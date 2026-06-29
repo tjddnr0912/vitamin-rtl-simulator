@@ -1,0 +1,22 @@
+[package]
+name = "hdl-lexer"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# The lexer is intentionally diag-light: it surfaces a structural `LexError`
+# (span + reason) and lets the parser/driver translate it into a `diag::Diagnostic`
+# (MsgCode::ParseUnexpectedToken / VITA-E2002). This keeps the leaf crate's
+# dependency surface minimal and the error model decoupled from rendering.
+[dependencies]
+# The workspace dep is pinned `default-features = false` (HARD GROUNDING / doc 03).
+# That strips logos' default `export_derive` + `std` features, so `#[derive(Logos)]`
+# and the `#[logos]/#[token]/#[regex]` attribute macros are NOT re-exported. We
+# re-enable exactly those two here (the only features this crate needs):
+#   export_derive -> the `#[derive(Logos)]` proc-macro (pulls logos-derive)
+#   std           -> `std`-backed lexer (we are not no_std)
+logos = { workspace = true, features = ["export_derive", "std"] }
+
+# Root Cargo.toml [workspace.dependencies] gains:
+#   logos = { version = "0.16", default-features = false }

@@ -1,0 +1,19 @@
+[package]
+name = "hdl-ast"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+# SchemaHash on the Box-recursive AST is now UNBLOCKED: the derive grew a
+# transparent `Box<T>` arm (vita-artifact-derive/src/lib.rs), so `Box<Expr>`
+# renders as `Expr` and the registry's insert_once guard short-circuits the
+# self-reference. Span is two u32 (no usize/float), so the shape is deterministic.
+vita-schema = { path = "../vita-schema" }
+vita-artifact-derive = { path = "../vita-artifact-derive" }
+
+[dev-dependencies]
+postcard = { workspace = true }   # round-trip AST in unit tests (workspace-pinned;
+                                  # avoids a new serde_json tree — verdict L4)

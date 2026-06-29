@@ -1,0 +1,56 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/hdl-preprocess",
+    "crates/hdl-lexer",
+    "crates/hdl-parser",
+    "crates/hdl-ast",
+    "crates/elaborate",
+    "crates/sim-ir",
+    "crates/sim-engine",
+    "crates/hdl-builtins",
+    "crates/vcd-writer",
+    "crates/diag",
+    "crates/vita-artifact",
+    "crates/vita-artifact-derive",
+    "crates/vita-schema",
+    "crates/vita-log",
+    "crates/cli",
+    "crates/vcd-diff",
+    "crates/corpus-runner",
+]
+# Vendored libm (third_party/libm) is a path DEPENDENCY but deliberately NOT a
+# workspace member: excluded so `cargo clippy --workspace -- -D warnings` does
+# not lint third-party code, and `cargo test --workspace` does not run its tests.
+exclude = ["third_party/libm"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.82"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-org/vitamin"
+
+[workspace.dependencies]
+logos            = { version = "0.16", default-features = false }
+serde            = { version = "1.0", features = ["derive"] }
+postcard         = { version = "1.1", features = ["use-std"] }
+blake3           = "=1.8.2"
+# Vendored pure-Rust libm (third_party/libm). default-features=false disables the
+# `arch` feature → no hardware float intrinsics → bit-identical f64 on every
+# IEEE-754 target (the 3-OS byte-identical golden contract). Powers N6 real-math
+# system functions ($ln/$sin/…) and the non-uniform $dist_* transcendentals.
+libm             = { path = "third_party/libm", default-features = false }
+syn              = { version = "2.0", features = ["full", "extra-traits"] }
+quote            = "1.0"
+proc-macro2      = "1.0"
+hex              = "0.4"
+serde-reflection = "0.6"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
+
+[profile.dev.package."sim-engine"]
+opt-level = 2

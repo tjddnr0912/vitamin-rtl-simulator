@@ -1,0 +1,7 @@
+# Byte-compared goldens and `include_str!` sources must check out VERBATIM on
+# every OS — Windows runners default to core.autocrlf=true, which rewrites LF
+# to CRLF at checkout and broke the sim-ir canonical golden on windows-latest
+# (first 3-OS CI run). `-text` disables all eol conversion for these paths.
+crates/testdata/** -text
+crates/**/testdata/** -text
+docs/preview/15-error-code-reference.md -text

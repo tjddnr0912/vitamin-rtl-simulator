@@ -1,0 +1,12 @@
+[package]
+name = "hdl-parser"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+hdl-lexer = { path = "../hdl-lexer" }
+hdl-ast   = { path = "../hdl-ast" }
+# NO winnow (hand-RD; doc-02 hot+recovery target; absent from workspace deps).
+# NO diag (parser stays diag-light like the lexer; the driver maps ParseError).

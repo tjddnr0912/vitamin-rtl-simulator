@@ -1,0 +1,17 @@
+[package]
+name = "sim-ir"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+vita-schema = { path = "../vita-schema" }
+vita-artifact-derive = { path = "../vita-artifact-derive" }
+
+[dev-dependencies]
+blake3 = { workspace = true }
+hex = { workspace = true }
+serde-reflection = { workspace = true }
+ron = "0.8"

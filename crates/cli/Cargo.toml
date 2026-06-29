@@ -1,0 +1,46 @@
+[package]
+name = "cli"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vita"
+path = "src/main.rs"
+
+[features]
+separate-bins = []
+
+[dependencies]
+hdl-preprocess = { path = "../hdl-preprocess" }
+hdl-lexer = { path = "../hdl-lexer" }
+hdl-parser = { path = "../hdl-parser" }
+hdl-ast = { path = "../hdl-ast" }
+elaborate = { path = "../elaborate" }
+sim-ir = { path = "../sim-ir" }
+sim-engine = { path = "../sim-engine" }
+diag = { path = "../diag" }
+vita-log = { path = "../vita-log" }
+vita-artifact = { path = "../vita-artifact" }
+vita-schema = { path = "../vita-schema" }
+postcard = { workspace = true }
+blake3 = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+vita-artifact = { path = "../vita-artifact" }
+vita-schema = { path = "../vita-schema" }
+postcard = { workspace = true }
+blake3 = { workspace = true }
+hdl-ast = { path = "../hdl-ast" }
+hdl-lexer = { path = "../hdl-lexer" }
+hdl-parser = { path = "../hdl-parser" }
+elaborate = { path = "../elaborate" }
+sim-ir = { path = "../sim-ir" }
+sim-engine = { path = "../sim-engine" }
+diag = { path = "../diag" }

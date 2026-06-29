@@ -1,0 +1,1209 @@
+{
+    "BasicBlock": STRUCT([
+        {
+            "stmts": SEQ(U32),
+        },
+        {
+            "term": TYPENAME("Terminator"),
+        },
+    ]),
+    "BinOp": ENUM({
+        0: {
+            "Add": UNIT,
+        },
+        1: {
+            "Sub": UNIT,
+        },
+        2: {
+            "Mul": UNIT,
+        },
+        3: {
+            "Div": UNIT,
+        },
+        4: {
+            "Mod": UNIT,
+        },
+        5: {
+            "Pow": UNIT,
+        },
+        6: {
+            "BitAnd": UNIT,
+        },
+        7: {
+            "BitOr": UNIT,
+        },
+        8: {
+            "BitXor": UNIT,
+        },
+        9: {
+            "BitXnor": UNIT,
+        },
+        10: {
+            "LogAnd": UNIT,
+        },
+        11: {
+            "LogOr": UNIT,
+        },
+        12: {
+            "Lt": UNIT,
+        },
+        13: {
+            "Le": UNIT,
+        },
+        14: {
+            "Gt": UNIT,
+        },
+        15: {
+            "Ge": UNIT,
+        },
+        16: {
+            "Eq": UNIT,
+        },
+        17: {
+            "Ne": UNIT,
+        },
+        18: {
+            "CaseEq": UNIT,
+        },
+        19: {
+            "CaseNe": UNIT,
+        },
+        20: {
+            "Shl": UNIT,
+        },
+        21: {
+            "Shr": UNIT,
+        },
+        22: {
+            "AShl": UNIT,
+        },
+        23: {
+            "AShr": UNIT,
+        },
+        24: {
+            "CasezEq": UNIT,
+        },
+        25: {
+            "CasexEq": UNIT,
+        },
+    }),
+    "BitPacked": STRUCT([
+        {
+            "val": SEQ(U64),
+        },
+        {
+            "unk": SEQ(U64),
+        },
+    ]),
+    "ConstRepr": ENUM({
+        0: {
+            "Numeric": UNIT,
+        },
+        1: {
+            "StrUtf8": UNIT,
+        },
+        2: {
+            "Real": UNIT,
+        },
+    }),
+    "ConstVal": STRUCT([
+        {
+            "width": U32,
+        },
+        {
+            "signed": BOOL,
+        },
+        {
+            "repr": TYPENAME("ConstRepr"),
+        },
+        {
+            "bits": TYPENAME("BitPacked"),
+        },
+    ]),
+    "ContAssign": STRUCT([
+        {
+            "lhs": TYPENAME("Lvalue"),
+        },
+        {
+            "rhs": U32,
+        },
+        {
+            "delay": OPTION(U32),
+        },
+    ]),
+    "DelayRegion": ENUM({
+        0: {
+            "Active": UNIT,
+        },
+        1: {
+            "Inactive": UNIT,
+        },
+    }),
+    "DisableKind": ENUM({
+        0: {
+            "Fork": UNIT,
+        },
+        1: {
+            "Scope": UNIT,
+        },
+    }),
+    "EdgeKind": ENUM({
+        0: {
+            "Posedge": UNIT,
+        },
+        1: {
+            "Negedge": UNIT,
+        },
+        2: {
+            "AnyEdge": UNIT,
+        },
+    }),
+    "EdgeTerm": STRUCT([
+        {
+            "net": U32,
+        },
+        {
+            "kind": TYPENAME("EdgeKind"),
+        },
+    ]),
+    "Expr": ENUM({
+        0: {
+            "Const": STRUCT([
+                {
+                    "val": U32,
+                },
+            ]),
+        },
+        1: {
+            "Signal": STRUCT([
+                {
+                    "net": U32,
+                },
+                {
+                    "word": OPTION(U32),
+                },
+            ]),
+        },
+        2: {
+            "Select": STRUCT([
+                {
+                    "base": U32,
+                },
+                {
+                    "offset": U32,
+                },
+                {
+                    "width": U32,
+                },
+                {
+                    "kind": TYPENAME("SelKind"),
+                },
+            ]),
+        },
+        3: {
+            "Concat": STRUCT([
+                {
+                    "parts": SEQ(U32),
+                },
+            ]),
+        },
+        4: {
+            "Replicate": STRUCT([
+                {
+                    "count": U32,
+                },
+                {
+                    "value": U32,
+                },
+            ]),
+        },
+        5: {
+            "Unary": STRUCT([
+                {
+                    "op": TYPENAME("UnOp"),
+                },
+                {
+                    "operand": U32,
+                },
+            ]),
+        },
+        6: {
+            "Binary": STRUCT([
+                {
+                    "op": TYPENAME("BinOp"),
+                },
+                {
+                    "lhs": U32,
+                },
+                {
+                    "rhs": U32,
+                },
+            ]),
+        },
+        7: {
+            "Ternary": STRUCT([
+                {
+                    "cond": U32,
+                },
+                {
+                    "then_e": U32,
+                },
+                {
+                    "else_e": U32,
+                },
+            ]),
+        },
+        8: {
+            "SysFunc": STRUCT([
+                {
+                    "which": TYPENAME("SysFuncId"),
+                },
+                {
+                    "args": SEQ(U32),
+                },
+            ]),
+        },
+        9: {
+            "Call": STRUCT([
+                {
+                    "func": U32,
+                },
+                {
+                    "args": SEQ(U32),
+                },
+            ]),
+        },
+        10: {
+            "ArrayItem": STRUCT([
+                {
+                    "index": BOOL,
+                },
+                {
+                    "width": U32,
+                },
+                {
+                    "signed": BOOL,
+                },
+            ]),
+        },
+    }),
+    "FourState": ENUM({
+        0: {
+            "Zero": UNIT,
+        },
+        1: {
+            "One": UNIT,
+        },
+        2: {
+            "X": UNIT,
+        },
+        3: {
+            "Z": UNIT,
+        },
+    }),
+    "Frame": STRUCT([
+        {
+            "return_pc": U32,
+        },
+        {
+            "callee_entry": U32,
+        },
+        {
+            "locals_base": U32,
+        },
+        {
+            "locals_len": U32,
+        },
+        {
+            "is_automatic": BOOL,
+        },
+    ]),
+    "FuncDef": STRUCT([
+        {
+            "entry": U32,
+        },
+        {
+            "n_params": U32,
+        },
+        {
+            "locals_len": U32,
+        },
+        {
+            "is_task": BOOL,
+        },
+    ]),
+    "Instance": STRUCT([
+        {
+            "parent": OPTION(U32),
+        },
+        {
+            "module": U32,
+        },
+        {
+            "first_net": U32,
+        },
+        {
+            "net_count": U32,
+        },
+    ]),
+    "JoinState": STRUCT([
+        {
+            "parent": OPTION(U32),
+        },
+        {
+            "children": SEQ(U32),
+        },
+        {
+            "detached": SEQ(U32),
+        },
+        {
+            "flags": TYPENAME("ProcFlags"),
+        },
+    ]),
+    "LvalChunk": STRUCT([
+        {
+            "net": U32,
+        },
+        {
+            "word": OPTION(U32),
+        },
+        {
+            "offset": OPTION(U32),
+        },
+        {
+            "width": OPTION(U32),
+        },
+        {
+            "kind": TYPENAME("SelKind"),
+        },
+    ]),
+    "Lvalue": STRUCT([
+        {
+            "chunks": SEQ(TYPENAME("LvalChunk")),
+        },
+    ]),
+    "NetKind": ENUM({
+        0: {
+            "Wire": UNIT,
+        },
+        1: {
+            "Reg": UNIT,
+        },
+        2: {
+            "Logic": UNIT,
+        },
+        3: {
+            "Integer": UNIT,
+        },
+        4: {
+            "Real": UNIT,
+        },
+        5: {
+            "DynArray": UNIT,
+        },
+        6: {
+            "Queue": UNIT,
+        },
+        7: {
+            "Assoc": UNIT,
+        },
+        8: {
+            "AssocStr": UNIT,
+        },
+        9: {
+            "String": UNIT,
+        },
+    }),
+    "NetVar": STRUCT([
+        {
+            "kind": TYPENAME("NetKind"),
+        },
+        {
+            "width": U32,
+        },
+        {
+            "msb": U32,
+        },
+        {
+            "lsb": U32,
+        },
+        {
+            "signed": BOOL,
+        },
+        {
+            "array_len": U32,
+        },
+        {
+            "dir": TYPENAME("PortDir"),
+        },
+        {
+            "init": TYPENAME("BitPacked"),
+        },
+    ]),
+    "PortDir": ENUM({
+        0: {
+            "Input": UNIT,
+        },
+        1: {
+            "Output": UNIT,
+        },
+        2: {
+            "Inout": UNIT,
+        },
+        3: {
+            "Internal": UNIT,
+        },
+    }),
+    "ProcFlags": NEWTYPESTRUCT(U8),
+    "Process": STRUCT([
+        {
+            "sensitivity": TYPENAME("Sensitivity"),
+        },
+        {
+            "body": SEQ(TYPENAME("BasicBlock")),
+        },
+        {
+            "entry": U32,
+        },
+        {
+            "suspend": TYPENAME("SuspendState"),
+        },
+    ]),
+    "RegionTag": ENUM({
+        0: {
+            "Active": UNIT,
+        },
+        1: {
+            "Inactive": UNIT,
+        },
+        2: {
+            "Nba": UNIT,
+        },
+        3: {
+            "Monitor": UNIT,
+        },
+    }),
+    "SelKind": ENUM({
+        0: {
+            "Bit": UNIT,
+        },
+        1: {
+            "PartConst": UNIT,
+        },
+        2: {
+            "PartIdxUp": UNIT,
+        },
+        3: {
+            "PartIdxDown": UNIT,
+        },
+    }),
+    "SensKind": ENUM({
+        0: {
+            "Initial": UNIT,
+        },
+        1: {
+            "Comb": UNIT,
+        },
+        2: {
+            "Latch": UNIT,
+        },
+        3: {
+            "Edge": UNIT,
+        },
+        4: {
+            "Level": UNIT,
+        },
+    }),
+    "Sensitivity": STRUCT([
+        {
+            "kind": TYPENAME("SensKind"),
+        },
+        {
+            "edges": SEQ(TYPENAME("EdgeTerm")),
+        },
+    ]),
+    "SimIr": STRUCT([
+        {
+            "instances": SEQ(TYPENAME("Instance")),
+        },
+        {
+            "nets": SEQ(TYPENAME("NetVar")),
+        },
+        {
+            "processes": SEQ(TYPENAME("Process")),
+        },
+        {
+            "cont_assigns": SEQ(TYPENAME("ContAssign")),
+        },
+        {
+            "funcs": SEQ(TYPENAME("FuncDef")),
+        },
+        {
+            "exprs": SEQ(TYPENAME("Expr")),
+        },
+        {
+            "stmts": SEQ(TYPENAME("Stmt")),
+        },
+        {
+            "blocks": SEQ(TYPENAME("BasicBlock")),
+        },
+        {
+            "consts": SEQ(TYPENAME("ConstVal")),
+        },
+    ]),
+    "Stmt": ENUM({
+        0: {
+            "BlockingAssign": STRUCT([
+                {
+                    "lhs": TYPENAME("Lvalue"),
+                },
+                {
+                    "rhs": U32,
+                },
+            ]),
+        },
+        1: {
+            "NonblockingAssign": STRUCT([
+                {
+                    "lhs": TYPENAME("Lvalue"),
+                },
+                {
+                    "rhs": U32,
+                },
+                {
+                    "delay": OPTION(U32),
+                },
+            ]),
+        },
+        2: {
+            "SysTask": STRUCT([
+                {
+                    "which": TYPENAME("SysTaskId"),
+                },
+                {
+                    "fmt": OPTION(U32),
+                },
+                {
+                    "args": SEQ(U32),
+                },
+            ]),
+        },
+        3: {
+            "Disable": STRUCT([
+                {
+                    "scope_kind": TYPENAME("DisableKind"),
+                },
+                {
+                    "target": U32,
+                },
+            ]),
+        },
+        4: {
+            "Force": STRUCT([
+                {
+                    "lhs": TYPENAME("Lvalue"),
+                },
+                {
+                    "rhs": U32,
+                },
+            ]),
+        },
+        5: {
+            "Release": STRUCT([
+                {
+                    "lhs": TYPENAME("Lvalue"),
+                },
+            ]),
+        },
+    }),
+    "SuspendState": STRUCT([
+        {
+            "resume_pc": U32,
+        },
+        {
+            "locals": SEQ(TYPENAME("FourState")),
+        },
+        {
+            "join_state": TYPENAME("JoinState"),
+        },
+        {
+            "wake_key": TYPENAME("WakeKey"),
+        },
+        {
+            "call_stack": SEQ(TYPENAME("Frame")),
+        },
+        {
+            "frame_arena": SEQ(TYPENAME("FourState")),
+        },
+    ]),
+    "SysFuncId": ENUM({
+        0: {
+            "Time": UNIT,
+        },
+        1: {
+            "Realtime": UNIT,
+        },
+        2: {
+            "Signed": UNIT,
+        },
+        3: {
+            "Unsigned": UNIT,
+        },
+        4: {
+            "Clog2": UNIT,
+        },
+        5: {
+            "Rtoi": UNIT,
+        },
+        6: {
+            "Itor": UNIT,
+        },
+        7: {
+            "RealToBits": UNIT,
+        },
+        8: {
+            "BitsToReal": UNIT,
+        },
+        9: {
+            "DynSize": UNIT,
+        },
+        10: {
+            "QPopBack": UNIT,
+        },
+        11: {
+            "QPopFront": UNIT,
+        },
+        12: {
+            "AssocExists": UNIT,
+        },
+        13: {
+            "AssocNum": UNIT,
+        },
+        14: {
+            "AssocFirst": UNIT,
+        },
+        15: {
+            "AssocNext": UNIT,
+        },
+        16: {
+            "AssocLast": UNIT,
+        },
+        17: {
+            "AssocPrev": UNIT,
+        },
+        18: {
+            "Random": UNIT,
+        },
+        19: {
+            "Urandom": UNIT,
+        },
+        20: {
+            "UrandomRange": UNIT,
+        },
+        21: {
+            "CountOnes": UNIT,
+        },
+        22: {
+            "OneHot": UNIT,
+        },
+        23: {
+            "OneHot0": UNIT,
+        },
+        24: {
+            "IsUnknown": UNIT,
+        },
+        25: {
+            "Stime": UNIT,
+        },
+        26: {
+            "Fopen": UNIT,
+        },
+        27: {
+            "Sformatf": UNIT,
+        },
+        28: {
+            "TestPlusargs": UNIT,
+        },
+        29: {
+            "ValuePlusargs": UNIT,
+        },
+        30: {
+            "StrLen": UNIT,
+        },
+        31: {
+            "StrGetC": UNIT,
+        },
+        32: {
+            "StrSubstr": UNIT,
+        },
+        33: {
+            "StrToUpper": UNIT,
+        },
+        34: {
+            "StrToLower": UNIT,
+        },
+        35: {
+            "StrCmp": UNIT,
+        },
+        36: {
+            "Fgets": UNIT,
+        },
+        37: {
+            "Fscanf": UNIT,
+        },
+        38: {
+            "Sscanf": UNIT,
+        },
+        39: {
+            "Fread": UNIT,
+        },
+        40: {
+            "Feof": UNIT,
+        },
+        41: {
+            "Fgetc": UNIT,
+        },
+        42: {
+            "Ungetc": UNIT,
+        },
+        43: {
+            "DistUniform": UNIT,
+        },
+        44: {
+            "DistNormal": UNIT,
+        },
+        45: {
+            "DistExponential": UNIT,
+        },
+        46: {
+            "DistPoisson": UNIT,
+        },
+        47: {
+            "DistChiSquare": UNIT,
+        },
+        48: {
+            "Cast": UNIT,
+        },
+        49: {
+            "ArrSum": UNIT,
+        },
+        50: {
+            "ArrProduct": UNIT,
+        },
+        51: {
+            "ArrAnd": UNIT,
+        },
+        52: {
+            "ArrOr": UNIT,
+        },
+        53: {
+            "ArrXor": UNIT,
+        },
+        54: {
+            "StrAtoi": UNIT,
+        },
+        55: {
+            "StrAtohex": UNIT,
+        },
+        56: {
+            "StrAtooct": UNIT,
+        },
+        57: {
+            "StrAtobin": UNIT,
+        },
+        58: {
+            "StrAtoreal": UNIT,
+        },
+        59: {
+            "Ln": UNIT,
+        },
+        60: {
+            "Log10": UNIT,
+        },
+        61: {
+            "Exp": UNIT,
+        },
+        62: {
+            "Sqrt": UNIT,
+        },
+        63: {
+            "Pow": UNIT,
+        },
+        64: {
+            "Floor": UNIT,
+        },
+        65: {
+            "Ceil": UNIT,
+        },
+        66: {
+            "Sin": UNIT,
+        },
+        67: {
+            "Cos": UNIT,
+        },
+        68: {
+            "Tan": UNIT,
+        },
+        69: {
+            "Asin": UNIT,
+        },
+        70: {
+            "Acos": UNIT,
+        },
+        71: {
+            "Atan": UNIT,
+        },
+        72: {
+            "Atan2": UNIT,
+        },
+        73: {
+            "Hypot": UNIT,
+        },
+        74: {
+            "Sinh": UNIT,
+        },
+        75: {
+            "Cosh": UNIT,
+        },
+        76: {
+            "Tanh": UNIT,
+        },
+        77: {
+            "Asinh": UNIT,
+        },
+        78: {
+            "Acosh": UNIT,
+        },
+        79: {
+            "Atanh": UNIT,
+        },
+        80: {
+            "DistT": UNIT,
+        },
+        81: {
+            "DistErlang": UNIT,
+        },
+    }),
+    "SysTaskId": ENUM({
+        0: {
+            "Display": UNIT,
+        },
+        1: {
+            "Write": UNIT,
+        },
+        2: {
+            "Monitor": UNIT,
+        },
+        3: {
+            "Strobe": UNIT,
+        },
+        4: {
+            "Finish": UNIT,
+        },
+        5: {
+            "Stop": UNIT,
+        },
+        6: {
+            "DumpFile": UNIT,
+        },
+        7: {
+            "DumpVars": UNIT,
+        },
+        8: {
+            "DumpOn": UNIT,
+        },
+        9: {
+            "DumpOff": UNIT,
+        },
+        10: {
+            "DumpAll": UNIT,
+        },
+        11: {
+            "DumpFlush": UNIT,
+        },
+        12: {
+            "DumpLimit": UNIT,
+        },
+        13: {
+            "DynNew": UNIT,
+        },
+        14: {
+            "DynDelete": UNIT,
+        },
+        15: {
+            "QPushBack": UNIT,
+        },
+        16: {
+            "QPushFront": UNIT,
+        },
+        17: {
+            "AssocDeleteKey": UNIT,
+        },
+        18: {
+            "QInsert": UNIT,
+        },
+        19: {
+            "QDeleteIdx": UNIT,
+        },
+        20: {
+            "Fclose": UNIT,
+        },
+        21: {
+            "Fdisplay": UNIT,
+        },
+        22: {
+            "Fwrite": UNIT,
+        },
+        23: {
+            "Sformat": UNIT,
+        },
+        24: {
+            "ReadmemB": UNIT,
+        },
+        25: {
+            "ReadmemH": UNIT,
+        },
+        26: {
+            "StrPutC": UNIT,
+        },
+        27: {
+            "WritememB": UNIT,
+        },
+        28: {
+            "WritememH": UNIT,
+        },
+        29: {
+            "Cast": UNIT,
+        },
+        30: {
+            "MonitorOn": UNIT,
+        },
+        31: {
+            "MonitorOff": UNIT,
+        },
+        32: {
+            "ClassRandomize": UNIT,
+        },
+        33: {
+            "ArrSort": UNIT,
+        },
+        34: {
+            "ArrRsort": UNIT,
+        },
+        35: {
+            "ArrReverse": UNIT,
+        },
+        36: {
+            "StrItoa": UNIT,
+        },
+        37: {
+            "StrHextoa": UNIT,
+        },
+        38: {
+            "StrOcttoa": UNIT,
+        },
+        39: {
+            "StrBintoa": UNIT,
+        },
+        40: {
+            "ArrLocator": UNIT,
+        },
+    }),
+    "Terminator": ENUM({
+        0: {
+            "Goto": STRUCT([
+                {
+                    "target": U32,
+                },
+            ]),
+        },
+        1: {
+            "Branch": STRUCT([
+                {
+                    "cond": U32,
+                },
+                {
+                    "then_bb": U32,
+                },
+                {
+                    "else_bb": U32,
+                },
+            ]),
+        },
+        2: {
+            "Delay": STRUCT([
+                {
+                    "amount": U32,
+                },
+                {
+                    "region": TYPENAME("DelayRegion"),
+                },
+                {
+                    "resume": U32,
+                },
+            ]),
+        },
+        3: {
+            "Wait": STRUCT([
+                {
+                    "cond": TYPENAME("WaitCause"),
+                },
+                {
+                    "resume": U32,
+                },
+            ]),
+        },
+        4: {
+            "Fork": STRUCT([
+                {
+                    "children": SEQ(U32),
+                },
+                {
+                    "join": U32,
+                },
+                {
+                    "resume_bb": U32,
+                },
+            ]),
+        },
+        5: {
+            "Call": STRUCT([
+                {
+                    "target": U32,
+                },
+                {
+                    "ret_bb": U32,
+                },
+            ]),
+        },
+        6: {
+            "Return": UNIT,
+        },
+    }),
+    "UnOp": ENUM({
+        0: {
+            "Plus": UNIT,
+        },
+        1: {
+            "Minus": UNIT,
+        },
+        2: {
+            "LogNot": UNIT,
+        },
+        3: {
+            "BitNot": UNIT,
+        },
+        4: {
+            "RedAnd": UNIT,
+        },
+        5: {
+            "RedNand": UNIT,
+        },
+        6: {
+            "RedOr": UNIT,
+        },
+        7: {
+            "RedNor": UNIT,
+        },
+        8: {
+            "RedXor": UNIT,
+        },
+        9: {
+            "RedXnor": UNIT,
+        },
+    }),
+    "WaitCause": ENUM({
+        0: {
+            "Edge": STRUCT([
+                {
+                    "net": U32,
+                },
+                {
+                    "kind": TYPENAME("EdgeKind"),
+                },
+            ]),
+        },
+        1: {
+            "Level": STRUCT([
+                {
+                    "nets": SEQ(U32),
+                },
+            ]),
+        },
+        2: {
+            "Expr": STRUCT([
+                {
+                    "expr": U32,
+                },
+            ]),
+        },
+        3: {
+            "Named": STRUCT([
+                {
+                    "ev": U32,
+                },
+            ]),
+        },
+        4: {
+            "Fork": UNIT,
+        },
+    }),
+    "WakeCond": ENUM({
+        0: {
+            "Edge": STRUCT([
+                {
+                    "net": U32,
+                },
+                {
+                    "kind": TYPENAME("EdgeKind"),
+                },
+            ]),
+        },
+        1: {
+            "Level": STRUCT([
+                {
+                    "nets": SEQ(U32),
+                },
+            ]),
+        },
+        2: {
+            "WaitTrue": STRUCT([
+                {
+                    "expr": U32,
+                },
+            ]),
+        },
+        3: {
+            "TimeAbs": STRUCT([
+                {
+                    "tick": U64,
+                },
+            ]),
+        },
+        4: {
+            "NamedEvent": STRUCT([
+                {
+                    "ev": U32,
+                },
+            ]),
+        },
+        5: {
+            "Join": STRUCT([
+                {
+                    "join_ref": U32,
+                },
+            ]),
+        },
+    }),
+    "WakeKey": STRUCT([
+        {
+            "cond": TYPENAME("WakeCond"),
+        },
+        {
+            "region": TYPENAME("RegionTag"),
+        },
+        {
+            "tie_break": U32,
+        },
+    ]),
+}

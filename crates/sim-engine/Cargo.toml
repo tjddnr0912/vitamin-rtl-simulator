@@ -1,0 +1,28 @@
+[package]
+name = "sim-engine"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+sim-ir     = { path = "../sim-ir" }
+diag       = { path = "../diag" }
+vcd-writer = { path = "../vcd-writer" }
+# Vendored pure-Rust libm (3-OS deterministic, default-features=false) for the
+# N6 real-math transcendentals ($ln/$sin/…) and non-uniform $dist_*.
+libm       = { workspace = true }
+# `elaborate` is a prod dep ONLY for the engine-facing `ForkModeTable`/`JoinMode`
+# join-mode side channel (SimOpts.fork_modes). No dependency cycle: elaborate does
+# NOT depend on sim-engine. The IR contract (SimIr) is unchanged.
+elaborate  = { path = "../elaborate" }
+# NOTE: hdl-builtins intentionally NOT a dep in v1 — $task handlers are inlined
+# in the private `builtins` module (HOOK: extract to hdl-builtins post-v1).
+
+[dev-dependencies]
+# End-to-end tests build a SimIr via the real lex → parse → elaborate pipeline,
+# then simulate it and assert on the VCD buffer + captured $display output.
+hdl-preprocess = { path = "../hdl-preprocess" }
+hdl-lexer  = { path = "../hdl-lexer" }
+hdl-parser = { path = "../hdl-parser" }
+hdl-ast    = { path = "../hdl-ast" }

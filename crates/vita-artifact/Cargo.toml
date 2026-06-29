@@ -1,0 +1,19 @@
+[package]
+name = "vita-artifact"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+postcard = { workspace = true }
+sim-ir = { path = "../sim-ir" }
+vita-schema = { path = "../vita-schema" }
+diag = { path = "../diag" }
+
+[dev-dependencies]
+hex = { workspace = true }
+diag = { path = "../diag" }
+vita-schema = { path = "../vita-schema" }
+sim-ir = { path = "../sim-ir" }
