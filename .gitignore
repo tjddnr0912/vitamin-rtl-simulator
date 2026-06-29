@@ -1,2 +1,6 @@
 /target
 **/*.rs.bk
+
+# dev-meta — managed only in the violet_sw development monorepo
+LOOPROMPT.md
+CLAUDE.md
