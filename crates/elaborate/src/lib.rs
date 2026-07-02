@@ -2547,6 +2547,31 @@ struct Elaborator<'s> {
     /// A2a: true while lowering the synthesized §6.8 decl-init `initial` —
     /// a const param's own initializer is legitimate, so the deny is off.
     lowering_decl_init: bool,
+    /// A2b-prereq: package name → (var name → NetId) for package-level
+    /// VARIABLES (IEEE §26: one storage instance per elaboration, shared by
+    /// every module). The nets live under the reserved `$pkg$<pkg>` scope
+    /// (not a legal user path — vita has no escaped identifiers) and are
+    /// excluded from the VCD in v1 (iverilog parity: it dumps no package
+    /// vars either). Elaborate-local (never serialized).
+    pkg_vars: std::collections::BTreeMap<String, std::collections::BTreeMap<String, u32>>,
+    /// A2b-prereq: fq alias key → (origin package, is_explicit) for names
+    /// bound into a module scope by an `import pkg::*`/`import pkg::name`
+    /// VARIABLE import (the alias itself lives in `symbols`, interface-alias
+    /// precedent). Consulted by `add_net`: a LOCAL declaration shadows a
+    /// WILDCARD import (iverilog-pinned), colliding with an EXPLICIT import
+    /// is an error (iverilog-pinned).
+    pkg_var_aliases: std::collections::BTreeMap<String, (String, bool)>,
+    /// A2b-prereq: true while lowering a PACKAGE body's variable declarations.
+    /// A non-constant initializer is LOUD there — no §6.8 pre-sweep collects
+    /// package-scope inits, so silently defaulting the net would be a
+    /// silent-wrong init drop (the generate/interface ㉮ hazard class).
+    in_pkg_body: bool,
+    /// A2b-prereq (adversarial sound S2): fq keys of DECLARED genvar names.
+    /// A genvar binds into `params` only transiently (during loop unroll), so
+    /// the constant-shadow guard needs this persistent record — otherwise a
+    /// procedural reference to a genvar-named import alias would silently
+    /// resolve to the package variable outside the unroll.
+    genvar_decls: std::collections::BTreeSet<String>,
     /// Every clocking-block name in the whole design (never cleared) — diagnostic
     /// only: lets a cross-hierarchy `@(inst.cb)` event control emit an accurate
     /// "unsupported clocking-event" message instead of a generic hier-name error.
@@ -2734,6 +2759,10 @@ impl<'s> Elaborator<'s> {
             clocking_hold_nets: std::collections::BTreeSet::new(),
             const_param_nets: std::collections::BTreeMap::new(),
             lowering_decl_init: false,
+            pkg_vars: std::collections::BTreeMap::new(),
+            pkg_var_aliases: std::collections::BTreeMap::new(),
+            in_pkg_body: false,
+            genvar_decls: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
             func_metas: Vec::new(),
@@ -3979,6 +4008,14 @@ impl<'s> Elaborator<'s> {
                 } else {
                     format!("{level}.{tail}")
                 };
+                // A2b-prereq (adversarial diff F2): a package-variable IMPORT
+                // alias is a LEXICAL binding only (IEEE §26.3 — an import is
+                // not a declaration in the importing scope), so a HIERARCHICAL
+                // path must never resolve through it (iverilog: "Unable to
+                // bind"). Committed-unresolved → the caller stays loud.
+                if self.pkg_var_aliases.contains_key(&full) {
+                    return None;
+                }
                 return table.get(&full).copied(); // committed: Some=hit, None=unresolved
             }
             // (b) SINGLETON generate block: vita names a named `if`/`begin` block `g[0]`,
@@ -3991,6 +4028,9 @@ impl<'s> Elaborator<'s> {
                 } else {
                     format!("{base0}.{rest}")
                 };
+                if self.pkg_var_aliases.contains_key(&full) {
+                    return None; // same §26.3 rule as (a)
+                }
                 return table.get(&full).copied();
             }
             // (c) leading segment names a NET (not a scope) here: `.member` on a plain
@@ -4181,6 +4221,15 @@ impl<'s> Elaborator<'s> {
                     saved_params.push((key.clone(), self.params.insert(key, v)));
                 }
                 ast::ModuleItem::NetVar(d) => self.prescan_net_bits(d),
+                // A2b-prereq S2: record declared genvar names persistently —
+                // their `params` binding is transient (unroll-only), but the
+                // constant-shadow guard must see them at any lowering point.
+                ast::ModuleItem::Genvar { names, .. } => {
+                    for n in names {
+                        let key = self.fq(&n.name);
+                        self.genvar_decls.insert(key);
+                    }
+                }
                 _ => {}
             }
         }
@@ -6604,14 +6653,42 @@ impl<'s> Elaborator<'s> {
             // defaulted to X/0 (a now-fixed pre-existing silent-wrong, and the value
             // that the 2-state `is_var` change relies on instead of a cont-assign).
             let init = match &decl.init {
-                Some(e) => fold_init(e, width)
-                    .or_else(|| {
+                Some(e) => {
+                    let folded = fold_init(e, width).or_else(|| {
                         self.const_eval_in_scope(e).map(|v| {
                             let cv = make_const_i64(v, 64, true);
                             resize_bits(&cv.bits, cv.width, width, cv.signed)
                         })
-                    })
-                    .unwrap_or_else(|| default_init(d.kind, width)),
+                    });
+                    match folded {
+                        Some(v) => v,
+                        None => {
+                            // A2b-prereq: a MODULE body hands a non-foldable
+                            // init to the §6.8 pre-sweep; a PACKAGE body has no
+                            // such pass, so defaulting here would silently drop
+                            // the init (the ㉮ hazard class) — LOUD instead.
+                            if self.in_pkg_body {
+                                let msg = if decl.unpacked.is_empty() {
+                                    format!(
+                                        "package variable `{}` initializer is not a \
+                                         constant expression (v1: assign it from a \
+                                         module initial block instead)",
+                                        decl.name.name
+                                    )
+                                } else {
+                                    format!(
+                                        "package variable `{}`: an unpacked-array \
+                                         `'{{…}}` initializer in a package body is \
+                                         not yet supported (A2b)",
+                                        decl.name.name
+                                    )
+                                };
+                                self.error(MsgCode::ElabUnsupported, &msg);
+                            }
+                            default_init(d.kind, width)
+                        }
+                    }
+                }
                 None => default_init(d.kind, width),
             };
             self.add_net(
@@ -7149,12 +7226,45 @@ impl<'s> Elaborator<'s> {
     /// (LOWERING + COVERAGE verdicts: duplicate-net silent acceptance.)
     fn add_net(&mut self, name: &str, net: ir::NetVar) {
         let key = self.fq(name);
+        // A2b-prereq S3: when a local decl shadows a wildcard alias, the alias
+        // entry is removed only AFTER the budget check below passes — an early
+        // return must leave the maps consistent.
+        let mut shadow_wildcard_alias = false;
         if self.symbols.contains_key(&key) {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!("net/variable `{key}` redeclared (duplicate declaration)"),
-            );
-            return;
+            // A2b-prereq: a name bound by a package-variable IMPORT is not a
+            // declaration. A LOCAL declaration shadows a WILDCARD import
+            // (iverilog-pinned: `import p::*` + `int cnt` ⇒ local wins) — drop
+            // the alias and fall through to create the real net (the insert
+            // below replaces the symbols entry). Colliding with an EXPLICIT
+            // import stays loud (iverilog-pinned: "already been imported").
+            match self.pkg_var_aliases.get(&key) {
+                // Documented leniency (diff F3): IEEE §26.3 makes a local
+                // declaration AFTER a use of the wildcard binding an error;
+                // vita lowers by pass (nets before process bodies), so textual
+                // use-before-decl is not observable here — the local uniformly
+                // wins the whole scope (self-consistent, never a torn state).
+                Some((_, false)) => {
+                    shadow_wildcard_alias = true;
+                }
+                Some((pkg, true)) => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "`{name}` has already been imported into this scope \
+                             from package `{pkg}` (an explicit import conflicts \
+                             with a local declaration)"
+                        ),
+                    );
+                    return;
+                }
+                None => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!("net/variable `{key}` redeclared (duplicate declaration)"),
+                    );
+                    return;
+                }
+            }
         }
         // GEN-NET-CAP: bound the aggregate net arena. Past the cap, no-op (the
         // arena stops growing) and report once — `had_error` makes the run loud.
@@ -7170,6 +7280,9 @@ impl<'s> Elaborator<'s> {
                 );
             }
             return;
+        }
+        if shadow_wildcard_alias {
+            self.pkg_var_aliases.remove(&key);
         }
         let id = self.nets.len() as u32;
         self.nets.push(net);
@@ -7271,8 +7384,28 @@ impl<'s> Elaborator<'s> {
             K::MinTypMax { min, typ, max } => r(self, min)
                 .or_else(|| r(self, typ))
                 .or_else(|| r(self, max)),
-            // literals · PkgScoped · SysCall · Call · New · Dollar · Error: no bare
-            // net/hier ref of their own (function calls are not descended — see doc).
+            // A2b-prereq: `pkg::name` naming a package VARIABLE is a net
+            // reference — not a constant (adversarial diff F1: it used to fall
+            // into the const-but-unfoldable catch-all and clamp to a SILENT
+            // width-1). A `pkg::name` naming a package CONSTANT never reaches
+            // this fn (the bound folds); an UNKNOWN `pkg::name` keeps the
+            // pre-existing silent-unfoldable behavior (unchanged from before
+            // packages had variables at all).
+            K::PkgScoped { pkg, name } => {
+                if self
+                    .pkg_vars
+                    .get(&pkg.name)
+                    .is_some_and(|m| m.contains_key(&name.name))
+                {
+                    return Some(format!(
+                        "a reference to package variable `{}::{}`",
+                        pkg.name, name.name
+                    ));
+                }
+                None
+            }
+            // literals · SysCall · Call · New · Dollar · Error: no bare net/hier
+            // ref of their own (function calls are not descended — see doc).
             _ => None,
         }
     }
@@ -10340,11 +10473,32 @@ impl<'s> Elaborator<'s> {
                 {
                     Some(&v) => self.const_param_expr(v),
                     None => {
+                        // A2b-prereq: `pkg::var` reads the package-level
+                        // VARIABLE net (sees the package storage even when a
+                        // local declaration shadows an import — same rule as
+                        // the const branch above, iverilog-pinned).
+                        if let Some(&net) =
+                            self.pkg_vars.get(&pkg.name).and_then(|m| m.get(&name.name))
+                        {
+                            if self.net_is_static_array(net) {
+                                // mirror the Ident arm's whole-array guard: a
+                                // whole unpacked array has no value here.
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    "a whole unpacked array has no value in this \
+                                     context (v1: arrays are copied by array \
+                                     assignment; index an element elsewhere — \
+                                     import the name and select on it)",
+                                );
+                            }
+                            return self.push_expr(ir::Expr::Signal { net, word: None });
+                        }
                         self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
-                                "`{}::{}` does not name a package constant (v7 \
-                                 supports param/enum-label references)",
+                                "`{}::{}` does not name a package constant or \
+                                 variable (v7 supports param/enum-label and \
+                                 plain-variable references)",
                                 pkg.name, name.name
                             ),
                         );
@@ -10447,7 +10601,12 @@ impl<'s> Elaborator<'s> {
                         .map(|s| s.name.as_str())
                         .collect::<Vec<_>>()
                         .join(".");
-                    if self.lookup_net_scoped(&joined).is_none() {
+                    // A2b-prereq F2: a dotted hit on a package-var import alias
+                    // is NOT a known dotted symbol — defer, so the hierarchical
+                    // resolver (which skips aliases per §26.3) stays loud.
+                    if self.lookup_net_scoped(&joined).is_none()
+                        || self.dotted_hit_is_pkg_alias(&joined)
+                    {
                         let eid = self.push_expr(ir::Expr::Signal {
                             net: POISON_NET,
                             word: None,
@@ -11284,7 +11443,13 @@ impl<'s> Elaborator<'s> {
                         .map(|s| s.name.as_str())
                         .collect::<Vec<_>>()
                         .join(".");
-                    if let Some(id) = self.lookup_net_scoped(&joined) {
+                    // A2b-prereq F2: never write through a dotted hit on a
+                    // package-var import alias (§26.3) — defer, and the
+                    // hierarchical write resolver stays loud.
+                    if let Some(id) = self
+                        .lookup_net_scoped(&joined)
+                        .filter(|_| !self.dotted_hit_is_pkg_alias(&joined))
+                    {
                         id
                     } else {
                         out.push(ir::LvalChunk {
@@ -11570,7 +11735,12 @@ impl<'s> Elaborator<'s> {
                 .map(|s| s.name.as_str())
                 .collect::<Vec<_>>()
                 .join(".");
-            if let Some(id) = self.lookup_net_scoped(&joined) {
+            // A2b-prereq F2: a dotted hit on a package-var import alias is not
+            // a known dotted symbol (§26.3) — fall through to the loud reject.
+            if let Some(id) = self
+                .lookup_net_scoped(&joined)
+                .filter(|_| !self.dotted_hit_is_pkg_alias(&joined))
+            {
                 return id;
             }
             // A hierarchical READ in an expression is deferred (N3) and a hierarchical
@@ -11591,7 +11761,29 @@ impl<'s> Elaborator<'s> {
         // (`top.g[0]`); a net declared inside the block (`top.g[0].t`) shadows it.
         let name = &path.segments[0].name;
         match self.lookup_net_scoped(name) {
-            Some(id) => id,
+            Some(id) => {
+                // A2b-prereq guard: when the hit is a package-variable IMPORT
+                // alias but a local CONSTANT (param/localparam/enum label, or
+                // a declared genvar — S2) also binds this name, the constant
+                // shadows the import for reads (the Ident arm resolves params
+                // first), so a WRITE reaching this funnel must not silently
+                // land in the package variable: loud. `pkg_var_aliases` empty
+                // (every pre-existing design) short-circuits: zero change.
+                if self.bare_hit_is_shadowed_pkg_alias(name) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "`{name}` here resolves to a local constant \
+                             (parameter/genvar/enum label), which shadows \
+                             the imported package variable — a constant is \
+                             not assignable (rename one of them to \
+                             disambiguate)"
+                        ),
+                    );
+                    return POISON_NET;
+                }
+                id
+            }
             None => {
                 self.error(
                     MsgCode::ElabUnresolvedName,
@@ -11608,6 +11800,38 @@ impl<'s> Elaborator<'s> {
     /// isolation). Returns the innermost (most specific) binding.
     fn lookup_net_scoped(&self, name: &str) -> Option<u32> {
         self.walk_scopes(name, &self.symbols)
+    }
+
+    /// A2b-prereq (adversarial diff F2): true iff a DOTTED (multi-segment)
+    /// name's symbols hit lands on a package-variable IMPORT alias. An import
+    /// is a lexical binding for the BARE name only (IEEE §26.3) — a dotted
+    /// path resolving through one (possible only at the outermost bare-key
+    /// candidate of the scope walk) is an illegal hierarchical access and
+    /// must be treated as a MISS by the dotted-name consumers, so the
+    /// reference stays loud. Single-segment lookups never call this.
+    fn dotted_hit_is_pkg_alias(&self, joined: &str) -> bool {
+        !self.pkg_var_aliases.is_empty()
+            && self
+                .walk_scopes_key(joined, |k| self.symbols.contains_key(k))
+                .is_some_and(|k| self.pkg_var_aliases.contains_key(&k))
+    }
+
+    /// A2b-prereq (adversarial sound S1/S2): true iff a BARE name's innermost
+    /// symbols hit is a package-variable import alias that a local CONSTANT
+    /// shadows — a param/localparam/enum label (live `params` binding) or a
+    /// declared genvar (persistent record; its `params` binding is
+    /// unroll-transient). Such a name must never resolve to the package net:
+    /// reads see the constant, so a write/array-view resolving the alias
+    /// would be a SILENT divergence. Callers turn a `true` into a loud path.
+    fn bare_hit_is_shadowed_pkg_alias(&self, name: &str) -> bool {
+        !self.pkg_var_aliases.is_empty()
+            && self
+                .walk_scopes_key(name, |k| self.symbols.contains_key(k))
+                .is_some_and(|k| self.pkg_var_aliases.contains_key(&k))
+            && (self.lookup_scoped(name).is_some()
+                || self
+                    .walk_scopes_key(name, |k| self.genvar_decls.contains(k))
+                    .is_some())
     }
 
     // ── user function/task inlining (SD2 inline path) ──────────────
@@ -15126,6 +15350,16 @@ impl<'s> Elaborator<'s> {
                         .map(|s| s.name.as_str())
                         .collect::<Vec<_>>()
                         .join(".");
+                    // A2b-prereq S1/S2/F2: mirror of `lval_array_chain` — a
+                    // shadowed (bare) or dotted (§26.3) alias hit falls out of
+                    // the fast path so the scalar/deferred lanes stay loud.
+                    if p.segments.len() == 1 {
+                        if self.bare_hit_is_shadowed_pkg_alias(&joined) {
+                            return None;
+                        }
+                    } else if self.dotted_hit_is_pkg_alias(&joined) {
+                        return None;
+                    }
                     match self.lookup_net_scoped(&joined) {
                         // Declared array-ness, NOT `array_len > 1`: a `[0:0]`
                         // array's element access is still an ELEMENT access
@@ -15557,6 +15791,17 @@ impl<'s> Elaborator<'s> {
                         .map(|s| s.name.as_str())
                         .collect::<Vec<_>>()
                         .join(".");
+                    // A2b-prereq S1/S2/F2: a const/genvar-shadowed import alias
+                    // (bare) or ANY dotted hit on an alias (§26.3) must not take
+                    // the array-chain fast path — the scalar/deferred lanes'
+                    // guards keep the reference loud.
+                    if p.segments.len() == 1 {
+                        if self.bare_hit_is_shadowed_pkg_alias(&joined) {
+                            return None;
+                        }
+                    } else if self.dotted_hit_is_pkg_alias(&joined) {
+                        return None;
+                    }
                     match self.lookup_net_scoped(&joined) {
                         // Same declared-array-ness rule as expr_array_chain.
                         Some(n) if self.net_is_static_array(n) => break n,
@@ -15990,13 +16235,27 @@ impl<'s> Elaborator<'s> {
                         if self.out_subst_lookup(&seg.name).is_some() {
                             return None; // task out-formal: vector surface
                         }
+                        // A2b-prereq S1: a const-shadowed import alias must not
+                        // take the array-view fast path — fall through (None) to
+                        // the scalar funnel, whose `resolve_net` guard is loud.
+                        if self.bare_hit_is_shadowed_pkg_alias(&seg.name) {
+                            return None;
+                        }
                         seg.name.clone()
                     }
-                    segs => segs
-                        .iter()
-                        .map(|s| s.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join("."),
+                    segs => {
+                        let joined = segs
+                            .iter()
+                            .map(|s| s.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(".");
+                        // A2b-prereq F2: dotted paths never resolve through an
+                        // import alias (§26.3) — the scalar funnel stays loud.
+                        if self.dotted_hit_is_pkg_alias(&joined) {
+                            return None;
+                        }
+                        joined
+                    }
                 };
                 let net = self.lookup_net_scoped(&name)?;
                 self.net_is_static_array(net).then(|| (net, Vec::new()))
@@ -16017,19 +16276,32 @@ impl<'s> Elaborator<'s> {
                     [seg] => {
                         // Inline-subst formals / params shadow nets (mirrors
                         // the lower_expr Ident arm's resolution priority).
+                        // A2b-prereq S1/S2: a const/genvar-shadowed import
+                        // alias also falls through — the scalar funnel's
+                        // guard keeps the reference loud, never a silent
+                        // read of the package storage.
                         if self.subst_lookup(&seg.name).is_some()
                             || self.out_subst_lookup(&seg.name).is_some()
                             || self.lookup_scoped(&seg.name).is_some()
+                            || self.bare_hit_is_shadowed_pkg_alias(&seg.name)
                         {
                             return None;
                         }
                         seg.name.clone()
                     }
-                    segs => segs
-                        .iter()
-                        .map(|s| s.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join("."),
+                    segs => {
+                        let joined = segs
+                            .iter()
+                            .map(|s| s.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(".");
+                        // A2b-prereq F2: dotted paths never resolve through an
+                        // import alias (IEEE §26.3).
+                        if self.dotted_hit_is_pkg_alias(&joined) {
+                            return None;
+                        }
+                        joined
+                    }
                 };
                 let net = self.lookup_net_scoped(&name)?;
                 self.net_is_static_array(net).then(|| (net, Vec::new()))
@@ -24067,6 +24339,7 @@ impl<'s> Elaborator<'s> {
         let saved_prefix = std::mem::replace(&mut self.cur_prefix, format!("$pkg${pkg}"));
         let mut saved: Vec<(String, Option<i64>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
+        let mut vars: BTreeMap<String, u32> = BTreeMap::new();
         let mut funcs: BTreeMap<String, ast::FunctionDef> = BTreeMap::new();
         let mut tasks: BTreeMap<String, ast::TaskDef> = BTreeMap::new();
         for item in &pm.body {
@@ -24082,6 +24355,19 @@ impl<'s> Elaborator<'s> {
                         );
                         0
                     });
+                    // A2b-prereq: params and variables share the package's single
+                    // name space (IEEE §26.3) — a duplicate is loud, never a
+                    // silent double-binding (`add_net` only guards net-vs-net).
+                    if vars.contains_key(&p.name.name) {
+                        self.error(
+                            MsgCode::DupUnit,
+                            &format!(
+                                "package symbol `{}` declared more than once (a \
+                                 parameter and a variable share one name space)",
+                                p.name.name
+                            ),
+                        );
+                    }
                     let key = self.fq(&p.name.name);
                     saved.push((key.clone(), self.params.insert(key, v)));
                     consts.insert(p.name.name.clone(), v);
@@ -24105,6 +24391,18 @@ impl<'s> Elaborator<'s> {
                                 None => next,
                             };
                             next = v + 1;
+                            // A2b-prereq: same single-name-space rule as params.
+                            if vars.contains_key(&l.name.name) {
+                                self.error(
+                                    MsgCode::DupUnit,
+                                    &format!(
+                                        "package symbol `{}` declared more than \
+                                         once (an enum label and a variable share \
+                                         one name space)",
+                                        l.name.name
+                                    ),
+                                );
+                            }
                             let key = self.fq(&l.name.name);
                             saved.push((key.clone(), self.params.insert(key, v)));
                             consts.insert(l.name.name.clone(), v);
@@ -24126,11 +24424,22 @@ impl<'s> Elaborator<'s> {
                         "imports inside a package are outside the v7 scope",
                     );
                 }
+                // A2b-prereq: package-level VARIABLE declaration — one storage
+                // instance per elaboration (IEEE §26), lowered as an ordinary
+                // net under the reserved `$pkg$<pkg>` prefix (`cur_prefix` is
+                // already synthetic here). Plain vector variable kinds only in
+                // v1; the initializer must const-fold (it rides the NetVar
+                // `init` field = a value at creation, satisfying the LRM's
+                // before-t0 static init — no package-scope §6.8 pre-sweep
+                // exists, so a non-foldable init is LOUD, never a silent X).
+                ast::ModuleItem::NetVar(d) => {
+                    self.elaborate_pkg_netvar(d, &consts, &mut vars);
+                }
                 _ => {
                     self.error(
                         MsgCode::ElabUnsupported,
-                        "only parameters/typedefs/functions/tasks are supported \
-                         in a package body (v7)",
+                        "only parameters/typedefs/functions/tasks/variables are \
+                         supported in a package body (v7/A2b-prereq)",
                     );
                 }
             }
@@ -24147,8 +24456,96 @@ impl<'s> Elaborator<'s> {
         }
         self.cur_prefix = saved_prefix;
         self.pkg_consts.insert(pkg.clone(), consts);
+        self.pkg_vars.insert(pkg.clone(), vars);
         self.pkg_funcs.insert(pkg.clone(), funcs);
         self.pkg_tasks.insert(pkg, tasks);
+    }
+
+    /// A2b-prereq: lower ONE package-body variable declaration. v1 subset:
+    /// plain vector VARIABLE kinds (`reg`/`logic`/`integer`/`time`/2-state
+    /// atoms), optional unpacked array dims WITHOUT an initializer, and
+    /// const-foldable scalar initializers only. Everything else is loud —
+    /// wire kinds are not package items (IEEE §26.2), and event/string/real/
+    /// class/dynamic storage are an unverified scope in v1 (scope-gate, §3).
+    fn elaborate_pkg_netvar(
+        &mut self,
+        d: &ast::NetVarDecl,
+        consts: &BTreeMap<String, i64>,
+        vars: &mut BTreeMap<String, u32>,
+    ) {
+        if d.kind.is_net() {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a net declaration is not a package item (IEEE §26.2: a package \
+                 holds variables — use a variable kind)",
+            );
+            return;
+        }
+        if !matches!(
+            d.kind,
+            ast::NetVarKind::Reg
+                | ast::NetVarKind::Logic
+                | ast::NetVarKind::Integer
+                | ast::NetVarKind::Time
+                | ast::NetVarKind::Bit
+                | ast::NetVarKind::Byte
+                | ast::NetVarKind::Shortint
+                | ast::NetVarKind::Int
+                | ast::NetVarKind::Longint
+        ) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "this variable kind in a package body is outside the v1 subset \
+                 (plain vector variables only — event/string/real/class/virtual \
+                 are a follow-on)",
+            );
+            return;
+        }
+        if d.const_param {
+            // A2a's desugared array parameter targeting a PACKAGE body is the
+            // A2b slice (const table storage) — loud until then.
+            self.error(
+                MsgCode::ElabUnsupported,
+                "an array parameter in a package body is not yet supported (A2b)",
+            );
+            return;
+        }
+        for decl in &d.names {
+            if self.dyn_dim_kind(&decl.unpacked).is_some() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "package variable `{}`: dynamic storage (queue/dynamic/\
+                         associative) in a package body is outside the v1 subset",
+                        decl.name.name
+                    ),
+                );
+                return;
+            }
+            if consts.contains_key(&decl.name.name) {
+                self.error(
+                    MsgCode::DupUnit,
+                    &format!(
+                        "package symbol `{}` declared more than once (a parameter \
+                         and a variable share one name space)",
+                        decl.name.name
+                    ),
+                );
+            }
+        }
+        // The shared decl path registers width/sign/2-state/array sidecars
+        // exactly like a module-body variable; `in_pkg_body` makes a
+        // non-foldable initializer LOUD inside the shared init fold (a module
+        // body would hand it to the §6.8 pre-sweep, which a package does not
+        // have). PortList::None + empty body ⇒ every name is `Internal`.
+        let saved = std::mem::replace(&mut self.in_pkg_body, true);
+        self.elaborate_netvar_decl(d, &ast::PortList::None, &[], false);
+        self.in_pkg_body = saved;
+        for decl in &d.names {
+            if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {
+                vars.insert(decl.name.name.clone(), id);
+            }
+        }
     }
 
     /// Bind one import's CONST symbols into the current module scope.
@@ -24182,9 +24579,17 @@ impl<'s> Elaborator<'s> {
                         // A different package already wildcard-bound this name ⇒
                         // ambiguous. Unbind it (save the prior value for restore) so a
                         // reference is loud-undefined, and mark it ambiguous.
+                        // A2b-prereq: `wc_origin` is shared by the CONST and the
+                        // VARIABLE namespaces (§26.8 ambiguity is per NAME) — the
+                        // prior binding may live in either map; unbind both sides
+                        // (the alias-guarded symbols removal never touches a real
+                        // net: only keys this import machinery inserted).
                         Some(prev) if prev != pkg => {
                             let prev_val = self.params.remove(&key);
                             saved_params.push((key.clone(), prev_val));
+                            if self.pkg_var_aliases.remove(&key).is_some() {
+                                self.symbols.remove(&key);
+                            }
                             wc_origin.insert(key, String::new());
                         }
                         // Same package re-import: idempotent, keep the binding.
@@ -24195,12 +24600,97 @@ impl<'s> Elaborator<'s> {
                         }
                     }
                 }
+                // A2b-prereq: wildcard-bind the package's VARIABLES as symbol
+                // aliases (interface-alias precedent — one insertion covers
+                // every read/write name→net funnel). Same origin/ambiguity
+                // rules as the consts above, shared `wc_origin`.
+                let vars: Vec<(String, u32)> = self
+                    .pkg_vars
+                    .get(pkg)
+                    .map(|m| m.iter().map(|(k, &n)| (k.clone(), n)).collect())
+                    .unwrap_or_default();
+                for (name, net) in vars {
+                    let key = self.fq(&name);
+                    if explicit_imports.contains(&key) {
+                        continue;
+                    }
+                    match wc_origin.get(&key).map(String::as_str) {
+                        Some("") => continue,
+                        Some(prev) if prev != pkg => {
+                            let prev_val = self.params.remove(&key);
+                            saved_params.push((key.clone(), prev_val));
+                            if self.pkg_var_aliases.remove(&key).is_some() {
+                                self.symbols.remove(&key);
+                            }
+                            wc_origin.insert(key, String::new());
+                        }
+                        Some(_) => {}
+                        None => {
+                            // Never clobber a symbols entry this machinery did
+                            // not create (e.g. an interface-port alias): the
+                            // existing binding wins, like a local declaration.
+                            // Same for a HEADER parameter already bound (3a
+                            // runs before this 3a.5): local constant wins the
+                            // wildcard (iverilog local-wins pin).
+                            if self.params.contains_key(&key)
+                                || (self.symbols.contains_key(&key)
+                                    && !self.pkg_var_aliases.contains_key(&key))
+                            {
+                                continue;
+                            }
+                            self.symbols.insert(key.clone(), net);
+                            self.pkg_var_aliases
+                                .insert(key.clone(), (pkg.to_string(), false));
+                            wc_origin.insert(key, pkg.to_string());
+                        }
+                    }
+                }
             }
             Some(sym) => {
                 if let Some(&v) = consts.get(&sym.name) {
                     let key = self.fq(&sym.name);
                     explicit_imports.insert(key.clone());
+                    // A2b-prereq S4 (symmetric): an explicit CONST import wins
+                    // over a prior wildcard VARIABLE binding (§26.8) — drop the
+                    // now-dead alias so no write path can still reach it.
+                    if self.pkg_var_aliases.remove(&key).is_some() {
+                        self.symbols.remove(&key);
+                    }
                     saved_params.push((key.clone(), self.params.insert(key, v)));
+                } else if let Some(&net) = self.pkg_vars.get(pkg).and_then(|m| m.get(&sym.name)) {
+                    // A2b-prereq: explicit VARIABLE import — bind the alias and
+                    // mark it explicit (a later local declaration of this name
+                    // is a loud conflict in `add_net`, iverilog-pinned). A name
+                    // ALREADY locally bound (header param / earlier net) is the
+                    // same conflict, just discovered in the other order — but a
+                    // prior WILDCARD binding (const or var, S4) is not a local
+                    // declaration: the explicit import wins (§26.8).
+                    let key = self.fq(&sym.name);
+                    let wildcard_bound = wc_origin.get(&key).is_some_and(|p| !p.is_empty());
+                    if (self.params.contains_key(&key) && !wildcard_bound)
+                        || (self.symbols.contains_key(&key)
+                            && !self.pkg_var_aliases.contains_key(&key))
+                    {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "explicit import of `{}` from package `{pkg}` \
+                                 conflicts with a local declaration of the same \
+                                 name",
+                                sym.name
+                            ),
+                        );
+                    } else {
+                        if wildcard_bound {
+                            // unbind the losing wildcard (either namespace).
+                            let prev = self.params.remove(&key);
+                            saved_params.push((key.clone(), prev));
+                            self.pkg_var_aliases.remove(&key);
+                        }
+                        explicit_imports.insert(key.clone());
+                        self.symbols.insert(key.clone(), net);
+                        self.pkg_var_aliases.insert(key, (pkg.to_string(), true));
+                    }
                 } else if !self
                     .pkg_funcs
                     .get(pkg)

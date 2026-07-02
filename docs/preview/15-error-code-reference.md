@@ -585,6 +585,17 @@ multi-word 산술(`*`/`/`/`%`/`**`)의 피연산자 폭이 `WIDE_ARITH_CAP`(2^20
 - **원인**: replication/concat로 2^20-bit를 넘는 곱셈·나눗셈·거듭제곱(예: `{2{a}} * {2{a}}`, `a`는 2^20-bit).
 - **해결**: 피연산자 폭을 `MAX_NET_WIDTH` 이하로 줄인다(2^20-bit 초과 산술은 v1 범위 밖).
 
+### VITA-W4026 · `W-RUN-VCD-PKGVAR-SKIP` (Warning)
+
+package-level 변수(예약 `$pkg$<pkg>` 스코프의 저장소)는 v1에서 VCD 표면이 없다 — bare `$dumpvars`는 package 변수를 선언하지 않으며(iverilog parity: iverilog도 덤프하지 않음), `$dumpvars(…, pkg_var)`처럼 **명시적으로 선택**했을 때만 이 경고를 1회 내고 해당 net을 제외한다(silent 무시 금지; iverilog는 이 지점에서 assert 크래시).
+
+```
+->  warning[VITA-W4026] W-RUN-VCD-PKGVAR-SKIP: package variable has no VCD surface (v1); excluded from the dump
+```
+
+- **원인**: `$dumpvars` 인자로 import된 package 변수(또는 그 스코프)를 직접 지정.
+- **해결**: 관찰이 필요하면 모듈 변수에 복사해 덤프하거나 `$display`/OBS probe로 관찰(패키지 변수 파형은 후속).
+
 ### VITA-E8001 · `E-FLIST-CYCLE` (Error)
 **filelist 사이클 — 활성 스택에 이미 있는 `.f`를 재포함.** 중첩 `-f`/`-F`가 (베이스 해소+lexical
 canonical 후) 현재 열린 `.f` active-stack의 경로로 해소될 때. 평탄화는 트리여야 하므로 back-edge는

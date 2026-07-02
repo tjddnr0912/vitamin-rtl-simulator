@@ -1796,6 +1796,31 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
         return;
     }
     st.dump_filter = dump_filter_from_args(st, args);
+    // A2b-prereq: package-level variables (reserved `$pkg$…` scope) have no
+    // VCD surface in v1 — iverilog parity for the bare dump (it declares no
+    // package vars either), and an EXPLICIT `$dumpvars(…, pkg_var)` selection
+    // is warned once, never silently ignored (iverilog asserts/crashes here).
+    if st.net_names.len() == st.ir.nets.len() {
+        if let Some(f) = &st.dump_filter {
+            if f.iter().any(|&n| {
+                st.net_names
+                    .get(n as usize)
+                    .is_some_and(|s| s.starts_with("$pkg$"))
+            }) {
+                use diag::{Diagnostic, LogEvent, MsgCode, Severity, TimeStamp};
+                st.sink.emit(LogEvent::Diagnostic(Diagnostic {
+                    severity: Severity::Warning,
+                    code: MsgCode::RunVcdPkgVarSkip,
+                    message: "a package variable has no VCD surface (v1): it is \
+                              excluded from the dump"
+                        .to_string(),
+                    location: None,
+                    context: Vec::new(),
+                    sim_time: Some(TimeStamp { ticks: st.now }),
+                }));
+            }
+        }
+    }
     let path = st
         .vcd_path_override
         .clone()
@@ -1858,6 +1883,11 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
             // $scope/$upscope tree by visiting nets in scope-sorted order and pushing
             // / popping as the scope prefix changes (classic sorted-leaf tree walk).
             let mut order: Vec<usize> = (0..nets.len()).collect();
+            // A2b-prereq: package variables live under the reserved `$pkg$<pkg>`
+            // scope and have no VCD surface in v1 (iverilog parity). Dropped
+            // BEFORE the scope-tree walk so no empty `$pkg$…` $scope is emitted.
+            // No pre-existing design has such names → byte-identical.
+            order.retain(|&i| !names[i].starts_with("$pkg$"));
             let segs: Vec<Vec<&str>> = names.iter().map(|s| s.split('.').collect()).collect();
             // sort by scope path (all but the leaf); stable → vars keep net order
             // within a scope.
