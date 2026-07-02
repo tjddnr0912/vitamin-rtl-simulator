@@ -1,6 +1,6 @@
 # vitamin — 잔여 작업 트래커 (Remaining Work)
 
-> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2835 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능).
+> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2853 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능). 최신 = **§4.5.72 generate/interface 배열 `'{…}` decl-init silent-drop 수정(㉮ 종결)**.
 > 이 파일 = **"goal까지 남은 것" 상위 스냅샷** — 재계획 시점마다 통째로 갱신한다. 슬라이스 단위 라이브 기록 = [ROADMAP](ROADMAP.md) §2(착수 순서)·§4.5.x(슬라이스 로그)·§6(외부 리포트)·§7(OBS), 실행 큐 = `LOOPROMPT.md` NEXT. 2026-06-16 이전 P0~P5/Phase-A/B 상세 이력은 이 파일의 **git 이력**과 [DEVLOG](DEVLOG.md)가 보존(여기서 삭제).
 >
 > **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터(correct-or-loud) · **G2**(2026-07-02 추가) = **AI-Agent 친화 simulator**(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
@@ -35,7 +35,7 @@
 | file-I/O 소형 | `$fflush` accept·`$fmonitor`/`$fstrobe`·STDIN read(결정성 설계 필요) |
 | 소형 슬라이스 큐 | 계단식 CA 체인 t0 전파 그라운딩 · 계층 함수호출 `u1.f(x)` · compound-const `==?` fold · `%-` 좌측정렬 family · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지) |
 | **package 발굴 pre-existing**(§4.5.70 ㉶~㉼·§4.5.71 ㉽) | `always @(*)` decl-init wake(iverilog 미발화·vita-wide) · param override 비상수=W3056 warn+default(iverilog=error) · `@(p::x)` event control(iverilog ✓) · longint MIN fold 갭(package만) · ~~비상수 package init~~ ✅(§4.5.71서 해소) · `p::arr[i]` scoped element read(iverilog ✓) · generate-block 내 `import`(iverilog ✓) · package 자기-func init 호출(㉽, iverilog ✓·현 loud+진단 부정확) |
-| **A2a 발굴 pre-existing**(§4.5.69 ㉮~㉵) | **generate/interface 스코프 배열 decl-init 영구 silent-drop**(iverilog ✓·①급) · 크로스모듈 t0 decl-init race(iverilog ✓·ProcId 순서=golden 리스크 M~L) · SYS-READ hier-element dest 실지원(iverilog ✓·현 honest-loud) · hier-write sentinel cont_assigns/out_binds 미패치 panic · scalar `int unsigned` param 부호(iverilog ✓) · repl-count 변수→0 · assoc 배열-key/clocking 배열-output word0 · typedef-요소 param 진단 |
+| **A2a 발굴 pre-existing**(§4.5.69 ㉮~㉵) | ~~generate/interface 스코프 배열 decl-init 영구 silent-drop~~ **✅ 종결(§4.5.72)** · 크로스스코프 t0 decl-init race(㉯·iverilog와 값 divergent이나 **둘 다 §6.8 합법·self-consistent**·문서 핀=골든 리스크로 defer) · SYS-READ hier-element dest 실지원(iverilog ✓·현 honest-loud) · hier-write sentinel cont_assigns/out_binds 미패치 panic · scalar `int unsigned` param 부호(iverilog ✓) · repl-count 변수→0 · assoc 배열-key/clocking 배열-output word0 · typedef-요소 param 진단 · **queue/dyn/string decl-init in gen/iface**(iverilog 일부 ✓·현 loud follow-on) · generate-case 스코프 이름 `gcase[0].x` E3010(gen-if는 정상) |
 | deep 잔여(저우선) | inline body NON-fill context-width·runtime `==?` pattern·string queue·block-local queue decl·modport 방향 강제·force part-select |
 
 ## D. 별도 관리 — 재진입 트리거 충족 시에만 승격 (정확성과 직교 · ROADMAP §조건부 13~17)

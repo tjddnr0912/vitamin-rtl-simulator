@@ -4482,6 +4482,18 @@ impl<'s> Elaborator<'s> {
         self.pending_var_inits.append(&mut bl_strings);
         self.flush_pending_var_inits();
 
+        // (6.9b) §6.8 for GENERATE scopes: the module-body sweep above walks the
+        //        module body ONLY, so an array `'{…}` / non-constant / queue
+        //        decl-init inside a generate block was silently dropped. Collect +
+        //        flush them now (VarInit phase, ONE synthesized `initial` per gen
+        //        scope) — AFTER the module pre-sweep and BEFORE the Logic pass, so
+        //        every pre-sweep initial precedes the user processes that read it.
+        for item in &module.body {
+            if let ast::ModuleItem::Generate(g) = item {
+                self.elaborate_generate(&g.items, GenPhase::VarInit, 0, map);
+            }
+        }
+
         // (6.5) N4 clocking: synthesize preponed-sampled holding nets + a marked
         // commit handler per clocking block, and register `@(cb)` events — AFTER the
         // net passes (source nets resolve) and BEFORE the process loop (so `cb.sig`
@@ -5153,18 +5165,36 @@ impl<'s> Elaborator<'s> {
                 // module body passes (4)/(7).
                 for it in &decl.body {
                     if let ast::ModuleItem::NetVar(d) = it {
-                        // A2a scope-gate (the generate gate's twin): an interface
-                        // body has no §6.8 decl-init collection pass, so a
-                        // desugared array parameter here would silently read 0.
-                        if d.const_param {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                "an array parameter inside an interface is unsupported (v1) — move it to module scope",
-                            );
-                        }
+                        // A desugared array parameter is created like any var; its
+                        // `'{…}` decl-init rides the interface §6.8 pre-sweep below
+                        // (collect + flush, `lowering_decl_init`-exempt), so it is a
+                        // supported form now (the A2a scope-gate is lifted). User
+                        // writes still hit the net-id-keyed const-param deny.
                         self.elaborate_netvar_decl(d, &decl.ports, &decl.body, false);
                     }
                 }
+                // §6.8 pre-sweep for the interface body (mirrors the module-body
+                // sweep): an array `'{…}` / non-constant decl-init has no foldable
+                // `net.init`, so without this collect+flush it was silently dropped.
+                // Runs in the interface INSTANCE scope (bare-name lvalues resolve to
+                // `path.name`) and BEFORE the logic pass below, so the synthesized
+                // `initial` precedes the interface's own procs.
+                //
+                // SAVE/RESTORE the shared `pending_var_inits` around it: this pass
+                // runs during the PARENT's Nets phase, and `hoist_block_local_nets`
+                // may already have queued a module block-local non-const init there
+                // (it runs earlier, in pass 4a). Without the isolation this flush
+                // would STEAL that init and re-lower it in the interface scope —
+                // both a loud misresolve and (with same-named members) a silent
+                // module-side drop. The generate VarInit walk isolates the same way.
+                let saved_pending = std::mem::take(&mut self.pending_var_inits);
+                for it in &decl.body {
+                    if let ast::ModuleItem::NetVar(d) = it {
+                        self.collect_var_init_drivers(d);
+                    }
+                }
+                self.flush_pending_var_inits();
+                self.pending_var_inits = saved_pending;
                 for it in &decl.body {
                     match it {
                         ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
@@ -6428,9 +6458,12 @@ impl<'s> Elaborator<'s> {
                 // registered here and the init is collected (in declaration order)
                 // by `collect_var_init_drivers`, then drained into the synthesized
                 // pre-sweep `initial` (§6.8); the string heap holds no foldable
-                // `init` field, so it always rides that path. In a scope that does
-                // NOT collect the init (block-local/interface/generate) it stays a
-                // loud reject — correct-or-loud, never a silently-dropped init.
+                // `init` field, so it always rides that path. A scope that does not
+                // pass `allow_string_init` keeps STRING inits a loud reject —
+                // correct-or-loud, never a silently-dropped init. (Generate and
+                // interface bodies DO now run the array/non-const pre-sweep, but
+                // their string decl-init remains a documented follow-on, so they
+                // still pass `false` here.)
                 if decl.init.is_some() && !allow_string_init {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -6498,12 +6531,14 @@ impl<'s> Elaborator<'s> {
                     // A queue / dynamic-array `'{…}` initializer is EXPANDED to runtime
                     // ops at t0 by the var-init flush (a push_back sequence / `new[N]` +
                     // element writes); allow it and register the handle. `allow_string_init`
-                    // gates this to the scopes whose init pass actually runs the flush
-                    // (module body / block-local) — in a generate or interface body the
-                    // var-init is NOT collected, so allowing it there would silently DROP
-                    // the init (the same reason `allow_string_init` guards string inits).
-                    // Any other init (a whole-value copy, a non-pattern expr) or an assoc
-                    // array stays loud — those use runtime methods.
+                    // gates this to the scopes that pass it (module body / block-local).
+                    // Generate and interface bodies now run the flush for ARRAY/non-const
+                    // inits, but the QUEUE/dyn-array decl-init path there is a documented
+                    // follow-on (the handle-net creation + in-scope expand is unverified),
+                    // so they still pass `false` → a queue `'{…}` decl-init in those scopes
+                    // stays a LOUD reject (correct-or-loud), never a silent drop. Any other
+                    // init (a whole-value copy, a non-pattern expr) or an assoc array stays
+                    // loud too — those use runtime methods.
                     let desugared = allow_string_init
                         && matches!(&init.kind, ast::ExprKind::AssignPattern(_))
                         && matches!(handle_kind, ir::NetKind::Queue | ir::NetKind::DynArray);
@@ -16755,6 +16790,15 @@ impl<'s> Elaborator<'s> {
 enum GenPhase {
     /// Create NetVar nets only (so they sit in the parent's contiguous slice).
     Nets,
+    /// Collect + flush §6.8 variable decl-init pre-sweeps (unpacked-array `'{…}`
+    /// patterns and non-constant scalars) as t0 `initial` blocks, ONE per generate
+    /// scope. Runs AFTER the Nets walk (nets exist) and BEFORE the Logic walk (so
+    /// the synthesized initial precedes the scope's user processes). A constant
+    /// scalar is already folded into `net.init` and is not collected here. Queue /
+    /// dyn-array / string decl-inits in a generate scope stay a LOUD reject (their
+    /// handle net is not created here — `allow_string_init` is `false`), a
+    /// documented follow-on.
+    VarInit,
     /// Lower cont-assigns + processes only (nets already created in the Nets walk).
     Logic,
     /// Recurse into child module instances only (after the parent net slice is final).
@@ -16799,8 +16843,21 @@ impl<'s> Elaborator<'s> {
             }
             return;
         }
+        // VarInit: isolate THIS scope-level's pending list so a nested block's
+        // flush drains only its own inits (not ours), and flush at the end while
+        // the current scope prefix is still active — so each collected bare-name
+        // lvalue (`arr`) resolves to the scoped net (`blk[idx].arr`), and the
+        // synthesized `initial` lands in this scope. `pending_var_inits` is empty
+        // outside the module/interface flush windows, but the save/restore keeps
+        // sibling scopes independent regardless. (No-op for other phases.)
+        let saved_pending =
+            (phase == GenPhase::VarInit).then(|| std::mem::take(&mut self.pending_var_inits));
         for item in items {
             self.elaborate_gen_item(item, phase, depth, map);
+        }
+        if let Some(outer) = saved_pending {
+            self.flush_pending_var_inits();
+            self.pending_var_inits = outer;
         }
     }
 
@@ -17030,18 +17087,24 @@ impl<'s> Elaborator<'s> {
             // NETS phase: only net declarations. No ports inside a generate
             // (LRM forbids port decls) → empty port list/body, dir = Internal.
             (GenPhase::Nets, ast::ModuleItem::NetVar(d)) => {
-                // A2a scope-gate: a generate scope does NOT collect unpacked-
-                // array `'{…}` decl-inits (the §6.8 pre-sweep walks the module
-                // body only — a known drop, ROADMAP candidate), so a desugared
-                // array parameter here would silently stay 0. Loud until the
-                // generate-scope init collection lands.
-                if d.const_param {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "an array parameter inside a generate block is unsupported (v1) — move it to module scope",
-                    );
-                }
+                // A desugared array parameter is created here like any var; its
+                // `'{…}` decl-init is collected by the VarInit phase and flushed
+                // as an exempt (`lowering_decl_init`) pre-sweep, so it is now a
+                // supported form (the old A2a scope-gate that loud-rejected it is
+                // lifted). User writes still hit the net-id-keyed const-param deny.
                 self.elaborate_netvar_decl(d, &ast::PortList::None, &[], false);
+            }
+            // VARINIT phase: collect this decl's §6.8 pre-sweep initializer (an
+            // unpacked-array `'{…}` or a non-constant scalar). For those supported
+            // forms the net was created in the Nets phase; `elaborate_generate`
+            // flushes the collected inits at scope exit (while the scope prefix is
+            // active, so the bare-name lvalue resolves to `blk[idx].name`). Without
+            // this the initializer was silently dropped — the value stayed at its
+            // X/0 default. (A queue/dyn-array/string decl-init is loud-rejected in
+            // the Nets phase — `allow_string_init` is `false` — so no net exists to
+            // collect here; that is a documented follow-on.)
+            (GenPhase::VarInit, ast::ModuleItem::NetVar(d)) => {
+                self.collect_var_init_drivers(d);
             }
             // LOGIC phase: cont-assigns + processes.
             (GenPhase::Logic, ast::ModuleItem::ContAssign(ca)) => {

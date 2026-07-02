@@ -251,15 +251,21 @@ fn v1_boundaries_are_loud() {
         "fixed array-parameter dimension",
         "queue dim",
     );
-    // generate scope: the §6.8 pre-sweep does not collect generate decl-inits
-    // (a desugared parameter would silently stay 0) — loud scope-gate.
-    assert_loud(
-        "module t; generate if (1) begin : g\n\
-         localparam int L [0:1] = '{30, 40};\n\
-         end endgenerate endmodule\n",
-        "generate block",
-        "generate-scope array parameter",
-    );
+    // generate scope: SUPPORTED since the gen/iface array decl-init landed
+    // (2026-07-03) — the VarInit pre-sweep collects + flushes the desugared
+    // parameter's `'{…}` in the block scope. Positive pin (the old loud
+    // scope-gate is lifted; full coverage = pkg_array_param.rs).
+    {
+        let (o, e, c) = run("module t; generate if (1) begin : g\n\
+             localparam int L [0:1] = '{30, 40};\n\
+             initial begin $display(\"%0d %0d\", L[0], L[1]); $finish; end\n\
+             end endgenerate endmodule\n");
+        assert_eq!(
+            c, 0,
+            "generate-scope array parameter must elaborate clean:\n{e}"
+        );
+        assert!(o.starts_with("30 40\n"), "generate array param value:\n{o}");
+    }
     // package scope: SUPPORTED since A2b (2026-07-03) — positive pin here so
     // this boundary list stays truthful; full coverage = pkg_array_param.rs.
     {
@@ -270,14 +276,20 @@ fn v1_boundaries_are_loud() {
         assert_eq!(c, 0, "package array parameter must elaborate clean:\n{e}");
         assert!(o.starts_with("1\n"), "package array param value:\n{o}");
     }
-    // interface scope: no §6.8 decl-init collection pass there (the generate
-    // gate's twin — adversarial find: the value silently read 0)
-    assert_loud(
-        "interface ifc; localparam int R [0:1] = '{1,2}; endinterface\n\
-         module t; ifc i(); initial $display(\"%0d\", i.R[0]); endmodule\n",
-        "interface",
-        "interface-scope array parameter",
-    );
+    // interface scope: SUPPORTED since the gen/iface array decl-init landed
+    // (2026-07-03 — the generate gate's twin) — the interface body §6.8
+    // pre-sweep flushes it in the instance scope. Positive pin.
+    {
+        let (o, e, c) = run(
+            "interface ifc; localparam int R [0:1] = '{1,2}; endinterface\n\
+             module t; ifc i(); initial begin #1; $display(\"%0d %0d\", i.R[0], i.R[1]); $finish; end endmodule\n",
+        );
+        assert_eq!(
+            c, 0,
+            "interface-scope array parameter must elaborate clean:\n{e}"
+        );
+        assert!(o.starts_with("1 2\n"), "interface array param value:\n{o}");
+    }
     // port-name collision: the non-ANSI input copy-in would drive the net
     // through a deny-free ContAssign (adversarial find) — reject the merge
     assert_loud(
