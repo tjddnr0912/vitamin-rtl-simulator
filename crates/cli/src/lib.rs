@@ -35,6 +35,7 @@ pub const EXIT_STALE: i32 = 2;
 pub const EXIT_CLI_ERROR: i32 = 3;
 
 mod filelist;
+mod obs;
 pub mod worklib;
 
 /// Knobs the `vita` driver threads down into the pipeline. Kept tiny for v1 — the
@@ -81,6 +82,11 @@ pub struct VitaOpts {
     /// order). Searched first-match by `$test/$value$plusargs`. Pure runtime
     /// input — never hashed into artifacts.
     pub plusargs: Vec<String>,
+    /// `--obs-dir <D>` (G2 OBS-1a): write the run manifest + result ledger
+    /// (`run.json` + `results.jsonl`) into `D` at end-of-run. `None` ⇒ no obs
+    /// rail (byte-identical to before). Out-of-band sink — never hashed into
+    /// artifacts, never enters the golden IR. One-shot `vita` only for v1.
+    pub obs_dir: Option<String>,
 }
 
 impl VitaOpts {
@@ -180,6 +186,11 @@ impl StderrSink {
     /// Count of Fatal-severity diagnostics seen so far.
     pub fn fatal_count(&self) -> u32 {
         self.fatals.get()
+    }
+
+    /// Count of Warning-severity diagnostics seen so far (obs manifest).
+    pub fn warning_count(&self) -> u32 {
+        self.warnings.get()
     }
 
     /// True if any Error or Fatal diagnostic was emitted.
@@ -603,6 +614,9 @@ fn run_vita_str_gated(
     inner: &StderrSink,
     sink: &vita_log::GatedSink,
 ) -> i32 {
+    // G2 OBS-1a wall-clock baseline (isolated, non-deterministic — only used if
+    // `--obs-dir` is set; the Instant read is cheap and never affects output).
+    let obs_start = std::time::Instant::now();
     // ── preprocess → lex → parse (shared front-end) ─────────────────────────
     let Some((unit, rt)) = frontend_text_to_unit_pre(file, text, sink, &pre_opts_of(opts)) else {
         return EXIT_USER_ERROR;
@@ -678,10 +692,95 @@ fn run_vita_str_gated(
     let code = sim_exit_code(&result);
     // A `-Werror`-promoted warning is a real Error in the post-gate stream:
     // doc-13 class 1 ("승격-warning 실패") — flip an otherwise-clean exit.
-    if code == EXIT_OK && inner.had_error_or_fatal() {
-        return EXIT_USER_ERROR;
+    let final_code = if code == EXIT_OK && inner.had_error_or_fatal() {
+        EXIT_USER_ERROR
+    } else {
+        code
+    };
+    // G2 OBS-1a: emit the run manifest + result ledger AFTER the exit code is
+    // final (so `status`/`exit_code` match exactly what the process returns).
+    // Derived from the SAME `result` + diagnostic counts — no second source.
+    if let Some(dir) = &opts.obs_dir {
+        emit_obs(
+            dir,
+            file,
+            text,
+            &opts.plusargs,
+            &result,
+            inner,
+            final_code,
+            obs_start,
+        );
     }
-    code
+    final_code
+}
+
+/// Build the OBS-1a `ObsRun` from the finished run and write `run.json` +
+/// `results.jsonl` into `dir`. A filesystem failure is surfaced LOUD (a
+/// silently-missing obs file would mislead the harness) but does NOT change the
+/// simulation's exit code — the run itself succeeded/failed independently.
+#[allow(clippy::too_many_arguments)]
+fn emit_obs(
+    dir: &str,
+    file: &str,
+    text: &str,
+    plusargs: &[String],
+    result: &sim_engine::SimResult,
+    inner: &StderrSink,
+    final_code: i32,
+    start: std::time::Instant,
+) {
+    let utc_unix_s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // The BASENAME only (not the full path): a run from `/tmp/x/d.sv` and one
+    // from `/home/ci/d.sv` of the same design must byte-diff clean (R-F1). The
+    // content identity is the blake3, not the path.
+    let source_name = std::path::Path::new(file)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(file);
+    // `exit_class` MUST agree with the FINAL exit code (adversarial find): a
+    // `-Werror`-promoted warning flips an engine-"ok" run to a failing
+    // `final_code`, so deriving `exit_class` from the raw `SimResult` would emit
+    // `"ok"` next to `exit_code:1`/`status:"FAIL"` — a self-contradicting log.
+    // Derive it from `final_code` + the fatal count instead (verdict fields all
+    // agree). `finish_reason` stays from the engine — it is DESCRIPTIVE (how the
+    // sim stopped: it really did `$finish`), not the pass/fail verdict.
+    let exit_class = if final_code == EXIT_OK {
+        "ok"
+    } else if inner.fatal_count() > 0 {
+        "fatal"
+    } else {
+        "had_errors"
+    };
+    let run = obs::ObsRun {
+        source_name,
+        source_blake3: blake3::hash(text.as_bytes()).to_hex().to_string(),
+        plusargs,
+        format_version: vita_artifact::CURRENT_FORMAT_VERSION,
+        finish_reason: obs::finish_reason_str(result.finish_reason),
+        exit_class,
+        exit_code: final_code,
+        sim_time: result.sim_time,
+        errors: inner.error_count(),
+        warnings: inner.warning_count(),
+        fatals: inner.fatal_count(),
+        status: if final_code == EXIT_OK {
+            "PASS"
+        } else {
+            "FAIL"
+        },
+        utc_unix_s,
+        wall_s: start.elapsed().as_secs_f64(),
+    };
+    if let Err(e) = obs::write_run_dir(dir, &run) {
+        eprintln!(
+            "error[{}]: cannot write --obs-dir '{dir}': {e}",
+            MsgCode::CliBadFlag.code_num()
+        );
+    }
 }
 
 /// Map a finished `SimResult` to the doc-13 exit code. A clean `$finish`/quiescent
@@ -849,6 +948,7 @@ pub fn run(argv: &[String]) -> i32 {
                 work: None,
                 tops: Vec::new(),
                 plusargs: io.plusargs,
+                obs_dir: io.obs_dir,
             };
             run_vita(&io.pos, &opts)
         }
@@ -2462,6 +2562,9 @@ struct IoArgs {
     /// order preserved ($test/$value$plusargs search order). vita/vrun only —
     /// the compile applets reject them loud.
     plusargs: Vec<String>,
+    /// `--obs-dir <D>` (G2 OBS-1a): directory for the run manifest + result
+    /// ledger. `None` ⇒ no obs rail. Out-of-band; one-shot `vita` only for v1.
+    obs_dir: Option<String>,
 }
 
 /// W-FLIST-OVERRIDE (always-logged): a single-value knob set twice — proceed
@@ -2491,6 +2594,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut libs: Vec<String> = Vec::new();
     let mut tops: Vec<String> = Vec::new();
     let mut plusargs: Vec<String> = Vec::new();
+    let mut obs_dir: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -2674,6 +2778,31 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 log_append = true;
                 i += 1;
             }
+            // G2 OBS-1a: directory for the run manifest + result ledger.
+            "--obs-dir" => {
+                let Some(v) = args.get(i + 1) else {
+                    eprintln!(
+                        "error[{}]: '--obs-dir' needs a directory",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                // Reject an empty value: `Path::new("").join(...)` is a relative
+                // path, so `--obs-dir ""` (e.g. a `--obs-dir $UNSET` slip) would
+                // silently write run.json/results.jsonl into the CWD.
+                if v.is_empty() {
+                    eprintln!(
+                        "error[{}]: '--obs-dir' needs a non-empty directory",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                }
+                if let Some(prev) = &obs_dir {
+                    warn_override("--obs-dir", prev, v);
+                }
+                obs_dir = Some(v.clone());
+                i += 2;
+            }
             "--dump-filelist" => {
                 dump_filelist = true;
                 i += 1;
@@ -2739,6 +2868,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         libs,
         tops,
         plusargs,
+        obs_dir,
     })
 }
 
@@ -2791,6 +2921,22 @@ fn reject_plusargs(stage: &str, io: &IoArgs) -> Result<(), i32> {
              compiles, it does not simulate",
             MsgCode::CliBadFlag.code_num(),
             io.plusargs[0]
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
+    Ok(())
+}
+
+/// `--obs-dir` (G2 OBS-1a) is honored ONLY by the one-shot `vita` applet in v1.
+/// Loud-reject it on the staged applets rather than silently accept-and-drop it
+/// (a silent no-op on `vrun`, the simulate stage, would mislead a harness — the
+/// staged obs rail is an OBS-1b follow-on). Mirrors [`reject_plusargs`].
+fn reject_obs_dir(stage: &str, io: &IoArgs) -> Result<(), i32> {
+    if let Some(dir) = &io.obs_dir {
+        eprintln!(
+            "error[{}]: '--obs-dir {dir}' is a one-shot `vita` argument — '{stage}' \
+             does not emit the obs rail (a staged-run manifest is a follow-on)",
+            MsgCode::CliBadFlag.code_num()
         );
         return Err(EXIT_CLI_ERROR);
     }
@@ -2863,6 +3009,9 @@ fn dispatch_vcmp(args: &[String]) -> i32 {
     if let Err(c) = reject_plusargs("vcmp", &io) {
         return c;
     }
+    if let Err(c) = reject_obs_dir("vcmp", &io) {
+        return c;
+    }
     if io.pos.is_empty() {
         eprintln!(
             "error[{}]: vcmp: no source files",
@@ -2917,6 +3066,9 @@ fn dispatch_velab(args: &[String]) -> i32 {
         return c;
     }
     if let Err(c) = reject_plusargs("velab", &io) {
+        return c;
+    }
+    if let Err(c) = reject_obs_dir("velab", &io) {
         return c;
     }
     // ── library mode (`-L`): logical discovery instead of a positional .vu ──
@@ -3003,6 +3155,9 @@ fn dispatch_vrun(args: &[String]) -> i32 {
         return c;
     }
     if let Err(c) = reject_worklib_flags("vrun", &io, false, false) {
+        return c;
+    }
+    if let Err(c) = reject_obs_dir("vrun", &io) {
         return c;
     }
     if io.pos.len() != 1 {

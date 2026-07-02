@@ -1,6 +1,6 @@
 # vitamin — 잔여 작업 트래커 (Remaining Work)
 
-> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2853 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능). 최신 = **§4.5.72 generate/interface 배열 `'{…}` decl-init silent-drop 수정(㉮ 종결)**.
+> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2862 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능). 최신 = **§4.5.73 G2 OBS-1a(`--obs-dir`→run.json+results.jsonl)** · 직전 §4.5.72 generate/interface 배열 decl-init silent-drop 수정(㉮ 종결). **G2 OBS 트랙 착수**: OBS-1a ✅ · OBS-1b(coverage.json+staged obs+input-identity) 다음.
 > 이 파일 = **"goal까지 남은 것" 상위 스냅샷** — 재계획 시점마다 통째로 갱신한다. 슬라이스 단위 라이브 기록 = [ROADMAP](ROADMAP.md) §2(착수 순서)·§4.5.x(슬라이스 로그)·§6(외부 리포트)·§7(OBS), 실행 큐 = `LOOPROMPT.md` NEXT. 2026-06-16 이전 P0~P5/Phase-A/B 상세 이력은 이 파일의 **git 이력**과 [DEVLOG](DEVLOG.md)가 보존(여기서 삭제).
 >
 > **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터(correct-or-loud) · **G2**(2026-07-02 추가) = **AI-Agent 친화 simulator**(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
