@@ -168,6 +168,15 @@ enum FieldSel {
     },
 }
 
+/// A parsed `parameter`/`localparam` declaration. `Scalar` = the ordinary
+/// `ParamDecl` (elaborate folds the value). `ConstArrayVar` = an A2a body
+/// ARRAY parameter (`localparam int RHO [0:4] = '{…}`) desugared to the
+/// equivalent variable-array `NetVarDecl` with `const_param: true`.
+enum ParamItem {
+    Scalar(ParamDecl),
+    ConstArrayVar(NetVarDecl),
+}
+
 /// The components of a parsed `property_spec` (the body shared by an inline
 /// `assert property(<spec>)` and a named `property NAME; <spec>; endproperty`):
 /// `(clock, disable_iff, antecedent, implication_kind, consequent,
@@ -2147,7 +2156,9 @@ impl<'t, 's> Parser<'t, 's> {
             self.bump();
             self.expect(TokenKind::LParen, "'(' after '#'");
             loop {
-                if let Some(p) = self.parse_param_decl() {
+                // body=false: an array parameter in the header is a loud error
+                // inside `parse_param_decl` (never a `ConstArrayVar` here).
+                if let Some(ParamItem::Scalar(p)) = self.parse_param_decl(false) {
                     params.push(p);
                 }
                 if !self.eat(TokenKind::Comma) {
@@ -2437,7 +2448,10 @@ impl<'t, 's> Parser<'t, 's> {
 
     /// Parse one parameter/localparam decl (the keyword is optional on `#(…)`
     /// continuations, defaulting to `Parameter`, which matches IEEE-1364 §12.2).
-    fn parse_param_decl(&mut self) -> Option<ParamDecl> {
+    /// `parse_param_decl` result: almost always a scalar `ParamDecl`; a body
+    /// ARRAY parameter (A2a) desugars to the equivalent const variable-array
+    /// decl instead (see `parse_array_param`).
+    fn parse_param_decl(&mut self, body: bool) -> Option<ParamItem> {
         let start = self.cur_span();
         let kind = if self.eat_kw(Kw::Localparam) {
             ParamKind::Localparam
@@ -2445,13 +2459,22 @@ impl<'t, 's> Parser<'t, 's> {
             self.eat_kw(Kw::Parameter);
             ParamKind::Parameter
         };
-        let mut signed = self.opt_signed().unwrap_or(false);
+        // Track explicit-`signed` PRESENCE alongside the folded bool: the A2a
+        // array desugar must mirror `signed_eff` (explicit wins, else the atom
+        // default) — the folded bool alone conflates "absent" with `false`.
+        let expl0 = self.opt_signed();
+        let mut signed = expl0.unwrap_or(false);
         // SV typed parameter: a data-type KIND keyword may lead — `parameter int W`,
         // `parameter logic [3:0] X`, `byte`/`shortint`/`longint`. 2-state atoms imply
         // a fixed signed range; `int` maps to the 32-bit signed Integer path. The
         // V2005 `integer`/`real`/`realtime`/`time` types stay in the else branch.
         let mut ty = ParamType::Implicit;
         let mut forced_range = None;
+        // The exact declared kind, kept for the A2a array-parameter desugar (the
+        // scalar path collapses `int` into `ParamType::Integer` etc. — the desugar
+        // must construct the SAME `NetVarDecl` the equivalent var decl would).
+        let mut var_kind: Option<NetVarKind> = None;
+        let mut expl1: Option<bool> = None;
         let kw_kind = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(
                 k @ (Kw::Logic
@@ -2467,51 +2490,88 @@ impl<'t, 's> Parser<'t, 's> {
         if let Some(k) = kw_kind {
             self.bump(); // the kind keyword
             match k {
-                Kw::Int => ty = ParamType::Integer, // 32-bit signed 2-state
+                Kw::Int => {
+                    ty = ParamType::Integer; // 32-bit signed 2-state
+                    var_kind = Some(NetVarKind::Int);
+                }
                 Kw::Byte => {
                     forced_range = Some(Self::dec_range(7));
                     signed = true;
+                    var_kind = Some(NetVarKind::Byte);
                 }
                 Kw::Shortint => {
                     forced_range = Some(Self::dec_range(15));
                     signed = true;
+                    var_kind = Some(NetVarKind::Shortint);
                 }
                 Kw::Longint => {
                     forced_range = Some(Self::dec_range(63));
                     signed = true;
+                    var_kind = Some(NetVarKind::Longint);
                 }
-                _ => {} // logic/reg/bit: width from an explicit range below
+                // logic/reg/bit: width from an explicit range below
+                Kw::Logic => var_kind = Some(NetVarKind::Logic),
+                Kw::Reg => var_kind = Some(NetVarKind::Reg),
+                Kw::Bit => var_kind = Some(NetVarKind::Bit),
+                _ => {}
             }
-            signed = signed || self.opt_signed().unwrap_or(false);
+            expl1 = self.opt_signed();
+            signed = signed || expl1.unwrap_or(false);
         } else {
             ty = match self.peek() {
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Integer))) => {
                     self.bump();
+                    var_kind = Some(NetVarKind::Integer);
                     ParamType::Integer
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Real))) => {
                     self.bump();
+                    var_kind = Some(NetVarKind::Real);
                     ParamType::Real
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Realtime))) => {
                     self.bump();
+                    var_kind = Some(NetVarKind::Realtime);
                     ParamType::Realtime
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Time))) => {
                     self.bump();
+                    var_kind = Some(NetVarKind::Time);
                     ParamType::Time
                 }
                 _ => ParamType::Implicit,
             };
         }
-        let range = match forced_range {
-            Some(r) => Some(r),
-            None => self.opt_range(),
+        let explicit_range = if forced_range.is_some() {
+            None
+        } else {
+            self.opt_range()
         };
+        let range = forced_range.or_else(|| explicit_range.clone());
         let name = self.ident()?;
+        // A2a: `[` after the parameter name ⇒ an ARRAY parameter (IEEE §6.20.2).
+        if self.peek() == Some(TokenKind::LBracket) {
+            // Explicit-signing presence (either position): the desugar mirrors
+            // `signed_eff` — an explicit `signed`/`unsigned` wins over the
+            // atom default (`int unsigned` must come out unsigned, like the
+            // equivalent var decl — the folded bool can't express that).
+            let expl_signed = match (expl0, expl1) {
+                (None, None) => None,
+                (a, b) => Some(a.unwrap_or(false) || b.unwrap_or(false)),
+            };
+            return self.parse_array_param(
+                body,
+                kind,
+                var_kind,
+                expl_signed,
+                explicit_range,
+                name,
+                start,
+            );
+        }
         self.expect(TokenKind::Eq, "'=' in parameter");
         let value = self.expr(0);
-        Some(ParamDecl {
+        Some(ParamItem::Scalar(ParamDecl {
             kind,
             signed,
             ty,
@@ -2519,7 +2579,86 @@ impl<'t, 's> Parser<'t, 's> {
             name,
             value,
             span: start.to(self.prev_span()),
-        })
+        }))
+    }
+
+    /// A2a (IEEE §6.20.2): a body `localparam <type> NAME [dims] = '{…};` —
+    /// an ARRAY parameter. DESUGARED here into the EXACT `NetVarDecl` the
+    /// equivalent variable-array decl (`int NAME [dims] = '{…};`) parses to,
+    /// so storage, `'{…}` init, indexing, foreach and `$size`/`$bits` reuse
+    /// the verified unpacked-array path verbatim, plus `const_param: true` so
+    /// elaborate registers the net as an elaboration constant (any later
+    /// write is a loud error). Kept loud (v1): the ANSI `#(…)` header form
+    /// and an overridable body `parameter` (no override machinery for
+    /// aggregates), an implicit-typed element, and non-fixed dims (`[$]`/`[]`).
+    #[allow(clippy::too_many_arguments)]
+    fn parse_array_param(
+        &mut self,
+        body: bool,
+        kind: ParamKind,
+        var_kind: Option<NetVarKind>,
+        expl_signed: Option<bool>,
+        explicit_range: Option<Range>,
+        name: Ident,
+        start: Span,
+    ) -> Option<ParamItem> {
+        if !body {
+            self.error(
+                "a scalar parameter in the ANSI `#(…)` header (an array parameter is supported only as a body `localparam` in v1)",
+            );
+            return None;
+        }
+        if kind == ParamKind::Parameter {
+            self.error(
+                "`localparam` for an array parameter (an overridable array `parameter` is unsupported in v1)",
+            );
+            return None;
+        }
+        let Some(vk) = var_kind else {
+            self.error(
+                "an explicit data type on an array parameter (`localparam int …` — an implicit-typed array parameter is unsupported in v1)",
+            );
+            return None;
+        };
+        let n_start = name.span;
+        let mut unpacked = Vec::new();
+        while self.at_dim_start() {
+            match self.parse_dim() {
+                Some(d) => unpacked.push(d),
+                None => break,
+            }
+        }
+        if !unpacked
+            .iter()
+            .all(|d| matches!(d, Dim::Range(_) | Dim::Size(_)))
+        {
+            self.error("a fixed array-parameter dimension (`[msb:lsb]`/`[size]`)");
+            return None;
+        }
+        self.expect(TokenKind::Eq, "'=' in parameter");
+        let value = self.expr(0);
+        // Mirror `signed_eff`: an explicit `signed`/`unsigned` wins; otherwise
+        // the atom default (byte/shortint/int/longint/integer are signed),
+        // exactly like the equivalent var decl.
+        let signed = expl_signed.unwrap_or_else(|| atom_default_signed(Some(vk)));
+        Some(ParamItem::ConstArrayVar(NetVarDecl {
+            kind: vk,
+            signed,
+            range: explicit_range,
+            packed: Vec::new(),
+            delay: None,
+            names: vec![DeclName {
+                name,
+                unpacked,
+                init: Some(value),
+                span: n_start.to(self.prev_span()),
+            }],
+            lifetime: None,
+            class_type: None,
+            class_args: Vec::new(),
+            const_param: true,
+            span: start.to(self.prev_span()),
+        }))
     }
 
     /// `defparam hier.path = expr [, hier.path = expr]* ;` (IEEE §23.10.1) — a
@@ -2557,17 +2696,24 @@ impl<'t, 's> Parser<'t, 's> {
         }
         // parameter / localparam
         if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) {
-            let p = self.parse_param_decl()?;
+            let p = self.parse_param_decl(true)?;
             self.expect(TokenKind::Semi, "';'");
-            // Record a module-scope `localparam` whose value is a pure literal
-            // constant, so a constant generate hier index `g[P].x` can fold it.
-            // A `parameter` is overridable → never recorded (its index stays loud).
-            if p.kind == ParamKind::Localparam {
-                if let Some(v) = self.try_const_index(&p.value) {
-                    self.const_locals.insert(p.name.name.clone(), v);
+            return Some(match p {
+                ParamItem::Scalar(p) => {
+                    // Record a module-scope `localparam` whose value is a pure literal
+                    // constant, so a constant generate hier index `g[P].x` can fold it.
+                    // A `parameter` is overridable → never recorded (its index stays loud).
+                    if p.kind == ParamKind::Localparam {
+                        if let Some(v) = self.try_const_index(&p.value) {
+                            self.const_locals.insert(p.name.name.clone(), v);
+                        }
+                    }
+                    ModuleItem::Param(p)
                 }
-            }
-            return Some(ModuleItem::Param(p));
+                // A2a: an array parameter arrives as the desugared const
+                // variable-array decl — flows through every NetVar pass verbatim.
+                ParamItem::ConstArrayVar(d) => ModuleItem::NetVar(d),
+            });
         }
         // defparam path = expr [, path = expr]* ;  (IEEE §23.10.1)
         if self.at_kw(Kw::Defparam) {
@@ -3772,6 +3918,7 @@ impl<'t, 's> Parser<'t, 's> {
                 lifetime: None,
                 class_type: None,
                 class_args: Vec::new(),
+                const_param: false,
                 span,
             }));
         }
@@ -5118,6 +5265,7 @@ impl<'t, 's> Parser<'t, 's> {
             lifetime: None,
             class_type: None,
             class_args: Vec::new(),
+            const_param: false,
             span: start.to(self.prev_span()),
         })
     }
@@ -5242,6 +5390,7 @@ impl<'t, 's> Parser<'t, 's> {
             lifetime: None,
             class_type,
             class_args,
+            const_param: false,
             span: start.to(self.prev_span()),
         })
     }
@@ -7037,6 +7186,7 @@ impl<'t, 's> Parser<'t, 's> {
             lifetime: None,
             class_type: Some(iface),
             class_args: Vec::new(),
+            const_param: false,
             span: start.to(self.prev_span()),
         })
     }
@@ -10117,6 +10267,7 @@ impl<'t, 's> Parser<'t, 's> {
             lifetime: None,
             class_type: None,
             class_args: Vec::new(),
+            const_param: false,
             span: decl_span,
         };
         let init_assign = Stmt::Blocking {
@@ -10407,6 +10558,7 @@ impl<'t, 's> Parser<'t, 's> {
             lifetime: None,
             class_type: None,
             class_args: Vec::new(),
+            const_param: false,
             span: id.span,
         };
         Stmt::Block {
@@ -10520,6 +10672,7 @@ impl<'t, 's> Parser<'t, 's> {
             lifetime: None,
             class_type: None,
             class_args: Vec::new(),
+            const_param: false,
             span: id.span,
         };
         let mut decls: Vec<NetVarDecl> = Vec::new();

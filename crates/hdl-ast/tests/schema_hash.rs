@@ -162,9 +162,15 @@ use vita_schema::schema_hash;
 /// `WildNe` — lowered by elaborate to a const-pattern mask & compare (plain
 /// `Eq`/`Ne` in the frozen IR; no sim-ir change, format_version stays 19).
 /// Re-pins this .vu hash.
+/// 2026-07-02 A2a array parameter (§6.20.2): adds `const_param: bool` to
+/// `NetVarDecl` — a body `localparam int RHO [0:4] = '{…}` desugars in the
+/// parser to the equivalent const variable-array decl; elaborate registers
+/// the net as an elaboration constant (every later write is loud). Pure
+/// front-end + elaborate (no sim-ir change; format_version stays 19).
+/// Re-pins this .vu hash.
 const EXPECTED: [u8; 32] = [
-    20, 225, 117, 125, 139, 231, 159, 95, 153, 186, 230, 135, 175, 148, 40, 133, 59, 127, 45, 172,
-    152, 180, 109, 63, 210, 248, 112, 250, 128, 204, 76, 186,
+    233, 20, 54, 169, 195, 132, 13, 112, 10, 180, 185, 169, 226, 21, 205, 200, 149, 130, 236, 139,
+    148, 198, 220, 164, 222, 183, 77, 33, 251, 32, 160, 1,
 ];
 
 #[test]

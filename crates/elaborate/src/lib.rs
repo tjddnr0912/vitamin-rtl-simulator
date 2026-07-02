@@ -2538,6 +2538,15 @@ struct Elaborator<'s> {
     /// Holding NetIds of clocking INPUTs (`cb.sig`) — read-only; an lvalue write
     /// to one is loud (you cannot drive a clocking input, §14.3).
     clocking_hold_nets: std::collections::BTreeSet<u32>,
+    /// A2a: NetIds of DESUGARED array parameters (`localparam int RHO[0:4] =
+    /// '{…}` — stored as an ordinary variable array) → the source name. Any
+    /// write to one (assignment / force / $readmem / SYS-READ dest / task
+    /// output actual) is a loud error: a parameter is an elaboration constant
+    /// and must never be silently mutable. Elaborate-local (never serialized).
+    const_param_nets: std::collections::BTreeMap<u32, String>,
+    /// A2a: true while lowering the synthesized §6.8 decl-init `initial` —
+    /// a const param's own initializer is legitimate, so the deny is off.
+    lowering_decl_init: bool,
     /// Every clocking-block name in the whole design (never cleared) — diagnostic
     /// only: lets a cross-hierarchy `@(inst.cb)` event control emit an accurate
     /// "unsupported clocking-event" message instead of a generic hier-name error.
@@ -2723,6 +2732,8 @@ impl<'s> Elaborator<'s> {
             ca_delays: std::collections::BTreeMap::new(),
             clocking_events: std::collections::BTreeMap::new(),
             clocking_hold_nets: std::collections::BTreeSet::new(),
+            const_param_nets: std::collections::BTreeMap::new(),
+            lowering_decl_init: false,
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
             func_metas: Vec::new(),
@@ -3527,6 +3538,13 @@ impl<'s> Elaborator<'s> {
                             "cannot drive a clocking INPUT (`cb.sig` is read-only, §14.3)",
                         );
                         POISON_NET
+                    } else if self.const_param_nets.contains_key(&net) {
+                        // A2a: a hierarchical write resolves AFTER lower_lvalue
+                        // (sentinel chunk), so the funnel deny never saw the real
+                        // net — enforce it here (`u1.RHO = …` incl. the [0:0]
+                        // single-element shape that passes the static-array guard).
+                        self.deny_const_param_write(net, "assign to");
+                        POISON_NET
                     } else if self.event_nets.contains(&net)
                         || self.is_dyn_handle_net(net)
                         || self.net_is_static_array(net)
@@ -3637,6 +3655,12 @@ impl<'s> Elaborator<'s> {
                             MsgCode::ElabUnsupported,
                             "cannot drive a clocking INPUT (`cb.sig` is read-only, §14.3)",
                         );
+                        poison_chunk()
+                    } else if self.const_param_nets.contains_key(&net) {
+                        // A2a: the deferred element/bit/part-select write lane —
+                        // the funnel deny saw only the sentinel, so enforce it on
+                        // the resolved net (`u1.RHO[0] = …` was a silent mutation).
+                        self.deny_const_param_write(net, "assign to");
                         poison_chunk()
                     } else if self.event_nets.contains(&net) || self.is_dyn_handle_net(net) {
                         self.error(
@@ -5076,6 +5100,15 @@ impl<'s> Elaborator<'s> {
                 // module body passes (4)/(7).
                 for it in &decl.body {
                     if let ast::ModuleItem::NetVar(d) = it {
+                        // A2a scope-gate (the generate gate's twin): an interface
+                        // body has no §6.8 decl-init collection pass, so a
+                        // desugared array parameter here would silently read 0.
+                        if d.const_param {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "an array parameter inside an interface is unsupported (v1) — move it to module scope",
+                            );
+                        }
                         self.elaborate_netvar_decl(d, &decl.ports, &decl.body, false);
                     }
                 }
@@ -6612,6 +6645,25 @@ impl<'s> Elaborator<'s> {
                     } else {
                         self.wired_or_nets.insert(id);
                     }
+                }
+            }
+            // A2a: a DESUGARED array parameter — register the net as an
+            // elaboration constant so every later write stays loud (looked up
+            // post-add like the sidecars above). Elaborate-local only.
+            if d.const_param {
+                // A non-Internal dir means the name collided with a port decl
+                // (`module m(R); input R; localparam int R[…] = …;`) — the
+                // port copy-in would drive the net through a deny-free
+                // ContAssign (adversarial find), so reject the merge itself.
+                if dir != ir::PortDir::Internal {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!("an array parameter `{}` cannot be a port", decl.name.name),
+                    );
+                }
+                let key = self.fq(&decl.name.name);
+                if let Some(&id) = self.symbols.get(&key) {
+                    self.const_param_nets.insert(id, decl.name.name.clone());
                 }
             }
             // Record per-dim extents when addressing is NOT plain 0-based: any
@@ -9591,7 +9643,14 @@ impl<'s> Elaborator<'s> {
             }),
             span: sp,
         };
+        // A2a: this synthesized initial holds ONLY declaration initializers —
+        // a desugared array parameter's own `= '{…}` is its legitimate
+        // one-time init (§6.8), not a user write; the const-param deny must
+        // not fire on it.
+        let saved = self.lowering_decl_init;
+        self.lowering_decl_init = true;
         let proc = self.lower_proc_block(&pb);
+        self.lowering_decl_init = saved;
         self.push_process(proc);
     }
 
@@ -11072,9 +11131,50 @@ impl<'s> Elaborator<'s> {
     }
 
     // ── lvalue lowering ────────────────────────────────────────────
+    /// SYS-READ dest guard: the just-lowered dest `eid` is a deferred
+    /// hierarchical ELEMENT-select placeholder (`Signal{POISON_NET}` with a
+    /// pending `deferred_hier_sel` record). The fixup rebuilds a READ select
+    /// — never a write chunk — so the engine write silently VANISHES for
+    /// these dests (measured: rc=1, value unchanged; iverilog writes it).
+    /// Every SYS-READ special loud-rejects them; a WHOLE hierarchical dest
+    /// (`deferred_hier`) keeps its working patched path.
+    fn is_deferred_hier_sel_dest(&self, eid: u32) -> bool {
+        self.deferred_hier_sel.iter().any(|d| d.eid == eid)
+    }
+
+    /// A2a: loud-reject a WRITE targeting a desugared array parameter (a
+    /// parameter is an elaboration constant — silently mutating one would be
+    /// a silent-wrong). `how` is the verb phrase for the message ("assign
+    /// to" / "$readmem into" / …). Returns whether it fired.
+    fn deny_const_param_write(&mut self, net: u32, how: &str) -> bool {
+        if self.lowering_decl_init {
+            return false;
+        }
+        let Some(name) = self.const_param_nets.get(&net) else {
+            return false;
+        };
+        let name = name.clone();
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!("cannot {how} parameter `{name}` (a parameter is an elaboration constant)"),
+        );
+        true
+    }
+
     fn lower_lvalue(&mut self, lv: &ast::Lvalue) -> ir::Lvalue {
         let mut chunks = Vec::new();
         self.collect_lval_chunks(lv, &mut chunks);
+        // A2a: a chunk rooting at a desugared array parameter — every lvalue
+        // shape (whole/element/slice/concat part, procedural or continuous,
+        // force/release, SYS-READ dest routed through here) funnels through
+        // these chunks, so one check covers them all. First hit is enough.
+        if !self.const_param_nets.is_empty() {
+            for c in &chunks {
+                if self.deny_const_param_write(c.net, "assign to") {
+                    break;
+                }
+            }
+        }
         // review F3: a string chunk inside a CONCAT lvalue has chunk width 0
         // — the runtime slice loop wrote an EMPTY piece (silently clearing
         // the string). Whole-string single-chunk stays the supported shape.
@@ -12265,6 +12365,9 @@ impl<'s> Elaborator<'s> {
                     match &a.kind {
                         ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                             let net = self.resolve_net(path);
+                            // A2a: the copy-out WRITES the actual (selects route
+                            // through lower_lvalue below and are covered there).
+                            self.deny_const_param_write(net, "connect an output/inout to");
                             out_binds.push((slot, whole_net_lvalue(net)));
                         }
                         // §13.5.3: a part/bit/indexed select or array element actual —
@@ -12825,6 +12928,8 @@ impl<'s> Elaborator<'s> {
                                 );
                                 continue;
                             }
+                            // A2a: the copy-out WRITES the actual.
+                            self.deny_const_param_write(caller_net, "connect an output/inout to");
                             if is_inout {
                                 let rd = self.push_expr(ir::Expr::Signal {
                                     net: caller_net,
@@ -14841,6 +14946,10 @@ impl<'s> Elaborator<'s> {
             );
             return true;
         }
+        // A2a: the engine WRITES the found key into `knet` — a bare Signal that
+        // never passes lower_lvalue (adversarial find: `aa.first(R)` silently
+        // mutated a desugared array parameter).
+        self.deny_const_param_write(knet, "write the iteration key into");
         if !matches!(kind, ir::NetKind::Assoc | ir::NetKind::AssocStr) {
             // The dense dyn/queue walk exists only for the foreach desugar.
             let synthetic = matches!(
@@ -16090,6 +16199,9 @@ impl<'s> Elaborator<'s> {
             let path = path.clone();
             self.check_modport_write(&path);
         }
+        // A2a: same bypass — a whole-array write (`R = '{…}` / `R = other`)
+        // targeting a desugared array parameter must stay loud.
+        self.deny_const_param_write(t_net, "assign to");
         // SV §10.9: a positional assignment pattern RHS (`a = '{e0,…}`) assigns each
         // element to the corresponding 1-D unpacked array slot (declaration order).
         if let ast::ExprKind::AssignPattern(elems) = &rhs.kind {
@@ -16665,6 +16777,17 @@ impl<'s> Elaborator<'s> {
             // NETS phase: only net declarations. No ports inside a generate
             // (LRM forbids port decls) → empty port list/body, dir = Internal.
             (GenPhase::Nets, ast::ModuleItem::NetVar(d)) => {
+                // A2a scope-gate: a generate scope does NOT collect unpacked-
+                // array `'{…}` decl-inits (the §6.8 pre-sweep walks the module
+                // body only — a known drop, ROADMAP candidate), so a desugared
+                // array parameter here would silently stay 0. Loud until the
+                // generate-scope init collection lands.
+                if d.const_param {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "an array parameter inside a generate block is unsupported (v1) — move it to module scope",
+                    );
+                }
                 self.elaborate_netvar_decl(d, &ast::PortList::None, &[], false);
             }
             // LOGIC phase: cont-assigns + processes.
@@ -18940,6 +19063,11 @@ impl<'s> Elaborator<'s> {
                             );
                             continue;
                         };
+                        // A2a: the clocking-output commit WRITES the source net
+                        // engine-side (a sidecar, never an lvalue) — a desugared
+                        // array parameter source must stay loud (adversarial
+                        // find: `cb.R <= v` silently overwrote the parameter).
+                        self.deny_const_param_write(src_id, "drive (clocking output)");
                         let sv = &self.nets[src_id as usize];
                         let (w, msb, lsb, signed) = (sv.width, sv.msb, sv.lsb, sv.signed);
                         let clean = format!("__clkout_{}_{}", cb_name, it.name.name);
@@ -23468,16 +23596,24 @@ impl<'s> Elaborator<'s> {
             }
         }
         let var_id = self.lower_expr(&args[1]);
-        if !matches!(
-            self.exprs.get(var_id as usize),
-            Some(ir::Expr::Signal { word: None, .. })
-        ) {
+        let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(var_id as usize) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "$value$plusargs target must be a plain variable (v7)",
             );
             return None;
+        };
+        // A2a: $value$plusargs WRITES the dest.
+        let net = *net;
+        if net == POISON_NET && self.is_deferred_hier_sel_dest(var_id) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a $value$plusargs target cannot be a hierarchical element select \
+                 (v7) — read into a local variable",
+            );
+            return None;
         }
+        self.deny_const_param_write(net, "$value$plusargs into");
         Some(self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::ValuePlusargs,
             args: vec![fmt_id, var_id],
@@ -23714,16 +23850,24 @@ impl<'s> Elaborator<'s> {
             return true;
         }
         let str_id = self.lower_expr(&args[0]);
-        if !matches!(
-            self.exprs.get(str_id as usize),
-            Some(ir::Expr::Signal { word: None, .. })
-        ) {
+        let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(str_id as usize) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "$fgets target must be a plain variable (v9)",
             );
             return true;
+        };
+        // A2a: $fgets WRITES the dest.
+        let net = *net;
+        if net == POISON_NET && self.is_deferred_hier_sel_dest(str_id) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a $fgets target cannot be a hierarchical element select (v9) — \
+                 read into a local variable",
+            );
+            return true;
         }
+        self.deny_const_param_write(net, "$fgets into");
         let fd_id = self.lower_expr(&args[1]);
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Fgets,
@@ -23783,19 +23927,29 @@ impl<'s> Elaborator<'s> {
                 );
                 return true;
             }
+            // A2a: $fread WRITES the whole memory — a desugared array
+            // parameter target is loud.
+            self.deny_const_param_write(net, "$fread into");
             self.push_expr(ir::Expr::Signal { net, word: None })
         } else {
             let id = self.lower_expr(&args[0]);
-            if !matches!(
-                self.exprs.get(id as usize),
-                Some(ir::Expr::Signal { word: None, .. })
-            ) {
+            let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(id as usize) else {
                 self.error(
                     MsgCode::ElabUnsupported,
                     "$fread target must be an integral variable or memory (v9)",
                 );
                 return true;
+            };
+            let net = *net;
+            if net == POISON_NET && self.is_deferred_hier_sel_dest(id) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a $fread target cannot be a hierarchical element select (v9) — \
+                     read into a local variable",
+                );
+                return true;
             }
+            self.deny_const_param_write(net, "$fread into");
             id
         };
         let mut sf_args = vec![target_id, self.lower_expr(&args[1])];
@@ -23867,16 +24021,24 @@ impl<'s> Elaborator<'s> {
         let mut sf_args = vec![src_id, fmt_id];
         for a in &args[2..] {
             let id = self.lower_expr(a);
-            if !matches!(
-                self.exprs.get(id as usize),
-                Some(ir::Expr::Signal { word: None, .. })
-            ) {
+            let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(id as usize) else {
                 self.error(
                     MsgCode::ElabUnsupported,
                     "$fscanf/$sscanf destination arguments must be plain variables (v9)",
                 );
                 return true;
+            };
+            // A2a: the scanf parser WRITES every dest arg.
+            let net = *net;
+            if net == POISON_NET && self.is_deferred_hier_sel_dest(id) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a $fscanf/$sscanf destination cannot be a hierarchical element \
+                     select (v9) — read into a local variable",
+                );
+                return true;
             }
+            self.deny_const_param_write(net, "$fscanf/$sscanf into");
             sf_args.push(id);
         }
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
@@ -25635,6 +25797,15 @@ impl<'s> Elaborator<'s> {
                     if dump_family || readmem_family {
                         if let Some((net, lead)) = self.expr_array_view(a) {
                             if lead.is_empty() {
+                                // A2a: $readmemb/h WRITE the memory — a desugared
+                                // array-parameter target is loud ($writemem/$dump
+                                // only READ, so they pass).
+                                if matches!(
+                                    which,
+                                    ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH
+                                ) {
+                                    self.deny_const_param_write(net, "$readmem into");
+                                }
                                 return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
                             }
                         }

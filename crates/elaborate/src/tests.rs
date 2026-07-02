@@ -89,6 +89,7 @@ fn netvar(
         lifetime: None,
         class_type: None,
         class_args: Vec::new(),
+        const_param: false,
         span: SP,
     })
 }
@@ -758,6 +759,7 @@ fn reg_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
         lifetime: None,
         class_type: None,
         class_args: Vec::new(),
+        const_param: false,
         span: SP,
     })
 }
@@ -2420,6 +2422,7 @@ fn wire_range_expr(msb: ast::Expr, names: &[&str]) -> ast::ModuleItem {
         lifetime: None,
         class_type: None,
         class_args: Vec::new(),
+        const_param: false,
         span: SP,
     })
 }
@@ -2718,6 +2721,7 @@ fn netvar_decl_reg(name: &str) -> ast::NetVarDecl {
         lifetime: None,
         class_type: None,
         class_args: Vec::new(),
+        const_param: false,
         span: SP,
     }
 }

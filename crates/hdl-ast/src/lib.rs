@@ -565,6 +565,13 @@ pub struct NetVarDecl {
     /// (`C #(16) h;` ⇒ `[16]`). Empty = the default specialization (or a
     /// non-parameterized class). Elaborate folds these to the monomorphized class.
     pub class_args: Vec<Expr>,
+    /// A2a: this decl was DESUGARED from a body `localparam <type> NAME [dims] =
+    /// '{…}` (an array parameter, IEEE §6.20.2). The storage is an ordinary
+    /// variable array, but elaborate registers the net as an elaboration
+    /// constant so any later write (assignment / force / $readmem / …) is a
+    /// loud error — a parameter must never be silently mutable. `false` for
+    /// every genuine net/variable declaration.
+    pub const_param: bool,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]

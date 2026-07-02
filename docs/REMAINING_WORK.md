@@ -9,7 +9,7 @@
 
 | # | 항목 | 내용 | 오라클 |
 |---|---|---|---|
-| A2a | module-body array parameter | `localparam int RHO[0:4]='{…}` → elaborate desugar=const 변수-배열(§4.5.33/46 경로 재사용)·이후 대입=loud·header/override=v1 loud | hand-IEEE + **내부 차분**(`localparam X`≡`var X; initial X=…`) |
+| A2a ✅ | module-body array parameter | **완료(2026-07-02, ROADMAP §4.5.69, 2799 green)** — 파서 desugar→const 변수-배열·deny 13사이트·scope-gate(generate/interface/port)·적대 4-round CLEAN | hand-IEEE + 내부 차분 ✓ |
 | A2b-prereq | package-level 변수/집합-상수 저장 | 현재 E3009 "(v7)" loud → 단일 인스턴스 lowering(예약 scope NetVar·format 불변)·t0-이전 init·`pkg::x`+import 해소·MVP-CUT package-var 동시 해제 | **iverilog ✓**(2026-07-02 그라운딩: package var 지원 확인=라이브 차분) |
 | A2b | package-level array parameter | A2a+prereq 결합 · acceptance=sha3_pkg `RC_TABLE[0:23]` repro → **§6 리포트 CLOSE** | hand-IEEE + 내부 차분 |
 
@@ -34,6 +34,7 @@
 | N4 clocking 잔여 | non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)` |
 | file-I/O 소형 | `$fflush` accept·`$fmonitor`/`$fstrobe`·STDIN read(결정성 설계 필요) |
 | 소형 슬라이스 큐 | 계단식 CA 체인 t0 전파 그라운딩 · 계층 함수호출 `u1.f(x)` · compound-const `==?` fold · `%-` 좌측정렬 family · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지) |
+| **A2a 발굴 pre-existing**(§4.5.69 ㉮~㉵) | **generate/interface 스코프 배열 decl-init 영구 silent-drop**(iverilog ✓·①급) · 크로스모듈 t0 decl-init race(iverilog ✓·ProcId 순서=golden 리스크 M~L) · SYS-READ hier-element dest 실지원(iverilog ✓·현 honest-loud) · hier-write sentinel cont_assigns/out_binds 미패치 panic · scalar `int unsigned` param 부호(iverilog ✓) · repl-count 변수→0 · assoc 배열-key/clocking 배열-output word0 · typedef-요소 param 진단 |
 | deep 잔여(저우선) | inline body NON-fill context-width·runtime `==?` pattern·string queue·block-local queue decl·modport 방향 강제·force part-select |
 
 ## D. 별도 관리 — 재진입 트리거 충족 시에만 승격 (정확성과 직교 · ROADMAP §조건부 13~17)
