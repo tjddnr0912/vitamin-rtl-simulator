@@ -936,6 +936,26 @@ SYS-READ·SYS-INTRO·DIR-PP를 IR-0-now vs 단일 **v9 bump**으로 분할(워�
 >
 > 각 항목 구현 시 §4.5.x 인벤토리에 개별 슬라이스로 등재(A3는 typedef-family 연장).
 
+### 6-2. 2차 리포트 (2026-07-03 — 동일 사용자, 미러 `231d737` 실-RTL 재평가)
+
+> 1차 갭 FIX(A1/A2a/A3/B1/B2)를 리뷰어가 직접 확인(hash_pkg·sha3_pkg·hash_clkgate clean parse)한 뒤 **실제 RTL 18파일**로 재평가 — 1차 minimal-repro가 못 잡은 **신규 소형 갭 7종(리포트 §4b)** + 잔여 R2b를 보고. **전 갭 클레임을 HEAD `0ef0eec`서 라이브 재현 완료 + 리포트 §5/§7 주장 11건은 stale 판별**(하단 정정표). 전부 소형 parser/v1-cut/engine — 1차 A2급 구조 문제 없음. §6-1 잔여 7(D docs)=EXT2-DOC로 승계, 8(E)=stale 정정으로 갱신. 실행 큐 = LOOPROMPT NEXT "EXT2 체인".
+
+| 순위 | ID | 갭 (리포트 항목) | 단계 | 오라클 | 공수 | 재현 (HEAD 0ef0eec) |
+|---|---|---|---|---|---|---|
+| 1 | **EXT2-0** | **`$fgets(s,fd)` silent no-op** — 내용 있는 파일서 0 반환·무경고(iverilog n=4 "123\n"). §5 file-I/O 中 유일 실갭 = **유일 silent-wrong** → 체인 최상위 | engine | **iverilog ✓** | S | `FGETS n=0 line=` |
+| 2 | **EXT2-A** (§4b A 🔴) | labeled end-block `endmodule : m`·`endpackage : p`(+endfunction/endtask/endinterface/endgenerate 계열 전수, IEEE 이름-일치 검사 포함) — 외부 14/18 파일 차단 | parser(additive) | iverilog ✓ | S | E2002 "expected 'module', found Colon" |
+| 3 | **EXT2-E** (§4b E 🔴) | scoped type `pkg::t` as **port type**(`input p::e_t m`, 외부 8곳) — **그라운딩서 확대 발견: module-body var decl `p::byte_t v;`도 동일 실패**(파서가 instantiation으로 오인) | parser(additive) | iverilog(슬라이스 시 확인) | S-M | E2002 "expected ')', found ColonColon" / var-decl "expected identifier" |
+| 4 | **EXT2-C** (§4b C 🟠) | struct/multi-dim-packed typedef **tf-port** `function f(input cfg_t c)` — 외부 7곳 | v1-cut 해제(honest-loud 승격) | iverilog(확인) | M | E2002 명시 loud |
+| 5 | **EXT2-D** (§4b D 🟠) | procedural 블록 내 `automatic int unsigned idx;` 선언 — §4.2 MVP-CUT "block-local automatic form2" 승격 | parser+lifetime 의미 | **iverilog도 sorry** → hand-IEEE 핀 | M | E2002 "expected statement, found Automatic" |
+| 6 | **EXT2-B** (§4b B 🟠) | **function-body `typedef enum`**(valued 멤버) | v1-cut 해제 | iverilog(확인) | S-M | E2002 명시 loud("define it at module scope") |
+| 7 | **EXT2-F** (§4b F 🟡) | generate-for step `g++`/`g--`(procedural `i++`는 지원) — `+=` 계열 동시 검토 | parser(기존 desugar 재사용) | iverilog ✓ | S | E2002 "expected '=' in generate-for" |
+| 8 | **EXT2-H** (§4b H 🟡) | frame 함수 body의 part-select/array-element **대입** `r[7:0]=x` | elaborate(frame-call subset 확장) | iverilog ✓ | M | E3009 명시 loud |
+| 9 | **EXT2-A2c** (§4 R2b) | packed multi-dim param `localparam logic[1:0][7:0] PK=16'hAABB` — 외부 0회 사용(비-blocker)·A2 패밀리 잔여. packed=단일 벡터라 A2a급 storage 갭 아닐 가능성(파서 위주로 추정·§1 룰대로 storage grep 선행) | parser(+param eval) | iverilog sorry → hand-IEEE+내부차분(§6-1 A2 방식) | S-M | E2002 "expected identifier, found LBracket" |
+| 10 | **EXT2-DOC** (§7·§6-1 D 재보고) | 문서 stale: CLI-ref("-o만")·lang-ref(`unique` "deferred")·system-tasks(plusargs 미기재)·`explain E3009` generic — **외부서 2회 보고** | docs | — | S | 사이 슬롯 가능 |
+| 11 | **EXT2-NAP** (§3) | named assignment pattern `'{k:v}`(현 명시 loud·positional만) — 외부 0회 | parser | iverilog(확인) | S-M | E2002 명시 loud |
+
+> **stale 정정 (전건 라이브 실측 2026-07-03, HEAD `0ef0eec` — 리포트 §5/§7이 구버전·문서 기준)**: string(+`len`/`toupper`)·queue(`push_back`/`size`)+`foreach`·class(new/메서드 호출)·interface port·SVA `assert property`(`|->`/`##1`)·`if($value$plusargs())`(리포트 §5 행은 자기 §3 B1-FIX 표와 모순=stale 행)·`$urandom`·`$sformatf`·`$fscanf`(%d 파일 읽기 OK)·`$fopen/$fdisplay/$fclose`(write 경로)·SIGPIPE(`vita … | head` = exit 0) — **전부 HEAD서 동작**. 리뷰어가 §4b 파서 갭에 막혀 TB 단계에 실도달 못 한 것 + 1차 리포트 §5 표를 그대로 carry한 것으로 추정. 유일 실갭 = `$fgets`(EXT2-0). → 차기 대-리뷰어 회신 시 이 정정표 인용.
+
 ---
 
 ## 7. G2 — AI-Agent 친화 트랙 (OBS · 2026-07-02 신설)
