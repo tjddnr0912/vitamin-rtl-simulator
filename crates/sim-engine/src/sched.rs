@@ -3414,10 +3414,6 @@ impl Kernel for Scheduler<'_, '_> {
             return Value::from_i128(0, 32, true);
         }
         let fd = fdv.to_u64().unwrap_or(0) as u32;
-        // capacity = the dest in whole bytes (iverilog reads the FULL width N,
-        // not C's N-1 — no NUL is reserved).
-        let width = self.st.ir.nets[net as usize].width.max(1);
-        let max_bytes = (width / 8) as usize;
         let whole_net = |net: u32| Lvalue {
             chunks: vec![sim_ir::LvalChunk {
                 net,
@@ -3427,6 +3423,40 @@ impl Kernel for Scheduler<'_, '_> {
                 kind: sim_ir::SelKind::Bit,
             }],
         };
+        // v7: a SystemVerilog `string` dest is a dynamic HANDLE (NetKind::String,
+        // net width 0). It has NO byte capacity, so it must NOT fall into the
+        // sub-byte (width < 8) reg branch below, which would clear the dest and
+        // return 0 (the silent-wrong this fixes). Read the WHOLE line uncapped
+        // (through a retained newline, else to EOF), pack it MSB-first, and write
+        // it via the same string lvalue path as `s = "..."` (§6.16 byte-strip).
+        if self.st.ir.nets[net as usize].kind == sim_ir::NetKind::String {
+            let mut raw: Vec<u8> = Vec::new();
+            while let Some(b) = crate::builtins::file_read_byte(self, fd) {
+                raw.push(b);
+                if b == b'\n' {
+                    break;
+                }
+            }
+            if raw.is_empty() {
+                // genuine EOF / bad-fd / write-only: dest UNCHANGED, count 0.
+                return Value::from_i128(0, 32, true);
+            }
+            // C-string semantics (iverilog parity, same as the reg path below):
+            // the STORED string and the returned count stop at the first NUL,
+            // even though the whole line was already consumed from the stream.
+            // (n == raw.len() when there is no embedded NUL.) A leading NUL gives
+            // n = 0 → the dest is set to the empty string (distinct from the EOF
+            // arm above, which leaves it UNCHANGED).
+            let n = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+            let lv = whole_net(net);
+            let off = self.resolve_lvalue_offsets(&lv);
+            self.k_write_lvalue(&lv, Value::from_str_bytes(&raw[..n]), &off);
+            return Value::from_i128(n as i128, 32, true);
+        }
+        // capacity = the dest in whole bytes (iverilog reads the FULL width N,
+        // not C's N-1 — no NUL is reserved).
+        let width = self.st.ir.nets[net as usize].width.max(1);
+        let max_bytes = (width / 8) as usize;
         if max_bytes == 0 {
             // sub-byte dest (width < 8): iverilog reads NO stream byte but
             // CLEARS the dest to 0 (C fgets into a too-small buffer => empty

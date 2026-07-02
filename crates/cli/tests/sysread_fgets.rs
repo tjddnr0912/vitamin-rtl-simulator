@@ -175,6 +175,134 @@ fn fgets_leading_nul_clears_dest() {
 }
 
 #[test]
+fn fgets_string_dest_reads_full_line() {
+    // v7 string dest: a `string` is a dynamic HANDLE (net width 0). Before the
+    // fix it fell into the sub-byte branch and returned 0 with an empty string
+    // (silent-wrong). iverilog-pinned: each $fgets reads the WHOLE line through
+    // its retained newline (no width cap), returning the byte count; the 3rd
+    // call hits EOF (n=0, dest UNCHANGED).
+    let (out, _c) = run(
+        "module t;\n\
+         string a, b, c; integer fd, n1, n2, n3;\n\
+         initial begin\n\
+           fd = $fopen(\"in.txt\", \"r\");\n\
+           n1 = $fgets(a, fd);\n\
+           n2 = $fgets(b, fd);\n\
+           n3 = $fgets(c, fd);\n\
+           $display(\"n1=%0d a=<%s>\", n1, a);\n\
+           $display(\"n2=%0d b=<%s>\", n2, b);\n\
+           $display(\"n3=%0d c=<%s>\", n3, c);\n\
+         end\n\
+         endmodule\n",
+        &[("in.txt", b"123\n456\n")],
+    );
+    assert!(out.contains("n1=4 a=<123\n>"), "string line 1:\n{out}");
+    assert!(out.contains("n2=4 b=<456\n>"), "string line 2:\n{out}");
+    assert!(out.contains("n3=0 c=<>"), "string EOF empty:\n{out}");
+}
+
+#[test]
+fn fgets_string_dest_no_trailing_newline() {
+    // Last line with NO trailing newline: read to EOF, count excludes a newline
+    // (n=5 for "world"), next read is a clean EOF. iverilog-pinned.
+    let (out, _c) = run(
+        "module t;\n\
+         string a, b, c; integer fd, n1, n2, n3;\n\
+         initial begin\n\
+           fd = $fopen(\"in.txt\", \"r\");\n\
+           n1 = $fgets(a, fd);\n\
+           n2 = $fgets(b, fd);\n\
+           n3 = $fgets(c, fd);\n\
+           $display(\"n1=%0d a=<%s>\", n1, a);\n\
+           $display(\"n2=%0d b=<%s>\", n2, b);\n\
+           $display(\"n3=%0d c=<%s>\", n3, c);\n\
+         end\n\
+         endmodule\n",
+        &[("in.txt", b"hello\nworld")],
+    );
+    assert!(out.contains("n1=6 a=<hello\n>"), "string line 1:\n{out}");
+    assert!(
+        out.contains("n2=5 b=<world>"),
+        "string no-newline tail:\n{out}"
+    );
+    assert!(out.contains("n3=0 c=<>"), "string EOF:\n{out}");
+}
+
+#[test]
+fn fgets_string_dest_eof_leaves_unchanged() {
+    // Empty file / immediate EOF: n=0 and the string keeps its PRIOR value
+    // (NOT cleared — distinct from a sub-byte reg dest). iverilog-pinned.
+    let (out, _c) = run(
+        "module t;\n\
+         string a = \"PRESET\"; integer fd, n1;\n\
+         initial begin\n\
+           fd = $fopen(\"in.txt\", \"r\");\n\
+           n1 = $fgets(a, fd);\n\
+           $display(\"n1=%0d a=<%s>\", n1, a);\n\
+         end\n\
+         endmodule\n",
+        &[("in.txt", b"")],
+    );
+    assert!(
+        out.contains("n1=0 a=<PRESET>"),
+        "string EOF leaves dest unchanged:\n{out}"
+    );
+}
+
+#[test]
+fn fgets_string_dest_truncates_at_nul() {
+    // C-string semantics (iverilog parity, mirroring the reg path): the STORED
+    // string and the returned count stop at the first NUL, though the whole line
+    // is consumed from the stream. A leading NUL => n=0 and dest CLEARED to "".
+    // Bytes: "ab\0cd\n" then "ef\n" — line 1 truncates at the NUL (n=2 "ab"),
+    // line 2 is a normal read proving the stream advanced past the whole line 1.
+    let (out, _c) = run(
+        "module t;\n\
+         string a, b; integer fd, n1, n2; int la;\n\
+         initial begin\n\
+           fd = $fopen(\"in.txt\", \"r\");\n\
+           n1 = $fgets(a, fd); la = a.len();\n\
+           n2 = $fgets(b, fd);\n\
+           $display(\"n1=%0d la=%0d a=<%s>\", n1, la, a);\n\
+           $display(\"n2=%0d b=<%s>\", n2, b);\n\
+         end\n\
+         endmodule\n",
+        &[(
+            "in.txt",
+            &[0x61, 0x62, 0x00, 0x63, 0x64, 0x0a, 0x65, 0x66, 0x0a],
+        )],
+    );
+    assert!(out.contains("n1=2 la=2 a=<ab>"), "truncate at NUL:\n{out}");
+    // stream advanced past the whole NUL line => next read is "ef\n".
+    assert!(
+        out.contains("n2=3 b=<ef\n>"),
+        "stream consumed past NUL:\n{out}"
+    );
+}
+
+#[test]
+fn fgets_string_dest_leading_nul_clears() {
+    // A leading NUL (bytes "\0xyz\n") => n=0 and the string is set to EMPTY
+    // (overwriting a preset value) — distinct from genuine EOF, which leaves the
+    // dest unchanged. iverilog-pinned.
+    let (out, _c) = run(
+        "module t;\n\
+         string a = \"PRE\"; integer fd, n1; int la;\n\
+         initial begin\n\
+           fd = $fopen(\"in.txt\", \"r\");\n\
+           n1 = $fgets(a, fd); la = a.len();\n\
+           $display(\"n1=%0d la=%0d a=<%s>\", n1, la, a);\n\
+         end\n\
+         endmodule\n",
+        &[("in.txt", &[0x00, 0x78, 0x79, 0x7a, 0x0a])],
+    );
+    assert!(
+        out.contains("n1=0 la=0 a=<>"),
+        "leading NUL clears string to empty:\n{out}"
+    );
+}
+
+#[test]
 fn fgets_sub_byte_dest_clears_without_consuming() {
     // a dest narrower than one byte (reg[3:0]): iverilog reads NO stream byte
     // but CLEARS the dest to 0 (n=0); the next $fgetc still returns byte 1.

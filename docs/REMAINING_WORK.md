@@ -1,6 +1,6 @@
 # vitamin — 잔여 작업 트래커 (Remaining Work)
 
-> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2862 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능). 최신 = **2026-07-03 외부 리포트 2차 수신 → EXT2 체인 최우선 승격**(§A′·ROADMAP §6-2) · §4.5.73 G2 OBS-1a(`--obs-dir`→run.json+results.jsonl) · §4.5.72 generate/interface 배열 decl-init silent-drop 수정(㉮ 종결). **G2 OBS 트랙**: OBS-1a ✅ · OBS-1b는 EXT2 체인 다음.
+> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2867 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능). 최신 = **2026-07-03 EXT2-0 `$fgets` string-dest silent no-op 수정 ✅**(§4.5.74·EXT2 체인 첫 항목=유일 silent-wrong 종결) · 외부 리포트 2차 EXT2 체인 진행(§A′·ROADMAP §6-2) · §4.5.73 G2 OBS-1a(`--obs-dir`→run.json+results.jsonl). **G2 OBS 트랙**: OBS-1a ✅ · OBS-1b는 EXT2 체인 다음.
 > 이 파일 = **"goal까지 남은 것" 상위 스냅샷** — 재계획 시점마다 통째로 갱신한다. 슬라이스 단위 라이브 기록 = [ROADMAP](ROADMAP.md) §2(착수 순서)·§4.5.x(슬라이스 로그)·§6(외부 리포트)·§7(OBS), 실행 큐 = `LOOPROMPT.md` NEXT. 2026-06-16 이전 P0~P5/Phase-A/B 상세 이력은 이 파일의 **git 이력**과 [DEVLOG](DEVLOG.md)가 보존(여기서 삭제).
 >
 > **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터(correct-or-loud) · **G2**(2026-07-02 추가) = **AI-Agent 친화 simulator**(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
@@ -19,7 +19,7 @@
 
 | # | ID | 항목 | 단계/오라클 | 공수 |
 |---|---|---|---|---|
-| 1 | EXT2-0 | `$fgets` silent no-op(0 반환·무경고 — **유일 silent-wrong**) | engine / iverilog ✓ | S |
+| 1 ✅ | EXT2-0 | `$fgets` `string` dest silent no-op(0 반환·빈 문자열 — **유일 silent-wrong**) — **완료 2026-07-03(ROADMAP §4.5.74, 2867 green)**: `NetKind::String` 브랜치+C-string NUL 절단·적대 2-round CONVERGE(embedded-NUL)→재검 CLEAN | engine·IR-0 / iverilog ✓ | S |
 | 2 | EXT2-A | labeled end `endmodule : m` 계열 전수(외부 14/18 파일 차단) | parser / iverilog ✓ | S |
 | 3 | EXT2-E | scoped type `pkg::t` port + **body var-decl도**(그라운딩서 확대) | parser / iverilog 확인 | S-M |
 | 4 | EXT2-C | struct/multi-dim-packed typedef tf-port(v1-cut 해제) | elaborate / iverilog 확인 | M |
@@ -50,7 +50,7 @@
 | cast | class **down-cast** `Derived'(base)`(=`$cast` 런타임 타입가드 선행 필요)·real→longint |
 | SVA | empty-match `##0`/unbounded `##[m:$]` 융합(§16.9.2.1·오라클 부재)·N2c full(중첩 attempt=L급)·later-antecedent read·advanced prop-ref skew(2-cycle/중첩/cross-clock)·SVA-QUAD default-flip(full-VCD audit 선행). **2차 외부리포트의 "SVA deferred" 주장=stale**(2026-07-03 라이브 검증: `assert property` 동작·§6-2 정정표) |
 | N4 clocking 잔여 | non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)` |
-| file-I/O 소형 | `$fflush` accept·`$fmonitor`/`$fstrobe`·STDIN read(결정성 설계 필요) · **`$fgets` silent no-op → EXT2-0으로 승격(§A′ 최상위)** |
+| file-I/O 소형 | `$fflush` accept·`$fmonitor`/`$fstrobe`·STDIN read(결정성 설계 필요) · ~~`$fgets` silent no-op~~ **✅ 종결(§4.5.74 EXT2-0: `string` dest 브랜치·NUL 절단)** |
 | 소형 슬라이스 큐 | 계단식 CA 체인 t0 전파 그라운딩 · 계층 함수호출 `u1.f(x)` · compound-const `==?` fold · `%-` 좌측정렬 family · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지) |
 | **package 발굴 pre-existing**(§4.5.70 ㉶~㉼·§4.5.71 ㉽) | `always @(*)` decl-init wake(iverilog 미발화·vita-wide) · param override 비상수=W3056 warn+default(iverilog=error) · `@(p::x)` event control(iverilog ✓) · longint MIN fold 갭(package만) · ~~비상수 package init~~ ✅(§4.5.71서 해소) · `p::arr[i]` scoped element read(iverilog ✓) · generate-block 내 `import`(iverilog ✓) · package 자기-func init 호출(㉽, iverilog ✓·현 loud+진단 부정확) |
 | **A2a 발굴 pre-existing**(§4.5.69 ㉮~㉵) | ~~generate/interface 스코프 배열 decl-init 영구 silent-drop~~ **✅ 종결(§4.5.72)** · 크로스스코프 t0 decl-init race(㉯·iverilog와 값 divergent이나 **둘 다 §6.8 합법·self-consistent**·문서 핀=골든 리스크로 defer) · SYS-READ hier-element dest 실지원(iverilog ✓·현 honest-loud) · hier-write sentinel cont_assigns/out_binds 미패치 panic · scalar `int unsigned` param 부호(iverilog ✓) · repl-count 변수→0 · assoc 배열-key/clocking 배열-output word0 · typedef-요소 param 진단 · **queue/dyn/string decl-init in gen/iface**(iverilog 일부 ✓·현 loud follow-on) · generate-case 스코프 이름 `gcase[0].x` E3010(gen-if는 정상) |

@@ -141,9 +141,11 @@ pub(crate) trait Kernel {
     /// only (the `$value$plusargs` family: the worker writes the dest arg and
     /// returns the byte count to `lhs`).
     fn k_fgets_rhs(&self, rhs: u32) -> bool;
-    /// WRITE: read a line (up to the dest width in bytes, or through a newline)
-    /// into the str destination right-justified; returns the byte count, or 0
-    /// at EOF (leaving the destination UNCHANGED).
+    /// WRITE: read a line into the str destination; returns the byte count, or 0
+    /// at EOF (leaving the destination UNCHANGED). A fixed-width reg dest reads
+    /// up to its width in bytes (or through a newline), right-justified. A `string`
+    /// dest (NetKind::String) reads the WHOLE line uncapped and stores it via the
+    /// §6.16 packed-string path.
     fn k_fgets(&mut self, rhs: u32) -> Value;
     /// READ: is `rhs` a `$fread(target, fd[, start[, count]])` (v9)? It reads
     /// binary bytes into a reg or memory — statement-level effect, direct-rhs
