@@ -2196,6 +2196,12 @@ impl<'t, 's> Parser<'t, 's> {
                 "'endmodule'"
             },
         );
+        // Optional `: name` end-label (IEEE 1800 §9.3.4/§26/§27) after any
+        // container end — `endmodule : m`, `endpackage : p`, `endinterface : i`,
+        // `endprogram : p`. Accept-and-ignore, matching the established policy for
+        // endfunction/endtask/endclass/block/generate ends (a mismatched label is
+        // not silent-wrong: the container name is already fixed above).
+        self.opt_block_label();
         Some(ModuleDecl {
             is_macromodule,
             name,
@@ -3549,6 +3555,9 @@ impl<'t, 's> Parser<'t, 's> {
             return None;
         }
         self.bump(); // `endprimitive`
+                     // Optional `: name` end-label (IEEE 1800 §29.3), same accept-and-ignore
+                     // policy as the container ends in `parse_module_like`.
+        self.opt_block_label();
         if seq_rows.is_empty() {
             // An empty `table … endtable` is an illegal UDP form (iverilog: "Empty
             // UDP table") — loud-reject rather than silently synthesize an always-x
