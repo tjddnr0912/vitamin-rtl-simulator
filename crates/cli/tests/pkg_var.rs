@@ -207,30 +207,28 @@ fn scoped_lvalue_is_loud() {
 }
 
 #[test]
-fn nonconst_init_is_loud_v1() {
-    // iverilog SUPPORTS `int y = x * 2;` in a package (y=10) — vita v1 has no
-    // package-scope §6.8 pre-sweep, so this is an HONEST-loud (recorded
-    // follow-on), never a silent default-X.
-    let (_, e, c) = run(
+fn nonconst_init_supported_a2b() {
+    // A2b: a non-constant package init rides the package's own §6.8
+    // pre-sweep initial (ProcId before every module process) — iverilog: y=10.
+    // (Was a v1 honest-loud before the package pre-sweep existed.)
+    let (o, e, c) = run(
         "package p; int x = 5; int y = x * 2; endpackage\n\
          module top; import p::*;\n  initial begin $display(\"y=%0d\", y); $finish; end\nendmodule\n",
     );
-    assert_ne!(c, 0);
-    assert!(
-        e.contains("initializer is not a constant"),
-        "non-const package init must be loud:\n{e}"
-    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "y=10\nsimulation ended (Finish) at time 0\n");
 }
 
 #[test]
-fn array_pattern_init_is_loud_a2b() {
-    let (_, e, c) = run("package p; int t[0:2] = '{1, 2, 3}; endpackage\n\
-         module top; initial $finish;\nendmodule\n");
-    assert_ne!(c, 0);
-    assert!(
-        e.contains("A2b"),
-        "package array '{{…}}' init must be loud (A2b):\n{e}"
+fn array_pattern_init_supported_a2b() {
+    // A2b: a package array `'{…}` decl-init rides the package pre-sweep —
+    // iverilog-pinned element values.
+    let (o, e, c) = run(
+        "package p; int t[0:2] = '{1, 2, 3}; endpackage\n\
+         module top; import p::*;\n  initial begin $display(\"%0d %0d %0d\", t[0], t[1], t[2]); $finish; end\nendmodule\n",
     );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "1 2 3\nsimulation ended (Finish) at time 0\n");
 }
 
 #[test]

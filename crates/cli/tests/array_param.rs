@@ -260,13 +260,16 @@ fn v1_boundaries_are_loud() {
         "generate block",
         "generate-scope array parameter",
     );
-    // package scope: stays the package-body v7 reject until A2b-prereq
-    assert_loud(
-        "package p; localparam int R [0:1] = '{1,2}; endpackage\n\
-         module t; import p::*; initial $display(\"%0d\", R[0]); endmodule\n",
-        "package body",
-        "package array parameter",
-    );
+    // package scope: SUPPORTED since A2b (2026-07-03) — positive pin here so
+    // this boundary list stays truthful; full coverage = pkg_array_param.rs.
+    {
+        let (o, e, c) = run(
+            "package p; localparam int R [0:1] = '{1,2}; endpackage\n\
+             module t; import p::*; initial begin $display(\"%0d\", R[0]); $finish; end endmodule\n",
+        );
+        assert_eq!(c, 0, "package array parameter must elaborate clean:\n{e}");
+        assert!(o.starts_with("1\n"), "package array param value:\n{o}");
+    }
     // interface scope: no §6.8 decl-init collection pass there (the generate
     // gate's twin — adversarial find: the value silently read 0)
     assert_loud(

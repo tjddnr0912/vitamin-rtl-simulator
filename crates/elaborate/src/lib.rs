@@ -2550,7 +2550,8 @@ struct Elaborator<'s> {
     /// A2b-prereq: package name → (var name → NetId) for package-level
     /// VARIABLES (IEEE §26: one storage instance per elaboration, shared by
     /// every module). The nets live under the reserved `$pkg$<pkg>` scope
-    /// (not a legal user path — vita has no escaped identifiers) and are
+    /// (not a spoofable user path — an escaped identifier keeps its leading
+    /// backslash in the AST name, so `\$pkg$p` never string-matches) and are
     /// excluded from the VCD in v1 (iverilog parity: it dumps no package
     /// vars either). Elaborate-local (never serialized).
     pkg_vars: std::collections::BTreeMap<String, std::collections::BTreeMap<String, u32>>,
@@ -2561,11 +2562,6 @@ struct Elaborator<'s> {
     /// WILDCARD import (iverilog-pinned), colliding with an EXPLICIT import
     /// is an error (iverilog-pinned).
     pkg_var_aliases: std::collections::BTreeMap<String, (String, bool)>,
-    /// A2b-prereq: true while lowering a PACKAGE body's variable declarations.
-    /// A non-constant initializer is LOUD there — no §6.8 pre-sweep collects
-    /// package-scope inits, so silently defaulting the net would be a
-    /// silent-wrong init drop (the generate/interface ㉮ hazard class).
-    in_pkg_body: bool,
     /// A2b-prereq (adversarial sound S2): fq keys of DECLARED genvar names.
     /// A genvar binds into `params` only transiently (during loop unroll), so
     /// the constant-shadow guard needs this persistent record — otherwise a
@@ -2761,7 +2757,6 @@ impl<'s> Elaborator<'s> {
             lowering_decl_init: false,
             pkg_vars: std::collections::BTreeMap::new(),
             pkg_var_aliases: std::collections::BTreeMap::new(),
-            in_pkg_body: false,
             genvar_decls: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
@@ -3986,6 +3981,15 @@ impl<'s> Elaborator<'s> {
         path: &[String],
         table: &std::collections::BTreeMap<String, V>,
     ) -> Option<V> {
+        // A2b (adversarial sound #2): a hierarchical reference FROM package
+        // scope (a `$pkg$…` prefix = the package pre-sweep, the only proc
+        // context there) is LRM-illegal (§26.3 — packages see only their own
+        // scope) and has no legit resolution target (no interface/class state
+        // can exist in a package). Committed-unresolved → every deferred
+        // resolver stays loud, never an oracle-divergent silent value.
+        if prefix.starts_with("$pkg$") {
+            return None;
+        }
         let first = &path[0];
         let tail = path.join(".");
         let rest = path[1..].join(".");
@@ -6652,43 +6656,20 @@ impl<'s> Elaborator<'s> {
             // — previously only literals folded, so a param/expr initializer silently
             // defaulted to X/0 (a now-fixed pre-existing silent-wrong, and the value
             // that the 2-state `is_var` change relies on instead of a cont-assign).
+            // A non-foldable init defaults here and rides the §6.8 pre-sweep
+            // instead: the module body collects it via `collect_var_init_drivers`,
+            // and a PACKAGE body does the same (A2b — `elaborate_pkg_netvar`
+            // collects, `elaborate_package` flushes its own pre-sweep initial
+            // whose ProcId precedes every module process).
             let init = match &decl.init {
-                Some(e) => {
-                    let folded = fold_init(e, width).or_else(|| {
+                Some(e) => fold_init(e, width)
+                    .or_else(|| {
                         self.const_eval_in_scope(e).map(|v| {
                             let cv = make_const_i64(v, 64, true);
                             resize_bits(&cv.bits, cv.width, width, cv.signed)
                         })
-                    });
-                    match folded {
-                        Some(v) => v,
-                        None => {
-                            // A2b-prereq: a MODULE body hands a non-foldable
-                            // init to the §6.8 pre-sweep; a PACKAGE body has no
-                            // such pass, so defaulting here would silently drop
-                            // the init (the ㉮ hazard class) — LOUD instead.
-                            if self.in_pkg_body {
-                                let msg = if decl.unpacked.is_empty() {
-                                    format!(
-                                        "package variable `{}` initializer is not a \
-                                         constant expression (v1: assign it from a \
-                                         module initial block instead)",
-                                        decl.name.name
-                                    )
-                                } else {
-                                    format!(
-                                        "package variable `{}`: an unpacked-array \
-                                         `'{{…}}` initializer in a package body is \
-                                         not yet supported (A2b)",
-                                        decl.name.name
-                                    )
-                                };
-                                self.error(MsgCode::ElabUnsupported, &msg);
-                            }
-                            default_init(d.kind, width)
-                        }
-                    }
-                }
+                    })
+                    .unwrap_or_else(|| default_init(d.kind, width)),
                 None => default_init(d.kind, width),
             };
             self.add_net(
@@ -24330,8 +24311,11 @@ impl<'s> Elaborator<'s> {
     // ── v7 P2-D packages (IR-0 — elaborate-side symbol flattening) ──
     /// Fold one package body: params/localparams + enum labels (decl order,
     /// package-local visibility) into `pkg_consts`; clone funcs/tasks into
-    /// `pkg_funcs`/`pkg_tasks`. Anything else in a package body is loud
-    /// (variables / cont-assigns / procs are outside the v7 scope).
+    /// `pkg_funcs`/`pkg_tasks`; lower VARIABLE declarations (incl. desugared
+    /// array parameters) to nets under the reserved `$pkg$<pkg>` scope and
+    /// flush their collected decl-inits as the package's own §6.8 pre-sweep
+    /// `initial` (A2b — see `elaborate_pkg_netvar`). Anything else
+    /// (cont-assigns / procs / package-internal imports) is loud.
     fn elaborate_package(&mut self, pm: &ast::ModuleDecl) {
         let pkg = pm.name.name.clone();
         // fold under a synthetic scope so the package's own params resolve
@@ -24424,14 +24408,15 @@ impl<'s> Elaborator<'s> {
                         "imports inside a package are outside the v7 scope",
                     );
                 }
-                // A2b-prereq: package-level VARIABLE declaration — one storage
-                // instance per elaboration (IEEE §26), lowered as an ordinary
-                // net under the reserved `$pkg$<pkg>` prefix (`cur_prefix` is
-                // already synthetic here). Plain vector variable kinds only in
-                // v1; the initializer must const-fold (it rides the NetVar
-                // `init` field = a value at creation, satisfying the LRM's
-                // before-t0 static init — no package-scope §6.8 pre-sweep
-                // exists, so a non-foldable init is LOUD, never a silent X).
+                // A2b-prereq/A2b: package-level VARIABLE declaration — one
+                // storage instance per elaboration (IEEE §26), lowered as an
+                // ordinary net under the reserved `$pkg$<pkg>` prefix
+                // (`cur_prefix` is already synthetic here). Plain vector
+                // variable kinds only in v1. A const-foldable init rides the
+                // NetVar `init` field; any other init (array `'{…}`,
+                // non-constant scalar) is collected and flushed below as the
+                // package's own §6.8 pre-sweep `initial` (before-t0 for every
+                // module process — module parity, iverilog-pinned).
                 ast::ModuleItem::NetVar(d) => {
                     self.elaborate_pkg_netvar(d, &consts, &mut vars);
                 }
@@ -24444,6 +24429,15 @@ impl<'s> Elaborator<'s> {
                 }
             }
         }
+        // A2b: emit this package's collected decl-inits (array `'{…}`,
+        // non-constant scalars) as the package's own §6.8 pre-sweep `initial`
+        // — INSIDE the `$pkg$<pkg>` scope (lvalues/RHS resolve against the
+        // package nets and still-live package params) and BEFORE the param
+        // restore. Packages elaborate before any instance, so this process's
+        // ProcId precedes every module process: module code observes the
+        // initialized values at t0 (iverilog-pinned). Empty collection = no-op
+        // (flush early-returns), so init-free packages stay byte-identical.
+        self.flush_pending_var_inits();
         for (k, prev) in saved.into_iter().rev() {
             match prev {
                 Some(v) => {
@@ -24461,11 +24455,16 @@ impl<'s> Elaborator<'s> {
         self.pkg_tasks.insert(pkg, tasks);
     }
 
-    /// A2b-prereq: lower ONE package-body variable declaration. v1 subset:
+    /// A2b-prereq/A2b: lower ONE package-body variable declaration. v1 subset:
     /// plain vector VARIABLE kinds (`reg`/`logic`/`integer`/`time`/2-state
-    /// atoms), optional unpacked array dims WITHOUT an initializer, and
-    /// const-foldable scalar initializers only. Everything else is loud —
-    /// wire kinds are not package items (IEEE §26.2), and event/string/real/
+    /// atoms) with optional unpacked array dims — including a desugared array
+    /// PARAMETER (`const_param`, A2a mechanism: the net registers into
+    /// `const_param_nets`, so every write path stays loud). A const-foldable
+    /// init rides `NetVar.init`; any other init (array `'{…}`, non-constant
+    /// scalar — iverilog-supported) is COLLECTED for the package's own §6.8
+    /// pre-sweep initial, flushed by `elaborate_package` (its ProcId precedes
+    /// every module process, so module code sees the values at t0). Loud line:
+    /// wire kinds are not package items (IEEE §26.2); event/string/real/
     /// class/dynamic storage are an unverified scope in v1 (scope-gate, §3).
     fn elaborate_pkg_netvar(
         &mut self,
@@ -24501,15 +24500,6 @@ impl<'s> Elaborator<'s> {
             );
             return;
         }
-        if d.const_param {
-            // A2a's desugared array parameter targeting a PACKAGE body is the
-            // A2b slice (const table storage) — loud until then.
-            self.error(
-                MsgCode::ElabUnsupported,
-                "an array parameter in a package body is not yet supported (A2b)",
-            );
-            return;
-        }
         for decl in &d.names {
             if self.dyn_dim_kind(&decl.unpacked).is_some() {
                 self.error(
@@ -24533,14 +24523,12 @@ impl<'s> Elaborator<'s> {
                 );
             }
         }
-        // The shared decl path registers width/sign/2-state/array sidecars
-        // exactly like a module-body variable; `in_pkg_body` makes a
-        // non-foldable initializer LOUD inside the shared init fold (a module
-        // body would hand it to the §6.8 pre-sweep, which a package does not
-        // have). PortList::None + empty body ⇒ every name is `Internal`.
-        let saved = std::mem::replace(&mut self.in_pkg_body, true);
+        // The shared decl path registers width/sign/2-state/array/const-param
+        // sidecars exactly like a module-body variable; PortList::None + empty
+        // body ⇒ every name is `Internal`. A non-foldable init defaults inside
+        // and is collected below for the package pre-sweep (module parity).
         self.elaborate_netvar_decl(d, &ast::PortList::None, &[], false);
-        self.in_pkg_body = saved;
+        self.collect_var_init_drivers(d);
         for decl in &d.names {
             if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {
                 vars.insert(decl.name.name.clone(), id);
