@@ -15,8 +15,8 @@ warn-and-skip, functions are a hard elaboration error. See
 [Deferred / not yet supported](#deferred--not-yet-supported) at the end. vitamin
 never silently produces wrong output for an unimplemented builtin.
 
-Platform note: vitamin builds and runs on **Linux and macOS only**. Windows is
-out of scope; nothing in this chapter assumes it.
+Platform note: vitamin builds and tests on **Linux, macOS, and Windows**
+(3-OS CI, byte-identical outputs).
 
 Related: [Installation](001_installation.md) · [Quickstart](002_quickstart.md) ·
 [Language Reference](003_language-reference.md) · [CLI Reference](004_cli-reference.md) ·
@@ -28,8 +28,8 @@ Related: [Installation](001_installation.md) · [Quickstart](002_quickstart.md) 
 
 `$display`, `$write`, `$monitor`, and `$strobe` are all supported, including the
 radix-suffixed forms `$displayb` / `$displayo` / `$displayh` and `$writeb` /
-`$writeo` / `$writeh` (the suffix is accepted but does not change the default
-radix of bare arguments).
+`$writeo` / `$writeh` — the suffix sets the default radix of bare (unformatted)
+arguments, matching Icarus.
 
 | Task | Behavior |
 |---|---|
@@ -63,8 +63,8 @@ field renders as `x`/`z` rather than a fabricated number.
 | `%o` | Octal (per-digit `x`/`z`). |
 | `%b` | Binary (per-bit `x`/`z`). |
 | `%c` | Low 8 bits of the argument as one ASCII character. |
-| `%s` | String argument (a string literal or a vector holding packed bytes). |
-| `%t` | Time value (see the note below). |
+| `%s` | String argument (a string literal, a `string` variable, or a vector holding packed bytes). |
+| `%t` | Time value, full IEEE §21.3.2 semantics: rescaled to the `$timeformat` units (default = the global precision) and right-justified in the min field width (default 20). `%0t`/`%Nt`/`%0Nt` override the width. |
 | `%f` | Real, fixed-point. Default 6 fractional digits. |
 | `%e` | Real, scientific. Default 6 mantissa digits; exponent is signed and at least 2 digits (`1.500000e+03`). |
 | `%g` | Real, shortest of `%f`/`%e` with trailing zeros stripped (default 6 significant digits). |
@@ -83,6 +83,8 @@ Two width forms are recognized on the integer/real specifiers:
   (at least one digit is kept). This is the common idiom for compact output.
 - **`%Nd`** (e.g. `%5d`, `%8h`) — a fixed field of `N` columns, right-justified
   and space-padded.
+- **`%0Nd`** (e.g. `%06d`, `%08h`) — a fixed field of `N` columns,
+  right-justified and **zero**-padded (sign-aware for `%d`: `-00042`).
 - **bare `%d`** — the operand's *default* decimal width: the digit count of an
   `n`-bit value's maximum, right-justified and space-padded (e.g. an 8-bit value
   occupies 3 columns, a 32-bit value 10). Bare `%h`/`%o`/`%b` keep the full
@@ -98,12 +100,14 @@ $display("%08h", word);    // hex, full width
 $display("%8.2f", volts);  // "    3.14"
 ```
 
-> **`%t` quirk.** vitamin currently renders `%t` as a plain decimal of the time
-> value with **no field width** — unlike some simulators that pad `%t` to a fixed
-> column. A width modifier on `%t` is parsed but ignored, and there is no
-> `$timeformat` default to fall back on (`$timeformat` is not implemented — see
-> [Deferred](#deferred--not-yet-supported)). If you need aligned time columns,
-> read the time with `$time` and format it explicitly with `%Nd`.
+> **`%t` and `$timeformat`.** `%t` implements the full IEEE §21.3.2 model:
+> the value (in the displaying module's time unit) is rescaled to the
+> `$timeformat` units — default = the global precision, so a `1ns/1ps` design
+> prints `$time`=5 as `5000` — and right-justified in the min field width
+> (default 20). `$timeformat(units, precision, suffix, min_width)` is a
+> runtime statement (last call wins; zero args reset the defaults; 1–3
+> arguments are a compile error). Integer time values truncate at the
+> precision digit; real values (`$realtime`) round like `%f`.
 
 ---
 
@@ -174,9 +178,7 @@ the global tick count is scaled by the caller's unit multiplier.
 $display("t=%0t now=%0d real=%g", $time, $time, $realtime);
 ```
 
-> `$stime` is **not implemented** — despite appearing in the Phase-1 reference
-> catalog. Using it is an elaboration error. Use `$time` with a `%0d`/`%Nd`
-> field instead.
+`$stime` (the low 32 bits of `$time`, unsigned) is also implemented.
 
 ---
 
@@ -212,32 +214,49 @@ set" table. It is commonly used to size address widths in parameterized RTL.
 
 ---
 
+## More implemented families
+
+The original Phase-1 deferral list has since been implemented. Highlights
+(each differential-tested against Icarus or LRM-pinned where Icarus has no
+support):
+
+- **Plusargs** — `$test$plusargs("NAME")` and `$value$plusargs("N=%d", var)`
+  read the CLI's `+NAME[=VAL]` arguments (`vita tb.sv +VERBOSE +N=42`); the
+  value form is also usable directly as an `if` condition.
+- **Memory load/store** — `$readmemh`/`$readmemb`/`$writememh`/`$writememb`
+  with optional start/finish addresses.
+- **File I/O** — `$fopen` (fd and MCD modes), `$fclose`, `$fwrite`/`$fdisplay`
+  (+ b/o/h variants), `$fgetc`/`$ungetc`/`$feof`/`$fgets`/`$fread`/`$fscanf`/
+  `$sscanf`, `$sformat`/`$sformatf`, and the pre-opened STDOUT/STDERR
+  descriptors (`32'h8000_0001/2`). Reads are supported as the direct rhs of a
+  blocking assignment (`n = $fscanf(fd, …)`). STDIN reads are deferred
+  (a stdin-driven simulation breaks byte-determinism).
+- **Time formatting** — `$timeformat` + full `%t` (see above).
+- **Randomization** — `$random`/`$urandom`/`$urandom_range` (seeded, Icarus
+  bit-stream compatible) and the non-uniform `$dist_uniform`/`$dist_normal`/
+  `$dist_exponential`/`$dist_poisson`/`$dist_chi_square`/`$dist_t`/
+  `$dist_erlang` family.
+- **Real math** — the full IEEE §20.8.2 set: `$sqrt`, `$pow`, `$ln`, `$log10`,
+  `$exp`, `$floor`, `$ceil`, trig/hyperbolic (`$sin` … `$atanh`), `$hypot`,
+  `$atan2` (vendored pure-Rust libm, bit-identical across the 3 OSes).
+- **Introspection / bit-vector** — `$bits`, `$size`, `$dimensions`,
+  `$unpacked_dimensions`, `$left`/`$right`/`$high`/`$low`/`$increment`,
+  `$countones`, `$countbits`, `$onehot`/`$onehot0`, `$isunknown`, `$typename`,
+  `$clog2`, `$stime`, `$sampled`/`$changed` (SVA), `$cast`, `$exit`.
+- **Assertion control** — `$assertoff`/`$asserton`/`$assertkill` (global form).
+
 ## Deferred / not yet supported
 
-These are recognized as syntax but **not** implemented. vitamin handles them
-predictably rather than producing wrong output:
-
-- **System tasks** (e.g. `$readmemh`, `$readmemb`, `$writememh`, `$writememb`,
-  `$timeformat`, `$monitoron`/`$monitoroff`, file I/O `$fopen`/`$fwrite`/`$fdisplay`/…)
-  → **warn and skip**. No statement is emitted; the testbench keeps running.
-  Memory-initialization tasks (`$readmemh`/`$readmemb`) and `$timeformat`
-  in particular fall here — provide initial memory contents in RTL, and align
-  time output manually with `%0t`/`%Nt`.
-
-- **System functions** used in an expression that are not in the supported list
-  above (e.g. `$bits`, `$random`, `$urandom`, `$urandom_range`, the math family
-  `$sqrt`/`$pow`/`$ln`/…, `$stime`, `$countones`, `$onehot`, …) → **hard
-  elaboration error** (`E-ELAB-UNSUPPORTED`). A function returns a value, so it
-  cannot be silently skipped; the run stops with a diagnostic instead of
-  fabricating a result.
+Anything genuinely unimplemented stays predictable — unknown *tasks* warn and
+skip (`VITA-W3056`), unknown *functions* are a hard elaboration error
+(`E-ELAB-UNSUPPORTED`); vitamin never silently fabricates a result.
 
 | Category | Examples | Status |
 |---|---|---|
-| Memory load | `$readmemh`, `$readmemb`, `$writememh`, `$writememb` | task → warn-skip |
-| Time format | `$timeformat` | task → warn-skip |
-| File I/O | `$fopen`, `$fclose`, `$fwrite`, `$fdisplay`, `$fscanf`, `$sformatf` | task → warn-skip |
-| Bit-vector | `$bits`, `$countones`, `$onehot`, `$isunknown` | function → error |
-| Math | `$sqrt`, `$pow`, `$ln`, `$log10`, `$exp`, `$sin`, … | function → error |
+| File monitor variants | `$fmonitor`, `$fstrobe` | task → warn-skip |
+| Flush | `$fflush` | task → warn-skip (vitamin's file writes are unbuffered, so output bytes are unaffected) |
+| Timescale print | `$printtimescale` | task → warn-skip |
+| STDIN reads | `$fgetc(32'h8000_0000)`, … | −1 + warn (determinism-preserving deferral) |
 | Random | `$random`, `$urandom`, `$urandom_range`, `$dist_*` | function → error |
 | Legacy time | `$stime` | function → error |
 

@@ -15,7 +15,13 @@
   ($sformatf도 대입 RHS 특수형 — string-literal 포맷 필수).
 - **✅ 구현됨 (READ family, v9)**: `$fread`/`$fscanf`/`$fgets`/`$sscanf`/`$feof`/`$fgetc` — 모두 blocking
   assign의 직접 rhs 형태(`n = $fscanf(...)`)로만 지원(statement-level intercept; ref-VAR/메모리 쓰기).
-- **미구현 (silent-degrade — 미인식 $task은 WARN + skip, IR 미생성)**: `$fmonitor`, `$fstrobe`.
+- **✅ 구현됨 (pre-opened descriptors §21.3.4, 2026-07-02 ROADMAP §4.5.61)**: STDOUT
+  `32'h8000_0001`(=`$display`와 같은 결정적 싱크로 문장 순서 interleave)·STDERR `32'h8000_0002`
+  (프로세스 stderr). `$fclose`(pre-opened)=warn+no-op(계속 사용 가능)·read는 write-only 룰
+  (`$fgetc`=-1·`$feof`=0·무경고). **STDIN `32'h8000_0000` read/pushback은 deferred**(byte-결정성
+  — W4022 + -1)·STDIN write=W4022 warn+drop(iverilog는 무음 drop).
+- **미구현 (silent-degrade — 미인식 $task은 WARN + skip, IR 미생성)**: `$fmonitor`, `$fstrobe`,
+  `$fflush`(vita의 파일 write는 무버퍼 `write_all`이라 출력 바이트 무영향=accept-무해 후보).
   본 페이지의 IEEE 표준 레퍼런스 항목은 vitamin 지원 표기가 아니다.
 
 ---

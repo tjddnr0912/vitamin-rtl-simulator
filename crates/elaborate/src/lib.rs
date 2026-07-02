@@ -335,8 +335,14 @@ pub type RandWithCall = (Vec<(u32, i64, i64)>, Vec<Vec<sim_ir::COp>>);
 pub struct Sidecars {
     pub fork_modes: ForkModeTable,
     pub net_names: NetNameTable,
-    pub proc_multipliers: Vec<u32>,
+    pub proc_multipliers: Vec<u64>,
     pub severities: SeverityTable,
+    /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
+    pub timeformat_stmts: std::collections::BTreeSet<u32>,
+    /// Whole-handle copy markers (§7.10): StmtId → (dst_net, src_net).
+    pub handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
+    /// Queue-slice markers (§7.10.1): StmtIds with args [dst, src, a, b].
+    pub queue_slice_stmts: std::collections::BTreeSet<u32>,
     pub radixes: RadixTable,
     /// Per-ProcId hierarchical instance path (`"tb.u1"`) — drives `%m` (P2-11).
     /// Parallel to `processes`, like `proc_multipliers`.
@@ -576,6 +582,9 @@ pub fn elaborate_with_timescale_roots(
         fork_modes: std::mem::take(&mut el.fork_modes),
         proc_multipliers: std::mem::take(&mut el.proc_multipliers),
         severities: std::mem::take(&mut el.severities),
+        timeformat_stmts: std::mem::take(&mut el.timeformat_stmts),
+        handle_copy_stmts: std::mem::take(&mut el.handle_copy_stmts),
+        queue_slice_stmts: std::mem::take(&mut el.queue_slice_stmts),
         radixes: std::mem::take(&mut el.radixes),
         proc_scopes: std::mem::take(&mut el.proc_scopes),
         assign_ranks: std::mem::take(&mut el.assign_ranks),
@@ -2592,12 +2601,21 @@ struct Elaborator<'s> {
     cur_time_mult: u64,
     // Per-ProcId multiplier table (parallel to `processes`), threaded to the engine via
     // `SimOpts.proc_multipliers` for `$time`/`$realtime` scaling. NEVER in the golden root.
-    proc_multipliers: Vec<u32>,
+    proc_multipliers: Vec<u64>,
 
     // ── severity-task state (engine-facing side channel, NOT in SimIr) ──
     // StmtId → SeverityKind for every `$fatal`/`$error`/`$warning`/`$info` lowered
     // (each as a `SysTaskId::Display` stmt). Threaded via `SimOpts.severities`.
     severities: SeverityTable,
+    // StmtIds of `$timeformat` calls (each a no-op `SysTaskId::Display` stmt —
+    // the assert_ctl/severity pattern). Threaded via `SimOpts.timeformat_stmts`.
+    timeformat_stmts: std::collections::BTreeSet<u32>,
+    // Whole-handle copy markers (§7.10 `dst = src` deep copy): no-op Display
+    // StmtId → (dst_net, src_net). Threaded via `SimOpts.handle_copy_stmts`.
+    handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
+    // Queue-slice markers (§7.10.1 `dst = src[a:b]`): no-op Display StmtIds
+    // whose args are [dst, src, a, b]. Threaded via `SimOpts.queue_slice_stmts`.
+    queue_slice_stmts: std::collections::BTreeSet<u32>,
     // StmtId → default radix (2/8/16) for the b/o/h print-task variants (P1-5).
     radixes: RadixTable,
     // StmtIds of Force/Release stmts that are procedural assign/deassign (§9.3.1
@@ -2764,6 +2782,9 @@ impl<'s> Elaborator<'s> {
             inline_stack: Vec::new(),
             fork_modes: ForkModeTable::new(),
             severities: SeverityTable::new(),
+            timeformat_stmts: std::collections::BTreeSet::new(),
+            handle_copy_stmts: std::collections::BTreeMap::new(),
+            queue_slice_stmts: std::collections::BTreeSet::new(),
             radixes: RadixTable::new(),
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
@@ -2814,8 +2835,11 @@ impl<'s> Elaborator<'s> {
     /// `proc_multipliers.len() == processes.len()`). The engine reads the table from
     /// `SimOpts.proc_multipliers` to scale `$time`/`$realtime` per calling module.
     fn push_process(&mut self, p: ir::Process) {
-        self.proc_multipliers
-            .push(self.cur_time_mult.min(u32::MAX as u64) as u32);
+        // Full-width u64: a `10us/1ps`-class ratio (diff ≥ 10) used to SATURATE at
+        // u32::MAX = a non-power-of-10 M → wrong `$time` scaling and a wrong `%t`
+        // decade (soundness review Q6). The staged trailer stays wire-compatible
+        // (postcard varint encodes the same bytes for values < 2^32).
+        self.proc_multipliers.push(self.cur_time_mult);
         // `%m` scope: the instance path of the module being lowered ("tb.u1");
         // an empty prefix (single top) renders as the top module's own name —
         // but cur_prefix is ALWAYS the instance path incl. the top ("m" / "m.u1").
@@ -5859,8 +5883,14 @@ impl<'s> Elaborator<'s> {
                     ast::BinOp::Le => Some((a <= b) as i64),
                     ast::BinOp::Gt => Some((a > b) as i64),
                     ast::BinOp::Ge => Some((a >= b) as i64),
-                    ast::BinOp::Eq | ast::BinOp::CaseEq => Some((a == b) as i64),
-                    ast::BinOp::Ne | ast::BinOp::CaseNe => Some((a != b) as i64),
+                    // `==?`/`!=?` collapse too: a folded const has no x/z, so
+                    // every pattern bit is non-wildcard (§11.4.6 ≡ plain eq).
+                    ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::WildEq => {
+                        Some((a == b) as i64)
+                    }
+                    ast::BinOp::Ne | ast::BinOp::CaseNe | ast::BinOp::WildNe => {
+                        Some((a != b) as i64)
+                    }
                     ast::BinOp::BitAnd => Some(a & b),
                     ast::BinOp::BitOr => Some(a | b),
                     ast::BinOp::BitXor => Some(a ^ b),
@@ -7144,8 +7174,19 @@ impl<'s> Elaborator<'s> {
                     return Some(format!("a hierarchical reference (`{joined}`)"));
                 }
                 let name = &path.segments[0].name;
-                if self.lookup_scoped(name).is_none() && self.lookup_net_scoped(name).is_some() {
-                    return Some(format!("a reference to net/variable `{name}`"));
+                if self.lookup_scoped(name).is_none() {
+                    if self.lookup_net_scoped(name).is_some() {
+                        return Some(format!("a reference to net/variable `{name}`"));
+                    }
+                    // Neither a param/genvar NOR a net — an undefined name, or a
+                    // wildcard-AMBIGUOUS one (IEEE §26.8 unbinds it). This fn is
+                    // only reached when the bound did NOT fold, so a resolvable
+                    // param/genvar never lands here; an unresolved bare name is
+                    // genuinely undefined → loud, NOT a silent width-1 (`[UNDEF-1:0]`
+                    // used to clamp to 1 bit with no error). The expression path
+                    // already errors on the same name (E3010), so this restores
+                    // parity for the range/width context.
+                    return Some(format!("undefined name `{name}`"));
                 }
                 None
             }
@@ -10417,6 +10458,13 @@ impl<'s> Elaborator<'s> {
                 self.push_expr(ir::Expr::Unary { op: irop, operand })
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
+                // §11.4.6 wildcard equality intercept — BEFORE every map_binop
+                // route (the string-compare and generic arms below never see
+                // WildEq/WildNe). Comparison operands size each other, not the
+                // outer context, so both lower_expr paths land here.
+                if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
+                    return self.lower_wildcard_eq(lhs, rhs, matches!(op, ast::BinOp::WildNe));
+                }
                 // N7 handle type gate (IEEE §8.4/§11.4): a class handle / `null`
                 // is only a legal binary operand of `==`/`!=` against ANOTHER
                 // handle/null. Arithmetic/relational on a handle, or `==` with a
@@ -10541,6 +10589,14 @@ impl<'s> Elaborator<'s> {
                 // BEFORE the static array/packed chains (handles have
                 // `array_len 0`, so those would mis-route to bit-select).
                 if let Some(eid) = self.dyn_select_read(base, index) {
+                    return eid;
+                }
+                // String element READ `s[i]` (IEEE §6.16.2): a string variable is a
+                // dynamic byte SEQUENCE, not a packed vector — `s[i]` is the front-
+                // indexed CHARACTER (8-bit byte) at i, 0 if out of range, reusing the
+                // `.getc(i)` primitive. A packed-vector base (`logic[7:0] x; x[0]`)
+                // returns None here and falls through to the plain bit-select.
+                if let Some(eid) = self.string_index_read(base, index) {
                     return eid;
                 }
                 // SYMMETRY with the LHS (`collect_lval_chunks`): a `base[i]…[k]`
@@ -11026,6 +11082,22 @@ impl<'s> Elaborator<'s> {
             self.error(
                 MsgCode::ElabUnsupported,
                 "a string inside a concatenation lvalue is outside the v7 scope",
+            );
+        }
+        // A string ELEMENT chunk carries a non-None offset (a partial bit-write into
+        // the materialized vector). The plain `s[i] = c` form is intercepted earlier
+        // and routed to `.putc`; a string element reaching here came through a
+        // single-element concat `{s[0]} = c` (which slips past the multi-chunk guard
+        // above) — a silent-wrong packed bit-write. The supported whole-string write
+        // has offset None, so this never fires on `s = …`. Honest-loud.
+        if chunks
+            .iter()
+            .any(|c| self.is_string_net(c.net) && c.offset.is_some())
+        {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a string element write inside a concatenation lvalue is outside the \
+                 v7 scope (a plain `s[i] = c` is supported)",
             );
         }
         ir::Lvalue { chunks }
@@ -13133,6 +13205,11 @@ impl<'s> Elaborator<'s> {
             }
             Binary { op, lhs, rhs } => {
                 use ast::BinOp::*;
+                // §11.4.6: wildcard equality is context-INDEPENDENT (a 1-bit
+                // self-determined comparison) — route to the dedicated lowering.
+                if matches!(op, WildEq | WildNe) {
+                    return self.lower_wildcard_eq(lhs, rhs, matches!(op, WildNe));
+                }
                 let irop = map_binop(*op);
                 // logical &&/|| : operands self-determined (1-bit truth) — ctx stops.
                 if matches!(op, LogAnd | LogOr) {
@@ -13626,6 +13703,34 @@ impl<'s> Elaborator<'s> {
     fn string_handle(&self, name: &str) -> Option<u32> {
         let n = self.lookup_net_scoped(name)?;
         (self.nets.get(n as usize)?.kind == ir::NetKind::String).then_some(n)
+    }
+
+    /// The STRING net denoted by a single-segment ident expression (the base of a
+    /// `s[i]` element select), or `None` for anything else (a packed vector, an
+    /// array element, a hierarchical ref). Conservative on purpose — only a bare
+    /// string variable carries the byte-sequence semantics §6.16.2/3 want.
+    fn string_base_expr_net(&self, base: &ast::Expr) -> Option<u32> {
+        match &base.kind {
+            ast::ExprKind::Ident(p) => match p.segments.as_slice() {
+                [seg] => self.string_handle(&seg.name),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// String element READ `s[i]` (IEEE §6.16.2) → the `.getc(i)` byte primitive
+    /// (front-indexed character, 0 if out of range, 8-bit), when `base` is a bare
+    /// string variable. `None` ⇒ not a string element select → the caller falls
+    /// through to the packed bit-select (byte-identical for non-string bases).
+    fn string_index_read(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
+        let net = self.string_base_expr_net(base)?;
+        let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        let idx = self.lower_expr(index);
+        Some(self.push_expr(ir::Expr::SysFunc {
+            which: ir::SysFuncId::StrGetC,
+            args: vec![handle, idx],
+        }))
     }
 
     /// v7 P2-C: does this AST expression denote a STRING-domain value?
@@ -14223,8 +14328,9 @@ impl<'s> Elaborator<'s> {
         b.push_stmt_id(sid);
     }
 
-    /// `d = new[n] [(src)]` and `x = q.pop_*()` — the two BLOCKING-assign
-    /// special forms (v5 ⑥). True ⇒ fully lowered here.
+    /// `d = new[n] [(src)]`, `x = q.pop_*()`, and whole-handle copy
+    /// `dst = src` — the BLOCKING-assign special forms (v5 ⑥ + §7.10 copy).
+    /// True ⇒ fully lowered here.
     fn dyn_blocking_special(
         &mut self,
         b: &mut ProcessBuilder,
@@ -14233,6 +14339,161 @@ impl<'s> Elaborator<'s> {
         rhs: &ast::Expr,
     ) -> bool {
         match &rhs.kind {
+            // §7.5.1/§7.9/§7.10: whole-handle copy `dst = src` — VALUE
+            // semantics (a DEEP copy: later writes to either side never show
+            // through, iverilog-pinned for dyn/queue; assoc = hand-IEEE, no
+            // oracle). Lowered as a no-op Display + `handle_copy_stmts`
+            // marker (the timeformat pattern) — the engine deep-clones the
+            // src heap object into dst.
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                let Some((src_net, src_kind)) = self.dyn_handle(&p.segments[0].name) else {
+                    return false; // rhs is not a handle → the plain path
+                };
+                let dst = match lhs {
+                    ast::Lvalue::Ident(dp) if dp.segments.len() == 1 => {
+                        self.dyn_handle(&dp.segments[0].name)
+                    }
+                    _ => None,
+                };
+                let Some((dst_net, dst_kind)) = dst else {
+                    // handle READ into a non-handle target (`x = q`) keeps its
+                    // existing loud "no whole-value surface" on the plain path.
+                    return false;
+                };
+                if delay.is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a delayed whole-handle copy is outside the MVP",
+                    );
+                    return true;
+                }
+                if self.cur_defer.is_some() {
+                    // The §16.4 push_stmt hook would capture the marker into
+                    // defer_acts and try_defer would preempt the copy (the
+                    // timeformat-Q1 pattern) — loud-reject the combination.
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a whole-handle copy as a deferred-assertion action is \
+                         unsupported — call it as a plain statement",
+                    );
+                    return true;
+                }
+                if dst_kind != src_kind {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "whole-handle copy needs the SAME dynamic-storage kind \
+                         on both sides (queue=queue, dynamic=dynamic, assoc=assoc)",
+                    );
+                    return true;
+                }
+                // §7.6 assignment compatibility: equivalent ELEMENT types only
+                // (a deep clone never coerces element values, so a differing
+                // width/sign/2-state elem would silently carry wrong bits).
+                let elem_ty = |el: &Self, net: u32| {
+                    let nv = &el.nets[net as usize];
+                    (
+                        nv.width,
+                        nv.signed,
+                        el.two_state_heap_handles.contains(&net),
+                    )
+                };
+                if elem_ty(self, dst_net) != elem_ty(self, src_net) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "whole-handle copy needs matching element types on \
+                         both sides (width/sign/state)",
+                    );
+                    return true;
+                }
+                if dst_net == src_net {
+                    return true; // self-copy `q = q;` — a no-op
+                }
+                let sid = self.push_stmt(ir::Stmt::SysTask {
+                    which: ir::SysTaskId::Display,
+                    fmt: None,
+                    args: Vec::new(),
+                });
+                self.handle_copy_stmts.insert(sid, (dst_net, src_net));
+                b.push_stmt_id(sid);
+                true
+            }
+            // §7.10.1 queue SLICE read `dst = src[a:b]` — a new queue holding
+            // the in-range elements (hand-IEEE: Icarus parses this form but
+            // silently ignores the bounds, so the pin is the LRM + the
+            // vita-internal equivalence `q[a:b] ≡ element loop`). `$` in a
+            // bound is the last index (the q[$] dollar_subst machinery).
+            // Bounds are RUNTIME expressions, evaluated by the engine:
+            // partial out-of-range clamps, reversed/fully-out/x-z ⇒ empty.
+            ast::ExprKind::PartSelect { base, msb, lsb } => {
+                let src = match &base.kind {
+                    ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                        self.dyn_handle(&p.segments[0].name)
+                    }
+                    _ => None,
+                };
+                let Some((src_net, ir::NetKind::Queue)) = src else {
+                    return false; // not a queue slice → the plain path louds
+                };
+                let dst = match lhs {
+                    ast::Lvalue::Ident(dp) if dp.segments.len() == 1 => {
+                        self.dyn_handle(&dp.segments[0].name)
+                    }
+                    _ => None,
+                };
+                let Some((dst_net, ir::NetKind::Queue)) = dst else {
+                    return false; // slice read into a non-queue → plain-path loud
+                };
+                if delay.is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a delayed queue-slice assignment is outside the MVP",
+                    );
+                    return true;
+                }
+                if self.cur_defer.is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a queue slice as a deferred-assertion action is \
+                         unsupported — call it as a plain statement",
+                    );
+                    return true;
+                }
+                let elem_ty = |el: &Self, net: u32| {
+                    let nv = &el.nets[net as usize];
+                    (
+                        nv.width,
+                        nv.signed,
+                        el.two_state_heap_handles.contains(&net),
+                    )
+                };
+                if elem_ty(self, dst_net) != elem_ty(self, src_net) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "queue slice needs matching element types on both sides \
+                         (width/sign/state)",
+                    );
+                    return true;
+                }
+                let dst_h = self.push_expr(ir::Expr::Signal {
+                    net: dst_net,
+                    word: None,
+                });
+                let src_h = self.push_expr(ir::Expr::Signal {
+                    net: src_net,
+                    word: None,
+                });
+                // `$` inside a bound = src.size()-1 (the q[$] machinery).
+                let a_eid = self.lower_dyn_index(src_net, ir::NetKind::Queue, msb);
+                let b_eid = self.lower_dyn_index(src_net, ir::NetKind::Queue, lsb);
+                let sid = self.push_stmt(ir::Stmt::SysTask {
+                    which: ir::SysTaskId::Display,
+                    fmt: None,
+                    args: vec![dst_h, src_h, a_eid, b_eid],
+                });
+                self.queue_slice_stmts.insert(sid);
+                b.push_stmt_id(sid);
+                true
+            }
             ast::ExprKind::New { size, src } => {
                 // V2005 compat: a net actually named `new` → not the
                 // allocation form; the plain path re-lowers it as a read.
@@ -21975,6 +22236,26 @@ impl<'s> Elaborator<'s> {
                         return;
                     }
                 }
+                // §6.16.3: a string element write `s[i] = …` is detected FIRST —
+                // ahead of the event/delay early-return and the whole RHS-special
+                // chain below, every one of which would otherwise route through
+                // `lower_lvalue` and emit a silent packed BIT-write into the
+                // materialized vector. The plain form routes to the `.putc(i, c)`
+                // byte primitive; intra-assignment event/delay control (whose byte
+                // write would have to land after the wait) is honest-loud — iverilog
+                // supports it, but a clean reject beats the silent wrong path.
+                if self.is_string_index_lvalue(lhs) {
+                    if event.is_some() || delay.is_some() {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "event/delay control on a string element write `s[i]` \
+                             is unsupported (use a plain blocking assignment)",
+                        );
+                        return;
+                    }
+                    self.string_index_write_putc(b, lhs, rhs);
+                    return;
+                }
                 // Intra-assignment EVENT control `= [repeat(n)] @(ev) rhs` (IEEE
                 // §9.4.5): capture-now / wait / write. Handled FIRST — the rhs is a
                 // plain captured value (a special form like `new`/`pop` combined with
@@ -22100,6 +22381,20 @@ impl<'s> Elaborator<'s> {
                 rhs,
                 span,
             } => {
+                // §6.16.3: a string element write `s[i]` has no defined non-blocking
+                // form (iverilog 13.0 aborts on `s[i] <= c`). Detected FIRST — ahead
+                // of the event early-return — so the intra-event variant `s[i] <=
+                // @(ev) c` is caught too. The packed bit-write the normal path would
+                // emit is a silent-wrong (one bit of the materialized vector, not the
+                // character byte) — honest-loud.
+                if self.is_string_index_lvalue(lhs) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "non-blocking write to a string element `s[i] <= c` is \
+                         unsupported (use a blocking assignment)",
+                    );
+                    return;
+                }
                 // N1: non-blocking intra-assignment EVENT control
                 // (`a <= [repeat(n)] @(ev) rhs`). Capture-now / fork-join_none /
                 // NBA-write desugar — the process does NOT block.
@@ -22177,7 +22472,7 @@ impl<'s> Elaborator<'s> {
                 else_s,
                 ..
             } => {
-                let cond_id = self.lower_expr(cond);
+                let cond_id = self.lower_branch_cond(b, cond);
                 let then_bb = b.new_block();
                 let else_bb = b.new_block();
                 let merge = b.new_block();
@@ -23118,32 +23413,26 @@ impl<'s> Elaborator<'s> {
     /// a string LITERAL with at most one conversion spec from the supported
     /// set (%d/%h/%x/%o/%b/%s — %e/%f/%g real conversions are loud-deferred);
     /// `var` must lower to a plain whole-net Signal.
-    fn value_plusargs_special(
-        &mut self,
-        b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
-        delay: Option<&ast::Delay>,
-        rhs: &ast::Expr,
-    ) -> bool {
-        let ast::ExprKind::SysCall { name, args } = &rhs.kind else {
-            return false;
-        };
-        if name.name != "$value$plusargs" {
-            return false;
-        }
+    /// Validate `$value$plusargs(format, var)` args and build the
+    /// `SysFunc{ValuePlusargs}` ExprId (which writes `var` and returns 1/0 when
+    /// the engine evaluates it). `None` (after emitting a diagnostic) on a bad
+    /// arity / non-literal format / unsupported spec / non-plain-variable target.
+    /// Shared by the statement form (`r = $value$plusargs(…)`) and the
+    /// if-condition form (`if ($value$plusargs(…)) …`, B1).
+    fn value_plusargs_rhs(&mut self, args: &[ast::Expr]) -> Option<u32> {
         if args.len() != 2 {
             self.error(
                 MsgCode::ElabUnsupported,
                 "$value$plusargs takes (format, variable)",
             );
-            return true;
+            return None;
         }
         let ast::ExprKind::StrLit { .. } = &args[0].kind else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "$value$plusargs needs a string-literal format (v7)",
             );
-            return true;
+            return None;
         };
         let fmt_id = self.lower_expr(&args[0]);
         // validate the conversion set on the DECODED text (the const pool
@@ -23175,7 +23464,7 @@ impl<'s> Elaborator<'s> {
                     MsgCode::ElabUnsupported,
                     "$value$plusargs format supports one %d/%h/%x/%o/%b/%s spec (v7)",
                 );
-                return true;
+                return None;
             }
         }
         let var_id = self.lower_expr(&args[1]);
@@ -23187,12 +23476,68 @@ impl<'s> Elaborator<'s> {
                 MsgCode::ElabUnsupported,
                 "$value$plusargs target must be a plain variable (v7)",
             );
-            return true;
+            return None;
         }
-        let rhs_id = self.push_expr(ir::Expr::SysFunc {
+        Some(self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::ValuePlusargs,
             args: vec![fmt_id, var_id],
-        });
+        }))
+    }
+
+    /// Lower an `if`-CONDITION expression. `$value$plusargs(fmt, var)` (B1, IEEE
+    /// §21.6) is a function that writes `var` (a side effect) and returns 1/0; vita
+    /// supports it only as a blocking-assign RHS because of that write. The common
+    /// idiom is the condition form `if ($value$plusargs("LIMIT=%d", n)) …`, so
+    /// desugar it to a synthetic `__tmp = $value$plusargs(…)` (the supported
+    /// statement form — the write gets a controlled placement BEFORE the branch),
+    /// then branch on `__tmp`. Any other condition lowers normally (a nested
+    /// `$value$plusargs` deeper in an expression stays loud — `lower_expr`).
+    fn lower_branch_cond(&mut self, b: &mut ProcessBuilder, cond: &ast::Expr) -> u32 {
+        // Peel redundant parens — `if (($value$plusargs(…)))` is the same idiom.
+        // A COMPOUND condition (`($value$plusargs(…) && x)`) peels to a Binary,
+        // not the bare call, so it falls through to `lower_expr` and stays loud.
+        let mut inner = cond;
+        while let ast::ExprKind::Paren { inner: i } = &inner.kind {
+            inner = i;
+        }
+        if let ast::ExprKind::SysCall { name, args } = &inner.kind {
+            if name.name == "$value$plusargs" {
+                return match self.value_plusargs_rhs(args) {
+                    Some(rhs_id) => {
+                        let tmp = self.fresh_ia_tmp(32);
+                        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
+                            lhs: whole_net_lvalue(tmp),
+                            rhs: rhs_id,
+                        });
+                        b.push_stmt_id(sid);
+                        self.push_expr(ir::Expr::Signal {
+                            net: tmp,
+                            word: None,
+                        })
+                    }
+                    None => self.placeholder_expr(), // diagnostic already emitted
+                };
+            }
+        }
+        self.lower_expr(cond)
+    }
+
+    fn value_plusargs_special(
+        &mut self,
+        b: &mut ProcessBuilder,
+        lhs: &ast::Lvalue,
+        delay: Option<&ast::Delay>,
+        rhs: &ast::Expr,
+    ) -> bool {
+        let ast::ExprKind::SysCall { name, args } = &rhs.kind else {
+            return false;
+        };
+        if name.name != "$value$plusargs" {
+            return false;
+        }
+        let Some(rhs_id) = self.value_plusargs_rhs(args) else {
+            return true; // a diagnostic was already emitted
+        };
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true);
         if let Some(d) = delay {
@@ -23830,6 +24175,61 @@ impl<'s> Elaborator<'s> {
         });
         b.push_stmt_id(sid);
         true
+    }
+
+    /// String element WRITE `s[i] = c` (IEEE §6.16.3): a string variable is a
+    /// dynamic byte SEQUENCE, so the assignment mutates the front-indexed CHARACTER
+    /// (byte) at `i` via the `.putc(i, c)` primitive (an OOB index or a NUL byte is a
+    /// silent no-op per spec), NOT a packed bit-write into the materialized vector.
+    /// `false` ⇒ `lhs` is not a bare-string element select → the normal lvalue path
+    /// runs (byte-identical for every non-string lvalue).
+    /// The STRING net of a bare-string element lvalue `s[i]`, or `None` for any
+    /// other lvalue shape (a packed-vector bit-select, an array element, a concat).
+    /// Shared by the blocking write and the non-blocking honest-loud guard.
+    fn string_index_lvalue_net(&self, lhs: &ast::Lvalue) -> Option<u32> {
+        let ast::Lvalue::BitSelect { base, .. } = lhs else {
+            return None;
+        };
+        let ast::Lvalue::Ident(p) = &**base else {
+            return None;
+        };
+        match p.segments.as_slice() {
+            [seg] => self.string_handle(&seg.name),
+            _ => None,
+        }
+    }
+
+    /// Is `lhs` a bare-string element select `s[i]`? (predicate twin of
+    /// `string_index_lvalue_net`, gating both the blocking write route and the
+    /// non-blocking honest-loud guard).
+    fn is_string_index_lvalue(&self, lhs: &ast::Lvalue) -> bool {
+        self.string_index_lvalue_net(lhs).is_some()
+    }
+
+    /// Emit the plain blocking string element write `s[i] = c` as the `.putc(i, c)`
+    /// byte primitive. PRECONDITION: `is_string_index_lvalue(lhs)` holds and the
+    /// caller has already excluded event/delay control — so the shape match is
+    /// infallible here (a defensive `else` keeps it total).
+    fn string_index_write_putc(
+        &mut self,
+        b: &mut ProcessBuilder,
+        lhs: &ast::Lvalue,
+        rhs: &ast::Expr,
+    ) {
+        let (Some(net), ast::Lvalue::BitSelect { index, .. }) =
+            (self.string_index_lvalue_net(lhs), lhs)
+        else {
+            return;
+        };
+        let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        let idx = self.lower_expr(index);
+        let c = self.lower_expr(rhs);
+        let sid = self.push_stmt(ir::Stmt::SysTask {
+            which: ir::SysTaskId::StrPutC,
+            fmt: None,
+            args: vec![handle, idx, c],
+        });
+        b.push_stmt_id(sid);
     }
 
     /// String concatenation `lhs = {a, b, …}` or replication `lhs = {N{a, …}}`
@@ -24620,6 +25020,109 @@ impl<'s> Elaborator<'s> {
     /// 4-state exact. This replaces the v1 `redor(scrut^label) !== 1` formula,
     /// which was exact for casex but over-lenient for casez (it wildcarded x
     /// too — `casez(1x10)` falsely matched `1010`; iverilog-pinned strict).
+    /// §11.4.6 `==?`/`!=?` wildcard equality: the RHS PATTERN's x/z bits are
+    /// don't-care; every other bit compares like plain `==`/`!=` (an LHS x/z in
+    /// a compared position propagates x — UNLIKE `CasexEq`, which wildcards
+    /// EITHER side, so mapping there would be a silent-wrong). Lowered as
+    /// `(lhs & mask) ==/!= cleaned` with mask/cleaned computed from the CONSTANT
+    /// pattern at elaborate time: mask = the pattern's known bits, 1-filled
+    /// through the comparison width (the pattern zero-extends, so extension
+    /// bits stay COMPARED against 0 — iverilog-pinned); cleaned = pattern with
+    /// its wildcard bits cleared. The compare inherits vita's oracle-pinned
+    /// `Eq`/`Ne` 4-state semantics. A NON-constant pattern would need a runtime
+    /// known-bit mask (no frozen-IR primitive exposes the unk plane) →
+    /// honest-loud; iverilog supports it, recorded as a follow-on.
+    fn lower_wildcard_eq(&mut self, lhs: &ast::Expr, rhs: &ast::Expr, ne: bool) -> u32 {
+        let lhs_id = self.lower_expr(lhs);
+        // A fill pattern (`'1`/`'x`/…) sizes to the LHS width, like a case
+        // label (§11.6 — mirrors `case_label_eq`).
+        let rhs_id = if expr_contains_fill(rhs) {
+            let w = self.ir_bits_of(lhs_id).unwrap_or(32);
+            self.lower_expr_ctx(rhs, w)
+        } else {
+            self.lower_expr(rhs)
+        };
+        if self.expr_is_real(lhs_id) || self.expr_is_real(rhs_id) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "wildcard equality (==?/!=?) is not defined on a real operand",
+            );
+            return self.placeholder_expr();
+        }
+        let cv = match self.exprs.get(rhs_id as usize) {
+            Some(ir::Expr::Const { val }) => self.consts.get(*val as usize).cloned(),
+            _ => None,
+        };
+        // Numeric AND string-literal patterns are fine (a string has packed
+        // known bytes and no x/z, so its mask is all-ones — iverilog accepts
+        // `"ab" ==? "ab"`). Real is guarded above; a COMPOUND const expression
+        // (`{2'b1?,2'b1?}`, `(P|1)`) lowers to a non-Const node and stays loud
+        // (a const-fold walker is a recorded follow-on — honest, iverilog folds).
+        let Some(cv) = cv.filter(|c| c.repr != ir::ConstRepr::Real) else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "wildcard equality (==?/!=?) needs a constant right-hand pattern \
+                 (a runtime pattern's x/z mask has no IR primitive; a compound \
+                 const expression is not folded yet — use a literal or parameter)",
+            );
+            return self.placeholder_expr();
+        };
+        // Comparison width = max(operands) (§11.8.2): the pattern zero-extends,
+        // so mask bits ABOVE the pattern width stay 1 (known-0 must match). An
+        // UNSIZABLE lhs is loud: falling back to the pattern width would build
+        // a too-narrow mask whose zero-extension ANDs the lhs's high bits away
+        // — every high bit would silently "match" (the engine widens the And
+        // to max(lhs, mask), so the mask MUST cover the lhs).
+        let Some(aw) = self.ir_bits_of(lhs_id) else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "wildcard equality (==?/!=?) on a left operand of unsizable \
+                 width is unsupported (the pattern mask must cover it)",
+            );
+            return self.placeholder_expr();
+        };
+        let w = aw.max(cv.width).max(1);
+        let nwords = ((w as usize) + 63) / 64;
+        let mut mask = vec![0u64; nwords];
+        let mut clean = vec![0u64; nwords];
+        for wi in 0..nwords {
+            let cvv = cv.bits.val.get(wi).copied().unwrap_or(0);
+            let cvu = cv.bits.unk.get(wi).copied().unwrap_or(0);
+            mask[wi] = !cvu; // pattern x/z ⇒ 0 (don't-care); known/extension ⇒ 1
+            clean[wi] = cvv & !cvu; // wildcard positions cleared to 0
+        }
+        let top = w % 64;
+        if top != 0 {
+            let m = (1u64 << top) - 1;
+            mask[nwords - 1] &= m;
+            clean[nwords - 1] &= m;
+        }
+        let push_const = |el: &mut Self, bits: Vec<u64>| -> u32 {
+            let cid = el.intern_const(ir::ConstVal {
+                width: w,
+                signed: false,
+                repr: ir::ConstRepr::Numeric,
+                bits: ir::BitPacked {
+                    val: bits,
+                    unk: vec![0u64; nwords],
+                },
+            });
+            el.push_expr(ir::Expr::Const { val: cid })
+        };
+        let m_id = push_const(self, mask);
+        let c_id = push_const(self, clean);
+        let anded = self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::BitAnd,
+            lhs: lhs_id,
+            rhs: m_id,
+        });
+        self.push_expr(ir::Expr::Binary {
+            op: if ne { ir::BinOp::Ne } else { ir::BinOp::Eq },
+            lhs: anded,
+            rhs: c_id,
+        })
+    }
+
     fn case_label_eq(&mut self, scrut_id: u32, label: &ast::Expr, kind: ast::CaseKind) -> u32 {
         // §11.6: a case label is sized to the case-expression width, so a fill
         // label grows to it (`case(x8) '1:` ⇒ the label is 8'hFF, not 32 bits —
@@ -24927,6 +25430,45 @@ impl<'s> Elaborator<'s> {
                 args: Vec::new(),
             });
             self.assert_ctl.insert(sid, kind);
+            return Some(sid);
+        }
+        // §21.3.2 `$timeformat[(units, precision, suffix, min_width)]` — a no-op
+        // `Display` stmt + a `timeformat_stmts` side entry (the assert_ctl /
+        // severity pattern; the frozen SysTaskId gains no variant). Args stay
+        // RUNTIME expressions — the engine evaluates them at execution time
+        // (variable units/suffix are legal, iverilog-pinned). Arity is 0 or 4
+        // exactly (iverilog: "$timeformat requires zero or four arguments").
+        if name.name == "$timeformat" {
+            if !(args.is_empty() || args.len() == 4) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "$timeformat requires zero or four arguments (units, precision, \
+                     suffix, min_field_width)",
+                );
+                return None;
+            }
+            // A `$timeformat` as a DEFERRED-assert action would be captured by the
+            // §16.4 push_stmt hook (every SysTask under `cur_defer` lands in
+            // `defer_acts`) and the engine's `try_defer` intercepts BEFORE the
+            // timeformat check — the call would silently print its args at
+            // maturation instead of updating the `%t` state. Loud-reject the
+            // combination (soundness review Q1); use a plain statement instead.
+            if self.cur_defer.is_some() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "$timeformat as a deferred-assertion action is unsupported \
+                     (it would be captured for maturation instead of updating the \
+                     %t format state) — call it as a plain statement",
+                );
+                return None;
+            }
+            let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+            let sid = self.push_stmt(ir::Stmt::SysTask {
+                which: ir::SysTaskId::Display,
+                fmt: None,
+                args: arg_ids,
+            });
+            self.timeformat_stmts.insert(sid);
             return Some(sid);
         }
         // P1-1: `$fatal`/`$error`/`$warning`/`$info` lower as `Display` stmts plus
@@ -25654,6 +26196,19 @@ fn map_binop(op: ast::BinOp) -> ir::BinOp {
         Ne => ir::BinOp::Ne,
         CaseEq => ir::BinOp::CaseEq,
         CaseNe => ir::BinOp::CaseNe,
+        // `==?`/`!=?` are intercepted by `lower_wildcard_eq` BEFORE every
+        // map_binop call site (both lower_expr Binary arms). These arms exist
+        // only for match exhaustiveness: a missed interception degrades to the
+        // masked-compare CORE op (plain eq — correct whenever the pattern has
+        // no x/z bits) and trips the debug_assert in a debug build.
+        WildEq => {
+            debug_assert!(false, "WildEq must be lowered via lower_wildcard_eq");
+            ir::BinOp::Eq
+        }
+        WildNe => {
+            debug_assert!(false, "WildNe must be lowered via lower_wildcard_eq");
+            ir::BinOp::Ne
+        }
         BitAnd => ir::BinOp::BitAnd,
         BitXor => ir::BinOp::BitXor,
         BitXnor => ir::BinOp::BitXnor,

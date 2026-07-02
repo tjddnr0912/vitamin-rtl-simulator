@@ -54,6 +54,41 @@ pub(crate) fn dispatch(
     if let Some(sev) = sched.st.severities.get(&sid).copied() {
         return run_severity(sched, sev, fmt, args);
     }
+    // §21.3.2: a `$timeformat` call is a no-op `Display` whose StmtId is in
+    // `timeformat_stmts` (the assert_ctl pattern) — update the live `%t` format
+    // state instead of printing. Args are evaluated HERE, at execution time
+    // (runtime-variable args are legal; iverilog-pinned).
+    if sched.st.timeformat_stmts.contains(&sid) {
+        return run_timeformat(sched, args);
+    }
+    // §7.10 whole-handle copy `dst = src`: a no-op Display whose StmtId maps to
+    // (dst, src) — DEEP-clone the src heap object (VALUE semantics: later
+    // writes to either side never show through; iverilog-pinned for dyn/queue,
+    // hand-IEEE for assoc). A never-touched src slot (None) copies as empty.
+    if let Some(&(dst, src)) = sched.st.handle_copy_stmts.get(&sid) {
+        let obj = sched
+            .st
+            .dyn_heap
+            .get(src as usize)
+            .and_then(|o| o.as_ref().cloned());
+        if let Some(slot) = sched.st.dyn_heap.get_mut(dst as usize) {
+            *slot = obj;
+        }
+        // §7.10.2: a whole-assign into a BOUNDED queue truncates to the bound
+        // (+W4020), exactly like the push/insert post-op — without this the
+        // clone silently overfills a `[$:N]` dst (R1 both-lens converged
+        // finding; a no-op for unbounded queues and non-queue kinds).
+        sched.st.enforce_queue_bound(dst);
+        return Ctl::Continue;
+    }
+    // §7.10.1 queue slice `dst = src[a:b]`: args = [dst, src, a, b]. Bounds are
+    // runtime i64; partial out-of-range CLAMPS, a reversed range / fully-out /
+    // x-z bound yields the EMPTY queue (hand-IEEE — Icarus mis-executes this
+    // form). The subrange is cloned BEFORE the dst slot is written, so a
+    // self-slice `q = q[a:b]` is safe.
+    if sched.st.queue_slice_stmts.contains(&sid) {
+        return run_queue_slice(sched, args);
+    }
     // P1-5: the b/o/h variants change the default radix of unformatted args.
     let radix = sched.st.radixes.get(&sid).copied();
     match which {
@@ -510,6 +545,12 @@ pub(crate) fn dispatch(
                 .and_then(|v| v.to_u64())
                 .map(|v| v as u32);
             match fd {
+                // §21.3.4: the pre-opened STDIN/STDOUT/STDERR cannot be closed —
+                // warn + no-op, the descriptor STAYS usable (iverilog-pinned:
+                // "could not close file descriptor STDOUT", later writes print).
+                Some(fd) if (0x8000_0000..=0x8000_0002).contains(&fd) => {
+                    preopened_close_warn(sched, fd);
+                }
                 // fd form: drop the File (flush+close on Drop).
                 Some(fd) if fd & 0x8000_0000 != 0 => {
                     if sched.st.files.remove(&fd).is_none() {
@@ -1462,6 +1503,24 @@ fn parse_mem_token(tok: &str, w: u32, hex: bool) -> Value {
 fn file_write(sched: &mut Scheduler, fd: u32, text: &str) {
     use std::io::Write as _;
     if fd & 0x8000_0000 != 0 {
+        // §21.3.4 pre-opened descriptors. STDOUT (0x8000_0001) routes through
+        // the SAME deterministic sink as `$display`/MCD-bit-0, so it interleaves
+        // in statement order (iverilog-pinned) inside the golden stdout stream.
+        // STDERR (0x8000_0002) goes to the process stderr like iverilog. A write
+        // to the read-only STDIN (0x8000_0000) falls through to the files-map
+        // miss → W4022 warn + drop (iverilog drops it SILENTLY; the warn is
+        // strictly more diagnostic, output bytes identical).
+        match fd {
+            0x8000_0001 => {
+                write_out(sched.st, text);
+                return;
+            }
+            0x8000_0002 => {
+                let _ = std::io::stderr().write_all(text.as_bytes());
+                return;
+            }
+            _ => {}
+        }
         match sched.st.files.get_mut(&fd) {
             Some(f) => {
                 let _ = f.write_all(text.as_bytes());
@@ -1509,6 +1568,15 @@ pub(crate) fn file_read_byte(sched: &mut Scheduler, fd: u32) -> Option<u8> {
             return Some(b);
         }
     }
+    // §21.3.4: reads on the pre-opened STDOUT/STDERR behave like any write-only
+    // fd — `$fgetc`=-1 with NO warning and NO EOF latch (iverilog-pinned:
+    // fgetc=-1, $feof stays 0). STDIN (0x8000_0000) is DELIBERATELY excluded
+    // from this early return: reading it is a deferred feature (a stdin-driven
+    // sim breaks byte-determinism), so it falls through to the files-map miss
+    // → W4022 warn + -1 (iverilog reads stdin).
+    if fd == 0x8000_0001 || fd == 0x8000_0002 {
+        return None;
+    }
     if fd & 0x8000_0000 == 0 || !sched.st.files.contains_key(&fd) {
         bad_fd_warn(sched, fd);
         return None;
@@ -1532,6 +1600,98 @@ pub(crate) fn file_read_byte(sched: &mut Scheduler, fd: u32) -> Option<u8> {
             None
         }
     }
+}
+
+/// §7.10.1 queue-slice executor: args = [dst_handle, src_handle, a, b].
+/// Clamp semantics (hand-IEEE, no oracle — Icarus parses `q[a:b]` but ignores
+/// the bounds): a<0 clamps to 0, b>size-1 clamps to size-1; a>b, a≥size, b<0,
+/// or an x/z bound ⇒ the empty queue (x/z also warns once, the dyn pattern).
+/// The result replaces dst wholesale (value semantics) and then the bounded-
+/// queue post-op runs (mirrors the whole-copy path).
+fn run_queue_slice(sched: &mut Scheduler, args: &[u32]) -> Ctl {
+    let (Some(dst), Some(src)) = (
+        dyn_handle_net(sched, args.first()),
+        dyn_handle_net(sched, args.get(1)),
+    ) else {
+        return Ctl::Continue; // elaborate never emits a malformed marker
+    };
+    let bound = |sched: &mut Scheduler, i: usize| -> Option<i64> {
+        let v = sched.eval(*args.get(i)?);
+        if v.has_xz() {
+            return None;
+        }
+        Some(
+            v.to_i128_signed()
+                .unwrap_or(0)
+                .clamp(i64::MIN as i128, i64::MAX as i128) as i64,
+        )
+    };
+    let a = bound(sched, 2);
+    let b = bound(sched, 3);
+    let elems: std::collections::VecDeque<crate::value::Value> = match (a, b) {
+        (Some(a), Some(b)) => {
+            let n = match sched.st.dyn_heap.get(src as usize).and_then(|o| o.as_ref()) {
+                Some(crate::state::DynObj::Queue { elems }) => elems.len() as i64,
+                _ => 0,
+            };
+            let lo = a.max(0);
+            let hi = b.min(n - 1);
+            if lo > hi {
+                std::collections::VecDeque::new()
+            } else {
+                match sched.st.dyn_heap.get(src as usize).and_then(|o| o.as_ref()) {
+                    Some(crate::state::DynObj::Queue { elems }) => elems
+                        .iter()
+                        .skip(lo as usize)
+                        .take((hi - lo + 1) as usize)
+                        .cloned()
+                        .collect(),
+                    _ => std::collections::VecDeque::new(),
+                }
+            }
+        }
+        _ => {
+            dyn_warn_once(sched, src, "queue slice bound is X/Z; result is empty");
+            std::collections::VecDeque::new()
+        }
+    };
+    if let Some(slot) = sched.st.dyn_heap.get_mut(dst as usize) {
+        *slot = Some(crate::state::DynObj::Queue { elems });
+    }
+    sched.st.enforce_queue_bound(dst);
+    Ctl::Continue
+}
+
+/// `$fclose` on a pre-opened descriptor: W4022-class warn (once per fd, the
+/// same latch), descriptor STAYS open — iverilog parity ("could not close
+/// file descriptor STDOUT (0x80000001)"; a later write still prints).
+/// LATCH NOTE: STDIN shares the once-latch with its write/read W4022 — a
+/// design that first writes/reads STDIN and then `$fclose`s it gets only the
+/// first warning (accepted: same fd, same "ignored" outcome, bytes identical).
+fn preopened_close_warn(sched: &mut Scheduler, fd: u32) {
+    if !sched.st.bad_fd_warned.insert(fd) {
+        return;
+    }
+    let name = match fd {
+        0x8000_0000 => "STDIN",
+        0x8000_0001 => "STDOUT",
+        _ => "STDERR",
+    };
+    sched
+        .st
+        .sink
+        .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
+            severity: diag::Severity::Warning,
+            code: diag::MsgCode::RunBadFd,
+            message: format!(
+                "$fclose cannot close the pre-opened {name} descriptor 0x{fd:08x} (ignored)"
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(diag::TimeStamp {
+                ticks: sched.st.now,
+            }),
+        }));
 }
 
 /// W4022 once-per-descriptor (the dyn W4020 latch pattern).
@@ -2186,12 +2346,13 @@ fn render_template(
             // REGISTERING process's scope first (FmtCapture.scope).
             'm' | 'M' => out.push_str(&sched.st.cur_scope),
             't' | 'T' => {
-                // `%T` aliases `%t` (consumes one time arg). vita renders `%t` as a
-                // plain decimal (the documented `$timeformat`/field-width limitation);
-                // `%T` shares it. The key fix is consuming the arg — a literal `%T`
-                // left the arg for the next spec (an arg-shift silent-wrong).
+                // `%T` aliases `%t` (consumes one time arg). Full §21.3.2 semantics:
+                // the arg (a time in the DISPLAYING module's unit) is rescaled to the
+                // `$timeformat` units (default: the global precision) and justified
+                // in the min field width (default 20; an explicit `%Nt`/`%0t`
+                // OVERRIDES it — iverilog-pinned).
                 let v = next_arg(sched, args, argi);
-                out.push_str(&fmt_dec(&v));
+                out.push_str(&fmt_time_spec(sched, &v, field_width, min_zero));
             }
             'd' | 'D' => {
                 let v = next_arg(sched, args, argi);
@@ -2473,6 +2634,196 @@ fn fmt_dec(v: &Value) -> String {
     } else {
         s
     }
+}
+
+/// `%t` (IEEE 1800 §21.3.2): render a time VALUE (expressed in the displaying
+/// module's time unit) per the live `$timeformat` state. iverilog-pinned:
+/// - display value = arg × M (the module unit in ticks), decimal-shifted by
+///   `units_exp − global_prec_exp` places (default units = the global precision,
+///   so a 1ns/1ps module shows ps: `%0t` of `$time`=5 → "5000");
+/// - INTEGER args are exact decimal-string math and TRUNCATE the fraction to
+///   `prec` digits (9995ns @ −6/prec 1 → "9.9", never rounds); REAL args go
+///   through f64 and round like `%f` (5.556 @ prec 2 → "5.56");
+/// - an unknown-bearing integer keeps its collapsed x/X/z/Z char while the net
+///   shift only APPENDS zeros ("X000", "X.00 ns") and falls back to numeric with
+///   the unknown bits cleared once the shift cuts into the digits ("0.00us");
+/// - the suffix appends verbatim; the result is right-justified in the explicit
+///   `%Nt`/`%0t` width if given, else the min field width (default 20); a
+///   NEGATIVE min width LEFT-justifies in |width|.
+fn fmt_time_spec(
+    sched: &Scheduler,
+    v: &Value,
+    explicit_width: Option<usize>,
+    min_zero: bool,
+) -> String {
+    let (units_exp, prec, suffix, minw): (i32, usize, &str, i64) = match &sched.st.timeformat {
+        Some(tf) => (
+            tf.units_exp,
+            tf.prec as usize,
+            tf.suffix.as_str(),
+            tf.minw as i64,
+        ),
+        None => (sched.st.global_prec_exp as i32, 0, "", 20),
+    };
+    let k = units_exp as i64 - sched.st.global_prec_exp as i64;
+    let m = sched.st.cur_time_mult.max(1);
+    // M is 10^(unit_exp − global_prec_exp) by the timescale-wiring contract, so
+    // ilog10 recovers the exponent and the integer path stays exact string math.
+    let mz = m.ilog10() as i64;
+    debug_assert_eq!(10u64.checked_pow(mz as u32), Some(m));
+    let shift = mz - k; // net decimal shift: ≥0 appends zeros, <0 cuts into digits
+    let body = if v.is_real {
+        // `$realtime`-style value: scale in f64, then %f-round to `prec` digits
+        // (mirrors fmt_real's −0.0 normalization and non-finite C spelling).
+        let x = v.to_f64().unwrap_or(0.0) * (m as f64) / 10f64.powi(k as i32);
+        let x = if x == 0.0 { 0.0 } else { x };
+        if x.is_finite() {
+            format!("{x:.prec$}")
+        } else {
+            nonfinite_c(x)
+        }
+    } else if let Some(c) = unknown_group_char(v, 0, v.width) {
+        if shift >= 0 {
+            // Collapsed unknown char + appended zeros + zero-filled fraction.
+            let frac = if prec > 0 {
+                format!(".{}", "0".repeat(prec))
+            } else {
+                String::new()
+            };
+            format!("{c}{}{frac}", "0".repeat(shift as usize))
+        } else {
+            // Scale-down goes numeric with unknown bits cleared (iverilog live).
+            let mut cleared = v.clone();
+            for i in 0..cleared.val.len() {
+                let u = cleared.unk[i];
+                cleared.val[i] &= !u;
+                cleared.unk[i] = 0;
+            }
+            time_digits_shift(&fmt_dec(&cleared), shift, prec)
+        }
+    } else {
+        time_digits_shift(&fmt_dec(v), shift, prec)
+    };
+    let full = format!("{body}{suffix}");
+    let width: i64 = explicit_width.map(|w| w as i64).unwrap_or(minw);
+    let n = full.chars().count() as i64;
+    if width >= 0 {
+        if n < width {
+            // `%0Nt`: zero-fill; zeros go before any sign char (iverilog-pinned:
+            // `%08t` of -1000 → "000-1000", not sign-aware like `%0Nd`).
+            let fill = if min_zero { "0" } else { " " };
+            return format!("{}{full}", fill.repeat((width - n) as usize));
+        }
+    } else if n < -width {
+        // Negative min width ⇒ left-justify in |width| (iverilog-pinned).
+        return format!("{full}{}", " ".repeat((-width - n) as usize));
+    }
+    full
+}
+
+/// Shift the decimal point of an exact decimal string (optionally `-`-signed) by
+/// `shift` places (≥0 appends zeros; <0 inserts a point) and TRUNCATE/zero-fill
+/// the fraction to `prec` digits — the iverilog `%t` integer behavior (it never
+/// rounds: 9.995 @ prec 1 renders "9.9").
+fn time_digits_shift(digits: &str, shift: i64, prec: usize) -> String {
+    let (sign, mag) = match digits.strip_prefix('-') {
+        Some(m) => ("-", m),
+        None => ("", digits),
+    };
+    let body = if shift >= 0 {
+        // A zero value stays "0" — appending scale zeros would render "0000"
+        // (iverilog-pinned: `%t` of $time=0 in a 1ns/1ps module is "0").
+        let int_part = if mag == "0" {
+            mag.to_string()
+        } else {
+            format!("{mag}{}", "0".repeat(shift as usize))
+        };
+        if prec > 0 {
+            format!("{int_part}.{}", "0".repeat(prec))
+        } else {
+            int_part
+        }
+    } else {
+        let p = (-shift) as usize;
+        // Left-pad so at least one integer digit remains ("2" @ p=3 → "0002").
+        let padded = if mag.len() <= p {
+            format!("{}{mag}", "0".repeat(p + 1 - mag.len()))
+        } else {
+            mag.to_string()
+        };
+        let cut = padded.len() - p;
+        if prec == 0 {
+            padded[..cut].to_string()
+        } else {
+            let frac: String = padded[cut..]
+                .chars()
+                .chain(std::iter::repeat('0'))
+                .take(prec)
+                .collect();
+            format!("{}.{frac}", &padded[..cut])
+        }
+    };
+    format!("{sign}{body}")
+}
+
+/// `$timeformat` executor (§21.3.2): 0 args resets the defaults; 4 args set
+/// (units, precision, suffix, min width). Elaborate guarantees the 0/4 arity
+/// (1–3 args are a compile-time error, iverilog parity). Values are evaluated
+/// at EXECUTION time (runtime-variable args are legal). A negative precision
+/// clamps to 0. Units and min width are taken arithmetically like iverilog, but
+/// each caps at a hostile-input bound (|units−precision| ≤ 64 decimal places,
+/// |min width| ≤ 4096, precision ≤ 64 digits — the WIDE-ARITH-CAP pattern):
+/// `$timeformat(-2_000_000_000, …)` would otherwise make `%t` allocate a
+/// multi-GiB zero string. The caps sit far above every physical unit (the IEEE
+/// table spans 2…−15) so no real testbench can observe them.
+/// The suffix is %s-coerced NOW: a string-domain value keeps its exact bytes; a
+/// packed value renders its NUL-stripped ASCII form (8'h6E → "n").
+fn run_timeformat(sched: &mut Scheduler, args: &[u32]) -> Ctl {
+    if args.is_empty() {
+        sched.st.timeformat = None;
+        return Ctl::Continue;
+    }
+    fn int_arg(sched: &Scheduler, args: &[u32], i: usize) -> i64 {
+        args.get(i)
+            .map(|&e| {
+                sched
+                    .eval(e)
+                    .to_i128_signed()
+                    .unwrap_or(0)
+                    .clamp(i64::MIN as i128, i64::MAX as i128) as i64
+            })
+            .unwrap_or(0)
+    }
+    let gp = sched.st.global_prec_exp as i64;
+    let units_exp = int_arg(sched, args, 0).clamp(gp - 64, gp + 64) as i32;
+    let prec = int_arg(sched, args, 1).clamp(0, 64) as u32;
+    let suffix = match args.get(2).copied() {
+        // String LITERAL: exact text. Every OTHER expr — including a NUMERIC
+        // literal — goes through the same value path (`fmt_packed_chars_min`),
+        // so a literal 8'h6E and a reg holding 8'h6E render the identical "n"
+        // (soundness review Q7: the old const_string route stripped trailing
+        // NULs while the value route spaces them — value-dependent divergence).
+        Some(eid) => match str_const_of_expr(sched.st, eid) {
+            Some(text) => text,
+            None => {
+                let v = sched.eval(eid);
+                if v.is_str {
+                    String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
+                } else {
+                    fmt_packed_chars_min(&v)
+                }
+            }
+        },
+        None => String::new(),
+    };
+    let minw = int_arg(sched, args, 3).clamp(-4096, 4096) as i32;
+    sched.st.timeformat = Some(crate::state::TfState {
+        units_exp,
+        prec,
+        suffix,
+        minw,
+    });
+    Ctl::Continue
 }
 
 /// C/iverilog spelling of a non-finite f64: lowercase `nan` (any sign — iverilog

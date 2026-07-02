@@ -13,7 +13,41 @@
 //! clean diagnostic on EVERY OS — the same approach rustc/swc use. This is the
 //! sole place the stack is sized; `cli::run` stays in-thread for unit tests, which
 //! keeps the work single-threaded and deterministic (just on a bigger stack).
+/// Restore the DEFAULT SIGPIPE disposition (Unix). The Rust runtime IGNOREs
+/// SIGPIPE at startup, so a write to a pipe whose consumer has closed
+/// (`vita design.sv | head`) returns EPIPE, which the `print!`/`println!`
+/// machinery turns into a panic (`failed printing to stdout: Broken pipe`, exit
+/// 101). Resetting to `SIG_DFL` makes the OS terminate the process on the broken
+/// pipe (the conventional producer behaviour, exit 141) — quiet, not a panic.
+/// Process-wide for the signal DISPOSITION (not the per-thread MASK): on Linux
+/// the worker thread inherits SIG_DFL and dies on the broken-pipe write; on
+/// macOS the spawned thread has SIGPIPE masked, so its writes see EPIPE (no
+/// signal) — that case is handled by StderrSink's broken-pipe-safe
+/// `out_write`/`err_write` (crates/cli/src/lib.rs, the §4.5.59 follow-on).
+/// No-op on Windows (no SIGPIPE). A tiny FFI avoids pulling in `libc` for one
+/// call; `SIGPIPE` is 13 and `SIG_DFL` is 0 on every Unix target vita builds
+/// for (Linux/macOS).
+#[cfg(unix)]
+fn restore_default_sigpipe() {
+    const SIGPIPE: i32 = 13;
+    const SIG_DFL: usize = 0;
+    extern "C" {
+        fn signal(signum: i32, handler: usize) -> usize;
+    }
+    // SAFETY: `signal(2)` with `SIG_DFL` only resets a signal's disposition to
+    // the OS default; it allocates nothing and the ignored return is the prior
+    // handler. This is the standard CLI idiom.
+    unsafe {
+        signal(SIGPIPE, SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_default_sigpipe() {}
+
 fn main() {
+    restore_default_sigpipe();
+
     /// 256 MiB — virtual address space (lazily committed), generous headroom over
     /// every OS default. Matches the order of magnitude swc/other Rust compilers use.
     const STACK_SIZE: usize = 256 * 1024 * 1024;

@@ -456,14 +456,18 @@ impl<'t, 's> Parser<'t, 's> {
     /// Member name after a `.`: a normal identifier, OR one of the array-method
     /// names the lexer classifies as a keyword because it reuses an operator/
     /// qualifier spelling (`and`/`or`/`xor` reductions §7.12.3, `unique` locator
-    /// §7.12.1). Reading the source span keeps the segment name intact regardless
-    /// of token kind.
+    /// §7.12.1), OR a qualifier keyword accepted defensively so a legacy member
+    /// literally named `unique0`/`priority0` keeps parsing in dot position now
+    /// that those are keywords. Reading the source span keeps the segment name
+    /// intact regardless of token kind.
     fn member_ident(&mut self) -> Option<Ident> {
         if self.is_ident()
             || self.at_kw(Kw::And)
             || self.at_kw(Kw::Or)
             || self.at_kw(Kw::Xor)
             || self.at_kw(Kw::Unique)
+            || self.at_kw(Kw::Unique0)
+            || self.at_kw(Kw::Priority0)
         {
             let t = self.bump().unwrap();
             Some(Ident {
@@ -569,16 +573,16 @@ impl<'t, 's> Parser<'t, 's> {
 fn infix_bp(k: TokenKind) -> Option<(u8, u8)> {
     use TokenKind as T;
     Some(match k {
-        T::PipePipe => (5, 6),                                     // ||   lvl13
-        T::AmpAmp => (7, 8),                                       // &&   lvl12
-        T::Pipe => (9, 10),                                        // |    lvl11
-        T::Caret | T::TildeCaret | T::CaretTilde => (11, 12),      // ^ ~^ ^~ lvl10
-        T::Amp => (13, 14),                                        // &    lvl9
-        T::EqEq | T::BangEq | T::EqEqEq | T::BangEqEq => (15, 16), // == != === !== lvl8
-        T::Lt | T::LtEq | T::Gt | T::GtEq => (17, 18),             // < <= > >= lvl7
-        T::Shl | T::Shr | T::ShlA | T::ShrA => (19, 20),           // << >> <<< >>> lvl6
-        T::Plus | T::Minus => (21, 22),                            // + -  lvl5
-        T::Star | T::Slash | T::Percent => (23, 24),               // * / % lvl4
+        T::PipePipe => (5, 6),                                // ||   lvl13
+        T::AmpAmp => (7, 8),                                  // &&   lvl12
+        T::Pipe => (9, 10),                                   // |    lvl11
+        T::Caret | T::TildeCaret | T::CaretTilde => (11, 12), // ^ ~^ ^~ lvl10
+        T::Amp => (13, 14),                                   // &    lvl9
+        T::EqEq | T::BangEq | T::EqEqEq | T::BangEqEq | T::EqEqQ | T::BangEqQ => (15, 16), // == != === !== ==? !=? lvl8
+        T::Lt | T::LtEq | T::Gt | T::GtEq => (17, 18), // < <= > >= lvl7
+        T::Shl | T::Shr | T::ShlA | T::ShrA => (19, 20), // << >> <<< >>> lvl6
+        T::Plus | T::Minus => (21, 22),                // + -  lvl5
+        T::Star | T::Slash | T::Percent => (23, 24),   // * / % lvl4
         T::StarStar => (26, 27), // **   lvl3 LEFT-assoc (IEEE Table 11-2 / iverilog: `2**2**3` = (2**2)**3)
         _ => return None,
     })
@@ -615,6 +619,8 @@ fn bin_op(k: TokenKind) -> BinOp {
         T::BangEq => BinOp::Ne,
         T::EqEqEq => BinOp::CaseEq,
         T::BangEqEq => BinOp::CaseNe,
+        T::EqEqQ => BinOp::WildEq,
+        T::BangEqQ => BinOp::WildNe,
         T::Amp => BinOp::BitAnd,
         T::Caret => BinOp::BitXor,
         T::TildeCaret | T::CaretTilde => BinOp::BitXnor,
@@ -1009,6 +1015,40 @@ impl<'t, 's> Parser<'t, 's> {
         self.expect(TokenKind::LParen, "'(' to open a cast");
         let operand = self.expr(0);
         self.expect(TokenKind::RParen, "')' closing a cast");
+        let end = self.prev_span();
+        // B2 (§6.24.1): `T'(e)` where T is a simple vector/enum typedef → a numeric
+        // cast to T's width and sign. Desugar to the composition of the existing
+        // built-in casts `(signed'|unsigned')(W'(e))` — the size cast sets the
+        // width (extending with the OPERAND's sign), then the signing cast stamps
+        // T's signedness. A struct/union/class/multi-dim/atom/2-state typedef has
+        // no simple (width, signed) form and stays loud (the `Named` arm).
+        if let ExprKind::Ident(path) = &ty.kind {
+            if path.segments.len() == 1 {
+                if let Some((w, signed)) = self.simple_typedef_cast(&path.segments[0].name) {
+                    let width_lit = Expr {
+                        kind: ExprKind::IntLit {
+                            kind: IntLitKind::Decimal,
+                            raw: w.to_string(),
+                        },
+                        span: start,
+                    };
+                    let inner = Expr {
+                        kind: ExprKind::Cast {
+                            target: CastTarget::Size(Box::new(width_lit)),
+                            expr: Box::new(operand),
+                        },
+                        span: start,
+                    };
+                    return Expr {
+                        kind: ExprKind::Cast {
+                            target: CastTarget::Signing { signed },
+                            expr: Box::new(inner),
+                        },
+                        span: start.to(end),
+                    };
+                }
+            }
+        }
         let target = match ty.kind {
             ExprKind::Ident(path) => CastTarget::Named(path),
             _ => CastTarget::Size(Box::new(ty)),
@@ -1018,8 +1058,33 @@ impl<'t, 's> Parser<'t, 's> {
                 target,
                 expr: Box::new(operand),
             },
-            span: start.to(self.prev_span()),
+            span: start.to(end),
         }
+    }
+
+    /// A user typedef name usable as a NUMERIC cast `T'(e)` (B2) → its
+    /// `(width, signed)`. `Some` only for a simple 4-state vector or
+    /// enum-with-logic-base typedef whose range folds to a literal; `None`
+    /// (→ honest-loud at the `Named` cast arm) for a struct / union / class /
+    /// multi-dim-packed / atom (no range, e.g. base-less enum / `int`) / 2-state
+    /// (`bit`) typedef — those need per-field or 2-state-coercion semantics the
+    /// size+sign desugar cannot reproduce.
+    fn simple_typedef_cast(&self, name: &str) -> Option<(i64, bool)> {
+        let info = self.typedefs.get(name)?;
+        if self.struct_layouts.contains_key(name)
+            || self.union_type_names.contains(name)
+            || info.class_name.is_some()
+            || !info.packed.is_empty()
+            || !matches!(info.kind, NetVarKind::Logic | NetVarKind::Reg)
+        {
+            return None;
+        }
+        let range = info.range.as_ref()?;
+        let msb = Self::const_lit(&range.msb)?;
+        let lsb = Self::const_lit(&range.lsb)?;
+        // Direction-agnostic width (overflow-safe `abs_diff`, matching
+        // `member_width`); the range direction does not affect the cast VALUE.
+        Some((msb.abs_diff(lsb) as i64 + 1, info.signed))
     }
 
     /// Map a casting-type keyword (`int`/`byte`/…/`signed`/`unsigned`) to its
@@ -1625,7 +1690,7 @@ impl<'t, 's> Parser<'t, 's> {
         if self.peek() == Some(TokenKind::LBracketStar) {
             self.bump(); // `[*`
             self.error(
-                "a concrete assoc key type (`[integer]`/`[time]`) — wildcard `[*]` is unsupported",
+                "a concrete assoc key type (`[integer]`/`[int]`/`[longint]`/`[time]`/`[string]`/…) — wildcard `[*]` is unsupported",
             );
             self.expect(TokenKind::RBracket, "']'");
             return Some(Dim::Dyn);
@@ -1652,15 +1717,22 @@ impl<'t, 's> Parser<'t, 's> {
                 self.expect(TokenKind::RBracket, "']'");
                 return Some(Dim::Queue(bound));
             }
-            // `[integer]` / `[time]` — assoc key type (keyword-led, so it can
-            // never shadow a same-named size parameter).
-            Some(TokenKind::Word(WordKind::Keyword(k @ (Kw::Integer | Kw::Time)))) => {
+            // `[integer]` / `[time]` / `[int]` / `[longint]` / `[shortint]` /
+            // `[byte]` — assoc key type (keyword-led, so it can never shadow a
+            // same-named size parameter). Every integral spelling shares the
+            // documented signed-i64 key domain (the ⑥ design pin: keys are NOT
+            // truncated to the declared width — `[integer]`/`[time]` already
+            // behave this way), so the 2-state atoms map onto the same
+            // `AssocKey::Integer` lowering with zero AST/schema change.
+            Some(TokenKind::Word(WordKind::Keyword(
+                k @ (Kw::Integer | Kw::Time | Kw::Int | Kw::Longint | Kw::Shortint | Kw::Byte),
+            ))) => {
                 self.bump();
                 self.expect(TokenKind::RBracket, "']'");
-                return Some(Dim::Assoc(if k == Kw::Integer {
-                    AssocKey::Integer
-                } else {
+                return Some(Dim::Assoc(if k == Kw::Time {
                     AssocKey::Time
+                } else {
+                    AssocKey::Integer
                 }));
             }
             // `[string]` (v6) — since the v7 AST flip `string` is a real
@@ -1675,7 +1747,9 @@ impl<'t, 's> Parser<'t, 's> {
             // parse (recover as a plain dyn dim so the decl still resolves).
             Some(TokenKind::Star) => {
                 self.bump();
-                self.error("a concrete assoc key type (`[integer]`/`[time]`) — wildcard `[*]` is unsupported");
+                self.error(
+                    "a concrete assoc key type (`[integer]`/`[int]`/`[longint]`/`[time]`/`[string]`/…) — wildcard `[*]` is unsupported",
+                );
                 self.expect(TokenKind::RBracket, "']'");
                 return Some(Dim::Dyn);
             }
@@ -2052,6 +2126,21 @@ impl<'t, 's> Parser<'t, 's> {
         self.bump(); // module / macromodule / interface
         let name = self.ident()?;
 
+        // ANSI module-header package imports (IEEE §A.1.2 / §26.4): zero or more
+        // `import pkg::item;` between the module name and the parameter/port list.
+        // They exist so the imported symbols are visible to the port list that
+        // follows (`module m import p::*; (input logic [W-1:0] a)`). Collected as
+        // `ModuleItem::Import` at the FRONT of the body — elaborate's import pass
+        // already scans body imports (and applies them before resolving port
+        // widths), so a header import and a body import register identically.
+        let mut header_imports = Vec::new();
+        while self.at_kw(Kw::Import) {
+            match self.parse_import_decl() {
+                Some(i) => header_imports.push(ModuleItem::Import(i)),
+                None => break, // diagnostic already emitted; stop the header loop
+            }
+        }
+
         // ANSI param port list: #( parameter … )
         let mut params = Vec::new();
         if self.peek() == Some(TokenKind::Hash) {
@@ -2072,8 +2161,9 @@ impl<'t, 's> Parser<'t, 's> {
         let ports = self.parse_port_list();
         self.expect(TokenKind::Semi, "';' after module header");
 
-        // body until the end keyword — with forward-progress guard (BLOCKER B3)
-        let mut body = Vec::new();
+        // body until the end keyword — with forward-progress guard (BLOCKER B3).
+        // Header imports lead the body so elaborate registers them first.
+        let mut body = header_imports;
         while !self.at_eof() && !self.at_kw(end_kw) {
             let before = self.pos;
             match self.parse_module_item() {
@@ -2216,7 +2306,19 @@ impl<'t, 's> Parser<'t, 's> {
         let start = self.cur_span();
         // v5 ⑥: interface-typed port `intf p` / `intf.mp p` — an Ident in the
         // type position followed by Ident/Dot. No direction, no range.
-        if matches!(self.peek(), Some(TokenKind::Word(WordKind::Ident)))
+        //
+        // Guard: if the current Ident is a registered typedef name and the next
+        // token is an Ident (port name), this is `typedef_t portname` — a typedef
+        // port in a comma-continuation context (e.g. `input byte_t a, word_t c`).
+        // Skip the interface heuristic so try_port_typedef() handles it below.
+        // (typedef_t followed by `.` cannot be a valid typedef port, so the `.`
+        // case is intentionally left to the interface heuristic.)
+        let is_typedef_portname_shape = matches!(
+            self.peek_at(1),
+            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+        ) && self.peek_typedef_name().is_some();
+        if !is_typedef_portname_shape
+            && matches!(self.peek(), Some(TokenKind::Word(WordKind::Ident)))
             && matches!(
                 self.peek_at(1),
                 Some(TokenKind::Word(WordKind::Ident) | TokenKind::Dot)
@@ -2276,11 +2378,28 @@ impl<'t, 's> Parser<'t, 's> {
         if net_or_var.is_some() {
             self.bump();
         }
-        let mut signed = self.signed_eff(net_or_var);
-        let mut range = self.opt_range();
-        let mut packed = self.opt_packed_dims(); // additional packed dims `[3:0][7:0]`
-                                                 // A pure continuation (no own direction/type/range/signed) inherits the
-                                                 // previous port's type — `input [7:0] a, b` ⇒ b is also `[7:0]`.
+        // `input mode_e m` — a typedef name as the port type (typedef-recognition
+        // family). When no built-in kind keyword matched, a simple vector/enum
+        // typedef resolves to its (kind, signed, range); the typedef name carries
+        // the range, so the normal signed/range/packed reads are SKIPPED for it
+        // (they would otherwise consume the port NAME). Built-in path unchanged.
+        let typedef_ty = if net_or_var.is_none() {
+            self.try_port_typedef()
+        } else {
+            None
+        };
+        let (mut signed, mut range, mut packed) = if let Some((k, s, r)) = typedef_ty {
+            net_or_var = Some(k);
+            (s, r, Vec::new())
+        } else {
+            (
+                self.signed_eff(net_or_var),
+                self.opt_range(),
+                self.opt_packed_dims(), // additional packed dims `[3:0][7:0]`
+            )
+        };
+        // A pure continuation (no own direction/type/range/signed) inherits the
+        // previous port's type — `input [7:0] a, b` ⇒ b is also `[7:0]`.
         if explicit_dir.is_none()
             && net_or_var.is_none()
             && range.is_none()
@@ -4928,12 +5047,23 @@ impl<'t, 's> Parser<'t, 's> {
                 PortDir::Inout
             }
         };
-        let net_or_var = self.net_var_kind();
+        let mut net_or_var = self.net_var_kind();
         if net_or_var.is_some() {
             self.bump();
         }
-        let signed = self.signed_eff(net_or_var);
-        let range = self.opt_range();
+        // `input byte_t a;` — a typedef name as a non-ANSI port type (mirrors the
+        // ANSI path; typedef-recognition family §4.5.36 ALL-variants).
+        let typedef_ty = if net_or_var.is_none() {
+            self.try_port_typedef()
+        } else {
+            None
+        };
+        let (signed, range) = if let Some((k, s, r)) = typedef_ty {
+            net_or_var = Some(k);
+            (s, r)
+        } else {
+            (self.signed_eff(net_or_var), self.opt_range())
+        };
         let mut names = Vec::new();
         loop {
             if let Some(id) = self.ident() {
@@ -7497,6 +7627,35 @@ impl<'t, 's> Parser<'t, 's> {
         ports
     }
 
+    /// A typedef name as a MODULE port type (`input mode_e m`, `input byte_t a`) →
+    /// its `(kind, signed, range)`, mirroring `try_tf_port_typedef` for tf-ports
+    /// (typedef-recognition family). REQUIRES the next token to be the port NAME
+    /// (an Ident) so a bare continuation (`input byte_t a, b` — `b` is a name, not a
+    /// type) is NOT misresolved as a type. A struct/union/class/multi-dim-packed
+    /// typedef port type is honest-loud (v1 — the AnsiPort/PortDecl shape carries
+    /// only kind/signed/range, like a tf-port). Used by both the ANSI
+    /// (`parse_ansi_port`) and non-ANSI (`parse_port_decl`) port parsers.
+    fn try_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>)> {
+        let info = self.peek_typedef_name()?;
+        if !matches!(
+            self.peek_at(1),
+            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+        ) {
+            return None; // not `<type> <name>` — leave for the continuation/name path
+        }
+        let nm = self.cur_text().to_string();
+        if self.struct_layouts.contains_key(&nm)
+            || info.class_name.is_some()
+            || !info.packed.is_empty()
+        {
+            self.error(
+                "a struct/union/class/multi-dim-packed typedef as a module port type is unsupported in v1 (a simple vector/enum typedef port is supported)",
+            );
+        }
+        self.bump(); // the typedef-name token
+        Some((info.kind, info.signed, info.range))
+    }
+
     /// One ANSI tf-port: `[input|output|inout] [net_or_var] [signed] [range] name`.
     /// Returns the port, the (possibly-inherited) direction, and the
     /// (possibly-inherited) type, so a following bare `, name` keeps both.
@@ -7930,7 +8089,9 @@ impl<'t, 's> Parser<'t, 's> {
                 // P2-E: unique/priority QUALIFIERS on if/case — the violation
                 // check desugars to a synthesized `$warning` arm (IEEE
                 // §12.4/12.5: a no-match is a runtime violation warning).
-                Kw::Unique | Kw::Priority => self.parse_unique_priority(),
+                Kw::Unique | Kw::Priority | Kw::Unique0 | Kw::Priority0 => {
+                    self.parse_unique_priority()
+                }
                 Kw::Foreach => self.parse_foreach(),
                 Kw::Repeat => self.parse_repeat(),
                 Kw::Forever => self.parse_forever(),
@@ -10061,7 +10222,17 @@ impl<'t, 's> Parser<'t, 's> {
     /// is first-match-wins, so overlap is unobservable).
     fn parse_unique_priority(&mut self) -> Stmt {
         let qspan = self.cur_span();
-        self.bump(); // unique / priority
+        // §12.4.2: the `0` variants keep the multi-match intent but SUPPRESS
+        // the no-match violation — so they parse as the PLAIN if/case with no
+        // synthetic warn injection (hand-IEEE: Icarus rejects `unique0 if`
+        // outright and ignores the unique/unique0 distinction on case).
+        let suppress_no_match = matches!(
+            self.peek(),
+            Some(TokenKind::Word(WordKind::Keyword(
+                Kw::Unique0 | Kw::Priority0
+            )))
+        );
+        self.bump(); // unique / priority / unique0 / priority0
         let warn_stmt = |span: Span| Stmt::SysTaskCall {
             name: Ident {
                 name: "$warning".to_string(),
@@ -10079,7 +10250,7 @@ impl<'t, 's> Parser<'t, 's> {
             Some(TokenKind::Word(WordKind::Keyword(Kw::If))) => {
                 let mut s = self.parse_if();
                 if let Stmt::If { else_s, span, .. } = &mut s {
-                    if else_s.is_none() {
+                    if else_s.is_none() && !suppress_no_match {
                         *else_s = Some(Box::new(warn_stmt(*span)));
                     }
                 }
@@ -10094,7 +10265,7 @@ impl<'t, 's> Parser<'t, 's> {
                 let mut s = self.parse_case(kind);
                 if let Stmt::Case { items, span, .. } = &mut s {
                     let has_default = items.iter().any(|i| matches!(i, CaseItem::Default { .. }));
-                    if !has_default {
+                    if !has_default && !suppress_no_match {
                         items.push(CaseItem::Default {
                             body: Box::new(warn_stmt(*span)),
                             span: *span,

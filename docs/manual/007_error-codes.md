@@ -30,7 +30,7 @@ m.sv:3:1: error[VITA-E2002]: unexpected token 'endmodule', expected expression
 ```
 
 ```
-error[VITA-E3009]: procedural blocks are not yet supported (v1)
+error[VITA-E3009]: a dynamic-storage handle has no whole-value surface (read elements or call methods)
 ```
 
 - **Severity** is one of `note`, `info`, `warning`, `error`, `fatal`.

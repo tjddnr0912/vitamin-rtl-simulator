@@ -141,14 +141,19 @@ fn generate_scope_decl_init_is_loud() {
 
 #[test]
 fn whole_value_assignment_and_copy_stay_loud() {
-    // Runtime whole-value assignment, queue copy, and an assoc positional pattern
-    // are NOT part of this slice — they stay loud.
+    // Runtime whole-value assignment and an assoc positional pattern are NOT
+    // part of this slice — they stay loud. (Queue COPY `r = q` graduated to a
+    // supported §7.10 deep copy — see handle_copy.rs — so its old loud assert
+    // flipped to a positive check.)
     let (_a, oka) = run("module top; int q[$];\n\
          initial begin q='{1,2}; #1 $finish; end endmodule");
     assert!(!oka, "runtime q='{{…}} must be loud");
-    let (_b, okb) = run("module top; int q[$]; int r[$];\n\
-         initial begin q.push_back(1); r=q; #1 $finish; end endmodule");
-    assert!(!okb, "queue copy r=q must be loud");
+    let (out_b, okb) = run(
+        "module top; int q[$]; int r[$];\n\
+         initial begin q.push_back(1); r=q; $display(\"c=%0d\", r.size()); #1 $finish; end endmodule",
+    );
+    assert!(okb, "queue copy r=q is now supported:\n{out_b}");
+    assert!(out_b.contains("c=1"), "copy carries the element:\n{out_b}");
     let (_c, okc) = run("module top; int aa[string]='{1,2};\n\
          initial begin #1 $finish; end endmodule");
     assert!(!okc, "assoc positional pattern init must be loud");

@@ -332,19 +332,25 @@ fn wildcard_assoc_is_loud() {
 
 #[test]
 fn handle_misuse_is_loud() {
-    // whole-handle copy (`d2 = d`) — IEEE-legal, MVP-deferred → loud.
-    assert_loud_reject(
+    // whole-handle copy (`d2 = d`) is now SUPPORTED (§7.10 deep copy — see
+    // handle_copy.rs); the old MVP loud-reject flipped to a positive check.
+    let out = run_vita(
         r#"
 module t;
   integer d [];
   integer d2 [];
   initial begin
     d = new[2];
+    d[0] = 7;
     d2 = d;
+    $display("copy=%0d d2_0=%0d", d2.size(), d2[0]);
   end
 endmodule
 "#,
-        "whole-handle assignment",
+    );
+    assert!(
+        out.contains("copy=2 d2_0=7"),
+        "whole-handle copy now supported:\n{out}"
     );
     // a handle as a port — excluded. The ANSI header form never parses
     // (E2002), which is the loud surface; the body-decl form is caught by

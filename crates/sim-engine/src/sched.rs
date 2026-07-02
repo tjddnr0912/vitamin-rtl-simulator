@@ -1026,7 +1026,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             .get(tmpl)
             .copied()
             .unwrap_or(1)
-            .max(1) as u64;
+            .max(1);
         // VM-REGPOOL: lease the register/offset files from the pool, sized to this
         // body, and return them afterwards (a `pop` yields an OWNED buffer, so it no
         // longer borrows `self` and cannot alias the `&mut self` kernel call).
@@ -3312,6 +3312,12 @@ impl Kernel for Scheduler<'_, '_> {
             return Value::from_i128(-1, 32, true);
         }
         let fd = fdv.to_u64().unwrap_or(0) as u32;
+        // §21.3.4: the pre-opened descriptors are always-valid, never-EOF fds
+        // (iverilog-pinned: `$feof(STDOUT)` = 0, no warning — mirroring the
+        // write-only-fd rule, whose failed `$fgetc` never latches EOF).
+        if (0x8000_0000..=0x8000_0002).contains(&fd) {
+            return Value::from_i128(0, 32, true);
+        }
         // a bad/closed fd → −1 (iverilog parity, NOT 0); an open fd that has
         // not yet hit EOF → 0.
         if fd & 0x8000_0000 == 0 || !self.st.files.contains_key(&fd) {
@@ -3345,6 +3351,12 @@ impl Kernel for Scheduler<'_, '_> {
         // iverilog treats every other c — INCLUDING a value with x/z bits — as
         // a normal char and pushes its low byte (x/z bits coerced to 0).
         if !cv.has_xz() && (cv.to_u64().unwrap_or(0) as u32) == 0xffff_ffff {
+            return Value::from_i128(-1, 32, true);
+        }
+        // §21.3.4: the pre-opened STDOUT/STDERR follow the write-only rule —
+        // −1, no warning. STDIN pushback is part of the deferred stdin-read
+        // feature → −1 quietly too (nothing to push back into).
+        if (0x8000_0000..=0x8000_0002).contains(&fd) {
             return Value::from_i128(-1, 32, true);
         }
         // a bad/closed fd warns + returns −1; a valid but write-only ("w"/"a")

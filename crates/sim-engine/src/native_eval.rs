@@ -1156,11 +1156,15 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader) -> Value {
                 let (bv, bu) = stack.pop().expect("native eq: missing rhs");
                 let (av, au) = stack.pop().expect("native eq: missing lhs");
                 let m = low_mask(w);
-                let res = if (au & m) != 0 || (bu & m) != 0 {
-                    (0, 1) // any compared X/Z bit → X
+                let u = (au | bu) & m;
+                // §11.4.5: a both-known differing bit decides (definite 0/1);
+                // X only for an AMBIGUOUS compare (mirrors eval.rs log_eq).
+                let res = if ((av ^ bv) & !u & m) != 0 {
+                    (ne as u64, 0)
+                } else if u != 0 {
+                    (0, 1)
                 } else {
-                    let eq = (av & m) == (bv & m);
-                    ((eq ^ ne) as u64, 0)
+                    ((!ne) as u64, 0)
                 };
                 stack.push(res);
             }
@@ -1502,11 +1506,14 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader) -> Value {
                 let (bv, bu) = wstack.pop().expect("native weq: missing rhs");
                 let (av, au) = wstack.pop().expect("native weq: missing lhs");
                 let m = wmask(w);
-                let res = if (au & m) != 0 || (bu & m) != 0 {
+                let u = (au | bu) & m;
+                // §11.4.5 definite-mismatch rule — mirrors EqNe / log_eq.
+                let res = if ((av ^ bv) & !u & m) != 0 {
+                    (ne as u64, 0)
+                } else if u != 0 {
                     (0, 1)
                 } else {
-                    let eq = (av & m) == (bv & m);
-                    ((eq ^ ne) as u64, 0)
+                    ((!ne) as u64, 0)
                 };
                 stack.push(res);
             }

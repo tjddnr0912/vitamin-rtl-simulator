@@ -1447,11 +1447,13 @@ fn v2_8_in_body_event_wait() {
     assert_all_paths_return(p);
 }
 
-// v2-9 (M-D): unknown $task ($timeformat) → WARN + skip, IR survives, no Stmt.
+// v2-9 (M-D): unknown $task ($printtimescale — still unmapped) → WARN + skip,
+// IR survives, no Stmt. ($timeformat, the old example here, is now SUPPORTED —
+// §21.3.2 — so it emits a real no-op Display stmt instead of warn-skipping.)
 #[test]
 fn v2_9_unknown_systask_nonfatal() {
     let body = blk(vec![
-        systask("$timeformat", vec![]),
+        systask("$printtimescale", vec![]),
         bassign("a", dec("0")),
         systask("$finish", vec![]),
     ]);
@@ -1463,8 +1465,8 @@ fn v2_9_unknown_systask_nonfatal() {
         ],
     );
     let (ir, warns) = elab_with_warnings(&unit);
-    assert_eq!(warns, 1, "$timeformat must warn-skip, not kill the IR");
-    // exactly one SysTask stmt survives ($finish); $timeformat emitted nothing.
+    assert_eq!(warns, 1, "$printtimescale must warn-skip, not kill the IR");
+    // exactly one SysTask stmt survives ($finish); $printtimescale emitted nothing.
     let n_systask = ir
         .stmts
         .iter()

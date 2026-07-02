@@ -40,7 +40,7 @@ Phase-2.
 | `function` / `endfunction` | Yes | See §6. |
 | `task` / `endtask` | Yes | See §6. |
 | Module instantiation & hierarchy | Yes | Named (`.p(x)`) and positional port maps; arbitrary nesting. |
-| `interface` / `modport`, `package`, `program`, `class` | Deferred | Phase-2. |
+| `interface` / `modport`, `package`, `program`, `class` | Yes | Interfaces bind as signal aliases (modport direction enforcement pending); packages with `import`; `program` blocks; classes with inheritance + virtual dispatch, parameterized classes, and constrained-random (`rand`/`constraint`/`randomize()`). |
 
 ### Ports
 
@@ -63,8 +63,10 @@ module adder (a, b, sum);
 endmodule
 ```
 
-Implicit port connections (`.*` and `.name`) are **deferred** — `.*` is parsed
-but ignored with a diagnostic; write the ports explicitly.
+Implicit port connections (`.name` and `.*`) are **supported**: `.clk` expands
+to `.clk(clk)`, and `.*` auto-connects every unlisted port to the same-named
+net or variable in the instantiating scope (a same-named *constant* or missing
+name is a loud error, never a silent float).
 
 ---
 
@@ -87,7 +89,7 @@ All of the following declaration keywords are accepted:
 | `time` | Yes | 64-bit, 4-state. |
 | `real` / `realtime` | Yes | IEEE-754 f64, 2-state. `realtime` is a synonym. |
 | `signed` / `unsigned` qualifier | Yes | e.g. `reg signed [7:0] x;`, `'sd5`. |
-| `string` | Deferred | String literals as `$display` arguments work; the `string` type does not. |
+| `string` | Yes | Dynamic `string` variables with `len`/`getc`/`putc`/`substr`/`toupper`/`tolower`/`compare`, `atoi`-family and `itoa`-family conversions, element indexing `s[i]`, comparisons, and `{a, b}` concatenation on assignment. String *queues* (`string sq[$]`) are not yet supported. |
 
 `real`/`realtime` support includes the conversion system functions `$rtoi`,
 `$itor`, `$realtobits`, `$bitstoreal`.
@@ -159,8 +161,11 @@ end
 | `enum` (via `typedef enum`) | Yes |
 | `typedef` | Yes |
 | `struct packed` | Yes |
-| `struct` (unpacked) / `union` | Deferred (Phase-2) |
-| Dynamic arrays, associative arrays, queues | Deferred (Phase-2) |
+| `struct` (unpacked) | Rejected loud (packed structs only) |
+| `union packed` | Yes (overlay semantics; member reads/writes share storage) |
+| Dynamic arrays `int d[]` | Yes (`new[n]`, `new[n](src)`, `.size()`, `.delete()`, element r/w, whole-copy `b = a`) |
+| Associative arrays `int a[integer]` | Yes (signed-64 key domain; `.num()`/`.exists()`/`.delete()`/`.first()`/`.next()`, whole-copy) — key-type spellings other than `[integer]`/`[time]` are not parsed yet |
+| Queues `int q[$]`, bounded `[$:N]` | Yes (push/pop both ends, `.insert()`/`.delete()`, `q[$]`, bounded truncation, whole-copy `r = q`; the slice read `q[a:b]` is a loud reject) |
 
 ---
 
@@ -173,7 +178,7 @@ end
 | `always_ff` | Yes | SV sequential. |
 | `always_comb` | Yes | SV combinational. |
 | `always_latch` | Yes | SV latch. |
-| `final` | Deferred | Phase-2. |
+| `final` | Yes | Runs once after the main loop ends, whatever the finish reason. |
 
 ### Sensitivity / event control
 
@@ -193,8 +198,8 @@ end
 | Non-blocking assign `<=` | Yes | |
 | `if` / `else` | Yes | |
 | `case` | Yes | |
-| `casez` | Yes (Partial) | See wildcard note. |
-| `casex` | Yes (Partial) | See wildcard note. |
+| `casez` | Yes | Precise IEEE wildcard split — see note below. |
+| `casex` | Yes | |
 | `for` | Yes | |
 | `while` | Yes | |
 | `repeat` | Yes | |
@@ -203,17 +208,19 @@ end
 | `fork` / `join` | Yes | |
 | `fork` / `join_any` | Yes | |
 | `fork` / `join_none` | Yes | |
-| `disable name;` | Parsed (no-op) | Parses and elaborates but does **not** abort control flow; emits a warning. See [Limitations](006_limitations.md). |
-| `disable fork;` | Parsed (no-op) | Same — parsed but does not cancel forked processes in v1. |
+| `disable name;` | Yes | Aborts the named enclosing block (loop `break`/`continue` desugar onto this machinery). |
+| `disable fork;` | Yes | Cancels the calling process's forked children. |
 | `#delay` (statement) | Yes | Scaled by timescale, see §8. |
 | `@(event)` (statement) | Yes | |
 | `wait (expr)` | Yes | Level-sensitive wait (testbench). |
-| `foreach`, `unique`/`priority`, `do`-`while` | Deferred | Phase-2. |
+| `foreach` | Yes | Fixed-size unpacked, multi-dimensional (`foreach (m[i,j])`), and dyn/queue/assoc iteration; packed-vector foreach is not supported. |
+| `unique` / `priority` case·if | Yes | Runtime no-match / multi-match checks emit `VITA-W4007`; `unique0`/`priority0` are not parsed yet. |
+| `do` - `while` | Yes | |
 
-**`casez`/`casex` wildcard simplification (v1):** both currently mask *every*
-x/z in the scrutinee and the label as don't-care
-(`reduction_or(scrut ^ label) !== 1`). The precise IEEE split — `casez` matching
-only `z`/`?`, `casex` matching `x`/`z` — is a Phase-1.x refinement.
+**`casez`/`casex` wildcard precision:** the IEEE split is implemented — a
+`casez` bit is don't-care iff either side is `z`/`?` (an `x` never matches),
+and a `casex` bit is don't-care iff either side is `x` or `z`. The remaining
+positions compare 4-state exact.
 
 ### Continuous assignment
 
@@ -257,7 +264,7 @@ The `**` power operator (including `2**N` width computations) is supported.
 | `function` with return value | Yes | ANSI or non-ANSI ports; range and `signed` qualifiers. |
 | `task` (may consume time) | Yes | |
 | Local declarations in func/task bodies | Yes | |
-| `automatic` qualifier | Deferred | The keyword is parsed but vitamin does not provide per-call automatic storage; recursive func/task relying on it is Phase-2. |
+| `automatic` qualifier | Yes | Per-call frame storage; recursive functions/tasks work (recursion depth is capped loudly). |
 
 ---
 
@@ -290,20 +297,29 @@ The following are explicitly **not** supported in Phase-1. Where noted as
 *parsed-and-ignored*, vitamin emits an advisory diagnostic and continues; the
 construct has no effect.
 
+Most of the original Phase-1 deferral list has since been implemented —
+intra-assignment timing (`a = #5 b;`, `q <= #1 d;` with true capture-now /
+write-later semantics), `disable`-based control flow, `defparam`
+(direct-child form), recursive/`automatic` subroutines, implicit ports
+(`.name`/`.*`), dynamic/associative/queue storage, the `string` type,
+`interface`/`package`/`program`/`class`, `final` blocks,
+`foreach`/`unique`/`priority`/`do`-`while`, and instance arrays
+(`dff u[3:0](...)`) all work today (each adversarially differential-tested
+against Icarus Verilog or pinned to the LRM where Icarus has no support).
+
+Still deferred or intentionally loud:
+
 | Construct | Behavior today |
 |---|---|
-| Unpacked `struct` / `union` | Rejected / unsupported. |
-| Intra-assignment timing (`a = #5 b;`, `q <= #1 d;`) | Parsed-and-ignored (the `#delay`/`@event` after `=`/`<=` is discarded with a warning). |
-| `disable`-based control flow | `disable name;` / `disable fork;` **parse but are a no-op** (control flow is not aborted; a warning is emitted). See [Limitations](006_limitations.md). |
-| `defparam` | Deferred; use parameter overrides at instantiation. |
-| Recursive / `automatic` functions and tasks | `automatic` keyword tolerated, semantics deferred. |
-| SV implicit ports `.*` / `.name` | `.*` parsed-and-ignored with a diagnostic; connect ports explicitly. |
-| Dynamic arrays, associative arrays, queues | Deferred. |
-| `string` type | Deferred (string *literals* as task arguments still work). |
-| `interface` / `modport`, `package`, `program`, `class` | Deferred. |
-| `final` blocks | Deferred. |
-| `foreach`, `unique`/`priority`, `do`-`while` | Deferred. |
-| Instance arrays (`dff u[3:0](...)`) | Loud reject (`VITA-E3009`), Phase-1.x. |
+| Unpacked `struct` | Loud reject (packed structs and packed unions work). |
+| `unique0` / `priority0` | Not parsed. |
+| String queues (`string sq[$]`) | Loud reject. |
+| Queue slice read (`q[a:b]`) | Loud reject (Icarus itself mis-executes this form; a hand-LRM implementation is tracked). |
+| Assoc keys other than `[integer]`/`[time]` | Declaration spelling not parsed (`[int]`/`[longint]`/`[string]`/`[*]`). |
+| Array `parameter`s (`parameter int P[0:3]`) | Loud reject (single-value parameter model). |
+| Hierarchical function calls (`u1.f(x)`) | Loud reject. |
+| `force`/`release` on a bit/part-select | Loud reject (whole nets/variables only). |
+| Modport direction enforcement | Interface signals bind, but modport read/write direction is not checked. |
 
 ---
 
@@ -313,8 +329,8 @@ The Phase-1 freeze is defined by the IN-MVP / deferred table in
 `docs/preview/01-goals-and-scope.md`, and the v1 simplifications by the "알려진
 v1 단순화" table in the same document. This chapter additionally reflects
 constructs that the parser and elaborator accept today beyond the original
-freeze — notably `enum`/`typedef`/packed `struct`, `real`/`time`, and the full
-fork-join family (`disable` parses but is a no-op) — verified against
+freeze — notably `enum`/`typedef`/packed `struct`, `real`/`time`, the full
+fork-join family, and a real control-flow `disable` — verified against
 `crates/hdl-parser/src/lib.rs`, `crates/hdl-lexer/src/lib.rs`, and
 `crates/elaborate/src/lib.rs`. When tools disagree, the IEEE LRM is the final
 authority; when this document disagrees with the code, the code is the ground

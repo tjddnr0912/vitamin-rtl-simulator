@@ -1013,7 +1013,11 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
         Value::logic(b)
     }
 
-    /// `==` / `!=`: any compared bit x/z → X; else bit-equality.
+    /// `==` / `!=`: a bit pair that is BOTH known and differing decides the
+    /// comparison (definite inequality → `==`=0 / `!=`=1) even when OTHER bits
+    /// are x/z; only an AMBIGUOUS compare (some x/z, no definite mismatch) is X
+    /// (IEEE §11.4.5 "if the relation is ambiguous" — iverilog-pinned:
+    /// `4'b1x00 == 4'b0000` is 0, not x).
     ///
     /// Width unification follows IEEE 1364-2001 §4.5: the comparison is signed
     /// ONLY when BOTH operands are signed; if either is unsigned both operands
@@ -1038,20 +1042,25 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
         // `resize_keep_sign` canonicalizes both operands (planes masked past
         // `width`), so a word-wise scan is bit-exact for the live width.
         let mut unk = 0u64;
-        let mut diff = 0u64;
+        let mut definite = 0u64;
         for k in 0..nwords(w) {
             let lu = le.unk.get(k).copied().unwrap_or(0);
             let ru = re.unk.get(k).copied().unwrap_or(0);
             let lv = le.val.get(k).copied().unwrap_or(0);
             let rv = re.val.get(k).copied().unwrap_or(0);
-            unk |= lu | ru;
-            diff |= lv ^ rv;
+            let u = lu | ru;
+            unk |= u;
+            // both-known differing bit — the val plane of an x/z bit never
+            // counts (z encodes val=1, so `& !u` is required, not cosmetic).
+            definite |= (lv ^ rv) & !u;
+        }
+        if definite != 0 {
+            return Value::logic(op == BinOp::Ne); // definite inequality
         }
         if unk != 0 {
-            return Value::x1();
+            return Value::x1(); // ambiguous: no definite mismatch, some x/z
         }
-        let eq = diff == 0;
-        Value::logic(if op == BinOp::Eq { eq } else { !eq })
+        Value::logic(op == BinOp::Eq)
     }
 
     /// `===` / `!==`: exact 4-state per-bit compare, never X. Width unification

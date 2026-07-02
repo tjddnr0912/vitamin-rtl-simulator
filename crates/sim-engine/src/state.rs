@@ -37,6 +37,23 @@ pub(crate) struct NetSlot {
 /// so the args are RE-EVALUATED at postponed-flush time, sampling settled
 /// end-of-timestep net values. ExprIds index the immutable `ir.exprs` and remain
 /// valid for the whole run, so no value snapshot or scope context is needed:
+/// `$timeformat(units, precision, suffix, min_width)` runtime state (IEEE 1800
+/// §21.3.2), read by the `%t` format spec at each render (so a mid-sim
+/// `$timeformat` re-formats every later `%t`, including strobe/monitor flushes —
+/// iverilog-pinned). Arguments are taken arithmetically, unclamped (iverilog
+/// accepts out-of-range units); a negative `prec` clamps to 0 at the call site.
+#[derive(Clone, Debug)]
+pub struct TfState {
+    /// Power of 10, in seconds, of the display unit (−9 = ns).
+    pub units_exp: i32,
+    /// Fraction digits (integer args TRUNCATE to this many; reals round via %f).
+    pub prec: u32,
+    /// Suffix text, %s-coerced at the `$timeformat` call (string or packed ASCII).
+    pub suffix: String,
+    /// Minimum field width; negative ⇒ LEFT-justify in |minw| (iverilog-pinned).
+    pub minw: i32,
+}
+
 /// `EvalCtx` is rebuilt from `Scheduler::st` (ir / nets / now / wt) at flush.
 #[derive(Clone)]
 pub(crate) struct FmtCapture {
@@ -248,10 +265,27 @@ pub(crate) struct SimState<'a> {
     /// Per-NetId hierarchical name (`"top.dut.q"`); empty ⇒ flat `n{i}` fallback.
     pub net_names: Vec<String>,
     /// Per-ProcId time multiplier (from `SimOpts.proc_multipliers`); empty ⇒ M=1.
-    pub proc_multipliers: Vec<u32>,
+    pub proc_multipliers: Vec<u64>,
     /// StmtId → severity for `$fatal`/`$error`/`$warning`/`$info` statements
     /// (from `SimOpts.severities`); empty ⇒ no severity tasks in the design.
     pub severities: crate::SeverityTable,
+    /// StmtIds of `$timeformat` calls, lowered as no-op `Display` statements
+    /// (the `assert_ctl`/severity side-table pattern, from
+    /// `SimOpts.timeformat_stmts`); empty ⇒ no `$timeformat` in the design.
+    pub timeformat_stmts: std::collections::BTreeSet<u32>,
+    /// Whole-handle copy markers (§7.10, from `SimOpts.handle_copy_stmts`):
+    /// no-op Display StmtId → (dst_net, src_net); the dispatch intercept
+    /// deep-clones `dyn_heap[src]` into `dyn_heap[dst]`.
+    pub handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
+    /// Queue-slice markers (§7.10.1, from `SimOpts.queue_slice_stmts`):
+    /// no-op Display StmtIds whose args are [dst, src, a, b].
+    pub queue_slice_stmts: std::collections::BTreeSet<u32>,
+    /// Live `$timeformat` state (IEEE 1800 §21.3.2). `None` ⇒ the defaults:
+    /// units = the global precision, 0 fraction digits, no suffix, min width 20.
+    pub timeformat: Option<TfState>,
+    /// Global precision exponent (power of 10, in seconds, of one simulation
+    /// tick; from `SimOpts.global_prec_exp`). −9 for the 1ns/1ns base.
+    pub global_prec_exp: i8,
     /// StmtId → default radix (2/8/16) for b/o/h print variants (P1-5).
     pub radixes: crate::RadixTable,
     /// Assign-rank table (§9.3.1, from `SimOpts.assign_ranks`): StmtIds of
@@ -666,6 +700,11 @@ impl<'a> SimState<'a> {
             readable_fds: std::collections::BTreeSet::new(),
             proc_multipliers: Vec::new(),
             severities: crate::SeverityTable::new(),
+            timeformat_stmts: std::collections::BTreeSet::new(),
+            handle_copy_stmts: std::collections::BTreeMap::new(),
+            queue_slice_stmts: std::collections::BTreeSet::new(),
+            timeformat: None,
+            global_prec_exp: -9,
             radixes: crate::RadixTable::new(),
             assign_ranks: crate::AssignRankTable::new(),
             queue_bounds: crate::QueueBoundTable::new(),

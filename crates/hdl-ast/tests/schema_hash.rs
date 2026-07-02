@@ -158,9 +158,13 @@ use vita_schema::schema_hash;
 /// `TfPort` — `function f(int a, int b = 10)`. Parsed only for ANSI tf-ports;
 /// elaborate fills omitted trailing actuals at the call site. Pure front-end +
 /// elaborate (no sim-ir change; format_version stays 19). Re-pins this .vu hash.
+/// 2026-07-02 wildcard equality `==?`/`!=?` (§11.4.6): adds `BinOp::WildEq`/
+/// `WildNe` — lowered by elaborate to a const-pattern mask & compare (plain
+/// `Eq`/`Ne` in the frozen IR; no sim-ir change, format_version stays 19).
+/// Re-pins this .vu hash.
 const EXPECTED: [u8; 32] = [
-    90, 216, 79, 82, 147, 18, 176, 97, 115, 233, 164, 177, 255, 158, 114, 223, 131, 194, 162, 126,
-    44, 244, 105, 235, 16, 143, 244, 15, 217, 164, 4, 94,
+    20, 225, 117, 125, 139, 231, 159, 95, 153, 186, 230, 135, 175, 148, 40, 133, 59, 127, 45, 172,
+    152, 180, 109, 63, 210, 248, 112, 250, 128, 204, 76, 186,
 ];
 
 #[test]

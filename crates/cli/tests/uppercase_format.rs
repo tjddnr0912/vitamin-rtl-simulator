@@ -79,14 +79,16 @@ fn uppercase_eg_nonfinite_but_f_lowercase() {
 #[test]
 fn uppercase_t_consumes_its_arg() {
     // `%T` aliases `%t` and must CONSUME one arg, so a following `%d` reads the next
-    // value (the bug left `%T` literal and shifted every later arg). `%T` shares
-    // vita's documented plain-decimal `%t` rendering, so it equals vita `%t` exactly.
+    // value (the bug left `%T` literal and shifted every later arg). `%T` shares the
+    // full §21.3.2 `%t` rendering — default min field width 20 (iverilog-pinned;
+    // the 1ns/1ns base has multiplier 1, so the VALUE itself is unscaled).
     let out = run("module top; integer a,b; initial begin a=5; b=9; \
          $display(\"T[%T]d[%d]\",a,b); $display(\"t[%t]d[%d]\",a,b); $finish; end endmodule\n");
     // Both lines identical (T behaves as t) and the %d sees b=9 (no arg shift).
     assert!(
-        out.contains("T[5]d[          9]") && out.contains("t[5]d[          9]"),
-        "%T consumes arg, == %t; got:\n{out}"
+        out.contains("T[                   5]d[          9]")
+            && out.contains("t[                   5]d[          9]"),
+        "%T consumes arg, == %t (default width 20); got:\n{out}"
     );
 }
 

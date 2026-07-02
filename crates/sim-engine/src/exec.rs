@@ -250,7 +250,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             .get(tmpl)
             .copied()
             .unwrap_or(1)
-            .max(1) as u64;
+            .max(1);
         // `%m` scope of this process (P2-11); flat "top" when no sidecar. Skip the
         // String alloc when the scope is already current (the common case for a
         // process resumed many times) — `clone_from` reuses capacity otherwise.

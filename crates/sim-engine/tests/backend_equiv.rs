@@ -150,7 +150,7 @@ fn mixed_backend_run_equals_all_interpreter() {
 fn run_opts(
     ir: &sim_ir::SimIr,
     backend: Backend,
-    mults: Vec<u32>,
+    mults: Vec<u64>,
     max_deltas: u64,
 ) -> (SimResult, String) {
     let opts = SimOpts {
@@ -185,7 +185,7 @@ fn timescale_prologue_equals_across_backends() {
     let ir = build(src);
     // Distinct, non-unit multiplier per process so a stale cur_time_mult on the VM path
     // can never coincidentally match the correct one.
-    let mults: Vec<u32> = (0..ir.processes.len() as u32)
+    let mults: Vec<u64> = (0..ir.processes.len() as u64)
         .map(|i| (i + 1) * 10)
         .collect();
     let (ri, oi) = run_opts(&ir, Backend::Interpreter, mults.clone(), 1_000_000);
@@ -216,7 +216,7 @@ fn runaway_codegenable_loop_equal_and_fatal() {
       initial forever y = y + 1;\n\
     endmodule";
     let ir = build(src);
-    let unit = vec![1u32; ir.processes.len()];
+    let unit = vec![1u64; ir.processes.len()];
     let (ri, oi) = run_opts(&ir, Backend::Interpreter, unit.clone(), 256);
     let (rb, ob) = run_opts(&ir, Backend::Bytecode, unit, 256);
     assert_eq!(oi, ob, "runaway stdout must match");
@@ -252,7 +252,7 @@ fn blocking_index_sample_equals_across_backends() {
       end\n\
     endmodule";
     let ir = build(src);
-    let unit = vec![1u32; ir.processes.len()];
+    let unit = vec![1u64; ir.processes.len()];
     let (ri, oi) = run_opts(&ir, Backend::Interpreter, unit.clone(), 1_000_000);
     let (rb, ob) = run_opts(&ir, Backend::Bytecode, unit, 1_000_000);
     assert_eq!(oi, ob, "blocking-index stdout must match across backends");
@@ -424,7 +424,7 @@ fn word_aligned_array_write_read_equals_and_independent() {
       end\n\
     endmodule";
     let ir = build(src);
-    let unit = vec![1u32; ir.processes.len()];
+    let unit = vec![1u64; ir.processes.len()];
     let (ri, oi) = run_opts(&ir, Backend::Interpreter, unit.clone(), 1_000_000);
     let (rb, ob) = run_opts(&ir, Backend::Bytecode, unit, 1_000_000);
     assert_eq!(oi, ob, "64-bit array write/read must match across backends");

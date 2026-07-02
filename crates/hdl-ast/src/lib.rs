@@ -594,8 +594,11 @@ pub enum Dim {
 /// Assoc-array key type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum AssocKey {
-    Integer, // 32-bit signed
-    Time,    // 64-bit unsigned
+    /// Every integral key spelling (`integer`/`int`/`longint`/`shortint`/
+    /// `byte`) — the engine key domain is uniformly signed i64 (the v5-⑥
+    /// design pin: keys are never truncated to the declared width).
+    Integer,
+    Time, // `time` — same i64 engine domain; the variant is cosmetic today
     /// `[string]` (v6) — byte-string keys (contextual keyword: `string` stays
     /// a plain identifier everywhere else).
     Str,
@@ -1480,6 +1483,13 @@ pub enum BinOp {
     Ne,
     CaseEq,
     CaseNe,
+    /// `==?` wildcard equality (§11.4.6): x/z bits of the RHS pattern are
+    /// don't-care; an LHS x/z in a compared position propagates x (unlike
+    /// `CasexEq`, which wildcards EITHER side). Lowered by elaborate's
+    /// `lower_wildcard_eq` (const-RHS mask & compare), never via `map_binop`.
+    WildEq,
+    /// `!=?` wildcard inequality — the §11.4.6 negation of `WildEq`.
+    WildNe,
     BitAnd,
     BitXor,
     BitXnor,

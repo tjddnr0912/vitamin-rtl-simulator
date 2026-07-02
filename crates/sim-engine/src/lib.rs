@@ -142,7 +142,7 @@ pub struct SimOpts {
     /// Per-ProcId time multiplier `M = 10^(unit_exp − global_prec_exp)` from
     /// `elaborate::elaborate_with_timescale`, for `$time`/`$realtime` scaling
     /// (`$time = now / M`). EMPTY ⇒ multiplier 1 (the 1ns/1ns base). Never golden.
-    pub proc_multipliers: Vec<u32>,
+    pub proc_multipliers: Vec<u64>,
     /// Process-body execution backend (P0a). Default [`Backend::Interpreter`] so
     /// every existing caller is byte-identical. Rides out-of-band (never enters the
     /// frozen `SimIr`).
@@ -152,6 +152,20 @@ pub struct SimOpts {
     /// `SysTaskId::Display`). EMPTY for severity-free designs (the default), so
     /// every existing caller is unaffected. Never enters the golden IR.
     pub severities: SeverityTable,
+    /// `$timeformat` side table: StmtIds of `$timeformat` calls (lowered as no-op
+    /// `SysTaskId::Display`, the severity/assert_ctl pattern). EMPTY for designs
+    /// without `$timeformat` (the default). Never enters the golden IR.
+    pub timeformat_stmts: std::collections::BTreeSet<u32>,
+    /// Whole-handle copy markers (§7.10 `dst = src` deep copy): no-op Display
+    /// StmtId → (dst_net, src_net). EMPTY default. Never golden.
+    pub handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
+    /// Queue-slice markers (§7.10.1 `dst = src[a:b]`): no-op Display StmtIds
+    /// whose args are [dst, src, a, b]. EMPTY default. Never golden.
+    pub queue_slice_stmts: std::collections::BTreeSet<u32>,
+    /// Global precision exponent (power of 10, in seconds, of one simulation
+    /// tick) for `%t` unit scaling — −9 (the 1ns/1ns base) by default. Computed
+    /// alongside `proc_multipliers` by the CLI timescale wiring. Never golden.
+    pub global_prec_exp: i8,
     /// Default-radix side table (P1-5): StmtId → 2/8/16 for the b/o/h print
     /// variants. EMPTY by default (decimal everywhere). Never enters the IR.
     pub radixes: RadixTable,
@@ -278,6 +292,10 @@ impl Default for SimOpts {
             proc_multipliers: Vec::new(),
             backend: Backend::Interpreter,
             severities: SeverityTable::new(),
+            timeformat_stmts: std::collections::BTreeSet::new(),
+            handle_copy_stmts: std::collections::BTreeMap::new(),
+            queue_slice_stmts: std::collections::BTreeSet::new(),
+            global_prec_exp: -9,
             radixes: RadixTable::new(),
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
@@ -365,6 +383,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.proc_multipliers = opts.proc_multipliers.clone();
     st.backend = opts.backend;
     st.severities = opts.severities.clone();
+    st.timeformat_stmts = opts.timeformat_stmts.clone();
+    st.handle_copy_stmts = opts.handle_copy_stmts.clone();
+    st.queue_slice_stmts = opts.queue_slice_stmts.clone();
+    st.global_prec_exp = opts.global_prec_exp;
     st.radixes = opts.radixes.clone();
     st.assign_ranks = opts.assign_ranks.clone();
     st.queue_bounds = opts.queue_bounds.clone();

@@ -352,6 +352,14 @@ pub enum TokenKind {
     EqEqEq, // case equality
     #[token("!==")]
     BangEqEq, // case inequality
+    // §11.4.6 wildcard equality. logos longest-match keeps every prefix-sharing
+    // stream intact: `===?` still lexes `===` `?` (no 4-char token exists),
+    // `a==b?c:d` lexes `==` (next char is `b`), and a SPACED `== ?` stays two
+    // tokens — only the previously-unlexable contiguous `==?` is new.
+    #[token("==?")]
+    EqEqQ, // wildcard equality
+    #[token("!=?")]
+    BangEqQ, // wildcard inequality
 
     #[token("<<")]
     Shl,
@@ -549,7 +557,7 @@ pub enum Kw {
     // --- SV package + string type (v7 P2-C/P2-D) ---
     Package, Endpackage, Import, String,
     // --- SV procedural advanced (P2-E) ---
-    Do, Unique, Priority, Final,
+    Do, Unique, Priority, Unique0, Priority0, Final,
     // --- SVA concurrent assertion subset (v8, Phase-3) ---
     Property,
     // --- SV functional coverage subset (N5, Phase-3) ---
@@ -631,6 +639,7 @@ impl Kw {
             "package" => Package, "endpackage" => Endpackage,
             "import" => Import, "string" => String,
             "do" => Do, "unique" => Unique, "priority" => Priority,
+            "unique0" => Unique0, "priority0" => Priority0,
             "final" => Final,
             "property" => Property,
             "covergroup" => Covergroup, "endgroup" => Endgroup,
@@ -899,6 +908,31 @@ mod tests {
         assert_eq!(errs[0].kind, LexErrorKind::LoneSigil);
         assert_eq!(kinds("$display"), vec![SystemTask]);
         assert_eq!(kinds("`define"), vec![Directive]);
+    }
+
+    #[test]
+    fn wildcard_eq_tokens_munch_longest() {
+        use TokenKind::*;
+        assert_eq!(kinds("==?"), vec![EqEqQ]);
+        assert_eq!(kinds("!=?"), vec![BangEqQ]);
+        // no 4-char operator: `===?` stays case-eq + ternary-question.
+        assert_eq!(kinds("===?"), vec![EqEqEq, Question]);
+        assert_eq!(kinds("!==?"), vec![BangEqEq, Question]);
+        // spaced forms are unchanged (two tokens).
+        assert_eq!(kinds("== ?"), vec![EqEq, Question]);
+        // a ternary right after an equality COMPARAND is unaffected.
+        assert_eq!(
+            kinds("a==b?c:d"),
+            vec![
+                Word(WordKind::Ident),
+                EqEq,
+                Word(WordKind::Ident),
+                Question,
+                Word(WordKind::Ident),
+                Colon,
+                Word(WordKind::Ident)
+            ]
+        );
     }
 
     #[test]

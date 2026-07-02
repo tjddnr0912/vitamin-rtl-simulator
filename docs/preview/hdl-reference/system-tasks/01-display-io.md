@@ -160,7 +160,7 @@ IEEE 1800-2017 §20.10 / IEEE 1364-2005 §17.1 기준.
 | `%o` / `%O` | 8진수 | bit vector | |
 | `%c` / `%C` | ASCII 문자 | 8-bit | 하위 8비트 |
 | `%s` / `%S` | 문자열 | string / byte array | |
-| `%t` / `%T` | 시간 | time | IEEE: `$timeformat` 영향. **vitamin: plain decimal(`%0d` 동치), `$timeformat`·기본 필드폭 미적용** |
+| `%t` / `%T` | 시간 | time | `$timeformat` 스케일링·기본 필드폭 20 완전 적용(✅ 2026-07-02, ROADMAP §4.5.60) |
 | `%v` / `%V` | net 신호 강도 | net (4-state) | strength + value |
 | `%e` / `%E` | 실수 지수 표기 | real | 예: `1.23e+02` |
 | `%f` / `%F` | 실수 소수 표기 | real | 예: `123.000000` |

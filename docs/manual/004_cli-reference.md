@@ -4,15 +4,16 @@ vitamin ships four command-line entry points: **`vita`** (one-shot), and the
 staged trio **`vcmp`** → **`velab`** → **`vrun`**. This chapter documents what
 each one actually accepts today — its inputs, outputs, flags, and exit codes.
 
-> Platform support: vitamin runs on **Linux and macOS**. Windows is not
-> supported. See [Installation](001_installation.md) for build/setup.
+> Platform support: vitamin builds and tests on **Linux, macOS, and Windows**
+> (3-OS CI with byte-identical outputs). See [Installation](001_installation.md).
 
-> Scope note: this reference covers the flags that are **implemented in the
-> current build**. The broader flag surface designed in the SPEC
-> (`+define+`, `+incdir+`, `-s`/`--top-module`, `--timescale`, `--work`,
-> filelists `-f`/`-F`, …) is the planned CLI and is **not yet wired** — passing
-> any of those today is rejected as an unknown flag (exit 3). The authoritative
-> design is `docs/preview/14-staged-artifacts.md`.
+> Scope note: this reference covers the flags implemented in the current
+> build — including filelists (`-f`/`-F`), preprocessor defines/includes
+> (`-D`/`-I` and the `+define+`/`+incdir+` spellings), work libraries
+> (`--work`/`-L`/`--top`), runtime plusargs (`+NAME[=VAL]`), threads, timeouts,
+> and the diagnostic gates (`-Wno-*`/`-Werror`). Run `vita --help` (or any
+> applet with `--help`) for the live list; an unrecognized `-flag` still fails
+> with exit 3.
 
 ---
 
@@ -92,11 +93,25 @@ name.
   never calls `$dumpvars` produces no VCD (this is a no-op, not an error). The
   VCD path comes from the design's `$dumpfile(...)` argument.
 
-**Flags.**
+**Flags** (the common set below is shared by every applet):
 
 | flag | meaning |
 |------|---------|
-| `-o <path>` | Override the VCD output path, ignoring the design's `$dumpfile` argument. Has no effect if the design never dumps. |
+| `-o, --out <path>` | Override the VCD output path, ignoring the design's `$dumpfile` argument (per-applet meaning below). |
+| `-f <file>` / `-F <file>` | Expand a filelist (`-f` = paths relative to the CWD, `-F` = relative to the filelist's own directory). |
+| `-D, --define <N[=V]>` | Predefine a text macro (`+define+N=V+M` also accepted). |
+| `-I, --incdir <dir>` | Add an `` `include `` search directory (`+incdir+a+b` also accepted). |
+| `--dump-filelist` | Print the effective post-expansion input list and exit. |
+| `+NAME[=VAL]` | Runtime plusarg, visible to `$test$plusargs` / `$value$plusargs`. |
+| `--threads, -j <N>` | Worker threads — output stays byte-identical for any N. |
+| `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
+| `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
+| `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose terminal output. |
+| `-l, --log <file>` [`--log-append`] | Tee the full transcript (RTL + diags + progress) to a file. |
+| `-h, --help` / `-V, --version` | Help / version. |
+
+Work-library flags: `vcmp --work <NAME[=DIR]>` (+ `--workdir`), `velab -L
+<NAME[=DIR]>` and `--top <UNIT>`, `vrun --upstream <FILE>`.
 
 **Examples.**
 
@@ -104,6 +119,8 @@ name.
 vita tb.sv                       # run; VCD only if tb.sv calls $dumpvars
 vita tb.sv -o waves.vcd          # run; redirect the dump to waves.vcd
 vita pkg.sv dut.sv tb.sv         # concatenate three files, then run
+vita -f files.f +VERBOSE +N=42   # filelist + runtime plusargs
+vita -D WIDTH=16 -I rtl/inc tb.sv
 ```
 
 ---
@@ -207,15 +224,18 @@ vrun [-o <vcd>] <input.velab>
   gate rejection, a corrupt body, or a runtime `$fatal` · `3` on a missing
   input file or the wrong argument count.
 
-**Flags.**
+**Flags.** The common set (filelists, `-D`/`-I`, threads, timeout, gates,
+logging, plusargs) plus:
 
 | flag | meaning |
 |------|---------|
 | `-o <path>` | Override the VCD output path (same semantics as `vita -o`). Rejected if it names the input `.velab`. |
+| `--upstream <file>` | Verify the `.velab`'s recorded upstream digest against a specific `.vu`. |
 
 ```
 vrun build/dut.velab               # simulate; VCD if the design dumps
 vrun build/dut.velab -o waves.vcd  # redirect the dump
+vrun build/dut.velab +VERBOSE      # runtime plusargs reach $test$plusargs
 ```
 
 ---
@@ -232,9 +252,9 @@ its value. Its meaning differs by stage:
 | `velab`| the `.velab` artifact path |
 | `vrun` | the VCD output path (overrides `$dumpfile`) |
 
-Anything not recognized as a flag is treated as a positional input path. Any
-other token beginning with `-` (e.g. `--bogus`) is an **unknown flag** and fails
-with exit 3 — there are no other implemented flags yet.
+Anything not recognized as a flag is treated as a positional input path
+(tokens beginning with `+` are runtime plusargs). Any other token beginning
+with `-` (e.g. `--bogus`) is an **unknown flag** and fails with exit 3.
 
 ---
 
