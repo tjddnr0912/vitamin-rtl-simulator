@@ -13055,9 +13055,27 @@ impl<'s> Elaborator<'s> {
         let mut decls = func.body_decls.clone();
         collect_block_local_decls(&func.body, &mut decls);
         for d in &decls {
+            // v7 P2-C: a `string`/handle (`class`/`event`) LOCAL must NOT be bit-resized
+            // — omitting it from `local_dims` makes `fold_straight_line` take its
+            // `ctx_w == 0` path (`lower_expr` + no `resize_inline_assign`), preserving the
+            // heap value (a resize to the 1-bit `range_to_dims(String)` width corrupts it,
+            // so `s < t` on two string locals compared as 1-bit packed = silent-wrong).
+            let is_handle = matches!(
+                d.kind,
+                ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
+            );
             let (w, _, _, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
             for n in &d.names {
-                local_dims.insert(n.name.name.clone(), (w, signed));
+                if !is_handle {
+                    local_dims.insert(n.name.name.clone(), (w, signed));
+                }
+                // Record each local's declared `string`-ness (innermost-wins, so a local
+                // shadowing a formal resolves to the local) so a `string` relational
+                // compare (`s < t`) on two string LOCALS routes to `StrCmp` (§4.5.81).
+                self.formal_str.push((
+                    n.name.name.clone(),
+                    matches!(d.kind, ast::NetVarKind::String),
+                ));
             }
         }
         // (b) walk the straight-line body, recording the return-var assignment.
