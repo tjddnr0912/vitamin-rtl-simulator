@@ -2587,6 +2587,16 @@ struct Elaborator<'s> {
     // (read) and `collect_lval_chunks` (write) so a formal resolves to the caller's
     // net in either position. Symmetric Vec stack with `subst`.
     out_subst: Vec<(String, u32)>,
+    // v7 P2-C: FORMAL name → declared `string`-ness, for the FUNCTION body being lowered
+    // (inline OR frame). A `string` relational compare (`a < b`) routes through `StrCmp`
+    // only if an operand is string-domain; a formal is not otherwise detectable (an
+    // inline literal actual is not a string net; a frame formal is not in `subst`), so a
+    // `string`-declared formal compare silently did a PACKED compare. A symmetric Vec
+    // stack (innermost-wins via `rev`) so nested inline calls / a shadowing inner
+    // non-string formal resolve to the correct declared type. (Not populated for TASKs:
+    // an inline task copies its formals to `__taskarg_` locals whose string-compare is a
+    // SEPARATE pre-existing gap; a frame task would be a clean mirror — a follow-on.)
+    formal_str: Vec<(String, bool)>,
     // Recursion guard: function/task names on the active inline-expansion stack. A
     // name found here when we try to inline it = direct or mutual recursion =
     // E-ELAB-UNSUPPORTED (SD2: recursive ⇒ frame-call, deferred). Mirrors
@@ -2814,6 +2824,7 @@ impl<'s> Elaborator<'s> {
             in_assert_synth: false,
             subst: Vec::new(),
             out_subst: Vec::new(),
+            formal_str: Vec::new(),
             inline_stack: Vec::new(),
             fork_modes: ForkModeTable::new(),
             severities: SeverityTable::new(),
@@ -11868,6 +11879,17 @@ impl<'s> Elaborator<'s> {
             .find(|(n, _)| n == name)
             .map(|(_, e)| *e)
     }
+    /// v7 P2-C: is `name` a formal DECLARED `string` in the body being lowered?
+    /// Innermost-wins (a shadowing inner non-string formal returns `false`, so an
+    /// outer string formal of the same name never leaks in). `false` if not a formal.
+    fn formal_is_string(&self, name: &str) -> bool {
+        self.formal_str
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+            .map(|(_, s)| *s)
+            .unwrap_or(false)
+    }
 
     /// Inline a user-function call at an expression site → the ExprId of its return
     /// value (SD2 inline path; a 0-time function = zero schema cost). The common
@@ -12408,6 +12430,17 @@ impl<'s> Elaborator<'s> {
             m.base_net + m.return_slot
         };
         let saved_ret = self.cur_return.take();
+        // v7 P2-C: record `string`-declared formals so a `string` relational compare in
+        // the body routes through `StrCmp` (a frame formal is a scoped net, not in
+        // `subst`, so `expr_is_string_ast` cannot otherwise see it).
+        let fs_base = self.formal_str.len();
+        for p in &func.ports {
+            let is_str = matches!(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                ast::NetVarKind::String
+            );
+            self.formal_str.push((p.name.name.clone(), is_str));
+        }
         // A FUNCTION cannot be self-disabled (IEEE / iverilog "cannot disable
         // functions") — pass `false` so `disable <funcname>` falls to the loud
         // reject. A `disable <inner named block>` (break/continue) still lowers
@@ -12433,6 +12466,7 @@ impl<'s> Elaborator<'s> {
             b.finish()
         });
         self.cur_return = saved_ret;
+        self.formal_str.truncate(fs_base);
         for mut blk in body {
             rebase_terminator(&mut blk.term, base);
             self.func_blocks.push(blk);
@@ -12891,6 +12925,7 @@ impl<'s> Elaborator<'s> {
         actual_ids: &[u32],
     ) -> u32 {
         let frame_base = self.subst.len();
+        let fs_base = self.formal_str.len();
         // (a) bind each input formal NAME → actual ExprId. §13.5.3/§11.6.2: an actual
         // is ASSIGNED to its formal, so resize it to the formal's WIDTH — a narrow
         // actual zero/sign-extends to the port width (not left with X in the high bits),
@@ -12928,6 +12963,8 @@ impl<'s> Elaborator<'s> {
                 self.resize_inline_assign(eid, w, actual_signed)
             };
             self.subst.push((p.name.name.clone(), bound));
+            self.formal_str
+                .push((p.name.name.clone(), matches!(kind, ast::NetVarKind::String)));
         }
         // §11.6 + §10.7: width/sign context for each body assignment — the return
         // var (return-type width/sign) and each declared body/block local. Used to
@@ -12951,6 +12988,7 @@ impl<'s> Elaborator<'s> {
             self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &local_dims, &mut ret);
         // restore the substitution stack to its pre-call depth.
         self.subst.truncate(frame_base);
+        self.formal_str.truncate(fs_base);
 
         if !ok {
             self.error(
@@ -14139,6 +14177,15 @@ impl<'s> Elaborator<'s> {
             ast::ExprKind::Paren { inner } => self.expr_is_string_ast(inner),
             ast::ExprKind::Ident(p) => match p.segments.as_slice() {
                 [seg] => {
+                    // A formal DECLARED `string` is string-domain regardless of its
+                    // actual: an inline LITERAL actual is a packed const (not a string
+                    // net, so the `subst`/`ir_expr_is_string` path below misses it), and
+                    // a FRAME formal is a scoped net not in `subst`. Keyed on the formal's
+                    // declared type (NOT the actual's) so a string literal passed to a
+                    // PACKED formal still compares packed. Checked FIRST (innermost-wins).
+                    if self.formal_is_string(&seg.name) {
+                        return true;
+                    }
                     // review F2: an inlined FORMAL bound to a string actual
                     // must keep its string-domain-ness — resolve through the
                     // subst (the bypass lowered `a < b` as a packed compare,
