@@ -543,6 +543,15 @@ impl ClassLayout {
             .map(|&(w, s, _)| (w, s))
             .unwrap_or((1, false))
     }
+    /// Is field `i` a 4-state type (`logic`/`reg`/…)? A 2-state field (`bit`/`byte`/…)
+    /// coerces a written X/Z→0 (§6.11.3). Default `true` (4-state) for an unknown field
+    /// id ⇒ NO coercion (conservative — never corrupt an out-of-layout write).
+    fn field_four_state(&self, i: u32) -> bool {
+        self.fields
+            .get(i as usize)
+            .map(|&(_, _, fs)| fs)
+            .unwrap_or(true)
+    }
     fn default_value(&self, i: u32) -> Value {
         // SW1 (IEEE §8.8): a folded declaration initializer wins over the bare
         // type default (2-state→0 / 4-state→X).
@@ -1722,6 +1731,15 @@ impl<'a> SimState<'a> {
             .unwrap_or((1, false))
     }
 
+    /// Is field `field` of the object `id` a 4-state type? (2-state ⇒ coerce X/Z→0.)
+    /// `true` (no coercion) when the class/field is unknown — conservative.
+    fn class_field_four_state(&self, id: u32, field: u32) -> bool {
+        let cid = self.class_heap.borrow().get(&id).map(|o| o.class_id);
+        cid.and_then(|c| self.class_layouts.get(c as usize))
+            .map(|l| l.field_four_state(field))
+            .unwrap_or(true)
+    }
+
     /// N7: read field `field` of the object the handle points to. Null/X handle,
     /// a stale object, or a field-id past the layout ⇒ warn-once + X (never a
     /// panic). Returned at the field's natural width; `eval_ctx` resizes to ctx.
@@ -1762,7 +1780,15 @@ impl<'a> SimState<'a> {
             return false;
         };
         let fw = self.class_field_width(id, field);
-        let resized = piece.clone().resize_keep_sign(fw.0.max(1), fw.1);
+        let mut resized = piece.clone().resize_keep_sign(fw.0.max(1), fw.1);
+        // A 2-state field (`bit`/`byte`/…) can never hold X/Z — coerce it to 0 (§6.11.3),
+        // mirroring the frame-slot (`coerce_two_state_frame`) and module-net 2-state paths.
+        if !self.class_field_four_state(id, field) && resized.unk.iter().any(|&u| u != 0) {
+            for k in 0..resized.unk.len() {
+                resized.val[k] &= !resized.unk[k]; // X (val0/unk1) & Z (val1/unk1) → 0
+                resized.unk[k] = 0;
+            }
+        }
         let mut heap = self.class_heap.borrow_mut();
         match heap.get_mut(&id) {
             Some(obj) if (field as usize) < obj.fields.len() => {
