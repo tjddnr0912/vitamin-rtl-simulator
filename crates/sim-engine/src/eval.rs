@@ -285,24 +285,27 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
     /// `Signal{net, word:None}` elaborate emits for method receivers).
     fn handle_str_bytes(&self, arg: Option<&u32>) -> Option<Vec<u8>> {
         let &a = arg?;
-        match self.ir.exprs.get(a as usize) {
-            Some(Expr::Signal { net, word: None }) => self.nets.str_bytes(*net),
-            // A string-valued CONST operand: an inlined string LOCAL/FORMAL bound to
-            // a string literal is a compile-time `Const` (not a runtime string net),
-            // so the string primitives (`getc`/`substr`/`len`/…) must read its packed
-            // bytes directly. Uses `value_str_bytes` — the same packed-ASCII byte
-            // surface (MSB-first, leading width-padding NULs stripped) as the string
-            // assoc-key path — so a const and a materialized net index identically.
-            // Any X/Z (or a real) → `None` = no valid byte string.
-            Some(Expr::Const { .. }) => {
-                let v = self.eval(a);
-                if v.is_real || v.has_xz() {
-                    None
-                } else {
-                    Some(value_str_bytes(&v))
-                }
+        // A real string NET's heap bytes are authoritative (they may contain embedded
+        // NULs that the packed `value_str_bytes` leading-strip would lose).
+        if let Some(Expr::Signal { net, word: None }) = self.ir.exprs.get(a as usize) {
+            if let Some(b) = self.nets.str_bytes(*net) {
+                return Some(b);
             }
-            _ => None,
+        }
+        // Otherwise the operand is a string-VALUED expression whose packed bits ARE
+        // the string — read them via `value_str_bytes` (MSB-first, leading width-pad
+        // NULs stripped; same surface as the string assoc-key path, so it indexes
+        // identically to a materialized net). Reaches here for a string `Const` (an
+        // inline local bound to a literal) and a FRAME string formal (a 1-bit wire
+        // whose frame slot holds the materialized string Value, `str_bytes` = None on
+        // its non-`String` net kind). The elaborate side only routes genuine string
+        // operands to the string primitives, so evaluating `a` as a string is sound.
+        // Any X/Z (or a real) → `None` = no valid byte string.
+        let v = self.eval(a);
+        if v.is_real || v.has_xz() {
+            None
+        } else {
+            Some(value_str_bytes(&v))
         }
     }
 

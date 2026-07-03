@@ -14615,16 +14615,21 @@ impl<'s> Elaborator<'s> {
         }))
     }
 
-    /// A `StrGetC`/`handle_str_bytes`-consumable string handle: a Signal to a real
-    /// string net, or a string `Const`. (Mirrors the engine's accepted operand forms
-    /// — a Signal to a NON-string net, e.g. a frame string formal's 1-bit wire slot,
-    /// or a string-producing `SysFunc`, is NOT byte-readable there.)
+    /// A `StrGetC`/`handle_str_bytes`-consumable string handle. The caller has
+    /// already confirmed the BASE is string-domain (`expr_is_string_ast`), so any
+    /// word-less `Signal` is a genuine string operand — either a real string net
+    /// (read via `str_bytes`) OR a frame string formal, which lowers to a 1-bit wire
+    /// whose frame slot holds the materialized string Value (the engine's
+    /// `handle_str_bytes` reads that via an eval fallback). A string `Const` (a
+    /// literal-bound inline local) is likewise readable. A string-producing `SysFunc`
+    /// actual (`s.substr(..)`) is deliberately NOT accepted here — the engine byte
+    /// path does not eval it, so it falls through to the unchanged bit-select (a
+    /// separate follow-on), not a silent-X.
     fn handle_is_str_readable(&self, eid: u32) -> bool {
-        match self.exprs.get(eid as usize) {
-            Some(ir::Expr::Signal { net, word: None }) => self.is_string_net(*net),
-            Some(ir::Expr::Const { .. }) => true,
-            _ => false,
-        }
+        matches!(
+            self.exprs.get(eid as usize),
+            Some(ir::Expr::Signal { word: None, .. }) | Some(ir::Expr::Const { .. })
+        )
     }
 
     /// v7 P2-C: does this AST expression denote a STRING-domain value?
