@@ -106,6 +106,12 @@ struct TypeInfo {
     class_name: Option<String>,
 }
 
+/// A resolved tf-port type carried through the comma-sticky inheritance:
+/// `(net_or_var kind, signed, range, struct-type-name)`. The struct name is `Some`
+/// only for a packed struct/union typedef port (EXT2-C) — it threads onward so a
+/// bare continuation `input cfg_t a, b` binds every name's layout (`var_struct`).
+type TfPortType = (Option<NetVarKind>, bool, Option<Range>, Option<String>);
+
 /// Flat bit layout of a packed struct: members are placed MSB-first into one
 /// `logic [total-1:0]` vector. `fields` carries `(name, lsb_offset, width,
 /// ascending, signed, two_state)` so a `s.field` access desugars to the constant
@@ -7831,9 +7837,13 @@ impl<'t, 's> Parser<'t, 's> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // EXT2-C: scope struct-port `var_struct` bindings to this function (see
+        // `parse_task_def`) — snapshot before the ports, restore after the body.
+        let tf_scope = self.snapshot_scope();
         let mut ports = self.opt_tf_port_paren_list();
         self.expect(TokenKind::Semi, "';' after function header");
         let (body_decls, body) = self.tf_body(BlockEnd2::Endfunction, &mut ports);
+        self.restore_scope(tf_scope);
         self.expect(
             TokenKind::Word(WordKind::Keyword(Kw::Endfunction)),
             "'endfunction'",
@@ -7865,9 +7875,15 @@ impl<'t, 's> Parser<'t, 's> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // EXT2-C: scope struct-port `var_struct` bindings to this task — snapshot
+        // before the port list, restore after the body — so a struct port name never
+        // leaks into the module or another tf scope (a stale binding would silently
+        // mis-desugar `name.field` elsewhere).
+        let tf_scope = self.snapshot_scope();
         let mut ports = self.opt_tf_port_paren_list();
         self.expect(TokenKind::Semi, "';' after task header");
         let (body_decls, body) = self.tf_body(BlockEnd2::Endtask, &mut ports);
+        self.restore_scope(tf_scope);
         self.expect(TokenKind::Word(WordKind::Keyword(Kw::Endtask)), "'endtask'");
         self.opt_block_label();
         TaskDef {
@@ -7920,7 +7936,7 @@ impl<'t, 's> Parser<'t, 's> {
             return ports;
         }
         let mut inherited = PortDir::Input;
-        let mut inherited_type: (Option<NetVarKind>, bool, Option<Range>) = (None, false, None);
+        let mut inherited_type: TfPortType = (None, false, None, None);
         loop {
             let before = self.pos;
             let (port, dir, ty) = self.parse_tf_port(inherited, &inherited_type);
@@ -7987,27 +8003,44 @@ impl<'t, 's> Parser<'t, 's> {
     /// not on a typedef name, so the caller keeps its built-in / inherited-type
     /// handling. Shared by the ANSI (`parse_tf_port`) and non-ANSI
     /// (`parse_tf_port_decl_into`) port parsers.
-    fn try_tf_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>)> {
+    fn try_tf_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>, Option<String>)> {
         let info = self.peek_typedef_name()?;
         let nm = self.type_name_key();
-        if self.struct_layouts.contains_key(&nm)
-            || info.class_name.is_some()
-            || !info.packed.is_empty()
-        {
+        // EXT2-C: a packed struct/union typedef IS supported as a tf-port. The frame
+        // var is the struct's flat vector (`info.range` = total width) and the caller
+        // binds the port NAME to the layout (`var_struct`) so `c.field` desugars to a
+        // part-select in the body. A class handle or a multi-dim-packed vector typedef
+        // stays honest-loud (the TfPort shape carries no class binding / packed dims).
+        let is_struct = self.struct_layouts.contains_key(&nm);
+        if info.class_name.is_some() || !info.packed.is_empty() {
             self.error(
-                "a simple (non-struct) typedef type for a tf-port (a struct/union/class/multi-dim packed port type is unsupported in v1)",
+                "a class or multi-dim-packed typedef type for a tf-port (a simple vector / enum / packed-struct typedef port is supported)",
             );
         }
         self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
-        Some((info.kind, info.signed, info.range))
+        let struct_name = if is_struct { Some(nm) } else { None };
+        Some((info.kind, info.signed, info.range, struct_name))
+    }
+
+    /// Bind a struct/union tf-port name to its layout so `name.field` desugars to a
+    /// part-select in the body (mirrors `parse_typed_decl`'s struct binding). A union
+    /// is excluded from the `'{…}` assignment-pattern (`struct_scalar_vars`) exactly
+    /// as a regular union var is. Scoped to the enclosing function/task by the
+    /// snapshot/restore in `parse_function_def`/`parse_task_def`.
+    fn bind_tf_port_struct(&mut self, name: &str, struct_name: &str) {
+        self.var_struct
+            .insert(name.to_string(), struct_name.to_string());
+        if !self.union_type_names.contains(struct_name) {
+            self.struct_scalar_vars.insert(name.to_string());
+        }
     }
 
     fn parse_tf_port(
         &mut self,
         inherited: PortDir,
-        inherited_type: &(Option<NetVarKind>, bool, Option<Range>),
-    ) -> (TfPort, PortDir, (Option<NetVarKind>, bool, Option<Range>)) {
+        inherited_type: &TfPortType,
+    ) -> (TfPort, PortDir, TfPortType) {
         let start = self.cur_span();
         let (dir, dir_present) = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(Kw::Input))) => {
@@ -8032,27 +8065,31 @@ impl<'t, 's> Parser<'t, 's> {
         let mut range = self.opt_range();
         // A tf-port type given as a user-defined type name (`task t(byte_t a)`).
         // Resolve a SIMPLE typedef (vector / enum / atom) to its kind/sign/range,
-        // exactly as a built-in keyword type would (struct/union/class/multi-dim =
-        // honest-loud, handled inside the helper).
+        // exactly as a built-in keyword type would; a packed struct/union typedef
+        // additionally returns its type name so the port var is layout-bound (EXT2-C;
+        // class / multi-dim-packed = honest-loud, handled inside the helper).
         let mut typedef_signed: Option<bool> = None;
+        let mut struct_name: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
-            if let Some((k, s, r)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 range = r;
                 typedef_signed = Some(s);
+                struct_name = sn;
             }
         }
         // A port carries its own type when a direction keyword OR any explicit type
         // token is present; otherwise (a bare `, name`) it inherits the previous
-        // type. The resolved type then propagates to the next bare port.
+        // type (INCLUDING its struct-ness). The resolved type then propagates on.
         let type_present = net_or_var.is_some() || range.is_some() || explicit_signed.is_some();
-        let (net_or_var, signed, range) = if dir_present || type_present {
+        let (net_or_var, signed, range, struct_name) = if dir_present || type_present {
             (
                 net_or_var,
                 explicit_signed
                     .or(typedef_signed)
                     .unwrap_or_else(|| atom_default_signed(net_or_var)),
                 range,
+                struct_name,
             )
         } else {
             inherited_type.clone()
@@ -8061,6 +8098,14 @@ impl<'t, 's> Parser<'t, 's> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // EXT2-C: bind a struct/union port NAME to its layout so `name.field`
+        // desugars in the body (scoped to this tf by `parse_function_def`/
+        // `parse_task_def`). A bare continuation `, b` inherits the struct name too.
+        if let Some(sn) = &struct_name {
+            if !name.name.is_empty() {
+                self.bind_tf_port_struct(&name.name, sn);
+            }
+        }
         // IEEE §13.5.3: an ANSI tf-port may carry a default argument value
         // (`int b = 10`), used when a call omits the trailing actual.
         let default = if self.eat(TokenKind::Eq) {
@@ -8077,7 +8122,12 @@ impl<'t, 's> Parser<'t, 's> {
             default,
             span: start.to(self.prev_span()),
         };
-        let next_type = (port.net_or_var, port.signed, port.range.clone());
+        let next_type = (
+            port.net_or_var,
+            port.signed,
+            port.range.clone(),
+            struct_name,
+        );
         (port, dir, next_type)
     }
 
@@ -8240,17 +8290,25 @@ impl<'t, 's> Parser<'t, 's> {
         let mut signed = self.signed_eff(net_or_var);
         let mut range = self.opt_range();
         // A non-ANSI tf-port type given as a user-defined type name
-        // (`input byte_t a;`) — resolve a SIMPLE typedef exactly as the ANSI path.
+        // (`input byte_t a;` / `input cfg_t c;`) — resolve a SIMPLE typedef, or a
+        // packed struct/union (EXT2-C), exactly as the ANSI path.
+        let mut struct_name: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
-            if let Some((k, s, r)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 signed = s;
                 range = r;
+                struct_name = sn;
             }
         }
         loop {
             let n_start = self.cur_span();
             let Some(name) = self.ident() else { break };
+            // Bind a struct/union port name to its layout (scoped by the enclosing
+            // tf's snapshot/restore); `input cfg_t a, b;` binds every name.
+            if let Some(sn) = &struct_name {
+                self.bind_tf_port_struct(&name.name, sn);
+            }
             ports.push(TfPort {
                 dir,
                 net_or_var,

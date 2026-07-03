@@ -1,6 +1,6 @@
 # vitamin — 잔여 작업 트래커 (Remaining Work)
 
-> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2893 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong 0**(잔여는 전부 honest-loud=안전 또는 신규 기능). 최신 = **2026-07-03 EXT2-E scoped type `pkg::t` type positions 전수 ✅**(§4.5.76·분류 퍼널 scope-aware+cross-pkg collision-safe twin·적대 R2 CONVERGE mixed-kind→CLEAN) · EXT2-A 컨테이너 end-label ✅(§4.5.75) · EXT2-0 `$fgets` string-dest ✅(§4.5.74) · 외부 리포트 2차 EXT2 체인 진행(§A′·ROADMAP §6-2). **G2 OBS 트랙**: OBS-1a ✅ · OBS-1b는 EXT2 체인 다음.
+> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2902 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong = 신규 발굴 3건(§C tf-port/md-packed, EXT2-C 적대리뷰서 발견·pre-existing·다음 우선순위)**, 나머지 잔여는 honest-loud=안전. 최신 = **2026-07-03 EXT2-C packed struct/union typedef tf-port ✅**(§4.5.77·`bind_tf_port_struct`+snapshot/restore 스코프·적대 R1 CLEAN) · EXT2-E scoped type `pkg::t` ✅(§4.5.76) · EXT2-A/0(§4.5.75/74) · 외부 리포트 2차 EXT2 체인 진행(§A′·ROADMAP §6-2). **G2 OBS 트랙**: OBS-1a ✅ · OBS-1b는 EXT2 체인 다음.
 > 이 파일 = **"goal까지 남은 것" 상위 스냅샷** — 재계획 시점마다 통째로 갱신한다. 슬라이스 단위 라이브 기록 = [ROADMAP](ROADMAP.md) §2(착수 순서)·§4.5.x(슬라이스 로그)·§6(외부 리포트)·§7(OBS), 실행 큐 = `LOOPROMPT.md` NEXT. 2026-06-16 이전 P0~P5/Phase-A/B 상세 이력은 이 파일의 **git 이력**과 [DEVLOG](DEVLOG.md)가 보존(여기서 삭제).
 >
 > **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터(correct-or-loud) · **G2**(2026-07-02 추가) = **AI-Agent 친화 simulator**(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
@@ -22,7 +22,7 @@
 | 1 ✅ | EXT2-0 | `$fgets` `string` dest silent no-op(0 반환·빈 문자열 — **유일 silent-wrong**) — **완료 2026-07-03(ROADMAP §4.5.74, 2867 green)**: `NetKind::String` 브랜치+C-string NUL 절단·적대 2-round CONVERGE(embedded-NUL)→재검 CLEAN | engine·IR-0 / iverilog ✓ | S |
 | 2 ✅ | EXT2-A | labeled end `endmodule : m` 계열 전수(외부 14/18 파일 차단) — **완료 2026-07-03(§4.5.75, 2874 green)**: 컨테이너 4종+UDP `opt_block_label` 1줄씩·AST 무변경·적대 2 CLEAN. follow-on=mismatch 통일 loud 진단 | parser / iverilog ✓ | S |
 | 3 ✅ | EXT2-E | scoped type `pkg::t` in type positions(port·body·fn·struct member·chained) — **완료 2026-07-03(§4.5.76, 2893 green)**: 퍼널 scope-aware+`"pkg::t"` twin(cross-pkg collision-safe·kind+freshness gating)·적대 R2 CONVERGE(mixed-kind→enum-arm)→CLEAN. follow-on=scoped cast/`$bits`/param loud | parser / iverilog ✓ | S-M |
-| 4 | EXT2-C | struct/multi-dim-packed typedef tf-port(v1-cut 해제) | elaborate / iverilog 확인 | M |
+| 4 ✅ | EXT2-C | packed struct/union typedef tf-port — **완료 2026-07-03(§4.5.77, 2902 green)**: `try_tf_port_typedef` struct 수용+`bind_tf_port_struct`+snapshot/restore 스코프·적대 R1 CLEAN. md-packed tf-port=defer(md frame-local 선행)·발굴 3 silent-wrong=§C | parser+bind / iverilog ✓ | M |
 | 5 | EXT2-D | block-local `automatic` 선언(§D MVP-CUT form2서 승격) | parser+lifetime / hand-IEEE(iverilog sorry) | M |
 | 6 | EXT2-B | function-body `typedef enum`(v1-cut 해제) | parser / iverilog 확인 | S-M |
 | 7 | EXT2-F | generate-for `++/--` step(procedural은 지원=desugar 재사용) | parser / iverilog ✓ | S |
@@ -43,10 +43,11 @@
 | OBS-5 | snapshot/restore/rewind | L-XL |
 | OBS-6 | X-origin·region-annotated events·정적 backward cone | L+ |
 
-## C. In-scope SV 잔여 (전부 honest-loud=안전 · ROADMAP §4.5.2)
+## C. In-scope SV 잔여 (대부분 honest-loud=안전 · ROADMAP §4.5.2)
 
 | 항목 | 잔여 내용 |
 |---|---|
+| **🔴 신규 silent-wrong 3건**(EXT2-C 적대리뷰 발굴 2026-07-03·pre-existing·main 재현·**다음 우선순위 ①**) | ㊀ **narrow-actual tf-port part-select**: 포트폭보다 좁은 actual이 zero-extend 안 됨→`f={c[7:4],c[3:0]}; f(4'h7)`가 `x7`(iverilog `07`)·generic arg copy-in(struct tf-port가 노출 확대) · ㊁ **signed+unsigned wider-context**: signed 피연산자를 sign-extend→`signed[7:0] s + [7:0] u`, `f(-1,1)`가 `0`(iverilog `256`) · ㊂ **md-packed frame-LOCAL element-select**: 함수 body의 `logic[1:0][7:0] p; p[0]`이 bit-select로 오계산→`01`(iverilog `cd`)·module scope는 정상 |
 | cast | class **down-cast** `Derived'(base)`(=`$cast` 런타임 타입가드 선행 필요)·real→longint |
 | SVA | empty-match `##0`/unbounded `##[m:$]` 융합(§16.9.2.1·오라클 부재)·N2c full(중첩 attempt=L급)·later-antecedent read·advanced prop-ref skew(2-cycle/중첩/cross-clock)·SVA-QUAD default-flip(full-VCD audit 선행). **2차 외부리포트의 "SVA deferred" 주장=stale**(2026-07-03 라이브 검증: `assert property` 동작·§6-2 정정표) |
 | N4 clocking 잔여 | non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)` |

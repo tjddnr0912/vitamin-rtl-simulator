@@ -121,18 +121,27 @@ fn builtin_ports_unchanged() {
 }
 
 #[test]
-fn struct_port_is_loud_both_forms() {
-    // A struct typedef port needs per-port layout binding — honest-loud, ANSI and non-ANSI.
-    let (_a, oka) = run(
+fn struct_port_supported_both_forms() {
+    // EXT2-C: a struct typedef tf-port is now SUPPORTED (was v1-loud) — the port var
+    // is the struct's flat vector, so passing/returning the whole struct works and
+    // `a.field` desugars in the body. Here `return a` passes the 8-bit struct value
+    // straight through, ANSI and non-ANSI. Pinned to iverilog: cd.
+    let (a, oka) = run(
         "module top; typedef struct packed {logic [3:0] a, b;} s_t;\n\
          function automatic logic [7:0] f(s_t a); return a; endfunction\n\
          initial begin $display(\"%h\", f(8'hCD)); #1 $finish; end endmodule",
     );
-    assert!(!oka, "ANSI struct port must be loud");
-    let (_n, okn) = run(
+    assert!(
+        oka && a == "cd",
+        "ANSI struct port must be supported, got:\n{a}"
+    );
+    let (n, okn) = run(
         "module top; typedef struct packed {logic [3:0] a, b;} s_t;\n\
          function automatic logic [7:0] f; input s_t a; f=a; endfunction\n\
          initial begin $display(\"%h\", f(8'hCD)); #1 $finish; end endmodule",
     );
-    assert!(!okn, "non-ANSI struct port must be loud");
+    assert!(
+        okn && n == "cd",
+        "non-ANSI struct port must be supported, got:\n{n}"
+    );
 }
