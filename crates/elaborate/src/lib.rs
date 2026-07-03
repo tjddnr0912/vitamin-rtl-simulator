@@ -9392,6 +9392,76 @@ impl<'s> Elaborator<'s> {
         true
     }
 
+    /// True if `e` is a self-contained, scope-INDEPENDENT constant expression:
+    /// literals, package-scoped constants, and compound expressions built only from
+    /// those (plus system-function calls whose args are all scope-safe).
+    ///
+    /// A class-method/ctor DEFAULT argument value is lowered in the CALLER scope,
+    /// but IEEE §13.5.3 resolves it in the method's CLASS scope. Any BARE NAME or
+    /// user call is therefore scope-ambiguous: it may name a class-scope entity (a
+    /// data member, method, class `parameter`/`localparam`, nested typedef/enum
+    /// label, or a `.with()` reduction over a member) that would silently bind to a
+    /// same-named CALLER-scope name instead. vita has no authoritative per-class
+    /// scope-symbol table (parameterized classes are monomorphised), so rather than
+    /// enumerate class-scope names and risk missing a category, callers loud-reject
+    /// any filled default that is NOT scope-safe (correct-or-loud). This is an
+    /// ALLOW-LIST: a variant not recognised as scope-independent (including any
+    /// added later) is rejected. A literal default (`7`, `"x"`, `8'hFF`,
+    /// `{4'ha,4'hb}`, `1<<3`, `pkg::K`) works; class-scope name resolution of a
+    /// name default is a follow-on.
+    fn default_is_scope_safe(e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        let r = Self::default_is_scope_safe;
+        match &e.kind {
+            // Leaves that are scope-independent.
+            K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::Null => true,
+            // `pkg::x` resolves in the PACKAGE scope regardless of caller/class scope.
+            K::PkgScoped { .. } => true,
+            // A system function (`$clog2`, `$bits`, …) is scope-independent; safe iff
+            // every argument is scope-safe.
+            K::SysCall { args, .. } => args.iter().all(r),
+            // Compound expressions: safe iff EVERY operand is scope-safe.
+            K::Unary { operand, .. } => r(operand),
+            K::Binary { lhs, rhs, .. } => r(lhs) && r(rhs),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => r(cond) && r(then_e) && r(else_e),
+            K::BitSelect { base, index } => r(base) && r(index),
+            K::PartSelect { base, msb, lsb } => r(base) && r(msb) && r(lsb),
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => r(base) && r(offset) && r(width),
+            K::Concat { parts } => parts.iter().all(r),
+            K::Replicate { count, value } => r(count) && value.iter().all(r),
+            K::Paren { inner } => r(inner),
+            K::MinTypMax { min, typ, max } => r(min) && r(typ) && r(max),
+            // The cast VALUE operand must be scope-safe; a `size'(…)` width too. A
+            // type-position target (`Prim`/`Signing`/`Named`) is a TYPE, not a
+            // scope-ambiguous value, so it is not recursed. (A `Named` typedef could
+            // in theory resolve to a different width in the class vs caller scope, but
+            // that is unconstructable today — class-scope typedefs, package-body
+            // classes, and cross-module class sharing are all unsupported, so the
+            // typedef always resolves in the single module the class and caller
+            // share; the value operand is recursed regardless.)
+            K::Cast { target, expr } => {
+                r(expr)
+                    && match target {
+                        ast::CastTarget::Size(s) => r(s),
+                        _ => true,
+                    }
+            }
+            // Ident, Call, ArrayMethodWith, RandomizeWith, New, ClassNew, Dist,
+            // Dollar, AssignPattern, Error, and any variant added later are NOT
+            // provably scope-independent → reject (conservative; no escape possible).
+            _ => false,
+        }
+    }
+
     /// Common method-call builder: resolve `class::meth` (base-chain walk), build
     /// `Expr::Call{fid, [this, …args]}`, and (unless `is_super`) record virtual
     /// dispatch in `class_calls` keyed by the Call ExprId.
@@ -9434,8 +9504,35 @@ impl<'s> Elaborator<'s> {
             }
         };
         // Output/ref task ports are outside the MVP (only `this` + inputs bind).
+        // §13.5.3: fill omitted trailing args with their default values (mirroring
+        // the frame/inline/task call paths) — without this, an omitted default arg
+        // bound 0/X instead of the default expression (a silent-wrong).
+        let ports: &[ast::TfPort] = match (&method.func, &method.task) {
+            (Some(f), _) => &f.ports,
+            (_, Some(t)) => &t.ports,
+            _ => &[],
+        };
+        let Some(eff_args) = self.fill_default_args(meth, ports, args) else {
+            return Some(self.placeholder_expr()); // loud already emitted
+        };
+        // A FILLED default (index ≥ args.len()) lowers in the CALLER scope, but IEEE
+        // resolves it in the class scope; a non-literal (name/call) default is
+        // scope-ambiguous — loud-reject rather than silently bind a caller-scope name.
+        for a in &eff_args[args.len()..] {
+            if !Self::default_is_scope_safe(a) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "method `{owner}::{meth}`: a non-literal default argument value is \
+                         unsupported (it would resolve in the caller's scope, not the class \
+                         scope) — pass the argument explicitly"
+                    ),
+                );
+                return Some(self.placeholder_expr());
+            }
+        }
         let mut call_args = vec![this_eid];
-        for a in args {
+        for a in eff_args {
             call_args.push(self.lower_expr(a));
         }
         let eid = self.push_expr(ir::Expr::Call {
@@ -9460,7 +9557,7 @@ impl<'s> Elaborator<'s> {
         class_name: &str,
         args: &[ast::Expr],
     ) {
-        let Some((_owner, method)) = self.class_find_method(class_name, "new") else {
+        let Some((owner, method)) = self.class_find_method(class_name, "new") else {
             return;
         };
         let Some(fid) = method.fid else {
@@ -9472,8 +9569,33 @@ impl<'s> Elaborator<'s> {
         };
         // `this` = read the freshly-allocated handle (the lvalue as a value).
         let this_eid = self.ctor_this_expr(lhs);
+        // §13.5.3: fill omitted trailing ctor args with their default values (the
+        // same gap as `build_class_call` — an omitted default bound 0/X silently).
+        let ports: &[ast::TfPort] = match (&method.func, &method.task) {
+            (Some(f), _) => &f.ports,
+            (_, Some(t)) => &t.ports,
+            _ => &[],
+        };
+        let Some(eff_args) = self.fill_default_args("new", ports, args) else {
+            return; // loud already emitted
+        };
+        // A filled ctor default lowers in the caller scope (see `build_class_call`);
+        // a non-literal (name/call) default is scope-ambiguous — loud-reject.
+        for a in &eff_args[args.len()..] {
+            if !Self::default_is_scope_safe(a) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "constructor of `{owner}`: a non-literal default argument value is \
+                         unsupported (it would resolve in the caller's scope, not the class \
+                         scope) — pass the argument explicitly"
+                    ),
+                );
+                return;
+            }
+        }
         let mut call_args = vec![this_eid];
-        for a in args {
+        for a in eff_args {
             call_args.push(self.lower_expr(a));
         }
         let call = self.push_expr(ir::Expr::Call {
