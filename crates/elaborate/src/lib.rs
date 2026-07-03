@@ -5669,7 +5669,7 @@ impl<'s> Elaborator<'s> {
     /// 200` is -56, `parameter signed [7:0] = 8'hA5` is -91); an UNSIZED param (no
     /// range, untyped) keeps its full value (the common width-defining `parameter W
     /// = 8`). Real-typed params are not integer-coerced. `int`/`integer` are signed
-    /// even without an explicit `signed` keyword; `time` (64-bit) keeps its value.
+    /// by default (unsigned only with an explicit `unsigned`); `time` keeps its value.
     /// The DECLARED `(width, signed)` of a parameter, when determinate: an
     /// explicit `[msb:lsb]` range (foldable bounds) or `integer`/`int` (32-bit).
     /// `None` for an untyped/unsized param (width inferred from its value) or a
@@ -5688,7 +5688,10 @@ impl<'s> Elaborator<'s> {
                 _ => None, // unfoldable bound: leave it value-inferred (loud elsewhere)
             }
         } else if matches!(p.ty, ast::ParamType::Integer) {
-            Some((32, true)) // `integer`/`int` are 32-bit signed
+            // `int`/`integer` are 32-bit; signedness comes from the decl (signed by
+            // default, `int unsigned` / `unsigned integer` flip it — the parser sets
+            // `p.signed` accordingly).
+            Some((32, p.signed))
         } else {
             // Untyped/implicit param: an explicitly-SIZED literal initializer
             // (`localparam P = 8'hAB`) sets the param width to the literal width
@@ -5711,13 +5714,15 @@ impl<'s> Elaborator<'s> {
     }
 
     fn coerce_param_value(&mut self, v: i64, p: &ast::ParamDecl) -> i64 {
+        // `param_decl_width` already reports the declared signedness (incl. `int`/
+        // `integer` via `p.signed`), so coerce with THAT — an `int unsigned` must
+        // NOT be force-signed here.
         let Some((w, signed)) = self.param_decl_width(p) else {
             return v;
         };
         if w == 0 || w >= 64 {
             return v;
         }
-        let signed = signed || matches!(p.ty, ast::ParamType::Integer);
         let mask = (1i64 << w) - 1;
         let trunc = v & mask;
         if signed && (trunc & (1i64 << (w - 1))) != 0 {

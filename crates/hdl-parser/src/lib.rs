@@ -2585,39 +2585,57 @@ impl<'t, 's> Parser<'t, 's> {
         };
         if let Some(k) = kw_kind {
             self.bump(); // the kind keyword
-            match k {
+                         // 2-state atoms (int/byte/shortint/longint) DEFAULT to signed; logic/reg/
+                         // bit default to unsigned. An explicit `signed`/`unsigned` (in EITHER
+                         // position, `unsigned int` or `int unsigned`) WINS over that default — so
+                         // `int unsigned` / `byte unsigned` come out unsigned, matching the
+                         // equivalent var decl. (The old `signed || expl` could never flip an
+                         // atom's signed default back to unsigned.)
+            let atom_signed = match k {
                 Kw::Int => {
-                    ty = ParamType::Integer; // 32-bit signed 2-state
+                    ty = ParamType::Integer; // 32-bit 2-state
                     var_kind = Some(NetVarKind::Int);
+                    true
                 }
                 Kw::Byte => {
                     forced_range = Some(Self::dec_range(7));
-                    signed = true;
                     var_kind = Some(NetVarKind::Byte);
+                    true
                 }
                 Kw::Shortint => {
                     forced_range = Some(Self::dec_range(15));
-                    signed = true;
                     var_kind = Some(NetVarKind::Shortint);
+                    true
                 }
                 Kw::Longint => {
                     forced_range = Some(Self::dec_range(63));
-                    signed = true;
                     var_kind = Some(NetVarKind::Longint);
+                    true
                 }
-                // logic/reg/bit: width from an explicit range below
-                Kw::Logic => var_kind = Some(NetVarKind::Logic),
-                Kw::Reg => var_kind = Some(NetVarKind::Reg),
-                Kw::Bit => var_kind = Some(NetVarKind::Bit),
-                _ => {}
-            }
+                // logic/reg/bit: unsigned default; width from an explicit range below.
+                Kw::Logic => {
+                    var_kind = Some(NetVarKind::Logic);
+                    false
+                }
+                Kw::Reg => {
+                    var_kind = Some(NetVarKind::Reg);
+                    false
+                }
+                Kw::Bit => {
+                    var_kind = Some(NetVarKind::Bit);
+                    false
+                }
+                _ => false,
+            };
             expl1 = self.opt_signed();
-            signed = signed || expl1.unwrap_or(false);
+            signed = expl0.or(expl1).unwrap_or(atom_signed);
         } else {
             ty = match self.peek() {
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Integer))) => {
                     self.bump();
                     var_kind = Some(NetVarKind::Integer);
+                    // `integer` is 32-bit SIGNED (V2005); a leading `unsigned` wins.
+                    signed = expl0.unwrap_or(true);
                     ParamType::Integer
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Real))) => {
