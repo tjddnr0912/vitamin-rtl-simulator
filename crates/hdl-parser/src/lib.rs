@@ -118,7 +118,7 @@ struct TypeInfo {
 /// unsigned per §5.4.1, matching iverilog). `two_state` (the member is `bit`/
 /// `byte`/`int`/`shortint`/`longint`) drives the `'{…}` pattern desugar to coerce
 /// X/Z→0 into that field (§6.11.3), which a 4-state member does not.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct StructLayout {
     fields: Vec<(String, u32, u32, bool, bool, bool)>,
 }
@@ -2172,6 +2172,17 @@ impl<'t, 's> Parser<'t, 's> {
         let ports = self.parse_port_list();
         self.expect(TokenKind::Semi, "';' after module header");
 
+        // For the post-package scoped-twin pass below: snapshot the aggregate type
+        // sub-maps BEFORE the body so a chained-alias-of-aggregate (`typedef pk::s a;`
+        // — an `Alias` node that nonetheless writes a layout) can be told apart from a
+        // plain vector alias that merely LEAVES a stale same-name entry from another
+        // package. Only a package needs this; a module never runs the twin pass.
+        let (struct_before, enum_before) = if end_kw == Kw::Endpackage {
+            (self.struct_layouts.clone(), self.enum_defs.clone())
+        } else {
+            (Default::default(), Default::default())
+        };
+
         // body until the end keyword — with forward-progress guard (BLOCKER B3).
         // Header imports lead the body so elaborate registers them first.
         let mut body = header_imports;
@@ -2202,6 +2213,79 @@ impl<'t, 's> Parser<'t, 's> {
         // endfunction/endtask/endclass/block/generate ends (a mismatched label is
         // not silent-wrong: the container name is already fixed above).
         self.opt_block_label();
+        // IEEE §26.3: a package's typedefs are referable elsewhere scope-qualified
+        // (`pkg::t`). Register a `"pkg::name"` twin of each package-scope typedef so a
+        // scoped type resolves to THIS package's definition — collision-safe against a
+        // same-named typedef in another package (the flat bare-keyed registry keeps
+        // only the last-registered, so a bare lookup would be silent-wrong). The pass
+        // runs at each `endpackage`, before any later package overwrites the bare key.
+        //
+        // The `typedefs` twin is unconditional: every typedef writes `typedefs[n]`, so
+        // it is THIS package's value. The AGGREGATE sub-maps are copied per the node's
+        // KIND so a plain vector alias `pb::t` does NOT inherit a stale `struct_layouts`
+        // / `enum_defs` entry a same-named struct/enum in ANOTHER package left behind
+        // (that mis-bind would be silent-wrong): a `Struct`/`Enum` node owns its map;
+        // an `Alias` node copies an aggregate twin ONLY when this body actually (re)wrote
+        // it (a chained-alias-of-aggregate `typedef pk::s a;` — vs a plain alias that
+        // left the same-name entry untouched). The bare entry is left as-is (a package
+        // typedef is also visible bare in vita's flat model — pre-existing over-leniency).
+        if end_kw == Kw::Endpackage {
+            let pkg = name.name.clone();
+            for it in &body {
+                if let ModuleItem::Typedef(td) = it {
+                    let n = td.name.name.clone();
+                    if n.contains("::") {
+                        continue; // already-scoped (defensive; package typedefs are bare)
+                    }
+                    let scoped = format!("{pkg}::{n}");
+                    if let Some(ti) = self.typedefs.get(&n).cloned() {
+                        self.typedefs.insert(scoped.clone(), ti);
+                    }
+                    // Was `n`'s struct/enum layout (re)written by THIS package body?
+                    // `Struct`/`Enum` nodes own their map unconditionally; an `Alias`
+                    // is fresh only if its aggregate entry differs from the pre-body
+                    // snapshot (chained-alias-of-aggregate), never when it is a stale
+                    // cross-package leftover.
+                    let struct_fresh = match td.kind {
+                        TypedefKind::Struct { .. } => self.struct_layouts.contains_key(&n),
+                        TypedefKind::Alias { .. } => {
+                            self.struct_layouts.get(&n) != struct_before.get(&n)
+                                && self.struct_layouts.contains_key(&n)
+                        }
+                        TypedefKind::Enum { .. } => false,
+                    };
+                    let enum_fresh = match td.kind {
+                        // Unlike a struct (whose layout is ALWAYS written), an `Enum`
+                        // node writes `enum_defs[n]` only when its labels are literal-
+                        // foldable; a non-foldable enum (`{X = SOME_PARAM}`) leaves a
+                        // same-name entry from another package intact — so, exactly like
+                        // an `Alias`, it is fresh only when THIS body changed the entry
+                        // (else the enum methods on a scoped var stay honest-loud rather
+                        // than silently binding the wrong package's labels).
+                        TypedefKind::Enum { .. } | TypedefKind::Alias { .. } => {
+                            self.enum_defs.get(&n) != enum_before.get(&n)
+                                && self.enum_defs.contains_key(&n)
+                        }
+                        TypedefKind::Struct { .. } => false,
+                    };
+                    if struct_fresh {
+                        if let Some(sl) = self.struct_layouts.get(&n).cloned() {
+                            self.struct_layouts.insert(scoped.clone(), sl);
+                        }
+                        // A union is a struct-layout overlay; its flag rides with the
+                        // (fresh) layout twin.
+                        if self.union_type_names.contains(&n) {
+                            self.union_type_names.insert(scoped.clone());
+                        }
+                    }
+                    if enum_fresh {
+                        if let Some(ed) = self.enum_defs.get(&n).cloned() {
+                            self.enum_defs.insert(scoped, ed);
+                        }
+                    }
+                }
+            }
+        }
         Some(ModuleDecl {
             is_macromodule,
             name,
@@ -5313,7 +5397,67 @@ impl<'t, 's> Parser<'t, 's> {
 
     /// If the current token names a known typedef, return its resolved underlying
     /// type (peek only — the caller commits the decl). `None` ⇒ not a type name.
+    /// The full `"pkg::t"` key at the cursor when it names a scope-qualified type
+    /// whose package registered it (see the post-package pass in `parse_module_like`
+    /// that duplicates each package typedef under a `"pkg::name"` key). `None` for a
+    /// bare name, a scoped VALUE ref (`pkg::CONST` — `CONST` is not a type), or an
+    /// unknown scope. Keying the FULL `pkg::t` (not the bare final segment) is what
+    /// makes a scoped type resolve to the RIGHT package under a cross-package
+    /// same-name collision (`pa::t` 8-bit vs `pb::t` 16-bit) — the flat bare-keyed
+    /// registry only holds the last-registered `t`, so a bare lookup would be
+    /// silent-wrong.
+    fn scoped_type_key(&self) -> Option<String> {
+        if self.is_ident()
+            && self.peek_at(1) == Some(TokenKind::ColonColon)
+            && matches!(
+                self.peek_at(2),
+                Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+            )
+        {
+            let key = format!("{}::{}", self.cur_text(), self.text_at(2));
+            if self.typedefs.contains_key(&key) {
+                return Some(key);
+            }
+        }
+        None
+    }
+
+    /// Token length of a `pkg::` scope qualifier that precedes a registered scoped
+    /// type at the cursor — 2 (`pkg` + `::`) or 0 (none). Used by type-name
+    /// consumers to know how many leading tokens to skip.
+    fn scope_qualifier_len(&self) -> usize {
+        if self.scoped_type_key().is_some() {
+            2
+        } else {
+            0
+        }
+    }
+
+    /// The map key a type-name consumer should use for the parser's type sub-maps
+    /// (`struct_layouts`/`enum_defs`/`union_type_names`/`var_struct`/`var_enum`):
+    /// the full `"pkg::t"` for a scoped type (matching the twin key registered for
+    /// the package), else the bare name. This keeps a scoped struct/enum type's
+    /// layout / label / union bindings resolving to the right package's definition.
+    fn type_name_key(&self) -> String {
+        self.scoped_type_key()
+            .unwrap_or_else(|| self.cur_text().to_string())
+    }
+
+    /// Skip a `pkg::` scope qualifier (2 tokens) if one precedes a scoped type at
+    /// the cursor, leaving the cursor on the final type-name identifier. Every
+    /// type-name consumer calls this before `bump`-ing the name token.
+    fn eat_scope_qualifier(&mut self) {
+        if self.scope_qualifier_len() == 2 {
+            self.bump(); // pkg
+            self.bump(); // ::
+        }
+    }
+
     fn peek_typedef_name(&self) -> Option<TypeInfo> {
+        if let Some(key) = self.scoped_type_key() {
+            // Scoped `pkg::t`: resolve the package-scoped twin key (collision-safe).
+            return self.typedefs.get(&key).cloned();
+        }
         if self.is_ident() {
             return self.typedefs.get(self.cur_text()).cloned();
         }
@@ -5325,11 +5469,14 @@ impl<'t, 's> Parser<'t, 's> {
     /// invalid since `e` is a type, `e::A`/`e'(…)` have a non-ident second token).
     /// Returns the type only for that shape, so a typedef name used otherwise falls
     /// through to the statement region. (The module-item parser needs no such guard:
-    /// no statements appear there.)
+    /// no statements appear there.) A scoped type `pkg::t name` (qualifier length
+    /// `q`) requires the NAME after the final segment (`peek_at(q+1)`), so a scoped
+    /// value ref / cast (`pkg::t'(…)`) still falls through to the statement region.
     fn peek_block_typedef_decl(&self) -> Option<TypeInfo> {
         let info = self.peek_typedef_name()?;
+        let q = self.scope_qualifier_len();
         if matches!(
-            self.peek_at(1),
+            self.peek_at(q + 1),
             Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
         ) {
             Some(info)
@@ -5341,7 +5488,8 @@ impl<'t, 's> Parser<'t, 's> {
     /// `T name1, name2 = init, …;` where the leading type-name resolved to `info`.
     fn parse_typed_decl(&mut self, info: TypeInfo) -> Option<NetVarDecl> {
         let start = self.cur_span();
-        let tyname = self.cur_text().to_string();
+        let tyname = self.type_name_key(); // "pkg::t" (scoped twin key) or bare "t"
+        self.eat_scope_qualifier(); // skip an optional `pkg::` before the type name
         self.bump(); // the type-name identifier
                      // ⓑ-breadth (§8.25): a parameterized class handle override `C #(16) h;`.
                      // Only a class-typed name takes specialization args; for any other type a
@@ -5519,7 +5667,7 @@ impl<'t, 's> Parser<'t, 's> {
             // pre-existing limit), an atom (`int`/`byte` — signed, no explicit
             // range), or a struct / class / multi-dim-packed typedef cannot be
             // represented by the enum's `Option<Range>` base model — honest-loud.
-            let nm = self.cur_text().to_string();
+            let nm = self.type_name_key();
             if self.struct_layouts.contains_key(&nm)
                 || info.class_name.is_some()
                 || info.signed
@@ -5532,6 +5680,7 @@ impl<'t, 's> Parser<'t, 's> {
                 self.synchronize();
                 return Some(ModuleItem::Error(start.to(self.prev_span())));
             }
+            self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
             info.range
         } else {
@@ -5650,7 +5799,8 @@ impl<'t, 's> Parser<'t, 's> {
     /// (`typedef base_t [3:0] a_t;` / `typedef base_t a_t [4];`) needs type
     /// composition not in v1 — honest-loud.
     fn parse_typedef_chained_alias(&mut self, start: Span, info: TypeInfo) -> Option<ModuleItem> {
-        let base_name = self.cur_text().to_string();
+        let base_name = self.type_name_key(); // "pkg::t" (scoped) / bare — keys the sub-maps
+        self.eat_scope_qualifier(); // skip an optional `pkg::` before the base type name
         self.bump(); // base typedef name
                      // honest-loud: PACKED dims before the new name (`typedef base_t [3:0] a_t;`).
         if self.peek() == Some(TokenKind::LBracket) {
@@ -5723,7 +5873,7 @@ impl<'t, 's> Parser<'t, 's> {
             return Some((kind, signed, range));
         }
         if let Some(info) = self.peek_typedef_name() {
-            let nm = self.cur_text().to_string();
+            let nm = self.type_name_key();
             if self.struct_layouts.contains_key(&nm)
                 || info.class_name.is_some()
                 || !info.packed.is_empty()
@@ -5733,6 +5883,7 @@ impl<'t, 's> Parser<'t, 's> {
                 );
                 return None;
             }
+            self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
             return Some((info.kind, info.signed, info.range));
         }
@@ -7636,6 +7787,7 @@ impl<'t, 's> Parser<'t, 's> {
                 // (the `<typedef_name> <function_name>` shape — same disambiguation
                 // as a block-local decl). Map the typedef's resolved type onto the
                 // return fields, mirroring the built-in-keyword arm above.
+                self.eat_scope_qualifier(); // optional `pkg::` before the type name
                 self.bump(); // the typedef name
                              // The function return-type fields carry one packed dimension
                              // (`range`); a multi-dim packed typedef (`typedef logic [3:0][7:0]
@@ -7796,13 +7948,14 @@ impl<'t, 's> Parser<'t, 's> {
     /// (`parse_ansi_port`) and non-ANSI (`parse_port_decl`) port parsers.
     fn try_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>)> {
         let info = self.peek_typedef_name()?;
+        let q = self.scope_qualifier_len(); // 0 (bare) or 2 (`pkg::`)
         if !matches!(
-            self.peek_at(1),
+            self.peek_at(q + 1),
             Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
         ) {
             return None; // not `<type> <name>` — leave for the continuation/name path
         }
-        let nm = self.cur_text().to_string();
+        let nm = self.type_name_key();
         if self.struct_layouts.contains_key(&nm)
             || info.class_name.is_some()
             || !info.packed.is_empty()
@@ -7811,6 +7964,7 @@ impl<'t, 's> Parser<'t, 's> {
                 "a struct/union/class/multi-dim-packed typedef as a module port type is unsupported in v1 (a simple vector/enum typedef port is supported)",
             );
         }
+        self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
         Some((info.kind, info.signed, info.range))
     }
@@ -7835,7 +7989,7 @@ impl<'t, 's> Parser<'t, 's> {
     /// (`parse_tf_port_decl_into`) port parsers.
     fn try_tf_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>)> {
         let info = self.peek_typedef_name()?;
-        let nm = self.cur_text().to_string();
+        let nm = self.type_name_key();
         if self.struct_layouts.contains_key(&nm)
             || info.class_name.is_some()
             || !info.packed.is_empty()
@@ -7844,6 +7998,7 @@ impl<'t, 's> Parser<'t, 's> {
                 "a simple (non-struct) typedef type for a tf-port (a struct/union/class/multi-dim packed port type is unsupported in v1)",
             );
         }
+        self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
         Some((info.kind, info.signed, info.range))
     }
@@ -10213,6 +10368,7 @@ impl<'t, 's> Parser<'t, 's> {
         info: TypeInfo,
     ) -> Option<(NetVarDecl, Stmt, Ident)> {
         let start = self.cur_span(); // type-name token span (matches the built-in path)
+        self.eat_scope_qualifier(); // skip an optional `pkg::` before the type name
         self.bump(); // the type-name identifier
                      // A class-handle alias cannot be a loop counter (no arithmetic on a
                      // handle, §8.4). Emit a clear loud error rather than letting a
