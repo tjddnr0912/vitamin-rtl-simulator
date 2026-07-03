@@ -12256,6 +12256,42 @@ impl<'s> Elaborator<'s> {
     /// `int tmp;`. Returns the `automatic`-override bits for the freshly reserved
     /// slots. The slot index is read from the live net count so it stays aligned
     /// with the frame's flat slot order even when some decls coalesce.
+    /// A multi-dim PACKED frame-local decl (`logic [1:0][7:0] p`) is a flat
+    /// `product(packed widths)`-bit vector — return its full `(width, msb, packed
+    /// extents)` (else `None` ⇒ use the outer-dim-only `range_to_dims`). The extents are
+    /// computed ONCE here (`packed_extents` emits an error for a non-const bound, so it
+    /// must not run twice) and handed to [`Self::register_frame_packed`]. Together these
+    /// mirror the module-scope decl so an element read `p[i]` is an element-width
+    /// part-select, not a 1-bit bit-select on a truncated net.
+    #[allow(clippy::type_complexity)]
+    fn frame_packed_width(&mut self, d: &ast::NetVarDecl) -> Option<(u32, u32, Vec<(u32, u32, bool)>)> {
+        if d.packed.is_empty() {
+            return None;
+        }
+        let ext = self.packed_extents(d.range.as_ref(), &d.packed);
+        let w = ext
+            .iter()
+            .fold(1u32, |a, &(_, pw, _)| a.saturating_mul(pw.max(1)));
+        Some((w, w.saturating_sub(1), ext))
+    }
+
+    /// After reserving a frame-local `net`, register a multi-dim PACKED array's
+    /// `packed_dims` (element-select, from the precomputed `ext`) + `dim_desc`
+    /// (`$bits`/`$size`/`$dimensions`/`$left`/`$right`) — mirroring the module-scope
+    /// decl. Uses `compute_dim_desc` (NOT `record_dim_desc`) to avoid the unconditional
+    /// `intro_kind` side effect; the caller keeps its own 2-state `intro_kind` gate.
+    fn register_frame_packed(
+        &mut self,
+        net: u32,
+        d: &ast::NetVarDecl,
+        unpacked: &[ast::Dim],
+        ext: Vec<(u32, u32, bool)>,
+    ) {
+        self.packed_dims.insert(net, ext);
+        let dd = self.compute_dim_desc(d.kind, d.range.as_ref(), &d.packed, unpacked);
+        self.dim_desc.insert(net, dd);
+    }
+
     fn reserve_frame_block_locals(&mut self, body: &ast::Stmt, base_net: u32) -> u64 {
         let mut decls = Vec::new();
         collect_block_local_decls(body, &mut decls);
@@ -12265,7 +12301,13 @@ impl<'s> Elaborator<'s> {
                 if self.symbols.contains_key(&self.fq(&decl.name.name)) {
                     continue; // coalesce with an already-reserved formal/local
                 }
-                let (w, msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                let pinfo = self.frame_packed_width(d);
+                let (mut w, mut msb, lsb, signed) =
+                    self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                if let Some((pw, pmsb, _)) = &pinfo {
+                    w = *pw;
+                    msb = *pmsb;
+                }
                 let slot = self.nets.len() as u32 - base_net;
                 let net = self.nets.len() as u32;
                 self.add_net(
@@ -12281,6 +12323,9 @@ impl<'s> Elaborator<'s> {
                         init: default_init(d.kind, w),
                     },
                 );
+                if let Some((_, _, ext)) = pinfo {
+                    self.register_frame_packed(net, d, &decl.unpacked, ext);
+                }
                 if net_kind_is_two_state(d.kind) {
                     self.intro_kind.insert(net, d.kind);
                 }
@@ -12363,7 +12408,15 @@ impl<'s> Elaborator<'s> {
             let mut slot = n_params + 1; // formals + return var
             for d in &func.body_decls {
                 for decl in &d.names {
-                    let (w, msb, lsb, signed) = s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    // A multi-dim PACKED frame local widens to its full flat width and
+                    // registers packed_dims + dim_desc (element read + dim sysfuncs).
+                    let pinfo = s.frame_packed_width(d);
+                    let (mut w, mut msb, lsb, signed) =
+                        s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    if let Some((pw, pmsb, _)) = &pinfo {
+                        w = *pw;
+                        msb = *pmsb;
+                    }
                     let net = s.nets.len() as u32;
                     s.add_net(
                         &decl.name.name,
@@ -12378,6 +12431,9 @@ impl<'s> Elaborator<'s> {
                             init: default_init(d.kind, w),
                         },
                     );
+                    if let Some((_, _, ext)) = pinfo {
+                        s.register_frame_packed(net, d, &decl.unpacked, ext);
+                    }
                     if net_kind_is_two_state(d.kind) {
                         s.intro_kind.insert(net, d.kind);
                     }
@@ -12514,7 +12570,13 @@ impl<'s> Elaborator<'s> {
             let mut slot = n_params; // tasks have no return var
             for d in &task.body_decls {
                 for decl in &d.names {
-                    let (w, msb, lsb, signed) = s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    let pinfo = s.frame_packed_width(d);
+                    let (mut w, mut msb, lsb, signed) =
+                        s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    if let Some((pw, pmsb, _)) = &pinfo {
+                        w = *pw;
+                        msb = *pmsb;
+                    }
                     let net = s.nets.len() as u32;
                     s.add_net(
                         &decl.name.name,
@@ -12529,6 +12591,9 @@ impl<'s> Elaborator<'s> {
                             init: default_init(d.kind, w),
                         },
                     );
+                    if let Some((_, _, ext)) = pinfo {
+                        s.register_frame_packed(net, d, &decl.unpacked, ext);
+                    }
                     if net_kind_is_two_state(d.kind) {
                         s.intro_kind.insert(net, d.kind);
                     }
@@ -25363,14 +25428,13 @@ impl<'s> Elaborator<'s> {
     /// dimensionless `real`/`realtime`/`event` and a 1-bit scalar get an EMPTY
     /// descriptor (0 dims). Stored for EVERY name so the fold is unambiguous and a
     /// scalar (`reg s`, empty) is distinct from `reg [0:0] x` (one dim).
-    fn record_dim_desc(
+    fn compute_dim_desc(
         &mut self,
-        id: u32,
         kind: ast::NetVarKind,
         range: Option<&ast::Range>,
         packed: &[ast::Range],
         unpacked: &[ast::Dim],
-    ) {
+    ) -> (Vec<(i64, i64)>, usize) {
         let mut dims: Vec<(i64, i64)> = Vec::new();
         for u in unpacked {
             match u {
@@ -25411,7 +25475,24 @@ impl<'s> Elaborator<'s> {
                 _ => {} // real/realtime/event/bit-scalar/string: dimensionless here
             }
         }
-        self.dim_desc.insert(id, (dims, unpacked_n));
+        (dims, unpacked_n)
+    }
+
+    /// Store the [`Self::compute_dim_desc`] entry for `id` AND register its `intro_kind`
+    /// (the module-scope decl path — the `intro_kind` insert drives $typename + 2-state
+    /// coercion). The frame-local packed path inserts the `dim_desc` via
+    /// `compute_dim_desc` WITHOUT this side effect, since it gates `intro_kind` on
+    /// 2-state kinds itself (a 4-state `logic` packed local must not be coerced).
+    fn record_dim_desc(
+        &mut self,
+        id: u32,
+        kind: ast::NetVarKind,
+        range: Option<&ast::Range>,
+        packed: &[ast::Range],
+        unpacked: &[ast::Dim],
+    ) {
+        let dd = self.compute_dim_desc(kind, range, packed, unpacked);
+        self.dim_desc.insert(id, dd);
         self.intro_kind.insert(id, kind);
     }
 
