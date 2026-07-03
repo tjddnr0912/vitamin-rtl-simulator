@@ -276,6 +276,17 @@ pub struct FuncMeta {
     /// `is_automatic`. `0` (the common case) ⇒ every slot follows `is_automatic`
     /// (byte-identical to B1/B2). Slots ≥ 64 always follow the default.
     pub auto_override: u64,
+    /// v7: per-FORMAL `string`-type bitmask (bit `i` set ⇒ input formal `i` was
+    /// declared `input string`). A string formal lowers to a 1-bit `Wire` net (a
+    /// string is a dynamic handle, not a fixed width), so the engine cannot tell
+    /// it from a scalar by width/kind — this mask lets `Expr::Call` arg binding
+    /// materialise a string LITERAL actual as a heap-string value instead of
+    /// truncating it to the 1-bit slot. `0` (the common case) ⇒ no string formals
+    /// ⇒ byte-identical. Formals ≥ 64 are not marked (frame funcs never have that
+    /// many params). `#[serde(default)]` so a trailer written by an older binary
+    /// still deserialises (missing ⇒ 0 ⇒ prior behaviour).
+    #[serde(default)]
+    pub str_params: u64,
 }
 
 /// Frame-call sidecar (B1): `Vec<FuncMeta>` index-aligned to `ir.funcs`.
@@ -8902,6 +8913,10 @@ impl<'s> Elaborator<'s> {
             ret_width,
             ret_signed,
             auto_override: 0,
+            // A method frame prepends a `this` slot, so formal indices are offset
+            // by one vs `Expr::Call` arg order — string-formal marking needs its
+            // own grounding (un-grounded here) → left 0.
+            str_params: 0,
         });
         if let Some(ci) = self.class_table.get_mut(cname) {
             ci.methods[mi].fid = Some(fid);
@@ -12379,6 +12394,30 @@ impl<'s> Elaborator<'s> {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = func.ports.len() as u32;
+        // v7: per-formal `string` bitmask — a `string` formal lowers to a 1-bit
+        // Wire slot, so the engine needs this to bind a string LITERAL actual as a
+        // heap string rather than truncating it (see `FuncMeta.str_params`).
+        let mut str_params: u64 = 0;
+        for (i, p) in func.ports.iter().enumerate() {
+            if matches!(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                ast::NetVarKind::String
+            ) {
+                if i < 64 {
+                    str_params |= 1u64 << i;
+                } else {
+                    // The `string`-formal mask is 64-wide; a `string` formal beyond
+                    // index 63 could not be marked → its literal actual would
+                    // silently truncate to the 1-bit slot. Loud-reject instead
+                    // (correct-or-loud); a 65+-param frame function is pathological.
+                    self.error_unsupported(
+                        p.span,
+                        "a `string` formal beyond parameter index 63 is unsupported \
+                         (the frame-call string-argument mask is 64 wide)",
+                    );
+                }
+            }
+        }
         let (ret_width, ret_signed) = self.func_return_dims(func);
         let scope_seg = format!("$func${name}");
         let ret_name = name.to_string();
@@ -12503,6 +12542,7 @@ impl<'s> Elaborator<'s> {
             ret_width,
             ret_signed,
             auto_override,
+            str_params,
         });
     }
 
@@ -12662,6 +12702,9 @@ impl<'s> Elaborator<'s> {
             ret_width: 1,
             ret_signed: false,
             auto_override,
+            // Task string-formal binding rides `run_task`, not `Expr::Call`; its
+            // string-literal path is a separate (un-grounded) concern → left 0.
+            str_params: 0,
         });
     }
 

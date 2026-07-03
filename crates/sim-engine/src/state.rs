@@ -2707,6 +2707,18 @@ impl<'a> NetReader for SimState<'a> {
         let nv = &self.ir.nets[(m.base_net + i as u32) as usize];
         Some((nv.width.max(1), nv.signed))
     }
+    fn formal_is_string(&self, func: u32, i: usize) -> bool {
+        // A `string` formal lowers to a 1-bit Wire net (a string is a dynamic
+        // handle, not a fixed width), so it is NOT distinguishable by net
+        // kind/width — the elaborate-side `str_params` bitmask carries the fact.
+        if i >= 64 {
+            return false;
+        }
+        self.func_table
+            .get(func as usize)
+            .map(|m| (m.str_params >> i) & 1 == 1)
+            .unwrap_or(false)
+    }
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
         // N7: a class-handle FIELD-select read (`obj.f` / `this.f`, word = field-id)
         // goes to the heap. Checked FIRST so a method's `this` slot — which is also

@@ -245,6 +245,7 @@ impl B {
             ret_width: ret_w,
             ret_signed,
             auto_override: 0,
+            str_params: 0,
         });
         func
     }
@@ -294,6 +295,7 @@ impl B {
             ret_width: 32,
             ret_signed: true,
             auto_override: 0,
+            str_params: 0,
         });
         func
     }
@@ -515,6 +517,7 @@ fn runaway_recursion_hits_depth_cap_fatal() {
             ret_width: 32,
             ret_signed: true,
             auto_override: 0,
+            str_params: 0,
         });
         let c = b.k(5);
         let v = b.call(func, vec![c]);
@@ -577,6 +580,7 @@ fn cont_assign_originated_runaway_terminates() {
             ret_width: 32,
             ret_signed: true,
             auto_override: 0,
+            str_params: 0,
         });
         // module nets: x (driver, =5) and y (cont-assign target).
         let x = b.net(int_net(32, true));
@@ -757,6 +761,7 @@ fn recursive_automatic_task_with_output_formal() {
         ret_width: 32,
         ret_signed: true,
         auto_override: 0,
+        str_params: 0,
     });
 
     // process: P0 Call(factt, ret=P1); P1 [$display(res)] Return

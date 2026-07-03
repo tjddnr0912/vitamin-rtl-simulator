@@ -201,6 +201,13 @@ pub trait NetReader {
     fn formal_width(&self, _func: u32, _i: usize) -> Option<(u32, bool)> {
         None
     }
+    /// B1 frame-call: is the i-th formal a `string` type? A string LITERAL actual
+    /// evaluates to a packed const; a `string` formal must instead receive a
+    /// heap-string value (the width-N slot would truncate the packed bits on
+    /// read-back). Default `false` ⇒ non-engine readers never see string formals.
+    fn formal_is_string(&self, _func: u32, _i: usize) -> bool {
+        false
+    }
     /// v5 ⑤: is `net` an ASSOC handle? Gates the i64-key read path in the
     /// Signal arm (assoc keys cannot ride the u32 word funnel). Default false
     /// — non-engine readers never see assoc nets.
@@ -462,11 +469,24 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
                     .iter()
                     .enumerate()
                     .map(|(i, &a)| {
-                        let (fw, fs) = self.nets.formal_width(*func, i).unwrap_or_else(|| {
+                        // A `string` formal lowers to a 1-bit Wire slot, so binding at
+                        // the formal width would truncate the actual. Evaluate at the
+                        // actual's NATURAL width (a string LITERAL is a packed const the
+                        // 1-bit width would otherwise cut) and hand over a heap-string
+                        // value — `resize_keep_sign` preserves `is_str`, so the slot
+                        // never truncates it. A string VAR actual is already is_str, so
+                        // this round-trips it unchanged.
+                        if self.nets.formal_is_string(*func, i) {
                             let s = self.wt.get(a);
-                            (s.width, s.signed)
-                        });
-                        self.eval_ctx(a, fw, fs)
+                            let v = self.eval_ctx(a, s.width.max(1), s.signed);
+                            Value::from_str_bytes(&v.to_str_bytes())
+                        } else {
+                            let (fw, fs) = self.nets.formal_width(*func, i).unwrap_or_else(|| {
+                                let s = self.wt.get(a);
+                                (s.width, s.signed)
+                            });
+                            self.eval_ctx(a, fw, fs)
+                        }
                     })
                     .collect();
                 // N7: virtual dispatch redirects `func` to the receiver's runtime
