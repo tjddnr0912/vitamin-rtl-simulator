@@ -12149,13 +12149,31 @@ impl<'s> Elaborator<'s> {
     /// rejects), but the walk covers the common AST shapes.
     fn build_frame_set(&self) -> std::collections::BTreeSet<String> {
         let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        // Callee return widths (a call operand's self-width) for the ㊁ context-width
+        // detection — built once so `f = g(x) + 1` sees `g(x)`'s width, not `None`.
+        let func_widths: std::collections::HashMap<String, u32> = self
+            .func_table
+            .iter()
+            .filter_map(|(n, f)| ast_func_return_width(f).map(|w| (n.clone(), w)))
+            .collect();
         for (name, f) in &self.func_table {
             // A function is framed when it is `automatic`, recursive (below), its
             // body is NOT straight-line foldable (has control flow / a construct the
             // inline path rejects), OR its return type is 2-state (so the frame
             // return slot coerces X/Z→0, §6.11.3 — the inline fold has no slot to
             // coerce). Framing handles all of these with one machine.
-            if f.automatic || f.ret_two_state || body_needs_frame(&f.body) {
+            // The ㊁ context-width route additionally requires a SELF-CONTAINED body
+            // (`body_reads_only_locals`): a framed call contributes only its ARG
+            // expressions to an implicit `always_comb`/`@(*)` sensitivity list, so a
+            // body that reads a module-level signal would lose that read from the list
+            // if routed (stale/X). Such a function stays INLINE (main's behavior — its
+            // reads survive via inlining); the pre-existing inline width bug there is
+            // left untouched rather than traded for a sensitivity regression.
+            if f.automatic
+                || f.ret_two_state
+                || body_needs_frame(&f.body)
+                || (body_needs_context_width(f, &func_widths) && body_reads_only_locals(f))
+            {
                 set.insert(name.clone());
             }
         }
@@ -22470,7 +22488,17 @@ impl<'s> Elaborator<'s> {
                     self.collect_expr_reads(a, reads);
                 }
             }
-            ir::Expr::Call { .. } => {}
+            // A frame function CALL: its argument expressions are evaluated in the
+            // caller's scope, so their nets belong in an implicit `@(*)`/`always_comb`
+            // sensitivity list — same as a `SysFunc`. Without this, a comb block whose
+            // only reads reach a framed function through its args (`y = f(a, b)`) never
+            // re-fires when the args change (silent stale/X). (`func` is a callee index,
+            // not an expression.)
+            ir::Expr::Call { args, .. } => {
+                for &a in args {
+                    self.collect_expr_reads(a, reads);
+                }
+            }
             // ⓑ-breadth (v17): the with-clause iterator reads the engine scratch,
             // not a net — no sensitivity contribution.
             ir::Expr::ArrayItem { .. } => {}
@@ -27148,6 +27176,414 @@ fn body_needs_frame(s: &ast::Stmt) -> bool {
         Null(_) | Blocking { .. } => false,
         Block { stmts, .. } => stmts.iter().any(body_needs_frame),
         _ => true,
+    }
+}
+
+// ── ㊁ inline-function context-width frame-routing detection (pure AST) ───────
+//
+// A STATIC simple-body function is INLINED (fold-by-substitution). The inline path
+// lowers each assignment RHS at its SELF width, then resizes to the target — so a
+// WIDENING context-sensitive op (`f = s + u` into a wider `f`, `f = c << 4`, …)
+// loses the §11.6 context-width extension of its operands and is silently wrong
+// (the frame/module net-assignment path evaluates at the context width correctly).
+// `body_needs_context_width` detects this so `build_frame_set` routes such a function
+// to the (correct) frame path. CONSERVATIVE: an unfoldable width routes to frame
+// (safe — the frame path is always correct; over-routing only changes a golden).
+
+/// Fold a pure DECIMAL integer literal (a range bound / replication count) to i64;
+/// `None` for a sized/based literal or any non-literal (a param/expr) ⇒ unknown.
+fn ast_decimal_lit_i64(e: &ast::Expr) -> Option<i64> {
+    match &e.kind {
+        ast::ExprKind::Paren { inner } => ast_decimal_lit_i64(inner),
+        ast::ExprKind::IntLit {
+            kind: ast::IntLitKind::Decimal,
+            raw,
+        } => raw.trim().replace('_', "").parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
+/// Self-determined bit width of a net/var KIND + optional literal RANGE; atoms are
+/// fixed-width, a vector kind folds a LITERAL `[msb:lsb]`. `None` for real/string/
+/// handle (not bit arithmetic) or an unfoldable range.
+fn ast_kind_range_width(kind: ast::NetVarKind, range: Option<&ast::Range>) -> Option<u32> {
+    use ast::NetVarKind::*;
+    match kind {
+        Integer | Int => Some(32),
+        Byte => Some(8),
+        Shortint => Some(16),
+        Longint | Time => Some(64), // `time` is a 64-bit integral (bit-vector) type
+        Real | Realtime | Event | String | ClassHandle => None,
+        _ => match range {
+            None => Some(1),
+            Some(r) => {
+                let msb = ast_decimal_lit_i64(&r.msb)?;
+                let lsb = ast_decimal_lit_i64(&r.lsb)?;
+                u32::try_from(msb.abs_diff(lsb) + 1).ok()
+            }
+        },
+    }
+}
+
+/// Is `kind` a BIT-VECTOR (integral) type — i.e. arithmetic evaluated at a context
+/// width? `real`/`realtime`/`string`/`event`/class-handle are NOT (no context-width
+/// extension applies), so a widening assignment to one is never mis-lowered this way.
+fn ast_kind_is_bit_vector(kind: ast::NetVarKind) -> bool {
+    use ast::NetVarKind::*;
+    !matches!(kind, Real | Realtime | Event | String | ClassHandle)
+}
+
+/// A binary op whose value can DIFFER between a self-width eval-then-extend and a
+/// wider context-width eval — so lowering it at self width and resizing is wrong.
+/// `+`/`-` carry, `*`/`**` product and `<<`/`<<<` shifted-out bits gain magnitude; a
+/// `>>`/`>>>` of a SIGNED operand drags the context-width sign extension into view; a
+/// `/` of a SIGNED operand overflows at self width (INT_MIN / -1); an unsigned `~^`
+/// (XNOR) flips the high extension bits to 1 (like unary `~`). Signedness isn't known
+/// to this pure AST pass, so `>>`/`>>>`/`/`/`~^` route conservatively (a case where
+/// the operand's sign makes it context-insensitive only produces harmless churn).
+/// `%`, `&`/`|`/`^` and comparison ops are genuinely context-insensitive.
+fn binop_is_widening(op: ast::BinOp) -> bool {
+    use ast::BinOp::*;
+    matches!(
+        op,
+        Add | Sub | Mul | Pow | Shl | AShl | Shr | AShr | Div | BitXnor
+    )
+}
+
+/// Does `e` (a context-determined position with overall context width `cw`) contain a
+/// widening op whose OWN self width is below `cw` — i.e. one the inline path evaluates
+/// too narrowly and then extends? IEEE §11.6: every context-determined node in a region
+/// shares one width `cw = max(target, self-widths in the region)`; a widening op is
+/// mis-lowered exactly when its self width < `cw` (a wider sibling — a mask constant, a
+/// ternary default, a wide literal — can lift `cw` above a nested narrow op's width).
+/// `cw == None` = unknown context width (param-width target / unfoldable operand) ⇒ any
+/// widening op counts (fail closed). Recurses only into context-determined positions; a
+/// self-determined position (concat/replicate parts, comparison/logical/reduction
+/// operands, a shift count / power exponent) evaluates at its own width and is skipped.
+fn ctx_widening_below(
+    e: &ast::Expr,
+    cw: Option<u32>,
+    widths: &std::collections::HashMap<String, u32>,
+    func_widths: &std::collections::HashMap<String, u32>,
+) -> bool {
+    use ast::ExprKind::*;
+    // A widening node is mis-lowered iff its own self width is below the context width.
+    let below = |node: &ast::Expr| match (cw, ast_expr_self_width(node, widths, func_widths)) {
+        (Some(c), Some(sw)) => sw < c,
+        _ => true, // unknown context or unknown self width ⇒ conservative
+    };
+    let rec = |x: &ast::Expr| ctx_widening_below(x, cw, widths, func_widths);
+    match &e.kind {
+        Paren { inner } => rec(inner),
+        Binary { op, lhs, rhs } => {
+            use ast::BinOp::*;
+            if binop_is_widening(*op) && below(e) {
+                return true;
+            }
+            match op {
+                Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | LogAnd
+                | LogOr => false, // self-determined 1-bit result
+                // A shift's count / power's exponent is self-determined — recurse only
+                // into the (context-determined) LEFT operand.
+                Shl | Shr | AShl | AShr | Pow => rec(lhs),
+                // `%` / bitwise: both operands are context-determined — a narrower
+                // widening op may nest in either.
+                _ => rec(lhs) || rec(rhs),
+            }
+        }
+        Unary { op, operand } => {
+            use ast::UnOp::*;
+            if matches!(op, Minus | BitNot) && below(e) {
+                return true;
+            }
+            matches!(op, Plus | Minus | BitNot) && rec(operand)
+        }
+        Ternary { then_e, else_e, .. } => rec(then_e) || rec(else_e),
+        _ => false,
+    }
+}
+
+/// Self-determined bit width of an expression (`None` = unknown ⇒ conservative).
+/// `widths` maps a formal/local NAME to its declared width.
+fn ast_expr_self_width(
+    e: &ast::Expr,
+    widths: &std::collections::HashMap<String, u32>,
+    func_widths: &std::collections::HashMap<String, u32>,
+) -> Option<u32> {
+    use ast::ExprKind::*;
+    let rec = |x| ast_expr_self_width(x, widths, func_widths);
+    match &e.kind {
+        Paren { inner } => rec(inner),
+        Ident(p) => match p.segments.as_slice() {
+            [seg] => widths.get(&seg.name).copied(),
+            _ => None,
+        },
+        // A single-segment call is a function call → its return width. (A 2-segment
+        // `h.method()` is a handle method — unknown here → conservative `None`.)
+        Call { name, .. } => match name.segments.as_slice() {
+            [seg] => func_widths.get(&seg.name).copied(),
+            _ => None,
+        },
+        IntLit { kind, raw } => literal::parse_int_literal(raw, *kind).map(|cv| cv.width),
+        BitSelect { .. } => Some(1),
+        PartSelect { msb, lsb, .. } => {
+            let m = ast_decimal_lit_i64(msb)?;
+            let l = ast_decimal_lit_i64(lsb)?;
+            u32::try_from(m.abs_diff(l) + 1).ok()
+        }
+        IndexedPart { width, .. } => u32::try_from(ast_decimal_lit_i64(width)?).ok(),
+        Binary { op, lhs, rhs } => {
+            use ast::BinOp::*;
+            match op {
+                Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | LogAnd
+                | LogOr => Some(1),
+                // §11.6.1: a shift / power self-width is the LEFT operand's width.
+                Shl | Shr | AShl | AShr | Pow => rec(lhs),
+                _ => Some(rec(lhs)?.max(rec(rhs)?)),
+            }
+        }
+        Unary { op, operand } => match op {
+            ast::UnOp::LogNot
+            | ast::UnOp::RedAnd
+            | ast::UnOp::RedNand
+            | ast::UnOp::RedOr
+            | ast::UnOp::RedNor
+            | ast::UnOp::RedXor
+            | ast::UnOp::RedXnor => Some(1),
+            _ => rec(operand),
+        },
+        Ternary { then_e, else_e, .. } => Some(rec(then_e)?.max(rec(else_e)?)),
+        Concat { parts } => {
+            let mut sum: u32 = 0;
+            for p in parts {
+                sum = sum.checked_add(rec(p)?)?;
+            }
+            Some(sum)
+        }
+        Replicate { count, value } => {
+            let c = u32::try_from(ast_decimal_lit_i64(count)?).ok()?;
+            let mut sum: u32 = 0;
+            for v in value {
+                sum = sum.checked_add(rec(v)?)?;
+            }
+            c.checked_mul(sum)
+        }
+        _ => None,
+    }
+}
+
+/// Walk a straight-line body; `true` if any `lhs = rhs;` is a WIDENING context-
+/// sensitive assignment — i.e. the RHS carries a widening op whose self width is below
+/// the assignment's context width `CW = max(target width, whole-RHS self width)`. An
+/// unfoldable (param-width) target, or an unknown RHS self width, makes `CW` unknown ⇒
+/// any widening op routes (conservative → frame path, which is always correct).
+fn assign_needs_context_width(
+    s: &ast::Stmt,
+    widths: &std::collections::HashMap<String, u32>,
+    unknown_bv: &std::collections::HashSet<String>,
+    func_widths: &std::collections::HashMap<String, u32>,
+) -> bool {
+    use ast::Stmt::*;
+    match s {
+        Block { stmts, .. } => stmts
+            .iter()
+            .any(|st| assign_needs_context_width(st, widths, unknown_bv, func_widths)),
+        Blocking { lhs, rhs, .. } => {
+            let ast::Lvalue::Ident(p) = lhs else {
+                return false;
+            };
+            let [seg] = p.segments.as_slice() else {
+                return false;
+            };
+            // Target width: `Some(w)` known; `None` but present in `unknown_bv` =
+            // param-width bit-vector (conservative); neither = `real`/`string`/handle,
+            // not a bit-width context (never route).
+            let target_w = if let Some(&w) = widths.get(&seg.name) {
+                Some(w)
+            } else if unknown_bv.contains(&seg.name) {
+                None
+            } else {
+                return false;
+            };
+            // Context width = max(target, whole-RHS self width). Unknown on either side
+            // ⇒ `None` (conservative). Route iff some widening op is narrower than it.
+            let cw = match (target_w, ast_expr_self_width(rhs, widths, func_widths)) {
+                (Some(t), Some(r)) => Some(t.max(r)),
+                _ => None,
+            };
+            ctx_widening_below(rhs, cw, widths, func_widths)
+        }
+        _ => false, // control flow ⇒ already framed by `body_needs_frame`
+    }
+}
+
+/// A function's declared RETURN bit-vector width. `None` = a `real`/`realtime`
+/// return (handled by the caller: NOT a bit-width context) OR an unfoldable
+/// (param-width) integral return (the caller treats that as unknown-width ⇒ route).
+fn ast_func_return_width(f: &ast::FunctionDef) -> Option<u32> {
+    match f.ret_type {
+        ast::ParamType::Integer => Some(32),
+        ast::ParamType::Time => Some(64),
+        ast::ParamType::Real | ast::ParamType::Realtime => None,
+        ast::ParamType::Implicit => ast_kind_range_width(ast::NetVarKind::Reg, f.range.as_ref()),
+    }
+}
+
+/// Does a STATIC function's inline lowering miscompute a widening context-sensitive
+/// assignment? If so `build_frame_set` routes it to the correct frame path (㊁).
+/// `func_widths` maps a callee name to its return width (a call operand's self-width).
+fn body_needs_context_width(
+    f: &ast::FunctionDef,
+    func_widths: &std::collections::HashMap<String, u32>,
+) -> bool {
+    let mut widths: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut unknown_bv: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // A bit-vector target with a foldable width → `widths` (precise check); with an
+    // unfoldable (param-width) width → `unknown_bv` (fail-closed route). A non-bit-
+    // vector (`real`/`string`/handle) target is in NEITHER set (never routed on).
+    let mut classify = |name: &str, kind: ast::NetVarKind, range: Option<&ast::Range>| {
+        if !ast_kind_is_bit_vector(kind) {
+            return;
+        }
+        match ast_kind_range_width(kind, range) {
+            Some(w) => {
+                widths.insert(name.to_string(), w);
+            }
+            None => {
+                unknown_bv.insert(name.to_string());
+            }
+        }
+    };
+    for p in &f.ports {
+        classify(
+            &p.name.name,
+            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+            p.range.as_ref(),
+        );
+    }
+    let mut decls = f.body_decls.clone();
+    collect_block_local_decls(&f.body, &mut decls);
+    for d in &decls {
+        for n in &d.names {
+            classify(&n.name.name, d.kind, d.range.as_ref());
+        }
+    }
+    // The return var: `real`/`realtime` is not a bit-width context (skip); an integral
+    // return with a foldable width → `widths`, an unfoldable (param-width) one →
+    // `unknown_bv` (fail-closed).
+    match f.ret_type {
+        ast::ParamType::Real | ast::ParamType::Realtime => {}
+        _ => match ast_func_return_width(f) {
+            Some(w) => {
+                widths.insert(f.name.name.clone(), w);
+            }
+            None => {
+                unknown_bv.insert(f.name.name.clone());
+            }
+        },
+    }
+    assign_needs_context_width(&f.body, &widths, &unknown_bv, func_widths)
+}
+
+/// Is a STATIC function body SELF-CONTAINED — reading only its own formals,
+/// (block-)locals and return var, and calling no other user function? Then routing it
+/// to the frame path is sensitivity-safe: an implicit `always_comb`/`@(*)` call site's
+/// read-set is exactly the call's ARG expressions (added by `collect_expr_reads`), so
+/// no body read is lost. A body that reads a module-level / hierarchical signal (or
+/// calls another function whose body might) must stay INLINE, else that read vanishes
+/// from the comb sensitivity list (stale/X). Fail CLOSED: any construct not proven
+/// local-only ⇒ `false`.
+fn body_reads_only_locals(f: &ast::FunctionDef) -> bool {
+    let mut locals: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for p in &f.ports {
+        locals.insert(p.name.name.clone());
+    }
+    let mut decls = f.body_decls.clone();
+    collect_block_local_decls(&f.body, &mut decls);
+    for d in &decls {
+        for n in &d.names {
+            locals.insert(n.name.name.clone());
+        }
+    }
+    locals.insert(f.name.name.clone());
+    stmt_reads_only_locals(&f.body, &locals)
+}
+
+/// Straight-line-body walker for [`body_reads_only_locals`]. A control-flow statement
+/// fails closed (such a body is already routed by `body_needs_frame`, so this arm never
+/// decides a route; it only guards the ㊁ context-width addition).
+fn stmt_reads_only_locals(s: &ast::Stmt, locals: &std::collections::HashSet<String>) -> bool {
+    use ast::Stmt::*;
+    match s {
+        Block { stmts, .. } => stmts.iter().all(|st| stmt_reads_only_locals(st, locals)),
+        Blocking { lhs, rhs, .. } => {
+            lvalue_reads_only_locals(lhs, locals) && expr_reads_only_locals(rhs, locals)
+        }
+        _ => false,
+    }
+}
+
+/// An lvalue is local-only iff it is a plain single-segment local name. A concat /
+/// indexed / hierarchical lvalue fails closed (its index sub-exprs, or the target
+/// itself, could reach a non-local signal).
+fn lvalue_reads_only_locals(lv: &ast::Lvalue, locals: &std::collections::HashSet<String>) -> bool {
+    match lv {
+        ast::Lvalue::Ident(p) => {
+            matches!(p.segments.as_slice(), [seg] if locals.contains(&seg.name))
+        }
+        _ => false,
+    }
+}
+
+/// Does `e` read only local names (and no user function call)? Fail CLOSED on any
+/// variant not proven read-local (user `Call`, package/hierarchical ref, `new`, cast
+/// targets, method/randomize/dist, …) so a routed body can never hide a non-local read.
+fn expr_reads_only_locals(e: &ast::Expr, locals: &std::collections::HashSet<String>) -> bool {
+    use ast::ExprKind::*;
+    match &e.kind {
+        IntLit { .. } | RealLit { .. } | StrLit { .. } | Null | Dollar => true,
+        Ident(p) => matches!(p.segments.as_slice(), [seg] if locals.contains(&seg.name)),
+        Paren { inner } => expr_reads_only_locals(inner, locals),
+        Unary { operand, .. } => expr_reads_only_locals(operand, locals),
+        Binary { lhs, rhs, .. } => {
+            expr_reads_only_locals(lhs, locals) && expr_reads_only_locals(rhs, locals)
+        }
+        Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            expr_reads_only_locals(cond, locals)
+                && expr_reads_only_locals(then_e, locals)
+                && expr_reads_only_locals(else_e, locals)
+        }
+        BitSelect { base, index } => {
+            expr_reads_only_locals(base, locals) && expr_reads_only_locals(index, locals)
+        }
+        PartSelect { base, msb, lsb } => {
+            expr_reads_only_locals(base, locals)
+                && expr_reads_only_locals(msb, locals)
+                && expr_reads_only_locals(lsb, locals)
+        }
+        IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => {
+            expr_reads_only_locals(base, locals)
+                && expr_reads_only_locals(offset, locals)
+                && expr_reads_only_locals(width, locals)
+        }
+        Concat { parts } => parts.iter().all(|p| expr_reads_only_locals(p, locals)),
+        Replicate { count, value } => {
+            expr_reads_only_locals(count, locals)
+                && value.iter().all(|v| expr_reads_only_locals(v, locals))
+        }
+        // `$signed`/`$unsigned`/… read only their (local) argument expressions.
+        SysCall { args, .. } => args.iter().all(|a| expr_reads_only_locals(a, locals)),
+        Cast { expr, .. } => expr_reads_only_locals(expr, locals),
+        _ => false,
     }
 }
 
