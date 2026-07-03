@@ -12618,6 +12618,28 @@ impl<'s> Elaborator<'s> {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = task.ports.len() as u32;
+        // v7: per-formal `string` bitmask (mirror of reserve_frame_func) — a
+        // `string` formal lowers to a 1-bit Wire slot, so the `run_task` copy-in
+        // needs this to bind a string LITERAL actual as a heap string rather than
+        // truncating it (the copy-in only consults INPUT slots; marking an output
+        // formal is harmless). See `FuncMeta.str_params`.
+        let mut str_params: u64 = 0;
+        for (i, p) in task.ports.iter().enumerate() {
+            if matches!(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                ast::NetVarKind::String
+            ) {
+                if i < 64 {
+                    str_params |= 1u64 << i;
+                } else {
+                    self.error_unsupported(
+                        p.span,
+                        "a `string` formal beyond parameter index 63 is unsupported \
+                         (the frame-call string-argument mask is 64 wide)",
+                    );
+                }
+            }
+        }
         let scope_seg = format!("$func${name}");
         let auto_override = self.with_scope(&scope_seg, |s| {
             // [0..n_params): formals (input AND output, declared order).
@@ -12702,9 +12724,7 @@ impl<'s> Elaborator<'s> {
             ret_width: 1,
             ret_signed: false,
             auto_override,
-            // Task string-formal binding rides `run_task`, not `Expr::Call`; its
-            // string-literal path is a separate (un-grounded) concern → left 0.
-            str_params: 0,
+            str_params,
         });
     }
 
@@ -12718,6 +12738,18 @@ impl<'s> Elaborator<'s> {
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
         self.frame_task_lowering = true;
+        // v7 P2-C (mirror of lower_frame_func_body): record `string`-declared task
+        // formals so a `string` relational compare in the body routes through
+        // `StrCmp` (a frame formal is a scoped net, not in `subst`, so
+        // `expr_is_string_ast` cannot otherwise see it).
+        let fs_base = self.formal_str.len();
+        for p in &task.ports {
+            let is_str = matches!(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                ast::NetVarKind::String
+            );
+            self.formal_str.push((p.name.name.clone(), is_str));
+        }
         let self_disable = stmt_disables_name(&task.body, name);
         // return-kw (void): a `return;` in a frame task jumps to a single exit block.
         // Gated on `body_has_return` for byte-identical IR when absent.
@@ -12743,6 +12775,7 @@ impl<'s> Elaborator<'s> {
             b.finish()
         });
         self.cur_return = saved_ret;
+        self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
         self.frame_task_lowering = saved_ftl;
         for mut blk in body {
@@ -13306,6 +13339,29 @@ impl<'s> Elaborator<'s> {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!("recursive task `{tname}` (frame-call deferred)"),
+            );
+            return;
+        }
+        // v7: the INLINE (static-lifetime) task path binds each input formal via a
+        // formal-WIDTH local net + copy-in assign. A `string` formal lowers to a
+        // 1-bit `Wire` net, so that copy-in TRUNCATES the actual (and no `formal_str`
+        // routing happens), giving a silent-wrong compare. The frame path
+        // (`automatic`/recursive tasks) handles string formals correctly; a proper
+        // inline fix needs a String-kind snapshot local (the local exists to prevent
+        // input/output aliasing — direct subst would reintroduce that), so until then
+        // loud-reject rather than silently truncate (correct-or-loud). Declaring the
+        // task `automatic` diverts to the working frame path.
+        if task
+            .ports
+            .iter()
+            .any(|p| matches!(p.net_or_var, Some(ast::NetVarKind::String)))
+        {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "a `string` formal in the static task `{tname}` is unsupported \
+                     (declare the task `automatic`)"
+                ),
             );
             return;
         }

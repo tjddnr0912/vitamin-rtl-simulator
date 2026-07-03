@@ -2375,7 +2375,17 @@ impl<'a> SimState<'a> {
         // ── COPY-IN the input args (resize to each formal's width). ──
         for (slot, v) in in_vals {
             let nv = &self.ir.nets[(base + *slot) as usize];
-            let bound = v.clone().resize_keep_sign(nv.width.max(1), nv.signed);
+            // A `string` formal lowers to a 1-bit Wire slot; the caller already
+            // evaluated the actual at its natural width (`max(sw.width)`), so
+            // materialise a heap-string value here rather than truncating it to
+            // the slot (`resize_keep_sign` preserves is_str; a string VAR actual
+            // is already is_str, so this round-trips it unchanged). Mirrors the
+            // frame-function `Expr::Call` binding fix.
+            let bound = if self.formal_is_string(callee, *slot as usize) {
+                Value::from_str_bytes(&v.to_str_bytes())
+            } else {
+                v.clone().resize_keep_sign(nv.width.max(1), nv.signed)
+            };
             self.frame_slot_write(
                 callee,
                 self.frame_slot_auto[(base + *slot) as usize],
