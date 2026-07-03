@@ -8732,6 +8732,11 @@ impl<'s> Elaborator<'s> {
             Some(f) => self.func_return_dims(f),
             None => (1, false), // task: a dummy 1-bit return, discarded by the caller
         };
+        // A 2-state return type (`function bit`/`byte`/…) can never hold X/Z — register
+        // the return + 2-state formals/locals for X/Z→0 coercion (§6.11.3), mirroring the
+        // frame-function reserve; `reserve_class_method` previously did this for NONE, so
+        // a 2-state class-method local silently kept an X-write (`bit x = 8'hxA` → `xa`).
+        let ret_two_state = method.func.as_ref().is_some_and(|f| f.ret_two_state);
         let (ports, body_decls): (Vec<ast::TfPort>, Vec<ast::NetVarDecl>) =
             match (&method.func, &method.task) {
                 (Some(f), _) => (f.ports.clone(), f.body_decls.clone()),
@@ -8777,6 +8782,7 @@ impl<'s> Elaborator<'s> {
             for p in &ports {
                 let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
                 let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
+                let net = s.nets.len() as u32;
                 s.add_net(
                     &p.name.name,
                     ir::NetVar {
@@ -8790,12 +8796,16 @@ impl<'s> Elaborator<'s> {
                         init: default_init(kind, w),
                     },
                 );
+                if net_kind_is_two_state(kind) {
+                    s.intro_kind.insert(net, kind);
+                }
             }
             // Return var at slot `n_params`, named after the method. ALWAYS
             // allocated (even for void task-methods — they get a discarded 1-bit
             // dummy) so `return_slot < locals_len` holds and the frame router's
             // range check passes; only a FUNCTION's body assigns it.
             let _ = is_func;
+            let ret_net = s.nets.len() as u32;
             s.add_net(
                 &mname,
                 ir::NetVar {
@@ -8813,6 +8823,17 @@ impl<'s> Elaborator<'s> {
                     init: default_init(ast::NetVarKind::Reg, ret_width),
                 },
             );
+            // A 2-state return coerces X/Z→0 (§6.11.3); the specific 2-state kind is
+            // immaterial to coercion, so pick one by width (mirrors `reserve_frame_func`).
+            if ret_two_state {
+                let k = match ret_width {
+                    0..=8 => ast::NetVarKind::Byte,
+                    9..=16 => ast::NetVarKind::Shortint,
+                    17..=32 => ast::NetVarKind::Int,
+                    _ => ast::NetVarKind::Longint,
+                };
+                s.intro_kind.insert(ret_net, k);
+            }
             // body_decls (scalars; a multi-dim PACKED local widens to full width +
             // registers packed_dims/dim_desc — same net-based reserve as a frame local).
             for d in &body_decls {
@@ -8840,6 +8861,9 @@ impl<'s> Elaborator<'s> {
                     );
                     if let Some((_, _, ext)) = pinfo {
                         s.register_frame_packed(net, d, &decl.unpacked, ext);
+                    }
+                    if net_kind_is_two_state(d.kind) {
+                        s.intro_kind.insert(net, d.kind);
                     }
                 }
             }
