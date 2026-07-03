@@ -12873,9 +12873,43 @@ impl<'s> Elaborator<'s> {
         actual_ids: &[u32],
     ) -> u32 {
         let frame_base = self.subst.len();
-        // (a) bind each input formal NAME → actual ExprId.
+        // (a) bind each input formal NAME → actual ExprId. §13.5.3/§11.6.2: an actual
+        // is ASSIGNED to its formal, so resize it to the formal's WIDTH — a narrow
+        // actual zero/sign-extends to the port width (not left with X in the high bits),
+        // a wide actual truncates. The extension direction is the ACTUAL's own sign
+        // (§11.6.1), and the formal's declared SIGNEDNESS is deliberately NOT re-stamped
+        // onto the value here: stamping it is IEEE-correct in isolation, but combined
+        // with the inline path's pre-existing SELF-width (not context-width) evaluation
+        // of body sub-expressions it can flip a signed-context overflow to the wrong
+        // sign (silent-wrong). Applying the formal signedness to body arithmetic is a
+        // separate deferred gap (needs context-width propagation into the inline SSA).
         for (p, &eid) in inputs.iter().zip(actual_ids) {
-            self.subst.push((p.name.name.clone(), eid));
+            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+            let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            // A heap-HANDLE formal (string/class/event) or any width-0 type is NOT a
+            // bit-vector — bind it verbatim; a bit-resize would corrupt the handle (the
+            // NetKind discriminator must precede the width-based resize). `resize_inline_
+            // assign` already guards real internally.
+            let is_handle = matches!(
+                kind,
+                ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
+            );
+            // Only EXTEND a NARROW actual (the ㊀ bug: its high bits were X). A wide or
+            // exact actual is bound VERBATIM — TRUNCATING it here would, combined with
+            // the inline path's deferred self-width body evaluation, flip a wider-context
+            // shift (`f = c >> 1` with a wide actual) to the wrong value vs the pre-change
+            // baseline; the IEEE assignment truncation is instead left to the body's own
+            // context (a part-select / the return assignment re-truncates). This keeps
+            // the change strictly additive over the prior behavior for wide/exact actuals.
+            let rw = self.ir_bits_of(eid).unwrap_or(w);
+            let bound = if is_handle || w == 0 || rw >= w {
+                eid
+            } else {
+                // Extend by the actual's OWN sign (§11.6.1); no formal-sign re-stamp.
+                let actual_signed = self.expr_self_signed(eid);
+                self.resize_inline_assign(eid, w, actual_signed)
+            };
+            self.subst.push((p.name.name.clone(), bound));
         }
         // §11.6 + §10.7: width/sign context for each body assignment — the return
         // var (return-type width/sign) and each declared body/block local. Used to
