@@ -8813,10 +8813,18 @@ impl<'s> Elaborator<'s> {
                     init: default_init(ast::NetVarKind::Reg, ret_width),
                 },
             );
-            // body_decls (scalars).
+            // body_decls (scalars; a multi-dim PACKED local widens to full width +
+            // registers packed_dims/dim_desc — same net-based reserve as a frame local).
             for d in &body_decls {
                 for decl in &d.names {
-                    let (w, msb, lsb, signed) = s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    let pinfo = s.frame_packed_width(d);
+                    let (mut w, mut msb, lsb, signed) =
+                        s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    if let Some((pw, pmsb, _)) = &pinfo {
+                        w = *pw;
+                        msb = *pmsb;
+                    }
+                    let net = s.nets.len() as u32;
                     s.add_net(
                         &decl.name.name,
                         ir::NetVar {
@@ -8830,6 +8838,9 @@ impl<'s> Elaborator<'s> {
                             init: default_init(d.kind, w),
                         },
                     );
+                    if let Some((_, _, ext)) = pinfo {
+                        s.register_frame_packed(net, d, &decl.unpacked, ext);
+                    }
                 }
             }
             // A frame-local 64-bit scratch slot for discarding nested void-call
@@ -12264,7 +12275,10 @@ impl<'s> Elaborator<'s> {
     /// mirror the module-scope decl so an element read `p[i]` is an element-width
     /// part-select, not a 1-bit bit-select on a truncated net.
     #[allow(clippy::type_complexity)]
-    fn frame_packed_width(&mut self, d: &ast::NetVarDecl) -> Option<(u32, u32, Vec<(u32, u32, bool)>)> {
+    fn frame_packed_width(
+        &mut self,
+        d: &ast::NetVarDecl,
+    ) -> Option<(u32, u32, Vec<(u32, u32, bool)>)> {
         if d.packed.is_empty() {
             return None;
         }
