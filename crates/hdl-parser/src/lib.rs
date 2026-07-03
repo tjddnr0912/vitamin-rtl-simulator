@@ -7101,11 +7101,11 @@ impl<'t, 's> Parser<'t, 's> {
         let start = self.cur_span();
         self.bump(); // `for`
         self.expect(TokenKind::LParen, "'(' after generate 'for'");
-        let init = self.parse_gen_assign();
+        let init = self.parse_gen_assign(false);
         self.expect(TokenKind::Semi, "';' after generate-for init");
         let cond = self.expr(0);
         self.expect(TokenKind::Semi, "';' after generate-for cond");
-        let step = self.parse_gen_assign();
+        let step = self.parse_gen_assign(true);
         self.expect(TokenKind::RParen, "')' after generate-for header");
         let (label, body) = self.parse_gen_branch();
         GenItem::For {
@@ -7118,20 +7118,88 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
-    /// `genvar_id = expr` (no trailing `;`) for a generate-for init/step. LHS is a
-    /// single genvar identifier (the LRM restricts it — not a general lvalue).
-    fn parse_gen_assign(&mut self) -> GenAssign {
+    /// `genvar_iteration` for a generate-for init/step (no trailing `;`). LHS is a
+    /// single genvar identifier (the LRM restricts it — not a general lvalue). The
+    /// STEP (`is_step`) also accepts the IEEE §27.4 `++g`/`g++`/`--g`/`g--`/`g op= expr`
+    /// forms, desugared to `g = g <op> operand` (byte-identical to the explicit
+    /// `g = g + …` it produces, reusing the procedural for-step operators); the INIT
+    /// is `g = expr` only (`for (g++; …)` stays a loud `=`-expected error).
+    fn parse_gen_assign(&mut self, is_step: bool) -> GenAssign {
         let start = self.cur_span();
-        let lvalue = self.ident().unwrap_or(Ident {
-            name: String::new(),
-            span: start,
-        });
+        // STEP prefix `++g` / `--g` (inc_or_dec_operator genvar_identifier).
+        if is_step {
+            if let Some(t @ (TokenKind::PlusPlus | TokenKind::MinusMinus)) = self.peek() {
+                let op = Self::compound_assign_binop(t).expect("++/-- is a compound op");
+                self.bump(); // ++ / --
+                let lvalue = self.gen_step_ident(start);
+                return self.gen_step_assign(lvalue, op, None, start);
+            }
+        }
+        let lvalue = self.gen_step_ident(start);
+        // STEP postfix `g++` / `g--` or compound `g op= expr`.
+        if is_step {
+            if let Some(t) = self.peek() {
+                if let Some(op) = Self::compound_assign_binop(t) {
+                    let is_incdec = matches!(t, TokenKind::PlusPlus | TokenKind::MinusMinus);
+                    self.bump(); // the `++`/`--`/`op=` operator
+                    let operand = if is_incdec { None } else { Some(self.expr(0)) };
+                    return self.gen_step_assign(lvalue, op, operand, start);
+                }
+            }
+        }
         self.expect(TokenKind::Eq, "'=' in generate-for assignment");
         let value = self.expr(0);
         GenAssign {
             lvalue,
             value,
             span: start.to(self.prev_span()),
+        }
+    }
+
+    /// A single genvar identifier for a generate-for init/step (empty-name recovery).
+    fn gen_step_ident(&mut self, start: Span) -> Ident {
+        self.ident().unwrap_or(Ident {
+            name: String::new(),
+            span: start,
+        })
+    }
+
+    /// Build a generate-for STEP `g = g <op> operand` (operand `None` ⇒ literal `1`
+    /// for `++`/`--`). Shared by the prefix/postfix/`op=` desugars — the resulting
+    /// `GenAssign` is byte-identical to the explicit `g = g <op> …` form.
+    fn gen_step_assign(
+        &self,
+        lvalue: Ident,
+        op: BinOp,
+        operand: Option<Expr>,
+        start: Span,
+    ) -> GenAssign {
+        let operand = operand.unwrap_or(Expr {
+            span: self.prev_span(),
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw: "1".to_string(),
+            },
+        });
+        let lhs_expr = Expr {
+            span: start,
+            kind: ExprKind::Ident(HierPath {
+                segments: vec![lvalue.clone()],
+                span: start,
+            }),
+        };
+        let span = start.to(self.prev_span());
+        GenAssign {
+            lvalue,
+            value: Expr {
+                span,
+                kind: ExprKind::Binary {
+                    op,
+                    lhs: Box::new(lhs_expr),
+                    rhs: Box::new(operand),
+                },
+            },
+            span,
         }
     }
 

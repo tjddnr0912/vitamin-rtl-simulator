@@ -1,6 +1,6 @@
 # vitamin — 잔여 작업 트래커 (Remaining Work)
 
-> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2911 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong = §C 잔여(㊁ inline signed+unsigned·string-literal arg·㊂ md-packed frame-local — 전부 INLINE/frame 경로·다음 우선순위 ①)**, 나머지 잔여는 honest-loud=안전. 최신 = **2026-07-03 ㊀ narrow-actual INLINE 함수 인자 width-extend 수정 ✅**(§4.5.78·static 함수 INLINE 경로·strictly-additive·적대 3-round differential 0-regression) · EXT2-C struct/union tf-port ✅(§4.5.77) · EXT2-E/A/0(§4.5.76/75/74) · 외부 리포트 2차 EXT2 체인 진행(§A′·ROADMAP §6-2). **G2 OBS 트랙**: OBS-1a ✅ · OBS-1b는 EXT2 체인 다음.
+> **리뉴얼: 2026-07-02** (사용자 지시 재계획) · 기준 갱신 2026-07-03 = **format_version 19 · 2921 tests green · 3-OS CI green · MsgCode 58** · known **silent-wrong = §C 잔여(string 함수 formal·㊁ inline signed+unsigned·㊂ md-packed frame-local — 전부 INLINE/frame 경로 deep·다음 우선순위 ①=전용 슬라이스)**, 나머지 잔여는 honest-loud=안전. 최신 = **2026-07-03 EXT2-F gen-for step `g++`/`op=` ✅**(§4.5.79·desugar 재사용·byte-identical·적대 R1 CLEAN) · ㊀ narrow-actual INLINE 인자 width-extend ✅(§4.5.78) · EXT2-C tf-port ✅(§4.5.77) · EXT2-E/A/0(§4.5.76/75/74) · 외부 리포트 2차 EXT2 체인(§A′·ROADMAP §6-2). **G2 OBS 트랙**: OBS-1a ✅ · OBS-1b는 EXT2 체인 다음.
 > 이 파일 = **"goal까지 남은 것" 상위 스냅샷** — 재계획 시점마다 통째로 갱신한다. 슬라이스 단위 라이브 기록 = [ROADMAP](ROADMAP.md) §2(착수 순서)·§4.5.x(슬라이스 로그)·§6(외부 리포트)·§7(OBS), 실행 큐 = `LOOPROMPT.md` NEXT. 2026-06-16 이전 P0~P5/Phase-A/B 상세 이력은 이 파일의 **git 이력**과 [DEVLOG](DEVLOG.md)가 보존(여기서 삭제).
 >
 > **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터(correct-or-loud) · **G2**(2026-07-02 추가) = **AI-Agent 친화 simulator**(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
@@ -25,7 +25,7 @@
 | 4 ✅ | EXT2-C | packed struct/union typedef tf-port — **완료 2026-07-03(§4.5.77, 2902 green)**: `try_tf_port_typedef` struct 수용+`bind_tf_port_struct`+snapshot/restore 스코프·적대 R1 CLEAN. md-packed tf-port=defer(md frame-local 선행)·발굴 3 silent-wrong=§C | parser+bind / iverilog ✓ | M |
 | 5 | EXT2-D | block-local `automatic` 선언(§D MVP-CUT form2서 승격) | parser+lifetime / hand-IEEE(iverilog sorry) | M |
 | 6 | EXT2-B | function-body `typedef enum`(v1-cut 해제) | parser / iverilog 확인 | S-M |
-| 7 | EXT2-F | generate-for `++/--` step(procedural은 지원=desugar 재사용) | parser / iverilog ✓ | S |
+| 7 ✅ | EXT2-F | generate-for `++/--`/`op=` step(+prefix) — **완료 2026-07-03(§4.5.79, 2921 green)**: `parse_gen_assign(is_step)` desugar 재사용·byte-identical·적대 R1 CLEAN | parser / iverilog ✓ | S |
 | 8 | EXT2-H | frame fn part-select/array-element 대입(frame-call subset 확장) | elaborate / iverilog ✓ | M |
 | 9 | EXT2-A2c | packed multi-dim param(리포트 R2b·외부 미사용) | parser / hand-IEEE+내부차분 | S-M |
 | 10 | EXT2-DOC | 문서 stale(CLI-ref·lang-ref·system-tasks·explain — 외부 2회 보고) | docs | S |
@@ -47,7 +47,7 @@
 
 | 항목 | 잔여 내용 |
 |---|---|
-| **🔴 silent-wrong 잔여**(EXT2-C 적대리뷰 발굴·pre-existing·main 재현·**다음 우선순위 ①**) | ~~㊀ narrow-actual INLINE 함수 인자 width-extend~~ **✅ 수정(§4.5.78)** · ㊁ **INLINE(static) 함수 body signed+unsigned self-width**: `f=s+u; f(-1,1)`가 `0`(iverilog `256`)·**+formal signedness 미적용**(형변환 부호가 actual서 누출)=동일 근본 **INLINE 경로 context-width propagation 부재**(전용 슬라이스·module scope는 정상) · **string-LITERAL을 string 함수 인자로**: `strlt("ab","b")`가 `lt=0`(iverilog `lt=1`)·string VAR 인자는 정상 · ㊂ **md-packed frame-LOCAL element-select**: 함수 body `logic[1:0][7:0] p; p[0]`이 bit-select 오계산→`01`(iverilog `cd`)·module scope 정상 |
+| **🔴 silent-wrong 잔여**(EXT2-C 적대리뷰 발굴·pre-existing·main 재현·**다음 우선순위 ①**) | ~~㊀ narrow-actual INLINE 함수 인자 width-extend~~ **✅ 수정(§4.5.78)** · ㊁ **INLINE(static) 함수 body signed+unsigned self-width**: `f=s+u; f(-1,1)`가 `0`(iverilog `256`)·**+formal signedness 미적용**(형변환 부호가 actual서 누출)=동일 근본 **INLINE 경로 context-width propagation 부재**(전용 슬라이스·module scope는 정상) · **string 함수 formal 광범위 silent-wrong**(그라운딩 2026-07-03·전용 슬라이스): ⓐ INLINE(static)+string VAR 인자=정상(review F2) · ⓑ INLINE+string LITERAL 인자=**packed 비교 오답**(`strlt("ab","b")`=0 vs 1·`ir_expr_is_string`이 literal을 packed 취급·둘 다 literal일 때만·한쪽 var면 정상) · ⓒ **FRAME(automatic) 함수+string 인자(var/literal 무관)=오답**(a_var=0 vs 1·`build_frame_set`이 automatic 전부 frame화·frame body string formal 처리 미비=별도 경로). 수정=binding서 literal→string-net coercion + expr_is_string_ast formal-type 추적, 양 경로(inline/frame)·string 라우팅 delicate(F2 이력) · ㊂ **md-packed frame-LOCAL element-select**: 함수 body `logic[1:0][7:0] p; p[0]`이 bit-select 오계산→`01`(iverilog `cd`)·module scope 정상 |
 | cast | class **down-cast** `Derived'(base)`(=`$cast` 런타임 타입가드 선행 필요)·real→longint |
 | SVA | empty-match `##0`/unbounded `##[m:$]` 융합(§16.9.2.1·오라클 부재)·N2c full(중첩 attempt=L급)·later-antecedent read·advanced prop-ref skew(2-cycle/중첩/cross-clock)·SVA-QUAD default-flip(full-VCD audit 선행). **2차 외부리포트의 "SVA deferred" 주장=stale**(2026-07-03 라이브 검증: `assert property` 동작·§6-2 정정표) |
 | N4 clocking 잔여 | non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)` |
