@@ -284,11 +284,26 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
     /// v7 P2-C: bytes of the STRING handle named by an arg ExprId (the
     /// `Signal{net, word:None}` elaborate emits for method receivers).
     fn handle_str_bytes(&self, arg: Option<&u32>) -> Option<Vec<u8>> {
-        let net = arg.and_then(|&a| match self.ir.exprs.get(a as usize) {
-            Some(Expr::Signal { net, word: None }) => Some(*net),
+        let &a = arg?;
+        match self.ir.exprs.get(a as usize) {
+            Some(Expr::Signal { net, word: None }) => self.nets.str_bytes(*net),
+            // A string-valued CONST operand: an inlined string LOCAL/FORMAL bound to
+            // a string literal is a compile-time `Const` (not a runtime string net),
+            // so the string primitives (`getc`/`substr`/`len`/…) must read its packed
+            // bytes directly. Uses `value_str_bytes` — the same packed-ASCII byte
+            // surface (MSB-first, leading width-padding NULs stripped) as the string
+            // assoc-key path — so a const and a materialized net index identically.
+            // Any X/Z (or a real) → `None` = no valid byte string.
+            Some(Expr::Const { .. }) => {
+                let v = self.eval(a);
+                if v.is_real || v.has_xz() {
+                    None
+                } else {
+                    Some(value_str_bytes(&v))
+                }
+            }
             _ => None,
-        })?;
-        self.nets.str_bytes(net)
+        }
     }
 
     /// v5 ⑤: evaluate an assoc KEY expression into the engine's signed-i64

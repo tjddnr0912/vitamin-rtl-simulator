@@ -14576,13 +14576,55 @@ impl<'s> Elaborator<'s> {
     /// string variable. `None` ⇒ not a string element select → the caller falls
     /// through to the packed bit-select (byte-identical for non-string bases).
     fn string_index_read(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
-        let net = self.string_base_expr_net(base)?;
-        let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        let handle = if let Some(net) = self.string_base_expr_net(base) {
+            self.push_expr(ir::Expr::Signal { net, word: None })
+        } else if let ast::ExprKind::Ident(p) = &base.kind {
+            // INLINE-function path: a string LOCAL or FORMAL `s` has no real string
+            // NET (`string_base_expr_net` finds only module/scoped nets), so `s[i]`
+            // used to fall through to a packed BIT-select on the subst-bound string
+            // value — silently 0 (bit 0 of a handle) instead of the byte. `expr_is_
+            // string_ast` recognizes an inline string (a declared-`string` formal or
+            // local via `formal_str`, or a subst value that is a string) exactly as
+            // the string compare/method paths do; lower the bare ident and reuse the
+            // `.getc(i)` byte primitive. Bare single-segment ident only (mirrors
+            // `string_base_expr_net`'s scope).
+            if p.segments.len() != 1 || !self.expr_is_string_ast(base) {
+                return None;
+            }
+            let h = self.lower_expr(base);
+            // Route to `.getc` ONLY when the lowered base is a StrGetC-consumable
+            // string HANDLE — a Signal-to-string-net (a runtime-sourced inline local)
+            // or a string Const (a literal-bound local/formal) — exactly the forms the
+            // engine `handle_str_bytes` reads. A FRAME string formal is a 1-bit WIRE
+            // net (its literal actual lives in a heap slot via the str-arg mask, not
+            // byte-readable here), and a string-SysFunc actual (`s.substr(..)`) is not
+            // byte-readable either; both fall through to the unchanged bit-select
+            // (byte-identical to the prior behavior — the frame-path string-select is
+            // a separate deferred gap, NOT regressed here).
+            if !self.handle_is_str_readable(h) {
+                return None;
+            }
+            h
+        } else {
+            return None;
+        };
         let idx = self.lower_expr(index);
         Some(self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::StrGetC,
             args: vec![handle, idx],
         }))
+    }
+
+    /// A `StrGetC`/`handle_str_bytes`-consumable string handle: a Signal to a real
+    /// string net, or a string `Const`. (Mirrors the engine's accepted operand forms
+    /// — a Signal to a NON-string net, e.g. a frame string formal's 1-bit wire slot,
+    /// or a string-producing `SysFunc`, is NOT byte-readable there.)
+    fn handle_is_str_readable(&self, eid: u32) -> bool {
+        match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Signal { net, word: None }) => self.is_string_net(*net),
+            Some(ir::Expr::Const { .. }) => true,
+            _ => false,
+        }
     }
 
     /// v7 P2-C: does this AST expression denote a STRING-domain value?
