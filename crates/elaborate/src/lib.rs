@@ -12406,10 +12406,16 @@ impl<'s> Elaborator<'s> {
             // if routed (stale/X). Such a function stays INLINE (main's behavior — its
             // reads survive via inlining); the pre-existing inline width bug there is
             // left untouched rather than traded for a sensitivity regression.
+            // Both the ㊁ context-width route and the multi-dim-packed-local
+            // element-select route (`p[k]` folds as a bit-select on the inline
+            // subst value — silently wrong) need the frame path AND a SELF-CONTAINED
+            // body (a framed call contributes only its args to an `always_comb`/`@(*)`
+            // sensitivity list; a global-reading body would lose that read → stale).
             if f.automatic
                 || f.ret_two_state
                 || body_needs_frame(&f.body)
-                || (body_needs_context_width(f, &func_widths) && body_reads_only_locals(f))
+                || ((body_needs_context_width(f, &func_widths) || body_selects_mdpacked_local(f))
+                    && body_reads_only_locals(f))
             {
                 set.insert(name.clone());
             }
@@ -13268,6 +13274,24 @@ impl<'s> Elaborator<'s> {
         inputs: &[ast::TfPort],
         actual_ids: &[u32],
     ) -> u32 {
+        // A multi-dim packed local element-select (`p[k]`) folds as a BIT-select on
+        // the inline subst value (which carries no packed dims) — silently wrong.
+        // A SELF-CONTAINED such function was routed to the (correct) frame path by
+        // `build_frame_set`, so reaching the inline path here means the body reads a
+        // NON-local (not routable without dropping that read from an `always_comb`
+        // sensitivity list) — loud-reject rather than fold the wrong element.
+        if body_selects_mdpacked_local(func) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "function `{}`: a multi-dim packed local element-select in a \
+                     non-`automatic` function that also reads a non-local signal is \
+                     unsupported (declare the function `automatic`)",
+                    func.name.name
+                ),
+            );
+            return self.placeholder_expr();
+        }
         let frame_base = self.subst.len();
         let fs_base = self.formal_str.len();
         // (a) bind each input formal NAME → actual ExprId. §13.5.3/§11.6.2: an actual
@@ -13329,7 +13353,15 @@ impl<'s> Elaborator<'s> {
                 d.kind,
                 ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
             );
-            let (w, _, _, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+            let (mut w, _, _, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+            // A multi-dim PACKED local (`logic [1:0][7:0] p`) has its FULL flat width
+            // = product of all packed dims; `range_to_dims` returns only the OUTER dim
+            // (`[1:0]` ⇒ 2), so a whole-value assign (`p = 16'hABCD`) would truncate to
+            // 2 bits (silent-wrong). Use the full packed width. (An element-select of
+            // such a local is separately routed to the frame path / loud-rejected.)
+            if let Some((pw, _, _)) = self.frame_packed_width(d) {
+                w = pw;
+            }
             for n in &d.names {
                 if !is_handle {
                     local_dims.insert(n.name.name.clone(), (w, signed));
@@ -28031,6 +28063,74 @@ fn expr_reads_only_locals(e: &ast::Expr, locals: &std::collections::HashSet<Stri
         // `$signed`/`$unsigned`/… read only their (local) argument expressions.
         SysCall { args, .. } => args.iter().all(|a| expr_reads_only_locals(a, locals)),
         Cast { expr, .. } => expr_reads_only_locals(expr, locals),
+        _ => false,
+    }
+}
+
+/// True if the function's body ELEMENT-SELECTS a multi-dim PACKED local
+/// (`logic [1:0][7:0] p; … = p[0]`). The inline path binds a local by SUBSTITUTION
+/// (a flat value carrying no packed dims), so `p[k]` folds as a BIT-select — silently
+/// wrong (`p[0]` yields bit 0, not byte `[7:0]`). `build_frame_set` routes such a
+/// function to the (correct) frame path when self-contained; a non-routable one is
+/// loud-rejected in `reduce_function_body`. Only MULTI-dim packed (`d.packed`
+/// non-empty) counts — a 1-D `logic [7:0] p; p[0]` is a legitimate bit-select. A
+/// whole-use md-packed local (no select) folds correctly (flat value) → NOT flagged.
+fn body_selects_mdpacked_local(f: &ast::FunctionDef) -> bool {
+    let mut names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut decls = f.body_decls.clone();
+    collect_block_local_decls(&f.body, &mut decls);
+    for d in &decls {
+        if !d.packed.is_empty() {
+            for n in &d.names {
+                names.insert(n.name.name.clone());
+            }
+        }
+    }
+    !names.is_empty() && stmt_selects_name(&f.body, &names)
+}
+
+/// Straight-line-body walker for [`body_selects_mdpacked_local`] (an inline body is
+/// Block+Blocking; control flow is already framed by `body_needs_frame`). True if any
+/// RHS reads `<name>[…]` for a name in `names`. (An element-select LHS write is
+/// separately loud — not reducible / outside the frame subset — so only the RHS read
+/// is the silent path checked here.)
+fn stmt_selects_name(s: &ast::Stmt, names: &std::collections::HashSet<String>) -> bool {
+    use ast::Stmt::*;
+    match s {
+        Block { stmts, .. } => stmts.iter().any(|st| stmt_selects_name(st, names)),
+        Blocking { rhs, .. } => expr_selects_name(rhs, names),
+        _ => false,
+    }
+}
+
+/// True if `e` contains a bit/part/indexed select whose BASE is a bare name in
+/// `names` (`p[k]` / `p[a:b]` / `p[a+:w]`). Recurses every operand position.
+fn expr_selects_name(e: &ast::Expr, names: &std::collections::HashSet<String>) -> bool {
+    use ast::ExprKind as K;
+    let named_base = |b: &ast::Expr| matches!(&b.kind, K::Ident(p) if p.segments.first().is_some_and(|s| names.contains(&s.name)));
+    let r = |x: &ast::Expr| expr_selects_name(x, names);
+    match &e.kind {
+        K::BitSelect { base, index } => named_base(base) || r(base) || r(index),
+        K::PartSelect { base, msb, lsb } => named_base(base) || r(base) || r(msb) || r(lsb),
+        K::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => named_base(base) || r(base) || r(offset) || r(width),
+        K::Unary { operand, .. } => r(operand),
+        K::Binary { lhs, rhs, .. } => r(lhs) || r(rhs),
+        K::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => r(cond) || r(then_e) || r(else_e),
+        K::Concat { parts } => parts.iter().any(r),
+        K::Replicate { count, value } => r(count) || value.iter().any(r),
+        K::Call { args, .. } | K::SysCall { args, .. } => args.iter().any(r),
+        K::Paren { inner } => r(inner),
+        K::MinTypMax { min, typ, max } => r(min) || r(typ) || r(max),
+        K::Cast { target, expr } => r(expr) || matches!(target, ast::CastTarget::Size(s) if r(s)),
         _ => false,
     }
 }
