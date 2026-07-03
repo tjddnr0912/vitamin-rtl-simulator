@@ -8769,6 +8769,30 @@ impl<'s> Elaborator<'s> {
         }
         let nports = ports.len() as u32;
         let n_params = 1 + nports; // `this` + declared formals
+                                   // v7: per-formal `string` bitmask, indexed by FRAME SLOT (`this` = slot 0,
+                                   // formal i = slot 1+i). A method call lowers to `Expr::Call{args:[this, a0,
+                                   // …]}`, so the arg index EQUALS the slot index — the same `formal_is_string`
+                                   // materialization path as frame functions (§4.5.87) then binds a string
+                                   // LITERAL actual as a heap string instead of truncating it to the 1-bit
+                                   // slot. See `FuncMeta.str_params`.
+        let mut str_params: u64 = 0;
+        for (i, p) in ports.iter().enumerate() {
+            if matches!(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                ast::NetVarKind::String
+            ) {
+                let slot = i + 1; // `this` occupies slot 0
+                if slot < 64 {
+                    str_params |= 1u64 << slot;
+                } else {
+                    self.error_unsupported(
+                        p.span,
+                        "a `string` formal beyond parameter index 62 is unsupported \
+                         (the 64-wide frame-call string mask reserves slot 0 for `this`)",
+                    );
+                }
+            }
+        }
         let mname = method.name.clone();
         let cname_s = cname.to_string();
         let this_net = self.with_scope(&scope_seg, |s| {
@@ -8913,10 +8937,7 @@ impl<'s> Elaborator<'s> {
             ret_width,
             ret_signed,
             auto_override: 0,
-            // A method frame prepends a `this` slot, so formal indices are offset
-            // by one vs `Expr::Call` arg order — string-formal marking needs its
-            // own grounding (un-grounded here) → left 0.
-            str_params: 0,
+            str_params,
         });
         if let Some(ci) = self.class_table.get_mut(cname) {
             ci.methods[mi].fid = Some(fid);
@@ -8943,6 +8964,22 @@ impl<'s> Elaborator<'s> {
             (_, Some(t)) => t.body_decls.clone(),
             _ => Vec::new(),
         };
+        // v7 P2-C (mirror of lower_frame_func_body): record `string`-declared method
+        // formals so a `string` relational compare in the body routes through
+        // `StrCmp` (a frame formal is a scoped net, not in `subst`).
+        let m_ports: &[ast::TfPort] = match (&method.func, &method.task) {
+            (Some(f), _) => &f.ports,
+            (_, Some(t)) => &t.ports,
+            _ => &[],
+        };
+        let fs_base = self.formal_str.len();
+        for p in m_ports {
+            let is_str = matches!(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                ast::NetVarKind::String
+            );
+            self.formal_str.push((p.name.name.clone(), is_str));
+        }
         let scope_seg = format!("$class${cname}${}", method.name);
         let base = self.func_blocks.len() as u32;
         let saved_this = self.cur_this.take();
@@ -8991,6 +9028,7 @@ impl<'s> Elaborator<'s> {
         self.cur_this = saved_this;
         self.cur_return = saved_ret;
         self.cur_discard = saved_discard;
+        self.formal_str.truncate(fs_base);
         for mut blk in blocks {
             rebase_terminator(&mut blk.term, base);
             self.func_blocks.push(blk);
