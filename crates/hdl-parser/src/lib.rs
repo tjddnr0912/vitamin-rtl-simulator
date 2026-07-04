@@ -2634,8 +2634,13 @@ impl<'t, 's> Parser<'t, 's> {
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Integer))) => {
                     self.bump();
                     var_kind = Some(NetVarKind::Integer);
-                    // `integer` is 32-bit SIGNED (V2005); a leading `unsigned` wins.
-                    signed = expl0.unwrap_or(true);
+                    // `integer` is 32-bit SIGNED (V2005); an explicit `signed`/
+                    // `unsigned` in EITHER position (`unsigned integer` OR the
+                    // trailing `integer unsigned`) wins over that default, mirroring
+                    // the `int`/`byte`/… atoms above (was: only the leading position
+                    // was consumed, so `integer unsigned` was a parse error).
+                    expl1 = self.opt_signed();
+                    signed = expl0.or(expl1).unwrap_or(true);
                     ParamType::Integer
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Real))) => {
