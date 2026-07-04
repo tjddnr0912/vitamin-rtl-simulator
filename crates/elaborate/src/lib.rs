@@ -13340,6 +13340,44 @@ impl<'s> Elaborator<'s> {
         // (width, sign), which the inline SSA path otherwise misses (see
         // `resize_inline_assign`).
         let (ret_w, ret_signed) = self.func_return_dims(func);
+        // Sibling-block same-name string/handle collision (INLINE path): two
+        // block-local decls sharing a NAME but differing in string/handle-ness
+        // flatten into one name-keyed `formal_str`/`subst` binding (innermost-wins),
+        // so one block's local silently adopts the other's classification (its
+        // `s[i]` folds as a byte where the other wants a bit, or vice versa). v1 has
+        // no per-block-scope inline namespace — loud-reject (rename one) rather than
+        // miscompute. Only BLOCK locals are compared (a block local shadowing a
+        // function-TOP-level local is separately caught by the block-scope-leak
+        // E3009). Packed-WIDTH-only collisions are a separate deferred axis;
+        // identical-typed reuse (`for` temps etc.) is safe and unaffected.
+        {
+            let mut block_locals: Vec<ast::NetVarDecl> = Vec::new();
+            collect_block_local_decls(&func.body, &mut block_locals);
+            let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+            for d in &block_locals {
+                let is_str = matches!(d.kind, ast::NetVarKind::String);
+                for n in &d.names {
+                    match seen.get(&n.name.name) {
+                        Some(&prev) if prev != is_str => {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "block-local `{}` in function `{}` is declared \
+                                     `string` in one block and non-`string` in another \
+                                     — vita flattens inline block-locals to one binding \
+                                     (no per-block scope); rename one",
+                                    n.name.name, func.name.name
+                                ),
+                            );
+                            return self.placeholder_expr();
+                        }
+                        _ => {
+                            seen.insert(n.name.name.clone(), is_str);
+                        }
+                    }
+                }
+            }
+        }
         let mut local_dims: BTreeMap<String, (u32, bool)> = BTreeMap::new();
         let mut decls = func.body_decls.clone();
         collect_block_local_decls(&func.body, &mut decls);
