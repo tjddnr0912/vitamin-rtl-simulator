@@ -14801,6 +14801,28 @@ impl<'s> Elaborator<'s> {
         if let Some(net) = self.pkg_scoped_var_net(base) {
             return self.norm_offset_for_net(net, raw_off);
         }
+        // Array-element part/indexed-select `mem[i][m:l]` — peel the element
+        // `BitSelect`(s) to the root net and normalize by the ELEMENT's declared
+        // range, the descending twin of `norm_offset_ascending`'s `base_root_net`
+        // peel (which already handles ascending elements). Without it a non-zero-LSB
+        // element (`logic [15:8] mem[0:1]; mem[0][11:8]`) read raw internal bits →
+        // silent `x`. Confined to a genuine STATIC-ARRAY element of a SINGLE-DIM
+        // vector: `net_is_static_array` excludes an illegal bit-of-bit on a plain
+        // vector (`vec[i][j]`, which iverilog rejects — keeps it byte-identical to
+        // the raw path); `!packed_dims` excludes a multi-dim packed element, whose
+        // residual range after the packed-dim index differs from the whole-net
+        // range (deep — left raw, pre-existing silent, tracked separately). A
+        // zero-LSB element normalizes to the raw offset anyway, so the ONLY behavior
+        // change is a non-zero-LSB single-dim array element (the fix target). A
+        // hierarchical `dut.mem[i][m:l]` root yields `None` here (separate deferred
+        // path) and stays raw — another pre-existing residual, out of scope.
+        if matches!(&base.kind, ast::ExprKind::BitSelect { .. }) {
+            if let Some(net) = self.base_root_net(base) {
+                if self.net_is_static_array(net) && !self.packed_dims.contains_key(&net) {
+                    return self.norm_offset_for_net(net, raw_off);
+                }
+            }
+        }
         raw_off
     }
 

@@ -243,3 +243,52 @@ fn descending_array_indexed_still_works() {
          endmodule\n");
     assert_eq!(out, "1001\n");
 }
+
+// ───────── descending NON-ZERO-LSB array element (§4.5.103 fix) ─────────
+// The descending twin of `base_root_net`: a part/indexed-select of an array
+// element whose vector has a non-zero declared LSB (`logic [15:8] mem[0:1]`)
+// used to read raw internal bits (silent `x`) because `norm_offset_if_net` did
+// not peel the element `BitSelect`. iverilog-pinned.
+
+#[test]
+fn descending_nonzero_lsb_array_elem_part() {
+    // mem[0]=8'hA5=1010_0101 over source bits 15..8. mem[0][11:8]=low nibble=5,
+    // mem[0][13:10]=bits 13..10=1001=9. iverilog: 5, 9.
+    let out = run("module t;\n\
+           logic [15:8] mem [0:1];\n\
+           initial begin mem[0] = 8'hA5; $display(\"%h %h\", mem[0][11:8], mem[0][13:10]); end\n\
+         endmodule\n");
+    assert_eq!(out, "5 9\n");
+}
+
+#[test]
+fn descending_nonzero_lsb_array_elem_indexed_part() {
+    // Indexed-part `[b+:w]`/`[b-:w]` on the same non-zero-LSB element. iverilog: 5, 5.
+    let out = run("module t;\n\
+           logic [15:8] mem [0:1];\n\
+           initial begin mem[0] = 8'hA5; $display(\"%h %h\", mem[0][8+:4], mem[0][11-:4]); end\n\
+         endmodule\n");
+    assert_eq!(out, "5 5\n");
+}
+
+#[test]
+fn descending_nonzero_lsb_2d_array_elem_part() {
+    // A 2-D unpacked array of non-zero-LSB vectors: both indices peel to the
+    // element range. iverilog: 5.
+    let out = run("module t;\n\
+           logic [15:8] mem [0:1][0:1];\n\
+           initial begin mem[1][0] = 8'hA5; $display(\"%h\", mem[1][0][11:8]); end\n\
+         endmodule\n");
+    assert_eq!(out, "5\n");
+}
+
+#[test]
+fn zero_lsb_array_elem_part_byte_identical() {
+    // Guard: a ZERO-LSB element normalizes to the raw offset, so this stays
+    // byte-identical to the pre-fix behavior (common case must not regress).
+    let out = run("module t;\n\
+           logic [7:0] pm [0:1];\n\
+           initial begin pm[0] = 8'h5A; $display(\"%h %h\", pm[0][3:0], pm[0][7:4]); end\n\
+         endmodule\n");
+    assert_eq!(out, "a 5\n");
+}
