@@ -5,6 +5,7 @@
 //!     to `p::t` — iverilog rejects "undeclared t" (a package type is invisible
 //!     without `import`/`p::t`);
 //!   - a module-local `typedef t;` leaked into a later module's body.
+//!
 //! Both are silent-accepts of code iverilog rejects (correct-or-loud violation).
 //!
 //! Fixed by snapshotting the type registries around each top-level unit and
