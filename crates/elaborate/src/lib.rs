@@ -342,10 +342,37 @@ pub type RandcField = (u32, i64, i64);
 /// constraints are ADDED to the class constraints).
 pub type RandWithCall = (Vec<(u32, i64, i64)>, Vec<Vec<sim_ir::COp>>);
 
+/// OBS-1b coverage-manifest entry: one covergroup INSTANCE and its coverage items
+/// (coverpoints + crosses), each with the resolved 64-bit hit-bitmap net id, bin
+/// count, and weight. Engine-facing, out-of-band (golden-free) — the engine reads
+/// each bitmap's final value at end-of-run to compute `coverage.json`. Built during
+/// elaboration (at the covergroup `new` site, where the bitmap-name scope is correct).
+#[derive(Debug, Clone)]
+pub struct CovgInstMeta {
+    pub inst: String,
+    pub items: Vec<CovItem>,
+}
+
+/// One coverage item (a coverpoint or a cross) inside a [`CovgInstMeta`]. Mirrors
+/// what `synth_cover_get` reduces: `countones(bitmap)*100/num_bins`, weighted.
+#[derive(Debug, Clone)]
+pub struct CovItem {
+    pub name: String,
+    /// `false` = coverpoint (skipped from the average when `num_bins == 0`);
+    /// `true` = cross (always counted, implicit weight 1 — matches `synth_cover_get`).
+    pub is_cross: bool,
+    pub bitmap_net: u32,
+    pub num_bins: u32,
+    pub weight: u32,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Sidecars {
     pub fork_modes: ForkModeTable,
     pub net_names: NetNameTable,
+    /// OBS-1b: per covergroup-instance coverage manifest (see [`CovgInstMeta`]).
+    /// EMPTY ⇒ no covergroups ⇒ no `coverage.json` payload. Golden-neutral.
+    pub coverage_manifest: Vec<CovgInstMeta>,
     pub proc_multipliers: Vec<u64>,
     pub severities: SeverityTable,
     /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
@@ -591,6 +618,7 @@ pub fn elaborate_with_timescale_roots(
         class_dist,
         class_randc,
         fork_modes: std::mem::take(&mut el.fork_modes),
+        coverage_manifest: std::mem::take(&mut el.coverage_manifest),
         proc_multipliers: std::mem::take(&mut el.proc_multipliers),
         severities: std::mem::take(&mut el.severities),
         timeformat_stmts: std::mem::take(&mut el.timeformat_stmts),
@@ -2969,6 +2997,10 @@ struct Elaborator<'s> {
     /// N5 slice C: FQ instance name → its cross trackers (product hit-bitmap + the
     /// constituent coverpoints' match data). Sampled/averaged alongside `cover_insts`.
     cross_insts: std::collections::BTreeMap<String, Vec<CrossTracker>>,
+    /// OBS-1b: per covergroup-instance coverage manifest, built at each `new` site
+    /// (resolved bitmap net ids in the correct scope). Threaded to `SimOpts` for the
+    /// end-of-run `coverage.json` export. Out-of-band, golden-free.
+    coverage_manifest: Vec<CovgInstMeta>,
     // §16.4 deferred immediate asserts (out-of-band, engine-facing): marker
     // StmtId → region, and action StmtId → (marker StmtId, region). See
     // [`DeferMarkTable`]/[`DeferActTable`].
@@ -3099,6 +3131,7 @@ impl<'s> Elaborator<'s> {
             cover_types: std::collections::BTreeMap::new(),
             cover_insts: std::collections::BTreeMap::new(),
             cross_insts: std::collections::BTreeMap::new(),
+            coverage_manifest: Vec::new(),
             defer_marks: DeferMarkTable::new(),
             defer_acts: DeferActTable::new(),
             cur_defer: None,
@@ -19244,9 +19277,41 @@ impl<'s> Elaborator<'s> {
         // Slice C: resolve crosses (cartesian product of constituents' counting bins).
         let crosses = self.resolve_crosses(&cg.crosses, &trackers);
         let key = self.fq(&ci.name.name);
+        // OBS-1b: record this instance's coverage manifest for the end-of-run
+        // coverage.json. Resolve each hit-bitmap net id HERE (the fresh `__sva_cov_*`
+        // names are visible in this scope) and mirror `synth_cover_get`'s item set:
+        // coverpoints (skipped from the average when num_bins==0) + crosses (weight 1).
+        let cov_items: Vec<CovItem> = trackers
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                self.lookup_net_scoped(&t.bitmap).map(|net| CovItem {
+                    name: t.name.clone().unwrap_or_else(|| format!("cp_{i}")),
+                    is_cross: false,
+                    bitmap_net: net,
+                    num_bins: t.num_bins,
+                    weight: t.weight,
+                })
+            })
+            .chain(crosses.iter().enumerate().filter_map(|(i, cx)| {
+                self.lookup_net_scoped(&cx.bitmap).map(|net| CovItem {
+                    name: format!("cross_{i}"),
+                    is_cross: true,
+                    bitmap_net: net,
+                    num_bins: cx.num_bins,
+                    weight: 1,
+                })
+            }))
+            .collect();
         self.cover_insts.insert(key.clone(), trackers);
         if !crosses.is_empty() {
-            self.cross_insts.insert(key, crosses);
+            self.cross_insts.insert(key.clone(), crosses);
+        }
+        if !cov_items.is_empty() {
+            self.coverage_manifest.push(CovgInstMeta {
+                inst: key,
+                items: cov_items,
+            });
         }
         // Slice F: a clocked covergroup (`covergroup cg @(ev);`) AUTO-samples each
         // instance on its event — synthesize `always @(ev) inst.sample();` (the call

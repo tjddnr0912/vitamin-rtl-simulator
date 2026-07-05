@@ -266,3 +266,147 @@ fn no_obs_flag_writes_nothing() {
     assert!(!d.join("results.jsonl").exists());
     assert!(String::from_utf8_lossy(&out.stdout).contains("x=5"));
 }
+
+// ── OBS-1b: coverage.json (R-L5) ────────────────────────────────────────────
+// Teeth: 3-WAY — the coverage.json overall percent equals `c.get_coverage()`
+// printed by `$display("%f", …)` (both derive from the SAME final hit-bitmaps +
+// the SAME weighted-average formula). Plus a determinism golden.
+
+/// The group-level overall `coverage_pct` (the first one in the file — it sits on
+/// the `{"instance": …}` line, before the per-item coverpoints).
+fn overall_pct(json: &str) -> String {
+    json.split("\"coverage_pct\": ")
+        .nth(1)
+        .and_then(|s| s.split(['}', ',', ']', '\n']).next())
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+/// Extract `cov=<f>` printed by the RTL's `$display("cov=%f", c.get_coverage())`.
+fn rtl_cov(stdout: &str) -> String {
+    stdout
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("cov="))
+        .unwrap_or("")
+        .to_string()
+}
+
+#[test]
+fn coverage_json_matches_get_coverage() {
+    // 3 bins, 2 hit → 66.666667. coverage.json overall == get_coverage $display.
+    let src = "module m;\n\
+         logic [1:0] x;\n\
+         covergroup cg; cp: coverpoint x { bins lo={0}; bins mid={1,2}; bins hi={3}; } endgroup\n\
+         cg c = new;\n\
+         initial begin x=0; c.sample(); x=1; c.sample();\n\
+           $display(\"cov=%f\", c.get_coverage()); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    let cj = read(&obs.join("coverage.json"));
+    assert_eq!(rtl_cov(&out), overall_pct(&cj), "3-way mismatch\n{cj}");
+    assert!(cj.contains("\"covered_bins\": 2"), "per-item detail\n{cj}");
+    assert!(cj.contains("\"num_bins\": 3"), "{cj}");
+}
+
+#[test]
+fn coverage_json_cross_included_in_overall() {
+    // ca 100 + cb 100 + cross 50, /3 = 83.333333. The cross MUST be in the overall
+    // (else it disagrees with get_coverage).
+    let src = "module m;\n\
+         logic a, b;\n\
+         covergroup cg;\n\
+           ca: coverpoint a { bins z={0}; bins o={1}; }\n\
+           cb: coverpoint b { bins z={0}; bins o={1}; }\n\
+           cx: cross ca, cb;\n\
+         endgroup\n\
+         cg c = new;\n\
+         initial begin a=0;b=0; c.sample(); a=1;b=1; c.sample();\n\
+           $display(\"cov=%f\", c.get_coverage()); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    let cj = read(&obs.join("coverage.json"));
+    assert_eq!(
+        rtl_cov(&out),
+        overall_pct(&cj),
+        "cross 3-way mismatch\n{cj}"
+    );
+    assert!(
+        cj.contains("\"kind\": \"cross\""),
+        "cross item present\n{cj}"
+    );
+}
+
+#[test]
+fn coverage_json_zero_hits() {
+    // Never sampled → 0.000000, covered_bins 0.
+    let src = "module m;\n\
+         logic [1:0] x;\n\
+         covergroup cg; cp: coverpoint x { bins lo={0}; bins hi={3}; } endgroup\n\
+         cg c = new;\n\
+         initial begin $display(\"cov=%f\", c.get_coverage()); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    let cj = read(&obs.join("coverage.json"));
+    assert_eq!(rtl_cov(&out), overall_pct(&cj), "{cj}");
+    assert_eq!(overall_pct(&cj), "0.000000", "{cj}");
+    assert!(cj.contains("\"covered_bins\": 0"), "{cj}");
+}
+
+#[test]
+fn coverage_json_weighted() {
+    // cp1 weight 3 (100%), cp2 weight 1 (0%) → (3*100 + 1*0)/4 = 75.000000.
+    let src = "module m;\n\
+         logic p, q;\n\
+         covergroup cg;\n\
+           c1: coverpoint p { bins z={0}; option.weight=3; }\n\
+           c2: coverpoint q { bins z={0}; bins o={1}; option.weight=1; }\n\
+         endgroup\n\
+         cg c = new;\n\
+         initial begin p=0; q=0; c.sample();\n\
+           $display(\"cov=%f\", c.get_coverage()); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    let cj = read(&obs.join("coverage.json"));
+    assert_eq!(
+        rtl_cov(&out),
+        overall_pct(&cj),
+        "weighted 3-way mismatch\n{cj}"
+    );
+}
+
+#[test]
+fn coverage_json_determinism() {
+    let src = "module m;\n\
+         logic [1:0] x;\n\
+         covergroup cg; cp: coverpoint x { bins lo={0}; bins mid={1,2}; bins hi={3}; } endgroup\n\
+         cg c = new;\n\
+         initial begin x=0; c.sample(); x=3; c.sample(); #1 $finish; end\n\
+         endmodule\n";
+    let (_o1, c1, obs1) = run(src, &[]);
+    let (_o2, c2, obs2) = run(src, &[]);
+    assert_eq!(c1, 0);
+    assert_eq!(c2, 0);
+    assert_eq!(
+        read(&obs1.join("coverage.json")),
+        read(&obs2.join("coverage.json")),
+        "coverage.json must be byte-identical across runs"
+    );
+}
+
+#[test]
+fn no_covergroup_no_coverage_json() {
+    // A design with no covergroups writes run.json but NOT coverage.json.
+    let src = "module m; initial begin $display(\"hi\"); #1 $finish; end endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    assert!(obs.join("run.json").exists(), "run.json still written");
+    assert!(
+        !obs.join("coverage.json").exists(),
+        "no covergroups ⇒ no coverage.json"
+    );
+}

@@ -649,6 +649,9 @@ fn run_vita_str_gated(
         assign_ranks: sc.assign_ranks,
         queue_bounds: sc.queue_bounds,
         proc_scopes: sc.proc_scopes,
+        // OBS-1b: the coverage manifest → end-of-run `coverage.json` (empty for
+        // covergroup-free designs → no coverage payload). One-shot path only.
+        coverage_manifest: sc.coverage_manifest,
         net_dims: sc.net_dims,
         final_procs: sc.final_procs,
         // N4 clocking: thread the preponed-sampler sidecars (one-shot path; empty
@@ -780,6 +783,17 @@ fn emit_obs(
             "error[{}]: cannot write --obs-dir '{dir}': {e}",
             MsgCode::CliBadFlag.code_num()
         );
+    }
+    // OBS-1b: emit `coverage.json` when the design produced functional coverage
+    // (≥1 covergroup instance). Absent ⇒ no covergroups (the file is simply not
+    // written). A write failure is loud, like run.json (silent-missing misleads).
+    if let Some(cov) = &result.coverage {
+        if let Err(e) = obs::write_coverage_dir(dir, cov) {
+            eprintln!(
+                "error[{}]: cannot write coverage.json to '{dir}': {e}",
+                MsgCode::CliBadFlag.code_num()
+            );
+        }
     }
 }
 

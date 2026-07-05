@@ -191,3 +191,61 @@ pub fn write_run_dir(dir: &str, run: &ObsRun) -> std::io::Result<()> {
     std::fs::File::create(d.join("results.jsonl"))?.write_all(run.ledger_line().as_bytes())?;
     Ok(())
 }
+
+/// Shape a coverage percent to 6 decimals — matches `$display("%f", …)`, and the
+/// underlying f64 is computed IDENTICALLY to `get_coverage` (see the engine's
+/// end-of-run summary), so `coverage.json` never disagrees with the RTL's own
+/// `c.get_coverage()`. Fixed format ⇒ deterministic (2-run byte-identical).
+fn fmt_pct(p: f64) -> String {
+    if p.is_finite() {
+        format!("{p:.6}")
+    } else {
+        "0.000000".to_string()
+    }
+}
+
+/// The `coverage.json` (R-L5) payload: N5 functional coverage — per covergroup
+/// instance, its overall percent + a per-item (coverpoint/cross) breakdown. Fixed
+/// key + iteration order (the manifest is built in deterministic elaboration order)
+/// ⇒ byte-identical across runs of the same input.
+pub fn coverage_json(cov: &sim_engine::CoverageSummary) -> String {
+    let mut s = String::new();
+    s.push_str("{\n  \"schema_ver\": ");
+    s.push_str(&SCHEMA_VER.to_string());
+    s.push_str(",\n  \"kind\": \"coverage\",\n  \"groups\": [");
+    for (gi, g) in cov.groups.iter().enumerate() {
+        s.push_str(if gi > 0 { ",\n    {" } else { "\n    {" });
+        s.push_str("\"instance\": ");
+        json_str(&mut s, &g.instance);
+        s.push_str(", \"coverage_pct\": ");
+        s.push_str(&fmt_pct(g.coverage_pct));
+        s.push_str(", \"coverpoints\": [");
+        for (ii, it) in g.items.iter().enumerate() {
+            s.push_str(if ii > 0 { ",\n      {" } else { "\n      {" });
+            s.push_str("\"name\": ");
+            json_str(&mut s, &it.name);
+            s.push_str(", \"kind\": ");
+            json_str(&mut s, if it.is_cross { "cross" } else { "coverpoint" });
+            s.push_str(", \"num_bins\": ");
+            s.push_str(&it.num_bins.to_string());
+            s.push_str(", \"covered_bins\": ");
+            s.push_str(&it.covered_bins.to_string());
+            s.push_str(", \"coverage_pct\": ");
+            s.push_str(&fmt_pct(it.coverage_pct));
+            s.push('}');
+        }
+        s.push_str("]}");
+    }
+    s.push_str("\n  ]\n}\n");
+    s
+}
+
+/// Write `coverage.json` into `dir` (R-L5, OBS-1b). Loud on any filesystem error
+/// (a silently-missing coverage file would mislead the harness). Only called when
+/// the run produced a coverage summary (the design had ≥1 covergroup instance).
+pub fn write_coverage_dir(dir: &str, cov: &sim_engine::CoverageSummary) -> std::io::Result<()> {
+    let d = std::path::Path::new(dir);
+    std::fs::create_dir_all(d)?;
+    std::fs::File::create(d.join("coverage.json"))?.write_all(coverage_json(cov).as_bytes())?;
+    Ok(())
+}

@@ -47,9 +47,9 @@ use sim_ir::SimIr;
 /// Re-exported from `elaborate` so callers thread the join-mode side table into
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
 pub use elaborate::{
-    AssignRankTable, DeferActTable, DeferMarkTable, DeferRegion, ForkModeTable, FuncMeta,
-    FuncTable, JoinMode, NetDimsTable, NetNameTable, QueueBoundTable, RadixTable, SeverityKind,
-    SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
+    AssignRankTable, CovItem, CovgInstMeta, DeferActTable, DeferMarkTable, DeferRegion,
+    ForkModeTable, FuncMeta, FuncTable, JoinMode, NetDimsTable, NetNameTable, QueueBoundTable,
+    RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
 };
 pub use sched::FinishReason;
 
@@ -180,6 +180,11 @@ pub struct SimOpts {
     /// Per-ProcId instance path (`"tb.u1"`) for `%m` (P2-11). EMPTY ⇒ `%m`
     /// renders the legacy flat `top`. Never enters the IR.
     pub proc_scopes: Vec<String>,
+    /// OBS-1b coverage manifest (per covergroup instance → hit-bitmap net ids). The
+    /// engine reads each bitmap's FINAL value at end-of-run to build the
+    /// `SimResult.coverage` summary for `coverage.json`. EMPTY ⇒ no covergroups.
+    /// Never enters the IR (golden-neutral).
+    pub coverage_manifest: Vec<CovgInstMeta>,
     /// Unpacked-array dims (Phase-1.x ⑤): array NetId → per-dim `(lo, size)`.
     /// SPARSE — an absent array means 1-D 0-based, so per-element VCD names
     /// fall back to `mem[k]`. EMPTY by default. Never enters the IR.
@@ -300,6 +305,7 @@ impl Default for SimOpts {
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
             proc_scopes: Vec::new(),
+            coverage_manifest: Vec::new(),
             net_dims: NetDimsTable::new(),
             threads: 1,
             plusargs: Vec::new(),
@@ -335,12 +341,43 @@ impl Default for SimOpts {
 }
 
 /// Outcome of a run. The VCD + stdout are the side effects; this is the summary.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// (Not `Eq`: the OBS-1b `coverage` field carries `f64` percents.)
+#[derive(Debug, Clone, PartialEq)]
 pub struct SimResult {
     pub finish_reason: FinishReason,
     pub sim_time: u64,
     pub exit_class: ExitClass,
     pub vcd_path: Option<String>,
+    /// OBS-1b: end-of-run functional-coverage summary (N5 covergroups). `None` ⇒ the
+    /// design had no covergroup instances (empty `coverage_manifest`).
+    pub coverage: Option<CoverageSummary>,
+}
+
+/// OBS-1b: end-of-run functional-coverage summary (N5 covergroups), computed from
+/// `SimOpts.coverage_manifest` + the final hit-bitmap net values. Serialized to
+/// `coverage.json` by the CLI.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoverageSummary {
+    pub groups: Vec<CovgResult>,
+}
+
+/// One covergroup INSTANCE's coverage: overall weighted-average percent + per-item
+/// breakdown. `coverage_pct` mirrors `synth_cover_get` (`c.get_coverage()`) EXACTLY.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CovgResult {
+    pub instance: String,
+    pub coverage_pct: f64,
+    pub items: Vec<CovItemResult>,
+}
+
+/// One coverage item's result: covered-bin count out of `num_bins` and its percent.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CovItemResult {
+    pub name: String,
+    pub is_cross: bool,
+    pub num_bins: u32,
+    pub covered_bins: u32,
+    pub coverage_pct: f64,
 }
 
 /// A `Write` sink that forwards RTL text to a `LogSink` as `RtlOutput` events.
@@ -525,11 +562,68 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         message: format!("simulation ended ({:?}) at time {}", reason, st.now),
     }));
 
+    // OBS-1b: build the end-of-run functional-coverage summary from the manifest +
+    // final hit-bitmap values. Mirrors `synth_cover_get` EXACTLY (same countones —
+    // 1-bits excluding X/Z — same per-item `covered*100.0/num_bins`, same
+    // coverpoint-then-cross accumulation ORDER, same `sum/max(total_weight,1)` weighted
+    // average) so `coverage.json` can never disagree with `c.get_coverage()`.
+    let coverage = (!opts.coverage_manifest.is_empty()).then(|| {
+        let groups = opts
+            .coverage_manifest
+            .iter()
+            .map(|inst| {
+                let mut sum = 0.0f64;
+                let mut total_weight: u64 = 0;
+                let items = inst
+                    .items
+                    .iter()
+                    .map(|it| {
+                        let bp = &st.nets[it.bitmap_net as usize].cur;
+                        let mut covered: u32 = 0;
+                        for (k, &v) in bp.val.iter().enumerate() {
+                            covered += (v & !bp.unk.get(k).copied().unwrap_or(0)).count_ones();
+                        }
+                        let pct = if it.num_bins == 0 {
+                            0.0
+                        } else {
+                            f64::from(covered) * 100.0 / f64::from(it.num_bins)
+                        };
+                        // Coverpoints with num_bins==0 are EXCLUDED from the average
+                        // (not a coverage target); crosses always count (weight 1).
+                        if it.is_cross || it.num_bins > 0 {
+                            sum += f64::from(it.weight) * pct;
+                            total_weight += u64::from(it.weight);
+                        }
+                        CovItemResult {
+                            name: it.name.clone(),
+                            is_cross: it.is_cross,
+                            num_bins: it.num_bins,
+                            covered_bins: covered,
+                            coverage_pct: pct,
+                        }
+                    })
+                    .collect();
+                let coverage_pct = if total_weight == 0 {
+                    0.0
+                } else {
+                    sum / total_weight as f64
+                };
+                CovgResult {
+                    instance: inst.inst.clone(),
+                    coverage_pct,
+                    items,
+                }
+            })
+            .collect();
+        CoverageSummary { groups }
+    });
+
     SimResult {
         finish_reason: reason,
         sim_time: st.now,
         exit_class,
         vcd_path: st.vcd_path.clone(),
+        coverage,
     }
 }
 
