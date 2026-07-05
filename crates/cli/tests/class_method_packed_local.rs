@@ -6,8 +6,8 @@
 //! (`cd`), and `$bits`/`$size`/`$dimensions` were wrong. The fix reuses the shared
 //! `frame_packed_width`/`register_frame_packed` helpers (full `product(packed widths)`
 //! width + `packed_dims` + `dim_desc`). Pinned to iverilog 13.0. (An element-WRITE
-//! lvalue `p[0]=…` stays a loud E3009 — outside the frame-call subset — not
-//! silent-wrong. The inline function/task subst-bound local paths are a separate,
+//! lvalue `p[0]=…` was a loud E3009 here — outside the frame-call subset — and is now
+//! supported by EXT2-H's frame part-select write. The inline function/task subst-bound local paths are a separate,
 //! deeper follow-on. Class-method 2-state (`bit`) locals not coercing a runtime X→0 —
 //! `reserve_class_method` never sets `intro_kind`, for scalar AND packed alike — is a
 //! separate pre-existing gap (a different axis than width), left untouched here.)
@@ -118,16 +118,17 @@ fn class_method_packed_virtual_and_inherited() {
 }
 
 #[test]
-fn class_method_packed_element_write_is_loud() {
-    // An element-WRITE lvalue stays outside the frame-call subset — a loud non-zero
-    // exit (E3009 on stderr), NOT a silent-wrong.
+fn class_method_packed_element_write_supported() {
+    // EXT2-H (§4b H): an md-packed element-WRITE lvalue (`p[0] = 8'hCD`) is now inside
+    // the frame-call subset — the engine read-modify-writes the frame slot, so p[0]
+    // sets the low byte → p = 16'h00CD (was a loud E3009 before EXT2-H).
     let (out, code) = run(&method_body(
         "[15:0] f; logic [1:0][7:0] p; begin p = 0; p[0] = 8'hCD; f = p; end",
         "%h",
     ));
-    assert_eq!(
-        code,
-        Some(1),
-        "element write must loud-exit(1), got {code:?}:\n{out}"
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("00cd"),
+        "p[0]=CD sets the low byte, got:\n{out}"
     );
 }

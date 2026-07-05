@@ -2518,6 +2518,12 @@ struct Elaborator<'s> {
     // nested void call writes its result into). `None` in a process body, where a
     // fresh module net is used instead.
     cur_discard: Option<u32>,
+    // Frame-local nets that came from an UNPACKED-array decl (`reg [7:0] mem [0:3]`).
+    // These reserve as a 1-elem net (the array is outside the frame-call subset), so a
+    // `mem[k]` select mis-lowers to a bit-select of that 1-elem net — `validate_frame_
+    // body` must keep rejecting any such select/write (EXT2-H allows part-selects of a
+    // genuine scalar, NOT a collapsed array). Elaborate-transient (not a Sidecar).
+    frame_array_local: std::collections::BTreeSet<u32>,
     // Sidecar accumulators (drained into `Sidecars`):
     class_handle_nets: std::collections::BTreeSet<u32>,
     class_new_sites: std::collections::BTreeMap<u32, u32>,
@@ -2824,6 +2830,7 @@ impl<'s> Elaborator<'s> {
             cur_this: None,
             cur_return: None,
             cur_discard: None,
+            frame_array_local: std::collections::BTreeSet::new(),
             class_handle_nets: std::collections::BTreeSet::new(),
             class_new_sites: std::collections::BTreeMap::new(),
             class_vtable: Vec::new(),
@@ -8902,6 +8909,11 @@ impl<'s> Elaborator<'s> {
                     if let Some((_, _, ext)) = pinfo {
                         s.register_frame_packed(net, d, &decl.unpacked, ext);
                     }
+                    // EXT2-H guard: mark an unpacked-array class-method local (1-elem
+                    // net) so its `mem[k]` select write stays loud (see reserve_frame_func).
+                    if !decl.unpacked.is_empty() {
+                        s.frame_array_local.insert(net);
+                    }
                     if net_kind_is_two_state(d.kind) {
                         s.intro_kind.insert(net, d.kind);
                     }
@@ -12522,7 +12534,15 @@ impl<'s> Elaborator<'s> {
         let mut auto_override = 0u64;
         for d in &decls {
             for decl in &d.names {
-                if self.symbols.contains_key(&self.fq(&decl.name.name)) {
+                let fq = self.fq(&decl.name.name);
+                if let Some(&existing) = self.symbols.get(&fq) {
+                    // EXT2-H guard: a block-local UNPACKED ARRAY that shadows a
+                    // same-named outer scalar coalesces onto that (shape-blind) net —
+                    // mark the coalesced net so an element write `y[k]=v` stays loud,
+                    // not a silent scalar bit-write.
+                    if !decl.unpacked.is_empty() {
+                        self.frame_array_local.insert(existing);
+                    }
                     continue; // coalesce with an already-reserved formal/local
                 }
                 let pinfo = self.frame_packed_width(d);
@@ -12549,6 +12569,11 @@ impl<'s> Elaborator<'s> {
                 );
                 if let Some((_, _, ext)) = pinfo {
                     self.register_frame_packed(net, d, &decl.unpacked, ext);
+                }
+                // EXT2-H guard: mark an unpacked-array block-local (1-elem net) so its
+                // `mem[k]` select write stays loud (see reserve_frame_func).
+                if !decl.unpacked.is_empty() {
+                    self.frame_array_local.insert(net);
                 }
                 if net_kind_is_two_state(d.kind) {
                     self.intro_kind.insert(net, d.kind);
@@ -12681,6 +12706,12 @@ impl<'s> Elaborator<'s> {
                     );
                     if let Some((_, _, ext)) = pinfo {
                         s.register_frame_packed(net, d, &decl.unpacked, ext);
+                    }
+                    // EXT2-H guard: an UNPACKED-array local reserves as a 1-elem net
+                    // (an array is outside the frame-call subset) — mark it so a
+                    // `mem[k]` select write stays loud, not mis-lowered as a bit-select.
+                    if !decl.unpacked.is_empty() {
+                        s.frame_array_local.insert(net);
                     }
                     if net_kind_is_two_state(d.kind) {
                         s.intro_kind.insert(net, d.kind);
@@ -12864,6 +12895,12 @@ impl<'s> Elaborator<'s> {
                     );
                     if let Some((_, _, ext)) = pinfo {
                         s.register_frame_packed(net, d, &decl.unpacked, ext);
+                    }
+                    // EXT2-H guard: an UNPACKED-array local reserves as a 1-elem net
+                    // (an array is outside the frame-call subset) — mark it so a
+                    // `mem[k]` select write stays loud, not mis-lowered as a bit-select.
+                    if !decl.unpacked.is_empty() {
+                        s.frame_array_local.insert(net);
                     }
                     if net_kind_is_two_state(d.kind) {
                         s.intro_kind.insert(net, d.kind);
@@ -13156,6 +13193,13 @@ impl<'s> Elaborator<'s> {
             for &sid in &blk.stmts {
                 match &self.stmts[sid as usize] {
                     ir::Stmt::BlockingAssign { lhs, .. } => {
+                        // A concatenation-target lvalue (`{a,b} = x`) is multi-chunk; the
+                        // frame write path (`frame_write_lvalue`) handles a SINGLE chunk
+                        // only, so a concat must stay loud (EXT2-H's per-chunk relax must
+                        // not admit it — it would panic / silently write chunk 0).
+                        if lhs.chunks.len() > 1 {
+                            why = Some("a concatenation-target assignment");
+                        }
                         for c in &lhs.chunks {
                             // N7: a class field write (`this.f = v` / `obj.f = v`) is a
                             // HEAP write through a class handle, not a frame-slot write —
@@ -13166,10 +13210,23 @@ impl<'s> Elaborator<'s> {
                             }
                             let whole = c.offset.is_none() && c.word.is_none() && c.width.is_none();
                             let in_frame = c.net >= lo && c.net < hi;
-                            if !whole {
+                            // EXT2-H: a bit/part-select write to an IN-FRAME scalar net
+                            // (`r[7:0] = x`, `r[i] = b`, an md-packed `p[0] = ..`) is now
+                            // supported — the engine read-modify-writes the frame slot.
+                            // A WHOLE write must target an in-frame net; a non-whole write
+                            // to a net OUTSIDE the function, an ARRAY-element write
+                            // (`c.word`), or a select of an UNPACKED-array local (a 1-elem
+                            // net — `frame_array_local` — where `mem[k]` mis-lowers to a
+                            // bit-select), stays rejected.
+                            if whole {
+                                if !in_frame {
+                                    why = Some("an assignment to a net outside the function");
+                                }
+                            } else if c.word.is_some()
+                                || !in_frame
+                                || self.frame_array_local.contains(&c.net)
+                            {
                                 why = Some("a part-select / array-element assignment");
-                            } else if !in_frame {
-                                why = Some("an assignment to a net outside the function");
                             }
                         }
                     }

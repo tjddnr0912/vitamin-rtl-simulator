@@ -2106,22 +2106,76 @@ impl<'a> SimState<'a> {
     /// rejected at ELABORATE, so the engine only ever sees a whole-net chunk;
     /// the `debug_assert` is a release-stripped backstop.
     fn frame_write_lvalue(&self, lhs: &Lvalue, v: Value) {
-        debug_assert_eq!(
-            lhs.chunks.len(),
-            1,
-            "frame lvalue is a single whole-net chunk"
-        );
+        debug_assert_eq!(lhs.chunks.len(), 1, "frame lvalue is a single chunk");
         let c = &lhs.chunks[0];
         let net = c.net as usize;
         debug_assert!(
-            self.frame_local[net] && c.offset.is_none() && c.word.is_none() && c.width.is_none(),
-            "frame write must target a whole frame-local net"
+            self.frame_local[net],
+            "frame write targets a frame-local net"
         );
         let (fidx, slot) = self.frame_route[net].expect("frame lvalue net is routed");
+        let auto = self.frame_slot_auto[net];
         let nv = &self.ir.nets[net];
-        let val = v.resize_keep_sign(nv.width.max(1), nv.signed);
-        // B4: route by this slot's EFFECTIVE lifetime (window vs static slab).
-        self.frame_slot_write(fidx, self.frame_slot_auto[net], slot, val);
+        let net_w = nv.width.max(1);
+        // A WHOLE-net write: resize to the slot's declared width/sign and store.
+        if c.offset.is_none() && c.word.is_none() && c.width.is_none() {
+            let val = v.resize_keep_sign(net_w, nv.signed);
+            // B4: route by this slot's EFFECTIVE lifetime (window vs static slab).
+            self.frame_slot_write(fidx, auto, slot, val);
+            return;
+        }
+        // EXT2-H: a bit/part-select write to a frame-local SCALAR net (`r[7:0]=x`,
+        // `r[i]=b`) — read-modify-write the slot. (An ARRAY-element `c.word` write is
+        // rejected at elaborate: frame locals are scalar.) The offset (const OR a
+        // dynamic index) is evaluated FIRST with no frame borrow held; the (lsb,
+        // width) computation mirrors `write_chunk` (the module-net path), and any bit
+        // outside `[0, net_w)` is dropped (IEEE part-select OOB semantics).
+        // Resolve the (possibly dynamic) offset with the SAME OOR_DROP semantics as
+        // the module path (`resolve_lvalue_offsets`): an X/Z index or one outside the
+        // signed i32 range → a huge sentinel (2^30) so every selected bit lands out of
+        // range and the write is DROPPED (iverilog parity), NOT written at bit 0.
+        // Signed-aware: an unsigned 0xFFFFFFFF is the huge 4294967295 (drop), not a
+        // wrapped −1 (which would partial-write).
+        const OOR_DROP: u32 = 1 << 30;
+        let raw_off = c
+            .offset
+            .map(|e| {
+                let sw = self.wt.get(e);
+                let v = self.mk_eval_ctx().eval_ctx(e, sw.width, sw.signed);
+                if v.has_xz() {
+                    OOR_DROP
+                } else {
+                    match v.to_i128_signed() {
+                        Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => {
+                            i as i32 as u32
+                        }
+                        _ => OOR_DROP,
+                    }
+                }
+            })
+            .unwrap_or(0);
+        let off_i = raw_off as i32 as i64;
+        let fold = |eid: u32| crate::width::const_u32_of_expr(self.ir, eid);
+        let (lsb, width) = match c.kind {
+            SelKind::Bit => (off_i, 1u32),
+            SelKind::PartConst | SelKind::PartIdxUp => {
+                (off_i, c.width.and_then(fold).unwrap_or(net_w))
+            }
+            SelKind::PartIdxDown => {
+                let w = c.width.and_then(fold).unwrap_or(net_w);
+                (off_i - w as i64 + 1, w)
+            }
+        };
+        let piece = v.resize_keep_sign(width.max(1), false);
+        let mut cur = self.frame_slot_read(fidx, auto, slot);
+        for k in 0..width {
+            let bp = lsb + k as i64;
+            if bp >= 0 && (bp as u32) < net_w {
+                let (bv, bu) = piece.get_vu(k);
+                cur.set_vu(bp as u32, bv, bu);
+            }
+        }
+        self.frame_slot_write(fidx, auto, slot, cur);
     }
 
     /// N7: store a frame-body blocking-assign value, routing a class FIELD write

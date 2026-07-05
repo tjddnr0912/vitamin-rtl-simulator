@@ -8,8 +8,9 @@
 //! scope was always correct. The same fix (shared `frame_packed_width` /
 //! `register_frame_packed` helpers) covers a frame TASK body local and a `begin…end`
 //! BLOCK local, and registers `dim_desc` so `$bits`/`$size`/`$dimensions`/`$left`/`$right`
-//! are correct too. Pinned to iverilog 13.0. (An element-WRITE lvalue `p[0]=…` stays a
-//! loud E3009 — outside the frame-call subset — not silent-wrong.)
+//! are correct too. Pinned to iverilog 13.0. (An element-WRITE lvalue `p[0]=…` was a
+//! loud E3009 here — outside the frame-call subset — and is now supported by EXT2-H's
+//! frame part-select write.)
 //!
 //! Pre-existing residuals (branch==main, NOT touched here — each a separate path that
 //! also `range_to_dims`-truncates a multi-dim packed local): a NON-automatic INLINE task
@@ -125,17 +126,18 @@ fn scalar_frame_local_unchanged() {
 }
 
 #[test]
-fn frame_local_packed_element_write_is_loud() {
-    // An element-WRITE lvalue is outside the frame-call subset — a loud non-zero exit
-    // (E3009 on stderr), NOT a silent-wrong. (Correct-or-loud; the read fix does not
-    // open this write path.) `run` captures stdout only, so a loud exit ⇒ no `%h` line.
+fn frame_local_packed_element_write_supported() {
+    // EXT2-H (§4b H): an md-packed element-WRITE lvalue (`p[0] = 8'hCD`) — a part-select
+    // of the flat frame local — is now inside the frame-call subset (the engine
+    // read-modify-writes the frame slot). p[0] sets the low byte → p = 16'h00CD (was a
+    // loud E3009 before EXT2-H).
     let (out, code) = run("module m;\n\
          function automatic [15:0] f; logic [1:0][7:0] p; begin p = 16'h0000; p[0] = 8'hCD; f = p; end endfunction\n\
          initial begin $display(\"%h\", f()); #1 $finish; end endmodule\n");
-    assert_eq!(
-        code,
-        Some(1),
-        "element write must loud-exit(1), got code {code:?}:\n{out}"
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("00cd"),
+        "p[0]=CD sets the low byte, got:\n{out}"
     );
 }
 
