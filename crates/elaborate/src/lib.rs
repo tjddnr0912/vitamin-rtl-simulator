@@ -1600,8 +1600,87 @@ fn expr_reads_ident(e: &ast::Expr, name: &str) -> bool {
             expr_reads_ident(expr, name)
                 || matches!(target, ast::CastTarget::Size(s) if expr_reads_ident(s, name))
         }
+        // `'{s[0], …}` assignment-pattern elements and `new[s[0]]` (dynamic-array
+        // size / copy source) are rvalue reads. These leaf kinds were unhandled in
+        // BOTH this walker and the scope-leak walker that shares it — a shared blind
+        // spot invisible to a walker-vs-walker audit — so a coalesced-string read
+        // via `'{…}` / `new[…]` was silently reading the wrong net's bits.
+        K::AssignPattern(parts) => parts.iter().any(|x| expr_reads_ident(x, name)),
+        K::New { size, src } => {
+            expr_reads_ident(size, name) || src.as_ref().is_some_and(|s| expr_reads_ident(s, name))
+        }
         _ => false,
     }
+}
+
+/// The sub-slice of a system task/func's args that are READ inputs — the write
+/// DEST args of the string-building / scanf / file-read / `$cast` / `$value$plusargs`
+/// families are excluded (a string populated by e.g. `$sformat`/`$sscanf`/`$fgets`/
+/// `$cast`/`$value$plusargs` and never otherwise read is write-only, so must not trip
+/// the coalesce read-gate). Every other task reads all its args. This must cover EVERY
+/// sysfunc vita supports as a direct-rhs writer, else its write-only dest is misread.
+fn syscall_read_args<'a>(task: &str, args: &'a [ast::Expr]) -> &'a [ast::Expr] {
+    match task {
+        // dest is arg 0; the remaining args are read inputs (`$cast(dst, src)` writes
+        // dst=arg0, reads src=arg1)
+        "$sformat" | "$swrite" | "$swriteb" | "$swriteh" | "$swriteo" | "$fgets" | "$fread"
+        | "$cast" => args.get(1..).unwrap_or(&[]),
+        // source + fmt (args 0,1) are the only reads; trailing args are write dests
+        "$sscanf" | "$fscanf" => &args[..2.min(args.len())],
+        // `$value$plusargs(fmt, dest)`: the format (arg 0) is read, dest (arg 1) written
+        "$value$plusargs" => &args[..1.min(args.len())],
+        _ => args,
+    }
+}
+
+/// Like [`expr_reads_ident`] but arg-direction-aware at a system-func boundary, for
+/// the block-local coalesce read-gate ONLY. A string-building / scanf / file-read
+/// sysfunc's write DEST args are NOT reads (see [`syscall_read_args`]) — e.g. the
+/// idiomatic rvalue `n = $sscanf(src, fmt, s)` WRITES `s`. The shared
+/// `expr_reads_ident` cannot encode this: the scope-leak walker also uses it and
+/// must keep treating a dest as a reference. Gates the sysfunc boundary (and a
+/// `(paren)` / nested read-arg sysfunc), then defers to `expr_reads_ident` for
+/// ordinary sub-exprs. A sysfunc nested under an arithmetic wrapper is not re-gated,
+/// but vita supports these funcs only as a bare assignment RHS, so such forms are
+/// already loud-rejected upstream (never a silent over-reject of a valid program).
+/// `new(s[0])` (class-ctor args) is a read too, gated here (read-gate-only) rather
+/// than in the shared `expr_reads_ident` — a ctor arg is always a read so this cannot
+/// over-reject, and keeping it out of the shared walker avoids perturbing the
+/// scope-leak walker's OOP handling.
+fn rvalue_reads_ident(e: &ast::Expr, name: &str) -> bool {
+    use ast::ExprKind as K;
+    match &e.kind {
+        K::SysCall { name: task, args } => syscall_read_args(&task.name, args)
+            .iter()
+            .any(|a| rvalue_reads_ident(a, name)),
+        K::ClassNew { args } => args.iter().any(|a| rvalue_reads_ident(a, name)),
+        K::Paren { inner } => rvalue_reads_ident(inner, name),
+        _ => expr_reads_ident(e, name),
+    }
+}
+
+/// Does a `#(…)` delay-control expression read `name`? The delay prefix of
+/// `#(s[0]) stmt` / intra-assignment `= #(s) rhs` is a read the coalesce read-gate
+/// must see; the reference walker drops it via `..`.
+fn delay_reads_ident(d: &ast::Delay, name: &str) -> bool {
+    d.values.iter().any(|e| rvalue_reads_ident(e, name))
+}
+
+/// Does an `@(…)` sensitivity list read `name`? (`@(s) stmt`; `@(*)` reads nothing.)
+fn sensitivity_reads_ident(s: &ast::Sensitivity, name: &str) -> bool {
+    match s {
+        ast::Sensitivity::Star => false,
+        ast::Sensitivity::List(evs) => evs.iter().any(|ev| rvalue_reads_ident(&ev.expr, name)),
+    }
+}
+
+/// Does an intra-assignment event control `= @(ev) rhs` / `= repeat(n) @(ev) rhs`
+/// read `name`? Both the `repeat` count and the event expressions are reads.
+fn intra_event_reads_ident(e: &ast::IntraEvent, name: &str) -> bool {
+    e.repeat
+        .as_ref()
+        .is_some_and(|r| rvalue_reads_ident(r, name))
+        || sensitivity_reads_ident(&e.ctrl, name)
 }
 
 /// Does the lvalue (a write target) reference `name` — either as the written
@@ -1771,6 +1850,161 @@ fn stmt_refs_ident_outside(s: &ast::Stmt, skip: ast::Span, name: &str) -> bool {
             args.iter().any(|e| expr_reads_ident(e, name))
         }
         _ => false,
+    }
+}
+
+/// True if any statement in `s` READS `name` in an rvalue position — an assignment
+/// / `assign` / `force` RHS, an intra-assignment `#(s)` / `@(s)` control, a
+/// block-local initializer, a condition / scrutinee / loop bound, a `return` value, an
+/// lvalue-index sub-expr, a `#(s)` delay / `@(s)` event-control prefix, `new(s)` ctor
+/// args, or a task/sysfunc READ arg (a string-building / scanf sysfunc's write DEST
+/// arg is NOT a read, per [`syscall_read_args`]). A plain write `name = <expr>` does
+/// NOT count. READ-GATES the module block-local dynamic-storage coalesce reject: a
+/// WRITE-ONLY string local coalesces harmlessly (its truncated write is discarded onto
+/// the sibling's scalar net), so only a READ of the wrong-kind coalesced net is
+/// silent-wrong. Covers `stmt_refs_ident_outside`'s rvalue positions minus the
+/// lvalue-write side, PLUS the timing-control prefix fields that reference walker drops
+/// via `..` (`DelayCtrl.delay` / `EventCtrl.ctrl` / intra-assignment `event`) and
+/// `new(…)` ctor args. An uncovered form returns `false` — the only remaining read
+/// positions that lack coverage lack a live iverilog oracle: SVA properties / `assert
+/// #0` (iverilog "sorry"), CRV `RandomizeWith.constraints` / `Dist` / `ArrayMethodWith`
+/// (no oracle), and impossible forms (literals, multi-segment paths). Never an
+/// over-reject of a valid write-only program.
+fn stmt_reads_ident(s: &ast::Stmt, name: &str) -> bool {
+    use ast::Stmt::*;
+    match s {
+        Block { stmts, decls, .. } | Fork { stmts, decls, .. } => {
+            stmts.iter().any(|st| stmt_reads_ident(st, name))
+                // A sibling/nested block-local's OWN initializer (`int x = s[0];`) is
+                // a read even though it is a decl, not a statement — mirror the
+                // reference walker's `decl_inits` so a decl-init read is not missed.
+                || decls.iter().flat_map(|d| d.names.iter()).any(|n| {
+                    n.init.as_ref().is_some_and(|e| rvalue_reads_ident(e, name))
+                })
+        }
+        // Blocking / nonblocking assignments read their RHS and the lvalue INDEX
+        // sub-exprs (`mem[s] = …`; the written base ident is not a read), AND any
+        // intra-assignment `#(s)` delay / `@(s)` event control (`= #(s) rhs` /
+        // `= @(s) rhs`) — a read the plain lhs/rhs walk drops via `..`.
+        Blocking {
+            lhs,
+            delay,
+            event,
+            rhs,
+            ..
+        }
+        | NonBlocking {
+            lhs,
+            delay,
+            event,
+            rhs,
+            ..
+        } => {
+            lvalue_index_reads_ident(lhs, name)
+                || rvalue_reads_ident(rhs, name)
+                || delay.as_ref().is_some_and(|d| delay_reads_ident(d, name))
+                || event
+                    .as_ref()
+                    .is_some_and(|e| intra_event_reads_ident(e, name))
+        }
+        // Procedural-continuous `assign` / `force` read their RHS (+ lvalue index).
+        Assign { lhs, rhs, .. } | Force { lhs, rhs, .. } => {
+            lvalue_index_reads_ident(lhs, name) || rvalue_reads_ident(rhs, name)
+        }
+        If {
+            cond,
+            then_s,
+            else_s,
+            ..
+        } => {
+            rvalue_reads_ident(cond, name)
+                || stmt_reads_ident(then_s, name)
+                || else_s.as_ref().is_some_and(|e| stmt_reads_ident(e, name))
+        }
+        Return { value, .. } => value.as_ref().is_some_and(|e| rvalue_reads_ident(e, name)),
+        Case {
+            scrutinee, items, ..
+        } => {
+            rvalue_reads_ident(scrutinee, name)
+                || items.iter().any(|it| match it {
+                    ast::CaseItem::Match { labels, body, .. } => {
+                        labels.iter().any(|e| rvalue_reads_ident(e, name))
+                            || stmt_reads_ident(body, name)
+                    }
+                    ast::CaseItem::Default { body, .. } => stmt_reads_ident(body, name),
+                })
+        }
+        For {
+            init,
+            cond,
+            step,
+            body,
+            ..
+        } => {
+            stmt_reads_ident(init, name)
+                || rvalue_reads_ident(cond, name)
+                || stmt_reads_ident(step, name)
+                || stmt_reads_ident(body, name)
+        }
+        While { cond, body, .. } => rvalue_reads_ident(cond, name) || stmt_reads_ident(body, name),
+        Repeat { count, body, .. } => {
+            rvalue_reads_ident(count, name) || stmt_reads_ident(body, name)
+        }
+        Forever { body, .. } => stmt_reads_ident(body, name),
+        Wait { cond, body, .. } => {
+            rvalue_reads_ident(cond, name)
+                || body.as_ref().is_some_and(|b| stmt_reads_ident(b, name))
+        }
+        // `#(s[0]) stmt` — the delay expr is a read the plain body-walk drops via `..`.
+        DelayCtrl { delay, body, .. } => {
+            delay_reads_ident(delay, name)
+                || body.as_ref().is_some_and(|b| stmt_reads_ident(b, name))
+        }
+        // `@(s) stmt` — the event/sensitivity is a read (vita has a dedicated
+        // `@(string)` reject that the coalesce-to-packed-net would silently bypass).
+        EventCtrl { ctrl, body, .. } => {
+            sensitivity_reads_ident(ctrl, name)
+                || body.as_ref().is_some_and(|b| stmt_reads_ident(b, name))
+        }
+        SysTaskCall {
+            name: task, args, ..
+        } => syscall_read_args(task.name.as_str(), args)
+            .iter()
+            .any(|e| rvalue_reads_ident(e, name)),
+        UserTaskCall { args, .. } | RandomizeWith { args, .. } => {
+            args.iter().any(|e| rvalue_reads_ident(e, name))
+        }
+        _ => false,
+    }
+}
+
+/// True if an lvalue's INDEX sub-expressions (`mem[<idx>] = …`, `r[<msb>:<lsb>]`)
+/// read `name`. The written BASE ident is NOT a read (a plain `s = …` write is not
+/// a read of `s`). Mirrors `lvalue_refs_ident` minus the base-ident match.
+fn lvalue_index_reads_ident(lv: &ast::Lvalue, name: &str) -> bool {
+    use ast::Lvalue as L;
+    match lv {
+        L::Ident(_) => false,
+        L::BitSelect { base, index, .. } => {
+            lvalue_index_reads_ident(base, name) || rvalue_reads_ident(index, name)
+        }
+        L::PartSelect { base, msb, lsb, .. } => {
+            lvalue_index_reads_ident(base, name)
+                || rvalue_reads_ident(msb, name)
+                || rvalue_reads_ident(lsb, name)
+        }
+        L::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => {
+            lvalue_index_reads_ident(base, name)
+                || rvalue_reads_ident(offset, name)
+                || rvalue_reads_ident(width, name)
+        }
+        L::Concat { parts, .. } => parts.iter().any(|p| lvalue_index_reads_ident(p, name)),
+        L::Error(_) => false,
     }
 }
 
@@ -6335,7 +6569,28 @@ impl<'s> Elaborator<'s> {
                         // the second (a silent-wrong the array reductions/`size()`
                         // then compute over). v1 has no per-block scope to give them
                         // distinct heaps, so reject loudly rather than miscompute.
-                        if self.is_dyn_handle_net(net) || self.is_string_net(net) {
+                        // Also fire when the EXISTING net is a plain scalar but THIS
+                        // (later) block's decl is a `string` that the block READS
+                        // (`begin logic s; end  begin string s; …=s[0]; end`): the
+                        // string coalesces onto the packed net and reading it is
+                        // silent-wrong. A WRITE-ONLY string coalesces harmlessly (its
+                        // truncated write is discarded), so gate on a READ to avoid
+                        // over-rejecting the common param-gated / dead-store shape.
+                        let new_str_read = matches!(d.kind, ast::NetVarKind::String)
+                            && d.names.first().is_some_and(|n| {
+                                let nm = &n.name.name;
+                                stmts.iter().any(|st| stmt_reads_ident(st, nm))
+                                    // A SIBLING decl in THIS block can read the string
+                                    // in its own initializer (`begin string s; int x =
+                                    // s[0]; end`) — that read lives in a decl, not in
+                                    // `stmts`, so scan the block's decl inits too.
+                                    || decls.iter().flat_map(|dd| dd.names.iter()).any(|nn| {
+                                        nn.init
+                                            .as_ref()
+                                            .is_some_and(|e| rvalue_reads_ident(e, nm))
+                                    })
+                            });
+                        if self.is_dyn_handle_net(net) || self.is_string_net(net) || new_str_read {
                             self.error(
                                 MsgCode::ElabUnsupported,
                                 "a dynamic-storage local (queue / dynamic array / associative \
