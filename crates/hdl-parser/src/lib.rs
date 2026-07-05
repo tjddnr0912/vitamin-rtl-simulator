@@ -1808,6 +1808,71 @@ impl<'t, 's> Parser<'t, 's> {
         if !self.expect(TokenKind::Semi, "';'") {
             return None;
         }
+        // Bring the package's TYPE names into the current bare scope at parse time
+        // (type names are parse-resolved). A package body's bare typedefs are now
+        // unit-scoped (`restore_scope_unit` drops them, keeping only the `pkg::t`
+        // twins), so `import p::t;` / `import p::*;` must copy the scoped twin back
+        // to its bare name for a later `t x;` to parse. Value/const imports are
+        // still handled at elaborate from the returned `ImportDecl`.
+        let prefix = format!("{}::", pkg.name);
+        match &item {
+            Some(name) => {
+                let scoped = format!("{prefix}{}", name.name);
+                let bare = name.name.clone();
+                if let Some(v) = self.typedefs.get(&scoped).cloned() {
+                    self.typedefs.insert(bare.clone(), v);
+                }
+                if let Some(v) = self.struct_layouts.get(&scoped).cloned() {
+                    self.struct_layouts.insert(bare.clone(), v);
+                }
+                if let Some(v) = self.enum_defs.get(&scoped).cloned() {
+                    self.enum_defs.insert(bare.clone(), v);
+                }
+                if self.union_type_names.contains(&scoped) {
+                    self.union_type_names.insert(bare);
+                }
+            }
+            None => {
+                // Wildcard `import p::*` — copy every `p::X` type twin to bare `X`.
+                // `or_insert`: a local/explicit-import name of the same kind wins.
+                let td: Vec<(String, TypeInfo)> = self
+                    .typedefs
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
+                    })
+                    .collect();
+                for (b, v) in td {
+                    self.typedefs.entry(b).or_insert(v);
+                }
+                let sl: Vec<(String, StructLayout)> = self
+                    .struct_layouts
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
+                    })
+                    .collect();
+                for (b, v) in sl {
+                    self.struct_layouts.entry(b).or_insert(v);
+                }
+                let ed: Vec<(String, Vec<(String, i64)>)> = self
+                    .enum_defs
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
+                    })
+                    .collect();
+                for (b, v) in ed {
+                    self.enum_defs.entry(b).or_insert(v);
+                }
+                let un: Vec<String> = self
+                    .union_type_names
+                    .iter()
+                    .filter_map(|k| k.strip_prefix(&prefix).map(|b| b.to_string()))
+                    .collect();
+                self.union_type_names.extend(un);
+            }
+        }
         Some(ImportDecl {
             pkg,
             item,
@@ -1861,6 +1926,10 @@ impl<'t, 's> Parser<'t, 's> {
         while !self.at_eof() {
             let before = self.pos;
             if self.at_kw(Kw::Module) || self.at_kw(Kw::Macromodule) {
+                // A top-level unit's BARE type names are unit-scoped (IEEE §3.12.1):
+                // snapshot before, restore after (keeping any `pkg::` twins) so a
+                // module-local / package typedef does not leak into the next unit.
+                let snap = self.snapshot_scope();
                 match self.parse_module() {
                     Some(m) => items.push(TopItem::Module(m)),
                     None => {
@@ -1868,8 +1937,10 @@ impl<'t, 's> Parser<'t, 's> {
                         self.synchronize();
                     }
                 }
+                self.restore_scope_unit(snap);
             } else if self.at_kw(Kw::Interface) {
                 // v5 ⑥: `interface … endinterface` — same shape as a module.
+                let snap = self.snapshot_scope();
                 match self.parse_module_like(Kw::Interface, Kw::Endinterface) {
                     Some(m) => items.push(TopItem::Interface(m)),
                     None => {
@@ -1877,11 +1948,13 @@ impl<'t, 's> Parser<'t, 's> {
                         self.synchronize();
                     }
                 }
+                self.restore_scope_unit(snap);
             } else if self.at_kw(Kw::Program) {
                 // ⓑ-breadth (§24): `program … endprogram` parses into the module
                 // AST and elaborates as a top-level module container. The §24
                 // Reactive-region scheduling of program processes is approximated
                 // as Active (documented limitation). Pure parser addition (IR-0).
+                let snap = self.snapshot_scope();
                 match self.parse_module_like(Kw::Program, Kw::Endprogram) {
                     Some(m) => items.push(TopItem::Module(m)),
                     None => {
@@ -1889,8 +1962,12 @@ impl<'t, 's> Parser<'t, 's> {
                         self.synchronize();
                     }
                 }
+                self.restore_scope_unit(snap);
             } else if self.at_kw(Kw::Package) {
                 // v7 P2-D: `package … endpackage` — body shape reuses modules.
+                // The package body's scoped `pkg::t` twins survive the restore
+                // (kept by `restore_scope_unit`); only its bare names are dropped.
+                let snap = self.snapshot_scope();
                 match self.parse_module_like(Kw::Package, Kw::Endpackage) {
                     Some(m) => items.push(TopItem::Package(m)),
                     None => {
@@ -1898,6 +1975,7 @@ impl<'t, 's> Parser<'t, 's> {
                         self.synchronize();
                     }
                 }
+                self.restore_scope_unit(snap);
             } else if self.at_kw(Kw::Import) {
                 // v7 P2-D: compilation-unit-scope import.
                 match self.parse_import_decl() {
@@ -5625,6 +5703,56 @@ impl<'t, 's> Parser<'t, 's> {
         self.struct_layouts = s.struct_layouts;
         self.enum_defs = s.enum_defs;
         self.union_type_names = s.union_type_names;
+        self.var_struct = s.var_struct;
+        self.var_enum = s.var_enum;
+        self.struct_scalar_vars = s.struct_scalar_vars;
+        self.struct_1d_array_vars = s.struct_1d_array_vars;
+    }
+
+    /// Restore the type registries around a top-level UNIT (module / interface /
+    /// program / package), dropping the unit's BARE (unqualified) type names — a
+    /// unit's local `typedef t;` is unit-scoped in SV (IEEE §3.12.1), NOT visible
+    /// to the next unit — while KEEPING the scoped `pkg::t` twins a package body
+    /// added (so `pkg::t` and `import pkg::*` still resolve). Without this the flat
+    /// unit-global maps leak a bare package type (usable without `import`, which
+    /// iverilog rejects) or a module-local type into a later module — both silent-
+    /// wrong. Var-struct bindings are fully restored (unit-local, never leak).
+    fn restore_scope_unit(&mut self, s: ScopeSnapshot) {
+        // typedefs / struct_layouts / enum_defs: revert to the snapshot, then
+        // re-add the `::`-qualified twins the unit created (absent from the snap).
+        let new_td: Vec<(String, TypeInfo)> = self
+            .typedefs
+            .iter()
+            .filter(|(k, _)| k.contains("::") && !s.typedefs.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        self.typedefs = s.typedefs;
+        self.typedefs.extend(new_td);
+        let new_sl: Vec<(String, StructLayout)> = self
+            .struct_layouts
+            .iter()
+            .filter(|(k, _)| k.contains("::") && !s.struct_layouts.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        self.struct_layouts = s.struct_layouts;
+        self.struct_layouts.extend(new_sl);
+        let new_ed: Vec<(String, Vec<(String, i64)>)> = self
+            .enum_defs
+            .iter()
+            .filter(|(k, _)| k.contains("::") && !s.enum_defs.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        self.enum_defs = s.enum_defs;
+        self.enum_defs.extend(new_ed);
+        let new_un: Vec<String> = self
+            .union_type_names
+            .iter()
+            .filter(|k| k.contains("::") && !s.union_type_names.contains(*k))
+            .cloned()
+            .collect();
+        self.union_type_names = s.union_type_names;
+        self.union_type_names.extend(new_un);
+        // Var-struct bindings are unit-local and never leak → full restore.
         self.var_struct = s.var_struct;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
