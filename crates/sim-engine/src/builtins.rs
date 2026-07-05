@@ -61,6 +61,12 @@ pub(crate) fn dispatch(
     if sched.st.timeformat_stmts.contains(&sid) {
         return run_timeformat(sched, args);
     }
+    // OBS-3: a `$vita_stage("label", vals…)` call is a no-op `Display` whose StmtId is
+    // in `stage_stmts` — NEVER print; instead (under `+STAGE_TRACE`) append a
+    // `stage.jsonl` line. Args are evaluated HERE at execution time.
+    if sched.st.stage_stmts.contains(&sid) {
+        return run_vita_stage(sched, args);
+    }
     // §7.10 whole-handle copy `dst = src`: a no-op Display whose StmtId maps to
     // (dst, src) — DEEP-clone the src heap object (VALUE semantics: later
     // writes to either side never show through; iverilog-pinned for dyn/queue,
@@ -2808,6 +2814,48 @@ fn time_digits_shift(digits: &str, shift: i64, prec: usize) -> String {
 /// table spans 2…−15) so no real testbench can observe them.
 /// The suffix is %s-coerced NOW: a string-domain value keeps its exact bytes; a
 /// packed value renders its NUL-stripped ASCII form (8'h6E → "n").
+/// OBS-3: a `$vita_stage("label", vals…)` call — a no-op `Display` intercepted by
+/// StmtId. Pure no-op unless `+STAGE_TRACE` armed `stage_enabled`; then append a
+/// `stage.jsonl` line `{v,t,kind:"stage",label,idx,vals[]}` — arg[0] is the label
+/// (string), args[1..] are the values (each formatted like `$display %0d`, as JSON
+/// strings so x/z is representable). NEVER prints (a stage is a structured record).
+fn run_vita_stage(sched: &mut Scheduler, args: &[u32]) -> Ctl {
+    if !sched.st.stage_enabled {
+        return Ctl::Continue; // no capture without +STAGE_TRACE
+    }
+    let label = args
+        .first()
+        .map(|&a| {
+            let v = sched.eval(a);
+            String::from_utf8_lossy(&crate::eval::value_str_bytes(&v)).into_owned()
+        })
+        .unwrap_or_default();
+    let vals: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|&a| fmt_dec(&sched.eval(a)))
+        .collect();
+    let now = sched.st.now;
+    let idx = sched.st.stage_idx;
+    sched.st.stage_idx += 1;
+    let mut line = String::from("{\"v\":1,\"t\":");
+    line.push_str(&now.to_string());
+    line.push_str(",\"kind\":\"stage\",\"label\":");
+    crate::json_push_str(&mut line, &label);
+    line.push_str(",\"idx\":");
+    line.push_str(&idx.to_string());
+    line.push_str(",\"vals\":[");
+    for (i, v) in vals.iter().enumerate() {
+        if i > 0 {
+            line.push(',');
+        }
+        crate::json_push_str(&mut line, v);
+    }
+    line.push_str("]}");
+    sched.st.stage_lines.push(line);
+    Ctl::Continue
+}
+
 fn run_timeformat(sched: &mut Scheduler, args: &[u32]) -> Ctl {
     if args.is_empty() {
         sched.st.timeformat = None;

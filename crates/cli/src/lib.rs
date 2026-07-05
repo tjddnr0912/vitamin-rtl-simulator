@@ -663,6 +663,7 @@ fn run_vita_str_gated(
         // §21.3.2 %t/$timeformat: the call-site table + the precision exponent
         // %t scales against (one-shot path; empty/−9 ⇒ byte-identical).
         timeformat_stmts: sc.timeformat_stmts,
+        stage_stmts: sc.stage_stmts,
         handle_copy_stmts: sc.handle_copy_stmts,
         queue_slice_stmts: sc.queue_slice_stmts,
         global_prec_exp: rt.global_prec_exp,
@@ -822,6 +823,15 @@ fn emit_obs(
         if let Err(e) = obs::write_trace_dir(dir, lines) {
             eprintln!(
                 "error[{}]: cannot write trace.jsonl to '{dir}': {e}",
+                MsgCode::CliBadFlag.code_num()
+            );
+        }
+    }
+    // OBS-3: emit `stage.jsonl` when `+STAGE_TRACE` armed `$vita_stage` capture.
+    if let Some(lines) = &result.stage {
+        if let Err(e) = obs::write_stage_dir(dir, lines) {
+            eprintln!(
+                "error[{}]: cannot write stage.jsonl to '{dir}': {e}",
                 MsgCode::CliBadFlag.code_num()
             );
         }
@@ -1472,6 +1482,9 @@ fn run_velab_gated(
     let Some(ir) = ir else {
         return EXIT_USER_ERROR; // elab error already emitted
     };
+    if let Err(c) = reject_stage_staged(&sc) {
+        return c;
+    }
 
     // ── write `.velab` body = postcard(SimIr) ++ postcard(ForkModeTable) ++
     //    postcard(NetNameTable) ++ postcard((proc_multipliers, global_prec_exp)) ++
@@ -2082,6 +2095,9 @@ fn run_velab_lib_gated(
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;
     };
+    if let Err(c) = reject_stage_staged(&sc) {
+        return c;
+    }
     if inner.had_error_or_fatal() {
         return EXIT_USER_ERROR;
     }
@@ -2566,6 +2582,7 @@ fn run_vrun_gated(
         // trailer — without them a staged `%t` mis-scales and a `$timeformat`
         // prints its args.
         timeformat_stmts: extra.timeformat_stmts,
+        stage_stmts: std::collections::BTreeSet::new(),
         handle_copy_stmts: extra.handle_copy_stmts,
         queue_slice_stmts: extra.queue_slice_stmts,
         global_prec_exp,
@@ -3018,6 +3035,22 @@ fn reject_plusargs(stage: &str, io: &IoArgs) -> Result<(), i32> {
 /// Loud-reject it on the staged applets rather than silently accept-and-drop it
 /// (a silent no-op on `vrun`, the simulate stage, would mislead a harness — the
 /// staged obs rail is an OBS-1b follow-on). Mirrors [`reject_plusargs`].
+/// OBS-3: `$vita_stage` is a one-shot `vita` observability task — the staged tools do
+/// not emit `stage.jsonl`, and a staged run would print the intercepted no-op Display.
+/// Loud-reject a staged design that uses `$vita_stage` (staged staging is a follow-on;
+/// `--obs-dir` is already one-shot only).
+fn reject_stage_staged(sc: &elaborate::Sidecars) -> Result<(), i32> {
+    if !sc.stage_stmts.is_empty() {
+        eprintln!(
+            "error[{}]: `$vita_stage` is a one-shot `vita` task — `velab` does not \
+             stage it (run one-shot: `vita <design> --obs-dir <D> +STAGE_TRACE`)",
+            MsgCode::CliBadFlag.code_num()
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
+    Ok(())
+}
+
 fn reject_obs_dir(stage: &str, io: &IoArgs) -> Result<(), i32> {
     if let Some(dir) = &io.obs_dir {
         eprintln!(

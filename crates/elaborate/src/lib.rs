@@ -377,6 +377,10 @@ pub struct Sidecars {
     pub severities: SeverityTable,
     /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
+    /// OBS-3: StmtIds of `$vita_stage(...)` calls (no-op `Display` stmts the engine
+    /// intercepts to emit `stage.jsonl`, gated on `+STAGE_TRACE`). EMPTY ⇒ no
+    /// `$vita_stage` in the design. One-shot `vita` only (velab loud-rejects it).
+    pub stage_stmts: std::collections::BTreeSet<u32>,
     /// Whole-handle copy markers (§7.10): StmtId → (dst_net, src_net).
     pub handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
     /// Queue-slice markers (§7.10.1): StmtIds with args [dst, src, a, b].
@@ -622,6 +626,7 @@ pub fn elaborate_with_timescale_roots(
         proc_multipliers: std::mem::take(&mut el.proc_multipliers),
         severities: std::mem::take(&mut el.severities),
         timeformat_stmts: std::mem::take(&mut el.timeformat_stmts),
+        stage_stmts: std::mem::take(&mut el.stage_stmts),
         handle_copy_stmts: std::mem::take(&mut el.handle_copy_stmts),
         queue_slice_stmts: std::mem::take(&mut el.queue_slice_stmts),
         radixes: std::mem::take(&mut el.radixes),
@@ -2929,6 +2934,7 @@ struct Elaborator<'s> {
     // StmtIds of `$timeformat` calls (each a no-op `SysTaskId::Display` stmt —
     // the assert_ctl/severity pattern). Threaded via `SimOpts.timeformat_stmts`.
     timeformat_stmts: std::collections::BTreeSet<u32>,
+    stage_stmts: std::collections::BTreeSet<u32>,
     // Whole-handle copy markers (§7.10 `dst = src` deep copy): no-op Display
     // StmtId → (dst_net, src_net). Threaded via `SimOpts.handle_copy_stmts`.
     handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
@@ -3113,6 +3119,7 @@ impl<'s> Elaborator<'s> {
             fork_modes: ForkModeTable::new(),
             severities: SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
+            stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
             queue_slice_stmts: std::collections::BTreeSet::new(),
             radixes: RadixTable::new(),
@@ -27176,6 +27183,39 @@ impl<'s> Elaborator<'s> {
                 args: arg_ids,
             });
             self.timeformat_stmts.insert(sid);
+            return Some(sid);
+        }
+        // OBS-3: `$vita_stage("label", v0, v1, …)` — a vendor stage-trace task. Lowers
+        // to a no-op `Display` (never prints) + a `stage_stmts` StmtId sidecar (the
+        // $timeformat pattern; the frozen SysTaskId gains no variant). The engine
+        // intercepts by StmtId and, when `+STAGE_TRACE` is set, appends a `stage.jsonl`
+        // line `{v,t,kind:"stage",label,idx,vals[]}`; without the plusarg it is a pure
+        // no-op. Args stay RUNTIME expressions. Requires ≥1 arg (the label). One-shot
+        // `vita` only (velab loud-rejects a staged design with `$vita_stage`).
+        if name.name == "$vita_stage" {
+            if args.is_empty() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "$vita_stage requires at least a label argument \
+                     (`$vita_stage(\"label\"[, values…])`)",
+                );
+                return None;
+            }
+            if self.cur_defer.is_some() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "$vita_stage as a deferred-assertion action is unsupported \
+                     — call it as a plain statement",
+                );
+                return None;
+            }
+            let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+            let sid = self.push_stmt(ir::Stmt::SysTask {
+                which: ir::SysTaskId::Display,
+                fmt: None,
+                args: arg_ids,
+            });
+            self.stage_stmts.insert(sid);
             return Some(sid);
         }
         // P1-1: `$fatal`/`$error`/`$warning`/`$info` lower as `Display` stmts plus

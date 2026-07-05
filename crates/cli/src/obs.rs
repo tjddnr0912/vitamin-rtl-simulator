@@ -254,6 +254,17 @@ pub fn write_coverage_dir(dir: &str, cov: &sim_engine::CoverageSummary) -> std::
 /// complete `{v,t,kind:"chg",…}` record (already serialized by the engine, in time
 /// order); this joins them one-per-line. Loud on any filesystem error.
 pub fn write_trace_dir(dir: &str, lines: &[String]) -> std::io::Result<()> {
+    write_jsonl(dir, "trace.jsonl", lines)
+}
+
+/// Write `stage.jsonl` into `dir` (R-S3, OBS-3): one `{v,t,kind:"stage",…}` record
+/// per `$vita_stage` call, in emission order. Loud on any filesystem error.
+pub fn write_stage_dir(dir: &str, lines: &[String]) -> std::io::Result<()> {
+    write_jsonl(dir, "stage.jsonl", lines)
+}
+
+/// Join engine-serialized JSONL records one-per-line and write them to `dir/name`.
+fn write_jsonl(dir: &str, name: &str, lines: &[String]) -> std::io::Result<()> {
     let d = std::path::Path::new(dir);
     std::fs::create_dir_all(d)?;
     let mut body = String::with_capacity(lines.iter().map(|l| l.len() + 1).sum());
@@ -261,6 +272,6 @@ pub fn write_trace_dir(dir: &str, lines: &[String]) -> std::io::Result<()> {
         body.push_str(l);
         body.push('\n');
     }
-    std::fs::File::create(d.join("trace.jsonl"))?.write_all(body.as_bytes())?;
+    std::fs::File::create(d.join(name))?.write_all(body.as_bytes())?;
     Ok(())
 }

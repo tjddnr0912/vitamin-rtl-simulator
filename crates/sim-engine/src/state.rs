@@ -280,6 +280,14 @@ pub(crate) struct SimState<'a> {
     /// (the `assert_ctl`/severity side-table pattern, from
     /// `SimOpts.timeformat_stmts`); empty ⇒ no `$timeformat` in the design.
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
+    /// OBS-3: StmtIds of `$vita_stage(...)` calls — intercepted (never printed).
+    pub stage_stmts: std::collections::BTreeSet<u32>,
+    /// OBS-3: accumulated `stage.jsonl` lines (one per `$vita_stage` call), in order.
+    pub stage_lines: Vec<String>,
+    /// OBS-3: monotonic stage-emission counter (the `idx` field), for alignment.
+    pub stage_idx: u64,
+    /// OBS-3: `true` iff `+STAGE_TRACE` is set — else `$vita_stage` is a pure no-op.
+    pub stage_enabled: bool,
     /// Whole-handle copy markers (§7.10, from `SimOpts.handle_copy_stmts`):
     /// no-op Display StmtId → (dst_net, src_net); the dispatch intercept
     /// deep-clones `dyn_heap[src]` into `dyn_heap[dst]`.
@@ -720,6 +728,10 @@ impl<'a> SimState<'a> {
             proc_multipliers: Vec::new(),
             severities: crate::SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
+            stage_stmts: std::collections::BTreeSet::new(),
+            stage_lines: Vec::new(),
+            stage_idx: 0,
+            stage_enabled: false,
             handle_copy_stmts: std::collections::BTreeMap::new(),
             queue_slice_stmts: std::collections::BTreeSet::new(),
             timeformat: None,

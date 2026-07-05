@@ -156,6 +156,8 @@ pub struct SimOpts {
     /// `SysTaskId::Display`, the severity/assert_ctl pattern). EMPTY for designs
     /// without `$timeformat` (the default). Never enters the golden IR.
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
+    /// OBS-3: `$vita_stage` StmtIds (no-op Display the engine intercepts for stage.jsonl).
+    pub stage_stmts: std::collections::BTreeSet<u32>,
     /// Whole-handle copy markers (§7.10 `dst = src` deep copy): no-op Display
     /// StmtId → (dst_net, src_net). EMPTY default. Never golden.
     pub handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
@@ -302,6 +304,7 @@ impl Default for SimOpts {
             backend: Backend::Interpreter,
             severities: SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
+            stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
             queue_slice_stmts: std::collections::BTreeSet::new(),
             global_prec_exp: -9,
@@ -359,6 +362,9 @@ pub struct SimResult {
     /// OBS-2: `trace.jsonl` lines — one `{v,t,kind:"chg",path,old,new}` per probed-net
     /// CHANGE, in emission (time) order. `None` ⇒ no `--probe` (empty `probed_nets`).
     pub trace: Option<Vec<String>>,
+    /// OBS-3: `stage.jsonl` lines — one `{v,t,kind:"stage",…}` per `$vita_stage` call
+    /// (time order). `None` ⇒ `+STAGE_TRACE` was not set (no capture).
+    pub stage: Option<Vec<String>>,
 }
 
 /// OBS-2: format a net's 4-state value as an MSB..LSB binary string (`bit_char`
@@ -484,6 +490,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.backend = opts.backend;
     st.severities = opts.severities.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
+    st.stage_stmts = opts.stage_stmts.clone();
     st.handle_copy_stmts = opts.handle_copy_stmts.clone();
     st.queue_slice_stmts = opts.queue_slice_stmts.clone();
     st.global_prec_exp = opts.global_prec_exp;
@@ -494,6 +501,14 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.net_dims = opts.net_dims.clone();
     st.threads = opts.threads;
     st.plusargs = opts.plusargs.clone();
+    // OBS-3: `$vita_stage` captures to stage.jsonl only under `+STAGE_TRACE`; without
+    // it every `$vita_stage` is a pure no-op (suppressed, no capture). Accept the
+    // bare flag AND a `+STAGE_TRACE=<val>` form (plusargs conventionally carry `=v`),
+    // but NOT a `STAGE_TRACE`-prefixed neighbour like `+STAGE_TRACEX`.
+    st.stage_enabled = st
+        .plusargs
+        .iter()
+        .any(|p| p == "STAGE_TRACE" || p.starts_with("STAGE_TRACE="));
     st.final_procs = opts.final_procs.clone();
     // N4 clocking: source nets to snapshot (ordered, deterministic) + commit handlers.
     st.clocking_inputs = opts.clocking_inputs.iter().copied().collect();
@@ -683,6 +698,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
 
     // OBS-2: hand off the accumulated trace lines (Some iff `--probe` was set).
     let trace = (!opts.probed_nets.is_empty()).then(|| std::mem::take(&mut st.trace_lines));
+    // OBS-3: hand off stage lines (Some iff `+STAGE_TRACE` armed the capture).
+    let stage = st
+        .stage_enabled
+        .then(|| std::mem::take(&mut st.stage_lines));
 
     SimResult {
         finish_reason: reason,
@@ -691,6 +710,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         vcd_path: st.vcd_path.clone(),
         coverage,
         trace,
+        stage,
     }
 }
 

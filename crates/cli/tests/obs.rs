@@ -585,3 +585,115 @@ fn trace_probe_real_is_loud() {
     assert_ne!(code, 0, "real probe must be loud");
     assert!(!obs.join("trace.jsonl").exists());
 }
+
+// ── OBS-3: stage.jsonl (R-S3) — $vita_stage vendor stage-trace task ──────────
+// Teeth: 3-WAY (stage vals == parallel `$display %0d`) + no-op without +STAGE_TRACE.
+
+#[test]
+fn stage_jsonl_capture() {
+    let src = "module m;\n\
+         logic [3:0] st;\n\
+         initial begin st=1; $vita_stage(\"init\", st);\n\
+           #1 st=5; $vita_stage(\"run\", st, 42); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &["+STAGE_TRACE"]);
+    assert_eq!(code, 0, "{out}");
+    let sj = read(&obs.join("stage.jsonl"));
+    assert!(
+        sj.contains("\"label\":\"init\",\"idx\":0,\"vals\":[\"1\"]"),
+        "{sj}"
+    );
+    assert!(
+        sj.contains("\"label\":\"run\",\"idx\":1,\"vals\":[\"5\",\"42\"]"),
+        "{sj}"
+    );
+    assert!(sj.contains("\"t\":1,"), "time recorded\n{sj}");
+}
+
+#[test]
+fn stage_3way_matches_display() {
+    // stage vals == parallel `$display("%0d",…)` (incl. signed + x).
+    let src = "module m;\n\
+         logic [7:0] a; logic signed [7:0] b; logic [3:0] x;\n\
+         initial begin a=200; b=-5; x=4'bxx01;\n\
+           $display(\"D %0d %0d %0d\", a, b, x);\n\
+           $vita_stage(\"s\", a, b, x); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &["+STAGE_TRACE"]);
+    assert_eq!(code, 0, "{out}");
+    // parse $display "D <a> <b> <x>"
+    let disp: Vec<String> = out
+        .lines()
+        .find_map(|l| l.strip_prefix("D "))
+        .map(|r| r.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default();
+    let sj = read(&obs.join("stage.jsonl"));
+    let vals: Vec<String> = sj
+        .split("\"vals\":[")
+        .nth(1)
+        .and_then(|s| s.split(']').next())
+        .unwrap_or("")
+        .split(',')
+        .map(|t| t.trim_matches('"').to_string())
+        .collect();
+    assert_eq!(vals, disp, "stage vals must equal $display %0d\n{sj}");
+}
+
+#[test]
+fn stage_no_plusarg_is_noop() {
+    // Without +STAGE_TRACE: no stage.jsonl AND no stdout leak ($vita_stage suppressed).
+    let src = "module m;\n\
+         logic [3:0] st;\n\
+         initial begin st=7; $vita_stage(\"x\", st); #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        !obs.join("stage.jsonl").exists(),
+        "no +STAGE_TRACE ⇒ no stage.jsonl"
+    );
+    assert!(
+        !out.contains('x'),
+        "no $vita_stage text leaks to stdout\n{out}"
+    );
+}
+
+#[test]
+fn stage_determinism() {
+    let src = "module m;\n\
+         logic [3:0] st;\n\
+         initial begin st=1; $vita_stage(\"a\", st); #1 st=8; $vita_stage(\"b\", st); #1 $finish; end\n\
+         endmodule\n";
+    let (_o1, c1, o1) = run(src, &["+STAGE_TRACE"]);
+    let (_o2, c2, o2) = run(src, &["+STAGE_TRACE"]);
+    assert_eq!(c1, 0);
+    assert_eq!(c2, 0);
+    assert_eq!(read(&o1.join("stage.jsonl")), read(&o2.join("stage.jsonl")));
+}
+
+#[test]
+fn stage_zero_arg_is_loud() {
+    let src = "module m; initial begin $vita_stage(); #1 $finish; end endmodule\n";
+    let (_o, code, _obs) = run(src, &["+STAGE_TRACE"]);
+    assert_ne!(code, 0, "$vita_stage() with no label must be loud");
+}
+
+#[test]
+fn stage_plusarg_value_form_enables() {
+    // `+STAGE_TRACE=1` (the conventional `+name=value` form) enables capture, but a
+    // prefix neighbour `+STAGE_TRACEX` does NOT (exact/`=`-prefixed match only).
+    let src = "module m; logic [3:0] s;\n\
+         initial begin s=1; $vita_stage(\"a\", s); #1 $finish; end endmodule\n";
+    let (_o, c1, obs1) = run(src, &["+STAGE_TRACE=1"]);
+    assert_eq!(c1, 0);
+    assert!(
+        obs1.join("stage.jsonl").exists(),
+        "+STAGE_TRACE=1 enables capture"
+    );
+    let (_o2, c2, obs2) = run(src, &["+STAGE_TRACEX"]);
+    assert_eq!(c2, 0);
+    assert!(
+        !obs2.join("stage.jsonl").exists(),
+        "+STAGE_TRACEX must NOT enable"
+    );
+}
