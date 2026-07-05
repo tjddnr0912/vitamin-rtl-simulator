@@ -87,6 +87,13 @@ pub struct VitaOpts {
     /// rail (byte-identical to before). Out-of-band sink — never hashed into
     /// artifacts, never enters the golden IR. One-shot `vita` only for v1.
     pub obs_dir: Option<String>,
+    /// `--probe <path>` (OBS-2): hierarchical net names to trace into `trace.jsonl`
+    /// (requires `--obs-dir`). Resolved to net ids after elaborate (miss ⇒ loud).
+    /// EMPTY ⇒ no probing. One-shot `vita` only.
+    pub probes: Vec<String>,
+    /// `--probe-file <F>` (OBS-2): a file of probe paths, one per line (`#` comments
+    /// and blank lines skipped), merged with `--probe`.
+    pub probe_file: Option<String>,
 }
 
 impl VitaOpts {
@@ -634,9 +641,23 @@ fn run_vita_str_gated(
     };
 
     // ── simulate ────────────────────────────────────────────────────────────
+    // OBS-2: resolve --probe paths → net ids against the elaborated net_names
+    // (loud on an unresolved path / --probe without --obs-dir) BEFORE net_names is
+    // moved into SimOpts below.
+    let probed_nets = match resolve_probes(
+        &opts.probes,
+        opts.probe_file.as_deref(),
+        opts.obs_dir.as_deref(),
+        &sc.net_names,
+        &ir.nets,
+    ) {
+        Ok(v) => v,
+        Err(c) => return c,
+    };
     let sim_opts = SimOpts {
         fork_modes: sc.fork_modes,
         net_names: sc.net_names,
+        probed_nets,
         proc_multipliers: sc.proc_multipliers,
         severities: sc.severities,
         // §21.3.2 %t/$timeformat: the call-site table + the precision exponent
@@ -791,6 +812,16 @@ fn emit_obs(
         if let Err(e) = obs::write_coverage_dir(dir, cov) {
             eprintln!(
                 "error[{}]: cannot write coverage.json to '{dir}': {e}",
+                MsgCode::CliBadFlag.code_num()
+            );
+        }
+    }
+    // OBS-2: emit `trace.jsonl` when the run was probed (`--probe`). Absent ⇒ no
+    // probe. A write failure is loud (a silently-missing trace misleads).
+    if let Some(lines) = &result.trace {
+        if let Err(e) = obs::write_trace_dir(dir, lines) {
+            eprintln!(
+                "error[{}]: cannot write trace.jsonl to '{dir}': {e}",
                 MsgCode::CliBadFlag.code_num()
             );
         }
@@ -963,6 +994,8 @@ pub fn run(argv: &[String]) -> i32 {
                 tops: Vec::new(),
                 plusargs: io.plusargs,
                 obs_dir: io.obs_dir,
+                probes: io.probes,
+                probe_file: io.probe_file,
             };
             run_vita(&io.pos, &opts)
         }
@@ -2484,6 +2517,9 @@ fn run_vrun_gated(
     let sim_opts = SimOpts {
         fork_modes,
         net_names,
+        // OBS-2: --probe is one-shot `vita` only (reject_obs_dir rejects it for the
+        // staged tools), so the staged path never probes.
+        probed_nets: Vec::new(),
         proc_multipliers,
         severities,
         radixes,
@@ -2579,6 +2615,10 @@ struct IoArgs {
     /// `--obs-dir <D>` (G2 OBS-1a): directory for the run manifest + result
     /// ledger. `None` ⇒ no obs rail. Out-of-band; one-shot `vita` only for v1.
     obs_dir: Option<String>,
+    /// `--probe <path>` (OBS-2, repeatable): net names to trace into `trace.jsonl`.
+    probes: Vec<String>,
+    /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
+    probe_file: Option<String>,
 }
 
 /// W-FLIST-OVERRIDE (always-logged): a single-value knob set twice — proceed
@@ -2609,6 +2649,8 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut tops: Vec<String> = Vec::new();
     let mut plusargs: Vec<String> = Vec::new();
     let mut obs_dir: Option<String> = None;
+    let mut probes: Vec<String> = Vec::new();
+    let mut probe_file: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -2817,6 +2859,35 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 obs_dir = Some(v.clone());
                 i += 2;
             }
+            "--probe" => {
+                let Some(v) = args.get(i + 1) else {
+                    eprintln!(
+                        "error[{}]: '--probe' needs a hierarchical net path",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                if v.is_empty() {
+                    eprintln!(
+                        "error[{}]: '--probe' needs a non-empty net path",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                }
+                probes.push(v.clone());
+                i += 2;
+            }
+            "--probe-file" => {
+                let Some(v) = args.get(i + 1) else {
+                    eprintln!(
+                        "error[{}]: '--probe-file' needs a file path",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                probe_file = Some(v.clone());
+                i += 2;
+            }
             "--dump-filelist" => {
                 dump_filelist = true;
                 i += 1;
@@ -2883,6 +2954,8 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         tops,
         plusargs,
         obs_dir,
+        probes,
+        probe_file,
     })
 }
 
@@ -2954,7 +3027,101 @@ fn reject_obs_dir(stage: &str, io: &IoArgs) -> Result<(), i32> {
         );
         return Err(EXIT_CLI_ERROR);
     }
+    if !io.probes.is_empty() || io.probe_file.is_some() {
+        eprintln!(
+            "error[{}]: '--probe'/'--probe-file' is a one-shot `vita` argument — \
+             '{stage}' does not emit the trace rail (staged probing is a follow-on)",
+            MsgCode::CliBadFlag.code_num()
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
     Ok(())
+}
+
+/// OBS-2: resolve `--probe`/`--probe-file` paths to net ids against the elaborated
+/// `net_names` table. `--probe` requires `--obs-dir` (the `trace.jsonl` target). An
+/// unresolved path is LOUD (never a silent skip — a probe typo must not vanish).
+/// Returns the resolved net ids (empty when no `--probe` was given).
+fn resolve_probes(
+    probes: &[String],
+    probe_file: Option<&str>,
+    obs_dir: Option<&str>,
+    net_names: &[String],
+    nets: &[sim_ir::NetVar],
+) -> Result<Vec<u32>, i32> {
+    let mut paths: Vec<String> = probes.to_vec();
+    if let Some(f) = probe_file {
+        let content = std::fs::read_to_string(f).map_err(|e| {
+            eprintln!(
+                "error[{}]: cannot read --probe-file '{f}': {e}",
+                MsgCode::CliBadFlag.code_num()
+            );
+            EXIT_CLI_ERROR
+        })?;
+        for line in content.lines() {
+            let t = line.trim();
+            if !t.is_empty() && !t.starts_with('#') {
+                paths.push(t.to_string());
+            }
+        }
+    }
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    if obs_dir.is_none() {
+        eprintln!(
+            "error[{}]: '--probe' requires '--obs-dir <D>' (trace.jsonl is written there)",
+            MsgCode::CliBadFlag.code_num()
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
+    let mut ids = Vec::new();
+    for p in &paths {
+        match net_names.iter().position(|n| n == p) {
+            Some(idx) => {
+                // OBS-2 v1: `fmt_probe_value` formats a plain integral bit-vector
+                // (Wire/Reg/Logic/Integer, `array_len == 1`) — the only kind whose
+                // whole-net value the trace captures faithfully. Loud-reject anything
+                // else, because it would silently misreport:
+                //   • unpacked ARRAY (`array_len > 1`) → only element 0 is formatted;
+                //   • dynamic-array/queue/string HANDLE (`array_len == 0`) → heap
+                //     storage, not a bit vector;
+                //   • REAL/realtime (`array_len == 1`, kind `Real`) → the raw f64
+                //     bit-pattern, NOT the value (≠ VCD `r1.5` / `$monitor` 1.5).
+                // per-element / real / handle probing is a follow-on.
+                let reason = nets.get(idx).and_then(|n| {
+                    if n.array_len == 0 {
+                        Some("a dynamic-array/queue/string handle")
+                    } else if n.array_len > 1 {
+                        Some("an unpacked array")
+                    } else if matches!(n.kind, sim_ir::NetKind::Real) {
+                        Some("a real/realtime net")
+                    } else {
+                        None
+                    }
+                });
+                if let Some(r) = reason {
+                    eprintln!(
+                        "error[{}]: --probe path '{p}' is {r} — v1 can trace only a \
+                         scalar/vector/packed net (real / per-element array / handle \
+                         probing is a follow-on)",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                }
+                ids.push(idx as u32);
+            }
+            None => {
+                eprintln!(
+                    "error[{}]: --probe path '{p}' does not resolve to a net \
+                     (check the hierarchical name; `--dump-filelist`-style net listing is a follow-on)",
+                    MsgCode::CliBadFlag.code_num()
+                );
+                return Err(EXIT_CLI_ERROR);
+            }
+        }
+    }
+    Ok(ids)
 }
 
 fn reject_worklib_flags(

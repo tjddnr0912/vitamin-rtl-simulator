@@ -264,6 +264,13 @@ pub(crate) struct SimState<'a> {
     pub vcd_date: String,
     /// Per-NetId hierarchical name (`"top.dut.q"`); empty ⇒ flat `n{i}` fallback.
     pub net_names: Vec<String>,
+    /// OBS-2 (`--probe`): per-NetId "is this net traced?" — EMPTY ⇒ no probing (the
+    /// per-change tap is a no-op). Sized to the net table when any net is probed.
+    pub probed: Vec<bool>,
+    /// OBS-2: last emitted value string per probed net (change dedup + `old` field).
+    pub probe_prev: Vec<Option<String>>,
+    /// OBS-2: accumulated `trace.jsonl` lines (one per probed-net change), time order.
+    pub trace_lines: Vec<String>,
     /// Per-ProcId time multiplier (from `SimOpts.proc_multipliers`); empty ⇒ M=1.
     pub proc_multipliers: Vec<u64>,
     /// StmtId → severity for `$fatal`/`$error`/`$warning`/`$info` statements
@@ -685,6 +692,9 @@ impl<'a> SimState<'a> {
             timescale_unit,
             vcd_date,
             net_names: Vec::new(),
+            probed: Vec::new(),
+            probe_prev: Vec::new(),
+            trace_lines: Vec::new(),
             net_dims: crate::NetDimsTable::new(),
             dump_filter: None,
             dump_multi_warned: false,
@@ -1359,6 +1369,7 @@ impl<'a> SimState<'a> {
         // normally. Overwritten each change, so it is fresh for the next sweep.
         self.last_blocking_writer[i] = self.blocking_writer.unwrap_or(u32::MAX);
         self.emit_vcd_change(net, word);
+        self.emit_probe_change(net, word);
     }
 
     /// GLITCH: OR this write's bit0 transition (`old_b0 → current bit0`) into the
@@ -1406,6 +1417,36 @@ impl<'a> SimState<'a> {
             let _ = w.set_time(self.now);
             let _ = w.value_change(id, &packed, width);
         }
+    }
+
+    /// OBS-2 (`--probe`): record a `trace.jsonl` change line when a PROBED net's value
+    /// changes. INDEPENDENT of VCD dumping (a `--probe` without `$dumpvars` still
+    /// traces). Change-deduped against the last emitted value so only real
+    /// transitions are logged ("transition만", R-L3). Fast `probed` bool check ⇒
+    /// no-op for unprobed nets and for runs with no `--probe` (empty `probed`).
+    fn emit_probe_change(&mut self, net: u32, _word: u32) {
+        let i = net as usize;
+        if self.probed.get(i).copied() != Some(true) {
+            return;
+        }
+        let width = self.nets[i].width;
+        let newv = crate::fmt_probe_value(&self.nets[i].cur, width);
+        if self.probe_prev[i].as_deref() == Some(newv.as_str()) {
+            return; // no actual value change (same-value write / other-word glitch)
+        }
+        let old = self.probe_prev[i].clone().unwrap_or_default();
+        let path = self.net_names.get(i).cloned().unwrap_or_default();
+        let mut line = String::from("{\"v\":1,\"t\":");
+        line.push_str(&self.now.to_string());
+        line.push_str(",\"kind\":\"chg\",\"path\":");
+        crate::json_push_str(&mut line, &path);
+        line.push_str(",\"old\":");
+        crate::json_push_str(&mut line, &old);
+        line.push_str(",\"new\":");
+        crate::json_push_str(&mut line, &newv);
+        line.push('}');
+        self.trace_lines.push(line);
+        self.probe_prev[i] = Some(newv);
     }
 
     // ── edge support ─────────────────────────────────────────────────────

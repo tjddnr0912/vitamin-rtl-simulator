@@ -185,6 +185,10 @@ pub struct SimOpts {
     /// `SimResult.coverage` summary for `coverage.json`. EMPTY ⇒ no covergroups.
     /// Never enters the IR (golden-neutral).
     pub coverage_manifest: Vec<CovgInstMeta>,
+    /// OBS-2: net ids to trace for `trace.jsonl` (`--probe`). On each CHANGE of a
+    /// probed net the engine records a `{v,t,kind:"chg",path,old,new}` line in
+    /// `SimResult.trace`. EMPTY ⇒ no probing (byte-identical). Never enters the IR.
+    pub probed_nets: Vec<u32>,
     /// Unpacked-array dims (Phase-1.x ⑤): array NetId → per-dim `(lo, size)`.
     /// SPARSE — an absent array means 1-D 0-based, so per-element VCD names
     /// fall back to `mem[k]`. EMPTY by default. Never enters the IR.
@@ -306,6 +310,7 @@ impl Default for SimOpts {
             queue_bounds: QueueBoundTable::new(),
             proc_scopes: Vec::new(),
             coverage_manifest: Vec::new(),
+            probed_nets: Vec::new(),
             net_dims: NetDimsTable::new(),
             threads: 1,
             plusargs: Vec::new(),
@@ -351,6 +356,49 @@ pub struct SimResult {
     /// OBS-1b: end-of-run functional-coverage summary (N5 covergroups). `None` ⇒ the
     /// design had no covergroup instances (empty `coverage_manifest`).
     pub coverage: Option<CoverageSummary>,
+    /// OBS-2: `trace.jsonl` lines — one `{v,t,kind:"chg",path,old,new}` per probed-net
+    /// CHANGE, in emission (time) order. `None` ⇒ no `--probe` (empty `probed_nets`).
+    pub trace: Option<Vec<String>>,
+}
+
+/// OBS-2: format a net's 4-state value as an MSB..LSB binary string (`bit_char`
+/// semantics: 0/1/x/z), matching the VCD writer. Deterministic. A scalar (width 1)
+/// yields a single char.
+fn fmt_probe_value(bits: &sim_ir::BitPacked, width: u32) -> String {
+    let w = width.max(1);
+    let mut s = String::with_capacity(w as usize);
+    for i in (0..w).rev() {
+        let word = (i / 64) as usize;
+        let shift = i % 64;
+        let v = bits.val.get(word).map_or(0, |x| (x >> shift) & 1);
+        let u = bits.unk.get(word).map_or(0, |x| (x >> shift) & 1);
+        s.push(match (v, u) {
+            (0, 0) => '0',
+            (1, 0) => '1',
+            (0, 1) => 'x',
+            _ => 'z',
+        });
+    }
+    s
+}
+
+/// OBS-2: append `s` as a JSON string literal (quotes + minimal RFC-8259 escaping).
+/// Net paths and 4-state values are normally escape-free, but a `\`-escaped SV
+/// identifier could appear — so quote/backslash/control are escaped for safety.
+fn json_push_str(out: &mut String, s: &str) {
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 /// OBS-1b: end-of-run functional-coverage summary (N5 covergroups), computed from
@@ -417,6 +465,21 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         opts.vcd_path_override.clone(),
     );
     st.net_names = opts.net_names.clone();
+    // OBS-2: arm the `--probe` trace tap. `probe_prev` starts at each probed net's
+    // INITIAL value so the first logged line is the first real transition (old→new);
+    // the t0 value itself is the baseline, not a "change" (R-L3 transition-only).
+    if !opts.probed_nets.is_empty() {
+        let n = st.nets.len();
+        st.probed = vec![false; n];
+        st.probe_prev = vec![None; n];
+        for &id in &opts.probed_nets {
+            let i = id as usize;
+            if i < n {
+                st.probed[i] = true;
+                st.probe_prev[i] = Some(fmt_probe_value(&st.nets[i].cur, st.nets[i].width));
+            }
+        }
+    }
     st.proc_multipliers = opts.proc_multipliers.clone();
     st.backend = opts.backend;
     st.severities = opts.severities.clone();
@@ -618,12 +681,16 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         CoverageSummary { groups }
     });
 
+    // OBS-2: hand off the accumulated trace lines (Some iff `--probe` was set).
+    let trace = (!opts.probed_nets.is_empty()).then(|| std::mem::take(&mut st.trace_lines));
+
     SimResult {
         finish_reason: reason,
         sim_time: st.now,
         exit_class,
         vcd_path: st.vcd_path.clone(),
         coverage,
+        trace,
     }
 }
 

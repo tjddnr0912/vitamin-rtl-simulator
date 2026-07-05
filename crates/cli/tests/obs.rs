@@ -410,3 +410,178 @@ fn no_covergroup_no_coverage_json() {
         "no covergroups ⇒ no coverage.json"
     );
 }
+
+// ── OBS-2: trace.jsonl (R-L3) — `--probe` net change-stream ─────────────────
+// Teeth: 3-WAY — the trace value timeline == the same net's VCD/`$monitor`
+// timeline (both derive from the SAME per-change event). Probe typo = loud.
+
+/// Parse `trace.jsonl` into `(t, new_binary)` pairs for a given path.
+fn trace_pairs(json: &str, path: &str) -> Vec<(u64, String)> {
+    let needle = format!("\"path\":\"{path}\"");
+    json.lines()
+        .filter(|l| l.contains(&needle))
+        .filter_map(|l| {
+            let t = l.split("\"t\":").nth(1)?.split(',').next()?.parse().ok()?;
+            let nv = l.split("\"new\":\"").nth(1)?.split('"').next()?.to_string();
+            Some((t, nv))
+        })
+        .collect()
+}
+
+#[test]
+fn trace_jsonl_change_stream() {
+    // A 4-bit counter: t0 x→0, then 0→1→2→5. Change-only, MSB..LSB binary.
+    let src = "module m;\n\
+         logic [3:0] cnt;\n\
+         initial begin cnt=0; #1 cnt=1; #1 cnt=2; #1 cnt=5; #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &["--probe", "m.cnt"]);
+    assert_eq!(code, 0, "{out}");
+    let pairs = trace_pairs(&read(&obs.join("trace.jsonl")), "m.cnt");
+    assert_eq!(
+        pairs,
+        vec![
+            (0, "0000".into()),
+            (1, "0001".into()),
+            (2, "0010".into()),
+            (3, "0101".into()),
+        ]
+    );
+}
+
+#[test]
+fn trace_jsonl_3way_matches_monitor() {
+    // The trace (binary→decimal) timeline == `$monitor` (decimal) timeline.
+    let src = "module m;\n\
+         logic [3:0] cnt;\n\
+         initial begin $monitor(\"MON %0t %0d\", $time, cnt);\n\
+           cnt=0; #1 cnt=3; #1 cnt=10; #1 cnt=15; #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &["--probe", "m.cnt"]);
+    assert_eq!(code, 0, "{out}");
+    // $monitor lines → (t, dec)
+    let mon: Vec<(u64, u32)> = out
+        .lines()
+        .filter_map(|l| l.strip_prefix("MON "))
+        .filter_map(|r| {
+            let mut it = r.split_whitespace();
+            Some((it.next()?.parse().ok()?, it.next()?.parse().ok()?))
+        })
+        .collect();
+    // trace (t, binary→dec)
+    let tr: Vec<(u64, u32)> = trace_pairs(&read(&obs.join("trace.jsonl")), "m.cnt")
+        .iter()
+        .map(|(t, b)| (*t, u32::from_str_radix(b, 2).unwrap()))
+        .collect();
+    assert_eq!(tr, mon, "trace timeline must equal $monitor timeline");
+}
+
+#[test]
+fn trace_probe_typo_is_loud() {
+    // An unresolved --probe path is a loud error (exit != 0), never a silent skip.
+    let src = "module m; logic x; initial begin x=0; #1 $finish; end endmodule\n";
+    let (_o, code, obs) = run(src, &["--probe", "m.nonexistent"]);
+    assert_ne!(code, 0, "probe typo must be loud");
+    assert!(!obs.join("trace.jsonl").exists());
+}
+
+#[test]
+fn trace_probe_without_obs_dir_is_loud() {
+    // `--probe` needs `--obs-dir` (the trace.jsonl target).
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_obs_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(
+        &f,
+        "module m; logic x; initial begin x=0; #1 $finish; end endmodule\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .args(["--probe", "m.x"])
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "--probe without --obs-dir is loud"
+    );
+}
+
+#[test]
+fn trace_determinism() {
+    let src = "module m;\n\
+         logic [3:0] cnt;\n\
+         initial begin cnt=0; #1 cnt=7; #1 cnt=8; #1 $finish; end\n\
+         endmodule\n";
+    let (_o1, c1, obs1) = run(src, &["--probe", "m.cnt"]);
+    let (_o2, c2, obs2) = run(src, &["--probe", "m.cnt"]);
+    assert_eq!(c1, 0);
+    assert_eq!(c2, 0);
+    assert_eq!(
+        read(&obs1.join("trace.jsonl")),
+        read(&obs2.join("trace.jsonl")),
+        "trace.jsonl byte-identical across runs"
+    );
+}
+
+#[test]
+fn no_probe_no_trace_jsonl() {
+    let src = "module m; logic x; initial begin x=0; #1 $finish; end endmodule\n";
+    let (out, code, obs) = run(src, &[]);
+    assert_eq!(code, 0, "{out}");
+    assert!(obs.join("run.json").exists());
+    assert!(
+        !obs.join("trace.jsonl").exists(),
+        "no --probe ⇒ no trace.jsonl"
+    );
+}
+
+#[test]
+fn trace_probe_unpacked_array_is_loud() {
+    // An unpacked-array probe target would under-report (element 0 only) — v1 loud-
+    // rejects it (per-element probing is a follow-on), never a silent partial trace.
+    let src = "module m;\n\
+         reg [7:0] mem [0:3];\n\
+         initial begin mem[0]=1; mem[1]=2; #1 $finish; end\n\
+         endmodule\n";
+    let (_o, code, obs) = run(src, &["--probe", "m.mem"]);
+    assert_ne!(code, 0, "unpacked-array probe must be loud");
+    assert!(!obs.join("trace.jsonl").exists());
+}
+
+#[test]
+fn trace_probe_packed_multidim_full_width() {
+    // A packed multi-dim net (array_len==1) traces its FULL width, not element 0.
+    let src = "module m;\n\
+         reg [1:0][7:0] p;\n\
+         initial begin p=16'hABCD; #1 p=16'h1234; #1 $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &["--probe", "m.p"]);
+    assert_eq!(code, 0, "{out}");
+    let tj = read(&obs.join("trace.jsonl"));
+    assert!(
+        tj.contains("\"new\":\"1010101111001101\""),
+        "ABCD full 16-bit\n{tj}"
+    );
+    assert!(
+        tj.contains("\"new\":\"0001001000110100\""),
+        "1234 full 16-bit\n{tj}"
+    );
+}
+
+#[test]
+fn trace_probe_real_is_loud() {
+    // A `real`/`realtime` net has array_len==1 but f64 storage — the whole-net
+    // formatter would emit the raw IEEE-754 bit pattern (≠ VCD `r1.5` / `$monitor`).
+    // So loud-reject it (real probing is a follow-on), never a silent bit-pattern.
+    let src = "module m;\n\
+         real r;\n\
+         initial begin r=1.5; #1 r=2.5; #1 $finish; end\n\
+         endmodule\n";
+    let (_o, code, obs) = run(src, &["--probe", "m.r"]);
+    assert_ne!(code, 0, "real probe must be loud");
+    assert!(!obs.join("trace.jsonl").exists());
+}

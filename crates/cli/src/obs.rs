@@ -249,3 +249,18 @@ pub fn write_coverage_dir(dir: &str, cov: &sim_engine::CoverageSummary) -> std::
     std::fs::File::create(d.join("coverage.json"))?.write_all(coverage_json(cov).as_bytes())?;
     Ok(())
 }
+
+/// Write `trace.jsonl` into `dir` (R-L3, OBS-2). Each element of `lines` is a
+/// complete `{v,t,kind:"chg",…}` record (already serialized by the engine, in time
+/// order); this joins them one-per-line. Loud on any filesystem error.
+pub fn write_trace_dir(dir: &str, lines: &[String]) -> std::io::Result<()> {
+    let d = std::path::Path::new(dir);
+    std::fs::create_dir_all(d)?;
+    let mut body = String::with_capacity(lines.iter().map(|l| l.len() + 1).sum());
+    for l in lines {
+        body.push_str(l);
+        body.push('\n');
+    }
+    std::fs::File::create(d.join("trace.jsonl"))?.write_all(body.as_bytes())?;
+    Ok(())
+}
