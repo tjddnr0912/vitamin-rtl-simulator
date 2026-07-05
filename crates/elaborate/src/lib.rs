@@ -11422,6 +11422,21 @@ impl<'s> Elaborator<'s> {
                 })
             }
             ast::ExprKind::PartSelect { base, msb, lsb } => {
+                // A part-select of a package ARRAY ELEMENT (`pkg::mem[i][m:l]`) is
+                // loud (v1 does not normalize nested non-zero-LSB packed elements)
+                // — the whole element `pkg::mem[i]` and a DIRECT `pkg::vec[m:l]`
+                // both lower fine.
+                if self.is_pkg_array_elem_subselect(base) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a part-select of a package array element \
+                         (`pkg::arr[i][m:l]`) is not supported in v1 — read the \
+                         whole element `pkg::arr[i]`, or import the name and \
+                         part-select on it",
+                    );
+                    let _ = (msb, lsb);
+                    return self.placeholder_expr();
+                }
                 // N3.4: a part-select on a bare multi-dim PACKED net selects
                 // whole outer-dim elements, not flat bits.
                 if let Some(sel) = self.try_packed_part_select(base, msb, lsb) {
@@ -11459,6 +11474,19 @@ impl<'s> Elaborator<'s> {
                 width,
                 dir,
             } => {
+                // Loud twin of the PartSelect guard: an indexed part-select of a
+                // package array element (`pkg::mem[i][b+:w]`) is unsupported in v1.
+                if self.is_pkg_array_elem_subselect(base) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "an indexed part-select of a package array element \
+                         (`pkg::arr[i][b+:w]`) is not supported in v1 — read the \
+                         whole element `pkg::arr[i]`, or import the name and \
+                         select on it",
+                    );
+                    let _ = (offset, width, dir);
+                    return self.placeholder_expr();
+                }
                 // N3.4 follow-on: a constant indexed part-select on a bare/array
                 // multi-dim packed net selects whole outer elements (`x[2+:2]` ≡
                 // `x[3:2]`); a variable offset is loud (iverilog 13.0 aborts).
@@ -14765,7 +14793,41 @@ impl<'s> Elaborator<'s> {
                 }
             }
         }
+        // Explicit DIRECT `pkg::vec[…]` — normalize by the package net's declared
+        // range, exactly as the bare `Ident` arm does (a non-zero-LSB `[15:8]` or
+        // ascending `[lo:hi]` package vector selects the right internal bit). Only
+        // a direct PkgScoped base: a package ARRAY-ELEMENT sub-select
+        // (`pkg::mem[i][m:l]`) is loud-guarded upstream, so it never reaches here.
+        if let Some(net) = self.pkg_scoped_var_net(base) {
+            return self.norm_offset_for_net(net, raw_off);
+        }
         raw_off
+    }
+
+    /// Does `base` (a part/indexed-select base) peel through ≥1 array-element
+    /// `BitSelect` to an explicit `pkg::name` root? Such a package array-element
+    /// SUB-select (`pkg::mem[i][m:l]`) has offset-normalization edge cases —
+    /// nested non-zero-LSB packed dims resolve against the whole-net range, not
+    /// the residual element range — that v1 does not handle correctly. It is LOUD
+    /// (exactly as on the base before package array elements could lower at all),
+    /// never silently mis-normalized. A DIRECT `pkg::vec[m:l]` (0 peels) or a
+    /// LOCAL base yields false and lowers normally.
+    fn is_pkg_array_elem_subselect(&self, base: &ast::Expr) -> bool {
+        let mut cur = base;
+        let mut peeled = false;
+        loop {
+            match &cur.kind {
+                ast::ExprKind::Paren { inner } => cur = inner,
+                ast::ExprKind::BitSelect { base, .. } => {
+                    peeled = true;
+                    cur = base;
+                }
+                ast::ExprKind::PkgScoped { .. } => {
+                    return peeled && self.pkg_scoped_var_net(cur).is_some();
+                }
+                _ => return false,
+            }
+        }
     }
 
     /// Placeholder used after an error so downstream edges stay valid.
@@ -14787,6 +14849,9 @@ impl<'s> Elaborator<'s> {
                 ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                     return self.lookup_net_scoped(&path.segments[0].name);
                 }
+                // Explicit `pkg::vec[m:l]` / `pkg::arr[i][m:l]` — the root is the
+                // package net (its declared range drives the ascending check).
+                ast::ExprKind::PkgScoped { .. } => return self.pkg_scoped_var_net(cur),
                 _ => return None,
             }
         }
@@ -16295,6 +16360,33 @@ impl<'s> Elaborator<'s> {
         Some((path, idxs))
     }
 
+    /// Resolve an explicitly package-scoped base `pkg::name` to its package-level
+    /// VARIABLE net, if it names one. Mirrors the const-vs-var precedence of the
+    /// `PkgScoped` expr arm (`lower_expr`): a package CONSTANT (param/enum-label)
+    /// is a value, not a net, so it is NOT resolved here (returns `None` → the
+    /// select chain bails and the scalar lane const-folds it). Explicit `::`
+    /// qualification carries no shadowing ambiguity, so — unlike the bare/dotted
+    /// `Ident` arms — there is no alias guard. Read-only: `pkg::arr[i]` is a legal
+    /// rvalue select (iverilog-pinned), while writing a package variable
+    /// (`pkg::arr[i] = …`) is rejected at parse (matches iverilog).
+    fn pkg_scoped_var_net(&self, e: &ast::Expr) -> Option<u32> {
+        let ast::ExprKind::PkgScoped { pkg, name } = &e.kind else {
+            return None;
+        };
+        if self
+            .pkg_consts
+            .get(&pkg.name)
+            .and_then(|c| c.get(&name.name))
+            .is_some()
+        {
+            return None;
+        }
+        self.pkg_vars
+            .get(&pkg.name)
+            .and_then(|m| m.get(&name.name))
+            .copied()
+    }
+
     fn expr_array_chain<'a>(
         &self,
         base: &'a ast::Expr,
@@ -16337,6 +16429,12 @@ impl<'s> Elaborator<'s> {
                         _ => return None,
                     }
                 }
+                // Explicit `pkg::arr[i]` — resolve the package variable net and
+                // apply the same declared-array-ness rule as the `Ident` arm.
+                ast::ExprKind::PkgScoped { .. } => match self.pkg_scoped_var_net(cur) {
+                    Some(n) if self.net_is_static_array(n) => break n,
+                    _ => return None,
+                },
                 _ => return None,
             }
         };
@@ -16375,6 +16473,12 @@ impl<'s> Elaborator<'s> {
                         _ => return None,
                     }
                 }
+                // Explicit `pkg::pm[i]` — multi-dim packed bit-slice off a
+                // package variable net (twin of the `expr_array_chain` arm).
+                ast::ExprKind::PkgScoped { .. } => match self.pkg_scoped_var_net(cur) {
+                    Some(n) if self.packed_dims.contains_key(&n) => break n,
+                    _ => return None,
+                },
                 _ => return None,
             }
         };
@@ -16489,6 +16593,14 @@ impl<'s> Elaborator<'s> {
     fn packed_ps_base(&mut self, base: &ast::Expr) -> Option<(u32, Option<u32>)> {
         match &base.kind {
             ast::ExprKind::Ident(path) => self.bare_packed_net(path).map(|n| (n, None)),
+            // Explicit `pkg::pm[m:l]`/`[b+:w]` — the outer part-select of a
+            // multi-dim packed package var (twin of the `bare_packed_net` arm; a
+            // scalar/vector or single-dim pkg net yields None → generic flat-bits,
+            // which is correct after `norm_offset_if_net` sees the PkgScoped base).
+            ast::ExprKind::PkgScoped { .. } => self
+                .pkg_scoped_var_net(base)
+                .filter(|n| self.packed_dims.get(n).is_some_and(|d| d.len() >= 2))
+                .map(|n| (n, None)),
             ast::ExprKind::BitSelect { base: b, index } => {
                 let (net, idxs) = self.expr_array_chain(b, index)?;
                 // element must itself be multi-dim packed, and EVERY unpacked dim

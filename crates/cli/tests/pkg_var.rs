@@ -153,6 +153,89 @@ fn array_var_element_rw_and_two_state_default() {
 }
 
 #[test]
+fn scoped_array_element_read() {
+    // iverilog: "a=30 b=30" — an explicit `p::arr[i]` element read sees the
+    // SAME package storage the imported bare `arr[i]` does (§4.5.102: was a
+    // v1 E3009 whole-array loud; the select chain now resolves the pkg net).
+    let (o, e, c) = run(
+        "package p; logic [7:0] arr[0:3] = '{10,20,30,40}; endpackage\n\
+         module top; import p::*;\n  logic [7:0] a, b;\n  initial begin a = p::arr[2]; b = arr[2]; $display(\"a=%0d b=%0d\", a, b); $finish; end\nendmodule\n",
+    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "a=30 b=30\nsimulation ended (Finish) at time 0\n");
+}
+
+#[test]
+fn scoped_array_multi_index_read() {
+    // iverilog: "a=6 b=2" — a `p::grid[i][j]` chain flattens through the pkg
+    // net exactly like a local multi-dim array read.
+    let (o, e, c) = run(
+        "package p; int grid[0:1][0:2] = '{'{1,2,3},'{4,5,6}}; endpackage\n\
+         module top;\n  int a, b;\n  initial begin a = p::grid[1][2]; b = p::grid[0][1]; $display(\"a=%0d b=%0d\", a, b); $finish; end\nendmodule\n",
+    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "a=6 b=2\nsimulation ended (Finish) at time 0\n");
+}
+
+#[test]
+fn scoped_packed_slice_and_vector_bit_read() {
+    // iverilog: "pm=171 vec0=1 vec1=0" — a multi-dim PACKED `p::pm[i]` is a
+    // bit-slice (0xAB=171) via the packed chain; a plain vector `p::vec[i]`
+    // bit-select rides the scalar fallback (unchanged, pinned here).
+    let (o, e, c) = run(
+        "package p; logic [1:0][7:0] pm = 16'hABCD; logic [7:0] vec = 8'hA5; endpackage\n\
+         module top;\n  logic [7:0] pmv; logic v0, v1;\n  initial begin pmv = p::pm[1]; v0 = p::vec[0]; v1 = p::vec[1]; $display(\"pm=%0d vec0=%0d vec1=%0d\", pmv, v0, v1); $finish; end\nendmodule\n",
+    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(
+        o,
+        "pm=171 vec0=1 vec1=0\nsimulation ended (Finish) at time 0\n"
+    );
+}
+
+#[test]
+fn scoped_const_and_var_array_coexist() {
+    // A package CONSTANT (localparam) still const-folds through the scoped
+    // path — `pkg_scoped_var_net` returns None for it, so the select chain
+    // does NOT misroute `p::K` as a net. iverilog: "k=7 e=10".
+    let (o, e, c) = run(
+        "package p; localparam int K = 7; logic [7:0] arr[0:3] = '{10,20,30,40}; endpackage\n\
+         module top;\n  int k; logic [7:0] el;\n  initial begin k = p::K; el = p::arr[0]; $display(\"k=%0d e=%0d\", k, el); $finish; end\nendmodule\n",
+    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "k=7 e=10\nsimulation ended (Finish) at time 0\n");
+}
+
+#[test]
+fn scoped_packed_outer_part_select() {
+    // iverilog: "a=abcd b=abcd" — the OUTER part-select / indexed-part of a
+    // multi-dim packed `p::pm` selects whole elements (§4.5.102 review find:
+    // was silently the flat low bits `0001` — packed_ps_base now sees the
+    // PkgScoped base, the twin of the `p::pm[i]` BitSelect fix).
+    let (o, e, c) = run(
+        "package p; logic [1:0][7:0] pm = 16'hABCD; endpackage\n\
+         module top;\n  logic [15:0] a, b;\n  initial begin a = p::pm[0+:2]; b = p::pm[1:0]; $display(\"a=%h b=%h\", a, b); $finish; end\nendmodule\n",
+    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "a=abcd b=abcd\nsimulation ended (Finish) at time 0\n");
+}
+
+#[test]
+fn scoped_nonzero_lsb_vector_select() {
+    // iverilog: "v8=1 v15=1 c=1" — a package vector with a NON-ZERO declared
+    // LSB (`logic [15:8]`); the scoped bit/part-select must normalize by the
+    // declared range (§4.5.102 review find: `p::vhi[8]` was silently `x`,
+    // reading internal bit 8 of an 8-bit net — norm_offset_if_net now sees
+    // the PkgScoped base).
+    let (o, e, c) = run(
+        "package p; logic [15:8] vhi = 8'b1010_0001; endpackage\n\
+         module top;\n  logic v8, v15; logic [3:0] c;\n  initial begin v8 = p::vhi[8]; v15 = p::vhi[15]; c = p::vhi[11:8]; $display(\"v8=%b v15=%b c=%h\", v8, v15, c); $finish; end\nendmodule\n",
+    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert_eq!(o, "v8=1 v15=1 c=1\nsimulation ended (Finish) at time 0\n");
+}
+
+#[test]
 fn four_state_kinds_and_t0_visibility() {
     // iverilog: "v=ab u=x b=1" — init visible at t0, no-init logic is X,
     // `bit` is 2-state.
@@ -275,6 +358,31 @@ fn whole_array_scoped_read_is_loud() {
         e.contains("whole unpacked array"),
         "whole-array scoped read must be loud:\n{e}"
     );
+}
+
+#[test]
+fn scoped_array_element_subselect_is_loud() {
+    // §4.5.102 boundary (correct-or-loud): a part/indexed-select of a package
+    // array ELEMENT (`p::mem[i][m:l]`) is loud, NOT silently mis-normalized.
+    // The whole element read `p::mem[i]` and a DIRECT `p::vec[m:l]` both work;
+    // this sub-select form has nested non-zero-LSB offset edge cases v1 does not
+    // handle (it was loud before element bases could lower at all). iverilog
+    // supports it, so this is an honest capability gap, never a wrong value.
+    for stmt in [
+        "r = p::mem[0][3:0];",
+        "r = p::mem[0][0+:4];",
+        "r = p::mem[0][3-:4];",
+    ] {
+        let (_, e, c) = run(&format!(
+            "package p; logic [7:0] mem[0:1] = '{{8'hAB, 8'hCD}}; endpackage\n\
+             module top;\n  logic [3:0] r;\n  initial begin {stmt} $display(\"%h\", r); $finish; end\nendmodule\n"
+        ));
+        assert_ne!(c, 0, "`{stmt}` must be loud, not silent");
+        assert!(
+            e.contains("package array element"),
+            "`{stmt}` wrong diagnostic:\n{e}"
+        );
+    }
 }
 
 #[test]
