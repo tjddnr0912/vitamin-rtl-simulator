@@ -449,17 +449,22 @@ fn imported_function_call_still_works() {
 }
 
 #[test]
-fn body_local_enum_typedef_stays_clean_loud() {
-    // The enum v1 cut itself: LOUD (no iverilog oracle), and CLEAN — the enum is
-    // consumed so the rest of the function body does not cascade.
-    let (_o, e, ok) = run("module m (input logic [1:0] s, output logic [1:0] y);\n\
+fn body_local_enum_typedef_now_supported_round5() {
+    // SUPERSEDED by round-5 Gap B: a body-local enum typedef in a FUNCTION body is
+    // now SUPPORTED (was a v1 cut → loud in round-4). Labels register as constants
+    // scoped to the function ({A=0,B=1}), so `v == B` folds. Drive x=1 (==B) → 3.
+    let (o, _e, ok) = run("module tb;\n\
+         logic [1:0] s, y;\n\
          function automatic logic [1:0] f(input logic [1:0] x);\n\
-         typedef enum logic [1:0] { A = 2'd0, B = 2'd1 } e;\n\
-         e v; v = e'(x); return logic'(v); endfunction\n\
-         assign y = f(s); endmodule\n");
-    assert!(!ok, "body-local enum typedef stays a v1 cut → loud");
+           typedef enum logic [1:0] { A = 2'd0, B = 2'd1 } e;\n\
+           e v; v = e'(x);\n\
+           if (v == B) return 2'd3; else return 2'd0;\n\
+         endfunction\n\
+         assign y = f(s);\n\
+         initial begin s = 2'd1; #1 $display(\"y=%0d\", y); #1 $finish; end endmodule\n");
     assert!(
-        e.contains("body-local enum typedef"),
-        "expected the enum-cut message: {e}"
+        ok,
+        "round-5: body-local enum in a function body is supported"
     );
+    assert!(o.contains("y=3"), "v==B(1) → 3, got: {o}");
 }

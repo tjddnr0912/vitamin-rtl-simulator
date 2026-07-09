@@ -1671,6 +1671,13 @@ pub struct FunctionDef {
     pub name: Ident,
     pub ports: Vec<TfPort>,
     pub body_decls: Vec<NetVarDecl>,
+    /// Body-local `typedef enum` definitions (IEEE §6.18). The type NAME and its
+    /// label VALUES are already registered in the parser's scratch maps (so `e v;`
+    /// and `e'(x)` casts resolve at parse time), but elaborate needs the labels to
+    /// register their integer constants scoped to this function — carry the enum
+    /// nodes here (an alias/struct/union body typedef needs nothing from elaborate,
+    /// so only enums are collected). Empty for the common no-body-enum function.
+    pub body_enums: Vec<TypedefDecl>,
     pub body: Box<Stmt>,
     pub span: Span,
 }
@@ -1680,6 +1687,8 @@ pub struct TaskDef {
     pub name: Ident,
     pub ports: Vec<TfPort>,
     pub body_decls: Vec<NetVarDecl>,
+    /// Body-local `typedef enum` definitions (see [`FunctionDef::body_enums`]).
+    pub body_enums: Vec<TypedefDecl>,
     pub body: Box<Stmt>,
     pub span: Span,
 }

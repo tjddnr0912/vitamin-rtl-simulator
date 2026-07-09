@@ -2681,6 +2681,7 @@ fn func_def(
         name: ident(name),
         ports,
         body_decls,
+        body_enums: Vec::new(),
         body: Box::new(body),
         span: SP,
     })
@@ -2696,6 +2697,7 @@ fn task_def(
         name: ident(name),
         ports,
         body_decls,
+        body_enums: Vec::new(),
         body: Box::new(body),
         span: SP,
     })

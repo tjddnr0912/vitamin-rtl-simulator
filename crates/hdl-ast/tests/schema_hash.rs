@@ -168,9 +168,15 @@ use vita_schema::schema_hash;
 /// the net as an elaboration constant (every later write is loud). Pure
 /// front-end + elaborate (no sim-ir change; format_version stays 19).
 /// Re-pins this .vu hash.
+/// 2026-07-10 round-5 Gap B body-local enum (§6.18): adds `body_enums:
+/// Vec<TypedefDecl>` to `FunctionDef` and `TaskDef` — a body-local `typedef enum`
+/// in a function/task body carries its labels to elaborate for label-constant
+/// registration scoped to the function (the type NAME + `e'(x)` casts were already
+/// parse-resolved). Pure front-end + elaborate (no sim-ir change; format_version
+/// stays 19). Re-pins this .vu hash.
 const EXPECTED: [u8; 32] = [
-    233, 20, 54, 169, 195, 132, 13, 112, 10, 180, 185, 169, 226, 21, 205, 200, 149, 130, 236, 139,
-    148, 198, 220, 164, 222, 183, 77, 33, 251, 32, 160, 1,
+    190, 109, 222, 118, 194, 151, 186, 149, 171, 251, 78, 158, 164, 207, 50, 56, 192, 186, 109, 1,
+    67, 63, 129, 99, 50, 26, 165, 69, 61, 20, 225, 67,
 ];
 
 #[test]

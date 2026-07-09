@@ -138,15 +138,31 @@ fn nested_block_typedef_is_scoped() {
 }
 
 #[test]
-fn body_enum_typedef_is_loud() {
-    // An enum typedef in a procedural body needs elaborate-side label registration
-    // — honest-loud (define at module scope instead).
-    let (_o, ok) = run(
+fn body_enum_typedef_in_function_supported() {
+    // round-5 Gap B: an enum typedef in a FUNCTION body is supported — its labels
+    // register as constants scoped to the function ({X,Y,Z} ⇒ 0,1,2), so `v=Y`
+    // folds to 1. (The parser already resolves the type `e` and `e'(x)` casts; the
+    // AST `body_enums` slot carries the labels to elaborate for registration.)
+    let (o, ok) = run(
         "module top;\n\
          function automatic int f; typedef enum logic [1:0] {X,Y,Z} e; e v; v=Y; return v; endfunction\n\
          initial begin $display(\"%0d\", f()); #1 $finish; end endmodule",
     );
-    assert!(!ok, "a body-local enum typedef must be loud");
+    assert!(ok && o == "1", "got:\n{o}");
+}
+
+#[test]
+fn body_enum_typedef_in_block_is_loud() {
+    // A body-local enum in a bare `begin/end` block (no `body_enums` carrier) stays
+    // honest-loud — correct-or-loud (round-5 keeps the block path rejecting).
+    let (_o, ok) = run(
+        "module top;\n\
+         initial begin typedef enum logic [1:0] {X,Y} e; e v; v=Y; $display(\"%0d\", v); #1 $finish; end endmodule",
+    );
+    assert!(
+        !ok,
+        "a body-local enum typedef in a begin/end block must be loud"
+    );
 }
 
 #[test]

@@ -3080,6 +3080,7 @@ impl<'t, 's> Parser<'t, 's> {
                     name: fd.name,
                     ports: fd.ports,
                     body_decls: fd.body_decls,
+                    body_enums: fd.body_enums,
                     body: fd.body,
                     span: fd.span,
                 }));
@@ -5857,36 +5858,39 @@ impl<'t, 's> Parser<'t, 's> {
     /// A procedural body-local typedef DEFINITION (`typedef logic [3:0] t;` inside
     /// a begin/function/task body — IEEE §6.18). The cursor is at the `typedef`
     /// keyword. Registers the name in `self.typedefs` (and `struct_layouts` for a
-    /// struct/union) so subsequent local decls resolve it; the typedef itself emits
-    /// no runtime decl, so the returned AST node is discarded. An ENUM typedef
-    /// additionally needs elaborate-side label-constant registration (the discarded
-    /// AST node carries the labels) that the body parser cannot perform — so a
-    /// body-local enum typedef is honest-loud (define it at module scope). The
-    /// caller is responsible for snapshotting/restoring the registries for scope.
-    fn parse_body_typedef_def(&mut self) {
-        if matches!(
+    /// struct/union) so subsequent local decls resolve it; an alias/struct/union
+    /// typedef emits no runtime decl and elaborate needs nothing from its node, so
+    /// it is discarded (returns `None`). An ENUM typedef additionally needs
+    /// elaborate-side label-constant registration (the AST node carries the labels)
+    /// — when `allow_enum` (a function/task body, which has a `body_enums` slot to
+    /// carry it) the enum node is RETURNED so the caller can thread it to elaborate;
+    /// otherwise (a bare `begin/end` block, no carrier) it stays honest-loud (define
+    /// it at module scope). The caller snapshots/restores the registries for scope.
+    fn parse_body_typedef_def(&mut self, allow_enum: bool) -> Option<TypedefDecl> {
+        let is_enum = matches!(
             self.peek_at(1),
             Some(TokenKind::Word(WordKind::Keyword(Kw::Enum)))
-        ) {
+        );
+        if is_enum && !allow_enum {
             self.error(
                 "an alias / struct / union typedef in a begin/function/task body (a body-local enum typedef is unsupported in v1 — define it at module scope)",
             );
             // GAP-B: emit the loud reject, then PARSE the enum typedef NORMALLY
             // (registering the type NAME + consuming all its tokens) so the rest
-            // of the function/task body — which references the type (`e v; v =
-            // e'(x);`) — parses without cascading into spurious follow-on errors.
-            // `synchronize()` would instead halt at the `logic` base-type keyword
-            // INSIDE the enum, leaving `logic [1:0] {…} e;` to re-parse as garbage
-            // (8 errors observed). The design still fails — the loud error aborts
-            // before elaborate — so no unsupported enum is ever simulated. This is
-            // the honest-loud "emit + consume" recovery used for struct tf-ports
-            // before EXT2-C.
+            // of the body — which references the type (`e v; v = e'(x);`) — parses
+            // without cascading into spurious follow-on errors. The design still
+            // fails (the loud error aborts before elaborate). "emit + consume".
             let _ = self.parse_typedef();
-            return;
+            return None;
         }
-        // Registration is the functional effect; there is no body slot for the
-        // ModuleItem, and elaborate needs nothing from an alias/struct/union node.
-        let _ = self.parse_typedef();
+        // Registration into the parser scratch maps is the functional effect (so a
+        // later `t v;`/`t'(x)` resolves). An alias/struct/union needs nothing from
+        // elaborate → return None; a body enum (allow_enum) RETURNS its node so the
+        // caller carries the labels to elaborate (round-5 Gap B).
+        match self.parse_typedef() {
+            Some(ModuleItem::Typedef(td)) if is_enum => Some(td),
+            _ => None,
+        }
     }
 
     /// `typedef enum [base] { L0, L1 = expr, … } name;` (Phase-2). Registers
@@ -8166,7 +8170,7 @@ impl<'t, 's> Parser<'t, 's> {
         let tf_scope = self.snapshot_scope();
         let mut ports = self.opt_tf_port_paren_list();
         self.expect(TokenKind::Semi, "';' after function header");
-        let (body_decls, body) = self.tf_body(BlockEnd2::Endfunction, &mut ports);
+        let (body_decls, body_enums, body) = self.tf_body(BlockEnd2::Endfunction, &mut ports);
         self.restore_scope(tf_scope);
         self.expect(
             TokenKind::Word(WordKind::Keyword(Kw::Endfunction)),
@@ -8183,6 +8187,7 @@ impl<'t, 's> Parser<'t, 's> {
                 name,
                 ports,
                 body_decls,
+                body_enums,
                 body: Box::new(body),
                 span: start.to(self.prev_span()),
             },
@@ -8206,7 +8211,7 @@ impl<'t, 's> Parser<'t, 's> {
         let tf_scope = self.snapshot_scope();
         let mut ports = self.opt_tf_port_paren_list();
         self.expect(TokenKind::Semi, "';' after task header");
-        let (body_decls, body) = self.tf_body(BlockEnd2::Endtask, &mut ports);
+        let (body_decls, body_enums, body) = self.tf_body(BlockEnd2::Endtask, &mut ports);
         self.restore_scope(tf_scope);
         self.expect(TokenKind::Word(WordKind::Keyword(Kw::Endtask)), "'endtask'");
         self.opt_block_label();
@@ -8215,6 +8220,7 @@ impl<'t, 's> Parser<'t, 's> {
             name,
             ports,
             body_decls,
+            body_enums,
             body: Box::new(body),
             span: start.to(self.prev_span()),
         }
@@ -8463,8 +8469,16 @@ impl<'t, 's> Parser<'t, 's> {
     /// form — input/output/inout formal decls, hoisted into `ports`), then exactly
     /// ONE body statement (usually a `begin … end`), up to the endfunction/endtask
     /// closer. `ports` is appended to for non-ANSI formals.
-    fn tf_body(&mut self, end: BlockEnd2, ports: &mut Vec<TfPort>) -> (Vec<NetVarDecl>, Stmt) {
+    fn tf_body(
+        &mut self,
+        end: BlockEnd2,
+        ports: &mut Vec<TfPort>,
+    ) -> (Vec<NetVarDecl>, Vec<TypedefDecl>, Stmt) {
         let mut body_decls = Vec::new();
+        // Body-local `typedef enum` nodes (round-5 Gap B) — the function/task has a
+        // `body_enums` AST slot to carry them to elaborate for label-constant
+        // registration. Alias/struct/union body typedefs need no carrier.
+        let mut body_enums: Vec<TypedefDecl> = Vec::new();
         // Body-local typedef DEFINITIONs are lexically scoped (see `block_body`):
         // snapshot at the first one, restore when the body ends.
         let mut typedef_scope: Option<ScopeSnapshot> = None;
@@ -8489,7 +8503,11 @@ impl<'t, 's> Parser<'t, 's> {
                     typedef_scope = Some(self.snapshot_scope());
                 }
                 let before = self.pos;
-                self.parse_body_typedef_def();
+                // allow_enum: a function/task body can carry an enum's labels
+                // (via `body_enums`) to elaborate, so accept & collect it here.
+                if let Some(td) = self.parse_body_typedef_def(true) {
+                    body_enums.push(td);
+                }
                 if self.pos == before {
                     self.bump();
                 }
@@ -8590,7 +8608,7 @@ impl<'t, 's> Parser<'t, 's> {
         if let Some(scope) = typedef_scope {
             self.restore_scope(scope);
         }
-        (body_decls, body)
+        (body_decls, body_enums, body)
     }
 
     /// True at the `endfunction`/`endtask` closer.
@@ -11426,7 +11444,9 @@ impl<'t, 's> Parser<'t, 's> {
                 if scope.is_none() {
                     scope = Some(self.snapshot_scope());
                 }
-                self.parse_body_typedef_def();
+                // A bare `begin/end` block has no `body_enums` carrier, so a
+                // body-local enum here stays honest-loud (allow_enum = false).
+                let _ = self.parse_body_typedef_def(false);
             } else if self.net_var_kind().is_some() {
                 if let Some(d) = self.parse_net_var(false) {
                     // procedural block-local decl: no net delay

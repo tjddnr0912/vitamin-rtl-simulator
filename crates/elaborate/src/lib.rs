@@ -2921,6 +2921,21 @@ struct Elaborator<'s> {
     /// is not a local declaration → absent → the intended fold proceeds.
     /// Saved/restored per module (like `bits_prescan`).
     local_decl_names: std::collections::BTreeSet<String>,
+    /// DUP (round-5): per-block-local scoping decision for `automatic` block-locals
+    /// whose bare name COLLIDES across DISJOINT procedural blocks (two `always`
+    /// blocks each declaring `automatic int idx;`). v1 flattens block-locals to the
+    /// module namespace by bare name, so such a pair would alias → the second was
+    /// rejected E3009. Keyed by the declaring `Stmt::Block` span (`span.lo`) → the
+    /// set of local NAMES that must be given their own `$blk$<span.lo>` scope
+    /// segment (so each block gets a distinct net instead of aliasing). Computed
+    /// ONCE per module by `compute_scoped_block_locals` as a pure function of the
+    /// AST (both the Nets-phase hoist and the Logic-phase body lowering read it, so
+    /// they derive the SAME segment). Tightly guarded (see the compute fn): only
+    /// disjoint blocks, no module-net collision, no nested scoped blocks — every
+    /// uncovered edge falls through to the pre-existing loud E3009 (correct-or-loud).
+    /// Empty for every design with no such collision → byte-identical. Saved/
+    /// restored per module.
+    scoped_block_locals: BTreeMap<u32, std::collections::BTreeSet<String>>,
     /// v7 P2-D: package name → its const symbols (params/localparams + enum
     /// labels), folded EAGERLY in declaration order at `run()` entry.
     pkg_consts: BTreeMap<String, BTreeMap<String, i64>>,
@@ -3398,6 +3413,7 @@ impl<'s> Elaborator<'s> {
             array_dims: BTreeMap::new(),
             bits_prescan: BTreeMap::new(),
             local_decl_names: std::collections::BTreeSet::new(),
+            scoped_block_locals: BTreeMap::new(),
             pkg_consts: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
@@ -4861,6 +4877,12 @@ impl<'s> Elaborator<'s> {
         // body const-eval, so a local name that shadows a wildcard-imported array
         // is known regardless of decl order (catches forward refs and ports).
         let names = self.gather_local_decl_names(module);
+        // DUP (round-5): decide which colliding `automatic` block-locals get their
+        // own `$blk$<span>` scope (pure AST fn; excludes any name that also collides
+        // with a module net via `names`). Computed here so both the hoist below and
+        // the later body lowering read the SAME decision. See the field doc.
+        let scoped_blocks = Self::compute_scoped_block_locals(module, &names);
+        let saved_scoped_blocks = std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
         let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
         for item in &module.body {
@@ -5265,6 +5287,7 @@ impl<'s> Elaborator<'s> {
         self.restore_params(saved_params);
         self.bits_prescan = saved_prescan;
         self.local_decl_names = saved_local_names;
+        self.scoped_block_locals = saved_scoped_blocks;
         self.func_table = saved_funcs;
         self.task_table = saved_tasks;
         self.frame_idx = saved_frame_idx;
@@ -6507,6 +6530,83 @@ impl<'s> Elaborator<'s> {
         }
     }
 
+    /// Gap B (round-5): register a function/task's body-local `typedef enum` labels
+    /// as integer constants under the CURRENT scope (`self.cur_prefix`), returning a
+    /// save-list for `restore_params` to unwind afterwards. Mirrors the module-scope
+    /// enum-label loop (3c) exactly: an explicit `LABEL = expr` const-folds (and
+    /// resets the running counter to `expr+1`); an implicit label takes the counter.
+    /// The caller scopes the registration to the body lowering so the labels are
+    /// visible to `A`/`B` reads inside the body but do NOT leak to the module: the
+    /// FRAME path registers under the `$func$<name>` segment (innermost-wins via
+    /// `walk_scopes_key`), the INLINE path under the caller prefix bounded by the
+    /// reduction. Empty `body_enums` (the common case) returns an empty save-list →
+    /// byte-identical.
+    ///
+    /// A label whose name also names a `begin/end` BLOCK-LOCAL in the same body is
+    /// loud-rejected: a body label registers as an enclosing-scope const, and vita
+    /// resolves an enclosing const OVER an inner block-local net (a pre-existing
+    /// resolution-order limitation, opposite of IEEE §6.21), so the label would
+    /// silently shadow the block-local meant to shadow IT. Rejecting keeps this
+    /// correct-or-loud rather than mis-resolving (the general resolution order is a
+    /// documented follow-on).
+    fn push_body_enum_labels(
+        &mut self,
+        body_enums: &[ast::TypedefDecl],
+        body: &ast::Stmt,
+    ) -> Vec<(String, Option<i64>)> {
+        let mut saved = Vec::new();
+        if body_enums.is_empty() {
+            return saved; // common case — no gather, byte-identical
+        }
+        // Names declared in `begin/end` blocks of this body (nested inner scopes) —
+        // a label sharing one of these would mis-shadow it (see doc above).
+        let mut block_locals = Vec::new();
+        collect_block_local_decls(body, &mut block_locals);
+        let block_local_names: std::collections::BTreeSet<&str> = block_locals
+            .iter()
+            .flat_map(|d| d.names.iter())
+            .map(|n| n.name.name.as_str())
+            .collect();
+        for td in body_enums {
+            #[allow(irrefutable_let_patterns)]
+            if let ast::TypedefKind::Enum { labels, .. } = &td.kind {
+                let mut next: i64 = 0;
+                for lab in labels {
+                    if block_local_names.contains(lab.name.name.as_str()) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "body-local enum label `{}` shares its name with a \
+                                 `begin/end` block-local in the same function/task; v1 \
+                                 resolves the enclosing enum label OVER the inner \
+                                 block-local (opposite of IEEE §6.21 lexical scope) — \
+                                 rename one",
+                                lab.name.name
+                            ),
+                        );
+                    }
+                    let v = match &lab.value {
+                        Some(e) => self.const_eval_in_scope(e).unwrap_or_else(|| {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "enum label `{}` value is not a foldable constant",
+                                    lab.name.name
+                                ),
+                            );
+                            0
+                        }),
+                        None => next,
+                    };
+                    let key = self.fq(&lab.name.name);
+                    saved.push((key.clone(), self.params.insert(key, v)));
+                    next = v.wrapping_add(1);
+                }
+            }
+        }
+        saved
+    }
+
     /// Resolve a bare param/genvar `name` to its value, searching the current
     /// scope then each enclosing GENERATE-block scope (strip one trailing
     /// `.segment` at a time). A genvar bound at the generate-for's scope (`top.i`)
@@ -6577,6 +6677,11 @@ impl<'s> Elaborator<'s> {
             if !Self::is_gen_scope_segment(last_seg)
                 && !last_seg.starts_with("$itask$")
                 && !last_seg.starts_with("$func$")
+                // DUP (round-5): a per-block `$blk$<span>` scope is transparent for
+                // outward reads exactly like `$func$`/`$itask$` — a scoped block-local
+                // is found FIRST (innermost-wins) while a non-scoped name in the same
+                // block still falls through to the enclosing module net.
+                && !last_seg.starts_with("$blk$")
             {
                 return None;
             }
@@ -7053,6 +7158,145 @@ impl<'s> Elaborator<'s> {
         // unless ANSI. (Body PortDecl dir-merge is a small follow-up.)
     }
 
+    /// DUP (round-5): collect every `automatic` block-local declaration
+    /// (name → declaring `Stmt::Block` span `(lo, hi)`) from a procedural statement
+    /// tree. Only `Stmt::Block` carries a scopeable per-block namespace; `Stmt::Fork`
+    /// locals keep the pre-existing flatten (concurrent — different semantics), so
+    /// its `decls` are skipped (recursed into only to find nested Blocks). STATIC
+    /// (non-`automatic`) block-locals are intentionally OMITTED — they safely
+    /// coalesce onto one net when two sequential blocks reuse a temp name (see
+    /// `hoist_block_local_nets`), so they need no separate scope.
+    fn gather_auto_block_locals(s: &ast::Stmt, out: &mut BTreeMap<String, Vec<(u32, u32)>>) {
+        match s {
+            ast::Stmt::Block {
+                decls, stmts, span, ..
+            } => {
+                for d in decls {
+                    if d.lifetime == Some(true) {
+                        for n in &d.names {
+                            out.entry(n.name.name.clone())
+                                .or_default()
+                                .push((span.lo, span.hi));
+                        }
+                    }
+                }
+                for st in stmts {
+                    Self::gather_auto_block_locals(st, out);
+                }
+            }
+            ast::Stmt::Fork { stmts, .. } => {
+                for st in stmts {
+                    Self::gather_auto_block_locals(st, out);
+                }
+            }
+            ast::Stmt::If { then_s, else_s, .. } => {
+                Self::gather_auto_block_locals(then_s, out);
+                if let Some(e) = else_s {
+                    Self::gather_auto_block_locals(e, out);
+                }
+            }
+            ast::Stmt::Case { items, .. } => {
+                for it in items {
+                    let inner = match it {
+                        ast::CaseItem::Match { body: b, .. } => b,
+                        ast::CaseItem::Default { body: b, .. } => b,
+                    };
+                    Self::gather_auto_block_locals(inner, out);
+                }
+            }
+            ast::Stmt::For { body: b, .. }
+            | ast::Stmt::While { body: b, .. }
+            | ast::Stmt::Repeat { body: b, .. }
+            | ast::Stmt::Forever { body: b, .. } => {
+                Self::gather_auto_block_locals(b, out);
+            }
+            _ => {}
+        }
+    }
+
+    /// DUP (round-5): decide which `automatic` block-locals need a `$blk$<span>`
+    /// scope segment. Returns block `span.lo` → the set of local NAMES to scope in
+    /// that block. A name is scoped IFF it is declared `automatic` in ≥ 2 procedural
+    /// blocks that are all MUTUALLY DISJOINT (no span containment ⇒ no shadowing /
+    /// nesting), AND it does not also name a module-scope net/param (`module_names`).
+    /// A candidate block nested inside ANOTHER candidate block is then dropped (a
+    /// single-level hoist would not match nested segments). Every excluded case
+    /// falls through to the pre-existing loud E3009 — correct-or-loud. Pure function
+    /// of the AST, so the Nets-phase hoist and the Logic-phase lowering agree.
+    fn compute_scoped_block_locals(
+        module: &ast::ModuleDecl,
+        module_names: &std::collections::BTreeSet<String>,
+    ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
+        // `outer` strictly contains `inner` (properly nested AST blocks never
+        // partially overlap, so containment ⇒ nesting).
+        fn contains(outer: (u32, u32), inner: (u32, u32)) -> bool {
+            outer.0 <= inner.0 && inner.1 <= outer.1 && outer != inner
+        }
+        // (1) gather automatic block-locals across all procedural blocks.
+        let mut per_name: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+        for item in &module.body {
+            if let ast::ModuleItem::Proc(p) = item {
+                Self::gather_auto_block_locals(&p.body, &mut per_name);
+            }
+        }
+        // (2) candidate (span, name): declared in ≥2 blocks, no module-net
+        //     collision, and no two declaring spans nested (shadowing).
+        let mut cand: Vec<(u32, u32, String)> = Vec::new();
+        for (name, spans) in &per_name {
+            if spans.len() < 2 || module_names.contains(name) {
+                continue;
+            }
+            let shadowed = spans.iter().enumerate().any(|(i, &a)| {
+                spans
+                    .iter()
+                    .enumerate()
+                    .any(|(j, &b)| i != j && contains(a, b))
+            });
+            if shadowed {
+                continue;
+            }
+            for &(lo, hi) in spans {
+                cand.push((lo, hi, name.clone()));
+            }
+        }
+        // (3) drop any candidate block nested inside ANOTHER candidate block.
+        let cand_spans: Vec<(u32, u32)> = cand.iter().map(|&(lo, hi, _)| (lo, hi)).collect();
+        let mut out: BTreeMap<u32, std::collections::BTreeSet<String>> = BTreeMap::new();
+        for (lo, hi, name) in cand {
+            let nested = cand_spans.iter().any(|&s| contains(s, (lo, hi)));
+            if nested {
+                continue;
+            }
+            out.entry(lo).or_default().insert(name);
+        }
+        out
+    }
+
+    /// DUP (round-5): the `$blk$<span>` scope segment for a decl `d` in the block at
+    /// `span`, if ANY name it declares is marked for scoping. `None` ⇒ not scoped
+    /// (pre-existing behavior).
+    ///
+    /// ANY (not ALL) is load-bearing for soundness: `compute_scoped_block_locals`
+    /// marks scoping PER-NAME, and the block body is lowered under `$blk$<span>`
+    /// whenever the block has ANY scoped name. If a MULTI-name decl
+    /// (`automatic int idx, jdx;`) had only `idx` scoped and we left the whole decl
+    /// BARE (the old ALL check), `idx` would keep the bare `top.idx` net while the
+    /// block IS wrapped — breaking the invariant "every colliding occurrence is
+    /// scoped, so no bare `top.idx` exists". A later same-named static block-local
+    /// then coalesces onto that bare net and aliases block `idx` (silent-wrong,
+    /// found by adversarial review). Scoping the WHOLE decl on ANY hit keeps the
+    /// invariant; the non-colliding sibling (`jdx`) is a block-local referenced only
+    /// within this block, so giving it a `$blk$` net too is harmless (it resolves
+    /// under the same scope wrap, and an outside reference is already loud).
+    fn block_local_scope_seg(&self, span: ast::Span, d: &ast::NetVarDecl) -> Option<String> {
+        let set = self.scoped_block_locals.get(&span.lo)?;
+        if d.names.iter().any(|n| set.contains(&n.name.name)) {
+            Some(format!("$blk${}", span.lo))
+        } else {
+            None
+        }
+    }
+
     /// Recursively create nets for every `begin…end`/`fork…join` block-local
     /// declaration reachable from a procedural-block body. v1 flattens these to
     /// module-scope nets (no per-process frame). Called in the Nets phase.
@@ -7063,8 +7307,53 @@ impl<'s> Elaborator<'s> {
         body: &[ast::ModuleItem],
     ) {
         match s {
-            ast::Stmt::Block { decls, stmts, .. } | ast::Stmt::Fork { decls, stmts, .. } => {
+            ast::Stmt::Block {
+                decls, stmts, span, ..
+            }
+            | ast::Stmt::Fork {
+                decls, stmts, span, ..
+            } => {
                 for d in decls {
+                    // DUP (round-5): a colliding `automatic` block-local that the
+                    // pure pre-scan marked (disjoint blocks, no module-net collision,
+                    // no nesting) gets its OWN `$blk$<span>` scope so two blocks'
+                    // same-named locals become DISTINCT nets instead of aliasing
+                    // (was E3009). It still must pass per-entry definite-assignment
+                    // (each scoped block independently) to be byte-identical to the
+                    // static flatten — same gate as the non-colliding automatic path
+                    // below. `Fork` spans are never marked (gather skips them), so a
+                    // fork local always falls through. Everything unmarked keeps the
+                    // pre-existing behavior.
+                    if d.lifetime == Some(true) {
+                        if let Some(seg) = self.block_local_scope_seg(*span, d) {
+                            for n in &d.names {
+                                let nm = &n.name.name;
+                                let read_in_sibling_init =
+                                    decls.iter().flat_map(|dd| dd.names.iter()).any(|nn| {
+                                        nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm))
+                                    });
+                                if n.init.is_some()
+                                    || read_in_sibling_init
+                                    || !automatic_local_definitely_assigned(stmts, nm)
+                                {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "an `automatic` block-local `{nm}` whose per-entry \
+                                             lifetime differs from static (an initializer, or a \
+                                             read before its first write) is unsupported in a \
+                                             procedural block (v1 flattens block-locals to one \
+                                             static net); assign it before use, or drop `automatic`",
+                                        ),
+                                    );
+                                }
+                            }
+                            self.with_scope(&seg, |s| {
+                                s.elaborate_netvar_decl(d, ports, body, true)
+                            });
+                            continue;
+                        }
+                    }
                     // v1 flattens block-locals into the module namespace (no
                     // per-block scope). If a local name was already created by an
                     // EARLIER block, skip re-creating it rather than erroring
@@ -13727,6 +14016,9 @@ impl<'s> Elaborator<'s> {
         // reject. A `disable <inner named block>` (break/continue) still lowers
         // via `lower_stmt` either way.
         let (body, entry) = self.with_scope(&scope_seg, |s| {
+            // Gap B: body-local enum labels → constants under `$func$<name>` (this
+            // scope), visible to the body, restored before the scope closes.
+            let saved_labels = s.push_body_enum_labels(&func.body_enums, &func.body);
             let mut b = ProcessBuilder::new();
             // §13.4.4: run body-local declaration initializers at entry (top-level
             // body_decls, then block-locals — at frame entry, an approximation of
@@ -13744,7 +14036,9 @@ impl<'s> Elaborator<'s> {
             } else {
                 s.lower_frame_body_stmt(&mut b, &func.body, name, false);
             }
-            b.finish()
+            let out = b.finish();
+            s.restore_params(saved_labels);
+            out
         });
         self.cur_return = saved_ret;
         self.formal_str.truncate(fs_base);
@@ -13909,6 +14203,10 @@ impl<'s> Elaborator<'s> {
         let has_ret = body_has_return(&task.body);
         let saved_ret = self.cur_return.take();
         let (body, entry) = self.with_scope(&scope_seg, |s| {
+            // Gap B: body-local enum labels → constants under `$func$<name>` (this
+            // scope), mirroring `lower_frame_func_body` — so a task body enum's
+            // labels resolve inside the body without leaking to the module.
+            let saved_labels = s.push_body_enum_labels(&task.body_enums, &task.body);
             let mut b = ProcessBuilder::new();
             // §13.4.4: run body-local declaration initializers at entry (top-level
             // body_decls, then block-locals).
@@ -13925,7 +14223,9 @@ impl<'s> Elaborator<'s> {
             } else {
                 s.lower_frame_body_stmt(&mut b, &task.body, name, self_disable);
             }
-            b.finish()
+            let out = b.finish();
+            s.restore_params(saved_labels);
+            out
         });
         self.cur_return = saved_ret;
         self.formal_str.truncate(fs_base);
@@ -14418,8 +14718,12 @@ impl<'s> Elaborator<'s> {
         // (b) walk the straight-line body, recording the return-var assignment.
         let fname = func.name.name.clone();
         let mut ret: Option<u32> = None;
+        // Gap B: body-local enum labels → constants under the caller prefix, bounded
+        // to this reduction (restored below) so a body `= A` folds without leaking.
+        let saved_labels = self.push_body_enum_labels(&func.body_enums, &func.body);
         let ok =
             self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &local_dims, &mut ret);
+        self.restore_params(saved_labels);
         // restore the substitution stack to its pre-call depth.
         self.subst.truncate(frame_base);
         self.formal_str.truncate(fs_base);
@@ -14803,6 +15107,11 @@ impl<'s> Elaborator<'s> {
         let mut tlocals = task.body_decls.clone();
         collect_block_local_decls(&task.body, &mut tlocals);
         self.inline_stack.push(tname.clone());
+        // Gap B: body-local enum labels → constants under the CALLER prefix, bounded
+        // to this inlining. The `$itask$<name>$L` locals scope (when present) is
+        // transparent in `walk_scopes_key`, so a label at `caller.LABEL` is still
+        // found from inside it; restored after so it does not leak past the call.
+        let saved_labels = self.push_body_enum_labels(&task.body_enums, &task.body);
         if tlocals.is_empty() {
             self.inline_task_body(b, &task.body);
         } else {
@@ -14812,6 +15121,7 @@ impl<'s> Elaborator<'s> {
                 s.inline_task_body(b, &task.body);
             });
         }
+        self.restore_params(saved_labels);
         self.inline_stack.pop();
 
         // Copy-OUT each output/inout formal to its caller net AFTER the body. A
@@ -24691,7 +25001,9 @@ impl<'s> Elaborator<'s> {
             // ── SEQUENCING: begin … end ─────────────────────────────
             // begin..end: block-local decls were already hoisted to module nets in
             // the Nets phase (hoist_block_local_nets), so just lower the stmts here.
-            ast::Stmt::Block { label, stmts, .. } => {
+            ast::Stmt::Block {
+                label, stmts, span, ..
+            } => {
                 // Named block targeted by some `disable` in its own body:
                 // allocate an exit BB so the disable lowers as a Goto (doc-17
                 // lowering row). Allocation is LAZY (pre-scan) so unlabeled /
@@ -24709,8 +25021,22 @@ impl<'s> Elaborator<'s> {
                             exit
                         })
                 });
-                for st in stmts {
-                    self.lower_stmt(b, st);
+                // DUP (round-5): if this block has `$blk$`-scoped locals, lower its
+                // body under the SAME segment the Nets-phase hoist used so a scoped
+                // local resolves to its own net; `walk_scopes_key` treats `$blk$` as
+                // transparent so every non-scoped name still falls through to the
+                // enclosing module net (byte-identical for unscoped blocks).
+                if self.scoped_block_locals.contains_key(&span.lo) {
+                    let seg = format!("$blk${}", span.lo);
+                    self.with_scope(&seg, |s| {
+                        for st in stmts {
+                            s.lower_stmt(b, st);
+                        }
+                    });
+                } else {
+                    for st in stmts {
+                        self.lower_stmt(b, st);
+                    }
                 }
                 if let Some(exit) = exit {
                     self.disable_stack.pop();

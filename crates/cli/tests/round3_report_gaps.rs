@@ -248,28 +248,23 @@ fn gap_e1_non_ansi_packed_struct_port() {
 // ─────────────────────────────── GAP B ───────────────────────────────
 
 #[test]
-fn gap_b_body_local_enum_is_loud_and_clean() {
-    // A body-local enum typedef is a v1 cut → LOUD (iverilog 13.0 segfaults on it,
-    // no oracle). The reject must be CLEAN: exactly one enum-reject diagnostic,
-    // no cascade from the downstream `e v; v = e'(x);` that references the type.
-    let (_o, e, ok) = run("package p;\n\
+fn gap_b_body_local_enum_now_supported_round5() {
+    // SUPERSEDED by round-5 Gap B: a body-local enum typedef in a (package) FUNCTION
+    // body is now SUPPORTED (was a v1 cut → loud in round-3). The labels register as
+    // constants scoped to the function; call f(1) with {A=0,B=1} ⇒ v==B ⇒ 2.
+    let (o, _e, ok) = run("package p;\n\
            function automatic logic [1:0] f(input logic [1:0] x);\n\
              typedef enum logic [1:0] { A = 2'd0, B = 2'd1 } e;\n\
-             e v; v = e'(x); return logic'(v);\n\
+             e v; v = e'(x); if (v == B) return 2'd2; else return 2'd0;\n\
            endfunction\n\
          endpackage\n\
-         module m (input logic [1:0] s, output logic [1:0] y); assign y = s; endmodule");
-    assert!(!ok, "body-local enum typedef must be loud");
-    let enum_errs = e
-        .lines()
-        .filter(|l| l.contains("body-local enum typedef is unsupported"))
-        .count();
-    assert_eq!(enum_errs, 1, "exactly one clean enum-reject error:\n{e}");
-    // And no follow-on "e v;" lvalue cascade (the type was consumed cleanly).
+         module tb; import p::*; logic [1:0] y;\n\
+           initial begin y = f(2'd1); #1 $display(\"y=%0d\", y); #1 $finish; end endmodule");
     assert!(
-        !e.contains("after lvalue"),
-        "the rejected enum must not cascade into an lvalue error:\n{e}"
+        ok,
+        "round-5: body-local enum in a package function body is supported"
     );
+    assert!(o.contains("y=2"), "v==B(1) → 2, got: {o}");
 }
 
 #[test]
