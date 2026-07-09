@@ -23728,6 +23728,30 @@ impl<'s> Elaborator<'s> {
                 }
                 n
             }
+            // `@(pkg::sig)` — an explicitly scoped package variable in an event
+            // control. A package variable is ONE shared net per elaboration, so
+            // `pkg::sig` resolves to the SAME net the imported bare `@(sig)` arms
+            // on (iverilog-pinned). A package CONSTANT (param/enum-label) or an
+            // unknown symbol yields None → loud (a constant cannot wake a process).
+            ast::ExprKind::PkgScoped { .. } => match self.pkg_scoped_var_net(e) {
+                Some(n) => {
+                    if self.is_dyn_handle_net(n) || self.is_string_net(n) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a dynamic-storage handle cannot appear in an event control",
+                        );
+                    }
+                    n
+                }
+                None => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "an event control `@(pkg::name)` must name a package variable \
+                         (not a constant / enum-label or an unknown symbol)",
+                    );
+                    POISON_NET
+                }
+            },
             ast::ExprKind::Paren { inner } => self.sens_event_net(inner, edge_ctx),
             ast::ExprKind::BitSelect { base, index } => {
                 if edge_ctx {
@@ -23765,13 +23789,16 @@ impl<'s> Elaborator<'s> {
     /// `[hi:lo]` → `lo`; ascending `[lo:hi]` stored as `msb<lsb` → the larger bound
     /// `lsb`). Returns the net id when supported, else `None` (→ caller rejects loud).
     fn lsb_bitselect_net(&self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
-        let ast::ExprKind::Ident(path) = &base.kind else {
-            return None; // computed / hierarchical / concat base
+        let net = match &base.kind {
+            ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
+                self.lookup_net_scoped(&path.segments[0].name)?
+            }
+            // `@(posedge p::vec[lsb])` — a scoped package vector's LSB bit-select,
+            // the same net (and LSB rule) the imported bare `@(posedge vec[lsb])`
+            // arms on. A package constant / unknown yields None → caller rejects.
+            ast::ExprKind::PkgScoped { .. } => self.pkg_scoped_var_net(base)?,
+            _ => return None, // computed / hierarchical / concat / multi-seg base
         };
-        if path.segments.len() != 1 {
-            return None;
-        }
-        let net = self.lookup_net_scoped(&path.segments[0].name)?;
         // Reject array elements (multi-bit words), multi-dim packed selects, and
         // dyn-storage/string handles — none is a scalar net whose bit 0 we can arm.
         if self.net_is_static_array(net)
