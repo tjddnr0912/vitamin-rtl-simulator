@@ -11346,6 +11346,35 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
+    /// GAP-D helper: parse a block-local declaration carrying an explicit
+    /// `automatic` lifetime override (`automatic <type> <name>;`, IEEE §6.21),
+    /// stamping `lifetime = Some(true)`. Split out of `block_body` and marked
+    /// `#[inline(never)]` so its locals never enlarge that hot recursive frame
+    /// (the MAX_STMT_DEPTH budget is frame-sized — see the call site). Snapshots
+    /// `scope` before a user-type decl, exactly like the inline typedef-var
+    /// branch, so a block-local shadow does not leak its binding out of the block.
+    #[inline(never)]
+    fn parse_automatic_block_decl(
+        &mut self,
+        scope: &mut Option<ScopeSnapshot>,
+    ) -> Option<NetVarDecl> {
+        self.bump(); // 'automatic' — `static` is not reserved, so only this reaches here
+        if self.net_var_kind().is_some() {
+            let mut d = self.parse_net_var(false)?;
+            d.lifetime = Some(true);
+            Some(d)
+        } else if let Some(info) = self.peek_block_typedef_decl() {
+            if scope.is_none() {
+                *scope = Some(self.snapshot_scope());
+            }
+            let mut d = self.parse_typed_decl(info)?;
+            d.lifetime = Some(true);
+            Some(d)
+        } else {
+            None
+        }
+    }
+
     /// Shared block body: decls-prefix THEN statements, until the closer.
     fn block_body(&mut self, end: BlockEnd) -> (Vec<NetVarDecl>, Vec<Stmt>) {
         let mut decls = Vec::new();
@@ -11370,24 +11399,15 @@ impl<'t, 's> Parser<'t, 's> {
             } else if self.at_kw(Kw::Automatic) && self.lifetime_prefixes_decl() {
                 // GAP-D (IEEE §6.21): a block-local decl with an explicit
                 // `automatic` lifetime override (`automatic int unsigned idx;`).
-                // Consume the keyword and parse the following decl exactly like a
-                // plain block-local, stamping the lifetime — mirrors `tf_body`'s
-                // B4 override. `static` is not a reserved word, so only
-                // `automatic` reaches here.
-                self.bump(); // 'automatic'
-                if self.net_var_kind().is_some() {
-                    if let Some(mut d) = self.parse_net_var(false) {
-                        d.lifetime = Some(true);
-                        decls.push(d);
-                    }
-                } else if let Some(info) = self.peek_block_typedef_decl() {
-                    if scope.is_none() {
-                        scope = Some(self.snapshot_scope());
-                    }
-                    if let Some(mut d) = self.parse_typed_decl(info) {
-                        d.lifetime = Some(true);
-                        decls.push(d);
-                    }
+                // Parsed in a cold, non-inlined helper so its locals never
+                // enlarge this hot recursive frame — `block_body` sits on the
+                // `parse_statement → parse_seq_block → block_body` recursion, and
+                // the MAX_STMT_DEPTH stack budget is frame-sized. Growing this
+                // frame inline overflowed the 2 MiB test-thread stack at the cap
+                // (`depth_guard.rs::deep_stmt_nesting_errors_cleanly`); mirrors
+                // `parse_with_postfix` on the expr path.
+                if let Some(d) = self.parse_automatic_block_decl(&mut scope) {
+                    decls.push(d);
                 }
             } else if let Some(info) = self.peek_block_typedef_decl() {
                 // A procedural block-local declaration using a user-defined type
