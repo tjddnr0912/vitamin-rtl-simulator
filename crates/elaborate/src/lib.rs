@@ -1903,6 +1903,161 @@ fn stmt_refs_ident_outside(s: &ast::Stmt, skip: ast::Span, name: &str) -> bool {
 /// #0` (iverilog "sorry"), CRV `RandomizeWith.constraints` / `Dist` / `ArrayMethodWith`
 /// (no oracle), and impossible forms (literals, multi-segment paths). Never an
 /// over-reject of a valid write-only program.
+/// CONSERVATIVE "expression `e` certainly does NOT reference `name`". Unlike the
+/// shared `expr_reads_ident` — whose `_ => false` UNDER-detects (it misses a read
+/// hidden in `ArrayMethodWith` / `ClassNew` / `RandomizeWith` / `Dist` /
+/// `PkgScoped`) — this returns `false` for ANY form it does not fully vet, so the
+/// GAP-D accept below can never be fooled by a walker blind spot. Only enumerated
+/// leaf / composite forms with EVERY sub-expression provably ref-free return
+/// `true`. (Sound-by-construction: unknown ⇒ "may reference".)
+fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
+    use ast::ExprKind as K;
+    match &e.kind {
+        K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::Null | K::Dollar => true,
+        // The FIRST segment matching `name` is a reference — a bare read (`t`), a
+        // field / hierarchical read (`t.field`, a multi-seg ident for a class
+        // handle), all count. Only a path whose HEAD is some other name (`other.x`)
+        // is ref-free.
+        K::Ident(p) => !p.segments.first().is_some_and(|s| s.name == name),
+        K::Unary { operand, .. } => expr_no_ref(operand, name),
+        K::Binary { lhs, rhs, .. } => expr_no_ref(lhs, name) && expr_no_ref(rhs, name),
+        K::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => expr_no_ref(cond, name) && expr_no_ref(then_e, name) && expr_no_ref(else_e, name),
+        K::BitSelect { base, index } => expr_no_ref(base, name) && expr_no_ref(index, name),
+        K::PartSelect { base, msb, lsb } => {
+            expr_no_ref(base, name) && expr_no_ref(msb, name) && expr_no_ref(lsb, name)
+        }
+        K::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => expr_no_ref(base, name) && expr_no_ref(offset, name) && expr_no_ref(width, name),
+        K::Concat { parts } => parts.iter().all(|x| expr_no_ref(x, name)),
+        K::Replicate { count, value } => {
+            expr_no_ref(count, name) && value.iter().all(|x| expr_no_ref(x, name))
+        }
+        // A call's NAME head can be the receiver of a method call (`t.size()`,
+        // `t.method(a)`) — a read of `name`. A plain `f(args)` head is some other
+        // function. So the head must not be `name`, AND every arg must be ref-free.
+        K::Call { name: cn, args } => {
+            !cn.segments.first().is_some_and(|s| s.name == name)
+                && args.iter().all(|x| expr_no_ref(x, name))
+        }
+        K::SysCall { args, .. } => args.iter().all(|x| expr_no_ref(x, name)),
+        K::Paren { inner } => expr_no_ref(inner, name),
+        K::MinTypMax { min, typ, max } => {
+            expr_no_ref(min, name) && expr_no_ref(typ, name) && expr_no_ref(max, name)
+        }
+        K::Cast { target, expr } => {
+            expr_no_ref(expr, name)
+                && match target {
+                    ast::CastTarget::Size(s) => expr_no_ref(s, name),
+                    _ => true,
+                }
+        }
+        K::AssignPattern(parts) => parts.iter().all(|x| expr_no_ref(x, name)),
+        K::New { size, src } => {
+            expr_no_ref(size, name) && src.as_ref().map_or(true, |s| expr_no_ref(s, name))
+        }
+        // PkgScoped / ClassNew / ArrayMethodWith / RandomizeWith / Dist / Error —
+        // not vetted → conservatively "may reference".
+        _ => false,
+    }
+}
+
+/// CONSERVATIVE lvalue counterpart of [`expr_no_ref`] — the lvalue (write target
+/// and any select index) certainly does NOT reference `name`. Uses `expr_no_ref`
+/// for index sub-exprs (so a read hidden in an index is not a blind spot).
+fn lvalue_no_ref(lv: &ast::Lvalue, name: &str) -> bool {
+    use ast::Lvalue as L;
+    match lv {
+        // As in `expr_no_ref`: any path headed by `name` references it (a whole
+        // write `name`, a field/hier write `name.f`). Only another head is ref-free.
+        L::Ident(p) => !p.segments.first().is_some_and(|s| s.name == name),
+        L::BitSelect { base, index, .. } => lvalue_no_ref(base, name) && expr_no_ref(index, name),
+        L::PartSelect { base, msb, lsb, .. } => {
+            lvalue_no_ref(base, name) && expr_no_ref(msb, name) && expr_no_ref(lsb, name)
+        }
+        L::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => lvalue_no_ref(base, name) && expr_no_ref(offset, name) && expr_no_ref(width, name),
+        L::Concat { parts, .. } => parts.iter().all(|p| lvalue_no_ref(p, name)),
+        L::Error(_) => true,
+    }
+}
+
+/// CONSERVATIVE "statement `st` certainly does NOT reference `name`" (read OR
+/// write, anywhere). Returns `false` for any statement form not fully vetted —
+/// only a simple blocking / non-blocking assign (NO intra-assign timing) with a
+/// ref-free lvalue+rhs, a system-task call with ref-free args, or a null
+/// statement is provably ref-free. Control flow / timing / `assign` / `force` /
+/// method-with all conservatively block the accept.
+fn stmt_no_ref(st: &ast::Stmt, name: &str) -> bool {
+    use ast::Stmt as S;
+    match st {
+        S::Null(_) => true,
+        S::Blocking {
+            lhs,
+            delay,
+            event,
+            rhs,
+            ..
+        }
+        | S::NonBlocking {
+            lhs,
+            delay,
+            event,
+            rhs,
+            ..
+        } => {
+            delay.is_none() && event.is_none() && lvalue_no_ref(lhs, name) && expr_no_ref(rhs, name)
+        }
+        S::SysTaskCall { args, .. } => args.iter().all(|a| expr_no_ref(a, name)),
+        _ => false,
+    }
+}
+
+/// GAP-D soundness (see `hoist_block_local_nets`). v1 flattens a PROCEDURAL
+/// block-local to ONE static module net (no per-block-entry frame), so an
+/// `automatic` block-local is byte-identical to that flattening ONLY when its
+/// per-entry reset is DEAD — it is written before its entry value can be
+/// observed. True iff, scanning the block's top-level statements in order, we
+/// reach a clean whole-var BLOCKING write of `name` (no intra-assign timing,
+/// rhs provably ref-free) with EVERY preceding statement provably ref-free.
+/// Any statement / expression form not fully vetted by the CONSERVATIVE
+/// `stmt_no_ref` / `expr_no_ref` checkers (control flow, timing, `assign`/
+/// `force`, `with`-clause array method, boxed exprs, …) blocks the accept →
+/// the automatic is LOUD-rejected rather than silently given static semantics
+/// (iverilog cannot oracle block-local `automatic` either, so a guess is
+/// unsound). A never-mentioned local is trivially equivalent (dead).
+fn automatic_local_static_equivalent(stmts: &[ast::Stmt], name: &str) -> bool {
+    for st in stmts {
+        if let ast::Stmt::Blocking {
+            lhs: ast::Lvalue::Ident(p),
+            delay: None,
+            event: None,
+            rhs,
+            ..
+        } = st
+        {
+            if p.segments.len() == 1 && p.segments[0].name == name && expr_no_ref(rhs, name) {
+                return true; // clean whole-var write dominates any later read
+            }
+        }
+        if !stmt_no_ref(st, name) {
+            return false; // an unvetted / referencing statement precedes the write
+        }
+    }
+    true
+}
+
 fn stmt_reads_ident(s: &ast::Stmt, name: &str) -> bool {
     use ast::Stmt::*;
     match s {
@@ -2828,6 +2983,14 @@ struct Elaborator<'s> {
     /// output actual) is a loud error: a parameter is an elaboration constant
     /// and must never be silently mutable. Elaborate-local (never serialized).
     const_param_nets: std::collections::BTreeMap<u32, String>,
+    /// GAP-G: fq name of a DESUGARED 1-D unpacked array parameter (`localparam
+    /// int ROT[0:3] = '{0,1,3,5}`) → its const-folded element values, in
+    /// declared index order. Populated when the const-param net is created (its
+    /// `'{…}` init elements are all foldable scalars); lets `const_eval_in_scope`
+    /// fold an element read `ROT[i]` in a constant context — e.g. a generate-scope
+    /// `localparam R = ROT[g]`. A multi-dim / non-foldable array is simply absent
+    /// (its element reads stay loud — correct-or-loud). Elaborate-local only.
+    array_const_vals: std::collections::BTreeMap<String, Vec<i64>>,
     /// A2a: true while lowering the synthesized §6.8 decl-init `initial` —
     /// a const param's own initializer is legitimate, so the deny is off.
     lowering_decl_init: bool,
@@ -3084,6 +3247,7 @@ impl<'s> Elaborator<'s> {
             modport_readonly: BTreeSet::new(),
             cur_prefix: String::new(),
             params: BTreeMap::new(),
+            array_const_vals: BTreeMap::new(),
             param_meta: BTreeMap::new(),
             hier_params: BTreeMap::new(),
             defparams: BTreeMap::new(),
@@ -4527,7 +4691,14 @@ impl<'s> Elaborator<'s> {
                     }
                     saved_params.push((key.clone(), self.params.insert(key, v)));
                 }
-                ast::ModuleItem::NetVar(d) => self.prescan_net_bits(d),
+                ast::ModuleItem::NetVar(d) => {
+                    self.prescan_net_bits(d);
+                    // GAP-G: capture a const array param's element values in
+                    // DECL ORDER, so a later same-walk `localparam X = ROT[2]`
+                    // folds (the array param net itself is created later, in the
+                    // Nets phase — too late for this bind).
+                    self.capture_const_array_vals(d);
+                }
                 // A2b-prereq S2: record declared genvar names persistently —
                 // their `params` binding is transient (unroll-only), but the
                 // constant-shadow guard must see them at any lowering point.
@@ -5998,18 +6169,9 @@ impl<'s> Elaborator<'s> {
         // `param_decl_width` already reports the declared signedness (incl. `int`/
         // `integer` via `p.signed`), so coerce with THAT — an `int unsigned` must
         // NOT be force-signed here.
-        let Some((w, signed)) = self.param_decl_width(p) else {
-            return v;
-        };
-        if w == 0 || w >= 64 {
-            return v;
-        }
-        let mask = (1i64 << w) - 1;
-        let trunc = v & mask;
-        if signed && (trunc & (1i64 << (w - 1))) != 0 {
-            trunc - (1i64 << w) // sign-extend
-        } else {
-            trunc
+        match self.param_decl_width(p) {
+            Some((w, signed)) => coerce_i64_to_width(v, w, signed),
+            None => v,
         }
     }
 
@@ -6252,6 +6414,29 @@ impl<'s> Elaborator<'s> {
             // nested prefix (`top.g[0]`), matching Verilog generate scoping.
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                 self.lookup_scoped(&path.segments[0].name)
+            }
+            // GAP-G: a constant-context element read of a const array parameter
+            // (`ROT[i]` — e.g. a generate-scope `localparam R = ROT[g]`). The
+            // array NAME resolves through the same scope walk as a bare param
+            // Ident; the index folds; `get` bounds-checks. A non-array base, an
+            // out-of-range or negative index, or an array shape not captured in
+            // `array_const_vals` (descending / non-zero base / multi-dim /
+            // non-foldable element) folds None → loud at the binding site.
+            ast::ExprKind::BitSelect { base, index } => {
+                let ast::ExprKind::Ident(path) = &base.kind else {
+                    return None;
+                };
+                if path.segments.len() != 1 {
+                    return None;
+                }
+                let idx = self.const_eval_in_scope(index)?;
+                if idx < 0 {
+                    return None;
+                }
+                let key = self.walk_scopes_key(&path.segments[0].name, |k| {
+                    self.array_const_vals.contains_key(k)
+                })?;
+                self.array_const_vals.get(&key)?.get(idx as usize).copied()
             }
             ast::ExprKind::Ternary {
                 cond,
@@ -6641,6 +6826,45 @@ impl<'s> Elaborator<'s> {
                         }
                         continue;
                     }
+                    // GAP-D soundness: a procedural block-local `automatic` is
+                    // byte-identical to the static flattening ONLY when its
+                    // per-entry reset/re-init is dead. An initializer (must re-run
+                    // each entry) or a read-before-write use (observes the reset
+                    // value) cannot be honored without a per-block frame, so reject
+                    // LOUD rather than silently give static semantics. The
+                    // static-equivalent case (`automatic t x; x = e; … x …`) is
+                    // accepted — it flattens correctly.
+                    if d.lifetime == Some(true) {
+                        for n in &d.names {
+                            let nm = &n.name.name;
+                            // A sibling block-local's initializer that reads this
+                            // automatic var (`automatic int v; int w = v;`) observes
+                            // its entry value too — not just the block statements.
+                            // Use the CONSERVATIVE `expr_no_ref` (not the shared
+                            // under-detecting `expr_reads_ident`, which `_ => false`s
+                            // on `ArrayMethodWith`/`Dist`/… and could miss a hidden
+                            // read) so this gate is sound like the statement scan.
+                            let read_in_sibling_init = decls
+                                .iter()
+                                .flat_map(|dd| dd.names.iter())
+                                .any(|nn| nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm)));
+                            if n.init.is_some()
+                                || read_in_sibling_init
+                                || !automatic_local_static_equivalent(stmts, nm)
+                            {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "an `automatic` block-local `{nm}` whose per-entry \
+                                         lifetime differs from static (an initializer, or a \
+                                         read before its first write) is unsupported in a \
+                                         procedural block (v1 flattens block-locals to one \
+                                         static net); assign it before use, or drop `automatic`",
+                                    ),
+                                );
+                            }
+                        }
+                    }
                     self.elaborate_netvar_decl(d, ports, body, true);
                     // §6.8/§6.21: a NON-constant PROCESS block-local initializer
                     // (`begin logic x = g+1; …`) is STATIC-lifetime — applied ONCE
@@ -6722,6 +6946,72 @@ impl<'s> Elaborator<'s> {
     }
 
     // ── PASS 1b: body NetVarDecl → nets ────────────────────────────
+    /// GAP-G: for each DESUGARED array parameter name in `d`, capture its
+    /// const-folded element values under its fq name so `const_eval_in_scope`
+    /// can fold an element read `NAME[i]` in a constant context (a generate-scope
+    /// `localparam R = ROT[g]`, or a module-scope `localparam X = ROT[2]`).
+    /// Restricted to a 0-based ASCENDING single-dim array (`[0:N]` / `[N]`) whose
+    /// `'{…}` init is ALL foldable scalars — the only shape whose positional
+    /// pattern maps element i → index i directly. Any other shape (descending /
+    /// non-zero base / multi-dim / non-foldable element / count mismatch) is left
+    /// absent, so its element reads stay LOUD (correct-or-loud). Idempotent:
+    /// called both in the decl-order body-param walk and at net elaboration.
+    fn capture_const_array_vals(&mut self, d: &ast::NetVarDecl) {
+        if !d.const_param {
+            return;
+        }
+        // ELEMENT type (width, signed) — the same shape the RUNTIME net stores
+        // each element at (and that `coerce_param_value` applies to a scalar), so
+        // a narrow element (`bit[3:0]`, `byte`, `logic signed [N]`) truncates /
+        // sign-extends its init literal instead of storing the raw i64. Without
+        // this a const read `ROT[i]` disagreed with both iverilog AND vita's own
+        // runtime read (adversarial find). Decl-level (shared by all names).
+        let (base_w, _, _, elem_signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        let elem_w = if d.packed.is_empty() {
+            base_w
+        } else {
+            self.packed_extents(d.range.as_ref(), &d.packed)
+                .iter()
+                .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)))
+        };
+        for decl in &d.names {
+            let Some(init) = &decl.init else { continue };
+            let ast::ExprKind::AssignPattern(parts) = &init.kind else {
+                continue;
+            };
+            let zero_based_asc = decl.unpacked.len() == 1
+                && match &decl.unpacked[0] {
+                    ast::Dim::Size(_) => true,
+                    ast::Dim::Range(r) => {
+                        self.const_eval_in_scope(&r.msb) == Some(0)
+                            && self.const_eval_in_scope(&r.lsb).is_some_and(|l| l >= 0)
+                    }
+                    _ => false,
+                };
+            if !zero_based_asc {
+                continue;
+            }
+            let Some(vals) = parts
+                .iter()
+                .map(|p| {
+                    self.const_eval_in_scope(p)
+                        .map(|v| coerce_i64_to_width(v, elem_w, elem_signed))
+                })
+                .collect::<Option<Vec<i64>>>()
+            else {
+                continue;
+            };
+            let expected = self
+                .array_dim_extents(&decl.unpacked)
+                .iter()
+                .fold(1u32, |a, &(_, n)| a.saturating_mul(n.max(1)));
+            if vals.len() as u32 == expected {
+                let key = self.fq(&decl.name.name);
+                self.array_const_vals.insert(key, vals);
+            }
+        }
+    }
+
     fn elaborate_netvar_decl(
         &mut self,
         d: &ast::NetVarDecl,
@@ -6761,6 +7051,11 @@ impl<'s> Elaborator<'s> {
                 "a named event takes no range, initializer or array dimensions",
             );
         }
+        // GAP-G: capture const-array element values (covers a generate-LOCAL array
+        // param, whose net is created only here; a module-scope one is also
+        // captured earlier in the decl-order body-param walk so a `localparam X =
+        // ROT[i]` folds). Idempotent.
+        self.capture_const_array_vals(d);
         for decl in &d.names {
             let (mut width, mut msb, lsb, signed) =
                 self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
@@ -18224,11 +18519,43 @@ impl<'s> Elaborator<'s> {
             (_, ast::ModuleItem::Generate(g)) => {
                 self.elaborate_generate(&g.items, phase, depth + 1, map);
             }
-            // forbidden-in-generate (reported once, in the Nets phase).
-            (GenPhase::Nets, ast::ModuleItem::Param(_) | ast::ModuleItem::PortDecl(_)) => {
+            // GAP-G: a `localparam` (or `parameter`) declared INSIDE a generate
+            // block (IEEE §27) is a per-instance elaboration constant. Const-fold
+            // its value in the current scope (the genvar is bound) and register it
+            // under the block-scoped fq key, so a later generate-if condition, a
+            // sibling localparam, or a body expression resolves it via
+            // `lookup_scoped` — exactly like a module-scope localparam. Registered
+            // in EVERY phase because the generate-for re-walks the body per phase
+            // and a Logic-phase cont-assign (`stage[g] << R`) needs the binding
+            // live when it lowers; the value is identical each pass. A fold
+            // failure is reported LOUD once (Nets phase only, to avoid a 4×
+            // duplicate). This replaces the old blanket "not allowed inside
+            // generate" reject for parameters.
+            (_, ast::ModuleItem::Param(p)) => match self.const_eval_in_scope(&p.value) {
+                Some(v) => {
+                    let v = self.coerce_param_value(v, p);
+                    let key = self.fq(&p.name.name);
+                    self.hier_params.insert(key.clone(), v);
+                    self.params.insert(key, v);
+                }
+                None => {
+                    if phase == GenPhase::Nets {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "generate-scope parameter `{}` value is not a foldable constant expression",
+                                p.name.name
+                            ),
+                        );
+                    }
+                }
+            },
+            // A PORT declaration inside generate stays forbidden (IEEE §27:
+            // ports are module-boundary, not per-instance). Reported once.
+            (GenPhase::Nets, ast::ModuleItem::PortDecl(_)) => {
                 self.error(
                     MsgCode::ElabUnsupported,
-                    "parameter/port declaration not allowed inside generate",
+                    "port declaration not allowed inside generate",
                 );
             }
             (
@@ -27833,6 +28160,24 @@ fn clamp_bound_u32(v: Option<i64>) -> u32 {
 /// decimals signed, but the written magnitude is the value (iverilog folds it
 /// positive), so sign-extending on the bit image would turn it into -1. The
 /// image must fit i64 (else None → loud at the param sites). X/Z bits → None.
+/// Truncate / sign-extend `v` to a `w`-bit value of the given signedness — the
+/// coercion `coerce_param_value` applies to a scalar param, factored out so a
+/// const ARRAY element (GAP-G) is coerced to its ELEMENT type the SAME way (so
+/// a narrow element such as `bit[3:0]` / `byte` truncates its init literal to
+/// match the runtime net and iverilog). `w == 0` or `w >= 64` keeps the full i64.
+fn coerce_i64_to_width(v: i64, w: u32, signed: bool) -> i64 {
+    if w == 0 || w >= 64 {
+        return v;
+    }
+    let mask = (1i64 << w) - 1;
+    let trunc = v & mask;
+    if signed && (trunc & (1i64 << (w - 1))) != 0 {
+        trunc - (1i64 << w) // sign-extend
+    } else {
+        trunc
+    }
+}
+
 fn const_eval_i64_lit(e: &ast::Expr) -> Option<i64> {
     let ast::ExprKind::IntLit { kind, raw } = &e.kind else {
         return None;

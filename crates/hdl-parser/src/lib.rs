@@ -1915,6 +1915,47 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
+    /// True when the cursor is on `automatic` and the NEXT token begins a
+    /// declaration — a net/var kind keyword (`int`, `logic`, …) or a
+    /// (possibly user-typedef) identifier. Routes a block-local `automatic
+    /// <type> <name>;` lifetime override (GAP-D, IEEE §6.21) through the
+    /// decl-collection path instead of the statement region. Mirrors the
+    /// keyword set of `net_var_kind`.
+    fn lifetime_prefixes_decl(&self) -> bool {
+        use Kw::*;
+        match self.peek_at(1) {
+            Some(TokenKind::Word(WordKind::Keyword(k))) => matches!(
+                k,
+                Wire | Tri
+                    | Wand
+                    | Triand
+                    | Wor
+                    | Trior
+                    | Tri0
+                    | Tri1
+                    | Supply0
+                    | Supply1
+                    | Trireg
+                    | Uwire
+                    | Reg
+                    | Logic
+                    | Integer
+                    | Real
+                    | Realtime
+                    | Time
+                    | Event
+                    | String
+                    | Bit
+                    | Byte
+                    | Shortint
+                    | Int
+                    | Longint
+            ),
+            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent) => true,
+            _ => false,
+        }
+    }
+
     pub fn parse_source_unit(&mut self) -> SourceUnit {
         // N7: pre-scan the token stream for every `class NAME` (any nesting) so a
         // class-typed declaration `Packet p;` parses through the ordinary
@@ -2573,8 +2614,12 @@ impl<'t, 's> Parser<'t, 's> {
         } else {
             None
         };
-        let (mut signed, mut range, mut packed) = if let Some((k, s, r)) = typedef_ty {
+        // EXT2-E1: a packed-struct typedef port carries a layout name to bind
+        // once the port NAME is known (below), so `c.field` desugars.
+        let mut port_struct_name: Option<String> = None;
+        let (mut signed, mut range, mut packed) = if let Some((k, s, r, sn)) = typedef_ty {
             net_or_var = Some(k);
+            port_struct_name = sn;
             (s, r, Vec::new())
         } else {
             (
@@ -2602,6 +2647,12 @@ impl<'t, 's> Parser<'t, 's> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // EXT2-E1: bind a packed-struct port's NAME to its layout (mirrors the
+        // tf-port path) so a body `c.field` desugars to a part-select on the
+        // port's flat vector. Module-scoped like a `cfg_t c;` var binding.
+        if let Some(sn) = &port_struct_name {
+            self.bind_tf_port_struct(&name.name, sn);
+        }
         let default = if self.eat(TokenKind::Eq) {
             Some(self.expr(0))
         } else {
@@ -5405,8 +5456,10 @@ impl<'t, 's> Parser<'t, 's> {
         } else {
             None
         };
-        let (signed, range) = if let Some((k, s, r)) = typedef_ty {
+        let mut port_struct_name: Option<String> = None;
+        let (signed, range) = if let Some((k, s, r, sn)) = typedef_ty {
             net_or_var = Some(k);
+            port_struct_name = sn;
             (s, r)
         } else {
             (self.signed_eff(net_or_var), self.opt_range())
@@ -5414,6 +5467,12 @@ impl<'t, 's> Parser<'t, 's> {
         let mut names = Vec::new();
         loop {
             if let Some(id) = self.ident() {
+                // EXT2-E1: each name of a packed-struct non-ANSI port (`input
+                // cfg_t a, b;`) binds to the struct layout so `a.field`/`b.field`
+                // desugar (mirrors the ANSI path and `bind_tf_port_struct`).
+                if let Some(sn) = &port_struct_name {
+                    self.bind_tf_port_struct(&id.name, sn);
+                }
                 names.push(id);
             }
             if !self.eat(TokenKind::Comma) {
@@ -5776,7 +5835,17 @@ impl<'t, 's> Parser<'t, 's> {
             self.error(
                 "an alias / struct / union typedef in a begin/function/task body (a body-local enum typedef is unsupported in v1 — define it at module scope)",
             );
-            self.synchronize();
+            // GAP-B: emit the loud reject, then PARSE the enum typedef NORMALLY
+            // (registering the type NAME + consuming all its tokens) so the rest
+            // of the function/task body — which references the type (`e v; v =
+            // e'(x);`) — parses without cascading into spurious follow-on errors.
+            // `synchronize()` would instead halt at the `logic` base-type keyword
+            // INSIDE the enum, leaving `logic [1:0] {…} e;` to re-parse as garbage
+            // (8 errors observed). The design still fails — the loud error aborts
+            // before elaborate — so no unsupported enum is ever simulated. This is
+            // the honest-loud "emit + consume" recovery used for struct tf-ports
+            // before EXT2-C.
+            let _ = self.parse_typedef();
             return;
         }
         // Registration is the functional effect; there is no body slot for the
@@ -8173,15 +8242,20 @@ impl<'t, 's> Parser<'t, 's> {
         ports
     }
 
-    /// A typedef name as a MODULE port type (`input mode_e m`, `input byte_t a`) →
-    /// its `(kind, signed, range)`, mirroring `try_tf_port_typedef` for tf-ports
-    /// (typedef-recognition family). REQUIRES the next token to be the port NAME
-    /// (an Ident) so a bare continuation (`input byte_t a, b` — `b` is a name, not a
-    /// type) is NOT misresolved as a type. A struct/union/class/multi-dim-packed
-    /// typedef port type is honest-loud (v1 — the AnsiPort/PortDecl shape carries
-    /// only kind/signed/range, like a tf-port). Used by both the ANSI
+    /// A typedef name as a MODULE port type (`input mode_e m`, `input byte_t a`,
+    /// `input cfg_t c`) → its `(kind, signed, range, struct_name)`, mirroring
+    /// `try_tf_port_typedef` for tf-ports (typedef-recognition family). REQUIRES
+    /// the next token to be the port NAME (an Ident) so a bare continuation
+    /// (`input byte_t a, b` — `b` is a name, not a type) is NOT misresolved as a
+    /// type. EXT2-E1: a PACKED struct/union typedef IS supported as a module port
+    /// — the port net is the struct's flat vector (`info.range` = total width) and
+    /// the caller binds the port NAME to the layout (`var_struct`, via
+    /// `bind_tf_port_struct`) so `c.field` desugars to a part-select, exactly as a
+    /// module-internal `cfg_t c;` var does. A class handle or a multi-dim-packed
+    /// vector typedef port stays honest-loud (the AnsiPort/PortDecl shape carries
+    /// no class binding / extra packed dims). Used by both the ANSI
     /// (`parse_ansi_port`) and non-ANSI (`parse_port_decl`) port parsers.
-    fn try_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>)> {
+    fn try_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>, Option<String>)> {
         let info = self.peek_typedef_name()?;
         let q = self.scope_qualifier_len(); // 0 (bare) or 2 (`pkg::`)
         if !matches!(
@@ -8191,17 +8265,16 @@ impl<'t, 's> Parser<'t, 's> {
             return None; // not `<type> <name>` — leave for the continuation/name path
         }
         let nm = self.type_name_key();
-        if self.struct_layouts.contains_key(&nm)
-            || info.class_name.is_some()
-            || !info.packed.is_empty()
-        {
+        let is_struct = self.struct_layouts.contains_key(&nm);
+        if info.class_name.is_some() || !info.packed.is_empty() {
             self.error(
-                "a struct/union/class/multi-dim-packed typedef as a module port type is unsupported in v1 (a simple vector/enum typedef port is supported)",
+                "a class or multi-dim-packed typedef as a module port type is unsupported in v1 (a simple vector / enum / packed-struct typedef port is supported)",
             );
         }
         self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
-        Some((info.kind, info.signed, info.range))
+        let struct_name = if is_struct { Some(nm) } else { None };
+        Some((info.kind, info.signed, info.range, struct_name))
     }
 
     /// One ANSI tf-port: `[input|output|inout] [net_or_var] [signed] [range] name`.
@@ -8388,21 +8461,27 @@ impl<'t, 's> Parser<'t, 's> {
             }
             // B4: a per-decl lifetime override `automatic <kind> <name>;` (only
             // `automatic` — `static` is not a reserved word). The keyword precedes
-            // a normal var decl; consume it and stamp the lifetime on the decl.
-            if self.at_kw(Kw::Automatic)
-                && matches!(
-                    self.peek_at(1),
-                    Some(TokenKind::Word(WordKind::Keyword(
-                        Kw::Reg | Kw::Logic | Kw::Integer | Kw::Real | Kw::Realtime | Kw::Time
-                    )))
-                )
-            {
+            // a normal var decl OR a user-typedef decl; consume it and stamp the
+            // lifetime on the decl. `lifetime_prefixes_decl` gates the same kind
+            // set as `block_body`'s GAP-D branch, so `automatic int unsigned x;`
+            // and `automatic my_t s;` both work in a function/task body.
+            if self.at_kw(Kw::Automatic) && self.lifetime_prefixes_decl() {
                 self.bump(); // 'automatic'
                 let before = self.pos;
-                if let Some(mut d) = self.parse_net_var(false) {
-                    // function/task body decl: no net delay
-                    d.lifetime = Some(true);
-                    body_decls.push(d);
+                if self.net_var_kind().is_some() {
+                    if let Some(mut d) = self.parse_net_var(false) {
+                        // function/task body decl: no net delay
+                        d.lifetime = Some(true);
+                        body_decls.push(d);
+                    }
+                } else if let Some(info) = self.peek_block_typedef_decl() {
+                    if typedef_scope.is_none() {
+                        typedef_scope = Some(self.snapshot_scope());
+                    }
+                    if let Some(mut d) = self.parse_typed_decl(info) {
+                        d.lifetime = Some(true);
+                        body_decls.push(d);
+                    }
                 }
                 if self.pos == before {
                     self.bump();
@@ -11287,6 +11366,28 @@ impl<'t, 's> Parser<'t, 's> {
                 if let Some(d) = self.parse_net_var(false) {
                     // procedural block-local decl: no net delay
                     decls.push(d);
+                }
+            } else if self.at_kw(Kw::Automatic) && self.lifetime_prefixes_decl() {
+                // GAP-D (IEEE §6.21): a block-local decl with an explicit
+                // `automatic` lifetime override (`automatic int unsigned idx;`).
+                // Consume the keyword and parse the following decl exactly like a
+                // plain block-local, stamping the lifetime — mirrors `tf_body`'s
+                // B4 override. `static` is not a reserved word, so only
+                // `automatic` reaches here.
+                self.bump(); // 'automatic'
+                if self.net_var_kind().is_some() {
+                    if let Some(mut d) = self.parse_net_var(false) {
+                        d.lifetime = Some(true);
+                        decls.push(d);
+                    }
+                } else if let Some(info) = self.peek_block_typedef_decl() {
+                    if scope.is_none() {
+                        scope = Some(self.snapshot_scope());
+                    }
+                    if let Some(mut d) = self.parse_typed_decl(info) {
+                        d.lifetime = Some(true);
+                        decls.push(d);
+                    }
                 }
             } else if let Some(info) = self.peek_block_typedef_decl() {
                 // A procedural block-local declaration using a user-defined type

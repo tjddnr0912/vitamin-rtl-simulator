@@ -330,15 +330,26 @@ fn collision_nonfoldable_enum_value_resolves() {
 // ---- loud stays loud (correct-or-loud; not silently mis-parsed) ----
 
 #[test]
-fn scoped_struct_port_is_loud() {
-    // A struct/union/class/multi-dim-packed typedef as a PORT type is v1 honest-loud
-    // (as for the bare form) — the scoped path must reject, not silently accept.
+fn scoped_struct_port_supported() {
+    // EXT2-E1: a PACKED-struct typedef used via its SCOPED name (`pk::s_t`) as a
+    // module port is supported (loud→supported) — the scoped path resolves the
+    // layout and `a.field` desugars to a part-select. iverilog-oracled: s_t{x[7:0]};
+    // a=8'h5A ⇒ a.x = 5a.
     let (out, code) = run(
         "package pk; typedef struct packed { logic [7:0] x; } s_t; endpackage\n\
-         module sub(input pk::s_t a); initial $display(\"got\"); endmodule\n\
-         module top; sub u(.a()); endmodule\n",
+         module sub(input pk::s_t a, output logic [7:0] o); assign o=a.x; endmodule\n\
+         module top; logic [7:0] c,o; sub u(.a(c),.o(o));\n\
+         initial begin c=8'h5A; #1 $display(\"R:%0h\",o); $finish; end endmodule\n",
     );
-    assert_ne!(code, Some(0), "scoped struct port must be loud:\n{out}");
+    assert_eq!(
+        code,
+        Some(0),
+        "scoped struct port must be supported:\n{out}"
+    );
+    assert!(
+        out.contains("R:5a"),
+        "scoped struct port a.x must read 5a:\n{out}"
+    );
 }
 
 #[test]

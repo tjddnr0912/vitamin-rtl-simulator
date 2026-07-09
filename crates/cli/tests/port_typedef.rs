@@ -8,8 +8,10 @@
 //! Fixed by a shared `try_port_typedef` (mirroring `try_tf_port_typedef` for
 //! tf-ports) used by both port parsers: a simple vector/enum typedef resolves to
 //! its (kind, signed, range). It requires the next token to be the port name so a
-//! bare continuation (`input byte_t a, b`) is not misresolved. struct/union/
-//! class/multi-dim-packed typedef ports are honest-loud (v1, as for tf-ports).
+//! bare continuation (`input byte_t a, b`) is not misresolved. A PACKED-struct
+//! typedef port is supported (EXT2-E1, `bind_tf_port_struct` — the port net is
+//! the struct's flat vector and `c.field` desugars to a part-select); a class /
+//! multi-dim-packed typedef port stays honest-loud (v1, as for tf-ports).
 //! Pure parser, no AST field added, `.vu`/format unchanged, IR-0. The typedef is
 //! brought into scope via a package + header import (A1, §4.5.55). Pinned to
 //! iverilog 13.0.
@@ -112,14 +114,21 @@ fn builtin_port_unchanged() {
 }
 
 #[test]
-fn struct_typedef_port_is_loud() {
-    // A struct/union/class/multi-dim-packed typedef port type is honest-loud (v1,
-    // as for tf-ports) — iverilog supports it, vita rejects rather than guessing.
-    let (_o, ok) = run(
+fn struct_typedef_port_supported() {
+    // EXT2-E1: a PACKED-struct typedef module port is supported (loud→supported).
+    // The port net is the struct's flat vector and each `pp.field` desugars to a
+    // part-select, exactly as a module-internal `pair_t pp;` var. iverilog-oracled:
+    // pair_t{x[7:4],y[3:0]}; pp=8'hAB ⇒ x=A,y=B, (A+B)&0xF = 5.
+    let (o, ok) = run(
         "package p; typedef struct packed {logic[3:0] x; logic[3:0] y;} pair_t; endpackage\n\
-         module m import p::*; (input pair_t pp, output logic [3:0] s); assign s=pp.x+pp.y; endmodule",
+         module m import p::*; (input pair_t pp, output logic [3:0] s); assign s=pp.x+pp.y; endmodule\n\
+         module tb; logic[7:0] c; logic[3:0] s; m d(.pp(c),.s(s));\n\
+         initial begin c=8'hAB; #1 $display(\"R:%0d\",s); $finish; end endmodule",
     );
-    assert!(!ok, "a struct typedef port type must be loud (v1)");
+    assert!(
+        ok && o == "5",
+        "struct typedef port must be supported (=5):\n{o}"
+    );
 }
 
 #[test]
