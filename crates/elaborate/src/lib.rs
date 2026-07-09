@@ -2024,35 +2024,206 @@ fn stmt_no_ref(st: &ast::Stmt, name: &str) -> bool {
     }
 }
 
-/// GAP-D soundness (see `hoist_block_local_nets`). v1 flattens a PROCEDURAL
-/// block-local to ONE static module net (no per-block-entry frame), so an
-/// `automatic` block-local is byte-identical to that flattening ONLY when its
-/// per-entry reset is DEAD — it is written before its entry value can be
-/// observed. True iff, scanning the block's top-level statements in order, we
-/// reach a clean whole-var BLOCKING write of `name` (no intra-assign timing,
-/// rhs provably ref-free) with EVERY preceding statement provably ref-free.
-/// Any statement / expression form not fully vetted by the CONSERVATIVE
-/// `stmt_no_ref` / `expr_no_ref` checkers (control flow, timing, `assign`/
-/// `force`, `with`-clause array method, boxed exprs, …) blocks the accept →
-/// the automatic is LOUD-rejected rather than silently given static semantics
-/// (iverilog cannot oracle block-local `automatic` either, so a guess is
-/// unsound). A never-mentioned local is trivially equivalent (dead).
-fn automatic_local_static_equivalent(stmts: &[ast::Stmt], name: &str) -> bool {
-    for st in stmts {
-        if let ast::Stmt::Blocking {
-            lhs: ast::Lvalue::Ident(p),
+/// GAP-D definite-assignment (round-4, guard-aware). Returns the assigned-state
+/// AFTER `st` for the automatic local `name`, or `None` if `st` (or a
+/// sub-statement) READS `name` on a path where it is not yet definitely written
+/// THIS execution — the only case where the v1 static flattening (persist the
+/// last value) diverges from `automatic` (fresh each block entry). Every form
+/// not explicitly proven safe collapses to `None` (loud), never a silent accept:
+/// a statement provably free of any `name` reference (`stmt_no_ref`) is a no-op;
+/// a clean whole-var write establishes assignment; control flow recurses and
+/// merges (an `if`/`case` assigns only if EVERY arm does; a loop cannot newly
+/// guarantee assignment, it may run zero times); anything else that touches
+/// `name` is conservatively unsafe.
+fn da_stmt(st: &ast::Stmt, assigned: bool, name: &str) -> Option<bool> {
+    use ast::Stmt as S;
+    // A statement with no reference to `name` at all can neither read nor assign
+    // it — the assigned-state passes through unchanged.
+    if stmt_no_ref(st, name) {
+        return Some(assigned);
+    }
+    match st {
+        S::Blocking {
+            lhs,
             delay: None,
             event: None,
             rhs,
             ..
-        } = st
-        {
-            if p.segments.len() == 1 && p.segments[0].name == name && expr_no_ref(rhs, name) {
-                return true; // clean whole-var write dominates any later read
+        } => {
+            // RHS is evaluated first: reading `name` here while unassigned is unsafe.
+            if !assigned && !expr_no_ref(rhs, name) {
+                return None;
+            }
+            // A clean WHOLE-var write (`name = …`) makes it definitely assigned.
+            if let ast::Lvalue::Ident(p) = lhs {
+                if p.segments.len() == 1 && p.segments[0].name == name {
+                    return Some(true);
+                }
+            }
+            // Otherwise the lvalue references `name` only through a select base
+            // (`name[i] = …`, a read-modify-write of the unwritten bits) or an
+            // index (`other[name] = …`, a read of `name`). Either is unsafe while
+            // unassigned; when already assigned it is a safe read that does not
+            // downgrade the state. (A fully ref-free lvalue+rhs took the
+            // `stmt_no_ref` fast path, so reaching here means one side references
+            // `name`.)
+            if !assigned {
+                return None;
+            }
+            Some(assigned)
+        }
+        S::If {
+            cond,
+            then_s,
+            else_s,
+            ..
+        } => {
+            if !assigned && !expr_no_ref(cond, name) {
+                return None;
+            }
+            let a_then = da_stmt(then_s, assigned, name)?;
+            let a_else = match else_s {
+                Some(e) => da_stmt(e, assigned, name)?,
+                None => assigned,
+            };
+            Some(a_then && a_else)
+        }
+        S::Block { stmts, decls, .. } => {
+            // A nested block-local decl whose initializer reads `name` observes
+            // the entry value too (mirror the sibling-init gate at the top level).
+            for dd in decls {
+                for nn in &dd.names {
+                    if let Some(e) = &nn.init {
+                        if !assigned && !expr_no_ref(e, name) {
+                            return None;
+                        }
+                    }
+                }
+            }
+            let mut a = assigned;
+            for s in stmts {
+                a = da_stmt(s, a, name)?;
+            }
+            Some(a)
+        }
+        S::Fork { .. } => {
+            // Fork branches run CONCURRENTLY — a write in one branch does not
+            // provably precede a read in another (racy order), so sequential
+            // threading (as for `Block`) would be unsound. A fork is safe only if
+            // `name` is ALREADY definitely assigned BEFORE it (every branch read
+            // then sees a current-execution value regardless of interleaving); a
+            // write inside the fork cannot establish assignment. Reaching here
+            // means the fork DOES reference `name` (else `stmt_no_ref` fast-pathed
+            // it), so an unassigned fork is conservatively loud.
+            if assigned {
+                Some(true)
+            } else {
+                None
             }
         }
-        if !stmt_no_ref(st, name) {
-            return false; // an unvetted / referencing statement precedes the write
+        S::Case {
+            scrutinee, items, ..
+        } => {
+            if !assigned && !expr_no_ref(scrutinee, name) {
+                return None;
+            }
+            let mut all = true;
+            let mut has_default = false;
+            for it in items {
+                let body = match it {
+                    ast::CaseItem::Match { labels, body, .. } => {
+                        if !assigned && labels.iter().any(|l| !expr_no_ref(l, name)) {
+                            return None;
+                        }
+                        body
+                    }
+                    ast::CaseItem::Default { body, .. } => {
+                        has_default = true;
+                        body
+                    }
+                };
+                all = da_stmt(body, assigned, name)? && all;
+            }
+            // Definitely assigned after the case only if EVERY arm assigns AND a
+            // default exists (else a scrutinee value can match no arm → skip all).
+            Some(assigned || (has_default && all))
+        }
+        S::For {
+            init,
+            cond,
+            step,
+            body,
+            ..
+        } => {
+            let a0 = da_stmt(init, assigned, name)?;
+            if !a0 && !expr_no_ref(cond, name) {
+                return None;
+            }
+            // The FIRST iteration enters with `a0` (the binding read-before-write
+            // case; the loop may also run zero times). Body / step are checked
+            // against `a0` — conservative, since a later iteration only ever has
+            // MORE assigned than the first.
+            da_stmt(body, a0, name)?;
+            da_stmt(step, a0, name)?;
+            Some(a0) // a loop cannot newly guarantee assignment (may run 0 times)
+        }
+        S::While { cond, body, .. } => {
+            if !assigned && !expr_no_ref(cond, name) {
+                return None;
+            }
+            da_stmt(body, assigned, name)?;
+            Some(assigned)
+        }
+        S::Repeat { count, body, .. } => {
+            if !assigned && !expr_no_ref(count, name) {
+                return None;
+            }
+            da_stmt(body, assigned, name)?;
+            Some(assigned)
+        }
+        S::Forever { body, .. } => {
+            da_stmt(body, assigned, name)?;
+            Some(assigned)
+        }
+        S::Return { value, .. } => {
+            if let Some(v) = value {
+                if !assigned && !expr_no_ref(v, name) {
+                    return None;
+                }
+            }
+            Some(assigned)
+        }
+        // Any other statement that references `name` (timing, `assign`/`force`,
+        // event control, disable, non-blocking, a task call with a referencing
+        // arg, SVA, …) is not vetted for read-before-write → conservatively unsafe.
+        _ => None,
+    }
+}
+
+/// GAP-D soundness (see `hoist_block_local_nets`). v1 flattens a PROCEDURAL
+/// block-local to ONE static module net (no per-block-entry frame). An
+/// `automatic` block-local is byte-identical to that flattening iff it is
+/// DEFINITELY ASSIGNED before every read on every path THIS execution (its
+/// per-entry reset is then unobservable). Scans the block's statements: the
+/// moment `name` is definitely assigned at the top level, every later read is
+/// safe (accept); a read reached while it may still be unwritten is a loud
+/// reject (`da_stmt` returns `None`). A never-read local is trivially equivalent.
+/// The guard-aware `da_stmt` accepts a write that dominates the read inside a
+/// shared conditional / loop (`if (c) begin x = …; … x … end`, the round-4
+/// prefix-builder shape) which the earlier top-level-only scan rejected. Still
+/// conservative: iverilog cannot oracle block-local `automatic`, so any un-vetted
+/// form stays loud rather than silently given static semantics.
+fn automatic_local_definitely_assigned(stmts: &[ast::Stmt], name: &str) -> bool {
+    let mut assigned = false;
+    for st in stmts {
+        // Once definitely assigned at the top level, every later read observes a
+        // current-execution value → safe regardless of the statement form.
+        if assigned {
+            return true;
+        }
+        match da_stmt(st, false, name) {
+            Some(a) => assigned = a,
+            None => return false,
         }
     }
     true
@@ -2739,6 +2910,17 @@ struct Elaborator<'s> {
     /// before nets lower, so the real net table can't serve it. Unfoldable
     /// decls are silently skipped (the `$bits` SITE goes loud instead).
     bits_prescan: BTreeMap<String, (u64, Vec<u64>)>,
+    /// GAP-G (round-4 shadow guard): the bare names DECLARED locally by the
+    /// current module — header (`#(...)`) params, ports, and top-level body
+    /// nets/params — gathered from the AST ONCE before any body const-eval. A
+    /// local declaration SHADOWS a same-named wildcard-imported package array
+    /// (local-wins), so `const_array_vals_of_base` must NOT fold the imported
+    /// array for a name in this set (→ loud, correct-or-loud). Gathered upfront
+    /// (not decl-order like `bits_prescan`) so it catches a forward reference and
+    /// a PORT — declaration forms a decl-order prescan would miss. A pure import
+    /// is not a local declaration → absent → the intended fold proceeds.
+    /// Saved/restored per module (like `bits_prescan`).
+    local_decl_names: std::collections::BTreeSet<String>,
     /// v7 P2-D: package name → its const symbols (params/localparams + enum
     /// labels), folded EAGERLY in declaration order at `run()` entry.
     pkg_consts: BTreeMap<String, BTreeMap<String, i64>>,
@@ -2991,6 +3173,17 @@ struct Elaborator<'s> {
     /// `localparam R = ROT[g]`. A multi-dim / non-foldable array is simply absent
     /// (its element reads stay loud — correct-or-loud). Elaborate-local only.
     array_const_vals: std::collections::BTreeMap<String, Vec<i64>>,
+    /// GAP-G (round-4): package name → (const array parameter name → element
+    /// values), the package-scope twin of `array_const_vals`. A package array
+    /// param (`package p; localparam int ROT[0:3]='{…}`) lowers to a `$pkg$p`
+    /// net, so its elements are not in the module-scope `array_const_vals`;
+    /// captured here during `elaborate_package` so a const read of an element
+    /// folds whether the array is named by an explicit `p::ROT[i]` or by a bare
+    /// `ROT[i]` made visible via `import p::*`. Same shape rules as
+    /// `array_const_vals` (0-based ascending single-dim, all-foldable init);
+    /// anything else is absent → loud. Elaborate-local only.
+    pkg_array_const_vals:
+        std::collections::BTreeMap<String, std::collections::BTreeMap<String, Vec<i64>>>,
     /// A2a: true while lowering the synthesized §6.8 decl-init `initial` —
     /// a const param's own initializer is legitimate, so the deny is off.
     lowering_decl_init: bool,
@@ -3204,6 +3397,7 @@ impl<'s> Elaborator<'s> {
             const_dedup: BTreeMap::new(),
             array_dims: BTreeMap::new(),
             bits_prescan: BTreeMap::new(),
+            local_decl_names: std::collections::BTreeSet::new(),
             pkg_consts: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
@@ -3248,6 +3442,7 @@ impl<'s> Elaborator<'s> {
             cur_prefix: String::new(),
             params: BTreeMap::new(),
             array_const_vals: BTreeMap::new(),
+            pkg_array_const_vals: BTreeMap::new(),
             param_meta: BTreeMap::new(),
             hier_params: BTreeMap::new(),
             defparams: BTreeMap::new(),
@@ -4661,6 +4856,12 @@ impl<'s> Elaborator<'s> {
         //      BEFORE nets so `[W-1:0]` folds and runtime refs (`x = P`) resolve.
         //      Net decls in the SAME walk pre-register their widths (v7), so a
         //      decl-order `localparam X = $bits(mem[0])` folds too.
+        // GAP-G shadow guard: gather every bare name this module declares
+        // locally (header params, ports, top-level body nets/params) BEFORE any
+        // body const-eval, so a local name that shadows a wildcard-imported array
+        // is known regardless of decl order (catches forward refs and ports).
+        let names = self.gather_local_decl_names(module);
+        let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
         for item in &module.body {
             match item {
@@ -5063,6 +5264,7 @@ impl<'s> Elaborator<'s> {
         // restore scope/params so siblings + ancestors resolve correctly.
         self.restore_params(saved_params);
         self.bits_prescan = saved_prescan;
+        self.local_decl_names = saved_local_names;
         self.func_table = saved_funcs;
         self.task_table = saved_tasks;
         self.frame_idx = saved_frame_idx;
@@ -6394,6 +6596,100 @@ impl<'s> Elaborator<'s> {
     /// escalate None to an ERROR (never a silent 0), width callers clamp
     /// loudly. NOTE: this is a width-less mathematical-integer model; a
     /// logical `>>` of a NEGATIVE value is width-dependent and folds None.
+    /// GAP-G shadow guard: the bare names the module declares locally — header
+    /// (`#(...)`) params, ports, and top-level body nets/params. A name in this
+    /// set SHADOWS a same-named wildcard-imported package array, so a const
+    /// element read of it must not fold the imported array. See `local_decl_names`.
+    fn gather_local_decl_names(
+        &self,
+        module: &ast::ModuleDecl,
+    ) -> std::collections::BTreeSet<String> {
+        let mut names = std::collections::BTreeSet::new();
+        for p in &module.params {
+            names.insert(p.name.name.clone());
+        }
+        match &module.ports {
+            ast::PortList::Ansi(ports) => {
+                for pt in ports {
+                    names.insert(pt.name.name.clone());
+                }
+            }
+            ast::PortList::NonAnsi(idents) => {
+                for id in idents {
+                    names.insert(id.name.clone());
+                }
+            }
+            ast::PortList::None => {}
+        }
+        for item in &module.body {
+            match item {
+                ast::ModuleItem::NetVar(d) => {
+                    for n in &d.names {
+                        names.insert(n.name.name.clone());
+                    }
+                }
+                ast::ModuleItem::Param(p) => {
+                    names.insert(p.name.name.clone());
+                }
+                _ => {}
+            }
+        }
+        names
+    }
+
+    /// GAP-G: resolve the element-value table of a const array `base` used in a
+    /// constant-context element read (`base[i]`). Handles, in local-wins order:
+    /// (1) a module-local / generate-scope array by bare name (the same scope
+    /// walk a bare param Ident takes); (2) a package array named by its bare name
+    /// made visible via `import p::*` / `import p::ROT` — resolved through the
+    /// var-alias the import machinery bound (`pkg_var_aliases`) to its origin
+    /// package; (3) an explicitly package-qualified array `p::ROT`. Any other
+    /// base shape (hierarchical, multi-segment, a non-captured array) → None →
+    /// the read stays loud at the binding site (correct-or-loud).
+    fn const_array_vals_of_base(&self, base: &ast::Expr) -> Option<&Vec<i64>> {
+        match &base.kind {
+            ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
+                let n = path.segments[0].name.as_str();
+                if let Some(key) =
+                    self.walk_scopes_key(n, |k| self.array_const_vals.contains_key(k))
+                {
+                    return self.array_const_vals.get(&key);
+                }
+                // A module-local declaration of `n` SHADOWS a wildcard-imported
+                // package array of the same name (IEEE §26.3, iverilog-pinned
+                // local-wins). A GAP-G-capturable local array would have hit
+                // `array_const_vals` above; reaching here with a local net means
+                // the local is a shape GAP-G does NOT capture (descending /
+                // non-zero-base / multi-dim / plain variable / scalar), so the
+                // correct result is LOUD — never silently fold the IMPORTED array
+                // in its place. `add_net` drops the stale import alias when the
+                // local net is created, but that is a pass LATER than this const
+                // read, so consult the decl-order `bits_prescan` (populated for
+                // every body net before the params/generates that follow it).
+                // A local declaration of `n` (array net, scalar param, port, or a
+                // forward-declared one) SHADOWS the wildcard-imported array —
+                // `local_decl_names` was gathered upfront from the AST, so it
+                // catches every declaration form regardless of order. A local
+                // genvar / header param bound only in `self.params` is caught by
+                // `lookup_scoped`. A pure import is NOT a local declaration →
+                // absent from both → the fold below proceeds (the GAP-G support).
+                if self.local_decl_names.contains(n) || self.lookup_scoped(n).is_some() {
+                    return None;
+                }
+                // Imported (wildcard/explicit) package array parameter read by its
+                // bare name: the import bound a var-alias `key → (pkg, _)`; fold
+                // from that package's captured element values.
+                let akey = self.walk_scopes_key(n, |k| self.pkg_var_aliases.contains_key(k))?;
+                let (pkg, _) = self.pkg_var_aliases.get(&akey)?;
+                self.pkg_array_const_vals.get(pkg)?.get(n)
+            }
+            ast::ExprKind::PkgScoped { pkg, name } => {
+                self.pkg_array_const_vals.get(&pkg.name)?.get(&name.name)
+            }
+            _ => None,
+        }
+    }
+
     fn const_eval_in_scope(&self, e: &ast::Expr) -> Option<i64> {
         match &e.kind {
             ast::ExprKind::IntLit { .. } => const_eval_i64_lit(e),
@@ -6417,26 +6713,20 @@ impl<'s> Elaborator<'s> {
             }
             // GAP-G: a constant-context element read of a const array parameter
             // (`ROT[i]` — e.g. a generate-scope `localparam R = ROT[g]`). The
-            // array NAME resolves through the same scope walk as a bare param
-            // Ident; the index folds; `get` bounds-checks. A non-array base, an
-            // out-of-range or negative index, or an array shape not captured in
-            // `array_const_vals` (descending / non-zero base / multi-dim /
-            // non-foldable element) folds None → loud at the binding site.
+            // array is resolved by `const_array_vals_of_base` (module-local,
+            // generate-scope, or a package array named `p::ROT` / bare `ROT` via
+            // `import p::*`); the index folds; `get` bounds-checks. A non-array
+            // base, an out-of-range or negative index, or an array shape not
+            // captured (descending / non-zero base / multi-dim / non-foldable
+            // element) folds None → loud at the binding site.
             ast::ExprKind::BitSelect { base, index } => {
-                let ast::ExprKind::Ident(path) = &base.kind else {
-                    return None;
-                };
-                if path.segments.len() != 1 {
-                    return None;
-                }
                 let idx = self.const_eval_in_scope(index)?;
                 if idx < 0 {
                     return None;
                 }
-                let key = self.walk_scopes_key(&path.segments[0].name, |k| {
-                    self.array_const_vals.contains_key(k)
-                })?;
-                self.array_const_vals.get(&key)?.get(idx as usize).copied()
+                self.const_array_vals_of_base(base)?
+                    .get(idx as usize)
+                    .copied()
             }
             ast::ExprKind::Ternary {
                 cond,
@@ -6824,6 +7114,32 @@ impl<'s> Elaborator<'s> {
                                  no per-block heap); rename one of them",
                             );
                         }
+                        // GAP-D completeness (adversarial find): an `automatic`
+                        // block-local whose name COLLIDES with an existing net (a
+                        // module-scope net, or an earlier sibling block-local) is
+                        // ALIASED onto that net by the v1 flatten — this both defeats
+                        // the automatic's required distinct per-entry storage AND
+                        // BYPASSES the definite-assignment gate below (this `continue`
+                        // skips it, so a read-before-write colliding automatic would
+                        // be silently accepted with the shared/persisted value).
+                        // v1 has no per-block scope to give the shadowing automatic
+                        // its own storage, so reject LOUD rather than silently alias
+                        // (correct-or-loud) — the workaround is a distinct name.
+                        if d.lifetime == Some(true) {
+                            for n in &d.names {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "an `automatic` block-local `{}` collides with an \
+                                         existing net of the same name; v1 flattens \
+                                         block-locals into the module namespace and cannot \
+                                         give the `automatic` its own per-entry storage (it \
+                                         would alias the shadowed net) — rename it",
+                                        n.name.name
+                                    ),
+                                );
+                            }
+                        }
                         continue;
                     }
                     // GAP-D soundness: a procedural block-local `automatic` is
@@ -6850,7 +7166,7 @@ impl<'s> Elaborator<'s> {
                                 .any(|nn| nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm)));
                             if n.init.is_some()
                                 || read_in_sibling_init
-                                || !automatic_local_static_equivalent(stmts, nm)
+                                || !automatic_local_definitely_assigned(stmts, nm)
                             {
                                 self.error(
                                     MsgCode::ElabUnsupported,
@@ -6956,16 +7272,23 @@ impl<'s> Elaborator<'s> {
     /// non-zero base / multi-dim / non-foldable element / count mismatch) is left
     /// absent, so its element reads stay LOUD (correct-or-loud). Idempotent:
     /// called both in the decl-order body-param walk and at net elaboration.
-    fn capture_const_array_vals(&mut self, d: &ast::NetVarDecl) {
-        if !d.const_param {
-            return;
-        }
-        // ELEMENT type (width, signed) — the same shape the RUNTIME net stores
-        // each element at (and that `coerce_param_value` applies to a scalar), so
-        // a narrow element (`bit[3:0]`, `byte`, `logic signed [N]`) truncates /
-        // sign-extends its init literal instead of storing the raw i64. Without
-        // this a const read `ROT[i]` disagreed with both iverilog AND vita's own
-        // runtime read (adversarial find). Decl-level (shared by all names).
+    /// GAP-G: the const-folded element values of ONE declarator `decl` of a
+    /// const array parameter `d` (`ROT` in `localparam int ROT[0:3]='{0,1,3,5}`),
+    /// each coerced to the ELEMENT type — the same shape the RUNTIME net stores
+    /// each element at (and that `coerce_param_value` applies to a scalar), so a
+    /// narrow element (`bit[3:0]`, `byte`, `logic signed [N]`) truncates /
+    /// sign-extends its init literal instead of storing the raw i64. Without this
+    /// a const read `ROT[i]` disagreed with both iverilog AND vita's own runtime
+    /// read (adversarial find). `None` unless `decl` is a 0-based ascending
+    /// single-dim unpacked array with an all-foldable `'{…}` init of the declared
+    /// length (descending / non-zero base / multi-dim / non-foldable → None → the
+    /// element read stays loud, correct-or-loud). Shared by the module-scope
+    /// capture below and the package-scope capture in `elaborate_package`.
+    fn const_array_elem_vals(
+        &mut self,
+        d: &ast::NetVarDecl,
+        decl: &ast::DeclName,
+    ) -> Option<Vec<i64>> {
         let (base_w, _, _, elem_signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
         let elem_w = if d.packed.is_empty() {
             base_w
@@ -6974,38 +7297,42 @@ impl<'s> Elaborator<'s> {
                 .iter()
                 .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)))
         };
+        let init = decl.init.as_ref()?;
+        let ast::ExprKind::AssignPattern(parts) = &init.kind else {
+            return None;
+        };
+        let zero_based_asc = decl.unpacked.len() == 1
+            && match &decl.unpacked[0] {
+                ast::Dim::Size(_) => true,
+                ast::Dim::Range(r) => {
+                    self.const_eval_in_scope(&r.msb) == Some(0)
+                        && self.const_eval_in_scope(&r.lsb).is_some_and(|l| l >= 0)
+                }
+                _ => false,
+            };
+        if !zero_based_asc {
+            return None;
+        }
+        let vals = parts
+            .iter()
+            .map(|p| {
+                self.const_eval_in_scope(p)
+                    .map(|v| coerce_i64_to_width(v, elem_w, elem_signed))
+            })
+            .collect::<Option<Vec<i64>>>()?;
+        let expected = self
+            .array_dim_extents(&decl.unpacked)
+            .iter()
+            .fold(1u32, |a, &(_, n)| a.saturating_mul(n.max(1)));
+        (vals.len() as u32 == expected).then_some(vals)
+    }
+
+    fn capture_const_array_vals(&mut self, d: &ast::NetVarDecl) {
+        if !d.const_param {
+            return;
+        }
         for decl in &d.names {
-            let Some(init) = &decl.init else { continue };
-            let ast::ExprKind::AssignPattern(parts) = &init.kind else {
-                continue;
-            };
-            let zero_based_asc = decl.unpacked.len() == 1
-                && match &decl.unpacked[0] {
-                    ast::Dim::Size(_) => true,
-                    ast::Dim::Range(r) => {
-                        self.const_eval_in_scope(&r.msb) == Some(0)
-                            && self.const_eval_in_scope(&r.lsb).is_some_and(|l| l >= 0)
-                    }
-                    _ => false,
-                };
-            if !zero_based_asc {
-                continue;
-            }
-            let Some(vals) = parts
-                .iter()
-                .map(|p| {
-                    self.const_eval_in_scope(p)
-                        .map(|v| coerce_i64_to_width(v, elem_w, elem_signed))
-                })
-                .collect::<Option<Vec<i64>>>()
-            else {
-                continue;
-            };
-            let expected = self
-                .array_dim_extents(&decl.unpacked)
-                .iter()
-                .fold(1u32, |a, &(_, n)| a.saturating_mul(n.max(1)));
-            if vals.len() as u32 == expected {
+            if let Some(vals) = self.const_array_elem_vals(d, decl) {
                 let key = self.fq(&decl.name.name);
                 self.array_const_vals.insert(key, vals);
             }
@@ -25870,6 +26197,11 @@ impl<'s> Elaborator<'s> {
         let mut saved: Vec<(String, Option<i64>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
         let mut vars: BTreeMap<String, u32> = BTreeMap::new();
+        // GAP-G: const array-parameter element values for this package (name →
+        // elements), the package-scope twin of `array_const_vals`. Flushed into
+        // `pkg_array_const_vals` below so an element read `p::ROT[i]` (or a bare
+        // `ROT[i]` from `import p::*`) folds in a constant context.
+        let mut array_vals: BTreeMap<String, Vec<i64>> = BTreeMap::new();
         let mut funcs: BTreeMap<String, ast::FunctionDef> = BTreeMap::new();
         let mut tasks: BTreeMap<String, ast::TaskDef> = BTreeMap::new();
         for item in &pm.body {
@@ -25965,6 +26297,16 @@ impl<'s> Elaborator<'s> {
                 // module process — module parity, iverilog-pinned).
                 ast::ModuleItem::NetVar(d) => {
                     self.elaborate_pkg_netvar(d, &consts, &mut vars);
+                    // GAP-G: capture a const array param's foldable element values
+                    // (same shape rules as the module-scope `capture_const_array_vals`)
+                    // keyed by the package-local name, for `p::ROT[i]` const folds.
+                    if d.const_param {
+                        for decl in &d.names {
+                            if let Some(vals) = self.const_array_elem_vals(d, decl) {
+                                array_vals.insert(decl.name.name.clone(), vals);
+                            }
+                        }
+                    }
                 }
                 _ => {
                     self.error(
@@ -25997,6 +26339,9 @@ impl<'s> Elaborator<'s> {
         self.cur_prefix = saved_prefix;
         self.pkg_consts.insert(pkg.clone(), consts);
         self.pkg_vars.insert(pkg.clone(), vars);
+        if !array_vals.is_empty() {
+            self.pkg_array_const_vals.insert(pkg.clone(), array_vals);
+        }
         self.pkg_funcs.insert(pkg.clone(), funcs);
         self.pkg_tasks.insert(pkg, tasks);
     }

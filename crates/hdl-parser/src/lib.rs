@@ -1423,20 +1423,12 @@ impl<'t, 's> Parser<'t, 's> {
                 let path = self.hier_path().unwrap();
                 // v7 P2-D: `pkg::name` package-scoped value reference.
                 if path.segments.len() == 1 && self.peek() == Some(T::ColonColon) {
-                    self.bump(); // '::'
-                    if let Some(name) = self.ident() {
-                        return Expr {
-                            kind: ExprKind::PkgScoped {
-                                pkg: path.segments.into_iter().next().unwrap(),
-                                name,
-                            },
-                            span: start.to(self.prev_span()),
-                        };
-                    }
-                    return Expr {
-                        kind: ExprKind::Error,
-                        span: start.to(self.prev_span()),
-                    };
+                    // The ENTIRE `pkg::name` / `pkg::name(args)` handling lives in a
+                    // cold, non-inlined helper so its locals never enlarge
+                    // `expr_primary`'s hot recursive frame — the MAX_EXPR_DEPTH stack
+                    // budget is frame-sized, and even this small block tipped the
+                    // paren-depth guard (`depth_guard.rs`), like `struct_member_expr`.
+                    return self.pkg_scoped_expr(path, start);
                 }
                 // v5 ⑥: contextual `new[n]` / `new[n](src)` — the ident `new`
                 // immediately followed by `[`. Elaborate falls back to an
@@ -1592,6 +1584,50 @@ impl<'t, 's> Parser<'t, 's> {
         self.expect(TokenKind::RParen, "')'");
         args
     }
+
+    /// The `pkg::name` / `pkg::name(args)` case of `expr_primary` (cursor just
+    /// past the package `Ident`, at `::`). A plain scoped VALUE reference lowers
+    /// to `ExprKind::PkgScoped`; a scoped SUBROUTINE CALL `pkg::name(args)` is
+    /// unsupported in v1 (resolving the callee in its package's scope is a
+    /// separate feature) — emit ONE honest error at the `(` ("found LParen"),
+    /// then CONSUME the balanced argument list so the rest of the statement still
+    /// parses (no spurious "expected ';'" cascade; workaround = `import` the
+    /// package and call by the bare name). Split whole out of `expr_primary` and
+    /// marked `#[inline(never)]` so NONE of its locals (this branch's plus the
+    /// scoped-value construction's) enlarge that hot recursive frame — the
+    /// MAX_EXPR_DEPTH stack budget is frame-sized (mirrors `struct_member_expr`;
+    /// `depth_guard.rs::deep_paren_nesting_errors_cleanly`). The error message is
+    /// phrased to fit the parser's "expected <X>, found <token>" template.
+    #[inline(never)]
+    fn pkg_scoped_expr(&mut self, path: HierPath, start: Span) -> Expr {
+        self.bump(); // '::'
+        let Some(name) = self.ident() else {
+            return Expr {
+                kind: ExprKind::Error,
+                span: start.to(self.prev_span()),
+            };
+        };
+        if self.peek() == Some(TokenKind::LParen) {
+            self.error(
+                "a supported expression (a package-scoped subroutine call \
+                 `pkg::name(...)` is unsupported in v1 — `import` the package and \
+                 call by its bare name)",
+            );
+            let _ = self.call_args(); // balanced (args) — clean recovery
+            return Expr {
+                kind: ExprKind::Error,
+                span: start.to(self.prev_span()),
+            };
+        }
+        Expr {
+            kind: ExprKind::PkgScoped {
+                pkg: path.segments.into_iter().next().unwrap(),
+                name,
+            },
+            span: start.to(self.prev_span()),
+        }
+    }
+
     /// `{a,b}` concat OR `{n{a,b}}` replication. After parsing `first`, a following
     /// `{` ⇒ replication (first=count); the inner braced list becomes `value:
     /// Vec<Expr>` DIRECTLY (verdict M5 — no Concat wrapper). `{ {a},{b} }` is a
