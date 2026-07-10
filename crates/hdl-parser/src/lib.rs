@@ -150,10 +150,12 @@ struct ScopeSnapshot {
     // TYPE-name-keyed (a body-local typedef definition).
     typedefs: std::collections::HashMap<String, TypeInfo>,
     struct_layouts: std::collections::HashMap<String, StructLayout>,
+    unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
     enum_defs: std::collections::HashMap<String, Vec<(String, i64)>>,
     union_type_names: std::collections::HashSet<String>,
     // VAR-name-keyed (a block-local struct/enum variable shadowing an outer one).
     var_struct: std::collections::HashMap<String, String>,
+    var_unpacked_struct: std::collections::HashMap<String, String>,
     var_enum: std::collections::HashMap<String, String>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
@@ -240,6 +242,15 @@ pub struct Parser<'t, 's> {
     /// scalar struct (0 dims, in `struct_scalar_vars`), a multi-dim array (≥2
     /// dims), and a union array are all excluded. Module-scoped.
     struct_1d_array_vars: std::collections::HashSet<String>,
+    /// Round-9: UNPACKED struct (record) type name → its members (each keeps its
+    /// OWN type — a `string`/`int` member can't share a flat vector). A scalar
+    /// variable of this type desugars to N independent member nets `k$field`
+    /// (no aggregate storage in v1); accumulates across the source unit like
+    /// `struct_layouts` (scoped `pkg::T` twins added at `endpackage`).
+    unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
+    /// Round-9: variable name → its UNPACKED-struct type name (module-scoped;
+    /// cleared per module). Drives the `k.field` → `k$field` member-net desugar.
+    var_unpacked_struct: std::collections::HashMap<String, String>,
     /// Packed-union type names. Unions share `struct_layouts` (for `u.field`
     /// reads) but their overlay layout is NOT a packed concat, so a union var is
     /// kept OUT of `struct_scalar_vars` and its `'{…}` pattern stays loud.
@@ -300,6 +311,8 @@ impl<'t, 's> Parser<'t, 's> {
             node_budget_blown: false,
             typedefs: std::collections::HashMap::new(),
             struct_layouts: std::collections::HashMap::new(),
+            unpacked_struct_layouts: std::collections::HashMap::new(),
+            var_unpacked_struct: std::collections::HashMap::new(),
             var_struct: std::collections::HashMap::new(),
             struct_scalar_vars: std::collections::HashSet::new(),
             struct_1d_array_vars: std::collections::HashSet::new(),
@@ -1037,31 +1050,44 @@ impl<'t, 's> Parser<'t, 's> {
         // width (extending with the OPERAND's sign), then the signing cast stamps
         // T's signedness. A struct/union/class/multi-dim/atom/2-state typedef has
         // no simple (width, signed) form and stays loud (the `Named` arm).
-        if let ExprKind::Ident(path) = &ty.kind {
-            if path.segments.len() == 1 {
-                if let Some((w, signed)) = self.simple_typedef_cast(&path.segments[0].name) {
-                    let width_lit = Expr {
-                        kind: ExprKind::IntLit {
-                            kind: IntLitKind::Decimal,
-                            raw: w.to_string(),
-                        },
-                        span: start,
-                    };
-                    let inner = Expr {
-                        kind: ExprKind::Cast {
-                            target: CastTarget::Size(Box::new(width_lit)),
-                            expr: Box::new(operand),
-                        },
-                        span: start,
-                    };
-                    return Expr {
-                        kind: ExprKind::Cast {
-                            target: CastTarget::Signing { signed },
-                            expr: Box::new(inner),
-                        },
-                        span: start.to(end),
-                    };
-                }
+        //
+        // Round-9 PKG2: the casting type may be package-scoped (`pkg::T'(e)`),
+        // which parses as a `PkgScoped` primary. The parser registers a
+        // `"pkg::T"` twin of each package typedef in `self.typedefs` /
+        // `struct_layouts` / `union_type_names`, so `simple_typedef_cast` resolves
+        // the scoped key exactly like a bare name. A scoped SIZE cast
+        // `pkg::WIDTH'(e)` (WIDTH a localparam, not a typedef) returns `None` here
+        // and falls through to the `Size` arm unchanged — a genuine size cast.
+        let td_key: Option<String> = match &ty.kind {
+            ExprKind::Ident(path) if path.segments.len() == 1 => {
+                Some(path.segments[0].name.clone())
+            }
+            ExprKind::PkgScoped { pkg, name } => Some(format!("{}::{}", pkg.name, name.name)),
+            _ => None,
+        };
+        if let Some(key) = &td_key {
+            if let Some((w, signed)) = self.simple_typedef_cast(key) {
+                let width_lit = Expr {
+                    kind: ExprKind::IntLit {
+                        kind: IntLitKind::Decimal,
+                        raw: w.to_string(),
+                    },
+                    span: start,
+                };
+                let inner = Expr {
+                    kind: ExprKind::Cast {
+                        target: CastTarget::Size(Box::new(width_lit)),
+                        expr: Box::new(operand),
+                    },
+                    span: start,
+                };
+                return Expr {
+                    kind: ExprKind::Cast {
+                        target: CastTarget::Signing { signed },
+                        expr: Box::new(inner),
+                    },
+                    span: start.to(end),
+                };
             }
         }
         let target = match ty.kind {
@@ -1471,6 +1497,16 @@ impl<'t, 's> Parser<'t, 's> {
                     return Expr {
                         kind: ExprKind::ClassNew { args },
                         span: start.to(self.prev_span()),
+                    };
+                }
+                // Round-9: UNPACKED-struct member read `k.field` → the member net
+                // `k$field` (a plain Ident — the member has its own storage). Tried
+                // before the packed path; `None` for every non-unpacked var, so
+                // packed structs and all else are byte-identical.
+                if let Some(mangled) = self.unpacked_field_ident(&path) {
+                    return Expr {
+                        span: mangled.span,
+                        kind: ExprKind::Ident(mangled),
                     };
                 }
                 // packed-struct member access `s.field` → constant part-select.
@@ -2090,6 +2126,18 @@ impl<'t, 's> Parser<'t, 's> {
                         self.synchronize();
                     }
                 }
+            } else if self.at_ident_kw("bind") {
+                // Round-9: top-level `bind <target> <checker> <inst> (…);`. `bind`
+                // is a CONTEXTUAL keyword (the lexer has no `Kw::Bind`, so it lexes
+                // as an `Ident`); at source-unit position a bare ident can only be
+                // an error today, so catching `bind` here is purely additive.
+                match self.parse_bind_decl() {
+                    Some(b) => items.push(TopItem::Bind(b)),
+                    None => {
+                        items.push(TopItem::Error(self.prev_span()));
+                        self.synchronize();
+                    }
+                }
             } else {
                 self.error("'module'");
                 let s = self.cur_span();
@@ -2294,6 +2342,7 @@ impl<'t, 's> Parser<'t, 's> {
         let start = self.cur_span();
         // Variable→struct bindings are module-scoped (type *names* are not).
         self.var_struct.clear();
+        self.var_unpacked_struct.clear();
         self.struct_scalar_vars.clear();
         self.struct_1d_array_vars.clear();
         self.var_enum.clear();
@@ -2444,6 +2493,12 @@ impl<'t, 's> Parser<'t, 's> {
                         if self.union_type_names.contains(&n) {
                             self.union_type_names.insert(scoped.clone());
                         }
+                    }
+                    // Round-9: an UNPACKED struct is never in `struct_layouts`, so it
+                    // needs its own `pkg::T` layout twin (map membership is the gate —
+                    // only an unpacked-struct typedef puts its name here).
+                    if let Some(usl) = self.unpacked_struct_layouts.get(&n).cloned() {
+                        self.unpacked_struct_layouts.insert(scoped.clone(), usl);
                     }
                     if enum_fresh {
                         if let Some(ed) = self.enum_defs.get(&n).cloned() {
@@ -3237,6 +3292,24 @@ impl<'t, 's> Parser<'t, 's> {
     }
 
     // ─────────────────────── module instantiation ───────────────────────
+    /// Round-9: `bind <target> <checker> <inst> (.p(sig), …);`. After the
+    /// contextual `bind` and the target-module ident, `<checker> <inst> (…);` is
+    /// an ORDINARY module instantiation, so `parse_module_instance` (which also
+    /// consumes the trailing `;`) is reused wholesale — no bind-specific port
+    /// parsing. `None` on a malformed target/checker ident (caller recovers).
+    fn parse_bind_decl(&mut self) -> Option<BindDecl> {
+        let start = self.cur_span();
+        self.bump(); // contextual 'bind'
+        let target = self.ident()?;
+        let checker = self.ident()?;
+        let inst = self.parse_module_instance(checker);
+        Some(BindDecl {
+            target,
+            inst,
+            span: start.to(self.prev_span()),
+        })
+    }
+
     /// Parse a module instantiation, given the already-consumed `module_name`.
     /// Grammar:  module_name [ #(param_overrides) ] inst_body {, inst_body} ;
     /// where     inst_body = inst_name [unpacked_dims] ( port_connections )
@@ -5624,7 +5697,12 @@ impl<'t, 's> Parser<'t, 's> {
             )
         {
             let key = format!("{}::{}", self.cur_text(), self.text_at(2));
-            if self.typedefs.contains_key(&key) {
+            // Round-9: an unpacked struct type is NOT in `typedefs` (it has no flat
+            // TypeInfo), so accept an `unpacked_struct_layouts` key too — otherwise
+            // a scoped `pkg::rec_t` decl / `pkg::rec_t'()` would not resolve. Every
+            // packed-path caller re-checks `typedefs` after this, so a scoped
+            // unpacked key still routes only to the unpacked decl path.
+            if self.typedefs.contains_key(&key) || self.unpacked_struct_layouts.contains_key(&key) {
                 return Some(key);
             }
         }
@@ -5788,9 +5866,11 @@ impl<'t, 's> Parser<'t, 's> {
         ScopeSnapshot {
             typedefs: self.typedefs.clone(),
             struct_layouts: self.struct_layouts.clone(),
+            unpacked_struct_layouts: self.unpacked_struct_layouts.clone(),
             enum_defs: self.enum_defs.clone(),
             union_type_names: self.union_type_names.clone(),
             var_struct: self.var_struct.clone(),
+            var_unpacked_struct: self.var_unpacked_struct.clone(),
             var_enum: self.var_enum.clone(),
             struct_scalar_vars: self.struct_scalar_vars.clone(),
             struct_1d_array_vars: self.struct_1d_array_vars.clone(),
@@ -5803,9 +5883,11 @@ impl<'t, 's> Parser<'t, 's> {
     fn restore_scope(&mut self, s: ScopeSnapshot) {
         self.typedefs = s.typedefs;
         self.struct_layouts = s.struct_layouts;
+        self.unpacked_struct_layouts = s.unpacked_struct_layouts;
         self.enum_defs = s.enum_defs;
         self.union_type_names = s.union_type_names;
         self.var_struct = s.var_struct;
+        self.var_unpacked_struct = s.var_unpacked_struct;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
@@ -5838,6 +5920,16 @@ impl<'t, 's> Parser<'t, 's> {
             .collect();
         self.struct_layouts = s.struct_layouts;
         self.struct_layouts.extend(new_sl);
+        // Round-9: unpacked-struct layouts scope exactly like `struct_layouts` —
+        // keep the `pkg::T` twins this unit added, drop its bare names.
+        let new_usl: Vec<(String, Vec<StructMember>)> = self
+            .unpacked_struct_layouts
+            .iter()
+            .filter(|(k, _)| k.contains("::") && !s.unpacked_struct_layouts.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        self.unpacked_struct_layouts = s.unpacked_struct_layouts;
+        self.unpacked_struct_layouts.extend(new_usl);
         let new_ed: Vec<(String, Vec<(String, i64)>)> = self
             .enum_defs
             .iter()
@@ -5856,6 +5948,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.union_type_names.extend(new_un);
         // Var-struct bindings are unit-local and never leak → full restore.
         self.var_struct = s.var_struct;
+        self.var_unpacked_struct = s.var_unpacked_struct;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
@@ -6167,15 +6260,9 @@ impl<'t, 's> Parser<'t, 's> {
     /// laid out MSB-first into one flat `logic [W-1:0]` vector; the layout is
     /// recorded so `name var;` resolves and `var.field` desugars to a part-select.
     /// `start` is the span of the leading `typedef` keyword (already consumed).
-    fn parse_typedef_struct(&mut self, start: Span) -> Option<ModuleItem> {
-        self.bump(); // `struct`
-        if !self.eat_kw(Kw::Packed) {
-            // unpacked struct has no flat layout in v1 — reject loudly.
-            self.error("`packed` after `struct` (unpacked struct unsupported in v1)");
-            self.synchronize();
-            return Some(ModuleItem::Error(start.to(self.prev_span())));
-        }
-        let _ = self.opt_signed(); // `struct packed signed` — sign ignored for layout
+    /// Parse `{ <type> f1, f2; … }` — the shared member list of a packed OR
+    /// unpacked `typedef struct`. Cursor at `{`; consumes through the closing `}`.
+    fn parse_struct_member_list(&mut self) -> Option<Vec<StructMember>> {
         self.expect(TokenKind::LBrace, "'{' for struct body");
         let mut members = Vec::new();
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
@@ -6203,8 +6290,36 @@ impl<'t, 's> Parser<'t, 's> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close struct body");
+        Some(members)
+    }
+
+    fn parse_typedef_struct(&mut self, start: Span) -> Option<ModuleItem> {
+        self.bump(); // `struct`
+        let packed = self.eat_kw(Kw::Packed);
+        if packed {
+            let _ = self.opt_signed(); // `struct packed signed` — sign ignored for layout
+        }
+        let members = self.parse_struct_member_list()?;
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
+        if !packed {
+            // Round-9: an UNPACKED struct (record). Members keep their OWN types (a
+            // `string`/`int` member can't share a flat packed vector), so a scalar
+            // variable desugars to N independent member nets `k$field` (there is no
+            // aggregate storage in v1). Record the member layout and emit a
+            // `TypedefKind::Struct` node (elaborate treats a struct typedef as a
+            // no-op) so the package `endpackage` twin loop registers `pkg::T`. An
+            // unpacked-array VARIABLE of this type, a decl-init / `'{…}` pattern, a
+            // whole-struct copy/compare, and a tf-port all stay LOUD — v1 supports
+            // the SCALAR record only.
+            self.unpacked_struct_layouts
+                .insert(tname.name.clone(), members.clone());
+            return Some(ModuleItem::Typedef(TypedefDecl {
+                name: tname,
+                kind: TypedefKind::Struct { members },
+                span: start.to(self.prev_span()),
+            }));
+        }
         // Compute each member width. A named integer-atom kind (`int`/`byte`/…)
         // carries a fixed width from its TYPE; a vector kind (`bit`/`logic`) sizes
         // from a constant-literal range (`None` ⇒ 1).
@@ -6612,6 +6727,138 @@ impl<'t, 's> Parser<'t, 's> {
             span: path.segments[0].span,
         };
         Some((base, off, w, asc, sgn))
+    }
+
+    /// Round-9: the collision-free member-net name for `var.field` of a scalar
+    /// unpacked struct. Prefixed with `$` — a SV SIMPLE identifier cannot BEGIN
+    /// with `$` (only `[a-zA-Z_]…`), so this never collides with a user variable
+    /// (mirrors the `$blk$`/`$func$` internal-name convention). The desugar
+    /// refuses a `$` in the VARIABLE name (see `parse_unpacked_struct_decl`), so
+    /// the first `$` after the `$unp$` prefix unambiguously delimits var from
+    /// field → the (var, field) → name map is injective (distinct accesses never
+    /// alias). A `$` in a FIELD name is fine (it lands entirely after that first
+    /// separator).
+    fn unpacked_member_net(var: &str, field: &str) -> String {
+        format!("$unp${var}${field}")
+    }
+
+    /// Round-9: if `path` is `var.field` where `var` is an UNPACKED-struct
+    /// variable and `field` is one of its members, return the single-segment
+    /// member-net path `$unp$var$field` (the desugar target). `None` for a
+    /// non-unpacked var, a non-member field, or a non-2-segment path — so packed
+    /// structs and every other access fall through byte-identically.
+    fn unpacked_field_ident(&self, path: &HierPath) -> Option<HierPath> {
+        if path.segments.len() != 2 {
+            return None;
+        }
+        let var = &path.segments[0].name;
+        let tyname = self.var_unpacked_struct.get(var)?;
+        let members = self.unpacked_struct_layouts.get(tyname)?;
+        let field = &path.segments[1].name;
+        if !members.iter().any(|m| &m.name.name == field) {
+            return None;
+        }
+        Some(HierPath {
+            segments: vec![Ident {
+                name: Self::unpacked_member_net(var, field),
+                span: path.span,
+            }],
+            span: path.span,
+        })
+    }
+
+    /// Round-9: peek an UNPACKED-struct-typed declaration `[pkg::]T name…` at the
+    /// cursor. Returns the (scoped-or-bare) type-name key when the leading
+    /// token(s) name a KNOWN unpacked struct type AND a var-name ident follows.
+    /// Non-consuming; mirrors `peek_block_typedef_decl` (which only sees `typedefs`
+    /// and so never fires for an unpacked struct).
+    fn peek_unpacked_struct_decl(&self) -> Option<String> {
+        let key = self.scoped_type_key().or_else(|| {
+            if self.is_ident() {
+                Some(self.cur_text().to_string())
+            } else {
+                None
+            }
+        })?;
+        if !self.unpacked_struct_layouts.contains_key(&key) {
+            return None;
+        }
+        let q = self.scope_qualifier_len();
+        if matches!(
+            self.peek_at(q + 1),
+            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+        ) {
+            Some(key)
+        } else {
+            None
+        }
+    }
+
+    /// Round-9: parse a scalar UNPACKED-struct declaration `[pkg::]T k [, k2];`,
+    /// desugaring each variable into its member nets (`k$field`, one `NetVarDecl`
+    /// per member, each with the member's OWN type). Registers each var in
+    /// `var_unpacked_struct` so `k.field` member access desugars. An unpacked-array
+    /// declaration (`T k[N]`) and a decl-initializer / `'{…}` pattern stay LOUD —
+    /// v1 supports the scalar record only (there is no aggregate storage).
+    fn parse_unpacked_struct_decl(&mut self, tyname: String) -> Option<Vec<NetVarDecl>> {
+        self.eat_scope_qualifier(); // optional `pkg::`
+        self.bump(); // the type-name identifier
+        let names = self.parse_decl_name_list()?;
+        self.expect(TokenKind::Semi, "';'");
+        let members = self.unpacked_struct_layouts.get(&tyname)?.clone();
+        let mut out = Vec::new();
+        for n in &names {
+            if !n.unpacked.is_empty() {
+                self.error_at(
+                    n.name.span,
+                    "an array of unpacked structs (record array) is unsupported in v1 — scalar record only",
+                );
+                continue;
+            }
+            if n.init.is_some() {
+                self.error_at(
+                    n.name.span,
+                    "an unpacked-struct declaration initializer / '{…} pattern is unsupported in v1",
+                );
+                continue;
+            }
+            // A `$` in the variable name would break the `$unp$<var>$<field>`
+            // desugar's injectivity (the first `$` after the prefix must delimit
+            // var from field) → reject. `$` in a var name is unusual; loud is safe.
+            if n.name.name.contains('$') {
+                self.error_at(
+                    n.name.span,
+                    "an unpacked-struct variable name containing `$` is unsupported in v1",
+                );
+                continue;
+            }
+            self.var_unpacked_struct
+                .insert(n.name.name.clone(), tyname.clone());
+            for m in &members {
+                out.push(NetVarDecl {
+                    kind: m.kind,
+                    signed: m.signed,
+                    range: m.range.clone(),
+                    packed: Vec::new(),
+                    delay: None,
+                    names: vec![DeclName {
+                        name: Ident {
+                            name: Self::unpacked_member_net(&n.name.name, &m.name.name),
+                            span: n.name.span,
+                        },
+                        unpacked: Vec::new(),
+                        init: None,
+                        span: n.name.span,
+                    }],
+                    lifetime: None,
+                    class_type: None,
+                    class_args: Vec::new(),
+                    const_param: false,
+                    span: n.name.span,
+                });
+            }
+        }
+        Some(out)
     }
 
     /// IEEE §10.9.1 packed-struct positional assignment pattern. When `rhs` is
@@ -7027,7 +7274,12 @@ impl<'t, 's> Parser<'t, 's> {
         // leaks past the member region. An indexed `[i±:w]` / runtime / reverse
         // sub-select stays loud (iverilog 13.0 itself refuses those struct-member
         // writes — "sorry: not yet supported" — so there is no oracle to match).
-        let mut lv = if let Some((base, off, w, asc, _sgn)) = self.struct_field_select(&path) {
+        let mut lv = if let Some(mangled) = self.unpacked_field_ident(&path) {
+            // Round-9: UNPACKED-struct member write `k.field = …` → the member net
+            // `k$field` (a plain Ident). A trailing sub-select (`k.field[i] = …`)
+            // flows through the `loop` below on the member net, like any net.
+            Lvalue::Ident(mangled)
+        } else if let Some((base, off, w, asc, _sgn)) = self.struct_field_select(&path) {
             let span = path.span;
             if self.peek() == Some(TokenKind::LBracket) {
                 self.parse_struct_field_lval(base, off, w, asc, span)
@@ -11493,6 +11745,17 @@ impl<'t, 's> Parser<'t, 's> {
                 // `parse_with_postfix` on the expr path.
                 if let Some(d) = self.parse_automatic_block_decl(&mut scope) {
                     decls.push(d);
+                }
+            } else if let Some(tyname) = self.peek_unpacked_struct_decl() {
+                // Round-9: a block-local scalar UNPACKED-struct variable
+                // (`p::kat_t k;`) desugars to N member nets `k$field` (see
+                // `parse_unpacked_struct_decl`). It registers a var binding, so it
+                // triggers the block scope snapshot like any struct-typed decl.
+                if scope.is_none() {
+                    scope = Some(self.snapshot_scope());
+                }
+                if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
+                    decls.extend(member_decls);
                 }
             } else if let Some(info) = self.peek_block_typedef_decl() {
                 // A procedural block-local declaration using a user-defined type

@@ -236,14 +236,16 @@ fn pkg_call_control_flow_is_loud() {
 }
 
 #[test]
-fn pkg_call_bare_external_ref_is_loud() {
-    // A body reading a package-internal localparam by its BARE name is NOT
-    // self-contained (that bare name would not resolve / could collide in the caller
-    // module scope) → loud.
+fn pkg_call_same_pkg_localparam_now_supported() {
+    // round-9 PKG2 SUPERSEDES this round-7 boundary: a body reading a SAME-package
+    // localparam by its bare name is now SUPPORTED — the frame-body lowering injects
+    // the package's constants under the call scope, so the bare `OFF` resolves to
+    // `p::OFF`. (`10 + 5 = 15`; matches iverilog.) A bare reference to ANOTHER
+    // package's symbol, or to a package VARIABLE, is still loud.
     let src = "package p; localparam logic [7:0] OFF = 8'd5;\n\
         function automatic logic [7:0] addoff(input logic [7:0] m); return (m + OFF); endfunction endpackage\n\
-        module m(output logic [7:0] o); assign o = p::addoff(8'd10); endmodule";
-    assert!(!ok(src), "bare external reference must be loud");
+        module m; logic [7:0] o; initial begin #1; o = p::addoff(8'd10); $display(\"o=%0d\", o); end endmodule";
+    assert_eq!(run(src).0, "o=15");
 }
 
 #[test]

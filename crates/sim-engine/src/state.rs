@@ -2776,6 +2776,23 @@ impl<'a> NetReader for SimState<'a> {
             },
         )
     }
+    /// Round-9 FIO: the read-only VALUE half of `Scheduler::k_feof`, for a pure
+    /// expression-context `$feof(fd)` (e.g. `while (!$feof(fd))`). MUST stay in
+    /// sync with `k_feof` (sched.rs): pre-opened STDOUT/STDERR/STDIN → 0, a
+    /// bad/closed fd → −1, else the fd's latched EOF flag (0/1). The only
+    /// difference is the missing `bad_fd_warn` — this path is `&self`, and the
+    /// direct-rhs `e = $feof(fd)` form (intercepted by `file_read_int_special`)
+    /// still emits that warning via `k_feof`.
+    fn fd_eof(&self, fd: u32) -> Value {
+        if (0x8000_0000..=0x8000_0002).contains(&fd) {
+            return Value::from_i128(0, 32, true);
+        }
+        if fd & 0x8000_0000 == 0 || !self.files.contains_key(&fd) {
+            return Value::from_i128(-1, 32, true);
+        }
+        let eof = self.read_state.get(&fd).map(|s| s.eof).unwrap_or(false);
+        Value::from_i128(if eof { 1 } else { 0 }, 32, true)
+    }
     fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
         self.run_frame_call(func, args)
     }

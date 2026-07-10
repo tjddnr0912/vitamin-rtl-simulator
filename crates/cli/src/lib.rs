@@ -1372,7 +1372,9 @@ fn run_vcmp_gated(
                 hdl_ast::TopItem::Package(m) => Some(("package".to_string(), m.name.name.clone())),
                 // N7: a top-level class is a unit too (importable like a package).
                 hdl_ast::TopItem::Class(c) => Some(("class".to_string(), c.name.name.clone())),
-                hdl_ast::TopItem::Import(_) | hdl_ast::TopItem::Error(_) => None,
+                hdl_ast::TopItem::Import(_)
+                | hdl_ast::TopItem::Bind(_)
+                | hdl_ast::TopItem::Error(_) => None,
             })
             .collect();
         let cu = worklib::Cu {
@@ -2066,7 +2068,9 @@ fn run_velab_lib_gated(
                 | hdl_ast::TopItem::Interface(m)
                 | hdl_ast::TopItem::Package(m) => Some(m.name.name.clone()),
                 hdl_ast::TopItem::Class(c) => Some(c.name.name.clone()),
-                hdl_ast::TopItem::Import(_) | hdl_ast::TopItem::Error(_) => None,
+                hdl_ast::TopItem::Import(_)
+                | hdl_ast::TopItem::Bind(_)
+                | hdl_ast::TopItem::Error(_) => None,
             };
             if let Some(n) = name {
                 match unit_map.get(&n) {
