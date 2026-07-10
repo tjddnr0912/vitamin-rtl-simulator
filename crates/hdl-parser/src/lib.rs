@@ -6794,6 +6794,34 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
+    /// Round-9: `block_body`'s unpacked-struct decl branch — the PEEK and the
+    /// parse, extracted whole into a COLD, non-inlined helper so NONE of their
+    /// locals (the peek's `String` key + the member-`NetVarDecl` construction)
+    /// enlarge `block_body`'s frame on the deep `parse_statement → parse_seq_block
+    /// → block_body` recursion (the `MAX_STMT_DEPTH` budget is frame-sized).
+    /// Returns whether a decl was consumed. Mirrors `parse_automatic_block_decl` —
+    /// enlarging `block_body`'s frame overflowed the 2 MiB CI test-thread stack at
+    /// the cap (`depth_guard.rs::deep_stmt_nesting_errors_cleanly`).
+    #[inline(never)]
+    fn try_block_unpacked_struct_decl(
+        &mut self,
+        decls: &mut Vec<NetVarDecl>,
+        scope: &mut Option<ScopeSnapshot>,
+    ) -> bool {
+        let Some(tyname) = self.peek_unpacked_struct_decl() else {
+            return false;
+        };
+        // Registers a var binding → triggers the block scope snapshot like any
+        // struct-typed decl.
+        if scope.is_none() {
+            *scope = Some(self.snapshot_scope());
+        }
+        if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
+            decls.extend(member_decls);
+        }
+        true
+    }
+
     /// Round-9: parse a scalar UNPACKED-struct declaration `[pkg::]T k [, k2];`,
     /// desugaring each variable into its member nets (`k$field`, one `NetVarDecl`
     /// per member, each with the member's OWN type). Registers each var in
@@ -11746,17 +11774,17 @@ impl<'t, 's> Parser<'t, 's> {
                 if let Some(d) = self.parse_automatic_block_decl(&mut scope) {
                     decls.push(d);
                 }
-            } else if let Some(tyname) = self.peek_unpacked_struct_decl() {
+            } else if self.try_block_unpacked_struct_decl(&mut decls, &mut scope) {
                 // Round-9: a block-local scalar UNPACKED-struct variable
-                // (`p::kat_t k;`) desugars to N member nets `k$field` (see
-                // `parse_unpacked_struct_decl`). It registers a var binding, so it
-                // triggers the block scope snapshot like any struct-typed decl.
-                if scope.is_none() {
-                    scope = Some(self.snapshot_scope());
-                }
-                if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
-                    decls.extend(member_decls);
-                }
+                // (`p::kat_t k;`) desugars to N member nets `$unp$k$field`. The
+                // PEEK and the parse both live in the cold, non-inlined helper so
+                // NONE of their locals (the peek's `String` key + the member-
+                // `NetVarDecl` construction) enlarge THIS frame — `block_body`
+                // sits on the deep `parse_statement → parse_seq_block →
+                // block_body` recursion and the `MAX_STMT_DEPTH` budget is
+                // frame-sized (mirrors `parse_automatic_block_decl`; enlarging
+                // this frame overflowed the 2 MiB CI test-thread stack at the cap
+                // — `depth_guard.rs::deep_stmt_nesting_errors_cleanly`).
             } else if let Some(info) = self.peek_block_typedef_decl() {
                 // A procedural block-local declaration using a user-defined type
                 // name (`my_enum_t state = IDLE;` / `byte_t b;` / `s_t s;`),
