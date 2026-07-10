@@ -2939,6 +2939,12 @@ struct Elaborator<'s> {
     /// v7 P2-D: package name → its const symbols (params/localparams + enum
     /// labels), folded EAGERLY in declaration order at `run()` entry.
     pkg_consts: BTreeMap<String, BTreeMap<String, i64>>,
+    /// Declared `(width, signed)` of each package PARAM const (the package twin
+    /// of `param_meta`). A `pkg::x` / bare-imported read materializes at this
+    /// DECLARED width (`logic [3:0] x` → 4 bits) instead of the value-inferred
+    /// 32 bits, so it carries the right self-width inside a concat/replication
+    /// (`{4'h5, p::x}` — otherwise the 32-bit const shoves the high operand out).
+    pkg_const_meta: BTreeMap<String, BTreeMap<String, (u32, bool)>>,
     /// v7 P2-D: package name → its function/task definitions (clones — the
     /// same inline-expansion tables modules use).
     pkg_funcs: BTreeMap<String, BTreeMap<String, ast::FunctionDef>>,
@@ -3415,6 +3421,7 @@ impl<'s> Elaborator<'s> {
             local_decl_names: std::collections::BTreeSet::new(),
             scoped_block_locals: BTreeMap::new(),
             pkg_consts: BTreeMap::new(),
+            pkg_const_meta: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
             cu_imports: Vec::new(),
@@ -4941,7 +4948,14 @@ impl<'s> Elaborator<'s> {
         for item in &module.body {
             if let ast::ModuleItem::Typedef(td) = item {
                 #[allow(irrefutable_let_patterns)]
-                if let ast::TypedefKind::Enum { labels, .. } = &td.kind {
+                if let ast::TypedefKind::Enum { base, labels } = &td.kind {
+                    // A label carries the enum base's DECLARED width so it reads
+                    // at its real self-width in a concat (`{4'h5, STATE}`), not 32
+                    // bits — the `param_meta` twin of the localparam path above.
+                    // Signedness is per-value (`v < 0`), matching the sign
+                    // `const_param_expr` already inferred (the base's `signed` is
+                    // dropped by the parser, so a negative label must stay signed).
+                    let base_w = self.enum_base_width(base);
                     let mut next: i64 = 0;
                     for lab in labels {
                         let v = match &lab.value {
@@ -4958,6 +4972,9 @@ impl<'s> Elaborator<'s> {
                             None => next,
                         };
                         let key = self.fq(&lab.name.name);
+                        if let Some(w) = base_w {
+                            self.param_meta.insert(key.clone(), (w, v < 0));
+                        }
                         saved_params.push((key.clone(), self.params.insert(key, v)));
                         next = v.wrapping_add(1);
                     }
@@ -6352,6 +6369,29 @@ impl<'s> Elaborator<'s> {
     /// `None` for an untyped/unsized param (width inferred from its value) or a
     /// `real`/`time` (no fixed packed width here). Single source of truth shared
     /// by value coercion and the typed-param read-width (`param_meta`).
+    /// The DECLARED WIDTH of an enum's base type (`enum logic [3:0]` → `4`), so
+    /// a label materializes at its real self-width inside a concat/replication
+    /// (`{4'h5, STATE}`) instead of the value-inferred 32 bits. An implicit-base
+    /// enum (`enum {A,B}` → 32-bit `int`) or an unfoldable bound returns `None`
+    /// (value-inferred width, unchanged). Signedness is decided PER LABEL by its
+    /// value (see the call sites): the parser drops an `enum logic signed [N]`
+    /// base's signedness (a pre-existing limit), so a base-level `signed` flag is
+    /// unavailable — mirroring the value-inferred sign the local-param path
+    /// already used (`const_param_expr`: unsigned for `v ≥ 0`, signed for `v < 0`)
+    /// keeps a negative label's arithmetic correct (`A=-2` stays -2), narrowing
+    /// only the WIDTH. Deriving sign from the base instead would silently flip a
+    /// negative label to a large unsigned value (`A=-2` → 14).
+    fn enum_base_width(&self, base: &Option<ast::Range>) -> Option<u32> {
+        let r = base.as_ref()?;
+        match (
+            self.const_eval_in_scope(&r.msb),
+            self.const_eval_in_scope(&r.lsb),
+        ) {
+            (Some(m), Some(l)) => Some(m.abs_diff(l) as u32 + 1),
+            _ => None,
+        }
+    }
+
     fn param_decl_width(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
@@ -6751,6 +6791,92 @@ impl<'s> Elaborator<'s> {
     /// package; (3) an explicitly package-qualified array `p::ROT`. Any other
     /// base shape (hierarchical, multi-segment, a non-captured array) → None →
     /// the read stays loud at the binding site (correct-or-loud).
+    /// True if a (constant) replication-count expression reads a const-array
+    /// ELEMENT (`CNT[i]`) anywhere — directly or inside an arithmetic wrapper
+    /// (`CNT[0]+1`, `-CNT[0]`, `c ? CNT[0] : 1`). Such an element read is not a
+    /// runtime net the engine can fold, so a foldable count containing one must
+    /// be materialized as a literal (else it reads 0 → 0-width). Recurses only
+    /// the node kinds a constant count uses; `const_array_vals_of_base` gates the
+    /// `BitSelect` on a genuine const array (a packed-vector bit-select or a
+    /// runtime array read is NOT one → left to the ordinary lowering).
+    fn count_reads_const_array_elem(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::BitSelect { base, .. } => self.const_array_vals_of_base(base).is_some(),
+            ast::ExprKind::Paren { inner } => self.count_reads_const_array_elem(inner),
+            ast::ExprKind::Unary { operand, .. } => self.count_reads_const_array_elem(operand),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.count_reads_const_array_elem(lhs) || self.count_reads_const_array_elem(rhs)
+            }
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.count_reads_const_array_elem(cond)
+                    || self.count_reads_const_array_elem(then_e)
+                    || self.count_reads_const_array_elem(else_e)
+            }
+            // `$clog2(CNT[i])` etc. — the element read hides inside a system-call
+            // arg (`const_eval_in_scope` folds `$clog2`/`$bits`).
+            ast::ExprKind::SysCall { args, .. } => {
+                args.iter().any(|a| self.count_reads_const_array_elem(a))
+            }
+            _ => false,
+        }
+    }
+
+    /// True if a replication-count expression reads an UNPACKED-ARRAY element of
+    /// ANY shape — including shapes `const_array_vals_of_base` cannot fold
+    /// (descending, non-zero-based, multi-dimensional) and a RUNTIME array. Uses
+    /// the array net directly (`net_is_static_array`), so it is the loud-gate
+    /// twin of [`Self::count_reads_const_array_elem`]: a count that reads such an
+    /// element but does NOT const-fold is an invalid/unsupported constant count
+    /// and must be LOUD (the engine would otherwise read 0 → silent 0-width),
+    /// mirroring the loud `localparam R = ROT[i]` binding site. A scalar
+    /// (packed-vector) net has `array_len == 1` → NOT flagged, so a packed
+    /// bit/part-select count is left to the ordinary lowering (byte-identical).
+    fn count_reads_array_param_elem(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::BitSelect { base, .. } => {
+                self.base_is_array_net(base) || self.count_reads_array_param_elem(base)
+            }
+            ast::ExprKind::Paren { inner } => self.count_reads_array_param_elem(inner),
+            ast::ExprKind::Unary { operand, .. } => self.count_reads_array_param_elem(operand),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.count_reads_array_param_elem(lhs) || self.count_reads_array_param_elem(rhs)
+            }
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.count_reads_array_param_elem(cond)
+                    || self.count_reads_array_param_elem(then_e)
+                    || self.count_reads_array_param_elem(else_e)
+            }
+            ast::ExprKind::SysCall { args, .. } => {
+                args.iter().any(|a| self.count_reads_array_param_elem(a))
+            }
+            _ => false,
+        }
+    }
+
+    /// True if `base` names an unpacked-array net (bare or `pkg::`-scoped) — the
+    /// select on it is an array-element read. A scalar/packed net is not one.
+    fn base_is_array_net(&self, base: &ast::Expr) -> bool {
+        match &base.kind {
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => self
+                .lookup_net_scoped(&p.segments[0].name)
+                .is_some_and(|n| self.net_is_static_array(n)),
+            ast::ExprKind::PkgScoped { pkg, name } => self
+                .pkg_vars
+                .get(&pkg.name)
+                .and_then(|m| m.get(&name.name))
+                .is_some_and(|&n| self.net_is_static_array(n)),
+            _ => false,
+        }
+    }
+
     fn const_array_vals_of_base(&self, base: &ast::Expr) -> Option<&Vec<i64>> {
         match &base.kind {
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
@@ -11931,7 +12057,17 @@ impl<'s> Elaborator<'s> {
                     .get(&pkg.name)
                     .and_then(|c| c.get(&name.name))
                 {
-                    Some(&v) => self.const_param_expr(v),
+                    // Materialize at the package const's DECLARED width (`logic
+                    // [3:0] x` → 4-bit const), not the value-inferred 32 bits, so
+                    // it carries the right self-width inside a concat/replication.
+                    Some(&v) => {
+                        let meta = self
+                            .pkg_const_meta
+                            .get(&pkg.name)
+                            .and_then(|m| m.get(&name.name))
+                            .copied();
+                        self.const_param_expr_w(v, meta)
+                    }
                     None => {
                         // A2b-prereq: `pkg::var` reads the package-level
                         // VARIABLE net (sees the package storage even when a
@@ -12472,11 +12608,45 @@ impl<'s> Elaborator<'s> {
                     }
                     return self.lower_string_concat_parts(&flat);
                 }
+                // A replication count that reads an unpacked-array ELEMENT
+                // (`{CNT[0]{…}}`, an arithmetic wrapper `{CNT[0]+1{…}}`, or inside
+                // `$clog2(CNT[i])`) is NOT a runtime net the engine's
+                // `const_u32_of_expr` can fold — it would read 0 (→ silent 0-width).
+                // A replication count MUST be a foldable, non-negative constant
+                // (IEEE §11.4.12.2), so here it is correct-or-loud: fold it to a
+                // literal, else LOUD. The union of the two array detectors covers
+                // BOTH a GAP-G-capturable element (module / generate / package
+                // zero-based ascending array — folds) AND a shape GAP-G cannot fold
+                // (descending / non-zero-based / multi-dimensional) or a RUNTIME
+                // array or an out-of-range / negative index — none of which fold, so
+                // they go loud instead of the old silent 0. Any NON-array count
+                // (literal, param, genvar, packed bit/part-select, plain expression)
+                // fails both gates → keeps its existing lowering, byte-identical
+                // golden IR.
+                let count = if self.count_reads_const_array_elem(count)
+                    || self.count_reads_array_param_elem(count)
+                {
+                    match self.const_eval_in_scope(count) {
+                        Some(n) if n >= 0 => self.const_u32_expr(n as u32, 32),
+                        _ => {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a replication count that reads an unpacked-array \
+                                 element must be a foldable, non-negative constant \
+                                 (an out-of-range / negative / non-constant index, \
+                                 or a descending / non-zero-based / multi-dimensional \
+                                 array shape, is unsupported)",
+                            );
+                            self.placeholder_expr()
+                        }
+                    }
+                } else {
+                    self.lower_expr(count)
+                };
                 // hdl-ast `value: Vec<Expr>` is the element LIST (no wrapper
                 // Concat); sim-ir Replicate wants ONE `value: u32` → wrap in a
                 // Concat node. (For a single element this is a 1-part Concat,
                 // kept for shape-uniformity / determinism.)
-                let count = self.lower_expr(count);
                 let part_ids: Vec<u32> = value.iter().map(|p| self.lower_expr(p)).collect();
                 if part_ids.iter().any(|&p| self.expr_is_real(p)) {
                     self.error(
@@ -26522,6 +26692,10 @@ impl<'s> Elaborator<'s> {
         let saved_prefix = std::mem::replace(&mut self.cur_prefix, format!("$pkg${pkg}"));
         let mut saved: Vec<(String, Option<i64>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
+        // Declared `(width, signed)` per PARAM const (flushed to
+        // `pkg_const_meta`) so a `pkg::x` / bare-imported read gets its true
+        // self-width in a concat/replication (see the field doc).
+        let mut const_meta: BTreeMap<String, (u32, bool)> = BTreeMap::new();
         let mut vars: BTreeMap<String, u32> = BTreeMap::new();
         // GAP-G: const array-parameter element values for this package (name →
         // elements), the package-scope twin of `array_const_vals`. Flushed into
@@ -26559,10 +26733,17 @@ impl<'s> Elaborator<'s> {
                     let key = self.fq(&p.name.name);
                     saved.push((key.clone(), self.params.insert(key, v)));
                     consts.insert(p.name.name.clone(), v);
+                    if let Some(m) = self.param_decl_width(p) {
+                        const_meta.insert(p.name.name.clone(), m);
+                    }
                 }
                 ast::ModuleItem::Typedef(td) => {
                     #[allow(irrefutable_let_patterns)]
-                    if let ast::TypedefKind::Enum { labels, .. } = &td.kind {
+                    if let ast::TypedefKind::Enum { base, labels } = &td.kind {
+                        // Base width so an imported / `pkg::`-read label carries
+                        // its self-width in a concat (twin of the module path);
+                        // per-value signedness (`v < 0`) as above.
+                        let base_w = self.enum_base_width(base);
                         let mut next: i64 = 0;
                         for l in labels {
                             let v = match &l.value {
@@ -26594,6 +26775,9 @@ impl<'s> Elaborator<'s> {
                             let key = self.fq(&l.name.name);
                             saved.push((key.clone(), self.params.insert(key, v)));
                             consts.insert(l.name.name.clone(), v);
+                            if let Some(w) = base_w {
+                                const_meta.insert(l.name.name.clone(), (w, v < 0));
+                            }
                         }
                     }
                     // Alias/Struct typedefs ride the parser's unit-global
@@ -26664,6 +26848,9 @@ impl<'s> Elaborator<'s> {
         }
         self.cur_prefix = saved_prefix;
         self.pkg_consts.insert(pkg.clone(), consts);
+        if !const_meta.is_empty() {
+            self.pkg_const_meta.insert(pkg.clone(), const_meta);
+        }
         self.pkg_vars.insert(pkg.clone(), vars);
         if !array_vals.is_empty() {
             self.pkg_array_const_vals.insert(pkg.clone(), array_vals);
@@ -26771,8 +26958,21 @@ impl<'s> Elaborator<'s> {
         };
         match &imp.item {
             None => {
-                let all: Vec<(String, i64)> = consts.iter().map(|(k, &v)| (k.clone(), v)).collect();
-                for (name, v) in all {
+                // Carry each const's declared `(width, signed)` alongside its
+                // value so a bare-imported read materializes at the right width
+                // (the pkg twin of a local param's `param_meta` entry).
+                let all = consts
+                    .iter()
+                    .map(|(k, &v)| {
+                        let m = self
+                            .pkg_const_meta
+                            .get(pkg)
+                            .and_then(|mm| mm.get(k))
+                            .copied();
+                        (k.clone(), v, m)
+                    })
+                    .collect::<Vec<_>>();
+                for (name, v, meta) in all {
                     let key = self.fq(&name);
                     // An explicit import of this name always wins — skip the wildcard.
                     if explicit_imports.contains(&key) {
@@ -26801,6 +27001,9 @@ impl<'s> Elaborator<'s> {
                         Some(_) => {}
                         None => {
                             saved_params.push((key.clone(), self.params.insert(key.clone(), v)));
+                            if let Some(m) = meta {
+                                self.param_meta.insert(key.clone(), m);
+                            }
                             wc_origin.insert(key, pkg.to_string());
                         }
                     }
@@ -26860,6 +27063,16 @@ impl<'s> Elaborator<'s> {
                     // now-dead alias so no write path can still reach it.
                     if self.pkg_var_aliases.remove(&key).is_some() {
                         self.symbols.remove(&key);
+                    }
+                    // Bare-imported read materializes at the declared width (the
+                    // pkg twin of a local param's `param_meta` entry).
+                    if let Some(m) = self
+                        .pkg_const_meta
+                        .get(pkg)
+                        .and_then(|mm| mm.get(&sym.name))
+                        .copied()
+                    {
+                        self.param_meta.insert(key.clone(), m);
                     }
                     saved_params.push((key.clone(), self.params.insert(key, v)));
                 } else if let Some(&net) = self.pkg_vars.get(pkg).and_then(|m| m.get(&sym.name)) {
