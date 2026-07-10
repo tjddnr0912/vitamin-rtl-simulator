@@ -1587,17 +1587,15 @@ impl<'t, 's> Parser<'t, 's> {
 
     /// The `pkg::name` / `pkg::name(args)` case of `expr_primary` (cursor just
     /// past the package `Ident`, at `::`). A plain scoped VALUE reference lowers
-    /// to `ExprKind::PkgScoped`; a scoped SUBROUTINE CALL `pkg::name(args)` is
-    /// unsupported in v1 (resolving the callee in its package's scope is a
-    /// separate feature) — emit ONE honest error at the `(` ("found LParen"),
-    /// then CONSUME the balanced argument list so the rest of the statement still
-    /// parses (no spurious "expected ';'" cascade; workaround = `import` the
-    /// package and call by the bare name). Split whole out of `expr_primary` and
+    /// to `ExprKind::PkgScoped`; a scoped SUBROUTINE CALL `pkg::name(args)` lowers
+    /// to a 2-segment `ExprKind::Call` `[pkg, name]` (round-7 §4.5.111). Elaborate
+    /// resolves the callee in the named package's scope — a self-contained,
+    /// straight-line function inlines; a stateful one is loud (workaround: `import`
+    /// the package and call by the bare name). Split whole out of `expr_primary` and
     /// marked `#[inline(never)]` so NONE of its locals (this branch's plus the
     /// scoped-value construction's) enlarge that hot recursive frame — the
     /// MAX_EXPR_DEPTH stack budget is frame-sized (mirrors `struct_member_expr`;
-    /// `depth_guard.rs::deep_paren_nesting_errors_cleanly`). The error message is
-    /// phrased to fit the parser's "expected <X>, found <token>" template.
+    /// `depth_guard.rs::deep_paren_nesting_errors_cleanly`).
     #[inline(never)]
     fn pkg_scoped_expr(&mut self, path: HierPath, start: Span) -> Expr {
         self.bump(); // '::'
@@ -1608,14 +1606,22 @@ impl<'t, 's> Parser<'t, 's> {
             };
         };
         if self.peek() == Some(TokenKind::LParen) {
-            self.error(
-                "a supported expression (a package-scoped subroutine call \
-                 `pkg::name(...)` is unsupported in v1 — `import` the package and \
-                 call by its bare name)",
-            );
-            let _ = self.call_args(); // balanced (args) — clean recovery
+            // IEEE §26.3 (round-7): `pkg::name(args)` package-scoped subroutine call.
+            // Emit a 2-segment `Call` [pkg, name]; elaborate resolves the callee in the
+            // named package's scope (a self-contained function inlines; a stateful one
+            // is loud — `import` the package and call by the bare name). A method call
+            // `obj.m()` is also a 2-segment `Call`, but the elaborate call resolver
+            // disambiguates by whether the head segment is a known package.
+            let args = self.call_args();
+            let pkg = path.segments.into_iter().next().unwrap();
             return Expr {
-                kind: ExprKind::Error,
+                kind: ExprKind::Call {
+                    name: HierPath {
+                        segments: vec![pkg, name],
+                        span: start.to(self.prev_span()),
+                    },
+                    args,
+                },
                 span: start.to(self.prev_span()),
             };
         }
