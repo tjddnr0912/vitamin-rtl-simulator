@@ -114,8 +114,8 @@ type TfPortType = (Option<NetVarKind>, bool, Option<Range>, Option<String>);
 
 /// Flat bit layout of a packed struct: members are placed MSB-first into one
 /// `logic [total-1:0]` vector. `fields` carries `(name, lsb_offset, width,
-/// ascending, signed, two_state)` so a `s.field` access desugars to the constant
-/// part-select `s[off+w-1 : off]`, and a trailing sub-select (`s.f[i]` /
+/// ascending, signed, two_state, dbase)` so a `s.field` access desugars to the
+/// constant part-select `s[off+w-1 : off]`, and a trailing sub-select (`s.f[i]` /
 /// `s.f[a:b]` / `s.f[base±:w]`) can be remapped onto the flat vector with the
 /// member's declared direction (`ascending` = `logic [0:N]`, field index 0 = MSB).
 /// `signed` is the member's EFFECTIVE signedness (atom types `int`/`byte`/… and
@@ -123,17 +123,21 @@ type TfPortType = (Option<NetVarKind>, bool, Option<Range>, Option<String>);
 /// `$signed()` so a signed member reads back negative (a sub-select stays
 /// unsigned per §5.4.1, matching iverilog). `two_state` (the member is `bit`/
 /// `byte`/`int`/`shortint`/`longint`) drives the `'{…}` pattern desugar to coerce
-/// X/Z→0 into that field (§6.11.3), which a 4-state member does not.
+/// X/Z→0 into that field (§6.11.3), which a 4-state member does not. `dbase` is the
+/// member's DECLARED base index — `min(msb, lsb)` of the member's own range (0 for
+/// a plain `[N:0]`/`[0:N]`/atom member) — subtracted from a sub-select's source
+/// index so a NON-zero-LSB member (`logic [15:8] a; s.a[11:8]`) selects the right
+/// field-relative bits instead of reading raw/out-of-range positions (silent X).
 #[derive(Clone, PartialEq)]
 struct StructLayout {
-    fields: Vec<(String, u32, u32, bool, bool, bool)>,
+    fields: Vec<(String, u32, u32, bool, bool, bool, u32)>,
 }
 impl StructLayout {
-    fn field(&self, name: &str) -> Option<(u32, u32, bool, bool)> {
+    fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, u32)> {
         self.fields
             .iter()
-            .find(|(n, _, _, _, _, _)| n == name)
-            .map(|(_, o, w, asc, sgn, _ts)| (*o, *w, *asc, *sgn))
+            .find(|(n, _, _, _, _, _, _)| n == name)
+            .map(|(_, o, w, asc, sgn, _ts, dbase)| (*o, *w, *asc, *sgn, *dbase))
     }
 }
 
@@ -1513,8 +1517,8 @@ impl<'t, 's> Parser<'t, 's> {
                 // Extracted to a non-inlined helper so the (rare) struct-field
                 // locals never inflate `expr_primary`'s frame on the hot paren-
                 // recursion path (the MAX_EXPR_DEPTH stack budget is frame-sized).
-                if let Some((base, off, w, asc, sgn)) = self.struct_field_select(&path) {
-                    return self.struct_member_expr(base, off, w, asc, sgn, path.span);
+                if let Some((base, off, w, asc, sgn, dbase)) = self.struct_field_select(&path) {
+                    return self.struct_member_expr(base, (off, w, asc, sgn, dbase), path.span);
                 }
                 // SV §6.19.5 enum method `x.first/last/num/next/prev/name [()]` —
                 // the no-arg form only (a `x.next(2)` step arg falls through to a
@@ -6350,6 +6354,7 @@ impl<'t, 's> Parser<'t, 's> {
                 Self::member_ascending(&m.range),
                 m.signed,
                 Self::member_kind_two_state(m.kind),
+                Self::member_dbase(&m.range),
             ));
         }
         self.struct_layouts
@@ -6456,6 +6461,7 @@ impl<'t, 's> Parser<'t, 's> {
                     Self::member_ascending(&m.range),
                     m.signed,
                     Self::member_kind_two_state(m.kind),
+                    Self::member_dbase(&m.range),
                 )
             })
             .collect();
@@ -6713,12 +6719,15 @@ impl<'t, 's> Parser<'t, 's> {
     /// If `path` is `var.field` where `var` is a packed-struct variable and `field`
     /// is one of its members, return `(base_path_to_var, lsb_offset, width,
     /// ascending, signed)`.
-    fn struct_field_select(&self, path: &HierPath) -> Option<(HierPath, u32, u32, bool, bool)> {
+    fn struct_field_select(
+        &self,
+        path: &HierPath,
+    ) -> Option<(HierPath, u32, u32, bool, bool, u32)> {
         if path.segments.len() != 2 {
             return None;
         }
         let tyname = self.var_struct.get(&path.segments[0].name)?;
-        let (off, w, asc, sgn) = self
+        let (off, w, asc, sgn, dbase) = self
             .struct_layouts
             .get(tyname)?
             .field(&path.segments[1].name)?;
@@ -6726,7 +6735,7 @@ impl<'t, 's> Parser<'t, 's> {
             segments: vec![path.segments[0].clone()],
             span: path.segments[0].span,
         };
-        Some((base, off, w, asc, sgn))
+        Some((base, off, w, asc, sgn, dbase))
     }
 
     /// Round-9: the collision-free member-net name for `var.field` of a scalar
@@ -6927,7 +6936,7 @@ impl<'t, 's> Parser<'t, 's> {
             Some(l) => l
                 .fields
                 .iter()
-                .map(|(_, _, w, _, _, ts)| (*w, *ts))
+                .map(|(_, _, w, _, _, ts, _)| (*w, *ts))
                 .collect(),
             None => return rhs,
         };
@@ -7040,6 +7049,22 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
+    /// The member's DECLARED base index — the numerically smaller of its declared
+    /// `msb`/`lsb` (so `logic [15:8]` → 8, ascending `logic [4:11]` → 4, a plain
+    /// `[N:0]`/`[0:N]`/atom member → 0). Subtracted from a sub-select's SOURCE index
+    /// to map it into the field-relative `[0, w)` range: the field part-select `pv`
+    /// normalizes the member to `[w-1:0]`, so a non-zero declared base must be
+    /// removed or the sub-select overruns `pv` (silent X) / lands on the wrong bits.
+    fn member_dbase(range: &Option<Range>) -> u32 {
+        match range {
+            Some(r) => match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
+                (Some(m), Some(l)) => m.min(l).max(0) as u32,
+                _ => 0,
+            },
+            None => 0,
+        }
+    }
+
     /// Build the read-side `Expr` for a packed-struct member access. The base is
     /// always the field part-select `pv = s[off+w-1 : off]`; a trailing sub-select
     /// becomes an `IndexedPart` on `pv` (FIELD-bounded, direction-aware).
@@ -7052,15 +7077,16 @@ impl<'t, 's> Parser<'t, 's> {
     /// TYPED, not a raw part-select, so iverilog preserves member signedness here.
     /// A sub-select (`s.f[a:b]`) stays unsigned (§5.4.1), matching iverilog.
     #[inline(never)]
+    /// `geom` = the resolved member geometry `(flat_off, width, ascending, signed,
+    /// dbase)` from [`Self::struct_field_select`] (bundled to keep the arg count
+    /// under clippy's limit).
     fn struct_member_expr(
         &mut self,
         base: HierPath,
-        off: u32,
-        w: u32,
-        asc: bool,
-        sgn: bool,
+        geom: (u32, u32, bool, bool, u32),
         span: Span,
     ) -> Expr {
+        let (off, w, asc, sgn, dbase) = geom;
         let pv = Expr {
             kind: ExprKind::PartSelect {
                 base: Box::new(Expr {
@@ -7072,7 +7098,7 @@ impl<'t, 's> Parser<'t, 's> {
             },
             span,
         };
-        match self.parse_struct_field_sel(w, asc) {
+        match self.parse_struct_field_sel(w, asc, dbase) {
             FieldSel::Whole if sgn => Expr {
                 kind: ExprKind::Cast {
                     target: CastTarget::Signing { signed: true },
@@ -7093,11 +7119,21 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
-    /// Map a member-relative bit index `e` onto the field part-select `pv[w-1:0]`.
-    /// Descending member: `pv[e]` (identity). Ascending member: `pv[w-1-e]`
-    /// (field index 0 is the field MSB, which is `pv`'s high bit). `e` may be
-    /// runtime; constant `w` folds in elaborate.
-    fn remap_pv_idx(w: u32, ascending: bool, e: Expr) -> Expr {
+    /// Map a member SOURCE bit index `e` onto the field part-select `pv[w-1:0]`.
+    /// First remove the member's declared base (`e - dbase`) so the index is
+    /// field-relative (`logic [15:8] a; a[11]` → `pv[3]`); then, for a descending
+    /// member `pv[e]` (identity), for an ascending member `pv[w-1-e]` (field index 0
+    /// is the field MSB, which is `pv`'s high bit). `dbase == 0` (a plain
+    /// `[N:0]`/`[0:N]`/atom member) emits the pre-shift `e` UNCHANGED, so the IR is
+    /// byte-identical to the pre-fix path for every zero-base member. `e` may be
+    /// runtime; constant `w`/`dbase` fold in elaborate.
+    fn remap_pv_idx(w: u32, ascending: bool, dbase: u32, e: Expr) -> Expr {
+        let e = if dbase == 0 {
+            e
+        } else {
+            let sp = e.span;
+            mk_bin(BinOp::Sub, e, Self::dec_lit(dbase, sp))
+        };
         if ascending {
             let sp = e.span;
             mk_bin(BinOp::Sub, Self::dec_lit(w - 1, sp), e)
@@ -7108,11 +7144,14 @@ impl<'t, 's> Parser<'t, 's> {
 
     /// Parse the trailing `[...]` of a packed-struct member READ sub-select and
     /// normalize it to one indexed part-select on the field part-select `pv`. No
-    /// `[` ⇒ `Whole`. Every form is FIELD-bounded by `pv` (OOB reads X). For an
-    /// ascending member the `+:`/`-:` direction flips and the offset mirrors,
-    /// matching an ascending NET part-select; a reversed regular range (`s.f[3:0]`
-    /// on `logic [0:N]`, or `s.f[0:3]` on `logic [N:0]`) is a loud parse error.
-    fn parse_struct_field_sel(&mut self, w: u32, ascending: bool) -> FieldSel {
+    /// `[` ⇒ `Whole`. Every form is FIELD-bounded by `pv` (OOB reads X). `dbase` is
+    /// the member's declared base index, removed from each source index so a
+    /// NON-zero-LSB member (`logic [15:8] a; s.a[11:8]`) selects field-relative bits
+    /// (see [`Self::remap_pv_idx`]). For an ascending member the `+:`/`-:` direction
+    /// flips and the offset mirrors, matching an ascending NET part-select; a
+    /// reversed regular range (`s.f[3:0]` on `logic [0:N]`, or `s.f[0:3]` on
+    /// `logic [N:0]`) is a loud parse error.
+    fn parse_struct_field_sel(&mut self, w: u32, ascending: bool, dbase: u32) -> FieldSel {
         if self.peek() != Some(TokenKind::LBracket) {
             return FieldSel::Whole;
         }
@@ -7136,8 +7175,20 @@ impl<'t, 's> Parser<'t, 's> {
                         } else {
                             PartDir::PlusColon
                         };
+                        // Out-of-field-LOW (source below the member's declared base)
+                        // reads X, exactly like an out-of-field-HIGH select (which
+                        // pv's own bounds X-extend). Address a far-OOB bit so the
+                        // whole select reads X — matching iverilog — rather than
+                        // underflowing the field-relative index. Only reachable when
+                        // `dbase > 0` (a non-zero-LSB member), so the zero-base path
+                        // stays byte-identical.
+                        let offset = if lo < dbase {
+                            Self::dec_lit(OOB_DROP_BIT, first.span)
+                        } else {
+                            Self::remap_pv_idx(w, ascending, dbase, Self::dec_lit(lo, first.span))
+                        };
                         FieldSel::Indexed {
-                            offset: Self::remap_pv_idx(w, ascending, Self::dec_lit(lo, first.span)),
+                            offset,
                             width: Self::dec_lit(width, first.span),
                             dir,
                         }
@@ -7165,7 +7216,7 @@ impl<'t, 's> Parser<'t, 's> {
                     PartDir::PlusColon
                 };
                 FieldSel::Indexed {
-                    offset: Self::remap_pv_idx(w, ascending, first),
+                    offset: Self::remap_pv_idx(w, ascending, dbase, first),
                     width,
                     dir,
                 }
@@ -7179,7 +7230,7 @@ impl<'t, 's> Parser<'t, 's> {
                     PartDir::MinusColon
                 };
                 FieldSel::Indexed {
-                    offset: Self::remap_pv_idx(w, ascending, first),
+                    offset: Self::remap_pv_idx(w, ascending, dbase, first),
                     width,
                     dir,
                 }
@@ -7188,7 +7239,7 @@ impl<'t, 's> Parser<'t, 's> {
             _ => {
                 let span = first.span;
                 FieldSel::Indexed {
-                    offset: Self::remap_pv_idx(w, ascending, first),
+                    offset: Self::remap_pv_idx(w, ascending, dbase, first),
                     width: Self::dec_lit(1, span),
                     dir: PartDir::PlusColon,
                 }
@@ -7307,10 +7358,10 @@ impl<'t, 's> Parser<'t, 's> {
             // `k$field` (a plain Ident). A trailing sub-select (`k.field[i] = …`)
             // flows through the `loop` below on the member net, like any net.
             Lvalue::Ident(mangled)
-        } else if let Some((base, off, w, asc, _sgn)) = self.struct_field_select(&path) {
+        } else if let Some((base, off, w, asc, _sgn, dbase)) = self.struct_field_select(&path) {
             let span = path.span;
             if self.peek() == Some(TokenKind::LBracket) {
-                self.parse_struct_field_lval(base, off, w, asc, span)
+                self.parse_struct_field_lval(base, off, w, asc, dbase, span)
             } else {
                 Lvalue::PartSelect {
                     base: Box::new(Lvalue::Ident(base)),
@@ -7387,10 +7438,12 @@ impl<'t, 's> Parser<'t, 's> {
     /// fold it to a FLAT, field-bounded lvalue on the struct net `base[total-1:0]`.
     /// The cursor is on the `[`. `off`/`w`/`asc` are the member's flat offset, width
     /// and declared direction (ascending = `logic [0:N]`, source index 0 = field
-    /// MSB). This is the WRITE twin of [`Self::parse_struct_field_sel`]: every form
-    /// maps a SOURCE index `k` onto flat bit `off + k` (descending) or
-    /// `off + (w-1-k)` (ascending), so the write stays inside the member region —
-    /// never leaking into an adjacent member.
+    /// MSB); `dbase` is the member's declared base index (`min(msb,lsb)`), removed
+    /// from each source index so a NON-zero-LSB member (`logic [15:8] a`) writes the
+    /// right bits. This is the WRITE twin of [`Self::parse_struct_field_sel`]: every
+    /// form maps a SOURCE index `k` (field-relative `r = k - dbase`) onto flat bit
+    /// `off + r` (descending) or `off + (w-1-r)` (ascending), so the write stays
+    /// inside the member region — never leaking into an adjacent member.
     ///
     /// SCOPE (correct-or-loud): only a CONSTANT range `[a:b]` running in the
     /// member's declared direction and a CONSTANT bit-select `[i]` are folded —
@@ -7406,10 +7459,14 @@ impl<'t, 's> Parser<'t, 's> {
         off: u32,
         w: u32,
         asc: bool,
+        dbase: u32,
         span: Span,
     ) -> Lvalue {
         self.bump(); // '['
         let first = self.expr(0);
+        // The member's declared source range is `[dbase, dbase+w)`; a field-relative
+        // index `r = k - dbase` (0 for a zero-base member, so byte-identical).
+        let hi = dbase as i64 + w as i64;
         match self.peek() {
             // Regular `[a:b]` — must be constant and run in the member's direction.
             Some(TokenKind::Colon) => {
@@ -7418,17 +7475,17 @@ impl<'t, 's> Parser<'t, 's> {
                 let end = self.cur_span();
                 self.expect(TokenKind::RBracket, "']'");
                 match (Self::const_lit(&first), Self::const_lit(&last)) {
-                    // In-direction range, both bounds inside the field [0, w).
+                    // In-direction range, both bounds inside the field [dbase, dbase+w).
                     (Some(a), Some(b))
                         if ((asc && a <= b) || (!asc && a >= b))
-                            && a >= 0
-                            && b >= 0
-                            && (a as u32) < w
-                            && (b as u32) < w =>
+                            && a >= dbase as i64
+                            && b >= dbase as i64
+                            && a < hi
+                            && b < hi =>
                     {
-                        let (ka, kb) = (a as u32, b as u32);
-                        // Map source MSB/LSB index onto the flat vector. Ascending:
-                        // source index k → flat `off + (w-1-k)`; descending: `off + k`.
+                        let (ka, kb) = (a as u32 - dbase, b as u32 - dbase);
+                        // Map field-relative MSB/LSB index onto the flat vector.
+                        // Ascending: index r → flat `off + (w-1-r)`; descending: `off + r`.
                         let (fmsb, flsb) = if asc {
                             (off + (w - 1 - ka), off + (w - 1 - kb))
                         } else {
@@ -7455,12 +7512,9 @@ impl<'t, 's> Parser<'t, 's> {
             Some(TokenKind::RBracket) => {
                 self.bump(); // ']'
                 match Self::const_lit(&first) {
-                    Some(i) if i >= 0 && (i as u32) < w => {
-                        let fbit = if asc {
-                            off + (w - 1 - i as u32)
-                        } else {
-                            off + i as u32
-                        };
+                    Some(i) if i >= dbase as i64 && i < hi => {
+                        let ri = i as u32 - dbase;
+                        let fbit = if asc { off + (w - 1 - ri) } else { off + ri };
                         Lvalue::BitSelect {
                             base: Box::new(Lvalue::Ident(base)),
                             index: Box::new(Self::dec_lit(fbit, span)),

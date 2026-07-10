@@ -355,3 +355,128 @@ fn whole_field_write_unchanged() {
       endmodule\n");
     assert_eq!(out, "a5\n");
 }
+
+// ── NON-zero-LSB member — declared base must be removed from the sub-select ──
+//
+// A member with a non-zero declared LSB (`logic [15:8] a`) or non-zero ascending
+// base (`logic [4:11] c`) previously read/wrote raw / out-of-range bits (silent
+// X or a wrong value), because the sub-select source index was used verbatim
+// against the field part-select `pv` (normalized to `[w-1:0]`). The declared base
+// index `min(msb,lsb)` is now subtracted. Oracle = iverilog directly for `:`/`+:`
+// / bit forms; iverilog 13.0 asserts on a struct-field `-:`, so that form is
+// pinned by vita-internal equivalence to its `:` twin.
+
+#[test]
+fn nonzero_lsb_desc_read_all_forms() {
+    // field `a` = `logic [15:8]` (declared base 8), value 5A.
+    let out = run("module top;\n\
+        typedef struct packed { logic [15:8] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 8'h5A; s.b = 8'h3C;\n\
+          $display(\"%h %h %b %h\", s.a[11:8], s.a[15:12], s.a[9], s.a[8+:4]);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "a 5 1 a\n");
+}
+
+#[test]
+fn nonzero_lsb_desc_read_pos_and_base_differ() {
+    // field `q` = `logic [11:4]` (declared base 4) sits at flat pos [7:0] — the
+    // flat offset (0) and the declared base (4) differ, so a naive path reads the
+    // wrong nibble (`e` instead of `7`).
+    let out = run("module top;\n\
+        typedef struct packed { logic [3:0] p; logic [11:4] q; } t_t;\n\
+        t_t t;\n\
+        initial begin t.p = 4'h9; t.q = 8'hE7;\n\
+          $display(\"%h %h %h\", t.q[7:4], t.q[11:8], t.q[4+:4]);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "7 e 7\n");
+}
+
+#[test]
+fn nonzero_base_asc_read_all_forms() {
+    // ascending field `c` = `logic [4:11]` (declared base 4), value E7. Oracle =
+    // equivalent ascending net (iverilog handles the net; a struct field matches).
+    let out = run("module top;\n\
+        typedef struct packed { logic [4:11] c; logic [3:0] d; } u_t;\n\
+        u_t u;\n\
+        initial begin u.c = 8'hE7; u.d = 4'h5;\n\
+          $display(\"%h %h %b\", u.c[4:11], u.c[4:7], u.c[4]);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "e7 e 1\n");
+}
+
+#[test]
+fn nonzero_lsb_minus_colon_equiv_to_colon() {
+    // iverilog 13.0 asserts on a struct-field `-:`; pin `s.a[hi-:w]` to its `:`
+    // twin `s.a[hi:hi-w+1]` (identical bits) — a vita-internal equivalence.
+    let out = run("module top;\n\
+        typedef struct packed { logic [15:8] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 8'h5A;\n\
+          $display(\"%h %h %h %h\", s.a[15-:4], s.a[15:12], s.a[11-:4], s.a[11:8]);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "5 5 a a\n");
+}
+
+#[test]
+fn nonzero_lsb_out_of_field_reads_x() {
+    // A select touching outside the member's declared range reads X (both the
+    // pre-existing OOB-HIGH and the newly-correct OOB-LOW — previously `s.a[7:4]`
+    // silently read `5`).
+    let out = run("module top;\n\
+        typedef struct packed { logic [15:8] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 8'h5A; s.b = 8'h3C;\n\
+          $display(\"%h %h %h %b\", s.a[7:4], s.a[19:16], s.a[10:7], s.a[7]);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "x x x x\n");
+}
+
+#[test]
+fn nonzero_lsb_desc_write() {
+    // WRITE to a non-zero-LSB member sub-field (was loud E2002, now supported):
+    // s.a[11:8]=F, s.a[15]=1 → a = 1000_1111 = 8F.
+    let out = run("module top;\n\
+        typedef struct packed { logic [15:8] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 8'h00; s.b = 8'h00;\n\
+          s.a[11:8] = 4'hF; s.a[15] = 1'b1;\n\
+          $display(\"%h\", s);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "8f00\n");
+}
+
+#[test]
+fn nonzero_base_write_desc_and_asc() {
+    // Non-zero declared base WRITE on a descending (`q` base 4) and an ascending
+    // (`c` base 4) member. q[7:4]=A,q[11]=1 → q=8A; c[4]=1(MSB),c[11]=1(LSB) → c=81.
+    let out = run("module top;\n\
+        typedef struct packed { logic [11:4] q; logic [4:11] c; } x_t;\n\
+        x_t x;\n\
+        initial begin x.q = 8'h00; x.c = 8'h00;\n\
+          x.q[7:4] = 4'hA; x.q[11] = 1'b1;\n\
+          x.c[4] = 1'b1;   x.c[11] = 1'b1;\n\
+          $display(\"%h %h\", x.q, x.c);\n\
+        end\n\
+      endmodule\n");
+    assert_eq!(out, "8a 81\n");
+}
+
+#[test]
+fn nonzero_lsb_write_out_of_field_range_loud() {
+    // A write RANGE straying outside the member's declared range is loud (matches
+    // the pre-fix in-bounds guard, now field-relative) — never a neighbour leak.
+    run_loud(
+        "module top;\n\
+        typedef struct packed { logic [15:8] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a[7:4] = 4'hF; end\n\
+      endmodule\n",
+    );
+}
