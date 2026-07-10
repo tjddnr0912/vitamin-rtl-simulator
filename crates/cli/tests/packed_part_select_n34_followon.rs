@@ -243,3 +243,75 @@ fn const_indexed_part_out_of_range_is_loud() {
          endmodule\n");
     assert_eq!(bc, Some(1), "underflow x[0-:2] must be loud");
 }
+
+// ── §4.5.103 residual: packed ELEMENT sub-select of a non-zero-LSB inner dim ──
+// `pm[i][m:l]` where `pm` is `logic [1:0][15:8]` — after the outer index the
+// residual is the inner vector `[15:8]`, whose LSB (8) must be subtracted from the
+// sub-select offset (the packed twin of the array-element `dbase`). Previously the
+// `!packed_dims` guard left it raw → silent X. Bit-selects and zero-LSB inner dims
+// already worked. Values pinned to iverilog 13.0.
+
+#[test]
+fn packed_elem_nonzero_lsb_read_sub_selects() {
+    // pm[0] = 5A on inner [15:8]: [11:8]=A, [15:12]=5, bit9=1, [8+:4]=A.
+    let (out, c) = run("module t;\n\
+         logic [1:0][15:8] pm;\n\
+         initial begin pm[0]=8'h5A; pm[1]=8'h3C; #1;\n\
+           $display(\"%h %h %b %h\", pm[0][11:8], pm[0][15:12], pm[0][9], pm[0][8+:4]); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(
+        out.contains("a 5 1 a"),
+        "packed elem non-zero-LSB read:\n{out}"
+    );
+}
+
+#[test]
+fn packed_elem_ascending_inner_dim() {
+    // ascending inner `[8:15]`: pm[0][8:11]=5 (hi nibble), bit8=0 (MSB).
+    let (out, c) = run("module t;\n\
+         logic [1:0][8:15] pm;\n\
+         initial begin pm[0]=8'h5A; #1; $display(\"%h %b\", pm[0][8:11], pm[0][8]); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("5 0"), "packed elem ascending inner:\n{out}");
+}
+
+#[test]
+fn packed_elem_three_dim_two_index_residual_vector() {
+    // 3-D `[1:0][1:0][15:8]`: pm[0][0] leaves a residual vector [15:8].
+    let (out, c) = run("module t;\n\
+         logic [1:0][1:0][15:8] pm;\n\
+         initial begin pm[0][0]=8'h5A; #1; $display(\"%h\", pm[0][0][11:8]); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("a"), "packed elem 3-D 2-index:\n{out}");
+}
+
+#[test]
+fn packed_elem_zero_lsb_inner_unchanged() {
+    // zero-LSB inner `[7:0]`: offset normalization is a no-op — already correct.
+    let (out, c) = run("module t;\n\
+         logic [1:0][7:0] pm;\n\
+         initial begin pm[0]=8'hE7; #1; $display(\"%h\", pm[0][7:4]); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("e"), "packed elem zero-LSB inner:\n{out}");
+}
+
+#[test]
+fn array_of_packed_partial_index_not_misnormalized() {
+    // R2 guard: `packed_elem_resid` must NOT fire on an ARRAY-OF-PACKED (the `[0]`s
+    // include an UNPACKED index). `reg [1:0][5:2][3:2] tm [0:1]; tm[0][0][5:4]` has a
+    // 2-dim packed residual after `tm[0][0]`, so it stays on the pre-existing raw
+    // path (iverilog=3 here). A mis-normalization (the R1 over-catch) gave 1.
+    let (out, c) = run("module t;\n\
+         reg [1:0][5:2][3:2] tm [0:1];\n\
+         initial begin tm[0]=16'h1234; #1; $display(\"%h\", tm[0][0][5:4]); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(
+        out.contains("3"),
+        "array-of-packed partial index must not mis-normalize:\n{out}"
+    );
+}

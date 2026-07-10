@@ -16766,6 +16766,82 @@ impl<'s> Elaborator<'s> {
         self.lookup_net_scoped(&joined)
     }
 
+    /// If `base` is a multi-dim packed ELEMENT (`pm[i]…`, where `pm` is a packed
+    /// net — local, interface-member, or package) whose residual after the peeled
+    /// index/indices is EXACTLY ONE un-indexed packed dim (a residual VECTOR),
+    /// return that residual dim's `(lo, width, ascending)`. A sub-select of such an
+    /// element (`pm[i][m:l]`, `pm[i][b+:w]`) normalizes its offset against the
+    /// residual dim's LSB — the packed twin of the array-element / struct-member
+    /// `dbase`; the element extract (`lower_expr(pm[i])`) is already the `[w-1:0]`
+    /// value. `None` for a bare net, a fully-indexed (bit) access, or a residual of
+    /// >1 dim (a deeper follow-on) — those stay on their existing paths.
+    fn packed_elem_resid(&self, base: &ast::Expr) -> Option<(u32, u32, bool)> {
+        let mut n_idx = 0usize;
+        let mut cur = base;
+        loop {
+            match &cur.kind {
+                ast::ExprKind::Paren { inner } => cur = inner,
+                ast::ExprKind::BitSelect { base: b, .. } => {
+                    n_idx += 1;
+                    cur = b;
+                }
+                _ => break,
+            }
+        }
+        let net = match &cur.kind {
+            ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
+                self.lookup_net_scoped(&path.segments[0].name)?
+            }
+            ast::ExprKind::Ident(path) => self.iface_member_net(path)?,
+            ast::ExprKind::PkgScoped { .. } => self.pkg_scoped_var_net(cur)?,
+            _ => return None,
+        };
+        let dims = self.packed_dims.get(&net)?;
+        // Confine to a BARE packed net (NOT an unpacked array). An array-of-packed's
+        // UNPACKED indices would be miscounted as packed by `n_idx`, so a PARTIAL
+        // packed-index sub-select (`tm[0][0][m:l]` on `reg [a][b][c] tm [0:1]`) would
+        // normalize against the innermost dim while >1 packed dim actually remains →
+        // silent-wrong. `net_is_static_array` is true only for an unpacked array (a
+        // bare packed net is not), so this excludes every array-of-packed. The genuine
+        // array-of-packed residual-vector case stays on the pre-existing raw path (a
+        // separate follow-on), unchanged.
+        if self.net_is_static_array(net) {
+            return None;
+        }
+        // Residual = exactly ONE un-indexed dim (a vector): the peeled indices leave
+        // `dims.len() - 1` dims. `n_idx == 0` is a bare packed net (its own path).
+        if n_idx == 0 || n_idx != dims.len() - 1 {
+            return None;
+        }
+        Some(dims[n_idx])
+    }
+
+    /// Offset normalization against an EXPLICIT `(lo, width, ascending)` range — the
+    /// range-explicit twin of [`Self::norm_offset_for_net`] (used for a packed
+    /// element's RESIDUAL dim, whose range is not a whole net's). Descending: a
+    /// `lo == 0` range is a no-op (raw), else `raw − lo`. Ascending `[lo:hi]`: the
+    /// largest source index `hi = lo + width − 1` is internal bit 0, so `hi − raw`.
+    fn norm_offset_for_range(&mut self, raw_off: u32, lo: u32, width: u32, asc: bool) -> u32 {
+        if !asc {
+            if lo == 0 {
+                return raw_off;
+            }
+            let lo_c = self.const_u32_expr(lo, 32);
+            self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Sub,
+                lhs: raw_off,
+                rhs: lo_c,
+            })
+        } else {
+            let hi_c = self.const_u32_expr(lo + width - 1, 32);
+            self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Sub,
+                lhs: hi_c,
+                rhs: raw_off,
+            })
+        }
+    }
+
     fn norm_offset_if_net(&mut self, base: &ast::Expr, raw_off: u32) -> u32 {
         if let ast::ExprKind::Ident(path) = &base.kind {
             if path.segments.len() == 1 {
@@ -16806,6 +16882,14 @@ impl<'s> Elaborator<'s> {
         // hierarchical `dut.mem[i][m:l]` root yields `None` here (separate deferred
         // path) and stays raw — another pre-existing residual, out of scope.
         if matches!(&base.kind, ast::ExprKind::BitSelect { .. }) {
+            // Multi-dim packed ELEMENT sub-select (`pm[i][m:l]`) — normalize by the
+            // residual (inner) dim's LSB. The element extract `lower_expr(pm[i])` is
+            // the `[w-1:0]` value, so this is the packed twin of the array-element
+            // `dbase`. Previously the `!packed_dims` guard below excluded it → raw
+            // offset → silent `x` for a non-zero-LSB inner dim (§4.5.103 residual).
+            if let Some((lo, w, asc)) = self.packed_elem_resid(base) {
+                return self.norm_offset_for_range(raw_off, lo, w, asc);
+            }
             if let Some(net) = self.base_root_net(base) {
                 if self.net_is_static_array(net) && !self.packed_dims.contains_key(&net) {
                     return self.norm_offset_for_net(net, raw_off);
@@ -16876,6 +16960,12 @@ impl<'s> Elaborator<'s> {
     /// ASCENDING (`[lo:hi]`, `msb < lsb`)? A base that does not resolve to a net is
     /// `false` (treated as the classic descending `[N:0]`).
     fn base_net_ascending(&self, base: &ast::Expr) -> bool {
+        // A packed element's RESIDUAL (inner) dim drives the direction/width, not
+        // the whole net's outer dim (`pm[i][m:l]` on `logic [1:0][15:8]` is a
+        // descending inner select regardless of the outer dim's direction).
+        if let Some((_lo, _w, asc)) = self.packed_elem_resid(base) {
+            return asc;
+        }
         self.base_root_net(base)
             .map(|net| self.net_ascending(net))
             .unwrap_or(false)
@@ -16917,6 +17007,11 @@ impl<'s> Elaborator<'s> {
     /// (`norm_offset_for_net`). Only used when `base_net_ascending(base)` is true,
     /// so `base_root_net` is guaranteed `Some`.
     fn norm_offset_ascending(&mut self, base: &ast::Expr, raw_off: u32) -> u32 {
+        // Ascending packed element — normalize against the residual dim's range
+        // (the descending twin runs in `norm_offset_if_net`).
+        if let Some((lo, w, asc)) = self.packed_elem_resid(base) {
+            return self.norm_offset_for_range(raw_off, lo, w, asc);
+        }
         match self.base_root_net(base) {
             Some(net) => self.norm_offset_for_net(net, raw_off),
             None => raw_off,
