@@ -1098,6 +1098,11 @@ struct DeferredHierSelect {
     /// Indices in SOURCE order (`grid[i][j]` → `[i, j]`). Length 1 = the N3.1 scalar/
     /// vector/single-dim-array case; ≥2 = a multi-dim unpacked/packed element select.
     idx_eids: Vec<u32>,
+    /// A trailing PART-select (`dut.mem[i][m:l]`, scalar `dut.v[m:l]`, `[b+:w]`) whose
+    /// offset is normalized against the (element/net) LSB at resolution time — the
+    /// READ twin of [`DeferredHierSelWrite`]'s `part`. `None` = a bit-select / whole
+    /// element read (the pre-existing lanes), so those stay byte-identical.
+    part: Option<HierPart>,
 }
 
 /// during statement lowering and materialized AFTER the module's process loop as
@@ -3970,6 +3975,16 @@ impl<'s> Elaborator<'s> {
                 continue;
             }
             let path = d.path.join(".");
+            // HIER-REST-PS (read): a trailing PART-select whose offset is normalized
+            // against the (element/net) LSB — the READ twin of the write-side `part`
+            // branch. Handled first; the bit/whole lanes below run only when absent.
+            if let Some(p) = d.part {
+                if let Some(e) = self.build_hier_read_part(net, &d.idx_eids, p, &path) {
+                    let ex = self.exprs[e as usize].clone();
+                    self.exprs[d.eid as usize] = ex;
+                }
+                continue;
+            }
             let built = if self.net_is_static_array(net) {
                 // Unpacked array element — single- OR multi-dim, mirroring the local
                 // `lower_array_read` path so `dut.grid[i][j]` reads exactly what a local
@@ -4019,6 +4034,82 @@ impl<'s> Elaborator<'s> {
     /// a partial slice (`< D` indices) or a bit-of-bit (`> D+1`). The index eids were
     /// lowered at the read site (full param/genvar/formal context), so this only builds
     /// the flat-word arithmetic and the select.
+    /// Build a hierarchical part-select READ (`dut.mem[i][m:l]`, scalar `dut.v[m:l]`,
+    /// `[b+:w]`) — the READ twin of the `part` branch of
+    /// [`Self::build_hier_sel_write_chunk`]. `idx_eids` (if any) select an
+    /// unpacked-array ELEMENT word; the part-select then applies within it, with the
+    /// offset normalized against the element/net LSB (so a non-zero-LSB net selects the
+    /// right internal bits, and a `[N:0]` element is a no-op). `None` (after a loud
+    /// error) for a multi-dim packed element sub-part-select (a deferred follow-on, as
+    /// on the write side) or a stray index on a scalar.
+    fn build_hier_read_part(
+        &mut self,
+        net: u32,
+        idx_eids: &[u32],
+        part: HierPart,
+        path: &str,
+    ) -> Option<u32> {
+        // Ascending net (`logic [lo:hi]`) `+:`/`-:`: the select KIND was baked
+        // descending at lowering (net direction unknown then), so it would walk the
+        // wrong way and read partly out-of-range → silent-wrong. Loud-reject —
+        // consistent with the ascending `[m:l]` part-select (already loud via the
+        // descending-default width check). Ascending indexed hierarchical part-select
+        // is a follow-on (a `[m:l]` or whole-net read works).
+        if matches!(part.kind, ir::SelKind::PartIdxUp | ir::SelKind::PartIdxDown)
+            && self.net_ascending(net)
+        {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "an ascending-net indexed part-select (`[b+:w]`/`[b-:w]`) of hierarchical \
+                     `{path}` is unsupported — read a `[m:l]` range or the whole net"
+                ),
+            );
+            return None;
+        }
+        let word = if self.net_is_static_array(net) {
+            let dims = self.net_dim_extents(net);
+            let d = dims.len();
+            if idx_eids.len() != d {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "a hierarchical part-select of unpacked array `{path}` must index \
+                         every dimension to one element"
+                    ),
+                );
+                return None;
+            }
+            Some(self.flatten_word_eids(&dims, idx_eids, &[]))
+        } else if self.packed_dims.contains_key(&net) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "a hierarchical part-select of multi-dim packed `{path}` is a follow-on \
+                     (read whole elements `[i]` or the whole net)"
+                ),
+            );
+            return None;
+        } else {
+            if !idx_eids.is_empty() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!("too many indices in hierarchical part-select of `{path}`"),
+                );
+                return None;
+            }
+            None
+        };
+        let base = self.push_expr(ir::Expr::Signal { net, word });
+        let offset = self.norm_offset_for_net(net, part.raw_off);
+        Some(self.push_expr(ir::Expr::Select {
+            base,
+            offset,
+            width: part.width,
+            kind: part.kind,
+        }))
+    }
+
     fn build_hier_array_read(&mut self, net: u32, idx_eids: &[u32], path: &str) -> Option<u32> {
         let dims = self.net_dim_extents(net);
         let d = dims.len();
@@ -4541,6 +4632,23 @@ impl<'s> Elaborator<'s> {
         // base has no indices. The offset is normalized against the net's LSB here
         // (parity with the local part-select lvalue path).
         if let Some(p) = part {
+            // Ascending net `+:`/`-:`: the select KIND was baked descending at
+            // lowering (net direction unknown then) → it would write the wrong bits
+            // (silent). Loud-reject, mirroring the read twin `build_hier_read_part`
+            // and the already-loud ascending `[m:l]` write. (Read/write symmetric.)
+            if matches!(p.kind, ir::SelKind::PartIdxUp | ir::SelKind::PartIdxDown)
+                && self.net_ascending(net)
+            {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "an ascending-net indexed part-select (`[b+:w]`/`[b-:w]`) WRITE of \
+                         hierarchical `{path}` is unsupported — write a `[m:l]` range or the \
+                         whole net"
+                    ),
+                );
+                return poison_chunk();
+            }
             let word = if self.net_is_static_array(net) {
                 let dims = self.net_dim_extents(net);
                 let d = dims.len();
@@ -12623,6 +12731,7 @@ impl<'s> Elaborator<'s> {
                         prefix: self.cur_prefix.clone(),
                         path,
                         idx_eids,
+                        part: None,
                     });
                     return eid;
                 }
@@ -12676,6 +12785,34 @@ impl<'s> Elaborator<'s> {
                 // whole outer-dim elements, not flat bits.
                 if let Some(sel) = self.try_packed_part_select(base, msb, lsb) {
                     return sel;
+                }
+                // HIER-REST-PS (read): a hierarchical part-select `dut.mem[i][m:l]` /
+                // scalar `dut.v[m:l]` — the target net does not exist yet, so its
+                // declared LSB (the offset normalization) is unknown. Defer with a
+                // HierPart, mirroring the write side (`collect_lval_chunks` PartSelect):
+                // resolution normalizes the offset against the element/net LSB. Without
+                // it a non-zero-LSB hierarchical net read the raw offset → silent X.
+                if let Some((path, idx_asts)) = self.hier_chain(base) {
+                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let lsb_id = self.lower_expr(lsb);
+                    let msb_id = self.lower_expr(msb);
+                    let width = self.width_from_msb_lsb_checked(msb, lsb, msb_id, lsb_id);
+                    let eid = self.push_expr(ir::Expr::Signal {
+                        net: POISON_NET,
+                        word: None,
+                    });
+                    self.deferred_hier_sel.push(DeferredHierSelect {
+                        eid,
+                        prefix: self.cur_prefix.clone(),
+                        path,
+                        idx_eids,
+                        part: Some(HierPart {
+                            raw_off: lsb_id,
+                            width,
+                            kind: ir::SelKind::PartConst,
+                        }),
+                    });
+                    return eid;
                 }
                 let base_id = self.lower_expr(base);
                 if self.expr_is_real(base_id) {
@@ -12739,6 +12876,32 @@ impl<'s> Elaborator<'s> {
                 // `x[3:2]`); a variable offset is loud (iverilog 13.0 aborts).
                 if let Some(sel) = self.try_packed_indexed_part(base, offset, width, dir) {
                     return sel;
+                }
+                // HIER-REST-PS (read): a hierarchical indexed part-select
+                // `dut.mem[i][b+:w]` / `dut.v[b+:w]` — defer with a HierPart (offset
+                // normalized against the net LSB at fixup), the `+:`/`-:` twin of the
+                // PartSelect arm above and the write side. `false` (descending) kind
+                // mirrors the write side; an ascending hier net is a rare follow-on.
+                if let Some((path, idx_asts)) = self.hier_chain(base) {
+                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let raw_off = self.lower_expr(offset);
+                    let w = self.lower_expr(width);
+                    let eid = self.push_expr(ir::Expr::Signal {
+                        net: POISON_NET,
+                        word: None,
+                    });
+                    self.deferred_hier_sel.push(DeferredHierSelect {
+                        eid,
+                        prefix: self.cur_prefix.clone(),
+                        path,
+                        idx_eids,
+                        part: Some(HierPart {
+                            raw_off,
+                            width: w,
+                            kind: indexed_sel_kind(dir, false),
+                        }),
+                    });
+                    return eid;
                 }
                 let base_id = self.lower_expr(base);
                 if self.expr_is_real(base_id) {
@@ -18124,6 +18287,45 @@ impl<'s> Elaborator<'s> {
         };
         outer_first.reverse(); // base-chain → source order
         outer_first.push(index); // outermost index is last in source order
+        Some((path, outer_first))
+    }
+
+    /// Expression twin of [`Self::lval_hier_chain`]: given a PART-select `base`, walk
+    /// nested BitSelects (`dut.mem[i]`) or a bare multi-segment ref (`dut.v`) down to a
+    /// cross-instance hierarchical Ident, returning the dotted path and element indices
+    /// (source order). `None` for a single-segment local base or a known dotted
+    /// interface-member alias (both handled by the normal part-select path). Used to
+    /// DEFER a hierarchical part-select READ (`dut.mem[i][m:l]`, `dut.v[m:l]`) whose net
+    /// range — and thus the LSB offset normalization — is unknown until pass 8.
+    fn hier_chain<'a>(&self, base: &'a ast::Expr) -> Option<(Vec<String>, Vec<&'a ast::Expr>)> {
+        let mut outer_first: Vec<&ast::Expr> = Vec::new();
+        let mut cur = base;
+        let path = loop {
+            match &cur.kind {
+                ast::ExprKind::BitSelect { base: b, index: i } => {
+                    outer_first.push(i);
+                    cur = b;
+                }
+                ast::ExprKind::Ident(p) if p.segments.len() >= 2 => {
+                    let joined = p
+                        .segments
+                        .iter()
+                        .map(|s| s.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(".");
+                    if self.lookup_net_scoped(&joined).is_some() {
+                        return None; // interface-member alias — normal path
+                    }
+                    break p
+                        .segments
+                        .iter()
+                        .map(|s| s.name.clone())
+                        .collect::<Vec<_>>();
+                }
+                _ => return None,
+            }
+        };
+        outer_first.reverse(); // base-chain → source order
         Some((path, outer_first))
     }
 
