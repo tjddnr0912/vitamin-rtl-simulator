@@ -3102,6 +3102,14 @@ struct Elaborator<'s> {
     // (IEEE §6.20.2). Parallel-keyed to `params`; absent ⇒ value-inference.
     // elaborate-LOCAL (golden-neutral — only changes a typed param's const width).
     param_meta: BTreeMap<String, (u32, bool)>,
+    // FQ param-name → its DECLARED packed range `(lo, width, ascending)` — for a
+    // NON-zero-LSB param (`localparam [15:8] P`), so a bit/part-select `P[15:12]`
+    // normalizes its offset against the declared LSB like a net (the param twin of
+    // the struct/interface `dbase`). Only NON-zero-LSB params are inserted — an
+    // absent entry means the classic `[N:0]`/zero-LSB raw offset (byte-identical).
+    // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
+    // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
+    param_range: BTreeMap<String, (u32, u32, bool)>,
     // PERSISTENT FQ param-name → value, NEVER restored (unlike `params`). Lets a
     // post-elaboration hierarchical READ (`dut.WIDTH`) fold to the sibling
     // instance's param value. Out-of-band (golden-free).
@@ -3506,6 +3514,7 @@ impl<'s> Elaborator<'s> {
             array_const_vals: BTreeMap::new(),
             pkg_array_const_vals: BTreeMap::new(),
             param_meta: BTreeMap::new(),
+            param_range: BTreeMap::new(),
             hier_params: BTreeMap::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
@@ -5116,6 +5125,9 @@ impl<'s> Elaborator<'s> {
                     if let Some(m) = meta {
                         self.param_meta.insert(key.clone(), m);
                     }
+                    if let Some(r) = self.param_decl_range(p) {
+                        self.param_range.insert(key.clone(), r);
+                    }
                     saved_params.push((key.clone(), self.params.insert(key, v)));
                 }
                 ast::ModuleItem::NetVar(d) => {
@@ -6642,6 +6654,59 @@ impl<'s> Elaborator<'s> {
         }
     }
 
+    /// The param's DECLARED packed range `(lo, width, ascending)` — recorded in
+    /// `param_range` ONLY when the LSB is non-zero (`localparam [15:8] P`), so a
+    /// bit/part-select `P[15:12]` normalizes its offset against the declared LSB.
+    /// `None` for a bare/atom param, a zero-LSB range (`[N:0]` — raw is already
+    /// correct), or an unfoldable bound. Reads the SAME `p.range` as
+    /// [`Self::param_decl_width`].
+    fn param_decl_range(&self, p: &ast::ParamDecl) -> Option<(u32, u32, bool)> {
+        if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
+            return None;
+        }
+        let r = p.range.as_ref()?;
+        let m = self.const_eval_in_scope(&r.msb)?;
+        let l = self.const_eval_in_scope(&r.lsb)?;
+        let lo = m.min(l).max(0) as u32;
+        if lo == 0 {
+            return None; // zero-LSB `[N:0]`/`[0:N]` — the raw offset is already correct
+        }
+        Some((lo, m.abs_diff(l) as u32 + 1, m < l))
+    }
+
+    /// If `base` is a bare param/localparam Ident with a recorded non-zero-LSB
+    /// declared range, return `(lo, width, ascending)` — resolved by the SAME
+    /// `walk_scopes` as the param's value (`lookup_scoped`) and meta (`param_meta`),
+    /// so the offset range can never drift from the value lookup. Drives the
+    /// offset-normalization param arms in `norm_offset_if_net` / `base_net_ascending`
+    /// / `norm_offset_ascending`, mirroring a net's `norm_offset_for_net`.
+    fn param_sel_range(&self, base: &ast::Expr) -> Option<(u32, u32, bool)> {
+        let ast::ExprKind::Ident(path) = &base.kind else {
+            return None;
+        };
+        if path.segments.len() != 1 {
+            return None;
+        }
+        let seg = &path.segments[0].name;
+        // A frame-local (inline-function input formal / local, or task output formal)
+        // SHADOWS the param — the VALUE resolves to it FIRST, so the offset must not
+        // use the param range. Decline when either substitution stack binds the name.
+        if self.subst_lookup(seg).is_some() || self.out_subst_lookup(seg).is_some() {
+            return None;
+        }
+        // Re-derive the SAME innermost binding key the VALUE resolves to — a shadowing
+        // inner net/local (`symbols`) or generate/zero-LSB param (`params`) must WIN —
+        // then use the declared range ONLY if that exact key is a recorded non-zero-LSB
+        // param. An independent `walk_scopes(&param_range)` would silently skip a shadow
+        // (`param_range` is a SUBSET of `params`, populated only for non-zero-LSB params
+        // at a couple of decl sites) and drift outward to an OUTER param, normalizing
+        // the offset against the wrong LSB while the value came from the inner binding.
+        let key = self.walk_scopes_key(seg, |k| {
+            self.params.contains_key(k) || self.symbols.contains_key(k)
+        })?;
+        self.param_range.get(&key).copied()
+    }
+
     fn coerce_param_value(&mut self, v: i64, p: &ast::ParamDecl) -> i64 {
         // `param_decl_width` already reports the declared signedness (incl. `int`/
         // `integer` via `p.signed`), so coerce with THAT — an `int unsigned` must
@@ -6761,6 +6826,9 @@ impl<'s> Elaborator<'s> {
             self.hier_params.insert(key.clone(), v);
             if let Some(m) = meta {
                 self.param_meta.insert(key.clone(), m);
+            }
+            if let Some(r) = self.param_decl_range(p) {
+                self.param_range.insert(key.clone(), r);
             }
             saved.push((key.clone(), self.params.insert(key, v)));
         }
@@ -16848,6 +16916,14 @@ impl<'s> Elaborator<'s> {
                 if let Some(net) = self.lookup_net_scoped(&path.segments[0].name) {
                     return self.norm_offset_for_net(net, raw_off);
                 }
+                // A NON-zero-LSB param/localparam (`localparam [15:8] P; P[15:12]`) —
+                // the base folds to a Const (not a net), so normalize by the param's
+                // DECLARED range (recorded in `param_range`, resolved by the SAME
+                // `walk_scopes` as the value). A zero-LSB param has no entry → raw
+                // (byte-identical).
+                if let Some((lo, w, asc)) = self.param_sel_range(base) {
+                    return self.norm_offset_for_range(raw_off, lo, w, asc);
+                }
             } else if let Some(net) = self.iface_member_net(path) {
                 // Interface-member alias (`bi.data`, ≥2-seg) — a KNOWN dotted symbol
                 // resolved at port-binding; normalize by its declared range like a
@@ -16966,6 +17042,11 @@ impl<'s> Elaborator<'s> {
         if let Some((_lo, _w, asc)) = self.packed_elem_resid(base) {
             return asc;
         }
+        // A non-zero-LSB param's declared direction drives the select (an ascending
+        // `parameter [8:15] P` part-select maps like an ascending net).
+        if let Some((_lo, _w, asc)) = self.param_sel_range(base) {
+            return asc;
+        }
         self.base_root_net(base)
             .map(|net| self.net_ascending(net))
             .unwrap_or(false)
@@ -17010,6 +17091,10 @@ impl<'s> Elaborator<'s> {
         // Ascending packed element — normalize against the residual dim's range
         // (the descending twin runs in `norm_offset_if_net`).
         if let Some((lo, w, asc)) = self.packed_elem_resid(base) {
+            return self.norm_offset_for_range(raw_off, lo, w, asc);
+        }
+        // Ascending non-zero-LSB param — normalize against its declared range.
+        if let Some((lo, w, asc)) = self.param_sel_range(base) {
             return self.norm_offset_for_range(raw_off, lo, w, asc);
         }
         match self.base_root_net(base) {
