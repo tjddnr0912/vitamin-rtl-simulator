@@ -877,7 +877,11 @@ pub fn instantiated_names(unit: &ast::SourceUnit) -> std::collections::BTreeSet<
 /// how the same name is instantiated elsewhere. Degenerate (every module
 /// instantiated — a cycle or a pure library, so the set is empty): fall back to
 /// the last-declared single module so `run` still produces IR. Deterministic.
-fn pick_roots<'a>(map: &ModuleMap<'a>, order: &[&'a ast::ModuleDecl]) -> Vec<&'a ast::ModuleDecl> {
+fn pick_roots<'a>(
+    map: &ModuleMap<'a>,
+    order: &[&'a ast::ModuleDecl],
+    bind_checkers: &std::collections::BTreeSet<String>,
+) -> Vec<&'a ast::ModuleDecl> {
     let instantiated = collect_instantiated(map, order);
     let canon = |name: &str, fallback: &'a ast::ModuleDecl| -> &'a ast::ModuleDecl {
         map.get(name).map(|(d, _)| *d).unwrap_or(fallback)
@@ -886,7 +890,10 @@ fn pick_roots<'a>(map: &ModuleMap<'a>, order: &[&'a ast::ModuleDecl]) -> Vec<&'a
     let mut added: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for m in order {
         let name = m.name.name.as_str();
-        if instantiated.contains(name) || !added.insert(name) {
+        // Round-9: a module attached ONLY via `bind` is not instantiated in any
+        // body, so it would otherwise be picked as a spurious extra root (a
+        // second, floating-port `$scope`). Exclude the bind-checker names.
+        if instantiated.contains(name) || bind_checkers.contains(name) || !added.insert(name) {
             continue;
         }
         roots.push(canon(name, m));
@@ -2907,6 +2914,12 @@ struct Elaborator<'s> {
 
     // ── lookup-only maps (NEVER feed arena order) ──
     symbols: BTreeMap<String, u32>, // fully-qualified net/var NAME → NetId
+    /// Round-9: top-level `bind` decls indexed by TARGET module name → the
+    /// checker instances to attach inside every instantiation of that target.
+    /// Populated once in `run` (target/checker existence-validated); consumed at
+    /// step (8) of `elaborate_instance`. Owned clones keep it independent of the
+    /// AST borrow.
+    bind_targets: BTreeMap<String, Vec<ast::ModuleInstance>>,
     const_dedup: BTreeMap<ConstKey, u32>,
     // NetId → per-dimension `(lo, size)` extents (source order) for unpacked arrays
     // whose addressing is NOT plain 0-based (`reg [7:0] g[0:1][0:2]` ⇒ [(0,2),(0,3)];
@@ -3435,6 +3448,7 @@ impl<'s> Elaborator<'s> {
             processes: Vec::new(),
             stmts: Vec::new(),
             symbols: BTreeMap::new(),
+            bind_targets: BTreeMap::new(),
             const_dedup: BTreeMap::new(),
             array_dims: BTreeMap::new(),
             bits_prescan: BTreeMap::new(),
@@ -3767,6 +3781,52 @@ impl<'s> Elaborator<'s> {
                 self.cu_imports.push(i.clone());
             }
         }
+        // Round-9: index every top-level `bind <target> <checker> u(...)` by its
+        // TARGET module. Both target and checker must resolve to known MODULES
+        // (loud otherwise — a mis-named bind must never silently no-op). v1
+        // attaches OBSERVER checkers only: a checker OUTPUT/INOUT port would drive
+        // a target-internal net (multi-driver), so reject one loudly. Each bound
+        // checker fires once per target instance at step (8) of
+        // `elaborate_instance`, wired in that instance's own scope.
+        for it in &unit.items {
+            let ast::TopItem::Bind(b) = it else {
+                continue;
+            };
+            let target = b.target.name.clone();
+            let checker = &b.inst.module_name.name;
+            let Some(&(cdecl, _)) = map.get(checker.as_str()) else {
+                self.error(
+                    MsgCode::ElabUnresolvedInstance,
+                    &format!("bind checker module `{checker}` not found in the design"),
+                );
+                continue;
+            };
+            if !map.contains_key(target.as_str()) {
+                self.error(
+                    MsgCode::ElabUnresolvedInstance,
+                    &format!("bind target module `{target}` not found in the design"),
+                );
+                continue;
+            }
+            if port_list_dirs(cdecl)
+                .iter()
+                .any(|(_, d)| matches!(d, ir::PortDir::Output | ir::PortDir::Inout))
+            {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "bind checker `{checker}` has an output/inout port; v1 supports \
+                         observer (input-only) checkers so a bound instance never drives \
+                         a target net"
+                    ),
+                );
+                continue;
+            }
+            self.bind_targets
+                .entry(target)
+                .or_default()
+                .push(b.inst.clone());
+        }
         // N7: register every class (whole-design prescan, forward-reference safe)
         // before any module lowers, so a class-handle decl / `new` / method call
         // resolves regardless of declaration order, then lower every method into
@@ -3796,6 +3856,14 @@ impl<'s> Elaborator<'s> {
             }
         }
 
+        // Round-9: bind-checker module names — excluded from the default root set
+        // (they attach via `bind`, never as free-standing tops).
+        let bind_checkers: std::collections::BTreeSet<String> = self
+            .bind_targets
+            .values()
+            .flatten()
+            .map(|mi| mi.module_name.name.clone())
+            .collect();
         let roots = match self.root_override.clone() {
             // `--top` override: the named units, in the given order. Unknown
             // names are loud — silently elaborating the default set instead
@@ -3816,7 +3884,7 @@ impl<'s> Elaborator<'s> {
                 }
                 sel
             }
-            None => pick_roots(&map, &order),
+            None => pick_roots(&map, &order, &bind_checkers),
         };
         if roots.is_empty() {
             self.error(MsgCode::ElabUnsupported, "no top module to elaborate");
@@ -5321,6 +5389,21 @@ impl<'s> Elaborator<'s> {
             }
         }
 
+        // (8b) Round-9: attach bound checker instances declared by a top-level
+        //      `bind <this-module> <checker> u(...)`. Fires ONCE per instance of
+        //      this target module, AFTER its own children, while `cur_prefix` is
+        //      still this instance's path — so each checker port `.clk(clk)`
+        //      resolves against THIS instance's own `clk` net, reusing the
+        //      ordinary child-instantiation path (no bind-specific wiring). The
+        //      checker's `assert property` materializes inside its own instance's
+        //      step (7.5). `binds.clone()` releases the `self.bind_targets` borrow
+        //      before the `&mut self` recursion.
+        if let Some(binds) = self.bind_targets.get(&module.name.name) {
+            for mi in binds.clone() {
+                self.elaborate_child_instances(&mi, inst_id, map);
+            }
+        }
+
         // restore scope/params so siblings + ancestors resolve correctly.
         self.restore_params(saved_params);
         self.bits_prescan = saved_prescan;
@@ -6666,6 +6749,60 @@ impl<'s> Elaborator<'s> {
             }
         }
         saved
+    }
+
+    /// Round-9 PKG2: register a package's constants (enum labels + localparams)
+    /// as params under the CURRENT scope so a frame-lowered `pkg::fn` body can
+    /// READ a bare same-package name (`C`, `D`) that resolves to `pkg::C` /
+    /// `pkg::D`. Mirrors `push_body_enum_labels` (scoped registration +
+    /// `restore_params` unwind) and `apply_import_consts` (also seeds
+    /// `param_meta` for the declared width, so the framed body matches the
+    /// bare-import call byte-for-byte). Skips any name that is one of the
+    /// function's own formals / locals / return-name: a formal is a NET,
+    /// resolved AFTER params, so an injected same-name const would shadow it —
+    /// skipping keeps the local winning. Returns (param save-list, param_meta
+    /// save-list) for the caller to unwind in reverse.
+    #[allow(clippy::type_complexity)]
+    fn push_pkg_consts_scoped(
+        &mut self,
+        pkg: &str,
+        func: &ast::FunctionDef,
+    ) -> (
+        Vec<(String, Option<i64>)>,
+        Vec<(String, Option<(u32, bool)>)>,
+    ) {
+        let mut saved_p = Vec::new();
+        let mut saved_m = Vec::new();
+        let consts = match self.pkg_consts.get(pkg) {
+            Some(c) => c.clone(),
+            None => return (saved_p, saved_m),
+        };
+        // Skip-set = formals + body-local decls + the function's own name (same
+        // construction as `pkg_func_self_contained`).
+        let mut skip: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for p in &func.ports {
+            skip.insert(p.name.name.clone());
+        }
+        let mut decls = func.body_decls.clone();
+        collect_block_local_decls(&func.body, &mut decls);
+        for d in &decls {
+            for n in &d.names {
+                skip.insert(n.name.name.clone());
+            }
+        }
+        skip.insert(func.name.name.clone());
+        let metas = self.pkg_const_meta.get(pkg).cloned().unwrap_or_default();
+        for (cname, &v) in &consts {
+            if skip.contains(cname) {
+                continue;
+            }
+            let key = self.fq(cname);
+            saved_p.push((key.clone(), self.params.insert(key.clone(), v)));
+            if let Some(&m) = metas.get(cname) {
+                saved_m.push((key.clone(), self.param_meta.insert(key, m)));
+            }
+        }
+        (saved_p, saved_m)
     }
 
     /// Resolve a bare param/genvar `name` to its value, searching the current
@@ -12784,18 +12921,23 @@ impl<'s> Elaborator<'s> {
                     );
                     return self.placeholder_expr();
                 }
-                // v9 SYS-READ: the file-read functions advance/mutate the fd
-                // read state, so they are direct-rhs-only special forms (the
-                // legal placements intercept in lower_stmt BEFORE lower_expr is
-                // reached). Reaching here = an illegal nested placement. This
-                // guard MUST stay in sync with `file_read_int_special`.
+                // v9 SYS-READ: the fd-ADVANCING file-read functions mutate the fd
+                // read state (and some write ref/dest args), so they are
+                // direct-rhs-only special forms (the legal placements intercept in
+                // lower_stmt BEFORE lower_expr is reached). Reaching here = an
+                // illegal nested placement. This guard MUST stay in sync with
+                // `file_read_int_special`. Round-9 FIO: `$feof` is PURE (reads the
+                // EOF flag, no mutation) and is intentionally NOT in this list —
+                // it maps through `map_sysfunc` like any pure value sysfunc, so
+                // `while (!$feof(fd))` and other expression/condition placements
+                // work (re-evaluation per iteration is exactly correct).
                 if matches!(
                     name.name.as_str(),
-                    "$fgetc" | "$feof" | "$ungetc" | "$fgets" | "$fread" | "$fscanf" | "$sscanf"
+                    "$fgetc" | "$ungetc" | "$fgets" | "$fread" | "$fscanf" | "$sscanf"
                 ) {
                     self.error(
                         MsgCode::ElabUnsupported,
-                        "$fgetc/$feof/$ungetc/$fgets/$fread/$fscanf/$sscanf are \
+                        "$fgetc/$ungetc/$fgets/$fread/$fscanf/$sscanf are \
                          supported only as the direct rhs of a blocking assignment (v9)",
                     );
                     return self.placeholder_expr();
@@ -13788,14 +13930,23 @@ impl<'s> Elaborator<'s> {
                 return self.placeholder_expr();
             }
         };
-        if !pkg_func_self_contained(&func) {
+        // Round-9 PKG2: same-package constants (enum labels + localparams) are
+        // readable in the body — the frame-body lowering injects them under the
+        // `$func$pkg::name` scope. `pkg_consts[pkg]` already holds params +
+        // localparams + enum labels (see `elaborate_package`).
+        let pkg_const_names: std::collections::BTreeSet<String> = self
+            .pkg_consts
+            .get(pkg)
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default();
+        if !pkg_func_self_contained(&func, &pkg_const_names) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
                     "package-scoped call `{pkg}::{name}(...)` is supported only for a \
                      self-contained, straight-line function (its body must reference only \
-                     its own formals/locals and have no control flow); `import {pkg}::*` \
-                     and call `{name}` by its bare name instead",
+                     its own formals/locals and same-package constants, and have no control \
+                     flow); `import {pkg}::*` and call `{name}` by its bare name instead",
                 ),
             );
             return self.placeholder_expr();
@@ -14682,6 +14833,16 @@ impl<'s> Elaborator<'s> {
         // reject. A `disable <inner named block>` (break/continue) still lowers
         // via `lower_stmt` either way.
         let (body, entry) = self.with_scope(&scope_seg, |s| {
+            // Round-9 PKG2: inject same-package constants (enum labels +
+            // localparams) BEFORE the body-local labels so a body-local label
+            // can still shadow a same-name package const (innermost body decl
+            // wins). Gated on the frame key being `pkg::name` — module frame
+            // keys are plain identifiers with no `::`, so ordinary frames inject
+            // nothing and stay byte-identical.
+            let (saved_pkg_p, saved_pkg_m) = match name.split_once("::") {
+                Some((pkg, _)) => s.push_pkg_consts_scoped(pkg, func),
+                None => (Vec::new(), Vec::new()),
+            };
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), visible to the body, restored before the scope closes.
             let saved_labels = s.push_body_enum_labels(&func.body_enums, &func.body);
@@ -14704,6 +14865,19 @@ impl<'s> Elaborator<'s> {
             }
             let out = b.finish();
             s.restore_params(saved_labels);
+            // Round-9 PKG2: unwind the injected package consts (meta first, then
+            // params — reverse of injection). Empty for module frames.
+            for (k, prev) in saved_pkg_m.into_iter().rev() {
+                match prev {
+                    Some(m) => {
+                        s.param_meta.insert(k, m);
+                    }
+                    None => {
+                        s.param_meta.remove(&k);
+                    }
+                }
+            }
+            s.restore_params(saved_pkg_p);
             out
         });
         self.cur_return = saved_ret;
@@ -29913,6 +30087,15 @@ fn map_sysfunc(dollar_name: &str) -> Option<ir::SysFuncId> {
         "$urandom" => Some(ir::SysFuncId::Urandom),
         "$urandom_range" => Some(ir::SysFuncId::UrandomRange),
         "$stime" => Some(ir::SysFuncId::Stime),
+        // Round-9 FIO: $feof is the ONLY PURE file function — it reads the fd's
+        // EOF flag with no state mutation, so it is allowed in any expression /
+        // condition context (`while (!$feof(fd))`). The fd-ADVANCING reads
+        // ($fgetc/$fgets/$fread/$fscanf/$sscanf/$ungetc) are NOT mapped here — they
+        // stay direct-rhs-only (a second evaluation under unspecified expression
+        // order would double-advance the fd). The direct-rhs `e = $feof(fd)` form
+        // is still intercepted first by `file_read_int_special` (byte-identical),
+        // so this mapping is reached only for expression-context $feof.
+        "$feof" => Some(ir::SysFuncId::Feof),
         // v19: N6 real-math (IEEE §20.8.2) — pure value functions, lowered like
         // any other SysFunc. The non-uniform $dist_* are NOT here — they advance
         // the ref seed and route through `dist_seeded_special` (direct-rhs only).
@@ -30767,7 +30950,13 @@ fn apply_cmp_bound(op: ast::BinOp, c: i64, lo: &mut i64, hi: &mut i64) {
 /// is lowered in that scope). See `inline_pkg_function`. Multiple / non-final `return`s
 /// are fine — the frame path models the first-return exit faithfully (unlike the inline
 /// fold, which is why this feature routes through the frame path).
-fn pkg_func_self_contained(func: &ast::FunctionDef) -> bool {
+fn pkg_func_self_contained(
+    func: &ast::FunctionDef,
+    pkg_const_names: &std::collections::BTreeSet<String>,
+) -> bool {
+    // WRITE set: names a statement may assign to — the function's own
+    // formals / locals plus its return-by-name. A package const / enum label is
+    // NOT writable, so it stays out of this set (writing one is loud).
     let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for p in &func.ports {
         names.insert(p.name.name.clone());
@@ -30781,15 +30970,29 @@ fn pkg_func_self_contained(func: &ast::FunctionDef) -> bool {
     }
     // A value function may assign its own return value by name (`f = expr;`).
     names.insert(func.name.name.clone());
-    pkg_stmt_pure(&func.body, &names)
+    // READ set: the write set PLUS same-package constants (enum labels +
+    // localparams). Round-9 PKG2: a body may READ a bare `C`/`D` that is an
+    // enum label of the SAME package as the function (frame-body lowering
+    // injects those consts under the `$func$pkg::name` scope so the bare name
+    // resolves to the package version — see `push_pkg_consts_scoped`). A local
+    // that shadows a same-name pkg const still wins (it is in `names`).
+    let read_names: std::collections::BTreeSet<String> =
+        names.union(pkg_const_names).cloned().collect();
+    pkg_stmt_pure(&func.body, &names, &read_names)
 }
 
-/// Straight-line + free-name-closed check for one statement (see `pkg_func_self_contained`).
-fn pkg_stmt_pure(s: &ast::Stmt, names: &std::collections::BTreeSet<String>) -> bool {
+/// Straight-line + free-name-closed check for one statement (see
+/// `pkg_func_self_contained`). `write` = assignable names; `read` = readable
+/// names (write set ∪ same-package consts).
+fn pkg_stmt_pure(
+    s: &ast::Stmt,
+    write: &std::collections::BTreeSet<String>,
+    read: &std::collections::BTreeSet<String>,
+) -> bool {
     use ast::Stmt::*;
     match s {
-        Block { stmts, .. } => stmts.iter().all(|st| pkg_stmt_pure(st, names)),
-        Return { value: Some(e), .. } => pkg_expr_pure(e, names),
+        Block { stmts, .. } => stmts.iter().all(|st| pkg_stmt_pure(st, write, read)),
+        Return { value: Some(e), .. } => pkg_expr_pure(e, read),
         Return { value: None, .. } => true,
         // Only a BLOCKING `=` (a local / function-name assignment) is foldable; a
         // non-blocking `<=` in a function is illegal, and delay / intra-event is not
@@ -30803,8 +31006,8 @@ fn pkg_stmt_pure(s: &ast::Stmt, names: &std::collections::BTreeSet<String>) -> b
         } => {
             delay.is_none()
                 && event.is_none()
-                && pkg_lvalue_pure(lhs, names)
-                && pkg_expr_pure(rhs, names)
+                && pkg_lvalue_pure(lhs, write, read)
+                && pkg_expr_pure(rhs, read)
         }
         // Control flow, `<=`, task calls, timing, force / assert, etc. → NOT
         // pure-inlinable (conservative: a construct not listed here is loud).
@@ -30863,14 +31066,23 @@ fn pkg_expr_pure(e: &ast::Expr, names: &std::collections::BTreeSet<String>) -> b
 }
 
 /// Free-name-closed check for an assignment target (see `pkg_func_self_contained`).
-fn pkg_lvalue_pure(lv: &ast::Lvalue, names: &std::collections::BTreeSet<String>) -> bool {
+/// The write TARGET (base ident) must be a formal/local (`write`); index /
+/// select sub-expressions are ordinary reads (`read` = write ∪ same-pkg consts,
+/// so e.g. `arr[C] = ..` with `C` a package const is allowed).
+fn pkg_lvalue_pure(
+    lv: &ast::Lvalue,
+    write: &std::collections::BTreeSet<String>,
+    read: &std::collections::BTreeSet<String>,
+) -> bool {
     match lv {
-        ast::Lvalue::Ident(p) => p.segments.len() == 1 && names.contains(&p.segments[0].name),
+        ast::Lvalue::Ident(p) => p.segments.len() == 1 && write.contains(&p.segments[0].name),
         ast::Lvalue::BitSelect { base, index, .. } => {
-            pkg_lvalue_pure(base, names) && pkg_expr_pure(index, names)
+            pkg_lvalue_pure(base, write, read) && pkg_expr_pure(index, read)
         }
         ast::Lvalue::PartSelect { base, msb, lsb, .. } => {
-            pkg_lvalue_pure(base, names) && pkg_expr_pure(msb, names) && pkg_expr_pure(lsb, names)
+            pkg_lvalue_pure(base, write, read)
+                && pkg_expr_pure(msb, read)
+                && pkg_expr_pure(lsb, read)
         }
         ast::Lvalue::IndexedPart {
             base,
@@ -30878,9 +31090,9 @@ fn pkg_lvalue_pure(lv: &ast::Lvalue, names: &std::collections::BTreeSet<String>)
             width,
             ..
         } => {
-            pkg_lvalue_pure(base, names)
-                && pkg_expr_pure(offset, names)
-                && pkg_expr_pure(width, names)
+            pkg_lvalue_pure(base, write, read)
+                && pkg_expr_pure(offset, read)
+                && pkg_expr_pure(width, read)
         }
         ast::Lvalue::Concat { .. } | ast::Lvalue::Error(_) => false,
     }

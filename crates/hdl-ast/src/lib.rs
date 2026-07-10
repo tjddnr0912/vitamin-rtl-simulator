@@ -100,8 +100,25 @@ pub enum TopItem {
     /// sidecar layout/vtable tables — pure IR-0 (no sim-ir/format_version
     /// change), like interfaces/packages.
     Class(ClassDecl),
+    /// `bind <target> <checker> <inst> (.p(sig), …);` (round-9). Attaches an
+    /// extra child instance (the checker) inside every instantiation of the
+    /// target module, wiring its ports in the TARGET instance's scope. Elaborate
+    /// reuses the ordinary child-instantiation path (no new IR); the checker's
+    /// `assert property` materializes as it would for any instance.
+    Bind(BindDecl),
     /// Recovery placeholder for an unparseable top-level construct.
     Error(Span),
+}
+
+/// `bind <target_module> <checker_inst>;` (round-9). `target` is the module
+/// whose instances receive the bound child; `inst` is an ordinary module
+/// instantiation of the checker (its `module_name` = the checker module),
+/// reused verbatim so the parser and elaborator need no bind-specific wiring.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub struct BindDecl {
+    pub target: Ident,
+    pub inst: ModuleInstance,
+    pub span: Span,
 }
 
 /// One `import` term (v7 P2-D): `pkg::*` (`item: None`) or `pkg::sym`.

@@ -180,9 +180,14 @@ use vita_schema::schema_hash;
 /// single-dim zero-based formal as an md-packed frame slot (call-site concat) or
 /// loud-classifies the rest. Pure front-end + elaborate (no sim-ir change;
 /// format_version stays 19). Re-pins this .vu hash.
+/// 2026-07-10 round-9 bind (§23.11): adds `TopItem::Bind(BindDecl)` — a top-level
+/// `bind <target> <checker> u(...)` attaches an observer checker instance inside
+/// every instantiation of the target module (elaborate reuses the ordinary
+/// child-instantiation path; no sim-ir change; format_version stays 19). Re-pins
+/// this .vu hash.
 const EXPECTED: [u8; 32] = [
-    55, 134, 184, 181, 102, 250, 106, 242, 164, 119, 193, 122, 137, 187, 186, 187, 133, 168, 156,
-    47, 161, 39, 201, 179, 195, 164, 224, 142, 93, 86, 229, 92,
+    240, 0, 103, 21, 74, 102, 203, 100, 114, 190, 152, 219, 188, 38, 136, 231, 169, 101, 44, 76,
+    255, 185, 129, 6, 52, 248, 124, 160, 101, 199, 150, 83,
 ];
 
 #[test]

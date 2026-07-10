@@ -242,6 +242,13 @@ pub trait NetReader {
     fn assoc_str_exists(&self, _net: u32, _key: &Option<Vec<u8>>) -> Option<bool> {
         None
     }
+    /// Round-9 FIO: the EOF flag of file descriptor `fd` as a 32-bit value
+    /// (pre-opened → 0, bad/closed → −1, else 0/1), for a PURE expression-context
+    /// `$feof(fd)`. Default X keeps non-engine readers (native-eval fakes) honest;
+    /// `SimState` overrides with the live file state.
+    fn fd_eof(&self, _fd: u32) -> Value {
+        Value::xs(32, true)
+    }
 }
 
 /// Evaluation context: the IR (consts/exprs), the net table, current time, and
@@ -1838,6 +1845,17 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
                 }
                 Value::from_str_bytes(&bytes)
             }
+            // Round-9 FIO: $feof is PURE — read the fd's EOF flag through the
+            // NetReader. `SimState` overrides `fd_eof` with the live file state;
+            // the native-eval fakes keep the default X. Mirrors `k_feof`'s VALUE
+            // contract exactly (pre-opened fd → 0, bad/closed fd → −1, else the
+            // EOF flag), minus the bad-fd warning (eval is `&self`; the direct-rhs
+            // `e = $feof(fd)` form still warns via `k_feof`). Re-evaluated each
+            // iteration of `while (!$feof(fd))` — exactly correct for a pure fn.
+            SysFuncId::Feof => match args.first().map(|&a| self.eval(a)) {
+                Some(v) if !v.has_xz() => self.nets.fd_eof(v.to_u64().unwrap_or(0) as u32),
+                _ => Value::from_i128(-1, 32, true),
+            },
             // v9 shape-bump placeholders: the side-effecting file-read family,
             // $dist_*, and the $cast function form are all intercepted at the
             // statement level (direct rhs of a blocking assign) once ranks 5-6
@@ -1848,7 +1866,6 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
             | SysFuncId::Fscanf
             | SysFuncId::Sscanf
             | SysFuncId::Fread
-            | SysFuncId::Feof
             | SysFuncId::Fgetc
             | SysFuncId::Ungetc
             | SysFuncId::DistUniform
