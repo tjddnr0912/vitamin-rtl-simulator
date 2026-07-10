@@ -16748,12 +16748,38 @@ impl<'s> Elaborator<'s> {
 
     /// If `base` is a direct single-segment net `Ident`, normalize the offset by its
     /// declared range; otherwise (a computed/concat base, range `[?:0]`) leave it raw.
+    /// If `path` is a multi-segment KNOWN dotted symbol — an interface-member alias
+    /// (`bi.data`, inserted at port-binding) — return its net. `None` for a
+    /// hierarchical cross-instance ref (NOT in `lookup_net_scoped`; it defers via
+    /// `hier_chain`) or a non-net dotted access (a class field). Confines the
+    /// offset-normalization multi-seg arms below to interface members.
+    fn iface_member_net(&self, path: &ast::HierPath) -> Option<u32> {
+        if path.segments.len() < 2 {
+            return None;
+        }
+        let joined = path
+            .segments
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>()
+            .join(".");
+        self.lookup_net_scoped(&joined)
+    }
+
     fn norm_offset_if_net(&mut self, base: &ast::Expr, raw_off: u32) -> u32 {
         if let ast::ExprKind::Ident(path) = &base.kind {
             if path.segments.len() == 1 {
                 if let Some(net) = self.lookup_net_scoped(&path.segments[0].name) {
                     return self.norm_offset_for_net(net, raw_off);
                 }
+            } else if let Some(net) = self.iface_member_net(path) {
+                // Interface-member alias (`bi.data`, ≥2-seg) — a KNOWN dotted symbol
+                // resolved at port-binding; normalize by its declared range like a
+                // single-seg net so a non-zero-LSB member (`logic [15:8] data`)
+                // selects the right internal bits (bit + part + indexed read). A
+                // hierarchical ref defers via `hier_chain` (never reaches here); a
+                // class-field access is not in `lookup_net_scoped` → stays raw.
+                return self.norm_offset_for_net(net, raw_off);
             }
         }
         // Explicit DIRECT `pkg::vec[…]` — normalize by the package net's declared
@@ -16834,6 +16860,10 @@ impl<'s> Elaborator<'s> {
                 ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                     return self.lookup_net_scoped(&path.segments[0].name);
                 }
+                // Interface-member alias (`bi.data`) — a known dotted symbol; its
+                // declared range drives the ascending check (a hierarchical ref
+                // resolves to `None` here and stays on the descending-default path).
+                ast::ExprKind::Ident(path) => return self.iface_member_net(path),
                 // Explicit `pkg::vec[m:l]` / `pkg::arr[i][m:l]` — the root is the
                 // package net (its declared range drives the ascending check).
                 ast::ExprKind::PkgScoped { .. } => return self.pkg_scoped_var_net(cur),

@@ -495,3 +495,64 @@ endmodule
 "#;
     assert_loud(src, "non-ANSI interface header ports");
 }
+
+// ── non-zero-LSB interface-member READ sub-select (offset normalization) ──────
+// An interface member is a KNOWN dotted symbol (`bi.data`, resolved at
+// port-binding). A READ bit/part/indexed sub-select of a NON-zero-LSB member
+// (`logic [15:8] data`) previously read a RAW offset → silent X, because
+// `norm_offset_if_net`/`base_root_net` only handled a single-segment net. The
+// WRITE side already normalized. Values pinned to iverilog 13.0.
+
+#[test]
+fn member_nonzero_lsb_read_sub_selects() {
+    // data = 5A on [15:8]: [11:8]=A, [15:12]=5, bit9=1, [8+:4]=A; z[7:4]=E (zero-LSB).
+    let out = run_vita(
+        "interface bus_if; logic [15:8] data; logic [7:0] z; endinterface\n\
+         module top; bus_if bi();\n\
+           initial begin bi.data=8'h5A; bi.z=8'hE7; #1;\n\
+             $display(\"%h %h %b %h %h\", bi.data[11:8], bi.data[15:12], bi.data[9], bi.data[8+:4], bi.z[7:4]);\n\
+           end\n\
+         endmodule\n",
+    );
+    assert!(
+        out.contains("a 5 1 a e"),
+        "iface member non-zero-LSB read:\n{out}"
+    );
+}
+
+#[test]
+fn member_ascending_read_sub_select() {
+    // ascending member `logic [8:15]`: data[8:11]=5 (hi nibble), bit8=0 (MSB).
+    let out = run_vita(
+        "interface bus_if; logic [8:15] data; endinterface\n\
+         module top; bus_if bi();\n\
+           initial begin bi.data=8'h5A; #1; $display(\"%h %b\", bi.data[8:11], bi.data[8]); end\n\
+         endmodule\n",
+    );
+    assert!(out.contains("5 0"), "ascending iface member read:\n{out}");
+}
+
+#[test]
+fn member_array_elem_nonzero_lsb_read() {
+    // interface-member array element with a non-zero-LSB element range.
+    let out = run_vita(
+        "interface bus_if; logic [15:8] mem[0:1]; endinterface\n\
+         module top; bus_if bi();\n\
+           initial begin bi.mem[0]=8'h5A; #1; $display(\"%h\", bi.mem[0][11:8]); end\n\
+         endmodule\n",
+    );
+    assert!(out.contains("a"), "iface member array-elem read:\n{out}");
+}
+
+#[test]
+fn member_nonzero_lsb_write_still_works() {
+    // WRITE was already correct; guard against regression.
+    let out = run_vita(
+        "interface bus_if; logic [15:8] data; endinterface\n\
+         module top; bus_if bi();\n\
+           initial begin bi.data=8'h00; bi.data[11:8]=4'hF; bi.data[15]=1'b1; #1;\n\
+             $display(\"%h\", bi.data); end\n\
+         endmodule\n",
+    );
+    assert!(out.contains("8f"), "iface member write:\n{out}");
+}
