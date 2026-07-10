@@ -480,3 +480,56 @@ fn nonzero_lsb_write_out_of_field_range_loud() {
       endmodule\n",
     );
 }
+
+// ── NEGATIVE-LSB member — sub-select is loud (whole read/write stays correct) ─
+//
+// A member declared with a negative LSB (`logic [7:-4]`, declared base −4) would
+// need SIGNED field-relative offsets across every sub-select form (read, write,
+// `+:`/`-:`, runtime); v1 does not do that, so a sub-select is loud-rejected
+// rather than silently mis-mapped (it previously read the wrong bits because the
+// declared base was clamped to 0). The whole-field read/write is unaffected.
+
+#[test]
+fn neg_lsb_read_subselect_is_loud() {
+    run_loud(
+        "module top;\n\
+        typedef struct packed { logic [7:-4] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 12'h5A3; $display(\"%b\", s.a[7:4]); end\n\
+      endmodule\n",
+    );
+}
+
+#[test]
+fn neg_lsb_bit_select_is_loud() {
+    run_loud(
+        "module top;\n\
+        typedef struct packed { logic [7:-4] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 12'h5A3; $display(\"%b\", s.a[0]); end\n\
+      endmodule\n",
+    );
+}
+
+#[test]
+fn neg_lsb_write_subselect_is_loud() {
+    run_loud(
+        "module top;\n\
+        typedef struct packed { logic [7:-4] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a[7:4] = 4'hF; end\n\
+      endmodule\n",
+    );
+}
+
+#[test]
+fn neg_lsb_whole_read_write_unaffected() {
+    // Whole-field read and write of a negative-LSB member use the flat offset/width
+    // (not the declared base), so they stay correct (oracle = iverilog).
+    let out = run("module top;\n\
+        typedef struct packed { logic [7:-4] a; logic [7:0] b; } s_t;\n\
+        s_t s;\n\
+        initial begin s.a = 12'h5A3; s.b = s.a; $display(\"%h %h\", s.a, s.b); end\n\
+      endmodule\n");
+    assert_eq!(out, "5a3 a3\n");
+}

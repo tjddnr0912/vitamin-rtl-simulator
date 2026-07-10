@@ -130,10 +130,10 @@ type TfPortType = (Option<NetVarKind>, bool, Option<Range>, Option<String>);
 /// field-relative bits instead of reading raw/out-of-range positions (silent X).
 #[derive(Clone, PartialEq)]
 struct StructLayout {
-    fields: Vec<(String, u32, u32, bool, bool, bool, u32)>,
+    fields: Vec<(String, u32, u32, bool, bool, bool, i64)>,
 }
 impl StructLayout {
-    fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, u32)> {
+    fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, i64)> {
         self.fields
             .iter()
             .find(|(n, _, _, _, _, _, _)| n == name)
@@ -6722,7 +6722,7 @@ impl<'t, 's> Parser<'t, 's> {
     fn struct_field_select(
         &self,
         path: &HierPath,
-    ) -> Option<(HierPath, u32, u32, bool, bool, u32)> {
+    ) -> Option<(HierPath, u32, u32, bool, bool, i64)> {
         if path.segments.len() != 2 {
             return None;
         }
@@ -7055,10 +7055,17 @@ impl<'t, 's> Parser<'t, 's> {
     /// to map it into the field-relative `[0, w)` range: the field part-select `pv`
     /// normalizes the member to `[w-1:0]`, so a non-zero declared base must be
     /// removed or the sub-select overruns `pv` (silent X) / lands on the wrong bits.
-    fn member_dbase(range: &Option<Range>) -> u32 {
+    ///
+    /// Signed: a NEGATIVE base (`logic [7:-4]`, min = −4) is returned verbatim so a
+    /// sub-select of such a member is loud-rejected downstream — a field-relative
+    /// remap with a negative base needs signed offsets across every form (read,
+    /// write, `+:`/`-:`, runtime), which v1 does not do; the whole-field read/write
+    /// is unaffected and stays correct. A non-negative base casts to the `u32` the
+    /// select machinery uses, so every currently-valid member is byte-identical.
+    fn member_dbase(range: &Option<Range>) -> i64 {
         match range {
             Some(r) => match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
-                (Some(m), Some(l)) => m.min(l).max(0) as u32,
+                (Some(m), Some(l)) => m.min(l),
                 _ => 0,
             },
             None => 0,
@@ -7083,7 +7090,7 @@ impl<'t, 's> Parser<'t, 's> {
     fn struct_member_expr(
         &mut self,
         base: HierPath,
-        geom: (u32, u32, bool, bool, u32),
+        geom: (u32, u32, bool, bool, i64),
         span: Span,
     ) -> Expr {
         let (off, w, asc, sgn, dbase) = geom;
@@ -7151,10 +7158,21 @@ impl<'t, 's> Parser<'t, 's> {
     /// flips and the offset mirrors, matching an ascending NET part-select; a
     /// reversed regular range (`s.f[3:0]` on `logic [0:N]`, or `s.f[0:3]` on
     /// `logic [N:0]`) is a loud parse error.
-    fn parse_struct_field_sel(&mut self, w: u32, ascending: bool, dbase: u32) -> FieldSel {
+    fn parse_struct_field_sel(&mut self, w: u32, ascending: bool, dbase: i64) -> FieldSel {
         if self.peek() != Some(TokenKind::LBracket) {
             return FieldSel::Whole;
         }
+        // A NEGATIVE-LSB member (`logic [7:-4]`) sub-select needs signed field-
+        // relative offsets across every form (deep); loud-reject it (the whole-field
+        // read returned above is unaffected). The error fails the compile, so the
+        // node produced by the (clamped) fall-through below is never simulated.
+        if dbase < 0 {
+            self.error(
+                "a whole-member read — a sub-select of a packed-struct member with a \
+                 NEGATIVE declared LSB (`logic [7:-4]`) is unsupported in v1",
+            );
+        }
+        let dbase = dbase.max(0) as u32;
         self.bump(); // '['
         let first = self.expr(0);
         let sel = match self.peek() {
@@ -7459,9 +7477,22 @@ impl<'t, 's> Parser<'t, 's> {
         off: u32,
         w: u32,
         asc: bool,
-        dbase: u32,
+        dbase: i64,
         span: Span,
     ) -> Lvalue {
+        // Negative-LSB member WRITE sub-select: loud (signed field-relative offsets,
+        // like the READ twin `parse_struct_field_sel`). Emitted BEFORE consuming `[`
+        // so the diagnostic's `found` token is the sub-select `[` (matching the READ
+        // twin), not the post-`[` token. The whole-field write does not reach here;
+        // the clamped fall-through node is never simulated.
+        if dbase < 0 {
+            self.error_at(
+                span,
+                "a whole-member write — a sub-select WRITE of a packed-struct member \
+                 with a NEGATIVE declared LSB (`logic [7:-4]`) is unsupported in v1",
+            );
+        }
+        let dbase = dbase.max(0) as u32;
         self.bump(); // '['
         let first = self.expr(0);
         // The member's declared source range is `[dbase, dbase+w)`; a field-relative
