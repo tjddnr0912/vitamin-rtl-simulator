@@ -958,6 +958,17 @@ struct DeferredHier {
     path: Vec<String>,
 }
 
+/// §13.3 UARR: the classified shape of a SUPPORTED unpacked-array subroutine
+/// formal (`classify_array_formal`). Lowered to an md-packed `[count][elem_w]`
+/// frame slot; `ascending` is the formal's declared unpacked-dim direction, which
+/// the ACTUAL must match (§7.6 positional copy).
+#[derive(Clone, Copy)]
+struct ArrayFormal {
+    count: u32,
+    elem_w: u32,
+    ascending: bool,
+}
+
 /// A hierarchical WRITE target (`tb.dut.x = …`) whose net does not exist when the
 /// lvalue is lowered. The `LvalChunk` is emitted with the sentinel net
 /// `HIER_WRITE_SENTINEL_BASE + index-in-this-Vec`; `resolve_deferred_hier_write`
@@ -3149,6 +3160,12 @@ struct Elaborator<'s> {
     // body` must keep rejecting any such select/write (EXT2-H allows part-selects of a
     // genuine scalar, NOT a collapsed array). Elaborate-transient (not a Sidecar).
     frame_array_local: std::collections::BTreeSet<u32>,
+    // §13.3 UARR: nets that are an unpacked-array FUNCTION FORMAL lowered as an
+    // md-packed frame slot (`input logic [63:0] words [0:7]` → `[7:0][63:0]`). A
+    // WHOLE read of such a formal (`arr` not `arr[i]`) would return the flat vector
+    // — silently wrong for a scalar context — so the whole-name read choke point
+    // loud-rejects it (only element reads `arr[i]` are supported). Elaborate-transient.
+    frame_arr_formal_nets: std::collections::BTreeSet<u32>,
     // Sidecar accumulators (drained into `Sidecars`):
     class_handle_nets: std::collections::BTreeSet<u32>,
     class_new_sites: std::collections::BTreeMap<u32, u32>,
@@ -3485,6 +3502,7 @@ impl<'s> Elaborator<'s> {
             cur_return: None,
             cur_discard: None,
             frame_array_local: std::collections::BTreeSet::new(),
+            frame_arr_formal_nets: std::collections::BTreeSet::new(),
             class_handle_nets: std::collections::BTreeSet::new(),
             class_new_sites: std::collections::BTreeMap::new(),
             class_vtable: Vec::new(),
@@ -12243,6 +12261,19 @@ impl<'s> Elaborator<'s> {
                          element elsewhere)",
                     );
                 }
+                // §13.3 UARR: an unpacked-array FORMAL is an md-packed frame slot; a
+                // WHOLE read (`arr`, not `arr[i]`) reaches this choke point (an element
+                // read `arr[i]` diverts through `expr_packed_chain` earlier) and would
+                // return the flat vector — silently wrong for a scalar context. Only
+                // element reads are supported, so loud-reject the whole use.
+                if self.frame_arr_formal_nets.contains(&net) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a whole unpacked-array formal has no value here — index an \
+                         element (`arr[i]`); passing / comparing / displaying the whole \
+                         array formal is unsupported",
+                    );
+                }
                 self.push_expr(ir::Expr::Signal { net, word: None })
             }
 
@@ -12469,6 +12500,19 @@ impl<'s> Elaborator<'s> {
                 })
             }
             ast::ExprKind::PartSelect { base, msb, lsb } => {
+                // §13.3 UARR: `arr[hi:lo]` on a whole unpacked-array formal is an
+                // unpacked SLICE, not a packed value — the md-packed rep would
+                // silently return `{arr[hi],…,arr[lo]}`. Loud (index an element).
+                if self.is_array_formal_whole(base) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a part-select of a whole unpacked-array formal \
+                         (`arr[hi:lo]`) is an unpacked slice, not a value — index a \
+                         single element (`arr[i]`)",
+                    );
+                    let _ = (msb, lsb);
+                    return self.placeholder_expr();
+                }
                 // A part-select of a package ARRAY ELEMENT (`pkg::mem[i][m:l]`) is
                 // loud (v1 does not normalize nested non-zero-LSB packed elements)
                 // — the whole element `pkg::mem[i]` and a DIRECT `pkg::vec[m:l]`
@@ -12521,6 +12565,18 @@ impl<'s> Elaborator<'s> {
                 width,
                 dir,
             } => {
+                // §13.3 UARR: `arr[b+:w]` on a whole unpacked-array formal is an
+                // unpacked slice, not a value — loud (see the PartSelect twin).
+                if self.is_array_formal_whole(base) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "an indexed part-select of a whole unpacked-array formal \
+                         (`arr[b+:w]`) is an unpacked slice, not a value — index a \
+                         single element (`arr[i]`)",
+                    );
+                    let _ = (offset, width, dir);
+                    return self.placeholder_expr();
+                }
                 // Loud twin of the PartSelect guard: an indexed part-select of a
                 // package array element (`pkg::mem[i][b+:w]`) is unsupported in v1.
                 if self.is_pkg_array_elem_subselect(base) {
@@ -13710,6 +13766,29 @@ impl<'s> Elaborator<'s> {
         let mut actual_ids: Vec<u32> = Vec::with_capacity(eff_args.len());
         for (i, &a) in eff_args.iter().enumerate() {
             let p = &ports[i];
+            // §13.3 UARR: an unpacked-array formal takes a whole-array actual packed
+            // into its md-packed slot; a formal outside the supported slice is
+            // loud-rejected here (the earlier reserve left a sane placeholder net).
+            if let Some(cls) = self.classify_array_formal(p) {
+                match cls {
+                    Ok(af) => {
+                        let packed = self.lower_array_actual_packed(a, af);
+                        actual_ids.push(packed);
+                    }
+                    Err(reason) => {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "function `{fname}`: unpacked-array formal `{}` is \
+                                 unsupported — {reason}",
+                                p.name.name
+                            ),
+                        );
+                        actual_ids.push(self.placeholder_expr());
+                    }
+                }
+                continue;
+            }
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
             let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
             actual_ids.push(self.lower_ctx_or_plain(a, w));
@@ -13718,6 +13797,90 @@ impl<'s> Elaborator<'s> {
             func: fid,
             args: actual_ids,
         })
+    }
+
+    /// §13.3 UARR: lower an unpacked-array ACTUAL (`pick(tbl, …)`) into the packed
+    /// `count*elem_w` value bound to an md-packed array FORMAL slot. The actual must
+    /// be a bare whole-array net of matching element width and length; anything else
+    /// (a select, literal, package-scoped ref, or a shape mismatch) is loud-rejected
+    /// (correct-or-loud). Packs `{net[count-1], …, net[0]}` so element index `i`
+    /// lands at bit offset `i*elem_w` — the md-packed formal's `[count-1:0][elem_w-1:0]`
+    /// layout (element 0 at the LSB).
+    fn lower_array_actual_packed(&mut self, a: &ast::Expr, af: ArrayFormal) -> u32 {
+        let (count, elem_w) = (af.count, af.elem_w);
+        let net = match &a.kind {
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                self.lookup_net_scoped(&p.segments[0].name)
+            }
+            _ => None,
+        };
+        let Some(net) = net.filter(|&n| self.net_is_static_array(n)) else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "an unpacked-array formal requires a whole-array actual (a bare array \
+                 name; a select, literal, or package-scoped array is unsupported)",
+            );
+            return self.placeholder_expr();
+        };
+        let nv = &self.nets[net as usize];
+        if nv.width != elem_w || nv.array_len != count {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "unpacked-array actual shape ({} x {}b) does not match the formal \
+                     ({} x {}b)",
+                    nv.array_len, nv.width, count, elem_w
+                ),
+            );
+            return self.placeholder_expr();
+        }
+        // The actual must be a SINGLE-dimension unpacked array whose declared
+        // direction MATCHES the formal's. `dim_desc` holds `(msb,lsb)` per dim +
+        // the unpacked-dim count. A 2-D actual with the same total element count
+        // (`m[0:1][0:1]` for `a[0:3]`) is a shape mismatch; a direction mismatch
+        // (formal `[3:0]`, actual `[0:3]`) would make the index-based md-packed read
+        // disagree with §7.6's POSITIONAL copy (a silent value reversal). Both loud.
+        match self.dim_desc.get(&net) {
+            Some((dims, unpacked_n)) if *unpacked_n == 1 && !dims.is_empty() => {
+                let (m, l) = dims[0];
+                let actual_asc = m < l;
+                if actual_asc != af.ascending {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "unpacked-array actual and formal have OPPOSITE dimension \
+                         directions (one `[0:N-1]`, one `[N-1:0]`) — §7.6 copies by \
+                         position, so this would silently reverse the elements; \
+                         declare them the same direction",
+                    );
+                    return self.placeholder_expr();
+                }
+            }
+            _ => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "an unpacked-array actual must be a single-dimension array \
+                     matching the formal (a multi-dimensional actual is unsupported)",
+                );
+                return self.placeholder_expr();
+            }
+        }
+        // `Signal.word` is an ExprId (the flat word OFFSET expr), NOT a literal
+        // index — read flat position `k` via a `Const k` word expr. Flat words are
+        // 0-based POSITIONS (direction/base-independent), so this packs the actual's
+        // elements in position order; the md-packed formal reads them back with the
+        // same position→offset map. Concat parts[0] is the MSB, so emit the highest
+        // position first → position 0 lands at the LSB (`arr[0]` = `[0 +: elem_w]`).
+        let parts: Vec<u32> = (0..count)
+            .rev()
+            .map(|k| {
+                let word = self.const_u32_expr(k, 32);
+                self.push_expr(ir::Expr::Signal {
+                    net,
+                    word: Some(word),
+                })
+            })
+            .collect();
+        self.push_expr(ir::Expr::Concat { parts })
     }
 
     /// Reserve + lower every frame function of the CURRENT module instance. Runs
@@ -13830,6 +13993,11 @@ impl<'s> Elaborator<'s> {
             if f.automatic
                 || f.ret_two_state
                 || body_needs_frame(&f.body)
+                // §13.3 UARR: an unpacked-array formal is lowered ONLY on the frame
+                // path (md-packed slot + call-site concat); the inline substitution
+                // path has no array binding. Force it to a frame regardless of
+                // lifetime so `arr[i]` reads / control flow both work.
+                || f.ports.iter().any(|p| !p.unpacked.is_empty())
                 || ((body_needs_context_width(f, &func_widths) || body_selects_mdpacked_local(f))
                     && body_reads_only_locals(f))
             {
@@ -13990,6 +14158,139 @@ impl<'s> Elaborator<'s> {
         auto_override
     }
 
+    /// IEEE §13.3 unpacked-array subroutine formal classification (the md-packed
+    /// frame slice). Returns:
+    /// - `None` — NOT an array formal (empty `unpacked`); a scalar/vector formal.
+    /// - `Some(Ok((count, elem_w, elem_signed)))` — a SUPPORTED single-dim
+    ///   zero-based unpacked array of a simple zero-LSB vector (or scalar) element.
+    ///   Lowered as an md-packed `[count][elem_w]` frame slot: `arr[i]` reuses the
+    ///   md-packed element read/write machinery (§4.5.82/97), the call site packs
+    ///   the actual whole-array into a `count*elem_w` concat.
+    /// - `Some(Err(reason))` — an array formal OUTSIDE the slice (multi-dim,
+    ///   non-zero-based, dynamic/queue/assoc dim, non-const bound, or a non-simple
+    ///   element) → loud (correct-or-loud; iverilog also rejects unpacked tf-ports).
+    fn classify_array_formal(
+        &mut self,
+        p: &ast::TfPort,
+    ) -> Option<Result<ArrayFormal, &'static str>> {
+        if p.unpacked.is_empty() {
+            return None;
+        }
+        // Multi-dim unpacked → the 2-level packing / offset math is out of the slice.
+        if p.unpacked.len() != 1 {
+            return Some(Err(
+                "a multi-dimensional unpacked-array formal (only a single dimension is supported)",
+            ));
+        }
+        // A signed element (`logic signed [7:0] arr [0:3]`): the md-packed element
+        // read is a part-select (unsigned per §11.5.1), but an unpacked-array element
+        // access keeps the element's signedness — so a signed element would read
+        // unsigned (silent-wrong). Loud until the read path re-stamps the sign.
+        if p.signed {
+            return Some(Err(
+                "a signed-element unpacked-array formal (only unsigned elements are supported)",
+            ));
+        }
+        // `ascending` = the formal's declared unpacked-dim direction (`[0:N-1]` is
+        // little-endian ascending, `[N-1:0]` big-endian descending). The ACTUAL must
+        // match it (§7.6 array copy is POSITIONAL, so `arr[i]` == the actual element
+        // at the same DECLARED-order position only when the two directions agree; the
+        // md-packed read is index-based). The call site loud-rejects a mismatch.
+        let (count, ascending) = match &p.unpacked[0] {
+            // `[N]` == `[0:N-1]` (zero-based ascending by construction).
+            ast::Dim::Size(e) => match self.const_eval_in_scope(e) {
+                Some(n) if n >= 1 => (n as u32, true),
+                _ => return Some(Err("a non-constant or non-positive unpacked-array size")),
+            },
+            ast::Dim::Range(r) => {
+                let (m, l) = match (
+                    self.const_eval_in_scope(&r.msb),
+                    self.const_eval_in_scope(&r.lsb),
+                ) {
+                    (Some(m), Some(l)) => (m, l),
+                    _ => return Some(Err("a non-constant unpacked-array bound")),
+                };
+                // Zero-based `[0:N-1]` / `[N-1:0]` only: element index i maps to bit
+                // offset i*elem_w in the md-packed slot, which requires index 0 to be
+                // valid. A non-zero base (`[1:4]`, `[2:5]`) would shift every read.
+                if m < 0 || l < 0 || m.min(l) != 0 {
+                    return Some(Err(
+                        "a non-zero-based unpacked-array range (only `[0:N-1]` / `[N-1:0]`)",
+                    ));
+                }
+                ((m.abs_diff(l) + 1) as u32, m < l)
+            }
+            ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_) => {
+                return Some(Err("a dynamic / queue / associative formal dimension"))
+            }
+        };
+        // The element must be a simple zero-LSB vector (`[W-1:0]`), an integral atom
+        // (`int unsigned`/`byte unsigned`/…), or a scalar. A non-zero-LSB element
+        // (`[15:8]`) needs per-element offset normalization (§4.5.103) — out of slice.
+        let elem_w = match p.range.as_ref() {
+            // No explicit vector range: an atom (`int`/`byte`/…, implicit zero-LSB
+            // `[W-1:0]`) or a 1-bit scalar. A real/string/event/handle element is not
+            // a bit-vector and cannot be md-packed → loud. The atom's width comes from
+            // `range_to_dims` (int→32, byte→8, …); bare signed atoms already louded
+            // above via `p.signed`.
+            None => {
+                let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                if !ast_kind_is_bit_vector(kind) {
+                    return Some(Err(
+                        "a real / string / event / class-handle unpacked-array element",
+                    ));
+                }
+                let (w, _, _, _) = self.range_to_dims(kind, None, p.signed);
+                w
+            }
+            Some(r) => {
+                let (m, l) = match (
+                    self.const_eval_in_scope(&r.msb),
+                    self.const_eval_in_scope(&r.lsb),
+                ) {
+                    (Some(m), Some(l)) => (m, l),
+                    _ => return Some(Err("a non-constant element width")),
+                };
+                if l != 0 || m < 0 {
+                    return Some(Err("a non-zero-LSB element range (`[hi:0]` only)"));
+                }
+                (m.abs_diff(l) + 1) as u32
+            }
+        };
+        Some(Ok(ArrayFormal {
+            count,
+            elem_w,
+            ascending,
+        }))
+    }
+
+    /// The md-packed `packed_dims` extents for a SUPPORTED array formal, in the
+    /// `packed_extents` format `(lo, width, ascending)` (outer→inner): zero-based
+    /// descending dims `[count-1:0][elem_w-1:0]` ⇒ `lo=0`, `ascending=false` for both,
+    /// so `flatten_word` maps element index `i` to bit offset `i*elem_w` (no `Sub`).
+    /// Total slot width = `count*elem_w`.
+    fn array_formal_ext(count: u32, elem_w: u32) -> Vec<(u32, u32, bool)> {
+        vec![(0, count, false), (0, elem_w, false)]
+    }
+
+    /// True if `base` is the WHOLE array formal directly — a 1-seg `Ident`
+    /// resolving to an md-packed array-formal frame net. A part / indexed-select of
+    /// it (`arr[hi:lo]`, `arr[c+:w]`) is an UNPACKED-array SLICE, not a packed
+    /// value; the md-packed internal representation would otherwise silently return
+    /// a byte-concatenation of elements. Loud-reject (only element reads `arr[i]`
+    /// are supported). An ELEMENT part-select `arr[i][hi:lo]` has a `BitSelect`
+    /// base (not a bare `Ident`), so it is NOT caught here — it stays supported.
+    fn is_array_formal_whole(&self, base: &ast::Expr) -> bool {
+        if let ast::ExprKind::Ident(p) = &base.kind {
+            if p.segments.len() == 1 {
+                if let Some(net) = self.lookup_net_scoped(&p.segments[0].name) {
+                    return self.frame_arr_formal_nets.contains(&net);
+                }
+            }
+        }
+        false
+    }
+
     fn reserve_frame_func(&mut self, name: &str, func: &ast::FunctionDef) {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
@@ -14024,6 +14325,72 @@ impl<'s> Elaborator<'s> {
         let auto_override = self.with_scope(&scope_seg, |s| {
             // [0..n_params): input formals, port order.
             for p in &func.ports {
+                // §13.3 UARR: an unpacked-array formal lowers to an md-packed
+                // `[count][elem_w]` frame slot so `arr[i]` reuses the md-packed
+                // element read/write machinery; the call site packs the actual
+                // whole-array into a `count*elem_w` concat. Outside the slice, the
+                // call site loud-rejects — reserve a sane scalar so the (then
+                // unreachable) body lowering does not panic, keeping 1 slot / formal.
+                if let Some(cls) = s.classify_array_formal(p) {
+                    match cls {
+                        Ok(af) => {
+                            let (count, elem_w) = (af.count, af.elem_w);
+                            let ext = Self::array_formal_ext(count, elem_w);
+                            let w = count.saturating_mul(elem_w).max(1);
+                            let net = s.nets.len() as u32;
+                            s.add_net(
+                                &p.name.name,
+                                ir::NetVar {
+                                    kind: ir::NetKind::Reg,
+                                    width: w,
+                                    msb: w.saturating_sub(1),
+                                    lsb: 0,
+                                    signed: false,
+                                    array_len: 1,
+                                    dir: ir::PortDir::Internal,
+                                    init: default_init(ast::NetVarKind::Reg, w),
+                                },
+                            );
+                            s.packed_dims.insert(net, ext);
+                            let dd = s.compute_dim_desc(
+                                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                p.range.as_ref(),
+                                &[],
+                                &p.unpacked,
+                            );
+                            s.dim_desc.insert(net, dd);
+                            s.frame_arr_formal_nets.insert(net);
+                            // A 2-state ELEMENT (`int unsigned`/`byte unsigned`/`bit`/…)
+                            // can never hold X/Z (§6.11.3): register the whole md-packed
+                            // slot as 2-state so the frame arg-binding coerces X/Z→0. The
+                            // coercion is whole-value, which is correct for a uniform
+                            // 2-state element array; a 4-state `logic`/`reg` element keeps
+                            // X/Z (not registered).
+                            let ekind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                            if net_kind_is_two_state(ekind) {
+                                s.intro_kind.insert(net, ekind);
+                            }
+                        }
+                        Err(_) => {
+                            let (w, msb, lsb, signed) =
+                                s.range_to_dims(ast::NetVarKind::Reg, p.range.as_ref(), p.signed);
+                            s.add_net(
+                                &p.name.name,
+                                ir::NetVar {
+                                    kind: ir::NetKind::Reg,
+                                    width: w,
+                                    msb,
+                                    lsb,
+                                    signed,
+                                    array_len: 1,
+                                    dir: ir::PortDir::Internal,
+                                    init: default_init(ast::NetVarKind::Reg, w),
+                                },
+                            );
+                        }
+                    }
+                    continue;
+                }
                 let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
                 let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
                 let net = s.nets.len() as u32;
@@ -15038,6 +15405,22 @@ impl<'s> Elaborator<'s> {
                 return;
             }
         };
+        // §13.3 UARR: an unpacked-array TASK formal is outside the supported slice
+        // (the md-packed representation targets FUNCTION input formals; a task's
+        // output/inout array formal is pass-by-reference, not covered). Loud-reject
+        // here — before frame/inline dispatch — so it can never silently mis-lower
+        // (a whole-array actual would otherwise hit the incidental whole-array guard,
+        // but a clear message is better; correct-or-loud).
+        if task.ports.iter().any(|p| !p.unpacked.is_empty()) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "task `{tname}` has an unpacked-array formal — unsupported (pass a \
+                     packed vector, or use a function with a single-dim input array formal)"
+                ),
+            );
+            return;
+        }
         // B2 frame-call: a recursive/automatic task is LOWERED to the func arena
         // (reserved in step 6.5) — emit a Terminator::Call + register the binding.
         if let Some(&fid) = self.task_frame_idx.get(tname.as_str()) {

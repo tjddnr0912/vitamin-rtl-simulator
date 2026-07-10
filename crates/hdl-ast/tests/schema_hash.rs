@@ -174,9 +174,15 @@ use vita_schema::schema_hash;
 /// registration scoped to the function (the type NAME + `e'(x)` casts were already
 /// parse-resolved). Pure front-end + elaborate (no sim-ir change; format_version
 /// stays 19). Re-pins this .vu hash.
+/// 2026-07-10 round-6 UARR unpacked-array tf-port (§13.3): adds `unpacked:
+/// Vec<Dim>` to `TfPort` — an unpacked-array subroutine formal
+/// (`input logic [63:0] words [0:7]`) carries its dims so elaborate lowers a
+/// single-dim zero-based formal as an md-packed frame slot (call-site concat) or
+/// loud-classifies the rest. Pure front-end + elaborate (no sim-ir change;
+/// format_version stays 19). Re-pins this .vu hash.
 const EXPECTED: [u8; 32] = [
-    190, 109, 222, 118, 194, 151, 186, 149, 171, 251, 78, 158, 164, 207, 50, 56, 192, 186, 109, 1,
-    67, 63, 129, 99, 50, 26, 165, 69, 61, 20, 225, 67,
+    55, 134, 184, 181, 102, 250, 106, 242, 164, 119, 193, 122, 137, 187, 186, 187, 133, 168, 156,
+    47, 161, 39, 201, 179, 195, 164, 224, 142, 93, 86, 229, 92,
 ];
 
 #[test]

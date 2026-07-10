@@ -1699,6 +1699,9 @@ pub struct TfPort {
     pub signed: bool,
     pub range: Option<Range>,
     pub name: Ident,
+    /// IEEE §13.3: an unpacked-array formal (`input logic [63:0] words [0:7]`).
+    /// The dims that follow the port NAME. Empty for a scalar/vector formal.
+    pub unpacked: Vec<Dim>,
     /// IEEE §13.5.3 default argument value (`function f(int a, int b = 10)`). Only
     /// an ANSI tf-port carries one; a call omitting trailing args fills them in.
     pub default: Option<Expr>,

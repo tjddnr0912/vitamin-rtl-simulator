@@ -2657,6 +2657,7 @@ fn tf_port(dir: ast::PortDir, range: Option<(u32, u32)>, name: &str) -> ast::TfP
             span: SP,
         }),
         name: ident(name),
+        unpacked: Vec::new(),
         default: None,
         span: SP,
     }

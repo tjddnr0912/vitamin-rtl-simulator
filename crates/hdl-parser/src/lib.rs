@@ -8432,6 +8432,17 @@ impl<'t, 's> Parser<'t, 's> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // IEEE §13.3: unpacked-array formal dims follow the NAME
+        // (`input logic [63:0] words [0:7]`). Parsed here so the port list no
+        // longer stops at the trailing `[` (was E2002 → a 6-error cascade); the
+        // dims ride `TfPort.unpacked` for elaborate to lower / loud-classify.
+        let mut unpacked = Vec::new();
+        while self.at_dim_start() {
+            match self.parse_dim() {
+                Some(d) => unpacked.push(d),
+                None => break,
+            }
+        }
         // EXT2-C: bind a struct/union port NAME to its layout so `name.field`
         // desugars in the body (scoped to this tf by `parse_function_def`/
         // `parse_task_def`). A bare continuation `, b` inherits the struct name too.
@@ -8453,6 +8464,7 @@ impl<'t, 's> Parser<'t, 's> {
             signed,
             range,
             name,
+            unpacked,
             default,
             span: start.to(self.prev_span()),
         };
@@ -8656,6 +8668,16 @@ impl<'t, 's> Parser<'t, 's> {
         loop {
             let n_start = self.cur_span();
             let Some(name) = self.ident() else { break };
+            // IEEE §13.3: a non-ANSI formal may be an unpacked array too
+            // (`input logic [63:0] words [0:7];`). Per-name dims (a comma list can
+            // mix `a, mem [0:3]`), mirroring the ANSI path.
+            let mut unpacked = Vec::new();
+            while self.at_dim_start() {
+                match self.parse_dim() {
+                    Some(d) => unpacked.push(d),
+                    None => break,
+                }
+            }
             // Bind a struct/union port name to its layout (scoped by the enclosing
             // tf's snapshot/restore); `input cfg_t a, b;` binds every name.
             if let Some(sn) = &struct_name {
@@ -8667,6 +8689,7 @@ impl<'t, 's> Parser<'t, 's> {
                 signed,
                 range: range.clone(),
                 name,
+                unpacked,
                 default: None, // non-ANSI formals have no default (ANSI-only, §13.5.3)
                 span: n_start.to(self.prev_span()),
             });
