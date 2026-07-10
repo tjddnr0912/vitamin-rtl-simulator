@@ -404,9 +404,12 @@ fn scalar_formal_function_unaffected() {
 }
 
 #[test]
-fn pkg_scoped_call_still_loud() {
-    // The awareness item PKGCALL — `pkg::f(...)` remains a loud v1 cut.
+fn pkg_scoped_call_now_supported() {
+    // The round-6 awareness item PKGCALL — `pkg::f(...)` — is SUPPORTED as of round-7
+    // (§4.5.111) for a self-contained, straight-line package function (`f` reads only
+    // its formal `x`). `cp::f(2'b10)` → 2'b10.
     let src = "package cp; function automatic logic [1:0] f(input logic [1:0] x); return x; endfunction endpackage\n\
-        module m(output logic [1:0] o); assign o = cp::f(2'b10); endmodule";
-    assert!(!ok(src), "package-scoped call must stay loud");
+        module m(output logic [1:0] o); assign o = cp::f(2'b10); initial begin #1; $display(\"o=%0d\",o); end endmodule";
+    assert!(ok(src), "self-contained package-scoped call now elaborates");
+    assert_eq!(run(src).0, "o=2");
 }

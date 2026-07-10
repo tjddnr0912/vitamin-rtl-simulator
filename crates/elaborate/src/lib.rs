@@ -3161,11 +3161,14 @@ struct Elaborator<'s> {
     // genuine scalar, NOT a collapsed array). Elaborate-transient (not a Sidecar).
     frame_array_local: std::collections::BTreeSet<u32>,
     // §13.3 UARR: nets that are an unpacked-array FUNCTION FORMAL lowered as an
-    // md-packed frame slot (`input logic [63:0] words [0:7]` → `[7:0][63:0]`). A
-    // WHOLE read of such a formal (`arr` not `arr[i]`) would return the flat vector
-    // — silently wrong for a scalar context — so the whole-name read choke point
-    // loud-rejects it (only element reads `arr[i]` are supported). Elaborate-transient.
-    frame_arr_formal_nets: std::collections::BTreeSet<u32>,
+    // md-packed frame slot (`input logic [63:0] words [0:7]` → `[7:0][63:0]`) → its
+    // classified `ArrayFormal` shape. A WHOLE read of such a formal (`arr` not
+    // `arr[i]`) would return the flat vector — silently wrong for a scalar context —
+    // so the whole-name read choke point loud-rejects it (only element reads `arr[i]`
+    // are supported). The shape is retained so a SIBLING array-formal ACTUAL (round-7
+    // UARR2: `f(a,i)` forwarding `f`'s own formal `a` to `g`) can pass the whole
+    // md-packed value through when the caller/callee formals match. Elaborate-transient.
+    frame_arr_formal_meta: std::collections::BTreeMap<u32, ArrayFormal>,
     // Sidecar accumulators (drained into `Sidecars`):
     class_handle_nets: std::collections::BTreeSet<u32>,
     class_new_sites: std::collections::BTreeMap<u32, u32>,
@@ -3502,7 +3505,7 @@ impl<'s> Elaborator<'s> {
             cur_return: None,
             cur_discard: None,
             frame_array_local: std::collections::BTreeSet::new(),
-            frame_arr_formal_nets: std::collections::BTreeSet::new(),
+            frame_arr_formal_meta: std::collections::BTreeMap::new(),
             class_handle_nets: std::collections::BTreeSet::new(),
             class_new_sites: std::collections::BTreeMap::new(),
             class_vtable: Vec::new(),
@@ -10348,7 +10351,6 @@ impl<'s> Elaborator<'s> {
             self.formal_str.push((p.name.name.clone(), is_str));
         }
         let scope_seg = format!("$class${cname}${}", method.name);
-        let base = self.func_blocks.len() as u32;
         let saved_this = self.cur_this.take();
         let saved_ret = self.cur_return.take();
         let saved_discard = self.cur_discard.take();
@@ -10396,6 +10398,11 @@ impl<'s> Elaborator<'s> {
         self.cur_return = saved_ret;
         self.cur_discard = saved_discard;
         self.formal_str.truncate(fs_base);
+        // Capture the block base AFTER the body closure (round-7): lowering the body may
+        // append blocks (a `pkg::f()` inside a method reserves+lowers its frame on
+        // demand). For an ordinary method nothing is appended during the closure, so
+        // `base` is unchanged → byte-identical. (Mirrors `lower_frame_func_body`.)
+        let base = self.func_blocks.len() as u32;
         for mut blk in blocks {
             rebase_terminator(&mut blk.term, base);
             self.func_blocks.push(blk);
@@ -12266,7 +12273,7 @@ impl<'s> Elaborator<'s> {
                 // read `arr[i]` diverts through `expr_packed_chain` earlier) and would
                 // return the flat vector — silently wrong for a scalar context. Only
                 // element reads are supported, so loud-reject the whole use.
-                if self.frame_arr_formal_nets.contains(&net) {
+                if self.frame_arr_formal_meta.contains_key(&net) {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a whole unpacked-array formal has no value here — index an \
@@ -13658,6 +13665,15 @@ impl<'s> Elaborator<'s> {
             if let Some(net) = self.string_handle(&name.segments[0].name) {
                 return self.lower_string_method_expr(net, &name.segments[1].name, args);
             }
+            // IEEE §26.3 (round-7): a package-scoped function call `pkg::name(args)`.
+            // Reached only when the head is not a handle / cover / class object above
+            // (the object-method and package-scope namespaces are disjoint here), and
+            // the head names a known package. Resolve the callee in that package.
+            if self.pkg_funcs.contains_key(&name.segments[0].name) {
+                let pkg = name.segments[0].name.clone();
+                let fname = name.segments[1].name.clone();
+                return self.inline_pkg_function(&pkg, &fname, args);
+            }
         }
         if name.segments.len() != 1 {
             self.error(
@@ -13689,7 +13705,18 @@ impl<'s> Elaborator<'s> {
         }
         // A non-framed recursive function reaching here means the recursion cycle
         // was missed by `build_frame_set` (it should have been framed) — the inline
-        // path's `inline_stack` guard still catches it loud below.
+        // path's `inline_stack` guard still catches it loud (in `inline_resolved_func`).
+        self.inline_resolved_func(&func, args)
+    }
+
+    /// Inline an ALREADY-RESOLVED function definition as a straight-line fold, formals
+    /// bound to actuals. Shared by the bare-name inline path (`inline_function`, after
+    /// the frame dispatch) and the package-scoped pure-inline path
+    /// (`inline_pkg_function`). Does NOT consult the frame set — the caller decides
+    /// frame vs inline. The `inline_stack` guard still catches any missed recursion
+    /// cycle loud.
+    fn inline_resolved_func(&mut self, func: &ast::FunctionDef, args: &[ast::Expr]) -> u32 {
+        let fname = func.name.name.clone();
         if self.inline_stack.iter().any(|n| n == &fname) {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -13700,7 +13727,6 @@ impl<'s> Elaborator<'s> {
             );
             return self.placeholder_expr();
         }
-
         // Functions take INPUT formals only; an output/inout formal is illegal.
         if func
             .ports
@@ -13732,10 +13758,71 @@ impl<'s> Elaborator<'s> {
         }
 
         // (2) Reduce the straight-line body → an ExprId, formals bound to actuals.
-        self.inline_stack.push(fname.clone());
-        let result = self.reduce_function_body(&func, &inputs, &actual_ids);
+        self.inline_stack.push(fname);
+        let result = self.reduce_function_body(func, &inputs, &actual_ids);
         self.inline_stack.pop();
         result
+    }
+
+    /// IEEE §26.3 (round-7): resolve + frame-lower a package-scoped function call
+    /// `pkg::name(args)`. Supported only for a SELF-CONTAINED, straight-line function
+    /// — one whose body has no control flow and references only its own formals /
+    /// locals (plus literals, operators, `$sys` calls, and unambiguous package-scoped
+    /// `pkg::CONST` reads). Such a function computes purely from its actuals, so lowering
+    /// it in the CALLER's module scope can never mis-resolve a bare name or collide with
+    /// a module net (provably correct-or-loud, whether or not the package is imported).
+    /// It is routed through the FRAME path (not the inline fold) so the return
+    /// expression gets its IEEE §11.6.1 assignment-context width — byte-for-byte the same
+    /// result as calling the function by its bare imported name. A stateful /
+    /// control-flow / externally-referencing package function is loud: the workaround is
+    /// to `import pkg::*` and call by the bare name (which brings the whole package scope
+    /// into the module, so the ordinary inline / frame path resolves the body).
+    fn inline_pkg_function(&mut self, pkg: &str, name: &str, args: &[ast::Expr]) -> u32 {
+        let func = match self.pkg_funcs.get(pkg).and_then(|m| m.get(name)) {
+            Some(f) => f.clone(),
+            None => {
+                self.error(
+                    MsgCode::ElabUnresolvedName,
+                    &format!("package `{pkg}` has no function `{name}`"),
+                );
+                return self.placeholder_expr();
+            }
+        };
+        if !pkg_func_self_contained(&func) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "package-scoped call `{pkg}::{name}(...)` is supported only for a \
+                     self-contained, straight-line function (its body must reference only \
+                     its own formals/locals and have no control flow); `import {pkg}::*` \
+                     and call `{name}` by its bare name instead",
+                ),
+            );
+            return self.placeholder_expr();
+        }
+        // Route through the FRAME path, NOT the inline fold. The inline fold
+        // (`fold_straight_line`) evaluates the return expression in its SELF-determined
+        // operand width and only THEN resizes to the return type — silently dropping an
+        // overflowing top-level operator's carry/high bits (8-bit `a + b` bound to a
+        // 16-bit return keeps only 8 bits, `255+255` → 254 not 510). The frame path
+        // lowers the body to real return-slot assignments, so the ENGINE applies the
+        // IEEE §11.6.1 assignment-context width — identical to calling the same function
+        // by its bare imported name, which `build_frame_set` already frames. Reserve +
+        // lower the frame on first use, keyed as `pkg::name` (distinct from any
+        // module-local bare name), then divert the call to it. A self-contained function
+        // makes no other user call, so there is no mutual recursion → reserving AND
+        // lowering it on demand (rather than at the step-6.5 barrier) is safe.
+        let key = format!("{pkg}::{name}");
+        let fid = match self.frame_idx.get(&key) {
+            Some(&fid) => fid,
+            None => {
+                self.reserve_frame_func(&key, &func);
+                let fid = self.frame_idx[&key];
+                self.lower_frame_func_body(&key, &func, fid);
+                fid
+            }
+        };
+        self.emit_frame_call(fid, &func, args)
     }
 
     // ── B1 frame-call: automatic/recursive function lowering ────────────────
@@ -13808,13 +13895,50 @@ impl<'s> Elaborator<'s> {
     /// layout (element 0 at the LSB).
     fn lower_array_actual_packed(&mut self, a: &ast::Expr, af: ArrayFormal) -> u32 {
         let (count, elem_w) = (af.count, af.elem_w);
-        let net = match &a.kind {
+        let net_opt = match &a.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
                 self.lookup_net_scoped(&p.segments[0].name)
             }
             _ => None,
         };
-        let Some(net) = net.filter(|&n| self.net_is_static_array(n)) else {
+        // §13.3 UARR2 (round-7): the actual is the CALLER's OWN unpacked-array formal
+        // (`f(a, i)` forwarding `f`'s formal `a` on to `g`). Such a formal is a single
+        // md-packed frame net (array_len 1), NOT a static array, so it does not resolve
+        // through the static-array path below. When the caller and callee formals have
+        // the SAME shape (count × elem_w) and unpacked-dim direction, the caller
+        // formal's whole md-packed value IS exactly the callee slot value (both store
+        // element 0 at the LSB), so pass it through as a whole-net read — no per-element
+        // repack needed. A shape / direction mismatch is loud (§7.6 copies by position,
+        // so opposite directions would silently reverse the elements).
+        if let Some(net) = net_opt {
+            if let Some(&caller_af) = self.frame_arr_formal_meta.get(&net) {
+                if caller_af.count == af.count
+                    && caller_af.elem_w == af.elem_w
+                    && caller_af.ascending == af.ascending
+                {
+                    return self.push_expr(ir::Expr::Signal { net, word: None });
+                }
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "unpacked-array actual formal ({} × {}b, {}) does not match the \
+                         callee formal ({} × {}b, {})",
+                        caller_af.count,
+                        caller_af.elem_w,
+                        if caller_af.ascending {
+                            "[0:N-1]"
+                        } else {
+                            "[N-1:0]"
+                        },
+                        af.count,
+                        af.elem_w,
+                        if af.ascending { "[0:N-1]" } else { "[N-1:0]" },
+                    ),
+                );
+                return self.placeholder_expr();
+            }
+        }
+        let Some(net) = net_opt.filter(|&n| self.net_is_static_array(n)) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "an unpacked-array formal requires a whole-array actual (a bare array \
@@ -14284,7 +14408,7 @@ impl<'s> Elaborator<'s> {
         if let ast::ExprKind::Ident(p) = &base.kind {
             if p.segments.len() == 1 {
                 if let Some(net) = self.lookup_net_scoped(&p.segments[0].name) {
-                    return self.frame_arr_formal_nets.contains(&net);
+                    return self.frame_arr_formal_meta.contains_key(&net);
                 }
             }
         }
@@ -14321,7 +14445,13 @@ impl<'s> Elaborator<'s> {
         }
         let (ret_width, ret_signed) = self.func_return_dims(func);
         let scope_seg = format!("$func${name}");
-        let ret_name = name.to_string();
+        // The return var is named by the FUNCTION's own name, not the frame-table key
+        // — the body assigns / reads it by that name (`f = E;` / `return f`). These are
+        // equal for every module frame func (the table key IS the function name), so this
+        // is byte-identical there; they DIFFER only for a package-scoped call, whose key
+        // is `pkg::name` (distinct scope, to avoid colliding with a same-named module
+        // function) while the body still says `name` (round-7).
+        let ret_name = func.name.name.clone();
         let auto_override = self.with_scope(&scope_seg, |s| {
             // [0..n_params): input formals, port order.
             for p in &func.ports {
@@ -14359,7 +14489,7 @@ impl<'s> Elaborator<'s> {
                                 &p.unpacked,
                             );
                             s.dim_desc.insert(net, dd);
-                            s.frame_arr_formal_nets.insert(net);
+                            s.frame_arr_formal_meta.insert(net, af);
                             // A 2-state ELEMENT (`int unsigned`/`byte unsigned`/`bit`/…)
                             // can never hold X/Z (§6.11.3): register the whole md-packed
                             // slot as 2-state so the frame arg-binding coerces X/Z→0. The
@@ -14524,7 +14654,6 @@ impl<'s> Elaborator<'s> {
     /// `Branch` target rebased by `+base`, set `FuncDef.entry`, then validate.
     fn lower_frame_func_body(&mut self, name: &str, func: &ast::FunctionDef, fid: u32) {
         let scope_seg = format!("$func${name}");
-        let base = self.func_blocks.len() as u32;
         // return-kw: a frame function's `return [expr]` assigns the func-named return
         // var (base_net + return_slot) and jumps to a single exit block; the body also
         // falls through to it. Mirrors class-method lowering — IR-0 (exit BB + Goto/
@@ -14567,11 +14696,11 @@ impl<'s> Elaborator<'s> {
             if has_ret {
                 let exit = b.new_block();
                 s.cur_return = Some((Some(retvar), exit));
-                s.lower_frame_body_stmt(&mut b, &func.body, name, false);
+                s.lower_frame_body_stmt(&mut b, &func.body, &func.name.name, false);
                 b.goto(exit);
                 b.start_block(exit);
             } else {
-                s.lower_frame_body_stmt(&mut b, &func.body, name, false);
+                s.lower_frame_body_stmt(&mut b, &func.body, &func.name.name, false);
             }
             let out = b.finish();
             s.restore_params(saved_labels);
@@ -14579,6 +14708,13 @@ impl<'s> Elaborator<'s> {
         });
         self.cur_return = saved_ret;
         self.formal_str.truncate(fs_base);
+        // Capture the block base AFTER the body closure: lowering the body may itself
+        // have appended blocks to `func_blocks` (round-7: a package-scoped call inside
+        // this body reserves + lowers ITS frame on demand, pushing the callee's blocks
+        // first). Capturing before the closure would rebase this function's blocks over
+        // the callee's, corrupting the CFG. For an ordinary frame function nothing is
+        // pushed during the closure, so `base` is unchanged → byte-identical.
+        let base = self.func_blocks.len() as u32;
         for mut blk in body {
             rebase_terminator(&mut blk.term, base);
             self.func_blocks.push(blk);
@@ -14718,7 +14854,6 @@ impl<'s> Elaborator<'s> {
     /// which is rebased by `+base` into `task_calls_func` on append.
     fn lower_frame_task_body(&mut self, name: &str, task: &ast::TaskDef, fid: u32) {
         let scope_seg = format!("$func${name}");
-        let base = self.func_blocks.len() as u32;
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
         self.frame_task_lowering = true;
@@ -14768,6 +14903,12 @@ impl<'s> Elaborator<'s> {
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
         self.frame_task_lowering = saved_ftl;
+        // Capture the block base AFTER the body closure (round-7): a `pkg::f()` inside
+        // the task body reserves+lowers its frame on demand, appending blocks during the
+        // closure; capturing before would rebase this task's blocks (and its nested
+        // task-call keys) over the callee's. Unchanged for an ordinary task (nothing
+        // appended during the closure) → byte-identical. (Mirrors `lower_frame_func_body`.)
+        let base = self.func_blocks.len() as u32;
         for mut blk in body {
             rebase_terminator(&mut blk.term, base);
             self.func_blocks.push(blk);
@@ -30615,6 +30756,133 @@ fn apply_cmp_bound(op: ast::BinOp, c: i64, lo: &mut i64, hi: &mut i64) {
             *hi = (*hi).min(c);
         }
         _ => {}
+    }
+}
+
+/// IEEE §26.3 (round-7): is `func` a SELF-CONTAINED, straight-line function safe to
+/// FRAME-lower for a package-scoped call `pkg::f(args)`? True iff its body has no
+/// control flow and every bare identifier / call it references is one of its own
+/// formals or a body-local declaration (no free / package-internal reference that could
+/// mis-resolve or collide with a net in the caller's module scope, since the frame body
+/// is lowered in that scope). See `inline_pkg_function`. Multiple / non-final `return`s
+/// are fine — the frame path models the first-return exit faithfully (unlike the inline
+/// fold, which is why this feature routes through the frame path).
+fn pkg_func_self_contained(func: &ast::FunctionDef) -> bool {
+    let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for p in &func.ports {
+        names.insert(p.name.name.clone());
+    }
+    let mut decls = func.body_decls.clone();
+    collect_block_local_decls(&func.body, &mut decls);
+    for d in &decls {
+        for n in &d.names {
+            names.insert(n.name.name.clone());
+        }
+    }
+    // A value function may assign its own return value by name (`f = expr;`).
+    names.insert(func.name.name.clone());
+    pkg_stmt_pure(&func.body, &names)
+}
+
+/// Straight-line + free-name-closed check for one statement (see `pkg_func_self_contained`).
+fn pkg_stmt_pure(s: &ast::Stmt, names: &std::collections::BTreeSet<String>) -> bool {
+    use ast::Stmt::*;
+    match s {
+        Block { stmts, .. } => stmts.iter().all(|st| pkg_stmt_pure(st, names)),
+        Return { value: Some(e), .. } => pkg_expr_pure(e, names),
+        Return { value: None, .. } => true,
+        // Only a BLOCKING `=` (a local / function-name assignment) is foldable; a
+        // non-blocking `<=` in a function is illegal, and delay / intra-event is not
+        // straight-line.
+        Blocking {
+            lhs,
+            rhs,
+            delay,
+            event,
+            ..
+        } => {
+            delay.is_none()
+                && event.is_none()
+                && pkg_lvalue_pure(lhs, names)
+                && pkg_expr_pure(rhs, names)
+        }
+        // Control flow, `<=`, task calls, timing, force / assert, etc. → NOT
+        // pure-inlinable (conservative: a construct not listed here is loud).
+        _ => false,
+    }
+}
+
+/// Free-name-closed check for an expression (see `pkg_func_self_contained`). A bare
+/// name must be a formal / body-local; nested USER calls and exotic nodes are rejected.
+fn pkg_expr_pure(e: &ast::Expr, names: &std::collections::BTreeSet<String>) -> bool {
+    use ast::ExprKind::*;
+    match &e.kind {
+        IntLit { .. } | RealLit { .. } | StrLit { .. } => true,
+        // A package-scoped `pkg::CONST` / `pkg::var` read resolves to a single global
+        // net — unambiguous and collision-free in any caller scope.
+        PkgScoped { .. } => true,
+        Ident(p) => p.segments.len() == 1 && names.contains(&p.segments[0].name),
+        Unary { operand, .. } => pkg_expr_pure(operand, names),
+        Binary { lhs, rhs, .. } => pkg_expr_pure(lhs, names) && pkg_expr_pure(rhs, names),
+        Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            pkg_expr_pure(cond, names)
+                && pkg_expr_pure(then_e, names)
+                && pkg_expr_pure(else_e, names)
+        }
+        BitSelect { base, index } => pkg_expr_pure(base, names) && pkg_expr_pure(index, names),
+        PartSelect { base, msb, lsb } => {
+            pkg_expr_pure(base, names) && pkg_expr_pure(msb, names) && pkg_expr_pure(lsb, names)
+        }
+        IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => {
+            pkg_expr_pure(base, names)
+                && pkg_expr_pure(offset, names)
+                && pkg_expr_pure(width, names)
+        }
+        Concat { parts } => parts.iter().all(|p| pkg_expr_pure(p, names)),
+        Replicate { count, value } => {
+            pkg_expr_pure(count, names) && value.iter().all(|v| pkg_expr_pure(v, names))
+        }
+        Paren { inner } => pkg_expr_pure(inner, names),
+        MinTypMax { typ, .. } => pkg_expr_pure(typ, names),
+        Cast { expr, .. } => pkg_expr_pure(expr, names),
+        // A `$sys` call ($signed/$clog2/$bits/…) is a pure function of its args.
+        SysCall { args, .. } => args.iter().all(|a| pkg_expr_pure(a, names)),
+        // A nested USER call, `new`, randomize, dist, `$`-in-queue, etc. make the
+        // function non-self-contained (or need a frame) → NOT pure-inlinable.
+        _ => false,
+    }
+}
+
+/// Free-name-closed check for an assignment target (see `pkg_func_self_contained`).
+fn pkg_lvalue_pure(lv: &ast::Lvalue, names: &std::collections::BTreeSet<String>) -> bool {
+    match lv {
+        ast::Lvalue::Ident(p) => p.segments.len() == 1 && names.contains(&p.segments[0].name),
+        ast::Lvalue::BitSelect { base, index, .. } => {
+            pkg_lvalue_pure(base, names) && pkg_expr_pure(index, names)
+        }
+        ast::Lvalue::PartSelect { base, msb, lsb, .. } => {
+            pkg_lvalue_pure(base, names) && pkg_expr_pure(msb, names) && pkg_expr_pure(lsb, names)
+        }
+        ast::Lvalue::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => {
+            pkg_lvalue_pure(base, names)
+                && pkg_expr_pure(offset, names)
+                && pkg_expr_pure(width, names)
+        }
+        ast::Lvalue::Concat { .. } | ast::Lvalue::Error(_) => false,
     }
 }
 

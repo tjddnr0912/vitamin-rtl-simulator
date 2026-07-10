@@ -396,29 +396,22 @@ fn gap_d_nested_block_read_before_write_is_loud() {
 // ───────────────────── B / package-scoped call ─────────────────────
 
 #[test]
-fn pkg_scoped_subroutine_call_is_clean_loud() {
-    // `bp::f(s)` is unsupported but now a CLEAN single loud — the balanced
-    // `(args)` is consumed, so NO spurious "expected module item" desync
-    // cascade follows.
+fn pkg_scoped_subroutine_call_now_supported() {
+    // SUPERSEDED by round-7 (§4.5.111): `bp::f(s)` was a clean loud in round-4; it is
+    // now SUPPORTED for a self-contained, straight-line package function (`f` reads
+    // only its formal `x` + a literal). It parses, elaborates, and simulates — no
+    // error, no parser desync cascade.
     let (_o, e, ok) = run(
         "package bp; function automatic logic [1:0] f(input logic [1:0] x);\n\
          return x ^ 2'b01; endfunction endpackage\n\
          module m (input logic [1:0] s, output logic [1:0] y);\n\
          assign y = bp::f(s); endmodule\n",
     );
-    assert!(!ok, "package-scoped call is unsupported → loud");
-    assert_eq!(
-        err_count(&e),
-        1,
-        "must be ONE clean error, not a cascade: {e}"
-    );
-    assert!(
-        e.contains("package-scoped subroutine call"),
-        "expected the honest scoped-call message: {e}"
-    );
+    assert!(ok, "self-contained package-scoped call now elaborates: {e}");
+    assert_eq!(err_count(&e), 0, "no error expected: {e}");
     assert!(
         !e.contains("expected module item"),
-        "must not desync into a follow-on cascade: {e}"
+        "must not desync into a parser cascade: {e}"
     );
 }
 
