@@ -3180,6 +3180,14 @@ struct Elaborator<'s> {
     // nested void call writes its result into). `None` in a process body, where a
     // fresh module net is used instead.
     cur_discard: Option<u32>,
+    // True while lowering a FRAME function/task/method body — executed by
+    // `run_frame_call`, which cannot honor the interpreter's sys-read StmtEffect.
+    // A bare `$sscanf`/`$fscanf`/`$fgets`/`$fread` in such a body must NOT route
+    // through `emit_discarded_call` (it would loud-reject on the module discard
+    // net, or silently no-op); it keeps the pre-existing `lower_systask`
+    // (warn+skip) path. `false` in a process body AND an INLINE task body (both
+    // lowered into the process statement stream, where the sys-read DOES execute).
+    in_frame_body: bool,
     // Frame-local nets that came from an UNPACKED-array decl (`reg [7:0] mem [0:3]`).
     // These reserve as a 1-elem net (the array is outside the frame-call subset), so a
     // `mem[k]` select mis-lowers to a bit-select of that 1-elem net — `validate_frame_
@@ -3532,6 +3540,7 @@ impl<'s> Elaborator<'s> {
             cur_this: None,
             cur_return: None,
             cur_discard: None,
+            in_frame_body: false,
             frame_array_local: std::collections::BTreeSet::new(),
             frame_arr_formal_meta: std::collections::BTreeMap::new(),
             class_handle_nets: std::collections::BTreeSet::new(),
@@ -10669,6 +10678,7 @@ impl<'s> Elaborator<'s> {
         let saved_discard = self.cur_discard.take();
         self.cur_this = Some((this_net, cname.to_string()));
         self.cur_discard = method.discard_net;
+        let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
         // Return var (functions) = base_net + return_slot; None for a void task.
         let m = self.func_metas[fid as usize];
         let retvar = method.func.as_ref().map(|_| m.base_net + m.return_slot);
@@ -10710,6 +10720,7 @@ impl<'s> Elaborator<'s> {
         self.cur_this = saved_this;
         self.cur_return = saved_ret;
         self.cur_discard = saved_discard;
+        self.in_frame_body = saved_frame;
         self.formal_str.truncate(fs_base);
         // Capture the block base AFTER the body closure (round-7): lowering the body may
         // append blocks (a `pkg::f()` inside a method reserves+lowers its frame on
@@ -15064,6 +15075,7 @@ impl<'s> Elaborator<'s> {
             m.base_net + m.return_slot
         };
         let saved_ret = self.cur_return.take();
+        let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
         // v7 P2-C: record `string`-declared formals so a `string` relational compare in
         // the body routes through `StrCmp` (a frame formal is a scoped net, not in
         // `subst`, so `expr_is_string_ast` cannot otherwise see it).
@@ -15128,6 +15140,7 @@ impl<'s> Elaborator<'s> {
             out
         });
         self.cur_return = saved_ret;
+        self.in_frame_body = saved_frame;
         self.formal_str.truncate(fs_base);
         // Capture the block base AFTER the body closure: lowering the body may itself
         // have appended blocks to `func_blocks` (round-7: a package-scoped call inside
@@ -15295,6 +15308,7 @@ impl<'s> Elaborator<'s> {
         // Gated on `body_has_return` for byte-identical IR when absent.
         let has_ret = body_has_return(&task.body);
         let saved_ret = self.cur_return.take();
+        let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
         let (body, entry) = self.with_scope(&scope_seg, |s| {
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), mirroring `lower_frame_func_body` — so a task body enum's
@@ -15321,6 +15335,7 @@ impl<'s> Elaborator<'s> {
             out
         });
         self.cur_return = saved_ret;
+        self.in_frame_body = saved_frame;
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
         self.frame_task_lowering = saved_ftl;
@@ -26284,18 +26299,18 @@ impl<'s> Elaborator<'s> {
                 }
                 // v9 SYS-READ: `n = $fgets(str, fd)` — writes the str dest +
                 // returns the byte count, the $value$plusargs family.
-                if self.fgets_special(b, lhs, delay.as_ref(), rhs) {
+                if self.fgets_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // v9 SYS-READ: `rc = $fread(target, fd[, start[, count]])` —
                 // binary read into a reg/memory, same family.
-                if self.fread_special(b, lhs, delay.as_ref(), rhs) {
+                if self.fread_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // v9 SYS-READ: `n = $fscanf(fd, fmt, args...)` /
                 // `n = $sscanf(str, fmt, args...)` — the scanf parser writes the
                 // matched ref args + returns the count, same family.
-                if self.scanf_special(b, lhs, delay.as_ref(), rhs) {
+                if self.scanf_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // N7: reject forging a handle from an integral / leaking a handle
@@ -26398,7 +26413,44 @@ impl<'s> Elaborator<'s> {
                 });
                 b.push_stmt_id(sid);
             }
-            ast::Stmt::SysTaskCall { name, args, .. } => {
+            ast::Stmt::SysTaskCall { name, args, span } => {
+                // v9 SYS-READ as a BARE statement (return discarded): $sscanf/
+                // $fscanf/$fgets/$fread WRITE their destination args as a
+                // side-effect of evaluating the SysFunc. The `*_special` helpers
+                // emit that write only from an assignment rhs; as a bare
+                // statement they never ran, so the dests were silently never
+                // written (iverilog writes them regardless of the return use).
+                // Route through the same helpers with NO lhs (count discarded).
+                //
+                // NOT in a FRAME function/task/method body (`in_frame_body`): the
+                // discard uses a fresh MODULE net (`emit_discarded_call`→
+                // `fresh_ia_tmp`), which is outside the frame, and
+                // `run_frame_call` cannot execute the scanf StmtEffect anyway — so
+                // leave the pre-existing `lower_systask` (warn+skip) path there
+                // unchanged (a bare sys-read in a subprogram body is a separate
+                // follow-on; its ASSIGNMENT form is equally unsupported). A process
+                // body and an INLINE task body (both in the process stream) DO
+                // execute it.
+                if !self.in_frame_body
+                    && matches!(
+                        name.name.as_str(),
+                        "$sscanf" | "$fscanf" | "$fgets" | "$fread"
+                    )
+                {
+                    let synth = ast::Expr {
+                        kind: ast::ExprKind::SysCall {
+                            name: name.clone(),
+                            args: args.clone(),
+                        },
+                        span: *span,
+                    };
+                    if self.scanf_special(b, None, None, &synth)
+                        || self.fgets_special(b, None, None, &synth)
+                        || self.fread_special(b, None, None, &synth)
+                    {
+                        return;
+                    }
+                }
                 if let Some(sid) = self.lower_systask(name, args) {
                     b.push_stmt_id(sid);
                 }
@@ -27687,7 +27739,7 @@ impl<'s> Elaborator<'s> {
     fn fgets_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27732,13 +27784,7 @@ impl<'s> Elaborator<'s> {
             which: ir::SysFuncId::Fgets,
             args: vec![str_id, fd_id],
         });
-        let lv = self.lower_lvalue(lhs);
-        self.check_lvalue_kind(&lv, true);
-        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
-            lhs: lv,
-            rhs: rhs_id,
-        });
-        b.push_stmt_id(sid);
+        self.emit_sysread_write(b, lhs, rhs_id);
         true
     }
 
@@ -27751,7 +27797,7 @@ impl<'s> Elaborator<'s> {
     fn fread_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27822,13 +27868,7 @@ impl<'s> Elaborator<'s> {
             which: ir::SysFuncId::Fread,
             args: sf_args,
         });
-        let lv = self.lower_lvalue(lhs);
-        self.check_lvalue_kind(&lv, true);
-        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
-            lhs: lv,
-            rhs: rhs_id,
-        });
-        b.push_stmt_id(sid);
+        self.emit_sysread_write(b, lhs, rhs_id);
         true
     }
 
@@ -27842,7 +27882,7 @@ impl<'s> Elaborator<'s> {
     fn scanf_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27904,14 +27944,35 @@ impl<'s> Elaborator<'s> {
             which,
             args: sf_args,
         });
-        let lv = self.lower_lvalue(lhs);
-        self.check_lvalue_kind(&lv, true);
-        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
-            lhs: lv,
-            rhs: rhs_id,
-        });
-        b.push_stmt_id(sid);
+        self.emit_sysread_write(b, lhs, rhs_id);
         true
+    }
+
+    /// Emit the write for a SYS-READ special form (`$fscanf`/`$sscanf`/`$fgets`/
+    /// `$fread`). As an assignment rhs (`Some(lhs)`) the returned count is written
+    /// to `lhs`. As a BARE statement (`None`) the count is DISCARDED — but the
+    /// destination writes (the side-effect of EVALUATING the `SysFunc`) must still
+    /// happen, so the SysFunc is evaluated via `emit_discarded_call` (a throwaway
+    /// assign to a fresh net). Without this a bare `$sscanf(str,fmt,a);` silently
+    /// never wrote `a` (iverilog writes it regardless of the return being used).
+    fn emit_sysread_write(
+        &mut self,
+        b: &mut ProcessBuilder,
+        lhs: Option<&ast::Lvalue>,
+        rhs_id: u32,
+    ) {
+        match lhs {
+            Some(lhs) => {
+                let lv = self.lower_lvalue(lhs);
+                self.check_lvalue_kind(&lv, true);
+                let sid = self.push_stmt(ir::Stmt::BlockingAssign {
+                    lhs: lv,
+                    rhs: rhs_id,
+                });
+                b.push_stmt_id(sid);
+            }
+            None => self.emit_discarded_call(b, rhs_id),
+        }
     }
 
     // ── v7 P2-D packages (IR-0 — elaborate-side symbol flattening) ──
