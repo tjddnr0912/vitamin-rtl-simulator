@@ -2277,7 +2277,7 @@ fn str_const_of_expr(st: &SimState, eid: u32) -> Option<String> {
 /// these fields with no separator).
 fn push_default_radix(v: &Value, out: &mut String, radix: Option<u8>) {
     if v.is_real {
-        out.push_str(&fmt_real(v, 'g', None, None, false));
+        out.push_str(&fmt_real(v, 'g', None, None, false, false, false));
         return;
     }
     match radix {
@@ -2351,11 +2351,12 @@ fn render_template(
             out.push(c);
             continue;
         }
-        // optional width/flags: %0d, %5h, %8.2f, %-5d …  (v1 records `0` for
+        // optional width/flags: %0d, %5h, %8.2f, %-5d, %+d …  (v1 records `0` for
         // integer specs; width/precision are threaded into the real `%f/%e/%g`
-        // formatters; `-` left-justifies).
+        // formatters; `-` left-justifies, `+` forces a sign).
         let mut min_zero = false;
         let mut left_just = false;
+        let mut plus = false;
         let mut width_digits = String::new();
         while let Some(&d) = chars.peek() {
             if d == '-' && width_digits.is_empty() {
@@ -2365,6 +2366,12 @@ fn render_template(
                 // width digits — iverilog itself rejects `%0-5d` (echoes it raw),
                 // so gating on an empty width run keeps that malformed order loud.
                 left_just = true;
+                chars.next();
+            } else if d == '+' && width_digits.is_empty() {
+                // `+` flag: force a leading `+` on a non-negative SIGNED-decimal
+                // (`%d`) or real (`%f/%e/%g`) value (iverilog ignores it for the
+                // unsigned `%h/%o/%b`, `%t`, `%c`). Order-independent with `-`.
+                plus = true;
                 chars.next();
             } else if d == '0' && width_digits.is_empty() {
                 min_zero = true;
@@ -2429,7 +2436,13 @@ fn render_template(
                 // `%Nd` ⇒ width N; bare `%d` ⇒ the operand's default decimal width
                 // (digit count of its max value). An X/Z prints as a right-justified
                 // `x`/`z` in that field, like a numeric value.
-                let s = fmt_dec(&v);
+                let mut s = fmt_dec(&v);
+                // `+` forces a leading sign on a NON-negative value (iverilog:
+                // `%+d` of 42 → "+42", of x → "+X"; a negative already carries
+                // `-`). The sign counts toward the field width.
+                if plus && !s.starts_with('-') {
+                    s.insert(0, '+');
+                }
                 // `%0d` (bare leading zero, no width) = minimal; `%0Nd` = zero-pad
                 // to N (sign-aware: "-42"→"-00042"); `%Nd` = space-pad to N; bare
                 // `%d` = the operand's default decimal field width (iverilog-pinned).
@@ -2445,9 +2458,10 @@ fn render_template(
                         out.push_str(&s);
                         out.push_str(&" ".repeat(pad));
                     } else if min_zero {
-                        // zero-pad AFTER any leading sign: "-42" → "-00042".
-                        if let Some(rest) = s.strip_prefix('-') {
-                            out.push('-');
+                        // zero-pad AFTER any leading sign (`-` or `+`): "-42" →
+                        // "-00042", "+42" → "+00042".
+                        if let Some(rest) = s.strip_prefix(['-', '+']) {
+                            out.push_str(&s[..1]);
                             out.push_str(&"0".repeat(pad));
                             out.push_str(rest);
                         } else {
@@ -2476,7 +2490,7 @@ fn render_template(
             }
             'f' | 'F' | 'g' | 'G' | 'e' | 'E' => {
                 let v = next_arg(sched, args, argi);
-                let s = fmt_real(&v, spec, field_width, precision, left_just);
+                let s = fmt_real(&v, spec, field_width, precision, left_just, min_zero, plus);
                 // `%E`/`%G` uppercase the exponent letter and non-finite labels
                 // (iverilog: `%E` → "1.5E+20", `%G` → "1E-05", `%E` of inf → "INF").
                 // `%F` is identical to `%f` for ALL values including inf/nan — iverilog
@@ -2978,6 +2992,8 @@ fn fmt_real(
     width: Option<usize>,
     prec: Option<usize>,
     left_just: bool,
+    min_zero: bool,
+    plus: bool,
 ) -> String {
     // Normalize IEEE-754 negative zero to +0.0 so every real spec displays it as
     // a plain "0" (the %g path / VCD `fmt_g` already do). iverilog prints a
@@ -3001,13 +3017,32 @@ fn fmt_real(
             _ => format!("{x}"),
         }
     };
+    // `+` forces a leading sign on a non-negative value (iverilog: `%+f` of 3.14
+    // → "+3.140000", of +inf → "+inf"; `nan` gets NO sign; a negative already
+    // carries `-"). The sign counts toward the field width.
+    let body = if plus && !body.starts_with('-') && body != "nan" {
+        format!("+{body}")
+    } else {
+        body
+    };
     if let Some(w) = width {
         if body.len() < w {
-            let pad = " ".repeat(w - body.len());
+            let pad = w - body.len();
             return if left_just {
-                format!("{body}{pad}")
+                // `-` right-pads with spaces (overrides `0`).
+                format!("{body}{}", " ".repeat(pad))
+            } else if min_zero && x.is_finite() {
+                // `%0Nf` zero-pads AFTER any leading sign (`-`/`+`): "-3.14" →
+                // "-003.14" (iverilog-pinned; a bare `%Nf` space-pads). The `0`
+                // flag is IGNORED for a non-finite body (inf/nan) — C/iverilog
+                // space-pad those regardless, so they fall to the else below.
+                if let Some(rest) = body.strip_prefix(['-', '+']) {
+                    format!("{}{}{rest}", &body[..1], "0".repeat(pad))
+                } else {
+                    format!("{}{body}", "0".repeat(pad))
+                }
             } else {
-                format!("{pad}{body}")
+                format!("{}{body}", " ".repeat(pad))
             };
         }
     }
