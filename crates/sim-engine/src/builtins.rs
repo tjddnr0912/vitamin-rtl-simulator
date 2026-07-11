@@ -1894,6 +1894,22 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
             // BEFORE the scope-tree walk so no empty `$pkg$…` $scope is emitted.
             // No pre-existing design has such names → byte-identical.
             order.retain(|&i| !names[i].starts_with("$pkg$"));
+            // Internal throwaway nets (`$ia_tmp$<n>` — an intra-assignment-delay
+            // capture or a discarded sys-call sink like a bare `$random(seed);` /
+            // `$sscanf(...);`) are implementation detail, not user signals; iverilog
+            // emits no such net. Drop them from the VCD (the leaf carries the `$ia_tmp$`
+            // sigil — the FQ name is `<scope>.$ia_tmp$<n>`). A synthetic temp is NEVER
+            // an escaped identifier, so a name containing a backslash is a real user
+            // signal (e.g. `\x.$ia_tmp$0`, whose embedded `.` the leaf split would
+            // otherwise mistake for a scope separator) — keep it, unfiltered.
+            order.retain(|&i| {
+                names[i].contains('\\')
+                    || !names[i]
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or(&names[i])
+                        .starts_with("$ia_tmp$")
+            });
             let segs: Vec<Vec<&str>> = names.iter().map(|s| s.split('.').collect()).collect();
             // sort by scope path (all but the leaf); stable → vars keep net order
             // within a scope.

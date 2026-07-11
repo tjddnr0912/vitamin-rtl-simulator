@@ -26264,7 +26264,7 @@ impl<'s> Elaborator<'s> {
                 }
                 // v7: `x = $random(seed)` — the seeded draw writes the seed
                 // back, statement-level intercept (the only legal placement).
-                if self.random_seeded_special(b, lhs, delay.as_ref(), rhs) {
+                if self.random_seeded_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // v9 rank 6: `x = $dist_uniform(seed, start, end)` — seeded family.
@@ -26442,6 +26442,7 @@ impl<'s> Elaborator<'s> {
                             | "$value$plusargs"
                             | "$fgetc"
                             | "$ungetc"
+                            | "$random"
                     )
                 {
                     let synth = ast::Expr {
@@ -26456,6 +26457,10 @@ impl<'s> Elaborator<'s> {
                         || self.fread_special(b, None, None, &synth)
                         || self.value_plusargs_special(b, None, None, &synth)
                         || self.file_read_int_special(b, None, None, &synth)
+                        // Bare seeded `$random(seed);` advances the seed (rhs-based
+                        // writeback). Unseeded bare `$random;` has no seed → the
+                        // helper declines (args empty) → a harmless discarded draw.
+                        || self.random_seeded_special(b, None, None, &synth)
                     {
                         return;
                     }
@@ -27266,7 +27271,7 @@ impl<'s> Elaborator<'s> {
     fn random_seeded_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27295,7 +27300,16 @@ impl<'s> Elaborator<'s> {
             which: ir::SysFuncId::Random,
             args: vec![seed_id],
         });
-        self.emit_blocking_intercept(b, lhs, delay, rhs_id);
+        match lhs {
+            Some(lhs) => self.emit_blocking_intercept(b, lhs, delay, rhs_id),
+            // Bare statement `$random(seed);` (return discarded): the seed WRITEBACK
+            // still fires — `StmtEffect::SeededRandom` is rhs-based (`k_random_seeded_
+            // rhs`), so a throwaway assign of the draw advances the seed exactly as
+            // iverilog does. Without this the bare form hit `lower_systask` (W3056
+            // skip) and silently left the seed unchanged, so a later `$random(seed)`
+            // diverged. §4.5.123 sibling; a bare statement has no intra-assign delay.
+            None => self.emit_discarded_call(b, rhs_id),
+        }
         true
     }
 
