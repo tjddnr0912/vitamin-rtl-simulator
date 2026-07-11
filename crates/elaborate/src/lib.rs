@@ -13071,6 +13071,22 @@ impl<'s> Elaborator<'s> {
                             self.placeholder_expr()
                         }
                     }
+                } else if self.count_reads_runtime_net(count) {
+                    // A replication count MUST be a constant expression (IEEE
+                    // §11.4.12.2). A runtime-variable count previously lowered to
+                    // a net the engine folded to 0 → silent 0-width (`{n{4'hA}}`
+                    // with a `logic`/`int` `n` printed `000`, not iverilog's
+                    // "reference to a variable in a constant expression" reject);
+                    // make it LOUD instead. A constant count (param / genvar /
+                    // $clog2 / const-function / literal) reads no net and keeps
+                    // its existing lowering, byte-identical.
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a replication count must be a constant expression (IEEE \
+                         §11.4.12.2); a count that reads a runtime variable is \
+                         unsupported",
+                    );
+                    self.placeholder_expr()
                 } else {
                     self.lower_expr(count)
                 };
@@ -19712,6 +19728,117 @@ impl<'s> Elaborator<'s> {
             }
             ast::ExprKind::SysCall { args, .. } => {
                 args.iter().any(|a| self.expr_reads_net(a, target))
+            }
+            _ => false,
+        }
+    }
+
+    /// True if a replication-count expression reads a runtime VARIABLE net (a
+    /// `logic`/`reg`/`int` signal) — i.e. it is NOT a compile-time constant.
+    /// IEEE §11.4.12.2 requires the count to be a constant expression; a runtime
+    /// count otherwise lowers to a net the engine folds to 0 → silent 0-width.
+    /// A param / localparam / genvar / `$clog2` / const-function / literal reads
+    /// NO net (params live in `self.params`, not the net table), so this returns
+    /// false and the existing lowering is kept byte-identical. CONSERVATIVE
+    /// toward false: an unhandled shape keeps the old lowering (pre-existing
+    /// behavior — never a new over-reject of valid code).
+    fn count_reads_runtime_net(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Ident(p) => {
+                let name = p
+                    .segments
+                    .iter()
+                    .map(|s| s.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                // Mirror lower_expr's resolution precedence (subst → out_subst →
+                // params → net): a name bound as an inline-function local/formal,
+                // or a constant (param / localparam / genvar / enum-label), is NOT
+                // a runtime net — even when an outer-scope net of the same name is
+                // shadowed by it. Only a genuine runtime-variable read is flagged
+                // (else a valid `{N{…}}` with a shadowing inner localparam is
+                // wrongly loud-rejected — adversarial soundness find).
+                self.subst_lookup(&name).is_none()
+                    && self.out_subst_lookup(&name).is_none()
+                    && self.lookup_scoped(&name).is_none()
+                    && self.lookup_net_scoped(&name).is_some()
+            }
+            ast::ExprKind::Paren { inner } => self.count_reads_runtime_net(inner),
+            ast::ExprKind::Unary { operand, .. } => self.count_reads_runtime_net(operand),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.count_reads_runtime_net(lhs) || self.count_reads_runtime_net(rhs)
+            }
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.count_reads_runtime_net(cond)
+                    || self.count_reads_runtime_net(then_e)
+                    || self.count_reads_runtime_net(else_e)
+            }
+            ast::ExprKind::BitSelect { base, index } => {
+                self.count_reads_runtime_net(base) || self.count_reads_runtime_net(index)
+            }
+            ast::ExprKind::PartSelect { base, msb, lsb } => {
+                self.count_reads_runtime_net(base)
+                    || self.count_reads_runtime_net(msb)
+                    || self.count_reads_runtime_net(lsb)
+            }
+            ast::ExprKind::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                self.count_reads_runtime_net(base)
+                    || self.count_reads_runtime_net(offset)
+                    || self.count_reads_runtime_net(width)
+            }
+            ast::ExprKind::Concat { parts } => {
+                parts.iter().any(|p| self.count_reads_runtime_net(p))
+            }
+            ast::ExprKind::Replicate { count, value } => {
+                self.count_reads_runtime_net(count)
+                    || value.iter().any(|p| self.count_reads_runtime_net(p))
+            }
+            ast::ExprKind::Cast { expr, .. } => self.count_reads_runtime_net(expr),
+            ast::ExprKind::MinTypMax { min, typ, max } => {
+                self.count_reads_runtime_net(min)
+                    || self.count_reads_runtime_net(typ)
+                    || self.count_reads_runtime_net(max)
+            }
+            // A CONSTANT function's result is constant iff its ARGUMENTS are (a
+            // runtime-net argument makes the count runtime — iverilog rejects
+            // it). Unlike `expr_reads_net`'s conservative `Call => true`, a
+            // const-function call with constant args (`{f(3){…}}`) must NOT be
+            // flagged, so walk the arguments only (a body reading a module net
+            // stays the pre-existing silent-0 — a rare, no-regression miss).
+            ast::ExprKind::Call { args, .. } => {
+                args.iter().any(|a| self.count_reads_runtime_net(a))
+            }
+            ast::ExprKind::SysCall { name, args } => {
+                // The type/shape-query system functions are ELABORATION CONSTANTS
+                // regardless of a net operand (they read the operand's TYPE/shape,
+                // not its runtime value): `{$bits(net){…}}` is a constant count.
+                // Every other sysfunc (`$clog2`, `$signed`, …) is runtime iff its
+                // arguments are, so recurse into those. (adversarial differential
+                // find: `$bits`/`$size`/… of a net were wrongly loud-rejected.)
+                let is_type_query = matches!(
+                    name.name.as_str(),
+                    "$bits"
+                        | "$size"
+                        | "$high"
+                        | "$low"
+                        | "$left"
+                        | "$right"
+                        | "$increment"
+                        | "$dimensions"
+                        | "$unpacked_dimensions"
+                        | "$isunbounded"
+                        | "$typename"
+                );
+                !is_type_query && args.iter().any(|a| self.count_reads_runtime_net(a))
             }
             _ => false,
         }
