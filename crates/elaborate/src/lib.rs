@@ -26276,7 +26276,7 @@ impl<'s> Elaborator<'s> {
                     return;
                 }
                 // v7: `ok = $value$plusargs(fmt, var)` — same family.
-                if self.value_plusargs_special(b, lhs, delay.as_ref(), rhs) {
+                if self.value_plusargs_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // v7: `fd = $fopen(name[, mode])` — same family.
@@ -26294,7 +26294,7 @@ impl<'s> Elaborator<'s> {
                 // v9 SYS-READ: `c = $fgetc(fd)` / `e = $feof(fd)` /
                 // `r = $ungetc(c, fd)` — each advances/mutates the fd read
                 // state, statement-level intercept (the only legal placement).
-                if self.file_read_int_special(b, lhs, delay.as_ref(), rhs) {
+                if self.file_read_int_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // v9 SYS-READ: `n = $fgets(str, fd)` — writes the str dest +
@@ -26415,26 +26415,33 @@ impl<'s> Elaborator<'s> {
             }
             ast::Stmt::SysTaskCall { name, args, span } => {
                 // v9 SYS-READ as a BARE statement (return discarded): $sscanf/
-                // $fscanf/$fgets/$fread WRITE their destination args as a
-                // side-effect of evaluating the SysFunc. The `*_special` helpers
-                // emit that write only from an assignment rhs; as a bare
-                // statement they never ran, so the dests were silently never
-                // written (iverilog writes them regardless of the return use).
-                // Route through the same helpers with NO lhs (count discarded).
+                // $fscanf/$fgets/$fread WRITE their destination args, $value$plusargs
+                // writes its ref var, and $fgetc/$ungetc advance/mutate the fd — all
+                // as a side-effect of evaluating the SysFunc. The `*_special` helpers
+                // emit that write only from an assignment rhs; as a bare statement
+                // they never ran, so the effect was silently dropped (iverilog does
+                // it regardless of the return use). Route through the same helpers
+                // with NO lhs (return discarded). ($feof is a pure query — a bare
+                // $feof has no effect, so it is not routed here.)
                 //
                 // NOT in a FRAME function/task/method body (`in_frame_body`): the
                 // discard uses a fresh MODULE net (`emit_discarded_call`→
-                // `fresh_ia_tmp`), which is outside the frame, and
-                // `run_frame_call` cannot execute the scanf StmtEffect anyway — so
-                // leave the pre-existing `lower_systask` (warn+skip) path there
-                // unchanged (a bare sys-read in a subprogram body is a separate
-                // follow-on; its ASSIGNMENT form is equally unsupported). A process
-                // body and an INLINE task body (both in the process stream) DO
-                // execute it.
+                // `fresh_ia_tmp`), which is outside the frame, and `run_frame_call`
+                // cannot execute the sys-read StmtEffect anyway — so leave the
+                // pre-existing `lower_systask` (warn+skip) path there unchanged (a
+                // bare sys-read in a subprogram body is a separate follow-on; its
+                // ASSIGNMENT form is equally unsupported). A process body and an
+                // INLINE task body (both in the process stream) DO execute it.
                 if !self.in_frame_body
                     && matches!(
                         name.name.as_str(),
-                        "$sscanf" | "$fscanf" | "$fgets" | "$fread"
+                        "$sscanf"
+                            | "$fscanf"
+                            | "$fgets"
+                            | "$fread"
+                            | "$value$plusargs"
+                            | "$fgetc"
+                            | "$ungetc"
                     )
                 {
                     let synth = ast::Expr {
@@ -26447,6 +26454,8 @@ impl<'s> Elaborator<'s> {
                     if self.scanf_special(b, None, None, &synth)
                         || self.fgets_special(b, None, None, &synth)
                         || self.fread_special(b, None, None, &synth)
+                        || self.value_plusargs_special(b, None, None, &synth)
+                        || self.file_read_int_special(b, None, None, &synth)
                     {
                         return;
                     }
@@ -27572,7 +27581,7 @@ impl<'s> Elaborator<'s> {
     fn value_plusargs_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27585,41 +27594,42 @@ impl<'s> Elaborator<'s> {
         let Some(rhs_id) = self.value_plusargs_rhs(args) else {
             return true; // a diagnostic was already emitted
         };
-        let lv = self.lower_lvalue(lhs);
-        self.check_lvalue_kind(&lv, true);
-        if let Some(d) = delay {
-            // capture-now/write-later (the shared intra-assignment desugar) —
-            // the plusarg search and var write happen at the CAPTURE.
-            let w = self.ir_lvalue_width(&lv);
-            let tmp = self.fresh_ia_tmp(w);
-            let cap = self.push_stmt(ir::Stmt::BlockingAssign {
-                lhs: whole_net_lvalue(tmp),
-                rhs: rhs_id,
-            });
-            b.push_stmt_id(cap);
-            let (amount, region) = self.lower_delay(d);
-            let resume = b.new_block();
-            b.end_block_with(ir::Terminator::Delay {
-                amount,
-                region,
-                resume: resume.raw(),
-            });
-            b.start_block(resume);
-            let tmp_read = self.push_expr(ir::Expr::Signal {
-                net: tmp,
-                word: None,
-            });
-            let wr = self.push_stmt(ir::Stmt::BlockingAssign {
-                lhs: lv,
-                rhs: tmp_read,
-            });
-            b.push_stmt_id(wr);
-        } else {
-            let sid = self.push_stmt(ir::Stmt::BlockingAssign {
-                lhs: lv,
-                rhs: rhs_id,
-            });
-            b.push_stmt_id(sid);
+        match (lhs, delay) {
+            (Some(lhs), Some(d)) => {
+                // capture-now/write-later (the shared intra-assignment desugar,
+                // assignment form only) — the plusarg search and var write happen
+                // at the CAPTURE.
+                let lv = self.lower_lvalue(lhs);
+                self.check_lvalue_kind(&lv, true);
+                let w = self.ir_lvalue_width(&lv);
+                let tmp = self.fresh_ia_tmp(w);
+                let cap = self.push_stmt(ir::Stmt::BlockingAssign {
+                    lhs: whole_net_lvalue(tmp),
+                    rhs: rhs_id,
+                });
+                b.push_stmt_id(cap);
+                let (amount, region) = self.lower_delay(d);
+                let resume = b.new_block();
+                b.end_block_with(ir::Terminator::Delay {
+                    amount,
+                    region,
+                    resume: resume.raw(),
+                });
+                b.start_block(resume);
+                let tmp_read = self.push_expr(ir::Expr::Signal {
+                    net: tmp,
+                    word: None,
+                });
+                let wr = self.push_stmt(ir::Stmt::BlockingAssign {
+                    lhs: lv,
+                    rhs: tmp_read,
+                });
+                b.push_stmt_id(wr);
+            }
+            // Assignment form (no delay) → BlockingAssign(lhs); a BARE statement
+            // (`None`, no intra-delay possible) → evaluate the SysFunc for its
+            // ref-var write side-effect and discard the returned OK flag.
+            (lhs, _) => self.emit_sysread_write(b, lhs, rhs_id),
         }
         true
     }
@@ -27688,7 +27698,7 @@ impl<'s> Elaborator<'s> {
     fn file_read_int_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27720,13 +27730,7 @@ impl<'s> Elaborator<'s> {
             which,
             args: arg_ids,
         });
-        let lv = self.lower_lvalue(lhs);
-        self.check_lvalue_kind(&lv, true);
-        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
-            lhs: lv,
-            rhs: rhs_id,
-        });
-        b.push_stmt_id(sid);
+        self.emit_sysread_write(b, lhs, rhs_id);
         true
     }
 
