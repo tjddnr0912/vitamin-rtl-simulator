@@ -2277,13 +2277,13 @@ fn str_const_of_expr(st: &SimState, eid: u32) -> Option<String> {
 /// these fields with no separator).
 fn push_default_radix(v: &Value, out: &mut String, radix: Option<u8>) {
     if v.is_real {
-        out.push_str(&fmt_real(v, 'g', None, None));
+        out.push_str(&fmt_real(v, 'g', None, None, false));
         return;
     }
     match radix {
-        Some(2) => out.push_str(&fmt_radix(v, 1, false, None)),
-        Some(8) => out.push_str(&fmt_radix(v, 3, false, None)),
-        Some(16) => out.push_str(&fmt_radix(v, 4, false, None)),
+        Some(2) => out.push_str(&fmt_radix(v, 1, false, None, false)),
+        Some(8) => out.push_str(&fmt_radix(v, 3, false, None, false)),
+        Some(16) => out.push_str(&fmt_radix(v, 4, false, None, false)),
         _ => {
             let s = fmt_dec(v);
             let fw = dec_field_width(v.width, v.signed);
@@ -2314,6 +2314,29 @@ fn strength_form(v: &Value) -> String {
         .join("_")
 }
 
+/// Pad `content` to `field_width` (a MINIMUM — a longer string is never
+/// truncated): right-justified by default, or left-justified (space right-pad)
+/// under the `-` flag. Used by the plain-content specs `%c`/`%v`/`%m`/`%s`, which
+/// iverilog justifies in an explicit field width. `None` width → content verbatim.
+fn justify(content: &str, field_width: Option<usize>, left_just: bool) -> String {
+    match field_width {
+        Some(n) => {
+            let clen = content.chars().count();
+            if clen < n {
+                let pad = " ".repeat(n - clen);
+                if left_just {
+                    format!("{content}{pad}")
+                } else {
+                    format!("{pad}{content}")
+                }
+            } else {
+                content.to_string()
+            }
+        }
+        None => content.to_string(),
+    }
+}
+
 fn render_template(
     sched: &Scheduler,
     template: &str,
@@ -2328,12 +2351,22 @@ fn render_template(
             out.push(c);
             continue;
         }
-        // optional width/flags: %0d, %5h, %8.2f …  (v1 records `0` for integer
-        // specs; width/precision are threaded into the real `%f/%e/%g` formatters).
+        // optional width/flags: %0d, %5h, %8.2f, %-5d …  (v1 records `0` for
+        // integer specs; width/precision are threaded into the real `%f/%e/%g`
+        // formatters; `-` left-justifies).
         let mut min_zero = false;
+        let mut left_just = false;
         let mut width_digits = String::new();
         while let Some(&d) = chars.peek() {
-            if d == '0' && width_digits.is_empty() {
+            if d == '-' && width_digits.is_empty() {
+                // `-` (left-justify) flag: the content right-pads with spaces to
+                // the field width and OVERRIDES the `0` flag (iverilog-pinned:
+                // `%-05d` of 42 → "42   ", spaces not zeros). It must PRECEDE the
+                // width digits — iverilog itself rejects `%0-5d` (echoes it raw),
+                // so gating on an empty width run keeps that malformed order loud.
+                left_just = true;
+                chars.next();
+            } else if d == '0' && width_digits.is_empty() {
                 min_zero = true;
                 width_digits.push('0');
                 chars.next();
@@ -2380,7 +2413,7 @@ fn render_template(
             // P2-11: hierarchical scope of the EXECUTING process (was: always
             // the literal "top"). Strobe/monitor renders restore the
             // REGISTERING process's scope first (FmtCapture.scope).
-            'm' | 'M' => out.push_str(&sched.st.cur_scope),
+            'm' | 'M' => out.push_str(&justify(&sched.st.cur_scope, field_width, left_just)),
             't' | 'T' => {
                 // `%T` aliases `%t` (consumes one time arg). Full §21.3.2 semantics:
                 // the arg (a time in the DISPLAYING module's unit) is rescaled to the
@@ -2388,7 +2421,7 @@ fn render_template(
                 // in the min field width (default 20; an explicit `%Nt`/`%0t`
                 // OVERRIDES it — iverilog-pinned).
                 let v = next_arg(sched, args, argi);
-                out.push_str(&fmt_time_spec(sched, &v, field_width, min_zero));
+                out.push_str(&fmt_time_spec(sched, &v, field_width, min_zero, left_just));
             }
             'd' | 'D' => {
                 let v = next_arg(sched, args, argi);
@@ -2407,7 +2440,11 @@ fn render_template(
                 };
                 if s.len() < fw {
                     let pad = fw - s.len();
-                    if min_zero {
+                    if left_just {
+                        // `-` right-pads with spaces (and overrides `0`).
+                        out.push_str(&s);
+                        out.push_str(&" ".repeat(pad));
+                    } else if min_zero {
                         // zero-pad AFTER any leading sign: "-42" → "-00042".
                         if let Some(rest) = s.strip_prefix('-') {
                             out.push('-');
@@ -2427,19 +2464,19 @@ fn render_template(
             }
             'h' | 'H' | 'x' | 'X' => {
                 let v = next_arg(sched, args, argi);
-                out.push_str(&fmt_radix(&v, 4, min_zero, field_width));
+                out.push_str(&fmt_radix(&v, 4, min_zero, field_width, left_just));
             }
             'o' | 'O' => {
                 let v = next_arg(sched, args, argi);
-                out.push_str(&fmt_radix(&v, 3, min_zero, field_width));
+                out.push_str(&fmt_radix(&v, 3, min_zero, field_width, left_just));
             }
             'b' | 'B' => {
                 let v = next_arg(sched, args, argi);
-                out.push_str(&fmt_radix(&v, 1, min_zero, field_width));
+                out.push_str(&fmt_radix(&v, 1, min_zero, field_width, left_just));
             }
             'f' | 'F' | 'g' | 'G' | 'e' | 'E' => {
                 let v = next_arg(sched, args, argi);
-                let s = fmt_real(&v, spec, field_width, precision);
+                let s = fmt_real(&v, spec, field_width, precision, left_just);
                 // `%E`/`%G` uppercase the exponent letter and non-finite labels
                 // (iverilog: `%E` → "1.5E+20", `%G` → "1E-05", `%E` of inf → "INF").
                 // `%F` is identical to `%f` for ALL values including inf/nan — iverilog
@@ -2454,19 +2491,24 @@ fn render_template(
             }
             'c' | 'C' => {
                 let v = next_arg(sched, args, argi);
-                out.push(char_of(&v));
+                out.push_str(&justify(&char_of(&v).to_string(), field_width, left_just));
             }
             's' | 'S' => {
                 let e = args.get(*argi).copied();
                 *argi += 1;
-                // Build the content string, then right-justify it in an explicit
-                // field width (a MINIMUM — a longer string overflows, it is never
-                // truncated). The content for an explicit-width `%Ns`/`%0s` on a
-                // packed reg is its leading-NUL-stripped form; a bare `%s` keeps the
+                // Build the content string, then justify it in the field width (a
+                // MINIMUM — a longer string overflows, it is never truncated). The
+                // content for an explicit-width `%Ns`/`%0s` on a packed reg is its
+                // leading-NUL-stripped form; a RIGHT-justified bare `%s` keeps the
                 // full reg-width form (NUL → space). A string literal / string-domain
                 // value renders its exact text either way. (iverilog-pinned: 64-bit
                 // "hello" → `%s` "   hello", `%2s` "hello", `%10s` "     hello".)
-                let content = match e {
+                //
+                // Under `-` on a packed reg with NO explicit width, iverilog strips
+                // the NUL padding and LEFT-justifies in the reg's byte width (`%-s`
+                // of a 64-bit "cpu0" → "cpu0    ", not the NUL→space "    cpu0"), so
+                // a default width is supplied and the stripped content used.
+                let (content, default_w) = match e {
                     // string LITERAL: decoded text (the classic fmt-arg path).
                     Some(eid)
                         if matches!(
@@ -2474,37 +2516,40 @@ fn render_template(
                             Some(sim_ir::Expr::Const { .. })
                         ) =>
                     {
-                        arg_string(sched, Some(eid))
+                        (arg_string(sched, Some(eid)), None)
                     }
                     Some(eid) => {
                         let v = sched.eval(eid);
                         if v.is_str {
                             // v7 P2-C: a STRING-domain value renders its EXACT bytes.
-                            String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
+                            (
+                                String::from_utf8_lossy(&v.to_str_bytes()).into_owned(),
+                                None,
+                            )
+                        } else if left_just {
+                            // stripped content + default field = reg byte width.
+                            let nbytes = (v.width as usize).div_ceil(8).max(1);
+                            (fmt_packed_chars_min(&v), Some(nbytes))
                         } else if field_width.is_some() {
                             // `%0s` / `%Ns` strip leading NUL padding (all-NUL → "").
-                            fmt_packed_chars_min(&v)
+                            (fmt_packed_chars_min(&v), None)
                         } else {
                             // bare `%s` pads to the reg width (NUL → space).
-                            fmt_packed_chars(&v)
+                            (fmt_packed_chars(&v), None)
                         }
                     }
-                    None => String::new(),
+                    None => (String::new(), None),
                 };
-                let clen = content.chars().count();
-                match field_width {
-                    Some(n) if clen < n => {
-                        out.push_str(&" ".repeat(n - clen));
-                        out.push_str(&content);
-                    }
-                    _ => out.push_str(&content),
-                }
+                // Explicit width wins over the packed-reg default; `justify`
+                // right-pads spaces when `-` is set, else left-pads (byte-identical
+                // to the old match when `left_just` is false and `default_w` None).
+                out.push_str(&justify(&content, field_width.or(default_w), left_just));
             }
             // P0-8③: the remaining IEEE specs CONSUME their argument — leaving
             // them unconsumed shifted every later spec onto the wrong arg.
             'v' | 'V' => {
                 let v = next_arg(sched, args, argi);
-                out.push_str(&strength_form(&v));
+                out.push_str(&justify(&strength_form(&v), field_width, left_just));
             }
             // binary-dump specs: consume; vitamin emits no text for them (v1 —
             // the IEEE form writes raw bytes, useless in a text log).
@@ -2691,6 +2736,7 @@ fn fmt_time_spec(
     v: &Value,
     explicit_width: Option<usize>,
     min_zero: bool,
+    left_just: bool,
 ) -> String {
     let (units_exp, prec, suffix, minw): (i32, usize, &str, i64) = match &sched.st.timeformat {
         Some(tf) => (
@@ -2743,7 +2789,13 @@ fn fmt_time_spec(
     let full = format!("{body}{suffix}");
     let width: i64 = explicit_width.map(|w| w as i64).unwrap_or(minw);
     let n = full.chars().count() as i64;
-    if width >= 0 {
+    if left_just {
+        // `%-Nt`: left-justify (space right-pad) in |width|, overriding `0`.
+        let aw = width.abs();
+        if n < aw {
+            return format!("{full}{}", " ".repeat((aw - n) as usize));
+        }
+    } else if width >= 0 {
         if n < width {
             // `%0Nt`: zero-fill; zeros go before any sign char (iverilog-pinned:
             // `%08t` of -1000 → "000-1000", not sign-aware like `%0Nd`).
@@ -2920,7 +2972,13 @@ fn nonfinite_c(x: f64) -> String {
 
 /// `%f`/`%e`/`%g` of a real Value (the arg may be an integer promoted to real).
 /// `width`/`prec` are the optional field-width / precision modifiers (`%8.2f`).
-fn fmt_real(v: &Value, spec: char, width: Option<usize>, prec: Option<usize>) -> String {
+fn fmt_real(
+    v: &Value,
+    spec: char,
+    width: Option<usize>,
+    prec: Option<usize>,
+    left_just: bool,
+) -> String {
     // Normalize IEEE-754 negative zero to +0.0 so every real spec displays it as
     // a plain "0" (the %g path / VCD `fmt_g` already do). iverilog prints a
     // constant/literal -0.0 as "0"/"0.000000"; matching it here keeps %f/%e/%g
@@ -2945,7 +3003,12 @@ fn fmt_real(v: &Value, spec: char, width: Option<usize>, prec: Option<usize>) ->
     };
     if let Some(w) = width {
         if body.len() < w {
-            return format!("{}{}", " ".repeat(w - body.len()), body);
+            let pad = " ".repeat(w - body.len());
+            return if left_just {
+                format!("{body}{pad}")
+            } else {
+                format!("{pad}{body}")
+            };
         }
     }
     body
@@ -2984,7 +3047,13 @@ fn format_g(x: f64, prec: Option<usize>) -> String {
 
 /// %h/%o/%b: group bits per digit (1=bin,3=oct,4=hex), MSB-first; a group with
 /// any X → 'x', any Z (no X) → 'z'.
-fn fmt_radix(v: &Value, bits_per_digit: u32, min_zero: bool, field_width: Option<usize>) -> String {
+fn fmt_radix(
+    v: &Value,
+    bits_per_digit: u32,
+    min_zero: bool,
+    field_width: Option<usize>,
+    left_just: bool,
+) -> String {
     if v.width == 0 {
         return "0".to_string();
     }
@@ -3046,10 +3115,17 @@ fn fmt_radix(v: &Value, bits_per_digit: u32, min_zero: bool, field_width: Option
     };
     match field_width {
         Some(w) if base.len() < w => {
-            let pad = if min_zero { '0' } else { ' ' };
-            let mut p: String = std::iter::repeat(pad).take(w - base.len()).collect();
-            p.push_str(&base);
-            p
+            let n = w - base.len();
+            if left_just {
+                // `-` right-pads with spaces (overrides `0`); the natural
+                // zero-padded digit string is the content (e.g. 8'hA → "0a").
+                format!("{base}{}", " ".repeat(n))
+            } else {
+                let pad = if min_zero { '0' } else { ' ' };
+                let mut p: String = std::iter::repeat(pad).take(n).collect();
+                p.push_str(&base);
+                p
+            }
         }
         _ => base,
     }
