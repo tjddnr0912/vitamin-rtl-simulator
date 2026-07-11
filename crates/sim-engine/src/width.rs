@@ -512,6 +512,53 @@ pub(crate) fn const_u32_of_expr(ir: &SimIr, eid: u32) -> Option<u32> {
             let b = const_u32_of_expr(ir, *rhs)?;
             Some(a.saturating_sub(b))
         }
+        // `$clog2(k)` of a SINGLE constant argument (a literal, or a param folded to
+        // a Const) is a legal constant replication count / part-select width (IEEE
+        // §11.4.12.2). Without this arm `$clog2` survives lowering as a `SysFunc`
+        // node → `None` → a silent 0-width replication (`{$clog2(8){2'b10}}` printed
+        // `00000000` instead of `00101010`). For a SINGLE operand the result depends
+        // ONLY on the argument's value — width and signedness are irrelevant (there
+        // is no arithmetic, hence no wraparound), so this is bit-exact regardless of
+        // vita's self-width inference. An ARITHMETIC argument (`$clog2(N+1)`) is
+        // deliberately NOT folded: SV width-limited constant arithmetic, compounded
+        // by the pre-existing derived-localparam value-inferred width (elaborate's
+        // `param_decl_width` → ≥ 32 for an expression initializer), makes it unsafe
+        // to reproduce bit-exactly — it stays a silent 0-width count (a documented
+        // follow-on), NEVER a wrong non-zero one.
+        Expr::SysFunc {
+            which: SysFuncId::Clog2,
+            args,
+        } if args.len() == 1 => {
+            let Expr::Const { val } = &ir.exprs[args[0] as usize] else {
+                return None;
+            };
+            let c = &ir.consts[*val as usize];
+            // Fold ONLY a genuine numeric integer Const. A REAL literal's `bits.val[0]`
+            // is the raw IEEE-754 f64 bit pattern (`$clog2(8.0)` would misread
+            // `0x4020…0000` as a huge int; iverilog rounds the real first), and a
+            // string literal's bits are byte data — neither is an integer clog2
+            // argument, so decline (→ silent 0-width, base==fix).
+            if !matches!(c.repr, ConstRepr::Numeric) {
+                return None;
+            }
+            // Reject X/Z, a value beyond one u64 lane, or a SIGNED-NEGATIVE value
+            // (`$clog2` of a negative widens to a ≥ 32-bit integer — unmodeled here).
+            if c.bits.unk.iter().any(|&u| u != 0) || c.bits.val.iter().skip(1).any(|&v| v != 0) {
+                return None;
+            }
+            let n = c.bits.val.first().copied().unwrap_or(0);
+            if c.signed && c.width >= 1 && c.width <= 64 && (n >> (c.width - 1)) & 1 == 1 {
+                return None;
+            }
+            // clog2(n) = 0 for n ≤ 1, else the top set-bit position of n-1, plus one
+            // (byte-identical to the engine's runtime `SysFuncId::Clog2`). The result
+            // (≤ 64) is well within WIDTH_MAX, so no clamp is needed.
+            Some(if n <= 1 {
+                0
+            } else {
+                64 - (n - 1).leading_zeros()
+            })
+        }
         _ => None,
     }
 }
