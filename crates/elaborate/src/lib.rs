@@ -26268,7 +26268,7 @@ impl<'s> Elaborator<'s> {
                     return;
                 }
                 // v9 rank 6: `x = $dist_uniform(seed, start, end)` — seeded family.
-                if self.dist_uniform_special(b, lhs, delay.as_ref(), rhs) {
+                if self.dist_uniform_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
                 // v9 rank 6: `ok = $cast(dst, src)` (func form) — writes dst ref.
@@ -26443,6 +26443,19 @@ impl<'s> Elaborator<'s> {
                             | "$fgetc"
                             | "$ungetc"
                             | "$random"
+                            // Of the `$dist_*` family only `$dist_uniform` is routed:
+                            // its integer LCG advance AND draw match iverilog exactly
+                            // for all inputs (the same verified `$random` LCG). The
+                            // NON-uniform siblings have a PRE-EXISTING vita-vs-iverilog
+                            // divergence — `$dist_chi_square`/`$dist_t` in the seed LCG
+                            // advance itself, `$dist_normal`/`$dist_exponential`/
+                            // `$dist_erlang` (and possibly `$dist_poisson`) in the draw
+                            // VALUE (vendored-libm rounding, off-by-one) — present in
+                            // the ASSIGNMENT form too. Routing them bare would turn
+                            // base's skip into a DIFFERENT wrong value; leave them
+                            // warn+skip (base==fix) until the algorithm is fixed
+                            // (a separate, deep follow-on).
+                            | "$dist_uniform"
                     )
                 {
                     let synth = ast::Expr {
@@ -26461,6 +26474,9 @@ impl<'s> Elaborator<'s> {
                         // writeback). Unseeded bare `$random;` has no seed → the
                         // helper declines (args empty) → a harmless discarded draw.
                         || self.random_seeded_special(b, None, None, &synth)
+                        // Bare `$dist_*(seed, …);` — the same rhs-based seed writeback
+                        // (`StmtEffect::SeededDist`). §4.5.125 sibling.
+                        || self.dist_uniform_special(b, None, None, &synth)
                     {
                         return;
                     }
@@ -27369,7 +27385,7 @@ impl<'s> Elaborator<'s> {
     fn dist_uniform_special(
         &mut self,
         b: &mut ProcessBuilder,
-        lhs: &ast::Lvalue,
+        lhs: Option<&ast::Lvalue>,
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
@@ -27424,7 +27440,15 @@ impl<'s> Elaborator<'s> {
             ids.push(self.lower_expr(a));
         }
         let rhs_id = self.push_expr(ir::Expr::SysFunc { which, args: ids });
-        self.emit_blocking_intercept(b, lhs, delay, rhs_id);
+        match lhs {
+            Some(lhs) => self.emit_blocking_intercept(b, lhs, delay, rhs_id),
+            // Bare statement `$dist_*(seed, …);` (return discarded): the seed
+            // WRITEBACK still fires — `StmtEffect::SeededDist` is rhs-based
+            // (`k_dist_seeded_rhs`), so a throwaway assign advances the seed exactly
+            // as iverilog does. Without this the bare form hit `lower_systask` (W3056
+            // skip), silently leaving the seed unchanged. §4.5.125 sibling.
+            None => self.emit_discarded_call(b, rhs_id),
+        }
         true
     }
 
