@@ -2621,6 +2621,76 @@ fn sva_binary(op: ast::BinOp, lhs: ast::Expr, rhs: ast::Expr, sp: ast::Span) -> 
     }
 }
 
+/// Count the ARG-CONSUMING conversion specifiers in a `$display`-family format
+/// literal (`$sformatf`-hoist gate, §4.5.127). Scans the raw literal (quotes +
+/// deferred escapes): a `\`-escape skips two bytes (so `\%`/`\"` never start a
+/// spec), `%%` is a literal percent, and a `%` followed by optional flags/width/
+/// precision then a known consumer char (`h x d o b c s t e f g v p u z`) counts
+/// one. `%m` (scope) and `%l` (library) consume NO arg and are excluded; any
+/// unknown/non-alphabetic conversion is NOT counted. `count >= value_args` gates
+/// the hoist as a "no surplus value arg" test (a surplus string arg falls into
+/// vita's pre-existing numeric-render-of-a-string gap, a silent-wrong the hoist
+/// must not expose). SOUNDNESS: this char-set is exactly the one vita's own
+/// `render_template` (sim-engine) consumes, so for WELL-FORMED formats the count
+/// equals real consumption ⇒ no surplus is admitted. The flag-skip here is broader
+/// than `render_template`'s (it also skips ` `/`#`/misordered flags), so on
+/// MALFORMED formats it can OVERcount relative to render — but iverilog itself
+/// warns ("unknown/invalid format") on exactly those, so an over-counted surplus
+/// never lands on iverilog-clean code (correct-or-loud holds: such a case is a
+/// category-b iverilog-warned divergence, not a silent-wrong on valid code).
+/// Escaped/octal `%` (`\045`) UNDERcounts → stricter → loud (safe).
+fn count_arg_specs(raw: &str) -> usize {
+    let b = raw.as_bytes();
+    let mut i = 0;
+    let mut n = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' => i += 2, // an escape sequence — skip it (\n, \", \%, …)
+            b'%' => {
+                i += 1;
+                if i >= b.len() {
+                    break; // trailing '%'
+                }
+                if b[i] == b'%' {
+                    i += 1; // literal "%%"
+                    continue;
+                }
+                // skip flags / field width / precision
+                while i < b.len() && matches!(b[i], b'-' | b'+' | b' ' | b'#' | b'.' | b'0'..=b'9')
+                {
+                    i += 1;
+                }
+                if i >= b.len() {
+                    break;
+                }
+                let c = b[i].to_ascii_lowercase();
+                if matches!(
+                    c,
+                    b'h' | b'x'
+                        | b'd'
+                        | b'o'
+                        | b'b'
+                        | b'c'
+                        | b's'
+                        | b't'
+                        | b'e'
+                        | b'f'
+                        | b'g'
+                        | b'v'
+                        | b'p'
+                        | b'u'
+                        | b'z'
+                ) {
+                    n += 1;
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    n
+}
+
 fn sva_unary(op: ast::UnOp, operand: ast::Expr, sp: ast::Span) -> ast::Expr {
     ast::Expr {
         kind: ast::ExprKind::Unary {
@@ -8941,6 +9011,27 @@ impl<'s> Elaborator<'s> {
         };
         self.add_net(&name, nv);
         (self.nets.len() - 1) as u32
+    }
+
+    /// A fresh `String` net for hoisting a `$sformatf` operand to a temp
+    /// (`$sfmt_tmp$<n>` — the leading `$` keeps it collision-proof against user
+    /// identifiers, and a `String` net has no VCD `$var` form so the temp is
+    /// invisible to dumps). Returns the name so a synthetic `Ident` lvalue/expr
+    /// can reference it (module-scoped via `fq`, like `fresh_sva_reg`).
+    fn fresh_string_temp(&mut self) -> String {
+        let name = format!("$sfmt_tmp${}", self.nets.len());
+        let nv = ir::NetVar {
+            kind: ir::NetKind::String,
+            width: 0,
+            msb: 0,
+            lsb: 0,
+            signed: false,
+            array_len: 0,
+            dir: ir::PortDir::Internal,
+            init: default_init(ast::NetVarKind::Reg, 1),
+        };
+        self.add_net(&name, nv);
+        name
     }
 
     /// Register a net by name → NetId (declaration-order append). A duplicate
@@ -26481,6 +26572,71 @@ impl<'s> Elaborator<'s> {
                         return;
                     }
                 }
+                // $sformatf-as-print-arg (§4.5.127): a top-level `$sformatf(...)`
+                // VALUE argument to an IMMEDIATE format task ($display/$write/
+                // $fdisplay/$fwrite family) is not the direct rhs of an assignment,
+                // so lowering it would hit the loud guard in `lower_expr`. Hoist
+                // each such arg to a fresh string temp (rendered once, before the
+                // task — the immediate task renders exactly once too, and $sformatf
+                // is pure) and pass the temp Ident.
+                //
+                // GATED on the FORMAT arg (index `fmt_idx` = 0, or 1 after the fd of
+                // an `$f…` task) being a STRING LITERAL. A runtime string in the
+                // format position (a `string` variable, a function result, …) needs
+                // a runtime format engine vita lacks — it renders WRONG in both base
+                // and fix (`$display(str_var, x)` is a pre-existing silent gap). If
+                // we hoisted the value `$sformatf` there, we would strip the loud
+                // reject the raw `$sformatf` was providing and EXPOSE that silent
+                // mis-render (base loud → fix wrong). So a non-literal format is left
+                // untouched → the raw `$sformatf` still hits the loud guard → LOUD.
+                // ALSO gated on the literal having ENOUGH arg-consuming specifiers to
+                // consume every value arg (`count_arg_specs(fmt) >= value args`). A
+                // SURPLUS value arg (or an empty format) has no specifier — vita then
+                // renders that leftover string temp NUMERICALLY (a pre-existing gap;
+                // iverilog prints it as text with no warning), so hoisting it would be
+                // a base-loud → fix-wrong silent-wrong. Too few specifiers → not
+                // hoisted → the raw `$sformatf` stays → LOUD. (The hoist is byte-for-
+                // byte transparent — a `$sfmt_tmp$` string net renders exactly like a
+                // user `string` — so "no surplus" is the exact safe boundary.)
+                // Only args STRICTLY AFTER the format (`i > fmt_idx`) are hoisted —
+                // the fd of an `$f…` task (index 0) is never a valid `$sformatf` (a
+                // descriptor must be numeric), so it stays raw → loud, not a bogus run.
+                //
+                // DEFERRED tasks ($monitor/$strobe) are excluded: they re-render, so
+                // hoisting would freeze the value (and iverilog itself rejects a
+                // $sformatf arg there — no oracle). A NESTED $sformatf (in a concat/
+                // ternary) is left untouched → still loud (a separate follow-on).
+                let fmt_idx = usize::from(name.name.starts_with("$f"));
+                if matches!(
+                    name.name.as_str(),
+                    "$display" | "$displayb" | "$displayo" | "$displayh"
+                        | "$write" | "$writeb" | "$writeo" | "$writeh"
+                        | "$fdisplay" | "$fdisplayb" | "$fdisplayo" | "$fdisplayh"
+                        | "$fwrite" | "$fwriteb" | "$fwriteo" | "$fwriteh"
+                ) && matches!(
+                    args.get(fmt_idx).map(|a| &a.kind),
+                    Some(ast::ExprKind::StrLit { raw })
+                        if count_arg_specs(raw) >= args.len().saturating_sub(fmt_idx + 1)
+                ) && args.iter().enumerate().any(|(i, a)| {
+                    i > fmt_idx
+                        && matches!(&a.kind, ast::ExprKind::SysCall { name, .. } if name.name == "$sformatf")
+                }) {
+                    let hoisted: Vec<ast::Expr> = args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, a)| {
+                            if i > fmt_idx {
+                                self.hoist_sformatf_arg(b, a).unwrap_or_else(|| a.clone())
+                            } else {
+                                a.clone()
+                            }
+                        })
+                        .collect();
+                    if let Some(sid) = self.lower_systask(name, &hoisted) {
+                        b.push_stmt_id(sid);
+                    }
+                    return;
+                }
                 if let Some(sid) = self.lower_systask(name, args) {
                     b.push_stmt_id(sid);
                 }
@@ -28585,6 +28741,46 @@ impl<'s> Elaborator<'s> {
         });
         b.push_stmt_id(sid);
         true
+    }
+
+    /// Hoist a top-level `$sformatf(...)` ARGUMENT of an immediate format task
+    /// (§4.5.127) to a fresh string temp: emit `tmp = $sformatf(...)` into `b`
+    /// (via `sformatf_special` — the pure render runs exactly ONCE, before the
+    /// task, matching the immediate task's own single evaluation) and return an
+    /// `Ident(tmp)` to pass in its place. `None` ⇒ `arg` is not a bare
+    /// `$sformatf` call, so it is left untouched — a NESTED `$sformatf` (inside a
+    /// concat/ternary/comparison) still reaches the direct-rhs loud guard in
+    /// `lower_expr` (a separate follow-on).
+    fn hoist_sformatf_arg(&mut self, b: &mut ProcessBuilder, arg: &ast::Expr) -> Option<ast::Expr> {
+        let ast::ExprKind::SysCall { name, .. } = &arg.kind else {
+            return None;
+        };
+        if name.name != "$sformatf" {
+            return None;
+        }
+        let sp = arg.span;
+        let tmp = self.fresh_string_temp();
+        let tmp_lv = ast::Lvalue::Ident(ast::HierPath {
+            segments: vec![ast::Ident {
+                name: tmp.clone(),
+                span: sp,
+            }],
+            span: sp,
+        });
+        // Reuse the direct-rhs handler: it validates the string-literal format,
+        // lowers the args, and emits `tmp = $sformatf(...)`. (A non-literal format
+        // emits its OWN loud error there, identical to a direct-rhs assignment.)
+        self.sformatf_special(b, &tmp_lv, None, arg);
+        Some(ast::Expr {
+            kind: ast::ExprKind::Ident(ast::HierPath {
+                segments: vec![ast::Ident {
+                    name: tmp,
+                    span: sp,
+                }],
+                span: sp,
+            }),
+            span: sp,
+        })
     }
 
     /// String element WRITE `s[i] = c` (IEEE §6.16.3): a string variable is a
