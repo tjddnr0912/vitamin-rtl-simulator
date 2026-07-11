@@ -265,3 +265,68 @@ fn plain_display_unchanged() {
     assert_eq!(c, Some(0));
     assert!(out.contains("x=42 y=2a z=1010"), "got:\n{out}");
 }
+
+// §4.5.128 — the string-dest format tasks $sformat/$swrite* (dest at index 0, format
+// at index 1) get the identical hoist with fmt_idx=1.
+
+#[test]
+fn sformat_value_arg() {
+    let (out, c) = run("module t; string s; initial begin \
+         $sformat(s, \"[%s]\", $sformatf(\"v%0d\", 7)); $display(\"R=%s\", s); \
+         #1 $finish; end endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("R=[v7]"), "got:\n{out}");
+}
+
+#[test]
+fn swrite_mixed_args() {
+    // $swrite with an ordinary int arg + a $sformatf arg (order preserved).
+    let (out, c) = run("module t; string s; initial begin \
+         $swrite(s, \"%0d-%s\", 3, $sformatf(\"x%0d\", 9)); $display(\"R=%s\", s); \
+         #1 $finish; end endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("R=3-x9"), "got:\n{out}");
+}
+
+#[test]
+fn swriteh_radix_value_arg() {
+    let (out, c) = run("module t; string s; logic [7:0] v=8'hAB; initial begin \
+         $swriteh(s, \"[%s]\", $sformatf(\"%0d\", v)); $display(\"R=%s\", s); \
+         #1 $finish; end endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("R=[171]"), "got:\n{out}");
+}
+
+#[test]
+fn sformat_format_position_stays_loud() {
+    // The format is at index 1 (after the dest); a $sformatf there is a runtime
+    // format → not hoisted → LOUD (iverilog runs it via a runtime format engine;
+    // a documented follow-on).
+    let (out, c) = run("module t; string s; initial begin \
+         $sformat(s, $sformatf(\"z%0d\", 1)); $display(\"R=%s\", s); \
+         #1 $finish; end endmodule\n");
+    assert_ne!(
+        c,
+        Some(0),
+        "$sformat format-position $sformatf must stay loud; got:\n{out}"
+    );
+}
+
+#[test]
+fn sformat_surplus_stays_loud() {
+    // Surplus value arg (1 spec, 2 args) → LOUD (iverilog itself warns "$sformat has
+    // 1 extra argument(s)" — not clean valid code).
+    let (out, c) = run("module t; string s; initial begin \
+         $sformat(s, \"[%s]\", $sformatf(\"A\"), $sformatf(\"B\")); $display(\"R=%s\", s); \
+         #1 $finish; end endmodule\n");
+    assert_ne!(c, Some(0), "$sformat surplus must stay loud; got:\n{out}");
+}
+
+#[test]
+fn sformat_plain_unchanged() {
+    // Byte-identity: $sformat with NO $sformatf arg is untouched.
+    let (out, c) = run("module t; string s; int x=42; initial begin \
+         $sformat(s, \"x=%0d\", x); $display(\"R=%s\", s); #1 $finish; end endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("R=x=42"), "got:\n{out}");
+}

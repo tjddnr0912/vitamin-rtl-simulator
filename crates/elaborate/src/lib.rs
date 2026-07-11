@@ -26572,9 +26572,10 @@ impl<'s> Elaborator<'s> {
                         return;
                     }
                 }
-                // $sformatf-as-print-arg (§4.5.127): a top-level `$sformatf(...)`
-                // VALUE argument to an IMMEDIATE format task ($display/$write/
-                // $fdisplay/$fwrite family) is not the direct rhs of an assignment,
+                // $sformatf-as-print-arg (§4.5.127, +§4.5.128 $sformat/$swrite):
+                // a top-level `$sformatf(...)` VALUE argument to an IMMEDIATE format
+                // task ($display/$write/$fdisplay/$fwrite, and the string-dest
+                // $sformat/$swrite* family) is not the direct rhs of an assignment,
                 // so lowering it would hit the loud guard in `lower_expr`. Hoist
                 // each such arg to a fresh string temp (rendered once, before the
                 // task — the immediate task renders exactly once too, and $sformatf
@@ -26599,20 +26600,31 @@ impl<'s> Elaborator<'s> {
                 // byte transparent — a `$sfmt_tmp$` string net renders exactly like a
                 // user `string` — so "no surplus" is the exact safe boundary.)
                 // Only args STRICTLY AFTER the format (`i > fmt_idx`) are hoisted —
-                // the fd of an `$f…` task (index 0) is never a valid `$sformatf` (a
-                // descriptor must be numeric), so it stays raw → loud, not a bogus run.
+                // the fd of an `$f…` task (or the string DEST of `$sformat`/`$swrite*`)
+                // at index 0 is never a valid `$sformatf`, so it stays raw → loud.
                 //
                 // DEFERRED tasks ($monitor/$strobe) are excluded: they re-render, so
                 // hoisting would freeze the value (and iverilog itself rejects a
                 // $sformatf arg there — no oracle). A NESTED $sformatf (in a concat/
                 // ternary) is left untouched → still loud (a separate follow-on).
-                let fmt_idx = usize::from(name.name.starts_with("$f"));
+                //
+                // `$sformat`/`$swrite*` write their rendered text to a string DEST at
+                // index 0 (like an `$f…` task's fd) and are IMMEDIATE (rendered once at
+                // execution), so their format is at index 1 and value args at i > 1.
+                let fmt_idx = usize::from(
+                    name.name.starts_with("$f")
+                        || matches!(
+                            name.name.as_str(),
+                            "$sformat" | "$swrite" | "$swriteb" | "$swriteo" | "$swriteh"
+                        ),
+                );
                 if matches!(
                     name.name.as_str(),
                     "$display" | "$displayb" | "$displayo" | "$displayh"
                         | "$write" | "$writeb" | "$writeo" | "$writeh"
                         | "$fdisplay" | "$fdisplayb" | "$fdisplayo" | "$fdisplayh"
                         | "$fwrite" | "$fwriteb" | "$fwriteo" | "$fwriteh"
+                        | "$sformat" | "$swrite" | "$swriteb" | "$swriteo" | "$swriteh"
                 ) && matches!(
                     args.get(fmt_idx).map(|a| &a.kind),
                     Some(ast::ExprKind::StrLit { raw })
