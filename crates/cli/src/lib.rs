@@ -87,6 +87,14 @@ pub struct VitaOpts {
     /// rail (byte-identical to before). Out-of-band sink — never hashed into
     /// artifacts, never enters the golden IR. One-shot `vita` only for v1.
     pub obs_dir: Option<String>,
+    /// `--hier-tree <path>` (design-structure export): after elaborate, write the module
+    /// hierarchy as an indented tree (`instance : module`, top at the root) to `<path>`.
+    /// `None` ⇒ not requested. Out-of-band (never hashed / never in the golden IR).
+    pub hier_tree: Option<String>,
+    /// `--inst-paths <path>` (design-structure export): after elaborate, write every
+    /// instance's full dotted path from the top (one per line, VCD-scope-consistent) to
+    /// `<path>` — copy/paste-ready for scope-setting / signal-force control.
+    pub inst_paths: Option<String>,
     /// `--probe <path>` (OBS-2): hierarchical net names to trace into `trace.jsonl`
     /// (requires `--obs-dir`). Resolved to net ids after elaborate (miss ⇒ loud).
     /// EMPTY ⇒ no probing. One-shot `vita` only.
@@ -473,14 +481,50 @@ pub fn frontend_text_to_unit_pre_with_includes(
     sink: &dyn LogSink,
     pre_opts: &hdl_preprocess::PreOpts,
 ) -> Option<FrontendUnit> {
+    frontend_sources_to_unit_pre_with_includes(
+        &[(file.to_string(), text.to_string())],
+        sink,
+        pre_opts,
+    )
+}
+
+/// [`frontend_text_to_unit_pre`] over MULTIPLE command-line sources (G12): each file
+/// keeps its own name + local line in diagnostics via the multi-file SourceMap,
+/// instead of the old pre-concatenation that named `sources[0]` with a global line.
+pub fn frontend_sources_to_unit_pre(
+    sources: &[(String, String)],
+    sink: &dyn LogSink,
+    pre_opts: &hdl_preprocess::PreOpts,
+) -> Option<(hdl_ast::SourceUnit, hdl_preprocess::ResolvedTimescales)> {
+    frontend_sources_to_unit_pre_with_includes(sources, sink, pre_opts).map(|(u, rt, _)| (u, rt))
+}
+
+/// Multi-source twin of [`frontend_text_to_unit_pre_with_includes`]: preprocess all
+/// `(name, text)` sources as ONE compilation unit (per-file SourceMap), then the
+/// shared lex/parse/timescale path. `\`include` search is relative to the first
+/// source's directory (matches the old single-buffer behavior).
+pub fn frontend_sources_to_unit_pre_with_includes(
+    sources: &[(String, String)],
+    sink: &dyn LogSink,
+    pre_opts: &hdl_preprocess::PreOpts,
+) -> Option<FrontendUnit> {
     // ── preprocess ─────────────────────────────────────────────────────────
-    // raw source -> expanded text + SourceMap. The expanded text (not `text`) is
-    // what the lexer and parser consume; spans they produce index the expanded
-    // buffer and resolve back to original files via `pp.map`.
-    let base_dir = std::path::Path::new(file)
+    // raw sources -> expanded text + multi-file SourceMap. The expanded text (one
+    // buffer) is what the lexer and parser consume; spans they produce index the
+    // expanded buffer and resolve back to the correct ORIGINAL file via `pp.map`.
+    let first_name = sources.first().map(|(n, _)| n.as_str()).unwrap_or("");
+    let base_dir = std::path::Path::new(first_name)
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
-    let pp = hdl_preprocess::preprocess_str(base_dir, file, text, pre_opts);
+    let pp = hdl_preprocess::preprocess_sources(base_dir, sources, pre_opts);
+    frontend_pp_to_unit(pp, sink)
+}
+
+/// Post-preprocess front-end shared by the single-file and multi-source entry points:
+/// consume a `PpResult` (expanded text + SourceMap) → lex → parse → resolve module
+/// timescales, plus the `\`include` closure. Diagnostics resolve through `pp.map` to
+/// the correct per-file name + local line.
+fn frontend_pp_to_unit(pp: hdl_preprocess::PpResult, sink: &dyn LogSink) -> Option<FrontendUnit> {
     for d in &pp.diags {
         let loc = pp.map.resolve_span(d.at, d.at);
         sink.emit(LogEvent::Diagnostic(Diagnostic {
@@ -593,11 +637,69 @@ pub fn timescale_unit_string(exp: i8) -> String {
     format!("{mantissa}{unit}")
 }
 
+/// Render the design hierarchy as an indented tree keyed by MODULE name (`--hier-tree`),
+/// top module at the root: `<instance> : <module>`, two spaces per level. Children are
+/// the instances whose `parent` is this index; order = deterministic elaboration order.
+fn render_hier_tree(insts: &[elaborate::InstanceInfo]) -> String {
+    // The leaf scope segment of the full dotted path (`top.u_cpu.u_alu` → `u_alu`); the
+    // top instance's path is its own name.
+    fn leaf(path: &str) -> &str {
+        path.rsplit('.').next().unwrap_or(path)
+    }
+    // Iterative pre-order walk (stack of (idx, depth)) so a deep hierarchy cannot
+    // overflow the process stack. Children are pushed in REVERSE so they emit in
+    // ascending elaboration order.
+    fn walk(insts: &[elaborate::InstanceInfo], root: usize, out: &mut String) {
+        let mut stack = vec![(root, 0usize)];
+        while let Some((idx, depth)) = stack.pop() {
+            let inf = &insts[idx];
+            for _ in 0..depth {
+                out.push_str("  ");
+            }
+            out.push_str(&format!("{} : {}\n", leaf(&inf.path), inf.module));
+            let children: Vec<usize> = insts
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.parent == Some(idx as u32))
+                .map(|(j, _)| j)
+                .collect();
+            for &j in children.iter().rev() {
+                stack.push((j, depth + 1));
+            }
+        }
+    }
+    let mut out = String::new();
+    for (i, inf) in insts.iter().enumerate() {
+        if inf.parent.is_none() {
+            walk(insts, i, &mut out);
+        }
+    }
+    out
+}
+
+/// Render every instance's full dotted path from the top, one per line (`--inst-paths`) —
+/// copy/paste-ready for scope-setting / signal-force control. VCD-`$scope`-consistent
+/// (arrayed / generate segments appear verbatim). Order = elaboration order.
+fn render_inst_paths(insts: &[elaborate::InstanceInfo]) -> String {
+    let mut out = String::new();
+    for inf in insts {
+        out.push_str(&inf.path);
+        out.push('\n');
+    }
+    out
+}
+
 /// Core: run the `vita` one-shot pipeline over already-read source `text`
 /// (`file` is the display name used in diagnostics). Returns the process exit
 /// code. This is the unit-test entry point — it never reads argv or files and
 /// never calls `std::process::exit`.
 pub fn run_vita_str(file: &str, text: &str, opts: &VitaOpts) -> i32 {
+    run_vita_sources(&[(file.to_string(), text.to_string())], opts)
+}
+
+/// [`run_vita_str`] over MULTIPLE command-line sources (G12) — preserves per-file
+/// name + line in diagnostics. `sources` = (display-name, text) in command order.
+pub fn run_vita_sources(sources: &[(String, String)], opts: &VitaOpts) -> i32 {
     let log = match open_log(opts) {
         Ok(l) => l,
         Err(c) => return c,
@@ -607,7 +709,7 @@ pub fn run_vita_str(file: &str, text: &str, opts: &VitaOpts) -> i32 {
     if inner.verbose() {
         echo_effective_inputs(&sink, opts);
     }
-    let code = run_vita_str_gated(file, text, opts, &inner, &sink);
+    let code = run_vita_str_gated(sources, opts, &inner, &sink);
     // doc-13: the counts summary epilogue is the unsuppressible end-of-stage
     // spine — printed on EVERY pipeline run (not on --help/--version/usage).
     inner.epilogue();
@@ -615,8 +717,7 @@ pub fn run_vita_str(file: &str, text: &str, opts: &VitaOpts) -> i32 {
 }
 
 fn run_vita_str_gated(
-    file: &str,
-    text: &str,
+    sources: &[(String, String)],
     opts: &VitaOpts,
     inner: &StderrSink,
     sink: &vita_log::GatedSink,
@@ -625,7 +726,7 @@ fn run_vita_str_gated(
     // `--obs-dir` is set; the Instant read is cheap and never affects output).
     let obs_start = std::time::Instant::now();
     // ── preprocess → lex → parse (shared front-end) ─────────────────────────
-    let Some((unit, rt)) = frontend_text_to_unit_pre(file, text, sink, &pre_opts_of(opts)) else {
+    let Some((unit, rt)) = frontend_sources_to_unit_pre(sources, sink, &pre_opts_of(opts)) else {
         return EXIT_USER_ERROR;
     };
 
@@ -639,6 +740,27 @@ fn run_vita_str_gated(
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;
     };
+
+    // Design-structure exports (one-shot): the elaborated hierarchy → a module tree
+    // (`--hier-tree`) and/or a full instance-path list (`--inst-paths`). Out-of-band; a
+    // write failure is loud but does NOT change the exit code (the elaboration itself
+    // succeeded). Staged `velab` support is a follow-on.
+    if let Some(path) = &opts.hier_tree {
+        if let Err(e) = std::fs::write(path, render_hier_tree(&sc.instances_info)) {
+            eprintln!(
+                "error[{}]: cannot write --hier-tree '{path}': {e}",
+                MsgCode::CliBadFlag.code_num()
+            );
+        }
+    }
+    if let Some(path) = &opts.inst_paths {
+        if let Err(e) = std::fs::write(path, render_inst_paths(&sc.instances_info)) {
+            eprintln!(
+                "error[{}]: cannot write --inst-paths '{path}': {e}",
+                MsgCode::CliBadFlag.code_num()
+            );
+        }
+    }
 
     // ── simulate ────────────────────────────────────────────────────────────
     // OBS-2: resolve --probe paths → net ids against the elaborated net_names
@@ -726,10 +848,20 @@ fn run_vita_str_gated(
     // final (so `status`/`exit_code` match exactly what the process returns).
     // Derived from the SAME `result` + diagnostic counts — no second source.
     if let Some(dir) = &opts.obs_dir {
+        // Reconstruct the display name + concatenated source text for the OBS run
+        // manifest (basename + blake3), byte-identical to the pre-G12 single buffer.
+        let file = sources.first().map(|(n, _)| n.as_str()).unwrap_or("");
+        let mut text = String::new();
+        for (_, t) in sources {
+            text.push_str(t);
+            if !t.ends_with('\n') {
+                text.push('\n');
+            }
+        }
         emit_obs(
             dir,
             file,
-            text,
+            &text,
             &opts.plusargs,
             &result,
             inner,
@@ -864,12 +996,12 @@ fn lex_error_message(kind: hdl_lexer::LexErrorKind) -> &'static str {
     }
 }
 
-/// Run `vita` over one or more source files: read + concatenate (preprocess is a
-/// passthrough), then drive the pipeline. Returns the process exit code.
+/// Run `vita` over one or more source files: read each file, then drive the pipeline.
+/// Returns the process exit code.
 ///
-/// File-read failures are CLI/usage errors (exit 3). With multiple files the
-/// concatenated text uses the FIRST file's name in diagnostics (v1 — the §7
-/// file_id→path bridge that disambiguates spans across files lands with vita-log).
+/// File-read failures are CLI/usage errors (exit 3). Each file is registered as its
+/// own SourceMap entry (G12) so multi-file diagnostics report the correct per-file
+/// name + local line, instead of the FIRST file's name with a concat-global line.
 pub fn run_vita(sources: &[String], opts: &VitaOpts) -> i32 {
     if sources.is_empty() {
         eprintln!(
@@ -878,17 +1010,10 @@ pub fn run_vita(sources: &[String], opts: &VitaOpts) -> i32 {
         );
         return EXIT_CLI_ERROR;
     }
-    let mut text = String::new();
+    let mut srcs: Vec<(String, String)> = Vec::with_capacity(sources.len());
     for path in sources {
         match std::fs::read_to_string(path) {
-            Ok(s) => {
-                text.push_str(&s);
-                // separate files with a newline so a missing trailing newline in
-                // one file can't fuse tokens across the boundary.
-                if !s.ends_with('\n') {
-                    text.push('\n');
-                }
-            }
+            Ok(s) => srcs.push((path.clone(), s)),
             Err(e) => {
                 eprintln!(
                     "error[{}]: cannot read '{path}': {e}",
@@ -898,8 +1023,7 @@ pub fn run_vita(sources: &[String], opts: &VitaOpts) -> i32 {
             }
         }
     }
-    let display_name = sources[0].as_str();
-    run_vita_str(display_name, &text, opts)
+    run_vita_sources(&srcs, opts)
 }
 
 /// Which multicall applet was requested (by `argv[0]` basename, or `vita <sub>`).
@@ -1004,6 +1128,8 @@ pub fn run(argv: &[String]) -> i32 {
                 tops: Vec::new(),
                 plusargs: io.plusargs,
                 obs_dir: io.obs_dir,
+                hier_tree: io.hier_tree,
+                inst_paths: io.inst_paths,
                 probes: io.probes,
                 probe_file: io.probe_file,
             };
@@ -1280,6 +1406,7 @@ fn run_vcmp_gated(
     // read+concat (mirrors run_vita): read error → exit 3. Per-source raw
     // digests feed the worklib manifest (RULE-V staleness keys).
     let mut text = String::new();
+    let mut srcs: Vec<(String, String)> = Vec::with_capacity(sources.len());
     let mut src_digests: Vec<(String, [u8; 32])> = Vec::new();
     for path in sources {
         match std::fs::read_to_string(path) {
@@ -1289,6 +1416,7 @@ fn run_vcmp_gated(
                 if !s.ends_with('\n') {
                     text.push('\n');
                 }
+                srcs.push((path.clone(), s));
             }
             Err(e) => {
                 eprintln!(
@@ -1299,11 +1427,13 @@ fn run_vcmp_gated(
             }
         }
     }
-    let file = sources[0].as_str();
 
     // preprocess → lex → parse through the SAME shared front-end the one-shot uses.
+    // Each file is its own SourceMap entry (G12) so diagnostics keep per-file name +
+    // line; `text` (the concatenation) is retained only for the RULE-V composite
+    // digest below, keeping worklib staleness keys byte-stable.
     let Some((unit, rt, includes)) =
-        frontend_text_to_unit_pre_with_includes(file, &text, sink, &pre_opts_of(opts))
+        frontend_sources_to_unit_pre_with_includes(&srcs, sink, &pre_opts_of(opts))
     else {
         return EXIT_USER_ERROR;
     };
@@ -2636,6 +2766,10 @@ struct IoArgs {
     /// `--obs-dir <D>` (G2 OBS-1a): directory for the run manifest + result
     /// ledger. `None` ⇒ no obs rail. Out-of-band; one-shot `vita` only for v1.
     obs_dir: Option<String>,
+    /// `--hier-tree <path>` / `--inst-paths <path>`: design-structure exports (module
+    /// hierarchy tree / full instance-path list). `None` ⇒ not requested.
+    hier_tree: Option<String>,
+    inst_paths: Option<String>,
     /// `--probe <path>` (OBS-2, repeatable): net names to trace into `trace.jsonl`.
     probes: Vec<String>,
     /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
@@ -2670,6 +2804,8 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut tops: Vec<String> = Vec::new();
     let mut plusargs: Vec<String> = Vec::new();
     let mut obs_dir: Option<String> = None;
+    let mut hier_tree: Option<String> = None;
+    let mut inst_paths: Option<String> = None;
     let mut probes: Vec<String> = Vec::new();
     let mut probe_file: Option<String> = None;
     let mut i = 0;
@@ -2880,6 +3016,28 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 obs_dir = Some(v.clone());
                 i += 2;
             }
+            "--hier-tree" => {
+                let Some(v) = args.get(i + 1).filter(|v| !v.is_empty()) else {
+                    eprintln!(
+                        "error[{}]: '--hier-tree' needs a non-empty path",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                hier_tree = Some(v.clone());
+                i += 2;
+            }
+            "--inst-paths" => {
+                let Some(v) = args.get(i + 1).filter(|v| !v.is_empty()) else {
+                    eprintln!(
+                        "error[{}]: '--inst-paths' needs a non-empty path",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                inst_paths = Some(v.clone());
+                i += 2;
+            }
             "--probe" => {
                 let Some(v) = args.get(i + 1) else {
                     eprintln!(
@@ -2975,6 +3133,8 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         tops,
         plusargs,
         obs_dir,
+        hier_tree,
+        inst_paths,
         probes,
         probe_file,
     })

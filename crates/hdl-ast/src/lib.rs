@@ -762,6 +762,10 @@ pub struct IntraEvent {
 pub struct EventExpr {
     pub edge: Edge,
     pub expr: Expr,
+    /// G7 (IEEE 1800 §9.4.2.3): an optional `iff <expr>` guard — the event fires only
+    /// when this condition is true at the edge instant. Elaborate desugars a single
+    /// guarded term `@(posedge clk iff en) S` to `@(posedge clk) if (en) S`.
+    pub iff: Option<Expr>,
     pub span: Span,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
@@ -1397,6 +1401,34 @@ pub enum ExprKind {
     /// `null` — the null class handle literal (N7). Lowers to a 0-valued
     /// 32-bit handle; dereferencing it yields X + a warn-once diagnostic.
     Null,
+    /// G7-family G11: a time-unit literal `1ns` / `10ps` / `1.5us` (IEEE §5.8) —
+    /// `num` is the numeric literal and `unit_exp` its base-10 second exponent
+    /// (`s`=0, `ms`=-3, `us`=-6, `ns`=-9, `ps`=-12, `fs`=-15). Elaborate folds it to a
+    /// value in the current module's time unit (`num × 10^(unit_exp − module_unit_exp)`)
+    /// so a `#(…)` delay scales correctly; a sub-precision literal is loud.
+    TimeLit {
+        num: Box<Expr>,
+        unit_exp: i8,
+    },
+    /// G10 (IEEE §13.5.4): a named argument in a subroutine call — `.formal(value)` or
+    /// `.formal()` (empty ⇒ use the formal's default). Appears ONLY as a direct element
+    /// of a `Call`'s `args`; elaborate reorders named args to positional using the
+    /// callee's formal list (`resolve_named_args`) before lowering, so a `NamedArg`
+    /// reaching `lower_expr` is a misuse (loud).
+    NamedArg {
+        formal: Ident,
+        value: Option<Box<Expr>>,
+    },
+    /// G8 (IEEE §8.13): a method call chained on a CALL / method RESULT —
+    /// `s.substr(2,4).atoi()`. The `recv` is a call/method result (a plain `a.b.c` is a
+    /// hier path, not this). Elaborate lowers `recv` to a handle and dispatches the
+    /// method on it (a string method chains as a nested `SysFunc` — a `.substr()` result
+    /// is itself a string handle, so no temporary is needed).
+    MethodCall {
+        recv: Box<Expr>,
+        method: Ident,
+        args: Vec<Expr>,
+    },
     /// Bare `$` — the queue last-index (`q[$]`, `q[$-1]`). Only meaningful
     /// inside a queue element select; elaborate substitutes `size()-1` there
     /// and loud-rejects it anywhere else.
@@ -1685,6 +1717,11 @@ pub struct FunctionDef {
     /// `ParamType::Integer` with 4-state `integer`; byte/shortint/longint reach
     /// elaborate as a bare range like `reg [N]`), so the parser records it here.
     pub ret_two_state: bool,
+    /// G4: the return type is `string` (IEEE §6.16). `ParamType` has no String
+    /// variant, so — like `ret_two_state` — the parser records it here. Elaborate
+    /// makes the return net a `NetKind::String` and recognizes a call to this
+    /// function as a string operand (`expr_is_string_ast`).
+    pub ret_string: bool,
     pub name: Ident,
     pub ports: Vec<TfPort>,
     pub body_decls: Vec<NetVarDecl>,

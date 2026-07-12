@@ -202,13 +202,15 @@ fn uarr_loud_real_element() {
 }
 
 #[test]
-fn uarr_loud_bare_int_signed_element() {
-    // A bare `int` element is SIGNED → loud (the md-packed part-select reads unsigned).
+fn uarr_bare_int_signed_element_reads_signed() {
+    // G3 (round-10): a bare `int` element is SIGNED and is now SUPPORTED — the
+    // whole-element read re-stamps `$signed`, so a negative element reads negative
+    // (not zero-extended via the unsigned part-select). Was loud before.
     let src = "module m(output int o);\n\
         function automatic int f(input int a[0:3], input int i); return a[i]; endfunction\n\
         int g[0:3];\n\
-        initial begin g[0]=5; o=f(g,0); $display(\"o=%0d\",o); end endmodule";
-    assert!(!ok(src), "a bare (signed) int element must be loud");
+        initial begin g[0]=-5; o=f(g,0); $display(\"o=%0d\",o); end endmodule";
+    assert_eq!(run(src).0, "o=-5");
 }
 
 #[test]
@@ -266,14 +268,14 @@ fn uarr_loud_non_zero_based() {
 }
 
 #[test]
-fn uarr_loud_signed_element() {
-    // A signed element would read unsigned via the part-select — loud until the
-    // read path re-stamps the element sign.
+fn uarr_signed_element_reads_signed() {
+    // G3 (round-10): a `logic signed [7:0]` element is now SUPPORTED — the whole-element
+    // read re-stamps `$signed` so it reads negative (not unsigned via the part-select).
     let src = "module m(output logic signed [7:0] o);\n\
         function automatic logic signed [7:0] f(input logic signed [7:0] a[0:3], input int i); return a[i]; endfunction\n\
         logic signed [7:0] g[0:3];\n\
         initial begin g[0]=-8'sd5; o=f(g,0); $display(\"o=%0d\",o); end endmodule";
-    assert!(!ok(src), "signed-element formal must be loud");
+    assert_eq!(run(src).0, "o=-5");
 }
 
 #[test]

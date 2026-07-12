@@ -366,10 +366,27 @@ pub struct CovItem {
     pub weight: u32,
 }
 
+/// One elaborated instance's static structure, for the design-hierarchy exports
+/// (`--hier-tree` module tree + `--inst-paths` full-path list). Out-of-band (not in
+/// the frozen sim-ir), populated at `elaborate_instance` in instance-index order.
+#[derive(Debug, Clone)]
+pub struct InstanceInfo {
+    /// The full dotted instance path from the top (`top.u_cpu.u_alu`). Empty for the
+    /// top instance's own root name is avoided — the top is its module/instance name.
+    pub path: String,
+    /// The module name this instance elaborates.
+    pub module: String,
+    /// Parent instance index (into the same `Vec`), or `None` for a top root.
+    pub parent: Option<u32>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Sidecars {
     pub fork_modes: ForkModeTable,
     pub net_names: NetNameTable,
+    /// Static design hierarchy (one entry per elaborated instance, in index order) for
+    /// the `--hier-tree` / `--inst-paths` exports. EMPTY ⇒ not requested / no instances.
+    pub instances_info: Vec<InstanceInfo>,
     /// OBS-1b: per covergroup-instance coverage manifest (see [`CovgInstMeta`]).
     /// EMPTY ⇒ no covergroups ⇒ no `coverage.json` payload. Golden-neutral.
     pub coverage_manifest: Vec<CovgInstMeta>,
@@ -670,6 +687,7 @@ pub fn elaborate_with_timescale_roots(
         clocking_outputs: std::mem::take(&mut el.clocking_outputs),
         ca_delays: std::mem::take(&mut el.ca_delays),
         net_names: el.net_name_table(), // BEFORE finish() consumes `el`
+        instances_info: std::mem::take(&mut el.instances_info),
     };
     if el.had_error {
         (None, sc)
@@ -974,6 +992,11 @@ struct ArrayFormal {
     count: u32,
     elem_w: u32,
     ascending: bool,
+    /// G3: the element type is SIGNED (`byte`/`int`/`shortint`/`longint`/`logic
+    /// signed [..]`). The md-packed slot is whole-`signed:false`; a whole-element read
+    /// `arr[i]` re-stamps `$signed` (`lower_packed_read`) so a negative element reads
+    /// as negative instead of zero-extended (silent-wrong). Unsigned ⇒ `false`.
+    elem_signed: bool,
 }
 
 /// A hierarchical WRITE target (`tb.dut.x = …`) whose net does not exist when the
@@ -2530,6 +2553,7 @@ fn subst_sensitivity(s: &ast::Sensitivity, map: &BTreeMap<String, ast::Expr>) ->
                 .map(|ev| ast::EventExpr {
                     edge: ev.edge,
                     expr: subst_expr(&ev.expr, map),
+                    iff: ev.iff.as_ref().map(|e| subst_expr(e, map)),
                     span: ev.span,
                 })
                 .collect(),
@@ -2977,6 +3001,9 @@ struct Elaborator<'s> {
     wired_and_nets: BTreeSet<u32>,
     wired_or_nets: BTreeSet<u32>,
     instances: Vec<ir::Instance>,
+    /// Static per-instance hierarchy info (path/module/parent) for the design-structure
+    /// exports (`--hier-tree` / `--inst-paths`). Parallel to `instances`, index-aligned.
+    instances_info: Vec<InstanceInfo>,
 
     // ── v2: procedural lowering arenas ──
     // `processes` is one Process per ProceduralBlock (module-body order).
@@ -3536,6 +3563,7 @@ impl<'s> Elaborator<'s> {
             wired_and_nets: BTreeSet::new(),
             wired_or_nets: BTreeSet::new(),
             instances: Vec::new(),
+            instances_info: Vec::new(),
             processes: Vec::new(),
             stmts: Vec::new(),
             symbols: BTreeMap::new(),
@@ -5084,6 +5112,13 @@ impl<'s> Elaborator<'s> {
             module: 0, // sim-engine ignores this; 0 for v3 (no module table needed)
             first_net,
             net_count: 0, // patched in (5)
+        });
+        // Design-structure export sidecar (parallel to `instances`): the module name and
+        // full dotted path this instance elaborates, for `--hier-tree` / `--inst-paths`.
+        self.instances_info.push(InstanceInfo {
+            path: inst_path.to_string(),
+            module: module.name.name.clone(),
+            parent: parent_inst,
         });
 
         // Enter this instance's scope (restored before returning).
@@ -7337,6 +7372,27 @@ impl<'s> Elaborator<'s> {
     fn const_eval_in_scope(&self, e: &ast::Expr) -> Option<i64> {
         match &e.kind {
             ast::ExprKind::IntLit { .. } => const_eval_i64_lit(e),
+            // G11: a time literal folds to the CURRENT module's time unit. Final ticks =
+            // value × 10^(unit_exp − global_prec_exp); the delay path × cur_time_mult, so
+            // the folded value is that / cur_time_mult (module units). `None` (loud at the
+            // caller) for sub-precision (finer than the design precision / module unit),
+            // a negative/real/non-constant value, or overflow.
+            ast::ExprKind::TimeLit { num, unit_exp } => {
+                let val = self.const_eval_in_scope(num)?;
+                if val < 0 {
+                    return None;
+                }
+                let e = *unit_exp as i32 - self.global_prec_exp as i32;
+                if e < 0 {
+                    return None;
+                }
+                let ticks = 10i128.checked_pow(e as u32)?.checked_mul(val as i128)?;
+                let mult = self.cur_time_mult as i128;
+                if mult == 0 || ticks % mult != 0 {
+                    return None;
+                }
+                i64::try_from(ticks / mult).ok()
+            }
             ast::ExprKind::Paren { inner } => self.const_eval_in_scope(inner),
             ast::ExprKind::Unary { op, operand } => {
                 let v = self.const_eval_in_scope(operand)?;
@@ -12487,6 +12543,52 @@ impl<'s> Elaborator<'s> {
                 let cid = self.lower_int_literal(*kind, raw);
                 self.push_expr(ir::Expr::Const { val: cid })
             }
+            // G11: a time literal folds to a Const in the current module's time unit
+            // (reuses the `const_eval_in_scope` fold). Loud on sub-precision / real /
+            // non-constant (correct-or-loud).
+            ast::ExprKind::TimeLit { .. } => match self.const_eval_in_scope(e) {
+                Some(d) => {
+                    let cid = self.intern_const(make_const_i64(d, 64, false));
+                    self.push_expr(ir::Expr::Const { val: cid })
+                }
+                None => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a time literal that is non-constant, real, negative, or finer \
+                         than the module's time unit/precision is unsupported",
+                    );
+                    self.placeholder_expr()
+                }
+            },
+            // G10: a `NamedArg` is consumed by the call reorder (`resolve_named_args`);
+            // reaching `lower_expr` means it was used outside a user-subroutine call
+            // (e.g. a named arg to a system task) — loud (correct-or-loud).
+            ast::ExprKind::NamedArg { .. } => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a named argument `.formal(...)` is only valid in a user function / \
+                     task call",
+                );
+                self.placeholder_expr()
+            }
+            // G8: a method chained on a call/method RESULT (`s.substr(a,b).atoi()`). Lower
+            // the receiver, then dispatch the method on its handle — a string method
+            // chains as a nested SysFunc (a `.substr()`/`.toupper()`/`.tolower()` result
+            // IS a string handle, per `ir_expr_is_string`). A non-string receiver (e.g.
+            // chaining on `.atoi()`, which returns an int) is loud (correct-or-loud).
+            ast::ExprKind::MethodCall { recv, method, args } => {
+                let h = self.lower_expr(recv);
+                if self.ir_expr_is_string(h) {
+                    self.lower_string_method_expr_handle(h, &method.name, args)
+                } else {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a chained method call is supported only on a string-returning \
+                         method result (e.g. `s.substr(a,b).atoi()`)",
+                    );
+                    self.placeholder_expr()
+                }
+            }
             // v7 P2-D: explicit `pkg::name` — folds through the package
             // const map (sees the PACKAGE value even when a local declaration
             // shadows an import, iverilog-pinned). Function references need
@@ -14089,6 +14191,115 @@ impl<'s> Elaborator<'s> {
     /// site, like any other actual (so a constant / module-scope default just works;
     /// a default that references an earlier FORMAL resolves in the caller's scope,
     /// not the formal — out of scope here).
+    /// G10 (IEEE §13.5.4): reorder named arguments (`.formal(v)` / `.formal()`) to
+    /// positional using the callee's formal list. Leading positional args fill slots
+    /// 0..k; each named arg scatters to its formal's index; every unbound slot uses the
+    /// formal's default. Loud (correct-or-loud) on: an unknown / duplicated formal, a
+    /// positional arg after a named one, a `.formal()` with no default, a default that
+    /// references another formal, a missing actual, or too many positionals. Returns the
+    /// fully-positional args (owned) so both the frame and inline call paths see a plain
+    /// list. Only invoked when at least one arg is a `NamedArg`.
+    fn resolve_named_args(
+        &mut self,
+        fname: &str,
+        ports: &[ast::TfPort],
+        args: &[ast::Expr],
+    ) -> Option<Vec<ast::Expr>> {
+        let mut slots: Vec<Option<ast::Expr>> = vec![None; ports.len()];
+        let mut seen_named = false;
+        let mut pos = 0usize;
+        for a in args {
+            if let ast::ExprKind::NamedArg { formal, value } = &a.kind {
+                seen_named = true;
+                let Some(idx) = ports.iter().position(|p| p.name.name == formal.name) else {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!("call to `{fname}`: no formal named `{}`", formal.name),
+                    );
+                    return None;
+                };
+                if slots[idx].is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "call to `{fname}`: formal `{}` is bound more than once",
+                            formal.name
+                        ),
+                    );
+                    return None;
+                }
+                match value {
+                    Some(v) => slots[idx] = Some((**v).clone()),
+                    None => match &ports[idx].default {
+                        Some(def) => slots[idx] = Some(def.clone()),
+                        None => {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "call to `{fname}`: `.{}()` has no default value",
+                                    formal.name
+                                ),
+                            );
+                            return None;
+                        }
+                    },
+                }
+            } else {
+                if seen_named {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "call to `{fname}`: a positional argument cannot follow a named one"
+                        ),
+                    );
+                    return None;
+                }
+                if pos >= ports.len() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!("call to `{fname}`: too many positional arguments"),
+                    );
+                    return None;
+                }
+                slots[pos] = Some(a.clone());
+                pos += 1;
+            }
+        }
+        let mut out = Vec::with_capacity(ports.len());
+        for (i, slot) in slots.into_iter().enumerate() {
+            match slot {
+                Some(e) => out.push(e),
+                None => match &ports[i].default {
+                    Some(def) => {
+                        // Same guard as `fill_default_args`: a default referencing another
+                        // formal would wrongly bind to a caller variable (silent-wrong).
+                        if ports.iter().any(|q| expr_reads_ident(def, &q.name.name)) {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "function/task `{fname}`: a default argument value that references another formal is unsupported"
+                                ),
+                            );
+                            return None;
+                        }
+                        out.push(def.clone());
+                    }
+                    None => {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "call to `{fname}`: missing actual for formal `{}` (no default value)",
+                                ports[i].name.name
+                            ),
+                        );
+                        return None;
+                    }
+                },
+            }
+        }
+        Some(out)
+    }
+
     fn fill_default_args<'a>(
         &mut self,
         fname: &str,
@@ -14156,6 +14367,34 @@ impl<'s> Elaborator<'s> {
             if let Some(net) = self.string_handle(&name.segments[0].name) {
                 return self.lower_string_method_expr(net, &name.segments[1].name, args);
             }
+            // G1: a string method on a string-domain FORMAL / inline LOCAL. A frame
+            // string formal is a 1-bit wire slot and an inline string local is a subst
+            // value — neither is a bare `NetKind::String` net, so `string_handle` above
+            // misses them and the call would fall to the misleading "hierarchical
+            // function call (deferred)" error. But the receiver IS string-domain
+            // (`expr_is_string_ast`), and when its lowered handle is byte-readable
+            // (frame-slot `Signal` / literal `Const`, exactly what `string_index_read`
+            // routes `s[i]` through), dispatch the method on it — `.len()`, `.getc()`,
+            // `.atoi()`, … all read via the engine's `handle_str_bytes`.
+            {
+                let base = ast::Expr {
+                    kind: ast::ExprKind::Ident(ast::HierPath {
+                        segments: vec![name.segments[0].clone()],
+                        span: name.segments[0].span,
+                    }),
+                    span: name.segments[0].span,
+                };
+                if self.expr_is_string_ast(&base) {
+                    let h = self.lower_expr(&base);
+                    if self.handle_is_str_readable(h) {
+                        return self.lower_string_method_expr_handle(
+                            h,
+                            &name.segments[1].name,
+                            args,
+                        );
+                    }
+                }
+            }
             // IEEE §26.3 (round-7): a package-scoped function call `pkg::name(args)`.
             // Reached only when the head is not a handle / cover / class object above
             // (the object-method and package-scope namespaces are disjoint here), and
@@ -14187,6 +14426,43 @@ impl<'s> Elaborator<'s> {
             }
         };
 
+        // G10: reorder named args (`.formal(v)` / `.formal()`) to positional using the
+        // callee's formals (if any named arg is present), so the frame and inline paths
+        // below both see a plain positional list.
+        let reordered_args;
+        let args: &[ast::Expr] = if args
+            .iter()
+            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
+        {
+            match self.resolve_named_args(&fname, &func.ports, args) {
+                Some(v) => {
+                    reordered_args = v;
+                    &reordered_args
+                }
+                None => return self.placeholder_expr(),
+            }
+        } else {
+            args
+        };
+
+        // G4: a `string` return type now PARSES (no more E2002 cascade — the report's
+        // primary complaint), but a materialized string return needs frame String-slot
+        // storage the engine does not yet provide (a frame return/local slot is a
+        // bit-vector; a String slot reads back empty — silent-wrong), and the inline
+        // path yields a raw `$sformatf` ExprId that does not render/compare as a string
+        // outside a direct string-var assignment. Rather than ship either silent-wrong,
+        // reject the CALL with one honest diagnostic (correct-or-loud). Full support
+        // (frame heap string slots) is a documented follow-on.
+        if func.ret_string {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "function `{fname}`: a `string` return type is not yet supported \
+                     (return the text via a `string` output/ref formal instead)"
+                ),
+            );
+            return self.placeholder_expr();
+        }
         // B1 frame-call: a function in the frame set (automatic OR on a recursion
         // cycle) is LOWERED to the func arena (reserved in step 6.5), not inlined.
         // Emit an `Expr::Call` to its FuncId — the args are lowered in the CALLER
@@ -14597,6 +14873,14 @@ impl<'s> Elaborator<'s> {
             .filter_map(|(n, f)| ast_func_return_width(f).map(|w| (n.clone(), w)))
             .collect();
         for (name, f) in &self.func_table {
+            // G4: a `string`-returning function is neither framed nor inlined — its call
+            // is loud-rejected in `inline_function` (frame String-slot storage is a
+            // follow-on). Keep it OUT of the frame set so no frame body is reserved /
+            // lowered (which would emit a confusing secondary E3018 for its string local
+            // reserved as a 1-bit Wire). The call-site diagnostic is the single message.
+            if f.ret_string {
+                continue;
+            }
             // A function is framed when it is `automatic`, recursive (below), its
             // body is NOT straight-line foldable (has control flow / a construct the
             // inline path rejects), OR its return type is 2-state (so the frame
@@ -14806,15 +15090,12 @@ impl<'s> Elaborator<'s> {
                 "a multi-dimensional unpacked-array formal (only a single dimension is supported)",
             ));
         }
-        // A signed element (`logic signed [7:0] arr [0:3]`): the md-packed element
-        // read is a part-select (unsigned per §11.5.1), but an unpacked-array element
-        // access keeps the element's signedness — so a signed element would read
-        // unsigned (silent-wrong). Loud until the read path re-stamps the sign.
-        if p.signed {
-            return Some(Err(
-                "a signed-element unpacked-array formal (only unsigned elements are supported)",
-            ));
-        }
+        // G3: a signed element (`byte`/`int`/`shortint`/`longint`/`logic signed [..]`)
+        // is supported — the md-packed element read is a part-select (unsigned per
+        // §11.5.1), so `lower_packed_read` re-stamps `$signed` on a whole-element read
+        // when `elem_signed` is set (below). `p.signed` reflects the element type's
+        // declared signedness (`byte`→signed, `byte unsigned`→unsigned).
+        let elem_signed = p.signed;
         // `ascending` = the formal's declared unpacked-dim direction (`[0:N-1]` is
         // little-endian ascending, `[N-1:0]` big-endian descending). The ACTUAL must
         // match it (§7.6 array copy is POSITIONAL, so `arr[i]` == the actual element
@@ -14885,6 +15166,7 @@ impl<'s> Elaborator<'s> {
             count,
             elem_w,
             ascending,
+            elem_signed,
         }))
     }
 
@@ -15740,6 +16022,11 @@ impl<'s> Elaborator<'s> {
     fn resize_inline_assign(&mut self, e: u32, w: u32, target_signed: bool) -> u32 {
         // real values are not bit-resizable — leave them untouched.
         if self.expr_is_real(e) {
+            return e;
+        }
+        // G4: a string ExprId (`$sformatf(...)`, a string local/return) is a heap value,
+        // not a bit-vector — a resize would corrupt it. Leave untouched.
+        if self.ir_expr_is_string(e) {
             return e;
         }
         let rw = self.ir_bits_of(e).unwrap_or(w);
@@ -17438,6 +17725,15 @@ impl<'s> Elaborator<'s> {
                 _ => false,
             },
             ast::ExprKind::Call { name, .. } => {
+                // G4: a call to a user function declared `function string f(...)` is a
+                // string-domain value, so `f(x) == "…"` lowers as a string compare.
+                if name.segments.len() == 1 {
+                    if let Some(f) = self.func_table.get(&name.segments[0].name) {
+                        if f.ret_string {
+                            return true;
+                        }
+                    }
+                }
                 name.segments.len() == 2
                     && self.string_handle(&name.segments[0].name).is_some()
                     && matches!(
@@ -17475,6 +17771,21 @@ impl<'s> Elaborator<'s> {
     /// mutator (`lower_string_method_stmt`); unknown methods are loud.
     fn lower_string_method_expr(&mut self, net: u32, method: &str, args: &[ast::Expr]) -> u32 {
         let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        self.lower_string_method_expr_handle(handle, method, args)
+    }
+
+    /// G1: [`lower_string_method_expr`] over a PRE-LOWERED string handle — a string-net
+    /// `Signal`, a frame string-FORMAL slot `Signal` (a 1-bit wire whose frame slot
+    /// holds the materialized string, read via the engine's `handle_str_bytes` eval
+    /// fallback), or a literal string `Const`. Lets a string method on a formal / inline
+    /// local dispatch even though its handle is not a bare `NetKind::String` net. The
+    /// caller must have confirmed the handle is string-readable (`handle_is_str_readable`).
+    fn lower_string_method_expr_handle(
+        &mut self,
+        handle: u32,
+        method: &str,
+        args: &[ast::Expr],
+    ) -> u32 {
         let arity_ok = |n: usize| args.len() == n;
         let which = match method {
             "len" if arity_ok(0) => ir::SysFuncId::StrLen,
@@ -18864,12 +19175,30 @@ impl<'s> Elaborator<'s> {
             .product();
         let base = self.push_expr(ir::Expr::Signal { net, word: None });
         let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
-        self.push_expr(ir::Expr::Select {
+        let sel = self.push_expr(ir::Expr::Select {
             base,
             offset,
             width,
             kind: ir::SelKind::PartIdxUp,
-        })
+        });
+        // G3: a signed-element unpacked-array FORMAL (`byte b[0:3]`) is md-packed with a
+        // whole-`signed:false` slot; a WHOLE-element read (`b[i]`) is a part-select,
+        // unsigned per §11.5.1 — re-stamp `$signed` so a negative element reads negative
+        // (else -1 → 255, silent-wrong). Gated on `frame_arr_formal_meta` (a regular
+        // multi-dim packed net element stays unsigned) AND a whole-element read
+        // (`idxs.len()+1 == dims.len()`; a sub-bit `b[i][k]` stays unsigned per §11.5.1).
+        if idxs.len() + 1 == dims.len()
+            && self
+                .frame_arr_formal_meta
+                .get(&net)
+                .is_some_and(|af| af.elem_signed)
+        {
+            return self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::Signed,
+                args: vec![sel],
+            });
+        }
+        sel
     }
 
     /// N3.4: a `[msb:lsb]` part-select on a BARE multi-dim PACKED net (e.g.
@@ -25868,7 +26197,62 @@ impl<'s> Elaborator<'s> {
     }
 
     // ── one ProceduralBlock → one Process ──────────────────────────
+    /// G7: the single-term `iff` event guard (IEEE §9.4.2.3) — `Some(guard)` when the
+    /// sensitivity list has exactly one term and it carries `iff` (`@(edge sig iff g)`),
+    /// else `None`. A multi-term list where any term has `iff` cannot become one
+    /// body-wrap (differing per-term guards) → loud, returns `None` (the caller then
+    /// lowers unguarded, which fails elaboration anyway — no silent-wrong).
+    fn event_iff_guard(&mut self, ctrl: &ast::Sensitivity) -> Option<ast::Expr> {
+        let ast::Sensitivity::List(terms) = ctrl else {
+            return None;
+        };
+        if terms.iter().all(|t| t.iff.is_none()) {
+            return None;
+        }
+        if terms.len() != 1 {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "an `iff` guard on a multi-term event control is unsupported (only a \
+                 single guarded term `@(edge sig iff cond)` is supported)",
+            );
+            return None;
+        }
+        terms[0].iff.clone()
+    }
+
+    /// G7: rewrite `always @(edge sig iff g) S` to `always @(edge sig) if (g) S` — the
+    /// IR sensitivity has no guard slot, so the guard rides as a body `if`. Strips the
+    /// `iff` from the sensitivity (so the recursion in `lower_proc_block` does not
+    /// re-desugar). `None` for the common no-`iff` case (and after a multi-term loud).
+    fn desugar_event_iff(&mut self, p: &ast::ProceduralBlock) -> Option<ast::ProceduralBlock> {
+        let sens = p.sensitivity.as_ref()?;
+        let guard = self.event_iff_guard(sens)?;
+        let ast::Sensitivity::List(terms) = sens else {
+            return None;
+        };
+        let stripped = ast::Sensitivity::List(vec![ast::EventExpr {
+            iff: None,
+            ..terms[0].clone()
+        }]);
+        Some(ast::ProceduralBlock {
+            kind: p.kind,
+            sensitivity: Some(stripped),
+            body: Box::new(ast::Stmt::If {
+                cond: guard,
+                then_s: p.body.clone(),
+                else_s: None,
+                span: p.span,
+            }),
+            span: p.span,
+        })
+    }
+
     fn lower_proc_block(&mut self, p: &ast::ProceduralBlock) -> ir::Process {
+        // G7: desugar a single-term `iff` event guard into a body `if` (the IR
+        // sensitivity carries no guard). Shadow `p` with the rewritten block; the rest
+        // of the function is unchanged.
+        let desugared = self.desugar_event_iff(p);
+        let p = desugared.as_ref().unwrap_or(p);
         // The ProcId this process WILL occupy when the caller pushes it. Stable for
         // the whole body lowering (lower_proc_block is non-reentrant: it fully
         // builds one Process and returns BEFORE processes.push). Any fork mode
@@ -26836,7 +27220,24 @@ impl<'s> Elaborator<'s> {
                 });
                 b.start_block(resume);
                 if let Some(body) = body {
-                    self.lower_stmt(b, body);
+                    // G7: an `iff` guard on this event control gates the controlled
+                    // statement (`@(edge sig iff g) S` ≡ `@(edge sig) if (g) S`; the IR
+                    // wait cause above ignores the guard slot).
+                    let guard = self.event_iff_guard(ctrl);
+                    let wrapped;
+                    let body_ref: &ast::Stmt = if let Some(g) = guard {
+                        let gspan = g.span;
+                        wrapped = ast::Stmt::If {
+                            cond: g,
+                            then_s: body.clone(),
+                            else_s: None,
+                            span: gspan,
+                        };
+                        &wrapped
+                    } else {
+                        body
+                    };
+                    self.lower_stmt(b, body_ref);
                 }
                 if star {
                     let nets = self.comb_read_set(&b.body[resume.raw() as usize..]);

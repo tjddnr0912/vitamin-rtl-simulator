@@ -22,6 +22,7 @@
 | R-L4 | handshake/protocol event(채널 fire 전수) | §2 L4 | 로그 rail |
 | R-L5 | coverage summary(coverage.json — "무엇이 안 돌았나" 즉답) | §2 L5 | 로그 rail |
 | R-L6 | SVA log(property **이름**+연루 신호값) | §2 L6 | 로그 rail |
+| R-S0 | **design-structure export**(elaborate 후 module hierarchy tree + instance full-path 목록·scope 설정/signal force copy-paste용) | round-10 요청 | 정적 export |
 | R-S3 | emulator↔sim 공통 **stage-trace** 스키마 + golden stage hook(정렬 diff→모듈 지목) | §3·§9.2 | 로그 rail(훅) |
 | R-C1 | 프로그램 제어 API: `poke/peek/step/run_until` (stdio JSON-RPC, TB 없이 루프 폐합) | §9.1 | 제어 capability |
 | R-C2 | 결정적 checkpoint/replay/time-travel(`snapshot/restore/rewind_to`) | §9.1 | 제어 capability |
@@ -79,6 +80,8 @@
 | **OBS-4** | `vrun --control stdio` JSON-RPC(R-C1): `peek(path)`·`poke(path,val)`·`step(n)`·`run_until(time)`·`finish` + 에러 계약(unknown path/bad val=구조화 에러) | time-step 경계에 REPL(단일 스레드 유지)·poke=스케줄 주입 이벤트·**전 명령을 run.json에 저널**(→동일 세션 재생=replay v0) | 제어 세션 기록→비대화식 재실행이 byte-identical·poke≡`force/release`-등가 케이스 내부 차분 | L |
 | **OBS-5** | `snapshot()→file`·`restore(file)`·`rewind_to(t)`(R-C2) | 엔진 상태 postcard 직렬화(스냅샷 경계=OBS-4 저널과 결합해 재현). VCD는 restore 후 신규 파일(append 이어쓰기 비목표) | `snapshot→restore→계속` ≡ 무중단 실행 전 구간 byte-diff | L-XL |
 | **OBS-6** | X-origin(R-C4: per-net first-X `{t,path,cause}`)·region-annotated events(R-C3: `region:"active\|nba\|…"`,probe-set 한정)·정적 backward cone(R-C5 v1) | X 생성 3지점(uninit/multi-drv/arith) 태깅·스케줄러 region 큐 노출·sim-ir 에지 역추적 | X-cause를 수작업 유도 케이스로 핀·region 순서는 스케줄러 스펙(doc-06)과 대조 | L+ |
+
+| **OBS-S0 (구현됨)** | `--hier-tree <path>`(module hierarchy tree: top부터 `<instance> : <module>` indented) + `--inst-paths <path>`(전 instance full dotted path `top.u_cpu.u_alu` 1/line·VCD `$scope` 일치)(R-S0) — scope 설정/signal force copy-paste용 | elaborate `InstanceInfo{path,module,parent}` out-of-band sidecar(`elaborate_instance` hook·frozen-IR 무영향)·CLI가 elaborate 후 렌더·one-shot `vita`(staged velab=follow-on) | tree/paths 텍스트 대조·nested/arrayed/generate scope 이름 = VCD `$scope`와 일관 | **S(완료 2026-07-13, §4.5.129)** |
 
 **비목표(rail 밖)**: FSDB/UCDB·SQLite 내장(외부 로더 스크립트 1개로 충분 — 리뷰어도 optional)·waveform GUI·UVM 연동·L4 채널 자동 추론(R-I2는 config 기술 기반만). VCD는 사람용으로 유지.
 

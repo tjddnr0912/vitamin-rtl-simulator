@@ -1166,6 +1166,7 @@ fn ev_list(terms: Vec<(ast::Edge, &str)>) -> ast::Sensitivity {
             .map(|(edge, n)| ast::EventExpr {
                 edge,
                 expr: id_expr(n),
+                iff: None,
                 span: SP,
             })
             .collect(),
@@ -2679,6 +2680,7 @@ fn func_def(
         }),
         ret_type: ast::ParamType::Implicit,
         ret_two_state: false,
+        ret_string: false,
         name: ident(name),
         ports,
         body_decls,

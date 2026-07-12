@@ -455,6 +455,64 @@ pub fn preprocess_with(
     pp.finish()
 }
 
+/// Preprocess MULTIPLE command-line source files as ONE compilation unit (G12).
+///
+/// Each source is registered as its OWN [`SourceFileEntry`] (FileId 0..N) — exactly
+/// how `\`include` registers a file — so every segment carries its own FileId and
+/// diagnostics resolve to the correct per-file name + local line, instead of the old
+/// pre-concatenation that named `sources[0]` with a cumulative global line. Macros /
+/// `\`define`s and the `\`ifdef stack persist ACROSS files (shared compilation unit),
+/// preserving the concatenation's cross-file visibility. `sources` = (display-name,
+/// text) pairs in command-line order. With a single source this is byte-identical to
+/// [`preprocess_str`]. Out-of-band (the SourceMap is not in the frozen `.vu`), so no
+/// `format_version` / schema-hash impact.
+pub fn preprocess_sources(
+    base_dir: &Path,
+    sources: &[(String, String)],
+    opts: &PreOpts,
+) -> PpResult {
+    preprocess_sources_with(base_dir, sources, opts, &FsIncludeReader)
+}
+
+/// Like [`preprocess_sources`] but with an injected [`IncludeReader`] (testable).
+pub fn preprocess_sources_with(
+    base_dir: &Path,
+    sources: &[(String, String)],
+    opts: &PreOpts,
+    reader: &dyn IncludeReader,
+) -> PpResult {
+    assert!(
+        !sources.is_empty(),
+        "preprocess_sources requires at least one source"
+    );
+    // The first source seeds FileId(0) exactly as the single-file path.
+    let mut pp = Preprocessor::new(base_dir, &sources[0].0, &sources[0].1, opts, reader);
+    // Register the remaining command-line files as their own SourceFileEntry
+    // (FileId 1..N) — mirroring `dir_include`'s registration — so segments they emit
+    // resolve back to that file. `canon: None` matches the entry-file convention (the
+    // CLI takes per-source digests separately; only `\`include`d files carry a canon).
+    for (name, text) in &sources[1..] {
+        pp.files.push(SourceFileEntry {
+            name: name.clone(),
+            text: text.clone(),
+            canon: None,
+            dir: base_dir.to_path_buf(),
+        });
+    }
+    // Fusion guard: ensure every NON-final file's text ends in a newline so the last
+    // token of one file can't fuse with the first of the next in the expanded buffer
+    // (the old concatenation inserted the same separator). The final file is scanned
+    // last, so it needs none.
+    let n = sources.len();
+    for f in pp.files.iter_mut().take(n.saturating_sub(1)) {
+        if !f.text.ends_with('\n') {
+            f.text.push('\n');
+        }
+    }
+    pp.run_sources(n);
+    pp.finish()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal state
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1099,6 +1157,27 @@ impl<'a> Preprocessor<'a> {
         self.flush_pending_nl();
         // At EOF, every still-open CondFrame is an unterminated conditional. Point
         // each at its own recorded opening offset (open_at), not at out.len().
+        let unclosed: Vec<u32> = self.cond.iter().map(|f| f.open_at).collect();
+        for open_at in unclosed {
+            self.err(
+                MsgCode::PpBadDirective,
+                "unterminated `ifdef/`ifndef (no matching `endif)",
+                open_at as usize,
+            );
+        }
+        self.cond.clear();
+    }
+
+    /// Multi-source variant of [`run`](Self::run): scan files `0..n` in order into the
+    /// shared output/segments/macros, flushing each file's trailing directive newline
+    /// before the next begins (so it maps to the right file). The `\`ifdef stack and
+    /// macros persist across files (shared compilation unit); unterminated conditionals
+    /// are reported once at the end, identically to `run`.
+    fn run_sources(&mut self, n: usize) {
+        for i in 0..n {
+            self.scan_file(FileId(i as u32));
+            self.flush_pending_nl();
+        }
         let unclosed: Vec<u32> = self.cond.iter().map(|f| f.open_at).collect();
         for open_at in unclosed {
             self.err(

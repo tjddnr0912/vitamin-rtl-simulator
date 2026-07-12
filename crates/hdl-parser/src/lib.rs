@@ -1031,10 +1031,41 @@ impl<'t, 's> Parser<'t, 's> {
                 Some(TokenKind::Apostrophe) if self.peek_at(1) == Some(TokenKind::LParen) => {
                     e = self.parse_size_or_named_cast(e);
                 }
+                // G8 (§8.13): a method call chained on a CALL / method RESULT —
+                // `s.substr(a,b).atoi()`. Fires only when `e` is already a Call/MethodCall
+                // (a plain `a.b` hier path is folded in `expr_primary`, not here) and the
+                // `.` is followed by `ident (`.
+                Some(TokenKind::Dot)
+                    if matches!(e.kind, ExprKind::Call { .. } | ExprKind::MethodCall { .. })
+                        && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+                        && self.peek_at(2) == Some(TokenKind::LParen) =>
+                {
+                    e = self.parse_method_chain(e);
+                }
                 _ => break,
             }
         }
         e
+    }
+
+    /// G8: parse a chained method call `<recv>.method(args)` where `recv` is a call /
+    /// method result (cursor at the `.`).
+    fn parse_method_chain(&mut self, recv: Expr) -> Expr {
+        let start = recv.span;
+        self.bump(); // '.'
+        let method = self.ident().unwrap_or_else(|| Ident {
+            name: String::new(),
+            span: self.cur_span(),
+        });
+        let args = self.call_args();
+        Expr {
+            kind: ExprKind::MethodCall {
+                recv: Box::new(recv),
+                method,
+                args,
+            },
+            span: start.to(self.prev_span()),
+        }
     }
 
     /// Finish a size/typedef cast whose casting type is the already-parsed primary
@@ -1399,12 +1430,22 @@ impl<'t, 's> Parser<'t, 's> {
             {
                 self.parse_keyword_cast(Self::cast_type_kw(kw).unwrap())
             }
-            // numeric / string literals
-            Some(T::IntDecimal) => self.lit_int(IntLitKind::Decimal),
+            // numeric / string literals (G11: a decimal/real literal may be a time
+            // literal `1ns` when a time-unit ident touches it — `maybe_time_literal`).
+            Some(T::IntDecimal) => {
+                let n = self.lit_int(IntLitKind::Decimal);
+                self.maybe_time_literal(n)
+            }
             Some(T::IntSized) => self.lit_int(IntLitKind::Sized),
             Some(T::IntUnsizedBased) => self.lit_int(IntLitKind::UnsizedBased),
-            Some(T::RealFixed) => self.lit_real(RealLitKind::Fixed),
-            Some(T::RealExp) => self.lit_real(RealLitKind::Exp),
+            Some(T::RealFixed) => {
+                let n = self.lit_real(RealLitKind::Fixed);
+                self.maybe_time_literal(n)
+            }
+            Some(T::RealExp) => {
+                let n = self.lit_real(RealLitKind::Exp);
+                self.maybe_time_literal(n)
+            }
             Some(T::Str) => {
                 let raw = self.cur_text().to_string();
                 self.bump();
@@ -1609,12 +1650,50 @@ impl<'t, 's> Parser<'t, 's> {
             span: start,
         }
     }
+
+    /// G11: a numeric literal immediately followed (span-adjacent, no whitespace) by a
+    /// time-unit ident `fs`/`ps`/`ns`/`us`/`ms`/`s` is a time literal `1ns` (IEEE §5.8).
+    /// Adjacency is the discriminator: `1ns` is a time literal, `1 s` / `x + s` are not,
+    /// and `1step` is untouched (`step` ∉ the unit set, and it is anyway lexed elsewhere).
+    fn maybe_time_literal(&mut self, num: Expr) -> Expr {
+        if !self.is_ident() {
+            return num;
+        }
+        let unit_exp: i8 = match self.cur_text() {
+            "s" => 0,
+            "ms" => -3,
+            "us" => -6,
+            "ns" => -9,
+            "ps" => -12,
+            "fs" => -15,
+            _ => return num,
+        };
+        // The unit token must TOUCH the number (no whitespace) — `1 s` is not a literal.
+        if self.cur_span().lo != num.span.hi {
+            return num;
+        }
+        let start = num.span;
+        self.bump(); // the time-unit ident
+        Expr {
+            kind: ExprKind::TimeLit {
+                num: Box::new(num),
+                unit_exp,
+            },
+            span: start.to(self.prev_span()),
+        }
+    }
     fn call_args(&mut self) -> Vec<Expr> {
         self.bump(); // '('
         let mut args = Vec::new();
         if self.peek() != Some(TokenKind::RParen) {
             loop {
-                args.push(self.expr(0));
+                // G10 (IEEE §13.5.4): a NAMED argument `.formal(value)` / `.formal()`
+                // (may follow positionals). Elaborate reorders these to positional.
+                if self.peek() == Some(TokenKind::Dot) {
+                    args.push(self.parse_named_call_arg());
+                } else {
+                    args.push(self.expr(0));
+                }
                 // PARSE-CONCAT-CAP: stop consuming once the node budget is blown.
                 if self.node_budget_blown || !self.eat(TokenKind::Comma) {
                     break;
@@ -1623,6 +1702,28 @@ impl<'t, 's> Parser<'t, 's> {
         }
         self.expect(TokenKind::RParen, "')'");
         args
+    }
+
+    /// G10: parse one named call argument `.formal(value)` or `.formal()` (empty ⇒ the
+    /// formal's default value). Cursor is at the leading `.`.
+    fn parse_named_call_arg(&mut self) -> Expr {
+        let start = self.cur_span();
+        self.bump(); // '.'
+        let formal = self.ident().unwrap_or_else(|| Ident {
+            name: String::new(),
+            span: self.cur_span(),
+        });
+        self.expect(TokenKind::LParen, "'(' after named-argument formal");
+        let value = if self.peek() == Some(TokenKind::RParen) {
+            None
+        } else {
+            Some(Box::new(self.expr(0)))
+        };
+        self.expect(TokenKind::RParen, "')' after named-argument value");
+        Expr {
+            kind: ExprKind::NamedArg { formal, value },
+            span: start.to(self.prev_span()),
+        }
     }
 
     /// The `pkg::name` / `pkg::name(args)` case of `expr_primary` (cursor just
@@ -1910,6 +2011,12 @@ impl<'t, 's> Parser<'t, 's> {
                 if let Some(v) = self.enum_defs.get(&scoped).cloned() {
                     self.enum_defs.insert(bare.clone(), v);
                 }
+                // G6: UNPACKED struct typedefs live only in `unpacked_struct_layouts`
+                // (never in `typedefs`), so a bare `rec_t r;` after `import p::rec_t`
+                // needs the scoped twin copied here too, exactly like the packed kinds.
+                if let Some(v) = self.unpacked_struct_layouts.get(&scoped).cloned() {
+                    self.unpacked_struct_layouts.insert(bare.clone(), v);
+                }
                 if self.union_type_names.contains(&scoped) {
                     self.union_type_names.insert(bare);
                 }
@@ -1953,6 +2060,17 @@ impl<'t, 's> Parser<'t, 's> {
                     .filter_map(|k| k.strip_prefix(&prefix).map(|b| b.to_string()))
                     .collect();
                 self.union_type_names.extend(un);
+                // G6: wildcard-copy UNPACKED struct typedefs too (see the explicit arm).
+                let usl: Vec<(String, Vec<StructMember>)> = self
+                    .unpacked_struct_layouts
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
+                    })
+                    .collect();
+                for (b, v) in usl {
+                    self.unpacked_struct_layouts.entry(b).or_insert(v);
+                }
             }
         }
         Some(ImportDecl {
@@ -2408,6 +2526,17 @@ impl<'t, 's> Parser<'t, 's> {
         let mut body = header_imports;
         while !self.at_eof() && !self.at_kw(end_kw) {
             let before = self.pos;
+            // G6B: module/interface/program-scope scalar UNPACKED-struct decl
+            // (`[pkg::]T k;`) → N member NetVars, mirroring block_body's branch. The
+            // typedef branch of `parse_module_item` resolves only `typedefs`, which
+            // never holds unpacked structs — so without this they fall to module-
+            // instantiation parsing and choke. Cold helper keeps the loop frame small.
+            if self.try_module_unpacked_struct_decl(&mut body) {
+                if self.pos == before {
+                    self.bump();
+                }
+                continue;
+            }
             match self.parse_module_item() {
                 Some(it) => body.push(it),
                 None => {
@@ -3042,6 +3171,26 @@ impl<'t, 's> Parser<'t, 's> {
             let s = self.cur_span();
             self.bump();
             return Some(ModuleItem::Error(s));
+        }
+        // G9: an optional `label :` prefix on a labelable concurrent-assertion module
+        // item (IEEE 1800 §16.2: `name : assert|assume property …` / `name : cover
+        // property …`). At module scope a leading `IDENT :` is ONLY a label — an
+        // instantiation is `TYPE inst (...)`, never `TYPE :` — so gate on the following
+        // assert/assume/cover-property keyword; a stray `IDENT :` still falls through
+        // and errors loudly. The label only names the assertion (the checker is wrapped
+        // in a synthetic `initial` with no label slot), so consume + discard it and let
+        // the existing assert/assume/cover arms below materialize the checker unchanged.
+        if self.is_ident() && self.peek_at(1) == Some(TokenKind::Colon) {
+            let after_colon_assert = matches!(
+                self.peek_at(2),
+                Some(TokenKind::Word(WordKind::Keyword(Kw::Assert | Kw::Assume)))
+            );
+            let after_colon_cover = self.text_at(2) == "cover"
+                && self.peek_at(3) == Some(TokenKind::Word(WordKind::Keyword(Kw::Property)));
+            if after_colon_assert || after_colon_cover {
+                self.bump(); // label ident
+                self.bump(); // ':'
+            }
         }
         // parameter / localparam
         if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) {
@@ -4235,6 +4384,7 @@ impl<'t, 's> Parser<'t, 's> {
             .map(|inp| EventExpr {
                 edge: Edge::NoEdge,
                 expr: mk_ident(inp),
+                iff: None,
                 span,
             })
             .collect();
@@ -6831,6 +6981,23 @@ impl<'t, 's> Parser<'t, 's> {
         true
     }
 
+    /// G6B: the module/interface/program-body twin of
+    /// [`try_block_unpacked_struct_decl`] — a scalar `[pkg::]T k;` at module scope
+    /// desugars to N member `NetVarDecl`s pushed as `ModuleItem::NetVar`. Cold and
+    /// non-inlined so its locals don't enlarge the body-loop frame (depth_guard).
+    /// Module-scope needs no block-scope snapshot: `var_unpacked_struct` is cleared
+    /// per module (`parse_module_like`), so registrations don't leak across modules.
+    #[inline(never)]
+    fn try_module_unpacked_struct_decl(&mut self, body: &mut Vec<ModuleItem>) -> bool {
+        let Some(tyname) = self.peek_unpacked_struct_decl() else {
+            return false;
+        };
+        if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
+            body.extend(member_decls.into_iter().map(ModuleItem::NetVar));
+        }
+        true
+    }
+
     /// Round-9: parse a scalar UNPACKED-struct declaration `[pkg::]T k [, k2];`,
     /// desugaring each variable into its member nets (`k$field`, one `NetVarDecl`
     /// per member, each with the member's OWN type). Registers each var in
@@ -8436,12 +8603,19 @@ impl<'t, 's> Parser<'t, 's> {
         let mut range = None;
         let mut ret_type = ParamType::Implicit;
         let mut ret_two_state = false;
+        let mut ret_string = false;
         let is_void = self.eat_kw(Kw::Void);
         if is_void {
             // `function void f(...)`: no return value. In module/package scope the
             // caller converts to a TaskDef (task-equivalent); inside a class it is a
             // frame-function whose result is discarded. ret_type stays Implicit with
             // no range (the slot is never read). No AST shape change (IR-0).
+        } else if self.at_kw(Kw::String) {
+            // G4: `function [automatic] string f(...)` — string return type. `range`/
+            // `ret_type` stay default; elaborate keys off `ret_string` to make the
+            // return net a `NetKind::String` and treat a call as a string operand.
+            self.bump();
+            ret_string = true;
         } else {
             let kw_kind = match self.peek() {
                 Some(TokenKind::Word(WordKind::Keyword(
@@ -8555,6 +8729,7 @@ impl<'t, 's> Parser<'t, 's> {
                 range,
                 ret_type,
                 ret_two_state,
+                ret_string,
                 name,
                 ports,
                 body_decls,
@@ -8709,6 +8884,22 @@ impl<'t, 's> Parser<'t, 's> {
     /// handling. Shared by the ANSI (`parse_tf_port`) and non-ANSI
     /// (`parse_tf_port_decl_into`) port parsers.
     fn try_tf_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>, Option<String>)> {
+        // G5: an UNPACKED struct typedef as a tf-port is unsupported in v1 (there is no
+        // per-member frame-slot machinery for it — unlike a PACKED struct, which is
+        // supported via `var_struct`/`bind_tf_port_struct`). Recognize the name and
+        // reject with ONE honest diagnostic instead of the misleading `)`-closing cascade
+        // a fall-through would produce (unpacked structs are absent from `typedefs`, so
+        // `peek_typedef_name` returns None and the port NAME is left unconsumed).
+        let nm = self.type_name_key();
+        if self.unpacked_struct_layouts.contains_key(&nm) {
+            self.error(
+                "an unpacked-struct typedef as a tf-port is unsupported in v1 (a simple \
+                 vector / enum / packed-struct typedef port is supported)",
+            );
+            self.eat_scope_qualifier();
+            self.bump(); // consume the type-name token so the port name doesn't cascade
+            return Some((NetVarKind::Reg, false, None, None));
+        }
         let info = self.peek_typedef_name()?;
         let nm = self.type_name_key();
         // EXT2-C: a packed struct/union typedef IS supported as a tf-port. The frame
@@ -9097,6 +9288,7 @@ impl<'t, 's> Parser<'t, 's> {
             return Sensitivity::List(vec![EventExpr {
                 edge: Edge::NoEdge,
                 expr,
+                iff: None,
                 span,
             }]);
         }
@@ -9140,8 +9332,23 @@ impl<'t, 's> Parser<'t, 's> {
             Edge::NoEdge
         };
         let expr = self.expr(0);
-        let span = start.to(expr.span);
-        EventExpr { edge, expr, span }
+        // G7 (IEEE §9.4.2.3): an optional `iff <expr>` guard on this event term. `iff`
+        // is a contextual keyword (a plain Ident here), and `expr(0)` stops at it since
+        // it is neither an operator nor a term separator. The guard `expr(0)` likewise
+        // stops at `or`/`,`/`)`.
+        let iff = if self.at_ident_kw("iff") {
+            self.bump();
+            Some(self.expr(0))
+        } else {
+            None
+        };
+        let span = start.to(iff.as_ref().map_or(expr.span, |e| e.span));
+        EventExpr {
+            edge,
+            expr,
+            iff,
+            span,
+        }
     }
 
     // ─────────────────────── 2. statement dispatcher ───────────────────────
@@ -12158,6 +12365,18 @@ fn subst_expr(e: &mut Expr, map: &std::collections::BTreeMap<String, Expr>) {
         }
         ExprKind::ArrayMethodWith(b) => subst_expr(&mut b.with_expr, map),
         ExprKind::Paren { inner } => subst_expr(inner, map),
+        ExprKind::TimeLit { num, .. } => subst_expr(num, map),
+        ExprKind::NamedArg { value, .. } => {
+            if let Some(v) = value {
+                subst_expr(v, map);
+            }
+        }
+        ExprKind::MethodCall { recv, args, .. } => {
+            subst_expr(recv, map);
+            for a in args {
+                subst_expr(a, map);
+            }
+        }
         ExprKind::MinTypMax { min, typ, max } => {
             subst_expr(min, map);
             subst_expr(typ, map);
@@ -12585,6 +12804,18 @@ fn rename_ident_in_stmt(s: &mut Stmt, from: &str, to: &str) {
             }
             ExprKind::ArrayMethodWith(b) => fix_expr(&mut b.with_expr, from, to),
             ExprKind::Paren { inner } => fix_expr(inner, from, to),
+            ExprKind::TimeLit { num, .. } => fix_expr(num, from, to),
+            ExprKind::NamedArg { value, .. } => {
+                if let Some(v) = value {
+                    fix_expr(v, from, to);
+                }
+            }
+            ExprKind::MethodCall { recv, args, .. } => {
+                fix_expr(recv, from, to);
+                for a in args {
+                    fix_expr(a, from, to);
+                }
+            }
             ExprKind::MinTypMax { min, typ, max } => {
                 fix_expr(min, from, to);
                 fix_expr(typ, from, to);

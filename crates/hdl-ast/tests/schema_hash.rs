@@ -185,9 +185,15 @@ use vita_schema::schema_hash;
 /// every instantiation of the target module (elaborate reuses the ordinary
 /// child-instantiation path; no sim-ir change; format_version stays 19). Re-pins
 /// this .vu hash.
+/// 2026-07-13 round-10 report gaps: adds `FunctionDef.ret_string` (G4 `string`
+/// return type), `EventExpr.iff` (G7 `@(edge sig iff g)` event guard), and three
+/// `ExprKind` variants — `TimeLit{num,unit_exp}` (G11 `1ns`/`10ps` time literals),
+/// `NamedArg{formal,value}` (G10 `.formal(v)` named call args), `MethodCall{recv,
+/// method,args}` (G8 chained method call `s.substr(a,b).atoi()`). All desugar in the
+/// front end / elaborate (no sim-ir change; format_version stays 19). Re-pins this hash.
 const EXPECTED: [u8; 32] = [
-    240, 0, 103, 21, 74, 102, 203, 100, 114, 190, 152, 219, 188, 38, 136, 231, 169, 101, 44, 76,
-    255, 185, 129, 6, 52, 248, 124, 160, 101, 199, 150, 83,
+    80, 152, 153, 40, 18, 232, 79, 91, 189, 117, 216, 57, 37, 20, 125, 165, 228, 210, 148, 71, 141,
+    169, 219, 255, 72, 64, 160, 189, 132, 73, 116, 22,
 ];
 
 #[test]
