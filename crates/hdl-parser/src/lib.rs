@@ -724,10 +724,17 @@ impl<'t, 's> Parser<'t, 's> {
     /// if the next token is operator-class but matched no infix slot, emit one
     /// error (verdict B1: do not silently leave `~& b` unconsumed).
     /// P2-5 guard: cap the expression recursion so deep nesting is a clean
-    /// parse error, never a SIGSEGV. 256 is ≫ any real RTL expression (deepest
-    /// practical cones are <50) and fits a default 2 MiB test-thread stack
-    /// even in debug builds (~5 fat frames per paren level).
-    const MAX_EXPR_DEPTH: u32 = 256;
+    /// parse error, never a SIGSEGV. 128 is ≫ any real RTL expression (deepest
+    /// practical cones are <50) yet fires with margin below the point a default
+    /// 2 MiB test-thread stack overflows in debug builds. That point is
+    /// OS-sensitive: macOS debug frames are fat enough to SIGABRT at ~241-deep
+    /// (measured), so the former 256 sat ABOVE the overflow depth and never got
+    /// to fire on macOS — the cap must be < the smallest overflow depth across
+    /// build hosts, not merely "large". 128 keeps 47% headroom under that ~241
+    /// floor (room for future hot-frame growth) while clearing the 100-deep
+    /// `shallow_nesting_still_parses` test. (Statement nesting frames are
+    /// smaller, so `MAX_STMT_DEPTH` stays 256.)
+    const MAX_EXPR_DEPTH: u32 = 128;
 
     /// PARSE-CONCAT-CAP global budget on parsed expression nodes (user decision,
     /// 2026-06-22). 2^21 ≈ 2.1 M nodes × 80 B ≈ 168 MiB of `Expr` — ~80,000× the
@@ -740,7 +747,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.expr_depth += 1;
         if self.expr_depth > Self::MAX_EXPR_DEPTH {
             self.expr_depth -= 1;
-            self.error("expression nesting too deep (cap 256)");
+            self.error("expression nesting too deep (cap 128)");
             return Expr {
                 kind: ExprKind::Error,
                 span: self.cur_span(),
