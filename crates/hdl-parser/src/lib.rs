@@ -160,6 +160,11 @@ struct ScopeSnapshot {
     // VAR-name-keyed (a block-local struct/enum variable shadowing an outer one).
     var_struct: std::collections::HashMap<String, String>,
     var_unpacked_struct: std::collections::HashMap<String, String>,
+    // N3: a dynamic array of a PACKABLE record (`rec_t arr[]`, all-integral members) →
+    // the record type name. `arr` lowers to a single `DynArray` net of the packed-
+    // struct total width; `arr[i].field` is a part-select on the element (offsets
+    // computed on demand from `unpacked_struct_layouts` via `packable_record_layout`).
+    record_array_vars: std::collections::HashMap<String, String>,
     var_enum: std::collections::HashMap<String, String>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
@@ -255,6 +260,7 @@ pub struct Parser<'t, 's> {
     /// Round-9: variable name → its UNPACKED-struct type name (module-scoped;
     /// cleared per module). Drives the `k.field` → `k$field` member-net desugar.
     var_unpacked_struct: std::collections::HashMap<String, String>,
+    record_array_vars: std::collections::HashMap<String, String>,
     /// Packed-union type names. Unions share `struct_layouts` (for `u.field`
     /// reads) but their overlay layout is NOT a packed concat, so a union var is
     /// kept OUT of `struct_scalar_vars` and its `'{…}` pattern stays loud.
@@ -317,6 +323,7 @@ impl<'t, 's> Parser<'t, 's> {
             struct_layouts: std::collections::HashMap::new(),
             unpacked_struct_layouts: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),
+            record_array_vars: std::collections::HashMap::new(),
             var_struct: std::collections::HashMap::new(),
             struct_scalar_vars: std::collections::HashSet::new(),
             struct_1d_array_vars: std::collections::HashSet::new(),
@@ -1034,6 +1041,18 @@ impl<'t, 's> Parser<'t, 's> {
                         && self.peek_at(2) == Some(TokenKind::LParen) =>
                 {
                     e = self.parse_method_chain(e);
+                }
+                // N3: `arr[i].field` where `arr` is a record ARRAY var — a member READ
+                // on the element (a part-select on the dyn element value), NOT a
+                // hierarchical ref. The element-method branch above took the `(` case;
+                // this handles the bare `.field` (checked BEFORE `is_indexed_hier_base`
+                // so a record-array element member wins over the generate-array path).
+                Some(TokenKind::Dot)
+                    if self.record_array_member_base(&e)
+                        && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+                        && self.peek_at(2) != Some(TokenKind::LParen) =>
+                {
+                    e = self.parse_record_array_member(e);
                 }
                 // HIER-REST②: a `.` after a `name[idx]` select is a hierarchical
                 // reference into a generate / instance-array element (`g[0].x`,
@@ -2488,6 +2507,7 @@ impl<'t, 's> Parser<'t, 's> {
         // Variable→struct bindings are module-scoped (type *names* are not).
         self.var_struct.clear();
         self.var_unpacked_struct.clear();
+        self.record_array_vars.clear();
         self.struct_scalar_vars.clear();
         self.struct_1d_array_vars.clear();
         self.var_enum.clear();
@@ -6057,6 +6077,7 @@ impl<'t, 's> Parser<'t, 's> {
             union_type_names: self.union_type_names.clone(),
             var_struct: self.var_struct.clone(),
             var_unpacked_struct: self.var_unpacked_struct.clone(),
+            record_array_vars: self.record_array_vars.clone(),
             var_enum: self.var_enum.clone(),
             struct_scalar_vars: self.struct_scalar_vars.clone(),
             struct_1d_array_vars: self.struct_1d_array_vars.clone(),
@@ -6074,6 +6095,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.union_type_names = s.union_type_names;
         self.var_struct = s.var_struct;
         self.var_unpacked_struct = s.var_unpacked_struct;
+        self.record_array_vars = s.record_array_vars;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
@@ -6135,6 +6157,7 @@ impl<'t, 's> Parser<'t, 's> {
         // Var-struct bindings are unit-local and never leak → full restore.
         self.var_struct = s.var_struct;
         self.var_unpacked_struct = s.var_unpacked_struct;
+        self.record_array_vars = s.record_array_vars;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
@@ -6737,6 +6760,25 @@ impl<'t, 's> Parser<'t, 's> {
         self.member_width(range)
     }
 
+    /// N3: is a struct member kind a genuine bit-vector (packable into a flat record
+    /// value)? Excludes `string`/`real`/`realtime`/`event`/class-handle/virtual-
+    /// interface — those have no fixed bit width, so `member_width_kind` would give
+    /// them a bogus 1-bit default; a record containing one is NOT packable (→ loud).
+    fn member_kind_is_integral(kind: NetVarKind) -> bool {
+        matches!(
+            kind,
+            NetVarKind::Reg
+                | NetVarKind::Logic
+                | NetVarKind::Integer
+                | NetVarKind::Time
+                | NetVarKind::Bit
+                | NetVarKind::Byte
+                | NetVarKind::Shortint
+                | NetVarKind::Int
+                | NetVarKind::Longint
+        )
+    }
+
     /// Fold a constant-literal expression to `i64` at parse time (decimal literals
     /// and +/-/* of them). Returns `None` for anything non-constant.
     fn const_lit(e: &Expr) -> Option<i64> {
@@ -7085,7 +7127,7 @@ impl<'t, 's> Parser<'t, 's> {
     fn try_block_unpacked_struct_decl(
         &mut self,
         decls: &mut Vec<NetVarDecl>,
-        scope: &mut Option<ScopeSnapshot>,
+        scope: &mut Option<Box<ScopeSnapshot>>,
     ) -> bool {
         let Some(tyname) = self.peek_unpacked_struct_decl() else {
             return false;
@@ -7093,7 +7135,7 @@ impl<'t, 's> Parser<'t, 's> {
         // Registers a var binding → triggers the block scope snapshot like any
         // struct-typed decl.
         if scope.is_none() {
-            *scope = Some(self.snapshot_scope());
+            *scope = Some(Box::new(self.snapshot_scope()));
         }
         if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
             decls.extend(member_decls);
@@ -7118,12 +7160,185 @@ impl<'t, 's> Parser<'t, 's> {
         true
     }
 
+    /// N3: the packed `StructLayout` (MSB-first) of a PACKABLE unpacked record — one
+    /// whose members are ALL integral (`int`/`byte`/`logic [W:0]`/…). `None` if the
+    /// type is not a known unpacked record or has a `string`/`real`/dynamic member
+    /// (not packable → a record ARRAY of it stays loud, deferred to a heterogeneous
+    /// heap). Mirrors the `parse_typedef_struct` packed layout loop.
+    fn packable_record_layout(&self, tyname: &str) -> Option<StructLayout> {
+        let members = self.unpacked_struct_layouts.get(tyname)?;
+        let mut widths = Vec::with_capacity(members.len());
+        for m in members {
+            // A `string`/`real`/handle/event member is NOT a bit-vector — `member_width_
+            // kind` would give it a bogus default 1-bit width (silently corrupting the
+            // field), so gate on the integral KIND FIRST → non-packable → loud.
+            if !Self::member_kind_is_integral(m.kind) {
+                return None;
+            }
+            match self.member_width_kind(m.kind, &m.range) {
+                Some(w) if w > 0 => widths.push(w),
+                _ => return None,
+            }
+        }
+        let total: u32 = widths.iter().sum();
+        let mut off = total;
+        let mut fields = Vec::with_capacity(members.len());
+        for (m, w) in members.iter().zip(&widths) {
+            off -= w;
+            fields.push((
+                m.name.name.clone(),
+                off,
+                *w,
+                Self::member_ascending(&m.range),
+                m.signed,
+                Self::member_kind_two_state(m.kind),
+                Self::member_dbase(&m.range),
+            ));
+        }
+        Some(StructLayout { fields })
+    }
+
+    /// N3: desugar a record-array init `'{ '{…}, … }` — each OUTER element (an inner
+    /// record `'{…}`) becomes a field-width concat via `build_struct_pattern_concat`,
+    /// leaving an outer `AssignPattern` of packed element VALUES. The existing dyn-array
+    /// `'{…}` decl-init flush then lowers it to `new[N]` + one whole-element write each.
+    fn desugar_record_array_init(&mut self, tyname: &str, e: Expr) -> Expr {
+        let span = e.span;
+        let ExprKind::AssignPattern(elems) = e.kind else {
+            return e;
+        };
+        let parts = elems
+            .into_iter()
+            .map(|el| self.build_struct_pattern_concat(tyname, el))
+            .collect();
+        Expr {
+            kind: ExprKind::AssignPattern(parts),
+            span,
+        }
+    }
+
+    /// N3: a synthetic `[W-1:0]` range (decimal literals) for a record-array element net.
+    fn synth_bit_range(&self, w: u32, span: Span) -> Range {
+        let lit = |v: u32| Expr {
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw: v.to_string(),
+            },
+            span,
+        };
+        Range {
+            msb: lit(w.saturating_sub(1)),
+            lsb: lit(0),
+            span,
+        }
+    }
+
+    /// N3: is `e` an `arr[i]` bit-select whose base is a record-ARRAY var?
+    fn record_array_member_base(&self, e: &Expr) -> bool {
+        if let ExprKind::BitSelect { base, .. } = &e.kind {
+            if let ExprKind::Ident(p) = &base.kind {
+                return p.segments.len() == 1
+                    && self.record_array_vars.contains_key(&p.segments[0].name);
+            }
+        }
+        false
+    }
+
+    /// N3: parse `arr[i].field` (cursor at `.`) → a PART-SELECT on the element value
+    /// `arr[i]` at the field's packed offset (MSB-first). `arr[i]` is a dyn element
+    /// read; the part-select extracts the field. An unknown field is loud.
+    fn parse_record_array_member(&mut self, base: Expr) -> Expr {
+        self.bump(); // '.'
+        let field = self.ident().unwrap_or_else(|| Ident {
+            name: String::new(),
+            span: self.cur_span(),
+        });
+        let tyname = match &base.kind {
+            ExprKind::BitSelect { base: b, .. } => match &b.kind {
+                ExprKind::Ident(p) if p.segments.len() == 1 => {
+                    self.record_array_vars.get(&p.segments[0].name).cloned()
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let span = base.span.to(self.prev_span());
+        // (off, width, ascending, signed, dbase) — mirror the scalar packed-struct path:
+        // a signed WHOLE-field read is `$signed`-wrapped; a sub-select stays unsigned.
+        let field = tyname
+            .as_ref()
+            .and_then(|t| self.packable_record_layout(t))
+            .and_then(|l| {
+                l.fields
+                    .iter()
+                    .find(|f| f.0 == field.name)
+                    .map(|f| (f.1, f.2, f.3, f.4, f.6))
+            });
+        match field {
+            Some((off, w, ascending, signed, dbase)) => {
+                let lit = |v: u32| Expr {
+                    kind: ExprKind::IntLit {
+                        kind: IntLitKind::Decimal,
+                        raw: v.to_string(),
+                    },
+                    span,
+                };
+                // `arr[i][off+w-1 : off]` — the field, normalized to `[w-1:0]` (unsigned).
+                let field_sel = Expr {
+                    kind: ExprKind::PartSelect {
+                        base: Box::new(base),
+                        msb: Box::new(lit(off + w - 1)),
+                        lsb: Box::new(lit(off)),
+                    },
+                    span,
+                };
+                // A trailing sub-select (`arr[i].f[hi:lo]` / `arr[i].f[k]`) follows?
+                if self.peek() == Some(TokenKind::LBracket) {
+                    // The `[w-1:0]`-normalized value matches the field's own coordinates
+                    // ONLY for a descending, zero-declared-LSB member. A NON-zero-LSB or
+                    // ASCENDING member needs a `dbase` remap this path does not perform
+                    // (§4.5.113 family) → correct-or-loud: reject, never read raw/OOB
+                    // bits (silent X). expr_postfix then applies the sub-select (unsigned
+                    // per §5.4.1, matching the scalar packed-struct path).
+                    if dbase != 0 || ascending {
+                        self.error(
+                            "a whole-field read of this non-zero-LSB or ascending \
+                             record-array member (its sub-select is unsupported)",
+                        );
+                    }
+                    return field_sel;
+                }
+                // Whole-field read: a signed member reads back sign-extended (§5.4.1).
+                if signed {
+                    Expr {
+                        kind: ExprKind::SysCall {
+                            name: Ident {
+                                name: "$signed".to_string(),
+                                span,
+                            },
+                            args: vec![field_sel],
+                        },
+                        span,
+                    }
+                } else {
+                    field_sel
+                }
+            }
+            None => {
+                self.error("unknown field in a record-array element member access");
+                base
+            }
+        }
+    }
+
     /// Round-9: parse a scalar UNPACKED-struct declaration `[pkg::]T k [, k2];`,
     /// desugaring each variable into its member nets (`k$field`, one `NetVarDecl`
     /// per member, each with the member's OWN type). Registers each var in
-    /// `var_unpacked_struct` so `k.field` member access desugars. An unpacked-array
-    /// declaration (`T k[N]`) and a decl-initializer / `'{…}` pattern stay LOUD —
-    /// v1 supports the scalar record only (there is no aggregate storage).
+    /// `var_unpacked_struct` so `k.field` member access desugars. N3: a DYNAMIC array
+    /// of a PACKABLE record (`T arr [];`) lowers instead to a single wide `logic` net
+    /// (packed-struct width) registered in `record_array_vars` — `arr[i].field` is a
+    /// part-select on the element. A FIXED unpacked array, a non-packable record
+    /// array, and a scalar decl-init stay LOUD.
     fn parse_unpacked_struct_decl(&mut self, tyname: String) -> Option<Vec<NetVarDecl>> {
         self.eat_scope_qualifier(); // optional `pkg::`
         self.bump(); // the type-name identifier
@@ -7133,6 +7348,54 @@ impl<'t, 's> Parser<'t, 's> {
         let mut out = Vec::new();
         for n in &names {
             if !n.unpacked.is_empty() {
+                // N3: a DYNAMIC array of a PACKABLE record (`rec_t arr [];`) lowers to
+                // ONE wide `logic` DynArray net (the packed-struct total width). A decl
+                // init `'{ '{…}, … }` desugars each element to a field-width concat; the
+                // existing dyn-array `'{…}` flush turns it into `new[N]` + writes. A
+                // fixed / multi-dim / non-packable record array stays loud.
+                if n.unpacked.len() == 1
+                    && matches!(n.unpacked[0], Dim::Dyn)
+                    && !n.name.name.contains('$')
+                {
+                    if let Some(layout) = self.packable_record_layout(&tyname) {
+                        let w: u32 = layout.fields.iter().map(|f| f.2).sum();
+                        // An all-2-state record (`bit`/`byte`/`int`/… members only) defaults
+                        // its fields to 0, not X — pick `Bit` so a `new[n]`'d / undeclared
+                        // element reads 0 (mirrors the packed-struct `NetVarKind::Bit` path);
+                        // any 4-state member keeps `Logic` (X default). (Adversarial soundness
+                        // review RANK 2.)
+                        let all_two_state = layout.fields.iter().all(|f| f.5);
+                        self.record_array_vars
+                            .insert(n.name.name.clone(), tyname.clone());
+                        let init = n
+                            .init
+                            .clone()
+                            .map(|e| self.desugar_record_array_init(&tyname, e));
+                        out.push(NetVarDecl {
+                            kind: if all_two_state {
+                                NetVarKind::Bit
+                            } else {
+                                NetVarKind::Logic
+                            },
+                            signed: false,
+                            range: Some(self.synth_bit_range(w, n.name.span)),
+                            packed: Vec::new(),
+                            delay: None,
+                            names: vec![DeclName {
+                                name: n.name.clone(),
+                                unpacked: vec![Dim::Dyn],
+                                init,
+                                span: n.name.span,
+                            }],
+                            lifetime: None,
+                            class_type: None,
+                            class_args: Vec::new(),
+                            const_param: false,
+                            span: n.name.span,
+                        });
+                        continue;
+                    }
+                }
                 self.error_at(
                     n.name.span,
                     "an array of unpacked structs (record array) is unsupported in v1 — scalar record only",
@@ -7219,7 +7482,15 @@ impl<'t, 's> Parser<'t, 's> {
     fn build_struct_pattern_concat(&mut self, tyname: &str, rhs: Expr) -> Expr {
         // Each field's (width, is_two_state) in declaration order (field 0 = MSB =
         // leftmost concat part); cloned out so `self` is free for `error` below.
-        let fields: Vec<(u32, bool)> = match self.struct_layouts.get(tyname) {
+        // N3: a PACKABLE record (in `unpacked_struct_layouts`, not `struct_layouts`)
+        // has an on-demand packed layout — an `arr[i] = '{…}` / decl-init element of a
+        // record array desugars through the same field-width concat.
+        let layout = self
+            .struct_layouts
+            .get(tyname)
+            .cloned()
+            .or_else(|| self.packable_record_layout(tyname));
+        let fields: Vec<(u32, bool)> = match layout {
             Some(l) => l
                 .fields
                 .iter()
@@ -12213,7 +12484,7 @@ impl<'t, 's> Parser<'t, 's> {
     #[inline(never)]
     fn parse_automatic_block_decl(
         &mut self,
-        scope: &mut Option<ScopeSnapshot>,
+        scope: &mut Option<Box<ScopeSnapshot>>,
     ) -> Option<NetVarDecl> {
         self.bump(); // 'automatic' — `static` is not reserved, so only this reaches here
         if self.net_var_kind().is_some() {
@@ -12222,7 +12493,7 @@ impl<'t, 's> Parser<'t, 's> {
             Some(d)
         } else if let Some(info) = self.peek_block_typedef_decl() {
             if scope.is_none() {
-                *scope = Some(self.snapshot_scope());
+                *scope = Some(Box::new(self.snapshot_scope()));
             }
             let mut d = self.parse_typed_decl(info)?;
             d.lifetime = Some(true);
@@ -12240,12 +12511,19 @@ impl<'t, 's> Parser<'t, 's> {
         // restore them when the block ends, so a local name does not leak out of /
         // clobber an outer one. `None` until such a decl appears → zero overhead
         // for the common (plain-var) block.
-        let mut scope: Option<ScopeSnapshot> = None;
+        // BOXED: `ScopeSnapshot` is ~11 collections (~520 B). `block_body` sits on
+        // the `parse_statement → parse_seq_block → block_body` recursion whose
+        // `MAX_STMT_DEPTH` budget is FRAME-sized, so an inline `Option<ScopeSnapshot>`
+        // put the whole struct on every recursion frame — at the cap that overran
+        // the 2 MiB test-thread stack (`depth_guard::deep_stmt_nesting_errors_cleanly`)
+        // once one more map was added. A `Box` keeps only an 8-byte pointer on the
+        // frame; the common (plain-var) block stays `None` → no heap alloc.
+        let mut scope: Option<Box<ScopeSnapshot>> = None;
         while !self.at_eof() && !self.at_block_end(end) {
             let before = self.pos;
             if self.at_kw(Kw::Typedef) {
                 if scope.is_none() {
-                    scope = Some(self.snapshot_scope());
+                    scope = Some(Box::new(self.snapshot_scope()));
                 }
                 // A bare `begin/end` block has no `body_enums` carrier, so a
                 // body-local enum here stays honest-loud (allow_enum = false).
@@ -12287,7 +12565,7 @@ impl<'t, 's> Parser<'t, 's> {
                 // block-local `s_t x` that shadows an outer `s_t x` must not leak
                 // its layout binding out of the block.
                 if scope.is_none() {
-                    scope = Some(self.snapshot_scope());
+                    scope = Some(Box::new(self.snapshot_scope()));
                 }
                 if let Some(d) = self.parse_typed_decl(info) {
                     decls.push(d);
@@ -12311,7 +12589,7 @@ impl<'t, 's> Parser<'t, 's> {
         // AFTER statements are parsed — a statement may reference a local typedef
         // (e.g. a cast `t'(x)`) or a local struct var's `x.field`.
         if let Some(scope) = scope {
-            self.restore_scope(scope);
+            self.restore_scope(*scope);
         }
         (decls, stmts)
     }

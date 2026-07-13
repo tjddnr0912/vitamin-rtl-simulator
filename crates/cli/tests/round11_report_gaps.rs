@@ -29,8 +29,13 @@
 //!       (`b.size()`/`b[i]` read the caller's heap; the fn is inlined). A WRITE to
 //!       the formal / inout / output stays loud.
 //!
+//!   N3  dynamic array of a PACKABLE record (`rec_t arr[]`)        → READ supported
+//!       A packable (all-integral) record is a packed layout: `rec_t arr[]` is one wide
+//!       DynArray net, `arr[i].field` a part-select. Decl + `'{…}` init + member READ +
+//!       `.size()`/`new[]` work. A member/whole-element WRITE, and a NON-packable record
+//!       (string/real member → heterogeneous heap), stay loud.
+//!
 //! Deep-storage gaps still correct-or-LOUD (documented follow-ons, NOT silent-wrong):
-//!   N3  array/queue of unpacked structs (`rec_t arr[]`)           → loud (heterogeneous heap)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -221,11 +226,92 @@ fn fmt_refactor_sformatf_module_level_intact() {
 
 // ───────────── deep-storage gaps: correct-or-LOUD (accepted, not silent) ──────
 #[test]
-fn n3_record_array_is_loud() {
+fn n3_packable_record_array_read_supported() {
+    // N3: a dynamic array of a PACKABLE record (all-integral members) is now supported
+    // — the record is a packed layout, so `rec_t arr[]` is one wide `logic` DynArray net
+    // and `arr[i].field` is a part-select on the element. Decl + `'{…}` init + member
+    // READ (const & runtime index) all compose from existing dyn-array + part-select
+    // machinery (parser-only). (hand-IEEE — iverilog rejects it.)
     let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
         module t; import p::*; rec_t arr [] = '{ '{1,2}, '{3,4} };\n\
         initial begin if(arr[1].a==3) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_record_array_both_members_and_runtime_index() {
+    let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{1,2}, '{3,4} };\n\
+        initial begin int i=1; if(arr[0].a==1 && arr[0].b==2 && arr[i].a==3 && arr[i].b==4) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_record_array_new_and_size() {
+    let src = "package p; typedef struct { logic [7:0] x; logic [7:0] y; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[3]; if(arr.size()==3) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud: a NON-packable record (a `string`/`real` member) has no flat
+// packed representation → the record array stays loud (a heterogeneous-aggregate heap
+// is the deep follow-on). And member/whole-element WRITES stay loud (they need a
+// dyn-element read-modify-write, a separate follow-on) — never a silent wrong.
+#[test]
+fn n3b_non_packable_record_array_is_loud() {
+    let src = "package p; typedef struct { string s; int n; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{\"hi\",1} };\n\
+        initial begin if(arr[0].n==1) $display(\"PASS\"); $finish; end endmodule";
     assert!(loud(src));
+}
+
+#[test]
+fn n3b_record_array_member_write_is_loud() {
+    let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[2]; arr[0].a=7; if(arr[0].a==7) $display(\"PASS\"); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+// Adversarial soundness review RANK 1: a SIGNED member must read back sign-extended
+// (the whole-field read is `$signed`-wrapped, mirroring the scalar packed-struct path)
+// — else `arr[i].a * arr[i].b` / `<` on negatives were silently unsigned.
+#[test]
+fn n3b_record_array_signed_member_sign_extends() {
+    let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{-3, 4} };\n\
+        initial begin if(arr[0].a * arr[0].b == -12 && arr[0].a < 0) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// RANK 2: an all-2-state record (`bit`/`byte`/`int` members) defaults its fields to 0,
+// not X (the DynArray net is `Bit`, not `Logic`) — a `new[n]`'d element reads 0.
+#[test]
+fn n3b_record_array_all_two_state_defaults_zero() {
+    let src = "package p; typedef struct { byte a; int b; bit [3:0] c; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[1]; if(arr[0].a==0 && arr[0].b==0 && arr[0].c==0) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// RANK 3: a sub-select of a NON-zero-LSB member is correct-or-LOUD (the `[w-1:0]`
+// normalization does not remap the member's declared base) — never a silent X. A
+// zero-LSB member sub-select stays correct (unchanged).
+#[test]
+fn n3b_record_array_nonzero_lsb_member_subselect_is_loud() {
+    let src = "package p; typedef struct { logic [15:8] a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{8'hA5, 8'h11} };\n\
+        initial begin $display(\"%h\", arr[0].a[11:8]); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+#[test]
+fn n3b_record_array_zero_lsb_member_subselect_ok() {
+    let src = "package p; typedef struct { logic [7:0] a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{8'hA5, 8'h11} };\n\
+        initial begin if(arr[0].a[3:0]==4'h5 && arr[0].b[7:4]==4'h1) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
 }
 
 // ───────────────────────────── N6/N6B: fixed string array ────────────────
