@@ -11338,6 +11338,19 @@ impl<'s> Elaborator<'s> {
                 );
             }
         }
+        // G4: reject a `string`-returning class method call (same reason as the module /
+        // package function paths — a frame String return slot reads back empty, a
+        // silent-wrong). Guard the CALL rather than silently returning an empty string.
+        if method.func.as_ref().is_some_and(|f| f.ret_string) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "method `{class}::{meth}`: a `string` return type is not yet supported \
+                     (return the text via a `string` output/ref formal instead)"
+                ),
+            );
+            return Some(self.placeholder_expr());
+        }
         let fid = match method.fid {
             Some(f) => f,
             None => {
@@ -14555,6 +14568,20 @@ impl<'s> Elaborator<'s> {
                 return self.placeholder_expr();
             }
         };
+        // G4: same loud guard as the module-function path (`inline_function`) — a
+        // `string` return needs frame heap String-slot storage the engine does not yet
+        // provide (a frame return slot is a bit-vector; a String return reads back empty
+        // = silent-wrong). Reject the CALL rather than silently return an empty string.
+        if func.ret_string {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "function `{pkg}::{name}`: a `string` return type is not yet supported \
+                     (return the text via a `string` output/ref formal instead)"
+                ),
+            );
+            return self.placeholder_expr();
+        }
         // Round-9 PKG2: same-package constants (enum labels + localparams) are
         // readable in the body — the frame-body lowering injects them under the
         // `$func$pkg::name` scope. `pkg_consts[pkg]` already holds params +
@@ -27202,6 +27229,60 @@ impl<'s> Elaborator<'s> {
 
             // ── @(event) ────────────────────────────────────────────
             ast::Stmt::EventCtrl { ctrl, body, .. } => {
+                // G7: `@(edge sig iff cond) STMT` waits for an `edge sig` occurrence AT
+                // WHICH `cond` is true (IEEE §9.4.2.3) — a GUARDED wait. It is NOT
+                // `@(edge sig) if(cond) STMT` (which would unblock at the FIRST edge, so a
+                // one-shot `@(posedge clk iff rdy);` fires a cycle early — silent-wrong).
+                // Desugar to a wait LOOP and lower it: `@(edge sig); while(!cond) @(edge
+                // sig); STMT`. (The `always @(… iff …)` proc-block form keeps the `if
+                // (cond)` desugar in `desugar_event_iff`, which is correct there because
+                // the always re-arms on every edge.) A multi-term `iff` already louded in
+                // `event_iff_guard` (returns None → falls through, elaboration fails).
+                if let Some(guard) = self.event_iff_guard(ctrl) {
+                    let gspan = guard.span;
+                    let stripped = match ctrl {
+                        ast::Sensitivity::List(terms) => {
+                            ast::Sensitivity::List(vec![ast::EventExpr {
+                                iff: None,
+                                ..terms[0].clone()
+                            }])
+                        }
+                        other => other.clone(),
+                    };
+                    let wait = ast::Stmt::EventCtrl {
+                        ctrl: stripped,
+                        body: None,
+                        span: gspan,
+                    };
+                    let not_guard = ast::Expr {
+                        kind: ast::ExprKind::Unary {
+                            op: ast::UnOp::LogNot,
+                            operand: Box::new(guard),
+                        },
+                        span: gspan,
+                    };
+                    let mut stmts = vec![
+                        wait.clone(),
+                        ast::Stmt::While {
+                            cond: not_guard,
+                            body: Box::new(wait),
+                            span: gspan,
+                        },
+                    ];
+                    if let Some(body) = body {
+                        stmts.push((**body).clone());
+                    }
+                    self.lower_stmt(
+                        b,
+                        &ast::Stmt::Block {
+                            label: None,
+                            decls: Vec::new(),
+                            stmts,
+                            span: gspan,
+                        },
+                    );
+                    return;
+                }
                 // P1-4: in-body `@(*)` infers the read-set of the statement it
                 // CONTROLS (IEEE 1800 §9.4.2.2) — the cause is patched after the
                 // body lowers (blocks ≥ `resume` are exactly the controlled
@@ -27220,24 +27301,7 @@ impl<'s> Elaborator<'s> {
                 });
                 b.start_block(resume);
                 if let Some(body) = body {
-                    // G7: an `iff` guard on this event control gates the controlled
-                    // statement (`@(edge sig iff g) S` ≡ `@(edge sig) if (g) S`; the IR
-                    // wait cause above ignores the guard slot).
-                    let guard = self.event_iff_guard(ctrl);
-                    let wrapped;
-                    let body_ref: &ast::Stmt = if let Some(g) = guard {
-                        let gspan = g.span;
-                        wrapped = ast::Stmt::If {
-                            cond: g,
-                            then_s: body.clone(),
-                            else_s: None,
-                            span: gspan,
-                        };
-                        &wrapped
-                    } else {
-                        body
-                    };
-                    self.lower_stmt(b, body_ref);
+                    self.lower_stmt(b, body);
                 }
                 if star {
                     let nets = self.comb_read_set(&b.body[resume.raw() as usize..]);

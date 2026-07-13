@@ -147,6 +147,25 @@ fn g4_string_return_parses_then_loud() {
     assert!(!ok(src), "string return must be loud (not silent-wrong)");
 }
 
+#[test]
+fn g4_pkg_string_return_loud() {
+    // Adversarial-review regression: the ret_string loud guard must also cover the
+    // package-scoped call path (`pkg::f()`) — else a string return there silently reads
+    // empty and flips a `==` comparison (a HIGH silent-wrong).
+    let src = "package p; function string g(); g=\"PKG\"; endfunction endpackage\n\
+        module top(output int o); initial begin o=(p::g()==\"PKG\"); $display(\"o=%0d\",o); $finish; end endmodule";
+    assert!(!ok(src), "a package string return must be loud");
+}
+
+#[test]
+fn g4_class_method_string_return_loud() {
+    // …and the class-method call path (`c.m()`).
+    let src = "module top(output int o);\n\
+        class C; function string name(); name=\"obj\"; endfunction endclass\n\
+        C c; initial begin c=new(); o=(c.name()==\"obj\"); $display(\"o=%0d\",o); $finish; end endmodule";
+    assert!(!ok(src), "a class-method string return must be loud");
+}
+
 // ───────────────────────────── G5: unpacked-struct tf-port (loud) ─────────
 #[test]
 fn g5_unpacked_struct_tf_port_one_clean_loud() {
@@ -206,13 +225,30 @@ fn g7_iff_matches_manual_desugar() {
 }
 
 #[test]
-fn g7_iff_statement_form() {
-    let src = "module m;\n\
+fn g7_iff_oneshot_wait_fires_at_guarded_edge() {
+    // `@(posedge clk iff rdy);` must WAIT until a posedge WHERE rdy is true
+    // (IEEE §9.4.2.3), NOT unblock at the first posedge. rdy rises at t=12, so the
+    // first posedge with rdy=1 is t=15 (NOT t=5). (Adversarial-review regression: the
+    // earlier `@(posedge clk) if(rdy)` desugar silently fired at t=5.) Matches the
+    // iverilog `do @(posedge clk); while(!rdy);` oracle (also t=15).
+    let src = "module m(output int o);\n\
         logic clk=0, rdy=0;\n\
         always #5 clk=~clk;\n\
-        initial begin #12 rdy=1; #60 $finish; end\n\
-        initial begin @(posedge clk iff rdy); $display(\"PASS\"); end endmodule";
-    assert_eq!(run(src).0, "PASS");
+        initial begin #12 rdy=1; #40 $finish; end\n\
+        initial begin @(posedge clk iff rdy); o=$time; $display(\"o=%0d\",o); end endmodule";
+    assert_eq!(run(src).0, "o=15");
+}
+
+#[test]
+fn g7_iff_guarded_body_runs_at_guarded_edge() {
+    // The wait+body form runs the body at the FIRST en-true posedge (t=15, capturing
+    // v=22), not falling through at t=5 with x unchanged.
+    let src = "module m(output int o);\n\
+        logic clk=0, en=0; int v=22;\n\
+        always #5 clk=~clk;\n\
+        initial begin #12 en=1; #40 $finish; end\n\
+        initial begin int x=0; @(posedge clk iff en) x=v; o=x; $display(\"o=%0d\",o); end endmodule";
+    assert_eq!(run(src).0, "o=22");
 }
 
 #[test]
