@@ -428,13 +428,13 @@ pub(crate) fn dispatch(
             Ctl::Continue
         }
         SysTaskId::Display => {
-            let mut s = format_args_str(sched, fmt, args, radix);
+            let mut s = format_args_str(sched.st, fmt, args, radix);
             s.push('\n');
             write_out(sched.st, &s);
             Ctl::Continue
         }
         SysTaskId::Write => {
-            let s = format_args_str(sched, fmt, args, radix);
+            let s = format_args_str(sched.st, fmt, args, radix);
             write_out(sched.st, &s);
             Ctl::Continue
         }
@@ -478,7 +478,7 @@ pub(crate) fn dispatch(
         SysTaskId::Finish => Ctl::Finish,
         SysTaskId::Stop => Ctl::Stop,
         SysTaskId::DumpFile => {
-            let name = arg_string(sched, args.first().copied());
+            let name = arg_string(sched.st, args.first().copied());
             sched.st.dump_pending_path = Some(name);
             Ctl::Continue
         }
@@ -533,7 +533,7 @@ pub(crate) fn dispatch(
                 .filter(|v| !v.has_xz())
                 .and_then(|v| v.to_u64())
                 .map(|v| v as u32);
-            let mut text = format_args_str(sched, fmt, args.get(1..).unwrap_or(&[]), radix);
+            let mut text = format_args_str(sched.st, fmt, args.get(1..).unwrap_or(&[]), radix);
             if matches!(which, SysTaskId::Fdisplay) {
                 text.push('\n');
             }
@@ -662,7 +662,7 @@ pub(crate) fn dispatch(
         // format engine and writes dest (string net = byte store; packed =
         // the normal funnel with §6.16 conversion).
         SysTaskId::Sformat => {
-            let text = format_args_str(sched, fmt, args.get(1..).unwrap_or(&[]), radix);
+            let text = format_args_str(sched.st, fmt, args.get(1..).unwrap_or(&[]), radix);
             let dest = args
                 .first()
                 .and_then(|&a| match sched.st.ir.exprs.get(a as usize) {
@@ -1736,7 +1736,7 @@ fn run_severity(
     fmt: Option<u32>,
     args: &[u32],
 ) -> Ctl {
-    let message = format_args_str(sched, fmt, args, None);
+    let message = format_args_str(sched.st, fmt, args, None);
     emit_severity_message(sched, sev, message)
 }
 
@@ -2199,13 +2199,13 @@ fn word0(store: &sim_ir::BitPacked, width: u32) -> sim_ir::BitPacked {
 // ── argument / const string helpers ────────────────────────────────────────
 
 /// Read a string from a $dumpfile/$display arg ExprId → Const{StrUtf8} → bytes.
-fn arg_string(sched: &Scheduler, eid: Option<u32>) -> String {
+fn arg_string(st: &SimState, eid: Option<u32>) -> String {
     let Some(eid) = eid else { return String::new() };
-    if let sim_ir::Expr::Const { val } = &sched.st.ir.exprs[eid as usize] {
-        return const_string(sched.st.ir, *val);
+    if let sim_ir::Expr::Const { val } = &st.ir.exprs[eid as usize] {
+        return const_string(st.ir, *val);
     }
     // non-const arg: render its value as decimal (best-effort)
-    fmt_dec(&sched.eval(eid))
+    fmt_dec(&st.eval_expr(eid))
 }
 
 /// Resolve an ExprId that is a `Const{val}` into its const string (format str).
@@ -2246,7 +2246,7 @@ pub(crate) fn const_string(ir: &sim_ir::SimIr, cid: u32) -> String {
 // ── $display format engine (4-state aware) ─────────────────────────────────
 
 pub(crate) fn format_args_str(
-    sched: &Scheduler,
+    st: &SimState,
     fmt: Option<u32>,
     args: &[u32],
     radix: Option<u8>,
@@ -2256,8 +2256,8 @@ pub(crate) fn format_args_str(
     if let Some(fmt_eid) = fmt {
         // FROZEN IR: `SysTask.fmt` is an ExprId pointing to a `Const{val}` whose
         // `val` is the format-string ConstId (verified against elaborate).
-        let template = expr_const_string(sched.st, fmt_eid);
-        render_template(sched, &template, args, &mut argi, &mut out);
+        let template = expr_const_string(st, fmt_eid);
+        render_template(st, &template, args, &mut argi, &mut out);
     }
     // IEEE 1364-2005 §17.1 (P0-8): any argument NOT consumed by a format
     // string prints sequentially — a string-literal arg is itself a format
@@ -2268,10 +2268,10 @@ pub(crate) fn format_args_str(
     while argi < args.len() {
         let e = args[argi];
         argi += 1;
-        if let Some(text) = str_const_of_expr(sched.st, e) {
-            render_template(sched, &text, args, &mut argi, &mut out);
+        if let Some(text) = str_const_of_expr(st, e) {
+            render_template(st, &text, args, &mut argi, &mut out);
         } else {
-            push_default_radix(&sched.eval(e), &mut out, radix);
+            push_default_radix(&st.eval_expr(e), &mut out, radix);
         }
     }
     out
@@ -2354,7 +2354,7 @@ fn justify(content: &str, field_width: Option<usize>, left_just: bool) -> String
 }
 
 fn render_template(
-    sched: &Scheduler,
+    st: &SimState,
     template: &str,
     args: &[u32],
     argi: &mut usize,
@@ -2436,18 +2436,39 @@ fn render_template(
             // P2-11: hierarchical scope of the EXECUTING process (was: always
             // the literal "top"). Strobe/monitor renders restore the
             // REGISTERING process's scope first (FmtCapture.scope).
-            'm' | 'M' => out.push_str(&justify(&sched.st.cur_scope, field_width, left_just)),
+            'm' | 'M' => {
+                // N1: `%m` inside a subroutine body reports `module.function`
+                // (IEEE §21.2.1) — append the active frame-subroutine name(s), resolved
+                // from FuncId via `func_names`. Empty stack (module-level) ⇒ just
+                // `cur_scope`, byte-identical to before.
+                let fs = st.frame_scope.borrow();
+                let scope = if fs.is_empty() {
+                    st.cur_scope.clone()
+                } else {
+                    let mut s = st.cur_scope.clone();
+                    for &fid in fs.iter() {
+                        if let Some(n) = st.func_names.get(fid as usize) {
+                            if !n.is_empty() {
+                                s.push('.');
+                                s.push_str(n);
+                            }
+                        }
+                    }
+                    s
+                };
+                out.push_str(&justify(&scope, field_width, left_just));
+            }
             't' | 'T' => {
                 // `%T` aliases `%t` (consumes one time arg). Full §21.3.2 semantics:
                 // the arg (a time in the DISPLAYING module's unit) is rescaled to the
                 // `$timeformat` units (default: the global precision) and justified
                 // in the min field width (default 20; an explicit `%Nt`/`%0t`
                 // OVERRIDES it — iverilog-pinned).
-                let v = next_arg(sched, args, argi);
-                out.push_str(&fmt_time_spec(sched, &v, field_width, min_zero, left_just));
+                let v = next_arg(st, args, argi);
+                out.push_str(&fmt_time_spec(st, &v, field_width, min_zero, left_just));
             }
             'd' | 'D' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 // IEEE 1364 %d: right-justify in a field width. `%0d` ⇒ minimal;
                 // `%Nd` ⇒ width N; bare `%d` ⇒ the operand's default decimal width
                 // (digit count of its max value). An X/Z prints as a right-justified
@@ -2493,19 +2514,19 @@ fn render_template(
                 }
             }
             'h' | 'H' | 'x' | 'X' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 out.push_str(&fmt_radix(&v, 4, min_zero, field_width, left_just));
             }
             'o' | 'O' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 out.push_str(&fmt_radix(&v, 3, min_zero, field_width, left_just));
             }
             'b' | 'B' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 out.push_str(&fmt_radix(&v, 1, min_zero, field_width, left_just));
             }
             'f' | 'F' | 'g' | 'G' | 'e' | 'E' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 let s = fmt_real(&v, spec, field_width, precision, left_just, min_zero, plus);
                 // `%E`/`%G` uppercase the exponent letter and non-finite labels
                 // (iverilog: `%E` → "1.5E+20", `%G` → "1E-05", `%E` of inf → "INF").
@@ -2520,7 +2541,7 @@ fn render_template(
                 }
             }
             'c' | 'C' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 out.push_str(&justify(&char_of(&v).to_string(), field_width, left_just));
             }
             's' | 'S' => {
@@ -2542,14 +2563,14 @@ fn render_template(
                     // string LITERAL: decoded text (the classic fmt-arg path).
                     Some(eid)
                         if matches!(
-                            sched.st.ir.exprs.get(eid as usize),
+                            st.ir.exprs.get(eid as usize),
                             Some(sim_ir::Expr::Const { .. })
                         ) =>
                     {
-                        (arg_string(sched, Some(eid)), None)
+                        (arg_string(st, Some(eid)), None)
                     }
                     Some(eid) => {
-                        let v = sched.eval(eid);
+                        let v = st.eval_expr(eid);
                         if v.is_str {
                             // v7 P2-C: a STRING-domain value renders its EXACT bytes.
                             (
@@ -2578,17 +2599,17 @@ fn render_template(
             // P0-8③: the remaining IEEE specs CONSUME their argument — leaving
             // them unconsumed shifted every later spec onto the wrong arg.
             'v' | 'V' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 out.push_str(&justify(&strength_form(&v), field_width, left_just));
             }
             // binary-dump specs: consume; vitamin emits no text for them (v1 —
             // the IEEE form writes raw bytes, useless in a text log).
             'u' | 'U' | 'z' | 'Z' => {
-                let _ = next_arg(sched, args, argi);
+                let _ = next_arg(st, args, argi);
             }
             // `%p` (SV assignment pattern): minimal-width value form (v1).
             'p' | 'P' => {
-                let v = next_arg(sched, args, argi);
+                let v = next_arg(st, args, argi);
                 out.push_str(&fmt_dec(&v));
             }
             other => {
@@ -2645,10 +2666,10 @@ pub(crate) fn fmt_packed_chars_min(v: &Value) -> String {
     s
 }
 
-fn next_arg(sched: &Scheduler, args: &[u32], argi: &mut usize) -> Value {
+fn next_arg(st: &SimState, args: &[u32], argi: &mut usize) -> Value {
     let e = args.get(*argi).copied();
     *argi += 1;
-    e.map(|x| sched.eval(x)).unwrap_or_else(Value::x1)
+    e.map(|x| st.eval_expr(x)).unwrap_or_else(Value::x1)
 }
 
 /// IEEE %d default field width = decimal digit count of an `n`-bit operand's max
@@ -2762,23 +2783,23 @@ fn fmt_dec(v: &Value) -> String {
 ///   `%Nt`/`%0t` width if given, else the min field width (default 20); a
 ///   NEGATIVE min width LEFT-justifies in |width|.
 fn fmt_time_spec(
-    sched: &Scheduler,
+    st: &SimState,
     v: &Value,
     explicit_width: Option<usize>,
     min_zero: bool,
     left_just: bool,
 ) -> String {
-    let (units_exp, prec, suffix, minw): (i32, usize, &str, i64) = match &sched.st.timeformat {
+    let (units_exp, prec, suffix, minw): (i32, usize, &str, i64) = match &st.timeformat {
         Some(tf) => (
             tf.units_exp,
             tf.prec as usize,
             tf.suffix.as_str(),
             tf.minw as i64,
         ),
-        None => (sched.st.global_prec_exp as i32, 0, "", 20),
+        None => (st.global_prec_exp as i32, 0, "", 20),
     };
-    let k = units_exp as i64 - sched.st.global_prec_exp as i64;
-    let m = sched.st.cur_time_mult.max(1);
+    let k = units_exp as i64 - st.global_prec_exp as i64;
+    let m = st.cur_time_mult.max(1);
     // M is 10^(unit_exp − global_prec_exp) by the timescale-wiring contract, so
     // ilog10 recovers the exponent and the integer path stays exact string math.
     let mz = m.ilog10() as i64;

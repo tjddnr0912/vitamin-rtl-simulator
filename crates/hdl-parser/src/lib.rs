@@ -1015,6 +1015,19 @@ impl<'t, 's> Parser<'t, 's> {
         loop {
             match self.peek() {
                 Some(TokenKind::LBracket) => e = self.parse_select(e),
+                // N6B: a METHOD call on an indexed array ELEMENT (`files[i].len()`,
+                // `arr[k].substr(a,b)`). A `name[idx]` select followed by `.ident(` is a
+                // method on the element, NOT a hierarchical generate-array reference
+                // (`g[0].x` / `bank[3].c.r` carry NO `(` after the member). Checked
+                // BEFORE `is_indexed_hier_base` so the element-method wins; the receiver
+                // is the `BitSelect`, dispatched at elaborate on the element's type.
+                Some(TokenKind::Dot)
+                    if matches!(e.kind, ExprKind::BitSelect { .. })
+                        && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+                        && self.peek_at(2) == Some(TokenKind::LParen) =>
+                {
+                    e = self.parse_method_chain(e);
+                }
                 // HIER-REST②: a `.` after a `name[idx]` select is a hierarchical
                 // reference into a generate / instance-array element (`g[0].x`,
                 // `bank[3].c.r`). Fold the CONSTANT index into the scope-segment name
@@ -3016,6 +3029,15 @@ impl<'t, 's> Parser<'t, 's> {
                     self.bump();
                     var_kind = Some(NetVarKind::Time);
                     ParamType::Time
+                }
+                // N5: a `string` typed parameter/localparam. Consume the keyword so
+                // the name parses; the value is a string literal, folded and stored
+                // as a string constant by elaborate (detected by the StrLit value, so
+                // no new `ParamType` variant is needed — the untyped spelling
+                // `localparam S = "abc"` (N5B) rides the same value-detection path).
+                Some(TokenKind::Word(WordKind::Keyword(Kw::String))) => {
+                    self.bump();
+                    ParamType::Implicit
                 }
                 _ => ParamType::Implicit,
             };
@@ -8938,20 +8960,42 @@ impl<'t, 's> Parser<'t, 's> {
         inherited_type: &TfPortType,
     ) -> (TfPort, PortDir, TfPortType) {
         let start = self.cur_span();
-        let (dir, dir_present) = match self.peek() {
-            Some(TokenKind::Word(WordKind::Keyword(Kw::Input))) => {
-                self.bump();
-                (PortDir::Input, true)
+        // N2: SV `ref` (and `const ref`) formal direction. `ref` is NOT a keyword in
+        // our lexer — it lexes as a plain identifier — so match it textually here, in
+        // the direction slot only (a formal can never be *named* `ref`). Map to INOUT
+        // (copy-in / copy-out): for straight-line synthesizable code with no aliasing
+        // this is observationally identical to true pass-by-reference, and it is the
+        // natural spelling for the in-place block helpers (`ref logic [31:0] H[0:7]`).
+        // A `const ref` is input-only; copy-out of its unmodified value is harmless, so
+        // it maps to inout as well. iverilog has no `ref` support (sorry) — hand-IEEE.
+        // Only consume a leading `const` when it actually precedes `ref`.
+        if self.at_ident_kw("const") && self.peek_at(1) == Some(TokenKind::Word(WordKind::Ident)) {
+            // Peek the token after `const`: consume the pair only if it is `ref`.
+            let save = self.pos;
+            self.bump(); // tentatively consume `const`
+            if !self.at_ident_kw("ref") {
+                self.pos = save; // not `const ref` — restore
             }
-            Some(TokenKind::Word(WordKind::Keyword(Kw::Output))) => {
-                self.bump();
-                (PortDir::Output, true)
+        }
+        let (dir, dir_present) = if self.at_ident_kw("ref") {
+            self.bump();
+            (PortDir::Inout, true)
+        } else {
+            match self.peek() {
+                Some(TokenKind::Word(WordKind::Keyword(Kw::Input))) => {
+                    self.bump();
+                    (PortDir::Input, true)
+                }
+                Some(TokenKind::Word(WordKind::Keyword(Kw::Output))) => {
+                    self.bump();
+                    (PortDir::Output, true)
+                }
+                Some(TokenKind::Word(WordKind::Keyword(Kw::Inout))) => {
+                    self.bump();
+                    (PortDir::Inout, true)
+                }
+                _ => (inherited, false), // bare `, b` continues the previous direction
             }
-            Some(TokenKind::Word(WordKind::Keyword(Kw::Inout))) => {
-                self.bump();
-                (PortDir::Inout, true)
-            }
-            _ => (inherited, false), // bare `, b` continues the previous direction
         };
         let mut net_or_var = self.net_var_kind();
         if net_or_var.is_some() {
@@ -9428,6 +9472,14 @@ impl<'t, 's> Parser<'t, 's> {
                 Kw::Release => self.parse_release(),
                 // SVA-REST: `assume` parses like `assert` (sim-checked the same).
                 Kw::Assert | Kw::Assume => self.parse_assert(),
+                // N4: `void'(call);` — a discard-cast statement (evaluate the call
+                // for its side effects, drop the result). IEEE §13.4.1 explicit-void.
+                Kw::Void
+                    if self.peek_at(1) == Some(T::Apostrophe)
+                        && self.peek_at(2) == Some(T::LParen) =>
+                {
+                    self.parse_void_cast_stmt()
+                }
                 _ => self.stmt_error(),
             },
             Some(T::SystemTask) => self.parse_systask_call(),
@@ -9636,6 +9688,30 @@ impl<'t, 's> Parser<'t, 's> {
             name,
             args,
             span: start.to(self.prev_span()),
+        }
+    }
+
+    // N4: `void'(EXPR);` discard-cast statement. Parse `void ' ( EXPR ) ;` and lower
+    // to the discard form of EXPR: a user call → `UserTaskCall`, a system call →
+    // `SysTaskCall` (the two idioms in the TBs: `void'($value$plusargs(...))` and
+    // `void'(helper())`). Any other inner expression evaluates for side effects but
+    // has no statement form yet → clean loud error (correct-or-loud).
+    fn parse_void_cast_stmt(&mut self) -> Stmt {
+        let start = self.cur_span();
+        self.bump(); // `void`
+        self.bump(); // `'`
+        self.bump(); // `(`
+        let inner = self.expr(0);
+        self.expect(TokenKind::RParen, "')' closing void'()");
+        self.expect(TokenKind::Semi, "';'");
+        let span = start.to(self.prev_span());
+        match inner.kind {
+            ExprKind::Call { name, args } => Stmt::UserTaskCall { name, args, span },
+            ExprKind::SysCall { name, args } => Stmt::SysTaskCall { name, args, span },
+            _ => {
+                self.error_at(inner.span, "a call expression inside void'( … )");
+                self.stmt_error_at(start)
+            }
         }
     }
 

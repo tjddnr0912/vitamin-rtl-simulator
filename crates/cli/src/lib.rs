@@ -811,6 +811,7 @@ fn run_vita_str_gated(
         // B1/B2 frame-call: thread the func/task sidecars on the one-shot path
         // (empty for designs with no automatic/recursive func/task → byte-identical).
         func_table: sc.func_table,
+        func_names: sc.func_names,
         task_calls_proc: sc.task_calls_proc,
         task_calls_func: sc.task_calls_func,
         // SVPART: 2-state nets coerce X/Z→0 on write (one-shot path only).
@@ -1696,6 +1697,10 @@ fn decode_vu_unit(
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 struct StagedExtraSidecars {
     func_table: sim_engine::FuncTable,
+    /// N1: FuncId → name for `%m` in a frame body. `#[serde(default)]` so an older
+    /// `.velab` trailer (no field) still deserialises (empty ⇒ `%m` = module scope).
+    #[serde(default)]
+    func_names: Vec<String>,
     task_calls_proc: sim_engine::TaskCallProc,
     task_calls_func: sim_engine::TaskCallFunc,
     two_state_nets: std::collections::BTreeSet<u32>,
@@ -1753,6 +1758,7 @@ impl StagedExtraSidecars {
     fn from_sidecars(sc: &elaborate::Sidecars) -> Self {
         StagedExtraSidecars {
             func_table: sc.func_table.clone(),
+            func_names: sc.func_names.clone(),
             task_calls_proc: sc.task_calls_proc.clone(),
             task_calls_func: sc.task_calls_func.clone(),
             two_state_nets: sc.two_state_nets.clone(),
@@ -2685,6 +2691,7 @@ fn run_vrun_gated(
         // assertion-control behavior (class read 0/X, recursive automatic fn
         // returned X — both exit 0). Now value-identical to one-shot.
         func_table: extra.func_table,
+        func_names: extra.func_names,
         task_calls_proc: extra.task_calls_proc,
         task_calls_func: extra.task_calls_func,
         two_state_nets: extra.two_state_nets,

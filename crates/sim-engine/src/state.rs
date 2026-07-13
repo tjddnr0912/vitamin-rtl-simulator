@@ -380,6 +380,15 @@ pub(crate) struct SimState<'a> {
     /// Instance path of the process CURRENTLY executing — set per `run_process`
     /// (like `cur_time_mult`), read by the `%m` format spec.
     pub cur_scope: String,
+    /// N1: stack of active frame-subroutine FuncIds (innermost last), pushed by
+    /// `run_frame_call`/`run_task` while a body executes (a `u32` push is alloc-free on
+    /// the hot call path). `%m` inside a subroutine body appends each id's name (from
+    /// `func_names`) to `cur_scope` (IEEE §21.2.1 → `module.function`). Empty on the
+    /// module-level path (byte-identical `%m`). `RefCell` because the runners are `&self`.
+    pub frame_scope: std::cell::RefCell<Vec<u32>>,
+    /// N1: FuncId → subroutine name, index-aligned to `ir.funcs` (`SimOpts.func_names`).
+    /// Consulted only by `%m` inside a frame body. EMPTY ⇒ `%m` = the module scope.
+    pub func_names: Vec<String>,
     /// Worker-thread budget (from `SimOpts.threads`); `≥2` ⇒ VCD writer thread.
     pub threads: u32,
     /// Process-body execution backend (from `SimOpts.backend`). Default
@@ -741,6 +750,8 @@ impl<'a> SimState<'a> {
             queue_bounds: crate::QueueBoundTable::new(),
             proc_scopes: Vec::new(),
             cur_scope: "top".to_string(),
+            frame_scope: std::cell::RefCell::new(Vec::new()),
+            func_names: Vec::new(),
             threads: 1,
             backend: crate::Backend::Interpreter,
             vm_cache: (0..ir.processes.len())
@@ -2076,6 +2087,14 @@ impl Drop for DepthGuard<'_> {
     }
 }
 
+/// N1: RAII pop of the `%m` frame-scope stack on EVERY exit of a frame body.
+struct FrameScopeGuard<'c>(&'c std::cell::RefCell<Vec<u32>>);
+impl Drop for FrameScopeGuard<'_> {
+    fn drop(&mut self) {
+        self.0.borrow_mut().pop();
+    }
+}
+
 impl<'a> SimState<'a> {
     /// Build a read-only `EvalCtx` over `&self` holding ZERO frame borrow
     /// (mirrors the scheduler's `eval`/`truthy` ctor). An `EvalCtx` can live
@@ -2093,6 +2112,54 @@ impl<'a> SimState<'a> {
             rng: &self.rng,
             plusargs: &self.plusargs,
         }
+    }
+
+    /// Evaluate an expression to a self-width Value against the CURRENT state
+    /// (module nets, or the active frame window if one is installed). Identical to
+    /// `Scheduler::eval` — both build an `EvalCtx` over this `SimState` — so the
+    /// `&SimState` formatter (`format_args_str`) renders byte-for-byte the same from
+    /// a process body (executor) and from inside a frame body (N1: `$sformatf` args
+    /// that read frame-local formals resolve through `read_net`'s frame routing).
+    pub(crate) fn eval_expr(&self, eid: u32) -> Value {
+        self.mk_eval_ctx().eval(eid)
+    }
+
+    /// N1: evaluate a frame-body `BlockingAssign` RHS. `$sformatf(fmt, …)` written to
+    /// a `string` target is rendered through the SHARED formatter (`format_args_str`) —
+    /// the generic `eval_sysfunc` arm cannot see the format string (it would dump the
+    /// raw args), so a `s = $sformatf(...)` in a subroutine body (an OUTPUT string
+    /// formal, a string return) needs this intercept. The frame window is active, so any
+    /// format arg that reads a frame-local formal resolves through `read_net`. The
+    /// intercept is GATED on a `NetKind::String` lhs: a `$sformatf` assigned to a
+    /// NUMERIC target is an illegal implicit string→int cast (iverilog rejects it), so
+    /// vita leaves it on the pre-existing generic path rather than changing its value.
+    /// Any other RHS evaluates normally in the assignment-width context.
+    fn frame_rhs_value(&self, lhs: &Lvalue, rhs: u32) -> Value {
+        let lhs_is_string = lhs
+            .chunks
+            .first()
+            .and_then(|c| self.ir.nets.get(c.net as usize))
+            .map(|n| n.kind == NetKind::String)
+            .unwrap_or(false);
+        if lhs_is_string {
+            if let Some(sim_ir::Expr::SysFunc {
+                which: sim_ir::SysFuncId::Sformatf,
+                args,
+            }) = self.ir.exprs.get(rhs as usize)
+            {
+                let text = crate::builtins::format_args_str(
+                    self,
+                    args.first().copied(),
+                    args.get(1..).unwrap_or(&[]),
+                    None,
+                );
+                return Value::from_str_bytes(text.as_bytes());
+            }
+        }
+        let lw = self.lvalue_width(lhs);
+        let sw = self.wt.get(rhs);
+        self.mk_eval_ctx()
+            .eval_ctx(rhs, lw.max(sw.width), sw.signed)
     }
 
     /// Read frame slot `slot` of function `func`: the top AUTOMATIC window, or
@@ -2172,7 +2239,16 @@ impl<'a> SimState<'a> {
         let net_w = nv.width.max(1);
         // A WHOLE-net write: resize to the slot's declared width/sign and store.
         if c.offset.is_none() && c.word.is_none() && c.width.is_none() {
-            let val = v.resize_keep_sign(net_w, nv.signed);
+            // N1: a frame-local `string` slot (an OUTPUT/INOUT string formal) holds the
+            // heap-string VALUE, not a width-resized bit-vector — materialise an is_str
+            // Value from the evaluated bytes (mirrors the string input-formal copy-in
+            // at `run_task` and the module `dyn_write` string path). A width resize here
+            // would truncate the string to the 1-bit slot width (silently emptying it).
+            let val = if nv.kind == NetKind::String {
+                Value::from_str_bytes(&v.to_str_bytes())
+            } else {
+                v.resize_keep_sign(net_w, nv.signed)
+            };
             // B4: route by this slot's EFFECTIVE lifetime (window vs static slab).
             self.frame_slot_write(fidx, auto, slot, val);
             return;
@@ -2289,6 +2365,9 @@ impl<'a> SimState<'a> {
         }
         self.call_depth.set(d + 1);
         let _g = DepthGuard(&self.call_depth); // decrements on EVERY exit
+                                               // N1: expose this subroutine (FuncId `func`) to `%m` rendered inside its body.
+        self.frame_scope.borrow_mut().push(func);
+        let _sg = FrameScopeGuard(&self.frame_scope);
 
         let fd = self.ir.funcs[func as usize];
         debug_assert!(
@@ -2318,7 +2397,17 @@ impl<'a> SimState<'a> {
         let fresh: Vec<Value> = (0..nloc)
             .map(|s| {
                 let nv = &self.ir.nets[(base + s) as usize];
-                Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
+                // N1: a frame-local `string` slot (an output/inout string formal or a
+                // string return var) defaults to the EMPTY string, not a width-1
+                // non-is_str value — the latter renders as a stray space and makes
+                // `s==""` / `s.len()==0` FALSE on an unwritten path (a silent-wrong
+                // caught by adversarial review; string-return t03 already matched
+                // iverilog because it happened to write, output formals did not).
+                if nv.kind == NetKind::String {
+                    Value::from_str_bytes(&[])
+                } else {
+                    Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
+                }
             })
             .collect();
         match (has_auto, has_static) {
@@ -2354,13 +2443,10 @@ impl<'a> SimState<'a> {
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
                 if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
-                    let lw = self.lvalue_width(lhs);
-                    let sw = self.wt.get(*rhs);
                     // OWNED Value FIRST — its nested Calls may recurse into
                     // run_frame_call, fine: THIS frame holds NO live borrow now.
-                    let v = self
-                        .mk_eval_ctx()
-                        .eval_ctx(*rhs, lw.max(sw.width), sw.signed);
+                    // N1: `$sformatf` renders through the shared formatter here.
+                    let v = self.frame_rhs_value(lhs, *rhs);
                     // THEN store (borrow scoped to the index-store only). N7: a
                     // class field write routes to the heap, not a frame slot.
                     self.frame_or_class_write(lhs, v);
@@ -2443,6 +2529,9 @@ impl<'a> SimState<'a> {
         }
         self.call_depth.set(d + 1);
         let _g = DepthGuard(&self.call_depth);
+        // N1: expose this task (FuncId `callee`) to `%m` rendered inside its body.
+        self.frame_scope.borrow_mut().push(callee);
+        let _sg = FrameScopeGuard(&self.frame_scope);
         let fd = self.ir.funcs[callee as usize];
         debug_assert!(fd.is_task, "run_task on a non-task FuncDef");
         let base = m.base_net;
@@ -2459,7 +2548,17 @@ impl<'a> SimState<'a> {
         let fresh: Vec<Value> = (0..nloc)
             .map(|s| {
                 let nv = &self.ir.nets[(base + s) as usize];
-                Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
+                // N1: a frame-local `string` slot (an output/inout string formal or a
+                // string return var) defaults to the EMPTY string, not a width-1
+                // non-is_str value — the latter renders as a stray space and makes
+                // `s==""` / `s.len()==0` FALSE on an unwritten path (a silent-wrong
+                // caught by adversarial review; string-return t03 already matched
+                // iverilog because it happened to write, output formals did not).
+                if nv.kind == NetKind::String {
+                    Value::from_str_bytes(&[])
+                } else {
+                    Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
+                }
             })
             .collect();
         match (has_auto, has_static) {
@@ -2511,11 +2610,8 @@ impl<'a> SimState<'a> {
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
                 if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
-                    let lw = self.lvalue_width(lhs);
-                    let sw = self.wt.get(*rhs);
-                    let v = self
-                        .mk_eval_ctx()
-                        .eval_ctx(*rhs, lw.max(sw.width), sw.signed);
+                    // N1: `$sformatf` renders through the shared formatter here.
+                    let v = self.frame_rhs_value(lhs, *rhs);
                     self.frame_or_class_write(lhs, v);
                 }
             }

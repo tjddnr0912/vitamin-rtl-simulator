@@ -421,6 +421,9 @@ pub struct Sidecars {
     /// B1 frame-call metadata, index-aligned to `ir.funcs`. EMPTY ⇒ no
     /// automatic/recursive functions ⇒ golden-neutral.
     pub func_table: FuncTable,
+    /// N1: FuncId → subroutine name, index-aligned to `func_table` / `ir.funcs`.
+    /// Consulted only by `%m` rendered inside a frame body. EMPTY ⇒ module scope.
+    pub func_names: Vec<String>,
     /// B2 frame-call: task-call sites in process bodies (executor-facing).
     pub task_calls_proc: TaskCallProc,
     /// B2 frame-call: nested task-call sites in task bodies (`run_task`-facing).
@@ -655,6 +658,7 @@ pub fn elaborate_with_timescale_roots(
         defer_marks: std::mem::take(&mut el.defer_marks),
         defer_acts: std::mem::take(&mut el.defer_acts),
         func_table: std::mem::take(&mut el.func_metas), // B1 (empty until frame funcs lower)
+        func_names: std::mem::take(&mut el.frame_func_names), // N1 %m
         task_calls_proc: std::mem::take(&mut el.task_calls_proc), // B2
         task_calls_func: std::mem::take(&mut el.task_calls_func), // B2
         // SVPART: 2-state net ids, derived from the decl-time kind map (reuses the
@@ -3085,6 +3089,9 @@ struct Elaborator<'s> {
     /// in `lower_frame_func`; drained into `Sidecars.func_table`. EMPTY until a
     /// frame (automatic/recursive) function lowers.
     func_metas: Vec<FuncMeta>,
+    /// N1: subroutine name per FuncId, parallel to `func_metas` (pushed together).
+    /// Drained into `Sidecars.func_names` for `%m` inside a frame body.
+    frame_func_names: Vec<String>,
     /// B1 frame-call: the GLOBAL `FuncDef` arena (→ `ir.funcs`). Accumulates
     /// across instances; index-aligned to `func_metas`. EMPTY for designs with
     /// no frame functions (golden-neutral: `ir.funcs` stays empty).
@@ -3207,6 +3214,18 @@ struct Elaborator<'s> {
     // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
     // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
     param_range: BTreeMap<String, (u32, u32, bool)>,
+    // N5: FQ param-name → RAW string literal for a `string`-typed / string-valued
+    // parameter (`localparam string S = "abc"` and the untyped `localparam S = "abc"`).
+    // A string param has NO i64 value, so it is kept out of `self.params` and stored
+    // here; an Ident that resolves to such a param re-emits the SAME `StrUtf8` const
+    // `parse_str_literal(raw)` would (so `S == "abc"` is byte-identical). elaborate-LOCAL.
+    str_param_raw: BTreeMap<String, String>,
+    // N6: FQ name of a FIXED `string` ARRAY (`string files[0:1]`) → (lo, hi, element
+    // net ids in index order). A string is heap-backed with no packed width, so a fixed
+    // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)
+    // resolves to the K-th net (read + write + `.method()`). A RUNTIME index / dynamic
+    // (`string s[]`) / init-pattern is loud (correct-or-loud). elaborate-LOCAL.
+    string_array_elems: BTreeMap<String, (i64, i64, Vec<u32>)>,
     // PERSISTENT FQ param-name → value, NEVER restored (unlike `params`). Lets a
     // post-elaboration hierarchical READ (`dut.WIDTH`) fold to the sibling
     // instance's param value. Out-of-band (golden-free).
@@ -3593,6 +3612,7 @@ impl<'s> Elaborator<'s> {
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
             func_metas: Vec::new(),
+            frame_func_names: Vec::new(),
             funcs: Vec::new(),
             func_blocks: Vec::new(),
             frame_idx: BTreeMap::new(),
@@ -3621,6 +3641,8 @@ impl<'s> Elaborator<'s> {
             pkg_array_const_vals: BTreeMap::new(),
             param_meta: BTreeMap::new(),
             param_range: BTreeMap::new(),
+            str_param_raw: BTreeMap::new(),
+            string_array_elems: BTreeMap::new(),
             hier_params: BTreeMap::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
@@ -5215,34 +5237,43 @@ impl<'s> Elaborator<'s> {
         for item in &module.body {
             match item {
                 ast::ModuleItem::Param(p) => {
-                    // Unfoldable value = LOUD error (never a silent 0): a parameter
-                    // bound to a wrong default poisons every downstream width with
-                    // no trace (P0-5). 0 stays only as the post-error recovery value.
-                    let meta = self.param_decl_width(p);
-                    let v = self
-                        .eval_param_init(&p.value, meta.map(|(w, _)| w))
-                        .unwrap_or_else(|| {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
+                    // N5: a string-valued parameter/localparam (`localparam string S =
+                    // "abc"`, or the untyped `localparam S = "abc"`). It has no i64
+                    // value, so record its raw literal (FQ-keyed, persistent — walk_scopes
+                    // only matches from the declaring prefix) and skip the numeric fold.
+                    if let Some(raw) = Self::param_str_literal(&p.value) {
+                        let key = self.fq(&p.name.name);
+                        self.str_param_raw.insert(key, raw);
+                    } else {
+                        // Unfoldable value = LOUD error (never a silent 0): a parameter
+                        // bound to a wrong default poisons every downstream width with
+                        // no trace (P0-5). 0 stays only as the post-error recovery value.
+                        let meta = self.param_decl_width(p);
+                        let v = self
+                            .eval_param_init(&p.value, meta.map(|(w, _)| w))
+                            .unwrap_or_else(|| {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
                                     "parameter `{}` value is not a foldable constant expression",
                                     p.name.name
                                 ),
-                            );
-                            0
-                        });
-                    let v = self.coerce_param_value(v, p);
-                    let key = self.fq(&p.name.name);
-                    // persistent copy for a hierarchical read (`dut.LP`) of a body
-                    // parameter/localparam (mirrors the header path in bind_params).
-                    self.hier_params.insert(key.clone(), v);
-                    if let Some(m) = meta {
-                        self.param_meta.insert(key.clone(), m);
+                                );
+                                0
+                            });
+                        let v = self.coerce_param_value(v, p);
+                        let key = self.fq(&p.name.name);
+                        // persistent copy for a hierarchical read (`dut.LP`) of a body
+                        // parameter/localparam (mirrors the header path in bind_params).
+                        self.hier_params.insert(key.clone(), v);
+                        if let Some(m) = meta {
+                            self.param_meta.insert(key.clone(), m);
+                        }
+                        if let Some(r) = self.param_decl_range(p) {
+                            self.param_range.insert(key.clone(), r);
+                        }
+                        saved_params.push((key.clone(), self.params.insert(key, v)));
                     }
-                    if let Some(r) = self.param_decl_range(p) {
-                        self.param_range.insert(key.clone(), r);
-                    }
-                    saved_params.push((key.clone(), self.params.insert(key, v)));
                 }
                 ast::ModuleItem::NetVar(d) => {
                     self.prescan_net_bits(d);
@@ -6821,6 +6852,69 @@ impl<'s> Elaborator<'s> {
         self.param_range.get(&key).copied()
     }
 
+    /// N6: (min, max) index bounds of a SINGLE FIXED unpacked dim (`[N]` → (0, N-1);
+    /// `[hi:lo]` / `[lo:hi]` → (min, max)), or None for a dynamic/queue/assoc/non-const
+    /// dim (a dynamic string array is a deeper follow-on → loud).
+    fn fixed_dim_bounds(&mut self, dim: &ast::Dim) -> Option<(i64, i64)> {
+        match dim {
+            ast::Dim::Size(e) => {
+                let n = self.const_eval_in_scope(e)?;
+                (n >= 1).then_some((0, n - 1))
+            }
+            ast::Dim::Range(r) => {
+                let m = self.const_eval_in_scope(&r.msb)?;
+                let l = self.const_eval_in_scope(&r.lsb)?;
+                Some((m.min(l), m.max(l)))
+            }
+            _ => None,
+        }
+    }
+
+    /// N6: resolve a string-array ELEMENT read/write `NAME[K]` — if `base` is an Ident
+    /// naming a fixed string array in scope and `index` folds to a CONST in range,
+    /// return the K-th element net. A runtime index / out-of-range / non-string-array
+    /// base returns None (the caller falls through / loud-rejects). Shared by the read
+    /// (`lower_expr`) and write (`lvalue`) paths so both resolve identically.
+    fn string_array_elem_net(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
+        let ast::ExprKind::Ident(path) = &base.kind else {
+            return None;
+        };
+        if path.segments.len() != 1 {
+            return None;
+        }
+        let key = self.walk_scopes_key(&path.segments[0].name, |k| {
+            self.string_array_elems.contains_key(k)
+        })?;
+        let (min, max, elems) = self.string_array_elems.get(&key)?.clone();
+        let k = self.const_eval_in_scope(index)?;
+        if k < min || k > max {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!("string-array index {k} is out of the declared range [{min}:{max}]"),
+            );
+            return None;
+        }
+        Some(elems[(k - min) as usize])
+    }
+
+    /// N6: true iff `base` is a fixed string-array Ident in scope (so a runtime-index
+    /// element access can be loud-rejected rather than mis-routed).
+    fn is_string_array_base(&self, base: &ast::Expr) -> bool {
+        matches!(&base.kind, ast::ExprKind::Ident(p) if p.segments.len() == 1
+            && self.walk_scopes_key(&p.segments[0].name, |k| self.string_array_elems.contains_key(k)).is_some())
+    }
+
+    /// N5: the raw string literal of a string-valued parameter initializer, or None.
+    /// Unwraps a parenthesised value (`= ("abc")`). A non-StrLit value (numeric, an
+    /// Ident, …) returns None → the numeric fold path (unchanged).
+    fn param_str_literal(value: &ast::Expr) -> Option<String> {
+        match &value.kind {
+            ast::ExprKind::StrLit { raw } => Some(raw.clone()),
+            ast::ExprKind::Paren { inner } => Self::param_str_literal(inner),
+            _ => None,
+        }
+    }
+
     fn coerce_param_value(&mut self, v: i64, p: &ast::ParamDecl) -> i64 {
         // `param_decl_width` already reports the declared signedness (incl. `int`/
         // `integer` via `p.signed`), so coerce with THAT — an `int unsigned` must
@@ -8281,6 +8375,54 @@ impl<'s> Elaborator<'s> {
             // precedent). Reads materialize is_str packed values; writes
             // strip leading NULs through the funnel.
             if matches!(d.kind, ast::NetVarKind::String) {
+                // N6: a FIXED `string` ARRAY (`string files[0:1]` / `string f[4]`) — a
+                // single fixed unpacked dim, no packed/range — desugars to N scalar
+                // `NetKind::String` element nets (`<name>$sae$<i>`); `files[K]` (CONST K)
+                // resolves to the K-th net. A dynamic (`string s[]`) / multi-dim /
+                // init-pattern array stays loud (correct-or-loud) via the reject below.
+                if d.range.is_none() && d.packed.is_empty() && decl.unpacked.len() == 1 {
+                    if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
+                        if decl.init.is_some() {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a string-array initializer is unsupported (assign \
+                                 elements in an initial block)",
+                            );
+                            continue;
+                        }
+                        let dir = self.dir_for_name(&decl.name.name, ports, body);
+                        if dir != ir::PortDir::Internal {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a string array cannot be a port (outside the v7 scope)",
+                            );
+                            continue;
+                        }
+                        let n = (max - min) as usize + 1;
+                        let mut elem_ids = Vec::with_capacity(n);
+                        for i in 0..n {
+                            let ename = format!("{}$sae${i}", decl.name.name);
+                            let net = self.nets.len() as u32;
+                            self.add_net(
+                                &ename,
+                                ir::NetVar {
+                                    kind: ir::NetKind::String,
+                                    width: 0,
+                                    msb: 0,
+                                    lsb: 0,
+                                    signed: false,
+                                    array_len: 0,
+                                    dir: ir::PortDir::Internal,
+                                    init: default_init(ast::NetVarKind::Reg, 1),
+                                },
+                            );
+                            elem_ids.push(net);
+                        }
+                        let key = self.fq(&decl.name.name);
+                        self.string_array_elems.insert(key, (min, max, elem_ids));
+                        continue;
+                    }
+                }
                 if d.range.is_some() || !d.packed.is_empty() || !decl.unpacked.is_empty() {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -10778,6 +10920,7 @@ impl<'s> Elaborator<'s> {
             auto_override: 0,
             str_params,
         });
+        self.frame_func_names.push(method.name.clone()); // %m
         if let Some(ci) = self.class_table.get_mut(cname) {
             ci.methods[mi].fid = Some(fid);
             ci.methods[mi].this_net = Some(this_net);
@@ -11485,6 +11628,34 @@ impl<'s> Elaborator<'s> {
     /// Emit a statement that evaluates `call` (for its side effects) and discards
     /// the result. Inside a METHOD body the target is the frame-local `$discard`
     /// slot (the write must land in-frame); in a process body a fresh module net.
+    /// R4: lower a `return <expr>` value. `return $sformatf(...)` (a string return,
+    /// IEEE §6.16) builds the `Sformatf` SysFunc directly — the SAME IR the direct-rhs
+    /// blocking-assign special (`sformatf_special`) produces — so the string return slot
+    /// stores a rendered string (the generic `lower_expr` would reject `$sformatf`
+    /// outside a blocking-assign rhs). Any other value takes the normal width-context
+    /// path, byte-identical to before.
+    fn lower_return_rhs(&mut self, val: &ast::Expr, ctx_w: u32) -> u32 {
+        if let ast::ExprKind::SysCall { name, args } = &val.kind {
+            if name.name == "$sformatf"
+                && matches!(
+                    args.first().map(|a| &a.kind),
+                    Some(ast::ExprKind::StrLit { .. })
+                )
+            {
+                let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+                return self.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::Sformatf,
+                    args: arg_ids,
+                });
+            }
+        }
+        if ctx_w == 0 {
+            self.lower_expr(val)
+        } else {
+            self.lower_ctx_or_plain(val, ctx_w)
+        }
+    }
+
     fn emit_discarded_call(&mut self, b: &mut ProcessBuilder, call: u32) {
         let tmp = match self.cur_discard {
             Some(d) => d,
@@ -12705,6 +12876,31 @@ impl<'s> Elaborator<'s> {
                         }
                         return self.push_expr(ir::Expr::Signal { net, word: None });
                     }
+                    // N5: a `string`-valued parameter/localparam folds to the SAME
+                    // StrUtf8 const its raw literal would (so `S == "abc"` is byte-
+                    // identical). It has no i64 value (kept out of `self.params`), so it
+                    // is resolved before the numeric param path — but ONLY when the
+                    // string param is the INNERMOST binding of the name (IEEE §6.21
+                    // innermost-wins). An independent `walk_scopes(&str_param_raw)` would
+                    // match an OUTER module-scope string param even when an inner net /
+                    // numeric param / frame-local (`$func$f.S`) shadows it, resolving the
+                    // name two different ways (const-eval finds the inner via
+                    // `lookup_scoped`, this pass found the outer string) — a silent-wrong.
+                    // Re-derive the innermost key over the COMBINED binding set and only
+                    // fold the string when that exact key is the string param.
+                    if let Some(key) = self.walk_scopes_key(seg, |k| {
+                        self.str_param_raw.contains_key(k)
+                            || self.params.contains_key(k)
+                            || self.symbols.contains_key(k)
+                    }) {
+                        if self.str_param_raw.contains_key(&key) {
+                            let raw = self.str_param_raw[&key].clone();
+                            let cid = self.intern_const(parse_str_literal(&raw));
+                            return self.push_expr(ir::Expr::Const { val: cid });
+                        }
+                        // else: an inner net / numeric param wins — fall through to the
+                        // normal resolution below (which resolves that innermost binding).
+                    }
                     // parameter / localparam / genvar: a constant in THIS scope (or
                     // an enclosing generate scope) folds to a Const, NOT a net read.
                     // Resolved before `resolve_net` so a param never errors as an
@@ -12965,6 +13161,23 @@ impl<'s> Elaborator<'s> {
                          single value, not a range",
                     );
                     let _ = index;
+                    return self.placeholder_expr();
+                }
+                // N6: a fixed string-ARRAY element read `files[K]` (CONST K) → the K-th
+                // scalar string element net (checked before the dyn/string-byte chains —
+                // a string array is a set of scalar string nets, not a handle). A runtime
+                // index is loud (a dynamic string array is a deeper follow-on).
+                if self.is_string_array_base(base) {
+                    if let Some(net) = self.string_array_elem_net(base, index) {
+                        return self.push_expr(ir::Expr::Signal { net, word: None });
+                    }
+                    if self.const_eval_in_scope(index).is_none() {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a string-array element requires a constant index (a runtime \
+                             index / dynamic string array is a deeper follow-on)",
+                        );
+                    }
                     return self.placeholder_expr();
                 }
                 // v5 ⑥: dyn-handle element read (`d[i]`, `q[$]`, `a[k]`) —
@@ -13824,6 +14037,37 @@ impl<'s> Elaborator<'s> {
                 });
             }
             ast::Lvalue::BitSelect { base, index, .. } => {
+                // N6: a fixed string-ARRAY element write `files[K] = ...` (CONST K) → a
+                // WHOLE-net write of the K-th string element net (a string array is a set
+                // of scalar string nets). A runtime index / OOB is loud (correct-or-loud).
+                if let ast::Lvalue::Ident(p) = &**base {
+                    if p.segments.len() == 1 {
+                        if let Some(key) = self.walk_scopes_key(&p.segments[0].name, |k| {
+                            self.string_array_elems.contains_key(k)
+                        }) {
+                            let (min, max, elems) =
+                                self.string_array_elems.get(&key).unwrap().clone();
+                            match self.const_eval_in_scope(index) {
+                                Some(k) if k >= min && k <= max => {
+                                    out.push(whole_net_chunk(elems[(k - min) as usize]));
+                                }
+                                Some(k) => self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "string-array index {k} is out of the declared \
+                                         range [{min}:{max}]"
+                                    ),
+                                ),
+                                None => self.error(
+                                    MsgCode::ElabUnsupported,
+                                    "a string-array element write requires a constant \
+                                     index (a runtime index is a deeper follow-on)",
+                                ),
+                            }
+                            return;
+                        }
+                    }
+                }
                 // v5 ⑥: dyn-handle element write (`d[i] = v`, `q[$] = v`,
                 // `a[k] = v`) — handles never take the static chunk paths.
                 if let ast::Lvalue::Ident(p) = &**base {
@@ -14458,15 +14702,16 @@ impl<'s> Elaborator<'s> {
             args
         };
 
-        // G4: a `string` return type now PARSES (no more E2002 cascade — the report's
-        // primary complaint), but a materialized string return needs frame String-slot
-        // storage the engine does not yet provide (a frame return/local slot is a
-        // bit-vector; a String slot reads back empty — silent-wrong), and the inline
-        // path yields a raw `$sformatf` ExprId that does not render/compare as a string
-        // outside a direct string-var assignment. Rather than ship either silent-wrong,
-        // reject the CALL with one honest diagnostic (correct-or-loud). Full support
-        // (frame heap string slots) is a documented follow-on.
+        // R4: a `string` return type (IEEE §6.16) is materialized through the FRAME
+        // path — a `NetKind::String` return slot the body writes (`return $sformatf(...)`
+        // renders via the engine's `frame_rhs_value`) and `run_frame_call` copies out as
+        // a string Value; the call reads as a string operand (`ir_expr_is_string`).
+        // `build_frame_set` forces every string-returning function into the frame set, so
+        // `frame_idx` is populated below. A missing `fid` (defensive) stays loud.
         if func.ret_string {
+            if let Some(&fid) = self.frame_idx.get(fname.as_str()) {
+                return self.emit_frame_call(fid, &func, args);
+            }
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
@@ -14900,12 +15145,14 @@ impl<'s> Elaborator<'s> {
             .filter_map(|(n, f)| ast_func_return_width(f).map(|w| (n.clone(), w)))
             .collect();
         for (name, f) in &self.func_table {
-            // G4: a `string`-returning function is neither framed nor inlined — its call
-            // is loud-rejected in `inline_function` (frame String-slot storage is a
-            // follow-on). Keep it OUT of the frame set so no frame body is reserved /
-            // lowered (which would emit a confusing secondary E3018 for its string local
-            // reserved as a 1-bit Wire). The call-site diagnostic is the single message.
+            // R4: a `string`-returning function (IEEE §6.16) is materialized through a
+            // frame `NetKind::String` return slot — the frame body writes it (a
+            // `$sformatf(...)` render via the engine's `frame_rhs_value`) and
+            // `run_frame_call` copies out the string Value; the call is recognized as a
+            // string operand (`ir_expr_is_string`). An inline straight-line fold has no
+            // string slot, so it MUST be framed regardless of lifetime — force it in.
             if f.ret_string {
+                set.insert(name.clone());
                 continue;
             }
             // A function is framed when it is `automatic`, recursive (below), its
@@ -15357,7 +15604,13 @@ impl<'s> Elaborator<'s> {
             s.add_net(
                 &ret_name,
                 ir::NetVar {
-                    kind: if ret_width == 32 && ret_signed {
+                    // R4: a `string` return uses a heap-backed `NetKind::String` slot
+                    // (procedurally assignable, the frame body writes it and the copy-out
+                    // reads the string Value); `ret_width` stays the Implicit-Reg width 1
+                    // (a string bypasses width via `resize_keep_sign`, which keeps is_str).
+                    kind: if func.ret_string {
+                        ir::NetKind::String
+                    } else if ret_width == 32 && ret_signed {
                         ir::NetKind::Integer
                     } else {
                         ir::NetKind::Reg
@@ -15456,6 +15709,7 @@ impl<'s> Elaborator<'s> {
             auto_override,
             str_params,
         });
+        self.frame_func_names.push(func.name.name.clone()); // %m
     }
 
     /// Lower a frame function's body into the GLOBAL `func_blocks` arena: build a
@@ -15595,10 +15849,13 @@ impl<'s> Elaborator<'s> {
                 let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
                 let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
                 let net = s.nets.len() as u32;
+                // N1: a `string` OUTPUT/INOUT formal is a real `NetKind::String` slot
+                // (procedurally assignable) instead of the input-only 1-bit Wire — the
+                // body writes it and the frame copy-out moves the string to the actual.
                 s.add_net(
                     &p.name.name,
                     ir::NetVar {
-                        kind: map_net_kind_or_wire(kind),
+                        kind: formal_net_kind(kind, p.dir),
                         width: w,
                         msb,
                         lsb,
@@ -15680,6 +15937,7 @@ impl<'s> Elaborator<'s> {
             auto_override,
             str_params,
         });
+        self.frame_func_names.push(task.name.name.clone()); // %m
     }
 
     /// B2: lower a frame TASK body into the global `func_blocks` arena — like
@@ -27514,6 +27772,24 @@ impl<'s> Elaborator<'s> {
                         return;
                     }
                 }
+                // N4: a single-segment name that is a user FUNCTION called in
+                // statement position (`void'(f())`, and the bare `f();` form) —
+                // evaluate the call for its side effects and DISCARD the result.
+                // Routed before `inline_task` so it is not mis-reported as an
+                // undeclared task.
+                if name.segments.len() == 1 && self.func_table.contains_key(&name.segments[0].name)
+                {
+                    let call_expr = ast::Expr {
+                        kind: ast::ExprKind::Call {
+                            name: name.clone(),
+                            args: args.to_vec(),
+                        },
+                        span: name.span,
+                    };
+                    let call = self.lower_expr(&call_expr);
+                    self.emit_discarded_call(b, call);
+                    return;
+                }
                 self.inline_task(b, name, args)
             }
             // N7: `return [expr];` — assign the enclosing method/function's return
@@ -27528,11 +27804,7 @@ impl<'s> Elaborator<'s> {
                             Some(rv) => self.nets.get(rv as usize).map(|n| n.width).unwrap_or(32),
                             None => 0,
                         };
-                        let rhs = if ctx_w == 0 {
-                            self.lower_expr(val)
-                        } else {
-                            self.lower_ctx_or_plain(val, ctx_w)
-                        };
+                        let rhs = self.lower_return_rhs(val, ctx_w);
                         if let Some(rv) = retvar {
                             let sid = self.push_stmt(ir::Stmt::BlockingAssign {
                                 lhs: whole_net_lvalue(rv),
@@ -32679,6 +32951,25 @@ fn map_net_kind_or_wire(k: ast::NetVarKind) -> ir::NetKind {
         ClassHandle => ir::NetKind::Integer,
         // Wire + all net aliases (Tri/Uwire/Wand/...) behave as Wire in v1.
         _ => ir::NetKind::Wire,
+    }
+}
+
+/// N1: net kind for a subroutine FORMAL, accounting for direction. A `string`
+/// INPUT formal keeps the classic 1-bit Wire slot (`map_net_kind_or_wire`): the
+/// body only reads it, and the call-site materializes the actual into the slot via
+/// the `str_params` mask (byte-identical to the proven input path). A `string`
+/// OUTPUT / INOUT formal, however, is WRITTEN in the body (`s = $sformatf(...)`) —
+/// a Wire target would fail the procedural-assign check (E3018), so it becomes a
+/// real `NetKind::String` slot (heap-backed, procedurally assignable); the frame
+/// copy-out then moves the string Value onto the caller's `string` actual. Any
+/// non-string formal is unchanged.
+fn formal_net_kind(k: ast::NetVarKind, dir: ast::PortDir) -> ir::NetKind {
+    if matches!(k, ast::NetVarKind::String)
+        && matches!(dir, ast::PortDir::Output | ast::PortDir::Inout)
+    {
+        ir::NetKind::String
+    } else {
+        map_net_kind_or_wire(k)
     }
 }
 

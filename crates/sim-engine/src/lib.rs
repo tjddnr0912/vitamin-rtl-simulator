@@ -232,6 +232,9 @@ pub struct SimOpts {
     /// B1 frame-call metadata, index-aligned to `ir.funcs`. EMPTY default ⇒ no
     /// automatic/recursive functions ⇒ every existing caller byte-identical.
     pub func_table: FuncTable,
+    /// N1: FuncId → subroutine name, index-aligned to `func_table`. `%m` inside a
+    /// frame body only. EMPTY default ⇒ `%m` = module scope (byte-identical).
+    pub func_names: Vec<String>,
     /// B2 frame-call: process-body task-call sites (executor-facing).
     pub task_calls_proc: TaskCallProc,
     /// B2 frame-call: nested (task-body) task-call sites (`run_task`-facing).
@@ -325,6 +328,7 @@ impl Default for SimOpts {
             defer_marks: DeferMarkTable::new(),
             defer_acts: DeferActTable::new(),
             func_table: FuncTable::new(),
+            func_names: Vec::new(),
             task_calls_proc: TaskCallProc::new(),
             task_calls_func: TaskCallFunc::new(),
             two_state_nets: std::collections::BTreeSet::new(),
@@ -565,6 +569,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // Order is load-bearing: `func_table` must be on `st` before routing/width.
     // EMPTY table ⇒ no-op (routing all-false, width rebuild byte-identical).
     st.func_table = opts.func_table.clone();
+    st.func_names = opts.func_names.clone();
     st.build_func_routing();
     st.wt = crate::width::WidthTable::build(ir, &st.func_table);
     // N7: a class field-read Signal's net is the 32-bit handle; patch its

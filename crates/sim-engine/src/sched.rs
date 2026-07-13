@@ -1379,7 +1379,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             } else {
                 self.st.radixes.get(&sid).copied()
             };
-            let message = crate::builtins::format_args_str(self, fmt, args, radix);
+            let message = crate::builtins::format_args_str(&*self.st, fmt, args, radix);
             let report = crate::state::DeferredReport {
                 action_sid: sid,
                 which,
@@ -1486,7 +1486,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             for cap in &batch {
                 self.st.cur_time_mult = cap.time_mult; // registering module's M
                 self.st.cur_scope = cap.scope.clone(); // registering module's %m
-                let mut line = format_args_str(self, cap.fmt, &cap.args, cap.radix);
+                let mut line = format_args_str(&*self.st, cap.fmt, &cap.args, cap.radix);
                 line.push('\n');
                 write_out(self.st, &line);
             }
@@ -1605,7 +1605,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // change-reprint prints only while the monitor is enabled.
                 let do_print = was_establishment || (changed && !monitor_disabled);
                 if do_print {
-                    let mut line = format_args_str(self, fmt, &args, radix);
+                    let mut line = format_args_str(&*self.st, fmt, &args, radix);
                     line.push('\n');
                     write_out(self.st, &line);
                 }
@@ -3748,7 +3748,7 @@ impl Kernel for Scheduler<'_, '_> {
             return Value::from_str_bytes(&[]);
         };
         let (fmt, rest) = (args.first().copied(), args.get(1..).unwrap_or(&[]).to_vec());
-        let text = crate::builtins::format_args_str(self, fmt, &rest, None);
+        let text = crate::builtins::format_args_str(&*self.st, fmt, &rest, None);
         Value::from_str_bytes(text.as_bytes())
     }
     fn k_disable_fork(&mut self) {
