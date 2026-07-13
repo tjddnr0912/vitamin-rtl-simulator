@@ -4,3 +4,6 @@
 # dev-meta — managed only in the violet_sw development monorepo
 LOOPROMPT.md
 CLAUDE.md
+
+# generated simulation output
+*.vcd
