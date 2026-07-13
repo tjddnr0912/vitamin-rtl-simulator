@@ -5,7 +5,7 @@
 //!   G2  dynamic-array (`[]`) subroutine formal                  → loud (deep)
 //!   G3  signed-element sized unpacked-array formal (`byte b[]`) → supported (sign)
 //!   G4  `string` function RETURN type                          → parses; call loud
-//!   G5  unpacked-struct typedef as a tf-port                   → one clean loud
+//!   G5  unpacked-struct typedef as a tf-port                   → SUPPORTED (round-11 R5)
 //!   G6  bare struct typedef var after `import p::*`            → supported
 //!   G6B `p::rec_t` struct var at MODULE scope                  → supported
 //!   G7  `@(posedge clk iff en)` event guard                    → supported (desugar)
@@ -166,21 +166,21 @@ fn g4_class_method_string_return_loud() {
     assert!(!ok(src), "a class-method string return must be loud");
 }
 
-// ───────────────────────────── G5: unpacked-struct tf-port (loud) ─────────
+// ───────────── G5: unpacked-struct tf-port — now SUPPORTED (R5 supersede) ─────
 #[test]
-fn g5_unpacked_struct_tf_port_one_clean_loud() {
+fn g5_unpacked_struct_tf_port_now_supported() {
+    // round-10 kept an unpacked-struct typedef tf-port a single clean loud; round-11
+    // R5 (R5-A) lifts it to SUPPORTED — the record port expands to one member formal
+    // per field (reusing the scalar unpacked-struct member desugar). A FUNCTION takes
+    // an input struct formal; a TASK gets full inout copy-in/out (see round11 R5-A
+    // tests). (A FUNCTION inout/output formal stays loud — a separate general gap.)
     let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
         module m; import p::*;\n\
         function automatic int f(input rec_t r); return r.a; endfunction\n\
-        initial $display(\"x\"); endmodule";
-    let (_out, err, success) = run_files(&[("t.sv", src)]);
-    assert!(!success, "unpacked-struct tf-port must be loud");
-    // ONE diagnostic naming the unpacked-struct port, not the pre-fix 3-error cascade.
-    assert!(
-        err.contains("unpacked-struct typedef as a tf-port"),
-        "got:\n{err}"
-    );
-    assert_eq!(err.matches("error[").count(), 1, "got:\n{err}");
+        initial begin rec_t r; r.a=7; if(f(r)==7) $display(\"PASS\"); $finish; end endmodule";
+    let (out, _err, success) = run_files(&[("t.sv", src)]);
+    assert!(success, "unpacked-struct tf-port is now supported (R5)");
+    assert!(out.contains("PASS"), "got:\n{out}");
 }
 
 // ───────────────────────────── G6 / G6B: struct typedef var ───────────────

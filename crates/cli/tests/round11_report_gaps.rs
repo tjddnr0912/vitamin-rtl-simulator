@@ -265,9 +265,34 @@ fn r2_dynamic_array_formal_is_loud() {
 
 #[test]
 fn r5_unpacked_struct_tfport_is_loud() {
+    // The EXACT report src uses a FUNCTION with an `inout` struct formal — that hits
+    // the general function-inout/output restriction (E3009, all types), a separate
+    // deep gap from the struct tf-port support below. Still correct-or-loud.
     let src = "package p; typedef struct { string name; int count; } rec_t; endpackage\n\
         module t; import p::*;\n\
         function automatic int f(inout rec_t r); r.count=r.count+1; return r.count; endfunction\n\
         initial begin rec_t r; r.count=1; if(f(r)==2) $display(\"PASS\"); $finish; end endmodule";
     assert!(loud(src));
+}
+
+// R5-A: the unpacked-struct tf-port ITSELF is now supported — the record port
+// expands to one member formal per field (`$unp$r$field`), reusing the scalar
+// unpacked-struct member desugar. A TASK gets full inout copy-in/out via the
+// proven task-terminator path; a FUNCTION gets an input struct formal.
+#[test]
+fn r5a_task_inout_struct_formal_supported() {
+    let src = "package p; typedef struct { string name; int count; } rec_t; endpackage\n\
+        module t; import p::*;\n\
+        task automatic bump(inout rec_t r); r.count=r.count+1; endtask\n\
+        initial begin rec_t r; r.count=1; bump(r); if(r.count==2) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn r5a_function_input_struct_formal_supported() {
+    let src = "package p; typedef struct { string name; int count; } rec_t; endpackage\n\
+        module t; import p::*;\n\
+        function automatic int rd(input rec_t r); return r.count+10; endfunction\n\
+        initial begin rec_t r; r.count=5; if(rd(r)==15) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
 }

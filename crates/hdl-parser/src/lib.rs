@@ -1078,6 +1078,7 @@ impl<'t, 's> Parser<'t, 's> {
             span: self.cur_span(),
         });
         let args = self.call_args();
+        let args = self.expand_struct_call_args(args); // R5: struct actual → members
         Expr {
             kind: ExprKind::MethodCall {
                 recv: Box::new(recv),
@@ -1600,6 +1601,7 @@ impl<'t, 's> Parser<'t, 's> {
                 }
                 if self.peek() == Some(T::LParen) {
                     let args = self.call_args();
+                    let args = self.expand_struct_call_args(args); // R5: struct actual → members
                     Expr {
                         kind: ExprKind::Call { name: path, args },
                         span: start.to(self.prev_span()),
@@ -1774,6 +1776,7 @@ impl<'t, 's> Parser<'t, 's> {
             // `obj.m()` is also a 2-segment `Call`, but the elaborate call resolver
             // disambiguates by whether the head segment is a known package.
             let args = self.call_args();
+            let args = self.expand_struct_call_args(args); // R5: struct actual → members
             let pkg = path.segments.into_iter().next().unwrap();
             return Expr {
                 kind: ExprKind::Call {
@@ -6930,6 +6933,94 @@ impl<'t, 's> Parser<'t, 's> {
         format!("$unp${var}${field}")
     }
 
+    /// R5: expand one unpacked-struct tf-port `<dir> rec_t r` into its N member
+    /// formals `$unp$r$field`, each carrying the member's OWN kind/signed/range and
+    /// the port's direction. A heterogeneous record (e.g. `string` + `int`) cannot
+    /// ride a single flat vector the way a PACKED struct tf-port does, so — exactly
+    /// like `parse_unpacked_struct_decl` does for a local `rec_t r;` — it desugars to
+    /// one scalar member net per field. Registers `var_unpacked_struct[r]` so the
+    /// body's `r.field` resolves to `$unp$r$field` (that same map also drives the
+    /// call-site actual expansion, `expand_struct_call_args`). Returns `[]` (after a
+    /// loud diagnostic) if the port name is empty or contains `$` (which would break
+    /// the `$unp$<var>$<field>` mangle's injectivity).
+    fn unpacked_struct_member_ports(&mut self, port: &TfPort, tyname: &str) -> Vec<TfPort> {
+        if port.name.name.is_empty() {
+            return Vec::new();
+        }
+        if port.name.name.contains('$') {
+            self.error_at(
+                port.name.span,
+                "an unpacked-struct tf-port name containing `$` is unsupported in v1",
+            );
+            return Vec::new();
+        }
+        let Some(members) = self.unpacked_struct_layouts.get(tyname).cloned() else {
+            return Vec::new();
+        };
+        self.var_unpacked_struct
+            .insert(port.name.name.clone(), tyname.to_string());
+        members
+            .iter()
+            .map(|m| TfPort {
+                dir: port.dir,
+                net_or_var: Some(m.kind),
+                signed: m.signed,
+                range: m.range.clone(),
+                name: Ident {
+                    name: Self::unpacked_member_net(&port.name.name, &m.name.name),
+                    span: port.name.span,
+                },
+                unpacked: Vec::new(),
+                default: None,
+                span: port.span,
+            })
+            .collect()
+    }
+
+    /// R5: at a USER function/task/method call, expand each bare-ident actual that
+    /// names an unpacked-struct variable `r` into its member nets `$unp$r$field…`
+    /// (positional, struct-declaration order — matching the callee's expanded member
+    /// formals from `unpacked_struct_member_ports`). A whole-struct value has no flat
+    /// representation, so the callee formal was expanded the same way and the arities
+    /// line up; a mismatch (passing `r` to a non-struct formal) is a loud arity error
+    /// at elaborate. Non-struct args pass through byte-identically, and the whole is a
+    /// no-op when no struct var is in scope. NOT applied to `$system` calls (a bare
+    /// `$display(r)` stays a whole-struct use = the existing loud path).
+    fn expand_struct_call_args(&self, args: Vec<Expr>) -> Vec<Expr> {
+        if self.var_unpacked_struct.is_empty() {
+            return args;
+        }
+        let mut out = Vec::with_capacity(args.len());
+        for a in args {
+            let expanded = match &a.kind {
+                ExprKind::Ident(path) if path.segments.len() == 1 => self
+                    .var_unpacked_struct
+                    .get(&path.segments[0].name)
+                    .and_then(|ty| self.unpacked_struct_layouts.get(ty))
+                    .map(|members| (path.segments[0].name.clone(), a.span, members.clone())),
+                _ => None,
+            };
+            match expanded {
+                Some((var, span, members)) => {
+                    for m in &members {
+                        out.push(Expr {
+                            kind: ExprKind::Ident(HierPath {
+                                segments: vec![Ident {
+                                    name: Self::unpacked_member_net(&var, &m.name.name),
+                                    span,
+                                }],
+                                span,
+                            }),
+                            span,
+                        });
+                    }
+                }
+                None => out.push(a),
+            }
+        }
+        out
+    }
+
     /// Round-9: if `path` is `var.field` where `var` is an UNPACKED-struct
     /// variable and `field` is one of its members, return the single-segment
     /// member-net path `$unp$var$field` (the desugar target). `None` for a
@@ -8844,10 +8935,18 @@ impl<'t, 's> Parser<'t, 's> {
         let mut inherited_type: TfPortType = (None, false, None, None);
         loop {
             let before = self.pos;
-            let (port, dir, ty) = self.parse_tf_port(inherited, &inherited_type);
+            let (port, dir, ty, unpacked_struct) = self.parse_tf_port(inherited, &inherited_type);
             inherited = dir;
             inherited_type = ty;
-            ports.push(port);
+            // R5: an unpacked-struct port expands to its N member formals; every
+            // other port pushes one (byte-identical to the pre-R5 path).
+            match unpacked_struct {
+                Some(tyname) => {
+                    let members = self.unpacked_struct_member_ports(&port, &tyname);
+                    ports.extend(members);
+                }
+                None => ports.push(port),
+            }
             if self.pos == before {
                 self.bump(); // forward-progress guard
             }
@@ -8912,22 +9011,28 @@ impl<'t, 's> Parser<'t, 's> {
     /// not on a typedef name, so the caller keeps its built-in / inherited-type
     /// handling. Shared by the ANSI (`parse_tf_port`) and non-ANSI
     /// (`parse_tf_port_decl_into`) port parsers.
-    fn try_tf_port_typedef(&mut self) -> Option<(NetVarKind, bool, Option<Range>, Option<String>)> {
-        // G5: an UNPACKED struct typedef as a tf-port is unsupported in v1 (there is no
-        // per-member frame-slot machinery for it — unlike a PACKED struct, which is
-        // supported via `var_struct`/`bind_tf_port_struct`). Recognize the name and
-        // reject with ONE honest diagnostic instead of the misleading `)`-closing cascade
-        // a fall-through would produce (unpacked structs are absent from `typedefs`, so
-        // `peek_typedef_name` returns None and the port NAME is left unconsumed).
+    #[allow(clippy::type_complexity)]
+    fn try_tf_port_typedef(
+        &mut self,
+    ) -> Option<(
+        NetVarKind,
+        bool,
+        Option<Range>,
+        Option<String>,
+        Option<String>,
+    )> {
+        // R5: an UNPACKED struct typedef IS supported as a tf-port — it expands to one
+        // member formal per field (`$unp$<port>$<field>`), because a heterogeneous
+        // record cannot ride a single flat vector the way a PACKED struct port does.
+        // Signal the caller (via the 5th tuple slot = unpacked struct type name) to run
+        // the 1→N expansion after it has parsed the port NAME; consume the type-name so
+        // the port name is next (unpacked structs are absent from `typedefs`, so a
+        // fall-through would otherwise leave the name unconsumed and cascade).
         let nm = self.type_name_key();
         if self.unpacked_struct_layouts.contains_key(&nm) {
-            self.error(
-                "an unpacked-struct typedef as a tf-port is unsupported in v1 (a simple \
-                 vector / enum / packed-struct typedef port is supported)",
-            );
             self.eat_scope_qualifier();
-            self.bump(); // consume the type-name token so the port name doesn't cascade
-            return Some((NetVarKind::Reg, false, None, None));
+            self.bump(); // consume the type-name token so the port name is next
+            return Some((NetVarKind::Reg, false, None, None, Some(nm)));
         }
         let info = self.peek_typedef_name()?;
         let nm = self.type_name_key();
@@ -8945,7 +9050,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
         let struct_name = if is_struct { Some(nm) } else { None };
-        Some((info.kind, info.signed, info.range, struct_name))
+        Some((info.kind, info.signed, info.range, struct_name, None))
     }
 
     /// Bind a struct/union tf-port name to its layout so `name.field` desugars to a
@@ -8965,7 +9070,7 @@ impl<'t, 's> Parser<'t, 's> {
         &mut self,
         inherited: PortDir,
         inherited_type: &TfPortType,
-    ) -> (TfPort, PortDir, TfPortType) {
+    ) -> (TfPort, PortDir, TfPortType, Option<String>) {
         let start = self.cur_span();
         // N2: SV `ref` (and `const ref`) formal direction. `ref` is NOT a keyword in
         // our lexer — it lexes as a plain identifier — so match it textually here, in
@@ -9017,12 +9122,14 @@ impl<'t, 's> Parser<'t, 's> {
         // class / multi-dim-packed = honest-loud, handled inside the helper).
         let mut typedef_signed: Option<bool> = None;
         let mut struct_name: Option<String> = None;
+        let mut unpacked_struct: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
-            if let Some((k, s, r, sn)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn, usn)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 range = r;
                 typedef_signed = Some(s);
                 struct_name = sn;
+                unpacked_struct = usn;
             }
         }
         // A port carries its own type when a direction keyword OR any explicit type
@@ -9087,7 +9194,7 @@ impl<'t, 's> Parser<'t, 's> {
             port.range.clone(),
             struct_name,
         );
-        (port, dir, next_type)
+        (port, dir, next_type, unpacked_struct)
     }
 
     /// Body of a function/task: a decl prefix (net/var decls AND — for the non-ANSI
@@ -9270,12 +9377,14 @@ impl<'t, 's> Parser<'t, 's> {
         // (`input byte_t a;` / `input cfg_t c;`) — resolve a SIMPLE typedef, or a
         // packed struct/union (EXT2-C), exactly as the ANSI path.
         let mut struct_name: Option<String> = None;
+        let mut unpacked_struct: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
-            if let Some((k, s, r, sn)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn, usn)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 signed = s;
                 range = r;
                 struct_name = sn;
+                unpacked_struct = usn;
             }
         }
         loop {
@@ -9296,7 +9405,7 @@ impl<'t, 's> Parser<'t, 's> {
             if let Some(sn) = &struct_name {
                 self.bind_tf_port_struct(&name.name, sn);
             }
-            ports.push(TfPort {
+            let port = TfPort {
                 dir,
                 net_or_var,
                 signed,
@@ -9305,7 +9414,16 @@ impl<'t, 's> Parser<'t, 's> {
                 unpacked,
                 default: None, // non-ANSI formals have no default (ANSI-only, §13.5.3)
                 span: n_start.to(self.prev_span()),
-            });
+            };
+            // R5: an unpacked-struct formal expands to its N member ports (per name in
+            // a comma list); every other formal appends one (byte-identical pre-R5).
+            match &unpacked_struct {
+                Some(tyname) => {
+                    let members = self.unpacked_struct_member_ports(&port, tyname);
+                    ports.extend(members);
+                }
+                None => ports.push(port),
+            }
             if !self.eat(TokenKind::Comma) {
                 break;
             }
@@ -9607,7 +9725,8 @@ impl<'t, 's> Parser<'t, 's> {
                     } else {
                         Vec::new()
                     };
-                    // `obj.randomize() with { … };` as a void statement (§18.7).
+                    let args = self.expand_struct_call_args(args); // R5: struct actual → members
+                                                                   // `obj.randomize() with { … };` as a void statement (§18.7).
                     if self.at_ident_kw("with") && self.peek_at(1) == Some(TokenKind::LBrace) {
                         self.bump(); // `with`
                         let constraints = self.parse_with_constraints();
