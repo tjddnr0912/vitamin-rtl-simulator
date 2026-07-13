@@ -1697,10 +1697,6 @@ fn decode_vu_unit(
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 struct StagedExtraSidecars {
     func_table: sim_engine::FuncTable,
-    /// N1: FuncId → name for `%m` in a frame body. `#[serde(default)]` so an older
-    /// `.velab` trailer (no field) still deserialises (empty ⇒ `%m` = module scope).
-    #[serde(default)]
-    func_names: Vec<String>,
     task_calls_proc: sim_engine::TaskCallProc,
     task_calls_func: sim_engine::TaskCallFunc,
     two_state_nets: std::collections::BTreeSet<u32>,
@@ -1750,6 +1746,14 @@ struct StagedExtraSidecars {
     /// §7.10.1 queue-slice markers (staged sidecar — same drop hazard).
     /// APPEND-ONLY tail. EMPTY ⇒ byte-identical.
     queue_slice_stmts: std::collections::BTreeSet<u32>,
+    /// N1/round-11: FuncId → "module.function" for frame-body `%m` (staged
+    /// velab→vrun must carry it or a frame `%m` silently renders the module
+    /// scope only). APPEND-ONLY tail. Rides the format_version 20 bump — unlike
+    /// the empty-default tails above, this is POPULATED for any frame subroutine
+    /// (so NOT byte-identical), which is exactly why the wire-shape pin below
+    /// forced the bump. Old `.velab` are loud-rejected at the header gate.
+    #[serde(default)]
+    func_names: Vec<String>,
 }
 
 impl StagedExtraSidecars {
@@ -1758,7 +1762,6 @@ impl StagedExtraSidecars {
     fn from_sidecars(sc: &elaborate::Sidecars) -> Self {
         StagedExtraSidecars {
             func_table: sc.func_table.clone(),
-            func_names: sc.func_names.clone(),
             task_calls_proc: sc.task_calls_proc.clone(),
             task_calls_func: sc.task_calls_func.clone(),
             two_state_nets: sc.two_state_nets.clone(),
@@ -1785,6 +1788,7 @@ impl StagedExtraSidecars {
             timeformat_stmts: sc.timeformat_stmts.clone(),
             handle_copy_stmts: sc.handle_copy_stmts.clone(),
             queue_slice_stmts: sc.queue_slice_stmts.clone(),
+            func_names: sc.func_names.clone(),
         }
     }
 }
@@ -3647,6 +3651,7 @@ mod tests {
         s.timeformat_stmts = std::collections::BTreeSet::from([19u32]);
         s.handle_copy_stmts = std::collections::BTreeMap::from([(23u32, (2u32, 5u32))]);
         s.queue_slice_stmts = std::collections::BTreeSet::from([29u32]);
+        s.func_names = vec!["top.f".to_string(), "top.g".to_string()];
         let bytes = postcard::to_stdvec(&s).expect("postcard encode");
         let got = blake3::hash(&bytes).to_hex().to_string();
         // REGEN_GOLDEN=1 cargo test -p cli staged_extra_sidecars_wire_shape -- --nocapture
@@ -3654,10 +3659,11 @@ mod tests {
             println!("REGEN StagedExtraSidecars wire = {got}");
             return;
         }
-        const EXPECTED: &str = "4407caf64753b4eb58110ba4381068f4800e95a51f98c1f1564a9c9fcfd15c96";
+        const EXPECTED: &str = "cb7acf056e77fe4a5122cd783f79185a0694a51b3c333d503b3c8f6b68a280b2";
         assert_eq!(
             got, EXPECTED,
-            "StagedExtraSidecars wire shape changed — a 15th-trailer field moved.\n\
+            "StagedExtraSidecars wire shape changed — a field was added / removed / \
+             reordered / retyped on the hand-maintained trailer.\n\
              If intentional: bump format_version + regen with REGEN_GOLDEN=1."
         );
     }
