@@ -256,8 +256,7 @@ fn n3b_record_array_new_and_size() {
 
 // correct-or-loud: a NON-packable record (a `string`/`real` member) has no flat
 // packed representation → the record array stays loud (a heterogeneous-aggregate heap
-// is the deep follow-on). And member/whole-element WRITES stay loud (they need a
-// dyn-element read-modify-write, a separate follow-on) — never a silent wrong.
+// is the deep follow-on) — never a silent wrong.
 #[test]
 fn n3b_non_packable_record_array_is_loud() {
     let src = "package p; typedef struct { string s; int n; } rec_t; endpackage\n\
@@ -266,11 +265,76 @@ fn n3b_non_packable_record_array_is_loud() {
     assert!(loud(src));
 }
 
+// N3 WRITE path: a record-array element MEMBER write `arr[i].field = v` is a part-select
+// on the dyn element (engine read-modify-write) — the sibling field is preserved.
 #[test]
-fn n3b_record_array_member_write_is_loud() {
+fn n3b_record_array_member_write_supported() {
+    let src = "package p; typedef struct { logic [7:0] a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{8'h11, 8'h22} };\n\
+        initial begin arr[0].a=8'hAB; if(arr[0].a==8'hAB && arr[0].b==8'h22) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// member write over a signed member + runtime index; `new[]`'d then written.
+#[test]
+fn n3b_record_array_member_write_signed_runtime_index() {
+    let src = "package p; typedef struct { byte a; int b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin int i=1; arr=new[2]; arr[0].a=-5; arr[i].b=8; \
+        if(arr[0].a==-5 && arr[1].b==8) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// whole-element write `arr[i] = '{…}` — the pattern desugars to a packed concat, then a
+// whole-element dyn write (already supported).
+#[test]
+fn n3b_record_array_whole_element_write() {
     let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
         module t; import p::*; rec_t arr [];\n\
-        initial begin arr=new[2]; arr[0].a=7; if(arr[0].a==7) $display(\"PASS\"); $finish; end endmodule";
+        initial begin arr=new[2]; arr[0]='{5,6}; arr[1]='{-3,100}; \
+        if(arr[0].a==5 && arr[0].b==6 && arr[1].a==-3 && arr[1].b==100) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud: a member SUB-select write (`arr[i].a[3:0] = v`) has no dbase remap on
+// the write path → loud, never a silent wrong.
+#[test]
+fn n3b_record_array_member_subselect_write_is_loud() {
+    let src = "package p; typedef struct { logic [7:0] a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[1]; arr[0].a[3:0]=4'hF; $finish; end endmodule";
+    assert!(loud(src));
+}
+
+// An all-2-state record's member write coerces X/Z→0 (IEEE §6.11.3), matching the
+// whole-element `'{…}` desugar; a 4-state member correctly preserves X.
+#[test]
+fn n3b_record_array_two_state_member_write_coerces_x() {
+    let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr []; logic [31:0] xv='x;\n\
+        initial begin arr=new[1]; arr[0].a=xv; if(arr[0].a===0) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_record_array_four_state_member_write_preserves_x() {
+    let src = "package p; typedef struct { logic [7:0] a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr []; logic [7:0] xv='x;\n\
+        initial begin arr=new[1]; arr[0]='{0,0}; arr[0].a=xv; \
+        if(arr[0].a===8'hxx && arr[0].b==0) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud: a MIXED 2-/4-state record (a 2-state `int`/`bit` member AND a
+// 4-state `logic` member) cannot be packed into one net that carries per-field 2-state
+// defaults/coercion (IEEE §6.11.2) → the record array is LOUD, never a silent X (a fresh
+// element's `int` field would otherwise read X and poison arithmetic). All-2-state and
+// all-4-state records are fine. (Adversarial soundness review RANK 1.)
+#[test]
+fn n3b_mixed_two_four_state_record_array_is_loud() {
+    let src = "package p; typedef struct { int cnt; logic [7:0] flags; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[4]; $display(\"%0d\", arr[2].cnt + 1); $finish; end endmodule";
     assert!(loud(src));
 }
 

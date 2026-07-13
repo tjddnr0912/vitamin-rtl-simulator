@@ -7180,6 +7180,21 @@ impl<'t, 's> Parser<'t, 's> {
                 _ => return None,
             }
         }
+        // A MIXED 2-/4-state record (≥1 two-state member like `int`/`bit` AND ≥1
+        // four-state member like `logic`) is NOT packable into one net: the single
+        // packed net has ONE kind, so a `Bit` net would let a `logic` field lose X and
+        // a `Logic` net would let a 2-state field hold/default X (IEEE §6.11.2 says a
+        // 2-state member defaults 0 and coerces X/Z→0). The scalar record path (per-
+        // member nets) and the whole-element `'{…}` desugar handle this per-field, but
+        // the array's shared net and its element member-write/fresh-default paths
+        // cannot — so a mixed record ARRAY is correct-or-LOUD (never a silent X), like a
+        // non-packable (string/real) record. An all-2-state OR all-4-state record is
+        // fine (uniform kind). (Adversarial soundness review RANK 1.)
+        let any_two_state = members.iter().any(|m| Self::member_kind_two_state(m.kind));
+        let any_four_state = members.iter().any(|m| !Self::member_kind_two_state(m.kind));
+        if any_two_state && any_four_state {
+            return None;
+        }
         let total: u32 = widths.iter().sum();
         let mut off = total;
         let mut fields = Vec::with_capacity(members.len());
@@ -7326,6 +7341,74 @@ impl<'t, 's> Parser<'t, 's> {
             }
             None => {
                 self.error("unknown field in a record-array element member access");
+                base
+            }
+        }
+    }
+
+    /// N3 (write): is `lv` an `arr[i]` element-select whose base is a record-ARRAY var?
+    /// The LVALUE twin of [`record_array_member_base`].
+    fn record_array_lval_base(&self, lv: &Lvalue) -> bool {
+        if let Lvalue::BitSelect { base, .. } = lv {
+            if let Lvalue::Ident(p) = base.as_ref() {
+                return p.segments.len() == 1
+                    && self.record_array_vars.contains_key(&p.segments[0].name);
+            }
+        }
+        false
+    }
+
+    /// N3 (write): parse `arr[i].field = …` (cursor at `.`) → a PART-SELECT lvalue on
+    /// the dyn element at the field's packed offset — the WRITE twin of
+    /// [`parse_record_array_member`]. The engine deposits the field bits with a
+    /// read-modify-write on the element (`dyn_write`). A whole-field write of a
+    /// non-zero-LSB member is fine (the field occupies packed bits `[off, off+w)`
+    /// regardless of its declared LSB), but a member SUB-select (`arr[i].f[a:b] = …`)
+    /// needs a `dbase` remap this path does not do → correct-or-LOUD.
+    fn parse_record_array_member_lval(&mut self, base: Lvalue) -> Lvalue {
+        self.bump(); // '.'
+        let field = self.ident().unwrap_or_else(|| Ident {
+            name: String::new(),
+            span: self.cur_span(),
+        });
+        let span = base.span().to(self.prev_span());
+        let tyname = match &base {
+            Lvalue::BitSelect { base: b, .. } => match b.as_ref() {
+                Lvalue::Ident(p) if p.segments.len() == 1 => {
+                    self.record_array_vars.get(&p.segments[0].name).cloned()
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let off_w = tyname
+            .as_ref()
+            .and_then(|t| self.packable_record_layout(t))
+            .and_then(|l| {
+                l.fields
+                    .iter()
+                    .find(|f| f.0 == field.name)
+                    .map(|f| (f.1, f.2))
+            });
+        match off_w {
+            Some((off, w)) => {
+                // A member SUB-select write (`arr[i].f[…] = …`) is unsupported (no dbase
+                // remap on the write path) → loud, never a silent wrong.
+                if self.peek() == Some(TokenKind::LBracket) {
+                    self.error(
+                        "a whole-field write of this record-array member \
+                         (a member sub-select write is unsupported)",
+                    );
+                }
+                Lvalue::PartSelect {
+                    base: Box::new(base),
+                    msb: Box::new(Self::dec_lit(off + w - 1, span)),
+                    lsb: Box::new(Self::dec_lit(off, span)),
+                    span,
+                }
+            }
+            None => {
+                self.error("unknown field in a record-array element member write");
                 base
             }
         }
@@ -7581,10 +7664,17 @@ impl<'t, 's> Parser<'t, 's> {
             // struct type is the array variable's struct type.
             Lvalue::BitSelect { base, .. } => {
                 if let Lvalue::Ident(p) = base.as_ref() {
-                    if p.segments.len() == 1
-                        && self.struct_1d_array_vars.contains(&p.segments[0].name)
-                    {
-                        if let Some(tyname) = self.var_struct.get(&p.segments[0].name).cloned() {
+                    if p.segments.len() == 1 {
+                        let nm = &p.segments[0].name;
+                        if self.struct_1d_array_vars.contains(nm) {
+                            if let Some(tyname) = self.var_struct.get(nm).cloned() {
+                                return self.build_struct_pattern_concat(&tyname, rhs);
+                            }
+                        }
+                        // N3: a record-array element `arr[i] = '{…}` — desugar the
+                        // pattern to a packed field concat (via `packable_record_layout`),
+                        // leaving a whole-element dyn write the engine already supports.
+                        if let Some(tyname) = self.record_array_vars.get(nm).cloned() {
                             return self.build_struct_pattern_concat(&tyname, rhs);
                         }
                     }
@@ -7999,6 +8089,13 @@ impl<'t, 's> Parser<'t, 's> {
                         }
                     }
                 };
+            } else if self.peek() == Some(TokenKind::Dot) && self.record_array_lval_base(&lv) {
+                // N3 (write): `arr[i].field = …` — a record-array element member write.
+                // Fold to a part-select lvalue on the dyn element (mirrors the READ-side
+                // `parse_record_array_member`); the engine does a read-modify-write. This
+                // is checked BEFORE the generate-array hier path below, which would else
+                // fold the known record-array element into a bogus hier scope name.
+                lv = self.parse_record_array_member_lval(lv);
             } else if self.peek() == Some(TokenKind::Dot) && Self::is_indexed_hier_lval(&lv) {
                 // HIER-REST②: `g[0].x = …` — fold the constant index into the
                 // scope-segment name, mirroring the expression side.

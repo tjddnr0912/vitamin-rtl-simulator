@@ -14315,6 +14315,19 @@ impl<'s> Elaborator<'s> {
             base: b, index: i, ..
         } = base
         {
+            // N3: a dyn-ARRAY element part-select base (`arr[i].field = …`) — the
+            // element word is the runtime dyn index; the part-select offset/width then
+            // apply WITHIN the element (the engine does a read-modify-write). A dyn
+            // handle never takes the static `lval_array_chain` path (mirrors the
+            // BitSelect whole-element write).
+            if let ast::Lvalue::Ident(p) = b.as_ref() {
+                if p.segments.len() == 1 {
+                    if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name) {
+                        let word = self.lower_dyn_index(net, kind, i);
+                        return (net, Some(word));
+                    }
+                }
+            }
             if let Some((net, idxs)) = self.lval_array_chain(b, i) {
                 let dims = self.net_dim_extents(net);
                 let d = dims.len();

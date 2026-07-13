@@ -1125,7 +1125,7 @@ impl<'a> SimState<'a> {
         let net = c.net as usize;
         // v5 (C)-3b: dyn-handle element write → heap (never the flat store).
         if self.dyn_is_handle[net] {
-            return self.dyn_write(c, raw_word, piece);
+            return self.dyn_write(c, raw_off, raw_word, piece);
         }
         // N7: a class-handle field-select write (`obj.f = v`, `word = field-id`)
         // goes to the heap; a bare word-less write (the handle id itself —
@@ -1905,7 +1905,13 @@ impl<'a> SimState<'a> {
         slot.as_mut().expect("dyn_entry: slot just set to Some")
     }
 
-    fn dyn_write(&mut self, c: &sim_ir::LvalChunk, raw_word: u32, piece: &Value) -> bool {
+    fn dyn_write(
+        &mut self,
+        c: &sim_ir::LvalChunk,
+        raw_off: u32,
+        raw_word: u32,
+        piece: &Value,
+    ) -> bool {
         let net = c.net;
         let w = self.ir.nets[net as usize].width.max(1);
         // v7 P2-C: STRING whole-handle assignment — strip leading NULs from
@@ -1919,6 +1925,64 @@ impl<'a> SimState<'a> {
             let bytes = piece.to_str_bytes();
             self.dyn_heap[net as usize] = Some(DynObj::Str { bytes });
             return false; // no net dirty channel (design §4, dyn precedent)
+        }
+        // N3: a part-select WRITE of a packable-record dyn-ARRAY element
+        // (`arr[i].field = v`) — deposit `piece` into the element at `[off +: width]`
+        // (read-modify-write). Only a plain `DynArray` element (word + a part-select)
+        // takes this path; a queue/assoc/string element part-select falls to the loud
+        // arm below. The `(lsb, width)` computation mirrors the module-net `write_chunk`.
+        if self.ir.nets[net as usize].kind == NetKind::DynArray
+            && c.word.is_some()
+            && (c.offset.is_some() || c.width.is_some())
+        {
+            let off_i = raw_off as i32 as i64;
+            let ir = self.ir;
+            let fold = |eid: u32| crate::width::const_u32_of_expr(ir, eid);
+            let (lsb, width) = match c.kind {
+                SelKind::Bit => (off_i, 1u32),
+                SelKind::PartConst | SelKind::PartIdxUp => {
+                    (off_i, c.width.and_then(fold).unwrap_or(w))
+                }
+                SelKind::PartIdxDown => {
+                    let ww = c.width.and_then(fold).unwrap_or(w);
+                    (off_i - ww as i64 + 1, ww)
+                }
+            };
+            // SVPART: an all-2-state record's element net can never hold X/Z (IEEE
+            // §6.11.3) — coerce the field's incoming unknown bits to 0, matching the
+            // whole-element `'{…}` desugar (which coerces per 2-state field). Mirrors
+            // the module-net `write_chunk` coercion (a mixed 2-/4-state record keeps
+            // `Logic`, so a 2-state field there stays a documented follow-on).
+            let piece_c;
+            let piece = if self.two_state[net as usize] && piece.unk.iter().any(|&u| u != 0) {
+                let mut v = piece.clone();
+                for k in 0..v.unk.len() {
+                    v.val[k] &= !v.unk[k];
+                    v.unk[k] = 0;
+                }
+                piece_c = v;
+                &piece_c
+            } else {
+                piece
+            };
+            let piece_r = piece.clone().resize_keep_sign(width.max(1), false);
+            let i = raw_word as usize;
+            match self.dyn_heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                Some(DynObj::DynArray { elems }) if i < elems.len() => {
+                    // Deposit each in-range field bit (OOB bits drop, IEEE part-select).
+                    let mut cur = elems[i].clone();
+                    for k in 0..width {
+                        let bp = lsb + k as i64;
+                        if bp >= 0 && (bp as u32) < w {
+                            let (bv, bu) = piece_r.get_vu(k);
+                            cur.set_vu(bp as u32, bv, bu);
+                        }
+                    }
+                    elems[i] = cur;
+                }
+                _ => self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)"),
+            }
+            return false;
         }
         if c.word.is_none() || c.offset.is_some() || c.width.is_some() {
             self.dyn_warn_once_at(net, "unsupported dyn lvalue shape (write ignored)");
