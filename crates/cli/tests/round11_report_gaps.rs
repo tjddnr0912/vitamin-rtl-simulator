@@ -321,6 +321,32 @@ fn r2b_signedness_mismatch_actual_is_loud() {
     assert!(loud(src));
 }
 
+// Adversarial-review (soundness) silent-wrongs, fixed:
+#[test]
+fn r2b_two_state_return_coerces_xz() {
+    // The R2 carve-out forces a 2-state-return fn onto the inline path, which lacks the
+    // frame return slot's X/Z→0 coercion (§6.11.3). An `int` return of a 4-state
+    // element read (`logic b[]`, unwritten → X) must coerce to 0, not leak X. Coerced
+    // in `inline_resolved_func`. (A 4-state `logic` return correctly PRESERVES X.)
+    let src = "module m;\n\
+        function automatic int r2(input logic [7:0] b[]); return b[0]; endfunction\n\
+        logic [7:0] a[]; initial begin a=new[1]; a[0]=8'b0001_000x; if(r2(a)==16) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn r2b_formal_shadows_outer_same_named_net() {
+    // The dyn-array formal must SHADOW an outer same-named dyn net — `dyn_handle_read`
+    // consults the `dyn_subst` alias BEFORE the scoped net lookup, so a module-level
+    // `int b[]` (size 100) does not win over the formal `b` aliased to actual `a`
+    // (size 3).
+    let src = "module m;\n\
+        int b[];\n\
+        function automatic int r2(input int b[]); return b.size(); endfunction\n\
+        int a[]; initial begin b=new[100]; a=new[3]; if(r2(a)==3) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
 // R5-B: a FUNCTION with an output/inout formal is now SUPPORTED. Its call carries
 // copy-in + copy-out (like a task) PLUS a return value, so it lowers to a
 // `Terminator::Call` (via `emit_frame_func_out_call`) — hoisted out of a

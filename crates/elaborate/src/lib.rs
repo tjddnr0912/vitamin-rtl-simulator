@@ -14867,7 +14867,18 @@ impl<'s> Elaborator<'s> {
         let result = self.reduce_function_body(func, &inputs, &actual_ids);
         self.inline_stack.pop();
         self.dyn_subst.truncate(self.dyn_subst.len() - n_dyn);
-        result
+        // R2 / §6.11.3: a 2-state return (`int`/`byte`/`bit`/…) must coerce X/Z→0. The
+        // frame RETURN SLOT does this, but the R2 carve-out forced this (`ret_two_state`)
+        // function onto the INLINE path, which has no slot — so a 4-state-element read
+        // (`return b[i]` on `logic b[]`) or an OOB read would leak X/Z. Coerce the folded
+        // return value here. GATED on an R2 call (`n_dyn > 0`), so every non-R2 inline
+        // function stays byte-identical (they were the only `ret_two_state` inline path).
+        if n_dyn > 0 && func.ret_two_state {
+            let rw = ast_func_return_width(func).unwrap_or(32).max(1);
+            self.coerce_two_state(result, rw)
+        } else {
+            result
+        }
     }
 
     /// IEEE §26.3 (round-7): resolve + frame-lower a package-scoped function call
@@ -18538,11 +18549,17 @@ impl<'s> Elaborator<'s> {
     /// the plain `dyn_handle` (no alias) so a write to such a formal misses `symbols`
     /// and stays loud — the read-only asymmetry is exactly this call-site choice.
     fn dyn_handle_read(&self, name: &str) -> Option<(u32, ir::NetKind)> {
-        self.dyn_handle(name).or_else(|| {
-            let net = self.dyn_subst_lookup(name)?;
-            let k = self.nets.get(net as usize)?.kind;
-            Some((net, k))
-        })
+        // The `dyn_subst` ALIAS is checked FIRST: while an R2 body is being lowered, a
+        // dyn-array formal must SHADOW any outer same-named net (a module-level `int
+        // b[]`/`b[$]` sharing the formal's name must NOT win — that would read the
+        // wrong array). Outside an R2 body `dyn_subst` is empty, so this is exactly
+        // `dyn_handle` for every other read (byte-identical).
+        if let Some(net) = self.dyn_subst_lookup(name) {
+            if let Some(nv) = self.nets.get(net as usize) {
+                return Some((net, nv.kind));
+            }
+        }
+        self.dyn_handle(name)
     }
 
     /// R2: is `p` a read-only `input` single-dim DYNAMIC-array formal of a simple
