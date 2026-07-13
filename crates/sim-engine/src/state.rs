@@ -2533,7 +2533,12 @@ impl<'a> SimState<'a> {
         self.frame_scope.borrow_mut().push(callee);
         let _sg = FrameScopeGuard(&self.frame_scope);
         let fd = self.ir.funcs[callee as usize];
-        debug_assert!(fd.is_task, "run_task on a non-task FuncDef");
+        // R5-B: a FUNCTION with output/inout formals is ALSO driven here — elaborate
+        // emits it as a `Terminator::Call` whose `out_slots` copy out the inout/output
+        // formal slots PLUS the return slot (captured into a caller temp). run_task is
+        // generic over `out_slots`, so it runs the function body (which sets the return
+        // slot via its `return`) and copies out every requested slot uniformly.
+        let _ = &fd;
         let base = m.base_net;
         let nloc = m.locals_len;
         // B4: per-func storage needs (window for automatic slots, slab for static).

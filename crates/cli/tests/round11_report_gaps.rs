@@ -19,11 +19,15 @@
 //!   N6  FIXED `string` ARRAY variable (`string files[0:1]`)      → supported (const idx)
 //!   N6B `string` method on an indexed element (`files[i].len()`) → supported (parse+elem)
 //!
+//!   R5  unpacked-struct typedef tf-port (`inout rec_t r`)         → SUPPORTED
+//!       R5-A: the port expands to per-member formals (parser 1→N). R5-B: a
+//!       FUNCTION with output/inout formals now copies out (hoist → task-terminator
+//!       path + return-capture); a one-shot-hoist-unsafe position stays loud.
+//!
 //! Deep-storage gaps still correct-or-LOUD (documented follow-ons, NOT silent-wrong;
 //! each needs storage/plumbing that does not exist yet):
 //!   N3  array/queue of unpacked structs (`rec_t arr[]`)           → loud (heterogeneous heap)
 //!   R2  dynamic-array tf-formal (`input byte b[]`)                → loud (frame dyn formal)
-//!   R5  unpacked-struct typedef tf-port (`inout rec_t r`)         → loud (member desugar)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -263,15 +267,99 @@ fn r2_dynamic_array_formal_is_loud() {
     assert!(loud(src));
 }
 
+// R5-B: a FUNCTION with an output/inout formal is now SUPPORTED. Its call carries
+// copy-in + copy-out (like a task) PLUS a return value, so it lowers to a
+// `Terminator::Call` (via `emit_frame_func_out_call`) — hoisted out of a
+// once-evaluated expression to a temp when nested. The EXACT report src (a function
+// with an inout struct formal used in an `if` condition) now runs.
 #[test]
-fn r5_unpacked_struct_tfport_is_loud() {
-    // The EXACT report src uses a FUNCTION with an `inout` struct formal — that hits
-    // the general function-inout/output restriction (E3009, all types), a separate
-    // deep gap from the struct tf-port support below. Still correct-or-loud.
+fn r5_unpacked_struct_inout_function_supported() {
     let src = "package p; typedef struct { string name; int count; } rec_t; endpackage\n\
         module t; import p::*;\n\
         function automatic int f(inout rec_t r); r.count=r.count+1; return r.count; endfunction\n\
         initial begin rec_t r; r.count=1; if(f(r)==2) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// R5-B copy-out is OBSERVED: the caller's actual is written back (hand-IEEE — iverilog
+// rejects function output/inout formals; vita renders the IEEE-correct value).
+#[test]
+fn r5b_scalar_inout_copyout_observed() {
+    let src = "module t;\n\
+        function automatic int inc(inout int a); a=a+1; return a*10; endfunction\n\
+        initial begin int x=5; int r; r=inc(x); if(r==60 && x==6) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn r5b_struct_inout_copyout_observed() {
+    let src = "package p; typedef struct { int a; int b; } rec_t; endpackage\n\
+        module t; import p::*;\n\
+        function automatic int f(inout rec_t r); r.a=r.a+1; r.b=r.b+2; return r.a+r.b; endfunction\n\
+        initial begin rec_t r; int y; r.a=10; r.b=20; y=f(r); if(y==33 && r.a==11 && r.b==22) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn r5b_output_formal_supported() {
+    let src = "module t;\n\
+        function automatic int mk(output int a); a=42; return 7; endfunction\n\
+        initial begin int x; int r; r=mk(x); if(r==7 && x==42) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud boundaries: positions where a one-shot hoist would change
+// semantics (a re-evaluated / conditionally-evaluated / non-hoist-site call) stay
+// loud — never a silent wrong.
+#[test]
+fn r5b_while_condition_is_loud() {
+    let src = "module t;\n\
+        function automatic int nxt(inout int a); a=a+1; return a; endfunction\n\
+        initial begin int x=0; while(nxt(x)<3) $display(\"iter\"); $finish; end endmodule";
+    assert!(loud(src)); // re-evaluated per iteration → cannot be hoisted once
+}
+
+#[test]
+fn r5b_short_circuit_rhs_is_loud() {
+    let src = "module t;\n\
+        function automatic int f(inout int a); a=a+1; return a; endfunction\n\
+        logic g;\n\
+        initial begin int x=0; g=0; if(g && f(x)>0) $display(\"Y\"); $finish; end endmodule";
+    assert!(loud(src)); // `&&` RHS is conditional → not hoisted (no silent unconditional call)
+}
+
+#[test]
+fn r5b_eval_order_read_of_mutated_is_loud() {
+    // `y = x + f(x)`: IEEE evaluates the `x` operand BEFORE `f(x)`, so it must read x's
+    // OLD value. Hoisting f(x) (which mutates x) to before the statement would make
+    // that `x` read the NEW value = a silent eval-order wrong (12 vs 11). The hoist is
+    // declined when a mutated actual is read elsewhere in the expression → loud.
+    let src = "module t;\n\
+        function automatic int f(inout int a); a=a+1; return a; endfunction\n\
+        initial begin int x=5; int y; y = x + f(x); $display(\"y=%0d\",y); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+#[test]
+fn r5b_disjoint_operand_supported() {
+    // `y = f(x) + z`: z is NOT mutated by f, so the hoist is safe (z is read
+    // in place, unaffected by f's copy-out of x) → supported.
+    let src = "module t;\n\
+        function automatic int f(inout int a); a=a+1; return a; endfunction\n\
+        initial begin int x=5; int z=100; int y; y = f(x) + z; if(y==106 && x==6) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn r5b_mutated_read_in_methodcall_arg_is_loud() {
+    // Completeness of the eval-order guard: a mutated var read INSIDE a method-call
+    // arg (`c.m(x) + f(x)`) must also decline the hoist — else `c.m(x)` would read
+    // the post-`f` x. (Found by the soundness review; `reads_ident_outside_inout`
+    // walks MethodCall/New/AssignPattern/… so this is loud, not silent.)
+    let src = "module t;\n\
+        class C; function int m(int z); return z*2; endfunction endclass\n\
+        function automatic int f(inout int a); a=a+1; return a; endfunction\n\
+        initial begin C c; int x=5; int y; c=new(); y = c.m(x) + f(x); $display(\"y=%0d\",y); $finish; end endmodule";
     assert!(loud(src));
 }
 

@@ -1696,6 +1696,21 @@ fn expr_reads_ident(e: &ast::Expr, name: &str) -> bool {
     }
 }
 
+/// R5-B: the single root net name of an lvalue-shaped expression (a bare Ident or a
+/// select on one) — used to name the variable an inout ACTUAL mutates. `None` for a
+/// concat / literal / arbitrary expression.
+fn expr_root_ident(e: &ast::Expr) -> Option<String> {
+    use ast::ExprKind as K;
+    match &e.kind {
+        K::Ident(p) if p.segments.len() == 1 => Some(p.segments[0].name.clone()),
+        K::BitSelect { base, .. } | K::PartSelect { base, .. } | K::IndexedPart { base, .. } => {
+            expr_root_ident(base)
+        }
+        K::Paren { inner } => expr_root_ident(inner),
+        _ => None,
+    }
+}
+
 /// The sub-slice of a system task/func's args that are READ inputs — the write
 /// DEST args of the string-building / scanf / file-read / `$cast` / `$value$plusargs`
 /// families are excluded (a string populated by e.g. `$sformat`/`$sscanf`/`$fgets`/
@@ -3254,6 +3269,12 @@ struct Elaborator<'s> {
     // tables are point-queried only (BTreeMap), never iterated into arena order.
     func_table: BTreeMap<String, ast::FunctionDef>,
     task_table: BTreeMap<String, ast::TaskDef>,
+    // R5-B: names of FRAME functions that have an output/inout formal. A call to
+    // one carries copy-out (like a task) plus a return value, so it is lowered as a
+    // `Terminator::Call` (statement context) via `emit_frame_func_out_call` rather
+    // than a pure `Expr::Call`. EMPTY for any design without such a function, so the
+    // hoist pre-pass in `lower_stmt` is skipped and all other code is byte-identical.
+    inout_func_names: std::collections::BTreeSet<String>,
     // Named SVA declarations (Phase-3 named-SVA slice): bare name → decl, collected
     // per-instance like func_table/task_table (saved/restored so siblings don't
     // inherit). Kept SEPARATE from the net symbol table so a net and a sequence of
@@ -3649,6 +3670,7 @@ impl<'s> Elaborator<'s> {
             cur_inst: 0,
             func_table: BTreeMap::new(),
             task_table: BTreeMap::new(),
+            inout_func_names: std::collections::BTreeSet::new(),
             seq_table: BTreeMap::new(),
             prop_table: BTreeMap::new(),
             let_table: BTreeMap::new(),
@@ -5342,6 +5364,10 @@ impl<'s> Elaborator<'s> {
         //       hierarchical in v1, so the bare name is the key.
         let saved_funcs = std::mem::take(&mut self.func_table);
         let saved_tasks = std::mem::take(&mut self.task_table);
+        // R5-B: the inout-function set is module-local too (it is rebuilt by this
+        // module's `lower_frame_funcs`), so a nested child instance elaborated in the
+        // middle of this module must not clobber it — save/restore alongside func_table.
+        let saved_inout_funcs = std::mem::take(&mut self.inout_func_names);
         // B1 frame-call: the frame-func name→id map is module-local (a sibling
         // module's call must never divert to this module's func). The global
         // `funcs`/`func_blocks`/`func_metas` arenas are NOT saved (they accumulate).
@@ -5676,6 +5702,7 @@ impl<'s> Elaborator<'s> {
         self.scoped_block_locals = saved_scoped_blocks;
         self.func_table = saved_funcs;
         self.task_table = saved_tasks;
+        self.inout_func_names = saved_inout_funcs; // R5-B
         self.frame_idx = saved_frame_idx;
         self.task_frame_idx = saved_task_frame_idx;
         self.seq_table = saved_seqs;
@@ -15062,6 +15089,19 @@ impl<'s> Elaborator<'s> {
     fn lower_frame_funcs(&mut self) {
         let frame_set = self.build_frame_set();
         let task_set = self.build_task_frame_set(); // B2
+                                                    // R5-B: record which framed functions have an output/inout formal so their
+                                                    // calls route to the copy-out path (`emit_frame_func_out_call`) + the hoist.
+        self.inout_func_names.clear();
+        for name in &frame_set {
+            if let Some(f) = self.func_table.get(name) {
+                if f.ports
+                    .iter()
+                    .any(|p| !matches!(p.dir, ast::PortDir::Input))
+                {
+                    self.inout_func_names.insert(name.clone());
+                }
+            }
+        }
         if frame_set.is_empty() && task_set.is_empty() {
             return;
         }
@@ -15583,7 +15623,12 @@ impl<'s> Elaborator<'s> {
                 s.add_net(
                     &p.name.name,
                     ir::NetVar {
-                        kind: map_net_kind_or_wire(kind),
+                        // R5-B: an output/inout `string` formal needs a real assignable
+                        // `NetKind::String` slot (mirrors reserve_frame_task). For an
+                        // INPUT formal `formal_net_kind` delegates to
+                        // `map_net_kind_or_wire`, so an input-only function is
+                        // byte-identical.
+                        kind: formal_net_kind(kind, p.dir),
                         width: w,
                         msb,
                         lsb,
@@ -16127,6 +16172,507 @@ impl<'s> Elaborator<'s> {
             // top-level: keyed by (process template, process-local block).
             self.task_calls_proc
                 .insert((self.cur_proc, call_block), info);
+        }
+    }
+
+    /// R5-B: emit a call to a frame FUNCTION that has output/inout formals as a
+    /// `Terminator::Call` (statement context), reusing the task copy-out machinery.
+    /// `in_binds` cover input + inout formals; `out_binds` cover output + inout
+    /// formals (written back to the caller actual) PLUS the function's return slot,
+    /// copied into `ret_lval` — the assignment LHS for a direct `x = f(r)`, or a
+    /// hoist temp for a call nested in an expression. Mirrors `emit_frame_task_call`;
+    /// the only extra is the return-slot out-bind. The engine runs the body through
+    /// `run_task` (which is generic over `out_slots`, so it copies out the return
+    /// slot too — see the note there).
+    fn emit_frame_func_out_call(
+        &mut self,
+        b: &mut ProcessBuilder,
+        fid: u32,
+        func: &ast::FunctionDef,
+        args: &[ast::Expr],
+        ret_lval: ir::Lvalue,
+    ) {
+        let fname = func.name.name.clone();
+        let Some(eff_args) = self.fill_default_args(&fname, &func.ports, args) else {
+            return;
+        };
+        let (base_net, return_slot) = self
+            .func_metas
+            .get(fid as usize)
+            .map(|m| (m.base_net, m.return_slot))
+            .unwrap_or((0, func.ports.len() as u32));
+        let mut in_binds: Vec<(u32, u32)> = Vec::new();
+        let mut out_binds: Vec<(u32, ir::Lvalue)> = Vec::new();
+        for (slot, (p, a)) in func.ports.iter().zip(eff_args.iter().copied()).enumerate() {
+            let slot = slot as u32;
+            let fw = self
+                .nets
+                .get((base_net + slot) as usize)
+                .map(|n| n.width)
+                .unwrap_or(32);
+            match p.dir {
+                ast::PortDir::Input => {
+                    let eid = self.lower_ctx_or_plain(a, fw);
+                    in_binds.push((slot, eid));
+                }
+                ast::PortDir::Output | ast::PortDir::Inout => {
+                    if matches!(p.dir, ast::PortDir::Inout) {
+                        let eid = self.lower_ctx_or_plain(a, fw); // inout reads in too
+                        in_binds.push((slot, eid));
+                    }
+                    match &a.kind {
+                        ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
+                            let net = self.resolve_net(path);
+                            self.deny_const_param_write(net, "connect an output/inout to");
+                            out_binds.push((slot, whole_net_lvalue(net)));
+                        }
+                        ast::ExprKind::PartSelect { .. }
+                        | ast::ExprKind::BitSelect { .. }
+                        | ast::ExprKind::IndexedPart { .. }
+                            if self
+                                .actual_root_net(a)
+                                .map(|n| self.net_is_frame_local(n))
+                                .unwrap_or(false) =>
+                        {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "frame function `{fname}` output/inout arg cannot be a select of an automatic (frame-local) variable"
+                                ),
+                            );
+                        }
+                        ast::ExprKind::PartSelect { .. }
+                        | ast::ExprKind::BitSelect { .. }
+                        | ast::ExprKind::IndexedPart { .. } => match expr_to_lvalue(a) {
+                            Some(lv_ast) => {
+                                let lv = self.lower_lvalue(&lv_ast);
+                                out_binds.push((slot, lv));
+                            }
+                            None => self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "frame function `{fname}` output/inout arg must be a simple net or select"
+                                ),
+                            ),
+                        },
+                        _ => self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!("frame function `{fname}` output/inout arg must be a simple net"),
+                        ),
+                    }
+                }
+            }
+        }
+        // Return-capture: the function's return slot is copied out to `ret_lval`.
+        out_binds.push((return_slot, ret_lval));
+        let info = TaskCallInfo {
+            callee: fid,
+            in_binds,
+            out_binds,
+        };
+        let call_block = b.cur_id();
+        let ret = b.new_block();
+        b.end_block_with(ir::Terminator::Call {
+            target: self.funcs[fid as usize].entry,
+            ret_bb: ret.raw(),
+        });
+        b.start_block(ret);
+        if self.frame_task_lowering {
+            self.pending_task_calls.push((call_block, info));
+        } else {
+            self.task_calls_proc
+                .insert((self.cur_proc, call_block), info);
+        }
+    }
+
+    /// R5-B: if `e` is a direct call `f(args)` to a framed function with an
+    /// output/inout formal, return its `(FuncId, FunctionDef)`.
+    fn inout_call_target(&self, e: &ast::Expr) -> Option<(u32, ast::FunctionDef)> {
+        if let ast::ExprKind::Call { name, .. } = &e.kind {
+            if name.segments.len() == 1 {
+                let n = &name.segments[0].name;
+                if self.inout_func_names.contains(n) {
+                    let fid = *self.frame_idx.get(n)?;
+                    let func = self.func_table.get(n)?.clone();
+                    return Some((fid, func));
+                }
+            }
+        }
+        None
+    }
+
+    /// R5-B: does `e`'s subtree contain a call to an inout-bearing function?
+    fn expr_has_inout_call(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        if self.inout_call_target(e).is_some() {
+            return true;
+        }
+        match &e.kind {
+            K::Unary { operand, .. } => self.expr_has_inout_call(operand),
+            K::Binary { lhs, rhs, .. } => {
+                self.expr_has_inout_call(lhs) || self.expr_has_inout_call(rhs)
+            }
+            K::Paren { inner } => self.expr_has_inout_call(inner),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.expr_has_inout_call(cond)
+                    || self.expr_has_inout_call(then_e)
+                    || self.expr_has_inout_call(else_e)
+            }
+            _ => false,
+        }
+    }
+
+    /// R5-B: does `e` contain an inout-call in a position `hoist_inout_calls` does
+    /// NOT hoist (a short-circuit `&&`/`||` RHS, a `?:` arm, or any node other than
+    /// Binary/Unary/Paren)? If so, the statement must NOT be hoisted at all — a
+    /// partial hoist would emit some calls then leave the un-hoistable one in place
+    /// (and re-entering the pre-pass would loop). Returning `true` makes
+    /// `hoist_stmt_top` decline, so the whole expression lowers normally and the
+    /// un-hoistable call loud-rejects at `emit_frame_call` (correct-or-loud).
+    fn has_unhoistable_inout_call(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        // A call `e` itself IS hoistable (handled at the top of `hoist_inout_calls`).
+        if self.inout_call_target(e).is_some() {
+            return false;
+        }
+        match &e.kind {
+            K::Binary { op, lhs, rhs } => {
+                let rhs_bad = if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) {
+                    // `&&`/`||` RHS is only conditionally evaluated ⇒ never hoisted.
+                    self.expr_has_inout_call(rhs)
+                } else {
+                    self.has_unhoistable_inout_call(rhs)
+                };
+                self.has_unhoistable_inout_call(lhs) || rhs_bad
+            }
+            K::Unary { operand, .. } => self.has_unhoistable_inout_call(operand),
+            K::Paren { inner } => self.has_unhoistable_inout_call(inner),
+            // Any other node (Ternary, Concat, a non-inout Call's args, …) is not a
+            // hoist site — an inout-call anywhere inside is un-hoistable.
+            _ => self.expr_has_inout_call(e),
+        }
+    }
+
+    /// R5-B: is it SAFE to hoist the inout-calls out of `e`? A hoist moves a call's
+    /// copy-out (its output/inout side-effect) to BEFORE the whole expression, but
+    /// IEEE evaluates the expression's operands in place, left-to-right. So if any
+    /// OTHER part of `e` READS a variable a hoisted call MUTATES, that read would see
+    /// the post-call value instead of the in-order (pre-call, if to the left) value —
+    /// a silent eval-order wrong (`y = x + f(x)` must be `x_old + f(x)`, not
+    /// `x_new + …`). Decline the hoist in that case → the call loud-rejects at
+    /// `emit_frame_call`. Conservative: also declines a harmless read to the RIGHT of
+    /// the call (which would in fact be correct) — acceptable (correct-or-loud).
+    fn hoist_is_safe(&self, e: &ast::Expr) -> bool {
+        let mut mutated: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        self.collect_inout_mutated(e, &mut mutated);
+        !mutated.iter().any(|v| self.reads_ident_outside_inout(e, v))
+    }
+
+    /// R5-B: collect the root net names of every output/inout ACTUAL of every
+    /// inout-call in `e` — the variables a hoist of those calls would mutate.
+    fn collect_inout_mutated(&self, e: &ast::Expr, out: &mut std::collections::BTreeSet<String>) {
+        use ast::ExprKind as K;
+        if let Some((_fid, func)) = self.inout_call_target(e) {
+            if let K::Call { args, .. } = &e.kind {
+                for (p, a) in func.ports.iter().zip(args.iter()) {
+                    if !matches!(p.dir, ast::PortDir::Input) {
+                        if let Some(root) = expr_root_ident(a) {
+                            out.insert(root);
+                        }
+                    }
+                }
+            }
+            return; // the call's own args are the mutated set; don't double-count
+        }
+        match &e.kind {
+            K::Unary { operand, .. } => self.collect_inout_mutated(operand, out),
+            K::Binary { lhs, rhs, .. } => {
+                self.collect_inout_mutated(lhs, out);
+                self.collect_inout_mutated(rhs, out);
+            }
+            K::Paren { inner } => self.collect_inout_mutated(inner, out),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.collect_inout_mutated(cond, out);
+                self.collect_inout_mutated(then_e, out);
+                self.collect_inout_mutated(else_e, out);
+            }
+            _ => {}
+        }
+    }
+
+    /// R5-B: does `e` read `name` in a position OUTSIDE any inout-call subtree? (An
+    /// inout-call's own args are its copy-in, evaluated at the hoisted call site, so
+    /// they are skipped; every other read is evaluated in place and matters for the
+    /// hoist-safety check.) Mirrors `expr_reads_ident` minus the inout-call subtrees.
+    fn reads_ident_outside_inout(&self, e: &ast::Expr, name: &str) -> bool {
+        use ast::ExprKind as K;
+        if self.inout_call_target(e).is_some() {
+            return false;
+        }
+        match &e.kind {
+            K::Ident(p) => p.segments.len() == 1 && p.segments[0].name == name,
+            K::Unary { operand, .. } => self.reads_ident_outside_inout(operand, name),
+            K::Binary { lhs, rhs, .. } => {
+                self.reads_ident_outside_inout(lhs, name)
+                    || self.reads_ident_outside_inout(rhs, name)
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.reads_ident_outside_inout(cond, name)
+                    || self.reads_ident_outside_inout(then_e, name)
+                    || self.reads_ident_outside_inout(else_e, name)
+            }
+            K::BitSelect { base, index } => {
+                self.reads_ident_outside_inout(base, name)
+                    || self.reads_ident_outside_inout(index, name)
+            }
+            K::PartSelect { base, msb, lsb } => {
+                self.reads_ident_outside_inout(base, name)
+                    || self.reads_ident_outside_inout(msb, name)
+                    || self.reads_ident_outside_inout(lsb, name)
+            }
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                self.reads_ident_outside_inout(base, name)
+                    || self.reads_ident_outside_inout(offset, name)
+                    || self.reads_ident_outside_inout(width, name)
+            }
+            K::Concat { parts } => parts
+                .iter()
+                .any(|x| self.reads_ident_outside_inout(x, name)),
+            K::Replicate { count, value } => {
+                self.reads_ident_outside_inout(count, name)
+                    || value
+                        .iter()
+                        .any(|x| self.reads_ident_outside_inout(x, name))
+            }
+            K::Call { args, .. } | K::SysCall { args, .. } => {
+                args.iter().any(|x| self.reads_ident_outside_inout(x, name))
+            }
+            K::Paren { inner } => self.reads_ident_outside_inout(inner, name),
+            K::MinTypMax { min, typ, max } => {
+                self.reads_ident_outside_inout(min, name)
+                    || self.reads_ident_outside_inout(typ, name)
+                    || self.reads_ident_outside_inout(max, name)
+            }
+            K::Cast { target, expr } => {
+                self.reads_ident_outside_inout(expr, name)
+                    || matches!(target, ast::CastTarget::Size(s) if self.reads_ident_outside_inout(s, name))
+            }
+            // A method call / `new` / assignment-pattern reads its receiver + args —
+            // MUST be walked (a mutated var read here is the eval-order hazard the
+            // soundness review flagged: `y = obj.m(x) + f(x)` would silently read the
+            // post-`f` x). `Dist` `value` likewise.
+            K::MethodCall { recv, args, .. } => {
+                self.reads_ident_outside_inout(recv, name)
+                    || args.iter().any(|x| self.reads_ident_outside_inout(x, name))
+            }
+            K::New { size, src } => {
+                self.reads_ident_outside_inout(size, name)
+                    || src
+                        .as_ref()
+                        .is_some_and(|s| self.reads_ident_outside_inout(s, name))
+            }
+            K::ClassNew { args } => args.iter().any(|x| self.reads_ident_outside_inout(x, name)),
+            K::NamedArg { value, .. } => value
+                .as_ref()
+                .is_some_and(|v| self.reads_ident_outside_inout(v, name)),
+            K::AssignPattern(parts) => parts
+                .iter()
+                .any(|x| self.reads_ident_outside_inout(x, name)),
+            K::Dist { value, .. } => self.reads_ident_outside_inout(value, name),
+            // Leaves that read no variable → cannot read `name`.
+            K::IntLit { .. }
+            | K::RealLit { .. }
+            | K::StrLit { .. }
+            | K::TimeLit { .. }
+            | K::PkgScoped { .. }
+            | K::Null
+            | K::Dollar
+            | K::Error => false,
+            // Any OTHER kind (RandomizeWith / ArrayMethodWith / a future node) may
+            // read the variable in a way this walker does not model — assume it does
+            // so the hoist is DECLINED (→ loud), never silently mis-ordered.
+            _ => true,
+        }
+    }
+
+    /// R5-B: a fresh named temp holding an inout-function call's RETURN value. The
+    /// name lets a synthetic `Ident` reference it (module-scoped, like
+    /// `fresh_string_temp`); the net id builds the return-capture out-bind lvalue.
+    fn fresh_ret_temp(&mut self, func: &ast::FunctionDef, rw: u32, rsig: bool) -> (u32, String) {
+        if func.ret_string {
+            let name = self.fresh_string_temp();
+            ((self.nets.len() - 1) as u32, name)
+        } else {
+            let w = rw.max(1);
+            let name = format!("$ia_ret${}", self.nets.len());
+            let net = self.nets.len() as u32;
+            self.add_net(
+                &name,
+                ir::NetVar {
+                    kind: if w == 32 && rsig {
+                        ir::NetKind::Integer
+                    } else {
+                        ir::NetKind::Reg
+                    },
+                    width: w,
+                    msb: w.saturating_sub(1),
+                    lsb: 0,
+                    signed: rsig,
+                    array_len: 1,
+                    dir: ir::PortDir::Internal,
+                    init: default_init(ast::NetVarKind::Reg, w),
+                },
+            );
+            (net, name)
+        }
+    }
+
+    /// R5-B: rewrite `e`, hoisting each inout-function call in an unconditionally-
+    /// evaluated position to a fresh temp — emitting its copy-out `Terminator::Call`
+    /// (`emit_frame_func_out_call`) so the surrounding expression lowers as a plain
+    /// read of the temp. An inout-call in a SHORT-CIRCUIT operand (`&&`/`||` RHS,
+    /// `?:` arms) or any position not walked here is left in place → it reaches
+    /// `emit_frame_call` and is loud (correct-or-loud: never a conditional call
+    /// silently made unconditional).
+    fn hoist_inout_calls(&mut self, b: &mut ProcessBuilder, e: &ast::Expr) -> ast::Expr {
+        use ast::ExprKind as K;
+        if let Some((fid, func)) = self.inout_call_target(e) {
+            let args = match &e.kind {
+                K::Call { args, .. } => args.clone(),
+                _ => unreachable!(),
+            };
+            let (rw, rsig) = self
+                .func_metas
+                .get(fid as usize)
+                .map(|m| (m.ret_width, m.ret_signed))
+                .unwrap_or((32, true));
+            let (tmp_net, tmp_name) = self.fresh_ret_temp(&func, rw, rsig);
+            self.emit_frame_func_out_call(b, fid, &func, &args, whole_net_lvalue(tmp_net));
+            return ast::Expr {
+                kind: K::Ident(ast::HierPath {
+                    segments: vec![ast::Ident {
+                        name: tmp_name,
+                        span: e.span,
+                    }],
+                    span: e.span,
+                }),
+                span: e.span,
+            };
+        }
+        match &e.kind {
+            K::Binary { op, lhs, rhs } => {
+                let l = self.hoist_inout_calls(b, lhs);
+                // `&&`/`||` short-circuit: the RHS is only conditionally evaluated, so
+                // hoisting it (an unconditional call) would change semantics → leave it
+                // in place (it will loud-reject at `emit_frame_call` if it is an
+                // inout-call).
+                let r = if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) {
+                    (**rhs).clone()
+                } else {
+                    self.hoist_inout_calls(b, rhs)
+                };
+                ast::Expr {
+                    kind: K::Binary {
+                        op: *op,
+                        lhs: Box::new(l),
+                        rhs: Box::new(r),
+                    },
+                    span: e.span,
+                }
+            }
+            K::Unary { op, operand } => ast::Expr {
+                kind: K::Unary {
+                    op: *op,
+                    operand: Box::new(self.hoist_inout_calls(b, operand)),
+                },
+                span: e.span,
+            },
+            K::Paren { inner } => ast::Expr {
+                kind: K::Paren {
+                    inner: Box::new(self.hoist_inout_calls(b, inner)),
+                },
+                span: e.span,
+            },
+            _ => e.clone(),
+        }
+    }
+
+    /// R5-B: hoist pre-pass for `lower_stmt` (only entered when `inout_func_names`
+    /// is non-empty). For the statement forms whose key expression is evaluated
+    /// EXACTLY ONCE (an `if` condition, or a blocking-assign RHS with no event/delay),
+    /// rewrite that expression with `hoist_inout_calls` (emitting the copy-out call
+    /// before the statement) and return the rewritten statement. (A `case` scrutinee
+    /// is NOT hoisted — it stays loud; only `if`/blocking are handled here.)
+    /// `while`/`for` conditions are re-evaluated per iteration, so a one-shot hoist
+    /// would be wrong — those are loud-rejected. Returns `None` when nothing needs
+    /// hoisting (the caller then lowers `s` as-is → byte-identical).
+    fn hoist_stmt_top(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) -> Option<ast::Stmt> {
+        use ast::Stmt as S;
+        match s {
+            S::If {
+                cond,
+                then_s,
+                else_s,
+                span,
+            } if self.expr_has_inout_call(cond)
+                && !self.has_unhoistable_inout_call(cond)
+                && self.hoist_is_safe(cond) =>
+            {
+                let cond2 = self.hoist_inout_calls(b, cond);
+                Some(S::If {
+                    cond: cond2,
+                    then_s: then_s.clone(),
+                    else_s: else_s.clone(),
+                    span: *span,
+                })
+            }
+            S::Blocking {
+                lhs,
+                delay,
+                event,
+                rhs,
+                span,
+            } if delay.is_none()
+                && event.is_none()
+                && self.expr_has_inout_call(rhs)
+                && !self.has_unhoistable_inout_call(rhs)
+                && self.hoist_is_safe(rhs) =>
+            {
+                let rhs2 = self.hoist_inout_calls(b, rhs);
+                Some(S::Blocking {
+                    lhs: lhs.clone(),
+                    delay: delay.clone(),
+                    event: event.clone(),
+                    rhs: rhs2,
+                    span: *span,
+                })
+            }
+            S::While { cond, .. } if self.expr_has_inout_call(cond) => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "an inout/output-function call in a `while` condition is unsupported \
+                     (assign it to a variable inside the loop body)",
+                );
+                None
+            }
+            _ => None,
         }
     }
 
@@ -26963,6 +27509,15 @@ impl<'s> Elaborator<'s> {
     /// CONTRACT: on entry `b.cur` is open; on exit `b.cur` is open and is the
     /// "continue point" (where control flows next). Every form upholds this.
     fn lower_stmt(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
+        // R5-B: hoist an inout/output-function call out of a once-evaluated expression
+        // to a temp (emitting its copy-out `Terminator::Call` first), so the statement
+        // below lowers as a plain read of the temp. Gated on `inout_func_names`, so a
+        // design with no such function skips this entirely and is byte-identical.
+        if !self.inout_func_names.is_empty() {
+            if let Some(rewritten) = self.hoist_stmt_top(b, s) {
+                return self.lower_stmt(b, &rewritten);
+            }
+        }
         match s {
             // ── STRAIGHT-LINE (stay in the same block) ──────────────
             ast::Stmt::Blocking {
