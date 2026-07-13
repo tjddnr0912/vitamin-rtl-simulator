@@ -165,6 +165,11 @@ struct ScopeSnapshot {
     // struct total width; `arr[i].field` is a part-select on the element (offsets
     // computed on demand from `unpacked_struct_layouts` via `packable_record_layout`).
     record_array_vars: std::collections::HashMap<String, String>,
+    // N3 heterogeneous heap (SoA): a dyn array of a NON-uniform record (mixed 2-/4-state,
+    // or a string/real member) → the record type name. Each member becomes its own typed
+    // dyn array `$unp$arr$field`, so `arr[i].field` = a native dyn element access (per-
+    // field 2-state/string/real semantics come for free, unlike the packed single-net).
+    record_soa_vars: std::collections::HashMap<String, String>,
     var_enum: std::collections::HashMap<String, String>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
@@ -261,6 +266,9 @@ pub struct Parser<'t, 's> {
     /// cleared per module). Drives the `k.field` → `k$field` member-net desugar.
     var_unpacked_struct: std::collections::HashMap<String, String>,
     record_array_vars: std::collections::HashMap<String, String>,
+    /// N3 SoA record arrays (var → typename): a NON-uniform record dyn array whose
+    /// members each became a `$unp$arr$field` typed dyn array (module-scoped).
+    record_soa_vars: std::collections::HashMap<String, String>,
     /// Packed-union type names. Unions share `struct_layouts` (for `u.field`
     /// reads) but their overlay layout is NOT a packed concat, so a union var is
     /// kept OUT of `struct_scalar_vars` and its `'{…}` pattern stays loud.
@@ -324,6 +332,7 @@ impl<'t, 's> Parser<'t, 's> {
             unpacked_struct_layouts: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),
             record_array_vars: std::collections::HashMap::new(),
+            record_soa_vars: std::collections::HashMap::new(),
             var_struct: std::collections::HashMap::new(),
             struct_scalar_vars: std::collections::HashSet::new(),
             struct_1d_array_vars: std::collections::HashSet::new(),
@@ -1619,6 +1628,9 @@ impl<'t, 's> Parser<'t, 's> {
                     }
                 }
                 if self.peek() == Some(T::LParen) {
+                    // N3 SoA: `arr.size()`/`arr.num()` on a SoA record array → field 0's
+                    // dyn array (`$unp$arr$field0.size()`); all fields share the length.
+                    let path = self.soa_rewrite_method_recv(path);
                     let args = self.call_args();
                     let args = self.expand_struct_call_args(args); // R5: struct actual → members
                     Expr {
@@ -2508,6 +2520,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.var_struct.clear();
         self.var_unpacked_struct.clear();
         self.record_array_vars.clear();
+        self.record_soa_vars.clear();
         self.struct_scalar_vars.clear();
         self.struct_1d_array_vars.clear();
         self.var_enum.clear();
@@ -6078,6 +6091,7 @@ impl<'t, 's> Parser<'t, 's> {
             var_struct: self.var_struct.clone(),
             var_unpacked_struct: self.var_unpacked_struct.clone(),
             record_array_vars: self.record_array_vars.clone(),
+            record_soa_vars: self.record_soa_vars.clone(),
             var_enum: self.var_enum.clone(),
             struct_scalar_vars: self.struct_scalar_vars.clone(),
             struct_1d_array_vars: self.struct_1d_array_vars.clone(),
@@ -6096,6 +6110,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.var_struct = s.var_struct;
         self.var_unpacked_struct = s.var_unpacked_struct;
         self.record_array_vars = s.record_array_vars;
+        self.record_soa_vars = s.record_soa_vars;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
@@ -6158,6 +6173,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.var_struct = s.var_struct;
         self.var_unpacked_struct = s.var_unpacked_struct;
         self.record_array_vars = s.record_array_vars;
+        self.record_soa_vars = s.record_soa_vars;
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
@@ -6833,6 +6849,31 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
+    /// N3 SoA: a single-segment `Ident` expression from a (mangled) net name.
+    fn ident_expr(name: &str, span: Span) -> Expr {
+        Expr {
+            kind: ExprKind::Ident(HierPath {
+                segments: vec![Ident {
+                    name: name.to_string(),
+                    span,
+                }],
+                span,
+            }),
+            span,
+        }
+    }
+
+    /// N3 SoA: a single-segment `Ident` lvalue from a (mangled) net name.
+    fn ident_lval(name: &str, span: Span) -> Lvalue {
+        Lvalue::Ident(HierPath {
+            segments: vec![Ident {
+                name: name.to_string(),
+                span,
+            }],
+            span,
+        })
+    }
+
     // ───────────────────────── SV §6.19.5 enum methods ─────────────────────
     /// A decimal integer literal for a possibly-negative `i64` (negatives become
     /// `-<magnitude>`). Used to build the enum-method desugar's constants.
@@ -7232,6 +7273,38 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
+    /// N3 SoA: transpose a record-array decl-init `'{ '{a,b}, '{c,d} }` into per-FIELD
+    /// unpacked-array inits — field 0 → `'{a,c}`, field 1 → `'{b,d}`. Each field's dyn
+    /// array then inits independently via the existing dyn-array `'{…}` decl-init flush.
+    /// `None` when the init is not the `'{ '{…},… }` shape with exactly `nfields`-arg
+    /// elements (the caller emits a loud error — never a silent partial init).
+    fn soa_field_inits(&self, nfields: usize, init: &Expr) -> Option<Vec<Expr>> {
+        let ExprKind::AssignPattern(elems) = &init.kind else {
+            return None;
+        };
+        let mut per_field: Vec<Vec<Expr>> = vec![Vec::new(); nfields];
+        for el in elems {
+            let ExprKind::AssignPattern(args) = &el.kind else {
+                return None; // an element that is not an inner `'{…}` record pattern
+            };
+            if args.len() != nfields {
+                return None; // wrong field count
+            }
+            for (j, a) in args.iter().enumerate() {
+                per_field[j].push(a.clone());
+            }
+        }
+        Some(
+            per_field
+                .into_iter()
+                .map(|args| Expr {
+                    kind: ExprKind::AssignPattern(args),
+                    span: init.span,
+                })
+                .collect(),
+        )
+    }
+
     /// N3: a synthetic `[W-1:0]` range (decimal literals) for a record-array element net.
     fn synth_bit_range(&self, w: u32, span: Span) -> Range {
         let lit = |v: u32| Expr {
@@ -7248,15 +7321,58 @@ impl<'t, 's> Parser<'t, 's> {
         }
     }
 
-    /// N3: is `e` an `arr[i]` bit-select whose base is a record-ARRAY var?
+    /// N3: is `e` an `arr[i]` bit-select whose base is a record-ARRAY var (either the
+    /// packed single-net representation or a SoA per-field representation)?
     fn record_array_member_base(&self, e: &Expr) -> bool {
         if let ExprKind::BitSelect { base, .. } = &e.kind {
             if let ExprKind::Ident(p) = &base.kind {
+                let nm = &p.segments[0].name;
                 return p.segments.len() == 1
-                    && self.record_array_vars.contains_key(&p.segments[0].name);
+                    && (self.record_array_vars.contains_key(nm)
+                        || self.record_soa_vars.contains_key(nm));
             }
         }
         false
+    }
+
+    /// N3 SoA: if `var` is a SoA record array and `field` is a valid member, return the
+    /// member's own dyn-array net name `$unp$var$field`; else `None`. Drives the
+    /// `arr[i].field` → `$unp$arr$field[i]` rewrite (a native, correctly-typed dyn
+    /// element access — no packed offset / `$signed` / dbase machinery needed).
+    fn soa_member_field(&self, var: &str, field: &str) -> Option<String> {
+        let ty = self.record_soa_vars.get(var)?;
+        let members = self.unpacked_struct_layouts.get(ty)?;
+        members
+            .iter()
+            .any(|m| m.name.name == field)
+            .then(|| Self::unpacked_member_net(var, field))
+    }
+
+    /// N3 SoA: rewrite the receiver of a whole-array method call `arr.size()` /
+    /// `arr.delete()` on a SoA record array to field 0's dyn array
+    /// (`$unp$arr$field0.size()`) — every field net has equal length, so any field
+    /// answers `.size()`/`.num()`; `.delete()` on field 0 is not enough on its own,
+    /// so a bare `arr.delete()` stays loud (handled as a whole-array op elsewhere).
+    /// A non-SoA path (or ≠2 segments) is returned unchanged.
+    fn soa_rewrite_method_recv(&self, path: HierPath) -> HierPath {
+        if path.segments.len() == 2 {
+            if let Some(ty) = self.record_soa_vars.get(&path.segments[0].name) {
+                if let Some(m0) = self
+                    .unpacked_struct_layouts
+                    .get(ty)
+                    .and_then(|ms| ms.first())
+                {
+                    let mnet = Self::unpacked_member_net(&path.segments[0].name, &m0.name.name);
+                    let mut segs = path.segments;
+                    segs[0].name = mnet;
+                    return HierPath {
+                        segments: segs,
+                        span: path.span,
+                    };
+                }
+            }
+        }
+        path
     }
 
     /// N3: parse `arr[i].field` (cursor at `.`) → a PART-SELECT on the element value
@@ -7268,6 +7384,32 @@ impl<'t, 's> Parser<'t, 's> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // N3 SoA: `arr[i].field` → `$unp$arr$field[i]` — a native dyn element access on
+        // the member's own typed dyn array (a trailing sub-select `[…]` then applies
+        // natively via expr_postfix, correctly typed/signed). Checked before the packed
+        // single-net path.
+        if let ExprKind::BitSelect { base: b, index } = &base.kind {
+            if let ExprKind::Ident(p) = &b.kind {
+                if p.segments.len() == 1 && self.record_soa_vars.contains_key(&p.segments[0].name) {
+                    let span = base.span.to(self.prev_span());
+                    match self.soa_member_field(&p.segments[0].name, &field.name) {
+                        Some(mnet) => {
+                            return Expr {
+                                kind: ExprKind::BitSelect {
+                                    base: Box::new(Self::ident_expr(&mnet, span)),
+                                    index: index.clone(),
+                                },
+                                span,
+                            };
+                        }
+                        None => {
+                            self.error("unknown field in a record-array element member access");
+                            return base;
+                        }
+                    }
+                }
+            }
+        }
         let tyname = match &base.kind {
             ExprKind::BitSelect { base: b, .. } => match &b.kind {
                 ExprKind::Ident(p) if p.segments.len() == 1 => {
@@ -7351,8 +7493,10 @@ impl<'t, 's> Parser<'t, 's> {
     fn record_array_lval_base(&self, lv: &Lvalue) -> bool {
         if let Lvalue::BitSelect { base, .. } = lv {
             if let Lvalue::Ident(p) = base.as_ref() {
+                let nm = &p.segments[0].name;
                 return p.segments.len() == 1
-                    && self.record_array_vars.contains_key(&p.segments[0].name);
+                    && (self.record_array_vars.contains_key(nm)
+                        || self.record_soa_vars.contains_key(nm));
             }
         }
         false
@@ -7372,6 +7516,26 @@ impl<'t, 's> Parser<'t, 's> {
             span: self.cur_span(),
         });
         let span = base.span().to(self.prev_span());
+        // N3 SoA: `arr[i].field = …` → `$unp$arr$field[i] = …` — a native, correctly-
+        // typed dyn element write (the WRITE twin of the SoA read rewrite). Checked
+        // before the packed part-select path.
+        if let Lvalue::BitSelect { base: b, index, .. } = &base {
+            if let Lvalue::Ident(p) = b.as_ref() {
+                if p.segments.len() == 1 && self.record_soa_vars.contains_key(&p.segments[0].name) {
+                    return match self.soa_member_field(&p.segments[0].name, &field.name) {
+                        Some(mnet) => Lvalue::BitSelect {
+                            base: Box::new(Self::ident_lval(&mnet, span)),
+                            index: index.clone(),
+                            span,
+                        },
+                        None => {
+                            self.error("unknown field in a record-array element member write");
+                            base
+                        }
+                    };
+                }
+            }
+        }
         let tyname = match &base {
             Lvalue::BitSelect { base: b, .. } => match b.as_ref() {
                 Lvalue::Ident(p) if p.segments.len() == 1 => {
@@ -7476,6 +7640,60 @@ impl<'t, 's> Parser<'t, 's> {
                             const_param: false,
                             span: n.name.span,
                         });
+                        continue;
+                    }
+                    // N3 SoA (heterogeneous heap): the record is NOT uniform-packable
+                    // (a MIXED 2-/4-state record — `packable_record_layout` returned
+                    // None) but every member is INTEGRAL → lower to per-field dyn arrays
+                    // `$unp$arr$field` (each the member's own kind, so a 2-state field
+                    // defaults 0 / coerces X and a 4-state field keeps X — natively).
+                    // A string/real member is NOT yet integral-only → falls through to
+                    // loud (Phase 2/3). `arr[i].field` / `new[]` / `'{…}` are desugared
+                    // to native dyn ops at the use sites.
+                    if members
+                        .iter()
+                        .all(|m| Self::member_kind_is_integral(m.kind))
+                    {
+                        let field_inits: Vec<Option<Expr>> = match &n.init {
+                            Some(e) => match self.soa_field_inits(members.len(), e) {
+                                Some(v) => v.into_iter().map(Some).collect(),
+                                None => {
+                                    self.error_at(
+                                        n.name.span,
+                                        "a record-array initializer must be `'{ '{…}, … }` \
+                                         with one inner pattern per element, each listing \
+                                         every field",
+                                    );
+                                    continue;
+                                }
+                            },
+                            None => vec![None; members.len()],
+                        };
+                        self.record_soa_vars
+                            .insert(n.name.name.clone(), tyname.clone());
+                        for (m, finit) in members.iter().zip(field_inits) {
+                            out.push(NetVarDecl {
+                                kind: m.kind,
+                                signed: m.signed,
+                                range: m.range.clone(),
+                                packed: Vec::new(),
+                                delay: None,
+                                names: vec![DeclName {
+                                    name: Ident {
+                                        name: Self::unpacked_member_net(&n.name.name, &m.name.name),
+                                        span: n.name.span,
+                                    },
+                                    unpacked: vec![Dim::Dyn],
+                                    init: finit,
+                                    span: n.name.span,
+                                }],
+                                lifetime: None,
+                                class_type: None,
+                                class_args: Vec::new(),
+                                const_param: false,
+                                span: n.name.span,
+                            });
+                        }
                         continue;
                     }
                 }
@@ -10046,6 +10264,157 @@ impl<'t, 's> Parser<'t, 's> {
 
     // ─────────────────────── 3. assignments / task calls ───────────────────────
     /// Leading ident or `{`: blocking `=`, nonblocking `<=`, or a user-task call.
+    /// N3 SoA: build a blocking / non-blocking assignment `lhs = rhs` (no timing).
+    fn assign_stmt(lhs: Lvalue, rhs: Expr, blocking: bool, span: Span) -> Stmt {
+        if blocking {
+            Stmt::Blocking {
+                lhs,
+                delay: None,
+                event: None,
+                rhs,
+                span,
+            }
+        } else {
+            Stmt::NonBlocking {
+                lhs,
+                delay: None,
+                event: None,
+                rhs,
+                span,
+            }
+        }
+    }
+
+    /// N3 SoA: expand a whole-array / element assignment of a SoA record array into a
+    /// `Block` of per-field NATIVE dyn ops. Handles `arr = new[N]` / `new[N](src)`,
+    /// `arr = other` (same-type SoA copy), and `arr[i] = '{…}` (element pattern write).
+    /// Returns `None` for any other shape → the caller builds the ordinary assignment,
+    /// which resolves the virtual `arr` to no net (loud) — never a silent partial write.
+    fn try_soa_assign(
+        &mut self,
+        lhs: &Lvalue,
+        rhs: &Expr,
+        blocking: bool,
+        span: Span,
+    ) -> Option<Stmt> {
+        // Whole-array: `arr = new[N]` / `arr = new[N](src)` / `arr = other`.
+        if let Lvalue::Ident(p) = lhs {
+            if p.segments.len() == 1 {
+                let var = p.segments[0].name.clone();
+                let ty = self.record_soa_vars.get(&var)?.clone();
+                let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+                let stmts: Vec<Stmt> = match &rhs.kind {
+                    ExprKind::New { size, src } => {
+                        // Per-field `new[N]`; a SoA src `other` maps to `$unp$other$f`.
+                        let src_var = match src.as_deref().map(|e| &e.kind) {
+                            Some(ExprKind::Ident(rp)) if rp.segments.len() == 1 => {
+                                Some(rp.segments[0].name.clone())
+                            }
+                            _ => None,
+                        };
+                        members
+                            .iter()
+                            .map(|m| {
+                                let mnet = Self::unpacked_member_net(&var, &m.name.name);
+                                let field_src = src_var.as_ref().and_then(|s| {
+                                    self.record_soa_vars.contains_key(s).then(|| {
+                                        Box::new(Self::ident_expr(
+                                            &Self::unpacked_member_net(s, &m.name.name),
+                                            span,
+                                        ))
+                                    })
+                                });
+                                let new_rhs = Expr {
+                                    kind: ExprKind::New {
+                                        size: size.clone(),
+                                        src: field_src.or_else(|| src.clone()),
+                                    },
+                                    span,
+                                };
+                                Self::assign_stmt(
+                                    Self::ident_lval(&mnet, span),
+                                    new_rhs,
+                                    blocking,
+                                    span,
+                                )
+                            })
+                            .collect()
+                    }
+                    ExprKind::Ident(rp)
+                        if rp.segments.len() == 1
+                            && self.record_soa_vars.get(&rp.segments[0].name) == Some(&ty) =>
+                    {
+                        // `arr = other` — same-type SoA whole-array copy (field by field).
+                        let other = rp.segments[0].name.clone();
+                        members
+                            .iter()
+                            .map(|m| {
+                                let dst = Self::unpacked_member_net(&var, &m.name.name);
+                                let srcn = Self::unpacked_member_net(&other, &m.name.name);
+                                Self::assign_stmt(
+                                    Self::ident_lval(&dst, span),
+                                    Self::ident_expr(&srcn, span),
+                                    blocking,
+                                    span,
+                                )
+                            })
+                            .collect()
+                    }
+                    _ => return None,
+                };
+                return Some(Stmt::Block {
+                    label: None,
+                    decls: Vec::new(),
+                    stmts,
+                    span,
+                });
+            }
+        }
+        // Element pattern write: `arr[i] = '{v0,…,vM}`.
+        if let Lvalue::BitSelect { base, index, .. } = lhs {
+            if let Lvalue::Ident(p) = base.as_ref() {
+                if p.segments.len() == 1 {
+                    let var = p.segments[0].name.clone();
+                    let ty = self.record_soa_vars.get(&var)?.clone();
+                    let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+                    let ExprKind::AssignPattern(vals) = &rhs.kind else {
+                        return None; // a non-pattern element rhs → loud fallthrough
+                    };
+                    if vals.len() != members.len() {
+                        self.error_at(span, "a record-array element pattern must list every field");
+                        // Emit an empty block: the error already fails compilation.
+                        return Some(Stmt::Block {
+                            label: None,
+                            decls: Vec::new(),
+                            stmts: Vec::new(),
+                            span,
+                        });
+                    }
+                    let stmts = members
+                        .iter()
+                        .zip(vals)
+                        .map(|(m, v)| {
+                            let mnet = Self::unpacked_member_net(&var, &m.name.name);
+                            let elem = Lvalue::BitSelect {
+                                base: Box::new(Self::ident_lval(&mnet, span)),
+                                index: index.clone(),
+                                span,
+                            };
+                            Self::assign_stmt(elem, v.clone(), blocking, span)
+                        })
+                        .collect();
+                    return Some(Stmt::Block {
+                        label: None,
+                        decls: Vec::new(),
+                        stmts,
+                        span,
+                    });
+                }
+            }
+        }
+        None
+    }
+
     fn parse_assign_or_call(&mut self) -> Stmt {
         let start = self.cur_span();
         let lhs = self.parse_lvalue();
@@ -10061,6 +10430,17 @@ impl<'t, 's> Parser<'t, 's> {
                 self.bump();
                 let (delay, event) = self.parse_intra_assign_timing(true);
                 let rhs = self.expr(0);
+                // N3 SoA: `arr=new[N]` / `arr=other` / `arr[i]='{…}` on a SoA record
+                // array → a Block of per-field native dyn ops (only without intra-assign
+                // timing, which a whole-array op never has).
+                if delay.is_none() && event.is_none() {
+                    if let Some(stmt) =
+                        self.try_soa_assign(&lhs, &rhs, true, start.to(self.prev_span()))
+                    {
+                        self.expect(TokenKind::Semi, "';'");
+                        return stmt;
+                    }
+                }
                 let rhs = self.maybe_struct_pattern_rhs(&lhs, rhs);
                 self.expect(TokenKind::Semi, "';'");
                 Stmt::Blocking {
@@ -10075,6 +10455,14 @@ impl<'t, 's> Parser<'t, 's> {
                 self.bump();
                 let (delay, event) = self.parse_intra_assign_timing(false);
                 let rhs = self.expr(0);
+                if delay.is_none() && event.is_none() {
+                    if let Some(stmt) =
+                        self.try_soa_assign(&lhs, &rhs, false, start.to(self.prev_span()))
+                    {
+                        self.expect(TokenKind::Semi, "';'");
+                        return stmt;
+                    }
+                }
                 let rhs = self.maybe_struct_pattern_rhs(&lhs, rhs);
                 self.expect(TokenKind::Semi, "';'");
                 Stmt::NonBlocking {

@@ -325,16 +325,57 @@ fn n3b_record_array_four_state_member_write_preserves_x() {
     assert_eq!(run(src).0, "PASS");
 }
 
-// correct-or-loud: a MIXED 2-/4-state record (a 2-state `int`/`bit` member AND a
-// 4-state `logic` member) cannot be packed into one net that carries per-field 2-state
-// defaults/coercion (IEEE §6.11.2) → the record array is LOUD, never a silent X (a fresh
-// element's `int` field would otherwise read X and poison arithmetic). All-2-state and
-// all-4-state records are fine. (Adversarial soundness review RANK 1.)
+// N3 heterogeneous heap (SoA), Phase 1: a MIXED 2-/4-state record (a 2-state `int`/`bit`
+// member AND a 4-state `logic` member) is now supported — each member lowers to its OWN
+// typed dyn array (`$unp$arr$field`), so a fresh `new[]` `int` field reads 0 and a `logic`
+// field reads X, with correct per-field semantics (this was the soundness RANK-1 silent-
+// wrong under the single-net packed path). Member read/write, `new[]`, `'{…}`, `.size()`.
 #[test]
-fn n3b_mixed_two_four_state_record_array_is_loud() {
+fn n3b_mixed_two_four_state_record_array_soa() {
+    // fresh new[] → 2-state field defaults 0 (not X), 4-state field defaults X.
     let src = "package p; typedef struct { int cnt; logic [7:0] flags; } rec_t; endpackage\n\
         module t; import p::*; rec_t arr [];\n\
-        initial begin arr=new[4]; $display(\"%0d\", arr[2].cnt + 1); $finish; end endmodule";
+        initial begin arr=new[4]; \
+        if(arr[2].cnt==0 && arr[2].flags===8'hxx && arr[2].cnt+1==1) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_mixed_record_member_write_and_pattern_and_size() {
+    let src = "package p; typedef struct { int cnt; logic [7:0] flags; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[3]; arr[0]='{5,8'hAA}; arr[1].cnt=-3; arr[1].flags=8'hBB; \
+        if(arr[0].cnt==5 && arr[0].flags==8'hAA && arr[1].cnt==-3 && arr[1].flags==8'hBB && arr.size()==3) \
+        $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_mixed_record_decl_init_and_sibling_isolation() {
+    let src = "package p; typedef struct { int a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{9, 8'h11}, '{7, 8'h22} };\n\
+        initial begin arr[0].a=42; \
+        if(arr[0].a==42 && arr[0].b==8'h11 && arr[1].a==7 && arr[1].b==8'h22) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud: a WHOLE-element read of a SoA record (`arr[i]` as a value) has no flat
+// surface across the per-field dyn arrays → loud, never a silent wrong.
+#[test]
+fn n3b_mixed_record_whole_element_read_is_loud() {
+    let src = "package p; typedef struct { int a; logic [7:0] b; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[2]; if(arr[0]==arr[1]) $display(\"x\"); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+// correct-or-loud: a string/real-member record array is still loud (Phase 2/3 — needs
+// dynamic string/real element storage).
+#[test]
+fn n3b_string_member_record_array_is_loud() {
+    let src = "package p; typedef struct { string s; int n; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[1]; $finish; end endmodule";
     assert!(loud(src));
 }
 
