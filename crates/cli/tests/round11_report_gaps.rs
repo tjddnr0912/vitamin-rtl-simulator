@@ -24,10 +24,13 @@
 //!       FUNCTION with output/inout formals now copies out (hoist → task-terminator
 //!       path + return-capture); a one-shot-hoist-unsafe position stays loud.
 //!
-//! Deep-storage gaps still correct-or-LOUD (documented follow-ons, NOT silent-wrong;
-//! each needs storage/plumbing that does not exist yet):
+//!   R2  dynamic-array INPUT tf-formal (`input byte b[]`)          → SUPPORTED (read-only alias)
+//!       A read-only `input` dyn-array formal aliases the caller's DynArray net
+//!       (`b.size()`/`b[i]` read the caller's heap; the fn is inlined). A WRITE to
+//!       the formal / inout / output stays loud.
+//!
+//! Deep-storage gaps still correct-or-LOUD (documented follow-ons, NOT silent-wrong):
 //!   N3  array/queue of unpacked structs (`rec_t arr[]`)           → loud (heterogeneous heap)
-//!   R2  dynamic-array tf-formal (`input byte b[]`)                → loud (frame dyn formal)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -260,10 +263,61 @@ fn n6_runtime_index_is_loud() {
 }
 
 #[test]
-fn r2_dynamic_array_formal_is_loud() {
+fn r2_dynamic_array_input_formal_supported() {
+    // R2: a READ-ONLY `input` dyn-array formal is now supported — it ALIASES the
+    // caller's DynArray net (the read-only function is routed to the inline path,
+    // where `b.size()`/`b[i]` resolve against the caller's `dyn_heap` — no copy, no
+    // engine change). The exact report src runs. (hand-IEEE — iverilog rejects it.)
     let src = "module t;\n\
         function automatic int f(input byte b[]); return b.size(); endfunction\n\
         initial begin byte a[]; a=new[3]; if(f(a)==3) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn r2b_element_read_and_sum_supported() {
+    let src = "module t;\n\
+        function automatic int f(input byte b[]); return b[0]+b[1]+b[2]; endfunction\n\
+        initial begin byte a[]; a=new[3]; a[0]=1; a[1]=2; a[2]=3; if(f(a)==6) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud: the alias is READ-ONLY. Any WRITE to the dyn formal, an
+// inout/output dyn formal, or a non-straight-line body keeps the function FRAMED,
+// where the dyn formal is loud-rejected — never a silent caller mutation.
+#[test]
+fn r2b_write_element_is_loud() {
+    let src = "module t;\n\
+        function automatic int f(input byte b[]); b[0]=9; return b.size(); endfunction\n\
+        initial begin byte a[]; a=new[3]; if(f(a)==3) $display(\"PASS\"); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+#[test]
+fn r2b_new_in_body_is_loud() {
+    let src = "module t;\n\
+        function automatic int f(input byte b[]); b=new[5]; return b.size(); endfunction\n\
+        initial begin byte a[]; a=new[3]; if(f(a)==5) $display(\"PASS\"); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+#[test]
+fn r2b_inout_dyn_formal_is_loud() {
+    let src = "module t;\n\
+        function automatic int f(inout byte b[]); return b.size(); endfunction\n\
+        initial begin byte a[]; a=new[3]; if(f(a)==3) $display(\"PASS\"); $finish; end endmodule";
+    assert!(loud(src));
+}
+
+#[test]
+fn r2b_signedness_mismatch_actual_is_loud() {
+    // The alias reads the CALLER net's storage, so `b[i]` takes the caller's
+    // signedness. A signed `byte b[]` formal fed an UNSIGNED `byte a[]` actual would
+    // read 0xFF as 255 (unsigned) instead of the IEEE-correct -1 (the formal's signed
+    // element type). Loud on the width/signedness mismatch, never a silent wrong sign.
+    let src = "module t;\n\
+        function automatic int f(input byte b[]); return b[0]; endfunction\n\
+        initial begin byte unsigned a[]; a=new[1]; a[0]=8'hFF; if(f(a)==-1) $display(\"PASS\"); $finish; end endmodule";
     assert!(loud(src));
 }
 

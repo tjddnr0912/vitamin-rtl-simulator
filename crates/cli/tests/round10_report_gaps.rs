@@ -2,7 +2,7 @@
 //! `tb/*.sv` verification environment. Fixed here (correct-or-loud throughout):
 //!
 //!   G1  string METHOD on a `string` formal (`s.len()`)          → supported
-//!   G2  dynamic-array (`[]`) subroutine formal                  → loud (deep)
+//!   G2  dynamic-array (`[]`) subroutine formal                  → INPUT read-only SUPPORTED (round-11 R2)
 //!   G3  signed-element sized unpacked-array formal (`byte b[]`) → supported (sign)
 //!   G4  `string` function RETURN type                          → parses; call loud
 //!   G5  unpacked-struct typedef as a tf-port                   → SUPPORTED (round-11 R5)
@@ -102,16 +102,23 @@ fn g1_string_compare_regression() {
     assert_eq!(run(src).0, "o=1");
 }
 
-// ───────────────────────────── G2: dyn-array formal (loud) ────────────────
+// ────────── G2: dyn-array INPUT formal — now SUPPORTED (round-11 R2 supersede) ─
 #[test]
-fn g2_dyn_array_formal_is_loud() {
-    // A dynamic-array (`[]`) formal is runtime-sized — outside the fixed md-packed slot
-    // model. Loud (correct-or-loud): iverilog accepts it, but vita never silent-wrongs.
+fn g2_dyn_array_input_formal_now_supported() {
+    // round-10 kept a dynamic-array (`[]`) formal loud (runtime-sized, outside the
+    // fixed md-packed slot model). round-11 R2 supports a READ-ONLY `input` one by
+    // ALIASING the caller's DynArray net (the read-only function inlines; `b[i]`/
+    // `.size()` read the caller's heap). A WRITE / inout / output stays loud.
     let src = "module m(output logic [7:0] o);\n\
         function automatic logic [7:0] f(input logic [7:0] b[]); return b[0]; endfunction\n\
         logic [7:0] a[];\n\
         initial begin a=new[2]; a[0]=8'h5a; o=f(a); $display(\"o=%h\",o); end endmodule";
-    assert!(!ok(src), "a dynamic-array formal must be loud");
+    let (out, _err, success) = run_files(&[("t.sv", src)]);
+    assert!(
+        success,
+        "a read-only input dyn-array formal is now supported (R2)"
+    );
+    assert!(out.contains("o=5a"), "got:\n{out}");
 }
 
 // ───────────────────────────── G3: signed-element formal ──────────────────

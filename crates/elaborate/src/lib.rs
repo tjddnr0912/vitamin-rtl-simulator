@@ -1711,6 +1711,17 @@ fn expr_root_ident(e: &ast::Expr) -> Option<String> {
     }
 }
 
+/// R2: the single root net name of an lvalue (a bare Ident or a select on one).
+fn lval_root_name(lhs: &ast::Lvalue) -> Option<String> {
+    match lhs {
+        ast::Lvalue::Ident(p) if p.segments.len() == 1 => Some(p.segments[0].name.clone()),
+        ast::Lvalue::BitSelect { base, .. }
+        | ast::Lvalue::PartSelect { base, .. }
+        | ast::Lvalue::IndexedPart { base, .. } => lval_root_name(base),
+        _ => None,
+    }
+}
+
 /// The sub-slice of a system task/func's args that are READ inputs — the write
 /// DEST args of the string-building / scanf / file-read / `$cast` / `$value$plusargs`
 /// families are excluded (a string populated by e.g. `$sformat`/`$sscanf`/`$fgets`/
@@ -3439,6 +3450,13 @@ struct Elaborator<'s> {
     // (read) and `collect_lval_chunks` (write) so a formal resolves to the caller's
     // net in either position. Symmetric Vec stack with `subst`.
     out_subst: Vec<(String, u32)>,
+    // R2: a READ-ONLY `input` dynamic-array formal NAME → the caller's DynArray NetId
+    // (an alias). Consulted ONLY on read paths (`.size()`/`b[i]`) so `b.size()` reads
+    // the caller's `dyn_heap[a]` directly. WRITE paths (`b[i]=`/`b=new[]`/`push_back`)
+    // never consult this — they miss `symbols` and stay loud, so a read-only input
+    // aliases for free while writes/inout/output remain correct-or-loud. Vec stack
+    // (pushed at the inline call, popped after the body), mirroring `out_subst`.
+    dyn_subst: Vec<(String, u32)>,
     // v7 P2-C: FORMAL name → declared `string`-ness, for the FUNCTION body being lowered
     // (inline OR frame). A `string` relational compare (`a < b`) routes through `StrCmp`
     // only if an operand is string-domain; a formal is not otherwise detectable (an
@@ -3696,6 +3714,7 @@ impl<'s> Elaborator<'s> {
             in_assert_synth: false,
             subst: Vec::new(),
             out_subst: Vec::new(),
+            dyn_subst: Vec::new(),
             formal_str: Vec::new(),
             inline_stack: Vec::new(),
             fork_modes: ForkModeTable::new(),
@@ -14450,6 +14469,14 @@ impl<'s> Elaborator<'s> {
             .find(|(n, _)| n == name)
             .map(|(_, e)| *e)
     }
+    /// R2: a read-only `input` dyn-array formal aliased to a caller DynArray net.
+    fn dyn_subst_lookup(&self, name: &str) -> Option<u32> {
+        self.dyn_subst
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+            .map(|(_, e)| *e)
+    }
     /// v7 P2-C: is `name` a formal DECLARED `string` in the body being lowered?
     /// Innermost-wins (a shadowing inner non-string formal returns `false`, so an
     /// outer string formal of the same name never leaks in). `false` if not a formal.
@@ -14644,7 +14671,9 @@ impl<'s> Elaborator<'s> {
                 return self
                     .synth_cover_method_expr(&name.segments[0].name, &name.segments[1].name);
             }
-            if let Some((net, kind)) = self.dyn_handle(&name.segments[0].name) {
+            // R2: `dyn_handle_read` so a read-only `input` dyn-array formal (aliased
+            // to the caller net via `dyn_subst`) resolves `b.size()` / `b.num()`.
+            if let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name) {
                 return self.lower_dyn_method_expr(net, kind, &name.segments[1].name, args);
             }
             // v7 P2-C: string methods.
@@ -14802,17 +14831,42 @@ impl<'s> Elaborator<'s> {
         //     own formals. §11.6: an arg is in the context of its FORMAL's width, so a
         //     fill grows to that width (non-fill ⇒ byte-identical via lower_expr).
         let mut actual_ids: Vec<u32> = Vec::with_capacity(eff_args.len());
+        let mut dyn_binds: Vec<(String, u32)> = Vec::new();
         for (i, &a) in eff_args.iter().enumerate() {
             let p = &inputs[i];
+            // R2: a read-only `input` dyn-array formal ALIASES the caller's DynArray
+            // net (no value copy) so `b.size()`/`b[i]` read the caller's heap. The
+            // alias rides `dyn_subst` (read-only); the actual_id slot is a placeholder
+            // (never read — `b` is only used via the dyn read paths). A non-bare /
+            // mismatched actual is loud (correct-or-loud).
+            if self.is_input_dyn_array_formal(p) {
+                match self.dyn_array_actual_net(a, p) {
+                    Some(net) => dyn_binds.push((p.name.name.clone(), net)),
+                    None => self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "function `{fname}`: dynamic-array formal `{}` needs a bare \
+                             matching dynamic-array actual",
+                            p.name.name
+                        ),
+                    ),
+                }
+                actual_ids.push(self.placeholder_expr());
+                continue;
+            }
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
             let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
             actual_ids.push(self.lower_ctx_or_plain(a, w));
         }
 
-        // (2) Reduce the straight-line body → an ExprId, formals bound to actuals.
+        // (2) Reduce the straight-line body → an ExprId, formals bound to actuals. The
+        //     R2 dyn aliases are pushed for the body's read paths and popped after.
+        let n_dyn = dyn_binds.len();
+        self.dyn_subst.extend(dyn_binds);
         self.inline_stack.push(fname);
         let result = self.reduce_function_body(func, &inputs, &actual_ids);
         self.inline_stack.pop();
+        self.dyn_subst.truncate(self.dyn_subst.len() - n_dyn);
         result
     }
 
@@ -15193,6 +15247,16 @@ impl<'s> Elaborator<'s> {
             // string slot, so it MUST be framed regardless of lifetime — force it in.
             if f.ret_string {
                 set.insert(name.clone());
+                continue;
+            }
+            // R2: a read-only dyn-array-input function is routed to the INLINE path
+            // (where the formal aliases the caller's DynArray net) — do NOT frame it,
+            // even though it is `automatic` / `ret_two_state` / has a `Return` / has an
+            // unpacked formal (the frame ABI is value-only and cannot carry a dyn
+            // handle). The inline fold accepts its straight-line body; a write to the
+            // dyn formal / control flow / recursion is excluded by `func_r2_inlinable`
+            // (→ stays framed → loud) or by `inline_stack` (recursion → loud).
+            if self.func_r2_inlinable(f) {
                 continue;
             }
             // A function is framed when it is `automatic`, recursive (below), its
@@ -16930,6 +16994,12 @@ impl<'s> Elaborator<'s> {
         // sign (silent-wrong). Applying the formal signedness to body arithmetic is a
         // separate deferred gap (needs context-width propagation into the inline SSA).
         for (p, &eid) in inputs.iter().zip(actual_ids) {
+            // R2: a dyn-array formal is aliased via `dyn_subst` (read paths), NOT bound
+            // in `subst` — so a stray WHOLE-array read of `b` misses `subst` and falls
+            // to its normal (loud) resolution instead of the placeholder ExprId.
+            if self.is_input_dyn_array_formal(p) {
+                continue;
+            }
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
             let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
             // A heap-HANDLE formal (string/class/event) or any width-0 type is NOT a
@@ -17137,6 +17207,28 @@ impl<'s> Elaborator<'s> {
                     *ret = Some(rhs_id); // return assignment
                 } else {
                     self.subst.push((target, rhs_id)); // local: innermost-wins binding
+                }
+                true
+            }
+            // R2: an explicit `return e;` in a straight-line inline body — same as the
+            // `fname = e` return assignment (size the value to the return width/sign).
+            // Behavior-preserving for existing code: every Return-bodied function is
+            // pre-framed by `body_needs_frame`, so no function reaching the inline fold
+            // today contains a `Return` — this arm is exercised only by the new R2
+            // read-only-dyn carve-out.
+            ast::Stmt::Return { value, .. } => {
+                if let Some(e) = value {
+                    let rhs_id0 = if ret_w == 0 {
+                        self.lower_expr(e)
+                    } else {
+                        self.lower_ctx_or_plain(e, ret_w)
+                    };
+                    let rhs_id = if ret_w == 0 || self.cast_operand_is_real(e, rhs_id0) {
+                        rhs_id0
+                    } else {
+                        self.resize_inline_assign(rhs_id0, ret_w, ret_signed)
+                    };
+                    *ret = Some(rhs_id);
                 }
                 true
             }
@@ -18441,6 +18533,105 @@ impl<'s> Elaborator<'s> {
         .then_some((n, k))
     }
 
+    /// R2: dyn handle for a READ position — `dyn_handle` first, then a `dyn_subst`
+    /// alias (a read-only `input` dyn-array formal → caller net). WRITE paths call
+    /// the plain `dyn_handle` (no alias) so a write to such a formal misses `symbols`
+    /// and stays loud — the read-only asymmetry is exactly this call-site choice.
+    fn dyn_handle_read(&self, name: &str) -> Option<(u32, ir::NetKind)> {
+        self.dyn_handle(name).or_else(|| {
+            let net = self.dyn_subst_lookup(name)?;
+            let k = self.nets.get(net as usize)?.kind;
+            Some((net, k))
+        })
+    }
+
+    /// R2: is `p` a read-only `input` single-dim DYNAMIC-array formal of a simple
+    /// integral element (`byte b[]` / `int b[]` / `logic [W:0] b[]`)? Only this shape
+    /// is aliased (queue/assoc/multi-dim, and real/string/handle elements, are not).
+    fn is_input_dyn_array_formal(&self, p: &ast::TfPort) -> bool {
+        matches!(p.dir, ast::PortDir::Input)
+            && p.unpacked.len() == 1
+            && matches!(p.unpacked[0], ast::Dim::Dyn)
+            && !matches!(
+                p.net_or_var,
+                Some(
+                    ast::NetVarKind::String
+                        | ast::NetVarKind::Real
+                        | ast::NetVarKind::ClassHandle
+                        | ast::NetVarKind::Event
+                )
+            )
+    }
+
+    /// R2: the caller's DynArray NetId for a dyn-array actual — a BARE single-seg
+    /// Ident resolving to a `NetKind::DynArray` net whose element width matches the
+    /// formal's. `None` (→ loud) for a select / queue / assoc / non-dyn / mismatched
+    /// element (correct-or-loud: the alias only shares storage of the same shape).
+    fn dyn_array_actual_net(&mut self, a: &ast::Expr, p: &ast::TfPort) -> Option<u32> {
+        let ast::ExprKind::Ident(path) = &a.kind else {
+            return None;
+        };
+        if path.segments.len() != 1 {
+            return None;
+        }
+        let net = self.lookup_net_scoped(&path.segments[0].name)?;
+        let (nw, ns) = {
+            let nv = self.nets.get(net as usize)?;
+            if nv.kind != ir::NetKind::DynArray {
+                return None;
+            }
+            (nv.width, nv.signed)
+        };
+        let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+        let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+        // Element WIDTH *and* SIGNEDNESS must match: the alias reads the caller net's
+        // own storage, so `b[i]` takes the CALLER's signedness — if that differs from
+        // the formal's (`byte b[]` ← `byte unsigned a[]`), a signed element would read
+        // as unsigned (0xFF → 255 vs the IEEE-correct -1). Loud on any mismatch rather
+        // than silently read with the wrong sign (correct-or-loud).
+        (nw == fw && ns == fs).then_some(net)
+    }
+
+    /// R2: can `f` be routed to the INLINE path with a read-only dyn-array-input alias
+    /// (bypassing the frame forces)? Requires ≥1 `input` dyn-array formal, ALL formals
+    /// `input`, and a STRAIGHT-LINE body (Null/Block/Blocking/Return only) that never
+    /// WRITES a dyn-array formal. A recursive such function is caught by the inline
+    /// path's `inline_stack` (loud), so no recursion check is needed here. Any function
+    /// outside this exact shape stays FRAMED → loud at `classify_array_formal`
+    /// (correct-or-loud).
+    fn func_r2_inlinable(&self, f: &ast::FunctionDef) -> bool {
+        f.ports.iter().any(|p| self.is_input_dyn_array_formal(p))
+            && f.ports.iter().all(|p| matches!(p.dir, ast::PortDir::Input))
+            && self.body_readonly_dyn_ok(&f.body, f)
+    }
+
+    /// R2: is `s` a straight-line body (Null/Block/Blocking/Return) that never WRITES a
+    /// dyn-array formal of `f`? Any control-flow statement, timing, or a dyn-formal
+    /// element/whole write returns `false` → the function stays framed → loud.
+    fn body_readonly_dyn_ok(&self, s: &ast::Stmt, f: &ast::FunctionDef) -> bool {
+        use ast::Stmt as S;
+        match s {
+            S::Null(_) => true,
+            S::Block { stmts, .. } => stmts.iter().all(|x| self.body_readonly_dyn_ok(x, f)),
+            S::Return { .. } => true,
+            S::Blocking {
+                lhs, delay, event, ..
+            } => delay.is_none() && event.is_none() && !self.lval_is_dyn_formal(lhs, f),
+            _ => false,
+        }
+    }
+
+    /// R2: does lvalue `lhs` write (the root of) a dyn-array formal of `f`?
+    fn lval_is_dyn_formal(&self, lhs: &ast::Lvalue, f: &ast::FunctionDef) -> bool {
+        lval_root_name(lhs)
+            .map(|r| {
+                f.ports
+                    .iter()
+                    .any(|p| self.is_input_dyn_array_formal(p) && p.name.name == r)
+            })
+            .unwrap_or(false)
+    }
+
     /// v7 P2-C: `name` (single segment, current scope) as a STRING net.
     fn string_handle(&self, name: &str) -> Option<u32> {
         let n = self.lookup_net_scoped(name)?;
@@ -18735,7 +18926,9 @@ impl<'s> Elaborator<'s> {
         if p.segments.len() != 1 {
             return None;
         }
-        let (net, kind) = self.dyn_handle(&p.segments[0].name)?;
+        // R2: `dyn_handle_read` so `b[i]` on a read-only aliased input dyn-array formal
+        // reads the caller's `dyn_heap[a]`.
+        let (net, kind) = self.dyn_handle_read(&p.segments[0].name)?;
         let word = self.lower_dyn_index(net, kind, index);
         Some(self.push_expr(ir::Expr::Signal {
             net,
