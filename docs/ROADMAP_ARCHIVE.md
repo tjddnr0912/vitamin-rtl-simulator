@@ -8,6 +8,14 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.136 neg-range-bound 진단 정직화 + grounding sweep (2026-07-16, branch feat-negbound-diag) ✅
+
+fresh-area probe(NEXT §1) iteration: classic-Verilog 스윕(bit-vector fn·signed div/mod/shift·indexed part-select·div-by-0·zero-replication·signed concat·ternary sign·`$sformatf`·array-query fn `$left/$right/$high/$low/$size/$increment/$bits/$dimensions`)에서 **코어 견고 재확인**(전부 iverilog byte-match). `%m`은 내용 일치·모듈간 initial-block 순서만 상이(impl-defined t0).
+
+- **유일 발굴 = 음수 range bound**(`logic [3:-2]`=6bit per iverilog `|msb-lsb|+1`): net/multi-packed inner = W3056 warn+clamp-1(**whole-value 손상**)·unpacked `[-1:2]` = E4002. 전부 **non-silent**(§2: W-degrade=비-silent)→ correct-or-loud상 loud→supported gap, cardinal-sin 아님. **DEEP**: u32 dbase/offset + frozen `ir::NetVar.msb/lsb`가 음수 base 불가 → format bump 또는 signed 사이드카. packed-struct-member 경로는 이미 whole-correct(flat offset)+sub-select-loud 처리(`struct_field_select.rs` 선례)—plain-net이 이를 미러해야. ROADMAP §3 defer.
+- **이번 수정(behavior 불변)**: W3056 message가 리터럴 `[3:-2]`를 "parameterized range underflowed (param value 0?)"로 **오진단**. lsb<0(음수 low bound)↔ msb<0·lsb≥0(`[W-1:0]`-with-W==0 param underflow) 2-shape 분리 진단. 두 shape 모두 warn+clamp-1 유지 → 非음수 디자인 byte-identical(full suite 불변). param-underflow graceful(elaborate `v3_12`) 보존.
+- **교훈**: 한 경로(plain-net) 버그가 형제 경로(struct-member)엔 이미 정답 처리일 수 있음 → defer 前 형제 grep·미러(LOOPROMPT §1 병합). +2 회귀(`nonconst_width_p0ncw.rs`). 게이트 3553 green·clippy/fmt clean·format 21 불변(IR-0).
+
 #### 4.5.135 `$time`/`$stime` 반올림 + `$stime`-in-`$monitor` 제외 (2026-07-16, branch feat-time-round) ✅
 
 fresh-area probe(NEXT §1)로 발굴한 신규 silent-wrong 2건을 같은 반복 내 수정(§S④). 오라클 = iverilog 13.0 라이브.
