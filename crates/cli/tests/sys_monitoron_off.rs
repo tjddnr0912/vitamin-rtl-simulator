@@ -92,3 +92,28 @@ fn off_with_no_monitor_is_harmless() {
     assert!(out.contains("OK"), "no-monitor on/off harmless:\n{out}");
     assert_ne!(code, Some(101), "must not panic");
 }
+
+#[test]
+fn stime_arg_does_not_retrigger_monitor() {
+    // IEEE §21.2.3: a DIRECT `$time`/`$stime`/`$realtime` arg is RENDERED but does
+    // NOT participate in $monitor change detection — time advancing alone must not
+    // reprint. `$stime` (the low 32 bits of `$time`) was omitted from the
+    // exclusion, so it re-fired on EVERY 1ns step (16 spurious lines, silent-wrong).
+    // iverilog-13.0 live: only the establishment (s=0 x=0) and the real x change
+    // (s=5 x=1) — exactly 2 lines. (iverilog rejects a non-time expression like
+    // $random in $monitor; the three time functions are its only allowed non-simple
+    // args — so this is the exhaustive oracle-backed exclusion set.)
+    let (out, _c) = run("`timescale 1ns/1ps\n\
+         module t;\n\
+           reg clk=0, x=0;\n\
+           initial forever #1 clk=~clk;\n\
+           initial $monitor(\"mon s=%0d x=%b\", $stime, x);\n\
+           initial begin #5 x=1; #10 $finish; end\n\
+         endmodule\n");
+    let lines: Vec<&str> = out.lines().filter(|l| l.starts_with("mon ")).collect();
+    assert_eq!(
+        lines,
+        vec!["mon s=0 x=0", "mon s=5 x=1"],
+        "$stime must not retrigger the monitor each tick:\n{out}"
+    );
+}

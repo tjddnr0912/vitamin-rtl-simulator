@@ -1537,10 +1537,13 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // Evaluate every monitored expression to a settled 4-state Value,
                 // scaling `$time`/`$realtime` by the monitoring module's M.
                 // `self.eval` builds `EvalCtx` from `self.st`, reading settled `cur`.
-                // IEEE §17.1.3 (P0-9): a DIRECT `$time`/`$realtime` argument does
-                // NOT participate in change detection (it is rendered, but time
-                // advancing must not retrigger the monitor) — filter those out of
-                // the comparison vector. Change compare is on the BIT PLANES
+                // IEEE §21.2.3 / 1364 §17.1.3 (P0-9): a DIRECT `$time`/`$stime`/
+                // `$realtime` argument does NOT participate in change detection (it
+                // is rendered, but time advancing must not retrigger the monitor) —
+                // filter those out of the comparison vector. `$stime` is the low 32
+                // bits of `$time` and ticks every step exactly like it; omitting it
+                // here re-fired the monitor on EVERY timestep (silent-wrong vs the
+                // 2 iverilog lines). Change compare is on the BIT PLANES
                 // (width/val/unk) only, not the derived `PartialEq` (which also
                 // compares the static signed/is_real metadata).
                 self.st.cur_time_mult = tmult;
@@ -1549,7 +1552,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                     matches!(
                         self.st.ir.exprs[eid as usize],
                         sim_ir::Expr::SysFunc {
-                            which: sim_ir::SysFuncId::Time | sim_ir::SysFuncId::Realtime,
+                            which: sim_ir::SysFuncId::Time
+                                | sim_ir::SysFuncId::Stime
+                                | sim_ir::SysFuncId::Realtime,
                             ..
                         }
                     )
