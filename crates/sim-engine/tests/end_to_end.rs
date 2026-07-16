@@ -1854,18 +1854,27 @@ fn real_percent_h_rejected_at_elaborate() {
     );
 }
 
-// E2. `**` (power) on a real operand is a permanent ElabUnsupported (§6.2).
+// E2. `**` with a real operand is SUPPORTED (IEEE 1800 §11.4.9: real result =
+// pow(base, exp)) — it desugars to the $pow sysfunc (libm::pow). Was previously a
+// §6.2 ElabUnsupported reject. iverilog-pinned values.
 #[test]
-fn real_power_rejected_at_elaborate() {
+fn real_power_supported_via_pow() {
     let diags = elaborate_diags(
         "module t; real r; initial begin r = 2.0 ** 3; $display(\"%g\", r); end endmodule",
     );
     assert!(
-        diags
-            .iter()
-            .any(|d| d.contains("power (**) not defined on real operand")),
-        "expected **-on-real rejection, got: {diags:?}"
+        !diags.iter().any(|d| d.contains("power (**) not defined")),
+        "real ** must no longer be rejected, got: {diags:?}"
     );
+    // real base/int exp, int base/real exp, fractional exp, negative base — all
+    // fold via libm::pow (iverilog: 8, 8, 3, -8).
+    let ir = build(
+        "module t; initial begin \
+         $display(\"%g %g %g %g\", 2.0**3, 2**3.0, 9.0**0.5, (-2.0)**3); \
+         $finish; end endmodule",
+    );
+    let (_res, out) = simulate_capture(&ir, SimOpts::default());
+    assert_eq!(out, "8 8 3 -8\n");
 }
 
 // E3. `%` (modulo) on a real operand is rejected (§6.2).

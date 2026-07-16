@@ -13258,10 +13258,17 @@ impl<'s> Elaborator<'s> {
                             MsgCode::ElabUnsupported,
                             "modulo (%) not defined on real operand",
                         ),
-                        ir::BinOp::Pow => self.error(
-                            MsgCode::ElabUnsupported,
-                            "power (**) not defined on real operand in MVP",
-                        ),
+                        // IEEE 1800-2017 §11.4.9: `**` with a real operand yields a
+                        // REAL result = pow(base, exp). Desugar to the `$pow` sysfunc
+                        // (libm::pow) instead of loud-rejecting — both operands read
+                        // as real (`real_arg` converts an integral operand to f64),
+                        // so `2.0**3`, `r**2`, and `2**2.0` all fold correctly.
+                        ir::BinOp::Pow => {
+                            return self.push_expr(ir::Expr::SysFunc {
+                                which: ir::SysFuncId::Pow,
+                                args: vec![lhs, rhs],
+                            });
+                        }
                         ir::BinOp::BitAnd
                         | ir::BinOp::BitOr
                         | ir::BinOp::BitXor
