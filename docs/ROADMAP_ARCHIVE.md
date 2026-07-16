@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.137 `$fflush` = 인식된 no-op (오진단 warning 제거) (2026-07-16, branch feat-fflush-noop) ✅
+
+NEXT §2 loud→supported. vita가 `$fflush`를 "unsupported system task skipped (v2)" W3056로 경고+drop했으나 iverilog는 무경고 실행. **`$fflush`=vita서 provable no-op**: 열린 파일=raw UNBUFFERED `std::fs::File`(각 `$fwrite`가 `write_all`로 OS 직행)·`$display`/STDOUT=결정성 sink capture → flush할 대상 없음. write fd를 닫지 않은 same-sim reopen-read가 직전 write 전부 봄(검증 `rb=[data12]`)=drop해도 무손실·출력이 이미 iverilog 일치. 경고가 오진단(없는 degradation 암시).
+
+- **fix**(`elaborate::lower_systask`): `map_systask` fallback 前 `"$fflush"` 인식→silent accept-and-drop(Stmt·경고 無). **Pure IR-0**(Stmt 미방출·SysTaskId 변종 無·엔진 무변·format 불변). 全 form(bare·`()`·`(fd)`·`(0)`=flush-all·MCD·preopened STDOUT fd) no-op.
+- **적대(proportionate·behavior-preserving)**: 全 form differential + `$write`-interleaving + read-back 모두 byte-match·full suite byte-identical(stderr 경고만 소멸·stdout 무변 3554 green). 유일 edge=side-effecting arg `$fflush($fopen())` drop=기존 skip 경로와 동일(무회귀·pathological).
+- **defer(ROADMAP §3)**: `$fstrobe`/`$fmonitor`=W3056 skip으로 **파일출력 silent drop**·지원=직렬화 마커(SysTaskId 변종 or staged 사이드카)→**format bump**=전용 슬라이스. **교훈**: 부작용 없는 no-op systask=elaborate서 return None(Stmt/사이드카/SysTaskId 변종 불필요·format 불변)·엔진효과 있는 건 format bump.
+- +1 회귀(`file_io.rs`). clippy/fmt clean·format 21 불변.
+
 #### 4.5.136 neg-range-bound 진단 정직화 + grounding sweep (2026-07-16, branch feat-negbound-diag) ✅
 
 fresh-area probe(NEXT §1) iteration: classic-Verilog 스윕(bit-vector fn·signed div/mod/shift·indexed part-select·div-by-0·zero-replication·signed concat·ternary sign·`$sformatf`·array-query fn `$left/$right/$high/$low/$size/$increment/$bits/$dimensions`)에서 **코어 견고 재확인**(전부 iverilog byte-match). `%m`은 내용 일치·모듈간 initial-block 순서만 상이(impl-defined t0).
