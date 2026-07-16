@@ -80,6 +80,7 @@
 
 - t0 race 그라운딩(계단식 CA 체인) · `@(*)` decl-init wake · runtime `==?` pattern.
 - inline body NON-fill context-width · modport 방향 강제 · force part-select · assoc 배열-key/clocking 배열-output word0.
+- **음수 range bound**(`logic [3:-2]`/`[-1:-8]` net·multi-packed inner `[1:0][3:-2]`·unpacked `[-1:2]`) — iverilog=`|msb-lsb|+1`(예: `[3:-2]`=6bit). 현재 net/multi-packed=W3056 warn+clamp-1(**whole-value 손상**)·unpacked=E4002. 전부 non-silent(§4.5.135 후 diag 정직화). 정식 지원=**packed-struct-member 선례 미러**(whole=flat offset 정확+sub-select loud; `struct_field_select.rs`): `range_to_dims` 정확 폭+정규화 base·neg-base 마커로 sub-select loud-guard(u32 dbase→signed 또는 사이드카). 단, `[W-1:0]`-with-W==0 param underflow(lsb≥0)는 graceful width-1 유지(test `v3_12`).
 
 ## 4. SVA / 검증 honest-loud 잔여
 

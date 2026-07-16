@@ -195,3 +195,66 @@ fn parameter_unpacked_dim_still_folds() {
         "param unpacked dim must keep working:\n{out}"
     );
 }
+
+// ── DIAGNOSTIC HONESTY: a LITERAL negative low bound `[3:-2]` is a distinct
+//    (not-yet-supported) shape from the `[W-1:0]`-with-W==0 parameter underflow.
+//    Full support is a loud→supported gap (ROADMAP §3); the value pinned here is
+//    the HONEST diagnostic — behaviour is unchanged (both shapes warn + clamp to
+//    width 1). The old unified guard misdiagnosed the literal case as
+//    "parameterized range underflowed (param value 0?)".
+
+fn run_stderr(src: &str) -> (String, Option<i32>) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_ncwe_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    (
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+        out.status.code(),
+    )
+}
+
+#[test]
+fn literal_negative_low_bound_diag_is_honest() {
+    // `logic [3:-2]` — a literal negative LOW bound (iverilog sizes it 6 bits;
+    // vita cannot yet, ROADMAP §3, so it warns + clamps to width 1). The
+    // diagnostic must name the real cause, NOT the misleading "parameterized
+    // range underflowed" the unified guard used to print for it.
+    let (err, _c) = run_stderr(
+        "module t; logic [3:-2] x;\n\
+         initial $display(\"B %0d\", $bits(x)); endmodule\n",
+    );
+    assert!(
+        err.contains("negative packed-range low bound"),
+        "literal negative low bound must be named honestly:\n{err}"
+    );
+    assert!(
+        !err.contains("parameterized range underflowed"),
+        "must NOT misdiagnose a literal `[3:-2]` as a parameter underflow:\n{err}"
+    );
+}
+
+#[test]
+fn param_zero_width_underflow_keeps_its_message() {
+    // The degenerate `[W-1:0]` with W==0 (only the HIGH bound folds negative, low
+    // bound stays 0) is the parameter-underflow shape — it must keep its own
+    // message and stay graceful (non-fatal width-1; cf. elaborate v3_12).
+    let (err, _c) = run_stderr(
+        "module t; parameter W=0; logic [W-1:0] x;\n\
+         initial $display(\"B %0d\", $bits(x)); endmodule\n",
+    );
+    assert!(
+        err.contains("parameterized range underflowed"),
+        "parameter underflow must keep its distinct message:\n{err}"
+    );
+    assert!(
+        !err.contains("negative packed-range low bound"),
+        "param underflow (lsb=0) is not the literal-negative shape:\n{err}"
+    );
+}

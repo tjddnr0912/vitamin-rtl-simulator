@@ -11878,13 +11878,26 @@ impl<'s> Elaborator<'s> {
                 // NOT a silent width-1.
                 self.check_const_range_bound(&r.msb, msb_v);
                 self.check_const_range_bound(&r.lsb, lsb_v);
-                // A bound that folds NEGATIVE is the degenerate `[W-1:0]`-with-W==0
-                // underflow artifact (the signed i64 domain shows it directly; the
-                // old u32 wrap needed Sub-shape detection): clamp to width 1 + warn,
-                // NOT a fatal MAX_NET_WIDTH explosion. A *literal* huge bound
-                // (`[4294967295:0]`) folds positive and still hits the over-cap
-                // error below.
-                if msb_v.is_some_and(|v| v < 0) || lsb_v.is_some_and(|v| v < 0) {
+                // A bound that folds NEGATIVE clamps to width 1 + warn (NOT a fatal
+                // MAX_NET_WIDTH explosion). Two shapes fold negative:
+                //  - only msb < 0, lsb ≥ 0 → the degenerate `[W-1:0]`-with-W==0
+                //    PARAMETER underflow (v3_12 keeps this graceful, non-fatal).
+                //  - lsb < 0 → a negative LOW bound (`[3:-2]`, `[-1:-8]`, or a
+                //    param low bound that folded negative like `[7:W-3]` W==1).
+                //    iverilog sizes it |msb-lsb|+1; vita cannot yet (the u32 dbase/
+                //    offset and frozen `NetVar.msb/lsb` cannot hold a negative base).
+                //    Loud→supported gap (ROADMAP §3) — the packed-struct-member path
+                //    already does whole-correct + sub-select-loud (struct_field_
+                //    select.rs); the plain-net path should mirror it.
+                // The old message misdiagnosed the literal case as "parameterized";
+                // keep the diagnostic honest for both shapes.
+                if lsb_v.is_some_and(|v| v < 0) {
+                    self.warn(
+                        "negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width 1",
+                    );
+                    return (1, 0, 0, signed);
+                }
+                if msb_v.is_some_and(|v| v < 0) {
                     self.warn(
                         "parameterized range underflowed (param value 0?); net clamped to width 1",
                     );
