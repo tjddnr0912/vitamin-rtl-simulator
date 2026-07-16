@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.138 VCD `$var` `[msb:lsb]` bit-range reference (2026-07-16, branch feat-vcd-varrange) ✅
+
+fresh-area VCD probe(NEXT §1)로 발굴한 silent-wrong: vita가 벡터 `$var`에 bit-range 미방출(`$var reg 4 ! cnt $end` vs iverilog `cnt [3:0]`). IEEE 1364-2005 §18.2.3.2 `<reference> ::= id [ [msb:lsb] ]` — range 없으면 뷰어가 ascending `[0:3]`↔descending `[3:0]`을 구분 못하고(`reg 4` 동일) non-zero-base `[7:4]` base 상실 → **비트 라벨 오표시(silent)**. 값은 정확·메타데이터만 결손.
+
+- **fix**(`state.rs` `vcd_var_reference` + `builtins.rs` 4 declare_var site): 벡터(width>1 **OR** 1-bit non-zero index `[5:5]`)=declared `[msb:lsb]`·true scalar/`[0:0]`/real·realtime=range 無. **Pure IR-0**(엔진-local·NetVar.msb/lsb는 frozen SimIr서 read만·format 불변). 배열 요소도 일괄(hand-IEEE: iverilog은 memory 미덤프).
+- **적대 2-lens 둘 다 실결함 발굴→수정**: (a) differential=1-bit non-zero-index(`[5:5]`) 초기 `width>1` gate서 누락→gate 보정 (b) soundness=packed-multi-dim(`[0:3][7:0]`)서 elaborate가 msb=width-1만 갱신·lsb stale→초기 fix가 inconsistent `[31:3]`(span≠size) 방출=**내가 낸 회귀**→span==width일 때만 declared 사용·아니면 flat `[width-1:0]` fallback(iverilog은 packed 전부 `[31:0]`). 최종 differential CLEAN(desc/asc/non-zero/single-bit/[0:0]/integer/time/packed struct·2D 전부 iverilog 일치).
+- golden VCD 테스트(rangeless 인코딩분) 갱신: `vcd_golden_byte_exact`·`vcd_dumpvars_declares_memory_array`·`vcd_array.rs` 4. +1 회귀. 게이트 3555 green·clippy/fmt clean.
+- **follow-on(cosmetic·ROADMAP §3)**: real size `64`vs`1`·packed=`wire`vs`reg`·`parameter` 미덤프·elaborate NetVar.lsb stale(VCD서 우회·근본 미수정).
+
 #### 4.5.137 `$fflush` = 인식된 no-op (오진단 warning 제거) (2026-07-16, branch feat-fflush-noop) ✅
 
 NEXT §2 loud→supported. vita가 `$fflush`를 "unsupported system task skipped (v2)" W3056로 경고+drop했으나 iverilog는 무경고 실행. **`$fflush`=vita서 provable no-op**: 열린 파일=raw UNBUFFERED `std::fs::File`(각 `$fwrite`가 `write_all`로 OS 직행)·`$display`/STDOUT=결정성 sink capture → flush할 대상 없음. write fd를 닫지 않은 same-sim reopen-read가 직전 write 전부 봄(검증 `rb=[data12]`)=drop해도 무손실·출력이 이미 iverilog 일치. 경고가 오진단(없는 degradation 암시).
