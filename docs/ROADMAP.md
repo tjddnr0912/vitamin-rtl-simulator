@@ -43,7 +43,7 @@
 - inline 함수 잔여 4종: global-reader widening 미수혜 · size-cast `16'(a*b)` context · signed `>>>` unsigned-context · inline-call return 미truncate. §4.5.80 잔여.
 - hier `@(*)` sensitivity · hier md-packed-nested part-select. §4.5.115/103 잔여.
 - narrow-typed(`bit`/`logic`) param init from a 32-bit-self-width expr(comparison·산술)=선언폭 미적용→32-bit width→`%b` wide(value 정확·`%0d` 정상). pre-existing(plain `==`도)·§4.5.146 발굴. const_eval i64→param에 declared-narrow truncate 필요.
-- part-select-in-range-bound const-fold=폭 1(`logic [P[5:0]-1:0] x`=vita width 1 vs iverilog 63). part-select range 폴딩 경로(`coerce_i64_to_width` 무관·plain 32-bit param도 재현)·§4.5.147 발굴. silent-wrong.
+- param scalar bit/part-select const-fold **미지원**(silent-wrong·DEEP): `logic [P[5:0]-1:0] x`=range-bound 폭 1 vs iverilog 63(param 값 컨텍스트는 E3009 honest-loud). §4.5.148 naive fold `(v>>i)&mask` 시도→**적대 2렌즈 수렴 발굴**: `[N:0]` descending만 정답·**zero-LSB ascending `[0:N]`**(선언 범위 미정규화→wrong bit)+non-zero-LSB below-LSB index=loud→silent 회귀→revert. 근원=`param_range`가 non-zero-LSB만 추적("absent=descending zero-LSB" 불변식·zero-LSB ascending 미탐·`base_net_ascending` false). fix=全 param 범위(lo/msb/direction) 기록 or `[lo..hi]` membership(param_range 불변식 확장=broad).
 
 **문서화된 divergence (수정 비대상·핀됨):**
 
