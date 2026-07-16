@@ -8,6 +8,14 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.141 real `**` 지원(loud→supported·$pow desugar) (2026-07-17, branch feat-real-power) ✅
+
+fresh-area probe(power operator)로 발굴한 loud→supported: vita가 real 피연산자 `**`를 E3009 "power (**) not defined on real operand in MVP"로 거부·iverilog는 지원(IEEE 1800 §11.4.9: real 피연산자→real 결과=pow(base,exp)). vita는 이미 `libm::pow`를 `$pow` sysfunc로 보유→순수 갭.
+
+- **fix**(`elaborate` binary lowering real-operand branch): `**`를 error 대신 `SysFunc{Pow,[lhs,rhs]}`로 desugar. `$pow` eval이 양 피연산자를 real 변환(`real_arg`=integral→f64)→`2.0**3`·`2**3.0`·`r**e`·`(-2.0)**3`·`9.0**0.5`·`2.0**-2`·nested·comparison/chain 全 iverilog byte-match. 정수 `**` 불변(byte-id). **IR-0·format 불변**.
+- **적대(proportionate·additive)**: 유일 divergence 2건=**전부 pre-existing**($pow/$sqrt/$itor 직접 probe로 확인): ① X-bearing integral→real: vita whole→0.0(`real_arg`) vs iverilog per-bit X→0(공통·`**` 특정 아님) ② const context `localparam real P=2.0**3`=E3009 "not foldable"—but real const 산술 전부(+*/-)uniformly loud→런타임 `**`가 다른 런타임 real op과 일치·const는 broad gap. 둘 다 ROADMAP §3.
+- 기존 reject 테스트(`real_power_rejected_at_elaborate`)→`real_power_supported_via_pow`로 재목적(value 핀). 3557 green·clippy/fmt clean.
+
 #### 4.5.140 지연 게이트/cont-assign 출력=초기 X (Z 아님) (2026-07-16, branch feat-delayed-driver-init-x) ✅
 
 fresh-area probe(gate-primitive)로 발굴한 silent-wrong: **지연** 게이트/연속대입(`and #3(o,a,b)`·`assign #3 o=a&b`) 출력 net이 첫 지연출력 landing 전 `[0,d)` 창에서 **undriven-Z**(net default)로 읽힘 — iverilog=**X**(driven-unknown). 드라이버는 t=0부터 연결·출력 레지스터는 delay 경과까지 X 유지=구동중이지 floating 아님→Z 오류. 무지연 드라이버는 이미 정확(fixpoint가 t=0에 구동)·지연 경로만 Z.
