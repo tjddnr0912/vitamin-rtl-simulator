@@ -432,6 +432,14 @@ pub struct Sidecars {
     /// `longint`). The engine coerces X/Z→0 on every write to these (IEEE §6.11.3
     /// — a 2-state var can never hold X). EMPTY ⇒ no 2-state nets ⇒ golden-neutral.
     pub two_state_nets: std::collections::BTreeSet<u32>,
+    /// N3 Phase 2 heterogeneous heap: DynArray handle NetIds whose ELEMENTS are `real`
+    /// (`real r[]`). The engine flags the net `is_real` (so element read/write use the
+    /// real value path) and fills `new[]` with 0.0. EMPTY ⇒ golden-neutral.
+    pub real_elem_dyn_nets: std::collections::BTreeSet<u32>,
+    /// N3 Phase 2 heterogeneous heap: DynArray handle NetIds whose ELEMENTS are `string`
+    /// (`string s[]`). The engine stores/reads elements as `is_str` byte-strings (no
+    /// bit-vector resize) and fills `new[]` with "". EMPTY ⇒ golden-neutral.
+    pub string_elem_dyn_nets: std::collections::BTreeSet<u32>,
     /// WAND/WOR: NetIds declared `wand`/`wor` (wired-AND / wired-OR resolution).
     /// EMPTY ⇒ golden-neutral. Only consulted for MULTI-driven nets.
     pub wired_and_nets: std::collections::BTreeSet<u32>,
@@ -674,6 +682,9 @@ pub fn elaborate_with_timescale_roots(
             // `intro_kind` but still need the 2-state default (§7.5.2).
             .chain(el.two_state_heap_handles.iter().copied())
             .collect(),
+        // N3 Phase 2 heterogeneous-heap element-kind markers.
+        real_elem_dyn_nets: std::mem::take(&mut el.real_elem_dyn_nets),
+        string_elem_dyn_nets: std::mem::take(&mut el.string_elem_dyn_nets),
         // N7 class/OOP sidecars.
         class_handle_nets: std::mem::take(&mut el.class_handle_nets),
         class_new_sites: std::mem::take(&mut el.class_new_sites),
@@ -3177,6 +3188,11 @@ struct Elaborator<'s> {
     // 2-state default of 0. Recorded separately to avoid leaking the element
     // kind into `$typename`/`$size` for the handle net. elaborate-LOCAL only.
     two_state_heap_handles: std::collections::BTreeSet<u32>,
+    // N3 Phase 2: DynArray handle nets whose ELEMENT type is `real` / `string`
+    // (`real r[]` / `string s[]`) — the engine needs the element kind for the
+    // `new[]` default and the (non-bit-vector) element store. elaborate-LOCAL.
+    real_elem_dyn_nets: std::collections::BTreeSet<u32>,
+    string_elem_dyn_nets: std::collections::BTreeSet<u32>,
     // Every net DECLARED with static unpacked dims — including 1-element
     // arrays (`reg x [0:0]`), which `array_len > 1` cannot distinguish from
     // scalars (adversarial find #5). elaborate-LOCAL only.
@@ -3665,6 +3681,8 @@ impl<'s> Elaborator<'s> {
             intro_kind: BTreeMap::new(),
             task_arg_locals: std::collections::HashMap::new(),
             two_state_heap_handles: BTreeSet::new(),
+            real_elem_dyn_nets: BTreeSet::new(),
+            string_elem_dyn_nets: BTreeSet::new(),
             unpacked_array_nets: BTreeSet::new(),
             packed_dims: BTreeMap::new(),
             dollar_subst: None,
@@ -8469,6 +8487,59 @@ impl<'s> Elaborator<'s> {
                         continue;
                     }
                 }
+                // N3 Phase 2: `string s[]` — a DYNAMIC ARRAY of strings. One DynArray
+                // handle net; the string elements live in the engine heap as `is_str`
+                // Values (`string_elem_dyn_nets` marker). A decl-init `'{…}` rides the
+                // shared dyn-array `'{…}` flush like any dyn array. A FIXED string array
+                // (`string s[0:1]`) took the element-net path above; a queue/assoc/multi-
+                // dim string container stays loud.
+                if d.range.is_none()
+                    && d.packed.is_empty()
+                    && decl.unpacked.len() == 1
+                    && matches!(decl.unpacked[0], ast::Dim::Dyn)
+                {
+                    let dir = self.dir_for_name(&decl.name.name, ports, body);
+                    if dir != ir::PortDir::Internal {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a string dynamic array cannot be a port (outside the v7 scope)",
+                        );
+                        continue;
+                    }
+                    let next_id = self.nets.len() as u32;
+                    self.add_net(
+                        &decl.name.name,
+                        ir::NetVar {
+                            kind: ir::NetKind::DynArray,
+                            width: 0,
+                            msb: 0,
+                            lsb: 0,
+                            signed: false,
+                            array_len: 0,
+                            dir: ir::PortDir::Internal,
+                            init: default_init(ast::NetVarKind::Reg, 1),
+                        },
+                    );
+                    if self.nets.len() as u32 > next_id {
+                        self.string_elem_dyn_nets.insert(next_id);
+                    }
+                    // A `'{…}` decl-init rides the var-init flush (`new[N]` + element
+                    // writes), collected in `collect_var_init_drivers`; a whole-value /
+                    // non-pattern init has no surface → loud. `allow_string_init` gates
+                    // it to the scopes that run the flush (module body / block-local).
+                    if let Some(init) = &decl.init {
+                        if !allow_string_init
+                            || !matches!(init.kind, ast::ExprKind::AssignPattern(_))
+                        {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a `string s[]` initializer is supported only as a `'{…}` \
+                                 pattern at module scope (else use `new[]` / element writes)",
+                            );
+                        }
+                    }
+                    continue;
+                }
                 if d.range.is_some() || !d.packed.is_empty() || !decl.unpacked.is_empty() {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -8573,17 +8644,23 @@ impl<'s> Elaborator<'s> {
                         continue;
                     }
                 }
-                if matches!(
-                    d.kind,
-                    ast::NetVarKind::Real | ast::NetVarKind::Realtime | ast::NetVarKind::Event
-                ) {
+                // N3 Phase 2: a `real r[]` DYNAMIC ARRAY is supported (element-real
+                // heap). A real/realtime element in a QUEUE/ASSOC, and `event`
+                // anywhere, stay loud (correct-or-loud — not yet plumbed).
+                let is_real_dyn =
+                    matches!(d.kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime)
+                        && handle_kind == ir::NetKind::DynArray;
+                if matches!(d.kind, ast::NetVarKind::Event)
+                    || (matches!(d.kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime)
+                        && !is_real_dyn)
+                {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "real/event elements in dynamic storage are outside the MVP",
                     );
                     continue;
                 }
-                if !net_is_variable(d.kind) {
+                if !net_is_variable(d.kind) && !is_real_dyn {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "dynamic storage must be a VARIABLE kind (reg/logic/integer/time), not a net",
@@ -8621,6 +8698,11 @@ impl<'s> Elaborator<'s> {
                     // `two_state_nets` sidecar reaches the engine's `new[]` fill.
                     if net_kind_is_two_state(d.kind) {
                         self.two_state_heap_handles.insert(next_id);
+                    }
+                    // N3 Phase 2: a `real r[]` element-real dyn array — the engine
+                    // flags the net `is_real` and fills `new[]` with 0.0.
+                    if is_real_dyn {
+                        self.real_elem_dyn_nets.insert(next_id);
                     }
                 }
                 continue;
@@ -11895,7 +11977,16 @@ impl<'s> Elaborator<'s> {
             // scalar init read an earlier queue's `.size()` correctly.
             if scalar_string {
                 if !name.unpacked.is_empty() {
-                    continue; // a dimensioned string is loud-rejected at declaration
+                    // N3 Phase 2: a `string s[]` DYNAMIC array with a `'{…}` init IS
+                    // collected — the flush expands it via `dyn_decl_init_stmts` (like
+                    // an int/real dyn array). Any other dimensioned-string shape (a
+                    // fixed array, a non-pattern init) is loud-rejected at declaration.
+                    let is_dyn_str_init = name.unpacked.len() == 1
+                        && matches!(name.unpacked[0], ast::Dim::Dyn)
+                        && matches!(init.kind, ast::ExprKind::AssignPattern(_));
+                    if !is_dyn_str_init {
+                        continue;
+                    }
                 }
             } else {
                 let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);

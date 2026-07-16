@@ -816,6 +816,9 @@ fn run_vita_str_gated(
         task_calls_func: sc.task_calls_func,
         // SVPART: 2-state nets coerce X/Z→0 on write (one-shot path only).
         two_state_nets: sc.two_state_nets,
+        // N3 Phase 2 heterogeneous heap: real/string dyn-array element markers.
+        real_elem_dyn_nets: sc.real_elem_dyn_nets,
+        string_elem_dyn_nets: sc.string_elem_dyn_nets,
         wired_and_nets: sc.wired_and_nets,
         wired_or_nets: sc.wired_or_nets,
         // N7 class/OOP sidecars (one-shot path only).
@@ -1754,6 +1757,15 @@ struct StagedExtraSidecars {
     /// forced the bump. Old `.velab` are loud-rejected at the header gate.
     #[serde(default)]
     func_names: Vec<String>,
+    /// N3 Phase 2 heterogeneous heap: DynArray handle NetIds whose ELEMENTS are
+    /// `real` / `string` (`real r[]` / `string s[]`). The engine flags the net
+    /// `is_real` / string-element and fills `new[]` with 0.0 / "". APPEND-ONLY tail;
+    /// rides the format_version 21 bump. EMPTY for any design without a real/string
+    /// dyn array (or record). Old `.velab` are loud-rejected at the header gate.
+    #[serde(default)]
+    real_elem_dyn_nets: std::collections::BTreeSet<u32>,
+    #[serde(default)]
+    string_elem_dyn_nets: std::collections::BTreeSet<u32>,
 }
 
 impl StagedExtraSidecars {
@@ -1789,6 +1801,8 @@ impl StagedExtraSidecars {
             handle_copy_stmts: sc.handle_copy_stmts.clone(),
             queue_slice_stmts: sc.queue_slice_stmts.clone(),
             func_names: sc.func_names.clone(),
+            real_elem_dyn_nets: sc.real_elem_dyn_nets.clone(),
+            string_elem_dyn_nets: sc.string_elem_dyn_nets.clone(),
         }
     }
 }
@@ -2699,6 +2713,8 @@ fn run_vrun_gated(
         task_calls_proc: extra.task_calls_proc,
         task_calls_func: extra.task_calls_func,
         two_state_nets: extra.two_state_nets,
+        real_elem_dyn_nets: extra.real_elem_dyn_nets,
+        string_elem_dyn_nets: extra.string_elem_dyn_nets,
         class_handle_nets: extra.class_handle_nets,
         class_new_sites: extra.class_new_sites,
         class_layouts: extra.class_layouts,
@@ -3659,7 +3675,7 @@ mod tests {
             println!("REGEN StagedExtraSidecars wire = {got}");
             return;
         }
-        const EXPECTED: &str = "cb7acf056e77fe4a5122cd783f79185a0694a51b3c333d503b3c8f6b68a280b2";
+        const EXPECTED: &str = "a514007733d5dc74354d654e17fe8a5f673735779ad33cc4e984d22368196ed9";
         assert_eq!(
             got, EXPECTED,
             "StagedExtraSidecars wire shape changed — a field was added / removed / \

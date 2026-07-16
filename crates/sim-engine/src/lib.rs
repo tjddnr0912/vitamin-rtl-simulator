@@ -244,6 +244,12 @@ pub struct SimOpts {
     /// One-shot `vita` only (the staged trailer does not serialise it; 2-state
     /// INIT-to-0 rides the golden SimIr and so works on both paths).
     pub two_state_nets: std::collections::BTreeSet<u32>,
+    /// N3 Phase 2 heterogeneous heap: DynArray handle NetIds whose ELEMENTS are
+    /// `real` / `string`. The engine flags the net `is_real` (real) or routes the
+    /// element store through the string heap (string), and fills `new[]` with the
+    /// element's IEEE default (0.0 / ""). One-shot `vita` + staged trailer.
+    pub real_elem_dyn_nets: std::collections::BTreeSet<u32>,
+    pub string_elem_dyn_nets: std::collections::BTreeSet<u32>,
     /// WAND/WOR: NetIds whose MULTI-driver resolution is wired-AND / wired-OR
     /// (instead of the default wire resolution). One-shot `vita` only.
     pub wired_and_nets: std::collections::BTreeSet<u32>,
@@ -332,6 +338,8 @@ impl Default for SimOpts {
             task_calls_proc: TaskCallProc::new(),
             task_calls_func: TaskCallFunc::new(),
             two_state_nets: std::collections::BTreeSet::new(),
+            real_elem_dyn_nets: std::collections::BTreeSet::new(),
+            string_elem_dyn_nets: std::collections::BTreeSet::new(),
             wired_and_nets: std::collections::BTreeSet::new(),
             wired_or_nets: std::collections::BTreeSet::new(),
             class_handle_nets: std::collections::BTreeSet::new(),
@@ -528,6 +536,19 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     for &n in &opts.two_state_nets {
         if (n as usize) < st.two_state.len() {
             st.two_state[n as usize] = true;
+        }
+    }
+    // N3 Phase 2 heterogeneous heap: flag `real r[]` element-real handles `is_real`
+    // (so element read/write use the real value path) and `string s[]` handles as
+    // string-element (byte-string store). EMPTY ⇒ golden-neutral.
+    for &n in &opts.real_elem_dyn_nets {
+        if let Some(slot) = st.nets.get_mut(n as usize) {
+            slot.is_real = true;
+        }
+    }
+    for &n in &opts.string_elem_dyn_nets {
+        if (n as usize) < st.dyn_str_elem.len() {
+            st.dyn_str_elem[n as usize] = true;
         }
     }
     // N7 class/OOP: install the class sidecars (out-of-band, golden-free). EMPTY

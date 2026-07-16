@@ -6795,6 +6795,18 @@ impl<'t, 's> Parser<'t, 's> {
         )
     }
 
+    /// N3 Phase 3: a record member kind that a SoA record array can carry — an
+    /// integral (→ int/logic dyn array), a `string` (→ string dyn array), or a
+    /// `real`/`realtime` (→ real dyn array). A nested struct / event / class-handle
+    /// member has no per-field dyn-array representation → the record array stays loud.
+    fn member_kind_soa_ok(kind: NetVarKind) -> bool {
+        Self::member_kind_is_integral(kind)
+            || matches!(
+                kind,
+                NetVarKind::String | NetVarKind::Real | NetVarKind::Realtime
+            )
+    }
+
     /// Fold a constant-literal expression to `i64` at parse time (decimal literals
     /// and +/-/* of them). Returns `None` for anything non-constant.
     fn const_lit(e: &Expr) -> Option<i64> {
@@ -7644,16 +7656,14 @@ impl<'t, 's> Parser<'t, 's> {
                     }
                     // N3 SoA (heterogeneous heap): the record is NOT uniform-packable
                     // (a MIXED 2-/4-state record — `packable_record_layout` returned
-                    // None) but every member is INTEGRAL → lower to per-field dyn arrays
-                    // `$unp$arr$field` (each the member's own kind, so a 2-state field
-                    // defaults 0 / coerces X and a 4-state field keeps X — natively).
-                    // A string/real member is NOT yet integral-only → falls through to
-                    // loud (Phase 2/3). `arr[i].field` / `new[]` / `'{…}` are desugared
-                    // to native dyn ops at the use sites.
-                    if members
-                        .iter()
-                        .all(|m| Self::member_kind_is_integral(m.kind))
-                    {
+                    // None — or a string/real-member record) → lower each member to its
+                    // OWN typed dyn array `$unp$arr$field` (integral → int/logic dyn, so
+                    // a 2-state field defaults 0 / a 4-state field keeps X natively;
+                    // `string` → string dyn; `real` → real dyn — Phase 3 heterogeneous
+                    // heap). A nested-struct / event / class member has no dyn-array
+                    // form → falls through to loud. `arr[i].field` / `new[]` / `'{…}` are
+                    // desugared to native dyn ops at the use sites.
+                    if members.iter().all(|m| Self::member_kind_soa_ok(m.kind)) {
                         let field_inits: Vec<Option<Expr>> = match &n.init {
                             Some(e) => match self.soa_field_inits(members.len(), e) {
                                 Some(v) => v.into_iter().map(Some).collect(),

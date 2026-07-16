@@ -254,14 +254,62 @@ fn n3b_record_array_new_and_size() {
     assert_eq!(run(src).0, "PASS");
 }
 
-// correct-or-loud: a NON-packable record (a `string`/`real` member) has no flat
-// packed representation → the record array stays loud (a heterogeneous-aggregate heap
-// is the deep follow-on) — never a silent wrong.
+// N3 Phase 3 heterogeneous heap: a string/real-member record array is now SUPPORTED —
+// each member lowers to its OWN typed dyn array (`$unp$arr$field`: string → string dyn,
+// real → real dyn, int → int dyn), so `arr[i].field` is a native per-field dyn element.
+// decl-init `'{ '{…},… }` rides the per-field var-init flush.
 #[test]
-fn n3b_non_packable_record_array_is_loud() {
+fn n3b_string_member_record_array_supported() {
     let src = "package p; typedef struct { string s; int n; } rec_t; endpackage\n\
-        module t; import p::*; rec_t arr [] = '{ '{\"hi\",1} };\n\
-        initial begin if(arr[0].n==1) $display(\"PASS\"); $finish; end endmodule";
+        module t; import p::*; rec_t arr [] = '{ '{\"hi\",1}, '{\"bye\",2} };\n\
+        initial begin if(arr[0].s==\"hi\" && arr[0].n==1 && arr[1].s==\"bye\" && arr[1].n==2) \
+        $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_string_member_record_new_and_writes() {
+    let src = "package p; typedef struct { string s; int n; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[2]; arr[0].s=\"hello\"; arr[0].n=7; arr[1]='{\"wo\",9}; \
+        if(arr[0].s==\"hello\" && arr[0].n==7 && arr[1].s==\"wo\" && arr[1].n==9 && arr.size()==2) \
+        $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3b_real_member_record_array_supported() {
+    let src = "package p; typedef struct { real x; int y; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [] = '{ '{1.5, 3}, '{-2.5, 4} };\n\
+        initial begin arr[0].x=9.25; \
+        if(arr[0].x==9.25 && arr[0].y==3 && arr[1].x==-2.5 && arr[1].y==4) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// N3 Phase 2: standalone `string s[]` / `real r[]` dynamic arrays (the per-field building
+// block) — new[]/element r-w/default ""/0.0/size/decl-init.
+#[test]
+fn n3_standalone_string_dyn_array() {
+    let src = "module t; string s[] = '{\"a\", \"bb\", \"ccc\"};\n\
+        initial begin s[1]=\"changed\"; if(s[0]==\"a\" && s[1]==\"changed\" && s[2]==\"ccc\" && s.size()==3) \
+        $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n3_standalone_real_dyn_array() {
+    let src = "module t; real r[];\n\
+        initial begin r=new[3]; r[0]=1.5; r[1]=-2.25; \
+        if(r[0]==1.5 && r[1]==-2.25 && r[2]==0.0 && r.size()==3) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+// correct-or-loud: an `event`-member record (no dyn-array element form) stays loud.
+#[test]
+fn n3b_event_member_record_array_is_loud() {
+    let src = "package p; typedef struct { event e; int n; } rec_t; endpackage\n\
+        module t; import p::*; rec_t arr [];\n\
+        initial begin arr=new[1]; $finish; end endmodule";
     assert!(loud(src));
 }
 
@@ -369,14 +417,14 @@ fn n3b_mixed_record_whole_element_read_is_loud() {
     assert!(loud(src));
 }
 
-// correct-or-loud: a string/real-member record array is still loud (Phase 2/3 — needs
-// dynamic string/real element storage).
+// N3 Phase 3: a fresh `new[]` string-member record defaults each field to its IEEE type
+// default — a `string` field to "" and an `int` field to 0.
 #[test]
-fn n3b_string_member_record_array_is_loud() {
+fn n3b_string_member_record_new_defaults() {
     let src = "package p; typedef struct { string s; int n; } rec_t; endpackage\n\
         module t; import p::*; rec_t arr [];\n\
-        initial begin arr=new[1]; $finish; end endmodule";
-    assert!(loud(src));
+        initial begin arr=new[1]; if(arr[0].s==\"\" && arr[0].n==0) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
 }
 
 // Adversarial soundness review RANK 1: a SIGNED member must read back sign-extended

@@ -251,6 +251,10 @@ pub(crate) struct SimState<'a> {
     /// the hot read/write funnels pay ONE Vec<bool> load — not an `ir.nets`
     /// kind match — per indexed access.
     pub dyn_is_handle: Vec<bool>,
+    /// N3 Phase 2: per-net flag — this DynArray handle's ELEMENTS are `string`
+    /// (`string s[]`). Element store/read use the `is_str` byte-string path (no
+    /// bit-vector resize) and `new[]` fills "". EMPTY/all-false ⇒ golden-neutral.
+    pub dyn_str_elem: Vec<bool>,
     /// IEEE 1364-2005 self-width side table — built once, immutable for the run.
     pub wt: crate::width::WidthTable,
 
@@ -700,6 +704,7 @@ impl<'a> SimState<'a> {
                     )
                 })
                 .collect(),
+            dyn_str_elem: vec![false; nnets],
             wt,
             vcd: None,
             vcd_path: None,
@@ -1040,9 +1045,17 @@ impl<'a> SimState<'a> {
         // v7 P2-C: a STRING destination takes the WHOLE source value — its
         // net-table width is 0 (dynamic), so the total-width resize below
         // would chop the value to 1 bit; §6.16 conversion is dyn_write's
-        // byte-strip, never a bit resize.
+        // byte-strip, never a bit resize. N3 Phase 2: a `string s[]` ELEMENT
+        // (`s[i] = …`, net kind DynArray but `dyn_str_elem`) is the same — pass
+        // the whole value so `dyn_write` stores the byte-string, not 1 bit.
         if let [c] = lhs.chunks.as_slice() {
-            if self.ir.nets[c.net as usize].kind == NetKind::String {
+            if self.ir.nets[c.net as usize].kind == NetKind::String
+                || self
+                    .dyn_str_elem
+                    .get(c.net as usize)
+                    .copied()
+                    .unwrap_or(false)
+            {
                 let (raw_off, raw_word) = offsets.first().copied().unwrap_or((0, 0));
                 return self.write_chunk(c, raw_off, raw_word, &value);
             }
@@ -2030,9 +2043,21 @@ impl<'a> SimState<'a> {
             }
             return false;
         }
+        // N3 Phase 2: a `string s[]` element stores the raw byte-string (a width
+        // resize would corrupt the dynamic-length `is_str` value); a real element
+        // rides the `is_real` resize no-op above. Every other element resizes.
+        let str_elem = self
+            .dyn_str_elem
+            .get(net as usize)
+            .copied()
+            .unwrap_or(false);
         match self.dyn_heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
             Some(DynObj::DynArray { elems }) if i < elems.len() => {
-                elems[i] = piece.clone().resize(w);
+                elems[i] = if str_elem {
+                    Value::from_str_bytes(&piece.to_str_bytes())
+                } else {
+                    piece.clone().resize(w)
+                };
                 false
             }
             _ => {

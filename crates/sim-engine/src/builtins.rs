@@ -150,8 +150,19 @@ pub(crate) fn dispatch(
             // default — 0 for 2-state element types (int/bit/byte/shortint/
             // longint), X for 4-state. The per-net `two_state` flag carries the
             // element type's 2-state-ness; honoring it here keeps dyn arrays
-            // consistent with scalar/fixed-unpacked/assoc defaults.
-            let elem_default = if sched
+            // consistent with scalar/fixed-unpacked/assoc defaults. N3 Phase 2:
+            // a `real r[]` element defaults to 0.0 and a `string s[]` element to "".
+            let elem_default = if sched.st.nets[net as usize].is_real {
+                Value::from_f64(0.0)
+            } else if sched
+                .st
+                .dyn_str_elem
+                .get(net as usize)
+                .copied()
+                .unwrap_or(false)
+            {
+                Value::from_str_bytes(&[])
+            } else if sched
                 .st
                 .two_state
                 .get(net as usize)
