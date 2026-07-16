@@ -118,14 +118,16 @@ fn timescale_default_is_1ns_1ns() {
 
 #[test]
 fn timescale_time_and_realtime_scaled() {
-    // doc-08 example: 1ns/1ps, after #2.5 (= 2500 ticks) → $time = 2 (truncated to the
-    // module's 1ns unit), $realtime = 2.5 (sub-unit fraction kept).
+    // doc-08 example: 1ns/1ps, after #2.5 (= 2500 ticks) → $time = 3 ($time ROUNDS
+    // the 2.5ns module-unit time to nearest per IEEE 1800-2017 §20.3.1 — 2.5
+    // half-up → 3, NOT truncated to 2; iverilog-13.0-pinned), $realtime = 2.5
+    // (sub-unit fraction kept).
     let (ir, opts) = build_timescaled(
         "`timescale 1ns/1ps\nmodule top; initial begin #2.5; \
          $display(\"%0d %g\", $time, $realtime); $finish; end endmodule\n",
     );
     let (_res, out) = simulate_capture(&ir, opts);
-    assert_eq!(out, "2 2.5\n");
+    assert_eq!(out, "3 2.5\n");
 }
 
 #[test]
@@ -142,14 +144,16 @@ fn timescale_time_default_unscaled() {
 fn timescale_rounding_doc08_case1() {
     // doc-08 §정밀도 회귀 case 1: 1ns/100ps (M=10), round-half-away. #1.44→14.4→14
     // ticks (1400ps); #0.05→0.5→1 tick (1500ps); #0.04→0.4→0 ticks (no advance).
-    // Total advanced time = 15 ticks (= 1.5ns), so $time truncates to 1.
+    // Total advanced time = 15 ticks (= 1.5ns). DELAY rounding (→15 ticks) and
+    // $time rounding are distinct: $time ROUNDS 1.5→2 (half-up, IEEE §20.3.1 —
+    // NOT truncated to 1; iverilog-13.0-pinned $time=2, $realtime=1.5).
     let (ir, opts) = build_timescaled(
         "`timescale 1ns/100ps\nmodule top; reg a; initial begin \
          a=0; #1.44 a=1; #0.05 a=0; #0.04 a=1; $display(\"%0d\", $time); $finish; end endmodule\n",
     );
     let (res, out) = simulate_capture(&ir, opts);
     assert_eq!(res.sim_time, 15);
-    assert_eq!(out, "1\n");
+    assert_eq!(out, "2\n");
 }
 
 #[test]
@@ -2687,7 +2691,8 @@ fn time_type_is_64bit_unsigned_var() {
 #[test]
 fn runtime_delay_variable_scales_by_module_timescale() {
     // iverilog (probed live): `#d` with d=3 under 1ns/1ps advances 3000 ticks;
-    // `#(d*2)` adds 6000; real `#r` (1.5) adds 1500; X delay adds 0.
+    // `#(d*2)` adds 6000; real `#r` (1.5) adds 1500; X delay adds 0. At t=10.5ns
+    // $time ROUNDS 10.5→11 (half-up, §20.3.1; iverilog-pinned c=d=11, NOT 10).
     let (ir, opts) = build_timescaled(
         "`timescale 1ns/1ps\nmodule top; integer d; reg [7:0] xd; real r; \
          initial begin \
@@ -2703,7 +2708,7 @@ fn runtime_delay_variable_scales_by_module_timescale() {
     );
     let (res, out) = simulate_capture(&ir, opts);
     assert_eq!(res.finish_reason, FinishReason::Finish);
-    assert_eq!(out, "a=3\nb=9\nc=10\nd=10\n");
+    assert_eq!(out, "a=3\nb=9\nc=11\nd=11\n");
     assert_eq!(res.sim_time, 10500);
 }
 

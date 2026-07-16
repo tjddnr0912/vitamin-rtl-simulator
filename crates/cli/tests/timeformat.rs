@@ -162,6 +162,50 @@ fn t_integer_truncates_never_rounds() {
 }
 
 #[test]
+fn time_and_stime_sysfunc_round_to_nearest() {
+    // The `$time`/`$stime` SYSFUNCS scale the current sim time to the calling
+    // module's unit and ROUND to nearest (IEEE 1800-2017 §20.3.1) — a DIFFERENT
+    // mechanism from the `%t` RENDERER, which truncates at the precision digit
+    // (t_integer_truncates_never_rounds above). This prints via %0d — no %t — so
+    // only the sysfunc scaling is exercised. Was a silent-wrong: vita truncated
+    // (1.5→1) instead of rounding. iverilog-13.0-pinned: 1.5→2, 2.5→3, 3.5→4,
+    // 4.4→4, 4.6→5, and an exact boundary (5.0) never over-rounds. Round-half-up
+    // == round-half-away-from-zero since time ≥ 0. $stime == $time (values fit
+    // 32 bit).
+    let (out, _, code) = run("`timescale 1ns/1ps\n\
+         module t; initial begin\n\
+           #1.5 $display(\"a %0d %0d\", $time, $stime);\n\
+           #1.0 $display(\"b %0d %0d\", $time, $stime);\n\
+           #1.0 $display(\"c %0d %0d\", $time, $stime);\n\
+           #0.9 $display(\"d %0d %0d\", $time, $stime);\n\
+           #0.2 $display(\"e %0d %0d\", $time, $stime);\n\
+           #0.4 $display(\"f %0d %0d\", $time, $stime);\n\
+           $finish; end endmodule\n");
+    assert_eq!(code, 0, "clean exit:\n{out}");
+    assert!(out.contains("a 2 2"), "1.5 rounds up:\n{out}");
+    assert!(out.contains("b 3 3"), "2.5 half-up (not half-even):\n{out}");
+    assert!(out.contains("c 4 4"), "3.5 half-up:\n{out}");
+    assert!(out.contains("d 4 4"), "4.4 rounds down:\n{out}");
+    assert!(out.contains("e 5 5"), "4.6 rounds up:\n{out}");
+    assert!(out.contains("f 5 5"), "5.0 exact never over-rounds:\n{out}");
+}
+
+#[test]
+fn time_round_holds_at_wide_timescale_ratio() {
+    // `timescale 1s/1ps` ⇒ module multiplier M = 10^12; the rounding increment
+    // m/2 = 5*10^11 must neither overflow nor mis-scale. 1.5s→2, 2.5s→3
+    // (iverilog-pinned). Guards the round path on the widest realistic M.
+    let (out, _, code) = run("`timescale 1s/1ps\n\
+         module t; initial begin\n\
+           #1.5 $display(\"g %0d\", $time);\n\
+           #1.0 $display(\"h %0d\", $time);\n\
+           $finish; end endmodule\n");
+    assert_eq!(code, 0, "clean exit:\n{out}");
+    assert!(out.contains("g 2"), "1.5s rounds up at M=1e12:\n{out}");
+    assert!(out.contains("h 3"), "2.5s half-up at M=1e12:\n{out}");
+}
+
+#[test]
 fn t_real_path_rounds_like_percent_f() {
     // REAL args ($realtime, real literals) go through f64 and round like %f:
     // t=5.556ns @ prec 2 → "5.56" (the integer path would truncate to 5.55).

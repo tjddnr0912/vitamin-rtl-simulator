@@ -146,23 +146,22 @@ ticks = rounded_value_in_module_unit × (module_unit / global_precision)
 |---|---------|-------------|
 | 반환 타입 | 64-bit 정수 | `real` (64-bit IEEE 754 double) |
 | 단위 | 호출 모듈의 `time_unit` | 호출 모듈의 `time_unit` |
-| Precision 반영 | 아니오 — `time_unit` 미만 절사 | 예 — 소수점으로 표시 |
+| Precision 반영 | 아니오 — `time_unit`로 최근접 반올림(round-half-up) | 예 — 소수점으로 표시 |
 | 용도 | 이벤트 시각 비교, 조건 분기 | 파형 출력, 사람이 읽는 로그 |
 
 ```systemverilog
 // `timescale 1ns/100ps 모듈에서
 // 현재 내부 시각 = 2500ps (global tick)
 
-$display($time);      // 출력: 2  (2ns 정수, 500ps 절사)
+$display($time);      // 출력: 3  (2.5ns를 최근접 정수로 반올림; 2.5→3, IEEE §20.3.1)
 $display($realtime);  // 출력: 2.5 (precision 반영한 소수)
 ```
 
-`$stime`(IEEE: `$time`의 하위 32비트)도 표준에 있으나 **vitamin 미구현** — 호출 시 `VITA-E3009`.
-하위 32비트가 필요하면 `$time & 32'hFFFF_FFFF`.
+`$stime`(IEEE: `$time`의 하위 32비트)는 **구현됨**(v7) — `$time`처럼 모듈 단위로 최근접 반올림한 뒤 하위 32비트로 절단한다.
 
 본 프로젝트 구현 방침:
 - 내부 시간 레지스터는 `u64` (전역 tick)
-- `$time` 구현: `current_tick / (time_unit / global_precision)` 의 정수 부분
+- `$time` 구현: `(current_tick + M/2) / M` (M = `time_unit / global_precision`) — 최근접 정수 반올림(round-half-up; 시각 ≥ 0이라 round-half-away-from-zero와 동일해 iverilog와 일치). 단순 절사가 **아님**(IEEE 1800-2017 §20.3.1 "rounded to an integer value").
 - `$realtime` 구현: `current_tick as f64 * global_precision_in_ns / time_unit_in_ns`
 - VCD 타임스탬프 출력: 전역 tick 그대로 (`$timescale` 헤더에 global_precision 기록)
 

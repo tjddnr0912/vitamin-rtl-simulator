@@ -204,8 +204,9 @@ pub enum SysFuncId {
     OneHot0,
     /// `$isunknown(x)` (v7) — any x/z bit.
     IsUnknown,
-    /// `$stime` (v7) — current time scaled to the caller's module, truncated
-    /// to unsigned 32 bit.
+    /// `$stime` (v7) — current time scaled to the caller's module unit and
+    /// ROUNDED to nearest (like `$time`, §20.3.1), then truncated to unsigned
+    /// 32 bit.
     Stime,
     /// `$fopen(name[, mode])` (v7) — side-effecting (file table) — statement-
     /// level intercept as the direct rhs of a blocking assign.

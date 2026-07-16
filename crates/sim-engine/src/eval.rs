@@ -1512,11 +1512,15 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
                 }
             }
             SysFuncId::Time => {
-                // $time: current time in the CALLING module's units, truncated to int
-                // (now is global-precision ticks; divide by the module multiplier M).
+                // $time: current time in the CALLING module's units, ROUNDED to the
+                // nearest integer — IEEE 1800-2017 §20.3.1: "scaled to the time unit
+                // of the module ... and rounded to an integer value" (NOT truncated).
+                // `now` is global-precision ticks; scale by the module multiplier M
+                // with round-half-up (= round-half-away-from-zero, since time ≥ 0 —
+                // matches iverilog: 1.5→2, 2.5→3, 4.6→5).
                 let m = self.time_mult.max(1);
                 let mut v = Value::zeros(64, false);
-                v.val[0] = self.now / m;
+                v.val[0] = self.now.saturating_add(m / 2) / m;
                 v
             }
             SysFuncId::Realtime => {
@@ -1694,11 +1698,13 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
                 v.val[0] = lo as u64 + (r as u64 % range);
                 v
             }
-            // v7 `$stime` — `$time` truncated to unsigned 32 bit (1364 §17.7.2).
+            // v7 `$stime` — the low 32 bits of `$time` (1364 §17.7.2). Like `$time`,
+            // the module-unit scaling ROUNDS to nearest (round-half-up) BEFORE the
+            // truncation to unsigned 32 bit — not a bare truncating divide.
             SysFuncId::Stime => {
                 let m = self.time_mult.max(1);
                 let mut v = Value::zeros(32, false);
-                v.val[0] = (self.now / m) & 0xffff_ffff;
+                v.val[0] = (self.now.saturating_add(m / 2) / m) & 0xffff_ffff;
                 v
             }
             // v7 `$test$plusargs(query)` — true iff some plusarg STARTS WITH
