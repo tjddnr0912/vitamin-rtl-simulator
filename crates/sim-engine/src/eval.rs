@@ -1573,7 +1573,25 @@ impl<'a, N: NetReader> EvalCtx<'a, N> {
             SysFuncId::Clog2 => {
                 // Exact at any width: $clog2(n) = highest set bit of (n-1) + 1.
                 // Word-wise so a >64-bit argument is not truncated (P0-4).
-                let a = self.eval(args[0]);
+                let mut a = self.eval(args[0]);
+                if a.is_real {
+                    // $clog2 of a real rounds to the nearest integer (ties away
+                    // from zero, per IEEE real→int) and then computes clog2 —
+                    // iverilog: $clog2(100.0) == $clog2(100) == 7. Reading a.val
+                    // directly runs clog2 over the IEEE-754 bit pattern (silently
+                    // wrong: 63). A negative / non-finite / ≥2^64 "size" has no
+                    // meaningful clog2 (iverilog's negative value is a 32-bit-wrap
+                    // artifact), so it yields X — never a confident wrong number.
+                    let r = a.to_f64().unwrap_or(f64::NAN).round();
+                    // Strict `< 2^64`: the low 64 bits must hold the value for the
+                    // word-logic below. `u64::MAX as f64` rounds UP to 2^64, so a
+                    // `<=` guard would let exactly 2^64 through, where `from_i128`
+                    // masks it to 0 → clog2(0)=0 (a confident wrong bus width).
+                    if !(r.is_finite() && r >= 0.0 && r < 2.0_f64.powi(64)) {
+                        return Value::xs(32, false);
+                    }
+                    a = Value::from_i128(r as i128, 64, false);
+                }
                 if a.has_xz() {
                     return Value::xs(32, false);
                 }

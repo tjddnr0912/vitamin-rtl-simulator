@@ -39,7 +39,7 @@
 - non-uniform `$dist_*` libm draw 발산 · chi_square/t seed LCG. §4.5.126.
 - string-array-elem 전원 concat `{s[0],"-",s[1]}` truncate — native-eval static string-width. §4.5.134 발굴.
 - `$monitor`에 직접 `$random`/`$urandom` 인자=매 스텝 spurious re-fire(no-oracle: iverilog는 non-simple `$monitor` 인자 자체 거부 "SORRY"·시간함수 3종만 예외). 값 렌더는 정상. §4.5.135 발굴.
-- leading-NUL frame string · frame-body 内 SYS-READ(assignment form도) · runtime `$clog2(real)` f64 misread. §C/§4.5.122/124.
+- leading-NUL frame string · frame-body 内 SYS-READ(assignment form도). §C/§4.5.122/124. (runtime `$clog2(real)` f64 misread = §4.5.143서 해결)
 - 숫자 literal `%s` NUL-byte(§4.5.119). `%d`-of-real **width** 해결(§4.5.142); 잔여=`%d`/`%0d`-of-**non-finite** real(inf/nan)=vita `i64::MAX`(`fmt_dec` 포화) vs iverilog `inf`/`nan`(pre-existing·value edge).
 - inline 함수 잔여 4종: global-reader widening 미수혜 · size-cast `16'(a*b)` context · signed `>>>` unsigned-context · inline-call return 미truncate. §4.5.80 잔여.
 - hier `@(*)` sensitivity · hier md-packed-nested part-select. §4.5.115/103 잔여.
@@ -82,7 +82,7 @@
 - inline body NON-fill context-width · modport 방향 강제 · force part-select · assoc 배열-key/clocking 배열-output word0.
 - **음수 range bound**(`logic [3:-2]`/`[-1:-8]` net·multi-packed inner `[1:0][3:-2]`·unpacked `[-1:2]`) — iverilog=`|msb-lsb|+1`(예: `[3:-2]`=6bit). 현재 net/multi-packed=W3056 warn+clamp-1(**whole-value 손상**)·unpacked=E4002. 전부 non-silent(§4.5.135 후 diag 정직화). 정식 지원=**packed-struct-member 선례 미러**(whole=flat offset 정확+sub-select loud; `struct_field_select.rs`): `range_to_dims` 정확 폭+정규화 base·neg-base 마커로 sub-select loud-guard(u32 dbase→signed 또는 사이드카). 단, `[W-1:0]`-with-W==0 param underflow(lsb≥0)는 graceful width-1 유지(test `v3_12`).
 - **VCD 잔여 fidelity**(§4.5.138 range fix 후·전부 **cosmetic·decode 동일**·§4.5.139서 VALUE 검증 완료: x/z·real·wide·readmem·format 全 decoded waveform iverilog 일치). 남은 encoding 차이: ① value 미압축=vita full-width(`bxxxxxxxx`) vs iverilog leading-redundant strip(`bx`·`b0`)—decode 동일·큰 golden churn ② t=0 초기덤프 구조=vita `$dumpvars`에 pre-assign X + `#0` change vs iverilog settled값—final 동일 ③ var-type=logic 절차구동시 vita `wire` vs iverilog `reg`(연속구동=both wire·usage 의존이라 non-trivial)·`int`=`reg` vs `integer` ④ real size `64` vs `1` ⑤ `parameter` 미덤프. + 근본: elaborate packed-md NetVar.lsb stale(lib.rs 8435/7862·VCD helper서 flat fallback 우회).
-- **real const-fold 전면 미지원**(§4.5.141 발굴): `localparam/parameter real` = `2.0+3.0`·`*`·`/`·`-`·`**` 全 E3009 "not foldable"(iverilog=folds). 런타임 real 산술은 정상(§4.5.141서 `**`도 지원)·const 경로만 uniformly loud. const_eval_in_scope에 real f64 arithmetic 추가 필요(broad·non-silent).
+- **real const-fold 전면 미지원**(§4.5.141 발굴): `localparam/parameter real` = `2.0+3.0`·`*`·`/`·`-`·`**` 全 E3009 "not foldable"(iverilog=folds). `localparam=$clog2(real-lit)`도 동근(const_eval_in_scope=i64-only·real arg→None loud·§4.5.143 런타임은 해결). 런타임 real 산술은 정상(§4.5.141서 `**`도 지원)·const 경로만 uniformly loud. const_eval_in_scope에 real f64 arithmetic 추가 필요(broad·non-silent).
 - **X-bearing integral→real 변환 divergence**(§4.5.141 발굴): vita=whole X값→`0.0`(`real_arg`=`to_i128_signed().unwrap_or(0)`) vs iverilog=per-bit X→0(예 `4'bxx01`→1). `$itor`/`$sqrt`/`$pow`/real-`**` 공통·pre-existing. non-silent 아니지만 divergent(impl-defined X→real).
 
 ## 4. SVA / 검증 honest-loud 잔여

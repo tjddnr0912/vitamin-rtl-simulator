@@ -8,6 +8,17 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.143 runtime `$clog2(real)` round-then-count (silent-63 → correct) (2026-07-17, branch feat-clog2-real) ✅
+
+recorded §2(§4.5.122/124) 재그라운딩. `real r=100.0; $clog2(r)`=vita **63**(IEEE-754 비트패턴을 정수로 오독) vs iverilog **7**. 정수 `$clog2` 정상.
+
+- **룰 핀(iverilog 13.0 라이브 20+ 케이스 byte-id)**: `$clog2(real)` = real→최근접 정수 **반올림(ties away from zero)**→clog2. 100.0→7·7.0→3·1.5→1·2.5→2·4.5→3·8.5→4·0.5→0·128.0→7·129.0→8·5e9→33. iverilog는 `$clog2`를 산술로 수용(형제 bit-query `$countones`/`$onehot`/`$onehot0`/`$isunknown`은 real 거부→vita 이미 elaborate E3009 loud). Rust `f64::round()`=ties-away 일치.
+- **구현(IR-0, `eval.rs` `SysFuncId::Clog2`)**: `a.is_real`이면 `to_f64().round()`가 `finite && ≥0 && <2^64`면 `from_i128(r,64,false)`로 정수 Value 교체 후 기존 word-logic 통과, 아니면 `Value::xs(32)`. 비-real 경로 verbatim.
+- **correct-or-loud 경계**: 음수 real은 iverilog=32(32-bit-wrap 아티팩트)이나 양수 5e9는 64-bit magnitude→단일 변환으로 양쪽 불일치. 음수/비유한/≥2^64 = **X**(honest-undefined·never confident-wrong).
+- **적대 병렬 2렌즈(수렴)**: differential(양수 60+ live diff = 0 divergence·ties-away 확인)+soundness(ALL-sites·is_real 전파·경계) 둘 다 **동일 단일 silent-wrong** 지적: `u64::MAX as f64`가 2^64로 올림→`<=` 가드가 정확히 `r==2^64` 통과→`from_i128` mask→`clog2(0)=0`. `<2.0_f64.powi(64)` strict化로 fail-closed(2^64→X, 2^64−2048→64). soundness가 4번째 evaluator `native_eval.rs`(VM fast-path)도 클리어(`ConstRepr::Real` decline→커널 eval bail=funnel 단일소스).
+- **ALL-sites(4)**: runtime eval(수정)·`width.rs` const-width-fold(non-Numeric decline·base==fix)·elaborate `const_eval_in_scope`(i64-only·real→None loud)·`native_eval.rs` VM(decline→bail). 전부 커버.
+- **out-of-scope(loud 유지)**: const-fold `localparam=$clog2(real-lit)`=const_eval i64-only→E3009(real const-fold 전면 미지원과 동근·§3 기록). 숫자 literal `%s` leading-NUL(§4.5.119)=별개 thread(재확인). 3559 green·clippy/fmt clean·format_version 21 불변.
+
 #### 4.5.142 `%d`-of-real 기본 필드폭 제거 + fresh-area sweep (2026-07-17, branch feat-pct-d-real-width) ✅
 
 fresh-area 스윕(generate for/if/case·macro w/args·signedness 전파[self-det operand·concat-unsign·sign-ext·signed shift]·`$sscanf`·`$sformat`·real-math sysfunc[NaN/-inf edge 포함]) 全 iverilog 일치=코어 견고. 이후 recorded §2 中형 2건 재그라운딩→1건 shallow fix.

@@ -1682,6 +1682,30 @@ fn pct_d_of_real_has_no_default_field_width() {
     );
 }
 
+// 18b. `$clog2(real)` rounds the real to the nearest integer (ties away from zero),
+// then computes clog2 — iverilog accepts a real arg as arithmetic (unlike the
+// bit-query siblings $countones/$onehot, which stay loud). Reading the IEEE-754 bit
+// pattern directly was silently wrong (100.0 → 63). A negative / non-finite "size"
+// has no meaningful clog2 → X, never a confident wrong number. iverilog-13.0-pinned.
+#[test]
+fn clog2_of_real_rounds_then_counts() {
+    let out = run_sv(
+        "module t; real r; initial begin \
+         $display(\"%0d %0d %0d %0d\", $clog2(100.0), $clog2(7.0), $clog2(1.5), $clog2(0.5)); \
+         $display(\"%0d %0d %0d\", $clog2(2.5), $clog2(4.5), $clog2(8.5)); \
+         r = 5000000000.0; $display(\"%0d\", $clog2(r)); \
+         $display(\"%0d %0d\", $clog2(16), $clog2(17)); \
+         r = -2.0; $display(\"%0d\", $clog2(r)); \
+         r = 18446744073709549568.0; $display(\"%0d\", $clog2(r)); \
+         r = 18446744073709551616.0; $display(\"%0d\", $clog2(r)); \
+         end endmodule",
+    );
+    // 100→7  7→3  1.5→2→1  0.5→1→0 | 2.5→3→2  4.5→5→3  8.5→9→4 | 5e9→33 | 16→4 17→5
+    // | −2.0→X | 2^64−2048 (largest f64 < 2^64) → 64 | exactly 2^64 → X (out of u64,
+    // must not wrap to a confident 0).
+    assert_eq!(out, "7 3 1 0\n2 3 4\n33\n4 5\nx\n64\nx\n");
+}
+
 // 19. [P4 · backend seam] Backend selection rides out-of-band on SimOpts. The
 // Bytecode backend currently falls back to the interpreter for every body
 // (Stage B: no VM yet), so it is byte-identical to Interpreter — stdout AND the
