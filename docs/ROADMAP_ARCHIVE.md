@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.142 `%d`-of-real 기본 필드폭 제거 + fresh-area sweep (2026-07-17, branch feat-pct-d-real-width) ✅
+
+fresh-area 스윕(generate for/if/case·macro w/args·signedness 전파[self-det operand·concat-unsign·sign-ext·signed shift]·`$sscanf`·`$sformat`·real-math sysfunc[NaN/-inf edge 포함]) 全 iverilog 일치=코어 견고. 이후 recorded §2 中형 2건 재그라운딩→1건 shallow fix.
+
+- **fix = `%d`-of-real width**(recorded §4.5.120): bare `%d`의 real 피연산자가 20폭(`dec_field_width(64)`)으로 pad→iverilog는 rounded 값 **무pad**(`%d` of 2.5="3"). `builtins.rs` `%d` formatter서 real+width없음=fw 0(`%0d`처럼). 정수 `%d`·명시 `%Nd`/`%0Nd`/`%-Nd` 불변(byte-id). `$display`/`$sformatf`/`$fdisplay`/`$fwrite` 공유 경로라 일괄. IR-0.
+- **적대(proportionate)**: 유일 edge=`%d` of non-finite real(inf/nan)→vita `i64::MAX`(`fmt_dec` 포화) vs iverilog `inf`—**pre-existing value 동작**(width fix가 value 미변경). ROADMAP §2 기록.
+- **재그라운딩 결과**: `$signed`-in-wider-sum(§4.5.111)=현재 MATCH(후속 슬라이스가 해결한 듯). mixed-sign enum(§4.5.109/110)=confirmed **multi-part**: AST `TypedefKind::Enum.base`=`Option<Range>`만(base type/signedness 미포함)·parser가 `signed` drop→respect엔 AST enrichment+parser+elaborate 필요→stays deferred(§2).
+- 기존 golden(`float_format_determinism_golden`) 옛 20폭 핀→무pad 정정·+1 회귀. 3558 green·clippy/fmt clean.
+
 #### 4.5.141 real `**` 지원(loud→supported·$pow desugar) (2026-07-17, branch feat-real-power) ✅
 
 fresh-area probe(power operator)로 발굴한 loud→supported: vita가 real 피연산자 `**`를 E3009 "power (**) not defined on real operand in MVP"로 거부·iverilog는 지원(IEEE 1800 §11.4.9: real 피연산자→real 결과=pow(base,exp)). vita는 이미 `libm::pow`를 `$pow` sysfunc로 보유→순수 갭.
