@@ -7623,6 +7623,51 @@ impl<'s> Elaborator<'s> {
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
                 let a = self.const_eval_in_scope(lhs)?;
+                // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
+                // of the PATTERN (rhs) are don't-cares (§11.4.6). const_eval carries no
+                // x/z, so the generic `const_eval_in_scope(rhs)` below returns None on
+                // the pattern; pull the pattern's value + x/z mask straight from the
+                // literal and masked-compare. The pattern zero-extends, so `a & !mask`
+                // at full width matches iverilog for a narrower pattern too. Fail-closed:
+                // only a NON-NEGATIVE const `a` (an i64 sign bit would corrupt the
+                // full-width compare) and a single-word, bit-63-clear pattern; otherwise
+                // fall through to None (loud). An x/z-free pattern is NOT intercepted —
+                // it folds via the `WildEq`/`WildNe` collapse arm below.
+                if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
+                    if let ast::ExprKind::IntLit { kind, raw } = &rhs.kind {
+                        // Only a SIZED pattern is safe: bits ABOVE its declared width
+                        // zero-extend, so the masked compare's "the LHS high bits must
+                        // be 0" is correct. An UNSIZED x/z literal (`'hx`) x-FILLS to the
+                        // context width — but parse_int_literal sizes it to its 32-bit
+                        // self-width, so an LHS wider than 32 bits would wrongly require
+                        // its high bits to be 0 (silent-wrong). Leave unsized x/z patterns
+                        // loud (fall through → the generic rhs fold returns None).
+                        if matches!(kind, ast::IntLitKind::Sized) {
+                            if let Some(cv) = parse_int_literal(raw, *kind) {
+                                if cv.bits.unk.iter().any(|&u| u != 0) {
+                                    let pat = cv.bits.val.first().copied().unwrap_or(0);
+                                    let mask = cv.bits.unk.first().copied().unwrap_or(0);
+                                    if a >= 0
+                                        && cv.bits.val.len() <= 1
+                                        && cv.bits.unk.len() <= 1
+                                        && (pat >> 63) == 0
+                                        && (mask >> 63) == 0
+                                    {
+                                        let eq =
+                                            (a & !(mask as i64)) == (pat as i64 & !(mask as i64));
+                                        return Some(if matches!(op, ast::BinOp::WildEq) {
+                                            eq
+                                        } else {
+                                            !eq
+                                        }
+                                            as i64);
+                                    }
+                                    return None; // negative LHS / wide / bit-63 pattern → loud
+                                }
+                            }
+                        }
+                    }
+                }
                 let b = self.const_eval_in_scope(rhs)?;
                 match op {
                     // checked_*: i64 overflow → None → LOUD at the call sites.

@@ -207,3 +207,80 @@ endmodule
 "#);
     assert_eq!(out.trim(), "B=6");
 }
+
+/// §4.5.146 — `==?`/`!=?` against a wildcard LITERAL folds at const-eval: the x/z bits
+/// of the PATTERN (rhs) are don't-cares (§11.4.6). Previously E3009 ("not a foldable
+/// constant expression"). Values pinned to live iverilog 13.0; displayed via `%0d` (a
+/// `bit`-typed comparison localparam renders wide under `%b` — a separate pre-existing
+/// issue, present for plain `==` too).
+#[test]
+fn wildcard_eq_const_fold() {
+    let out = run(r#"
+module t;
+  localparam [3:0] P = 4'b1010;
+  localparam [7:0] Q = 8'hA5;
+  localparam int A = (P ==? 4'b1x1x);       // match -> 1
+  localparam int B = (P ==? 4'b0x1x);       // bit3 mismatch -> 0
+  localparam int C = (Q ==? 8'b1010_xxxx);  // wider match -> 1
+  localparam int D = (Q ==? 4'b0101);       // narrow pattern zero-ext, Q hi != 0 -> 0
+  localparam int E = (P !=? 4'b1x1x);       // negate -> 0
+  localparam int F = (P ==? 4'bxxxx);       // all wildcard -> 1
+  localparam int G = (P ==? 4'bz0z0);       // z also wildcard -> 1
+  initial $display("%0d%0d%0d%0d%0d%0d%0d", A, B, C, D, E, F, G);
+endmodule
+"#);
+    assert_eq!(out.trim(), "1010011");
+}
+
+/// The wildcard fold drives a generate condition (the real use case).
+#[test]
+fn wildcard_eq_generate_condition() {
+    let out = run(r#"
+module t;
+  localparam [3:0] P = 4'b1010;
+  generate if (P ==? 4'b1x1x) begin: G initial $display("match"); end endgenerate
+endmodule
+"#);
+    assert_eq!(out.trim(), "match");
+}
+
+/// A NEGATIVE signed LHS is fail-closed (loud): const_eval's i64 sign bits would
+/// corrupt the full-width masked compare, so vita rejects rather than compute an
+/// unverifiable value (iverilog computes it — a correct-or-loud over-rejection).
+#[test]
+fn wildcard_eq_negative_lhs_is_loud() {
+    let (_out, diags) = run_with_diags(
+        r#"
+module t;
+  localparam signed [3:0] P = -6;
+  localparam int A = (P ==? 4'b1x1x);
+  initial $display("%0d", A);
+endmodule
+"#,
+    );
+    assert!(
+        diags.iter().any(|d| d.starts_with("Error")),
+        "negative signed LHS wildcard fold must be loud: {diags:?}"
+    );
+}
+
+/// An UNSIZED x/z pattern (`'hx`) is fail-closed (loud): it x-FILLS to the context
+/// width, but parse_int_literal sizes it to its 32-bit self-width, so an LHS wider
+/// than 32 bits would wrongly require its high bits to be 0. Only SIZED patterns fold.
+/// (iverilog computes M=1 here — a correct-or-loud over-rejection, not silent-wrong.)
+#[test]
+fn wildcard_eq_unsized_pattern_is_loud() {
+    let (_out, diags) = run_with_diags(
+        r#"
+module t;
+  localparam logic [39:0] P = 40'hFF_0000_0000;
+  localparam int M = (P ==? 'hx);
+  initial $display("M=%0d", M);
+endmodule
+"#,
+    );
+    assert!(
+        diags.iter().any(|d| d.starts_with("Error")),
+        "unsized x/z wildcard pattern must be loud (self-width truncation): {diags:?}"
+    );
+}

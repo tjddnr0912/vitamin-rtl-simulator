@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.146 compound-const `==?`/`!=?` wildcard-literal fold (loud→supported) (2026-07-17, branch feat-const-wildeq-fold) ✅
+
+recorded §3(compound-const `==?` fold) 착수. fresh-area sweep서 나머지 no-oracle 확정(iverilog 13.0: array reduction method·`inside` operator·`case inside` 全 거부)·casez/casex robust·`inside` operator는 지원(== 시맨틱). `localparam bit M=(P ==? 4'b1x1x)`=vita E3009 "not foldable" vs iverilog folds. const_eval_in_scope WildEq collapse가 "folded const has no x/z" 전제→x/z 패턴 리터럴 RHS서 `const_eval(rhs)`=None→loud.
+
+- **룰(iverilog 13.0)**: `==?`/`!=?` 패턴(RHS) x/z=don't-care(§11.4.6). **SIZED** 패턴은 폭 위 bit=zero-extend·**UNSIZED** x/z 패턴(`'hx`)은 context-width로 x-fill.
+- **구현(IR-0, `const_eval_in_scope` Binary arm)**: WildEq/WildNe+RHS=**Sized** IntLit면 generic `const_eval(rhs)` 前 `parse_int_literal`로 (val, mask) 추출→`(a & !mask)==(pat & !mask)`(WildNe negate). fail-closed: LHS const `a>=0`·single-word·bit-63-clear·**Sized only** 아니면 None(loud). 런타임 `lower_wildcard_eq`와 동일 수식·runtime 무관.
+- **적대 2렌즈**: differential이 **자가 유발 silent-wrong 발굴**=UNSIZED x/z 패턴+LHS>32bit(`P[39:0] ==? 'hx`)서 `parse_int_literal`이 32-bit self-width로 sizing→bit[39:32]가 mask 밖=required-0→iverilog(x-fill match=1) vs vita 0. 前=loud(안전)를 fold가 silent化. **Sized-only 가드로 수정**(unsized x/z=loud). soundness(masked-compare §11.4.6·runtime 미러·guard·IR-0 CLEAN). byte-id: sized A1B0C1D0E0F1G1·40-bit sized wild·hex-xz.
+- **out-of-scope(fail-closed loud)**: unsized x/z 패턴·negative-signed LHS·non-literal RHS. **pre-existing 발굴(§2)**: x/z-fill const param LHS→0(upstream·全 const op 상속)·`coerce_i64_to_width` w==63 debug-panic·narrow-typed param from comparison=`%b` wide. format_version 21.
+
 #### 4.5.145 md-packed nested part-select WRITE `x[j][m:l]`/`arr[i][j][m:l]` (loud→supported) (2026-07-17, branch feat-mdpacked-nested-write) ✅
 
 recorded §3(§4.5.117 write 잔여) 착수. READ는 이미 element-select+packed-flatten 조합으로 정답·WRITE만 E3009 2-path 거부(bare=`nested lvalue select`·unpacked-array=`bit-select then part-select`). iverilog 지원=②.
