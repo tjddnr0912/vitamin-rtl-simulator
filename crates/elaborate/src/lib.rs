@@ -3106,6 +3106,12 @@ struct Elaborator<'s> {
     /// v7 P2-D: package name → its const symbols (params/localparams + enum
     /// labels), folded EAGERLY in declaration order at `run()` entry.
     pkg_consts: BTreeMap<String, BTreeMap<String, i64>>,
+    /// Package name → its TYPE names (every `typedef`). The parser resolves an
+    /// `import p::my_t` / `p::my_t` type at parse time (it copies the scoped type twin
+    /// to the bare name), so elaborate has nothing to BIND for a type import — this set
+    /// exists only so `apply_import_consts` can tell a legal type import from an
+    /// unknown-symbol error.
+    pkg_types: BTreeMap<String, std::collections::BTreeSet<String>>,
     /// Declared `(width, signed)` of each package PARAM const (the package twin
     /// of `param_meta`). A `pkg::x` / bare-imported read materializes at this
     /// DECLARED width (`logic [3:0] x` → 4 bits) instead of the value-inferred
@@ -3648,6 +3654,7 @@ impl<'s> Elaborator<'s> {
             local_decl_names: std::collections::BTreeSet::new(),
             scoped_block_locals: BTreeMap::new(),
             pkg_consts: BTreeMap::new(),
+            pkg_types: BTreeMap::new(),
             pkg_const_meta: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
@@ -29983,6 +29990,7 @@ impl<'s> Elaborator<'s> {
         let mut array_vals: BTreeMap<String, Vec<i64>> = BTreeMap::new();
         let mut funcs: BTreeMap<String, ast::FunctionDef> = BTreeMap::new();
         let mut tasks: BTreeMap<String, ast::TaskDef> = BTreeMap::new();
+        let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for item in &pm.body {
             match item {
                 ast::ModuleItem::Param(p) => {
@@ -30017,6 +30025,10 @@ impl<'s> Elaborator<'s> {
                     }
                 }
                 ast::ModuleItem::Typedef(td) => {
+                    // Every typedef name is a package TYPE (the parser resolves the type
+                    // itself; this only lets an `import p::<name>` be recognized as a
+                    // legal type import rather than an unknown symbol).
+                    types.insert(td.name.name.clone());
                     #[allow(irrefutable_let_patterns)]
                     if let ast::TypedefKind::Enum { base, labels } = &td.kind {
                         // Base width so an imported / `pkg::`-read label carries
@@ -30127,6 +30139,9 @@ impl<'s> Elaborator<'s> {
         }
         self.cur_prefix = saved_prefix;
         self.pkg_consts.insert(pkg.clone(), consts);
+        if !types.is_empty() {
+            self.pkg_types.insert(pkg.clone(), types);
+        }
         if !const_meta.is_empty() {
             self.pkg_const_meta.insert(pkg.clone(), const_meta);
         }
@@ -30396,12 +30411,18 @@ impl<'s> Elaborator<'s> {
                         .pkg_tasks
                         .get(pkg)
                         .is_some_and(|t| t.contains_key(&sym.name))
+                    && !self
+                        .pkg_types
+                        .get(pkg)
+                        .is_some_and(|t| t.contains(&sym.name))
                 {
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!("package `{pkg}` has no symbol `{}`", sym.name),
                     );
                 }
+                // A type import (`import p::my_t`) binds nothing in elaborate — the
+                // parser already copied the scoped type twin to the bare name.
             }
         }
     }

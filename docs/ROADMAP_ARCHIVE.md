@@ -8,6 +8,14 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.148 explicit single-symbol TYPE import (`import p::t;`) loud→supported (2026-07-17, branch feat-explicit-import-type) ✅
+
+`import p::my_t;`(단일-심볼 TYPE 임포트)=vita `error[VITA-E3009]: package `p` has no symbol `my_t`` loud(over-reject) vs iverilog 정상. wildcard `import p::*`·bare `p::my_t` read는 이미 지원 — 명시적 단일 TYPE 임포트만 누락(③ loud→supported).
+
+- **원인**: `apply_import_consts`(elaborate)의 "no symbol" E3009 가드가 consts/vars/funcs/tasks만 조회·TYPE 미조회. 타입은 파서가 parse-time에 해석(스코프 twin `p::t`→bare `t` 복사, `hdl-parser/src/lib.rs:2056-2077` 단일-임포트 arm — scalar/packed-struct·enum·unpacked-struct·union 5종 맵 全 복사)하므로 elaborate엔 BIND할 게 없으나, 임포트문 자체가 loud reject됨.
+- **fix(IR-0)**: `pkg_types: BTreeMap<String, BTreeSet<String>>`(패키지→전 typedef명) 신설·`elaborate_package`서 모든 `ast::ModuleItem::Typedef` 수집(enum 특수분기 앞에 삽입→全 kind 커버)·"no symbol" 가드에 `&& !pkg_types[pkg].contains(sym)` 추가. 타입 임포트=nothing-bind(파서가 이미 twin 복사 완료).
+- **적대 2렌즈 CONVERGE(high-confidence)**: soundness=타입 해석은 100% 파서-측·불변, fix는 elaborate 임포트문 에러 게이트만 건드림. `pkg_types`와 파서 twin 모두 실 typedef서 유래→대칭·이론적 비대칭(pkg_types엔 있으나 twin 無)도 `t x;` **parse**서 loud(silent 경로 無). differential=scalar/struct/enum/union/cross-pkg 全 iverilog 13.0 byte-일치·unknown symbol 여전히 loud(over-accept 無). regression=`package_import.rs` +3(explicit type·enum type·unknown-still-loud). IR-0(sim-ir 형상·format_version 불변)·3573 green.
+
 #### 4.5.147 width-63 param `coerce_i64_to_width` overflow-panic fix (robustness) (2026-07-17, branch feat-width63-param-panic) ✅
 
 §4.5.146 soundness 리뷰 발굴(F2). `localparam [62:0] P = …`(width 63)=vita debug-build **panic**("attempt to subtract with overflow" `lib.rs:coerce_i64_to_width`) vs iverilog 정상(`P=4611686018427387914`). vita가 합법 param에 crash(loud보다 나쁨).
