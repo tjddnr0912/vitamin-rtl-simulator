@@ -2585,11 +2585,19 @@ fn render_template(
                 // of a 64-bit "cpu0" → "cpu0    ", not the NUL→space "    cpu0"), so
                 // a default width is supplied and the stripped content used.
                 let (content, default_w) = match e {
-                    // string LITERAL: decoded text (the classic fmt-arg path).
+                    // string LITERAL (StrUtf8): decoded text (the classic fmt-arg
+                    // path). A NUMERIC const (e.g. `%s` of 16'h0041) is deliberately
+                    // NOT matched here — it falls through to the packed-value branch
+                    // below so it renders via fmt_packed_chars (NUL byte → space,
+                    // full reg width), byte-identical to the runtime-value path.
+                    // const_string would instead strip trailing NUL and emit an
+                    // embedded NUL literally (iverilog renders every 0x00 as a space).
                     Some(eid)
                         if matches!(
                             st.ir.exprs.get(eid as usize),
-                            Some(sim_ir::Expr::Const { .. })
+                            Some(sim_ir::Expr::Const { val })
+                                if st.ir.consts[*val as usize].repr
+                                    == sim_ir::ConstRepr::StrUtf8
                         ) =>
                     {
                         (arg_string(st, Some(eid)), None)

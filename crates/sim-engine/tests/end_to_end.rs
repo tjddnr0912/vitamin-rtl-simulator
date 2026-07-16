@@ -1706,6 +1706,27 @@ fn clog2_of_real_rounds_then_counts() {
     assert_eq!(out, "7 3 1 0\n2 3 4\n33\n4 5\nx\n64\nx\n");
 }
 
+// 18c. `%s` of a NUMERIC const renders every 0x00 byte as a space (iverilog rule),
+// across the full reg width and with no trailing-NUL stripping — byte-identical to
+// the runtime-value path (fmt_packed_chars). Previously a numeric const routed
+// through const_string (strip trailing NUL, emit embedded NUL literally). Explicit-
+// width `%0s`/`%Ns` strip leading NUL padding; bare `%s` pads with spaces; `%-Ns`
+// left-justifies in the reg byte width. iverilog-13.0-pinned (verified via hexdump).
+#[test]
+fn pct_s_of_numeric_const_maps_nul_to_space() {
+    let out = run_sv(
+        "module t; initial begin \
+         $write(\"[%s][%s][%s][%s][%s][%s][%s]\\n\", \
+           16'h0041, 16'h4100, 24'h004241, 24'h410042, 8'h00, 32'h00004241, 16'h4142); \
+         $display(\"|%0s|%5s|%-5s|\", 16'h0041, 16'h0041, 16'h0041); \
+         end endmodule",
+    );
+    // 0x00→space, full width: 16'h0041→" A", 16'h4100→"A ", 24'h004241→" BA",
+    // 24'h410042→"A B", 8'h00→" ", 32'h00004241→"  BA", 16'h4142→"AB" (no NUL).
+    // %0s strips leading NUL→"A"; %5s→"    A"; %-5s→"A    ".
+    assert_eq!(out, "[ A][A ][ BA][A B][ ][  BA][AB]\n|A|    A|A    |\n");
+}
+
 // 19. [P4 · backend seam] Backend selection rides out-of-band on SimOpts. The
 // Bytecode backend currently falls back to the interpreter for every body
 // (Stage B: no VM yet), so it is byte-identical to Interpreter — stdout AND the
