@@ -284,3 +284,23 @@ endmodule
         "unsized x/z wildcard pattern must be loud (self-width truncation): {diags:?}"
     );
 }
+
+/// §4.5.147 — a width-63 param (`[62:0]`) folds without panicking. `coerce_i64_to_width`
+/// computed its low-bit mask as `(1i64 << 63) - 1` (= `i64::MIN - 1`), which panics on
+/// subtract-overflow in a debug build; the u64 mask + wrapping sign-extend fold it
+/// exactly (unsigned max = 2^63-1, signed negatives sign-extend). iverilog-13.0-pinned.
+#[test]
+fn width_63_param_folds_without_panic() {
+    let out = run(r#"
+module t;
+  localparam [62:0] U = 63'h4000_0000_0000_000A;
+  localparam [62:0] M = 63'h7FFF_FFFF_FFFF_FFFF;
+  localparam signed [62:0] S = -63'sd10;
+  initial $display("U=%0d M=%0d S=%0d", U, M, S);
+endmodule
+"#);
+    assert_eq!(
+        out.trim(),
+        "U=4611686018427387914 M=9223372036854775807 S=-10"
+    );
+}

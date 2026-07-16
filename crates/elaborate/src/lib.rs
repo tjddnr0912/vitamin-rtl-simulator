@@ -32386,10 +32386,15 @@ fn coerce_i64_to_width(v: i64, w: u32, signed: bool) -> i64 {
     if w == 0 || w >= 64 {
         return v;
     }
-    let mask = (1i64 << w) - 1;
+    // Compute the low-`w`-bit mask in u64: at w == 63 the i64 form `(1i64 << 63) - 1`
+    // is `i64::MIN - 1`, which panics on subtract-overflow in a debug build (release
+    // wraps to the same i64::MAX). u64 has no such edge for w ≤ 63.
+    let mask = ((1u64 << w) - 1) as i64;
     let trunc = v & mask;
     if signed && (trunc & (1i64 << (w - 1))) != 0 {
-        trunc - (1i64 << w) // sign-extend
+        // sign-extend: trunc − 2^w. `1i64 << w` is `i64::MIN` at w == 63, so subtract
+        // with wrapping — the two's-complement result is exact for any w in 1..=63.
+        trunc.wrapping_sub(1i64.wrapping_shl(w))
     } else {
         trunc
     }

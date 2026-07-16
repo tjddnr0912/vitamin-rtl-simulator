@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.147 width-63 param `coerce_i64_to_width` overflow-panic fix (robustness) (2026-07-17, branch feat-width63-param-panic) ✅
+
+§4.5.146 soundness 리뷰 발굴(F2). `localparam [62:0] P = …`(width 63)=vita debug-build **panic**("attempt to subtract with overflow" `lib.rs:coerce_i64_to_width`) vs iverilog 정상(`P=4611686018427387914`). vita가 합법 param에 crash(loud보다 나쁨).
+
+- **원인**: `let mask = (1i64 << w) - 1` — w==63서 `1i64 << 63`=`i64::MIN`·`- 1`=subtract-overflow panic(release=wrap→우연히 correct). sign-extend `trunc - (1i64 << w)`도 w==63서 overflow. `w==0||w>=64` early-return이 w==63 미포함.
+- **fix(IR-0)**: mask=`((1u64 << w) - 1) as i64`(u64는 w≤63 edge 無·w=63→i64::MAX)·sign-extend=`trunc.wrapping_sub(1i64.wrapping_shl(w))`(2's-comp 정확). w∈1..=62=byte-identical(u64 mask≡i64 mask·wrapping_sub≡sub)·w==63만 panic→정확값.
+- **ALL-sites family probe**: 형제 `(1i64 << X) - 1` 5곳(RangeEnd::TypeExtreme·range bound) 全 이미 guarded(`w.min(63)`/`if width>=63 return`)·`coerce_i64_to_width`만 미가드. 
+- **적대 differential**: w63 값 sweep(0·2^62·2^63-1·signed ±·bit62-set)+adjacent width(w62/w32/w8/w1) regression+array-elem/arith/array-bound 컨텍스트 live iverilog 일치·panic 無. byte-id: unsigned max=2^63-1·signed -10/-1.
+- **out-of-scope**: `[63:0]` full 2^64-1 param=const_eval i64 초과→loud(pre-existing·별개). format_version 21.
+
 #### 4.5.146 compound-const `==?`/`!=?` wildcard-literal fold (loud→supported) (2026-07-17, branch feat-const-wildeq-fold) ✅
 
 recorded §3(compound-const `==?` fold) 착수. fresh-area sweep서 나머지 no-oracle 확정(iverilog 13.0: array reduction method·`inside` operator·`case inside` 全 거부)·casez/casex robust·`inside` operator는 지원(== 시맨틱). `localparam bit M=(P ==? 4'b1x1x)`=vita E3009 "not foldable" vs iverilog folds. const_eval_in_scope WildEq collapse가 "folded const has no x/z" 전제→x/z 패턴 리터럴 RHS서 `const_eval(rhs)`=None→loud.

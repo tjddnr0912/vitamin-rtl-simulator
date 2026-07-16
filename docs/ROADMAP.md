@@ -43,6 +43,7 @@
 - inline 함수 잔여 4종: global-reader widening 미수혜 · size-cast `16'(a*b)` context · signed `>>>` unsigned-context · inline-call return 미truncate. §4.5.80 잔여.
 - hier `@(*)` sensitivity · hier md-packed-nested part-select. §4.5.115/103 잔여.
 - narrow-typed(`bit`/`logic`) param init from a 32-bit-self-width expr(comparison·산술)=선언폭 미적용→32-bit width→`%b` wide(value 정확·`%0d` 정상). pre-existing(plain `==`도)·§4.5.146 발굴. const_eval i64→param에 declared-narrow truncate 필요.
+- part-select-in-range-bound const-fold=폭 1(`logic [P[5:0]-1:0] x`=vita width 1 vs iverilog 63). part-select range 폴딩 경로(`coerce_i64_to_width` 무관·plain 32-bit param도 재현)·§4.5.147 발굴. silent-wrong.
 
 **문서화된 divergence (수정 비대상·핀됨):**
 
@@ -69,7 +70,7 @@
 - SYS-READ hier-element dest · hier-write sentinel panic→loud · generate-내 `import` · package 자기-func init(㉽) · explicit `import p::t`(TYPE).
 - `$fmonitor`/`$fstrobe`(파일 strobe/monitor) — 현재 W3056 skip=**파일출력 silent drop**(non-silent·warned). 지원=**format bump 필요**(`SysTaskId` 변종 ① or 직렬화 사이드카 ②·staged 파리티): `FmtCapture`에 `fd:Option<u32>` 추가(engine-local)+strobe drain을 `file_write` 라우팅·전용 슬라이스. STDIN read(결정성 설계 필요).
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).
-- `case (x) inside {…}`(§12.5.4 wildcard case)=vita E2002 parse-reject(loud)·③ 후보(no-oracle: iverilog 13.0 `case inside`/`inside` op/array reduction method 全 거부→hand-IEEE `==?`+내부차분). `inside` operator는 지원(== 시맨틱·§11.4.13).
+- `case (x) inside {…}`(§12.5.4 wildcard case)=vita E2002 parse-reject(loud)·③ 후보(no-oracle: iverilog 13.0 `case inside`/`inside` op/array reduction method 全 거부→hand-IEEE `==?`+내부차분). `inside` operator는 지원(== 시맨틱·§11.4.13). based-literal 내 whitespace(`64'sh FFFF`)=vita lexer reject(loud) vs iverilog 허용(minor·§4.5.147 발굴).
 
 **외부 리포트 잔여 (§6-2 → ARCHIVE · 전부 no-oracle 또는 docs):**
 
@@ -86,7 +87,6 @@
 - **real const-fold 전면 미지원**(§4.5.141 발굴): `localparam/parameter real` = `2.0+3.0`·`*`·`/`·`-`·`**` 全 E3009 "not foldable"(iverilog=folds). `localparam=$clog2(real-lit)`도 동근(const_eval_in_scope=i64-only·real arg→None loud·§4.5.143 런타임은 해결). 런타임 real 산술은 정상(§4.5.141서 `**`도 지원)·const 경로만 uniformly loud. const_eval_in_scope에 real f64 arithmetic 추가 필요(broad·non-silent).
 - **X-bearing integral→real 변환 divergence**(§4.5.141 발굴): vita=whole X값→`0.0`(`real_arg`=`to_i128_signed().unwrap_or(0)`) vs iverilog=per-bit X→0(예 `4'bxx01`→1). `$itor`/`$sqrt`/`$pow`/real-`**` 공통·pre-existing. non-silent 아니지만 divergent(impl-defined X→real).
 - **x/z-fill const param LHS→0**(§4.5.146 발굴): `localparam logic [W] P = 'x`=const_eval가 `fill_to_i64`/`fill_literal_const`로 0 bind(x 소실)→**全 const 연산자 상속**(`P==0`·`P+1`·`P ==? pat` 4-state 결과 divergent). upstream param binding 근원·contrived(all-x const 선언)·broad. §4.5.146 `==?` fold는 sized 패턴만이라 무영향(a=int).
-- **`coerce_i64_to_width` w==63 debug-panic**(§4.5.146 발굴): `(1i64 << 63) - 1` overflow(param bind `[62:0]`서 발화·`==?` 무관). release=wrap(우연히 correct)·debug=panic. w<63 정상·w≥64 early-return. 1-line fix(w==63→`i64::MAX` mask).
 
 ## 4. SVA / 검증 honest-loud 잔여
 
