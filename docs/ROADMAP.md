@@ -33,7 +33,6 @@
 - mixed-sign enum 산술 · `enum bit` 2-state-base X-leak(일반 enum-base-kind 갭). §4.5.109/110.
 - `$signed`-in-wider-sum sign-loss · size-cast fn-call operand sign-loss `4'(f(15))`. §4.5.111/112.
 - packed bit/part-select replication count · hierarchical `{s.CNT[0]{v}}` count silent-0. §4.5.109/121 잔여.
-- array-of-packed residual sub-select `tm[i][j][m:l]` · residual-2D. §4.5.117 잔여.
 - inline-local/generate/task-local param sub-select(`param_range`=module-scope only) · net-vs-param VALUE precedence · gen-scope param value truncation. §4.5.118 잔여.
 - 2D-packed iface member element/outer part-select · scalar iface member over-acceptance. §4.5.116 잔여.
 - non-uniform `$dist_*` libm draw 발산 · chi_square/t seed LCG. §4.5.126.
@@ -60,7 +59,7 @@
 
 - control-flow pkg fn(frame이 처리 가능→relax) · pkg `function string` · pkg TASK statement call. §4.5.111 잔여.
 - array formal 재전달(nested/recursion) · non-zero-LSB 원소 · 2-D/non-zero-base/signed/task array formal. §4.5.110 slice 밖.
-- 음수-LSB 멤버 sub-select 정식 지원(§4.5.114) · md-packed element WRITE nested-lval(§4.5.117).
+- 음수-LSB 멤버 sub-select 정식 지원(§4.5.114) · md-packed element WRITE nested part-select `x[j][m:l]`/`arr[i][j][m:l]`(E3009 2-path: bare=nested-lval·unpacked=bit-then-part·read 全 해결·write는 lval_part_base가 unpacked-dim만 flatten·§4.5.117).
 - method/ctor NAME-default class-scope 해석(§4.5.90) · G4 string-return frame call(§4.5.129).
 
 **소형 큐:**
