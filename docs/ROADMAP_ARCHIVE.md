@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.139 VCD VALUE 검증(정확)+회귀 가드·fresh-area sweep (2026-07-16, branch feat-vcd-value-verify) ✅
+
+§4.5.138($var range) 후속 VCD probe iteration. **VCD value-change 덤프가 정확함을 검증**: left-extend + last-write-wins decoder로 vita decoded waveform이 iverilog 13.0과 일치(x/z·real·wide·`$readmemh`/`$readmemb`). 발굴한 vita↔iverilog VCD 차이는 **전부 encoding/cosmetic·decode 동일→silent-wrong 아님**:
+- value 미압축(vita `b10xz01xz`/`bzzzz` full vs iverilog leading-redundant strip `bx`/`bz`/`b0`)·decode 동일·golden churn 큼→defer.
+- t=0 초기덤프 구조(vita `$dumpvars`에 pre-assign X + `#0` change vs iverilog settled)·final 동일.
+- var-type keyword(logic 절차구동=vita `wire` vs iverilog `reg`·usage 의존 non-trivial·`int`=`reg` vs `integer`)·real size `64`vs`1`. 전부 ROADMAP §3.
+- 함께 probe·iverilog 일치(코어 견고): format spec(%e/%g/%f/%o/%h/%d/%b·%c high-byte=기존 DEEP-defer)·casez/casex·reduction on x/z·`$readmemh`/`$readmemb`(comment·@addr·range·multi-value·X-fill).
+- ship: 회귀 가드 `vcd_dumps_xz_and_real_values`(x/z·real value-line 핀·향후 compression 채택=의식적 golden update). 3556 green·clippy/fmt clean·format 21 불변. **코드 무변**(검증+가드+기록 iteration·§1 valid).
+
 #### 4.5.138 VCD `$var` `[msb:lsb]` bit-range reference (2026-07-16, branch feat-vcd-varrange) ✅
 
 fresh-area VCD probe(NEXT §1)로 발굴한 silent-wrong: vita가 벡터 `$var`에 bit-range 미방출(`$var reg 4 ! cnt $end` vs iverilog `cnt [3:0]`). IEEE 1364-2005 §18.2.3.2 `<reference> ::= id [ [msb:lsb] ]` — range 없으면 뷰어가 ascending `[0:3]`↔descending `[3:0]`을 구분 못하고(`reg 4` 동일) non-zero-base `[7:4]` base 상실 → **비트 라벨 오표시(silent)**. 값은 정확·메타데이터만 결손.
