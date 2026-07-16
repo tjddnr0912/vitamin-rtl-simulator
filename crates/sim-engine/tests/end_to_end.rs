@@ -563,6 +563,35 @@ fn vcd_var_reference_carries_declared_range() {
 }
 
 #[test]
+fn vcd_dumps_xz_and_real_values() {
+    // VCD VALUE dumps for 4-state (x/z) and real signals. The decoded waveform
+    // matches iverilog 13.0 (verified by a left-extend + last-write-wins decoder:
+    // vita writes the full-width form `b10xz01xz` / `bzzzz` where iverilog uses
+    // the leading-redundant-strip form `bx`/`bz`, but both decode identically).
+    // This pins the value-line content so a future value-formatting change (e.g.
+    // adding VCD compression) is a conscious, reviewed golden update.
+    let path = tmp_vcd("xzreal");
+    let src = "module m; reg [7:0] v; real r; reg [3:0] z; \
+               initial begin $dumpfile(\"x\"); $dumpvars(0, m); \
+                 v = 8'b10xz_01xz; r = -2.5; z = 4'bzzzz; #1 $finish; end endmodule";
+    let (ir, names) = build_named(src);
+    let mut opts = opts_with_vcd(&path);
+    opts.net_names = names;
+    let _ = simulate_capture(&ir, opts);
+    let vcd = std::fs::read_to_string(&path).expect("vcd");
+    assert!(
+        vcd.contains("b10xz01xz "),
+        "mixed 4-state value dumped:\n{vcd}"
+    );
+    assert!(vcd.contains("bzzzz "), "all-z value dumped:\n{vcd}");
+    assert!(
+        vcd.contains("r-2.5 "),
+        "real value dumped in r-format:\n{vcd}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn vcd_clock_toggles_recorded() {
     let path = tmp_vcd("clk");
     let _ = std::fs::remove_file(&path);
