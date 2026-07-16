@@ -40,7 +40,7 @@
 - string-array-elem 전원 concat `{s[0],"-",s[1]}` truncate — native-eval static string-width. §4.5.134 발굴.
 - `$monitor`에 직접 `$random`/`$urandom` 인자=매 스텝 spurious re-fire(no-oracle: iverilog는 non-simple `$monitor` 인자 자체 거부 "SORRY"·시간함수 3종만 예외). 값 렌더는 정상. §4.5.135 발굴.
 - leading-NUL frame string · frame-body 内 SYS-READ(assignment form도). §C/§4.5.122/124. (runtime `$clog2(real)` f64 misread = §4.5.143서 해결)
-- 숫자 literal `%s` NUL-byte(§4.5.119). `%d`-of-real **width** 해결(§4.5.142); 잔여=`%d`/`%0d`-of-**non-finite** real(inf/nan)=vita `i64::MAX`(`fmt_dec` 포화) vs iverilog `inf`/`nan`(pre-existing·value edge).
+- format 출력 잔여(§4.5.144 후·전부 pre-existing): real-const `%s`=vita packed f64 bytes vs iverilog warn+`<%s>` · string-LITERAL embedded-NUL(const_string NUL-리터럴+lexer octal-escape `\000`) · render_template malformed spec(missing-arg·`%`+non-spec char)=vita `x`/literal vs iverilog `<…>`+warn(literal+var 공통) · `%d`/`%0d`-of-non-finite real(inf/nan)=vita `i64::MAX` vs `inf`/`nan`. (숫자-const `%s` NUL→space·`%d`-of-real width=§4.5.144/142 해결)
 - inline 함수 잔여 4종: global-reader widening 미수혜 · size-cast `16'(a*b)` context · signed `>>>` unsigned-context · inline-call return 미truncate. §4.5.80 잔여.
 - hier `@(*)` sensitivity · hier md-packed-nested part-select. §4.5.115/103 잔여.
 

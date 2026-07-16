@@ -1727,6 +1727,25 @@ fn pct_s_of_numeric_const_maps_nul_to_space() {
     assert_eq!(out, "[ A][A ][ BA][A B][ ][  BA][AB]\n|A|    A|A    |\n");
 }
 
+// 18d. A bare string-VARIABLE argument (with no leading format string) is itself a
+// format template (IEEE 1364-2005 §17.1): its `%` specs consume the following args,
+// exactly like a string literal. Previously a runtime `string` printed as a
+// packed-ASCII decimal (e.g. "hello" → 448378203247). iverilog-13.0-pinned.
+#[test]
+fn bare_string_var_is_a_format_template() {
+    let out = run_sv(
+        "module t; string s; string f; initial begin \
+         s = \"hello\"; $write(\"[\"); $write(s); $write(\"]\\n\"); \
+         f = \"x=%0d b=%0d\"; $display(f, 7, 9); \
+         f = \"50%%done\"; $display(f); \
+         s = \"\"; $write(\"E[\"); $write(s); $write(\"]\\n\"); \
+         end endmodule",
+    );
+    // $write(s) prints text; a string var with % specs consumes following args;
+    // %% → literal %; an empty string var prints nothing.
+    assert_eq!(out, "[hello]\nx=7 b=9\n50%done\nE[]\n");
+}
+
 // 19. [P4 · backend seam] Backend selection rides out-of-band on SimOpts. The
 // Bytecode backend currently falls back to the interpreter for every body
 // (Stage B: no VM yet), so it is byte-identical to Interpreter — stdout AND the

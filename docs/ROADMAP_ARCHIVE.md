@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.144 `%s` 출력 문자열 fidelity: 숫자-const NUL→space + bare string-var template (2026-07-17, branch feat-pct-s-nul) ✅
+
+recorded §2(§4.5.119) 재그라운딩 → format 엔진 문자열 렌더 silent-wrong 2건(별도 커밋). **hexdump 필수**(NUL/space=grep/터미널이 mangle → 최초 "vita empty" 오진단은 harness 아티팩트·실제는 0x00 리터럴 방출).
+
+- **A. `%s` of 숫자 const = NUL byte 오방출(silent-wrong)**: `$write("%s",16'h0041)`=vita `[00 41]`(NUL 리터럴) vs iverilog `[20 41]`(space)·`8'h00`=vita 빈문자열(trailing-NUL strip) vs iverilog `" "`. iverilog 룰=**모든 0x00→space·full reg width·no strip**. 원인=숫자 const literal이 `render_template` `%s` const-arm(`Expr::Const`)서 `const_string`(trailing strip+NUL 리터럴) 경유. **런타임 var 경로(`fmt_packed_chars`)는 이미 정확**(baseline byte-id). fix=const-arm 가드를 `ConstRepr::StrUtf8`로 좁힘→숫자 const fall-through=런타임과 동일 `fmt_packed_chars`(0x00→space·x/z mask→space). byte-id: NUL 각 위치·`%0s`/`%5s`/`%-5s`·80-bit wide·x/z·concat/repl/enum/param·全 sink. IR-0.
+- **B. bare string VAR arg = 숫자 렌더(silent-wrong)**: `string s="hello"; $write(s)`=vita `448378203247`(byte를 %d) vs iverilog `hello`. iverilog 룰(IEEE 1364 §17.1)=**string-typed arg(literal OR var)=format template**(`%`spec가 후속 arg 소비·multi-arg·`%%`→lit·empty→무). 원인=`format_args_str` bare-arg 루프가 string LITERAL(`str_const_of_expr`)만 template 처리·string VAR은 `push_default_radix`(%d). fix=eval후 `is_str`면 `to_str_bytes`→`render_template`(§2602 is_str 경로 미러). 全 sink 공유.
+- **적대 4-agent(A·B 각 2렌즈, 全 CLEAN 수렴)**: A-differential(exotic const 60+: real/enum/struct/concat/wide/param·trailing-NUL이 fix 증명)·A-soundness(ConstRepr 3변종·StrUtf8 유일 discriminator·전 sink·bounds-safe). B-differential(is_str source 全 match·**non-string wrongly-is_str 트랩 부재**=enum/bit-select/struct/`.len()` 全 숫자 유지·is_str는 `from_str_bytes` 단일소스)·soundness self(sink 전수·is_str 1곳). teeth=const≡runtime var byte-id.
+- **out-of-scope(전부 pre-existing·§2 기록)**: real-const `%s`(vita packed f64 vs iverilog warn+`<%s>`)·string-LITERAL embedded-NUL(const_string NUL-리터럴+lexer octal-escape)·render_template malformed-spec(missing-arg·`%`+non-spec=vita `x`/lit vs iverilog `<…>`+warn·literal+var 공통)·high-byte 128-255 UTF-8 remangle(A/B 모두 런타임과 동일 공유·미변경). 3561 green·format_version 21.
+
 #### 4.5.143 runtime `$clog2(real)` round-then-count (silent-63 → correct) (2026-07-17, branch feat-clog2-real) ✅
 
 recorded §2(§4.5.122/124) 재그라운딩. `real r=100.0; $clog2(r)`=vita **63**(IEEE-754 비트패턴을 정수로 오독) vs iverilog **7**. 정수 `$clog2` 정상.

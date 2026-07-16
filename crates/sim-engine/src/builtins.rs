@@ -2291,7 +2291,18 @@ pub(crate) fn format_args_str(
         if let Some(text) = str_const_of_expr(st, e) {
             render_template(st, &text, args, &mut argi, &mut out);
         } else {
-            push_default_radix(&st.eval_expr(e), &mut out, radix);
+            let v = st.eval_expr(e);
+            if v.is_str {
+                // A string-typed VALUE (a `string` variable, not just a literal)
+                // is itself a format segment (IEEE 1364-2005 §17.1): its `%` specs
+                // consume the args that follow, exactly like a string literal.
+                // Previously a runtime string fell through to push_default_radix
+                // and printed as a packed-ASCII decimal (silently wrong).
+                let text = String::from_utf8_lossy(&v.to_str_bytes()).into_owned();
+                render_template(st, &text, args, &mut argi, &mut out);
+            } else {
+                push_default_radix(&v, &mut out, radix);
+            }
         }
     }
     out
