@@ -2587,12 +2587,32 @@ fn continuous_assign_delay_propagates_after_d() {
                  $finish; end endmodule";
     let ir = build(src);
     let (_res, out) = simulate_capture(&ir, SimOpts::default());
-    // y reads high-Z until the delayed driver propagates at t=5, then 7; a=3 at
-    // t=6 → y=3 at t=11 (seen at t=12). `%0d` of an all-Z field prints `z` per
-    // §21.2.1.2. (vita reads the not-yet-propagated net as Z [LRM unconnected-net];
-    // iverilog reads X here — impl-defined for the pre-propagation window. The
-    // delay-propagation behavior under test, t6=7/t12=3, is identical.)
-    assert_eq!(out, "t2 y=z\nt6 y=7\nt12 y=3\n");
+    // y reads X (driven-unknown) until the delayed driver propagates at t=5, then
+    // 7; a=3 at t=6 → y=3 at t=11 (seen at t=12). `%0d` of an all-X field prints
+    // `x` per §21.2.1.2. A continuous-assign driver (even a delayed one) drives
+    // its net from t=0, so before its first output the net is X, NOT the
+    // unconnected-net Z — iverilog-pinned (the driver's output register inits to
+    // X; the delay applies to transitions). This previously read Z (the net was
+    // left at its undriven wire default until the delayed write landed).
+    assert_eq!(out, "t2 y=x\nt6 y=7\nt12 y=3\n");
+}
+
+#[test]
+fn delayed_driver_initial_x_propagates_before_first_output() {
+    // A DELAYED gate's output holds X (driven-unknown) during [0, d), and that X
+    // must PROPAGATE through a downstream (undelayed) cont-assign — the fix drives
+    // the initial X inside the settle fixpoint, so `d = g` sees g==X (not the
+    // stale Z default). `and #4 (g,a,1)` with a=1 ⇒ g=X until t=4 then 1; d
+    // follows g. iverilog-pinned: `t2 g=x d=x`, `t6 g=1 d=1`.
+    let src = "module t; reg a; wire g; wire d; \
+               and #4 (g, a, 1'b1); assign d = g; \
+               initial begin a = 1; \
+                 #2 $display(\"t2 g=%b d=%b\", g, d); \
+                 #4 $display(\"t6 g=%b d=%b\", g, d); \
+                 $finish; end endmodule";
+    let ir = build(src);
+    let (_res, out) = simulate_capture(&ir, SimOpts::default());
+    assert_eq!(out, "t2 g=x d=x\nt6 g=1 d=1\n");
 }
 
 // ── bare @(sig) any-change wait blocks until the NEXT change after it arms

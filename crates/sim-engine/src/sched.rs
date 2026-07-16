@@ -564,6 +564,16 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// `md_nets` group, so the per-driver individual write in `settle_cont_assigns`
     /// is SKIPPED (the net is written once by the resolution instead).
     ca_md: Vec<bool>,
+    /// Per-cont-assign flag: a DELAYED driver that is the SOLE cont-assign driver
+    /// of every net its lhs touches. Only such a driver gets the initial-X drive
+    /// during `[0, d)` (its output register holds x until the first delayed write
+    /// lands). A delayed driver sharing a net with ANY other cont-assign is
+    /// excluded — the every-delta X-drive would otherwise fight a concurrent
+    /// undelayed driver and spin the delta budget (`ca_md` does NOT catch this:
+    /// a delayed ci is never a `ca_md` member, and a dynamic/array-element overlap
+    /// is a deliberate E3001 blind spot). Non-sole delayed nets keep the pre-fix
+    /// undriven-z during the window (safe: byte-identical to before this fix).
+    delayed_sole: Vec<bool>,
     /// Pending inertial-delay cont-assign writes, keyed by absolute apply tick.
     delayed_ca: BTreeMap<u64, Vec<DelayedWrite>>,
     /// Transport NBAs (`q <= #d v`, v5 increment A): updates due at a FUTURE
@@ -673,6 +683,34 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 md_nets.push((net, cis, kind));
             }
         }
+        // Total cont-assign drivers per base net (ANY delay / shape — one count
+        // per distinct net a cont-assign's lhs touches). A delayed driver only
+        // earns the initial-X drive when it is the SOLE driver of every net it
+        // touches; else the every-delta X-drive could fight a concurrent driver.
+        let mut net_drivers: std::collections::BTreeMap<u32, u32> =
+            std::collections::BTreeMap::new();
+        for ca in &st.ir.cont_assigns {
+            let mut nets_seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+            for c in &ca.lhs.chunks {
+                nets_seen.insert(c.net);
+            }
+            for net in nets_seen {
+                *net_drivers.entry(net).or_default() += 1;
+            }
+        }
+        let delayed_sole: Vec<bool> = st
+            .ir
+            .cont_assigns
+            .iter()
+            .map(|ca| {
+                ca.delay.is_some()
+                    && ca
+                        .lhs
+                        .chunks
+                        .iter()
+                        .all(|c| net_drivers.get(&c.net) == Some(&1))
+            })
+            .collect();
         Scheduler {
             st,
             cur: SlotQueues::default(),
@@ -694,6 +732,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             ca_gen: vec![0; nca],
             md_nets,
             ca_md,
+            delayed_sole,
             delayed_ca: BTreeMap::new(),
             delayed_nba: BTreeMap::new(),
             delta_count: 0,
@@ -731,6 +770,23 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             let mut changed = false;
             for ci in 0..self.st.ir.cont_assigns.len() {
                 if self.st.ir.cont_assigns[ci].delay.is_some() {
+                    // A delayed driver's output register holds x until its FIRST
+                    // delayed write lands — iverilog-pinned: `assign #3 o = a&b`
+                    // and `and #3 (o,a,b)` read `o == x` (NOT the undriven-z net
+                    // default) during [0, d). Drive that initial x INSIDE the
+                    // fixpoint (not just below) so it propagates to downstream
+                    // cont-assigns; the computed value is scheduled at now+d below.
+                    // Skipped once the first write has landed (`last_ca_drv` Some),
+                    // and unless this delayed driver is the SOLE driver of its net
+                    // (`delayed_sole`) — a shared net's every-delta x-drive would
+                    // oscillate against the concurrent driver (see the field doc).
+                    if self.last_ca_drv[ci].is_none() && self.delayed_sole[ci] {
+                        let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                        let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
+                        let w = self.eval_for_lvalue(&lhs, ca_rhs).width;
+                        let offs = self.resolve_lvalue_offsets(&lhs);
+                        changed |= self.st.write_lvalue(&lhs, Value::xs(w, false), &offs);
+                    }
                     continue; // a delayed `assign #d` is scheduled below, not now
                 }
                 if self.ca_md[ci] {
