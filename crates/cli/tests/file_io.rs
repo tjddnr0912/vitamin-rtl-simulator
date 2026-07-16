@@ -213,3 +213,42 @@ fn readable_fd_open_close_cycle_stays_correct() {
     assert_eq!(code, Some(0), "stderr:\n{err}");
     assert!(out.contains("ok"), "got:\n{out}");
 }
+
+#[test]
+fn fflush_is_an_accepted_noop_no_warning() {
+    // §21.3.5 $fflush — vita holds files as raw UNBUFFERED std::fs::File and
+    // captures stdout deterministically, so there is nothing to flush: it is a
+    // provably-correct no-op. It must be ACCEPTED silently (no "unsupported
+    // system task `$fflush` skipped" warning) to match iverilog, which prints
+    // no diagnostic. Every form — bare, (), (fd), (0)=flush-all — is a no-op.
+    // The written file content is unaffected, and a same-sim reopen-read sees
+    // every prior write WITHOUT closing the write fd (the strongest no-op proof:
+    // unbuffered writes are already visible, so dropping $fflush loses nothing).
+    let (out, err, code, d) = run_in_dir(
+        "module top;\n\
+         integer fd, rd; reg [8*6:1] line;\n\
+         initial begin\n\
+           $display(\"a\"); $fflush; $display(\"b\"); $fflush();\n\
+           fd = $fopen(\"ff.txt\", \"w\");\n\
+           $fwrite(fd, \"data12\"); $fflush(fd); $fflush(0);\n\
+           rd = $fopen(\"ff.txt\", \"r\"); void'($fgets(line, rd));\n\
+           $display(\"rb=[%0s]\", line);\n\
+           $fclose(fd); $fclose(rd); $display(\"c\");\n\
+           $finish;\n\
+         end\n\
+         endmodule\n",
+    );
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(
+        !err.contains("$fflush"),
+        "$fflush must NOT warn 'unsupported system task skipped':\n{err}"
+    );
+    assert!(out.contains("a\nb\n"), "display order intact:\n{out}");
+    assert!(
+        out.contains("rb=[data12]"),
+        "read-back after $fflush:\n{out}"
+    );
+    assert!(out.contains("\nc\n"), "run completes:\n{out}");
+    let ff = std::fs::read_to_string(d.join("ff.txt")).expect("ff.txt written");
+    assert_eq!(ff, "data12", "file content unaffected by $fflush:\n{ff:?}");
+}

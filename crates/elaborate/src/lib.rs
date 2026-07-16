@@ -31763,6 +31763,20 @@ impl<'s> Elaborator<'s> {
         if let Some(sev) = map_severity(&name.name) {
             return Some(self.lower_severity_task(sev, args));
         }
+        // §21.3.5 `$fflush[(fd|mcd)]` — flush a stdio buffer. vita holds open
+        // files as raw UNBUFFERED `std::fs::File`s (each `$fwrite` `write_all`s
+        // straight to the OS) and captures `$display`/STDOUT through a
+        // deterministic sink, so there is NOTHING to flush: `$fflush` is a
+        // provably-correct no-op, and a same-sim reopen-read already sees every
+        // prior write. iverilog prints no diagnostic for it either, so accept-
+        // and-drop SILENTLY (no Stmt, no warning) — matching iverilog's
+        // observable behaviour — rather than the misleading "unsupported system
+        // task skipped" the map_systask fallback would emit. (If vita ever adds
+        // userspace file buffering, $fflush must become a real flush — see the
+        // ROADMAP §3 `$fstrobe`/`$fmonitor` note, which shares the file path.)
+        if name.name == "$fflush" {
+            return None;
+        }
         let which = match map_systask(&name.name) {
             Some(w) => w,
             None => {
