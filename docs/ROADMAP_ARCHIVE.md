@@ -8,6 +8,14 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.140 지연 게이트/cont-assign 출력=초기 X (Z 아님) (2026-07-16, branch feat-delayed-driver-init-x) ✅
+
+fresh-area probe(gate-primitive)로 발굴한 silent-wrong: **지연** 게이트/연속대입(`and #3(o,a,b)`·`assign #3 o=a&b`) 출력 net이 첫 지연출력 landing 전 `[0,d)` 창에서 **undriven-Z**(net default)로 읽힘 — iverilog=**X**(driven-unknown). 드라이버는 t=0부터 연결·출력 레지스터는 delay 경과까지 X 유지=구동중이지 floating 아님→Z 오류. 무지연 드라이버는 이미 정확(fixpoint가 t=0에 구동)·지연 경로만 Z.
+
+- **fix**(`sched.rs settle_cont_assigns`): zero-delay settle **fixpoint 내부**서, 첫 출력 미landing(`last_ca_drv` None)·**net 단독 드라이버**(`delayed_sole`)인 지연 CA가 all-X 구동. fixpoint **내부** 구동이라야 downstream 무지연 CA로 X 전파(검증 `and #4(g,a,1);assign d=g`→`d==x` on [0,4)). 지연 계산값은 now+d 스케줄 불변·landing 후(`last_ca_drv` Some) X-drive 영구 skip(None→Some 단방향).
+- **적대 soundness가 실회귀 발굴→수정**: 처음 `!ca_md[ci]` 가드는 **지연 드라이버에 vacuous**(`ca_md` 멤버십=`delay.is_none()` 필요)·E3001은 dynamic/array-elem select **blind spot**→지연 whole + 무지연 `assign y[i]=b` 겹침 시 X-drive가 매 delta 충돌→1M-delta spin+가짜 "oscillation" fatal(내가 낸 회귀). **`delayed_sole`**(per-net 드라이버 카운트, net 공유 시 pre-fix Z 유지=byte-id)로 robust 수정. differential=~20 variant(width·expr·gate·tristate Z-out·rise/fall·inertial supersede·partial-x·전파) 全 iverilog 일치·negative control 불변.
+- 교훈: **가드가 맞아 보여도 대상 subset(지연)에 실제 적용되는지 검증**(vacuous guard)·기존 "보호"(E3001)도 blind spot 가능→robust는 per-net 카운트. IR-0·format 불변. 기존 테스트 1건(Z를 "impl-defined"로 핀했던 것) X로 정정+회귀 1. 3557 green.
+
 #### 4.5.139 VCD VALUE 검증(정확)+회귀 가드·fresh-area sweep (2026-07-16, branch feat-vcd-value-verify) ✅
 
 §4.5.138($var range) 후속 VCD probe iteration. **VCD value-change 덤프가 정확함을 검증**: left-extend + last-write-wins decoder로 vita decoded waveform이 iverilog 13.0과 일치(x/z·real·wide·`$readmemh`/`$readmemb`). 발굴한 vita↔iverilog VCD 차이는 **전부 encoding/cosmetic·decode 동일→silent-wrong 아님**:
