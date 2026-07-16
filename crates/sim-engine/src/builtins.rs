@@ -9,7 +9,7 @@ use vcd_writer::{IdCode, ScopeType};
 
 use crate::eval::NetReader;
 use crate::sched::Scheduler;
-use crate::state::{vcd_var_type, FmtCapture, MonitorState, SimState};
+use crate::state::{vcd_var_reference, vcd_var_type, FmtCapture, MonitorState, SimState};
 use crate::value::Value;
 
 /// Control-flow signal back to the executor.
@@ -1980,11 +1980,16 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
                     let mut wv = Vec::with_capacity(nets[i].array_len as usize);
                     for word in 0..nets[i].array_len {
                         let name = elem_name(leaf, &dims, word);
-                        wv.push(w.declare_var(vt, nets[i].width.max(1), &name).ok());
+                        let r =
+                            vcd_var_reference(vt, &name, nets[i].width, nets[i].msb, nets[i].lsb);
+                        wv.push(w.declare_var(vt, nets[i].width.max(1), &r).ok());
                     }
                     word_ids[i] = wv;
-                } else if let Ok(id) = w.declare_var(vt, nets[i].width.max(1), leaf) {
-                    ids[i] = Some(id);
+                } else {
+                    let r = vcd_var_reference(vt, leaf, nets[i].width, nets[i].msb, nets[i].lsb);
+                    if let Ok(id) = w.declare_var(vt, nets[i].width.max(1), &r) {
+                        ids[i] = Some(id);
+                    }
                 }
             }
             while !cur.is_empty() {
@@ -2023,11 +2028,15 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
                     let mut wv = Vec::with_capacity(nv.array_len as usize);
                     for word in 0..nv.array_len {
                         let ename = elem_name(&name, &dims, word);
-                        wv.push(w.declare_var(vt, nv.width.max(1), &ename).ok());
+                        let r = vcd_var_reference(vt, &ename, nv.width, nv.msb, nv.lsb);
+                        wv.push(w.declare_var(vt, nv.width.max(1), &r).ok());
                     }
                     word_ids[i] = wv;
-                } else if let Ok(id) = w.declare_var(vt, nv.width.max(1), &name) {
-                    ids[i] = Some(id);
+                } else {
+                    let r = vcd_var_reference(vt, &name, nv.width, nv.msb, nv.lsb);
+                    if let Ok(id) = w.declare_var(vt, nv.width.max(1), &r) {
+                        ids[i] = Some(id);
+                    }
                 }
             }
             let _ = w.pop_scope();

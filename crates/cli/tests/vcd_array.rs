@@ -44,7 +44,7 @@ fn nonzero_lo_array_declares_true_indices() {
     let vcd = std::fs::read_to_string(d.join("w.vcd")).expect("vcd");
     for k in 4..=7 {
         assert!(
-            vcd.contains(&format!("m[{k}] $end")),
+            vcd.contains(&format!("m[{k}] [7:0] $end")),
             "declared index {k}:\n{vcd}"
         );
     }
@@ -68,7 +68,10 @@ fn two_d_array_declares_nested_brackets() {
     assert_eq!(code, Some(0), "stderr:\n{err}");
     let vcd = std::fs::read_to_string(d.join("w.vcd")).expect("vcd");
     for name in ["g[0][2]", "g[0][3]", "g[1][2]", "g[1][3]"] {
-        assert!(vcd.contains(&format!("{name} $end")), "{name}:\n{vcd}");
+        assert!(
+            vcd.contains(&format!("{name} [3:0] $end")),
+            "{name}:\n{vcd}"
+        );
     }
     assert!(vcd.contains("b1010 "), "g[1][2]=a change:\n{vcd}");
 }
@@ -108,7 +111,7 @@ fn staged_pipeline_carries_dims_sidecar() {
     let vcd = std::fs::read_to_string(d.join("w.vcd")).expect("vcd");
     for k in 4..=6 {
         assert!(
-            vcd.contains(&format!("m[{k}] $end")),
+            vcd.contains(&format!("m[{k}] [7:0] $end")),
             "staged element {k}:\n{vcd}"
         );
     }
@@ -208,8 +211,14 @@ fn dumpvars_net_arg_selects_single_net_and_array_arg_expands() {
     assert_eq!(code, Some(0), "stderr:\n{err}");
     let vcd = std::fs::read_to_string(d.join("w.vcd")).expect("vcd");
     assert!(vcd.contains(" b $end"), "selected net:\n{vcd}");
-    assert!(vcd.contains("mem[0] $end"), "array arg element 0:\n{vcd}");
-    assert!(vcd.contains("mem[1] $end"), "array arg element 1:\n{vcd}");
+    assert!(
+        vcd.contains("mem[0] [3:0] $end"),
+        "array arg element 0:\n{vcd}"
+    );
+    assert!(
+        vcd.contains("mem[1] [3:0] $end"),
+        "array arg element 1:\n{vcd}"
+    );
     assert!(!vcd.contains(" a $end"), "unselected net excluded:\n{vcd}");
 }
 

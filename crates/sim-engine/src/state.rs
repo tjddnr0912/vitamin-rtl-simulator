@@ -3153,6 +3153,40 @@ pub(crate) fn vcd_var_type(kind: NetKind) -> VarType {
     }
 }
 
+/// The VCD `$var` reference field. A bit-vector carries its DECLARED `[msb:lsb]`
+/// range, so a waveform viewer labels an ascending `[0:3]` or non-zero-base
+/// `[7:4]` vector correctly instead of defaulting to `[width-1:0]` (IEEE
+/// 1364-2005 §18.2.3.2 `<reference> ::= id [ [msb:lsb] ]`; iverilog-pinned —
+/// omitting it silently mislabels every non-`[N:0]` vector, e.g. `[0:3]` and
+/// `[3:0]` become the indistinguishable `reg 4`).
+///
+/// A "vector" here is anything that is NOT a true scalar and NOT `[0:0]`:
+/// `width > 1`, OR a 1-bit net at a NON-ZERO bit index (`reg [5:5]` records
+/// `[5:5]`; iverilog-pinned). A true scalar (`reg a` → msb==lsb==0, width 1) and
+/// a `[0:0]` net both collapse to a bare name, as iverilog does. A dimensionless
+/// `real`/`realtime` never carries a range. `base` is the leaf name, already
+/// array-indexed for a per-element word.
+pub(crate) fn vcd_var_reference(vt: VarType, base: &str, width: u32, msb: u32, lsb: u32) -> String {
+    let is_vector = width > 1 || msb != 0 || lsb != 0;
+    if !is_vector || matches!(vt, VarType::Real | VarType::Realtime) {
+        return base.to_string();
+    }
+    // A packed multi-dim net (`logic [0:3][7:0]`) stores msb = width-1 but a STALE
+    // OUTER-dim lsb (elaborate's packed override resets width+msb, never lsb), so
+    // |msb-lsb|+1 can disagree with the flat `width`. VCD flattens a packed vector
+    // to `[width-1:0]` (iverilog-pinned: `[0:3][7:0]` and `[7:4][7:0]` both dump
+    // `[31:0]`); emitting the raw `[width-1:staleLsb]` would be an internally
+    // inconsistent range (size ≠ span). Use the declared `[msb:lsb]` only when it
+    // is span-consistent (every single packed-dim net, incl. ascending/non-zero
+    // base); otherwise fall back to the flat range.
+    let span = (msb as i64 - lsb as i64).unsigned_abs() as u32 + 1;
+    if span == width {
+        format!("{base} [{msb}:{lsb}]")
+    } else {
+        format!("{base} [{}:0]", width.saturating_sub(1))
+    }
+}
+
 /// Build a net's storage from its declared init. For scalars the init IS the
 /// value; for arrays the init plane is replicated per word (elaborate emits one
 /// init plane; v1 broadcasts it to every element).
