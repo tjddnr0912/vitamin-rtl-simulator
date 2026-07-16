@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.145 md-packed nested part-select WRITE `x[j][m:l]`/`arr[i][j][m:l]` (loud→supported) (2026-07-17, branch feat-mdpacked-nested-write) ✅
+
+recorded §3(§4.5.117 write 잔여) 착수. READ는 이미 element-select+packed-flatten 조합으로 정답·WRITE만 E3009 2-path 거부(bare=`nested lvalue select`·unpacked-array=`bit-select then part-select`). iverilog 지원=②.
+
+- **룰(iverilog 13.0)**: `x[j][m:l]=v`(bare `[1:0][7:0]`)·`arr[i][j][m:l]=v`(unpacked-array-of-packed). unpacked idx→element word·**const** packed idx→leaf base bit(`flatten_word` over packed extents)·`[m:l]`→leaf 내 bit. variable PACKED idx=iverilog 거부→vita loud(무오라클). variable UNPACKED idx=iverilog 허용→vita 계산.
+- **구현(IR-0)**: `try_nested_packed_part_lval`(`elaborate`) — PartSelect lval arm서 `try_packed_part_select_lval`(outer)+hier 후·generic `lval_part_base` 前. READ path 미러: `base_off=flatten_word(pext,packed_idxs)`(prefix→leaf.size가 stride=bit offset)+`l`, width=`m-l+1`, kind=PartIdxUp, word=unpacked flatten. 엔진 `write_chunk`가 `base=word*net_w`+offset로 word+PartIdxUp 정확 소비(비-flat). fail-closed: leaf=descending zero-lsb·const in-range `[m:l]`·const packed idx·leaf 1개 남음. non-대상 disjoint(scalar `r[m:l]`·whole-element·outer part-select 불변).
+- **적대 2렌즈 全 CLEAN**: differential(~45 case: shape/width/3D/4D/2D-unpacked/non-zero-base/asc-outer/edge-partsel/NBA/task/CA byte-id·**ascending OUTER dim도 정확 계산**·leaf만 gated)+soundness(ud partition·flatten prefix bit-offset·word RMW self-consistent·PartIdxUp+word=Some 엔진 확인·guard 완전성·IR-0). 회귀 테스트 4(bare·array+var-unpacked·var-packed-loud·3D).
+- **fail-closed 잔여(전부 loud/no-op·§3 기록)**: ascending/non-zero-lsb leaf·genvar-index(`x[g][m:l]`=const-fold 안 됨·over-reject)·OOB `[m:l]`(iverilog truncate·was-loud pre-fix)·const-OOB packed idx=silent no-op(read path 공유·값 무손상). 3565 green·format_version 21.
+
 #### 4.5.144 `%s` 출력 문자열 fidelity: 숫자-const NUL→space + bare string-var template (2026-07-17, branch feat-pct-s-nul) ✅
 
 recorded §2(§4.5.119) 재그라운딩 → format 엔진 문자열 렌더 silent-wrong 2건(별도 커밋). **hexdump 필수**(NUL/space=grep/터미널이 mangle → 최초 "vita empty" 오진단은 harness 아티팩트·실제는 0x00 리터럴 방출).

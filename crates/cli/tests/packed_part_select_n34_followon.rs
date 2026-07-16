@@ -315,3 +315,65 @@ fn array_of_packed_partial_index_not_misnormalized() {
         "array-of-packed partial index must not mis-normalize:\n{out}"
     );
 }
+
+// §4.5.145 — a part-select on a NESTED packed-dim select as a WRITE lvalue
+// (`x[j][m:l]=v` / `arr[i][j][m:l]=v`). The read side already composed element-select
+// + packed-flatten; the write side rejected it (E3009). Now it lowers to one bit-slice
+// LvalChunk (unpacked idx → element word, const packed idx → leaf base bit, [m:l]
+// within). iverilog-13.0-pinned.
+#[test]
+fn nested_packed_part_write_bare() {
+    // x=ABCD ⇒ x[1]=AB, x[0]=CD. x[0][3:0]=7 → ABC7; x[1][6:2]=1F → FFCD.
+    let (out, c) = run("module t;\n\
+         reg [1:0][7:0] x;\n\
+         initial begin x=16'hABCD; x[0][3:0]=4'h7; $display(\"%h\", x);\n\
+                       x=16'hABCD; x[1][6:2]=5'h1F; $display(\"%h\", x); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(
+        out.contains("abc7") && out.contains("ffcd"),
+        "bare nested packed part write:\n{out}"
+    );
+}
+
+#[test]
+fn nested_packed_part_write_array_and_var_unpacked() {
+    // arr[i][j][m:l]: [i] picks the element word, [j][m:l] the leaf bits. A VARIABLE
+    // UNPACKED index is allowed (iverilog accepts it). a[0][0][3:0]=7 → a[0]=1237;
+    // a[1][1][7:4]=E → a[1]=EBCD; then a[1][0][3:0]=9 → a[1]=EBC9.
+    let (out, c) = run("module t;\n\
+         logic [1:0][7:0] a[0:1]; integer i;\n\
+         initial begin a[0]=16'h1234; a[1]=16'hABCD;\n\
+                       a[0][0][3:0]=4'h7; a[1][1][7:4]=4'hE;\n\
+                       $display(\"%h %h\", a[0], a[1]);\n\
+                       i=1; a[i][0][3:0]=4'h9; $display(\"%h\", a[1]); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(
+        out.contains("1237 ebcd") && out.contains("ebc9"),
+        "array + var-unpacked nested packed write:\n{out}"
+    );
+}
+
+#[test]
+fn nested_packed_part_write_variable_packed_index_is_loud() {
+    // iverilog rejects a VARIABLE PACKED index here ("not allowed in a constant
+    // expression"); vita is loud too (no oracle → do not compute), correct-or-loud.
+    let (out, c) = run("module t;\n\
+         reg [1:0][7:0] x; integer j;\n\
+         initial begin x=16'hABCD; j=1; x[j][3:0]=4'h9; $display(\"%h\", x); end\n\
+       endmodule\n");
+    assert_ne!(c, Some(0), "variable packed index must be loud:\n{out}");
+}
+
+#[test]
+fn nested_packed_part_write_three_dim() {
+    // 3-D packed `[1:0][1:0][7:0]`: y[1][0][3:0]=F on 12345678 → 123F5678 (the two
+    // const packed indices flatten to the leaf base bit).
+    let (out, c) = run("module t;\n\
+         reg [1:0][1:0][7:0] y;\n\
+         initial begin y=32'h12345678; y[1][0][3:0]=4'hF; $display(\"%h\", y); end\n\
+       endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(out.contains("123f5678"), "3-D nested packed write:\n{out}");
+}

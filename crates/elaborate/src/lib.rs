@@ -14312,6 +14312,14 @@ impl<'s> Elaborator<'s> {
                     });
                     return;
                 }
+                // `x[j][m:l]` / `arr[i][j][m:l]` — a part-select whose base is a
+                // NESTED select landing on the LEAF packed dim (write twin of the
+                // read's element-select + packed-flatten). The generic path below
+                // flattens only unpacked dims and would reject this (E3009).
+                if let Some(chunk) = self.try_nested_packed_part_lval(base, msb, lsb) {
+                    out.push(chunk);
+                    return;
+                }
                 // `g[i][j][msb:lsb] = …` — part-select WITHIN an array element word.
                 // `lval_part_base` resolves the element (net + flat word); a scalar
                 // base gives `(net, None)` ⇒ the classic `r[msb:lsb]` chunk.
@@ -20823,6 +20831,98 @@ impl<'s> Elaborator<'s> {
             width: Some(width),
             kind: ir::SelKind::PartIdxUp,
         });
+    }
+
+    /// A `[msb:lsb]` part-select LHS whose base is a NESTED select that lands on the
+    /// LEAF packed dimension: `x[j][m:l] = …` (bare `[1:0][7:0]` net) or
+    /// `arr[i][j][m:l] = …` (unpacked-array-of-packed). The read side composes an
+    /// element-select + packed-flatten; the write side's generic `lval_part_base`
+    /// flattens only the unpacked dims and rejected this (E3009). Mirror the read:
+    /// the unpacked indices (if any) pick the element `word`, the packed indices pick
+    /// the leaf's base bit (`flatten_word` over the packed extents), and `[msb:lsb]`
+    /// selects within the leaf. Returns `Some(chunk)` for the handled leaf shape,
+    /// `Some(poison)` after a loud out-of-range, and `None` (fall through to the
+    /// generic loud path) for any shape it does not provably handle — fail-closed:
+    /// only a DESCENDING, zero-LSB leaf with a CONSTANT in-range `[msb:lsb]`, exactly
+    /// one leaf dim left after the indices (so `[msb:lsb]` is bit-addressed, not an
+    /// outer-element range — that is `try_packed_part_select_lval`).
+    fn try_nested_packed_part_lval(
+        &mut self,
+        base: &ast::Lvalue,
+        msb: &ast::Expr,
+        lsb: &ast::Expr,
+    ) -> Option<ir::LvalChunk> {
+        let ast::Lvalue::BitSelect { base: b, index, .. } = base else {
+            return None;
+        };
+        // Resolve the index chain: an unpacked-array-of-packed goes through the array
+        // chain (idxs = unpacked… ++ packed…); a bare multi-dim packed net goes through
+        // the packed chain (idxs = packed… only, no unpacked dims).
+        let (net, all_idxs, ud) = if let Some((n, ix)) = self.lval_array_chain(b, index) {
+            let ud = self.net_dim_extents(n).len();
+            (n, ix, ud)
+        } else if let Some((n, ix)) = self.lval_packed_chain(b, index) {
+            (n, ix, 0usize)
+        } else {
+            return None;
+        };
+        let pdims = self.packed_dims.get(&net)?.clone();
+        // Exactly one leaf packed dim must remain after the packed indices, so
+        // `[msb:lsb]` is a bit-select within the leaf. Fewer packed indices ⇒ an
+        // outer-element part-select (`try_packed_part_select_lval`); more ⇒ bit-of-bit.
+        if pdims.len() < 2 || all_idxs.len() != ud + pdims.len() - 1 {
+            return None;
+        }
+        // iverilog requires the PACKED indices to be constant (a variable packed index
+        // "is not allowed in a constant expression"); a variable UNPACKED array index is
+        // fine. A variable packed index has no oracle, so fall through to the generic
+        // loud path rather than compute an unverifiable offset.
+        if all_idxs[ud..].iter().any(|e| const_eval_u32(e).is_none()) {
+            return None;
+        }
+        // Fail-closed: the leaf must be a plain descending zero-LSB vector so `l` is the
+        // bit offset within it and `[msb:lsb]` maps to `[base+l, base+m]`.
+        let leaf = *pdims.last().unwrap();
+        if leaf.2 || leaf.0 != 0 {
+            return None;
+        }
+        let (Some(m), Some(l)) = (const_eval_u32(msb), const_eval_u32(lsb)) else {
+            return None; // variable bounds → generic loud path
+        };
+        if m < l || m >= leaf.1 {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "part-select range exceeds the packed sub-element width",
+            );
+            return Some(Self::poison_chunk());
+        }
+        // Unpacked indices → element word (descending default, mirroring lval_part_base).
+        let word = (ud > 0).then(|| {
+            let ue = self.net_dim_extents(net);
+            self.flatten_word(&ue, &all_idxs[..ud], &[])
+        });
+        // Packed indices → the leaf's base bit (bit offset, exactly as the read path's
+        // flatten over the packed extents); then `+ l` for the part-select LSB.
+        let (pext, pdirs) = Self::packed_split(&pdims);
+        let base_off = self.flatten_word(&pext, &all_idxs[ud..], &pdirs);
+        let offset = if l == 0 {
+            base_off
+        } else {
+            let l_c = self.const_u32_expr(l, 32);
+            self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Add,
+                lhs: base_off,
+                rhs: l_c,
+            })
+        };
+        let width = self.const_u32_expr(m - l + 1, 32);
+        Some(ir::LvalChunk {
+            net,
+            word,
+            offset: Some(offset),
+            width: Some(width),
+            kind: ir::SelKind::PartIdxUp,
+        })
     }
 
     /// Per-dim `(lo, size)` extents of array `net` (source order). Arrays with

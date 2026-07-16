@@ -59,7 +59,7 @@
 
 - control-flow pkg fn(frame이 처리 가능→relax) · pkg `function string` · pkg TASK statement call. §4.5.111 잔여.
 - array formal 재전달(nested/recursion) · non-zero-LSB 원소 · 2-D/non-zero-base/signed/task array formal. §4.5.110 slice 밖.
-- 음수-LSB 멤버 sub-select 정식 지원(§4.5.114) · md-packed element WRITE nested part-select `x[j][m:l]`/`arr[i][j][m:l]`(E3009 2-path: bare=nested-lval·unpacked=bit-then-part·read 全 해결·write는 lval_part_base가 unpacked-dim만 flatten·§4.5.117).
+- 음수-LSB 멤버 sub-select 정식 지원(§4.5.114). md-packed nested part-select WRITE `x[j][m:l]`/`arr[i][j][m:l]`=**§4.5.145 지원**(descending zero-lsb leaf·const packed idx); fail-closed 잔여(전부 loud·honest)=ascending/non-zero-lsb leaf·**genvar-index**(`x[g][m:l]`=const-fold 안 됨·over-reject)·const-OOB packed idx=silent no-op(read path 공유·값 무손상).
 - method/ctor NAME-default class-scope 해석(§4.5.90) · G4 string-return frame call(§4.5.129).
 
 **소형 큐:**
