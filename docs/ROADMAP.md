@@ -38,6 +38,7 @@
 - 2D-packed iface member element/outer part-select · scalar iface member over-acceptance. §4.5.116 잔여.
 - non-uniform `$dist_*` libm draw 발산 · chi_square/t seed LCG. §4.5.126.
 - string-array-elem 전원 concat `{s[0],"-",s[1]}` truncate — native-eval static string-width. §4.5.134 발굴.
+- `$monitor`에 직접 `$random`/`$urandom` 인자=매 스텝 spurious re-fire(no-oracle: iverilog는 non-simple `$monitor` 인자 자체 거부 "SORRY"·시간함수 3종만 예외). 값 렌더는 정상. §4.5.135 발굴.
 - leading-NUL frame string · frame-body 内 SYS-READ(assignment form도) · runtime `$clog2(real)` f64 misread. §C/§4.5.122/124.
 - 숫자 literal `%s` NUL-byte · `%d`-of-real width. §4.5.119/120 잔여.
 - inline 함수 잔여 4종: global-reader widening 미수혜 · size-cast `16'(a*b)` context · signed `>>>` unsigned-context · inline-call return 미truncate. §4.5.80 잔여.

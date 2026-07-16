@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.135 `$time`/`$stime` 반올림 + `$stime`-in-`$monitor` 제외 (2026-07-16, branch feat-time-round) ✅
+
+fresh-area probe(NEXT §1)로 발굴한 신규 silent-wrong 2건을 같은 반복 내 수정(§S④). 오라클 = iverilog 13.0 라이브.
+
+- **① `$time`/`$stime` 절사→반올림** (`crates/sim-engine/src/eval.rs`): 두 시스템함수가 모듈 단위 시각을 `self.now / m`(floor)로 절사 — IEEE 1800-2017 §20.3.1 "scaled to the time unit … and rounded to an integer value" 위반. `#1.5`@1ns/1ps → vita `$time`=1, iverilog=2. `$realtime`는 원래 정확(소수 유지). fix = `self.now.saturating_add(m/2)/m`(round-half-up = time≥0이라 round-half-away-from-zero, iverilog 일치: 1.5→2·2.5→3·4.6→5). `$stime` = 반올림 후 low-32 mask. VCD·`#delay`는 raw tick 유지(무영향). all-sites: compute는 이 2곳뿐(native_eval는 인터프리터 bail·sched.rs는 분류만). m은 항상 10^k≥1(m/2 정확·m=1→0 무회귀). 옛 절사를 인코딩한 기존 테스트 3건(end_to_end.rs) + SPEC doc-08(절사 서술·stale "$stime 미구현" 표기) iverilog 값으로 정정.
+- **② `$stime`-in-`$monitor` 매-스텝 re-fire** (`crates/sim-engine/src/sched.rs`, ①의 적대 differential 리뷰서 발굴): monitor change-detection의 `is_direct_time` 제외집합이 `$time`/`$realtime`만 필터(IEEE §21.2.3: 시간함수는 렌더하되 change-trigger 제외)·`$stime` 누락 → `$monitor("s=%0d x=%b",$stime,x)`가 매 1ns 스텝 재출력(iverilog 2줄 vs vita 16줄). fix = `matches!`에 `Stime` 추가(IEEE 3종 {time,stime,realtime} 완성). ①과 독립(정수-ns repro서 반올림=identity로 재현). `$stime` 값 렌더는 정상 유지.
+- **적대 2-lens**: differential(~140 관측·9 timescale/precision·half-boundary·32-bit wrap·2^53/2^60 magnitude 전부 byte-match → half-up 확정) + soundness(all-sites·VCD/scheduler raw-tick·M=10^k·saturating_add·round-then-mask 전부 SOUND). teeth = iverilog 라이브 + 신규 회귀 3(round-half-up boundary·wide-ratio 1s/1ps M=10^12·`$stime`-monitor 제외). 게이트 3551 green·clippy/fmt clean·format_version 21 불변(IR-0).
+- **follow-on(no-oracle)**: `$random`/`$urandom` 직접 `$monitor` 인자 re-fire — iverilog가 non-simple 인자 거부("SORRY")라 오라클 부재. ROADMAP §2 기록.
+
 *(2026-07-16 이관 이후 완료분이 여기에 추가된다. §4.5.134까지는 아래 스냅샷에 있음.)*
 
 ---
