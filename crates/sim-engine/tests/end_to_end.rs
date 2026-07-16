@@ -1651,14 +1651,35 @@ fn float_format_determinism_golden() {
            end\n\
          endmodule",
     );
-    // %d on a real uses the 64-bit field width (20); %d on a 200-bit operand uses
-    // the n*LOG10_2 path → field width 61. Reconstruct both widths via format! so
-    // they are self-documenting, not a fragile wall of literal spaces.
+    // bare `%d` on a REAL is UNPADDED — iverilog prints the rounded value with no
+    // default field width (2.5 → "3", not a 20-wide u64 field). `%d` on a 200-bit
+    // INTEGER still uses the n*LOG10_2 path → field width 61 (unchanged; the 61
+    // width is reconstructed via format! so it is self-documenting).
     let expected = format!(
-        "0.333333\n1.500000e+03\n1e-05\n0|0.000000\ninf\n{:>20}\n[{:>61}]\n3\n",
-        3, 123456,
+        "0.333333\n1.500000e+03\n1e-05\n0|0.000000\ninf\n3\n[{:>61}]\n3\n",
+        123456,
     );
     assert_eq!(out, expected);
+}
+
+#[test]
+fn pct_d_of_real_has_no_default_field_width() {
+    // A bare `%d`/`%0d` of a REAL is UNPADDED (iverilog prints the rounded value,
+    // no default field width: 3.7→4, -2.9→-3). An explicit `%Nd`/`%-Nd`/`%0Nd`
+    // still pads. An INTEGER `%d` keeps its default decimal field width (an 8-bit
+    // reg → width 3, so 42 → " 42"). iverilog-13.0-pinned.
+    let out = run_sv(
+        "module t; real r; reg [7:0] b; initial begin \
+         r = 3.7; b = 8'd42; \
+         $display(\"[%d][%0d][%6d][%-6d][%06d]\", r, r, r, r, r); \
+         $display(\"int[%d] real[%d]\", b, r); \
+         r = -2.9; $display(\"neg[%d][%5d]\", r, r); \
+         end endmodule",
+    );
+    assert_eq!(
+        out,
+        "[4][4][     4][4     ][000004]\nint[ 42] real[4]\nneg[-3][   -3]\n"
+    );
 }
 
 // 19. [P4 · backend seam] Backend selection rides out-of-band on SimOpts. The

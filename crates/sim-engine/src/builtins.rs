@@ -2506,6 +2506,11 @@ fn render_template(
                 let fw = match (min_zero, field_width) {
                     (true, Some(0)) => 0,
                     (_, Some(n)) => n,
+                    // bare `%d` of a REAL has NO default field width — iverilog
+                    // prints the rounded value unpadded (`%d` of 4.0 → "4", not the
+                    // 20-wide u64 field `dec_field_width(64)` would give). An
+                    // explicit `%Nd`/`%0Nd` still pads (handled above).
+                    (_, None) if v.is_real => 0,
                     (_, None) => dec_field_width(v.width, v.signed),
                 };
                 if s.len() < fw {
