@@ -1096,7 +1096,7 @@ impl Preprocessor<'_> {
     fn emitting(&self) -> bool {
         self.cond
             .last()
-            .map_or(true, |f| f.active && f.parent_emitting)
+            .is_none_or(|f| f.active && f.parent_emitting)
     }
 }
 

@@ -1717,7 +1717,7 @@ impl DynObj {
     }
 }
 
-impl<'a> SimState<'a> {
+impl SimState<'_> {
     /// One W-RUN-DYN-DEGRADE per handle net, callable from `&self` (read path).
     pub(crate) fn dyn_warn_once_at(&self, net: u32, msg: &str) {
         if !self.dyn_warned.borrow_mut().insert(net) {
@@ -2790,7 +2790,7 @@ impl<'a> SimState<'a> {
     }
 }
 
-impl<'a> NetReader for SimState<'a> {
+impl NetReader for SimState<'_> {
     fn dyn_size(&self, net: u32) -> Option<u64> {
         // Only a dyn HANDLE answers; a missing heap entry IS the empty object
         // (size 0 — IEEE: a declared dynamic array/queue/assoc starts empty).

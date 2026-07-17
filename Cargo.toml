@@ -26,7 +26,10 @@ exclude = ["third_party/libm"]
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.82"
+# 1.85 (was 1.82): required by fst-writer 0.3.x, whose 0.2.x line writes a
+# malformed FST time-table that GTKWave/fst-reader tolerate but wellen (Surfer)
+# rejects. vita's own crates stay edition 2021 — 1.85 only raises the floor.
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/your-org/vitamin"
 

@@ -8,6 +8,14 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.150 FST: fst-writer 0.2.6→0.3.1 + MSRV 1.82→1.85 (Surfer 상호운용 수정) (2026-07-17, branch fix-fst-surfer-msrv185) ✅
+
+§4.5.149 FST를 **Surfer 0.7.0(wellen 리더)로 시각 검증하다 발견**: vita FST가 Surfer에서 `FailedToLoad(Fst, "I/O operation failed")`로 거부됨(GTKWave `fst2vcd`·`fst-reader`는 관대해 통과했으나 wellen은 엄격). 근본원인 = **`fst-writer` 크레이트의 타임테이블 인코딩 버그**(vita 무관 — raw fst-writer만으로 재현).
+
+- **수정**: `fst-writer` `=0.2.6`→`=0.3.1`(타임테이블 버그 대거 수정·`de342f15`/`d51aac45`/`9ddbf3b4` + wellen end-to-end 테스트 추가 `9cfe669b`). 0.3.x=edition 2024 → **워크스페이스 MSRV 1.82→1.85**(rust-toolchain.toml·`Cargo.toml`·vita 코드는 edition 2021 유지, floor만 상향; 사용자 사전 승인). 0.2.x용 트랜지티브 edition2024 회피 핀(proc-macro-crate·indexmap) 제거(1.85는 edition2024 지원). 트랜스코더 코드 불변(0.3.1 API 동일).
+- **검증**: 0.3.1로 현실적 설계(clk/count/nibble/real/wire·수백~수천 스텝) 전부 Surfer 로드 OK·값 canonical 동치. 기존 6 FST 테스트 green 유지.
+- **잔여 known-edge(honest-loud·silent-wrong 아님)**: fst-writer 0.3.1도 **upstream 미해결 [issue #4](https://github.com/ekiwi/fst-writer/issues/4)**(타임테이블 LZ4)로 **특정 소형 크기**(재현 최소 = 값-변화 시각 11개)서 wellen/Surfer `I/O operation failed` loud 거부. n=1..1000 스윕서 11만 실패(50~1000 전부 로드)→대형 덤프 안전·소형은 VCD 권장. 로드되는 FST 값은 항상 정확(loud 거부일 뿐). SPEC preview/07 §FST known limitation에 기록·상류 리포트 대상. IR-0.
+
 #### 4.5.149 FST waveform output (`$dumpfile("x.fst")` / `-o x.fst`) — G2 breadth (2026-07-17, branch feat-fst-waveform) ✅
 
 GTKWave/Surfer 네이티브 **FST** 파형을 VCD와 **동일한 in-code 인터페이스**로 지원(신규 기능). `$dumpfile` 인자(또는 CLI `-o`)의 확장자가 `.fst`(대소문자 무관)면 FST, 그 외 VCD. `$dumpvars`·`$dumpoff`·`$dumpon`·`$dumpall`·`$dumpflush`·`$dumplimit` 전부 FST 경로서 그대로 동작. SPEC=[preview/07 §FST 파형 출력](preview/07-vcd-format.md).

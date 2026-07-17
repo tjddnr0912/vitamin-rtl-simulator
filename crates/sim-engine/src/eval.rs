@@ -268,7 +268,7 @@ pub struct EvalCtx<'a, N: NetReader> {
     pub plusargs: &'a [String],
 }
 
-impl<'a, N: NetReader> EvalCtx<'a, N> {
+impl<N: NetReader> EvalCtx<'_, N> {
     /// Self-determined eval: size the node to its own self-width. Unchanged
     /// public surface; used by control-flow truthiness and systask args.
     pub fn eval(&self, eid: u32) -> Value {

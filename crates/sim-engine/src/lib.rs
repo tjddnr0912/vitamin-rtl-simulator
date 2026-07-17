@@ -454,7 +454,7 @@ struct LogWrite<'a> {
     sink: &'a dyn LogSink,
 }
 
-impl<'a> Write for LogWrite<'a> {
+impl Write for LogWrite<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let text = String::from_utf8_lossy(buf).into_owned();
         self.sink.emit(LogEvent::RtlOutput(RtlText {

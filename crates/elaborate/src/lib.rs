@@ -2005,7 +2005,7 @@ fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
         // field / hierarchical read (`t.field`, a multi-seg ident for a class
         // handle), all count. Only a path whose HEAD is some other name (`other.x`)
         // is ref-free.
-        K::Ident(p) => !p.segments.first().is_some_and(|s| s.name == name),
+        K::Ident(p) => p.segments.first().is_none_or(|s| s.name != name),
         K::Unary { operand, .. } => expr_no_ref(operand, name),
         K::Binary { lhs, rhs, .. } => expr_no_ref(lhs, name) && expr_no_ref(rhs, name),
         K::Ternary {
@@ -2031,7 +2031,7 @@ fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
         // `t.method(a)`) — a read of `name`. A plain `f(args)` head is some other
         // function. So the head must not be `name`, AND every arg must be ref-free.
         K::Call { name: cn, args } => {
-            !cn.segments.first().is_some_and(|s| s.name == name)
+            cn.segments.first().is_none_or(|s| s.name != name)
                 && args.iter().all(|x| expr_no_ref(x, name))
         }
         K::SysCall { args, .. } => args.iter().all(|x| expr_no_ref(x, name)),
@@ -2048,7 +2048,7 @@ fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
         }
         K::AssignPattern(parts) => parts.iter().all(|x| expr_no_ref(x, name)),
         K::New { size, src } => {
-            expr_no_ref(size, name) && src.as_ref().map_or(true, |s| expr_no_ref(s, name))
+            expr_no_ref(size, name) && src.as_ref().is_none_or(|s| expr_no_ref(s, name))
         }
         // PkgScoped / ClassNew / ArrayMethodWith / RandomizeWith / Dist / Error —
         // not vetted → conservatively "may reference".
@@ -2064,7 +2064,7 @@ fn lvalue_no_ref(lv: &ast::Lvalue, name: &str) -> bool {
     match lv {
         // As in `expr_no_ref`: any path headed by `name` references it (a whole
         // write `name`, a field/hier write `name.f`). Only another head is ref-free.
-        L::Ident(p) => !p.segments.first().is_some_and(|s| s.name == name),
+        L::Ident(p) => p.segments.first().is_none_or(|s| s.name != name),
         L::BitSelect { base, index, .. } => lvalue_no_ref(base, name) && expr_no_ref(index, name),
         L::PartSelect { base, msb, lsb, .. } => {
             lvalue_no_ref(base, name) && expr_no_ref(msb, name) && expr_no_ref(lsb, name)
@@ -21983,7 +21983,7 @@ enum GenPhase {
     Instances,
 }
 
-impl<'s> Elaborator<'s> {
+impl Elaborator<'_> {
     /// Run `f` with `cur_prefix` temporarily extended by `seg` (a gen-block
     /// `label[idx]` segment). Restores the prefix on return. Genvar bindings in
     /// `self.params` are NOT touched here (the caller manages those).
@@ -22484,7 +22484,7 @@ impl ProcessBuilder {
     }
 }
 
-impl<'s> Elaborator<'s> {
+impl Elaborator<'_> {
     /// Register a named SVA sequence into the module-global table (first-wins, with a
     /// redeclaration warning). Shared by the top-level prescan and the generate-scope
     /// collector (slice A4) so both keep identical first-wins semantics.

@@ -419,8 +419,9 @@ FST는 **VCD를 트랜스코드**해 생성한다(`vcd-writer/src/fst.rs`, `tran
 
 - **정확성(correct-or-loud)**: 모든 dump 의미론(`$dumpoff`→전-x 등)은 이미 VCD 값-변화 스트림에 반영돼 있어, 그 스트림을 그대로 FST로 재생하면 **FST ≡ VCD**가 구성적으로 성립한다. 별도 바이너리 싱크를 값-변화 경로마다 배선하지 않으므로 silent-wrong 분기 여지가 없다.
 - **실수형 unknown**: `$dumpoff` 중 real은 VCD에서 전-x 벡터로 나오지만 FST real은 f64이므로 **NaN**으로 매핑한다(iverilog `rNaN`과 동일). 벡터 바이트를 real로 재해석하면 garbage float가 되는 silent-wrong을 회피.
-- **바이너리 인코딩**: 압축 블록(geometry/hierarchy/value-change)은 순수-Rust `fst-writer`(=0.2.6, BSD-3-Clause) 크레이트가 담당. vita는 바이너리를 직접 손대지 않는다. MSRV 1.82 유지를 위해 0.2.x 라인 핀(0.3.x는 Rust 1.85 요구) + 트랜지티브 핀(`proc-macro-crate`=3.3.0·`indexmap`=2.7.1, `vcd-writer/Cargo.toml`).
-- **검증**: 산출 FST를 독립 리더 `fst-reader`(=0.10.2)로 되읽어 파형 동치를 확인(단위 테스트 `vcd-writer` `fst::tests`, 엔드투엔드 `cli/tests/fst_waveform.rs`, iverilog-13.0 파형 핀). 추가로 **GTKWave 자체 `fst2vcd`**(GTKWave libfst)로도 디코드해 vita VCD와 canonical 파형 동치를 확인(scalar/vec/real/x·z 全). GTKWave **GUI 시각 검증은 추후 다른 뷰어로 수동** — 참고: Homebrew의 GTKWave 3.3.107(2020·x86_64·미서명)은 Apple Silicon macOS에서 Gatekeeper 삭제 + GTK pixbuf 하드코드 경로로 GUI가 segfault(FST 자체와 무관한 패키징 문제). 대안 뷰어=Surfer(순수-Rust·서명·FST 네이티브).
+- **바이너리 인코딩**: 압축 블록(geometry/hierarchy/value-change)은 순수-Rust `fst-writer`(=0.3.1, BSD-3-Clause) 크레이트가 담당. vita는 바이너리를 직접 손대지 않는다. **0.3.x는 Rust 1.85(edition 2024) 요구 → 워크스페이스 MSRV=1.85**(vita 자체 코드는 edition 2021 유지·floor만 상향). 초기에 MSRV 1.82 유지용으로 쓴 0.2.6은 타임테이블 인코딩이 어긋나 wellen(Surfer)가 거부 → 0.3.x로 상향(아래 검증 참조).
+- **검증**: 산출 FST를 독립 리더 `fst-reader`(=0.10.2)로 되읽어 파형 동치를 확인(단위 테스트 `vcd-writer` `fst::tests`, 엔드투엔드 `cli/tests/fst_waveform.rs`, iverilog-13.0 파형 핀). 추가로 **GTKWave `fst2vcd`(libfst)** + **Surfer 0.7.0(wellen 리더)** 로 실제 로드 확인 — 현실적 설계(수백~수천 시간스텝)는 전부 Surfer에서 로드되고 값도 canonical 동치.
+- **⚠ known limitation(honest-loud, silent-wrong 아님)**: `fst-writer`(0.2.x·0.3.x 공통, **upstream 미해결 [issue #4](https://github.com/ekiwi/fst-writer/issues/4)** — 타임테이블 LZ4 인코딩)로 인해 **특정 소형 타임테이블 크기**(재현 최소: 값-변화 시각 정확히 11개)에서 산출 FST를 wellen/Surfer가 `I/O operation failed`로 **loud 거부**한다. raw fst-writer만으로도 재현(vita 무관). 로드되는 FST의 값은 항상 정확(silent-wrong 무발생·loud 거부일 뿐). n=1..1000 스윕서 11만 실패(50~1000 전부 로드) — 즉 **대형 덤프(FST의 본 용도)는 안전**, 소형 테스트벤치는 VCD 권장. fst-writer 상류 수정 시 해소.
 
 ### FST 비목표
 

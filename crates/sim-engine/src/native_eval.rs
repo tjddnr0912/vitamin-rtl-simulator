@@ -2735,7 +2735,7 @@ mod tests {
     #[test]
     fn wide_cmp_and_equality_match_oracle() {
         // signed 100-bit: sign bit is bit 99 (word-1 bit 35).
-        let neg = vwide_s(100, 5, 1 << 35 | 3); // negative (bit 99 set)
+        let neg = vwide_s(100, 5, (1 << 35) | 3); // negative (bit 99 set)
         let pos = vwide_s(100, u64::MAX, 0x3_FFFF_FFFF); // large positive
         for op in [BinOp::Lt, BinOp::Le, BinOp::Gt, BinOp::Ge] {
             let irs = ir_of(
@@ -2753,7 +2753,7 @@ mod tests {
                 vec![nv(100, false), nv(100, false)],
             );
             let (a, b) = (
-                vwide(100, 5, 1 << 35 | 3),
+                vwide(100, 5, (1 << 35) | 3),
                 vwide(100, u64::MAX, 0x3_FFFF_FFFF),
             );
             assert_matches_oracle(&iru, 2, 8, false, &[a.clone(), b.clone()]);
@@ -2785,7 +2785,7 @@ mod tests {
                 vec![],
                 vec![nv(100, true), nv(8, false)],
             );
-            let x = vwide_s(100, 0xDEAD_BEEF_CAFE_F00D, 1 << 35 | 0x123); // bit 99 set
+            let x = vwide_s(100, 0xDEAD_BEEF_CAFE_F00D, (1 << 35) | 0x123); // bit 99 set
             for amt in [0u64, 1, 37, 63, 64, 65, 99, 100, 127, 200] {
                 assert_matches_oracle(&ir, 2, 100, false, &[x.clone(), vw(8, amt)]);
                 assert_matches_oracle(&ir, 2, 100, true, &[x.clone(), vw(8, amt)]);

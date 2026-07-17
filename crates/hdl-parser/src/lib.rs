@@ -735,7 +735,7 @@ fn is_operatorish(k: TokenKind) -> bool {
         )
 }
 
-impl<'t, 's> Parser<'t, 's> {
+impl Parser<'_, '_> {
     /// Pratt entry. `min_bp` = caller's right binding power. After the fold loop,
     /// if the next token is operator-class but matched no infix slot, emit one
     /// error (verdict B1: do not silently leave `~& b` unconsumed).
@@ -1866,7 +1866,7 @@ impl<'t, 's> Parser<'t, 's> {
 }
 
 // ───────────── module / port / param / decl / contassign ─────────────
-impl<'t, 's> Parser<'t, 's> {
+impl Parser<'_, '_> {
     /// Parse an optional signing qualifier. Returns `Some(true)` for `signed`,
     /// `Some(false)` for `unsigned`, `None` for neither — so the caller can apply
     /// the TYPE's default (2-state atom types default signed, reg/wire/logic/bit
@@ -8521,7 +8521,7 @@ impl<'t, 's> Parser<'t, 's> {
 // `GenItem`s, not `Stmt`s. Every loop over a sub-item list carries a
 // forward-progress guard (`pos == before → bump`) so malformed input can never
 // spin, matching the rest of the parser's recovery discipline.
-impl<'t, 's> Parser<'t, 's> {
+impl Parser<'_, '_> {
     /// `genvar i, j;` → `ModuleItem::Genvar{names, span}`. The `genvar` keyword is
     /// already at `peek()`. An empty/garbled name list still terminates at `;`.
     fn parse_genvar_decl(&mut self) -> ModuleItem {
@@ -8827,7 +8827,7 @@ impl<'t, 's> Parser<'t, 's> {
 }
 
 // ════════════════════════ PR2: statements + procedural blocks ════════════════════════
-impl<'t, 's> Parser<'t, 's> {
+impl Parser<'_, '_> {
     // ─────────────────────── 1. procedural blocks ───────────────────────
     /// `initial S` | `always [@(…)] S` | `always_ff @(…) S` | `always_comb S`
     /// | `always_latch S`. For `always`/`always_ff` a leading `@(…)` folds onto
@@ -13253,12 +13253,12 @@ pub fn parse(tokens: &[Spanned], src: &str) -> (Option<SourceUnit>, Vec<ParseErr
     (su, p.errors)
 }
 
-/// v5 ⑥ foreach desugar: rename every SINGLE-SEGMENT `Ident` reference to
-/// `from` into `to`, across a statement tree — exprs, lvalues, nested stmts,
-/// block-local decl initializers/dims AND event-control sensitivity exprs
-/// (the last two were review finding 2026-06-11: a missed arm silently binds
-/// the reference to the OUTER variable). Multi-segment paths are left alone
-/// (`x.y` never names the loop index).
+// v5 ⑥ foreach desugar: rename every SINGLE-SEGMENT `Ident` reference to
+// `from` into `to`, across a statement tree — exprs, lvalues, nested stmts,
+// block-local decl initializers/dims AND event-control sensitivity exprs
+// (the last two were review finding 2026-06-11: a missed arm silently binds
+// the reference to the OUTER variable). Multi-segment paths are left alone
+// (`x.y` never names the loop index).
 // ──────────── ⓑ-breadth (§8.25): parameterized-class monomorphization ────────
 // Substitute class value parameters (`name → value-expr`) throughout a class's
 // declarations so each specialization is a fully-concrete class. Coverage is the

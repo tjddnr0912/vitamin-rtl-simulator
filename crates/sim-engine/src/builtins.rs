@@ -3189,7 +3189,7 @@ fn fmt_radix(
     if v.width == 0 {
         return "0".to_string();
     }
-    let ndig = (v.width + bits_per_digit - 1) / bits_per_digit;
+    let ndig = v.width.div_ceil(bits_per_digit);
     let mut s = String::new();
     for d in (0..ndig).rev() {
         let base = d * bits_per_digit;
