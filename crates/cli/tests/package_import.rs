@@ -196,3 +196,21 @@ fn explicit_type_import_keeps_unknown_symbol_loud() {
     assert_ne!(code, Some(0));
     assert!(err.contains("E3009"), "stderr:\n{err}");
 }
+
+#[test]
+fn package_enum_label_at_i64_max_wraps_like_module_scope() {
+    // The package enum auto-increment used an unchecked `v + 1` (its module-scope
+    // and body-local twins already `wrapping_add`) — an explicit label at
+    // i64::MAX was a debug-build overflow PANIC. iverilog: B wraps to
+    // 0x8000_0000_0000_0000.
+    let (out, err, code) = run("package p;\n\
+           typedef enum logic [63:0] { A = 64'sh7FFF_FFFF_FFFF_FFFF, B } e_t;\n\
+         endpackage\n\
+         module top;\n\
+           import p::*;\n\
+           e_t e;\n\
+           initial begin e = B; $display(\"%h\", e); $finish; end\n\
+         endmodule\n");
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(out.contains("8000000000000000"), "got:\n{out}");
+}

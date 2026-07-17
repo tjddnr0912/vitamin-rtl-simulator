@@ -134,7 +134,7 @@ b0001 #
 ID 문자열 = [c3 if c3>32] + [c2 if c2>32] + [c1 if c1>32] + char(c0)
 ```
 
-결과: 첫 변수 `!`, 두 번째 `"`, ..., 94번째 `~`, 95번째 `"!`, ..., 최대 94^4 ≈ 78M 변수.
+결과: 첫 변수 `!`, 두 번째 `"`, ..., 94번째 `~`, 95번째 `!!`, ..., 최대 94^4 ≈ 78M 변수.
 
 주의: 이 알고리즘은 Tcl VCD 패키지에서 확인한 단일 구현이다. IEEE 1364 §18은 인코딩 알고리즘 자체를 규정하지 않고 "printable ASCII 33-126 범위의 1개 이상 문자"만을 요건으로 한다. 결과 범위는 표준 적합이고 rust-vcd의 `IdCode::next()` 방식과도 일관성이 있다.
 
@@ -415,7 +415,7 @@ endmodule
 
 ### 설계: VCD→FST 트랜스코드
 
-FST는 **VCD를 트랜스코드**해 생성한다(`vcd-writer/src/fst.rs`, `transcode_vcd_to_fst`). 시뮬레이션 코어는 검증된 VCD를 사이드카(`<경로>.fst.vcdtmp`)로 쓰고, `simulate` 종료 시 이를 FST로 변환한 뒤 사이드카를 삭제한다.
+FST는 **VCD를 트랜스코드**해 생성한다(`vcd-writer/src/fst.rs`, `transcode_vcd_to_fst`). 시뮬레이션 코어는 검증된 VCD를 사이드카(`<경로>.fst.vcdtmp`)로 쓰고, `simulate` 종료 시 이를 FST로 변환한다. 변환 **성공** 시에만 사이드카를 삭제하며, 변환 **실패** 시에는 `W-RUN-VCD-WRITE-FAIL` 경고를 loud하게 낸 뒤 사이드카를 **의도적으로 보존**한다 — 검증된 VCD가 디버깅용으로 살아남도록.
 
 - **정확성(correct-or-loud)**: 모든 dump 의미론(`$dumpoff`→전-x 등)은 이미 VCD 값-변화 스트림에 반영돼 있어, 그 스트림을 그대로 FST로 재생하면 **FST ≡ VCD**가 구성적으로 성립한다. 별도 바이너리 싱크를 값-변화 경로마다 배선하지 않으므로 silent-wrong 분기 여지가 없다.
 - **실수형 unknown**: `$dumpoff` 중 real은 VCD에서 전-x 벡터로 나오지만 FST real은 f64이므로 **NaN**으로 매핑한다(iverilog `rNaN`과 동일). 벡터 바이트를 real로 재해석하면 garbage float가 되는 silent-wrong을 회피.

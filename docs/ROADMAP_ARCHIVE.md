@@ -8,6 +8,29 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.151 전면 감사(spec↔코드 정합 + 적대 버그헌트 + 문서 최신화) — silent-wrong 3·panic 2·게이트 갭 1 수정, format_version 21→22 (2026-07-17, branch main) ✅
+
+**방법론**: Fagan 역할분리 리뷰어 8팀 병렬(spec-정합 4축=diag/artifact-schema/VCD-FST-timescale/OBS · 적대 버그헌트 2축=sim-engine/front-end · 코드위생 1 · 문서일관성 1) → 발견 전량을 **라이브 iverilog 차분으로 확정/반증** 후 수정. 리뷰어 발견 중 1건(psel negative-offset READ 의혹)은 **차분이 반증**(vita `100x`/`00xx` = iverilog byte-일치) — 정적 추론만으로 수정했으면 회귀였을 것.
+
+**silent-wrong 3건 수정(전부 iverilog-diff 확정)**:
+1. **`**` 지수 truncation** (`eval.rs` Pow): self-determined 지수를 결과폭으로 `resize`해 좁은 결과폭에서 지수 VALUE가 절단(`logic[3:0] r = 2**18`→vita 4 vs iverilog 0 — 18 mod 16=2로 읽음). fix=지수는 widen-only(`max(w, own)`), 결과만 `arith` 후 w로 절단. native 경로는 POW_MAX=16 초과 시 오라클-bound라 자동 수혜.
+2. **>64-bit signed→real 0.0** (`value.rs::to_i128_signed`): 64비트 게이트라 `signed [99:0]` −5가 `to_f64`서 None→`unwrap_or(0.0)`(vita 0 vs iverilog −5). fix=128-bit lane으로 확장(65..=128 부호 재구성 + unsigned 65..127 양수·>128=None 계약 유지). arr_cmp sort key·real-math arg도 동시 수혜. 잔여 known-edge=width>128→real은 여전히 0.0(초희귀·ROADMAP §3 deep 기록).
+3. **timescale 2단계 반올림 미구현** (**HIGH·format_version 21→22**): doc-08은 `#delay`를 ①모듈 자신의 precision으로 반올림→②global tick 스케일 2단계로 명세하나 구현은 global grain 1회 반올림 — 혼합-precision 설계서 발산(`1us/10ns` 모듈 `#3.453us`=vita 34530 vs iverilog **34500** ticks·`1ns/1ns` 모듈 `#2.5`=2500 vs **3000**). fix=`ResolvedTimescales.prec_exp`(per-module) 신설→elaborate `mod_prec_exp`/`cur_prec_mult`/`proc_prec_mults`(per-process S=10^(prec−global))→`SimOpts.proc_prec_mults`→엔진 `delay_ticks`/const `const_delay_ticks`가 `round(d×M/S)×S`. **staged 배선**: `.vu` timescale tail=(unit_exp, global_prec, **prec_exp**) triple·`.velab` trailer=(proc_multipliers, global_prec, **proc_prec_mults**) triple → **v22 bump**(sim-ir 불변·SimIr 골든 v19 핀 유지·v20/21 동급 trailer-only). S=1(단일 timescale/레거시 4-인자 entry)=byte-identical. one-shot+staged 양 경로 iverilog 일치 검증.
+
+**panic→clean 2건**: ④ package enum 라벨 `i64::MAX`+1 auto-increment가 unchecked `v+1`(module/body-local 쌍둥이는 이미 `wrapping_add`) — debug SIGABRT→wrapping(iverilog `8000…0` 일치). ⑤ md-packed `x[-1 +: 2]` const offset이 `const_eval_u32` wrapping_neg로 0xFFFF_FFFF→`c+w` u32 overflow debug panic→u64 승격+`u32::try_from` 가드로 clean loud(iverilog도 loud 거부).
+
+**게이트 갭 1건**: ⑥ `W-FLIST-OVERRIDE`가 raw `eprintln!`으로 GatedSink 우회 — doc-15가 약속한 `-Werror=W-FLIST-OVERRIDE` 승격 불가·counts epilogue 미포함. fix=파싱 중 record→sink 생성 직후 replay(`record_override`/`emit_flist_overrides`·5 진입점+`--dump-filelist`). 승격(exit≠0)/기본(warnings 카운트)/억제 3모드 검증.
+
+**하드닝·정리**: ⑦ FST `extend_vector` fast-path 대문자 X/Z 정규화 누락(latent — vita writer는 소문자만 방출) 수정. ⑧ doc-03 명세의 `separate-bins` dev 피처 실구현(3-line shim bins `src/bin/{vcmp,velab,vrun}.rs`+`cli::driver_main()` 공유·multicall과 동일 코드 경로). ⑨ `hdl-builtins`에 `publish=false`(dev-stub 형제 일관). 코드위생 스윕 판정=**중복/미사용/디버그 잔재 0건**(유사 코드는 전부 의도된 이중 경로 — 정확도 우선 KEEP)·스파게티 top5(lower_stmt 등 mega-match)는 시맨틱-carrying이라 leave-as-is.
+
+**stale 주석 5곳 정정**: elaborate `warn()` W3008→W3056 실태·obs.rs 모듈헤더(OBS-1a만→1a/1b/2/3 전부)·vita-artifact/cli "RULE-V Phase-2 예정"→구현 완료 실태·probe 베이스라인 주석(t0 drive는 첫 chg로 기록됨).
+
+**신규 ROADMAP 등재(loud=안전·수정 비대상 판정)**: `64'hFFFF_…`(bit63 set unsigned 64-bit) param 리터럴=E3009 over-reject(iverilog 수용 — naive `v as i64` fix는 downstream const 부호 비교를 silent-wrong으로 만들 위험이라 보류·§3 큐) · partial-timescale 정책 진단(`--timescale-policy`)=doc-08서 future로 강등+§3 큐.
+
+**문서 최신화(2-2: 코드가 옳은 곳 전부)**: format_version 8→22(doc-14/16/17)·MsgCode 산문 55→58(doc-02/15·본문 entry는 이미 58 bijection)·MSRV 1.82→1.85 약 20곳(README/CONTRIBUTING/doc-02/03/09/18/manual)·FST 언급(README/doc-00/01/04/05/manual-000)·doc-15 구조(8xxx 헤더 위치·reserved 목록·E3001 실트리거·E-ART-FORMAT-MISMATCH 런타임 재사용)·doc-19 필드 정합(trace=4-state binary·stage=%0d decimal·coverage.json=covergroup-only·run_id 미구현·`utc_unix_s`)·doc-04 hdl-builtins 실태·crate 수 15→17·doc-09 깨진 링크·doc-07 id-code 오기(`"!`→`!!`)·CHANGELOG v22 entry.
+
+**검증**: **3591 green**(기존 3579 무회귀 + 신규 회귀 12: pow 1·pkg-enum 1·psel-loud 2·wide-real 1·two-stage 3·flist-gate 3·fst-case 1) · clippy `-D warnings` clean · fmt clean · obs run.json format_version 핀 21→22 갱신 1건이 유일한 기존 테스트 변경.
+
 #### 4.5.150 FST: fst-writer 0.2.6→0.3.1 + MSRV 1.82→1.85 (Surfer 상호운용 수정) (2026-07-17, branch fix-fst-surfer-msrv185) ✅
 
 §4.5.149 FST를 **Surfer 0.7.0(wellen 리더)로 시각 검증하다 발견**: vita FST가 Surfer에서 `FailedToLoad(Fst, "I/O operation failed")`로 거부됨(GTKWave `fst2vcd`·`fst-reader`는 관대해 통과했으나 wellen은 엄격). 근본원인 = **`fst-writer` 크레이트의 타임테이블 인코딩 버그**(vita 무관 — raw fst-writer만으로 재현).

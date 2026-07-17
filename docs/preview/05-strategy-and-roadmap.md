@@ -111,7 +111,7 @@ VHDL(IEEE 1076)은 다른 언어이므로 별도 프론트엔드(lexer/parser/el
 현재는 비목표이나 IR 경계를 열어두고 후속 단계에서 검토한다:
 
 - **컴파일드/JIT 백엔드** — `sim-ir` 경계를 재사용해 Verilator 계열 성능 확보
-- **FST 파형** — LZ4 압축 기반, 대용량 설계 대응
+- ~~**FST 파형** — LZ4 압축 기반, 대용량 설계 대응~~ → ✅ **구현됨(2026-07-17)**: `$dumpfile("x.fst")`/`-o x.fst`(`.fst` 확장자 디스패치) — VCD→FST 트랜스코드(`vcd-writer/src/fst.rs`), 순수-Rust `fst-writer` 위임
 - **SV assertion 영역 확장** — Preponed / Observed / Reactive / Postponed (program block용)
 - **확장 VCD** — `$dumpports*` 지원
 

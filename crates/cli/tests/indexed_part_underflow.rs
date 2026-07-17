@@ -99,3 +99,56 @@ fn in_range_and_top_overflow_unchanged() {
          endmodule\n");
     assert!(b.contains("R c0"), "top-overflow unchanged:\n{b}");
 }
+
+/// Variant of [`run`] that also captures stderr + exit code (for loud-reject pins).
+fn run_err(src: &str) -> (String, Option<i32>) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_ipu_e_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    (
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+        out.status.code(),
+    )
+}
+
+#[test]
+fn md_packed_negative_const_offset_is_loud_not_panic() {
+    // Multi-dim packed `x[-1 +: 2]`: the const offset folds to 0xFFFF_FFFF
+    // (wrapping_neg) and `c + w` used to overflow u32 — a debug-build PANIC
+    // instead of a diagnostic. Now a clean loud reject, matching iverilog
+    // ("Part-select [-1+:2] exceeds the declared bounds").
+    let (err, code) = run_err(
+        "module t;\n\
+         logic [1:0][7:0] x;\n\
+         initial begin x[-1 +: 2] = 0; $display(\"%h\", x); end\n\
+         endmodule\n",
+    );
+    assert_ne!(code, Some(0), "must reject, not run");
+    assert!(
+        err.contains("part-select range exceeds the declared bounds"),
+        "stderr:\n{err}"
+    );
+}
+
+#[test]
+fn md_packed_minus_colon_huge_offset_is_loud_not_panic() {
+    // The `-:` guard expression `c + 1` itself could overflow at c=0xFFFF_FFFF.
+    let (err, code) = run_err(
+        "module t;\n\
+         logic [1:0][7:0] x;\n\
+         initial begin x[-1 -: 2] = 0; end\n\
+         endmodule\n",
+    );
+    assert_ne!(code, Some(0), "must reject, not run");
+    assert!(
+        err.contains("part-select range exceeds the declared bounds"),
+        "stderr:\n{err}"
+    );
+}

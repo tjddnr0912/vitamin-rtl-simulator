@@ -36,7 +36,7 @@
   AND: known-0 = `(~av&~au)|(~bv&~bu)`, known-1 = `(~au&av)&(~bu&bv)`, rv=known1·ru=`~known0&~known1`.
   라스트 부분워드는 `low_mask`로 마스킹(not_w/xnor_w가 high 0&0→1). per-bit `*1`은 `#[cfg(test)]` 오라클로 보존(`word_vs_bit_parity`가 4×4 입력×NOT을 bit-exact 대조).
 - 효과: 64비트당 64회→1회 + 브랜치리스 → LLVM 자동벡터화(NEON/AVX). wide 버스 큰 이득, 좁은 설계 무손해(1 word).
-- **`std::simd` 미도입:** portable_simd는 **nightly 전용**이라 MSRV-1.82 stable + `--locked` 3-OS 바이트동일 핀과 충돌. 안정 u64 워드 루프가 이미 SIMD-친화형(64-lane/워드)이며 LLVM이 자동벡터화하므로 명시 SIMD 불요. 도입하려면 nightly 또는 `wide` 크레이트가 필요한데 둘 다 핵심 불변식을 깸 → 의도적 제외.
+- **`std::simd` 미도입:** portable_simd는 **nightly 전용**이라 MSRV-1.85 stable + `--locked` 3-OS 바이트동일 핀과 충돌. 안정 u64 워드 루프가 이미 SIMD-친화형(64-lane/워드)이며 LLVM이 자동벡터화하므로 명시 SIMD 불요. 도입하려면 nightly 또는 `wide` 크레이트가 필요한데 둘 다 핵심 불변식을 깸 → 의도적 제외.
 - 비교(`eval.rs` relational/eq)는 산술 레인(64/128bit 정수)이라 별개 경로 — 워드化 대상 아님.
 
 ### (2) for-loop copy block (사용자 지목)
@@ -78,7 +78,7 @@
 
 ### P0a — target form = **바이트코드 VM** (확정)
 
-세 후보를 프로젝트 hard-constraint(cargo-only · `build.rs` 금지 · MSRV-1.82 핀 · `--locked` 3-OS 바이트동일) 기준으로 평가:
+세 후보를 프로젝트 hard-constraint(cargo-only · `build.rs` 금지 · MSRV-1.85 핀 · `--locked` 3-OS 바이트동일) 기준으로 평가:
 
 | 형식 | 속도 | 신규 의존 | 결정성 핀 | 판정 |
 |---|---|---|---|---|
@@ -323,7 +323,7 @@ witness·고워드 X-poison·indexed 3종) + iverilog 차분 2 디자인(`diff_w
 1. **병목은 양파.** 표면층(bit-serial) 제거 → 재측정 → 그 밑(alloc) → 또 그 밑(정규화/transient-alloc). 한 번 측정으로 끝나지 않음.
 2. **"실패한" 실험도 선행 최적화 후 재시도 가치.** inline-Value: 1차 ~0(net-write per-bit 루프가 alloc 가리고 Deref 오버헤드 상쇄) → 그 루프 word化 후 3차 1.55x.
 3. **공유 경로 > backend-전용.** interp·VM 둘 다 빨라지고 위험 낮음.
-4. **`std::simd` 여전히 미도입**(§(1)과 동일 이유: nightly/MSRV-1.82/3-OS 충돌). u64 워드 루프를 LLVM이 자동벡터화.
+4. **`std::simd` 여전히 미도입**(§(1)과 동일 이유: nightly/MSRV-1.85/3-OS 충돌). u64 워드 루프를 LLVM이 자동벡터화.
 5. **"스케줄러-바운드"의 절반은 allocator-바운드.** (2026-06-10) 알고리즘 교체 없이 타임스텝당 고정
    할당만 제거해도 클럭-바운드 1.85x — derived `Clone::clone_from`가 재할당이라는 함정(`Vec::clone_from`은
    재사용)과 `mem::take` 후 소비가 capacity를 버린다는 함정이 반복 패턴.

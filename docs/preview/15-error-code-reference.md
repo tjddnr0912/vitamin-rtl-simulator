@@ -21,7 +21,7 @@
 - **`VITA-<S>####` 숫자는 보조**(빠른 grep용). 한 번 부여하면 **영구**(빈 번호는 빈 채로,
   재사용·renumber 금지 — rustc `E0001` 방식). severity 접두 `S` ∈ {E=Error, W=Warning,
   I=Info, F=Fatal}. **초기 36개**(시드 할당)는 카테고리 내 mnemonic 알파벳순으로 부여했고(현재 본문
-  full-entry 코드는 **55개** — 2026-06-12 v7 기준), **이후 추가는
+  full-entry 코드는 **58개** — 2026-07-17 기준), **이후 추가는
   해당 밴드의 다음 빈 번호를 단조 부여**한다(알파벳 재정렬 금지). 공식 출처 기반 추가 케이스
   인벤토리는 **부록 A** 참조(미구현 예약 코드 107개 + 밴드 5/6/7).
 - severity·게이트·exit 의미는 [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md).
@@ -35,7 +35,7 @@
   `E/F/I/W-ELAB-USER-*`(elaboration-time severity 태스크 — 현재 severity 태스크는 런타임
   4xxx로 발행), `E-RUN-ASSERT-FAIL`(assert는 Phase-1.x), `W-RUN-NO-LOCATIONS`,
   `W-LINT-UNCLOSED`(lint_off 프라그마 미구현), `W-ELAB-WIDTH-TRUNC`(실제 폭-절단 경고
-  emitter 구현 전까지 예약).
+  emitter 구현 전까지 예약), `F-LIMIT-ERRORS`(`--error-limit` 플래그 미구현 — emit 지점 0개).
 
 ### 번호대 예약
 
@@ -243,17 +243,18 @@ warning[VITA-W2003]: implicit net 'enabel' inferred (default_nettype wire)  --> 
 ## 3xxx · ELABORATE
 
 ### VITA-E3001 · `E-ELAB-MULTIDRIVER` (Error)
-**한 net이 복수 구조적 드라이버로 충돌 구동.** 평탄화 sim-ir에서 한 net(또는 비트범위)이 둘
-이상의 구조적 드라이버(복수 `assign`, output 포트, gate)로 구동되고 `--multi-driver` 정책이
-`error`(기본, bucket B 입력)일 때. 값은 IEEE §6.6 4-state wired-logic으로 항상 *해소*되며, 이
-코드는 그 충돌을 hard fail로 볼지를 게이트한다. `%m` 계층 경로와 함께 보고.
+**엔진이 해소할 수 없는 continuous-assign 비트구간 겹침.** 실제 트리거는 문서 초안보다 좁다:
+한 net의 **부분 비트범위 continuous assign 구간들이 서로 겹치는데**(overlapping intervals) 엔진이
+그 겹침을 해소할 수 없을 때만 발화한다. whole-net 복수 드라이버(`assign w = a; assign w = b;`)는
+IEEE §6.6 4-state wired-logic **wire 해소로 합법**이며 이 코드를 발화하지 **않는다**(값은 항상
+해소됨). `%m` 계층 경로와 함께 보고.
 ```
-wire w;  assign w = a;  assign w = b;     // w에 두 번째 구조적 드라이버
-$ velab -s top --multi-driver error   ->  VITA-E3001 at top.w
+wire [7:0] w;  assign w[3:0] = a;  assign w[5:2] = b;   // [3:2] 구간 겹침 — 해소 불가
+$ velab -s top   ->  VITA-E3001 at top.w
 ```
-**해결:** 단일 드라이버로 줄이거나 의도된 wired-logic을 명시(`tri`/open-drain). 복수 드라이버가
-의도면 `velab --multi-driver warn`으로 정책을 낮춘다 — 같은 `E-ELAB-MULTIDRIVER` 코드가 Warning
-severity로 바뀌고 elaboration이 계속된다(`--multi-driver`는 bucket B 해시 입력이라 스냅샷 재생성).
+**해결:** 겹치는 part-select 구간을 분리하거나 단일 드라이버로 재구성. 문서화됐던
+`velab --multi-driver warn|error` 정책 플래그(warn 강등 선택)는 **미구현 future work**다 —
+현재는 정책 선택 없이 항상 Error.
 
 ### VITA-E3002 · `E-ELAB-PORT-MISMATCH` (Error)
 **인스턴스 포트 연결이 모듈 포트 선언과 비호환.** 모듈에 없는 named 포트 `.foo()`, 포트 수를
@@ -537,10 +538,6 @@ write는 원소 생성**(§7.8), **`delete(k)` 미존재 키는 무음 no-op**(�
 ```
 **해결:** 모든 덤프 대상을 첫 `$dumpvars` 호출에 모으기.
 
----
-
-## 8xxx · FILELIST
-
 ### VITA-W4022 · `W-RUN-BAD-FD` (Warning)
 
 파일 연산($fdisplay/$fwrite/$fclose)이 유효하지 않거나 이미 닫힌 디스크립터를 받음 — 해당 연산은 무시된다(iverilog 동작 동일). fd당 1회만 경고.
@@ -595,6 +592,10 @@ package-level 변수(예약 `$pkg$<pkg>` 스코프의 저장소)는 v1에서 VCD
 
 - **원인**: `$dumpvars` 인자로 import된 package 변수(또는 그 스코프)를 직접 지정.
 - **해결**: 관찰이 필요하면 모듈 변수에 복사해 덤프하거나 `$display`/OBS probe로 관찰(패키지 변수 파형은 후속).
+
+---
+
+## 8xxx · FILELIST
 
 ### VITA-E8001 · `E-FLIST-CYCLE` (Error)
 **filelist 사이클 — 활성 스택에 이미 있는 `.f`를 재포함.** 중첩 `-f`/`-F`가 (베이스 해소+lexical
@@ -691,10 +692,11 @@ warning[VITA-W8008] W-FLIST-MIXED-BASE: -f inside -F frame re-anchors to CWD (re
 억제, `-Werror=`로 승격.
 
 ### VITA-W8009 · `W-FLIST-OVERRIDE` (Warning)
-**단일값 knob이 두 곳에서 지정 — last-wins override 적용(항상 로깅).** 단일값 elaborate knob
+**단일값 knob이 두 곳에서 지정 — last-wins override 적용(gated 경고).** 단일값 elaborate knob
 (`--top-module`/`-s`, `--std`, `--timescale`, `--multi-driver`)이 평탄 `-f`/`-F`+명령줄 스트림의
 두 곳 이상에 있을 때. 명령줄 토큰이 전개 뒤에 append되어 명령줄이 `.f`를 override. silent override를
-막기 위해 **always-logged spine**(`-q`로도 억제 안 됨)으로 두 값·출처·승자를 보인다.
+막기 위해 vita-log **GATED sink** 경유로 두 값·출처·승자를 보인다 — 기본은 경고 로깅+에필로그
+카운트 집계, `-Wno-W-FLIST-OVERRIDE`로 억제, `-Werror=W-FLIST-OVERRIDE`로 승격 가능.
 ```
 # build.f: --top-module dut_b
 $ velab -s dut_a -f build.f
@@ -719,6 +721,11 @@ error[VITA-E9001] E-ART-FORMAT-MISMATCH: top.velab has format_version=2, this vi
 ```
 **해결:** 현재 도구로 재생성(`vcmp`/`velab`, 또는 `vcmp --clean`). 산출물은 항상 재생성 가능하므로
 refuse-and-rebuild(version-GATE), silent 마이그레이션 없음. exit class 2. 억제 불가.
+
+> **런타임 재사용(방어적 Fatal).** 같은 코드가 **런타임에도** can't-happen 가드로 재사용된다:
+> `.velab`의 fork join-mode 트레일러 항목이 누락된 경우(손-절단/stale 산출물;
+> `sched.rs::fatal_fork_mode_missing`) join 모드를 지어내는 대신 이 코드로 **loud하게 즉시 종료**
+> 한다(exit class 1). 본문에 기술한 1차 용도(헤더-전용 로드 게이트, exit class 2)는 불변.
 
 ### VITA-E9002 · `E-ART-SCHEMA-MISMATCH` (Error)
 **산출물 schema_hash가 도구의 구조적 타입-형상 해시와 다름.** 헤더의 `schema_hash`(D2/§5의
@@ -779,7 +786,7 @@ RTL 버그 아님). 억제 불가.
 
 ## 부록 A · 조사 기반 에러/경고 케이스 인벤토리 (공식 출처)
 
-> 본문(§0~9)의 55개(현재 full-entry / `MsgCode` enum 등재 수, 2026-06-12 v7 기준)는 **MVP 설계·구현 대상** 코드다. 본 부록은 실제 시뮬레이터
+> 본문(§0~9)의 58개(현재 full-entry / `MsgCode` enum 등재 수, 2026-07-17 기준)는 **MVP 설계·구현 대상** 코드다. 본 부록은 실제 시뮬레이터
 > (Verilator · Icarus iverilog · VCS · Xcelium · GHDL) 공식 문서 + IEEE 1800/1364가 정의하는
 > **추가 오류/경고 조건 107개를 미리 수집한 인벤토리**다 — 추후 구현 시 어떤 케이스를 처리해야
 > 하는지 미리 드러내 구현을 용이하게 하려는 목적이다. **이 코드들은 아직 미구현(예약)** 이며,
@@ -796,7 +803,7 @@ RTL 버그 아님). 억제 불가.
 `LINT` = 스타일/린트(선택; Verilator 기본 off 다수) · `SVA`/`SV-TYPE`/`VHDL` = 예약 밴드(향후 기능).
 *sev* 약어 Erro=Error.
 
-**번호 부여 (거버넌스 보강):** 초기 36개(시드)는 알파벳순으로 부여했고(현재 본문 55개), **이후 추가는 해당 밴드의
+**번호 부여 (거버넌스 보강):** 초기 36개(시드)는 알파벳순으로 부여했고(현재 본문 58개), **이후 추가는 해당 밴드의
 다음 빈 번호를 영구 부여한다(재정렬·renumber 금지)** — 그래서 본 부록 번호는 알파벳순이 아니다.
 mnemonic이 1차 안정 키임은 동일. 구현 전이므로 일부 번호는 향후 통합·재배치될 수 있다(미구현
 인벤토리 한정).

@@ -80,7 +80,7 @@ preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명
 
 ## Cargo 워크스페이스 / 크레이트
 
-15개 크레이트가 단일 cargo workspace를 구성한다. 각 크레이트는 단일 책임 + 명확한 인터페이스를 가져 독립적으로 테스트 가능하다.
+17개 크레이트(프로덕션 15개 + dev/test 전용 2개 — `corpus-runner`·`vcd-diff`, publish=false)가 단일 cargo workspace를 구성한다. 각 크레이트는 단일 책임 + 명확한 인터페이스를 가져 독립적으로 테스트 가능하다. 아래 표는 프로덕션 15개다.
 
 | 크레이트 | 책임 | 의존 |
 |---|---|---|
@@ -91,8 +91,8 @@ preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명
 | `elaborate` | 파라미터 해소·계층 평탄화·타입/연결성 검사 → IR 생성 | ast, sim-ir, diag |
 | `sim-ir` | 언어 중립 시뮬레이션 IR (net/process/sensitivity/builtin-call) | vita-artifact-derive (serde·SchemaHash derive) |
 | `sim-engine` | 이벤트 구동 커널, 스케줄러, 시간 모델 | sim-ir |
-| `hdl-builtins` | 표준 `$`-system tasks/functions 라이브러리 — 디스패치 테이블 + 카테고리별 핸들러 | sim-ir, sim-engine, vcd-writer |
-| `vcd-writer` | IEEE 1364 VCD 직렬화 (dump 태스크가 호출될 때만 활성) | sim-ir |
+| `hdl-builtins` | 표준 `$`-system tasks/functions 라이브러리 — 디스패치 테이블 + 카테고리별 핸들러 (**post-v1 추출 목표 설계**; 현재는 1줄 stub이고 `$task` 핸들러는 `sim-engine/src/builtins.rs`에 인라인) | sim-ir, sim-engine, vcd-writer |
+| `vcd-writer` | IEEE 1364 VCD 직렬화 + VCD→FST 트랜스코드(`fst.rs`, fst-writer 위임) (dump 태스크가 호출될 때만 활성) | sim-ir |
 | `diag` | 진단 *렌더링* (file:line:col + caret) + `Severity`/`MsgCode`/`Frame`/`Diagnostic`/`LogSink`/`LogEvent` 데이터 모델 (IO 없음 → leaf) | — |
 | `vita-artifact` | 단계 산출물 (역)직렬화 + 헤더(magic/format_version/schema_hash/빌드지문) + staleness 검사(D3 트리플 대조) + `--dump` RON 뷰 | hdl-ast, sim-ir, hdl-preprocess, diag, vita-artifact-derive |
 | `vita-artifact-derive` | `#[derive(SchemaHash)]` proc-macro — 타입별 local shape 문자열을 컴파일 타임 방출 (leaf, syn/quote) | — |
@@ -114,9 +114,9 @@ preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명
 
 **`sim-engine`** 은 IR을 실행하는 이벤트 루프 코어다. 시간 모델, stratified queue, delta cycle이 모두 여기에 있다. hdl-builtins에 의존하지 않는다 — builtin 실행은 hdl-builtins가 엔진 위에서 동작하는 구조다.
 
-**`hdl-builtins`** 는 표준 `$`-system tasks/functions 전 범주를 구현하는 라이브러리다. display·I/O·file I/O·sim ctrl·time·변환·비트벡터·수학·random·dump·assertion 샘플링·introspection을 카테고리별 핸들러로 구현하고 디스패치 테이블로 묶는다. sim-engine, vcd-writer 양쪽을 의존해 dump 패밀리 호출을 vcd-writer로 라우팅한다. (`hdl-reference/system-tasks/` 참조)
+**`hdl-builtins`** 는 표준 `$`-system tasks/functions 전 범주를 담는 라이브러리로 **설계**되었다 — display·I/O·file I/O·sim ctrl·time·변환·비트벡터·수학·random·dump·assertion 샘플링·introspection을 카테고리별 핸들러로 구현하고 디스패치 테이블로 묶어, sim-engine·vcd-writer 양쪽을 의존해 dump 패밀리 호출을 vcd-writer로 라우팅하는 구조다. **단, 이 디스패치-테이블 분리는 post-v1 추출 목표이며, 현 구현에서 이 크레이트는 1줄 stub이다** — `$task` 핸들러 실체는 `sim-engine/src/builtins.rs`에 인라인으로 있고, 코드의 HOOK 주석이 추출 지점을 표시한다. (`hdl-reference/system-tasks/` 참조)
 
-**`vcd-writer`** 는 직렬화 책임만 갖는다. VCD 헤더·$scope 계층·$var 선언·값 변화 기록이 모두 이 크레이트다. sim-engine이나 hdl-builtins의 실행 로직과 섞이지 않는다.
+**`vcd-writer`** 는 직렬화 책임만 갖는다. VCD 헤더·$scope 계층·$var 선언·값 변화 기록이 모두 이 크레이트다. 출력 파일 확장자가 `.fst`(대소문자 무관)면 VCD→FST 트랜스코드(`fst.rs`)도 이 크레이트가 담당하며, FST 바이너리 인코딩은 순수-Rust `fst-writer` 크레이트에 위임한다. sim-engine이나 hdl-builtins의 실행 로직과 섞이지 않는다.
 
 **`diag`** 는 소스 위치 정보와 오류/경고 메시지를 일관된 형식으로 생성하는 공유 라이브러리다. 렌더러는 `miette`(`default-features = false`로 leaf 순수성 유지; `codespan-reporting`을 fallback로 교체 가능)다. 어느 단계에서든 같은 방식으로 진단을 보고할 수 있게 한다. (크레이트 결정 근거는 [02-implementation-language.md](02-implementation-language.md))
 
@@ -157,6 +157,11 @@ preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명
 ## Builtin Dispatch (hdl-builtins)
 
 system task 호출 하나가 파이프라인을 어떻게 통과하는지 단계별로 따라간다.
+
+> **현 구현 주의.** 아래 3~5단계의 "hdl-builtins 디스패치 테이블"은 **post-v1 추출 목표 설계**다.
+> 현재 `hdl-builtins`는 1줄 stub이고, `$task` 핸들러는 전부 `sim-engine/src/builtins.rs`에
+> 인라인으로 구현되어 있다(코드의 HOOK 주석이 추출 경계를 표시). 1~2단계와 dump→vcd-writer
+> 라우팅 의미론은 현 구현에서도 동일하다.
 
 **1. parser → AST:** HDL 소스의 `$xxx(arg1, arg2)` 구문을 parser가 인식해 언어별 builtin call AST 노드를 만든다. 이름(`$xxx`)과 파싱된 인자 표현식 목록을 담는다.
 

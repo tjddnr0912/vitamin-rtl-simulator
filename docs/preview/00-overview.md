@@ -22,13 +22,14 @@ HDL 소스
   → parse        (언어별 AST · 문법 검사)
   → elaborate    (파라미터 해소 · 계층 연결성 · 타입/포트 정합 · 다중구동 검사)
   → sim engine   (이벤트 구동 커널 · timescale 시간 모델)
-  → VCD writer   (RTL dump 태스크 호출 시에만 활성)
+  → VCD writer   (RTL dump 태스크 호출 시에만 활성 · 파형 = VCD + FST(`.fst` 확장자 디스패치, VCD→FST 트랜스코드))
 ```
 
 검사는 별도 단계가 아니라 각 단계 내부에서 수행된다.
 문법 오류는 parse에서, 연결성·타입·다중구동 등 정합성 오류는 elaboration에서 잡는다.
 VCD 파형은 자동 항상-덤프가 아니며, RTL 코드가 dump 시스템 태스크(`$dumpfile`, `$dumpvars` 등)를
-명시적으로 호출할 때에만 생성된다.
+명시적으로 호출할 때에만 생성된다. 파형 출력은 VCD + FST를 지원한다 —
+`$dumpfile("x.fst")`처럼 확장자가 `.fst`(대소문자 무관)면 FST(VCD→FST 트랜스코드), 그 외는 VCD다.
 
 실행은 두 방식이다. `vita` 하나로 compile→elaborate→simulation을 한 번에 돌리거나,
 단계별 명령 `vcmp`(compile)·`velab`(elaborate)·`vrun`(simulation)으로 나눠 돌릴 수 있다.

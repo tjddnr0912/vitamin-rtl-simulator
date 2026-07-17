@@ -5,7 +5,7 @@ full **Verilog-2005** synthesizable RTL subset plus a large **SystemVerilog**
 subset — `logic`, `always_ff/comb/latch`, `enum` / `typedef` / packed `struct`,
 functions/tasks, dynamic / queue / associative arrays, classes, and assertions
 (SVA) — producing a textual `$display` transcript and a hierarchical **VCD**
-waveform.
+(or **FST**) waveform.
 
 Its goals are **determinism** (byte-identical output across Linux and macOS) and
 a **clean, source-only `cargo` build** with no C/C++ dependencies.
@@ -17,7 +17,7 @@ preprocess → lex → parse → elaborate → sim-ir → sim-engine → VCD
 > **Status — actively developed (`0.0.0`).** The full pipeline works end-to-end
 > in both one-shot and staged modes, spanning Phase-1 RTL, a broad SystemVerilog
 > subset, and Phase-3 verification features (SVA, classes, constrained-random).
-> **2,600+ tests pass**; behaviour is checked against Icarus Verilog (`iverilog`)
+> **3,500+ tests pass**; behaviour is checked against Icarus Verilog (`iverilog`)
 > by live differential review under a strict **correct-or-loud** rule — the
 > simulator never produces a silently wrong result, and anything unsupported is
 > an explicit diagnostic. Platforms: **Linux and macOS** (Windows is not
@@ -38,7 +38,7 @@ dispatched by name (or `vita <sub>`).
 ## Quick start
 
 Build from a clone of this repository (needs a Rust toolchain — `rust-toolchain.toml`
-pins **1.82** automatically):
+pins **1.85** automatically):
 
 ```sh
 cargo build --release --workspace --locked      # builds target/release/vita
@@ -47,7 +47,10 @@ cargo build --release --workspace --locked      # builds target/release/vita
 
 You will see the `$display` transcript on stdout and a `counter.vcd` waveform in
 the current directory — open it in [GTKWave](https://gtkwave.sourceforge.net/) or
-[Surfer](https://surfer-project.org/). To install the tools onto your `PATH`, run
+[Surfer](https://surfer-project.org/). To get an **FST** waveform instead, give
+the output an `.fst` extension — `-o waves.fst` on the command line, or
+`$dumpfile("waves.fst")` in the RTL (any other extension writes VCD). To install
+the tools onto your `PATH`, run
 `./install.sh` (or see [Installation](docs/manual/001_installation.md)).
 
 A minimal design:
@@ -86,7 +89,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain pins (MSRV 1.82, edition
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain pins (MSRV 1.85, edition
 2021, `--locked`) and the determinism rules that keep builds reproducible.
 
 ## License

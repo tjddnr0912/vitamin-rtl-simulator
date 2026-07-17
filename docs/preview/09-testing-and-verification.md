@@ -281,7 +281,7 @@ strict — 두 요구를 분리해 만족한다(13-diagnostics-and-logging.md `-
 
 > **구현됨(2026-06-10):** 모노레포 루트 `.github/workflows/vitamin-ci.yml` —
 > `016_claude_rtl/**` paths 필터, **ubuntu-latest / macos-14 / windows-latest**
-> 3-OS 매트릭스(결정성 계약과 일치), toolchain은 `rust-toolchain.toml`(MSRV 1.82
+> 3-OS 매트릭스(결정성 계약과 일치), toolchain은 `rust-toolchain.toml`(MSRV 1.85
 > 핀)을 rustup이 자동 인식(stable/beta 매트릭스는 핀과 충돌이라 비채택), 게이트 =
 > `fmt --check` → `clippy -D warnings` → `test --workspace --locked`. ubuntu에만
 > iverilog를 설치해 차분 스위트가 라이브 오라클로 돌고, 부재 OS에선 설계대로
@@ -320,7 +320,7 @@ cargo run --bin vcd-diff -- ...  # 차등검증 diff
 ## Sources
 
 - 본 spec §8 (시뮬레이션 엔진 설계)
-- research-log: [`iverilog-verilator-behaviors-2026-05-28.md`](../research-log/iverilog-verilator-behaviors-2026-05-28.md)
+- research-log: [`iverilog-verilator-behaviors-2026-05-28.md`](research-log/iverilog-verilator-behaviors-2026-05-28.md)
 - Icarus Verilog 공식 문서: https://steveicarus.github.io/iverilog/usage/index.html
 - Verilator 공식 문서: https://verilator.org/guide/latest/
 - CHIPS Alliance sv-tests: https://github.com/chipsalliance/sv-tests

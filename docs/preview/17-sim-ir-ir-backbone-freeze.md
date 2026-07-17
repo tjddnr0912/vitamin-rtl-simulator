@@ -18,6 +18,11 @@
 
 ## 1. `Expr` — 식 enum
 
+> **주(M3-baseline verbatim).** §1/§2의 verbatim 블록은 **M3 동결 시점의 baseline 형상**이다
+> (`Expr` 10-variant, `BinOp`에 `CasezEq/CasexEq` 부재 등). 이후의 **의도적 re-freeze**(v4~v19,
+> §10 및 `crates/vita-artifact/src/header.rs` 주석에 기록)가 이를 확장했다 — 예:
+> `Expr::ArrayItem`(v17), `BinOp::CasezEq/CasexEq`(v7). 블록은 baseline 기록으로 보존한다.
+
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum Expr {
@@ -298,15 +303,15 @@ node-kind당 append-only `Vec` 1개 = 재로드 시 포인터 fixup 0.
 
 ---
 
-## 8. derive 가드 (V-PRIM) — **동결 prerequisite**
+## 8. derive 가드 (V-PRIM) — **구현 완료(DONE)**
 
-> **현 derive는 `usize`/`isize`/`f32`/`f64`를 거부하지 않는다.** `vita-artifact-derive`의 `PRIMITIVES`에 들어 있어 정상 렌더된다. PR1 체크리스트가 주장한 "frozen 클러스터 usize/isize 거부" 가드가 **코드에 없다.** M3 결정성이 여기 걸려 있다.
+> **현 derive는 `usize`/`isize`/`f32`/`f64`를 하드 거부한다(구현됨).** `vita-artifact-derive/src/lib.rs`가 4개 타입 전부에 `compile_error!` reject arm을 두고(HashMap/HashSet 가드 미러), `PRIMITIVES`에서 이 4개는 제거됐다. 초안이 지적했던 "가드가 코드에 없다" 상태는 해소됨 — M3 결정성 prerequisite 충족.
 
-**필수 수정(M3 deliverable, 골든 pin 전 선착):**
-1. `render_path_type`에서 `PRIMITIVES.contains` arm **앞에** `usize`/`isize`/`f32`/`f64` reject arm 추가 → `compile_error!`(HashMap/HashSet 가드 미러). `PRIMITIVES`에서 이 4개 제거.
-2. `sim-ir`에 belt-and-suspenders 테스트: `schema_hash::<SimIr>()`의 canonical 문자열이 토큰 `usize`/`isize`/`f32`/`f64`를 **하나도 안 담음** 단언.
+**구현 내역:**
+1. `render_path_type`에서 `PRIMITIVES.contains` arm **앞에** `usize`/`isize`/`f32`/`f64` reject arm → `compile_error!`(HashMap/HashSet 가드 미러). `PRIMITIVES`에서 이 4개 제거. ✅
+2. belt-and-suspenders 테스트 `crates/sim-ir/tests/no_float_usize.rs`: `schema_hash::<SimIr>()`의 canonical 문자열이 토큰 `usize`/`isize`/`f32`/`f64`를 **하나도 안 담음** 단언. ✅
 
-미수정 시 stray `usize` 인덱스 필드가 작성자 머신에선 통과하고 런타임 3-OS 바이트를 컴파일 신호 없이 깬다.
+이 가드로 stray `usize` 인덱스 필드는 작성자 머신에서 이미 **컴파일 타임에 loud 거부**된다 — 런타임 3-OS 바이트 결정성이 컴파일 신호 없이 깨질 경로 차단.
 
 **F2 경로(disc/array-len whitespace):** M3 frozen 타입 중 명시 discriminant·고정배열 `[T;N]` 사용 0 → F2 경로 미진입, F2 수정 불요.
 
@@ -324,7 +329,9 @@ node-kind당 append-only `Vec` 1개 = 재로드 시 포인터 fixup 0.
 - **format_version 5–8 (2026-06-10~14) — 후속 re-freeze:** v5=`NonblockingAssign.delay`(NBA transport delay)
   +`NetKind` Dyn 3종(동적 배열/queue/assoc)+`SysFunc`/`SysTask` 메서드 — v6=queue `insert/delete`·assoc iter·string 키
   — v7=`BinOp::CasezEq/CasexEq`+`SysFuncId`/`SysTaskId` 다수($random·파일 I/O·readmem·bit-vector)+`NetKind::String`
-  — **v8=`WaitCause::Fork`(wait fork IR)**. **현재 골든 `format_version` = 8.** SVA(concurrent assert·시퀀스·
+  — **v8=`WaitCause::Fork`(wait fork IR)**. **현재 골든 `format_version` = 22**(SimIr 골든 해시는
+  **v19 re-freeze에 핀** — v20/21/22는 trailer-only bump·골든 불변; v9~v22 버전별 이력 정본 =
+  `crates/vita-artifact/src/header.rs` 주석). SVA(concurrent assert·시퀀스·
   sampled fn·named property/sequence·multi-clock)와 wait fork **기능**은 v8 위에 **순수 IR-0 desugar + AST-flip**으로
   얹혀 `.vu` AST-해시만 재핀(SimIr 골든 무변경).
 - **`format_version` bump:** M3가 전 백본 동결 → 루트 해시 by construction 변경 → 이전 모든 `.velab` 무효(decode 시 incompatible-tool 하드 에러, silent misparse 없음). M3 동결로 1회 bump; 새 `schema_hash_is_pinned` EXPECTED + canonical 골든(SimIr 루트) 커밋.
@@ -339,7 +346,7 @@ node-kind당 append-only `Vec` 1개 = 재로드 시 포인터 fixup 0.
 1. `Select`/`LvalChunk` 비-self-contained(방향/width는 `nets[net].msb/lsb` 조인). arena IR이므로 수용.
 2. `SensKind` provenance 5-variant(런타임은 ~2). 진단 가치로 수용.
 3. `Const`→`consts` 간접화(작은 리터럴). uniform pool dedup으로 수용.
-4. **derive 가드(§8)가 prerequisite.** `usize/isize/f32/f64` reject arm 착지 전 골든 pin 금지.
+4. ~~derive 가드(§8)가 prerequisite.~~ ✅ 착지 완료(§8 DONE — reject arm + `no_float_usize.rs`).
 5. `with=`-클래스 wire 변경은 Layer-1 사각(doc 16 경계) — Layer-3 RON 전담. M3 frozen 타입 `#[serde(with=)]` 0이라 노출 nil.
 
 **Phase-2 re-freeze (의도적 루트-해시 flip, 전 `.velab` 재생성):**

@@ -15,7 +15,7 @@
 
 | REQ | 내용 | 원문 | 분류 |
 |---|---|---|---|
-| R-L0 | run manifest(run.json: run_id·utc·tool/version·seed·plusargs·소스 해시·pass/fail 카운트·wall_s) | §2 L0 | 로그 rail |
+| R-L0 | run manifest(run.json — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·utc_unix_s·wall_s. 리뷰어 원문의 `run_id`는 **미구현-연기**, wall-clock 키는 `utc`가 아니라 `utc_unix_s`/`wall_s`) | §2 L0 | 로그 rail |
 | R-L1 | test-case ledger(results.jsonl, PASS=1줄 terse·FAIL=detail_ref) | §2 L1 | 로그 rail |
 | R-L2 | failure detail(fail/*.json, 발산점 값 우선) | §2 L2 | 로그 rail |
 | R-L3 | FSM/state trace(**transition만**, hang용 stuck_in) | §2 L3 | 로그 rail |
@@ -41,7 +41,7 @@
 | REQ | 현재 자산 (fit) | gap (해야 할 일) | 공수 |
 |---|---|---|---|
 | R-F1 결정성 | **이미 코어 불변식**(3-OS byte-identical·seeded RNG·BTree-only) — legacy 대비 구조 우위 그대로 상속 | JSONL sink가 같은 게이트(골든 byte-diff 테스트)를 통과하게 작성 | S |
-| R-F1 경로/값 | VCD writer가 계층 `$scope` 안정 경로 보유·enum 이름은 IR/사이드카에 존재·4-state 값 모델 | 경로 문자열 규칙(VCD scope 규칙 재사용)·값 포맷터(`W'h..`, x/z 문자 유지)·envelope(`v`,`t`,`kind`) 확정=**본 스펙 §3** | S |
+| R-F1 경로/값 | VCD writer가 계층 `$scope` 안정 경로 보유·enum 이름은 IR/사이드카에 존재·4-state 값 모델 | 경로 문자열 규칙(VCD scope 규칙 재사용)·값 포맷터(4-state x/z 문자 유지 — 출하 인코딩은 §3 핀4: trace=full-width 이진·stage=`%0d` 10진)·envelope(`v`,`t`,`kind`) 확정=**본 스펙 §3** | S |
 | R-L0/L1/L5 | exit-code 분류·`$fatal`/assertion 카운트·**N5 functional coverage + SVA/cover 카운터 이미 구현**·plusargs 파서 존재 | `--obs-dir` CLI + 직렬화기. 주의: vitamin은 현재 1 run=1 test 모델 → v1 test_id=run 단위(TB-루프 분절은 `$vita_test_begin/end` v2) | S-M |
 | R-L3/R-I1 | 엔진에 net 변경 감지 스트림 존재(VCD가 그 소비자)·net_names 사이드카 | **JSONL probe sink** = 같은 변경 스트림의 2번째 소비자(`--probe <path>`/`--probe-file`). 미해석 경로=loud | M |
 | R-L4/R-I2 | — (채널 추상화는 설계 지식이라 sim이 강제 불가) | config로 채널 기술(valid/ready/data 튜플)→fire-event 자동 emit. probe sink 위의 얇은 층 | M |
@@ -55,7 +55,7 @@
 
 **제약(전 단계 공통)**:
 - **골든 무영향**: obs 설정은 CLI/SimOpts 사이드카(out-of-band) — frozen SimIr 형상 불변=**전부 IR-0**, format_version 불변. obs rail 자체 버전은 별도 `schema_ver`(초기 1).
-- **결정성 게이트**: 동일 입력+seed+obs 설정 → JSONL **byte-identical**(이벤트 순서 포함)을 골든 테스트로 상시 게이트. wall-clock(`utc`,`wall_s`)은 manifest의 명시 필드 2개에만 격리(비교 시 제외 규칙을 스펙에 핀).
+- **결정성 게이트**: 동일 입력+seed+obs 설정 → JSONL **byte-identical**(이벤트 순서 포함)을 골든 테스트로 상시 게이트. wall-clock(`utc_unix_s`,`wall_s`)은 manifest의 명시 필드 2개에만 격리(비교 시 제외 규칙을 스펙에 핀).
 - **loud 관찰**: probe 경로 미해석·미지원 kind·windowed 질의 범위 오류 = E-code loud. 값은 엔진 값에서만 파생(3-way 차분이 teeth).
 - **token 경제**: PASS=1줄 terse·FAIL=rich·transition/event만(전 cycle 덤프 금지)·VCD는 사람용으로 유지(JSONL은 별도 rail).
 
@@ -64,7 +64,7 @@
 1. **rail 분리**: VCD(사람용)와 semantic JSONL(LLM용)은 별개 산출물. 리뷰어 anti-pattern 계약(R-A) 전문 채택.
 2. **결정성 계약의 승격**: R-F1의 "동일 seed→byte-identical 로그"를 vitamin 골든 게이트로 승격(기존 3-OS 결정성 인프라 재사용). 이것이 legacy 대비 1호 차별점이자 checkpoint/bisect/stage-diff의 전제.
 3. **로그도 correct-or-loud**: 틀린 로그=silent-wrong. 이중 계산 금지(엔진 단일 소스)·미해석=loud·**3-way 내부 차분(JSONL≡VCD≡`$display`)을 OBS 슬라이스의 표준 teeth**로. 적대 2-sub 리뷰 프로토콜(LOOPROMPT §4) 동일 적용.
-4. **record envelope(스키마 계약)**: 매 record = self-contained 1줄 JSON, 최소 필드 `{"v":1,"t":<time u64>,"kind":"..."}` + kind별 payload. 값=**명시폭 hex, 4-state 문자 유지**(`"8'h1x"`) · enum=**이름 문자열**(미명명 값은 `"E:8'h03"` 폴백) · 경로=VCD scope 규칙의 full-hier 문자열(`"top.u0.state_q"`). 키 순서 고정(직렬화기가 결정)=byte-identity.
+4. **record envelope(스키마 계약)**: 매 record = self-contained 1줄 JSON, 최소 필드 `{"v":1,"t":<time u64>,"kind":"..."}` + kind별 payload. **값 인코딩(출하 확정 — 초안의 "명시폭 hex(`"8'h1x"`)"에서 의도적으로 변경·수용된 설계)**: `trace.jsonl`의 `old`/`new` = **full-width 무접두 4-state 이진 문자열**(MSB-first, 문자 0/1/x/z, 예 `"1010101111001101"`) — bit-정밀·폭 모호성 0; `stage.jsonl`의 `vals[]` = **10진 `%0d` 문자열**(의도적 — 병행 `$display %0d`와의 3-way 차분 teeth를 위한 미러) · enum=**이름 문자열**(미명명 값은 폴백) · 경로=VCD scope 규칙의 full-hier 문자열(`"top.u0.state_q"`). 키 순서 고정(직렬화기가 결정)=byte-identity.
 5. **단계 순서 = 리뷰어 §8(로그 먼저) → §9.4(capability)**: MVP가 즉시 유용하고 저위험(S-M)·제어 API는 L급. OBS-1→2→3→4→5→6.
 
 ## 4. 단계별 계획 (step-by-step)
@@ -74,7 +74,7 @@
 | 단계 | 산출물 | 구현 스케치 | 검증(teeth) | 공수 |
 |---|---|---|---|---|
 | **OBS-0 ✅** | 본 스펙(계약·스키마·우선순위) | — | — | — |
-| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0: tool/version/format_version/seed/plusargs/소스 blake3/exit 분류/카운트) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: covergroup/coverpoint/bins hit·assertion pass/fail·cover property 카운트 직렬화) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
+| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0 — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·utc_unix_s·wall_s; `run_id`는 미구현-연기) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: **functional covergroup 커버리지만** 직렬화 — `groups[]{instance, coverage_pct, coverpoints[]{name,is_cross,num_bins,covered_bins,coverage_pct}}`; assertion pass/fail·cover property 카운트는 **미포함** — OBS-2 `sva.jsonl` 슬라이스로 라우팅) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
 | **OBS-2** | `--probe <path>`(반복)/`--probe-file F` → `trace.jsonl`(R-L3/R-I1: **변경 시만** `{v,t,kind:"chg",path,old,new}`) + `sva.jsonl`(R-L6: property명·시각·verdict·leaf 신호값=support-cone v0) | VCD 변경 스트림의 2번째 소비자로 probe sink 연결·경로 해소는 elaborate 심볼 테이블(미해석=loud E-code) | 3-way 차분(trace.jsonl ≡ VCD 동일 net 타임라인 ≡ `$monitor`)·probe 오타=loud 테스트 | M |
 | **OBS-3** | `$vita_stage("label", v0, v1, …)` → `stage.jsonl`(R-S3: `{v,t,kind:"stage",label,idx,vals[]}`) — 사용자 TB가 emulator와 동일 스키마로 정렬 diff 가능 | 벤더 시스템 태스크(no-op Display+StmtId 사이드테이블 선례=§4.5.x `$timeformat` 패턴, IR-0·bump 회피)·`+STAGE_TRACE` plusarg 게이트 | 라벨 순서·값을 `$display` 병행 emit과 바이트 대조·iverilog 호환은 `` `ifdef VITA `` 가드 문서화 | M |
 | **OBS-4** | `vrun --control stdio` JSON-RPC(R-C1): `peek(path)`·`poke(path,val)`·`step(n)`·`run_until(time)`·`finish` + 에러 계약(unknown path/bad val=구조화 에러) | time-step 경계에 REPL(단일 스레드 유지)·poke=스케줄 주입 이벤트·**전 명령을 run.json에 저널**(→동일 세션 재생=replay v0) | 제어 세션 기록→비대화식 재실행이 byte-identical·poke≡`force/release`-등가 케이스 내부 차분 | L |
@@ -82,6 +82,8 @@
 | **OBS-6** | X-origin(R-C4: per-net first-X `{t,path,cause}`)·region-annotated events(R-C3: `region:"active\|nba\|…"`,probe-set 한정)·정적 backward cone(R-C5 v1) | X 생성 3지점(uninit/multi-drv/arith) 태깅·스케줄러 region 큐 노출·sim-ir 에지 역추적 | X-cause를 수작업 유도 케이스로 핀·region 순서는 스케줄러 스펙(doc-06)과 대조 | L+ |
 
 | **OBS-S0 (구현됨)** | `--hier-tree <path>`(module hierarchy tree: top부터 `<instance> : <module>` indented) + `--inst-paths <path>`(전 instance full dotted path `top.u_cpu.u_alu` 1/line·VCD `$scope` 일치)(R-S0) — scope 설정/signal force copy-paste용 | elaborate `InstanceInfo{path,module,parent}` out-of-band sidecar(`elaborate_instance` hook·frozen-IR 무영향)·CLI가 elaborate 후 렌더·one-shot `vita`(staged velab=follow-on) | tree/paths 텍스트 대조·nested/arrayed/generate scope 이름 = VCD `$scope`와 일관 | **S(완료 2026-07-13, §4.5.129)** |
+
+> **OBS-2 probe 의미론(출하)**: `probe_prev`는 **t0 이전 construction 값**으로 arm된다 — 따라서 t0에 처음 구동된 값도 **첫 `chg`로 기록**된다(`old`=construction 기본값, 보통 x). transition-only dedup은 그 이후부터 적용.
 
 **비목표(rail 밖)**: FSDB/UCDB·SQLite 내장(외부 로더 스크립트 1개로 충분 — 리뷰어도 optional)·waveform GUI·UVM 연동·L4 채널 자동 추론(R-I2는 config 기술 기반만). VCD는 사람용으로 유지.
 

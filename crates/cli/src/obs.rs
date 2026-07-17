@@ -1,5 +1,7 @@
-//! OBS-1a (G2 observability rail): the run manifest (`run.json`, R-L0) and the
-//! single-run result ledger (`results.jsonl`, R-L1), written to `--obs-dir`.
+//! G2 observability rail writers — OBS-1a run manifest (`run.json`, R-L0) +
+//! result ledger (`results.jsonl`, R-L1), OBS-1b functional coverage
+//! (`coverage.json`, R-L5), OBS-2 probe trace (`trace.jsonl`), and OBS-3 stage
+//! ledger (`stage.jsonl`), all written to `--obs-dir`.
 //!
 //! This is an out-of-band, machine-readable companion to the human-facing
 //! stdout/VCD — "what was the run's config + source identity + pass/fail
@@ -10,11 +12,9 @@
 //! are DETERMINISTIC except the two isolated wall-clock fields (`utc_unix_s`,
 //! `wall_s`), which a determinism golden excludes.
 //!
-//! Not here (follow-ons): `coverage.json` (R-L5) is OBS-1b — functional
-//! coverage is synthesized into IR nets with no engine-level aggregate to
-//! flush, so a faithful export needs its own slice, not a fabricated count.
-//! A per-source-file breakdown, a `--seed` flag, and a per-testcase `results`
-//! ledger (v2, `$vita_test_begin/end`) are later slices too.
+//! Not here (follow-ons): `sva.jsonl` (OBS-2 잔여), staged/vrun obs, a
+//! compile-fail manifest, a `--seed` flag, and a per-testcase `results`
+//! ledger (v2, `$vita_test_begin/end`) are later slices (ROADMAP §6).
 
 use std::io::Write;
 

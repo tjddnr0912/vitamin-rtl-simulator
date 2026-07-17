@@ -121,14 +121,17 @@ supported. The backend is a deterministic IR-walking interpreter; a compiled
 backend is reserved for a later phase behind the `sim-ir` boundary. Values are
 4-state (`0`/`1`/`x`/`z`).
 
-Out of scope for now: synthesis itself, a waveform GUI, non-VCD wave formats
-(FST), and advanced verification features (UPF, SDF back-annotation, DPI-C,
-coverage, UVM).
+Beyond the RTL core, waveforms can be written as **FST** as well as VCD (give
+the output an `.fst` extension via `$dumpfile` or `-o`), and functional
+coverage (`covergroup`/`coverpoint`/`bins`/`cross`) is implemented, alongside
+SVA and class-based constrained-random verification. Out of scope for now:
+synthesis itself, a waveform GUI, other wave formats (FSDB), and the UVM
+ecosystem (plus UPF, SDF back-annotation, DPI-C).
 
 ## Supported platforms
 
 vitamin runs on **Linux and macOS** (Apple Silicon and Intel). It builds from
-source with `cargo` against a pinned toolchain (MSRV **1.82**, edition 2021); use
+source with `cargo` against a pinned toolchain (MSRV **1.85**, edition 2021); use
 `--locked` for reproducible builds. **Windows is not supported.**
 
 ## Where to go next

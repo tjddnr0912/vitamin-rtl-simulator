@@ -46,7 +46,7 @@ work/
 `work/lib.toml` (매니페스트):
 
 ```toml
-format_version = 8   # work/lib.toml 매니페스트 포맷(현재 8). 산출물 컨테이너 format_version도 8 (CURRENT_FORMAT_VERSION).
+format_version = 22  # work/lib.toml 매니페스트 포맷(현재 22). 산출물 컨테이너 format_version도 22 (CURRENT_FORMAT_VERSION).
 tool           = { version = "0.1.0", git_sha = "…", dirty = false, profile = "release" }
 [library]
 name = "work"                # 논리 라이브러리 이름 (D3 — 기본 work)
@@ -100,6 +100,9 @@ consumed              [(lib:unit, src_sha256), …]   # 소비한 단위 트리�
 worklib_manifest_hash [u8; 32]   # 단위 추가/삭제/재정렬 무효화용 (§3)
 uses_dump             bool       # "설계가 dump-family 태스크를 참조하는가" 중립 사실
 tool_fingerprint      provenance 전용
+# 주: 헤더의 consumed/worklib_manifest_hash는 동결 헤더 형상 유지용 vestigial placeholder —
+#     라이브 RULE-V 데이터는 append-only 트레일러(⑨ WorkConsumed)에 실리고, 라이브 re-hash
+#     게이트는 worklib vrun 경로에 실제 구현돼 있다.
 ─────── 이하 postcard 본문 ───────
 SimIr 루트 1개:
   - 평탄화된 계층/인스턴스
@@ -109,7 +112,7 @@ SimIr 루트 1개:
   - arena/interner 평탄 벡터 (u32 인덱스 엣지 — 재로드 시 포인터 fixup 0)
 ```
 
-> **엔진-facing 사이드테이블 트레일러(골든 SimIr 프레임 밖, append-only — 현재 13개).** 골든 `SimIr` postcard 프레임 뒤에 out-of-band 트레일러 세그먼트를 `write_velab_file`이 다음 순서로 append한다: ① fork_modes ② net_names ③ timescale(proc_multipliers+global_prec) ④ severities ⑤ radixes ⑥ proc_scopes ⑦ assign_ranks ⑧ queue_bounds ⑨ WorkConsumed(worklib v1; legacy explicit-path 빌드도 항상 기록) ⑩ net_dims(per-element VCD) ⑪ final_procs(P2-E `final`) ⑫ defer_marks ⑬ defer_acts(§16.4 deferred immediate assert). 이들은 `SimOpts`/elaborate IR-0 합성으로 **골든 해시(SimIr 루트)에 무영향** — SVA 체커·named-event·wait fork·frame-call 등 IR-0 기능이 여기 또는 elaborate-합성으로 얹힌다. format_version은 8 유지.
+> **엔진-facing 사이드테이블 트레일러(골든 SimIr 프레임 밖, append-only).** 골든 `SimIr` postcard 프레임 뒤에 out-of-band 트레일러 세그먼트를 `write_velab_file`이 다음 순서로 append한다: ① fork_modes ② net_names ③ timescale — v22부터 트리플 `(proc_multipliers, global_prec_exp, proc_prec_mults)` ④ severities ⑤ radixes ⑥ proc_scopes ⑦ assign_ranks ⑧ queue_bounds ⑨ WorkConsumed(worklib v1; legacy explicit-path 빌드도 항상 기록) ⑩ net_dims(per-element VCD) ⑪ final_procs(P2-E `final`) ⑫ defer_marks ⑬ defer_acts(§16.4 deferred immediate assert) ⑭ StagedExtraSidecars. 이들은 `SimOpts`/elaborate IR-0 합성으로 **골든 해시(SimIr 루트)에 무영향** — SVA 체커·named-event·wait fork·frame-call 등 IR-0 기능이 여기 또는 elaborate-합성으로 얹힌다. format_version은 현재 22 — v9~v22 이력은 `crates/vita-artifact/src/header.rs`의 버전별 주석이 정본(SimIr 골든 해시는 v19 re-freeze에 핀·v20/21/22는 trailer-only).
 
 > **SCHEMA_HASH 루트 = `sim_ir::SimIr` (M3 동결, doc 17).** §5의 구조적 해시는 위 `SimIr` 루트(arena 전체를 `Vec`로 by-value 보유 → `Expr`/`Stmt`/`NetVar`/`ConstVal`까지 도달)에서 산출한다. `Process`만으로는 cross-arena u32 엣지라 arena에 미도달 → `Process`는 런타임 클러스터 sub-pin 골든. `Expr`/`Stmt`/`Lvalue`/`Terminator`/`Sensitivity`/`NetVar`/arena 형상은 doc 17이 동결.
 
@@ -315,7 +318,7 @@ time_precision, … }`)를 받고 **raw argv를 절대 받지 않는다.** 로�
 > glob 거부(E8004)·`W-FLIST-MIXED-BASE` lint·프레임별 베이스 해소. **2탄(같은 날): typed 버킷 합류** —
 > `-D NAME[=VAL]`/`-I dir` + `+define+N=V+M`(verbatim — 경로 해소 금지)/`+incdir+a+b`(세그먼트별
 > 프레임 베이스 해소) → `PreOpts{cli_defines, incdirs}`(전처리기 측은 기존재) · `E-FLIST-WRONG-STAGE`
-> (velab/vrun에 전처리 버킷=exit 3) · `W-FLIST-OVERRIDE`(단일값 knob 재지정=always-logged 경고+last-wins).
+> (velab/vrun에 전처리 버킷=exit 3) · `W-FLIST-OVERRIDE`(단일값 knob 재지정=gated 경고+last-wins — vita-log GatedSink 경유: 기본 로깅+에필로그 집계, `-Werror=`/`-Wno-` 적용).
 > **잔여(Phase-1.x):** `E-FLIST-DUP-CTX-CONFLICT`(sticky 디렉티브 도입 시), `--dump-filelist`,
 > 매니페스트 anchor(§1 work-lib와 함께).
 
@@ -407,11 +410,13 @@ knob을 `.f`에 넣는 것은 비권장**한다(빌드 의도를 명령줄에 �
 스트림의 마지막 값이 이긴다**. **명령줄 토큰은 모든 `-f`/`-F` 전개 뒤(스트림 끝)에 append**
 되므로, 결과적으로 **명령줄이 `.f`를 override**하되 규칙은 "last-wins" 하나로 설명된다.
 
-> **필수 경고 `W-FLIST-OVERRIDE` (항상 로깅).** 단일값 knob이 두 곳 이상에서 지정돼 override가
-> 일어나면 **반드시 경고를 로그에 출력**한다 — silently 진행하지 않는다. 경고는 두 값, 각
+> **필수 경고 `W-FLIST-OVERRIDE` (gated 경고).** 단일값 knob이 두 곳 이상에서 지정돼 override가
+> 일어나면 경고를 로그에 출력한다 — silently 진행하지 않는다. 경고는 두 값, 각
 > 출처(`build.f:3` vs 명령줄), 이긴 값을 보여준다: `W-FLIST-OVERRIDE: --top-module 'b'
-> (vendor.f:3) overridden by 'a' (command line)`. 이 경고는 always-logged spine이라 `-q`로도
-> 억제되지 않는다(13-diagnostics-and-logging.md). hard error가 아니라 진행 + 경고 — 명령줄
+> (vendor.f:3) overridden by 'a' (command line)`. 이 경고는 vita-log **GATED sink**를 경유한다
+> (13-diagnostics-and-logging.md): 기본 = 경고 로깅 + 에필로그 카운트 집계,
+> `-Werror=W-FLIST-OVERRIDE`로 에러 승격(strict CI), `-Wno-W-FLIST-OVERRIDE`로 억제 가능.
+> hard error가 아니라 진행 + 경고 — 명령줄
 > override 워크플로(`velab -s top2 -f build.f`)는 정상 동작으로 두되, 의도치 않은 충돌은
 > 사용자에게 큰 소리로 알린다.
 
@@ -450,7 +455,7 @@ canonical 경로가 두 번 나오는 경우만 dedup하되, 두 occurrence가 *
 
 ```
 vrun <top>.velab:
-  1. 헤더만 디코드 (본문 역직렬화 전): magic, format_version(현재 8), schema_hash 확인
+  1. 헤더만 디코드 (본문 역직렬화 전): magic, format_version(현재 22), schema_hash 확인
      → format/schema 불일치면 hard error + 재빌드 힌트 (본문 안 읽고 거부)
   2. 스냅샷의 consumed[(lib:unit, src_sha256)] 각 항목에 대해:
        라이브 소스를 재전처리(상속 반영) → 다이제스트 재계산 → 박힌 값과 대조

@@ -724,3 +724,67 @@ fn log_open_failure_is_cli_error() {
     assert_eq!(out.status.code(), Some(3), "unopenable log = usage error");
     assert!(String::from_utf8_lossy(&out.stderr).contains("cannot open log"));
 }
+
+// ── W-FLIST-OVERRIDE through the GATED sink (adversarial-review fix) ──
+// The override warning used to be a raw eprintln that bypassed vita-log, so
+// `-Werror=W-FLIST-OVERRIDE` could never promote it and the counts epilogue
+// never included it (doc-15 W8009 promises strict-CI promotion).
+
+fn override_src() -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("vita_ux_ovr_{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, "module t; initial $finish; endmodule\n").unwrap();
+    f
+}
+
+#[test]
+fn flist_override_default_is_counted_warning() {
+    let f = override_src();
+    let out = vita(&["-o", "a.vcd", "-o", "b.vcd", f.to_str().unwrap()]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "stderr:\n{err}");
+    assert!(err.contains("warning[VITA-W8009]"), "stderr:\n{err}");
+    assert!(
+        err.contains("overridden by 'b.vcd' (last wins)"),
+        "stderr:\n{err}"
+    );
+    // now flows through the sink ⇒ counted in the epilogue (2 = this + W1017).
+    assert!(err.contains("warnings=2"), "epilogue count:\n{err}");
+}
+
+#[test]
+fn flist_override_promotes_with_werror() {
+    let f = override_src();
+    let out = vita(&[
+        "-o",
+        "a.vcd",
+        "-o",
+        "b.vcd",
+        "-Werror=W-FLIST-OVERRIDE",
+        f.to_str().unwrap(),
+    ]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "promotion must fail the run:\n{err}"
+    );
+    assert!(err.contains("error[VITA-W8009]"), "stderr:\n{err}");
+}
+
+#[test]
+fn flist_override_suppresses_with_wno() {
+    let f = override_src();
+    let out = vita(&[
+        "-o",
+        "a.vcd",
+        "-o",
+        "b.vcd",
+        "-Wno-W-FLIST-OVERRIDE",
+        f.to_str().unwrap(),
+    ]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "stderr:\n{err}");
+    assert!(!err.contains("W8009"), "must be suppressed:\n{err}");
+}

@@ -112,3 +112,20 @@ fn exponent_zero_and_one() {
            end endmodule\n");
     assert_eq!(out, "1\n7\n25\n");
 }
+
+#[test]
+fn exponent_wider_than_result_is_not_truncated() {
+    // Adversarial-review fix: the self-determined exponent used to be
+    // `resize`d to the RESULT width, so a narrow result truncated the
+    // exponent's VALUE (`4'(2 ** 18)` read 18 mod 16 = 2 ⇒ 4). The result
+    // wraps mod 2^w; the exponent never does. Oracle: iverilog (0 / 0 / 1).
+    let out = run("module t;\n\
+           logic [3:0] a, r;\n\
+           initial begin\n\
+             a = 2;\n\
+             r = a ** 18; $display(\"%0d\", r);\n\
+             r = a ** 16; $display(\"%0d\", r);\n\
+             r = 1  ** 18; $display(\"%0d\", r);\n\
+           end endmodule\n");
+    assert_eq!(out, "0\n0\n1\n");
+}

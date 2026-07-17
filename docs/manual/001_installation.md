@@ -22,7 +22,7 @@ prebuilt binary. `cargo` is the only build entry point: no `cmake`, no `make`, n
 
 ## 1.1 Prerequisites
 
-You need a Rust toolchain. vitamin pins **Rust 1.82** (the MSRV) via
+You need a Rust toolchain. vitamin pins **Rust 1.85** (the MSRV) via
 `rust-toolchain.toml` at the repository root, so once Rust is installed through
 `rustup`, the correct version is selected **automatically** when you run any
 `cargo` command inside the checkout — you do not need to pick a version by hand.
@@ -35,7 +35,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 Then restart your shell (or `source "$HOME/.cargo/env"`) so `cargo` is on your
 `PATH`. The first `cargo` invocation in the repo downloads and uses the pinned
-1.82.0 toolchain on its own.
+1.85.0 toolchain on its own.
 
 On a fresh RHEL/Fedora box you may also need a C linker for the final link step:
 

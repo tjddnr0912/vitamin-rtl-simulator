@@ -354,7 +354,25 @@ impl Value {
     }
 
     /// Sign-aware i128 view of the low bits (for signed arith/relational).
+    /// Spans the full 128-bit arithmetic lane: a signed 65..=128-bit value
+    /// reconstructs its sign from the u128 image (a `signed [99:0]` holding −5
+    /// used to fall through `to_u64` → `None` → callers' `unwrap_or(0)` read it
+    /// as 0 — adversarial review). Beyond 128 bits (or on any X/Z) → `None`,
+    /// the same no-silent-truncation contract as `to_u64`/`to_u128`.
     pub fn to_i128_signed(&self) -> Option<i128> {
+        if self.width > 64 {
+            let u = self.to_u128()?;
+            if self.signed {
+                if self.width >= 128 {
+                    return Some(u as i128); // exact two's-complement reinterpret
+                }
+                if (u >> (self.width - 1)) & 1 == 1 {
+                    return Some((u | (!0u128 << self.width)) as i128);
+                }
+                return Some(u as i128);
+            }
+            return i128::try_from(u).ok();
+        }
         let u = self.to_u64()? as i128;
         if self.signed && self.width >= 1 && self.width <= 64 {
             let sign = (self.val.first().copied().unwrap_or(0) >> (self.width - 1)) & 1;

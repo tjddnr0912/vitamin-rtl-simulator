@@ -391,6 +391,9 @@ pub struct Sidecars {
     /// EMPTY ⇒ no covergroups ⇒ no `coverage.json` payload. Golden-neutral.
     pub coverage_manifest: Vec<CovgInstMeta>,
     pub proc_multipliers: Vec<u64>,
+    /// Parallel per-process `S = 10^(prec − global)` (two-stage `#delay`
+    /// rounding); rides `SimOpts.proc_prec_mults`. EMPTY ⇒ S = 1 everywhere.
+    pub proc_prec_mults: Vec<u64>,
     pub severities: SeverityTable,
     /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
@@ -621,7 +624,18 @@ pub fn elaborate_with_timescale(
     mod_unit_exp: &std::collections::BTreeMap<String, i8>,
     global_prec_exp: i8,
 ) -> (Option<ir::SimIr>, Sidecars) {
-    elaborate_with_timescale_roots(unit, sink, mod_unit_exp, global_prec_exp, None)
+    // Legacy 4-arg surface: no per-module precision map ⇒ every module's prec
+    // is taken as the global precision (S = 1) ⇒ the two-stage `#delay`
+    // conversion degenerates to the old single rounding. The CLI passes the
+    // real map through [`elaborate_with_timescale_prec_roots`].
+    elaborate_with_timescale_prec_roots(
+        unit,
+        sink,
+        mod_unit_exp,
+        &std::collections::BTreeMap::new(),
+        global_prec_exp,
+        None,
+    )
 }
 
 /// [`elaborate_with_timescale`] with an explicit ROOT override (`--top`): when
@@ -635,8 +649,32 @@ pub fn elaborate_with_timescale_roots(
     global_prec_exp: i8,
     roots: Option<&[String]>,
 ) -> (Option<ir::SimIr>, Sidecars) {
+    elaborate_with_timescale_prec_roots(
+        unit,
+        sink,
+        mod_unit_exp,
+        &std::collections::BTreeMap::new(),
+        global_prec_exp,
+        roots,
+    )
+}
+
+/// [`elaborate_with_timescale_roots`] + the per-module PRECISION map from
+/// `hdl_preprocess::resolve_module_timescales` — the full two-stage `#delay`
+/// surface (doc-08): a real delay first rounds to the declaring module's own
+/// precision, then scales to global ticks. An empty `mod_prec_exp` degenerates
+/// to the old single global-grain rounding (S = 1).
+pub fn elaborate_with_timescale_prec_roots(
+    unit: &ast::SourceUnit,
+    sink: &dyn LogSink,
+    mod_unit_exp: &std::collections::BTreeMap<String, i8>,
+    mod_prec_exp: &std::collections::BTreeMap<String, i8>,
+    global_prec_exp: i8,
+    roots: Option<&[String]>,
+) -> (Option<ir::SimIr>, Sidecars) {
     let mut el = Elaborator::new(sink);
     el.mod_unit_exp = mod_unit_exp.clone();
+    el.mod_prec_exp = mod_prec_exp.clone();
     el.global_prec_exp = global_prec_exp;
     el.root_override = roots.map(<[String]>::to_vec);
     el.run(unit);
@@ -652,6 +690,7 @@ pub fn elaborate_with_timescale_roots(
         fork_modes: std::mem::take(&mut el.fork_modes),
         coverage_manifest: std::mem::take(&mut el.coverage_manifest),
         proc_multipliers: std::mem::take(&mut el.proc_multipliers),
+        proc_prec_mults: std::mem::take(&mut el.proc_prec_mults),
         severities: std::mem::take(&mut el.severities),
         timeformat_stmts: std::mem::take(&mut el.timeformat_stmts),
         stage_stmts: std::mem::take(&mut el.stage_stmts),
@@ -3523,6 +3562,10 @@ struct Elaborator<'s> {
     // `hdl_preprocess::resolve_module_timescales`. Empty/`-9` ⇒ the `1ns/1ns` base
     // (multiplier 1 everywhere → byte-identical to the pre-timescale lowering).
     mod_unit_exp: std::collections::BTreeMap<String, i8>,
+    // module NAME → its OWN precision exponent (two-stage delay conversion —
+    // empty for the legacy 4-arg entry points ⇒ every module's prec == global
+    // ⇒ stage-1 is the identity, byte-identical to the single-round behavior).
+    mod_prec_exp: std::collections::BTreeMap<String, i8>,
     global_prec_exp: i8,
     // `--top` root override (worklib / multi-top selection): when `Some`, these
     // units are the roots — in the given order — instead of `pick_roots`.
@@ -3531,9 +3574,15 @@ struct Elaborator<'s> {
     // being lowered (saved/restored around each `elaborate_instance`, like cur_prefix).
     // `#delay` literals scale by this; `$time`/`$realtime` divide by it (per process).
     cur_time_mult: u64,
+    // `S = 10^(prec_exp − global_prec_exp)` of the module CURRENTLY being lowered:
+    // one step of its OWN precision in global ticks (1 when prec == global).
+    cur_prec_mult: u64,
     // Per-ProcId multiplier table (parallel to `processes`), threaded to the engine via
     // `SimOpts.proc_multipliers` for `$time`/`$realtime` scaling. NEVER in the golden root.
     proc_multipliers: Vec<u64>,
+    // Parallel per-process `S = 10^(prec − global)` table (two-stage `#delay`
+    // rounding: real delays = `round(d × M/S) × S`). NEVER in the golden root.
+    proc_prec_mults: Vec<u64>,
 
     // ── severity-task state (engine-facing side channel, NOT in SimIr) ──
     // StmtId → SeverityKind for every `$fatal`/`$error`/`$warning`/`$info` lowered
@@ -3774,10 +3823,13 @@ impl<'s> Elaborator<'s> {
             disable_stack: Vec::new(),
             disable_fork_floor: 0,
             mod_unit_exp: BTreeMap::new(),
+            mod_prec_exp: BTreeMap::new(),
             root_override: None,
             global_prec_exp: -9, // 1ns base precision (no-timescale lock)
             cur_time_mult: 1,
+            cur_prec_mult: 1,
             proc_multipliers: Vec::new(),
+            proc_prec_mults: Vec::new(),
         }
     }
 
@@ -3795,6 +3847,21 @@ impl<'s> Elaborator<'s> {
         10u64.pow(diff.min(18))
     }
 
+    /// `S = 10^(prec_exp − global_prec_exp)` for module `name`: one step of the
+    /// module's OWN precision in global ticks (≥ 1). A module absent from the
+    /// map (legacy 4-arg entry / no-timescale base) defaults to prec == global
+    /// ⇒ S = 1 ⇒ the two-stage delay conversion degenerates to the old single
+    /// rounding. Same 18-exponent cap as [`Self::module_mult`].
+    fn module_prec_mult(&self, name: &str) -> u64 {
+        let p = self
+            .mod_prec_exp
+            .get(name)
+            .copied()
+            .unwrap_or(self.global_prec_exp);
+        let diff = (p - self.global_prec_exp).max(0) as u32;
+        10u64.pow(diff.min(18))
+    }
+
     /// Append a process AND its time multiplier in lockstep (invariant:
     /// `proc_multipliers.len() == processes.len()`). The engine reads the table from
     /// `SimOpts.proc_multipliers` to scale `$time`/`$realtime` per calling module.
@@ -3804,6 +3871,7 @@ impl<'s> Elaborator<'s> {
         // decade (soundness review Q6). The staged trailer stays wire-compatible
         // (postcard varint encodes the same bytes for values < 2^32).
         self.proc_multipliers.push(self.cur_time_mult);
+        self.proc_prec_mults.push(self.cur_prec_mult);
         // `%m` scope: the instance path of the module being lowered ("tb.u1");
         // an empty prefix (single top) renders as the top module's own name —
         // but cur_prefix is ALWAYS the instance path incl. the top ("m" / "m.u1").
@@ -3909,9 +3977,9 @@ impl<'s> Elaborator<'s> {
     /// `had_error`, so the SimIr survives and is returned. This is the lever that
     /// makes unsupported *procedural* constructs and unknown `$task`s degrade
     /// (skip / no-op) instead of discarding the whole module (COVERAGE M-A/M-B/M-D).
-    /// Reuses `ElabWidthTrunc` (W-ELAB-WIDTH-TRUNC / VITA-W3008) as the generic
-    /// "lowered with a documented approximation" warning channel until a dedicated
-    /// W-ELAB-DEGRADED code is minted. The message carries the specifics.
+    /// Stamps `ElabFeatureLimit` (W-ELAB-FEATURE-LIMIT / VITA-W3056) — the
+    /// "legal construct accepted but simplified" channel. The message carries
+    /// the specifics.
     fn warn(&mut self, msg: &str) {
         // P2-10: the generic warn class is "legal construct accepted but
         // simplified" (W-ELAB-FEATURE-LIMIT) — it used to stamp EVERY warning
@@ -3920,7 +3988,7 @@ impl<'s> Elaborator<'s> {
     }
 
     /// Emit a Warning with a SPECIFIC code (the generic [`Self::warn`] uses
-    /// `W-ELAB-WIDTH-TRUNC`).
+    /// `W-ELAB-FEATURE-LIMIT`).
     fn warn_code(&mut self, code: MsgCode, msg: &str) {
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Warning,
@@ -5218,6 +5286,8 @@ impl<'s> Elaborator<'s> {
         // in its body (restored on the way out, like cur_prefix/cur_inst).
         let new_mult = self.module_mult(&module.name.name);
         let saved_mult = std::mem::replace(&mut self.cur_time_mult, new_mult);
+        let new_prec_mult = self.module_prec_mult(&module.name.name);
+        let saved_prec_mult = std::mem::replace(&mut self.cur_prec_mult, new_prec_mult);
 
         // (3) bind params (defaults, then overrides) — BEFORE nets so [W-1:0] folds.
         // Merge any `defparam` overrides targeting THIS instance (FQ `inst_path`)
@@ -5755,6 +5825,7 @@ impl<'s> Elaborator<'s> {
         self.cur_prefix = saved_prefix;
         self.cur_inst = saved_inst;
         self.cur_time_mult = saved_mult;
+        self.cur_prec_mult = saved_prec_mult;
         self.inst_stack.pop();
     }
 
@@ -12264,7 +12335,12 @@ impl<'s> Elaborator<'s> {
     /// `assign #d` behavior, now shared so `wire #d w = e` desugars identically.
     fn fold_ca_delay(&self, delay: Option<&ast::Delay>) -> (Option<u32>, Option<(u32, u32, u32)>) {
         let mult = self.cur_time_mult;
-        let uniform = delay.and_then(|d| d.values.first().and_then(|e| const_delay_ticks(e, mult)));
+        let pmult = self.cur_prec_mult;
+        let uniform = delay.and_then(|d| {
+            d.values
+                .first()
+                .and_then(|e| const_delay_ticks(e, mult, pmult))
+        });
         let rft = delay.and_then(|d| {
             // Only 2- or 3-value specs can carry a distinct fall/turnoff.
             if d.values.len() < 2 {
@@ -12273,7 +12349,7 @@ impl<'s> Elaborator<'s> {
             let folded: Option<Vec<u32>> = d
                 .values
                 .iter()
-                .map(|e| const_delay_ticks(e, mult))
+                .map(|e| const_delay_ticks(e, mult, pmult))
                 .collect();
             let folded = folded?;
             let rise = folded[0];
@@ -20585,11 +20661,15 @@ impl<'s> Elaborator<'s> {
         };
         // selected element index SET, direction-agnostic (`[c+:w]` = {c..c+w-1},
         // `[c-:w]` = {c-w+1..c}); `packed_outer_range` maps it to flat bits per the
-        // net's own dimension direction (ascending or descending).
-        let (lo, hi) = match dir {
-            ast::PartDir::PlusColon => (c, c + w - 1),
+        // net's own dimension direction (ascending or descending). All index math
+        // in u64: a huge/negative-folded `c` (`x[-1 +: 2]` → 0xFFFF_FFFF via
+        // `const_eval_u32`'s wrapping_neg) used to overflow `c + w` in u32 — a
+        // debug panic instead of the clean loud reject below (iverilog also
+        // rejects; adversarial review).
+        let (lo64, hi64) = match dir {
+            ast::PartDir::PlusColon => (c as u64, c as u64 + w as u64 - 1),
             ast::PartDir::MinusColon => {
-                if c + 1 < w {
+                if (c as u64) + 1 < w as u64 {
                     // c-w+1 < 0 — below the lowest element index.
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -20598,10 +20678,17 @@ impl<'s> Elaborator<'s> {
                     return Err(());
                 }
                 // low index = c-w+1; add BEFORE subtract so the legal low-end case
-                // (c-w+1 == 0, e.g. `x[0-:1]`/`x[1-:2]`) does not underflow u32 — the
+                // (c-w+1 == 0, e.g. `x[0-:1]`/`x[1-:2]`) does not underflow — the
                 // guard above already ensures `c + 1 >= w` (review M1).
-                ((c + 1) - w, c)
+                (c as u64 + 1 - w as u64, c as u64)
             }
+        };
+        let (Ok(lo), Ok(hi)) = (u32::try_from(lo64), u32::try_from(hi64)) else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "part-select range exceeds the declared bounds of the packed array",
+            );
+            return Err(());
         };
         self.packed_outer_range(net, lo, hi)
     }
@@ -30050,7 +30137,10 @@ impl Elaborator<'_> {
                                 }),
                                 None => next,
                             };
-                            next = v + 1;
+                            // wrapping: an explicit label at i64::MAX must not
+                            // panic the auto-increment (twin of the module-scope
+                            // and body-local enum loops).
+                            next = v.wrapping_add(1);
                             // A2b-prereq: same single-name-space rule as params.
                             if vars.contains_key(&l.name.name) {
                                 self.error(
@@ -31807,7 +31897,7 @@ impl Elaborator<'_> {
             _ => e,
         };
         let amount = self.lower_expr(pick);
-        let region = if const_delay_ticks(pick, mult) == Some(0) {
+        let region = if const_delay_ticks(pick, mult, self.cur_prec_mult) == Some(0) {
             ir::DelayRegion::Inactive
         } else {
             ir::DelayRegion::Active
@@ -32531,7 +32621,7 @@ fn const_eval_u32(e: &ast::Expr) -> Option<u32> {
 /// round-half-away). The multiply happens INSIDE the rounding so a fractional
 /// `#2.5` with `M=1000` is the exact `2500`, not `round(2.5)×1000`. With `M=1` (the
 /// 1ns/1ns base) this is byte-identical to the prior `round(d)` behavior.
-fn const_delay_ticks(e: &ast::Expr, mult: u64) -> Option<u32> {
+fn const_delay_ticks(e: &ast::Expr, mult: u64, prec_mult: u64) -> Option<u32> {
     let pick = match &e.kind {
         ast::ExprKind::MinTypMax { typ, .. } => typ.as_ref(),
         _ => e,
@@ -32545,10 +32635,19 @@ fn const_delay_ticks(e: &ast::Expr, mult: u64) -> Option<u32> {
         _ => None,
     };
     if let Some(raw) = real {
-        let x = parse_real_f64(raw) * mult as f64;
-        return Some((x.round() as i64).clamp(0, u32::MAX as i64) as u32);
+        // TWO-STAGE (doc-08): round to the MODULE's own precision first
+        // (P = M/S), then scale by S = 10^(prec − global) to global ticks.
+        // S == 1 (single-timescale designs / legacy entry) ⇒ round(d × M),
+        // byte-identical to the prior behavior.
+        let s_mult = prec_mult.max(1);
+        let p_mult = (mult / s_mult).max(1);
+        let x = parse_real_f64(raw) * p_mult as f64;
+        let stage1 = (x.round() as i64).clamp(0, u32::MAX as i64) as u64;
+        return Some(stage1.saturating_mul(s_mult).min(u32::MAX as u64) as u32);
     }
-    // integer delay: exact `d × M` (saturating into u32).
+    // integer delay: exact `d × M` (saturating into u32) — a whole-unit count is
+    // already an exact multiple of the module precision (unit ≥ prec), so
+    // stage-1 rounding is the identity here.
     const_eval_u32(pick).map(|d| (d as u64).saturating_mul(mult).min(u32::MAX as u64) as u32)
 }
 

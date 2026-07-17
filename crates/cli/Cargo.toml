@@ -14,7 +14,22 @@ name = "vita"
 path = "src/main.rs"
 
 [features]
-separate-bins = []
+separate-bins = [] # dev 전용 — 기본 빌드는 vita 단일 multicall 바이너리만 산출 (doc-03)
+
+[[bin]]
+name = "vcmp"
+path = "src/bin/vcmp.rs"
+required-features = ["separate-bins"]
+
+[[bin]]
+name = "velab"
+path = "src/bin/velab.rs"
+required-features = ["separate-bins"]
+
+[[bin]]
+name = "vrun"
+path = "src/bin/vrun.rs"
+required-features = ["separate-bins"]
 
 [dependencies]
 hdl-preprocess = { path = "../hdl-preprocess" }

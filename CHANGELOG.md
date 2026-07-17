@@ -3,6 +3,29 @@
 All notable changes to **vitamin** are recorded here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); dates are ISO-8601.
 
+## [Unreleased] — 2026-07-17
+
+### Changed
+- `format_version` 21 → 22: IEEE **two-stage `#delay` conversion** — in
+  mixed-precision designs a delay is now rounded to the declaring module's own
+  `` `timescale `` precision first, then converted to the global simulation
+  precision (iverilog-verified). The artifact timescale trailers are extended
+  accordingly. (The full per-version history lives in the comments of
+  `crates/vita-artifact/src/header.rs`.)
+
+### Fixed
+- `**` (power): exponent no longer truncated at narrow result widths.
+- Conversion of >64-bit **signed** values to `real`.
+- Overflow panic on package-enum label ranges.
+- u32 overflow panic in indexed part-selects.
+- `W-FLIST-OVERRIDE` now flows through the diagnostic gate, so `-Werror=` and
+  `-Wno-` apply to it.
+
+### Added
+- FST output: case-normalization hardening of the `.fst` extension dispatch.
+- The dev-only `separate-bins` Cargo feature now really builds standalone
+  `vcmp`/`velab`/`vrun` binaries (thin shims sharing the multicall path).
+
 ## [Unreleased] — Phase-1 MVP
 
 vitamin's first milestone: a working, deterministic, 3-OS-reproducible RTL

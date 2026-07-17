@@ -6,9 +6,11 @@ and the contribution workflow.
 
 ## Toolchain & build
 
-- **Rust 1.82** is the MSRV, pinned by `rust-toolchain.toml` (rustup picks it up
-  automatically — no manual `rustup override` needed).
-- **Edition 2021** (not 2024 — that requires rustc ≥ 1.85 and would break the MSRV).
+- **Rust 1.85** is the MSRV, pinned by `rust-toolchain.toml` (rustup picks it up
+  automatically — no manual `rustup override` needed). The floor sits at 1.85
+  because the `fst-writer` 0.3.x dependency requires edition 2024.
+- **Edition 2021** for vitamin's own crates — they deliberately stay on 2021
+  even though the 1.85 toolchain would allow 2024.
 - Always build and test with `--locked` for 3-OS reproducibility:
 
   ```sh

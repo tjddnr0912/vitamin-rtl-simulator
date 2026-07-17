@@ -22,7 +22,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.82.0
+      - uses: dtolnay/rust-toolchain@1.85.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: install C linker
         run: dnf install -y gcc
-      - uses: dtolnay/rust-toolchain@1.82.0
+      - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
         with:
           key: rhel9

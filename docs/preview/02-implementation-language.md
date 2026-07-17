@@ -60,7 +60,7 @@ spec §4에서 합의된 근거 다섯 가지:
 
 ### 진단: `miette` (결정) — `codespan-reporting` fallback
 
-- **miette** 7.6.0 (2025-04-27, Apache-2.0) — **채택.** `code()`/`url()`/`related()`를 네이티브로 제공해 에러 카탈로그(15: 본문 full-entry **55개**(`MsgCode` enum 등재, 2026-06-12 v7 기준) + 부록 A 예약 107)·multi-span Frame(13)에 1:1 매핑된다. 13의 진단 데이터 모델이 이미 miette 어휘(`code()`/`url()`/`related()`)로 설계돼 있다. **MSRV 1.82**(manifest 실측 `rust-version = "1.82.0"`; crates.io에 노출된 1.70은 stale). leaf `diag` 크레이트는 IO/터미널 순수성(04: "IO 없음 → leaf")을 위해 **`default-features = false` 필수** — 기본 `fancy` 피처가 `owo-colors`/`supports-color`/`terminal_size`를 끌어들이기 때문이다. 터미널 렌더링(`fancy`)은 `vita-log` 크레이트에서만 활성화한다.
+- **miette** 7.6.0 (2025-04-27, Apache-2.0) — **채택.** `code()`/`url()`/`related()`를 네이티브로 제공해 에러 카탈로그(15: 본문 full-entry **58개**(`MsgCode` enum 등재, 2026-07-17 기준) + 부록 A 예약 107)·multi-span Frame(13)에 1:1 매핑된다. 13의 진단 데이터 모델이 이미 miette 어휘(`code()`/`url()`/`related()`)로 설계돼 있다. miette 자체 manifest MSRV는 `1.82.0`(crates.io에 노출된 1.70은 stale)이나, **프로젝트 MSRV는 1.85**(fst-writer 0.3.x의 edition 2024 요구가 결정 — 2026-07-17 상향). leaf `diag` 크레이트는 IO/터미널 순수성(04: "IO 없음 → leaf")을 위해 **`default-features = false` 필수** — 기본 `fancy` 피처가 `owo-colors`/`supports-color`/`terminal_size`를 끌어들이기 때문이다. 터미널 렌더링(`fancy`)은 `vita-log` 크레이트에서만 활성화한다.
 - **codespan-reporting** 0.13.1 (2025-10-22, Apache-2.0) — **fallback.** 성숙도 높고(1억+ 다운로드, MSRV 1.67) multi-span label+note 지원. miette의 dep-tree/바이너리 footprint가 installed-binary 크기 기준으로 블로킹이면 `code()`/`url()`/`explain` glue만 재구현해 스왑한다. `MsgCode`/`Diagnostic`/`Frame` 모델은 owner 소유 leaf `diag`에 있어 렌더 백엔드는 교체 가능하다.
 - **ariadne** 0.6.0 (2025-10-28, MIT) — **미채택.** 유일 강점이던 "chumsky 동저자 시너지"가 chumsky archived로 소멸했고, `related()` 부재로 multi-span 카탈로그에 덜 맞는다. (참고: 02 이전 판의 "ariadne MSRV 1.85"는 manifest에 `rust-version` 필드 미선언 — "검증됨" 표기를 철회한다.)
 
@@ -87,9 +87,9 @@ spec §4에서 합의된 근거 다섯 가지:
 
 ## MSRV / Toolchain
 
-- **계획 MSRV:** Rust **1.82** (채택한 miette 7.6.0의 manifest MSRV가 `1.82.0`이라 이 상한으로 결정). Rust 1.80이 안정화한 `std::sync::LazyLock`을 포함한다(참고: `OnceLock`은 1.70, `let-else`는 1.65). 실제 기능 사용 패턴에 따라 추가 상향 가능하며, `rust-toolchain.toml`에 명시한다.
+- **MSRV:** Rust **1.85** (fst-writer 0.3.x가 edition 2024를 요구해 2026-07-17 1.82→1.85 상향; 이전 결정 요인은 miette 7.6.0의 manifest MSRV `1.82.0`). Rust 1.80이 안정화한 `std::sync::LazyLock`을 포함한다(참고: `OnceLock`은 1.70, `let-else`는 1.65). 실제 기능 사용 패턴에 따라 추가 상향 가능하며, `rust-toolchain.toml`에 명시한다.
 - **`rust-toolchain.toml` 사용:** 저장소 루트에 고정해 `cargo build`/`cargo test` 실행 시 자동으로 toolchain을 맞춘다. CI 및 로컬 개발 환경이 동일한 Rust 버전을 사용하도록 보장한다.
-- **MSRV 상한 근거:** 채택 크레이트 MSRV 집합의 상한 = miette 7.6.0(1.82). winnow 1.0.3·logos 0.16.1(1.80)·codespan 0.13.1(1.67)은 모두 1.82 이하라 제약이 되지 않는다. 렌더 백엔드를 codespan으로 스왑하면 1.67까지 내려갈 수 있다. (이전 판의 "ariadne 1.85"는 manifest 미선언이며 ariadne 미채택으로 무관.)
+- **MSRV floor 근거:** 채택 크레이트 요구 집합의 상한이 floor를 결정한다 — 현재 floor = **fst-writer 0.3.x(edition 2024 → rustc ≥1.85)**. miette 7.6.0(1.82)·winnow 1.0.3·logos 0.16.1(1.80)·codespan 0.13.1(1.67)은 모두 1.85 이하라 제약이 되지 않는다. **vita 자체 크레이트는 edition 2021을 유지**한다(floor만 1.85로 상향). (이전 판의 "ariadne 1.85"는 manifest 미선언이며 ariadne 미채택으로 무관.)
 
 ---
 

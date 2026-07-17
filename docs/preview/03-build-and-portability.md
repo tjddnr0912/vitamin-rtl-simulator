@@ -26,7 +26,7 @@
 
 ## Cargo Workspace 구조
 
-spec §5.2의 코어 11개 크레이트 + 단계별 산출물 계층 3개(`vita-artifact`, `vita-artifact-derive`, `vita-schema`) + 운영 로깅 1개(`vita-log`) = 15개 크레이트를 단일 cargo workspace에 배치한다. 각 크레이트는 단일 책임 + 명확한 인터페이스로 분리해 독립 테스트가 가능하다.
+spec §5.2의 코어 11개 크레이트 + 단계별 산출물 계층 3개(`vita-artifact`, `vita-artifact-derive`, `vita-schema`) + 운영 로깅 1개(`vita-log`) = 프로덕션 15개, 여기에 dev/test 전용 2개(`corpus-runner`·`vcd-diff`, publish=false)를 더한 **17개 크레이트**를 단일 cargo workspace에 배치한다. 각 크레이트는 단일 책임 + 명확한 인터페이스로 분리해 독립 테스트가 가능하다.
 
 ```toml
 # Cargo.toml (워크스페이스 루트)
@@ -54,8 +54,8 @@ members = [
 resolver = "2"
 
 [workspace.package]
-edition = "2021"          # edition 2024는 rustc>=1.85 필요 — MSRV 1.82와 비호환이라 2021 고정 (16/PR1-B)
-rust-version = "1.82"     # MSRV — 채택 miette 7.6.0 manifest(1.82.0)가 상한
+edition = "2021"          # vita 자체 크레이트는 2021 유지 — 코드베이스 안정성; edition 2024는 서드파티(fst-writer 0.3.x)만 (16/PR1-B)
+rust-version = "1.85"     # MSRV — fst-writer 0.3.x(edition 2024 요구)가 결정; 2026-07-17 1.82→1.85 상향
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/your-org/vitamin"  # placeholder
 
@@ -153,7 +153,7 @@ required-features = ["separate-bins"]
 # Cargo.toml (워크스페이스 루트)
 [profile.release]
 opt-level     = 3         # IR-walking 이벤트 루프가 throughput-critical — size 's'/'z' 금지
-lto           = "thin"    # 15-크레이트 파이프라인 교차 인라인; fat-LTO 속도를 낮은 링크 비용으로 회수
+lto           = "thin"    # 프로덕션 15-크레이트(워크스페이스 17개 중) 파이프라인 교차 인라인; fat-LTO 속도를 낮은 링크 비용으로 회수
 codegen-units = 1         # hot 인터프리터 루프 최대 최적화 (LTO와 짝)
 strip         = "symbols" # 작은 배포 바이너리 + 깔끔한 macOS 공증; multicall이라 strip 대상 1개
 # panic = "abort" 를 설정하지 않는다 — 기본 unwind 유지.
@@ -246,7 +246,7 @@ vrun  top.velab +SEED=1                        #       simulation (상류 체인
 ```toml
 # rust-toolchain.toml (저장소 루트)
 [toolchain]
-channel = "1.82.0"          # MSRV (miette 7.6.0 → 1.82); stable 릴리스 고정
+channel = "1.85.0"          # MSRV (fst-writer 0.3.x → 1.85); stable 릴리스 고정
 components = [
     "rustfmt",              # 코드 포맷
     "clippy",               # 린트
@@ -262,10 +262,10 @@ targets = [
 
 ### MSRV 정책
 
-- **현재 MSRV: 1.82.** 채택한 miette 7.6.0의 manifest MSRV가 `1.82.0`이라 이 값으로 고정한다. Rust 1.80이 안정화한 `std::sync::LazyLock`을 포함한다(참고: `let-else`는 1.65, `OnceLock`은 1.70).
-- **채택 크레이트 MSRV 집합의 상한으로 결정.** 현재 상한 = miette(1.82). winnow 1.x·logos 0.16(1.80)·codespan 0.13(1.67)은 모두 1.82 이하. 렌더 백엔드를 codespan으로 스왑하면 1.67까지 내려갈 수 있다.
+- **현재 MSRV: 1.85.** fst-writer 0.3.x가 edition 2024(rustc ≥1.85)를 요구해 이 값으로 고정한다(2026-07-17, 1.82→1.85 상향). Rust 1.80이 안정화한 `std::sync::LazyLock`을 포함한다(참고: `let-else`는 1.65, `OnceLock`은 1.70).
+- **채택 크레이트 요구 집합의 상한으로 결정.** 현재 상한 = fst-writer 0.3.x(1.85). miette 7.6.0(1.82)·winnow 1.x·logos 0.16(1.80)·codespan 0.13(1.67)은 모두 1.85 이하. vita 자체 크레이트는 edition 2021을 유지한다(floor만 상향).
 - **MSRV 변경은 semver minor bump로 처리.** 패치 릴리스에서 MSRV를 올리지 않는다.
-- **CI에서 MSRV 최소 버전으로 `cargo check` 실행** — `rust-toolchain.toml` 외에 별도 `toolchain: "1.82.0"` 잡을 매트릭스에 포함해 MSRV 회귀를 방지한다.
+- **CI에서 MSRV 최소 버전으로 `cargo check` 실행** — `rust-toolchain.toml` 외에 별도 `toolchain: "1.85.0"` 잡을 매트릭스에 포함해 MSRV 회귀를 방지한다.
 
 ---
 
@@ -323,7 +323,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           # rust-toolchain.toml의 channel을 그대로 읽음
-          toolchain: "1.82.0"
+          toolchain: "1.85.0"
           components: rustfmt, clippy
 
       - name: Cache cargo registry
@@ -362,7 +362,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: "1.82.0"
+          toolchain: "1.85.0"
           components: rustfmt, clippy
 
       - name: Cache cargo registry
@@ -382,13 +382,13 @@ jobs:
 
   # ── MSRV 회귀 방지 잡 (Ubuntu만으로 충분) ───────────────────────────────
   msrv:
-    name: MSRV check (Rust 1.82)
+    name: MSRV check (Rust 1.85)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: "1.82.0"
+          toolchain: "1.85.0"
       - run: cargo check --workspace --locked
       # (cargo audit 단계는 별도 job으로 추후 추가)
 ```

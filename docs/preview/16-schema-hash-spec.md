@@ -190,8 +190,8 @@ texpr        ::= prim | option | seq | map | set | array | tuple | uname
 prim         ::= "u8" | "u16" | "u32" | "u64" | "u128"
                | "i8" | "i16" | "i32" | "i64" | "i128"
                | "bool" | "char" | "str" | "String"
-               | "f32" | "f64"
-               | "usize" | "isize"            (* 표현 가능하나 엔진/CI 거부 — 결정성 RULE 4 *)
+               | "f32" | "f64"                (* 금지 — dead production: derive가 compile_error!로 하드 거부 (doc 17 §8) *)
+               | "usize" | "isize"            (* 금지 — dead production: derive가 compile_error!로 하드 거부 — 결정성 RULE 4, doc 17 §8 *)
 
 option       ::= "Option" "<" texpr ">"
 seq          ::= "Vec" "<" texpr ">"
@@ -329,6 +329,12 @@ sim_ir::SuspendState=repr=@#[]struct{#[]resume_pc:u32,#[]locals:Vec<sim_ir::Four
 7. **`diag` 타입은 레지스트리 밖** (`13` line 102/182–184: sim-ir 코어 span-free·SchemaHash-clean; dep graph line 98은 `hdl-ast`/`sim-ir`만 derive). `MsgCode`/`Severity`/`Diagnostic`/`LogEvent`/`diag::Frame`/span/`SourceLoc`는 참여 타입 아님 — 어떤 sim-ir 필드도 참조 안 하므로 `register` walk에 등장 안 함. span은 독립 버전드 side-table로 hash 밖.
 8. **frozen set에 generic 없음.** 모든 frozen 노드 monomorphic(타입 파라미터·lifetime·const generic 없음 — span-free). **PR1 결정: generic 타입에 derive `compile_error!`** (generic 지원 미구현-예약). attack surface를 frozen set이 필요로 하는 것으로 축소. **⚠ 잔여:** `hdl-ast`는 *다른* SchemaHash deriver(line 98) — `hdl-ast` 루트가 non-generic인지 PR1 freeze 전 확인. 아니면 reject-all-generics 규칙이 `hdl-ast`를 깸. (현 frozen sim-ir set은 전부 concrete — 확인됨.)
 
+> **설계 노트 — `COp`/`CBinOp`는 의도적 SchemaHash 비참여.** constraint-솔버 postfix 타입
+> `COp`/`CBinOp`는 Serialize/Deserialize지만 **의도적으로 SchemaHash가 아니다** — `SimIr` 루트
+> 밖의 `StagedExtraSidecars` 트레일러에 실리므로, 그 wire 형상은 구조적 해시가 아니라
+> **format_version bump**로 게이트된다(v20/21/22 trailer-only bump 선례와 동일 클래스).
+> 커버리지 구멍이 아니라 의도된 분담이다.
+
 ### 정규 concat
 
 ```rust
@@ -381,9 +387,11 @@ fn schema_hash_is_pinned() {
     assert_eq!(hex::encode(got), EXPECTED,
         "SCHEMA_HASH 변경 — frozen sim-ir 타입의 형상/serde 속성이 이동.\n\
          의도적이면: 모든 .velab 무효 → format_version bump + 골든 갱신.");
-    // (현재 골든 컨테이너 format_version = 8. v2→8 사이 의도적 re-freeze: real(v3)·#delay ExprId(v4)·
+    // (현재 골든 컨테이너 format_version = 22. v2→8 사이 의도적 re-freeze: real(v3)·#delay ExprId(v4)·
     //  NBA transport delay+dyn array/queue/assoc(v5)·queue insert/assoc iter/string key(v6)·
-    //  casez/casex·$random·file I/O·readmem·package·string(v7)·WaitCause::Fork wait-fork(v8).)
+    //  casez/casex·$random·file I/O·readmem·package·string(v7)·WaitCause::Fork wait-fork(v8).
+    //  SimIr 골든 해시 자체는 v19 re-freeze에 핀 — v20/21/22는 trailer-only bump(골든 불변).
+    //  v9~v22 버전별 이력 정본 = crates/vita-artifact/src/header.rs 주석.)
 }
 ```
 모든 CI OS/arch(x86_64/aarch64 × linux-gnu/apple-darwin)에서 실행. 정규 문자열이 byte-identical(위)이므로 해시 동일 → *같은* `EXPECTED` literal이 전 플랫폼 통과 — 그것이 2-플랫폼 계약(§5 line 491). platform-의존 해시면 최소 한 runner 실패.

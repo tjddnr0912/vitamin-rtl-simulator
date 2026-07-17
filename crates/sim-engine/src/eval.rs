@@ -668,7 +668,15 @@ impl<N: NetReader> EvalCtx<'_, N> {
                 // sign-extends to -1), THEN restamp to the base's sign so `arith`'s
                 // both-signed reduction follows the base. (Restamping before the
                 // widen turned `1'b1` into a 1-bit signed -1 ⇒ `2 ** 1'b1` = 0.)
-                let mut exp = self.eval(rhs).resize(w);
+                // Widen-ONLY: a bare `resize(w)` also TRUNCATED an exponent wider
+                // than the result (`logic [3:0] r = a ** 18` read the exponent as
+                // 18 mod 16 = 2 ⇒ 2**2 = 4, not 2**18 mod 16 = 0 — adversarial
+                // review). The exponent's VALUE must survive intact; it is the
+                // RESULT that wraps to the base's width, so widen to
+                // max(w, own width) and truncate only after `arith`.
+                let exp_raw = self.eval(rhs);
+                let ew = exp_raw.width.max(w);
+                let mut exp = exp_raw.resize(ew);
                 exp.signed = base.signed;
                 // IEEE Table 11-6: a 0 base with a NEGATIVE exponent is x (it is a
                 // 0^(-k) division-by-zero). `2 ** -1` (|base| > 1) stays 0.
@@ -679,7 +687,8 @@ impl<N: NetReader> EvalCtx<'_, N> {
                 {
                     return Value::xs(w, base.signed);
                 }
-                self.arith(op, &base, &exp) // result width = base width = w
+                // result width = base width = w (`arith` returns max(w, ew))
+                self.arith(op, &base, &exp).resize(w)
             }
 
             // BITWISE — context-determined: BOTH operands sized to (w, eff_signed).

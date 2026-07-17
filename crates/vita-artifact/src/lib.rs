@@ -1,5 +1,5 @@
 //! vita-artifact — staged-artifact container: header (de)serialize, version/schema
-//! staleness gates. (Body serialization + RULE-V live re-hash land in later PRs.)
+//! staleness gates. (Body serialization is owned by the CLI; the RULE-V live re-hash gate is implemented on the worklib vrun path.)
 mod gate;
 mod header;
 

@@ -281,6 +281,9 @@ pub(crate) struct SimState<'a> {
     pub trace_lines: Vec<String>,
     /// Per-ProcId time multiplier (from `SimOpts.proc_multipliers`); empty ⇒ M=1.
     pub proc_multipliers: Vec<u64>,
+    /// Per-ProcId `S = 10^(prec − global)` (from `SimOpts.proc_prec_mults`);
+    /// empty ⇒ S=1 ⇒ two-stage `#delay` rounding degenerates to `round(d × M)`.
+    pub proc_prec_mults: Vec<u64>,
     /// StmtId → severity for `$fatal`/`$error`/`$warning`/`$info` statements
     /// (from `SimOpts.severities`); empty ⇒ no severity tasks in the design.
     pub severities: crate::SeverityTable,
@@ -410,6 +413,10 @@ pub(crate) struct SimState<'a> {
     /// Multiplier of the process CURRENTLY executing — set per `run_process`, read by
     /// `$time`/`$realtime`. 1 outside any process (the 1ns/1ns base).
     pub cur_time_mult: u64,
+    /// `S = 10^(prec − global)` of the ACTIVE process's module (set per
+    /// activation, like `cur_time_mult`): one module-precision step in global
+    /// ticks — the two-stage `#delay` grain.
+    pub cur_prec_mult: u64,
 
     // ── stdout for $display/$write (boxed sink, deterministic) ──
     pub out: Box<dyn Write + 'a>,
@@ -745,6 +752,7 @@ impl<'a> SimState<'a> {
             read_state: std::collections::BTreeMap::new(),
             readable_fds: std::collections::BTreeSet::new(),
             proc_multipliers: Vec::new(),
+            proc_prec_mults: Vec::new(),
             severities: crate::SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
@@ -768,6 +776,7 @@ impl<'a> SimState<'a> {
                 .map(|_| crate::backend::VmSlot::Unchecked)
                 .collect(),
             cur_time_mult: 1,
+            cur_prec_mult: 1,
             out,
             finished: false,
             had_error: false,

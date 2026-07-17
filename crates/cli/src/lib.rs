@@ -102,6 +102,10 @@ pub struct VitaOpts {
     /// `--probe-file <F>` (OBS-2): a file of probe paths, one per line (`#` comments
     /// and blank lines skipped), merged with `--probe`.
     pub probe_file: Option<String>,
+    /// W-FLIST-OVERRIDE events recorded during arg parsing (knob, old, new) —
+    /// emitted through the GATED sink at pipeline start so `-Wno-*`/`-Werror=`
+    /// and the counts epilogue apply uniformly (doc-13).
+    pub overrides: Vec<(String, String, String)>,
 }
 
 impl VitaOpts {
@@ -706,6 +710,7 @@ pub fn run_vita_sources(sources: &[(String, String)], opts: &VitaOpts) -> i32 {
     };
     let inner = StderrSink::with_output(opts.verbosity.unwrap_or(1), log);
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
+    emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
         echo_effective_inputs(&sink, opts);
     }
@@ -735,8 +740,14 @@ fn run_vita_str_gated(
     // elaboration error was reported. `elaborate_with_timescale` also yields the
     // fork-join, net-name, and per-process time-multiplier side tables threaded into
     // `SimOpts`; the timescale env scales `#delay`/`$time`/`$realtime`.
-    let (ir, sc) =
-        elaborate::elaborate_with_timescale(&unit, sink, &rt.unit_exp, rt.global_prec_exp);
+    let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
+        &unit,
+        sink,
+        &rt.unit_exp,
+        &rt.prec_exp,
+        rt.global_prec_exp,
+        None,
+    );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;
     };
@@ -781,6 +792,7 @@ fn run_vita_str_gated(
         net_names: sc.net_names,
         probed_nets,
         proc_multipliers: sc.proc_multipliers,
+        proc_prec_mults: sc.proc_prec_mults,
         severities: sc.severities,
         // §21.3.2 %t/$timeformat: the call-site table + the precision exponent
         // %t scales against (one-shot path; empty/−9 ⇒ byte-identical).
@@ -1072,6 +1084,77 @@ pub fn resolve_applet(argv: &[String]) -> (Applet, Vec<String>) {
     }
 }
 
+/// Restore the DEFAULT SIGPIPE disposition (Unix). The Rust runtime IGNOREs
+/// SIGPIPE at startup, so a write to a pipe whose consumer has closed
+/// (`vita design.sv | head`) returns EPIPE, which the `print!`/`println!`
+/// machinery turns into a panic (`failed printing to stdout: Broken pipe`, exit
+/// 101). Resetting to `SIG_DFL` makes the OS terminate the process on the broken
+/// pipe (the conventional producer behaviour, exit 141) — quiet, not a panic.
+/// Process-wide for the signal DISPOSITION (not the per-thread MASK): on Linux
+/// the worker thread inherits SIG_DFL and dies on the broken-pipe write; on
+/// macOS the spawned thread has SIGPIPE masked, so its writes see EPIPE (no
+/// signal) — that case is handled by StderrSink's broken-pipe-safe
+/// `out_write`/`err_write` (the §4.5.59 follow-on). No-op on Windows (no
+/// SIGPIPE). A tiny FFI avoids pulling in `libc` for one call; `SIGPIPE` is 13
+/// and `SIG_DFL` is 0 on every Unix target vita builds for (Linux/macOS).
+#[cfg(unix)]
+fn restore_default_sigpipe() {
+    const SIGPIPE: i32 = 13;
+    const SIG_DFL: usize = 0;
+    extern "C" {
+        fn signal(signum: i32, handler: usize) -> usize;
+    }
+    // SAFETY: `signal(2)` with `SIG_DFL` only resets a signal's disposition to
+    // the OS default; it allocates nothing and the ignored return is the prior
+    // handler. This is the standard CLI idiom.
+    unsafe {
+        signal(SIGPIPE, SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_default_sigpipe() {}
+
+/// The SHARED process-level driver every binary shim calls (`vita` and the
+/// dev-only `separate-bins` shims `vcmp`/`velab`/`vrun`, doc-03) — SIGPIPE
+/// reset + a big-stack worker thread around [`run`], then `process::exit`.
+///
+/// The pipeline contains user-depth-controlled recursion: the recursive-descent
+/// parser, and recursive AST walks (`Clone`/`Drop`/elaborate) over deeply nested
+/// expressions, sequences, and SVA property trees. The default MAIN-THREAD stack
+/// is only ~1 MiB on Windows (vs ~8 MiB on Linux/macOS), so a pathologically deep
+/// design overflows it and aborts (SIGABRT / `STATUS_STACK_OVERFLOW`) BEFORE a
+/// depth-cap diagnostic (e.g. `SVA_SEQ_ALT_CAP`) can report cleanly. Run the whole
+/// driver on a worker thread with a large explicit stack so depth caps produce a
+/// clean diagnostic on EVERY OS — the same approach rustc/swc use. This is the
+/// sole place the stack is sized; [`run`] stays in-thread for unit tests, which
+/// keeps the work single-threaded and deterministic (just on a bigger stack).
+pub fn driver_main() -> ! {
+    restore_default_sigpipe();
+
+    /// 256 MiB — virtual address space (lazily committed), generous headroom over
+    /// every OS default. Matches the order of magnitude swc/other Rust compilers use.
+    const STACK_SIZE: usize = 256 * 1024 * 1024;
+
+    let argv: Vec<String> = std::env::args().collect();
+    let code = std::thread::Builder::new()
+        .name("vita-main".to_string())
+        .stack_size(STACK_SIZE)
+        .spawn(move || run(&argv))
+        .expect("spawn vita worker thread")
+        .join()
+        // A panic in the worker has already printed its message via the default
+        // hook; re-raise it on this thread so the process exits with the same
+        // conventional panic code (101) as before — NOT a vita exit class
+        // (1 user/design error, 2 stale/artifact-gate, 3 CLI error), which would
+        // mislead callers. (`spawn` failure above is `.expect()` -> also 101: the
+        // 256 MiB is lazily-committed virtual memory so the reservation is cheap
+        // and failure is near-impossible; falling back to in-thread would just
+        // re-introduce the very ~1 MiB overflow this wrapper removes.)
+        .unwrap_or_else(|payload| std::panic::resume_unwind(payload));
+    std::process::exit(code);
+}
+
 /// The full multicall entry: dispatch on `argv[0]` basename / explicit subcommand,
 /// then either run the one-shot pipeline or print the staged-flow stub. Returns
 /// the process exit code. `main()` is a thin wrapper around this.
@@ -1136,6 +1219,7 @@ pub fn run(argv: &[String]) -> i32 {
                 inst_paths: io.inst_paths,
                 probes: io.probes,
                 probe_file: io.probe_file,
+                overrides: io.overrides.clone(),
             };
             run_vita(&io.pos, &opts)
         }
@@ -1350,10 +1434,13 @@ fn reject_out_clobbers_input(inputs: &[String], out: &str) -> Result<(), i32> {
 /// design-wide precision exponent (real now that timescale is wired).
 /// `composite` is the RULE-V upstream digest — blake3 of the stage's INPUT
 /// (vcmp: the preprocessed source text; velab: the consumed `.vu` bytes) —
-/// RECORDED since 2026-06-11 for provenance/forensics. The live re-hash gate
-/// (`E-ART-STALE-UPSTREAM`) plus `consumed`/`worklib_manifest_hash` remain the
-/// documented Phase-2 piece (they need a worklib for vrun to re-hash against);
-/// `verify_header` already gates the primary staleness via `schema_hash` +
+/// RECORDED since 2026-06-11 for provenance/forensics. The live RULE-V re-hash
+/// gate (`E-ART-STALE-UPSTREAM`) IS implemented on the worklib vrun path (it
+/// re-hashes consumed lib manifests / CU blobs / raw sources vs the recorded
+/// hashes — see the `consumed.libs` auto-gate below); the header's OWN
+/// `consumed`/`worklib_manifest_hash` fields stay vestigial placeholders (the
+/// live data rides the append-only trailer — frozen header shape, doc-14 §1).
+/// `verify_header` gates the primary staleness via `schema_hash` +
 /// `format_version`.
 fn artifact_header(
     schema_hash: [u8; 32],
@@ -1392,6 +1479,7 @@ pub fn run_vcmp(sources: &[String], out: Option<&str>, opts: &VitaOpts) -> i32 {
     };
     let inner = StderrSink::with_output(opts.verbosity.unwrap_or(1), log);
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
+    emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
         sink.emit(LogEvent::Progress(diag::ProgressEvent {
             message: format!("files: {}", sources.join(" ")),
@@ -1446,7 +1534,7 @@ fn run_vcmp_gated(
     };
 
     // ── write `.vu` body = postcard(SourceUnit) ++ postcard((unit_exp map, global
-    //    precision)). The resolved timescale rides after the hashed SourceUnit frame
+    //    precision, prec_exp map)) [v22]. The resolved timescale rides after the hashed SourceUnit frame
     //    (the gate covers the type, not these bytes) so `velab` can elaborate the
     //    staged path with the same scaling as the one-shot path. ──
     // `-Werror`: a promoted warning is an Error — the stage fails and writes
@@ -1456,7 +1544,7 @@ fn run_vcmp_gated(
     }
     let mut body = postcard::to_stdvec(&unit).expect("SourceUnit postcard encode infallible");
     body.extend_from_slice(
-        &postcard::to_stdvec(&(rt.unit_exp, rt.global_prec_exp))
+        &postcard::to_stdvec(&(rt.unit_exp, rt.global_prec_exp, rt.prec_exp))
             .expect("timescale env postcard encode infallible"),
     );
     // RULE-V composite (recorded 2026-06-11): digest of this stage's INPUT —
@@ -1579,6 +1667,7 @@ pub fn run_velab(vu_path: &str, out: &str, opts: &VitaOpts) -> i32 {
     };
     let inner = StderrSink::with_output(opts.verbosity.unwrap_or(1), log);
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
+    emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
         sink.emit(LogEvent::Progress(diag::ProgressEvent {
             message: format!("in: {vu_path}  out: {out}"),
@@ -1605,7 +1694,7 @@ fn run_velab_gated(
     // E-ART-STALE-UPSTREAM re-hash gate when a worklib exists (Phase-2).
     let vu_composite = *blake3::hash(&bytes).as_bytes();
 
-    let (unit, unit_exp, global_prec_exp) = match decode_vu_unit(&bytes, sink) {
+    let (unit, unit_exp, prec_exp, global_prec_exp) = match decode_vu_unit(&bytes, sink) {
         Ok(x) => x,
         Err(code) => return code,
     };
@@ -1616,8 +1705,14 @@ fn run_velab_gated(
     } else {
         Some(&opts.tops)
     };
-    let (ir, sc) =
-        elaborate::elaborate_with_timescale_roots(&unit, sink, &unit_exp, global_prec_exp, roots);
+    let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
+        &unit,
+        sink,
+        &unit_exp,
+        &prec_exp,
+        global_prec_exp,
+        roots,
+    );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR; // elab error already emitted
     };
@@ -1626,7 +1721,7 @@ fn run_velab_gated(
     }
 
     // ── write `.velab` body = postcard(SimIr) ++ postcard(ForkModeTable) ++
-    //    postcard(NetNameTable) ++ postcard((proc_multipliers, global_prec_exp)) ++
+    //    postcard(NetNameTable) ++ postcard((proc_multipliers, global_prec_exp, proc_prec_mults)) ++
     //    postcard(SeverityTable). All trailers ride OUTSIDE the hashed SimIr frame
     //    (the schema gate covers the type, not these bytes), so the golden hash and
     //    staleness are unaffected; names give `vrun` hierarchical VCD, the multipliers
@@ -1639,20 +1734,20 @@ fn run_velab_gated(
     write_velab_file(out, &ir, &sc, global_prec_exp, vu_composite, None)
 }
 
+/// `.vu` decode result: the `SourceUnit` + its timescale env — per-module
+/// `unit_exp` map, per-module `prec_exp` map (v22 two-stage `#delay`), and the
+/// design-wide `global_prec_exp`.
+type VuUnitEnv = (
+    hdl_ast::SourceUnit,
+    std::collections::BTreeMap<String, i8>,
+    std::collections::BTreeMap<String, i8>,
+    i8,
+);
+
 /// Decode a `.vu`: header gate (magic/format/schema) + `SourceUnit` frame +
 /// the tolerant timescale tail. Shared by the legacy positional path and the
 /// worklib closure loader.
-fn decode_vu_unit(
-    bytes: &[u8],
-    sink: &dyn LogSink,
-) -> Result<
-    (
-        hdl_ast::SourceUnit,
-        std::collections::BTreeMap<String, i8>,
-        i8,
-    ),
-    i32,
-> {
+fn decode_vu_unit(bytes: &[u8], sink: &dyn LogSink) -> Result<VuUnitEnv, i32> {
     let (header, body) = match vita_artifact::read_vu(bytes) {
         Ok(x) => x,
         Err(e) => return Err(emit_artifact_error(sink, &e)),
@@ -1673,23 +1768,31 @@ fn decode_vu_unit(
             ))
         }
     };
-    let (unit_exp, global_prec_exp): (std::collections::BTreeMap<String, i8>, i8) =
-        if vu_rest.is_empty() {
-            (std::collections::BTreeMap::new(), -9)
-        } else {
-            match postcard::from_bytes(vu_rest) {
-                Ok(x) => x,
-                Err(e) => {
-                    return Err(emit_artifact_error(
-                        sink,
-                        &vita_artifact::ArtifactError::format(&format!(
-                            "undecodable .vu timescale trailer: {e}"
-                        )),
-                    ))
-                }
+    type TsEnv = (
+        std::collections::BTreeMap<String, i8>,
+        i8,
+        std::collections::BTreeMap<String, i8>,
+    );
+    let (unit_exp, global_prec_exp, prec_exp): TsEnv = if vu_rest.is_empty() {
+        (
+            std::collections::BTreeMap::new(),
+            -9,
+            std::collections::BTreeMap::new(),
+        )
+    } else {
+        match postcard::from_bytes(vu_rest) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(emit_artifact_error(
+                    sink,
+                    &vita_artifact::ArtifactError::format(&format!(
+                        "undecodable .vu timescale trailer: {e}"
+                    )),
+                ))
             }
-        };
-    Ok((unit, unit_exp, global_prec_exp))
+        }
+    };
+    Ok((unit, unit_exp, prec_exp, global_prec_exp))
 }
 
 /// 14th `.velab` trailer (2026-06-22 STAGED-DROP audit fix): the engine-facing
@@ -1938,7 +2041,7 @@ fn write_velab_file(
         &postcard::to_stdvec(&sc.net_names).expect("NetNameTable postcard encode infallible"),
     );
     velab_body.extend_from_slice(
-        &postcard::to_stdvec(&(&sc.proc_multipliers, global_prec_exp))
+        &postcard::to_stdvec(&(&sc.proc_multipliers, global_prec_exp, &sc.proc_prec_mults))
             .expect("timescale trailer postcard encode infallible"),
     );
     velab_body.extend_from_slice(
@@ -2034,6 +2137,7 @@ pub fn run_velab_lib(
     };
     let inner = StderrSink::with_output(opts.verbosity.unwrap_or(1), log);
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
+    emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
         sink.emit(LogEvent::Progress(diag::ProgressEvent {
             message: format!(
@@ -2147,6 +2251,7 @@ fn run_velab_lib_gated(
     struct LoadedCu {
         unit: hdl_ast::SourceUnit,
         unit_exp: std::collections::BTreeMap<String, i8>,
+        prec_exp: std::collections::BTreeMap<String, i8>,
         prec: i8,
         blob_path: String,
         blob_hash: [u8; 32],
@@ -2176,7 +2281,7 @@ fn run_velab_lib_gated(
         };
         let blob_hash = *blake3::hash(&bytes).as_bytes();
         blob_bytes_all.extend_from_slice(&bytes);
-        let (unit, unit_exp, prec) = match decode_vu_unit(&bytes, sink) {
+        let (unit, unit_exp, prec_exp, prec) = match decode_vu_unit(&bytes, sink) {
             Ok(x) => x,
             Err(code) => return code,
         };
@@ -2195,6 +2300,7 @@ fn run_velab_lib_gated(
         loaded.push(LoadedCu {
             unit,
             unit_exp,
+            prec_exp,
             prec,
             blob_path: blob_path.to_string_lossy().into_owned(),
             blob_hash,
@@ -2213,11 +2319,15 @@ fn run_velab_lib_gated(
     };
     let mut emitted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut merged_exp: std::collections::BTreeMap<String, i8> = std::collections::BTreeMap::new();
+    let mut merged_prec: std::collections::BTreeMap<String, i8> = std::collections::BTreeMap::new();
     let mut prec = i8::MAX;
     for cu in &loaded {
         prec = prec.min(cu.prec);
         for (k, v) in &cu.unit_exp {
             merged_exp.entry(k.clone()).or_insert(*v);
+        }
+        for (k, v) in &cu.prec_exp {
+            merged_prec.entry(k.clone()).or_insert(*v);
         }
         for it in &cu.unit.items {
             let name = match it {
@@ -2251,8 +2361,14 @@ fn run_velab_lib_gated(
     }
 
     // ── 5. elaborate with the EXPLICIT roots ──
-    let (ir, sc) =
-        elaborate::elaborate_with_timescale_roots(&merged, sink, &merged_exp, prec, Some(tops));
+    let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
+        &merged,
+        sink,
+        &merged_exp,
+        &merged_prec,
+        prec,
+        Some(tops),
+    );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;
     };
@@ -2296,6 +2412,7 @@ pub fn run_vrun(velab_path: &str, opts: &VitaOpts) -> i32 {
     };
     let inner = StderrSink::with_output(opts.verbosity.unwrap_or(1), log);
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
+    emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
         sink.emit(LogEvent::Progress(diag::ProgressEvent {
             message: format!("in: {velab_path}"),
@@ -2392,22 +2509,23 @@ fn run_vrun_gated(
     };
     // Timescale trailer (proc multipliers + global precision). Tolerant of an older
     // `.velab` with no trailer → 1ns/1ns base ($time unscaled, preamble 1ns).
-    let ((proc_multipliers, global_prec_exp), rest4): ((Vec<u64>, i8), &[u8]) = if rest3.is_empty()
-    {
-        ((Vec::new(), -9), rest3)
-    } else {
-        match postcard::take_from_bytes(rest3) {
-            Ok(x) => x,
-            Err(e) => {
-                return emit_artifact_error(
-                    sink,
-                    &vita_artifact::ArtifactError::format(&format!(
-                        "undecodable .velab timescale trailer: {e}"
-                    )),
-                )
+    type TsTrailer = (Vec<u64>, i8, Vec<u64>);
+    let ((proc_multipliers, global_prec_exp, proc_prec_mults), rest4): (TsTrailer, &[u8]) =
+        if rest3.is_empty() {
+            ((Vec::new(), -9, Vec::new()), rest3)
+        } else {
+            match postcard::take_from_bytes(rest3) {
+                Ok(x) => x,
+                Err(e) => {
+                    return emit_artifact_error(
+                        sink,
+                        &vita_artifact::ArtifactError::format(&format!(
+                            "undecodable .velab timescale trailer: {e}"
+                        )),
+                    )
+                }
             }
-        }
-    };
+        };
     // Severity trailer ($fatal/$error/$warning/$info, P1-1). Tolerant of an older
     // `.velab` with no trailer → empty ⇒ severity tasks degrade to plain $display.
     let (severities, rest5): (sim_engine::SeverityTable, &[u8]) = if rest4.is_empty() {
@@ -2698,6 +2816,7 @@ fn run_vrun_gated(
         // staged tools), so the staged path never probes.
         probed_nets: Vec::new(),
         proc_multipliers,
+        proc_prec_mults,
         severities,
         radixes,
         assign_ranks,
@@ -2804,15 +2923,38 @@ struct IoArgs {
     probes: Vec<String>,
     /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
     probe_file: Option<String>,
+    /// W-FLIST-OVERRIDE events recorded during arg parsing (knob, old, new) —
+    /// replayed through the gated sink by [`emit_flist_overrides`].
+    overrides: Vec<(String, String, String)>,
 }
 
-/// W-FLIST-OVERRIDE (always-logged): a single-value knob set twice — proceed
-/// with last-wins but say so loudly (doc-14 §3.1).
-fn warn_override(knob: &str, old_v: &str, new_v: &str) {
-    eprintln!(
-        "warning[{}]: {knob} '{old_v}' overridden by '{new_v}' (last wins)",
-        MsgCode::FlistOverride.code_num()
-    );
+/// W-FLIST-OVERRIDE: a single-value knob set twice — RECORD it (last wins)
+/// during arg parsing; [`emit_flist_overrides`] replays the events through the
+/// GATED sink once it exists. (A raw `eprintln!` here bypassed the doc-13
+/// uniform gate: `-Werror=W-FLIST-OVERRIDE` could never promote it and the
+/// counts epilogue never included it — adversarial review.)
+fn record_override(
+    overrides: &mut Vec<(String, String, String)>,
+    knob: &str,
+    old_v: &str,
+    new_v: &str,
+) {
+    overrides.push((knob.to_string(), old_v.to_string(), new_v.to_string()));
+}
+
+/// Replay the [`record_override`] events through the gated sink (doc-14 §3.1
+/// wording + doc-15 W8009 example format).
+fn emit_flist_overrides(sink: &dyn LogSink, overrides: &[(String, String, String)]) {
+    for (knob, old_v, new_v) in overrides {
+        sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code: MsgCode::FlistOverride,
+            message: format!("{knob} '{old_v}' overridden by '{new_v}' (last wins)"),
+            location: None,
+            context: Vec::new(),
+            sim_time: None,
+        }));
+    }
 }
 
 fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
@@ -2838,6 +2980,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut inst_paths: Option<String> = None;
     let mut probes: Vec<String> = Vec::new();
     let mut probe_file: Option<String> = None;
+    let mut overrides: Vec<(String, String, String)> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -2850,7 +2993,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = &out {
-                    warn_override("-o", prev, v);
+                    record_override(&mut overrides, "-o", prev, v);
                 }
                 out = Some(v.clone());
                 i += 2;
@@ -2867,7 +3010,12 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = threads {
-                    warn_override("--threads", &prev.to_string(), &n.to_string());
+                    record_override(
+                        &mut overrides,
+                        "--threads",
+                        &prev.to_string(),
+                        &n.to_string(),
+                    );
                 }
                 threads = Some(n.max(1));
                 i += 2;
@@ -2884,7 +3032,12 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = timeout {
-                    warn_override("--timeout", &prev.to_string(), &n.to_string());
+                    record_override(
+                        &mut overrides,
+                        "--timeout",
+                        &prev.to_string(),
+                        &n.to_string(),
+                    );
                 }
                 timeout = Some(n);
                 i += 2;
@@ -2900,7 +3053,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = &upstream {
-                    warn_override("--upstream", prev, v);
+                    record_override(&mut overrides, "--upstream", prev, v);
                 }
                 upstream = Some(v.clone());
                 i += 2;
@@ -2914,7 +3067,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = &work {
-                    warn_override("--work", prev, v);
+                    record_override(&mut overrides, "--work", prev, v);
                 }
                 work = Some(v.clone());
                 i += 2;
@@ -2928,7 +3081,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = &workdir {
-                    warn_override("--workdir", prev, v);
+                    record_override(&mut overrides, "--workdir", prev, v);
                 }
                 workdir = Some(v.clone());
                 i += 2;
@@ -3012,7 +3165,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 if let Some(prev) = &log {
-                    warn_override("--log", prev, v);
+                    record_override(&mut overrides, "--log", prev, v);
                 }
                 log = Some(v.clone());
                 i += 2;
@@ -3041,7 +3194,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 }
                 if let Some(prev) = &obs_dir {
-                    warn_override("--obs-dir", prev, v);
+                    record_override(&mut overrides, "--obs-dir", prev, v);
                 }
                 obs_dir = Some(v.clone());
                 i += 2;
@@ -3167,6 +3320,7 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         inst_paths,
         probes,
         probe_file,
+        overrides,
     })
 }
 
@@ -3176,6 +3330,11 @@ fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
 /// beyond what the expansion itself did), so CI can diff two trees' effective
 /// inputs directly.
 fn run_dump_filelist(io: &IoArgs) -> i32 {
+    // The dry-run surfaces override warnings too — through the same gate as the
+    // real pipeline (no raw eprintln bypass).
+    let inner = StderrSink::with_output(io.verbosity.unwrap_or(1), None);
+    let sink = vita_log::GatedSink::new(&inner, io.gate.clone());
+    emit_flist_overrides(&sink, &io.overrides);
     for f in &io.pos {
         println!("source {f}");
     }
@@ -3454,6 +3613,7 @@ fn dispatch_vcmp(args: &[String]) -> i32 {
             log: io.log,
             log_append: io.log_append,
             work,
+            overrides: io.overrides.clone(),
             ..VitaOpts::default()
         },
     )
@@ -3522,6 +3682,7 @@ fn dispatch_velab(args: &[String]) -> i32 {
                 verbosity: io.verbosity,
                 log: io.log,
                 log_append: io.log_append,
+                overrides: io.overrides.clone(),
                 ..VitaOpts::default()
             },
         );
@@ -3546,6 +3707,7 @@ fn dispatch_velab(args: &[String]) -> i32 {
             log: io.log,
             log_append: io.log_append,
             tops: io.tops,
+            overrides: io.overrides.clone(),
             ..VitaOpts::default()
         },
     )
@@ -3592,6 +3754,7 @@ fn dispatch_vrun(args: &[String]) -> i32 {
         log_append: io.log_append,
         upstream: io.upstream,
         plusargs: io.plusargs,
+        overrides: io.overrides.clone(),
         ..VitaOpts::default()
     };
     run_vrun(&io.pos[0], &opts)

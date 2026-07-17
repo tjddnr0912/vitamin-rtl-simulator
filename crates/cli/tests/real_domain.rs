@@ -49,3 +49,26 @@ endmodule
         "expected 'H4=2.083333' in vita output, got:\n{out}"
     );
 }
+
+// Adversarial-review fix: `to_i128_signed` only reconstructed the sign for
+// width ≤ 64, so a `signed [99:0]` holding −5 coerced to real as 0.0 (the
+// 128-bit lane now covers 65..=128; iverilog: -5).
+#[test]
+fn wide_signed_negative_to_real() {
+    let src = r#"
+module t; reg signed [99:0] x; reg [99:0] u; real r;
+initial begin
+  x = -100'sd5; r = x; $display("neg=%g", r);
+  u = 100'd5 <<< 70; r = u; $display("bigu=%g", r);
+end
+endmodule
+"#;
+    let out = run_vita_oneshot(src);
+    assert!(out.contains("neg=-5\n"), "wide signed → real:\n{out}");
+    // unsigned 65..128-bit values also flow through the widened lane
+    // (5 × 2^70 ≈ 5.90295810358706e+21 in %g).
+    assert!(
+        out.contains("bigu=5.90296e+21"),
+        "wide unsigned → real:\n{out}"
+    );
+}

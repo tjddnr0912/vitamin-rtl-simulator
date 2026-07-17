@@ -138,6 +138,13 @@ pub struct ResolvedTimescales {
     /// module NAME → its delay-unit exponent (`unit_exp`). The per-module delay
     /// multiplier is `10^(unit_exp − global_prec_exp)`.
     pub unit_exp: std::collections::BTreeMap<String, i8>,
+    /// module NAME → its OWN precision exponent (`prec_exp`). IEEE two-stage
+    /// delay conversion: a `#delay` first rounds to the declaring module's own
+    /// precision (`round(d × 10^(unit−prec))`), THEN scales by
+    /// `10^(prec − global_prec_exp)` to global ticks — one global-grain rounding
+    /// kept sub-precision digits the module declared away (adversarial review,
+    /// doc-08 §delay 2단계).
+    pub prec_exp: std::collections::BTreeMap<String, i8>,
     /// design-wide FINEST precision exponent = the global tick base.
     pub global_prec_exp: i8,
     /// true if ANY module fell back to the `1ns/1ns` base (→ W-PP-TIMESCALE-DEFAULT).
@@ -155,6 +162,7 @@ pub fn resolve_module_timescales(
     regions: &[(usize, TimeScale)],
 ) -> ResolvedTimescales {
     let mut unit_exp = std::collections::BTreeMap::new();
+    let mut prec_exp = std::collections::BTreeMap::new();
     let mut precs: Vec<i8> = Vec::new();
     let mut default_used = false;
     for &(name, lo) in modules {
@@ -163,17 +171,16 @@ pub fn resolve_module_timescales(
             .rev()
             .find(|(off, _)| *off <= lo)
             .map(|(_, ts)| *ts);
-        match gov {
-            Some(ts) => {
-                unit_exp.insert(name.to_string(), ts.unit_exp);
-                precs.push(ts.prec_exp);
-            }
+        let ts = match gov {
+            Some(ts) => ts,
             None => {
                 default_used = true;
-                unit_exp.insert(name.to_string(), TimeScale::DEFAULT.unit_exp);
-                precs.push(TimeScale::DEFAULT.prec_exp);
+                TimeScale::DEFAULT
             }
-        }
+        };
+        unit_exp.insert(name.to_string(), ts.unit_exp);
+        prec_exp.insert(name.to_string(), ts.prec_exp);
+        precs.push(ts.prec_exp);
     }
     let global_prec_exp = precs
         .into_iter()
@@ -181,6 +188,7 @@ pub fn resolve_module_timescales(
         .unwrap_or(TimeScale::DEFAULT.prec_exp);
     ResolvedTimescales {
         unit_exp,
+        prec_exp,
         global_prec_exp,
         default_used,
     }

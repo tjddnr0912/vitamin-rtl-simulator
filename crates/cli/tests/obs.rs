@@ -64,7 +64,7 @@ fn writes_run_and_results() {
     // L0 manifest key fields.
     assert_eq!(field(&manifest, "schema_ver"), "1");
     assert_eq!(field(&manifest, "tool"), "\"vita\"");
-    assert_eq!(field(&manifest, "format_version"), "21");
+    assert_eq!(field(&manifest, "format_version"), "22");
     assert_eq!(field(&manifest, "seed"), "null");
     assert_eq!(field(&manifest, "finish_reason"), "\"finish\"");
     assert_eq!(field(&manifest, "exit_class"), "\"ok\"");

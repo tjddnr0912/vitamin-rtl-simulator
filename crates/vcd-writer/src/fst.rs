@@ -136,19 +136,24 @@ fn timescale_exponent(spec: &str) -> i8 {
 /// vectors, but this keeps the transcode correct for any minimal-form producer
 /// and guarantees `value.len() == width` so fst-writer never has to guess.
 fn extend_vector(bits: &[u8], width: usize) -> Vec<u8> {
-    if bits.len() >= width {
+    let mut out = if bits.len() >= width {
         // already full (or over-wide → trust the low `width`, MSB-aligned):
         // VCD never over-emits, so this branch is just the equality fast path.
-        return bits[bits.len() - width..].to_vec();
-    }
-    let pad = match bits.first() {
-        Some(b'x') | Some(b'X') => b'x',
-        Some(b'z') | Some(b'Z') => b'z',
-        _ => b'0',
+        bits[bits.len() - width..].to_vec()
+    } else {
+        let pad = match bits.first() {
+            Some(b'x') | Some(b'X') => b'x',
+            Some(b'z') | Some(b'Z') => b'z',
+            _ => b'0',
+        };
+        let mut v = vec![pad; width - bits.len()];
+        v.extend_from_slice(bits);
+        v
     };
-    let mut out = vec![pad; width - bits.len()];
-    out.extend_from_slice(bits);
-    // normalise case: fst 4-state chars are lowercase.
+    // normalise case on EVERY branch: fst 4-state chars are lowercase. (The
+    // fast path used to return `X`/`Z` verbatim — latent only, since vita's own
+    // writer always emits lowercase full-width, but the doc-comment promises
+    // correctness for any minimal-form producer.)
     for c in out.iter_mut() {
         if *c == b'X' {
             *c = b'x';
@@ -365,6 +370,18 @@ pub fn transcode_vcd_to_fst(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn extend_vector_normalises_case_on_every_branch() {
+        // The equality/over-wide fast path used to return `X`/`Z` verbatim
+        // (only the pad branch folded case) — latent, since vita's own writer
+        // emits lowercase full-width, but the fn documents itself as correct
+        // for ANY minimal-form producer.
+        assert_eq!(super::extend_vector(b"XZ01", 4), b"xz01".to_vec());
+        assert_eq!(super::extend_vector(b"XZ01", 3), b"z01".to_vec());
+        assert_eq!(super::extend_vector(b"X1", 4), b"xxx1".to_vec());
+        assert_eq!(super::extend_vector(b"Z1", 4), b"zzz1".to_vec());
+    }
+
     use super::*;
     use fst_reader::{FstFilter, FstHierarchyEntry, FstReader, FstSignalValue};
     use std::sync::atomic::{AtomicU32, Ordering};

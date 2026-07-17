@@ -4,8 +4,9 @@ vitamin ships four command-line entry points: **`vita`** (one-shot), and the
 staged trio **`vcmp`** → **`velab`** → **`vrun`**. This chapter documents what
 each one actually accepts today — its inputs, outputs, flags, and exit codes.
 
-> Platform support: vitamin builds and tests on **Linux, macOS, and Windows**
-> (3-OS CI with byte-identical outputs). See [Installation](001_installation.md).
+> Platform support: vitamin builds and tests on **Linux (Ubuntu + RHEL9/UBI)
+> and macOS** (3-lane CI with byte-identical outputs). See
+> [Installation](001_installation.md).
 
 > Scope note: this reference covers the flags implemented in the current
 > build — including filelists (`-f`/`-F`), preprocessor defines/includes
@@ -44,8 +45,10 @@ the arguments unchanged. Any other `argv[0]` basename (or no recognized
 subcommand) runs the one-shot `vita` path.
 
 > A developer build can emit four separate executables via the dev-only
-> `separate-bins` Cargo feature, for debugging a single stage in isolation. The
-> default production build is the single multicall binary.
+> `separate-bins` Cargo feature (`cargo build --features separate-bins` builds
+> standalone `vcmp`/`velab`/`vrun` binaries — thin shims over the same multicall
+> path), for debugging a single stage in isolation. The default production
+> build is the single multicall binary.
 
 ---
 
@@ -252,6 +255,11 @@ its value. Its meaning differs by stage:
 | `velab`| the `.velab` artifact path |
 | `vrun` | the VCD output path (overrides `$dumpfile`) |
 
+Where `-o` names the waveform output (`vita`/`vrun`), the file **extension
+selects the format**: a path ending in `.fst` (case-insensitive) writes an FST
+waveform; any other extension writes VCD. The same dispatch applies to the
+design's `$dumpfile(...)` argument.
+
 Anything not recognized as a flag is treated as a positional input path
 (tokens beginning with `+` are runtime plusargs). Any other token beginning
 with `-` (e.g. `--bogus`) is an **unknown flag** and fails with exit 3.
@@ -263,7 +271,7 @@ with `-` (e.g. `--bogus`) is an **unknown flag** and fails with exit 3.
 Each `.vu`/`.velab` header records two compatibility stamps:
 
 - **`format_version`** — an integer bumped whenever the on-disk artifact layout
-  changes (currently **3**).
+  changes (currently **22**).
 - **`schema_hash`** — a structural hash derived from the **shape** of the
   serialized types (`SourceUnit` for `.vu`, `SimIr` for `.velab`). Adding,
   removing, reordering, or retyping a field flips this hash. It is computed

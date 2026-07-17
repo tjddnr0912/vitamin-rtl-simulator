@@ -143,6 +143,13 @@ pub struct SimOpts {
     /// `elaborate::elaborate_with_timescale`, for `$time`/`$realtime` scaling
     /// (`$time = now / M`). EMPTY ⇒ multiplier 1 (the 1ns/1ns base). Never golden.
     pub proc_multipliers: Vec<u64>,
+    /// Parallel per-ProcId `S = 10^(prec_exp − global_prec_exp)` table (module's
+    /// OWN precision step in global ticks) for the IEEE two-stage `#delay`
+    /// conversion: a real delay rounds to the module precision FIRST
+    /// (`round(d × M/S)`), then scales by `S`. EMPTY ⇒ S=1 for every process ⇒
+    /// byte-identical to the prior single `round(d × M)` (single-timescale
+    /// designs and every existing `SimOpts::default()` caller unaffected).
+    pub proc_prec_mults: Vec<u64>,
     /// Process-body execution backend (P0a). Default [`Backend::Interpreter`] so
     /// every existing caller is byte-identical. Rides out-of-band (never enters the
     /// frozen `SimIr`).
@@ -310,6 +317,7 @@ impl Default for SimOpts {
             fork_modes: ForkModeTable::new(),
             net_names: Vec::new(),
             proc_multipliers: Vec::new(),
+            proc_prec_mults: Vec::new(),
             backend: Backend::Interpreter,
             severities: SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
@@ -484,8 +492,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     );
     st.net_names = opts.net_names.clone();
     // OBS-2: arm the `--probe` trace tap. `probe_prev` starts at each probed net's
-    // INITIAL value so the first logged line is the first real transition (old→new);
-    // the t0 value itself is the baseline, not a "change" (R-L3 transition-only).
+    // CONSTRUCTION value (pre-t0, usually all-x) — armed BEFORE the event loop, so
+    // a value first driven at t0 IS logged as the first `chg` (old = the
+    // construction default). Only same-value writes are suppressed (R-L3
+    // transition-only) — the t0 initialization edge is real signal history.
     if !opts.probed_nets.is_empty() {
         let n = st.nets.len();
         st.probed = vec![false; n];
@@ -499,6 +509,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         }
     }
     st.proc_multipliers = opts.proc_multipliers.clone();
+    st.proc_prec_mults = opts.proc_prec_mults.clone();
     st.backend = opts.backend;
     st.severities = opts.severities.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
