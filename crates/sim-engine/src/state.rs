@@ -263,6 +263,10 @@ pub(crate) struct SimState<'a> {
     pub vcd_path: Option<String>,
     pub dump_pending_path: Option<String>,
     pub vcd_path_override: Option<String>,
+    /// Set when the resolved dump path ends in `.fst`: the VCD is written to a
+    /// temp sidecar and transcoded to this FST path at finalize (see
+    /// `builtins::dumpvars` and `simulate`). `None` ⇒ a plain VCD target.
+    pub fst_target: Option<String>,
     pub dumping: bool,
     pub timescale_unit: String,
     pub vcd_date: String,
@@ -710,6 +714,7 @@ impl<'a> SimState<'a> {
             vcd_path: None,
             dump_pending_path: None,
             vcd_path_override,
+            fst_target: None,
             dumping: false,
             timescale_unit,
             vcd_date,

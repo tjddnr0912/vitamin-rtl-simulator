@@ -14,7 +14,7 @@ VCD는 RTL의 dump 시스템 태스크가 호출될 때만 생성된다. `$dumpf
 
 | 태스크 | 구문 예시 | 동작 |
 |--------|-----------|------|
-| `$dumpfile` | `$dumpfile("sim.vcd")` | VCD 출력 파일 경로 지정 |
+| `$dumpfile` | `$dumpfile("sim.vcd")` / `$dumpfile("sim.fst")` | 파형 출력 파일 경로 지정. 확장자 `.fst`(대소문자 무관)면 FST, 그 외는 VCD ([FST 파형 출력](#fst-파형-출력-gtkwavesurfer-네이티브) 참조) |
 | `$dumpvars` | `$dumpvars` / `$dumpvars(0, tb)` / `$dumpvars(2, tb.dut)` | 덤프 대상 지정. 첫 인수=깊이(0=무한), 이후=scope. 인수 없으면 전체 |
 | `$dumpon` | `$dumpon` | `$dumpoff`로 정지된 덤프 재개, 현재 값 기록 |
 | `$dumpoff` | `$dumpoff` | 덤프 일시 정지. 모든 추적 변수에 `x`/`bx` 기록 후 변화 중단 |
@@ -388,10 +388,50 @@ Verilator도 동일한 정규화 diff로 비교한다. Phase 1에서는 iverilog
 
 ---
 
+## FST 파형 출력 (GTKWave/Surfer 네이티브)
+
+GTKWave 네이티브 압축 포맷 **FST**(Fast Signal Trace)를 VCD와 **동일한 in-code 인터페이스**로 지원한다. 대형 파형에서 VCD 대비 파일 크기가 크게 줄어 GTKWave/Surfer 로드가 빠르다.
+
+### 사용법 (가이드)
+
+VCD와 **완전히 동일한 `$` 시스템 태스크**를 쓰고, 파일 확장자만 `.fst`로 지정한다 — 새 태스크를 외울 필요가 없다.
+
+```systemverilog
+module tb;
+  reg clk; reg [3:0] cnt; real r;
+  initial begin
+    $dumpfile("wave.fst");   // ← .fst 확장자 → FST 출력 (".vcd"면 그대로 VCD)
+    $dumpvars(0, tb);        // VCD와 동일: 대상/깊이 지정
+    // ... 자극 ...
+    $finish;
+  end
+endmodule
+```
+
+- **CLI 오버라이드**: `vita design.sv -o wave.fst` / `vrun design.velab -o wave.fst` — `-o`의 확장자가 `.fst`면 코드 내 `$dumpfile` 인자를 무시하고 FST로 출력한다.
+- **확장자 판정**: 대소문자 무관(`.fst`·`.FST` 모두 FST). 그 외 확장자는 전부 VCD(기존 동작 불변).
+- **동일 지원 태스크**: `$dumpvars`·`$dumpoff`·`$dumpon`·`$dumpall`·`$dumpflush`·`$dumplimit` 전부 FST 경로에서도 그대로 동작한다(VCD와 의미론 동일).
+- **뷰어**: 산출 `.fst`는 GTKWave·Surfer에서 바로 로드된다.
+
+### 설계: VCD→FST 트랜스코드
+
+FST는 **VCD를 트랜스코드**해 생성한다(`vcd-writer/src/fst.rs`, `transcode_vcd_to_fst`). 시뮬레이션 코어는 검증된 VCD를 사이드카(`<경로>.fst.vcdtmp`)로 쓰고, `simulate` 종료 시 이를 FST로 변환한 뒤 사이드카를 삭제한다.
+
+- **정확성(correct-or-loud)**: 모든 dump 의미론(`$dumpoff`→전-x 등)은 이미 VCD 값-변화 스트림에 반영돼 있어, 그 스트림을 그대로 FST로 재생하면 **FST ≡ VCD**가 구성적으로 성립한다. 별도 바이너리 싱크를 값-변화 경로마다 배선하지 않으므로 silent-wrong 분기 여지가 없다.
+- **실수형 unknown**: `$dumpoff` 중 real은 VCD에서 전-x 벡터로 나오지만 FST real은 f64이므로 **NaN**으로 매핑한다(iverilog `rNaN`과 동일). 벡터 바이트를 real로 재해석하면 garbage float가 되는 silent-wrong을 회피.
+- **바이너리 인코딩**: 압축 블록(geometry/hierarchy/value-change)은 순수-Rust `fst-writer`(=0.2.6, BSD-3-Clause) 크레이트가 담당. vita는 바이너리를 직접 손대지 않는다. MSRV 1.82 유지를 위해 0.2.x 라인 핀(0.3.x는 Rust 1.85 요구) + 트랜지티브 핀(`proc-macro-crate`=3.3.0·`indexmap`=2.7.1, `vcd-writer/Cargo.toml`).
+- **검증**: 산출 FST를 독립 리더 `fst-reader`(=0.10.2)로 되읽어 파형 동치를 확인(단위 테스트 `vcd-writer` `fst::tests`, 엔드투엔드 `cli/tests/fst_waveform.rs`, iverilog-13.0 파형 핀).
+
+### FST 비목표
+
+- **native FST 스트리밍**(VCD 사이드카 없이 값-변화를 직접 FST로): 현재는 트랜스코드 방식(correct-or-loud 우선). 사이드카 I/O 제거는 후속 최적화.
+- **LXT/LXT2**: 레거시 GTKWave 포맷. 지원 계획 없음.
+
+---
+
 ## 비목표 (현 단계)
 
 - **확장 VCD (`$dumpports*`)**: 포트 강도(strength) 정보 포함 상용 툴 확장. vitamin Phase 1 범위 밖.
-- **FST 포맷**: GTKWave 네이티브 압축 포맷. VCD 호환 완성 후 Phase 2+ 고려.
 - **LXT/LXT2**: 레거시 GTKWave 포맷. 지원 계획 없음.
 
 ---

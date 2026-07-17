@@ -35,6 +35,9 @@ serde = { workspace = true }
 [dev-dependencies]
 vita-artifact = { path = "../vita-artifact" }
 vita-schema = { path = "../vita-schema" }
+# End-to-end FST verification: read back what `vita design.sv` (with a `.fst`
+# $dumpfile) actually wrote and assert the waveform (independent reader oracle).
+fst-reader = "=0.10.2"
 postcard = { workspace = true }
 blake3 = { workspace = true }
 hdl-ast = { path = "../hdl-ast" }

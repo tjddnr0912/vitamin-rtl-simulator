@@ -31,6 +31,10 @@ use std::io::{self, Write};
 
 use sim_ir::BitPacked;
 
+/// VCD → FST transcode (G2 waveform breadth). A `.fst` dump target is produced
+/// by transcoding the verified VCD; see [`fst::transcode_vcd_to_fst`].
+pub mod fst;
+
 /// VCD identifier code: a base-94 encoding over printable ASCII `!`..=`~`.
 ///
 /// First var = `!`, then `"`, …, 94th = `~`, 95th = `!!`, etc. A variable keeps

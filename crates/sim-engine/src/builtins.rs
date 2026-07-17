@@ -1844,7 +1844,20 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
         .or_else(|| st.dump_pending_path.clone())
         .unwrap_or_else(|| "dump.vcd".to_string());
 
-    let file = match std::fs::File::create(&path) {
+    // G2 FST breadth: a `.fst` dump target is produced by transcoding the VCD at
+    // finalize. Write the VCD to a temp sidecar now; `simulate` transcodes it to
+    // the real `.fst` path and removes the sidecar once the writer has flushed.
+    let is_fst = path.to_ascii_lowercase().ends_with(".fst");
+    if is_fst {
+        st.fst_target = Some(path.clone());
+    }
+    let write_path = if is_fst {
+        format!("{path}.vcdtmp")
+    } else {
+        path.clone()
+    };
+
+    let file = match std::fs::File::create(&write_path) {
         Ok(f) => f,
         Err(e) => {
             // P2-1: the main artifact must not vanish silently — warn (with the
@@ -1853,11 +1866,12 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
             st.sink.emit(LogEvent::Diagnostic(Diagnostic {
                 severity: Severity::Warning,
                 code: MsgCode::RunVcdOpenFail,
-                message: format!("cannot open VCD dump file '{path}': {e}"),
+                message: format!("cannot open VCD dump file '{write_path}': {e}"),
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: st.now }),
             }));
+            st.fst_target = None;
             return;
         }
     };
@@ -1865,7 +1879,9 @@ fn dumpvars(st: &mut SimState, args: &[u32]) {
     // `finalize_vcd` flushes explicitly, so buffering never changes the bytes.
     // P4-T1: with `--threads ≥2` the buffered chunks go to a dedicated writer
     // thread (order-preserving bounded FIFO) — byte-identical, wall-clock only.
-    let sink: crate::state::VcdSink = if st.threads >= 2 {
+    // An FST target keeps the sidecar VCD single-threaded so the file is fully
+    // flushed and closed (no writer thread to join) before `simulate` transcodes.
+    let sink: crate::state::VcdSink = if st.threads >= 2 && !is_fst {
         Box::new(std::io::BufWriter::with_capacity(
             64 * 1024,
             crate::vcd_thread::ThreadedWriter::spawn(file),

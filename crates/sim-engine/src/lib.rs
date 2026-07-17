@@ -654,6 +654,39 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
 
     st.finalize_vcd();
 
+    // G2 FST breadth: a `.fst` dump target is produced by transcoding the sidecar
+    // VCD. Dropping the writer flushes + closes the sidecar (single-threaded for
+    // FST, so there is no writer thread to join); then transcode to the real
+    // `.fst` path and remove the sidecar. A transcode failure is LOUD — the
+    // waveform must never silently vanish (same MsgCode as a VCD write failure);
+    // the sidecar VCD is left in place for debugging.
+    if let Some(fst_path) = st.fst_target.take() {
+        st.vcd = None; // flush + close the sidecar VCD file
+        let tmp = format!("{fst_path}.vcdtmp");
+        let version = format!("vitamin-sim {}", env!("CARGO_PKG_VERSION"));
+        let date = st.vcd_date.clone();
+        match vcd_writer::fst::transcode_vcd_to_fst(
+            std::path::Path::new(&tmp),
+            std::path::Path::new(&fst_path),
+            &version,
+            &date,
+        ) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&tmp);
+            }
+            Err(e) => {
+                st.sink.emit(LogEvent::Diagnostic(diag::Diagnostic {
+                    severity: diag::Severity::Warning,
+                    code: diag::MsgCode::RunVcdWriteFail,
+                    message: format!("FST transcode failed for '{fst_path}': {e}"),
+                    location: None,
+                    context: Vec::new(),
+                    sim_time: Some(diag::TimeStamp { ticks: st.now }),
+                }));
+            }
+        }
+    }
+
     let exit_class = if st.had_fatal {
         ExitClass::Fatal
     } else if st.had_error {

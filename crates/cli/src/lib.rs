@@ -1223,14 +1223,17 @@ fn print_help(applet: &str) {
              and elaborates their instantiation closure."
         }
         "vrun" => {
-            "Usage: vrun [-o <out.vcd>] <in.velab>\n\n\
-             Simulate a `.velab`, writing the VCD and RTL stdout."
+            "Usage: vrun [-o <out.vcd|out.fst>] <in.velab>\n\n\
+             Simulate a `.velab`, writing the waveform and RTL stdout.\n\
+             A `-o` (or `$dumpfile`) path ending in `.fst` writes FST; else VCD."
         }
         _ => {
-            "Usage: vita [-o <out.vcd>] <sources>...\n\
+            "Usage: vita [-o <out.vcd|out.fst>] <sources>...\n\
              \x20      vita {vcmp|velab|vrun} [OPTIONS] ...\n\n\
              One-shot RTL simulation: preprocess -> lex -> parse -> elaborate ->\n\
-             simulate -> VCD. The staged subcommands split the same pipeline.\n\
+             simulate -> waveform. A `-o`/`$dumpfile` path ending in `.fst`\n\
+             writes the GTKWave/Surfer FST format; any other extension writes VCD.\n\
+             The staged subcommands split the same pipeline.\n\
              `vita explain <CODE>` prints the doc-15 entry for a diagnostic."
         }
     };

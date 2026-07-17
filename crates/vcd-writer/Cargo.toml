@@ -7,3 +7,19 @@ license.workspace = true
 
 [dependencies]
 sim-ir = { path = "../sim-ir" }
+# FST waveform emission (VCD→FST transcode). Pinned to the 0.2.x line whose MSRV
+# (1.73) sits under the workspace's 1.82 pin; the 0.3.x line requires Rust 1.85.
+# BSD-3-Clause (Cornell / Kevin Laeufer), pure-Rust (lz4_flex + miniz_oxide).
+fst-writer = "=0.2.6"
+# MSRV-1.82 transitive pins for the fst-writer tree (NOT used directly by
+# vcd-writer): both crates' latest releases adopted edition2024 (needs Cargo
+# ≥1.85). proc-macro-crate 3.3.0 keeps toml_edit <0.23 → toml_datetime 0.6.x;
+# indexmap 2.7.1 predates its edition2024 bump. Declared here (rather than left
+# to the lock) so a plain `cargo build` off the pinned Cargo.lock still resolves.
+proc-macro-crate = "=3.3.0"
+indexmap = "=2.7.1"
+
+[dev-dependencies]
+# Independent FST reader (same author as fst-writer) — the transcode's
+# correct-or-loud oracle: read the emitted FST back and assert it round-trips.
+fst-reader = "=0.10.2"

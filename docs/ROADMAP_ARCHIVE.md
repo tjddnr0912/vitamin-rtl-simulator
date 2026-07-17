@@ -8,6 +8,15 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.149 FST waveform output (`$dumpfile("x.fst")` / `-o x.fst`) — G2 breadth (2026-07-17, branch feat-fst-waveform) ✅
+
+GTKWave/Surfer 네이티브 **FST** 파형을 VCD와 **동일한 in-code 인터페이스**로 지원(신규 기능). `$dumpfile` 인자(또는 CLI `-o`)의 확장자가 `.fst`(대소문자 무관)면 FST, 그 외 VCD. `$dumpvars`·`$dumpoff`·`$dumpon`·`$dumpall`·`$dumpflush`·`$dumplimit` 전부 FST 경로서 그대로 동작. SPEC=[preview/07 §FST 파형 출력](preview/07-vcd-format.md).
+
+- **설계(VCD→FST 트랜스코드, `vcd-writer/src/fst.rs::transcode_vcd_to_fst`)**: 시뮬 코어는 검증된 VCD를 사이드카(`<경로>.fst.vcdtmp`)로 쓰고 `simulate` 종료 시 FST로 변환·사이드카 삭제. 모든 dump 의미론(`$dumpoff`→전-x 등)이 이미 VCD 값-변화 스트림에 반영 → 그 스트림을 재생하면 **FST≡VCD 구성적 성립**(값-변화 경로마다 2nd 바이너리 싱크 배선 안 함 → silent-wrong 분기 여지 無). 압축 블록(geometry/hierarchy/value-change)은 순수-Rust `fst-writer`=0.2.6(BSD-3, Cornell/Laeufer) 위임 — vita가 바이너리 직접 안 만듦.
+- **의존성/MSRV(툴체인·MSRV 상향 불요)**: fst-writer 0.2.x(MSRV 1.73 < 워크스페이스 1.82 핀; 0.3.x는 Rust 1.85 요구) `=0.2.6` 핀 + edition2024 회피용 트랜지티브 핀(`proc-macro-crate`=3.3.0 → toml_edit<0.23 → toml_datetime 0.6.x·`indexmap`=2.7.1)을 `vcd-writer/Cargo.toml`에 직접 선언(--locked 정책상 커밋 lock이 durable pin).
+- **적대 리뷰(differential+soundness)서 self-introduced silent-wrong 1건 발굴·즉수정**: `$dumpoff` 중 real은 VCD서 전-x 벡터(`bxxx…x`)로 방출되는데(vita 특성) 이를 FST real(f64) 시그널에 벡터 바이트로 먹이면 **garbage float**(206842847014058100…)로 되읽힘=silent-wrong. fix=real 대상 벡터값 → **NaN**(iverilog `rNaN` 동치·real-domain unknown). 회귀 `real_dumpoff_maps_to_nan`.
+- **검증(correct-or-loud)**: 독립 리더 `fst-reader`=0.10.2로 되읽어 파형 동치 확인. 커버=scalar·vec·real·wide-64b·x/z·`$dumpoff`/`$dumpon`·중첩 scope·>94 시그널(멀티문자 idcode)·음수/지수 real, iverilog-13.0 파형 핀. 경로=one-shot `$dumpfile`·`-o`·staged `vrun -o`·`.FST`. 단위(`vcd-writer` `fst::tests`)+엔드투엔드(`cli/tests/fst_waveform.rs`). IR-0(sim-ir 형상·format_version 불변).
+
 #### 4.5.148 explicit single-symbol TYPE import (`import p::t;`) loud→supported (2026-07-17, branch feat-explicit-import-type) ✅
 
 `import p::my_t;`(단일-심볼 TYPE 임포트)=vita `error[VITA-E3009]: package `p` has no symbol `my_t`` loud(over-reject) vs iverilog 정상. wildcard `import p::*`·bare `p::my_t` read는 이미 지원 — 명시적 단일 TYPE 임포트만 누락(③ loud→supported).
