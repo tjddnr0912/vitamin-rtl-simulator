@@ -420,7 +420,7 @@ FST는 **VCD를 트랜스코드**해 생성한다(`vcd-writer/src/fst.rs`, `tran
 - **정확성(correct-or-loud)**: 모든 dump 의미론(`$dumpoff`→전-x 등)은 이미 VCD 값-변화 스트림에 반영돼 있어, 그 스트림을 그대로 FST로 재생하면 **FST ≡ VCD**가 구성적으로 성립한다. 별도 바이너리 싱크를 값-변화 경로마다 배선하지 않으므로 silent-wrong 분기 여지가 없다.
 - **실수형 unknown**: `$dumpoff` 중 real은 VCD에서 전-x 벡터로 나오지만 FST real은 f64이므로 **NaN**으로 매핑한다(iverilog `rNaN`과 동일). 벡터 바이트를 real로 재해석하면 garbage float가 되는 silent-wrong을 회피.
 - **바이너리 인코딩**: 압축 블록(geometry/hierarchy/value-change)은 순수-Rust `fst-writer`(=0.2.6, BSD-3-Clause) 크레이트가 담당. vita는 바이너리를 직접 손대지 않는다. MSRV 1.82 유지를 위해 0.2.x 라인 핀(0.3.x는 Rust 1.85 요구) + 트랜지티브 핀(`proc-macro-crate`=3.3.0·`indexmap`=2.7.1, `vcd-writer/Cargo.toml`).
-- **검증**: 산출 FST를 독립 리더 `fst-reader`(=0.10.2)로 되읽어 파형 동치를 확인(단위 테스트 `vcd-writer` `fst::tests`, 엔드투엔드 `cli/tests/fst_waveform.rs`, iverilog-13.0 파형 핀).
+- **검증**: 산출 FST를 독립 리더 `fst-reader`(=0.10.2)로 되읽어 파형 동치를 확인(단위 테스트 `vcd-writer` `fst::tests`, 엔드투엔드 `cli/tests/fst_waveform.rs`, iverilog-13.0 파형 핀). 추가로 **GTKWave 자체 `fst2vcd`**(GTKWave libfst)로도 디코드해 vita VCD와 canonical 파형 동치를 확인(scalar/vec/real/x·z 全). GTKWave **GUI 시각 검증은 추후 다른 뷰어로 수동** — 참고: Homebrew의 GTKWave 3.3.107(2020·x86_64·미서명)은 Apple Silicon macOS에서 Gatekeeper 삭제 + GTK pixbuf 하드코드 경로로 GUI가 segfault(FST 자체와 무관한 패키징 문제). 대안 뷰어=Surfer(순수-Rust·서명·FST 네이티브).
 
 ### FST 비목표
 
