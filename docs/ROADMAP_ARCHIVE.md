@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.152 signed packed struct/union whole-value signedness + case collective-signedness (2026-07-18, branch feat-signed-packed-struct) ✅
+
+**발굴 경위**: fresh-area probe(streaming·signed-div·x-prop·real-fmt·casez/wand·NBA·packed-struct 등 배터리)로 신규 silent-wrong 사냥 중 **`typedef struct packed signed {…}`** 발견 — `signed` 키워드가 whole-value로 안 먹힘.
+
+**silent-wrong ① — signed packed struct/union whole-value = unsigned (파서·iverilog-diff 확정)**: 파서 `parse_typedef_struct`/`parse_typedef_union`이 `struct packed signed`의 `signed`를 `let _ = self.opt_signed()`로 **폐기**("sign ignored for layout" 주석)하고 typedef `TypeInfo.signed`를 `false` 하드코딩 → 구조체를 한 값으로 읽을 때 unsigned(`struct packed signed{logic[7:0] v} s; s=8'hFF; %0d`=vita **255** vs iverilog **−1**). 렌더링뿐 아니라 compare(`s<0`=0 vs 1)·arith(`s+1`=256 vs 0)·arith-shift(`s>>>1`)·wider 대입 sign-extend(`logic signed[15:0] w=s`=255 vs −1) 전반 발산. **fix**: `signed` 키워드를 `TypeInfo.signed`로 캡처(struct·union 양쪽). 멤버 접근(`s.field`)·packed 레이아웃·member별 signedness는 **불변**(멤버는 `StructLayout.fields[i].signed` 독립 경유). `signed` 없으면 `opt_signed()→None→false`로 **byte-identical**(모든 기존 struct). IR-0(`NetVar.signed`는 기존 필드·VALUE만 변경·SchemaHash/format_version 불변·`TypeInfo`는 parser-internal non-Serialize).
+
+**silent-wrong ② — case/casez/casex collective-signedness (elaborate·pre-existing·①이 노출)**: 적대 differential 리뷰어가 `case(signed_struct)`서 발견 — **plain `reg signed [3:0]`도 동일**(struct 무관 증명). §12.5/§11.8.1: case 비교는 scrutinee AND **모든** label이 signed일 때만 signed(하나라도 unsigned면 전체 zero-extend). vita 엔진은 `CaseEq(scrut,label)`를 **pair별**(`signed(l)&&signed(r)`)로 sizing → signed scrut이 unsigned sibling label 있어도 signed label(`-1`)엔 sign-extend해 오매치(`case(s=4'hF) -1: ; 4'hF: ;`=vita `neg1` vs iverilog `hF`). ①이 signed struct을 올바로 signed화하면서 이 패턴이 correct→wrong로 노출(regression). **fix**(`lower_case`): label을 한 번만 lower(arena 재사용)→collective signedness 계산→`scrut_signed && !collective`면 scrut을 `$unsigned`로 **1회 래핑**. 그러면 모든 pair가 `pair_signed=false`→scrut·label **양쪽 zero-extend**=collective-unsigned 규칙 정확 재현(narrow signed label widening 잔여도 자동 해소·`$unsigned`는 width·x/z 보존). all-signed set=signed 유지·unsigned scrut=no-op(byte-identical). `case_label_eq`→`lower_case_label`+`case_cmp` 분리. 엔진·CaseEq 시맨틱 불변. IR-0(signed-scrut+unsigned-label 설계만 `$unsigned` 노드 1개 추가·형상/골든 불변).
+
+**적대 리뷰 2렌즈 CLEAN**: soundness(정적 code-path)=`TypeInfo.signed` 단일 퍼널 확정(module var/port/tf-port/func-return/array/package 全 site가 `info.signed` 경유·하드코딩 signed:false는 non-struct/unpacked뿐)·멤버 per-field·value-only 확정. differential(라이브 ~45 케이스)=signed struct/union display/compare/arith/shift/ternary/concat(unsigned로 소실)/psel(unsigned)/sext/x-z/cross-boundary 전부 iverilog 일치·plain/unsigned struct byte-identical — **단 case collective-signedness 1건 발견**(→②로 수정). VCD 자가검증=signed/unsigned struct 동일 `$var wire 8`·동일 비트벡터(VCD sign-agnostic).
+
+**검증**: 신규 회귀 테스트 2파일(`signed_packed_struct.rs`×6 — whole-value/sext/member-unsigned/union/unsigned-불변/**vita-내부 등가**(signed struct ≡ plain `logic signed [7:0]` char-identical) · `case_collective_signedness.rs`×6 — plain/struct/all-signed/narrow-label/unsigned/casez). clippy `-D warnings`·fmt clean. format_version 22 불변.
+
 #### 4.5.151 전면 감사(spec↔코드 정합 + 적대 버그헌트 + 문서 최신화) — silent-wrong 3·panic 2·게이트 갭 1 수정, format_version 21→22 (2026-07-17, branch main) ✅
 
 **방법론**: Fagan 역할분리 리뷰어 8팀 병렬(spec-정합 4축=diag/artifact-schema/VCD-FST-timescale/OBS · 적대 버그헌트 2축=sim-engine/front-end · 코드위생 1 · 문서일관성 1) → 발견 전량을 **라이브 iverilog 차분으로 확정/반증** 후 수정. 리뷰어 발견 중 1건(psel negative-offset READ 의혹)은 **차분이 반증**(vita `100x`/`00xx` = iverilog byte-일치) — 정적 추론만으로 수정했으면 회귀였을 것.
