@@ -29260,31 +29260,65 @@ impl Elaborator<'_> {
     ) {
         // casez/casex wildcard semantics are realized per-label by masking the
         // label's unknown (`?`/`z`/`x`) bits out of the compare (see
-        // `case_label_eq`). Plain `case` is an exact 4-state `===`.
-        let scrut_id = self.lower_expr(scrutinee);
+        // `case_cmp`). Plain `case` is an exact 4-state `===`.
+        let scrut_id0 = self.lower_expr(scrutinee);
         let merge = b.new_block();
 
         // Pre-allocate each Match arm's entry block; pin the default body.
         // Allocation order (deterministic): merge, then each Match arm block in
-        // source order, then per-label miss-blocks during the cascade.
+        // source order, then per-label miss-blocks during the cascade. Every
+        // label is lowered ONCE here (ids reused below) so the case's collective
+        // signedness can be computed from them.
         let mut arm_bodies: Vec<(BlockId, &ast::Stmt)> = Vec::new();
         let mut default_body: Option<&ast::Stmt> = None;
-        let mut tests: Vec<(&[ast::Expr], BlockId)> = Vec::new();
+        let mut tests: Vec<(Vec<u32>, BlockId)> = Vec::new();
         for it in items {
             match it {
                 ast::CaseItem::Match { labels, body, .. } => {
                     let arm = b.new_block();
-                    tests.push((labels.as_slice(), arm));
+                    let ids: Vec<u32> = labels
+                        .iter()
+                        .map(|l| self.lower_case_label(scrut_id0, l))
+                        .collect();
+                    tests.push((ids, arm));
                     arm_bodies.push((arm, body));
                 }
                 ast::CaseItem::Default { body, .. } => default_body = Some(body),
             }
         }
 
+        // §12.5 / §11.8.1 COLLECTIVE signedness: the case comparison is signed
+        // ONLY when the scrutinee AND every case-item label are signed; if ANY
+        // participant is unsigned the WHOLE comparison is unsigned. vita's engine
+        // sizes each `CaseEq(scrut,label)` pair independently
+        // (`signed(l)&&signed(r)`), so a signed scrutinee would sign-extend
+        // against a signed label even when an unsigned sibling label makes the
+        // SET collectively unsigned — the wrong branch, silently (e.g.
+        // `case(s) -1: ; 4'hF: ;` with signed `s=4'hF`: vita matched `-1`,
+        // iverilog matches `4'hF`). Force the scrutinee UNSIGNED once when the
+        // set is collectively unsigned: then every pair-signedness is false, so
+        // the scrutinee AND each label zero-extend — exactly the collective rule
+        // (iverilog-pinned). No-op when the scrutinee is already unsigned (its
+        // pairs are already unsigned → byte-identical) or when all labels are
+        // signed (correctly stays signed). `$unsigned` preserves width and x/z.
+        let scrut_signed = self.expr_self_signed(scrut_id0);
+        let collective_signed = scrut_signed
+            && tests
+                .iter()
+                .all(|(ids, _)| ids.iter().all(|&id| self.expr_self_signed(id)));
+        let scrut_id = if scrut_signed && !collective_signed {
+            self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::Unsigned,
+                args: vec![scrut_id0],
+            })
+        } else {
+            scrut_id0
+        };
+
         // Test cascade: for each label, a wildcard-aware match → arm else next.
         for (labels, arm) in &tests {
-            for label in *labels {
-                let eq = self.case_label_eq(scrut_id, label, kind);
+            for &lbl_id in labels {
+                let eq = self.case_cmp(scrut_id, lbl_id, kind);
                 let next = b.new_block();
                 b.end_block_with(ir::Terminator::Branch {
                     cond: eq,
@@ -31551,7 +31585,7 @@ impl Elaborator<'_> {
     fn lower_wildcard_eq(&mut self, lhs: &ast::Expr, rhs: &ast::Expr, ne: bool) -> u32 {
         let lhs_id = self.lower_expr(lhs);
         // A fill pattern (`'1`/`'x`/…) sizes to the LHS width, like a case
-        // label (§11.6 — mirrors `case_label_eq`).
+        // label (§11.6 — mirrors `lower_case_label`).
         let rhs_id = if expr_contains_fill(rhs) {
             let w = self.ir_bits_of(lhs_id).unwrap_or(32);
             self.lower_expr_ctx(rhs, w)
@@ -31639,16 +31673,26 @@ impl Elaborator<'_> {
         })
     }
 
-    fn case_label_eq(&mut self, scrut_id: u32, label: &ast::Expr, kind: ast::CaseKind) -> u32 {
-        // §11.6: a case label is sized to the case-expression width, so a fill
-        // label grows to it (`case(x8) '1:` ⇒ the label is 8'hFF, not 32 bits —
-        // otherwise it never matches). Non-fill labels lower byte-identically.
-        let lbl_id = if expr_contains_fill(label) {
+    /// Fill-aware lowering of ONE case label to its IR expr id. §11.6: a case
+    /// label is sized to the case-expression width, so a fill label grows to it
+    /// (`case(x8) '1:` ⇒ the label is 8'hFF, not 32 bits — otherwise it never
+    /// matches). Non-fill labels lower byte-identically. Split from `case_cmp`
+    /// so `lower_case` can lower every label ONCE, derive the case's COLLECTIVE
+    /// signedness from the label ids, and reuse them in the compare cascade (a
+    /// second lowering would bloat the expr arena and churn the goldens).
+    fn lower_case_label(&mut self, scrut_id: u32, label: &ast::Expr) -> u32 {
+        if expr_contains_fill(label) {
             let w = self.ir_bits_of(scrut_id).unwrap_or(32);
             self.lower_expr_ctx(label, w)
         } else {
             self.lower_expr(label)
-        };
+        }
+    }
+
+    /// Per-label 4-state equality node from a PRE-LOWERED label id. Plain `case`
+    /// is the exact 4-state `scrut === label`; casez/casex map to the dedicated
+    /// v7 wildcard match ops.
+    fn case_cmp(&mut self, scrut_id: u32, lbl_id: u32, kind: ast::CaseKind) -> u32 {
         let op = match kind {
             ast::CaseKind::Case => ir::BinOp::CaseEq,
             ast::CaseKind::Casez => ir::BinOp::CasezEq,
