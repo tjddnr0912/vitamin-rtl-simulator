@@ -730,18 +730,31 @@ fn log_open_failure_is_cli_error() {
 // `-Werror=W-FLIST-OVERRIDE` could never promote it and the counts epilogue
 // never included it (doc-15 W8009 promises strict-CI promotion).
 
-fn override_src() -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("vita_ux_ovr_{}", std::process::id()));
+/// A PER-TEST scratch dir holding `t.sv`. The `name` MUST be unique per test:
+/// these three overrides tests run in parallel, and a shared path made them race
+/// on `t.sv` (one test reading mid-`fs::write` truncate → an empty file →
+/// spurious `E2002 no design units`, flaky on high-core CI). Running vita with
+/// this dir as CWD (`vita_in`) also lands the `a.vcd`/`b.vcd` outputs here rather
+/// than polluting/racing the shared repo CWD.
+fn override_dir(name: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("vita_ux_ovr_{}_{name}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
-    let f = d.join("t.sv");
-    std::fs::write(&f, "module t; initial $finish; endmodule\n").unwrap();
-    f
+    std::fs::write(d.join("t.sv"), "module t; initial $finish; endmodule\n").unwrap();
+    d
+}
+
+fn vita_in(dir: &std::path::Path, args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_vita"))
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("run vita")
 }
 
 #[test]
 fn flist_override_default_is_counted_warning() {
-    let f = override_src();
-    let out = vita(&["-o", "a.vcd", "-o", "b.vcd", f.to_str().unwrap()]);
+    let d = override_dir("default");
+    let out = vita_in(&d, &["-o", "a.vcd", "-o", "b.vcd", "t.sv"]);
     let err = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(0), "stderr:\n{err}");
     assert!(err.contains("warning[VITA-W8009]"), "stderr:\n{err}");
@@ -755,15 +768,18 @@ fn flist_override_default_is_counted_warning() {
 
 #[test]
 fn flist_override_promotes_with_werror() {
-    let f = override_src();
-    let out = vita(&[
-        "-o",
-        "a.vcd",
-        "-o",
-        "b.vcd",
-        "-Werror=W-FLIST-OVERRIDE",
-        f.to_str().unwrap(),
-    ]);
+    let d = override_dir("werror");
+    let out = vita_in(
+        &d,
+        &[
+            "-o",
+            "a.vcd",
+            "-o",
+            "b.vcd",
+            "-Werror=W-FLIST-OVERRIDE",
+            "t.sv",
+        ],
+    );
     let err = String::from_utf8_lossy(&out.stderr);
     assert_ne!(
         out.status.code(),
@@ -775,15 +791,18 @@ fn flist_override_promotes_with_werror() {
 
 #[test]
 fn flist_override_suppresses_with_wno() {
-    let f = override_src();
-    let out = vita(&[
-        "-o",
-        "a.vcd",
-        "-o",
-        "b.vcd",
-        "-Wno-W-FLIST-OVERRIDE",
-        f.to_str().unwrap(),
-    ]);
+    let d = override_dir("wno");
+    let out = vita_in(
+        &d,
+        &[
+            "-o",
+            "a.vcd",
+            "-o",
+            "b.vcd",
+            "-Wno-W-FLIST-OVERRIDE",
+            "t.sv",
+        ],
+    );
     let err = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(0), "stderr:\n{err}");
     assert!(!err.contains("W8009"), "must be suppressed:\n{err}");
