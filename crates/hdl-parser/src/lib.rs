@@ -6521,9 +6521,17 @@ impl Parser<'_, '_> {
     fn parse_typedef_struct(&mut self, start: Span) -> Option<ModuleItem> {
         self.bump(); // `struct`
         let packed = self.eat_kw(Kw::Packed);
-        if packed {
-            let _ = self.opt_signed(); // `struct packed signed` — sign ignored for layout
-        }
+        // `struct packed signed` (§7.2.1): the qualifier sets the WHOLE-struct value
+        // signedness (used when the struct is read as one value — display / compare /
+        // arithmetic / arithmetic-shift / sign-extend-on-assign). The member LAYOUT is
+        // unaffected (offsets ignore sign) and each member keeps its OWN signedness, so
+        // `s.field` reads stay member-typed. Absent the keyword ⇒ unsigned (byte-identical
+        // to the pre-existing behaviour for every non-`signed` struct).
+        let struct_signed = if packed {
+            self.opt_signed().unwrap_or(false)
+        } else {
+            false
+        };
         let members = self.parse_struct_member_list()?;
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
@@ -6598,7 +6606,7 @@ impl Parser<'_, '_> {
             tname.name.clone(),
             TypeInfo {
                 kind: struct_kind,
-                signed: false,
+                signed: struct_signed,
                 range: Some(Self::dec_range(total.saturating_sub(1))),
                 packed: Vec::new(),
                 class_name: None,
@@ -6625,7 +6633,10 @@ impl Parser<'_, '_> {
             self.synchronize();
             return Some(ModuleItem::Error(start.to(self.prev_span())));
         }
-        let _ = self.opt_signed();
+        // `union packed signed` (§7.3.1/§7.2.1): whole-union value signedness, exactly as
+        // for a signed packed struct. Member overlay/layout and per-member signedness are
+        // unaffected. Absent the keyword ⇒ unsigned (byte-identical for every prior union).
+        let union_signed = self.opt_signed().unwrap_or(false);
         self.expect(TokenKind::LBrace, "'{' for union body");
         let mut members = Vec::new();
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
@@ -6706,7 +6717,7 @@ impl Parser<'_, '_> {
             tname.name.clone(),
             TypeInfo {
                 kind: union_kind,
-                signed: false,
+                signed: union_signed,
                 range: Some(Self::dec_range(total.saturating_sub(1))),
                 packed: Vec::new(),
                 class_name: None,
