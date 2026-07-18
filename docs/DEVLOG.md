@@ -1,4 +1,4 @@
-# DEVLOG — vitamin (016_claude_rtl) 슬라이스별 개발 이력
+# DEVLOG — vitamin 슬라이스별 개발 이력
 
 > `CLAUDE.md` 상태 블록에서 분리한 **슬라이스별(탄) 누적 개발 로그**(Stage C 바이트코드 VM → Phase-1 감사 → Phase-2 → Phase-3 SVA/검증 → Medium 묶음). 단일 진실 공급원은 `docs/preview/` SPEC이며, 향후 과제는 [ROADMAP.md](ROADMAP.md), 잔여 작업은 [REMAINING_WORK.md](REMAINING_WORK.md)에 있다. 각 항목은 커밋 해시·테스트 그린 수·적대 리뷰 결과를 핀(pin)한다.
 

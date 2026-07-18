@@ -279,14 +279,16 @@ strict — 두 요구를 분리해 만족한다(13-diagnostics-and-logging.md `-
 
 ### 빌드 매트릭스
 
-> **구현됨(2026-06-10):** 모노레포 루트 `.github/workflows/vitamin-ci.yml` —
-> `016_claude_rtl/**` paths 필터, **ubuntu-latest / macos-14 / windows-latest**
-> 3-OS 매트릭스(결정성 계약과 일치), toolchain은 `rust-toolchain.toml`(MSRV 1.85
-> 핀)을 rustup이 자동 인식(stable/beta 매트릭스는 핀과 충돌이라 비채택), 게이트 =
-> `fmt --check` → `clippy -D warnings` → `test --workspace --locked`. ubuntu에만
-> iverilog를 설치해 차분 스위트가 라이브 오라클로 돌고, 부재 OS에선 설계대로
-> graceful skip. **골든 해시 핀이 in-repo 테스트라 3-OS 바이트 동일성은 아티팩트
-> 교환 없이 OS별 자체 검증으로 강제된다.**
+> **구현됨(2026-07-18 기준):** repo 루트 `.github/workflows/ci.yml` — standalone
+> repo라 paths 필터 없이 push(main)/PR마다 전체 실행. 3-lane 매트릭스(결정성
+> 계약과 일치) = **ubuntu-latest · macos-latest**(`build-native`: `fmt --check` →
+> `clippy -D warnings` → `build` → `test --workspace --locked`) + **RHEL9/UBI
+> 컨테이너**(`build-rhel`: gcc 링커 설치 후 `build` → `test`). toolchain은
+> `dtolnay/rust-toolchain@1.85.0`로 MSRV를 명시 핀(stable/beta 매트릭스는 핀과
+> 충돌이라 비채택). CI에는 iverilog가 설치되지 않아 라이브 iverilog 차분 스위트는
+> 설계대로 graceful skip하고(오라클 검증은 로컬 개발에서 수행), **골든 해시 핀이
+> in-repo 테스트라 3-lane 바이트 동일성은 아티팩트 교환 없이 OS별 자체 검증으로
+> 강제된다.**
 
 ```yaml
 # 초기 스케치(역사 보존; 실물은 위 워크플로)

@@ -37,5 +37,5 @@ SV와 달리 Verilog에는 없는 것: `logic`, `always_ff/comb/latch`, `interfa
 
 ## Sources
 
-- 본 spec §10 (violet_sw/016_claude_rtl project spec)
+- 본 spec §10 (vitamin project spec = `docs/preview/`)
 - IEEE 1364-2005, IEEE 1800-2017
