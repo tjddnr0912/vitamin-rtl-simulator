@@ -191,9 +191,13 @@ use vita_schema::schema_hash;
 /// `NamedArg{formal,value}` (G10 `.formal(v)` named call args), `MethodCall{recv,
 /// method,args}` (G8 chained method call `s.substr(a,b).atoi()`). All desugar in the
 /// front end / elaborate (no sim-ir change; format_version stays 19). Re-pins this hash.
+/// 2026-07-19 §4.5.158 enum-label sign: adds `TypedefKind::Enum.signed` (the base's
+/// declared signedness) so a label reference lowers with the enum's sign — a POSITIVE
+/// label of a signed enum stays signed in a relational/collective context. Front-end +
+/// elaborate only (no sim-ir change; format_version stays 22). Re-pins this .vu hash.
 const EXPECTED: [u8; 32] = [
-    80, 152, 153, 40, 18, 232, 79, 91, 189, 117, 216, 57, 37, 20, 125, 165, 228, 210, 148, 71, 141,
-    169, 219, 255, 72, 64, 160, 189, 132, 73, 116, 22,
+    35, 29, 201, 236, 57, 122, 37, 216, 46, 253, 74, 33, 86, 151, 210, 111, 164, 106, 210, 40, 90,
+    217, 219, 196, 133, 152, 205, 221, 76, 157, 16, 109,
 ];
 
 #[test]

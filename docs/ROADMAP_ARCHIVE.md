@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.158 enum label operand signedness — 선언 sign 상속 (2026-07-19, branch feat-enum-label-sign) ✅ [.vu re-pin]
+
+**발굴 경위**: fresh-area 광역 sweep(interface/generate/hierarchical/casez/recursive-fn/foreach/param-override/string 전부 clean or no-oracle→코어 견고) 후 §2 中형 recorded(§4.5.154 differential 발굴 "enum-label 부호비교") 착수. `enum byte {A=-1,B=2} v=A; v>B`=vita **1**(255>2) vs iverilog **0**(−1>2 signed)·`B>C`(C=−3)=0 vs 1.
+
+**silent-wrong — enum label sign이 per-value(elaborate·iverilog-diff·§4.5.153-154 계열)**: 라벨 sign을 `param_meta`에 `v < 0`(값별)로 등록 → **signed enum의 POSITIVE 라벨**(B=2)이 unsigned→IEEE §11.8.1 collective로 비교 전체 unsigned화(오답). 변수 whole-value sign(§4.5.153)·width(§4.5.154)는 fixed였으나 라벨은 AST enum 노드가 sign 미보유라 per-value. **fix**: AST `TypedefKind::Enum`에 `signed: bool` 추가(base 선언 sign=`TypeInfo.signed` §4.5.153/154 resolve값·파서서 `enum_signed=info.signed` 배선·**`.vu` schema re-pin**·sim-ir 불변·format 22)·라벨 sign=**`enum_signed || (v<0)`**(signed enum=全 라벨 signed·unsigned enum의 negative[illegal]는 graceful signed). base-less `enum {…}`=int→base_w=`Some(32)`로 라벨도 도달.
+
+**적대 2렌즈 CLEAN(+발굴 즉수정)**: differential(110+ 케이스)=全 signed enum(byte/shortint/int/longint/logic-signed/base-less) 비교 iverilog SIGNED 일치·byte-identity(unsigned enum·label VALUE/`%0d`/`%b`·arith·`==`/`!=` sign-agnostic·case·method·concat self-width·`$bits`·array-idx 全 불변)·collective §11.8.1 정확(positive signed label이 unsigned 상대 잘못 signed화 안 함)·신규 divergence 0. soundness=sign-consumption 경로 확정(`walk_scopes(param_meta)`→`make_const_i64(v,w,signed)`)·`||v<0` 정확·base_w=32(unfoldable-range는 None 유지)·golden(sim-ir 무참조·re-pin만)·**KEY GAP 발굴=body-local enum**(`push_body_enum_labels`이 `self.params`만·param_meta 미설정→함수 내 라벨 sign/width value-inferred silent-wrong)→**§3 全 경로로 즉수정**(param_meta scoped save/restore[`restore_param_meta` 헬퍼·4 caller]·`push_pkg_consts_scoped` 선례 미러·pollution 없음 spot-check). 잔여 minor=unfoldable-range signed enum(base_w=None→value-inferred·극한 엣지)·generate-scope enum label=loud E3010(honest).
+
+**검증**: 신규 회귀 테스트 `enum_label_sign.rs`×6(signed 라벨 relational·base-less int·unsigned 불변·value/arith 불변·**body-local**[hand-IEEE·iverilog가 body-local 라벨 bind 불가]·vita-내부 등가[enum 라벨≡plain signed const]). `schema_hash.rs` re-pin(+이유 doc). **3636 green**(+6). clippy/fmt clean. format_version 22 불변(`.vu` re-pin·sim-ir·golden 불변).
+
 #### 4.5.157 atom+packed-dims loud-reject — 全 decl-site 완결 (§4.5.156 follow-through) (2026-07-19, branch feat-atom-dims-reject-allsites) ✅ [§3 全 경로 커버]
 
 **발굴 경위**: §4.5.156이 `parse_net_var`만 loud-reject해 **divergence 생성**(§3 "한 경로만 고치면 divergence>uniform-wrong"): sibling decl-site(typedef/port/tf-port/struct-member/param/for-init)는 여전히 `byte [7:0] x` 등 atom+packed-dims illegal decl을 lenient 수용 vs iverilog reject. 6 sibling site 전부 vita ACCEPT/iverilog REJECT 확정.

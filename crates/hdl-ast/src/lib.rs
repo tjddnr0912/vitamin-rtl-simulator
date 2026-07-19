@@ -477,9 +477,13 @@ pub struct TypedefDecl {
 pub enum TypedefKind {
     /// `typedef enum [base] { RED, GREEN=5, … } color_t;` — labels become module
     /// constants; the type is the (default int) base. `base` is the optional packed
-    /// base range (`enum logic [1:0] {…}`).
+    /// base range (`enum logic [1:0] {…}`); `signed` is the base's DECLARED signedness
+    /// (`enum byte {…}` / `enum logic signed [N] {…}` → true), so a label reference is
+    /// lowered with the enum's sign — a POSITIVE label of a signed enum stays SIGNED in
+    /// a relational/collective context (§4.5.158), not the value-inferred unsigned.
     Enum {
         base: Option<Range>,
+        signed: bool,
         labels: Vec<EnumLabel>,
     },
     /// `typedef logic [7:0] byte_t;` — a plain type alias. The parser resolves

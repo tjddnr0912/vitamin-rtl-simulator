@@ -5438,16 +5438,26 @@ impl<'s> Elaborator<'s> {
         for item in &module.body {
             if let ast::ModuleItem::Typedef(td) = item {
                 #[allow(irrefutable_let_patterns)]
-                if let ast::TypedefKind::Enum { base, labels } = &td.kind {
-                    // A label carries the enum base's DECLARED width so it reads
-                    // at its real self-width in a concat (`{4'h5, STATE}`), not 32
-                    // bits — the `param_meta` twin of the localparam path above.
-                    // Signedness is per-value (`v < 0`), matching the sign
-                    // `const_param_expr` already inferred (the base's `signed` is
-                    // captured for the enum VARIABLE's whole value — §4.5.153 — but
-                    // the AST enum node here carries only the range, so a label reads
-                    // its sign per-value; a negative label must stay signed).
-                    let base_w = self.enum_base_width(base);
+                if let ast::TypedefKind::Enum {
+                    base,
+                    signed,
+                    labels,
+                } = &td.kind
+                {
+                    // A label carries the enum base's DECLARED width so it reads at its
+                    // real self-width in a concat (`{4'h5, STATE}`), not 32 bits — the
+                    // `param_meta` twin of the localparam path above. §4.5.158: the label
+                    // also carries the enum's DECLARED sign (`signed`) so a POSITIVE label
+                    // of a SIGNED enum stays signed in a relational/collective context
+                    // (`enum byte {B=2}; v > B` = signed) — `|| v < 0` keeps a negative
+                    // label signed even on an (illegal) unsigned base (graceful, §4.5.154).
+                    // §4.5.158: a base-less `enum {…}` is `int` (32-bit) — give its labels
+                    // an explicit 32-bit `param_meta` so the sign fix below reaches them too
+                    // (`enum_base_width` returns None for a rangeless base). An unfoldable
+                    // range stays None (unknown width, value-inferred as before).
+                    let base_w = self
+                        .enum_base_width(base)
+                        .or_else(|| base.is_none().then_some(32u32));
                     let mut next: i64 = 0;
                     for lab in labels {
                         let v = match &lab.value {
@@ -5465,7 +5475,7 @@ impl<'s> Elaborator<'s> {
                         };
                         let key = self.fq(&lab.name.name);
                         if let Some(w) = base_w {
-                            self.param_meta.insert(key.clone(), (w, v < 0));
+                            self.param_meta.insert(key.clone(), (w, *signed || v < 0));
                         }
                         saved_params.push((key.clone(), self.params.insert(key, v)));
                         next = v.wrapping_add(1);
@@ -7203,6 +7213,22 @@ impl<'s> Elaborator<'s> {
         }
     }
 
+    /// §4.5.158: twin of `restore_params` for the `param_meta` side-map — unwinds a
+    /// scoped body-local enum-label width/sign registration so it does not pollute
+    /// later scopes (`param_meta` is otherwise persistent).
+    fn restore_param_meta(&mut self, saved: Vec<(String, Option<(u32, bool)>)>) {
+        for (k, prev) in saved.into_iter().rev() {
+            match prev {
+                Some(v) => {
+                    self.param_meta.insert(k, v);
+                }
+                None => {
+                    self.param_meta.remove(&k);
+                }
+            }
+        }
+    }
+
     /// Gap B (round-5): register a function/task's body-local `typedef enum` labels
     /// as integer constants under the CURRENT scope (`self.cur_prefix`), returning a
     /// save-list for `restore_params` to unwind afterwards. Mirrors the module-scope
@@ -7222,14 +7248,19 @@ impl<'s> Elaborator<'s> {
     /// silently shadow the block-local meant to shadow IT. Rejecting keeps this
     /// correct-or-loud rather than mis-resolving (the general resolution order is a
     /// documented follow-on).
+    #[allow(clippy::type_complexity)] // (params save, param_meta save) — mirrors push_pkg_consts_scoped
     fn push_body_enum_labels(
         &mut self,
         body_enums: &[ast::TypedefDecl],
         body: &ast::Stmt,
-    ) -> Vec<(String, Option<i64>)> {
+    ) -> (
+        Vec<(String, Option<i64>)>,
+        Vec<(String, Option<(u32, bool)>)>,
+    ) {
         let mut saved = Vec::new();
+        let mut saved_meta = Vec::new();
         if body_enums.is_empty() {
-            return saved; // common case — no gather, byte-identical
+            return (saved, saved_meta); // common case — no gather, byte-identical
         }
         // Names declared in `begin/end` blocks of this body (nested inner scopes) —
         // a label sharing one of these would mis-shadow it (see doc above).
@@ -7242,7 +7273,18 @@ impl<'s> Elaborator<'s> {
             .collect();
         for td in body_enums {
             #[allow(irrefutable_let_patterns)]
-            if let ast::TypedefKind::Enum { labels, .. } = &td.kind {
+            if let ast::TypedefKind::Enum {
+                base,
+                signed,
+                labels,
+            } = &td.kind
+            {
+                // §4.5.158: give body-local labels the enum's declared width+sign in
+                // `param_meta` (twin of the module/package paths) so a positive label of
+                // a signed enum compares signed inside a function/task; base-less = int(32).
+                let base_w = self
+                    .enum_base_width(base)
+                    .or_else(|| base.is_none().then_some(32u32));
                 let mut next: i64 = 0;
                 for lab in labels {
                     if block_local_names.contains(lab.name.name.as_str()) {
@@ -7272,12 +7314,18 @@ impl<'s> Elaborator<'s> {
                         None => next,
                     };
                     let key = self.fq(&lab.name.name);
+                    if let Some(w) = base_w {
+                        saved_meta.push((
+                            key.clone(),
+                            self.param_meta.insert(key.clone(), (w, *signed || v < 0)),
+                        ));
+                    }
                     saved.push((key.clone(), self.params.insert(key, v)));
                     next = v.wrapping_add(1);
                 }
             }
         }
-        saved
+        (saved, saved_meta)
     }
 
     /// Round-9 PKG2: register a package's constants (enum labels + localparams)
@@ -16141,7 +16189,7 @@ impl<'s> Elaborator<'s> {
             };
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), visible to the body, restored before the scope closes.
-            let saved_labels = s.push_body_enum_labels(&func.body_enums, &func.body);
+            let (saved_labels, saved_meta) = s.push_body_enum_labels(&func.body_enums, &func.body);
             let mut b = ProcessBuilder::new();
             // §13.4.4: run body-local declaration initializers at entry (top-level
             // body_decls, then block-locals — at frame entry, an approximation of
@@ -16161,6 +16209,7 @@ impl<'s> Elaborator<'s> {
             }
             let out = b.finish();
             s.restore_params(saved_labels);
+            s.restore_param_meta(saved_meta);
             // Round-9 PKG2: unwind the injected package consts (meta first, then
             // params — reverse of injection). Empty for module frames.
             for (k, prev) in saved_pkg_m.into_iter().rev() {
@@ -16354,7 +16403,7 @@ impl<'s> Elaborator<'s> {
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), mirroring `lower_frame_func_body` — so a task body enum's
             // labels resolve inside the body without leaking to the module.
-            let saved_labels = s.push_body_enum_labels(&task.body_enums, &task.body);
+            let (saved_labels, saved_meta) = s.push_body_enum_labels(&task.body_enums, &task.body);
             let mut b = ProcessBuilder::new();
             // §13.4.4: run body-local declaration initializers at entry (top-level
             // body_decls, then block-locals).
@@ -16373,6 +16422,7 @@ impl<'s> Elaborator<'s> {
             }
             let out = b.finish();
             s.restore_params(saved_labels);
+            s.restore_param_meta(saved_meta);
             out
         });
         self.cur_return = saved_ret;
@@ -17387,10 +17437,11 @@ impl<'s> Elaborator<'s> {
         let mut ret: Option<u32> = None;
         // Gap B: body-local enum labels → constants under the caller prefix, bounded
         // to this reduction (restored below) so a body `= A` folds without leaking.
-        let saved_labels = self.push_body_enum_labels(&func.body_enums, &func.body);
+        let (saved_labels, saved_meta) = self.push_body_enum_labels(&func.body_enums, &func.body);
         let ok =
             self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &local_dims, &mut ret);
         self.restore_params(saved_labels);
+        self.restore_param_meta(saved_meta);
         // restore the substitution stack to its pre-call depth.
         self.subst.truncate(frame_base);
         self.formal_str.truncate(fs_base);
@@ -17816,7 +17867,7 @@ impl<'s> Elaborator<'s> {
         // to this inlining. The `$itask$<name>$L` locals scope (when present) is
         // transparent in `walk_scopes_key`, so a label at `caller.LABEL` is still
         // found from inside it; restored after so it does not leak past the call.
-        let saved_labels = self.push_body_enum_labels(&task.body_enums, &task.body);
+        let (saved_labels, saved_meta) = self.push_body_enum_labels(&task.body_enums, &task.body);
         if tlocals.is_empty() {
             self.inline_task_body(b, &task.body);
         } else {
@@ -17827,6 +17878,7 @@ impl<'s> Elaborator<'s> {
             });
         }
         self.restore_params(saved_labels);
+        self.restore_param_meta(saved_meta);
         self.inline_stack.pop();
 
         // Copy-OUT each output/inout formal to its caller net AFTER the body. A
@@ -30154,11 +30206,23 @@ impl Elaborator<'_> {
                     // legal type import rather than an unknown symbol).
                     types.insert(td.name.name.clone());
                     #[allow(irrefutable_let_patterns)]
-                    if let ast::TypedefKind::Enum { base, labels } = &td.kind {
-                        // Base width so an imported / `pkg::`-read label carries
-                        // its self-width in a concat (twin of the module path);
-                        // per-value signedness (`v < 0`) as above.
-                        let base_w = self.enum_base_width(base);
+                    if let ast::TypedefKind::Enum {
+                        base,
+                        signed,
+                        labels,
+                    } = &td.kind
+                    {
+                        // Base width so an imported / `pkg::`-read label carries its
+                        // self-width in a concat (twin of the module path); the enum's
+                        // DECLARED sign (`|| v < 0` graceful) so a positive label of a
+                        // signed enum stays signed in a comparison — §4.5.158.
+                        // §4.5.158: a base-less `enum {…}` is `int` (32-bit) — give its labels
+                        // an explicit 32-bit `param_meta` so the sign fix below reaches them too
+                        // (`enum_base_width` returns None for a rangeless base). An unfoldable
+                        // range stays None (unknown width, value-inferred as before).
+                        let base_w = self
+                            .enum_base_width(base)
+                            .or_else(|| base.is_none().then_some(32u32));
                         let mut next: i64 = 0;
                         for l in labels {
                             let v = match &l.value {
@@ -30194,7 +30258,7 @@ impl Elaborator<'_> {
                             saved.push((key.clone(), self.params.insert(key, v)));
                             consts.insert(l.name.name.clone(), v);
                             if let Some(w) = base_w {
-                                const_meta.insert(l.name.name.clone(), (w, v < 0));
+                                const_meta.insert(l.name.name.clone(), (w, *signed || v < 0));
                             }
                         }
                     }

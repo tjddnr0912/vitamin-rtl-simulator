@@ -6434,6 +6434,10 @@ impl Parser<'_, '_> {
                 },
             }
         };
+        // §4.5.158: the enum's DECLARED sign (the `TypeInfo.signed` §4.5.153/154 resolves)
+        // rides into the AST `Enum` node so a label reference is lowered with the enum's
+        // sign, not the value-inferred one — a positive label of a signed enum stays signed.
+        let enum_signed = info.signed;
         self.typedefs.insert(tname.name.clone(), info);
         // SV §6.19.5 enum-method support: fold each label's value (running counter,
         // reset by an explicit literal-foldable `= expr`). Record the ordered
@@ -6463,7 +6467,11 @@ impl Parser<'_, '_> {
         }
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
-            kind: TypedefKind::Enum { base, labels },
+            kind: TypedefKind::Enum {
+                base,
+                signed: enum_signed,
+                labels,
+            },
             span: start.to(self.prev_span()),
         }))
     }
