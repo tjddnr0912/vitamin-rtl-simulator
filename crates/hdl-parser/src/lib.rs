@@ -6597,6 +6597,23 @@ impl Parser<'_, '_> {
         // sign, not the value-inferred one — a positive label of a signed enum stays signed.
         let enum_signed = info.signed;
         self.typedefs.insert(tname.name.clone(), info);
+        // Const-foldable enum base WIDTH in bits, for the label-range check below.
+        // `None` = skip the check (fail-open, never over-rejects) when the base range
+        // is not a literal (`enum logic [N-1:0]`) or is >64 bits wide. Base-less
+        // `enum {…}` = `int` (32-bit signed). Widths 1..=64 are checked with i128
+        // bounds (overflow-safe): a SIGNED 64-bit base (`longint`) admits any i64, but
+        // an UNSIGNED 64-bit base (`time`, `bit [63:0]`) still rejects a negative label
+        // (not representable in `[0, 2^64-1]`) — so width 64 is checked, not skipped.
+        let base_w: Option<u32> = match &base {
+            None => Some(32),
+            Some(r) => match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
+                (Some(msb), Some(lsb)) => match msb.checked_sub(lsb) {
+                    Some(d) if d.unsigned_abs() < 64 => Some(d.unsigned_abs() as u32 + 1),
+                    _ => None,
+                },
+                _ => None,
+            },
+        };
         // SV §6.19.5 enum-method support: fold each label's value (running counter,
         // reset by an explicit literal-foldable `= expr`). Record the ordered
         // (label, value) list ONLY if EVERY value folds (`const_lit`) — an enum with
@@ -6616,6 +6633,23 @@ impl Parser<'_, '_> {
                         }
                     },
                 };
+                // §6.19: a label value outside the enum base type's representable range
+                // is an error (IEEE — iverilog rejects "too large"/"negative"/overflow).
+                // vita previously TRUNCATED it silently (`{X=16}` in `[3:0]` read 0). Loud
+                // it — only for const-foldable values against a known base width, so the
+                // check never fires on a legitimately-typed label (correct-or-loud).
+                if let Some(w) = base_w {
+                    let vi = v as i128;
+                    let (lo, hi): (i128, i128) = if enum_signed {
+                        (-(1i128 << (w - 1)), (1i128 << (w - 1)) - 1)
+                    } else {
+                        (0, (1i128 << w) - 1)
+                    };
+                    if vi < lo || vi > hi {
+                        let sp = lab.value.as_ref().map(|e| e.span).unwrap_or(lab.name.span);
+                        self.error_at(sp, "an enum label value that fits the enum base type");
+                    }
+                }
                 folded.push((lab.name.name.clone(), v));
                 counter = v.wrapping_add(1);
             }

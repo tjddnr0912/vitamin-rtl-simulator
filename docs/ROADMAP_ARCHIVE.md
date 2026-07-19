@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.165 enum label 범위검증 — out-of-range label을 silent-truncate→loud (SV §6.19) (2026-07-20, branch feat-enum-label-range) ✅
+
+**발굴 경위**: fresh-area sweep 6 probe(산술 div/mod/pow/shift·format 지정자·bit-vector sysfunc·부호/폭·real 포맷·제어흐름)이 全 MATCH→코어 견고 확인→NEXT item 2(loud→supported)로 전환. 후보 3 그라운딩 中 **enum label 범위검증 부재**(§4.5.153 기록·§3)가 실은 **silent-wrong**: `enum logic [3:0] {X=16}`을 vita가 조용히 truncate(`e=0`)·iverilog는 compile-reject("value too large"). `{X=-1}`(unsigned base 음수)=vita 15·iverilog "negative value"·auto-inc overflow(`[1:0] {A..E}` E=4)=vita 0·iverilog "inferred value overflowed".
+
+**silent→loud 구현**(parser-only·IR-0·format 22 불변): `parse_enum`의 label-folding 루프에 range-check 추가. `base_w: Option<u32>`=enum base 폭(base-less `enum{}`=int 32·explicit vector=fold·atom=synth `dec_range`·`[N-1:0]` param/≥65-bit=None→**skip=fail-open**). 각 label의 const-foldable 값 `v`를 **i128 경계**로 검사: signed=`[-2^(w-1),2^(w-1)-1]`·unsigned=`[0,2^w-1]`. 폭 1..=64 검사(64-bit도: signed longint=any i64 OK·**unsigned time/`bit[63:0]`=음수 reject**). foldable 값·foldable 폭에만 발화→legit label은 무영향(correct-or-loud·never over-reject). `enum_signed`(§4.5.153/154 resolved sign)이 storage sign과 일치.
+
+**적대 2렌즈**: differential(~60 probe)=**CLEAN**(over-rejection 0·value-divergence 0·全 accept/reject 판정이 iverilog와 byte-identical: unsigned/signed vector·byte/shortint/int/longint atoms·ascending `[0:3]`/non-zero-lsb `[7:4]` 폭 정확·auto-inc·expr label·typedef/package base·boundary ±1). soundness=**SOUND** + **FINDING 1**(narrow silent-wrong 발굴·즉시 수정): 초판 cutoff `<63`이 width-64를 전부 skip→**unsigned `time`/`bit[63:0]` 음수 label을 silent-accept**(iverilog reject)→cutoff `<64`로 확장(signed longint=any i64 통과 유지·unsigned-64=음수만 reject)·재현 CLEAN. FINDING 2(진단 `found` 토큰이 post-`;`=cosmetic·span은 정확·기존 semantic-reject 선례 동일)=비수정.
+
+**잔여(§2·pre-existing·fail-open·invalid-program 한정)**: sized/based-literal label(`{A=8'hFF}`·`{A='d20}`)·param-width base(`[N-1:0]`)의 out-of-range=`const_lit` 미fold(decimal-only)→skip=silent-truncate 잔존. iverilog는 reject하나 **유효 프로그램 무영향**·fail-open이 over-reject보다 안전(§4.5.164 sized-literal 잔여와 동일 클래스·const_lit 확장 or elaborate-time 검사=별개 슬라이스). i64::MIN label(`-(2^63)`)=별개 pre-existing E3009(non-foldable).
+
+**검증**: 신규 `enum_label_range.rs`×10(signed-overflow·unsigned-negative·too-large·auto-inc-overflow·in-range-pass·atom/default-base·param-width-failopen·sized-literal-failopen·**unsigned-64-negative-loud**[FINDING 1 회귀]·**signed-longint-±i64::MAX-pass**). **3692 green**(+10). clippy/fmt clean.
+
 #### 4.5.164 enum `.name()`/`.name` — SV §6.19.5 label-string method (loud→supported) (2026-07-20, branch feat-enum-name-method) ✅
 
 **발굴 경위**: 6연속 param 슬라이스 후 **도메인 전환** fresh-sweep으로 §3에 그라운딩·기록한 enum `.name()`(vita E3009 vs iverilog label string) 착수(전용 슬라이스). `first/last/num/next/prev`는 i64 fold로 지원되나 name()은 dynamic string이라 `enum_method_expr`이 의도적 None이었음.
