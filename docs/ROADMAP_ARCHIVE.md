@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.155 `$bits` of a fixed-width atom array element (byte/shortint/int/longint) (2026-07-19, branch feat-bits-atom-array-elem) ✅
+
+**발굴 경위**: §4.5.154 review가 기록한 follow-on(`$bits(unpacked-array-elem)` of atom=1) 재그라운딩. `byte a[2]; $bits(a[0])`=vita **1** vs iverilog **8**(shortint/int/longint=1 vs 16/32/64). **storage/`%b`(10100101)/arith는 이미 8-bit 정확** — `$bits` reporting만 오류.
+
+**silent-wrong — `$bits` prescan atom width 누락 (elaborate·iverilog-diff)**: `$bits`는 `bits_of_view`가 `from_prescan`(정적 `bits_prescan`) 우선 소비(const site `prescan_first=true`·runtime는 1-D 완전인덱스서 `from_table` miss→prescan fallback). `prescan_net_bits`가 `Integer=32`·`Real/Time/Event=64`만 특별처리하고 **byte/shortint/int/longint를 `_ => {range None => 1}` 폴백**으로 보냄(`range_to_dims`는 8/16/32/64 처리하는데 prescan이 미러 안 함·§4.5.154 scalar fix는 net 경로 `range_to_dims`만 탐). **fix**=prescan에 atom arm 추가(Byte=8·Shortint=16·Int|Integer=32·Longint=64·`range_to_dims` 미러). **보너스**: const-context scalar `$bits(byte)`(=prescan 우선)도 1→8 교정(`localparam W=$bits(b)`·`logic [$bits(b)-1:0]`). 
+
+**적대 2렌즈 CLEAN**: soundness=**`from_table`는 fix 불요 확정**(unpacked byte-array net은 `range_to_dims`로 `nv.width=8` 이미 저장·1-D 완전인덱스는 `array_dims` absent라 from_table miss→prescan이 유일 authority)·`bits_prescan` 유일 populator·legal SV서 atom은 range/packed 미보유라 prescan≡range_to_dims≡net·value-only(elaborate-local BTreeMap·non-serialized). differential=3-way(pre-fix 바이너리 `1 1 1 1` 재현→post `8 16 32 64`)·byte-identity(logic-range/integer/bit/whole-array/packed/real·scalar 전부 pre==post==iverilog)·신규 divergence 0·51 케이스. 잔여(pre-existing·별개)=md-array **row** `$bits(m[0])`(partial-index sub-array=next-pow2 오류·logic도 동일·atom무관)·illegal `byte [7:0] x`(atom+dims lenient accept·loud 대상)→ROADMAP §2/§3.
+
+**검증**: 신규 회귀 테스트 `bits_atom_array_elem.rs`×6(atom elem 8/16/32/64·whole+multidim elem·forward-ref·ranged/integer/bit 불변·**const-scalar 보너스**·vita-내부 등가(elem≡scalar≡`%b` 폭)). **3626 green**(+6). clippy/fmt clean. format_version 22 불변(IR-0).
+
 #### 4.5.154 enum built-in base kind preservation — width + 2-state-ness (byte/shortint/int/longint/time/logic/bit) (2026-07-19, branch feat-enum-atom-base-width) ✅
 
 **발굴 경위**: §4.5.153 발굴한 recorded §2 follow-on("enum atom-base width")을 mechanism-level 재그라운딩. iverilog 차분 sweep: `$bits(enum byte)`=vita **32** vs iverilog **8**·`enum logic`(bare)=32 vs 1·`enum time`=32 vs 64. 근본=파서 `parse_typedef`가 range 없는 built-in base(atom `byte`/`shortint`/`int`/`longint` + bare `logic`/`bit`/`reg` + base-less)를 전부 4-state 32-bit `Integer` `None` arm으로 뭉갬 → **width(변수+라벨 양 경로)·2-state-ness 소실**.

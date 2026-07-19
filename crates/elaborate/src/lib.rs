@@ -31343,7 +31343,16 @@ impl Elaborator<'_> {
             return; // dynamic length — $bits on a string stays loud
         }
         let elem: u64 = match d.kind {
-            ast::NetVarKind::Integer => 32,
+            // §4.5.155: fixed-width integer atoms (IEEE §6.11.1) carry no range, so
+            // the `$bits` prescan must report the KIND width — mirroring `range_to_dims`
+            // — not the rangeless `None => 1` default below (which made
+            // `$bits(byte_arr[i])` = 1 instead of 8, even though the net storage /
+            // `%b` / arithmetic already size the element correctly). Only the static
+            // prescan path was stale (the scalar §4.5.154 fix rides `range_to_dims`).
+            ast::NetVarKind::Byte => 8,
+            ast::NetVarKind::Shortint => 16,
+            ast::NetVarKind::Int | ast::NetVarKind::Integer => 32,
+            ast::NetVarKind::Longint => 64,
             ast::NetVarKind::Real
             | ast::NetVarKind::Realtime
             | ast::NetVarKind::Time

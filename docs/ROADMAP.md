@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-19)**: format_version **22** · **3617 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.154(recorded §2 재그라운딩 — enum built-in base kind preservation: width + 2-state-ness 전 kind 정확화, silent-wrong 2 수정). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
+> **기준선(2026-07-19)**: format_version **22** · **3626 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.155(`$bits` of fixed-width atom array element — prescan atom-width 미러, silent-wrong 1 수정 + const-scalar 보너스). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -46,7 +46,8 @@
 - param scalar bit/part-select const-fold **미지원**(silent-wrong·DEEP): `logic [P[5:0]-1:0] x`=range-bound 폭 1 vs iverilog 63(param 값 컨텍스트는 E3009 honest-loud). §4.5.148 naive fold `(v>>i)&mask` 시도→**적대 2렌즈 수렴 발굴**: `[N:0]` descending만 정답·**zero-LSB ascending `[0:N]`**(선언 범위 미정규화→wrong bit)+non-zero-LSB below-LSB index=loud→silent 회귀→revert. 근원=`param_range`가 non-zero-LSB만 추적("absent=descending zero-LSB" 불변식·zero-LSB ascending 미탐·`base_net_ascending` false). fix=全 param 범위(lo/msb/direction) 기록 or `[lo..hi]` membership(param_range 불변식 확장=broad).
 
 - enum **label operand 부호 비교** (`enum byte {A=-1,B=2} v=A; v>B`=vita unsigned(255>2=1) vs iverilog signed(−1>2=0)) — bare enum-label 참조가 relational 컨텍스트서 self-determined **unsigned**(변수 whole-value 부호[§4.5.153]·width[§4.5.154]와 별 경로). literal RHS(`v>2`)·`v<0`은 정상·label RHS만 발산. pre-existing·§4.5.154 differential 발굴.
-- **`$bits(unpacked-array-elem)` of rangeless 2-state atom** = 1 (`byte a[2]; $bits(a[0])`=vita 1 vs iverilog 8) — array-element `$bits` 경로가 kind 무시·range-only(scalar `$bits`는 §4.5.154서 kind-aware 정확). enum-independent(plain `byte arr` 동일)·storage/`%b`/whole-array `$bits`는 정상. pre-existing·§4.5.154 발굴.
+- **🔴 size-cast `N'(expr)` context width 미전파 (DEEP·broad·§4.5.155 발굴)**: `5'(a+4'h1)`(a=4'hF)=vita `00000` vs iverilog `10000`(16)·`8'(a*b)`=13 vs 45·`6'(a<<1)`=14 vs 30·`5'(0-1)`=15 vs 31 — size cast가 inner 산술을 self-width로 계산 후 result만 resize(carry 소실). **assignment context(`logic[4:0] x=a+1`=16)는 정상**(엔진 `eval_ctx(rhs, net_w)`가 statement서 ctx 공급). 근본=IR Expr에 expr-level ctx-width 노드 없음(width=structural)·`lower_expr_ctx`/`lower_ctx_or_plain`이 **fill-only** 전파(non-fill leaf=self-width). fix=①새 IR Resize 노드(format bump) ②fill-only ctx 머신을 non-fill leaf까지 확장(26 caller+fill 시맨틱 회귀 위험) ③엔진 width 모델 — 전부 multi-part. recorded "inline size-cast `16'(a*b)` context"(§43)의 module-level 일반화·전용 슬라이스.
+- **`$bits(md-array ROW)` partial-index sub-array** = next-pow2 오류(`byte m[2][3]; $bits(m[0])`=vita 32 vs iverilog 24·`int`=128 vs 96) — logic 배열도 동일(atom-independent)·element `m[i][j]`는 정상(§4.5.155). runtime 경로만(const-context는 §4.5.155가 부수 교정). from_prescan partial-index 미처리→from_table next-pow2. pre-existing·§4.5.155 발굴.
 
 **문서화된 divergence (수정 비대상·핀됨):**
 
@@ -75,6 +76,7 @@
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).
 - `case (x) inside {…}`(§12.5.4 wildcard case)=vita E2002 parse-reject(loud)·③ 후보(no-oracle: iverilog 13.0 `case inside`/`inside` op/array reduction method 全 거부→hand-IEEE `==?`+내부차분). `inside` operator는 지원(== 시맨틱·§11.4.13). based-literal 내 whitespace(`64'sh FFFF`)=vita lexer reject(loud) vs iverilog 허용(minor·§4.5.147 발굴).
 - **enum label 범위검증 부재**(honest-loud 추가 후보): vita가 base 폭/부호를 벗어난 enum label(`enum logic [3:0] {X=-1}`·`{Y=16}`·signed `{Z=8}`)을 **조용히 truncate 수용** vs iverilog는 compile-reject("value too large/negative"). 유효 프로그램엔 무영향(§4.5.153 differential은 이 lenience 확인)·invalid program을 loud화하면 correct-or-loud 강화. 부호축은 §4.5.153서 해결·범위검증은 별개. §4.5.153 발굴.
+- **integer-atom + dims 미거부**(honest-loud 추가 후보): `byte [7:0] x`/`byte [7:0][1:0] x`처럼 fixed-width atom에 range/packed dims를 붙인 illegal decl(IEEE `integer_atom_type`는 dims 불가)을 파서가 lenient 수용 → net(`packed_extents`=16)과 prescan/`range_to_dims`(=8)가 불일치. iverilog reject. §4.5.155 soundness 발굴(R1).
 - **bit63-set unsigned 64-bit param 리터럴**(`parameter logic [63:0] A = 64'hFFFF_0000_0000_0000`)=E3009 over-reject(loud) vs iverilog 수용. §4.5.151 발굴·**보류 사유**=`const_eval_i64_lit`의 naive `v as i64` 수용은 i64 image가 음수로 읽혀 downstream const 부호 비교/산술을 silent-wrong으로 전환할 위험(explicit-signed 64-bit arm은 已수용·비대칭) — param 값 도메인에 부호/폭 메타 배선 후 착수.
 - **partial-timescale 정책 진단**(`--timescale-policy`·`W-PARSE-TIMESCALE-PARTIAL`/`E-PP-TIMESCALE-PARTIAL`): 일부 모듈만 `` `timescale `` 선언 시 현재 무진단 1ns/1ns 디폴트(전무 케이스만 W1017). doc-08 §15 설계는 문서화됨·`rt.default_used` 신호 이미 존재 — 배선만 필요. §4.5.151 발굴.
 
