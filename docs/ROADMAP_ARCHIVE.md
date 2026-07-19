@@ -8,6 +8,20 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.154 enum built-in base kind preservation — width + 2-state-ness (byte/shortint/int/longint/time/logic/bit) (2026-07-19, branch feat-enum-atom-base-width) ✅
+
+**발굴 경위**: §4.5.153 발굴한 recorded §2 follow-on("enum atom-base width")을 mechanism-level 재그라운딩. iverilog 차분 sweep: `$bits(enum byte)`=vita **32** vs iverilog **8**·`enum logic`(bare)=32 vs 1·`enum time`=32 vs 64. 근본=파서 `parse_typedef`가 range 없는 built-in base(atom `byte`/`shortint`/`int`/`longint` + bare `logic`/`bit`/`reg` + base-less)를 전부 4-state 32-bit `Integer` `None` arm으로 뭉갬 → **width(변수+라벨 양 경로)·2-state-ness 소실**.
+
+**silent-wrong ① — enum base width (파서·iverilog-diff·recorded §2)**: `$bits`/`%b`/concat/replication/struct-member/port/func-return 폭 전반 오류(`enum byte`=32 not 8). **fix**=파서가 **실제 base kind를 `TypeInfo`에 보존**(range=None·plain `byte`/`int`/`logic` decl과 byte-identical) + label-width 경로(`enum_base_width`·AST `base`)엔 kind 폭의 range를 합성. width machinery(elaborate `range_to_dims`)·2-state(`net_kind_is_two_state`)·sign(`atom_default_signed`)이 전부 plain-atom 경로 재사용. per-kind: byte/shortint/int/longint=2-state signed(8/16/32/64)·integer=4-state signed 32·time=4-state unsigned 64·logic/reg=4-state unsigned 1·bit=2-state unsigned 1·base-less=int(2-state 32).
+
+**적대 Rev1 회귀 2건(soundness 발굴)→redesign**: 초기 시도는 atom을 `kind:Logic,range:Some`으로 라우팅 → (a) `simple_typedef_cast`(`kind∈{Logic,Reg}` 게이트)가 atom enum cast를 admit→2-state coercion 없이 desugar(`enum byte'(4'b1x01)`=`00001x01` X누수 vs 이전 E3009 loud) (b) enum-typedef-base 가드(`info.range.is_none()`)가 range=Some로 새어 loud→accept. **redesign=실제 kind 보존**(위)이 두 회귀 근본 해소: Byte/Bit∉{Logic,Reg}·range=None이라 cast는 E3009 loud 복원·guard도 유지. 리뷰어 확인 CLEAN(main과 동일 loud terminus).
+
+**silent-wrong ② — int/base-less 2-state (differential 발굴·pre-existing·①이 부각)**: `enum int`·base-less `enum {…}`(암묵 base=int)가 4-state `Integer`로 모델링→uninit=X(state-machine `enum{IDLE,RUN}` read-before-assign이 X vs iverilog 0). ①이 byte/shortint/longint를 2-state로 만들며 이 pre-existing 불일치 노출. soundness 리뷰어가 정확한 remedy 제안("map int→Int, base-less→Int"). **fix**=int-family를 kind 보존에 균일 확장: int→`Int`(2-state)·integer→`Integer`(4-state 유지)·time→`Time`(64 width 보너스)·base-less None-arm=`Integer`→`Int`. plain int/integer/time와 byte-identical.
+
+**적대 2렌즈×2라운드 CLEAN**: Rev1 리뷰(differential 70+·soundness)가 회귀 2건 발굴→redesign 후 Rev2 리뷰=**both findings CLOSED**(정확한 predicate citation)·신규 loud→silent gap 0·kind-preservation 全 consumer(cast/`$bits`/2-state-init/VCD var-type/struct-member/port/func-return/label) SOUND·differential 2-state/width/sign 정확·byte-identity(int/integer/vector-range/plain var). 잔여 발굴(pre-existing·별개축)=enum-label 부호비교·`$bits(unpacked-elem)` atom→ROADMAP §2.
+
+**검증**: 신규 회귀 테스트 `enum_atom_base_width.rs`×9(atom width/bare-vector 1-bit/int-integer-baseless 32/concat/width×sign/int-baseless 2-state/integer 4-state 유지/time 64/**vita-내부 등가**(enum byte ≡ plain byte)). **3617 green**(+9·회귀 0). clippy/fmt clean. format_version 22 불변(IR-0·`TypeInfo` parser-internal·AST `base`는 Option<Range> 형상 불변·value-only).
+
 #### 4.5.153 enum base-type signedness — vector-base `signed` + atom-base `unsigned` whole-value (2026-07-19, branch feat-enum-signed-base) ✅
 
 **발굴 경위**: fresh-area probe(§4.5.152 signedness 계열의 sibling·type-qualifier whole-value 후보)로 신규 silent-wrong 사냥 중 **`typedef enum logic signed [N] {…}`** 발견 — struct/union(§4.5.152)의 정확한 enum-base sibling. 파서 주석이 이미 이 한계를 자인("the built-in `enum logic signed[N]` path also drops signedness — a separate pre-existing limit").

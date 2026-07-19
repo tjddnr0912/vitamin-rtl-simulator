@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-19)**: format_version **22** · **3611 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.153(fresh-area probe — enum base-type signedness: vector-base `signed` + atom-base `unsigned` whole-value, silent-wrong 2 수정). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
+> **기준선(2026-07-19)**: format_version **22** · **3617 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.154(recorded §2 재그라운딩 — enum built-in base kind preservation: width + 2-state-ness 전 kind 정확화, silent-wrong 2 수정). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -45,7 +45,8 @@
 - narrow-typed(`bit`/`logic`) param init from a 32-bit-self-width expr(comparison·산술)=선언폭 미적용→32-bit width→`%b` wide(value 정확·`%0d` 정상). pre-existing(plain `==`도)·§4.5.146 발굴. const_eval i64→param에 declared-narrow truncate 필요.
 - param scalar bit/part-select const-fold **미지원**(silent-wrong·DEEP): `logic [P[5:0]-1:0] x`=range-bound 폭 1 vs iverilog 63(param 값 컨텍스트는 E3009 honest-loud). §4.5.148 naive fold `(v>>i)&mask` 시도→**적대 2렌즈 수렴 발굴**: `[N:0]` descending만 정답·**zero-LSB ascending `[0:N]`**(선언 범위 미정규화→wrong bit)+non-zero-LSB below-LSB index=loud→silent 회귀→revert. 근원=`param_range`가 non-zero-LSB만 추적("absent=descending zero-LSB" 불변식·zero-LSB ascending 미탐·`base_net_ascending` false). fix=全 param 범위(lo/msb/direction) 기록 or `[lo..hi]` membership(param_range 불변식 확장=broad).
 
-- enum **atom-base width** (`enum byte {…}`/`enum int {…}`·no-range `enum logic signed {…}`) = vita 32-bit int 모델 → `%b`/`$bits` 폭 발산(`enum byte`=32 vs iverilog 8·value는 대개 일치). signedness는 §4.5.153서 해결(atom `unsigned` 존중)·폭은 별개 축·pre-existing. `enum_base_width`가 range 있을 때만 폭 산출→atom kind별 self-width 매핑 필요. §4.5.153 발굴.
+- enum **label operand 부호 비교** (`enum byte {A=-1,B=2} v=A; v>B`=vita unsigned(255>2=1) vs iverilog signed(−1>2=0)) — bare enum-label 참조가 relational 컨텍스트서 self-determined **unsigned**(변수 whole-value 부호[§4.5.153]·width[§4.5.154]와 별 경로). literal RHS(`v>2`)·`v<0`은 정상·label RHS만 발산. pre-existing·§4.5.154 differential 발굴.
+- **`$bits(unpacked-array-elem)` of rangeless 2-state atom** = 1 (`byte a[2]; $bits(a[0])`=vita 1 vs iverilog 8) — array-element `$bits` 경로가 kind 무시·range-only(scalar `$bits`는 §4.5.154서 kind-aware 정확). enum-independent(plain `byte arr` 동일)·storage/`%b`/whole-array `$bits`는 정상. pre-existing·§4.5.154 발굴.
 
 **문서화된 divergence (수정 비대상·핀됨):**
 

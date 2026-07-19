@@ -6246,7 +6246,15 @@ impl Parser<'_, '_> {
         self.bump(); // `enum`
                      // Optional packed base: `enum logic [1:0] {…}` or `enum [1:0] {…}`.
         let mut base_signed: Option<bool> = None;
-        let base = if self.net_var_kind().is_some() {
+        // §4.5.154: for a rangeless ATOM (`byte`/`shortint`/`longint`) or bare vector
+        // (`logic`/`bit`/`reg`) enum base, `atom_kind` records the REAL base kind so the
+        // enum's `TypeInfo` preserves it (correct width via the atom machinery + 2-state-
+        // ness + keeps `T'(e)` casts / the enum-base guard on their kind/range-gated
+        // paths), while `base` below carries a SYNTHESIZED width range consumed ONLY by
+        // the AST label-width path (`enum_base_width`). `None` = the base is not one of
+        // those synthesized kinds (explicit-range vector, `int`/`integer`, base-less).
+        let mut atom_kind: Option<NetVarKind> = None;
+        let base = if let Some(nvk) = self.net_var_kind() {
             self.bump(); // base kind keyword (logic/reg/integer/…)
                          // §4.5.153: capture an explicit `signed`/`unsigned` on the built-in enum
                          // base so the enum's WHOLE value signedness (`%0d`/compare/sign-extend) is
@@ -6255,7 +6263,43 @@ impl Parser<'_, '_> {
                          // each arm below applies its own default (vector base=unsigned, atom/
                          // base-less=signed-`int`), so a qualifier-less enum is byte-identical.
             base_signed = self.opt_signed();
-            self.opt_range()
+            match self.opt_range() {
+                // Explicit packed range (`enum logic [3:0] …`): vector base (default unsigned).
+                Some(r) => Some(r),
+                // No explicit range → an ATOM (`byte`/`shortint`/`longint`) or a bare vector kind
+                // (`logic`/`bit`/`reg`). The prior model collapsed ALL of these onto the 32-bit-
+                // `int` `None` arm below, so `$bits`/`%b`/concat width were wrong for BOTH the enum
+                // variable and its labels (`enum byte`=32 not 8, `enum logic`=32 not 1). Record the
+                // real kind (`atom_kind`, drives the variable's `TypeInfo`) and synthesize the
+                // kind's true width as the AST `base` (drives label width), seeding the per-kind
+                // default sign (atoms signed, bare vectors unsigned). `int`/`integer`/`time` →
+                // `_ => None` (unchanged 32-bit signed int).
+                None => {
+                    let synth = match nvk {
+                        // 2-state signed atoms.
+                        NetVarKind::Byte => Some((7u32, true)),
+                        NetVarKind::Shortint => Some((15, true)),
+                        NetVarKind::Int => Some((31, true)),
+                        NetVarKind::Longint => Some((63, true)),
+                        // `integer` = 4-state 32-bit signed (Verilog legacy); `time` = 4-state
+                        // 64-bit UNSIGNED. Preserving their real kind keeps `integer` 4-state
+                        // (X-init) and fixes `time` width (was 32). §4.5.154.
+                        NetVarKind::Integer => Some((31, true)),
+                        NetVarKind::Time => Some((63, false)),
+                        // Bare vector kinds (no range) = 1-bit unsigned; `bit` is 2-state.
+                        NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit => Some((0, false)),
+                        _ => None,
+                    };
+                    match synth {
+                        Some((hi, def_signed)) => {
+                            atom_kind = Some(nvk);
+                            base_signed = Some(base_signed.unwrap_or(def_signed));
+                            Some(Self::dec_range(hi))
+                        }
+                        None => None,
+                    }
+                }
+            }
         } else if let Some(info) = self.peek_typedef_name() {
             // `enum b_t {…}` — the base type is an existing typedef name. Support a
             // SIMPLE UNSIGNED vector typedef (`logic`/`bit`/`reg` `[N]`); the enum
@@ -6305,24 +6349,43 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';'");
         // Enum storage is `int` (32-bit signed) unless a packed base range was
         // given, in which case a `logic` vector of that range.
-        let info = match &base {
-            // Vector base (`enum logic [N] …`): defaults UNSIGNED, honors explicit `signed`.
-            Some(r) => TypeInfo {
-                kind: NetVarKind::Logic,
+        let info = if let Some(ak) = atom_kind {
+            // §4.5.154: a synthesized ATOM (`byte`/`shortint`/`longint`) or bare vector
+            // (`logic`/`bit`/`reg`) base — preserve the REAL kind (range None) so the enum
+            // variable is sized + state-typed exactly like a plain `byte`/`logic`/… decl.
+            // `base_signed` was resolved to `Some(..)` in the synth arm above. The AST
+            // `base` (synthesized range) drives the separate label-width path.
+            TypeInfo {
+                kind: ak,
                 signed: base_signed.unwrap_or(false),
-                range: Some(r.clone()),
-                packed: Vec::new(),
-                class_name: None,
-            },
-            // Atom base (`enum int/integer/byte …`) or base-less `enum {…}`: defaults SIGNED
-            // (int is a 32-bit signed 2-state type), honors explicit `unsigned` — §4.5.153.
-            None => TypeInfo {
-                kind: NetVarKind::Integer,
-                signed: base_signed.unwrap_or(true),
                 range: None,
                 packed: Vec::new(),
                 class_name: None,
-            },
+            }
+        } else {
+            match &base {
+                // Vector base (`enum logic [N] …`): defaults UNSIGNED, honors explicit `signed`.
+                Some(r) => TypeInfo {
+                    kind: NetVarKind::Logic,
+                    signed: base_signed.unwrap_or(false),
+                    range: Some(r.clone()),
+                    packed: Vec::new(),
+                    class_name: None,
+                },
+                // Base-less `enum {…}` (and any illegal non-integral base that slipped through):
+                // the default enum base is `int` = 32-bit signed 2-state (§4.5.154 — was the
+                // 4-state `Integer`, so an uninitialized base-less enum read X instead of 0).
+                // Every real integral base kind is now carried by `atom_kind` above; `int`/
+                // `integer`/`time` route through it, so only the base-less/illegal case lands
+                // here. Defaults SIGNED, honors explicit `unsigned` — §4.5.153.
+                None => TypeInfo {
+                    kind: NetVarKind::Int,
+                    signed: base_signed.unwrap_or(true),
+                    range: None,
+                    packed: Vec::new(),
+                    class_name: None,
+                },
+            }
         };
         self.typedefs.insert(tname.name.clone(), info);
         // SV §6.19.5 enum-method support: fold each label's value (running counter,
