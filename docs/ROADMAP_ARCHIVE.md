@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.157 atom+packed-dims loud-reject — 全 decl-site 완결 (§4.5.156 follow-through) (2026-07-19, branch feat-atom-dims-reject-allsites) ✅ [§3 全 경로 커버]
+
+**발굴 경위**: §4.5.156이 `parse_net_var`만 loud-reject해 **divergence 생성**(§3 "한 경로만 고치면 divergence>uniform-wrong"): sibling decl-site(typedef/port/tf-port/struct-member/param/for-init)는 여전히 `byte [7:0] x` 등 atom+packed-dims illegal decl을 lenient 수용 vs iverilog reject. 6 sibling site 전부 vita ACCEPT/iverilog REJECT 확정.
+
+**loud→supported — 全 decl-site 배선(파서·iverilog-diff·§3 全 경로)**: §4.5.156 inline check를 **공유 헬퍼 `reject_packed_dims_on_nonvector(kind, has_dims)`**로 추출(allow-list=`is_net()`[trireg/uwire 포함]+logic/reg/bit, IEEE §6.11 정확)하고 **9 decl-site + 3 type-spec-site**에 배선: `parse_net_var`·typedef-alias·struct-member·for-typed-init·ANSI-port·non-ANSI-port·ANSI-tf-port·non-ANSI-tf-port·typed-param(+**적대 soundness가 발굴한 3 잔여**: enum-base `enum byte [3:0]`·class-value-param `#(int [3:0])`·function-return `function int [7:0]`). per-site has_dims: struct-member=range만·param=`explicit_range`만(atom `forced_range`[byte→[7:0]] 제외)·func-return=Int-only(byte/shortint/longint는 forced range→leftover-`[` parse-error로 이미 loud). port/tf-port=typedef 해소 후 `net_or_var`(atom typedef는 range=None→no-op·vector typedef 허용).
+
+**적대 2렌즈 CLEAN**: differential(~90 케이스 全 site)=**over-rejection 0**(legal typedef/port/tf-port/struct/param/for-init/enum/class/func-return 전부 accept·vita reject는 전부 pre-existing[unpacked-dims parser gap·multi-dim-packed·`trireg` E3009 등]으로 committed 바이너리와 byte-identical)·correct-reject 全 site iverilog parity. soundness=9 site 개별 SOUND(predicate·allow-set·single-error recovery·format 무영향)+**3 type-spec 잔여 발굴**(→즉시 배선)+주석 2건 정정(ANSI-port soundness 근거=atom-typedef range=None·param int-vs-byte reject 메커니즘). 잔여 pre-existing(orthogonal·非-atom-dims)=`class #(int X)` typed value-param을 iverilog 미지원(vita 수용·범위 밖).
+
+**검증**: `atom_dims_reject.rs`에 all-sites 테스트 추가(10 site×illegal reject: var/typedef/port-ANSI/port-nonANSI/tf-ANSI/tf-nonANSI/struct/param/for-init/enum/class/func-return). **3630 green**. clippy/fmt clean. format_version 22 불변(파서 reject·IR-0).
+
 #### 4.5.156 loud-reject a packed range/dimension on a non-vector type (byte/int/…/real/string/event) (2026-07-19, branch feat-atom-dims-reject) ✅ [loud→supported·correct-or-loud]
 
 **발굴 경위**: §4.5.155 soundness 리뷰어 발굴 R1 재그라운딩. fresh-area probe(queue/dyn-array/assoc/streaming/real-math/`$sformatf`/part-select/mixed-sign/shift 전부 clean or no-oracle→코어 견고 확인) 후 loud→supported로 pivot. `byte [7:0] x`/`int [3:0] x` 등 fixed-width atom에 packed range/dims를 붙인 **illegal decl**(IEEE §6.11: `integer_atom_type`·real/string/event는 packed_dimension 불가)을 vita가 lenient 수용 vs iverilog compile-reject.

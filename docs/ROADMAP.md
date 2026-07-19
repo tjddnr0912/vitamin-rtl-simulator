@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-19)**: format_version **22** · **3629 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.156(loud-reject packed range/dim on a non-vector type — correct-or-loud; parse_net_var 경로). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
+> **기준선(2026-07-19)**: format_version **22** · **3630 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.157(atom+packed-dims loud-reject 全 decl-site 완결 — §4.5.156 follow-through·§3 全 경로). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -76,7 +76,6 @@
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).
 - `case (x) inside {…}`(§12.5.4 wildcard case)=vita E2002 parse-reject(loud)·③ 후보(no-oracle: iverilog 13.0 `case inside`/`inside` op/array reduction method 全 거부→hand-IEEE `==?`+내부차분). `inside` operator는 지원(== 시맨틱·§11.4.13). based-literal 내 whitespace(`64'sh FFFF`)=vita lexer reject(loud) vs iverilog 허용(minor·§4.5.147 발굴).
 - **enum label 범위검증 부재**(honest-loud 추가 후보): vita가 base 폭/부호를 벗어난 enum label(`enum logic [3:0] {X=-1}`·`{Y=16}`·signed `{Z=8}`)을 **조용히 truncate 수용** vs iverilog는 compile-reject("value too large/negative"). 유효 프로그램엔 무영향(§4.5.153 differential은 이 lenience 확인)·invalid program을 loud화하면 correct-or-loud 강화. 부호축은 §4.5.153서 해결·범위검증은 별개. §4.5.153 발굴.
-- **integer-atom + dims 미거부 — sibling decl 경로 잔여**(§4.5.156이 `parse_net_var`[module/block/func-body/class-member] 경로는 loud-reject). 잔여 lenient-accept(iverilog reject): **module port**(ANSI `input byte [7:0] p`·non-ANSI)·**typedef**(`typedef byte [7:0] t`→모든 인스턴스로 전파)·**tf-port**(`f(byte [7:0] a)`)·**struct/union member**·**for-typed-init**·typed `localparam`. 대부분 single-range=net 8 self-consistent(genuine 16-vs-8 불일치는 multi-packed만·일부 경로는 이미 cascade-loud). 완전 커버=공유 가드를 全 decl-site 배선(§3 全 경로). §4.5.156 soundness map.
 - **bit63-set unsigned 64-bit param 리터럴**(`parameter logic [63:0] A = 64'hFFFF_0000_0000_0000`)=E3009 over-reject(loud) vs iverilog 수용. §4.5.151 발굴·**보류 사유**=`const_eval_i64_lit`의 naive `v as i64` 수용은 i64 image가 음수로 읽혀 downstream const 부호 비교/산술을 silent-wrong으로 전환할 위험(explicit-signed 64-bit arm은 已수용·비대칭) — param 값 도메인에 부호/폭 메타 배선 후 착수.
 - **partial-timescale 정책 진단**(`--timescale-policy`·`W-PARSE-TIMESCALE-PARTIAL`/`E-PP-TIMESCALE-PARTIAL`): 일부 모듈만 `` `timescale `` 선언 시 현재 무진단 1ns/1ns 디폴트(전무 케이스만 W1017). doc-08 §15 설계는 문서화됨·`rt.default_used` 신호 이미 존재 — 배선만 필요. §4.5.151 발굴.
 

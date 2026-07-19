@@ -56,6 +56,58 @@ fn atom_with_packed_range_is_rejected() {
     }
 }
 
+/// §4.5.156 (§3 全 site): an atom+packed-range is rejected at EVERY declaration
+/// position via the shared `reject_packed_dims_on_nonvector` guard — not just a
+/// plain var decl, but typedef alias, module port (ANSI + non-ANSI), tf-port (ANSI +
+/// non-ANSI), struct member, typed param, and for-typed-init. iverilog rejects all.
+#[test]
+fn atom_with_packed_range_rejected_at_all_decl_sites() {
+    let srcs = [
+        ("typedef", "module t; typedef int [3:0] tt; tt x; initial $finish; endmodule"),
+        ("port-ANSI", "module m(input byte [7:0] p); endmodule"),
+        ("port-nonANSI", "module m(p); input byte [7:0] p; endmodule"),
+        (
+            "tf-port-ANSI",
+            "module t; task tk(input int [3:0] a); endtask initial $finish; endmodule",
+        ),
+        (
+            "tf-port-nonANSI",
+            "module t; task tk; input byte [7:0] a; endtask initial $finish; endmodule",
+        ),
+        (
+            "struct-member",
+            "module t; typedef struct packed { int [3:0] f; } s_t; s_t s; initial $finish; endmodule",
+        ),
+        (
+            "typed-param",
+            "module t; localparam real [1:0] Q = 0; initial $finish; endmodule",
+        ),
+        (
+            "for-init",
+            "module t; initial for (byte [3:0] i=0; i<2; i++) ; endmodule",
+        ),
+        (
+            "enum-base",
+            "module t; typedef enum byte [3:0] { A, B } e_t; e_t e; initial $finish; endmodule",
+        ),
+        (
+            "class-value-param",
+            "module t; class C #(int [3:0] X = 0); endclass initial $finish; endmodule",
+        ),
+        (
+            "func-return-type",
+            "module t; function int [7:0] f; f=0; endfunction initial $finish; endmodule",
+        ),
+    ];
+    for (site, src) in srcs {
+        let (err, ok) = run(src);
+        assert!(
+            !ok && err.contains("vector-typed"),
+            "[{site}] atom+range should be rejected; got ok={ok} err:\n{err}"
+        );
+    }
+}
+
 /// BYTE-IDENTITY: every legal declaration still elaborates cleanly — a scalar atom,
 /// a vector type WITH a packed range (`logic`/`reg`/`bit`), a net with a range, an
 /// unpacked array of an atom, a multi-packed vector, and `real`/`string`.

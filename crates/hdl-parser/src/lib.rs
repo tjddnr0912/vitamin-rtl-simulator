@@ -2914,6 +2914,14 @@ impl Parser<'_, '_> {
                 self.opt_packed_dims(), // additional packed dims `[3:0][7:0]`
             )
         };
+        // §4.5.156 (§3 全 site): reject an inline packed range/dim on a non-vector port
+        // kind (`input byte [7:0] p`). A typedef-typed port has `net_or_var` set to the
+        // typedef's resolved kind with its OWN range (an atom typedef has range=None →
+        // no-op; a signed/packed atom typedef was already rejected at its decl), so no
+        // valid typedef port over-rejects. A bare continuation has `net_or_var=None`.
+        if let Some(k) = net_or_var {
+            self.reject_packed_dims_on_nonvector(k, range.is_some() || !packed.is_empty());
+        }
         // A pure continuation (no own direction/type/range/signed) inherits the
         // previous port's type — `input [7:0] a, b` ⇒ b is also `[7:0]`.
         if explicit_dir.is_none()
@@ -3091,6 +3099,12 @@ impl Parser<'_, '_> {
             self.opt_range()
         };
         let range = forced_range.or_else(|| explicit_range.clone());
+        // §4.5.156 (§3 全 site): a typed param's kind may not carry a user packed range
+        // unless it is a vector (`logic`/`reg`/`bit`). `forced_range` is the atom's OWN
+        // fixed width (byte→[7:0]) not a user dim, so gate on `explicit_range` only.
+        if let Some(k) = var_kind {
+            self.reject_packed_dims_on_nonvector(k, explicit_range.is_some());
+        }
         let name = self.ident()?;
         // A2a: `[` after the parameter name ⇒ an ARRAY parameter (IEEE §6.20.2).
         if self.peek() == Some(TokenKind::LBracket) {
@@ -5799,6 +5813,10 @@ impl Parser<'_, '_> {
         } else {
             (self.signed_eff(net_or_var), self.opt_range())
         };
+        // §4.5.156 (§3 全 site): reject a packed range on a non-vector non-ANSI port.
+        if let Some(k) = net_or_var {
+            self.reject_packed_dims_on_nonvector(k, range.is_some());
+        }
         let mut names = Vec::new();
         loop {
             if let Some(id) = self.ident() {
@@ -5831,26 +5849,19 @@ impl Parser<'_, '_> {
     /// / task / class body a `wire #3 w = a;` is illegal — the caller passes `false`
     /// so the `#` is left to error as before (correct-or-loud: never parse a delay
     /// we would then silently drop).
-    fn parse_net_var(&mut self, allow_net_delay: bool) -> Option<NetVarDecl> {
-        let start = self.cur_span();
-        let kind = self.net_var_kind().unwrap();
-        self.bump();
-        let signed = self.signed_eff(Some(kind));
-        let range = self.opt_range();
-        let packed = self.opt_packed_dims(); // additional packed dims `logic [3:0][7:0]`
-                                             // §4.5.156: a packed range/dimension is only legal on a vector-typed decl —
-                                             // a NET or `logic`/`reg`/`bit` (IEEE §6.11 `integer_vector_type`). A
-                                             // fixed-width integer atom (`byte`/`shortint`/`int`/`longint`/`integer`/
-                                             // `time`) and the dimensionless types (`real`/`string`/`event`) take NO
-                                             // packed dims. vita silently accepted these illegal decls: a single range
-                                             // was dropped (`byte [7:0] x` sized 8, self-consistent but non-conformant),
-                                             // and a SECOND packed dim genuinely diverged (`byte [7:0][1:0] x` —
-                                             // `packed_extents` folds 8×2=16 while `range_to_dims`/`$bits` report the kind
-                                             // width 8). iverilog rejects all of them. Emit a loud reject (keep the parsed
-                                             // decl so the rest of the file parses). Covers this decl path only; the
-                                             // sibling paths (ports / tf-ports / typedef / struct member) stay lenient —
-                                             // ROADMAP §3.
-        if (range.is_some() || !packed.is_empty())
+    /// §4.5.156: a packed range/dimension is legal ONLY on a vector-typed decl — a
+    /// NET or `logic`/`reg`/`bit` (IEEE §6.11 `integer_vector_type`). A fixed-width
+    /// integer atom (`byte`/`shortint`/`int`/`longint`/`integer`/`time`) and the
+    /// dimensionless types (`real`/`string`/`event`) take none. Called at every decl
+    /// / type-spec site that parses `kind + opt_range()/opt_packed_dims()` (§3 全
+    /// site): module/block/func-body/class-member var, typedef alias, struct/union
+    /// member, module port (ANSI + non-ANSI), tf-port (ANSI + non-ANSI), typed
+    /// parameter, for-typed-init, enum base, class value-param, and the `int`
+    /// function-return type. (`byte`/`shortint`/`longint` in a function-return type
+    /// still reject, but via the leftover-`[` parse error, not this helper.) Emits a
+    /// loud reject; the caller keeps its parsed decl (elaborate is skipped, errors > 0).
+    fn reject_packed_dims_on_nonvector(&mut self, kind: NetVarKind, has_dims: bool) {
+        if has_dims
             && !(kind.is_net()
                 || matches!(kind, NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit))
         {
@@ -5858,6 +5869,17 @@ impl Parser<'_, '_> {
                 "a vector-typed decl (net or `logic`/`reg`/`bit`) for a packed range/dimension — a fixed-width integer atom (`byte`/`int`/…) / `real` / `string` / `event` takes none (IEEE §6.11)",
             );
         }
+    }
+
+    fn parse_net_var(&mut self, allow_net_delay: bool) -> Option<NetVarDecl> {
+        let start = self.cur_span();
+        let kind = self.net_var_kind().unwrap();
+        self.bump();
+        let signed = self.signed_eff(Some(kind));
+        let range = self.opt_range();
+        let packed = self.opt_packed_dims(); // additional packed dims `logic [3:0][7:0]`
+                                             // §4.5.156: reject a packed range/dim on a non-vector kind (see the helper).
+        self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
         // IEEE §6.1.3 net-declaration delay (`wire #3 w = a;` / `wire #(2,3) w = a;`):
         // after the range, before the name list. Only a NET kind in a delay-permitting
         // scope takes one — a `#` after a variable range, or any `#` in a procedural /
@@ -6285,7 +6307,12 @@ impl Parser<'_, '_> {
             base_signed = self.opt_signed();
             match self.opt_range() {
                 // Explicit packed range (`enum logic [3:0] …`): vector base (default unsigned).
-                Some(r) => Some(r),
+                // §4.5.156 (§3 全 site): a NON-vector base (`enum byte [3:0]`) may not carry a
+                // packed range — reject (a vector base logic/reg/bit is fine).
+                Some(r) => {
+                    self.reject_packed_dims_on_nonvector(nvk, true);
+                    Some(r)
+                }
                 // No explicit range → an ATOM (`byte`/`shortint`/`longint`) or a bare vector kind
                 // (`logic`/`bit`/`reg`). The prior model collapsed ALL of these onto the 32-bit-
                 // `int` `None` arm below, so `$bits`/`%b`/concat width were wrong for BOTH the enum
@@ -6449,6 +6476,7 @@ impl Parser<'_, '_> {
         let signed = self.signed_eff(Some(kind));
         let range = self.opt_range();
         let packed = self.opt_packed_dims();
+        self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
         self.typedefs.insert(
@@ -6554,6 +6582,7 @@ impl Parser<'_, '_> {
             self.bump(); // kind keyword
             let signed = self.signed_eff(Some(kind));
             let range = self.opt_range();
+            self.reject_packed_dims_on_nonvector(kind, range.is_some());
             return Some((kind, signed, range));
         }
         if let Some(info) = self.peek_typedef_name() {
@@ -9098,10 +9127,13 @@ impl Parser<'_, '_> {
             loop {
                 let _ = self.eat_kw(Kw::Parameter); // optional `parameter`
                                                     // optional leading type: a net/var kind keyword + optional range.
-                if self.net_var_kind().is_some() {
+                if let Some(k) = self.net_var_kind() {
                     self.bump();
                     let _ = self.opt_signed();
-                    let _ = self.opt_range();
+                    let r = self.opt_range();
+                    // §4.5.156 (§3 全 site): a non-vector class value-param type may not carry
+                    // a packed range (`class C #(int [3:0] X)`).
+                    self.reject_packed_dims_on_nonvector(k, r.is_some());
                 }
                 let Some(name) = self.ident() else { break };
                 let default = if self.eat(TokenKind::Eq) {
@@ -9482,6 +9514,12 @@ impl Parser<'_, '_> {
                 if range.is_none() {
                     range = self.opt_range();
                 }
+                // §4.5.156 (§3 全 site): `int` is the only non-vector kw-kind that can reach a
+                // USER range here (byte/shortint/longint carry a forced width; logic/reg/bit are
+                // vectors) — reject `function int [7:0] f`.
+                if matches!(k, Kw::Int) && range.is_some() {
+                    self.reject_packed_dims_on_nonvector(NetVarKind::Int, true);
+                }
             } else if let Some(info) = self.peek_block_typedef_decl() {
                 // A user-defined type name as the return type: `function b_t f;`
                 // (the `<typedef_name> <function_name>` shape — same disambiguation
@@ -9816,6 +9854,12 @@ impl Parser<'_, '_> {
         }
         let explicit_signed = self.opt_signed();
         let mut range = self.opt_range();
+        // §4.5.156 (§3 全 site): reject an inline packed range on a non-vector tf-port
+        // kind (`task t(byte [7:0] a)`); a typedef-name port is resolved below and was
+        // validated at its own decl.
+        if let Some(k) = net_or_var {
+            self.reject_packed_dims_on_nonvector(k, range.is_some());
+        }
         // A tf-port type given as a user-defined type name (`task t(byte_t a)`).
         // Resolve a SIMPLE typedef (vector / enum / atom) to its kind/sign/range,
         // exactly as a built-in keyword type would; a packed struct/union typedef
@@ -10074,6 +10118,11 @@ impl Parser<'_, '_> {
         }
         let mut signed = self.signed_eff(net_or_var);
         let mut range = self.opt_range();
+        // §4.5.156 (§3 全 site): reject an inline packed range on a non-vector non-ANSI
+        // tf-port kind; a typedef-name port is resolved below (validated at its decl).
+        if let Some(k) = net_or_var {
+            self.reject_packed_dims_on_nonvector(k, range.is_some());
+        }
         // A non-ANSI tf-port type given as a user-defined type name
         // (`input byte_t a;` / `input cfg_t c;`) — resolve a SIMPLE typedef, or a
         // packed struct/union (EXT2-C), exactly as the ANSI path.
@@ -12438,6 +12487,7 @@ impl Parser<'_, '_> {
         let signed = self.signed_eff(Some(kind));
         let range = self.opt_range();
         let packed = self.opt_packed_dims();
+        self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
         self.build_for_typed_init(start, kind, signed, range, packed)
     }
 
