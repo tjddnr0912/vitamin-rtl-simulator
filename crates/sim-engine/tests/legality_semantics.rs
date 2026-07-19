@@ -83,8 +83,11 @@ endmodule
     );
     // …or WRITTEN like a variable…
     assert_rejected("module t; event ev; initial ev = 1'b1; endmodule", "event");
-    // …and carries no packed range.
-    assert_rejected("module t; event [3:0] ev; endmodule", "event");
+    // …and carries no packed range. §4.5.156: a packed dimension is legal only on a
+    // vector-typed decl, so `event [3:0] ev` is now caught at PARSE time (before
+    // elaborate) and never reaches this `elab`-based helper (whose `parse` guard
+    // asserts parse-clean). The parser-level reject is covered by
+    // `cli::atom_dims_reject::atom_with_packed_range_is_rejected`.
 }
 
 /// force/release semantics landed (format_version 4 follow-up): whole-net

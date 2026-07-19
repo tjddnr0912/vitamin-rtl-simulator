@@ -5838,10 +5838,30 @@ impl Parser<'_, '_> {
         let signed = self.signed_eff(Some(kind));
         let range = self.opt_range();
         let packed = self.opt_packed_dims(); // additional packed dims `logic [3:0][7:0]`
-                                             // IEEE §6.1.3 net-declaration delay (`wire #3 w = a;` / `wire #(2,3) w = a;`):
-                                             // after the range, before the name list. Only a NET kind in a delay-permitting
-                                             // scope takes one — a `#` after a variable range, or any `#` in a procedural /
-                                             // class scope, stays a loud error (never silently accept `reg #3 r`).
+                                             // §4.5.156: a packed range/dimension is only legal on a vector-typed decl —
+                                             // a NET or `logic`/`reg`/`bit` (IEEE §6.11 `integer_vector_type`). A
+                                             // fixed-width integer atom (`byte`/`shortint`/`int`/`longint`/`integer`/
+                                             // `time`) and the dimensionless types (`real`/`string`/`event`) take NO
+                                             // packed dims. vita silently accepted these illegal decls: a single range
+                                             // was dropped (`byte [7:0] x` sized 8, self-consistent but non-conformant),
+                                             // and a SECOND packed dim genuinely diverged (`byte [7:0][1:0] x` —
+                                             // `packed_extents` folds 8×2=16 while `range_to_dims`/`$bits` report the kind
+                                             // width 8). iverilog rejects all of them. Emit a loud reject (keep the parsed
+                                             // decl so the rest of the file parses). Covers this decl path only; the
+                                             // sibling paths (ports / tf-ports / typedef / struct member) stay lenient —
+                                             // ROADMAP §3.
+        if (range.is_some() || !packed.is_empty())
+            && !(kind.is_net()
+                || matches!(kind, NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit))
+        {
+            self.error(
+                "a vector-typed decl (net or `logic`/`reg`/`bit`) for a packed range/dimension — a fixed-width integer atom (`byte`/`int`/…) / `real` / `string` / `event` takes none (IEEE §6.11)",
+            );
+        }
+        // IEEE §6.1.3 net-declaration delay (`wire #3 w = a;` / `wire #(2,3) w = a;`):
+        // after the range, before the name list. Only a NET kind in a delay-permitting
+        // scope takes one — a `#` after a variable range, or any `#` in a procedural /
+        // class scope, stays a loud error (never silently accept `reg #3 r`).
         let delay = if allow_net_delay && kind.is_net() && self.peek() == Some(TokenKind::Hash) {
             self.parse_delay()
         } else {

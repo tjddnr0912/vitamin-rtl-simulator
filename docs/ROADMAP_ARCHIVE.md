@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.156 loud-reject a packed range/dimension on a non-vector type (byte/int/…/real/string/event) (2026-07-19, branch feat-atom-dims-reject) ✅ [loud→supported·correct-or-loud]
+
+**발굴 경위**: §4.5.155 soundness 리뷰어 발굴 R1 재그라운딩. fresh-area probe(queue/dyn-array/assoc/streaming/real-math/`$sformatf`/part-select/mixed-sign/shift 전부 clean or no-oracle→코어 견고 확인) 후 loud→supported로 pivot. `byte [7:0] x`/`int [3:0] x` 등 fixed-width atom에 packed range/dims를 붙인 **illegal decl**(IEEE §6.11: `integer_atom_type`·real/string/event는 packed_dimension 불가)을 vita가 lenient 수용 vs iverilog compile-reject.
+
+**loud→supported — atom+packed-dims parse-reject (파서·iverilog-diff)**: `parse_net_var`가 `opt_range()`+`opt_packed_dims()` 후 무검증 → single-range는 `range_to_dims`가 range 드롭(net 8·self-consistent but non-conformant)·**second packed dim은 genuine 발산**(`byte [7:0][1:0]`=`packed_extents` 8×2=16 vs `range_to_dims`/`$bits` 8). **fix**=`parse_net_var`에 allow-list 가드: `range.is_some()||!packed.is_empty()`인데 `!(kind.is_net() || Logic|Reg|Bit)`면 loud `E2002`(emit+keep-decl→나머지 파스 정상·elaborate는 errors>0로 skip). ALLOW-LIST(§3 원칙)=vector-typed(nets+logic/reg/bit)만 허용·나머지 전부 reject=construction상 완전.
+
+**적대 2렌즈 CLEAN**: differential(110+ 케이스)=**over-rejection 0**(legal 60여종[scalar atom·vector+range·全 net+range·unpacked array·multi-packed vector·param bit/logic] 전부 accept)·correct-reject 15+종 iverilog 완전 parity(byte/shortint/int/longint/integer/time/real/realtime/event/string+range·multi-packed·signed). soundness=allow-list 정확(`is_net`이 trireg/uwire 포함 확인·reject-set≡IEEE atom+dimensionless)·ClassHandle/VirtualIface는 `parse_net_var` 미도달(defensive)·recovery clean(parse-error→elaborate skip·no panic·no cascade)·format 무영향. **under-rejection(sibling decl 경로)=전부 pre-existing**(fix는 error 추가만·새 accept 불가): 리뷰어가 정확화한 nit=single-range는 net 8 self-consistent(원 커밋 "net 16" 부정확→주석/doc 정정)·genuine 16-vs-8은 multi-packed만.
+
+**검증**: 신규 회귀 테스트 `atom_dims_reject.rs`×3(atom+range reject[byte/shortint/int/longint/integer/real/multi-packed/event]·legal 11종 accept·unpacked array 불변). `legality_semantics.rs` 갱신(`event [3:0]`=elaborate-reject→parse-reject 이동·이유 주석·커버리지 `cli::atom_dims_reject`로 이관). 신규 §3 등재=sibling decl 경로(ports/typedef/tf-ports/struct-member/for-init/param) under-rejection(§4.5.156 soundness map). **3629 green**(+3). clippy/fmt clean. format_version 22 불변(파서 reject·IR-0).
+
 #### 4.5.155 `$bits` of a fixed-width atom array element (byte/shortint/int/longint) (2026-07-19, branch feat-bits-atom-array-elem) ✅
 
 **발굴 경위**: §4.5.154 review가 기록한 follow-on(`$bits(unpacked-array-elem)` of atom=1) 재그라운딩. `byte a[2]; $bits(a[0])`=vita **1** vs iverilog **8**(shortint/int/longint=1 vs 16/32/64). **storage/`%b`(10100101)/arith는 이미 8-bit 정확** — `$bits` reporting만 오류.
