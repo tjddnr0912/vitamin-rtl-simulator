@@ -307,6 +307,12 @@ pub struct Parser<'t, 's> {
     /// ⓑ-breadth (§8.25): override specializations of parameterized classes,
     /// produced by `monomorphize_param_classes` and appended at top level.
     pending_mono_specs: Vec<ClassDecl>,
+    /// A body parameter/localparam COMMA-LIST (`localparam A=1, B=2;`) yields one
+    /// `ModuleItem` per name from a single `parse_module_item` call. The FIRST is
+    /// returned inline; the REST queue here (FIFO) and drain at the top of
+    /// `parse_module_item` and `parse_gen_item` (which wraps them), plus the
+    /// single-item `parse_gen_branch` arm, so every name lands in the SAME scope.
+    pending_module_items: Vec<ModuleItem>,
     /// SV §11.5 loop-control context stack (one entry per enclosing for/while/
     /// repeat/forever/foreach being parsed). `break`/`continue` desugar to
     /// `disable <synthetic-label>` of the innermost loop; the loop is wrapped in
@@ -361,6 +367,7 @@ impl<'t, 's> Parser<'t, 's> {
             union_type_names: std::collections::HashSet::new(),
             const_locals: std::collections::HashMap::new(),
             pending_mono_specs: Vec::new(),
+            pending_module_items: Vec::new(),
             loop_labels: Vec::new(),
             enum_defs: std::collections::HashMap::new(),
             var_enum: std::collections::HashMap::new(),
@@ -2615,7 +2622,17 @@ impl Parser<'_, '_> {
         // body until the end keyword — with forward-progress guard (BLOCKER B3).
         // Header imports lead the body so elaborate registers them first.
         let mut body = header_imports;
-        while !self.at_eof() && !self.at_kw(end_kw) {
+        // The `pending` disjunct keeps the loop alive to drain a body-param
+        // comma-list continuation even when it is the LAST item before `end_kw`
+        // (the first name already advanced the cursor onto `end_kw`).
+        while !self.at_eof() && (!self.pending_module_items.is_empty() || !self.at_kw(end_kw)) {
+            // Emit queued body-param comma-list continuations (already parsed, same
+            // scope) FIRST — before the forward-progress guard below, which would
+            // else `bump` (a drained item advances no cursor).
+            if !self.pending_module_items.is_empty() {
+                body.push(self.pending_module_items.remove(0));
+                continue;
+            }
             let before = self.pos;
             // G6B: module/interface/program-scope scalar UNPACKED-struct decl
             // (`[pkg::]T k;`) → N member NetVars, mirroring block_body's branch. The
@@ -2639,6 +2656,17 @@ impl Parser<'_, '_> {
                 self.bump();
             } // B3: never spin on a stuck token
         }
+        // Every queued body-param comma-list continuation must have drained into
+        // `body` above; the loop condition keeps it alive for that. The sole
+        // exception is a truncated source (EOF before `end_kw`) — where the queued
+        // names are dropped alongside the already-emitted missing-`end` error, and
+        // never leak into a sibling container. This guard future-proofs that
+        // invariant (a new un-drained `parse_module_item` caller / an early loop
+        // break would trip it).
+        debug_assert!(
+            self.at_eof() || self.pending_module_items.is_empty(),
+            "body-param continuations left un-drained at a container end"
+        );
         self.expect(
             TokenKind::Word(WordKind::Keyword(end_kw)),
             if end_kw == Kw::Endinterface {
@@ -3203,13 +3231,6 @@ impl Parser<'_, '_> {
         }))
     }
 
-    /// Parse ONE full parameter/localparam decl (prefix + a single assignment) —
-    /// the non-comma-list callers (`for`-typed-init etc.) use this thin wrapper.
-    fn parse_param_decl(&mut self, body: bool) -> Option<ParamItem> {
-        let pfx = self.parse_param_prefix();
-        self.finish_param_assignment(&pfx, body)
-    }
-
     /// Does the current token begin a parameter TYPE PREFIX — `parameter`/
     /// `localparam`, a signing keyword, or a data-type keyword? The `#(…)` header
     /// loop uses this to tell a NEW type group from an unadorned continuation
@@ -3343,6 +3364,25 @@ impl Parser<'_, '_> {
         })
     }
 
+    /// Convert a parsed `ParamItem` into its `ModuleItem`, recording a module-scope
+    /// `localparam` whose value is a pure literal so a constant generate-hier index
+    /// (`g[P].x`) can fold it. A `parameter` is overridable → never recorded.
+    fn param_item_to_module_item(&mut self, p: ParamItem) -> ModuleItem {
+        match p {
+            ParamItem::Scalar(p) => {
+                if p.kind == ParamKind::Localparam {
+                    if let Some(v) = self.try_const_index(&p.value) {
+                        self.const_locals.insert(p.name.name.clone(), v);
+                    }
+                }
+                ModuleItem::Param(p)
+            }
+            // A2a: an array parameter arrives as the desugared const variable-array
+            // decl — flows through every NetVar pass verbatim.
+            ParamItem::ConstArrayVar(d) => ModuleItem::NetVar(d),
+        }
+    }
+
     fn parse_module_item(&mut self) -> Option<ModuleItem> {
         // skip a stray lexer error token without re-reporting (already diagnosed)
         if self.at_lex_error() {
@@ -3370,26 +3410,28 @@ impl Parser<'_, '_> {
                 self.bump(); // ':'
             }
         }
-        // parameter / localparam
+        // parameter / localparam — a COMMA-LIST shares ONE type prefix across every
+        // name (`localparam [T] A = 1, B = 2;` — IEEE §6.20.1). The first name emits
+        // inline; the rest queue in `pending_module_items` and drain (in order, same
+        // scope) at the next `parse_module_item`/`parse_gen_item`.
         if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) {
-            let p = self.parse_param_decl(true)?;
-            self.expect(TokenKind::Semi, "';'");
-            return Some(match p {
-                ParamItem::Scalar(p) => {
-                    // Record a module-scope `localparam` whose value is a pure literal
-                    // constant, so a constant generate hier index `g[P].x` can fold it.
-                    // A `parameter` is overridable → never recorded (its index stays loud).
-                    if p.kind == ParamKind::Localparam {
-                        if let Some(v) = self.try_const_index(&p.value) {
-                            self.const_locals.insert(p.name.name.clone(), v);
-                        }
-                    }
-                    ModuleItem::Param(p)
+            let pfx = self.parse_param_prefix();
+            let mut first: Option<ModuleItem> = None;
+            loop {
+                let Some(pi) = self.finish_param_assignment(&pfx, true) else {
+                    break; // parse error already recorded by finish_param_assignment
+                };
+                let mi = self.param_item_to_module_item(pi);
+                match first {
+                    None => first = Some(mi),
+                    Some(_) => self.pending_module_items.push(mi),
                 }
-                // A2a: an array parameter arrives as the desugared const
-                // variable-array decl — flows through every NetVar pass verbatim.
-                ParamItem::ConstArrayVar(d) => ModuleItem::NetVar(d),
-            });
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect(TokenKind::Semi, "';'");
+            return first;
         }
         // defparam path = expr [, path = expr]* ;  (IEEE §23.10.1)
         if self.at_kw(Kw::Defparam) {
@@ -8807,7 +8849,15 @@ impl Parser<'_, '_> {
     /// guarded.
     fn parse_gen_items_until(&mut self, stop: &dyn Fn(&Self) -> bool) -> Vec<GenItem> {
         let mut items = Vec::new();
-        while !self.at_eof() && !stop(self) {
+        // The `pending` disjunct keeps the loop alive to drain a body-param
+        // comma-list continuation that is the LAST item before the stop token.
+        while !self.at_eof() && (!self.pending_module_items.is_empty() || !stop(self)) {
+            // Emit queued body-param comma-list continuations (same generate scope,
+            // wrapped as plain gen items) before the forward-progress guard below.
+            if !self.pending_module_items.is_empty() {
+                items.push(GenItem::Item(Box::new(self.pending_module_items.remove(0))));
+                continue;
+            }
             let before = self.pos;
             if let Some(it) = self.parse_gen_item() {
                 items.push(it);
@@ -9059,10 +9109,18 @@ impl Parser<'_, '_> {
                 other => (None, vec![other]), // unreachable; defensive
             }
         } else {
-            match self.parse_gen_item() {
-                Some(it) => (None, vec![it]),
-                None => (None, Vec::new()),
+            // A single (unbracketed) gen item. A body param comma-list here
+            // (`if (c) localparam A=1, B=2;`) emits >1 item from ONE construct;
+            // collect the queued continuations into THIS branch so they stay scoped
+            // to it rather than leaking to the enclosing scope.
+            let mut items = Vec::new();
+            if let Some(it) = self.parse_gen_item() {
+                items.push(it);
             }
+            while !self.pending_module_items.is_empty() {
+                items.push(GenItem::Item(Box::new(self.pending_module_items.remove(0))));
+            }
+            (None, items)
         }
     }
 }

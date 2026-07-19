@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.160 body param/localparam comma-list — `localparam A=1, B=2;` (loud→supported) (2026-07-19, branch feat-body-param-comma-list) ✅
+
+**발굴 경위**: fresh-area sweep(signed mod/div·$countones/$onehot/$isunknown·indexed part-select·4-state X 전파·real-conv·do-while/break/continue·ternary-x·$sformatf 11종 全 MATCH or no-oracle→코어 견고 재확인) 후 item ② loud→supported로 pivot — §4.5.159서 §3에 기록한 body comma-list 갭 착수. `localparam A=1, B=2;`=vita E2002 loud(module-item 경로가 param 1개만 파싱 후 `;` 기대)·iverilog 수용(매우 흔한 구문).
+
+**loud→supported 구현**(§4.5.159 인프라 재사용·parser-only): body param 경로가 `parse_param_prefix`(type prefix 1회) + `finish_param_assignment` comma-loop → 첫 name inline emit·나머지 **`pending_module_items` FIFO 큐**. drain=collection LOOP 최상단(module/iface/program/package body loop·`parse_gen_items_until`) + `parse_gen_branch` single-item(explicit)·**loop 조건에 `!pending.is_empty()` 추가**(comma-list가 end 키워드 직전 마지막 항목이면 첫 name이 cursor를 end로 전진→drain 전 loop 종료되는 edge). `param_item_to_module_item` 헬퍼(localparam const_locals 기록+`ConstArrayVar`→`NetVar`)가 **모든** item에 실행(첫+큐). dead `parse_param_decl` wrapper 제거. AST/schema/sim-ir/골든/format 全 불변.
+
+**적대 2렌즈 CLEAN**(양 서브에이전트 확정 버그 0): differential(~63 probe)=continuation이 first와 byte-identical(width/sign/type 상속·`[3:0]`/`signed[7:0]`/int/byte/…·inter-param ref)·全 scope(module·package scoped `pk::B`+unqualified·interface·program·generate for/if BEGIN+single-branch)·queue leak 0(인접 submodule/instance/sibling gen block 미오염)·회귀 0(single param·header comma-list §4.5.159). soundness=producer 단일 site·`parse_module_item`(2 caller)·`parse_gen_item`(2 caller) **全 4 drain**·class body는 producer 미도달(별도 `parse_class_param_list`)·cross-scope leak 없음(body loop/`parse_gen_items_until`에 internal break/return 無→pending 잔류 exit=at_eof only=terminal)·FIFO·error-recovery panic/hang 0·const_locals 全 item·gen if/for/case single-item branch-scoped. `debug_assert!(at_eof || pending.is_empty())`(container 종료 후·future-proof).
+
+**발굴 pre-existing(§2 기록·이 기능과 무관·comma-list 없이 재현)**: #1 untyped param↔param signed compare(`localparam A=-1,B=2; A<B`=vita `ge`/0 vs iverilog `less`/1·param↔literal은 정상) · #2 untyped param sum `%b` width(33 vs 32-bit) — **동근**(untyped param IEEE §6.20.2 값-결정 타입 미적용·sign+width **multipart**·§S⑤ defer). §4.5.159/이 슬라이스 무관(코드추론+param↔literal MATCH로 확정).
+
+**검증**: `array_param.rs` canary flip(옛 "comma-list stays loud" 인코딩 → 새 정답 `1 2`·§5 룰=옛 버그동작 갱신) + 신규 `param_body_comma_list.rs`×10(untyped/typed/width·sign 상속/parameter/inter-ref/last-item/package-scoped/generate/single). **3653 green**(+10). clippy/fmt clean. format_version 22 불변.
+
 #### 4.5.159 ANSI `#(…)` param-port comma-list — continuation이 type prefix 상속 (2026-07-19, branch feat-param-header-comma-inherit) ✅
 
 **발굴 경위**: §2 中형 recorded "narrow-typed param init width"(§4.5.146) 재현 probe → `localparam logic [3:0] B = (2==2)` 등 **전부 MATCH**(후속 param_meta 작업이 해소 → §4.5.146 **non-reproducing** 판정). 이어 적대 comma-list probe로 신규 silent-wrong 발굴: `#(parameter [3:0] A=20, B=20)`=vita `A=4 B=20` vs iverilog `A=4 B=4`·`#(parameter signed [7:0] A=-1, B=200)`=vita `B=200`(unsigned 32-bit) vs iverilog `B=-56`(signed 8-bit wrap).

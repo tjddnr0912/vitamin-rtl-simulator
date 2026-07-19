@@ -298,17 +298,18 @@ fn v1_boundaries_are_loud() {
         "cannot be a port",
         "port/param name collision",
     );
-    // scalar params are untouched by the desugar (regression canary)
-    let (out, _, code) = run(
-        "module t; localparam int A = 1, B = 2; initial $display(\"%0d %0d\", A, B); endmodule\n",
+    // scalar comma-list params — NOW SUPPORTED (body param comma-list shares one
+    // type prefix across every name; was loud before that slice). iverilog-pinned.
+    let (out, e, code) = run(
+        "module t; localparam int A = 1, B = 2; initial begin $display(\"%0d %0d\", A, B); $finish; end endmodule\n",
     );
-    assert_ne!(
-        code, 0,
-        "comma-list scalar param stays loud (pre-existing single-name shape)"
+    assert_eq!(code, 0, "comma-list scalar params elaborate clean:\n{e}");
+    assert!(
+        out.contains("1 2"),
+        "comma-list scalar param values:\n{out}"
     );
     let (out2, _, code2) =
         run("module t; localparam int A = 7; initial begin $display(\"%0d\", A); $finish; end endmodule\n");
     assert_eq!(code2, 0);
     assert!(out2.contains('7'), "scalar localparam regression:\n{out2}");
-    let _ = out;
 }
