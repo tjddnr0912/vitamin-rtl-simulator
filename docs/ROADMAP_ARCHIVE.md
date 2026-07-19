@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.153 enum base-type signedness — vector-base `signed` + atom-base `unsigned` whole-value (2026-07-19, branch feat-enum-signed-base) ✅
+
+**발굴 경위**: fresh-area probe(§4.5.152 signedness 계열의 sibling·type-qualifier whole-value 후보)로 신규 silent-wrong 사냥 중 **`typedef enum logic signed [N] {…}`** 발견 — struct/union(§4.5.152)의 정확한 enum-base sibling. 파서 주석이 이미 이 한계를 자인("the built-in `enum logic signed[N]` path also drops signedness — a separate pre-existing limit").
+
+**silent-wrong ① — enum vector-base `signed` whole-value = unsigned (파서·iverilog-diff 확정)**: `parse_typedef`가 built-in enum base의 `signed`를 `let _ = self.opt_signed()`로 **폐기**하고 enum typedef `TypeInfo.signed`를 `false` 하드코딩 → enum을 한 값으로 읽을 때 unsigned(`enum logic signed[3:0]{B=-1} et; et e=B; %0d`=vita **15** vs iverilog **−1**). compare(`e<0`=0 vs 1)·arith(`e+1`=16 vs 0)·wider 대입 sign-extend(`logic signed[7:0] w=e`=15/00001111 vs −1/11111111) 발산. bit 패턴(`%b`=1111)·unsigned base·default-int base(no explicit base·이미 signed)는 정상. **fix**: `signed`를 `TypeInfo.signed`로 캡처(§4.5.152 struct/union과 **동일 퍼널** — enum도 `self.typedefs`에 저장돼 plain `typedef logic signed[N] alias`와 동일 소비).
+
+**silent-wrong ② — enum atom-base 명시 `unsigned` 폐기 (파서·pre-existing·soundness 리뷰어 발굴·同 메커니즘 atom-arm)**: `TypeInfo` 빌드의 `None`(atom/base-less) arm이 `signed:true` 하드코딩 → atom base(`int`/`integer`)의 명시 `unsigned`도 폐기(`enum int unsigned{A=32'hFFFFFFFF} e=A; %0d`=vita **−1** cmp=1 vs iverilog **4294967295** cmp=0). §2 "全 경로 커버"상 ①의 vector-arm만 고치면 divergence>uniform-wrong이므로 **동일 커밋에 양 arm 완결**: `base_signed`를 `bool`→`Option<bool>`로 확장, vector arm=`unwrap_or(false)`(default unsigned·§7.2.1), atom/base-less arm=`unwrap_or(true)`(default signed·`int`은 32-bit signed). qualifier-less enum은 양 arm 모두 old default와 동일→**byte-identical**. (`integer unsigned`는 iverilog 자체 self-contradictory[−1 표시/cmp=0 unsigned·§4.5.91 기록]→vita 4294967295/cmp=0가 spec-correct.)
+
+**적대 리뷰 2렌즈 CLEAN**: differential(라이브 iverilog 70+ 케이스)=widths 4~65bit·sext(signed/unsigned target)·arith/compare/shift/concat(unsigned로 소실)·ternary(mixed=unsigned)·cast·**case collective-signedness(§4.5.152 trap 포함)**·func arg/return·struct/union member·port·array·ascending base·2-state base 전부 iverilog 일치·비-signed enum(default/unsigned/int/byte·enum method `.name/.next`·VCD) **byte-identical**·발견 divergence는 전부 iverilog-reject(out-of-range label lenience 등 pre-existing). soundness(정적)=`parse_typedef` 단일 enum-base site 확정(typedef-name signed base·inline enum decl은 이미 honest-loud)·`base_signed` arm별 default 정확·enum var는 generic `NetVarDecl.signed` 경유(enum-ness는 `var_enum` 별도·signedness 무관)·label 경로(`enum_base_width`/`TypedefKind::Enum`)는 AST range만 참조·per-value 부호 유지(불변)·IR-0(`TypeInfo` parser-internal non-Serialize).
+
+**검증**: 신규 회귀 테스트 `enum_signed_base.rs`×8(vector whole-value/sext/unsigned-base 불변/default-int 불변/atom-`int unsigned`/atom-signed·base-less 불변/struct-member/**vita-내부 등가**(signed enum ≡ plain `logic signed[7:0]` char-identical)). stale 주석 2건 갱신(elaborate `enum_base_width`/label-lower: base signed는 이제 변수 whole-value로 캡처·라벨은 AST range만이라 per-value 유지). **3611 green**(+8). clippy `-D warnings`·fmt clean. format_version 22 불변(IR-0).
+
 #### 4.5.152 signed packed struct/union whole-value signedness + case collective-signedness (2026-07-18, branch feat-signed-packed-struct) ✅
 
 **발굴 경위**: fresh-area probe(streaming·signed-div·x-prop·real-fmt·casez/wand·NBA·packed-struct 등 배터리)로 신규 silent-wrong 사냥 중 **`typedef struct packed signed {…}`** 발견 — `signed` 키워드가 whole-value로 안 먹힘.

@@ -5444,7 +5444,9 @@ impl<'s> Elaborator<'s> {
                     // bits — the `param_meta` twin of the localparam path above.
                     // Signedness is per-value (`v < 0`), matching the sign
                     // `const_param_expr` already inferred (the base's `signed` is
-                    // dropped by the parser, so a negative label must stay signed).
+                    // captured for the enum VARIABLE's whole value — §4.5.153 — but
+                    // the AST enum node here carries only the range, so a label reads
+                    // its sign per-value; a negative label must stay signed).
                     let base_w = self.enum_base_width(base);
                     let mut next: i64 = 0;
                     for lab in labels {
@@ -6885,11 +6887,12 @@ impl<'s> Elaborator<'s> {
     /// (`{4'h5, STATE}`) instead of the value-inferred 32 bits. An implicit-base
     /// enum (`enum {A,B}` → 32-bit `int`) or an unfoldable bound returns `None`
     /// (value-inferred width, unchanged). Signedness is decided PER LABEL by its
-    /// value (see the call sites): the parser drops an `enum logic signed [N]`
-    /// base's signedness (a pre-existing limit), so a base-level `signed` flag is
-    /// unavailable — mirroring the value-inferred sign the local-param path
-    /// already used (`const_param_expr`: unsigned for `v ≥ 0`, signed for `v < 0`)
-    /// keeps a negative label's arithmetic correct (`A=-2` stays -2), narrowing
+    /// value (see the call sites): the enum VARIABLE's whole-value signedness is
+    /// now captured into `TypeInfo.signed` (§4.5.153), but the AST enum node carries
+    /// only the base RANGE (not its sign), so this LABEL-width path derives sign PER
+    /// LABEL by its value — mirroring the value-inferred sign the local-param path
+    /// already used (`const_param_expr`: unsigned for `v ≥ 0`, signed for `v < 0`).
+    /// That keeps a negative label's arithmetic correct (`A=-2` stays -2), narrowing
     /// only the WIDTH. Deriving sign from the base instead would silently flip a
     /// negative label to a large unsigned value (`A=-2` → 14).
     fn enum_base_width(&self, base: &Option<ast::Range>) -> Option<u32> {

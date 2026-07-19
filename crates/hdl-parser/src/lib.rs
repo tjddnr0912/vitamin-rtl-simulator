@@ -6245,18 +6245,26 @@ impl Parser<'_, '_> {
         }
         self.bump(); // `enum`
                      // Optional packed base: `enum logic [1:0] {…}` or `enum [1:0] {…}`.
+        let mut base_signed: Option<bool> = None;
         let base = if self.net_var_kind().is_some() {
             self.bump(); // base kind keyword (logic/reg/integer/…)
-            let _ = self.opt_signed();
+                         // §4.5.153: capture an explicit `signed`/`unsigned` on the built-in enum
+                         // base so the enum's WHOLE value signedness (`%0d`/compare/sign-extend) is
+                         // honored. Mirrors the struct/union §4.5.152 fix — same `TypeInfo.signed`
+                         // funnel. `Some(true)`=`signed`, `Some(false)`=`unsigned`, `None`=absent →
+                         // each arm below applies its own default (vector base=unsigned, atom/
+                         // base-less=signed-`int`), so a qualifier-less enum is byte-identical.
+            base_signed = self.opt_signed();
             self.opt_range()
         } else if let Some(info) = self.peek_typedef_name() {
             // `enum b_t {…}` — the base type is an existing typedef name. Support a
             // SIMPLE UNSIGNED vector typedef (`logic`/`bit`/`reg` `[N]`); the enum
-            // then stores as that vector (its range). A SIGNED base (the built-in
-            // `enum logic signed[N]` path also drops signedness — a separate
-            // pre-existing limit), an atom (`int`/`byte` — signed, no explicit
-            // range), or a struct / class / multi-dim-packed typedef cannot be
-            // represented by the enum's `Option<Range>` base model — honest-loud.
+            // then stores as that vector (its range). A SIGNED *typedef* base (the
+            // built-in `enum logic signed [N]` path IS honored via `base_signed`
+            // above — §4.5.153; a signed typedef-name base stays honest-loud), an
+            // atom (`int`/`byte` — signed, no explicit range), or a struct / class /
+            // multi-dim-packed typedef cannot be represented by the enum's
+            // `Option<Range>` base model — honest-loud.
             let nm = self.type_name_key();
             if self.struct_layouts.contains_key(&nm)
                 || info.class_name.is_some()
@@ -6298,16 +6306,19 @@ impl Parser<'_, '_> {
         // Enum storage is `int` (32-bit signed) unless a packed base range was
         // given, in which case a `logic` vector of that range.
         let info = match &base {
+            // Vector base (`enum logic [N] …`): defaults UNSIGNED, honors explicit `signed`.
             Some(r) => TypeInfo {
                 kind: NetVarKind::Logic,
-                signed: false,
+                signed: base_signed.unwrap_or(false),
                 range: Some(r.clone()),
                 packed: Vec::new(),
                 class_name: None,
             },
+            // Atom base (`enum int/integer/byte …`) or base-less `enum {…}`: defaults SIGNED
+            // (int is a 32-bit signed 2-state type), honors explicit `unsigned` — §4.5.153.
             None => TypeInfo {
                 kind: NetVarKind::Integer,
-                signed: true,
+                signed: base_signed.unwrap_or(true),
                 range: None,
                 packed: Vec::new(),
                 class_name: None,

@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-18)**: format_version **22** · **3603 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.152(fresh-area probe — signed packed struct/union whole-value signedness + case/casez/casex collective-signedness, silent-wrong 2 수정). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
+> **기준선(2026-07-19)**: format_version **22** · **3611 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.153(fresh-area probe — enum base-type signedness: vector-base `signed` + atom-base `unsigned` whole-value, silent-wrong 2 수정). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -45,6 +45,8 @@
 - narrow-typed(`bit`/`logic`) param init from a 32-bit-self-width expr(comparison·산술)=선언폭 미적용→32-bit width→`%b` wide(value 정확·`%0d` 정상). pre-existing(plain `==`도)·§4.5.146 발굴. const_eval i64→param에 declared-narrow truncate 필요.
 - param scalar bit/part-select const-fold **미지원**(silent-wrong·DEEP): `logic [P[5:0]-1:0] x`=range-bound 폭 1 vs iverilog 63(param 값 컨텍스트는 E3009 honest-loud). §4.5.148 naive fold `(v>>i)&mask` 시도→**적대 2렌즈 수렴 발굴**: `[N:0]` descending만 정답·**zero-LSB ascending `[0:N]`**(선언 범위 미정규화→wrong bit)+non-zero-LSB below-LSB index=loud→silent 회귀→revert. 근원=`param_range`가 non-zero-LSB만 추적("absent=descending zero-LSB" 불변식·zero-LSB ascending 미탐·`base_net_ascending` false). fix=全 param 범위(lo/msb/direction) 기록 or `[lo..hi]` membership(param_range 불변식 확장=broad).
 
+- enum **atom-base width** (`enum byte {…}`/`enum int {…}`·no-range `enum logic signed {…}`) = vita 32-bit int 모델 → `%b`/`$bits` 폭 발산(`enum byte`=32 vs iverilog 8·value는 대개 일치). signedness는 §4.5.153서 해결(atom `unsigned` 존중)·폭은 별개 축·pre-existing. `enum_base_width`가 range 있을 때만 폭 산출→atom kind별 self-width 매핑 필요. §4.5.153 발굴.
+
 **문서화된 divergence (수정 비대상·핀됨):**
 
 - 크로스스코프 t0 decl-init race(양쪽 §6.8 합법·self-consistent) · 런타임 구성 `-0.0` 표시 · iverilog 자인 결함들(expression-force "evaluated once" 등).
@@ -71,6 +73,7 @@
 - `$fmonitor`/`$fstrobe`(파일 strobe/monitor) — 현재 W3056 skip=**파일출력 silent drop**(non-silent·warned). 지원=**format bump 필요**(`SysTaskId` 변종 ① or 직렬화 사이드카 ②·staged 파리티): `FmtCapture`에 `fd:Option<u32>` 추가(engine-local)+strobe drain을 `file_write` 라우팅·전용 슬라이스. STDIN read(결정성 설계 필요).
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).
 - `case (x) inside {…}`(§12.5.4 wildcard case)=vita E2002 parse-reject(loud)·③ 후보(no-oracle: iverilog 13.0 `case inside`/`inside` op/array reduction method 全 거부→hand-IEEE `==?`+내부차분). `inside` operator는 지원(== 시맨틱·§11.4.13). based-literal 내 whitespace(`64'sh FFFF`)=vita lexer reject(loud) vs iverilog 허용(minor·§4.5.147 발굴).
+- **enum label 범위검증 부재**(honest-loud 추가 후보): vita가 base 폭/부호를 벗어난 enum label(`enum logic [3:0] {X=-1}`·`{Y=16}`·signed `{Z=8}`)을 **조용히 truncate 수용** vs iverilog는 compile-reject("value too large/negative"). 유효 프로그램엔 무영향(§4.5.153 differential은 이 lenience 확인)·invalid program을 loud화하면 correct-or-loud 강화. 부호축은 §4.5.153서 해결·범위검증은 별개. §4.5.153 발굴.
 - **bit63-set unsigned 64-bit param 리터럴**(`parameter logic [63:0] A = 64'hFFFF_0000_0000_0000`)=E3009 over-reject(loud) vs iverilog 수용. §4.5.151 발굴·**보류 사유**=`const_eval_i64_lit`의 naive `v as i64` 수용은 i64 image가 음수로 읽혀 downstream const 부호 비교/산술을 silent-wrong으로 전환할 위험(explicit-signed 64-bit arm은 已수용·비대칭) — param 값 도메인에 부호/폭 메타 배선 후 착수.
 - **partial-timescale 정책 진단**(`--timescale-policy`·`W-PARSE-TIMESCALE-PARTIAL`/`E-PP-TIMESCALE-PARTIAL`): 일부 모듈만 `` `timescale `` 선언 시 현재 무진단 1ns/1ns 디폴트(전무 케이스만 W1017). doc-08 §15 설계는 문서화됨·`rt.default_used` 신호 이미 존재 — 배선만 필요. §4.5.151 발굴.
 
