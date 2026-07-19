@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.159 ANSI `#(…)` param-port comma-list — continuation이 type prefix 상속 (2026-07-19, branch feat-param-header-comma-inherit) ✅
+
+**발굴 경위**: §2 中형 recorded "narrow-typed param init width"(§4.5.146) 재현 probe → `localparam logic [3:0] B = (2==2)` 등 **전부 MATCH**(후속 param_meta 작업이 해소 → §4.5.146 **non-reproducing** 판정). 이어 적대 comma-list probe로 신규 silent-wrong 발굴: `#(parameter [3:0] A=20, B=20)`=vita `A=4 B=20` vs iverilog `A=4 B=4`·`#(parameter signed [7:0] A=-1, B=200)`=vita `B=200`(unsigned 32-bit) vs iverilog `B=-56`(signed 8-bit wrap).
+
+**silent-wrong — 헤더 comma-list continuation이 leading type 유실(parser·iverilog-diff)**: ANSI `#(…)` 헤더 루프가 각 comma 항목을 `parse_param_decl`로 **매번 새로 파싱** → 무장식 continuation(`, B=20`)은 kind=Parameter·ty=Implicit로 재-디폴트 → `B`가 값-사이즈 IMPLICIT 32-bit param이 됨(선언 `[3:0]`/`signed [7:0]` 미상속·width truncation·signedness 유실). first 항목(A)만 올바른 타입. **fix**(parser-only): `parse_param_decl`을 **`parse_param_prefix`**(`[param|localparam] [signing] [type] [packed_range]`를 1회 파싱→`ParamPrefix`) + **`finish_param_assignment`**(name+array/scalar+value·prefix 인자)로 분리. 헤더 루프는 그룹당 prefix 1회 파싱 후 무장식 continuation에 **동일 prefix 적용**(IEEE §6.20.1)·comma 뒤 fresh prefix 키워드(`, parameter …`)면 **새 그룹**(`starts_param_prefix`). AST/schema/sim-ir/golden/format 全 불변(ParamDecl 재사용·같은 노드 多 생성·format_version 22 유지).
+
+**적대 2렌즈 CLEAN**: differential(iverilog 라이브 ~40 케이스)=`[3:0]`/`[7:0]`/`signed [7:0]`/multi-group/3-name/header-localparam/inter-param-ref(`B=A+1`) 全 상속 일치·회귀 0(untyped `A=1,B=2`·`int A,B`·body single `localparam [3:0] X`·body A2a array param 불변). soundness=`parse_module_like`의 **단일 헤더 루프**가 module/interface/program/package 4종 헤더를 uniform 커버(2258/2275/2288/2534 全 경유)·body single-param 경로(`parse_param_decl` wrapper) byte-identical·**격리 확정**: class value-param은 별도 typeless 경로(`parse_class_param_list`·`ClassParam{name,default}`가 type 폐기·no-oracle: iverilog가 typed class value-param 미지원)→**§2 기록**·body comma-list(`localparam A=1,B=2;`)는 여전히 honest-loud E2002(multi-emit 필요·**§3 기록**)·real-param `#(parameter real …)` E3009 DIFF는 **pre-existing**(stash-rebuild로 main도 동일 확인·ROADMAP §3 "real const-fold 전면 미지원" 기수록).
+
+**검증**: 신규 `param_header_comma_inherit.rs`×7(narrow-width 상속·signedness+width 상속·3-name 공유·fresh-prefix 새 그룹·header localparam·untyped 불변·int 불변). **3643 green**(+7). clippy/fmt clean. format_version 22 불변(순수 parser 리팩터).
+
 #### 4.5.158 enum label operand signedness — 선언 sign 상속 (2026-07-19, branch feat-enum-label-sign) ✅ [.vu re-pin]
 
 **발굴 경위**: fresh-area 광역 sweep(interface/generate/hierarchical/casez/recursive-fn/foreach/param-override/string 전부 clean or no-oracle→코어 견고) 후 §2 中형 recorded(§4.5.154 differential 발굴 "enum-label 부호비교") 착수. `enum byte {A=-1,B=2} v=A; v>B`=vita **1**(255>2) vs iverilog **0**(−1>2 signed)·`B>C`(C=−3)=0 vs 1.

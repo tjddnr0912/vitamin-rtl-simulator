@@ -199,6 +199,28 @@ enum ParamItem {
     ConstArrayVar(NetVarDecl),
 }
 
+/// The parsed TYPE PREFIX of a parameter/localparam decl —
+/// `[parameter|localparam] [signing] [data_type] [packed_range]` — shared by
+/// EVERY name in a comma-list (`localparam [T] A = 1, B = 2` /
+/// `#(parameter [T] A = 1, B = 2)`). Split from the name+value tail
+/// (`finish_param_assignment`) so the prefix parses ONCE and an unadorned
+/// continuation (`, B = 2`) inherits the leading type/width/signedness
+/// (IEEE §6.20.1) instead of silently re-defaulting to a value-sized implicit
+/// param. `expl0`/`expl1` keep explicit-signing PRESENCE (leading/trailing) for
+/// the A2a array desugar's `signed_eff`.
+#[derive(Clone)]
+struct ParamPrefix {
+    start: Span,
+    kind: ParamKind,
+    signed: bool,
+    ty: ParamType,
+    var_kind: Option<NetVarKind>,
+    forced_range: Option<Range>,
+    explicit_range: Option<Range>,
+    expl0: Option<bool>,
+    expl1: Option<bool>,
+}
+
 /// The components of a parsed `property_spec` (the body shared by an inline
 /// `assert property(<spec>)` and a named `property NAME; <spec>; endproperty`):
 /// `(clock, disable_iff, antecedent, implication_kind, consequent,
@@ -2549,10 +2571,23 @@ impl Parser<'_, '_> {
         if self.peek() == Some(TokenKind::Hash) {
             self.bump();
             self.expect(TokenKind::LParen, "'(' after '#'");
+            let mut last_pfx: Option<ParamPrefix> = None;
             loop {
+                // A type prefix (`parameter [T]`) is parsed once per GROUP; an
+                // unadorned continuation (`, B = 2`) inherits the PRECEDING group's
+                // type/width/signedness (IEEE §6.20.1) rather than silently
+                // re-defaulting to a value-sized implicit param. A comma followed by
+                // a fresh prefix keyword (`, parameter …`) starts a new group.
+                let pfx = if last_pfx.is_none() || self.starts_param_prefix() {
+                    let p = self.parse_param_prefix();
+                    last_pfx = Some(p.clone());
+                    p
+                } else {
+                    last_pfx.clone().unwrap()
+                };
                 // body=false: an array parameter in the header is a loud error
-                // inside `parse_param_decl` (never a `ConstArrayVar` here).
-                if let Some(ParamItem::Scalar(p)) = self.parse_param_decl(false) {
+                // inside `finish_param_assignment` (never a `ConstArrayVar` here).
+                if let Some(ParamItem::Scalar(p)) = self.finish_param_assignment(&pfx, false) {
                     params.push(p);
                 }
                 if !self.eat(TokenKind::Comma) {
@@ -2965,12 +3000,11 @@ impl Parser<'_, '_> {
         }
     }
 
-    /// Parse one parameter/localparam decl (the keyword is optional on `#(…)`
-    /// continuations, defaulting to `Parameter`, which matches IEEE-1364 §12.2).
-    /// `parse_param_decl` result: almost always a scalar `ParamDecl`; a body
-    /// ARRAY parameter (A2a) desugars to the equivalent const variable-array
-    /// decl instead (see `parse_array_param`).
-    fn parse_param_decl(&mut self, body: bool) -> Option<ParamItem> {
+    /// Parse the TYPE PREFIX of a parameter/localparam decl (the keyword is
+    /// optional on `#(…)` continuations, defaulting to `Parameter`, which matches
+    /// IEEE-1364 §12.2). The name+value tail is `finish_param_assignment`, split
+    /// out so a comma-list applies ONE prefix to every name.
+    fn parse_param_prefix(&mut self) -> ParamPrefix {
         let start = self.cur_span();
         let kind = if self.eat_kw(Kw::Localparam) {
             ParamKind::Localparam
@@ -3098,6 +3132,36 @@ impl Parser<'_, '_> {
         } else {
             self.opt_range()
         };
+        ParamPrefix {
+            start,
+            kind,
+            signed,
+            ty,
+            var_kind,
+            forced_range,
+            explicit_range,
+            expl0,
+            expl1,
+        }
+    }
+
+    /// Finish ONE parameter assignment — `name [array_dims] = value` — using a
+    /// shared `ParamPrefix`. A body ARRAY parameter (A2a) desugars to the
+    /// equivalent const variable-array decl (see `parse_array_param`); otherwise a
+    /// scalar `ParamDecl`. Called once per name in a comma-list so every name
+    /// inherits the SAME leading type prefix (IEEE §6.20.1).
+    fn finish_param_assignment(&mut self, pfx: &ParamPrefix, body: bool) -> Option<ParamItem> {
+        let ParamPrefix {
+            start,
+            kind,
+            signed,
+            ty,
+            var_kind,
+            forced_range,
+            explicit_range,
+            expl0,
+            expl1,
+        } = pfx.clone();
         let range = forced_range.or_else(|| explicit_range.clone());
         // §4.5.156 (§3 全 site): a typed param's kind may not carry a user packed range
         // unless it is a vector (`logic`/`reg`/`bit`). `forced_range` is the atom's OWN
@@ -3137,6 +3201,41 @@ impl Parser<'_, '_> {
             value,
             span: start.to(self.prev_span()),
         }))
+    }
+
+    /// Parse ONE full parameter/localparam decl (prefix + a single assignment) —
+    /// the non-comma-list callers (`for`-typed-init etc.) use this thin wrapper.
+    fn parse_param_decl(&mut self, body: bool) -> Option<ParamItem> {
+        let pfx = self.parse_param_prefix();
+        self.finish_param_assignment(&pfx, body)
+    }
+
+    /// Does the current token begin a parameter TYPE PREFIX — `parameter`/
+    /// `localparam`, a signing keyword, or a data-type keyword? The `#(…)` header
+    /// loop uses this to tell a NEW type group from an unadorned continuation
+    /// (`, B = 2`) that must inherit the preceding group's type.
+    fn starts_param_prefix(&self) -> bool {
+        matches!(
+            self.peek(),
+            Some(TokenKind::Word(WordKind::Keyword(
+                Kw::Parameter
+                    | Kw::Localparam
+                    | Kw::Signed
+                    | Kw::Unsigned
+                    | Kw::Logic
+                    | Kw::Reg
+                    | Kw::Bit
+                    | Kw::Int
+                    | Kw::Byte
+                    | Kw::Shortint
+                    | Kw::Longint
+                    | Kw::Integer
+                    | Kw::Real
+                    | Kw::Realtime
+                    | Kw::Time
+                    | Kw::String
+            )))
+        )
     }
 
     /// A2a (IEEE §6.20.2): a body `localparam <type> NAME [dims] = '{…};` —

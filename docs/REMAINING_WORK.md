@@ -2,7 +2,7 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-07-19)**: format_version **22** · **3636 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85** · 최신 완료 §4.5.158(enum label operand signedness — 선언 sign 상속·全 3 label-site·`.vu` re-pin). 미착수 DEEP=size-cast `N'(expr)` context width 미전파(ROADMAP §2).
+> - **기준(2026-07-19)**: format_version **22** · **3643 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85** · 최신 완료 §4.5.159(ANSI `#(…)` param-port comma-list continuation이 leading type prefix 상속 — module/iface/program/package 4종 헤더 커버·parser-only·format 불변). 미착수 DEEP=size-cast `N'(expr)` context width 미전파(ROADMAP §2).
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
 > - **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* RTL 시뮬레이터(correct-or-loud) · **G2** = AI-Agent 친화 simulator(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 
