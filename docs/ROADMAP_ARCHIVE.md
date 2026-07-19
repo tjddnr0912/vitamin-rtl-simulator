@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.162 untyped param value-determined type — IDENT/EXPRESSION initializer (§4.5.161 완성) (2026-07-19, branch feat-untyped-param-expr-signedness) ✅
+
+**발굴 경위**: §4.5.161이 LITERAL initializer만 §6.20.2 적용 → §2에 남긴 residual(ident/expr-valued positive→unsigned) 착수(NEXT item ①·soundness 리뷰어가 "내부 inconsistent" 지목). `localparam D=7; localparam C=D; localparam E=3+4; s<D`=1(signed·§4.5.161) vs `s<C`=`s<E`=0(vita·C/E value-inferred unsigned) vs iverilog 1 — 같은 값이 bare literal이면 signed·ident/expr면 unsigned.
+
+**silent-wrong fix**(elaborate-local·IR-0): `param_decl_width` untyped 분기에 **`const_expr_signed`**(AST-level §11.8.1 sign·IR-level `expr_self_signed` 미러: arith/bitwise=both-signed·shift/pow=left·compare/logical=unsigned·unary +/-/~=operand·single-seg ident=`param_meta` sign) 추가 → (a) **bare ident**(`C=D`·peeled `-D`/`~D`)=`param_meta.get(fq).copied()`(hit=source의 full `(width,signed)` 상속[narrow/typed alias width 보존]·miss=None→value-inferred) (b) **일반 expr**(`E=3+4`)=`(min_signed_bits(folded).max(32), const_expr_signed)`. 全 `Implicit`-gate(time 제외).
+
+**적대 2렌즈 — 발굴 2 regression 즉수정**: soundness=`time C=D`(D signed)가 D sign 상속(ident-inherit이 Implicit-gate 누락)→**블록 전체 Implicit-gate**로 수정. differential=`C=N`(N time·large)가 expression path서 34-bit로 축소(정답 64·time 폭)→**bare-ident MISS=`.copied()`로 None 반환**(value-sizing 안 함→value-inferred가 wide source 폭 유지). 재검증: `time C=D`(unsigned 유지)·`C=N`(%b/concat 64 복원·`$bits({C,C})=128`)·longint/bit64 alias(64 개선)·int-signed/unsigned/mixed §11.8.1·narrow alias(width 상속)·nested chain 全 MATCH·회귀 0.
+
+**잔여(§2·전부 pre-existing·stash-rebuild 확인)**: (a) `time` param value-inferred sign(`time C=SD` negative=32-bit signed vs 64-unsigned·main 동일) (b) `$bits(time-alias)`=32 vs 64(net은 64·`$bits`-path만·main 동일) (c) pkg-scoped ident(`C=p::X`)=unsigned(single-seg만 sign 상속) (d) expr self-determined width(sub-expr truncation·`8'hFF+8'hFF`·§2 size-cast DEEP 동근). const_expr_signed의 `_=>false`는 concat/select/`$signed`가 const서 E3009 loud라 moot(too-conservative 잔여만).
+
+**검증**: `untyped_param_value_signedness.rs` +6(ident-alias·expression·unsigned-expr 불변·narrow-alias width·nested chain·**time-alias sign-guard**). **3670 green**(+6 이번·§4.5.161 11 포함 총 17). clippy/fmt clean. format_version 22 불변.
+
 #### 4.5.161 untyped param value-determined signedness+width (IEEE §6.20.2) (2026-07-19, branch feat-untyped-param-value-signedness) ✅
 
 **발굴 경위**: §4.5.160 적대 발굴로 §2 기록한 "untyped param 값-결정 타입" 재그라운딩(NEXT item ① oracle-backed). `localparam A=-1, B=2; A < B`=vita `ge`/0 vs iverilog `less`/1 — 무장식 `localparam`이 IEEE §6.20.2("타입은 값이 결정") 미적용: positive decimal `B=2`가 value-inferred fallback(`const_u32_expr`=v≤u32면 32-bit UNSIGNED)로 unsigned화 → §11.8.1 collective(둘 다 unsigned) 오답. param↔literal은 정상(literal이 signed)이라 param↔param 전용.

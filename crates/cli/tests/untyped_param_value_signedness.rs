@@ -165,3 +165,84 @@ fn typed_params_unchanged() {
     // TI signed (−1 < 0 = 1); TU unsigned (huge, < 0 = 0).
     assert!(out.contains("1 0"), "typed params unchanged:\n{out}");
 }
+
+#[test]
+fn ident_alias_inherits_signedness() {
+    // `C = D` inherits D's signedness (both signed decimals) — so `s < C` is
+    // signed like `s < D`, not the pre-fix unsigned residual.
+    let (out, code) = run(
+        "module t;\n  localparam D = 7; localparam C = D;\n  logic signed [3:0] s;\n\
+         initial begin s = -1; $display(\"%0d %0d\", s < D, s < C); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("1 1"), "ident alias signed:\n{out}");
+}
+
+#[test]
+fn expression_param_is_signed() {
+    // `E = 3 + 4` (both signed) is signed; several operator forms.
+    let (out, code) = run(
+        "module t;\n  localparam A = 5, B = 3;\n  localparam SUM=A+B, PRD=A*B, SHL=A<<1, \
+         TERN=(A>B)?A:B;\n  logic signed [3:0] s;\n\
+         initial begin s = -1; $display(\"%0d %0d %0d %0d\", s<SUM, s<PRD, s<SHL, s<TERN); \
+         $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("1 1 1 1"), "expression params signed:\n{out}");
+}
+
+#[test]
+fn unsigned_expression_param_stays_unsigned() {
+    // §11.8.1: an unsigned operand makes the whole expression (and the param)
+    // unsigned — must not be flipped to signed by the fix.
+    let (out, code) = run(
+        "module t;\n  localparam UH = 8'hFF;\n  localparam UE = UH + 8'h01;\n\
+         localparam MIX = UH + 5;\n  logic signed [3:0] s;\n\
+         initial begin s = -1; $display(\"%0d %0d\", s < UE, s < MIX); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    // s (as unsigned in the collective compare) < unsigned RHS.
+    assert!(
+        out.contains("1 1"),
+        "unsigned expression stays unsigned:\n{out}"
+    );
+}
+
+#[test]
+fn narrow_alias_inherits_width() {
+    // Aliasing a narrow typed param keeps its width (ident-inherit returns the
+    // source param's full meta, not a value-sized 32-bit).
+    let (out, code) = run(&disp(
+        "localparam [3:0] N = 4'ha; localparam C = N;",
+        "%0d %0d",
+        "$bits(N), $bits(C)",
+    ));
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("4 4"), "narrow alias width:\n{out}");
+}
+
+#[test]
+fn nested_alias_chain_signed() {
+    // `C = A` (negative), `E = C + 1` — signedness propagates through the chain.
+    let (out, code) = run(
+        "module t;\n  localparam A = -2; localparam C = A; localparam E = C + 1;\n\
+         initial begin $display(\"%0d %0d %0d\", A, E, E < 0); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("-2 -1 1"), "nested alias chain:\n{out}");
+}
+
+#[test]
+fn time_param_alias_does_not_inherit_sign() {
+    // A `time` param aliasing a SIGNED param must keep its declared 64-bit
+    // UNSIGNED type — the value-determined ident/expression paths are gated to
+    // `Implicit` params, so `time C = D` does NOT inherit D's signedness. iverilog
+    // compares unsigned here (x → 65535 < 5 = 0); a sign-inheriting bug gave 1.
+    let (out, code) = run(
+        "module t;\n  localparam signed [7:0] D = 5;\n  localparam time C = D;\n\
+         logic signed [15:0] x;\n\
+         initial begin x = -1; $display(\"%0d\", x < C); #100 $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains('0'), "time alias must stay unsigned:\n{out}");
+}

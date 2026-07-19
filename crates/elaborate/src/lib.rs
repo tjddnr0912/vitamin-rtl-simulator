@@ -6916,6 +6916,54 @@ impl<'s> Elaborator<'s> {
         }
     }
 
+    /// Self-determined signedness of a CONSTANT expression at the AST level
+    /// (§5.4.1/§11.8.1) — the const-param analogue of the IR-level
+    /// [`Self::expr_self_signed`], for a param initializer that has not been
+    /// lowered. A signed operand chain keeps an untyped param signed (IEEE
+    /// §6.20.2): `localparam D = 7; localparam C = D;` and `E = 3 + 4` are signed
+    /// (like their operands), so a comparison against a negative value is signed.
+    /// An in-scope param reference inherits its recorded signedness; anything
+    /// unmodeled is conservatively unsigned.
+    fn const_expr_signed(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.const_expr_signed(inner),
+            ast::ExprKind::IntLit { kind, raw } => {
+                literal::parse_int_literal(raw, *kind).is_some_and(|cv| cv.signed)
+            }
+            ast::ExprKind::Ident(pth) if pth.segments.len() == 1 => self
+                .param_meta
+                .get(&self.fq(&pth.segments[0].name))
+                .is_some_and(|&(_, s)| s),
+            // context-determined unary +/-/~ follow the operand's sign.
+            ast::ExprKind::Unary {
+                op: ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot,
+                operand,
+            } => self.const_expr_signed(operand),
+            ast::ExprKind::Binary { op, lhs, rhs } => match op {
+                ast::BinOp::Add
+                | ast::BinOp::Sub
+                | ast::BinOp::Mul
+                | ast::BinOp::Div
+                | ast::BinOp::Mod
+                | ast::BinOp::BitAnd
+                | ast::BinOp::BitOr
+                | ast::BinOp::BitXor
+                | ast::BinOp::BitXnor => self.const_expr_signed(lhs) && self.const_expr_signed(rhs),
+                // power & shifts: sign follows the LEFT (base) operand only.
+                ast::BinOp::Pow
+                | ast::BinOp::Shl
+                | ast::BinOp::Shr
+                | ast::BinOp::AShl
+                | ast::BinOp::AShr => self.const_expr_signed(lhs),
+                _ => false, // comparisons / equality / logical: 1-bit unsigned
+            },
+            ast::ExprKind::Ternary { then_e, else_e, .. } => {
+                self.const_expr_signed(then_e) && self.const_expr_signed(else_e)
+            }
+            _ => false, // Call / select / concat / unmodeled: conservatively unsigned
+        }
+    }
+
     fn param_decl_width(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
@@ -6980,7 +7028,37 @@ impl<'s> Elaborator<'s> {
                     return Some((cv.width, cv.signed));
                 }
             }
-            None // non-literal expression, or `time` (64-bit): keep the full i64
+            // The value-determined ident/expression cases below apply ONLY to a
+            // genuinely untyped (`Implicit`) param — a `time` param keeps its
+            // declared 64-bit UNSIGNED type, so a bare `time C = D;` must NOT
+            // inherit D's sign/width through the ident path (the ident-inherit and
+            // the expression path share this one `Implicit` gate).
+            if matches!(p.ty, ast::ParamType::Implicit) {
+                // A bare in-scope param reference (`localparam C = D;`, or a unary
+                // `-D`/`+D`/`~D` peeled above) inherits that param's full `(width,
+                // signed)` — so an alias of a narrow/typed param keeps its width.
+                // On a MISS (the source has no recorded meta — e.g. a `time` param,
+                // or an unfoldable-width source), fall to the value-inferred default
+                // (`None`) rather than value-sizing the folded i64 below: a bare
+                // alias must keep the SOURCE's width, not shrink to its value's.
+                if let ast::ExprKind::Ident(pth) = &e.kind {
+                    if pth.segments.len() == 1 {
+                        return self
+                            .param_meta
+                            .get(&self.fq(&pth.segments[0].name))
+                            .copied();
+                    }
+                }
+                // Any other constant EXPRESSION initializer (`localparam E = 3 + 4;`)
+                // is value-determined (§6.20.2): signedness from the expression
+                // (§11.8.1), width from the folded value's minimal signed width.
+                // Without this a positive such param was UNSIGNED — inconsistent
+                // with the same value written as a bare literal.
+                if let Some(v) = self.const_eval_in_scope(&p.value) {
+                    return Some((min_signed_bits(v).max(32), self.const_expr_signed(&p.value)));
+                }
+            }
+            None // `time` (64-bit) / unfoldable: keep the full i64
         }
     }
 
