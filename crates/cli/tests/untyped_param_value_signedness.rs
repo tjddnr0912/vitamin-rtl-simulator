@@ -246,3 +246,69 @@ fn time_param_alias_does_not_inherit_sign() {
     assert_eq!(code, Some(0), "{out}");
     assert!(out.contains('0'), "time alias must stay unsigned:\n{out}");
 }
+
+#[test]
+fn pkg_scoped_alias_inherits_signedness() {
+    // `C = p::X` inherits the package constant's signedness (X a signed decimal),
+    // both as a bare alias and inside an expression — was unsigned pre-fix.
+    let (out, code) = run("package p; localparam X = 7; endpackage\n\
+         module t;\n  localparam C = p::X; localparam E = p::X + 1;\n\
+         logic signed [3:0] s;\n\
+         initial begin s = -1; $display(\"%0d %0d\", s < C, s < E); $finish; end\nendmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("1 1"), "pkg-scoped alias signed:\n{out}");
+}
+
+#[test]
+fn pkg_scoped_narrow_alias_inherits_width() {
+    // A bare `p::N` alias of a narrow package param keeps its 4-bit width.
+    let (out, code) = run("package p; localparam [3:0] N = 4'ha; endpackage\n\
+         module t; localparam C = p::N;\n\
+         initial begin $display(\"%0d\", $bits(C)); $finish; end\nendmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains('4'), "pkg-scoped narrow alias width:\n{out}");
+}
+
+#[test]
+fn intra_package_alias_inherits_signedness() {
+    // A package-INTERNAL alias/expression (`B = A`, `E = A + 1` inside the pkg)
+    // resolves the sibling param's type — param_meta is made live during the
+    // package fold. Read scoped from a module. Was unsigned pre-fix.
+    let (out, code) = run(
+        "package p; localparam A = 7; localparam B = A; localparam E = A + 1; endpackage\n\
+         module t; logic signed [3:0] s;\n\
+         initial begin s = -1; $display(\"%0d %0d\", s < p::B, s < p::E); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("1 1"), "intra-package alias signed:\n{out}");
+}
+
+#[test]
+fn intra_package_narrow_alias_width() {
+    // An intra-package alias of a narrow/signed sibling keeps its width.
+    let (out, code) = run(
+        "package p; localparam signed [7:0] A = 8'sd5; localparam B = A;\n\
+         localparam [3:0] N = 4'ha; localparam M = N; endpackage\n\
+         module t; initial begin $display(\"%0d %0d\", $bits(p::B), $bits(p::M)); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("8 4"),
+        "intra-package narrow alias width:\n{out}"
+    );
+}
+
+#[test]
+fn package_param_meta_does_not_pollute_module() {
+    // The package fold makes its params' meta live only transiently; a module
+    // param of the SAME NAME must keep its own type (restore, no pollution).
+    let (out, code) = run("package p; localparam signed [7:0] X = -1; endpackage\n\
+         module t; localparam X = 8'hFF; logic signed [15:0] s;\n\
+         initial begin s = -1; $display(\"%0d %0d\", $bits(X), s < X); $finish; end\nendmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    // Module X is its own unsigned 8-bit (not p's signed): $bits=8, compare unsigned.
+    assert!(
+        out.contains("8 0"),
+        "no package→module param_meta pollution:\n{out}"
+    );
+}

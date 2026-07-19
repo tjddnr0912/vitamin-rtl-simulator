@@ -6934,6 +6934,12 @@ impl<'s> Elaborator<'s> {
                 .param_meta
                 .get(&self.fq(&pth.segments[0].name))
                 .is_some_and(|&(_, s)| s),
+            // a `pkg::X` reference inherits the package constant's signedness.
+            ast::ExprKind::PkgScoped { pkg, name } => self
+                .pkg_const_meta
+                .get(&pkg.name)
+                .and_then(|m| m.get(&name.name))
+                .is_some_and(|&(_, s)| s),
             // context-determined unary +/-/~ follow the operand's sign.
             ast::ExprKind::Unary {
                 op: ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot,
@@ -7048,6 +7054,15 @@ impl<'s> Elaborator<'s> {
                             .get(&self.fq(&pth.segments[0].name))
                             .copied();
                     }
+                }
+                // Same for a bare `pkg::X` alias — inherit the package constant's
+                // full `(width, signed)` (MISS → value-inferred, as above).
+                if let ast::ExprKind::PkgScoped { pkg, name } = &e.kind {
+                    return self
+                        .pkg_const_meta
+                        .get(&pkg.name)
+                        .and_then(|m| m.get(&name.name))
+                        .copied();
                 }
                 // Any other constant EXPRESSION initializer (`localparam E = 3 + 4;`)
                 // is value-determined (§6.20.2): signedness from the expression
@@ -30261,6 +30276,10 @@ impl Elaborator<'_> {
         // while folding later ones (`localparam L2 = W * 2`).
         let saved_prefix = std::mem::replace(&mut self.cur_prefix, format!("$pkg${pkg}"));
         let mut saved: Vec<(String, Option<i64>)> = Vec::new();
+        // Parallel to `saved`: param_meta entries for THIS package's params, made
+        // live during the fold so an intra-package alias/expression resolves a
+        // sibling param's (width, signed), then restored (no cross-scope pollution).
+        let mut saved_meta: Vec<(String, Option<(u32, bool)>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
         // Declared `(width, signed)` per PARAM const (flushed to
         // `pkg_const_meta`) so a `pkg::x` / bare-imported read gets its true
@@ -30302,10 +30321,17 @@ impl Elaborator<'_> {
                         );
                     }
                     let key = self.fq(&p.name.name);
-                    saved.push((key.clone(), self.params.insert(key, v)));
+                    saved.push((key.clone(), self.params.insert(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
                     if let Some(m) = self.param_decl_width(p) {
                         const_meta.insert(p.name.name.clone(), m);
+                        // Make this param's meta visible to a LATER intra-package
+                        // alias/expression (the ident/`const_expr_signed` arms read
+                        // `param_meta`). Set-or-CLEAR so a stale same-name entry from
+                        // another scope can't leak in on the no-meta path.
+                        saved_meta.push((key.clone(), self.param_meta.insert(key, m)));
+                    } else {
+                        saved_meta.push((key.clone(), self.param_meta.remove(&key)));
                     }
                 }
                 ast::ModuleItem::Typedef(td) => {
@@ -30433,6 +30459,19 @@ impl Elaborator<'_> {
                 }
                 None => {
                     self.params.remove(&k);
+                }
+            }
+        }
+        // Restore param_meta — the package's params were made live only for
+        // intra-package alias resolution above; module-scope reads use
+        // `pkg_const_meta` (persisted below), so these entries must not linger.
+        for (k, prev) in saved_meta.into_iter().rev() {
+            match prev {
+                Some(m) => {
+                    self.param_meta.insert(k, m);
+                }
+                None => {
+                    self.param_meta.remove(&k);
                 }
             }
         }

@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.163 untyped param — PACKAGE-scoped alias 값-결정 타입 (§4.5.162 후속) (2026-07-20, branch feat-pkg-scoped-param-signedness) ✅
+
+**발굴 경위**: §4.5.162가 §2에 남긴 "pkg-scoped ident" residual(`localparam C = p::X`·X signed → C unsigned) 착수. `package p; localparam X=7; module t; localparam C=p::X; s<p::X`=1 vs `s<C`=0(vita) — const_expr_signed이 single-seg ident만 sign 상속·pkg-scoped(`p::X`) 미처리.
+
+**silent-wrong fix (2 파트·elaborate-local·IR-0)**: ① **consumption**: `const_expr_signed`에 `PkgScoped{pkg,name}` arm(`pkg_const_meta[pkg][name].signed`) + `param_decl_width`에 bare-`pkg::X` inherit(`pkg_const_meta.get().and_then().copied()`·hit=full meta 상속·miss=value-inferred·single-seg ident 미러). ② **population**(2nd 리뷰어 발굴 pre-existing): `param_meta`가 `elaborate_package` fold 中 미population → **intra-package** alias/expr(`localparam B=A`·`E=A+1` in-pkg)이 sibling meta miss → C unsigned. fix=fold loop서 `param_meta` set-or-CLEAR+save/restore(`saved_meta`·self.params 미러·restore로 pollution 방지)→ident/const_expr_signed arm이 sibling 해소.
+
+**적대 2렌즈**: 1st(differential+soundness·60 probe)=consumption CLEAN(scope-gate 정상·cross-pkg collision·import 일관·全 DIFF pre-existing). 2nd(soundness 8-concern)=consumption CLEAN(ordering=miss시 E3009 loud·key no-collision·miss→value-inferred 안전)+**intra-package population 갭 발굴**→§4b 같은 반복 즉수정·재검증(pollution: same-name module param 미오염·multi-pkg[pa::V/pb::V] no-collision·narrow/signed intra-pkg alias width 상속·cross-pkg scoped chain 全 MATCH).
+
+**잔여(§2·pre-existing)**: time param value-inferred sign·expr self-determined width(§2 size-cast DEEP 동근·§4.5.162 residual)·pkg-internal `import`(E3009 honest-loud·별개).
+
+**검증**: `untyped_param_value_signedness.rs` +5(pkg-scoped alias/expr·narrow-alias width·**intra-pkg alias/expr·narrow·pollution**). **3675 green**(+5). clippy/fmt clean. format_version 22 불변.
+
 #### 4.5.162 untyped param value-determined type — IDENT/EXPRESSION initializer (§4.5.161 완성) (2026-07-19, branch feat-untyped-param-expr-signedness) ✅
 
 **발굴 경위**: §4.5.161이 LITERAL initializer만 §6.20.2 적용 → §2에 남긴 residual(ident/expr-valued positive→unsigned) 착수(NEXT item ①·soundness 리뷰어가 "내부 inconsistent" 지목). `localparam D=7; localparam C=D; localparam E=3+4; s<D`=1(signed·§4.5.161) vs `s<C`=`s<E`=0(vita·C/E value-inferred unsigned) vs iverilog 1 — 같은 값이 bare literal이면 signed·ident/expr면 unsigned.
