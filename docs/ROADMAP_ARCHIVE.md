@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.164 enum `.name()`/`.name` — SV §6.19.5 label-string method (loud→supported) (2026-07-20, branch feat-enum-name-method) ✅
+
+**발굴 경위**: 6연속 param 슬라이스 후 **도메인 전환** fresh-sweep으로 §3에 그라운딩·기록한 enum `.name()`(vita E3009 vs iverilog label string) 착수(전용 슬라이스). `first/last/num/next/prev`는 i64 fold로 지원되나 name()은 dynamic string이라 `enum_method_expr`이 의도적 None이었음.
+
+**loud→supported 구현**(parser-only·IR-0·format 22 불변): `enum_method_expr`(→`&mut self`)이 `x.name`/`x.name()`를 **synthetic string-return function 호출**로 desugar — `function string $enum_name$<T>(input signed?[63:0] x); case(x) <val>: return "<label>"; … default: return ""; endcase`. enum type별 1회 생성(`pending_enum_name_fns` **BTreeMap**=결정적 주입 순서)·container-end(`parse_module_like`)서 body에 주입(forward-ref OK·module-scoped·container별 자체 copy). port sign=`any label<0`·width 64(large enum 정확). **string-return function이 assign AND `$display("%s",…)` 양 context서 EXACT-length**(§4.5.163 그라운딩 확정: 핵심 통찰=packed string-literal **ternary는 result-width=max branch로 짧은 label PAD=silent-wrong**→ternary 금지·string function만 정답).
+
+**적대 2렌즈 CLEAN**: differential(48 probe)=全 exact-length·no-pad(signed/negative·sparse·base-less·single-label·wide·property-form·concat·compare·sformatf·for-loop·two-enum-types·**same-enum-two-modules**·first/next regression·next+name compose·package·uninit→""·determinism byte-identical)·DIFF 전부 non-finding(`LABEL.name()`=iverilog assertion crash·**longint≥2^32=iverilog 버그[32-bit truncate]·vita CORRECT**[64-bit port 정당]·sized-literal-label=pre-existing). soundness(7 concern SOUND)=determinism(BTreeMap sorted·HashMap-into-AST 없음)·injection 완전(drain unconditional·stranding 없음)·collision(`$` prefix=simple-ident 불가·escaped `\$`는 backslash 포함 별개)·`&mut` refactor(first/next 등 불변·labels/ename clone)·schema/golden 불변(Func instance는 SchemaHash 무변).
+
+**잔여(§3·pre-existing·NOT regression)**: sized-literal enum label(`{A=8'hFF}`)=non-foldable→`enum_defs` 미등록→`.first`/`.name` 全 enum-method loud(diagnostic 품질 minor)·function-port receiver `.name`=E3010(`var_enum`이 tf-port 미bind·enum-method-family 공통).
+
+**검증**: `enum_methods.rs` `name_method_is_loud`→`name_method_returns_label_string`(옛 loud 인코딩→새 정답·§5) + 신규 `enum_name_method.rs`×7(exact-both-context·signed/sparse·property-form·next+name·oob→""·two-types·**staged `vcmp→velab→vrun`**[.vu round-trip=synthetic fn 직렬화 검증·soundness 리뷰어 coverage-gap 지적 반영]). **3682 green**(+7). clippy/fmt clean.
+
 #### 4.5.163 untyped param — PACKAGE-scoped alias 값-결정 타입 (§4.5.162 후속) (2026-07-20, branch feat-pkg-scoped-param-signedness) ✅
 
 **발굴 경위**: §4.5.162가 §2에 남긴 "pkg-scoped ident" residual(`localparam C = p::X`·X signed → C unsigned) 착수. `package p; localparam X=7; module t; localparam C=p::X; s<p::X`=1 vs `s<C`=0(vita) — const_expr_signed이 single-seg ident만 sign 상속·pkg-scoped(`p::X`) 미처리.

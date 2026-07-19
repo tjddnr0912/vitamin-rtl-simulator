@@ -99,12 +99,18 @@ fn single_label_enum() {
 }
 
 #[test]
-fn name_method_is_loud() {
-    // `.name`/`.name()` is honest-loud (the packed string-ternary desugar would
-    // pad variable-length labels, unlike iverilog's dynamic string).
-    let (_o, code) = run("module top; typedef enum {A,B} e; e x;\n\
-         initial begin x=A; $display(\"%s\",x.name); $finish; end endmodule\n");
-    assert_ne!(code, Some(0), "`.name` must stay loud, not silently pad");
+fn name_method_returns_label_string() {
+    // `.name`/`.name()` returns the enum label as an EXACT-length string — a
+    // synthetic string-returning `case(x)` function, matching iverilog (a packed
+    // string-ternary would pad variable-length labels, so it is NOT used).
+    let (o, code) = run("module top; typedef enum {A,B} e; e x;\n\
+         initial begin x=A; $display(\"[%s]\",x.name); x=B; $display(\"[%s]\",x.name()); \
+         $finish; end endmodule\n");
+    assert_eq!(code, Some(0), "`.name` now supported:\n{o}");
+    assert!(
+        o.contains("[A]") && o.contains("[B]"),
+        "`.name` returns the exact label string:\n{o}"
+    );
 }
 
 #[test]
