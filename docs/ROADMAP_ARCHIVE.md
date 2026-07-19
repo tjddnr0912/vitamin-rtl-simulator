@@ -8,6 +8,22 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.166 comb sensitivity 읽기집합 완전성 — LHS-index + 계층 ref silent→correct (SV §9.2.2.2.1) (2026-07-20, branch feat-comb-index-sensitivity) ✅
+
+**발굴 경위**: 외부 Reviewer round-13 리포트(`5158f41` 기준)의 **★V10 silent-wrong**(최우선 ask). `always_comb`/`@(*)`/`always_latch`에서 변수가 **LHS bit/part/word-select 인덱스로만** 등장(`always_comb mask[idx*8 +: 8]=v`)하면 추론 감도목록에서 누락→인덱스 변경에 무감→조용히 stale. 리포트 실피해=`sha3_core.sv`의 `pad_mask[pad_byte_pos_q*8 +: 8]`가 pad_pos 변경에 무감→SHA3-256("abc") 오답(0x06이 byte0 고착). 재현: `mask[idx*8 +: 8]=8'hAB`→vita 全 idx `mask=0` vs iverilog `000000ab`/`0000ab00`/`00ab0000`. **적대 2-패스 soundness 렌즈가 같은 클래스의 2 잔여 twin을 추가 발굴**(Part B·C).
+
+**Part A — 로컬 인덱스(리포트 V10)**: `comb_read_set`(elaborate)이 RHS + branch 조건만 수집하고 **LHS 인덱스/offset/word를 누락**. fix=신규 `collect_lval_reads`가 각 `LvalChunk`의 `word`(배열 워드)·`offset`(비트/part offset)·`width`를 `collect_expr_reads`로 수집(쓰기 base net 제외·RHS `Signal{word}`/`Select`와 대칭). `BlockingAssign`/`NonblockingAssign`/`Force`/`Release` 全 lvalue-arm 적용(Release=latent 대칭·force/release는 loud-reject).
+
+**Part B — 계층 INDEXED twin(soundness 렌즈 1)**: `y=dut.mem[idx]` / `dut.mem[idx]=v`(계층 인덱스 read/write)는 대상 net이 미-elaborate child라 **deferred sentinel chunk(write)/placeholder expr(read)** 뒤로 lowering→lowering시 `comb_read_set`에 인덱스 불가시→감도 누락(read·write **양 twin**). **Part C — 계층 WHOLE-NET read(soundness 렌즈 2)**: `y=dut.q`(인덱스 없는 계층 whole-net read)도 `Signal{POISON_NET}` placeholder라 동일 누락. fix(B+C)=① comb-추론 ProcId를 `comb_inferred_procs`에 기록(**bare self-timed `always #5 clk=~clk`는 is_comb_inferred 아님→미기록→clock 감도 불변**·landmine 회피). ② deferred-hier resolver들이 real net+idx eids를 stmt/expr 아레나에 in-place 패치한 **후**(`fn run`) `recompute_comb_sensitivity_after_hier`가 기록 proc들의 read-set 재계산(superset-only·POISON 제거+실 net 추가·절대 narrow 안 함). **가드=4 deferral 레인 전부**(`deferred_hier`/`_sel`/`_write`/`_sel_write`)—whole-net 레인 누락 시 `y=dut.q`가 "무관한 indexed ref 존재 여부"에 정확성이 의존하는 비국소 버그(렌즈 2 발굴). non-hier 설계는 가드로 재계산 skip→golden churn 0.
+
+**형식/결정성**: elaborate value-only(감도 edges 확장)·**IR shape 불변→format_version 22 유지**(SchemaHash 구조적). `comb_inferred_procs`=elaborator 임시 필드(비직렬화). `comb_read_set`=BTreeSet 결정적·3-OS 불변.
+
+**적대 2렌즈**: differential=**CLEAN**(에이전트 39-probe: 유일 2 divergence[p36/p37]=pre-existing comb-loop settling·인덱스 0 scalar `y=y+1`서도 재현→직교; 로컬 10 + 계층 5[multi-instance·2D·part-select·branch-cond·mixed] + whole-net probe 全 MATCH). soundness=**2-패스**: 패스1=Part A SOUND(FINDING=Release 비대칭[대칭화]+Part B[계층 indexed twin] 발굴); 패스2(recompute 기전)=Q1~Q5 SOUND(multi-instance/idempotence/ordering/**clock 안전**/borrow)·**Q6 발굴=whole-net 레인 가드 누락**(Part C·즉시 broaden).
+
+**§2 deep-defer 발굴(별개 클래스·pre-existing)**: **함수/태스크 body-내부 net read가 caller comb 감도 미기여**(`always_comb y=f(); function f; f=a^..`=iverilog `a` 추적[ef/df] vs vita xx). `collect_expr_reads`의 `Call` arm이 **인자 read만** 수집·callee body의 transitive net read(재귀/중첩/callee-내 hier·index) 미분석. 리포트 V10(comb 자기 body)과 다른 클래스·전용 슬라이스(→ROADMAP §2). task-call은 iverilog도 미재발화(murky·no-clean-oracle).
+
+**검증**: 신규 `comb_lhs_index_sens.rs`×9(로컬 5: indexed-partsel·bitsel·array-word·explicit-`@(*)`·latch + 계층 4: hier-write·hier-read·**clock-survives-recompute**[landmine 회귀]·whole-net-read). **3701 green**(+9). clippy/fmt clean.
+
 #### 4.5.165 enum label 범위검증 — out-of-range label을 silent-truncate→loud (SV §6.19) (2026-07-20, branch feat-enum-label-range) ✅
 
 **발굴 경위**: fresh-area sweep 6 probe(산술 div/mod/pow/shift·format 지정자·bit-vector sysfunc·부호/폭·real 포맷·제어흐름)이 全 MATCH→코어 견고 확인→NEXT item 2(loud→supported)로 전환. 후보 3 그라운딩 中 **enum label 범위검증 부재**(§4.5.153 기록·§3)가 실은 **silent-wrong**: `enum logic [3:0] {X=16}`을 vita가 조용히 truncate(`e=0`)·iverilog는 compile-reject("value too large"). `{X=-1}`(unsigned base 음수)=vita 15·iverilog "negative value"·auto-inc overflow(`[1:0] {A..E}` E=4)=vita 0·iverilog "inferred value overflowed".

@@ -2,7 +2,7 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-07-20)**: format_version **22** · **3692 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85** · 최신 완료 §4.5.165(enum label 범위검증 SV §6.19 — out-of-range label을 silent-truncate→loud[E2002]·const-foldable 값/폭에 i128 경계·부호 포함·폭 1..=64·fail-open[sized-literal/param-width는 skip]·parser-only·format 불변·differential CLEAN+soundness FINDING 1[unsigned-64 음수] 즉시수정). 미착수 후보=fresh-area probe 신규 ① · size-cast `N'(expr)` context width(§2 DEEP) · untyped param time/expr-width(§2 residual) · enum label fail-open 잔여(sized-literal/param-width out-of-range).
+> - **기준(2026-07-20)**: format_version **22** · **3701 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85** · 최신 완료 §4.5.166(comb sensitivity 읽기집합 완전성 SV §9.2.2.2.1 — always_comb/@(*)/always_latch서 LHS bit/part/word-select 인덱스[`mask[idx*8+:8]=v`] 및 계층 ref[`dut.mem[idx]`·`dut.q`] read/write를 감도목록에 포함·silent stale→correct·외부 round-13 ★V10; fix=`collect_lval_reads`[LHS 인덱스] + 4 deferral-lane 가드 후 `recompute_comb_sensitivity_after_hier`[계층·self-timed always 제외로 clock 안전]; elaborate value-only·format 불변; differential CLEAN + soundness 2-패스[Release 대칭·계층 indexed twin·whole-net 레인 가드 3건 발굴·수정]). 미착수 후보=**함수/태스크 body-내부 read→caller comb 감도(§2 신규 DEEP·§4.5.166 발굴)** · fresh-area probe 신규 ① · size-cast `N'(expr)` context width(§2 DEEP) · untyped param time/expr-width(§2 residual).
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
 > - **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* RTL 시뮬레이터(correct-or-loud) · **G2** = AI-Agent 친화 simulator(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 

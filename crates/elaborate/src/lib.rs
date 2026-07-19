@@ -3167,6 +3167,13 @@ struct Elaborator<'s> {
     /// P2-E: ProcIds of `final` blocks — engine side table (never the IR):
     /// skipped at arming, run once at end of simulation.
     pub final_procs: std::collections::BTreeSet<u32>,
+    /// §4.5.166 HIER twin: ProcIds whose implicit `@(*)`/`always_comb`/
+    /// `always_latch` read-set was inferred by `comb_read_set` (NOT a bare
+    /// self-timed `always`). Recomputed after the deferred hierarchical
+    /// indexed read/write resolvers patch real net+index into the arenas, so a
+    /// hierarchical index (`y = dut.mem[idx]` / `dut.mem[idx] = v`) — invisible
+    /// behind a sentinel at lowering time — enters the sensitivity list.
+    comb_inferred_procs: Vec<u32>,
     /// B1 frame-call metadata, index-aligned to `self.funcs`/`ir.funcs`. Pushed
     /// in `lower_frame_func`; drained into `Sidecars.func_table`. EMPTY until a
     /// frame (automatic/recursive) function lowers.
@@ -3709,6 +3716,7 @@ impl<'s> Elaborator<'s> {
             pkg_tasks: BTreeMap::new(),
             cu_imports: Vec::new(),
             final_procs: std::collections::BTreeSet::new(),
+            comb_inferred_procs: Vec::new(),
             clocking_inputs: std::collections::BTreeSet::new(),
             clocking_commit: std::collections::BTreeMap::new(),
             clocking_outputs: std::collections::BTreeMap::new(),
@@ -4192,6 +4200,21 @@ impl<'s> Elaborator<'s> {
         }
         self.defparams.clear();
 
+        // §4.5.166 HIER twin: a hierarchical read/write in an implicit
+        // `@(*)`/`always_comb`/`always_latch` — whole-net (`y = dut.q`) OR indexed
+        // (`y = dut.mem[idx]` / `dut.mem[idx] = v`) — lowers behind a placeholder
+        // expr / sentinel chunk, so the referenced net (and any index) was
+        // invisible to `comb_read_set` at process-lowering time and dropped from
+        // the sensitivity list (silent stale; the LOCAL-index twin is fixed in
+        // `collect_lval_reads`). ALL FOUR deferral lanes must arm the recompute —
+        // the whole-net lanes too, else `always_comb y = dut.q` stays stale and
+        // its correctness would hinge on an unrelated indexed ref elsewhere. The
+        // resolvers below patch the real net+index into the stmt/expr arenas;
+        // recompute the affected comb read-sets after.
+        let had_hier_defer = !self.deferred_hier.is_empty()
+            || !self.deferred_hier_sel.is_empty()
+            || !self.deferred_hier_write.is_empty()
+            || !self.deferred_hier_sel_write.is_empty();
         // N3.1: resolve hierarchical INDEXED reads FIRST (their index lowering may
         // itself defer a whole-net hierarchical read into `deferred_hier`)…
         self.resolve_deferred_hier_sel();
@@ -4206,6 +4229,13 @@ impl<'s> Elaborator<'s> {
         // (`dut.mem[i] = …`), also before the multidriver scan (the rebuilt chunks
         // carry real net ids).
         self.resolve_deferred_hier_sel_write();
+        // §4.5.166: now that hier read/write chunks + exprs carry real nets and
+        // index eids, recompute the comb/latch read-sets so the referenced net
+        // (and any index) enters the sensitivity list. Only runs when a hier ref
+        // was deferred (any of the four lanes).
+        if had_hier_defer {
+            self.recompute_comb_sensitivity_after_hier();
+        }
 
         // whole-net multidriver check over the WHOLE flat IR (instance-agnostic).
         self.check_whole_net_multidriver();
@@ -27887,6 +27917,10 @@ impl Elaborator<'_> {
             (ast::ProcKind::Always, Some(ast::Sensitivity::Star))
         );
         let sensitivity = if is_comb_inferred && sensitivity.edges.is_empty() {
+            // Record this ProcId so the post-hier-resolution pass can recompute
+            // its read-set (a bare self-timed `always` is NOT is_comb_inferred, so
+            // its intentionally-empty sensitivity is never touched — clocks safe).
+            self.comb_inferred_procs.push(self.cur_proc);
             let nets = self.comb_read_set(&body);
             ir::Sensitivity {
                 kind: sensitivity.kind,
@@ -27918,8 +27952,13 @@ impl Elaborator<'_> {
         for bb in body {
             for &sid in &bb.stmts {
                 match &self.stmts[sid as usize] {
-                    ir::Stmt::BlockingAssign { rhs, .. }
-                    | ir::Stmt::NonblockingAssign { rhs, .. } => {
+                    ir::Stmt::BlockingAssign { lhs, rhs }
+                    | ir::Stmt::NonblockingAssign { lhs, rhs, .. } => {
+                        // The LHS dynamic INDEX sub-exprs (`mem[sel] = …`,
+                        // `mask[idx*8 +: 8] = …`) are reads: the block must
+                        // re-fire when the index changes, not only when a RHS
+                        // signal does. The written base net is NOT a read.
+                        self.collect_lval_reads(lhs, &mut reads);
                         self.collect_expr_reads(*rhs, &mut reads);
                     }
                     ir::Stmt::SysTask { fmt, args, .. } => {
@@ -27931,12 +27970,16 @@ impl Elaborator<'_> {
                         }
                     }
                     ir::Stmt::Disable { .. } => {}
-                    // shape-reserved at format_version 4 (never lowered yet);
-                    // a force RHS would be a read when the increment lands.
-                    ir::Stmt::Force { rhs, .. } => {
+                    // shape-reserved at format_version 4 (never lowered yet); a
+                    // force RHS / LHS-index would be a read when force lands. The
+                    // `Release` LHS index is symmetric (latent — both loud-rejected).
+                    ir::Stmt::Force { lhs, rhs } => {
+                        self.collect_lval_reads(lhs, &mut reads);
                         self.collect_expr_reads(*rhs, &mut reads);
                     }
-                    ir::Stmt::Release { .. } => {}
+                    ir::Stmt::Release { lhs } => {
+                        self.collect_lval_reads(lhs, &mut reads);
+                    }
                 }
             }
             if let ir::Terminator::Branch { cond, .. } = &bb.term {
@@ -27944,6 +27987,57 @@ impl Elaborator<'_> {
             }
         }
         reads.into_iter().collect()
+    }
+
+    /// §4.5.166 HIER twin: after the deferred hierarchical indexed read/write
+    /// resolvers have patched real net + index eids into the stmt/expr arenas,
+    /// recompute the read-set of every comb-inferred process (recorded in
+    /// `comb_inferred_procs` — bare self-timed `always` blocks are excluded, so
+    /// their intentionally-empty sensitivity is never widened). A hierarchical
+    /// index (`y = dut.mem[idx]` / `dut.mem[idx] = v`) is behind a sentinel at
+    /// lowering time and thus dropped from the original inference; the patched
+    /// body now exposes it. The recomputed set only WIDENS (local reads are
+    /// unchanged; the newly-visible hier index is added) — never narrows a real
+    /// read — so non-hier comb blocks are byte-identical. Two-phase to satisfy
+    /// the borrow checker: gather under `&self`, then apply under `&mut self`.
+    fn recompute_comb_sensitivity_after_hier(&mut self) {
+        let mut updated: Vec<(u32, Vec<u32>)> = Vec::new();
+        for &pid in &self.comb_inferred_procs {
+            let nets = self.comb_read_set(&self.processes[pid as usize].body);
+            updated.push((pid, nets));
+        }
+        for (pid, nets) in updated {
+            self.processes[pid as usize].sensitivity.edges = nets
+                .into_iter()
+                .map(|net| ir::EdgeTerm {
+                    net,
+                    kind: ir::EdgeKind::AnyEdge,
+                })
+                .collect();
+        }
+    }
+
+    /// The dynamic INDEX sub-expressions of an assignment LVALUE are reads that
+    /// belong in an implicit `@(*)`/`always_comb` sensitivity list: the array
+    /// WORD index (`mem[sel] = …`), the bit/part-select OFFSET (`r[idx] = …`,
+    /// `mask[idx*8 +: 8] = …`), and any non-constant WIDTH. The written BASE net
+    /// is NOT a read (writing `mask` does not make the block sensitive to
+    /// `mask`). Symmetric with the `Signal { word }` / `Select` read arms — a
+    /// block whose ONLY read of `idx` is through an LHS index otherwise never
+    /// re-fires when `idx` changes (silent stale value; the V10 comb-sensitivity
+    /// silent-wrong, §4.5.166).
+    fn collect_lval_reads(&self, lhs: &ir::Lvalue, reads: &mut std::collections::BTreeSet<u32>) {
+        for ch in &lhs.chunks {
+            if let Some(w) = ch.word {
+                self.collect_expr_reads(w, reads);
+            }
+            if let Some(o) = ch.offset {
+                self.collect_expr_reads(o, reads);
+            }
+            if let Some(wd) = ch.width {
+                self.collect_expr_reads(wd, reads);
+            }
+        }
     }
 
     /// Recursively collect every `Signal` net read by expression `eid`.

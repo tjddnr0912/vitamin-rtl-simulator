@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-19)**: format_version **22** · **3636 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.158(enum label operand signedness — 선언 sign 상속, silent-wrong 수정·全 3 label-site). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
+> **기준선(2026-07-20)**: format_version **22** · **3701 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.166(comb sensitivity 읽기집합 완전성 — always_comb/@(*)/always_latch서 LHS bit/part/word-select 인덱스 + 계층 ref[`dut.mem[idx]`·`dut.q`] read/write를 감도에 포함·silent stale→correct·외 round-13 V10). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -29,6 +29,7 @@
 
 **중형 (오라클 확보 시 착수 후보):**
 
+- **함수/태스크 body-내부 read → caller comb 감도 미기여**(§4.5.166 발굴·pre-existing·DEEP): `always_comb y=f();`서 `function f`가 모듈 net `a`를 **인자 없이 내부**로 read하면(`f=a^8'hFF`) 그 read가 caller 감도에 안 들어감→`a` 변경에 무감(vita `y=xx` vs iverilog `ef`/`df`·§9.2.2.2.1은 함수호출 접근 변수 포함). `collect_expr_reads`의 `Call` arm은 **인자 read만** 수집(callee body 미하강). fix=callee body의 transitive net read-set(재귀 cycle-guard·formal/local vs 모듈 net scope 분리·callee-내 hier/index read)—전용 슬라이스. task-call(`always_comb tsk(y)`)은 iverilog도 미재발화(no-clean-oracle·murky). ⚠️§4.5.166이 comb 자기-body의 LHS-index/계층 ref는 해소했으나 callee-body는 별개 클래스.
 - dual-wildcard import type ambiguity(둘 다 silent·loud화 후보). §4.5.104.
 - mixed-sign enum 산술 · `enum bit` 2-state-base X-leak(일반 enum-base-kind 갭). §4.5.109/110.
 - `$signed`-in-wider-sum sign-loss · size-cast fn-call operand sign-loss `4'(f(15))`. §4.5.111/112.
