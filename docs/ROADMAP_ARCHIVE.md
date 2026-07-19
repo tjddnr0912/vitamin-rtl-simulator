@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.161 untyped param value-determined signedness+width (IEEE §6.20.2) (2026-07-19, branch feat-untyped-param-value-signedness) ✅
+
+**발굴 경위**: §4.5.160 적대 발굴로 §2 기록한 "untyped param 값-결정 타입" 재그라운딩(NEXT item ① oracle-backed). `localparam A=-1, B=2; A < B`=vita `ge`/0 vs iverilog `less`/1 — 무장식 `localparam`이 IEEE §6.20.2("타입은 값이 결정") 미적용: positive decimal `B=2`가 value-inferred fallback(`const_u32_expr`=v≤u32면 32-bit UNSIGNED)로 unsigned화 → §11.8.1 collective(둘 다 unsigned) 오답. param↔literal은 정상(literal이 signed)이라 param↔param 전용.
+
+**silent-wrong fix**(elaborate-local·IR-0): `param_decl_width` untyped 분기가 값 LITERAL을 `parse_int_literal`로 타입 결정 — plain DECIMAL=signed·width=`min_signed_bits(folded).max(32)`(§3.5.1·값 자체를 담는 최소 signed 폭)·SIZED/UNSIZED-BASED=literal의 명시 width·sign·leading unary `-`/`+`+paren peel(inner sign 상속). `value_determined` 가드=SIZED는 현행(全 param-type)·DECIMAL/BASED는 `Implicit` 한정(`time`=64-bit 유지). 값-inferred fallback(비-리터럴 expr)·enum-label(`v<0` 별경로)·ranged/int/real 全 불변.
+
+**적대 2렌즈**: soundness=CLEAN(8-concern: width/value 일관·coerce no-op·param_range 불변·`value_determined`가 time 제외·unary-peel IEEE-correct·enum-label 미접촉·hier/pkg 일관·residual 미악화). differential이 **-2^k regression 발굴**(내 초기 minus-peel이 magnitude 리터럴 width 사용→`-2^31`=33 vs 32·`-2^k` mag≥2^31 off-by-one·width-only): `-2^k`는 `+2^k`보다 1비트 적게 필요 → **`min_signed_bits(folded 값)`로 즉수정**(§S "differential이 이긴다")·全 boundary(±2^31/2^32/2^33·i64 extremes·-(2^31±1)) 재검증 MATCH. `$unsigned(param)` DIFF=iverilog const-fold quirk(plain var는 MATCH·vita spec-correct).
+
+**잔여(§2·narrower residual)**: expression/ident-valued untyped param(`C=A+B`·`C=D`)은 value-inferred 유지→positive면 unsigned(내부 inconsistent: `D=7` signed vs `C=D` unsigned) · interface-member positive param(`i.A<i.B`) unsigned(interface-specific) · sized-literal `time` param `$bits`(pre-existing·byte-identical). 전부 pre-existing·미악화.
+
+**검증**: 신규 `untyped_param_value_signedness.rs`×11(sign compare·small/large·neg-power-of-two·boundary·based-sign·sized-unchanged·width/replicate use·comma-list·typed-unchanged). **3664 green**(+11). clippy/fmt clean. format_version 22 불변.
+
 #### 4.5.160 body param/localparam comma-list — `localparam A=1, B=2;` (loud→supported) (2026-07-19, branch feat-body-param-comma-list) ✅
 
 **발굴 경위**: fresh-area sweep(signed mod/div·$countones/$onehot/$isunknown·indexed part-select·4-state X 전파·real-conv·do-while/break/continue·ternary-x·$sformatf 11종 全 MATCH or no-oracle→코어 견고 재확인) 후 item ② loud→supported로 pivot — §4.5.159서 §3에 기록한 body comma-list 갭 착수. `localparam A=1, B=2;`=vita E2002 loud(module-item 경로가 param 1개만 파싱 후 `;` 기대)·iverilog 수용(매우 흔한 구문).

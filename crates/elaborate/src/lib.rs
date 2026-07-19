@@ -6934,23 +6934,53 @@ impl<'s> Elaborator<'s> {
             // `p.signed` accordingly).
             Some((32, p.signed))
         } else {
-            // Untyped/implicit param: an explicitly-SIZED literal initializer
-            // (`localparam P = 8'hAB`) sets the param width to the literal width
-            // (8), so `$bits`/concat match iverilog. A plain decimal / unsized-based
-            // / expression initializer keeps the value-inferred width (≥32) — None.
+            // Untyped/implicit param — IEEE §6.20.2: the type follows the VALUE.
+            // A LITERAL initializer carries its own `(width, signedness)`, which
+            // `parse_int_literal` computes exactly: a SIZED literal (`8'hAB`) its
+            // declared width; a plain DECIMAL (`42`, `3000000000`) a SIGNED width
+            // grown to hold value+sign (§3.5.1 — 32, or 33 for ≥2^31); an
+            // UNSIZED-BASED literal (`'hFF` unsigned, `'shFF` signed) its base's
+            // sign. Without this an untyped decimal fell through to the
+            // value-inferred fallback, which makes a NON-NEGATIVE value UNSIGNED
+            // (`const_u32_expr`) — so `localparam A=-1, B=2; A < B` compared
+            // UNSIGNED (B unsigned) instead of signed (both signed decimals).
+            // The SIZED case applies to any reaching param-type (unchanged); the
+            // value-determined DECIMAL/UNSIZED-BASED case is restricted to a
+            // genuinely untyped (`Implicit`) param — a `time` param's width is its
+            // declared 64-bit type, not the literal's. A non-literal EXPRESSION
+            // initializer keeps the value-inferred width — None.
+            // Peel `(...)` and a leading unary `-`/`+` to reach the inner literal —
+            // that tells us the SIGNEDNESS (a `-`/`+` preserves the operand's sign).
             let mut e = &p.value;
-            while let ast::ExprKind::Paren { inner } = &e.kind {
-                e = inner;
+            loop {
+                match &e.kind {
+                    ast::ExprKind::Paren { inner } => e = inner,
+                    ast::ExprKind::Unary {
+                        op: ast::UnOp::Minus | ast::UnOp::Plus,
+                        operand,
+                    } => e = operand,
+                    _ => break,
+                }
             }
-            if let ast::ExprKind::IntLit {
-                kind: ast::IntLitKind::Sized,
-                raw,
-            } = &e.kind
-            {
-                return literal::parse_int_literal(raw, ast::IntLitKind::Sized)
-                    .map(|cv| (cv.width, cv.signed));
+            if let ast::ExprKind::IntLit { kind, raw } = &e.kind {
+                let value_determined = matches!(kind, ast::IntLitKind::Sized)
+                    || matches!(p.ty, ast::ParamType::Implicit);
+                if value_determined {
+                    let cv = literal::parse_int_literal(raw, *kind)?;
+                    // A plain unsized DECIMAL is signed and sized to its FOLDED
+                    // value's minimal signed width (≥32) — NOT the magnitude
+                    // literal's, because `-2^k` needs one fewer bit than `+2^k`
+                    // (`-2^31` is 32-bit, `+2^31` 33-bit). SIZED / UNSIZED-BASED
+                    // literals carry an explicit width — keep parse_int_literal's.
+                    if matches!(kind, ast::IntLitKind::Decimal) {
+                        if let Some(v) = self.const_eval_in_scope(&p.value) {
+                            return Some((min_signed_bits(v).max(32), true));
+                        }
+                    }
+                    return Some((cv.width, cv.signed));
+                }
             }
-            None // unsized, or `time` (64-bit): keep the full i64
+            None // non-literal expression, or `time` (64-bit): keep the full i64
         }
     }
 
@@ -32613,6 +32643,17 @@ fn clamp_bound_u32(v: Option<i64>) -> u32 {
 /// const ARRAY element (GAP-G) is coerced to its ELEMENT type the SAME way (so
 /// a narrow element such as `bit[3:0]` / `byte` truncates its init literal to
 /// match the runtime net and iverilog). `w == 0` or `w >= 64` keeps the full i64.
+/// Minimal width (in bits) to hold `v` as a TWO'S-COMPLEMENT SIGNED value: the
+/// magnitude's bit-length plus one sign bit. `0` → 1, `5` → 4, `-1` → 1,
+/// `2^31` → 33, but `-2^31` → 32 (a negative power of two needs one fewer bit
+/// than its positive twin). Used to size an untyped decimal param to its VALUE
+/// (IEEE §6.20.2) rather than the magnitude literal's width. Always ≤ 64 for a
+/// foldable `i64` (`i64::MIN` gives 64).
+fn min_signed_bits(v: i64) -> u32 {
+    let mag = if v < 0 { !v as u64 } else { v as u64 };
+    (64 - mag.leading_zeros()) + 1
+}
+
 fn coerce_i64_to_width(v: i64, w: u32, signed: bool) -> i64 {
     if w == 0 || w >= 64 {
         return v;
