@@ -82,13 +82,13 @@ fn two_foreach_same_formal() {
     assert!(o.contains("s=6 p=6"), "both foreach loops run:\n{o}");
 }
 
-// ── boundary: a FUNCTION with a `foreach` over a dyn-array formal stays LOUD. A
-//    `foreach` is control flow, so the function is NOT R2-inlinable (R2 needs a
-//    straight-line body) → it is FRAMED, and a framed function's dyn-array formal is
-//    unsupported (the separate function-frame dyn-formal follow-on, not this foreach
-//    fix). This slice fixes the static-TASK path; the function path is orthogonal. ──
+// ── follow-on RESOLVED: a FUNCTION with a `foreach` over a dyn-array formal is FRAMED
+//    (a `foreach` is control flow → not R2-inlinable). When this slice (§4.5.174) landed,
+//    the framed-function dyn-formal path was a separate follow-on and stayed loud. It was
+//    since completed: §4.5.177 (direct-rhs `r = f(a)`) + §4.5.179 (this buried `$display`
+//    arg, hoisted to a temp). So the case below now RUNS (sum=15). ──
 #[test]
-fn function_foreach_dyn_formal_stays_loud() {
+fn function_foreach_dyn_formal_supported() {
     let o = run("module top;\n\
          function automatic int fsum(input int c[]);\n\
            int s=0; foreach(c[i]) s+=c[i]; return s;\n\
@@ -96,8 +96,8 @@ fn function_foreach_dyn_formal_stays_loud() {
          int a[]; initial begin a=new[3]; a[0]=4;a[1]=5;a[2]=6; $display(\"sum=%0d\", fsum(a)); end\n\
          endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "a framed function's dyn-array formal is a separate follow-on — stays loud:\n{o}"
+        !o.contains("E3009") && o.contains("sum=15"),
+        "framed function's dyn-array formal buried in $display (§4.5.177/178) = 15:\n{o}"
     );
 }
 

@@ -3369,6 +3369,13 @@ struct Elaborator<'s> {
     // than a pure `Expr::Call`. EMPTY for any design without such a function, so the
     // hoist pre-pass in `lower_stmt` is skipped and all other code is byte-identical.
     inout_func_names: std::collections::BTreeSet<String>,
+    // §4.5.179: names of FRAMED functions with an `input` dynamic-array formal (the set
+    // §4.5.177 blesses on the direct-rhs `x = f(arr)` path). A call to one BURIED in a
+    // larger expression (`$display(f(a))`, `r = f(a)+1`, `if (f(a) > 0)`) is hoisted to a
+    // temp `__t = f(a)` — itself a direct-rhs blocking assign that re-triggers §4.5.177's
+    // snapshot marker. EMPTY for any design without such a function → the hoist pre-pass in
+    // `lower_stmt` is skipped and all other code is byte-identical.
+    dyn_formal_func_names: std::collections::BTreeSet<String>,
     // Named SVA declarations (Phase-3 named-SVA slice): bare name → decl, collected
     // per-instance like func_table/task_table (saved/restored so siblings don't
     // inherit). Kept SEPARATE from the net symbol table so a net and a sequence of
@@ -3795,6 +3802,7 @@ impl<'s> Elaborator<'s> {
             func_table: BTreeMap::new(),
             task_table: BTreeMap::new(),
             inout_func_names: std::collections::BTreeSet::new(),
+            dyn_formal_func_names: std::collections::BTreeSet::new(),
             seq_table: BTreeMap::new(),
             prop_table: BTreeMap::new(),
             let_table: BTreeMap::new(),
@@ -5549,6 +5557,8 @@ impl<'s> Elaborator<'s> {
         // module's `lower_frame_funcs`), so a nested child instance elaborated in the
         // middle of this module must not clobber it — save/restore alongside func_table.
         let saved_inout_funcs = std::mem::take(&mut self.inout_func_names);
+        // §4.5.179: dyn-formal-function set is module-local too (same rebuild path).
+        let saved_dyn_formal_funcs = std::mem::take(&mut self.dyn_formal_func_names);
         // B1 frame-call: the frame-func name→id map is module-local (a sibling
         // module's call must never divert to this module's func). The global
         // `funcs`/`func_blocks`/`func_metas` arenas are NOT saved (they accumulate).
@@ -5884,6 +5894,7 @@ impl<'s> Elaborator<'s> {
         self.func_table = saved_funcs;
         self.task_table = saved_tasks;
         self.inout_func_names = saved_inout_funcs; // R5-B
+        self.dyn_formal_func_names = saved_dyn_formal_funcs; // §4.5.179
         self.frame_idx = saved_frame_idx;
         self.task_frame_idx = saved_task_frame_idx;
         self.seq_table = saved_seqs;
@@ -15715,6 +15726,11 @@ impl<'s> Elaborator<'s> {
                                                     // R5-B: record which framed functions have an output/inout formal so their
                                                     // calls route to the copy-out path (`emit_frame_func_out_call`) + the hoist.
         self.inout_func_names.clear();
+        // §4.5.179: record which FRAMED functions have an `input` dyn-array formal, so a
+        // BURIED call to one is hoisted to a `__t = f(a)` temp (re-triggering §4.5.177's
+        // marker). Only `frame_set` members — an R2-inlinable (straight-line) dyn-formal
+        // function is inline-aliased, never framed, so it is (correctly) excluded here.
+        self.dyn_formal_func_names.clear();
         for name in &frame_set {
             if let Some(f) = self.func_table.get(name) {
                 if f.ports
@@ -15722,6 +15738,9 @@ impl<'s> Elaborator<'s> {
                     .any(|p| !matches!(p.dir, ast::PortDir::Input))
                 {
                     self.inout_func_names.insert(name.clone());
+                }
+                if f.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
+                    self.dyn_formal_func_names.insert(name.clone());
                 }
             }
         }
@@ -17681,6 +17700,161 @@ impl<'s> Elaborator<'s> {
         }
     }
 
+    /// §4.5.179: if `e` is a direct call `f(args)` to a FRAMED function with an `input`
+    /// dyn-array formal (`dyn_formal_func_names` — the exact set §4.5.177 blesses on the
+    /// direct-rhs path), return its `(FuncId, FunctionDef)`.
+    fn dyn_formal_call_target(&self, e: &ast::Expr) -> Option<(u32, ast::FunctionDef)> {
+        if let ast::ExprKind::Call { name, .. } = &e.kind {
+            if name.segments.len() == 1 {
+                let n = &name.segments[0].name;
+                if self.dyn_formal_func_names.contains(n) {
+                    let fid = *self.frame_idx.get(n)?;
+                    let func = self.func_table.get(n)?.clone();
+                    return Some((fid, func));
+                }
+            }
+        }
+        None
+    }
+
+    /// §4.5.179: does `e`'s subtree contain a framed dyn-formal call?
+    fn expr_has_dyn_formal_call(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        if self.dyn_formal_call_target(e).is_some() {
+            return true;
+        }
+        match &e.kind {
+            K::Unary { operand, .. } => self.expr_has_dyn_formal_call(operand),
+            K::Binary { lhs, rhs, .. } => {
+                self.expr_has_dyn_formal_call(lhs) || self.expr_has_dyn_formal_call(rhs)
+            }
+            K::Paren { inner } => self.expr_has_dyn_formal_call(inner),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.expr_has_dyn_formal_call(cond)
+                    || self.expr_has_dyn_formal_call(then_e)
+                    || self.expr_has_dyn_formal_call(else_e)
+            }
+            _ => false,
+        }
+    }
+
+    /// §4.5.179: does `e` contain a framed dyn-formal call in a position
+    /// `hoist_dyn_formal_calls` does NOT hoist (a short-circuit `&&`/`||` RHS, a `?:`
+    /// arm, or any node other than Binary/Unary/Paren)? A dyn-formal function is PURE
+    /// (a function rejects output/inout formals), so there is no eval-order hazard —
+    /// the only reason to decline is a CONDITIONAL call: hoisting it would make an
+    /// only-sometimes-evaluated call unconditional. Returning `true` makes
+    /// `hoist_stmt_top` decline → the call stays loud at `emit_frame_call`
+    /// (correct-or-loud; never a conditional call silently made unconditional).
+    fn has_unhoistable_dyn_formal_call(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        // A call `e` itself IS hoistable (handled at the top of `hoist_dyn_formal_calls`).
+        if self.dyn_formal_call_target(e).is_some() {
+            return false;
+        }
+        match &e.kind {
+            K::Binary { op, lhs, rhs } => {
+                let rhs_bad = if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) {
+                    // `&&`/`||` RHS is only conditionally evaluated ⇒ never hoisted.
+                    self.expr_has_dyn_formal_call(rhs)
+                } else {
+                    self.has_unhoistable_dyn_formal_call(rhs)
+                };
+                self.has_unhoistable_dyn_formal_call(lhs) || rhs_bad
+            }
+            K::Unary { operand, .. } => self.has_unhoistable_dyn_formal_call(operand),
+            K::Paren { inner } => self.has_unhoistable_dyn_formal_call(inner),
+            // Any other node (Ternary, Concat, a non-dyn Call's args, …) is not a hoist
+            // site — a dyn-formal call anywhere inside is un-hoistable.
+            _ => self.expr_has_dyn_formal_call(e),
+        }
+    }
+
+    /// §4.5.179: rewrite `e`, hoisting each framed dyn-formal call in an
+    /// unconditionally-evaluated position (Binary/Unary/Paren operand) to a fresh temp.
+    /// Emits `__t = f(args)` as a DIRECT-rhs blocking assign via `lower_stmt` — which
+    /// re-enters the marker path (`emit_frame_dyn_formal_markers`): the direct-rhs guard
+    /// there fires §4.5.177's snapshot + blessed bind, so the temp receives the correct
+    /// value. The surrounding expression then lowers as a plain read of the temp. A call
+    /// in a SHORT-CIRCUIT operand (`&&`/`||` RHS) is left in place → it reaches
+    /// `emit_frame_call` and is loud (correct-or-loud). No eval-order guard is needed: a
+    /// framed function is pure (no output formals), so hoisting its evaluation earlier
+    /// never changes another operand's value.
+    fn hoist_dyn_formal_calls(&mut self, b: &mut ProcessBuilder, e: &ast::Expr) -> ast::Expr {
+        use ast::ExprKind as K;
+        if let Some((fid, func)) = self.dyn_formal_call_target(e) {
+            let (rw, rsig) = self
+                .func_metas
+                .get(fid as usize)
+                .map(|m| (m.ret_width, m.ret_signed))
+                .unwrap_or((32, true));
+            let (_tmp_net, tmp_name) = self.fresh_ret_temp(&func, rw, rsig);
+            // `__t = f(args)` — a direct-rhs blocking assign. `lower_stmt`'s hoist gate
+            // will NOT re-hoist it (its Blocking arm excludes a rhs that IS the direct
+            // call), and its marker path (`emit_frame_dyn_formal_markers`) blesses it.
+            let assign = ast::Stmt::Blocking {
+                lhs: ast::Lvalue::Ident(ast::HierPath {
+                    segments: vec![ast::Ident {
+                        name: tmp_name.clone(),
+                        span: e.span,
+                    }],
+                    span: e.span,
+                }),
+                delay: None,
+                event: None,
+                rhs: e.clone(),
+                span: e.span,
+            };
+            self.lower_stmt(b, &assign);
+            return ast::Expr {
+                kind: K::Ident(ast::HierPath {
+                    segments: vec![ast::Ident {
+                        name: tmp_name,
+                        span: e.span,
+                    }],
+                    span: e.span,
+                }),
+                span: e.span,
+            };
+        }
+        match &e.kind {
+            K::Binary { op, lhs, rhs } => {
+                let l = self.hoist_dyn_formal_calls(b, lhs);
+                let r = if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) {
+                    (**rhs).clone()
+                } else {
+                    self.hoist_dyn_formal_calls(b, rhs)
+                };
+                ast::Expr {
+                    kind: K::Binary {
+                        op: *op,
+                        lhs: Box::new(l),
+                        rhs: Box::new(r),
+                    },
+                    span: e.span,
+                }
+            }
+            K::Unary { op, operand } => ast::Expr {
+                kind: K::Unary {
+                    op: *op,
+                    operand: Box::new(self.hoist_dyn_formal_calls(b, operand)),
+                },
+                span: e.span,
+            },
+            K::Paren { inner } => ast::Expr {
+                kind: K::Paren {
+                    inner: Box::new(self.hoist_dyn_formal_calls(b, inner)),
+                },
+                span: e.span,
+            },
+            _ => e.clone(),
+        }
+    }
+
     /// R5-B: hoist pre-pass for `lower_stmt` (only entered when `inout_func_names`
     /// is non-empty). For the statement forms whose key expression is evaluated
     /// EXACTLY ONCE (an `if` condition, or a blocking-assign RHS with no event/delay),
@@ -17728,6 +17902,64 @@ impl<'s> Elaborator<'s> {
                     delay: delay.clone(),
                     event: event.clone(),
                     rhs: rhs2,
+                    span: *span,
+                })
+            }
+            // §4.5.179: the same one-shot hoist for a BURIED framed dyn-formal call. These
+            // arms are reached only when the inout arms above did NOT match (their guard
+            // was false), so a design with both kinds still hoists each across passes.
+            S::If {
+                cond,
+                then_s,
+                else_s,
+                span,
+            } if self.expr_has_dyn_formal_call(cond)
+                && !self.has_unhoistable_dyn_formal_call(cond) =>
+            {
+                let cond2 = self.hoist_dyn_formal_calls(b, cond);
+                Some(S::If {
+                    cond: cond2,
+                    then_s: then_s.clone(),
+                    else_s: else_s.clone(),
+                    span: *span,
+                })
+            }
+            S::Blocking {
+                lhs,
+                delay,
+                event,
+                rhs,
+                span,
+            } if delay.is_none()
+                && event.is_none()
+                && self.expr_has_dyn_formal_call(rhs)
+                // EXCLUDE a rhs that IS the direct call — §4.5.177 handles `x = f(arr)`
+                // itself (and re-hoisting it would loop). Only a NESTED call is hoisted.
+                && self.dyn_formal_call_target(rhs).is_none()
+                && !self.has_unhoistable_dyn_formal_call(rhs) =>
+            {
+                let rhs2 = self.hoist_dyn_formal_calls(b, rhs);
+                Some(S::Blocking {
+                    lhs: lhs.clone(),
+                    delay: delay.clone(),
+                    event: event.clone(),
+                    rhs: rhs2,
+                    span: *span,
+                })
+            }
+            // §4.5.179: `$display`/`$write`/`$strobe`/… args are each evaluated once,
+            // unconditionally → hoist a framed dyn-formal call out of any of them.
+            S::SysTaskCall { name, args, span }
+                if args.iter().any(|a| self.expr_has_dyn_formal_call(a))
+                    && !args.iter().any(|a| self.has_unhoistable_dyn_formal_call(a)) =>
+            {
+                let args2 = args
+                    .iter()
+                    .map(|a| self.hoist_dyn_formal_calls(b, a))
+                    .collect();
+                Some(S::SysTaskCall {
+                    name: name.clone(),
+                    args: args2,
                     span: *span,
                 })
             }
@@ -29047,7 +29279,7 @@ impl Elaborator<'_> {
         // to a temp (emitting its copy-out `Terminator::Call` first), so the statement
         // below lowers as a plain read of the temp. Gated on `inout_func_names`, so a
         // design with no such function skips this entirely and is byte-identical.
-        if !self.inout_func_names.is_empty() {
+        if !self.inout_func_names.is_empty() || !self.dyn_formal_func_names.is_empty() {
             if let Some(rewritten) = self.hoist_stmt_top(b, s) {
                 return self.lower_stmt(b, &rewritten);
             }

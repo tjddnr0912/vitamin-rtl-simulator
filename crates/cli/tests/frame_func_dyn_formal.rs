@@ -116,16 +116,19 @@ fn direct_rhs_for_loop() {
     );
 }
 
-// ── LOUD: a call nested in a bigger expression (not the direct rhs) has no marker ──
+// ── §4.5.179: a call as a `$display` arg (a bigger expression, not the direct rhs) is
+// now SUPPORTED — `hoist_stmt_top` lifts it to a `__t = f(a)` temp (which re-triggers the
+// direct-rhs marker). Full coverage of the hoist (arith/if/short-circuit-loud/…) lives in
+// `frame_func_dyn_formal_nested.rs`. Kept here as the §4.5.177→§4.5.179 transition marker.
 #[test]
-fn nested_in_expr_stays_loud() {
+fn nested_in_display_now_supported() {
     let o = run("module top;\n\
          function automatic int f(input int c[]); int s=0; foreach(c[i]) s+=c[i]; return s; endfunction\n\
          int a[]; initial begin a=new[3]; a[0]=4;a[1]=5;a[2]=6; $display(\"sum=%0d\", f(a)); end\n\
          endmodule\n");
     assert!(
-        is_loud(&o) && o.contains("DIRECT rhs"),
-        "a dyn-formal call as a $display arg must stay loud:\n{o}"
+        !is_loud(&o) && o.contains("sum=15"),
+        "a dyn-formal call as a $display arg is hoisted (§4.5.179) = 15:\n{o}"
     );
 }
 
