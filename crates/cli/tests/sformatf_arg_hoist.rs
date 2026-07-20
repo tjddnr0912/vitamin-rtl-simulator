@@ -199,19 +199,19 @@ fn fd_position_sformatf_stays_loud() {
 }
 
 #[test]
-fn frame_body_display_sformatf_loud() {
-    // Soundness backstop: the hoist runs inside frame (automatic) bodies too, but
-    // `validate_frame_body` rejects BOTH the hoisted temp assignment (a write to a
-    // net outside the function) AND the $display ($systask) — so a $display with a
-    // $sformatf arg in an automatic task/function body is LOUD (base==fix), never a
-    // silent-wrong via `run_frame_call`.
+fn frame_body_display_sformatf_now_supported() {
+    // round-14 V3/V4 Phase 2: a leaf, non-suspending automatic TASK ($display/$sformatf,
+    // no @/#/wait/fork/nested-call) is now routed through the engine's suspendable-frame
+    // path (`run_process`), which handles $systask natively — so this runs and prints
+    // "A[v=8]" (was loud when a $systask in a frame body was rejected). The $sformatf-arg
+    // hoist still functions inside the frame body.
     let (out, c) = run("module t; task automatic show(int v); \
          $display(\"A[%s]\", $sformatf(\"v=%0d\",v)); endtask\n\
          initial begin show(8); #1 $finish; end endmodule\n");
-    assert_ne!(
-        c,
-        Some(0),
-        "frame-body $display+$sformatf must stay loud; got:\n{out}"
+    assert_eq!(c, Some(0), "leaf $display task must run; got:\n{out}");
+    assert!(
+        out.contains("A[v=8]"),
+        "frame-body $display+$sformatf; got:\n{out}"
     );
 }
 

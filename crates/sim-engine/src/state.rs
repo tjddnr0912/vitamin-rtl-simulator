@@ -471,6 +471,11 @@ pub(crate) struct SimState<'a> {
     /// runs the task and writes its outputs to the (possibly module-net) caller
     /// lvalues. Empty ⇒ no frame-task calls.
     pub task_calls_proc: crate::TaskCallProc,
+    /// Round-14 V3/V4: the set of suspendable TASK `FuncId`s (recomputed at startup via
+    /// `sim_ir::compute_suspendable_tasks`). `run_process`'s `Terminator::Call` arm
+    /// routes a call to one of these through the call-stack path instead of the
+    /// synchronous `run_task_call`. Empty ⇒ no suspendable tasks (byte-identical).
+    pub suspendable_tasks: std::collections::BTreeSet<u32>,
     /// B2 frame-call: nested task-call sites (in task bodies), keyed by GLOBAL
     /// `ir.blocks` index. `run_task` consults this; outputs must be frame-local.
     pub task_calls_func: crate::TaskCallFunc,
@@ -793,6 +798,7 @@ impl<'a> SimState<'a> {
             call_depth: Cell::new(0),
             call_fatal: Cell::new(false),
             task_calls_proc: crate::TaskCallProc::new(),
+            suspendable_tasks: std::collections::BTreeSet::new(),
             task_calls_func: crate::TaskCallFunc::new(),
             frame_slot_auto: vec![false; nnets],
             func_has_auto: Vec::new(),
@@ -1031,6 +1037,25 @@ impl<'a> SimState<'a> {
             // integer net ← integer value: unchanged legacy path.
             (false, false) => value,
         };
+
+        // ── Round-14 V3/V4: frame-local write lane ──
+        // A write to a frame-local net from `run_process` (executing a suspendable task
+        // body) MUST route to the frame slot, symmetric with `read_net`'s frame-local read
+        // branch — the flat-store path below would silently write the module net space, so
+        // the output-formal / body-local slot would never be updated (o=0 silent-wrong).
+        // Frame locals are single-chunk scalars; `frame_write_lvalue` handles both a whole
+        // and a bit/part-select write (re-evaluating the offset in this frame's context).
+        // Empty `frame_local` (no frame tasks) ⇒ never taken (byte-identical).
+        if lhs.chunks.len() == 1
+            && self
+                .frame_local
+                .get(lhs.chunks[0].net as usize)
+                .copied()
+                .unwrap_or(false)
+        {
+            self.frame_write_lvalue(lhs, value);
+            return false; // a frame slot is not a flat-store net → no dirty channel
+        }
 
         // ── v5 ⑤: assoc-element lane (single chunk, i64 key) ──
         // The key cannot ride the u32 pairs; `resolve_lvalue_offsets` claims
@@ -2796,6 +2821,87 @@ impl<'a> SimState<'a> {
         out_slots: &[u32],
     ) -> Option<Vec<Value>> {
         self.run_task(callee, in_vals, out_slots)
+    }
+
+    /// Round-14 V3/V4 (suspendable path): push a fresh call frame for `callee` and copy
+    /// in the input actuals — the MANUAL, suspend-safe twin of `run_task`'s setup (which
+    /// uses RAII guards that assume a single synchronous scope). `run_process` drives the
+    /// callee's CFG in between (so NBA/$systask run natively and a `Delay`/`Wait` in the
+    /// body suspends the calling process); `exit_task_frame` pops it at `Return`. The
+    /// window rides the shared `frame_stack` — correct for a non-suspending call (the
+    /// callee runs to completion before any other activity interleaves); a call that
+    /// actually suspends needs the per-activity window (a follow-on phase).
+    pub(crate) fn enter_task_frame(&self, callee: u32, in_vals: &[(u32, Value)]) {
+        let m = self.func_table[callee as usize];
+        let base = m.base_net;
+        let nloc = m.locals_len;
+        self.call_depth.set(self.call_depth.get() + 1);
+        self.frame_scope.borrow_mut().push(callee);
+        let has_auto = self.func_has_auto[callee as usize];
+        let has_static = self.func_has_static[callee as usize];
+        let fresh: Vec<Value> = (0..nloc)
+            .map(|s| {
+                let nv = &self.ir.nets[(base + s) as usize];
+                if nv.kind == NetKind::String {
+                    Value::from_str_bytes(&[])
+                } else {
+                    Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
+                }
+            })
+            .collect();
+        match (has_auto, has_static) {
+            (true, true) => {
+                self.frame_stack.borrow_mut().push(fresh.clone());
+                self.static_store
+                    .borrow_mut()
+                    .entry(callee)
+                    .or_insert(fresh);
+            }
+            (true, false) => self.frame_stack.borrow_mut().push(fresh),
+            (false, _) => {
+                self.static_store
+                    .borrow_mut()
+                    .entry(callee)
+                    .or_insert(fresh);
+            }
+        }
+        for (slot, v) in in_vals {
+            let nv = &self.ir.nets[(base + *slot) as usize];
+            let bound = if self.formal_is_string(callee, *slot as usize) {
+                Value::from_str_bytes(&v.to_str_bytes())
+            } else {
+                v.clone().resize_keep_sign(nv.width.max(1), nv.signed)
+            };
+            self.frame_slot_write(
+                callee,
+                self.frame_slot_auto[(base + *slot) as usize],
+                *slot,
+                bound,
+            );
+        }
+    }
+
+    /// Round-14 V3/V4 (suspendable path): copy out `callee`'s output/inout slots and pop
+    /// its frame — the MANUAL twin of `run_task`'s teardown. Returns the out-slot values
+    /// (the caller writes them to its lvalues). Mirrors `enter_task_frame`'s push order.
+    pub(crate) fn exit_task_frame(&self, callee: u32, out_slots: &[u32]) -> Vec<Value> {
+        let m = self.func_table[callee as usize];
+        let base = m.base_net;
+        let has_auto = self.func_has_auto[callee as usize];
+        let outs: Vec<Value> = out_slots
+            .iter()
+            .map(|&s| {
+                let nv = &self.ir.nets[(base + s) as usize];
+                self.frame_slot_read(callee, self.frame_slot_auto[(base + s) as usize], s)
+                    .resize_keep_sign(nv.width.max(1), nv.signed)
+            })
+            .collect();
+        if has_auto {
+            self.frame_stack.borrow_mut().pop();
+        }
+        self.frame_scope.borrow_mut().pop();
+        self.call_depth.set(self.call_depth.get().saturating_sub(1));
+        outs
     }
 }
 

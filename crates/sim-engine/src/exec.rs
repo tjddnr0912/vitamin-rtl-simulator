@@ -224,23 +224,31 @@ pub(crate) trait Kernel {
 pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
     let mut guard: u64 = 0;
     loop {
-        // ── CENTRALIZED CHILD-COMPLETION INTERCEPT (terminator-agnostic) ──
-        // If this activity is a fork child and the NEXT bb to fetch is its barrier's
-        // join_bb, the child has completed. Report + die BEFORE the join_bb block is
-        // ever fetched (join_bb is a never-executed sentinel). This catches the child
-        // whether it arrives via Goto, Branch, or a resumed Delay/Wait, so a child
-        // whose last statement is an if/case/delay/wait into join_bb is handled.
-        if sched.activity_is_child(pi) {
-            if let Some(jr) = sched.activity_join_ref(pi) {
-                if bb == sched.barrier_join_bb(jr) {
-                    sched.on_child_complete(jr, pi);
-                    return Step::Done; // child dead; rearm skips it (is_child)
+        // Round-14 V3/V4: while this activity is inside a suspendable task call, execute
+        // the TOP frame's task CFG (global `ir.blocks`) below instead of the base process
+        // body; the base-process `bb` is frozen at the call site and resumes at the
+        // frame's `ret_bb` on `Return`. The child-completion intercept keys on the base
+        // `bb`, so it applies only when NOT in a frame.
+        let in_frame = !sched.activities[pi as usize].call_stack.is_empty();
+        if !in_frame {
+            // ── CENTRALIZED CHILD-COMPLETION INTERCEPT (terminator-agnostic) ──
+            // If this activity is a fork child and the NEXT bb to fetch is its barrier's
+            // join_bb, the child has completed. Report + die BEFORE the join_bb block is
+            // ever fetched (join_bb is a never-executed sentinel). This catches the child
+            // whether it arrives via Goto, Branch, or a resumed Delay/Wait, so a child
+            // whose last statement is an if/case/delay/wait into join_bb is handled.
+            if sched.activity_is_child(pi) {
+                if let Some(jr) = sched.activity_join_ref(pi) {
+                    if bb == sched.barrier_join_bb(jr) {
+                        sched.on_child_complete(jr, pi);
+                        return Step::Done; // child dead; rearm skips it (is_child)
+                    }
                 }
             }
+            // Defense-in-depth: a non-child must NEVER fetch a live barrier's join_bb.
+            #[cfg(debug_assertions)]
+            sched.assert_not_parent_at_join(pi, bb);
         }
-        // Defense-in-depth: a non-child must NEVER fetch a live barrier's join_bb.
-        #[cfg(debug_assertions)]
-        sched.assert_not_parent_at_join(pi, bb);
 
         // Snapshot the block's stmt ids + terminator (process-local indexing,
         // resolved through this activity's template).
@@ -281,7 +289,18 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
         // `stmts.clone()`/`term.clone()`/per-stmt `Stmt::clone()` allocated on every
         // block activation — the second-largest malloc source of clock-bound designs.
         let ir = sched.st.ir;
-        let block = &ir.processes[tmpl].body[bb as usize];
+        // Frame-aware fetch: the top task frame's block (global arena) or the base
+        // process body block (process-local index).
+        let cur_bb = if in_frame {
+            sched.activities[pi as usize].call_stack.last().unwrap().bb
+        } else {
+            bb
+        };
+        let block = if in_frame {
+            &ir.blocks[cur_bb as usize]
+        } else {
+            &ir.processes[tmpl].body[cur_bb as usize]
+        };
 
         // ── statements (P7a read/write-phase split) ──
         // Each statement executes in two explicit phases: a READ phase
@@ -299,27 +318,48 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             }
         }
 
-        // ── terminator ──
+        // ── terminator ── (`set_pos!` writes the base-process `bb` or, in a task
+        // frame, the top frame's `bb`; the base-only suspend/fork/delay arms guard on
+        // `in_frame` and fatal defensively — a Phase-2 suspendable task is leaf and
+        // non-suspending, so those never fire from a frame.)
+        macro_rules! set_pos {
+            ($t:expr) => {
+                if in_frame {
+                    sched.activities[pi as usize]
+                        .call_stack
+                        .last_mut()
+                        .unwrap()
+                        .bb = $t;
+                } else {
+                    bb = $t;
+                }
+            };
+        }
         match &block.term {
             Terminator::Goto { target } => {
-                bb = *target;
+                set_pos!(*target);
             }
             Terminator::Branch {
                 cond,
                 then_bb,
                 else_bb,
             } => {
-                bb = if sched.truthy(*cond) {
+                let t = if sched.truthy(*cond) {
                     *then_bb
                 } else {
                     *else_bb
                 };
+                set_pos!(t);
             }
             Terminator::Delay {
                 amount,
                 region,
                 resume,
             } => {
+                if in_frame {
+                    sched.mark_fatal();
+                    return Step::Fatal;
+                }
                 // format_version 4: `amount` is the ExprId of the RAW delay
                 // value in module units — evaluate NOW and scale by this
                 // process's multiplier (X/Z → 0; real → round(v×M)).
@@ -330,6 +370,10 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                 return Step::Suspended;
             }
             Terminator::Wait { cond, resume } => {
+                if in_frame {
+                    sched.mark_fatal();
+                    return Step::Fatal;
+                }
                 match cond {
                     WaitCause::Expr { expr } => {
                         if sched.truthy(*expr) {
@@ -363,8 +407,30 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                 return Step::Suspended;
             }
             Terminator::Return => {
-                sched.rearm(pi);
-                return Step::Done;
+                if in_frame {
+                    // Pop the task frame: copy out its output/inout slots to the caller
+                    // lvalues, then resume the parent at `ret_bb` (the base process here —
+                    // a Phase-2 task is leaf, so the stack is empty after this pop).
+                    let frame = sched.activities[pi as usize].call_stack.pop().unwrap();
+                    let out_s: Vec<u32> = frame.out_binds.iter().map(|&(s, _)| s).collect();
+                    let outs = sched.st.exit_task_frame(frame.callee, &out_s);
+                    for ((_, lval), val) in frame.out_binds.iter().zip(outs) {
+                        let offs = sched.resolve_lvalue_offsets(lval);
+                        sched.st.write_lvalue(lval, val, &offs);
+                    }
+                    if sched.activities[pi as usize].call_stack.is_empty() {
+                        bb = frame.ret_bb;
+                    } else {
+                        sched.activities[pi as usize]
+                            .call_stack
+                            .last_mut()
+                            .unwrap()
+                            .bb = frame.ret_bb;
+                    }
+                } else {
+                    sched.rearm(pi);
+                    return Step::Done;
+                }
             }
             // fork/join/join_any/join_none: register the barrier, spawn each child as
             // a new activity (runnable THIS instant), then either continue at
@@ -375,20 +441,36 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                 children,
                 join,
                 resume_bb,
-            } => match sched.exec_fork(pi, children, *join, *resume_bb) {
-                Some(cont) => {
-                    bb = cont;
+            } => {
+                if in_frame {
+                    sched.mark_fatal();
+                    return Step::Fatal;
                 }
-                None => return Step::Suspended,
-            },
-            // B2 frame-call: a recursive/automatic TASK call. The sidecar carries
-            // the positional arg↔formal binding (the frozen Terminator has none).
-            // Evaluate inputs in THIS (caller) process scope, run the task frame
-            // (&self, re-entrant), then write its outputs to the caller lvalues —
-            // which here MAY be module nets (the &mut executor can write the flat
-            // store). A non-frame Call (no sidecar entry) just advances.
+                match sched.exec_fork(pi, children, *join, *resume_bb) {
+                    Some(cont) => {
+                        bb = cont;
+                    }
+                    None => return Step::Suspended,
+                }
+            }
+            // B2 frame-call: a TASK call from a PROCESS body. Evaluate inputs in THIS
+            // (caller) scope; then either PUSH a suspendable-task frame (round-14 V3/V4 —
+            // `run_process` drives its CFG, handling NBA/$systask, and pops at `Return`)
+            // or run a subset task synchronously (unchanged), writing outputs to the
+            // caller lvalues (which MAY be module nets). A non-frame Call just advances.
             Terminator::Call { ret_bb, .. } => {
-                if let Some(info) = sched.st.task_calls_proc.get(&(tmpl as u32, bb)).cloned() {
+                if in_frame {
+                    // A nested call from a task frame is a follow-on (leaf tasks have no
+                    // Call); fatal defensively rather than mis-run.
+                    sched.mark_fatal();
+                    return Step::Fatal;
+                }
+                if let Some(info) = sched
+                    .st
+                    .task_calls_proc
+                    .get(&(tmpl as u32, cur_bb))
+                    .cloned()
+                {
                     let cm = sched.st.func_table[info.callee as usize];
                     let in_v: Vec<(u32, Value)> = info
                         .in_binds
@@ -400,6 +482,21 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             (slot, v)
                         })
                         .collect();
+                    if sched.st.suspendable_tasks.contains(&info.callee) {
+                        // Suspendable: push a frame; do NOT advance `bb` — the base process
+                        // resumes at `ret_bb` when the frame returns.
+                        sched.st.enter_task_frame(info.callee, &in_v);
+                        let entry = sched.st.ir.funcs[info.callee as usize].entry;
+                        sched.activities[pi as usize]
+                            .call_stack
+                            .push(crate::sched::FrameRec {
+                                callee: info.callee,
+                                bb: entry,
+                                ret_bb: *ret_bb,
+                                out_binds: info.out_binds.clone(),
+                            });
+                        continue; // re-fetch from the new frame next iteration
+                    }
                     let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
                     if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
                         for ((_, lval), val) in info.out_binds.iter().zip(outs) {

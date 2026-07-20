@@ -56,3 +56,67 @@ fn subset_task_unchanged_phase1() {
     assert!(ok, "subset task must still run, got:\n{out}");
     assert!(out.contains("o=7"), "subset task result, got:\n{out}");
 }
+
+// ─── Phase 2: leaf non-suspending tasks routed through run_process (vs iverilog) ───
+#[test]
+fn v4_display_task_runs() {
+    // V4B: a $systask ($display) in an automatic task — leaf, non-suspending — now runs
+    // via the suspendable-frame path. say(7) prints o=7. (iverilog: o=7.)
+    let src = "module t; task automatic say(input int n); $display(\"o=%0d\", n); endtask\n\
+        initial begin say(7); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "$display task must run, got:\n{out}");
+    assert!(out.contains("o=7"), "got:\n{out}");
+}
+
+#[test]
+fn v4_nba_task_runs() {
+    // A non-blocking assign to a module net from a task (no timing) — routed; the NBA
+    // settles after #1. put(8'hAB) then d==ab. (iverilog: o=ab.)
+    let src = "module t; logic [7:0] d;\n\
+        task automatic put(input logic [7:0] v); d <= v; endtask\n\
+        initial begin put(8'hAB); #1 $display(\"o=%0h\", d); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "NBA task must run, got:\n{out}");
+    assert!(out.contains("o=ab"), "got:\n{out}");
+}
+
+#[test]
+fn v4_output_arg_copied_back() {
+    // An OUTPUT formal written in the routed task must be copied back to the caller — the
+    // frame-local write lane (write_lvalue) routes it to the frame slot, not the flat
+    // store. dbl(9) ⇒ o=18. (Regression guard for the o=0 silent-wrong caught in review.)
+    let src = "module t;\n\
+        task automatic dbl(input int a, output int r); r = a * 2; $display(\"in=%0d\", a); endtask\n\
+        initial begin int y; dbl(9, y); $display(\"o=%0d\", y); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "output-arg task must run, got:\n{out}");
+    assert!(
+        out.contains("o=18"),
+        "output arg must be copied back, got:\n{out}"
+    );
+}
+
+#[test]
+fn v4_body_local_write_read() {
+    // A body-local variable written then read inside the routed task (frame-slot RW).
+    // acc(3,4): t1=7, r=14 ⇒ o=14. (iverilog: o=14.)
+    let src = "module t;\n\
+        task automatic acc(input int a, input int b, output int r); int t1; t1 = a + b; r = t1 * 2; endtask\n\
+        initial begin int y; acc(3, 4, y); $display(\"o=%0d\", y); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "body-local task must run, got:\n{out}");
+    assert!(out.contains("o=14"), "got:\n{out}");
+}
+
+#[test]
+fn v3_timing_task_still_loud_phase2() {
+    // GUARD: a task that SUSPENDS (`@(posedge)`) is not yet supported (per-activity-window
+    // phase) — it must stay LOUD (E3009), never silently mis-run on the shared frame_stack.
+    let src = "module t; logic c=0; always #5 c=~c;\n\
+        task automatic w(); @(posedge c); endtask\n\
+        initial begin w(); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "timing task must stay loud in Phase 2, got:\n{out}");
+    assert!(out.contains("frame-call subset"), "got:\n{out}");
+}

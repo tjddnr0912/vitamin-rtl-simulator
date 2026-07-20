@@ -388,7 +388,30 @@ pub(crate) struct Ready {
 /// arena only ever GROWS — ids are never reused or reindexed — so any `Ready`
 /// stored by value in `wheel`/`waiters`/`net_to_edge` stays valid after a later
 /// fork appends.
+/// Round-14 V3/V4: one entry on an activity's suspendable-task call-stack. While the
+/// stack is non-empty, `run_process` executes the TOP frame's task CFG (from the global
+/// `ir.blocks` arena at `bb`) instead of the base process body — so a `Delay`/`Wait` in
+/// a task body suspends the whole activity (the stack is preserved on the `Activity`).
+/// `Return` pops the frame, copies `out_binds` to the caller's lvalues, and resumes the
+/// parent at `ret_bb`.
+pub(crate) struct FrameRec {
+    /// The suspendable task's `FuncId` (index into `func_table` / `ir.funcs`).
+    pub callee: u32,
+    /// Current block in `ir.blocks` for this frame.
+    pub bb: u32,
+    /// Where the PARENT resumes on `Return`: a base-process-local block id when this is
+    /// the only frame (parent is the process), else a global `ir.blocks` id (parent is a
+    /// task frame). The pop site interprets it by whether the stack is then empty.
+    pub ret_bb: u32,
+    /// `(callee out-/inout-slot, caller lvalue)` — copied out at `Return`.
+    pub out_binds: Vec<(u32, sim_ir::Lvalue)>,
+}
+
 pub(crate) struct Activity {
+    /// Round-14 V3/V4: suspendable-task call-stack. Empty for the overwhelming majority
+    /// of activities (the base process runs directly); non-empty only while inside a
+    /// suspendable task call. `run_process` reads the top frame's CFG when non-empty.
+    pub call_stack: Vec<FrameRec>,
     /// Index into `ir.processes` for the body/sensitivity TEMPLATE this activity
     /// runs. Multiple activities may share a template (a child runs a different BB
     /// sub-chain of the SAME `body` Vec as its parent).
@@ -524,7 +547,7 @@ pub(crate) struct Scheduler<'a, 'ir> {
     net_to_edge: Vec<Vec<(EdgeKind, Ready)>>,
     /// Per-activity private state. `index == Ready.proc` (activity id). Seeded 1:1
     /// with `ir.processes` at t0; fork appends children (append-only, never reused).
-    activities: Vec<Activity>,
+    pub(crate) activities: Vec<Activity>,
     /// Live fork join barriers. `index == JoinBarrier id` (a child's `join_ref`).
     /// Slots are RECYCLED through `free_barriers` once every child has reported
     /// (P3-1) — no live reference can outlast that point, so no ABA.
@@ -893,6 +916,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         self.free_barriers.clear();
         self.activities = (0..self.st.ir.processes.len() as u32)
             .map(|pi| Activity {
+                call_stack: Vec::new(),
                 template: pi,
                 tie: pi,
                 join_ref: None,
@@ -2702,6 +2726,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         for (child_idx, &child_entry) in children.iter().enumerate() {
             let child_tie = compose_child_tie(parent_tie, child_idx as u32);
             let child = Activity {
+                call_stack: Vec::new(),
                 template: parent_tmpl,
                 tie: child_tie,
                 join_ref: Some(join_ref),

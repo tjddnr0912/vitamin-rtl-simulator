@@ -3198,6 +3198,12 @@ struct Elaborator<'s> {
     /// PER-INSTANCE (saved/restored). The task-call divert (`inline_task`) emits a
     /// `Terminator::Call` + a `TaskCallInfo` when the callee is here.
     task_frame_idx: BTreeMap<String, u32>,
+    /// Round-14 V3/V4: frame-TASK bodies whose reject decision is DEFERRED to a
+    /// post-pass — `(fid, name, block_base, net_base, locals_len)`. Once every task is
+    /// lowered, `sim_ir::compute_suspendable_tasks` gives the transitive suspendable set,
+    /// so a leaf non-suspending task is lifted (the engine routes it) while a
+    /// timing/nested/transitively-suspendable one stays loud (E3009).
+    frame_task_pending: Vec<(u32, String, u32, u32, u32)>,
     /// B2: accumulated process-body task-call sites (→ `Sidecars.task_calls_proc`).
     task_calls_proc: TaskCallProc,
     /// B2: accumulated nested (task-body) task-call sites (→ `task_calls_func`).
@@ -3736,6 +3742,7 @@ impl<'s> Elaborator<'s> {
             func_blocks: Vec::new(),
             frame_idx: BTreeMap::new(),
             task_frame_idx: BTreeMap::new(),
+            frame_task_pending: Vec::new(),
             task_calls_proc: BTreeMap::new(),
             task_calls_func: BTreeMap::new(),
             frame_task_lowering: false,
@@ -15676,6 +15683,90 @@ impl<'s> Elaborator<'s> {
             let fid = self.task_frame_idx[name];
             self.lower_frame_task_body(name, &task, fid);
         }
+        self.resolve_frame_task_rejects();
+    }
+
+    /// Round-14 V3/V4: decide the DEFERRED frame-TASK reject now that every task body is
+    /// lowered. `compute_suspendable_tasks` gives the transitive suspendable set:
+    /// - a task in that set that is LEAF and NON-SUSPENDING (no `Delay`/`Wait`/`Fork`/
+    ///   `Call` terminator in its own body) is LIFTED — the engine routes it through
+    ///   `run_process` (V3/V4 Phase 2). Its `$display`/NBA run and it needs no suspend.
+    /// - a task in the set that is otherwise (has timing, or a nested/transitive call to a
+    ///   suspendable task) stays LOUD (E3009) — the per-activity-window + nested-frame
+    ///   phases are a follow-on; running it now would drop it onto the synchronous
+    ///   executor (silent-wrong), so correct-or-loud keeps it a clean reject.
+    /// - a task NOT in the set is a plain subset task (or an lvalue-kind non-subset one) —
+    ///   the classic `validate_frame_body` (a subset task calling only subset tasks runs
+    ///   synchronously, byte-identical to before this feature).
+    fn resolve_frame_task_rejects(&mut self) {
+        let full = ir::compute_suspendable_tasks(&self.funcs, &self.func_blocks, &self.stmts);
+        let pending = std::mem::take(&mut self.frame_task_pending);
+        for (fid, name, base, base_net, locals_len) in pending {
+            if full.contains(&fid) {
+                if self.frame_body_is_leaf_nonsuspending(fid) {
+                    // lifted — the engine's suspendable-frame path runs it.
+                } else {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "frame task `{name}` body uses a timing/suspend/fork or nested \
+                             suspendable-task call, which is outside the frame-call subset \
+                             (a leaf non-suspending task — $display/NBA to its own locals or \
+                             module nets, no @/#/wait/fork/nested-task-call — is supported)"
+                        ),
+                    );
+                }
+            } else {
+                self.validate_frame_body(&name, base, base_net, locals_len, true);
+            }
+        }
+    }
+
+    /// Round-14 V3/V4 Phase 2: is task `fid` a LEAF, NON-SUSPENDING frame task — it
+    /// carries a suspend signal (an NBA/$systask/force/release statement) but NO
+    /// `Delay`/`Wait`/`Fork`/`Call` terminator, so `run_process` can run it to completion
+    /// within one call using the shared frame window (no interleaving, no nested frame).
+    /// Walks the REACHABLE blocks from the task's entry (a range walk would spill into
+    /// later tasks' blocks — every task's body sits in the shared `func_blocks` arena).
+    fn frame_body_is_leaf_nonsuspending(&self, fid: u32) -> bool {
+        let mut has_signal = false;
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![self.funcs[fid as usize].entry];
+        while let Some(b) = stack.pop() {
+            if !seen.insert(b) {
+                continue;
+            }
+            let Some(blk) = self.func_blocks.get(b as usize) else {
+                continue;
+            };
+            match &blk.term {
+                ir::Terminator::Delay { .. }
+                | ir::Terminator::Wait { .. }
+                | ir::Terminator::Fork { .. }
+                | ir::Terminator::Call { .. } => return false,
+                ir::Terminator::Goto { target } => stack.push(*target),
+                ir::Terminator::Branch {
+                    then_bb, else_bb, ..
+                } => {
+                    stack.push(*then_bb);
+                    stack.push(*else_bb);
+                }
+                ir::Terminator::Return => {}
+            }
+            for &sid in &blk.stmts {
+                if !matches!(
+                    self.stmts[sid as usize],
+                    ir::Stmt::BlockingAssign { .. }
+                        | ir::Stmt::Disable {
+                            scope_kind: ir::DisableKind::Scope,
+                            ..
+                        }
+                ) {
+                    has_signal = true;
+                }
+            }
+        }
+        has_signal
     }
 
     /// B2: THIS module's recursive TASKS (self or mutual). A non-recursive task
@@ -16602,7 +16693,12 @@ impl<'s> Elaborator<'s> {
             self.task_calls_func.insert(base + local_block, info);
         }
         let m = self.func_metas[fid as usize];
-        self.validate_frame_body(name, base, m.base_net, m.locals_len, true);
+        // Round-14 V3/V4: DEFER the frame-TASK reject decision to `resolve_frame_task_rejects`
+        // (run after every task is lowered) — a leaf non-suspending task is lifted for the
+        // engine's suspendable-frame path, so its reject can only be decided once the full
+        // transitive suspendable set is known.
+        self.frame_task_pending
+            .push((fid, name.to_string(), base, m.base_net, m.locals_len));
     }
 
     /// B2: emit a frame-TASK call. Seals the current block with `Terminator::Call`

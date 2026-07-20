@@ -645,6 +645,12 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.task_calls_func = opts.task_calls_func.clone(); // B2
     st.max_class_objs = opts.max_class_objs; // CLASS-HEAP-CAP
 
+    // Round-14 V3/V4: recompute the suspendable-task set from the SimIr func arena — no
+    // serialized sidecar (format_version 22 unchanged), identical on the one-shot and
+    // staged paths. `run_process` routes these tasks through the call-stack path.
+    st.suspendable_tasks =
+        sim_ir::compute_suspendable_tasks(&st.ir.funcs, &st.ir.blocks, &st.ir.stmts);
+
     let reason = {
         let mut sched = Scheduler::new(&mut st, opts.max_deltas, opts.time_limit, opts.fork_modes);
         // t0 structural settle. If it can't converge (cont-assign oscillator),
