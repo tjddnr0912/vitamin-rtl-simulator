@@ -18048,7 +18048,15 @@ impl<'s> Elaborator<'s> {
         // here — before frame/inline dispatch — so it can never silently mis-lower
         // (a whole-array actual would otherwise hit the incidental whole-array guard,
         // but a clear message is better; correct-or-loud).
-        if task.ports.iter().any(|p| !p.unpacked.is_empty()) {
+        // V2A: an `input` DYNAMIC-array formal (`byte b[]`) is EXEMPT — the inline
+        // (static-task) path below aliases the caller's `DynArray` handle via
+        // `dyn_subst` (read-only), exactly like the R11 function inline path. Every
+        // OTHER unpacked-array formal (fixed `[0:N]`, output/inout dyn-array) stays loud.
+        if task
+            .ports
+            .iter()
+            .any(|p| !p.unpacked.is_empty() && !self.is_input_dyn_array_formal(p))
+        {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
@@ -18061,6 +18069,21 @@ impl<'s> Elaborator<'s> {
         // B2 frame-call: a recursive/automatic task is LOWERED to the func arena
         // (reserved in step 6.5) — emit a Terminator::Call + register the binding.
         if let Some(&fid) = self.task_frame_idx.get(tname.as_str()) {
+            // V2A: an input dyn-array formal in a FRAMED (automatic/recursive) task needs
+            // the handle-in-frame-slot infrastructure (V5) — the frame formal is a fixed
+            // scalar slot, not a `DynArray` handle, so `b[i]`/`b.size()` would mis-lower.
+            // The inline/static path handles it via `dyn_subst`; loud here until V5.
+            if task.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "a dynamic-array formal in the automatic/recursive task `{tname}` \
+                         is not yet supported (declare the task static, or pass a \
+                         fixed-size packed vector)"
+                    ),
+                );
+                return;
+            }
             self.emit_frame_task_call(b, fid, &task, args);
             return;
         }
@@ -18157,10 +18180,46 @@ impl<'s> Elaborator<'s> {
         };
         // (caller lvalue, local_net), in arg order — copied out at task exit.
         let mut copy_out: Vec<(ir::Lvalue, u32)> = Vec::new();
+        // V2A: (formal name → caller DynArray NetId) read-only aliases, pushed onto
+        // `dyn_subst` around the body lowering below (mirrors the function inline path).
+        let mut dyn_binds: Vec<(String, u32)> = Vec::new();
         for (i, (p, a)) in task.ports.iter().zip(eff_args.iter().copied()).enumerate() {
             let local = locals[i];
             match p.dir {
                 ast::PortDir::Input => {
+                    // V2A: an `input` dyn-array formal is pass-by-VALUE (IEEE §13.5.1).
+                    // A task body has full STATEMENTS, so it (or a callee) can mutate the
+                    // underlying array WHILE reading `b` — a bare read-only alias to the
+                    // caller's handle would then leak the mutation into `b` (silent-wrong).
+                    // So SNAPSHOT: allocate a fresh DynArray temp, deep-copy the caller's
+                    // array into it at entry (`handle_copy_stmts`), and alias `b` to the
+                    // COPY via `dyn_subst`. (The R11 FUNCTION path needs no snapshot — it
+                    // loud-rejects statement bodies, so a function can't mutate mid-body,
+                    // making its direct alias safe.) A non-bare / mismatched actual is loud.
+                    if self.is_input_dyn_array_formal(p) {
+                        match self.dyn_array_actual_net(a, p) {
+                            Some(caller_net) => {
+                                let snap = self.alloc_dyn_snapshot(caller_net);
+                                let sid = self.push_stmt(ir::Stmt::SysTask {
+                                    which: ir::SysTaskId::Display,
+                                    fmt: None,
+                                    args: Vec::new(),
+                                });
+                                self.handle_copy_stmts.insert(sid, (snap, caller_net));
+                                b.push_stmt_id(sid);
+                                dyn_binds.push((p.name.name.clone(), snap));
+                            }
+                            None => self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "task `{tname}`: dynamic-array formal `{}` needs a bare \
+                                     matching dynamic-array actual",
+                                    p.name.name
+                                ),
+                            ),
+                        }
+                        continue;
+                    }
                     // Copy the actual IN to the formal-width local (a SNAPSHOT,
                     // truncated to the formal width); bind the formal to a read of that
                     // local — so body reads see the formal width (§13.5.3), not the
@@ -18294,6 +18353,12 @@ impl<'s> Elaborator<'s> {
         // called 3× prints 1,2,3, not 1,1,1 (an inline task is always static;
         // automatic/recursive tasks divert to the per-call frame path). A task with
         // NO body-locals takes the exact prior path (no scope, byte-identical IR).
+        // V2A: activate the input dyn-array aliases for the body's read paths
+        // (`b[i]`/`b.size()` resolve `b` to the caller net via `dyn_subst_lookup`),
+        // popped after the body below. Empty for a task with no dyn-array formal
+        // (byte-identical).
+        let n_dyn = dyn_binds.len();
+        self.dyn_subst.extend(dyn_binds);
         let mut tlocals = task.body_decls.clone();
         collect_block_local_decls(&task.body, &mut tlocals);
         self.inline_stack.push(tname.clone());
@@ -18335,6 +18400,7 @@ impl<'s> Elaborator<'s> {
         // pop our frames so sibling/outer code is unaffected.
         self.subst.truncate(subst_base);
         self.out_subst.truncate(out_base);
+        self.dyn_subst.truncate(self.dyn_subst.len() - n_dyn); // V2A: pop dyn-array aliases
     }
 
     /// Lower an inline-task body with the `return`-exit-block gating (a `return;`
@@ -19329,6 +19395,39 @@ impl<'s> Elaborator<'s> {
             )
     }
 
+    /// V2A: allocate a fresh `DynArray` temp net MIRRORING the element type of
+    /// `caller_net` (an existing dyn-array handle) — width/msb/lsb/sign + 2-state
+    /// membership — so the whole-handle deep-copy (`handle_copy_stmts`) accepts it (its
+    /// guard louds on any element-type mismatch) and `b[i]` reads coerce X/Z→0 for a
+    /// 2-state element. Holds the pass-by-value copy of an `input` dyn-array TASK formal;
+    /// the synthetic name (`__dynsnap_<id>`) is never looked up (the body reads the
+    /// formal, aliased to this net id via `dyn_subst`).
+    fn alloc_dyn_snapshot(&mut self, caller_net: u32) -> u32 {
+        let (width, msb, lsb, signed) = {
+            let nv = &self.nets[caller_net as usize];
+            (nv.width, nv.msb, nv.lsb, nv.signed)
+        };
+        let two_state = self.two_state_heap_handles.contains(&caller_net);
+        let snap = self.nets.len() as u32;
+        self.add_net(
+            &format!("__dynsnap_{snap}"),
+            ir::NetVar {
+                kind: ir::NetKind::DynArray,
+                width,
+                msb,
+                lsb,
+                signed,
+                array_len: 0, // heap handle — elements live in the engine heap
+                dir: ir::PortDir::Internal,
+                init: default_init(ast::NetVarKind::Reg, width.max(1)),
+            },
+        );
+        if two_state {
+            self.two_state_heap_handles.insert(snap);
+        }
+        snap
+    }
+
     /// R2: the caller's DynArray NetId for a dyn-array actual — a BARE single-seg
     /// Ident resolving to a `NetKind::DynArray` net whose element width matches the
     /// formal's. `None` (→ loud) for a select / queue / assoc / non-dyn / mismatched
@@ -19340,7 +19439,15 @@ impl<'s> Elaborator<'s> {
         if path.segments.len() != 1 {
             return None;
         }
-        let net = self.lookup_net_scoped(&path.segments[0].name)?;
+        // Re-forwarding: while an R2 body is lowered, a dyn-array FORMAL name is a
+        // `dyn_subst` alias to the caller's DynArray net (not a real net in `symbols`).
+        // Consult it FIRST so `outer(input b[])` can pass `b` on to a nested
+        // `inner(b)` (transitive read-only aliasing) — mirroring `dyn_handle_read`.
+        // Outside an R2 body `dyn_subst` is empty ⇒ byte-identical to the plain lookup.
+        let name = &path.segments[0].name;
+        let net = self
+            .dyn_subst_lookup(name)
+            .or_else(|| self.lookup_net_scoped(name))?;
         let (nw, ns) = {
             let nv = self.nets.get(net as usize)?;
             if nv.kind != ir::NetKind::DynArray {

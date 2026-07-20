@@ -703,3 +703,127 @@ fn r5a_function_input_struct_formal_supported() {
         initial begin rec_t r; r.count=5; if(rd(r)==15) $display(\"PASS\"); $finish; end endmodule";
     assert_eq!(run(src).0, "PASS");
 }
+
+// ───────────── V2A (§4.5.170): TASK `input` dynamic-array formal ─────────────
+// A STATIC task with an `input` dyn-array formal aliases the caller's DynArray
+// read-only via `dyn_subst` — the same R2 machinery the function path uses.
+#[test]
+fn v2a_task_input_dyn_array_supported() {
+    // `.size()` + element reads in a static task. sum = 10+20+30 = 60, size 3.
+    let src = "module t;\n\
+        byte arr[];\n\
+        task consume(input byte b[], output int r);\n\
+          integer i; r=0; for(i=0;i<b.size();i=i+1) r=r+b[i]; r=r+b.size(); endtask\n\
+        initial begin int x; arr=new[3]; arr[0]=10; arr[1]=20; arr[2]=30;\n\
+          consume(arr,x); if(x==63) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn v2a_task_dyn_pass_by_value() {
+    // IEEE §13.5.1: an `input` dyn-array formal is pass-by-VALUE. The body mutates the
+    // caller's array (`a[0]=999`) AFTER entry; the formal `b` must read the pre-call
+    // SNAPSHOT (10), NOT the mutation — the alias-vs-copy silent-wrong the adversarial
+    // 2-lens caught. vita snapshots the caller's handle into a fresh DynArray temp
+    // (`alloc_dyn_snapshot` + `handle_copy_stmts`) at task entry.
+    let src = "module t;\n\
+        int a[];\n\
+        task consume(input int b[], output int r); a[0]=999; r=b[0]; endtask\n\
+        initial begin int x; a=new[2]; a[0]=10; a[1]=20; consume(a,x);\n\
+          if(x==10) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn v2a_task_dyn_pass_by_value_indirect() {
+    // Pass-by-value must also hold when a CALLEE mutates the array: `poke()` writes
+    // `a[1]` before `b[1]` is read. The snapshot isolates b → 20, not 777.
+    let src = "module t;\n\
+        int a[];\n\
+        task poke(); a[1]=777; endtask\n\
+        task consume(input int b[], output int r); poke(); r=b[1]; endtask\n\
+        initial begin int x; a=new[2]; a[0]=10; a[1]=20; consume(a,x);\n\
+          if(x==20) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn v2a_task_signed_int_element() {
+    // A signed `int` element reads negative (no unsigned collapse). 100+(-7)=93.
+    let src = "module t;\n\
+        int arr[];\n\
+        task consume(input int b[], output int r); r=b[0]+b[1]; endtask\n\
+        initial begin int x; arr=new[2]; arr[0]=100; arr[1]=-7;\n\
+          consume(arr,x); if(x==93) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn v2a_task_dyn_reforward_supported() {
+    // Re-forwarding: a dyn-array formal passed on to a NESTED task (transitive
+    // read-only alias via `dyn_array_actual_net`'s `dyn_subst` consult). inner sees
+    // size 3, element[1]=8.
+    let src = "module t;\n\
+        byte arr[];\n\
+        task inner(input byte c[], output int r); r=c.size()*100 + c[1]; endtask\n\
+        task outer(input byte b[], output int r); inner(b, r); endtask\n\
+        initial begin int x; arr=new[3]; arr[0]=7; arr[1]=8; arr[2]=9;\n\
+          outer(arr,x); if(x==308) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn v2a_function_reforward_still_works() {
+    // The shared `dyn_array_actual_net` change must also let a FUNCTION re-forward its
+    // dyn-array formal (and not regress the non-forward function path). 3+8 = 11.
+    let src = "module t;\n\
+        byte arr[];\n\
+        function automatic int inner(input byte c[]); return c.size()+c[1]; endfunction\n\
+        function automatic int outer(input byte b[]); return inner(b); endfunction\n\
+        initial begin arr=new[3]; arr[0]=7; arr[1]=8; arr[2]=9;\n\
+          if(outer(arr)==11) $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn v2a_automatic_task_dyn_array_loud() {
+    // An AUTOMATIC (frame) task with a dyn-array formal needs the handle-in-frame-slot
+    // infra (V5) — loud until then (NOT a silent mis-lower). correct-or-loud.
+    let src = "module t;\n\
+        byte arr[];\n\
+        task automatic consume(input byte b[]); $display(\"o=%0d\", b[0]); endtask\n\
+        initial begin arr=new[1]; arr[0]=5; consume(arr); $finish; end endmodule";
+    assert!(loud(src), "automatic-task dyn-array formal must stay loud");
+}
+
+#[test]
+fn v2a_task_dyn_write_loud() {
+    // Writing the read-only input alias (`b[0]=x`) stays loud (E3010) — never a silent
+    // corruption of the caller's array. Mirrors the function R2 write asymmetry.
+    let src = "module t;\n\
+        byte arr[];\n\
+        task consume(input byte b[]); b[0]=9; endtask\n\
+        initial begin arr=new[2]; consume(arr); $finish; end endmodule";
+    assert!(loud(src), "write to input dyn-array formal must stay loud");
+}
+
+#[test]
+fn v2a_task_dyn_sign_mismatch_loud() {
+    // `byte b[]` <- `byte unsigned arr[]`: an element-signedness mismatch would read
+    // 0xFF as 255 (unsigned) vs -1 (signed) — loud rather than silent-wrong.
+    let src = "module t;\n\
+        byte unsigned arr[];\n\
+        task consume(input byte b[]); $display(\"o=%0d\", b[0]); endtask\n\
+        initial begin arr=new[1]; arr[0]=8'hFF; consume(arr); $finish; end endmodule";
+    assert!(loud(src), "sign-mismatched dyn-array actual must stay loud");
+}
+
+#[test]
+fn v2a_task_dyn_queue_actual_loud() {
+    // A queue actual (`int q[$]`) to a dyn-array formal is a different NetKind — loud.
+    let src = "module t;\n\
+        int q[$];\n\
+        task consume(input int b[]); $display(\"o=%0d\", b[0]); endtask\n\
+        initial begin q.push_back(5); consume(q); $finish; end endmodule";
+    assert!(loud(src), "queue actual to dyn-array formal must stay loud");
+}
