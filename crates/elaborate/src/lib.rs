@@ -17284,6 +17284,32 @@ impl<'s> Elaborator<'s> {
         locals_len: u32,
         allow_call: bool,
     ) {
+        if let Some(w) = self.classify_frame_body(block_base, net_base, locals_len, allow_call) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "frame function/task `{name}` body uses {w}, which is outside the \
+                     frame-call subset (only blocking assigns to its own locals, \
+                     if/else/case/loops, and nested task calls are supported)"
+                ),
+            );
+        }
+    }
+
+    /// Round-14 V3/V4: classify a frame body — `None` = SUBSET (blocking-assigns to
+    /// its own locals + control flow + nested subset calls, executable synchronously
+    /// by `run_task_call`); `Some(reason)` = NON-SUBSET (a timing/suspend/fork
+    /// terminator, an NBA/$systask/force/release statement, or an out-of-frame /
+    /// part-select / array-element blocking assign). `validate_frame_body` turns
+    /// `Some` into the loud E3009 (behaviour unchanged this phase); a later phase
+    /// routes a `Some` TASK to the suspendable-frame engine path instead of rejecting.
+    fn classify_frame_body(
+        &self,
+        block_base: u32,
+        net_base: u32,
+        locals_len: u32,
+        allow_call: bool,
+    ) -> Option<&'static str> {
         let (lo, hi) = (net_base, net_base + locals_len);
         let mut why: Option<&'static str> = None;
         for bi in block_base as usize..self.func_blocks.len() {
@@ -17352,16 +17378,7 @@ impl<'s> Elaborator<'s> {
                 }
             }
         }
-        if let Some(w) = why {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "frame function/task `{name}` body uses {w}, which is outside the \
-                     frame-call subset (only blocking assigns to its own locals, \
-                     if/else/case/loops, and nested task calls are supported)"
-                ),
-            );
-        }
+        why
     }
 
     /// Declared return self-width + signedness of a function (`function [15:0]`,
