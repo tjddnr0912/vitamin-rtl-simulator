@@ -3419,6 +3419,14 @@ struct Elaborator<'s> {
     // (warn+skip) path. `false` in a process body AND an INLINE task body (both
     // lowered into the process statement stream, where the sys-read DOES execute).
     in_frame_body: bool,
+    // §4.5.177: set ONLY while lowering the rhs of a blessed direct-rhs call
+    // `x = f(dynarr)` at module-process level — where `lower_stmt` has already emitted the
+    // `handle_copy` snapshot marker that fills the callee's dyn-array formal heap slot.
+    // `emit_frame_call` binds a function's `input` dyn-array formal ONLY when this is set;
+    // every other call context (nested in a bigger expr, inside a `&self` subroutine body,
+    // etc.) has no marker → the formal would read empty → loud (correct-or-loud by
+    // construction: no marker ⇒ no support).
+    dyn_formal_call_ok: bool,
     // Frame-local nets that came from an UNPACKED-array decl (`reg [7:0] mem [0:3]`).
     // These reserve as a 1-elem net (the array is outside the frame-call subset), so a
     // `mem[k]` select mis-lowers to a bit-select of that 1-elem net — `validate_frame_
@@ -3799,6 +3807,7 @@ impl<'s> Elaborator<'s> {
             cur_return: None,
             cur_discard: None,
             in_frame_body: false,
+            dyn_formal_call_ok: false,
             frame_array_local: std::collections::BTreeSet::new(),
             frame_arr_formal_meta: std::collections::BTreeMap::new(),
             class_handle_nets: std::collections::BTreeSet::new(),
@@ -15446,6 +15455,42 @@ impl<'s> Elaborator<'s> {
         let mut actual_ids: Vec<u32> = Vec::with_capacity(eff_args.len());
         for (i, &a) in eff_args.iter().enumerate() {
             let p = &ports[i];
+            // §4.5.177: an `input` DYNAMIC-array formal (reserved as a `DynArray` net) is
+            // supported ONLY on the blessed direct-rhs path (`x = f(arr)` at module-process
+            // level), where `lower_stmt` has emitted the `handle_copy` snapshot marker that
+            // fills the formal's heap slot. An UNBLESSED call has no marker, so the formal
+            // would read an empty array — loud (correct-or-loud by construction). When
+            // blessed, the arg is a placeholder (the real data rode the marker; the frame
+            // window slot for a dyn-array formal is never read — reads go to the heap).
+            if self.is_input_dyn_array_formal(p) {
+                if !self.dyn_formal_call_ok {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "function `{fname}`: a dynamic-array formal `{}` is supported only \
+                             as the DIRECT rhs of a blocking assignment at module-process level \
+                             (`x = {fname}(arr);`), where the caller array is snapshotted",
+                            p.name.name
+                        ),
+                    );
+                    actual_ids.push(self.placeholder_expr());
+                    continue;
+                }
+                // The actual must be a bare dyn-array net of matching element type — the
+                // marker (`lower_stmt`) deep-copies THAT net into the formal's heap slot.
+                if self.dyn_array_actual_net(a, p).is_none() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "function `{fname}`: dynamic-array formal `{}` needs a bare matching \
+                             dynamic-array actual",
+                            p.name.name
+                        ),
+                    );
+                }
+                actual_ids.push(self.const_u32_expr(0, 1));
+                continue;
+            }
             // §13.3 UARR: an unpacked-array formal takes a whole-array actual packed
             // into its md-packed slot; a formal outside the supported slice is
             // loud-rejected here (the earlier reserve left a sane placeholder net).
@@ -15477,6 +15522,66 @@ impl<'s> Elaborator<'s> {
             func: fid,
             args: actual_ids,
         })
+    }
+
+    /// §4.5.177: for a direct-rhs `x = f(arr)` where `f` is a FRAMED function (reserved
+    /// via `reserve_frame_func`) with an `input` dyn-array formal, and we are at
+    /// module-process level (`!in_frame_body`, so a `handle_copy` marker CAN run in the
+    /// `&mut` process executor), emit one snapshot marker per bare dyn actual — a no-op
+    /// `Display` whose StmtId maps (in `handle_copy_stmts`) to `(formal heap net, caller
+    /// net)`, deep-copying the caller array into the callee formal's per-activation heap
+    /// slot at run time — and set `dyn_formal_call_ok` so `emit_frame_call` binds the
+    /// formal. Returns whether the call was blessed (caller clears the flag after lowering
+    /// the rhs). Every non-matching case returns `false`, leaving the call loud in
+    /// `emit_frame_call` (no marker ⇒ no support; correct-or-loud by construction). A
+    /// framed function's `&self` executor can never mutate a dyn-array, so the snapshot is
+    /// a sound pass-by-value/alias.
+    fn emit_frame_dyn_formal_markers(
+        &mut self,
+        b: &mut ProcessBuilder,
+        delay: Option<&ast::Delay>,
+        rhs: &ast::Expr,
+    ) -> bool {
+        if delay.is_some() || self.in_frame_body {
+            return false;
+        }
+        let ast::ExprKind::Call { name, args } = &rhs.kind else {
+            return false;
+        };
+        if name.segments.len() != 1 {
+            return false;
+        }
+        let fname = &name.segments[0].name;
+        let Some(&fid) = self.frame_idx.get(fname.as_str()) else {
+            return false;
+        };
+        let Some(func) = self.func_table.get(fname.as_str()).cloned() else {
+            return false;
+        };
+        if !func.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
+            return false;
+        }
+        let base_net = self.func_metas[fid as usize].base_net;
+        for (i, p) in func.ports.iter().enumerate() {
+            if !self.is_input_dyn_array_formal(p) {
+                continue;
+            }
+            let Some(a) = args.get(i) else { continue };
+            // A bare matching dyn-array actual → snapshot it into the formal's heap slot.
+            // A non-bare / mismatched actual gets NO marker — `emit_frame_call` louds it.
+            if let Some(caller_net) = self.dyn_array_actual_net(a, p) {
+                let formal_net = base_net + i as u32;
+                let sid = self.push_stmt(ir::Stmt::SysTask {
+                    which: ir::SysTaskId::Display,
+                    fmt: None,
+                    args: Vec::new(),
+                });
+                self.handle_copy_stmts.insert(sid, (formal_net, caller_net));
+                b.push_stmt_id(sid);
+            }
+        }
+        self.dyn_formal_call_ok = true;
+        true
     }
 
     /// §13.3 UARR: lower an unpacked-array ACTUAL (`pick(tbl, …)`) into the packed
@@ -16478,6 +16583,37 @@ impl<'s> Elaborator<'s> {
         let auto_override = self.with_scope(&scope_seg, |s| {
             // [0..n_params): input formals, port order.
             for p in &func.ports {
+                // §4.5.177: an `input` DYNAMIC-array formal (`int c[]`) in a FRAMED
+                // (automatic/recursive, control-flow-body) function is a per-activation
+                // `DynArray` heap net — the caller's array is snapshotted into it at the
+                // call site (`emit_frame_call` + a `handle_copy` marker). A framed
+                // function's `&self` executor can never mutate a dyn-array (`new[]` /
+                // element write both need `&mut` heap), so the snapshot is a safe
+                // pass-by-value/alias. Reads route to the heap (`read_net` dyn branch) and
+                // §4.5.176 makes `foreach(c[i])` / `c.first(k)` work inside the body. A
+                // STRAIGHT-LINE dyn-formal function still takes the R2 inline alias path.
+                if s.is_input_dyn_array_formal(p) {
+                    let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                    let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
+                    let net = s.nets.len() as u32;
+                    s.add_net(
+                        &p.name.name,
+                        ir::NetVar {
+                            kind: ir::NetKind::DynArray,
+                            width: w.max(1),
+                            msb,
+                            lsb,
+                            signed,
+                            array_len: 0, // heap handle — elements live in the engine heap
+                            dir: ir::PortDir::Internal,
+                            init: default_init(kind, w.max(1)),
+                        },
+                    );
+                    if net_kind_is_two_state(kind) {
+                        s.two_state_heap_handles.insert(net);
+                    }
+                    continue;
+                }
                 // §13.3 UARR: an unpacked-array formal lowers to an md-packed
                 // `[count][elem_w]` frame slot so `arr[i]` reuses the md-packed
                 // element read/write machinery; the call site packs the actual
@@ -29026,10 +29162,21 @@ impl Elaborator<'_> {
                 if self.scanf_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
+                // §4.5.177: a direct-rhs `x = f(arr)` to a FRAMED function with an `input`
+                // dyn-array formal, at module-process level — emit the `handle_copy`
+                // snapshot marker(s) that fill the callee formal's heap slot, and BLESS the
+                // call so `emit_frame_call` (during `lower_expr` below) binds the formal.
+                // Every other context returns false here → the call stays loud in
+                // `emit_frame_call` (no marker ⇒ no support). The flag is cleared right
+                // after the rhs lowers so it never leaks to a later statement.
+                let dyn_blessed = self.emit_frame_dyn_formal_markers(b, delay.as_ref(), rhs);
                 // N7: reject forging a handle from an integral / leaking a handle
                 // to an integral (closes the use-after-free hole).
                 self.check_handle_assign(lhs, rhs);
                 let rhs_id = self.lower_expr(rhs);
+                if dyn_blessed {
+                    self.dyn_formal_call_ok = false;
+                }
                 let lv = self.lower_lvalue(lhs);
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
                                                    // §5.7.1: context-determined fill literal → lvalue width.
