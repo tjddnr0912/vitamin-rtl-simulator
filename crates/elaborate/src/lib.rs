@@ -3212,7 +3212,7 @@ struct Elaborator<'s> {
     /// timing/nested/transitively-suspendable one stays loud (E3009). The trailing bool
     /// = the AST had a `repeat(...)` with a timing body (a shared-counter hazard — keep
     /// loud), captured from the AST before it is lost to the IR desugar.
-    frame_task_pending: Vec<(u32, String, u32, u32, u32, bool)>,
+    frame_task_pending: Vec<(u32, String, u32, u32, bool)>,
     /// B2: accumulated process-body task-call sites (→ `Sidecars.task_calls_proc`).
     task_calls_proc: TaskCallProc,
     /// B2: accumulated nested (task-body) task-call sites (→ `task_calls_func`).
@@ -11463,7 +11463,8 @@ impl<'s> Elaborator<'s> {
         }
         self.funcs[fid as usize].entry = base + entry;
         let m = self.func_metas[fid as usize];
-        self.validate_frame_body(&method.name, base, m.base_net, m.locals_len, false);
+        let entry_bb = self.funcs[fid as usize].entry;
+        self.validate_frame_body(&method.name, entry_bb, m.base_net, m.locals_len, false);
     }
 
     /// Lower every class method (reserve all fids first so mutual/forward method
@@ -15679,7 +15680,7 @@ impl<'s> Elaborator<'s> {
     fn resolve_frame_task_rejects(&mut self) {
         let full = ir::compute_suspendable_tasks(&self.funcs, &self.func_blocks, &self.stmts);
         let pending = std::mem::take(&mut self.frame_task_pending);
-        for (fid, name, base, base_net, locals_len, unsafe_repeat) in pending {
+        for (fid, name, base_net, locals_len, unsafe_repeat) in pending {
             if full.contains(&fid) {
                 if self.frame_body_is_leaf_nonsuspending(fid)
                     && !unsafe_repeat
@@ -15699,7 +15700,8 @@ impl<'s> Elaborator<'s> {
                     );
                 }
             } else {
-                self.validate_frame_body(&name, base, base_net, locals_len, true);
+                let entry_bb = self.funcs[fid as usize].entry;
+                self.validate_frame_body(&name, entry_bb, base_net, locals_len, true);
             }
         }
     }
@@ -16712,7 +16714,8 @@ impl<'s> Elaborator<'s> {
         }
         self.funcs[fid as usize].entry = base + entry;
         let m = self.func_metas[fid as usize];
-        self.validate_frame_body(name, base, m.base_net, m.locals_len, false);
+        let entry_bb = self.funcs[fid as usize].entry;
+        self.validate_frame_body(name, entry_bb, m.base_net, m.locals_len, false);
     }
 
     /// B2: reserve a frame TASK — allocate its formal nets (input + output, in
@@ -16893,7 +16896,6 @@ impl<'s> Elaborator<'s> {
         self.frame_task_pending.push((
             fid,
             name.to_string(),
-            base,
             m.base_net,
             m.locals_len,
             unsafe_repeat,
@@ -17574,12 +17576,12 @@ impl<'s> Elaborator<'s> {
     fn validate_frame_body(
         &mut self,
         name: &str,
-        block_base: u32,
+        entry: u32,
         net_base: u32,
         locals_len: u32,
         allow_call: bool,
     ) {
-        if let Some(w) = self.classify_frame_body(block_base, net_base, locals_len, allow_call) {
+        if let Some(w) = self.classify_frame_body(entry, net_base, locals_len, allow_call) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
@@ -17600,15 +17602,31 @@ impl<'s> Elaborator<'s> {
     /// routes a `Some` TASK to the suspendable-frame engine path instead of rejecting.
     fn classify_frame_body(
         &self,
-        block_base: u32,
+        entry: u32,
         net_base: u32,
         locals_len: u32,
         allow_call: bool,
     ) -> Option<&'static str> {
         let (lo, hi) = (net_base, net_base + locals_len);
         let mut why: Option<&'static str> = None;
-        for bi in block_base as usize..self.func_blocks.len() {
-            let blk = &self.func_blocks[bi];
+        // Walk only the blocks REACHABLE from this body's entry via its OWN CFG edges
+        // (a `Call` terminator follows `ret_bb`, never the callee's entry — the walk
+        // stays inside this function). A linear `block_base..func_blocks.len()` scan
+        // over-reads into LATER-lowered functions' blocks when this runs in the
+        // post-pass (`resolve_frame_task_rejects` fires after every body is lowered, so
+        // `len()` is the GLOBAL end): their out-of-frame writes get mis-attributed here,
+        // false-rejecting a valid subset task not defined last (ROADMAP §3). Reachable-
+        // only is also correct-or-loud: a block skipped here is either another
+        // function's or dead code (never executed), so it can only DROP a false reject.
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![entry];
+        while let Some(bi) = stack.pop() {
+            if !seen.insert(bi) {
+                continue;
+            }
+            let Some(blk) = self.func_blocks.get(bi as usize) else {
+                continue;
+            };
             let term_ok = matches!(
                 blk.term,
                 ir::Terminator::Goto { .. }
@@ -17677,6 +17695,23 @@ impl<'s> Elaborator<'s> {
                     } => {}
                     _ => why = Some("a $systask / nonblocking / force / release statement"),
                 }
+            }
+            // Follow this block's OWN successor edges (a `Call` stays in-function via
+            // `ret_bb`; a `Fork`/`Return` has no in-body successor to classify — and a
+            // `Fork` already set `why` above, so not descending into it can't flip the
+            // verdict from reject to accept).
+            match &blk.term {
+                ir::Terminator::Goto { target } => stack.push(*target),
+                ir::Terminator::Branch {
+                    then_bb, else_bb, ..
+                } => {
+                    stack.push(*then_bb);
+                    stack.push(*else_bb);
+                }
+                ir::Terminator::Call { ret_bb, .. } => stack.push(*ret_bb),
+                ir::Terminator::Delay { resume, .. } => stack.push(*resume),
+                ir::Terminator::Wait { resume, .. } => stack.push(*resume),
+                ir::Terminator::Fork { .. } | ir::Terminator::Return => {}
             }
         }
         why

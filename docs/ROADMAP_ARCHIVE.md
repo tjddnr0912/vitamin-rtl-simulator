@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.172 frame-body validator over-scan false-REJECT 수정 (linear scan → reachable-block CFG walk) (2026-07-20, branch feat-frame-overscan-fix) ✅
+
+**발굴 경위**: §4.5.171 V5 적대 리뷰 agent가 발굴해 ROADMAP §3에 기록해둔 pre-existing false-REJECT. frame-TASK subset reject 결정은 **POST-PASS**(`resolve_frame_task_rejects`)로 미뤄지는데 이는 **모든** frame body가 lower된 뒤 실행된다. `classify_frame_body`가 `block_base..self.func_blocks.len()`를 linear 스캔 → post-pass서 `func_blocks.len()`가 **전체 블록의 끝**이라, **뒤에 정의된 task/func들의 블록까지 over-read**→그들의 (합법적으로 out-of-frame인) output-formal write를 검사 대상 task의 것으로 오판→E3009("assignment to a net outside the function")로 subset task를 false-reject. **repro**(clean HEAD): `task automatic p(output int r); int x; x=6; r=x;` 뒤에 `q`를 하나 더 정의하면 iverilog `p=6 q=7`인데 vita가 `p`를 reject. **task-only 버그**(함수는 자기 lower 직후 inline validate돼 뒤 func가 아직 없음→over-scan 없음).
+
+**설계 (reachable-block CFG walk)**: linear range 스캔을 **entry(`self.funcs[fid].entry`)서 자기 CFG 엣지만 순회하는 워크리스트**로 교체(`frame_task_has_unsafe_construct`/`frame_body_is_leaf_nonsuspending`이 이미 쓰는 패턴). 엣지: `Goto`→target·`Branch`→then/else·`Call`→`ret_bb`(**callee entry 아님**→함수 밖으로 안 나감)·`Delay`/`Wait`→`resume`·`Fork`/`Return`→없음(`Fork`는 이미 `why=Some`). 3 call site(class-method·frame-func·post-pass task) 전부 `funcs[fid].entry` 전달로 통일·`frame_task_pending` 튜플서 dead `base` 필드 제거. **correct-or-loud**: reachable-only가 스킵하는 블록은 (a)다른 함수 것 [버그 원인·제거가 fix] 또는 (b)entry서 도달 불가능한 dead code [런타임 실행 안 됨]뿐이라, verdict는 false-reject만 DROP할 수 있고 Some→None(silent-wrong)은 불가. `Fork`가 항상 `why=Some`이라 fork children 미방문도 verdict 안 뒤집음.
+
+**적대 differential(vita vs iverilog)**: 全 MATCH — nested subset task call(caller not-last·`42 9`)·control flow if/case/for(`23 7`)·suspendable `#delay` task mixed(`1 2 @5`)·5-task+function interleave(`1 2 3 4 5`)·2/3-task not-last repro(`p=6 q=7`/`1 2 3`). **still-loud 유지**: automatic task가 모듈 net에 write하면 여전히 E3009(walk가 in-func reachable write를 정확히 검출→over-relax 아님). 신규 `frame_subset_overscan.rs`×4(repro 2-task·middle-of-3·function not-last·still-loud).
+
+**결과**: subset task/func를 정의 순서와 무관하게 정확히 분류. format 22 불변(elaborate-time 검증 로직만·IR/serialize 무변화)·golden churn 0. **3754 green**(+4). ⭐교훈: ① **deferred 검증(post-pass)은 linear range 가정이 깨진다**—lower 순서 의존 상한(`len()`)이 전역 끝이 됨→CFG reachability가 유일하게 견고한 경계. ② **correct-or-loud를 fix 방향으로 활용**: over-scan은 reject 사유만 ADD(§4.5.171 기록)했으므로 reachable-only 축소는 false-reject DROP만 가능·신규 silent-wrong 표면 0—안전하게 좁힐 수 있음이 사전 보장. ③ **기존 CFG-walk 패턴 재사용**(`funcs[fid].entry` 워크리스트)으로 신규 순회 버그 표면 최소. 상세=본 엔트리·ROADMAP §3(RESOLVED).
+
 #### 4.5.171 V5 — frame-local (task-body) DYNAMIC array loud→supported (per-net heap + reentry guard) (2026-07-20, branch feat-v5-frame-dyn-array) ✅
 
 **발굴 경위**: "순차적으로 전부" 3순위(V5 frame dyn-array·V2A-frame도 해소 목표). `task automatic mk(...); int loc[]; loc = new[n]; loc[i]; loc.size();`가 frame-local `loc[]`이 DynArray handle 아닌 1-elem net(`frame_array_local`)이라 `new[]`서 E3009. iverilog ✓. 사용자 결정=**"do the full per-activation heap now"**(AskUserQuestion).
