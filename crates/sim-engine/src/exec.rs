@@ -502,6 +502,9 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     let frame = sched.activities[pi as usize].call_stack.pop().unwrap();
                     let out_s: Vec<u32> = frame.out_binds.iter().map(|&(s, _)| s).collect();
                     let outs = sched.st.exit_task_frame(frame.callee, &out_s);
+                    // V5: free this activation's frame dyn-array locals so a later call
+                    // starts fresh (size 0) and the reentry guard next sees None.
+                    sched.st.frame_dyn_free(frame.callee);
                     for ((_, lval), val) in frame.out_binds.iter().zip(outs) {
                         let offs = sched.resolve_lvalue_offsets(lval);
                         sched.st.write_lvalue(lval, val, &offs);
@@ -573,6 +576,11 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 sched.mark_fatal(); // runaway recursion → loud, never a hang
                                 return Step::Fatal;
                             }
+                            // V5: a recursive/concurrent frame dyn-array local would share
+                            // its per-net heap object with the parent activation — fatal-loud.
+                            if !sched.st.frame_dyn_reentry_ok(info.callee) {
+                                return Step::Fatal;
+                            }
                             sched.st.enter_task_frame(info.callee, &in_v);
                             let entry = sched.st.ir.funcs[info.callee as usize].entry;
                             sched.activities[pi as usize]
@@ -623,6 +631,10 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     if sched.st.suspendable_tasks.contains(&info.callee) {
                         // Suspendable: push a frame; do NOT advance `bb` — the base process
                         // resumes at `ret_bb` when the frame returns.
+                        // V5: reentry guard for a frame dyn-array local (see the nested arm).
+                        if !sched.st.frame_dyn_reentry_ok(info.callee) {
+                            return Step::Fatal;
+                        }
                         sched.st.enter_task_frame(info.callee, &in_v);
                         let entry = sched.st.ir.funcs[info.callee as usize].entry;
                         sched.activities[pi as usize]

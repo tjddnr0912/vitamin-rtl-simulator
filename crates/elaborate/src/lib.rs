@@ -16103,6 +16103,40 @@ impl<'s> Elaborator<'s> {
         unpacked: &[ast::Dim],
     ) -> u32 {
         if !unpacked.is_empty() {
+            // V5: a frame-local single-dim DYNAMIC array (`int loc[]`) of a simple
+            // bit-vector element gets a real `DynArray` heap handle (like a module
+            // dyn-array), so `loc = new[n]` / `loc[i]` / `loc.size()` route to the heap.
+            // The per-net heap slot (`dyn_heap[net]`) holds the CURRENT activation's
+            // array; the engine frees it at frame exit and fatal-louds on recursive /
+            // concurrent reentry (correct-or-loud; a full per-activation stash is a
+            // follow-on). Multi-dim / packed / non-bit-vector-element dynamic arrays
+            // stay loud (`frame_array_local`).
+            if unpacked.len() == 1
+                && matches!(unpacked[0], ast::Dim::Dyn)
+                && d.packed.is_empty()
+                && ast_kind_is_bit_vector(d.kind)
+            {
+                let (w, msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                let net = self.nets.len() as u32;
+                self.add_net(
+                    name,
+                    ir::NetVar {
+                        kind: ir::NetKind::DynArray,
+                        width: w.max(1),
+                        msb,
+                        lsb,
+                        signed,
+                        array_len: 0, // heap handle — elements live in the engine heap
+                        dir: ir::PortDir::Internal,
+                        init: default_init(d.kind, w.max(1)),
+                    },
+                );
+                // IEEE §7.5.2: a 2-state element defaults to 0 (not X) on `new[]` fill.
+                if net_kind_is_two_state(d.kind) {
+                    self.two_state_heap_handles.insert(net);
+                }
+                return net;
+            }
             if let Some(Ok(af)) = self.classify_unpacked_array(
                 unpacked,
                 d.range.as_ref(),
@@ -17604,6 +17638,12 @@ impl<'s> Elaborator<'s> {
                             }
                             let whole = c.offset.is_none() && c.word.is_none() && c.width.is_none();
                             let in_frame = c.net >= lo && c.net < hi;
+                            // V5: an in-frame DYN-ARRAY element write (`loc[i] = v`) routes
+                            // to the HEAP (`dyn_write`), not a frame-slot write — allowed
+                            // (the frame dyn-array net holds the current activation's array).
+                            if in_frame && self.is_dyn_handle_net(c.net) {
+                                continue;
+                            }
                             // EXT2-H: a bit/part-select write to an IN-FRAME scalar net
                             // (`r[7:0] = x`, `r[i] = b`, an md-packed `p[0] = ..`) is now
                             // supported — the engine read-modify-writes the frame slot.

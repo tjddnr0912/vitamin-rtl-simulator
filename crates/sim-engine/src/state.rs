@@ -490,6 +490,10 @@ pub(crate) struct SimState<'a> {
     pub func_has_auto: Vec<bool>,
     /// B4: per-func "has ≥1 static slot" — the frame keeps a persistent slab iff true.
     pub func_has_static: Vec<bool>,
+    /// V5: per-func "has ≥1 frame-local DYNAMIC-array slot" — gates the reentry
+    /// guard + free-at-exit scan (`frame_dyn_reentry_ok`/`frame_dyn_free`) so a frame
+    /// with no dyn local pays nothing.
+    pub func_has_dyn_local: Vec<bool>,
 
     // ── ⓑ-breadth (v17): array-method `with`-clause iterator scratch ──────────
     /// The current `(element value, 0-based index)` while a reduction/locator fold
@@ -803,6 +807,7 @@ impl<'a> SimState<'a> {
             frame_slot_auto: vec![false; nnets],
             func_has_auto: Vec::new(),
             func_has_static: Vec::new(),
+            func_has_dyn_local: Vec::new(),
             array_item_scratch: std::cell::RefCell::new(None),
             class_heap: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             class_obj_next: Cell::new(1),
@@ -852,6 +857,7 @@ impl<'a> SimState<'a> {
         self.frame_slot_auto = vec![false; nnets];
         self.func_has_auto = vec![false; self.func_table.len()];
         self.func_has_static = vec![false; self.func_table.len()];
+        self.func_has_dyn_local = vec![false; self.func_table.len()];
         if self.func_table.is_empty() {
             return;
         }
@@ -881,6 +887,12 @@ impl<'a> SimState<'a> {
                     self.func_has_auto[fi] = true;
                 } else {
                     self.func_has_static[fi] = true;
+                }
+                // V5: a frame-local DYN-ARRAY net (its heap lives in `dyn_heap[net]`)
+                // needs the per-activation reentry guard + free-at-exit. Only DynArray
+                // (NOT a frame-local `String`, which is `dyn_is_handle` but slab-stored).
+                if self.ir.nets[net].kind == NetKind::DynArray {
+                    self.func_has_dyn_local[fi] = true;
                 }
             }
         }
@@ -1046,12 +1058,23 @@ impl<'a> SimState<'a> {
         // Frame locals are single-chunk scalars; `frame_write_lvalue` handles both a whole
         // and a bit/part-select write (re-evaluating the offset in this frame's context).
         // Empty `frame_local` (no frame tasks) ⇒ never taken (byte-identical).
+        // V5: a frame-local DYN-ARRAY net (`int loc[]`) is EXCLUDED — its `loc[i]=v`
+        // element write must land in the heap (`write_chunk` → `dyn_write`), not the
+        // unused scalar window slot; the heap holds the current activation's array. A
+        // frame-local STRING is `dyn_is_handle` too but is SLAB-stored (§4.5.167), so it
+        // still takes the frame-slot write (only a non-string dyn handle is excluded).
         if lhs.chunks.len() == 1
             && self
                 .frame_local
                 .get(lhs.chunks[0].net as usize)
                 .copied()
                 .unwrap_or(false)
+            && (!self
+                .dyn_is_handle
+                .get(lhs.chunks[0].net as usize)
+                .copied()
+                .unwrap_or(false)
+                || self.ir.nets[lhs.chunks[0].net as usize].kind == NetKind::String)
         {
             self.frame_write_lvalue(lhs, value);
             return false; // a frame slot is not a flat-store net → no dirty channel
@@ -2903,6 +2926,59 @@ impl<'a> SimState<'a> {
         self.call_depth.set(self.call_depth.get().saturating_sub(1));
         outs
     }
+
+    /// V5: reentry guard for a frame-local DYNAMIC array (`int loc[]`). Its heap
+    /// object (`dyn_heap[net]`, keyed by net) is SHARED across activations of the same
+    /// func/task, so a RECURSIVE or CONCURRENT entry while a parent activation's array
+    /// is still live would clobber it (silent-wrong). Until a per-activation dyn-array
+    /// heap stash lands (a follow-on), that is a fatal-loud (correct-or-loud). A fresh
+    /// (non-reentrant) entry finds the slot None — freed at the prior `frame_dyn_free`.
+    /// Returns `true` when the frame may enter; `false` (after emitting the fatal) on
+    /// reentry. Cheap: skips the scan unless the callee actually has a dyn-array local.
+    pub(crate) fn frame_dyn_reentry_ok(&mut self, callee: u32) -> bool {
+        if !self
+            .func_has_dyn_local
+            .get(callee as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        let m = self.func_table[callee as usize];
+        for s in 0..m.locals_len {
+            let net = (m.base_net + s) as usize;
+            if self.ir.nets[net].kind == NetKind::DynArray && self.dyn_heap[net].is_some() {
+                self.fatal_run(
+                    "recursive or concurrent frame-local dynamic array is unsupported \
+                     (a per-activation dynamic-array heap is a follow-on); rewrite without \
+                     recursion/concurrency, or use a module-scope dynamic array",
+                );
+                return false;
+            }
+        }
+        true
+    }
+
+    /// V5: free this activation's frame-local dyn-array heap objects at frame exit, so a
+    /// later call to the same func/task starts fresh (an unallocated array is size 0) and
+    /// the reentry guard above next sees `None`.
+    pub(crate) fn frame_dyn_free(&mut self, callee: u32) {
+        if !self
+            .func_has_dyn_local
+            .get(callee as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let m = self.func_table[callee as usize];
+        for s in 0..m.locals_len {
+            let net = (m.base_net + s) as usize;
+            if self.ir.nets[net].kind == NetKind::DynArray {
+                self.dyn_heap[net].take();
+            }
+        }
+    }
 }
 
 impl NetReader for SimState<'_> {
@@ -3190,6 +3266,16 @@ impl NetReader for SimState<'_> {
         // byte-identical. The read clones the slot Value and releases the frame
         // borrow at the `return` BEFORE control re-enters any evaluator.
         if self.frame_local[net as usize] {
+            // V5: a frame-local DYN-ARRAY (`int loc[]`) — both `frame_local` AND
+            // `dyn_is_handle` — keeps its elements in the HEAP (`dyn_heap[net]` = the
+            // current activation's array), so `loc[i]`/whole reads route to `dyn_read`.
+            // A frame-local STRING (§4.5.167) is `dyn_is_handle` too but is SLAB-stored,
+            // so it must NOT take the dyn path — it (and scalars) stay in the frame slot.
+            if self.dyn_is_handle[net as usize]
+                && self.ir.nets[net as usize].kind != NetKind::String
+            {
+                return self.dyn_read(net, word);
+            }
             let (fidx, slot) = self.frame_route[net as usize].expect("frame-local net is routed");
             debug_assert!(
                 word.is_none(),
@@ -3198,7 +3284,7 @@ impl NetReader for SimState<'_> {
             // B4: route by this slot's EFFECTIVE lifetime (window vs static slab).
             return self.frame_slot_read(fidx, self.frame_slot_auto[net as usize], slot);
         }
-        // v5 (C)-3b: a dyn HANDLE never reads the flat store — its elements
+        // v5 (C)-3b: a dyn HANDLE (module) never reads the flat store — its elements
         // live in the heap. One bitmap load on the hot path.
         if self.dyn_is_handle[net as usize] {
             return self.dyn_read(net, word);

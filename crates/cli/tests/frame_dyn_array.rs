@@ -1,0 +1,202 @@
+//! V5 (§4.5.171): a frame-local (task-body-local) single-dim DYNAMIC array
+//! (`int loc[]; loc = new[n]; loc[i]; loc.size()`) of a simple bit-vector element in
+//! an automatic/suspendable TASK gets a real DynArray heap handle. Its heap object
+//! lives at `dyn_heap[net]` (the current activation's array); the engine frees it at
+//! frame exit and FATAL-louds on recursive / concurrent reentry (correct-or-loud — a
+//! per-activation heap stash is a follow-on). Goldens are iverilog 13.0.
+use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
+/// (combined stdout+stderr trimmed, success) for a one-shot vita run of `src`.
+fn run(src: &str) -> (String, bool) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_v5_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let mut combined = String::from_utf8_lossy(&out.stdout).into_owned();
+    combined.push_str(&String::from_utf8_lossy(&out.stderr));
+    (combined.trim().to_owned(), out.status.success())
+}
+
+// ───────────────────────── supported (task, single activation) ─────────────────────────
+#[test]
+fn task_dyn_local_basic() {
+    // new[3] + element writes + reads + .size(). 3*100 + 5 + 6 = 311.
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; loc = new[n]; loc[0]=5; loc[1]=6;\n\
+          r = loc.size()*100 + loc[0] + loc[1]; endtask\n\
+        int x; initial begin mk(3,x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "must run, got:\n{out}");
+    assert!(out.contains("r=311"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_dynamic_index() {
+    // variable-index read AND write in loops: sum of i*i for i in 0..3 = 0+1+4+9 = 14.
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; int i; loc = new[n];\n\
+          for(i=0;i<n;i=i+1) loc[i]=i*i;\n\
+          r=0; for(i=0;i<n;i=i+1) r=r+loc[i]; endtask\n\
+        int x; initial begin mk(4,x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=14"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_signed_byte_element() {
+    // a signed `byte` element reads negative (no unsigned collapse): -5 + 100 = 95.
+    let src = "module t;\n\
+        task automatic mk(output int r);\n\
+          byte loc[]; loc = new[2]; loc[0]=-5; loc[1]=100; r = loc[0]+loc[1]; endtask\n\
+        int x; initial begin mk(x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=95"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_resize() {
+    // `loc = new[m]` after `new[n]` REPLACES the array (reuses the net's heap slot).
+    // size 4 * 10 + loc[3](9) = 49.
+    let src = "module t;\n\
+        task automatic mk(output int r);\n\
+          int loc[]; loc=new[2]; loc[0]=1; loc[1]=2; loc=new[4]; loc[3]=9;\n\
+          r = loc.size()*10 + loc[3]; endtask\n\
+        int x; initial begin mk(x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=49"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_delete() {
+    // `loc.delete()` empties the array: size 0.
+    let src = "module t;\n\
+        task automatic mk(output int r);\n\
+          int loc[]; loc=new[3]; loc.delete(); r = loc.size(); endtask\n\
+        int x; initial begin mk(x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=0"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_sequential_fresh() {
+    // Each call starts fresh (free-at-exit): mk(3)->330, mk(2)->220. The two calls do
+    // NOT share the previous array.
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; loc=new[n]; loc[0]=n*10; r = loc.size()*100 + loc[0]; endtask\n\
+        int x,y; initial begin mk(3,x); mk(2,y); $display(\"x=%0d y=%0d\", x, y); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("x=330 y=220"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_size_before_new_is_zero() {
+    // Reading `.size()` BEFORE `new[]` must be 0 (a fresh activation, not a prior call's
+    // array). Guards the free-at-exit reset.
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; r = loc.size(); loc = new[n]; endtask\n\
+        int a,b; initial begin int z; mk(9,z); mk(2,a); mk(5,b);\n\
+          $display(\"a=%0d b=%0d\", a, b); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("a=0 b=0"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_across_suspend() {
+    // A SINGLE suspendable task: the array survives a `#delay` (same activation).
+    // 42 + 43 + 3 = 88.
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; loc=new[n]; loc[0]=42; #5; loc[1]=43;\n\
+          r = loc[0]+loc[1]+loc.size(); endtask\n\
+        int x; initial begin mk(3,x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=88"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_module_coexist_no_alias() {
+    // A MODULE-scope dyn-array `g[]` and a frame-local `loc[]` do not alias.
+    // loc: 7+8=15, + g[0]=100 => 115; g unchanged.
+    let src = "module t;\n\
+        int g[];\n\
+        task automatic mk(output int r);\n\
+          int loc[]; loc=new[2]; loc[0]=7; loc[1]=8; r = loc[0]+loc[1]+g[0]; endtask\n\
+        int x; initial begin g=new[1]; g[0]=100; mk(x); $display(\"r=%0d g0=%0d\", x, g[0]); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=115 g0=100"), "got:\n{out}");
+}
+
+#[test]
+fn task_dyn_nested_different_tasks() {
+    // A non-recursive `outer` (dyn-array `b`) calls `inner` (its OWN dyn-array `a`) —
+    // different nets, no reentry-guard false-trigger. 10 + 3 + (5+6) = 24.
+    let src = "module t;\n\
+        task automatic inner(output int r);\n\
+          int a[]; a=new[2]; a[0]=5; a[1]=6; r=a[0]+a[1]; endtask\n\
+        task automatic outer(output int r);\n\
+          int b[]; int ir; b=new[3]; b[0]=10; inner(ir); r = b[0]+b.size()+ir; endtask\n\
+        int x; initial begin outer(x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok && out.contains("r=24"), "got:\n{out}");
+}
+
+// ───────────────────────── correct-or-loud boundaries ─────────────────────────
+#[test]
+fn task_dyn_recursion_fatal_loud() {
+    // A RECURSIVE task with a dyn-array local would share its per-net heap object with
+    // the parent activation — FATAL-loud (F4004), NOT a silent-wrong (was r=3 vs 6).
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; loc=new[n]; loc[0]=n;\n\
+          if(n<=1) r=loc.size(); else begin int s; mk(n-1,s); r=loc.size()+s; end endtask\n\
+        int x; initial begin mk(3,x); $display(\"r=%0d\", x); end endmodule";
+    let (out, ok) = run(src);
+    assert!(
+        !ok,
+        "recursive frame dyn-array must be fatal-loud, got:\n{out}"
+    );
+    assert!(
+        !out.contains("r=3"),
+        "must not silently collapse the recursion, got:\n{out}"
+    );
+}
+
+#[test]
+fn task_dyn_concurrent_fatal_loud() {
+    // Two fork activations that both allocate then suspend reenter the shared per-net
+    // heap — FATAL-loud, not silent cross-contamination.
+    let src = "module t;\n\
+        task automatic mk(input int n, output int r);\n\
+          int loc[]; loc=new[n]; #5; loc[0]=n; r=loc.size(); endtask\n\
+        int x,y; initial begin fork mk(3,x); mk(2,y); join $display(\"x=%0d y=%0d\",x,y); end endmodule";
+    let (out, ok) = run(src);
+    assert!(
+        !ok,
+        "concurrent frame dyn-array must be fatal-loud, got:\n{out}"
+    );
+}
+
+#[test]
+fn function_dyn_local_stays_loud() {
+    // A FUNCTION with a dyn-array local + `new[]` stays loud — the synchronous function
+    // executor cannot run `new[]` (a follow-on). NOT a silent-wrong.
+    let src = "module t;\n\
+        function automatic int mk(input int n);\n\
+          int loc[]; loc = new[n]; loc[0]=5; return loc.size()+loc[0]; endfunction\n\
+        initial $display(\"r=%0d\", mk(3)); endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "function dyn-array local must stay loud, got:\n{out}");
+}
