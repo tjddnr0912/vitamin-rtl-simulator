@@ -786,14 +786,20 @@ fn v2a_function_reforward_still_works() {
 }
 
 #[test]
-fn v2a_automatic_task_dyn_array_loud() {
-    // An AUTOMATIC (frame) task with a dyn-array formal needs the handle-in-frame-slot
-    // infra (V5) — loud until then (NOT a silent mis-lower). correct-or-loud.
+fn v2a_automatic_task_dyn_array_supported() {
+    // §4.5.173 (V2A-frame): an AUTOMATIC (frame, SUSPENDABLE) task with an `input`
+    // dyn-array formal is now SUPPORTED — the formal is a per-activation `DynArray` heap
+    // slot and the caller's array is DEEP-COPIED into it at frame entry (pass-by-value,
+    // IEEE §13.5.1). The `$display` makes the task suspendable (the path that can
+    // populate the heap). Was loud pre-§4.5.173 (V5 handle-in-slot pending).
     let src = "module t;\n\
         byte arr[];\n\
         task automatic consume(input byte b[]); $display(\"o=%0d\", b[0]); endtask\n\
         initial begin arr=new[1]; arr[0]=5; consume(arr); $finish; end endmodule";
-    assert!(loud(src), "automatic-task dyn-array formal must stay loud");
+    assert!(
+        run(src).0.contains("o=5"),
+        "automatic-task dyn-array formal must be supported (o=5)"
+    );
 }
 
 #[test]

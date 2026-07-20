@@ -2979,6 +2979,31 @@ impl<'a> SimState<'a> {
             }
         }
     }
+
+    /// V2A-frame (§4.5.173): DEEP-COPY each caller dynamic-array actual into the callee's
+    /// per-activation `input`-formal heap slot (pass-by-VALUE, IEEE §13.5.1) — called
+    /// right after `enter_task_frame` on the suspendable path. `dyn_snaps[i] = (formal
+    /// slot, caller src net)`; the source's heap object is cloned so later writes to
+    /// either side never show through (a never-allocated source copies as the empty
+    /// array). The formal's slot is freed at `exit_task_frame` (`frame_dyn_free`) and
+    /// guarded against recursive/concurrent reentry (`frame_dyn_reentry_ok`), exactly
+    /// like a frame-local dyn-array LOCAL (§4.5.171). No dyn formals ⇒ no-op.
+    pub(crate) fn frame_dyn_snapshot_formals(&mut self, callee: u32, dyn_snaps: &[(u32, u32)]) {
+        if dyn_snaps.is_empty() {
+            return;
+        }
+        let base = self.func_table[callee as usize].base_net;
+        for &(slot, src_net) in dyn_snaps {
+            let obj = self
+                .dyn_heap
+                .get(src_net as usize)
+                .and_then(|o| o.as_ref().cloned());
+            let dst = (base + slot) as usize;
+            if let Some(cell) = self.dyn_heap.get_mut(dst) {
+                *cell = obj;
+            }
+        }
+    }
 }
 
 impl NetReader for SimState<'_> {

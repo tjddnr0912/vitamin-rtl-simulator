@@ -526,6 +526,11 @@ struct Waiter {
 /// narrower than the delay never reaches the LHS; iverilog-pinned live).
 type DelayedWrite = (u32, u64, Lvalue, Value, Offsets);
 
+/// V2A-frame (§4.5.173): a frame task call's copy-ins, split by kind — scalar
+/// `(formal slot, evaluated value)` pairs and dynamic-array snapshot `(formal slot,
+/// caller source net)` pairs. See [`Scheduler::split_frame_in_binds`].
+type FrameInBinds = (Vec<(u32, Value)>, Vec<(u32, u32)>);
+
 pub(crate) struct Scheduler<'a, 'ir> {
     pub st: &'a mut SimState<'ir>,
     /// Current time's Active/Inactive buckets.
@@ -2235,6 +2240,33 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// over, so a native leaf load reads exactly what the interpreter would.
     pub(crate) fn eval_native(&self, prog: &crate::native_eval::NativeProg) -> Value {
         crate::native_eval::run(prog, self.st)
+    }
+
+    /// V2A-frame (§4.5.173): split a frame task call's `in_binds` into SCALAR copy-in
+    /// pairs `(slot, Value)` and DYNAMIC-array snapshot pairs `(slot, caller src net)`.
+    /// A formal whose frame net is a `DynArray` is pass-by-VALUE — its in-bind ExprId is
+    /// a bare `Signal` reading the caller's dyn-array net (elaborate contract), from which
+    /// we recover the source net; the caller applies `frame_dyn_snapshot_formals` right
+    /// after `enter_task_frame`. Every non-dyn formal evaluates to a scalar in the caller
+    /// context (unchanged). No dyn formals ⇒ `dyn_snaps` empty, `in_v` == the old vector.
+    pub(crate) fn split_frame_in_binds(&self, info: &crate::TaskCallInfo) -> FrameInBinds {
+        let cm = self.st.func_table[info.callee as usize];
+        let mut in_v: Vec<(u32, Value)> = Vec::with_capacity(info.in_binds.len());
+        let mut dyn_snaps: Vec<(u32, u32)> = Vec::new();
+        for &(slot, e) in &info.in_binds {
+            let fnet = (cm.base_net + slot) as usize;
+            if self.st.ir.nets[fnet].kind == sim_ir::NetKind::DynArray {
+                if let sim_ir::Expr::Signal { net, .. } = &self.st.ir.exprs[e as usize] {
+                    dyn_snaps.push((slot, *net));
+                }
+            } else {
+                let nv = &self.st.ir.nets[fnet];
+                let sw = self.st.wt.get(e);
+                let v = self.eval_ctx_top(e, nv.width.max(1).max(sw.width), nv.signed);
+                in_v.push((slot, v));
+            }
+        }
+        (in_v, dyn_snaps)
     }
 
     /// Build an EvalCtx and run eval_ctx (mirror of the `eval` façade).

@@ -15699,11 +15699,45 @@ impl<'s> Elaborator<'s> {
                         ),
                     );
                 }
+            } else if self.frame_task_has_dyn_formal(fid, base_net) {
+                // V2A-frame (§4.5.173): a dyn-array input formal is snapshotted at frame
+                // ENTRY on the SUSPENDABLE path only (the engine's `enter` deep-copy). A
+                // subset (non-suspendable) task takes the SYNCHRONOUS `run_task_call` path,
+                // which is `&self` and cannot populate the heap — so a pure-compute
+                // dyn-formal task would silently read an empty array. Loud (correct-or-loud):
+                // use a FUNCTION (which supports dynamic-array inputs via the R2 inline
+                // path), or give the task an observable/timing statement ($display / @ / #
+                // / wait) that routes it to the suspendable-frame path.
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "frame task `{name}` has a dynamic-array input formal but is a subset \
+                         (non-suspendable) task — use a function (functions support \
+                         dynamic-array inputs), or add a `$display`/`@`/`#`/`wait` so the task \
+                         runs on the suspendable-frame path"
+                    ),
+                );
             } else {
                 let entry_bb = self.funcs[fid as usize].entry;
                 self.validate_frame_body(&name, entry_bb, base_net, locals_len, true);
             }
         }
+    }
+
+    /// V2A-frame (§4.5.173): does frame task `fid` have an `input` dynamic-array formal
+    /// (reserved as a `NetKind::DynArray` slot by `reserve_frame_task`)? Formals occupy
+    /// slots `[0, n_params)` of the frame net range `[base_net, …)`.
+    fn frame_task_has_dyn_formal(&self, fid: u32, base_net: u32) -> bool {
+        let n_params = self
+            .func_metas
+            .get(fid as usize)
+            .map(|m| m.n_params)
+            .unwrap_or(0);
+        (0..n_params).any(|s| {
+            self.nets
+                .get((base_net + s) as usize)
+                .is_some_and(|nv| nv.kind == ir::NetKind::DynArray)
+        })
     }
 
     /// Round-14 V3/V4 (adversarial-review guard): a suspendable task carries a construct
@@ -16755,6 +16789,35 @@ impl<'s> Elaborator<'s> {
                 let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
                 let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
                 let net = s.nets.len() as u32;
+                // V2A-frame (§4.5.173): an `input` DYNAMIC-array formal (`byte b[]`) is a
+                // per-activation `DynArray` heap handle — the caller's array is DEEP-COPIED
+                // into it at frame entry (pass-by-VALUE, IEEE §13.5.1; `enter` snapshot in
+                // exec.rs). Reserved exactly like a frame-local dyn-array LOCAL (§4.5.171),
+                // so V5's net-range lifecycle (`func_has_dyn_local` → reentry guard +
+                // free-at-exit) covers it automatically and `b[i]`/`b.size()` route to the
+                // heap (`read_net` frame_local dyn branch). Only INPUT reaches here — an
+                // output/inout dyn-array formal is already loud (`emit_frame_task_call`
+                // guard above).
+                if s.is_input_dyn_array_formal(p) {
+                    s.add_net(
+                        &p.name.name,
+                        ir::NetVar {
+                            kind: ir::NetKind::DynArray,
+                            width: w.max(1),
+                            msb,
+                            lsb,
+                            signed,
+                            array_len: 0, // heap handle — elements live in the engine heap
+                            dir: ir::PortDir::Internal,
+                            init: default_init(kind, w.max(1)),
+                        },
+                    );
+                    // IEEE §7.5.2: a 2-state element defaults to 0 (not X) on the copy-in.
+                    if net_kind_is_two_state(kind) {
+                        s.two_state_heap_handles.insert(net);
+                    }
+                    continue;
+                }
                 // N1: a `string` OUTPUT/INOUT formal is a real `NetKind::String` slot
                 // (procedurally assignable) instead of the input-only 1-bit Wire — the
                 // body writes it and the frame copy-out moves the string to the actual.
@@ -16936,8 +16999,35 @@ impl<'s> Elaborator<'s> {
                 .unwrap_or(32);
             match p.dir {
                 ast::PortDir::Input => {
-                    let eid = self.lower_ctx_or_plain(a, fw);
-                    in_binds.push((slot, eid));
+                    // V2A-frame (§4.5.173): a dyn-array input formal is pass-by-VALUE — the
+                    // engine deep-copies the caller's array into the formal's per-activation
+                    // heap slot at frame entry. Emit the in-bind as a BARE `Signal` reading
+                    // the caller's dyn-array net; the engine recovers the source net from
+                    // this Signal (formal net kind == DynArray ⇒ snapshot, not a scalar
+                    // copy). A select / queue / assoc / non-dyn / element-mismatched actual
+                    // is loud (`dyn_array_actual_net` ⇒ None; correct-or-loud).
+                    if self.is_input_dyn_array_formal(p) {
+                        match self.dyn_array_actual_net(a, p) {
+                            Some(caller_net) => {
+                                let sig = self.push_expr(ir::Expr::Signal {
+                                    net: caller_net,
+                                    word: None,
+                                });
+                                in_binds.push((slot, sig));
+                            }
+                            None => self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "frame task `{tname}`: dynamic-array formal `{}` needs a \
+                                     bare matching dynamic-array actual",
+                                    p.name.name
+                                ),
+                            ),
+                        }
+                    } else {
+                        let eid = self.lower_ctx_or_plain(a, fw);
+                        in_binds.push((slot, eid));
+                    }
                 }
                 ast::PortDir::Output | ast::PortDir::Inout => {
                     if matches!(p.dir, ast::PortDir::Inout) {
@@ -18144,21 +18234,14 @@ impl<'s> Elaborator<'s> {
         // B2 frame-call: a recursive/automatic task is LOWERED to the func arena
         // (reserved in step 6.5) — emit a Terminator::Call + register the binding.
         if let Some(&fid) = self.task_frame_idx.get(tname.as_str()) {
-            // V2A: an input dyn-array formal in a FRAMED (automatic/recursive) task needs
-            // the handle-in-frame-slot infrastructure (V5) — the frame formal is a fixed
-            // scalar slot, not a `DynArray` handle, so `b[i]`/`b.size()` would mis-lower.
-            // The inline/static path handles it via `dyn_subst`; loud here until V5.
-            if task.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    &format!(
-                        "a dynamic-array formal in the automatic/recursive task `{tname}` \
-                         is not yet supported (declare the task static, or pass a \
-                         fixed-size packed vector)"
-                    ),
-                );
-                return;
-            }
+            // V2A-frame (§4.5.173): an input dyn-array formal is now reserved as a
+            // per-activation `DynArray` heap slot (`reserve_frame_task`) and DEEP-COPIED
+            // from the caller at frame entry (`emit_frame_task_call` → engine snapshot).
+            // A dyn-formal task that would take the SYNCHRONOUS (`run_task_call`) path
+            // instead of the suspendable-frame path can't be snapshotted (the sync
+            // executor is `&self`, can't populate the heap) — that case stays loud in the
+            // post-pass (`resolve_frame_task_rejects`). Output/inout dyn-array formals are
+            // already loud (the unpacked-array formal guard above).
             self.emit_frame_task_call(b, fid, &task, args);
             return;
         }

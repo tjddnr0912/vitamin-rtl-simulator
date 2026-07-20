@@ -557,18 +557,9 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     // synchronously; this frame resumes at `ret_bb` when the callee returns
                     // (the `Return` arm sets the PARENT frame's PC).
                     if let Some(info) = sched.st.task_calls_func.get(&cur_bb).cloned() {
-                        let cm = sched.st.func_table[info.callee as usize];
-                        let in_v: Vec<(u32, Value)> = info
-                            .in_binds
-                            .iter()
-                            .map(|&(slot, e)| {
-                                let nv = &sched.st.ir.nets[(cm.base_net + slot) as usize];
-                                let sw = sched.st.wt.get(e);
-                                let v =
-                                    sched.eval_ctx_top(e, nv.width.max(1).max(sw.width), nv.signed);
-                                (slot, v)
-                            })
-                            .collect();
+                        // V2A-frame (§4.5.173): split scalar copy-ins from dyn-array input
+                        // formals — the latter are pass-by-VALUE and snapshotted after enter.
+                        let (in_v, dyn_snaps) = sched.split_frame_in_binds(&info);
                         if sched.st.suspendable_tasks.contains(&info.callee) {
                             if sched.activities[pi as usize].call_stack.len() as u32
                                 >= crate::state::MAX_CALL_DEPTH
@@ -578,10 +569,14 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             }
                             // V5: a recursive/concurrent frame dyn-array local would share
                             // its per-net heap object with the parent activation — fatal-loud.
+                            // (V2A-frame: also guards a recursive dyn-array INPUT formal.)
                             if !sched.st.frame_dyn_reentry_ok(info.callee) {
                                 return Step::Fatal;
                             }
                             sched.st.enter_task_frame(info.callee, &in_v);
+                            // V2A-frame: deep-copy caller dyn-array actuals into the fresh
+                            // per-activation formal slots (pass-by-value, IEEE §13.5.1).
+                            sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
                             let entry = sched.st.ir.funcs[info.callee as usize].entry;
                             sched.activities[pi as usize]
                                 .call_stack
@@ -617,25 +612,21 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     .get(&(tmpl as u32, cur_bb))
                     .cloned()
                 {
-                    let cm = sched.st.func_table[info.callee as usize];
-                    let in_v: Vec<(u32, Value)> = info
-                        .in_binds
-                        .iter()
-                        .map(|&(slot, e)| {
-                            let nv = &sched.st.ir.nets[(cm.base_net + slot) as usize];
-                            let sw = sched.st.wt.get(e);
-                            let v = sched.eval_ctx_top(e, nv.width.max(1).max(sw.width), nv.signed);
-                            (slot, v)
-                        })
-                        .collect();
+                    // V2A-frame (§4.5.173): split scalar copy-ins from dyn-array input
+                    // formals — the latter are pass-by-VALUE and snapshotted after enter.
+                    let (in_v, dyn_snaps) = sched.split_frame_in_binds(&info);
                     if sched.st.suspendable_tasks.contains(&info.callee) {
                         // Suspendable: push a frame; do NOT advance `bb` — the base process
                         // resumes at `ret_bb` when the frame returns.
                         // V5: reentry guard for a frame dyn-array local (see the nested arm).
+                        // (V2A-frame: also guards a recursive dyn-array INPUT formal.)
                         if !sched.st.frame_dyn_reentry_ok(info.callee) {
                             return Step::Fatal;
                         }
                         sched.st.enter_task_frame(info.callee, &in_v);
+                        // V2A-frame: deep-copy caller dyn-array actuals into the fresh
+                        // per-activation formal slots (pass-by-value, IEEE §13.5.1).
+                        sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
                         let entry = sched.st.ir.funcs[info.callee as usize].entry;
                         sched.activities[pi as usize]
                             .call_stack
