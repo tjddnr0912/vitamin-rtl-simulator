@@ -20663,7 +20663,7 @@ impl<'s> Elaborator<'s> {
                         );
                         return true;
                     }
-                    if args.len() == 1 && self.dyn_handle(&name.segments[0].name).is_none() {
+                    if args.len() == 1 && self.dyn_handle_read(&name.segments[0].name).is_none() {
                         if let Some(arr) = self.lookup_net_scoped(&name.segments[0].name) {
                             if self.net_is_static_array(arr) {
                                 return self.lower_fixed_foreach_step(b, lhs, arr, m, &args[0], 1);
@@ -20671,7 +20671,14 @@ impl<'s> Elaborator<'s> {
                         }
                     }
                 }
-                let Some((net, kind)) = self.dyn_handle(&name.segments[0].name) else {
+                // §4.5.174: a `foreach` READS the array — resolve via `dyn_handle_read`
+                // so a read-only `input` dyn-array FORMAL (a `dyn_subst` alias, not a real
+                // net) routes through the same dense dyn/queue walk a module dyn-array uses.
+                // The plain `dyn_handle` misses the alias → the desugared `b.first(__i)`
+                // fell through to the generic method path → E3009 (inline static-task gap,
+                // §4.5.170; the frame/automatic path already worked). `dyn_subst` is empty
+                // outside an inline dyn-formal body ⇒ byte-identical for every other array.
+                let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name) else {
                     return false;
                 };
                 // v6: iteration methods — `st = h.first(k);` (ref key arg).

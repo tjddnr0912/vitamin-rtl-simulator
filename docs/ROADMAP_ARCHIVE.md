@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.174 inline static-task `foreach`-on-dyn-formal loud→supported (dyn_handle → dyn_handle_read at the foreach dispatch) (2026-07-20, branch feat-inline-foreach-dyn-formal) ✅
+
+**발굴 경위**: §4.5.173 V2A-frame 적대 probe서 발굴해 ROADMAP §3에 기록해둔 §4.5.170 gap. static(non-`automatic`) task의 `input b[]` formal에 `foreach(b[i])`를 쓰면 E3009("first/next/last/prev are only supported as the DIRECT rhs of a blocking assignment"). `for(int i=0;i<b.size();i++)`는 동작·`automatic`(frame) 경로도 동작→`foreach`+inline-static 조합만 loud. iverilog ✓.
+
+**근본 원인**: 파서가 `foreach(a[i])`를 `__st = a.first/next(__foreach_i)`로 **uniform desugar**(surface는 assoc-only 표기지만 내부는 통일). elaborator(`lower_*_call` foreach dispatch)가 array의 KIND로 재작성: fixed→plain index walk(`lower_fixed_foreach_step`)·dyn/queue→dense walk(`lower_iter_special`)·assoc→sparse first/next. dyn/queue dispatch가 array를 **`dyn_handle`**(=`lookup_net_scoped`만)로 resolve. **inline static-task의 dyn-array formal `b`는 `dyn_subst` alias**(§4.5.170·read-only input formal은 real net 아니라 caller net으로 별칭)→`dyn_handle("b")`=None→dispatch가 `return false`(특수 lowering 안 함)→desugar된 `b.first(__foreach_i)`가 generic method-call 경로로 falling through→`("first"|"next"|.., _)` arm이 expression-position first/next로 보고 E3009. AUTOMATIC 경로는 formal이 real `DynArray` net(§4.5.171 reserve)이라 `dyn_handle` 직접 hit→정상.
+
+**fix (1-liner 본질·2 site)**: foreach는 배열 **READ**이므로 dispatch를 **`dyn_handle_read`**(§4.5.170 R2: `dyn_subst` alias 우선 consult 후 `dyn_handle` fallback)로 교체 — (a) fixed-array early gate(`...is_none()`·dyn formal을 non-dyn로 오판해 fixed 시도하던 것 차단·shadowing edge까지 방어) (b) dyn/queue resolution(`let Some((net,kind))=...`). formal이 caller의 real DynArray net으로 resolve→**module dyn-array와 동일한 dense walk**(`lower_iter_special`)로 라우팅. `dyn_subst`는 inline dyn-formal body 밖에서 empty라 `dyn_handle_read`≡`dyn_handle`→**fixed/module-dyn/queue/assoc 全 byte-identical**(회귀 0).
+
+**적대 differential(vita vs iverilog)**: 全 MATCH — static task foreach sum(60)·index+element(`b[0]=5..`)·signed byte(-5+10-2=3)·two-foreach-same-formal(6/6). **regression 全 MATCH**: module dyn foreach(60)·fixed-array(12)·queue(7)·assoc(vita `s=3` correct·iverilog compile-fail=iverilog 한계). **boundary LOUD(별개 follow-on)**: FUNCTION+`foreach`(control flow→R2-straight-line 아님→framed→framed function dyn formal 미지원=function-frame dyn-formal 슬라이스 소관·`foreach` fix와 직교)·clean HEAD 동일 확인.
+
+**결과**: static task의 `input` dyn-array formal `foreach` 동작(sum/index/element/signed/multi-loop). 신규 `inline_foreach_dyn_formal.rs`×8. format 22 불변(순수 lowering resolve 경로·IR/serialize 무변화). **3775 green**(+8). ⭐교훈: ① **read-position resolve는 일관되게 `dyn_handle_read`**(§4.5.170이 만든 alias-aware helper를 read 경로 전반에 적용해야 formal이 module array와 동일 동작)—dispatch 한 곳이 `dyn_handle`을 쓰면 formal이 조용히 다른 경로로 샘. ② **uniform desugar(`foreach`→`first/next`)의 KIND-dispatch가 alias-blind면 formal이 fall-through**—handle resolve를 alias-aware로 하면 기존 dense-walk 재사용. ③ **correct-or-loud 경계 명확화**(task=supported·function+foreach=framed-loud[별개]). 상세=본 엔트리·ROADMAP §3(RESOLVED).
+
 #### 4.5.173 V2A-frame — AUTOMATIC task `input` dynamic-array formal loud→supported (per-activation heap slot + entry deep-copy) (2026-07-20, branch feat-v2a-frame-dyn-formal) ✅
 
 **발굴 경위**: "순차적으로 전부" V5 follow-on. §4.5.170(V2A)은 STATIC task의 dyn-array input formal을 inline `dyn_subst` 별칭 + snapshot으로 지원했으나 AUTOMATIC(framed) task는 "formal이 fixed scalar slot이라 `b[i]`/`b.size()` mis-lower" 이유로 loud-defer("V5 handle-in-slot 필요"). §4.5.171(V5)이 frame-local `DynArray` net 머신러리(net-range lifecycle: `func_has_dyn_local`·reentry guard·free-at-exit)를 만들어 이제 formal에 재사용 가능. `task automatic consume(input byte b[]); b.size(); b[i];` = E3009였음. iverilog ✓(`sum=60 size=3`).
