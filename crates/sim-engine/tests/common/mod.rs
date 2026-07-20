@@ -36,7 +36,14 @@ static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn unique_vcd_path(tag: &str, backend: Backend) -> std::path::PathBuf {
     let n = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
-    tmp_dir().join(format!("vitamin_{tag}_{backend:?}_{n}.vcd"))
+    // The counter alone is only unique WITHIN one process. `cargo test` runs each
+    // `tests/*.rs` file as a SEPARATE binary, and they share ONE `CARGO_TARGET_TMPDIR`
+    // per crate — so two binaries (e.g. backend_equiv + differential) that generate the
+    // same-tagged corpus design both start `TMP_SEQ` at 0 and collide on
+    // `vitamin_{tag}_{backend}_0.vcd`, racing the write/read under parallel execution.
+    // The PID disambiguates the binaries so the byte comparison is never corrupted.
+    let pid = std::process::id();
+    tmp_dir().join(format!("vitamin_{tag}_{backend:?}_{pid}_{n}.vcd"))
 }
 
 /// Collects elaborate-time diagnostic strings so the build helper can assert no
