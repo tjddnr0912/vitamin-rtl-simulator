@@ -2477,17 +2477,13 @@ impl<'a> SimState<'a> {
         self.frame_write_lvalue(lhs, v);
     }
 
-    /// B1 frame-call evaluator. Runs user function `func`'s lowered body (in the
-    /// GLOBAL `ir.blocks` arena from `FuncDef.entry`) against a per-invocation
     /// §4.5.175: is `rhs` an associative/dynamic/queue ITERATION method
     /// (`a.first/next/last/prev(k)`) — the lowered `foreach` walk over a dynamic
     /// array / queue / associative array? Such a step WRITES the iteration key as a
-    /// side effect, which the process executor does via a `&mut` `write_lvalue`
-    /// (`Scheduler::assoc_iter_step`). The SYNCHRONOUS frame executors
-    /// (`run_frame_call` for functions, `run_task` for subset tasks) are `&self` and
-    /// cannot advance the key — a plain `frame_rhs_value` eval leaves it stuck, so the
-    /// walk never progresses and the loop silently returns 0 (a silent-wrong found by
-    /// adversarial review). Detect it so the executor can fatal-loud instead.
+    /// side effect. The process executor does that via `Scheduler::assoc_iter_step`
+    /// (`&mut write_lvalue`); the synchronous frame executors (`run_frame_call` /
+    /// `run_task`, `&self`) route it through [`Self::frame_assoc_iter`] instead
+    /// (§4.5.176), which writes a FRAME-LOCAL key via the interior-mutable window.
     fn rhs_is_assoc_iter(&self, rhs: u32) -> bool {
         matches!(
             self.ir.exprs.get(rhs as usize),
@@ -2501,21 +2497,222 @@ impl<'a> SimState<'a> {
         )
     }
 
-    /// §4.5.175: latch a fatal for a `foreach`-over-dynamic-storage inside a `&self`
-    /// synchronous frame body (see [`Self::rhs_is_assoc_iter`]). Reuses the
-    /// `call_fatal` channel (like the recursion-depth fatal) — the scheduler converts
-    /// it to `FinishReason::Error`. Correct-or-loud: a fatal, never a silent 0.
+    /// §4.5.176: the PURE-COMPUTE half of one assoc/dyn/queue iteration step
+    /// (`a.first/next/last/prev(k)`). Reads only (`&self`) — the handle heap and the
+    /// current key — and returns `(Some((key net, located-key value)) | None, status)`
+    /// where status is 1 (found+fits) / 0 (none/exhausted/x-z key) / −1 (found but
+    /// truncated, hand-IEEE §7.9.4). The CALLER performs the actual key write, so the
+    /// SAME compute drives both the `&mut` process path (`write_lvalue`) and the `&self`
+    /// frame path (`frame_write_lvalue`). A `None` key write leaves the key var
+    /// unchanged (§7.9.4). Mirrors the read/compute of `Scheduler::assoc_iter_step`.
+    pub(crate) fn assoc_iter_compute(&self, rhs: u32) -> (Option<(u32, Value)>, i32) {
+        use std::ops::Bound;
+        let Some(sim_ir::Expr::SysFunc { which, args }) = self.ir.exprs.get(rhs as usize) else {
+            return (None, 0); // defensive: hand-built IR only (the rhs probe matched)
+        };
+        let which = *which;
+        let net_of = |a: Option<&u32>| {
+            a.and_then(|&e| match self.ir.exprs.get(e as usize) {
+                Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
+                _ => None,
+            })
+        };
+        let (Some(hnet), Some(knet)) = (net_of(args.first()), net_of(args.get(1))) else {
+            return (None, 0); // malformed args: degrade, never panic
+        };
+        let (kw, ks) = self
+            .ir
+            .nets
+            .get(knet as usize)
+            .map(|nv| (nv.width.max(1), nv.signed))
+            .unwrap_or((32, true));
+        use sim_ir::SysFuncId as F;
+        let needs_cur = matches!(which, F::AssocNext | F::AssocPrev);
+        let cur_val = if needs_cur {
+            let v = self.read_net(knet, None);
+            if v.has_xz() {
+                self.dyn_warn_once_at(hnet, "assoc iteration key variable is X/Z (status 0)");
+                return (None, 0);
+            }
+            Some(v)
+        } else {
+            None
+        };
+        enum Hit {
+            Int(i64),
+            Str(Vec<u8>),
+        }
+        let hit: Option<Hit> = match self.dyn_heap.get(hnet as usize).and_then(|o| o.as_ref()) {
+            Some(crate::state::DynObj::Assoc { map }) => {
+                let cur = cur_val.as_ref().map(|v| {
+                    let raw = v.val.first().copied().unwrap_or(0);
+                    if kw >= 64 {
+                        raw as i64
+                    } else {
+                        let m = (1u64 << kw) - 1;
+                        let r = raw & m;
+                        if ks && (r >> (kw - 1)) & 1 == 1 {
+                            (r | !m) as i64
+                        } else {
+                            r as i64
+                        }
+                    }
+                });
+                match which {
+                    F::AssocFirst => map.keys().next().copied(),
+                    F::AssocLast => map.keys().next_back().copied(),
+                    F::AssocNext => map
+                        .range((Bound::Excluded(cur.unwrap_or(0)), Bound::Unbounded))
+                        .next()
+                        .map(|(k, _)| *k),
+                    _ => map
+                        .range((Bound::Unbounded, Bound::Excluded(cur.unwrap_or(0))))
+                        .next_back()
+                        .map(|(k, _)| *k),
+                }
+                .map(Hit::Int)
+            }
+            Some(crate::state::DynObj::AssocStr { map }) => {
+                let cur = cur_val.as_ref().map(crate::eval::value_str_bytes);
+                match which {
+                    F::AssocFirst => map.keys().next().cloned(),
+                    F::AssocLast => map.keys().next_back().cloned(),
+                    F::AssocNext => map
+                        .range((
+                            Bound::Excluded(cur.clone().unwrap_or_default()),
+                            Bound::Unbounded,
+                        ))
+                        .next()
+                        .map(|(k, _)| k.clone()),
+                    _ => map
+                        .range::<Vec<u8>, _>((
+                            Bound::Unbounded,
+                            Bound::Excluded(&cur.unwrap_or_default()),
+                        ))
+                        .next_back()
+                        .map(|(k, _)| k.clone()),
+                }
+                .map(Hit::Str)
+            }
+            // Dense walk on dyn/queue (a missing entry IS the empty object).
+            other => {
+                let len = other.map(|o| o.len() as u64).unwrap_or(0);
+                let cur = cur_val.as_ref().and_then(|v| v.to_u64());
+                let dense = match which {
+                    F::AssocFirst => (len > 0).then_some(0),
+                    F::AssocLast => len.checked_sub(1),
+                    F::AssocNext => cur.and_then(|c| c.checked_add(1)).filter(|&n| n < len),
+                    _ => cur.and_then(|c| c.checked_sub(1)).filter(|&p| p < len),
+                };
+                dense.map(|d| Hit::Int(d as i64))
+            }
+        };
+        let Some(hit) = hit else {
+            return (None, 0); // none/empty/exhausted: key var UNCHANGED (§7.9.4)
+        };
+        let (kval, fits) = match hit {
+            Hit::Int(k) => {
+                let fits = if kw >= 64 {
+                    true
+                } else if ks {
+                    let m = (1u64 << kw) - 1;
+                    let t = (k as u64) & m;
+                    let back = if (t >> (kw - 1)) & 1 == 1 {
+                        (t | !m) as i64
+                    } else {
+                        t as i64
+                    };
+                    back == k
+                } else {
+                    k >= 0 && (k as u64) >> kw.min(63) == 0
+                };
+                let mut v = Value::zeros(kw, ks);
+                let sign_fill = if k < 0 { u64::MAX } else { 0 };
+                for (i, w) in v.val.iter_mut().enumerate() {
+                    *w = if i == 0 { k as u64 } else { sign_fill };
+                }
+                v.mask_top();
+                (v, fits)
+            }
+            Hit::Str(bytes) => {
+                let fits = (bytes.len() as u64) * 8 <= kw as u64;
+                let mut v = Value::zeros(kw, ks);
+                for (i, b) in bytes.iter().rev().enumerate() {
+                    for bit in 0..8u32 {
+                        let idx = i as u32 * 8 + bit;
+                        if idx < kw {
+                            v.set_vu(idx, ((b >> bit) & 1) as u64, 0);
+                        }
+                    }
+                }
+                (v, fits)
+            }
+        };
+        if !fits {
+            self.dyn_warn_once_at(
+                hnet,
+                "assoc iteration key does not fit the index variable (truncated, status -1)",
+            );
+        }
+        (Some((knet, kval)), if fits { 1 } else { -1 })
+    }
+
+    /// §4.5.176: execute one assoc/dyn/queue `foreach` step INSIDE a `&self` synchronous
+    /// frame body (`run_frame_call` function / `run_task` subset task). Computes the step
+    /// via [`Self::assoc_iter_compute`], writes the located key through the interior-
+    /// mutable frame window (`frame_write_lvalue`), and writes the status to the step's
+    /// `__st` lhs. The `foreach` desugar's key is always a BODY-LOCAL, so the key net is
+    /// frame-local; a direct `st = aa.first(module_net)` in a function would need a `&mut`
+    /// module-net write we cannot do here → those fall back to the fatal (correct-or-loud).
+    fn frame_assoc_iter(&self, lhs: &Lvalue, rhs: u32) {
+        let (key_write, status) = self.assoc_iter_compute(rhs);
+        if let Some((knet, kval)) = key_write {
+            // The key write must land in the frame window (this executor is `&self`); a
+            // module-net key can only be written by the `&mut` process path.
+            if !self
+                .frame_local
+                .get(knet as usize)
+                .copied()
+                .unwrap_or(false)
+            {
+                self.fatal_frame_assoc_iter();
+                return;
+            }
+            let klv = sim_ir::Lvalue {
+                chunks: vec![sim_ir::LvalChunk {
+                    net: knet,
+                    word: None,
+                    offset: None,
+                    width: None,
+                    kind: sim_ir::SelKind::Bit,
+                }],
+            };
+            self.frame_or_class_write(&klv, kval);
+        }
+        // Write the int status to `__st` (mirror `Scheduler::k_assoc_iter`: 32-bit signed,
+        // resized to the lhs / rhs self-width context).
+        let lw = self.lvalue_width(lhs);
+        let sw = self.wt.get(rhs);
+        let mut sv = Value::zeros(32, true);
+        sv.val[0] = (status as u32) as u64;
+        let sv = sv.resize_keep_sign(lw.max(sw.width), sw.signed);
+        self.frame_or_class_write(lhs, sv);
+    }
+
+    /// §4.5.176 fallback: a `foreach`/iteration step whose key is NOT frame-local (a
+    /// direct `st = aa.first(module_net)` in a function body) needs a `&mut` module-net
+    /// write this `&self` executor cannot do — fatal-loud (reuses the `call_fatal`
+    /// channel → `FinishReason::Error`). Correct-or-loud: a fatal, never a silent 0.
     fn fatal_frame_assoc_iter(&self) {
         if !self.call_fatal.get() {
             self.call_fatal.set(true);
             self.sink.emit(LogEvent::Diagnostic(Diagnostic {
                 severity: Severity::Fatal,
                 code: MsgCode::RunFatal,
-                message: "a `foreach` over a dynamic array / queue / associative array is \
-                          unsupported inside a function or subset-task body — the synchronous \
-                          frame executor cannot advance the iteration key (would silently return \
-                          0). Use an explicit `for (int i = 0; i < a.size(); i++)` loop, or \
-                          iterate in a process / suspendable task."
+                message: "an associative-array iteration (`first/next/last/prev`) whose key \
+                          variable is not a local of the function/task is unsupported inside a \
+                          synchronous frame body — declare the key as a body-local, or iterate \
+                          in a process / suspendable task."
                     .to_string(),
                 location: None,
                 context: Vec::new(),
@@ -2524,6 +2721,8 @@ impl<'a> SimState<'a> {
         }
     }
 
+    /// B1 frame-call evaluator. Runs user function `func`'s lowered body (in the
+    /// GLOBAL `ir.blocks` arena from `FuncDef.entry`) against a per-invocation
     /// frame, returning its return-var Value resized to the declared return
     /// width/sign. `&self` (read path) + interior-mutable frame arena; the body
     /// BB loop is iterative, native recursion occurs ONLY on a nested
@@ -2631,7 +2830,7 @@ impl<'a> SimState<'a> {
         // ── BB LOOP over the GLOBAL func arena from `fd.entry`. Process bodies
         //    live in a SEPARATE `Process.body` space and are never touched. ──
         let mut cur = fd.entry;
-        'body: loop {
+        loop {
             debug_assert!(
                 (cur as usize) < self.ir.blocks.len(),
                 "frame CFG target in range (rebase complete)"
@@ -2639,12 +2838,13 @@ impl<'a> SimState<'a> {
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
                 if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
-                    // §4.5.175: a dyn/queue/assoc `foreach` step (`__st = a.first/next(k)`)
-                    // WRITES its key via `&mut write_lvalue`, which this `&self` function
-                    // executor cannot do — plain eval would stall the walk at 0. Fatal-loud.
+                    // §4.5.176: a dyn/queue/assoc `foreach` step (`__st = a.first/next(k)`)
+                    // WRITES its key as a side effect. This `&self` function executor runs
+                    // it through the frame-aware path (writes the frame-local key via the
+                    // interior-mutable window) instead of a plain eval that would stall at 0.
                     if self.rhs_is_assoc_iter(*rhs) {
-                        self.fatal_frame_assoc_iter();
-                        break 'body;
+                        self.frame_assoc_iter(lhs, *rhs);
+                        continue;
                     }
                     // OWNED Value FIRST — its nested Calls may recurse into
                     // run_frame_call, fine: THIS frame holds NO live borrow now.
@@ -2810,7 +3010,7 @@ impl<'a> SimState<'a> {
 
         // ── BB LOOP over the GLOBAL func arena from fd.entry. ──
         let mut cur = fd.entry;
-        'body: loop {
+        loop {
             debug_assert!(
                 (cur as usize) < self.ir.blocks.len(),
                 "task CFG target in range"
@@ -2818,11 +3018,11 @@ impl<'a> SimState<'a> {
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
                 if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
-                    // §4.5.175: a dyn/queue/assoc `foreach` step can't advance its key in
-                    // this `&self` subset-task executor — fatal-loud instead of stalling at 0.
+                    // §4.5.176: a dyn/queue/assoc `foreach` step advances its key via the
+                    // frame-aware path in this `&self` subset-task executor (was a stall/0).
                     if self.rhs_is_assoc_iter(*rhs) {
-                        self.fatal_frame_assoc_iter();
-                        break 'body;
+                        self.frame_assoc_iter(lhs, *rhs);
+                        continue;
                     }
                     // N1: `$sformatf` renders through the shared formatter here.
                     let v = self.frame_rhs_value(lhs, *rhs);

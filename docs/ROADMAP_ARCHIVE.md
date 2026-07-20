@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.176 `foreach` over dynamic array/queue/assoc inside a FUNCTION / SUBSET-task body loud→supported (frame-aware iteration in the &self executors) (2026-07-21, branch feat-frame-foreach-supported) ✅
+
+**발굴 경위**: §4.5.175가 loud화한 silent-wrong의 최종 해소. "function-frame dyn-formal"의 고레버리지 prerequisite—`&self` 동기 executor(`run_frame_call`=함수·`run_task`=subset task)가 dyn/queue/assoc `foreach`의 iteration key를 advance하게 만들면 §4.5.175 loud 케이스가 supported로 전환된다.
+
+**핵심 관찰**: §4.5.175 분석서 "`&self` executor는 key-write(`&mut write_lvalue`) 불가"라 loud했으나, **`foreach` desugar의 iteration key(`__foreach_i`)는 항상 BODY-LOCAL**(frame-local net)이다. frame-local write는 `frame_write_lvalue`(interior-mutable frame window·RefCell·`&self`-OK)로 가능→`&self` executor도 key를 advance할 수 있다. 즉 loud는 필요 이상으로 보수적이었고, frame-aware write로 supported 가능.
+
+**설계 (compute/write 분리·process path byte-identical)**: (1) `Scheduler::assoc_iter_step`(`&mut`)의 **read/compute half**(handle heap read·current key read·located key 계산·kval+fits+status)를 side-effect 없는 `SimState::assoc_iter_compute(&self) -> (Option<(knet, kval)>, status)`로 추출. 두 executor가 동일 compute로 key를 locate. (2) `Scheduler::assoc_iter_step`을 thin wrapper로 리팩터(`assoc_iter_compute` call 후 `write_lvalue`로 key write)→**process path byte-identical**(전 모듈-레벨 foreach/assoc/queue test + golden determinism 불변). (3) 신규 `SimState::frame_assoc_iter(&self)`: compute→key를 `frame_or_class_write`(→`frame_write_lvalue`, frame window)로·status를 `__st` lhs로 write. (4) `run_frame_call`/`run_task` BB 루프서 `rhs_is_assoc_iter`면 `frame_assoc_iter` 호출(§4.5.175 fatal 대체). **correct-or-loud 잔여**: key net이 frame-local 아니면(direct `st=aa.first(module_net)` in function·module-net write=`&mut` 필요) `fatal_frame_assoc_iter`로 fallback(guard: `!frame_local[knet]`).
+
+**적대 differential(vita vs iverilog)**: iverilog-oracle 케이스 全 MATCH — function dyn foreach(15)·subset task dyn foreach(15)·queue foreach(7)·signed byte(-5+10-2=3)·nested function call per element(2*(1+2+3)=12)·suspendable task 회귀(15)·module process 회귀(60/assoc/queue byte-identical). **hand-IEEE(iverilog가 assoc-in-function compile 불가)**: assoc int foreach(2*10+5*20=120)·direct first/next while-loop(3+4+5=12)·reverse last/prev(3*1+2*10+1*100=123)—전부 손계산 검증. 전 suite green(process path 회귀 0·golden 불변).
+
+**결과**: 동기 frame executor의 dyn/queue/assoc `foreach`(+direct first/next/last/prev iteration loop)가 correct. 신규 `frame_foreach_dynamic.rs`×10(구 `_loud.rs`×8 rename+supported화). format 22 불변(엔진 실행 경로만·IR/serialize 무변화). **3785 green**(+2). ⭐교훈: ① **loud가 필요 이상 보수적일 수 있다—핵심 제약(key-write=`&mut`)을 재검토하니 `foreach` key는 항상 frame-local이라 `&self` frame window write로 supported 가능**. correct-or-loud는 즉시 loud(§4.5.175)→여유 있을 때 supported(§4.5.176) 2단계가 이상적. ② **compute/write 분리로 process path byte-identical 유지하며 코드 공유**(read/compute를 `&self` helper로 추출→process는 `&mut write_lvalue`·frame은 `frame_write_lvalue`가 각자 write·drift 없음). ③ **§4.5.175 fatal 채널·`rhs_is_assoc_iter` guard 재사용**(loud→supported가 같은 detection 지점). ④ **function-frame dyn-formal의 남은 blocker 좁혀짐**—이제 함수 内 dyn `foreach`는 동작·dyn FORMAL만 classification서 rejected(formal을 DynArray net으로 reserve하는 별개 follow-on). 상세=본 엔트리·ROADMAP §2.
+
 #### 4.5.175 SILENT-WRONG 수정 — `foreach` over dynamic array/queue/assoc inside a FUNCTION / SUBSET-task body → loud (runtime fatal) (2026-07-21, branch feat-frame-foreach-loud) ✅
 
 **발굴 경위**: "function-frame dyn-formal"(control-flow body function의 dyn-array input formal) 조사 중, feasibility de-risk로 "framed function이 module dyn-array를 `foreach`로 읽는" probe를 돌렸더니 **vita `gsum=0` vs iverilog `gsum=15`**—clean HEAD의 **pre-existing SILENT-WRONG** 발굴. 적대 differential이 정확히 짚음.
