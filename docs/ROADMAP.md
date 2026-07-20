@@ -58,6 +58,8 @@
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
 
+**frame-body validator over-scan (pre-existing false-REJECT · §4.5.171 적대 agent 발굴 · V5 무관):** `classify_frame_body`(`crates/elaborate/src/lib.rs:17610`)가 `block_base..func_blocks.len()`를 스캔 → **POST-PASS**(`resolve_frame_task_rejects`·전 func lower 후 subset task 검증)서 `func_blocks.len()`가 **전체** 끝이라 **뒤에 정의된 func들의 블록까지 over-scan**→그들의 write를 out-of-frame로 오판→E3009("assignment to a net outside the function"). **repro**(clean HEAD·dyn-array 0): subset `task automatic p(output int r); int x; x=6; r=x;` 다음에 또 하나 정의하면 iverilog `p=6 q=7`인데 vita가 `p` reject. **안전성**: over-scan은 reject 사유만 ADD(never 제거)→**false-REJECT만 가능·false-accept/silent-wrong 불가**(런타임 라우팅은 `compute_suspendable_tasks` intra-func edge + `FuncMeta` 연속·disjoint range로 별도 정상 경계). fix=스캔을 THIS func 블록범위로 제한(func별 block_base 추적하여 block_end 계산, 또는 entry서 reachable-block CFG walk[frame_body_is_leaf_nonsuspending 방식])·verification 필요→별개 슬라이스.
+
 **string/heap:**
 
 - ~~frame string LOCAL 대입(E3018→heap slot)~~ **RESOLVED §4.5.167(round-14 V1)**: function/task/block/class-method-local `string`이 heap `NetKind::String` frame slot(`frame_local_net_kind`·4 사이트)·procedural 대입/return/`s[i]`/method(`.len`/`.substr`/`.getc`) 지원(엔진 str_bytes frame-aware). **잔여 loud**: static(non-`automatic`) task inline string local(`hoist_inline_task_locals`:18119)=Wire→E3018(inline 경로=frame-slot 아님·순진 String化시 str_bytes twin 미적용→silent 회귀 위험·별개 inline-string-storage 슬라이스). substr-actual `s[i]` · string part-select `s[i:j]`.
