@@ -42,6 +42,68 @@ fn fork_task_still_loud() {
     );
 }
 
+// Each guard below was a SILENT-WRONG or PANIC caught by the adversarial 2-lens review;
+// the lift predicate now keeps them a clean E3009 reject (correct-or-loud).
+#[test]
+fn frame_local_array_task_loud() {
+    // A frame-local unpacked ARRAY (stored as a 1-elem net → element access collapses to
+    // 1 bit) must stay loud — was a silent-wrong (a0=1 vs 5) once the task was lifted.
+    let src = "module t; task automatic fill; int arr[0:2]; arr[0]=5; arr[1]=6; arr[2]=7;\n\
+        $display(\"a0=%0d\", arr[0]); endtask\n\
+        initial begin fill; #5 $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "frame-local array task must stay loud, got:\n{out}");
+    assert!(
+        !out.contains("a0=1"),
+        "must not silently collapse, got:\n{out}"
+    );
+}
+
+#[test]
+fn wait_frame_local_expr_task_loud() {
+    // `wait(<frame-local>)`: the level-wait re-eval runs without the window restored →
+    // panic. Must stay loud instead.
+    let src = "module t; logic c=0; always #5 c=~c;\n\
+        task automatic w(); int cnt; cnt=0; wait(cnt>=4); $display(\"done\"); endtask\n\
+        initial begin w(); #20 $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "wait(frame-local) task must stay loud, got:\n{out}");
+    assert!(!out.contains("panic"), "must not panic, got:\n{out}");
+}
+
+#[test]
+fn nba_frame_local_task_loud() {
+    // NBA to a frame-local is illegal (iverilog rejects) and panicked the arg-bind path.
+    let src = "module t; task automatic w(); int loc; loc <= 5; $display(\"x\"); endtask\n\
+        initial begin w(); #5 $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "NBA-to-frame-local task must stay loud, got:\n{out}");
+    assert!(!out.contains("panic"), "must not panic, got:\n{out}");
+}
+
+#[test]
+fn repeat_timing_task_loud() {
+    // `repeat(<non-const>) @(edge)`: the hidden loop counter is a SHARED net, corrupted by
+    // concurrent activations. Stays loud until the counter is per-activation.
+    let src = "module t; logic c=0; always #5 c=~c;\n\
+        task automatic w(input int dly, output int r); repeat(dly) @(posedge c); r=$time; endtask\n\
+        initial begin int x; w(3, x); $display(\"o=%0d\", x); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "repeat-with-timing task must stay loud, got:\n{out}");
+}
+
+#[test]
+fn disable_fork_task_loud() {
+    // `disable fork` is counted a suspend-signal (engine routes it) but has no in-frame
+    // guard — it silently mis-ran (o=00 vs aa). The lift predicate now rejects the
+    // `Disable{Fork}` statement, so it stays loud.
+    let src = "module t; logic [7:0] o=0;\n\
+        task automatic killer(); #1; disable fork; endtask\n\
+        initial begin fork begin #10 o=8'hAA; end join_none killer(); #20 $display(\"o=%0h\",o); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(!ok, "disable-fork task must stay loud, got:\n{out}");
+}
+
 #[test]
 fn subset_task_unchanged_phase1() {
     // A pure-subset task (blocking assign to its own local) must still run fine.

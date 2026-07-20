@@ -1680,6 +1680,13 @@ fn subst_expr(e: &ast::Expr, map: &BTreeMap<String, ast::Expr>) -> ast::Expr {
 /// True iff `e` reads a bare single-segment identifier named `name` anywhere (slice
 /// N2c — detect a local-variable READ). Conservative: only a single-segment `Ident`
 /// counts (a hierarchical `u.name` is a different signal). Recurses structurally.
+/// The body statement of a `case` item (`Match`/`Default`) — for AST timing walks.
+fn case_item_body(it: &ast::CaseItem) -> &ast::Stmt {
+    match it {
+        ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => body,
+    }
+}
+
 fn expr_reads_ident(e: &ast::Expr, name: &str) -> bool {
     use ast::ExprKind as K;
     match &e.kind {
@@ -3202,8 +3209,10 @@ struct Elaborator<'s> {
     /// post-pass — `(fid, name, block_base, net_base, locals_len)`. Once every task is
     /// lowered, `sim_ir::compute_suspendable_tasks` gives the transitive suspendable set,
     /// so a leaf non-suspending task is lifted (the engine routes it) while a
-    /// timing/nested/transitively-suspendable one stays loud (E3009).
-    frame_task_pending: Vec<(u32, String, u32, u32, u32)>,
+    /// timing/nested/transitively-suspendable one stays loud (E3009). The trailing bool
+    /// = the AST had a `repeat(...)` with a timing body (a shared-counter hazard — keep
+    /// loud), captured from the AST before it is lost to the IR desugar.
+    frame_task_pending: Vec<(u32, String, u32, u32, u32, bool)>,
     /// B2: accumulated process-body task-call sites (→ `Sidecars.task_calls_proc`).
     task_calls_proc: TaskCallProc,
     /// B2: accumulated nested (task-body) task-call sites (→ `task_calls_func`).
@@ -15701,23 +15710,179 @@ impl<'s> Elaborator<'s> {
     fn resolve_frame_task_rejects(&mut self) {
         let full = ir::compute_suspendable_tasks(&self.funcs, &self.func_blocks, &self.stmts);
         let pending = std::mem::take(&mut self.frame_task_pending);
-        for (fid, name, base, base_net, locals_len) in pending {
+        for (fid, name, base, base_net, locals_len, unsafe_repeat) in pending {
             if full.contains(&fid) {
-                if self.frame_body_is_leaf_nonsuspending(fid) {
+                if self.frame_body_is_leaf_nonsuspending(fid)
+                    && !unsafe_repeat
+                    && !self.frame_task_has_unsafe_construct(fid, base_net, locals_len)
+                {
                     // lifted — the engine's suspendable-frame path runs it.
                 } else {
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!(
-                            "frame task `{name}` body uses a `fork`, which is outside the \
-                             supported frame subset (a task using $display/NBA/@/#/wait and \
-                             nested task calls — but no fork — is supported)"
+                            "frame task `{name}` body uses a construct outside the supported \
+                             suspendable-task subset (a `fork`, a frame-local unpacked ARRAY, \
+                             a `wait`/`repeat` reading a frame-local, or a nonblocking assign \
+                             to a frame-local) — $display/NBA-to-module-net/@/#/wait-on-a-net \
+                             and nested task calls ARE supported"
                         ),
                     );
                 }
             } else {
                 self.validate_frame_body(&name, base, base_net, locals_len, true);
             }
+        }
+    }
+
+    /// Round-14 V3/V4 (adversarial-review guard): a suspendable task carries a construct
+    /// the engine's frame machinery cannot yet run CORRECTLY, so it must stay LOUD rather
+    /// than silently mis-run. Covers the differential-review findings:
+    /// - a frame-local UNPACKED ARRAY (`int a[0:2]`) — reserved as a 1-element net, so
+    ///   element access collapses to a 1-bit select (silent-wrong, even with no suspend);
+    /// - a nonblocking assign whose LHS is a frame-local (illegal per LRM — iverilog
+    ///   rejects — and the engine's arg-bind path panics on it);
+    /// - a `Wait` whose condition reads a frame-local (the level-wait re-eval runs without
+    ///   the frame window restored → panic);
+    /// - a `disable fork` statement (a fork-family construct with no in-frame guard).
+    ///
+    /// The `repeat(<non-const>) @(edge)` shared-counter case is caught separately, at the
+    /// AST level (`ast_has_repeat_with_timing`), before the desugar loses it.
+    fn frame_task_has_unsafe_construct(&self, fid: u32, base_net: u32, locals_len: u32) -> bool {
+        let (lo, hi) = (base_net, base_net + locals_len);
+        let is_frame_local = |n: u32| n >= lo && n < hi;
+        // (1) a frame-local unpacked array declared by this task.
+        if (lo..hi).any(|n| self.frame_array_local.contains(&n)) {
+            return true;
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![self.funcs[fid as usize].entry];
+        while let Some(b) = stack.pop() {
+            if !seen.insert(b) {
+                continue;
+            }
+            let Some(blk) = self.func_blocks.get(b as usize) else {
+                continue;
+            };
+            for &sid in &blk.stmts {
+                match &self.stmts[sid as usize] {
+                    // (2) a nonblocking assign to a frame-local LHS.
+                    ir::Stmt::NonblockingAssign { lhs, .. } => {
+                        if lhs.chunks.iter().any(|c| is_frame_local(c.net)) {
+                            return true;
+                        }
+                    }
+                    // (4) `disable fork` — a fork-family construct the engine's in-frame
+                    // path can't run; `compute_suspendable_tasks` counts it as a signal
+                    // (so the engine WOULD route it), but the DisableFork apply has no
+                    // in-frame guard, so it must stay loud (soundness-review finding).
+                    ir::Stmt::Disable {
+                        scope_kind: ir::DisableKind::Fork,
+                        ..
+                    } => return true,
+                    _ => {}
+                }
+            }
+            match &blk.term {
+                // (3) a `wait`/`@` whose condition expr reads a frame-local net.
+                ir::Terminator::Wait { cond, resume } => {
+                    if self.wait_cond_reads_frame_local(cond, &is_frame_local) {
+                        return true;
+                    }
+                    stack.push(*resume);
+                }
+                ir::Terminator::Delay { resume, .. } => stack.push(*resume),
+                ir::Terminator::Goto { target } => stack.push(*target),
+                ir::Terminator::Branch {
+                    then_bb, else_bb, ..
+                } => {
+                    stack.push(*then_bb);
+                    stack.push(*else_bb);
+                }
+                ir::Terminator::Call { ret_bb, .. } => stack.push(*ret_bb),
+                ir::Terminator::Fork { .. } | ir::Terminator::Return => {}
+            }
+        }
+        false
+    }
+
+    /// Does a `Wait` condition read a frame-local net? (`@`/`wait` re-evaluates its
+    /// condition on wake without the frame window restored, so a frame-local read there
+    /// panics — such a task stays loud.) An `@(posedge module_clk)` / `wait(module_net)`
+    /// reads only module nets and is fine.
+    fn wait_cond_reads_frame_local(
+        &self,
+        cond: &ir::WaitCause,
+        is_frame_local: &impl Fn(u32) -> bool,
+    ) -> bool {
+        match cond {
+            ir::WaitCause::Edge { net, .. } => is_frame_local(*net),
+            ir::WaitCause::Level { nets } => nets.iter().any(|&n| is_frame_local(n)),
+            ir::WaitCause::Named { ev } => is_frame_local(*ev),
+            ir::WaitCause::Expr { expr } => {
+                let mut reads = std::collections::BTreeSet::new();
+                self.collect_expr_reads(*expr, &mut reads);
+                reads.iter().any(|&n| is_frame_local(n))
+            }
+            ir::WaitCause::Fork => false,
+        }
+    }
+
+    /// Round-14 V3/V4 (adversarial guard): does `stmt` contain a `repeat(...)` whose body
+    /// has a timing control (@/#/wait)? A non-const `repeat`'s HIDDEN loop counter is a
+    /// shared net (not per-activation — by design; a const `repeat` unrolls instead), so
+    /// concurrent activations of a suspendable task corrupt each other's iteration count
+    /// across a suspend (differential-review silent-wrong). Keep such a task loud.
+    /// Conservative (a const `repeat` is unrolled and safe, but rejecting it too is
+    /// correct-or-loud — and the KAT-driver pattern uses no `repeat`).
+    fn ast_has_repeat_with_timing(stmt: &ast::Stmt) -> bool {
+        use ast::Stmt as S;
+        match stmt {
+            S::Repeat { body, .. } => {
+                Self::ast_stmt_has_timing(body) || Self::ast_has_repeat_with_timing(body)
+            }
+            S::Block { stmts, .. } | S::Fork { stmts, .. } => {
+                stmts.iter().any(Self::ast_has_repeat_with_timing)
+            }
+            S::If { then_s, else_s, .. } => {
+                Self::ast_has_repeat_with_timing(then_s)
+                    || else_s
+                        .as_deref()
+                        .is_some_and(Self::ast_has_repeat_with_timing)
+            }
+            S::For { body, .. } | S::While { body, .. } | S::Forever { body, .. } => {
+                Self::ast_has_repeat_with_timing(body)
+            }
+            S::DelayCtrl { body, .. } | S::EventCtrl { body, .. } | S::Wait { body, .. } => body
+                .as_deref()
+                .is_some_and(Self::ast_has_repeat_with_timing),
+            S::Case { items, .. } => items
+                .iter()
+                .any(|it| Self::ast_has_repeat_with_timing(case_item_body(it))),
+            _ => false,
+        }
+    }
+
+    /// Any @/#/wait timing control anywhere in `stmt` (recursively).
+    fn ast_stmt_has_timing(stmt: &ast::Stmt) -> bool {
+        use ast::Stmt as S;
+        match stmt {
+            S::DelayCtrl { .. } | S::EventCtrl { .. } | S::Wait { .. } | S::WaitFork { .. } => true,
+            S::Block { stmts, .. } | S::Fork { stmts, .. } => {
+                stmts.iter().any(Self::ast_stmt_has_timing)
+            }
+            S::If { then_s, else_s, .. } => {
+                Self::ast_stmt_has_timing(then_s)
+                    || else_s.as_deref().is_some_and(Self::ast_stmt_has_timing)
+            }
+            S::For { body, .. }
+            | S::While { body, .. }
+            | S::Forever { body, .. }
+            | S::Repeat { body, .. } => Self::ast_stmt_has_timing(body),
+            S::Case { items, .. } => items
+                .iter()
+                .any(|it| Self::ast_stmt_has_timing(case_item_body(it))),
+            _ => false,
         }
     }
 
@@ -16691,8 +16856,15 @@ impl<'s> Elaborator<'s> {
         // (run after every task is lowered) — a leaf non-suspending task is lifted for the
         // engine's suspendable-frame path, so its reject can only be decided once the full
         // transitive suspendable set is known.
-        self.frame_task_pending
-            .push((fid, name.to_string(), base, m.base_net, m.locals_len));
+        let unsafe_repeat = Self::ast_has_repeat_with_timing(&task.body);
+        self.frame_task_pending.push((
+            fid,
+            name.to_string(),
+            base,
+            m.base_net,
+            m.locals_len,
+            unsafe_repeat,
+        ));
     }
 
     /// B2: emit a frame-TASK call. Seals the current block with `Terminator::Call`
