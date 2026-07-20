@@ -186,10 +186,12 @@ fn frame_concat_lvalue_still_loud() {
 }
 
 #[test]
-fn frame_local_array_element_write_still_loud() {
-    // BOUNDARY (review find): a frame-local UNPACKED ARRAY (`reg [7:0] mem [0:3]`)
-    // reserves as a 1-elem net, so `mem[k] = x` mis-lowers to a bit-select — it stays
-    // loud (marked `frame_array_local`), NOT silent garbage.
+fn frame_local_array_element_write_supported() {
+    // §4.5.169 (was `..._still_loud`): a frame-local single-dim zero-based UNPACKED
+    // ARRAY (`reg [7:0] mem [0:3]`) now reserves as an md-packed `[count][elem_w]` frame
+    // slot (the array-FORMAL representation, `reserve_frame_local_decl` →
+    // `classify_unpacked_array` Ok), so `mem[k] = x` lowers to a packed part-select
+    // write + read — supported, verified vs iverilog. f = mem[1] = 0x22.
     let src = "module m;\n\
          function automatic integer f; reg [7:0] mem [0:3];\n\
            mem[0] = 8'h11; mem[1] = 8'h22; f = mem[1]; endfunction\n\
@@ -197,16 +199,17 @@ fn frame_local_array_element_write_still_loud() {
     let (out, code) = run(src);
     assert_eq!(
         code,
-        Some(1),
-        "local array element write must loud, got code={code:?}\n{out}"
+        Some(0),
+        "local array element write now supported, got code={code:?}\n{out}"
     );
+    assert!(out.contains("r=22"), "expected mem[1]=0x22, got:\n{out}");
 }
 
 #[test]
-fn frame_block_local_array_element_write_still_loud() {
-    // BOUNDARY: an unpacked-array BLOCK-local (`begin: blk reg [7:0] mem [0:3]; …`) is
-    // marked at `reserve_frame_block_locals` too (ALL frame-local reservation sites) —
-    // its `mem[k]` select write stays loud, not silent-wrong.
+fn frame_block_local_array_element_write_supported() {
+    // §4.5.169: an unpacked-array BLOCK-local (`begin: blk reg [7:0] mem [0:3]; …`) also
+    // reserves md-packed — ALL frame-local reservation sites share
+    // `reserve_frame_local_decl`, so `mem[k]` read/write is supported here too.
     let src = "module m;\n\
          function automatic integer f;\n\
            begin: blk reg [7:0] mem [0:3]; mem[0]=8'h11; mem[1]=8'h22; f=mem[1]; end\n\
@@ -215,9 +218,10 @@ fn frame_block_local_array_element_write_still_loud() {
     let (out, code) = run(src);
     assert_eq!(
         code,
-        Some(1),
-        "block-local array element write must loud, got code={code:?}\n{out}"
+        Some(0),
+        "block-local array element write now supported, got code={code:?}\n{out}"
     );
+    assert!(out.contains("r=22"), "expected mem[1]=0x22, got:\n{out}");
 }
 
 #[test]

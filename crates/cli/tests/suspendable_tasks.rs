@@ -45,17 +45,33 @@ fn fork_task_still_loud() {
 // Each guard below was a SILENT-WRONG or PANIC caught by the adversarial 2-lens review;
 // the lift predicate now keeps them a clean E3009 reject (correct-or-loud).
 #[test]
-fn frame_local_array_task_loud() {
-    // A frame-local unpacked ARRAY (stored as a 1-elem net → element access collapses to
-    // 1 bit) must stay loud — was a silent-wrong (a0=1 vs 5) once the task was lifted.
+fn frame_local_array_task_supported() {
+    // §4.5.169 (was `..._loud`): a frame-local single-dim zero-based unpacked ARRAY in a
+    // suspendable task now reserves as an md-packed `[count][elem_w]` frame slot
+    // (`reserve_frame_local_decl` → `classify_unpacked_array` Ok), so element access is a
+    // packed part-select — NOT the old 1-elem collapse (which read a0=1). a0 = 5,
+    // verified vs iverilog. A MULTI-DIM / non-zero-based / non-simple-element array is
+    // still `Err` → `frame_array_local` → loud (see `frame_local_array_multidim_task_loud`).
     let src = "module t; task automatic fill; int arr[0:2]; arr[0]=5; arr[1]=6; arr[2]=7;\n\
         $display(\"a0=%0d\", arr[0]); endtask\n\
         initial begin fill; #5 $finish; end endmodule";
     let (out, ok) = run(src);
-    assert!(!ok, "frame-local array task must stay loud, got:\n{out}");
+    assert!(ok, "frame-local array task now supported, got:\n{out}");
+    assert!(out.contains("a0=5"), "expected arr[0]=5, got:\n{out}");
+}
+
+#[test]
+fn frame_local_array_multidim_task_loud() {
+    // BOUNDARY: a MULTI-DIM frame-local array is OUTSIDE the md-packed slice
+    // (`classify_unpacked_array` Err) → stays `frame_array_local` → loud, NOT a silent
+    // 1-elem collapse. (Guards that the §4.5.169 lift is narrowed to the supported slice.)
+    let src = "module t; task automatic fill; int arr[0:1][0:1]; arr[0][0]=5;\n\
+        $display(\"a0=%0d\", arr[0][0]); endtask\n\
+        initial begin fill; #5 $finish; end endmodule";
+    let (out, ok) = run(src);
     assert!(
-        !out.contains("a0=1"),
-        "must not silently collapse, got:\n{out}"
+        !ok,
+        "multi-dim frame-local array must stay loud, got:\n{out}"
     );
 }
 

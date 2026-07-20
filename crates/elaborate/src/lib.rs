@@ -11320,38 +11320,7 @@ impl<'s> Elaborator<'s> {
             // registers packed_dims/dim_desc — same net-based reserve as a frame local).
             for d in &body_decls {
                 for decl in &d.names {
-                    let pinfo = s.frame_packed_width(d);
-                    let (mut w, mut msb, lsb, signed) =
-                        s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                    if let Some((pw, pmsb, _)) = &pinfo {
-                        w = *pw;
-                        msb = *pmsb;
-                    }
-                    let net = s.nets.len() as u32;
-                    s.add_net(
-                        &decl.name.name,
-                        ir::NetVar {
-                            kind: frame_local_net_kind(d.kind),
-                            width: w,
-                            msb,
-                            lsb,
-                            signed,
-                            array_len: 1,
-                            dir: ir::PortDir::Internal,
-                            init: default_init(d.kind, w),
-                        },
-                    );
-                    if let Some((_, _, ext)) = pinfo {
-                        s.register_frame_packed(net, d, &decl.unpacked, ext);
-                    }
-                    // EXT2-H guard: mark an unpacked-array class-method local (1-elem
-                    // net) so its `mem[k]` select write stays loud (see reserve_frame_func).
-                    if !decl.unpacked.is_empty() {
-                        s.frame_array_local.insert(net);
-                    }
-                    if net_kind_is_two_state(d.kind) {
-                        s.intro_kind.insert(net, d.kind);
-                    }
+                    s.reserve_frame_local_decl(&decl.name.name, d, &decl.unpacked);
                 }
             }
             // A frame-local 64-bit scratch slot for discarding nested void-call
@@ -16114,6 +16083,100 @@ impl<'s> Elaborator<'s> {
         self.dim_desc.insert(net, dd);
     }
 
+    /// Reserve ONE frame-local variable `name` (declared by `d`, with the per-name
+    /// unpacked dims `unpacked`) and return its net id. Three cases:
+    /// - a SUPPORTED single-dim unpacked array (§13.3 slice, `classify_unpacked_array`
+    ///   ⇒ `Ok`): an md-packed `[count][elem_w]` frame slot — the SAME representation
+    ///   as an array FORMAL, so `arr[k]` read/write reuses the packed part-select
+    ///   machinery (`lower_packed_read` / `frame_write_lvalue`) and per-activity window
+    ///   isolation. Registered in `frame_arr_formal_meta` (signed-element `$signed`
+    ///   re-stamp + whole-array-slice reject) — NOT in `frame_array_local`, so a
+    ///   suspendable-task guard (`frame_task_has_unsafe_construct`) lets it lift.
+    /// - an UNSUPPORTED unpacked array (`Err`, e.g. multi-dim / non-zero-based /
+    ///   dynamic / non-simple element): a 1-elem net marked `frame_array_local` so
+    ///   `mem[k]` element access stays loud (correct-or-loud), as before.
+    /// - a scalar / multi-dim PACKED local: the widen + `register_frame_packed` path.
+    fn reserve_frame_local_decl(
+        &mut self,
+        name: &str,
+        d: &ast::NetVarDecl,
+        unpacked: &[ast::Dim],
+    ) -> u32 {
+        if !unpacked.is_empty() {
+            if let Some(Ok(af)) = self.classify_unpacked_array(
+                unpacked,
+                d.range.as_ref(),
+                &d.packed,
+                d.signed,
+                d.kind,
+            ) {
+                let (count, elem_w) = (af.count, af.elem_w);
+                let ext = Self::array_formal_ext(count, elem_w);
+                let w = count.saturating_mul(elem_w).max(1);
+                let net = self.nets.len() as u32;
+                self.add_net(
+                    name,
+                    ir::NetVar {
+                        // Whole md-packed slot is unsigned (`signed:false`); the element's
+                        // signedness lives in `frame_arr_formal_meta` (`$signed` re-stamp).
+                        // A 2-state element defaults to 0 via `default_init(d.kind, w)`
+                        // (an unpacked array of `int` inits to 0, of `logic` to X).
+                        kind: frame_local_net_kind(d.kind),
+                        width: w,
+                        msb: w.saturating_sub(1),
+                        lsb: 0,
+                        signed: false,
+                        array_len: 1,
+                        dir: ir::PortDir::Internal,
+                        init: default_init(d.kind, w),
+                    },
+                );
+                self.packed_dims.insert(net, ext);
+                let dd = self.compute_dim_desc(d.kind, d.range.as_ref(), &[], unpacked);
+                self.dim_desc.insert(net, dd);
+                self.frame_arr_formal_meta.insert(net, af);
+                if net_kind_is_two_state(d.kind) {
+                    self.intro_kind.insert(net, d.kind);
+                }
+                return net;
+            }
+            // `classify_unpacked_array` returned `Some(Err(..))` — fall through to the
+            // loud 1-elem + `frame_array_local` path below.
+        }
+        let pinfo = self.frame_packed_width(d);
+        let (mut w, mut msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        if let Some((pw, pmsb, _)) = &pinfo {
+            w = *pw;
+            msb = *pmsb;
+        }
+        let net = self.nets.len() as u32;
+        self.add_net(
+            name,
+            ir::NetVar {
+                kind: frame_local_net_kind(d.kind),
+                width: w,
+                msb,
+                lsb,
+                signed,
+                array_len: 1,
+                dir: ir::PortDir::Internal,
+                init: default_init(d.kind, w),
+            },
+        );
+        if let Some((_, _, ext)) = pinfo {
+            self.register_frame_packed(net, d, unpacked, ext);
+        }
+        // EXT2-H guard: an UNSUPPORTED unpacked-array local (1-elem net) — mark it so
+        // its `mem[k]` select write stays loud, not mis-lowered as a bit-select.
+        if !unpacked.is_empty() {
+            self.frame_array_local.insert(net);
+        }
+        if net_kind_is_two_state(d.kind) {
+            self.intro_kind.insert(net, d.kind);
+        }
+        net
+    }
+
     fn reserve_frame_block_locals(&mut self, body: &ast::Stmt, base_net: u32) -> u64 {
         let mut decls = Vec::new();
         collect_block_local_decls(body, &mut decls);
@@ -16131,39 +16194,8 @@ impl<'s> Elaborator<'s> {
                     }
                     continue; // coalesce with an already-reserved formal/local
                 }
-                let pinfo = self.frame_packed_width(d);
-                let (mut w, mut msb, lsb, signed) =
-                    self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                if let Some((pw, pmsb, _)) = &pinfo {
-                    w = *pw;
-                    msb = *pmsb;
-                }
                 let slot = self.nets.len() as u32 - base_net;
-                let net = self.nets.len() as u32;
-                self.add_net(
-                    &decl.name.name,
-                    ir::NetVar {
-                        kind: frame_local_net_kind(d.kind),
-                        width: w,
-                        msb,
-                        lsb,
-                        signed,
-                        array_len: 1,
-                        dir: ir::PortDir::Internal,
-                        init: default_init(d.kind, w),
-                    },
-                );
-                if let Some((_, _, ext)) = pinfo {
-                    self.register_frame_packed(net, d, &decl.unpacked, ext);
-                }
-                // EXT2-H guard: mark an unpacked-array block-local (1-elem net) so its
-                // `mem[k]` select write stays loud (see reserve_frame_func).
-                if !decl.unpacked.is_empty() {
-                    self.frame_array_local.insert(net);
-                }
-                if net_kind_is_two_state(d.kind) {
-                    self.intro_kind.insert(net, d.kind);
-                }
+                self.reserve_frame_local_decl(&decl.name.name, d, &decl.unpacked);
                 if d.lifetime == Some(true) && slot < 64 {
                     auto_override |= 1u64 << slot;
                 }
@@ -16187,11 +16219,45 @@ impl<'s> Elaborator<'s> {
         &mut self,
         p: &ast::TfPort,
     ) -> Option<Result<ArrayFormal, &'static str>> {
-        if p.unpacked.is_empty() {
+        // A TfPort has no `packed` field (a formal element is a single vector range),
+        // so pass `&[]` — the multi-dim-packed-element reject never fires for formals.
+        self.classify_unpacked_array(
+            &p.unpacked,
+            p.range.as_ref(),
+            &[],
+            p.signed,
+            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+        )
+    }
+
+    /// §13.3 UARR slice classifier, shared by array FORMALS and frame-LOCAL unpacked
+    /// arrays (a frame local reuses the same md-packed `[count][elem_w]` lowering). The
+    /// caller supplies the raw fields (`classify_array_formal` from a `TfPort`, the
+    /// frame-local reservation from a `NetVarDecl` + per-name unpacked dims). `packed`
+    /// is the ADDITIONAL packed dims of a local (`logic [3:0][7:0] arr[]` ⇒ `[[7:0]]`);
+    /// a formal passes `&[]`. See the SUPPORTED/`Err` contract on `reserve_frame_func`.
+    fn classify_unpacked_array(
+        &mut self,
+        unpacked: &[ast::Dim],
+        range: Option<&ast::Range>,
+        packed: &[ast::Range],
+        signed: bool,
+        kind: ast::NetVarKind,
+    ) -> Option<Result<ArrayFormal, &'static str>> {
+        if unpacked.is_empty() {
             return None;
         }
+        // A multi-dim PACKED element (`logic [3:0][7:0] arr[0:2]`) is out of the
+        // simple-element slice: the md-packed slot encodes only `[count][elem_w]`, so a
+        // sub-element select `arr[k][j]` would mis-lower to a bit select (silent-wrong).
+        // Loud-reject (a formal never reaches here — its `packed` is always `&[]`).
+        if !packed.is_empty() {
+            return Some(Err(
+                "a multi-dimensional packed element combined with an unpacked array",
+            ));
+        }
         // Multi-dim unpacked → the 2-level packing / offset math is out of the slice.
-        if p.unpacked.len() != 1 {
+        if unpacked.len() != 1 {
             return Some(Err(
                 "a multi-dimensional unpacked-array formal (only a single dimension is supported)",
             ));
@@ -16199,15 +16265,15 @@ impl<'s> Elaborator<'s> {
         // G3: a signed element (`byte`/`int`/`shortint`/`longint`/`logic signed [..]`)
         // is supported — the md-packed element read is a part-select (unsigned per
         // §11.5.1), so `lower_packed_read` re-stamps `$signed` on a whole-element read
-        // when `elem_signed` is set (below). `p.signed` reflects the element type's
+        // when `elem_signed` is set (below). `signed` reflects the element type's
         // declared signedness (`byte`→signed, `byte unsigned`→unsigned).
-        let elem_signed = p.signed;
-        // `ascending` = the formal's declared unpacked-dim direction (`[0:N-1]` is
+        let elem_signed = signed;
+        // `ascending` = the declared unpacked-dim direction (`[0:N-1]` is
         // little-endian ascending, `[N-1:0]` big-endian descending). The ACTUAL must
         // match it (§7.6 array copy is POSITIONAL, so `arr[i]` == the actual element
         // at the same DECLARED-order position only when the two directions agree; the
         // md-packed read is index-based). The call site loud-rejects a mismatch.
-        let (count, ascending) = match &p.unpacked[0] {
+        let (count, ascending) = match &unpacked[0] {
             // `[N]` == `[0:N-1]` (zero-based ascending by construction).
             ast::Dim::Size(e) => match self.const_eval_in_scope(e) {
                 Some(n) if n >= 1 => (n as u32, true),
@@ -16238,20 +16304,19 @@ impl<'s> Elaborator<'s> {
         // The element must be a simple zero-LSB vector (`[W-1:0]`), an integral atom
         // (`int unsigned`/`byte unsigned`/…), or a scalar. A non-zero-LSB element
         // (`[15:8]`) needs per-element offset normalization (§4.5.103) — out of slice.
-        let elem_w = match p.range.as_ref() {
+        let elem_w = match range {
             // No explicit vector range: an atom (`int`/`byte`/…, implicit zero-LSB
             // `[W-1:0]`) or a 1-bit scalar. A real/string/event/handle element is not
             // a bit-vector and cannot be md-packed → loud. The atom's width comes from
             // `range_to_dims` (int→32, byte→8, …); bare signed atoms already louded
-            // above via `p.signed`.
+            // above via `signed`.
             None => {
-                let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
                 if !ast_kind_is_bit_vector(kind) {
                     return Some(Err(
                         "a real / string / event / class-handle unpacked-array element",
                     ));
                 }
-                let (w, _, _, _) = self.range_to_dims(kind, None, p.signed);
+                let (w, _, _, _) = self.range_to_dims(kind, None, signed);
                 w
             }
             Some(r) => {
@@ -16481,41 +16546,7 @@ impl<'s> Elaborator<'s> {
             let mut slot = n_params + 1; // formals + return var
             for d in &func.body_decls {
                 for decl in &d.names {
-                    // A multi-dim PACKED frame local widens to its full flat width and
-                    // registers packed_dims + dim_desc (element read + dim sysfuncs).
-                    let pinfo = s.frame_packed_width(d);
-                    let (mut w, mut msb, lsb, signed) =
-                        s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                    if let Some((pw, pmsb, _)) = &pinfo {
-                        w = *pw;
-                        msb = *pmsb;
-                    }
-                    let net = s.nets.len() as u32;
-                    s.add_net(
-                        &decl.name.name,
-                        ir::NetVar {
-                            kind: frame_local_net_kind(d.kind),
-                            width: w,
-                            msb,
-                            lsb,
-                            signed,
-                            array_len: 1,
-                            dir: ir::PortDir::Internal,
-                            init: default_init(d.kind, w),
-                        },
-                    );
-                    if let Some((_, _, ext)) = pinfo {
-                        s.register_frame_packed(net, d, &decl.unpacked, ext);
-                    }
-                    // EXT2-H guard: an UNPACKED-array local reserves as a 1-elem net
-                    // (an array is outside the frame-call subset) — mark it so a
-                    // `mem[k]` select write stays loud, not mis-lowered as a bit-select.
-                    if !decl.unpacked.is_empty() {
-                        s.frame_array_local.insert(net);
-                    }
-                    if net_kind_is_two_state(d.kind) {
-                        s.intro_kind.insert(net, d.kind);
-                    }
+                    s.reserve_frame_local_decl(&decl.name.name, d, &decl.unpacked);
                     if d.lifetime == Some(true) && slot < 64 {
                         auto_override |= 1u64 << slot;
                     }
@@ -16713,39 +16744,7 @@ impl<'s> Elaborator<'s> {
             let mut slot = n_params; // tasks have no return var
             for d in &task.body_decls {
                 for decl in &d.names {
-                    let pinfo = s.frame_packed_width(d);
-                    let (mut w, mut msb, lsb, signed) =
-                        s.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                    if let Some((pw, pmsb, _)) = &pinfo {
-                        w = *pw;
-                        msb = *pmsb;
-                    }
-                    let net = s.nets.len() as u32;
-                    s.add_net(
-                        &decl.name.name,
-                        ir::NetVar {
-                            kind: frame_local_net_kind(d.kind),
-                            width: w,
-                            msb,
-                            lsb,
-                            signed,
-                            array_len: 1,
-                            dir: ir::PortDir::Internal,
-                            init: default_init(d.kind, w),
-                        },
-                    );
-                    if let Some((_, _, ext)) = pinfo {
-                        s.register_frame_packed(net, d, &decl.unpacked, ext);
-                    }
-                    // EXT2-H guard: an UNPACKED-array local reserves as a 1-elem net
-                    // (an array is outside the frame-call subset) — mark it so a
-                    // `mem[k]` select write stays loud, not mis-lowered as a bit-select.
-                    if !decl.unpacked.is_empty() {
-                        s.frame_array_local.insert(net);
-                    }
-                    if net_kind_is_two_state(d.kind) {
-                        s.intro_kind.insert(net, d.kind);
-                    }
+                    s.reserve_frame_local_decl(&decl.name.name, d, &decl.unpacked);
                     if d.lifetime == Some(true) && slot < 64 {
                         auto_override |= 1u64 << slot;
                     }
