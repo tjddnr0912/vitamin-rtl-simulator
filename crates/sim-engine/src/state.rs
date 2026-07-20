@@ -2384,6 +2384,23 @@ impl<'a> SimState<'a> {
             self.frame_local[net],
             "frame write targets a frame-local net"
         );
+        // §4.5.178: a heap-backed DYNAMIC-array write (`b[i]=v` / a whole-handle store to a
+        // dyn-array `input` formal or a frame-local dyn array) reaching this `&self` frame
+        // executor (`run_frame_call` = functions, `run_task` = subset tasks) CANNOT be
+        // performed — the heap store (`write_lvalue`→`dyn_write`) is `&mut`, so the write
+        // would land in the unused scalar frame slot while READS come from the heap: the
+        // write silently vanishes. `function f(input int b[]); b[0]=9; return b[0];` called
+        // as `r = f(a)` returned the PRE-write value (1, not 9) — a pre-existing §4.5.177
+        // silent-wrong (the snapshot soundness argument tacitly assumed a read-only body).
+        // Loud instead (correct-or-loud).
+        // A frame-local STRING is `dyn_is_handle` too but is slab-stored (§4.5.167) and DOES
+        // write correctly below, so it is EXCLUDED. Empty `dyn_is_handle` ⇒ never taken.
+        if self.dyn_is_handle.get(net).copied().unwrap_or(false)
+            && self.ir.nets[net].kind != NetKind::String
+        {
+            self.fatal_frame_heap_write();
+            return;
+        }
         let (fidx, slot) = self.frame_route[net].expect("frame lvalue net is routed");
         let auto = self.frame_slot_auto[net];
         let nv = &self.ir.nets[net];
@@ -2703,6 +2720,31 @@ impl<'a> SimState<'a> {
     /// direct `st = aa.first(module_net)` in a function body) needs a `&mut` module-net
     /// write this `&self` executor cannot do — fatal-loud (reuses the `call_fatal`
     /// channel → `FinishReason::Error`). Correct-or-loud: a fatal, never a silent 0.
+    /// §4.5.178: latch a fatal for a heap dynamic-array WRITE attempted in a synchronous
+    /// `&self` frame executor (see the guard at the top of `frame_write_lvalue`). Such a
+    /// write cannot reach the `&mut` heap store, so it would silently vanish. Mirrors
+    /// `fatal_frame_assoc_iter`'s latch (fires once; the scheduler converts the latched
+    /// `call_fatal` to `FinishReason::Error`).
+    fn fatal_frame_heap_write(&self) {
+        if !self.call_fatal.get() {
+            self.call_fatal.set(true);
+            self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+                severity: Severity::Fatal,
+                code: MsgCode::RunFatal,
+                message: "writing an element of (or a whole store to) a dynamic-array `input` \
+                          formal is unsupported inside a synchronous function / subset-task body \
+                          — the formal is a pass-by-value copy on the heap and this `&self` \
+                          frame executor cannot mutate the heap (the write would silently \
+                          vanish). Read the formal without mutating it, or restructure to a \
+                          process / suspendable task."
+                    .to_string(),
+                location: None,
+                context: Vec::new(),
+                sim_time: Some(TimeStamp { ticks: self.now }),
+            }));
+        }
+    }
+
     fn fatal_frame_assoc_iter(&self) {
         if !self.call_fatal.get() {
             self.call_fatal.set(true);
