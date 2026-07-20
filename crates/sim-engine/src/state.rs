@@ -2479,6 +2479,51 @@ impl<'a> SimState<'a> {
 
     /// B1 frame-call evaluator. Runs user function `func`'s lowered body (in the
     /// GLOBAL `ir.blocks` arena from `FuncDef.entry`) against a per-invocation
+    /// §4.5.175: is `rhs` an associative/dynamic/queue ITERATION method
+    /// (`a.first/next/last/prev(k)`) — the lowered `foreach` walk over a dynamic
+    /// array / queue / associative array? Such a step WRITES the iteration key as a
+    /// side effect, which the process executor does via a `&mut` `write_lvalue`
+    /// (`Scheduler::assoc_iter_step`). The SYNCHRONOUS frame executors
+    /// (`run_frame_call` for functions, `run_task` for subset tasks) are `&self` and
+    /// cannot advance the key — a plain `frame_rhs_value` eval leaves it stuck, so the
+    /// walk never progresses and the loop silently returns 0 (a silent-wrong found by
+    /// adversarial review). Detect it so the executor can fatal-loud instead.
+    fn rhs_is_assoc_iter(&self, rhs: u32) -> bool {
+        matches!(
+            self.ir.exprs.get(rhs as usize),
+            Some(sim_ir::Expr::SysFunc {
+                which: sim_ir::SysFuncId::AssocFirst
+                    | sim_ir::SysFuncId::AssocNext
+                    | sim_ir::SysFuncId::AssocLast
+                    | sim_ir::SysFuncId::AssocPrev,
+                ..
+            })
+        )
+    }
+
+    /// §4.5.175: latch a fatal for a `foreach`-over-dynamic-storage inside a `&self`
+    /// synchronous frame body (see [`Self::rhs_is_assoc_iter`]). Reuses the
+    /// `call_fatal` channel (like the recursion-depth fatal) — the scheduler converts
+    /// it to `FinishReason::Error`. Correct-or-loud: a fatal, never a silent 0.
+    fn fatal_frame_assoc_iter(&self) {
+        if !self.call_fatal.get() {
+            self.call_fatal.set(true);
+            self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+                severity: Severity::Fatal,
+                code: MsgCode::RunFatal,
+                message: "a `foreach` over a dynamic array / queue / associative array is \
+                          unsupported inside a function or subset-task body — the synchronous \
+                          frame executor cannot advance the iteration key (would silently return \
+                          0). Use an explicit `for (int i = 0; i < a.size(); i++)` loop, or \
+                          iterate in a process / suspendable task."
+                    .to_string(),
+                location: None,
+                context: Vec::new(),
+                sim_time: Some(TimeStamp { ticks: self.now }),
+            }));
+        }
+    }
+
     /// frame, returning its return-var Value resized to the declared return
     /// width/sign. `&self` (read path) + interior-mutable frame arena; the body
     /// BB loop is iterative, native recursion occurs ONLY on a nested
@@ -2586,7 +2631,7 @@ impl<'a> SimState<'a> {
         // ── BB LOOP over the GLOBAL func arena from `fd.entry`. Process bodies
         //    live in a SEPARATE `Process.body` space and are never touched. ──
         let mut cur = fd.entry;
-        loop {
+        'body: loop {
             debug_assert!(
                 (cur as usize) < self.ir.blocks.len(),
                 "frame CFG target in range (rebase complete)"
@@ -2594,6 +2639,13 @@ impl<'a> SimState<'a> {
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
                 if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
+                    // §4.5.175: a dyn/queue/assoc `foreach` step (`__st = a.first/next(k)`)
+                    // WRITES its key via `&mut write_lvalue`, which this `&self` function
+                    // executor cannot do — plain eval would stall the walk at 0. Fatal-loud.
+                    if self.rhs_is_assoc_iter(*rhs) {
+                        self.fatal_frame_assoc_iter();
+                        break 'body;
+                    }
                     // OWNED Value FIRST — its nested Calls may recurse into
                     // run_frame_call, fine: THIS frame holds NO live borrow now.
                     // N1: `$sformatf` renders through the shared formatter here.
@@ -2758,7 +2810,7 @@ impl<'a> SimState<'a> {
 
         // ── BB LOOP over the GLOBAL func arena from fd.entry. ──
         let mut cur = fd.entry;
-        loop {
+        'body: loop {
             debug_assert!(
                 (cur as usize) < self.ir.blocks.len(),
                 "task CFG target in range"
@@ -2766,6 +2818,12 @@ impl<'a> SimState<'a> {
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
                 if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
+                    // §4.5.175: a dyn/queue/assoc `foreach` step can't advance its key in
+                    // this `&self` subset-task executor — fatal-loud instead of stalling at 0.
+                    if self.rhs_is_assoc_iter(*rhs) {
+                        self.fatal_frame_assoc_iter();
+                        break 'body;
+                    }
                     // N1: `$sformatf` renders through the shared formatter here.
                     let v = self.frame_rhs_value(lhs, *rhs);
                     self.frame_or_class_write(lhs, v);
