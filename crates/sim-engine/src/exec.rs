@@ -221,6 +221,41 @@ pub(crate) trait Kernel {
 /// Execute activity `pi` starting at body block `start`. `pi` is a runtime
 /// ACTIVITY id (index into `Scheduler::activities`), NOT a declaration index —
 /// the body/sensitivity are resolved through `activities[pi].template`.
+/// Round-14 V3/V4 Phase 3: pop this activity's live AUTOMATIC frame windows off the
+/// SHARED `frame_stack` into their `FrameRec`s before the activity suspends — so an
+/// interleaving activity's frame calls can't corrupt them (a `frame_slot_read` always
+/// reads `frame_stack.last()`, which must be THIS activity's window only while it runs).
+/// Popped TOP-first (reverse call order), matching `enter_task_frame`'s push order.
+fn stash_frame_windows(sched: &mut Scheduler, pi: u32) {
+    let n = sched.activities[pi as usize].call_stack.len();
+    for i in (0..n).rev() {
+        let callee = sched.activities[pi as usize].call_stack[i].callee;
+        if sched.st.func_has_auto[callee as usize] {
+            let w = sched
+                .st
+                .frame_stack
+                .borrow_mut()
+                .pop()
+                .expect("frame window to stash");
+            sched.activities[pi as usize].call_stack[i].window = Some(w);
+        }
+    }
+}
+
+/// The inverse of [`stash_frame_windows`]: push the stashed windows back onto
+/// `frame_stack` in call order (bottom `FrameRec` first) so this activity's live frame
+/// context is on top again before it resumes executing the frame CFG.
+fn restore_frame_windows(sched: &mut Scheduler, pi: u32) {
+    let n = sched.activities[pi as usize].call_stack.len();
+    for i in 0..n {
+        // Tolerant: only a STASHED (`Some`) window is pushed back; a live/None frame is
+        // skipped, so a spurious call during normal in-frame execution is a no-op.
+        if let Some(w) = sched.activities[pi as usize].call_stack[i].window.take() {
+            sched.st.frame_stack.borrow_mut().push(w);
+        }
+    }
+}
+
 pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
     let mut guard: u64 = 0;
     loop {
@@ -248,6 +283,18 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             // Defense-in-depth: a non-child must NEVER fetch a live barrier's join_bb.
             #[cfg(debug_assertions)]
             sched.assert_not_parent_at_join(pi, bb);
+        }
+        // Round-14 V3/V4 Phase 3: resuming INTO a suspended frame — restore this
+        // activity's stashed windows onto the shared `frame_stack` before executing the
+        // frame CFG. Only fires on the first iteration after a resume (windows are `Some`
+        // only across a suspend); a no-op otherwise.
+        if in_frame
+            && sched.activities[pi as usize]
+                .call_stack
+                .iter()
+                .any(|f| f.window.is_some())
+        {
+            restore_frame_windows(sched, pi);
         }
 
         // Snapshot the block's stmt ids + terminator (process-local indexing,
@@ -356,28 +403,42 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                 region,
                 resume,
             } => {
-                if in_frame {
-                    sched.mark_fatal();
-                    return Step::Fatal;
-                }
-                // format_version 4: `amount` is the ExprId of the RAW delay
-                // value in module units — evaluate NOW and scale by this
-                // process's multiplier (X/Z → 0; real → round(v×M)).
+                // format_version 4: `amount` is the ExprId of the RAW delay value in
+                // module units — evaluate NOW (the frame window is still live) and scale
+                // by this process's multiplier (X/Z → 0; real → round(v×M)).
                 let ticks = sched.delay_ticks(*amount);
                 let inactive = matches!(region, DelayRegion::Inactive) || ticks == 0;
                 let tick = sched.now().saturating_add(ticks);
-                sched.schedule_resume(pi, *resume, tick, inactive);
+                if in_frame {
+                    // Suspend the frame: record its resume PC, stash the window off the
+                    // shared stack, wake at the frozen process `bb` (ignored on resume —
+                    // in_frame reads the frame's PC).
+                    sched.activities[pi as usize]
+                        .call_stack
+                        .last_mut()
+                        .unwrap()
+                        .bb = *resume;
+                    stash_frame_windows(sched, pi);
+                    sched.schedule_resume(pi, bb, tick, inactive);
+                } else {
+                    sched.schedule_resume(pi, *resume, tick, inactive);
+                }
                 return Step::Suspended;
             }
             Terminator::Wait { cond, resume } => {
-                if in_frame {
-                    sched.mark_fatal();
-                    return Step::Fatal;
-                }
                 match cond {
                     WaitCause::Expr { expr } => {
+                        // `truthy` reads the condition with the window still live.
                         if sched.truthy(*expr) {
-                            bb = *resume; // already true → fall through
+                            if in_frame {
+                                sched.activities[pi as usize]
+                                    .call_stack
+                                    .last_mut()
+                                    .unwrap()
+                                    .bb = *resume; // already true → fall through in the frame
+                            } else {
+                                bb = *resume; // already true → fall through
+                            }
                             guard += 1;
                             if guard > sched.max_deltas_guard() {
                                 sched.mark_fatal();
@@ -385,12 +446,27 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             }
                             continue;
                         }
-                        // Suspending: the one place the cause must be OWNED.
-                        sched.suspend_on(pi, *resume, cond.clone());
+                        if in_frame {
+                            sched.activities[pi as usize]
+                                .call_stack
+                                .last_mut()
+                                .unwrap()
+                                .bb = *resume;
+                            stash_frame_windows(sched, pi);
+                            sched.suspend_on(pi, bb, cond.clone());
+                        } else {
+                            // Suspending: the one place the cause must be OWNED.
+                            sched.suspend_on(pi, *resume, cond.clone());
+                        }
                     }
                     // `wait fork` (v8): park on the implicit child barrier, or
                     // fall through immediately when there are no live children.
                     WaitCause::Fork => {
+                        if in_frame {
+                            // `wait fork` inside a task frame is a Phase-4 follow-on.
+                            sched.mark_fatal();
+                            return Step::Fatal;
+                        }
                         if sched.exec_wait_fork(pi, *resume) {
                             bb = *resume; // no outstanding children → fall through
                             guard += 1;
@@ -402,7 +478,19 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         }
                         // parked by exec_wait_fork; on_child_complete resumes it.
                     }
-                    _ => sched.suspend_on(pi, *resume, cond.clone()),
+                    _ => {
+                        if in_frame {
+                            sched.activities[pi as usize]
+                                .call_stack
+                                .last_mut()
+                                .unwrap()
+                                .bb = *resume;
+                            stash_frame_windows(sched, pi);
+                            sched.suspend_on(pi, bb, cond.clone());
+                        } else {
+                            sched.suspend_on(pi, *resume, cond.clone());
+                        }
+                    }
                 }
                 return Step::Suspended;
             }
@@ -494,6 +582,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 bb: entry,
                                 ret_bb: *ret_bb,
                                 out_binds: info.out_binds.clone(),
+                                window: None,
                             });
                         continue; // re-fetch from the new frame next iteration
                     }

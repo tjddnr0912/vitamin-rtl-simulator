@@ -405,6 +405,13 @@ pub(crate) struct FrameRec {
     pub ret_bb: u32,
     /// `(callee out-/inout-slot, caller lvalue)` — copied out at `Return`.
     pub out_binds: Vec<(u32, sim_ir::Lvalue)>,
+    /// Round-14 V3/V4 Phase 3: this frame's AUTOMATIC window while the activity is
+    /// SUSPENDED. During execution the window lives on the shared `frame_stack` (top =
+    /// current, `None` here); on a `Delay`/`Wait` in this frame it is STASHED here
+    /// (popped off `frame_stack`) so interleaving activities can't corrupt the shared
+    /// stack, and RESTORED (pushed back) when the activity resumes. `None` for a static
+    /// callee (its slab lives in `static_store`, not `frame_stack`).
+    pub window: Option<Vec<crate::value::Value>>,
 }
 
 pub(crate) struct Activity {

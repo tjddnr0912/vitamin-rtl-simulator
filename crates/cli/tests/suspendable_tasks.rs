@@ -26,23 +26,19 @@ fn run(src: &str) -> (String, bool) {
     (combined.trim().to_owned(), out.status.success())
 }
 
-// ───────────────────────── Phase 1: classifier (behaviour unchanged) ─────────
+// ───────────────────────── Phase 4 guard: fork in a task stays loud ──────────
 #[test]
-fn nonsubset_task_still_loud_phase1() {
-    // REGRESSION PIN: a task with `@(posedge)` must STILL be loud (E3009) until the
-    // engine suspendable-frame path lands (Phase 2/3). The classifier refactor
-    // (validate_frame_body → classify_frame_body) must not change this behaviour.
+fn fork_task_still_loud() {
+    // GUARD: a `fork` inside a task body is a Phase-4 follow-on — it must stay LOUD
+    // (E3009), never silently mis-run on the suspendable-frame path.
     let src = "module t; logic c=0; always #5 c=~c;\n\
-        task automatic w(); @(posedge c); endtask\n\
-        initial begin w(); $finish; end endmodule";
+        task automatic par(); fork @(posedge c); @(posedge c); join endtask\n\
+        initial begin par(); $finish; end endmodule";
     let (out, ok) = run(src);
+    assert!(!ok, "fork task must stay loud, got:\n{out}");
     assert!(
-        !ok,
-        "non-subset task must stay loud in Phase 1, got:\n{out}"
-    );
-    assert!(
-        out.contains("frame-call subset"),
-        "expected the frame-call-subset E3009, got:\n{out}"
+        out.contains("fork"),
+        "expected the fork reject, got:\n{out}"
     );
 }
 
@@ -109,14 +105,38 @@ fn v4_body_local_write_read() {
     assert!(out.contains("o=14"), "got:\n{out}");
 }
 
+// ───────────────── Phase 3: timing (@/#/wait) suspends the caller (vs iverilog) ─────
 #[test]
-fn v3_timing_task_still_loud_phase2() {
-    // GUARD: a task that SUSPENDS (`@(posedge)`) is not yet supported (per-activity-window
-    // phase) — it must stay LOUD (E3009), never silently mis-run on the shared frame_stack.
+fn v3_at_wait_suspends() {
+    // Two `@(posedge clk)` waits in a task suspend the calling process; with a 5ns clock
+    // the second edge lands at t=15. (iverilog: o=15.)
     let src = "module t; logic c=0; always #5 c=~c;\n\
-        task automatic w(); @(posedge c); endtask\n\
-        initial begin w(); $finish; end endmodule";
+        task automatic w2(); @(posedge c); @(posedge c); endtask\n\
+        initial begin w2(); $display(\"o=%0t\", $time); #1 $finish; end endmodule";
     let (out, ok) = run(src);
-    assert!(!ok, "timing task must stay loud in Phase 2, got:\n{out}");
-    assert!(out.contains("frame-call subset"), "got:\n{out}");
+    assert!(ok, "@-wait task must run, got:\n{out}");
+    assert!(out.contains("o=15"), "got:\n{out}");
+}
+
+#[test]
+fn v3_delay_suspends() {
+    // A `#10` delay in a task advances time to 10. (iverilog: o=10.)
+    let src = "module t; task automatic dly(); #10; endtask\n\
+        initial begin dly(); $display(\"o=%0t\", $time); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "#delay task must run, got:\n{out}");
+    assert!(out.contains("o=10"), "got:\n{out}");
+}
+
+#[test]
+fn v3_sequential_drivers() {
+    // The KAT-driver shape: several `task drive(v); @(posedge clk); bus<=v;` calls in one
+    // initial. Second drive wins ⇒ bus=22. (iverilog: o=22.)
+    let src = "module t; logic c=0; logic [7:0] bus; always #5 c=~c;\n\
+        task automatic drive(input logic [7:0] v); @(posedge c); bus <= v; endtask\n\
+        initial begin drive(8'h11); @(posedge c); drive(8'h22); @(posedge c);\n\
+          $display(\"o=%0h\", bus); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "sequential driver task must run, got:\n{out}");
+    assert!(out.contains("o=22"), "got:\n{out}");
 }

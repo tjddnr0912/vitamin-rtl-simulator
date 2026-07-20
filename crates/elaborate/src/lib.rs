@@ -15709,10 +15709,10 @@ impl<'s> Elaborator<'s> {
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!(
-                            "frame task `{name}` body uses a timing/suspend/fork or nested \
-                             suspendable-task call, which is outside the frame-call subset \
-                             (a leaf non-suspending task — $display/NBA to its own locals or \
-                             module nets, no @/#/wait/fork/nested-task-call — is supported)"
+                            "frame task `{name}` body uses a `fork` or a nested \
+                             suspendable-task call, which is outside the supported frame \
+                             subset (a LEAF task — $display/NBA/@/#/wait, no fork and no \
+                             nested-task-call — is supported)"
                         ),
                     );
                 }
@@ -15722,14 +15722,17 @@ impl<'s> Elaborator<'s> {
         }
     }
 
-    /// Round-14 V3/V4 Phase 2: is task `fid` a LEAF, NON-SUSPENDING frame task — it
-    /// carries a suspend signal (an NBA/$systask/force/release statement) but NO
-    /// `Delay`/`Wait`/`Fork`/`Call` terminator, so `run_process` can run it to completion
-    /// within one call using the shared frame window (no interleaving, no nested frame).
+    /// Round-14 V3/V4 Phase 2/3: is (suspendable) task `fid` LIFTABLE onto the engine's
+    /// suspendable-frame path — a LEAF task (no nested task `Call`) with no `Fork`. The
+    /// engine's `run_process` handles its `$display`/NBA (Phase 2) and its `@`/`#`/`wait`
+    /// suspend via the per-activity window stash/restore (Phase 3). A nested-task-call
+    /// (`Call`) or `fork` (`Fork`) stays LOUD — those are follow-on phases; running them
+    /// now would drop the callee onto the synchronous executor / mis-use the window.
     /// Walks the REACHABLE blocks from the task's entry (a range walk would spill into
     /// later tasks' blocks — every task's body sits in the shared `func_blocks` arena).
+    /// The caller has already confirmed `fid` is suspendable (`compute_suspendable_tasks`),
+    /// so a leaf-no-fork task necessarily carries a `Delay`/`Wait` or a signal statement.
     fn frame_body_is_leaf_nonsuspending(&self, fid: u32) -> bool {
-        let mut has_signal = false;
         let mut seen = std::collections::BTreeSet::new();
         let mut stack = vec![self.funcs[fid as usize].entry];
         while let Some(b) = stack.pop() {
@@ -15740,10 +15743,10 @@ impl<'s> Elaborator<'s> {
                 continue;
             };
             match &blk.term {
-                ir::Terminator::Delay { .. }
-                | ir::Terminator::Wait { .. }
-                | ir::Terminator::Fork { .. }
-                | ir::Terminator::Call { .. } => return false,
+                ir::Terminator::Fork { .. } | ir::Terminator::Call { .. } => return false,
+                ir::Terminator::Delay { resume, .. } | ir::Terminator::Wait { resume, .. } => {
+                    stack.push(*resume)
+                }
                 ir::Terminator::Goto { target } => stack.push(*target),
                 ir::Terminator::Branch {
                     then_bb, else_bb, ..
@@ -15753,20 +15756,8 @@ impl<'s> Elaborator<'s> {
                 }
                 ir::Terminator::Return => {}
             }
-            for &sid in &blk.stmts {
-                if !matches!(
-                    self.stmts[sid as usize],
-                    ir::Stmt::BlockingAssign { .. }
-                        | ir::Stmt::Disable {
-                            scope_kind: ir::DisableKind::Scope,
-                            ..
-                        }
-                ) {
-                    has_signal = true;
-                }
-            }
         }
-        has_signal
+        true
     }
 
     /// B2: THIS module's recursive TASKS (self or mutual). A non-recursive task
