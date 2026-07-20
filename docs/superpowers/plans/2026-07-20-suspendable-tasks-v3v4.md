@@ -25,6 +25,40 @@
 
 **Reference designs:** spec `docs/superpowers/specs/2026-07-20-round14-deferred-items-design.md` §1. Key existing code: `crates/sim-engine/src/exec.rs:224` (`run_process`), `:390` (`Terminator::Call` arm), `crates/sim-engine/src/state.rs:2596` (`run_task`), `crates/sim-engine/src/sched.rs:391` (`struct Activity`), `crates/elaborate/src/lib.rs:17279` (`validate_frame_body`).
 
+## Design decisions resolved during execution (2026-07-20)
+
+1. **Task 1.3 (richer lowering) is a NO-OP.** `validate_frame_body` runs *after* the
+   task body is lowered — it walks already-emitted `func_blocks` and matches their
+   `Terminator`/`Stmt` variants. So a non-subset task body is *already* lowered with real
+   `Delay`/`Wait`/`Fork` terminators and NBA/`$systask` statements; nothing stops execution
+   but the E3009 reject and the synchronous executor. Phase 1.3 needs no code.
+
+2. **No sidecar, no trailer, no format bump — the engine RECOMPUTES the suspendable set
+   at startup** (user decision). `task_calls_proc` rides the `StagedExtraSidecars` trailer
+   ("must survive vcmp→vrun"), so a serialized `suspendable_tasks` would be a v23 trailer
+   bump. Instead the engine walks each task's func-arena CFG once at startup and marks it
+   suspendable — available identically on the one-shot AND staged paths from the SimIr alone.
+   **`format_version` stays 22; SimIr golden unchanged; supersedes spec §1.6's "sidecar".**
+   (Tasks 1.2 in Phase 1 is therefore dropped; its role moves to Phase 2 as the engine
+   recompute.)
+
+3. **Engine classifier = terminator + statement-kind only (no frame-net-range).** A task is
+   *engine-suspendable* iff its body has a `Delay`/`Wait`/`Fork` terminator OR a
+   `SysTask`/NBA/`Force`/`Release` statement — a purely structural walk needing no elaborate
+   state. `run_process` handles all of these natively. **Consistency rule (correct-or-loud):**
+   elaborate lifts the E3009 reject for a task **only** when it is engine-suspendable by this
+   exact definition. A task that is non-subset *only* because of an lvalue-kind issue
+   (out-of-frame / part-select / array-element write, no timing/NBA/systask) **stays loud** —
+   the engine would not route it, so lifting its reject would drop it onto the synchronous
+   executor that cannot run it (silent-wrong). This keeps the elaborate reject-lift and the
+   engine recompute keyed on the *same* structural signal, so they can never disagree.
+
+4. **Reject-lift and engine routing are ATOMIC.** Lifting the E3009 in elaborate without the
+   engine routing in place would drop a non-subset task onto `run_task` (mis-run/panic). So
+   Phase 2's elaborate change (lift reject for engine-suspendable tasks) and engine change
+   (recompute + suspendable Call/Return) land in the SAME commit. There is no intermediate
+   commit where a suspendable task elaborates but mis-runs.
+
 ---
 
 ## Phase 0 — Pin the oracle & lock the reproductions
