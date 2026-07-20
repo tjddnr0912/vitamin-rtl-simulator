@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-20)**: format_version **22** · **3701 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.166(comb sensitivity 읽기집합 완전성 — always_comb/@(*)/always_latch서 LHS bit/part/word-select 인덱스 + 계층 ref[`dut.mem[idx]`·`dut.q`] read/write를 감도에 포함·silent stale→correct·외 round-13 V10). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
+> **기준선(2026-07-20)**: format_version **22** · **3710 tests green** · 3-OS CI green · MsgCode 58 · **MSRV 1.85**(§4.5.150). 최신 완료 = §4.5.167(round-14 loud→supported: 64-bit MSB-set 리터럴 fold[V9·§4.5.151 defer 해소]·frame-local `string` 변수[V1]·엔진 str_bytes frame-aware twin[심층검증서 loud→silent 회귀 발굴·수정]. round-14=§4.5.166 ★V10의 confirmation 리포트). 최종 목표 = **G1**(icarus·verilator·xcelium·vcs급 정확성·correct-or-loud) + **G2**(AI-Agent 친화·SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -60,7 +60,7 @@
 
 **string/heap:**
 
-- frame string LOCAL 대입(E3018→heap slot) · substr-actual `s[i]` · string part-select `s[i:j]`.
+- ~~frame string LOCAL 대입(E3018→heap slot)~~ **RESOLVED §4.5.167(round-14 V1)**: function/task/block/class-method-local `string`이 heap `NetKind::String` frame slot(`frame_local_net_kind`·4 사이트)·procedural 대입/return/`s[i]`/method(`.len`/`.substr`/`.getc`) 지원(엔진 str_bytes frame-aware). **잔여 loud**: static(non-`automatic`) task inline string local(`hoist_inline_task_locals`:18119)=Wire→E3018(inline 경로=frame-slot 아님·순진 String化시 str_bytes twin 미적용→silent 회귀 위험·별개 inline-string-storage 슬라이스). substr-actual `s[i]` · string part-select `s[i:j]`.
 - dyn string 요소 method(`s[i].len()`) · whole-element read as value(`x=arr[i]`) · record array-of-record.
 - queue/assoc의 string·real 요소 · string queue · block-local queue decl.
 
@@ -70,6 +70,11 @@
 - array formal 재전달(nested/recursion) · non-zero-LSB 원소 · 2-D/non-zero-base/signed/task array formal. §4.5.110 slice 밖.
 - 음수-LSB 멤버 sub-select 정식 지원(§4.5.114). md-packed nested part-select WRITE `x[j][m:l]`/`arr[i][j][m:l]`=**§4.5.145 지원**(descending zero-lsb leaf·const packed idx); fail-closed 잔여(전부 loud·honest)=ascending/non-zero-lsb leaf·**genvar-index**(`x[g][m:l]`=const-fold 안 됨·over-reject)·const-OOB packed idx=silent no-op(read path 공유·값 무손상).
 - method/ctor NAME-default class-scope 해석(§4.5.90) · G4 string-return frame call(§4.5.129).
+- **round-14 리포트 잔여 (전부 loud·오라클=iverilog ✓·§4.5.167서 스코프)**:
+  - **V3/V4 (task body 内 timing/suspend·최우선·구조적 DEEP)**: `task ...; @(posedge clk); sig<=v;`(V3=`@`/`#`/wait·V4=NBA/$systask)→E3009 "outside the frame-call subset". `run_frame_call`/`run_task`가 한 time-step 内 **동기 평가**라 시간축 suspend 불가 → **task-call-into-process splicing 또는 coroutine 모델**(다일 아키텍처 슬라이스). **리포트 gating chain상 V3/V4가 4 TB를 gate**(V2A/V5/V1은 그 다음)—이것 없이 기존 tb/*.sv 미구동. iverilog ✓(모두 PASS).
+  - **V2A (task input dyn-array formal)**: `task consume(input byte b[])`→E3009 blanket-reject(17773). R11의 function-input `is_input_dyn_array_formal`(dyn_subst) 머신을 task frame/inline 경로로 확장 필요(copy-in 배선). iverilog ✓.
+  - **V5 (frame dyn-array local `new[]`)**: `byte loc[]; loc=new[n];` in a frame→E3009(local이 DynArray handle 아님). frame slot에 heap dyn-array handle 저장 인프라 필요. iverilog ✓.
+- **round-14 oracle-reject (vita loud=정당·차분 오라클 없음)**: V2B(fn `output byte b[]` formal — iverilog "must be input ports") · V6(`pkt_t q[$]` queue of unpacked struct — iverilog "Unpacked structs not supported") · V8(task-local unpacked struct decl — 동). 지원=hand-IEEE 전용 슬라이스(unpacked-struct 저장 모델).
 
 **소형 큐:**
 
@@ -80,7 +85,7 @@
 - `case (x) inside {…}`(§12.5.4 wildcard case)=vita E2002 parse-reject(loud)·③ 후보(no-oracle: iverilog 13.0 `case inside`/`inside` op/array reduction method 全 거부→hand-IEEE `==?`+내부차분). `inside` operator는 지원(== 시맨틱·§11.4.13). based-literal 내 whitespace(`64'sh FFFF`)=vita lexer reject(loud) vs iverilog 허용(minor·§4.5.147 발굴).
 - ~~**enum label 범위검증 부재**~~ **RESOLVED §4.5.165**: const-foldable label 값 vs const-foldable base 폭(부호 포함·폭 1..=64)을 range-check해 out-of-range를 loud(E2002)화(`{X=16}`→0·`{X=-1}`→15·auto-inc overflow·unsigned-64 음수 전부 iverilog와 일치). **잔여(fail-open·§2 invalid-program 한정)**: sized/based-literal label(`{A=8'hFF}`)·param-width base(`[N-1:0]`)의 out-of-range는 `const_lit` 미fold(decimal-only)라 skip=silent-truncate 잔존(iverilog reject하나 유효 프로그램 무영향·fail-open>over-reject·const_lit 확장 or elaborate-time 검사=별개 슬라이스).
 - **sized-literal enum label → enum-method loud**(§4.5.164 발굴·pre-existing): `enum bit[3:0] {A=8'hFF}`처럼 label이 non-foldable(sized-literal/식)이면 `enum_defs` 미등록 → `.first`/`.next`/`.name` 全 enum-method가 E3010/E3009 loud(honest·유효값엔 무영향). `const_lit`이 unsized-decimal만 fold. diagnostic 품질 minor(`.name` 메시지="hierarchical function call deferred"·오도). fix=enum label const-fold 확장 or label-site 진단 개선. 부수: function-port receiver `.name`/`.first`=E3010(`var_enum`이 tf-port 미bind·enum-method-family 공통)·chained `x.name().len()`·`arr.min()[0]`=iverilog도 거부(no-oracle).
-- **bit63-set unsigned 64-bit param 리터럴**(`parameter logic [63:0] A = 64'hFFFF_0000_0000_0000`)=E3009 over-reject(loud) vs iverilog 수용. §4.5.151 발굴·**보류 사유**=`const_eval_i64_lit`의 naive `v as i64` 수용은 i64 image가 음수로 읽혀 downstream const 부호 비교/산술을 silent-wrong으로 전환할 위험(explicit-signed 64-bit arm은 已수용·비대칭) — param 값 도메인에 부호/폭 메타 배선 후 착수.
+- ~~**bit63-set unsigned 64-bit param 리터럴**~~ **RESOLVED §4.5.167(round-14 V9)**: `const_eval_i64_lit`의 explicit-signed width-64 arm(`v as i64` bit-reinterpret)을 `cv.width==64`(부호 무관)로 확장 — 폭-64 리터럴=64-bit bit container. **§4.5.151 보류 사유**(naive `v as i64`가 downstream 부호 비교/산술 silent-wrong 위험)는 **`width==64` gate로 봉쇄**: 폭-64만 hit(narrow는 bit63 불가)·폭-64를 magnitude로 쓰는 건 pathological이며 downstream서 negative→loud(bound clamp→width 1·array index E4002·i64::MIN abs_diff 全 cap 초과). 적대 2-lens 全 magnitude sink 추적 CLEAN(differential서 오히려 iverilog가 magnitude-misuse silent-wrong).
 - **partial-timescale 정책 진단**(`--timescale-policy`·`W-PARSE-TIMESCALE-PARTIAL`/`E-PP-TIMESCALE-PARTIAL`): 일부 모듈만 `` `timescale `` 선언 시 현재 무진단 1ns/1ns 디폴트(전무 케이스만 W1017). doc-08 §15 설계는 문서화됨·`rt.default_used` 신호 이미 존재 — 배선만 필요. §4.5.151 발굴.
 
 **외부 리포트 잔여 (§6-2 → ARCHIVE · 전부 no-oracle 또는 docs):**

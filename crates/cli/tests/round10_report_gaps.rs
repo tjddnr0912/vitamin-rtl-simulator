@@ -143,15 +143,21 @@ fn g3_unsigned_element_regression() {
     assert_eq!(run(src).0, "o=255");
 }
 
-// ───────────────────────────── G4: string return (parses; call loud) ──────
+// ─────────────────────── G4: string return (now SUPPORTED, round-14 V1) ────
 #[test]
-fn g4_string_return_parses_then_loud() {
-    // The report's primary complaint was an E2002 PARSE cascade. It now PARSES; the call
-    // is loud (a materialized string return needs frame heap string slots — a follow-on).
+fn g4_string_return_now_supported() {
+    // round-10's primary complaint was an E2002 PARSE cascade; round-11 cleared parse
+    // and it was loud because the frame-local `string s` was a Wire slot (E3018 on the
+    // assign). round-14 V1 gives frame-local strings a real `NetKind::String` heap slot
+    // (`frame_local_net_kind`) + frame-aware `str_bytes`, so build-and-return works:
+    // f(42) == "42" ⇒ o=1. (The pkg-scoped and class-method string-return paths below
+    // stay loud — a separate materialization gap.)
     let src = "module m(output int o);\n\
         function automatic string f(input int n); string s; s=$sformatf(\"%0d\",n); return s; endfunction\n\
         initial begin o=(f(42)==\"42\"); $display(\"o=%0d\",o); end endmodule";
-    assert!(!ok(src), "string return must be loud (not silent-wrong)");
+    let (out, code) = run(src);
+    assert!(code, "expected supported, got:\n{out}");
+    assert_eq!(out, "o=1", "string build-and-return, got:\n{out}");
 }
 
 #[test]

@@ -11315,7 +11315,7 @@ impl<'s> Elaborator<'s> {
                     s.add_net(
                         &decl.name.name,
                         ir::NetVar {
-                            kind: map_net_kind_or_wire(d.kind),
+                            kind: frame_local_net_kind(d.kind),
                             width: w,
                             msb,
                             lsb,
@@ -15140,7 +15140,10 @@ impl<'s> Elaborator<'s> {
             if let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name) {
                 return self.lower_dyn_method_expr(net, kind, &name.segments[1].name, args);
             }
-            // v7 P2-C: string methods.
+            // v7 P2-C: string methods. A frame-local string slot is also a
+            // `NetKind::String` net now (round-14 V1); its receiver handle reads via
+            // the engine's frame-aware `str_bytes` (mirrors `read_net`), so this
+            // dispatch is correct for both module-scope and frame-local strings.
             if let Some(net) = self.string_handle(&name.segments[0].name) {
                 return self.lower_string_method_expr(net, &name.segments[1].name, args);
             }
@@ -15890,7 +15893,7 @@ impl<'s> Elaborator<'s> {
                 self.add_net(
                     &decl.name.name,
                     ir::NetVar {
-                        kind: map_net_kind_or_wire(d.kind),
+                        kind: frame_local_net_kind(d.kind),
                         width: w,
                         msb,
                         lsb,
@@ -16241,7 +16244,7 @@ impl<'s> Elaborator<'s> {
                     s.add_net(
                         &decl.name.name,
                         ir::NetVar {
-                            kind: map_net_kind_or_wire(d.kind),
+                            kind: frame_local_net_kind(d.kind),
                             width: w,
                             msb,
                             lsb,
@@ -16471,7 +16474,7 @@ impl<'s> Elaborator<'s> {
                     s.add_net(
                         &decl.name.name,
                         ir::NetVar {
-                            kind: map_net_kind_or_wire(d.kind),
+                            kind: frame_local_net_kind(d.kind),
                             width: w,
                             msb,
                             lsb,
@@ -32899,7 +32902,16 @@ fn const_eval_i64_lit(e: &ast::Expr) -> Option<i64> {
     if explicit_signed && cv.width >= 1 && cv.width < 64 && (v >> (cv.width - 1)) & 1 == 1 {
         return Some((v | (!0u64 << cv.width)) as i64);
     }
-    if explicit_signed && cv.width == 64 {
+    if cv.width == 64 {
+        // A full 64-bit literal (signed OR unsigned) is a 64-bit bit container;
+        // reinterpret its bit pattern into the i64 const domain. Without this an
+        // unsigned `64'h8000_0000_0000_0000` exceeds `i64::MAX`, so `try_from`
+        // below would spuriously reject it as "not foldable" (round-14 V9).
+        // Bit-preserving: downstream 64-bit param/compare/mask use is bit-exact,
+        // and a magnitude misuse (huge index/bound) surfaces as a negative value
+        // that later range checks still reject loudly — so this never converts a
+        // loud reject into a silent-wrong. (The narrow-signed branch above still
+        // uses `explicit_signed`; only the unsigned MSB-set path is newly folded.)
         return Some(v as i64);
     }
     i64::try_from(v).ok()
@@ -34512,6 +34524,21 @@ fn formal_net_kind(k: ast::NetVarKind, dir: ast::PortDir) -> ir::NetKind {
     if matches!(k, ast::NetVarKind::String)
         && matches!(dir, ast::PortDir::Output | ast::PortDir::Inout)
     {
+        ir::NetKind::String
+    } else {
+        map_net_kind_or_wire(k)
+    }
+}
+
+/// N1: net kind for a function/task frame-local DECLARATION (`body_decls` /
+/// block-local `begin string s; …`). Unlike an input formal — which keeps the
+/// 1-bit Wire slot and is filled by the call-site `str_params` mask
+/// (`map_net_kind_or_wire`) — a frame-local `string` is WRITTEN in the body
+/// (`s = $sformatf(...)`), so a Wire target would fail the procedural-assign
+/// check (E3018, round-14 V1). It needs a real heap-backed `NetKind::String`
+/// slot, exactly like an output formal. Every non-string type is unchanged.
+fn frame_local_net_kind(k: ast::NetVarKind) -> ir::NetKind {
+    if matches!(k, ast::NetVarKind::String) {
         ir::NetKind::String
     } else {
         map_net_kind_or_wire(k)

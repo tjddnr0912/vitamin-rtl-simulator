@@ -2926,6 +2926,16 @@ impl NetReader for SimState<'_> {
         if self.ir.nets.get(net as usize).map(|n| n.kind) != Some(NetKind::String) {
             return None;
         }
+        // A frame-local `string` slot's value lives in the active call window / static
+        // slab (via `frame_slot_write`), NOT `dyn_heap[net]` (which stays empty). Read
+        // the live slot Value and take its string bytes — mirrors `read_net`'s
+        // frame-local branch — so a string method (`.len()`, `.getc()`, `.substr()`, …)
+        // on a frame-local string reads the actual value, not an empty string. Without
+        // this, `string s; s = $sformatf(...); ... s.len()` returned 0 (round-14 V1
+        // method-on-local twin: value-use worked but method-read hit the static net).
+        if self.frame_local.get(net as usize).copied().unwrap_or(false) {
+            return Some(self.read_net(net, None).to_str_bytes());
+        }
         Some(
             match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
                 Some(DynObj::Str { bytes }) => bytes.clone(),

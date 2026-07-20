@@ -130,17 +130,23 @@ fn frame_string_compare_unchanged() {
 }
 
 #[test]
-fn frame_string_local_still_loud() {
-    // BOUNDARY: a frame string LOCAL is a separate, pre-existing gap — a string can't
-    // be assigned to a frame local net → loud E3018 (correct-or-loud), NOT silent.
-    // A follow-on that adds frame string-local storage would flip this.
+fn frame_string_local_now_supported() {
+    // round-14 V1: a frame string LOCAL is now a real `NetKind::String` heap slot
+    // (`frame_local_net_kind`), procedurally assignable, and its byte/method reads
+    // route through the engine's frame-aware `str_bytes` — the boundary guard that
+    // previously asserted E3018-loud here has flipped to supported. s[1] of "ABCD"
+    // = 'B' = 66. (Was the pre-existing "still loud" gap the follow-on comment named.)
     let src = "module m;\n\
          function int h; string s; s = \"ABCD\"; h = s[1]; endfunction\n\
          initial begin $display(\"r=%0d\", h()); #1 $finish; end endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(1), "expected loud, got code={code:?}\n{out}");
+    assert_eq!(
+        code,
+        Some(0),
+        "expected supported, got code={code:?}\n{out}"
+    );
     assert!(
-        !out.contains("r="),
-        "must not silently compute, got:\n{out}"
+        out.contains("r=66"),
+        "frame string-local index, got:\n{out}"
     );
 }
