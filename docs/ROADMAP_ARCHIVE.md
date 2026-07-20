@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.180 SILENT-WRONG 수정: same-named STATIC block-locals in DISJOINT procedural blocks → loud (type-mismatch + definite-assignment guard) (2026-07-21, branch feat-block-local-collision-loud) ✅
+
+**발굴 경위**: "fresh-area silent-wrong probe"(추천 방향)—iverilog 라이브 차분을 최근 세션이 안 건드린 영역(signed 산술·shift·select·concat·sys-func·width·cast·array·X/Z·power/mod)에 ~90 비교 스윕. 대부분 CLEAN이나, `signed [3:0] x=-3; y=x`를 두 sibling 블록에서 `y`를 다른 부호로 선언한 케이스서 **vita -3 vs iverilog 253** 발견. 축소하니 격리 시엔 정상(253)이라 컨텍스트 의존—두 블록이 같은 이름 `y`를 선언하는 게 트리거.
+
+**근본 원인**: v1은 절차 블록-로컬을 module net으로 **flatten**(`hoist_block_local_nets`·per-block frame 없음). 같은 이름이 다른 블록에서 또 선언되면 `existing` net을 찾아 **coalesce**("scalar local safely coalesces—net just reused in time"). 이 가정은 **둘째 블록의 TYPE이 같고 read 전 assign될 때만** iverilog(distinct-per-scope 변수)와 byte-identical: (1) **타입 불일치**(sign/width)면 공유 net을 잘못된 부호/폭으로 read/write—`%0d` 부호 뒤집힘(signed net에 unsigned 값)·`y>>>1`이 산술 shift(-1 vs 127)·`%h` 폭(0c vs c); (2) **read-before-write**면 첫째 블록의 leftover value를 봄(vita 5 vs iverilog x=fresh var default). sibling `begin…end`·named block(`begin:ba`/`begin:bb`)·**cross-process**(두 initial) 全 발생(첫째의 flatten `top.y`에 둘째가 충돌). dyn/queue/string local과 automatic collision은 이미 loud(각각 heap-per-block·per-entry storage 불가)—**plain static scalar만 gap**.
+
+**fix (correct-or-loud LOUD)**: `hoist_block_local_nets`의 `existing`(collision) 경로, automatic 분기 뒤 static `else`에 guard 추가: 각 name에 대해 (a) module-scope 선언(`local_decl_names.contains`)이면 skip(legitimate SHADOW—struct/enum shadow-scoping 또는 `check_block_local_scope_leaks`가 이미 처리), (b) dyn/string이면 skip(위서 이미 loud), (c) 새 decl의 `range_to_dims` type vs 기존 net width/signed 비교→**불일치면 E3009**, (d) 같은 타입이면 `automatic_local_definitely_assigned(stmts, nm)` 아니면 E3009(read-before-write). **SAFE same-type+assigned-first coalesce는 무영향**(흔한 두 `for` 블록의 `int i` 재사용). **★적대 검증서 회귀 발굴+수정**: 초판(module-shadow 미제외)이 `block_struct_var_shadow.rs` 3 test FAIL—struct/enum var가 module var를 SHADOW하는 SUPPORTED 케이스(distinct scoping)를 오판 loud. `local_decl_names.contains(nm)` 제외로 수정(충돌 이름이 module-scope 선언=shadow=skip·순수 block-local=sibling collision=fire). plain-scalar module-shadow는 `check_block_local_scope_leaks`가 이미 E3009라 gap 없음.
+
+**적대 differential(vita vs iverilog)**: 修正前 MISMATCH 全 재현(diff-sign -3/253·diff-width 0c/c·`>>>` -1/127·named -3/253·cross-proc·stale 5/x)→修正後 全 loud(E3009). SAFE(same-type `for` 재사용=6·unique names=253·single local=-5) 정상. probe 다른 ~80 비교(shift·select·concat·sysfunc·width·cast·array·X/Z·power/mod) 全 MATCH. 전 suite green(guard가 module-shadow·same-type-coalesce 무영향).
+
+**결과**: plain static 블록-로컬 이름 충돌의 silent-wrong 봉쇄. 신규 `block_local_name_collision.rs`×9. format 22 불변(elaborate guard만). **3821 green**(+9). ⭐교훈: ① **fresh-area iverilog 차분 probe가 pre-existing silent-wrong 발굴**(정본 correct-or-loud 활동·컨텍스트 의존 버그는 격리로 사라져 "격리해도 재현되는 최소형" 필요). ② **"safely coalesces" 류 최적화 가정은 조건부**(same-type+DA일 때만 byte-identical·타입/DA 어긋나면 silent-wrong)—가정의 전제를 명시적 guard로. ③ **적대 검증이 fix의 over-reject 회귀 잡음**(struct/enum shadow는 SUPPORTED·`local_decl_names` 제외가 sibling-collision과 module-shadow 분리). ④ **correct-or-loud=loud 먼저·SUPPORTED follow-up 기록**(`$blk$` scope를 static에 확장하면 iverilog-parity). 상세=본 엔트리·ROADMAP §2.
+
 #### 4.5.179 FRAMED function dyn-formal call BURIED in an expression loud→supported (R5-B hoist reuse → temp = f(a) direct-rhs) (2026-07-21, branch feat-frame-func-dyn-formal-buried) ✅
 
 **발굴 경위**: §4.5.177(direct-rhs `r=f(arr)`)의 명시된 follow-on(추천 항목). framed dyn-formal function을 큰 expression 안에서 부르는 흔한 형태 — `$display("%0d", fsum(a))`·`r=fsum(a)+100`·`if(fsum(a)>10)` — 가 §4.5.177의 marker가 direct-rhs blocking assign에만 붙어 E3009였음(iverilog ✓: 15/115/big).

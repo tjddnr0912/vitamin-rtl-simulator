@@ -8544,6 +8544,73 @@ impl<'s> Elaborator<'s> {
                                     ),
                                 );
                             }
+                        } else {
+                            // A STATIC scalar block-local coalescing onto an EXISTING
+                            // same-named net (the v1 flatten "reuse the net in time" path)
+                            // matches iverilog's distinct-per-scope variable ONLY when
+                            // (a) its TYPE equals the shared net's AND (b) it is definitely
+                            // assigned before any read here. A type mismatch (different
+                            // width or signedness) makes THIS block read/write the shared
+                            // net with the WRONG type — wrong `%d` sign, wrong `>>>`
+                            // arithmetic, wrong `%h`/`$bits` width. A read-before-write
+                            // observes the PRIOR block's leftover value instead of the X a
+                            // fresh variable would hold. Both are silent-wrong; v1 has no
+                            // per-block scope to give this local distinct typed storage, so
+                            // loud (correct-or-loud). The SAFE same-type + definitely-
+                            // assigned coalesce (common `for`/`tmp` name reuse) is
+                            // unaffected. dyn/string collisions were already loud above;
+                            // `range_to_dims` is packed-only, so skip them here.
+                            let (nw, _, _, nsig) =
+                                self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                            for n in &d.names {
+                                let nm = &n.name.name;
+                                // A name ALSO declared at MODULE scope is a legitimate
+                                // SHADOW (`outer_s x; … begin inner_s x; … end`), handled
+                                // by the struct/enum/typedef shadow-scoping — NOT a
+                                // sibling block-local coalesce. Skip it: this guard targets
+                                // block-vs-block (two disjoint blocks reusing one flattened
+                                // net), where the colliding name is a pure block-local.
+                                if self.local_decl_names.contains(nm) {
+                                    continue;
+                                }
+                                let Some(ex) = self.symbols.get(&self.fq(nm)).copied() else {
+                                    continue;
+                                };
+                                if self.is_dyn_handle_net(ex)
+                                    || self.is_string_net(ex)
+                                    || matches!(d.kind, ast::NetVarKind::String)
+                                {
+                                    continue;
+                                }
+                                let (ew, esig) = {
+                                    let e = &self.nets[ex as usize];
+                                    (e.width, e.signed)
+                                };
+                                if nw != ew || nsig != esig {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "block-local `{nm}` is declared with a different \
+                                             width/signedness than a same-named block-local in \
+                                             another block; v1 flattens both to one module net \
+                                             and cannot hold two types (the shared net would be \
+                                             read/written with the wrong sign or width) — rename \
+                                             one"
+                                        ),
+                                    );
+                                } else if !automatic_local_definitely_assigned(stmts, nm) {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "block-local `{nm}` shares one flattened net with a \
+                                             same-named block-local in another block but is READ \
+                                             before it is assigned here — it would observe the \
+                                             other block's leftover value, not a fresh variable's \
+                                             default; assign it before use, or rename one"
+                                        ),
+                                    );
+                                }
+                            }
                         }
                         continue;
                     }
