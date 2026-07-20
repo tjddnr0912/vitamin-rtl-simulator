@@ -15709,10 +15709,9 @@ impl<'s> Elaborator<'s> {
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!(
-                            "frame task `{name}` body uses a `fork` or a nested \
-                             suspendable-task call, which is outside the supported frame \
-                             subset (a LEAF task — $display/NBA/@/#/wait, no fork and no \
-                             nested-task-call — is supported)"
+                            "frame task `{name}` body uses a `fork`, which is outside the \
+                             supported frame subset (a task using $display/NBA/@/#/wait and \
+                             nested task calls — but no fork — is supported)"
                         ),
                     );
                 }
@@ -15743,7 +15742,11 @@ impl<'s> Elaborator<'s> {
                 continue;
             };
             match &blk.term {
-                ir::Terminator::Fork { .. } | ir::Terminator::Call { .. } => return false,
+                ir::Terminator::Fork { .. } => return false,
+                // Phase 4: a nested task `Call` is supported (the engine pushes a nested
+                // frame, or runs a subset callee synchronously). Follow `ret_bb` (the
+                // continuation in THIS task); the callee lives in another func.
+                ir::Terminator::Call { ret_bb, .. } => stack.push(*ret_bb),
                 ir::Terminator::Delay { resume, .. } | ir::Terminator::Wait { resume, .. } => {
                     stack.push(*resume)
                 }

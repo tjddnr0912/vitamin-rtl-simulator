@@ -548,10 +548,60 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             // caller lvalues (which MAY be module nets). A non-frame Call just advances.
             Terminator::Call { ret_bb, .. } => {
                 if in_frame {
-                    // A nested call from a task frame is a follow-on (leaf tasks have no
-                    // Call); fatal defensively rather than mis-run.
-                    sched.mark_fatal();
-                    return Step::Fatal;
+                    // Round-14 V3/V4 Phase 4: a NESTED task call from a task frame — keyed
+                    // by GLOBAL block (`task_calls_func`). Push a nested suspendable frame
+                    // (call-stack depth > 1, incl. recursion) or run a subset callee
+                    // synchronously; this frame resumes at `ret_bb` when the callee returns
+                    // (the `Return` arm sets the PARENT frame's PC).
+                    if let Some(info) = sched.st.task_calls_func.get(&cur_bb).cloned() {
+                        let cm = sched.st.func_table[info.callee as usize];
+                        let in_v: Vec<(u32, Value)> = info
+                            .in_binds
+                            .iter()
+                            .map(|&(slot, e)| {
+                                let nv = &sched.st.ir.nets[(cm.base_net + slot) as usize];
+                                let sw = sched.st.wt.get(e);
+                                let v =
+                                    sched.eval_ctx_top(e, nv.width.max(1).max(sw.width), nv.signed);
+                                (slot, v)
+                            })
+                            .collect();
+                        if sched.st.suspendable_tasks.contains(&info.callee) {
+                            if sched.activities[pi as usize].call_stack.len() as u32
+                                >= crate::state::MAX_CALL_DEPTH
+                            {
+                                sched.mark_fatal(); // runaway recursion → loud, never a hang
+                                return Step::Fatal;
+                            }
+                            sched.st.enter_task_frame(info.callee, &in_v);
+                            let entry = sched.st.ir.funcs[info.callee as usize].entry;
+                            sched.activities[pi as usize]
+                                .call_stack
+                                .push(crate::sched::FrameRec {
+                                    callee: info.callee,
+                                    bb: entry,
+                                    ret_bb: *ret_bb,
+                                    out_binds: info.out_binds.clone(),
+                                    window: None,
+                                });
+                            continue; // execute the nested frame next iteration
+                        }
+                        // subset nested callee: synchronous (mirrors run_task's nested Call).
+                        let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
+                        if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
+                            for ((_, lval), val) in info.out_binds.iter().zip(outs) {
+                                let offs = sched.resolve_lvalue_offsets(lval);
+                                sched.st.write_lvalue(lval, val, &offs);
+                            }
+                        }
+                    }
+                    // advance THIS frame past the (subset / no-info) call.
+                    sched.activities[pi as usize]
+                        .call_stack
+                        .last_mut()
+                        .unwrap()
+                        .bb = *ret_bb;
+                    continue;
                 }
                 if let Some(info) = sched
                     .st

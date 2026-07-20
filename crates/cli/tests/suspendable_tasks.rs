@@ -140,3 +140,31 @@ fn v3_sequential_drivers() {
     assert!(ok, "sequential driver task must run, got:\n{out}");
     assert!(out.contains("o=22"), "got:\n{out}");
 }
+
+// ─── Phase 4: recursion + nested suspendable task calls (call-stack depth > 1) ───
+#[test]
+fn v4_recursion_with_timing() {
+    // A task that recursively calls itself, waiting each level — the call-stack grows one
+    // FrameRec per level and all windows stash/restore together across a suspend.
+    // countdown(3): 3 waits on a 5ns clock ⇒ $time=25. (iverilog: o=25.)
+    let src = "module t; logic c=0; always #5 c=~c;\n\
+        task automatic countdown(input int n); if (n>0) begin @(posedge c); countdown(n-1); end endtask\n\
+        initial begin countdown(3); $display(\"o=%0t\", $time); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "recursion-with-timing must run, got:\n{out}");
+    assert!(out.contains("o=25"), "got:\n{out}");
+}
+
+#[test]
+fn v4_nested_suspendable_call() {
+    // A suspendable task `hi` that calls another suspendable task `lo` (which waits). The
+    // nested frame is pushed onto the same call-stack; both windows stash across the wait.
+    // hi(0x33) ⇒ bus=33. (iverilog: o=33.)
+    let src = "module t; logic c=0; logic [7:0] bus; always #5 c=~c;\n\
+        task automatic lo(input logic [7:0] v); @(posedge c); bus <= v; endtask\n\
+        task automatic hi(input logic [7:0] v); lo(v); @(posedge c); endtask\n\
+        initial begin hi(8'h33); $display(\"o=%0h\", bus); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "nested suspendable call must run, got:\n{out}");
+    assert!(out.contains("o=33"), "got:\n{out}");
+}
