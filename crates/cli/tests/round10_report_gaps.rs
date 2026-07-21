@@ -215,11 +215,14 @@ fn g6b_scoped_struct_var_module_scope() {
 }
 
 #[test]
-fn g6_record_array_stays_loud() {
-    // A record ARRAY still needs aggregate storage vita lacks → loud (correct-or-loud).
+fn g6_record_array_now_supported() {
+    // §4.5.191: a FIXED array of a PACKABLE record is now supported — lowered to a
+    // packed-vector array so `arr[i].field` desugars to a part-select on the element.
+    // (Formerly loud; round-10 pinned the reject.)
     let src = "package p; typedef struct { int a; } rec_t; endpackage\n\
-        module m; import p::*; rec_t arr[0:1]; initial $display(\"x\"); endmodule";
-    assert!(!ok(src), "a record array must stay loud");
+        module m(output int o); import p::*; rec_t arr[0:1];\n\
+        initial begin arr[0].a=9; arr[1].a=7; o=arr[0].a+arr[1].a; $display(\"o=%0d\", o); end endmodule";
+    assert_eq!(run(src).0, "o=16");
 }
 
 // ───────────────────────────── G7: iff event guard ────────────────────────

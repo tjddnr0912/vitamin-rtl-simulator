@@ -8188,7 +8188,13 @@ impl Parser<'_, '_> {
         field: &str,
     ) -> Option<(u32, u32, bool, bool, i64, u32)> {
         let tyname = self.var_struct.get(arr)?;
-        self.struct_layouts.get(tyname)?.field(field)
+        // A PACKED struct (`struct_layouts`) first; then a packable UNPACKED record
+        // (§4.5.191 fixed record array) via `packable_record_layout` — both yield the
+        // same `StructLayout::field()` `(off, w, asc, sgn, dbase, stride)` shape.
+        if let Some(g) = self.struct_layouts.get(tyname).and_then(|l| l.field(field)) {
+            return Some(g);
+        }
+        self.packable_record_layout(tyname)?.field(field)
     }
 
     /// §4.5.190 (read): parse `arr[i].field` (cursor at `.`) → a part-select on the
@@ -8471,6 +8477,48 @@ impl Parser<'_, '_> {
                                 span: n.name.span,
                             });
                         }
+                        continue;
+                    }
+                }
+                // §4.5.191: a FIXED 1-D unpacked array of a PACKABLE record
+                // (`rec_t mem[N]`) lowers to a fixed array of the packed-struct-width
+                // vector `logic/bit [W-1:0] mem[N]`, registered as a struct 1-D array so
+                // `mem[i].field` (§4.5.190) desugars to a part-select on the element
+                // (`struct_array_field_geom` falls back to `packable_record_layout`). A
+                // decl-init `'{…}`, a multi-dim array, or a non-packable record (mixed
+                // 2-/4-state, string/real/nested/class member) stays loud.
+                if n.unpacked.len() == 1
+                    && matches!(n.unpacked[0], Dim::Range(_) | Dim::Size(_))
+                    && n.init.is_none()
+                    && !n.name.name.contains('$')
+                {
+                    if let Some(layout) = self.packable_record_layout(&tyname) {
+                        let w: u32 = layout.fields.iter().map(|f| f.2).sum();
+                        let all_two_state = layout.fields.iter().all(|f| f.5);
+                        self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                        self.struct_1d_array_vars.insert(n.name.name.clone());
+                        out.push(NetVarDecl {
+                            kind: if all_two_state {
+                                NetVarKind::Bit
+                            } else {
+                                NetVarKind::Logic
+                            },
+                            signed: false,
+                            range: Some(self.synth_bit_range(w, n.name.span)),
+                            packed: Vec::new(),
+                            delay: None,
+                            names: vec![DeclName {
+                                name: n.name.clone(),
+                                unpacked: n.unpacked.clone(),
+                                init: None,
+                                span: n.name.span,
+                            }],
+                            lifetime: None,
+                            class_type: None,
+                            class_args: Vec::new(),
+                            const_param: false,
+                            span: n.name.span,
+                        });
                         continue;
                     }
                 }
