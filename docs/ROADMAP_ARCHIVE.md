@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.185 `$bits(TYPE)` loud→supported (parser type-size fold) (2026-07-21, branch feat-bits-of-type) ✅
+
+**발굴 경위**: §4.5.184 후 fresh-area probe($display 포맷·X/Z·cast·$bits 차분) 중 `$bits(logic[15:0])`·`$bits(s_t)`가 vita 거부(타입 keyword→E2002 parse error·typedef name→E3010 "undeclared variable") vs iverilog `16`·`7` 정상으로 발견. `$bits(변수)`·`$bits(struct변수)`·`$bits(mem[i])`는 동작(elaborate `bits_prescan`). 즉 **`$bits`의 TYPE 인자만** gap — SV §20.6.1의 흔한 idiom(`logic [$bits(T)-1:0]`).
+
+**근본 원인**: `$bits`는 elaborator서 처리(변수명 키 `bits_prescan`)인데, TYPE 인자(`logic[15:0]` keyword·`s_t` typedef name)는 **valid expression이 아님**→파서가 `call_args()`서 파싱 실패(keyword) 또는 elaborate서 미등록 변수로 loud(typedef name).
+
+**설계(파서 type-size fold·format 무변화)**: `$bits`는 compile-time 상수이고 파서가 타입 폭 정보(`struct_layouts`·`typedefs`·atom kinds) 보유→**파서서 `$bits(TYPE)`를 IntLit로 fold**. SystemTask arm 인터셉트: `name=="$bits"` & `(` 뒤에 `parse_bits_type_arg`가 (a) 데이터 keyword(`net_var_kind`) + opt signedness + packed dims 또는 (b) bare type NAME(다음 토큰 `)`)이면 폭 계산 후 `dec_lit(w)` return; 아니면 pos 복원→normal `$bits(expr)` 경로(elaborate). `bits_of_type_name`: struct=Σfield·union=MAX field·typedef=`member_width_kind × ∏packed`. **`logic[$bits(T)-1:0]` decl range·`parameter W=$bits(T)`도 동작**(range/param이 `expr(0)`→expr_primary 경유).
+
+**★correct-or-loud(silent-wrong 방지)**: 초판이 `$bits(real)`=**1**(silent-wrong·`member_width_kind(Real)`=atom 아님→1) 유발→적대 probe서 발견. **fix**: 두 분기 모두 **INTEGRAL 타입만 fold**(`member_kind_is_integral`)—`real`/`realtime`/`string`/`event`/class는 None→loud(correct-or-loud). `$bits(real_var)`=64는 elaborate 경로라 무영향.
+
+**적대 differential(vita vs iverilog)**: 지원 全 MATCH — struct(7)·union(8·equal-width)·int(32)·byte(8)·shortint(16)·longint(64)·time(64)·integer(32)·logic[15:0](16)·logic[1:0][3:0](8)·bit[7:0](8)·logic(1)·word_t typedef(12)·signed alias(8)·enum(3)·decl-range idiom·parameter idiom. **회귀 clean**: `$bits(var/struct/mem[i]/member/real_var)`. **LOUD 유지**: real/realtime/string(초판 silent 1→loud)·scoped `pkg::T`(follow-on)·unknown name. iverilog는 `$bits(real)`·non-uniform packed union 자체를 거부(vita가 union=MAX로 초과·SV-correct). format 22 불변(파서 fold·AST/sim-ir 무변화·schema_hash 무관). **3873 green**(+11). ⭐교훈: ① **`$bits`는 elaborate 처리지만 TYPE 인자는 파서 fold가 자연**(파서가 타입 폭 보유). ② **적대 probe가 초판 silent-wrong(`$bits(real)`=1) 즉시 발견→INTEGRAL gate**(비-integral은 loud). ③ **파서 fold라 decl-range/param 등 모든 expression 위치서 동작**. ④ **iverilog 초과분(union MAX·real reject)은 vita가 SV-correct**. 상세=본 엔트리·ROADMAP §3.
+
 #### 4.5.184 multi-dimensional packed array struct/union member loud→supported (parser flat-width + element-stride desugar) (2026-07-21, branch feat-multidim-packed-member) ✅
 
 **발굴 경위**: §4.5.183 후 fresh-area probe(packed struct/union 연산 차분) 중 `typedef union packed { logic [7:0] byte_v; logic [1:0][3:0] nib; }`가 vita E2002(parse error·2번째 `[3:0]`서 "expected identifier") vs iverilog `u.nib[0]=b·nib[1]=a` 정상으로 발견. 격리: **독립 multi-dim packed net(`logic [1:0][3:0] x`)은 지원**(MATCH)·오직 **struct/union 멤버**만 거부(파서 `parse_struct_member_type`가 단일 `Option<Range>`만 파싱·6817 주석에 "multi-dim packed member is unsupported in v1" 명시된 의도적 v1 한계).

@@ -1556,6 +1556,22 @@ impl Parser<'_, '_> {
                     name: self.src[t.span.clone()].to_string(),
                     span: Self::sp(&t.span),
                 };
+                // §20.6.1 `$bits(TYPE)`: a compile-time type-size whose argument is a
+                // data TYPE (a typedef name or a `logic`/`int`/… keyword with optional
+                // packed dims), which is NOT a valid expression. Fold it to an integer
+                // literal here, where the type widths (struct_layouts / typedefs / atom
+                // kinds) are known — so it works everywhere an expression does, including
+                // a decl range `logic [$bits(T)-1:0]`. A `$bits(expr)` (variable /
+                // `arr[i]` / `x.field`) is not a bare type → falls through to the normal
+                // SysCall path (the elaborator sizes it via `bits_prescan`).
+                if name.name == "$bits" && self.peek() == Some(T::LParen) {
+                    let save = self.pos;
+                    self.bump(); // (
+                    if let Some(w) = self.parse_bits_type_arg() {
+                        return Self::dec_lit(w, start.to(self.prev_span()));
+                    }
+                    self.pos = save; // not a bare type → restore for normal expr-arg parse
+                }
                 let args = if self.peek() == Some(T::LParen) {
                     self.call_args()
                 } else {
@@ -7186,6 +7202,78 @@ impl Parser<'_, '_> {
         }
         let flat = base.checked_mul(stride)?;
         Some((flat, stride))
+    }
+
+    /// The compile-time bit width of a struct/union or simple-typedef TYPE NAME (used
+    /// by `$bits(T)`). A packed struct is the SUM of its field widths; a packed union
+    /// is the MAX; a simple typedef (`typedef logic [7:0] t` / `typedef int i_t`) is
+    /// its base kind/range width times any packed dims. `None` (→ the `$bits` site
+    /// stays a normal expression, loud in elaborate) for a class-handle alias or an
+    /// unknown name.
+    fn bits_of_type_name(&self, name: &str) -> Option<u32> {
+        if let Some(layout) = self.struct_layouts.get(name) {
+            return Some(if self.union_type_names.contains(name) {
+                layout.fields.iter().map(|f| f.2).max().unwrap_or(0)
+            } else {
+                layout.fields.iter().map(|f| f.2).sum()
+            });
+        }
+        let info = self.typedefs.get(name)?;
+        // Only an INTEGRAL alias has a fixed `$bits` here. A `real`/`realtime` (64-bit,
+        // but `member_width_kind` gives a bogus 1) / `string` (dynamic) / class-handle
+        // alias returns None → the site stays a normal expr (loud in elaborate) rather
+        // than folding a wrong width. (`$bits(real_var)` uses the elaborate path, which
+        // sizes a real variable correctly — this only gates a bare TYPE name.)
+        if info.class_name.is_some() || !Self::member_kind_is_integral(info.kind) {
+            return None;
+        }
+        let mut w = self.member_width_kind(info.kind, &info.range)?;
+        for d in &info.packed {
+            w = w.checked_mul(self.member_width(&Some(d.clone()))?)?;
+        }
+        Some(w)
+    }
+
+    /// Parse a `$bits(<type>)` TYPE argument (cursor just AFTER the `(`): a data-type
+    /// keyword with optional signedness + packed dims (`logic [15:0]`, `int`), or a
+    /// struct/union/simple-typedef NAME (`s_t`). Returns the folded bit width and
+    /// consumes through the closing `)`. `None` (the caller then restores the cursor)
+    /// when the argument is NOT a bare type — an ordinary `$bits(expr)` (a variable,
+    /// `arr[i]`, a `x.field`) then parses normally and the elaborator sizes it.
+    fn parse_bits_type_arg(&mut self) -> Option<u32> {
+        // A data-type keyword (`logic`/`bit`/`int`/…) is never a valid expression, so
+        // this is unambiguously a type. Optional signedness + packed dims fold in.
+        if let Some(kind) = self.net_var_kind() {
+            // Only an INTEGRAL keyword has a fixed integral `$bits`; `real`/`realtime`/
+            // `string`/`event`/… return None so the site stays loud (correct-or-loud),
+            // never a silently-wrong 1-bit fold. Checked BEFORE consuming any token.
+            if !Self::member_kind_is_integral(kind) {
+                return None;
+            }
+            self.bump(); // kind keyword
+            let _ = self.opt_signed(); // signedness does not change the bit width
+            let range = self.opt_range();
+            let mut w = self.member_width_kind(kind, &range)?;
+            while self.peek() == Some(TokenKind::LBracket) {
+                let d = self.opt_range()?;
+                w = w.checked_mul(self.member_width(&Some(d))?)?;
+            }
+            if self.peek() == Some(TokenKind::RParen) {
+                self.bump(); // )
+                return Some(w);
+            }
+            return None;
+        }
+        // A bare type NAME (`$bits(s_t)`) — only when it is a KNOWN type AND the very
+        // next token is `)`, so `$bits(var)` / `$bits(var.field)` / `$bits(arr[i])`
+        // fall through to the expression path.
+        if self.is_ident() && self.peek_at(1) == Some(TokenKind::RParen) {
+            let w = self.bits_of_type_name(self.cur_text())?;
+            self.bump(); // type name
+            self.bump(); // )
+            return Some(w);
+        }
+        None
     }
 
     /// N3: is a struct member kind a genuine bit-vector (packable into a flat record
