@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.181 enum `.next(N)` / `.prev(N)` CONSTANT-step loud→supported (parser N-step ternary-chain desugar) (2026-07-21, branch feat-enum-step-n) ✅
+
+**발굴 경위**: §4.5.180 fresh-area probe 스윕 중 enum method bisect서 발견한 oracle-backed loud gap. `.next()`/`.prev()`/`.first`/`.last`/`.num`/`.name()`는 전부 동작하나 **`.next(2)`처럼 STEP 인자**가 있으면 E3009("hierarchical function call (deferred)")—iverilog는 지원(`.next(2)`=2 스텝 전진·wrap).
+
+**근본 원인**: 파서(`expr_primary`)의 §6.19.5 enum-method desugar(1652)가 **arg-less 전용**(`peek != LParen || empty_call` 게이트). `x.next(2)`는 peek==LParen & non-empty→desugar 건너뜀→generic `Call{x.next, [2]}`→elaborate `inline_function`이 2-segment name을 hierarchical call로 loud. 즉 `.next(N)`의 N 인자를 처리하는 경로가 없음.
+
+**설계 (파서 constant-step 분기)**: arg-less enum block 뒤에 신규 분기 — peek==LParen & path=`var.{next|prev}` & `var_enum.contains_key`면 `call_args()` 파싱 후 single literal arg(`const_lit` fold)면 신규 **`enum_step_n_expr(path, is_next, n)`**가 N-step ternary chain 생성: 각 label i→`vals[(i+offset) mod len]`(`offset = next?N:len-N`, `rem_euclid`로 N≥len·N=0[identity]·부호 정규화). arg-less `enum_method_expr`(1-step)는 **불변**(byte-identical 유지)—별도 함수라 golden churn 0. **correct-or-loud**: non-literal step(`x.next(k)`)·wrong arity는 generic Call로 fall-through→elaborate loud. AST/IR 무변화(기존 Ternary/`==`/IntLit node만).
+
+**적대 differential(vita vs iverilog)**: 全 MATCH — next(2)=C·next(3)=A(full-cycle)·next(4)=B(4 mod 3)·next(0)=identity·next(2) of B wraps=A·prev(2)=A·prev(3)=C·prev(2) of A=B·arg-less `.next()` 불변. **LOUD**: non-constant step(`.next(k)`)·iverilog는 지원하나 vita는 correct-or-loud. 전 suite green(파서 변경이 비-enum 경로 무영향·arg-less 불변).
+
+**결과**: enum step-arg 흔한 형태 동작. `enum_methods.rs`+5. format 22 불변(파서 desugar만). **3826 green**(+5). ⭐교훈: ① **fresh-area probe가 loud gap도 발굴**(silent-wrong뿐 아니라 oracle-backed loud→supported 후보). ② **arg 유무로 갈라지는 desugar는 arg 형태를 놓치기 쉽다**(게이트가 arg-less 전용→arg-form이 generic call로 새어 loud). ③ **1-step 경로 불변 유지가 golden churn 0의 핵심**(신규 N-step은 별도 함수). ④ **constant-step subset이 common case**(testbench의 `.next(2)`)·runtime step은 correct-or-loud. 상세=본 엔트리·ROADMAP.
+
 #### 4.5.180 SILENT-WRONG 수정: same-named STATIC block-locals in DISJOINT procedural blocks → loud (type-mismatch + definite-assignment guard) (2026-07-21, branch feat-block-local-collision-loud) ✅
 
 **발굴 경위**: "fresh-area silent-wrong probe"(추천 방향)—iverilog 라이브 차분을 최근 세션이 안 건드린 영역(signed 산술·shift·select·concat·sys-func·width·cast·array·X/Z·power/mod)에 ~90 비교 스윕. 대부분 CLEAN이나, `signed [3:0] x=-3; y=x`를 두 sibling 블록에서 `y`를 다른 부호로 선언한 케이스서 **vita -3 vs iverilog 253** 발견. 축소하니 격리 시엔 정상(253)이라 컨텍스트 의존—두 블록이 같은 이름 `y`를 선언하는 게 트리거.

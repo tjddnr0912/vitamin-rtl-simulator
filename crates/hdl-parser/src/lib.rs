@@ -1650,8 +1650,7 @@ impl Parser<'_, '_> {
                     return self.struct_member_expr(base, (off, w, asc, sgn, dbase), path.span);
                 }
                 // SV §6.19.5 enum method `x.first/last/num/next/prev/name [()]` —
-                // the no-arg form only (a `x.next(2)` step arg falls through to a
-                // Call → loud). Desugars to literals / ternary chains over the
+                // the arg-less form. Desugars to literals / ternary chains over the
                 // enum's labels; non-enum `x.foo` returns None → normal path.
                 {
                     let empty_call =
@@ -1665,6 +1664,29 @@ impl Parser<'_, '_> {
                             return e;
                         }
                     }
+                }
+                // SV §6.19.5 `x.next(N)` / `x.prev(N)` with a CONSTANT step. A
+                // non-constant step or a non-enum receiver falls through to the generic
+                // Call below (loud in elaborate — correct-or-loud). Handled here, not in
+                // the arg-less `enum_method_expr`, so `.next()` stays byte-identical.
+                if self.peek() == Some(T::LParen)
+                    && path.segments.len() == 2
+                    && matches!(path.segments[1].name.as_str(), "next" | "prev")
+                    && self.var_enum.contains_key(&path.segments[0].name)
+                {
+                    let is_next = path.segments[1].name == "next";
+                    let args = self.call_args();
+                    if args.len() == 1 {
+                        if let Some(n) = Self::const_lit(&args[0]) {
+                            if let Some(e) = self.enum_step_n_expr(&path, is_next, n) {
+                                return e;
+                            }
+                        }
+                    }
+                    return Expr {
+                        kind: ExprKind::Call { name: path, args },
+                        span: start.to(self.prev_span()),
+                    };
                 }
                 if self.peek() == Some(T::LParen) {
                     // N3 SoA: `arr.size()`/`arr.num()` on a SoA record array → field 0's
@@ -7343,6 +7365,60 @@ impl Parser<'_, '_> {
             }
             _ => return None,
         })
+    }
+
+    /// SV §6.19.5 `x.next(N)` / `x.prev(N)` with a CONSTANT step `n_steps`. Builds an
+    /// N-step ternary chain over the enum labels — each label maps to the member `N`
+    /// positions ahead (`next`) or behind (`prev`), wrapping around the ordered set
+    /// (`prev(N)` ≡ a forward step of `len − N`). `None` when `x` is not a
+    /// literal-foldable enum variable (the caller then emits a generic Call that
+    /// loud-rejects — the same fate as a NON-constant step, correct-or-loud). Kept
+    /// separate from the arg-less `enum_method_expr` so the common `.next()` desugar
+    /// stays byte-identical.
+    fn enum_step_n_expr(&self, path: &HierPath, is_next: bool, n_steps: i64) -> Option<Expr> {
+        if path.segments.len() != 2 {
+            return None;
+        }
+        let ename = self.var_enum.get(&path.segments[0].name)?;
+        let labels = self.enum_defs.get(ename)?;
+        if labels.is_empty() {
+            return None;
+        }
+        let span = path.span;
+        let var = Expr {
+            kind: ExprKind::Ident(HierPath {
+                segments: vec![path.segments[0].clone()],
+                span,
+            }),
+            span,
+        };
+        let vals: Vec<i64> = labels.iter().map(|(_, v)| *v).collect();
+        let n = vals.len() as i64;
+        // Forward offset into the ordered label set (0..n). `prev` reverses direction.
+        // `rem_euclid` normalizes N ≥ n, N == 0 (identity), and any sign.
+        let offset = if is_next {
+            n_steps.rem_euclid(n)
+        } else {
+            (-n_steps).rem_euclid(n)
+        };
+        // Every valid member maps to `vals[(i+offset) mod n]`; the default (an
+        // out-of-set value) mirrors the arg-less chain's wrap target.
+        let default = vals[offset as usize];
+        Some(
+            (0..n)
+                .map(|i| (vals[i as usize], vals[(i + offset).rem_euclid(n) as usize]))
+                .collect::<Vec<(i64, i64)>>()
+                .iter()
+                .rev()
+                .fold(Self::i64_lit(default, span), |else_e, (m, r)| Expr {
+                    kind: ExprKind::Ternary {
+                        cond: Box::new(Self::enum_eq(&var, *m, span)),
+                        then_e: Box::new(Self::i64_lit(*r, span)),
+                        else_e: Box::new(else_e),
+                    },
+                    span,
+                }),
+        )
     }
 
     /// Build the synthetic `function string <fname>(input signed? [63:0] x)` whose

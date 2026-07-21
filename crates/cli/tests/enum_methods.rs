@@ -147,3 +147,77 @@ fn non_foldable_enum_methods_are_loud() {
     );
     assert_ne!(code, Some(0), "non-foldable enum methods must be loud");
 }
+
+// ── §6.19.5 `.next(N)` / `.prev(N)` with a CONSTANT step (loud→supported) ──
+// A constant step desugars to an N-step ternary chain (each member → the one N
+// positions ahead/behind, wrapping); a NON-constant step stays loud.
+
+#[test]
+fn next_step_with_wrap() {
+    // {A=1,B=2,C=4}. next(2) of A = C; next(3) full-cycle = A; next(2) of B wraps = A.
+    let (out, code) = run(
+        "module top; typedef enum logic [2:0] {A=1,B=2,C=4} e; e x;\n\
+         initial begin\n\
+           x=A; $display(\"R n2=%0d n3=%0d\", x.next(2), x.next(3));\n\
+           x=B; $display(\"R nb2=%0d\", x.next(2)); $finish; end endmodule\n",
+    );
+    assert_eq!(code, Some(0));
+    assert!(
+        out.contains("R n2=4 n3=1"),
+        "next(2)=C next(3)=A; got:\n{out}"
+    );
+    assert!(
+        out.contains("R nb2=1"),
+        "next(2) of B wraps to A; got:\n{out}"
+    );
+}
+
+#[test]
+fn prev_step_with_wrap() {
+    // prev(2) of C = A; prev(3) full-cycle = C; prev(2) of A wraps = B.
+    let (out, code) = run(
+        "module top; typedef enum logic [2:0] {A=1,B=2,C=4} e; e x;\n\
+         initial begin\n\
+           x=C; $display(\"R p2=%0d p3=%0d\", x.prev(2), x.prev(3));\n\
+           x=A; $display(\"R pa2=%0d\", x.prev(2)); $finish; end endmodule\n",
+    );
+    assert_eq!(code, Some(0));
+    assert!(
+        out.contains("R p2=1 p3=4"),
+        "prev(2)=A prev(3)=C; got:\n{out}"
+    );
+    assert!(
+        out.contains("R pa2=2"),
+        "prev(2) of A wraps to B; got:\n{out}"
+    );
+}
+
+#[test]
+fn next_step_zero_is_identity() {
+    // next(0) / prev(0) return the value unchanged (§6.19.5).
+    let (out, code) = run("module top; typedef enum {A,B,C} e; e x;\n\
+         initial begin x=B; $display(\"R z=%0d pz=%0d\", x.next(0), x.prev(0)); $finish; end endmodule\n");
+    assert_eq!(code, Some(0));
+    assert!(
+        out.contains("R z=1 pz=1"),
+        "next(0)/prev(0)=B(1); got:\n{out}"
+    );
+}
+
+#[test]
+fn next_step_noarg_still_works() {
+    // The arg-less `.next()` path is unchanged (byte-identical desugar).
+    let (out, code) = run("module top; typedef enum {A,B,C} e; e x;\n\
+         initial begin x=A; $display(\"R=%0d\", x.next()); $finish; end endmodule\n");
+    assert_eq!(code, Some(0));
+    assert!(out.contains("R=1"), "next() of A = B(1); got:\n{out}");
+}
+
+#[test]
+fn next_step_nonconstant_is_loud() {
+    // A runtime step cannot fold to a static chain → loud (correct-or-loud); the
+    // constant-step subset is what iverilog testbenches use.
+    let (_o, code) = run("module top; typedef enum {A,B,C} e; e x; int k;\n\
+         initial begin k=2; x=A; x=x.next(k); $display(\"%0d\", x); $finish; end endmodule\n");
+    assert_ne!(code, Some(0), "non-constant enum step must be loud");
+}
