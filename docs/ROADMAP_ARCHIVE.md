@@ -8,6 +8,72 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+> **round-16 리포트 대응 7-슬라이스(§4.5.187~193, 2026-07-21)** — 외부 리뷰어 VITA_TEST_REPORT round-16(base `4cd6f54`/§4.5.185)의 잔여 갭을 현재 HEAD(§4.5.186)에서 iverilog로 재현·트리아지 후 tractable 항목을 순차 구현. 공통: correct-or-loud, format_version 22 불변, 각 슬라이스마다 full-suite green. **남은 리포트 항목=전부 executor-bound**(§3 참조: `&self` function/synchronous-task executor가 heap-op 불가→V2A-dyn-nonsuspendable·V5 function-dyn-local·V2B function-output-dyn·framed-function nested/recursion은 `&mut`-capable executor 아키텍처 확장 필요).
+
+#### 4.5.193 output unpacked-fixed array formal on TASK loud→supported (md-packed slot → packed-temp out-bind → post-call unpack) (2026-07-21, branch feat-task-output-array) ✅
+
+**발굴 경위**: round-16 리포트의 "unpacked-array formal on task"(sha2 16) 중 §4.5.188(input)이 처리하지 못한 **OUTPUT half**(`shaN_compute`/`hex2bytes`-style `output byte digest[N]`). vita loud("an OUTPUT/INOUT array formal is pass-by-reference").
+
+**설계(§4.5.188 확장·heap/format 무변화)**: body는 input과 동일한 md-packed `[count][elem_w]` slot을 씀(md-packed element WRITE §4.5.97). (1) `reserve_frame_task`의 md-packed 예약을 `Input|Output`으로 확장. (2) UARR guard를 output fixed-array도 면제(framed 한정). (3) `emit_frame_task_call` Output arm에 array branch: 신규 caller-side packed temp net 생성→**out-bind(md-packed slot → temp whole-net)**[기존 scalar copy-out 그대로]. (4) `ret` block(call 후·exit copy-out 뒤 동기·suspendable 양쪽서 실행)에 **unpack** 방출: `for i in 0..count { caller[i] = packed[i*ew +: ew] }`(AST+`lower_stmt`로 array-element write/part-select read를 정상 lowering 재사용·bit-faithful copy라 signedness는 caller 배열 것·later read서 적용).
+
+**correct-or-loud**: INOUT array formal·non-bare array actual(slice)·classifier-reject=loud. **IEEE §13.5.2 pass-by-value**: output formal은 default(2-state 0·4-state X)서 시작→body가 안 쓴 element는 그 default가 copy-out(caller 이전 값 덮어씀). nested call의 module-net unpack write는 frame subset check가 포착.
+
+**적대 differential(element-wise iverilog ref)**: byte[4] suspendable·input+output 병용 synchronous·wide logic[15:0]·signed(−5/−100)·two-call isolation·partial-write default(00/22/00). LOUD=INOUT/non-bare. `frame_task_output_array.rs`×8·§4.5.188 pinned test 갱신·**3944 green**(+8).
+
+#### 4.5.192 packable unpacked-struct scalar body-local in task/function loud→supported (V8) (2026-07-21, branch feat-frame-local-unpacked-struct) ✅
+
+**발굴 경위**: round-16 V8(TB=partial·tb_partial:372 task-local unpacked struct). `rec_t p;`를 function/task body에 두면 E2002("expected '=' after lvalue")—`rec_t`가 statement lvalue로 파싱됨. packed struct body-local은 이미 동작·**unpacked만** gap.
+
+**근본 원인**: unpacked struct 타입은 `unpacked_struct_layouts`에만 있고 `typedefs`엔 없음(주석 명시)→tf-body decl loop의 `peek_block_typedef_decl`이 miss→decl loop break→statement 파싱.
+
+**설계(parser-only·§4.5.190/191 재사용)**: (1) tf-body decl loop에 `parse_body_unpacked_struct_local` branch: packable unpacked-struct scalar를 인식→**packed-vector frame-local**(`logic/bit [W-1:0] p;`)로 lowering+`var_struct`/`struct_scalar_vars` 등록. (2) `struct_field_select`(scalar `s.field` geom)에 `packable_record_layout` fallback 추가(§4.5.190 `struct_array_field_geom`와 동일 패턴)→read+write 양쪽 `p.field`가 part-select desugar.
+
+**correct-or-loud**: non-packable record(string/real/nested member)·array body-local·decl-init `'{…}`=loud. module-scope record는 member-net(`$unp$var$field`) 표현 유지(이 branch는 tf-body 한정). **적대**: task/function local field write→read·per-call frame re-init(mixed-width)·runtime `'{…}` pattern·4-state read-before-write=X. 회귀: module member-net·packed body-local 불변. `frame_local_unpacked_struct.rs`×8·**3936 green**(+8).
+
+#### 4.5.191 FIXED 1-D array of packable unpacked struct loud→supported (V6) (2026-07-21, branch feat-fixed-record-array) ✅
+
+**발굴 경위**: round-16 V6(TB=top·axi_mem_model:134 memory model `mem[addr].field`). FIXED unpacked-struct 배열(`entry_t mem[N]`)이 loud("array of unpacked structs unsupported")—dynamic record array(record_array_vars)·SoA·scalar record만 지원.
+
+**설계(parser-only·§4.5.190 재사용)**: `parse_unpacked_struct_decl`의 fixed-array loud 앞에 branch: packable record 고정배열을 **packed-vector 고정배열**(`logic/bit [W-1:0] mem[N]`)로 lowering+`struct_1d_array_vars`/`var_struct` 등록→`mem[i].field`가 §4.5.190 packed-struct-array desugar 재사용. `struct_array_field_geom`에 `packable_record_layout` fallback(StructLayout `.field()` 동일 shape). `bit`/`logic` element로 2-state-0/4-state-X default.
+
+**correct-or-loud**: non-packable record·multi-dim·decl-init=loud. queue-of-struct·dynamic-record-array 무영향. **적대**: axi_mem_model shape {addr,data,valid} round-trip(field write→read·whole-element MSB-first packing)·runtime-index·2-state 0/4-state X default·`mem[i]='{…}` asymmetric pattern. `fixed_record_array.rs`×8·round-10 pinned test 갱신·**3928 green**(+8).
+
+#### 4.5.190 arr[i].field on packed-struct 1-D array loud→supported (2026-07-21, branch feat-struct-array-member) ✅
+
+**발굴 경위**: fresh-area probe서 packed-struct 1-D 배열 element field access(`arr[i].field`·register-file/memory idiom)가 read/write 모두 E3010("undeclared hierarchical name"). scalar `s.field`·dynamic record array/SoA는 동작·**packed-struct 배열만** gap. iverilog는 이 접근서 assertion abort/reject(오라클 없음).
+
+**설계(parser-only·기존 packed-struct member 머신러리 일반화)**: (1) `struct_member_expr`(READ)를 base=EXPR로 일반화[`struct_member_expr_of`]—BitSelect element `arr[i]`에 part-select. (2) `parse_struct_field_lval`(WRITE)를 base=`HierPath`→base=`Lvalue`로 일반화. (3) postfix loop(read)+lvalue loop(write)에 branch: `arr[i].field`(arr∈`struct_1d_array_vars`)→field geom(`var_struct`→`struct_layouts`)로 element part-select `arr[i][off+w-1:off]`(whole-field sign wrap·trailing sub-select·RMW field write 상속).
+
+**검증(no oracle→hand-IEEE+self-consistency)**: field offset을 plain packed-vector part-select(iverilog가 pin)와 교차검증(`arr[0].a`==`arr[0][15:8]`==11)·vita↔vita self-consistency(field R/W==manual part-select)·signed sign-extend·3-field offset·trailing sub-select·RMW가 다른 field 보존. 회귀: whole-element·`arr[i]='{…}` pattern 불변. AST/format 무변화. `struct_array_member.rs`×10·**3920 green**(+10).
+
+#### 4.5.189 SILENT-WRONG 수정: loop-body block-local initializer ran once, not per-entry (2026-07-21, branch feat-frame-block-init) ✅
+
+**발굴 경위**: round-16 "automatic block-local w/ initializer" 조사 중 iverilog 차분서 SILENT-WRONG 발견. automatic task/function의 LOOP body에 `int t = f(k);`(initializer 有)를 두면 vita가 frame ENTRY서 **1회만** init(loop var를 entry 값으로)—iverilog는 매 block entry 재실행. `for(k) begin int x=k*10+1; end`가 vita `1,1,1` vs iverilog `1,11,21`.
+
+**근본 원인**: `lower_frame_task_body`/`lower_frame_func_body`가 `collect_block_local_decls`로 모든 nested block-local init을 frame ENTRY(활성화당 1회)에 방출—**코드 자체 주석이 "single-entry approximation that is exact for the common single-entry case"** 라고 자인. 루프는 block을 N회 재진입하나 init은 1회.
+
+**설계(IEEE §6.21 automatic lifetime)**: nested block-local init을 각 block의 OWN entry(`Block` arm of `lower_stmt`·`in_frame_body` gate)에 방출→루프 내부 init이 매 반복 재실행. top-level body_decls는 frame entry 유지(파서가 outermost body block을 `decls: []`로 wrap→중복 없음). storage slot은 여전히 지속→no-init read-before-write는 iverilog parity(`int acc; acc=acc+1;` 누적). MODULE-process block-local은 static(once-at-t0) init 유지(`in_frame_body`-only).
+
+**적대 differential 全 MATCH(이전 MISMATCH)**: loop init in task(1/11/21)+function(33)·nested loops(0/1/10/11)·sibling decl ordering·while-loop·init-from-function-call. 회귀 MATCH: no-init persists(1/2/3)·non-loop block once-per-call(10/14)·module initial static(1/1/1). content-only(golden churn 0·format 22). `frame_block_local_init.rs`×9·**3910 green**(+9).
+
+#### 4.5.188 input unpacked-fixed array formal on TASK loud→supported (2026-07-21, branch feat-task-unpk-formal) ✅
+
+**발굴 경위**: round-16 리포트의 단일 최대 잔여 task 클래스(sha2 16 `shaN_compute`/`hex2bytes`/`shaN_block`·sha3 3). `input byte b[4]`·`input logic [63:0] w[80]` 같은 unpacked-FIXED array formal이 task서 blanket-loud("task has an unpacked-array formal")—FUNCTION 경로는 md-packed `[count][elem_w]` frame slot으로 §4.5.82/97부터 지원.
+
+**설계(함수 경로를 frame-TASK 경로로 미러·3 site)**: (1) `reserve_frame_task`: `input` classify_array_formal-Ok formal을 `reserve_frame_func`와 동일 md-packed value slot 예약(packed_dims+dim_desc+frame_arr_formal_meta+2-state whole-slot coercion). (2) `emit_frame_task_call`: whole-array actual을 `lower_array_actual_packed`로 slot value에 pack(call-site concat·`emit_frame_call`과 동일). (3) task-call UARR guard: `input` unpacked-fixed formal 면제—단 task가 FRAMED(`task_frame_idx`)일 때만(static task inline binding엔 md-packed slot 無→silent truncation 대신 loud). value slot이라 동기 `run_task_call`·suspendable 양쪽 동작.
+
+**적대 differential(element-wise iverilog ref·iverilog는 unpacked subroutine port reject)**: byte[4] sum(suspendable+non-suspendable+output-scalar)·signed byte(−5/10/−3)·wide logic[63:0]×4. 적대: input element write가 caller에 no-leak(pass-by-value IEEE §13.5.1)·two-call isolation·OUTPUT/INOUT array formal=loud(pass-by-ref)·static task unpacked formal=loud·size mismatch=loud. round-6 pinned test 갱신. `frame_task_unpk_formal.rs`×9·**3901 green**(+9).
+
+#### 4.5.187 $fopen runtime filename loud→supported (string literal → variable/concat/packed-reg) (2026-07-21, branch feat-fopen-runtime-name) ✅
+
+**발굴 경위**: round-16 리포트의 새 file-I/O 층(sha2 CAVP walker `load_vector`/`rsp_next` 9 site). CAVP walker가 vector-file path를 `string` 변수에 만드는데 `$fopen`이 non-literal arg를 loud-reject("$fopen arguments must be string literals (v7)")—file-driven testbench 전면 차단.
+
+**근본 원인**: elaborate `fopen_special` gate가 `ExprKind::StrLit` arg만 수용·engine `k_fopen`이 `Const{StrUtf8}` expr만 resolve(둘 다 vita `string` 타입[P2-C] 이전).
+
+**설계(§21.3 iverilog parity)**: (1) elaborate: StrLit-only gate 제거·name/mode를 일반 expr로 lower. (2) engine `k_fopen`: `resolve` helper가 각 arg를 Const{StrUtf8}→`const_string`·runtime STRING value(`is_str`)→`to_str_bytes`·기타 packed value→ASCII in reg(`fmt_packed_chars_min` NUL-strip)로 resolve(3형 모두 valid 파일명).
+
+**적대 differential 全 MATCH(iverilog 13.0)**: string-variable path(write+reopen+$fgets)·concat path `{"pre_", base, ".txt"}`·CAVP reader($fopen(var)→$fscanf %d/%h)·open-failure→0(완화된 gate서 silent success 없음). 기존 file_io(9)+sysread_fgets(12) 스위트 green. `fopen_runtime_name.rs`×4·**3892 green**(+4).
+
 #### 4.5.186 constant-function evaluation in const contexts loud→supported (elaborate-time integer function-body interpreter) (2026-07-21, branch feat-const-function-eval) ✅
 
 **발굴 경위**: §4.5.185 후 fresh-area probe($cast·let·const-func 차분) 중 `localparam W = clog(256)`(clog=while-loop 함수)가 vita E3009 "not a foldable constant expression" vs iverilog `8` 정상으로 발견. SV의 흔하고 중요한 idiom(파라미터 계산용 상수 함수·커스텀 `$clog2`). 사용자가 4 선택지 중 이 feature 선택.
