@@ -242,7 +242,14 @@ pub(crate) struct SimState<'a> {
     /// Ordering is never observed (every access is a point op on a single
     /// HANDLE NetId), so the flat layout is byte-identical to the old BTreeMap.
     /// Dyn objects never live in the flat BitPacked store.
-    pub dyn_heap: Vec<Option<DynObj>>,
+    /// `RefCell` (§4.5.194): the dynamic heap is mutated from the `&self`
+    /// synchronous frame executors (`run_frame_call` / `run_task`) — a function
+    /// body's `new[]` / dyn element write runs on the expression read-path —
+    /// exactly as `class_heap` is already interior-mutable for `&self`
+    /// value-returning method field writes. Borrow discipline: every access
+    /// scopes its `borrow()`/`borrow_mut()` to the shortest span and never holds
+    /// a guard across a nested call that could re-touch the heap.
+    pub dyn_heap: std::cell::RefCell<Vec<Option<DynObj>>>,
     /// Warn-once latch for dyn degradations (X-size new[], OOB, …) — one
     /// W-RUN-DYN-DEGRADE per handle net, never a per-iteration spam. RefCell:
     /// the READ path (`read_net` is `&self`) must latch too.
@@ -708,7 +715,7 @@ impl<'a> SimState<'a> {
             force_net_to_forces: std::collections::BTreeMap::new(),
             force_always_reeval: std::collections::BTreeSet::new(),
             latent_assigns: std::collections::BTreeMap::new(),
-            dyn_heap: (0..nnets).map(|_| None).collect(),
+            dyn_heap: std::cell::RefCell::new((0..nnets).map(|_| None).collect()),
             dyn_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
             dyn_is_handle: ir
                 .nets
@@ -1803,7 +1810,8 @@ impl SimState<'_> {
             // v7 P2-C: a STRING handle's whole-value read IS its packed
             // materialization (8×len, is_str — context resizing bypassed).
             if nv.kind == NetKind::String {
-                let bytes: &[u8] = match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+                let heap = self.dyn_heap.borrow();
+                let bytes: &[u8] = match heap.get(net as usize).and_then(|o| o.as_ref()) {
                     Some(DynObj::Str { bytes }) => bytes,
                     _ => &[],
                 };
@@ -1814,7 +1822,12 @@ impl SimState<'_> {
             self.dyn_warn_once_at(net, "dyn handle read without an index");
             return xs();
         };
-        match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+        match self
+            .dyn_heap
+            .borrow()
+            .get(net as usize)
+            .and_then(|o| o.as_ref())
+        {
             Some(DynObj::DynArray { elems }) if (i as usize) < elems.len() => {
                 elems[i as usize].clone()
             }
@@ -1972,12 +1985,27 @@ impl SimState<'_> {
     /// `Some(f())` only if it is currently `None`, then hands back `&mut DynObj`.
     /// `net` is always a valid HANDLE NetId (`< ir.nets.len()`), so the slot
     /// exists; the `expect` is unreachable by construction.
-    pub(crate) fn dyn_entry(&mut self, net: u32, f: impl FnOnce() -> DynObj) -> &mut DynObj {
-        let slot = &mut self.dyn_heap[net as usize];
+    /// §4.5.194: interior-mutable (`RefCell`) lazy-create + scoped-mutate. Sets
+    /// the slot to `Some(f())` only if currently `None`, then runs `g` on the
+    /// live object with the `borrow_mut` guard scoped to THIS call. `g` MUST NOT
+    /// re-touch `dyn_heap` (else `BorrowMutError`); callers do a point mutation
+    /// here and defer any `enforce_queue_bound`/warn to AFTER this returns (the
+    /// closure form replaces the old `&mut DynObj`-returning `dyn_entry`, whose
+    /// escaping reference cannot survive a `RefCell`).
+    pub(crate) fn with_dyn_entry<R>(
+        &self,
+        net: u32,
+        f: impl FnOnce() -> DynObj,
+        g: impl FnOnce(&mut DynObj) -> R,
+    ) -> R {
+        let mut heap = self.dyn_heap.borrow_mut();
+        let slot = &mut heap[net as usize];
         if slot.is_none() {
             *slot = Some(f());
         }
-        slot.as_mut().expect("dyn_entry: slot just set to Some")
+        g(slot
+            .as_mut()
+            .expect("with_dyn_entry: slot just set to Some"))
     }
 
     fn dyn_write(
@@ -1998,7 +2026,7 @@ impl SimState<'_> {
             && c.width.is_none()
         {
             let bytes = piece.to_str_bytes();
-            self.dyn_heap[net as usize] = Some(DynObj::Str { bytes });
+            self.dyn_heap.borrow_mut()[net as usize] = Some(DynObj::Str { bytes });
             return false; // no net dirty channel (design §4, dyn precedent)
         }
         // N3: a part-select WRITE of a packable-record dyn-ARRAY element
@@ -2042,20 +2070,29 @@ impl SimState<'_> {
             };
             let piece_r = piece.clone().resize_keep_sign(width.max(1), false);
             let i = raw_word as usize;
-            match self.dyn_heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
-                Some(DynObj::DynArray { elems }) if i < elems.len() => {
-                    // Deposit each in-range field bit (OOB bits drop, IEEE part-select).
-                    let mut cur = elems[i].clone();
-                    for k in 0..width {
-                        let bp = lsb + k as i64;
-                        if bp >= 0 && (bp as u32) < w {
-                            let (bv, bu) = piece_r.get_vu(k);
-                            cur.set_vu(bp as u32, bv, bu);
+            // Scope the `borrow_mut` to the store; the miss-warn runs after it
+            // releases (§C6 — never hold a heap guard across `dyn_warn_once_at`).
+            let hit = {
+                let mut heap = self.dyn_heap.borrow_mut();
+                match heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                    Some(DynObj::DynArray { elems }) if i < elems.len() => {
+                        // Deposit each in-range field bit (OOB bits drop, IEEE part-select).
+                        let mut cur = elems[i].clone();
+                        for k in 0..width {
+                            let bp = lsb + k as i64;
+                            if bp >= 0 && (bp as u32) < w {
+                                let (bv, bu) = piece_r.get_vu(k);
+                                cur.set_vu(bp as u32, bv, bu);
+                            }
                         }
+                        elems[i] = cur;
+                        true
                     }
-                    elems[i] = cur;
+                    _ => false,
                 }
-                _ => self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)"),
+            };
+            if !hit {
+                self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)");
             }
             return false;
         }
@@ -2080,28 +2117,51 @@ impl SimState<'_> {
         let i = raw_word as usize;
         if self.ir.nets[net as usize].kind == NetKind::Queue {
             // A missing entry IS the empty queue: the append lane must be
-            // reachable on a never-touched handle (`q[0] = v` creates it).
-            let DynObj::Queue { elems } = self.dyn_entry(net, || DynObj::Queue {
-                elems: std::collections::VecDeque::new(),
-            }) else {
-                return false; // kind-mismatched entry: unreachable by construction
-            };
-            let len = elems.len();
-            match i.cmp(&len) {
-                std::cmp::Ordering::Less => elems[i] = piece.clone().resize(w),
-                // The u32::MAX X-sentinel can never land in the Equal arm:
-                // len ≤ the cap, far below the sentinel.
-                std::cmp::Ordering::Equal if len < MAX_DYN_ELEMS => {
-                    elems.push_back(piece.clone().resize(w));
-                    self.enforce_queue_bound(net); // v6 ③ (no-op when unbounded)
-                }
-                std::cmp::Ordering::Equal => self.dyn_warn_once_at(
+            // reachable on a never-touched handle (`q[0] = v` creates it). The
+            // `borrow_mut` is scoped to `with_dyn_entry`; the bound-enforcement /
+            // warn run AFTER it returns (§C6 — no dyn_heap touch in the guard).
+            enum QStep {
+                Done,
+                Pushed,
+                Cap,
+                Oob,
+            }
+            let step = self.with_dyn_entry(
+                net,
+                || DynObj::Queue {
+                    elems: std::collections::VecDeque::new(),
+                },
+                |obj| {
+                    let DynObj::Queue { elems } = obj else {
+                        return QStep::Done; // kind-mismatched entry: unreachable by construction
+                    };
+                    let len = elems.len();
+                    match i.cmp(&len) {
+                        std::cmp::Ordering::Less => {
+                            elems[i] = piece.clone().resize(w);
+                            QStep::Done
+                        }
+                        // The u32::MAX X-sentinel can never land in the Equal arm:
+                        // len ≤ the cap, far below the sentinel.
+                        std::cmp::Ordering::Equal if len < MAX_DYN_ELEMS => {
+                            elems.push_back(piece.clone().resize(w));
+                            QStep::Pushed
+                        }
+                        std::cmp::Ordering::Equal => QStep::Cap,
+                        std::cmp::Ordering::Greater => QStep::Oob,
+                    }
+                },
+            );
+            match step {
+                QStep::Pushed => self.enforce_queue_bound(net), // v6 ③ (no-op when unbounded)
+                QStep::Cap => self.dyn_warn_once_at(
                     net,
                     "queue exceeds the element cap (1<<24); write-append dropped",
                 ),
-                std::cmp::Ordering::Greater => {
-                    self.dyn_warn_once_at(net, "queue index beyond size or X (write ignored)");
+                QStep::Oob => {
+                    self.dyn_warn_once_at(net, "queue index beyond size or X (write ignored)")
                 }
+                QStep::Done => {}
             }
             return false;
         }
@@ -2113,20 +2173,29 @@ impl SimState<'_> {
             .get(net as usize)
             .copied()
             .unwrap_or(false);
-        match self.dyn_heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
-            Some(DynObj::DynArray { elems }) if i < elems.len() => {
-                elems[i] = if str_elem {
-                    Value::from_str_bytes(&piece.to_str_bytes())
+        let hit = {
+            let mut heap = self.dyn_heap.borrow_mut();
+            if let Some(DynObj::DynArray { elems }) =
+                heap.get_mut(net as usize).and_then(|o| o.as_mut())
+            {
+                if i < elems.len() {
+                    elems[i] = if str_elem {
+                        Value::from_str_bytes(&piece.to_str_bytes())
+                    } else {
+                        piece.clone().resize(w)
+                    };
+                    true
                 } else {
-                    piece.clone().resize(w)
-                };
+                    false
+                }
+            } else {
                 false
             }
-            _ => {
-                self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)");
-                false
-            }
+        };
+        if !hit {
+            self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)");
         }
+        false
     }
 
     /// v5 ⑤: assoc-element WRITE (`a[k] = v`) — the `Offsets::AssocKey` lane.
@@ -2142,7 +2211,12 @@ impl SimState<'_> {
         };
         // Cap BEFORE the entry borrow (the warn latch needs `&self` while the
         // map borrow holds `&mut self`); replacing an existing key is exempt.
-        let (len, exists) = match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+        let (len, exists) = match self
+            .dyn_heap
+            .borrow()
+            .get(net as usize)
+            .and_then(|o| o.as_ref())
+        {
             Some(DynObj::Assoc { map }) => (map.len(), map.contains_key(&k)),
             _ => (0, false),
         };
@@ -2151,12 +2225,17 @@ impl SimState<'_> {
             return;
         }
         // A missing entry IS the empty assoc (lazy, like every dyn object).
-        let entry = self.dyn_entry(net, || DynObj::Assoc {
-            map: std::collections::BTreeMap::new(),
-        });
-        if let DynObj::Assoc { map } = entry {
-            map.insert(k, value.clone().resize(w));
-        }
+        self.with_dyn_entry(
+            net,
+            || DynObj::Assoc {
+                map: std::collections::BTreeMap::new(),
+            },
+            |obj| {
+                if let DynObj::Assoc { map } = obj {
+                    map.insert(k, value.clone().resize(w));
+                }
+            },
+        );
     }
 
     /// v6: string-keyed assoc WRITE — the `Offsets::AssocStrKey` lane (the
@@ -2167,7 +2246,12 @@ impl SimState<'_> {
             self.dyn_warn_once_at(net, "assoc key is X/Z (write ignored)");
             return;
         };
-        let (len, exists) = match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+        let (len, exists) = match self
+            .dyn_heap
+            .borrow()
+            .get(net as usize)
+            .and_then(|o| o.as_ref())
+        {
             Some(DynObj::AssocStr { map }) => (map.len(), map.contains_key(k)),
             _ => (0, false),
         };
@@ -2175,12 +2259,17 @@ impl SimState<'_> {
             self.dyn_warn_once_at(net, "assoc exceeds the element cap (1<<24); write dropped");
             return;
         }
-        let entry = self.dyn_entry(net, || DynObj::AssocStr {
-            map: std::collections::BTreeMap::new(),
-        });
-        if let DynObj::AssocStr { map } = entry {
-            map.insert(k.clone(), value.clone().resize(w));
-        }
+        self.with_dyn_entry(
+            net,
+            || DynObj::AssocStr {
+                map: std::collections::BTreeMap::new(),
+            },
+            |obj| {
+                if let DynObj::AssocStr { map } = obj {
+                    map.insert(k.clone(), value.clone().resize(w));
+                }
+            },
+        );
     }
 
     /// v6 ③: bounded-queue post-op rule (iverilog live, IEEE §7.10):
@@ -2193,12 +2282,15 @@ impl SimState<'_> {
         };
         let cap = b as usize + 1;
         let mut dropped = false;
-        if let Some(DynObj::Queue { elems }) =
-            self.dyn_heap.get_mut(net as usize).and_then(|o| o.as_mut())
         {
-            while elems.len() > cap {
-                elems.pop_back();
-                dropped = true;
+            let mut heap = self.dyn_heap.borrow_mut();
+            if let Some(DynObj::Queue { elems }) =
+                heap.get_mut(net as usize).and_then(|o| o.as_mut())
+            {
+                while elems.len() > cap {
+                    elems.pop_back();
+                    dropped = true;
+                }
             }
         }
         if dropped {
@@ -2559,7 +2651,12 @@ impl<'a> SimState<'a> {
             Int(i64),
             Str(Vec<u8>),
         }
-        let hit: Option<Hit> = match self.dyn_heap.get(hnet as usize).and_then(|o| o.as_ref()) {
+        let hit: Option<Hit> = match self
+            .dyn_heap
+            .borrow()
+            .get(hnet as usize)
+            .and_then(|o| o.as_ref())
+        {
             Some(crate::state::DynObj::Assoc { map }) => {
                 let cur = cur_val.as_ref().map(|v| {
                     let raw = v.val.first().copied().unwrap_or(0);
@@ -3247,7 +3344,8 @@ impl<'a> SimState<'a> {
         let m = self.func_table[callee as usize];
         for s in 0..m.locals_len {
             let net = (m.base_net + s) as usize;
-            if self.ir.nets[net].kind == NetKind::DynArray && self.dyn_heap[net].is_some() {
+            if self.ir.nets[net].kind == NetKind::DynArray && self.dyn_heap.borrow()[net].is_some()
+            {
                 self.fatal_run(
                     "recursive or concurrent frame-local dynamic array is unsupported \
                      (a per-activation dynamic-array heap is a follow-on); rewrite without \
@@ -3275,7 +3373,7 @@ impl<'a> SimState<'a> {
         for s in 0..m.locals_len {
             let net = (m.base_net + s) as usize;
             if self.ir.nets[net].kind == NetKind::DynArray {
-                self.dyn_heap[net].take();
+                self.dyn_heap.borrow_mut()[net].take();
             }
         }
     }
@@ -3296,10 +3394,11 @@ impl<'a> SimState<'a> {
         for &(slot, src_net) in dyn_snaps {
             let obj = self
                 .dyn_heap
+                .borrow()
                 .get(src_net as usize)
                 .and_then(|o| o.as_ref().cloned());
             let dst = (base + slot) as usize;
-            if let Some(cell) = self.dyn_heap.get_mut(dst) {
+            if let Some(cell) = self.dyn_heap.borrow_mut().get_mut(dst) {
                 *cell = obj;
             }
         }
@@ -3320,6 +3419,7 @@ impl NetReader for SimState<'_> {
                 | sim_ir::NetKind::AssocStr,
             ) => Some(
                 self.dyn_heap
+                    .borrow()
                     .get(net as usize)
                     .and_then(|o| o.as_ref())
                     .map(|o| o.len() as u64)
@@ -3342,7 +3442,12 @@ impl NetReader for SimState<'_> {
                 | sim_ir::NetKind::Assoc
                 | sim_ir::NetKind::AssocStr,
             ) => Some(
-                match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+                match self
+                    .dyn_heap
+                    .borrow()
+                    .get(net as usize)
+                    .and_then(|o| o.as_ref())
+                {
                     Some(DynObj::DynArray { elems }) => elems.clone(),
                     Some(DynObj::Queue { elems }) => elems.iter().cloned().collect(),
                     Some(DynObj::Assoc { map }) => map.values().cloned().collect(),
@@ -3400,7 +3505,12 @@ impl NetReader for SimState<'_> {
             self.dyn_warn_once_at(net, "assoc key is X/Z (read X)");
             return Value::xs(w, signed);
         };
-        match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+        match self
+            .dyn_heap
+            .borrow()
+            .get(net as usize)
+            .and_then(|o| o.as_ref())
+        {
             Some(DynObj::Assoc { map }) => map.get(&k).cloned().unwrap_or_else(|| {
                 self.dyn_warn_once_at(net, "assoc key not found (read X)");
                 Value::xs(w, signed)
@@ -3423,7 +3533,12 @@ impl NetReader for SimState<'_> {
             return Some(false);
         };
         Some(
-            match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+            match self
+                .dyn_heap
+                .borrow()
+                .get(net as usize)
+                .and_then(|o| o.as_ref())
+            {
                 Some(DynObj::Assoc { map }) => map.contains_key(&k),
                 _ => false,
             },
@@ -3444,7 +3559,12 @@ impl NetReader for SimState<'_> {
             return Some(self.read_net(net, None).to_str_bytes());
         }
         Some(
-            match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+            match self
+                .dyn_heap
+                .borrow()
+                .get(net as usize)
+                .and_then(|o| o.as_ref())
+            {
                 Some(DynObj::Str { bytes }) => bytes.clone(),
                 _ => Vec::new(),
             },
@@ -3471,7 +3591,12 @@ impl NetReader for SimState<'_> {
             self.dyn_warn_once_at(net, "assoc key is X/Z (read X)");
             return Value::xs(w, signed);
         };
-        match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+        match self
+            .dyn_heap
+            .borrow()
+            .get(net as usize)
+            .and_then(|o| o.as_ref())
+        {
             Some(DynObj::AssocStr { map }) => map.get(k).cloned().unwrap_or_else(|| {
                 self.dyn_warn_once_at(net, "assoc key not found (read X)");
                 Value::xs(w, signed)
@@ -3491,7 +3616,12 @@ impl NetReader for SimState<'_> {
             return Some(false);
         };
         Some(
-            match self.dyn_heap.get(net as usize).and_then(|o| o.as_ref()) {
+            match self
+                .dyn_heap
+                .borrow()
+                .get(net as usize)
+                .and_then(|o| o.as_ref())
+            {
                 Some(DynObj::AssocStr { map }) => map.contains_key(k),
                 _ => false,
             },

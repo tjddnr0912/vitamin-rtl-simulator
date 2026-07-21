@@ -75,9 +75,10 @@ pub(crate) fn dispatch(
         let obj = sched
             .st
             .dyn_heap
+            .borrow()
             .get(src as usize)
             .and_then(|o| o.as_ref().cloned());
-        if let Some(slot) = sched.st.dyn_heap.get_mut(dst as usize) {
+        if let Some(slot) = sched.st.dyn_heap.borrow_mut().get_mut(dst as usize) {
             *slot = obj;
         }
         // §7.10.2: a whole-assign into a BOUNDED queue truncates to the bound
@@ -176,23 +177,25 @@ pub(crate) fn dispatch(
             let mut elems = vec![elem_default; n];
             // copy form `new[n](src)`: prefix-copy from the src handle.
             if let Some(src_net) = dyn_handle_net(sched, args.get(2)) {
-                if let Some(crate::state::DynObj::DynArray { elems: src }) = sched
-                    .st
-                    .dyn_heap
-                    .get(src_net as usize)
-                    .and_then(|o| o.as_ref())
+                // Hold the shared borrow only across the prefix-copy loop (it
+                // writes the LOCAL `elems`, not the heap); it drops at the end of
+                // this block, before the borrow_mut store below (§C6).
+                let src_heap = sched.st.dyn_heap.borrow();
+                if let Some(crate::state::DynObj::DynArray { elems: src }) =
+                    src_heap.get(src_net as usize).and_then(|o| o.as_ref())
                 {
                     for (dst, s) in elems.iter_mut().zip(src.iter()) {
                         *dst = s.clone();
                     }
                 }
             }
-            sched.st.dyn_heap[net as usize] = Some(crate::state::DynObj::DynArray { elems });
+            sched.st.dyn_heap.borrow_mut()[net as usize] =
+                Some(crate::state::DynObj::DynArray { elems });
             Ctl::Continue
         }
         SysTaskId::DynDelete => {
             if let Some(net) = dyn_handle_net(sched, args.first()) {
-                sched.st.dyn_heap[net as usize].take(); // absent entry IS the empty object
+                sched.st.dyn_heap.borrow_mut()[net as usize].take(); // absent entry IS the empty object
             }
             Ctl::Continue
         }
@@ -210,20 +213,18 @@ pub(crate) fn dispatch(
                 .map(|nv| nv.signed)
                 .unwrap_or(true);
             let mut bad_kind = false;
-            if let Some(obj) = sched
-                .st
-                .dyn_heap
-                .get_mut(net as usize)
-                .and_then(|o| o.as_mut())
             {
-                match obj {
-                    crate::state::DynObj::DynArray { elems } => {
-                        apply_order(elems.as_mut_slice(), which, signed)
+                let mut heap = sched.st.dyn_heap.borrow_mut();
+                if let Some(obj) = heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                    match obj {
+                        crate::state::DynObj::DynArray { elems } => {
+                            apply_order(elems.as_mut_slice(), which, signed)
+                        }
+                        crate::state::DynObj::Queue { elems } => {
+                            apply_order(elems.make_contiguous(), which, signed)
+                        }
+                        _ => bad_kind = true,
                     }
-                    crate::state::DynObj::Queue { elems } => {
-                        apply_order(elems.make_contiguous(), which, signed)
-                    }
-                    _ => bad_kind = true,
                 }
             }
             if bad_kind {
@@ -283,6 +284,7 @@ pub(crate) fn dispatch(
             let len = sched
                 .st
                 .dyn_heap
+                .borrow()
                 .get(net as usize)
                 .and_then(|o| o.as_ref())
                 .map(|o| o.len())
@@ -296,16 +298,21 @@ pub(crate) fn dispatch(
                 return Ctl::Continue;
             }
             // A missing entry IS the empty queue (lazy, like every dyn object).
-            let entry = sched.st.dyn_entry(net, || crate::state::DynObj::Queue {
-                elems: std::collections::VecDeque::new(),
-            });
-            if let crate::state::DynObj::Queue { elems } = entry {
-                if which == SysTaskId::QPushFront {
-                    elems.push_front(v);
-                } else {
-                    elems.push_back(v);
-                }
-            }
+            sched.st.with_dyn_entry(
+                net,
+                || crate::state::DynObj::Queue {
+                    elems: std::collections::VecDeque::new(),
+                },
+                |obj| {
+                    if let crate::state::DynObj::Queue { elems } = obj {
+                        if which == SysTaskId::QPushFront {
+                            elems.push_front(v);
+                        } else {
+                            elems.push_back(v);
+                        }
+                    }
+                },
+            );
             sched.st.enforce_queue_bound(net); // v6 ③ (no-op when unbounded)
             Ctl::Continue
         }
@@ -340,6 +347,7 @@ pub(crate) fn dispatch(
             let len = sched
                 .st
                 .dyn_heap
+                .borrow()
                 .get(net as usize)
                 .and_then(|o| o.as_ref())
                 .map(|o| o.len())
@@ -370,12 +378,17 @@ pub(crate) fn dispatch(
                     }
                     None => Value::xs(w, false),
                 };
-                let entry = sched.st.dyn_entry(net, || crate::state::DynObj::Queue {
-                    elems: std::collections::VecDeque::new(),
-                });
-                if let crate::state::DynObj::Queue { elems } = entry {
-                    elems.insert(idx.unwrap_or(0) as usize, v);
-                }
+                sched.st.with_dyn_entry(
+                    net,
+                    || crate::state::DynObj::Queue {
+                        elems: std::collections::VecDeque::new(),
+                    },
+                    |obj| {
+                        if let crate::state::DynObj::Queue { elems } = obj {
+                            elems.insert(idx.unwrap_or(0) as usize, v);
+                        }
+                    },
+                );
                 sched.st.enforce_queue_bound(net); // v6 ③ (no-op when unbounded)
             } else {
                 let ok = matches!(idx, Some(i) if i < len as u64);
@@ -386,6 +399,7 @@ pub(crate) fn dispatch(
                 if let Some(crate::state::DynObj::Queue { elems }) = sched
                     .st
                     .dyn_heap
+                    .borrow_mut()
                     .get_mut(net as usize)
                     .and_then(|o| o.as_mut())
                 {
@@ -409,6 +423,7 @@ pub(crate) fn dispatch(
                             if let Some(crate::state::DynObj::AssocStr { map }) = sched
                                 .st
                                 .dyn_heap
+                                .borrow_mut()
                                 .get_mut(net as usize)
                                 .and_then(|o| o.as_mut())
                             {
@@ -428,6 +443,7 @@ pub(crate) fn dispatch(
                         if let Some(crate::state::DynObj::Assoc { map }) = sched
                             .st
                             .dyn_heap
+                            .borrow_mut()
                             .get_mut(net as usize)
                             .and_then(|o| o.as_mut())
                         {
@@ -614,6 +630,7 @@ pub(crate) fn dispatch(
                     if let Some(crate::state::DynObj::Str { bytes }) = sched
                         .st
                         .dyn_heap
+                        .borrow_mut()
                         .get_mut(net as usize)
                         .and_then(|o| o.as_mut())
                     {
@@ -1647,7 +1664,13 @@ fn run_queue_slice(sched: &mut Scheduler, args: &[u32]) -> Ctl {
     let b = bound(sched, 3);
     let elems: std::collections::VecDeque<crate::value::Value> = match (a, b) {
         (Some(a), Some(b)) => {
-            let n = match sched.st.dyn_heap.get(src as usize).and_then(|o| o.as_ref()) {
+            let n = match sched
+                .st
+                .dyn_heap
+                .borrow()
+                .get(src as usize)
+                .and_then(|o| o.as_ref())
+            {
                 Some(crate::state::DynObj::Queue { elems }) => elems.len() as i64,
                 _ => 0,
             };
@@ -1656,7 +1679,13 @@ fn run_queue_slice(sched: &mut Scheduler, args: &[u32]) -> Ctl {
             if lo > hi {
                 std::collections::VecDeque::new()
             } else {
-                match sched.st.dyn_heap.get(src as usize).and_then(|o| o.as_ref()) {
+                match sched
+                    .st
+                    .dyn_heap
+                    .borrow()
+                    .get(src as usize)
+                    .and_then(|o| o.as_ref())
+                {
                     Some(crate::state::DynObj::Queue { elems }) => elems
                         .iter()
                         .skip(lo as usize)
@@ -1672,7 +1701,7 @@ fn run_queue_slice(sched: &mut Scheduler, args: &[u32]) -> Ctl {
             std::collections::VecDeque::new()
         }
     };
-    if let Some(slot) = sched.st.dyn_heap.get_mut(dst as usize) {
+    if let Some(slot) = sched.st.dyn_heap.borrow_mut().get_mut(dst as usize) {
         *slot = Some(crate::state::DynObj::Queue { elems });
     }
     sched.st.enforce_queue_bound(dst);
@@ -3444,7 +3473,7 @@ fn arr_locator(sched: &mut Scheduler, args: &[u32]) {
         .into_iter()
         .map(|v| v.resize_keep_sign(dw, dsigned))
         .collect();
-    sched.st.dyn_heap[dst_net as usize] = Some(crate::state::DynObj::Queue { elems });
+    sched.st.dyn_heap.borrow_mut()[dst_net as usize] = Some(crate::state::DynObj::Queue { elems });
 }
 
 /// One W-RUN-DYN-DEGRADE per handle net (latched in `dyn_warned`) — a degraded

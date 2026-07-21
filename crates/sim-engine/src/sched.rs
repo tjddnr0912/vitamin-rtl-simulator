@@ -3806,20 +3806,24 @@ impl Kernel for Scheduler<'_, '_> {
                     .get(n as usize)
                     .map(|nv| (nv.width.max(1), nv.signed))
                     .unwrap_or((1, false));
-                match self
-                    .st
-                    .dyn_heap
-                    .get_mut(n as usize)
-                    .and_then(|o| o.as_mut())
-                {
-                    Some(crate::state::DynObj::Queue { elems }) if !elems.is_empty() => {
-                        let v = if front {
-                            elems.pop_front()
-                        } else {
-                            elems.pop_back()
-                        };
-                        v.unwrap_or_else(|| Value::xs(w, signed))
+                // Scope the `borrow_mut` to the pop; the empty/non-queue warn
+                // runs after it releases (§C6 — no heap guard across the warn).
+                let popped_opt = {
+                    let mut heap = self.st.dyn_heap.borrow_mut();
+                    match heap.get_mut(n as usize).and_then(|o| o.as_mut()) {
+                        Some(crate::state::DynObj::Queue { elems }) if !elems.is_empty() => {
+                            let v = if front {
+                                elems.pop_front()
+                            } else {
+                                elems.pop_back()
+                            };
+                            Some(v.unwrap_or_else(|| Value::xs(w, signed)))
+                        }
+                        _ => None,
                     }
+                };
+                match popped_opt {
+                    Some(v) => v,
                     _ => {
                         // empty (a missing entry IS the empty queue) or a
                         // non-queue object: element-width X + warn-once
