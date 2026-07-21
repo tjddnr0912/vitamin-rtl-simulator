@@ -3362,6 +3362,12 @@ struct Elaborator<'s> {
     // small defs sidesteps threading an AST lifetime through the whole driver; the
     // tables are point-queried only (BTreeMap), never iterated into arena order.
     func_table: BTreeMap<String, ast::FunctionDef>,
+    // §4.5.186 constant-function evaluation: the SAME per-module function defs as
+    // `func_table`, but populated EARLIER (before the module's parameter fold) so a
+    // `localparam W = f(N)` can interpret `f` at compile time (`func_table` itself is
+    // populated in pass 3.5, AFTER the param fold in pass 3). Saved/restored per
+    // instance scope alongside `func_table`.
+    const_func_table: BTreeMap<String, ast::FunctionDef>,
     task_table: BTreeMap<String, ast::TaskDef>,
     // R5-B: names of FRAME functions that have an output/inout formal. A call to
     // one carries copy-out (like a task) plus a return value, so it is lowered as a
@@ -3800,6 +3806,7 @@ impl<'s> Elaborator<'s> {
             inst_stack: Vec::new(),
             cur_inst: 0,
             func_table: BTreeMap::new(),
+            const_func_table: BTreeMap::new(),
             task_table: BTreeMap::new(),
             inout_func_names: std::collections::BTreeSet::new(),
             dyn_formal_func_names: std::collections::BTreeSet::new(),
@@ -5433,6 +5440,16 @@ impl<'s> Elaborator<'s> {
         let saved_scoped_blocks = std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
         let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
+        // §4.5.186: collect this module's functions into `const_func_table` BEFORE the
+        // parameter fold below, so a `localparam W = f(N)` can interpret `f` at compile
+        // time. (`func_table` is populated later, in pass 3.5.) Saved/restored with
+        // `func_table` at the module-scope exit.
+        let saved_const_funcs = std::mem::take(&mut self.const_func_table);
+        for item in &module.body {
+            if let ast::ModuleItem::Func(f) = item {
+                self.const_func_table.insert(f.name.name.clone(), f.clone());
+            }
+        }
         for item in &module.body {
             match item {
                 ast::ModuleItem::Param(p) => {
@@ -5892,6 +5909,7 @@ impl<'s> Elaborator<'s> {
         self.local_decl_names = saved_local_names;
         self.scoped_block_locals = saved_scoped_blocks;
         self.func_table = saved_funcs;
+        self.const_func_table = saved_const_funcs;
         self.task_table = saved_tasks;
         self.inout_func_names = saved_inout_funcs; // R5-B
         self.dyn_formal_func_names = saved_dyn_formal_funcs; // §4.5.179
@@ -7987,64 +8005,294 @@ impl<'s> Elaborator<'s> {
                     }
                 }
                 let b = self.const_eval_in_scope(rhs)?;
-                match op {
-                    // checked_*: i64 overflow → None → LOUD at the call sites.
-                    ast::BinOp::Add => a.checked_add(b),
-                    ast::BinOp::Sub => a.checked_sub(b),
-                    ast::BinOp::Mul => a.checked_mul(b),
-                    ast::BinOp::Div if b != 0 => a.checked_div(b),
-                    ast::BinOp::Mod if b != 0 => a.checked_rem(b),
+                const_binop(*op, a, b)
+            }
+            // §4.5.186: a call to a CONSTANT FUNCTION in a const context
+            // (`localparam W = clog2(N)`). Evaluated by interpreting the function body
+            // at compile time (integer domain only; anything it cannot fold → None →
+            // LOUD at the binding site, never a silently-wrong param value).
+            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
+                self.eval_const_call(&name.segments[0].name, args, &BTreeMap::new(), 0)
+            }
+            _ => None,
+        }
+    }
 
-                    // Comparison / equality / logical / bitwise folding — required
-                    // so a generate-for CONDITION (`i < N`, `i >= 0`, …) const-folds
-                    // to 1/0 during unroll. SIGNED i64 semantics; `===`/`!==`
-                    // collapse to `==`/`!=` since a folded const has no x/z.
-                    ast::BinOp::Lt => Some((a < b) as i64),
-                    ast::BinOp::Le => Some((a <= b) as i64),
-                    ast::BinOp::Gt => Some((a > b) as i64),
-                    ast::BinOp::Ge => Some((a >= b) as i64),
-                    // `==?`/`!=?` collapse too: a folded const has no x/z, so
-                    // every pattern bit is non-wildcard (§11.4.6 ≡ plain eq).
-                    ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::WildEq => {
-                        Some((a == b) as i64)
-                    }
-                    ast::BinOp::Ne | ast::BinOp::CaseNe | ast::BinOp::WildNe => {
-                        Some((a != b) as i64)
-                    }
-                    ast::BinOp::BitAnd => Some(a & b),
-                    ast::BinOp::BitOr => Some(a | b),
-                    ast::BinOp::BitXor => Some(a ^ b),
-                    ast::BinOp::BitXnor => Some(!(a ^ b)),
-                    ast::BinOp::LogAnd => Some(((a != 0) && (b != 0)) as i64),
-                    ast::BinOp::LogOr => Some(((a != 0) || (b != 0)) as i64),
-                    ast::BinOp::Pow => const_pow_i64(a, b),
-                    // `<<`/`<<<`: value-preserving or None (a shifted-out/sign-
-                    // overflowing param value would be silently wrong). `1<<32`
-                    // folds to 4294967296 (iverilog folds unsized consts wide).
-                    ast::BinOp::Shl | ast::BinOp::AShl => const_shl_i64(a, b),
-                    // `>>` (logical): well-defined here only for a ≥ 0 (the
-                    // result of a logical shift of a negative value depends on
-                    // the operand WIDTH, which this domain doesn't model).
-                    ast::BinOp::Shr if a >= 0 => {
-                        if !(0..64).contains(&b) {
-                            Some(0)
-                        } else {
-                            Some(((a as u64) >> b) as i64)
-                        }
-                    }
-                    // `>>>` (arithmetic): sign-extending shift; an over-width or
-                    // negative amount saturates to all-sign.
-                    ast::BinOp::AShr => {
-                        if !(0..64).contains(&b) {
-                            Some(if a < 0 { -1 } else { 0 })
-                        } else {
-                            Some(a >> b)
-                        }
-                    }
-                    // Div/Mod by zero, negative-operand `>>` → non-constant.
+    /// §4.5.186 constant-function interpreter — the ENV-aware twin of
+    /// `const_eval_in_scope`. A single-segment Ident is looked up in the local `env`
+    /// (function formals + body locals) BEFORE the module param scope, so a local
+    /// shadows a same-named param. Every other form mirrors `const_eval_in_scope`
+    /// (sharing `const_binop`). A form not modeled in a const-function body (a
+    /// part-select, index, real, string, unmodeled `$call`) returns None → LOUD.
+    fn eval_const_env(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        depth: u32,
+    ) -> Option<i64> {
+        match &e.kind {
+            ast::ExprKind::IntLit { .. } => const_eval_i64_lit(e),
+            ast::ExprKind::Paren { inner } => self.eval_const_env(inner, env, depth),
+            ast::ExprKind::Ident(path) if path.segments.len() == 1 => env
+                .get(&path.segments[0].name)
+                .copied()
+                .or_else(|| self.lookup_scoped(&path.segments[0].name)),
+            ast::ExprKind::Unary { op, operand } => {
+                let v = self.eval_const_env(operand, env, depth)?;
+                match op {
+                    ast::UnOp::Plus => Some(v),
+                    ast::UnOp::Minus => v.checked_neg(),
+                    ast::UnOp::BitNot => Some(!v),
+                    ast::UnOp::LogNot => Some((v == 0) as i64),
                     _ => None,
                 }
             }
+            ast::ExprKind::Binary { op, lhs, rhs } => {
+                let a = self.eval_const_env(lhs, env, depth)?;
+                let b = self.eval_const_env(rhs, env, depth)?;
+                const_binop(*op, a, b)
+            }
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                if self.eval_const_env(cond, env, depth)? != 0 {
+                    self.eval_const_env(then_e, env, depth)
+                } else {
+                    self.eval_const_env(else_e, env, depth)
+                }
+            }
+            ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
+                let n = self.eval_const_env(&args[0], env, depth)?;
+                if n < 0 {
+                    return None;
+                }
+                if n <= 1 {
+                    Some(0)
+                } else {
+                    Some((64 - ((n - 1) as u64).leading_zeros()) as i64)
+                }
+            }
+            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
+                self.eval_const_call(&name.segments[0].name, args, env, depth)
+            }
+            _ => None,
+        }
+    }
+
+    /// §4.5.186: evaluate a CONSTANT FUNCTION call `name(args)` by interpreting its
+    /// body at compile time. `args` fold in the CALLER's env; a fresh callee env binds
+    /// each INPUT formal to its arg value and each body-local to its folded init (or 0),
+    /// then the body runs. Returns the `return expr` value, else the function-name
+    /// return var, coerced to the declared return width. None (→ LOUD, never a wrong
+    /// param value) for anything outside the integer domain: a real/string return or
+    /// formal/local, an output/inout/ref or unpacked-array formal, an arity mismatch,
+    /// an unsupported statement, recursion past the depth cap, or a loop past the step
+    /// cap (a guaranteed-terminate guard). The i64 domain matches `const_eval_in_scope`
+    /// (its intermediate-width imprecision is the same tracked §2 residual).
+    fn eval_const_call(
+        &self,
+        name: &str,
+        args: &[ast::Expr],
+        caller_env: &std::collections::BTreeMap<String, i64>,
+        depth: u32,
+    ) -> Option<i64> {
+        const MAX_DEPTH: u32 = 64;
+        if depth >= MAX_DEPTH {
+            return None;
+        }
+        let f = self.const_func_table.get(name)?;
+        let (rw, rs) = self.const_fn_ret_wsign(f)?;
+        if args.len() > f.ports.len() {
+            return None; // too many args
+        }
+        let mut env: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
+        for (i, p) in f.ports.iter().enumerate() {
+            if p.dir != ast::PortDir::Input || !p.unpacked.is_empty() {
+                return None; // output/inout/ref or unpacked-array formal → loud
+            }
+            if let Some(k) = p.net_or_var {
+                if !netvar_kind_is_int_const(k) {
+                    return None; // real/string/… formal → loud
+                }
+            }
+            let av = if let Some(a) = args.get(i) {
+                self.eval_const_env(a, caller_env, depth)?
+            } else if let Some(d) = &p.default {
+                self.eval_const_env(d, &env, depth)?
+            } else {
+                return None; // too few args, no default
+            };
+            env.insert(p.name.name.clone(), av);
+        }
+        for d in &f.body_decls {
+            if !netvar_kind_is_int_const(d.kind) {
+                return None; // real/string/array local → loud
+            }
+            for n in &d.names {
+                let iv = n
+                    .init
+                    .as_ref()
+                    .and_then(|e| self.eval_const_env(e, &env, depth))
+                    .unwrap_or(0);
+                env.insert(n.name.name.clone(), iv);
+            }
+        }
+        env.entry(name.to_string()).or_insert(0);
+        let mut steps: u64 = 0;
+        let ret = match self.exec_const_stmt(&f.body, &mut env, depth + 1, &mut steps)? {
+            ConstFlow::Return(Some(v)) => v,
+            ConstFlow::Return(None) | ConstFlow::Normal => *env.get(name)?,
+        };
+        Some(coerce_int_width(ret, rw, rs))
+    }
+
+    /// The declared return `(width, signed)` of a const function, or None if the
+    /// return type is outside the integer domain (real/realtime/string).
+    fn const_fn_ret_wsign(&self, f: &ast::FunctionDef) -> Option<(u32, bool)> {
+        if f.ret_string || matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime) {
+            return None;
+        }
+        if let Some(r) = &f.range {
+            let hi = self.const_eval_in_scope(&r.msb)?;
+            let lo = self.const_eval_in_scope(&r.lsb)?;
+            return Some((u32::try_from((hi - lo).unsigned_abs() + 1).ok()?, f.signed));
+        }
+        match f.ret_type {
+            ast::ParamType::Integer => Some((32, true)), // `int`/`integer` are 32-bit signed
+            ast::ParamType::Time => Some((64, false)),
+            ast::ParamType::Implicit => Some((1, false)), // a bare `function f;` is 1-bit
+            _ => None,
+        }
+    }
+
+    /// §4.5.186: execute one statement of a const-function body over the local `env`.
+    /// Supports the pure integer subset — Block (+ local decls), blocking `=`, if/else,
+    /// for/while/repeat, return. A NonBlocking/timing/fork/system-task/case or any
+    /// unmodeled form returns None → LOUD. `steps` bounds total iterations so a
+    /// non-terminating loop is loud, never a hang.
+    fn exec_const_stmt(
+        &self,
+        s: &ast::Stmt,
+        env: &mut std::collections::BTreeMap<String, i64>,
+        depth: u32,
+        steps: &mut u64,
+    ) -> Option<ConstFlow> {
+        // A generous bound (legit const functions loop a few times — clog2 ~64,
+        // factorial ~20); a runaway/non-terminating loop trips it and goes LOUD
+        // rather than hanging elaboration. Kept modest so the loud is prompt even in
+        // an unoptimized (test) build.
+        const MAX_STEPS: u64 = 100_000;
+        *steps += 1;
+        if *steps > MAX_STEPS {
+            return None;
+        }
+        match s {
+            ast::Stmt::Null(_) => Some(ConstFlow::Normal),
+            ast::Stmt::Block { decls, stmts, .. } => {
+                for d in decls {
+                    if !netvar_kind_is_int_const(d.kind) {
+                        return None;
+                    }
+                    for n in &d.names {
+                        let iv = n
+                            .init
+                            .as_ref()
+                            .and_then(|e| self.eval_const_env(e, env, depth))
+                            .unwrap_or(0);
+                        env.insert(n.name.name.clone(), iv);
+                    }
+                }
+                for st in stmts {
+                    match self.exec_const_stmt(st, env, depth, steps)? {
+                        ConstFlow::Normal => {}
+                        other => return Some(other),
+                    }
+                }
+                Some(ConstFlow::Normal)
+            }
+            ast::Stmt::Blocking {
+                lhs,
+                delay,
+                event,
+                rhs,
+                ..
+            } => {
+                if delay.is_some() || event.is_some() {
+                    return None; // intra-assignment timing → loud
+                }
+                let ast::Lvalue::Ident(path) = lhs else {
+                    return None; // only a simple local-var target
+                };
+                if path.segments.len() != 1 {
+                    return None;
+                }
+                let v = self.eval_const_env(rhs, env, depth)?;
+                env.insert(path.segments[0].name.clone(), v);
+                Some(ConstFlow::Normal)
+            }
+            ast::Stmt::If {
+                cond,
+                then_s,
+                else_s,
+                ..
+            } => {
+                if self.eval_const_env(cond, env, depth)? != 0 {
+                    self.exec_const_stmt(then_s, env, depth, steps)
+                } else if let Some(e) = else_s {
+                    self.exec_const_stmt(e, env, depth, steps)
+                } else {
+                    Some(ConstFlow::Normal)
+                }
+            }
+            ast::Stmt::Return { value, .. } => {
+                let v = match value {
+                    Some(e) => Some(self.eval_const_env(e, env, depth)?),
+                    None => None,
+                };
+                Some(ConstFlow::Return(v))
+            }
+            ast::Stmt::While { cond, body, .. } => {
+                while self.eval_const_env(cond, env, depth)? != 0 {
+                    match self.exec_const_stmt(body, env, depth, steps)? {
+                        ConstFlow::Normal => {}
+                        other => return Some(other),
+                    }
+                }
+                Some(ConstFlow::Normal)
+            }
+            ast::Stmt::For {
+                init,
+                cond,
+                step,
+                body,
+                ..
+            } => {
+                self.exec_const_stmt(init, env, depth, steps)?;
+                while self.eval_const_env(cond, env, depth)? != 0 {
+                    match self.exec_const_stmt(body, env, depth, steps)? {
+                        ConstFlow::Normal => {}
+                        other => return Some(other),
+                    }
+                    self.exec_const_stmt(step, env, depth, steps)?;
+                }
+                Some(ConstFlow::Normal)
+            }
+            ast::Stmt::Repeat { count, body, .. } => {
+                let n = self.eval_const_env(count, env, depth)?;
+                if n < 0 {
+                    return None;
+                }
+                for _ in 0..n {
+                    match self.exec_const_stmt(body, env, depth, steps)? {
+                        ConstFlow::Normal => {}
+                        other => return Some(other),
+                    }
+                }
+                Some(ConstFlow::Normal)
+            }
+            // NonBlocking / timing / fork / system-task / case / disable / … → loud.
             _ => None,
         }
     }
@@ -33989,6 +34237,99 @@ fn const_shl_i64(a: i64, b: i64) -> Option<i64> {
         Some(r)
     } else {
         None
+    }
+}
+
+/// Fold one binary operator over two i64 const operands (SIGNED i64 semantics; a
+/// folded const carries no x/z, so `===`/`!==`/`==?`/`!=?` collapse to `==`/`!=`).
+/// `checked_*` overflow / div-or-mod by zero / a logical `>>` of a negative value
+/// (width-dependent) → None → LOUD at the caller. Shared by `const_eval_in_scope`
+/// (the plain const domain) and `eval_const_env` (the constant-function interpreter)
+/// so both fold identically.
+fn const_binop(op: ast::BinOp, a: i64, b: i64) -> Option<i64> {
+    match op {
+        ast::BinOp::Add => a.checked_add(b),
+        ast::BinOp::Sub => a.checked_sub(b),
+        ast::BinOp::Mul => a.checked_mul(b),
+        ast::BinOp::Div if b != 0 => a.checked_div(b),
+        ast::BinOp::Mod if b != 0 => a.checked_rem(b),
+        ast::BinOp::Lt => Some((a < b) as i64),
+        ast::BinOp::Le => Some((a <= b) as i64),
+        ast::BinOp::Gt => Some((a > b) as i64),
+        ast::BinOp::Ge => Some((a >= b) as i64),
+        ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::WildEq => Some((a == b) as i64),
+        ast::BinOp::Ne | ast::BinOp::CaseNe | ast::BinOp::WildNe => Some((a != b) as i64),
+        ast::BinOp::BitAnd => Some(a & b),
+        ast::BinOp::BitOr => Some(a | b),
+        ast::BinOp::BitXor => Some(a ^ b),
+        ast::BinOp::BitXnor => Some(!(a ^ b)),
+        ast::BinOp::LogAnd => Some(((a != 0) && (b != 0)) as i64),
+        ast::BinOp::LogOr => Some(((a != 0) || (b != 0)) as i64),
+        ast::BinOp::Pow => const_pow_i64(a, b),
+        // `<<`/`<<<`: value-preserving or None (a shifted-out/overflowing value would
+        // be silently wrong). `1<<32` folds wide (4294967296), matching iverilog.
+        ast::BinOp::Shl | ast::BinOp::AShl => const_shl_i64(a, b),
+        // `>>` (logical): well-defined here only for a ≥ 0 (a negative value's logical
+        // shift depends on the operand WIDTH, which this domain does not model).
+        ast::BinOp::Shr if a >= 0 => {
+            if !(0..64).contains(&b) {
+                Some(0)
+            } else {
+                Some(((a as u64) >> b) as i64)
+            }
+        }
+        // `>>>` (arithmetic): sign-extending; an over-width / negative amount saturates.
+        ast::BinOp::AShr => {
+            if !(0..64).contains(&b) {
+                Some(if a < 0 { -1 } else { 0 })
+            } else {
+                Some(a >> b)
+            }
+        }
+        // Div/Mod by zero, negative-operand `>>` → non-constant.
+        _ => None,
+    }
+}
+
+/// §4.5.186 constant-function interpreter control flow: fell off the end (`Normal`)
+/// or hit a `return [expr]` (`Return`). A break/continue is not modeled (its stmt
+/// falls to the interpreter's loud `_` arm), so only these two are needed.
+enum ConstFlow {
+    Normal,
+    Return(Option<i64>),
+}
+
+/// §4.5.186: is a net/var kind an INTEGER kind a const function may use for a formal
+/// / local / return (fits the i64 const domain)? Excludes real/realtime/string/event/
+/// class-handle/etc. — those make a const-function call loud (correct-or-loud).
+fn netvar_kind_is_int_const(kind: ast::NetVarKind) -> bool {
+    matches!(
+        kind,
+        ast::NetVarKind::Reg
+            | ast::NetVarKind::Logic
+            | ast::NetVarKind::Integer
+            | ast::NetVarKind::Time
+            | ast::NetVarKind::Bit
+            | ast::NetVarKind::Byte
+            | ast::NetVarKind::Shortint
+            | ast::NetVarKind::Int
+            | ast::NetVarKind::Longint
+    )
+}
+
+/// §4.5.186: truncate/sign-extend an i64 to a `width`-bit value (the SV self-width
+/// coercion of a const-function return). `width >= 64` is the identity; a narrower
+/// width masks to the low bits and sign-extends when `signed` and the sign bit is set.
+fn coerce_int_width(v: i64, width: u32, signed: bool) -> i64 {
+    if width == 0 || width >= 64 {
+        return v;
+    }
+    let mask = (1i64 << width) - 1;
+    let m = v & mask;
+    if signed && (m & (1i64 << (width - 1))) != 0 {
+        m | !mask
+    } else {
+        m
     }
 }
 

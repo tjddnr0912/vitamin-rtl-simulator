@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.186 constant-function evaluation in const contexts loud→supported (elaborate-time integer function-body interpreter) (2026-07-21, branch feat-const-function-eval) ✅
+
+**발굴 경위**: §4.5.185 후 fresh-area probe($cast·let·const-func 차분) 중 `localparam W = clog(256)`(clog=while-loop 함수)가 vita E3009 "not a foldable constant expression" vs iverilog `8` 정상으로 발견. SV의 흔하고 중요한 idiom(파라미터 계산용 상수 함수·커스텀 `$clog2`). 사용자가 4 선택지 중 이 feature 선택.
+
+**근본 원인**: `const_eval_in_scope`(param fold 도메인)가 `$clog2`/`$bits`/Binary/Ternary/Ident(param) 등은 처리하나 **사용자 함수 `Call`은 미처리**→`_ => None`→param fold 포기→E3009.
+
+**설계(elaborate-time 정수 함수-body 인터프리터·format 무변화)**: (1) **ordering**: 모듈 param fold(pass 3)가 func_table populate(pass 3.5)보다 먼저라 신규 `const_func_table`을 param fold **전에** populate(save/restore는 func_table과 동일 스코프). (2) `const_binop` 추출(Binary 폴딩을 free fn으로·`const_eval_in_scope`와 인터프리터가 동일 폴딩 공유·중복 0). (3) `const_eval_in_scope`에 `Call` arm 1개 추가→`eval_const_call`. (4) 인터프리터 3함수: `eval_const_env`(env-aware expr·single-seg Ident는 local env 우선 후 param scope)·`eval_const_call`(input formal→arg값 bind·body-local→folded init/0·body 실행·return을 declared width로 coerce[`coerce_int_width`])·`exec_const_stmt`(Block+decls·blocking `=`·if/else·for/while/repeat·return; ConstFlow=Normal|Return). **i64 도메인**은 기존 const_eval와 동일(intermediate-width 부정확은 §2 기지 residual과 동일 클래스·신규 아님).
+
+**★correct-or-loud 극도 엄격(param 값 silent-wrong=P0-5 최악·width 무흔적 오염)**: 정수 도메인 밖은 전부 None→LOUD. real/string return·formal·local, output/inout/ref formal, unpacked-array formal, 런타임 신호 참조(param/local 아님→`lookup_scoped` None), system task/NonBlocking/timing/fork/case/미모델 statement, arity mismatch, **recursion depth cap(64)**, **loop step cap(100K→~1s에 loud·비종료 루프가 elaboration hang 대신 loud)** 全 loud. i64 오버플로는 `checked_*`→None.
+
+**적대 differential(vita vs iverilog)**: 지원 全 MATCH — clog while-loop(width서·8)·return expr(42)·for-loop sum-of-squares(55)·recursion factorial(120)·function-name return(42)·multi-arg+nested(9)·byte-return coercion(300→44)·param-arg(7)·chained localparam·negative arg abs(42)·**param+runtime 동일 함수**(runtime path 무변화 회귀). **LOUD 유지**: real func·non-terminating loop(step cap·~1s)·system task in body·array formal·runtime-signal ref. format 22 불변(elaborate value-only·AST/sim-ir 무변화·schema_hash 무관). **3888 green**(+15). ⭐교훈: ① **const_eval에 Call arm + 자체 인터프리터로 상수함수 지원**(func_table를 param fold 전 populate하는 ordering이 핵심). ② **`const_binop` 추출로 폴딩 공유**(const_eval와 인터프리터 동일). ③ **param 값 silent-wrong=P0-5라 correct-or-loud 극도 엄격**(정수 도메인 밖·비종료·런타임 참조 全 loud). ④ **step/depth cap이 비종료·과재귀를 hang 대신 loud**(cap은 unopt build서 prompt하도록 100K). ⑤ **i64 도메인이 기존 const_eval와 일관**(intermediate width는 동일 §2 residual). 상세=본 엔트리·ROADMAP §3.
+
 #### 4.5.185 `$bits(TYPE)` loud→supported (parser type-size fold) (2026-07-21, branch feat-bits-of-type) ✅
 
 **발굴 경위**: §4.5.184 후 fresh-area probe($display 포맷·X/Z·cast·$bits 차분) 중 `$bits(logic[15:0])`·`$bits(s_t)`가 vita 거부(타입 keyword→E2002 parse error·typedef name→E3010 "undeclared variable") vs iverilog `16`·`7` 정상으로 발견. `$bits(변수)`·`$bits(struct변수)`·`$bits(mem[i])`는 동작(elaborate `bits_prescan`). 즉 **`$bits`의 TYPE 인자만** gap — SV §20.6.1의 흔한 idiom(`logic [$bits(T)-1:0]`).
