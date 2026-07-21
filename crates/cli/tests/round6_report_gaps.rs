@@ -375,12 +375,15 @@ fn uarr_element_part_select_still_supported() {
 }
 
 #[test]
-fn uarr_loud_task_array_formal() {
+fn uarr_task_input_array_formal_now_supported() {
+    // §4.5.188: an `input` unpacked-fixed array formal on a TASK is now an
+    // md-packed frame slot (mirrors the function path); the `output` scalar `r`
+    // copies out normally. Formerly loud (round-6 pinned the reject). 1+2+3+4=10.
     let src = "module m(output logic [7:0] o);\n\
         task automatic sum(input logic [7:0] a[0:3], output logic [7:0] r); r=a[0]+a[1]+a[2]+a[3]; endtask\n\
         logic [7:0] mem[0:3];\n\
         initial begin mem='{8'd1,8'd2,8'd3,8'd4}; sum(mem,o); $display(\"o=%0d\",o); end endmodule";
-    assert!(!ok(src), "a task array formal must be loud");
+    assert_eq!(run(src).0, "o=10");
 }
 
 // ───────────────────────── regression guards ─────────────────────────

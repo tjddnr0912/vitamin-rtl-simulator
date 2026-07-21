@@ -17316,6 +17316,50 @@ impl<'s> Elaborator<'s> {
                     }
                     continue;
                 }
+                // §13.3 UARR (§4.5.188): an `input` unpacked-FIXED array formal
+                // (`byte b[4]`, `logic [63:0] w[80]`) lowers to an md-packed
+                // `[count][elem_w]` frame slot — IDENTICAL to the FUNCTION path
+                // (`reserve_frame_func`), so `b[i]` reuses the md-packed element
+                // read machinery and the caller packs the whole-array actual into
+                // the slot value (`emit_frame_task_call`). The value slot works on
+                // BOTH the suspendable-frame AND the synchronous `run_task_call`
+                // path (no heap needed — pass-by-value). Only INPUT reaches here;
+                // an OUTPUT/INOUT unpacked-array formal (pass-by-reference) stays
+                // loud (the `emit_frame_task_call` UARR guard).
+                if matches!(p.dir, ast::PortDir::Input) {
+                    if let Some(Ok(af)) = s.classify_array_formal(p) {
+                        let (count, elem_w) = (af.count, af.elem_w);
+                        let ext = Self::array_formal_ext(count, elem_w);
+                        let w = count.saturating_mul(elem_w).max(1);
+                        s.add_net(
+                            &p.name.name,
+                            ir::NetVar {
+                                kind: ir::NetKind::Reg,
+                                width: w,
+                                msb: w.saturating_sub(1),
+                                lsb: 0,
+                                signed: false,
+                                array_len: 1,
+                                dir: ir::PortDir::Internal,
+                                init: default_init(ast::NetVarKind::Reg, w),
+                            },
+                        );
+                        s.packed_dims.insert(net, ext);
+                        let dd = s.compute_dim_desc(
+                            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                            p.range.as_ref(),
+                            &[],
+                            &p.unpacked,
+                        );
+                        s.dim_desc.insert(net, dd);
+                        s.frame_arr_formal_meta.insert(net, af);
+                        let ekind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                        if net_kind_is_two_state(ekind) {
+                            s.intro_kind.insert(net, ekind);
+                        }
+                        continue;
+                    }
+                }
                 // N1: a `string` OUTPUT/INOUT formal is a real `NetKind::String` slot
                 // (procedurally assignable) instead of the input-only 1-bit Wire — the
                 // body writes it and the frame copy-out moves the string to the actual.
@@ -17518,6 +17562,26 @@ impl<'s> Elaborator<'s> {
                                 &format!(
                                     "frame task `{tname}`: dynamic-array formal `{}` needs a \
                                      bare matching dynamic-array actual",
+                                    p.name.name
+                                ),
+                            ),
+                        }
+                    } else if let Some(cls) = self.classify_array_formal(p) {
+                        // §13.3 UARR (§4.5.188): an `input` unpacked-fixed array formal —
+                        // pack the whole-array actual into the md-packed slot value (the
+                        // caller-side concat), IDENTICAL to the FUNCTION path
+                        // (`emit_frame_call`). The engine copies this value into the frame
+                        // slot; body `b[i]` reads route through the md-packed element read.
+                        match cls {
+                            Ok(af) => {
+                                let packed = self.lower_array_actual_packed(a, af);
+                                in_binds.push((slot, packed));
+                            }
+                            Err(reason) => self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "frame task `{tname}`: unpacked-array formal `{}` is \
+                                     unsupported — {reason}",
                                     p.name.name
                                 ),
                             ),
@@ -18928,16 +18992,30 @@ impl<'s> Elaborator<'s> {
         // (static-task) path below aliases the caller's `DynArray` handle via
         // `dyn_subst` (read-only), exactly like the R11 function inline path. Every
         // OTHER unpacked-array formal (fixed `[0:N]`, output/inout dyn-array) stays loud.
-        if task
-            .ports
-            .iter()
-            .any(|p| !p.unpacked.is_empty() && !self.is_input_dyn_array_formal(p))
-        {
+        // V2A / §13.3 UARR: an `input` DYNAMIC-array formal (`byte b[]`) OR an
+        // `input` unpacked-FIXED array formal (`byte b[4]`, §4.5.188) is SUPPORTED
+        // — the former aliases/snapshots the caller handle (inline OR frame), the
+        // latter is an md-packed value slot on the FRAME path (mirrors the FUNCTION
+        // path). The unpacked-fixed exemption is gated on the task being FRAMED
+        // (`task_frame_idx`): the INLINE (static-task) binding path has no md-packed
+        // slot, so a static unpacked-fixed-formal task stays loud rather than
+        // silently truncating the packed actual into a scalar local. Every OTHER
+        // unpacked formal (an OUTPUT/INOUT array — pass-by-reference — or a fixed
+        // array the classifier rejects) stays loud (correct-or-loud).
+        let is_framed = self.task_frame_idx.contains_key(tname.as_str());
+        if task.ports.iter().any(|p| {
+            !p.unpacked.is_empty()
+                && !self.is_input_dyn_array_formal(p)
+                && !(is_framed
+                    && matches!(p.dir, ast::PortDir::Input)
+                    && matches!(self.classify_array_formal(p), Some(Ok(_))))
+        }) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
-                    "task `{tname}` has an unpacked-array formal — unsupported (pass a \
-                     packed vector, or use a function with a single-dim input array formal)"
+                    "task `{tname}` has an unpacked-array formal — unsupported (an \
+                     OUTPUT/INOUT array formal is pass-by-reference; pass a packed \
+                     vector, or use an `input` array formal / a function)"
                 ),
             );
             return;
