@@ -140,57 +140,10 @@ pub(crate) fn dispatch(
                 }
                 None => 0,
             };
-            let (w, signed) = sched
-                .st
-                .ir
-                .nets
-                .get(net as usize)
-                .map(|nv| (nv.width.max(1), nv.signed))
-                .unwrap_or((1, false));
-            // IEEE 1800-2017 §7.5.2: each `new[]` element takes its type's
-            // default — 0 for 2-state element types (int/bit/byte/shortint/
-            // longint), X for 4-state. The per-net `two_state` flag carries the
-            // element type's 2-state-ness; honoring it here keeps dyn arrays
-            // consistent with scalar/fixed-unpacked/assoc defaults. N3 Phase 2:
-            // a `real r[]` element defaults to 0.0 and a `string s[]` element to "".
-            let elem_default = if sched.st.nets[net as usize].is_real {
-                Value::from_f64(0.0)
-            } else if sched
-                .st
-                .dyn_str_elem
-                .get(net as usize)
-                .copied()
-                .unwrap_or(false)
-            {
-                Value::from_str_bytes(&[])
-            } else if sched
-                .st
-                .two_state
-                .get(net as usize)
-                .copied()
-                .unwrap_or(false)
-            {
-                Value::zeros(w, signed)
-            } else {
-                Value::xs(w, signed)
-            };
-            let mut elems = vec![elem_default; n];
-            // copy form `new[n](src)`: prefix-copy from the src handle.
-            if let Some(src_net) = dyn_handle_net(sched, args.get(2)) {
-                // Hold the shared borrow only across the prefix-copy loop (it
-                // writes the LOCAL `elems`, not the heap); it drops at the end of
-                // this block, before the borrow_mut store below (§C6).
-                let src_heap = sched.st.dyn_heap.borrow();
-                if let Some(crate::state::DynObj::DynArray { elems: src }) =
-                    src_heap.get(src_net as usize).and_then(|o| o.as_ref())
-                {
-                    for (dst, s) in elems.iter_mut().zip(src.iter()) {
-                        *dst = s.clone();
-                    }
-                }
-            }
-            sched.st.dyn_heap.borrow_mut()[net as usize] =
-                Some(crate::state::DynObj::DynArray { elems });
+            // §4.5.194: the alloc core (elem default + `new[n](src)` copy + heap store)
+            // is shared with the `&self` frame executor path (`frame_dyn_new`).
+            let src_net = dyn_handle_net(sched, args.get(2));
+            sched.st.alloc_dyn_array(net, n, src_net);
             Ctl::Continue
         }
         SysTaskId::DynDelete => {

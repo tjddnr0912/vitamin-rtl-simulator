@@ -190,13 +190,17 @@ fn task_dyn_concurrent_fatal_loud() {
 }
 
 #[test]
-fn function_dyn_local_stays_loud() {
-    // A FUNCTION with a dyn-array local + `new[]` stays loud — the synchronous function
-    // executor cannot run `new[]` (a follow-on). NOT a silent-wrong.
+fn function_dyn_local_now_supported() {
+    // §4.5.194 V5: a FUNCTION with a dyn-array local + `new[]` is supported — the
+    // interior-mutable dyn heap lets the `&self` executor allocate + element-write.
+    // loc.size()=3 + loc[0]=5 = 8. iverilog: 8.
     let src = "module t;\n\
         function automatic int mk(input int n);\n\
           int loc[]; loc = new[n]; loc[0]=5; return loc.size()+loc[0]; endfunction\n\
         initial $display(\"r=%0d\", mk(3)); endmodule";
     let (out, ok) = run(src);
-    assert!(!ok, "function dyn-array local must stay loud, got:\n{out}");
+    assert!(
+        ok && out.contains("r=8"),
+        "function dyn-local now supported (r=8):\n{out}"
+    );
 }

@@ -18651,6 +18651,21 @@ impl<'s> Elaborator<'s> {
                         scope_kind: ir::DisableKind::Scope,
                         ..
                     } => {}
+                    // V5 (§4.5.194): a `new[]` / `delete()` on an IN-FRAME dyn-array net
+                    // (`loc = new[n]`, `loc.delete()`) is a heap op the frame executors now
+                    // perform (args[0] is the handle Signal). A target OUTSIDE the frame or a
+                    // non-dyn handle falls through to the loud arm below (correct-or-loud).
+                    ir::Stmt::SysTask {
+                        which: ir::SysTaskId::DynNew | ir::SysTaskId::DynDelete,
+                        args,
+                        ..
+                    } if args.first().is_some_and(|&a| {
+                        matches!(
+                            &self.exprs[a as usize],
+                            ir::Expr::Signal { net, .. }
+                                if *net >= lo && *net < hi && self.is_dyn_handle_net(*net)
+                        )
+                    }) => {}
                     _ => why = Some("a $systask / nonblocking / force / release statement"),
                 }
             }

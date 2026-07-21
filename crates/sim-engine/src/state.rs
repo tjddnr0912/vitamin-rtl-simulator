@@ -2008,6 +2008,49 @@ impl SimState<'_> {
             .expect("with_dyn_entry: slot just set to Some"))
     }
 
+    /// §4.5.194: allocate a `new[n]` dynamic array into `dyn_heap[net]` — the shared
+    /// core of both the `&mut` builtin (`builtins::dispatch` DynNew) and the `&self`
+    /// frame executors (`frame_dyn_new`, for a function/task body `loc = new[n]`). `net`
+    /// is a validated DynArray handle; `n` is the already-capped element count; `src_net`
+    /// is the optional `new[n](src)` copy source. Each element takes its type's IEEE
+    /// §7.5.2 default (0 for 2-state, X for 4-state, 0.0 real, "" string).
+    pub(crate) fn alloc_dyn_array(&self, net: u32, n: usize, src_net: Option<u32>) {
+        let (w, signed) = self
+            .ir
+            .nets
+            .get(net as usize)
+            .map(|nv| (nv.width.max(1), nv.signed))
+            .unwrap_or((1, false));
+        let elem_default = if self.nets[net as usize].is_real {
+            Value::from_f64(0.0)
+        } else if self
+            .dyn_str_elem
+            .get(net as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            Value::from_str_bytes(&[])
+        } else if self.two_state.get(net as usize).copied().unwrap_or(false) {
+            Value::zeros(w, signed)
+        } else {
+            Value::xs(w, signed)
+        };
+        let mut elems = vec![elem_default; n];
+        if let Some(src_net) = src_net {
+            // shared borrow scoped to the prefix-copy (writes the LOCAL `elems`); dropped
+            // before the borrow_mut store below (§C6).
+            let src_heap = self.dyn_heap.borrow();
+            if let Some(DynObj::DynArray { elems: src }) =
+                src_heap.get(src_net as usize).and_then(|o| o.as_ref())
+            {
+                for (dst, s) in elems.iter_mut().zip(src.iter()) {
+                    *dst = s.clone();
+                }
+            }
+        }
+        self.dyn_heap.borrow_mut()[net as usize] = Some(DynObj::DynArray { elems });
+    }
+
     /// §4.5.194: `&self` (was `&mut`) — the dyn heap is interior-mutable, so this
     /// element/whole store is reachable from BOTH the `&mut` module path
     /// (`write_chunk`) and the `&self` frame executors (`frame_write_lvalue`, for a
@@ -2992,6 +3035,17 @@ impl<'a> SimState<'a> {
             self.frame_slot_write(func, self.frame_slot_auto[(base + i) as usize], i, v);
         }
 
+        // V5 (§4.5.194): guard the function's own dyn LOCAL against a recursive/concurrent
+        // activation sharing its per-net heap slot. Formals `[0, np)` are caller-snapshotted
+        // (§4.5.177), so `first_slot = np` excludes them (their slot is legitimately live at
+        // entry). Fatal-loud, never a silent shared-slot clobber.
+        if !self.frame_dyn_reentry_ok_from(func, np) {
+            if has_auto {
+                self.frame_stack.borrow_mut().pop();
+            }
+            return Some(Value::xs(rw, rsig));
+        }
+
         // ── BB LOOP over the GLOBAL func arena from `fd.entry`. Process bodies
         //    live in a SEPARATE `Process.body` space and are never touched. ──
         let mut cur = fd.entry;
@@ -3002,25 +3056,46 @@ impl<'a> SimState<'a> {
             );
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
-                if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
-                    // §4.5.176: a dyn/queue/assoc `foreach` step (`__st = a.first/next(k)`)
-                    // WRITES its key as a side effect. This `&self` function executor runs
-                    // it through the frame-aware path (writes the frame-local key via the
-                    // interior-mutable window) instead of a plain eval that would stall at 0.
-                    if self.rhs_is_assoc_iter(*rhs) {
-                        self.frame_assoc_iter(lhs, *rhs);
-                        continue;
+                match &self.ir.stmts[sid as usize] {
+                    Stmt::BlockingAssign { lhs, rhs } => {
+                        // §4.5.176: a dyn/queue/assoc `foreach` step (`__st = a.first/next(k)`)
+                        // WRITES its key as a side effect. This `&self` function executor runs
+                        // it through the frame-aware path (writes the frame-local key via the
+                        // interior-mutable window) instead of a plain eval that would stall at 0.
+                        if self.rhs_is_assoc_iter(*rhs) {
+                            self.frame_assoc_iter(lhs, *rhs);
+                            continue;
+                        }
+                        // OWNED Value FIRST — its nested Calls may recurse into
+                        // run_frame_call, fine: THIS frame holds NO live borrow now.
+                        // N1: `$sformatf` renders through the shared formatter here.
+                        let v = self.frame_rhs_value(lhs, *rhs);
+                        // THEN store (borrow scoped to the index-store only). N7: a
+                        // class field write routes to the heap, not a frame slot.
+                        self.frame_or_class_write(lhs, v);
                     }
-                    // OWNED Value FIRST — its nested Calls may recurse into
-                    // run_frame_call, fine: THIS frame holds NO live borrow now.
-                    // N1: `$sformatf` renders through the shared formatter here.
-                    let v = self.frame_rhs_value(lhs, *rhs);
-                    // THEN store (borrow scoped to the index-store only). N7: a
-                    // class field write routes to the heap, not a frame slot.
-                    self.frame_or_class_write(lhs, v);
+                    // V5 (§4.5.194): a frame-local dyn `new[]` / `delete()` — heap ops that
+                    // the interior-mutable `dyn_heap` now lets this `&self` executor perform.
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::DynNew,
+                        args,
+                        ..
+                    } => self.frame_dyn_new(args),
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::DynDelete,
+                        args,
+                        ..
+                    } => {
+                        if let Some(&a0) = args.first() {
+                            if let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[a0 as usize] {
+                                self.dyn_heap.borrow_mut()[*net as usize].take();
+                            }
+                        }
+                    }
+                    // Other SysTask / NBA / delay / event in a func body are rejected at
+                    // ELABORATE (B1 cut) → never reach here.
+                    _ => {}
                 }
-                // SysTask/NBA/delay/event in a func body are rejected at
-                // ELABORATE (B1 cut) → never reach here.
             }
             match &blk.term {
                 Terminator::Goto { target } => cur = *target,
@@ -3038,6 +3113,10 @@ impl<'a> SimState<'a> {
                 _ => break,
             }
         }
+
+        // V5 (§4.5.194): free this activation's dyn LOCALS so the next call starts fresh
+        // (formals `[0, np)` excluded — they are caller-managed snapshots, §4.5.177).
+        self.frame_dyn_free_from(func, np);
 
         // ── READ the return slot (clone + release), resize to declared width. ──
         let ret_auto = self.frame_slot_auto[(base + m.return_slot) as usize];
@@ -3173,6 +3252,26 @@ impl<'a> SimState<'a> {
             );
         }
 
+        // V5 (§4.5.194): guard this task's own dyn LOCALS against recursive/concurrent
+        // reentry (formals `[0, np)` are caller-managed, first_slot=np). A subset dyn-local
+        // task is normally LIFTED to the suspendable path; this keeps run_task self-consistent
+        // if one is routed here (the DynNew arm below executes its `new[]`).
+        let np = self.ir.funcs[callee as usize].n_params;
+        if !self.frame_dyn_reentry_ok_from(callee, np) {
+            if has_auto {
+                self.frame_stack.borrow_mut().pop();
+            }
+            return Some(
+                out_slots
+                    .iter()
+                    .map(|&s| {
+                        let nv = &self.ir.nets[(base + s) as usize];
+                        Value::xs(nv.width.max(1), nv.signed)
+                    })
+                    .collect(),
+            );
+        }
+
         // ── BB LOOP over the GLOBAL func arena from fd.entry. ──
         let mut cur = fd.entry;
         loop {
@@ -3182,16 +3281,38 @@ impl<'a> SimState<'a> {
             );
             let blk = &self.ir.blocks[cur as usize];
             for &sid in &blk.stmts {
-                if let Stmt::BlockingAssign { lhs, rhs } = &self.ir.stmts[sid as usize] {
-                    // §4.5.176: a dyn/queue/assoc `foreach` step advances its key via the
-                    // frame-aware path in this `&self` subset-task executor (was a stall/0).
-                    if self.rhs_is_assoc_iter(*rhs) {
-                        self.frame_assoc_iter(lhs, *rhs);
-                        continue;
+                match &self.ir.stmts[sid as usize] {
+                    Stmt::BlockingAssign { lhs, rhs } => {
+                        // §4.5.176: a dyn/queue/assoc `foreach` step advances its key via the
+                        // frame-aware path in this `&self` subset-task executor (was a stall/0).
+                        if self.rhs_is_assoc_iter(*rhs) {
+                            self.frame_assoc_iter(lhs, *rhs);
+                            continue;
+                        }
+                        // N1: `$sformatf` renders through the shared formatter here.
+                        let v = self.frame_rhs_value(lhs, *rhs);
+                        self.frame_or_class_write(lhs, v);
                     }
-                    // N1: `$sformatf` renders through the shared formatter here.
-                    let v = self.frame_rhs_value(lhs, *rhs);
-                    self.frame_or_class_write(lhs, v);
+                    // V5 (§4.5.194): a frame-local dyn `new[]` / `delete()` — parity with
+                    // run_frame_call (the classifier now admits DynNew in a subset body, so
+                    // execute it here rather than silently skip it).
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::DynNew,
+                        args,
+                        ..
+                    } => self.frame_dyn_new(args),
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::DynDelete,
+                        args,
+                        ..
+                    } => {
+                        if let Some(&a0) = args.first() {
+                            if let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[a0 as usize] {
+                                self.dyn_heap.borrow_mut()[*net as usize].take();
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
             match &blk.term {
@@ -3264,6 +3385,9 @@ impl<'a> SimState<'a> {
                 _ => break,
             }
         }
+
+        // V5 (§4.5.194): free this activation's dyn LOCALS (formals excluded, first_slot=np).
+        self.frame_dyn_free_from(callee, np);
 
         // ── COPY-OUT the requested output slots (resize to slot width). ──
         let outs: Vec<Value> = out_slots
@@ -3386,6 +3510,15 @@ impl<'a> SimState<'a> {
     /// `fatal_frame_heap_write`) rather than the `&mut` `fatal_run`. The scheduler
     /// converts a latched `call_fatal` into a fatal run end at the next region seam.
     pub(crate) fn frame_dyn_reentry_ok(&self, callee: u32) -> bool {
+        self.frame_dyn_reentry_ok_from(callee, 0)
+    }
+
+    /// §4.5.194: `first_slot` skips FORMAL slots (`[0, n_params)`) for the FUNCTION path —
+    /// a function's `input` dyn formal is snapshotted by the caller BEFORE `run_frame_call`,
+    /// so its slot is legitimately `Some` at entry and must NOT trip the reentry guard;
+    /// only the function's own dyn LOCALS (slots >= n_params) are per-activation. The
+    /// suspendable/task callers pass 0 (their snapshot runs AFTER this check).
+    pub(crate) fn frame_dyn_reentry_ok_from(&self, callee: u32, first_slot: u32) -> bool {
         if !self
             .func_has_dyn_local
             .get(callee as usize)
@@ -3395,7 +3528,7 @@ impl<'a> SimState<'a> {
             return true;
         }
         let m = self.func_table[callee as usize];
-        for s in 0..m.locals_len {
+        for s in first_slot..m.locals_len {
             let net = (m.base_net + s) as usize;
             if self.ir.nets[net].kind == NetKind::DynArray && self.dyn_heap.borrow()[net].is_some()
             {
@@ -3424,6 +3557,13 @@ impl<'a> SimState<'a> {
     /// later call to the same func/task starts fresh (an unallocated array is size 0) and
     /// the reentry guard above next sees `None`.
     pub(crate) fn frame_dyn_free(&self, callee: u32) {
+        self.frame_dyn_free_from(callee, 0)
+    }
+
+    /// §4.5.194: `first_slot` skips FORMAL slots for the FUNCTION path (see
+    /// `frame_dyn_reentry_ok_from`) — a function frees only its own dyn LOCALS at exit; its
+    /// `input` formal snapshot is overwritten by the caller on the next call.
+    pub(crate) fn frame_dyn_free_from(&self, callee: u32, first_slot: u32) {
         if !self
             .func_has_dyn_local
             .get(callee as usize)
@@ -3433,7 +3573,7 @@ impl<'a> SimState<'a> {
             return;
         }
         let m = self.func_table[callee as usize];
-        for s in 0..m.locals_len {
+        for s in first_slot..m.locals_len {
             let net = (m.base_net + s) as usize;
             if self.ir.nets[net].kind == NetKind::DynArray {
                 self.dyn_heap.borrow_mut()[net].take();
@@ -3465,6 +3605,48 @@ impl<'a> SimState<'a> {
                 *cell = obj;
             }
         }
+    }
+
+    /// §4.5.194 (V5): execute a `loc = new[n]` (`Stmt::SysTask { DynNew, args }`) inside a
+    /// frame body from the `&self` executor — args = [handle Signal, size, opt src Signal].
+    /// Mirrors the `&mut` builtin's size handling (X/Z → empty + warn, cap) then defers to
+    /// the shared `alloc_dyn_array` core. A non-dyn / malformed handle is a defensive no-op.
+    fn frame_dyn_new(&self, args: &[u32]) {
+        let Some(&a0) = args.first() else {
+            return;
+        };
+        let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[a0 as usize] else {
+            return;
+        };
+        let net = *net;
+        if self.ir.nets.get(net as usize).map(|nv| nv.kind) != Some(NetKind::DynArray) {
+            self.dyn_warn_once_at(net, "new[] on a non-dynamic-array handle (ignored)");
+            return;
+        }
+        let n = match args.get(1) {
+            Some(&a) => {
+                let v = self.mk_eval_ctx().eval(a);
+                if v.has_xz() {
+                    self.dyn_warn_once_at(net, "new[] size is X/Z; array degraded to empty");
+                    0
+                } else {
+                    let raw = v.to_u64().unwrap_or(0);
+                    if raw > MAX_DYN_ELEMS as u64 {
+                        self.dyn_warn_once_at(
+                            net,
+                            "new[] size exceeds the element cap (1<<24); clamped",
+                        );
+                    }
+                    raw.min(MAX_DYN_ELEMS as u64) as usize
+                }
+            }
+            None => 0,
+        };
+        let src_net = args.get(2).and_then(|&a| match &self.ir.exprs[a as usize] {
+            sim_ir::Expr::Signal { net, .. } => Some(*net),
+            _ => None,
+        });
+        self.alloc_dyn_array(net, n, src_net);
     }
 }
 

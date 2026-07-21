@@ -533,12 +533,14 @@ fn r2b_write_element_now_supported() {
     assert_eq!(run(src).0, "PASS");
 }
 
+// §4.5.194 V5: `b = new[5]` REALLOCATES the input formal's pass-by-value local copy
+// (a whole-handle DynNew into an in-frame dyn net) → b.size()=5. Supported; iverilog: PASS.
 #[test]
-fn r2b_new_in_body_is_loud() {
+fn r2b_new_in_body_now_supported() {
     let src = "module t;\n\
         function automatic int f(input byte b[]); b=new[5]; return b.size(); endfunction\n\
         initial begin byte a[]; a=new[3]; if(f(a)==5) $display(\"PASS\"); $finish; end endmodule";
-    assert!(loud(src));
+    assert_eq!(run(src).0, "PASS");
 }
 
 #[test]
