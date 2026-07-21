@@ -2008,13 +2008,11 @@ impl SimState<'_> {
             .expect("with_dyn_entry: slot just set to Some"))
     }
 
-    fn dyn_write(
-        &mut self,
-        c: &sim_ir::LvalChunk,
-        raw_off: u32,
-        raw_word: u32,
-        piece: &Value,
-    ) -> bool {
+    /// §4.5.194: `&self` (was `&mut`) — the dyn heap is interior-mutable, so this
+    /// element/whole store is reachable from BOTH the `&mut` module path
+    /// (`write_chunk`) and the `&self` frame executors (`frame_write_lvalue`, for a
+    /// `new[]`-local / snapshotted-formal element write).
+    fn dyn_write(&self, c: &sim_ir::LvalChunk, raw_off: u32, raw_word: u32, piece: &Value) -> bool {
         let net = c.net;
         let w = self.ir.nets[net as usize].width.max(1);
         // v7 P2-C: STRING whole-handle assignment — strip leading NULs from
@@ -2276,7 +2274,7 @@ impl SimState<'_> {
     /// whatever the op left beyond size N+1 falls off the TAIL — one rule
     /// reproduces push_back-on-full (= skip), push_front-on-full (back
     /// drops) and insert-on-full (back drops). Loud (W4020 once per net).
-    pub(crate) fn enforce_queue_bound(&mut self, net: u32) {
+    pub(crate) fn enforce_queue_bound(&self, net: u32) {
         let Some(&b) = self.queue_bounds.get(&net) else {
             return;
         };
@@ -2490,6 +2488,34 @@ impl<'a> SimState<'a> {
         if self.dyn_is_handle.get(net).copied().unwrap_or(false)
             && self.ir.nets[net].kind != NetKind::String
         {
+            // §4.5.194: an ELEMENT write to a frame-local dynamic array — a `new[]`-
+            // allocated LOCAL (`loc[i]=v`, V5), a snapshotted `input` formal's local copy
+            // (pass-by-value, IEEE §13.5.1), or an `output` formal (V2B). `dyn_heap` is
+            // interior-mutable now, so resolve the index/offset EXACTLY as the module path
+            // (`resolve_lvalue_offsets`: an X/Z or out-of-i32 index → the `OOR_DROP` 2^30
+            // sentinel so the write DROPS) and do the heap store. A WHOLE-handle store (no
+            // `word`) is not a blocking-assign element write — keep it loud (handle copy /
+            // `new[]` alloc is a separate mechanism, not reached here).
+            if c.word.is_some() {
+                const OOR_DROP: u32 = 1 << 30;
+                let idx = |e: u32| -> u32 {
+                    let sw = self.wt.get(e);
+                    let ev = self.mk_eval_ctx().eval_ctx(e, sw.width, sw.signed);
+                    if ev.has_xz() {
+                        return OOR_DROP;
+                    }
+                    match ev.to_i128_signed() {
+                        Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => {
+                            i as i32 as u32
+                        }
+                        _ => OOR_DROP,
+                    }
+                };
+                let raw_off = c.offset.map(idx).unwrap_or(0);
+                let raw_word = c.word.map(idx).unwrap_or(0);
+                self.dyn_write(c, raw_off, raw_word, &v);
+                return;
+            }
             self.fatal_frame_heap_write();
             return;
         }

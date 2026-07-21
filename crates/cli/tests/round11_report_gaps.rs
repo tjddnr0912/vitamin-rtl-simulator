@@ -521,15 +521,16 @@ fn r2b_element_read_and_sum_supported() {
     assert_eq!(run(src).0, "PASS");
 }
 
-// correct-or-loud: the alias is READ-ONLY. Any WRITE to the dyn formal, an
-// inout/output dyn formal, or a non-straight-line body keeps the function FRAMED,
-// where the dyn formal is loud-rejected — never a silent caller mutation.
+// §4.5.194: a WRITE to the dyn formal keeps the function FRAMED (not the R2 read-only
+// alias), where the write now lands on the per-activation SNAPSHOT — IEEE §13.5.1
+// pass-by-value, isolated from the caller (never a silent caller mutation). Verified:
+// the caller's array is unchanged (see frame_func_dyn_formal_write.rs).
 #[test]
-fn r2b_write_element_is_loud() {
+fn r2b_write_element_now_supported() {
     let src = "module t;\n\
         function automatic int f(input byte b[]); b[0]=9; return b.size(); endfunction\n\
         initial begin byte a[]; a=new[3]; if(f(a)==3) $display(\"PASS\"); $finish; end endmodule";
-    assert!(loud(src));
+    assert_eq!(run(src).0, "PASS");
 }
 
 #[test]

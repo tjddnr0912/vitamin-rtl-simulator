@@ -105,15 +105,30 @@ fn element_and_size_reads() {
 }
 
 #[test]
-fn writing_a_dyn_input_formal_stays_loud() {
-    // Correct-or-loud: writing the pass-by-value copy is still a heap write the `&self`
-    // synchronous executor cannot do — a loud F4004, never a silent mis-run.
+fn writing_a_dyn_input_formal_local_copy() {
+    // §4.5.194 write-path: writing the pass-by-value copy is now a real heap element
+    // store on the interior-mutable dyn heap (was a loud F4004). iverilog: r=999.
     let o = run("module top;\n\
          task automatic wr(input int b[], output int s); b[0]=999; s=b[0]; endtask\n\
          int a[]; int r;\n\
          initial begin a=new[2]; a[0]=1; a[1]=2; wr(a,r); $display(\"r=%0d\", r); end\n\
          endmodule\n");
-    assert!(o.contains("F4004"), "should be loud:\n{o}");
+    assert!(o.contains("r=999"), "got:\n{o}");
+}
+
+#[test]
+fn writing_an_input_formal_is_pass_by_value_isolated() {
+    // The write lands in the local snapshot only — the caller's array is unchanged
+    // (IEEE §13.5.1). iverilog: r=63 (10+1 + 20+1 + 30+1) and a0=10.
+    let o = run("module top;\n\
+         task automatic bump(input int b[], output int s);\n\
+           for(int i=0;i<b.size();i++) b[i]=b[i]+1;\n\
+           s=0; for(int i=0;i<b.size();i++) s+=b[i];\n\
+         endtask\n\
+         int a[]; int r;\n\
+         initial begin a=new[3]; a[0]=10; a[1]=20; a[2]=30; bump(a,r); $display(\"r=%0d a0=%0d\", r, a[0]); end\n\
+         endmodule\n");
+    assert!(o.contains("r=63 a0=10"), "got:\n{o}");
 }
 
 #[test]
