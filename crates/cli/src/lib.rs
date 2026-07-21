@@ -740,13 +740,20 @@ fn run_vita_str_gated(
     // elaboration error was reported. `elaborate_with_timescale` also yields the
     // fork-join, net-name, and per-process time-multiplier side tables threaded into
     // `SimOpts`; the timescale env scales `#delay`/`$time`/`$realtime`.
+    // r17 one-shot `--top`: when the user pins root(s), pass them through so the
+    // elaborator overrides auto-top; empty ⇒ `None` ⇒ auto-top (unchanged).
+    let root_sel: Option<&[String]> = if opts.tops.is_empty() {
+        None
+    } else {
+        Some(&opts.tops)
+    };
     let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
         &unit,
         sink,
         &rt.unit_exp,
         &rt.prec_exp,
         rt.global_prec_exp,
-        None,
+        root_sel,
     );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;
@@ -1197,7 +1204,7 @@ pub fn run(argv: &[String]) -> i32 {
             if io.dump_filelist {
                 return run_dump_filelist(&io);
             }
-            if let Err(c) = reject_worklib_flags("vita", &io, false, false) {
+            if let Err(c) = reject_worklib_flags("vita", &io, false, false, true) {
                 return c;
             }
             let opts = VitaOpts {
@@ -1212,7 +1219,10 @@ pub fn run(argv: &[String]) -> i32 {
                 log_append: io.log_append,
                 upstream: None, // one-shot has no staged upstream
                 work: None,
-                tops: Vec::new(),
+                // One-shot `--top <UNIT>` (r17): pin the elaboration root(s) for a
+                // deterministic single top, instead of relying on auto-top. Empty =
+                // auto-top (unchanged default). Passed through to elaborate below.
+                tops: io.tops.clone(),
                 plusargs: io.plusargs,
                 obs_dir: io.obs_dir,
                 hier_tree: io.hier_tree,
@@ -3515,6 +3525,7 @@ fn reject_worklib_flags(
     io: &IoArgs,
     allow_work: bool,
     allow_libs: bool,
+    allow_tops: bool,
 ) -> Result<(), i32> {
     if !allow_work && (io.work.is_some() || io.workdir.is_some()) {
         eprintln!(
@@ -3530,9 +3541,12 @@ fn reject_worklib_flags(
         );
         return Err(EXIT_CLI_ERROR);
     }
-    if !allow_libs && !io.tops.is_empty() {
+    // `--top` selects the elaboration root. `velab` (staged elaborate) and the
+    // one-shot `vita` both elaborate, so both accept it; `vcmp` (compile-only)
+    // and `vrun` (root already fixed in the `.vu`/`.velab`) do not.
+    if !allow_tops && !io.tops.is_empty() {
         eprintln!(
-            "error[{}]: --top is a velab flag — '{stage}' has no root selection",
+            "error[{}]: --top selects an elaboration root — '{stage}' has no root selection",
             MsgCode::CliBadFlag.code_num()
         );
         return Err(EXIT_CLI_ERROR);
@@ -3570,7 +3584,7 @@ fn dispatch_vcmp(args: &[String]) -> i32 {
     if io.dump_filelist {
         return run_dump_filelist(&io);
     }
-    if let Err(c) = reject_worklib_flags("vcmp", &io, true, false) {
+    if let Err(c) = reject_worklib_flags("vcmp", &io, true, false, false) {
         return c;
     }
     if let Err(c) = reject_plusargs("vcmp", &io) {
@@ -3630,7 +3644,7 @@ fn dispatch_velab(args: &[String]) -> i32 {
     if let Err(c) = reject_preprocess_buckets("velab", &io) {
         return c;
     }
-    if let Err(c) = reject_worklib_flags("velab", &io, false, true) {
+    if let Err(c) = reject_worklib_flags("velab", &io, false, true, true) {
         return c;
     }
     if let Err(c) = reject_plusargs("velab", &io) {
@@ -3724,7 +3738,7 @@ fn dispatch_vrun(args: &[String]) -> i32 {
     if let Err(c) = reject_preprocess_buckets("vrun", &io) {
         return c;
     }
-    if let Err(c) = reject_worklib_flags("vrun", &io, false, false) {
+    if let Err(c) = reject_worklib_flags("vrun", &io, false, false, false) {
         return c;
     }
     if let Err(c) = reject_obs_dir("vrun", &io) {

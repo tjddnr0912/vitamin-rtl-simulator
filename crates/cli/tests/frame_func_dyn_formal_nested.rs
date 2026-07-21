@@ -187,8 +187,14 @@ fn case_scrutinee_loud() {
 
 #[test]
 fn nested_in_frame_body_loud() {
-    // `$display(fsum(c))` INSIDE another function body — no `&mut` executor runs the
-    // snapshot marker there → loud (the temp assign's marker path sees `in_frame_body`).
+    // Family C (r17): the snapshot marker now RUNS inside a frame body (§4.5.194
+    // RefCell dyn_heap), so a dyn-formal call inside a TASK body, or inside a
+    // function with a LOCAL dyn-array arg, is supported. What stays loud here is a
+    // narrower residual: a FUNCTION re-forwarding ITS OWN dyn-array formal `c` to
+    // another dyn-formal function (`fsum(c)` where `c` is wrap's formal) — the framed
+    // function's own formal is heap-resident and `dyn_array_actual_net` cannot resolve
+    // it as a re-forward source (the pre-existing "array-formal re-forwarding" gap).
+    // Correct-or-loud: loud, never silently wrong.
     let o = run("module top;\n\
          function automatic int fsum(input int c[]); int s=0; foreach(c[i]) s+=c[i]; return s; endfunction\n\
          function automatic int wrap(input int c[]); $display(\"R=%0d\", fsum(c)); return 0; endfunction\n\
@@ -196,7 +202,7 @@ fn nested_in_frame_body_loud() {
          endmodule\n");
     assert!(
         is_loud(&o),
-        "dyn-formal call nested in frame body = loud:\n{o}"
+        "function re-forwarding its own dyn-formal = loud:\n{o}"
     );
 }
 

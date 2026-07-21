@@ -104,15 +104,54 @@ fn read_before_write_is_x_for_four_state() {
 }
 
 #[test]
-fn nonpackable_record_body_local_stays_loud() {
-    // A string-member record is not packable → loud (correct-or-loud).
+fn nonpackable_record_body_local_now_supported() {
+    // Family B (r17): a string-member (non-packable) record tf-local is now stored
+    // as PER-MEMBER frame slots (string member → NetKind::String heap slot, integral
+    // members → scalar slots), mirroring module scope — supersedes the §4.5.192 pin
+    // that kept this loud. `r.id` / `r.name` resolve to `$unp$r$field`.
     let o = run("module top;\n\
          typedef struct { string name; int id; } rec_t;\n\
-         task automatic t(); rec_t r; r.id=5; $display(\"%0d\", r.id); endtask\n\
+         task automatic t(); rec_t r; r.id=5; r.name=\"abc\";\n\
+           $display(\"%0d %s\", r.id, r.name); endtask\n\
          initial t();\nendmodule\n");
     assert!(
-        o.contains("E2002") || o.contains("E3009"),
-        "should be loud:\n{o}"
+        o.contains("5 abc"),
+        "non-packable tf-local should work:\n{o}"
+    );
+}
+
+#[test]
+fn r17_family_b_report_repro_package_scoped() {
+    // Family B (r17) — the reviewer's exact repro: a PACKAGE-scoped non-packable
+    // record (string + int) as a task-body top-level local, member-written and read.
+    let o = run(
+        "package bp; typedef struct { int count; string name; } np_t; endpackage\n\
+         module t; import bp::*;\n\
+         task automatic go (input int n);\n\
+           np_t r;\n\
+           begin r.count = n; r.name = \"abc\";\n\
+                 if (r.count == 7 && r.name == \"abc\") $display(\"PASS\"); end\n\
+         endtask\n\
+         initial begin go(7); $finish; end endmodule\n",
+    );
+    assert!(
+        o.contains("PASS"),
+        "package-scoped non-packable tf-local:\n{o}"
+    );
+}
+
+#[test]
+fn nonpackable_record_whole_value_op_stays_loud() {
+    // correct-or-loud: a WHOLE-value op on a non-packable local (per-member storage
+    // has no flat value) stays loud — never silently wrong.
+    let o = run("module top;\n\
+         typedef struct { string name; int id; } rec_t;\n\
+         task automatic t(); rec_t r; rec_t q; r.id=5; r.name=\"x\"; q=r;\n\
+           $display(\"%0d\", q.id); endtask\n\
+         initial t();\nendmodule\n");
+    assert!(
+        o.contains("E2002") || o.contains("E3009") || o.contains("E3010"),
+        "whole-struct copy of a non-packable local should be loud:\n{o}"
     );
 }
 

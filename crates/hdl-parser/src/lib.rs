@@ -8564,8 +8564,17 @@ impl Parser<'_, '_> {
                 // (`struct_array_field_geom` falls back to `packable_record_layout`). A
                 // decl-init `'{…}`, a multi-dim array, or a non-packable record (mixed
                 // 2-/4-state, string/real/nested/class member) stays loud.
+                // Family A (r17): the UNBOUNDED QUEUE form (`rec_t q[$]` =
+                // `Dim::Queue(None)`) routes through the SAME body — it lowers to a
+                // packed-vector queue `logic/bit [W-1:0] q[$]`, byte-identical to the
+                // registration a packed-struct queue gets via `parse_typed_decl`, so
+                // `q.push_back`/`q.size()`/`q[i]`/`q[i].field` all work with no further
+                // change. A bounded queue (`[$:N]` = `Dim::Queue(Some(_))`) stays loud.
                 if n.unpacked.len() == 1
-                    && matches!(n.unpacked[0], Dim::Range(_) | Dim::Size(_))
+                    && matches!(
+                        n.unpacked[0],
+                        Dim::Range(_) | Dim::Size(_) | Dim::Queue(None)
+                    )
                     && n.init.is_none()
                     && !n.name.name.contains('$')
                 {
@@ -8620,6 +8629,46 @@ impl Parser<'_, '_> {
                     n.name.span,
                     "an unpacked-struct variable name containing `$` is unsupported in v1",
                 );
+                continue;
+            }
+            // Family A (r17): a PACKABLE scalar unpacked-struct VARIABLE (`pkt_t p;`,
+            // all-integral members) lowers to a WHOLE packed-vector net registered in
+            // `var_struct` + `struct_scalar_vars` (byte-identical to the §4.5.192
+            // tf-body local `parse_body_unpacked_struct_local`), NOT the per-member
+            // `$unp$p$field` nets below. This flips MODULE + BLOCK scope together (both
+            // route scalars through here), unifying every scope on whole-vector for
+            // packable records so a struct var passes WHOLE to a (now whole-vector)
+            // struct tf-port and works as a whole value (`q.push_back(p)`, `r = p`).
+            // `p.field` still resolves — `unpacked_field_ident` misses (var left
+            // `var_unpacked_struct`) then `struct_field_select` → part-select. A
+            // NON-packable record (string/real/mixed) keeps the per-member path.
+            if let Some(layout) = self.packable_record_layout(&tyname) {
+                let w: u32 = layout.fields.iter().map(|f| f.2).sum();
+                let all_two_state = layout.fields.iter().all(|f| f.5);
+                self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                self.struct_scalar_vars.insert(n.name.name.clone());
+                out.push(NetVarDecl {
+                    kind: if all_two_state {
+                        NetVarKind::Bit
+                    } else {
+                        NetVarKind::Logic
+                    },
+                    signed: false,
+                    range: Some(self.synth_bit_range(w, n.name.span)),
+                    packed: Vec::new(),
+                    delay: None,
+                    names: vec![DeclName {
+                        name: n.name.clone(),
+                        unpacked: Vec::new(),
+                        init: None,
+                        span: n.name.span,
+                    }],
+                    lifetime: None,
+                    class_type: None,
+                    class_args: Vec::new(),
+                    const_param: false,
+                    span: n.name.span,
+                });
                 continue;
             }
             self.var_unpacked_struct
@@ -10619,7 +10668,34 @@ impl Parser<'_, '_> {
         let nm = self.type_name_key();
         if self.unpacked_struct_layouts.contains_key(&nm) {
             self.eat_scope_qualifier();
+            let span = self.cur_span();
             self.bump(); // consume the type-name token so the port name is next
+                         // Family A (r17): a PACKABLE unpacked-struct tf-port rides a SINGLE flat
+                         // vector — exactly like a packed struct (4th tuple slot = struct_name →
+                         // `bind_tf_port_struct`, so `c.field` desugars to a part-select in the
+                         // body), NOT the 1→N per-member expansion. This makes the formal's
+                         // representation identical to a packable struct VARIABLE (now also
+                         // whole-vector — see the scalar branch of `parse_unpacked_struct_decl`), so
+                         // `f(structvar)` passes the WHOLE value (no `expand_struct_call_args`
+                         // scatter) and a queue-of-record `q.push_back(p)` works end-to-end. A
+                         // NON-packable record (string/real/mixed member) cannot ride one vector →
+                         // 1→N per-member (5th slot), unchanged.
+            if let Some(layout) = self.packable_record_layout(&nm) {
+                let w: u32 = layout.fields.iter().map(|f| f.2).sum();
+                let all_two_state = layout.fields.iter().all(|f| f.5);
+                let kind = if all_two_state {
+                    NetVarKind::Bit
+                } else {
+                    NetVarKind::Logic
+                };
+                return Some((
+                    kind,
+                    false,
+                    Some(self.synth_bit_range(w, span)),
+                    Some(nm),
+                    None,
+                ));
+            }
             return Some((NetVarKind::Reg, false, None, None, Some(nm)));
         }
         let info = self.peek_typedef_name()?;
@@ -10916,6 +10992,29 @@ impl Parser<'_, '_> {
                 if self.pos != before {
                     // consumed tokens but produced no decl (a loud error path) — do not
                     // re-parse them as a statement; advance the loop.
+                    continue;
+                }
+                // Family B (r17): a NON-packable unpacked-struct scalar body-local at
+                // the tf-body TOP LEVEL (e.g. `np_t r;` where `np_t` has a `string`
+                // member). `parse_body_unpacked_struct_local`'s PACKABLE gate returned
+                // `None` without consuming, and the plain-typedef branch above missed
+                // it (unpacked structs live in `unpacked_struct_layouts`, not
+                // `typedefs`). Route it through the SAME per-member path the begin/end
+                // block-local already uses (`try_block_unpacked_struct_decl` →
+                // `parse_unpacked_struct_decl`): each member gets its own frame slot
+                // (a `string` member → `NetKind::String` heap slot, integral members →
+                // scalar slots), so `r.count`/`r.name` desugar to `$unp$r$field`
+                // exactly as at module scope. Array/dyn/loud forms inherit
+                // `parse_unpacked_struct_decl`'s existing correct-or-loud behavior,
+                // identical to the block-local path. Snapshot BEFORE the parse mutates
+                // `var_unpacked_struct` so `restore_scope` at body end is leak-free.
+                if let Some(tyname) = self.peek_unpacked_struct_decl() {
+                    if typedef_scope.is_none() {
+                        typedef_scope = Some(self.snapshot_scope());
+                    }
+                    if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
+                        body_decls.extend(member_decls);
+                    }
                     continue;
                 }
             }

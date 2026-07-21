@@ -3638,6 +3638,10 @@ struct Elaborator<'s> {
     // Whole-handle copy markers (§7.10 `dst = src` deep copy): no-op Display
     // StmtId → (dst_net, src_net). Threaded via `SimOpts.handle_copy_stmts`.
     handle_copy_stmts: std::collections::BTreeMap<u32, (u32, u32)>,
+    // Family C (r17): SUBSET of `handle_copy_stmts` that are dyn-array-formal snapshot
+    // markers living inside a frame body — the only handle-copy markers the `&self`
+    // frame executors run and the subset validator allows. Threaded via SimOpts.
+    dyn_formal_marker_stmts: std::collections::BTreeSet<u32>,
     // Queue-slice markers (§7.10.1 `dst = src[a:b]`): no-op Display StmtIds
     // whose args are [dst, src, a, b]. Threaded via `SimOpts.queue_slice_stmts`.
     queue_slice_stmts: std::collections::BTreeSet<u32>,
@@ -3844,6 +3848,7 @@ impl<'s> Elaborator<'s> {
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
+            dyn_formal_marker_stmts: std::collections::BTreeSet::new(),
             queue_slice_stmts: std::collections::BTreeSet::new(),
             radixes: RadixTable::new(),
             assign_ranks: AssignRankTable::new(),
@@ -4209,7 +4214,29 @@ impl<'s> Elaborator<'s> {
                 }
                 sel
             }
-            None => pick_roots(&map, &order, &bind_checkers),
+            None => {
+                // r17 correct-or-loud: auto-top (no `--top`) picking among 2+
+                // uninstantiated roots used to be SILENT. IEEE 1364/iverilog
+                // elaborate every uninstantiated module as an independent top, so
+                // this stays a WARNING (not an error) — the behavior is preserved,
+                // but the ambiguity is surfaced so a masked/unintended top cannot
+                // pass unnoticed. `--top <module>` pins a deterministic single top.
+                let r = pick_roots(&map, &order, &bind_checkers);
+                if r.len() >= 2 {
+                    let names: Vec<&str> = r.iter().map(|m| m.name.name.as_str()).collect();
+                    self.warn_code(
+                        MsgCode::ElabAutoTopAmbiguous,
+                        &format!(
+                            "auto-top selected {} uninstantiated roots ({}); all are \
+                             elaborated as independent tops — pin one with `--top <module>` \
+                             for a deterministic single top",
+                            names.len(),
+                            names.join(", ")
+                        ),
+                    );
+                }
+                r
+            }
         };
         if roots.is_empty() {
             self.error(MsgCode::ElabUnsupported, "no top module to elaborate");
@@ -15896,7 +15923,14 @@ impl<'s> Elaborator<'s> {
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
-        if delay.is_some() || self.in_frame_body {
+        // Family C (r17): the `in_frame_body` guard is GONE. §4.5.194 made `dyn_heap`
+        // interior-mutable (`RefCell`), so the snapshot marker's heap→heap deep-copy is
+        // now an op the `&self` frame executors (`run_frame_call`/`run_task`) can run
+        // too (see the marker arm there + `classify_frame_body`'s allow-list). This
+        // lifts §4.5.177/179's module-process-only restriction, so a dyn-array-formal
+        // function call BURIED in a function/task body (`s = sum(b);` inside a task)
+        // works — iverilog-pinned. A `#delay` still blocks (its own timing concern).
+        if delay.is_some() {
             return false;
         }
         let ast::ExprKind::Call { name, args } = &rhs.kind else {
@@ -15931,6 +15965,10 @@ impl<'s> Elaborator<'s> {
                     args: Vec::new(),
                 });
                 self.handle_copy_stmts.insert(sid, (formal_net, caller_net));
+                // Family C: record it as a dyn-formal marker so `classify_frame_body`
+                // allows this Display in the suspendable/subset frame body (a §7.10
+                // whole-handle copy is NOT in this set → stays loud in a frame body).
+                self.dyn_formal_marker_stmts.insert(sid);
                 b.push_stmt_id(sid);
             }
         }
@@ -18740,6 +18778,16 @@ impl<'s> Elaborator<'s> {
                                 if *net >= lo && *net < hi && self.is_dyn_handle_net(*net)
                         )
                     }) => {}
+                    // Family C (r17): a dyn-array-formal SNAPSHOT marker (a no-op
+                    // Display whose sid is in `dyn_formal_marker_stmts`) emitted for a
+                    // `x = f(arr)` call inside this frame body — the `&self` executors
+                    // run it (heap→heap deep-copy via the interior-mutable `dyn_heap`).
+                    // Restricted to the dyn-formal set, so a §7.10 whole-handle copy
+                    // Display stays loud here (it is NOT in the set).
+                    ir::Stmt::SysTask {
+                        which: ir::SysTaskId::Display,
+                        ..
+                    } if self.dyn_formal_marker_stmts.contains(&sid) => {}
                     _ => why = Some("a $systask / nonblocking / force / release statement"),
                 }
             }

@@ -3092,6 +3092,22 @@ impl<'a> SimState<'a> {
                             }
                         }
                     }
+                    // Family C (§4.5.194+r17): a dyn-array-formal SNAPSHOT marker for a
+                    // `x = f(arr)` call inside THIS function body — deep-copy the caller
+                    // array (src) into the callee formal's heap slot (dst), the exact op
+                    // the module-process executor runs (builtins §7.10 marker path). The
+                    // interior-mutable `dyn_heap` makes this a `&self`-safe heap op. Only
+                    // handle-copy markers match (a real `$display` — absent from a func
+                    // body per the B1 cut — is not in `handle_copy_stmts`).
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::Display,
+                        ..
+                    } if self.handle_copy_stmts.contains_key(&sid) => {
+                        if let Some(&(dst, src)) = self.handle_copy_stmts.get(&sid) {
+                            self.frame_dyn_copy_out(src, dst);
+                            self.enforce_queue_bound(dst);
+                        }
+                    }
                     // Other SysTask / NBA / delay / event in a func body are rejected at
                     // ELABORATE (B1 cut) → never reach here.
                     _ => {}
@@ -3310,6 +3326,18 @@ impl<'a> SimState<'a> {
                             if let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[a0 as usize] {
                                 self.dyn_heap.borrow_mut()[*net as usize].take();
                             }
+                        }
+                    }
+                    // Family C (r17): dyn-array-formal snapshot marker for a `x = f(arr)`
+                    // call inside this (subset) TASK body — parity with run_frame_call.
+                    // Deep-copy caller(src) → formal(dst); only handle-copy markers match.
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::Display,
+                        ..
+                    } if self.handle_copy_stmts.contains_key(&sid) => {
+                        if let Some(&(dst, src)) = self.handle_copy_stmts.get(&sid) {
+                            self.frame_dyn_copy_out(src, dst);
+                            self.enforce_queue_bound(dst);
                         }
                     }
                     _ => {}

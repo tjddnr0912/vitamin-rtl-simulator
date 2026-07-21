@@ -21,7 +21,7 @@
 - **`VITA-<S>####` 숫자는 보조**(빠른 grep용). 한 번 부여하면 **영구**(빈 번호는 빈 채로,
   재사용·renumber 금지 — rustc `E0001` 방식). severity 접두 `S` ∈ {E=Error, W=Warning,
   I=Info, F=Fatal}. **초기 36개**(시드 할당)는 카테고리 내 mnemonic 알파벳순으로 부여했고(현재 본문
-  full-entry 코드는 **58개** — 2026-07-17 기준), **이후 추가는
+  full-entry 코드는 **59개** — 2026-07-22 기준·W3057 auto-top ambiguity 추가), **이후 추가는
   해당 밴드의 다음 빈 번호를 단조 부여**한다(알파벳 재정렬 금지). 공식 출처 기반 추가 케이스
   인벤토리는 **부록 A** 참조(미구현 예약 코드 107개 + 밴드 5/6/7).
 - severity·게이트·exit 의미는 [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md).
@@ -388,6 +388,23 @@ module m(input i); endmodule  module t; m u1(); endmodule   // 포트 미연결
 ->  warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: input port `i` left unconnected
 ```
 **해결:** 대부분 무해(의도 확인용). `-Wno-`/`-Werror=`로 억제·승격.
+
+---
+
+### VITA-W3057 · `W-ELAB-AUTOTOP-AMBIGUOUS` (Warning)
+**auto-top이 인스턴스화되지 않은 root 후보 2개 이상 중에서 선택 — 명시 top 미지정.** `--top` 없이
+one-shot `vita <sources>`(또는 `-f`)에 여러 module을 넘겼을 때, 어디에도 인스턴스화되지 않은
+module(=root 후보)이 2개 이상이면 vita는 IEEE 1364/iverilog 패리티로 **그들 전부를 독립 top으로
+elaborate**한다. 이는 적법하지만, 사용자가 특정 top을 의도했다면 다른 root의 `$finish`가 먼저 걸려
+의도한 top의 출력이 가려질 수 있다(과거엔 이 상황이 **무진단**이라 correct-or-loud 위반이었다). 이제
+root 후보 이름을 나열해 경고하고, `--top <module>`로 결정적 단일 top을 고정하도록 안내한다.
+```
+module aaa; ... endmodule   module zzz; ... endmodule   // 둘 다 root
+$ vita tworoot.sv
+->  warning[VITA-W3057] W-ELAB-AUTOTOP-AMBIGUOUS: auto-top selected 2 uninstantiated roots (aaa, zzz); ...
+```
+**해결:** `--top <module>`로 원하는 top을 명시(one-shot `vita`/`-f`도 지원). 여러 독립 top을
+의도했다면 무해 — `-Wno-`/`-Werror=`로 억제·승격.
 
 ---
 
@@ -786,7 +803,7 @@ RTL 버그 아님). 억제 불가.
 
 ## 부록 A · 조사 기반 에러/경고 케이스 인벤토리 (공식 출처)
 
-> 본문(§0~9)의 58개(현재 full-entry / `MsgCode` enum 등재 수, 2026-07-17 기준)는 **MVP 설계·구현 대상** 코드다. 본 부록은 실제 시뮬레이터
+> 본문(§0~9)의 59개(현재 full-entry / `MsgCode` enum 등재 수, 2026-07-22 기준)는 **MVP 설계·구현 대상** 코드다. 본 부록은 실제 시뮬레이터
 > (Verilator · Icarus iverilog · VCS · Xcelium · GHDL) 공식 문서 + IEEE 1800/1364가 정의하는
 > **추가 오류/경고 조건 107개를 미리 수집한 인벤토리**다 — 추후 구현 시 어떤 케이스를 처리해야
 > 하는지 미리 드러내 구현을 용이하게 하려는 목적이다. **이 코드들은 아직 미구현(예약)** 이며,
