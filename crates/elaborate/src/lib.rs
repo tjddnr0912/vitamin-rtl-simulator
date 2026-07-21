@@ -31306,16 +31306,11 @@ impl Elaborator<'_> {
             self.error(MsgCode::ElabUnsupported, "$fopen takes (name[, mode])");
             return true;
         }
-        if !args
-            .iter()
-            .all(|a| matches!(a.kind, ast::ExprKind::StrLit { .. }))
-        {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "$fopen arguments must be string literals (v7)",
-            );
-            return true;
-        }
+        // §21.3: the filename/mode may be a string LITERAL, a runtime `string`
+        // value (variable / concatenation), or a packed reg holding ASCII — the
+        // engine's `k_fopen` resolves all three (Const → is_str → packed-chars).
+        // Previously literal-only (v7); relaxed so file-driven testbenches that
+        // build a path in a `string` variable open the file (iverilog parity).
         let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Fopen,

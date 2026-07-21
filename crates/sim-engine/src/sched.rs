@@ -3175,25 +3175,33 @@ impl Kernel for Scheduler<'_, '_> {
         )
     }
     fn k_fopen(&mut self, rhs: u32) -> Value {
-        // args = [name strconst (, mode strconst)] — elaborate's contract.
+        // args = [name (, mode)] — each is a string LITERAL, a runtime `string`
+        // value, or a packed reg holding ASCII (elaborate's relaxed contract).
         let args = match self.st.ir.exprs.get(rhs as usize) {
             Some(sim_ir::Expr::SysFunc { args, .. }) => args.clone(),
             _ => return Value::from_i128(0, 32, true),
         };
-        let name = match args.first().map(|&a| self.st.ir.exprs.get(a as usize)) {
-            Some(Some(sim_ir::Expr::Const { val })) => {
-                crate::builtins::const_string(self.st.ir, *val)
-            }
-            _ => return Value::from_i128(0, 32, true),
-        };
-        let mode = args
-            .get(1)
-            .and_then(|&a| match self.st.ir.exprs.get(a as usize) {
-                Some(sim_ir::Expr::Const { val }) => {
-                    Some(crate::builtins::const_string(self.st.ir, *val))
+        // Resolve a name/mode arg to text: a Const{StrUtf8} literal decodes
+        // directly; a runtime STRING value (`is_str`) renders its exact bytes;
+        // any other packed value is treated as ASCII in a reg (NUL-stripped) —
+        // all three are valid $fopen argument forms (§21.3, iverilog parity).
+        let resolve = |st: &SimState<'_>, a: u32| -> String {
+            if let Some(sim_ir::Expr::Const { val }) = st.ir.exprs.get(a as usize) {
+                crate::builtins::const_string(st.ir, *val)
+            } else {
+                let v = st.eval_expr(a);
+                if v.is_str {
+                    String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
+                } else {
+                    crate::builtins::fmt_packed_chars_min(&v)
                 }
-                _ => None,
-            });
+            }
+        };
+        let name = match args.first() {
+            Some(&a) => resolve(&self.st, a),
+            None => return Value::from_i128(0, 32, true),
+        };
+        let mode = args.get(1).map(|&a| resolve(&self.st, a));
         let open = |mode: &str| -> std::io::Result<std::fs::File> {
             let mut o = std::fs::OpenOptions::new();
             // a '+' mode (r+/w+/a+) is read-AND-write; plain w/a are write-only.
