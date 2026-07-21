@@ -54,29 +54,25 @@ fn output_byte_array_suspendable() {
 #[test]
 fn output_array_nonsuspendable_with_input() {
     // Combined input + output arrays, no timing (synchronous frame path).
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          task automatic mk(input byte seed, output byte b[3]);\n\
            for (int i=0;i<3;i++) b[i] = seed + i;\n\
          endtask\n\
          byte data[3];\n\
          initial begin mk(8'd100, data); $display(\"%0d %0d %0d\", data[0],data[1],data[2]); end\n\
-         endmodule\n",
-    );
+         endmodule\n");
     assert!(o.contains("100 101 102"), "got:\n{o}");
 }
 
 #[test]
 fn output_wide_element() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          task automatic gen(output logic [15:0] x[3]);\n\
            x[0]=16'hAAAA; x[1]=16'hBBBB; x[2]=16'hCCCC;\n\
          endtask\n\
          logic [15:0] d[3];\n\
          initial begin gen(d); $display(\"%h %h %h\", d[0],d[1],d[2]); end\n\
-         endmodule\n",
-    );
+         endmodule\n");
     assert!(o.contains("aaaa bbbb cccc"), "got:\n{o}");
 }
 
@@ -108,36 +104,30 @@ fn two_calls_isolated() {
 
 #[test]
 fn signed_output_elements() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          task automatic t(output byte b[2]); b[0]=-5; b[1]=-100; endtask\n\
          byte d[2];\n\
          initial begin t(d); $display(\"%0d %0d\", d[0], d[1]); end\n\
-         endmodule\n",
-    );
+         endmodule\n");
     assert!(o.contains("-5 -100"), "got:\n{o}");
 }
 
 #[test]
 fn inout_array_formal_stays_loud() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          task automatic t(inout byte b[3]); b[0]=b[0]+1; endtask\n\
          byte d[3];\n\
          initial begin d[0]=5; t(d); $display(\"%0d\", d[0]); end\n\
-         endmodule\n",
-    );
+         endmodule\n");
     assert!(o.contains("E3009"), "should be loud:\n{o}");
 }
 
 #[test]
 fn non_bare_output_actual_stays_loud() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          task automatic t(output byte b[2]); b[0]=1; endtask\n\
          byte d[4];\n\
          initial begin t(d[0:1]); $display(\"%0d\", d[0]); end\n\
-         endmodule\n",
-    );
+         endmodule\n");
     assert!(o.contains("E3009"), "should be loud:\n{o}");
 }

@@ -17633,8 +17633,7 @@ impl<'s> Elaborator<'s> {
                                                     init: default_init(ast::NetVarKind::Reg, w),
                                                 },
                                             );
-                                            out_binds
-                                                .push((slot, whole_net_lvalue(packed_net)));
+                                            out_binds.push((slot, whole_net_lvalue(packed_net)));
                                             out_array_unpacks.push((path.clone(), pname, af));
                                             continue;
                                         }
@@ -19125,11 +19124,16 @@ impl<'s> Elaborator<'s> {
         // array the classifier rejects) stays loud (correct-or-loud).
         let is_framed = self.task_frame_idx.contains_key(tname.as_str());
         if task.ports.iter().any(|p| {
-            !p.unpacked.is_empty()
-                && !self.is_input_dyn_array_formal(p)
-                && !(is_framed
-                    && matches!(p.dir, ast::PortDir::Input | ast::PortDir::Output)
-                    && matches!(self.classify_array_formal(p), Some(Ok(_))))
+            // A scalar/vector formal, or a supported `input` DYNAMIC-array formal
+            // (aliased/snapshotted on either path), is fine.
+            if p.unpacked.is_empty() || self.is_input_dyn_array_formal(p) {
+                return false;
+            }
+            // Any OTHER unpacked-array formal is loud UNLESS it is a FRAMED task's
+            // `input`/`output` unpacked-FIXED array (an md-packed value slot).
+            !(is_framed
+                && matches!(p.dir, ast::PortDir::Input | ast::PortDir::Output)
+                && matches!(self.classify_array_formal(p), Some(Ok(_))))
         }) {
             self.error(
                 MsgCode::ElabUnsupported,

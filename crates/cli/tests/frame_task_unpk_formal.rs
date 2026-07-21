@@ -145,10 +145,7 @@ fn two_calls_isolated() {
            pt(x); pt(y); pt(x);\n\
          end\n\
          endmodule\n");
-    assert!(
-        o.contains("s=3") && o.contains("s=30"),
-        "got:\n{o}"
-    );
+    assert!(o.contains("s=3") && o.contains("s=30"), "got:\n{o}");
 }
 
 // ── §4.5.193: an OUTPUT unpacked-fixed array formal is now supported (md-packed slot

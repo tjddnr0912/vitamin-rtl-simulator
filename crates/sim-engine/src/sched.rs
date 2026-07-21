@@ -3198,10 +3198,10 @@ impl Kernel for Scheduler<'_, '_> {
             }
         };
         let name = match args.first() {
-            Some(&a) => resolve(&self.st, a),
+            Some(&a) => resolve(self.st, a),
             None => return Value::from_i128(0, 32, true),
         };
-        let mode = args.get(1).map(|&a| resolve(&self.st, a));
+        let mode = args.get(1).map(|&a| resolve(self.st, a));
         let open = |mode: &str| -> std::io::Result<std::fs::File> {
             let mut o = std::fs::OpenOptions::new();
             // a '+' mode (r+/w+/a+) is read-AND-write; plain w/a are write-only.

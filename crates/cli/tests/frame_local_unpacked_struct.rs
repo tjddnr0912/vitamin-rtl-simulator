@@ -38,113 +38,100 @@ fn run(src: &str) -> String {
 
 #[test]
 fn task_local_unpacked_struct() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { int a; int b; } pair_t;\n\
          task automatic t();\n\
            pair_t p;\n\
            p.a=3; p.b=4;\n\
            $display(\"s=%0d a=%0d b=%0d\", p.a+p.b, p.a, p.b);\n\
          endtask\n\
-         initial t();\nendmodule\n",
-    );
+         initial t();\nendmodule\n");
     assert!(o.contains("s=7 a=3 b=4"), "got:\n{o}");
 }
 
 #[test]
 fn function_local_unpacked_struct() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { int a; int b; } pair_t;\n\
          function automatic int f();\n\
            pair_t p;\n\
            p.a=5; p.b=6;\n\
            return p.a + p.b;\n\
          endfunction\n\
-         initial $display(\"f=%0d\", f());\nendmodule\n",
-    );
+         initial $display(\"f=%0d\", f());\nendmodule\n");
     assert!(o.contains("f=11"), "got:\n{o}");
 }
 
 #[test]
 fn frame_local_reinit_per_call() {
     // The packed-vector local is a frame-local, so each call gets fresh storage.
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { logic [7:0] x; logic [15:0] y; } rec_t;\n\
          task automatic t(int seed);\n\
            rec_t r;\n\
            r.x=seed; r.y=seed*256;\n\
            $display(\"x=%0d y=%0d\", r.x, r.y);\n\
          endtask\n\
-         initial begin t(3); t(7); end\nendmodule\n",
-    );
+         initial begin t(3); t(7); end\nendmodule\n");
     assert!(o.contains("x=3 y=768"), "got:\n{o}");
     assert!(o.contains("x=7 y=1792"), "got:\n{o}");
 }
 
 #[test]
 fn runtime_assign_pattern_in_task() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { logic [7:0] a; logic [7:0] b; } pr;\n\
          task automatic t();\n\
            pr p;\n\
            p = '{8'h11, 8'h22};\n\
            $display(\"%h %h\", p.a, p.b);\n\
          endtask\n\
-         initial t();\nendmodule\n",
-    );
+         initial t();\nendmodule\n");
     assert!(o.contains("11 22"), "got:\n{o}");
 }
 
 #[test]
 fn read_before_write_is_x_for_four_state() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { logic [7:0] a; logic [7:0] b; } pr;\n\
          task automatic t();\n\
            pr p;\n\
            p.a=8'h11;\n\
            $display(\"a=%h b=%h\", p.a, p.b);\n\
          endtask\n\
-         initial t();\nendmodule\n",
-    );
+         initial t();\nendmodule\n");
     assert!(o.contains("a=11 b=xx"), "got:\n{o}");
 }
 
 #[test]
 fn nonpackable_record_body_local_stays_loud() {
     // A string-member record is not packable → loud (correct-or-loud).
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { string name; int id; } rec_t;\n\
          task automatic t(); rec_t r; r.id=5; $display(\"%0d\", r.id); endtask\n\
-         initial t();\nendmodule\n",
+         initial t();\nendmodule\n");
+    assert!(
+        o.contains("E2002") || o.contains("E3009"),
+        "should be loud:\n{o}"
     );
-    assert!(o.contains("E2002") || o.contains("E3009"), "should be loud:\n{o}");
 }
 
 #[test]
 fn module_scope_record_unchanged() {
     // Regression: a module-scope unpacked-struct var keeps its member-net path.
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct { int a; int b; } pr;\n\
          pr p;\n\
-         initial begin p.a=3; p.b=4; $display(\"m=%0d\", p.a+p.b); end\nendmodule\n",
-    );
+         initial begin p.a=3; p.b=4; $display(\"m=%0d\", p.a+p.b); end\nendmodule\n");
     assert!(o.contains("m=7"), "got:\n{o}");
 }
 
 #[test]
 fn packed_struct_body_local_unchanged() {
     // Regression: a packed-struct body-local (the pre-existing supported path).
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct packed { int a; int b; } pr;\n\
          task automatic t(); pr p; p.a=3; p.b=4; $display(\"p=%0d\", p.a+p.b); endtask\n\
-         initial t();\nendmodule\n",
-    );
+         initial t();\nendmodule\n");
     assert!(o.contains("p=7"), "got:\n{o}");
 }

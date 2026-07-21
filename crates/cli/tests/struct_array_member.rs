@@ -122,27 +122,23 @@ fn signed_byte_field_sign_extends() {
 
 #[test]
 fn three_field_offsets() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct packed { logic [3:0] x; logic [7:0] y; logic [3:0] z; } t3;\n\
          t3 arr[2];\n\
          initial begin arr[0].x=4'hA; arr[0].y=8'hBC; arr[0].z=4'hD;\n\
            $display(\"%h %h %h w=%h\", arr[0].x, arr[0].y, arr[0].z, arr[0]);\n\
-         end\nendmodule\n",
-    );
+         end\nendmodule\n");
     assert!(o.contains("a bc d w=abcd"), "got:\n{o}");
 }
 
 #[test]
 fn trailing_subselect_read() {
-    let o = run(
-        "module top;\n\
+    let o = run("module top;\n\
          typedef struct packed { logic [15:0] a; logic [15:0] b; } pr;\n\
          pr arr[2];\n\
          initial begin arr[0].a=16'h1234;\n\
            $display(\"hi=%h lo=%h bit=%b\", arr[0].a[15:8], arr[0].a[7:0], arr[0].a[0]);\n\
-         end\nendmodule\n",
-    );
+         end\nendmodule\n");
     assert!(o.contains("hi=12 lo=34 bit=0"), "got:\n{o}");
 }
 
