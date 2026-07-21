@@ -17315,17 +17315,17 @@ impl<'s> Elaborator<'s> {
                     }
                     continue;
                 }
-                // §13.3 UARR (§4.5.188): an `input` unpacked-FIXED array formal
-                // (`byte b[4]`, `logic [63:0] w[80]`) lowers to an md-packed
-                // `[count][elem_w]` frame slot — IDENTICAL to the FUNCTION path
-                // (`reserve_frame_func`), so `b[i]` reuses the md-packed element
-                // read machinery and the caller packs the whole-array actual into
-                // the slot value (`emit_frame_task_call`). The value slot works on
-                // BOTH the suspendable-frame AND the synchronous `run_task_call`
-                // path (no heap needed — pass-by-value). Only INPUT reaches here;
-                // an OUTPUT/INOUT unpacked-array formal (pass-by-reference) stays
-                // loud (the `emit_frame_task_call` UARR guard).
-                if matches!(p.dir, ast::PortDir::Input) {
+                // §13.3 UARR (§4.5.188/193): an `input` OR `output` unpacked-FIXED
+                // array formal (`byte b[4]`, `logic [63:0] w[80]`) lowers to an
+                // md-packed `[count][elem_w]` frame slot — IDENTICAL to the FUNCTION
+                // path (`reserve_frame_func`), so `b[i]` reuses the md-packed element
+                // read/write machinery. INPUT: the caller packs the whole-array actual
+                // into the slot value. OUTPUT (§4.5.193): the body WRITES the slot; the
+                // caller copies the whole slot to a packed temp at exit and unpacks it
+                // into the caller array elements after the call (`emit_frame_task_call`).
+                // The value slot works on BOTH the suspendable-frame and the synchronous
+                // `run_task_call` path (no heap). An INOUT array formal stays loud.
+                if matches!(p.dir, ast::PortDir::Input | ast::PortDir::Output) {
                     if let Some(Ok(af)) = s.classify_array_formal(p) {
                         let (count, elem_w) = (af.count, af.elem_w);
                         let ext = Self::array_formal_ext(count, elem_w);
@@ -17533,6 +17533,10 @@ impl<'s> Elaborator<'s> {
             .unwrap_or(0);
         let mut in_binds: Vec<(u32, u32)> = Vec::new();
         let mut out_binds: Vec<(u32, ir::Lvalue)> = Vec::new();
+        // §4.5.193: (caller array path, packed-temp net name, formal shape) for each
+        // OUTPUT unpacked-fixed array formal — unpacked into the caller array elements
+        // in `ret` AFTER the call (the out-bind copied the md-packed slot to the temp).
+        let mut out_array_unpacks: Vec<(ast::HierPath, String, ArrayFormal)> = Vec::new();
         for (slot, (p, a)) in task.ports.iter().zip(eff_args.iter().copied()).enumerate() {
             let slot = slot as u32;
             let fw = self
@@ -17593,6 +17597,72 @@ impl<'s> Elaborator<'s> {
                     }
                 }
                 ast::PortDir::Output | ast::PortDir::Inout => {
+                    // §4.5.193: an OUTPUT unpacked-fixed array formal (`output byte
+                    // digest[N]`). The body writes the md-packed slot; copy the WHOLE
+                    // slot to a fresh packed temp at exit (a normal scalar out-bind),
+                    // then UNPACK the temp into the caller array elements after the call
+                    // (below, in `ret`). Reuses the md-packed slot (§4.5.188) — no heap,
+                    // works on the synchronous and suspendable paths. INOUT array = loud.
+                    if matches!(p.dir, ast::PortDir::Output) {
+                        if let Some(cls) = self.classify_array_formal(p) {
+                            match cls {
+                                Ok(af) => {
+                                    if let ast::ExprKind::Ident(path) = &a.kind {
+                                        if path.segments.len() == 1 {
+                                            let arr_net = self.resolve_net(path);
+                                            self.deny_const_param_write(
+                                                arr_net,
+                                                "connect an output array to",
+                                            );
+                                            let w = af.count.saturating_mul(af.elem_w).max(1);
+                                            let packed_net = self.nets.len() as u32;
+                                            let pname = format!(
+                                                "__outpack${tname}${}${packed_net}",
+                                                p.name.name
+                                            );
+                                            self.add_net(
+                                                &pname,
+                                                ir::NetVar {
+                                                    kind: ir::NetKind::Reg,
+                                                    width: w,
+                                                    msb: w.saturating_sub(1),
+                                                    lsb: 0,
+                                                    signed: false,
+                                                    array_len: 1,
+                                                    dir: ir::PortDir::Internal,
+                                                    init: default_init(ast::NetVarKind::Reg, w),
+                                                },
+                                            );
+                                            out_binds
+                                                .push((slot, whole_net_lvalue(packed_net)));
+                                            out_array_unpacks.push((path.clone(), pname, af));
+                                            continue;
+                                        }
+                                    }
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "frame task `{tname}`: output array formal `{}` \
+                                             needs a bare array actual",
+                                            p.name.name
+                                        ),
+                                    );
+                                    continue;
+                                }
+                                Err(reason) => {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "frame task `{tname}`: output array formal `{}` \
+                                             unsupported — {reason}",
+                                            p.name.name
+                                        ),
+                                    );
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                     if matches!(p.dir, ast::PortDir::Inout) {
                         let eid = self.lower_ctx_or_plain(a, fw); // inout reads in too
                         in_binds.push((slot, eid));
@@ -17666,6 +17736,56 @@ impl<'s> Elaborator<'s> {
             // top-level: keyed by (process template, process-local block).
             self.task_calls_proc
                 .insert((self.cur_proc, call_block), info);
+        }
+        // §4.5.193: unpack each OUTPUT array formal's packed temp into the caller array
+        // elements — `caller[i] = packed[i*ew +: ew]` — emitted in `ret`, which runs
+        // AFTER the task's exit (where the out-bind wrote the temp). A bit-faithful copy
+        // (element signedness is the CALLER array's, applied on later reads, so no
+        // `$signed` wrap here). Built as AST + `lower_stmt` so the array-element write /
+        // md-packed part-select read reuse the normal lowering. A NESTED call's writes
+        // to a module net are caught by the frame subset check (correct-or-loud).
+        for (arr_path, pname, af) in &out_array_unpacks {
+            let sp = arr_path.span;
+            let dec = |v: u32| ast::Expr {
+                kind: ast::ExprKind::IntLit {
+                    kind: ast::IntLitKind::Decimal,
+                    raw: v.to_string(),
+                },
+                span: sp,
+            };
+            for i in 0..af.count {
+                let packed_read = ast::Expr {
+                    kind: ast::ExprKind::IndexedPart {
+                        base: Box::new(ast::Expr {
+                            kind: ast::ExprKind::Ident(ast::HierPath {
+                                segments: vec![ast::Ident {
+                                    name: pname.clone(),
+                                    span: sp,
+                                }],
+                                span: sp,
+                            }),
+                            span: sp,
+                        }),
+                        offset: Box::new(dec(i * af.elem_w)),
+                        width: Box::new(dec(af.elem_w)),
+                        dir: ast::PartDir::PlusColon,
+                    },
+                    span: sp,
+                };
+                let lhs = ast::Lvalue::BitSelect {
+                    base: Box::new(ast::Lvalue::Ident(arr_path.clone())),
+                    index: Box::new(dec(i)),
+                    span: sp,
+                };
+                let stmt = ast::Stmt::Blocking {
+                    lhs,
+                    delay: None,
+                    event: None,
+                    rhs: packed_read,
+                    span: sp,
+                };
+                self.lower_stmt(b, &stmt);
+            }
         }
     }
 
@@ -19008,7 +19128,7 @@ impl<'s> Elaborator<'s> {
             !p.unpacked.is_empty()
                 && !self.is_input_dyn_array_formal(p)
                 && !(is_framed
-                    && matches!(p.dir, ast::PortDir::Input)
+                    && matches!(p.dir, ast::PortDir::Input | ast::PortDir::Output)
                     && matches!(self.classify_array_formal(p), Some(Ok(_))))
         }) {
             self.error(

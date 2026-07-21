@@ -151,17 +151,19 @@ fn two_calls_isolated() {
     );
 }
 
-// ── correct-or-loud: an OUTPUT unpacked-array formal (pass-by-ref) stays loud ──
+// ── §4.5.193: an OUTPUT unpacked-fixed array formal is now supported (md-packed slot
+// → packed-temp out-bind → post-call unpack). Detailed coverage lives in
+// frame_task_output_array.rs; this asserts the former loud is gone. ──
 #[test]
-fn output_array_formal_stays_loud() {
+fn output_array_formal_now_supported() {
     let o = run("module top;\n\
          task automatic mk(output byte b[3]);\n\
            b[0]=7; b[1]=8; b[2]=9;\n\
          endtask\n\
          byte d[3];\n\
-         initial begin mk(d); $display(\"%0d\", d[0]); end\n\
+         initial begin mk(d); $display(\"%0d %0d %0d\", d[0], d[1], d[2]); end\n\
          endmodule\n");
-    assert!(o.contains("E3009"), "should be loud:\n{o}");
+    assert!(o.contains("7 8 9"), "got:\n{o}");
 }
 
 // ── correct-or-loud: a STATIC (non-framed) task's unpacked-fixed formal stays loud
