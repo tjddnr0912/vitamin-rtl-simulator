@@ -8671,7 +8671,21 @@ impl<'s> Elaborator<'s> {
                         for name in &d.names {
                             let Some(init) = &name.init else { continue };
                             let push = if scalar_string {
+                                // A scalar string (no dims) rides the t0 pre-sweep. A
+                                // string DYNAMIC array (`string s[] = '{…}`) rides it too:
+                                // its `'{…}` is expanded by the flush (`new[N]` + element
+                                // writes) exactly like the module-scope path
+                                // (`collect_var_init_drivers`'s `is_dyn_str_init`). Without
+                                // this the dimensioned-string branch dropped the init here
+                                // (`name.unpacked` is non-empty → `push` false), leaving the
+                                // block-local array silently EMPTY while the identical
+                                // module-scope decl worked (a pre-existing silent-wrong).
+                                // Other string dims (fixed / multi / non-`'{…}`) were
+                                // loud-rejected at the decl, so they never reach here.
                                 name.unpacked.is_empty()
+                                    || (name.unpacked.len() == 1
+                                        && matches!(name.unpacked[0], ast::Dim::Dyn)
+                                        && matches!(init.kind, ast::ExprKind::AssignPattern(_)))
                             } else {
                                 // Mirror `collect_var_init_drivers`: a non-constant
                                 // initializer rides the t0 pre-sweep. This INCLUDES an

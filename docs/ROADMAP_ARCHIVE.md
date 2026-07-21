@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.183 SILENT-WRONG 수정: block-local `string s[] = '{…}` dyn-array init이 조용히 drop → supported (module-scope parity) (2026-07-21, branch feat-block-local-string-dyn-init) ✅
+
+**발굴 경위**: §4.5.182(queue/dyn `{…}` concat) 적대 검증 중, string dyn-array가 concat에서 loud 유지됨을 확인하려고 baseline `string s[] = '{"a","b","c"}`(apostrophe 형태)를 테스트하다 **vita SZ=0(빈 배열)·빈 문자열 vs iverilog SZ=3(a b c)** 발견. int dyn(`int s[]='{4,5,6}`)은 SZ=3 정상. 축소 격리: **module-scope 선언은 정상**(SZ=3)이나 **동일 선언을 initial/always BLOCK 내부(block-local)에 두면 SZ=0**.
+
+**근본 원인**: block-local decl-init 수집기(`hoist_block_local_nets` 내부, 8667-8705)의 `scalar_string` 판정이 **base range/packed dims만** 보고 per-name unpacked dims는 무시→`string s[]`(dimensioned)도 `scalar_string=true`로 분류. 이어 push gate가 `name.unpacked.is_empty()`라, dimensioned string(`s[]`, unpacked=`[Dim::Dyn]`)은 **push=false→`'{…}` init이 t0 pre-sweep에 수집 안 됨→조용히 drop**→배열이 빈 채. module-scope 수집기(`collect_var_init_drivers`, 12391-12403)는 이미 `is_dyn_str_init` 특례(unpacked.len==1 && Dim::Dyn && AssignPattern)로 push→정상. 즉 **두 scope 수집기의 비대칭**이 원인(module엔 특례 有·block-local엔 無)→block-local만 pre-existing silent-wrong.
+
+**fix(supported·module parity)**: block-local `scalar_string` push gate에 module-scope `is_dyn_str_init`와 동일 조건 미러 추가—`name.unpacked==[Dim::Dyn]` & init이 `AssignPattern`이면 push. 기존 `pending_block_local_string_inits`(deferred string list·module string init 뒤 flush) 라우팅을 그대로 타고 flush(`dyn_decl_init_stmts`: `new[N]`+element writes)로 확장. **왜 loud 아니라 supported**: module-scope가 이미 동작(supported)하므로 block-local도 parity로 supported화가 맞음(loud면 비대칭 온존). **correct-or-loud**: fixed(`s[2]`)/multi-dim/non-`'{…}` string은 조건 미매칭→push 안 됨(기존 loud 유지)·`{…}` concat string은 §4.5.182가 handle-gate서 loud 유지(silent-empty 방지).
+
+**적대 differential(vita vs iverilog)**: 全 MATCH — block-local basic(foo bar baz 3)·named block(x y)·single(only 1)·`new[](copy)`+element write(a b c)·always block-local(p q)·module-scope 회귀(a b c)·scalar string 회귀(hello)·int dyn 회귀(4 5 6). **LOUD 유지(silent-wrong 0)**: string `{…}` concat block-local·fixed `string[2]`(iverilog는 compile OK지만 별개 gap·correct-or-loud). format 22 불변(elaborate collect gate만·AST/IR 무변화). **3849 green**(+9). ⭐교훈: ① **인접 feature(§4.5.182 string 제외)의 적대 검증이 pre-existing silent-wrong 발굴**(string dyn baseline 확인하다). ② **scope별 수집기 비대칭이 silent-wrong 원천**(module엔 `is_dyn_str_init` 有·block-local엔 無→drop)·분류 flag(`scalar_string`)가 per-name unpacked dim을 무시(base만 봄). ③ **module-scope가 이미 supported면 block-local도 supported로**(loud 아님·parity 복원). `block_local_string_dyn_init.rs`×9. 상세=본 엔트리·ROADMAP §2.
+
 #### 4.5.182 queue / dynamic-array `{…}` (unpacked-array concat) decl-init loud→supported (Concat → `'{…}` flush 라우팅) (2026-07-21, branch feat-queue-dyn-brace-init) ✅
 
 **발굴 경위**: §4.5.181 후 fresh-area probe 계속 — queue 메서드(`.insert`/`.delete(idx)`) 차분 중 `int q[$] = {1,2,3,4};`가 vita E3009 vs iverilog 정상으로 발견. 격리하니 메서드는 동작하고 **initializer 자체**(`{…}` 비-apostrophe 형태)가 원인. `int d[] = {1,2,3};`(dyn array)·`{a,b,c}`(scalar vars)·`{42}`(single) 全 동일 loud.
