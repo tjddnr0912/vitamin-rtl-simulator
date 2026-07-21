@@ -17196,13 +17196,12 @@ impl<'s> Elaborator<'s> {
             // scope), visible to the body, restored before the scope closes.
             let (saved_labels, saved_meta) = s.push_body_enum_labels(&func.body_enums, &func.body);
             let mut b = ProcessBuilder::new();
-            // §13.4.4: run body-local declaration initializers at entry (top-level
-            // body_decls, then block-locals — at frame entry, an approximation of
-            // per-block-entry init that is exact for the common single-entry case).
+            // §13.4.4 / §4.5.189: TOP-LEVEL body_decls run at frame entry (once per
+            // activation); NESTED block-local inits run at their OWN block entry (the
+            // `Block` arm of `lower_stmt`, gated on `in_frame_body`) so a decl-init
+            // inside a LOOP re-initializes each iteration (IEEE automatic lifetime,
+            // §6.21). Frame-entry emission was a single-entry-only approximation.
             s.emit_frame_local_inits(&mut b, &func.body_decls);
-            let mut block_locals = Vec::new();
-            collect_block_local_decls(&func.body, &mut block_locals);
-            s.emit_frame_local_inits(&mut b, &block_locals);
             if has_ret {
                 let exit = b.new_block();
                 s.cur_return = Some((Some(retvar), exit));
@@ -17452,12 +17451,14 @@ impl<'s> Elaborator<'s> {
             // labels resolve inside the body without leaking to the module.
             let (saved_labels, saved_meta) = s.push_body_enum_labels(&task.body_enums, &task.body);
             let mut b = ProcessBuilder::new();
-            // §13.4.4: run body-local declaration initializers at entry (top-level
-            // body_decls, then block-locals).
+            // §13.4.4 / §4.5.189: TOP-LEVEL body_decls run at frame entry (once per
+            // activation). NESTED block-local inits run at their OWN block entry (the
+            // `Block` arm of `lower_stmt`, gated on `in_frame_body`) so a decl-init
+            // inside a LOOP re-initializes each iteration — the IEEE automatic-lifetime
+            // rule (§6.21). Emitting them at frame entry was a single-entry-only
+            // approximation that silently ran a loop-body init exactly ONCE (an X that
+            // never re-inits ⇒ silent-wrong for `for(..) begin int t = f(k); .. end`).
             s.emit_frame_local_inits(&mut b, &task.body_decls);
-            let mut block_locals = Vec::new();
-            collect_block_local_decls(&task.body, &mut block_locals);
-            s.emit_frame_local_inits(&mut b, &block_locals);
             if has_ret {
                 let exit = b.new_block();
                 s.cur_return = Some((None, exit));
@@ -30081,14 +30082,18 @@ impl Elaborator<'_> {
             // begin..end: block-local decls were already hoisted to module nets in
             // the Nets phase (hoist_block_local_nets), so just lower the stmts here.
             ast::Stmt::Block {
-                label, stmts, span, ..
+                label,
+                decls,
+                stmts,
+                span,
+                ..
             } => {
                 // Named block targeted by some `disable` in its own body:
                 // allocate an exit BB so the disable lowers as a Goto (doc-17
                 // lowering row). Allocation is LAZY (pre-scan) so unlabeled /
                 // never-disabled blocks lower byte-identically to the old CFG.
-                // (A process block-local NON-const initializer is static-lifetime —
-                // applied ONCE at t0 by the synthesized var-init `initial`, NOT on
+                // (A MODULE-process block-local NON-const initializer is static-lifetime
+                // — applied ONCE at t0 by the synthesized var-init `initial`, NOT on
                 // each block entry — see `hoist_block_local_nets`.)
                 let exit = label.as_ref().and_then(|lab| {
                     stmts
@@ -30100,6 +30105,13 @@ impl Elaborator<'_> {
                             exit
                         })
                 });
+                // §4.5.189: inside a FRAME body (automatic task/function), a nested
+                // block's decl-inits run at BLOCK ENTRY (here) — so a decl-init inside a
+                // LOOP re-initializes every iteration (IEEE automatic lifetime, §6.21).
+                // The outermost body block has empty `decls` (parser), so the top-level
+                // body_decls still init once at frame entry (`emit_frame_local_inits`).
+                // MODULE-process block-locals keep their static (once-at-t0) init.
+                let emit_block_inits = self.in_frame_body;
                 // DUP (round-5): if this block has `$blk$`-scoped locals, lower its
                 // body under the SAME segment the Nets-phase hoist used so a scoped
                 // local resolves to its own net; `walk_scopes_key` treats `$blk$` as
@@ -30108,11 +30120,17 @@ impl Elaborator<'_> {
                 if self.scoped_block_locals.contains_key(&span.lo) {
                     let seg = format!("$blk${}", span.lo);
                     self.with_scope(&seg, |s| {
+                        if emit_block_inits {
+                            s.emit_frame_local_inits(b, decls);
+                        }
                         for st in stmts {
                             s.lower_stmt(b, st);
                         }
                     });
                 } else {
+                    if emit_block_inits {
+                        self.emit_frame_local_inits(b, decls);
+                    }
                     for st in stmts {
                         self.lower_stmt(b, st);
                     }
