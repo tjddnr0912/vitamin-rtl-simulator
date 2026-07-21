@@ -3,18 +3,18 @@
 //! flattened by v1 to ONE module net. That coalesce was assumed "safe — the net is just
 //! reused in time," but it is byte-identical to iverilog's distinct-per-scope variables
 //! ONLY when the two decls have the SAME type AND the second block assigns before it reads.
-//! Otherwise:
-//!   - a DIFFERENT type (sign/width) makes the second block read/write the shared net with
-//!     the wrong sign or width — wrong `%d` sign, wrong `>>>` arithmetic, wrong `%h` width
-//!     (`begin logic signed [7:0] y; … end  begin logic [7:0] y; y=x; $display("%0d",y); end`
-//!     printed a negative value where iverilog printed the unsigned 253);
-//!   - a READ-BEFORE-WRITE observes the FIRST block's leftover value instead of the X a
-//!     fresh variable holds (`begin y=5; end  begin logic [7:0] y; $display(y); end` printed
-//!     5 where iverilog printed x).
-//! Both are silent-wrong. v1 has no per-block scope to give the second local distinct typed
-//! storage, so it is now loud (E3009). The SAFE same-type + definitely-assigned coalesce
-//! (the common `for`/`tmp` name reuse) is unaffected. A legitimate SHADOW of a module-scope
-//! var (handled by the struct/enum/typedef scoping or the scope-leak guard) is unaffected.
+//! Otherwise it is silent-wrong two ways. A DIFFERENT type (sign/width) makes the second
+//! block read/write the shared net with the wrong sign or width — wrong `%d` sign, wrong
+//! `>>>` arithmetic, wrong `%h` width (`begin logic signed [7:0] y; … end  begin logic [7:0]
+//! y; y=x; $display("%0d",y); end` printed a negative value where iverilog printed the
+//! unsigned 253). And a READ-BEFORE-WRITE observes the FIRST block's leftover value instead
+//! of the X a fresh variable holds (`begin y=5; end  begin logic [7:0] y; $display(y); end`
+//! printed 5 where iverilog printed x).
+//!
+//! v1 has no per-block scope to give the second local distinct typed storage, so it is now
+//! loud (E3009). The SAFE same-type + definitely-assigned coalesce (the common `for`/`tmp`
+//! name reuse) is unaffected. A legitimate SHADOW of a module-scope var (handled by the
+//! struct/enum/typedef scoping or the scope-leak guard) is unaffected.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
