@@ -3361,24 +3361,25 @@ impl<'a> SimState<'a> {
                         }
                     }
                     let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
-                    let has_dyn = !dyn_snaps.is_empty();
-                    if has_dyn && !self.frame_dyn_reentry_ok(info.callee) {
+                    // V2A/V2B (§4.5.194): snapshot dyn INPUT formals IN; deep-copy OUTPUT/INOUT
+                    // dyn formals OUT — BEFORE the free clears the formal slot. Self-gating, so
+                    // call reentry/snapshot/free unconditionally.
+                    if !self.frame_dyn_reentry_ok(info.callee) {
                         break; // recursive/concurrent dyn formal → fatal latched; stop
                     }
-                    if has_dyn {
-                        self.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
-                    }
+                    self.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
                     let outs = self
                         .run_task(info.callee, &in_v, &out_s)
                         .unwrap_or_default();
-                    if has_dyn {
-                        self.frame_dyn_free(info.callee);
-                    }
-                    // callee popped → top frame is the calling task again; write
-                    // its frame-local output lvalues.
-                    for ((_, lval), val) in info.out_binds.iter().zip(outs) {
+                    // callee popped → top frame is the calling task again; write its
+                    // frame-local output lvalues (a dyn out-formal deep-copies to the heap).
+                    for ((s, lval), val) in info.out_binds.iter().zip(outs) {
+                        if self.frame_dyn_out_bind(info.callee, *s, lval) {
+                            continue;
+                        }
                         self.frame_write_lvalue(lval, val);
                     }
+                    self.frame_dyn_free(info.callee);
                     cur = *ret_bb;
                 }
                 Terminator::Return => break,
@@ -3605,6 +3606,35 @@ impl<'a> SimState<'a> {
                 *cell = obj;
             }
         }
+    }
+
+    /// V2B (§4.5.194): deep-copy an OUTPUT/INOUT dyn-array FORMAL's heap array OUT to the
+    /// caller's array at the subroutine's exit — the mirror of `frame_dyn_snapshot_formals`'s
+    /// caller→formal copy-IN. Must run BEFORE `frame_dyn_free` frees the formal slot.
+    pub(crate) fn frame_dyn_copy_out(&self, formal_net: u32, caller_net: u32) {
+        let obj = self
+            .dyn_heap
+            .borrow()
+            .get(formal_net as usize)
+            .and_then(|o| o.as_ref().cloned());
+        if let Some(cell) = self.dyn_heap.borrow_mut().get_mut(caller_net as usize) {
+            *cell = obj;
+        }
+    }
+
+    /// V2B (§4.5.194): if out-slot `slot` of `callee` is a DYNAMIC-array formal, deep-copy
+    /// it out to the caller net (`lval.chunks[0].net`) and return `true` (the caller skips
+    /// its scalar `write_lvalue`/`frame_write_lvalue`, whose value would be a meaningless
+    /// read of the unused scalar frame slot). A non-dyn out-slot returns `false`.
+    pub(crate) fn frame_dyn_out_bind(&self, callee: u32, slot: u32, lval: &Lvalue) -> bool {
+        let formal_net = self.func_table[callee as usize].base_net + slot;
+        if self.ir.nets[formal_net as usize].kind != NetKind::DynArray {
+            return false;
+        }
+        if let Some(c) = lval.chunks.first() {
+            self.frame_dyn_copy_out(formal_net, c.net);
+        }
+        true
     }
 
     /// §4.5.194 (V5): execute a `loc = new[n]` (`Stmt::SysTask { DynNew, args }`) inside a

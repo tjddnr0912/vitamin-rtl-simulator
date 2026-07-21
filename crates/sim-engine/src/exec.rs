@@ -502,13 +502,18 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     let frame = sched.activities[pi as usize].call_stack.pop().unwrap();
                     let out_s: Vec<u32> = frame.out_binds.iter().map(|&(s, _)| s).collect();
                     let outs = sched.st.exit_task_frame(frame.callee, &out_s);
-                    // V5: free this activation's frame dyn-array locals so a later call
-                    // starts fresh (size 0) and the reentry guard next sees None.
-                    sched.st.frame_dyn_free(frame.callee);
-                    for ((_, lval), val) in frame.out_binds.iter().zip(outs) {
+                    // V2B (§4.5.194): copy out BEFORE the free — the deep-copy of an OUTPUT/
+                    // INOUT dyn formal reads its heap slot, which frame_dyn_free would clear.
+                    for ((s, lval), val) in frame.out_binds.iter().zip(outs) {
+                        if sched.st.frame_dyn_out_bind(frame.callee, *s, lval) {
+                            continue; // dyn formal → heap deep-copy, not the scalar slot value
+                        }
                         let offs = sched.resolve_lvalue_offsets(lval);
                         sched.st.write_lvalue(lval, val, &offs);
                     }
+                    // V5: free this activation's frame dyn-array formals/locals so a later
+                    // call starts fresh (size 0) and the reentry guard next sees None.
+                    sched.st.frame_dyn_free(frame.callee);
                     if sched.activities[pi as usize].call_stack.is_empty() {
                         bb = frame.ret_bb;
                     } else {
@@ -593,22 +598,25 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         // V2A-dyn (§4.5.194): snapshot a dyn-array INPUT formal into its heap
                         // slot before the synchronous call, free after (as the top-level arm).
                         let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
-                        let has_dyn = !dyn_snaps.is_empty();
-                        if has_dyn && !sched.st.frame_dyn_reentry_ok(info.callee) {
+                        // V2A/V2B (§4.5.194): snapshot a dyn-array INPUT formal IN before the
+                        // synchronous call; deep-copy an OUTPUT/INOUT dyn formal OUT after.
+                        // reentry_ok/snapshot/free self-gate on the callee's dyn state, so call
+                        // them unconditionally (snapshot no-ops with no input dyn; reentry/free
+                        // no-op with no dyn formal/local).
+                        if !sched.st.frame_dyn_reentry_ok(info.callee) {
                             return Step::Fatal;
                         }
-                        if has_dyn {
-                            sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
-                        }
+                        sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
                         if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
-                            for ((_, lval), val) in info.out_binds.iter().zip(outs) {
+                            for ((s, lval), val) in info.out_binds.iter().zip(outs) {
+                                if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
+                                    continue; // dyn formal → heap deep-copy, not the scalar value
+                                }
                                 let offs = sched.resolve_lvalue_offsets(lval);
                                 sched.st.write_lvalue(lval, val, &offs);
                             }
                         }
-                        if has_dyn {
-                            sched.st.frame_dyn_free(info.callee);
-                        }
+                        sched.st.frame_dyn_free(info.callee);
                     }
                     // advance THIS frame past the (subset / no-info) call.
                     sched.activities[pi as usize]
@@ -657,22 +665,23 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     // synchronous run_task_call (dyn_heap is interior-mutable now) and freed
                     // after — the sync executor READS the formal from the heap, exactly like
                     // the suspendable frame-entry snapshot (§4.5.173).
-                    let has_dyn = !dyn_snaps.is_empty();
-                    if has_dyn && !sched.st.frame_dyn_reentry_ok(info.callee) {
+                    // V2A/V2B (§4.5.194): snapshot a dyn INPUT formal IN before the call;
+                    // deep-copy an OUTPUT/INOUT dyn formal OUT after. All three self-gate on
+                    // the callee's dyn state → call unconditionally.
+                    if !sched.st.frame_dyn_reentry_ok(info.callee) {
                         return Step::Fatal;
                     }
-                    if has_dyn {
-                        sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
-                    }
+                    sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
                     if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
-                        for ((_, lval), val) in info.out_binds.iter().zip(outs) {
+                        for ((s, lval), val) in info.out_binds.iter().zip(outs) {
+                            if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
+                                continue; // dyn formal → heap deep-copy, not the scalar value
+                            }
                             let offs = sched.resolve_lvalue_offsets(lval);
                             sched.st.write_lvalue(lval, val, &offs);
                         }
                     }
-                    if has_dyn {
-                        sched.st.frame_dyn_free(info.callee);
-                    }
+                    sched.st.frame_dyn_free(info.callee);
                 }
                 bb = *ret_bb;
             }

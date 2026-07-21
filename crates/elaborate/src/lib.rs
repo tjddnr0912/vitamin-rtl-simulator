@@ -16391,7 +16391,16 @@ impl<'s> Elaborator<'s> {
             // path hoists its body-locals under a per-call scope; see
             // `inline_task`). Framing a static task would wrongly subject it to the
             // frame-call subset (no $display / module-net writes).
-            if t.automatic || reaches(name, name, &edges) {
+            // V2B (§4.5.194): an OUTPUT/INOUT dynamic-array formal MUST be framed — the
+            // deep-copy-OUT at exit needs the frame's per-activation heap slot (the inline
+            // path has no dyn binding). (An INPUT dyn formal works inline via the R11 alias,
+            // so it does not force a frame.)
+            if t.automatic
+                || reaches(name, name, &edges)
+                || t.ports
+                    .iter()
+                    .any(|p| self.is_output_or_inout_dyn_array_formal(p))
+            {
                 set.insert(name.clone());
             }
         }
@@ -17265,10 +17274,10 @@ impl<'s> Elaborator<'s> {
                 // exec.rs). Reserved exactly like a frame-local dyn-array LOCAL (§4.5.171),
                 // so V5's net-range lifecycle (`func_has_dyn_local` → reentry guard +
                 // free-at-exit) covers it automatically and `b[i]`/`b.size()` route to the
-                // heap (`read_net` frame_local dyn branch). Only INPUT reaches here — an
-                // output/inout dyn-array formal is already loud (`emit_frame_task_call`
-                // guard above).
-                if s.is_input_dyn_array_formal(p) {
+                // heap (`read_net` frame_local dyn branch). V2B (§4.5.194): an OUTPUT/INOUT
+                // dyn formal reserves the SAME `DynArray` net — the body writes it and the
+                // engine deep-copies it out to the caller at exit (INOUT also copies in).
+                if s.is_input_dyn_array_formal(p) || s.is_output_or_inout_dyn_array_formal(p) {
                     s.add_net(
                         &p.name.name,
                         ir::NetVar {
@@ -17570,6 +17579,40 @@ impl<'s> Elaborator<'s> {
                     }
                 }
                 ast::PortDir::Output | ast::PortDir::Inout => {
+                    // V2B (§4.5.194): an OUTPUT/INOUT DYNAMIC-array formal. The body writes the
+                    // DynArray heap slot (new[]/element); the engine deep-copies it OUT to the
+                    // caller's dyn array at the subroutine's exit. INOUT also snapshots the
+                    // caller IN at entry — emit a BARE `Signal` in-bind (like the input-dyn
+                    // path) so `split_frame_in_binds` routes it to `frame_dyn_snapshot_formals`.
+                    // The out-bind is the caller's whole dyn net; the engine detects the
+                    // DynArray out-slot and does the heap copy instead of a scalar write.
+                    if self.is_output_or_inout_dyn_array_formal(p) {
+                        match self.dyn_array_actual_net(a, p) {
+                            Some(caller_net) => {
+                                self.deny_const_param_write(
+                                    caller_net,
+                                    "connect an output/inout dynamic array to",
+                                );
+                                if matches!(p.dir, ast::PortDir::Inout) {
+                                    let sig = self.push_expr(ir::Expr::Signal {
+                                        net: caller_net,
+                                        word: None,
+                                    });
+                                    in_binds.push((slot, sig));
+                                }
+                                out_binds.push((slot, whole_net_lvalue(caller_net)));
+                            }
+                            None => self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "frame task `{tname}`: output/inout dynamic-array formal \
+                                     `{}` needs a bare matching dynamic-array actual",
+                                    p.name.name
+                                ),
+                            ),
+                        }
+                        continue;
+                    }
                     // §4.5.193: an OUTPUT unpacked-fixed array formal (`output byte
                     // digest[N]`). The body writes the md-packed slot; copy the WHOLE
                     // slot to a fresh packed temp at exit (a normal scalar out-bind),
@@ -17802,6 +17845,37 @@ impl<'s> Elaborator<'s> {
                     in_binds.push((slot, eid));
                 }
                 ast::PortDir::Output | ast::PortDir::Inout => {
+                    // V2B (§4.5.194): an OUTPUT/INOUT DYNAMIC-array formal on a FUNCTION
+                    // (driven through run_task, same as a task). The engine deep-copies the
+                    // formal's heap array OUT to the caller at exit; INOUT also snapshots the
+                    // caller IN (a bare Signal in-bind → frame_dyn_snapshot_formals).
+                    if self.is_output_or_inout_dyn_array_formal(p) {
+                        match self.dyn_array_actual_net(a, p) {
+                            Some(caller_net) => {
+                                self.deny_const_param_write(
+                                    caller_net,
+                                    "connect an output/inout dynamic array to",
+                                );
+                                if matches!(p.dir, ast::PortDir::Inout) {
+                                    let sig = self.push_expr(ir::Expr::Signal {
+                                        net: caller_net,
+                                        word: None,
+                                    });
+                                    in_binds.push((slot, sig));
+                                }
+                                out_binds.push((slot, whole_net_lvalue(caller_net)));
+                            }
+                            None => self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "function output/inout dynamic-array formal `{}` needs a \
+                                     bare matching dynamic-array actual",
+                                    p.name.name
+                                ),
+                            ),
+                        }
+                        continue;
+                    }
                     if matches!(p.dir, ast::PortDir::Inout) {
                         let eid = self.lower_ctx_or_plain(a, fw); // inout reads in too
                         in_binds.push((slot, eid));
@@ -19115,6 +19189,12 @@ impl<'s> Elaborator<'s> {
             // A scalar/vector formal, or a supported `input` DYNAMIC-array formal
             // (aliased/snapshotted on either path), is fine.
             if p.unpacked.is_empty() || self.is_input_dyn_array_formal(p) {
+                return false;
+            }
+            // V2B (§4.5.194): a FRAMED task's OUTPUT/INOUT dyn-array formal is supported —
+            // reserved as a DynArray net, deep-copied OUT to the caller at exit (INOUT also
+            // copied IN). An inline (non-framed) task has no frame to copy from → loud below.
+            if is_framed && self.is_output_or_inout_dyn_array_formal(p) {
                 return false;
             }
             // Any OTHER unpacked-array formal is loud UNLESS it is a FRAMED task's
@@ -20442,6 +20522,26 @@ impl<'s> Elaborator<'s> {
     /// is aliased (queue/assoc/multi-dim, and real/string/handle elements, are not).
     fn is_input_dyn_array_formal(&self, p: &ast::TfPort) -> bool {
         matches!(p.dir, ast::PortDir::Input)
+            && p.unpacked.len() == 1
+            && matches!(p.unpacked[0], ast::Dim::Dyn)
+            && !matches!(
+                p.net_or_var,
+                Some(
+                    ast::NetVarKind::String
+                        | ast::NetVarKind::Real
+                        | ast::NetVarKind::ClassHandle
+                        | ast::NetVarKind::Event
+                )
+            )
+    }
+
+    /// V2B (§4.5.194): the OUTPUT/INOUT twin of `is_input_dyn_array_formal` — an
+    /// `output`/`inout` dynamic-array formal (`output byte b[]`). Reserved as a `DynArray`
+    /// net like an input formal (§4.5.171 lifecycle); the body writes it (`new[]` / element),
+    /// and the engine DEEP-COPIES the formal's heap array OUT to the caller's array at the
+    /// subroutine's exit (INOUT also snapshots the caller IN at entry).
+    fn is_output_or_inout_dyn_array_formal(&self, p: &ast::TfPort) -> bool {
+        matches!(p.dir, ast::PortDir::Output | ast::PortDir::Inout)
             && p.unpacked.len() == 1
             && matches!(p.unpacked[0], ast::Dim::Dyn)
             && !matches!(
