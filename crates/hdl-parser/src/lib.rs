@@ -1109,6 +1109,17 @@ impl Parser<'_, '_> {
                 {
                     e = self.parse_record_array_member(e);
                 }
+                // §4.5.190: `arr[i].field` where `arr` is a PACKED-STRUCT 1-D array
+                // (`struct_1d_array_vars`) — a member READ = a part-select on the packed
+                // element value `arr[i]`. Checked before `is_indexed_hier_base` so an
+                // array-element member wins over the generate-array hierarchical path.
+                Some(TokenKind::Dot)
+                    if self.struct_1d_array_member_base(&e)
+                        && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+                        && self.peek_at(2) != Some(TokenKind::LParen) =>
+                {
+                    e = self.parse_struct_array_member(e);
+                }
                 // HIER-REST②: a `.` after a `name[idx]` select is a hierarchical
                 // reference into a generate / instance-array element (`g[0].x`,
                 // `bank[3].c.r`). Fold the CONSTANT index into the scope-segment name
@@ -8156,6 +8167,56 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// §4.5.190: is `e` an `arr[i]` element-select whose base is a PACKED-STRUCT 1-D
+    /// array var (`struct_1d_array_vars`)? Gates the `arr[i].field` member desugar.
+    fn struct_1d_array_member_base(&self, e: &Expr) -> bool {
+        if let ExprKind::BitSelect { base, .. } = &e.kind {
+            if let ExprKind::Ident(p) = &base.kind {
+                return p.segments.len() == 1
+                    && self.struct_1d_array_vars.contains(&p.segments[0].name);
+            }
+        }
+        false
+    }
+
+    /// The packed-struct field geometry `(off, w, ascending, signed, dbase, stride)`
+    /// for element member `arr[i].field` — `arr`'s struct type (`var_struct`) laid out
+    /// in `struct_layouts`. `None` for an unknown field.
+    fn struct_array_field_geom(
+        &self,
+        arr: &str,
+        field: &str,
+    ) -> Option<(u32, u32, bool, bool, i64, u32)> {
+        let tyname = self.var_struct.get(arr)?;
+        self.struct_layouts.get(tyname)?.field(field)
+    }
+
+    /// §4.5.190 (read): parse `arr[i].field` (cursor at `.`) → a part-select on the
+    /// packed element value, reusing the scalar `struct_member_expr_of` machinery
+    /// (whole-field sign wrap + trailing sub-select + multi-dim member stride).
+    fn parse_struct_array_member(&mut self, base: Expr) -> Expr {
+        self.bump(); // '.'
+        let field = self.ident().unwrap_or_else(|| Ident {
+            name: String::new(),
+            span: self.cur_span(),
+        });
+        let span = base.span.to(self.prev_span());
+        let arr = match &base.kind {
+            ExprKind::BitSelect { base: b, .. } => match &b.kind {
+                ExprKind::Ident(p) if p.segments.len() == 1 => Some(p.segments[0].name.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        match arr.and_then(|nm| self.struct_array_field_geom(&nm, &field.name)) {
+            Some(geom) => self.struct_member_expr_of(base, geom, span),
+            None => {
+                self.error("unknown field in a struct-array element member access");
+                base
+            }
+        }
+    }
+
     /// N3 (write): is `lv` an `arr[i]` element-select whose base is a record-ARRAY var?
     /// The LVALUE twin of [`record_array_member_base`].
     fn record_array_lval_base(&self, lv: &Lvalue) -> bool {
@@ -8177,6 +8238,56 @@ impl Parser<'_, '_> {
     /// non-zero-LSB member is fine (the field occupies packed bits `[off, off+w)`
     /// regardless of its declared LSB), but a member SUB-select (`arr[i].f[a:b] = …`)
     /// needs a `dbase` remap this path does not do → correct-or-LOUD.
+    /// §4.5.190 (write): is `lv` an `arr[i]` element-select whose base is a
+    /// PACKED-STRUCT 1-D array var? The LVALUE twin of [`struct_1d_array_member_base`].
+    fn struct_1d_array_lval_base(&self, lv: &Lvalue) -> bool {
+        if let Lvalue::BitSelect { base, .. } = lv {
+            if let Lvalue::Ident(p) = base.as_ref() {
+                return p.segments.len() == 1
+                    && self.struct_1d_array_vars.contains(&p.segments[0].name);
+            }
+        }
+        false
+    }
+
+    /// §4.5.190 (write): parse `arr[i].field = …` (cursor at `.`) on a packed-struct
+    /// 1-D array → a part-select lvalue on the packed element (whole-field), or the
+    /// generalized `parse_struct_field_lval` for a trailing sub-select. The WRITE twin
+    /// of [`Self::parse_struct_array_member`].
+    fn parse_struct_array_member_lval(&mut self, base: Lvalue) -> Lvalue {
+        self.bump(); // '.'
+        let field = self.ident().unwrap_or_else(|| Ident {
+            name: String::new(),
+            span: self.cur_span(),
+        });
+        let span = base.span().to(self.prev_span());
+        let arr = match &base {
+            Lvalue::BitSelect { base: b, .. } => match b.as_ref() {
+                Lvalue::Ident(p) if p.segments.len() == 1 => Some(p.segments[0].name.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        match arr.and_then(|nm| self.struct_array_field_geom(&nm, &field.name)) {
+            Some((off, w, asc, _sgn, dbase, stride)) => {
+                if self.peek() == Some(TokenKind::LBracket) {
+                    self.parse_struct_field_lval(base, (off, w, asc, dbase, stride), span)
+                } else {
+                    Lvalue::PartSelect {
+                        base: Box::new(base),
+                        msb: Box::new(Self::dec_lit(off + w - 1, span)),
+                        lsb: Box::new(Self::dec_lit(off, span)),
+                        span,
+                    }
+                }
+            }
+            None => {
+                self.error("unknown field in a struct-array element member write");
+                base
+            }
+        }
+    }
+
     fn parse_record_array_member_lval(&mut self, base: Lvalue) -> Lvalue {
         self.bump(); // '.'
         let field = self.ident().unwrap_or_else(|| Ident {
@@ -8625,13 +8736,28 @@ impl Parser<'_, '_> {
         geom: (u32, u32, bool, bool, i64, u32),
         span: Span,
     ) -> Expr {
+        let base_expr = Expr {
+            kind: ExprKind::Ident(base),
+            span,
+        };
+        self.struct_member_expr_of(base_expr, geom, span)
+    }
+
+    /// §4.5.190: the same packed-struct member desugar as [`Self::struct_member_expr`]
+    /// but over an ARBITRARY base expression (a `BitSelect` array element `arr[i]`),
+    /// not just a whole-variable `Ident`. `arr[i].field` becomes a part-select on the
+    /// element value `arr[i][off+w-1 : off]`, reusing the entire scalar machinery
+    /// (whole-field sign wrap, trailing sub-select, multi-dim member stride).
+    fn struct_member_expr_of(
+        &mut self,
+        base_expr: Expr,
+        geom: (u32, u32, bool, bool, i64, u32),
+        span: Span,
+    ) -> Expr {
         let (off, w, asc, sgn, dbase, stride) = geom;
         let pv = Expr {
             kind: ExprKind::PartSelect {
-                base: Box::new(Expr {
-                    kind: ExprKind::Ident(base),
-                    span,
-                }),
+                base: Box::new(base_expr),
                 msb: Box::new(Self::dec_lit(off + w - 1, span)),
                 lsb: Box::new(Self::dec_lit(off, span)),
             },
@@ -8948,7 +9074,11 @@ impl Parser<'_, '_> {
         {
             let span = path.span;
             if self.peek() == Some(TokenKind::LBracket) {
-                self.parse_struct_field_lval(base, (off, w, asc, dbase, stride), span)
+                self.parse_struct_field_lval(
+                    Lvalue::Ident(base),
+                    (off, w, asc, dbase, stride),
+                    span,
+                )
             } else {
                 Lvalue::PartSelect {
                     base: Box::new(Lvalue::Ident(base)),
@@ -9017,6 +9147,11 @@ impl Parser<'_, '_> {
                 // is checked BEFORE the generate-array hier path below, which would else
                 // fold the known record-array element into a bogus hier scope name.
                 lv = self.parse_record_array_member_lval(lv);
+            } else if self.peek() == Some(TokenKind::Dot) && self.struct_1d_array_lval_base(&lv) {
+                // §4.5.190 (write): `arr[i].field = …` on a PACKED-STRUCT 1-D array —
+                // a part-select lvalue on the packed element (mirrors the scalar
+                // `s.field` write). Checked before the generate-array hier path.
+                lv = self.parse_struct_array_member_lval(lv);
             } else if self.peek() == Some(TokenKind::Dot) && Self::is_indexed_hier_lval(&lv) {
                 // HIER-REST②: `g[0].x = …` — fold the constant index into the
                 // scope-segment name, mirroring the expression side.
@@ -9049,7 +9184,9 @@ impl Parser<'_, '_> {
     /// itself asserts on it — no oracle).
     fn parse_struct_field_lval(
         &mut self,
-        base: HierPath,
+        // §4.5.190: the base LVALUE the field lives in — a whole-variable `Ident`
+        // (scalar `s.field`) OR an array element `arr[i]` BitSelect (`arr[i].field`).
+        base_lv: Lvalue,
         // (off, width, ascending, dbase, elem_stride) — bundled to keep the arg count
         // down (mirrors the READ twin `struct_member_expr`'s `geom`).
         geom: (u32, u32, bool, i64, u32),
@@ -9111,7 +9248,7 @@ impl Parser<'_, '_> {
                             (off + ka, off + kb)
                         };
                         Lvalue::PartSelect {
-                            base: Box::new(Lvalue::Ident(base)),
+                            base: Box::new(base_lv),
                             msb: Box::new(Self::dec_lit(fmsb, span)),
                             lsb: Box::new(Self::dec_lit(flsb, span)),
                             span: span.to(self.prev_span()),
@@ -9135,7 +9272,7 @@ impl Parser<'_, '_> {
                         let ri = i as u32 - dbase;
                         let fbit = if asc { off + (w - 1 - ri) } else { off + ri };
                         Lvalue::BitSelect {
-                            base: Box::new(Lvalue::Ident(base)),
+                            base: Box::new(base_lv),
                             index: Box::new(Self::dec_lit(fbit, span)),
                             span: span.to(self.prev_span()),
                         }
@@ -9145,7 +9282,7 @@ impl Parser<'_, '_> {
                         // bit guaranteed past the struct net so the engine drops the
                         // write too — never a leak into a neighbour member.
                         Lvalue::BitSelect {
-                            base: Box::new(Lvalue::Ident(base)),
+                            base: Box::new(base_lv),
                             index: Box::new(Self::dec_lit(OOB_DROP_BIT, span)),
                             span: span.to(self.prev_span()),
                         }
