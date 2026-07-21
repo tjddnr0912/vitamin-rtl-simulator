@@ -7664,10 +7664,17 @@ impl Parser<'_, '_> {
             return None;
         }
         let tyname = self.var_struct.get(&path.segments[0].name)?;
+        // A PACKED struct (`struct_layouts`) first; then a packable UNPACKED record
+        // (§4.5.192 packed-vector body-local, mirrors `struct_array_field_geom`) via
+        // `packable_record_layout` — both yield the same `StructLayout::field()` shape.
         let (off, w, asc, sgn, dbase, stride) = self
             .struct_layouts
-            .get(tyname)?
-            .field(&path.segments[1].name)?;
+            .get(tyname)
+            .and_then(|l| l.field(&path.segments[1].name))
+            .or_else(|| {
+                self.packable_record_layout(tyname)
+                    .and_then(|l| l.field(&path.segments[1].name))
+            })?;
         let base = HierPath {
             segments: vec![path.segments[0].clone()],
             span: path.segments[0].span,
@@ -8371,6 +8378,76 @@ impl Parser<'_, '_> {
     /// (packed-struct width) registered in `record_array_vars` — `arr[i].field` is a
     /// part-select on the element. A FIXED unpacked array, a non-packable record
     /// array, and a scalar decl-init stay LOUD.
+    /// §4.5.192: a packable UNPACKED-struct SCALAR body-local in a function/task
+    /// (`rec_t p;`). The type lives only in `unpacked_struct_layouts` (never in
+    /// `typedefs`), so `peek_block_typedef_decl` misses it and the body-decl loop
+    /// would treat `rec_t` as a statement. Recognized here and lowered to a
+    /// packed-vector local (`logic/bit [W-1:0] p;`) registered as a scalar struct var,
+    /// so `p.field` desugars to a part-select (`struct_field_select` →
+    /// `packable_record_layout`). Returns `None` when the current tokens are not a
+    /// packable-record scalar decl (a non-packable record, an array, a decl-init, or
+    /// a non-`<name> <ident>;` shape) — the caller then falls through (loud downstream).
+    fn parse_body_unpacked_struct_local(&mut self) -> Option<NetVarDecl> {
+        if !self.is_ident() {
+            return None;
+        }
+        let tyname = self.cur_text().to_string();
+        if !self.unpacked_struct_layouts.contains_key(&tyname) {
+            return None;
+        }
+        // Need `<type> <ident>` and a packable layout; else leave it to the caller.
+        if !matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident))) {
+            return None;
+        }
+        let layout = self.packable_record_layout(&tyname)?;
+        let span = self.cur_span();
+        self.bump(); // the type name
+        let names = self.parse_decl_name_list()?;
+        self.expect(TokenKind::Semi, "';'");
+        let w: u32 = layout.fields.iter().map(|f| f.2).sum();
+        let all_two_state = layout.fields.iter().all(|f| f.5);
+        let mut decl_names: Vec<DeclName> = Vec::new();
+        for n in &names {
+            // Only a SCALAR, non-init, non-`$` name (array / decl-init are follow-ons).
+            if !n.unpacked.is_empty() || n.init.is_some() || n.name.name.contains('$') {
+                self.error_at(
+                    n.name.span,
+                    "an unpacked-struct body-local supports only a scalar `rec_t p;` in v1 \
+                     (an array element, a `'{…}` initializer, or a `$`-name is unsupported)",
+                );
+                continue;
+            }
+            self.var_struct.insert(n.name.name.clone(), tyname.clone());
+            self.struct_scalar_vars.insert(n.name.name.clone());
+            decl_names.push(DeclName {
+                name: n.name.clone(),
+                unpacked: Vec::new(),
+                init: None,
+                span: n.name.span,
+            });
+        }
+        if decl_names.is_empty() {
+            return None;
+        }
+        Some(NetVarDecl {
+            kind: if all_two_state {
+                NetVarKind::Bit
+            } else {
+                NetVarKind::Logic
+            },
+            signed: false,
+            range: Some(self.synth_bit_range(w, span)),
+            packed: Vec::new(),
+            delay: None,
+            names: decl_names,
+            lifetime: None,
+            class_type: None,
+            class_args: Vec::new(),
+            const_param: false,
+            span,
+        })
+    }
+
     fn parse_unpacked_struct_decl(&mut self, tyname: String) -> Option<Vec<NetVarDecl>> {
         self.eat_scope_qualifier(); // optional `pkg::`
         self.bump(); // the type-name identifier
@@ -10822,6 +10899,25 @@ impl Parser<'_, '_> {
                     self.bump();
                 }
                 continue;
+            }
+            // §4.5.192: a packable UNPACKED-struct scalar body-local (`rec_t p;`) — the
+            // type is in `unpacked_struct_layouts`, not `typedefs`, so it misses the
+            // typedef branch above. Lowered to a packed-vector local + scalar-struct
+            // registration so `p.field` desugars like a packed-struct member.
+            {
+                let before = self.pos;
+                if let Some(d) = self.parse_body_unpacked_struct_local() {
+                    if typedef_scope.is_none() {
+                        typedef_scope = Some(self.snapshot_scope());
+                    }
+                    body_decls.push(d);
+                    continue;
+                }
+                if self.pos != before {
+                    // consumed tokens but produced no decl (a loud error path) — do not
+                    // re-parse them as a statement; advance the loop.
+                    continue;
+                }
             }
             break; // first non-decl token starts the body statement
         }
