@@ -9052,19 +9052,28 @@ impl<'s> Elaborator<'s> {
                     _ => None,
                 };
                 if let Some(init) = &decl.init {
-                    // A queue / dynamic-array `'{…}` initializer is EXPANDED to runtime
-                    // ops at t0 by the var-init flush (a push_back sequence / `new[N]` +
-                    // element writes); allow it and register the handle. `allow_string_init`
-                    // gates this to the scopes that pass it (module body / block-local).
-                    // Generate and interface bodies now run the flush for ARRAY/non-const
-                    // inits, but the QUEUE/dyn-array decl-init path there is a documented
-                    // follow-on (the handle-net creation + in-scope expand is unverified),
-                    // so they still pass `false` → a queue `'{…}` decl-init in those scopes
-                    // stays a LOUD reject (correct-or-loud), never a silent drop. Any other
-                    // init (a whole-value copy, a non-pattern expr) or an assoc array stays
-                    // loud too — those use runtime methods.
+                    // A queue / dynamic-array `'{…}` (or `{…}`) initializer is EXPANDED to
+                    // runtime ops at t0 by the var-init flush (a push_back sequence /
+                    // `new[N]` + element writes); allow it and register the handle.
+                    // `allow_string_init` gates this to the scopes that pass it (module body
+                    // / block-local). Generate and interface bodies now run the flush for
+                    // ARRAY/non-const inits, but the QUEUE/dyn-array decl-init path there is
+                    // a documented follow-on (the handle-net creation + in-scope expand is
+                    // unverified), so they still pass `false` → a queue `'{…}` decl-init in
+                    // those scopes stays a LOUD reject (correct-or-loud), never a silent
+                    // drop. A `{…}` unpacked concatenation (§10.10) is the same element list
+                    // as `'{…}` for a scalar-element queue/dyn array, so it rides the same
+                    // path — EXCEPT a STRING-element array, whose `'{…}` path is a separate
+                    // follow-on, so `string s[] = {…}` stays loud (never silent-empty). Any
+                    // other init (a whole-value copy, a non-pattern expr) or an assoc array
+                    // stays loud too — those use runtime methods.
+                    let init_is_pattern = match &init.kind {
+                        ast::ExprKind::AssignPattern(_) => true,
+                        ast::ExprKind::Concat { .. } => !matches!(d.kind, ast::NetVarKind::String),
+                        _ => false,
+                    };
                     let desugared = allow_string_init
-                        && matches!(&init.kind, ast::ExprKind::AssignPattern(_))
+                        && init_is_pattern
                         && matches!(handle_kind, ir::NetKind::Queue | ir::NetKind::DynArray);
                     if !desugared {
                         self.error(
@@ -12561,14 +12570,19 @@ impl<'s> Elaborator<'s> {
         // scalar init reads an earlier queue's `.size()` correctly.
         let mut stmts: Vec<ast::Stmt> = Vec::with_capacity(inits.len());
         for (lhs, rhs) in inits {
-            if let (ast::Lvalue::Ident(p), ast::ExprKind::AssignPattern(elems)) = (&lhs, &rhs.kind)
-            {
-                if p.segments.len() == 1 {
-                    if let Some((_, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
-                        self.dyn_handle(&p.segments[0].name)
-                    {
-                        stmts.extend(self.dyn_decl_init_stmts(&p.segments[0], kind, elems));
-                        continue;
+            if let ast::Lvalue::Ident(p) = &lhs {
+                // A queue / dyn-array `'{…}` OR `{…}` (§10.10 unpacked concat) decl-init —
+                // both expand to the same push_back / `new[N]`+element-write sequence for a
+                // registered handle. A STRING-element `{…}` never reaches here as a handle
+                // (loud at the decl gate), so no silent-empty slips through.
+                if let Some(elems) = dyn_pattern_elems(&rhs) {
+                    if p.segments.len() == 1 {
+                        if let Some((_, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
+                            self.dyn_handle(&p.segments[0].name)
+                        {
+                            stmts.extend(self.dyn_decl_init_stmts(&p.segments[0], kind, elems));
+                            continue;
+                        }
                     }
                 }
             }
@@ -34139,6 +34153,24 @@ fn fold_init(e: &ast::Expr, width: u32) -> Option<ir::BitPacked> {
             Some(resize_bits(&cv.bits, cv.width, width, cv.signed))
         }
         ast::ExprKind::Paren { inner } => fold_init(inner, width),
+        _ => None,
+    }
+}
+
+/// The element list of a queue / dynamic-array decl-init that rides the var-init
+/// flush: either a `'{e0,…}` assignment pattern OR a `{e0,…}` unpacked-array
+/// concatenation (IEEE §10.10 — a legal queue/dyn-array initializer too, e.g.
+/// `int q[$] = {1,2,3};`). For a scalar-element target both spell the SAME element
+/// list; the two forms differ only when an element is itself an unpacked array
+/// (concat flattens, pattern is positional), and that case has no scalar surface so
+/// `dyn_decl_init_stmts` stays loud either way — routing a `{…}` concat through the
+/// same expansion as `'{…}` is therefore correct-or-loud. `{n{x}}` is a distinct
+/// `Replicate` node (never `Concat`), so replication never slips in here.
+fn dyn_pattern_elems(init: &ast::Expr) -> Option<&[ast::Expr]> {
+    match &init.kind {
+        ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts } => {
+            Some(parts.as_slice())
+        }
         _ => None,
     }
 }

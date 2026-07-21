@@ -8,6 +8,20 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.182 queue / dynamic-array `{…}` (unpacked-array concat) decl-init loud→supported (Concat → `'{…}` flush 라우팅) (2026-07-21, branch feat-queue-dyn-brace-init) ✅
+
+**발굴 경위**: §4.5.181 후 fresh-area probe 계속 — queue 메서드(`.insert`/`.delete(idx)`) 차분 중 `int q[$] = {1,2,3,4};`가 vita E3009 vs iverilog 정상으로 발견. 격리하니 메서드는 동작하고 **initializer 자체**(`{…}` 비-apostrophe 형태)가 원인. `int d[] = {1,2,3};`(dyn array)·`{a,b,c}`(scalar vars)·`{42}`(single) 全 동일 loud.
+
+**근본 원인**: vita가 queue/dyn-array decl-init을 **`'{…}` assignment-pattern 형태로만** 수용(handle-gate가 `matches!(init.kind, AssignPattern)` 게이트). SV §10.10 **unpacked array concatenation** `{e0,e1,…}`도 queue/dyn-array의 합법적 initializer인데(iverilog ✓) `ExprKind::Concat`이라 게이트 통과 못 해 E3009. `fixed unpacked array`(iverilog가 `0 0 0`으로 비표준 처리)·`{n{x}}` replication(iverilog `5 0 0` dubious)·nested array concat(`{a,3}` iverilog compile-fail)은 경계 밖.
+
+**설계 (Concat → `'{…}` flush 라우팅)**: scalar-element target에선 `{…}`와 `'{…}`가 같은 element list를 표현하므로, Concat init을 기존 `'{…}` var-init flush 확장(`dyn_decl_init_stmts`: queue=push_back sequence·dyn=`new[N]`+element writes)에 **그대로 라우팅**. 신규 헬퍼 `dyn_pattern_elems(init)`가 `AssignPattern(parts)|Concat{parts}`에서 균일하게 element slice 추출. 3개 게이트 중 **2곳만** 수정: handle-gate(Concat 수용, **string 원소 제외**)·flush dispatch(Concat도 라우팅). collect 경로는 `fold_init`(IntLit만)·`const_eval_in_scope`(Concat arm 無) 둘 다 Concat에 None이라 자동으로 pending에 태움(무수정).
+
+**correct-or-loud BY CONSTRUCTION**: 라우팅이 `{…}`를 `'{…}`와 byte-identical하게 만들어 **모든 원소 타입에서 기존 `'{…}` 경로의 correct-or-loud 상속**. 유일한 의미 차이 = array-typed 원소(concat flatten vs pattern positional)인데, 그 케이스는 scalar surface가 없어 `'{…}`가 이미 loud(`'{a,3}`→E3009 "no whole-value surface")→`{…}`도 상속해 loud. replication `{n{x}}`는 별도 `Replicate` node(never `Concat`)라 안 새어 loud 유지. **STRING 원소 배열**은 `'{…}` string 경로가 별도 buggy(§4.5.183 발굴)이라 `string s[] = {…}`도 handle-gate서 loud 유지(silent-empty 구조적 방지).
+
+**적대 differential(vita vs iverilog)**: 지원 全 MATCH — queue literal(1 2 3 4)·dyn literal(5 6 7)·scalar vars(10 20 30)·single(42)·expr elements(`{1,2+3,4*2}`=1 5 8)·signed byte(-1 2 -3·iverilog는 elab assert-crash라 vita>iverilog)·`.size()`=4·init후 push_back/delete·module-scope·block-local. **LOUD 유지(silent-wrong 0)**: array-element concat(`{a,3}`=E3009)·replication(`{3{5}}`)·string concat. 전 suite green(gate가 Concat 없는 설계엔 byte-identical).
+
+**결과**: `int q[$]={…}`·`int d[]={…}` 흔한 idiom 동작. `queue_dyn_brace_init.rs`×14. format 22 불변(elaborate 라우팅만·AST/IR 무변화). **3840 green**(+14). ⭐교훈: ① **fresh-area probe가 흔한 idiom의 loud gap 발굴**(메서드 차분→initializer 격리). ② **proven 경로(`'{…}` flush) 재사용이 correct-or-loud 상속**(라우팅=byte-identical→새 silent 표면 0). ③ **string 원소 제외가 핵심**(string `'{…}` 경로 자체가 buggy→인접 silent-wrong §4.5.183 발굴). ④ **replication은 별도 AST node라 자동 배제·`fold_init`/`const_eval`이 Concat에 None이라 collect 경로 무수정**. 상세=본 엔트리·ROADMAP.
+
 #### 4.5.181 enum `.next(N)` / `.prev(N)` CONSTANT-step loud→supported (parser N-step ternary-chain desugar) (2026-07-21, branch feat-enum-step-n) ✅
 
 **발굴 경위**: §4.5.180 fresh-area probe 스윕 중 enum method bisect서 발견한 oracle-backed loud gap. `.next()`/`.prev()`/`.first`/`.last`/`.num`/`.name()`는 전부 동작하나 **`.next(2)`처럼 STEP 인자**가 있으면 E3009("hierarchical function call (deferred)")—iverilog는 지원(`.next(2)`=2 스텝 전진·wrap).
