@@ -3187,24 +3187,46 @@ impl<'a> SimState<'a> {
                         break; // malformed sidecar: stop defensively
                     };
                     let cm = self.func_table[info.callee as usize];
-                    let in_v: Vec<(u32, Value)> = info
-                        .in_binds
-                        .iter()
-                        .map(|&(slot, e)| {
-                            let nv = &self.ir.nets[(cm.base_net + slot) as usize];
+                    // V2A-dyn (§4.5.194): split scalar copy-ins from dyn-array INPUT formals.
+                    // A dyn formal slot (a DynArray net) is bound to a bare Signal reading the
+                    // caller's dyn net (elaborate contract) — recover that src net and
+                    // snapshot it into the callee's per-activation heap slot (pass-by-value,
+                    // IEEE §13.5.1). This mirrors the process path's `split_frame_in_binds` +
+                    // `frame_dyn_snapshot_formals`, but for a NESTED SUBSET call driven inside
+                    // this `&self` run_task (which does not go through exec.rs's Call arm).
+                    let mut in_v: Vec<(u32, Value)> = Vec::with_capacity(info.in_binds.len());
+                    let mut dyn_snaps: Vec<(u32, u32)> = Vec::new();
+                    for &(slot, e) in &info.in_binds {
+                        let fnet = (cm.base_net + slot) as usize;
+                        if self.ir.nets[fnet].kind == NetKind::DynArray {
+                            if let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[e as usize] {
+                                dyn_snaps.push((slot, *net));
+                            }
+                        } else {
+                            let nv = &self.ir.nets[fnet];
                             let sw = self.wt.get(e);
                             let v = self.mk_eval_ctx().eval_ctx(
                                 e,
                                 nv.width.max(1).max(sw.width),
                                 nv.signed,
                             );
-                            (slot, v)
-                        })
-                        .collect();
+                            in_v.push((slot, v));
+                        }
+                    }
                     let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
+                    let has_dyn = !dyn_snaps.is_empty();
+                    if has_dyn && !self.frame_dyn_reentry_ok(info.callee) {
+                        break; // recursive/concurrent dyn formal → fatal latched; stop
+                    }
+                    if has_dyn {
+                        self.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                    }
                     let outs = self
                         .run_task(info.callee, &in_v, &out_s)
                         .unwrap_or_default();
+                    if has_dyn {
+                        self.frame_dyn_free(info.callee);
+                    }
                     // callee popped → top frame is the calling task again; write
                     // its frame-local output lvalues.
                     for ((_, lval), val) in info.out_binds.iter().zip(outs) {
@@ -3332,7 +3354,12 @@ impl<'a> SimState<'a> {
     /// (non-reentrant) entry finds the slot None — freed at the prior `frame_dyn_free`.
     /// Returns `true` when the frame may enter; `false` (after emitting the fatal) on
     /// reentry. Cheap: skips the scan unless the callee actually has a dyn-array local.
-    pub(crate) fn frame_dyn_reentry_ok(&mut self, callee: u32) -> bool {
+    /// §4.5.194: `&self` (was `&mut`) — reachable from BOTH the `&mut` process path
+    /// (suspendable V2A/V5) and the `&self` run_task path (a NESTED subset dyn-formal
+    /// call), so the reentry fatal must latch `call_fatal` (a `Cell`, like
+    /// `fatal_frame_heap_write`) rather than the `&mut` `fatal_run`. The scheduler
+    /// converts a latched `call_fatal` into a fatal run end at the next region seam.
+    pub(crate) fn frame_dyn_reentry_ok(&self, callee: u32) -> bool {
         if !self
             .func_has_dyn_local
             .get(callee as usize)
@@ -3346,11 +3373,21 @@ impl<'a> SimState<'a> {
             let net = (m.base_net + s) as usize;
             if self.ir.nets[net].kind == NetKind::DynArray && self.dyn_heap.borrow()[net].is_some()
             {
-                self.fatal_run(
-                    "recursive or concurrent frame-local dynamic array is unsupported \
-                     (a per-activation dynamic-array heap is a follow-on); rewrite without \
-                     recursion/concurrency, or use a module-scope dynamic array",
-                );
+                if !self.call_fatal.get() {
+                    self.call_fatal.set(true);
+                    self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+                        severity: Severity::Fatal,
+                        code: MsgCode::RunFatal,
+                        message: "recursive or concurrent frame-local dynamic array (or \
+                                  dynamic-array input formal) is unsupported (a per-activation \
+                                  dynamic-array heap is a follow-on); rewrite without \
+                                  recursion/concurrency, or use a module-scope dynamic array"
+                            .to_string(),
+                        location: None,
+                        context: Vec::new(),
+                        sim_time: Some(TimeStamp { ticks: self.now }),
+                    }));
+                }
                 return false;
             }
         }
@@ -3360,7 +3397,7 @@ impl<'a> SimState<'a> {
     /// V5: free this activation's frame-local dyn-array heap objects at frame exit, so a
     /// later call to the same func/task starts fresh (an unallocated array is size 0) and
     /// the reentry guard above next sees `None`.
-    pub(crate) fn frame_dyn_free(&mut self, callee: u32) {
+    pub(crate) fn frame_dyn_free(&self, callee: u32) {
         if !self
             .func_has_dyn_local
             .get(callee as usize)
@@ -3386,7 +3423,7 @@ impl<'a> SimState<'a> {
     /// array). The formal's slot is freed at `exit_task_frame` (`frame_dyn_free`) and
     /// guarded against recursive/concurrent reentry (`frame_dyn_reentry_ok`), exactly
     /// like a frame-local dyn-array LOCAL (§4.5.171). No dyn formals ⇒ no-op.
-    pub(crate) fn frame_dyn_snapshot_formals(&mut self, callee: u32, dyn_snaps: &[(u32, u32)]) {
+    pub(crate) fn frame_dyn_snapshot_formals(&self, callee: u32, dyn_snaps: &[(u32, u32)]) {
         if dyn_snaps.is_empty() {
             return;
         }

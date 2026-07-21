@@ -5,10 +5,10 @@
 //! suspended never shows through the formal. V5's net-range lifecycle (§4.5.171)
 //! frees the slot at exit and fatal-louds on recursive/concurrent reentry.
 //!
-//! Supported: the SUSPENDABLE path (a task with `$display`/`@`/`#`/`wait`). A subset
-//! (pure-compute) dyn-formal task takes the synchronous executor which cannot populate
-//! the heap, so it stays loud (correct-or-loud — use a function instead). Recursion /
-//! concurrent activation stay loud (per-activation heap stash is a follow-on, as V5).
+//! Supported: the SUSPENDABLE path (a task with `$display`/`@`/`#`/`wait`) AND, since
+//! §4.5.194, the SUBSET (pure-compute) path — the interior-mutable dyn heap lets the
+//! synchronous executor snapshot the caller's array too (see `subset_task_dyn_formal.rs`).
+//! Recursion / concurrent activation stay loud (per-activation heap stash is a follow-on).
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -190,10 +190,12 @@ fn concurrent_fork_stays_loud() {
     );
 }
 
-// ── LOUD: a pure-compute (non-suspendable, subset) dyn-formal task takes the
-//    synchronous path which can't snapshot — stays loud (use a function instead) ──
+// ── SUPPORTED (§4.5.194): a pure-compute (non-suspendable, subset) dyn-formal task.
+//    The dyn heap is interior-mutable now, so the engine snapshots the caller's array
+//    into the formal's heap slot right before the synchronous `run_task_call` (was loud
+//    "…subset…" because the `&self` executor could not populate the heap). iverilog: r=6.
 #[test]
-fn non_suspendable_stays_loud() {
+fn non_suspendable_subset_dyn_formal_now_supported() {
     let o = run("module top;\n\
          task automatic pc(input int b[], output int s);\n\
            s=0; foreach(b[i]) s+=b[i];\n\
@@ -201,8 +203,8 @@ fn non_suspendable_stays_loud() {
          int a[]; int r; initial begin a=new[3]; a[0]=1;a[1]=2;a[2]=3; pc(a,r); $display(\"r=%0d\",r); end\n\
          endmodule\n");
     assert!(
-        o.contains("E3009") && o.contains("subset"),
-        "a subset dyn-formal task must stay loud:\n{o}"
+        o.contains("r=6"),
+        "subset dyn-formal task now supported:\n{o}"
     );
 }
 

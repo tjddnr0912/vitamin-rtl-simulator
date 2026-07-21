@@ -16166,45 +16166,18 @@ impl<'s> Elaborator<'s> {
                         ),
                     );
                 }
-            } else if self.frame_task_has_dyn_formal(fid, base_net) {
-                // V2A-frame (§4.5.173): a dyn-array input formal is snapshotted at frame
-                // ENTRY on the SUSPENDABLE path only (the engine's `enter` deep-copy). A
-                // subset (non-suspendable) task takes the SYNCHRONOUS `run_task_call` path,
-                // which is `&self` and cannot populate the heap — so a pure-compute
-                // dyn-formal task would silently read an empty array. Loud (correct-or-loud):
-                // use a FUNCTION (which supports dynamic-array inputs via the R2 inline
-                // path), or give the task an observable/timing statement ($display / @ / #
-                // / wait) that routes it to the suspendable-frame path.
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    &format!(
-                        "frame task `{name}` has a dynamic-array input formal but is a subset \
-                         (non-suspendable) task — use a function (functions support \
-                         dynamic-array inputs), or add a `$display`/`@`/`#`/`wait` so the task \
-                         runs on the suspendable-frame path"
-                    ),
-                );
             } else {
+                // V2A-dyn (§4.5.194): a subset (non-suspendable) task with a dynamic-array
+                // input formal is now SUPPORTED. `dyn_heap` is interior-mutable, so the
+                // engine deep-copies the caller's array into the formal's per-activation heap
+                // slot right before the synchronous `run_task_call` and frees it after (the
+                // exec.rs subset arms), exactly like the suspendable path's frame-entry
+                // snapshot (§4.5.173). Validate the body as an ordinary subset task — a dyn
+                // formal READ is fine; a WRITE to it still hits the `&self` heap-write fatal.
                 let entry_bb = self.funcs[fid as usize].entry;
                 self.validate_frame_body(&name, entry_bb, base_net, locals_len, true);
             }
         }
-    }
-
-    /// V2A-frame (§4.5.173): does frame task `fid` have an `input` dynamic-array formal
-    /// (reserved as a `NetKind::DynArray` slot by `reserve_frame_task`)? Formals occupy
-    /// slots `[0, n_params)` of the frame net range `[base_net, …)`.
-    fn frame_task_has_dyn_formal(&self, fid: u32, base_net: u32) -> bool {
-        let n_params = self
-            .func_metas
-            .get(fid as usize)
-            .map(|m| m.n_params)
-            .unwrap_or(0);
-        (0..n_params).any(|s| {
-            self.nets
-                .get((base_net + s) as usize)
-                .is_some_and(|nv| nv.kind == ir::NetKind::DynArray)
-        })
     }
 
     /// Round-14 V3/V4 (adversarial-review guard): a suspendable task carries a construct

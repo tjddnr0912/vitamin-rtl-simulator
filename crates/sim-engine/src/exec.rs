@@ -590,12 +590,24 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             continue; // execute the nested frame next iteration
                         }
                         // subset nested callee: synchronous (mirrors run_task's nested Call).
+                        // V2A-dyn (§4.5.194): snapshot a dyn-array INPUT formal into its heap
+                        // slot before the synchronous call, free after (as the top-level arm).
                         let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
+                        let has_dyn = !dyn_snaps.is_empty();
+                        if has_dyn && !sched.st.frame_dyn_reentry_ok(info.callee) {
+                            return Step::Fatal;
+                        }
+                        if has_dyn {
+                            sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                        }
                         if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
                             for ((_, lval), val) in info.out_binds.iter().zip(outs) {
                                 let offs = sched.resolve_lvalue_offsets(lval);
                                 sched.st.write_lvalue(lval, val, &offs);
                             }
+                        }
+                        if has_dyn {
+                            sched.st.frame_dyn_free(info.callee);
                         }
                     }
                     // advance THIS frame past the (subset / no-info) call.
@@ -640,11 +652,26 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         continue; // re-fetch from the new frame next iteration
                     }
                     let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
+                    // V2A-dyn (§4.5.194): a subset task's dyn-array INPUT formal is
+                    // deep-copied into its per-activation heap slot right before the
+                    // synchronous run_task_call (dyn_heap is interior-mutable now) and freed
+                    // after — the sync executor READS the formal from the heap, exactly like
+                    // the suspendable frame-entry snapshot (§4.5.173).
+                    let has_dyn = !dyn_snaps.is_empty();
+                    if has_dyn && !sched.st.frame_dyn_reentry_ok(info.callee) {
+                        return Step::Fatal;
+                    }
+                    if has_dyn {
+                        sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                    }
                     if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
                         for ((_, lval), val) in info.out_binds.iter().zip(outs) {
                             let offs = sched.resolve_lvalue_offsets(lval);
                             sched.st.write_lvalue(lval, val, &offs);
                         }
+                    }
+                    if has_dyn {
+                        sched.st.frame_dyn_free(info.callee);
                     }
                 }
                 bb = *ret_bb;
