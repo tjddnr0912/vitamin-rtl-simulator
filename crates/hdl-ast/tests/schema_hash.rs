@@ -195,9 +195,14 @@ use vita_schema::schema_hash;
 /// declared signedness) so a label reference lowers with the enum's sign — a POSITIVE
 /// label of a signed enum stays signed in a relational/collective context. Front-end +
 /// elaborate only (no sim-ir change; format_version stays 22). Re-pins this .vu hash.
+/// Re-pinned 2026-07-21 §4.5.184 multi-dim packed struct/union member
+/// (`StructMember.packed_dims: Vec<Range>` — the INNER packed dims of a
+/// `logic [1:0][3:0] m` member; empty for a single-dim member). Front-end only (the
+/// member desugars to a flat part-select in the parser; no sim-ir change,
+/// format_version stays 22). All `.vu` artifacts are stale. Re-pins this .vu hash.
 const EXPECTED: [u8; 32] = [
-    35, 29, 201, 236, 57, 122, 37, 216, 46, 253, 74, 33, 86, 151, 210, 111, 164, 106, 210, 40, 90,
-    217, 219, 196, 133, 152, 205, 221, 76, 157, 16, 109,
+    144, 62, 80, 227, 193, 2, 229, 171, 85, 68, 62, 91, 243, 142, 150, 38, 22, 205, 184, 180, 74,
+    66, 46, 208, 76, 69, 175, 146, 236, 204, 85, 72,
 ];
 
 #[test]

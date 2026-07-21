@@ -128,16 +128,23 @@ type TfPortType = (Option<NetVarKind>, bool, Option<Range>, Option<String>);
 /// a plain `[N:0]`/`[0:N]`/atom member) — subtracted from a sub-select's source
 /// index so a NON-zero-LSB member (`logic [15:8] a; s.a[11:8]`) selects the right
 /// field-relative bits instead of reading raw/out-of-range positions (silent X).
+/// One packed struct/union member's flat layout: `(name, lsb_offset, width,
+/// ascending, signed, two_state, dbase, elem_stride)`. `elem_stride` is the
+/// first-level element width of a multi-dim packed member (`logic [1:0][3:0] m` →
+/// 4), or 1 for an ordinary single-dim member (so a `s.m[i]` bit-select stays
+/// byte-identical). `> 1` marks a multi-dim member whose `m[i]` selects an
+/// `elem_stride`-bit element, not a bit.
+type StructFieldLayout = (String, u32, u32, bool, bool, bool, i64, u32);
 #[derive(Clone, PartialEq)]
 struct StructLayout {
-    fields: Vec<(String, u32, u32, bool, bool, bool, i64)>,
+    fields: Vec<StructFieldLayout>,
 }
 impl StructLayout {
-    fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, i64)> {
+    fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, i64, u32)> {
         self.fields
             .iter()
-            .find(|(n, _, _, _, _, _, _)| n == name)
-            .map(|(_, o, w, asc, sgn, _ts, dbase)| (*o, *w, *asc, *sgn, *dbase))
+            .find(|(n, ..)| n == name)
+            .map(|(_, o, w, asc, sgn, _ts, dbase, stride)| (*o, *w, *asc, *sgn, *dbase, *stride))
     }
 }
 
@@ -1646,8 +1653,14 @@ impl Parser<'_, '_> {
                 // Extracted to a non-inlined helper so the (rare) struct-field
                 // locals never inflate `expr_primary`'s frame on the hot paren-
                 // recursion path (the MAX_EXPR_DEPTH stack budget is frame-sized).
-                if let Some((base, off, w, asc, sgn, dbase)) = self.struct_field_select(&path) {
-                    return self.struct_member_expr(base, (off, w, asc, sgn, dbase), path.span);
+                if let Some((base, off, w, asc, sgn, dbase, stride)) =
+                    self.struct_field_select(&path)
+                {
+                    return self.struct_member_expr(
+                        base,
+                        (off, w, asc, sgn, dbase, stride),
+                        path.span,
+                    );
                 }
                 // SV §6.19.5 enum method `x.first/last/num/next/prev/name [()]` —
                 // the arg-less form. Desugars to literals / ternary chains over the
@@ -6799,13 +6812,27 @@ impl Parser<'_, '_> {
     /// nested-layout machinery not in v1 — honest-loud. Returns `None` (with the
     /// error already emitted) on a non-type token or an unsupported member type; the
     /// caller breaks out of the member loop.
-    fn parse_struct_member_type(&mut self) -> Option<(NetVarKind, bool, Option<Range>)> {
+    fn parse_struct_member_type(
+        &mut self,
+    ) -> Option<(NetVarKind, bool, Option<Range>, Vec<Range>)> {
         if let Some(kind) = self.net_var_kind() {
             self.bump(); // kind keyword
             let signed = self.signed_eff(Some(kind));
             let range = self.opt_range();
             self.reject_packed_dims_on_nonvector(kind, range.is_some());
-            return Some((kind, signed, range));
+            // Multi-dimensional PACKED member (`logic [1:0][3:0] m`): collect the INNER
+            // packed dims after the first range. Each is a constant `[a:b]` range; the
+            // member's flat width folds them in and a first-level `m[i]` selects one
+            // ∏(inner)-bit element (see `parse_struct_field_sel`). Empty for the common
+            // single-dim member, so that path is byte-identical.
+            let mut packed_dims = Vec::new();
+            while self.peek() == Some(TokenKind::LBracket) {
+                match self.opt_range() {
+                    Some(d) => packed_dims.push(d),
+                    None => break,
+                }
+            }
+            return Some((kind, signed, range, packed_dims));
         }
         if let Some(info) = self.peek_typedef_name() {
             let nm = self.type_name_key();
@@ -6820,7 +6847,7 @@ impl Parser<'_, '_> {
             }
             self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
-            return Some((info.kind, info.signed, info.range));
+            return Some((info.kind, info.signed, info.range, Vec::new()));
         }
         self.error("a net/var type in a struct/union member");
         None
@@ -6838,7 +6865,7 @@ impl Parser<'_, '_> {
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range)) = self.parse_struct_member_type() else {
+            let Some((kind, signed, range, packed_dims)) = self.parse_struct_member_type() else {
                 break;
             };
             loop {
@@ -6848,6 +6875,7 @@ impl Parser<'_, '_> {
                     kind,
                     signed,
                     range: range.clone(),
+                    packed_dims: packed_dims.clone(),
                     span: m_start.to(self.prev_span()),
                 });
                 if !self.eat(TokenKind::Comma) {
@@ -6901,26 +6929,26 @@ impl Parser<'_, '_> {
         // Compute each member width. A named integer-atom kind (`int`/`byte`/…)
         // carries a fixed width from its TYPE; a vector kind (`bit`/`logic`) sizes
         // from a constant-literal range (`None` ⇒ 1).
-        let mut widths = Vec::with_capacity(members.len());
+        let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
-            match self.member_width_kind(m.kind, &m.range) {
-                Some(w) if w > 0 => widths.push(w),
+            match self.member_flat_dims(m.kind, &m.range, &m.packed_dims) {
+                Some((flat, stride)) if flat > 0 => widths.push((flat, stride)),
                 _ => {
                     self.error_at(
                         m.span,
                         "struct member width must be a named integer type or a \
                          constant-literal range in v1",
                     );
-                    widths.push(1);
+                    widths.push((1, 1));
                 }
             }
         }
-        let total: u32 = widths.iter().sum();
+        let total: u32 = widths.iter().map(|(f, _)| *f).sum();
         // Lay out MSB-first: first member occupies the high bits.
         let mut off = total;
         let mut fields = Vec::with_capacity(members.len());
-        for (m, w) in members.iter().zip(&widths) {
-            off -= w;
+        for (m, (w, stride)) in members.iter().zip(&widths) {
+            off -= *w;
             fields.push((
                 m.name.name.clone(),
                 off,
@@ -6929,6 +6957,7 @@ impl Parser<'_, '_> {
                 m.signed,
                 Self::member_kind_two_state(m.kind),
                 Self::member_dbase(&m.range),
+                *stride,
             ));
         }
         self.struct_layouts
@@ -6987,7 +7016,7 @@ impl Parser<'_, '_> {
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range)) = self.parse_struct_member_type() else {
+            let Some((kind, signed, range, packed_dims)) = self.parse_struct_member_type() else {
                 break;
             };
             loop {
@@ -6997,6 +7026,7 @@ impl Parser<'_, '_> {
                     kind,
                     signed,
                     range: range.clone(),
+                    packed_dims: packed_dims.clone(),
                     span: m_start.to(self.prev_span()),
                 });
                 if !self.eat(TokenKind::Comma) {
@@ -7011,26 +7041,26 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::RBrace, "'}' to close union body");
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
-        let mut widths = Vec::with_capacity(members.len());
+        let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
-            match self.member_width_kind(m.kind, &m.range) {
-                Some(w) if w > 0 => widths.push(w),
+            match self.member_flat_dims(m.kind, &m.range, &m.packed_dims) {
+                Some((flat, stride)) if flat > 0 => widths.push((flat, stride)),
                 _ => {
                     self.error_at(
                         m.span,
                         "union member width must be a named integer type or a \
                          constant-literal range in v1",
                     );
-                    widths.push(1);
+                    widths.push((1, 1));
                 }
             }
         }
         // OVERLAY: union width = MAX member width; every member starts at bit 0.
-        let total: u32 = widths.iter().copied().max().unwrap_or(1);
+        let total: u32 = widths.iter().map(|(f, _)| *f).max().unwrap_or(1);
         let fields = members
             .iter()
             .zip(&widths)
-            .map(|(m, w)| {
+            .map(|(m, (w, stride))| {
                 (
                     m.name.name.clone(),
                     0u32,
@@ -7039,6 +7069,7 @@ impl Parser<'_, '_> {
                     m.signed,
                     Self::member_kind_two_state(m.kind),
                     Self::member_dbase(&m.range),
+                    *stride,
                 )
             })
             .collect();
@@ -7130,6 +7161,31 @@ impl Parser<'_, '_> {
             return Some(w);
         }
         self.member_width(range)
+    }
+
+    /// The FLAT bit width and first-level element STRIDE of a (possibly
+    /// multi-dimensional) packed struct/union member. `flat = base_width ×
+    /// ∏(packed_dims widths)`; `elem_stride = ∏(packed_dims widths)` — the width of
+    /// ONE `m[i]` element. For a single-dim member `packed_dims` is empty, so
+    /// `elem_stride == 1` and `flat == base_width` (byte-identical to before). None
+    /// (→ loud) if the base kind/range or any inner dim has no constant width.
+    fn member_flat_dims(
+        &self,
+        kind: NetVarKind,
+        range: &Option<Range>,
+        packed_dims: &[Range],
+    ) -> Option<(u32, u32)> {
+        let base = self.member_width_kind(kind, range)?;
+        let mut stride: u32 = 1;
+        for d in packed_dims {
+            let w = self.member_width(&Some(d.clone()))?;
+            if w == 0 {
+                return None;
+            }
+            stride = stride.checked_mul(w)?;
+        }
+        let flat = base.checked_mul(stride)?;
+        Some((flat, stride))
     }
 
     /// N3: is a struct member kind a genuine bit-vector (packable into a flat record
@@ -7504,12 +7560,12 @@ impl Parser<'_, '_> {
     fn struct_field_select(
         &self,
         path: &HierPath,
-    ) -> Option<(HierPath, u32, u32, bool, bool, i64)> {
+    ) -> Option<(HierPath, u32, u32, bool, bool, i64, u32)> {
         if path.segments.len() != 2 {
             return None;
         }
         let tyname = self.var_struct.get(&path.segments[0].name)?;
-        let (off, w, asc, sgn, dbase) = self
+        let (off, w, asc, sgn, dbase, stride) = self
             .struct_layouts
             .get(tyname)?
             .field(&path.segments[1].name)?;
@@ -7517,7 +7573,7 @@ impl Parser<'_, '_> {
             segments: vec![path.segments[0].clone()],
             span: path.segments[0].span,
         };
-        Some((base, off, w, asc, sgn, dbase))
+        Some((base, off, w, asc, sgn, dbase, stride))
     }
 
     /// Round-9: the collision-free member-net name for `var.field` of a scalar
@@ -7733,6 +7789,12 @@ impl Parser<'_, '_> {
             if !Self::member_kind_is_integral(m.kind) {
                 return None;
             }
+            // A multi-dim packed member inside a RECORD ARRAY (`rec_t a[N]; a[i].m[j]`)
+            // needs the element-stride sub-select on the array element's shared net — a
+            // follow-on. Keep it correct-or-LOUD here (non-packable → scalar/loud path).
+            if !m.packed_dims.is_empty() {
+                return None;
+            }
             match self.member_width_kind(m.kind, &m.range) {
                 Some(w) if w > 0 => widths.push(w),
                 _ => return None,
@@ -7766,6 +7828,7 @@ impl Parser<'_, '_> {
                 m.signed,
                 Self::member_kind_two_state(m.kind),
                 Self::member_dbase(&m.range),
+                1u32, // elem_stride: multi-dim members were rejected above
             ));
         }
         Some(StructLayout { fields })
@@ -8310,7 +8373,7 @@ impl Parser<'_, '_> {
             Some(l) => l
                 .fields
                 .iter()
-                .map(|(_, _, w, _, _, ts, _)| (*w, *ts))
+                .map(|(_, _, w, _, _, ts, _, _)| (*w, *ts))
                 .collect(),
             None => return rhs,
         };
@@ -8471,10 +8534,10 @@ impl Parser<'_, '_> {
     fn struct_member_expr(
         &mut self,
         base: HierPath,
-        geom: (u32, u32, bool, bool, i64),
+        geom: (u32, u32, bool, bool, i64, u32),
         span: Span,
     ) -> Expr {
-        let (off, w, asc, sgn, dbase) = geom;
+        let (off, w, asc, sgn, dbase, stride) = geom;
         let pv = Expr {
             kind: ExprKind::PartSelect {
                 base: Box::new(Expr {
@@ -8486,7 +8549,7 @@ impl Parser<'_, '_> {
             },
             span,
         };
-        match self.parse_struct_field_sel(w, asc, dbase) {
+        match self.parse_struct_field_sel(w, asc, dbase, stride) {
             FieldSel::Whole if sgn => Expr {
                 kind: ExprKind::Cast {
                     target: CastTarget::Signing { signed: true },
@@ -8539,7 +8602,13 @@ impl Parser<'_, '_> {
     /// flips and the offset mirrors, matching an ascending NET part-select; a
     /// reversed regular range (`s.f[3:0]` on `logic [0:N]`, or `s.f[0:3]` on
     /// `logic [N:0]`) is a loud parse error.
-    fn parse_struct_field_sel(&mut self, w: u32, ascending: bool, dbase: i64) -> FieldSel {
+    fn parse_struct_field_sel(
+        &mut self,
+        w: u32,
+        ascending: bool,
+        dbase: i64,
+        elem_stride: u32,
+    ) -> FieldSel {
         if self.peek() != Some(TokenKind::LBracket) {
             return FieldSel::Whole;
         }
@@ -8556,6 +8625,35 @@ impl Parser<'_, '_> {
         let dbase = dbase.max(0) as u32;
         self.bump(); // '['
         let first = self.expr(0);
+        // Multi-dim packed member (`logic [1:0][3:0] m`): a bare `m[i]` reads the i-th
+        // `elem_stride`-bit ELEMENT (`pv[i*stride +: stride]`), not a single bit. Only
+        // the common DESCENDING, ZERO-BASED outer dim and the bare `[i]` form are
+        // supported; an ascending / non-zero-base outer dim, a range/indexed/`m[i][j]`
+        // sub-select, stays loud (correct-or-loud — a follow-on). `i` may be runtime.
+        if elem_stride > 1 {
+            let sp = first.span;
+            let sel = if self.peek() == Some(TokenKind::RBracket) && !ascending && dbase == 0 {
+                FieldSel::Indexed {
+                    offset: mk_bin(BinOp::Mul, first, Self::dec_lit(elem_stride, sp)),
+                    width: Self::dec_lit(elem_stride, sp),
+                    dir: PartDir::PlusColon,
+                }
+            } else {
+                self.error(
+                    "a multi-dimensional packed struct/union member supports only a \
+                     whole-member read or a constant/runtime first-level element select \
+                     `m[i]` on a descending zero-based outer dim in v1 (a range / indexed \
+                     `[i±:w]` / `m[i][j]` / ascending or non-zero-base outer dim is loud)",
+                );
+                FieldSel::Indexed {
+                    offset: Self::dec_lit(0, sp),
+                    width: Self::dec_lit(elem_stride, sp),
+                    dir: PartDir::PlusColon,
+                }
+            };
+            self.expect(TokenKind::RBracket, "']'");
+            return sel;
+        }
         let sel = match self.peek() {
             // regular `[a:b]` — bounds must be constant and run in the member's
             // declared direction (a≥b descending, a≤b ascending). Normalize to the
@@ -8757,10 +8855,12 @@ impl Parser<'_, '_> {
             // `k$field` (a plain Ident). A trailing sub-select (`k.field[i] = …`)
             // flows through the `loop` below on the member net, like any net.
             Lvalue::Ident(mangled)
-        } else if let Some((base, off, w, asc, _sgn, dbase)) = self.struct_field_select(&path) {
+        } else if let Some((base, off, w, asc, _sgn, dbase, stride)) =
+            self.struct_field_select(&path)
+        {
             let span = path.span;
             if self.peek() == Some(TokenKind::LBracket) {
-                self.parse_struct_field_lval(base, off, w, asc, dbase, span)
+                self.parse_struct_field_lval(base, (off, w, asc, dbase, stride), span)
             } else {
                 Lvalue::PartSelect {
                     base: Box::new(Lvalue::Ident(base)),
@@ -8862,12 +8962,12 @@ impl Parser<'_, '_> {
     fn parse_struct_field_lval(
         &mut self,
         base: HierPath,
-        off: u32,
-        w: u32,
-        asc: bool,
-        dbase: i64,
+        // (off, width, ascending, dbase, elem_stride) — bundled to keep the arg count
+        // down (mirrors the READ twin `struct_member_expr`'s `geom`).
+        geom: (u32, u32, bool, i64, u32),
         span: Span,
     ) -> Lvalue {
+        let (off, w, asc, dbase, stride) = geom;
         // Negative-LSB member WRITE sub-select: loud (signed field-relative offsets,
         // like the READ twin `parse_struct_field_sel`). Emitted BEFORE consuming `[`
         // so the diagnostic's `found` token is the sub-select `[` (matching the READ
@@ -8878,6 +8978,18 @@ impl Parser<'_, '_> {
                 span,
                 "a whole-member write — a sub-select WRITE of a packed-struct member \
                  with a NEGATIVE declared LSB (`logic [7:-4]`) is unsupported in v1",
+            );
+        }
+        // A multi-dim packed member ELEMENT write (`s.m[i] = …`) is a follow-on: the
+        // READ side supports `s.m[i]` (element select), but the WRITE twin's flat
+        // field-relative fold is bit-oriented, so an element write stays loud
+        // (correct-or-loud). The whole-member write `s.m = …` does NOT reach here.
+        if stride > 1 {
+            self.error_at(
+                span,
+                "a multi-dimensional packed struct/union member ELEMENT write \
+                 `s.m[i] = …` is unsupported in v1 (whole-member `s.m = …` is supported; \
+                 element READ `s.m[i]` is supported)",
             );
         }
         let dbase = dbase.max(0) as u32;

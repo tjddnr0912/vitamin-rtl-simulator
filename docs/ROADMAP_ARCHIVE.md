@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.184 multi-dimensional packed array struct/union member loud→supported (parser flat-width + element-stride desugar) (2026-07-21, branch feat-multidim-packed-member) ✅
+
+**발굴 경위**: §4.5.183 후 fresh-area probe(packed struct/union 연산 차분) 중 `typedef union packed { logic [7:0] byte_v; logic [1:0][3:0] nib; }`가 vita E2002(parse error·2번째 `[3:0]`서 "expected identifier") vs iverilog `u.nib[0]=b·nib[1]=a` 정상으로 발견. 격리: **독립 multi-dim packed net(`logic [1:0][3:0] x`)은 지원**(MATCH)·오직 **struct/union 멤버**만 거부(파서 `parse_struct_member_type`가 단일 `Option<Range>`만 파싱·6817 주석에 "multi-dim packed member is unsupported in v1" 명시된 의도적 v1 한계).
+
+**핵심 통찰(파서-only·format 무변화)**: struct 멤버 access(`s.m`/`s.m[i]`)는 **파서서 part-select Expr/Lvalue로 desugar**(`struct_member_expr`/`parse_struct_field_lval`)→elaborator/IR은 일반 part-select만 봄→multi-dim 지원은 **전부 파서에** 국한·**AST(StructMember)만 확장·sim-ir/format 22 불변**.
+
+**설계**: (1) AST `StructMember`에 `packed_dims: Vec<Range>`(inner 2nd+ 차원·single-dim은 empty). (2) `parse_struct_member_type`가 첫 range 뒤 추가 `[a:b]` 차원 loop 수집. (3) 신규 `member_flat_dims`가 `flat = base × ∏(inner widths)`·`elem_stride = ∏(inner widths)` 계산(single-dim=stride 1→byte-identical). (4) `StructLayout` field tuple에 `elem_stride`(8번째)·3 build site(struct/union/record). (5) `struct_field_select`→`struct_member_expr`→`parse_struct_field_sel`(READ)·`parse_struct_field_lval`(WRITE) 전부 stride threading. (6) `parse_struct_field_sel`가 `elem_stride>1`이면 bare `s.m[i]`→`Indexed{offset:i*stride, width:stride, PlusColon}`(기존 IndexedPart 머신 재사용). **correct-or-loud**: element WRITE(`s.m[i]=x`)·element RANGE(`s.m[i:j]`)·ascending/non-zero-base outer·nested `s.m[i][j]`·record-array multi-dim member는 전부 loud(follow-on·never silent-wrong). runtime index `s.m[i]`는 지원(iverilog 13.0은 constant만 요구→vita 초과·hand-verified).
+
+**적대 differential(vita vs iverilog)**: 지원 全 MATCH — union(`ab b a`)·struct+neighbor(`abc c b a`)·whole R/W(`5a a 5`)·3-dim first-level(`1234 34 12`)·signed(`0 f`)·copy/compare(`1 a 5`)·3-byte(`[2:0][7:0]`)·offset-around-multidim·arithmetic·runtime(sum 38·hand-verified). **회귀 clean**: single-dim member+bit-select·non-zero-LSB member sub-select 全 MATCH. **LOUD 유지**: element write·range·ascending·`s.m[i][j]`(E3009)·record-array(E3010). format 22 불변(파서 desugar만·AST StructMember 확장은 sim-ir 미도달·단 AST `SourceUnit` `.vu` 해시는 re-pin—`hdl-ast/tests/schema_hash.rs`). **3862 green**(+13). ⭐교훈: ① **struct 멤버가 파서서 part-select로 desugar됨을 파악→다층 예상이 파서-only로 축소**(elaborator/IR 무변화·format bump 회피). ② **기존 IndexedPart 머신 재사용**(element select=`i*stride +: stride`). ③ **elem_stride=1 sentinel이 single-dim byte-identical 보장**. ④ **correct-or-loud 경계 다수**(write/range/ascending/nested/array=follow-on loud). ⑤ **runtime index가 iverilog 초과**(oracle 없어 hand-verify). 상세=본 엔트리·ROADMAP §3.
+
 #### 4.5.183 SILENT-WRONG 수정: block-local `string s[] = '{…}` dyn-array init이 조용히 drop → supported (module-scope parity) (2026-07-21, branch feat-block-local-string-dyn-init) ✅
 
 **발굴 경위**: §4.5.182(queue/dyn `{…}` concat) 적대 검증 중, string dyn-array가 concat에서 loud 유지됨을 확인하려고 baseline `string s[] = '{"a","b","c"}`(apostrophe 형태)를 테스트하다 **vita SZ=0(빈 배열)·빈 문자열 vs iverilog SZ=3(a b c)** 발견. int dyn(`int s[]='{4,5,6}`)은 SZ=3 정상. 축소 격리: **module-scope 선언은 정상**(SZ=3)이나 **동일 선언을 initial/always BLOCK 내부(block-local)에 두면 SZ=0**.

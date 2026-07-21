@@ -509,12 +509,17 @@ pub struct EnumLabel {
 
 /// One packed-struct member: `logic [7:0] a;`. v1 members are scalar/vector
 /// net/var types with a constant-literal range (no nested struct / param width).
+/// `packed_dims` carries the INNER packed dims of a multi-dimensional packed member
+/// (`logic [1:0][3:0] m` → `range = [1:0]`, `packed_dims = [[3:0]]`); it is empty for
+/// an ordinary single-dim member. The member's flat bit width is `range` width ×
+/// ∏(`packed_dims` widths); each first-level element (`m[i]`) is ∏(`packed_dims`) bits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct StructMember {
     pub name: Ident,
     pub kind: NetVarKind,
     pub signed: bool,
     pub range: Option<Range>,
+    pub packed_dims: Vec<Range>,
     pub span: Span,
 }
 
