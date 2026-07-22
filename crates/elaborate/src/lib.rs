@@ -1074,11 +1074,13 @@ struct DeferredHierTaskCall {
 }
 
 /// §13.3 UARR: the classified shape of a SUPPORTED unpacked-array subroutine
-/// formal (`classify_array_formal`). Lowered to an md-packed `[count][elem_w]`
-/// frame slot; `ascending` is the formal's declared unpacked-dim direction, which
-/// the ACTUAL must match (§7.6 positional copy).
-#[derive(Clone, Copy)]
+/// formal (`classify_array_formal`) or frame-LOCAL array. Lowered to an md-packed
+/// `[count][elem_w]` frame slot; `ascending` is the FIRST unpacked dim's declared
+/// direction, which a formal ACTUAL must match (§7.6 positional copy).
+#[derive(Clone)]
 struct ArrayFormal {
+    /// Total element count = product of every unpacked-dim size (== the single dim for
+    /// a 1-D array/formal).
     count: u32,
     elem_w: u32,
     ascending: bool,
@@ -1087,6 +1089,13 @@ struct ArrayFormal {
     /// `arr[i]` re-stamps `$signed` (`lower_packed_read`) so a negative element reads
     /// as negative instead of zero-extended (silent-wrong). Unsigned ⇒ `false`.
     elem_signed: bool,
+    /// §4.5.199: per-unpacked-dim `(size, ascending)`, OUTER→INNER. `[(count, ascending)]`
+    /// for a 1-D array/formal; N entries for a multi-dim frame-LOCAL array. The md-packed
+    /// slot's `packed_dims` is these dims (position-indexed) + a trailing `(0, elem_w,
+    /// false)`, so `flatten_word` maps `m[i][j]` to bit offset `i*∏inner + j*elem_w` with
+    /// no new offset math. A multi-dim FORMAL is rejected in `classify_array_formal`
+    /// (the formal binding packs a single dimension); multi-dim is a frame-local feature.
+    dims: Vec<(u32, bool)>,
 }
 
 /// A hierarchical WRITE target (`tb.dut.x = …`) whose net does not exist when the
@@ -16095,7 +16104,7 @@ impl<'s> Elaborator<'s> {
             if let Some(cls) = self.classify_array_formal(p) {
                 match cls {
                     Ok(af) => {
-                        let packed = self.lower_array_actual_packed(a, af);
+                        let packed = self.lower_array_actual_packed(a, &af);
                         actual_ids.push(packed);
                     }
                     Err(reason) => {
@@ -16200,7 +16209,7 @@ impl<'s> Elaborator<'s> {
     /// (correct-or-loud). Packs `{net[count-1], …, net[0]}` so element index `i`
     /// lands at bit offset `i*elem_w` — the md-packed formal's `[count-1:0][elem_w-1:0]`
     /// layout (element 0 at the LSB).
-    fn lower_array_actual_packed(&mut self, a: &ast::Expr, af: ArrayFormal) -> u32 {
+    fn lower_array_actual_packed(&mut self, a: &ast::Expr, af: &ArrayFormal) -> u32 {
         let (count, elem_w) = (af.count, af.elem_w);
         let net_opt = match &a.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
@@ -16218,8 +16227,13 @@ impl<'s> Elaborator<'s> {
         // repack needed. A shape / direction mismatch is loud (§7.6 copies by position,
         // so opposite directions would silently reverse the elements).
         if let Some(net) = net_opt {
-            if let Some(&caller_af) = self.frame_arr_formal_meta.get(&net) {
-                if caller_af.count == af.count
+            if let Some(caller_af) = self.frame_arr_formal_meta.get(&net).cloned() {
+                // §4.5.199: a MULTI-DIM frame-local md-packed net (`dims.len() > 1`) cannot
+                // forward as a whole-array actual to a (1-D) formal — the flat layouts
+                // differ, so require a matching SINGLE-dim shape; a multi-dim actual falls
+                // to the loud mismatch below (correct-or-loud).
+                if caller_af.dims.len() == 1
+                    && caller_af.count == af.count
                     && caller_af.elem_w == af.elem_w
                     && caller_af.ascending == af.ascending
                 {
@@ -16891,7 +16905,11 @@ impl<'s> Elaborator<'s> {
                 d.kind,
             ) {
                 let (count, elem_w) = (af.count, af.elem_w);
-                let ext = Self::array_formal_ext(count, elem_w);
+                // §4.5.199: `count` = product of every unpacked dim, and `ext` gets one
+                // packed entry per dim (via `af.dims`) so a multi-dim frame-LOCAL array
+                // `int m[2][2]` reads/writes `m[i][j]` through the existing N-D packed
+                // chain. A single-dim array is byte-identical to `array_formal_ext`.
+                let ext = Self::array_formal_ext_dims(&af.dims, elem_w);
                 let w = count.saturating_mul(elem_w).max(1);
                 let net = self.nets.len() as u32;
                 self.add_net(
@@ -17001,13 +17019,26 @@ impl<'s> Elaborator<'s> {
     ) -> Option<Result<ArrayFormal, &'static str>> {
         // A TfPort has no `packed` field (a formal element is a single vector range),
         // so pass `&[]` — the multi-dim-packed-element reject never fires for formals.
-        self.classify_unpacked_array(
+        let cls = self.classify_unpacked_array(
             &p.unpacked,
             p.range.as_ref(),
             &[],
             p.signed,
             p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
-        )
+        );
+        // §4.5.199: `classify_unpacked_array` now accepts a MULTI-DIM shape (for a frame-
+        // LOCAL array), but a subroutine array FORMAL is 1-D only — the md-packed value
+        // slot + the call-site whole-array concat pack a single dimension, so a 2-D formal
+        // would mis-bind (silent-wrong). Keep it loud (correct-or-loud); multi-dim is a
+        // frame-local-only feature.
+        if let Some(Ok(af)) = &cls {
+            if af.dims.len() > 1 {
+                return Some(Err(
+                    "a multi-dimensional unpacked-array formal (only a single dimension is supported)",
+                ));
+            }
+        }
+        cls
     }
 
     /// §13.3 UARR slice classifier, shared by array FORMALS and frame-LOCAL unpacked
@@ -17036,51 +17067,55 @@ impl<'s> Elaborator<'s> {
                 "a multi-dimensional packed element combined with an unpacked array",
             ));
         }
-        // Multi-dim unpacked → the 2-level packing / offset math is out of the slice.
-        if unpacked.len() != 1 {
-            return Some(Err(
-                "a multi-dimensional unpacked-array formal (only a single dimension is supported)",
-            ));
+        // §4.5.199: EVERY unpacked dim must be a zero-based CONSTANT (`[N]` or
+        // `[0:N-1]`/`[N-1:0]`), so each index i_k maps to a fixed stride in the md-packed
+        // slot. A single dim is the common (formal + 1-D local) case; 2+ dims are a
+        // multi-dim frame-LOCAL array — `array_formal_ext_dims` emits one `packed_dims`
+        // entry per dim + the elem_w entry, so `flatten_word` handles `m[i][j]` with the
+        // existing N-D offset math. A multi-dim FORMAL is loud-rejected downstream
+        // (`classify_array_formal`); the formal binding packs a single dimension.
+        let mut dims: Vec<(u32, bool)> = Vec::with_capacity(unpacked.len());
+        for dim in unpacked {
+            let (sz, asc) = match dim {
+                // `[N]` == `[0:N-1]` (zero-based ascending by construction).
+                ast::Dim::Size(e) => match self.const_eval_in_scope(e) {
+                    Some(n) if n >= 1 => (n as u32, true),
+                    _ => return Some(Err("a non-constant or non-positive unpacked-array size")),
+                },
+                ast::Dim::Range(r) => {
+                    let (m, l) = match (
+                        self.const_eval_in_scope(&r.msb),
+                        self.const_eval_in_scope(&r.lsb),
+                    ) {
+                        (Some(m), Some(l)) => (m, l),
+                        _ => return Some(Err("a non-constant unpacked-array bound")),
+                    };
+                    // Zero-based `[0:N-1]` / `[N-1:0]` only: index 0 must be valid so the
+                    // md-packed stride math needs no base offset. A non-zero base
+                    // (`[1:4]`) would shift every read.
+                    if m < 0 || l < 0 || m.min(l) != 0 {
+                        return Some(Err(
+                            "a non-zero-based unpacked-array range (only `[0:N-1]` / `[N-1:0]`)",
+                        ));
+                    }
+                    ((m.abs_diff(l) + 1) as u32, m < l)
+                }
+                ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_) => {
+                    return Some(Err("a dynamic / queue / associative formal dimension"))
+                }
+            };
+            dims.push((sz, asc));
         }
-        // G3: a signed element (`byte`/`int`/`shortint`/`longint`/`logic signed [..]`)
-        // is supported — the md-packed element read is a part-select (unsigned per
-        // §11.5.1), so `lower_packed_read` re-stamps `$signed` on a whole-element read
-        // when `elem_signed` is set (below). `signed` reflects the element type's
+        // `count` = total elements (product); saturating so a pathological product cannot
+        // panic (the width guard below caps the slot). `ascending` = the FIRST dim's
+        // direction (the §7.6 positional-copy check consumes it for 1-D formals only).
+        let count: u32 = dims.iter().fold(1u32, |a, &(s, _)| a.saturating_mul(s));
+        let ascending = dims[0].1;
+        // G3: a signed element is supported — the md-packed element read is a part-select
+        // (unsigned per §11.5.1), so `lower_packed_read` re-stamps `$signed` on a whole-
+        // element read when `elem_signed` is set. `signed` reflects the element type's
         // declared signedness (`byte`→signed, `byte unsigned`→unsigned).
         let elem_signed = signed;
-        // `ascending` = the declared unpacked-dim direction (`[0:N-1]` is
-        // little-endian ascending, `[N-1:0]` big-endian descending). The ACTUAL must
-        // match it (§7.6 array copy is POSITIONAL, so `arr[i]` == the actual element
-        // at the same DECLARED-order position only when the two directions agree; the
-        // md-packed read is index-based). The call site loud-rejects a mismatch.
-        let (count, ascending) = match &unpacked[0] {
-            // `[N]` == `[0:N-1]` (zero-based ascending by construction).
-            ast::Dim::Size(e) => match self.const_eval_in_scope(e) {
-                Some(n) if n >= 1 => (n as u32, true),
-                _ => return Some(Err("a non-constant or non-positive unpacked-array size")),
-            },
-            ast::Dim::Range(r) => {
-                let (m, l) = match (
-                    self.const_eval_in_scope(&r.msb),
-                    self.const_eval_in_scope(&r.lsb),
-                ) {
-                    (Some(m), Some(l)) => (m, l),
-                    _ => return Some(Err("a non-constant unpacked-array bound")),
-                };
-                // Zero-based `[0:N-1]` / `[N-1:0]` only: element index i maps to bit
-                // offset i*elem_w in the md-packed slot, which requires index 0 to be
-                // valid. A non-zero base (`[1:4]`, `[2:5]`) would shift every read.
-                if m < 0 || l < 0 || m.min(l) != 0 {
-                    return Some(Err(
-                        "a non-zero-based unpacked-array range (only `[0:N-1]` / `[N-1:0]`)",
-                    ));
-                }
-                ((m.abs_diff(l) + 1) as u32, m < l)
-            }
-            ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_) => {
-                return Some(Err("a dynamic / queue / associative formal dimension"))
-            }
-        };
         // The element must be a simple zero-LSB vector (`[W-1:0]`), an integral atom
         // (`int unsigned`/`byte unsigned`/…), or a scalar. A non-zero-LSB element
         // (`[15:8]`) needs per-element offset normalization (§4.5.103) — out of slice.
@@ -17118,16 +17153,31 @@ impl<'s> Elaborator<'s> {
             elem_w,
             ascending,
             elem_signed,
+            dims,
         }))
     }
 
-    /// The md-packed `packed_dims` extents for a SUPPORTED array formal, in the
+    /// The md-packed `packed_dims` extents for a SUPPORTED 1-D array formal, in the
     /// `packed_extents` format `(lo, width, ascending)` (outer→inner): zero-based
     /// descending dims `[count-1:0][elem_w-1:0]` ⇒ `lo=0`, `ascending=false` for both,
     /// so `flatten_word` maps element index `i` to bit offset `i*elem_w` (no `Sub`).
     /// Total slot width = `count*elem_w`.
     fn array_formal_ext(count: u32, elem_w: u32) -> Vec<(u32, u32, bool)> {
         vec![(0, count, false), (0, elem_w, false)]
+    }
+
+    /// §4.5.199: the md-packed `packed_dims` extents for an N-D frame-local array — one
+    /// POSITION-INDEXED entry per unpacked dim (`lo=0`, `ascending=false`; the declared
+    /// per-dim direction affects only the §7.6 positional-copy check, never the element
+    /// offset) + the trailing element bit-width entry. `flatten_word` over these dims
+    /// maps `m[i][j]` (row-major) to bit offset `i*(∏inner sizes)*elem_w + j*elem_w` and
+    /// the trailing-dims product gives the `elem_w` part-select width. For a single dim
+    /// this is byte-identical to `array_formal_ext(count, elem_w)`.
+    fn array_formal_ext_dims(dims: &[(u32, bool)], elem_w: u32) -> Vec<(u32, u32, bool)> {
+        dims.iter()
+            .map(|&(sz, _)| (0u32, sz, false))
+            .chain(std::iter::once((0u32, elem_w, false)))
+            .collect()
     }
 
     /// True if `base` is the WHOLE array formal directly — a 1-seg `Ident`
@@ -17876,7 +17926,7 @@ impl<'s> Elaborator<'s> {
                         // slot; body `b[i]` reads route through the md-packed element read.
                         match cls {
                             Ok(af) => {
-                                let packed = self.lower_array_actual_packed(a, af);
+                                let packed = self.lower_array_actual_packed(a, &af);
                                 in_binds.push((slot, packed));
                             }
                             Err(reason) => self.error(
@@ -17955,7 +18005,7 @@ impl<'s> Elaborator<'s> {
                                             );
                                             // INOUT copy-IN at entry (pass-by-value-result).
                                             if matches!(p.dir, ast::PortDir::Inout) {
-                                                let packed = self.lower_array_actual_packed(a, af);
+                                                let packed = self.lower_array_actual_packed(a, &af);
                                                 in_binds.push((slot, packed));
                                             }
                                             let w = af.count.saturating_mul(af.elem_w).max(1);
@@ -22616,6 +22666,23 @@ impl<'s> Elaborator<'s> {
             );
             return self.placeholder_expr();
         }
+        // §4.5.199: an md-packed UNPACKED-array frame slot (`frame_arr_formal_meta`) has
+        // NO whole-value surface, so a PARTIAL index (`m[i]` on a 2-D `int m[2][2]`, fewer
+        // indices than unpacked dims) must not silently return a multi-element sub-array
+        // slice — index every dimension down to the scalar element (a trailing bit/part-
+        // select is still fine: `idxs.len()+1 == dims.len()` for the element, one MORE for
+        // a bit-select). A genuine multi-dim PACKED net (`reg [3:0][7:0] x; x[i]`) is NOT
+        // in `frame_arr_formal_meta`, so its legal partial sub-element select is untouched.
+        // Never fires for a 1-D md-packed array (`dims.len()==2` ⇒ needs `idxs.len()==0`,
+        // impossible on a select), so the 1-D golden IR is byte-identical.
+        if idxs.len() + 1 < dims.len() && self.frame_arr_formal_meta.contains_key(&net) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a partial slice of an unpacked array (index every dimension down to a \
+                 scalar element; a whole sub-array has no value in this context)",
+            );
+            return self.placeholder_expr();
+        }
         let (ext, dirs) = Self::packed_split(&dims);
         let offset = self.flatten_word(&ext, idxs, &dirs);
         let elem_w: u64 = dims[idxs.len()..]
@@ -23094,6 +23161,25 @@ impl<'s> Elaborator<'s> {
             self.error(
                 MsgCode::ElabUnsupported,
                 "too many indices for packed array (more than its dimensions)",
+            );
+            out.push(ir::LvalChunk {
+                net: POISON_NET,
+                word: None,
+                offset: None,
+                width: None,
+                kind: ir::SelKind::Bit,
+            });
+            return;
+        }
+        // §4.5.199: a PARTIAL write to an md-packed unpacked-array frame slot (`m[i] = …`
+        // on a 2-D `int m[2][2]`) must not silently overwrite a multi-element sub-array —
+        // index down to a scalar element (mirror of `lower_packed_read`; byte-identical
+        // for a 1-D md-packed slot). Correct-or-loud.
+        if idxs.len() + 1 < dims.len() && self.frame_arr_formal_meta.contains_key(&net) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a partial slice of an unpacked array (index every dimension down to a \
+                 scalar element; a whole sub-array cannot be assigned here)",
             );
             out.push(ir::LvalChunk {
                 net: POISON_NET,

@@ -8,6 +8,24 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.199 multi-dim frame-LOCAL array loud→supported (frame↔inline parity, step 2 — 마지막 갭) (2026-07-23, branch feat-frame-multidim-local) ✅
+
+**컨텍스트**: §4.5.198 후 `task automatic`(framed) vs `task`(inline) body를 ~25 구성으로 differential-sweep→frame⊂inline 비대칭의 **유일한 잔여 갭 = multi-dim frame-LOCAL array**(`int m[2][2]` in task)로 규명(module 쓰기·control flow·1D local·queue/dyn·timing·$display 全 parity·string/sformatf local은 오히려 inline이 약함). 오너 "step2로 진행".
+
+**갭**: `int m[2][2]`가 `classify_unpacked_array`의 `unpacked.len()!=1` reject로 `frame_array_local` 1-elem net化→`m[0][0]=v`가 base `m[0]`(BitSelect)를 `lval_base_net`이 못 받아 "nested lvalue select (v1: single-level)". **모듈-scope `m[i][j]`는 동작**→frame-lowering-specific.
+
+**핵심 통찰(subagent 정밀 트레이스)**: frame-local array element access는 md-packed **part-select**(`packed_dims`+`flatten_word`)로 라우팅되고 이 **N-D 머신러리는 이미 존재**(`build_hier_packed_read`·`lower_packed_read`·`collect_packed_write`). frame md-packed net은 `array_len=1`이라 `net_is_static_array=false`→READ(`expr_packed_chain`→`lower_packed_read`)·WRITE(`lval_packed_chain`→`collect_packed_write`) **모두 `packed_dims` 소비**(`net_dim_extents`/`array_dims` 미사용). nested `m[i][j]` chain도 packed chain이 이미 walk·"single-level" 제약은 `lval_base_net`에만 있고 packed 경로는 우회. 즉 **`packed_dims`를 multi-dim으로 세팅하면 동작**.
+
+**fix(format 22 불변)**: (1) `classify_unpacked_array`가 모든 zero-based-const dim 수용(single→loop·`count=∏sizes`·per-dim `(size,ascending)`→신규 `ArrayFormal.dims`·multi-dim-PACKED-element reject는 유지). (2) `reserve_frame_local_decl`가 `array_formal_ext_dims(&af.dims, elem_w)`로 md-packed slot 예약(dim당 `packed_dims` 1 entry + trailing elem_w entry·`w=count*elem_w`). `flatten_word`가 `m[i][j]`→offset `i*∏inner*elem_w + j*elem_w`·width `elem_w`(stride가 elem_w 포함). **1D는 byte-identical**(`dims=[(count,asc)]`→`array_formal_ext_dims`=`array_formal_ext`). `ArrayFormal` Copy→Clone(1 site `&caller_af`→`.cloned()` + `lower_array_actual_packed` sig `&af`).
+
+**★핵심 silent-wrong guard(subagent 발굴)**: partial index `m[i]` on 2D(indices < unpacked dims)는 multi-element sub-array slice(`width=∏remaining dims`)를 조용히 반환→`lower_packed_read`/`collect_packed_write`에 `idxs.len()+1 < dims.len() && frame_arr_formal_meta.contains(net)` loud guard(scalar element까지 index 강제). genuine multi-dim PACKED net(`reg [3:0][7:0] x; x[i]`)은 `frame_arr_formal_meta` 밖이라 legal partial sub-select 무영향·1D(`dims.len()==2`)는 `idxs.len()<1` 불가라 **절대 미발화=byte-identical**. bit-select `m[i][j][bit]`(idxs.len()==dims.len())는 통과(guard는 `<`라).
+
+**correct-or-loud**: FORMAL은 1D only(`classify_array_formal`이 `dims.len()>1` reject→formal binding은 single-dim pack·multi-dim FORMAL이 유일 loud follow-on)·whole 2D array as arg(`f(m)`)=loud(`lower_array_actual_packed`의 `caller_af.dims.len()==1` guard). (element-part-select `m[i][j][7:4]`은 READ·WRITE 모두 packed chain으로 동작·iverilog MATCH[0xA5→10/5·write→192]—subagent가 loud로 예측했으나 실제 supported.)
+
+**적대 differential 全 MATCH(iverilog 오라클)**: 2D basic(5678)·3D non-square runtime-loop(726)·descending dims `[1:0][3:0]`(189)·signed byte(-105·md-packed whole-unsigned→`$signed` restamp)·runtime index both dims(77)·bit-select of element(11)·function body(30)·across-`#5`-suspend(14·per-activation 격리). partial-index/whole-arg 全 loud. 1D regression(g=18/14) clean. full suite green·format 22 불변·clippy/fmt clean.
+
+**교훈**: **frame-local array=md-packed part-select이라 N-D packed 머신러리(`flatten_word`) 재사용이 자연**(word-based `net_dim_extents` 아님)·subagent 정밀 트레이스가 read/write 모두 `packed_dims` 소비 확인→`net_dim_extents` 우회 안전·**partial-index guard가 핵심 silent-wrong 방지**(subagent가 "too many만 reject, too few는 silent multi-slice" 발굴)·`packed_dims`/`frame_arr_formal_meta`=elaborate-transient라 format 불변·1D byte-identical(golden churn 0). **이로써 frame ⊇ inline 완성**→STATIC task hier-call force-frame이 회귀 없이 안전(step 3). 신규 `frame_multidim_array.rs`×10·flip 1(`frame_local_array_multidim_task_loud`→`_supported`).
+
 #### 4.5.198 frame task MODULE array-element write loud→supported (frame↔inline parity, step 1) (2026-07-23, branch feat-frame-array-write) ✅
 
 **컨텍스트**: §4.5.197 후 오너와 "static hier-task force-frame 회귀 리스크" 논의 → "정밀 RTL 분석·정확도 최우선이면 어떤 선택이 올바른가?" 질문. 결론=**정확도 사다리**(silent-wrong ≪ loud ≪ correct-support·"올라가되 내려가지 마라"). naive force-frame은 동작하던 local 호출을 loud로 만듦(내려감)→오답. 올바른 방향=**frame 경로를 inline과 동등하게**(loud→correct-support). 그리고 frame⊂inline 비대칭은 **hier-task와 무관하게 오늘 이미 존재하는 정확도 갭**: `task automatic; mem[i]=v;`가 vita E3009인데 iverilog·verilator·vcs 정상. 오너 "진행해"→step 1 착수.
