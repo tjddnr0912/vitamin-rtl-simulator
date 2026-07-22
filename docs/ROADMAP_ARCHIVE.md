@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.201 hierarchical task OUTPUT/INOUT scalar formal loud→supported (cross-boundary copy-out) (2026-07-23, branch feat-hier-task-outformal) ✅
+
+**컨텍스트**: hier-task 완성(§4.5.197~200) 후 오너 "진행해"(follow-on). §4.5.197 hier-task은 **INPUT-only scalar formal**만 지원(defer 시 callee port 방향 미지라 copy-out 불가)·output/inout formal은 loud였음. iverilog 오라클 有(`u.compute(x,r)`=r=31·`u.inc(r)`=r=15).
+
+**핵심 난점**: hier call `u1.tk(x, r)` **defer 시점**(pass 7·callee instance 미elaborate)엔 callee의 port 방향(input/output/inout) 미지→어느 arg가 copy-IN(value)이고 어느 게 copy-OUT(caller lvalue)인지 결정 불가.
+
+**해결(dual-lower at defer + port-dir routing at resolve)**: (1) **defer 시 각 arg를 value(`arg_ids[i]`·copy-in expr)와 lvalue-able이면 caller lvalue(`arg_lvals[i]`·copy-out target)로 둘 다 lower**(`expr_to_lvalue`+`lower_lvalue`·non-lvalue arg는 None·부작용 無[Lvalue 생성만]). (2) `reserve_frame_task`가 hier-callable task의 port 방향을 `hier_task_port_dirs[fid]` sidecar에 저장(callee def이 resolve 시점 scope 밖이라 재조회 불가). (3) `resolve_deferred_hier_task_call`이 방향별 라우팅: Input→`in_binds`(value)·Output→`out_binds`(lvalue)·Inout→both. `TaskCallInfo{in_binds, out_binds}`는 엔진이 이미 적용(§4.5.194 `emit_frame_task_call` copy-out machinery 재사용·process Call arm이 out_binds를 task 종료 후 caller lvalue에 write). `hier_tasks` gate를 Input-only→Input|Output|Inout scalar non-string으로 완화. **wire 무변화**(format 22 불변·DeferredHierTaskCall/hier_task_port_dirs 全 elaborate-transient).
+
+**적대 differential 全 MATCH(iverilog 오라클)**: output(r=31)·inout(r=15)·**multi in+out STATIC task per-instance param**(divmod 17/5: 4 2 3 2·§4.5.200 force-frame과 조합)·output to array-elem select(arr2=42)·output+instance-net write+control flow static(lookup: a=4/b=-1/hits=1)·inout to array-elem select(m1=123)·**partial output write(r=0·IEEE §13.5.2 pass-by-value-result: unwritten output formal이 default 0을 copy-out해 caller의 999 덮음)**. correct-or-loud: non-lvalue output arg(`u.f(3)`)=loud·array/string formal=loud. input-only(§4.5.197) regression 0.
+
+**교훈**: **defer 시점 callee 정보 미지 문제를 dual-representation(value+lvalue) lower + resolve 시 port-dir sidecar로 선택**하는 패턴으로 해결(§4.5.196 hier-FUNCTION의 "engine이 formal width로 coerce" 트릭과 다른 접근—copy-out은 실제 caller lvalue가 필요라 defer 시 미리 잡아둬야 함)·기존 `out_binds` copy-out machinery 재사용으로 엔진 무변화·IEEE partial-write 자동 준수(엔진 copy-out이 formal default 반영). 신규 test 확장(`hier_task_call.rs` output/inout supported+non-lvalue loud·`hier_task_call_static.rs` static output+divmod).
+
 #### 4.5.200 STATIC-task hierarchical call `u1.tk()` loud→supported (frame↔inline parity, step 3 — hier-task 완성) (2026-07-23, branch feat-static-hier-task) ✅
 
 **컨텍스트**: §4.5.199로 **frame ⊇ inline 완성** 후 오너 "진행해"(step 3). §4.5.197이 AUTOMATIC task hier call을 지원(automatic task는 이미 framed→per-instance FuncId 有)했으나 STATIC(non-automatic) task는 inline→FuncId 없어 hier defer/resolve가 못 bind→loud. **이전엔 static task force-frame이 그 task의 LOCAL caller를 frame-subset에 종속시켜 회귀 위험이었으나**(오너와의 정확도-사다리 논의), §4.5.198(module array-element write)+§4.5.199(multi-dim frame-local)가 frame⊂inline 갭을 닫아 frame⊇inline→**force-frame이 회귀 없이 안전**.

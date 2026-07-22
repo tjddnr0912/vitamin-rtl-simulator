@@ -1062,15 +1062,19 @@ struct DeferredHierCall {
 /// the process block `(proc, call_block)` and the args are lowered in the CALLER scope;
 /// `resolve_deferred_hier_task_call` builds the `TaskCallInfo{callee: per-instance fid}`
 /// into `task_calls_proc[(proc, call_block)]` once every instance's frame tasks are in
-/// `hier_tasks`. Restricted to input-only scalar formals (no copy-out), so `in_binds`
-/// are the positional args by index and `out_binds` is empty; the engine coerces each
-/// arg to the per-instance formal width at frame entry (`enter_task_frame`).
+/// `hier_tasks`. Restricted to SCALAR formals. §4.5.201: each arg is lowered BOTH as a
+/// value (`arg_ids[i]`, the copy-IN for an input/inout formal) AND — when it is an lvalue
+/// (a bare var / select) — as a caller-side lvalue (`arg_lvals[i]`, the copy-OUT target for
+/// an output/inout formal); the callee port DIRECTION is unknown at the call site (the
+/// instance isn't elaborated yet), so `resolve_deferred_hier_task_call` picks between them
+/// per port using `hier_task_port_dirs[fid]`.
 struct DeferredHierTaskCall {
     proc: u32,
     call_block: u32,
     prefix: String,
     path: Vec<String>,
     arg_ids: Vec<u32>,
+    arg_lvals: Vec<Option<ir::Lvalue>>,
 }
 
 /// §13.3 UARR: the classified shape of a SUPPORTED unpacked-array subroutine
@@ -3405,6 +3409,11 @@ struct Elaborator<'s> {
     // per-module framing; frame ⊇ inline (§4.5.198/199) means force-framing never regresses
     // the task's LOCAL callers, and name-based over-collection is harmless. NEVER restored.
     hier_called_task_names: std::collections::BTreeSet<String>,
+    // §4.5.201: per hier-callable frame-TASK FuncId, the declared port DIRECTIONS (parallel
+    // to the formals). `resolve_deferred_hier_task_call` reads it to route each deferred arg
+    // to an in-bind (input/inout copy-in) and/or an out-bind (output/inout copy-out) — the
+    // direction is unknown at the call site (the callee instance isn't elaborated yet).
+    hier_task_port_dirs: BTreeMap<u32, Vec<ast::PortDir>>,
     // `defparam top.u.N = 7;` overrides, keyed by the FULLY-QUALIFIED target
     // instance path → [(param-name, const value)]. Collected in pass 7 (when the
     // parent's FQ prefix is current) and consumed by the child's `bind_params` in
@@ -3887,6 +3896,7 @@ impl<'s> Elaborator<'s> {
             hier_funcs: BTreeMap::new(),
             hier_tasks: BTreeMap::new(),
             hier_called_task_names: std::collections::BTreeSet::new(),
+            hier_task_port_dirs: BTreeMap::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
             cur_inst: 0,
@@ -4910,7 +4920,8 @@ impl<'s> Elaborator<'s> {
                     MsgCode::ElabUnsupported,
                     &format!(
                         "unsupported hierarchical task call `{}` (the callee must be a framed \
-                         task with input-only scalar formals, reached through an instance path)",
+                         task with scalar formals — input/output/inout, no array/string — \
+                         reached through an instance path)",
                         d.path.join(".")
                     ),
                 );
@@ -4931,18 +4942,49 @@ impl<'s> Elaborator<'s> {
                 );
                 continue;
             }
-            let in_binds: Vec<(u32, u32)> = d
-                .arg_ids
-                .iter()
-                .enumerate()
-                .map(|(i, &e)| (i as u32, e))
-                .collect();
+            // §4.5.201: route each arg by the callee port DIRECTION (`hier_task_port_dirs`,
+            // stored when the task was registered — the callee def is not in scope here).
+            // INPUT → copy-in (value); OUTPUT → copy-out (caller lvalue); INOUT → both. A
+            // non-lvalue output/inout actual is loud (correct-or-loud). `dirs.len()` ==
+            // `arg_ids.len()` after the arity guard (both are the callee's formal count).
+            let dirs = self
+                .hier_task_port_dirs
+                .get(&fid)
+                .cloned()
+                .unwrap_or_default();
+            let mut in_binds: Vec<(u32, u32)> = Vec::new();
+            let mut out_binds: Vec<(u32, ir::Lvalue)> = Vec::new();
+            let mut bind_err = false;
+            for (i, dir) in dirs.iter().enumerate() {
+                if matches!(dir, ast::PortDir::Input | ast::PortDir::Inout) {
+                    in_binds.push((i as u32, d.arg_ids[i]));
+                }
+                if matches!(dir, ast::PortDir::Output | ast::PortDir::Inout) {
+                    match &d.arg_lvals[i] {
+                        Some(lv) => out_binds.push((i as u32, lv.clone())),
+                        None => {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "hierarchical task call `{}`: an output/inout argument must \
+                                     be a writable net or select",
+                                    d.path.join(".")
+                                ),
+                            );
+                            bind_err = true;
+                        }
+                    }
+                }
+            }
+            if bind_err {
+                continue;
+            }
             self.task_calls_proc.insert(
                 (d.proc, d.call_block),
                 TaskCallInfo {
                     callee: fid,
                     in_binds,
-                    out_binds: Vec::new(),
+                    out_binds,
                 },
             );
             let entry = self.funcs[fid as usize].entry;
@@ -17607,16 +17649,20 @@ impl<'s> Elaborator<'s> {
         let n_params = task.ports.len() as u32;
         // Family D (r18): register this per-instance FuncId for a hierarchical enable
         // `u1.tk(x)` IF the task is HIER-CALLABLE — a plain module task (no `::`) with
-        // INPUT-only SCALAR non-`string` formals (so there is no cross-boundary copy-out;
-        // the args bind by index and the engine coerces each to the per-instance formal
-        // width at frame entry). An output/inout/array/string formal gets NO entry → a
-        // hier enable to it stays loud at resolution (correct-or-loud). `cur_prefix` is
-        // the current instance path, so the key is the full `<inst>.<tname>` that
-        // `hier_resolve` reconstructs from the enable's segments.
+        // SCALAR non-`string`, non-array formals of ANY direction (§4.5.201: input/output/
+        // inout). An input/inout formal copies IN by value; an output/inout formal copies
+        // OUT to the caller lvalue at the task's exit — both via the standard `TaskCallInfo`
+        // in/out binds the engine already applies. An array/string formal gets NO entry → a
+        // hier enable to it stays loud at resolution (correct-or-loud). `cur_prefix` is the
+        // current instance path, so the key is the full `<inst>.<tname>` that `hier_resolve`
+        // reconstructs from the enable's segments; `hier_task_port_dirs` records the
+        // directions so the resolver can route each arg without the callee def in scope.
         if !name.contains("::")
             && task.ports.iter().all(|p| {
-                matches!(p.dir, ast::PortDir::Input)
-                    && p.unpacked.is_empty()
+                matches!(
+                    p.dir,
+                    ast::PortDir::Input | ast::PortDir::Output | ast::PortDir::Inout
+                ) && p.unpacked.is_empty()
                     && !matches!(
                         p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
                         ast::NetVarKind::String
@@ -17629,6 +17675,8 @@ impl<'s> Elaborator<'s> {
                 format!("{}.{}", self.cur_prefix, name)
             };
             self.hier_tasks.insert(key, fid);
+            self.hier_task_port_dirs
+                .insert(fid, task.ports.iter().map(|p| p.dir).collect());
         }
         // v7: per-formal `string` bitmask (mirror of reserve_frame_func) — a
         // `string` formal lowers to a 1-bit Wire slot, so the `run_task` copy-in
@@ -19591,7 +19639,18 @@ impl<'s> Elaborator<'s> {
                     .iter()
                     .all(|a| !matches!(a.kind, ast::ExprKind::NamedArg { .. }))
             {
-                let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+                // §4.5.201: lower each arg BOTH as a value (the copy-IN for an input/inout
+                // formal) and — when it is an lvalue (a bare var / select) — as a caller
+                // lvalue (the copy-OUT target for an output/inout formal). The callee port
+                // direction is unknown here, so the resolver picks per port; a non-lvalue arg
+                // gets `None` and is loud there if the formal turns out to be output.
+                let mut arg_ids = Vec::with_capacity(args.len());
+                let mut arg_lvals: Vec<Option<ir::Lvalue>> = Vec::with_capacity(args.len());
+                for a in args {
+                    arg_ids.push(self.lower_expr(a));
+                    let lv = expr_to_lvalue(a).map(|lv_ast| self.lower_lvalue(&lv_ast));
+                    arg_lvals.push(lv);
+                }
                 let call_block = b.cur_id();
                 let ret = b.new_block();
                 b.end_block_with(ir::Terminator::Call {
@@ -19605,6 +19664,7 @@ impl<'s> Elaborator<'s> {
                     prefix: self.cur_prefix.clone(),
                     path: name.segments.iter().map(|s| s.name.clone()).collect(),
                     arg_ids,
+                    arg_lvals,
                 });
                 return;
             }

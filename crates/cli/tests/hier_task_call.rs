@@ -5,11 +5,11 @@
 //! path, so it may WRITE the callee instance's own nets — enabled by the r18 infra that
 //! makes a blocking assign to an out-of-frame net a suspend signal (`frame_task_module_write.rs`).
 //!
-//! Restricted to INPUT-only SCALAR formals (no cross-boundary copy-out): the args bind by
-//! index and the engine coerces each to the per-instance formal width at frame entry. An
-//! output/inout/array/string formal, a non-framed (static) task, a bad path, wrong arity,
-//! or named args stay loud (correct-or-loud). iverilog is the oracle for every supported
-//! case here.
+//! SCALAR formals of any direction: input/inout copy IN by index (the engine coerces each
+//! to the per-instance formal width at frame entry) and output/inout copy OUT to the caller
+//! lvalue at the task's exit (§4.5.201). An array/string formal, a non-lvalue output actual,
+//! a bad path, wrong arity, or named args stay loud (correct-or-loud). iverilog is the
+//! oracle for every supported case here.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -126,24 +126,32 @@ fn hier_task_local_plus_instance_state() {
 // ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
-fn hier_task_output_formal_stays_loud() {
-    // An output formal is a cross-boundary copy-out (pass-by-ref) — not in the
-    // hier-callable subset → loud (no `hier_tasks` entry).
+fn hier_task_output_formal_supported() {
+    // §4.5.201: an output formal is a cross-boundary copy-out — the caller lvalue is captured
+    // at the call site and written at the task's exit. iverilog: r=42.
     let o = run("module sub; task automatic get(output int y); y = 42; endtask endmodule\n\
          module t; sub u(); initial begin int r; u.get(r); $display(\"r=%0d\", r); $finish; end endmodule\n");
-    assert!(
-        o.contains("E3009") && !o.contains("r=42"),
-        "output-formal hier task must be loud:\n{o}"
-    );
+    assert!(o.contains("r=42"), "output-formal hier task:\n{o}");
 }
 
 #[test]
-fn hier_task_inout_formal_stays_loud() {
+fn hier_task_inout_formal_supported() {
+    // §4.5.201: inout = copy-in + copy-out. iverilog: r=6.
     let o = run("module sub; task automatic bump(inout int y); y = y + 1; endtask endmodule\n\
          module t; sub u(); initial begin int r = 5; u.bump(r); $display(\"r=%0d\", r); $finish; end endmodule\n");
+    assert!(o.contains("r=6"), "inout-formal hier task:\n{o}");
+}
+
+#[test]
+fn hier_task_output_arg_must_be_lvalue() {
+    // correct-or-loud: an output/inout arg must be a writable net/select (not a literal).
+    let o = run(
+        "module sub; task automatic f(output int y); y = 5; endtask endmodule\n\
+         module t; sub u(); initial begin u.f(3); $finish; end endmodule\n",
+    );
     assert!(
         o.contains("E3009"),
-        "inout-formal hier task must be loud:\n{o}"
+        "non-lvalue output arg must be loud:\n{o}"
     );
 }
 

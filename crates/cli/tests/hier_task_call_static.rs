@@ -129,17 +129,28 @@ fn static_task_per_instance_isolation() {
     );
 }
 
-// ── correct-or-loud boundaries ───────────────────────────────────────────────
-
 #[test]
-fn static_task_output_formal_stays_loud() {
+fn static_task_output_formal_supported() {
+    // §4.5.201: a STATIC task with an output formal, hier-called (force-framed §4.5.200 +
+    // cross-boundary copy-out §4.5.201). iverilog: r=42.
     let o = run("module sub; task get(output int y); y=42; endtask endmodule\n\
          module t; sub u(); initial begin int r; u.get(r); $display(\"r=%0d\", r); $finish; end endmodule\n");
-    assert!(
-        o.contains("E3009") && !o.contains("r=42"),
-        "static output-formal hier task must be loud:\n{o}"
-    );
+    assert!(o.contains("r=42"), "static output-formal hier task:\n{o}");
 }
+
+#[test]
+fn static_task_divmod_multi_output() {
+    // A static task with input + two output formals, per-instance param. iverilog: 4 2 3 2.
+    let o = run("module sub #(parameter int K=0);\n\
+         task divmod(input int a, input int b, output int q, output int r); q=a/b+K; r=a%b; endtask\n\
+         endmodule\n\
+         module t; sub #(.K(1)) u1(); sub #(.K(0)) u2();\n\
+         initial begin int q1,r1,q2,r2; u1.divmod(17,5,q1,r1); u2.divmod(17,5,q2,r2);\n\
+           $display(\"%0d %0d %0d %0d\", q1,r1,q2,r2); $finish; end endmodule\n");
+    assert!(o.contains("4 2 3 2"), "static multi-output divmod:\n{o}");
+}
+
+// ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
 fn static_task_string_formal_stays_loud() {
