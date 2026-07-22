@@ -8,9 +8,13 @@
 //! This is the prerequisite that lets a hierarchical task enable (`hier_task_call.rs`)
 //! mutate a child instance's state. iverilog is the oracle for the supported cases.
 //!
-//! Correct-or-loud: a `word`-indexed out-of-frame write (a module ARRAY element `mem[i]=v`)
-//! is NOT marked a signal (it stays a subset part-select reject) — supporting it needs the
-//! `&mut` array-element path plumbed through the lift, a separate follow-on.
+//! r19 (accuracy-first frame/inline parity): the signal rule was broadened to ANY
+//! out-of-frame write chunk — a module ARRAY-element write (`mem[i]=v`) and a concat-target
+//! chunk (`{a,b}=x`) now lift too, so the suspendable `&mut` executor performs them. This
+//! closes a real gap that existed independent of hier calls: `task automatic; mem[i]=v;`
+//! was loud in vita but accepted by every reference sim. An IN-FRAME `word`-indexed write
+//! (a frame-local array element, or a class-field heap write through an in-frame handle)
+//! is still NOT marked — it stays a subset the `&self` executor runs.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -86,14 +90,23 @@ fn subset_task_only_frame_locals_still_works() {
 }
 
 #[test]
-fn module_array_element_write_stays_loud() {
-    // BOUNDARY: a module ARRAY-element write (`mem[i]=v`, word-indexed, out of frame) is
-    // NOT lifted — it stays a subset part-select/array-element reject (correct-or-loud).
+fn module_array_element_write_supported() {
+    // r19: a module ARRAY-element write (`mem[i]=v`, word-indexed, out of frame) now lifts
+    // to the suspendable path and runs — was loud in r18. iverilog: mem2=99.
     let o = run("module t; int mem[4];\n\
          task automatic put(input int i, input int v); mem[i] = v; endtask\n\
          initial begin put(2, 99); $display(\"mem2=%0d\", mem[2]); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "module array-element write must stay loud:\n{o}"
+        o.contains("mem2=99"),
+        "module array-element write must run:\n{o}"
     );
+}
+
+#[test]
+fn automatic_task_runtime_index_array_fill() {
+    // The register-file idiom: a runtime-index loop writing a module array. iverilog: 100 103 107.
+    let o = run("module t; int mem[8];\n\
+         task automatic fill(input int base); for (int i = 0; i < 8; i++) mem[i] = base + i; endtask\n\
+         initial begin fill(100); $display(\"%0d %0d %0d\", mem[0], mem[3], mem[7]); $finish; end endmodule\n");
+    assert!(o.contains("100 103 107"), "runtime-index array fill:\n{o}");
 }

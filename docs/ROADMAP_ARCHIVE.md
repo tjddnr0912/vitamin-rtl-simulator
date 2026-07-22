@@ -8,6 +8,20 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.198 frame task MODULE array-element write loud→supported (frame↔inline parity, step 1) (2026-07-23, branch feat-frame-array-write) ✅
+
+**컨텍스트**: §4.5.197 후 오너와 "static hier-task force-frame 회귀 리스크" 논의 → "정밀 RTL 분석·정확도 최우선이면 어떤 선택이 올바른가?" 질문. 결론=**정확도 사다리**(silent-wrong ≪ loud ≪ correct-support·"올라가되 내려가지 마라"). naive force-frame은 동작하던 local 호출을 loud로 만듦(내려감)→오답. 올바른 방향=**frame 경로를 inline과 동등하게**(loud→correct-support). 그리고 frame⊂inline 비대칭은 **hier-task와 무관하게 오늘 이미 존재하는 정확도 갭**: `task automatic; mem[i]=v;`가 vita E3009인데 iverilog·verilator·vcs 정상. 오너 "진행해"→step 1 착수.
+
+**갭**: §4.5.197 Option A가 `compute_suspendable_tasks`의 signal 규칙을 `word.is_none() && out-of-frame`로 게이트해 module ARRAY-element write(`mem[i]=v`·`word=Some`)를 제외→그 task가 non-suspendable subset로 분류→`classify_frame_body`가 "part-select/array-element assignment"로 loud-reject. whole/part-select(word=None)만 §4.5.197서 지원됐었음.
+
+**fix(1-line·format 22 불변)**: signal 규칙에서 `word.is_none()` 조건 제거→`lhs.chunks.iter().any(|c| c.net < lo || c.net >= hi)`. 이제 **모든 out-of-frame write chunk**(whole·part-select·array-element·concat `{a,b}=x`)가 suspend-signal→module-array-writing task가 suspendable `&mut` process path로 lift. suspendable executor는 `write_lvalue`(full &mut)로 array-element write 수행(module-process 일반 경로와 동일).
+
+**적대 differential(iverilog 오라클) 全 MATCH**: `mem[a]=d`(aa bb)·runtime-index loop `for(i) mem[i]=base+i`(100 103 107)·hier `u.write_mem`(aa bb·hier-called automatic array-writer도 자동 커버)·concat `{a,b}=v`(a b). **class-field via MODULE handle over-lift 검증**: `obj.f=v`(module handle·word=Some·out-of-frame)가 이제 over-mark돼 suspendable로 lift되나 **무해**(f=42·suspendable `&mut`도 class_heap[RefCell] write 동일 수행·superset). 회귀 probe 全 clean(whole cnt=2·part reg8=fa·subset-only r=31). **full suite 4028→4029 green(0 fail)**·class-method 회귀 0.
+
+**correct-or-loud 경계**: IN-FRAME word-indexed write(frame-local array element·in-frame handle의 class-field)는 미표시→subset 유지(`&self` 실행). **multi-dim frame-LOCAL array**(`int m[2][2]` in task)는 여전히 loud[frame nested-lvalue-select "v1: single-level" + `frame_task_has_unsafe_construct` frame-local-array guard]—단 **모듈-scope `m[i][j]`는 동작**하므로 frame-lowering-specific 갭(step 2·별개·드묾). single-dim frame-local array는 이미 동작(§4.5.169 md-packed).
+
+**교훈**: **정확도 최우선=frame⊂inline 비대칭 자체가 갭**(hier-task 우회 아니라 정공법)·§4.5.197 Option A의 `word.is_none()` 게이트만 제거하면 array-element까지 커버(suspendable `&mut`가 array write 이미 수행)·class-field over-lift은 무해(suspendable=`&self` subset의 superset)·**정확도 사다리는 올라가되 내려가지 마라**(naive force-frame=correct→loud=오답). 신규 test 1(runtime-index)·flip 1(`module_array_element_write_stays_loud`→`_supported`).
+
 #### 4.5.197 hierarchical TASK call `u1.tk(x)` loud→supported (+ frame-aware suspend-classification infra) (2026-07-22, branch feat-hier-task-call) ✅
 
 **컨텍스트**: §4.5.196의 명시적 follow-on. 오너 지시="인프라를 지어서 hier-task까지 가는게 맞아. 이 방향으로 진행해". §4.5.196이 hierarchical FUNCTION call을 지원하며 "hier-task는 framed-task-write-to-instance-net 인프라(L)가 필요"로 defer했던 것을 해소.

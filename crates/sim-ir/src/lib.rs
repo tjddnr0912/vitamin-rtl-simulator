@@ -847,25 +847,26 @@ pub fn compute_suspendable_tasks(
     // A statement is a suspend signal unless it is a blocking assign or a `disable
     // <scope>` marker (the two things the synchronous `&self` frame executor can run)
     // — EXCEPT a blocking assign that writes a net OUTSIDE this task's own frame
-    // window `[lo, hi)` (a module / instance net). That write needs `&mut`, which only
-    // the suspendable process path has, so it IS a signal (r18 infra): it lets an
-    // `automatic` / hierarchically-called task mutate instance state, matching iverilog,
-    // instead of being loud-rejected as "an assignment to a net outside the function".
-    // A `word`-indexed chunk is NOT marked — a class-field HEAP write through a handle
-    // is `&self`-safe (stays subset), and a module ARRAY-element write stays loud in
-    // `classify_frame_body`; both keep their existing routing. `base_nets[fi]` is this
-    // func's frame base (== engine `func_table[fi].base_net`, threaded verbatim from
-    // elaborate `func_metas`, so both callers classify identically — the pure-function
-    // contract holds with `base_nets` now part of the input).
+    // window `[lo, hi)` (a module / instance net, INCLUDING an `mem[i]=v` array element
+    // or an `{a,b}=x` concat chunk). Such a write needs `&mut`, which only the suspendable
+    // process path has, so it IS a signal (r18/r19 infra): it lets an `automatic` /
+    // hierarchically-called task mutate instance state (whole-net, part-select, OR array
+    // element), matching iverilog, instead of being loud-rejected as "an assignment to a
+    // net outside the function" / "a part-select / array-element assignment". A `word`-
+    // indexed IN-FRAME write (a frame-local array element, or a class-field HEAP write
+    // through an in-frame handle) is NOT marked — it stays a subset the `&self` executor
+    // runs. A class-field write through a MODULE-scope handle (out-of-frame, `word=Some`)
+    // is over-marked to the suspendable path, which is harmless: the `&mut` executor does
+    // the same class-heap write, just not synchronously. `base_nets[fi]` is this func's
+    // frame base (== engine `func_table[fi].base_net`, threaded verbatim from elaborate
+    // `func_metas`, so both callers classify identically — the pure-function contract
+    // holds with `base_nets` now part of the input).
     let stmt_signal = |s: &Stmt, lo: u32, hi: u32| match s {
         Stmt::Disable {
             scope_kind: DisableKind::Scope,
             ..
         } => false,
-        Stmt::BlockingAssign { lhs, .. } => lhs
-            .chunks
-            .iter()
-            .any(|c| c.word.is_none() && (c.net < lo || c.net >= hi)),
+        Stmt::BlockingAssign { lhs, .. } => lhs.chunks.iter().any(|c| c.net < lo || c.net >= hi),
         _ => true,
     };
     // A `Call` terminator's `target` is the callee's entry block ⇒ callee FuncId.
