@@ -113,13 +113,20 @@ fn signed_output_elements() {
 }
 
 #[test]
-fn inout_array_formal_stays_loud() {
+fn inout_array_formal_now_supported() {
+    // r17: an INOUT unpacked-fixed array formal is supported (copy-in at entry so the
+    // body reads the caller's value, copy-out at exit) — supersedes the §4.5.193 pin
+    // that kept inout loud. iverilog rejects unpacked subroutine array ports, so this
+    // is hand-IEEE (the +1 on the copied-in value proves the round-trip).
     let o = run("module top;\n\
          task automatic t(inout byte b[3]); b[0]=b[0]+1; endtask\n\
          byte d[3];\n\
          initial begin d[0]=5; t(d); $display(\"%0d\", d[0]); end\n\
          endmodule\n");
-    assert!(o.contains("E3009"), "should be loud:\n{o}");
+    assert!(
+        o.contains('6'),
+        "inout array formal round-trip (5+1=6):\n{o}"
+    );
 }
 
 #[test]

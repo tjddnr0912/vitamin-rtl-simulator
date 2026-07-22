@@ -953,21 +953,21 @@ fn elaborate_rejects(src: &str) -> bool {
 
 #[test]
 fn frame_body_loud_rejects_unsupported_constructs() {
-    // A $systask in a frame body: the engine's eval_call runs only BlockingAssign,
-    // so a $display would be SILENTLY DROPPED — loud-reject instead. (iverilog
-    // accepts it: a deliberate B1 cut.)
-    assert!(
-        elaborate_rejects(
-            r#"
+    // Family D (r17): a genuine `$display`/`$write` in a frame FUNCTION body is now
+    // RENDERED by the `&self` executors (via `frame_print_stmts` + the render arm) —
+    // it used to be a deliberate B1 cut (loud) because the eval path would silently
+    // drop it. iverilog also runs it, so this is now a straight differential. (A
+    // severity/timeformat/control $systask stays loud — see the follow-on cases below.)
+    check(
+        r#"
 module tb;
   function automatic integer noisy(input integer n);
     begin $display("x"); noisy = n; end
   endfunction
   initial $display("%0d", noisy(3));
 endmodule
-"#
-        ),
-        "a $systask in a frame function body must be loud-rejected"
+"#,
+        "x\n3",
     );
     // Writing a MODULE net from a frame function: the &self eval path cannot write
     // the flat store — loud-reject, never a silent mis-route.

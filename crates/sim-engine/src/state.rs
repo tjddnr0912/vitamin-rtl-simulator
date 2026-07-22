@@ -3108,6 +3108,29 @@ impl<'a> SimState<'a> {
                             self.enforce_queue_bound(dst);
                         }
                     }
+                    // Family D (r17): a genuine `$display`/`$write` in this subset function
+                    // body (admitted by `classify_frame_body` via `frame_print_stmts`; a
+                    // severity/timeformat/marker Display was rejected there and never
+                    // reaches here, and a dyn-formal marker was consumed by the arm above).
+                    // Render through the same `&self`-safe formatter the module process
+                    // uses and emit as RtlOutput — the sink is interior-mutable, so this is
+                    // byte-identical to the module-process print path.
+                    Stmt::SysTask { which, fmt, args }
+                        if matches!(
+                            which,
+                            sim_ir::SysTaskId::Display | sim_ir::SysTaskId::Write
+                        ) =>
+                    {
+                        let radix = self.radixes.get(&sid).copied();
+                        let mut s = crate::builtins::format_args_str(self, *fmt, args, radix);
+                        if matches!(which, sim_ir::SysTaskId::Display) {
+                            s.push('\n');
+                        }
+                        self.sink.emit(LogEvent::RtlOutput(diag::RtlText {
+                            text: s,
+                            sim_time: None,
+                        }));
+                    }
                     // Other SysTask / NBA / delay / event in a func body are rejected at
                     // ELABORATE (B1 cut) → never reach here.
                     _ => {}
@@ -3339,6 +3362,24 @@ impl<'a> SimState<'a> {
                             self.frame_dyn_copy_out(src, dst);
                             self.enforce_queue_bound(dst);
                         }
+                    }
+                    // Family D (r17): a genuine `$display`/`$write` in this subset TASK
+                    // body — parity with run_frame_call (render + emit as RtlOutput).
+                    Stmt::SysTask { which, fmt, args }
+                        if matches!(
+                            which,
+                            sim_ir::SysTaskId::Display | sim_ir::SysTaskId::Write
+                        ) =>
+                    {
+                        let radix = self.radixes.get(&sid).copied();
+                        let mut s = crate::builtins::format_args_str(self, *fmt, args, radix);
+                        if matches!(which, sim_ir::SysTaskId::Display) {
+                            s.push('\n');
+                        }
+                        self.sink.emit(LogEvent::RtlOutput(diag::RtlText {
+                            text: s,
+                            sim_time: None,
+                        }));
                     }
                     _ => {}
                 }

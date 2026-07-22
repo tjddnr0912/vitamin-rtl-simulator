@@ -86,6 +86,12 @@ const MAX_ARRAY_LEN: u64 = 1 << 24;
 /// (COVERAGE verdict MEDIUM.)
 const POISON_NET: u32 = u32::MAX;
 
+/// Family D (r17): placeholder FuncId for a DEFERRED hierarchical function call
+/// (`u1.f(x)`), patched to the callee's real per-instance FuncId by
+/// `resolve_deferred_hier_call`. Like `POISON_NET`, it must never survive to the
+/// engine on a clean run — an unresolved call latches `had_error` (IR discarded).
+const POISON_FID: u32 = u32::MAX;
+
 /// Base of the sentinel net-id range used for a DEFERRED hierarchical WRITE
 /// target (`tb.dut.x = …`): the real net does not exist when the lvalue is
 /// lowered (the child instance's nets are created later), so the `LvalChunk`
@@ -1035,6 +1041,19 @@ struct DeferredHier {
     eid: u32,
     prefix: String,
     path: Vec<String>,
+}
+
+/// Family D (r17): a hierarchical FUNCTION call `u1.f(args)` whose callee lives in a
+/// child instance not yet elaborated when the call site is lowered. Mirrors
+/// [`DeferredHier`] (the net-read defer): the placeholder `Expr::Call { func: POISON_FID }`
+/// at `eid` is patched to the callee's per-instance FuncId after all instances exist.
+/// `prefix` = the caller's scope at lowering, `path` = the dotted segments (`[u1, f]`);
+/// the last segment is the function name, the rest resolve to the callee instance scope.
+struct DeferredHierCall {
+    eid: u32,
+    prefix: String,
+    path: Vec<String>,
+    argc: usize,
 }
 
 /// §13.3 UARR: the classified shape of a SUPPORTED unpacked-array subroutine
@@ -3339,6 +3358,13 @@ struct Elaborator<'s> {
     // post-elaboration hierarchical READ (`dut.WIDTH`) fold to the sibling
     // instance's param value. Out-of-band (golden-free).
     hier_params: BTreeMap<String, i64>,
+    // Family D (r17): PERSISTENT FULLY-QUALIFIED `<instance-path>.<fname>` → per-instance
+    // FuncId, NEVER restored. Only HIER-CALLABLE framed functions (input-only scalar
+    // formals, non-string return) are registered — a call resolving to anything else
+    // finds no entry → loud (correct-or-loud). Lets a hierarchical call `u1.f(x)` bind to
+    // the callee instance's FuncId (which already baked in that instance's nets/params).
+    // Reused by `hier_resolve` (the §23.6 commit-to-scope walk) exactly like `symbols`.
+    hier_funcs: BTreeMap<String, u32>,
     // `defparam top.u.N = 7;` overrides, keyed by the FULLY-QUALIFIED target
     // instance path → [(param-name, const value)]. Collected in pass 7 (when the
     // parent's FQ prefix is current) and consumed by the child's `bind_params` in
@@ -3642,6 +3668,12 @@ struct Elaborator<'s> {
     // markers living inside a frame body — the only handle-copy markers the `&self`
     // frame executors run and the subset validator allows. Threaded via SimOpts.
     dyn_formal_marker_stmts: std::collections::BTreeSet<u32>,
+    // Family D (r17): StmtIds of GENUINE `$display`/`$write` prints (NOT a severity /
+    // timeformat / stage / marker Display — those return early with their own table).
+    // `classify_frame_body` admits only these in a subset function/task body, and the
+    // `&self` executors render them. Validator-only (no serialization): the engine
+    // render arm keys on the plain Display/Write shape reaching it after the marker arm.
+    frame_print_stmts: std::collections::BTreeSet<u32>,
     // Queue-slice markers (§7.10.1 `dst = src[a:b]`): no-op Display StmtIds
     // whose args are [dst, src, a, b]. Threaded via `SimOpts.queue_slice_stmts`.
     queue_slice_stmts: std::collections::BTreeSet<u32>,
@@ -3688,6 +3720,9 @@ struct Elaborator<'s> {
     // and dotted path, then resolved against the now-complete `symbols` table after all
     // instances are elaborated (`resolve_deferred_hier`). Out-of-band (golden-free).
     deferred_hier: Vec<DeferredHier>,
+    // Family D (r17): deferred hierarchical FUNCTION calls (`u1.f(x)`), resolved to a
+    // per-instance FuncId after all instances exist (mirrors `deferred_hier`).
+    deferred_hier_calls: Vec<DeferredHierCall>,
     // N3.1: hierarchical INDEXED reads `dut.mem[i]` — resolved (with the lowering
     // scope restored) into an array element / bit select after all instances.
     deferred_hier_sel: Vec<DeferredHierSelect>,
@@ -3806,6 +3841,7 @@ impl<'s> Elaborator<'s> {
             str_param_raw: BTreeMap::new(),
             string_array_elems: BTreeMap::new(),
             hier_params: BTreeMap::new(),
+            hier_funcs: BTreeMap::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
             cur_inst: 0,
@@ -3849,6 +3885,7 @@ impl<'s> Elaborator<'s> {
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
             dyn_formal_marker_stmts: std::collections::BTreeSet::new(),
+            frame_print_stmts: std::collections::BTreeSet::new(),
             queue_slice_stmts: std::collections::BTreeSet::new(),
             radixes: RadixTable::new(),
             assign_ranks: AssignRankTable::new(),
@@ -3860,6 +3897,7 @@ impl<'s> Elaborator<'s> {
             pending_sva: Vec::new(),
             pending_cover: Vec::new(),
             deferred_hier: Vec::new(),
+            deferred_hier_calls: Vec::new(),
             deferred_hier_sel: Vec::new(),
             deferred_hier_write: Vec::new(),
             deferred_hier_sel_write: Vec::new(),
@@ -4289,6 +4327,10 @@ impl<'s> Elaborator<'s> {
         // instance's nets are in `symbols` (deferred during pass-7 lowering because
         // child nets are created in pass 8). Patches each placeholder to the real NetId.
         self.resolve_deferred_hier();
+        // Family D (r17): patch deferred hierarchical FUNCTION calls (`u1.f(x)`) to the
+        // callee's per-instance FuncId — now that every instance's frame funcs are
+        // registered in `hier_funcs`. Loud on any unresolved / non-hier-callable target.
+        self.resolve_deferred_hier_call();
         // N3 follow-on (HIER-REST): patch deferred hierarchical WRITE targets
         // (`tb.dut.x = …`) — BEFORE the multidriver scan so it sees real net ids.
         self.resolve_deferred_hier_write();
@@ -4737,6 +4779,51 @@ impl<'s> Elaborator<'s> {
             }
             if let Some(ir::Expr::Signal { net: slot, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *slot = net;
+            }
+        }
+    }
+
+    /// Family D (r17): patch each deferred hierarchical function call `u1.f(x)` to the
+    /// callee's per-instance FuncId, once every instance's frame funcs are reserved.
+    /// `hier_resolve` commits the leading segments to the callee instance scope (the same
+    /// §23.6 walk the net/param resolvers use) and looks up `<inst>.<fname>` in
+    /// `hier_funcs` (which holds ONLY hier-callable framed functions). An unresolved
+    /// target — a plain/inlined function, an output/array/string formal, or a bad
+    /// instance path — is loud (correct-or-loud); the POISON_FID placeholder never
+    /// survives (the whole IR is discarded on `had_error`).
+    fn resolve_deferred_hier_call(&mut self) {
+        let deferred = std::mem::take(&mut self.deferred_hier_calls);
+        for d in deferred {
+            let Some(fid) = self.hier_resolve(&d.prefix, &d.path, &self.hier_funcs) else {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "unsupported hierarchical function call `{}` (the callee must be a \
+                         framed function with input-only scalar formals and a non-string \
+                         return, reached through an instance path)",
+                        d.path.join(".")
+                    ),
+                );
+                continue;
+            };
+            // Arity guard: the engine coerces actuals to formal widths BY INDEX, so a
+            // wrong count would read past / drop formals (silent-wrong) — loud instead.
+            let n_params = self.func_metas[fid as usize].n_params as usize;
+            if n_params != d.argc {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "hierarchical call `{}` passes {} argument(s) but the function \
+                         takes {}",
+                        d.path.join("."),
+                        d.argc,
+                        n_params
+                    ),
+                );
+                continue;
+            }
+            if let Some(ir::Expr::Call { func, .. }) = self.exprs.get_mut(d.eid as usize) {
+                *func = fid;
             }
         }
     }
@@ -15561,11 +15648,43 @@ impl<'s> Elaborator<'s> {
                 return self.inline_pkg_function(&pkg, &fname, args);
             }
         }
-        if name.segments.len() != 1 {
+        if name.segments.len() >= 2 {
+            // Family D (r17): DEFER a hierarchical function call `u1.f(x)`. The callee
+            // lives in a child instance not yet elaborated at pass 7 (its FuncId does not
+            // exist yet), so — mirroring the hier-NET read defer (`DeferredHier`) — lower
+            // the args in the CALLER scope now and patch the placeholder
+            // `Expr::Call{func:POISON_FID}` to the callee's per-instance FuncId in
+            // `resolve_deferred_hier_call` after every instance exists. A target that is
+            // not a HIER-CALLABLE framed function (see `reserve_frame_func`) resolves to
+            // no `hier_funcs` entry → loud there (correct-or-loud). Args lower
+            // positionally; a `.named(v)` actual can't be reordered without the callee's
+            // formals here, so it falls through to the loud reject below.
+            if args
+                .iter()
+                .all(|a| !matches!(a.kind, ast::ExprKind::NamedArg { .. }))
+            {
+                let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+                let argc = arg_ids.len();
+                let eid = self.push_expr(ir::Expr::Call {
+                    func: POISON_FID,
+                    args: arg_ids,
+                });
+                self.deferred_hier_calls.push(DeferredHierCall {
+                    eid,
+                    prefix: self.cur_prefix.clone(),
+                    path: name.segments.iter().map(|s| s.name.clone()).collect(),
+                    argc,
+                });
+                return eid;
+            }
             self.error(
                 MsgCode::ElabUnsupported,
-                "hierarchical function call (deferred)",
+                "hierarchical function call with named arguments (deferred)",
             );
+            return self.placeholder_expr();
+        }
+        if name.segments.is_empty() {
+            self.error(MsgCode::ElabUnsupported, "empty function call name");
             return self.placeholder_expr();
         }
         let fname = name.segments[0].name.clone();
@@ -16929,6 +17048,31 @@ impl<'s> Elaborator<'s> {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = func.ports.len() as u32;
+        // Family D (r17): register this per-instance FuncId for a hierarchical call
+        // `u1.f(x)` IF the function is HIER-CALLABLE — a plain module function (no
+        // `::`), input-only SCALAR formals, non-`string` formals, and a non-`string`
+        // return. `cur_prefix` is the current instance path, so the key is the full
+        // `<inst>.<fname>` that `hier_resolve` reconstructs from the call's segments. A
+        // non-callable function (output/inout/array/string formal or string return) gets
+        // NO entry → a hier call to it stays loud at resolution (correct-or-loud).
+        if !name.contains("::")
+            && !func.ret_string
+            && func.ports.iter().all(|p| {
+                matches!(p.dir, ast::PortDir::Input)
+                    && p.unpacked.is_empty()
+                    && !matches!(
+                        p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                        ast::NetVarKind::String
+                    )
+            })
+        {
+            let key = if self.cur_prefix.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}.{}", self.cur_prefix, name)
+            };
+            self.hier_funcs.insert(key, fid);
+        }
         // v7: per-formal `string` bitmask — a `string` formal lowers to a 1-bit
         // Wire slot, so the engine needs this to bind a string LITERAL actual as a
         // heap string rather than truncating it (see `FuncMeta.str_params`).
@@ -17344,8 +17488,12 @@ impl<'s> Elaborator<'s> {
                 // caller copies the whole slot to a packed temp at exit and unpacks it
                 // into the caller array elements after the call (`emit_frame_task_call`).
                 // The value slot works on BOTH the suspendable-frame and the synchronous
-                // `run_task_call` path (no heap). An INOUT array formal stays loud.
-                if matches!(p.dir, ast::PortDir::Input | ast::PortDir::Output) {
+                // `run_task_call` path (no heap). INOUT (r17) reserves the SAME md-packed
+                // slot — the caller packs the actual IN at entry and unpacks OUT at exit.
+                if matches!(
+                    p.dir,
+                    ast::PortDir::Input | ast::PortDir::Output | ast::PortDir::Inout
+                ) {
                     if let Some(Ok(af)) = s.classify_array_formal(p) {
                         let (count, elem_w) = (af.count, af.elem_w);
                         let ext = Self::array_formal_ext(count, elem_w);
@@ -17657,7 +17805,15 @@ impl<'s> Elaborator<'s> {
                     // then UNPACK the temp into the caller array elements after the call
                     // (below, in `ret`). Reuses the md-packed slot (§4.5.188) — no heap,
                     // works on the synchronous and suspendable paths. INOUT array = loud.
-                    if matches!(p.dir, ast::PortDir::Output) {
+                    // §4.5.193 (r17 extends to INOUT): an OUTPUT/INOUT unpacked-fixed
+                    // array formal. Body writes the md-packed slot; at exit copy the whole
+                    // slot to a fresh packed temp (scalar out-bind), then UNPACK it into the
+                    // caller array elements in `ret`. INOUT additionally PACKS the caller
+                    // array INTO the slot at entry (a normal in-bind, identical to the
+                    // §4.5.188 input path) — IEEE §13.5.2 pass-by-value-result. iverilog
+                    // rejects unpacked subroutine array ports outright, so this is
+                    // hand-IEEE / self-consistent (write→read-back round-trip).
+                    if matches!(p.dir, ast::PortDir::Output | ast::PortDir::Inout) {
                         if let Some(cls) = self.classify_array_formal(p) {
                             match cls {
                                 Ok(af) => {
@@ -17668,6 +17824,11 @@ impl<'s> Elaborator<'s> {
                                                 arr_net,
                                                 "connect an output array to",
                                             );
+                                            // INOUT copy-IN at entry (pass-by-value-result).
+                                            if matches!(p.dir, ast::PortDir::Inout) {
+                                                let packed = self.lower_array_actual_packed(a, af);
+                                                in_binds.push((slot, packed));
+                                            }
                                             let w = af.count.saturating_mul(af.elem_w).max(1);
                                             let packed_net = self.nets.len() as u32;
                                             let pname = format!(
@@ -18788,6 +18949,14 @@ impl<'s> Elaborator<'s> {
                         which: ir::SysTaskId::Display,
                         ..
                     } if self.dyn_formal_marker_stmts.contains(&sid) => {}
+                    // Family D (r17): a genuine `$display`/`$write` print in a subset
+                    // function/task body — the `&self` executors render it (iverilog
+                    // runs a $display in a function). A severity/timeformat/stage/marker
+                    // Display is NOT in `frame_print_stmts` → stays loud (correct-or-loud).
+                    ir::Stmt::SysTask {
+                        which: ir::SysTaskId::Display | ir::SysTaskId::Write,
+                        ..
+                    } if self.frame_print_stmts.contains(&sid) => {}
                     _ => why = Some("a $systask / nonblocking / force / release statement"),
                 }
             }
@@ -19246,9 +19415,13 @@ impl<'s> Elaborator<'s> {
                 return false;
             }
             // Any OTHER unpacked-array formal is loud UNLESS it is a FRAMED task's
-            // `input`/`output` unpacked-FIXED array (an md-packed value slot).
+            // `input`/`output`/`inout` unpacked-FIXED array (an md-packed value slot;
+            // inout = §4.5.188 copy-in + §4.5.193 copy-out, r17).
             !(is_framed
-                && matches!(p.dir, ast::PortDir::Input | ast::PortDir::Output)
+                && matches!(
+                    p.dir,
+                    ast::PortDir::Input | ast::PortDir::Output | ast::PortDir::Inout
+                )
                 && matches!(self.classify_array_formal(p), Some(Ok(_))))
         }) {
             self.error(
@@ -32126,11 +32299,21 @@ impl Elaborator<'_> {
                 ast::ModuleItem::Task(t) => {
                     tasks.insert(t.name.name.clone(), t.clone());
                 }
-                ast::ModuleItem::Import(_) => {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "imports inside a package are outside the v7 scope",
-                    );
+                ast::ModuleItem::Import(imp) => {
+                    // Family D (r17): apply an imported package's CONSTANTS into this
+                    // package's fold scope (`base` is already fully elaborated — packages
+                    // elaborate in declaration order — so `pkg_consts[base]` exists). TYPES
+                    // are already resolved by the parser's unit-global typedef map, which is
+                    // why a `base::byte8_t`-typed decl in `derived` parses. The
+                    // wildcard-origin maps are package-loop-local; imported consts ride
+                    // `saved` for restore at the package's end. A package-INTERNAL call to
+                    // an imported ROUTINE stays a follow-on (routine resolution runs at the
+                    // external call site, not here) → loud (correct-or-loud); imported types
+                    // + consts now work.
+                    let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
+                    let mut explicit: std::collections::BTreeSet<String> =
+                        std::collections::BTreeSet::new();
+                    self.apply_import_consts(imp, &mut saved, &mut wc_origin, &mut explicit);
                 }
                 // A2b-prereq/A2b: package-level VARIABLE declaration — one
                 // storage instance per elaboration (IEEE §26), lowered as an
@@ -34216,6 +34399,14 @@ impl Elaborator<'_> {
         // args — record it out-of-band (frozen SysTaskId has no radix variants).
         if let Some(r) = radix_of_systask(&name.name) {
             self.radixes.insert(sid, r);
+        }
+        // Family D (r17): a GENUINE `$display`/`$write` print (every special Display —
+        // severity/timeformat/stage/assert-ctl — returned early above, so reaching here
+        // with a Display/Write `which` is a real print). Record it so
+        // `classify_frame_body` admits it in a subset function/task body and the `&self`
+        // executors render it.
+        if matches!(which, ir::SysTaskId::Display | ir::SysTaskId::Write) {
+            self.frame_print_stmts.insert(sid);
         }
         Some(sid)
     }
