@@ -648,8 +648,12 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // Round-14 V3/V4: recompute the suspendable-task set from the SimIr func arena — no
     // serialized sidecar (format_version 22 unchanged), identical on the one-shot and
     // staged paths. `run_process` routes these tasks through the call-stack path.
+    // r18: `base_nets` (each func's frame base, from `func_table`, itself the elaborate
+    // `func_metas` threaded verbatim) makes the classifier frame-aware — a task that
+    // writes an out-of-frame (module/instance) net is suspendable, not loud.
+    let base_nets: Vec<u32> = st.func_table.iter().map(|m| m.base_net).collect();
     st.suspendable_tasks =
-        sim_ir::compute_suspendable_tasks(&st.ir.funcs, &st.ir.blocks, &st.ir.stmts);
+        sim_ir::compute_suspendable_tasks(&st.ir.funcs, &st.ir.blocks, &st.ir.stmts, &base_nets);
 
     let reason = {
         let mut sched = Scheduler::new(&mut st, opts.max_deltas, opts.time_limit, opts.fork_modes);

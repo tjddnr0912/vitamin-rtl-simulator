@@ -1056,6 +1056,23 @@ struct DeferredHierCall {
     argc: usize,
 }
 
+/// Family D (r18): a hierarchical TASK enable `u1.tk(args);` whose callee lives in a
+/// child instance not yet elaborated when the call site is lowered. The statement path
+/// twin of [`DeferredHierCall`]. At the call site a placeholder `Terminator::Call` seals
+/// the process block `(proc, call_block)` and the args are lowered in the CALLER scope;
+/// `resolve_deferred_hier_task_call` builds the `TaskCallInfo{callee: per-instance fid}`
+/// into `task_calls_proc[(proc, call_block)]` once every instance's frame tasks are in
+/// `hier_tasks`. Restricted to input-only scalar formals (no copy-out), so `in_binds`
+/// are the positional args by index and `out_binds` is empty; the engine coerces each
+/// arg to the per-instance formal width at frame entry (`enter_task_frame`).
+struct DeferredHierTaskCall {
+    proc: u32,
+    call_block: u32,
+    prefix: String,
+    path: Vec<String>,
+    arg_ids: Vec<u32>,
+}
+
 /// §13.3 UARR: the classified shape of a SUPPORTED unpacked-array subroutine
 /// formal (`classify_array_formal`). Lowered to an md-packed `[count][elem_w]`
 /// frame slot; `ascending` is the formal's declared unpacked-dim direction, which
@@ -3365,6 +3382,12 @@ struct Elaborator<'s> {
     // the callee instance's FuncId (which already baked in that instance's nets/params).
     // Reused by `hier_resolve` (the §23.6 commit-to-scope walk) exactly like `symbols`.
     hier_funcs: BTreeMap<String, u32>,
+    // Family D (r18): the TASK twin of `hier_funcs` — PERSISTENT `<inst-path>.<tname>` →
+    // per-instance frame-TASK FuncId. Only HIER-CALLABLE framed tasks (input-only scalar
+    // formals) are registered; a hier task enable `u1.tk(x)` resolves through this via
+    // `hier_resolve`. An out/inout/array/string formal or a non-framed (static) task gets
+    // no entry → loud (correct-or-loud).
+    hier_tasks: BTreeMap<String, u32>,
     // `defparam top.u.N = 7;` overrides, keyed by the FULLY-QUALIFIED target
     // instance path → [(param-name, const value)]. Collected in pass 7 (when the
     // parent's FQ prefix is current) and consumed by the child's `bind_params` in
@@ -3723,6 +3746,9 @@ struct Elaborator<'s> {
     // Family D (r17): deferred hierarchical FUNCTION calls (`u1.f(x)`), resolved to a
     // per-instance FuncId after all instances exist (mirrors `deferred_hier`).
     deferred_hier_calls: Vec<DeferredHierCall>,
+    // Family D (r18): deferred hierarchical TASK enables (`u1.tk(x);`), resolved to a
+    // per-instance frame-TASK FuncId + `TaskCallInfo` after all instances exist.
+    deferred_hier_task_calls: Vec<DeferredHierTaskCall>,
     // N3.1: hierarchical INDEXED reads `dut.mem[i]` — resolved (with the lowering
     // scope restored) into an array element / bit select after all instances.
     deferred_hier_sel: Vec<DeferredHierSelect>,
@@ -3842,6 +3868,7 @@ impl<'s> Elaborator<'s> {
             string_array_elems: BTreeMap::new(),
             hier_params: BTreeMap::new(),
             hier_funcs: BTreeMap::new(),
+            hier_tasks: BTreeMap::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
             cur_inst: 0,
@@ -3898,6 +3925,7 @@ impl<'s> Elaborator<'s> {
             pending_cover: Vec::new(),
             deferred_hier: Vec::new(),
             deferred_hier_calls: Vec::new(),
+            deferred_hier_task_calls: Vec::new(),
             deferred_hier_sel: Vec::new(),
             deferred_hier_write: Vec::new(),
             deferred_hier_sel_write: Vec::new(),
@@ -4331,6 +4359,10 @@ impl<'s> Elaborator<'s> {
         // callee's per-instance FuncId — now that every instance's frame funcs are
         // registered in `hier_funcs`. Loud on any unresolved / non-hier-callable target.
         self.resolve_deferred_hier_call();
+        // Family D (r18): …and the deferred hierarchical TASK enables (`u1.tk(x);`) —
+        // build each callee's per-instance `TaskCallInfo` into `task_calls_proc` now that
+        // every instance's frame tasks are in `hier_tasks`.
+        self.resolve_deferred_hier_task_call();
         // N3 follow-on (HIER-REST): patch deferred hierarchical WRITE targets
         // (`tb.dut.x = …`) — BEFORE the multidriver scan so it sees real net ids.
         self.resolve_deferred_hier_write();
@@ -4824,6 +4856,72 @@ impl<'s> Elaborator<'s> {
             }
             if let Some(ir::Expr::Call { func, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *func = fid;
+            }
+        }
+    }
+
+    /// Family D (r18): build each deferred hierarchical TASK enable's `TaskCallInfo` — the
+    /// callee's per-instance frame-TASK FuncId + positional input binds — into
+    /// `task_calls_proc`, once every instance's frame tasks are in `hier_tasks`.
+    /// `hier_resolve` commits the leading segments to the callee instance scope (the same
+    /// §23.6 walk the net/param/func resolvers use) and looks up `<inst>.<tname>`. An
+    /// unresolved target — a non-framed (static) task, an output/inout/array/string
+    /// formal, or a bad instance path — is loud (correct-or-loud). The placeholder
+    /// `Terminator::Call.target` is patched to the callee entry (faithful IR; the process
+    /// executor resolves the callee via `task_calls_proc`, so `target` is otherwise
+    /// unread for a process-body call).
+    fn resolve_deferred_hier_task_call(&mut self) {
+        let deferred = std::mem::take(&mut self.deferred_hier_task_calls);
+        for d in deferred {
+            let Some(fid) = self.hier_resolve(&d.prefix, &d.path, &self.hier_tasks) else {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "unsupported hierarchical task call `{}` (the callee must be a framed \
+                         task with input-only scalar formals, reached through an instance path)",
+                        d.path.join(".")
+                    ),
+                );
+                continue;
+            };
+            // Arity guard: the engine binds actuals to formal slots BY INDEX, so a wrong
+            // count would read past / drop formals (silent-wrong) — loud instead.
+            let n_params = self.func_metas[fid as usize].n_params as usize;
+            if n_params != d.arg_ids.len() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "hierarchical task call `{}` passes {} argument(s) but the task takes {}",
+                        d.path.join("."),
+                        d.arg_ids.len(),
+                        n_params
+                    ),
+                );
+                continue;
+            }
+            let in_binds: Vec<(u32, u32)> = d
+                .arg_ids
+                .iter()
+                .enumerate()
+                .map(|(i, &e)| (i as u32, e))
+                .collect();
+            self.task_calls_proc.insert(
+                (d.proc, d.call_block),
+                TaskCallInfo {
+                    callee: fid,
+                    in_binds,
+                    out_binds: Vec::new(),
+                },
+            );
+            let entry = self.funcs[fid as usize].entry;
+            if let Some(blk) = self
+                .processes
+                .get_mut(d.proc as usize)
+                .and_then(|p| p.body.get_mut(d.call_block as usize))
+            {
+                if let ir::Terminator::Call { target, .. } = &mut blk.term {
+                    *target = entry;
+                }
             }
         }
     }
@@ -16302,7 +16400,13 @@ impl<'s> Elaborator<'s> {
     ///   the classic `validate_frame_body` (a subset task calling only subset tasks runs
     ///   synchronously, byte-identical to before this feature).
     fn resolve_frame_task_rejects(&mut self) {
-        let full = ir::compute_suspendable_tasks(&self.funcs, &self.func_blocks, &self.stmts);
+        // r18: frame-aware suspend classification — `base_nets[fi]` (from `func_metas`,
+        // threaded verbatim to the engine's `func_table`) lets a task that writes an
+        // out-of-frame module/instance net lift to the suspendable path instead of being
+        // loud-rejected as a subset. Elaborate and the engine pass the SAME `base_nets`.
+        let base_nets: Vec<u32> = self.func_metas.iter().map(|m| m.base_net).collect();
+        let full =
+            ir::compute_suspendable_tasks(&self.funcs, &self.func_blocks, &self.stmts, &base_nets);
         let pending = std::mem::take(&mut self.frame_task_pending);
         for (fid, name, base_net, locals_len, unsafe_repeat) in pending {
             if full.contains(&fid) {
@@ -17421,6 +17525,31 @@ impl<'s> Elaborator<'s> {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = task.ports.len() as u32;
+        // Family D (r18): register this per-instance FuncId for a hierarchical enable
+        // `u1.tk(x)` IF the task is HIER-CALLABLE — a plain module task (no `::`) with
+        // INPUT-only SCALAR non-`string` formals (so there is no cross-boundary copy-out;
+        // the args bind by index and the engine coerces each to the per-instance formal
+        // width at frame entry). An output/inout/array/string formal gets NO entry → a
+        // hier enable to it stays loud at resolution (correct-or-loud). `cur_prefix` is
+        // the current instance path, so the key is the full `<inst>.<tname>` that
+        // `hier_resolve` reconstructs from the enable's segments.
+        if !name.contains("::")
+            && task.ports.iter().all(|p| {
+                matches!(p.dir, ast::PortDir::Input)
+                    && p.unpacked.is_empty()
+                    && !matches!(
+                        p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                        ast::NetVarKind::String
+                    )
+            })
+        {
+            let key = if self.cur_prefix.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}.{}", self.cur_prefix, name)
+            };
+            self.hier_tasks.insert(key, fid);
+        }
         // v7: per-formal `string` bitmask (mirror of reserve_frame_func) — a
         // `string` formal lowers to a 1-bit Wire slot, so the `run_task` copy-in
         // needs this to bind a string LITERAL actual as a heap string rather than
@@ -19364,6 +19493,41 @@ impl<'s> Elaborator<'s> {
             }
         }
         if name.segments.len() != 1 {
+            // Family D (r18): DEFER a hierarchical TASK enable `u1.tk(x);`. The callee
+            // lives in a child instance not yet elaborated at pass 7, so — mirroring the
+            // hier FUNCTION call — lower the args in the CALLER scope now, seal this block
+            // with a placeholder `Terminator::Call` + a fresh ret block, and record the
+            // process key `(cur_proc, call_block)` + instance path.
+            // `resolve_deferred_hier_task_call` builds the per-instance `TaskCallInfo`
+            // (callee fid + positional in-binds) into `task_calls_proc` after every
+            // instance's frame tasks are in `hier_tasks`. Only a TOP-LEVEL process enable
+            // is deferred: a nested-in-frame-body hier enable would be keyed by
+            // `task_calls_func` and its `Call.target` walked for suspend transitivity
+            // (`compute_suspendable_tasks`), so it stays loud (correct-or-loud). Named
+            // args can't be positionally reordered without the callee formals → loud.
+            if name.segments.len() >= 2
+                && !self.frame_task_lowering
+                && args
+                    .iter()
+                    .all(|a| !matches!(a.kind, ast::ExprKind::NamedArg { .. }))
+            {
+                let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+                let call_block = b.cur_id();
+                let ret = b.new_block();
+                b.end_block_with(ir::Terminator::Call {
+                    target: ret.raw(), // placeholder — patched to the callee entry at resolve
+                    ret_bb: ret.raw(),
+                });
+                b.start_block(ret);
+                self.deferred_hier_task_calls.push(DeferredHierTaskCall {
+                    proc: self.cur_proc,
+                    call_block,
+                    prefix: self.cur_prefix.clone(),
+                    path: name.segments.iter().map(|s| s.name.clone()).collect(),
+                    arg_ids,
+                });
+                return;
+            }
             self.error(
                 MsgCode::ElabUnsupported,
                 "hierarchical task call (deferred)",

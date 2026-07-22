@@ -841,19 +841,32 @@ pub fn compute_suspendable_tasks(
     funcs: &[sim_ir::FuncDef],
     blocks: &[sim_ir::BasicBlock],
     stmts: &[sim_ir::Stmt],
+    base_nets: &[u32],
 ) -> std::collections::BTreeSet<u32> {
     use sim_ir::{DisableKind, Stmt, Terminator};
     // A statement is a suspend signal unless it is a blocking assign or a `disable
-    // <scope>` marker (the two things the synchronous frame executor can run).
-    let stmt_signal = |s: &Stmt| {
-        !matches!(
-            s,
-            Stmt::BlockingAssign { .. }
-                | Stmt::Disable {
-                    scope_kind: DisableKind::Scope,
-                    ..
-                }
-        )
+    // <scope>` marker (the two things the synchronous `&self` frame executor can run)
+    // — EXCEPT a blocking assign that writes a net OUTSIDE this task's own frame
+    // window `[lo, hi)` (a module / instance net). That write needs `&mut`, which only
+    // the suspendable process path has, so it IS a signal (r18 infra): it lets an
+    // `automatic` / hierarchically-called task mutate instance state, matching iverilog,
+    // instead of being loud-rejected as "an assignment to a net outside the function".
+    // A `word`-indexed chunk is NOT marked — a class-field HEAP write through a handle
+    // is `&self`-safe (stays subset), and a module ARRAY-element write stays loud in
+    // `classify_frame_body`; both keep their existing routing. `base_nets[fi]` is this
+    // func's frame base (== engine `func_table[fi].base_net`, threaded verbatim from
+    // elaborate `func_metas`, so both callers classify identically — the pure-function
+    // contract holds with `base_nets` now part of the input).
+    let stmt_signal = |s: &Stmt, lo: u32, hi: u32| match s {
+        Stmt::Disable {
+            scope_kind: DisableKind::Scope,
+            ..
+        } => false,
+        Stmt::BlockingAssign { lhs, .. } => lhs
+            .chunks
+            .iter()
+            .any(|c| c.word.is_none() && (c.net < lo || c.net >= hi)),
+        _ => true,
     };
     // A `Call` terminator's `target` is the callee's entry block ⇒ callee FuncId.
     let mut entry_to_func = std::collections::HashMap::new();
@@ -867,6 +880,10 @@ pub fn compute_suspendable_tasks(
         if !f.is_task {
             continue;
         }
+        // This task's frame window `[lo, hi)` (r18): a blocking assign writing a net
+        // outside it is a module/instance-net write → a suspend signal (see above).
+        let lo = base_nets.get(fi).copied().unwrap_or(0);
+        let hi = lo.saturating_add(f.locals_len);
         // Reachability walk over THIS task's own blocks: intra-func edges are followed;
         // a `Call.target` jumps into another func and is recorded (for transitivity),
         // not followed.
@@ -879,11 +896,11 @@ pub fn compute_suspendable_tasks(
             let Some(blk) = blocks.get(b as usize) else {
                 continue;
             };
-            if blk
-                .stmts
-                .iter()
-                .any(|&sid| stmts.get(sid as usize).is_some_and(stmt_signal))
-            {
+            if blk.stmts.iter().any(|&sid| {
+                stmts
+                    .get(sid as usize)
+                    .is_some_and(|s| stmt_signal(s, lo, hi))
+            }) {
                 direct[fi] = true;
             }
             match &blk.term {

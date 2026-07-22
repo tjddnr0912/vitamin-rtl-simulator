@@ -10,8 +10,10 @@
 //!
 //! iverilog accepts these; the fix walks only the blocks reachable from the body's
 //! own entry via its CFG edges (a `Call` follows `ret_bb`, never the callee entry),
-//! so it can never leave the function. These tests pin the fixed behaviour AND that
-//! a genuine out-of-frame write is still loud (the walk didn't over-relax).
+//! so it can never leave the function. These tests pin the fixed behaviour. (r18: a
+//! genuine out-of-frame write is no longer loud — a blocking assign to a module net is
+//! now a suspend signal, so such a task lifts to the suspendable path and runs; see
+//! `out_of_frame_write_now_supported`.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -96,10 +98,12 @@ fn two_subset_functions_first_runs() {
     assert!(o.contains("11 12"), "both functions must run (11 12):\n{o}");
 }
 
-// ── the walk must NOT over-relax: a genuine write to a net OUTSIDE the frame
-//    (a module net) is still outside the frame-call subset and stays loud ──
+// ── r18: a write to a net OUTSIDE the frame (a module net) from an `automatic`
+//    (framed) task is now SUPPORTED — the blocking assign to `g` is a suspend signal
+//    (`compute_suspendable_tasks` is frame-aware), so the task lifts to the suspendable
+//    path where the process executor's `&mut` write reaches the module net. iverilog: g=5.
 #[test]
-fn out_of_frame_write_still_loud() {
+fn out_of_frame_write_now_supported() {
     let o = run("module top;\n\
          int g;\n\
          task automatic writes_module(input int v);\n\
@@ -108,7 +112,11 @@ fn out_of_frame_write_still_loud() {
          initial begin writes_module(5); $display(\"g=%0d\", g); end\n\
          endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "a write to a module net from a frame task must stay loud:\n{o}"
+        !o.contains("E3009"),
+        "an automatic task writing a module net is now supported (r18):\n{o}"
+    );
+    assert!(
+        o.contains("g=5"),
+        "module-net write must run (iverilog: g=5):\n{o}"
     );
 }
