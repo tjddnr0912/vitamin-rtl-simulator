@@ -8,6 +8,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.200 STATIC-task hierarchical call `u1.tk()` loud→supported (frame↔inline parity, step 3 — hier-task 완성) (2026-07-23, branch feat-static-hier-task) ✅
+
+**컨텍스트**: §4.5.199로 **frame ⊇ inline 완성** 후 오너 "진행해"(step 3). §4.5.197이 AUTOMATIC task hier call을 지원(automatic task는 이미 framed→per-instance FuncId 有)했으나 STATIC(non-automatic) task는 inline→FuncId 없어 hier defer/resolve가 못 bind→loud. **이전엔 static task force-frame이 그 task의 LOCAL caller를 frame-subset에 종속시켜 회귀 위험이었으나**(오너와의 정확도-사다리 논의), §4.5.198(module array-element write)+§4.5.199(multi-dim frame-local)가 frame⊂inline 갭을 닫아 frame⊇inline→**force-frame이 회귀 없이 안전**.
+
+**fix(format 22 불변·§4.5.197 머신러리 재사용)**: 전역 1-회 **pre-scan**(`collect_hier_task_stmt`가 모든 모듈의 procedural block body walk→2+세그 `UserTaskCall`의 last segment=task 이름을 `hier_called_task_names`에 수집·`run` 시작서 framing 전 1회)·`build_task_frame_set`에 `|| self.hier_called_task_names.contains(name)` 추가로 force-frame·기존 §4.5.197 `reserve_frame_task`의 `hier_tasks` 등록(input-only scalar)+`inline_task` defer+`resolve_deferred_hier_task_call`이 자동 bind. **name-based**(framing이 instance elaboration보다 먼저 실행되므로 `u1`→module 해소 불가)라 동명 무관 task도 framed되나 frame⊇inline이라 **무해**. under-collection(generate block·nested-in-task-body hier call)=correct-or-loud(loud, not silent-wrong).
+
+**적대 differential 全 MATCH(iverilog 오라클)**: static `bump`(cnt=2)·register-file `mem[a]=d`(mem[3]=aa/mem[7]=bb·§4.5.198+200 조합)·**★local+hier 동시 호출**(cnt=3·force-framed static task의 LOCAL 호출이 frame path로 회귀 0)·2D local+nested for(acc=20·§4.5.199+200)·timing `#5`(t0=9)·name-collision 2모듈(a=11/b=110·over-application 무해)·per-instance param isolation(206/205). **correct-or-loud**: output/inout/string/array formal=loud(hier-callable 아님). automatic hier(§4.5.197) regression 0.
+
+**교훈**: **frame ⊇ inline 완성이 force-frame 안전화의 전제**(정확도 사다리를 다 올라온 뒤에야 static hier-task가 회귀 없이 가능)·**전역 pre-scan이 framing↔hier-call 순서 역전 해결**(framing이 먼저라 hier-call 대상을 미리 수집)·name-based over-application은 parity라 무해·under-collection은 correct-or-loud·기존 §4.5.197 defer/resolve 머신러리에 **force-frame 1줄만 추가**로 완성. **이로써 hier-task 완성**(automatic + static 모두 커버). 신규 `hier_task_call_static.rs`×9.
+
 #### 4.5.199 multi-dim frame-LOCAL array loud→supported (frame↔inline parity, step 2 — 마지막 갭) (2026-07-23, branch feat-frame-multidim-local) ✅
 
 **컨텍스트**: §4.5.198 후 `task automatic`(framed) vs `task`(inline) body를 ~25 구성으로 differential-sweep→frame⊂inline 비대칭의 **유일한 잔여 갭 = multi-dim frame-LOCAL array**(`int m[2][2]` in task)로 규명(module 쓰기·control flow·1D local·queue/dyn·timing·$display 全 parity·string/sformatf local은 오히려 inline이 약함). 오너 "step2로 진행".

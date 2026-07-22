@@ -3397,6 +3397,14 @@ struct Elaborator<'s> {
     // `hier_resolve`. An out/inout/array/string formal or a non-framed (static) task gets
     // no entry → loud (correct-or-loud).
     hier_tasks: BTreeMap<String, u32>,
+    // §4.5.200: task NAMES that appear as the target of a hierarchical enable (`u1.tk(...)`
+    // — the last segment of a 2+-segment `UserTaskCall`) ANYWHERE in the design. Such a task
+    // must be FORCE-FRAMED (`build_task_frame_set`): a STATIC (non-automatic) task is
+    // otherwise inlined and has no per-instance FuncId for the §4.5.197 hier defer/resolve
+    // to bind, so a hier call to it stays loud. Collected ONCE (pre-scan in `run`) before any
+    // per-module framing; frame ⊇ inline (§4.5.198/199) means force-framing never regresses
+    // the task's LOCAL callers, and name-based over-collection is harmless. NEVER restored.
+    hier_called_task_names: std::collections::BTreeSet<String>,
     // `defparam top.u.N = 7;` overrides, keyed by the FULLY-QUALIFIED target
     // instance path → [(param-name, const value)]. Collected in pass 7 (when the
     // parent's FQ prefix is current) and consumed by the child's `bind_params` in
@@ -3878,6 +3886,7 @@ impl<'s> Elaborator<'s> {
             hier_params: BTreeMap::new(),
             hier_funcs: BTreeMap::new(),
             hier_tasks: BTreeMap::new(),
+            hier_called_task_names: std::collections::BTreeSet::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
             cur_inst: 0,
@@ -4153,6 +4162,20 @@ impl<'s> Elaborator<'s> {
     /// case `top instantiating nothing` (one Instance, parent None).
     fn run(&mut self, unit: &ast::SourceUnit) {
         let (map, order) = build_module_map(unit);
+        // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables
+        // (`u1.tk(...)`) and record the target task name, so `build_task_frame_set` can
+        // FORCE-FRAME a hier-called STATIC task (otherwise it inlines and has no per-instance
+        // FuncId for the §4.5.197 hier defer/resolve to bind → the hier call stays loud).
+        // Runs ONCE before any framing. A hier enable nested in a task body is loud anyway
+        // (§4.5.197), and one in a generate block stays loud — both correct-or-loud, so
+        // scanning top-level procedural blocks is sufficient (never silent-wrong).
+        for m in &order {
+            for it in &m.body {
+                if let ast::ModuleItem::Proc(p) = it {
+                    collect_hier_task_stmt(&p.body, &mut self.hier_called_task_names);
+                }
+            }
+        }
         // v5 ⑥ (D): interfaces live in their OWN map (they are never roots and
         // never modules); a name colliding with a module is a duplicate design
         // unit (single design-unit namespace, doc-15 E-DUP-UNIT).
@@ -16664,14 +16687,21 @@ impl<'s> Elaborator<'s> {
             // automatic OR recursive (self/mutual). A static non-recursive task —
             // even with control flow OR body-locals — still inlines (the inline
             // path hoists its body-locals under a per-call scope; see
-            // `inline_task`). Framing a static task would wrongly subject it to the
-            // frame-call subset (no $display / module-net writes).
+            // `inline_task`). §4.5.198/199 closed the frame ⊂ inline capability gaps
+            // ($display, module-net writes incl. array elements, multi-dim locals), so
+            // framing a static task no longer loses any capability its LOCAL callers rely on.
             // V2B (§4.5.194): an OUTPUT/INOUT dynamic-array formal MUST be framed — the
             // deep-copy-OUT at exit needs the frame's per-activation heap slot (the inline
             // path has no dyn binding). (An INPUT dyn formal works inline via the R11 alias,
             // so it does not force a frame.)
+            // §4.5.200: a task that is the TARGET of a hierarchical enable (`u1.tk(...)`)
+            // anywhere in the design MUST be framed so it has a per-instance FuncId for the
+            // §4.5.197 hier defer/resolve to bind (a hier call to a still-inlined static task
+            // is otherwise loud). Name-based (framing precedes instance elaboration), so an
+            // unrelated same-named task is also framed — harmless now that frame ⊇ inline.
             if t.automatic
                 || reaches(name, name, &edges)
+                || self.hier_called_task_names.contains(name)
                 || t.ports
                     .iter()
                     .any(|p| self.is_output_or_inout_dyn_array_formal(p))
@@ -36491,6 +36521,61 @@ fn collect_callee_stmt(s: &ast::Stmt, out: &mut std::collections::BTreeSet<Strin
             for a in args {
                 collect_callee_expr(a, out);
             }
+        }
+        _ => {}
+    }
+}
+
+/// §4.5.200: collect the TARGET task name of every HIERARCHICAL task enable
+/// (`u1.tk(...)` — a `UserTaskCall` whose name has 2+ segments; the LAST segment is the
+/// task name, the leading segments are the instance path) reachable from `s`. Recurses
+/// through control flow, timing-wrapped bodies, blocks, and forks. Under-collection is
+/// correct-or-loud — an un-collected hier enable simply stays loud instead of force-framing
+/// its target. Companion to [`collect_callee_stmt`].
+fn collect_hier_task_stmt(s: &ast::Stmt, out: &mut std::collections::BTreeSet<String>) {
+    use ast::Stmt::*;
+    match s {
+        UserTaskCall { name, .. } if name.segments.len() >= 2 => {
+            out.insert(name.segments.last().unwrap().name.clone());
+        }
+        If { then_s, else_s, .. } => {
+            collect_hier_task_stmt(then_s, out);
+            if let Some(e) = else_s {
+                collect_hier_task_stmt(e, out);
+            }
+        }
+        Case { items, .. } => {
+            for it in items {
+                match it {
+                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
+                        collect_hier_task_stmt(body, out)
+                    }
+                }
+            }
+        }
+        For {
+            init, step, body, ..
+        } => {
+            collect_hier_task_stmt(init, out);
+            collect_hier_task_stmt(step, out);
+            collect_hier_task_stmt(body, out);
+        }
+        While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
+            collect_hier_task_stmt(body, out)
+        }
+        Block { stmts, .. } | Fork { stmts, .. } => {
+            for st in stmts {
+                collect_hier_task_stmt(st, out);
+            }
+        }
+        DelayCtrl { body, .. } | EventCtrl { body, .. } | Wait { body, .. } => {
+            if let Some(b) = body {
+                collect_hier_task_stmt(b, out);
+            }
+        }
+        DeferredAssert { then_s, else_s, .. } => {
+            collect_hier_task_stmt(then_s, out);
+            collect_hier_task_stmt(else_s, out);
         }
         _ => {}
     }
