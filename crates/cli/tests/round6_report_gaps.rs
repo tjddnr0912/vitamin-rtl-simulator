@@ -250,8 +250,8 @@ fn uarr_out_of_range_index_reads_x() {
 #[test]
 fn uarr_multidim_formal_now_supported() {
     // §4.5.202: an ASCENDING multi-dim unpacked-array formal (`a[0:1][0:1]`) is now
-    // supported (the N-D md-packed slot). o = a[0][0] = g[0][0] = 0x55. (A DESCENDING or
-    // non-zero-based multi-dim formal stays loud — see `multidim_array_formal.rs`.)
+    // supported (the N-D md-packed slot). o = a[0][0] = g[0][0] = 0x55. (A non-zero-base
+    // DESCENDING multi-dim formal stays loud — see `multidim_array_formal.rs`.)
     let src = "module m(output logic [7:0] o);\n\
         function automatic logic [7:0] f(input logic [7:0] a[0:1][0:1]); return a[0][0]; endfunction\n\
         logic [7:0] g[0:1][0:1];\n\
@@ -259,16 +259,20 @@ fn uarr_multidim_formal_now_supported() {
     assert_eq!(run(src).0, "o=55");
 }
 
-// ───────────────────────── correct-or-LOUD boundaries ─────────────────────────
-
 #[test]
-fn uarr_loud_non_zero_based() {
+fn uarr_non_zero_based_ascending_now_supported() {
+    // §4.5.206: a NON-ZERO-based ASCENDING formal (`a[1:4]`) is now supported — the packed
+    // dim carries the base `lo=1`, so `flatten_word` normalizes `idx-lo`; the actual must
+    // match the same base. a[1]=g[1]=0x55. (A non-zero-base DESCENDING formal / a base
+    // mismatch stays loud — `multidim_array_formal.rs`.)
     let src = "module m(output logic [7:0] o);\n\
         function automatic logic [7:0] f(input logic [7:0] a[1:4], input int i); return a[i]; endfunction\n\
         logic [7:0] g[1:4];\n\
         initial begin g[1]=8'h55; o=f(g,1); $display(\"o=%h\",o); end endmodule";
-    assert!(!ok(src), "non-zero-based range must be loud");
+    assert_eq!(run(src).0, "o=55");
 }
+
+// ───────────────────────── correct-or-LOUD boundaries ─────────────────────────
 
 #[test]
 fn uarr_signed_element_reads_signed() {

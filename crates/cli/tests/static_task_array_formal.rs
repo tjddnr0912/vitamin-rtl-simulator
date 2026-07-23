@@ -11,9 +11,9 @@
 //! case is hand-IEEE (§13.5.1/2 pass-by-value / value-result; static-local storage persists
 //! across calls, unchanged by the framing).
 //!
-//! Correct-or-loud: a non-zero-based array shape stays loud on the frame path. (§4.5.204
-//! added the OUTPUT/INOUT multi-dim copy-out; §4.5.205 added descending / mixed multi-dim
-//! — both now supported.)
+//! Correct-or-loud: a non-zero-base DESCENDING array shape stays loud on the frame path.
+//! (§4.5.204 added OUTPUT/INOUT multi-dim; §4.5.205 added descending / mixed; §4.5.206 added
+//! non-zero-base ASCENDING — all supported.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -198,13 +198,24 @@ fn static_descending_array_supported() {
 }
 
 #[test]
-fn static_non_zero_based_array_stays_loud() {
-    // A non-zero-based 1-D array formal stays loud.
+fn static_non_zero_based_ascending_supported() {
+    // §4.5.206: a non-zero-based ASCENDING array formal (`m[1:4]`) on a static (force-framed)
+    // task is supported — the base `lo=1` normalizes the index. m[1]=a[1].
     let o = run("module tb; int acc;\n\
-         task p(input int m[1:4]); acc=m[1]; endtask\n\
-         initial begin int a[1:4]; a[1]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+         task p(input int m[1:4]); acc=m[1]*1000+m[2]*100+m[3]*10+m[4]; endtask\n\
+         initial begin int a[1:4]; a[1]=1;a[2]=2;a[3]=3;a[4]=4; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+    assert!(o.contains("1234"), "static non-zero-based ascending:\n{o}");
+}
+
+#[test]
+fn static_non_zero_based_descending_stays_loud() {
+    // A non-zero-base DESCENDING formal (`m[4:1]`) stays loud (base+direction not cleanly
+    // verifiable — correct-or-loud).
+    let o = run("module tb; int acc;\n\
+         task p(input int m[4:1]); acc=m[1]; endtask\n\
+         initial begin int a[4:1]; a[1]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
     assert!(
         o.contains("E3009"),
-        "static non-zero-based array must be loud:\n{o}"
+        "static non-zero-base descending must be loud:\n{o}"
     );
 }

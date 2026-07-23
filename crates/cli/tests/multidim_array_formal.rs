@@ -11,12 +11,13 @@
 //! (§13.5.1 pass-by-value: `m[i][j] = a[i][j]`, the body may write its own copy without
 //! touching the caller).
 //!
-//! Correct-or-loud: any ZERO-BASED direction (ascending / descending / mixed) is supported
-//! as long as the actual's per-dim direction MATCHES the formal's (§4.5.205 — the direction
-//! is handled consistently on both sides, so `m[i][j]=a[i][j]` forward); a per-dim direction
-//! / size / dim-count MISMATCH, a non-zero-based dim, a partial (whole sub-array) select, or
-//! a HIER enable with an array formal all stay loud. INPUT / OUTPUT / INOUT (§4.5.204) and a
-//! STATIC task (force-framed, §4.5.203) are all supported.
+//! Correct-or-loud: supported shapes are zero-based any-direction (ascending / descending /
+//! mixed, §4.5.205) and non-zero-base ASCENDING (`m[1:4]`, §4.5.206), as long as the actual's
+//! per-dim base + size + direction MATCH the formal's (handled consistently on both sides, so
+//! `m[i][j]=a[i][j]` forward). A per-dim base / direction / size / dim-count MISMATCH, a
+//! non-zero-base DESCENDING dim, a partial (whole sub-array) select, or a HIER enable with an
+//! array formal all stay loud. INPUT / OUTPUT / INOUT (§4.5.204) and a STATIC task
+//! (force-framed, §4.5.203) are all supported.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -377,4 +378,63 @@ fn descending_output_multidim_forward() {
          initial begin int a[1:0][1:0]; p(a);\n\
            $display(\"%0d %0d %0d %0d\",a[0][0],a[0][1],a[1][0],a[1][1]); $finish; end endmodule\n");
     assert!(o.contains("1 2 3 4"), "descending output multi-dim:\n{o}");
+}
+
+// ── §4.5.206: non-zero-base ASCENDING formals ────────────────────────────────
+
+#[test]
+fn non_zero_base_2d_input() {
+    // A non-zero-base ascending 2-D formal `m[1:2][1:3]` — the packed dim carries lo, so the
+    // read normalizes `idx-lo`. Forward: m[i][j]=a[i][j].
+    let o = run("module tb;\n\
+         function automatic int f(input int m[1:2][1:3], input int i, input int j); return m[i][j]; endfunction\n\
+         initial begin int a[1:2][1:3];\n\
+           a[1][1]=1;a[1][2]=2;a[1][3]=3;a[2][1]=4;a[2][2]=5;a[2][3]=6;\n\
+           $display(\"%0d%0d%0d %0d%0d%0d\", f(a,1,1),f(a,1,2),f(a,1,3),f(a,2,1),f(a,2,2),f(a,2,3)); $finish; end endmodule\n");
+    assert!(o.contains("123 456"), "non-zero-base 2-D input:\n{o}");
+}
+
+#[test]
+fn non_zero_base_output() {
+    // A non-zero-base OUTPUT formal `m[2:5]` — the copy-out writes `caller[lo+pos]`.
+    let o = run("module tb;\n\
+         task automatic p(output int m[2:5]); m[2]=20;m[3]=30;m[4]=40;m[5]=50; endtask\n\
+         initial begin int a[2:5]; p(a); $display(\"%0d %0d %0d %0d\",a[2],a[3],a[4],a[5]); $finish; end endmodule\n");
+    assert!(o.contains("20 30 40 50"), "non-zero-base output:\n{o}");
+}
+
+#[test]
+fn non_zero_base_mixed_with_zero() {
+    // A formal mixing a zero-based and a non-zero-based dim (`m[0:1][1:2]`).
+    let o = run("module tb;\n\
+         function automatic int f(input int m[0:1][1:2], input int i, input int j); return m[i][j]; endfunction\n\
+         initial begin int a[0:1][1:2]; a[0][1]=11;a[0][2]=22;a[1][1]=33;a[1][2]=44;\n\
+           $display(\"%0d %0d %0d %0d\", f(a,0,1),f(a,0,2),f(a,1,1),f(a,1,2)); $finish; end endmodule\n");
+    assert!(o.contains("11 22 33 44"), "mixed zero/non-zero base:\n{o}");
+}
+
+#[test]
+fn non_zero_base_descending_stays_loud() {
+    // A non-zero-base DESCENDING dim (`[4:1]`) stays loud (base+direction not cleanly
+    // verifiable — correct-or-loud).
+    let o = run("module tb; int acc;\n\
+         task automatic p(input int m[4:1]); acc=m[1]; endtask\n\
+         initial begin int a[4:1]; a[1]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+    assert!(
+        o.contains("E3009"),
+        "non-zero-base descending must be loud:\n{o}"
+    );
+}
+
+#[test]
+fn base_mismatch_stays_loud() {
+    // A base MISMATCH (formal `[1:4]`, actual `[0:3]`) is loud — each side normalizes by its
+    // own lo, so the positions would mis-map.
+    let o = run("module tb; int acc;\n\
+         task automatic p(input int m[1:4]); acc=m[1]; endtask\n\
+         initial begin int a[0:3]; a[0]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+    assert!(
+        o.contains("E3009"),
+        "base-mismatch actual must be loud:\n{o}"
+    );
 }

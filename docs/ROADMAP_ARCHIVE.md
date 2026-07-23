@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.206 NON-ZERO-BASE ASCENDING array formal loud→supported (per-dim base threaded into the md-packed slot) (2026-07-23, branch feat-nonzero-base-array-formal) ✅
+
+**컨텍스트**: 오너 "남은 follow-on 계속·correct-support가 핵심". 배열 formal shape 마지막 갭=non-zero-based(`int m[1:4]`). §4.5.202~205는 zero-based만 지원(`classify_unpacked_array`의 `m.min(l) != 0` reject).
+
+**설계 결정(correct-support vs silent-wrong)**: base+direction 상호작용이 (§4.5.205 descending처럼) mental model로 예측 불가(내 derivation이 empirical fact와 계속 어긋남)→**cleanly-verifiable subset만 지원**: non-zero-base **ASCENDING**(`[1:4]`)만, non-zero-base DESCENDING(`[4:1]`)은 loud 유지(correct-or-loud). ascending은 direction flip 없어 derivation 신뢰 가능(m[i]=a[i] forward). **correct-support가 핵심이어도 검증 불가한 걸 억지 지원하면 silent-wrong(silent ≪ loud).**
+
+**fix(format 22 불변·tuple widening)**: `ArrayFormal.dims`를 `(size, ascending)`→`(lo, size, ascending)` 확장(lo=per-dim base). (1) `classify_unpacked_array`: Range의 `m.min(l) != 0` reject 제거·lo=min(m,l)·**non-zero+descending은 loud**·zero-based는 lo=0. (2) `array_formal_ext_dims`: packed dim에 lo 세팅(`(lo, size, false)`)→`flatten_word`가 `idx-lo` 정규화(zero-based lo=0→no `Sub`·byte-identical). (3) `lower_array_actual_packed` dim-check: actual lo(=min(msb,lsb))도 MATCH 요구(base mismatch=loud). (4) copy-out unpack: declared index=`caller[lo+pos]`(zero-based lo=0→pos·byte-identical). classify는 formals+frame-locals 공유→frame-local non-zero-base ascending도 자동 지원(bonus)·tuple widening의 모든 reader 사이트는 compiler가 build-error로 잡음.
+
+**적대 differential 全 MATCH(hand-IEEE·forward)**: non-zero ascending 1-D `[1:4]`(1234)·2-D `[1:2][1:3]`(123 456)·OUTPUT `[2:5]`(20 30 40 50·copy-out가 `caller[lo+pos]`)·mixed zero+non-zero `[0:1][1:2]`(11 22 33 44). **LOUD**: non-zero DESCENDING `[4:1]`·base mismatch(`[1:4]` formal/`[0:3]` actual). zero-based regression byte-identical(全 array/formal test green). flip 2(round6·static non-zero `_stays_loud`→`_supported`).
+
+**교훈**: **base+direction 상호작용이 예측 불가할 때(mental model 신뢰 불가)=cleanly-verifiable subset만 지원(ascending non-zero)+나머지는 correct-or-loud(descending non-zero)**—correct-support가 핵심이어도 검증 불가를 억지 지원하면 silent-wrong·tuple widening은 compiler가 모든 reader 사이트 잡아줌(build-error)·zero-based는 lo=0으로 byte-identical 보장·classify 공유로 frame-local도 bonus 커버. 신규 6 tests·flip 2. **이로써 배열 formal shape 스토리 완성**(zero-based any-dir + non-zero-base ascending·잔여=non-zero-base descending[correct-or-loud·drop]).
+
 #### 4.5.205 DESCENDING / mixed-direction multi-dim array formal loud→supported (over-conservative gate removed) (2026-07-23, branch feat-descending-multidim-array-formal) ✅
 
 **컨텍스트**: 오너 "남은 follow-on 항목을 계속 해·가치 떨어져도 correct-support가 핵심". §4.5.202가 descending multi-dim array formal을 loud로 gated("md-packed read는 index-major인데 actual 물리저장은 declaration-major→dim 내 element reverse"). **그러나 1-D descending formal은 이미 forward 동작**(§4.5.188·기존 `uarr_matching_descending_direction_ok`)—§4.5.202의 reversal 우려는 **1-D가 forward라는 증거를 무시한 잘못된 mental model**이었음.

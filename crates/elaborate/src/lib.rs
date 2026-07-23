@@ -1093,15 +1093,18 @@ struct ArrayFormal {
     /// `arr[i]` re-stamps `$signed` (`lower_packed_read`) so a negative element reads
     /// as negative instead of zero-extended (silent-wrong). Unsigned ⇒ `false`.
     elem_signed: bool,
-    /// §4.5.199: per-unpacked-dim `(size, ascending)`, OUTER→INNER. `[(count, ascending)]`
-    /// for a 1-D array/formal; N entries for a multi-dim frame-LOCAL array OR a multi-dim
-    /// FORMAL (§4.5.202/205). The md-packed slot's `packed_dims` is these dims (position-
-    /// indexed) + a trailing `(0, elem_w, false)`, so `flatten_word` maps `m[i][j]` to bit
-    /// offset `i*∏inner + j*elem_w` with no new offset math. A multi-dim FORMAL's actual
-    /// must match these dims' size + direction (`lower_array_actual_packed`); the direction
-    /// is handled consistently on both sides, so any (ascending / descending / mixed)
-    /// matching pair copies element-for-element.
-    dims: Vec<(u32, bool)>,
+    /// §4.5.199/206: per-unpacked-dim `(lo, size, ascending)`, OUTER→INNER. `[(lo, count,
+    /// ascending)]` for a 1-D array/formal; N entries for a multi-dim frame-LOCAL array OR a
+    /// multi-dim FORMAL (§4.5.202/205). The md-packed slot's `packed_dims` is `(lo, size,
+    /// false)` per dim + a trailing `(0, elem_w, false)`, so `flatten_word` maps `m[i][j]` to
+    /// bit offset `(i-lo0)*∏inner + (j-lo1)*elem_w` — §4.5.206 threads a NON-ZERO base `lo`
+    /// (`m[1:4]`) so the element index normalizes (zero-based ⇒ `lo=0` ⇒ no `Sub`, byte-
+    /// identical). A FORMAL's actual must match these dims' lo + size + direction
+    /// (`lower_array_actual_packed`); the direction is handled consistently on both sides, so
+    /// any (ascending / descending / mixed / non-zero-ascending) matching pair copies
+    /// element-for-element. (Non-zero-base DESCENDING is rejected in `classify_unpacked_array`
+    /// — its base+direction interaction is not cleanly verifiable → correct-or-loud.)
+    dims: Vec<(u32, u32, bool)>,
 }
 
 /// A hierarchical WRITE target (`tb.dut.x = …`) whose net does not exist when the
@@ -16351,23 +16354,24 @@ impl<'s> Elaborator<'s> {
         // (`m[0:1][0:1]` for `a[0:3]`) is a shape mismatch; a direction mismatch
         // (formal `[3:0]`, actual `[0:3]`) would make the index-based md-packed read
         // disagree with §7.6's POSITIONAL copy (a silent value reversal). Both loud.
-        // §4.5.202: the actual's per-dim shape (size + direction, outer→inner) must MATCH
-        // the formal's `dims`. §7.6 copies by POSITION into the md-packed slot, so a
-        // differing size, opposite direction (`[0:N-1]` vs `[N-1:0]` — silently reverses a
-        // dim), or dim-count would mis-map elements. For a 1-D formal this is the
-        // long-standing direction check; for a multi-dim ascending formal (`int m[2][2]`)
-        // every dim must line up. Read-only, so clone the small dim table out before the
-        // error path (which needs `&mut self`).
+        // §4.5.202/206: the actual's per-dim shape (base + size + direction, outer→inner)
+        // must MATCH the formal's `dims`. §7.6 copies by POSITION into the md-packed slot, so
+        // a differing size, opposite direction (`[0:N-1]` vs `[N-1:0]` — silently reverses a
+        // dim), differing base (`[1:4]` vs `[0:3]` — the read normalizes `idx-lo` per side),
+        // or dim-count would mis-map elements. For a 1-D formal this is the long-standing
+        // direction check; for a multi-dim formal every dim must line up. Read-only, so clone
+        // the small dim table out before the error path (which needs `&mut self`).
         let actual_dd = self.dim_desc.get(&net).cloned();
         let shape_ok = match &actual_dd {
             Some((dims, unpacked_n))
                 if *unpacked_n == af.dims.len() && dims.len() >= af.dims.len() =>
             {
-                af.dims.iter().enumerate().all(|(k, &(fsize, fasc))| {
+                af.dims.iter().enumerate().all(|(k, &(flo, fsize, fasc))| {
                     let (m, l) = dims[k];
+                    let actual_lo = m.min(l).max(0) as u32;
                     let actual_asc = m < l;
                     let actual_size = (m.abs_diff(l) + 1).min(u32::MAX as u64) as u32;
-                    actual_size == fsize && actual_asc == fasc
+                    actual_lo == flo && actual_size == fsize && actual_asc == fasc
                 })
             }
             _ => false,
@@ -17162,12 +17166,12 @@ impl<'s> Elaborator<'s> {
         // entry per dim + the elem_w entry, so `flatten_word` handles `m[i][j]` with the
         // existing N-D offset math. A multi-dim FORMAL is loud-rejected downstream
         // (`classify_array_formal`); the formal binding packs a single dimension.
-        let mut dims: Vec<(u32, bool)> = Vec::with_capacity(unpacked.len());
+        let mut dims: Vec<(u32, u32, bool)> = Vec::with_capacity(unpacked.len());
         for dim in unpacked {
-            let (sz, asc) = match dim {
+            let (lo, sz, asc) = match dim {
                 // `[N]` == `[0:N-1]` (zero-based ascending by construction).
                 ast::Dim::Size(e) => match self.const_eval_in_scope(e) {
-                    Some(n) if n >= 1 => (n as u32, true),
+                    Some(n) if n >= 1 => (0u32, n as u32, true),
                     _ => return Some(Err("a non-constant or non-positive unpacked-array size")),
                 },
                 ast::Dim::Range(r) => {
@@ -17178,27 +17182,36 @@ impl<'s> Elaborator<'s> {
                         (Some(m), Some(l)) => (m, l),
                         _ => return Some(Err("a non-constant unpacked-array bound")),
                     };
-                    // Zero-based `[0:N-1]` / `[N-1:0]` only: index 0 must be valid so the
-                    // md-packed stride math needs no base offset. A non-zero base
-                    // (`[1:4]`) would shift every read.
-                    if m < 0 || l < 0 || m.min(l) != 0 {
+                    // §4.5.206: negative bounds are always loud. A NON-ZERO base is supported
+                    // for an ASCENDING dim (`[1:4]` → `lo=1`; `array_formal_ext_dims` sets the
+                    // packed dim's lo so `flatten_word` does `idx-lo`), but a non-zero-base
+                    // DESCENDING dim (`[4:1]`) stays loud — its base+direction interaction on
+                    // the actual-pack side is not cleanly verifiable (correct-or-loud). A
+                    // ZERO-based range (any direction) keeps `lo=0` → no `Sub`, byte-identical.
+                    if m < 0 || l < 0 {
+                        return Some(Err("a negative unpacked-array bound"));
+                    }
+                    let lo = m.min(l) as u32;
+                    let ascending = m < l;
+                    if lo != 0 && !ascending {
                         return Some(Err(
-                            "a non-zero-based unpacked-array range (only `[0:N-1]` / `[N-1:0]`)",
+                            "a non-zero-based DESCENDING unpacked-array range (`[hi:lo]` \
+                             with lo>0) — use `[lo:hi]` ascending or a zero-based range",
                         ));
                     }
-                    ((m.abs_diff(l) + 1) as u32, m < l)
+                    (lo, (m.abs_diff(l) + 1) as u32, ascending)
                 }
                 ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_) => {
                     return Some(Err("a dynamic / queue / associative formal dimension"))
                 }
             };
-            dims.push((sz, asc));
+            dims.push((lo, sz, asc));
         }
         // `count` = total elements (product); saturating so a pathological product cannot
         // panic (the width guard below caps the slot). `ascending` = the FIRST dim's
         // direction (the §7.6 positional-copy check consumes it for 1-D formals only).
-        let count: u32 = dims.iter().fold(1u32, |a, &(s, _)| a.saturating_mul(s));
-        let ascending = dims[0].1;
+        let count: u32 = dims.iter().fold(1u32, |a, &(_, s, _)| a.saturating_mul(s));
+        let ascending = dims[0].2;
         // G3: a signed element is supported — the md-packed element read is a part-select
         // (unsigned per §11.5.1), so `lower_packed_read` re-stamps `$signed` on a whole-
         // element read when `elem_signed` is set. `signed` reflects the element type's
@@ -17245,17 +17258,18 @@ impl<'s> Elaborator<'s> {
         }))
     }
 
-    /// §4.5.199: the md-packed `packed_dims` extents for an N-D frame-local array OR a
-    /// multi-dim ascending array FORMAL (§4.5.202) — one POSITION-INDEXED entry per unpacked
-    /// dim (`lo=0`, `ascending=false`; the declared per-dim direction affects only the §7.6
-    /// positional-copy check, never the element offset) + the trailing element bit-width
-    /// entry. `flatten_word` over these dims maps `m[i][j]` (row-major) to bit offset
-    /// `i*(∏inner sizes)*elem_w + j*elem_w` and the trailing-dims product gives the `elem_w`
-    /// part-select width. For a single dim this yields `[(0, count, false), (0, elem_w,
-    /// false)]` — the long-standing byte-identical 1-D formal layout.
-    fn array_formal_ext_dims(dims: &[(u32, bool)], elem_w: u32) -> Vec<(u32, u32, bool)> {
+    /// §4.5.199/206: the md-packed `packed_dims` extents for an N-D frame-local array OR a
+    /// multi-dim array FORMAL (§4.5.202) — one `(lo, size, false)` entry per unpacked dim +
+    /// the trailing element bit-width entry. `ascending=false` (raw index, so the declared
+    /// direction never enters the element offset — matching directions align by construction);
+    /// `lo` is the dim's base (§4.5.206: `m[1:4]` → `lo=1`, so `flatten_word` normalizes the
+    /// index `idx-lo`; a zero-based dim keeps `lo=0` ⇒ no `Sub`). `flatten_word` over these
+    /// dims maps `m[i][j]` (row-major) to bit offset `(i-lo0)*(∏inner sizes)*elem_w +
+    /// (j-lo1)*elem_w`. For a single zero-based dim this yields `[(0, count, false), (0,
+    /// elem_w, false)]` — the long-standing byte-identical 1-D formal layout.
+    fn array_formal_ext_dims(dims: &[(u32, u32, bool)], elem_w: u32) -> Vec<(u32, u32, bool)> {
         dims.iter()
-            .map(|&(sz, _)| (0u32, sz, false))
+            .map(|&(lo, sz, _)| (lo, sz, false))
             .chain(std::iter::once((0u32, elem_w, false)))
             .collect()
     }
@@ -18247,7 +18261,7 @@ impl<'s> Elaborator<'s> {
             let d = af.dims.len();
             let mut strides = vec![1u32; d];
             for k in (0..d.saturating_sub(1)).rev() {
-                strides[k] = strides[k + 1].saturating_mul(af.dims[k + 1].0.max(1));
+                strides[k] = strides[k + 1].saturating_mul(af.dims[k + 1].1.max(1));
             }
             for i in 0..af.count {
                 let packed_read = ast::Expr {
@@ -18268,13 +18282,16 @@ impl<'s> Elaborator<'s> {
                     },
                     span: sp,
                 };
-                // Fully-indexed caller element for row-major flat position `i`.
+                // Fully-indexed caller element for row-major flat position `i`. Each dim's
+                // 0-based position maps to the caller's DECLARED index `lo + pos` (§4.5.206;
+                // zero-based ⇒ lo=0 ⇒ pos, byte-identical). The read side normalizes `idx-lo`
+                // the same way, so position p ↔ declared index lo+p on both sides.
                 let mut lhs = ast::Lvalue::Ident(arr_path.clone());
-                for (stride, &(size, _)) in strides.iter().zip(af.dims.iter()) {
-                    let idx = (i / *stride) % size.max(1);
+                for (stride, &(lo, size, _)) in strides.iter().zip(af.dims.iter()) {
+                    let pos = (i / *stride) % size.max(1);
                     lhs = ast::Lvalue::BitSelect {
                         base: Box::new(lhs),
-                        index: Box::new(dec(idx)),
+                        index: Box::new(dec(lo + pos)),
                         span: sp,
                     };
                 }
