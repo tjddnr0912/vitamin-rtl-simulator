@@ -1,0 +1,563 @@
+//! net-kind helpers — split out of the original `elaborate` lib.rs (mechanical move).
+
+use super::*;
+
+/// Self-determined bit width of a net/var KIND + optional literal RANGE; atoms are
+/// fixed-width, a vector kind folds a LITERAL `[msb:lsb]`. `None` for real/string/
+/// handle (not bit arithmetic) or an unfoldable range.
+pub(crate) fn ast_kind_range_width(
+    kind: ast::NetVarKind,
+    range: Option<&ast::Range>,
+) -> Option<u32> {
+    use ast::NetVarKind::*;
+    match kind {
+        Integer | Int => Some(32),
+        Byte => Some(8),
+        Shortint => Some(16),
+        Longint | Time => Some(64), // `time` is a 64-bit integral (bit-vector) type
+        Real | Realtime | Event | String | ClassHandle => None,
+        _ => match range {
+            None => Some(1),
+            Some(r) => {
+                let msb = ast_decimal_lit_i64(&r.msb)?;
+                let lsb = ast_decimal_lit_i64(&r.lsb)?;
+                u32::try_from(msb.abs_diff(lsb) + 1).ok()
+            }
+        },
+    }
+}
+
+/// Is `kind` a BIT-VECTOR (integral) type — i.e. arithmetic evaluated at a context
+/// width? `real`/`realtime`/`string`/`event`/class-handle are NOT (no context-width
+/// extension applies), so a widening assignment to one is never mis-lowered this way.
+pub(crate) fn ast_kind_is_bit_vector(kind: ast::NetVarKind) -> bool {
+    use ast::NetVarKind::*;
+    !matches!(kind, Real | Realtime | Event | String | ClassHandle)
+}
+
+/// hdl-ast has 18 net/var kinds; sim-ir freezes only 4. Aliases collapse to the
+/// closest 4-state kind; unsupported kinds still map to Wire so references
+/// resolve (the call site emits `ElabUnsupported`).
+pub(crate) fn map_net_kind_or_wire(k: ast::NetVarKind) -> ir::NetKind {
+    use ast::NetVarKind::*;
+    match k {
+        Reg => ir::NetKind::Reg,
+        Logic => ir::NetKind::Logic,
+        Integer => ir::NetKind::Integer,
+        // `real`/`realtime` → IEEE-754 f64 net (64-bit, signed, 2-state).
+        Real | Realtime => ir::NetKind::Real,
+        // `time` → 64-bit unsigned 4-state VARIABLE. The frozen NetKind has no
+        // Time variant; Reg carries the same legality (procedural-assign ok,
+        // user `assign` rejected) and 4-state all-X init. Width/signedness come
+        // from range_to_dims (64, unsigned).
+        Time => ir::NetKind::Reg,
+        // named event → its 64-bit counter reg (v5 batch B desugar).
+        Event => ir::NetKind::Reg,
+        // SVPART 2-state types → Reg storage (procedural-assignable, user `assign`
+        // rejected). Width/sign from range_to_dims, 2-state 0-init from default_init.
+        Bit | Byte | Shortint | Int | Longint => ir::NetKind::Reg,
+        // N7: a class handle is a 32-bit unsigned integer reg holding an object-id
+        // (0 = null); the object itself lives in the engine `class_heap`. Reg
+        // storage = procedural-assignable, user `assign` rejected.
+        ClassHandle => ir::NetKind::Integer,
+        // Wire + all net aliases (Tri/Uwire/Wand/...) behave as Wire in v1.
+        _ => ir::NetKind::Wire,
+    }
+}
+
+/// N1: net kind for a function/task frame-local DECLARATION (`body_decls` /
+/// block-local `begin string s; …`). Unlike an input formal — which keeps the
+/// 1-bit Wire slot and is filled by the call-site `str_params` mask
+/// (`map_net_kind_or_wire`) — a frame-local `string` is WRITTEN in the body
+/// (`s = $sformatf(...)`), so a Wire target would fail the procedural-assign
+/// check (E3018, round-14 V1). It needs a real heap-backed `NetKind::String`
+/// slot, exactly like an output formal. Every non-string type is unchanged.
+pub(crate) fn frame_local_net_kind(k: ast::NetVarKind) -> ir::NetKind {
+    if matches!(k, ast::NetVarKind::String) {
+        ir::NetKind::String
+    } else {
+        map_net_kind_or_wire(k)
+    }
+}
+
+pub(crate) fn net_is_variable(k: ast::NetVarKind) -> bool {
+    use ast::NetVarKind::*;
+    matches!(
+        k,
+        Reg | Logic | Integer | Time | Bit | Byte | Shortint | Int | Longint | ClassHandle
+    )
+}
+
+/// SVPART: the X-free 2-state integer types (`bit`/`byte`/`shortint`/`int`/
+/// `longint`). The engine coerces X/Z→0 on every write to these nets.
+pub(crate) fn net_kind_is_two_state(k: ast::NetVarKind) -> bool {
+    use ast::NetVarKind::*;
+    matches!(k, Bit | Byte | Shortint | Int | Longint)
+}
+
+/// True iff `k` is a VARIABLE kind (reg/logic/integer/real/time/event + the
+/// 2-state integer types) as opposed to a net (wire) — a variable's declaration
+/// initializer is a one-time value at time 0, not a continuous driver (§6.8).
+pub(crate) fn netvar_kind_is_var(k: ast::NetVarKind) -> bool {
+    use ast::NetVarKind::*;
+    matches!(
+        k,
+        Reg | Logic
+            | Integer
+            | Real
+            | Realtime
+            | Time
+            | Event
+            | Bit
+            | Byte
+            | Shortint
+            | Int
+            | Longint
+    )
+}
+
+/// Whether a kind is modeled in v1 without an `ElabUnsupported` note. Pure
+/// aliases (Tri/Uwire) are accepted silently; resolution nets (wand/wor/...)
+/// are flagged (still mapped to Wire so the arena stays valid).
+pub(crate) fn net_kind_supported(k: ast::NetVarKind) -> bool {
+    use ast::NetVarKind::*;
+    matches!(
+        k,
+        Wire | Tri
+            | Uwire
+            | Wand
+            | Wor
+            | Reg
+            | Logic
+            | Integer
+            | Real
+            | Realtime
+            | Time
+            | Event
+            | String
+            | Bit
+            | Byte
+            | Shortint
+            | Int
+            | Longint
+            | ClassHandle
+    )
+}
+
+/// Time-0 default `init`: variables (reg/logic/integer) start all-X; nets start
+/// all-Z. `(v,u)`: X=`01`, Z=`11`.
+pub(crate) fn default_init(kind: ast::NetVarKind, width: u32) -> ir::BitPacked {
+    // A real default = +0.0 = all-zero bits, never X (it is always 2-state).
+    if matches!(kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime) {
+        return ir::BitPacked {
+            val: vec![0],
+            unk: vec![0],
+        };
+    }
+    // A named-event counter starts at ZERO, never X: `e = e + 1` on an all-X
+    // start would stay X forever and no `@(e)` edge could ever fire.
+    if matches!(kind, ast::NetVarKind::Event) {
+        return ir::BitPacked {
+            val: vec![0],
+            unk: vec![0],
+        };
+    }
+    // N7: a class handle defaults to `null` = object-id 0 (NOT X) — IEEE §8.4;
+    // `h == null` must be TRUE for an uninitialized handle.
+    if matches!(kind, ast::NetVarKind::ClassHandle) {
+        return ir::BitPacked {
+            val: vec![0],
+            unk: vec![0],
+        };
+    }
+    // SVPART: 2-state types are X-free — they default-initialise to 0, never X.
+    if matches!(
+        kind,
+        ast::NetVarKind::Bit
+            | ast::NetVarKind::Byte
+            | ast::NetVarKind::Shortint
+            | ast::NetVarKind::Int
+            | ast::NetVarKind::Longint
+    ) {
+        let nwords = ((width as usize).div_ceil(64)).max(1);
+        return ir::BitPacked {
+            val: vec![0u64; nwords],
+            unk: vec![0u64; nwords],
+        };
+    }
+    let nwords = (((width as usize) + 63) / 64).max(1);
+    let is_var = matches!(
+        kind,
+        ast::NetVarKind::Reg
+            | ast::NetVarKind::Logic
+            | ast::NetVarKind::Integer
+            | ast::NetVarKind::Real
+            | ast::NetVarKind::Realtime
+            | ast::NetVarKind::Time
+    );
+    let mut val = vec![0u64; nwords];
+    let mut unk = vec![0u64; nwords];
+    for i in 0..(width as usize) {
+        let w = i / 64;
+        let off = i % 64;
+        unk[w] |= 1u64 << off; // X and Z both have unk=1
+        if !is_var {
+            val[w] |= 1u64 << off; // Z has val=1; X has val=0
+        }
+    }
+    ir::BitPacked { val, unk }
+}
+
+/// Resize a `BitPacked` from `from_w` to `to_w` bits. Truncates or zero-/sign-/
+/// x-/z-extends per IEEE §3.5.1 (extend with the MSB *state*; sign-extend a `1`
+/// only when `signed`). Used for net initializers.
+pub(crate) fn resize_bits(
+    src: &ir::BitPacked,
+    from_w: u32,
+    to_w: u32,
+    signed: bool,
+) -> ir::BitPacked {
+    let nwords = (((to_w as usize) + 63) / 64).max(1);
+    let mut val = vec![0u64; nwords];
+    let mut unk = vec![0u64; nwords];
+    let get = |plane: &[u64], i: usize| -> bool {
+        plane
+            .get(i / 64)
+            .map(|w| (w >> (i % 64)) & 1 == 1)
+            .unwrap_or(false)
+    };
+    // MSB state of the source (for extension).
+    let msb_i = from_w.saturating_sub(1) as usize;
+    let msb_v = get(&src.val, msb_i);
+    let msb_u = get(&src.unk, msb_i);
+    let (ext_v, ext_u) = match (msb_v, msb_u) {
+        (false, true) => (false, true),   // X → x-extend
+        (true, true) => (true, true),     // Z → z-extend
+        (true, false) => (signed, false), // 1 → sign-extend only if signed
+        _ => (false, false),              // 0 → zero-extend
+    };
+    for i in 0..(to_w as usize) {
+        let (v, u) = if (i as u32) < from_w {
+            (get(&src.val, i), get(&src.unk, i))
+        } else {
+            (ext_v, ext_u)
+        };
+        if v {
+            val[i / 64] |= 1u64 << (i % 64);
+        }
+        if u {
+            unk[i / 64] |= 1u64 << (i % 64);
+        }
+    }
+    ir::BitPacked { val, unk }
+}
+
+impl Elaborator<'_> {
+    /// Per-NetId fully-qualified name table for the VCD writer, built by inverting
+    /// the FQ-name → NetId `symbols` map (`"top.dut.q"`). A net with no symbol entry
+    /// (anonymous/implicit) falls back to `n{id}`. BTreeMap iteration is sorted, so
+    /// a net mapped by several aliases keeps the lexicographically smallest FQ name
+    /// (its canonical declaration path). Order-independent of arena order → 3-OS
+    /// stable. Computed before `finish()` (which moves `self.nets`/`self.symbols`).
+    pub(crate) fn net_name_table(&self) -> Vec<String> {
+        let mut names = vec![String::new(); self.nets.len()];
+        for (fq, &id) in &self.symbols {
+            if let Some(slot) = names.get_mut(id as usize) {
+                if slot.is_empty() {
+                    *slot = fq.clone();
+                }
+            }
+        }
+        for (i, n) in names.iter_mut().enumerate() {
+            if n.is_empty() {
+                *n = format!("n{i}");
+            }
+        }
+        names
+    }
+
+    // ── parameter binding (defaults + overrides; FQ-keyed) ──────────
+    /// Bind a module's params for the current instance scope: each declared
+    /// param's default (const-eval'd IN ORDER so a later param sees earlier ones),
+    /// then overlay the instantiation overrides (positional by index, named by
+    /// name). Localparams are NOT overridable. Params are keyed by FQ name so two
+    /// instances with different `WIDTH` coexist. Returns the prior FQ→value
+    /// entries so siblings/ancestors are restored on exit.
+    ///
+    /// The instantiation overrides are ALREADY resolved in the PARENT scope (Fix 1
+    /// / Finding M1), so a `child #(.W(PARENT_W))` override carries the parent's
+    /// `PARENT_W` value — no longer folds to 0 in the child scope.
+    /// Coerce a folded parameter value to its DECLARED type's (width, signedness),
+    /// matching IEEE 1800 §6.20 param typing: a ranged or integer-typed param
+    /// truncates to its width and sign-extends when signed (so `parameter byte B =
+    /// 200` is -56, `parameter signed [7:0] = 8'hA5` is -91); an UNSIZED param (no
+    /// range, untyped) keeps its full value (the common width-defining `parameter W
+    /// = 8`). Real-typed params are not integer-coerced. `int`/`integer` are signed
+    /// by default (unsigned only with an explicit `unsigned`); `time` keeps its value.
+    /// The DECLARED `(width, signed)` of a parameter, when determinate: an
+    /// explicit `[msb:lsb]` range (foldable bounds) or `integer`/`int` (32-bit).
+    /// `None` for an untyped/unsized param (width inferred from its value) or a
+    /// `real`/`time` (no fixed packed width here). Single source of truth shared
+    /// by value coercion and the typed-param read-width (`param_meta`).
+    /// The DECLARED WIDTH of an enum's base type (`enum logic [3:0]` → `4`), so
+    /// a label materializes at its real self-width inside a concat/replication
+    /// (`{4'h5, STATE}`) instead of the value-inferred 32 bits. An implicit-base
+    /// enum (`enum {A,B}` → 32-bit `int`) or an unfoldable bound returns `None`
+    /// (value-inferred width, unchanged). Signedness is decided PER LABEL by its
+    /// value (see the call sites): the enum VARIABLE's whole-value signedness is
+    /// now captured into `TypeInfo.signed` (§4.5.153), but the AST enum node carries
+    /// only the base RANGE (not its sign), so this LABEL-width path derives sign PER
+    /// LABEL by its value — mirroring the value-inferred sign the local-param path
+    /// already used (`const_param_expr`: unsigned for `v ≥ 0`, signed for `v < 0`).
+    /// That keeps a negative label's arithmetic correct (`A=-2` stays -2), narrowing
+    /// only the WIDTH. Deriving sign from the base instead would silently flip a
+    /// negative label to a large unsigned value (`A=-2` → 14).
+    pub(crate) fn enum_base_width(&self, base: &Option<ast::Range>) -> Option<u32> {
+        let r = base.as_ref()?;
+        match (
+            self.const_eval_in_scope(&r.msb),
+            self.const_eval_in_scope(&r.lsb),
+        ) {
+            (Some(m), Some(l)) => Some(m.abs_diff(l) as u32 + 1),
+            _ => None,
+        }
+    }
+
+    /// Gap B (round-5): register a function/task's body-local `typedef enum` labels
+    /// as integer constants under the CURRENT scope (`self.cur_prefix`), returning a
+    /// save-list for `restore_params` to unwind afterwards. Mirrors the module-scope
+    /// enum-label loop (3c) exactly: an explicit `LABEL = expr` const-folds (and
+    /// resets the running counter to `expr+1`); an implicit label takes the counter.
+    /// The caller scopes the registration to the body lowering so the labels are
+    /// visible to `A`/`B` reads inside the body but do NOT leak to the module: the
+    /// FRAME path registers under the `$func$<name>` segment (innermost-wins via
+    /// `walk_scopes_key`), the INLINE path under the caller prefix bounded by the
+    /// reduction. Empty `body_enums` (the common case) returns an empty save-list →
+    /// byte-identical.
+    ///
+    /// A label whose name also names a `begin/end` BLOCK-LOCAL in the same body is
+    /// loud-rejected: a body label registers as an enclosing-scope const, and vita
+    /// resolves an enclosing const OVER an inner block-local net (a pre-existing
+    /// resolution-order limitation, opposite of IEEE §6.21), so the label would
+    /// silently shadow the block-local meant to shadow IT. Rejecting keeps this
+    /// correct-or-loud rather than mis-resolving (the general resolution order is a
+    /// documented follow-on).
+    #[allow(clippy::type_complexity)] // (params save, param_meta save) — mirrors push_pkg_consts_scoped
+    pub(crate) fn push_body_enum_labels(
+        &mut self,
+        body_enums: &[ast::TypedefDecl],
+        body: &ast::Stmt,
+    ) -> (
+        Vec<(String, Option<i64>)>,
+        Vec<(String, Option<(u32, bool)>)>,
+    ) {
+        let mut saved = Vec::new();
+        let mut saved_meta = Vec::new();
+        if body_enums.is_empty() {
+            return (saved, saved_meta); // common case — no gather, byte-identical
+        }
+        // Names declared in `begin/end` blocks of this body (nested inner scopes) —
+        // a label sharing one of these would mis-shadow it (see doc above).
+        let mut block_locals = Vec::new();
+        collect_block_local_decls(body, &mut block_locals);
+        let block_local_names: std::collections::BTreeSet<&str> = block_locals
+            .iter()
+            .flat_map(|d| d.names.iter())
+            .map(|n| n.name.name.as_str())
+            .collect();
+        for td in body_enums {
+            #[allow(irrefutable_let_patterns)]
+            if let ast::TypedefKind::Enum {
+                base,
+                signed,
+                labels,
+            } = &td.kind
+            {
+                // §4.5.158: give body-local labels the enum's declared width+sign in
+                // `param_meta` (twin of the module/package paths) so a positive label of
+                // a signed enum compares signed inside a function/task; base-less = int(32).
+                let base_w = self
+                    .enum_base_width(base)
+                    .or_else(|| base.is_none().then_some(32u32));
+                let mut next: i64 = 0;
+                for lab in labels {
+                    if block_local_names.contains(lab.name.name.as_str()) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "body-local enum label `{}` shares its name with a \
+                                 `begin/end` block-local in the same function/task; v1 \
+                                 resolves the enclosing enum label OVER the inner \
+                                 block-local (opposite of IEEE §6.21 lexical scope) — \
+                                 rename one",
+                                lab.name.name
+                            ),
+                        );
+                    }
+                    let v = match &lab.value {
+                        Some(e) => self.const_eval_in_scope(e).unwrap_or_else(|| {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "enum label `{}` value is not a foldable constant",
+                                    lab.name.name
+                                ),
+                            );
+                            0
+                        }),
+                        None => next,
+                    };
+                    let key = self.fq(&lab.name.name);
+                    if let Some(w) = base_w {
+                        saved_meta.push((
+                            key.clone(),
+                            self.param_meta.insert(key.clone(), (w, *signed || v < 0)),
+                        ));
+                    }
+                    saved.push((key.clone(), self.params.insert(key, v)));
+                    next = v.wrapping_add(1);
+                }
+            }
+        }
+        (saved, saved_meta)
+    }
+
+    /// Register a net by name → NetId (declaration-order append). A duplicate
+    /// name is a hard error: we keep the FIRST binding, emit `ElabUnsupported`
+    /// (closest v1 code; doc-15 reserves `E-ELAB-DUP-DECL` for the eventual
+    /// dedicated slot), and do NOT push the orphan net — so `net_count` and the
+    /// golden hash are not perturbed by an unreferenceable duplicate.
+    /// (LOWERING + COVERAGE verdicts: duplicate-net silent acceptance.)
+    pub(crate) fn add_net(&mut self, name: &str, net: ir::NetVar) {
+        let key = self.fq(name);
+        // A2b-prereq S3: when a local decl shadows a wildcard alias, the alias
+        // entry is removed only AFTER the budget check below passes — an early
+        // return must leave the maps consistent.
+        let mut shadow_wildcard_alias = false;
+        if self.symbols.contains_key(&key) {
+            // A2b-prereq: a name bound by a package-variable IMPORT is not a
+            // declaration. A LOCAL declaration shadows a WILDCARD import
+            // (iverilog-pinned: `import p::*` + `int cnt` ⇒ local wins) — drop
+            // the alias and fall through to create the real net (the insert
+            // below replaces the symbols entry). Colliding with an EXPLICIT
+            // import stays loud (iverilog-pinned: "already been imported").
+            match self.pkg_var_aliases.get(&key) {
+                // Documented leniency (diff F3): IEEE §26.3 makes a local
+                // declaration AFTER a use of the wildcard binding an error;
+                // vita lowers by pass (nets before process bodies), so textual
+                // use-before-decl is not observable here — the local uniformly
+                // wins the whole scope (self-consistent, never a torn state).
+                Some((_, false)) => {
+                    shadow_wildcard_alias = true;
+                }
+                Some((pkg, true)) => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "`{name}` has already been imported into this scope \
+                             from package `{pkg}` (an explicit import conflicts \
+                             with a local declaration)"
+                        ),
+                    );
+                    return;
+                }
+                None => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!("net/variable `{key}` redeclared (duplicate declaration)"),
+                    );
+                    return;
+                }
+            }
+        }
+        // GEN-NET-CAP: bound the aggregate net arena. Past the cap, no-op (the
+        // arena stops growing) and report once — `had_error` makes the run loud.
+        if self.nets.len() >= MAX_TOTAL_NETS {
+            if !self.net_budget_blown {
+                self.net_budget_blown = true;
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "total net/variable count exceeds the v1 cap ({MAX_TOTAL_NETS}); \
+                         the design is too large or a generate loop is pathological"
+                    ),
+                );
+            }
+            return;
+        }
+        if shadow_wildcard_alias {
+            self.pkg_var_aliases.remove(&key);
+        }
+        let id = self.nets.len() as u32;
+        self.nets.push(net);
+        self.symbols.insert(key, id);
+    }
+
+    /// v7 `$bits` prescan (see `bits_prescan`): record one body decl's widths.
+    /// Every fold failure is a SILENT skip — the `$bits` call site is the loud
+    /// one; the real net lowering later re-folds with full diagnostics.
+    pub(crate) fn prescan_net_bits(&mut self, d: &ast::NetVarDecl) {
+        let fold_range = |me: &Self, r: &ast::Range| -> Option<u64> {
+            match (
+                me.const_eval_in_scope(&r.msb),
+                me.const_eval_in_scope(&r.lsb),
+            ) {
+                (Some(m), Some(l)) if m >= 0 && l >= 0 => Some(m.abs_diff(l) + 1),
+                _ => None,
+            }
+        };
+        if matches!(d.kind, ast::NetVarKind::String) {
+            return; // dynamic length — $bits on a string stays loud
+        }
+        let elem: u64 = match d.kind {
+            // §4.5.155: fixed-width integer atoms (IEEE §6.11.1) carry no range, so
+            // the `$bits` prescan must report the KIND width — mirroring `range_to_dims`
+            // — not the rangeless `None => 1` default below (which made
+            // `$bits(byte_arr[i])` = 1 instead of 8, even though the net storage /
+            // `%b` / arithmetic already size the element correctly). Only the static
+            // prescan path was stale (the scalar §4.5.154 fix rides `range_to_dims`).
+            ast::NetVarKind::Byte => 8,
+            ast::NetVarKind::Shortint => 16,
+            ast::NetVarKind::Int | ast::NetVarKind::Integer => 32,
+            ast::NetVarKind::Longint => 64,
+            ast::NetVarKind::Real
+            | ast::NetVarKind::Realtime
+            | ast::NetVarKind::Time
+            | ast::NetVarKind::Event => 64,
+            _ => {
+                let mut w = match &d.range {
+                    None => 1u64,
+                    Some(r) => match fold_range(self, r) {
+                        Some(w) => w,
+                        None => return,
+                    },
+                };
+                for r in &d.packed {
+                    match fold_range(self, r) {
+                        Some(pw) => w = w.saturating_mul(pw),
+                        None => return,
+                    }
+                }
+                w
+            }
+        };
+        'names: for n in &d.names {
+            let mut dims: Vec<u64> = Vec::new();
+            for dim in &n.unpacked {
+                match dim {
+                    ast::Dim::Range(r) => match fold_range(self, r) {
+                        Some(len) => dims.push(len),
+                        None => continue 'names,
+                    },
+                    ast::Dim::Size(e) => match self.const_eval_in_scope(e) {
+                        Some(s) if s > 0 => dims.push(s as u64),
+                        _ => continue 'names,
+                    },
+                    // dyn/queue/assoc — no static bit size
+                    _ => continue 'names,
+                }
+            }
+            self.bits_prescan.insert(n.name.name.clone(), (elem, dims));
+        }
+    }
+}

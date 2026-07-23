@@ -1,0 +1,533 @@
+//! strings — split out of the original `elaborate` lib.rs (mechanical move).
+
+use super::*;
+
+impl Elaborator<'_> {
+    /// N6: resolve a string-array ELEMENT read/write `NAME[K]` — if `base` is an Ident
+    /// naming a fixed string array in scope and `index` folds to a CONST in range,
+    /// return the K-th element net. A runtime index / out-of-range / non-string-array
+    /// base returns None (the caller falls through / loud-rejects). Shared by the read
+    /// (`lower_expr`) and write (`lvalue`) paths so both resolve identically.
+    pub(crate) fn string_array_elem_net(
+        &mut self,
+        base: &ast::Expr,
+        index: &ast::Expr,
+    ) -> Option<u32> {
+        let ast::ExprKind::Ident(path) = &base.kind else {
+            return None;
+        };
+        if path.segments.len() != 1 {
+            return None;
+        }
+        let key = self.walk_scopes_key(&path.segments[0].name, |k| {
+            self.string_array_elems.contains_key(k)
+        })?;
+        let (min, max, elems) = self.string_array_elems.get(&key)?.clone();
+        let k = self.const_eval_in_scope(index)?;
+        if k < min || k > max {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!("string-array index {k} is out of the declared range [{min}:{max}]"),
+            );
+            return None;
+        }
+        Some(elems[(k - min) as usize])
+    }
+
+    /// N6: true iff `base` is a fixed string-array Ident in scope (so a runtime-index
+    /// element access can be loud-rejected rather than mis-routed).
+    pub(crate) fn is_string_array_base(&self, base: &ast::Expr) -> bool {
+        matches!(&base.kind, ast::ExprKind::Ident(p) if p.segments.len() == 1
+            && self.walk_scopes_key(&p.segments[0].name, |k| self.string_array_elems.contains_key(k)).is_some())
+    }
+
+    /// N5: the raw string literal of a string-valued parameter initializer, or None.
+    /// Unwraps a parenthesised value (`= ("abc")`). A non-StrLit value (numeric, an
+    /// Ident, …) returns None → the numeric fold path (unchanged).
+    pub(crate) fn param_str_literal(value: &ast::Expr) -> Option<String> {
+        match &value.kind {
+            ast::ExprKind::StrLit { raw } => Some(raw.clone()),
+            ast::ExprKind::Paren { inner } => Self::param_str_literal(inner),
+            _ => None,
+        }
+    }
+
+    /// A fresh `String` net for hoisting a `$sformatf` operand to a temp
+    /// (`$sfmt_tmp$<n>` — the leading `$` keeps it collision-proof against user
+    /// identifiers, and a `String` net has no VCD `$var` form so the temp is
+    /// invisible to dumps). Returns the name so a synthetic `Ident` lvalue/expr
+    /// can reference it (module-scoped via `fq`, like `fresh_sva_reg`).
+    pub(crate) fn fresh_string_temp(&mut self) -> String {
+        let name = format!("$sfmt_tmp${}", self.nets.len());
+        let nv = ir::NetVar {
+            kind: ir::NetKind::String,
+            width: 0,
+            msb: 0,
+            lsb: 0,
+            signed: false,
+            array_len: 0,
+            dir: ir::PortDir::Internal,
+            init: default_init(ast::NetVarKind::Reg, 1),
+        };
+        self.add_net(&name, nv);
+        name
+    }
+
+    /// v7 P2-C: `name` (single segment, current scope) as a STRING net.
+    pub(crate) fn string_handle(&self, name: &str) -> Option<u32> {
+        let n = self.lookup_net_scoped(name)?;
+        (self.nets.get(n as usize)?.kind == ir::NetKind::String).then_some(n)
+    }
+
+    /// The STRING net denoted by a single-segment ident expression (the base of a
+    /// `s[i]` element select), or `None` for anything else (a packed vector, an
+    /// array element, a hierarchical ref). Conservative on purpose — only a bare
+    /// string variable carries the byte-sequence semantics §6.16.2/3 want.
+    pub(crate) fn string_base_expr_net(&self, base: &ast::Expr) -> Option<u32> {
+        match &base.kind {
+            ast::ExprKind::Ident(p) => match p.segments.as_slice() {
+                [seg] => self.string_handle(&seg.name),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// String element READ `s[i]` (IEEE §6.16.2) → the `.getc(i)` byte primitive
+    /// (front-indexed character, 0 if out of range, 8-bit), when `base` is a bare
+    /// string variable. `None` ⇒ not a string element select → the caller falls
+    /// through to the packed bit-select (byte-identical for non-string bases).
+    pub(crate) fn string_index_read(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
+        let handle = if let Some(net) = self.string_base_expr_net(base) {
+            self.push_expr(ir::Expr::Signal { net, word: None })
+        } else if let ast::ExprKind::Ident(p) = &base.kind {
+            // INLINE-function path: a string LOCAL or FORMAL `s` has no real string
+            // NET (`string_base_expr_net` finds only module/scoped nets), so `s[i]`
+            // used to fall through to a packed BIT-select on the subst-bound string
+            // value — silently 0 (bit 0 of a handle) instead of the byte. `expr_is_
+            // string_ast` recognizes an inline string (a declared-`string` formal or
+            // local via `formal_str`, or a subst value that is a string) exactly as
+            // the string compare/method paths do; lower the bare ident and reuse the
+            // `.getc(i)` byte primitive. Bare single-segment ident only (mirrors
+            // `string_base_expr_net`'s scope).
+            if p.segments.len() != 1 || !self.expr_is_string_ast(base) {
+                return None;
+            }
+            let h = self.lower_expr(base);
+            // Route to `.getc` ONLY when the lowered base is a StrGetC-consumable
+            // string HANDLE — a Signal-to-string-net (a runtime-sourced inline local)
+            // or a string Const (a literal-bound local/formal) — exactly the forms the
+            // engine `handle_str_bytes` reads. A FRAME string formal is a 1-bit WIRE
+            // net (its literal actual lives in a heap slot via the str-arg mask, not
+            // byte-readable here), and a string-SysFunc actual (`s.substr(..)`) is not
+            // byte-readable either; both fall through to the unchanged bit-select
+            // (byte-identical to the prior behavior — the frame-path string-select is
+            // a separate deferred gap, NOT regressed here).
+            if !self.handle_is_str_readable(h) {
+                return None;
+            }
+            h
+        } else {
+            return None;
+        };
+        let idx = self.lower_expr(index);
+        Some(self.push_expr(ir::Expr::SysFunc {
+            which: ir::SysFuncId::StrGetC,
+            args: vec![handle, idx],
+        }))
+    }
+
+    /// A `StrGetC`/`handle_str_bytes`-consumable string handle. The caller has
+    /// already confirmed the BASE is string-domain (`expr_is_string_ast`), so any
+    /// word-less `Signal` is a genuine string operand — either a real string net
+    /// (read via `str_bytes`) OR a frame string formal, which lowers to a 1-bit wire
+    /// whose frame slot holds the materialized string Value (the engine's
+    /// `handle_str_bytes` reads that via an eval fallback). A string `Const` (a
+    /// literal-bound inline local) is likewise readable. A string-producing `SysFunc`
+    /// actual (`s.substr(..)`) is deliberately NOT accepted here — the engine byte
+    /// path does not eval it, so it falls through to the unchanged bit-select (a
+    /// separate follow-on), not a silent-X.
+    pub(crate) fn handle_is_str_readable(&self, eid: u32) -> bool {
+        matches!(
+            self.exprs.get(eid as usize),
+            Some(ir::Expr::Signal { word: None, .. }) | Some(ir::Expr::Const { .. })
+        )
+    }
+
+    /// v7 P2-C: does this AST expression denote a STRING-domain value?
+    /// (a string variable read, or a string-producing method call). Literals
+    /// stay packed — a string-vs-literal comparison routes via the string
+    /// side. Conservative: anything else is not string-domain.
+    pub(crate) fn expr_is_string_ast(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.expr_is_string_ast(inner),
+            ast::ExprKind::Ident(p) => match p.segments.as_slice() {
+                [seg] => {
+                    // A formal DECLARED `string` is string-domain regardless of its
+                    // actual: an inline LITERAL actual is a packed const (not a string
+                    // net, so the `subst`/`ir_expr_is_string` path below misses it), and
+                    // a FRAME formal is a scoped net not in `subst`. Keyed on the formal's
+                    // declared type (NOT the actual's) so a string literal passed to a
+                    // PACKED formal still compares packed. Checked FIRST (innermost-wins).
+                    if self.formal_is_string(&seg.name) {
+                        return true;
+                    }
+                    // review F2: an inlined FORMAL bound to a string actual
+                    // must keep its string-domain-ness — resolve through the
+                    // subst (the bypass lowered `a < b` as a packed compare,
+                    // non-lexicographic for unequal lengths).
+                    if let Some(eid) = self.subst_lookup(&seg.name) {
+                        return self.ir_expr_is_string(eid);
+                    }
+                    if let Some(net) = self.out_subst_lookup(&seg.name) {
+                        return self.is_string_net(net);
+                    }
+                    self.lookup_scoped(&seg.name).is_none()
+                        && self.string_handle(&seg.name).is_some()
+                }
+                _ => false,
+            },
+            ast::ExprKind::Call { name, .. } => {
+                // G4: a call to a user function declared `function string f(...)` is a
+                // string-domain value, so `f(x) == "…"` lowers as a string compare.
+                if name.segments.len() == 1 {
+                    if let Some(f) = self.func_table.get(&name.segments[0].name) {
+                        if f.ret_string {
+                            return true;
+                        }
+                    }
+                }
+                name.segments.len() == 2
+                    && self.string_handle(&name.segments[0].name).is_some()
+                    && matches!(
+                        name.segments[1].name.as_str(),
+                        "substr" | "toupper" | "tolower"
+                    )
+            }
+            _ => false,
+        }
+    }
+
+    /// v7 P2-C: is `net` a string variable?
+    pub(crate) fn is_string_net(&self, net: u32) -> bool {
+        self.nets.get(net as usize).map(|n| n.kind) == Some(ir::NetKind::String)
+    }
+
+    /// v7 P2-C: does an already-LOWERED expr denote a string-domain value?
+    /// (subst-bound formals resolve here — review F2.)
+    pub(crate) fn ir_expr_is_string(&self, eid: u32) -> bool {
+        match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Signal { net, word: None }) => self.is_string_net(*net),
+            Some(ir::Expr::SysFunc { which, .. }) => matches!(
+                which,
+                ir::SysFuncId::StrSubstr
+                    | ir::SysFuncId::StrToUpper
+                    | ir::SysFuncId::StrToLower
+                    | ir::SysFuncId::Sformatf
+            ),
+            _ => false,
+        }
+    }
+
+    /// v7 P2-C: method-call EXPRESSION on a string (`s.len()`, `s.substr(i,j)`,
+    /// `s.toupper()`, `s.getc(i)`, `s.compare(t)`). `putc` is the statement
+    /// mutator (`lower_string_method_stmt`); unknown methods are loud.
+    pub(crate) fn lower_string_method_expr(
+        &mut self,
+        net: u32,
+        method: &str,
+        args: &[ast::Expr],
+    ) -> u32 {
+        let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        self.lower_string_method_expr_handle(handle, method, args)
+    }
+
+    /// G1: [`lower_string_method_expr`] over a PRE-LOWERED string handle — a string-net
+    /// `Signal`, a frame string-FORMAL slot `Signal` (a 1-bit wire whose frame slot
+    /// holds the materialized string, read via the engine's `handle_str_bytes` eval
+    /// fallback), or a literal string `Const`. Lets a string method on a formal / inline
+    /// local dispatch even though its handle is not a bare `NetKind::String` net. The
+    /// caller must have confirmed the handle is string-readable (`handle_is_str_readable`).
+    pub(crate) fn lower_string_method_expr_handle(
+        &mut self,
+        handle: u32,
+        method: &str,
+        args: &[ast::Expr],
+    ) -> u32 {
+        let arity_ok = |n: usize| args.len() == n;
+        let which = match method {
+            "len" if arity_ok(0) => ir::SysFuncId::StrLen,
+            "getc" if arity_ok(1) => ir::SysFuncId::StrGetC,
+            "substr" if arity_ok(2) => ir::SysFuncId::StrSubstr,
+            "toupper" if arity_ok(0) => ir::SysFuncId::StrToUpper,
+            "tolower" if arity_ok(0) => ir::SysFuncId::StrToLower,
+            "compare" if arity_ok(1) => ir::SysFuncId::StrCmp,
+            // ⓑ-breadth (v18): string→number conversions (IEEE §6.16.9-13).
+            "atoi" if arity_ok(0) => ir::SysFuncId::StrAtoi,
+            "atohex" if arity_ok(0) => ir::SysFuncId::StrAtohex,
+            "atooct" if arity_ok(0) => ir::SysFuncId::StrAtooct,
+            "atobin" if arity_ok(0) => ir::SysFuncId::StrAtobin,
+            "atoreal" if arity_ok(0) => ir::SysFuncId::StrAtoreal,
+            _ => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "string method `{method}` (with this arity) is outside the scope \
+                         (len/getc/substr/toupper/tolower/compare/putc/atoi/atohex/atooct/\
+                         atobin/atoreal)"
+                    ),
+                );
+                return self.placeholder_expr();
+            }
+        };
+        let mut ids = vec![handle];
+        ids.extend(args.iter().map(|a| self.lower_expr(a)));
+        self.push_expr(ir::Expr::SysFunc { which, args: ids })
+    }
+
+    /// v7 P2-C: method-call STATEMENT on a string — `s.putc(i, c);`.
+    pub(crate) fn lower_string_method_stmt(
+        &mut self,
+        b: &mut ProcessBuilder,
+        net: u32,
+        method: &str,
+        args: &[ast::Expr],
+    ) {
+        // ⓑ-breadth (v18): number→string conversions (IEEE §6.16.14-18) — in-place
+        // mutators taking the value to render.
+        let which = match (method, args.len()) {
+            ("putc", 2) => ir::SysTaskId::StrPutC,
+            ("itoa", 1) => ir::SysTaskId::StrItoa,
+            ("hextoa", 1) => ir::SysTaskId::StrHextoa,
+            ("octtoa", 1) => ir::SysTaskId::StrOcttoa,
+            ("bintoa", 1) => ir::SysTaskId::StrBintoa,
+            _ => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "string method statement `{method}` is outside the scope \
+                         (putc/itoa/hextoa/octtoa/bintoa)"
+                    ),
+                );
+                return;
+            }
+        };
+        let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        let mut ids = vec![handle];
+        ids.extend(args.iter().map(|a| self.lower_expr(a)));
+        let sid = self.push_stmt(ir::Stmt::SysTask {
+            which,
+            fmt: None,
+            args: ids,
+        });
+        b.push_stmt_id(sid);
+    }
+
+    /// String element WRITE `s[i] = c` (IEEE §6.16.3): a string variable is a
+    /// dynamic byte SEQUENCE, so the assignment mutates the front-indexed CHARACTER
+    /// (byte) at `i` via the `.putc(i, c)` primitive (an OOB index or a NUL byte is a
+    /// silent no-op per spec), NOT a packed bit-write into the materialized vector.
+    /// `false` ⇒ `lhs` is not a bare-string element select → the normal lvalue path
+    /// runs (byte-identical for every non-string lvalue).
+    /// The STRING net of a bare-string element lvalue `s[i]`, or `None` for any
+    /// other lvalue shape (a packed-vector bit-select, an array element, a concat).
+    /// Shared by the blocking write and the non-blocking honest-loud guard.
+    pub(crate) fn string_index_lvalue_net(&self, lhs: &ast::Lvalue) -> Option<u32> {
+        let ast::Lvalue::BitSelect { base, .. } = lhs else {
+            return None;
+        };
+        let ast::Lvalue::Ident(p) = &**base else {
+            return None;
+        };
+        match p.segments.as_slice() {
+            [seg] => self.string_handle(&seg.name),
+            _ => None,
+        }
+    }
+
+    /// Is `lhs` a bare-string element select `s[i]`? (predicate twin of
+    /// `string_index_lvalue_net`, gating both the blocking write route and the
+    /// non-blocking honest-loud guard).
+    pub(crate) fn is_string_index_lvalue(&self, lhs: &ast::Lvalue) -> bool {
+        self.string_index_lvalue_net(lhs).is_some()
+    }
+
+    /// Emit the plain blocking string element write `s[i] = c` as the `.putc(i, c)`
+    /// byte primitive. PRECONDITION: `is_string_index_lvalue(lhs)` holds and the
+    /// caller has already excluded event/delay control — so the shape match is
+    /// infallible here (a defensive `else` keeps it total).
+    pub(crate) fn string_index_write_putc(
+        &mut self,
+        b: &mut ProcessBuilder,
+        lhs: &ast::Lvalue,
+        rhs: &ast::Expr,
+    ) {
+        let (Some(net), ast::Lvalue::BitSelect { index, .. }) =
+            (self.string_index_lvalue_net(lhs), lhs)
+        else {
+            return;
+        };
+        let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        let idx = self.lower_expr(index);
+        let c = self.lower_expr(rhs);
+        let sid = self.push_stmt(ir::Stmt::SysTask {
+            which: ir::SysTaskId::StrPutC,
+            fmt: None,
+            args: vec![handle, idx, c],
+        });
+        b.push_stmt_id(sid);
+    }
+
+    /// String concatenation `lhs = {a, b, …}` or replication `lhs = {N{a, …}}`
+    /// (IEEE §6.16 / §11.4.12) where at least one part is a string — desugared to
+    /// the existing `$sformatf("%s%s…", a, b, …)` render path (the static `Concat`
+    /// node cannot carry a dynamic-width string result). Only the direct-rhs-of-a-
+    /// blocking-assign placement is handled (the dominant string-building pattern);
+    /// a string concat in any other context stays loud (the `lower_expr` reject).
+    /// Each part renders through `%s` — string vars/literals and integral byte
+    /// values alike (IEEE §6.16: an integral concat element is its character
+    /// bytes), matching iverilog. A `real` part is loud (no string segment).
+    pub(crate) fn string_concat_special(
+        &mut self,
+        b: &mut ProcessBuilder,
+        lhs: &ast::Lvalue,
+        delay: Option<&ast::Delay>,
+        rhs: &ast::Expr,
+    ) -> bool {
+        let mut inner = rhs;
+        while let ast::ExprKind::Paren { inner: i } = &inner.kind {
+            inner = i;
+        }
+        // The ordered list of part expressions (a replication flattens to its
+        // value list repeated `count` times). `None` ⇒ not a string concat.
+        let part_exprs: Vec<&ast::Expr> = match &inner.kind {
+            ast::ExprKind::Concat { parts } => {
+                if !parts.iter().any(|p| self.expr_is_string_ast(p)) {
+                    return false; // no string part ⇒ ordinary bit-concat (byte-identical)
+                }
+                parts.iter().collect()
+            }
+            ast::ExprKind::Replicate { count, value } => {
+                if !value.iter().any(|p| self.expr_is_string_ast(p)) {
+                    return false; // ordinary bit-replicate (byte-identical)
+                }
+                let Some(n) = self.const_eval_in_scope(count) else {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a non-constant replication count on a string is unsupported",
+                    );
+                    return true;
+                };
+                let n = n.max(0) as usize; // a 0/negative count ⇒ empty string
+                let mut v = Vec::with_capacity(n.saturating_mul(value.len()));
+                for _ in 0..n {
+                    v.extend(value.iter());
+                }
+                v
+            }
+            _ => return false,
+        };
+        if delay.is_some() {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "an intra-assignment delay on a string concatenation is unsupported",
+            );
+            return true;
+        }
+        let rhs_id = self.lower_string_concat_parts(&part_exprs);
+        let lv = self.lower_lvalue(lhs);
+        self.check_lvalue_kind(&lv, true);
+        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
+            lhs: lv,
+            rhs: rhs_id,
+        });
+        b.push_stmt_id(sid);
+        true
+    }
+
+    /// Shared string-concat lowering (IEEE §6.16): the ordered `part_exprs`
+    /// (a replication already flattened to its repeated value list) lower to a
+    /// `$sformatf("%s%s…%s", part0, part1, …)` expression — the parts pass as
+    /// `%s` args, so each renders as its string/char bytes and a literal `%` in a
+    /// part value is NOT a conversion. Returns the resulting ExprId.
+    ///
+    /// Used by BOTH the statement-level concat-ASSIGN desugar
+    /// (`string_concat_special`) and the general expression path
+    /// (`lower_expr`'s `Concat`/`Replicate` arms) so display args, comparisons,
+    /// function/task args, and nested concats share one oracle-proven impl.
+    ///
+    /// A real part stays LOUD (correct-or-loud): the loud diagnostic is emitted
+    /// and the remaining parts still lower (so the dead `$sformatf` node is
+    /// well-formed), but the surrounding elaboration is already poisoned.
+    pub(crate) fn lower_string_concat_parts(&mut self, part_exprs: &[&ast::Expr]) -> u32 {
+        // fmt = "%s"×N (the parts pass as %s args, so a `%` in any part value is
+        // rendered literally, not as a conversion).
+        let fmt = "%s".repeat(part_exprs.len());
+        let fmt_cid = self.intern_const(literal::str_const_from_bytes(fmt.as_bytes()));
+        let fmt_eid = self.push_expr(ir::Expr::Const { val: fmt_cid });
+        let mut args = vec![fmt_eid];
+        for p in part_exprs {
+            let pid = self.lower_expr(p);
+            if self.expr_is_real(pid) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a real value may not be a string-concatenation element",
+                );
+            }
+            args.push(pid);
+        }
+        self.push_expr(ir::Expr::SysFunc {
+            which: ir::SysFuncId::Sformatf,
+            args,
+        })
+    }
+
+    /// vita's canonical `$typename` spelling for a net (hand-IEEE — no oracle).
+    /// Atom types (`integer`/`time`/`real`) print bare; vector/array data types
+    /// print as `<base>[msb:lsb]…` for packed dims with unpacked dims appended as
+    /// `$[lo:hi]` (IEEE 1800 §20.6.1 form). reg/logic/wire all canonicalise to
+    /// "logic" (they are the same 4-state data type).
+    pub(crate) fn typename_string(&self, net: u32) -> String {
+        use ast::NetVarKind as K;
+        // The `string` decl branch never populates `intro_kind`, so detect it first.
+        if self.is_string_net(net) {
+            return "string".to_string();
+        }
+        let kind = self.intro_kind.get(&net).copied().unwrap_or(K::Logic);
+        // Atom types render bare regardless of any implicit packed dim.
+        match kind {
+            K::Integer => return "integer".to_string(),
+            K::Time => return "time".to_string(),
+            K::Real => return "real".to_string(),
+            K::Realtime => return "realtime".to_string(),
+            K::Event => return "event".to_string(),
+            K::String => return "string".to_string(),
+            K::Byte => return "byte".to_string(),
+            K::Shortint => return "shortint".to_string(),
+            K::Int => return "int".to_string(),
+            K::Longint => return "longint".to_string(),
+            _ => {}
+        }
+        // `bit` is the 2-state vector data type; reg/logic/wire/tri/… are 4-state.
+        let base = if matches!(kind, K::Bit) {
+            "bit"
+        } else {
+            "logic"
+        };
+        let (dims, unpacked_n) = self.net_dims_desc(net).unwrap_or((Vec::new(), 0));
+        let mut s = base.to_string();
+        // carry the signedness qualifier (IEEE canonical) when the net is signed.
+        if self.nets.get(net as usize).is_some_and(|n| n.signed) {
+            s.push_str(" signed");
+        }
+        // packed dims (after the unpacked prefix) directly follow the base.
+        for &(l, r) in dims.iter().skip(unpacked_n) {
+            s.push_str(&format!("[{l}:{r}]"));
+        }
+        // unpacked dims trail as `$[lo:hi]`.
+        for &(l, r) in dims.iter().take(unpacked_n) {
+            s.push_str(&format!("$[{l}:{r}]"));
+        }
+        s
+    }
+}

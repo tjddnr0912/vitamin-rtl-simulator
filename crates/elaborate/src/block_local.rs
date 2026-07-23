@@ -1,0 +1,606 @@
+//! procedural block-local hoisting — split out of the original `elaborate` lib.rs (mechanical move).
+
+use super::*;
+
+/// Collect every NESTED `begin…end`/`fork` block (i.e. not the top-level body
+/// block) together with the names it declares as locals. `is_top` is true only for
+/// the outermost body statement, whose own decls are function/task-scoped (not
+/// block-scoped) and so are skipped.
+pub(crate) fn gather_nested_block_locals(
+    s: &ast::Stmt,
+    is_top: bool,
+    out: &mut Vec<(ast::Span, Vec<String>)>,
+) {
+    use ast::Stmt::*;
+    match s {
+        Block {
+            stmts, decls, span, ..
+        }
+        | Fork {
+            stmts, decls, span, ..
+        } => {
+            if !is_top && !decls.is_empty() {
+                let names: Vec<String> = decls
+                    .iter()
+                    .flat_map(|d| d.names.iter().map(|n| n.name.name.clone()))
+                    .collect();
+                if !names.is_empty() {
+                    out.push((*span, names));
+                }
+            }
+            for st in stmts {
+                gather_nested_block_locals(st, false, out);
+            }
+        }
+        If { then_s, else_s, .. } => {
+            gather_nested_block_locals(then_s, false, out);
+            if let Some(e) = else_s {
+                gather_nested_block_locals(e, false, out);
+            }
+        }
+        Case { items, .. } => {
+            for it in items {
+                match it {
+                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
+                        gather_nested_block_locals(body, false, out)
+                    }
+                }
+            }
+        }
+        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
+            gather_nested_block_locals(body, false, out)
+        }
+        Wait { body, .. } | DelayCtrl { body, .. } | EventCtrl { body, .. } => {
+            if let Some(b) = body {
+                gather_nested_block_locals(b, false, out)
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collect every `begin`/`fork` block-local declaration in `s`, in source order
+/// (recursing into nested blocks and control-flow bodies). Used to reserve a
+/// frame body's block-locals under its `$func$<name>` scope so a local declared
+/// inside a `begin … end` resolves (previously unresolved → E3010, for frame
+/// functions AND tasks alike).
+pub(crate) fn collect_block_local_decls(s: &ast::Stmt, out: &mut Vec<ast::NetVarDecl>) {
+    use ast::Stmt::*;
+    match s {
+        Block { decls, stmts, .. } | Fork { decls, stmts, .. } => {
+            out.extend(decls.iter().cloned());
+            for st in stmts {
+                collect_block_local_decls(st, out);
+            }
+        }
+        If { then_s, else_s, .. } => {
+            collect_block_local_decls(then_s, out);
+            if let Some(e) = else_s {
+                collect_block_local_decls(e, out);
+            }
+        }
+        Case { items, .. } => {
+            for it in items {
+                match it {
+                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
+                        collect_block_local_decls(body, out)
+                    }
+                }
+            }
+        }
+        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
+            collect_block_local_decls(body, out)
+        }
+        _ => {}
+    }
+}
+
+impl Elaborator<'_> {
+    /// Param-aware const-eval in a SIGNED 64-bit domain (P0-6, 2026-06-10).
+    /// Folds: literals (sign-aware), params/genvars in scope, unary `+ - ~ !`,
+    /// the binary operator set with i64 semantics (so a descending genvar
+    /// condition `i >= 0` actually terminates), ternary `?:` and `$clog2`
+    /// (P0-5 — the `localparam AW = $clog2(DEPTH)` / `W = M ? a : b` idioms).
+    /// Overflow and ill-defined folds return None — param-binding callers
+    /// escalate None to an ERROR (never a silent 0), width callers clamp
+    /// loudly. NOTE: this is a width-less mathematical-integer model; a
+    /// logical `>>` of a NEGATIVE value is width-dependent and folds None.
+    /// GAP-G shadow guard: the bare names the module declares locally — header
+    /// (`#(...)`) params, ports, and top-level body nets/params. A name in this
+    /// set SHADOWS a same-named wildcard-imported package array, so a const
+    /// element read of it must not fold the imported array. See `local_decl_names`.
+    pub(crate) fn gather_local_decl_names(
+        &self,
+        module: &ast::ModuleDecl,
+    ) -> std::collections::BTreeSet<String> {
+        let mut names = std::collections::BTreeSet::new();
+        for p in &module.params {
+            names.insert(p.name.name.clone());
+        }
+        match &module.ports {
+            ast::PortList::Ansi(ports) => {
+                for pt in ports {
+                    names.insert(pt.name.name.clone());
+                }
+            }
+            ast::PortList::NonAnsi(idents) => {
+                for id in idents {
+                    names.insert(id.name.clone());
+                }
+            }
+            ast::PortList::None => {}
+        }
+        for item in &module.body {
+            match item {
+                ast::ModuleItem::NetVar(d) => {
+                    for n in &d.names {
+                        names.insert(n.name.name.clone());
+                    }
+                }
+                ast::ModuleItem::Param(p) => {
+                    names.insert(p.name.name.clone());
+                }
+                _ => {}
+            }
+        }
+        names
+    }
+
+    /// DUP (round-5): decide which `automatic` block-locals need a `$blk$<span>`
+    /// scope segment. Returns block `span.lo` → the set of local NAMES to scope in
+    /// that block. A name is scoped IFF it is declared `automatic` in ≥ 2 procedural
+    /// blocks that are all MUTUALLY DISJOINT (no span containment ⇒ no shadowing /
+    /// nesting), AND it does not also name a module-scope net/param (`module_names`).
+    /// A candidate block nested inside ANOTHER candidate block is then dropped (a
+    /// single-level hoist would not match nested segments). Every excluded case
+    /// falls through to the pre-existing loud E3009 — correct-or-loud. Pure function
+    /// of the AST, so the Nets-phase hoist and the Logic-phase lowering agree.
+    pub(crate) fn compute_scoped_block_locals(
+        module: &ast::ModuleDecl,
+        module_names: &std::collections::BTreeSet<String>,
+    ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
+        // `outer` strictly contains `inner` (properly nested AST blocks never
+        // partially overlap, so containment ⇒ nesting).
+        fn contains(outer: (u32, u32), inner: (u32, u32)) -> bool {
+            outer.0 <= inner.0 && inner.1 <= outer.1 && outer != inner
+        }
+        // (1) gather automatic block-locals across all procedural blocks.
+        let mut per_name: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+        for item in &module.body {
+            if let ast::ModuleItem::Proc(p) = item {
+                Self::gather_auto_block_locals(&p.body, &mut per_name);
+            }
+        }
+        // (2) candidate (span, name): declared in ≥2 blocks, no module-net
+        //     collision, and no two declaring spans nested (shadowing).
+        let mut cand: Vec<(u32, u32, String)> = Vec::new();
+        for (name, spans) in &per_name {
+            if spans.len() < 2 || module_names.contains(name) {
+                continue;
+            }
+            let shadowed = spans.iter().enumerate().any(|(i, &a)| {
+                spans
+                    .iter()
+                    .enumerate()
+                    .any(|(j, &b)| i != j && contains(a, b))
+            });
+            if shadowed {
+                continue;
+            }
+            for &(lo, hi) in spans {
+                cand.push((lo, hi, name.clone()));
+            }
+        }
+        // (3) drop any candidate block nested inside ANOTHER candidate block.
+        let cand_spans: Vec<(u32, u32)> = cand.iter().map(|&(lo, hi, _)| (lo, hi)).collect();
+        let mut out: BTreeMap<u32, std::collections::BTreeSet<String>> = BTreeMap::new();
+        for (lo, hi, name) in cand {
+            let nested = cand_spans.iter().any(|&s| contains(s, (lo, hi)));
+            if nested {
+                continue;
+            }
+            out.entry(lo).or_default().insert(name);
+        }
+        out
+    }
+
+    /// DUP (round-5): the `$blk$<span>` scope segment for a decl `d` in the block at
+    /// `span`, if ANY name it declares is marked for scoping. `None` ⇒ not scoped
+    /// (pre-existing behavior).
+    ///
+    /// ANY (not ALL) is load-bearing for soundness: `compute_scoped_block_locals`
+    /// marks scoping PER-NAME, and the block body is lowered under `$blk$<span>`
+    /// whenever the block has ANY scoped name. If a MULTI-name decl
+    /// (`automatic int idx, jdx;`) had only `idx` scoped and we left the whole decl
+    /// BARE (the old ALL check), `idx` would keep the bare `top.idx` net while the
+    /// block IS wrapped — breaking the invariant "every colliding occurrence is
+    /// scoped, so no bare `top.idx` exists". A later same-named static block-local
+    /// then coalesces onto that bare net and aliases block `idx` (silent-wrong,
+    /// found by adversarial review). Scoping the WHOLE decl on ANY hit keeps the
+    /// invariant; the non-colliding sibling (`jdx`) is a block-local referenced only
+    /// within this block, so giving it a `$blk$` net too is harmless (it resolves
+    /// under the same scope wrap, and an outside reference is already loud).
+    pub(crate) fn block_local_scope_seg(
+        &self,
+        span: ast::Span,
+        d: &ast::NetVarDecl,
+    ) -> Option<String> {
+        let set = self.scoped_block_locals.get(&span.lo)?;
+        if d.names.iter().any(|n| set.contains(&n.name.name)) {
+            Some(format!("$blk${}", span.lo))
+        } else {
+            None
+        }
+    }
+
+    /// Recursively create nets for every `begin…end`/`fork…join` block-local
+    /// declaration reachable from a procedural-block body. v1 flattens these to
+    /// module-scope nets (no per-process frame). Called in the Nets phase.
+    pub(crate) fn hoist_block_local_nets(
+        &mut self,
+        s: &ast::Stmt,
+        ports: &ast::PortList,
+        body: &[ast::ModuleItem],
+    ) {
+        match s {
+            ast::Stmt::Block {
+                decls, stmts, span, ..
+            }
+            | ast::Stmt::Fork {
+                decls, stmts, span, ..
+            } => {
+                for d in decls {
+                    // DUP (round-5): a colliding `automatic` block-local that the
+                    // pure pre-scan marked (disjoint blocks, no module-net collision,
+                    // no nesting) gets its OWN `$blk$<span>` scope so two blocks'
+                    // same-named locals become DISTINCT nets instead of aliasing
+                    // (was E3009). It still must pass per-entry definite-assignment
+                    // (each scoped block independently) to be byte-identical to the
+                    // static flatten — same gate as the non-colliding automatic path
+                    // below. `Fork` spans are never marked (gather skips them), so a
+                    // fork local always falls through. Everything unmarked keeps the
+                    // pre-existing behavior.
+                    if d.lifetime == Some(true) {
+                        if let Some(seg) = self.block_local_scope_seg(*span, d) {
+                            for n in &d.names {
+                                let nm = &n.name.name;
+                                let read_in_sibling_init =
+                                    decls.iter().flat_map(|dd| dd.names.iter()).any(|nn| {
+                                        nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm))
+                                    });
+                                if n.init.is_some()
+                                    || read_in_sibling_init
+                                    || !automatic_local_definitely_assigned(stmts, nm)
+                                {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "an `automatic` block-local `{nm}` whose per-entry \
+                                             lifetime differs from static (an initializer, or a \
+                                             read before its first write) is unsupported in a \
+                                             procedural block (v1 flattens block-locals to one \
+                                             static net); assign it before use, or drop `automatic`",
+                                        ),
+                                    );
+                                }
+                            }
+                            self.with_scope(&seg, |s| {
+                                s.elaborate_netvar_decl(d, ports, body, true)
+                            });
+                            continue;
+                        }
+                    }
+                    // v1 flattens block-locals into the module namespace (no
+                    // per-block scope). If a local name was already created by an
+                    // EARLIER block, skip re-creating it rather than erroring
+                    // "redeclared" — two SEQUENTIAL named blocks reusing the same
+                    // temp name (`integer local_v;`) then share one net, which is
+                    // correct since they never overlap in time.
+                    let existing = d
+                        .names
+                        .first()
+                        .and_then(|n| self.symbols.get(&self.fq(&n.name.name)).copied());
+                    if let Some(net) = existing {
+                        // ⓑ-breadth fix: a SCALAR local safely coalesces (the net
+                        // is just overwritten in time), but a DYNAMIC-STORAGE local
+                        // (queue/dyn-array/assoc/string) is backed by a persistent
+                        // heap that is NOT reset on block entry — sharing one net
+                        // across two blocks leaks the first block's elements into
+                        // the second (a silent-wrong the array reductions/`size()`
+                        // then compute over). v1 has no per-block scope to give them
+                        // distinct heaps, so reject loudly rather than miscompute.
+                        // Also fire when the EXISTING net is a plain scalar but THIS
+                        // (later) block's decl is a `string` that the block READS
+                        // (`begin logic s; end  begin string s; …=s[0]; end`): the
+                        // string coalesces onto the packed net and reading it is
+                        // silent-wrong. A WRITE-ONLY string coalesces harmlessly (its
+                        // truncated write is discarded), so gate on a READ to avoid
+                        // over-rejecting the common param-gated / dead-store shape.
+                        let new_str_read = matches!(d.kind, ast::NetVarKind::String)
+                            && d.names.first().is_some_and(|n| {
+                                let nm = &n.name.name;
+                                stmts.iter().any(|st| stmt_reads_ident(st, nm))
+                                    // A SIBLING decl in THIS block can read the string
+                                    // in its own initializer (`begin string s; int x =
+                                    // s[0]; end`) — that read lives in a decl, not in
+                                    // `stmts`, so scan the block's decl inits too.
+                                    || decls.iter().flat_map(|dd| dd.names.iter()).any(|nn| {
+                                        nn.init
+                                            .as_ref()
+                                            .is_some_and(|e| rvalue_reads_ident(e, nm))
+                                    })
+                            });
+                        if self.is_dyn_handle_net(net) || self.is_string_net(net) || new_str_read {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a dynamic-storage local (queue / dynamic array / associative \
+                                 array / string) declared under the same name in another block \
+                                 is unsupported (v1 flattens block-locals to one module net with \
+                                 no per-block heap); rename one of them",
+                            );
+                        }
+                        // GAP-D completeness (adversarial find): an `automatic`
+                        // block-local whose name COLLIDES with an existing net (a
+                        // module-scope net, or an earlier sibling block-local) is
+                        // ALIASED onto that net by the v1 flatten — this both defeats
+                        // the automatic's required distinct per-entry storage AND
+                        // BYPASSES the definite-assignment gate below (this `continue`
+                        // skips it, so a read-before-write colliding automatic would
+                        // be silently accepted with the shared/persisted value).
+                        // v1 has no per-block scope to give the shadowing automatic
+                        // its own storage, so reject LOUD rather than silently alias
+                        // (correct-or-loud) — the workaround is a distinct name.
+                        if d.lifetime == Some(true) {
+                            for n in &d.names {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "an `automatic` block-local `{}` collides with an \
+                                         existing net of the same name; v1 flattens \
+                                         block-locals into the module namespace and cannot \
+                                         give the `automatic` its own per-entry storage (it \
+                                         would alias the shadowed net) — rename it",
+                                        n.name.name
+                                    ),
+                                );
+                            }
+                        } else {
+                            // A STATIC scalar block-local coalescing onto an EXISTING
+                            // same-named net (the v1 flatten "reuse the net in time" path)
+                            // matches iverilog's distinct-per-scope variable ONLY when
+                            // (a) its TYPE equals the shared net's AND (b) it is definitely
+                            // assigned before any read here. A type mismatch (different
+                            // width or signedness) makes THIS block read/write the shared
+                            // net with the WRONG type — wrong `%d` sign, wrong `>>>`
+                            // arithmetic, wrong `%h`/`$bits` width. A read-before-write
+                            // observes the PRIOR block's leftover value instead of the X a
+                            // fresh variable would hold. Both are silent-wrong; v1 has no
+                            // per-block scope to give this local distinct typed storage, so
+                            // loud (correct-or-loud). The SAFE same-type + definitely-
+                            // assigned coalesce (common `for`/`tmp` name reuse) is
+                            // unaffected. dyn/string collisions were already loud above;
+                            // `range_to_dims` is packed-only, so skip them here.
+                            let (nw, _, _, nsig) =
+                                self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                            for n in &d.names {
+                                let nm = &n.name.name;
+                                // A name ALSO declared at MODULE scope is a legitimate
+                                // SHADOW (`outer_s x; … begin inner_s x; … end`), handled
+                                // by the struct/enum/typedef shadow-scoping — NOT a
+                                // sibling block-local coalesce. Skip it: this guard targets
+                                // block-vs-block (two disjoint blocks reusing one flattened
+                                // net), where the colliding name is a pure block-local.
+                                if self.local_decl_names.contains(nm) {
+                                    continue;
+                                }
+                                let Some(ex) = self.symbols.get(&self.fq(nm)).copied() else {
+                                    continue;
+                                };
+                                if self.is_dyn_handle_net(ex)
+                                    || self.is_string_net(ex)
+                                    || matches!(d.kind, ast::NetVarKind::String)
+                                {
+                                    continue;
+                                }
+                                let (ew, esig) = {
+                                    let e = &self.nets[ex as usize];
+                                    (e.width, e.signed)
+                                };
+                                if nw != ew || nsig != esig {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "block-local `{nm}` is declared with a different \
+                                             width/signedness than a same-named block-local in \
+                                             another block; v1 flattens both to one module net \
+                                             and cannot hold two types (the shared net would be \
+                                             read/written with the wrong sign or width) — rename \
+                                             one"
+                                        ),
+                                    );
+                                } else if !automatic_local_definitely_assigned(stmts, nm) {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "block-local `{nm}` shares one flattened net with a \
+                                             same-named block-local in another block but is READ \
+                                             before it is assigned here — it would observe the \
+                                             other block's leftover value, not a fresh variable's \
+                                             default; assign it before use, or rename one"
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    // GAP-D soundness: a procedural block-local `automatic` is
+                    // byte-identical to the static flattening ONLY when its
+                    // per-entry reset/re-init is dead. An initializer (must re-run
+                    // each entry) or a read-before-write use (observes the reset
+                    // value) cannot be honored without a per-block frame, so reject
+                    // LOUD rather than silently give static semantics. The
+                    // static-equivalent case (`automatic t x; x = e; … x …`) is
+                    // accepted — it flattens correctly.
+                    if d.lifetime == Some(true) {
+                        for n in &d.names {
+                            let nm = &n.name.name;
+                            // A sibling block-local's initializer that reads this
+                            // automatic var (`automatic int v; int w = v;`) observes
+                            // its entry value too — not just the block statements.
+                            // Use the CONSERVATIVE `expr_no_ref` (not the shared
+                            // under-detecting `expr_reads_ident`, which `_ => false`s
+                            // on `ArrayMethodWith`/`Dist`/… and could miss a hidden
+                            // read) so this gate is sound like the statement scan.
+                            let read_in_sibling_init = decls
+                                .iter()
+                                .flat_map(|dd| dd.names.iter())
+                                .any(|nn| nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm)));
+                            if n.init.is_some()
+                                || read_in_sibling_init
+                                || !automatic_local_definitely_assigned(stmts, nm)
+                            {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "an `automatic` block-local `{nm}` whose per-entry \
+                                         lifetime differs from static (an initializer, or a \
+                                         read before its first write) is unsupported in a \
+                                         procedural block (v1 flattens block-locals to one \
+                                         static net); assign it before use, or drop `automatic`",
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    self.elaborate_netvar_decl(d, ports, body, true);
+                    // §6.8/§6.21: a NON-constant PROCESS block-local initializer
+                    // (`begin logic x = g+1; …`) is STATIC-lifetime — applied ONCE
+                    // at time 0 (the block-local net is module-flattened), NOT on
+                    // each block entry. So it rides the SAME synthesized var-init
+                    // `initial` as a module-scope non-const var-init (matches
+                    // iverilog for an `always`/`for` body, which freezes the t0
+                    // value). A constant init already folded into net.init (skip).
+                    // A scalar `string s = expr;` block-local has no foldable
+                    // net.init field, so it always rides this t0 pre-sweep (a
+                    // dimensioned string was loud-rejected in `elaborate_netvar_decl`).
+                    let scalar_string = matches!(d.kind, ast::NetVarKind::String)
+                        && d.range.is_none()
+                        && d.packed.is_empty();
+                    if netvar_kind_is_var(d.kind) || scalar_string {
+                        for name in &d.names {
+                            let Some(init) = &name.init else { continue };
+                            let push = if scalar_string {
+                                // A scalar string (no dims) rides the t0 pre-sweep. A
+                                // string DYNAMIC array (`string s[] = '{…}`) rides it too:
+                                // its `'{…}` is expanded by the flush (`new[N]` + element
+                                // writes) exactly like the module-scope path
+                                // (`collect_var_init_drivers`'s `is_dyn_str_init`). Without
+                                // this the dimensioned-string branch dropped the init here
+                                // (`name.unpacked` is non-empty → `push` false), leaving the
+                                // block-local array silently EMPTY while the identical
+                                // module-scope decl worked (a pre-existing silent-wrong).
+                                // Other string dims (fixed / multi / non-`'{…}`) were
+                                // loud-rejected at the decl, so they never reach here.
+                                name.unpacked.is_empty()
+                                    || (name.unpacked.len() == 1
+                                        && matches!(name.unpacked[0], ast::Dim::Dyn)
+                                        && matches!(init.kind, ast::ExprKind::AssignPattern(_)))
+                            } else {
+                                // Mirror `collect_var_init_drivers`: a non-constant
+                                // initializer rides the t0 pre-sweep. This INCLUDES an
+                                // unpacked-array pattern (`int a[4] = '{1,2,3,4}`),
+                                // whose synthesized `a = '{…}` is routed through
+                                // `array_assign_special` — previously a bare
+                                // `name.unpacked.is_empty()` guard silently dropped it.
+                                let (w, ..) =
+                                    self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                                fold_init(init, w).is_none()
+                                    && self.const_eval_in_scope(init).is_none()
+                            };
+                            if push {
+                                let path = ast::HierPath {
+                                    segments: vec![name.name.clone()],
+                                    span: name.name.span,
+                                };
+                                // A block-local STRING init goes to the deferred
+                                // list so it is assigned AFTER module-scope string
+                                // inits (it may read one); a non-string keeps its
+                                // existing `pending_var_inits` slot (byte-identical).
+                                if scalar_string {
+                                    self.pending_block_local_string_inits
+                                        .push((ast::Lvalue::Ident(path), init.clone()));
+                                } else {
+                                    self.pending_var_inits
+                                        .push((ast::Lvalue::Ident(path), init.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+                for st in stmts {
+                    self.hoist_block_local_nets(st, ports, body);
+                }
+            }
+            ast::Stmt::If { then_s, else_s, .. } => {
+                self.hoist_block_local_nets(then_s, ports, body);
+                if let Some(e) = else_s {
+                    self.hoist_block_local_nets(e, ports, body);
+                }
+            }
+            ast::Stmt::Case { items, .. } => {
+                for it in items {
+                    let inner = match it {
+                        ast::CaseItem::Match { body: b, .. } => b,
+                        ast::CaseItem::Default { body: b, .. } => b,
+                    };
+                    self.hoist_block_local_nets(inner, ports, body);
+                }
+            }
+            ast::Stmt::For { body: b, .. }
+            | ast::Stmt::While { body: b, .. }
+            | ast::Stmt::Repeat { body: b, .. }
+            | ast::Stmt::Forever { body: b, .. } => {
+                self.hoist_block_local_nets(b, ports, body);
+            }
+            _ => {}
+        }
+    }
+
+    /// Allocate this frame function's nets (formals, return-var, body_decls — in
+    /// that slot order) under a synthetic `$func$<name>` scope, push a placeholder
+    /// `FuncDef` + the complete `FuncMeta`, and record the name→FuncId divert.
+    /// Reserve a frame body's block-local declarations (`begin int tmp; …`) under
+    /// the current `$func$<name>` scope, in source order, AFTER the formals /
+    /// return / top-level `body_decls`. A name already reserved (a formal, the
+    /// return var, a top-level local, or an earlier same-named block) is COALESCED
+    /// (shared net) — like the process-body hoist for two sequential blocks reusing
+    /// IEEE §6.21: a local declared in a nested `begin…end` is visible only within
+    /// that block. vita keeps a function/task/procedural body's block-locals in a
+    /// FLAT per-body table, so a reference OUTSIDE the declaring block would
+    /// silently resolve to the block-local instead of the lexically-correct outer
+    /// binding (a module variable, a formal, or an enclosing local). Proper
+    /// per-block scope lowering is a large follow-on (ROADMAP §4.5.18); until then,
+    /// detect that exact leak and reject it LOUD (correct-or-loud) rather than
+    /// produce a silent-wrong. A block-local referenced only inside its own block
+    /// resolves correctly and is left untouched (no diagnostic, byte-identical).
+    pub(crate) fn check_block_local_scope_leaks(&mut self, body: &ast::Stmt) {
+        let mut nested = Vec::new();
+        gather_nested_block_locals(body, true, &mut nested);
+        for (bspan, names) in &nested {
+            for n in names {
+                if stmt_refs_ident_outside(body, *bspan, n) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "block-local `{n}` is referenced outside its `begin…end` block; \
+                             vita cannot resolve this to the outer `{n}` yet (it would silently \
+                             read the block-local) — rename the block-local or hoist its \
+                             declaration to the enclosing scope"
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
