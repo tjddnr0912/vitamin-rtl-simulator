@@ -6,9 +6,9 @@
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
-## 0. NEXT — 리팩토링 후 재개할 follow-on (2026-07-23 기입)
+## 0. NEXT — 재개할 follow-on (2026-07-23 기입)
 
-> **대규모 모듈 분리 리팩토링**(37k-line elaborate/lib.rs 등 1000+line 파일 해소) 진행 중. 완료 후 아래 항목을 이 순서로 재개한다. 전부 §4.5.202~208 배열-formal·hier-task 아크의 잔여 correct-or-loud.
+> **대규모 모듈 분리 리팩토링 완료(2026-07-23)** — elaborate 37k→57모듈·hdl-parser 17k→30모듈·sim-engine 6 dir-모듈·cli/preprocess/통합테스트 분할, src 파일 ≤1000줄(예외 4: hdl-ast[SchemaHash `module_path!()` 정본 키라 분리 금지·실측 후 revert]·stmt_main/expr_main[단일 거대 함수]·sched/kernel.rs[단일 trait impl]). 4113 green·clippy/fmt clean·format 23 불변·해시/골든 불변. 이제 아래 항목을 이 순서로 재개한다. 전부 §4.5.202~208 배열-formal·hier-task 아크의 잔여 correct-or-loud.
 
 1. **hier-task OUTPUT/INOUT unpacked-array formal** (§4.5.207 잔여·hard): INPUT array는 §4.5.207이 defer actual-net + resolve-time pack으로 지원. output/inout array는 **deferred copy-out**(resolve 시점에 caller lvalue로 element-wise unpack을 생성해야) 미구현→loud. §4.5.201 scalar copy-out(`hier_task_port_dirs` dual-lower)과 §4.5.204 multi-index unpack을 resolve-time에 합성하는 설계 필요.
 2. **frame-formal array를 nested hier enable로 forward** (§4.5.208 잔여): frame-task body 안에서 자기 array formal(md-packed frame net)을 nested hier call의 actual로 전달—actual이 static array net이 아니라 md-packed slot이라 `arg_arrays` defer-resolve가 못 봄→loud.
