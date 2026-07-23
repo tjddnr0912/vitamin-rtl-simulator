@@ -1075,6 +1075,13 @@ struct DeferredHierTaskCall {
     path: Vec<String>,
     arg_ids: Vec<u32>,
     arg_lvals: Vec<Option<ir::Lvalue>>,
+    /// §4.5.207: per-arg, `Some(net)` when the actual is a bare whole-array Ident (a static
+    /// array net, resolved in the CALLER scope at defer time — a whole array cannot be lowered
+    /// to a value). At resolve, if the callee formal is an INPUT array (`frame_arr_formal_meta`)
+    /// the net is packed into the md-packed slot (`pack_hier_array_actual`); `None` otherwise.
+    /// An array formal fed a non-array actual (or vice versa), or an OUTPUT/INOUT array formal,
+    /// stays loud there (correct-or-loud).
+    arg_arrays: Vec<Option<u32>>,
 }
 
 /// §13.3 UARR: the classified shape of a SUPPORTED unpacked-array subroutine
@@ -4957,10 +4964,74 @@ impl<'s> Elaborator<'s> {
                 .get(&fid)
                 .cloned()
                 .unwrap_or_default();
+            let base_net = self.func_metas[fid as usize].base_net;
             let mut in_binds: Vec<(u32, u32)> = Vec::new();
             let mut out_binds: Vec<(u32, ir::Lvalue)> = Vec::new();
             let mut bind_err = false;
             for (i, dir) in dirs.iter().enumerate() {
+                // §4.5.207: the callee formal `i` is the per-instance net `base_net + i`. If it
+                // is an md-packed ARRAY slot (`frame_arr_formal_meta`), the arg must be a bare
+                // whole-array actual (`arg_arrays[i]`) packed into the slot — INPUT only (an
+                // output/inout array copy-out over a hier enable is a deferred follow-on).
+                let callee_af = self
+                    .frame_arr_formal_meta
+                    .get(&(base_net + i as u32))
+                    .cloned();
+                if let Some(af) = callee_af {
+                    if !matches!(dir, ast::PortDir::Input) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "hierarchical task call `{}`: an output/inout array formal is \
+                                 unsupported (input array formal only)",
+                                d.path.join(".")
+                            ),
+                        );
+                        bind_err = true;
+                        continue;
+                    }
+                    match d.arg_arrays[i] {
+                        Some(net) => match self.pack_hier_array_actual(net, &af) {
+                            Some(eid) => in_binds.push((i as u32, eid)),
+                            None => {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "hierarchical task call `{}`: the array argument's shape \
+                                         does not match the formal",
+                                        d.path.join(".")
+                                    ),
+                                );
+                                bind_err = true;
+                            }
+                        },
+                        None => {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "hierarchical task call `{}`: an array formal needs a bare \
+                                     whole-array actual",
+                                    d.path.join(".")
+                                ),
+                            );
+                            bind_err = true;
+                        }
+                    }
+                    continue;
+                }
+                // Scalar formal — a whole-array actual here is a type mismatch (loud).
+                if d.arg_arrays[i].is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "hierarchical task call `{}`: a whole-array actual was passed to a \
+                             scalar formal",
+                            d.path.join(".")
+                        ),
+                    );
+                    bind_err = true;
+                    continue;
+                }
                 if matches!(dir, ast::PortDir::Input | ast::PortDir::Inout) {
                     in_binds.push((i as u32, d.arg_ids[i]));
                 }
@@ -16404,6 +16475,52 @@ impl<'s> Elaborator<'s> {
         self.push_expr(ir::Expr::Concat { parts })
     }
 
+    /// §4.5.207: pack a bare whole-array actual `net` (a static array resolved in the CALLER
+    /// scope at defer time) into a callee INPUT array formal's md-packed slot value — the
+    /// resolve-time twin of [`Self::lower_array_actual_packed`]'s static-array path (used by
+    /// the hierarchical task resolver, where the callee shape is unknown until resolution).
+    /// Returns the Concat ExprId, or `None` on any shape mismatch (element width, element
+    /// count, or per-dim base + size + direction) — the caller emits the loud diagnostic.
+    /// Position 0 lands at the LSB, matching the formal's md-packed read.
+    fn pack_hier_array_actual(&mut self, net: u32, af: &ArrayFormal) -> Option<u32> {
+        if !self.net_is_static_array(net) {
+            return None;
+        }
+        let nv = &self.nets[net as usize];
+        if nv.width != af.elem_w || nv.array_len != af.count {
+            return None;
+        }
+        let actual_dd = self.dim_desc.get(&net).cloned();
+        let shape_ok = match &actual_dd {
+            Some((dims, unpacked_n))
+                if *unpacked_n == af.dims.len() && dims.len() >= af.dims.len() =>
+            {
+                af.dims.iter().enumerate().all(|(k, &(flo, fsize, fasc))| {
+                    let (m, l) = dims[k];
+                    let actual_lo = m.min(l).max(0) as u32;
+                    let actual_asc = m < l;
+                    let actual_size = (m.abs_diff(l) + 1).min(u32::MAX as u64) as u32;
+                    actual_lo == flo && actual_size == fsize && actual_asc == fasc
+                })
+            }
+            _ => false,
+        };
+        if !shape_ok {
+            return None;
+        }
+        let parts: Vec<u32> = (0..af.count)
+            .rev()
+            .map(|k| {
+                let word = self.const_u32_expr(k, 32);
+                self.push_expr(ir::Expr::Signal {
+                    net,
+                    word: Some(word),
+                })
+            })
+            .collect();
+        Some(self.push_expr(ir::Expr::Concat { parts }))
+    }
+
     /// Reserve + lower every frame function of the CURRENT module instance. Runs
     /// at step 6.5: RESERVE all (sorted) so a call to a not-yet-lowered frame func
     /// resolves (breaks self + mutual recursion), then lower each body. No-op when
@@ -17684,14 +17801,20 @@ impl<'s> Elaborator<'s> {
         // directions so the resolver can route each arg without the callee def in scope.
         if !name.contains("::")
             && task.ports.iter().all(|p| {
-                matches!(
-                    p.dir,
-                    ast::PortDir::Input | ast::PortDir::Output | ast::PortDir::Inout
-                ) && p.unpacked.is_empty()
+                // A SCALAR non-`string` formal of any direction is hier-callable (§4.5.201
+                // in/out/inout binds).
+                let scalar_ok = p.unpacked.is_empty()
                     && !matches!(
                         p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
                         ast::NetVarKind::String
-                    )
+                    );
+                // §4.5.207: an INPUT fixed unpacked-array formal is also hier-callable — the
+                // actual array net is packed into the md-packed slot at resolution. An
+                // OUTPUT/INOUT array (deferred copy-out) or a string/dyn formal is NOT, so a
+                // task carrying one gets no entry → a hier enable to it stays loud.
+                let input_array_ok =
+                    matches!(p.dir, ast::PortDir::Input) && self.is_fixed_unpacked_array_formal(p);
+                scalar_ok || input_array_ok
             })
         {
             let key = if self.cur_prefix.is_empty() {
@@ -19693,10 +19816,28 @@ impl<'s> Elaborator<'s> {
                 // gets `None` and is loud there if the formal turns out to be output.
                 let mut arg_ids = Vec::with_capacity(args.len());
                 let mut arg_lvals: Vec<Option<ir::Lvalue>> = Vec::with_capacity(args.len());
+                let mut arg_arrays: Vec<Option<u32>> = Vec::with_capacity(args.len());
                 for a in args {
-                    arg_ids.push(self.lower_expr(a));
-                    let lv = expr_to_lvalue(a).map(|lv_ast| self.lower_lvalue(&lv_ast));
-                    arg_lvals.push(lv);
+                    // §4.5.207: a bare whole-array Ident actual (a static array net) can't be
+                    // lowered to a value — resolve its net in the CALLER scope now and pack it
+                    // at resolution, once the callee array formal's shape is known. A scalar /
+                    // expression actual lowers as before (value + optional caller lvalue).
+                    let arr_net = match &a.kind {
+                        ast::ExprKind::Ident(p) if p.segments.len() == 1 => self
+                            .lookup_net_scoped(&p.segments[0].name)
+                            .filter(|&n| self.net_is_static_array(n)),
+                        _ => None,
+                    };
+                    if let Some(net) = arr_net {
+                        arg_arrays.push(Some(net));
+                        arg_ids.push(0); // placeholder — the array slot binds at resolution
+                        arg_lvals.push(None);
+                    } else {
+                        arg_arrays.push(None);
+                        arg_ids.push(self.lower_expr(a));
+                        let lv = expr_to_lvalue(a).map(|lv_ast| self.lower_lvalue(&lv_ast));
+                        arg_lvals.push(lv);
+                    }
                 }
                 let call_block = b.cur_id();
                 let ret = b.new_block();
@@ -19712,6 +19853,7 @@ impl<'s> Elaborator<'s> {
                     path: name.segments.iter().map(|s| s.name.clone()).collect(),
                     arg_ids,
                     arg_lvals,
+                    arg_arrays,
                 });
                 return;
             }

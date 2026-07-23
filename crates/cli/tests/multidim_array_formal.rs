@@ -294,15 +294,16 @@ fn partial_row_select_stays_loud() {
 }
 
 #[test]
-fn hier_call_with_array_formal_stays_loud() {
-    // A HIER enable `u.p(a)` whose callee has an array formal — cross-boundary array copy is
-    // a separate follow-on; the hier gate accepts only scalar formals. Loud.
+fn hier_call_with_input_array_formal_supported() {
+    // §4.5.207: a HIER enable `u.p(a)` whose callee has an INPUT array formal is now supported
+    // — the actual net is packed into the callee's md-packed slot at resolution. (An
+    // OUTPUT/INOUT array formal over a hier enable stays loud — see `hier_task_array_formal.rs`.)
     let o = run("module sub; int acc; task automatic p(input int m[2][2]); acc=m[0][0]; endtask endmodule\n\
          module tb; sub u();\n\
          initial begin int a[2][2]; a[0][0]=9; u.p(a); $display(\"acc=%0d\",u.acc); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "hier call with an array formal must be loud:\n{o}"
+        o.contains("acc=9"),
+        "hier call with input array formal:\n{o}"
     );
 }
 

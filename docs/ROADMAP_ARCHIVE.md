@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.207 hierarchical TASK enable with an INPUT unpacked-array formal loud→supported (defer actual-net + resolve-time pack) (2026-07-23, branch feat-hier-task-array-formal) ✅
+
+**컨텍스트**: 오너 "둘 다 순차로"(H-B hier-task array formal + H-C nested-in-frame). §4.5.197/201이 hier-task scalar formal(input/output/inout)을 지원했으나 array formal은 loud("scalar formals — no array"). 갭 원인 둘: (1) 호출 시점 whole-array actual을 value로 lower 불가, (2) callee array shape이 child instance elaborate 전까지 미지.
+
+**NO ORACLE**(iverilog subroutine array port 거부)→hand-IEEE §13.5.1 copy-in.
+
+**설계(§4.5.202~206 array machinery 재사용·defer→resolve 역할 분리)**: (1) **hier_tasks gate 완화**—INPUT fixed-array formal도 hier-callable(scalar non-string OR input-fixed-array·output/inout array·string·dyn은 non-callable→gate 제외→loud). (2) `DeferredHierTaskCall`에 `arg_arrays: Vec<Option<u32>>` 추가—defer 시 bare whole-array Ident actual의 static-array net을 **caller scope서 resolve해 저장**(value lower 회피). (3) resolve 시 callee formal net(`base_net+slot`)이 `frame_arr_formal_meta`에 있으면 array formal→신규 **`pack_hier_array_actual`**(`lower_array_actual_packed` static-array path의 **resolve-time twin**·shape[per-dim base+size+direction·elem_w·count] MATCH 검증→Concat 빌드·position 0=LSB)로 md-packed slot value 생성해 in_bind. INPUT만(output/inout array=loud)·array-formal↔scalar-actual/scalar-formal↔array-actual 미스매치=loud·shape mismatch=loud. per-instance callee af라 격리 자동.
+
+**적대 differential 全 MATCH(hand-IEEE)**: 1-D input(`u.load(d[4])`=1 4)·**mixed scalar+array register-file writer**(`u.wr(addr,d[4])`=a0 a1 a2 a3)·2-D(`u.p(m[2][2])`=42)·per-instance 격리(103 203)·signed byte + 3-seg deep path(`m.lf.p`=-40). **correct-or-loud 全 LOUD**: OUTPUT array over hier(gate 제외)·shape mismatch·array-formal+scalar-actual·scalar-formal+array-actual. 기존 hier-task(scalar·§4.5.197/201) regression 0.
+
+**교훈**: **defer 시점 미지 정보(callee array shape)는 resolve로 미루되, caller-scope 의존 정보(actual net)는 defer 시 미리 resolve해 저장**(defer↔resolve 역할 분리가 핵심)·인접 슬라이스(§4.5.202~206 array machinery)의 pack 로직을 resolve-time twin(`pack_hier_array_actual`)으로 재사용→신규 표면 최소·per-instance `frame_arr_formal_meta[base_net+slot]` 조회로 callee shape 격리·gate가 output/inout array 배제→copy-out 미구현이 자동 loud(correct-or-loud). 신규 `hier_task_array_formal.rs`×9. **잔여 follow-on**: hier-task output/inout array formal(deferred copy-out·hard).
+
 #### 4.5.206 NON-ZERO-BASE ASCENDING array formal loud→supported (per-dim base threaded into the md-packed slot) (2026-07-23, branch feat-nonzero-base-array-formal) ✅
 
 **컨텍스트**: 오너 "남은 follow-on 계속·correct-support가 핵심". 배열 formal shape 마지막 갭=non-zero-based(`int m[1:4]`). §4.5.202~205는 zero-based만 지원(`classify_unpacked_array`의 `m.min(l) != 0` reject).
