@@ -143,10 +143,18 @@ struct TypeInfo {
 }
 
 /// A resolved tf-port type carried through the comma-sticky inheritance:
-/// `(net_or_var kind, signed, range, struct-type-name)`. The struct name is `Some`
-/// only for a packed struct/union typedef port (EXT2-C) — it threads onward so a
-/// bare continuation `input cfg_t a, b` binds every name's layout (`var_struct`).
-type TfPortType = (Option<NetVarKind>, bool, Option<Range>, Option<String>);
+/// `(net_or_var kind, signed, range, struct-type-name, enum-type-name)`. The struct
+/// name is `Some` only for a packed struct/union typedef port (EXT2-C); the enum name
+/// (r18/E1) is `Some` for an `enum`-typedef port so `m.name()`/`m.next()` desugar in the
+/// body (`var_enum`). Both thread onward so a bare continuation `input e_t a, b` binds
+/// every name.
+type TfPortType = (
+    Option<NetVarKind>,
+    bool,
+    Option<Range>,
+    Option<String>,
+    Option<String>,
+);
 
 /// Flat bit layout of a packed struct: members are placed MSB-first into one
 /// `logic [total-1:0]` vector. `fields` carries `(name, lsb_offset, width,

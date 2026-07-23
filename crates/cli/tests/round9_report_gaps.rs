@@ -318,11 +318,15 @@ fn ustruct_equiv_separate_vars() {
 }
 
 #[test]
-fn ustruct_array_still_loud() {
-    // An array-of-records needs aggregate storage vita lacks → loud.
-    let src =
-        format!("{KAT}module m; initial begin p::kat_t arr[4]; $display(\"o=x\"); end endmodule");
-    assert!(!ok(&src));
+fn ustruct_array_now_soa() {
+    // r18 (Fix A): a fixed array of a NON-packable record (`kat_t` has `string` members)
+    // now lowers to struct-of-arrays (per-member native arrays `$unp$arr$field`), so the
+    // declaration + element member access work (was loud — no aggregate storage).
+    let src = format!(
+        "{KAT}module m; initial begin p::kat_t arr[4]; arr[0].mode = 5'h1f; \
+         $display(\"o=%h\", arr[0].mode); end endmodule"
+    );
+    assert!(ok(&src));
 }
 
 #[test]

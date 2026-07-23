@@ -343,6 +343,43 @@ impl Elaborator<'_> {
         }
     }
 
+    /// r18 (family D): emit ONLY the per-entry automatic-with-init block-locals' initializers
+    /// at BLOCK ENTRY, for a MODULE-process block (`compute_per_entry_block_locals` recorded
+    /// them under `block_lo` = the block's `span.lo`). A STATIC block-local keeps its
+    /// once-at-t0 init (via the synthesized var-init `initial`) and is NOT emitted here — so
+    /// only the automatic locals re-initialize on each block entry (§6.21). A block with no
+    /// per-entry locals (the common case) is a no-op. The frame path uses
+    /// `emit_frame_local_inits` (all locals) instead.
+    pub(crate) fn emit_per_entry_block_inits(
+        &mut self,
+        b: &mut ProcessBuilder,
+        body_decls: &[ast::NetVarDecl],
+        block_lo: u32,
+    ) {
+        let Some(names) = self.per_entry_block_locals.get(&block_lo).cloned() else {
+            return;
+        };
+        for d in body_decls {
+            for decl in &d.names {
+                let Some(init) = &decl.init else { continue };
+                if !names.contains(&decl.name.name) {
+                    continue;
+                }
+                let stmt = ast::Stmt::Blocking {
+                    lhs: ast::Lvalue::Ident(ast::HierPath {
+                        segments: vec![decl.name.clone()],
+                        span: decl.name.span,
+                    }),
+                    delay: None,
+                    event: None,
+                    rhs: init.clone(),
+                    span: decl.span,
+                };
+                self.lower_stmt(b, &stmt);
+            }
+        }
+    }
+
     pub(crate) fn lower_frame_body_stmt(
         &mut self,
         b: &mut ProcessBuilder,

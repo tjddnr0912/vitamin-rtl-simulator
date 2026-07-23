@@ -169,14 +169,16 @@ fn hierarchical_call_wrong_arity_stays_loud() {
 }
 
 #[test]
-fn severity_inside_function_stays_loud() {
-    // correct-or-loud: $error/$warning in a function is NOT a plain print (it must
-    // raise a diagnostic + set the fail flag) — stays loud (a follow-on), never
-    // silently rendered as text.
+fn severity_inside_function_now_supported() {
+    // r18 (F2): $error/$warning/$info/$fatal in a frame function/subset-task body is now
+    // correct-support — the &self frame executor renders it to the diag stream and applies
+    // its effect ($error → had_error via a Cell, $fatal → call_fatal). Was a §4.5.196
+    // follow-on loud. Here `f(5)` fires the `$error`, so "bad 5" is raised as a diagnostic
+    // (not silently dropped, not loud-rejected at elaborate).
     let o = run("module t; function automatic int f(input int x); $error(\"bad %0d\", x); return x; endfunction\n\
          initial begin int r=f(5); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009") || o.contains("E3004") || !o.contains("bad 5"),
-        "$error in function must be loud:\n{o}"
+        !o.contains("E3009") && o.contains("bad 5"),
+        "$error in function must render its diagnostic:\n{o}"
     );
 }

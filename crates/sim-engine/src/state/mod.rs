@@ -440,7 +440,11 @@ pub(crate) struct SimState<'a> {
 
     // ── status flags ──
     pub finished: bool,
-    pub had_error: bool,
+    /// r18 (F2): interior-mutable so a `$error` reached inside a synchronous `&self`
+    /// frame function / subset-task body (`frame_emit_severity`) can flag it — the same
+    /// pattern as `call_fatal`. `$error` in a module process still writes it via the
+    /// normal `&mut` path.
+    pub had_error: Cell<bool>,
     pub had_fatal: bool,
     /// CLASS-HEAP-CAP: max live class objects before a graceful fatal fires
     /// (see `SimOpts::max_class_objs`). Set by `simulate()` from the opts; the

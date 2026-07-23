@@ -182,17 +182,25 @@ fn gap_d_read_before_write_automatic_is_loud() {
 }
 
 #[test]
-fn gap_d_initializer_automatic_is_loud() {
-    // Correct-or-loud: an `automatic` block-local WITH an initializer must re-run
-    // the init on every entry, which a static flatten (init once at t0) cannot
-    // do — LOUD.
-    let (_o, _e, ok) = run(
+fn gap_d_initializer_automatic_now_per_entry() {
+    // r18 (family D): an `automatic` block-local WITH an initializer now re-runs its init
+    // on every block entry (§6.21) via a block-entry assignment on the flattened net —
+    // supported for the non-concurrent case (a module-process loop is sequential). So
+    // `x=100; x=x+i` per iteration → 100, 101, 102 (NOT the static 100,101,103). The
+    // fork-concurrency case still stays loud (see block_local_automatic_init.rs).
+    let (o, _e, ok) = run(
         "module top; integer i;\n\
            initial begin\n\
              for (i=0;i<3;i=i+1) begin automatic integer x = 100; x=x+i; $display(\"x=%0d\", x); end\n\
              $finish; end endmodule",
     );
-    assert!(!ok, "initializer automatic block-local must be loud");
+    assert!(
+        ok && o.contains("x=100")
+            && o.contains("x=101")
+            && o.contains("x=102")
+            && !o.contains("x=103"),
+        "initializer automatic block-local re-inits per entry:\n{o}"
+    );
 }
 
 #[test]

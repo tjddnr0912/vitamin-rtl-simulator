@@ -332,6 +332,27 @@ impl Parser<'_, '_> {
         })
     }
 
+    /// r18 (E2): if `path` is `var.field.method` where `var.field` is an UNPACKED-struct
+    /// MEMBER (a string/other typed net), return the 2-segment path `[$unp$var$field,
+    /// method]` so a method call on a struct member (`r.name.substr(a,b)`) becomes the
+    /// `net.method(args)` form elaborate already dispatches (a string method on the member
+    /// net). `None` for anything else (a non-member receiver, a nested/deeper path) → the
+    /// caller keeps the original path (→ a generic hierarchical Call, loud in elaborate).
+    pub(crate) fn unpacked_member_method_recv(&self, path: &HierPath) -> Option<HierPath> {
+        if path.segments.len() != 3 {
+            return None;
+        }
+        let recv = HierPath {
+            segments: path.segments[..2].to_vec(),
+            span: path.span,
+        };
+        let member = self.unpacked_field_ident(&recv)?;
+        Some(HierPath {
+            segments: vec![member.segments[0].clone(), path.segments[2].clone()],
+            span: path.span,
+        })
+    }
+
     /// Round-9: peek an UNPACKED-struct-typed declaration `[pkg::]T name…` at the
     /// cursor. Returns the (scoped-or-bare) type-name key when the leading
     /// token(s) name a KNOWN unpacked struct type AND a var-name ident follows.
@@ -699,6 +720,45 @@ impl Parser<'_, '_> {
                             const_param: false,
                             span: n.name.span,
                         });
+                        continue;
+                    }
+                    // r18 (Fix A) SoA: a FIXED array / unbounded QUEUE of a NON-packable
+                    // record (a PARAMETER-width member `[ADDR_W-1:0]`, or a MIXED 2-/4-state
+                    // record `{int; logic}`, or a string/real member) → per-member native
+                    // arrays/queues `$unp$var$field`, exactly like the dynamic-array SoA
+                    // fallback above. Each `$unp$var$field` carries the member's RAW range,
+                    // so a param width resolves per-instance at elaborate (a packed vector
+                    // would need a frozen parse-time width — silent-wrong under override).
+                    // Element access `var[i].field` → `$unp$var$field[i]` and queue methods
+                    // (`push_back`/`pop_*`/`insert`/`delete`) fan out per field at the use
+                    // sites (`try_soa_queue_method_stmt`, `try_soa_assign`). All-or-loud: a
+                    // member with no array form (nested struct / event / class) stays loud.
+                    if members.iter().all(|m| Self::member_kind_soa_ok(m.kind)) {
+                        self.record_soa_vars
+                            .insert(n.name.name.clone(), tyname.clone());
+                        for m in &members {
+                            out.push(NetVarDecl {
+                                kind: m.kind,
+                                signed: m.signed,
+                                range: m.range.clone(),
+                                packed: Vec::new(),
+                                delay: None,
+                                names: vec![DeclName {
+                                    name: Ident {
+                                        name: Self::unpacked_member_net(&n.name.name, &m.name.name),
+                                        span: n.name.span,
+                                    },
+                                    unpacked: n.unpacked.clone(),
+                                    init: None,
+                                    span: n.name.span,
+                                }],
+                                lifetime: None,
+                                class_type: None,
+                                class_args: Vec::new(),
+                                const_param: false,
+                                span: n.name.span,
+                            });
+                        }
                         continue;
                     }
                 }

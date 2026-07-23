@@ -552,6 +552,49 @@ impl<'a> SimState<'a> {
         }
     }
 
+    /// r18 (F2): render a SEVERITY task (`$info`/`$warning`/`$error`/`$fatal`, lowered as
+    /// a `Display` + a `severities` sidecar) reached inside a synchronous `&self` frame
+    /// function / subset-task body. The message goes to the diagnostic stream (the sink is
+    /// interior-mutable) byte-for-byte the `emit_severity_message` text; the effect is
+    /// applied through interior mutability — `$error` latches `had_error` (exit code),
+    /// `$fatal` latches `call_fatal` (the scheduler converts it to an error finish, the
+    /// SAME channel `fatal_frame_heap_write` uses). Admitting these in `classify_frame_body`
+    /// makes a `unique`/`priority case` — whose no-match arm is a synthetic `$warning` —
+    /// usable in a frame body (and any explicit severity call there). A severity in a
+    /// SUSPENDABLE task runs on the `run_process` path and is handled by `dispatch`, not
+    /// here.
+    pub(crate) fn frame_emit_severity(
+        &self,
+        sev: crate::SeverityKind,
+        fmt: Option<u32>,
+        args: &[u32],
+    ) {
+        use crate::SeverityKind as K;
+        let (severity, code) = match sev {
+            K::Fatal => (Severity::Fatal, MsgCode::RunFatal),
+            K::Error => (Severity::Error, MsgCode::RunUserError),
+            K::Warning => (Severity::Warning, MsgCode::RunUserWarning),
+            K::Info => (Severity::Info, MsgCode::RunUserInfo),
+        };
+        let mut message = crate::builtins::format_args_str(self, fmt, args, None);
+        if message.is_empty() {
+            message = code.title().to_string();
+        }
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity,
+            code,
+            message,
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(TimeStamp { ticks: self.now }),
+        }));
+        match sev {
+            K::Fatal => self.call_fatal.set(true),
+            K::Error => self.had_error.set(true),
+            K::Warning | K::Info => {}
+        }
+    }
+
     /// B1 frame-call evaluator. Runs user function `func`'s lowered body (in the
     /// GLOBAL `ir.blocks` arena from `FuncDef.entry`) against a per-invocation
     /// frame, returning its return-var Value resized to the declared return
@@ -731,13 +774,26 @@ impl<'a> SimState<'a> {
                             self.enforce_queue_bound(dst);
                         }
                     }
+                    // r18 (F2): a SEVERITY task (`$info`/`$warning`/`$error`/`$fatal`, a
+                    // `Display` with a `severities` sidecar) admitted by `classify_frame_body`.
+                    // Route to the diag stream — MUST precede the plain Display|Write arm,
+                    // which would otherwise print it to stdout as a `$display`.
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::Display,
+                        fmt,
+                        args,
+                    } if self.severities.contains_key(&sid) => {
+                        if let Some(&sev) = self.severities.get(&sid) {
+                            self.frame_emit_severity(sev, *fmt, args);
+                        }
+                    }
                     // Family D (r17): a genuine `$display`/`$write` in this subset function
                     // body (admitted by `classify_frame_body` via `frame_print_stmts`; a
-                    // severity/timeformat/marker Display was rejected there and never
-                    // reaches here, and a dyn-formal marker was consumed by the arm above).
-                    // Render through the same `&self`-safe formatter the module process
-                    // uses and emit as RtlOutput — the sink is interior-mutable, so this is
-                    // byte-identical to the module-process print path.
+                    // timeformat/marker Display was rejected there and never reaches here, a
+                    // severity Display was consumed by the arm above, and a dyn-formal marker
+                    // by the handle-copy arm). Render through the same `&self`-safe formatter
+                    // the module process uses and emit as RtlOutput — the sink is
+                    // interior-mutable, so this is byte-identical to the module-process print.
                     Stmt::SysTask { which, fmt, args }
                         if matches!(
                             which,

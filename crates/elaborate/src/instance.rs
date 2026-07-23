@@ -189,6 +189,11 @@ impl Elaborator<'_> {
         // the later body lowering read the SAME decision. See the field doc.
         let scoped_blocks = Self::compute_scoped_block_locals(module, &names);
         let saved_scoped_blocks = std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
+        // r18 (family D): per-entry automatic-with-init block-locals (same shared-set
+        // pattern as `scoped_block_locals` — computed once, read by both phases).
+        let per_entry_blocks = Self::compute_per_entry_block_locals(module, &names);
+        let saved_per_entry_blocks =
+            std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
         let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
         // §4.5.186: collect this module's functions into `const_func_table` BEFORE the
@@ -659,6 +664,7 @@ impl Elaborator<'_> {
         self.bits_prescan = saved_prescan;
         self.local_decl_names = saved_local_names;
         self.scoped_block_locals = saved_scoped_blocks;
+        self.per_entry_block_locals = saved_per_entry_blocks;
         self.func_table = saved_funcs;
         self.const_func_table = saved_const_funcs;
         self.task_table = saved_tasks;

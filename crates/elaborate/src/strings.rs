@@ -218,6 +218,16 @@ impl Elaborator<'_> {
     pub(crate) fn ir_expr_is_string(&self, eid: u32) -> bool {
         match self.exprs.get(eid as usize) {
             Some(ir::Expr::Signal { net, word: None }) => self.is_string_net(*net),
+            // r18: a string dyn-array/queue ELEMENT read `sa[i]` — a word-indexed `Signal`
+            // on a dyn net whose ELEMENTS are strings (`string_elem_dyn_nets`; the container
+            // net kind is Queue/DynArray, not `String`). The element is itself a string, so
+            // a method chains on it (`sa[i].substr(a,b)`, and `rec.name.substr(..)` via the
+            // SoA member net `$unp$arr$name[i]`). The engine's `handle_str_bytes` reads a
+            // word-indexed string signal through its `eval` fallback (the same path that
+            // renders `%s` / compares `sa[i]`).
+            Some(ir::Expr::Signal { net, word: Some(_) }) => {
+                self.string_elem_dyn_nets.contains(net)
+            }
             Some(ir::Expr::SysFunc { which, .. }) => matches!(
                 which,
                 ir::SysFuncId::StrSubstr

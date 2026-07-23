@@ -427,11 +427,17 @@ impl Elaborator<'_> {
                 // local resolves to its own net; `walk_scopes_key` treats `$blk$` as
                 // transparent so every non-scoped name still falls through to the
                 // enclosing module net (byte-identical for unscoped blocks).
+                // r18 (family D): a MODULE process (not `in_frame_body`) emits its
+                // per-entry automatic-with-init block-locals here so they RE-INITIALIZE on
+                // each block entry (§6.21); static block-locals keep their once-at-t0 init.
+                let span_lo = span.lo;
                 if self.scoped_block_locals.contains_key(&span.lo) {
                     let seg = format!("$blk${}", span.lo);
                     self.with_scope(&seg, |s| {
                         if emit_block_inits {
                             s.emit_frame_local_inits(b, decls);
+                        } else {
+                            s.emit_per_entry_block_inits(b, decls, span_lo);
                         }
                         for st in stmts {
                             s.lower_stmt(b, st);
@@ -440,6 +446,8 @@ impl Elaborator<'_> {
                 } else {
                     if emit_block_inits {
                         self.emit_frame_local_inits(b, decls);
+                    } else {
+                        self.emit_per_entry_block_inits(b, decls, span_lo);
                     }
                     for st in stmts {
                         self.lower_stmt(b, st);

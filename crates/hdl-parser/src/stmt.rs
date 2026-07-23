@@ -358,10 +358,18 @@ impl Parser<'_, '_> {
                         };
                     }
                     self.expect(TokenKind::Semi, "';'");
-                    Stmt::UserTaskCall {
-                        name: path,
-                        args,
-                        span: start.to(self.prev_span()),
+                    let span = start.to(self.prev_span());
+                    // r18 (Fix A): a queue method on a SoA record queue
+                    // (`q.push_back(p)`/`insert`/`delete`) fans out to per-field native
+                    // queue ops. A non-SoA-queue receiver → the generic call below.
+                    if let Some(s) = self.try_soa_queue_method_stmt(&path, &args, span) {
+                        s
+                    } else {
+                        Stmt::UserTaskCall {
+                            name: path,
+                            args,
+                            span,
+                        }
                     }
                 } else {
                     // e.g. `a[i](…)` — an indexed lvalue cannot be a call.

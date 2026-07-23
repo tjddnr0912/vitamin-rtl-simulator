@@ -461,12 +461,27 @@ impl Parser<'_, '_> {
             name: format!("__foreach_st_{}", start.lo),
             span: ivar.span,
         };
+        // r18 (Fix G): a foreach over a SoA record dyn-array/queue — the `.first`/`.next`
+        // iterator must ride a REAL net, but a SoA record array `arr` has no net named
+        // `arr` (only `$unp$arr$field`). Rewrite the iterator receiver to field 0's dyn
+        // net (all fields share length). The body's `arr[i].field` already SoA-rewrote to
+        // `$unp$arr$field[i]` during its own parse, so only the iterator needs this.
+        let iter_arr = self
+            .record_soa_vars
+            .get(&arr.name)
+            .and_then(|ty| self.unpacked_struct_layouts.get(ty))
+            .and_then(|ms| ms.first())
+            .map(|m0| Ident {
+                name: Self::unpacked_member_net(&arr.name, &m0.name.name),
+                span: arr.span,
+            })
+            .unwrap_or_else(|| arr.clone());
         // __st = arr.first(i) / arr.next(i)
         let iter_call = |method: &str| Expr {
             kind: ExprKind::Call {
                 name: HierPath {
                     segments: vec![
-                        arr.clone(),
+                        iter_arr.clone(),
                         Ident {
                             name: method.to_string(),
                             span: arr.span,

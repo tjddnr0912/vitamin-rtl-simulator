@@ -157,13 +157,18 @@ fn shortcircuit_rhs_loud() {
 }
 
 #[test]
-fn ternary_arm_loud() {
-    // `(x) ? fsum(a) : 0` — conditional arm → loud.
+fn ternary_arm_now_supported() {
+    // r18 (F3): `(x) ? fsum(a) : 0` — a `?:` arm is now hoisted when the dyn-formal
+    // function is PURE (`fsum` has no side effect), so evaluating it unconditionally is
+    // result-equivalent. With x=1 the then-arm is taken → r = fsum([4,5,6]) = 15.
     let o = run(&prog(
         FSUM,
-        "  r = (x!=0) ? fsum(a) : 0; $display(\"R=%0d\", r);",
+        "  x = 1; r = (x!=0) ? fsum(a) : 0; $display(\"R=%0d\", r);",
     ));
-    assert!(is_loud(&o), "ternary-arm dyn-formal call = loud:\n{o}");
+    assert!(
+        !is_loud(&o) && o.contains("R=15"),
+        "ternary-arm dyn-formal call:\n{o}"
+    );
 }
 
 #[test]

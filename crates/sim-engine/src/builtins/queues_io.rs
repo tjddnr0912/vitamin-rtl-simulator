@@ -179,7 +179,7 @@ pub(crate) fn emit_severity_message(
     match sev {
         K::Fatal => Ctl::Fatal,
         K::Error => {
-            sched.st.had_error = true;
+            sched.st.had_error.set(true);
             Ctl::Continue
         }
         K::Warning | K::Info => Ctl::Continue,

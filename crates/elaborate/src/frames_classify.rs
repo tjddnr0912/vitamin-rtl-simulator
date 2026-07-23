@@ -451,8 +451,15 @@ impl Elaborator<'_> {
     pub(crate) fn ast_has_repeat_with_timing(stmt: &ast::Stmt) -> bool {
         use ast::Stmt as S;
         match stmt {
-            S::Repeat { body, .. } => {
-                Self::ast_stmt_has_timing(body) || Self::ast_has_repeat_with_timing(body)
+            S::Repeat { count, body, .. } => {
+                // r18 (C1): a const-small `repeat(N)` is straight-UNROLLED by `lower_repeat`
+                // (no runtime counter), so its timing is safe across suspends — only a
+                // NON-const / large count desugars to the shared `$repeat_cnt$` net whose
+                // value would corrupt across concurrent activations. So flag the timing only
+                // when the count is NOT a const the unroller would consume.
+                let unrolled = matches!(const_eval_u32(count), Some(n) if n <= REPEAT_UNROLL_CAP);
+                (!unrolled && Self::ast_stmt_has_timing(body))
+                    || Self::ast_has_repeat_with_timing(body)
             }
             S::Block { stmts, .. } | S::Fork { stmts, .. } => {
                 stmts.iter().any(Self::ast_has_repeat_with_timing)
@@ -831,6 +838,18 @@ impl Elaborator<'_> {
                         which: ir::SysTaskId::Display | ir::SysTaskId::Write,
                         ..
                     } if self.frame_print_stmts.contains(&sid) => {}
+                    // r18 (F2): a SEVERITY task (`$info`/`$warning`/`$error`/`$fatal`, lowered
+                    // as a `Display` + a `severities` sidecar). The `&self` frame executors
+                    // render it to the diag stream (`frame_emit_severity`; `$error`/`$fatal`
+                    // latch `had_error`/`call_fatal` via interior mutability). This makes a
+                    // `unique`/`priority case` — whose synthesized no-match arm is a
+                    // `$warning` — usable in a frame function/subset-task body, and any
+                    // explicit severity call there. A timeformat/stage/assert-ctl Display is
+                    // NOT in `severities`, so it still hits the loud arm (correct-or-loud).
+                    ir::Stmt::SysTask {
+                        which: ir::SysTaskId::Display,
+                        ..
+                    } if self.severities.contains_key(&sid) => {}
                     _ => why = Some("a $systask / nonblocking / force / release statement"),
                 }
             }

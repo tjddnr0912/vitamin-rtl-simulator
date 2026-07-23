@@ -198,6 +198,17 @@ impl SimState<'_> {
                             self.enforce_queue_bound(dst);
                         }
                     }
+                    // r18 (F2): a SEVERITY task in this subset TASK body — parity with
+                    // run_frame_call. MUST precede the plain Display|Write print arm.
+                    Stmt::SysTask {
+                        which: sim_ir::SysTaskId::Display,
+                        fmt,
+                        args,
+                    } if self.severities.contains_key(&sid) => {
+                        if let Some(&sev) = self.severities.get(&sid) {
+                            self.frame_emit_severity(sev, *fmt, args);
+                        }
+                    }
                     // Family D (r17): a genuine `$display`/`$write` in this subset TASK
                     // body — parity with run_frame_call (render + emit as RtlOutput).
                     Stmt::SysTask { which, fmt, args }

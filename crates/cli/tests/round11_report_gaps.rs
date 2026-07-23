@@ -634,11 +634,17 @@ fn r5b_output_formal_supported() {
 // semantics (a re-evaluated / conditionally-evaluated / non-hoist-site call) stay
 // loud — never a silent wrong.
 #[test]
-fn r5b_while_condition_is_loud() {
+fn r5b_while_condition_now_supported() {
+    // r18 (F1): an inout/output-function call in a `while` condition is hoisted at the loop
+    // head, which is re-entered every iteration — so the call (and its copy-out) runs once
+    // per iteration, exactly like the un-hoisted form. `nxt(x)` returns 1,2,3 as x goes
+    // 0→1→2→3, so `nxt(x) < 3` is true for the first two iterations then exits (x reaches 3).
+    // (`run` returns the first PASS-marker line; the loop count is verified elsewhere.)
     let src = "module t;\n\
         function automatic int nxt(inout int a); a=a+1; return a; endfunction\n\
-        initial begin int x=0; while(nxt(x)<3) $display(\"iter\"); $finish; end endmodule";
-    assert!(loud(src)); // re-evaluated per iteration → cannot be hoisted once
+        initial begin int x=0; while(nxt(x)<3) ; if (x==3) $display(\"PASS\"); $finish; end endmodule";
+    let (o, ok) = run(src);
+    assert!(ok && o == "PASS", "hoisted while-inout reaches x==3:\n{o}");
 }
 
 #[test]

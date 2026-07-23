@@ -175,7 +175,7 @@ impl<'a> SimState<'a> {
             cur_prec_mult: 1,
             out,
             finished: false,
-            had_error: false,
+            had_error: Cell::new(false),
             had_fatal: false,
             max_class_objs: 1_000_000,
             sink,

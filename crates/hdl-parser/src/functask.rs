@@ -252,7 +252,7 @@ impl Parser<'_, '_> {
             return ports;
         }
         let mut inherited = PortDir::Input;
-        let mut inherited_type: TfPortType = (None, false, None, None);
+        let mut inherited_type: TfPortType = (None, false, None, None, None);
         loop {
             let before = self.pos;
             let (port, dir, ty, unpacked_struct) = self.parse_tf_port(inherited, &inherited_type);
@@ -341,20 +341,31 @@ impl Parser<'_, '_> {
         let mut typedef_signed: Option<bool> = None;
         let mut struct_name: Option<String> = None;
         let mut unpacked_struct: Option<String> = None;
+        // r18 (E1): an ENUM-typedef formal (`input e_t m`) — bind the port NAME to its
+        // enum type in `var_enum` (below, after the name is parsed) so `m.name()`/
+        // `m.next()` desugar in the body exactly like a module-scope enum var. The type
+        // name must be captured BEFORE `try_tf_port_typedef` consumes the token; the
+        // resolver returns only the underlying vector kind, not the enum-ness.
+        let mut enum_name: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
+            let tname = self.type_name_key();
+            let is_enum = self.enum_defs.contains_key(&tname);
             if let Some((k, s, r, sn, usn)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 range = r;
                 typedef_signed = Some(s);
                 struct_name = sn;
                 unpacked_struct = usn;
+                if is_enum {
+                    enum_name = Some(tname);
+                }
             }
         }
         // A port carries its own type when a direction keyword OR any explicit type
         // token is present; otherwise (a bare `, name`) it inherits the previous
         // type (INCLUDING its struct-ness). The resolved type then propagates on.
         let type_present = net_or_var.is_some() || range.is_some() || explicit_signed.is_some();
-        let (net_or_var, signed, range, struct_name) = if dir_present || type_present {
+        let (net_or_var, signed, range, struct_name, enum_name) = if dir_present || type_present {
             (
                 net_or_var,
                 explicit_signed
@@ -362,6 +373,7 @@ impl Parser<'_, '_> {
                     .unwrap_or_else(|| atom_default_signed(net_or_var)),
                 range,
                 struct_name,
+                enum_name,
             )
         } else {
             inherited_type.clone()
@@ -389,6 +401,15 @@ impl Parser<'_, '_> {
                 self.bind_tf_port_struct(&name.name, sn);
             }
         }
+        // r18 (E1): bind an enum-typed port NAME to its enum type so `name.name()`/
+        // `.next()`/`.first` desugar in the body (scoped to this tf by the snapshot/
+        // restore around the port list + body). A bare continuation `, b` inherits the
+        // enum name through `inherited_type`, exactly like the struct binding above.
+        if let Some(en) = &enum_name {
+            if !name.name.is_empty() {
+                self.var_enum.insert(name.name.clone(), en.clone());
+            }
+        }
         // IEEE §13.5.3: an ANSI tf-port may carry a default argument value
         // (`int b = 10`), used when a call omits the trailing actual.
         let default = if self.eat(TokenKind::Eq) {
@@ -411,6 +432,7 @@ impl Parser<'_, '_> {
             port.signed,
             port.range.clone(),
             struct_name,
+            enum_name,
         );
         (port, dir, next_type, unpacked_struct)
     }

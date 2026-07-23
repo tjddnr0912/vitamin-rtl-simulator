@@ -346,14 +346,44 @@ impl Elaborator<'_> {
         }
     }
 
-    /// §4.5.179: does `e` contain a framed dyn-formal call in a position
-    /// `hoist_dyn_formal_calls` does NOT hoist (a short-circuit `&&`/`||` RHS, a `?:`
-    /// arm, or any node other than Binary/Unary/Paren)? A dyn-formal function is PURE
-    /// (a function rejects output/inout formals), so there is no eval-order hazard —
-    /// the only reason to decline is a CONDITIONAL call: hoisting it would make an
-    /// only-sometimes-evaluated call unconditional. Returning `true` makes
-    /// `hoist_stmt_top` decline → the call stays loud at `emit_frame_call`
-    /// (correct-or-loud; never a conditional call silently made unconditional).
+    /// r18 (F3): is every framed dyn-formal call in `e` to a SIDE-EFFECT-FREE function (no
+    /// `$display`/`$error`/… anywhere in its body)? A pure function's VALUE is identical
+    /// whether evaluated conditionally or unconditionally, so its call may be hoisted out of
+    /// a `?:` arm (a conditionally-evaluated position) safely. An IMPURE function (one that
+    /// prints / raises severity) must NOT be hoisted out of a conditional position — the
+    /// side effect would fire even when the arm is not taken (silent extra output). Any
+    /// unrecognized node carrying a dyn-formal call is conservatively treated as impure.
+    pub(crate) fn dyn_formal_expr_all_pure(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        if let Some((_fid, func)) = self.dyn_formal_call_target(e) {
+            return !Self::stmt_has_observable_effect(&func.body);
+        }
+        match &e.kind {
+            K::Binary { lhs, rhs, .. } => {
+                self.dyn_formal_expr_all_pure(lhs) && self.dyn_formal_expr_all_pure(rhs)
+            }
+            K::Unary { operand, .. } => self.dyn_formal_expr_all_pure(operand),
+            K::Paren { inner } => self.dyn_formal_expr_all_pure(inner),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.dyn_formal_expr_all_pure(cond)
+                    && self.dyn_formal_expr_all_pure(then_e)
+                    && self.dyn_formal_expr_all_pure(else_e)
+            }
+            _ => !self.expr_has_dyn_formal_call(e),
+        }
+    }
+
+    /// §4.5.179 / r18: does `e` contain a framed dyn-formal call in a position
+    /// `hoist_dyn_formal_calls` does NOT hoist? Un-hoistable = a short-circuit `&&`/`||`
+    /// RHS (would change conditional evaluation for a non-pure function), OR any node other
+    /// than Binary/Unary/Paren/Ternary. A `?:` (r18/F3) is hoistable IFF every dyn-formal
+    /// call in it is PURE (`dyn_formal_expr_all_pure`) — else the conditional-eval side
+    /// effect would leak. Returning `true` makes `hoist_stmt_top` decline → the call stays
+    /// loud at `emit_frame_call` (correct-or-loud).
     pub(crate) fn has_unhoistable_dyn_formal_call(&self, e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         // A call `e` itself IS hoistable (handled at the top of `hoist_dyn_formal_calls`).
@@ -372,8 +402,21 @@ impl Elaborator<'_> {
             }
             K::Unary { operand, .. } => self.has_unhoistable_dyn_formal_call(operand),
             K::Paren { inner } => self.has_unhoistable_dyn_formal_call(inner),
-            // Any other node (Ternary, Concat, a non-dyn Call's args, …) is not a hoist
-            // site — a dyn-formal call anywhere inside is un-hoistable.
+            // r18 (F3): a `?:` is hoistable when its parts are structurally hoistable AND
+            // every dyn-formal call in it is pure (a conditionally-evaluated impure call
+            // would leak its side effect if hoisted).
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.has_unhoistable_dyn_formal_call(cond)
+                    || self.has_unhoistable_dyn_formal_call(then_e)
+                    || self.has_unhoistable_dyn_formal_call(else_e)
+                    || !self.dyn_formal_expr_all_pure(e)
+            }
+            // Any other node (Concat, a non-dyn Call's args, …) is not a hoist site — a
+            // dyn-formal call anywhere inside is un-hoistable.
             _ => self.expr_has_dyn_formal_call(e),
         }
     }
@@ -459,7 +502,55 @@ impl Elaborator<'_> {
                 },
                 span: e.span,
             },
+            // r18 (F3): a `?:` — reached only when `has_unhoistable_dyn_formal_call`
+            // confirmed every dyn-formal call in it is pure, so hoisting each arm's call to
+            // an unconditional temp is result-equivalent (the arm's value is picked as
+            // before; the extra evaluation is side-effect-free).
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => ast::Expr {
+                kind: K::Ternary {
+                    cond: Box::new(self.hoist_dyn_formal_calls(b, cond)),
+                    then_e: Box::new(self.hoist_dyn_formal_calls(b, then_e)),
+                    else_e: Box::new(self.hoist_dyn_formal_calls(b, else_e)),
+                },
+                span: e.span,
+            },
             _ => e.clone(),
+        }
+    }
+
+    /// r18 (F3): does `s` (recursively) contain an OBSERVABLE side effect — a `$display`/
+    /// `$write`/`$error`/… system task, or a user task/function call statement that might
+    /// print? Used to gate hoisting a dyn-formal call out of a conditional (`?:`) position:
+    /// only a side-effect-free function may be evaluated unconditionally without changing
+    /// behaviour. Conservative (a nested user call is treated as possibly-printing).
+    pub(crate) fn stmt_has_observable_effect(s: &ast::Stmt) -> bool {
+        use ast::Stmt as S;
+        match s {
+            S::SysTaskCall { .. } | S::UserTaskCall { .. } => true,
+            S::Block { stmts, .. } | S::Fork { stmts, .. } => {
+                stmts.iter().any(Self::stmt_has_observable_effect)
+            }
+            S::If { then_s, else_s, .. } => {
+                Self::stmt_has_observable_effect(then_s)
+                    || else_s
+                        .as_deref()
+                        .is_some_and(Self::stmt_has_observable_effect)
+            }
+            S::Case { items, .. } => items
+                .iter()
+                .any(|it| Self::stmt_has_observable_effect(case_item_body(it))),
+            S::For { body, .. }
+            | S::While { body, .. }
+            | S::Repeat { body, .. }
+            | S::Forever { body, .. } => Self::stmt_has_observable_effect(body),
+            S::DelayCtrl { body, .. } | S::EventCtrl { body, .. } | S::Wait { body, .. } => body
+                .as_deref()
+                .is_some_and(Self::stmt_has_observable_effect),
+            _ => false,
         }
     }
 
@@ -559,6 +650,32 @@ impl Elaborator<'_> {
                     span: *span,
                 })
             }
+            // r18 (F3): the same one-shot hoist for a framed dyn-formal call in a
+            // NON-BLOCKING assign rhs (`reg_out <= packk(b)` / `reg_out <= en ? packk(b) : 0`).
+            // Unlike blocking, §4.5.177's direct-rhs marker is NOT emitted for `<=`, so a
+            // DIRECT-call rhs is hoisted too (no `dyn_formal_call_target(rhs).is_none()`
+            // exclusion): the hoist emits `__t = f(arr)` (a blessed blocking assign) then the
+            // NBA reads `__t`. The NBA's target-net update still schedules for the region end.
+            S::NonBlocking {
+                lhs,
+                delay,
+                event,
+                rhs,
+                span,
+            } if delay.is_none()
+                && event.is_none()
+                && self.expr_has_dyn_formal_call(rhs)
+                && !self.has_unhoistable_dyn_formal_call(rhs) =>
+            {
+                let rhs2 = self.hoist_dyn_formal_calls(b, rhs);
+                Some(S::NonBlocking {
+                    lhs: lhs.clone(),
+                    delay: delay.clone(),
+                    event: event.clone(),
+                    rhs: rhs2,
+                    span: *span,
+                })
+            }
             // §4.5.179: `$display`/`$write`/`$strobe`/… args are each evaluated once,
             // unconditionally → hoist a framed dyn-formal call out of any of them.
             S::SysTaskCall { name, args, span }
@@ -575,14 +692,10 @@ impl Elaborator<'_> {
                     span: *span,
                 })
             }
-            S::While { cond, .. } if self.expr_has_inout_call(cond) => {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "an inout/output-function call in a `while` condition is unsupported \
-                     (assign it to a variable inside the loop body)",
-                );
-                None
-            }
+            // r18 (F1): a `while`/`for` condition with an inout/output-function call is now
+            // hoisted at the loop head (`lower_while`/`lower_for`) — the call's copy-out temp
+            // is emitted at the condition-eval block, which is re-entered every iteration. No
+            // loud here; an eval-order-UNSAFE condition still loud-rejects at `emit_frame_call`.
             _ => None,
         }
     }

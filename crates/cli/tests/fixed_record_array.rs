@@ -106,16 +106,18 @@ fn four_state_undriven_field_is_x() {
 }
 
 #[test]
-fn nonpackable_record_array_stays_loud() {
-    // A string-member record is not uniform-packable → loud (correct-or-loud).
+fn nonpackable_record_array_now_soa() {
+    // r18 (Fix A): a non-packable (string/mixed/param-width member) record array — fixed
+    // OR queue — now lowers to struct-of-arrays (per-member native `$unp$arr$field`), the
+    // same fallback the dynamic-array path already had. `arr[0].id` → `$unp$arr$id[0]`.
     let o = run("module top;\n\
          typedef struct { string name; int id; } rec_t;\n\
          rec_t arr[2];\n\
          initial begin arr[0].id = 5; $display(\"%0d\", arr[0].id); end\n\
          endmodule\n");
     assert!(
-        o.contains("E2002") || o.contains("E3010"),
-        "should be loud:\n{o}"
+        !o.contains("E2002") && !o.contains("E3010") && o.contains('5'),
+        "fixed string-member record array now works via SoA:\n{o}"
     );
 }
 

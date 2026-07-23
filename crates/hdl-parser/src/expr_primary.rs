@@ -283,6 +283,12 @@ impl Parser<'_, '_> {
                     };
                 }
                 if self.peek() == Some(T::LParen) {
+                    // r18 (E2): a method on a struct MEMBER receiver
+                    // (`r.name.substr(a,b)`) — rewrite `r.name` to its member net
+                    // `$unp$r$name` so this becomes the 2-segment `$unp$r$name.substr(a,b)`
+                    // method-on-a-net form elaborate dispatches. A non-member receiver
+                    // leaves `path` unchanged (→ the generic Call below).
+                    let path = self.unpacked_member_method_recv(&path).unwrap_or(path);
                     // N3 SoA: `arr.size()`/`arr.num()` on a SoA record array → field 0's
                     // dyn array (`$unp$arr$field0.size()`); all fields share the length.
                     let path = self.soa_rewrite_method_recv(path);

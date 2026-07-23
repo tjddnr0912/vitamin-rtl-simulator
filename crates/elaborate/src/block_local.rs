@@ -204,6 +204,96 @@ impl Elaborator<'_> {
         out
     }
 
+    /// r18 (family D): the module-process block-locals that are `automatic` WITH AN
+    /// INITIALIZER and safe to give per-entry (IEEE §6.21) semantics on the single flattened
+    /// net — the initializer re-runs at block entry instead of once at t0. Pure function of
+    /// the AST (mirrors `compute_scoped_block_locals`), keyed by the declaring block's
+    /// `span.lo` → qualifying NAMES. SOUND because a single flattened net is correct iff at
+    /// most one activation of the block is live at a time: a module process's loops are
+    /// sequential (iteration N completes before N+1), so ONLY a `fork` ancestor can spawn a
+    /// concurrent copy — `under_fork` blocks are EXCLUDED (they keep the loud reject). Also
+    /// excludes module-net collisions (handled by the coalesce guards) and dyn/string/array
+    /// decls (their own paths). Anything not recorded here falls through to the existing
+    /// E3009 (correct-or-loud). A module process cannot recurse, so recursion is a non-issue.
+    pub(crate) fn compute_per_entry_block_locals(
+        module: &ast::ModuleDecl,
+        module_names: &std::collections::BTreeSet<String>,
+    ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
+        fn walk(
+            s: &ast::Stmt,
+            under_fork: bool,
+            module_names: &std::collections::BTreeSet<String>,
+            out: &mut BTreeMap<u32, std::collections::BTreeSet<String>>,
+        ) {
+            match s {
+                ast::Stmt::Block {
+                    decls, stmts, span, ..
+                } => {
+                    if !under_fork {
+                        for d in decls {
+                            // A plain scalar VAR (not a net, not a string, no unpacked dims);
+                            // a dyn/queue/assoc/string/array decl keeps its own path.
+                            if d.lifetime == Some(true)
+                                && netvar_kind_is_var(d.kind)
+                                && !matches!(d.kind, ast::NetVarKind::String)
+                            {
+                                for n in &d.names {
+                                    if n.init.is_some()
+                                        && n.unpacked.is_empty()
+                                        && !module_names.contains(&n.name.name)
+                                    {
+                                        out.entry(span.lo).or_default().insert(n.name.name.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    for st in stmts {
+                        walk(st, under_fork, module_names, out);
+                    }
+                }
+                // A fork's children run CONCURRENTLY (`join_any`/`join_none` outlive the
+                // fork point) — one flattened net cannot represent per-child storage, so
+                // everything under a fork stays loud.
+                ast::Stmt::Fork { stmts, .. } => {
+                    for st in stmts {
+                        walk(st, true, module_names, out);
+                    }
+                }
+                ast::Stmt::If { then_s, else_s, .. } => {
+                    walk(then_s, under_fork, module_names, out);
+                    if let Some(e) = else_s {
+                        walk(e, under_fork, module_names, out);
+                    }
+                }
+                ast::Stmt::Case { items, .. } => {
+                    for it in items {
+                        walk(case_item_body(it), under_fork, module_names, out);
+                    }
+                }
+                ast::Stmt::For { body, .. }
+                | ast::Stmt::While { body, .. }
+                | ast::Stmt::Repeat { body, .. }
+                | ast::Stmt::Forever { body, .. } => walk(body, under_fork, module_names, out),
+                ast::Stmt::DelayCtrl { body, .. }
+                | ast::Stmt::EventCtrl { body, .. }
+                | ast::Stmt::Wait { body, .. } => {
+                    if let Some(b) = body {
+                        walk(b, under_fork, module_names, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut out = BTreeMap::new();
+        for item in &module.body {
+            if let ast::ModuleItem::Proc(p) = item {
+                walk(&p.body, false, module_names, &mut out);
+            }
+        }
+        out
+    }
+
     /// DUP (round-5): the `$blk$<span>` scope segment for a decl `d` in the block at
     /// `span`, if ANY name it declares is marked for scoping. `None` ⇒ not scoped
     /// (pre-existing behavior).
@@ -268,9 +358,16 @@ impl Elaborator<'_> {
                                     decls.iter().flat_map(|dd| dd.names.iter()).any(|nn| {
                                         nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm))
                                     });
-                                if n.init.is_some()
-                                    || read_in_sibling_init
-                                    || !automatic_local_definitely_assigned(stmts, nm)
+                                // r18 (family D): a per-entry-safe local (its init re-runs at
+                                // block entry) — supported even on a `$blk$`-scoped net.
+                                let per_entry = self
+                                    .per_entry_block_locals
+                                    .get(&span.lo)
+                                    .is_some_and(|s| s.contains(nm));
+                                if !per_entry
+                                    && (n.init.is_some()
+                                        || read_in_sibling_init
+                                        || !automatic_local_definitely_assigned(stmts, nm))
                                 {
                                     self.error(
                                         MsgCode::ElabUnsupported,
@@ -456,9 +553,19 @@ impl Elaborator<'_> {
                                 .iter()
                                 .flat_map(|dd| dd.names.iter())
                                 .any(|nn| nn.init.as_ref().is_some_and(|e| !expr_no_ref(e, nm)));
-                            if n.init.is_some()
-                                || read_in_sibling_init
-                                || !automatic_local_definitely_assigned(stmts, nm)
+                            // r18 (family D): a per-entry-safe automatic-with-init local
+                            // (not under a fork, no collision — see `compute_per_entry_
+                            // block_locals`) is now supported: its initializer re-runs at
+                            // BLOCK ENTRY (emitted by the Logic-phase Block arm), so skip
+                            // the loud reject here.
+                            let per_entry = self
+                                .per_entry_block_locals
+                                .get(&span.lo)
+                                .is_some_and(|s| s.contains(nm));
+                            if !per_entry
+                                && (n.init.is_some()
+                                    || read_in_sibling_init
+                                    || !automatic_local_definitely_assigned(stmts, nm))
                             {
                                 self.error(
                                     MsgCode::ElabUnsupported,
@@ -518,7 +625,15 @@ impl Elaborator<'_> {
                                 fold_init(init, w).is_none()
                                     && self.const_eval_in_scope(init).is_none()
                             };
-                            if push {
+                            // r18 (family D): a per-entry local's initializer is emitted at
+                            // BLOCK ENTRY (the Logic-phase Block arm), so it must NOT also
+                            // ride the t0 static pre-sweep — that would double-init (and a
+                            // loop-var-reading init reads X at t0). Skip the push here.
+                            let per_entry = self
+                                .per_entry_block_locals
+                                .get(&span.lo)
+                                .is_some_and(|s| s.contains(&name.name.name));
+                            if push && !per_entry {
                                 let path = ast::HierPath {
                                     segments: vec![name.name.clone()],
                                     span: name.name.span,

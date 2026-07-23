@@ -665,7 +665,18 @@ impl Elaborator<'_> {
         let exit = b.new_block();
         b.goto(head);
         b.start_block(head);
-        let c = self.lower_expr(cond);
+        // r18 (F1): an inout/output-function call in the loop CONDITION is hoisted here.
+        // `head` is (re-)entered on every iteration (loop entry + back-edge), so emitting
+        // the call's copy-out temp at `head` runs it exactly once per iteration — the same
+        // semantics as the un-hoisted `while (getnext(i, v) == 1)` (the call fires before
+        // each condition test). Only when eval-order-safe; otherwise the call lowers in
+        // place and loud-rejects at `emit_frame_call` (correct-or-loud).
+        let c = if self.expr_has_inout_call(cond) && self.hoist_is_safe(cond) {
+            let hoisted = self.hoist_inout_calls(b, cond);
+            self.lower_expr(&hoisted)
+        } else {
+            self.lower_expr(cond)
+        };
         b.end_block_with(ir::Terminator::Branch {
             cond: c,
             then_bb: body_bb.raw(),
@@ -811,7 +822,15 @@ impl Elaborator<'_> {
         let exit = b.new_block();
         b.goto(head);
         b.start_block(head);
-        let c = self.lower_expr(cond);
+        // r18 (F1): hoist an inout/output-function call out of the for-loop condition —
+        // same rationale as `lower_while` (the condition is re-tested at `head` after each
+        // step, so the call runs once per iteration). Eval-order-safe only.
+        let c = if self.expr_has_inout_call(cond) && self.hoist_is_safe(cond) {
+            let hoisted = self.hoist_inout_calls(b, cond);
+            self.lower_expr(&hoisted)
+        } else {
+            self.lower_expr(cond)
+        };
         b.end_block_with(ir::Terminator::Branch {
             cond: c,
             then_bb: body_bb.raw(),

@@ -718,7 +718,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
 
     let exit_class = if st.had_fatal {
         ExitClass::Fatal
-    } else if st.had_error {
+    } else if st.had_error.get() {
         ExitClass::HadErrors
     } else {
         ExitClass::Ok

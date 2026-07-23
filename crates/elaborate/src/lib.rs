@@ -298,6 +298,17 @@ struct Elaborator<'s> {
     /// Empty for every design with no such collision → byte-identical. Saved/
     /// restored per module.
     scoped_block_locals: BTreeMap<u32, std::collections::BTreeSet<String>>,
+    /// r18 (family D): module-process block-locals that are `automatic` WITH AN
+    /// INITIALIZER and are safe to give per-entry (IEEE §6.21) semantics on the single
+    /// flattened net — the initializer re-runs at BLOCK ENTRY instead of once at t0. Keyed
+    /// by the declaring block's `span.lo` → the set of qualifying NAMES. Computed ONCE per
+    /// module by `compute_per_entry_block_locals` (both the Nets-phase hoist and the
+    /// Logic-phase Block arm read it, deriving the SAME decision). SAFE iff at most one
+    /// activation of the block is live at a time: a module process's loops are sequential,
+    /// so ONLY a `fork` ancestor can spawn a concurrent copy — those blocks are EXCLUDED
+    /// (kept loud), as are name/module-net collisions and dyn/string decls. Empty for every
+    /// design without such a decl → byte-identical. Saved/restored per module.
+    per_entry_block_locals: BTreeMap<u32, std::collections::BTreeSet<String>>,
     /// v7 P2-D: package name → its const symbols (params/localparams + enum
     /// labels), folded EAGERLY in declaration order at `run()` entry.
     pkg_consts: BTreeMap<String, BTreeMap<String, i64>>,
