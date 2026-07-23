@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.205 DESCENDING / mixed-direction multi-dim array formal loud→supported (over-conservative gate removed) (2026-07-23, branch feat-descending-multidim-array-formal) ✅
+
+**컨텍스트**: 오너 "남은 follow-on 항목을 계속 해·가치 떨어져도 correct-support가 핵심". §4.5.202가 descending multi-dim array formal을 loud로 gated("md-packed read는 index-major인데 actual 물리저장은 declaration-major→dim 내 element reverse"). **그러나 1-D descending formal은 이미 forward 동작**(§4.5.188·기존 `uarr_matching_descending_direction_ok`)—§4.5.202의 reversal 우려는 **1-D가 forward라는 증거를 무시한 잘못된 mental model**이었음.
+
+**경험적 검증(correct-support 우선)**: 1-D descending distinct-value probe가 forward 확인(m[i]=a[i]·10 20 30 40·acc=1234) 후 gate 임시 해제→descending multi-dim 全 forward: descending 2-D `m[1:0][1:0]`(m[i][j]=a[i][j]·11 22 33 44)·**non-square 2×3 descending(123 456·reversal이면 명백히 다른 값→forward 확정 clincher)**·3-D descending(sum=28·spot 정확)·mixed direction `[0:1][1:0]`(11 22 33 44)·descending OUTPUT(1 2 3 4). **direction MISMATCH**(formal desc/actual asc·역)=LOUD(§4.5.202 `lower_array_actual_packed` per-dim direction 체크가 **실제 correctness guard**).
+
+**근본 원인**: direction이 formal read와 actual pack **양쪽에 일관되게** 적용됨(per-dim direction MATCH 요구가 declared index→동일 logical element 보장)→forward pass-by-value(§13.5.1). classify gate는 redundant + wrong(correct 케이스를 reject).
+
+**fix(format 22 불변)**: `classify_array_formal`의 descending multi-dim reject gate **제거**(per-dim direction match가 진짜 guard·non-zero-based/dynamic/non-simple-element는 여전히 `classify_unpacked_array`서 reject). iverilog는 구문 거부→hand-IEEE. flip 3(descending multi-dim input/output·static descending `_stays_loud`→forward).
+
+**교훈**: **"correct-or-loud"의 loud가 실제로는 correct-support 가능한데 잘못된 mental model로 과보수 gate한 것일 수 있다→correct-support 우선이면 경험적 재검증**(distinct-value·특히 **non-square가 reversal 판별 clincher**)·§4.5.202의 reversal 우려는 인접 사실(1-D descending이 이미 forward)을 무시한 것·진짜 correctness guard(per-dim direction MATCH)는 이미 별도 존재했음(gate는 redundant). 신규 2 tests·flip 3.
+
 #### 4.5.204 OUTPUT/INOUT multi-dim array formal loud→supported (multi-index copy-out unpack) (2026-07-23, branch feat-output-multidim-array-formal) ✅
 
 **컨텍스트**: §4.5.202(input multi-dim)·§4.5.203(static task array formal) 후 오너 "계속". §4.5.202가 output/inout multi-dim을 loud로 남겼음 — §4.5.193 copy-out unpack이 `caller[i] = packed[i*ew +: ew]`로 **1-D 인덱스**라 multi-dim caller엔 partial-index(sub-array)→"assigning a non-array value to an unpacked array"(E3009).

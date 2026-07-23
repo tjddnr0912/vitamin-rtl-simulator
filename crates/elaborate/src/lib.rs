@@ -1094,11 +1094,13 @@ struct ArrayFormal {
     /// as negative instead of zero-extended (silent-wrong). Unsigned ⇒ `false`.
     elem_signed: bool,
     /// §4.5.199: per-unpacked-dim `(size, ascending)`, OUTER→INNER. `[(count, ascending)]`
-    /// for a 1-D array/formal; N entries for a multi-dim frame-LOCAL array. The md-packed
-    /// slot's `packed_dims` is these dims (position-indexed) + a trailing `(0, elem_w,
-    /// false)`, so `flatten_word` maps `m[i][j]` to bit offset `i*∏inner + j*elem_w` with
-    /// no new offset math. A multi-dim FORMAL is rejected in `classify_array_formal`
-    /// (the formal binding packs a single dimension); multi-dim is a frame-local feature.
+    /// for a 1-D array/formal; N entries for a multi-dim frame-LOCAL array OR a multi-dim
+    /// FORMAL (§4.5.202/205). The md-packed slot's `packed_dims` is these dims (position-
+    /// indexed) + a trailing `(0, elem_w, false)`, so `flatten_word` maps `m[i][j]` to bit
+    /// offset `i*∏inner + j*elem_w` with no new offset math. A multi-dim FORMAL's actual
+    /// must match these dims' size + direction (`lower_array_actual_packed`); the direction
+    /// is handled consistently on both sides, so any (ascending / descending / mixed)
+    /// matching pair copies element-for-element.
     dims: Vec<(u32, bool)>,
 }
 
@@ -17111,25 +17113,19 @@ impl<'s> Elaborator<'s> {
             p.signed,
             p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
         );
-        // §4.5.202: a MULTI-DIM unpacked-array FORMAL (`int m[2][2]`) is supported when
-        // every unpacked dim is ASCENDING zero-based (`[N]` / `[0:N-1]`). Then declared
-        // index == flat position, so the md-packed slot (`array_formal_ext_dims`, one
-        // POSITION-indexed packed dim per unpacked dim) reads `m[i][j]` at flat `i*inner+j`
-        // and a whole-array actual with the SAME per-dim shape packs element-for-element —
-        // `m[i][j] = a[i][j]`, hand-IEEE §13.5.1 pass-by-value (iverilog rejects the whole
-        // construct: "unpacked dimensions on subroutine ports"). A DESCENDING dim (`[N-1:0]`)
-        // stays loud: the md-packed read is index-major but the actual's physical storage is
-        // declaration-major, so a passthrough would silently reverse elements within that
-        // dim. A 1-D formal (ascending OR descending) keeps its long-standing contract —
-        // `dims.len() > 1` is the only gate here.
-        if let Some(Ok(af)) = &cls {
-            if af.dims.len() > 1 && af.dims.iter().any(|&(_, asc)| !asc) {
-                return Some(Err(
-                    "a multi-dimensional unpacked-array formal with a descending dimension \
-                     (only ascending `[N]` / `[0:N-1]` dims are supported)",
-                ));
-            }
-        }
+        // §4.5.202 (+§4.5.205): a MULTI-DIM unpacked-array FORMAL (`int m[2][2]`,
+        // `m[1:0][2:0]`, mixed directions) is supported. Element access `m[i][j]` routes
+        // through the N-D md-packed slot (`array_formal_ext_dims` + `flatten_word`), and the
+        // call-site pack (`lower_array_actual_packed`) requires the actual's per-dim (size +
+        // direction) to MATCH the formal's, so a declared index maps to the same logical
+        // element on both sides — forward pass-by-value `m[i][j] = a[i][j]` (§13.5.1), the
+        // same as the long-standing 1-D formal. (§4.5.202 first gated DESCENDING multi-dim
+        // loud on a mistaken "index-major vs declaration-major reversal" worry; §4.5.205
+        // verified against a distinct-value reference — descending / mixed / non-square /
+        // 3-D all forward, and a direction MISMATCH is loud in `lower_array_actual_packed`
+        // — so the extra gate was removed. iverilog rejects the whole construct, so this is
+        // hand-IEEE.) Non-zero-based / dynamic / non-simple-element shapes are still rejected
+        // upstream in `classify_unpacked_array`.
         cls
     }
 

@@ -11,11 +11,12 @@
 //! (§13.5.1 pass-by-value: `m[i][j] = a[i][j]`, the body may write its own copy without
 //! touching the caller).
 //!
-//! Correct-or-loud: only ASCENDING zero-based dims (`[N]` / `[0:N-1]`) are supported — then
-//! declared index == flat position, unambiguous. A DESCENDING dim, a shape / dim-count
-//! mismatch, a partial (whole sub-array) select, or a HIER enable with an array formal all
-//! stay loud. (INPUT and — since §4.5.204 — OUTPUT/INOUT are all supported; a STATIC task is
-//! force-framed, §4.5.203.)
+//! Correct-or-loud: any ZERO-BASED direction (ascending / descending / mixed) is supported
+//! as long as the actual's per-dim direction MATCHES the formal's (§4.5.205 — the direction
+//! is handled consistently on both sides, so `m[i][j]=a[i][j]` forward); a per-dim direction
+//! / size / dim-count MISMATCH, a non-zero-based dim, a partial (whole sub-array) select, or
+//! a HIER enable with an array formal all stay loud. INPUT / OUTPUT / INOUT (§4.5.204) and a
+//! STATIC task (force-framed, §4.5.203) are all supported.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -222,16 +223,47 @@ fn one_dim_formal_still_works() {
 // ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
-fn descending_dim_stays_loud() {
-    // A DESCENDING multi-dim formal (`[1:0][1:0]`) — the md-packed read is index-major but
-    // the actual's physical storage is declaration-major, so a passthrough would reverse
-    // elements. Loud (only ascending `[N]` / `[0:N-1]` dims are supported).
+fn descending_multidim_forward() {
+    // §4.5.205: a DESCENDING multi-dim formal (`[1:0][1:0]`) with a matching-direction actual
+    // is supported — the direction is handled consistently on both sides, so `m[i][j]=a[i][j]`
+    // (forward). Distinct values catch any accidental reversal. iverilog rejects; hand-IEEE.
     let o = run("module tb;\n\
-         function automatic int f(input int m[1:0][1:0]); f=m[0][0]; endfunction\n\
-         initial begin int a[1:0][1:0]; a[0][0]=9; $display(\"r=%0d\",f(a)); $finish; end endmodule\n");
+         function automatic int f(input int m[1:0][1:0], input int i, input int j); return m[i][j]; endfunction\n\
+         initial begin int a[1:0][1:0]; a[0][0]=11;a[0][1]=22;a[1][0]=33;a[1][1]=44;\n\
+           $display(\"%0d %0d %0d %0d\", f(a,0,0),f(a,0,1),f(a,1,0),f(a,1,1)); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009") && o.contains("descending"),
-        "descending multi-dim formal must be loud:\n{o}"
+        o.contains("11 22 33 44"),
+        "descending multi-dim forward:\n{o}"
+    );
+}
+
+#[test]
+fn descending_non_square_and_mixed() {
+    // A descending NON-SQUARE 2×3 (forward vs reversed is unambiguous here) and a MIXED
+    // direction (`[0:1][1:0]`) both copy forward.
+    let desc = run("module tb;\n\
+         function automatic int f(input int m[1:0][2:0], input int i, input int j); return m[i][j]; endfunction\n\
+         initial begin int a[1:0][2:0]; a[0][0]=1;a[0][1]=2;a[0][2]=3;a[1][0]=4;a[1][1]=5;a[1][2]=6;\n\
+           $display(\"%0d%0d%0d %0d%0d%0d\", f(a,0,0),f(a,0,1),f(a,0,2),f(a,1,0),f(a,1,1),f(a,1,2)); $finish; end endmodule\n");
+    assert!(desc.contains("123 456"), "descending non-square:\n{desc}");
+    let mixed = run("module tb;\n\
+         function automatic int f(input int m[0:1][1:0], input int i, input int j); return m[i][j]; endfunction\n\
+         initial begin int a[0:1][1:0]; a[0][0]=11;a[0][1]=22;a[1][0]=33;a[1][1]=44;\n\
+           $display(\"%0d %0d %0d %0d\", f(a,0,0),f(a,0,1),f(a,1,0),f(a,1,1)); $finish; end endmodule\n");
+    assert!(mixed.contains("11 22 33 44"), "mixed direction:\n{mixed}");
+}
+
+#[test]
+fn direction_mismatch_stays_loud() {
+    // A per-dim direction MISMATCH (formal descending, actual ascending) is loud — §7.6
+    // positional copy would silently mis-map. This is the real correctness guard (not the
+    // formal's own direction).
+    let o = run("module tb; int acc;\n\
+         task automatic p(input int m[1:0][1:0]); acc=m[0][0]; endtask\n\
+         initial begin int a[0:1][0:1]; a[0][0]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+    assert!(
+        o.contains("E3009"),
+        "direction-mismatch actual must be loud:\n{o}"
     );
 }
 
@@ -337,13 +369,12 @@ fn output_signed_byte_multidim() {
 }
 
 #[test]
-fn descending_output_multidim_stays_loud() {
-    // A descending multi-dim output formal stays loud (not an ascending-zero-based shape).
+fn descending_output_multidim_forward() {
+    // §4.5.205: a descending multi-dim OUTPUT formal copies out forward (the copy-out unpack
+    // decomposes the flat index over the same dims, so element i lands at `caller[i0][i1]`).
     let o = run("module tb;\n\
-         task automatic p(output int m[1:0][1:0]); m[0][0]=1; endtask\n\
-         initial begin int a[1:0][1:0]; p(a); $display(\"%0d\",a[0][0]); $finish; end endmodule\n");
-    assert!(
-        o.contains("E3009"),
-        "descending output multi-dim must be loud:\n{o}"
-    );
+         task automatic p(output int m[1:0][1:0]); m[0][0]=1;m[0][1]=2;m[1][0]=3;m[1][1]=4; endtask\n\
+         initial begin int a[1:0][1:0]; p(a);\n\
+           $display(\"%0d %0d %0d %0d\",a[0][0],a[0][1],a[1][0],a[1][1]); $finish; end endmodule\n");
+    assert!(o.contains("1 2 3 4"), "descending output multi-dim:\n{o}");
 }

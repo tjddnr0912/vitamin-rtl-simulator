@@ -11,9 +11,9 @@
 //! case is hand-IEEE (§13.5.1/2 pass-by-value / value-result; static-local storage persists
 //! across calls, unchanged by the framing).
 //!
-//! Correct-or-loud: a rejected array shape (descending, non-zero-based) stays loud on the
-//! frame path. (§4.5.204 later added the OUTPUT/INOUT multi-dim copy-out, so those are now
-//! supported too.)
+//! Correct-or-loud: a non-zero-based array shape stays loud on the frame path. (§4.5.204
+//! added the OUTPUT/INOUT multi-dim copy-out; §4.5.205 added descending / mixed multi-dim
+//! — both now supported.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -188,15 +188,13 @@ fn static_output_multidim_supported() {
 // ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
-fn static_descending_array_stays_loud() {
-    // A descending multi-dim array formal stays loud on the frame path.
+fn static_descending_array_supported() {
+    // §4.5.205: a descending multi-dim array formal on a static (force-framed) task copies
+    // forward, matching-direction. m[i][j]=a[i][j].
     let o = run("module tb; int acc;\n\
-         task p(input int m[1:0][1:0]); acc=m[0][0]; endtask\n\
-         initial begin int a[1:0][1:0]; a[0][0]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
-    assert!(
-        o.contains("E3009"),
-        "static descending array must be loud:\n{o}"
-    );
+         task p(input int m[1:0][1:0]); acc=m[0][0]*1000+m[0][1]*100+m[1][0]*10+m[1][1]; endtask\n\
+         initial begin int a[1:0][1:0]; a[0][0]=1;a[0][1]=2;a[1][0]=3;a[1][1]=4; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+    assert!(o.contains("1234"), "static descending array forward:\n{o}");
 }
 
 #[test]
