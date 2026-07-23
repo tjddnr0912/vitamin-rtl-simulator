@@ -17,8 +17,8 @@
 //! hand-IEEE (§13.5.1/2) verified by write→read-back self-consistency and cross-check with the
 //! LOCAL output-array path (`frame_task_output_array.rs`, which IS differential-verified).
 //!
-//! Correct-or-loud: an unsupported array SHAPE (descending non-zero-base), a shape mismatch, an
-//! array formal fed a scalar actual, and a string/dynamic output array all stay loud.
+//! Correct-or-loud: a shape mismatch, an array formal fed a scalar actual, and a string/dynamic
+//! output array all stay loud. (Non-zero-base descending shapes became supported in §4.5.211.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -217,17 +217,17 @@ fn output_array_per_instance_isolation() {
 // ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
-fn output_array_descending_nonzero_base_stays_loud() {
-    // A non-zero-base DESCENDING array shape is rejected in `classify_unpacked_array` (§4.5.206),
-    // so the formal has no md-packed slot → the resolver treats it as a scalar → the whole-array
-    // actual is loud there (correct-or-loud).
+fn output_array_descending_nonzero_base_now_supported() {
+    // §4.5.211: a non-zero-base DESCENDING array shape is now a valid array formal, so the hier
+    // OUTPUT copy-out works — the callee writes `d[k]` and the caller reads back `a[k]` forward.
     let o = run(
-        "module sub; task automatic gen(output int d[4:1]); d[1]=1; endtask endmodule\n\
-         module t; sub u(); initial begin int a[4:1]; u.gen(a); $finish; end endmodule\n",
+        "module sub; task automatic gen(output int d[4:1]); d[4]=44;d[3]=33;d[2]=22;d[1]=11; endtask endmodule\n\
+         module t; sub u(); initial begin int a[4:1]; u.gen(a);\n\
+           $display(\"%0d %0d %0d %0d\", a[4],a[3],a[2],a[1]); $finish; end endmodule\n",
     );
     assert!(
-        o.contains("E3009"),
-        "descending non-zero-base output must be loud:\n{o}"
+        o.contains("44 33 22 11"),
+        "descending non-zero-base output now supported:\n{o}"
     );
 }
 

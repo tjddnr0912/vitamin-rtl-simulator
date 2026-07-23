@@ -26,9 +26,10 @@ pub(crate) struct ArrayFormal {
     /// (`m[1:4]`) so the element index normalizes (zero-based ⇒ `lo=0` ⇒ no `Sub`, byte-
     /// identical). A FORMAL's actual must match these dims' lo + size + direction
     /// (`lower_array_actual_packed`); the direction is handled consistently on both sides, so
-    /// any (ascending / descending / mixed / non-zero-ascending) matching pair copies
-    /// element-for-element. (Non-zero-base DESCENDING is rejected in `classify_unpacked_array`
-    /// — its base+direction interaction is not cleanly verifiable → correct-or-loud.)
+    /// any (ascending / descending / mixed / non-zero-base, any direction) matching pair copies
+    /// element-for-element (§4.5.211: non-zero-base DESCENDING is supported too — `flatten_word`
+    /// normalizes `idx-lo` consistently on the pack and the read, so `m[k] == a[k]`; a direction/
+    /// base MISMATCH between actual and formal is the real §7.6 guard and stays loud).
     pub(crate) dims: Vec<(u32, u32, bool)>,
 }
 
@@ -321,23 +322,24 @@ impl Elaborator<'_> {
                         (Some(m), Some(l)) => (m, l),
                         _ => return Some(Err("a non-constant unpacked-array bound")),
                     };
-                    // §4.5.206: negative bounds are always loud. A NON-ZERO base is supported
-                    // for an ASCENDING dim (`[1:4]` → `lo=1`; `array_formal_ext_dims` sets the
-                    // packed dim's lo so `flatten_word` does `idx-lo`), but a non-zero-base
-                    // DESCENDING dim (`[4:1]`) stays loud — its base+direction interaction on
-                    // the actual-pack side is not cleanly verifiable (correct-or-loud). A
-                    // ZERO-based range (any direction) keeps `lo=0` → no `Sub`, byte-identical.
+                    // §4.5.206/211: negative bounds are always loud. A NON-ZERO base is supported
+                    // for ANY direction — `array_formal_ext_dims` sets the packed dim's `lo` so
+                    // `flatten_word` normalizes `idx-lo` on BOTH the actual pack (`lower_array_
+                    // actual_packed` reads flat words in position order) and the formal read (`m[k]`
+                    // → `k-lo`), so `m[k] == a[k]` for a same-range formal (§13.5.1 positional
+                    // copy) regardless of direction. §4.5.206 gated non-zero-base DESCENDING (`[4:1]`)
+                    // out of caution ("base+direction not cleanly verifiable"), but §4.5.211 verified
+                    // the machinery it built already handles it: distinct-digit differentials (1-D
+                    // `[4:1]`=4321, non-square 2×3 `[2:1][3:1]`=654321, mixed `[1:2][3:1]`, offset
+                    // `[5:2]`, signed, output/inout, hier, frame-local, forward) are all forward. A
+                    // direction / base MISMATCH between actual and formal stays loud in
+                    // `lower_array_actual_packed` (the real §7.6 positional-copy guard). ZERO-based
+                    // (any direction) keeps `lo=0` → no `Sub`, byte-identical.
                     if m < 0 || l < 0 {
                         return Some(Err("a negative unpacked-array bound"));
                     }
                     let lo = m.min(l) as u32;
                     let ascending = m < l;
-                    if lo != 0 && !ascending {
-                        return Some(Err(
-                            "a non-zero-based DESCENDING unpacked-array range (`[hi:lo]` \
-                             with lo>0) — use `[lo:hi]` ascending or a zero-based range",
-                        ));
-                    }
                     (lo, (m.abs_diff(l) + 1) as u32, ascending)
                 }
                 ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_) => {

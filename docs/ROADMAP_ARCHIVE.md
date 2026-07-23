@@ -8,6 +8,20 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.211 NON-ZERO-BASE DESCENDING unpacked-array formal loud→supported (over-conservative reject removed) (2026-07-23, branch feat-nonzero-base-descending) ✅
+
+**컨텍스트**: ROADMAP §0 재개 follow-on #3. 오너 질문 "해당 방안이 구현 리스크가 너무 커? 시도해 볼만한 요소가 없나?"—§4.5.206이 non-zero-base DESCENDING(`int m[4:1]`)을 "base+direction 상호작용이 mental model로 예측 불가·cleanly-verifiable 불가"라며 loud로 gated하고 "재개하려면 상용 simulator 오라클 확보 선행"이라 기록했음. 오너 push-back에 "blocked"로만 두지 않고 실제 tractability를 조사.
+
+**핵심 발견(오라클 부재 ≠ 검증 불가)**: iverilog가 unpacked subroutine port를 거부(no direct formal oracle)하고 whole-unpacked-array copy(`b=a`)도 거부하지만, **IEEE §13.5.1이 same-declared-range formal에 `m[k]==a[k]`를 강제**하고 이건 완전 관측 가능. **구별 자릿값 differential**(`m[4]*1000+m[3]*100+m[2]*10+m[1]`으로 caller `a[4:1]={4,3,2,1}` 넣어 forward면 4321·reversal이면 1234·**non-square 2×3 `[2:1][3:1]`=654321이면 dim-swap/reversal 즉시 가시화**)이 clean verification. element-index 의미 자체는 iverilog-checked(`int m[4:1]; m[k]=..` read-back이 iverilog·vita 동일). §4.5.206의 "검증 불가"는 verification 방법을 못 찾은 것이지 실제 불가가 아니었음.
+
+**근본 원인(저자가 자기 머신러리를 불신)**: §4.5.206이 도입한 per-dim `(lo, size, ascending)` tuple + `array_formal_ext_dims`가 packed dim에 `lo`를 세팅→`flatten_word`가 pack(`lower_array_actual_packed`가 actual flat words를 position order로 읽음)과 read(`m[k]`→coord `k-lo`) **양쪽서 `idx-lo`를 일관 정규화**→`m[k]==a[k]` for same-range formal(direction 무관 forward). §4.5.206은 이 머신러리를 만들어놓고 descending에 대해 "derivation이 empirical과 어긋남"이라며(당시 mental model 혼동) 과보수적으로 `lo != 0 && !ascending` reject를 넣었으나, 실제로는 그 머신러리가 descending도 올바르게 처리함.
+
+**fix(format 23 불변·1줄 제거)**: `classify_unpacked_array`의 Range arm에서 `if lo != 0 && !ascending { return Err(...) }` reject 제거. 나머지(`(lo, size, ascending)` 계산·flatten·dim-check)는 그대로—이미 descending을 handle. classify는 formal + frame-local 공유라 hier(§4.5.207/209)·forward(§4.5.210)·frame-local 경로 전부 자동 커버.
+
+**적대 differential 全 MATCH(hand-IEEE §13.5.1·distinct-digit)**: INPUT 1-D `[4:1]`(4321)·offset base `[5:2]`(4321)·**non-square 2×3 `[2:1][3:1]`(654321 reversal clincher)**·**mixed `[1:2][3:1]`(654321)**·3×2 `[3:1][2:1]`(654321)·signed byte `[3:1]`($signed -40)·task copy-in(mem[k]=a[k])·OUTPUT `[4:1]`(44 33 22 11·copy-out `caller[lo+pos]`)·INOUT RMW(41 31 21 11)·hier INPUT(4321)·hier OUTPUT(44 33 22 11)·frame-local(40 30 20 10)·forward frame-formal(4321). **correct-or-loud 全 LOUD**: direction MISMATCH(ascending `[1:4]` actual/descending `[4:1]` formal→`lower_array_actual_packed` per-dim 체크가 진짜 §7.6 positional-copy guard)·base MISMATCH(`[3:0]` actual/`[4:1]` formal). 전 array-formal suite regression 0·flip 2(`multidim_array_formal.rs`·`hier_task_output_array.rs`의 `_stays_loud`→`_now_supported/_supported`).
+
+**교훈**: **"오라클 없음"이 "검증 불가"로 잘못 등치되면 tractable한 걸 과보수 gate한다**—iverilog가 formal을 거부해도 IEEE spec(§13.5.1 `m[k]==a[k]`)이 관측 가능한 correctness 계약을 제공하고, 구별 자릿값(non-square 654321)이 clean differential. **prior "correct-or-loud" 결정도 재검증 대상**(§4.5.205와 동형: 과보수 gate가 자기 머신러리를 불신한 경우)·저자가 만든 `idx-lo` flatten이 이미 direction-agnostic이라 reject만 제거하면 됨·direction/base MISMATCH guard는 별개로 유지(진짜 §7.6 guard). 신규 `nonzero_base_descending_array.rs`×14·flip 2. **이로써 배열 formal shape 스토리 완전 종결**(any-base × any-direction × 1-D/multi-dim × input/output/inout × local/hier/forward/frame-local)·**ROADMAP §0 재개 큐(#1·#2·#3) 소진 완료**.
+
 #### 4.5.210 forwarding a frame task/function's OWN unpacked-array FORMAL into a nested hierarchical TASK enable loud→supported (whole md-packed net forward) (2026-07-23, branch feat-hier-task-forward-array) ✅
 
 **컨텍스트**: ROADMAP §0 재개 follow-on #2(§4.5.208 잔여). §4.5.207/209가 hier-task array formal에 STATIC array actual(`byte a[4]`)을 지원(pack/unpack element-by-element)했으나, frame task/func가 **자기 array formal**을 nested hier enable로 forward(`task driver(input int a[]); u.tk(a);`)하면 loud였음. 갭 원인: forward된 formal `a`는 md-packed FRAME net(not static array)이라 (1) defer gate(`inline_task`)가 static array만 `arg_arrays`에 record→`a`는 else 분기로 새서 `lower_expr(a)`(whole array formal을 value로 lower)=loud, (2) resolve서 `arg_arrays[i]`=None→"needs bare whole-array actual" loud.

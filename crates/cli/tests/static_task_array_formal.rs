@@ -11,9 +11,9 @@
 //! case is hand-IEEE (§13.5.1/2 pass-by-value / value-result; static-local storage persists
 //! across calls, unchanged by the framing).
 //!
-//! Correct-or-loud: a non-zero-base DESCENDING array shape stays loud on the frame path.
-//! (§4.5.204 added OUTPUT/INOUT multi-dim; §4.5.205 added descending / mixed; §4.5.206 added
-//! non-zero-base ASCENDING — all supported.)
+//! Supported shapes: any base + any direction (§4.5.204 OUTPUT/INOUT multi-dim; §4.5.205
+//! descending / mixed; §4.5.206 non-zero-base ascending; §4.5.211 non-zero-base descending).
+//! A per-dim direction / base / size MISMATCH between actual and formal stays loud.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -208,14 +208,14 @@ fn static_non_zero_based_ascending_supported() {
 }
 
 #[test]
-fn static_non_zero_based_descending_stays_loud() {
-    // A non-zero-base DESCENDING formal (`m[4:1]`) stays loud (base+direction not cleanly
-    // verifiable — correct-or-loud).
+fn static_non_zero_based_descending_now_supported() {
+    // §4.5.211: a non-zero-base DESCENDING formal (`m[4:1]`) is supported (force-framed static
+    // task + `idx-lo` normalization). Distinct digits (4321) prove the forward mapping.
     let o = run("module tb; int acc;\n\
-         task p(input int m[4:1]); acc=m[1]; endtask\n\
-         initial begin int a[4:1]; a[1]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+         task p(input int m[4:1]); acc=m[4]*1000+m[3]*100+m[2]*10+m[1]; endtask\n\
+         initial begin int a[4:1]; a[4]=4;a[3]=3;a[2]=2;a[1]=1; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "static non-zero-base descending must be loud:\n{o}"
+        o.contains("4321"),
+        "static non-zero-base descending now supported:\n{o}"
     );
 }

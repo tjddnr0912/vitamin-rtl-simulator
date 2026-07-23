@@ -11,12 +11,12 @@
 //! (§13.5.1 pass-by-value: `m[i][j] = a[i][j]`, the body may write its own copy without
 //! touching the caller).
 //!
-//! Correct-or-loud: supported shapes are zero-based any-direction (ascending / descending /
-//! mixed, §4.5.205) and non-zero-base ASCENDING (`m[1:4]`, §4.5.206), as long as the actual's
-//! per-dim base + size + direction MATCH the formal's (handled consistently on both sides, so
-//! `m[i][j]=a[i][j]` forward). A per-dim base / direction / size / dim-count MISMATCH, a
-//! non-zero-base DESCENDING dim, a partial (whole sub-array) select, or a HIER enable with an
-//! array formal all stay loud. INPUT / OUTPUT / INOUT (§4.5.204) and a STATIC task
+//! Correct-or-loud: supported shapes are ANY base + ANY direction (zero-based any-direction
+//! §4.5.205, non-zero-base ascending §4.5.206, non-zero-base descending §4.5.211), as long as the
+//! actual's per-dim base + size + direction MATCH the formal's (handled consistently on both
+//! sides via `idx-lo`, so `m[i][j]=a[i][j]` forward). A per-dim base / direction / size /
+//! dim-count MISMATCH, a partial (whole sub-array) select, or (before §4.5.207/209) a HIER enable
+//! with an array formal stay loud. INPUT / OUTPUT / INOUT (§4.5.204) and a STATIC task
 //! (force-framed, §4.5.203) are all supported.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -415,15 +415,16 @@ fn non_zero_base_mixed_with_zero() {
 }
 
 #[test]
-fn non_zero_base_descending_stays_loud() {
-    // A non-zero-base DESCENDING dim (`[4:1]`) stays loud (base+direction not cleanly
-    // verifiable — correct-or-loud).
+fn non_zero_base_descending_now_supported() {
+    // §4.5.211: a non-zero-base DESCENDING dim (`[4:1]`) is supported — `flatten_word` normalizes
+    // `idx-lo` on both the pack and the read, so `m[k] == a[k]`. Distinct digits (4321) prove the
+    // forward mapping. See the dedicated `nonzero_base_descending_array.rs` suite.
     let o = run("module tb; int acc;\n\
-         task automatic p(input int m[4:1]); acc=m[1]; endtask\n\
-         initial begin int a[4:1]; a[1]=9; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
+         task automatic p(input int m[4:1]); acc=m[4]*1000+m[3]*100+m[2]*10+m[1]; endtask\n\
+         initial begin int a[4:1]; a[4]=4;a[3]=3;a[2]=2;a[1]=1; p(a); $display(\"%0d\",acc); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "non-zero-base descending must be loud:\n{o}"
+        o.contains("4321"),
+        "non-zero-base descending now supported:\n{o}"
     );
 }
 
