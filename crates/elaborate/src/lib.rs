@@ -18232,6 +18232,13 @@ impl<'s> Elaborator<'s> {
         // `$signed` wrap here). Built as AST + `lower_stmt` so the array-element write /
         // md-packed part-select read reuse the normal lowering. A NESTED call's writes
         // to a module net are caught by the frame subset check (correct-or-loud).
+        // §4.5.204: for a MULTI-DIM formal the LHS is a fully-indexed `caller[i0][i1]…`,
+        // decomposing the row-major flat index `i` over `af.dims` (outer→inner) — a partial
+        // `caller[i]` on a multi-dim array is a sub-array (loud). The packed temp is flat
+        // row-major (`array_formal_ext_dims`), so `packed[i*ew +: ew]` is exactly element
+        // `i`; ascending zero-based dims (the only supported multi-dim shape) have declared
+        // index == row-major coord, so the decomposed digits index directly. For a 1-D
+        // formal `strides == [1]` and the single digit is `i` — byte-identical to §4.5.193.
         for (arr_path, pname, af) in &out_array_unpacks {
             let sp = arr_path.span;
             let dec = |v: u32| ast::Expr {
@@ -18241,6 +18248,11 @@ impl<'s> Elaborator<'s> {
                 },
                 span: sp,
             };
+            let d = af.dims.len();
+            let mut strides = vec![1u32; d];
+            for k in (0..d.saturating_sub(1)).rev() {
+                strides[k] = strides[k + 1].saturating_mul(af.dims[k + 1].0.max(1));
+            }
             for i in 0..af.count {
                 let packed_read = ast::Expr {
                     kind: ast::ExprKind::IndexedPart {
@@ -18260,11 +18272,16 @@ impl<'s> Elaborator<'s> {
                     },
                     span: sp,
                 };
-                let lhs = ast::Lvalue::BitSelect {
-                    base: Box::new(ast::Lvalue::Ident(arr_path.clone())),
-                    index: Box::new(dec(i)),
-                    span: sp,
-                };
+                // Fully-indexed caller element for row-major flat position `i`.
+                let mut lhs = ast::Lvalue::Ident(arr_path.clone());
+                for (stride, &(size, _)) in strides.iter().zip(af.dims.iter()) {
+                    let idx = (i / *stride) % size.max(1);
+                    lhs = ast::Lvalue::BitSelect {
+                        base: Box::new(lhs),
+                        index: Box::new(dec(idx)),
+                        span: sp,
+                    };
+                }
                 let stmt = ast::Stmt::Blocking {
                     lhs,
                     delay: None,

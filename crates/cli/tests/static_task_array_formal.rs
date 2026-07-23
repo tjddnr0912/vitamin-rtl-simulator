@@ -11,8 +11,9 @@
 //! case is hand-IEEE (§13.5.1/2 pass-by-value / value-result; static-local storage persists
 //! across calls, unchanged by the framing).
 //!
-//! Correct-or-loud: a rejected array shape (descending, non-zero-based, output/inout
-//! multi-dim) stays loud on the frame path.
+//! Correct-or-loud: a rejected array shape (descending, non-zero-based) stays loud on the
+//! frame path. (§4.5.204 later added the OUTPUT/INOUT multi-dim copy-out, so those are now
+//! supported too.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -171,19 +172,20 @@ fn static_array_formal_refreshed_each_call() {
     assert!(o.contains("r1=3 r2=30"), "actual refreshed each call:\n{o}");
 }
 
-// ── correct-or-loud boundaries ───────────────────────────────────────────────
-
 #[test]
-fn static_output_multidim_stays_loud() {
-    // OUTPUT multi-dim copy-out is loud (whole-array assign into a multi-dim caller).
-    let o = run("module tb;\n\
-         task p(output int m[2][2]); m[0][0]=1; endtask\n\
-         initial begin int a[2][2]; p(a); $display(\"%0d\",a[0][0]); $finish; end endmodule\n");
-    assert!(
-        o.contains("E3009"),
-        "static output multi-dim must be loud:\n{o}"
+fn static_output_multidim_supported() {
+    // §4.5.204: a STATIC task with an OUTPUT multi-dim array formal — force-framed AND the
+    // multi-dim copy-out unpack. 1 2 3 4.
+    let o = run(
+        "module tb;\n\
+         task p(output int m[2][2]); m[0][0]=1;m[0][1]=2;m[1][0]=3;m[1][1]=4; endtask\n\
+         initial begin int a[2][2]; p(a);\n\
+           $display(\"%0d %0d %0d %0d\",a[0][0],a[0][1],a[1][0],a[1][1]); $finish; end endmodule\n",
     );
+    assert!(o.contains("1 2 3 4"), "static output multi-dim:\n{o}");
 }
+
+// ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
 fn static_descending_array_stays_loud() {

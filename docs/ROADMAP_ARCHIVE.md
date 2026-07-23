@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.204 OUTPUT/INOUT multi-dim array formal loud→supported (multi-index copy-out unpack) (2026-07-23, branch feat-output-multidim-array-formal) ✅
+
+**컨텍스트**: §4.5.202(input multi-dim)·§4.5.203(static task array formal) 후 오너 "계속". §4.5.202가 output/inout multi-dim을 loud로 남겼음 — §4.5.193 copy-out unpack이 `caller[i] = packed[i*ew +: ew]`로 **1-D 인덱스**라 multi-dim caller엔 partial-index(sub-array)→"assigning a non-array value to an unpacked array"(E3009).
+
+**NO ORACLE**(iverilog subroutine array port 거부)→hand-IEEE §13.5.2 pass-by-value-result.
+
+**fix(format 22 불변·copy-out unpack 1곳만)**: §4.5.193 unpack loop의 LHS를 1-D `caller[i]`에서 fully-indexed `caller[i0][i1]…`로 일반화 — row-major flat index `i`를 `af.dims`(outer→inner)로 분해(`strides[k]=∏sizes after k`·`idx[k]=(i/strides[k])%size[k]`)해 nested `BitSelect` chain 빌드. packed temp는 flat row-major(`array_formal_ext_dims`)라 `packed[i*ew +: ew]`가 정확히 element `i`·ascending zero-based(유일 지원 multi-dim shape)는 declared index=coord라 digit이 직접 인덱싱. 1-D는 `strides==[1]`·single digit=`i`→byte-identical. reserve(§4.5.202 `array_formal_ext_dims`)·out-bind push·INOUT copy-in(§4.5.202 multi-dim `lower_array_actual_packed`)은 이미 multi-dim 처리→**unpack만 잔여 갭**이었음.
+
+**적대 differential 全 MATCH(hand-IEEE)**: output 2×2(10 20 30 40)·INOUT 2×2 round-trip(6 6 7 9)·**static output 2×2**(force-frame §4.5.203+copy-out·1 2 3 4)·non-square 2×3(0 1 2 10 11 12)·3-D 2×2×2(sum=28)·signed byte output(-100 50·caller read 부호 유지)·**INOUT read-modify-write**(doubles·2 4 6 8·old 읽고 new 씀)·1-D output regression(7 8 9). **LOUD**: descending output multi-dim(§4.5.202 gate). flip 3(`multidim_array_formal.rs` output/inout multidim `_stays_loud`→`_supported`·`static_task_array_formal.rs` `static_output_multidim_stays_loud`→`_supported`).
+
+**교훈**: multi-dim formal 스토리를 **copy-out unpack 1곳 일반화로 대칭 완성**(reserve/copy-in은 §4.5.202가 이미 multi-dim 처리·unpack만 1-D였음—갭을 정확히 좁혀 최소 수정)·row-major decomposition(strides)이 nested `BitSelect`로 자연·1-D byte-identical(strides=[1]·single digit=i)·§4.5.203 force-frame과 자동 조합돼 static output multidim 커버. 신규 4 tests·flip 3.
+
 #### 4.5.203 STATIC (non-`automatic`) task with a FIXED unpacked-array formal loud→supported (force-frame·§4.5.200 골격 재사용) (2026-07-23, branch feat-static-task-array-formal) ✅
 
 **컨텍스트**: §4.5.202 적대 검증 중 발견한 인접 갭(T11/T11b). `task load(input int m[4]);`(static·array formal)이 vita E3009 "task `X` has an unpacked-array formal — unsupported" — 1-D·multi-dim·output/inout 전부. array formal의 md-packed value slot(§4.5.188 input/§4.5.193 output-inout/§4.5.202 multi-dim)이 FRAME 경로에만 존재하고 inline(static-task) 바인딩 경로엔 slot이 없어 `task automatic`만 지원됐음.

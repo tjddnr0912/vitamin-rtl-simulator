@@ -13,8 +13,9 @@
 //!
 //! Correct-or-loud: only ASCENDING zero-based dims (`[N]` / `[0:N-1]`) are supported — then
 //! declared index == flat position, unambiguous. A DESCENDING dim, a shape / dim-count
-//! mismatch, a partial (whole sub-array) select, a STATIC (non-framed) task, or a HIER
-//! enable with an array formal all stay loud.
+//! mismatch, a partial (whole sub-array) select, or a HIER enable with an array formal all
+//! stay loud. (INPUT and — since §4.5.204 — OUTPUT/INOUT are all supported; a STATIC task is
+//! force-framed, §4.5.203.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -273,30 +274,76 @@ fn hier_call_with_array_formal_stays_loud() {
 }
 
 #[test]
-fn output_multidim_array_formal_stays_loud() {
-    // Only an INPUT multi-dim array formal is supported. The OUTPUT copy-out (§4.5.193)
-    // unpacks the packed temp with a WHOLE-array assignment into the caller, which a
-    // multi-dim caller array rejects — loud (a multi-dim copy-out is a separate follow-on),
-    // never a silently mis-mapped write-back.
+fn output_multidim_array_formal_supported() {
+    // §4.5.204: OUTPUT multi-dim is now supported — the §4.5.193 copy-out unpack writes each
+    // caller element with a FULLY-indexed `caller[i0][i1]` (row-major decomposition of the
+    // flat index), not a whole-array assign. 10 20 30 40.
     let o = run("module tb;\n\
-         task automatic p(output int m[2][2]); m[0][0]=10; m[1][1]=40; endtask\n\
+         task automatic p(output int m[2][2]); m[0][0]=10; m[0][1]=20; m[1][0]=30; m[1][1]=40; endtask\n\
          initial begin int a[2][2]; p(a);\n\
-           $display(\"%0d %0d\", a[0][0], a[1][1]); $finish; end endmodule\n");
+           $display(\"%0d %0d %0d %0d\", a[0][0], a[0][1], a[1][0], a[1][1]); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "output multi-dim array formal must be loud:\n{o}"
+        o.contains("10 20 30 40"),
+        "output multi-dim array formal:\n{o}"
     );
 }
 
 #[test]
-fn inout_multidim_array_formal_stays_loud() {
-    // Likewise INOUT (copy-in + copy-out) — the copy-out half is loud for a multi-dim caller.
+fn inout_multidim_array_formal_supported() {
+    // §4.5.204: INOUT = copy-in (§4.5.202) + copy-out (§4.5.204). Read-modify-write doubles
+    // each element. 1 2 3 4 → 2 4 6 8.
     let o = run("module tb;\n\
-         task automatic p(inout int m[2][2]); m[0][0]=m[0][0]+1; endtask\n\
-         initial begin int a[2][2]; a[0][0]=5; p(a);\n\
-           $display(\"%0d\", a[0][0]); $finish; end endmodule\n");
+         task automatic dbl(inout int m[2][2]);\n\
+           for(int i=0;i<2;i++) for(int j=0;j<2;j++) m[i][j]=m[i][j]*2;\n\
+         endtask\n\
+         initial begin int a[2][2]; a[0][0]=1;a[0][1]=2;a[1][0]=3;a[1][1]=4; dbl(a);\n\
+           $display(\"%0d %0d %0d %0d\", a[0][0],a[0][1],a[1][0],a[1][1]); $finish; end endmodule\n");
+    assert!(o.contains("2 4 6 8"), "inout multi-dim array formal:\n{o}");
+}
+
+#[test]
+fn output_non_square_and_3d() {
+    // Non-square 2×3 output — the row-major decomposition must handle unequal dim sizes.
+    let o = run("module tb;\n\
+         task automatic p(output int m[2][3]);\n\
+           for(int i=0;i<2;i++) for(int j=0;j<3;j++) m[i][j]=i*10+j;\n\
+         endtask\n\
+         initial begin int a[2][3]; p(a);\n\
+           $display(\"%0d %0d %0d %0d %0d %0d\", a[0][0],a[0][1],a[0][2],a[1][0],a[1][1],a[1][2]); $finish; end endmodule\n");
+    assert!(o.contains("0 1 2 10 11 12"), "non-square output:\n{o}");
+}
+
+#[test]
+fn output_3d() {
+    // 3-D output, summed + spot-checked.
+    let o = run("module tb;\n\
+         task automatic p(output int m[2][2][2]);\n\
+           for(int i=0;i<2;i++) for(int j=0;j<2;j++) for(int k=0;k<2;k++) m[i][j][k]=i*4+j*2+k;\n\
+         endtask\n\
+         initial begin int a[2][2][2]; int s=0; p(a);\n\
+           for(int i=0;i<2;i++) for(int j=0;j<2;j++) for(int k=0;k<2;k++) s+=a[i][j][k];\n\
+           $display(\"sum=%0d a010=%0d a111=%0d\", s, a[0][1][0], a[1][1][1]); $finish; end endmodule\n");
+    assert!(o.contains("sum=28 a010=2 a111=7"), "3-D output:\n{o}");
+}
+
+#[test]
+fn output_signed_byte_multidim() {
+    // A signed `byte` element reads back negative from the caller after copy-out.
+    let o = run("module tb;\n\
+         task automatic p(output byte m[2][2]); m[0][0]=-8'sd100; m[1][1]=8'sd50; endtask\n\
+         initial begin byte a[2][2]; a[0][1]=0;a[1][0]=0; p(a);\n\
+           $display(\"%0d %0d\", a[0][0], a[1][1]); $finish; end endmodule\n");
+    assert!(o.contains("-100 50"), "signed output multi-dim:\n{o}");
+}
+
+#[test]
+fn descending_output_multidim_stays_loud() {
+    // A descending multi-dim output formal stays loud (not an ascending-zero-based shape).
+    let o = run("module tb;\n\
+         task automatic p(output int m[1:0][1:0]); m[0][0]=1; endtask\n\
+         initial begin int a[1:0][1:0]; p(a); $display(\"%0d\",a[0][0]); $finish; end endmodule\n");
     assert!(
         o.contains("E3009"),
-        "inout multi-dim array formal must be loud:\n{o}"
+        "descending output multi-dim must be loud:\n{o}"
     );
 }
