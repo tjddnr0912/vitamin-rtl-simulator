@@ -293,6 +293,19 @@ pub struct FuncMeta {
     /// still deserialises (missing ⇒ 0 ⇒ prior behaviour).
     #[serde(default)]
     pub str_params: u64,
+    /// §4.5.208: this frame TASK's body contains a DEFERRED hierarchical enable
+    /// (`u1.tk(...)` nested inside the body). The hier call's placeholder `Call.target`
+    /// is patched to the callee entry only at the finish-phase resolve — AFTER the
+    /// per-instance `resolve_frame_task_rejects` runs `compute_suspendable_tasks`, so the
+    /// two computes (elaborate pre-resolve, engine post-resolve) would classify the caller
+    /// DIFFERENTLY (breaking the §4.5.197 pure-function contract). This flag forces the
+    /// caller SUSPENDABLE in BOTH computes (`compute_suspendable_tasks`'s `force_suspend`) —
+    /// sound (over-approximation: a hier callee may suspend) and consistent (both derive it
+    /// from this serialized field). `false` (the common case) ⇒ byte-identical. `#[serde(
+    /// default)]` so an older trailer still deserialises (missing ⇒ false ⇒ prior behaviour;
+    /// old artifacts never had a frame-body hier call, so the default is exactly correct).
+    #[serde(default)]
+    pub has_hier_call: bool,
 }
 
 /// Frame-call sidecar (B1): `Vec<FuncMeta>` index-aligned to `ir.funcs`.
@@ -1071,6 +1084,13 @@ struct DeferredHierCall {
 struct DeferredHierTaskCall {
     proc: u32,
     call_block: u32,
+    /// §4.5.208: `Some(func_block)` when the enable is NESTED inside a frame TASK body (the
+    /// placeholder `Call` lives in `func_blocks`, not a process) — the resolver patches
+    /// `func_blocks[func_block].term` and inserts the `TaskCallInfo` into `task_calls_func`
+    /// (not `task_calls_proc`). `None` ⇒ a top-level process enable (`proc`/`call_block`).
+    /// The block id is process-LOCAL at emit and rebased by `+base` at frame-body finish
+    /// (`lower_frame_task_body`), exactly like `pending_task_calls`.
+    func_block: Option<u32>,
     prefix: String,
     path: Vec<String>,
     arg_ids: Vec<u32>,
@@ -3286,6 +3306,10 @@ struct Elaborator<'s> {
     /// B2: nested task-call sites collected during the current task-body lowering,
     /// keyed by process-LOCAL block id (rebased by +base when the body appends).
     pending_task_calls: Vec<(u32, TaskCallInfo)>,
+    /// §4.5.208: deferred hierarchical enables (`u1.tk(...)`) collected during the current
+    /// frame-task body lowering (`func_block` = process-LOCAL block, rebased by +base at
+    /// `lower_frame_task_body` finish, then moved to `deferred_hier_task_calls`).
+    pending_hier_task_calls: Vec<DeferredHierTaskCall>,
     // NetId → per-unpacked-dimension DESCENDING flag (`mem[3:0]` ⇒ [true]).
     // Recorded only when some dim is descending (absent = all ascending);
     // array ASSIGNMENT pairs elements positionally left-to-right in DECLARED
@@ -3880,6 +3904,7 @@ impl<'s> Elaborator<'s> {
             task_calls_func: BTreeMap::new(),
             frame_task_lowering: false,
             pending_task_calls: Vec::new(),
+            pending_hier_task_calls: Vec::new(),
             array_dim_desc: BTreeMap::new(),
             dim_desc: BTreeMap::new(),
             intro_kind: BTreeMap::new(),
@@ -5055,22 +5080,32 @@ impl<'s> Elaborator<'s> {
             if bind_err {
                 continue;
             }
-            self.task_calls_proc.insert(
-                (d.proc, d.call_block),
-                TaskCallInfo {
-                    callee: fid,
-                    in_binds,
-                    out_binds,
-                },
-            );
+            let info = TaskCallInfo {
+                callee: fid,
+                in_binds,
+                out_binds,
+            };
             let entry = self.funcs[fid as usize].entry;
-            if let Some(blk) = self
-                .processes
-                .get_mut(d.proc as usize)
-                .and_then(|p| p.body.get_mut(d.call_block as usize))
-            {
-                if let ir::Terminator::Call { target, .. } = &mut blk.term {
-                    *target = entry;
+            // §4.5.208: a NESTED-in-frame-body enable's placeholder `Call` lives in
+            // `func_blocks` and is keyed into `task_calls_func`; a top-level process enable
+            // uses `processes[proc]` + `task_calls_proc`. The engine reads the same two tables.
+            if let Some(fb) = d.func_block {
+                self.task_calls_func.insert(fb, info);
+                if let Some(blk) = self.func_blocks.get_mut(fb as usize) {
+                    if let ir::Terminator::Call { target, .. } = &mut blk.term {
+                        *target = entry;
+                    }
+                }
+            } else {
+                self.task_calls_proc.insert((d.proc, d.call_block), info);
+                if let Some(blk) = self
+                    .processes
+                    .get_mut(d.proc as usize)
+                    .and_then(|p| p.body.get_mut(d.call_block as usize))
+                {
+                    if let ir::Terminator::Call { target, .. } = &mut blk.term {
+                        *target = entry;
+                    }
                 }
             }
         }
@@ -12079,6 +12114,7 @@ impl<'s> Elaborator<'s> {
             ret_signed,
             auto_override: 0,
             str_params,
+            has_hier_call: false,
         });
         self.frame_func_names.push(method.name.clone()); // %m
         if let Some(ci) = self.class_table.get_mut(cname) {
@@ -16612,8 +16648,16 @@ impl<'s> Elaborator<'s> {
         // out-of-frame module/instance net lift to the suspendable path instead of being
         // loud-rejected as a subset. Elaborate and the engine pass the SAME `base_nets`.
         let base_nets: Vec<u32> = self.func_metas.iter().map(|m| m.base_net).collect();
-        let full =
-            ir::compute_suspendable_tasks(&self.funcs, &self.func_blocks, &self.stmts, &base_nets);
+        // §4.5.208: `has_hier_call` forces a frame task with a deferred hier enable
+        // suspendable — the SAME derivation the engine uses (both from `FuncMeta`).
+        let force_suspend: Vec<bool> = self.func_metas.iter().map(|m| m.has_hier_call).collect();
+        let full = ir::compute_suspendable_tasks(
+            &self.funcs,
+            &self.func_blocks,
+            &self.stmts,
+            &base_nets,
+            &force_suspend,
+        );
         let pending = std::mem::take(&mut self.frame_task_pending);
         for (fid, name, base_net, locals_len, unsafe_repeat) in pending {
             if full.contains(&fid) {
@@ -17676,6 +17720,7 @@ impl<'s> Elaborator<'s> {
             ret_signed,
             auto_override,
             str_params,
+            has_hier_call: false,
         });
         self.frame_func_names.push(func.name.name.clone()); // %m
     }
@@ -17989,6 +18034,7 @@ impl<'s> Elaborator<'s> {
             ret_signed: false,
             auto_override,
             str_params,
+            has_hier_call: false,
         });
         self.frame_func_names.push(task.name.name.clone()); // %m
     }
@@ -18001,6 +18047,7 @@ impl<'s> Elaborator<'s> {
         let scope_seg = format!("$func${name}");
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
+        let saved_hier_pending = std::mem::take(&mut self.pending_hier_task_calls);
         self.frame_task_lowering = true;
         // v7 P2-C (mirror of lower_frame_func_body): record `string`-declared task
         // formals so a `string` relational compare in the body routes through
@@ -18052,6 +18099,7 @@ impl<'s> Elaborator<'s> {
         self.in_frame_body = saved_frame;
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
+        let hier_pending = std::mem::replace(&mut self.pending_hier_task_calls, saved_hier_pending);
         self.frame_task_lowering = saved_ftl;
         // Capture the block base AFTER the body closure (round-7): a `pkg::f()` inside
         // the task body reserves+lowers its frame on demand, appending blocks during the
@@ -18067,6 +18115,17 @@ impl<'s> Elaborator<'s> {
         // rebase the nested task-call sites' (process-local) block keys to global.
         for (local_block, info) in pending {
             self.task_calls_func.insert(base + local_block, info);
+        }
+        // §4.5.208: rebase the frame-body hier enables' (process-local) blocks to global
+        // `func_blocks` ids, mark this task `has_hier_call` (→ forced suspendable in both
+        // `compute_suspendable_tasks` computes), and hand them to the finish-phase resolver.
+        if !hier_pending.is_empty() {
+            self.func_metas[fid as usize].has_hier_call = true;
+            for mut d in hier_pending {
+                d.func_block = Some(base + d.call_block);
+                d.call_block += base;
+                self.deferred_hier_task_calls.push(d);
+            }
         }
         let m = self.func_metas[fid as usize];
         // Round-14 V3/V4: DEFER the frame-TASK reject decision to `resolve_frame_task_rejects`
@@ -19797,14 +19856,14 @@ impl<'s> Elaborator<'s> {
             // with a placeholder `Terminator::Call` + a fresh ret block, and record the
             // process key `(cur_proc, call_block)` + instance path.
             // `resolve_deferred_hier_task_call` builds the per-instance `TaskCallInfo`
-            // (callee fid + positional in-binds) into `task_calls_proc` after every
-            // instance's frame tasks are in `hier_tasks`. Only a TOP-LEVEL process enable
-            // is deferred: a nested-in-frame-body hier enable would be keyed by
-            // `task_calls_func` and its `Call.target` walked for suspend transitivity
-            // (`compute_suspendable_tasks`), so it stays loud (correct-or-loud). Named
-            // args can't be positionally reordered without the callee formals → loud.
+            // (callee fid + positional in-binds) into `task_calls_proc` (a process enable)
+            // OR `task_calls_func` (§4.5.208: a NESTED-in-frame-body enable) after every
+            // instance's frame tasks are in `hier_tasks`. A frame-body enable additionally
+            // sets `FuncMeta.has_hier_call` so `compute_suspendable_tasks` forces the caller
+            // task suspendable consistently (the placeholder `Call.target` is invisible to the
+            // pre-resolve elaborate compute). Named args can't be positionally reordered
+            // without the callee formals → loud.
             if name.segments.len() >= 2
-                && !self.frame_task_lowering
                 && args
                     .iter()
                     .all(|a| !matches!(a.kind, ast::ExprKind::NamedArg { .. }))
@@ -19846,15 +19905,29 @@ impl<'s> Elaborator<'s> {
                     ret_bb: ret.raw(),
                 });
                 b.start_block(ret);
-                self.deferred_hier_task_calls.push(DeferredHierTaskCall {
+                let call = DeferredHierTaskCall {
                     proc: self.cur_proc,
                     call_block,
+                    // §4.5.208: a frame-body enable's block is process-LOCAL now; it is
+                    // rebased to a global `func_blocks` id at `lower_frame_task_body` finish.
+                    func_block: if self.frame_task_lowering {
+                        Some(call_block)
+                    } else {
+                        None
+                    },
                     prefix: self.cur_prefix.clone(),
                     path: name.segments.iter().map(|s| s.name.clone()).collect(),
                     arg_ids,
                     arg_lvals,
                     arg_arrays,
-                });
+                };
+                if self.frame_task_lowering {
+                    // Collected per-body; rebased + moved to `deferred_hier_task_calls` at the
+                    // body's finish (which also sets `FuncMeta.has_hier_call`).
+                    self.pending_hier_task_calls.push(call);
+                } else {
+                    self.deferred_hier_task_calls.push(call);
+                }
                 return;
             }
             self.error(

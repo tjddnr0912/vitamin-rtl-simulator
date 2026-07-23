@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.208 hierarchical TASK enable NESTED in a frame-task body loud→supported (format_version 22→23 · FuncMeta.has_hier_call force-suspend) (2026-07-23, branch feat-hier-task-nested) ✅
+
+**컨텍스트**: 오너 "둘 다 순차로"(H-C)·format bump 명시 승인. §4.5.197/201이 hier enable을 TOP-LEVEL process에서만 defer(nested-in-frame-body는 loud "hierarchical task call (deferred)"). 근본 원인: nested enable의 placeholder `Call.target`은 finish-phase resolve서만 patch되는데, **per-instance `resolve_frame_task_rejects`(`compute_suspendable_tasks`)가 그 前에** 실행→elaborate(pre-resolve·placeholder target→callee suspend 미전파)와 engine(post-resolve·patched→전파)의 suspend 분류 **divergence**→§4.5.197 pure-function 계약 위반(P0 suspend-misclassification).
+
+**ORACLE**: array formal과 달리 iverilog가 scalar hier enable 지원→iverilog-differential(**suspendable callee 포함**).
+
+**설계(sound over-approximation·format 22→23)**: **`FuncMeta.has_hier_call: bool`**(B1 func_table staged-trailer sidecar·`#[serde(default)]`)—frame task body에 deferred hier enable 있으면 set. `compute_suspendable_tasks`에 `force_suspend: &[bool]` param 추가(func_metas/func_table서 derive·양 caller 동일)→has_hier_call task를 **BOTH computes서 일관되게 suspendable 강제**(callee suspend 여부 무관·over-approximation SOUND[suspendable `&mut` path는 non-suspending callee도 실행]·placeholder-vs-patched target divergence 무의미화). frame-body defer machinery: `inline_task`의 `!frame_task_lowering` gate 제거→frame body서도 defer·`DeferredHierTaskCall.func_block: Option<u32>`(Some=frame-body→func_blocks/task_calls_func·None=proc)·`pending_hier_task_calls`(body별 수집·finish서 +base rebase[pending_task_calls 미러]→deferred_hier_task_calls로 이동+has_hier_call set)·resolve가 func_block 있으면 func_blocks patch+task_calls_func insert.
+
+**적대 differential 全 MATCH(iverilog oracle)**: basic(cnt=1)·repeated(cnt=3)·**★suspendable callee `#5`(at 5 t0=9·caller 강제 suspendable 검증)**·input formal passthrough(acc=42)·output formal copy-out(x=42)·local work+hier(lc=20 cnt=2)·per-instance isolation(105 205). **correct-or-loud**: named args·frame-formal array를 nested hier로 forward(actual이 md-packed frame net·static array 아님→follow-on). **flip 2**(§4.5.197 `hier_task_nested_in_frame_body_stays_loud`→supported·`obs.rs` format_version 22→23).
+
+**교훈**: **pre-resolve vs post-resolve compute divergence는 sidecar flag로 over-approximate하면 sound+consistent**(has_hier_call을 양 caller가 동일 FuncMeta서 derive→placeholder target 무관하게 일치)·**suspend 분류(P0)는 iverilog oracle로 suspendable callee 필수 검증**·frame-body defer는 pending_task_calls rebase 패턴 미러·**format bump는 staged 흐름(func_table 직렬화) 때문 불가피**(engine이 post-resolve로 "hier call이었는지" 재-derive 불가). 신규 `hier_task_nested.rs`×9·flip 2. **잔여 follow-on**: frame-formal array를 nested hier로 forward.
+
 #### 4.5.207 hierarchical TASK enable with an INPUT unpacked-array formal loud→supported (defer actual-net + resolve-time pack) (2026-07-23, branch feat-hier-task-array-formal) ✅
 
 **컨텍스트**: 오너 "둘 다 순차로"(H-B hier-task array formal + H-C nested-in-frame). §4.5.197/201이 hier-task scalar formal(input/output/inout)을 지원했으나 array formal은 loud("scalar formals — no array"). 갭 원인 둘: (1) 호출 시점 whole-array actual을 value로 lower 불가, (2) callee array shape이 child instance elaborate 전까지 미지.

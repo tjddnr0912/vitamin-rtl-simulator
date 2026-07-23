@@ -652,8 +652,16 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // `func_metas` threaded verbatim) makes the classifier frame-aware — a task that
     // writes an out-of-frame (module/instance) net is suspendable, not loud.
     let base_nets: Vec<u32> = st.func_table.iter().map(|m| m.base_net).collect();
-    st.suspendable_tasks =
-        sim_ir::compute_suspendable_tasks(&st.ir.funcs, &st.ir.blocks, &st.ir.stmts, &base_nets);
+    // §4.5.208: `has_hier_call` forces a frame task with a deferred hier enable suspendable —
+    // consistently with elaborate (both derive it from the same serialized `FuncMeta`).
+    let force_suspend: Vec<bool> = st.func_table.iter().map(|m| m.has_hier_call).collect();
+    st.suspendable_tasks = sim_ir::compute_suspendable_tasks(
+        &st.ir.funcs,
+        &st.ir.blocks,
+        &st.ir.stmts,
+        &base_nets,
+        &force_suspend,
+    );
 
     let reason = {
         let mut sched = Scheduler::new(&mut st, opts.max_deltas, opts.time_limit, opts.fork_modes);

@@ -842,6 +842,7 @@ pub fn compute_suspendable_tasks(
     blocks: &[sim_ir::BasicBlock],
     stmts: &[sim_ir::Stmt],
     base_nets: &[u32],
+    force_suspend: &[bool],
 ) -> std::collections::BTreeSet<u32> {
     use sim_ir::{DisableKind, Stmt, Terminator};
     // A statement is a suspend signal unless it is a blocking assign or a `disable
@@ -935,6 +936,18 @@ pub fn compute_suspendable_tasks(
                 }
                 Terminator::Return => {}
             }
+        }
+    }
+    // §4.5.208: FORCE a frame task with a deferred hier enable suspendable. The callee's
+    // suspend status is invisible through the placeholder `Call.target` when elaborate runs
+    // this (per-instance, pre-resolve), so both computes over-approximate CONSISTENTLY from
+    // the same `FuncMeta.has_hier_call` flag (threaded verbatim to both callers) — a sound
+    // over-approximation (the suspendable `&mut` path is a superset that also runs a
+    // non-suspending callee). Applied to `direct` BEFORE the transitive closure so a caller
+    // of the forced task is lifted too.
+    for (i, d) in direct.iter_mut().enumerate() {
+        if force_suspend.get(i).copied().unwrap_or(false) {
+            *d = true;
         }
     }
     // Transitive closure: a task that calls a suspendable task is itself suspendable.

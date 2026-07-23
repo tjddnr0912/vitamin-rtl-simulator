@@ -202,17 +202,15 @@ fn hier_task_named_args_stays_loud() {
 }
 
 #[test]
-fn hier_task_nested_in_frame_body_stays_loud() {
-    // A hier enable NESTED inside another frame TASK body is keyed by task_calls_func and
-    // its Call.target would be walked for suspend transitivity — kept loud (top-level only).
+fn hier_task_nested_in_frame_body_supported() {
+    // §4.5.208: a hier enable NESTED inside another frame TASK body is now supported —
+    // deferred into task_calls_func, and the caller is forced suspendable via
+    // FuncMeta.has_hier_call (format 22→23). Full coverage in `hier_task_nested.rs`. cnt=1.
     let o = run(
         "module sub; int cnt; task automatic bump(); cnt = cnt + 1; endtask endmodule\n\
          module t; sub u();\n\
          task automatic driver(); u.bump(); endtask\n\
          initial begin driver(); $display(\"cnt=%0d\", u.cnt); $finish; end endmodule\n",
     );
-    assert!(
-        o.contains("E3009"),
-        "nested-in-frame hier task must be loud:\n{o}"
-    );
+    assert!(o.contains("cnt=1"), "nested-in-frame hier task:\n{o}");
 }
