@@ -11,12 +11,12 @@
 //! dim + the elem_w entry. `m[i][j]` then routes through the SAME N-D packed chain
 //! (`expr_packed_chain`/`lval_packed_chain` → `flatten_word`) that module arrays use:
 //! offset `i*∏inner*elem_w + j*elem_w`, width `elem_w`. No new offset math, format 22
-//! unchanged. A FORMAL stays 1-D (`classify_array_formal` rejects multi-dim — the formal
-//! binding packs a single dimension).
+//! unchanged. (§4.5.202 later extended the SAME md-packed slot to a multi-dim ascending
+//! array FORMAL — see `multidim_array_formal.rs`.)
 //!
 //! Correct-or-loud: a PARTIAL index (`m[i]` on a 2-D array — fewer indices than dims) has
-//! no whole-sub-array value and is loud (not a silent multi-element slice); a whole 2-D
-//! array as a subroutine arg is loud. iverilog is the oracle for every supported case.
+//! no whole-sub-array value and is loud (not a silent multi-element slice). iverilog is the
+//! oracle for every supported case.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -134,14 +134,17 @@ fn partial_index_read_stays_loud() {
 }
 
 #[test]
-fn whole_multidim_array_arg_stays_loud() {
-    // Passing a whole 2-D array as a subroutine arg is loud (the formal binding is 1-D).
+fn whole_multidim_array_arg_now_supported() {
+    // §4.5.202: passing a whole 2-D array as a subroutine arg is now SUPPORTED — a multi-dim
+    // ascending array FORMAL is backed by the same N-D md-packed slot. Here the actual is a
+    // frame-LOCAL 2-D array (`m`), forwarded whole to `s2`'s matching formal (identical
+    // md-packed layout). s = a[0][0] = m[0][0] = 7.
     let o = run("module t;\n\
          function automatic int s2(input int a[2][2]); return a[0][0]; endfunction\n\
          task automatic tk(); int m[2][2]; m[0][0]=7; $display(\"s=%0d\", s2(m)); endtask\n\
          initial begin tk(); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "whole multi-dim array arg must be loud:\n{o}"
+        o.contains("s=7"),
+        "whole multi-dim array arg (formal):\n{o}"
     );
 }

@@ -247,16 +247,19 @@ fn uarr_out_of_range_index_reads_x() {
     assert_eq!(run(src).0, "o=xx");
 }
 
-// ───────────────────────── correct-or-LOUD boundaries ─────────────────────────
-
 #[test]
-fn uarr_loud_multidim_formal() {
+fn uarr_multidim_formal_now_supported() {
+    // §4.5.202: an ASCENDING multi-dim unpacked-array formal (`a[0:1][0:1]`) is now
+    // supported (the N-D md-packed slot). o = a[0][0] = g[0][0] = 0x55. (A DESCENDING or
+    // non-zero-based multi-dim formal stays loud — see `multidim_array_formal.rs`.)
     let src = "module m(output logic [7:0] o);\n\
         function automatic logic [7:0] f(input logic [7:0] a[0:1][0:1]); return a[0][0]; endfunction\n\
         logic [7:0] g[0:1][0:1];\n\
         initial begin g[0][0]=8'h55; o=f(g); $display(\"o=%h\",o); end endmodule";
-    assert!(!ok(src), "multi-dim unpacked formal must be loud");
+    assert_eq!(run(src).0, "o=55");
 }
+
+// ───────────────────────── correct-or-LOUD boundaries ─────────────────────────
 
 #[test]
 fn uarr_loud_non_zero_based() {

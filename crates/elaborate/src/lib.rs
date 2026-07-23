@@ -16293,15 +16293,14 @@ impl<'s> Elaborator<'s> {
         // so opposite directions would silently reverse the elements).
         if let Some(net) = net_opt {
             if let Some(caller_af) = self.frame_arr_formal_meta.get(&net).cloned() {
-                // §4.5.199: a MULTI-DIM frame-local md-packed net (`dims.len() > 1`) cannot
-                // forward as a whole-array actual to a (1-D) formal — the flat layouts
-                // differ, so require a matching SINGLE-dim shape; a multi-dim actual falls
-                // to the loud mismatch below (correct-or-loud).
-                if caller_af.dims.len() == 1
-                    && caller_af.count == af.count
-                    && caller_af.elem_w == af.elem_w
-                    && caller_af.ascending == af.ascending
-                {
+                // §4.5.202: forward the caller's OWN md-packed array formal as a whole-net
+                // value when the per-dim shape (`dims`: size + direction, outer→inner) and
+                // element width MATCH — then both slots share the identical
+                // `array_formal_ext_dims` flat layout, so the whole value is bit-identical
+                // and means the same in the callee. Covers 1-D (byte-identical to the old
+                // count/ascending check) AND a matching multi-dim forward; any shape /
+                // direction / dim-count mismatch falls to the loud error below.
+                if caller_af.dims == af.dims && caller_af.elem_w == af.elem_w {
                     return self.push_expr(ir::Expr::Signal { net, word: None });
                 }
                 self.error(
@@ -16350,29 +16349,35 @@ impl<'s> Elaborator<'s> {
         // (`m[0:1][0:1]` for `a[0:3]`) is a shape mismatch; a direction mismatch
         // (formal `[3:0]`, actual `[0:3]`) would make the index-based md-packed read
         // disagree with §7.6's POSITIONAL copy (a silent value reversal). Both loud.
-        match self.dim_desc.get(&net) {
-            Some((dims, unpacked_n)) if *unpacked_n == 1 && !dims.is_empty() => {
-                let (m, l) = dims[0];
-                let actual_asc = m < l;
-                if actual_asc != af.ascending {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "unpacked-array actual and formal have OPPOSITE dimension \
-                         directions (one `[0:N-1]`, one `[N-1:0]`) — §7.6 copies by \
-                         position, so this would silently reverse the elements; \
-                         declare them the same direction",
-                    );
-                    return self.placeholder_expr();
-                }
+        // §4.5.202: the actual's per-dim shape (size + direction, outer→inner) must MATCH
+        // the formal's `dims`. §7.6 copies by POSITION into the md-packed slot, so a
+        // differing size, opposite direction (`[0:N-1]` vs `[N-1:0]` — silently reverses a
+        // dim), or dim-count would mis-map elements. For a 1-D formal this is the
+        // long-standing direction check; for a multi-dim ascending formal (`int m[2][2]`)
+        // every dim must line up. Read-only, so clone the small dim table out before the
+        // error path (which needs `&mut self`).
+        let actual_dd = self.dim_desc.get(&net).cloned();
+        let shape_ok = match &actual_dd {
+            Some((dims, unpacked_n))
+                if *unpacked_n == af.dims.len() && dims.len() >= af.dims.len() =>
+            {
+                af.dims.iter().enumerate().all(|(k, &(fsize, fasc))| {
+                    let (m, l) = dims[k];
+                    let actual_asc = m < l;
+                    let actual_size = (m.abs_diff(l) + 1).min(u32::MAX as u64) as u32;
+                    actual_size == fsize && actual_asc == fasc
+                })
             }
-            _ => {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "an unpacked-array actual must be a single-dimension array \
-                     matching the formal (a multi-dimensional actual is unsupported)",
-                );
-                return self.placeholder_expr();
-            }
+            _ => false,
+        };
+        if !shape_ok {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "an unpacked-array actual must match the formal's per-dimension shape and \
+                 direction (a differing size, direction, or dimension count would silently \
+                 mis-map elements under §7.6 positional copy)",
+            );
+            return self.placeholder_expr();
         }
         // `Signal.word` is an ExprId (the flat word OFFSET expr), NOT a literal
         // index — read flat position `k` via a `Const k` word expr. Flat words are
@@ -17098,15 +17103,22 @@ impl<'s> Elaborator<'s> {
             p.signed,
             p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
         );
-        // §4.5.199: `classify_unpacked_array` now accepts a MULTI-DIM shape (for a frame-
-        // LOCAL array), but a subroutine array FORMAL is 1-D only — the md-packed value
-        // slot + the call-site whole-array concat pack a single dimension, so a 2-D formal
-        // would mis-bind (silent-wrong). Keep it loud (correct-or-loud); multi-dim is a
-        // frame-local-only feature.
+        // §4.5.202: a MULTI-DIM unpacked-array FORMAL (`int m[2][2]`) is supported when
+        // every unpacked dim is ASCENDING zero-based (`[N]` / `[0:N-1]`). Then declared
+        // index == flat position, so the md-packed slot (`array_formal_ext_dims`, one
+        // POSITION-indexed packed dim per unpacked dim) reads `m[i][j]` at flat `i*inner+j`
+        // and a whole-array actual with the SAME per-dim shape packs element-for-element —
+        // `m[i][j] = a[i][j]`, hand-IEEE §13.5.1 pass-by-value (iverilog rejects the whole
+        // construct: "unpacked dimensions on subroutine ports"). A DESCENDING dim (`[N-1:0]`)
+        // stays loud: the md-packed read is index-major but the actual's physical storage is
+        // declaration-major, so a passthrough would silently reverse elements within that
+        // dim. A 1-D formal (ascending OR descending) keeps its long-standing contract —
+        // `dims.len() > 1` is the only gate here.
         if let Some(Ok(af)) = &cls {
-            if af.dims.len() > 1 {
+            if af.dims.len() > 1 && af.dims.iter().any(|&(_, asc)| !asc) {
                 return Some(Err(
-                    "a multi-dimensional unpacked-array formal (only a single dimension is supported)",
+                    "a multi-dimensional unpacked-array formal with a descending dimension \
+                     (only ascending `[N]` / `[0:N-1]` dims are supported)",
                 ));
             }
         }
@@ -17229,22 +17241,14 @@ impl<'s> Elaborator<'s> {
         }))
     }
 
-    /// The md-packed `packed_dims` extents for a SUPPORTED 1-D array formal, in the
-    /// `packed_extents` format `(lo, width, ascending)` (outer→inner): zero-based
-    /// descending dims `[count-1:0][elem_w-1:0]` ⇒ `lo=0`, `ascending=false` for both,
-    /// so `flatten_word` maps element index `i` to bit offset `i*elem_w` (no `Sub`).
-    /// Total slot width = `count*elem_w`.
-    fn array_formal_ext(count: u32, elem_w: u32) -> Vec<(u32, u32, bool)> {
-        vec![(0, count, false), (0, elem_w, false)]
-    }
-
-    /// §4.5.199: the md-packed `packed_dims` extents for an N-D frame-local array — one
-    /// POSITION-INDEXED entry per unpacked dim (`lo=0`, `ascending=false`; the declared
-    /// per-dim direction affects only the §7.6 positional-copy check, never the element
-    /// offset) + the trailing element bit-width entry. `flatten_word` over these dims
-    /// maps `m[i][j]` (row-major) to bit offset `i*(∏inner sizes)*elem_w + j*elem_w` and
-    /// the trailing-dims product gives the `elem_w` part-select width. For a single dim
-    /// this is byte-identical to `array_formal_ext(count, elem_w)`.
+    /// §4.5.199: the md-packed `packed_dims` extents for an N-D frame-local array OR a
+    /// multi-dim ascending array FORMAL (§4.5.202) — one POSITION-INDEXED entry per unpacked
+    /// dim (`lo=0`, `ascending=false`; the declared per-dim direction affects only the §7.6
+    /// positional-copy check, never the element offset) + the trailing element bit-width
+    /// entry. `flatten_word` over these dims maps `m[i][j]` (row-major) to bit offset
+    /// `i*(∏inner sizes)*elem_w + j*elem_w` and the trailing-dims product gives the `elem_w`
+    /// part-select width. For a single dim this yields `[(0, count, false), (0, elem_w,
+    /// false)]` — the long-standing byte-identical 1-D formal layout.
     fn array_formal_ext_dims(dims: &[(u32, bool)], elem_w: u32) -> Vec<(u32, u32, bool)> {
         dims.iter()
             .map(|&(sz, _)| (0u32, sz, false))
@@ -17376,7 +17380,10 @@ impl<'s> Elaborator<'s> {
                     match cls {
                         Ok(af) => {
                             let (count, elem_w) = (af.count, af.elem_w);
-                            let ext = Self::array_formal_ext(count, elem_w);
+                            // §4.5.202: N-D packed_dims (one position-indexed entry per
+                            // unpacked dim + the elem_w entry). Byte-identical to
+                            // `array_formal_ext(count, elem_w)` for a 1-D formal.
+                            let ext = Self::array_formal_ext_dims(&af.dims, elem_w);
                             let w = count.saturating_mul(elem_w).max(1);
                             let net = s.nets.len() as u32;
                             s.add_net(
@@ -17753,7 +17760,9 @@ impl<'s> Elaborator<'s> {
                 ) {
                     if let Some(Ok(af)) = s.classify_array_formal(p) {
                         let (count, elem_w) = (af.count, af.elem_w);
-                        let ext = Self::array_formal_ext(count, elem_w);
+                        // §4.5.202: N-D packed_dims for a multi-dim ascending formal
+                        // (`int m[2][2]`); byte-identical to `array_formal_ext` for 1-D.
+                        let ext = Self::array_formal_ext_dims(&af.dims, elem_w);
                         let w = count.saturating_mul(elem_w).max(1);
                         s.add_net(
                             &p.name.name,
