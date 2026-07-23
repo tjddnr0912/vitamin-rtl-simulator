@@ -8,6 +8,22 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.212 SILENT-WRONG 수정: size-cast `N'(expr)` context-width 미전파 → supported (size-cast 전용 재귀 ctx-width lowering) (2026-07-23, branch feat-size-cast-context-width) ✅
+
+**컨텍스트**: 오너 "가장 높은 우선순위 진행". ROADMAP §1 최우선=오라클 있는 CRITICAL silent-wrong. 큐 소진 후 **fresh-area iverilog 차분 probe**(§4.5.180/185 방식·~80 관용구 스윕)로 재선정→vita가 대부분 견고했으나 **size-cast `N'(expr)` context width 미전파**가 재현(문서화된 §2 DEEP 항목·`8'(a*b)`=13 vs iverilog 45·공통·高임팩트). size cast가 inner 산술을 operand self-width로 계산 후 result만 resize→carry 소실.
+
+**ORACLE 있음(iverilog)**: size-cast width/sign은 iverilog가 정확→exhaustive 차분 가능(array-formal 슬라이스와 대조).
+
+**"DEEP" 재평가**: §2는 "새 IR Resize 노드(format bump) 또는 fill-only ctx 머신을 26-caller에 확장(회귀 위험)"이라 defer했으나, **size-cast 전용 재귀 헬퍼로 격리하면 공유 `lower_ctx_or_plain`/`lower_expr_ctx` 미변경**→회귀 표면 없음. `lower_expr_ctx`가 이미 연산자별 ctx 전파 구조를 갖췄으나 **non-fill operand를 plain `lower_expr`(self-width)로 lower**하는 게 핵심 갭이었음.
+
+**signedness 규칙 확정(iverilog 실측)**: `8'((signed -1 * signed 1)+unsigned 0)`=15(sign-ext면 255)·`8'(signed -3 * unsigned 5)`=65(sign-ext면 241)→**§11.8.1: 표현식에 unsigned operand 하나라도 있으면 전체 unsigned→모든 leaf(signed 포함) zero-extend**. all-signed면 sign-extend. 즉 **단일 top-level sign이 모든 context-det leaf에 균일 적용**(per-op mixed 처리 불필요).
+
+**설계(format 23 불변·全 elaborate-transient·IR-0)**: (1) **`is_size_ctx_operation(e)`**—operand가 context-det 연산(arith/bitwise/shift/`**`·unary +/-/~·ternary)인지(bare leaf/select/concat/cmp=self-det→기존 경로 byte-identical). (2) **`ast_ctx_signed(e)->Option<bool>`**—전체 sign(arith=`&&` of operands·shift/pow=left·cmp/concat/select=unsigned·IntLit=`parse_int_literal().signed`·Ident=net.signed)·param/call leaf=None. (3) **`lower_size_ctx(e,n,ext)`**—context-det 연산자 재귀(arith=양 operand ctx-det·shift/pow=base ctx-det+amount self-det·unary±~=operand·ternary=branches·cond self-det), 각 self-det leaf는 **`lower_size_leaf`**로 N에 extend(`extend_to(_,ext)`)+sign 재-stamp(`ext`면 `$signed`·아니면 signed leaf에 `$unsigned`→signed division/ashr/comparison 의미 보존). (4) Size + Named-const cast arm 배선: `is_size_ctx_operation && ast_ctx_signed=Some(ext)`면 `lower_size_ctx`·아니면 기존 `lower_ctx_or_plain`(param/call leaf fallback=회귀 0).
+
+**적대 differential 全 MATCH(iverilog·+23 tests)**: unsigned mul(45)/add-carry(10000)/shl(011110)/sub-borrow(11111)/mul16(fe01)/shift-var(0111100)/nested(33)/divmod(28 4)/power(27)·signed mul(-15)/ashl(-16)/division(-14 -2)/ashr(-16)/unary-neg(-3)·**mixed-sign(15·65·zero-ext all)**·ternary(45)/nested-cast(90)·narrowing(e)/leaf-unchanged(05 b)/cmp-1bit(1)/fill(11111111)/signed-add-no-overflow(-2). **랜덤 값 sweep 14/14 MATCH**(unsigned+signed 다양 폭). 전 workspace suite regression 0(leaf-operand size-cast는 self-det→byte-identical).
+
+**교훈**: **"DEEP"이 "공유 인프라 변경 필요"를 의미할 때, 전용 재귀 헬퍼로 격리하면 회귀 표면 없이 tractable**(§4.5.211 "no-oracle≠not-verifiable"와 동형: prior defer 근거 재평가)·`lower_expr_ctx`의 연산자별 ctx 구조를 재사용하되 non-fill leaf widening만 추가·**signedness는 §11.8.1 top-level 균일 규칙(iverilog 실측으로 확정)이라 per-op mixed 불필요**·sign 재-stamp가 signed division/shift 의미 보존·param/call leaf fallback이 회귀 0 보장·iverilog 오라클로 exhaustive+random 차분 검증. 신규 `size_cast_context_width.rs`×23. **잔여 residual**: param/call leaf(`8'(P*a)`·`4'(f(x))`)는 fallback→self-width(sign 판정 불가·follow-on).
+
 #### 4.5.211 NON-ZERO-BASE DESCENDING unpacked-array formal loud→supported (over-conservative reject removed) (2026-07-23, branch feat-nonzero-base-descending) ✅
 
 **컨텍스트**: ROADMAP §0 재개 follow-on #3. 오너 질문 "해당 방안이 구현 리스크가 너무 커? 시도해 볼만한 요소가 없나?"—§4.5.206이 non-zero-base DESCENDING(`int m[4:1]`)을 "base+direction 상호작용이 mental model로 예측 불가·cleanly-verifiable 불가"라며 loud로 gated하고 "재개하려면 상용 simulator 오라클 확보 선행"이라 기록했음. 오너 push-back에 "blocked"로만 두지 않고 실제 tractability를 조사.

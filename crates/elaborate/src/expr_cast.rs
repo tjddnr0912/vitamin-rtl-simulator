@@ -45,7 +45,19 @@ impl Elaborator<'_> {
                 // literal (`'1`/`'x`/`'z`) grows to N bits (a bare `lower_expr` sizes
                 // it to 1 bit, then `lower_size_cast` zero-extends it = silent-wrong:
                 // `8'('1)` gave `01` instead of `ff`). Byte-identical for a non-fill.
-                let e = self.lower_ctx_or_plain(operand, n);
+                // §4.5.212: when the operand is a context-determined OPERATION
+                // (`8'(a*b)`, `6'(a<<1)`), N is the context for the WHOLE operation, so
+                // the arithmetic must run at N bits (`lower_size_ctx`), not at the
+                // operands' self-width then resize (which lost the carry). The sign of
+                // every leaf follows the operand's overall sign (`ast_ctx_signed`); if
+                // that can't be resolved here the fill-only path is kept (no regression).
+                let e = match (
+                    Self::is_size_ctx_operation(operand),
+                    self.ast_ctx_signed(operand),
+                ) {
+                    (true, Some(ext)) => self.lower_size_ctx(operand, n, ext),
+                    _ => self.lower_ctx_or_plain(operand, n),
+                };
                 if self.cast_operand_is_real(operand, e) {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -71,7 +83,14 @@ impl Elaborator<'_> {
                     if let Some(n) = self.const_eval_in_scope(&id_expr) {
                         if n >= 1 && (n as u64) <= MAX_NET_WIDTH {
                             // fill literal grows to the cast width N (see Size arm).
-                            let e = self.lower_ctx_or_plain(operand, n as u32);
+                            // §4.5.212: a context-determined operation runs at N bits.
+                            let e = match (
+                                Self::is_size_ctx_operation(operand),
+                                self.ast_ctx_signed(operand),
+                            ) {
+                                (true, Some(ext)) => self.lower_size_ctx(operand, n as u32, ext),
+                                _ => self.lower_ctx_or_plain(operand, n as u32),
+                            };
                             if self.cast_operand_is_real(operand, e) {
                                 self.error(
                                     MsgCode::ElabUnsupported,
@@ -158,6 +177,206 @@ impl Elaborator<'_> {
         if signed_op {
             self.push_expr(ir::Expr::SysFunc {
                 which: ir::SysFuncId::Signed,
+                args: vec![resized],
+            })
+        } else {
+            resized
+        }
+    }
+
+    /// §4.5.212: is `e` a CONTEXT-DETERMINED operation whose result width the size
+    /// cast `N'(e)` must drive down into (arith/bitwise/shift/`**`, unary `+`/`-`/`~`,
+    /// ternary)? Such an operation computes at its operands' self-width by default, so
+    /// a cast to a WIDER N would silently lose the carry (`8'(a*b)` = 13 vs 45). A bare
+    /// leaf, select, concat, or comparison is SELF-determined — the cast just resizes
+    /// its already-correct value, so the existing fill-only path stays byte-identical.
+    pub(crate) fn is_size_ctx_operation(e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => Self::is_size_ctx_operation(inner),
+            ast::ExprKind::Binary { op, .. } => matches!(
+                op,
+                ast::BinOp::Add
+                    | ast::BinOp::Sub
+                    | ast::BinOp::Mul
+                    | ast::BinOp::Div
+                    | ast::BinOp::Mod
+                    | ast::BinOp::BitAnd
+                    | ast::BinOp::BitOr
+                    | ast::BinOp::BitXor
+                    | ast::BinOp::BitXnor
+                    | ast::BinOp::Shl
+                    | ast::BinOp::Shr
+                    | ast::BinOp::AShl
+                    | ast::BinOp::AShr
+                    | ast::BinOp::Pow
+            ),
+            ast::ExprKind::Unary { op, .. } => {
+                matches!(op, ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot)
+            }
+            ast::ExprKind::Ternary { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// §4.5.212: the OVERALL self-signedness of a size-cast operand's tree — signed iff
+    /// EVERY context-determined leaf is signed (§11.8.1: any unsigned operand makes the
+    /// whole expression unsigned, and ALL leaves are then zero-extended — verified
+    /// against iverilog: `8'((signed*signed)+unsigned)` zero-extends the signed pair).
+    /// A single sign therefore governs every leaf's extension. `None` ⇒ a leaf whose
+    /// sign can't be resolved here (a param / call / package ref) → the caller keeps the
+    /// current fill-only behavior (no regression). Mirrors `expr_self_signed`'s rules.
+    pub(crate) fn ast_ctx_signed(&self, e: &ast::Expr) -> Option<bool> {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.ast_ctx_signed(inner),
+            ast::ExprKind::Binary { op, lhs, rhs } => match op {
+                ast::BinOp::Add
+                | ast::BinOp::Sub
+                | ast::BinOp::Mul
+                | ast::BinOp::Div
+                | ast::BinOp::Mod
+                | ast::BinOp::BitAnd
+                | ast::BinOp::BitOr
+                | ast::BinOp::BitXor
+                | ast::BinOp::BitXnor => {
+                    Some(self.ast_ctx_signed(lhs)? && self.ast_ctx_signed(rhs)?)
+                }
+                // power / shifts: sign follows the LEFT (base) operand only.
+                ast::BinOp::Pow
+                | ast::BinOp::Shl
+                | ast::BinOp::Shr
+                | ast::BinOp::AShl
+                | ast::BinOp::AShr => self.ast_ctx_signed(lhs),
+                // comparison / logical / wildcard: a 1-bit UNSIGNED result.
+                _ => Some(false),
+            },
+            ast::ExprKind::Unary { op, operand } => match op {
+                ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot => {
+                    self.ast_ctx_signed(operand)
+                }
+                _ => Some(false), // reductions / logical-not: 1-bit unsigned
+            },
+            ast::ExprKind::Ternary { then_e, else_e, .. } => {
+                Some(self.ast_ctx_signed(then_e)? && self.ast_ctx_signed(else_e)?)
+            }
+            // bit/part-select, concat, replicate are ALWAYS unsigned (§5.4.1).
+            ast::ExprKind::Concat { .. }
+            | ast::ExprKind::Replicate { .. }
+            | ast::ExprKind::BitSelect { .. }
+            | ast::ExprKind::PartSelect { .. }
+            | ast::ExprKind::IndexedPart { .. } => Some(false),
+            ast::ExprKind::IntLit { kind, raw } => {
+                if literal::is_fill_literal(raw, *kind) {
+                    return Some(false);
+                }
+                literal::parse_int_literal(raw, *kind).map(|c| c.signed)
+            }
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                let net = self.lookup_net_scoped(&p.segments[0].name)?;
+                Some(self.nets.get(net as usize)?.signed)
+            }
+            // params / calls / sysfuncs / package refs / patterns → indeterminate here.
+            _ => None,
+        }
+    }
+
+    /// §4.5.212: lower a size-cast operand in CONTEXT WIDTH `n`, recursing the
+    /// context-determined operator structure so each leaf is widened to `n` BEFORE the
+    /// operation (so `8'(a*b)` multiplies two 8-bit operands = 45, not a 4-bit 13). The
+    /// operand-vs-shift-amount / self-determined split mirrors `lower_expr_ctx`; `ext`
+    /// (the whole operand's sign, from `ast_ctx_signed`) governs every leaf's extension.
+    pub(crate) fn lower_size_ctx(&mut self, e: &ast::Expr, n: u32, ext: bool) -> u32 {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.lower_size_ctx(inner, n, ext),
+            ast::ExprKind::Binary { op, lhs, rhs } => {
+                let irop = map_binop(*op);
+                match op {
+                    ast::BinOp::Add
+                    | ast::BinOp::Sub
+                    | ast::BinOp::Mul
+                    | ast::BinOp::Div
+                    | ast::BinOp::Mod
+                    | ast::BinOp::BitAnd
+                    | ast::BinOp::BitOr
+                    | ast::BinOp::BitXor
+                    | ast::BinOp::BitXnor => {
+                        // both operands context-determined at n.
+                        let l = self.lower_size_ctx(lhs, n, ext);
+                        let r = self.lower_size_ctx(rhs, n, ext);
+                        self.push_expr(ir::Expr::Binary {
+                            op: irop,
+                            lhs: l,
+                            rhs: r,
+                        })
+                    }
+                    ast::BinOp::Pow
+                    | ast::BinOp::Shl
+                    | ast::BinOp::Shr
+                    | ast::BinOp::AShl
+                    | ast::BinOp::AShr => {
+                        // base context-determined at n; exponent / shift amount SELF-determined.
+                        let l = self.lower_size_ctx(lhs, n, ext);
+                        let r = self.lower_expr(rhs);
+                        self.push_expr(ir::Expr::Binary {
+                            op: irop,
+                            lhs: l,
+                            rhs: r,
+                        })
+                    }
+                    // comparison / logical: a 1-bit self-determined result → extend as a leaf.
+                    _ => self.lower_size_leaf(e, n, ext),
+                }
+            }
+            ast::ExprKind::Unary { op, operand } => match op {
+                ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot => {
+                    let o = self.lower_size_ctx(operand, n, ext);
+                    self.push_expr(ir::Expr::Unary {
+                        op: map_unop(*op),
+                        operand: o,
+                    })
+                }
+                _ => self.lower_size_leaf(e, n, ext),
+            },
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                let c = self.lower_expr(cond); // condition self-determined
+                let t = self.lower_size_ctx(then_e, n, ext);
+                let f = self.lower_size_ctx(else_e, n, ext);
+                self.push_expr(ir::Expr::Ternary {
+                    cond: c,
+                    then_e: t,
+                    else_e: f,
+                })
+            }
+            // a self-determined value (leaf / select / concat / call) → resize to n.
+            _ => self.lower_size_leaf(e, n, ext),
+        }
+    }
+
+    /// §4.5.212: resize a self-determined leaf to the cast width `n`, extending with the
+    /// operand's overall sign `ext` (NOT the leaf's own sign — §11.8.1 coerces every
+    /// leaf to the expression's signedness). Re-stamps `$signed`/`$unsigned` so signed
+    /// division / arithmetic-shift / comparison in the enclosing op use the right
+    /// semantics (a `Concat`/`Select` extension is otherwise always unsigned).
+    fn lower_size_leaf(&mut self, e: &ast::Expr, n: u32, ext: bool) -> u32 {
+        let x = self.lower_expr(e);
+        let w = self.ir_bits_of(x).unwrap_or(32);
+        let resized = match n.cmp(&w) {
+            std::cmp::Ordering::Equal => x,
+            std::cmp::Ordering::Greater => self.extend_to(x, w, n, ext),
+            std::cmp::Ordering::Less => self.select_low(x, n),
+        };
+        let cur_signed = self.expr_self_signed(resized);
+        if ext && !cur_signed {
+            self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::Signed,
+                args: vec![resized],
+            })
+        } else if !ext && cur_signed {
+            self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::Unsigned,
                 args: vec![resized],
             })
         } else {
