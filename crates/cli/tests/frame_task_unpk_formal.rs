@@ -11,9 +11,9 @@
 //! oracle is an ELEMENT-WISE reference computing the same values; the array-formal
 //! mechanism is vita's, the arithmetic is what iverilog pins.
 //!
-//! Correct-or-loud boundary: an OUTPUT/INOUT unpacked-array formal (pass-by-ref) and
-//! a STATIC (non-framed) task's unpacked-fixed formal stay LOUD (the inline path has
-//! no md-packed slot — it would silently truncate).
+//! Correct-or-loud boundary: a size-mismatched actual is loud. (§4.5.203 later
+//! FORCE-FRAMES a STATIC task with such a formal, so it too is now supported — see
+//! `static_task_array_formal.rs`.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -163,10 +163,11 @@ fn output_array_formal_now_supported() {
     assert!(o.contains("7 8 9"), "got:\n{o}");
 }
 
-// ── correct-or-loud: a STATIC (non-framed) task's unpacked-fixed formal stays loud
-// (the inline binding has no md-packed slot — no silent truncation) ──
+// ── §4.5.203: a STATIC (non-framed) task's unpacked-fixed formal is now SUPPORTED —
+// the task is FORCE-FRAMED (`build_task_frame_set`) so the md-packed slot backs the
+// formal (frame ⊇ inline, §4.5.198/199/200). See `static_task_array_formal.rs`. ──
 #[test]
-fn static_task_unpk_formal_stays_loud() {
+fn static_task_unpk_formal_now_supported() {
     let o = run("module top;\n\
          task pt(input byte b[4]);\n\
            $display(\"%0d\", b[0]);\n\
@@ -174,7 +175,10 @@ fn static_task_unpk_formal_stays_loud() {
          byte d[4];\n\
          initial begin d[0]=1; d[1]=2; d[2]=3; d[3]=4; pt(d); end\n\
          endmodule\n");
-    assert!(o.contains("E3009"), "should be loud:\n{o}");
+    assert!(
+        o.contains('1'),
+        "static task unpk formal (force-framed):\n{o}"
+    );
 }
 
 // ── a size-mismatched actual is loud (shape check) ──

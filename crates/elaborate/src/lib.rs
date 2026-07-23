@@ -16746,12 +16746,20 @@ impl<'s> Elaborator<'s> {
             // §4.5.197 hier defer/resolve to bind (a hier call to a still-inlined static task
             // is otherwise loud). Name-based (framing precedes instance elaboration), so an
             // unrelated same-named task is also framed — harmless now that frame ⊇ inline.
+            // §4.5.203: a task with a FIXED unpacked-array formal (`byte b[4]`, `int m[2][2]`)
+            // MUST be framed — the array formal is an md-packed value slot that only exists on
+            // the frame path (the inline static-task binding has no slot, so it was loud). Same
+            // frame ⊇ inline safety as the hier force-frame; a rejected array shape stays loud
+            // on the frame path (correct-or-loud).
             if t.automatic
                 || reaches(name, name, &edges)
                 || self.hier_called_task_names.contains(name)
                 || t.ports
                     .iter()
                     .any(|p| self.is_output_or_inout_dyn_array_formal(p))
+                || t.ports
+                    .iter()
+                    .any(|p| self.is_fixed_unpacked_array_formal(p))
             {
                 set.insert(name.clone());
             }
@@ -21087,6 +21095,22 @@ impl<'s> Elaborator<'s> {
                         | ast::NetVarKind::Event
                 )
             )
+    }
+
+    /// §4.5.203: a FIXED unpacked-array formal (`byte b[4]`, `int m[2][2]`) — every unpacked
+    /// dim is a constant `[N]` / `[lo:hi]` (never dyn/queue/assoc, which are matched by the
+    /// dyn predicates above). Such a formal is only supported on the FRAME path (an md-packed
+    /// value slot, §4.5.188 input / §4.5.193 output-inout / §4.5.202 multi-dim); the inline
+    /// (static-task) binding path has no slot. So a task carrying one is FORCE-FRAMED
+    /// (`build_task_frame_set`) — proven safe since frame ⊇ inline (§4.5.198/199). A supported
+    /// shape then binds via `classify_array_formal`; a rejected shape (descending, output/inout
+    /// multi-dim, non-zero-based, …) stays loud on the frame path (correct-or-loud). Direction /
+    /// base / element are NOT inspected here — that is the classifier's job at reserve time.
+    fn is_fixed_unpacked_array_formal(&self, p: &ast::TfPort) -> bool {
+        !p.unpacked.is_empty()
+            && p.unpacked
+                .iter()
+                .all(|d| matches!(d, ast::Dim::Size(_) | ast::Dim::Range(_)))
     }
 
     /// V2A: allocate a fresh `DynArray` temp net MIRRORING the element type of

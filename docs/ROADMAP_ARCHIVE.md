@@ -8,6 +8,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.203 STATIC (non-`automatic`) task with a FIXED unpacked-array formal loud→supported (force-frame·§4.5.200 골격 재사용) (2026-07-23, branch feat-static-task-array-formal) ✅
+
+**컨텍스트**: §4.5.202 적대 검증 중 발견한 인접 갭(T11/T11b). `task load(input int m[4]);`(static·array formal)이 vita E3009 "task `X` has an unpacked-array formal — unsupported" — 1-D·multi-dim·output/inout 전부. array formal의 md-packed value slot(§4.5.188 input/§4.5.193 output-inout/§4.5.202 multi-dim)이 FRAME 경로에만 존재하고 inline(static-task) 바인딩 경로엔 slot이 없어 `task automatic`만 지원됐음.
+
+**NO ORACLE**: iverilog가 subroutine array port 구문 거부 → hand-IEEE §13.5.1/2 pass-by-value/value-result(static-local 저장은 framing 후에도 유지).
+
+**fix(format 22 불변·§4.5.200 force-frame 골격 재사용)**: `build_task_frame_set`에 트리거 1개 추가 — 신규 `&self` 헬퍼 `is_fixed_unpacked_array_formal`(port에 unpacked dim 有 & 全 dim `Size|Range`=fixed·dyn/queue/assoc 자동 제외)이 true인 formal을 가진 task를 force-frame. frame ⊇ inline(§4.5.198/199/200 완성)이라 static task를 framing해도 local caller 능력 손실 0(§4.5.200 hier force-frame과 **동일 안전 논거**). framed되면 `is_framed=true`→inline reject(19740) 우회→md-packed 경로가 array formal 바인딩. reject shape(descending·non-zero-based·output/inout multi-dim)은 framed reserve가 `classify_array_formal=Some(Err)`이라 여전히 loud(correct-or-loud). 헬퍼는 direction/base/element 미검사(framing 여부만·supported/loud 판정은 classifier가 reserve 시=관심사 분리).
+
+**적대 differential 全 MATCH(hand-IEEE)**: static 1-D input(acc=10)·static 2-D input(§4.5.202 조합·acc=42)·**static-local accumulation across calls**(cnt=6·framing이 static 저장 의미 보존)·output 1-D(10 20 30)·inout 1-D(6 17)·**register-file writer**(array formal+module-array element write+loop·a0 a1 a2 a3)·**array formal + `#5` suspend**(§4.5.168 suspendable·at 5 acc=7)·**inline caller→framed callee**(g=34·frame⊇inline call 경계)·**pass-by-value**(body input write=local·caller a0=1 불변·g=1004)·signed byte $signed(-45)·**actual refreshed each call**(r1=3 r2=30·stale snapshot 아님). **correct-or-loud 全 LOUD**: output multi-dim(copy-out reject)·descending·non-zero-based. full suite 회귀 0(array-formal static task는 이전 전부 loud라 regress할 working 케이스 자체가 없음).
+
+**교훈**: **인접 슬라이스(§4.5.202) 적대 검증이 인접 갭(static task array formal) 발굴**·**§4.5.200 force-frame 골격이 트리거 1개로 재사용**(frame ⊇ inline 완성이 static-task force-frame 안전의 전제·hier든 array-formal이든 동일 안전 논거)·헬퍼는 framing 여부만 결정하고 supported/loud는 classifier가 reserve 시 판정(관심사 분리→헬퍼 단순)·framing이 static-local 저장 의미 보존(accumulation/refresh로 검증). 신규 `static_task_array_formal.rs`×14.
+
 #### 4.5.202 multi-dimensional array FORMAL on framed function / `task automatic` loud→supported (hand-IEEE·N-D md-packed slot 재사용) (2026-07-23, branch feat-multidim-array-formal) ✅
 
 **컨텍스트**: hier-task 완성(§4.5.197~201) 후 오너 "추천을 hand-IEEE로 진행"(§4.5.198/199/200에서 기록해둔 "잔여 loud follow-on: multi-dim FORMAL(1D binding)"). §4.5.199가 frame-LOCAL multi-dim array를 N-D md-packed slot(`array_formal_ext_dims`+`flatten_word`)으로 지원했으나 subroutine array FORMAL은 1-D 유지(`classify_array_formal`이 `dims.len() > 1` blanket-reject)였음. `task automatic proc(input int m[2][2])`가 vita E3009.
