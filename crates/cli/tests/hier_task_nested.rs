@@ -142,15 +142,17 @@ fn nested_hier_named_args_stays_loud() {
 }
 
 #[test]
-fn nested_hier_forwarded_array_formal_stays_loud() {
-    // Forwarding the driver's OWN array formal through a nested hier enable — the actual is
-    // an md-packed frame net (not a static array), so it stays loud (a follow-on).
+fn nested_hier_forwarded_input_array_formal_now_supported() {
+    // §4.5.210: forwarding the driver's OWN INPUT array formal through a nested hier enable — the
+    // actual is an md-packed frame net, forwarded to the callee slot as its whole net value. See
+    // the dedicated `hier_task_forward_array.rs` suite; this guards the §4.5.208 boundary flipped
+    // to supported (was loud until §4.5.210).
     let o = run("module sub; int acc; task automatic p(input int d[3]); acc=d[0]+d[1]+d[2]; endtask endmodule\n\
          module t; sub u();\n\
          task automatic driver(input int d[3]); u.p(d); endtask\n\
          initial begin int a[3]; a[0]=1;a[1]=2;a[2]=4; driver(a); $display(\"acc=%0d\",u.acc); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "forwarded frame-formal array through nested hier must be loud:\n{o}"
+        o.contains("acc=7"),
+        "forwarded frame-formal array now supported:\n{o}"
     );
 }

@@ -422,6 +422,23 @@ impl Elaborator<'_> {
                         // entry (a normal in-bind, §4.5.207). Hand-IEEE §13.5.2 pass-by-value-
                         // result (iverilog rejects unpacked subroutine array ports).
                         ast::PortDir::Output | ast::PortDir::Inout => {
+                            // §4.5.210: the copy-OUT unpacks into the caller-array ELEMENTS, which
+                            // needs a writable static array. A FORWARDED frame array formal (an
+                            // md-packed frame net) would need a frame-executor part-select
+                            // writeback — loud (input forwarding is supported above).
+                            if !self.net_is_static_array(caller_net) {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "hierarchical task call `{}`: forwarding a frame array \
+                                         formal to an OUTPUT/INOUT array formal is unsupported \
+                                         (input forwarding only)",
+                                        d.path.join(".")
+                                    ),
+                                );
+                                bind_err = true;
+                                continue;
+                            }
                             self.deny_const_param_write(
                                 caller_net,
                                 "connect an output/inout array to",

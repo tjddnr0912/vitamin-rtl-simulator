@@ -66,12 +66,18 @@ impl Elaborator<'_> {
                 for a in args {
                     // §4.5.207: a bare whole-array Ident actual (a static array net) can't be
                     // lowered to a value — resolve its net in the CALLER scope now and pack it
-                    // at resolution, once the callee array formal's shape is known. A scalar /
-                    // expression actual lowers as before (value + optional caller lvalue).
+                    // at resolution, once the callee array formal's shape is known. §4.5.210: a
+                    // forwarded frame ARRAY FORMAL (`u.tk(a)` inside a frame task/func whose own
+                    // formal is `a[]`) is an md-packed frame net (not a static array); accept it
+                    // too — its whole net value forwards to the callee slot at resolution. A
+                    // scalar / expression actual lowers as before (value + optional caller lvalue).
                     let arr_net = match &a.kind {
-                        ast::ExprKind::Ident(p) if p.segments.len() == 1 => self
-                            .lookup_net_scoped(&p.segments[0].name)
-                            .filter(|&n| self.net_is_static_array(n)),
+                        ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                            self.lookup_net_scoped(&p.segments[0].name).filter(|&n| {
+                                self.net_is_static_array(n)
+                                    || self.frame_arr_formal_meta.contains_key(&n)
+                            })
+                        }
                         _ => None,
                     };
                     if let Some(net) = arr_net {

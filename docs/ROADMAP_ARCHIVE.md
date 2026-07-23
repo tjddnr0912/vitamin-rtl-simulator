@@ -8,6 +8,20 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.210 forwarding a frame task/function's OWN unpacked-array FORMAL into a nested hierarchical TASK enable loud→supported (whole md-packed net forward) (2026-07-23, branch feat-hier-task-forward-array) ✅
+
+**컨텍스트**: ROADMAP §0 재개 follow-on #2(§4.5.208 잔여). §4.5.207/209가 hier-task array formal에 STATIC array actual(`byte a[4]`)을 지원(pack/unpack element-by-element)했으나, frame task/func가 **자기 array formal**을 nested hier enable로 forward(`task driver(input int a[]); u.tk(a);`)하면 loud였음. 갭 원인: forward된 formal `a`는 md-packed FRAME net(not static array)이라 (1) defer gate(`inline_task`)가 static array만 `arg_arrays`에 record→`a`는 else 분기로 새서 `lower_expr(a)`(whole array formal을 value로 lower)=loud, (2) resolve서 `arg_arrays[i]`=None→"needs bare whole-array actual" loud.
+
+**NO ORACLE**(iverilog subroutine array port 거부)→hand-IEEE §13.5.1 pass-by-value.
+
+**핵심 통찰(UARR2 forwarding 재사용)**: frame array formal의 whole md-packed net 값 = callee slot의 packed 표현과 **동일 `array_formal_ext_dims` layout**(양쪽 다 element 0=LSB position order). 따라서 static array처럼 element-by-element pack(Concat)할 필요 없이 **whole net을 그대로 forward**(Signal{net, word:None})—`lower_array_actual_packed`의 UARR2 caller-formal forwarding(array_formal.rs §51-91)과 정확히 동일. per-dim `dims` + `elem_w`만 MATCH하면 됨.
+
+**설계(format 23 불변·全 elaborate-transient)**: (1) **defer gate 완화**(`inline_task`)—bare Ident actual이 `net_is_static_array` OR `frame_arr_formal_meta.contains_key`면 `arg_arrays`에 record(둘 다 whole array net·frame formal은 md-packed). (2) **`hier_array_shape_ok` 확장**—actual이 `frame_arr_formal_meta`에 있으면(forwarded formal) `caller_af.dims == af.dims && caller_af.elem_w == af.elem_w`, 아니면 static array 검사(기존). (3) **`pack_hier_array_actual` 디스패치**—`net_is_static_array`면 Concat(기존), 아니면(frame formal) whole `Signal{net, word:None}`. → resolve INPUT 경로는 `pack_hier_array_actual` 호출만으로 static+forwarded 둘 다 처리. (4) OUTPUT/INOUT arm은 `!net_is_static_array(caller_net)`면 loud("forwarding a frame array formal to an OUTPUT/INOUT array formal is unsupported")—copy-out은 caller ELEMENT write(static array)라 md-packed frame net writeback은 frame-executor part-select 필요(follow-on).
+
+**적대 differential 全 MATCH(hand-IEEE·+11 tests `hier_task_forward_array.rs`)**: INPUT 1-D(1 4)·multi-dim(10)·signed byte(-40)·**frame-LOCAL array forward(18·frame local도 frame_arr_formal_meta 커버)**·**mutated-value forward(acc=102 arr0=1·driver가 formal `a[0]=100` 후 forward→callee가 mutated 값·caller `arr` 불변 실증 §13.5.1)**·**chained 2-level(24·t.driver→m.relay→lf.tk)**·same-formal-to-two-enables(7 7). **correct-or-loud 全 LOUD**: shape mismatch·OUTPUT forward·INOUT forward·**non-hier whole formal in `$display`(defer gate 완화가 non-hier 경로 over-relax 안 함 실증)**. 기존 hier-task(static array §4.5.207/209·scalar) regression 0·flip 1(§4.5.208 `nested_hier_forwarded_array_formal_stays_loud`→`_now_supported`).
+
+**교훈**: **forward = whole md-packed net 값 전달**(UARR2 forwarding 재사용)—양 slot이 동일 layout이라 repack 불필요·`pack_hier_array_actual`을 static(Concat)/forwarded(whole Signal) 디스패치로 통합해 resolve INPUT 경로가 두 소스 투명 처리·shared `hier_array_shape_ok`가 static/frame-formal 양쪽 gate·defer gate 완화는 hier enable actual 경로만(non-hier whole-formal use는 여전히 loud)·mutated-value 테스트가 pass-by-value + current-value read 동시 실증·OUTPUT/INOUT forward는 frame net writeback 필요라 loud(input forward만). 신규 `hier_task_forward_array.rs`×11·flip 1. **이로써 §0 follow-on #1·#2 완료**(남은 #2=non-zero-base descending은 오라클 확보 blocker).
+
 #### 4.5.209 hierarchical TASK enable OUTPUT/INOUT unpacked-array formal loud→supported (deferred copy-out synthesized at resolution) (2026-07-23, branch feat-hier-task-output-array) ✅
 
 **컨텍스트**: ROADMAP §0 재개 follow-on #1(§4.5.207 잔여·hard). §4.5.207이 hier-task INPUT array formal(`u.load(a)` where `task load(input int d[4])`)을 defer actual-net + resolve-time pack(`pack_hier_array_actual`)으로 지원했으나, OUTPUT/INOUT array는 loud였음. 갭 원인: **copy-OUT을 resolve 시점에 합성**해야 함—호출 시점엔 callee array shape 미지(child instance 미elaborate)이고, 로컬 §4.5.204 output-array copy-out은 lowering 중 `ret` 블록에 AST+`lower_stmt`로 unpack을 emit하는데, resolve 시점엔 ProcessBuilder도 caller scope도 없음.
