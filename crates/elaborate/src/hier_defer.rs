@@ -327,8 +327,8 @@ impl Elaborator<'_> {
                     MsgCode::ElabUnsupported,
                     &format!(
                         "unsupported hierarchical task call `{}` (the callee must be a framed \
-                         task with scalar formals — input/output/inout, no array/string — \
-                         reached through an instance path)",
+                         task reached through an instance path, with scalar or fixed \
+                         unpacked-array formals — no string / dynamic-array formal)",
                         d.path.join(".")
                     ),
                 );
@@ -362,6 +362,10 @@ impl Elaborator<'_> {
             let base_net = self.func_metas[fid as usize].base_net;
             let mut in_binds: Vec<(u32, u32)> = Vec::new();
             let mut out_binds: Vec<(u32, ir::Lvalue)> = Vec::new();
+            // item 1: (caller-array net, packed-temp net, formal shape) for every OUTPUT/INOUT
+            // array formal — the copy-OUT is UNPACKED into the caller-array elements at the
+            // front of the ret block after the loop (the deferred twin of the local §4.5.204).
+            let mut out_array_unpacks: Vec<(u32, u32, ArrayFormal)> = Vec::new();
             let mut bind_err = false;
             for (i, dir) in dirs.iter().enumerate() {
                 // §4.5.207: the callee formal `i` is the per-instance net `base_net + i`. If it
@@ -373,43 +377,78 @@ impl Elaborator<'_> {
                     .get(&(base_net + i as u32))
                     .cloned();
                 if let Some(af) = callee_af {
-                    if !matches!(dir, ast::PortDir::Input) {
+                    // An array formal needs a bare whole-array actual — a static array net
+                    // resolved in the caller scope at defer time (`arg_arrays[i]`). A frame-LOCAL
+                    // array actual is md-packed (not a static array) ⇒ `None` ⇒ loud (ROADMAP
+                    // follow-on #2: forwarding a frame formal array through a nested enable).
+                    let Some(caller_net) = d.arg_arrays[i] else {
                         self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
-                                "hierarchical task call `{}`: an output/inout array formal is \
-                                 unsupported (input array formal only)",
+                                "hierarchical task call `{}`: an array formal needs a bare \
+                                 whole-array actual",
+                                d.path.join(".")
+                            ),
+                        );
+                        bind_err = true;
+                        continue;
+                    };
+                    // Shared shape gate — the copy-IN and copy-OUT agree on "matching".
+                    if !self.hier_array_shape_ok(caller_net, &af) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "hierarchical task call `{}`: the array argument's shape does \
+                                 not match the formal",
                                 d.path.join(".")
                             ),
                         );
                         bind_err = true;
                         continue;
                     }
-                    match d.arg_arrays[i] {
-                        Some(net) => match self.pack_hier_array_actual(net, &af) {
-                            Some(eid) => in_binds.push((i as u32, eid)),
-                            None => {
-                                self.error(
-                                    MsgCode::ElabUnsupported,
-                                    &format!(
-                                        "hierarchical task call `{}`: the array argument's shape \
-                                         does not match the formal",
-                                        d.path.join(".")
-                                    ),
-                                );
-                                bind_err = true;
+                    match dir {
+                        // INPUT (§4.5.207): pack the whole-array actual into the callee's
+                        // md-packed slot value (copy-in, IEEE §13.5.1 pass-by-value).
+                        ast::PortDir::Input => {
+                            if let Some(eid) = self.pack_hier_array_actual(caller_net, &af) {
+                                in_binds.push((i as u32, eid));
                             }
-                        },
-                        None => {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
-                                    "hierarchical task call `{}`: an array formal needs a bare \
-                                     whole-array actual",
-                                    d.path.join(".")
-                                ),
+                        }
+                        // OUTPUT / INOUT (item 1): the body writes the md-packed slot; at exit the
+                        // engine copies the WHOLE slot to a fresh packed temp (a scalar out-bind),
+                        // then the ret-block UNPACK (built after this loop) writes it into the
+                        // caller-array elements — the resolve-time twin of the local §4.5.193/204
+                        // copy-out. INOUT additionally PACKS the caller array INTO the slot at
+                        // entry (a normal in-bind, §4.5.207). Hand-IEEE §13.5.2 pass-by-value-
+                        // result (iverilog rejects unpacked subroutine array ports).
+                        ast::PortDir::Output | ast::PortDir::Inout => {
+                            self.deny_const_param_write(
+                                caller_net,
+                                "connect an output/inout array to",
                             );
-                            bind_err = true;
+                            if matches!(dir, ast::PortDir::Inout) {
+                                if let Some(eid) = self.pack_hier_array_actual(caller_net, &af) {
+                                    in_binds.push((i as u32, eid));
+                                }
+                            }
+                            let w = af.count.saturating_mul(af.elem_w).max(1);
+                            let packed_net = self.nets.len() as u32;
+                            let pname = format!("__houtpack${}${packed_net}", d.path.join("$"));
+                            self.add_net(
+                                &pname,
+                                ir::NetVar {
+                                    kind: ir::NetKind::Reg,
+                                    width: w,
+                                    msb: w.saturating_sub(1),
+                                    lsb: 0,
+                                    signed: false,
+                                    array_len: 1,
+                                    dir: ir::PortDir::Internal,
+                                    init: default_init(ast::NetVarKind::Reg, w),
+                                },
+                            );
+                            out_binds.push((i as u32, whole_net_lvalue(packed_net)));
+                            out_array_unpacks.push((caller_net, packed_net, af));
                         }
                     }
                     continue;
@@ -450,6 +489,40 @@ impl Elaborator<'_> {
             if bind_err {
                 continue;
             }
+            // item 1: build the copy-OUT unpack (`caller[i] = packed[i*ew +: ew]`) for every
+            // OUTPUT/INOUT array formal — direct IR, no scope/`lower_stmt`. Position `i` ↔ the
+            // caller's flat word `i` is the EXACT reverse of `pack_hier_array_actual` (which
+            // packs the caller's flat word `i` at slot position `i`), so the round-trip is
+            // correct by construction. Element signedness is the caller array's, applied on
+            // later reads (bit-faithful copy here). Prepended to the ret block below.
+            let mut unpack_sids: Vec<u32> = Vec::new();
+            for (caller_net, packed_net, af) in &out_array_unpacks {
+                for pos in 0..af.count {
+                    let base_sig = self.push_expr(ir::Expr::Signal {
+                        net: *packed_net,
+                        word: None,
+                    });
+                    let off = self.const_u32_expr(pos.saturating_mul(af.elem_w), 32);
+                    let wid = self.const_u32_expr(af.elem_w, 32);
+                    let rhs = self.push_expr(ir::Expr::Select {
+                        base: base_sig,
+                        offset: off,
+                        width: wid,
+                        kind: ir::SelKind::PartIdxUp,
+                    });
+                    let word = self.const_u32_expr(pos, 32);
+                    let lhs = ir::Lvalue {
+                        chunks: vec![ir::LvalChunk {
+                            net: *caller_net,
+                            word: Some(word),
+                            offset: None,
+                            width: None,
+                            kind: ir::SelKind::Bit,
+                        }],
+                    };
+                    unpack_sids.push(self.push_stmt(ir::Stmt::BlockingAssign { lhs, rhs }));
+                }
+            }
             let info = TaskCallInfo {
                 callee: fid,
                 in_binds,
@@ -459,22 +532,43 @@ impl Elaborator<'_> {
             // §4.5.208: a NESTED-in-frame-body enable's placeholder `Call` lives in
             // `func_blocks` and is keyed into `task_calls_func`; a top-level process enable
             // uses `processes[proc]` + `task_calls_proc`. The engine reads the same two tables.
+            // item 1: capture the `ret_bb` while patching the terminator, then PREPEND the
+            // copy-out unpack to that block so it runs AFTER the task's exit (the out-bind wrote
+            // the packed temp) and BEFORE any statement following the enable.
             if let Some(fb) = d.func_block {
                 self.task_calls_func.insert(fb, info);
+                let mut ret_bb = None;
                 if let Some(blk) = self.func_blocks.get_mut(fb as usize) {
-                    if let ir::Terminator::Call { target, .. } = &mut blk.term {
+                    if let ir::Terminator::Call { target, ret_bb: rb } = &mut blk.term {
                         *target = entry;
+                        ret_bb = Some(*rb);
+                    }
+                }
+                if let (Some(rb), false) = (ret_bb, unpack_sids.is_empty()) {
+                    if let Some(retblk) = self.func_blocks.get_mut(rb as usize) {
+                        retblk.stmts.splice(0..0, unpack_sids);
                     }
                 }
             } else {
                 self.task_calls_proc.insert((d.proc, d.call_block), info);
+                let mut ret_bb = None;
                 if let Some(blk) = self
                     .processes
                     .get_mut(d.proc as usize)
                     .and_then(|p| p.body.get_mut(d.call_block as usize))
                 {
-                    if let ir::Terminator::Call { target, .. } = &mut blk.term {
+                    if let ir::Terminator::Call { target, ret_bb: rb } = &mut blk.term {
                         *target = entry;
+                        ret_bb = Some(*rb);
+                    }
+                }
+                if let (Some(rb), false) = (ret_bb, unpack_sids.is_empty()) {
+                    if let Some(retblk) = self
+                        .processes
+                        .get_mut(d.proc as usize)
+                        .and_then(|p| p.body.get_mut(rb as usize))
+                    {
+                        retblk.stmts.splice(0..0, unpack_sids);
                     }
                 }
             }

@@ -562,13 +562,16 @@ impl Elaborator<'_> {
                         p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
                         ast::NetVarKind::String
                     );
-                // §4.5.207: an INPUT fixed unpacked-array formal is also hier-callable — the
-                // actual array net is packed into the md-packed slot at resolution. An
-                // OUTPUT/INOUT array (deferred copy-out) or a string/dyn formal is NOT, so a
-                // task carrying one gets no entry → a hier enable to it stays loud.
-                let input_array_ok =
-                    matches!(p.dir, ast::PortDir::Input) && self.is_fixed_unpacked_array_formal(p);
-                scalar_ok || input_array_ok
+                // §4.5.207 / item 1: a FIXED unpacked-array formal of ANY direction is
+                // hier-callable. INPUT packs the actual array into the md-packed slot at
+                // resolution; OUTPUT/INOUT additionally UNPACKS the slot back into the caller
+                // array at the enable's ret block (deferred copy-out, §13.5.2). A string/dyn
+                // formal is still NOT hier-callable, so a task carrying one stays loud. An
+                // unsupported array SHAPE (descending non-zero-base, …) gets no
+                // `frame_arr_formal_meta` entry → the resolver treats it as a scalar and the
+                // whole-array actual is loud there (correct-or-loud).
+                let fixed_array_ok = self.is_fixed_unpacked_array_formal(p);
+                scalar_ok || fixed_array_ok
             })
         {
             let key = if self.cur_prefix.is_empty() {

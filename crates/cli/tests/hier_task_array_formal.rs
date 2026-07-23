@@ -13,9 +13,9 @@
 //! NO ORACLE: iverilog rejects unpacked subroutine ports outright, so every supported case is
 //! hand-IEEE (§13.5.1 pass-by-value copy-in).
 //!
-//! Correct-or-loud: an OUTPUT/INOUT array formal (deferred copy-out is a follow-on), a shape
-//! mismatch, an array formal fed a scalar actual (or a scalar formal fed an array), and a
-//! string/dynamic array formal all stay loud.
+//! Correct-or-loud: a shape mismatch, an array formal fed a scalar actual (or a scalar formal
+//! fed an array), and a string/dynamic array formal all stay loud. (OUTPUT/INOUT array formals
+//! are now supported — item 1 — via the deferred copy-out; see `hier_task_output_array.rs`.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -105,13 +105,16 @@ fn hier_task_signed_byte_array_deep_path() {
 // ── correct-or-loud boundaries ───────────────────────────────────────────────
 
 #[test]
-fn hier_task_output_array_stays_loud() {
-    // An OUTPUT array formal over a hier enable — the deferred copy-out is a follow-on. Loud.
-    let o = run("module sub; task automatic fill(output int d[4]); d[0]=1; endtask endmodule\n\
-         module t; sub u(); initial begin int a[4]; u.fill(a); $display(\"%0d\",a[0]); $finish; end endmodule\n");
+fn hier_task_output_array_now_supported() {
+    // item 1: an OUTPUT array formal over a hier enable — the deferred copy-out is now
+    // synthesized at resolution (packed-temp out-bind + ret-block unpack). See the dedicated
+    // `hier_task_output_array.rs` suite; this one guards the §4.5.207 boundary flipped to
+    // supported (was loud until item 1).
+    let o = run("module sub; task automatic fill(output int d[4]); for(int i=0;i<4;i++) d[i]=i+1; endtask endmodule\n\
+         module t; sub u(); initial begin int a[4]; u.fill(a); $display(\"%0d %0d\",a[0],a[3]); $finish; end endmodule\n");
     assert!(
-        o.contains("E3009"),
-        "output array over hier must be loud:\n{o}"
+        o.contains("1 4"),
+        "output array over hier now supported:\n{o}"
     );
 }
 

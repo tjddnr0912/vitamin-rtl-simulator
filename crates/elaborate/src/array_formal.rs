@@ -165,23 +165,20 @@ impl Elaborator<'_> {
         self.push_expr(ir::Expr::Concat { parts })
     }
 
-    /// §4.5.207: pack a bare whole-array actual `net` (a static array resolved in the CALLER
-    /// scope at defer time) into a callee INPUT array formal's md-packed slot value — the
-    /// resolve-time twin of [`Self::lower_array_actual_packed`]'s static-array path (used by
-    /// the hierarchical task resolver, where the callee shape is unknown until resolution).
-    /// Returns the Concat ExprId, or `None` on any shape mismatch (element width, element
-    /// count, or per-dim base + size + direction) — the caller emits the loud diagnostic.
-    /// Position 0 lands at the LSB, matching the formal's md-packed read.
-    pub(crate) fn pack_hier_array_actual(&mut self, net: u32, af: &ArrayFormal) -> Option<u32> {
+    /// §4.5.207: does the bare whole-array actual `net` (a static array) MATCH the callee
+    /// array formal `af` — same element width, element count, and per-dim base + size +
+    /// direction? The shared shape gate for BOTH the hierarchical-task copy-IN
+    /// (`pack_hier_array_actual`) and the OUTPUT/INOUT copy-OUT (item 1, resolve-time unpack),
+    /// so the two directions can never disagree on what "matching" means. `&self` — read-only.
+    pub(crate) fn hier_array_shape_ok(&self, net: u32, af: &ArrayFormal) -> bool {
         if !self.net_is_static_array(net) {
-            return None;
+            return false;
         }
         let nv = &self.nets[net as usize];
         if nv.width != af.elem_w || nv.array_len != af.count {
-            return None;
+            return false;
         }
-        let actual_dd = self.dim_desc.get(&net).cloned();
-        let shape_ok = match &actual_dd {
+        match self.dim_desc.get(&net) {
             Some((dims, unpacked_n))
                 if *unpacked_n == af.dims.len() && dims.len() >= af.dims.len() =>
             {
@@ -194,8 +191,18 @@ impl Elaborator<'_> {
                 })
             }
             _ => false,
-        };
-        if !shape_ok {
+        }
+    }
+
+    /// §4.5.207: pack a bare whole-array actual `net` (a static array resolved in the CALLER
+    /// scope at defer time) into a callee INPUT array formal's md-packed slot value — the
+    /// resolve-time twin of [`Self::lower_array_actual_packed`]'s static-array path (used by
+    /// the hierarchical task resolver, where the callee shape is unknown until resolution).
+    /// Returns the Concat ExprId, or `None` on any shape mismatch (element width, element
+    /// count, or per-dim base + size + direction) — the caller emits the loud diagnostic.
+    /// Position 0 lands at the LSB, matching the formal's md-packed read.
+    pub(crate) fn pack_hier_array_actual(&mut self, net: u32, af: &ArrayFormal) -> Option<u32> {
+        if !self.hier_array_shape_ok(net, af) {
             return None;
         }
         let parts: Vec<u32> = (0..af.count)
