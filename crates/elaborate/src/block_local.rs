@@ -353,6 +353,88 @@ impl Elaborator<'_> {
         }
     }
 
+    /// BL4 (round-19): resolve a callee NAME to its formal port DIRECTIONS, in port
+    /// order, for the block-local definite-assignment gate. A single-segment name is
+    /// looked up in `func_table` then `task_table` (both hold the per-module AST def
+    /// with `ports: Vec<TfPort>`). Returns `None` for a hierarchical `u.f` (the child
+    /// module's ports are out of scope here), an unknown name, or a `$system` call —
+    /// leaving the DA walk to treat the reference conservatively as a read.
+    fn callee_port_dirs(&self, callee: &ast::HierPath) -> Option<Vec<ast::PortDir>> {
+        if callee.segments.len() != 1 {
+            return None;
+        }
+        let nm = callee.segments[0].name.as_str();
+        if let Some(f) = self.func_table.get(nm) {
+            return Some(f.ports.iter().map(|p| p.dir).collect());
+        }
+        if let Some(t) = self.task_table.get(nm) {
+            return Some(t.ports.iter().map(|p| p.dir).collect());
+        }
+        None
+    }
+
+    /// BL4 (round-19): true iff the call `callee(args)` DEFINITELY (whole-var) WRITES
+    /// `name` through a PURE OUTPUT actual and READS `name` at NO position of the same
+    /// call. This is the resolver threaded into `automatic_local_definitely_assigned` /
+    /// `da_stmt` (see [`crate::da::OutActualWrites`]). Soundness (this is an ACCEPT gate
+    /// — a wrong "assigned" reads a leftover/X value instead of erroring = silent-wrong):
+    ///   * ONLY a bare whole-var `Ident(name)` at an OUTPUT formal position counts as a
+    ///     write (copy-out only, no copy-in). A SELECT actual `name[i]` is a PARTIAL
+    ///     write (the other bits stay unwritten) → NOT a definite whole assignment; it
+    ///     is caught as a READ below and blocks the accept.
+    ///   * An INOUT actual is NOT a write here: its copy-IN reads `name`'s current value
+    ///     (the leftover on the v1 flatten ≠ a fresh automatic's default), so an inout
+    ///     `name` is a READ (blocks the accept unless `name` is already assigned).
+    ///   * `name` at ANY input actual, or inside a select index of any actual, or at an
+    ///     arg beyond the resolved formals, is a READ.
+    ///   * Named args (can't map positionally) or an unresolvable callee → `false`.
+    ///
+    /// The verdict is `writes && !reads`: a genuine output-write with no shadow read.
+    fn call_out_actual_writes(
+        &self,
+        callee: &ast::HierPath,
+        args: &[ast::Expr],
+        name: &str,
+    ) -> bool {
+        // Named args defeat positional formal mapping → conservative (stays loud).
+        if args
+            .iter()
+            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
+        {
+            return false;
+        }
+        let Some(dirs) = self.callee_port_dirs(callee) else {
+            return false;
+        };
+        let mut writes = false;
+        let mut reads = false;
+        for (i, arg) in args.iter().enumerate() {
+            // A clean whole-var OUTPUT actual `name` at an OUTPUT formal — copy-out only.
+            let clean_output_whole = matches!(dirs.get(i), Some(ast::PortDir::Output))
+                && matches!(&arg.kind, ast::ExprKind::Ident(p)
+                    if p.segments.len() == 1 && p.segments[0].name == name);
+            if clean_output_whole {
+                writes = true;
+            } else if expr_reads_ident(arg, name) {
+                // Any OTHER reference to `name` (input actual, inout copy-in, select
+                // index, partial-write select base, arg beyond arity) is a read.
+                reads = true;
+            }
+        }
+        writes && !reads
+    }
+
+    /// BL4 (round-19): [`automatic_local_definitely_assigned`] with this Elaborator's
+    /// output-actual resolver ([`Self::call_out_actual_writes`]) bound in — so a call
+    /// whose OUTPUT actual is `name` (unconditionally evaluated) is seen as a definite
+    /// assignment, not a read-before-write. `&self` (immutable) — the returned `bool`
+    /// releases the borrow before the surrounding `&mut self` hoist continues.
+    fn block_local_definitely_assigned(&self, stmts: &[ast::Stmt], name: &str) -> bool {
+        automatic_local_definitely_assigned(stmts, name, &|cn, args, nm| {
+            self.call_out_actual_writes(cn, args, nm)
+        })
+    }
+
     /// Recursively create nets for every `begin…end`/`fork…join` block-local
     /// declaration reachable from a procedural-block body. v1 flattens these to
     /// module-scope nets (no per-process frame). Called in the Nets phase.
@@ -408,7 +490,7 @@ impl Elaborator<'_> {
                                     && !const_immune
                                     && (n.init.is_some()
                                         || read_in_sibling_init
-                                        || !automatic_local_definitely_assigned(stmts, nm))
+                                        || !self.block_local_definitely_assigned(stmts, nm))
                                 {
                                     self.error(
                                         MsgCode::ElabUnsupported,
@@ -556,7 +638,7 @@ impl Elaborator<'_> {
                                              one"
                                         ),
                                     );
-                                } else if !automatic_local_definitely_assigned(stmts, nm) {
+                                } else if !self.block_local_definitely_assigned(stmts, nm) {
                                     self.error(
                                         MsgCode::ElabUnsupported,
                                         &format!(
@@ -621,7 +703,7 @@ impl Elaborator<'_> {
                                 && !const_immune
                                 && (n.init.is_some()
                                     || read_in_sibling_init
-                                    || !automatic_local_definitely_assigned(stmts, nm))
+                                    || !self.block_local_definitely_assigned(stmts, nm))
                             {
                                 self.error(
                                     MsgCode::ElabUnsupported,
