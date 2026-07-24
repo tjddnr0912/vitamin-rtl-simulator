@@ -8,6 +8,28 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.215 round-19 리포트 4-가족(BL·Q·F-struct·F-record-out) loud→correct-support (리포트 2-오진 정정·adversarial review가 silent-wrong 4건 포착·format 23 불변) (2026-07-24, branch round19-families) ✅
+
+**컨텍스트**: 외부 리뷰어 round-19 리포트(base §4.5.213/214·`5dd897b`)의 잔여 7-가족+m.name. round-18 8-가족은 §4.5.213서 이미 해소. brainstorm→spec(`docs/superpowers/specs/2026-07-24-round19-families-design.md`)→plan(`docs/superpowers/plans/2026-07-24-round19-families.md`)→subagent-driven(가족별 implementer + adversarial review·전체-브랜치 최종 review). **iverilog·verilator 모두 이 구문 거부**(`sorry: Overriding the default variable lifetime`·`Unpacked structs not supported`)→**외부 오라클 無**→hand-IEEE(§6.21 lifetime·§13.5.1/2 pass-by-value) + 통과 boundary 교차검증.
+
+**fresh-probe 트리아지가 리포트 2-오진 정정**: (1) **Q** — 리포트의 "member-width param-aware로 만들라"가 **UNSOUND**(parse-time frozen width→`#(.ADDR_W())` override 시 silent-wrong·`$bits`=8 vs 48 per-instance 실측). 실제 갭=whole-record scalar copy 뿐(net/queue/`size()`/`pop_front()`/field access 다 이미 동작). (2) **F-record-out** — "string 멤버 ≥2" 경계 **존재 안 함**(리포터 두 파일 다 동일 실패·2-string copy-out 값-정확). 실제 트리거=short-circuit `&&`/`||` RHS의 output-formal 호출(멤버 수 무관·records 문제 아닌 hoist 문제). (3) **m.name** — 별개 버그 아님·F-struct의 downstream 증상(`run_test`가 struct-with-string-member input formal→binding 실패로 `.name()` 미도달)→F-struct 고치면 자동 해소(검증).
+
+**6-가족(BL 4-face + Q + F-struct + F-record-out)**:
+- **BL1**(`9b6adf8`) const-init block-local under a fork: init이 상수 fold + never-reassigned면 concurrency-immune(모든 activation이 shared flattened net서 같은 상수 read)→loud gate skip. `stmt_never_assigns_ident` write-scan(da.rs).
+- **BL2/BL3**(`6b19a8c`) dyn-storage block-local `'{…}` init: `compute_per_entry_block_locals`가 dyn-storage 기록·`emit_per_entry_block_inits`가 block-entry서 `dyn_decl_init_stmts`(`new[N]`+elem writes) 재방출. BL3 same-name은 기존 `$blk$` distinct-net scoping 재사용(coalesce guard 불변).
+- **BL4**(`a714bb8`) output/inout-actual write를 definite-assignment이 인식: `da::OutActualWrites` resolver(func/task port dir)·unconditionally-evaluated output-actual=definite assignment. inout-first-ref는 copy-in이 actual을 read→flatten leftover≠fresh automatic이라 genuine divergence→LOUD 유지(sound deviation).
+- **Q**(`0e9858b`) non-packable record whole-scalar copy: `try_soa_assign`(parser soa.rs)에 same-type-name gate branch·per-member fan-out(field↔field by NAME). mixed-state/string-member/param-width 커버·기존 2 stays-loud test flip(값 검증 후).
+- **F-struct**(`4fc5f4d`) SoA-record-array element actual: `expand_soa_array_elem_arg`가 `arr[i]`→per-member `$unp$arr$field[i]`·formal side와 same-list order(aligned by construction·all-or-nothing). m.name 해소.
+- **F-record-out**(`8bc1d27`) short-circuit loop-cond output-formal 호출: `lower_while`/`lower_for`가 top-level `A&&B`/`A||B`를 explicit branch chain으로 lower·copy-out Call을 `eval_b`(non-shortcircuit edge서만 도달)에 방출→call이 skip path서 절대 안 fire.
+
+**★ adversarial review가 silent-wrong 4건 포착(3 latent·solo-pass면 ship됐을 것)**: (a) **BL1-fix**(`d243058`) write-scanner가 output/inout call in expr + assert action 놓침(under-detecting `expr_reads_ident`)→`_`-free-exhaustive walker(`expr_call_may_write_ident`)로. (b) **BL4-fix**(`d62b506`) reads-check가 same-call member/method read(`f(obj, obj.v)`) 놓침(같은 under-detecting walker)→conservative `expr_no_ref`. (c) **F-struct-fix**(`c7924fb`) array index를 per-member로 clone→side-effecting index(`kats[nxt()]`) N회 평가=torn record read→call-bearing index reject(`expr_has_call`). (d) **harden**(`f0142f6`) `expr_has_call`을 `_`-free-exhaustive화(whole-branch review Minor·defense-in-depth). Q review·F-record-out review·whole-branch review(7 probe)는 전부 CLEAN.
+
+**correct-or-loud 잔여(LOUD)**: BL under-fork non-const/reassigned·assoc·multi-dim dyn·BL4 inout-first-ref·Q cross-type copy·F-struct call-bearing index·F-record-out `?:`arm/if-cond/general-expr/nested-in-operand(`A&&(B||call)`). F-record-out `(A&&B)&&call`은 correct-by-construction이라 supported(review 판정).
+
+**format 23 불변**: 전부 parser-desugar(`.vu` AST hash만)·elaborate-transient·CFG-lowering·message-only. `CURRENT_FORMAT_VERSION`·sim-ir/header/schema/hdl-ast/vita-artifact 전부 미변경(whole-branch review `git diff` 확인). **4262→4333 green**(+71).
+
+**교훈**: (1) **외부 리포트도 fresh-probe 재트리아지 필수**(2-오진 정정·리포트대로 구현했으면 Q는 override-silent-wrong 도입). (2) **accept-gate의 under-detecting walker(`expr_reads_ident`)가 반복 silent-wrong 원천**·conservative(`expr_no_ref`)/`_`-free-exhaustive가 정답(BL1/BL4/F-struct 3회 동형 발현). (3) **가족별+전체-브랜치 2단 adversarial review가 silent-wrong 4건 포착**(3 latent·§4.5.214 "whole-branch review 필수" 재확인). (4) "context-bound 격리 불가" 리포트 항목(m.name)이 실은 인접 가족(F-struct)의 downstream 증상. 신규 test 8파일 + 71.
+
 #### 4.5.214 fork…join[_any|_none] inside a suspendable task body loud→supported (Case A/B split + interior-mutable window arena) (2026-07-24, branch fork-in-frame) ✅
 
 **컨텍스트**: §4.5.213(C1 part 2)이 "`fork a(); b(); join`을 suspendable task 내부에서 실행하는 것은 깊은 스케줄러 rework(shared frame-window model)라 blast radius=frame 서브시스템 전체"라 판단해 correct-or-loud LOUD 유지·ROADMAP §0 NEXT로 남긴 항목. 브레인스토밍→설계(`docs/superpowers/specs/2026-07-24-fork-in-frame-design.md`, approved)→구현 계획(`docs/superpowers/plans/2026-07-24-fork-in-frame.md`, staged 1→2→3)→4-task subagent-driven 구현(+ 커밋별 리뷰 + 전체-브랜치 최종 리뷰)으로 진행. iverilog가 리포트 repro(`fork a(); b(); join` of separate no-arg tasks)를 실제 실행하는 real oracle.
