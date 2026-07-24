@@ -272,8 +272,13 @@ impl Parser<'_, '_> {
     /// at elaborate. Non-struct args pass through byte-identically, and the whole is a
     /// no-op when no struct var is in scope. NOT applied to `$system` calls (a bare
     /// `$display(r)` stays a whole-struct use = the existing loud path).
+    ///
+    /// Round-19 (Task 5 / "F-struct"): an actual that ISN'T a bare struct-var Ident
+    /// falls through to [`Self::expand_soa_array_elem_arg`] — `arr[i]` naming a
+    /// record SoA array (`kats[0]`) is a whole NON-packable-record ELEMENT value and
+    /// expands the same way, member-by-member.
     pub(crate) fn expand_struct_call_args(&self, args: Vec<Expr>) -> Vec<Expr> {
-        if self.var_unpacked_struct.is_empty() {
+        if self.var_unpacked_struct.is_empty() && self.record_soa_vars.is_empty() {
             return args;
         }
         let mut out = Vec::with_capacity(args.len());
@@ -301,10 +306,79 @@ impl Parser<'_, '_> {
                         });
                     }
                 }
-                None => out.push(a),
+                None => match self.expand_soa_array_elem_arg(&a) {
+                    Some(elems) => out.extend(elems),
+                    None => out.push(a),
+                },
             }
         }
         out
+    }
+
+    /// Round-19 (Task 5 / "F-struct"): if `a` is `arr[i]` (`ExprKind::BitSelect`) or
+    /// `arr[i +: w]`/`arr[i -: w]` (`ExprKind::IndexedPart`) whose base is a bare
+    /// single-segment Ident naming a record SoA array (`record_soa_vars` — a FIXED,
+    /// QUEUE, or DYNAMIC array of a NON-packable record: a `string`/`real`/mixed-
+    /// state/param-width member), expand it to its N per-member element actuals
+    /// `$unp$arr$field[i]` — one per member of the record type, in the SAME
+    /// declaration order [`Self::unpacked_struct_member_ports`] used to build the
+    /// callee's N per-member formals (both walk `self.unpacked_struct_layouts[ty]`
+    /// with a plain `.iter()`, so the two sides are aligned by construction — the
+    /// SAME source list, walked the SAME way). Reuses [`Self::soa_member_field`] for
+    /// the per-member net name (the identical rewrite `arr[i].field` already uses),
+    /// so a would-be-unregistered field can never happen here (every name comes
+    /// straight from that member's own list) — but `collect`ing through the `?` keeps
+    /// this all-or-nothing regardless: one failure fails the WHOLE expansion, never a
+    /// partial one that would desync formal↔actual arity.
+    ///
+    /// `None` for anything else — a non-SoA base, a deeper/compound base (already
+    /// desugared to a plain member net elsewhere, e.g. `kats[0].mode` is NOT this
+    /// shape), or an unregistered array — so the caller leaves the actual UNEXPANDED
+    /// and a resulting formal/actual arity mismatch is caught (loud) downstream in
+    /// `fill_default_args`.
+    pub(crate) fn expand_soa_array_elem_arg(&self, a: &Expr) -> Option<Vec<Expr>> {
+        let base = match &a.kind {
+            ExprKind::BitSelect { base, .. } | ExprKind::IndexedPart { base, .. } => base,
+            _ => return None,
+        };
+        let ExprKind::Ident(p) = &base.kind else {
+            return None;
+        };
+        if p.segments.len() != 1 {
+            return None;
+        }
+        let arr = p.segments[0].name.as_str();
+        let ty = self.record_soa_vars.get(arr)?.clone();
+        let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+        let span = a.span;
+        members
+            .iter()
+            .map(|m| {
+                let mnet = self.soa_member_field(arr, &m.name.name)?;
+                let mbase = Self::ident_expr(&mnet, span);
+                Some(match &a.kind {
+                    ExprKind::BitSelect { index, .. } => Expr {
+                        kind: ExprKind::BitSelect {
+                            base: Box::new(mbase),
+                            index: index.clone(),
+                        },
+                        span,
+                    },
+                    ExprKind::IndexedPart {
+                        offset, width, dir, ..
+                    } => Expr {
+                        kind: ExprKind::IndexedPart {
+                            base: Box::new(mbase),
+                            offset: offset.clone(),
+                            width: width.clone(),
+                            dir: *dir,
+                        },
+                        span,
+                    },
+                    _ => unreachable!("matched in the outer fn — BitSelect or IndexedPart only"),
+                })
+            })
+            .collect()
     }
 
     /// Round-9: if `path` is `var.field` where `var` is an UNPACKED-struct
