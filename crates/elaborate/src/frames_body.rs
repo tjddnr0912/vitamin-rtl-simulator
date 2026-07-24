@@ -374,6 +374,41 @@ impl Elaborator<'_> {
                 if !names.contains(&decl.name.name) {
                     continue;
                 }
+                // BL2/BL3 (round-19): a DYNAMIC-STORAGE per-entry local re-inits via its
+                // decl-init EXPANSION — a raw whole-handle `x = '{…}'` assign is loud ("no
+                // whole-value surface"). Resolve the handle; a `'{…}`/`{…}` pattern init
+                // becomes `d = new[N]; d[i] = e;` (dyn array — `new[N]` self-resets) or a
+                // `q.push_back(e)` sequence (queue — CLEARED first, since push_back appends).
+                // A plain SCALAR per-entry local (family D — `dyn_handle` is None) falls
+                // through to the raw `x = init` blocking below, unchanged.
+                if let Some((_, kind)) = self.dyn_handle(&decl.name.name) {
+                    if let Some(elems) = dyn_pattern_elems(init) {
+                        if kind == ir::NetKind::Queue {
+                            // Reset the queue before re-pushing so a loop / repeated block
+                            // entry does not accumulate (a dyn array's `new[N]` needs no clear).
+                            let clear = ast::Stmt::UserTaskCall {
+                                name: ast::HierPath {
+                                    segments: vec![
+                                        decl.name.clone(),
+                                        ast::Ident {
+                                            name: "delete".to_string(),
+                                            span: decl.name.span,
+                                        },
+                                    ],
+                                    span: decl.name.span,
+                                },
+                                args: vec![],
+                                span: decl.span,
+                            };
+                            self.lower_stmt(b, &clear);
+                        }
+                        let stmts = self.dyn_decl_init_stmts(&decl.name, kind, elems);
+                        for st in &stmts {
+                            self.lower_stmt(b, st);
+                        }
+                        continue;
+                    }
+                }
                 let stmt = ast::Stmt::Blocking {
                     lhs: ast::Lvalue::Ident(ast::HierPath {
                         segments: vec![decl.name.clone()],

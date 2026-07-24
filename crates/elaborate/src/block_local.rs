@@ -212,9 +212,13 @@ impl Elaborator<'_> {
     /// most one activation of the block is live at a time: a module process's loops are
     /// sequential (iteration N completes before N+1), so ONLY a `fork` ancestor can spawn a
     /// concurrent copy — `under_fork` blocks are EXCLUDED (they keep the loud reject). Also
-    /// excludes module-net collisions (handled by the coalesce guards) and dyn/string/array
-    /// decls (their own paths). Anything not recorded here falls through to the existing
-    /// E3009 (correct-or-loud). A module process cannot recurse, so recursion is a non-issue.
+    /// excludes module-net collisions (handled by the coalesce guards). Records TWO shapes:
+    /// (a) a plain scalar VAR with an initializer (family D), and (b) BL2/BL3 (round-19) a
+    /// DYNAMIC-STORAGE local — one `Dim::Dyn`/`Dim::Queue` unpacked dim (dyn array / string
+    /// dyn array / queue) with a `'{…}`/`{…}`/`new[]` init, whose decl-init EXPANSION re-runs
+    /// at block entry (self-resetting). Assoc, multi-dim, and non-pattern dyn inits are NOT
+    /// recorded. Anything not recorded here falls through to the existing E3009
+    /// (correct-or-loud). A module process cannot recurse, so recursion is a non-issue.
     pub(crate) fn compute_per_entry_block_locals(
         module: &ast::ModuleDecl,
         module_names: &std::collections::BTreeSet<String>,
@@ -231,19 +235,45 @@ impl Elaborator<'_> {
                 } => {
                     if !under_fork {
                         for d in decls {
-                            // A plain scalar VAR (not a net, not a string, no unpacked dims);
-                            // a dyn/queue/assoc/string/array decl keeps its own path.
-                            if d.lifetime == Some(true)
-                                && netvar_kind_is_var(d.kind)
-                                && !matches!(d.kind, ast::NetVarKind::String)
-                            {
-                                for n in &d.names {
-                                    if n.init.is_some()
-                                        && n.unpacked.is_empty()
-                                        && !module_names.contains(&n.name.name)
-                                    {
-                                        out.entry(span.lo).or_default().insert(n.name.name.clone());
-                                    }
+                            if d.lifetime != Some(true) {
+                                continue;
+                            }
+                            for n in &d.names {
+                                if module_names.contains(&n.name.name) {
+                                    continue;
+                                }
+                                // A plain scalar VAR (not a net, not a string, no unpacked
+                                // dims) with an initializer — its init re-runs at block entry
+                                // (emitted as a plain `x = init` blocking).
+                                let scalar_var = netvar_kind_is_var(d.kind)
+                                    && !matches!(d.kind, ast::NetVarKind::String)
+                                    && n.init.is_some()
+                                    && n.unpacked.is_empty();
+                                // BL2/BL3 (round-19): a DYNAMIC-STORAGE block-local — a single
+                                // `Dim::Dyn`/`Dim::Queue` unpacked dim (a dyn array, a string
+                                // dyn array, or a queue) — declared `automatic` with a
+                                // `'{…}` / `{…}` (§10.10 unpacked-concat) initializer. Its
+                                // decl-init EXPANSION (`d = new[N]; d[i] = e;` for a dyn array /
+                                // a `q.push_back(e)` sequence for a queue) is re-emitted at
+                                // BLOCK ENTRY by `emit_per_entry_block_inits`, giving §6.21
+                                // per-entry semantics on the one flattened handle net
+                                // (self-resetting: `new[N]` re-allocates; a queue is cleared
+                                // first). EXCLUDED and left loud: associative arrays
+                                // (`Dim::Assoc` — no `'{…}` expansion), MULTI-dim dyn
+                                // (`unpacked.len() != 1`), and a non-pattern init. (A `new[]`
+                                // decl-init is separately rejected at the decl for any dyn
+                                // handle — vita supports only a `'{…}` pattern there.)
+                                let dyn_pattern = n.unpacked.len() == 1
+                                    && matches!(n.unpacked[0], ast::Dim::Dyn | ast::Dim::Queue(_))
+                                    && n.init.as_ref().is_some_and(|init| {
+                                        matches!(
+                                            init.kind,
+                                            ast::ExprKind::AssignPattern(_)
+                                                | ast::ExprKind::Concat { .. }
+                                        )
+                                    });
+                                if scalar_var || dyn_pattern {
+                                    out.entry(span.lo).or_default().insert(n.name.name.clone());
                                 }
                             }
                         }
