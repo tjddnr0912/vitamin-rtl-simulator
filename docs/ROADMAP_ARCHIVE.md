@@ -8,6 +8,33 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.218 SILENT-WRONG 수정: inner-scope local이 OUTER string-array side-map을 shadow 못 하던 문제 → supported (opt-in shadow-aware scope walk·format 23 불변) (2026-07-25, branch feat-scope-shadow-sidemap) ✅
+
+**컨텍스트**: §4.5.217 적대 2-lens 리뷰에서 **양 reviewer가 독립적으로 CONVERGE**해 발굴한 항목(ROADMAP §0 NEXT 최상단). 오라클 有(iverilog가 전부 지원하는 구문)·read/write 양 경로·**非-string 로컬까지 오염**.
+
+**근본 원인**: `walk_scopes_key`(유일한 outward scope walk)는 **`hit`이 probe하는 그 한 map 안에서만** innermost-wins다. 그런데 function/task/block/generate 로컬은 **NET**(`symbols`)이고, 이 walk를 쓰는 여러 consumer는 **다른 keyspace**(`string_array_elems`·`array_const_vals`·`pkg_var_aliases`·`iface_insts`·`genvar_decls`)를 probe한다→walk가 inner net binding을 **그냥 지나쳐** inner 로컬을 OUTER side-map 엔트리로 resolve. 조용히, 그리고 string이 아닌 로컬에서도.
+
+**silent-wrong(iverilog 차분 확정)**: 모듈 `string sa[2]` + inner 로컬 `sa`
+- function-local `string sa`: `sa[0]<sa[1]`이 vita 0 vs iverilog 1(byte-select가 배열 비교로) · inline(static) function 동일
+- task-local `logic [15:0] sa`: `{sa[0],sa[1]}`이 vita 1515673431 vs iverilog 1
+- task-local `logic [7:0] sa[2]` **WRITE**: 모듈 string 배열 원소를 덮어씀(vita `a,YY` vs `ZZ,YY`)
+- generate-local `logic [15:0] sa`: `sa[8]`이 **bogus LOUD**(“string-array index 8 is out of the declared range [0:1]”)—외부 배열 선언 범위로 range-check. **이 케이스가 “string 전용이 아니다”의 결정적 증거**.
+- block-local `string sa`: 모듈-scope `sa[0]="zz"`가 block-local 스칼라로의 `putc` byte-write로 격하→읽으면 빈 문자열
+
+**fix(format 23 불변·elaborate-local·4파일 +82줄)**: (1) `walk_scopes_key`는 **원본 그대로 복원**하고, shadow 검사를 **opt-in** `walk_scopes_key_shadowed`로 분리(둘 다 private `walk_scopes_key_inner(name,hit,stop_at_net_binding)`에 위임). (2) `string_array_elems` 3 site만 opt-in(`strings.rs` read 2 + `lvalue.rs` write 1). (3) block-local이 모듈 string-array 이름과 충돌하면 **`d.kind == String`일 때만** loud.
+
+**★ 적대 2-lens가 내가 넣은 결함 2건 포착(둘 다 배포됐으면 심각)**:
+- **S1(soundness·CRITICAL)**: 초판은 shadow 검사를 `walk_scopes_key` **전체**에 넣었는데, 이 검사는 **elaboration 중 채워지는 `symbols`에 의존=순서 의존적**이다. `elaborate_gen_item`은 generate control expr를 **phase마다 재-fold**하면서 fold 실패는 **Nets phase에서만** 진단한다→sibling net이 Nets 시점엔 없고 Logic 시점엔 있어서, 중첩 generate가 Nets서 fold되고 Logic서 실패→body가 unroll된 뒤 **lower되지 않고 통째로 사라짐(exit 0·errors=0·무진단)**. 고치려던 버그보다 **더 나쁨**. → shadow walk를 opt-in화해 `params`/`param_meta` 등 13 consumer를 byte-identical로 되돌려 해소(부수적으로 soundness가 측정한 **~20% elaboration perf 회귀**도 소멸).
+- **R1(differential)**: 초판 fix B가 이름 충돌만 보고 loud→**11개 byte-correct 설계를 false-reject**(`logic [7:0] sa;`·`logic [7:0] sa[2];`·`int`/`real`·multi-name 등, 전부 iverilog 정상+vita PRE 정상). PRE 빌드로 hazard set을 실측해 **STRING kind gate**로 축소.
+
+**리뷰어 제안을 실측으로 개선**: reviewer가 제안한 gate는 “String **또는** block이 이름을 index-select”였으나, reviewer 자신의 반례 `c2`가 index-select(`sa[0]=8'hAA`)하면서 정상이라 그 술어는 c2를 계속 reject한다. 반대로 read-predicate(`new_str_read` 방식)를 넣었으면 **write-only string block-local**(재감사서 발견한 `n4`)이 이미 silent-wrong이라 놓쳤을 것. **bare `NetVarKind::String` gate가 정답**(string 로컬이 bare name을 점유하는 순간, 읽든 안 읽든 모듈-scope `sa[i]` write가 `putc`로 격하). 재감사 verdict: “both halves of my original suggestion were wrong, and your gate is better”.
+
+**재감사 결과 양 lens CLEAN**: differential=PRE/POST/iverilog 3-way **114 설계**(false-reject 13 전부 복원·string-array fix 10 유지[신규 발굴 2 포함: function **formal** shadow·중첩 generate]·String-gate loud 6개 전부 PRE서 이미 broken/loud=**false-reject 0**·param class 5개 `PRE==POST`·over-rejection sweep ~70 regression 0)·**`##EMPTY-OUTPUT-EXIT0##` 전용 detector로 S1 시그니처 0건**.
+
+**correct-or-loud 잔여(전부 `PRE==POST`=pre-existing·ROADMAP §2)**: inner **net이 outer PARAM/enum-label을 shadow 못 함**(order-INDEPENDENT AST-gathered name set이 필요→전용 슬라이스) · block-local이 **imported package 변수**를 clobber · block-local scalar vector를 block이 index-select하는 경우 · fork-arm/for-body/unnamed block(별도 메시지로 이미 loud).
+
+**교훈**: (1) **공유 walk에 semantics를 추가할 땐 default가 아니라 opt-in**—consumer마다 순서 의존성·안전 전제가 다르다(13/14가 무관한데 전부 리스크를 지게 됨). (2) **mutable elaboration state(`symbols`)에 name resolution을 걸면 phase 재실행과 충돌**한다: 진단이 특정 phase에만 있으면 **조용한 삭제**가 된다(diagnostic gate가 phase-limited인 곳을 먼저 확인). (3) **REJECT gate는 “이름 충돌”이 아니라 실측한 hazard set으로 잘라라**—collision만 보면 correct 설계를 대량 loud화(11건). (4) **리뷰어의 제안 gate도 실측 검증 대상**(제안한 두 술어 모두 반례 존재·내 gate가 더 정확). (5) 슬라이스 축소가 정답일 때가 있다—param class를 포기하고 cleanly-verifiable subset(string-array)만 지원. 신규 `scope_shadow_sidemap.rs`×15(S1 회귀 가드 2개 포함). **4372→4387 green**·clippy/fmt clean·format 23 불변.
+
 #### 4.5.217 SILENT-WRONG 수정: string-ARRAY ELEMENT가 concat/replicate/relational에서 packed로 새던 문제 → supported (AST 문자열-도메인 분류기 BitSelect arm·format 23 불변) (2026-07-25, branch feat-string-array-elem-domain) ✅
 
 **발굴 경위**: ROADMAP §3 소형 큐의 loud→supported 후보(FIXED string array decl-init `string s[2]='{"a","b"}`)를 그라운딩하다, fixed 경로와 dyn 경로의 capability parity를 같은 문맥 매트릭스로 비교하는 probe에서 **두 경로 모두** `{s[0],s[1]}`을 빈 문자열로 렌더하는 것을 관찰. scalar string은 정상(`{a,b}`=abcb) → 배열 ELEMENT 전용 갭. iverilog가 fixed string array를 지원하므로 **live oracle 有**.
