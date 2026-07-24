@@ -485,3 +485,54 @@ fn disable_fork_in_frame_stays_loud() {
         endmodule\n");
     assert!(is_loud(&o), "disable fork in frame must stay loud:\n{o}");
 }
+
+// ── correct-or-loud (final-review Finding, silent-wrong): a `return` INSIDE a fork arm
+//    must stay LOUD. A `return` in an arm lowers to `goto(exit_bb)` where `exit_bb` carries
+//    `Terminator::Return`; at runtime the synthetic ARM frame (spawned by `exec_fork`, which
+//    BYPASSES `enter_task_frame`) hits the in-frame `Return` handler and runs
+//    `exit_task_frame`/`frame_dyn_free` on the PARENT task's FuncId — popping the parent's
+//    frame scope while it is parked (silent corruption). Before the fix `classify_one_arm`
+//    treated a reached `Return` terminator as safe (`Return => {}`), silently ADMITTING this;
+//    now it returns `ForkAdmit::Loud`. iverilog also REJECTS `return` inside fork-join
+//    (IEEE 1800 §9.3/§13.4.1) → oracle says loud. Pre-fix this mis-ran (exit 0, `after
+//    join @15`, no E3009); post-fix it is E3009. ──
+#[test]
+fn return_in_fork_arm_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic other; @(posedge clk); endtask\n\
+        task automatic run;\n\
+          @(posedge clk);\n\
+          fork begin @(posedge clk); return; end other(); join\n\
+          $display(\"after join @%0t\", $time);\n\
+        endtask\n\
+        initial begin run(); $finish; end\n\
+        endmodule\n");
+    assert!(is_loud(&o), "return inside a fork arm must stay loud:\n{o}");
+}
+
+// ── correct-or-loud (final-review Finding, DATA-CORRUPTION repro): the same `return`-in-arm
+//    but the task has a DYNAMIC-ARRAY local. Pre-fix the arm's `Return` freed the parent's
+//    dyn-array (`frame_dyn_free` on the parent FuncId) while the parent was parked, so the
+//    post-join read printed `after join q.size=0 q0=x q1=x` at exit 0 (silent-wrong — the
+//    correct value is `q.size=3 q0=77 q1=88`). It must now be LOUD (E3009). ──
+#[test]
+fn return_in_fork_arm_dyn_local_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic other; @(posedge clk); endtask\n\
+        task automatic run;\n\
+          int q[];\n\
+          q = new[3];\n\
+          q[0] = 77; q[1] = 88;\n\
+          @(posedge clk);\n\
+          fork begin @(posedge clk); return; end other(); join\n\
+          $display(\"after join q.size=%0d q0=%0d q1=%0d\", q.size(), q[0], q[1]);\n\
+        endtask\n\
+        initial begin run(); $finish; end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "return inside a fork arm (dyn-array local corruption path) must stay loud:\n{o}"
+    );
+}

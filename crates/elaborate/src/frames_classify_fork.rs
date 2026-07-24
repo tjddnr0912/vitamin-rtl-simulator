@@ -180,7 +180,17 @@ impl Elaborator<'_> {
                     stack.push(*ret_bb);
                 }
                 ir::Terminator::Fork { .. } => return ForkAdmit::Loud,
-                ir::Terminator::Return => {}
+                // A `return` (or a `disable`-escape) inside a fork arm diverts the arm to
+                // the task's SHARED exit block (which carries `Terminator::Return`). At
+                // runtime the synthetic ARM frame — spawned by `exec_fork`, which BYPASSES
+                // `enter_task_frame` — would hit the in-frame `Return` handler and run
+                // `exit_task_frame`/`frame_dyn_free` on the PARENT task's FuncId, popping the
+                // parent's frame scope and freeing its dyn-array locals while the parent is
+                // parked (silent data corruption). iverilog also REJECTS `return` inside a
+                // fork-join block (IEEE 1800 §9.3/§13.4.1) → LOUD. A well-formed arm instead
+                // terminates via `goto(join_bb)` and the walk stops at the join sentinel
+                // above, never reaching a `Return` terminator — so this is non-false-rejecting.
+                ir::Terminator::Return => return ForkAdmit::Loud,
             }
         }
         admit
