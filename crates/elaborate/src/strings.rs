@@ -41,6 +41,41 @@ impl Elaborator<'_> {
             && self.walk_scopes_key(&p.segments[0].name, |k| self.string_array_elems.contains_key(k)).is_some())
     }
 
+    /// r19: true iff `base` names a string ARRAY — a FIXED one (`string s[N]`, whose
+    /// elements are the per-element `<name>$sae$<i>` nets) or a DYNAMIC one (`string
+    /// s[]`, a `DynArray` net marked in `string_elem_dyn_nets`). That makes `base[i]`
+    /// a string ELEMENT (its declared element type is `string`, IEEE §7.4), NOT the
+    /// §6.16.2 BYTE select that `base[i]` means on a SCALAR `string`.
+    ///
+    /// Not a `NetKind::String` handle either way — a fixed string array registers no
+    /// net under the ARRAY's own name (only the element nets) and a dynamic one is a
+    /// `DynArray` net — so neither can reach `string_handle` / `string_base_expr_net`
+    /// and a scalar-string byte select is never captured here.
+    ///
+    /// **Each clause resolves the name with the SAME machinery its own lowering uses**,
+    /// so this classifier cannot disagree with the expression it is classifying: the
+    /// fixed clause shares `walk_scopes_key` with the element-net read/write paths, and
+    /// the dynamic clause goes through `dyn_handle_read` — which consults the `dyn_subst`
+    /// ALIAS first. Resolving the dynamic clause with a plain `lookup_net_scoped` instead
+    /// was a silent-wrong: inside an R2-inlined body a dyn-array formal SHADOWS an outer
+    /// same-named net, so a module-level `string b[]` made an inlined `int b[]` formal's
+    /// `b[0] < b[1]` compare as text (256 < 255 answered 1, iverilog 0).
+    pub(crate) fn is_string_array_elem_base(&self, base: &ast::Expr) -> bool {
+        // Zero cost for every design that declares no string array at all: the arm can
+        // only fire on a hit in one of these two containers, so the whole classifier
+        // stays byte-identical there without walking any scope chain.
+        if self.string_array_elems.is_empty() && self.string_elem_dyn_nets.is_empty() {
+            return false;
+        }
+        if self.is_string_array_base(base) {
+            return true;
+        }
+        matches!(&base.kind, ast::ExprKind::Ident(p) if p.segments.len() == 1
+            && self
+                .dyn_handle_read(&p.segments[0].name)
+                .is_some_and(|(n, _)| self.string_elem_dyn_nets.contains(&n)))
+    }
+
     /// N5: the raw string literal of a string-valued parameter initializer, or None.
     /// Unwraps a parenthesised value (`= ("abc")`). A non-StrLit value (numeric, an
     /// Ident, …) returns None → the numeric fold path (unchanged).
@@ -204,6 +239,15 @@ impl Elaborator<'_> {
                         "substr" | "toupper" | "tolower"
                     )
             }
+            // r19: a string-ARRAY ELEMENT (`sa[i]`) is itself a string-domain value.
+            // Without this arm an element fell through to the PACKED lowering in every
+            // context that gates on this classifier — concatenation, replication and the
+            // relational compares — and its bytes were silently dropped: `{sa[0],"!"}`
+            // rendered "!" (not "abc!"), `{2{sa[0]}}` rendered "", and `sa[0] < sa[1]`
+            // compared MSB-extended bits instead of lexicographically (§6.16). A byte
+            // select on a SCALAR string keeps the packed 8-bit meaning — see
+            // `is_string_array_elem_base` for why the two can never overlap.
+            ast::ExprKind::BitSelect { base, .. } => self.is_string_array_elem_base(base),
             _ => false,
         }
     }
