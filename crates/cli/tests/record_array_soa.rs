@@ -450,3 +450,47 @@ fn cross_type_copy_stays_loud() {
         "cross-type record whole copy must stay loud:\n{o}"
     );
 }
+
+// Q hardening (§4.5.215 follow-on, whole-branch-review Minor): a whole-record scalar copy of
+// a NON-packable record with a STRING member is a DEEP copy — mutating the SOURCE's string
+// member AFTER the copy must NOT show through to the destination (independent per-member heap
+// nets, not an alias). The Q review verified this by reduction (universal string-net value
+// semantics); this pins the exact string-member combination directly.
+#[test]
+fn string_member_record_copy_deep_by_value() {
+    let o = run("module t;\n\
+        typedef struct { int a; string s; } rec_t;\n\
+        rec_t p, q;\n\
+        initial begin\n\
+          p.a = 5; p.s = \"hello\";\n\
+          q = p;\n\
+          p.a = 99; p.s = \"changed\";\n\
+          $display(\"q=%0d,%s\", q.a, q.s);\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("q=5,hello"),
+        "string-member whole-copy must be a deep copy (q unaffected by later p mutation):\n{o}"
+    );
+}
+
+// Q hardening: a whole-record NBA `<=` copy with a string member — all members (incl. the
+// string) land together in the NBA update region with correct values.
+#[test]
+fn string_member_record_nba_copy() {
+    let o = run("module t;\n\
+        typedef struct { int a; string s; } rec_t;\n\
+        rec_t p, q;\n\
+        initial begin\n\
+          p.a = 7; p.s = \"world\";\n\
+          q <= p;\n\
+          #1 $display(\"q=%0d,%s\", q.a, q.s);\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("q=7,world"),
+        "string-member NBA whole-copy value:\n{o}"
+    );
+}
