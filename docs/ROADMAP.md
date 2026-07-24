@@ -6,7 +6,43 @@
 >
 > **운용 규칙**: 슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
-## 0. NEXT — 재개할 follow-on (2026-07-24 갱신)
+## 0. correct-support 승격 큐 (2026-07-25 전수 재그라운딩 — **오너 지시로 최상위**)
+
+> **목적**: 지금까지 correct-or-loud로 **LOUD 유지**한 항목 중 *실제로 구현 가능한 것*을 골라 correct-support로 올린다. 아래는 §3/§4 전체를 훑고 **12개 후보를 iverilog로 직접 재현**해 (a)아직 loud인지 (b)오라클이 있는지 확인한 결과다. 재확인에서 **4건이 stale**로 드러나 아래 "정정" 항목으로 이동했다.
+>
+> **순위 근거**: 전부 iverilog 오라클 有 = §1 우선순위 ②(additive·저위험). T1은 한 가족이라 머신러리가 공유되고, **dyn string 배열 경로가 이미 全 지원**이라 fixed를 그쪽 표현으로 라우팅하는 미러가 유력(§4.5.217서 확인). T2는 서로 독립적이라 개별 슬라이스.
+
+**T1 — string-array 가족 (오라클 ✓ 7/7 재현·공유 머신러리·가장 높은 ROI)**
+
+1. FIXED string array **decl-init** `string s[2]='{"aa","bb"}` — iverilog `aa bb` / vita E3009. module·block 양쪽.
+2. FIXED string array **runtime index** `s[i]` — iverilog `bb` / vita E3009 "requires a constant index".
+3. FIXED string array **`foreach`** — iverilog `0 aa 1 bb` / vita E3009(2와 동근).
+4. **`string q[$]`**(queue of string) — iverilog `1 aa` / vita E3009 "takes no packed/unpacked dimensions".
+5. **multi-dim** `string s[2][2]` — iverilog `aa` / vita E3009(4와 동일 gate).
+6. **hierarchical** `u.s[0]` — iverilog `aa` / vita E3010.
+7. **frame-local**(task/function body) string array — iverilog `aa` / vita E3009 subset reject.
+
+**T2 — 독립 항목 (오라클 ✓·각자 전용 슬라이스)**
+
+8. **`real` const-fold 전면 미지원** — `localparam real R = 2.0+3.0` = iverilog `5.0` / vita E3009 "not a foldable". `*`·`/`·`-`·`**` 전부 동일. **`localparam real`은 흔한 관용구**라 체감 가치가 크다(§4.5.141 발굴).
+9. **generate/interface 스코프 string decl-init** — `begin : g string s = "hi";` = iverilog `hi` / vita E3009 "supported only at module scope". 모듈 스코프는 이미 동작 → **스코프 비대칭 = 정확도 갭**(§4.5.198 논리).
+10. **sized-literal enum label → enum-method** — `enum bit[3:0]{A=4'h3}` + `.name()` = iverilog `A` / vita E3009. `const_lit`이 unsized-decimal만 fold해 `enum_defs` 미등록. 진단 문구도 오도("hierarchical function call").
+11. **음수 range bound** `logic [3:-2]` — iverilog 6-bit `101010` / vita **W3056 warn+clamp**(non-silent이나 whole-value 손상).
+
+**T3 — 전제조건 필요 (즉시 착수 대상 아님)**
+
+12. `$fmonitor`/`$fstrobe` — 파일 출력이 W3056로 skip. 지원엔 **format bump** 필요(SysTaskId 변종 or 사이드카).
+13. `case (x) inside {…}` — **no-oracle**(iverilog 13.0이 `case inside`/`inside` op/array reduction 전부 거부) → hand-IEEE + 내부 차분.
+
+**정정 — 재그라운딩에서 stale로 판명(§3에서 삭제, 비목표)**
+
+- ~~package `function string`~~ · ~~package control-flow 함수~~ — 둘 다 **이미 동작**(`hi` / `9` 확인).
+- ~~generate 스코프 queue/dyn decl-init~~ — queue **이미 동작**(`4` 확인). 잔여는 string decl-init뿐(위 9번).
+- ~~`always @(*)` string concat 조용히 drop~~ — **오진**. vita는 `[abcd]`로 **정확**하고 iverilog가 빈 문자열을 낸다. 명시 `@(a,b)`는 vita가 정직하게 loud. §4.5.217 리포트의 이 줄은 잘못 기록된 것.
+
+> **주의(정직한 순위 고지)**: 프로젝트 정본 우선순위(§1)는 **① 오라클 있는 CRITICAL silent-wrong > ② loud→supported**다. 아래 §0-B의 **inner NET vs outer PARAM shadow**는 여전히 ①-급(silent-wrong)이므로, 위 승격 큐를 먼저 하더라도 그 항목이 사라진 것은 아니다.
+
+## 0-B. NEXT — 재개할 deep-defer follow-on
 
 > **round-18 리포트 8-가족 RESOLVED(§4.5.213·2026-07-24)** — 외부 리뷰어 round-18 리포트의 잔여 8-가족(A/G queue/array-of-non-packable-record + foreach·D automatic-block-local-init·E1 enum-method-on-formal·E2 struct-member-method + string-dyn-element·F1 output-formal-fn-in-loop-cond·F2 severity-in-frame-body·F3 wrapped-dyn-formal) + C1 const-repeat를 correct-support화(hand-IEEE/iverilog 차분). 상세=ARCHIVE §4.5.213.
 >
@@ -25,7 +61,7 @@
 3. **전제조건 충족된 honest-loud 승격** (§4~§5).
 4. **G2 OBS 슬라이스** (§6).
 
-현재 NEXT 큐(상세=LOOPROMPT): **① inner-net vs outer-param shadow(§0·§2·AST-gathered name set 선행)** → ② string-array 소형 큐(§3: fixed decl-init·runtime index·queue-of-string) → OBS-2 sva.jsonl.
+현재 NEXT 큐(상세=LOOPROMPT): **§0 correct-support 승격 큐 T1(string-array 가족 7종) → T2(real const-fold·generate string decl-init·sized-literal enum label·음수 range)** → inner-net vs outer-param shadow(§0-B·①-급 silent-wrong·AST-gathered name set 선행) → OBS-2 sva.jsonl.
 
 ## 2. Silent-wrong 잔여 (전부 pre-existing·baseline 동일 — deep defer 또는 기록됨)
 
@@ -75,7 +111,7 @@
 - **🔴 inner NET이 outer PARAM/enum-label을 shadow 못 함(§4.5.218 잔여·오라클 有·DEEP)**: 같은 cross-map 근인이지만 `params`/`param_meta` consumer는 **순서 의존** 때문에 고칠 수 없었다 — shadow 검사가 `symbols`(elaboration 중 채워짐)에 의존하는데 `elaborate_gen_item`이 generate control expr를 phase마다 재-fold하고 fold 실패는 Nets phase에서만 진단→중첩 generate body가 **통째로 조용히 삭제**(exit 0). 재현: 모듈 `localparam W=4` + function-local `int W; W=9; return W;`=vita **4** vs iverilog 9(task-local·generate-local·enum-label·`str_param_raw` 동형). fix=order-INDEPENDENT **AST-gathered per-scope name set**(`gather_local_decl_names`/`compute_scoped_block_locals`의 "pure function of the AST" 패턴)로 shadow 판정 → 전용 슬라이스.
 - **block-local이 imported package 변수를 clobber(§4.5.218 재감사 발굴·오라클 有)**: `package pk; int pvar=33;` + `import pk::*` + `initial begin int pvar; pvar=7; end` → `pk::pvar`이 vita **7** vs iverilog 33(IEEE §26.3: 로컬이 import를 shadow·패키지 변수 불변). alias net이 `symbols`에 있어 `existing=Some`이지만 `int` 패키지 변수는 dyn/string 3-clause guard를 전부 통과해 coalesce. function-local은 안전(`$func$` scoping).
 - **block-local 잔여 shadow 2형(§4.5.218·PRE==POST)**: block-local **scalar vector**의 이름을 block이 index-select(`logic [7:0] sa; sa[0]`)=vita 0 vs iverilog 1 · named-block array 1형. **이름 충돌만으로 gate하면 byte-correct 설계 11건이 false-reject**되므로(§4.5.218 실측) per-shape hazard 모델이 필요.
-- **scalar-string 같은-family 잔여(§4.5.217 differential 발굴·전부 pre-existing)**: (a) `always @(*)` 안의 string concat이 **조용히 drop**(`{a,b}`=iverilog `abcd` vs vita 빈 문자열)·명시 `always @(a,b)`는 정직하게 loud라 비대칭 (b) `expr_is_string_ast`에 **`Ternary` arm 부재**→`{(c?a:b),"!"}`가 바이트 drop(scalar·element 공통·no-oracle[iverilog assert]·hand-IEEE) (c) `{a, 8'h00}`/X-Z 바이트가 `0x20`으로 치환되고 길이에 계상.
+- **scalar-string 같은-family 잔여(§4.5.217 differential 발굴)**: `expr_is_string_ast`에 **`Ternary` arm 부재**→`{(c?a:b),"!"}`가 바이트 drop(scalar·element 공통·**no-oracle**[iverilog assert]·hand-IEEE) · `{a, 8'h00}`/X-Z 바이트가 `0x20`으로 치환되고 길이에 계상. **정정**: 같이 기록됐던 "`always @(*)` string concat 조용히 drop"은 **오진**—vita가 `[abcd]`로 정확하고 iverilog가 빈 문자열이며, 명시 `@(a,b)`는 vita가 정직하게 loud.
 
 **문서화된 divergence (수정 비대상·핀됨):**
 
@@ -93,7 +129,7 @@
 
 **함수/패키지/formal:**
 
-- control-flow pkg fn(frame이 처리 가능→relax) · pkg `function string` · pkg TASK statement call. §4.5.111 잔여.
+- ~~control-flow pkg fn~~ · ~~pkg `function string`~~ = **둘 다 이미 동작**(2026-07-25 재그라운딩: `9` / `hi`). 잔여 = pkg TASK statement call뿐. §4.5.111.
 - array formal 재전달(nested/recursion) · non-zero-LSB 원소 · 2-D/non-zero-base/signed/task array formal. §4.5.110 slice 밖.
 - 음수-LSB 멤버 sub-select 정식 지원(§4.5.114). md-packed nested part-select WRITE `x[j][m:l]`/`arr[i][j][m:l]`=**§4.5.145 지원**(descending zero-lsb leaf·const packed idx); fail-closed 잔여(전부 loud·honest)=ascending/non-zero-lsb leaf·**genvar-index**(`x[g][m:l]`=const-fold 안 됨·over-reject)·const-OOB packed idx=silent no-op(read path 공유·값 무손상).
 - method/ctor NAME-default class-scope 해석(§4.5.90) · G4 string-return frame call(§4.5.129).
@@ -123,9 +159,9 @@
 
 **소형 큐:**
 
-- **string-array 잔여(§4.5.217 후·전부 loud=안전·오라클 有)**: FIXED string array decl-init(`string s[2]='{"a","b"}`·module/block 양쪽 loud·iverilog ✓·§4.5.183 기록 항목) · fixed array **runtime index**/`foreach`(dyn 배열은 이미 동작→fixed만 element-net 표현 때문에 const-index 전용) · `string q[$]`(queue of string·iverilog ✓) · multi-dim `string s[2][2]`(iverilog ✓) · hierarchical `u.s[0]` · **frame-local**(task/function body) string array(static task=E3018·function/automatic=E3009). dyn element의 byte select `d[0][0]`(no-oracle)도 잔여.
+- **string-array 잔여 → §0 승격 큐 T1로 이관(2026-07-25)**: FIXED string array decl-init(`string s[2]='{"a","b"}`·module/block 양쪽 loud·iverilog ✓·§4.5.183 기록 항목) · fixed array **runtime index**/`foreach`(dyn 배열은 이미 동작→fixed만 element-net 표현 때문에 const-index 전용) · `string q[$]`(queue of string·iverilog ✓) · multi-dim `string s[2][2]`(iverilog ✓) · hierarchical `u.s[0]` · **frame-local**(task/function body) string array(static task=E3018·function/automatic=E3009). dyn element의 byte select `d[0][0]`(no-oracle)도 잔여.
 
-- gen/iface queue/dyn/string decl-init · generate-case 스코프 이름 `gcase[0].x` · 계층 함수호출 `u1.f(x)`(round-17 D).
+- gen/iface **string** decl-init(→ §0 승격 큐 T2-9; queue/dyn은 **이미 동작**·2026-07-25 확인) · generate-case 스코프 이름 `gcase[0].x`.
 - SYS-READ hier-element dest · hier-write sentinel panic→loud · generate-내 `import` · package 자기-func init(㉽). explicit `import p::t`(TYPE)=**§4.5.148 지원**.
 - `$fmonitor`/`$fstrobe`(파일 strobe/monitor) — 현재 W3056 skip=**파일출력 silent drop**(non-silent·warned). 지원=**format bump 필요**(`SysTaskId` 변종 ① or 직렬화 사이드카 ②·staged 파리티): `FmtCapture`에 `fd:Option<u32>` 추가(engine-local)+strobe drain을 `file_write` 라우팅·전용 슬라이스. STDIN read(결정성 설계 필요).
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).
