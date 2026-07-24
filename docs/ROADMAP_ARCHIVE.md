@@ -8,6 +8,31 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.219 FIXED string-array decl-init `string s[N] = '{…}` loud→supported (t0 pre-sweep per-element 확장·format 23 불변) (2026-07-25, branch feat-fixed-string-array-init) ✅
+
+**컨텍스트**: 오너 지시로 재정렬한 **§0 correct-support 승격 큐 T1-1**. DYNAMIC 형태(`string s[] = '{…}`)는 이미 동작하는데 FIXED만 전 스코프 blanket-loud였음 — **그 비대칭 자체가 갭**(§4.5.198 논리). iverilog 오라클 有.
+
+**설계 결정(실측이 방향을 바꿈)**: 처음엔 "fixed를 dyn 표현으로 통째 라우팅"이 유력해 보였으나, **capability-parity 매트릭스 실측** 결과 **어느 쪽도 우세하지 않았다** — dyn이 init/runtime-index/`foreach`/`.size()`에서 앞서지만 **byte-select `s[0][0]`는 fixed만 정확**(119 vs dyn 0). 라우팅했으면 byte-select가 silent 0으로 **퇴행**했을 것(저장-클래스 변경의 전형적 함정). → 라우팅 포기, **additive 확장**으로 축소.
+
+**fix(format 23 불변·elaborate-local 3파일)**: `'{…}`를 선언 인덱스별 `s[k] = <elem>` 로 전개해 기존 t0 var-init pre-sweep에 push(const-index element 경로가 그대로 소비). 공유 헬퍼 `fixed_string_array_init_pairs` 하나를 module-scope collector와 block-local collector가 **동시에** 사용(두 collector가 갈라져 init을 조용히 흘린 전례=§4.5.183).
+
+**핵심 난점 = fill order**: 패턴 원소 k는 **선언 범위의 LEFT 경계부터 오른쪽으로** 채워진다(IEEE §10.9.1). `string s[3:1] = '{"a1","b2","c3"}`→s[3]=a1·s[1]=c3 (iverilog 확인). `string_array_elems`는 `min`부터 오름차순 저장이라 descending은 패턴을 역순으로 walk해야 함.
+
+**★ 적대 2-lens가 내가 넣은 결함 5건 포착(양 lens가 서로 다른 것을 잡음)**:
+- **F1(differential·SILENT-WRONG)**: mapping은 맞았으나 **element write의 실행 ORDER**가 틀림. iverilog는 오름차순 declared-index로 대입하는데 전개는 패턴 순서(descending 선언에선 내림차순)로 방출→**원소 initializer가 형제 원소를 읽으면** 값이 갈림(`'{"AA", peek(), "CC"}`에서 peek→s[3]가 이미 쓰인 값을 읽어 `[CC][AA][AA]` vs iverilog `[CC][ ][AA]`). fix=`step<0`이면 pair vector reverse(mapping 불변·ascending byte-identical).
+- **F2(differential·loud→silent 확대)**: hier 원소(`'{u.p,…}`)가 조용히 `""`. 근인은 pre-existing(scalar `string z = u.p;`도 동일)이나 **loud였던 것을 silent로 넓히면 안 됨**→`_`-free-exhaustive `expr_mentions_hier_path`로 loud화.
+- **negative bound(soundness)**: `IntLit{raw:"-2"}`가 decimal parse에서 거부돼 폴드 불가→오도하는 loud+부분 전개. fix=`Unary{Minus, IntLit}`.
+- **i64 overflow(soundness)**: `left-right`가 pathological bound에서 **panic**(main은 깔끔한 진단이었음). fix=`checked_sub`+원소 수 cap(4096, `ARRAY_PATTERN_UNROLL_CAP` 미러).
+- **decl/collector 재판정(soundness)**: collector가 `allow_string_init`을 못 봐서 interface/generate/package에선 decl은 loud인데 collector가 push→**cascading E3010**. fix=두 collector를 **decl의 실제 산출물(`string_array_elems`)** 로 게이팅→불일치가 구조적으로 불가.
+
+**리뷰 후 추가 발견+수정(false-loud)**: F2 게이트가 `q.size()`/`p.substr()`까지 삼킴 — 파서가 `recv.method(...)`를 `Call{HierPath[recv,method]}`로 인코딩해 `u.f()`와 **같은 2-segment 형태**이기 때문. fix=게이트를 Elaborator 메서드로 올려 **head가 local net으로 resolve되면 method call, 아니면 cross-instance**(=method lowering과 동일 resolver·§4.5.217 교훈 적용). `u.p`/`u.f()`는 loud 유지.
+
+**재감사**: soundness **CLEAN**(prefix hole 없음·double-flip 없음·`$blk$` 잔여는 내 주장을 정정해줘 comment로 고정) · differential은 false-loud 외 silent-wrong 0·105-file 코퍼스 재실행·repo examples PRE≡POST byte-identical. **잔여 divergence 1건은 pre-existing**(uninit string-array element 렌더 `[ ]` vs `[]`·init 없는 배열에서도 동일).
+
+**correct-or-loud 잔여**: generate/interface/package scope(=`allow_string_init` false·문서화된 follow-on) · `automatic` block-local · hier 원소 · 4096 초과 원소 · count mismatch(iverilog도 거부).
+
+**교훈**: (1) **저장-클래스 통합 전 capability-parity를 실측하라** — "새 표현이 더 낫다"는 직관이 틀려 byte-select가 퇴행할 뻔했다(어느 쪽도 우세하지 않으면 통합이 아니라 additive가 답). (2) **mapping이 맞아도 실행 ORDER가 관측 가능하면 별도 검증 대상**(soundness가 mapping을 4중 검증하고도 F1을 놓친 이유=order-sensitive probe를 ascending에서만 만들어 두 순서가 구분 불가했음). (3) **loud를 silent로 넓히지 마라** — 근인이 pre-existing이어도 내 변경이 표면을 넓히면 그건 내 책임. (4) **파서 인코딩이 의미를 가린다**(method call과 hier call이 같은 2-segment AST)→**분류는 lowering과 동일 resolver로**. 신규 `fixed_string_array_init.rs`×25. **4387→4412 green**·clippy/fmt clean·format 23 불변·staged 패리티 ✓.
+
 #### 4.5.218 SILENT-WRONG 수정: inner-scope local이 OUTER string-array side-map을 shadow 못 하던 문제 → supported (opt-in shadow-aware scope walk·format 23 불변) (2026-07-25, branch feat-scope-shadow-sidemap) ✅
 
 **컨텍스트**: §4.5.217 적대 2-lens 리뷰에서 **양 reviewer가 독립적으로 CONVERGE**해 발굴한 항목(ROADMAP §0 NEXT 최상단). 오라클 有(iverilog가 전부 지원하는 구문)·read/write 양 경로·**非-string 로컬까지 오염**.
