@@ -258,3 +258,54 @@ fn cross_type_soa_array_elem_actual_stays_loud() {
         "cross-type SoA element actual must stay loud, not silently mis-map:\n{out}"
     );
 }
+
+// correct-or-loud (adversarial-review Finding 1): the fan-out CLONES the array index
+// into each of the N per-member reads. A SIDE-EFFECTING / non-deterministic index (a
+// CALL) would be evaluated N times → duplicated side effects + a TORN record read
+// (members read from different elements), silently. IEEE §13.5.1 evaluates the actual
+// (and its index) ONCE. The parser can't hoist the index to a temp, so a call-bearing
+// index is rejected (unexpanded → loud arity), never silently multi-evaluated.
+#[test]
+fn call_index_stays_loud() {
+    let (out, code) = run("package kp; typedef enum logic[1:0]{M0,M1} m_e;\n\
+         typedef struct { m_e mode; string name; } kat_t; endpackage\n\
+         module t; import kp::*;\n\
+         logic clk=0; always #5 clk=~clk; m_e mode;\n\
+         function automatic int nxt(); nxt = 0; endfunction\n\
+         task automatic run_kat (input kat_t k); m_e m; @(posedge clk); m = k.mode;\n\
+         mode <= m; $display(\"PASS\"); endtask\n\
+         kat_t kats [];\n\
+         initial begin kats=new[1]; kats[0].mode=M1; kats[0].name=\"a\";\n\
+         run_kat(kats[nxt()]); #20 $finish; end\n\
+         endmodule\n");
+    assert_ne!(
+        code,
+        Some(0),
+        "a call-bearing SoA element index must stay loud (would multi-evaluate → torn read):\n{out}"
+    );
+}
+
+// A PURE arithmetic index (`i + 1`) is idempotent — every clone reads the same element,
+// so it stays supported (the fix rejects only call-bearing indices).
+#[test]
+fn pure_arith_index_supported() {
+    let (out, code) = run("package kp; typedef enum logic[1:0]{M0,M1} m_e;\n\
+         typedef struct { m_e mode; string name; } kat_t; endpackage\n\
+         module t; import kp::*;\n\
+         logic clk=0; always #5 clk=~clk; m_e mode;\n\
+         task automatic run_kat (input kat_t k); m_e m; @(posedge clk); m = k.mode;\n\
+         mode <= m; $display(\"PASS\"); endtask\n\
+         kat_t kats [];\n\
+         initial begin int i=1; kats=new[3]; kats[2].mode=M1; kats[2].name=\"a\";\n\
+         run_kat(kats[i+1]); #20 $finish; end\n\
+         endmodule\n");
+    assert_eq!(
+        code,
+        Some(0),
+        "pure arithmetic index must stay supported:\n{out}"
+    );
+    assert!(
+        out.contains("PASS"),
+        "pure-index actual did not bind:\n{out}"
+    );
+}

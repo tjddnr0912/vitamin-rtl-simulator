@@ -350,6 +350,24 @@ impl Parser<'_, '_> {
         let arr = p.segments[0].name.as_str();
         let ty = self.record_soa_vars.get(arr)?.clone();
         let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+        // IEEE §13.5.1: the actual (and its array index) is evaluated ONCE. This fan-out
+        // CLONES the index into each of the N per-member reads, so a SIDE-EFFECTING /
+        // non-deterministic index (a call — `kats[nxt()]`) would be evaluated N times →
+        // duplicated side effects AND a TORN record read (members read from DIFFERENT
+        // elements). The parser rewrites expressions, not statements, so it cannot hoist
+        // the index to a temp — reject a non-idempotent index (→ unexpanded → loud arity,
+        // correct-or-loud). A pure index (constant / ident / arithmetic / select) contains
+        // no call and is idempotent (every clone reads the same element).
+        let idx_pure = match &a.kind {
+            ExprKind::BitSelect { index, .. } => !Self::expr_has_call(index),
+            ExprKind::IndexedPart { offset, width, .. } => {
+                !Self::expr_has_call(offset) && !Self::expr_has_call(width)
+            }
+            _ => false,
+        };
+        if !idx_pure {
+            return None;
+        }
         let span = a.span;
         members
             .iter()
@@ -379,6 +397,54 @@ impl Parser<'_, '_> {
                 })
             })
             .collect()
+    }
+
+    /// Round-19 (F-struct fix): true if `e`'s subtree contains a function / method /
+    /// system CALL — the source of a side effect / non-determinism. Used to keep a
+    /// record-array-element ACTUAL's index IDEMPOTENT before it is cloned into N
+    /// per-member reads (a side-effecting index would evaluate N times → a torn record
+    /// read; IEEE §13.5.1 requires the actual evaluated once). A pure numeric index
+    /// (constant / ident / arithmetic / select / cast) contains no call.
+    fn expr_has_call(e: &Expr) -> bool {
+        use ExprKind as K;
+        match &e.kind {
+            K::Call { .. } | K::SysCall { .. } | K::MethodCall { .. } => true,
+            K::Unary { operand, .. } => Self::expr_has_call(operand),
+            K::Binary { lhs, rhs, .. } => Self::expr_has_call(lhs) || Self::expr_has_call(rhs),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                Self::expr_has_call(cond)
+                    || Self::expr_has_call(then_e)
+                    || Self::expr_has_call(else_e)
+            }
+            K::BitSelect { base, index } => Self::expr_has_call(base) || Self::expr_has_call(index),
+            K::PartSelect { base, msb, lsb } => {
+                Self::expr_has_call(base) || Self::expr_has_call(msb) || Self::expr_has_call(lsb)
+            }
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                Self::expr_has_call(base)
+                    || Self::expr_has_call(offset)
+                    || Self::expr_has_call(width)
+            }
+            K::Concat { parts } => parts.iter().any(Self::expr_has_call),
+            K::Replicate { count, value } => {
+                Self::expr_has_call(count) || value.iter().any(Self::expr_has_call)
+            }
+            K::Paren { inner } => Self::expr_has_call(inner),
+            K::MinTypMax { min, typ, max } => {
+                Self::expr_has_call(min) || Self::expr_has_call(typ) || Self::expr_has_call(max)
+            }
+            K::Cast { expr, .. } => Self::expr_has_call(expr),
+            _ => false,
+        }
     }
 
     /// Round-9: if `path` is `var.field` where `var` is an UNPACKED-struct
