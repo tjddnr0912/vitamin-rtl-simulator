@@ -20,6 +20,14 @@ pub enum JoinMode {
 /// process body is a private BB arena and `join_bb` is unique within it.
 pub type ForkModeTable = std::collections::BTreeMap<(u32, u32), JoinMode>;
 
+/// Stage-1 fork-in-frame: the sentinel "template" key for a fork that lives inside a
+/// suspendable TASK body (its blocks are in the GLOBAL `func_blocks` arena, so its
+/// `join_bb` is globally unique and its mode is independent of which process runs the
+/// task). Recorded as `(FRAME_FORK_KEY, global join_bb)` at the task-body flush and
+/// queried under the same key by the engine's `exec_fork` when the parent is in-frame.
+/// `u32::MAX` can never collide with a real `ProcId` (dense `0..nproc`).
+pub const FRAME_FORK_KEY: u32 = u32::MAX;
+
 /// Per-NetId fully-qualified hierarchical name (`"top.dut.q"`), source order.
 /// An engine-facing SIDE TABLE for the VCD writer — like [`ForkModeTable`] it
 /// rides out-of-band in `SimOpts` and NEVER enters the frozen `SimIr` root (which

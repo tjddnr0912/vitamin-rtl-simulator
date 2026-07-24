@@ -68,6 +68,28 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             #[cfg(debug_assertions)]
             sched.assert_not_parent_at_join(pi, bb);
         }
+        // Stage-1 fork-in-frame: an IN-FRAME fork child completes when its (sole) arm
+        // frame reaches the barrier's join_bb sentinel. `call_stack.len() == 1` ensures a
+        // deeper callee frame (a task the arm called) reaching a same-valued block id
+        // cannot mis-fire — only the arm frame itself, once every nested call has
+        // returned. Runs BEFORE the window-restore below so we tear the arm window down
+        // instead of restoring it.
+        if in_frame
+            && sched.activity_is_child(pi)
+            && sched.activities[pi as usize].call_stack.len() == 1
+        {
+            let arm = sched.activities[pi as usize].call_stack.last().unwrap();
+            let arm_bb = arm.bb;
+            let arm_callee = arm.callee;
+            if let Some(jr) = sched.activity_join_ref(pi) {
+                if arm_bb == sched.barrier_join_bb(jr) {
+                    sched.st.exit_arm_frame(arm_callee); // pop the arm's live owned window
+                    sched.activities[pi as usize].call_stack.clear();
+                    sched.on_child_complete(jr, pi);
+                    return Step::Done; // child dead; rearm skips it (is_child)
+                }
+            }
+        }
         // Round-14 V3/V4 Phase 3: resuming INTO a suspended frame — restore this
         // activity's stashed windows onto the shared `frame_stack` before executing the
         // frame CFG. Only fires on the first iteration after a resume (windows are `Some`
@@ -323,12 +345,17 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                 resume_bb,
             } => {
                 if in_frame {
-                    sched.mark_fatal();
-                    return Step::Fatal;
+                    // Stage-1 fork-in-frame: stash the parent frame's window (as the
+                    // in-frame Delay/Wait arms do) so the concurrent children — which take
+                    // turns on the shared `frame_stack` — never see it; the parent restores
+                    // it when the join resumes. On a `join_none` / zero-child continuation
+                    // (exec_fork → `Some`), `set_pos!` sets the FRAME's PC and the next loop
+                    // iteration restores this just-stashed window (a no-op round-trip).
+                    stash_frame_windows(sched, pi);
                 }
                 match sched.exec_fork(pi, children, *join, *resume_bb) {
                     Some(cont) => {
-                        bb = cont;
+                        set_pos!(cont);
                     }
                     None => return Step::Suspended,
                 }

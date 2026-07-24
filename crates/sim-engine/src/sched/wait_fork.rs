@@ -70,6 +70,14 @@ impl Scheduler<'_, '_> {
             b.fired = true;
             let parent = b.parent;
             let resume_bb = b.resume_bb;
+            // Stage-1 fork-in-frame: if the parent forked from INSIDE a suspendable task
+            // frame, it resumes at the frame's PC — set the top frame's `bb` here (the
+            // `Ready.block` below is IGNORED while in_frame; `run_process` reads the frame
+            // bb). A top-level (non-frame) parent has an empty call_stack → no-op, and the
+            // `Ready.block = resume_bb` drives it exactly as before (byte-identical).
+            if let Some(f) = self.activities[parent as usize].call_stack.last_mut() {
+                f.bb = resume_bb;
+            }
             let tie = self.activities[parent as usize].tie;
             // Re-enqueue the parent at resume_bb THIS instant (Active region).
             // Surplus children (join_any) stay live and run to completion; their

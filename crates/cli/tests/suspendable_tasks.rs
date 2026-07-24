@@ -26,19 +26,26 @@ fn run(src: &str) -> (String, bool) {
     (combined.trim().to_owned(), out.status.success())
 }
 
-// ───────────────────────── Phase 4 guard: fork in a task stays loud ──────────
+// ──────────── Stage-1 fork-in-frame: self-contained arms (Case A) now run ─────
 #[test]
-fn fork_task_still_loud() {
-    // GUARD: a `fork` inside a task body is a Phase-4 follow-on — it must stay LOUD
-    // (E3009), never silently mis-run on the suspendable-frame path.
+fn fork_task_self_contained_arms_run() {
+    // Stage-1 fork-in-frame (was `fork_task_still_loud`): a `fork … join` whose arms
+    // touch only module nets (here `@(posedge c)` twice — no parent frame-local) is
+    // Case A, so it RUNS on the existing owned-window model. Both arms wait ONE posedge
+    // (t=5) → join fires t=5. ORACLE iverilog: `PAR done @5`. (Case B / nested fork /
+    // disable fork inside a frame body still stay LOUD — see fork_in_frame.rs.)
     let src = "module t; logic c=0; always #5 c=~c;\n\
-        task automatic par(); fork @(posedge c); @(posedge c); join endtask\n\
+        task automatic par(); fork @(posedge c); @(posedge c); join\n\
+          $display(\"PAR done @%0t\", $time); endtask\n\
         initial begin par(); $finish; end endmodule";
     let (out, ok) = run(src);
-    assert!(!ok, "fork task must stay loud, got:\n{out}");
     assert!(
-        out.contains("fork"),
-        "expected the fork reject, got:\n{out}"
+        ok,
+        "fork task with self-contained arms now runs, got:\n{out}"
+    );
+    assert!(
+        out.contains("PAR done @5"),
+        "expected PAR done @5, got:\n{out}"
     );
 }
 

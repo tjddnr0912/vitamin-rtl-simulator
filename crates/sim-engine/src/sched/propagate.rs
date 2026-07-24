@@ -712,9 +712,29 @@ impl Scheduler<'_, '_> {
         resume_bb: u32,
     ) -> Option<u32> {
         let parent_tmpl = self.activities[parent_aid as usize].template;
+        // Stage-1 fork-in-frame: is the parent forking from INSIDE a suspendable task
+        // frame? Then each child runs one fork ARM as its own in-frame activity, and the
+        // fork's mode is keyed by the frame sentinel (its join_bb is a globally-unique
+        // func_blocks id, independent of which process runs the task). `arm_callee` is the
+        // enclosing task's FuncId, whose CFG the arm blocks live in.
+        let parent_in_frame = !self.activities[parent_aid as usize].call_stack.is_empty();
+        let arm_callee = if parent_in_frame {
+            self.activities[parent_aid as usize]
+                .call_stack
+                .last()
+                .unwrap()
+                .callee
+        } else {
+            0
+        };
+        let mode_key = if parent_in_frame {
+            elaborate::FRAME_FORK_KEY
+        } else {
+            parent_tmpl
+        };
         // P1-7: missing sidecar entry → graceful FATAL stop (never a default mode).
-        let Some(mode) = self.fork_mode(parent_tmpl, join) else {
-            self.fatal_fork_mode_missing(parent_tmpl, join);
+        let Some(mode) = self.fork_mode(mode_key, join) else {
+            self.fatal_fork_mode_missing(mode_key, join);
             return None; // parent parks; run loop sees `finished` and ends the run
         };
 
@@ -741,7 +761,9 @@ impl Scheduler<'_, '_> {
         // Spawn each child as a NEW activity. Deterministic: declaration order ==
         // the order of `children`; each child's tie composes parent.tie + child idx.
         // NOTE: nested fork is an elaborate ERROR, so `parent_tmpl` here is always a
-        // TOP-LEVEL process and `parent.tie` its dense top-level declaration index.
+        // TOP-LEVEL process and `parent.tie` its dense top-level declaration index —
+        // true whether the parent forks from its base process body or from INSIDE a
+        // suspendable task frame (the activity running the frame is still top-level).
         let parent_tie = self.activities[parent_aid as usize].tie;
         // FORK-TIE-CAP: `compose_child_tie` packs `(parent_tie + 1)` into the high
         // 16 bits and the child index into the low 16. Past ~65535 top-level
@@ -760,8 +782,30 @@ impl Scheduler<'_, '_> {
         }
         for (child_idx, &child_entry) in children.iter().enumerate() {
             let child_tie = compose_child_tie(parent_tie, child_idx as u32);
+            // Stage-1 fork-in-frame: an in-frame child rides one synthetic arm frame.
+            // Case A → an EMPTY OWNED window (the arm touches no parent frame slot):
+            // `Some(vec![])` for an automatic enclosing task so `run_process`'s restore
+            // pushes it onto `frame_stack` on the child's first run + each resume, and
+            // `stash`/`exit_arm_frame` pop it symmetrically (both gated on the same
+            // `func_has_auto`); `None` for a static one (its slab lives in `static_store`).
+            // The child dies at `join` via the loop-top intercept, so `ret_bb` is unused.
+            let child_call_stack = if parent_in_frame {
+                vec![crate::sched::FrameRec {
+                    callee: arm_callee,
+                    bb: child_entry,
+                    ret_bb: join,
+                    out_binds: Vec::new(),
+                    window: if self.st.func_has_auto[arm_callee as usize] {
+                        Some(Vec::new())
+                    } else {
+                        None
+                    },
+                }]
+            } else {
+                Vec::new()
+            };
             let child = Activity {
-                call_stack: Vec::new(),
+                call_stack: child_call_stack,
                 template: parent_tmpl,
                 tie: child_tie,
                 join_ref: Some(join_ref),

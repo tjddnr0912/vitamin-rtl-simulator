@@ -32,15 +32,25 @@ impl Elaborator<'_> {
         10u64.pow(diff.min(18))
     }
 
-    /// Record a fork's join MODE into the side table, keyed by `(cur_proc,
-    /// join_bb)`. The engine's lookup is total-or-fatal, so every fork MUST record.
+    /// Record a fork's join MODE into the side table. The engine's lookup is
+    /// total-or-fatal, so every fork MUST record. A base-process fork keys by
+    /// `(cur_proc, process-local join_bb)`. Stage-1 fork-in-frame: a fork inside a
+    /// TASK body (`frame_task_lowering`) instead collects `(local join_bb, mode)` into
+    /// `pending_fork_modes`, rebased to `(FRAME_FORK_KEY, global join_bb)` at the body
+    /// flush (the same +base rebase the nested task-call keys use), because its blocks
+    /// live in the global `func_blocks` arena and its mode must not depend on which
+    /// process runs the task.
     pub(crate) fn record_fork_mode(&mut self, join: ast::JoinKind, join_bb: u32) {
         let mode = match join {
             ast::JoinKind::Join => JoinMode::All,
             ast::JoinKind::JoinAny => JoinMode::Any,
             ast::JoinKind::JoinNone => JoinMode::None,
         };
-        self.fork_modes.insert((self.cur_proc, join_bb), mode);
+        if self.frame_task_lowering {
+            self.pending_fork_modes.push((join_bb, mode));
+        } else {
+            self.fork_modes.insert((self.cur_proc, join_bb), mode);
+        }
     }
 
     /// Recursively elaborate ONE module instance into the flat SimIr.

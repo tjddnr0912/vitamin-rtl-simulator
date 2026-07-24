@@ -216,6 +216,7 @@ impl Elaborator<'_> {
         let scope_seg = format!("$func${name}");
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
+        let saved_fork_modes = std::mem::take(&mut self.pending_fork_modes);
         let saved_hier_pending = std::mem::take(&mut self.pending_hier_task_calls);
         self.frame_task_lowering = true;
         // v7 P2-C (mirror of lower_frame_func_body): record `string`-declared task
@@ -268,6 +269,7 @@ impl Elaborator<'_> {
         self.in_frame_body = saved_frame;
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
+        let fork_modes_pending = std::mem::replace(&mut self.pending_fork_modes, saved_fork_modes);
         let hier_pending = std::mem::replace(&mut self.pending_hier_task_calls, saved_hier_pending);
         self.frame_task_lowering = saved_ftl;
         // Capture the block base AFTER the body closure (round-7): a `pkg::f()` inside
@@ -284,6 +286,13 @@ impl Elaborator<'_> {
         // rebase the nested task-call sites' (process-local) block keys to global.
         for (local_block, info) in pending {
             self.task_calls_func.insert(base + local_block, info);
+        }
+        // Stage-1 fork-in-frame: rebase this body's fork join-modes (process-local
+        // join_bb → global func_blocks id) and key them under the frame sentinel — a
+        // task-body fork's mode is process-independent. Empty ⇒ no fork → byte-identical.
+        for (local_join_bb, mode) in fork_modes_pending {
+            self.fork_modes
+                .insert((FRAME_FORK_KEY, base + local_join_bb), mode);
         }
         // §4.5.208: rebase the frame-body hier enables' (process-local) blocks to global
         // `func_blocks` ids, mark this task `has_hier_call` (→ forced suspendable in both

@@ -98,9 +98,10 @@ fn runtime_repeat_stays_loud() {
     assert!(is_loud(&o), "runtime repeat count must stay loud:\n{o}");
 }
 
-// ── correct-or-loud: `fork...join` inside a suspendable task stays loud ──
+// ── Stage-1 fork-in-frame: `fork <self-contained arms> join` inside a suspendable
+//    task now RUNS (see crates/cli/tests/fork_in_frame.rs for the full coverage) ──
 #[test]
-fn fork_in_frame_stays_loud() {
+fn fork_of_tasks_join_runs() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic a; repeat (2) @(posedge clk); endtask\n\
@@ -110,5 +111,8 @@ fn fork_in_frame_stays_loud() {
         endtask\n\
         initial begin run(); $finish; end\n\
         endmodule\n");
-    assert!(is_loud(&o), "fork in a frame task must stay loud:\n{o}");
+    assert!(
+        !is_loud(&o) && o.contains("PASS"),
+        "fork of tasks in a frame task now runs:\n{o}"
+    );
 }

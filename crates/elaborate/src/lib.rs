@@ -385,6 +385,11 @@ struct Elaborator<'s> {
     /// B2: nested task-call sites collected during the current task-body lowering,
     /// keyed by process-LOCAL block id (rebased by +base when the body appends).
     pending_task_calls: Vec<(u32, TaskCallInfo)>,
+    /// Stage-1 fork-in-frame: fork join-modes collected during the current task-body
+    /// lowering, keyed by process-LOCAL `join_bb` (rebased by +base and inserted into
+    /// `fork_modes` under `FRAME_FORK_KEY` when the body appends). Empty for a task body
+    /// with no fork ⇒ byte-identical to before.
+    pending_fork_modes: Vec<(u32, JoinMode)>,
     /// §4.5.208: deferred hierarchical enables (`u1.tk(...)`) collected during the current
     /// frame-task body lowering (`func_block` = process-LOCAL block, rebased by +base at
     /// `lower_frame_task_body` finish, then moved to `deferred_hier_task_calls`).

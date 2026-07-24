@@ -59,6 +59,7 @@ impl<'s> Elaborator<'s> {
             task_calls_func: BTreeMap::new(),
             frame_task_lowering: false,
             pending_task_calls: Vec::new(),
+            pending_fork_modes: Vec::new(),
             pending_hier_task_calls: Vec::new(),
             array_dim_desc: BTreeMap::new(),
             dim_desc: BTreeMap::new(),

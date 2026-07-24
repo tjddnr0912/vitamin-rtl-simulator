@@ -412,6 +412,23 @@ impl SimState<'_> {
         outs
     }
 
+    /// Stage-1 fork-in-frame: tear down a completing fork child's ARM frame. The arm rode
+    /// an OWNED window on the shared `frame_stack` while running (Case A → an empty window,
+    /// pushed by `run_process`'s `Some(..)`→restore path on each resume), so pop it here —
+    /// gated on `func_has_auto` exactly like `exit_task_frame`. Unlike `exit_task_frame`
+    /// this does NOT pop `frame_scope` / decrement `call_depth`: the arm frame is spawned
+    /// by `exec_fork` (it is never passed through `enter_task_frame`), so it pushed
+    /// NEITHER — its window reaches `frame_stack` only via the restore machinery. Popping
+    /// them here would corrupt the still-parked PARENT task's frame context. There is no
+    /// out-copy (a fork arm has no out-binds). `callee` is the enclosing task's FuncId
+    /// (the arm frame's `callee`). A later stage overrides this to also release a shared
+    /// arena handle for a Case-B arm.
+    pub(crate) fn exit_arm_frame(&self, callee: u32) {
+        if self.func_has_auto[callee as usize] {
+            self.frame_stack.borrow_mut().pop();
+        }
+    }
+
     /// V5: reentry guard for a frame-local DYNAMIC array (`int loc[]`). Its heap
     /// object (`dyn_heap[net]`, keyed by net) is SHARED across activations of the same
     /// func/task, so a RECURSIVE or CONCURRENT entry while a parent activation's array

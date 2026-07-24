@@ -249,6 +249,27 @@ pub(crate) fn body_has_return(s: &ast::Stmt) -> bool {
     }
 }
 
+/// Stage-1 fork-in-frame admission verdict for a `fork … join[_any|_none]` inside a
+/// suspendable task body. The gate ([`Elaborator::fork_arms_self_contained`]) walks
+/// every arm's reachable blocks and folds them into the worst verdict:
+/// - `CaseA`: no arm reads/writes a net in the enclosing task's frame-local range
+///   `[base_net, base_net+locals_len)` → runnable on the existing owned-window model
+///   (the single-threaded scheduler + stash/restore keep the concurrent children and
+///   the parked parent from co-residing on the shared `frame_stack`).
+/// - `CaseB`: some arm touches a parent frame-local → needs the shared-window arena
+///   (Stage 2/3). LOUD in Stage 1 (correct-or-loud).
+/// - `Loud`: a NESTED fork, a `disable fork`, or any construct the arm walk cannot
+///   prove self-contained. LOUD every stage.
+///
+/// `CaseB`/`Loud` both keep the task loud in Stage 1; the split exists so a later
+/// stage can admit `CaseB` (join-all) without touching the `Loud` structural rejects.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ForkAdmit {
+    CaseA,
+    CaseB,
+    Loud,
+}
+
 impl Elaborator<'_> {
     /// AST-side companion to `expr_is_real`: does `e` evaluate to real *because* it
     /// reaches a real-returning user function call through a real-propagating
@@ -312,7 +333,7 @@ impl Elaborator<'_> {
         let pending = std::mem::take(&mut self.frame_task_pending);
         for (fid, name, base_net, locals_len, unsafe_repeat) in pending {
             if full.contains(&fid) {
-                if self.frame_body_is_leaf_nonsuspending(fid)
+                if self.frame_body_is_leaf_nonsuspending(fid, base_net, base_net + locals_len)
                     && !unsafe_repeat
                     && !self.frame_task_has_unsafe_construct(fid, base_net, locals_len)
                 {
@@ -413,7 +434,21 @@ impl Elaborator<'_> {
                     stack.push(*else_bb);
                 }
                 ir::Terminator::Call { ret_bb, .. } => stack.push(*ret_bb),
-                ir::Terminator::Fork { .. } | ir::Terminator::Return => {}
+                // Stage-1 fork-in-frame: a `Fork` is now reachable here (a Case-A fork is
+                // admitted by `frame_body_is_leaf_nonsuspending`). Walk its arms AND its
+                // post-join continuation so a frame-local ARRAY / NBA-to-a-frame-local /
+                // `disable fork` / `wait`-reading-a-frame-local anywhere in the fork or
+                // after it still forces this task loud (correct-or-loud backstop).
+                ir::Terminator::Fork {
+                    children,
+                    join,
+                    resume_bb,
+                } => {
+                    stack.extend(children.iter().copied());
+                    stack.push(*join);
+                    stack.push(*resume_bb);
+                }
+                ir::Terminator::Return => {}
             }
         }
         false
@@ -506,17 +541,205 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Stage-1 fork-in-frame: true if evaluating expression `e` reads any net in
+    /// `[lo,hi)` — a parent frame-local of the enclosing suspendable task. Reuses the
+    /// shared `collect_expr_reads` net-collection walk (Signal/Select/Concat/… children).
+    fn expr_reads_range(&self, e: u32, lo: u32, hi: u32) -> bool {
+        let mut reads = std::collections::BTreeSet::new();
+        self.collect_expr_reads(e, &mut reads);
+        reads.iter().any(|&n| n >= lo && n < hi)
+    }
+
+    /// Stage-1 fork-in-frame: classify ONE fork arm subtree, from `arm_entry` up to the
+    /// shared `join_bb` sentinel (a fork arm is sealed with `goto(join_bb)`; the join
+    /// block is never-executed, so the walk stops there). Returns `Loud` on a nested
+    /// fork / `disable fork` / any unrecognized statement; `CaseB` if the arm reads or
+    /// writes a net in `[lo,hi)` (a parent frame-local); else `CaseA`. Does NOT descend
+    /// into a called task via a `Call` — the callee has its own frame and cannot touch
+    /// this task's locals — but DOES inspect that `Call`'s in-/out-binds (evaluated in
+    /// the ARM context), where a parent-local actual would otherwise slip past the walk.
+    ///
+    /// CONSERVATIVE by construction: under-detecting Case B is silent-wrong (a Case-B
+    /// fork would run on the empty owned window and read garbage), so any stmt kind not
+    /// proven self-contained, and any `Call` whose bind table is not yet populated (a
+    /// not-yet-resolved deferred hier enable), escalates to `CaseB` (stays loud).
+    fn classify_one_arm(&self, arm_entry: u32, join_bb: u32, lo: u32, hi: u32) -> ForkAdmit {
+        let in_range = |n: u32| n >= lo && n < hi;
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![arm_entry];
+        let mut admit = ForkAdmit::CaseA;
+        while let Some(bi) = stack.pop() {
+            if bi == join_bb || !seen.insert(bi) {
+                continue; // stop at the join sentinel; skip already-visited
+            }
+            let Some(blk) = self.func_blocks.get(bi as usize) else {
+                continue;
+            };
+            // A nested fork (fork inside a fork arm) is loud every stage.
+            if let ir::Terminator::Fork { .. } = &blk.term {
+                return ForkAdmit::Loud;
+            }
+            for &sid in &blk.stmts {
+                match &self.stmts[sid as usize] {
+                    // `disable fork` in a frame body — a fork-family construct with no
+                    // in-frame engine support (design §8) → loud.
+                    ir::Stmt::Disable {
+                        scope_kind: ir::DisableKind::Fork,
+                        ..
+                    } => return ForkAdmit::Loud,
+                    // `disable <named block>` (break/continue idiom) is a no-op marker +
+                    // Goto — self-contained, safe.
+                    ir::Stmt::Disable {
+                        scope_kind: ir::DisableKind::Scope,
+                        ..
+                    } => {}
+                    ir::Stmt::BlockingAssign { lhs, rhs } => {
+                        if lhs.chunks.iter().any(|c| in_range(c.net))
+                            || self.expr_reads_range(*rhs, lo, hi)
+                        {
+                            admit = ForkAdmit::CaseB;
+                        }
+                    }
+                    ir::Stmt::NonblockingAssign { lhs, rhs, .. } => {
+                        if lhs.chunks.iter().any(|c| in_range(c.net))
+                            || self.expr_reads_range(*rhs, lo, hi)
+                        {
+                            admit = ForkAdmit::CaseB;
+                        }
+                    }
+                    ir::Stmt::SysTask { args, .. } => {
+                        if args.iter().any(|&a| self.expr_reads_range(a, lo, hi)) {
+                            admit = ForkAdmit::CaseB;
+                        }
+                    }
+                    // Force/Release (and any future stmt kind) inside an arm — not proven
+                    // self-contained → conservatively Case B (correct-or-loud).
+                    _ => admit = ForkAdmit::CaseB,
+                }
+            }
+            match &blk.term {
+                ir::Terminator::Goto { target } => stack.push(*target),
+                ir::Terminator::Branch {
+                    cond,
+                    then_bb,
+                    else_bb,
+                } => {
+                    if self.expr_reads_range(*cond, lo, hi) {
+                        admit = ForkAdmit::CaseB;
+                    }
+                    stack.push(*then_bb);
+                    stack.push(*else_bb);
+                }
+                ir::Terminator::Wait { cond, resume } => {
+                    if self.wait_cond_reads_frame_local(cond, &in_range) {
+                        admit = ForkAdmit::CaseB;
+                    }
+                    stack.push(*resume);
+                }
+                ir::Terminator::Delay { resume, .. } => stack.push(*resume),
+                ir::Terminator::Call { ret_bb, .. } => {
+                    // The arm's nested task-call args are evaluated in the ARM (caller)
+                    // context and live in the side table (keyed by the GLOBAL block id of
+                    // this Call), NOT the arm's block stmts — inspect them for a parent
+                    // frame-local read (in-bind) or write-back (out-bind). A MISSING entry
+                    // means a deferred hier enable not yet resolved at this pass → its
+                    // actuals are unknown, so classify Case B (conservative).
+                    match self.task_calls_func.get(&bi) {
+                        Some(info) => {
+                            if info
+                                .in_binds
+                                .iter()
+                                .any(|&(_, arg)| self.expr_reads_range(arg, lo, hi))
+                                || info
+                                    .out_binds
+                                    .iter()
+                                    .any(|(_, lv)| lv.chunks.iter().any(|c| in_range(c.net)))
+                            {
+                                admit = ForkAdmit::CaseB;
+                            }
+                        }
+                        None => admit = ForkAdmit::CaseB,
+                    }
+                    stack.push(*ret_bb);
+                }
+                ir::Terminator::Fork { .. } => return ForkAdmit::Loud,
+                ir::Terminator::Return => {}
+            }
+        }
+        admit
+    }
+
+    /// Stage-1 fork-in-frame admission for a suspendable task `[lo,hi)` = its frame-local
+    /// net range. Walks the task's reachable blocks (following its OWN CFG edges; a `Call`
+    /// stays in-function via `ret_bb`) and, for every `Terminator::Fork`, classifies each
+    /// arm with [`classify_one_arm`], folding into the worst verdict. `Loud` short-circuits;
+    /// otherwise the worst of `CaseA`/`CaseB` wins. Called ONCE per task (memoized by the
+    /// caller), so multiple forks in one body still cost a single whole-body walk.
+    pub(crate) fn fork_arms_self_contained(&self, entry: u32, lo: u32, hi: u32) -> ForkAdmit {
+        let mut worst = ForkAdmit::CaseA;
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![entry];
+        while let Some(bi) = stack.pop() {
+            if !seen.insert(bi) {
+                continue;
+            }
+            let Some(blk) = self.func_blocks.get(bi as usize) else {
+                continue;
+            };
+            if let ir::Terminator::Fork { children, join, .. } = &blk.term {
+                for &arm in children {
+                    match self.classify_one_arm(arm, *join, lo, hi) {
+                        ForkAdmit::Loud => return ForkAdmit::Loud,
+                        ForkAdmit::CaseB => worst = ForkAdmit::CaseB,
+                        ForkAdmit::CaseA => {}
+                    }
+                }
+            }
+            // Follow this task's own CFG edges (a `Call` follows `ret_bb`, never into the
+            // callee), plus a fork's children/join/resume so every reachable Fork is seen.
+            match &blk.term {
+                ir::Terminator::Goto { target } => stack.push(*target),
+                ir::Terminator::Branch {
+                    then_bb, else_bb, ..
+                } => {
+                    stack.push(*then_bb);
+                    stack.push(*else_bb);
+                }
+                ir::Terminator::Delay { resume, .. } | ir::Terminator::Wait { resume, .. } => {
+                    stack.push(*resume)
+                }
+                ir::Terminator::Call { ret_bb, .. } => stack.push(*ret_bb),
+                ir::Terminator::Fork {
+                    children,
+                    join,
+                    resume_bb,
+                } => {
+                    stack.extend(children.iter().copied());
+                    stack.push(*join);
+                    stack.push(*resume_bb);
+                }
+                ir::Terminator::Return => {}
+            }
+        }
+        worst
+    }
+
     /// Round-14 V3/V4 Phase 2/3: is (suspendable) task `fid` LIFTABLE onto the engine's
-    /// suspendable-frame path — a LEAF task (no nested task `Call`) with no `Fork`. The
-    /// engine's `run_process` handles its `$display`/NBA (Phase 2) and its `@`/`#`/`wait`
-    /// suspend via the per-activity window stash/restore (Phase 3). A nested-task-call
-    /// (`Call`) or `fork` (`Fork`) stays LOUD — those are follow-on phases; running them
-    /// now would drop the callee onto the synchronous executor / mis-use the window.
-    /// Walks the REACHABLE blocks from the task's entry (a range walk would spill into
-    /// later tasks' blocks — every task's body sits in the shared `func_blocks` arena).
-    /// The caller has already confirmed `fid` is suspendable (`compute_suspendable_tasks`),
-    /// so a leaf-no-fork task necessarily carries a `Delay`/`Wait` or a signal statement.
-    pub(crate) fn frame_body_is_leaf_nonsuspending(&self, fid: u32) -> bool {
+    /// suspendable-frame path — a LEAF task (no nested task `Call`) with no non-Case-A
+    /// `Fork`. The engine's `run_process` handles its `$display`/NBA (Phase 2) and its
+    /// `@`/`#`/`wait` suspend via the per-activity window stash/restore (Phase 3). A
+    /// nested-task-call (`Call`) is supported (the engine pushes a nested frame, or runs a
+    /// subset callee synchronously). Stage-1 fork-in-frame: a `Fork` whose arms are all
+    /// self-contained (`ForkAdmit::CaseA`, decided over `[lo,hi)` = the task's frame-local
+    /// range) is ALSO liftable — the concurrent children ride owned windows and the parked
+    /// parent's window stays stashed in its `FrameRec`; a Case-B / nested / disable-fork
+    /// fork stays LOUD (correct-or-loud, follow-on stages). Walks the REACHABLE blocks from
+    /// the task's entry (a range walk would spill into later tasks' blocks — every task's
+    /// body sits in the shared `func_blocks` arena).
+    pub(crate) fn frame_body_is_leaf_nonsuspending(&self, fid: u32, lo: u32, hi: u32) -> bool {
+        // fork-in-frame verdict is a whole-body property — compute it at most ONCE
+        // (lazily, only if this body actually contains a `Fork`).
+        let mut fork_admit: Option<ForkAdmit> = None;
         let mut seen = std::collections::BTreeSet::new();
         let mut stack = vec![self.funcs[fid as usize].entry];
         while let Some(b) = stack.pop() {
@@ -527,7 +750,18 @@ impl Elaborator<'_> {
                 continue;
             };
             match &blk.term {
-                ir::Terminator::Fork { .. } => return false,
+                ir::Terminator::Fork { resume_bb, .. } => {
+                    let adm = *fork_admit.get_or_insert_with(|| {
+                        self.fork_arms_self_contained(self.funcs[fid as usize].entry, lo, hi)
+                    });
+                    if adm != ForkAdmit::CaseA {
+                        return false; // Case B / nested / disable-fork → stay loud
+                    }
+                    // Case A: keep walking the CONTINUATION after the join (the arm
+                    // children are classified by `fork_arms_self_contained` above and run
+                    // as their own activities, so they need not be walked here).
+                    stack.push(*resume_bb);
+                }
                 // Phase 4: a nested task `Call` is supported (the engine pushes a nested
                 // frame, or runs a subset callee synchronously). Follow `ret_bb` (the
                 // continuation in THIS task); the callee lives in another func.

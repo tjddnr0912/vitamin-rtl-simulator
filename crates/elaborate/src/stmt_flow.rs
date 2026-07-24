@@ -213,8 +213,16 @@ pub(crate) fn rebase_terminator(t: &mut ir::Terminator, base: u32) {
             *resume += base
         }
         ir::Terminator::Fork {
-            join, resume_bb, ..
+            children,
+            join,
+            resume_bb,
         } => {
+            // Stage-1 fork-in-frame: the CHILD arm-entry ids must rebase too (the `..`
+            // that skipped `children` was a latent bug — dormant while every in-frame
+            // fork was loud-rejected; a fork in a task body reaches here on the flush).
+            for c in children.iter_mut() {
+                *c += base;
+            }
             *join += base;
             *resume_bb += base;
         }
