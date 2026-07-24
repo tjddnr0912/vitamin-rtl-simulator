@@ -160,6 +160,94 @@ fn dyn_array_replicate_runtime_index() {
     assert_eq!(out, "[cdcd]\n");
 }
 
+#[test]
+fn byte_select_on_an_element_matches_scalar() {
+    // `sa[i][j]` — element (a string), THEN the §6.16.2 byte select. The base of the
+    // inner select is itself a string-array element, so `string_base_expr_net` (which
+    // only sees a bare string NET) missed it and the read fell through to a packed
+    // bit-select on a width-0 String signal: a silent 0 where iverilog says 119.
+    both(
+        "    $display(\"%0d %0d\", s[0][0], s[0][1]);\n",
+        "    $display(\"%0d %0d\", s0[0], s0[1]);\n",
+        "97 98\n",
+    );
+}
+
+#[test]
+fn byte_write_into_an_element_stays_loud() {
+    // The WRITE twin is still a loud "nested lvalue select" — so fixing the read side
+    // cannot introduce a read/write divergence. (iverilog itself asserts on this.)
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("vita_saed_wr_{}_{n}.sv", std::process::id()));
+    std::fs::write(
+        &path,
+        "module t;\n\
+           string s[2];\n\
+           initial begin s[0] = \"world\"; s[0][0] = \"W\"; $display(\"[%s]\", s[0]); end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(&path)
+        .output()
+        .expect("run vita");
+    let _ = std::fs::remove_file(&path);
+    assert!(!out.status.success(), "expected a loud reject");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("nested lvalue select"),
+        "unexpected diagnostic"
+    );
+}
+
+#[test]
+fn equal_length_equality_matches_scalar() {
+    // The equality cases that packed and lexicographic compare AGREE on — these
+    // already passed before the fix, and must keep passing (the fix routes them
+    // through StrCmp instead of a packed compare).
+    both(
+        "    $display(\"%0d %0d\", s[0]==s[1], s[0]==s[0]);\n",
+        "    $display(\"%0d %0d\", s0==s1, s0==s0);\n",
+        "0 1\n",
+    );
+}
+
+#[test]
+fn sized_integral_concat_part_matches_scalar() {
+    // IEEE §6.16: an integral concat element contributes its character bytes.
+    both(
+        "    $display(\"[%s]\", {s[0], 8'h41});\n",
+        "    $display(\"[%s]\", {s0, 8'h41});\n",
+        "[abcA]\n",
+    );
+}
+
+#[test]
+fn element_as_bare_sformatf_arg_matches_scalar() {
+    // No concat involved — a pre-fix baseline that must be untouched.
+    both(
+        "    $display(\"[%s]\", $sformatf(\"<%s>\", s[0]));\n",
+        "    $display(\"[%s]\", $sformatf(\"<%s>\", s0));\n",
+        "[<abc>]\n",
+    );
+}
+
+#[test]
+fn framed_dyn_formal_shadowing_a_string_array_stays_numeric() {
+    // The `automatic` counterpart of the inlined-shadowing pin: a FRAMED task takes no
+    // `dyn_subst` alias, so this was always correct. Pinned alongside so that a future
+    // change routing framed tasks through `dyn_subst` cannot regress it silently.
+    let out = run("module t;\n\
+           string b[];\n\
+           int    a[];\n\
+           task automatic show(input int b[]);\n\
+             $display(\"lt=%0d\", b[0] < b[1]);\n\
+           endtask\n\
+           initial begin b = new[1]; b[0] = \"z\";\n\
+             a = new[2]; a[0] = 256; a[1] = 255; show(a); end\n\
+         endmodule\n");
+    assert_eq!(out, "lt=0\n");
+}
+
 // ── boundaries that must NOT change ───────────────────────────────────────────
 
 #[test]

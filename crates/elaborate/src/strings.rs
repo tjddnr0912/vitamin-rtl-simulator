@@ -135,17 +135,25 @@ impl Elaborator<'_> {
     pub(crate) fn string_index_read(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
         let handle = if let Some(net) = self.string_base_expr_net(base) {
             self.push_expr(ir::Expr::Signal { net, word: None })
-        } else if let ast::ExprKind::Ident(p) = &base.kind {
+        } else if matches!(&base.kind, ast::ExprKind::Ident(p) if p.segments.len() == 1)
+            // r19: …or a string-ARRAY ELEMENT base (`sa[i][j]` — element, then §6.16.2
+            // byte). `string_base_expr_net` sees only a bare string NET, so this used to
+            // fall through to a packed bit-select on a width-0 String signal and read a
+            // silent 0 (`s[0]="world"; s[0][0]` gave 0, iverilog 119). The WRITE twin
+            // (`s[0][0]="W"`) stays loud ("nested lvalue select"), so read and write do
+            // not diverge here.
+            || matches!(&base.kind, ast::ExprKind::BitSelect { .. })
+        {
             // INLINE-function path: a string LOCAL or FORMAL `s` has no real string
             // NET (`string_base_expr_net` finds only module/scoped nets), so `s[i]`
             // used to fall through to a packed BIT-select on the subst-bound string
             // value — silently 0 (bit 0 of a handle) instead of the byte. `expr_is_
             // string_ast` recognizes an inline string (a declared-`string` formal or
             // local via `formal_str`, or a subst value that is a string) exactly as
-            // the string compare/method paths do; lower the bare ident and reuse the
-            // `.getc(i)` byte primitive. Bare single-segment ident only (mirrors
-            // `string_base_expr_net`'s scope).
-            if p.segments.len() != 1 || !self.expr_is_string_ast(base) {
+            // the string compare/method paths do; lower the base and reuse the
+            // `.getc(i)` byte primitive. Checked BEFORE lowering, so a non-string base
+            // is never lowered here.
+            if !self.expr_is_string_ast(base) {
                 return None;
             }
             let h = self.lower_expr(base);
