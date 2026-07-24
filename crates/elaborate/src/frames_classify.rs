@@ -425,7 +425,15 @@ impl Elaborator<'_> {
                     }
                     stack.push(*resume);
                 }
-                ir::Terminator::Delay { resume, .. } => stack.push(*resume),
+                // Backstop mirror of `classify_one_arm`'s Delay: a `#(d)` whose amount
+                // reads a frame-local (in a fork arm OR the post-join continuation) forces
+                // the task loud — the amount is evaluated without the frame window restored.
+                ir::Terminator::Delay { amount, resume, .. } => {
+                    if self.expr_reads_range(*amount, lo, hi) {
+                        return true;
+                    }
+                    stack.push(*resume);
+                }
                 ir::Terminator::Goto { target } => stack.push(*target),
                 ir::Terminator::Branch {
                     then_bb, else_bb, ..
@@ -550,6 +558,18 @@ impl Elaborator<'_> {
         reads.iter().any(|&n| n >= lo && n < hi)
     }
 
+    /// Stage-1 fork-in-frame: does an lvalue CHUNK touch a net in `[lo,hi)` — either its
+    /// TARGET net, its array-WORD index expr (`mem[d]`), or its part-select OFFSET expr
+    /// (`r[d +: 8]`)? The two index exprs are evaluated in the ARM's context, so a parent
+    /// frame-local read there is Case B exactly like a write to the target net — otherwise
+    /// the arm runs on the empty owned window and the index read panics / mis-reads the
+    /// static slab. (`width` is a compile-time constant, never a frame-local read.)
+    fn chunk_touches_range(&self, c: &ir::LvalChunk, lo: u32, hi: u32) -> bool {
+        (c.net >= lo && c.net < hi)
+            || c.word.is_some_and(|e| self.expr_reads_range(e, lo, hi))
+            || c.offset.is_some_and(|e| self.expr_reads_range(e, lo, hi))
+    }
+
     /// Stage-1 fork-in-frame: classify ONE fork arm subtree, from `arm_entry` up to the
     /// shared `join_bb` sentinel (a fork arm is sealed with `goto(join_bb)`; the join
     /// block is never-executed, so the walk stops there). Returns `Loud` on a nested
@@ -594,14 +614,20 @@ impl Elaborator<'_> {
                         ..
                     } => {}
                     ir::Stmt::BlockingAssign { lhs, rhs } => {
-                        if lhs.chunks.iter().any(|c| in_range(c.net))
+                        if lhs
+                            .chunks
+                            .iter()
+                            .any(|c| self.chunk_touches_range(c, lo, hi))
                             || self.expr_reads_range(*rhs, lo, hi)
                         {
                             admit = ForkAdmit::CaseB;
                         }
                     }
                     ir::Stmt::NonblockingAssign { lhs, rhs, .. } => {
-                        if lhs.chunks.iter().any(|c| in_range(c.net))
+                        if lhs
+                            .chunks
+                            .iter()
+                            .any(|c| self.chunk_touches_range(c, lo, hi))
                             || self.expr_reads_range(*rhs, lo, hi)
                         {
                             admit = ForkAdmit::CaseB;
@@ -636,7 +662,14 @@ impl Elaborator<'_> {
                     }
                     stack.push(*resume);
                 }
-                ir::Terminator::Delay { resume, .. } => stack.push(*resume),
+                ir::Terminator::Delay { amount, resume, .. } => {
+                    // The delay VALUE (`#(d)`) is evaluated in the arm's context — a parent
+                    // frame-local there is Case B, else the empty owned window panics.
+                    if self.expr_reads_range(*amount, lo, hi) {
+                        admit = ForkAdmit::CaseB;
+                    }
+                    stack.push(*resume);
+                }
                 ir::Terminator::Call { ret_bb, .. } => {
                     // The arm's nested task-call args are evaluated in the ARM (caller)
                     // context and live in the side table (keyed by the GLOBAL block id of
@@ -650,10 +683,11 @@ impl Elaborator<'_> {
                                 .in_binds
                                 .iter()
                                 .any(|&(_, arg)| self.expr_reads_range(arg, lo, hi))
-                                || info
-                                    .out_binds
-                                    .iter()
-                                    .any(|(_, lv)| lv.chunks.iter().any(|c| in_range(c.net)))
+                                || info.out_binds.iter().any(|(_, lv)| {
+                                    lv.chunks
+                                        .iter()
+                                        .any(|c| self.chunk_touches_range(c, lo, hi))
+                                })
                             {
                                 admit = ForkAdmit::CaseB;
                             }

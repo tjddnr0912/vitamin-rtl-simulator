@@ -139,3 +139,69 @@ fn fork_nested_stays_loud() {
         endmodule\n");
     assert!(is_loud(&o), "nested fork must stay loud:\n{o}");
 }
+
+// ── correct-or-loud (review Finding 1, position #1): an arm whose `#(d)` DELAY
+//    AMOUNT reads a parent frame-local is Case B (the amount is evaluated on the
+//    arm's empty owned window). Before the classifier fix this misclassified Case A
+//    → a frame_eval panic ("index out of bounds len 0"); it must be a clean E3009. ──
+#[test]
+fn fork_delay_amount_is_parent_local_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          int d = 3;\n\
+          @(posedge clk);\n\
+          fork #(d) $display(\"armhi @%0t\", $time); join\n\
+          $display(\"PASS @%0t\", $time);\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "arm delay amount reading a parent frame-local must stay loud (no panic):\n{o}"
+    );
+}
+
+// ── correct-or-loud (review Finding 1, position #2): an arm writing a module array
+//    element `mem[d]` where the INDEX `d` is a parent frame-local is Case B (the index
+//    is evaluated on the empty owned window). Before the fix this panicked; it must be
+//    a clean E3009. ──
+#[test]
+fn fork_lvalue_index_is_parent_local_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        logic [7:0] mem [0:3];\n\
+        task automatic run;\n\
+          int d = 1;\n\
+          @(posedge clk);\n\
+          fork mem[d] = 8'hAA; join\n\
+          $display(\"PASS mem1=%02h\", mem[1]);\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "arm lvalue index reading a parent frame-local must stay loud (no panic):\n{o}"
+    );
+}
+
+// ── correct-or-loud (review Finding 1, static variant): the SAME Case-B arm in a
+//    STATIC (recursive → framed) task. Before the fix this did NOT panic — it SILENTLY
+//    RAN off the static slab (window=None), a silent-wrong. It must go loud (E3009). ──
+#[test]
+fn fork_static_task_case_b_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        logic [7:0] mem [0:3];\n\
+        task run(input int n);\n\
+          if (n > 1) run(n - 1);\n\
+          @(posedge clk);\n\
+          fork mem[n] = 8'hAA; join\n\
+        endtask\n\
+        initial begin run(2); #100 $display(\"mem1=%02h mem2=%02h\", mem[1], mem[2]); $finish; end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "static-task Case-B fork arm must go loud, not silently run off the static slab:\n{o}"
+    );
+}
