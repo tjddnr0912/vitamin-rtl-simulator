@@ -778,6 +778,158 @@ impl Elaborator<'_> {
         !self.has_unhoistable_inout_call(e) && self.hoist_is_safe(e)
     }
 
+    /// §4.5.217: `(signed, width)` of a net IFF it is a plain bit-vector coercion
+    /// context (Wire/Reg/Logic/Integer — this also covers `int`/`byte`/`bit`/`time`,
+    /// all of which map onto those NetKinds); `None` for a string / real / dynamic-
+    /// handle net (not a bit-width context ⇒ the coercion gate stays loud).
+    fn bitvec_net_ws(&self, net: u32) -> Option<(bool, u32)> {
+        let nv = self.nets.get(net as usize)?;
+        matches!(
+            nv.kind,
+            ir::NetKind::Wire | ir::NetKind::Reg | ir::NetKind::Logic | ir::NetKind::Integer
+        )
+        .then_some((nv.signed, nv.width))
+    }
+
+    /// §4.5.217 (round-19 follow-on): the (effective signedness, self-determined width)
+    /// of a `?:` arm, for the definite-arm coercion-safety gate. Resolves a single-segment
+    /// Ident to its SCOPED net and a single-segment CALL to its function's declared return
+    /// type — unlike `ast_ctx_signed`, which is indeterminate on a call, yet a call arm is
+    /// the whole reason the split runs. Mirrors the IEEE §11.6.1 / §11.8.1 self-width and
+    /// signedness rules of `ast_expr_self_width` + `ast_ctx_signed` in one walk. `None`
+    /// (unknown ident/call, string/real/handle net, package/method ref, unfoldable select,
+    /// `real` return) ⇒ the arm is treated as NOT coercion-safe (loud), never a guess.
+    pub(crate) fn arm_coercion_info(&self, e: &ast::Expr) -> Option<(bool, u32)> {
+        use ast::ExprKind::*;
+        match &e.kind {
+            Paren { inner } => self.arm_coercion_info(inner),
+            Ident(p) => {
+                let [seg] = p.segments.as_slice() else {
+                    return None;
+                };
+                let net = self.lookup_net_scoped(&seg.name)?;
+                self.bitvec_net_ws(net)
+            }
+            // A single-segment call → its function's declared return (a 2-segment
+            // `h.method()` handle-method is unknown here → None). A `real`/`realtime`
+            // return width is None ⇒ loud (not a bit-vector coercion context).
+            Call { name, .. } => {
+                let [seg] = name.segments.as_slice() else {
+                    return None;
+                };
+                let f = self.func_table.get(&seg.name)?;
+                Some((f.signed, ast_func_return_width(f)?))
+            }
+            IntLit { kind, raw } => {
+                // A fill literal (`'0`/`'1`) is unsigned and context-filled — it never
+                // widens the context (self-width 0), so it can only make the gate loud
+                // via a sign mismatch (which is correct: `signed ? '0` is §11.8.1 unsigned).
+                if literal::is_fill_literal(raw, *kind) {
+                    return Some((false, 0));
+                }
+                let cv = literal::parse_int_literal(raw, *kind)?;
+                Some((cv.signed, cv.width))
+            }
+            BitSelect { .. } => Some((false, 1)),
+            PartSelect { msb, lsb, .. } => {
+                let m = ast_decimal_lit_i64(msb)?;
+                let l = ast_decimal_lit_i64(lsb)?;
+                Some((false, u32::try_from(m.abs_diff(l) + 1).ok()?))
+            }
+            IndexedPart { width, .. } => {
+                Some((false, u32::try_from(ast_decimal_lit_i64(width)?).ok()?))
+            }
+            Binary { op, lhs, rhs } => {
+                use ast::BinOp::*;
+                match op {
+                    // comparison / logical / wildcard: a 1-bit unsigned result.
+                    Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | LogAnd
+                    | LogOr => Some((false, 1)),
+                    // §11.6.1: a shift / power self width & sign follow the LEFT operand.
+                    Shl | Shr | AShl | AShr | Pow => self.arm_coercion_info(lhs),
+                    // arithmetic / bitwise: signed iff BOTH operands signed (§11.8.1),
+                    // width = max of the two operands.
+                    _ => {
+                        let (ls, lw) = self.arm_coercion_info(lhs)?;
+                        let (rs, rw) = self.arm_coercion_info(rhs)?;
+                        Some((ls && rs, lw.max(rw)))
+                    }
+                }
+            }
+            Unary { op, operand } => match op {
+                ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot => {
+                    self.arm_coercion_info(operand)
+                }
+                // reductions / logical-not: 1-bit unsigned.
+                _ => Some((false, 1)),
+            },
+            Ternary { then_e, else_e, .. } => {
+                let (ts, tw) = self.arm_coercion_info(then_e)?;
+                let (es, ew) = self.arm_coercion_info(else_e)?;
+                Some((ts && es, tw.max(ew)))
+            }
+            // bit/part-select, concat, replicate are ALWAYS unsigned (§5.4.1).
+            Concat { parts } => {
+                let mut sum: u32 = 0;
+                for p in parts {
+                    sum = sum.checked_add(self.arm_coercion_info(p)?.1)?;
+                }
+                Some((false, sum))
+            }
+            Replicate { count, value } => {
+                let c = u32::try_from(ast_decimal_lit_i64(count)?).ok()?;
+                let mut sum: u32 = 0;
+                for v in value {
+                    sum = sum.checked_add(self.arm_coercion_info(v)?.1)?;
+                }
+                Some((false, c.checked_mul(sum)?))
+            }
+            _ => None,
+        }
+    }
+
+    /// §4.5.217: width of a `?:` transform's assignment TARGET for the coercion gate.
+    /// Only a plain whole-net Ident (every current transform site, and the common shape)
+    /// resolves; a part-select / concat / hierarchical / non-bit-vector target ⇒ `None`
+    /// ⇒ the arms are treated as not coercion-safe (loud) rather than risk an over-wide
+    /// estimate that would hide a divergence.
+    pub(crate) fn ternary_lhs_width(&self, lv: &ast::Lvalue) -> Option<u32> {
+        let ast::Lvalue::Ident(p) = lv else {
+            return None;
+        };
+        let [seg] = p.segments.as_slice() else {
+            return None;
+        };
+        let net = self.lookup_net_scoped(&seg.name)?;
+        Some(self.bitvec_net_ws(net)?.1)
+    }
+
+    /// §4.5.217: are BOTH definite arms of `x = c ? then_e : else_e` COERCION-SAFE to
+    /// lower in ISOLATION (`x = then_e` / `x = else_e`), i.e. byte-identical to the
+    /// unified bare ternary (IEEE §11.4.11 / §11.8.1)? True iff (1) both arms have the
+    /// SAME effective signedness — else §11.8.1 flips the surviving arm between sign- and
+    /// zero-extend (a silent low-bit change) — AND (2) `lhs` is at least as wide as BOTH
+    /// arms' self width, so the unified context width equals `lhs`'s width and every
+    /// widening op (§11.6.1 shift, add carry) sees the SAME width isolated as it does
+    /// unified. Any unknown sign/width (either arm or the lhs) ⇒ false (loud), never a
+    /// guess. When false the caller declines the split → generic lowering → `emit_frame_call`
+    /// → E3009 (correct-or-loud), closing the §4.5.216 definite-arm sign/width silent-wrong.
+    pub(crate) fn ternary_arms_coercion_safe(
+        &self,
+        lhs: &ast::Lvalue,
+        then_e: &ast::Expr,
+        else_e: &ast::Expr,
+    ) -> bool {
+        let (Some((ts, tw)), Some((es, ew)), Some(lw)) = (
+            self.arm_coercion_info(then_e),
+            self.arm_coercion_info(else_e),
+            self.ternary_lhs_width(lhs),
+        ) else {
+            return false;
+        };
+        ts == es && lw >= tw.max(ew)
+    }
+
     /// §4.5.216: intercept a blocking-assign whose WHOLE rhs is a conditionally-evaluated
     /// output/inout-formal call that `hoist_inout_calls` cannot hoist (it must not be made
     /// unconditional), and lower it as explicit control flow that assigns `lhs` on EVERY
@@ -815,7 +967,13 @@ impl Elaborator<'_> {
             } if (self.expr_has_inout_call(then_e) || self.expr_has_inout_call(else_e))
                 && self.arm_transformable(cond)
                 && self.arm_transformable(then_e)
-                && self.arm_transformable(else_e) =>
+                && self.arm_transformable(else_e)
+                // §4.5.217: the definite-arm transform lowers each taken arm in ISOLATION
+                // (`x = T` / `x = E`); that is byte-identical to the unified bare ternary
+                // ONLY when the arms are coercion-safe (same effective sign; lhs ≥ both
+                // self-widths). Otherwise §11.8.1 sign-flip / §11.6.1 shift-width divergence
+                // silently changes the value → decline the split → generic lowering → loud.
+                && self.ternary_arms_coercion_safe(lhs, then_e, else_e) =>
             {
                 self.lower_ternary_rhs(b, lhs, cond, then_e, else_e);
                 true
@@ -972,10 +1130,13 @@ impl Elaborator<'_> {
     /// ```
     ///
     /// For the definite arms, `x = T` / `x = E` coerce each arm directly to `lhs`'s width (as
-    /// a normal blocking assign, via `assign_arm`) — identical to a bare ternary whenever
-    /// `lhs` is at least as wide as both arms (the common case; the width corner is verified
-    /// by a differential test). A BURIED / deeper-nested / eval-order-unsafe call is filtered
-    /// out by `shortcircuit_rhs_special`'s `arm_transformable` gate before we get here.
+    /// a normal blocking assign, via `assign_arm`) — byte-identical to a bare ternary ONLY
+    /// when `lhs` is at least as wide as both arms AND the arms share effective signedness.
+    /// §4.5.217 makes `shortcircuit_rhs_special` GATE on exactly that (`ternary_arms_coercion_safe`):
+    /// a sign-mismatch (§11.8.1) or a narrow-lhs width divergence (§11.6.1) declines the split →
+    /// generic lowering → loud, so a taken definite arm can never differ from the unified value.
+    /// A BURIED / deeper-nested / eval-order-unsafe call is likewise filtered out by
+    /// `shortcircuit_rhs_special`'s `arm_transformable` gate before we get here.
     pub(crate) fn lower_ternary_rhs(
         &mut self,
         b: &mut ProcessBuilder,

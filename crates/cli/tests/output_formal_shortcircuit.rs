@@ -16,6 +16,16 @@
 //! §11.4.7 short-circuit `&&`/`||`), cross-checked against the passing plain-condition
 //! boundary. The short-circuit-no-call test uses a MODULE-net counter carried by an
 //! `inout` formal (a genuine module-level side effect) to prove non-evaluation.
+//!
+//! §4.5.217 (round-19 follow-on) closes a SILENT-WRONG in the §4.5.216 `?:` transform: a
+//! DEFINITE (0/1) condition's taken arm was lowered in ISOLATION (`x = T` / `x = E`), which
+//! is byte-identical to the unified bare ternary ONLY when the two arms are coercion-safe.
+//! `shortcircuit_rhs_special` now GATES the ternary split on `ternary_arms_coercion_safe`
+//! (same effective signedness AND lhs ≥ both arm self-widths); a sign mismatch (§11.8.1
+//! zero- vs sign-extend) or a narrow-lhs width divergence (§11.6.1 shift width) declines the
+//! split → generic lowering → loud (correct-or-loud). The `&&`/`||` transform (1-bit boolean
+//! result) and the c=X x_merge path (a real `Ternary` node — the engine unifies) are sound
+//! and untouched.
 
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -430,41 +440,113 @@ fn ternary_both_arms_have_calls() {
 // Within-vita differential: a `?:` whose condition is X must produce the SAME 4-state
 // result (bit-exact via `===`) as vita's own `c ? T : E` — the x_merge path reproduces
 // the engine's `merge_x`. `mine` fires the intercept (THEN arm has a call); `refv` (arms
-// call-free) lowers via the normal ternary path. c is X ⇒ both = merge(3,5) = 4'b0xx1.
+// call-free) lowers via the normal ternary path. The arms are COERCION-SAFE (both 4-bit
+// unsigned, lhs 4-bit — §4.5.217), so the transform still fires; c is X ⇒ ONLY the x_merge
+// path runs (both copy-outs fire, exactly as a bare ternary evaluates both when c is x) ⇒
+// both = merge(3,5) = 4'b0xx1.
 #[test]
 fn ternary_value_matches_bare_xcorner() {
     let o = run("module t;\n\
         int calls = 0;\n\
-        function automatic int f (input int v, inout int c); c = c + 1; f = v; endfunction\n\
+        function automatic logic [3:0] f (input int v, inout int c); c = c + 1; f = v; endfunction\n\
         initial begin logic c; logic [3:0] mine, refv;\n\
-          mine = c ? f(3, calls) : 5;\n\
-          refv = c ? 3 : 5;\n\
+          mine = c ? f(3, calls) : 4'd5;\n\
+          refv = c ? 4'd3 : 4'd5;\n\
           $display(\"eq=%b mine=%b\", mine === refv, mine); $finish;\n\
         end\n\
         endmodule\n");
     assert!(
         !is_loud(&o) && o.contains("eq=1") && o.contains("mine=0xx1"),
-        "?: c=x merge value must be bit-exact to bare `c ? 3 : 5`:\n{o}"
+        "?: c=x merge value must be bit-exact to bare `c ? 4'd3 : 4'd5`:\n{o}"
     );
 }
 
-// Within-vita differential: narrow lhs with differing-width arms. Per-arm coercion to the
-// lvalue width must match the bare ternary's assigned result (the width corner the design
-// note flags). `mine` (THEN arm has a call) vs `refv` (arms call-free, normal path).
+// §4.5.217 (was `ternary_width_mismatch_matches_bare`, a supported "value matches"): the
+// arms here are NOT coercion-safe — a signed `byte` arm and an unsigned 16-bit arm, lhs only
+// 4-bit. The taken value is COINCIDENTALLY correct (the low nibble is 0x7 either way — the
+// sign/width divergence lands above bit 3 and is truncated), but the gate cannot prove that
+// statically, so it conservatively declines the split → loud (correct-or-loud). Before the
+// §4.5.217 gate this was silently transformed. (Contrast `ternary_arm_width_mismatch_stays_loud`,
+// where a shift pulls the divergence down INTO the surviving bits — a genuine silent-wrong.)
 #[test]
-fn ternary_width_mismatch_matches_bare() {
+fn ternary_width_mismatch_now_loud() {
     let o = run("module t;\n\
         int calls = 0;\n\
         function automatic byte f (input byte v, inout int c); c = c + 1; f = v; endfunction\n\
-        initial begin bit sel = 1; logic [3:0] mine, refv; byte a = 8'hA7;\n\
+        initial begin bit sel = 1; logic [3:0] mine; byte a = 8'hA7;\n\
           mine = sel ? f(8'hA7, calls) : 16'h0123;\n\
-          refv = sel ? a : 16'h0123;\n\
-          $display(\"eq=%b mine=%h\", mine === refv, mine); $finish;\n\
+          $display(\"mine=%h\", mine); $finish;\n\
         end\n\
         endmodule\n");
     assert!(
-        !is_loud(&o) && o.contains("eq=1") && o.contains("mine=7"),
-        "width-mismatch ?: must match bare ternary (both = 4'h7):\n{o}"
+        is_loud(&o),
+        "sign/width-mismatched ?: arms must stay loud (coercion-unsafe):\n{o}"
+    );
+}
+
+// §4.5.217 SILENT-WRONG FIX (repro 1 — SIGN contamination): a SIGNED narrow arm (`a`,
+// 4-bit) and an UNSIGNED wide call arm (`f` returns `logic [7:0]`). A bare `sel ? a : f(..)`
+// is §11.8.1 UNSIGNED (one unsigned operand ⇒ the whole is unsigned ⇒ ZERO-extend `a`) ⇒
+// 0x0A when `sel`=1. Lowering the taken THEN arm in isolation (`x = a`) would SIGN-extend
+// `a` (0xFA) — silently wrong. The gate sees the sign mismatch and declines → loud; it must
+// NEVER silently produce 0xFA.
+#[test]
+fn ternary_arm_sign_mismatch_stays_loud() {
+    let o = run("module t;\n\
+        int calls = 0;\n\
+        logic signed [3:0] a = 4'sb1010;\n\
+        function automatic logic [7:0] f (input int d, inout int c); c = c + 1; f = 8'h0A; endfunction\n\
+        initial begin logic sel = 1; logic [7:0] x;\n\
+          x = sel ? a : f(0, calls);\n\
+          $display(\"x=%h\", x); $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o) && !o.contains("x=fa"),
+        "sign-mismatched ?: arms must stay loud, never silently 0xFA:\n{o}"
+    );
+}
+
+// §4.5.217 SILENT-WRONG FIX (repro 2 — WIDTH divergence): both arms SIGNED, but the sibling
+// call arm (`g` returns `logic signed [15:0]`) is WIDER than the lhs (8-bit). A bare
+// `sel ? (a>>1) : g(..)` evaluates the taken `a>>1` at the unified width 16 (`a` sign-extended
+// to 16 FIRST, then logical `>>1`) ⇒ 0xfd; lowering it in isolation widens `a` only to lhs=8
+// ⇒ 0x7d — silently wrong, because the shift pulls the extended top bit DOWN into the low
+// (surviving) bits. lhs < max(arm self-widths) ⇒ gate declines → loud.
+#[test]
+fn ternary_arm_width_mismatch_stays_loud() {
+    let o = run("module t;\n\
+        int calls = 0;\n\
+        logic signed [3:0] a = 4'sb1010;\n\
+        function automatic logic signed [15:0] g (input int d, inout int c); c = c + 1; g = 16'sh0005; endfunction\n\
+        initial begin logic sel = 1; logic [7:0] x;\n\
+          x = sel ? (a >> 1) : g(0, calls);\n\
+          $display(\"x=%h\", x); $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o) && !o.contains("x=7d"),
+        "width-mismatched ?: arms must stay loud, never silently 0x7d:\n{o}"
+    );
+}
+
+// §4.5.217: a COERCION-SAFE `?:` (same effective signedness AND lhs ≥ both arm self-widths)
+// carrying an output/inout-formal call arm still fires the transform and is byte-identical
+// (within-vita `===`) to the bare CALL-FREE ternary. Both arms unsigned 16-bit, lhs 16-bit.
+#[test]
+fn ternary_arm_coercion_safe_supported() {
+    let o = run("module t;\n\
+        int calls = 0;\n\
+        function automatic logic [15:0] f (input logic [15:0] v, inout int c); c = c + 1; f = v; endfunction\n\
+        initial begin bit sel = 1; logic [15:0] mine, refv; logic [15:0] a = 16'hBEEF;\n\
+          mine = sel ? f(a, calls) : 16'h1234;\n\
+          refv = sel ? a : 16'h1234;\n\
+          $display(\"eq=%b mine=%h calls=%0d\", mine === refv, mine, calls); $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("eq=1") && o.contains("mine=beef") && o.contains("calls=1"),
+        "coercion-safe ?: with a call arm must be supported and match the bare ternary:\n{o}"
     );
 }
 
