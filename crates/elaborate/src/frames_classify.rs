@@ -404,15 +404,15 @@ impl Elaborator<'_> {
                     }
                     stack.push(*resume);
                 }
-                // Backstop mirror of `classify_one_arm`'s Delay: a `#(d)` whose amount
-                // reads a frame-local (in a fork arm OR the post-join continuation) forces
-                // the task loud — the amount is evaluated without the frame window restored.
-                ir::Terminator::Delay { amount, resume, .. } => {
-                    if self.expr_reads_range(*amount, lo, hi) {
-                        return true;
-                    }
-                    stack.push(*resume);
-                }
+                // A `#(d)` delay is NOT a frame-hazard here: the `Delay` terminator
+                // evaluates `amount` with this task's frame window live (a variable
+                // delay reading a frame-local is legal and iverilog-matching in an
+                // ordinary suspendable task, and a post-join continuation resumes with
+                // the parent window restored). The ONLY hazard — a `#(d)` amount read on
+                // a fork ARM's empty owned window — is caught precisely by
+                // `classify_one_arm` in frames_classify_fork.rs, not by this general
+                // backstop. So just follow the continuation.
+                ir::Terminator::Delay { resume, .. } => stack.push(*resume),
                 ir::Terminator::Goto { target } => stack.push(*target),
                 ir::Terminator::Branch {
                     then_bb, else_bb, ..

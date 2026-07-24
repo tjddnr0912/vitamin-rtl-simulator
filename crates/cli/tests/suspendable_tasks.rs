@@ -254,3 +254,46 @@ fn v4_nested_suspendable_call() {
     assert!(ok, "nested suspendable call must run, got:\n{out}");
     assert!(out.contains("o=33"), "got:\n{out}");
 }
+
+// ─── Regression (fork-in-frame fix pass 2): a variable delay reading a frame-local ───
+// A `#(d)` whose amount reads a frame-local is perfectly legal in an ORDINARY
+// suspendable task — the `Delay` terminator evaluates `amount` with the frame window
+// live. Commit 06bb53a mirrored a fork-arm-only Delay-amount check into the GENERAL
+// `frame_task_has_unsafe_construct` backstop, which runs for EVERY suspendable task, so
+// these iverilog-matching tasks falsely went E3009 (working→loud regression). The mirror
+// was removed; the fork-arm hazard is still caught precisely by `classify_one_arm`
+// (see fork_in_frame.rs::fork_delay_amount_is_parent_local_stays_loud).
+#[test]
+fn variable_delay_task_not_falsely_loud() {
+    // `dly(7)`: a `#(d)` delay reading the input formal `d`. After the delay $time=7.
+    // ORACLE iverilog 13.0: o=7, $finish at 7.
+    let src = "module t;\n\
+        task automatic dly(input int d); #(d); endtask\n\
+        initial begin dly(7); $display(\"o=%0d\", $time); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(
+        ok,
+        "variable-delay task must RUN (not E3009) — the general backstop must not \
+         flag a `#(d)` amount reading a frame-local, got:\n{out}"
+    );
+    assert!(out.contains("o=7"), "expected o=7, got:\n{out}");
+}
+
+#[test]
+fn recursive_variable_delay_task_not_falsely_loud() {
+    // `r(3)`: a recursive STATIC (→ framed) task whose `#(n)` amount reads the frame-local
+    // `n`. Static storage means the recursive calls clobber the shared `n` to 0 before any
+    // delay resumes, so every `#(n)` is `#(0)` and $time stays 0. ORACLE iverilog 13.0:
+    // o=0, $finish at 0. The point of this test is that it RUNS (not loud); the value just
+    // pins the iverilog-matching semantics.
+    let src = "module t;\n\
+        task r(input int n); if (n > 0) r(n - 1); #(n); endtask\n\
+        initial begin r(3); $display(\"o=%0d\", $time); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(
+        ok,
+        "recursive variable-delay task must RUN (not E3009) — the general backstop must \
+         not flag a `#(n)` amount reading a frame-local, got:\n{out}"
+    );
+    assert!(out.contains("o=0"), "expected o=0, got:\n{out}");
+}
