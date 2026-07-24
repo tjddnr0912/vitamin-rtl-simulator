@@ -415,9 +415,19 @@ impl Elaborator<'_> {
                     if p.segments.len() == 1 && p.segments[0].name == name);
             if clean_output_whole {
                 writes = true;
-            } else if expr_reads_ident(arg, name) {
+            } else if !expr_no_ref(arg, name) {
                 // Any OTHER reference to `name` (input actual, inout copy-in, select
-                // index, partial-write select base, arg beyond arity) is a read.
+                // index, partial-write select base, arg beyond arity, OR a same-call
+                // member / method read `name.field` / `name.size()`) is a read that
+                // observes the copy-IN value before the output copy-OUT. Use the
+                // CONSERVATIVE `expr_no_ref` (any unvetted form ⇒ "may reference"), NOT
+                // `expr_reads_ident` — the latter is the known under-detecting walker
+                // (single-seg only, no `MethodCall`/`Dist`/… arm), so a co-arg
+                // `name.field` (a multi-seg ident) / `name.method()` would slip through
+                // and let the accept gate skip the loud → the flattened net's leftover
+                // is read on re-entry = silent-wrong (BL4 adversarial-review finding;
+                // latent today since member/method-bearing OUTPUT-formal types are
+                // otherwise loud, but this keeps the gate sound as support widens).
                 reads = true;
             }
         }

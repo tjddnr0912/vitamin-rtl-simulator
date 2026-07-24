@@ -247,6 +247,35 @@ fn mixed_read_and_output_stays_loud() {
 }
 
 #[test]
+fn co_arg_method_read_of_output_actual_stays_loud() {
+    // BL4 adversarial-review Finding 1 (soundness hardening): `fill(a, a.sum())` passes
+    // `a` at a clean OUTPUT position but ALSO reads it via the co-arg METHOD `a.sum()`.
+    // That read observes the copy-IN (leftover) value before the output copy-OUT, so `a`
+    // is NOT a clean definite assignment. The DA accept gate must reject it. `expr_reads_
+    // ident` (the under-detecting walker — single-seg only, no `MethodCall` arm) MISSED
+    // this read → the gate now uses the conservative `expr_no_ref`. We assert the SPECIFIC
+    // block-local read-before-write rejection of `a` (the program is also loud downstream,
+    // so a bare `loud()` would be vacuous w.r.t. this fix). A same-call member read
+    // `f(a, a.field)` is caught by the same conservative walker.
+    let (o, ok) = run("module t;\n\
+         task automatic fill (output int a[4], input int chk); a[0] = chk; endtask\n\
+         initial begin\n\
+           begin\n\
+             automatic int a[4];\n\
+             fill(a, a.sum());\n\
+             if (a[0] == 6) $display(\"PASS\");\n\
+           end\n\
+           $finish;\n\
+         end\n\
+         endmodule");
+    assert!(!ok, "must be loud:\n{o}");
+    assert!(
+        o.contains("block-local `a`") && o.contains("per-entry lifetime"),
+        "expected the DA gate to reject `a` (co-arg method read of an output actual):\n{o}"
+    );
+}
+
+#[test]
 fn inout_first_ref_stays_loud() {
     // An INOUT actual has a copy-IN that READS `x` (verified). As the FIRST reference to
     // a fresh automatic, that copy-in reads the flatten's leftover — which diverges from
