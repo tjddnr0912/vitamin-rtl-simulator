@@ -467,15 +467,24 @@ impl Elaborator<'_> {
                 else_s,
                 ..
             } => {
-                let cond_id = self.lower_branch_cond(b, cond);
                 let then_bb = b.new_block();
                 let else_bb = b.new_block();
                 let merge = b.new_block();
-                b.end_block_with(ir::Terminator::Branch {
-                    cond: cond_id,
-                    then_bb: then_bb.raw(),
-                    else_bb: else_bb.raw(),
-                });
+                // F-record-out follow-on (§4.5.215): an output/inout-formal call in a
+                // short-circuit `&&`/`||` IF-condition is lowered as the SAME explicit
+                // branch chain as a loop cond (`lower_shortcircuit_cond`) — the guarded
+                // call's copy-out fires ONLY on the path that reaches it, never made
+                // unconditional. Every other condition is byte-identical (one Branch).
+                if self.cond_needs_shortcircuit_split(cond) {
+                    self.lower_shortcircuit_cond(b, cond, then_bb.raw(), else_bb.raw());
+                } else {
+                    let cond_id = self.lower_branch_cond(b, cond);
+                    b.end_block_with(ir::Terminator::Branch {
+                        cond: cond_id,
+                        then_bb: then_bb.raw(),
+                        else_bb: else_bb.raw(),
+                    });
+                }
                 b.start_block(then_bb);
                 self.lower_stmt(b, then_s);
                 b.goto(merge);

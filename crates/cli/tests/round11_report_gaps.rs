@@ -648,12 +648,22 @@ fn r5b_while_condition_now_supported() {
 }
 
 #[test]
-fn r5b_short_circuit_rhs_is_loud() {
+fn r5b_short_circuit_if_cond_now_supported() {
+    // §4.5.215 follow-on: an inout/output-formal call in a short-circuit `&&`/`||` IF-cond is
+    // now lowered as an explicit branch chain (`lower_shortcircuit_cond`), so the call fires
+    // ONLY on the non-short-circuit path — the EXACT safety the old loud provided (no
+    // unconditional call), now SUPPORTED. g=0 ⇒ `&&` short-circuits ⇒ f(x) is NEVER called ⇒
+    // x stays 0 (a silently-unconditional call would leave x=1 = the wrong the old loud
+    // avoided). Verified: the copy-out `Call` lives only in the reached branch.
     let src = "module t;\n\
         function automatic int f(inout int a); a=a+1; return a; endfunction\n\
         logic g;\n\
-        initial begin int x=0; g=0; if(g && f(x)>0) $display(\"Y\"); $finish; end endmodule";
-    assert!(loud(src)); // `&&` RHS is conditional → not hoisted (no silent unconditional call)
+        initial begin int x=0; g=0; if(g && f(x)>0) $display(\"Y\"); $display(\"x=%0d\", x); $finish; end endmodule";
+    let (o, ok) = run(src);
+    assert!(
+        ok && o == "x=0",
+        "g=0 ⇒ f short-circuited (never called), x stays 0:\n{o}"
+    );
 }
 
 #[test]

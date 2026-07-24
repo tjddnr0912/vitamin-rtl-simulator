@@ -297,19 +297,62 @@ fn output_formal_plain_condition_regression() {
 
 // ══════════════════ correct-or-loud: documented follow-ons stay LOUD ══════════════════
 
-// An output-formal call in an `if`-condition `&&` (not a loop condition) is NOT split —
-// stays loud (follow-on: the split is scoped to while/for conditions).
+// §4.5.215 FOLLOW-ON: an output/inout-formal call in an `if`-condition `&&`/`||` is now
+// lowered via the SAME short-circuit branch chain as a loop cond (`lower_shortcircuit_cond`
+// routing to the if's then_bb/else_bb) — supported.
 #[test]
-fn output_formal_if_cond_and_stays_loud() {
+fn output_formal_if_cond_and_now_supported() {
     let o = run(&format!(
         "module t;\n{STEP_CNT}\
         initial begin int n = 0;\n\
           if (n < 5 && step(n, calls) == 1) $display(\"hi\");\n\
-          $finish;\n\
+          else $display(\"no\");\n\
+          $display(\"calls=%0d\", calls); $finish;\n\
         end\n\
         endmodule\n"
     ));
-    assert!(is_loud(&o), "if-cond && should stay loud:\n{o}");
+    // n<5 true → step(0) called (calls=1), returns 0<3=1 → ==1 true → "hi".
+    assert!(
+        !is_loud(&o) && o.contains("hi") && o.contains("calls=1"),
+        "if-cond && output-formal call should be supported:\n{o}"
+    );
+}
+
+// THE critical short-circuit-no-call for if-cond: left operand FALSE ⇒ the call NEVER fires
+// and its inout copy-out never touches the counter (calls stays 0).
+#[test]
+fn output_formal_if_cond_shortcircuit_no_call() {
+    let o = run(&format!(
+        "module t;\n{STEP_CNT}\
+        initial begin int gate = 0;\n\
+          if (gate && step(0, calls) == 1) $display(\"taken\");\n\
+          else $display(\"not-taken\");\n\
+          $display(\"calls=%0d\", calls); $finish;\n\
+        end\n\
+        endmodule\n"
+    ));
+    assert!(
+        !is_loud(&o) && o.contains("not-taken") && o.contains("calls=0"),
+        "gate false ⇒ step must NEVER be called (calls=0):\n{o}"
+    );
+}
+
+// if-cond `||`: left operand TRUE ⇒ the RHS call is short-circuited (never fires).
+#[test]
+fn output_formal_if_cond_or_shortcircuit() {
+    let o = run(&format!(
+        "module t;\n{STEP_CNT}\
+        initial begin int done = 1;\n\
+          if (done || step(0, calls) == 1) $display(\"taken\");\n\
+          else $display(\"not-taken\");\n\
+          $display(\"calls=%0d\", calls); $finish;\n\
+        end\n\
+        endmodule\n"
+    ));
+    assert!(
+        !is_loud(&o) && o.contains("taken") && o.contains("calls=0"),
+        "done true ⇒ || short-circuits, step never called (calls=0):\n{o}"
+    );
 }
 
 // A `?:` arm output-formal call stays loud (documented follow-on).
