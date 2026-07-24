@@ -338,11 +338,21 @@ fn ustruct_decl_init_still_loud() {
 }
 
 #[test]
-fn ustruct_whole_copy_still_loud() {
+fn ustruct_whole_copy_now_supported() {
+    // round-19 Q: a scalar whole-struct copy `k2 = k` (both `p::kat_t`, a
+    // non-packable record — `string`/`logic`/`int` mixed members) now fans out to a
+    // per-member copy `$unp$k2$field = $unp$k$field` for every field
+    // (soa.rs::try_soa_assign), supersedes this pin — was loud (no aggregate
+    // whole-value surface), same class as `ustruct_array_now_soa` above superseding
+    // the array-of-records loud pin. A cross-TYPE whole copy stays loud (gated on
+    // matching `var_unpacked_struct` type names — see record_array_soa.rs).
     let src = format!(
-        "{KAT}module m; initial begin p::kat_t k; p::kat_t k2; k.mode=5'd1; k2 = k; $display(\"o=x\"); end endmodule"
+        "{KAT}module m; initial begin p::kat_t k; p::kat_t k2;\n\
+         k.name=\"t0\"; k.mode=5'd1; k.msg_hex=\"abcd\"; k.xof_out_bytes=32;\n\
+         k2 = k;\n\
+         $display(\"o=%s_%0d_%s_%0d\", k2.name, k2.mode, k2.msg_hex, k2.xof_out_bytes); end endmodule"
     );
-    assert!(!ok(&src));
+    assert_eq!(run(&src).0, "o=t0_1_abcd_32");
 }
 
 #[test]

@@ -295,3 +295,158 @@ fn record_array_with_event_member_stays_loud() {
         "event-member record array must stay loud:\n{o}"
     );
 }
+
+// ── Q (round-19): the reviewer's exact repro — a param-width record's module net
+// AND a block-local `automatic` copy in an `always_ff`, plus a queue pop-into-record.
+// Both `cur_ar`/`next_cur_ar` are scalar `var_unpacked_struct` records (the
+// param-width member `[ADDR_W-1:0]` makes `packable_record_layout` return None,
+// routing them onto the per-member SoA path) — the whole-value copy previously had
+// no surface (E3010 "undeclared").
+#[test]
+fn param_width_record_whole_copy() {
+    let o = run("module t #(parameter int ADDR_W = 32);\n\
+        logic clk=0; always #5 clk=~clk;\n\
+        logic rst_n=0;\n\
+        typedef struct { logic [ADDR_W-1:0] addr; logic [7:0] len; } pkt_t;\n\
+        pkt_t ar_q [$];\n\
+        pkt_t cur_ar;\n\
+        always_ff @(posedge clk or negedge rst_n) begin\n\
+            automatic pkt_t next_cur_ar;\n\
+            next_cur_ar = cur_ar;\n\
+            if (ar_q.size() > 0) next_cur_ar = ar_q.pop_front();\n\
+            cur_ar <= next_cur_ar;\n\
+        end\n\
+        initial begin\n\
+          pkt_t p;\n\
+          p.addr = 32'hDEAD_BEEF; p.len = 8'd4;\n\
+          ar_q.push_back(p);\n\
+          rst_n = 1;\n\
+          #12;\n\
+          $display(\"addr=%h len=%0d qsize=%0d\", cur_ar.addr, cur_ar.len, ar_q.size());\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("addr=deadbeef len=4 qsize=0"),
+        "param-width record whole copy (Q repro):\n{o}"
+    );
+}
+
+// ── Q: two instances with DIFFERENT ADDR_W overrides — the whole-copy must use
+// EACH instance's own per-instance-resolved member width, never a parse-time-frozen
+// one (a frozen 32-bit assumption would truncate/misrender the 48-bit instance).
+#[test]
+fn param_width_record_copy_override() {
+    let o = run(
+        "module dut #(parameter int ADDR_W = 32) (output logic [ADDR_W-1:0] out_addr, output logic [7:0] out_len);\n\
+        typedef struct { logic [ADDR_W-1:0] addr; logic [7:0] len; } pkt_t;\n\
+        pkt_t a, b;\n\
+        initial begin\n\
+          a.addr = 48'hDEADBEEF1234;\n\
+          a.len = 8'd9;\n\
+          b = a;\n\
+          out_addr = b.addr;\n\
+          out_len = b.len;\n\
+        end\n\
+        endmodule\n\
+        module t;\n\
+          logic [7:0]  addr8;\n\
+          logic [47:0] addr48;\n\
+          logic [7:0]  len8, len48;\n\
+          dut #(.ADDR_W(8))  d8  (.out_addr(addr8),  .out_len(len8));\n\
+          dut #(.ADDR_W(48)) d48 (.out_addr(addr48), .out_len(len48));\n\
+          initial begin\n\
+            #1;\n\
+            $display(\"addr8=%h len8=%0d addr48=%h len48=%0d\", addr8, len8, addr48, len48);\n\
+            $finish;\n\
+          end\n\
+        endmodule\n",
+    );
+    assert!(
+        !is_loud(&o) && o.contains("addr8=34 len8=9 addr48=deadbeef1234 len48=9"),
+        "param-width record whole copy, per-instance override:\n{o}"
+    );
+}
+
+// ── Q: literal-width MIXED 2-/4-state record (`int` + `logic`) — non-packable
+// via the mixed-state gate (not param-width), so it also rides `var_unpacked_struct`.
+#[test]
+fn mixed_state_record_whole_copy() {
+    let o = run("module t;\n\
+        typedef struct { int a; logic [7:0] b; } rec_t;\n\
+        rec_t x, y;\n\
+        initial begin\n\
+          x.a = 42; x.b = 8'hAB;\n\
+          y = x;\n\
+          $display(\"a=%0d b=%h\", y.a, y.b);\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("a=42 b=ab"),
+        "mixed-state record whole copy:\n{o}"
+    );
+}
+
+// ── Q: by-value semantics — mutating the source AFTER the copy must not affect
+// the destination (independent per-member nets, no aliasing).
+#[test]
+fn record_whole_copy_by_value() {
+    let o = run("module t;\n\
+        typedef struct { int a; logic [7:0] b; } rec_t;\n\
+        rec_t p, q;\n\
+        initial begin\n\
+          p.a = 5; p.b = 8'd10;\n\
+          q = p;\n\
+          p.a = 99;\n\
+          $display(\"qa=%0d pa=%0d\", q.a, p.a);\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("qa=5 pa=99"),
+        "record whole copy must be by-value:\n{o}"
+    );
+}
+
+// ── Q: NBA whole-copy fidelity — `q <= p;` must land EVERY field together.
+#[test]
+fn record_nba_whole_copy() {
+    let o = run("module t;\n\
+        typedef struct { int a; logic [7:0] b; } rec_t;\n\
+        rec_t p, q;\n\
+        initial begin\n\
+          p.a = 7; p.b = 8'd20;\n\
+          q <= p;\n\
+          #1;\n\
+          $display(\"a=%0d b=%0d\", q.a, q.b);\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("a=7 b=20"),
+        "record NBA whole copy:\n{o}"
+    );
+}
+
+// ── correct-or-loud: a whole-copy between TWO DIFFERENT record types stays loud —
+// no guaranteed per-field correspondence, so a silent field-by-position copy would
+// be silent-wrong (truncation / reordering). Never a partial fan-out.
+#[test]
+fn cross_type_copy_stays_loud() {
+    let o = run("module t;\n\
+        typedef struct { int a; logic [7:0] b; } rec1_t;\n\
+        typedef struct { int x; logic [7:0] y; } rec2_t;\n\
+        rec1_t p;\n\
+        rec2_t q;\n\
+        initial begin\n\
+          p = q;\n\
+          $display(\"ran\");\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "cross-type record whole copy must stay loud:\n{o}"
+    );
+}

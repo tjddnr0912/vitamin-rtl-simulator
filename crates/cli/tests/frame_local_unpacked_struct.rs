@@ -141,17 +141,23 @@ fn r17_family_b_report_repro_package_scoped() {
 }
 
 #[test]
-fn nonpackable_record_whole_value_op_stays_loud() {
-    // correct-or-loud: a WHOLE-value op on a non-packable local (per-member storage
-    // has no flat value) stays loud — never silently wrong.
+fn nonpackable_record_whole_value_op_now_supported() {
+    // round-19 Q: a WHOLE-value op on a non-packable local — both `r`/`q` are scalar
+    // `var_unpacked_struct` records of the SAME type — now fans out to a per-member
+    // copy `$unp$q$f = $unp$r$f` for every field (soa.rs::try_soa_assign), so the
+    // per-member frame-local storage (§4.5.192/round-17 Family B) gets a whole-copy
+    // surface too. Supersedes the old loud pin: this used to have no representation
+    // at all (task/function-body scope is byte-identical to module scope on the
+    // `var_unpacked_struct` gate, so the fix that opened module-scope whole-copy
+    // opens this too). A cross-type copy stays loud (see record_array_soa.rs).
     let o = run("module top;\n\
          typedef struct { string name; int id; } rec_t;\n\
          task automatic t(); rec_t r; rec_t q; r.id=5; r.name=\"x\"; q=r;\n\
-           $display(\"%0d\", q.id); endtask\n\
+           $display(\"%0d %s\", q.id, q.name); endtask\n\
          initial t();\nendmodule\n");
     assert!(
-        o.contains("E2002") || o.contains("E3009") || o.contains("E3010"),
-        "whole-struct copy of a non-packable local should be loud:\n{o}"
+        o.contains("5 x"),
+        "whole-struct copy of a non-packable local:\n{o}"
     );
 }
 

@@ -250,6 +250,58 @@ impl Parser<'_, '_> {
                 }
             }
         }
+        // Q (round-19): scalar-record whole-copy `a = b` / `a <= b` where BOTH `a`
+        // and `b` are scalar `var_unpacked_struct` records of the SAME type name →
+        // per-member fan-out `$unp$a$f <op> $unp$b$f` for every field. The record
+        // net, queue, `size()`/`pop_front()`, and field access already work via the
+        // per-member SoA representation (`parse_unpacked_struct_decl`); only the
+        // whole-value COPY had no surface — a scalar non-packable record has no
+        // flat net of its own, so a bare `a = b` would otherwise resolve `a` to
+        // "undeclared" downstream.
+        //
+        // Correctness gate: SAME type name is the whole guarantee. Same declared
+        // type ⇒ `$unp$a$f` / `$unp$b$f` were built from the IDENTICAL member list
+        // (`unpacked_struct_layouts[ty]`), giving identical per-field width/sign/
+        // kind by construction — including a PARAMETER-width member
+        // (`[ADDR_W-1:0]`) whose raw range resolves per-instance at elaborate (this
+        // path never calls `packable_record_layout`, so no parse-time frozen width
+        // is baked in — safe under `#(.ADDR_W())` override). A cross-type copy is
+        // refused (`None` here → falls through to the ordinary assignment, loud
+        // downstream) because two DIFFERENT record types carry no guaranteed
+        // per-field correspondence (different member lists / order / widths) — a
+        // silent field-by-position copy would silently truncate or reorder fields.
+        // All-or-loud: every member is copied, or the whole `Block` is skipped —
+        // never a partial fan-out that would desync fields.
+        if let (Lvalue::Ident(lp), ExprKind::Ident(rp)) = (lhs, &rhs.kind) {
+            if lp.segments.len() == 1 && rp.segments.len() == 1 {
+                let lvar = lp.segments[0].name.clone();
+                let rvar = rp.segments[0].name.clone();
+                if let Some(lty) = self.var_unpacked_struct.get(&lvar).cloned() {
+                    if self.var_unpacked_struct.get(&rvar) == Some(&lty) {
+                        let members = self.unpacked_struct_layouts.get(&lty)?.clone();
+                        let stmts = members
+                            .iter()
+                            .map(|m| {
+                                let dst = Self::unpacked_member_net(&lvar, &m.name.name);
+                                let srcn = Self::unpacked_member_net(&rvar, &m.name.name);
+                                Self::assign_stmt(
+                                    Self::ident_lval(&dst, span),
+                                    Self::ident_expr(&srcn, span),
+                                    blocking,
+                                    span,
+                                )
+                            })
+                            .collect();
+                        return Some(Stmt::Block {
+                            label: None,
+                            decls: Vec::new(),
+                            stmts,
+                            span,
+                        });
+                    }
+                }
+            }
+        }
         // Whole-array: `arr = new[N]` / `arr = new[N](src)` / `arr = other`.
         if let Lvalue::Ident(p) = lhs {
             if p.segments.len() == 1 {
