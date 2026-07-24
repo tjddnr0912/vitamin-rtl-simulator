@@ -355,32 +355,210 @@ fn output_formal_if_cond_or_shortcircuit() {
     );
 }
 
-// A `?:` arm output-formal call stays loud (documented follow-on).
+// ══════════════════ §4.5.216: `?:` arm / general `&&`/`||` RHS supported ══════════════════
+// An output/inout-formal call in a CONDITIONALLY-evaluated whole rhs (a `?:` arm or a
+// top-level short-circuit `&&`/`||` RHS) is lowered as explicit control flow that assigns
+// `lhs` on every path (`shortcircuit_rhs_special` → `lower_ternary_rhs` /
+// `lower_shortcircuit_rhs`), so the copy-out fires ONLY on the path that reaches it. The
+// result value is byte-identical to a bare `c?T:E` / `A&&B` / `A||B` (assembled with the
+// engine's own tri-valued `merge_x`/`log_and`/`log_or`, incl. the 4-state corners). Same
+// NO ORACLE as §4.5.215 (iverilog/verilator reject an output-formal function) → hand-IEEE
+// (§11.4.7/§11.4.11) cross-checked by a within-vita differential vs the call-free form.
+
+// §4.5.216 FLIP (was `_stays_loud`): a `?:` arm output-formal call is now supported.
 #[test]
-fn output_formal_ternary_arm_stays_loud() {
+fn output_formal_ternary_arm_now_supported() {
     let o = run(&format!(
         "module t;\n{STEP_CNT}\
         initial begin int n = 0, x;\n\
           x = (n < 5) ? step(n, calls) : 0;\n\
-          $display(\"x=%0d\", x); $finish;\n\
+          $display(\"x=%0d calls=%0d\", x, calls); $finish;\n\
         end\n\
         endmodule\n"
     ));
-    assert!(is_loud(&o), "?: arm should stay loud:\n{o}");
+    // n<5 true ⇒ THEN arm taken: step(0) called (calls=1), returns 0<3=1 ⇒ x=1.
+    assert!(
+        !is_loud(&o) && o.contains("x=1 calls=1"),
+        "?: arm output-formal call should be supported:\n{o}"
+    );
 }
 
-// A general expression `x = A && f(out r)` (not a loop condition) stays loud.
+// THE critical short-circuit-no-call for `?:`: the NOT-taken arm's call must NEVER fire
+// (its inout copy-out never touches the module counter).
 #[test]
-fn output_formal_general_expr_stays_loud() {
+fn ternary_arm_shortcircuit_no_call() {
+    let o = run(&format!(
+        "module t;\n{STEP_CNT}\
+        initial begin int n = 9, x;\n\
+          x = (n < 5) ? step(n, calls) : 42;\n\
+          $display(\"x=%0d calls=%0d\", x, calls); $finish;\n\
+        end\n\
+        endmodule\n"
+    ));
+    // n<5 FALSE ⇒ ELSE arm (42); the THEN arm's step() must NEVER be called ⇒ calls=0.
+    assert!(
+        !is_loud(&o) && o.contains("x=42 calls=0"),
+        "not-taken ?: arm must NEVER fire its call (calls=0):\n{o}"
+    );
+}
+
+// Both arms carry a call: each fires only on its own taken path (independent counters).
+#[test]
+fn ternary_both_arms_have_calls() {
+    let o = run("module t;\n\
+        int ca = 0, cb = 0;\n\
+        function automatic int fa (input int v, inout int c); c = c + 1; fa = v*10; endfunction\n\
+        function automatic int fb (input int v, inout int c); c = c + 1; fb = v*100; endfunction\n\
+        initial begin int x;\n\
+          for (int n = 0; n < 3; n++) begin\n\
+            x = (n < 1) ? fa(n, ca) : fb(n, cb);\n\
+            $display(\"n=%0d x=%0d ca=%0d cb=%0d\", n, x, ca, cb);\n\
+          end\n\
+          $finish;\n\
+        end\n\
+        endmodule\n");
+    // n=0 → fa (ca=1, x=0); n=1,2 → fb (cb=1,2, x=100,200). ca frozen at 1 (fa only at n=0).
+    assert!(
+        !is_loud(&o)
+            && o.contains("n=0 x=0 ca=1 cb=0")
+            && o.contains("n=1 x=100 ca=1 cb=1")
+            && o.contains("n=2 x=200 ca=1 cb=2"),
+        "both ?: arms with calls — each fires only on its taken path:\n{o}"
+    );
+}
+
+// Within-vita differential: a `?:` whose condition is X must produce the SAME 4-state
+// result (bit-exact via `===`) as vita's own `c ? T : E` — the x_merge path reproduces
+// the engine's `merge_x`. `mine` fires the intercept (THEN arm has a call); `refv` (arms
+// call-free) lowers via the normal ternary path. c is X ⇒ both = merge(3,5) = 4'b0xx1.
+#[test]
+fn ternary_value_matches_bare_xcorner() {
+    let o = run("module t;\n\
+        int calls = 0;\n\
+        function automatic int f (input int v, inout int c); c = c + 1; f = v; endfunction\n\
+        initial begin logic c; logic [3:0] mine, refv;\n\
+          mine = c ? f(3, calls) : 5;\n\
+          refv = c ? 3 : 5;\n\
+          $display(\"eq=%b mine=%b\", mine === refv, mine); $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("eq=1") && o.contains("mine=0xx1"),
+        "?: c=x merge value must be bit-exact to bare `c ? 3 : 5`:\n{o}"
+    );
+}
+
+// Within-vita differential: narrow lhs with differing-width arms. Per-arm coercion to the
+// lvalue width must match the bare ternary's assigned result (the width corner the design
+// note flags). `mine` (THEN arm has a call) vs `refv` (arms call-free, normal path).
+#[test]
+fn ternary_width_mismatch_matches_bare() {
+    let o = run("module t;\n\
+        int calls = 0;\n\
+        function automatic byte f (input byte v, inout int c); c = c + 1; f = v; endfunction\n\
+        initial begin bit sel = 1; logic [3:0] mine, refv; byte a = 8'hA7;\n\
+          mine = sel ? f(8'hA7, calls) : 16'h0123;\n\
+          refv = sel ? a : 16'h0123;\n\
+          $display(\"eq=%b mine=%h\", mine === refv, mine); $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("eq=1") && o.contains("mine=7"),
+        "width-mismatch ?: must match bare ternary (both = 4'h7):\n{o}"
+    );
+}
+
+// §4.5.216 FLIP (was `_stays_loud`): a general `x = A && f(out r)` (top-level `&&`, whole
+// rhs) is now supported.
+#[test]
+fn output_formal_general_expr_now_supported() {
     let o = run(&format!(
         "module t;\n{STEP_CNT}\
         initial begin int n = 0; logic x;\n\
           x = (n < 5) && (step(n, calls) == 1);\n\
-          $display(\"x=%0d\", x); $finish;\n\
+          $display(\"x=%0d calls=%0d\", x, calls); $finish;\n\
         end\n\
         endmodule\n"
     ));
-    assert!(is_loud(&o), "general-expr && should stay loud:\n{o}");
+    // n<5 true ⇒ step(0) called (calls=1), returns 1 ⇒ ==1 true ⇒ x=1.
+    assert!(
+        !is_loud(&o) && o.contains("x=1 calls=1"),
+        "general-expr && output-formal call should be supported:\n{o}"
+    );
+}
+
+// THE critical short-circuit-no-call for `&&`: left operand FALSE ⇒ the RHS call never
+// fires and its inout counter stays 0.
+#[test]
+fn general_expr_and_shortcircuit_no_call() {
+    let o = run(&format!(
+        "module t;\n{STEP_CNT}\
+        initial begin logic gate = 0; logic x;\n\
+          x = gate && (step(0, calls) == 1);\n\
+          $display(\"x=%0d calls=%0d\", x, calls); $finish;\n\
+        end\n\
+        endmodule\n"
+    ));
+    assert!(
+        !is_loud(&o) && o.contains("x=0 calls=0"),
+        "gate false ⇒ && RHS call must NEVER fire (calls=0):\n{o}"
+    );
+}
+
+// THE critical short-circuit-no-call for `||`: left operand TRUE ⇒ the RHS call never fires.
+#[test]
+fn general_expr_or_shortcircuit_no_call() {
+    let o = run(&format!(
+        "module t;\n{STEP_CNT}\
+        initial begin logic done = 1; logic x;\n\
+          x = done || (step(0, calls) == 1);\n\
+          $display(\"x=%0d calls=%0d\", x, calls); $finish;\n\
+        end\n\
+        endmodule\n"
+    ));
+    assert!(
+        !is_loud(&o) && o.contains("x=1 calls=0"),
+        "done true ⇒ || RHS call must NEVER fire (calls=0):\n{o}"
+    );
+}
+
+// Within-vita differential: `&&` with an X-valued LEFT operand must be bit-exact to vita's
+// own `&&`. `mine` fires the intercept (RHS has a call); `refv` (call-free RHS) is the
+// normal path. A is X, both RHS true ⇒ `x && 1` = X on both ⇒ `===` holds. The call still
+// FIRES for A=X (IEEE: `&&` needs its RHS when the LHS is X) — calls=1.
+#[test]
+fn general_expr_and_value_matches_bare_xcorner() {
+    let o = run("module t;\n\
+        int calls = 0;\n\
+        function automatic int step (input int fd, inout int c); c = c + 1; step = (fd < 3); endfunction\n\
+        initial begin logic a; logic mine, refv;\n\
+          mine = a && (step(0, calls) == 1);\n\
+          refv = a && (1 == 1);\n\
+          $display(\"eq=%b mine=%b calls=%0d\", mine === refv, mine, calls); $finish;\n\
+        end\n\
+        endmodule\n");
+    assert!(
+        !is_loud(&o) && o.contains("eq=1") && o.contains("mine=x") && o.contains("calls=1"),
+        "&& x-corner must be bit-exact to bare `a && (1==1)` and still fire the call:\n{o}"
+    );
+}
+
+// A BURIED call (`y = (A && f()) + 1` — the call is NOT the whole rhs) stays loud: the
+// intercept matches only a WHOLE-rhs ternary / short-circuit form (correct-or-loud).
+#[test]
+fn output_formal_buried_and_stays_loud() {
+    let o = run(&format!(
+        "module t;\n{STEP_CNT}\
+        initial begin int n = 0; int y;\n\
+          y = ((n < 5) && (step(n, calls) == 1)) + 1;\n\
+          $display(\"y=%0d\", y); $finish;\n\
+        end\n\
+        endmodule\n"
+    ));
+    assert!(
+        is_loud(&o),
+        "buried && call (not the whole rhs) should stay loud:\n{o}"
+    );
 }
 
 // The call NESTED inside a loop-condition operand's own `&&`/`||` (not a top-level operand)

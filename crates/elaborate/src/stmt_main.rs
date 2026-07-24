@@ -126,6 +126,15 @@ impl Elaborator<'_> {
                 if self.scanf_special(b, Some(lhs), delay.as_ref(), rhs) {
                     return;
                 }
+                // §4.5.216: an output/inout-formal call in a CONDITIONALLY-evaluated whole
+                // rhs — a `?:` arm (`x = c ? f(out r) : g`) or a top-level short-circuit
+                // `&&`/`||` RHS (`x = A && f(out r)`) — lowered as explicit control flow that
+                // assigns `lhs` on every path, so the copy-out fires ONLY on the taken path.
+                // Every other rhs (incl. a buried/deeper/eval-order-unsafe call) returns false
+                // → the generic path below, where such a call stays loud at `emit_frame_call`.
+                if self.shortcircuit_rhs_special(b, lhs, delay.as_ref(), rhs) {
+                    return;
+                }
                 // §4.5.177: a direct-rhs `x = f(arr)` to a FRAMED function with an `input`
                 // dyn-array formal, at module-process level — emit the `handle_copy`
                 // snapshot marker(s) that fill the callee formal's heap slot, and BLESS the
