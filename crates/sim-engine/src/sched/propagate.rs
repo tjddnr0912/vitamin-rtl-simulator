@@ -810,7 +810,14 @@ impl Scheduler<'_, '_> {
                 let window = if !self.st.func_has_auto[arm_callee as usize] {
                     None // static enclosing task: no window on the stack
                 } else if let Some(h) = arm_window_kind {
-                    Some(crate::state::WindowSlot::Shared(h)) // Case B: alias the parent's arena
+                    // Case B: this arm aliases the parent's arena window. Stage 3: take a
+                    // reference so the window is not freed while the arm is live — under
+                    // `join_any`/`join_none` a surviving arm may outlive the parent's
+                    // `Return`, and this refcount is what keeps its window valid. Balanced by
+                    // the arm's `exit_arm_frame` release at completion. (For `join` the parent
+                    // outlives every arm, so retain/release here is a no-op net-of-parent.)
+                    self.st.retain_frame_window(h);
+                    Some(crate::state::WindowSlot::Shared(h))
                 } else {
                     Some(crate::state::WindowSlot::Owned(Vec::new())) // Case A: empty owned
                 };

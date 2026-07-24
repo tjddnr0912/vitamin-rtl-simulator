@@ -302,13 +302,13 @@ fn fork_static_task_case_b_stays_loud() {
     );
 }
 
-// ── correct-or-loud (Stage 2 boundary): a Case-B fork with `join_any` stays LOUD.
-//    A surviving arm can outlive the parent's resume, so the shared window needs the
-//    refcount that Stage 3 adds; until then this is correct-or-loud (never silent). The
-//    SAME arm write (`x = 42`) is now SUPPORTED under `join` (see
-//    `case_b_join_arm_writes_parent_local`) — only the join MODE keeps this loud. ──
+// ── Stage 3 (was Stage-2 boundary): a Case-B fork with `join_any` is now SUPPORTED.
+//    The refcounted shared window lets the surviving arm outlive the parent. Both arms
+//    complete at the same posedge (t=5); the fast one fires join_any and the parent resumes
+//    and reads x = 42 (arm0, lower tie, ran its write before the parent's continuation).
+//    ORACLE: iverilog crashes on the surviving arm (of_JOIN_DETACH), so hand-IEEE. ──
 #[test]
-fn case_b_join_any_stays_loud() {
+fn case_b_join_any_now_supported() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic run;\n\
@@ -319,15 +319,17 @@ fn case_b_join_any_stays_loud() {
         initial begin run(); #100 $finish; end\n\
         endmodule\n");
     assert!(
-        is_loud(&o),
-        "case B join_any must stay loud until Stage 3 (refcount):\n{o}"
+        !is_loud(&o) && o.contains("x=42"),
+        "case B join_any is now supported (refcounted shared window):\n{o}"
     );
 }
 
-// ── correct-or-loud (Stage 2 boundary): a Case-B fork with `join_none` stays LOUD
-//    (same reason as join_any — the detached children outlive the parent). ──
+// ── Stage 3 (was Stage-2 boundary): a Case-B fork with `join_none` is now SUPPORTED.
+//    The parent does NOT block, so it reads x = 0 (the arm's posedge write lands later, at
+//    t=5, on the still-live refcounted window — see `case_b_join_none_child_reads_after_return`
+//    for the arm actually reading a parent local past the parent's Return). ──
 #[test]
-fn case_b_join_none_stays_loud() {
+fn case_b_join_none_now_supported() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic run;\n\
@@ -338,8 +340,110 @@ fn case_b_join_none_stays_loud() {
         initial begin run(); #100 $finish; end\n\
         endmodule\n");
     assert!(
-        is_loud(&o),
-        "case B join_none must stay loud until Stage 3 (refcount):\n{o}"
+        !is_loud(&o) && o.contains("x=0"),
+        "case B join_none is now supported (parent continues; x=0 before the arm writes):\n{o}"
+    );
+}
+
+// ── Stage 3 (join_none twin): a LONE join_none child reads a parent automatic local at a
+//    `#20` delay — LONG AFTER the parent returned (at t=0). The shared window must survive
+//    via the refcount. ORACLE: iverilog crashes on the detached child (of_JOIN_DETACH); the
+//    asserted value is hand-IEEE (§9.3.2: the automatic local stays live for the child). ──
+#[test]
+fn case_b_join_none_child_reads_after_return() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          automatic int x = 55;\n\
+          fork begin #20; if (x == 55) $display(\"jn child sees x=%0d @%0t\", x, $time); end join_none\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    // run() returns at t=0 (join_none); the child reads x at t=20 on the surviving window.
+    assert!(
+        !is_loud(&o) && o.contains("jn child sees x=55 @20"),
+        "join_none child reading a parent local after the parent returned:\n{o}"
+    );
+}
+
+// ── Stage 3 adversarial (rc soundness a): TWO surplus children both reference the parent
+//    local AFTER the parent returned. The window must be freed only after BOTH complete —
+//    rc goes 1(alloc)+3(retain)=4 → fast arm completes (3) → parent Return (2) → surplus s1
+//    at t=25 (1) → surplus s2 at t=45 (0, freed). Runs under `cargo test` with debug asserts
+//    active: any premature free (rc==0 access) or double-free (rc underflow) panics. ──
+#[test]
+fn case_b_join_any_two_surplus_children() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          automatic int x = 9;\n\
+          fork\n\
+            @(posedge clk);\n\
+            begin repeat (3) @(posedge clk); if (x == 9) $display(\"s1 sees x=%0d @%0t\", x, $time); end\n\
+            begin repeat (5) @(posedge clk); if (x == 9) $display(\"s2 sees x=%0d @%0t\", x, $time); end\n\
+          join_any\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    // Both surplus arms read x=9 on the window kept alive until the LAST of them completes.
+    assert!(
+        !is_loud(&o) && o.contains("s1 sees x=9 @25") && o.contains("s2 sees x=9 @45"),
+        "two surplus children sharing one refcounted window:\n{o}"
+    );
+}
+
+// ── Stage 3 adversarial (rc soundness b): a Case-B join_none task CALLED in a loop — each
+//    call allocs a DISTINCT arena window (the prior call's window is still live, so its
+//    handle is NOT on the free-list → no reuse-while-live). Each child reads its OWN call's
+//    automatic local, so the three distinct values (10/20/30) prove the windows never alias.
+//    Debug asserts (rc>0 on access, rc==0 before free) active — no leak, no double-free. ──
+#[test]
+fn case_b_join_none_loop_distinct_windows() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic spawn(input int id);\n\
+          automatic int x = id * 10;\n\
+          fork begin repeat (2) @(posedge clk); $display(\"child%0d sees x=%0d\", id, x); end join_none\n\
+        endtask\n\
+        initial begin\n\
+          for (int i = 1; i <= 3; i++) spawn(i);\n\
+          #100 $finish;\n\
+        end\n\
+        endmodule\n");
+    // Three concurrent live windows (h0/h1/h2), each read by its own child at t=15.
+    assert!(
+        !is_loud(&o)
+            && o.contains("child1 sees x=10")
+            && o.contains("child2 sees x=20")
+            && o.contains("child3 sees x=30"),
+        "join_none in a caller loop — distinct per-activation windows, no reuse-while-live:\n{o}"
+    );
+}
+
+// ── Stage 3 (Case B / join_any): the SURPLUS (slow) child references a parent automatic
+//    local AFTER the parent resumed+returned — the shared window must OUTLIVE the parent
+//    (refcount). Needs `frame_window_rc`: the parent releases at Return, the surplus keeps
+//    the window alive until it completes. ORACLE: iverilog crashes on a detached/surviving
+//    fork child (`of_JOIN_DETACH` assertion), so this is hand-IEEE (§9.3.2): the arm reads
+//    the same automatic `x` the parent initialized, which IEEE keeps live for the arm. ──
+#[test]
+fn case_b_join_any_surplus_outlives_parent() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          automatic int x = 9;\n\
+          fork\n\
+            @(posedge clk);\n\
+            begin repeat (3) @(posedge clk); if (x == 9) $display(\"surplus sees x=%0d @%0t\", x, $time); end\n\
+          join_any\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    // fast: posedge t=5 → join_any resumes, run RETURNS at t=5. surplus: 3 posedges
+    // → t=25, still reads x=9 (window kept alive by refcount).
+    assert!(
+        !is_loud(&o) && o.contains("surplus sees x=9 @25"),
+        "join_any surplus lifetime:\n{o}"
     );
 }
 

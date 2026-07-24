@@ -84,10 +84,18 @@ impl<'a> SimState<'a> {
                 .expect("frame read: no active call window")
             {
                 crate::state::WindowSlot::Owned(w) => w[slot as usize].clone(),
-                crate::state::WindowSlot::Shared(h) => self.frame_windows.borrow()[*h as usize]
-                    .as_ref()
-                    .expect("frame read: live shared window")[slot as usize]
-                    .clone(),
+                crate::state::WindowSlot::Shared(h) => {
+                    // Stage-3 refcount airtightness: an arena READ must never touch a slot with
+                    // no live reference (a use-after-free would otherwise read stale data).
+                    debug_assert!(
+                        self.frame_window_rc.borrow()[*h as usize] > 0,
+                        "frame_slot_read: arena access on a freed shared window (h={h})"
+                    );
+                    self.frame_windows.borrow()[*h as usize]
+                        .as_ref()
+                        .expect("frame read: live shared window")[slot as usize]
+                        .clone()
+                }
             }
         } else {
             self.static_store
@@ -117,6 +125,12 @@ impl<'a> SimState<'a> {
                 crate::state::WindowSlot::Owned(w) => w[slot as usize] = v,
                 crate::state::WindowSlot::Shared(h) => {
                     let h = *h as usize;
+                    // Stage-3 refcount airtightness: an arena WRITE must never touch a slot
+                    // with no live reference (would corrupt a freed/recycled window).
+                    debug_assert!(
+                        self.frame_window_rc.borrow()[h] > 0,
+                        "frame_slot_write: arena access on a freed shared window (h={h})"
+                    );
                     self.frame_windows.borrow_mut()[h]
                         .as_mut()
                         .expect("arg bind: live shared window")[slot as usize] = v;

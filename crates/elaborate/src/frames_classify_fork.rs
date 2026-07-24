@@ -213,21 +213,18 @@ impl Elaborator<'_> {
                         ForkAdmit::CaseA => {}
                     }
                 }
-                // Stage-2 join-mode gate: a Case-B fork needs the shared-window arena, which
-                // Stage 2 supports ONLY for `join` (all). A Case-B `join_any`/`join_none` —
-                // where a surviving arm can outlive the parent's resume — stays LOUD until
-                // Stage 3 adds the refcount (correct-or-loud). A Case-A fork of ANY mode is
-                // unaffected (it touches no parent local, so the owned-window model isolates
-                // it). The mode lives in `fork_modes` under `(FRAME_FORK_KEY, global join_bb)`,
-                // populated at the task-body flush (`lower_frame_task_body`) — always present
-                // by the time this classifier runs (post-body, in `resolve_frame_task_rejects`);
-                // a missing entry conservatively escalates to Loud.
+                // Stage-3: a Case-B fork of ANY join mode is admitted (the shared-window arena
+                // is now REFCOUNTED — `frame_window_rc`). Under `join_any`/`join_none` a
+                // surviving arm can outlive the parent's resume; the parent releases its
+                // reference at `Return` and the arm keeps the window alive until it completes,
+                // so the slot is freed only when the LAST referencing frame drops. (Stage 2
+                // gated `join_any`/`join_none` to `Loud` here for lack of that refcount; Stage
+                // 3 removes the gate.) The remaining `Loud` cases — a NESTED fork, a
+                // `disable fork`, or any arm construct not proven self-contained — are handled
+                // by `classify_one_arm` above (its `Loud` short-circuits this loop). A Case-A
+                // fork of any mode is unaffected (the owned-window model isolates it).
                 if this_fork == ForkAdmit::CaseB {
-                    if self.fork_modes.get(&(FRAME_FORK_KEY, *join)) == Some(&JoinMode::All) {
-                        worst = ForkAdmit::CaseB;
-                    } else {
-                        return ForkAdmit::Loud;
-                    }
+                    worst = ForkAdmit::CaseB;
                 }
             }
             // Follow this task's own CFG edges (a `Call` follows `ret_bb`, never into the

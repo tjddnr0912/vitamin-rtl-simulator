@@ -336,24 +336,68 @@ impl SimState<'_> {
         self.run_task(callee, in_vals, out_slots)
     }
 
-    /// Stage-2 fork-in-frame: allocate a Case-B shared-window arena slot pre-filled with
+    /// Stage-2/3 fork-in-frame: allocate a Case-B shared-window arena slot pre-filled with
     /// `init`, reusing a freed handle when available (the `dyn_heap`/`class_heap` free-list
-    /// pattern). Returns the handle a `WindowSlot::Shared` carries.
+    /// pattern). Returns the handle a `WindowSlot::Shared` carries. Stage 3: seed the slot's
+    /// refcount to `1` (the parent frame's initial reference) on BOTH the free-list-reuse and
+    /// the push path — `frame_window_rc` is index-parallel to `frame_windows`, so the push
+    /// path grows both in lockstep.
     pub(crate) fn alloc_frame_window(&self, init: Vec<Value>) -> u32 {
         if let Some(h) = self.frame_window_free.borrow_mut().pop() {
             self.frame_windows.borrow_mut()[h as usize] = Some(init);
+            self.frame_window_rc.borrow_mut()[h as usize] = 1; // parent's initial reference
             h
         } else {
             let mut g = self.frame_windows.borrow_mut();
             g.push(Some(init));
-            (g.len() - 1) as u32
+            let h = (g.len() - 1) as u32;
+            drop(g);
+            self.frame_window_rc.borrow_mut().push(1); // parallel arena; seed rc = 1
+            h
         }
     }
 
-    /// Stage-2 fork-in-frame: free a Case-B shared window (called on the parent's `Return`,
-    /// where `join`-all guarantees the arms are all done). Stage 3 gates this behind a
-    /// refcount reaching zero for `join_any`/`join_none`.
+    /// Stage-3 fork-in-frame: a fork ARM (a spawned Case-B child) takes a NEW reference to
+    /// the parent's shared window. Called ONCE per spawned child in `exec_fork` (the child's
+    /// arm `FrameRec` holds a `WindowSlot::Shared(h)`). Balanced by the child's
+    /// `release_frame_window` at completion (`exit_arm_frame`).
+    pub(crate) fn retain_frame_window(&self, h: u32) {
+        let mut rc = self.frame_window_rc.borrow_mut();
+        debug_assert!(
+            rc[h as usize] > 0,
+            "retain of a freed shared frame window (h={h})"
+        );
+        rc[h as usize] += 1;
+    }
+
+    /// Stage-3 fork-in-frame: DROP one reference to a Case-B shared window and free the arena
+    /// slot only when the LAST reference goes (rc → 0). Replaces the Stage-2 direct
+    /// `free_frame_window` in `exit_task_frame` (parent `Return`) and `exit_arm_frame` (child
+    /// completion). For `join`-all this frees at exactly the same moment as Stage 2 (every
+    /// child releases before the parent resumes, so the parent's release is the one that
+    /// hits 0); for `join_any`/`join_none` a surviving child defers the free past the parent.
+    pub(crate) fn release_frame_window(&self, h: u32) {
+        let mut rc = self.frame_window_rc.borrow_mut();
+        debug_assert!(
+            rc[h as usize] > 0,
+            "shared frame window rc underflow (h={h})"
+        );
+        rc[h as usize] -= 1;
+        if rc[h as usize] == 0 {
+            drop(rc); // free_frame_window re-asserts rc == 0; release the borrow first
+            self.free_frame_window(h);
+        }
+    }
+
+    /// Stage-2/3 fork-in-frame: free a Case-B shared window slot (return it to the free-list).
+    /// Stage 3 calls this ONLY from `release_frame_window` at rc == 0 (never a live slot); the
+    /// `debug_assert` locks in that no reference is dropped early (a use-after-free guard).
     pub(crate) fn free_frame_window(&self, h: u32) {
+        debug_assert_eq!(
+            self.frame_window_rc.borrow()[h as usize],
+            0,
+            "freeing a shared frame window with live references (h={h})"
+        );
         self.frame_windows.borrow_mut()[h as usize] = None;
         self.frame_window_free.borrow_mut().push(h);
     }
@@ -448,12 +492,16 @@ impl SimState<'_> {
             })
             .collect();
         if has_auto {
-            // Stage-2 fork-in-frame: a Case-B task's window is a `Shared(h)` arena slot —
-            // free it here. `join`-all guarantees every fork arm has completed before the
-            // parent reaches this `Return`, so a plain free is safe (Stage 3 will gate this
-            // behind a refcount decrement for `join_any`/`join_none`).
+            // Stage-2/3 fork-in-frame: a Case-B task's window is a `Shared(h)` arena slot —
+            // DROP the parent's reference here (`release_frame_window`). For `join`-all every
+            // fork arm has already completed (each dropped its own reference in
+            // `exit_arm_frame`), so the parent's release is the one that hits 0 → freed now,
+            // byte-identical to Stage 2's direct free. For `join_any`/`join_none` a surviving
+            // child still holds a reference, so the slot is NOT freed here — the last child's
+            // `exit_arm_frame` frees it (the surplus/detached child reads a valid window
+            // meanwhile). An `Owned` window just drops its `Vec`.
             if let Some(WindowSlot::Shared(h)) = self.frame_stack.borrow_mut().pop() {
-                self.free_frame_window(h);
+                self.release_frame_window(h);
             }
         }
         self.frame_scope.borrow_mut().pop();
@@ -472,16 +520,23 @@ impl SimState<'_> {
     /// out-copy (a fork arm has no out-binds). `callee` is the enclosing task's FuncId
     /// (the arm frame's `callee`).
     ///
-    /// Stage-2 fork-in-frame: a Case-B arm's window is a `WindowSlot::Shared(h)` that
-    /// ALIASES the parent's handle — so we pop it (balancing the restore push) but MUST NOT
-    /// free `h`: the parent still owns that arena slot and frees it on its own `Return`
-    /// (`exit_task_frame`). `join`-all guarantees the parent outlives every arm, so the
-    /// aliased handle is always still live when the parent reads/frees it.
+    /// Stage-2/3 fork-in-frame: a completing fork child's arm window is a `WindowSlot::Shared(h)`
+    /// that ALIASES the parent's handle. Pop it (balancing the restore push) and, in Stage 3,
+    /// DROP this arm's reference (`release_frame_window`). Under `join` the parent still holds
+    /// its own reference and outlives every arm, so this release never hits 0 here (the
+    /// parent's `Return` frees the slot — byte-identical to Stage 2's pop-without-free). Under
+    /// `join_any`/`join_none` the parent may have ALREADY returned (releasing its reference),
+    /// so a SURVIVING arm can be the last reference — then the release frees the slot HERE,
+    /// deferring the free correctly past the parent (the refcount's whole purpose). A Case-A
+    /// arm carries an `Owned(empty)` window and just drops its `Vec` (no rc).
     pub(crate) fn exit_arm_frame(&self, callee: u32) {
         if self.func_has_auto[callee as usize] {
-            // Discard the popped slot: an `Owned(empty)` (Case A) drops its Vec; a
-            // `Shared(h)` (Case B) drops only the aliased handle, never freeing the arena.
-            self.frame_stack.borrow_mut().pop();
+            // Pop first (releasing the `frame_stack` borrow), THEN release — the arena
+            // free-list / refcount RefCells are distinct from `frame_stack`.
+            let popped = self.frame_stack.borrow_mut().pop();
+            if let Some(WindowSlot::Shared(h)) = popped {
+                self.release_frame_window(h);
+            }
         }
     }
 

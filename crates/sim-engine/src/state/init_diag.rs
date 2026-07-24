@@ -187,6 +187,7 @@ impl<'a> SimState<'a> {
             frame_stack: std::cell::RefCell::new(Vec::new()),
             frame_windows: std::cell::RefCell::new(Vec::new()),
             frame_window_free: std::cell::RefCell::new(Vec::new()),
+            frame_window_rc: std::cell::RefCell::new(Vec::new()),
             static_store: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             call_depth: Cell::new(0),
             call_fatal: Cell::new(false),

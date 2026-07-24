@@ -493,15 +493,25 @@ pub(crate) struct SimState<'a> {
     /// carries only an arena handle for a Case-B fork-in-frame task (Stage 2). `RefCell`
     /// because the function evaluator runs on the `&self` read path. Empty steady-state.
     pub frame_stack: std::cell::RefCell<Vec<WindowSlot>>,
-    /// Stage-2 fork-in-frame: Case-B shared-window arena (the `dyn_heap`/`class_heap`
+    /// Stage-2/3 fork-in-frame: Case-B shared-window arena (the `dyn_heap`/`class_heap`
     /// interior-mutable pattern). A `WindowSlot::Shared(h)` on `frame_stack` — the parent
     /// task frame and each of its running fork arms — indexes `frame_windows[h]`. `None`
     /// = a freed slot (reusable via `frame_window_free`). Empty unless a task has an
-    /// admitted Case-B `join` fork. (Stage 3 will add a `frame_window_rc` refcount here
-    /// for `join_any`/`join_none`; Stage 2's `join`-all frees on the parent's `Return`.)
+    /// admitted Case-B fork.
     pub frame_windows: std::cell::RefCell<Vec<Option<Vec<Value>>>>,
     /// Free-list of reusable `frame_windows` slot handles (LIFO; deterministic).
     pub frame_window_free: std::cell::RefCell<Vec<u32>>,
+    /// Stage-3 fork-in-frame: per-arena-slot REFERENCE COUNT, index-parallel to
+    /// `frame_windows` (grown together in `alloc_frame_window`). For `join_any`/`join_none`
+    /// a SURVIVING child can outlive the parent while still referencing the shared window, so
+    /// the slot is freed only when the LAST referencing `FrameRec` (parent OR child) drops.
+    /// `alloc_frame_window` seeds `1` (the parent's initial reference); `exec_fork` `retain`s
+    /// once per spawned Case-B child; `exit_task_frame` (parent `Return`) and `exit_arm_frame`
+    /// (child completion) each `release` (decrement, free at zero). For `join` this is
+    /// byte-identical to Stage 2 (all children release before the parent, so `rc` reaches 0
+    /// exactly at the parent's `Return` — the same free moment). `rc[h] == 0` for a freed
+    /// slot; `debug_assert`ed `> 0` on every arena access. Empty unless a Case-B fork ran.
+    pub frame_window_rc: std::cell::RefCell<Vec<u32>>,
     /// STATIC per-function persistent slabs (FuncId → `Vec<Value>`), X-init once,
     /// never restored (shared-slot lifetime). `BTreeMap` = deterministic; never
     /// serialized.
