@@ -185,6 +185,8 @@ impl<'a> SimState<'a> {
             frame_local: vec![false; nnets],
             frame_route: vec![None; nnets],
             frame_stack: std::cell::RefCell::new(Vec::new()),
+            frame_windows: std::cell::RefCell::new(Vec::new()),
+            frame_window_free: std::cell::RefCell::new(Vec::new()),
             static_store: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             call_depth: Cell::new(0),
             call_fatal: Cell::new(false),
@@ -193,6 +195,7 @@ impl<'a> SimState<'a> {
             task_calls_func: crate::TaskCallFunc::new(),
             frame_slot_auto: vec![false; nnets],
             func_has_auto: Vec::new(),
+            func_contains_shared_fork: Vec::new(),
             func_has_static: Vec::new(),
             func_has_dyn_local: Vec::new(),
             array_item_scratch: std::cell::RefCell::new(None),
@@ -245,6 +248,13 @@ impl<'a> SimState<'a> {
         self.func_has_auto = vec![false; self.func_table.len()];
         self.func_has_static = vec![false; self.func_table.len()];
         self.func_has_dyn_local = vec![false; self.func_table.len()];
+        // Stage-2 fork-in-frame: threaded verbatim from the elaborate `FuncMeta` sidecar
+        // (same as `has_hier_call`), so a staged velab→vrun carries it too.
+        self.func_contains_shared_fork = self
+            .func_table
+            .iter()
+            .map(|m| m.contains_shared_fork)
+            .collect();
         if self.func_table.is_empty() {
             return;
         }

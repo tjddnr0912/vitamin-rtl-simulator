@@ -703,6 +703,7 @@ impl Elaborator<'_> {
             auto_override: 0,
             str_params,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         self.frame_func_names.push(method.name.clone()); // %m
         if let Some(ci) = self.class_table.get_mut(cname) {

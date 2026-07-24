@@ -531,6 +531,7 @@ impl Elaborator<'_> {
             auto_override,
             str_params,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         self.frame_func_names.push(func.name.name.clone()); // %m
     }
@@ -747,6 +748,7 @@ impl Elaborator<'_> {
             auto_override,
             str_params,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         self.frame_func_names.push(task.name.name.clone()); // %m
     }

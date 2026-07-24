@@ -74,11 +74,21 @@ impl<'a> SimState<'a> {
     /// across a nested eval — §borrowDiscipline rule 1).
     pub(crate) fn frame_slot_read(&self, func: u32, automatic: bool, slot: u32) -> Value {
         if automatic {
-            self.frame_stack
+            // Match the top WindowSlot; a `Shared(h)` dereferences the arena. Each borrow
+            // is scoped to the single index-clone (never held across an eval —
+            // §borrowDiscipline rule 1). `Owned` is byte-identical to the pre-arena path.
+            match self
+                .frame_stack
                 .borrow()
                 .last()
-                .expect("frame read: no active call window")[slot as usize]
-                .clone()
+                .expect("frame read: no active call window")
+            {
+                crate::state::WindowSlot::Owned(w) => w[slot as usize].clone(),
+                crate::state::WindowSlot::Shared(h) => self.frame_windows.borrow()[*h as usize]
+                    .as_ref()
+                    .expect("frame read: live shared window")[slot as usize]
+                    .clone(),
+            }
         } else {
             self.static_store
                 .borrow()
@@ -98,8 +108,20 @@ impl<'a> SimState<'a> {
         // copy-IN, body-local assignments, and the return slot alike.
         let v = self.coerce_two_state_frame(func, slot, v);
         if automatic {
-            let mut g = self.frame_stack.borrow_mut();
-            g.last_mut().expect("arg bind: no active call window")[slot as usize] = v;
+            // `v` is already owned (computed before any borrow). Route by the top WindowSlot;
+            // a `Shared(h)` writes into the arena. No eval inside either arm (§borrowDiscipline
+            // rule 3), and `frame_stack`/`frame_windows` are DISTINCT RefCells, so holding both
+            // is aliasing-free. `Owned` is byte-identical to the pre-arena path.
+            let mut fs = self.frame_stack.borrow_mut();
+            match fs.last_mut().expect("arg bind: no active call window") {
+                crate::state::WindowSlot::Owned(w) => w[slot as usize] = v,
+                crate::state::WindowSlot::Shared(h) => {
+                    let h = *h as usize;
+                    self.frame_windows.borrow_mut()[h]
+                        .as_mut()
+                        .expect("arg bind: live shared window")[slot as usize] = v;
+                }
+            }
         } else {
             let mut g = self.static_store.borrow_mut();
             g.get_mut(&func).expect("arg bind: no storage slab")[slot as usize] = v;
@@ -679,12 +701,16 @@ impl<'a> SimState<'a> {
                 }
             })
             .collect();
+        // A pure FUNCTION never contains a Case-B fork (a fork in a function body is
+        // loud), so its window is always `Owned` (byte-identical to the pre-arena path).
         match (has_auto, has_static) {
             (true, true) => {
-                self.frame_stack.borrow_mut().push(fresh.clone());
+                self.frame_stack
+                    .borrow_mut()
+                    .push(WindowSlot::Owned(fresh.clone()));
                 self.static_store.borrow_mut().entry(func).or_insert(fresh);
             }
-            (true, false) => self.frame_stack.borrow_mut().push(fresh),
+            (true, false) => self.frame_stack.borrow_mut().push(WindowSlot::Owned(fresh)),
             (false, _) => {
                 self.static_store.borrow_mut().entry(func).or_insert(fresh);
             }

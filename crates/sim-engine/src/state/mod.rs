@@ -167,6 +167,19 @@ pub struct FdReadState {
     pub pushback: Vec<u8>,
 }
 
+/// A live frame window on `frame_stack`. `Owned` is the common/Case-A path — its
+/// storage is byte-identical to the pre-arena `Vec<Value>` (one predictable match arm
+/// added on the hot `frame_slot_read`/`frame_slot_write` path). `Shared(handle)` is the
+/// Stage-2 fork-in-frame path: a Case-B task whose `fork … join` arms read/write its
+/// automatic locals, so the parked parent and its running arms all reference ONE window
+/// by handle — `handle` indexes the interior-mutable `frame_windows` arena (the exact
+/// `dyn_heap`/`class_heap` pattern). Popping a `Shared(h)` off `frame_stack` moves only
+/// the handle; the window DATA stays put in the arena until the owning parent frees it.
+pub(crate) enum WindowSlot {
+    Owned(Vec<crate::value::Value>),
+    Shared(u32),
+}
+
 pub(crate) struct SimState<'a> {
     pub ir: &'a SimIr,
     pub now: u64,
@@ -474,10 +487,21 @@ pub(crate) struct SimState<'a> {
     /// DERIVED net → `(func_idx, slot)` routing (len `ir.nets.len()`); `slot =
     /// net - base_net`. `None` for non-frame nets.
     pub frame_route: Vec<Option<(u32, u32)>>,
-    /// AUTOMATIC call windows (LIFO stack); each window is a `Vec<Value>` of
-    /// `locals_len` slots. `RefCell` because the function evaluator runs on the
-    /// `&self` read path. Empty steady-state.
-    pub frame_stack: std::cell::RefCell<Vec<Vec<Value>>>,
+    /// AUTOMATIC call windows (LIFO stack); each entry is a [`WindowSlot`]. `Owned`
+    /// holds the same `Vec<Value>` of `locals_len` slots as before this feature
+    /// (byte-identical for every existing frame task/function + Case-A fork); `Shared(h)`
+    /// carries only an arena handle for a Case-B fork-in-frame task (Stage 2). `RefCell`
+    /// because the function evaluator runs on the `&self` read path. Empty steady-state.
+    pub frame_stack: std::cell::RefCell<Vec<WindowSlot>>,
+    /// Stage-2 fork-in-frame: Case-B shared-window arena (the `dyn_heap`/`class_heap`
+    /// interior-mutable pattern). A `WindowSlot::Shared(h)` on `frame_stack` — the parent
+    /// task frame and each of its running fork arms — indexes `frame_windows[h]`. `None`
+    /// = a freed slot (reusable via `frame_window_free`). Empty unless a task has an
+    /// admitted Case-B `join` fork. (Stage 3 will add a `frame_window_rc` refcount here
+    /// for `join_any`/`join_none`; Stage 2's `join`-all frees on the parent's `Return`.)
+    pub frame_windows: std::cell::RefCell<Vec<Option<Vec<Value>>>>,
+    /// Free-list of reusable `frame_windows` slot handles (LIFO; deterministic).
+    pub frame_window_free: std::cell::RefCell<Vec<u32>>,
     /// STATIC per-function persistent slabs (FuncId → `Vec<Value>`), X-init once,
     /// never restored (shared-slot lifetime). `BTreeMap` = deterministic; never
     /// serialized.
@@ -511,6 +535,13 @@ pub(crate) struct SimState<'a> {
     pub func_has_auto: Vec<bool>,
     /// B4: per-func "has ≥1 static slot" — the frame keeps a persistent slab iff true.
     pub func_has_static: Vec<bool>,
+    /// Stage-2 fork-in-frame: per-func "this task has an admitted Case-B `join` fork"
+    /// (len `func_table.len()`, filled from `FuncMeta.contains_shared_fork` in
+    /// `build_func_routing`). When true AND the func has automatic slots, `enter_task_frame`
+    /// allocates a `frame_windows` arena window (a `WindowSlot::Shared`) so the fork arms can
+    /// share the parent's locals; `exit_task_frame` frees it on `Return`. `false` (the
+    /// overwhelming common case) ⇒ the byte-identical `WindowSlot::Owned` path.
+    pub func_contains_shared_fork: Vec<bool>,
     /// V5: per-func "has ≥1 frame-local DYNAMIC-array slot" — gates the reentry
     /// guard + free-at-exit scan (`frame_dyn_reentry_ok`/`frame_dyn_free`) so a frame
     /// with no dyn local pays nothing.

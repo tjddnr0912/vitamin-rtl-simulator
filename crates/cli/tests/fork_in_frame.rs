@@ -150,10 +150,62 @@ fn two_sequential_forks() {
     assert!(!is_loud(&o) && o.contains("DONE @15"), "two forks:\n{o}");
 }
 
-// ── correct-or-loud: an arm passing a parent frame-local as a task arg is Case B
-//    (needs the shared window) → stays LOUD in Stage 1 (never silent-wrong) ──
+// ── Stage 2 (Case B / join-all): a join arm WRITES a parent automatic local; the
+//    parent reads it after join. ORACLE iverilog 13.0 MATCH (`x=42 @25`). Needs the
+//    interior-mutable shared-window arena (WindowSlot::Shared) so the parked parent
+//    and the running arm reference one window by handle. ──
 #[test]
-fn fork_arg_is_parent_local_stays_loud() {
+fn case_b_join_arm_writes_parent_local() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          int x = 0;\n\
+          @(posedge clk);\n\
+          fork\n\
+            begin @(posedge clk); x = 42; end\n\
+            begin @(posedge clk); @(posedge clk); end\n\
+          join\n\
+          $display(\"x=%0d @%0t\", x, $time);\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    // run @posedge t=5; arm0 writes x=42 at t=15; arm1 done t=25; join resumes t=25.
+    assert!(!is_loud(&o) && o.contains("x=42 @25"), "case B join:\n{o}");
+}
+
+// ── Stage 2 (Case B / join-all): a SIBLING arm sees another arm's write to the shared
+//    parent local. ORACLE iverilog 13.0 MATCH (`sib sees x=7 @6`, `run done x=7 @6`).
+//    Timing-separated (posedge write, sibling reads one tick later) so the read strictly
+//    follows the write in time — iverilog has a zero-delay-fork-arm scheduling quirk where
+//    a bare `x = 7;` arm is not seen by a sibling in the same instant, so this form (which
+//    both simulators agree on) is the robust differential shape. ──
+#[test]
+fn case_b_sibling_visibility() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          int x = 0;\n\
+          fork\n\
+            begin @(posedge clk); x = 7; end\n\
+            begin @(posedge clk); #1; if (x == 7) $display(\"sib sees x=%0d @%0t\", x, $time); end\n\
+          join\n\
+          $display(\"run done x=%0d @%0t\", x, $time);\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    // arm0 writes x=7 at t=5; arm1 reads it at t=6; join resumes t=6.
+    assert!(
+        !is_loud(&o) && o.contains("sib sees x=7 @6") && o.contains("run done x=7 @6"),
+        "sibling visibility:\n{o}"
+    );
+}
+
+// ── Stage 2 (Case B / join-all): an arm passes a parent automatic local as a task-call
+//    ARG. The arg is read on the shared arena window (via `classify_one_arm`'s Call in-bind
+//    path), so the nested `use_it(x)` sees x=7. ORACLE iverilog 13.0 MATCH (`v=7`, `done`).
+//    (Was a Stage-1 loud placeholder; the shared window now makes it correct-support.) ──
+#[test]
+fn case_b_join_arm_passes_parent_local_as_arg() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic use_it(input int v); @(posedge clk); $display(\"v=%0d\", v); endtask\n\
@@ -163,8 +215,8 @@ fn fork_arg_is_parent_local_stays_loud() {
         initial begin run(); $finish; end\n\
         endmodule\n");
     assert!(
-        is_loud(&o),
-        "arm reading a parent frame-local must stay loud:\n{o}"
+        !is_loud(&o) && o.contains("v=7") && o.contains("done"),
+        "arm passing a parent frame-local as an arg (Case B join):\n{o}"
     );
 }
 
@@ -182,12 +234,14 @@ fn fork_nested_stays_loud() {
     assert!(is_loud(&o), "nested fork must stay loud:\n{o}");
 }
 
-// ── correct-or-loud (review Finding 1, position #1): an arm whose `#(d)` DELAY
-//    AMOUNT reads a parent frame-local is Case B (the amount is evaluated on the
-//    arm's empty owned window). Before the classifier fix this misclassified Case A
-//    → a frame_eval panic ("index out of bounds len 0"); it must be a clean E3009. ──
+// ── Stage 2 (Case B / join-all): an arm whose `#(d)` DELAY AMOUNT reads a parent
+//    automatic local. The amount is evaluated on the shared arena window (via
+//    `classify_one_arm`'s Delay path), so `#(d)` waits d=3 ticks. ORACLE iverilog 13.0
+//    MATCH (`armhi @8`, `PASS @8`). In Stage 1 this was loud (Case A gave the arm an
+//    empty owned window → the amount read would panic); the shared window makes it correct
+//    (a regression guard that the arena is restored when the Delay amount is evaluated). ──
 #[test]
-fn fork_delay_amount_is_parent_local_stays_loud() {
+fn case_b_join_arm_delay_amount_is_parent_local() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic run;\n\
@@ -199,17 +253,17 @@ fn fork_delay_amount_is_parent_local_stays_loud() {
         initial begin run(); #100 $finish; end\n\
         endmodule\n");
     assert!(
-        is_loud(&o),
-        "arm delay amount reading a parent frame-local must stay loud (no panic):\n{o}"
+        !is_loud(&o) && o.contains("armhi @8") && o.contains("PASS @8"),
+        "arm delay amount reading a parent frame-local (Case B join):\n{o}"
     );
 }
 
-// ── correct-or-loud (review Finding 1, position #2): an arm writing a module array
-//    element `mem[d]` where the INDEX `d` is a parent frame-local is Case B (the index
-//    is evaluated on the empty owned window). Before the fix this panicked; it must be
-//    a clean E3009. ──
+// ── Stage 2 (Case B / join-all): an arm writes a module array element `mem[d]` where the
+//    INDEX `d` is a parent automatic local. The index is read on the shared arena window
+//    (via `classify_one_arm`'s chunk-word path). ORACLE iverilog 13.0 MATCH (`mem1=aa`). In
+//    Stage 1 this was loud (the empty owned window would panic on the index read). ──
 #[test]
-fn fork_lvalue_index_is_parent_local_stays_loud() {
+fn case_b_join_arm_lvalue_index_is_parent_local() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         logic [7:0] mem [0:3];\n\
@@ -222,8 +276,8 @@ fn fork_lvalue_index_is_parent_local_stays_loud() {
         initial begin run(); #100 $finish; end\n\
         endmodule\n");
     assert!(
-        is_loud(&o),
-        "arm lvalue index reading a parent frame-local must stay loud (no panic):\n{o}"
+        !is_loud(&o) && o.contains("PASS mem1=aa"),
+        "arm lvalue index reading a parent frame-local (Case B join):\n{o}"
     );
 }
 
@@ -248,26 +302,44 @@ fn fork_static_task_case_b_stays_loud() {
     );
 }
 
-// ── correct-or-loud: an arm doing a whole-net blocking WRITE to a parent
-//    frame-local (`x = 42`) is Case B — distinct from the existing index-write
-//    (`fork_lvalue_index_is_parent_local_stays_loud`) and arg-read
-//    (`fork_arg_is_parent_local_stays_loud`) guards, which hit a chunk's `word`/
-//    in-bind expr; this hits a plain `lhs.chunks` net match in `classify_one_arm`'s
-//    `BlockingAssign` arm. Stays LOUD in Stage 1 (Case B is a Stage-2 follow-on). ──
+// ── correct-or-loud (Stage 2 boundary): a Case-B fork with `join_any` stays LOUD.
+//    A surviving arm can outlive the parent's resume, so the shared window needs the
+//    refcount that Stage 3 adds; until then this is correct-or-loud (never silent). The
+//    SAME arm write (`x = 42`) is now SUPPORTED under `join` (see
+//    `case_b_join_arm_writes_parent_local`) — only the join MODE keeps this loud. ──
 #[test]
-fn case_b_arm_writes_parent_local_stays_loud_stage1() {
+fn case_b_join_any_stays_loud() {
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic run;\n\
           int x = 0;\n\
-          fork begin @(posedge clk); x = 42; end @(posedge clk); join\n\
+          fork begin @(posedge clk); x = 42; end @(posedge clk); join_any\n\
           $display(\"x=%0d\", x);\n\
         endtask\n\
-        initial begin run(); $finish; end\n\
+        initial begin run(); #100 $finish; end\n\
         endmodule\n");
     assert!(
         is_loud(&o),
-        "case B whole-scalar write must stay loud in Stage 1:\n{o}"
+        "case B join_any must stay loud until Stage 3 (refcount):\n{o}"
+    );
+}
+
+// ── correct-or-loud (Stage 2 boundary): a Case-B fork with `join_none` stays LOUD
+//    (same reason as join_any — the detached children outlive the parent). ──
+#[test]
+fn case_b_join_none_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          int x = 0;\n\
+          fork begin @(posedge clk); x = 42; end join_none\n\
+          $display(\"x=%0d\", x);\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "case B join_none must stay loud until Stage 3 (refcount):\n{o}"
     );
 }
 

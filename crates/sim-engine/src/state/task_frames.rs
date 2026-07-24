@@ -87,15 +87,20 @@ impl SimState<'_> {
                 }
             })
             .collect();
+        // `run_task` is the SYNCHRONOUS (`&self`) subset-task executor — a task with a
+        // `fork` is suspendable and never routed here (it goes through `enter_task_frame`),
+        // so its window is always `Owned` (byte-identical to the pre-arena path).
         match (has_auto, has_static) {
             (true, true) => {
-                self.frame_stack.borrow_mut().push(fresh.clone());
+                self.frame_stack
+                    .borrow_mut()
+                    .push(WindowSlot::Owned(fresh.clone()));
                 self.static_store
                     .borrow_mut()
                     .entry(callee)
                     .or_insert(fresh);
             }
-            (true, false) => self.frame_stack.borrow_mut().push(fresh),
+            (true, false) => self.frame_stack.borrow_mut().push(WindowSlot::Owned(fresh)),
             (false, _) => {
                 self.static_store
                     .borrow_mut()
@@ -331,6 +336,28 @@ impl SimState<'_> {
         self.run_task(callee, in_vals, out_slots)
     }
 
+    /// Stage-2 fork-in-frame: allocate a Case-B shared-window arena slot pre-filled with
+    /// `init`, reusing a freed handle when available (the `dyn_heap`/`class_heap` free-list
+    /// pattern). Returns the handle a `WindowSlot::Shared` carries.
+    pub(crate) fn alloc_frame_window(&self, init: Vec<Value>) -> u32 {
+        if let Some(h) = self.frame_window_free.borrow_mut().pop() {
+            self.frame_windows.borrow_mut()[h as usize] = Some(init);
+            h
+        } else {
+            let mut g = self.frame_windows.borrow_mut();
+            g.push(Some(init));
+            (g.len() - 1) as u32
+        }
+    }
+
+    /// Stage-2 fork-in-frame: free a Case-B shared window (called on the parent's `Return`,
+    /// where `join`-all guarantees the arms are all done). Stage 3 gates this behind a
+    /// refcount reaching zero for `join_any`/`join_none`.
+    pub(crate) fn free_frame_window(&self, h: u32) {
+        self.frame_windows.borrow_mut()[h as usize] = None;
+        self.frame_window_free.borrow_mut().push(h);
+    }
+
     /// Round-14 V3/V4 (suspendable path): push a fresh call frame for `callee` and copy
     /// in the input actuals — the MANUAL, suspend-safe twin of `run_task`'s setup (which
     /// uses RAII guards that assume a single synchronous scope). `run_process` drives the
@@ -357,16 +384,32 @@ impl SimState<'_> {
                 }
             })
             .collect();
-        match (has_auto, has_static) {
-            (true, true) => {
-                self.frame_stack.borrow_mut().push(fresh.clone());
+        // Stage-2 fork-in-frame: a Case-B `join` task (`contains_shared_fork`) with
+        // automatic locals gets an interior-mutable ARENA window (a `WindowSlot::Shared`)
+        // so its fork arms share the parent's locals by handle; every other task keeps the
+        // byte-identical `Owned` window. (A shared task with only STATIC slots needs no
+        // arena — its locals already live in the shared `static_store`.)
+        let shared = self
+            .func_contains_shared_fork
+            .get(callee as usize)
+            .copied()
+            .unwrap_or(false);
+        match (has_auto, has_static, shared) {
+            (true, _, true) => {
+                let h = self.alloc_frame_window(fresh);
+                self.frame_stack.borrow_mut().push(WindowSlot::Shared(h));
+            }
+            (true, true, false) => {
+                self.frame_stack
+                    .borrow_mut()
+                    .push(WindowSlot::Owned(fresh.clone()));
                 self.static_store
                     .borrow_mut()
                     .entry(callee)
                     .or_insert(fresh);
             }
-            (true, false) => self.frame_stack.borrow_mut().push(fresh),
-            (false, _) => {
+            (true, false, false) => self.frame_stack.borrow_mut().push(WindowSlot::Owned(fresh)),
+            (false, _, _) => {
                 self.static_store
                     .borrow_mut()
                     .entry(callee)
@@ -405,7 +448,13 @@ impl SimState<'_> {
             })
             .collect();
         if has_auto {
-            self.frame_stack.borrow_mut().pop();
+            // Stage-2 fork-in-frame: a Case-B task's window is a `Shared(h)` arena slot —
+            // free it here. `join`-all guarantees every fork arm has completed before the
+            // parent reaches this `Return`, so a plain free is safe (Stage 3 will gate this
+            // behind a refcount decrement for `join_any`/`join_none`).
+            if let Some(WindowSlot::Shared(h)) = self.frame_stack.borrow_mut().pop() {
+                self.free_frame_window(h);
+            }
         }
         self.frame_scope.borrow_mut().pop();
         self.call_depth.set(self.call_depth.get().saturating_sub(1));
@@ -421,10 +470,17 @@ impl SimState<'_> {
     /// NEITHER — its window reaches `frame_stack` only via the restore machinery. Popping
     /// them here would corrupt the still-parked PARENT task's frame context. There is no
     /// out-copy (a fork arm has no out-binds). `callee` is the enclosing task's FuncId
-    /// (the arm frame's `callee`). A later stage overrides this to also release a shared
-    /// arena handle for a Case-B arm.
+    /// (the arm frame's `callee`).
+    ///
+    /// Stage-2 fork-in-frame: a Case-B arm's window is a `WindowSlot::Shared(h)` that
+    /// ALIASES the parent's handle — so we pop it (balancing the restore push) but MUST NOT
+    /// free `h`: the parent still owns that arena slot and frees it on its own `Return`
+    /// (`exit_task_frame`). `join`-all guarantees the parent outlives every arm, so the
+    /// aliased handle is always still live when the parent reads/frees it.
     pub(crate) fn exit_arm_frame(&self, callee: u32) {
         if self.func_has_auto[callee as usize] {
+            // Discard the popped slot: an `Owned(empty)` (Case A) drops its Vec; a
+            // `Shared(h)` (Case B) drops only the aliased handle, never freeing the arena.
             self.frame_stack.borrow_mut().pop();
         }
     }

@@ -231,6 +231,7 @@ impl B {
             auto_override: 0,
             str_params: 0,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         func
     }
@@ -282,6 +283,7 @@ impl B {
             auto_override: 0,
             str_params: 0,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         func
     }

@@ -66,8 +66,10 @@ pub(crate) struct FrameRec {
     /// current, `None` here); on a `Delay`/`Wait` in this frame it is STASHED here
     /// (popped off `frame_stack`) so interleaving activities can't corrupt the shared
     /// stack, and RESTORED (pushed back) when the activity resumes. `None` for a static
-    /// callee (its slab lives in `static_store`, not `frame_stack`).
-    pub window: Option<Vec<crate::value::Value>>,
+    /// callee (its slab lives in `static_store`, not `frame_stack`). Stage-2 fork-in-frame:
+    /// a `WindowSlot::Shared(h)` here is a Case-B task frame (parent) or its fork arm — the
+    /// stashed slot is just the arena handle; the window data stays in `frame_windows`.
+    pub window: Option<crate::state::WindowSlot>,
 }
 
 pub(crate) struct Activity {

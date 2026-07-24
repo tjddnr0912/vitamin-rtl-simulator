@@ -184,6 +184,7 @@ fn runaway_recursion_hits_depth_cap_fatal() {
             auto_override: 0,
             str_params: 0,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         let c = b.k(5);
         let v = b.call(func, vec![c]);
@@ -248,6 +249,7 @@ fn cont_assign_originated_runaway_terminates() {
             auto_override: 0,
             str_params: 0,
             has_hier_call: false,
+            contains_shared_fork: false,
         });
         // module nets: x (driver, =5) and y (cont-assign target).
         let x = b.net(int_net(32, true));
@@ -416,6 +418,7 @@ fn recursive_automatic_task_with_output_formal() {
         auto_override: 0,
         str_params: 0,
         has_hier_call: false,
+        contains_shared_fork: false,
     });
 
     // process: P0 Call(factt, ret=P1); P1 [$display(res)] Return

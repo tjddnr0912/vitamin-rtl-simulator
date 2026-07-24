@@ -185,6 +185,19 @@ pub struct FuncMeta {
     /// old artifacts never had a frame-body hier call, so the default is exactly correct).
     #[serde(default)]
     pub has_hier_call: bool,
+    /// Stage-2 fork-in-frame: this frame TASK has an admitted Case-B `fork … join` — an arm
+    /// reads/writes the enclosing task's frame-local range `[base_net, base_net+locals_len)`.
+    /// Threaded verbatim to the engine's `func_table` (like `has_hier_call`) so
+    /// `build_func_routing` fills `SimState.func_contains_shared_fork`, and
+    /// `enter_task_frame` allocates an interior-mutable ARENA window (a `WindowSlot::Shared`)
+    /// for the callee so its fork arms and the parked parent reference ONE window by handle.
+    /// Set by the classifier ONLY for a Case-B fork whose join mode is `join` (all) — a
+    /// Case-B `join_any`/`join_none` stays LOUD until Stage 3 (refcount). `false` (the common
+    /// case) ⇒ the byte-identical `WindowSlot::Owned` path. `#[serde(default)]` so an older
+    /// trailer still deserialises (missing ⇒ false ⇒ prior behaviour; old artifacts never had
+    /// an admitted Case-B fork, so the default is exactly correct).
+    #[serde(default)]
+    pub contains_shared_fork: bool,
 }
 
 /// Frame-call sidecar (B1): `Vec<FuncMeta>` index-aligned to `ir.funcs`.

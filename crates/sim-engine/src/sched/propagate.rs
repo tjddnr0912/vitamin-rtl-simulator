@@ -780,26 +780,46 @@ impl Scheduler<'_, '_> {
             ));
             return None; // parent parks; run loop sees `finished` and ends the run
         }
+        // Stage-2 fork-in-frame: the arm window follows the PARENT's just-stashed window
+        // (the Fork terminator arm stashed it into the parent's top `FrameRec.window`
+        // immediately before this call). Case B → the parent's window is a `Shared(h)`, so
+        // each arm shares the SAME handle `h` (parent + arms reference one arena window);
+        // Case A → an EMPTY `Owned` window (the arm touches no parent frame slot). `None`
+        // for a static enclosing task (its locals live in `static_store`, not `frame_stack`
+        // — so no window rides the stack, matching `stash`/`exit_arm_frame`'s `func_has_auto`
+        // gate). Computed ONCE (all arms share the parent's kind).
+        let arm_window_kind: Option<u32> =
+            if parent_in_frame && self.st.func_has_auto[arm_callee as usize] {
+                match &self.activities[parent_aid as usize]
+                    .call_stack
+                    .last()
+                    .unwrap()
+                    .window
+                {
+                    Some(crate::state::WindowSlot::Shared(h)) => Some(*h), // Case B: share handle
+                    _ => None, // Case A: empty owned (handled below)
+                }
+            } else {
+                None
+            };
         for (child_idx, &child_entry) in children.iter().enumerate() {
             let child_tie = compose_child_tie(parent_tie, child_idx as u32);
-            // Stage-1 fork-in-frame: an in-frame child rides one synthetic arm frame.
-            // Case A → an EMPTY OWNED window (the arm touches no parent frame slot):
-            // `Some(vec![])` for an automatic enclosing task so `run_process`'s restore
-            // pushes it onto `frame_stack` on the child's first run + each resume, and
-            // `stash`/`exit_arm_frame` pop it symmetrically (both gated on the same
-            // `func_has_auto`); `None` for a static one (its slab lives in `static_store`).
-            // The child dies at `join` via the loop-top intercept, so `ret_bb` is unused.
+            // Build the arm's synthetic frame. The child dies at `join` via the loop-top
+            // intercept, so `ret_bb` is unused for teardown.
             let child_call_stack = if parent_in_frame {
+                let window = if !self.st.func_has_auto[arm_callee as usize] {
+                    None // static enclosing task: no window on the stack
+                } else if let Some(h) = arm_window_kind {
+                    Some(crate::state::WindowSlot::Shared(h)) // Case B: alias the parent's arena
+                } else {
+                    Some(crate::state::WindowSlot::Owned(Vec::new())) // Case A: empty owned
+                };
                 vec![crate::sched::FrameRec {
                     callee: arm_callee,
                     bb: child_entry,
                     ret_bb: join,
                     out_binds: Vec::new(),
-                    window: if self.st.func_has_auto[arm_callee as usize] {
-                        Some(Vec::new())
-                    } else {
-                        None
-                    },
+                    window,
                 }]
             } else {
                 Vec::new()

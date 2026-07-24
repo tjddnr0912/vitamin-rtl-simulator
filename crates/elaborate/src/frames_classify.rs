@@ -317,6 +317,21 @@ impl Elaborator<'_> {
                     && !self.frame_task_has_unsafe_construct(fid, base_net, locals_len)
                 {
                     // lifted — the engine's suspendable-frame path runs it.
+                    // Stage-2 fork-in-frame: if the body has an admitted Case-B `join` fork
+                    // (an arm touches this task's frame-local range), flag the task so the
+                    // engine's `enter_task_frame` gives it a shared-window ARENA (a
+                    // `WindowSlot::Shared`) that the parent and its fork arms reference by
+                    // handle. `fork_arms_self_contained` returns `CaseB` ONLY for the
+                    // mode-gated `join` case (join_any/join_none is `Loud` → not lifted), so
+                    // this is exactly the set that needs the arena. A no-fork / Case-A task
+                    // returns `CaseA` here → flag stays false → byte-identical owned window.
+                    let entry = self.funcs[fid as usize].entry;
+                    if self.func_metas[fid as usize].is_automatic
+                        && self.fork_arms_self_contained(entry, base_net, base_net + locals_len)
+                            == ForkAdmit::CaseB
+                    {
+                        self.func_metas[fid as usize].contains_shared_fork = true;
+                    }
                 } else {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -568,11 +583,23 @@ impl Elaborator<'_> {
                     let adm = *fork_admit.get_or_insert_with(|| {
                         self.fork_arms_self_contained(self.funcs[fid as usize].entry, lo, hi)
                     });
-                    if adm != ForkAdmit::CaseA {
-                        return false; // Case B / nested / disable-fork → stay loud
+                    // Stage 2: a Case-B `join` fork is now liftable (the engine gives the task
+                    // a shared-window arena — see `contains_shared_fork` in
+                    // `resolve_frame_task_rejects`). Only a `Loud` verdict — a nested fork, a
+                    // `disable fork`, or a Case-B `join_any`/`join_none` (mode-gated to Loud in
+                    // `fork_arms_self_contained`) — keeps the task loud (correct-or-loud).
+                    if adm == ForkAdmit::Loud {
+                        return false;
                     }
-                    // Case A: keep walking the CONTINUATION after the join (the arm
-                    // children are classified by `fork_arms_self_contained` above and run
+                    // The shared-window ARENA exists only for an AUTOMATIC task (its locals are
+                    // per-activation windows). A STATIC task's locals live in the single shared
+                    // `static_store` slab, so a Case-B arm touching them would clobber across
+                    // (recursive) activations — silent-wrong. Keep static Case-B LOUD.
+                    if adm == ForkAdmit::CaseB && !self.func_metas[fid as usize].is_automatic {
+                        return false;
+                    }
+                    // Case A / Case-B-join: keep walking the CONTINUATION after the join (the
+                    // arm children are classified by `fork_arms_self_contained` above and run
                     // as their own activities, so they need not be walked here).
                     stack.push(*resume_bb);
                 }
