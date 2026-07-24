@@ -108,6 +108,48 @@ fn fork_inline_block_arms() {
     assert!(!is_loud(&o) && o.contains("PASS @25"), "inline block:\n{o}");
 }
 
+// ── join_none: parent continues immediately; children run in background.
+//    ORACLE: iverilog 13.0 crashes on this exact source — `Assertion failed:
+//    (child->wt_context==0 || thr->wt_context!=child->wt_context), function
+//    of_JOIN_DETACH, file vthread.cc, line 3793` (a known iverilog join_none /
+//    background-detach bug, not an SV-legality issue — the source is plain
+//    `fork … join_none` inside a task, which IEEE §9.3.2 permits). The expected
+//    value below is by IEEE timing reasoning, not a differential match. ──
+#[test]
+fn fork_join_none_of_tasks() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic a; repeat (2) @(posedge clk); endtask\n\
+        task automatic run;\n\
+          @(posedge clk); fork a(); a(); join_none $display(\"forked @%0t\", $time);\n\
+        endtask\n\
+        initial begin run(); #100 $finish; end\n\
+        endmodule\n");
+    // run's @(posedge clk) fires at t=5; join_none does not block, so the very
+    // next statement ($display) runs immediately in the same time step, t=5. The
+    // two forked `a()` children (each repeat(2) @(posedge clk) → done at t=25)
+    // keep running in the background after the parent moves on.
+    assert!(!is_loud(&o) && o.contains("forked @5"), "join_none:\n{o}");
+}
+
+// ── two forks in sequence in the same task — the second fork's window/child
+//    bookkeeping must not leak state from the first. ORACLE iverilog 13.0 MATCH
+//    (DONE @15). ──
+#[test]
+fn two_sequential_forks() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic a; @(posedge clk); endtask\n\
+        task automatic run;\n\
+          fork a(); a(); join fork a(); a(); join $display(\"DONE @%0t\", $time);\n\
+        endtask\n\
+        initial begin run(); $finish; end\n\
+        endmodule\n");
+    // 1st fork at t=0: both `a()` wait 1 posedge → t=5; join resumes t=5.
+    // 2nd fork at t=5: both `a()` wait 1 posedge → next posedge t=15; join resumes t=15.
+    assert!(!is_loud(&o) && o.contains("DONE @15"), "two forks:\n{o}");
+}
+
 // ── correct-or-loud: an arm passing a parent frame-local as a task arg is Case B
 //    (needs the shared window) → stays LOUD in Stage 1 (never silent-wrong) ──
 #[test]
@@ -204,4 +246,66 @@ fn fork_static_task_case_b_stays_loud() {
         is_loud(&o),
         "static-task Case-B fork arm must go loud, not silently run off the static slab:\n{o}"
     );
+}
+
+// ── correct-or-loud: an arm doing a whole-net blocking WRITE to a parent
+//    frame-local (`x = 42`) is Case B — distinct from the existing index-write
+//    (`fork_lvalue_index_is_parent_local_stays_loud`) and arg-read
+//    (`fork_arg_is_parent_local_stays_loud`) guards, which hit a chunk's `word`/
+//    in-bind expr; this hits a plain `lhs.chunks` net match in `classify_one_arm`'s
+//    `BlockingAssign` arm. Stays LOUD in Stage 1 (Case B is a Stage-2 follow-on). ──
+#[test]
+fn case_b_arm_writes_parent_local_stays_loud_stage1() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic run;\n\
+          int x = 0;\n\
+          fork begin @(posedge clk); x = 42; end @(posedge clk); join\n\
+          $display(\"x=%0d\", x);\n\
+        endtask\n\
+        initial begin run(); $finish; end\n\
+        endmodule\n");
+    assert!(
+        is_loud(&o),
+        "case B whole-scalar write must stay loud in Stage 1:\n{o}"
+    );
+}
+
+// ── correct-or-loud: `wait fork` inside a frame body — a fork-family construct
+//    with no in-frame implicit-child-barrier support — stays LOUD (all stages,
+//    design §8). Before the `frame_task_has_unsafe_construct` fix (this slice) this
+//    slipped past BOTH elaborate guards (`wait_cond_reads_frame_local` explicitly
+//    returns `false` for `WaitCause::Fork`, and `frame_body_is_leaf_nonsuspending`
+//    treats every `Wait` cause uniformly) and reached the engine's runtime
+//    in-frame `WaitCause::Fork` arm, which calls `mark_fatal()` — a backstop that
+//    reuses the delta-limit diagnostic (VITA-F4016 "did not converge"), a
+//    misleading RUNTIME fatal instead of a clean compile-time E3009. ──
+#[test]
+fn wait_fork_in_frame_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic a; @(posedge clk); endtask\n\
+        task automatic run;\n\
+          fork a(); join_none wait fork; $display(\"X\");\n\
+        endtask\n\
+        initial begin run(); $finish; end\n\
+        endmodule\n");
+    assert!(is_loud(&o), "wait fork in frame must stay loud:\n{o}");
+}
+
+// ── correct-or-loud: `disable fork` inside a frame body stays LOUD (all stages).
+//    Already caught by `frame_task_has_unsafe_construct`'s disable-fork arm before
+//    this slice; locked in here as a fork-in-frame regression guard alongside its
+//    sibling `wait fork` case above. ──
+#[test]
+fn disable_fork_in_frame_stays_loud() {
+    let o = run("module t;\n\
+        logic clk = 0; always #5 clk = ~clk;\n\
+        task automatic a; repeat(9) @(posedge clk); endtask\n\
+        task automatic run;\n\
+          fork a(); join_none disable fork; $display(\"X\");\n\
+        endtask\n\
+        initial begin run(); $finish; end\n\
+        endmodule\n");
+    assert!(is_loud(&o), "disable fork in frame must stay loud:\n{o}");
 }

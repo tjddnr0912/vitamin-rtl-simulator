@@ -352,7 +352,11 @@ impl Elaborator<'_> {
     ///   rejects — and the engine's arg-bind path panics on it);
     /// - a `Wait` whose condition reads a frame-local (the level-wait re-eval runs without
     ///   the frame window restored → panic);
-    /// - a `disable fork` statement (a fork-family construct with no in-frame guard).
+    /// - a `disable fork` statement (a fork-family construct with no in-frame guard);
+    /// - a `wait fork` statement (ditto — the engine's `WaitCause::Fork` in-frame arm has
+    ///   no implicit child-barrier tracking per activation, so it `mark_fatal`s at RUNTIME
+    ///   with a misleading delta-limit diagnostic; catching it here turns that into a clean
+    ///   compile-time E3009, matching `disable fork`'s treatment).
     ///
     /// The `repeat(<non-const>) @(edge)` shared-counter case is caught separately, at the
     /// AST level (`ast_has_repeat_with_timing`), before the desugar loses it.
@@ -400,6 +404,12 @@ impl Elaborator<'_> {
                 // (3) a `wait`/`@` whose condition expr reads a frame-local net.
                 ir::Terminator::Wait { cond, resume } => {
                     if self.wait_cond_reads_frame_local(cond, &is_frame_local) {
+                        return true;
+                    }
+                    // (5) `wait fork` — see the doc comment above; no in-frame child-
+                    // barrier support, so reject at compile time rather than let the
+                    // engine's runtime `mark_fatal` backstop fire.
+                    if matches!(cond, ir::WaitCause::Fork) {
                         return true;
                     }
                     stack.push(*resume);
