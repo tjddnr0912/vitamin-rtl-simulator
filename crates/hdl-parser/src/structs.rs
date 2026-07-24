@@ -400,15 +400,37 @@ impl Parser<'_, '_> {
     }
 
     /// Round-19 (F-struct fix): true if `e`'s subtree contains a function / method /
-    /// system CALL — the source of a side effect / non-determinism. Used to keep a
-    /// record-array-element ACTUAL's index IDEMPOTENT before it is cloned into N
-    /// per-member reads (a side-effecting index would evaluate N times → a torn record
-    /// read; IEEE §13.5.1 requires the actual evaluated once). A pure numeric index
-    /// (constant / ident / arithmetic / select / cast) contains no call.
+    /// system / ctor / randomize / array-method CALL (or a `dist` constraint) — any
+    /// potential side effect / non-determinism. Used to keep a record-array-element
+    /// ACTUAL's index IDEMPOTENT before it is cloned into N per-member reads (a
+    /// side-effecting index would evaluate N times → a torn record read; IEEE §13.5.1
+    /// requires the actual evaluated once). A pure numeric index (constant / ident /
+    /// arithmetic / select / cast) contains no call.
+    ///
+    /// EXHAUSTIVE (no `_` arm) — matching the discipline of `da.rs`'s
+    /// `expr_call_may_write_ident`: a future call-bearing `ExprKind` addition must be a
+    /// COMPILE ERROR here, not a silently-widened torn-read window (whole-branch review).
     fn expr_has_call(e: &Expr) -> bool {
         use ExprKind as K;
         match &e.kind {
-            K::Call { .. } | K::SysCall { .. } | K::MethodCall { .. } => true,
+            // Call-like / side-effecting / non-deterministic ⇒ a non-idempotent index.
+            K::Call { .. }
+            | K::SysCall { .. }
+            | K::MethodCall { .. }
+            | K::ClassNew { .. }
+            | K::RandomizeWith(_)
+            | K::ArrayMethodWith(_)
+            | K::Dist { .. } => true,
+            // Pure leaves — no call.
+            K::IntLit { .. }
+            | K::RealLit { .. }
+            | K::StrLit { .. }
+            | K::PkgScoped { .. }
+            | K::Ident(_)
+            | K::Null
+            | K::Dollar
+            | K::Error => false,
+            // Compound — recurse into every sub-expression.
             K::Unary { operand, .. } => Self::expr_has_call(operand),
             K::Binary { lhs, rhs, .. } => Self::expr_has_call(lhs) || Self::expr_has_call(rhs),
             K::Ternary {
@@ -442,8 +464,13 @@ impl Parser<'_, '_> {
             K::MinTypMax { min, typ, max } => {
                 Self::expr_has_call(min) || Self::expr_has_call(typ) || Self::expr_has_call(max)
             }
+            K::New { size, src } => {
+                Self::expr_has_call(size) || src.as_ref().is_some_and(|s| Self::expr_has_call(s))
+            }
+            K::TimeLit { num, .. } => Self::expr_has_call(num),
+            K::NamedArg { value, .. } => value.as_ref().is_some_and(|v| Self::expr_has_call(v)),
             K::Cast { expr, .. } => Self::expr_has_call(expr),
-            _ => false,
+            K::AssignPattern(parts) => parts.iter().any(Self::expr_has_call),
         }
     }
 
