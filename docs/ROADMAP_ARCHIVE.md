@@ -8,6 +8,34 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.217 SILENT-WRONG 수정: string-ARRAY ELEMENT가 concat/replicate/relational에서 packed로 새던 문제 → supported (AST 문자열-도메인 분류기 BitSelect arm·format 23 불변) (2026-07-25, branch feat-string-array-elem-domain) ✅
+
+**발굴 경위**: ROADMAP §3 소형 큐의 loud→supported 후보(FIXED string array decl-init `string s[2]='{"a","b"}`)를 그라운딩하다, fixed 경로와 dyn 경로의 capability parity를 같은 문맥 매트릭스로 비교하는 probe에서 **두 경로 모두** `{s[0],s[1]}`을 빈 문자열로 렌더하는 것을 관찰. scalar string은 정상(`{a,b}`=abcb) → 배열 ELEMENT 전용 갭. iverilog가 fixed string array를 지원하므로 **live oracle 有**.
+
+**silent-wrong 6형(iverilog 차분 확정)**: `string s[2]; s[0]="abc"; s[1]="b";`
+
+- `{s[0],s[1]}` → vita `""` vs iverilog `abcb` · `{2{s[0]}}` → `""` vs `abcabc` · `{s[0],"!"}` → `!` vs `abc!`
+- `r={s[0],"-",s[1]}` → `b`(len 2) vs `abc-b`(len 5) · `s[0]<s[1]` → 0 vs 1 · `s[0]>s[1]`/`<=` → 1/0 vs 0/1
+- dyn 배열 runtime index `{d[i],"!"}` → `" !"` vs `cd!`
+
+**근본 원인**: `expr_is_string_ast`(elaborate 공유 AST-레벨 문자열-도메인 분류기)의 match에 **인덱스 표현식 arm이 부재**(`Ident`/`Call`/`Paren`만)→`sa[i]`가 `_ => false`로 떨어짐. 이 분류기를 게이트로 쓰는 **모든** consumer가 element를 PACKED 경로로 lower: `Concat`(expr_main 747)·`Replicate`(764)·relational/equality(384)·`string_concat_special`(strings 415/421)·context-width Concat(expr_ctx 594). packed 경로에서 String-kind net은 width 0이라 NUL 바이트만 기여→leading-NUL strip 후 빈 문자열. **storage는 정상**(`%s`·`.len()`·`.substr()`·task arg·`q=s[0]` 전부 동작)→**access 라우팅(shallow) 갭**(LOOPROMPT §2 "element-select silent-wrong=WHOLE-value 연산 먼저 측정" 규칙대로 진단).
+
+**fix(format 23 불변·elaborate-local)**: (1) `expr_is_string_ast`에 `BitSelect { base, .. } => is_string_array_elem_base(base)` arm. (2) 신규 `&self` 헬퍼 — base가 single-segment Ident이면서 **FIXED** string array(`string_array_elems`) OR **DYNAMIC** string array(net이 `string_elem_dyn_nets`)일 때만 true. (3) **empty-container early-return**(두 컨테이너 모두 비면 즉시 false)→string array 없는 디자인은 scope walk 0회·byte-identical이 prose가 아닌 기계적 보장.
+
+**disjointness**: SCALAR string의 byte select `str[i]`(§6.16.2·8-bit integral)는 packed로 남아야 하는데, fixed string array는 배열 이름으로 net을 등록하지 않고(per-element `<name>$sae$<i>`만) dynamic은 `DynArray` net이라 둘 다 `NetKind::String` handle이 아님→`string_handle`/`string_base_expr_net` 도달 불가.
+
+**★ adversarial review(2-lens 병렬)가 신규 silent-wrong 1건 포착**: soundness lens가 **분류기와 lowering의 resolver 불일치** 발견 — dyn clause를 `lookup_net_scoped`로 resolve했으나 같은 `base[i]`의 **lowering은 `dyn_handle_read`**(=`dyn_subst` ALIAS를 먼저 consult·R2-inline body에서 dyn-array formal이 outer same-named net을 SHADOW). 모듈 레벨 `string b[]`가 inline된 `int b[]` formal의 `b[0]<b[1]`을 **텍스트 비교**로 만들어 `256<255`가 1(iverilog 0). **fix**=dyn clause를 `dyn_handle_read`로 교체→**각 clause가 자기 lowering과 동일 machinery로 resolve**→분류기가 자신이 분류하는 표현식과 불일치 불가(re-audit이 "AST classifier가 이제 IR twin(`ir_expr_is_string`)의 정확한 AST-레벨 projection"이라 판정). **주의**: 리뷰어 원본 repro는 재현 안 됨(`task automatic`=framed→`dyn_subst` 미사용·`%s`가 두 라우팅을 동일 렌더)—**inline 경로 + 텍스트/수치 비교가 갈리는 값**이 필요했음(측정 검증의 가치).
+
+**differential lens**: PRE(pre-fix 빌드)/POST/iverilog 3-way를 생성 매트릭스 900+행(compare 100×18·concat 64×8·dyn 36×8)+수작업 ~75 케이스에 적용→**regression 0·신규 divergence 0**·잔여 divergence는 전부 main에서 byte-for-byte 재현. 최종 verdict 양 lens **CLEAN**.
+
+**측정으로 기각된 리뷰 findings**(이론→측정 필수 원칙): frame-local string array가 `.getc` byte-read로 silent하다는 지적=**LOUD**(static task E3018·function/automatic E3009)→미지원 기능(안전)이지 silent 아님 · context-width Replicate ungated=**no-oracle**(iverilog가 string concat→packed target 대입 자체를 거부)·vita 답은 IEEE-sensible.
+
+**동반 수정(별도 커밋)**: byte select on an ELEMENT `s[0][0]`(pre-existing·PRE 빌드 동일)→vita 0 vs iverilog 119. `string_index_read`가 bare Ident base만 수용해 element base가 width-0 String signal의 packed bit-select로 샘. **fix**=`BitSelect` base 수용(두 gate 순서 유지: `expr_is_string_ast`가 lowering **전** 판정·`handle_is_str_readable`가 StrGetC-consumable만). dyn element는 word-indexed라 gate 미통과→불변(follow-on·iverilog도 거부). **write twin은 loud 유지**(`s[0][0]="W"`=nested lvalue select)→read/write divergence 없음.
+
+**테스트**: 신규 `string_array_elem_domain.rs`×24. 핵심 설계=`both()` 하네스가 **fixed-array 형태와 scalar-string 형태를 둘 다 실행해 동일 출력을 요구**(oracle 값 + vita-내부 등가 차분 동시 pin). 경계 pin=scalar byte-select packed 유지·정수 fixed/dyn 배열 packed 유지·runtime-index fixed array loud 유지·inline dyn-formal shadowing 수치 비교 유지. **4348→4372 green**·clippy/fmt clean·format 23 불변(elaborate-local·IR shape 무변경)·staged `vcmp→velab→vrun` 패리티 확인.
+
+**교훈**: (1) **loud→supported 후보를 그라운딩하다 같은 자료구조의 silent-wrong을 발굴** — capability-parity probe(형제 경로 A vs B를 같은 문맥 매트릭스로 비교)가 두 경로 공통 버그를 노출. (2) **AST-레벨 분류기의 누락 arm 1개 = consumer 전체에 동형 silent-wrong 복제**(1 arm 부재 = 5 consumer × 6 구문형)·역으로 1 arm 추가로 전부 해소. (3) **분류기는 자신이 분류하는 표현식의 lowering과 동일 resolver를 써야 한다** — 다른 resolver를 쓰면 shadowing에서 조용히 갈린다(F1). (4) **리뷰어 이론은 측정 후 채택**: 4개 finding 중 1개만 재현(그마저 repro는 틀렸고 메커니즘만 옳았음)·2개는 loud/no-oracle로 기각. (5) 기존 N6 테스트가 `==`와 `.len()`만 검증해 이 family가 숨었음 — **동치가 우연히 맞는 연산(equal-length equality)만 테스트하면 분류기 갭이 은닉**. (6) staged 바이너리는 `--features separate-bins`라 stale하기 쉬움(미빌드 시 fix 전 동작 재현→오진 유발).
+
 #### 4.5.216 round-19 follow-on: F-record-out short-circuit output-formal call — if-cond + ?:/general-expr 확장 (adversarial review가 ternary sign/width silent-wrong 포착·format 23 불변) (2026-07-24~25, branch round19-followons) ✅
 
 **컨텍스트**: §4.5.215 F-record-out가 while/for LOOP condition의 short-circuit `&&`/`||` output-formal 호출을 지원. 오너 "잔여 follow-on 구현·correct-support가 핵심". 문서화된 follow-on(if-cond·`?:`·general-expr) 구현. **외부 오라클**: iverilog/verilator 모두 function output port 거부→hand-IEEE(§11.4.7 short-circuit·§11.4.11/§11.8.1 arm unification·§13.5.2 copy-out)+call-free bare form 内부 differential.
