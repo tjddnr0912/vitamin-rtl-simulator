@@ -282,7 +282,7 @@ impl Elaborator<'_> {
                 // of scalar string nets). A runtime index / OOB is loud (correct-or-loud).
                 if let ast::Lvalue::Ident(p) = &**base {
                     if p.segments.len() == 1 {
-                        if let Some(key) = self.walk_scopes_key(&p.segments[0].name, |k| {
+                        if let Some(key) = self.walk_scopes_key_shadowed(&p.segments[0].name, |k| {
                             self.string_array_elems.contains_key(k)
                         }) {
                             let (min, max, elems) =

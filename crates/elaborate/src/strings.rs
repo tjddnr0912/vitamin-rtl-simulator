@@ -19,7 +19,7 @@ impl Elaborator<'_> {
         if path.segments.len() != 1 {
             return None;
         }
-        let key = self.walk_scopes_key(&path.segments[0].name, |k| {
+        let key = self.walk_scopes_key_shadowed(&path.segments[0].name, |k| {
             self.string_array_elems.contains_key(k)
         })?;
         let (min, max, elems) = self.string_array_elems.get(&key)?.clone();
@@ -38,7 +38,7 @@ impl Elaborator<'_> {
     /// element access can be loud-rejected rather than mis-routed).
     pub(crate) fn is_string_array_base(&self, base: &ast::Expr) -> bool {
         matches!(&base.kind, ast::ExprKind::Ident(p) if p.segments.len() == 1
-            && self.walk_scopes_key(&p.segments[0].name, |k| self.string_array_elems.contains_key(k)).is_some())
+            && self.walk_scopes_key_shadowed(&p.segments[0].name, |k| self.string_array_elems.contains_key(k)).is_some())
     }
 
     /// r19: true iff `base` names a string ARRAY — a FIXED one (`string s[N]`, whose

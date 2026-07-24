@@ -41,6 +41,52 @@ impl Elaborator<'_> {
     /// read-only check, the iface-instance lookup) can never drift from the
     /// value-level lookups.
     pub(crate) fn walk_scopes_key(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String> {
+        self.walk_scopes_key_inner(name, hit, false)
+    }
+
+    /// r19: [`Self::walk_scopes_key`], but the outward walk STOPS as soon as a scope
+    /// level binds `name` as a NET without `hit` matching there.
+    ///
+    /// The plain walk is innermost-wins only WITHIN the single map `hit` probes. A
+    /// function/task/block/generate local is a net (in `symbols`), so a consumer that
+    /// probes a SIDE-map (`string_array_elems`) sailed straight past an inner local
+    /// and resolved it to an OUTER side-map entry — silently, and for non-string
+    /// locals too: a task-local `logic [7:0] sa[2]` write landed on a module `string
+    /// sa[2]` element, and a generate-local `logic [15:0] sa` read was even
+    /// range-checked against the outer array's declared `[0:1]`.
+    ///
+    /// Deliberately NOT the default. The shadow test keys on `symbols`, which is
+    /// populated DURING elaboration, so it is only sound where the lookup cannot run
+    /// before the shadowing net exists. `elaborate_gen_item` re-folds every generate
+    /// control expression once per phase but reports a fold failure only in the Nets
+    /// phase, so making the param lookup (`lookup_scoped`) shadow-aware let a nested
+    /// generate fold in Nets and fail in Logic — silently deleting the whole generate
+    /// body, exit 0. The `params`/`param_meta` consumers therefore keep the plain
+    /// walk; that leaves an inner net failing to shadow an outer param (ROADMAP §2,
+    /// its own slice — it needs an order-INDEPENDENT, AST-gathered name set).
+    ///
+    /// **Precondition for opting a consumer in:** both the probed map AND `symbols`
+    /// must be fully populated before that consumer can run. The three string-array
+    /// sites qualify because they are reachable only from expression/lvalue lowering,
+    /// which starts after the Nets passes that fill both. **Never opt in a consumer
+    /// reachable from `const_eval_in_scope`** — that runs during param folding and
+    /// during every generate phase, so it would reproduce the silent generate-body
+    /// deletion verbatim. `array_const_vals` (`const_eval.rs`) is exactly such a
+    /// consumer: it sits INSIDE `const_eval_in_scope` and must keep the plain walk.
+    pub(crate) fn walk_scopes_key_shadowed(
+        &self,
+        name: &str,
+        hit: impl Fn(&str) -> bool,
+    ) -> Option<String> {
+        self.walk_scopes_key_inner(name, hit, true)
+    }
+
+    fn walk_scopes_key_inner(
+        &self,
+        name: &str,
+        hit: impl Fn(&str) -> bool,
+        stop_at_net_binding: bool,
+    ) -> Option<String> {
         use std::fmt::Write;
         let mut prefix = self.cur_prefix.as_str();
         // GEN-3X-STR (part b): reuse ONE scratch String across the outward walk
@@ -56,6 +102,9 @@ impl Elaborator<'_> {
             }
             if hit(&key) {
                 return Some(key);
+            }
+            if stop_at_net_binding && self.symbols.contains_key(&key) {
+                return None;
             }
             if prefix.is_empty() {
                 return None;

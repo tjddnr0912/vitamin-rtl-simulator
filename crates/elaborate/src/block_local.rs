@@ -526,6 +526,43 @@ impl Elaborator<'_> {
                     // "redeclared" — two SEQUENTIAL named blocks reusing the same
                     // temp name (`integer local_v;`) then share one net, which is
                     // correct since they never overlap in time.
+                    // r19: a module-scope FIXED string array (`string sa[2]`) occupies its
+                    // bare NAME while registering NO net under it — only the per-element
+                    // `<name>$sae$<i>` nets — so the `existing` probe below cannot see it
+                    // and a block-local `string` of that name silently flattened onto it.
+                    // Every module-scope `sa[i]` then resolved to the block-local scalar
+                    // instead: `sa[0]="zz"` became a `putc` byte-write and read back "".
+                    //
+                    // Gated on the STRING kind, deliberately — the same discipline as the
+                    // `new_str_read` gate below, and for the same reason. A NON-string
+                    // local of that name mostly coalesces harmlessly (it occupies `t.sa`
+                    // while the array's storage stays `t.sa$sae$i`), so rejecting on the
+                    // bare name collision alone turned a dozen byte-correct designs loud —
+                    // `logic [7:0] sa;`, `logic [7:0] sa[2];`, `int`/`real sa;`, multi-name
+                    // decls — every one of which iverilog runs and vita already got right.
+                    // The residual non-string shapes that ARE wrong (a scalar local whose
+                    // name the block index-selects; some named-block array cases) are
+                    // pre-existing and recorded in ROADMAP §2: separating them from the
+                    // correct ones needs a per-shape hazard model, not a name match.
+                    let shadowed_string_array = if matches!(d.kind, ast::NetVarKind::String) {
+                        d.names
+                            .iter()
+                            .find(|n| self.string_array_elems.contains_key(&self.fq(&n.name.name)))
+                            .map(|n| n.name.name.clone())
+                    } else {
+                        None
+                    };
+                    if let Some(nm) = shadowed_string_array {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "a block-local `{nm}` collides with a string ARRAY of the same \
+                                 name declared at module scope; v1 flattens block-locals into \
+                                 the module namespace and cannot give this one its own scope \
+                                 (the two would alias) — rename it",
+                            ),
+                        );
+                    }
                     let existing = d
                         .names
                         .first()
