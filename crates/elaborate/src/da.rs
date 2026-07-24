@@ -657,6 +657,103 @@ pub(crate) fn automatic_local_definitely_assigned(stmts: &[ast::Stmt], name: &st
     true
 }
 
+/// BL1 (round-19): true when NO statement in `stmts` can WRITE `name`. A write is a
+/// blocking / non-blocking / procedural-continuous (`assign`) / `force` / `deassign`
+/// / `release` whose lvalue is rooted at `name` (whole-var, or through a select /
+/// concat base — `++`/`--`/`+=` all desugar to a blocking assign, so they are
+/// covered), a task call that could pass `name` as an OUTPUT / INOUT actual
+/// (conservatively, ANY reference to `name` in a user-task or `randomize` actual), or
+/// a system task's WRITE-dest arg (`$sscanf(.., name)`, `$fgets(name, ..)` — its pure
+/// READ args, isolated by `syscall_read_args`, do NOT count, so `$display(name)` of
+/// the constant is not a write). Recurses into every nested block / control-flow /
+/// timing body.
+///
+/// Used together with a constant-folding initializer to prove an `automatic`
+/// block-local under a `fork` is CONCURRENCY-IMMUNE: a never-written constant reads
+/// identically from one shared static (v1-flattened) net on every activation, so the
+/// flatten is byte-identical to per-activation storage. SOUND FOR ACCEPT: every form
+/// that MIGHT write `name` returns "writes", so `never_assigns` can never be fooled
+/// into skipping the loud reject; an un-vetted statement that only READS is at worst a
+/// harmless false "may-write" that keeps the case loud (correct-or-loud).
+pub(crate) fn stmt_never_assigns_ident(stmts: &[ast::Stmt], name: &str) -> bool {
+    !stmts.iter().any(|st| stmt_may_write_ident(st, name))
+}
+
+/// The recursive worker for [`stmt_never_assigns_ident`] — true if `s` (or any
+/// nested sub-statement) can WRITE `name`.
+fn stmt_may_write_ident(s: &ast::Stmt, name: &str) -> bool {
+    use ast::Stmt::*;
+    match s {
+        Blocking { lhs, .. }
+        | NonBlocking { lhs, .. }
+        | Assign { lhs, .. }
+        | Force { lhs, .. }
+        | Deassign { lhs, .. }
+        | Release { lhs, .. } => lvalue_root_is(lhs, name),
+        Block { stmts, .. } | Fork { stmts, .. } => {
+            stmts.iter().any(|st| stmt_may_write_ident(st, name))
+        }
+        If { then_s, else_s, .. } => {
+            stmt_may_write_ident(then_s, name)
+                || else_s
+                    .as_ref()
+                    .is_some_and(|e| stmt_may_write_ident(e, name))
+        }
+        Case { items, .. } => items.iter().any(|it| match it {
+            ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
+                stmt_may_write_ident(body, name)
+            }
+        }),
+        For {
+            init, step, body, ..
+        } => {
+            stmt_may_write_ident(init, name)
+                || stmt_may_write_ident(step, name)
+                || stmt_may_write_ident(body, name)
+        }
+        While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
+            stmt_may_write_ident(body, name)
+        }
+        Wait { body, .. } | DelayCtrl { body, .. } | EventCtrl { body, .. } => {
+            body.as_ref().is_some_and(|b| stmt_may_write_ident(b, name))
+        }
+        // A user-task / randomize actual could be an OUTPUT / INOUT — any reference to
+        // `name` is conservatively a possible write (keeps it loud; sound for accept).
+        UserTaskCall { args, .. } | RandomizeWith { args, .. } => {
+            args.iter().any(|a| expr_reads_ident(a, name))
+        }
+        // A system task's WRITE-dest arg writes `name`; its READ args (isolated by
+        // `syscall_read_args`) do not.
+        SysTaskCall {
+            name: task, args, ..
+        } => {
+            let reads = syscall_read_args(task.name.as_str(), args);
+            args.iter()
+                .any(|a| !reads.iter().any(|r| std::ptr::eq(r, a)) && expr_reads_ident(a, name))
+        }
+        // Return / event-trigger / disable / wait-fork / SVA / null / error cannot
+        // write a data variable named `name`; every value-writing form is above.
+        _ => false,
+    }
+}
+
+/// Is the WRITTEN base of lvalue `lv` the identifier `name`? (`name = …`,
+/// `name[i] = …`, `name[a:b] = …`, or `name` as one target of a concat write
+/// `{name, …} = …`). A name appearing only in a select INDEX (`other[name] = …`) is
+/// a READ, not a write, and does NOT match. The write-side counterpart of
+/// [`lval_root_name`] extended to concat targets. Used by `stmt_may_write_ident`.
+fn lvalue_root_is(lv: &ast::Lvalue, name: &str) -> bool {
+    use ast::Lvalue as L;
+    match lv {
+        L::Ident(p) => p.segments.len() == 1 && p.segments[0].name == name,
+        L::BitSelect { base, .. } | L::PartSelect { base, .. } | L::IndexedPart { base, .. } => {
+            lvalue_root_is(base, name)
+        }
+        L::Concat { parts, .. } => parts.iter().any(|p| lvalue_root_is(p, name)),
+        L::Error(_) => false,
+    }
+}
+
 pub(crate) fn stmt_reads_ident(s: &ast::Stmt, name: &str) -> bool {
     use ast::Stmt::*;
     match s {

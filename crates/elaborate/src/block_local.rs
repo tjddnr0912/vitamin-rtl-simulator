@@ -364,7 +364,18 @@ impl Elaborator<'_> {
                                     .per_entry_block_locals
                                     .get(&span.lo)
                                     .is_some_and(|s| s.contains(nm));
+                                // BL1 (round-19): a const-folding, never-reassigned local is
+                                // byte-identical to the static flatten (the constant rides
+                                // `net.init`; a never-written net holds it forever) — skip the
+                                // loud (see the non-scoped gate below for the full rationale).
+                                let const_immune = n.init.as_ref().is_some_and(|init| {
+                                    let (w, ..) =
+                                        self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                                    fold_init(init, w).is_some()
+                                        || self.const_eval_in_scope(init).is_some()
+                                }) && stmt_never_assigns_ident(stmts, nm);
                                 if !per_entry
+                                    && !const_immune
                                     && (n.init.is_some()
                                         || read_in_sibling_init
                                         || !automatic_local_definitely_assigned(stmts, nm))
@@ -562,7 +573,22 @@ impl Elaborator<'_> {
                                 .per_entry_block_locals
                                 .get(&span.lo)
                                 .is_some_and(|s| s.contains(nm));
+                            // BL1 (round-19): an `automatic` block-local whose initializer
+                            // FOLDS TO A CONSTANT and which is NEVER reassigned in the block is
+                            // byte-identical to the static flatten — the folded constant already
+                            // rides `net.init` (a never-written net holds it forever), so it is
+                            // CONCURRENCY-IMMUNE even under a `fork` (module-process forks have no
+                            // frame arena, but every activation reads the SAME constant off one
+                            // shared net). Skip the loud for it; do NOT mark per-entry — a
+                            // constant needs no re-init, and the const `net.init` handles t0.
+                            let const_immune = n.init.as_ref().is_some_and(|init| {
+                                let (w, ..) =
+                                    self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                                fold_init(init, w).is_some()
+                                    || self.const_eval_in_scope(init).is_some()
+                            }) && stmt_never_assigns_ident(stmts, nm);
                             if !per_entry
+                                && !const_immune
                                 && (n.init.is_some()
                                     || read_in_sibling_init
                                     || !automatic_local_definitely_assigned(stmts, nm))
