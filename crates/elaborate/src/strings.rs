@@ -3,6 +3,101 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// r19: does `e` mention a HIERARCHICAL (cross-instance) name anywhere?
+    ///
+    /// Used as a REJECT gate, so under-detection would leave a silent-wrong: the match
+    /// is `_`-free-exhaustive over `ExprKind` on purpose, which makes a future variant
+    /// a compile error instead of a silently-widened gate.
+    ///
+    /// A 2-segment head is NOT automatically hierarchical. The parser encodes a method
+    /// call `q.size()` / `p.substr(0,1)` as `Call{name: HierPath[q, size]}`, the same
+    /// shape as a genuine cross-instance call `u.f()`, and a struct member read `r.f`
+    /// is a 2-segment `Ident` like `u.p`. They are told apart the way the METHOD
+    /// LOWERING tells them apart — whether the head resolves to a local net — so this
+    /// classifier cannot disagree with the expression it is classifying. Resolving
+    /// otherwise false-rejected `'{$sformatf("v%0d", q.size()), …}`, a common idiom.
+    /// A `pkg::name` reference is likewise not hierarchical (elaboration-resolved).
+    fn head_is_cross_instance(&self, segs: &[ast::Ident]) -> bool {
+        segs.len() > 1 && self.lookup_net_scoped(&segs[0].name).is_none()
+    }
+
+    pub(crate) fn expr_mentions_hier_path(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        let any = |v: &[ast::Expr]| v.iter().any(|x| self.expr_mentions_hier_path(x));
+        match &e.kind {
+            K::Ident(p) => self.head_is_cross_instance(&p.segments),
+            // leaves
+            K::IntLit { .. }
+            | K::RealLit { .. }
+            | K::StrLit { .. }
+            | K::Null
+            | K::Dollar
+            | K::Error => false,
+            // `TimeLit` is NOT a leaf — it holds `num: Box<Expr>`. Recursing matches the
+            // other `_`-free walkers in the tree (`expr_has_call`); grouping it with the
+            // leaves would be an under-detection in a gate whose failure mode is silent.
+            K::TimeLit { num, .. } => self.expr_mentions_hier_path(num),
+            // a package-scoped constant is elaboration-resolved, not a child-instance read
+            K::PkgScoped { .. } => false,
+            K::Unary { operand, .. } => self.expr_mentions_hier_path(operand),
+            K::Paren { inner } => self.expr_mentions_hier_path(inner),
+            // The discarded `target` can hold `Size(Expr)` / `Named(HierPath)`, but both
+            // are elaboration-time types/constants — never a t0 value read out of a child
+            // instance — and a hierarchical one is loud-rejected downstream anyway.
+            K::Cast { expr, .. } => self.expr_mentions_hier_path(expr),
+            K::NamedArg { value, .. } => value
+                .as_deref()
+                .is_some_and(|v| self.expr_mentions_hier_path(v)),
+            K::Binary { lhs, rhs, .. } => {
+                self.expr_mentions_hier_path(lhs) || self.expr_mentions_hier_path(rhs)
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.expr_mentions_hier_path(cond)
+                    || self.expr_mentions_hier_path(then_e)
+                    || self.expr_mentions_hier_path(else_e)
+            }
+            K::BitSelect { base, index } => {
+                self.expr_mentions_hier_path(base) || self.expr_mentions_hier_path(index)
+            }
+            K::PartSelect { base, msb, lsb } => {
+                self.expr_mentions_hier_path(base)
+                    || self.expr_mentions_hier_path(msb)
+                    || self.expr_mentions_hier_path(lsb)
+            }
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                self.expr_mentions_hier_path(base)
+                    || self.expr_mentions_hier_path(offset)
+                    || self.expr_mentions_hier_path(width)
+            }
+            K::Concat { parts } | K::AssignPattern(parts) => any(parts),
+            K::Replicate { count, value } => self.expr_mentions_hier_path(count) || any(value),
+            K::MinTypMax { min, typ, max } => {
+                self.expr_mentions_hier_path(min)
+                    || self.expr_mentions_hier_path(typ)
+                    || self.expr_mentions_hier_path(max)
+            }
+            K::Call { name, args } => self.head_is_cross_instance(&name.segments) || any(args),
+            K::MethodCall { recv, args, .. } => self.expr_mentions_hier_path(recv) || any(args),
+            K::SysCall { args, .. } => any(args),
+            // Conservative: these carry constraint/iterator bodies this walker does not
+            // model, so treat them as possibly hierarchical rather than assume not.
+            K::RandomizeWith { .. }
+            | K::ArrayMethodWith { .. }
+            | K::New { .. }
+            | K::ClassNew { .. }
+            | K::Dist { .. } => true,
+        }
+    }
+
     /// N6: resolve a string-array ELEMENT read/write `NAME[K]` — if `base` is an Ident
     /// naming a fixed string array in scope and `index` folds to a CONST in range,
     /// return the K-th element net. A runtime index / out-of-range / non-string-array
@@ -74,6 +169,118 @@ impl Elaborator<'_> {
             && self
                 .dyn_handle_read(&p.segments[0].name)
                 .is_some_and(|(n, _)| self.string_elem_dyn_nets.contains(&n)))
+    }
+
+    /// r19: expand a FIXED string-array `'{…}` decl-init into its per-element
+    /// `(lvalue, expr)` assignments — `string s[3] = '{"a","b","c"}` becomes
+    /// `s[0]="a"; s[1]="b"; s[2]="c"`, which the t0 var-init pre-sweep then drives
+    /// through the ordinary const-index element path (the element nets already exist
+    /// by then). ONE source of truth for both the module-scope collector and the
+    /// block-local one, so the two scopes cannot drift.
+    ///
+    /// Pattern element k targets the declared index walking from the LEFT bound
+    /// toward the right (IEEE §10.9.1) — so a DESCENDING declaration is NOT `min+k`:
+    /// `string s[3:1] = '{"a1","b2","c3"}` fills s[3]="a1", s[2]="b2", s[1]="c3"
+    /// (iverilog-confirmed). `string_array_elems` stores elements ascending from
+    /// `min`, so the descending case walks the pattern in reverse.
+    ///
+    /// The returned pairs are ordered by ASCENDING declared index regardless of the
+    /// declaration direction, because iverilog performs the element assignments in
+    /// that order and an element initializer may READ a sibling element mid-fill
+    /// (`string s[3:1] = '{"AA", peek(), "CC"}` where `peek()` returns `s[3]`). Only
+    /// the index↔value mapping follows the pattern order; emitting the WRITES in
+    /// pattern order was a silent-wrong on descending bounds.
+    ///
+    /// `None` ⇒ not an expandable fixed string-array pattern init (wrong element
+    /// count, non-pattern init, non-constant bound, or a shape whose element writes
+    /// this cannot express) and the caller stays LOUD. A count mismatch is loud on
+    /// purpose: iverilog rejects it too ("Unpacked array assignment pattern expects
+    /// N element(s)").
+    pub(crate) fn fixed_string_array_init_pairs(
+        &self,
+        name: &ast::Ident,
+        dim: &ast::Dim,
+        init: &ast::Expr,
+    ) -> Option<Vec<(ast::Lvalue, ast::Expr)>> {
+        let ast::ExprKind::AssignPattern(elems) = &init.kind else {
+            return None;
+        };
+        // The DECLARED bounds, direction preserved (`fixed_dim_bounds` normalizes to
+        // (min,max) and would lose the fill order).
+        let (left, right) = match dim {
+            ast::Dim::Size(e) => {
+                let n = self.const_eval_in_scope(e)?;
+                (n >= 1).then_some((0, n - 1))?
+            }
+            ast::Dim::Range(r) => {
+                let m = self.const_eval_in_scope(&r.msb)?;
+                let l = self.const_eval_in_scope(&r.lsb)?;
+                (m, l)
+            }
+            _ => return None,
+        };
+        // Checked: a pathological pair of bounds (`[i64::MAX : i64::MIN]`) overflows a
+        // bare subtraction and would PANIC where the decl used to emit a diagnostic.
+        // The cap mirrors the non-string array pattern unroll cap — an absurd element
+        // count declines here and the caller louds.
+        // Mirrors `ARRAY_PATTERN_UNROLL_CAP`; a larger pattern declines here and louds.
+        const FIXED_STR_ARRAY_INIT_CAP: usize = 4096;
+        let count = usize::try_from(left.checked_sub(right)?.unsigned_abs()).ok()? + 1;
+        if count > FIXED_STR_ARRAY_INIT_CAP || elems.len() != count {
+            return None;
+        }
+        // A HIERARCHICAL element initializer (`'{u.p, "b2"}`) reads a CHILD instance's
+        // string, which is still empty during the parent's t0 pre-sweep — it would
+        // render "" with no error. That ordering bug is pre-existing (a scalar
+        // `string z = u.p;` is silently empty on this path too, ROADMAP §2), but this
+        // expansion must not widen its reach from a loud reject to a silent wrong
+        // value, so decline the whole init and let the caller loud.
+        if elems.iter().any(|e| self.expr_mentions_hier_path(e)) {
+            return None;
+        }
+        let step: i64 = if left <= right { 1 } else { -1 };
+        let mut pairs: Vec<(ast::Lvalue, ast::Expr)> = elems
+            .iter()
+            .enumerate()
+            .map(|(k, e)| {
+                let idx = left + step * (k as i64);
+                // A NEGATIVE index must be `-<lit>`, not a decimal literal whose raw
+                // text starts with '-': `parse_int_literal` rejects a non-digit byte,
+                // so that raw never folds and the element write louds with a
+                // misleading "requires a constant index".
+                let mag = ast::Expr {
+                    kind: ast::ExprKind::IntLit {
+                        kind: ast::IntLitKind::Decimal,
+                        raw: idx.unsigned_abs().to_string(),
+                    },
+                    span: name.span,
+                };
+                let index = if idx < 0 {
+                    ast::Expr {
+                        kind: ast::ExprKind::Unary {
+                            op: ast::UnOp::Minus,
+                            operand: Box::new(mag),
+                        },
+                        span: name.span,
+                    }
+                } else {
+                    mag
+                };
+                let lv = ast::Lvalue::BitSelect {
+                    base: Box::new(ast::Lvalue::Ident(ast::HierPath {
+                        segments: vec![name.clone()],
+                        span: name.span,
+                    })),
+                    index: Box::new(index),
+                    span: name.span,
+                };
+                (lv, e.clone())
+            })
+            .collect();
+        if step < 0 {
+            pairs.reverse(); // execute ascending-index, like iverilog
+        }
+        Some(pairs)
     }
 
     /// N5: the raw string literal of a string-valued parameter initializer, or None.

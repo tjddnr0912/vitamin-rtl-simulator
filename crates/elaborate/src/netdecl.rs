@@ -150,13 +150,33 @@ impl Elaborator<'_> {
                 // init-pattern array stays loud (correct-or-loud) via the reject below.
                 if d.range.is_none() && d.packed.is_empty() && decl.unpacked.len() == 1 {
                     if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
-                        if decl.init.is_some() {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                "a string-array initializer is unsupported (assign \
-                                 elements in an initial block)",
-                            );
-                            continue;
+                        // r19: a `'{…}` decl-init EXPANDS to per-element assignments in
+                        // the t0 var-init pre-sweep (`fixed_string_array_init_pairs`,
+                        // collected by `collect_var_init_drivers` / the block-local
+                        // hoist). Accept it here so the element nets below still get
+                        // created; anything the expansion cannot express — a wrong
+                        // element count (iverilog rejects that too), a non-`'{…}` init,
+                        // or a scope that does not run the flush — stays LOUD rather
+                        // than being silently dropped.
+                        if let Some(init) = &decl.init {
+                            let ok = allow_string_init
+                                && self
+                                    .fixed_string_array_init_pairs(
+                                        &decl.name,
+                                        &decl.unpacked[0],
+                                        init,
+                                    )
+                                    .is_some();
+                            if !ok {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    "a string-array initializer is supported only as a \
+                                     `'{…}` pattern with one element per declared index, \
+                                     at module or block scope (else assign elements in an \
+                                     initial block)",
+                                );
+                                continue;
+                            }
                         }
                         let dir = self.dir_for_name(&decl.name.name, ports, body);
                         if dir != ir::PortDir::Internal {
@@ -690,12 +710,37 @@ impl Elaborator<'_> {
                 if !name.unpacked.is_empty() {
                     // N3 Phase 2: a `string s[]` DYNAMIC array with a `'{…}` init IS
                     // collected — the flush expands it via `dyn_decl_init_stmts` (like
-                    // an int/real dyn array). Any other dimensioned-string shape (a
-                    // fixed array, a non-pattern init) is loud-rejected at declaration.
+                    // an int/real dyn array).
                     let is_dyn_str_init = name.unpacked.len() == 1
                         && matches!(name.unpacked[0], ast::Dim::Dyn)
                         && matches!(init.kind, ast::ExprKind::AssignPattern(_));
                     if !is_dyn_str_init {
+                        // r19: a FIXED string array (`string s[3] = '{…}`) expands to one
+                        // `s[k] = <elem>` per declared index, pushed in declaration order
+                        // alongside the scalar inits so a later init can read an earlier
+                        // element.
+                        //
+                        // Gated on the decl having actually CREATED the element storage
+                        // (`string_array_elems`), not on re-deciding the shape here: the
+                        // decl also consults `allow_string_init`, which the collectors do
+                        // not see, so a scope that louds the decl (interface / generate /
+                        // package body) but still runs a collector would otherwise push
+                        // element writes for nets that were never created — cascading
+                        // E3010s. Keying off the decl's own output makes the two
+                        // structurally unable to disagree.
+                        if name.unpacked.len() == 1
+                            && self
+                                .string_array_elems
+                                .contains_key(&self.fq(&name.name.name))
+                        {
+                            if let Some(pairs) = self.fixed_string_array_init_pairs(
+                                &name.name,
+                                &name.unpacked[0],
+                                init,
+                            ) {
+                                self.pending_var_inits.extend(pairs);
+                            }
+                        }
                         continue;
                     }
                 }

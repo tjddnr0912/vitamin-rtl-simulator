@@ -514,6 +514,13 @@ impl Elaborator<'_> {
                                     );
                                 }
                             }
+                            // r19: this `$blk$`-scoped arm `continue`s past the decl-init collector
+                            // below, and it registers the decl under a `$blk$<lo>.` prefix that the
+                            // collector does not compute — so an init-bearing FIXED string array must
+                            // never reach here, or its init would be silently dropped. Today the
+                            // `automatic`-lifetime loud above guarantees that (an `AssignPattern` folds
+                            // neither via `fold_init` nor `const_eval_in_scope`, and `per_entry` never
+                            // holds a string array). Pinned by `automatic_block_local_init_stays_loud`.
                             self.with_scope(&seg, |s| {
                                 s.elaborate_netvar_decl(d, ports, body, true)
                             });
@@ -833,6 +840,34 @@ impl Elaborator<'_> {
                                 } else {
                                     self.pending_var_inits
                                         .push((ast::Lvalue::Ident(path), init.clone()));
+                                }
+                            } else if scalar_string
+                                && name.unpacked.len() == 1
+                                && self
+                                    .string_array_elems
+                                    .contains_key(&self.fq(&name.name.name))
+                            {
+                                // r19: a block-local FIXED string array (`string s[2] =
+                                // '{…}`) — `push` is false for it (the gate above admits
+                                // only a scalar or a `string s[]`), so expand it to one
+                                // `s[k] = <elem>` per declared index here, into the same
+                                // deferred string list so it lands after the module-scope
+                                // string inits it may read.
+                                //
+                                // Gated on the decl having created the element storage,
+                                // exactly like the module-scope collector — that is what
+                                // keeps the two scopes from drifting (the class of bug
+                                // that silently emptied a block-local `string s[] = '{…}`
+                                // once before). Deliberately NOT gated on `per_entry`:
+                                // that set only ever holds scalars and dyn/queue locals,
+                                // so excluding it here would be dead code that silently
+                                // opts INTO dropping the init if that set ever widens.
+                                if let Some(pairs) = self.fixed_string_array_init_pairs(
+                                    &name.name,
+                                    &name.unpacked[0],
+                                    init,
+                                ) {
+                                    self.pending_block_local_string_inits.extend(pairs);
                                 }
                             }
                         }
