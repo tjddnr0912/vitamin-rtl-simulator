@@ -182,6 +182,80 @@ fn reassigned_const_fork_stays_loud() {
     ));
 }
 
+#[test]
+fn fork_inout_call_writes_const_stays_loud() {
+    // CRITICAL-1 (adversarial): a function/method CALL in an EXPRESSION can WRITE the
+    // const-init local via an `output`/`inout` copy-out. `y = f(c)` where `f` has an
+    // `inout int io` mutates `c`, so it is NOT concurrency-immune — the write-scanner
+    // must inspect the call in the rhs (it previously only saw lvalue roots and
+    // statement-level task-call args, and silently ACCEPTED this → aliased net). Stays
+    // E3009.
+    assert!(loud(
+        "module top;\n\
+         function automatic int f(inout int io); io = io + 1; return io; endfunction\n\
+         int y;\n\
+         initial begin\n\
+           fork\n\
+             begin\n\
+               automatic int c = 5;\n\
+               y = f(c);\n\
+               #10 $display(\"%0d\", c);\n\
+             end\n\
+           join_none\n\
+           #1 $finish;\n\
+         end\n\
+         endmodule\n"
+    ));
+}
+
+#[test]
+fn fork_assert_action_writes_const_stays_loud() {
+    // CRITICAL-2 (adversarial): an assert ACTION block can WRITE the const-init local.
+    // `assert #0 (x) else c = 0;` writes `c` in the fail action — the write-scanner
+    // must recurse into a `DeferredAssert`'s then/else statements (previously swallowed
+    // by the `_ => false` arm → silently accepted). Stays E3009.
+    assert!(loud(
+        "module top;\n\
+         logic x;\n\
+         initial begin\n\
+           x = 1'b1;\n\
+           fork\n\
+             begin\n\
+               automatic int c = 5;\n\
+               assert #0 (x) else c = 0;\n\
+               #10 $display(\"%0d\", c);\n\
+             end\n\
+           join_none\n\
+           #1 $finish;\n\
+         end\n\
+         endmodule\n"
+    ));
+}
+
+#[test]
+fn fork_nested_decl_init_call_writes_stays_loud() {
+    // "Also fix": a NESTED-block decl-init `int z = f(c);` writes `c` via `f`'s inout
+    // copy-out. The Block/Fork arm previously walked `stmts` but NOT nested `decls`, so
+    // this decl-init write was missed. Stays E3009.
+    assert!(loud(
+        "module top;\n\
+         function automatic int f(inout int io); io = io + 1; return io; endfunction\n\
+         initial begin\n\
+           fork\n\
+             begin\n\
+               automatic int c = 5;\n\
+               begin\n\
+                 int z = f(c);\n\
+                 $display(\"%0d %0d\", z, c);\n\
+               end\n\
+             end\n\
+           join_none\n\
+           #1 $finish;\n\
+         end\n\
+         endmodule\n"
+    ));
+}
+
 // ── regression: the existing NON-fork const-init automatic (§4.5.213-D) ──────
 
 #[test]
