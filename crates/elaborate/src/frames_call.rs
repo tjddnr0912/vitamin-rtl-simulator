@@ -222,7 +222,12 @@ impl Elaborator<'_> {
         {
             self.error(
                 MsgCode::ElabUnsupported,
-                &format!("function `{fname}` has an output/inout formal (illegal)"),
+                &format!(
+                    "function `{fname}` has an output/inout formal — such a call is supported \
+                     only as a direct rhs (`x = {fname}(...)`), a plain while/if condition, or \
+                     one operand of a top-level `&&`/`||` in a while/for condition; it is not \
+                     supported in a `?:` arm or a deeper-nested expression"
+                ),
             );
             return self.placeholder_expr();
         }

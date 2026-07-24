@@ -51,6 +51,13 @@ impl Elaborator<'_> {
     /// (and re-entering the pre-pass would loop). Returning `true` makes
     /// `hoist_stmt_top` decline, so the whole expression lowers normally and the
     /// un-hoistable call loud-rejects at `emit_frame_call` (correct-or-loud).
+    ///
+    /// F-record-out (§4.5.215) also consults this from `cond_needs_shortcircuit_split`: a
+    /// TOP-LEVEL `&&`/`||` LOOP CONDITION for which this is `true` is not left loud — it is
+    /// lowered as an explicit short-circuit branch chain (`lower_shortcircuit_loop_cond`),
+    /// where each top-level operand becomes the whole expression of its own block so its call
+    /// IS hoisted there (guarded). A call still un-hoistable once isolated (nested deeper
+    /// inside an operand, or eval-order-unsafe) degrades to loud there (correct-or-loud).
     pub(crate) fn has_unhoistable_inout_call(&self, e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         // A call `e` itself IS hoistable (handled at the top of `hoist_inout_calls`).

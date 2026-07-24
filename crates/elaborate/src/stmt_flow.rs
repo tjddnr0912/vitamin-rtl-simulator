@@ -662,6 +662,104 @@ impl Elaborator<'_> {
     }
 
     // ── loops (SECONDARY) ──────────────────────────────────────────
+
+    /// F-record-out (§4.5.215) / r18 (F1): lower ONE loop-condition operand to a bool
+    /// expr id, hoisting an eval-order-safe inout/output-formal call in it to a copy-out
+    /// temp at the CURRENT open block (`head`, or a short-circuit `eval_b`), which is
+    /// re-entered on every iteration. An un-hoistable or eval-order-unsafe call lowers in
+    /// place and loud-rejects at `emit_frame_call` (correct-or-loud). With no inout-call
+    /// this is exactly `lower_expr` (byte-identical).
+    pub(crate) fn lower_loop_cond_operand(&mut self, b: &mut ProcessBuilder, e: &ast::Expr) -> u32 {
+        if self.expr_has_inout_call(e) && self.hoist_is_safe(e) {
+            let hoisted = self.hoist_inout_calls(b, e);
+            self.lower_expr(&hoisted)
+        } else {
+            self.lower_expr(e)
+        }
+    }
+
+    /// F-record-out (§4.5.215): does the loop condition `cond` require the explicit
+    /// short-circuit branch split? True iff it is a TOP-LEVEL `&&`/`||` carrying an
+    /// inout/output-formal call that `hoist_inout_calls` cannot hoist (an un-hoistable
+    /// `&&`/`||`-RHS call — see `has_unhoistable_inout_call`). Gated so a condition with no
+    /// such call is byte-identical to before (a single Branch via `lower_loop_cond_operand`);
+    /// only the reported class (a conditionally-evaluated output-formal call in a while/for
+    /// condition) is diverted to the branch chain. DEEPER nesting (`(A||B) && Ccall`) or an
+    /// eval-order-unsafe operand still loud-rejects there (correct-or-loud).
+    pub(crate) fn cond_needs_shortcircuit_split(&self, cond: &ast::Expr) -> bool {
+        matches!(
+            &cond.kind,
+            ast::ExprKind::Binary {
+                op: ast::BinOp::LogAnd | ast::BinOp::LogOr,
+                ..
+            }
+        ) && self.has_unhoistable_inout_call(cond)
+    }
+
+    /// F-record-out (§4.5.215): lower a TOP-LEVEL short-circuit loop condition `A && B` /
+    /// `A || B` (guarded by `cond_needs_shortcircuit_split`) as an explicit branch chain, so
+    /// the operand carrying an output/inout-formal call is evaluated ONLY on the
+    /// short-circuit path that reaches it — its copy-out `Terminator::Call` never fires (and
+    /// the output actual is never written) when the other operand already decides the result.
+    /// The current open block is `head`; on return the cursor is CLOSED (both `head` and the
+    /// synthesized `eval_b` are sealed) and control has been routed to `body_bb` / `exit`.
+    ///
+    /// ```text
+    ///   &&:  head:   cond_a = A;  branch cond_a -> eval_b, exit   (A false ⇒ whole false)
+    ///        eval_b: cond_b = B;  branch cond_b -> body,   exit
+    ///   ||:  head:   cond_a = A;  branch cond_a -> body,   eval_b (A true  ⇒ whole true)
+    ///        eval_b: cond_b = B;  branch cond_b -> body,   exit
+    /// ```
+    ///
+    /// Because `B` is the WHOLE expression of `eval_b`, `lower_loop_cond_operand` hoists its
+    /// (now unconditionally-evaluated-within-this-block) inout-call there — reusing
+    /// `emit_frame_func_out_call`, the same copy-out the direct-rhs / plain-condition paths
+    /// use. A deeper-nested or eval-order-unsafe call in either operand still loud-rejects
+    /// (correct-or-loud). `body_bb`/`exit` are process-local block ids (`BlockId::raw`).
+    pub(crate) fn lower_shortcircuit_loop_cond(
+        &mut self,
+        b: &mut ProcessBuilder,
+        cond: &ast::Expr,
+        body_bb: u32,
+        exit: u32,
+    ) {
+        let (op, lhs, rhs) = match &cond.kind {
+            ast::ExprKind::Binary { op, lhs, rhs } => (*op, lhs.as_ref(), rhs.as_ref()),
+            _ => unreachable!("cond_needs_shortcircuit_split guarantees a top-level && / ||"),
+        };
+        let is_and = matches!(op, ast::BinOp::LogAnd);
+        // head (current open block): evaluate A, branch per the short-circuit rule. Any
+        // eval-order-safe inout-call in A is hoisted here (unconditional — the LHS is always
+        // evaluated), which is correct.
+        let cond_a = self.lower_loop_cond_operand(b, lhs);
+        let eval_b = b.new_block();
+        if is_and {
+            // A false ⇒ whole `&&` false ⇒ exit; A true ⇒ evaluate B.
+            b.end_block_with(ir::Terminator::Branch {
+                cond: cond_a,
+                then_bb: eval_b.raw(),
+                else_bb: exit,
+            });
+        } else {
+            // A true ⇒ whole `||` true ⇒ body; A false ⇒ evaluate B.
+            b.end_block_with(ir::Terminator::Branch {
+                cond: cond_a,
+                then_bb: body_bb,
+                else_bb: eval_b.raw(),
+            });
+        }
+        // eval_b: reached ONLY when A did not short-circuit. Evaluate B — its inout-call is
+        // hoisted here (emitting the copy-out `Terminator::Call` in this block), so it fires
+        // exactly once per iteration it is reached, and never when A short-circuits.
+        b.start_block(eval_b);
+        let cond_b = self.lower_loop_cond_operand(b, rhs);
+        b.end_block_with(ir::Terminator::Branch {
+            cond: cond_b,
+            then_bb: body_bb,
+            else_bb: exit,
+        });
+    }
+
     pub(crate) fn lower_while(
         &mut self,
         b: &mut ProcessBuilder,
@@ -673,23 +771,22 @@ impl Elaborator<'_> {
         let exit = b.new_block();
         b.goto(head);
         b.start_block(head);
-        // r18 (F1): an inout/output-function call in the loop CONDITION is hoisted here.
-        // `head` is (re-)entered on every iteration (loop entry + back-edge), so emitting
-        // the call's copy-out temp at `head` runs it exactly once per iteration — the same
-        // semantics as the un-hoisted `while (getnext(i, v) == 1)` (the call fires before
-        // each condition test). Only when eval-order-safe; otherwise the call lowers in
-        // place and loud-rejects at `emit_frame_call` (correct-or-loud).
-        let c = if self.expr_has_inout_call(cond) && self.hoist_is_safe(cond) {
-            let hoisted = self.hoist_inout_calls(b, cond);
-            self.lower_expr(&hoisted)
+        // F-record-out (§4.5.215): a TOP-LEVEL `A && B` / `A || B` whose short-circuit-only
+        // operand carries an output/inout-formal call `hoist_inout_calls` cannot hoist (it
+        // must not be made unconditional) is lowered as an explicit short-circuit branch
+        // chain (`lower_shortcircuit_loop_cond`), so the call fires only on the path that
+        // reaches it. Otherwise (the common case) the condition is a single Branch, with an
+        // eval-order-safe inout-call hoisted at `head` (r18/F1 — see `lower_loop_cond_operand`).
+        if self.cond_needs_shortcircuit_split(cond) {
+            self.lower_shortcircuit_loop_cond(b, cond, body_bb.raw(), exit.raw());
         } else {
-            self.lower_expr(cond)
-        };
-        b.end_block_with(ir::Terminator::Branch {
-            cond: c,
-            then_bb: body_bb.raw(),
-            else_bb: exit.raw(),
-        });
+            let c = self.lower_loop_cond_operand(b, cond);
+            b.end_block_with(ir::Terminator::Branch {
+                cond: c,
+                then_bb: body_bb.raw(),
+                else_bb: exit.raw(),
+            });
+        }
         b.start_block(body_bb);
         self.lower_stmt(b, body);
         b.goto(head); // back-edge
@@ -830,20 +927,21 @@ impl Elaborator<'_> {
         let exit = b.new_block();
         b.goto(head);
         b.start_block(head);
-        // r18 (F1): hoist an inout/output-function call out of the for-loop condition —
-        // same rationale as `lower_while` (the condition is re-tested at `head` after each
-        // step, so the call runs once per iteration). Eval-order-safe only.
-        let c = if self.expr_has_inout_call(cond) && self.hoist_is_safe(cond) {
-            let hoisted = self.hoist_inout_calls(b, cond);
-            self.lower_expr(&hoisted)
+        // r18 (F1) + F-record-out (§4.5.215): hoist an inout/output-function call out of the
+        // for-loop condition — same rationale as `lower_while` (the condition is re-tested at
+        // `head` after each step, so the call runs once per iteration). A top-level `&&`/`||`
+        // with an un-hoistable short-circuit-RHS call is split into a branch chain; otherwise
+        // a single eval-order-safe hoist at `head`.
+        if self.cond_needs_shortcircuit_split(cond) {
+            self.lower_shortcircuit_loop_cond(b, cond, body_bb.raw(), exit.raw());
         } else {
-            self.lower_expr(cond)
-        };
-        b.end_block_with(ir::Terminator::Branch {
-            cond: c,
-            then_bb: body_bb.raw(),
-            else_bb: exit.raw(),
-        });
+            let c = self.lower_loop_cond_operand(b, cond);
+            b.end_block_with(ir::Terminator::Branch {
+                cond: c,
+                then_bb: body_bb.raw(),
+                else_bb: exit.raw(),
+            });
+        }
         b.start_block(body_bb);
         self.lower_stmt(b, body);
         self.lower_stmt(b, step); // step runs at the END of each iteration
