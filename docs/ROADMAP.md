@@ -67,6 +67,10 @@
 
 ## 2. Silent-wrong 잔여 (전부 pre-existing·baseline 동일 — deep defer 또는 기록됨)
 
+- **🔴 §4.5.221이 도입한 좁은 하강(pre-existing 아님 — 내 책임)**: 계층 real param 이 상수 범위 바운드에 오면 조용히 1-bit. `logic [$clog2(u.R)-1:0]`(u 는 real param R 을 가진 인스턴스) → PRE 는 loud(`E3009`) 였으나 POST 는 **진단 없이 width 1**. 원인 = `count_reads_real_param` 의 `Ident` arm 이 `segments.len()==1` 을 요구해 `u.R` 을 못 봄. **iverilog 도 거부**하므로 무오라클이고 범위는 좁으나 loud→silent 는 하강. **fix 전제** = 바운드 문맥에서의 계층 이름 해석(현재 `nonconst_bound_reason` 은 false-loud 회피 때문에 call/hier 로 안 내려감) — 이름 매칭 근사는 동명 정수 hier param 을 false-reject 할 수 있어 실측 hazard set 없이는 금지(§4.5.218 선례).
+- **파라미터 구조적 지연이 조용히 무시됨(pre-existing·PRE==POST)**: `assign #P y = x;` · `wire #P y = x;` · `and #P g(o,a,b);` 가 P 가 **정수 param 이어도** 지연을 무시(리터럴 `#3` 은 동작). §4.5.221 이 `parameter real` 을 지원하면서 **클럭 주기/지연 관용구가 이 경로의 주 사용처**가 되어 도달성이 크게 넓어졌다 — 우선순위 상향 후보.
+- **real→`input int` formal 미강제(pre-existing·PRE==POST)**: `f(2.4)` → vita `24`, iverilog `20`.
+
 > 발굴 경위·재현·범위 상세는 ARCHIVE의 해당 §4.5.x 참조.
 
 **✅ RESOLVED (silent-wrong → loud):**
