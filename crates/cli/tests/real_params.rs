@@ -672,3 +672,40 @@ fn a_min_typ_max_replication_count_cannot_spin_forever() {
     assert!(ok);
     assert!(out.contains("111 111 11"), "got {out:?}");
 }
+
+#[test]
+fn readmem_address_arguments_are_gated_by_position() {
+    // `$readmem*` address args took the f64 BIT PATTERN as an address ("address
+    // 4607182418800017408 outside the load range"), so the load silently did
+    // nothing and `$writemem*` silently wrote no file. The lowering site handles
+    // EVERY system-task argument, so gating it wholesale would false-loud
+    // `$display("%f", R)` — only args 2..  of the readmem family are addresses.
+    let dir = std::env::temp_dir().join(format!("vita_rm_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hex = dir.join("mm.hex");
+    std::fs::write(&hex, "11\n22\n33\n44\n").unwrap();
+    let f = hex.display().to_string().replace('\\', "\\\\");
+
+    let (out, ok, err) = run_raw(&format!(
+        "module t;\n  parameter real R = 1;\n  logic [7:0] m [0:3];\n  \
+         initial begin m[1]=0; m[2]=0; $readmemh(\"{f}\", m, R);\n    \
+         $display(\"%0h %0h\", m[1], m[2]);\n  end\nendmodule\n"
+    ));
+    assert!(ok, "expected support:\n{err}");
+    assert!(out.contains("11 22"), "want 11 22, got {out:?}");
+
+    // a fractional address has no integral meaning -> loud, never a bogus address
+    let (_, ok, _) = run_raw(&format!(
+        "module t;\n  parameter real R = 1.5;\n  logic [7:0] m [0:3];\n  \
+         initial $readmemh(\"{f}\", m, R);\nendmodule\n"
+    ));
+    assert!(!ok, "a fractional address must be loud");
+
+    // …and a real in a NON-address position is untouched
+    let (out, ok, _) = run_raw(
+        "module t;\n  parameter real R = 2.5;\n  initial $display(\"%0.2f\", R);\nendmodule\n",
+    );
+    assert!(ok);
+    assert!(out.contains("2.50"), "got {out:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
