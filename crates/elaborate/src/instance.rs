@@ -752,6 +752,18 @@ impl Elaborator<'_> {
                                  (a real override cannot be folded); the child default \
                                  would be used silently",
                             );
+                        } else if self.count_reads_real_param(e) {
+                            // r19/B1: the guard next to this one tests a real LITERAL, but this
+                            // slice newly made real-VALUED expressions reachable here (an ident
+                            // bound to a real param, `R+1`, `R*2`). Those do not const-fold, so
+                            // they fell into the warn-and-keep-default path below = the child
+                            // silently ran with the WRONG parameter, changing port widths at
+                            // exit 0 where this was loud before the slice.
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a parameter override that reads a real parameter is unsupported \
+                         (a real has no integral constant value)",
+                            );
                         } else {
                             self.warn(
                             "parameter override expression is not a constant; child default kept",
@@ -786,6 +798,18 @@ impl Elaborator<'_> {
                                          the declared default would be used silently",
                                         name.name
                                     ),
+                                );
+                            } else if self.count_reads_real_param(e) {
+                                // r19/B1: the guard next to this one tests a real LITERAL, but this
+                                // slice newly made real-VALUED expressions reachable here (an ident
+                                // bound to a real param, `R+1`, `R*2`). Those do not const-fold, so
+                                // they fell into the warn-and-keep-default path below = the child
+                                // silently ran with the WRONG parameter, changing port widths at
+                                // exit 0 where this was loud before the slice.
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    "a parameter override that reads a real parameter is unsupported \
+                             (a real has no integral constant value)",
                                 );
                             } else {
                                 self.warn(&format!(

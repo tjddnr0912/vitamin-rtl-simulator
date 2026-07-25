@@ -702,7 +702,7 @@ impl Elaborator<'_> {
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
                     let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
-                    let w = self.lower_expr(width);
+                    let w = self.lower_index_expr(width);
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
                         word: None,
@@ -737,7 +737,7 @@ impl Elaborator<'_> {
                 } else {
                     self.norm_offset_if_net(base, raw_off)
                 };
-                let width = self.lower_expr(width);
+                let width = self.lower_index_expr(width);
                 let kind = indexed_sel_kind(dir, asc);
                 self.push_expr(ir::Expr::Select {
                     base: base_id,
@@ -803,7 +803,7 @@ impl Elaborator<'_> {
                 // (literal, param, genvar, packed bit/part-select, plain expression)
                 // fails both gates → keeps its existing lowering, byte-identical
                 // golden IR.
-                let count = if self.count_reads_real_param(count) {
+                let count = if self.count_lowers_real_param(count) {
                     // r19: a REAL param has no integer value and is not in `params`, so
                     // the count would fold to a silent 0 here (a 0-width replication)
                     // rather than the intended value. IEEE §11.4.12.2 wants a constant

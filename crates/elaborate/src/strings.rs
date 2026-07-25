@@ -458,7 +458,7 @@ impl Elaborator<'_> {
         } else {
             return None;
         };
-        let idx = self.lower_expr(index);
+        let idx = self.lower_index_expr(index);
         Some(self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::StrGetC,
             args: vec![handle, idx],
@@ -769,7 +769,7 @@ impl Elaborator<'_> {
             return;
         };
         let handle = self.push_expr(ir::Expr::Signal { net, word: None });
-        let idx = self.lower_expr(index);
+        let idx = self.lower_index_expr(index);
         let c = self.lower_expr(rhs);
         let sid = self.push_stmt(ir::Stmt::SysTask {
             which: ir::SysTaskId::StrPutC,

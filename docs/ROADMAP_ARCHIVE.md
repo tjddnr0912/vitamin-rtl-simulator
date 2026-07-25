@@ -48,6 +48,15 @@
 
 **미해결(기록)**: 계층 real param `logic [$clog2(u.R)-1:0]` 는 PRE loud → POST 조용히 1-bit(`Ident` arm 이 `segments.len()==1` 요구). 좁고 iverilog 도 거부하나 **하강은 하강** — ROADMAP §2 에 기록. 그리고 pre-existing(PRE==POST): 파라미터 구조적 지연 `assign #P y = x;` 가 P 가 정수여도 **조용히 무시**(real param 이 클럭 주기 관용구라 이 슬라이스가 도달성을 크게 넓힘)·real→`input int` formal 미강제.
 
+**★★★ 재감사 3라운드(PRE 3-way) — 2라운드 fix 가 새 구멍 3개**: 
+- **B1 SILENT-WRONG(PRE loud→POST 조용)**: real param 을 **정수 formal 의 override** 로 쓰면 자식이 조용히 default 유지. `sub #(R) u(o)`(R=4.5) → iverilog `W=5`·PRE loud·POST **`W=8` warn 만, exit 0**(포트 폭까지 조용히 바뀜). 근인=guard 가 `expr_is_real_literal`(**구문적 리터럴**) 테스트인데 이 슬라이스가 **비-리터럴 real 식**(`R`·`R+1`·`R*2`)을 새로 도달 가능하게 만들어 warn-and-keep-default 로 낙하. **fix**=`count_reads_real_param` 으로 게이팅(4 site).
+- **B2 — `&& !params.contains_key` 절이 실제로 구멍을 냄**: `{R{1'b1}}`(R=4) → **2²⁴ bits(~16 MiB) exit 0**(PRE `1111`·iverilog 거부). `real_param_is_non_integral` 은 i64 쌍둥이가 있어 **false** 를 주는데, `lower_expr` 의 Ident arm 은 **`real_param_val` 을 `params` 보다 우선**하므로 real `Const` 가 `ir::Expr::Replicate` 에 도달. **= 내가 기록해 둔 `classifier-must-match-lowering-resolver` 교훈에 그대로 걸림.** **fix**=**같은 술어의 두 resolver 판**을 두고 consumer 가 자기 resolver 에 맞는 쪽을 고른다 — const-**fold** consumer(`check_const_range_bound`)=`real_param_is_non_integral`(`params` 기준) · **lower** consumer(replication)=`count_lowers_real_param`(`real_param_val` 기준).
+- **B3 — `lower_index_expr` 가 "모든 index site" 를 안 덮음**(내 doc 주석이 거짓): `+:`/`-:` 의 **WIDTH** 가 미게이팅 → `v[0 +: R]` 이 **2²⁴ x-bits exit 0**. i64 쌍둥이 유무와 무관하게 발화. **fix**=`expr_main` 2 site·`lvalue` 2 site·`strings` 2 site 를 전부 `lower_index_expr` 경유.
+
+**실측(10형)**: b1/b1n silent→**LOUD** · b1ok(정확한 쌍둥이 `R=4`)=**W=4 iverilog 일치**(false-loud 없음) · b2/b2b/b3/b3b/b3l/b3s 16MiB 폭주→**LOUD** · 합법 능력(`logic [R-1:0]`·`arr [R]`·`R/2`)=**iverilog 일치 유지**.
+
+**교훈(추가)**: (9) **"같은 술어" 를 여러 consumer 가 공유할 때, consumer 마다 resolver 가 다르면 술어도 갈라야 한다** — 하나로 합치면 한쪽이 반드시 틀린다(fold=`params` vs lower=`real_param_val` 우선). (10) **"모든 site 를 덮는 단일 래퍼" 라고 주석에 쓰면 그 주장을 테스트로 고정하라** — 주석은 6 site 중 4 site 만 참이었고, 남은 2 site 가 16MiB 폭주였다. (11) **가드를 구문(리터럴 모양)으로 세우면 새 슬라이스가 그 구문 밖의 값을 도달시키는 순간 뚫린다** — 값 기반으로.
+
 **correct-or-loud 잔여(LOUD)**: 정수 상수 문맥의 real param(width/range/`$clog2`) · `localparam real B = A;`(real→real alias) · real 식 override · generate/package/interface-body/defparam 바인딩 · real select 인덱스 · real replication count.
 
 **교훈**: (1) **타입 변환은 leaf 가 아니라 문맥 경계에서** — 조용한 1-bit 를 고치려 leaf 변환하면 조용한 잘못된 분기가 된다(두 silent-wrong 을 맞바꾼 셈). (2) **"고쳤다"를 리뷰 없이 믿지 말 것** — differential 과 soundness 가 **서로 다른 진입점**으로 같은 근본을 잡았다(전자=generate-if/비교, 후자=real→real alias 와 `R*2`); 한 렌즈만 돌렸으면 나머지 절반이 배포됐다. (3) **선언 타입 키잉**이라야 `parameter real R = 3;` 이 real 로 바인딩. (4) **IR 위 판정이 구조적으로 완전**(`lower_index_expr`) — AST walker 는 shape 를 놓치지만 lower 된 값은 못 숨는다. (5) 리터럴 부정은 **파싱된 값**을 부정(텍스트 재조립은 중첩에서 깨짐). 신규 `real_params.rs`×27.

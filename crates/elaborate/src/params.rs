@@ -453,6 +453,42 @@ impl Elaborator<'_> {
     /// for it and a constant-required context that lacks its own loud gate silently
     /// folded to 0 — `{int'(R){1'b1}}` printed `0` instead of `11`. The loud twin of
     /// the array-element / runtime-net count detectors, same recursive shape.
+    /// r19/B2: does `name` lower to a REAL value? `lower_expr`'s Ident arm prefers
+    /// `real_param_val` over `params`, so a real param WITH an exact i64 twin still
+    /// lowers to a real `Const`. A consumer that goes through `lower_expr` must ask
+    /// this, not `real_param_is_non_integral` — that one models the const-FOLD
+    /// resolver (`params`), and a `parameter real R = 4;` answers the two questions
+    /// differently. Asking the wrong one let a real count reach `ir::Expr::Replicate`
+    /// and emit 2^24 bits at exit 0. Same predicate, two resolvers: pick by consumer.
+    pub(crate) fn real_param_lowers_real(&self, name: &str) -> bool {
+        self.walk_scopes_key(name, |k| {
+            self.real_param_val.contains_key(k)
+                || self.params.contains_key(k)
+                || self.symbols.contains_key(k)
+        })
+        .is_some_and(|k| self.real_param_val.contains_key(&k))
+    }
+
+    /// r19: the `lower_expr`-resolver twin of [`Self::count_reads_real_param`], for
+    /// consumers that lower their operand rather than const-folding it.
+    pub(crate) fn count_lowers_real_param(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                self.real_param_lowers_real(&p.segments[0].name)
+            }
+            ast::ExprKind::Call { args, .. } => {
+                args.iter().any(|a| self.count_lowers_real_param(a))
+            }
+            ast::ExprKind::Paren { inner } => self.count_lowers_real_param(inner),
+            ast::ExprKind::Unary { operand, .. } => self.count_lowers_real_param(operand),
+            ast::ExprKind::Cast { expr, .. } => self.count_lowers_real_param(expr),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.count_lowers_real_param(lhs) || self.count_lowers_real_param(rhs)
+            }
+            _ => self.count_reads_real_param(e),
+        }
+    }
+
     pub(crate) fn count_reads_real_param(&self, e: &ast::Expr) -> bool {
         match &e.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {

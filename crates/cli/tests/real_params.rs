@@ -506,3 +506,48 @@ fn a_real_param_reached_through_a_const_function_call_is_loud() {
         assert!(!ok, "expected a loud reject for:\n{src}");
     }
 }
+
+#[test]
+fn a_real_valued_override_of_an_integral_formal_is_loud() {
+    // The sibling guard tested a real LITERAL; this slice newly made real-VALUED
+    // override expressions reachable, and those fell into warn-and-keep-default —
+    // the child silently ran with the wrong parameter (and the wrong port width).
+    for ovr in ["#(R)", "#(.W(R))", "#(.W(R+1))"] {
+        let src = format!(
+            "module sub #(parameter W = 8) (output logic [31:0] o);\n  assign o = W;\n\
+             endmodule\nmodule t;\n  parameter real R = 4.5;\n  logic [31:0] o;\n  \
+             sub {ovr} u(o);\n  initial #1 $display(\"W=%0d\", o);\nendmodule\n"
+        );
+        let (_, ok, _) = run_raw(&src);
+        assert!(!ok, "expected a loud reject for:\n{src}");
+    }
+    // …but an EXACT integer twin still folds and applies, matching the oracle.
+    let (out, ok, _) = run_raw(
+        "module sub #(parameter W = 8) (output logic [31:0] o);\n  assign o = W;\nendmodule\n\
+         module t;\n  parameter real R = 4;\n  logic [31:0] o;\n  sub #(.W(R)) u(o);\n  \
+         initial #1 $display(\"W=%0d\", o);\nendmodule\n",
+    );
+    assert!(ok, "exact integer twin must still apply");
+    assert!(out.contains("W=4"), "got {out:?}");
+}
+
+#[test]
+fn a_lowered_real_count_or_width_cannot_reach_the_ir() {
+    // `lower_expr` PREFERS `real_param_val` over `params`, so a real param with an
+    // exact i64 twin still lowers to a real Const. A gate keyed on the const-FOLD
+    // resolver said "integral" and waved it through: `{R{1'b1}}` emitted 2^24 bits
+    // and `v[0 +: R]` 2^24 x-bits, both at exit 0. Same predicate, two resolvers —
+    // each consumer must ask the one matching how IT resolves the name.
+    for body in [
+        "initial $display(\"%b\", {R{1'b1}});",
+        "logic [15:0] x; initial begin x = {R{1'b1}}; $display(\"%h\", x); end",
+        "logic [31:0] v; initial begin v='1; $display(\"%b\", v[0 +: R]); end",
+        "logic [31:0] v; initial begin v='1; $display(\"%b\", v[15 -: R]); end",
+        "logic [31:0] v; initial begin v=0; v[0 +: R] = '1; $display(\"%h\", v); end",
+        "string s = \"abc\"; initial $display(\"%c\", s[R]);",
+    ] {
+        let src = format!("module t;\n  parameter real R = 4;\n  {body}\nendmodule\n");
+        let (_, ok, _) = run_raw(&src);
+        assert!(!ok, "expected a loud reject for:\n{src}");
+    }
+}

@@ -473,9 +473,9 @@ impl Elaborator<'_> {
                     return;
                 }
                 let (net, word) = self.lval_part_base(base);
-                let raw_off = self.lower_expr(offset);
+                let raw_off = self.lower_index_expr(offset);
                 let off = self.norm_offset_for_net(net, raw_off);
-                let w = self.lower_expr(width);
+                let w = self.lower_index_expr(width);
                 // Ascending net: flip the indexed direction (the offset is already
                 // normalized by `norm_offset_for_net`). Descending keeps `kind`.
                 let kind = indexed_sel_kind(dir, self.net_ascending(net));
