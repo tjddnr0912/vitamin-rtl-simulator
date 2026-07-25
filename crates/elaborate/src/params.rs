@@ -485,6 +485,23 @@ impl Elaborator<'_> {
             ast::ExprKind::Binary { lhs, rhs, .. } => {
                 self.count_lowers_real_param(lhs) || self.count_lowers_real_param(rhs)
             }
+            // These two MUST be mirrored rather than delegated: the `_` fallback below
+            // reaches `count_reads_real_param`, i.e. back to the const-FOLD resolver,
+            // which answers `false` for a real param that has an exact i64 twin. That
+            // is how `{$clog2(R){1'b1}}` with `parameter real R = 4;` still folded to a
+            // silent 0 — one syntactic layer was enough to re-enter the wrong resolver.
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.count_lowers_real_param(cond)
+                    || self.count_lowers_real_param(then_e)
+                    || self.count_lowers_real_param(else_e)
+            }
+            ast::ExprKind::SysCall { args, .. } => {
+                args.iter().any(|a| self.count_lowers_real_param(a))
+            }
             _ => self.count_reads_real_param(e),
         }
     }

@@ -551,3 +551,38 @@ fn a_lowered_real_count_or_width_cannot_reach_the_ir() {
         assert!(!ok, "expected a loud reject for:\n{src}");
     }
 }
+
+#[test]
+fn a_real_param_cannot_reach_a_size_count_or_position_argument() {
+    // Round 3 gated the SELECT/INDEX axis but not the size / count / position argument
+    // of a method or system task, which still called raw `lower_expr`. A real `Const`
+    // reached the engine and its raw f64 BIT PATTERN was read as an integer:
+    // `new[R]` with R=3 allocated 2^24 elements (1.22 GB) and reported size 16777216,
+    // `s.substr(R,3)` returned empty, `s.putc(R,"Z")` dropped the write silently, and
+    // `q.insert(R,…)` / `q.delete(R)` hit the wrong slot — all at exit 0.
+    for body in [
+        "logic [7:0] d[]; initial begin d = new[R]; $display(\"%0d\", d.size()); end",
+        "string s = \"hello\"; initial $display(\"%s\", s.substr(R, 3));",
+        "string s = \"hello\"; initial $display(\"%0d\", s.getc(R));",
+        "string s = \"hello\"; initial begin s.putc(R, \"Z\"); $display(\"%s\", s); end",
+        "int q[$] = '{1,2}; initial begin q.insert(R, 9); $display(\"%0d\", q.size()); end",
+        "int q[$] = '{1,2}; initial begin q.delete(R); $display(\"%0d\", q.size()); end",
+        // …and the replication gate must not re-enter the const-fold resolver through a
+        // single syntactic layer: `_ => count_reads_real_param` answered "integral" for
+        // a real param with an exact i64 twin, so this folded to a silent 0.
+        "initial $display(\"%0d\", {$clog2(R){1'b1}});",
+    ] {
+        let src = format!("module t;\n  parameter real R = 1;\n  {body}\nendmodule\n");
+        let (_, ok, _) = run_raw(&src);
+        assert!(!ok, "expected a loud reject for:\n{src}");
+    }
+    // The same shapes with an INTEGER param must be untouched.
+    let (out, ok, _) = run_raw(
+        "module t;\n  parameter int P = 4;\n  logic [7:0] d[];\n  string s = \"hello\";\n  \
+         int q[$] = '{1,2};\n  initial begin\n    d = new[P]; q.insert(1, 9);\n    \
+         $display(\"%0d %s %0d %0d\", d.size(), s.substr(1,3), q.size(), {$clog2(P){1'b1}});\n  \
+         end\nendmodule\n",
+    );
+    assert!(ok, "integer params must be unaffected");
+    assert!(out.contains("4 ell 3 3"), "got {out:?}");
+}

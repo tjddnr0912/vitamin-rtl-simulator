@@ -682,7 +682,7 @@ impl Elaborator<'_> {
             }
         };
         let mut ids = vec![handle];
-        ids.extend(args.iter().map(|a| self.lower_expr(a)));
+        ids.extend(args.iter().map(|a| self.lower_index_expr(a)));
         self.push_expr(ir::Expr::SysFunc { which, args: ids })
     }
 
@@ -715,7 +715,7 @@ impl Elaborator<'_> {
         };
         let handle = self.push_expr(ir::Expr::Signal { net, word: None });
         let mut ids = vec![handle];
-        ids.extend(args.iter().map(|a| self.lower_expr(a)));
+        ids.extend(args.iter().map(|a| self.lower_index_expr(a)));
         let sid = self.push_stmt(ir::Stmt::SysTask {
             which,
             fmt: None,

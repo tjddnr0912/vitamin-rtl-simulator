@@ -439,7 +439,7 @@ impl Elaborator<'_> {
                 args: vec![handle],
             },
             ("delete", K::Assoc | K::AssocStr, 1) => {
-                let k = self.lower_expr(&args[0]);
+                let k = self.lower_index_expr(&args[0]);
                 ir::Stmt::SysTask {
                     which: ir::SysTaskId::AssocDeleteKey,
                     fmt: None,
@@ -449,7 +449,7 @@ impl Elaborator<'_> {
             // v6: queue positional delete(i) — IEEE §7.10.2.3 (OOB/X index =
             // engine warn + skip).
             ("delete", K::Queue, 1) => {
-                let i = self.lower_expr(&args[0]);
+                let i = self.lower_index_expr(&args[0]);
                 ir::Stmt::SysTask {
                     which: ir::SysTaskId::QDeleteIdx,
                     fmt: None,
@@ -466,7 +466,7 @@ impl Elaborator<'_> {
             // v6: queue positional insert(i, v) — IEEE §7.10.2.2 (i == size
             // appends; OOB/X index = engine warn + no-op).
             ("insert", K::Queue, 2) => {
-                let i = self.lower_expr(&args[0]);
+                let i = self.lower_index_expr(&args[0]);
                 let v = self.lower_expr(&args[1]);
                 ir::Stmt::SysTask {
                     which: ir::SysTaskId::QInsert,
@@ -731,7 +731,7 @@ impl Elaborator<'_> {
                     return true;
                 }
                 let h = self.push_expr(ir::Expr::Signal { net, word: None });
-                let n_eid = self.lower_expr(size);
+                let n_eid = self.lower_index_expr(size);
                 let mut args = vec![h, n_eid];
                 if let Some(s) = src {
                     let src_handle = match &s.kind {

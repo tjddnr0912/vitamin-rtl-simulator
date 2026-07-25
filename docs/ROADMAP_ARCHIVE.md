@@ -57,6 +57,18 @@
 
 **교훈(추가)**: (9) **"같은 술어" 를 여러 consumer 가 공유할 때, consumer 마다 resolver 가 다르면 술어도 갈라야 한다** — 하나로 합치면 한쪽이 반드시 틀린다(fold=`params` vs lower=`real_param_val` 우선). (10) **"모든 site 를 덮는 단일 래퍼" 라고 주석에 쓰면 그 주장을 테스트로 고정하라** — 주석은 6 site 중 4 site 만 참이었고, 남은 2 site 가 16MiB 폭주였다. (11) **가드를 구문(리터럴 모양)으로 세우면 새 슬라이스가 그 구문 밖의 값을 도달시키는 순간 뚫린다** — 값 기반으로.
 
+**★★★★ 4라운드(PRE 3-way) — 3라운드는 select/index 축만 닫았고 "size/count/position 인자" 축이 통째로 남아 있었다**: 메서드·시스템태스크의 크기/개수/위치 인자가 여전히 raw `lower_expr` → real `Const` 가 엔진에 도달해 **f64 비트패턴이 정수로 읽힘**(전부 exit 0):
+- **`new[R]`(R=3) → 2²⁴ 원소 할당 = 피크 RSS 1.22 GB·`size()` 가 16777216**(iverilog·PRE 는 `n=3`). R=4.5 면 **PRE loud → POST silent** 순수 하강.
+- `s.substr(R,3)`→**빈 문자열**(PRE `ell`) · `s.getc(R)`→**0**(PRE 101) · `s.putc(R,"Z")`→**쓰기 조용히 소실**(PRE `hZllo`).
+- `q.insert(R,…)`·`q.delete(R)`·assoc `a.delete(R)` → **엉뚱한 슬롯**(PRE 정답).
+- **B5 = 3라운드 fix 가 한 구문 층 모자랐음**: `count_lowers_real_param` 의 `_` arm 이 `count_reads_real_param` 으로 폴백 = **const-fold resolver 로 되돌아감** → i64 쌍둥이가 있는 real param 에 `false` → `{$clog2(R){1'b1}}`(R=4) 가 **조용히 0**(iverilog·PRE `3`). `SysCall`·`Ternary` 가 정확히 그 `_` arm 의 shape 였음.
+
+**fix**=`new[]`·queue/assoc index·string-method 인자 6 site 를 `lower_index_expr` 경유(그 인자들은 전부 정수라 안전) + `count_lowers_real_param` 에 `Ternary`/`SysCall` arm 을 **위임이 아니라 미러링**. 9형 실측 전부 LOUD 전환·정수 param(`new[P]`·`substr(1,3)`·`{$clog2(P){1'b1}}`)은 `4 ell 3 3` 로 불변.
+
+**미수정 1건(ROADMAP §2 기록)**: `$readmem*` 주소 인자. 그 lowering site 는 **모든** systask 인자를 처리하는 공용 경로라 통째 게이팅하면 `$display("%f", R)` 가 false-loud — `$readmem*` 전용 인자-위치 게이트 필요.
+
+**교훈(추가)**: (12) **"인덱스 축을 닫았다" 는 "정수를 요구하는 모든 인자를 닫았다" 가 아니다** — select/index 와 **size/count/position** 은 별개 축이고, 후자는 엔진이 f64 비트패턴을 정수로 읽어 **할당량 폭주**까지 간다. 정수를 요구하는 인자를 **축이 아니라 전수**로 세어라. (13) **폴백 `_` arm 이 다른 resolver 의 함수로 위임하면 그 지점에서 resolver 가 뒤바뀐다** — 술어를 resolver 별로 갈랐으면 **모든 arm 을 미러링**하라(위임 1줄이 전체 분리를 무효화). (14) 공용 lowering 경로에 게이트를 걸 땐 **그 경로를 쓰는 다른 consumer 를 먼저 세어라**(전부 정수 인자면 안전·아니면 위치별 게이트).
+
 **correct-or-loud 잔여(LOUD)**: 정수 상수 문맥의 real param(width/range/`$clog2`) · `localparam real B = A;`(real→real alias) · real 식 override · generate/package/interface-body/defparam 바인딩 · real select 인덱스 · real replication count.
 
 **교훈**: (1) **타입 변환은 leaf 가 아니라 문맥 경계에서** — 조용한 1-bit 를 고치려 leaf 변환하면 조용한 잘못된 분기가 된다(두 silent-wrong 을 맞바꾼 셈). (2) **"고쳤다"를 리뷰 없이 믿지 말 것** — differential 과 soundness 가 **서로 다른 진입점**으로 같은 근본을 잡았다(전자=generate-if/비교, 후자=real→real alias 와 `R*2`); 한 렌즈만 돌렸으면 나머지 절반이 배포됐다. (3) **선언 타입 키잉**이라야 `parameter real R = 3;` 이 real 로 바인딩. (4) **IR 위 판정이 구조적으로 완전**(`lower_index_expr`) — AST walker 는 shape 를 놓치지만 lower 된 값은 못 숨는다. (5) 리터럴 부정은 **파싱된 값**을 부정(텍스트 재조립은 중첩에서 깨짐). 신규 `real_params.rs`×27.
