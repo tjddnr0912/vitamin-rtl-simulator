@@ -356,7 +356,8 @@ impl Elaborator<'_> {
                     // formal context) and defer the chunk rebuild to
                     // `resolve_deferred_hier_sel_write` (the write twin of the read-side
                     // `resolve_deferred_hier_sel`).
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let sentinel = self.defer_hier_sel_write(path, idx_eids, None);
                     out.push(ir::LvalChunk {
                         net: sentinel,
@@ -390,7 +391,8 @@ impl Elaborator<'_> {
                 // array-element `dut.mem[i][3:0]=…`) — the target net does not exist
                 // yet; defer with the (lowered) lsb offset + const width and rebuild.
                 if let Some((path, idx_asts)) = self.lval_hier_chain(base) {
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let lsb_id = self.lower_index_expr(lsb);
                     let msb_id = self.lower_index_expr(msb);
                     let width = self.width_from_msb_lsb_checked(msb, lsb, msb_id, lsb_id);
@@ -421,8 +423,8 @@ impl Elaborator<'_> {
                 // `lval_part_base` resolves the element (net + flat word); a scalar
                 // base gives `(net, None)` ⇒ the classic `r[msb:lsb]` chunk.
                 let (net, word) = self.lval_part_base(base);
-                let lsb_id = self.lower_expr(lsb);
-                let msb_id = self.lower_expr(msb);
+                let lsb_id = self.lower_index_expr(lsb);
+                let msb_id = self.lower_index_expr(msb);
                 let asc = self.net_ascending(net);
                 let width = self.width_from_msb_lsb_dir(msb, lsb, msb_id, lsb_id, asc);
                 let offset = self.norm_offset_for_net(net, lsb_id);
@@ -454,9 +456,10 @@ impl Elaborator<'_> {
                 // HIER-REST-PS: a hierarchical indexed part-select write
                 // (`dut.v[o+:w]=…`) — defer with the (lowered) raw offset + width.
                 if let Some((path, idx_asts)) = self.lval_hier_chain(base) {
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
-                    let raw_off = self.lower_expr(offset);
-                    let w = self.lower_expr(width);
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
+                    let raw_off = self.lower_index_expr(offset);
+                    let w = self.lower_index_expr(width);
                     let part = HierPart {
                         raw_off,
                         width: w,

@@ -538,7 +538,8 @@ impl Elaborator<'_> {
                     // Lower EVERY index NOW, with the full lowering context
                     // (params/genvars/function-formal `subst`) — re-lowering at fixup
                     // would lose that (review N3.1 HIGH).
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
                         word: None,
@@ -610,7 +611,8 @@ impl Elaborator<'_> {
                 // resolution normalizes the offset against the element/net LSB. Without
                 // it a non-zero-LSB hierarchical net read the raw offset → silent X.
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let lsb_id = self.lower_index_expr(lsb);
                     let msb_id = self.lower_index_expr(msb);
                     let width = self.width_from_msb_lsb_checked(msb, lsb, msb_id, lsb_id);
@@ -700,7 +702,8 @@ impl Elaborator<'_> {
                 // PartSelect arm above and the write side. `false` (descending) kind
                 // mirrors the write side; an ascending hier net is a rare follow-on.
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
                     let w = self.lower_index_expr(width);
                     let eid = self.push_expr(ir::Expr::Signal {

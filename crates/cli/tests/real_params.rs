@@ -591,3 +591,55 @@ fn a_real_param_cannot_reach_a_size_count_or_position_argument() {
     assert!(ok, "integer params must be unaffected");
     assert!(out.contains("4 ell 3 3"), "got {out:?}");
 }
+
+#[test]
+fn every_write_hier_and_array_element_index_routes_through_the_index_gate() {
+    // The fifth review round found eleven shapes that never reached
+    // `lower_index_expr`, so a real param arrived at the engine as an f64 bit
+    // pattern read as an integer: `v[7:R] = ...` dropped the write, `u.v[R]` read
+    // the wrong bit, `m[1][R]` hit the wrong element. `lower_index_expr` converts an
+    // exactly-integral real at the boundary, so these are now correct rather than
+    // merely loud — the oracle rejects them all, so these are hand-IEEE pins.
+    for (body, want) in [
+        ("v[7:R] = 5'h1F; $display(\"%0h\", v);", "f8"),
+        ("v[R] = 1'b1; $display(\"%0h\", v);", "8"),
+        ("m[1] = 0; m[1][R] = 1'b1; $display(\"%0h\", m[1]);", "8"),
+        (
+            "g[0][1] = 0; g[0][1][R] = 1'b1; $display(\"%0h\", g[0][1]);",
+            "8",
+        ),
+        ("m[1] = 8'ha5; $display(\"%0d\", m[1][R]);", "0"),
+    ] {
+        let src = format!(
+            "module t;\n  parameter real R = 3;\n  logic [7:0] v = 0;\n  \
+             logic [7:0] m [0:3];\n  logic [7:0] g [0:1][0:1];\n  \
+             initial begin {body} end\nendmodule\n"
+        );
+        let (out, ok, err) = run_raw(&src);
+        assert!(ok, "expected support for:\n{src}\n{err}");
+        assert!(out.contains(want), "want {want:?} in {out:?}\n{src}");
+    }
+    // A non-integral value has no integral meaning and must stay loud, never silent.
+    let (_, ok, _) = run_raw(
+        "module t;\n  parameter real R = 3.5;\n  logic [7:0] v = 0;\n  \
+         initial v[7:R] = 5'h1F;\nendmodule\n",
+    );
+    assert!(!ok, "a fractional bound must be loud");
+}
+
+#[test]
+fn hierarchical_selects_route_through_the_index_gate_too() {
+    for (body, want) in [
+        ("u.v[R] = 1'b1; $display(\"%0h\", u.v);", "ad"),
+        ("$display(\"%0d\", u.v[R]);", "0"),
+    ] {
+        let src = format!(
+            "module sub;\n  logic [7:0] v;\n  initial v = 8'ha5;\nendmodule\n\
+             module t;\n  parameter real R = 3;\n  sub u();\n  \
+             initial begin #1 {body} end\nendmodule\n"
+        );
+        let (out, ok, err) = run_raw(&src);
+        assert!(ok, "expected support for:\n{src}\n{err}");
+        assert!(out.contains(want), "want {want:?} in {out:?}\n{src}");
+    }
+}

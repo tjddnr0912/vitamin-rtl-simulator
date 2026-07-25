@@ -171,7 +171,7 @@ impl Elaborator<'_> {
             // packed range normalizes against the element's LSB (parity with the plain
             // bit-select path, which uses `norm_offset_for_net`); a `[N:0]` element is a
             // no-op → byte-identical golden for every zero-based design.
-            let raw = self.lower_expr(trailing[0]);
+            let raw = self.lower_index_expr(trailing[0]);
             let offset = self.norm_offset_for_net(net, raw);
             let width = self.const_u32_expr(1, 32);
             return self.push_expr(ir::Expr::Select {
@@ -262,7 +262,7 @@ impl Elaborator<'_> {
             1 => {
                 // P0-NZE: normalize the trailing bit against the element's LSB (a
                 // `[N:0]` element is a no-op → byte-identical golden).
-                let raw = self.lower_expr(trailing[0]);
+                let raw = self.lower_index_expr(trailing[0]);
                 let off = self.norm_offset_for_net(net, raw);
                 let w = self.const_u32_expr(1, 32);
                 (Some(off), Some(w))
