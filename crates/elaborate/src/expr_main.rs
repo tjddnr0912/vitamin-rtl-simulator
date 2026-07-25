@@ -858,7 +858,23 @@ impl Elaborator<'_> {
                     );
                     self.placeholder_expr()
                 } else {
-                    self.lower_expr(count)
+                    // r19/B2: decide on the LOWERED count. The AST predicates above
+                    // have to enumerate `ExprKind` arms and that does not converge —
+                    // `MinTypMax` fell through every one of them, reached here as a
+                    // real `Const`, and `{(R:R:R){1'b1}}` then span forever building a
+                    // replication of the f64 bit pattern (RSS stays at 16 MB, so a
+                    // memory cap does not catch it). Requiring a folded constant here
+                    // is complete by construction: IEEE §11.4.12.2 wants a constant
+                    // integral count, so anything that did not fold has no business
+                    // reaching `Replicate`, where a non-constant silently became 0.
+                    // Deciding on the lowered node is complete by construction where
+                    // the AST walk is not; and because the wrapper converts an
+                    // exactly-integral real at this boundary, a real count with an i64
+                    // twin becomes correct rather than merely loud. NOT a "must be a
+                    // folded Const" check — tried, and it false-rejected `$clog2(P)`
+                    // on an INTEGER param, which the engine evaluates as a constant
+                    // without folding at elaborate time.
+                    self.lower_index_expr(count)
                 };
                 // hdl-ast `value: Vec<Expr>` is the element LIST (no wrapper
                 // Concat); sim-ir Replicate wants ONE `value: u32` → wrap in a

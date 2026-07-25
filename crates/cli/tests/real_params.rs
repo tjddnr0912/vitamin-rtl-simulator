@@ -643,3 +643,32 @@ fn hierarchical_selects_route_through_the_index_gate_too() {
         assert!(out.contains(want), "want {want:?} in {out:?}\n{src}");
     }
 }
+
+#[test]
+fn a_min_typ_max_replication_count_cannot_spin_forever() {
+    // `{(R:R:R){1'b1}}` fell through every arm of the AST predicate, reached
+    // ir::Expr::Replicate as a real Const, and spun forever building a replication
+    // of the f64 bit pattern — with RSS at 16 MB, so a memory cap would not catch
+    // it. Deciding on the LOWERED count is complete by construction where
+    // enumerating ExprKind arms is not.
+    let (out, ok, err) = run_raw(
+        "module t;\n  parameter real R = 3;\n  initial $display(\"%0d\", {(R:R:R){1'b1}});\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected support:\n{err}");
+    assert!(out.contains('7'), "3 ones is 7, got {out:?}");
+    // fractional has no integral meaning -> loud, never a spin
+    let (_, ok, _) = run_raw(
+        "module t;\n  parameter real R = 3.5;\n  initial $display(\"%0d\", {(R:R:R){1'b1}});\n\
+         endmodule\n",
+    );
+    assert!(!ok, "a fractional count must be loud");
+    // and the integer forms the gate shares must be untouched
+    let (out, ok, _) = run_raw(
+        "module t;\n  parameter int P = 3;\n  \
+         initial $display(\"%b %b %b\", {P{1'b1}}, {(P:P:P){1'b1}}, {$clog2(P){1'b1}});\n\
+         endmodule\n",
+    );
+    assert!(ok);
+    assert!(out.contains("111 111 11"), "got {out:?}");
+}
