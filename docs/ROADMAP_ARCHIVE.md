@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 219건 (최신순)
+## 인덱스 — 완료 슬라이스 220건 (최신순)
 
-> 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다.
+> 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–229**
+- `4.5.221` real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (리뷰 …
 - `4.5.220` SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-…
 
 **§4.5.210–219**
@@ -277,6 +278,71 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.221 real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (리뷰 5라운드·미해결 3건으로 브랜치 보류) (2026-07-25, branch feat-real-params) ⚠️미머지
+
+**4463→4464 green · format 23 불변 · MsgCode 59 불변**
+
+**갭**: `parameter real R = 1.5;` / `localparam real CLK = 5.0;` 가 elaborate서 거부. `params: BTreeMap<String,i64>` 뿐이라 real 값을 담을 곳이 없었음. iverilog 오라클 有(강함).
+
+**구현**:
+- **`real_param_val: BTreeMap<String,f64>`** — elaborate-local 사이드맵(§4.5.217 `str_param_raw` 와 동형). `params` 와 분리하는 이유 = real 은 i64 로 표현 불가하고, 섞으면 정수 fold 가 조용히 반올림한다.
+- **`param_real_value(ty, value)`** — **선언 타입**(Real/Realtime)으로 키잉. 값 모양이 아니라 선언으로 판정해야 `parameter real R = 3;`(정수 리터럴 초기화)이 real 로 바인딩된다.
+- **`real_literal_value`** — 파싱된 f64 를 부정. 초판은 `format!("-{inner}")` 텍스트 재조립이라 중첩 unary minus 가 `"--1.25"` → 파싱 실패 → **0.0**(측정으로 포착).
+- **바인딩**: 모듈 body/header · interface header · program header · instance array · `realtime`. **loud**: generate scope · package · interface body · defparam · hierarchical `dut.R`.
+- **`lower_index_expr`**(신규 `packed.rs`) — 인덱스/오프셋/바운드를 lower 한 뒤 **IR 위에서** `expr_is_real` 로 거부. 12개 select 사이트 전부 경유. 모양이 아니라 값으로 판정하므로 `v[R+0]`·lvalue `v[R]=0` 까지 잡는다(구조적 완전성).
+- **override**: real 리터럴 override 를 warn→**error** 승격. `ResolvedOverride.had_value: bool` 을 5개 생성 사이트 전부에(=`Default` 없는 bare bool 이라 컴파일러가 누락 강제).
+
+**★ 리뷰 2라운드 — leaf conversion 은 더 나쁜 오답이었다**: S5(`$clog2(R)` 가 **조용히 1-bit width**)를 고치려 `const_eval_in_scope` 의 **leaf** 에서 real→i64 변환을 넣었더니 두 리뷰어가 독립적으로 NOT-CLEAN 반환:
+
+| 소스 | iverilog | vita(leaf 변환) |
+|---|---|---|
+| generate-if `R > 2`, R=2.4 | taken | **NOT taken** — generate body 통째 삭제, exit 0 |
+| `(R == 2)` / `(S != 0)` | `0 1` | **`1 0`** |
+| `localparam real B = A;` (A=1.5) | 1.50 | **2.00** |
+| `localparam real HALF = CLK/2;` | 2.50 | **2.00** (클럭 주기 관용구) |
+| `localparam int A = R*2;` | 3 | **4** |
+| `logic [R/2-1:0]` R=5.0 | 3 bits | **2 bits** |
+
+**근본**: IEEE §11.8.1 은 real operand 를 포함한 식을 **real 도메인**에서 평가하고 문맥 경계에서 **한 번** 변환한다. leaf 변환은 **둘러싼 연산자가 무엇을 필요로 하는지 결정하기 전에** real 값을 파괴한다 — 조용한 1-bit 를 고치려다 조용한 **잘못된 분기·잘못된 값**을 만든 것(사다리에서 내려감).
+
+**최종 해법 = 되돌리고 loud**: `check_const_range_bound` 가 `count_reads_real_param(e)` 를 **먼저** 검사해 에러. 기존 `nonconst_bound_reason` 은 (`$bits(net)` false-loud 회피 때문에) system-call 인자로 내려가지 않아 `$clog2(R)` 가 진단 없이 `clamp_bound_u32(None)` → width 1 이 됐던 것. **어디서도 변환하지 않고 여기서 loud.** iverilog 는 변환을 지원하므로 이건 기록된 **capability gap** 이지 correctness 결함이 아니다.
+
+**★★ 재감사 2라운드 — revert 만으로는 부족했다(PRE 바이너리 3-way 실측)**: 리뷰어가 HEAD에서 **PRE 바이너리**를 빌드해 iverilog/PRE/POST 3중 측정 → **양방향 사다리 하강** 4건 발견.
+
+- **BLOCKING #1 SILENT-WRONG(PRE loud → POST 조용)**: `count_reads_real_param` 에 **`Call` arm 이 없고** `nonconst_bound_reason` 도 call 인자로 안 내려가 **const-function 이 real param 을 밀반입**. `logic [f(R)-1:0]`→**조용히 1-bit**(iverilog `w=8`)·`arr [f(R)]`→`$size`가 R 과 무관한 **8**(iverilog 4)·`{f(R){1'b1}}`→**조용히 빈 값**(iverilog `111`). 셋 다 PRE 는 loud 였음 = **내가 loud 를 silent 로 만든 것**. **fix**=`Call{args}` arm 추가.
+- **BLOCKING #2 FALSE-LOUD 회귀 8형**: `parameter real R = 4`(정수 상수 초기화)를 real-ONLY 로 바인딩해 **정수 능력 전부 상실** — `logic [R-1:0]`·`arr [R]`·`$clog2(R)`·`localparam int W = R`·`generate if (R>2)`·`generate for (i<R)`·정수 override `#(.R(i+2))`·positional `#(5)` 가 전부 PRE 에서 **byte-correct 였는데** POST 에서 loud. **fix**=초기화가 **정확한 i64 로 fold 되면 `real_param_val` 과 `params` 양쪽에 등록**(두 표현이 정확히 일치하므로 안전) → `R/2`는 real 도메인서 **1.5**, `logic [R-1:0]`는 정수 도메인서 **4**. 판별자도 `real_param_is_non_integral`(= real_param_val 에 있고 params 에 **없음**)로 재키잉해 정수 쌍둥이가 있는 param 은 bound guard 가 안 문다. folded override 는 `v as f64` 로 **적용**(거부 아님).
+
+**실측 결과(14형 전수·iverilog 대조)**: S1/S2/S3 = silent→**LOUD** · L1/L3/L4/L5/L6/L7/L8/L8b = 전부 **iverilog 와 일치 복구** · `parameter real R = 3; R/2` = **1.5000**(real 도메인 이득 보존) · 진짜 non-integral(`R = 2.4` generate-if·`R = 8.5` width) = 여전히 **LOUD**(silent 로 안 내려감).
+
+**교훈(추가)**: (6) **PRE 바이너리 3-way 측정이 양방향 하강을 잡는다** — iverilog 대조만으로는 "PRE 에서 되던 게 POST 에서 loud" 를 못 본다(둘 다 "vita 가 loud" 로만 보임). 새 기능이 기존 바인딩 분류를 바꾸면 **PRE 대조 필수**. (7) **저장 클래스를 새로 만들면 기존 클래스의 능력을 상속시켜라** — real 로 재분류하는 순간 정수 능력이 통째 사라졌다(두 표현이 **정확히 일치**할 때는 양쪽 등록이 정답). (8) **loud gate 를 추가하면 그 gate 를 우회하는 간접 경로(함수 호출·계층 이름)를 같은 반복에 전수** — gate 가 "유일한 그물" 이라고 문서에 썼다면 실제로 유일한지 측정하라.
+
+**미해결(기록)**: 계층 real param `logic [$clog2(u.R)-1:0]` 는 PRE loud → POST 조용히 1-bit(`Ident` arm 이 `segments.len()==1` 요구). 좁고 iverilog 도 거부하나 **하강은 하강** — ROADMAP §2 에 기록. 그리고 pre-existing(PRE==POST): 파라미터 구조적 지연 `assign #P y = x;` 가 P 가 정수여도 **조용히 무시**(real param 이 클럭 주기 관용구라 이 슬라이스가 도달성을 크게 넓힘)·real→`input int` formal 미강제.
+
+**★★★ 재감사 3라운드(PRE 3-way) — 2라운드 fix 가 새 구멍 3개**: 
+- **B1 SILENT-WRONG(PRE loud→POST 조용)**: real param 을 **정수 formal 의 override** 로 쓰면 자식이 조용히 default 유지. `sub #(R) u(o)`(R=4.5) → iverilog `W=5`·PRE loud·POST **`W=8` warn 만, exit 0**(포트 폭까지 조용히 바뀜). 근인=guard 가 `expr_is_real_literal`(**구문적 리터럴**) 테스트인데 이 슬라이스가 **비-리터럴 real 식**(`R`·`R+1`·`R*2`)을 새로 도달 가능하게 만들어 warn-and-keep-default 로 낙하. **fix**=`count_reads_real_param` 으로 게이팅(4 site).
+- **B2 — `&& !params.contains_key` 절이 실제로 구멍을 냄**: `{R{1'b1}}`(R=4) → **2²⁴ bits(~16 MiB) exit 0**(PRE `1111`·iverilog 거부). `real_param_is_non_integral` 은 i64 쌍둥이가 있어 **false** 를 주는데, `lower_expr` 의 Ident arm 은 **`real_param_val` 을 `params` 보다 우선**하므로 real `Const` 가 `ir::Expr::Replicate` 에 도달. **= 내가 기록해 둔 `classifier-must-match-lowering-resolver` 교훈에 그대로 걸림.** **fix**=**같은 술어의 두 resolver 판**을 두고 consumer 가 자기 resolver 에 맞는 쪽을 고른다 — const-**fold** consumer(`check_const_range_bound`)=`real_param_is_non_integral`(`params` 기준) · **lower** consumer(replication)=`count_lowers_real_param`(`real_param_val` 기준).
+- **B3 — `lower_index_expr` 가 "모든 index site" 를 안 덮음**(내 doc 주석이 거짓): `+:`/`-:` 의 **WIDTH** 가 미게이팅 → `v[0 +: R]` 이 **2²⁴ x-bits exit 0**. i64 쌍둥이 유무와 무관하게 발화. **fix**=`expr_main` 2 site·`lvalue` 2 site·`strings` 2 site 를 전부 `lower_index_expr` 경유.
+
+**실측(10형)**: b1/b1n silent→**LOUD** · b1ok(정확한 쌍둥이 `R=4`)=**W=4 iverilog 일치**(false-loud 없음) · b2/b2b/b3/b3b/b3l/b3s 16MiB 폭주→**LOUD** · 합법 능력(`logic [R-1:0]`·`arr [R]`·`R/2`)=**iverilog 일치 유지**.
+
+**교훈(추가)**: (9) **"같은 술어" 를 여러 consumer 가 공유할 때, consumer 마다 resolver 가 다르면 술어도 갈라야 한다** — 하나로 합치면 한쪽이 반드시 틀린다(fold=`params` vs lower=`real_param_val` 우선). (10) **"모든 site 를 덮는 단일 래퍼" 라고 주석에 쓰면 그 주장을 테스트로 고정하라** — 주석은 6 site 중 4 site 만 참이었고, 남은 2 site 가 16MiB 폭주였다. (11) **가드를 구문(리터럴 모양)으로 세우면 새 슬라이스가 그 구문 밖의 값을 도달시키는 순간 뚫린다** — 값 기반으로.
+
+**★★★★ 4라운드(PRE 3-way) — 3라운드는 select/index 축만 닫았고 "size/count/position 인자" 축이 통째로 남아 있었다**: 메서드·시스템태스크의 크기/개수/위치 인자가 여전히 raw `lower_expr` → real `Const` 가 엔진에 도달해 **f64 비트패턴이 정수로 읽힘**(전부 exit 0):
+- **`new[R]`(R=3) → 2²⁴ 원소 할당 = 피크 RSS 1.22 GB·`size()` 가 16777216**(iverilog·PRE 는 `n=3`). R=4.5 면 **PRE loud → POST silent** 순수 하강.
+- `s.substr(R,3)`→**빈 문자열**(PRE `ell`) · `s.getc(R)`→**0**(PRE 101) · `s.putc(R,"Z")`→**쓰기 조용히 소실**(PRE `hZllo`).
+- `q.insert(R,…)`·`q.delete(R)`·assoc `a.delete(R)` → **엉뚱한 슬롯**(PRE 정답).
+- **B5 = 3라운드 fix 가 한 구문 층 모자랐음**: `count_lowers_real_param` 의 `_` arm 이 `count_reads_real_param` 으로 폴백 = **const-fold resolver 로 되돌아감** → i64 쌍둥이가 있는 real param 에 `false` → `{$clog2(R){1'b1}}`(R=4) 가 **조용히 0**(iverilog·PRE `3`). `SysCall`·`Ternary` 가 정확히 그 `_` arm 의 shape 였음.
+
+**fix**=`new[]`·queue/assoc index·string-method 인자 6 site 를 `lower_index_expr` 경유(그 인자들은 전부 정수라 안전) + `count_lowers_real_param` 에 `Ternary`/`SysCall` arm 을 **위임이 아니라 미러링**. 9형 실측 전부 LOUD 전환·정수 param(`new[P]`·`substr(1,3)`·`{$clog2(P){1'b1}}`)은 `4 ell 3 3` 로 불변.
+
+**미수정 1건(ROADMAP §2 기록)**: `$readmem*` 주소 인자. 그 lowering site 는 **모든** systask 인자를 처리하는 공용 경로라 통째 게이팅하면 `$display("%f", R)` 가 false-loud — `$readmem*` 전용 인자-위치 게이트 필요.
+
+**교훈(추가)**: (12) **"인덱스 축을 닫았다" 는 "정수를 요구하는 모든 인자를 닫았다" 가 아니다** — select/index 와 **size/count/position** 은 별개 축이고, 후자는 엔진이 f64 비트패턴을 정수로 읽어 **할당량 폭주**까지 간다. 정수를 요구하는 인자를 **축이 아니라 전수**로 세어라. (13) **폴백 `_` arm 이 다른 resolver 의 함수로 위임하면 그 지점에서 resolver 가 뒤바뀐다** — 술어를 resolver 별로 갈랐으면 **모든 arm 을 미러링**하라(위임 1줄이 전체 분리를 무효화). (14) 공용 lowering 경로에 게이트를 걸 땐 **그 경로를 쓰는 다른 consumer 를 먼저 세어라**(전부 정수 인자면 안전·아니면 위치별 게이트).
+
+**correct-or-loud 잔여(LOUD)**: 정수 상수 문맥의 real param(width/range/`$clog2`) · `localparam real B = A;`(real→real alias) · real 식 override · generate/package/interface-body/defparam 바인딩 · real select 인덱스 · real replication count.
+
+**교훈**: (1) **타입 변환은 leaf 가 아니라 문맥 경계에서** — 조용한 1-bit 를 고치려 leaf 변환하면 조용한 잘못된 분기가 된다(두 silent-wrong 을 맞바꾼 셈). (2) **"고쳤다"를 리뷰 없이 믿지 말 것** — differential 과 soundness 가 **서로 다른 진입점**으로 같은 근본을 잡았다(전자=generate-if/비교, 후자=real→real alias 와 `R*2`); 한 렌즈만 돌렸으면 나머지 절반이 배포됐다. (3) **선언 타입 키잉**이라야 `parameter real R = 3;` 이 real 로 바인딩. (4) **IR 위 판정이 구조적으로 완전**(`lower_index_expr`) — AST walker 는 shape 를 놓치지만 lower 된 값은 못 숨는다. (5) 리터럴 부정은 **파싱된 값**을 부정(텍스트 재조립은 중첩에서 깨짐). 신규 `real_params.rs`×27.
 
 #### 4.5.220 SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-twin 3형 loud화 (format 23 불변) (2026-07-25, branch feat-dyn-string-elem-byteselect) ✅
 

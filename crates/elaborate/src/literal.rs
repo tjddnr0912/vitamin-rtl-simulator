@@ -499,6 +499,21 @@ pub fn parse_real_literal(raw: &str) -> ConstVal {
     }
 }
 
+/// r19: the real `ConstVal` for an already-folded f64 — the value-taking twin of
+/// [`parse_real_literal`], which is text-taking. Same shape, so a real parameter
+/// folds to exactly what the equivalent literal folds to.
+pub fn make_const_real(x: f64) -> ConstVal {
+    ConstVal {
+        width: 64,
+        signed: true,
+        repr: ConstRepr::Real,
+        bits: BitPacked {
+            val: vec![x.to_bits()],
+            unk: vec![0],
+        },
+    }
+}
+
 /// Parse a raw real literal lexeme to its f64 value (for real delays `#1.5`).
 pub fn parse_real_f64(raw: &str) -> f64 {
     let cleaned: String = raw.chars().filter(|&c| c != '_').collect();

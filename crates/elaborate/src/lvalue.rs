@@ -367,7 +367,7 @@ impl Elaborator<'_> {
                     });
                 } else {
                     let net = self.lval_base_net(base);
-                    let raw_off = self.lower_expr(index);
+                    let raw_off = self.lower_index_expr(index);
                     let offset = self.norm_offset_for_net(net, raw_off);
                     let width = self.const_u32_expr(1, 32);
                     out.push(ir::LvalChunk {
@@ -391,8 +391,8 @@ impl Elaborator<'_> {
                 // yet; defer with the (lowered) lsb offset + const width and rebuild.
                 if let Some((path, idx_asts)) = self.lval_hier_chain(base) {
                     let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
-                    let lsb_id = self.lower_expr(lsb);
-                    let msb_id = self.lower_expr(msb);
+                    let lsb_id = self.lower_index_expr(lsb);
+                    let msb_id = self.lower_index_expr(msb);
                     let width = self.width_from_msb_lsb_checked(msb, lsb, msb_id, lsb_id);
                     let part = HierPart {
                         raw_off: lsb_id,
@@ -473,9 +473,9 @@ impl Elaborator<'_> {
                     return;
                 }
                 let (net, word) = self.lval_part_base(base);
-                let raw_off = self.lower_expr(offset);
+                let raw_off = self.lower_index_expr(offset);
                 let off = self.norm_offset_for_net(net, raw_off);
-                let w = self.lower_expr(width);
+                let w = self.lower_index_expr(width);
                 // Ascending net: flip the indexed direction (the offset is already
                 // normalized by `norm_offset_for_net`). Descending keeps `kind`.
                 let kind = indexed_sel_kind(dir, self.net_ascending(net));

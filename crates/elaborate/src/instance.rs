@@ -138,6 +138,7 @@ impl Elaborator<'_> {
                         name: Some(param),
                         value: Some(v),
                         is_named: true,
+                        had_value: true,
                         fill: None,
                     })
                     .collect()
@@ -226,6 +227,18 @@ impl Elaborator<'_> {
                     if let Some(raw) = Self::param_str_literal(&p.value) {
                         let key = self.fq(&p.name.name);
                         self.str_param_raw.insert(key, raw);
+                    } else if let Some((v, exact)) = self.param_real_value(&p.ty, &p.value) {
+                        // r19: a REAL-valued parameter has no i64 value — same shape as
+                        // the string case above, so it rides the same side map and skips
+                        // the numeric fold that would otherwise loud-reject it. When the
+                        // initializer DID fold to an exact i64, register both: the two
+                        // representations agree, so `R/2` divides in the real domain and
+                        // `logic [R-1:0]` keeps working in the integer domain.
+                        let key = self.fq(&p.name.name);
+                        self.real_param_val.insert(key.clone(), v);
+                        if let Some(i) = exact {
+                            self.params.insert(key, i);
+                        }
                     } else {
                         // Unfoldable value = LOUD error (never a silent 0): a parameter
                         // bound to a wrong default poisons every downstream width with
@@ -729,14 +742,39 @@ impl Elaborator<'_> {
                 ast::ParamConn::Positional(e) => {
                     let value = self.const_eval_in_scope(e);
                     if value.is_none() {
-                        self.warn(
+                        if Self::expr_is_real_literal(e) {
+                            // r19: mirror the NAMED-connection rule — a real-literal
+                            // override cannot be folded, and warning + keeping the
+                            // child default runs with the wrong value at exit 0.
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "overriding a parameter with a real value is unsupported \
+                                 (a real override cannot be folded); the child default \
+                                 would be used silently",
+                            );
+                        } else if self.count_reads_real_param(e) {
+                            // r19/B1: the guard next to this one tests a real LITERAL, but this
+                            // slice newly made real-VALUED expressions reachable here (an ident
+                            // bound to a real param, `R+1`, `R*2`). Those do not const-fold, so
+                            // they fell into the warn-and-keep-default path below = the child
+                            // silently ran with the WRONG parameter, changing port widths at
+                            // exit 0 where this was loud before the slice.
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a parameter override that reads a real parameter is unsupported \
+                         (a real has no integral constant value)",
+                            );
+                        } else {
+                            self.warn(
                             "parameter override expression is not a constant; child default kept",
                         );
+                        }
                     }
                     overrides.push(ResolvedOverride {
                         name: None,
                         value,
                         is_named: false,
+                        had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
                     });
                 }
@@ -745,10 +783,40 @@ impl Elaborator<'_> {
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
                         if r.is_none() {
-                            self.warn(&format!(
-                                "override of parameter `{}` is not a constant; default kept",
-                                name.name
-                            ));
+                            // r19: a REAL-literal override is ERROR, not warn-and-keep.
+                            // Real PARAMETERS are supported now, so silently running with
+                            // the declared default would be the wrong value with exit 0 —
+                            // and the override machinery is i64-only, so the right value
+                            // cannot be applied. Every other non-constant override keeps
+                            // the pre-existing warn-and-default behaviour.
+                            if Self::expr_is_real_literal(e) {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "overriding parameter `{}` with a real value is \
+                                         unsupported (a real override cannot be folded); \
+                                         the declared default would be used silently",
+                                        name.name
+                                    ),
+                                );
+                            } else if self.count_reads_real_param(e) {
+                                // r19/B1: the guard next to this one tests a real LITERAL, but this
+                                // slice newly made real-VALUED expressions reachable here (an ident
+                                // bound to a real param, `R+1`, `R*2`). Those do not const-fold, so
+                                // they fell into the warn-and-keep-default path below = the child
+                                // silently ran with the WRONG parameter, changing port widths at
+                                // exit 0 where this was loud before the slice.
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    "a parameter override that reads a real parameter is unsupported \
+                             (a real has no integral constant value)",
+                                );
+                            } else {
+                                self.warn(&format!(
+                                    "override of parameter `{}` is not a constant; default kept",
+                                    name.name
+                                ));
+                            }
                         }
                         r
                     });
@@ -756,6 +824,7 @@ impl Elaborator<'_> {
                         name: Some(name.name.clone()),
                         value: v,
                         is_named: true,
+                        had_value: value.is_some(),
                         fill: value
                             .as_ref()
                             .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string()))),

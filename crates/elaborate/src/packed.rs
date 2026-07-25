@@ -93,6 +93,54 @@ impl Elaborator<'_> {
     /// (`msb<lsb`) → `lsb − idx`. A plain `[N:0]` net (lsb 0, descending) returns the
     /// raw offset unchanged so the long-standing golden IR is byte-for-byte preserved.
     /// A POISON/out-of-range net id (error recovery) is a no-op.
+    /// r19: lower a select INDEX / OFFSET / bound expression, rejecting a REAL value.
+    /// IEEE §11.5.1 requires an integral index; a real one has no bit position, and
+    /// the engine folded it to 0 — `v[R]` with a real `R` silently read the wrong bit,
+    /// a real part-select bound produced a multi-megabit X, and a real lvalue index
+    /// silently DROPPED the write. One wrapper for every index site so the rule cannot
+    /// drift between rvalue and lvalue paths. (Real PARAMETERS made this reachable;
+    /// a real literal index `v[1.5]` was always reachable and is covered too.)
+    pub(crate) fn lower_index_expr(&mut self, e: &ast::Expr) -> u32 {
+        let id = self.lower_expr(e);
+        if self.expr_is_real(id) {
+            // r19: a real param whose initializer folded EXACTLY to an integer is
+            // registered in BOTH `real_param_val` and `params`, but `lower_expr`
+            // prefers the real map — so the twin arrives here as a real `Const` and
+            // is indistinguishable from `1.5`. Converting it HERE is correct and
+            // converting it at the leaf was not: this is the context boundary that
+            // requires an integral operand, so `R/2` still divides in the real
+            // domain while `new[R]` / `v[7:R]` get the integer they need (IEEE
+            // §11.8.1 evaluates in the real domain and converts once, at the
+            // boundary). EXACT only — a fractional value has no integral meaning
+            // and stays loud, which is why the no-twin case is unaffected.
+            if let Some(v) = self.const_real_exact_u32(id) {
+                return self.const_u32_expr(v, 32);
+            }
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a select index / bound / size must be integral, not real (IEEE §11.5.1)",
+            );
+            return self.const_u32_expr(0, 32);
+        }
+        id
+    }
+
+    /// r19: the exact non-negative integer behind a real `Const`, or `None` when the
+    /// value is fractional, negative, or out of range. Deliberately exact: rounding
+    /// here would silently accept `v[2.7]`, and this helper's whole purpose is to let
+    /// an integer-valued real through WITHOUT admitting an approximation.
+    pub(crate) fn const_real_exact_u32(&self, eid: u32) -> Option<u32> {
+        let ir::Expr::Const { val } = self.exprs.get(eid as usize)? else {
+            return None;
+        };
+        let c = self.consts.get(*val as usize)?;
+        if !matches!(c.repr, ir::ConstRepr::Real) {
+            return None;
+        }
+        let x = f64::from_bits(*c.bits.val.first()?);
+        (x.fract() == 0.0 && x >= 0.0 && x <= u32::MAX as f64).then_some(x as u32)
+    }
+
     pub(crate) fn norm_offset_for_net(&mut self, net: u32, raw_off: u32) -> u32 {
         let Some((msb, lsb)) = self.nets.get(net as usize).map(|nv| (nv.msb, nv.lsb)) else {
             return raw_off;
