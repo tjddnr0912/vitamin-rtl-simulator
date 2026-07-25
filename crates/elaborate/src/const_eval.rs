@@ -532,6 +532,22 @@ impl Elaborator<'_> {
         if folded.is_some() {
             return;
         }
+        // r19: a REAL parameter has no i64 value and is deliberately kept out of
+        // `params`, so a bound reading one folds to None. `nonconst_bound_reason`
+        // does not descend into system-call args (a false-loud guard for `$bits`),
+        // so `$clog2(R)` produced NO diagnostic and `clamp_bound_u32(None)` silently
+        // gave a 1-bit width. Converting the param at the const-eval leaf instead
+        // was worse: it destroyed the real value before the enclosing expression
+        // chose its context, so `if (R > 2)` with R=2.4 took the wrong generate
+        // branch and `R == 2` folded TRUE. Loud here, converted nowhere.
+        if self.count_reads_real_param(e) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a real parameter is not an integral constant and cannot be used in a \
+                 width / range bound (assign it to an integer localparam first)",
+            );
+            return;
+        }
         if let Some(reason) = self.nonconst_bound_reason(e) {
             self.error(
                 MsgCode::ElabUnsupported,

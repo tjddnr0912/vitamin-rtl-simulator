@@ -191,12 +191,23 @@ impl Elaborator<'_> {
                     // fold the string when that exact key is the string param.
                     if let Some(key) = self.walk_scopes_key(seg, |k| {
                         self.str_param_raw.contains_key(k)
+                            || self.real_param_val.contains_key(k)
                             || self.params.contains_key(k)
                             || self.symbols.contains_key(k)
                     }) {
                         if self.str_param_raw.contains_key(&key) {
                             let raw = self.str_param_raw[&key].clone();
                             let cid = self.intern_const(parse_str_literal(&raw));
+                            return self.push_expr(ir::Expr::Const { val: cid });
+                        }
+                        // r19: a REAL param folds to the SAME const its raw literal
+                        // would, and rides the SAME innermost-wins re-derivation as the
+                        // string case — an independent walk over `real_param_raw` alone
+                        // would match an OUTER real param even when an inner net /
+                        // numeric param / frame-local shadows it (the silent-wrong the
+                        // string comment above describes).
+                        if let Some(&v) = self.real_param_val.get(&key) {
+                            let cid = self.intern_const(make_const_real(v));
                             return self.push_expr(ir::Expr::Const { val: cid });
                         }
                         // else: an inner net / numeric param wins — fall through to the
@@ -548,7 +559,7 @@ impl Elaborator<'_> {
                         "bit/part-select not defined on real operand",
                     );
                 }
-                let raw_off = self.lower_expr(index);
+                let raw_off = self.lower_index_expr(index);
                 let offset = self.norm_offset_if_net(base, raw_off);
                 let width = self.const_u32_expr(1, 32);
                 self.push_expr(ir::Expr::Select {
@@ -600,8 +611,8 @@ impl Elaborator<'_> {
                 // it a non-zero-LSB hierarchical net read the raw offset → silent X.
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
                     let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
-                    let lsb_id = self.lower_expr(lsb);
-                    let msb_id = self.lower_expr(msb);
+                    let lsb_id = self.lower_index_expr(lsb);
+                    let msb_id = self.lower_index_expr(msb);
                     let width = self.width_from_msb_lsb_checked(msb, lsb, msb_id, lsb_id);
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
@@ -627,8 +638,8 @@ impl Elaborator<'_> {
                         "bit/part-select not defined on real operand",
                     );
                 }
-                let lsb_id = self.lower_expr(lsb);
-                let msb_id = self.lower_expr(msb);
+                let lsb_id = self.lower_index_expr(lsb);
+                let msb_id = self.lower_index_expr(msb);
                 let asc = self.base_net_ascending(base);
                 let width = self.width_from_msb_lsb_dir(msb, lsb, msb_id, lsb_id, asc);
                 // Ascending: normalize via the root net (handles array elements,
@@ -690,7 +701,7 @@ impl Elaborator<'_> {
                 // mirrors the write side; an ascending hier net is a rare follow-on.
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
                     let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
-                    let raw_off = self.lower_expr(offset);
+                    let raw_off = self.lower_index_expr(offset);
                     let w = self.lower_expr(width);
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
@@ -716,7 +727,7 @@ impl Elaborator<'_> {
                         "bit/part-select not defined on real operand",
                     );
                 }
-                let raw_off = self.lower_expr(offset);
+                let raw_off = self.lower_index_expr(offset);
                 let asc = self.base_net_ascending(base);
                 // Ascending net: a source-index range maps onto DECREASING internal
                 // bits, so `+:` becomes a downward internal select and `-:` upward;
@@ -792,7 +803,18 @@ impl Elaborator<'_> {
                 // (literal, param, genvar, packed bit/part-select, plain expression)
                 // fails both gates → keeps its existing lowering, byte-identical
                 // golden IR.
-                let count = if self.count_reads_const_array_elem(count)
+                let count = if self.count_reads_real_param(count) {
+                    // r19: a REAL param has no integer value and is not in `params`, so
+                    // the count would fold to a silent 0 here (a 0-width replication)
+                    // rather than the intended value. IEEE §11.4.12.2 wants a constant
+                    // integral count — loud, never a silent 0.
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a replication count that reads a real parameter is unsupported \
+                         (a real has no integral constant value)",
+                    );
+                    self.placeholder_expr()
+                } else if self.count_reads_const_array_elem(count)
                     || self.count_reads_array_param_elem(count)
                 {
                     match self.const_eval_in_scope(count) {

@@ -30,6 +30,11 @@ pub(crate) struct ResolvedOverride {
     /// — so resolution defers sizing to `bind_params`, which re-folds the fill at
     /// the param width (else `#(.P('1))` would silently truncate to 32 bits).
     pub(crate) fill: Option<(ast::IntLitKind, String)>,
+    /// r19: an override EXPRESSION was written (as opposed to `.W()`, which legally
+    /// means "keep the default"). With `value: None` that marks an override that was
+    /// meant to apply but did not fold — a real-typed target must reject rather than
+    /// silently run with its declared default.
+    pub(crate) had_value: bool,
 }
 
 /// Build the module-name map + the declaration-ordered list. First decl wins on a

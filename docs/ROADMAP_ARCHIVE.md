@@ -8,6 +8,50 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.221 real-valued parameters (`parameter real`) loud→supported — 단, 정수-상수 문맥에서는 loud (리뷰 2라운드가 leaf-conversion silent-wrong 포착) (2026-07-25, branch feat-real-params) ✅
+
+**4463→4464 green · format 23 불변 · MsgCode 59 불변**
+
+**갭**: `parameter real R = 1.5;` / `localparam real CLK = 5.0;` 가 elaborate서 거부. `params: BTreeMap<String,i64>` 뿐이라 real 값을 담을 곳이 없었음. iverilog 오라클 有(강함).
+
+**구현**:
+- **`real_param_val: BTreeMap<String,f64>`** — elaborate-local 사이드맵(§4.5.217 `str_param_raw` 와 동형). `params` 와 분리하는 이유 = real 은 i64 로 표현 불가하고, 섞으면 정수 fold 가 조용히 반올림한다.
+- **`param_real_value(ty, value)`** — **선언 타입**(Real/Realtime)으로 키잉. 값 모양이 아니라 선언으로 판정해야 `parameter real R = 3;`(정수 리터럴 초기화)이 real 로 바인딩된다.
+- **`real_literal_value`** — 파싱된 f64 를 부정. 초판은 `format!("-{inner}")` 텍스트 재조립이라 중첩 unary minus 가 `"--1.25"` → 파싱 실패 → **0.0**(측정으로 포착).
+- **바인딩**: 모듈 body/header · interface header · program header · instance array · `realtime`. **loud**: generate scope · package · interface body · defparam · hierarchical `dut.R`.
+- **`lower_index_expr`**(신규 `packed.rs`) — 인덱스/오프셋/바운드를 lower 한 뒤 **IR 위에서** `expr_is_real` 로 거부. 12개 select 사이트 전부 경유. 모양이 아니라 값으로 판정하므로 `v[R+0]`·lvalue `v[R]=0` 까지 잡는다(구조적 완전성).
+- **override**: real 리터럴 override 를 warn→**error** 승격. `ResolvedOverride.had_value: bool` 을 5개 생성 사이트 전부에(=`Default` 없는 bare bool 이라 컴파일러가 누락 강제).
+
+**★ 리뷰 2라운드 — leaf conversion 은 더 나쁜 오답이었다**: S5(`$clog2(R)` 가 **조용히 1-bit width**)를 고치려 `const_eval_in_scope` 의 **leaf** 에서 real→i64 변환을 넣었더니 두 리뷰어가 독립적으로 NOT-CLEAN 반환:
+
+| 소스 | iverilog | vita(leaf 변환) |
+|---|---|---|
+| generate-if `R > 2`, R=2.4 | taken | **NOT taken** — generate body 통째 삭제, exit 0 |
+| `(R == 2)` / `(S != 0)` | `0 1` | **`1 0`** |
+| `localparam real B = A;` (A=1.5) | 1.50 | **2.00** |
+| `localparam real HALF = CLK/2;` | 2.50 | **2.00** (클럭 주기 관용구) |
+| `localparam int A = R*2;` | 3 | **4** |
+| `logic [R/2-1:0]` R=5.0 | 3 bits | **2 bits** |
+
+**근본**: IEEE §11.8.1 은 real operand 를 포함한 식을 **real 도메인**에서 평가하고 문맥 경계에서 **한 번** 변환한다. leaf 변환은 **둘러싼 연산자가 무엇을 필요로 하는지 결정하기 전에** real 값을 파괴한다 — 조용한 1-bit 를 고치려다 조용한 **잘못된 분기·잘못된 값**을 만든 것(사다리에서 내려감).
+
+**최종 해법 = 되돌리고 loud**: `check_const_range_bound` 가 `count_reads_real_param(e)` 를 **먼저** 검사해 에러. 기존 `nonconst_bound_reason` 은 (`$bits(net)` false-loud 회피 때문에) system-call 인자로 내려가지 않아 `$clog2(R)` 가 진단 없이 `clamp_bound_u32(None)` → width 1 이 됐던 것. **어디서도 변환하지 않고 여기서 loud.** iverilog 는 변환을 지원하므로 이건 기록된 **capability gap** 이지 correctness 결함이 아니다.
+
+**★★ 재감사 2라운드 — revert 만으로는 부족했다(PRE 바이너리 3-way 실측)**: 리뷰어가 HEAD에서 **PRE 바이너리**를 빌드해 iverilog/PRE/POST 3중 측정 → **양방향 사다리 하강** 4건 발견.
+
+- **BLOCKING #1 SILENT-WRONG(PRE loud → POST 조용)**: `count_reads_real_param` 에 **`Call` arm 이 없고** `nonconst_bound_reason` 도 call 인자로 안 내려가 **const-function 이 real param 을 밀반입**. `logic [f(R)-1:0]`→**조용히 1-bit**(iverilog `w=8`)·`arr [f(R)]`→`$size`가 R 과 무관한 **8**(iverilog 4)·`{f(R){1'b1}}`→**조용히 빈 값**(iverilog `111`). 셋 다 PRE 는 loud 였음 = **내가 loud 를 silent 로 만든 것**. **fix**=`Call{args}` arm 추가.
+- **BLOCKING #2 FALSE-LOUD 회귀 8형**: `parameter real R = 4`(정수 상수 초기화)를 real-ONLY 로 바인딩해 **정수 능력 전부 상실** — `logic [R-1:0]`·`arr [R]`·`$clog2(R)`·`localparam int W = R`·`generate if (R>2)`·`generate for (i<R)`·정수 override `#(.R(i+2))`·positional `#(5)` 가 전부 PRE 에서 **byte-correct 였는데** POST 에서 loud. **fix**=초기화가 **정확한 i64 로 fold 되면 `real_param_val` 과 `params` 양쪽에 등록**(두 표현이 정확히 일치하므로 안전) → `R/2`는 real 도메인서 **1.5**, `logic [R-1:0]`는 정수 도메인서 **4**. 판별자도 `real_param_is_non_integral`(= real_param_val 에 있고 params 에 **없음**)로 재키잉해 정수 쌍둥이가 있는 param 은 bound guard 가 안 문다. folded override 는 `v as f64` 로 **적용**(거부 아님).
+
+**실측 결과(14형 전수·iverilog 대조)**: S1/S2/S3 = silent→**LOUD** · L1/L3/L4/L5/L6/L7/L8/L8b = 전부 **iverilog 와 일치 복구** · `parameter real R = 3; R/2` = **1.5000**(real 도메인 이득 보존) · 진짜 non-integral(`R = 2.4` generate-if·`R = 8.5` width) = 여전히 **LOUD**(silent 로 안 내려감).
+
+**교훈(추가)**: (6) **PRE 바이너리 3-way 측정이 양방향 하강을 잡는다** — iverilog 대조만으로는 "PRE 에서 되던 게 POST 에서 loud" 를 못 본다(둘 다 "vita 가 loud" 로만 보임). 새 기능이 기존 바인딩 분류를 바꾸면 **PRE 대조 필수**. (7) **저장 클래스를 새로 만들면 기존 클래스의 능력을 상속시켜라** — real 로 재분류하는 순간 정수 능력이 통째 사라졌다(두 표현이 **정확히 일치**할 때는 양쪽 등록이 정답). (8) **loud gate 를 추가하면 그 gate 를 우회하는 간접 경로(함수 호출·계층 이름)를 같은 반복에 전수** — gate 가 "유일한 그물" 이라고 문서에 썼다면 실제로 유일한지 측정하라.
+
+**미해결(기록)**: 계층 real param `logic [$clog2(u.R)-1:0]` 는 PRE loud → POST 조용히 1-bit(`Ident` arm 이 `segments.len()==1` 요구). 좁고 iverilog 도 거부하나 **하강은 하강** — ROADMAP §2 에 기록. 그리고 pre-existing(PRE==POST): 파라미터 구조적 지연 `assign #P y = x;` 가 P 가 정수여도 **조용히 무시**(real param 이 클럭 주기 관용구라 이 슬라이스가 도달성을 크게 넓힘)·real→`input int` formal 미강제.
+
+**correct-or-loud 잔여(LOUD)**: 정수 상수 문맥의 real param(width/range/`$clog2`) · `localparam real B = A;`(real→real alias) · real 식 override · generate/package/interface-body/defparam 바인딩 · real select 인덱스 · real replication count.
+
+**교훈**: (1) **타입 변환은 leaf 가 아니라 문맥 경계에서** — 조용한 1-bit 를 고치려 leaf 변환하면 조용한 잘못된 분기가 된다(두 silent-wrong 을 맞바꾼 셈). (2) **"고쳤다"를 리뷰 없이 믿지 말 것** — differential 과 soundness 가 **서로 다른 진입점**으로 같은 근본을 잡았다(전자=generate-if/비교, 후자=real→real alias 와 `R*2`); 한 렌즈만 돌렸으면 나머지 절반이 배포됐다. (3) **선언 타입 키잉**이라야 `parameter real R = 3;` 이 real 로 바인딩. (4) **IR 위 판정이 구조적으로 완전**(`lower_index_expr`) — AST walker 는 shape 를 놓치지만 lower 된 값은 못 숨는다. (5) 리터럴 부정은 **파싱된 값**을 부정(텍스트 재조립은 중첩에서 깨짐). 신규 `real_params.rs`×27.
+
 #### 4.5.220 SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-twin 3형 loud화 (format 23 불변) (2026-07-25, branch feat-dyn-string-elem-byteselect) ✅
 
 **컨텍스트**: §4.5.219가 기록한 **전제조건 슬라이스**. fixed→dyn 라우팅(T1-2/3)을 하려면 먼저 **dyn ⊇ fixed**여야 하는데, byte-select만 fixed가 우세(119 vs dyn 0)했다.

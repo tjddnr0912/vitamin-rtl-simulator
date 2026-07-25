@@ -34,8 +34,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use diag::{Diagnostic, LogEvent, LogSink, MsgCode, Severity};
 use hdl_ast as ast;
 use literal::{
-    make_const_i64, make_const_u32, parse_int_literal, parse_real_f64, parse_real_literal,
-    parse_str_literal, parse_str_literal_text,
+    make_const_i64, make_const_real, make_const_u32, parse_int_literal, parse_real_f64,
+    parse_real_literal, parse_str_literal, parse_str_literal_text,
 };
 use sim_ir as ir;
 
@@ -500,6 +500,13 @@ struct Elaborator<'s> {
     // here; an Ident that resolves to such a param re-emits the SAME `StrUtf8` const
     // `parse_str_literal(raw)` would (so `S == "abc"` is byte-identical). elaborate-LOCAL.
     str_param_raw: BTreeMap<String, String>,
+    /// r19: a REAL-valued parameter/localparam, keyed FQ, holding the FOLDED f64.
+    /// Mirrors `str_param_raw`'s side-map design: a real has no i64 value, so it is
+    /// kept out of `params` and resolved before the numeric param path. Stores the
+    /// VALUE, not the raw text — building raw text by concatenation manufactured
+    /// non-grammar strings (`-(-1.25)` became `"--1.25"`), which `parse_real_literal`
+    /// silently turns into 0.0.
+    real_param_val: BTreeMap<String, f64>,
     // N6: FQ name of a FIXED `string` ARRAY (`string files[0:1]`) → (lo, hi, element
     // net ids in index order). A string is heap-backed with no packed width, so a fixed
     // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)

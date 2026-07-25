@@ -93,6 +93,25 @@ impl Elaborator<'_> {
     /// (`msb<lsb`) → `lsb − idx`. A plain `[N:0]` net (lsb 0, descending) returns the
     /// raw offset unchanged so the long-standing golden IR is byte-for-byte preserved.
     /// A POISON/out-of-range net id (error recovery) is a no-op.
+    /// r19: lower a select INDEX / OFFSET / bound expression, rejecting a REAL value.
+    /// IEEE §11.5.1 requires an integral index; a real one has no bit position, and
+    /// the engine folded it to 0 — `v[R]` with a real `R` silently read the wrong bit,
+    /// a real part-select bound produced a multi-megabit X, and a real lvalue index
+    /// silently DROPPED the write. One wrapper for every index site so the rule cannot
+    /// drift between rvalue and lvalue paths. (Real PARAMETERS made this reachable;
+    /// a real literal index `v[1.5]` was always reachable and is covered too.)
+    pub(crate) fn lower_index_expr(&mut self, e: &ast::Expr) -> u32 {
+        let id = self.lower_expr(e);
+        if self.expr_is_real(id) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a select index / bound must be integral, not real (IEEE §11.5.1)",
+            );
+            return self.const_u32_expr(0, 32);
+        }
+        id
+    }
+
     pub(crate) fn norm_offset_for_net(&mut self, net: u32, raw_off: u32) -> u32 {
         let Some((msb, lsb)) = self.nets.get(net as usize).map(|nv| (nv.msb, nv.lsb)) else {
             return raw_off;

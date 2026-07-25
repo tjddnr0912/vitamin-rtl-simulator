@@ -294,6 +294,84 @@ impl Elaborator<'_> {
         }
     }
 
+    /// r19: the folded f64 of a REAL-valued parameter initializer, or None.
+    ///
+    /// A parameter is real when its DECLARED type says so (`parameter real R = 3;` is
+    /// a real parameter even though its initializer is an integer literal — keying on
+    /// the initializer's literal form instead made `R/2` integer-divide to 1.0 where
+    /// IEEE gives 1.5), or when an untyped parameter is initialised with a real
+    /// literal (IEEE §6.20.2: the type follows the value).
+    ///
+    /// Returns the VALUE. An earlier version returned raw text and negated by string
+    /// concatenation, which produced `"--1.25"` for `-(-1.25)` — unparseable, and
+    /// `parse_real_literal` maps that to a silent 0.0.
+    ///
+    /// LITERAL forms only (through parens and unary `+`/`-`). Real ARITHMETIC has no
+    /// const-fold path, so it returns None and the caller stays loud — a wrong
+    /// parameter value poisons everything downstream with no trace.
+    pub(crate) fn param_real_value(
+        &self,
+        ty: &ast::ParamType,
+        value: &ast::Expr,
+    ) -> Option<(f64, Option<i64>)> {
+        let declared_real = matches!(ty, ast::ParamType::Real | ast::ParamType::Realtime);
+        if !declared_real && !Self::mentions_real_literal(value) {
+            return None;
+        }
+        // A real LITERAL (through parens / unary sign) folds here. Otherwise, when the
+        // DECLARED type is real, fall back to the integer const-fold — that is what
+        // makes `parameter real R = 3;` (and `= 3+1`) bind as 3.0 / 4.0 rather than as
+        // an i64 param whose `R/2` would integer-divide. Real ARITHMETIC reaches
+        // neither and returns None ⇒ the caller stays loud. The i64 is handed back so
+        // the caller can ALSO register it in `params`: `parameter real R = 4;` must keep
+        // every integral capability an ordinary i64 param had (`logic [R-1:0]`,
+        // `generate if (R > 2)`, `arr [R]`, integer overrides) — binding it real-only
+        // took a byte-correct design loud, which is a descent down the accuracy ladder.
+        if let Some(f) = Self::real_literal_value(value) {
+            return Some((f, None));
+        }
+        declared_real
+            .then(|| self.const_eval_in_scope(value))
+            .flatten()
+            .map(|v| (v as f64, Some(v)))
+    }
+
+    /// r19: is `e` a REAL literal (through parens / unary sign)? Used by the override
+    /// path, where there is no declared type to consult — only the expression.
+    pub(crate) fn expr_is_real_literal(e: &ast::Expr) -> bool {
+        Self::real_literal_value(e).is_some()
+    }
+
+    /// The value of a REAL literal initializer, through parens and unary `+`/`-`.
+    /// Negation is applied to the parsed f64 — negating the raw TEXT produced
+    /// `"--1.25"` for `-(-1.25)`, which parses to a silent 0.0.
+    fn real_literal_value(e: &ast::Expr) -> Option<f64> {
+        match &e.kind {
+            ast::ExprKind::RealLit { raw, .. } => Some(parse_real_f64(raw)),
+            ast::ExprKind::Paren { inner } => Self::real_literal_value(inner),
+            ast::ExprKind::Unary { op, operand } => {
+                let v = Self::real_literal_value(operand)?;
+                match op {
+                    ast::UnOp::Plus => Some(v),
+                    ast::UnOp::Minus => Some(-v),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Does the initializer contain a REAL literal (so an UNTYPED parameter takes the
+    /// real type from its value, IEEE §6.20.2)?
+    fn mentions_real_literal(e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::RealLit { .. } => true,
+            ast::ExprKind::Paren { inner } => Self::mentions_real_literal(inner),
+            ast::ExprKind::Unary { operand, .. } => Self::mentions_real_literal(operand),
+            _ => false,
+        }
+    }
+
     /// A fresh `String` net for hoisting a `$sformatf` operand to a temp
     /// (`$sfmt_tmp$<n>` — the leading `$` keeps it collision-proof against user
     /// identifiers, and a `String` net has no VCD `$var` form so the temp is

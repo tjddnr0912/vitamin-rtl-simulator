@@ -264,7 +264,7 @@ impl Elaborator<'_> {
         index: &ast::Expr,
     ) -> u32 {
         if kind != ir::NetKind::Queue {
-            return self.lower_expr(index);
+            return self.lower_index_expr(index);
         }
         let handle = self.push_expr(ir::Expr::Signal { net, word: None });
         let size = self.push_expr(ir::Expr::SysFunc {
@@ -278,7 +278,7 @@ impl Elaborator<'_> {
             rhs: one,
         });
         let saved = self.dollar_subst.replace(last);
-        let idx = self.lower_expr(index);
+        let idx = self.lower_index_expr(index);
         self.dollar_subst = saved;
         idx
     }

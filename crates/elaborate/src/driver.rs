@@ -84,6 +84,7 @@ impl<'s> Elaborator<'s> {
             param_meta: BTreeMap::new(),
             param_range: BTreeMap::new(),
             str_param_raw: BTreeMap::new(),
+            real_param_val: BTreeMap::new(),
             string_array_elems: BTreeMap::new(),
             hier_params: BTreeMap::new(),
             hier_funcs: BTreeMap::new(),

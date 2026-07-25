@@ -196,6 +196,7 @@ impl Elaborator<'_> {
         // CHILD param's declared width below.
         let mut ovr_by_name: BTreeMap<&str, Option<i64>> = BTreeMap::new();
         let mut ovr_fill: BTreeMap<&str, &(ast::IntLitKind, String)> = BTreeMap::new();
+        let mut ovr_unfoldable: std::collections::BTreeSet<String> = Default::default();
         let mut pos_i = 0usize;
         for ov in overrides {
             if ov.is_named {
@@ -207,6 +208,12 @@ impl Elaborator<'_> {
                     Some(p) => {
                         if let Some(v) = ov.value {
                             ovr_by_name.insert(p.name.name.as_str(), Some(v));
+                        } else if ov.fill.is_none() && ov.had_value {
+                            // r19: the override was WRITTEN but did not fold (a real
+                            // expression, a signal, …). `ovr_by_name` only holds folded
+                            // values, so record the attempt — a REAL-typed target must
+                            // reject rather than silently run with its declared default.
+                            ovr_unfoldable.insert(p.name.name.clone());
                         }
                         if let Some(f) = &ov.fill {
                             ovr_fill.insert(p.name.name.as_str(), f);
@@ -241,6 +248,61 @@ impl Elaborator<'_> {
 
         let mut saved = Vec::new();
         for p in &module.params {
+            // r19: a REAL-valued header parameter (`#(parameter real R = 1.5)`) has no
+            // i64 value — route it to the side map before the numeric fold, exactly as
+            // the module-body path does.
+            //
+            // An OVERRIDE of a real param is NOT supported: the override machinery is
+            // i64 throughout, so `#(.R(2.5))` cannot be folded. Falling through to the
+            // numeric path there is not safe — it only WARNS (W3056 "override is not a
+            // constant; default kept") and runs with the declared default, i.e. the
+            // wrong value with exit 0, where before this slice the whole design was
+            // loud. Reject explicitly instead (correct-or-loud): a parameter bound to
+            // the wrong value poisons everything downstream with no trace.
+            if let Some((v, exact)) = self.param_real_value(&p.ty, &p.value) {
+                let key = self.fq(&p.name.name);
+                // An override that FOLDED to an i64 applies exactly — `#(.R(i+2))` on a
+                // real formal is legal and iverilog answers it. Rejecting it took a
+                // byte-correct design loud. Only an override that was WRITTEN and did
+                // not fold (a real expression, a signal) is still unsupported, because
+                // the override machinery is i64 throughout and falling through would
+                // merely WARN and run with the declared default = the wrong value at
+                // exit 0.
+                match ovr_by_name.get(p.name.name.as_str()).copied() {
+                    Some(Some(ov)) => {
+                        self.real_param_val.insert(key.clone(), ov as f64);
+                        self.params.insert(key, ov);
+                        continue;
+                    }
+                    Some(None) => self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "the override of real parameter `{}` is not a constant (a \
+                             real override cannot be folded) — the declared default \
+                             would be used silently",
+                            p.name.name
+                        ),
+                    ),
+                    None if ovr_unfoldable.contains(&p.name.name) => self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "the override of real parameter `{}` is not a constant (a \
+                             real override cannot be folded) — the declared default \
+                             would be used silently",
+                            p.name.name
+                        ),
+                    ),
+                    None => {}
+                }
+                // Bind the declared default anyway: on the error paths the run already
+                // fails, and leaving the name unbound raised a second, misleading
+                // "undeclared net/variable" at every downstream read.
+                self.real_param_val.insert(key.clone(), v);
+                if let Some(i) = exact {
+                    self.params.insert(key, i);
+                }
+                continue;
+            }
             let meta = self.param_decl_width(p);
             let pw = meta.map(|(w, _)| w);
             // A fill-literal override re-folds at THIS param's declared width.
@@ -360,6 +422,64 @@ impl Elaborator<'_> {
             // arg (`const_eval_in_scope` folds `$clog2`/`$bits`).
             ast::ExprKind::SysCall { args, .. } => {
                 args.iter().any(|a| self.count_reads_const_array_elem(a))
+            }
+            _ => false,
+        }
+    }
+
+    /// r19: is `name` a REAL parameter with NO exact integer twin? A real param whose
+    /// initializer const-folded to an i64 is registered in BOTH `real_param_val` and
+    /// `params` — both representations are exact and agree — so it keeps every integral
+    /// capability it had before this slice (`logic [R-1:0]`, `generate if (R > 2)`, …)
+    /// while `R/2` still divides in the real domain. Only a param with no i64 twin
+    /// (`= 1.5`) is non-integral and must go loud in an integral context.
+    ///
+    /// Resolves over the COMBINED binding set — an independent walk of `real_param_val` alone
+    /// would match an OUTER real param even when an inner net / numeric param shadows
+    /// it, resolving one name two different ways.
+    pub(crate) fn real_param_is_non_integral(&self, name: &str) -> bool {
+        let Some(key) = self.walk_scopes_key(name, |k| {
+            self.real_param_val.contains_key(k)
+                || self.params.contains_key(k)
+                || self.symbols.contains_key(k)
+        }) else {
+            return false;
+        };
+        self.real_param_val.contains_key(&key) && !self.params.contains_key(&key)
+    }
+
+    /// r19: does `e` read a REAL-valued parameter? A real param is deliberately kept
+    /// out of `params` (it has no i64 value), so `const_eval_in_scope` returns None
+    /// for it and a constant-required context that lacks its own loud gate silently
+    /// folded to 0 — `{int'(R){1'b1}}` printed `0` instead of `11`. The loud twin of
+    /// the array-element / runtime-net count detectors, same recursive shape.
+    pub(crate) fn count_reads_real_param(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                self.real_param_is_non_integral(&p.segments[0].name)
+            }
+            // A const-FUNCTION call is the hole the bound guard was meant to be the only
+            // net for: neither this walk nor `nonconst_bound_reason` descended into call
+            // args, so `logic [f(R)-1:0]` folded to None and `clamp_bound_u32` silently
+            // gave width 1 on a design iverilog answers.
+            ast::ExprKind::Call { args, .. } => args.iter().any(|a| self.count_reads_real_param(a)),
+            ast::ExprKind::Paren { inner } => self.count_reads_real_param(inner),
+            ast::ExprKind::Unary { operand, .. } => self.count_reads_real_param(operand),
+            ast::ExprKind::Cast { expr, .. } => self.count_reads_real_param(expr),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.count_reads_real_param(lhs) || self.count_reads_real_param(rhs)
+            }
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.count_reads_real_param(cond)
+                    || self.count_reads_real_param(then_e)
+                    || self.count_reads_real_param(else_e)
+            }
+            ast::ExprKind::SysCall { args, .. } => {
+                args.iter().any(|a| self.count_reads_real_param(a))
             }
             _ => false,
         }
