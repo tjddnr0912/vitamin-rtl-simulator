@@ -8,6 +8,30 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.220 SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-twin 3형 loud화 (format 23 불변) (2026-07-25, branch feat-dyn-string-elem-byteselect) ✅
+
+**컨텍스트**: §4.5.219가 기록한 **전제조건 슬라이스**. fixed→dyn 라우팅(T1-2/3)을 하려면 먼저 **dyn ⊇ fixed**여야 하는데, byte-select만 fixed가 우세(119 vs dyn 0)했다.
+
+**오라클**: iverilog가 `d[0][0]`을 거부(no-oracle)→**vita-내부 등가 차분**이 teeth — 같은 "world"를 담은 FIXED 원소(`s[0][0]`=iverilog 119 111·오라클 검증)와 SCALAR(`p[0]`=119 111)가 기준점. hand-IEEE=§6.16.2(byte select·범위 밖=0).
+
+**근본 원인(READ)**: `handle_is_str_readable`(엔진이 이 handle의 BYTE를 읽을 수 있는가)가 `Signal{word:None}`·`Const`만 수용. dyn 원소는 **word-indexed** `Signal`이라 거부→width-0 handle의 packed bit-select로 낙하해 **조용히 0**. 정작 엔진 `handle_str_bytes`는 그 shape를 eval fallback으로 항상 읽을 수 있었다(`%s`·`d[i]` 비교가 쓰는 바로 그 경로)—**gate가 자기 술어를 under-approximate**한 것.
+
+**fix(format 23 불변·elaborate-local)**: gate에 `Signal{net, word:Some(_)}` + `string_elem_dyn_nets` arm 추가. **판별자 건전성 논거**(soundness가 제시한 더 강한 형태): 그 집합은 **엔진의 `dyn_str_elem` flag를 구동하는 바로 그 집합**이라, 엔진이 문자열로 저장하지 않는 net을 gate가 admit할 수 없다. 또 **이미 lower된 노드의 net-id로 판정**하므로 자기가 분류하는 lowering과 불일치 불가. **load-bearing 불변식**: 원소 Value가 `is_str`을 들고 있고 `resize_keep_sign`이 `is_str`에서 early-return한다(string dyn net은 width 0이라 아니면 1-bit로 truncate).
+
+**의도보다 넓게 고쳐짐(differential 발굴)**: dyn record-array의 **SoA string member**(`r[0].nm[0]`·파서 `$unp$r$nm[]` desugar가 같은 marker에 도달)·`$bits`(1→8)·`%c`·continuous-assign/NBA/generate/frame-task 문맥·nested `d[0][1][2]`·`d[0][0][3:0]`·`$signed` 全 0→정답.
+
+**★ 적대 2-lens가 write-twin family를 발굴(전부 pre-existing·PRE==POST·fixed/scalar 쌍둥이는 이미 loud)**: (1)`d[0][3:0]=4'hF`→`worle`(**엉뚱한 바이트**) (2)`d[0][15:8]`→**조용한 no-op** (3)runtime offset `d[0][j+:4]`→`worle`(별개 silent 경로) (4)`{d[0],x}=8'hAB`→원소를 **조용히 비움** (5)`real r[]; r[0][3:0]`→조용한 no-op. 근인=엔진이 원소를 byte-string/f64로 **재도출**하며 offset/width를 버림.
+
+**★ soundness의 배치 논거가 핵심 기여**: 초판 guard를 `lval_part_base`에만 뒀는데, `lower_lvalue`가 **문서화된 단일 퍼널**이고 이미 형제 string guard 2개를 갖고 있으며 그것들이 `is_string_net`(=`NetKind::String`) 키라 **dyn 원소의 `DynArray` net에 장님**—그래서 concat 형제가 열려 있었다. → 공유 술어 **`is_string_valued_net`**(scalar String ∪ `string_elem_dyn_nets`)로 퍼널 guard 2곳을 재키잉해 concat 축을 **구조적으로** 닫고, part-select는 더 구체적 메시지를 위해 조기 reject 유지하되 **같은 술어 계열**을 쓰게 해 2-site drift 제거(§4.5.183 dual-collector와 동일 함정). `real`은 `is_non_bit_addressable_elem_net`(string ∪ real element)로 동반 처리.
+
+**재감사 양 lens CLEAN**: differential=**644 파일 sweep·panic 0·empty-output-at-exit-0 0·PRE-worked→POST-loud 40건 전부 두 guard 중 하나에 귀속·미귀속 0**·fuzz 60·staged==one-shot(신규 guard는 velab서 발화). soundness=`offset:Some` LvalChunk **13 생성 site 전수**해 `lval_part_base`가 유일 choke point임을 구조적으로 증명·bypass(hier/force/`$sscanf`/streaming/nested-packed) 全 차단 확인.
+
+**리뷰어 자기정정 2건**(교훈 가치): differential이 `inline_fn` consumer를 "inert"라 했으나 soundness가 반증—**4-state return** inline 함수(`function [7:0] f(input string s)`)면 formal이 verbatim 바인딩돼 word-indexed handle이 gate에 도달, `f = s[0]`이 PRE **0(silent-wrong)**→POST 119이고 `.len()/.getc()/.atoi()` 등 loud→supported. differential은 `function int`(2-state→framed)·`automatic`만 시험해 놓쳤다고 스스로 진단. 또 `(p)[0]` 초기 보고를 "일반 paren-select 갭"에서 **string 전용**으로 정정.
+
+**correct-or-loud 잔여(ROADMAP §3 기록)**: `(p)[0]` paren base(동일 실패 클래스·한 gate 옆) · scalar `real x[3:0]` write(이제 scalar가 뒤처진 **반대 방향** 비대칭) · `string q[$]`/assoc/multi-dim/frame-local/package/class(선언 loud).
+
+**교훈**: (1) **gate가 "엔진이 X를 못 한다"고 말할 때 엔진을 직접 확인하라** — 여기선 엔진이 이미 할 수 있었고 gate만 under-approximate였다. (2) **판별자는 그것이 구동하는 저장소와 같은 집합을 써라**(`string_elem_dyn_nets`가 엔진 `dyn_str_elem`도 구동→admit 불가 논거가 "집합이 int를 배제한다"보다 강함). (3) **READ를 넓히면 WRITE twin을 같은 반복에서 전수하라** — 여기선 twin이 5형이었고 전부 pre-existing silent였다. (4) **guard는 문서화된 단일 퍼널에 두고 술어를 공유하라**(별도 site에 두면 형제 축이 열린 채 남는다). (5) **리뷰어의 "도달 불가/inert" 주장도 측정 대상**(경로 분기 1개[return 타입 2-state/4-state]가 consumer 도달성을 가른다). 신규 `dyn_string_elem_byte_select.rs`×23. **4412→4435 green**·clippy/fmt clean·format 23 불변.
+
 #### 4.5.219 FIXED string-array decl-init `string s[N] = '{…}` loud→supported (t0 pre-sweep per-element 확장·format 23 불변) (2026-07-25, branch feat-fixed-string-array-init) ✅
 
 **컨텍스트**: 오너 지시로 재정렬한 **§0 correct-support 승격 큐 T1-1**. DYNAMIC 형태(`string s[] = '{…}`)는 이미 동작하는데 FIXED만 전 스코프 blanket-loud였음 — **그 비대칭 자체가 갭**(§4.5.198 논리). iverilog 오라클 有.
