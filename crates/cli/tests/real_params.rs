@@ -338,7 +338,12 @@ fn integer_literal_initializing_a_real_param() {
 fn real_select_index_is_loud() {
     // IEEE §11.5.1 wants an integral index. A real one folded to 0, so `v[R]` read the
     // wrong bit, a real part-select bound produced a multi-megabit X, and a real lvalue
-    // index silently DROPPED the write. One wrapper guards every index site.
+    // index silently DROPPED the write.
+    //
+    // A NON-INTEGRAL value is the loud case. An exactly-integral real (`R = 4`) is
+    // instead CONVERTED at this boundary — see `lower_index_expr` — because a real
+    // param with an exact i64 twin lowers as real yet has an unambiguous integral
+    // meaning. Rejecting those took 13 oracle-correct designs loud.
     for body in [
         "$display(\"%b\", v[R]);",
         "$display(\"%b\", v[T:R]);",
@@ -348,12 +353,12 @@ fn real_select_index_is_loud() {
         loud(
             &format!(
                 "module t;\n\
-                   parameter real R = 1.0, T = 2.0;\n\
+                   parameter real R = 1.5, T = 2.5;\n\
                    logic [7:0] v = 8'b0000_0110;\n\
                    initial begin {body} end\n\
                  endmodule\n"
             ),
-            "select index / bound must be integral",
+            "must be integral, not real",
         );
     }
 }
@@ -546,7 +551,7 @@ fn a_lowered_real_count_or_width_cannot_reach_the_ir() {
         "logic [31:0] v; initial begin v=0; v[0 +: R] = '1; $display(\"%h\", v); end",
         "string s = \"abc\"; initial $display(\"%c\", s[R]);",
     ] {
-        let src = format!("module t;\n  parameter real R = 4;\n  {body}\nendmodule\n");
+        let src = format!("module t;\n  parameter real R = 4.5;\n  {body}\nendmodule\n");
         let (_, ok, _) = run_raw(&src);
         assert!(!ok, "expected a loud reject for:\n{src}");
     }
@@ -572,7 +577,7 @@ fn a_real_param_cannot_reach_a_size_count_or_position_argument() {
         // a real param with an exact i64 twin, so this folded to a silent 0.
         "initial $display(\"%0d\", {$clog2(R){1'b1}});",
     ] {
-        let src = format!("module t;\n  parameter real R = 1;\n  {body}\nendmodule\n");
+        let src = format!("module t;\n  parameter real R = 1.5;\n  {body}\nendmodule\n");
         let (_, ok, _) = run_raw(&src);
         assert!(!ok, "expected a loud reject for:\n{src}");
     }

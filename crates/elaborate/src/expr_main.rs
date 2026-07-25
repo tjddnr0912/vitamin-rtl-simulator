@@ -808,6 +808,13 @@ impl Elaborator<'_> {
                     // the count would fold to a silent 0 here (a 0-width replication)
                     // rather than the intended value. IEEE §11.4.12.2 wants a constant
                     // integral count — loud, never a silent 0.
+                    //
+                    // NOT `lower_index_expr`: tried, measured, reverted. `$clog2(R)`
+                    // lowers to a SysFunc that `expr_is_real` does not call real, so
+                    // the wrapper passed it through unchanged and the count folded to a
+                    // silent 0 — strictly worse than the loud reject here. The IR-based
+                    // decision only works where the operand reaches the boundary as a
+                    // real `Const`.
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a replication count that reads a real parameter is unsupported \
