@@ -397,11 +397,44 @@ impl Elaborator<'_> {
     /// actual (`s.substr(..)`) is deliberately NOT accepted here — the engine byte
     /// path does not eval it, so it falls through to the unchanged bit-select (a
     /// separate follow-on), not a silent-X.
+    ///
+    /// r19: a WORD-INDEXED `Signal` on a dyn net whose ELEMENTS are strings
+    /// (`string_elem_dyn_nets`) is readable too — the engine's `handle_str_bytes`
+    /// falls back to `eval` for exactly this shape, the same path `%s` and a compare
+    /// on `sa[i]` already take. Rejecting it made a byte select on a dynamic
+    /// string-array element (`d[0][0]`) fall through to a packed bit-select and read a
+    /// silent 0, while the byte-identical FIXED-array form (`s[0][0]`) correctly gave
+    /// the iverilog-verified 119.
+    ///
+    /// Why the discriminator is sound: `string_elem_dyn_nets` is the SAME set that
+    /// drives the engine's `dyn_str_elem` flag, which is what makes those elements be
+    /// stored as byte-strings in the first place. So the gate cannot admit a net whose
+    /// elements the engine does not hold as strings — a stronger argument than "the
+    /// set happens to exclude `int d[]`". Being keyed on the ALREADY-LOWERED node's
+    /// net id, it also cannot disagree with the lowering it is classifying.
+    ///
+    /// Load-bearing invariant: the element Value carries `is_str`, and
+    /// `resize_keep_sign` returns early on `is_str`. A string dyn net has width 0, so
+    /// its self-width would otherwise truncate the byte string to 1 bit. Anything that
+    /// stores a dyn string element WITHOUT `Value::from_str_bytes` would silently
+    /// collapse this byte select.
+    ///
+    /// The WRITE twin stays loud in every SELECT form: a bit select (`d[0][0] = "W"`)
+    /// is "nested lvalue select", and a part select (`d[0][3:0] = …`, including a
+    /// runtime offset) is rejected in `lval_part_base` — a string element has no
+    /// bit-addressable storage, and letting it through wrote the wrong byte silently.
+    /// A WHOLE element inside a concat lvalue (`{d[0], x} = …`) is caught by the
+    /// `lower_lvalue` funnel guards, which key on the same
+    /// `is_non_bit_addressable_target` predicate — all THREE guard sites share it, so
+    /// the policy cannot drift between them.
     pub(crate) fn handle_is_str_readable(&self, eid: u32) -> bool {
-        matches!(
-            self.exprs.get(eid as usize),
-            Some(ir::Expr::Signal { word: None, .. }) | Some(ir::Expr::Const { .. })
-        )
+        match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Signal { word: None, .. }) | Some(ir::Expr::Const { .. }) => true,
+            Some(ir::Expr::Signal { net, word: Some(_) }) => {
+                self.string_elem_dyn_nets.contains(net)
+            }
+            _ => false,
+        }
     }
 
     /// v7 P2-C: does this AST expression denote a STRING-domain value?
@@ -470,6 +503,27 @@ impl Elaborator<'_> {
     /// v7 P2-C: is `net` a string variable?
     pub(crate) fn is_string_net(&self, net: u32) -> bool {
         self.nets.get(net as usize).map(|n| n.kind) == Some(ir::NetKind::String)
+    }
+
+    /// r19: does a write to `net` land on storage with NO bit-addressable
+    /// representation — a scalar `NetKind::String` net, a dyn STRING element, or a dyn
+    /// REAL element? For all three, a partial or positional write cannot be expressed:
+    /// the engine re-derives the whole value (from its byte string, or as an f64) and
+    /// silently discards the offset/width, or writes an empty piece.
+    ///
+    /// ONE predicate behind EVERY guard that rejects such a write — the two
+    /// `lower_lvalue` funnel guards and the earlier `lval_part_base` rejection — so the
+    /// scalar / fixed / dynamic forms cannot drift apart. They did drift: keyed on
+    /// `is_string_net` alone, the funnel guards were blind to a dyn element's
+    /// `DynArray` net, so `{d[0], x} = …` silently emptied the element while the scalar
+    /// and fixed twins were loud.
+    /// Note this includes a scalar `NetKind::String` net even though `p[0] = "W"` IS
+    /// supported: that plain byte write is intercepted earlier and routed to `.putc`,
+    /// so it never reaches these guards.
+    pub(crate) fn is_non_bit_addressable_target(&self, net: u32) -> bool {
+        self.is_string_net(net)
+            || self.string_elem_dyn_nets.contains(&net)
+            || self.real_elem_dyn_nets.contains(&net)
     }
 
     /// v7 P2-C: does an already-LOWERED expr denote a string-domain value?

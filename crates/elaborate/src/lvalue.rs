@@ -117,10 +117,24 @@ impl Elaborator<'_> {
         // review F3: a string chunk inside a CONCAT lvalue has chunk width 0
         // — the runtime slice loop wrote an EMPTY piece (silently clearing
         // the string). Whole-string single-chunk stays the supported shape.
-        if chunks.len() > 1 && chunks.iter().any(|c| self.is_string_net(c.net)) {
+        //
+        // r19: keyed on `is_non_bit_addressable_target`, which also sees a DYN net
+        // whose elements are strings OR reals. Keyed on `is_string_net` alone these two
+        // guards were blind to a dyn element's `DynArray` net, so `{d[0], x} = …`
+        // silently emptied the element (and `{r[0], x} = …` overwrote a real with a bit
+        // pattern) while the scalar and fixed twins were loud. This funnel is the
+        // backstop; the part-select case is additionally rejected earlier in
+        // `lval_part_base` for a more specific message, and ALL THREE guards share the
+        // one predicate so the policy cannot drift between sites.
+        if chunks.len() > 1
+            && chunks
+                .iter()
+                .any(|c| self.is_non_bit_addressable_target(c.net))
+        {
             self.error(
                 MsgCode::ElabUnsupported,
-                "a string inside a concatenation lvalue is outside the v7 scope",
+                "a string / real value (or a dyn element of either) inside a \
+                 concatenation lvalue is outside the v7 scope",
             );
         }
         // A string ELEMENT chunk carries a non-None offset (a partial bit-write into
@@ -131,12 +145,12 @@ impl Elaborator<'_> {
         // has offset None, so this never fires on `s = …`. Honest-loud.
         if chunks
             .iter()
-            .any(|c| self.is_string_net(c.net) && c.offset.is_some())
+            .any(|c| self.is_non_bit_addressable_target(c.net) && c.offset.is_some())
         {
             self.error(
                 MsgCode::ElabUnsupported,
-                "a string element write inside a concatenation lvalue is outside the \
-                 v7 scope (a plain `s[i] = c` is supported)",
+                "a partial write to a string / real value inside a concatenation \
+                 lvalue is outside the v7 scope (a plain `s[i] = c` is supported)",
             );
         }
         ir::Lvalue { chunks }
@@ -525,6 +539,22 @@ impl Elaborator<'_> {
             if let ast::Lvalue::Ident(p) = b.as_ref() {
                 if p.segments.len() == 1 {
                     if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name) {
+                        // r19: a STRING element has no bit-addressable storage — the
+                        // engine's element write re-derives the whole element from
+                        // `to_str_bytes()`, discarding this offset/width, so the
+                        // read-modify-write below silently wrote the wrong byte
+                        // (`d[0][3:0] = 4'hF` on "world" produced "worle") or silently
+                        // did nothing at all (`d[0][15:8] = 8'h41`). The FIXED and
+                        // SCALAR twins both reject this shape, so match them.
+                        if self.is_non_bit_addressable_target(net) {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "a part-select write into a string / real array element \
+                                 is unsupported (the element has no bit-addressable \
+                                 storage) — assign the whole element",
+                            );
+                            return (POISON_NET, None);
+                        }
                         let word = self.lower_dyn_index(net, kind, i);
                         return (net, Some(word));
                     }
