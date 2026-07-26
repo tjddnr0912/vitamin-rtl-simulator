@@ -148,7 +148,7 @@ impl Elaborator<'_> {
                 // `NetKind::String` element nets (`<name>$sae$<i>`); `files[K]` (CONST K)
                 // resolves to the K-th net. A dynamic (`string s[]`) / multi-dim /
                 // init-pattern array stays loud (correct-or-loud) via the reject below.
-                if d.range.is_none() && d.packed.is_empty() && decl.unpacked.len() == 1 {
+                if d.range.is_none() && d.packed.is_empty() && !decl.unpacked.is_empty() {
                     // T1: a ZERO-BASED ASCENDING fixed string array routes to the
                     // DYNAMIC representation instead of N per-element nets. Measured
                     // capability parity (23 shapes, fixed vs dyn, iverilog-differential)
@@ -161,14 +161,25 @@ impl Elaborator<'_> {
                     // because the routed net needs a `new[n]` pre-size driven from the t0
                     // var-init flush, which only those scopes run. Generate / package /
                     // interface / port scopes keep the per-element-net path verbatim.
+                    //
+                    // T1-5: MULTI-dim (`string s[2][3]`) rides the same route — one FLAT
+                    // row-major container, with `s[i][j]` flattened at each access. Every
+                    // dimension must qualify (`fixed_string_dims_zero_asc`), because the
+                    // flat container renumbers any axis that does not.
                     if allow_string_init {
-                        if let Some(n) = self.fixed_string_dim_zero_asc(&decl.unpacked[0]) {
-                            if self.route_fixed_string_array(decl, n, ports, body) {
+                        if let Some(dims) = self.fixed_string_dims_zero_asc(&decl.unpacked) {
+                            if self.route_fixed_string_array(decl, &dims, ports, body) {
                                 continue;
                             }
                         }
                     }
-                    if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
+                    if decl.unpacked.len() != 1 {
+                        // Multi-dim that did NOT qualify for the route (a non-zero base,
+                        // a descending dim, a non-constant bound, or too many elements):
+                        // the per-element-net path below speaks one dimension only, so
+                        // fall through to the dimension reject rather than silently
+                        // building storage for the first dimension alone.
+                    } else if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
                         // r19: a `'{…}` decl-init EXPANDS to per-element assignments in
                         // the t0 var-init pre-sweep (`fixed_string_array_init_pairs`,
                         // collected by `collect_var_init_drivers` / the block-local

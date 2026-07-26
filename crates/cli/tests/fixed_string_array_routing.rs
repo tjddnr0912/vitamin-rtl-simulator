@@ -155,6 +155,91 @@ fn size_of_a_fixed_string_array() {
     );
 }
 
+// ── T1-5: multi-dimensional ──────────────────────────────────────────────────
+
+#[test]
+fn multi_dim_element_read_and_write() {
+    // iverilog: aa dd. `string s[2][2]` is ONE flat 4-element container; `s[i][j]`
+    // flattens row-major at each access. Both funnels bottom out on an `Ident` base,
+    // which a nested select never is — so read and write each walk the chain, and they
+    // must decline on exactly the same conditions or the two would land on different
+    // elements.
+    assert_eq!(
+        run("module m; string s[2][2];\n\
+             initial begin s[0][0]=\"aa\"; s[1][1]=\"dd\"; \
+             $display(\"%s %s\", s[0][0], s[1][1]); $finish; end\n\
+             endmodule\n"),
+        "aa dd\n"
+    );
+}
+
+#[test]
+fn multi_dim_row_major_order_is_observable() {
+    // A non-square shape is what distinguishes row-major from column-major: with
+    // `s[2][3]` a transposed flatten would collide `s[0][2]` with `s[1][0]`. Writing
+    // every cell and reading three of them back pins the order. iverilog: x x LAST.
+    assert_eq!(
+        run("module m; string s[2][3]; int i,j;\n\
+             initial begin\n\
+               for(i=0;i<2;i=i+1) for(j=0;j<3;j=j+1) s[i][j]=\"x\";\n\
+               s[1][2]=\"LAST\";\n\
+               $display(\"%s %s %s\", s[0][0], s[1][1], s[1][2]); $finish; end\n\
+             endmodule\n"),
+        "x x LAST\n"
+    );
+}
+
+#[test]
+fn three_dimensional() {
+    // iverilog: A Z — the flatten is N-D, not a special case for two.
+    assert_eq!(
+        run("module m; string s[2][2][2];\n\
+             initial begin s[0][0][0]=\"A\"; s[1][1][1]=\"Z\"; \
+             $display(\"%s %s\", s[0][0][0], s[1][1][1]); $finish; end\n\
+             endmodule\n"),
+        "A Z\n"
+    );
+}
+
+#[test]
+fn a_partial_index_of_a_multi_dim_array_is_loud() {
+    // REGRESSION GUARD. A single index on a 2-D array is a partial index — it selects a
+    // whole row, which has no value surface (iverilog rejects the source). The flat
+    // container would otherwise take the ROW number as an ELEMENT number: measured, the
+    // read printed an empty string at exit 0. Raised at BOTH funnels, or the write would
+    // stay silent while the read was loud.
+    assert!(loud(
+        "module m; string s[2][2];\n\
+        initial begin s[0][0]=\"aa\"; $display(\"%s\", s[0]); $finish; end\n\
+        endmodule\n"
+    ));
+    assert!(loud(
+        "module m; string s[2][2];\n\
+        initial begin s[0]=\"aa\"; $display(\"done\"); $finish; end\n\
+        endmodule\n"
+    ));
+}
+
+#[test]
+fn a_multi_dim_declaration_that_does_not_qualify_stays_loud() {
+    // Every dimension must be zero-based ascending, because the container is FLAT: a
+    // non-conforming axis would be renumbered silently. `string s[1:2][1:2]` is a
+    // capability gap (iverilog runs it) and an honest reject — not a wrong answer.
+    // A multi-dim `'{…}` decl-init is loud for the same reason: the expansion speaks one
+    // dimension, and filling the first N elements of the flat container is not the same
+    // array.
+    assert!(loud(
+        "module m; string s[1:2][1:2];\n\
+        initial begin s[1][1]=\"aa\"; $display(\"%s\", s[1][1]); $finish; end\n\
+        endmodule\n"
+    ));
+    assert!(loud(
+        "module m; string s[2][2] = '{\"a\",\"b\",\"c\",\"d\"};\n\
+        initial begin $display(\"%s\", s[0][0]); $finish; end\n\
+        endmodule\n"
+    ));
+}
+
 // ── what must NOT change ─────────────────────────────────────────────────────
 
 #[test]

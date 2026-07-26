@@ -322,11 +322,26 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+                // T1-5: a routed MULTI-dim string array element (`s[i][j] = v`) — the
+                // chain flattens row-major to one word of the flat container. Must be
+                // tried before the Ident arm below, which cannot see a nested base.
+                if let Some((net, word)) = self.routed_md_string_lval(base, index) {
+                    out.push(ir::LvalChunk {
+                        net,
+                        word: Some(word),
+                        offset: None,
+                        width: None,
+                        kind: ir::SelKind::Bit,
+                    });
+                    return;
+                }
                 // v5 ⑥: dyn-handle element write (`d[i] = v`, `q[$] = v`,
                 // `a[k] = v`) — handles never take the static chunk paths.
                 if let ast::Lvalue::Ident(p) = &**base {
                     if p.segments.len() == 1 {
                         if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name) {
+                            // Write twin of the read funnel's partial-index reject.
+                            self.reject_partial_md_string_index(net);
                             let word = self.lower_dyn_index(net, kind, index);
                             out.push(ir::LvalChunk {
                                 net,

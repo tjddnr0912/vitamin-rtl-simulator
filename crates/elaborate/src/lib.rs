@@ -524,7 +524,7 @@ struct Elaborator<'s> {
     // `new[]` on it stays LOUD — a fixed array is not resizable, and without this the
     // routing would turn today's honest reject into a SILENT resize. elaborate-LOCAL
     // (the engine only needs `string_elem_dyn_nets`, which the routed net also joins).
-    fixed_string_dyn: BTreeMap<u32, i64>,
+    fixed_string_dyn: BTreeMap<u32, Vec<u32>>,
     // T1: FQ name of a routed fixed string array → its DynArray net. The net is
     // registered under a MANGLED name (`<name>$sad`), never the declared one, so the
     // bare name stays FREE in the module namespace — exactly as the per-element-net

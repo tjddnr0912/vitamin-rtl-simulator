@@ -308,6 +308,16 @@ impl Elaborator<'_> {
     /// Read-side `handle[idx]` interception — `None` for non-handles so the
     /// caller's array/packed/scalar logic runs unchanged.
     pub(crate) fn dyn_select_read(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
+        // T1-5: a routed MULTI-dim string array nests (`s[i][j]`), so its base is a
+        // BitSelect rather than an Ident. Tried first because the Ident arm below would
+        // not match it at all; it declines for every other shape, including a 1-D routed
+        // array (which keeps the single-index path byte-identically).
+        if let Some((net, word)) = self.routed_md_string_elem(base, index) {
+            return Some(self.push_expr(ir::Expr::Signal {
+                net,
+                word: Some(word),
+            }));
+        }
         let ast::ExprKind::Ident(p) = &base.kind else {
             return None;
         };
@@ -317,6 +327,9 @@ impl Elaborator<'_> {
         // R2: `dyn_handle_read` so `b[i]` on a read-only aliased input dyn-array formal
         // reads the caller's `dyn_heap[a]`.
         let (net, kind) = self.dyn_handle_read(&p.segments[0].name)?;
+        // A single index on a routed MULTI-dim array is a partial index; the flat
+        // container would read the row number as an element number.
+        self.reject_partial_md_string_index(net);
         let word = self.lower_dyn_index(net, kind, index);
         Some(self.push_expr(ir::Expr::Signal {
             net,
