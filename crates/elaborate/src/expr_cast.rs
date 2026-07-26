@@ -670,9 +670,15 @@ impl Elaborator<'_> {
                 matches!(op, ir::UnOp::Plus | ir::UnOp::Minus) && self.expr_is_real(*operand)
             }
             Some(ir::Expr::Binary { op, lhs, rhs }) => {
+                // `**` is real-propagating (§11.4.4); the AST-side twin
+                // `ast_has_real_call` carries the identical list — keep them in step.
                 matches!(
                     op,
-                    ir::BinOp::Add | ir::BinOp::Sub | ir::BinOp::Mul | ir::BinOp::Div
+                    ir::BinOp::Add
+                        | ir::BinOp::Sub
+                        | ir::BinOp::Mul
+                        | ir::BinOp::Div
+                        | ir::BinOp::Pow
                 ) && (self.expr_is_real(*lhs) || self.expr_is_real(*rhs))
             }
             Some(ir::Expr::Ternary { then_e, else_e, .. }) => {
