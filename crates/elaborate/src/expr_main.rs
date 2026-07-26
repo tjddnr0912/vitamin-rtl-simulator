@@ -538,7 +538,8 @@ impl Elaborator<'_> {
                     // Lower EVERY index NOW, with the full lowering context
                     // (params/genvars/function-formal `subst`) — re-lowering at fixup
                     // would lose that (review N3.1 HIGH).
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
                         word: None,
@@ -610,7 +611,8 @@ impl Elaborator<'_> {
                 // resolution normalizes the offset against the element/net LSB. Without
                 // it a non-zero-LSB hierarchical net read the raw offset → silent X.
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let lsb_id = self.lower_index_expr(lsb);
                     let msb_id = self.lower_index_expr(msb);
                     let width = self.width_from_msb_lsb_checked(msb, lsb, msb_id, lsb_id);
@@ -700,7 +702,8 @@ impl Elaborator<'_> {
                 // PartSelect arm above and the write side. `false` (descending) kind
                 // mirrors the write side; an ascending hier net is a rare follow-on.
                 if let Some((path, idx_asts)) = self.hier_chain(base) {
-                    let idx_eids: Vec<u32> = idx_asts.iter().map(|e| self.lower_expr(e)).collect();
+                    let idx_eids: Vec<u32> =
+                        idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
                     let w = self.lower_index_expr(width);
                     let eid = self.push_expr(ir::Expr::Signal {
@@ -855,7 +858,23 @@ impl Elaborator<'_> {
                     );
                     self.placeholder_expr()
                 } else {
-                    self.lower_expr(count)
+                    // r19/B2: decide on the LOWERED count. The AST predicates above
+                    // have to enumerate `ExprKind` arms and that does not converge —
+                    // `MinTypMax` fell through every one of them, reached here as a
+                    // real `Const`, and `{(R:R:R){1'b1}}` then span forever building a
+                    // replication of the f64 bit pattern (RSS stays at 16 MB, so a
+                    // memory cap does not catch it). Requiring a folded constant here
+                    // is complete by construction: IEEE §11.4.12.2 wants a constant
+                    // integral count, so anything that did not fold has no business
+                    // reaching `Replicate`, where a non-constant silently became 0.
+                    // Deciding on the lowered node is complete by construction where
+                    // the AST walk is not; and because the wrapper converts an
+                    // exactly-integral real at this boundary, a real count with an i64
+                    // twin becomes correct rather than merely loud. NOT a "must be a
+                    // folded Const" check — tried, and it false-rejected `$clog2(P)`
+                    // on an INTEGER param, which the engine evaluates as a constant
+                    // without folding at elaborate time.
+                    self.lower_index_expr(count)
                 };
                 // hdl-ast `value: Vec<Expr>` is the element LIST (no wrapper
                 // Concat); sim-ir Replicate wants ONE `value: u32` → wrap in a

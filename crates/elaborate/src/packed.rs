@@ -101,6 +101,33 @@ impl Elaborator<'_> {
     /// drift between rvalue and lvalue paths. (Real PARAMETERS made this reachable;
     /// a real literal index `v[1.5]` was always reachable and is covered too.)
     pub(crate) fn lower_index_expr(&mut self, e: &ast::Expr) -> u32 {
+        // r19/S1: a real-returning FUNCTION. `expr_is_real` works on the lowered IR
+        // and cannot see this: the inline path folds the body to an expression whose
+        // nodes carry no real marker, and `func_return_dims` computes the Real kind
+        // only to discard it, so the return net is not `NetKind::Real` on either
+        // path. The DECLARATION does know, and this wrapper still holds the AST —
+        // so ask the declaration. `v[7:f()]` silently dropped the write before this.
+        // r19/S1: a real-returning FUNCTION. `expr_is_real` works on the lowered
+        // IR and cannot see this — the inline path folds the body to an expression
+        // with no real marker, and `func_return_dims` computes the Real kind only to
+        // discard it, so the return net is not `NetKind::Real` on either path. The
+        // DECLARATION knows, and this wrapper still holds the AST.
+        //
+        // Delegated, NOT re-implemented: the first version was a near-copy that
+        // dropped this predicate's operator guards, so `v[fr(2) > 2.0]` — where `>`
+        // consumes a real and yields an INTEGRAL result — was false-loud at eight
+        // gated sites. `ast_has_real_call` restricts propagation to `+ - * /` and
+        // the ternary arms, matching the IR-side twin `expr_is_real`.
+        if self.ast_has_real_call(e) {
+            let id = self.lower_expr(e);
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a select index / bound / size must be integral, not real (IEEE §11.5.1) \
+                 — this reads a real-returning function",
+            );
+            let _ = id;
+            return self.const_u32_expr(0, 32);
+        }
         let id = self.lower_expr(e);
         if self.expr_is_real(id) {
             // r19: a real param whose initializer folded EXACTLY to an integer is

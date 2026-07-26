@@ -591,3 +591,121 @@ fn a_real_param_cannot_reach_a_size_count_or_position_argument() {
     assert!(ok, "integer params must be unaffected");
     assert!(out.contains("4 ell 3 3"), "got {out:?}");
 }
+
+#[test]
+fn every_write_hier_and_array_element_index_routes_through_the_index_gate() {
+    // The fifth review round found eleven shapes that never reached
+    // `lower_index_expr`, so a real param arrived at the engine as an f64 bit
+    // pattern read as an integer: `v[7:R] = ...` dropped the write, `u.v[R]` read
+    // the wrong bit, `m[1][R]` hit the wrong element. `lower_index_expr` converts an
+    // exactly-integral real at the boundary, so these are now correct rather than
+    // merely loud — the oracle rejects them all, so these are hand-IEEE pins.
+    for (body, want) in [
+        ("v[7:R] = 5'h1F; $display(\"%0h\", v);", "f8"),
+        ("v[R] = 1'b1; $display(\"%0h\", v);", "8"),
+        ("m[1] = 0; m[1][R] = 1'b1; $display(\"%0h\", m[1]);", "8"),
+        (
+            "g[0][1] = 0; g[0][1][R] = 1'b1; $display(\"%0h\", g[0][1]);",
+            "8",
+        ),
+        ("m[1] = 8'ha5; $display(\"%0d\", m[1][R]);", "0"),
+    ] {
+        let src = format!(
+            "module t;\n  parameter real R = 3;\n  logic [7:0] v = 0;\n  \
+             logic [7:0] m [0:3];\n  logic [7:0] g [0:1][0:1];\n  \
+             initial begin {body} end\nendmodule\n"
+        );
+        let (out, ok, err) = run_raw(&src);
+        assert!(ok, "expected support for:\n{src}\n{err}");
+        assert!(out.contains(want), "want {want:?} in {out:?}\n{src}");
+    }
+    // A non-integral value has no integral meaning and must stay loud, never silent.
+    let (_, ok, _) = run_raw(
+        "module t;\n  parameter real R = 3.5;\n  logic [7:0] v = 0;\n  \
+         initial v[7:R] = 5'h1F;\nendmodule\n",
+    );
+    assert!(!ok, "a fractional bound must be loud");
+}
+
+#[test]
+fn hierarchical_selects_route_through_the_index_gate_too() {
+    for (body, want) in [
+        ("u.v[R] = 1'b1; $display(\"%0h\", u.v);", "ad"),
+        ("$display(\"%0d\", u.v[R]);", "0"),
+    ] {
+        let src = format!(
+            "module sub;\n  logic [7:0] v;\n  initial v = 8'ha5;\nendmodule\n\
+             module t;\n  parameter real R = 3;\n  sub u();\n  \
+             initial begin #1 {body} end\nendmodule\n"
+        );
+        let (out, ok, err) = run_raw(&src);
+        assert!(ok, "expected support for:\n{src}\n{err}");
+        assert!(out.contains(want), "want {want:?} in {out:?}\n{src}");
+    }
+}
+
+#[test]
+fn a_min_typ_max_replication_count_cannot_spin_forever() {
+    // `{(R:R:R){1'b1}}` fell through every arm of the AST predicate, reached
+    // ir::Expr::Replicate as a real Const, and spun forever building a replication
+    // of the f64 bit pattern — with RSS at 16 MB, so a memory cap would not catch
+    // it. Deciding on the LOWERED count is complete by construction where
+    // enumerating ExprKind arms is not.
+    let (out, ok, err) = run_raw(
+        "module t;\n  parameter real R = 3;\n  initial $display(\"%0d\", {(R:R:R){1'b1}});\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected support:\n{err}");
+    assert!(out.contains('7'), "3 ones is 7, got {out:?}");
+    // fractional has no integral meaning -> loud, never a spin
+    let (_, ok, _) = run_raw(
+        "module t;\n  parameter real R = 3.5;\n  initial $display(\"%0d\", {(R:R:R){1'b1}});\n\
+         endmodule\n",
+    );
+    assert!(!ok, "a fractional count must be loud");
+    // and the integer forms the gate shares must be untouched
+    let (out, ok, _) = run_raw(
+        "module t;\n  parameter int P = 3;\n  \
+         initial $display(\"%b %b %b\", {P{1'b1}}, {(P:P:P){1'b1}}, {$clog2(P){1'b1}});\n\
+         endmodule\n",
+    );
+    assert!(ok);
+    assert!(out.contains("111 111 11"), "got {out:?}");
+}
+
+#[test]
+fn readmem_address_arguments_are_gated_by_position() {
+    // `$readmem*` address args took the f64 BIT PATTERN as an address ("address
+    // 4607182418800017408 outside the load range"), so the load silently did
+    // nothing and `$writemem*` silently wrote no file. The lowering site handles
+    // EVERY system-task argument, so gating it wholesale would false-loud
+    // `$display("%f", R)` — only args 2..  of the readmem family are addresses.
+    let dir = std::env::temp_dir().join(format!("vita_rm_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hex = dir.join("mm.hex");
+    std::fs::write(&hex, "11\n22\n33\n44\n").unwrap();
+    let f = hex.display().to_string().replace('\\', "\\\\");
+
+    let (out, ok, err) = run_raw(&format!(
+        "module t;\n  parameter real R = 1;\n  logic [7:0] m [0:3];\n  \
+         initial begin m[1]=0; m[2]=0; $readmemh(\"{f}\", m, R);\n    \
+         $display(\"%0h %0h\", m[1], m[2]);\n  end\nendmodule\n"
+    ));
+    assert!(ok, "expected support:\n{err}");
+    assert!(out.contains("11 22"), "want 11 22, got {out:?}");
+
+    // a fractional address has no integral meaning -> loud, never a bogus address
+    let (_, ok, _) = run_raw(&format!(
+        "module t;\n  parameter real R = 1.5;\n  logic [7:0] m [0:3];\n  \
+         initial $readmemh(\"{f}\", m, R);\nendmodule\n"
+    ));
+    assert!(!ok, "a fractional address must be loud");
+
+    // …and a real in a NON-address position is untouched
+    let (out, ok, _) = run_raw(
+        "module t;\n  parameter real R = 2.5;\n  initial $display(\"%0.2f\", R);\nendmodule\n",
+    );
+    assert!(ok);
+    assert!(out.contains("2.50"), "got {out:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

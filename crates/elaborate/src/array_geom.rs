@@ -362,7 +362,10 @@ impl Elaborator<'_> {
         let mut acc: Option<u32> = None;
         for (k, idx) in word_idxs.iter().enumerate() {
             let (lo, size) = extents[k];
-            let i_eid = self.lower_expr(idx);
+            // r19/S2: the array WORD index and the multi-dim-packed trailing
+            // element index both funnel here. Gating only the flat-vector
+            // bit-select left `p[0][R]` reading the wrong nibble at exit 0.
+            let i_eid = self.lower_index_expr(idx);
             if guard_dims {
                 // `idx >= lo && idx <= hi` on the RAW index. A negative or
                 // wrapped index always fails one side in either signedness

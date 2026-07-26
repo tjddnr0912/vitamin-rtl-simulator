@@ -104,9 +104,61 @@ connectivity, parameter resolution).
 | `VITA-E3002` | `E-ELAB-PORT-MISMATCH` | error | An instance port connection is incompatible with the module's declared ports — a `.foo()` that isn't a port, or too many positional connections. | Fix the connection to a declared port (name / positional count / direction). Leave a port unconnected with `.z()`. |
 | `VITA-E3003` | `E-ELAB-UNRESOLVED-INSTANCE` | error | An instantiated module cannot be resolved to a compiled design unit. | Add the missing module's source to the [`vcmp`](004_cli-reference.md) input, or fix a module-name typo. |
 | `VITA-E3010` | `E-ELAB-UNRESOLVED-NAME` | error | A reference to a net/variable that is not declared in scope (in an `assign`, an expression, or an lvalue). | Add the missing `wire`/`reg`/`logic` declaration, or fix the typo. |
-| `VITA-E3009` | `E-ELAB-UNSUPPORTED` | error | A construct the elaborator does not yet support is encountered; elaboration stops. | Remove or rework the construct, or wait for a later release that supports it. |
+| `VITA-E3009` | `E-ELAB-UNSUPPORTED` | error | A construct the elaborator does not support is encountered; elaboration stops. Most often a **real value where the language requires an integer** — see below. | Make the value integral (declare it `int`, or convert with `$rtoi()`/`int'()`), or rework the construct. |
 | `VITA-W3008` | `W-ELAB-WIDTH-TRUNC` | warning | A width mismatch is resolved by implicit truncation/extension (e.g. assigning an 8-bit value to a 4-bit target loses the top bits). | If the truncation is intended, make it explicit (`wide[3:0]`); otherwise match the widths. |
 | `VITA-W3011` | `W-ELAB-CASEZ-APPROX` | warning | A `casez` label contains an explicit `x` bit. vitamin's v1 matcher treats that `x` as a don't-care like `z`, which is looser than strict `casez`. | If you mean don't-care, write `?`/`z` (no warning). Only `casez` labels with explicit `x` trigger this; `casex` is exact by definition. |
+
+### The most common `E3009`: a real value where an integer is required
+
+IEEE 1800 requires an **integral constant** for a select index, a range bound, and
+a replication count (§11.5.1, §11.4.12.2). vitamin will not quietly round such a
+value or reinterpret its bit pattern as an integer, because both produce a wrong
+answer with no error. Instead:
+
+- a real whose value is **exactly an integer** is converted and accepted, so
+  `parameter real R = 4;` works anywhere an integer works;
+- anything else is rejected with `E3009`.
+
+```systemverilog
+module m;
+  parameter real R = 1.5;
+  logic [7:0] v;
+  initial v[R] = 1'b1;
+endmodule
+```
+```
+error[VITA-E3009]: a select index / bound / size must be integral, not real (IEEE §11.5.1)
+```
+
+The same code appears for a real value used as: a part-select bound; the offset or
+width of an indexed part-select (`v[i +: n]`); an array index; a `new[N]` size; a
+queue or associative-array index, `.exists()` key or `.delete()` key; a string
+method argument; the address argument of `$readmemh`/`$readmemb`/`$writememh`/
+`$writememb`/`$fread`; or a replication count. It also fires when the value comes
+from a **function declared to return `real`**, not just from a `real` parameter.
+
+A related message names the width case specifically:
+
+```
+error[VITA-E3009]: a real parameter is not an integral constant and cannot be used
+in a width / range bound (assign it to an integer localparam first)
+```
+
+**What to do.** If the quantity is conceptually an integer, declare it as one
+(`parameter int N = 4;`). If it must stay real, convert explicitly at the point of
+use — `v[$rtoi(R)]` or `v[int'(R)]`. Note that an *expression* over a real
+parameter (`v[R+1]`) is rejected even when the result would be integral; convert
+the whole expression instead (`v[int'(R+1)]`).
+
+**Overriding a `real` parameter.** An override that folds to an integer is applied
+normally (`#(.R(3))`, `#(.R(i+2))`). One that does not fold — a real expression, or
+a signal — is rejected rather than silently leaving the child at its declared
+default:
+
+```
+error[VITA-E3009]: a parameter override that reads a real parameter is unsupported
+(a real has no integral constant value)
+```
 
 ### Elaboration-time `$error` / `$fatal` / `$warning` / `$info`
 

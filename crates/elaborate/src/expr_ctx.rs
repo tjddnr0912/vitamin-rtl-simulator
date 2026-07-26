@@ -607,7 +607,10 @@ impl Elaborator<'_> {
                 self.push_expr(ir::Expr::Concat { parts: part_ids })
             }
             Replicate { count, value } => {
-                let count = self.lower_expr(count);
+                // r19/S3: the SECOND replication-count lowering site, reached
+                // whenever the replicated value contains a `'0`/`'1` fill.
+                // Gating only the other one left `{R{'1}}` printing `ff`.
+                let count = self.lower_index_expr(count);
                 let part_ids: Vec<u32> = value
                     .iter()
                     .map(|p| self.lower_ctx_or_plain(p, 0))

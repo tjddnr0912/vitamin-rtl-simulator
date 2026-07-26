@@ -539,9 +539,27 @@ impl Elaborator<'_> {
         } else {
             (None, args)
         };
+        // r19/B3: `$readmem*`/`$writemem*` take `(file, mem, start, end)` — args 2
+        // and 3 are ADDRESSES and must be integral. This lowering site handles every
+        // system-task argument, so gating it wholesale would false-loud
+        // `$display("%f", R)`; gate the two positions that are addresses instead. A
+        // real param reached the engine here as an f64 BIT PATTERN read as an
+        // address (`address 4607182418800017408 outside the load range`), which
+        // silently loaded nothing and, on the write side, silently wrote no file.
+        let addr_positions = matches!(
+            which,
+            ir::SysTaskId::ReadmemB
+                | ir::SysTaskId::ReadmemH
+                | ir::SysTaskId::WritememB
+                | ir::SysTaskId::WritememH
+        );
         let arg_ids: Vec<u32> = value_args
             .iter()
-            .filter_map(|a| {
+            .enumerate()
+            .filter_map(|(argi, a)| {
+                if addr_positions && argi >= 2 {
+                    return Some(self.lower_index_expr(a));
+                }
                 // `$dumpvars(level, scope)` — the level const and a scope/module
                 // ident. v1 dumps ALL signals (a valid superset of any requested
                 // depth/scope), so a scope ident is silently dropped here rather

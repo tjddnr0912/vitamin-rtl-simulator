@@ -260,9 +260,16 @@ impl Elaborator<'_> {
                 matches!(op, ast::UnOp::Plus | ast::UnOp::Minus) && self.ast_has_real_call(operand)
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
+                // `**` is real-propagating in SV (§11.4.4) and was missing from
+                // this list and from its IR-side twin `expr_is_real`, which carries the
+                // identical four-op list — so `fa(2) ** 1` was not seen as real.
                 matches!(
                     op,
-                    ast::BinOp::Add | ast::BinOp::Sub | ast::BinOp::Mul | ast::BinOp::Div
+                    ast::BinOp::Add
+                        | ast::BinOp::Sub
+                        | ast::BinOp::Mul
+                        | ast::BinOp::Div
+                        | ast::BinOp::Pow
                 ) && (self.ast_has_real_call(lhs) || self.ast_has_real_call(rhs))
             }
             ast::ExprKind::Ternary { then_e, else_e, .. } => {
