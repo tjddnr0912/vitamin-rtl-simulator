@@ -152,3 +152,29 @@ A few smaller, fully-documented choices round out the list:
   Windows, 3-OS CI).
 - `docs/REMAINING_WORK.md` (in the repository) — the live tracker of Phase-2
   refinements for each item above.
+
+## Real (`real` / `realtime`) parameters
+
+`parameter real` and `localparam real` are supported: they bind, participate in
+real arithmetic (`R/2` divides in the real domain), and can be overridden with any
+value that folds to an integer.
+
+Where the language requires an **integral constant** — a select index, a range or
+width bound, a replication count, an array size, a memory address — a real is
+accepted only when its value is **exactly an integer** (`parameter real R = 4;`).
+A fractional value, or an expression over a real parameter, is rejected with
+[`VITA-E3009`](007_error-codes.md); convert it explicitly with `int'()` or
+`$rtoi()`. This is deliberate: rounding silently, or reading the f64 bit pattern
+as an integer, would produce a wrong answer with no diagnostic.
+
+Not yet supported, and rejected loudly: a `parameter real` declared in an
+interface body or a generate scope, a hierarchical reference to another instance's
+real parameter, and `$clog2()` of a real **when the result feeds a width or a
+replication count** (`$clog2(R)` on its own evaluates normally).
+
+> **Known defect — a package-scope `parameter real` is silently wrong.**
+> `pk::PR / 2` with `parameter real PR = 3;` in a package yields `1.0`, not `1.5`:
+> the package binding is not routed to the real side table, so the division happens
+> in the integer domain with no diagnostic. A module-scope `parameter real` is
+> correct. Until this is fixed, declare real constants at module scope, or pass them
+> as parameters. Tracked in `docs/ROADMAP.md` §2.

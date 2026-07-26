@@ -338,20 +338,69 @@ assign narrow = wide;             // 8 -> 4 비트, 상위 nibble 손실
 **(역사적 — 현재 미발화.)** v1이 `casez`를 `reduction_or(scrut^label)!==1` 근사로 lowering하던 시기, explicit-`x` 라벨 비트가 z처럼 don't-care로 처리됨을 알리던 경고. v7의 정밀 `CasezEq`/`CasexEq`(casez=양측 z/`?`만 와일드카드·explicit-x 라벨은 x하고만 매치, casex=x/z 둘 다)가 근사를 대체하면서 이 경고는 더 이상 발화하지 않는다. 코드 번호는 doc-15 bijection 보존을 위해 유지된다.
 
 ### VITA-E3009 · `E-ELAB-UNSUPPORTED` (Error)
-**elaborate가 지원하지 않는 구문의 loud-reject 표면.** correct-or-loud 원칙의 중심 코드:
-silent-wrong(틀린 출력·무에러)을 내는 대신 명시적으로 중단한다. 파이프라인 대부분(절차 블록·
-인스턴스·generate·func/task·class/OOP·dyn storage·SVA 등)은 구현돼 있고, 이 코드는 **잔여
-미지원 서브폼**에서 나온다 — 예: unpacked `struct`, `q[a:b]` queue slice 읽기, 계층 함수호출
-`u1.f(x)`, force/release part-select, 런타임 `==?` 패턴, array `parameter` 등(현행 목록은
-매뉴얼 [006 Limitations]·`docs/ROADMAP.md`).
+
+**elaborate가 지원하지 않는 구문의 loud-reject 표면.** correct-or-loud 원칙의 중심 코드 —
+silent-wrong(틀린 출력·무에러)을 내느니 명시적으로 중단한다. 파이프라인 대부분은 구현돼 있고,
+이 코드는 **잔여 미지원 서브폼**에서 나온다. 아래 목록은 실제 바이너리로 검증한 현행 표면이다
+(전체 잔여 목록 = [ROADMAP §3](../ROADMAP.md)).
+
+**① 정수를 요구하는 자리에 real 값이 온 경우** (가장 흔한 발생 원인)
+
+IEEE §11.5.1은 select 인덱스·범위 바운드를, §11.4.12.2는 replication count를 **정수 상수**로
+요구한다. vita는 값이 **정확히 정수인 real**이면 문맥 경계에서 변환해 받아들이고, 그렇지 않으면
+거부한다 — 조용히 반올림하거나 f64 비트패턴을 정수로 읽는 일이 없도록.
+
+```systemverilog
+module m;
+  parameter real R = 1.5;          // 정확한 정수가 아님
+  logic [7:0] v;
+  initial v[R] = 1'b1;
+endmodule
+->  error[VITA-E3009]: a select index / bound / size must be integral, not real (IEEE §11.5.1)
 ```
-module m; typedef struct { int a; } s_t; endmodule
-->  error[VITA-E2002]: expected `packed` after `struct` (unpacked struct unsupported in v1)
-module m; int q[$]; int r[$]; initial r = q[1:2]; endmodule
-->  error[VITA-E3009]: a dynamic-storage handle has no whole-value surface (read elements or call methods)
+
+같은 코드가 나오는 자리: select 인덱스·part-select 바운드·indexed part-select의 offset/width ·
+배열 word 인덱스 · `new[N]` 크기 · queue/assoc 인덱스와 `.exists()`/`.delete()` 키 ·
+string 메서드 인자 · `$readmem*`/`$writemem*`/`$fread`의 주소 인자 · replication count.
+**real을 반환하는 함수**(`function real f()`)를 이 자리에 쓴 경우도 포함한다.
+
+```systemverilog
+module m;
+  parameter real R = 8.5;
+  logic [R-1:0] v;                 // width가 정수로 접히지 않음
+endmodule
+->  error[VITA-E3009]: a real parameter is not an integral constant and cannot be used in a
+    width / range bound (assign it to an integer localparam first)
 ```
-**해결:** 메시지가 가리키는 서브폼을 지원되는 등가형으로 바꾸거나(예: unpacked→packed struct,
-slice→원소 루프), ROADMAP의 해당 후보 구현을 기다린다.
+
+**해결:** 값이 정수라면 정수형으로 선언하거나(`parameter int`), `$rtoi()`/`int'()`로 명시 변환한다.
+`parameter real R = 4;`처럼 **정확히 정수로 접히는** real은 정수 문맥에서 그대로 쓸 수 있다.
+
+**② real 파라미터의 override가 상수로 접히지 않는 경우**
+
+```systemverilog
+module s #(parameter W = 8) (); endmodule
+module m; parameter real R = 4.5; s #(.W(R)) u(); endmodule
+->  error[VITA-E3009]: a parameter override that reads a real parameter is unsupported
+    (a real has no integral constant value)
+```
+
+정수로 접히는 override(`#(.R(3))`, `#(.R(i+2))`)는 정상 적용된다.
+
+**③ 그 밖의 잔여 미지원 서브폼**
+
+`force`/`release`의 part-select 대상 · 런타임 `==?` 패턴 · 계층 real 파라미터 참조 ·
+interface body/generate scope의 `parameter real` 바인딩 · dynamic-storage 핸들의
+whole-value 대입. 현행 전체 목록은 [ROADMAP §3](../ROADMAP.md)와 매뉴얼 [006 Limitations].
+
+> **주의 — package-scope `parameter real`은 이 코드를 내지 않는다.** loud가 아니라
+> **조용히 정수 나눗셈**을 한다(`pk::PR/2`가 1.5 대신 1.0). ROADMAP §2의 알려진 결함이며,
+> "미지원=E3009"로 오인하지 말 것.
+
+> **문서 검증 규칙**: 이 절의 예시는 CI의 bijection 게이트(코드 번호·니모닉·심각도 1:1)가
+> **검사하지 않는다** — 발생 조건은 사람이 실제 바이너리로 확인해야 한다. 기능이 loud→supported로
+> 승격되면 여기서도 지워라. 2026-07-26 점검에서 unpacked `struct`·queue slice `q[a:b]`·계층
+> 함수호출 `u1.f(x)` 세 항목이 **이미 지원되는데 미지원으로 남아 있어** 제거했다.
 
 ### VITA-E3010 · `E-ELAB-UNRESOLVED-NAME` (Error)
 **선언되지 않은 net/variable 참조.** `assign`/식/lvalue에서 심볼 테이블에 없는 이름을 참조할 때.
