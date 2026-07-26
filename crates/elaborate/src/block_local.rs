@@ -551,10 +551,18 @@ impl Elaborator<'_> {
                     // name the block index-selects; some named-block array cases) are
                     // pre-existing and recorded in ROADMAP §2: separating them from the
                     // correct ones needs a per-shape hazard model, not a name match.
+                    //
+                    // T1: keyed on `has_fixed_string_array_storage`, which covers BOTH
+                    // representations. Keying it on `string_array_elems` alone stopped
+                    // firing once zero-based arrays routed to the dyn form, and the
+                    // alias came straight back in a NEW shape — the module's own
+                    // `sa[0]="zz"` and its read-back resolved through DIFFERENT
+                    // resolvers (the write reached the block-local scalar, the read the
+                    // routed array), so `R=zz,yy` became a silent `R=,` at exit 0.
                     let shadowed_string_array = if matches!(d.kind, ast::NetVarKind::String) {
                         d.names
                             .iter()
-                            .find(|n| self.string_array_elems.contains_key(&self.fq(&n.name.name)))
+                            .find(|n| self.has_fixed_string_array_storage(&n.name.name))
                             .map(|n| n.name.name.clone())
                     } else {
                         None
@@ -843,9 +851,7 @@ impl Elaborator<'_> {
                                 }
                             } else if scalar_string
                                 && name.unpacked.len() == 1
-                                && self
-                                    .string_array_elems
-                                    .contains_key(&self.fq(&name.name.name))
+                                && self.has_fixed_string_array_storage(&name.name.name)
                             {
                                 // r19: a block-local FIXED string array (`string s[2] =
                                 // '{…}`) — `push` is false for it (the gate above admits

@@ -125,7 +125,29 @@ impl Elaborator<'_> {
 
     /// `name` (single segment, current scope) as a dyn HANDLE net + its kind.
     pub(crate) fn dyn_handle(&self, name: &str) -> Option<(u32, ir::NetKind)> {
-        let n = self.lookup_net_scoped(name)?;
+        // T1: a ROUTED fixed string array is registered under a MANGLED net name, so it
+        // resolves through its side map, and that map is consulted with the SAME
+        // shadow-aware walk (`walk_scopes_key_shadowed`) and in the SAME order as the
+        // per-element-net form it replaces — side map first, symbol table second.
+        //
+        // The order is not interchangeable. v1 flattens a block-local onto a module net
+        // by BARE NAME, so a block-local `logic [7:0] sa` and a module `string sa[2]`
+        // both want `top.sa`; consulting `symbols` first hands the array's own name to
+        // the block-local and the array's `new[]` pre-size then fails to find a handle.
+        // `walk_scopes_key_shadowed` is precisely the walk that resolves this the way
+        // the element-net path already did: it tests the side map at each scope level
+        // BEFORE the net binding at that level, and stops at a net binding only in an
+        // OUTER scope.
+        //
+        // Zero cost for a design that routes none: the map is empty, so the closure can
+        // never hit and the walk is one `BTreeMap` miss.
+        let n = match self
+            .walk_scopes_key_shadowed(name, |k| self.fixed_string_dyn_key.contains_key(k))
+            .and_then(|k| self.fixed_string_dyn_key.get(&k))
+        {
+            Some(&n) => n,
+            None => self.lookup_net_scoped(name)?,
+        };
         let k = self.nets.get(n as usize)?.kind;
         matches!(
             k,
@@ -726,6 +748,24 @@ impl Elaborator<'_> {
                     );
                     return true;
                 };
+                // T1: a FIXED string array routed to the dyn representation is
+                // fixed-SIZE storage that merely happens to be dyn-backed, so it is not
+                // resizable — `string s[2]; s = new[5];` stays the honest reject it was
+                // before the routing (iverilog does not accept it either; it crashes on
+                // an internal assertion). Without this the routing would silently turn a
+                // loud reject into a resize, which is a descent down the ladder.
+                //
+                // The pre-size the declaration itself synthesizes is exempt: it runs
+                // inside the t0 var-init flush, which sets `lowering_decl_init` — user
+                // code cannot reach that flush, so the exemption cannot be borrowed.
+                if !self.lowering_decl_init && self.is_fixed_string_dyn(net) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "`new[n]` resizes only a DYNAMIC array (`string s[];`); this name \
+                         is a fixed-size string array and cannot be resized",
+                    );
+                    return true;
+                }
                 if delay.is_some() {
                     self.error(
                         MsgCode::ElabUnsupported,

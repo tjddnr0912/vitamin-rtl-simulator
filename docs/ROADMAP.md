@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-25 · main `1d2d7eb`)**: format_version **23** · **4474 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.221**(real-valued parameters — 후속 브랜치 `fix-real-param-residual`이 잔여를 닫고 **main 머지 완료**; 잔여는 §2 첫 항목 1건뿐). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-26)**: format_version **23** · **4494 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.222**(§0 T1 부분 — FIXED string array의 runtime index + `foreach`; **T1이 한 가족이 아님을 측정으로 확인**해 §0을 4갈래로 정정). 직전 = §4.5.221(real-valued parameters·머지 완료·잔여는 §2 첫 항목 1건). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -11,7 +11,7 @@
 
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
-| **1** | §0 | correct-support 승격 큐 | 16 | ✓ 11/13 | **현재 착수 대상**. T1 string-array 6 · T2 real const-fold/generate string/enum label/음수 range 4 |
+| **1** | §0 | correct-support 승격 큐 | 13 | ✓ 8/10 | T1 잔여 4(**근인 4갈래·§4.5.222서 2종 완료**) · T2 real const-fold/generate string/enum label/음수 range 4 |
 | **2** | §2 | Silent-wrong 잔여 | 39 | ✓ 7 | part-select 바운드 0 · replication count 0 · package real · 구조적 지연 · inner-NET shadow(DEEP) |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
@@ -28,19 +28,22 @@
 
 > **목적**: 지금까지 correct-or-loud로 **LOUD 유지**한 항목 중 *실제로 구현 가능한 것*을 골라 correct-support로 올린다. 아래는 §3/§4 전체를 훑고 **12개 후보를 iverilog로 직접 재현**해 (a)아직 loud인지 (b)오라클이 있는지 확인한 결과다. 재확인에서 **4건이 stale**로 드러나 아래 "정정" 항목으로 이동했다.
 >
-> **순위 근거**: 전부 iverilog 오라클 有 = §1 우선순위 ②(additive·저위험). T1은 한 가족이라 머신러리가 공유되고, **dyn string 배열 경로가 이미 全 지원**이라 fixed를 그쪽 표현으로 라우팅하는 미러가 유력(§4.5.217서 확인). T2는 서로 독립적이라 개별 슬라이스.
+> **순위 근거**: 전부 iverilog 오라클 有 = §1 우선순위 ②(additive·저위험). ~~T1은 한 가족이라 머신러리가 공유된다~~ — **§4.5.222 실측이 이 전제를 기각했다**(아래 T1 머리말). T2는 서로 독립적이라 개별 슬라이스.
 
-**T1 — string-array 가족 (오라클 ✓ 7/7 재현·공유 머신러리·가장 높은 ROI)**
+**T1 — string-array (오라클 ✓ 7/7 재현 · ~~공유 머신러리~~ **근인 4갈래 — 측정으로 정정**)**
 
-> **1번 RESOLVED §4.5.219** · **전제조건(dyn byte-select) RESOLVED §4.5.220** — 이제 **dyn ⊇ fixed**가 성립하므로 T1-2/3(runtime index·`foreach`)의 fixed→dyn 라우팅이 byte-select 퇴행 없이 가능하다. 라우팅 시 확인할 것: 저장-클래스 변경이므로 read 全 경로 재확인 + `new[]`/`.size()`가 fixed에서 loud로 남는지(fixed 배열에 `new[]`은 silent resize가 되면 안 됨) + non-zero-base/descending 선언의 인덱스 오프셋. 아래는 §4.5.219 당시 실측 기록: **fixed를 dyn 표현으로 통째 라우팅하는 안은 기각** — capability-parity 매트릭스에서 dyn이 init/runtime-index/`foreach`/`.size()`는 앞서지만 **byte-select `s[0][0]`는 fixed만 정확**(119 vs 0)이라, 라우팅하면 byte-select가 silent 0으로 퇴행한다. 2·3(runtime index/`foreach`)을 하려면 **먼저 dyn element의 byte-select를 고쳐 dyn ⊇ fixed를 만든 뒤** 라우팅하거나, element-net 경로를 직접 확장해야 한다.
+> **1/2/3 RESOLVED**(§4.5.219 decl-init · §4.5.220 전제조건 dyn byte-select · **§4.5.222 runtime index + `foreach`**).
+>
+> **★ "한 가족"은 틀린 전제였다(§4.5.222 실측)**: T1은 머신러리를 공유하지 않는다. **2/3만** fixed→dyn 라우팅으로 풀리고, **4·5·6·7은 근인이 각각 다르다**. 특히 **6·7은 DYN 배열에서도 똑같이 loud**(`u.s[0]`=dynamic-storage handle의 hier 게이트 · frame subset)이라 라우팅과 무관하다 — 표현을 바꿔도 안 열린다.
+>
+> 라우팅은 **zero-based ASCENDING 선언에만** 적용된다. dyn은 원소를 0..n-1로 번호 매기고 `foreach`가 그 순서로 걷는데, `foreach`는 **선언 인덱스**를 내고 descending은 **역순**이다(iverilog 실측 `int a[1:3]`→1,2,3 / `a[3:1]`→3,2,1) — non-zero-base/descending을 라우팅하면 인덱스 공간이 조용히 renumber된다. 그 둘은 원소-net 경로 유지 = 런타임 인덱스가 여전히 loud(§0 잔여).
 
-1. ~~FIXED string array **decl-init**~~ **RESOLVED §4.5.219**. 원래 항목: FIXED string array **decl-init** `string s[2]='{"aa","bb"}` — iverilog `aa bb` / vita E3009. module·block 양쪽.
-2. FIXED string array **runtime index** `s[i]` — iverilog `bb` / vita E3009 "requires a constant index".
-3. FIXED string array **`foreach`** — iverilog `0 aa 1 bb` / vita E3009(2와 동근).
-4. **`string q[$]`**(queue of string) — iverilog `1 aa` / vita E3009 "takes no packed/unpacked dimensions".
-5. **multi-dim** `string s[2][2]` — iverilog `aa` / vita E3009(4와 동일 gate).
-6. **hierarchical** `u.s[0]` — iverilog `aa` / vita E3010.
-7. **frame-local**(task/function body) string array — iverilog `aa` / vita E3009 subset reject.
+4. **`string q[$]`**(queue of string) — iverilog `1 aa` / vita E3009. **§4.5.222서 실측 후 되돌림**: `Dim::Queue`를 수용하고 `string_elem_dyn_nets`로 마킹하면 컴파일되고 `q.size()`도 맞지만 **원소가 전부 빈 문자열**(iverilog `2 aa bb` → 조용한 `2   `) — queue push/read 경로가 string VALUE를 string 원소 저장으로 라우팅하지 않는다. **게이트 확장이 아니라 엔진 작업**(전용 슬라이스).
+5. **multi-dim** `string s[2][2]` — iverilog `aa` / vita E3009. string은 heap handle이라 md-packed가 적용 안 됨(`int s[2][2]`는 정상 동작) → 전용 저장 필요.
+6. **hierarchical** `u.s[0]` — iverilog `aa` / vita E3009 "dynamic-storage handle has no plain indexable value". **dyn 배열도 동일** = cross-instance dyn handle 해석 갭(string 전용 아님).
+7. **frame-local**(task/function body) string array — iverilog `aa` / vita E3009 subset reject. **dyn 배열도 동일**(§4.5.171이 frame-local dyn 배열을 열었으나 `kind != String` 가드) = frame-local string 저장 갭.
+
+**T1 잔여 소형**: non-zero-base/descending 선언의 런타임 인덱스(라우팅 제외분·인덱스 오프셋+`foreach` 인덱스 remap 필요) · 상수 OOB 인덱스 진단이 elaborate 에러→런타임 경고로 하강(`fixed_string_dyn`이 길이를 아므로 복원 가능·값은 iverilog 일치).
 
 **T2 — 독립 항목 (오라클 ✓·각자 전용 슬라이스)**
 
@@ -83,8 +86,8 @@
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-1. **§0 T1** — string-array 가족 **6종**(1번은 §4.5.219서 RESOLVED). 전제조건 `dyn ⊇ fixed`가 §4.5.220으로 해소돼 지금이 적기.
-2. **§0 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound(각자 독립 슬라이스).
+1. **§0 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound(각자 독립 슬라이스). **T1보다 앞**: T1 잔여 4종은 §4.5.222 실측 결과 근인이 4갈래로 갈려 각각 전용 인프라가 필요한 반면, T2는 오라클이 있고 서로 독립이다.
+2. **§0 T1 잔여 4종** — queue-of-string(엔진 queue 원소 저장) · multi-dim string 저장 · cross-instance dyn handle(hier) · frame-local string 저장. 각각 전용 슬라이스.
 3. **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(**동근**: `const_eval_in_scope`의 `Cast`/`Call` arm → 한 슬라이스로 묶을 것) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 4. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
 5. **OBS-2 sva.jsonl**(R-L6).
@@ -95,6 +98,7 @@
 
 - **🔴 §4.5.221이 도입한 좁은 하강(pre-existing 아님 — 내 책임)**: 계층 real param 이 상수 범위 바운드에 오면 조용히 1-bit. `logic [$clog2(u.R)-1:0]`(u 는 real param R 을 가진 인스턴스) → PRE 는 loud(`E3009`) 였으나 POST 는 **진단 없이 width 1**. 원인 = `count_reads_real_param` 의 `Ident` arm 이 `segments.len()==1` 을 요구해 `u.R` 을 못 봄. **iverilog 도 거부**하므로 무오라클이고 범위는 좁으나 loud→silent 는 하강. **fix 전제** = 바운드 문맥에서의 계층 이름 해석(현재 `nonconst_bound_reason` 은 false-loud 회피 때문에 call/hier 로 안 내려감) — 이름 매칭 근사는 동명 정수 hier param 을 false-reject 할 수 있어 실측 hazard set 없이는 금지(§4.5.218 선례).
 - **replication 비대칭(기록)**: 같은 `parameter real R = 3.0` 에서 `{R{'1}}`·`{(R:R:R){1'b1}}` 는 supported(`111`)인데 `{R{1'b1}}`·`{R{2'b10}}` 는 loud. 일관성은 없으나 loud 쪽이 정직함.
+- **concat 원소가 정수 산술식이면 바이트가 아니라 워드 폭으로 렌더**(pre-existing·§4.5.222 3-way 실측서 PRE==POST 확인): `{"e", "0"+k}`(k=1) = iverilog `e1` / vita `e\0\0\01`. 스칼라 string·fixed 배열·non-zero-base 전부 동일 발화 = §4.5.134/217의 "string concat 폭" 가족과 동근. §4.5.222가 런타임 인덱스 write라는 **철자 하나를 더 도달 가능하게** 했을 뿐(신규 결함 아님). 올바른 concat(`{s[k],"!"}`)은 iverilog 일치라 blanket 가드는 false-loud → 술어는 **산술 피연산자의 self-width**여야 함.
 - **🔴 상수-foldable 식을 part-select 바운드로 쓰면 조용히 0 / 비트 덮어씀**(pre-existing·재리뷰 발견·**근인 규명됨**): `v[fi(7):fi(4)]` → iverilog `a`, vita `0`; `c[int'(5):int'(4)] = 2'b00` → iverilog `85`, vita `5`(상위 비트 clobber). **근인**: 바운드 접기가 `const_fn.rs::const_eval_u32` 를 쓰는데 이건 **`&self` 없는 자유 함수**라 `IntLit`/`Paren`/`Unary` 3개 arm뿐 — params·const 함수·cast 를 못 본다. 호출부(`packed.rs:425,616,630`·`packed_lval.rs:279,288`)는 `None` 을 "상수 아님"으로 보고 0 또는 net-width 폴백. **`const_eval_in_scope` 로 폴백을 시도했으나 이득 0으로 되돌림** — 그쪽에도 **`Cast` arm 이 없어** `int'(5)` 가 여전히 None 이고 `fi(7)` 의 `Call` arm 도 발화하지 않았다. **fix 전제** = `const_eval_in_scope` 에 `Cast` arm 추가 + `Call` arm 이 automatic 함수에 왜 안 무는지 규명. hot path 이므로 리뷰 필수.
 - **🔴 replication count 가 상수로 안 접히면 조용히 0**(pre-existing·differential 발견): `{P*2{1'b1}}`·`{(P>1?3:2){1'b1}}`·`{int'(3){1'b1}}`·`{cf(3){1'b1}}` 가 iverilog `111…` 인데 vita `0`(`{P+1{…}}` 는 동작 — `*`·ternary·cast·const-fn 만 깨짐).
 - **🔴 package-scope `parameter real` 이 정수 나눗셈**(pre-existing·differential 발견·"미라우팅"보다 넓음): `pk::PR/2`(PR=3) 가 iverilog `1.5000` 인데 vita `1.0000`. module-scope 쌍둥이는 정상. 비-정수 package real 은 loud.

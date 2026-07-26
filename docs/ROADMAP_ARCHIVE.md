@@ -12,6 +12,7 @@
 
 
 **§4.5.220–229**
+- `4.5.222` §0 T1 부분: FIXED string array의 RUNTIME 인덱스 + `foreach` loud→supported (zero-based ascending만 라우팅) …
 - `4.5.221` real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (적대 리뷰 6라운드·머지됨) …
 - `4.5.220` SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-…
 
@@ -278,6 +279,40 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.222 §0 T1 부분 — FIXED string array의 RUNTIME 인덱스 + `foreach` loud→supported (zero-based ascending만 라우팅·format 23 불변) (2026-07-26, branch feat-string-array-t1) ✅
+
+**4477→4494 green · format 23 불변 · MsgCode 59 불변**
+
+**갭**: `string s[2]`가 원소 net N개(`s$sae$<i>`)라 **런타임 인덱스가 표현 불가**(인덱스가 net들 중 하나를 골라야 함). `s[i]`·`foreach(s[j])` 全 E3009. iverilog 오라클 有.
+
+**★ 먼저 로드맵의 전제가 틀렸음을 측정으로 확인**: §0 T1은 6종을 "한 가족·머신러리 공유"로 묶었으나, **근인이 4개로 갈린다** — T1-2/3만 라우팅으로 풀리고 T1-4(queue)·T1-5(multi-dim)·T1-6(hier)·T1-7(frame-local)은 각각 별개다. 특히 **T1-6/T1-7은 DYN 배열에서도 똑같이 loud**(`u.s[0]`=dynamic-storage handle의 hier 게이트·frame subset)이라 라우팅과 무관하다.
+
+**★★ 저장-클래스 통합 전에 capability parity를 23종 실측**(`measure-parity-before-unifying-storage` 규칙): decl-init·const idx·byte select·원소 `.len()`/`.getc()`/`.toupper()`/`.substr()`·원소간 복사·함수 인자·ternary·`$sformatf`·`case`·compare·concat·empty read 전부 **fixed ≡ dyn**, 그리고 dyn만 runtime idx·`foreach`·runtime write·`.size()`를 답한다 = **dyn ⊋ fixed**. **fixed가 이기는 항목 0개**라 통합이 사다리 상승으로 정당화됨(§4.5.220 前이었다면 byte select가 119 vs 0이라 silent-wrong 맞바꾸기였을 것 — 전제 슬라이스가 먼저여야 했던 이유).
+
+**구현**: `fixed_string_dim_zero_asc`(신규 `string_array_route.rs`)가 **zero-based ASCENDING만** 통과 → `DynArray` net 1개 + `string_elem_dyn_nets` 마킹 + `fixed_string_dyn`(net→길이) + t0 var-init flush에 `new[n]` pre-size. 초기화 검증(원소 COUNT)은 기존 `fixed_string_array_init_pairs` 재사용, 확장은 기존 두 collector가 담당(스코프별 리스트 유지).
+
+**non-zero-base/descending은 라우팅 제외 — 인덱스 공간이 조용히 renumber되기 때문**: `foreach`는 **선언 인덱스**를 내고 descending은 **역순**이다(iverilog 실측 `int a[1:3]`→1,2,3 / `a[3:1]`→3,2,1·vita도 이미 정확). 0-base dyn으로 보내면 0,1,2가 된다. 그 둘은 원소-net 경로 유지 = 오늘과 동일 loud(§4.5.206 fail-closed 부분집합 선례).
+
+**`new[]`는 loud 유지**: 라우팅된 net은 "dyn-backed일 뿐 고정 크기"라 `s = new[5]`가 조용한 resize가 되면 하강이다. `fixed_string_dyn` 멤버십으로 거부(같은 크기 `new[2]`도 거부 — 연산 자체가 틀림). 합성된 pre-size만 `lowering_decl_init`로 면제(유저 코드는 그 flush에 도달 불가).
+
+**★★★ 적대 리뷰가 내가 만든 회귀 2건을 잡았다 — 둘 다 "라우팅이 배열을 자기 BARE 이름 위에 올린 것"이 근원**:
+
+- **FALSE-LOUD 회귀(PRE 정상→POST loud)**: v1은 block-local을 **bare 이름**으로 module net에 flatten한다. 초판이 배열을 선언 이름으로 등록하니 block-local `logic [7:0] sa`가 충돌해 dynamic-storage collision reject 발화 — **iverilog가 돌리고 PRE도 맞히던 설계 2형**이 loud. **fix**=원소-net 경로가 `sa$sae$i`로 이름을 비워두던 성질을 그대로 복원(`sa$sad` 맹글링 + `fixed_string_dyn_key` 사이드맵). 해석 순서도 **사이드맵 먼저, symbols 나중**이어야 한다(반대로 하면 hoist된 block-local이 배열의 이름을 가져가 pre-size가 핸들을 못 찾음) — `walk_scopes_key_shadowed`가 각 스코프 레벨에서 사이드맵을 net 바인딩보다 먼저 보므로 shadowing은 유지된다(function-local `int sa[]`가 여전히 이김, 실측).
+- **SILENT-WRONG 회귀(PRE loud→POST 조용)**: §4.5.218의 collision 가드가 `string_array_elems` 키라 라우팅 후 발화를 멈췄고, **alias가 새 형태로 되살아났다** — 모듈 자신의 `sa[0]="zz"`와 read-back이 **서로 다른 resolver**를 타서(write는 block-local scalar, read는 라우팅된 배열) iverilog `R=zz,yy`가 조용한 `R=,`(exit 0). **fix**=가드를 `has_fixed_string_array_storage`(두 표현 모두)로 재키잉.
+
+**T1-4(`string q[$]`)는 실측 후 되돌림**: `Dim::Queue` 수용 + 같은 `string_elem_dyn_nets` 마킹은 컴파일되고 `q.size()`도 맞지만 **원소가 전부 빈 문자열**(iverilog `2 aa bb` → 조용한 `2   `). queue push/read 경로가 string VALUE를 string 원소 저장으로 라우팅하지 않는다 = 게이트 확장이 아니라 엔진 작업. correct-or-loud로 **loud 유지**하고 이유를 코드 주석+ROADMAP에 기록.
+
+**3-way 실측(iverilog/PRE/POST·20 probe)**: 라우팅 대상 14형이 LOUD→iverilog 일치, 나머지 PRE==POST. staged(vcmp→velab→vrun) 파리티 확인·per-instance 격리 확인·generate 스코프 불변·format 23 불변(`string_elem_dyn_nets`가 v21 트레일러 사이드카에 이미 있어 bump 불요).
+
+**노출된 pre-existing(신규 아님·ROADMAP §2 기록)**: `{"e", "0"+k}`처럼 concat 원소가 **정수 산술식**이면 4바이트로 렌더(`e\0\0\01` vs iverilog `e1`). **PRE와 바이트 동일**이고 스칼라 string·non-zero-base 배열에서도 동일하게 발화 = 라우팅이 만든 게 아니라 **철자 하나(런타임 인덱스 write)를 더 도달 가능하게** 했을 뿐. 올바른 concat(`{s[k],"!"}`)은 iverilog와 일치하므로 blanket 가드는 false-loud가 되어 거부.
+
+**진단 품질 하강 1건(기록)**: 상수 OOB 인덱스(`string s[2]; s[5]`)가 PRE는 elaborate 에러였는데 POST는 런타임 W4020 경고 + iverilog와 같은 값. 둘 다 non-silent이고 POST 쪽이 값은 정확하나, 컴파일 타임에 잡히던 진단이 런타임으로 내려갔다 — `fixed_string_dyn`이 길이를 알고 있으므로 복원 가능(follow-on).
+
+**잔여(전용 슬라이스)**: T1-4 queue-of-string(엔진 queue 원소 저장) · T1-5 multi-dim string · T1-6 hier `u.s[0]`(cross-instance dyn handle) · T1-7 frame-local string array · non-zero-base/descending의 런타임 인덱스 · 상수 OOB 진단 복원.
+
+**교훈**: (1) **"한 가족"이라는 그룹핑은 근인 측정 전엔 가설일 뿐** — T1 6종은 4개 근인이었고, 2종은 대체 표현(dyn)에서도 똑같이 막혀 있었다. (2) **저장 클래스를 통합하기 전에 capability parity를 전수 측정하라** — 한쪽이 지배하지 않으면 통합은 silent 퇴행이다(여기선 지배가 성립해서 진행). (3) **라우팅이 이름을 차지하면 네임스페이스 전제가 깨진다** — 기존 표현이 이름을 비워두고 있었다면 그건 우연이 아니라 계약이다. (4) **표현을 바꾸면 그 표현을 키로 쓰던 가드가 조용히 죽는다** — §4.5.218 가드가 정확히 그렇게 죽고 silent-wrong이 되살아났다; 가드는 표현이 아니라 **저장(의미)** 에 키잉하라. (5) **게이트만 열어 되는지 반드시 실행해 보라** — T1-4는 컴파일되고 `.size()`도 맞았지만 원소가 전부 비어 있었다. 신규 `fixed_string_array_routing.rs`×17.
+
 
 #### 4.5.221 real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (적대 리뷰 6라운드·후속 브랜치서 잔여 해소) (2026-07-25, branch feat-real-params → fix-real-param-residual, main `1d2d7eb`) ✅
 

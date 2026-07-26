@@ -494,11 +494,50 @@ fn n6_string_array_size_form() {
 }
 
 #[test]
-fn n6_runtime_index_is_loud() {
-    // A runtime element index (dynamic string array) stays loud — correct-or-loud.
+fn n6_runtime_index_supported() {
+    // T1 FLIP (was `n6_runtime_index_is_loud`): a RUNTIME element index on a fixed
+    // string array is now supported. The declaration is zero-based ascending, so it
+    // routes to the dynamic representation, where an index is an ordinary runtime
+    // value instead of a choice among N distinct element nets. iverilog agrees.
     let src = "module t; string files [0:1]; int i;\n\
-        initial begin i=0; files[i]=\"x\"; $display(\"PASS\"); $finish; end endmodule";
+        initial begin i=0; files[i]=\"x\"; if(files[0]==\"x\") $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
+}
+
+#[test]
+fn n6_runtime_index_non_zero_base_stays_loud() {
+    // The routing is restricted to ZERO-BASED ASCENDING declarations, because the dyn
+    // representation numbers elements 0..n-1 and `foreach` walks them in that order —
+    // routing `[1:3]` would silently renumber the index space (iverilog's `foreach`
+    // over `a[1:3]` yields 1,2,3) and `[3:1]` would additionally re-order it. Those
+    // keep the per-element-net path, where a runtime index is still honestly loud.
+    let nz = "module t; string files [1:3]; int i;\n\
+        initial begin i=1; files[i]=\"x\"; $display(\"PASS\"); $finish; end endmodule";
+    assert!(loud(nz));
+    let desc = "module t; string files [1:0]; int i;\n\
+        initial begin i=1; files[i]=\"x\"; $display(\"PASS\"); $finish; end endmodule";
+    assert!(loud(desc));
+}
+
+#[test]
+fn n6_fixed_string_array_is_not_resizable() {
+    // The routed net is fixed-SIZE storage that merely happens to be dyn-backed, so
+    // `new[]` on it must stay the reject it was BEFORE the routing. Letting it through
+    // would turn an honest loud into a silent resize — a descent down the ladder.
+    let src = "module t; string files [2];\n\
+        initial begin files[0]=\"a\"; files = new[5]; $display(\"PASS\"); $finish; end endmodule";
     assert!(loud(src));
+}
+
+#[test]
+fn n6_foreach_over_fixed_string_array() {
+    // T1: `foreach` over a fixed string array — the second half of the same gap
+    // (the desugared `.first`/`.next` walk needs one indexable container, not N nets).
+    let src = "module t; string s[2]; string acc;\n\
+        initial begin s[0]=\"aa\"; s[1]=\"bb\"; acc=\"\"; \
+        foreach(s[j]) acc = {acc, s[j]}; \
+        if(acc==\"aabb\") $display(\"PASS\"); $finish; end endmodule";
+    assert_eq!(run(src).0, "PASS");
 }
 
 #[test]

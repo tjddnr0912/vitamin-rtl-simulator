@@ -149,6 +149,25 @@ impl Elaborator<'_> {
                 // resolves to the K-th net. A dynamic (`string s[]`) / multi-dim /
                 // init-pattern array stays loud (correct-or-loud) via the reject below.
                 if d.range.is_none() && d.packed.is_empty() && decl.unpacked.len() == 1 {
+                    // T1: a ZERO-BASED ASCENDING fixed string array routes to the
+                    // DYNAMIC representation instead of N per-element nets. Measured
+                    // capability parity (23 shapes, fixed vs dyn, iverilog-differential)
+                    // shows dyn is a strict SUPERSET — it additionally supports a runtime
+                    // index, `foreach`, a runtime element write and `.size()`, and since
+                    // §4.5.220 fixed the dyn element BYTE select it no longer loses
+                    // anything fixed had. Unifying is therefore a climb, not a trade.
+                    //
+                    // Restricted to `allow_string_init` scopes (module body + block-local)
+                    // because the routed net needs a `new[n]` pre-size driven from the t0
+                    // var-init flush, which only those scopes run. Generate / package /
+                    // interface / port scopes keep the per-element-net path verbatim.
+                    if allow_string_init {
+                        if let Some(n) = self.fixed_string_dim_zero_asc(&decl.unpacked[0]) {
+                            if self.route_fixed_string_array(decl, n, ports, body) {
+                                continue;
+                            }
+                        }
+                    }
                     if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
                         // r19: a `'{…}` decl-init EXPANDS to per-element assignments in
                         // the t0 var-init pre-sweep (`fixed_string_array_init_pairs`,
@@ -217,11 +236,19 @@ impl Elaborator<'_> {
                 // shared dyn-array `'{…}` flush like any dyn array. A FIXED string array
                 // (`string s[0:1]`) took the element-net path above; a queue/assoc/multi-
                 // dim string container stays loud.
+                // T1 MEASURED, NOT DONE — `string q[$]` stays loud. Admitting `Dim::Queue`
+                // here with the same `string_elem_dyn_nets` marker compiles and gets
+                // `q.size()` right, but every element reads back EMPTY (`2 aa bb` from
+                // iverilog became a silent `2   `): the queue push/read path does not
+                // route a string VALUE into the string element storage the way the
+                // dyn-array path does. That is engine work, not a gate widening, so the
+                // honest reject stays until the storage exists. See ROADMAP §0 T1-4.
                 if d.range.is_none()
                     && d.packed.is_empty()
                     && decl.unpacked.len() == 1
                     && matches!(decl.unpacked[0], ast::Dim::Dyn)
                 {
+                    let kind = ir::NetKind::DynArray;
                     let dir = self.dir_for_name(&decl.name.name, ports, body);
                     if dir != ir::PortDir::Internal {
                         self.error(
@@ -234,7 +261,7 @@ impl Elaborator<'_> {
                     self.add_net(
                         &decl.name.name,
                         ir::NetVar {
-                            kind: ir::NetKind::DynArray,
+                            kind,
                             width: 0,
                             msb: 0,
                             lsb: 0,
@@ -729,9 +756,7 @@ impl Elaborator<'_> {
                         // E3010s. Keying off the decl's own output makes the two
                         // structurally unable to disagree.
                         if name.unpacked.len() == 1
-                            && self
-                                .string_array_elems
-                                .contains_key(&self.fq(&name.name.name))
+                            && self.has_fixed_string_array_storage(&name.name.name)
                         {
                             if let Some(pairs) = self.fixed_string_array_init_pairs(
                                 &name.name,
