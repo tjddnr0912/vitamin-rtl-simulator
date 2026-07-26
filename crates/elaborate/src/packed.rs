@@ -101,6 +101,22 @@ impl Elaborator<'_> {
     /// drift between rvalue and lvalue paths. (Real PARAMETERS made this reachable;
     /// a real literal index `v[1.5]` was always reachable and is covered too.)
     pub(crate) fn lower_index_expr(&mut self, e: &ast::Expr) -> u32 {
+        // r19/S1: a real-returning FUNCTION. `expr_is_real` works on the lowered IR
+        // and cannot see this: the inline path folds the body to an expression whose
+        // nodes carry no real marker, and `func_return_dims` computes the Real kind
+        // only to discard it, so the return net is not `NetKind::Real` on either
+        // path. The DECLARATION does know, and this wrapper still holds the AST —
+        // so ask the declaration. `v[7:f()]` silently dropped the write before this.
+        if self.call_returns_real(e) {
+            let id = self.lower_expr(e);
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a select index / bound / size must be integral, not real (IEEE §11.5.1) \
+                 — this reads a real-returning function",
+            );
+            let _ = id;
+            return self.const_u32_expr(0, 32);
+        }
         let id = self.lower_expr(e);
         if self.expr_is_real(id) {
             // r19: a real param whose initializer folded EXACTLY to an integer is
@@ -123,6 +139,29 @@ impl Elaborator<'_> {
             return self.const_u32_expr(0, 32);
         }
         id
+    }
+
+    /// r19/S1: does `e` call a function DECLARED to return `real`/`realtime`? The
+    /// lowered IR carries no such marker on either the inline or the frame path, so
+    /// the AST declaration is the only place the answer exists at this point.
+    /// Single-segment names only — a hierarchical or package-scoped callee resolves
+    /// through a different table and is not claimed here (conservative: unclaimed
+    /// means "not known to be real", which is the pre-existing behaviour).
+    pub(crate) fn call_returns_real(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Call { name, .. } if name.segments.len() == 1 => self
+                .func_table
+                .get(&name.segments[0].name)
+                .is_some_and(|f| {
+                    matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime)
+                }),
+            ast::ExprKind::Paren { inner } => self.call_returns_real(inner),
+            ast::ExprKind::Unary { operand, .. } => self.call_returns_real(operand),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.call_returns_real(lhs) || self.call_returns_real(rhs)
+            }
+            _ => false,
+        }
     }
 
     /// r19: the exact non-negative integer behind a real `Const`, or `None` when the
