@@ -12,6 +12,10 @@
 
 
 **§4.5.220–229**
+- `4.5.226` §0 T1-6: 계층 dynamic-container element READ loud→supported (`u.s[0]`·`u.d[0]`·`u.q[0]`) …
+- `4.5.225` §0 T1-7: task/function body-local string ARRAY loud→supported (frame-entry pre-size) …
+- `4.5.224` §0 T1-5: multi-dim fixed string array loud→supported (row-major flat 컨테이너) …
+- `4.5.223` §0 T1-4: `string q[$]` loud→supported + dynamic-container element 단일 퍼널 …
 - `4.5.222` §0 T1 부분: FIXED string array의 RUNTIME 인덱스 + `foreach` loud→supported (zero-based ascending만 라우팅) …
 - `4.5.221` real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (적대 리뷰 6라운드·머지됨) …
 - `4.5.220` SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-…
@@ -279,6 +283,48 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.226 §0 T1-6: 계층 dynamic-container element READ loud→supported (`u.s[0]`·`u.d[0]`·`u.q[0]`·format 23 불변) (2026-07-27, branch feat-string-array-t1) ✅
+
+**4526→4535 green** · **string 전용 아님**: `resolve_deferred_hier_sel`이 dynamic-storage handle을 전부 거부했는데("dyn element read는 lowering의 1-seg base로만 라우팅된다"), 그건 **lowering 경로**에만 참이고 resolve된 element read는 word-indexed `Signal`일 뿐이라 엔진은 이름을 어떻게 도달했는지 신경쓰지 않는다. `int d[]`·`int q[$]`도 같은 이유로 loud였고 같이 열렸다.
+
+**string 배열만 추가로 필요했던 것**: 라우팅된 배열은 **맹글된 net 이름**(§4.5.222)이라 symbol table로 `u.s`를 못 찾는다 → 로컬 resolver가 쓰는 같은 사이드맵을 **같은 commit-to-scope walk로, symbol table 다음에** 조회(부모의 동명 배열이 자기 저장소를 유지하는 것을 테스트로 고정).
+
+**범위 = 위치가 곧 인덱스인 형태만**: 인덱스 1개 + DynArray/Queue. **assoc는 키드**라 bare index가 다른 연산이고, **multi-index on routed multi-dim**은 이 pass가 안 들고 있는 dims로 row-major flatten을 해야 해서 첫 인덱스를 flat으로 읽으면 조용히 틀린 원소다. 계층 element **WRITE**도 별개 deferred 머신이라 loud 유지(read와 비대칭이나 PRE도 loud → 회귀 아님). OOB 인덱스는 warn + iverilog와 바이트 동일. 신규 `hier_dyn_container_read.rs`×9.
+
+#### 4.5.225 §0 T1-7: task/function body-local string ARRAY loud→supported (frame-entry pre-size·format 23 불변) (2026-07-27, branch feat-string-array-t1) ✅
+
+**4515→4526 green** · frame-local 스칼라 `string`(§4.5.167 slab) 과 frame-local `int a[2]`(md-packed slot)는 이미 동작했으나 **string 컨테이너는 어느 표현에도 안 맞는다**(string은 packed width가 없어 `count*elem_w`가 무의미).
+
+**fix**: §4.5.171이 만든 frame-local `DynArray` heap handle + per-activation lifecycle의 `ast_kind_is_bit_vector` 가드를 **ELEMENT 타입에 한해** 해제(컨테이너는 동일 heap handle·`string_elem_dyn_nets`가 원소를 byte-string으로 만든다). 그 가드는 §4.5.171이 **측정된 회귀** 때문에 넣은 것이라 조심해서 갈랐다 — frame-local 스칼라 string은 unpacked dim이 없어 이 코드에 **도달조차 안 하므로** 혼동 불가(테스트로 고정). FIXED 형태는 `emit_frame_local_inits`가 **frame ENTRY에 `new[n]` pre-size**를 추가로 emit(module-scope 쌍둥이는 t0 var-init flush에서 받지만 frame local은 거기 도달 안 함).
+
+**공짜로 따라온 것**: frame-local net을 module-scope와 **같은 `fixed_string_dyn` set**에 등록 → multi-dim row-major chain walk · `new[]` reject · partial-index reject가 두 번째 구현 없이 적용(두 스코프가 갈릴 수 없음).
+
+**적대 프로브**: 2회 호출 per-activation 격리 · `@(posedge clk)` suspend 생존 · `foreach`/런타임 인덱스 · framed function body · **여전히 loud**=recursion(§4.5.171 per-net heap F4004·iverilog는 돌림=기록된 갭)·fixed에 `new[]`. 신규 `frame_local_string_array.rs`×11.
+
+#### 4.5.224 §0 T1-5: multi-dim fixed string array loud→supported (row-major flat 컨테이너·format 23 불변) (2026-07-27, branch feat-string-array-t1) ✅
+
+**4510→4515 green** · string은 heap handle이라 `int s[2][2]`를 굴리는 md-packed 표현이 안 맞는다. §4.5.222 라우팅 위에 **1개 flat row-major 컨테이너**로 태우고 `s[i][j]`를 접근마다 `s[i*n1+j]`로 flatten(기존 `flatten_word` 재사용).
+
+**양 퍼널이 Ident base로 끝난다** — 1-D면 충분하지만 중첩 select는 절대 Ident가 아니다. 그래서 read(`routed_md_string_elem`)/write(`routed_md_string_lval`) 각각 체인을 걷고, **의도적으로 동일한 조건에서 declaine**한다(read는 flatten하는데 write는 안 하면 `s[i][j]`가 서로 다른 원소에 앉는다).
+
+**PARTIAL 인덱스는 loud**: 2-D의 `s[0]`은 행 전체 선택이라 값 표면이 없고(iverilog도 거부), flat 컨테이너는 **행 번호를 원소 번호로** 받는다 — 실측서 exit 0에 빈 문자열이었다. **양 퍼널에 다 걸었다**(read만 걸면 write가 조용히 남는다). 모든 차원이 zero-based ascending이어야 하고(flat이라 한 축만 어긋나도 조용히 renumber), multi-dim `'{…}` decl-init도 loud.
+
+**row-major 순서는 NON-SQUARE로 고정**: `s[2][3]`이라야 transpose된 flatten이 `s[0][2]`와 `s[1][0]`을 충돌시킨다(정사각은 구분 불가). 3-D 검증. 라우팅 헬퍼를 strings.rs→string_array_route.rs로 이동(1009→934줄, 정책 복귀).
+
+#### 4.5.223 §0 T1-4: `string q[$]` loud→supported + dynamic-container element 단일 퍼널 (format 23 불변) (2026-07-27, branch feat-string-array-t1) ✅
+
+**4497→4510 green** · **차원을 수용하는 게 작업이 아니었다**: 이 브랜치의 첫 시도가 정확히 그것만 하고 **silent-wrong을 냈다** — 컴파일되고 `q.size()`도 맞는데 **원소가 전부 빈 문자열**(iverilog `2 aa bb` → 조용한 `2   `).
+
+**근인**: queue push/insert가 **각자 `.resize(w)`** 를 했고 string handle net은 width 0 → `max(1)` → 바이트 문자열이 1비트로 절단. dyn-ARRAY element write에는 N3 Phase 2부터 이 함정을 설명하는 주석과 함께 분기가 있었으나, queue 경로엔 필요한 적이 없었을 뿐이다.
+
+**fix = 분기를 세 번째로 복사하지 않고 단일 퍼널** `SimState::coerce_dyn_elem` — `dyn_str_elem`(엔진이 애초에 그 원소를 byte-string으로 잡게 만드는 바로 그 플래그) 키잉이라 자기가 변환해 주는 저장소와 불일치 불가. write 3 site(queue push·queue insert·`'{…}` decl-init 확장) + 추출원 dyn-array write가 공유. read는 원래 resize를 안 해서 무수정.
+
+**두 번째 silent-wrong도 같이 있었다**: decl-init collector 2개가 컨테이너 차원으로 게이팅해서 `string q[$] = '{…}`가 **조용히 drop**(int-queue 쌍둥이는 정상 초기화). 두 collector가 이제 술어 하나를 공유.
+
+**계획에 없던 결과 — 측정 후 수용**: non-packable record queue(string 멤버 struct)가 동작하게 됐다. 그런 컨테이너는 **SoA**(멤버당 컨테이너)라 string 멤버가 곧 `string q[$]`이고, string-queue reject가 record queue 전체를 loud로 만들고 있었다. iverilog가 전부 거부하므로 teeth=**내부 등가**(그 멤버가 이 슬라이스가 iverilog로 직접 검증한 저장소). **10형 전수 후 수용** — 전부 correct-or-loud, loud는 whole-element read 하나. SoA 멤버가 push_front/insert/delete에서 어긋나면 잡히는 정렬 테스트도 고정.
+
+**퍼널 회귀 teeth**: `byte q[$]`에 `push_back(300)`=44 유지 · int-queue 표면 바이트 불변 · bounded `[$:N]`은 string도 loud.
 
 #### 4.5.222 §0 T1 부분 — FIXED string array의 RUNTIME 인덱스 + `foreach` loud→supported (zero-based ascending만 라우팅·format 23 불변) (2026-07-26, branch feat-string-array-t1) ✅
 
