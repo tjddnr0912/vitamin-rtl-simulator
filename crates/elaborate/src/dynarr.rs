@@ -343,7 +343,10 @@ impl Elaborator<'_> {
                     self.error(MsgCode::ElabUnsupported, "exists() takes the key argument");
                     return self.placeholder_expr();
                 };
-                let key = self.lower_expr(k);
+                // r19/S6: `.exists(key)` — its siblings `lower_dyn_index` and
+                // `delete(key)` were gated; this one was not, so a real key
+                // returned 0 with a bogus-X warning at exit 0.
+                let key = self.lower_index_expr(k);
                 self.push_expr(ir::Expr::SysFunc {
                     which: ir::SysFuncId::AssocExists,
                     args: vec![handle, key],

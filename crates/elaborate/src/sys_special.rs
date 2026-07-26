@@ -366,11 +366,16 @@ impl Elaborator<'_> {
             id
         };
         let mut sf_args = vec![target_id, self.lower_expr(&args[1])];
+        // r19/S4: `$fread(mem, fd, start, count)` — args 2/3 are ADDRESSES, the same
+        // shape as `$readmem*`. Gating one address-taking task family and not the
+        // other left this one reading the f64 bit pattern as a start address
+        // ("start argument (4607182418800017408) is outside the memory range"),
+        // loading nothing at exit 0.
         if let Some(a) = args.get(2) {
-            sf_args.push(self.lower_expr(a));
+            sf_args.push(self.lower_index_expr(a));
         }
         if let Some(a) = args.get(3) {
-            sf_args.push(self.lower_expr(a));
+            sf_args.push(self.lower_index_expr(a));
         }
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Fread,

@@ -655,10 +655,17 @@ impl Elaborator<'_> {
                 .consts
                 .get(*val as usize)
                 .is_some_and(|c| matches!(c.repr, ir::ConstRepr::Real)),
-            Some(ir::Expr::Signal { net, .. }) => self
-                .nets
-                .get(*net as usize)
-                .is_some_and(|n| matches!(n.kind, ir::NetKind::Real)),
+            Some(ir::Expr::Signal { net, .. }) => {
+                self.nets
+                    .get(*net as usize)
+                    .is_some_and(|n| matches!(n.kind, ir::NetKind::Real))
+                    // r19/S1: a `real d[]` ELEMENT. The net is `NetKind::DynArray`,
+                    // so the kind test above cannot see it. `real_elem_dyn_nets` is
+                    // the set that makes the engine store those elements as f64 in
+                    // the first place, so it cannot claim a net the engine does not
+                    // hold as real — the same discriminator the string twin uses.
+                    || self.real_elem_dyn_nets.contains(net)
+            }
             Some(ir::Expr::Unary { op, operand }) => {
                 matches!(op, ir::UnOp::Plus | ir::UnOp::Minus) && self.expr_is_real(*operand)
             }
@@ -671,12 +678,32 @@ impl Elaborator<'_> {
             Some(ir::Expr::Ternary { then_e, else_e, .. }) => {
                 self.expr_is_real(*then_e) || self.expr_is_real(*else_e)
             }
-            Some(ir::Expr::SysFunc { which, .. }) => {
+            Some(ir::Expr::SysFunc { which, args }) => {
                 matches!(
                     which,
-                    ir::SysFuncId::Realtime | ir::SysFuncId::Itor | ir::SysFuncId::BitsToReal
+                    ir::SysFuncId::Realtime
+                        | ir::SysFuncId::Itor
+                        | ir::SysFuncId::BitsToReal
+                        // r19/S1: `.atoreal()` returns `Value::from_f64` and was
+                        // absent here, so `v[s.atoreal()]` read the f64 BIT PATTERN
+                        // as an index — reachable with no `real` keyword in sight.
+                        | ir::SysFuncId::StrAtoreal
                 ) || real_math_arity(*which).is_some()
+                    // `.sum()`/`.product()` fold with `arith`, which stays in the
+                    // real domain when the elements are real.
+                    || (matches!(which, ir::SysFuncId::ArrSum | ir::SysFuncId::ArrProduct)
+                        && args.first().is_some_and(|a| self.expr_is_real(*a)))
             }
+            // r19/S1: a real-returning function. Every consumer of this predicate is
+            // a "must be integral" gate, so a missing arm here is a silent-wrong at
+            // ~40 call sites at once — fixing the sites without fixing the predicate
+            // left all of them open. Conservative: a call whose callee is known to
+            // return a real is real; an unknown callee is not claimed.
+            Some(ir::Expr::Call { func, .. }) => self
+                .func_metas
+                .get(*func as usize)
+                .and_then(|m| self.nets.get((m.base_net + m.return_slot) as usize))
+                .is_some_and(|n| matches!(n.kind, ir::NetKind::Real)),
             _ => false,
         }
     }
