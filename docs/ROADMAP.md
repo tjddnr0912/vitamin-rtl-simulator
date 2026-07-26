@@ -2,28 +2,27 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-25)**: format_version **23** · **4474 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.221**(real-valued parameters — 미해결 3건으로 브랜치 `feat-real-params` 보류·§2 참조). **완료 슬라이스 55건의 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-25 · main `1d2d7eb`)**: format_version **23** · **4474 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.221**(real-valued parameters — 후속 브랜치 `fix-real-param-residual`이 잔여를 닫고 **main 머지 완료**; 잔여는 §2 첫 항목 1건뿐). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
 
 ## 요약 (스캔용)
 
-| § | 주제 | 항목 | 키워드 |
-|---|---|---:|---|
-| §0 | correct-support 승격 큐 | 16 | string-array 라우팅 · real 도메인 const-fold |
-| §0-B | NEXT — 재개할 deep-defer follow-on | 0 | deep-defer 재개 후보 |
-| §1 | 착수 우선순위 | 4 | 착수 순서 |
-| §2 | Silent-wrong 잔여 | 36 | real param 잔여 · inner-NET shadow · 감도 누락 · 구조적 지연 |
-| §3 | Loud→supported 후보 | 39 | SVA/OOP/CRV 확장 · VCD fidelity · paren string-select |
-| §4 | SVA / 검증 honest-loud 잔여 | 6 | SVA honest-loud |
-| §5 | perf / 하드닝 잔여 | 4 | perf(보류) |
-| §6 | G2 — AI-Agent 친화 OBS 트랙 | 1 | OBS-0~6 |
-| §7 | 조건부 / 장기 | 0 | 조건부·장기 |
-| §8 | 비계획 | 1 | 영구 비목표 |
-| §9 | 완료 이력 포인터 | 3 | 완료 이력 포인터 |
+| 순 | § | 주제 | 항목 | 오라클 | 키워드 |
+|---:|---|---|---:|:--:|---|
+| **1** | §0 | correct-support 승격 큐 | 16 | ✓ 11/13 | **현재 착수 대상**. T1 string-array 6 · T2 real const-fold/generate string/enum label/음수 range 4 |
+| **2** | §2 | Silent-wrong 잔여 | 39 | ✓ 7 | part-select 바운드 0 · replication count 0 · package real · 구조적 지연 · inner-NET shadow(DEEP) |
+| **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
+| **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
+| **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
+| — | §5 | perf / 하드닝 | 4 | — | **전부 보류 판정** — 트리거 시만 |
+| — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
+| — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
-> 🔴 = 열린 silent-wrong(최우선). 취소선 항목은 **RESOLVED**이며 상세는 ARCHIVE에만 둔다.
+> 🔴 = 열린 silent-wrong(정본 최우선). 취소선/RESOLVED 항목은 **잔여가 있을 때만** 한 줄로 남고 상세는 ARCHIVE에만 둔다.
+>
+> **순서 주의**: 정본 우선순위(§1)는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데, 위 표의 1·2위는 **오너 지시로 §0(②)이 §2(①) 앞**에 있다. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 
 ## 0. correct-support 승격 큐 (2026-07-25 전수 재그라운딩 — **오너 지시로 최상위**)
 
@@ -82,28 +81,32 @@
 3. **전제조건 충족된 honest-loud 승격** (§4~§5).
 4. **G2 OBS 슬라이스** (§6).
 
-현재 NEXT 큐(상세=LOOPROMPT): **§0 correct-support 승격 큐 T1(string-array 가족 7종) → T2(real const-fold·generate string decl-init·sized-literal enum label·음수 range)** → inner-net vs outer-param shadow(§0-B·①-급 silent-wrong·AST-gathered name set 선행) → OBS-2 sva.jsonl.
+현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-## 2. Silent-wrong 잔여 (전부 pre-existing·baseline 동일 — deep defer 또는 기록됨)
+1. **§0 T1** — string-array 가족 **6종**(1번은 §4.5.219서 RESOLVED). 전제조건 `dyn ⊇ fixed`가 §4.5.220으로 해소돼 지금이 적기.
+2. **§0 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound(각자 독립 슬라이스).
+3. **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(**동근**: `const_eval_in_scope`의 `Cast`/`Call` arm → 한 슬라이스로 묶을 것) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
+4. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
+5. **OBS-2 sva.jsonl**(R-L6).
+
+## 2. Silent-wrong 잔여 (1건 제외 전부 pre-existing·baseline 동일 — deep defer 또는 기록됨)
+
+> **오라클 있는 것부터 위로.** 아래 🔴 중 A1~A7(오라클 ✓)이 §1 우선순위 ①에 해당하고, 무오라클/soundness 발굴분은 그 아래.
 
 - **🔴 §4.5.221이 도입한 좁은 하강(pre-existing 아님 — 내 책임)**: 계층 real param 이 상수 범위 바운드에 오면 조용히 1-bit. `logic [$clog2(u.R)-1:0]`(u 는 real param R 을 가진 인스턴스) → PRE 는 loud(`E3009`) 였으나 POST 는 **진단 없이 width 1**. 원인 = `count_reads_real_param` 의 `Ident` arm 이 `segments.len()==1` 을 요구해 `u.R` 을 못 봄. **iverilog 도 거부**하므로 무오라클이고 범위는 좁으나 loud→silent 는 하강. **fix 전제** = 바운드 문맥에서의 계층 이름 해석(현재 `nonconst_bound_reason` 은 false-loud 회피 때문에 call/hier 로 안 내려감) — 이름 매칭 근사는 동명 정수 hier param 을 false-reject 할 수 있어 실측 hazard set 없이는 금지(§4.5.218 선례).
-- ~~🔴 real 값이 `expr_is_real` 에 안 잡히는 생산자 = 全 index/size gate 우회~~ **RESOLVED** — `atoreal()`·dyn `real d[]` 원소·`ArrSum/ArrProduct` 는 `expr_is_real` arm 추가로, **real 반환 FUNCTION** 은 `lower_index_expr` 가 **AST 를 들고 있으므로 선언 타입을 직접 조회**(`call_returns_real`)해서 해소. IR 에는 real 마커가 없다 — inline 은 본문을 식으로 접고 `func_return_dims` 는 Real kind 를 계산만 하고 버려서 반환 net 이 `NetKind::Real` 이 아니다(양 경로 동일). **잔여**: 계층/package-scoped callee 는 다른 테이블로 resolve 되어 미청구(보수적).
 - **replication 비대칭(기록)**: 같은 `parameter real R = 3.0` 에서 `{R{'1}}`·`{(R:R:R){1'b1}}` 는 supported(`111`)인데 `{R{1'b1}}`·`{R{2'b10}}` 는 loud. 일관성은 없으나 loud 쪽이 정직함.
 - **🔴 상수-foldable 식을 part-select 바운드로 쓰면 조용히 0 / 비트 덮어씀**(pre-existing·재리뷰 발견·**근인 규명됨**): `v[fi(7):fi(4)]` → iverilog `a`, vita `0`; `c[int'(5):int'(4)] = 2'b00` → iverilog `85`, vita `5`(상위 비트 clobber). **근인**: 바운드 접기가 `const_fn.rs::const_eval_u32` 를 쓰는데 이건 **`&self` 없는 자유 함수**라 `IntLit`/`Paren`/`Unary` 3개 arm뿐 — params·const 함수·cast 를 못 본다. 호출부(`packed.rs:425,616,630`·`packed_lval.rs:279,288`)는 `None` 을 "상수 아님"으로 보고 0 또는 net-width 폴백. **`const_eval_in_scope` 로 폴백을 시도했으나 이득 0으로 되돌림** — 그쪽에도 **`Cast` arm 이 없어** `int'(5)` 가 여전히 None 이고 `fi(7)` 의 `Call` arm 도 발화하지 않았다. **fix 전제** = `const_eval_in_scope` 에 `Cast` arm 추가 + `Call` arm 이 automatic 함수에 왜 안 무는지 규명. hot path 이므로 리뷰 필수.
 - **🔴 replication count 가 상수로 안 접히면 조용히 0**(pre-existing·differential 발견): `{P*2{1'b1}}`·`{(P>1?3:2){1'b1}}`·`{int'(3){1'b1}}`·`{cf(3){1'b1}}` 가 iverilog `111…` 인데 vita `0`(`{P+1{…}}` 는 동작 — `*`·ternary·cast·const-fn 만 깨짐).
 - **🔴 package-scope `parameter real` 이 정수 나눗셈**(pre-existing·differential 발견·"미라우팅"보다 넓음): `pk::PR/2`(PR=3) 가 iverilog `1.5000` 인데 vita `1.0000`. module-scope 쌍둥이는 정상. 비-정수 package real 은 loud.
 - **`$urandom_range(R,0)` 가 범위 1 로 붕괴**(soundness S5): `bits(3.0)` 의 하위 32비트가 0. generic SysCall 인자 경로라 위치별 게이트 필요.
-- **`c[int'(5):int'(4)] = 2'b00`** 가 iverilog `85` vs vita `5`(pre-existing·width 가 net-width−offset 으로 폴백해 상위 비트를 덮음).
-- ~~🔴🔴 real param 이 `lower_index_expr` 를 경유하지 않는 쓰기/계층/배열-원소 SILENT-WRONG(11형)~~ **RESOLVED** — `lvalue.rs`(part-select 바운드·hier idx chain·indexed part)·`expr_main.rs`(hier idx chain)·`arrays.rs`(배열 word index r/w) 11 site를 `lower_index_expr` 경유로 전환. 경계 변환 덕에 정수-값 real은 **correct-support**(`v[7:R]`=f8·`m[1][R]`=08·`u.v[R]`=ad), 비-정수는 loud. **잔여 loud**: `v[R+2:R]` 처럼 바운드가 **산술식**이면 직접 real `Const`가 아니라 변환 불가(iverilog도 거부).
-- ~~🔴 replication count 가 `MinTypMax` 면 무한 루프~~ **RESOLVED** — 최종 else 를 `lower_index_expr` 경유로 전환(**lower된 IR로 판정**하니 AST arm 열거의 비수렴 문제가 구조적으로 사라짐·경계 변환 덕에 `{(R:R:R){1'b1}}`=7 correct-support·비-정수는 loud). **주의**: "folded Const 여야 한다"는 더 강한 요구는 시도했다가 **되돌림** — 정수 param 의 `$clog2(P)` 를 false-reject(엔진이 elaborate-time fold 없이 상수로 평가). **잔여 loud**: `$clog2(<real>)`(iverilog 는 3).
-- ~~🔴 `$readmem*`/`$writemem*` 주소 인자가 f64 비트패턴을 정수로 읽음~~ **RESOLVED** — lowering site 가 **모든** systask 인자 공용이라 통째 게이팅은 `$display("%f",R)` 를 false-loud 시키므로 **인자 위치**(readmem family 의 argi≥2 = start/end 주소)만 `lower_index_expr` 경유. `$readmemh(f, m, R)`(R=1)=iverilog 와 바이트 일치·비-정수는 loud·非주소 위치의 real 은 불변.
 - **파라미터 구조적 지연이 조용히 무시됨(pre-existing·PRE==POST)**: `assign #P y = x;` · `wire #P y = x;` · `and #P g(o,a,b);` 가 P 가 **정수 param 이어도** 지연을 무시(리터럴 `#3` 은 동작). §4.5.221 이 `parameter real` 을 지원하면서 **클럭 주기/지연 관용구가 이 경로의 주 사용처**가 되어 도달성이 크게 넓어졌다 — 우선순위 상향 후보.
 - **real→`input int` formal 미강제(pre-existing·PRE==POST)**: `f(2.4)` → vita `24`, iverilog `20`.
 
 > 발굴 경위·재현·범위 상세는 ARCHIVE의 해당 §4.5.x 참조.
 
-**✅ RESOLVED (silent-wrong → loud):**
+**✅ RESOLVED (silent-wrong → loud / correct-support · 잔여만 기재):**
 
+- **real 값 생산자 4종이 index/size gate 全 우회** — **RESOLVED**(§4.5.221 5·6R·상세=ARCHIVE). `atoreal()`·dyn `real d[]` 원소·`ArrSum/ArrProduct`·real 반환 FUNCTION. **잔여 loud**: 계층/package-scoped callee 의 real 반환(다른 테이블로 resolve·보수적) · 바운드가 **산술식**(`v[R+2:R]`·iverilog 도 거부) · `$clog2(<real>)`(iverilog 는 3).
 - ~~`foreach` over dynamic array/queue/assoc inside a FUNCTION or SU~~ **RESOLVED**(§4.5.175/§4.5.176·상세=ARCHIVE) — 잔여 loud**: key가 non-local인 direct `st=aa.first(module_net)`(module-net write=`&mut` 필요→fatal). 신규 `frame_foreach_dynamic.rs`×10.
 
 **🔴 DEEP-defer (전용 인프라 필요):**

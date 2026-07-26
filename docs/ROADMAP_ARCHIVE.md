@@ -12,7 +12,7 @@
 
 
 **§4.5.220–229**
-- `4.5.221` real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (리뷰 …
+- `4.5.221` real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (적대 리뷰 6라운드·머지됨) …
 - `4.5.220` SILENT-WRONG 수정: DYN string-array element의 byte select가 0 → supported + write-…
 
 **§4.5.210–219**
@@ -279,9 +279,11 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
-#### 4.5.221 real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (리뷰 5라운드·미해결 3건으로 브랜치 보류) (2026-07-25, branch feat-real-params) ⚠️미머지
+#### 4.5.221 real-valued parameters (`parameter real`) loud→supported — 정수-상수 문맥은 loud (적대 리뷰 6라운드·후속 브랜치서 잔여 해소) (2026-07-25, branch feat-real-params → fix-real-param-residual, main `1d2d7eb`) ✅
 
-**4463→4464 green · format 23 불변 · MsgCode 59 불변**
+**4463→4474 green · format 23 불변 · MsgCode 59 불변**
+
+> **머지 이력**: 1차 브랜치 `feat-real-params`는 리뷰 4라운드 시점에 **미해결 3건**으로 보류했고, 후속 브랜치 `fix-real-param-residual`이 5·6라운드로 그 3건 + 새로 발굴된 것들을 닫은 뒤 main에 머지(`1d2d7eb`). 아래 ★ 블록은 라운드 순서대로 읽으면 된다 — **매 라운드가 직전 라운드의 fix에서 blocking을 찾았고, 매번 다른 축이었다**(도메인 → resolver → index → size/count → **생산자 판별자** → **술어 자체**).
 
 **갭**: `parameter real R = 1.5;` / `localparam real CLK = 5.0;` 가 elaborate서 거부. `params: BTreeMap<String,i64>` 뿐이라 real 값을 담을 곳이 없었음. iverilog 오라클 有(강함).
 
@@ -340,7 +342,24 @@
 
 **교훈(추가)**: (12) **"인덱스 축을 닫았다" 는 "정수를 요구하는 모든 인자를 닫았다" 가 아니다** — select/index 와 **size/count/position** 은 별개 축이고, 후자는 엔진이 f64 비트패턴을 정수로 읽어 **할당량 폭주**까지 간다. 정수를 요구하는 인자를 **축이 아니라 전수**로 세어라. (13) **폴백 `_` arm 이 다른 resolver 의 함수로 위임하면 그 지점에서 resolver 가 뒤바뀐다** — 술어를 resolver 별로 갈랐으면 **모든 arm 을 미러링**하라(위임 1줄이 전체 분리를 무효화). (14) 공용 lowering 경로에 게이트를 걸 땐 **그 경로를 쓰는 다른 consumer 를 먼저 세어라**(전부 정수 인자면 안전·아니면 위치별 게이트).
 
-**correct-or-loud 잔여(LOUD)**: 정수 상수 문맥의 real param(width/range/`$clog2`) · `localparam real B = A;`(real→real alias) · real 식 override · generate/package/interface-body/defparam 바인딩 · real select 인덱스 · real replication count.
+**★★★★★ 5라운드(후속 브랜치 `fix-real-param-residual`) — 4라운드까지는 전부 *호출 지점*만 고쳤고 *판별자*는 안 고쳤다**: `lower_index_expr`가 아무리 많은 site를 경유해도 그 안의 `expr_is_real`이 **real 값의 생산자를 못 알아보면 게이트 ~40곳이 전부 열린 채**다. 실측으로 4종 발견:
+
+- **`.atoreal()`** · **dyn `real d[]`의 원소** · **`ArrSum`/`ArrProduct`**(`.sum()`/`.product()`) → `expr_is_real`에 arm 추가(dyn 원소는 `real_elem_dyn_nets` 키잉).
+- **real 반환 FUNCTION** → **IR에는 real 마커가 없다**(inline은 본문을 식으로 접고, `func_return_dims`는 Real kind를 계산만 하고 버려서 반환 net이 `NetKind::Real`이 아니다 — 양 경로 동일). `lower_index_expr`는 **AST를 들고 있으므로** 선언 타입을 직접 조회(`call_returns_real`)해서 해소.
+
+같은 라운드에서 **누락 site 축**도 재차 드러남 — 4라운드까지 문서 주석이 "모든 index site를 덮는다"고 세 번째로 거짓이었다: **쓰기/계층/배열-원소 11형**(`lvalue.rs` part-select 바운드·hier idx chain·indexed part / `expr_main.rs` hier idx chain / `arrays.rs` 배열 word index r/w)을 전부 `lower_index_expr` 경유로 전환. 경계 변환 덕에 **정수-값 real은 correct-support**(`v[7:R]`=f8·`m[1][R]`=08·`u.v[R]`=ad), 비-정수는 loud. 추가로 replication count의 `MinTypMax` 무한 루프(최종 else를 `lower_index_expr` 경유 = **lower된 IR로 판정**하니 AST arm 열거의 비수렴이 구조적으로 소멸)와 `$readmem*` 주소 인자(공용 systask 경로라 **인자 위치** argi≥2만 게이팅 — 통째 게이팅은 `$display("%f",R)`를 false-loud)를 해소.
+
+**★★★★★★ 6라운드 — 내 fix 2건이 되돌려졌다(되돌린 것이 결론)**:
+
+- **`call_returns_real` 근사 복제본 = BLOCKING false-loud**: 5라운드에서 `ast_has_real_call`을 재구현했는데 **연산자 가드를 빠뜨린 near-copy**여서 `v[fr(2) > 2.0]`(비교 결과는 정수 1비트)처럼 real이 **소비되고 끝나는** 식까지 real로 판정 → 8 site false-loud, 프로브 하나는 VCD 자체를 잃음. **fix = 복제본 삭제하고 위임**.
+- **`**`(Pow)가 두 쌍둥이 술어 양쪽에 없었음** — real-propagating 연산자인데 `+ - * /`만 있었다. 양쪽에 추가(한쪽만 고치면 §4.5.221 B5와 같은 resolver 갈림).
+- **되돌린 것 2건**: (a) "바운드는 folded `Const`여야 한다"는 더 강한 요구 → 정수 param의 `$clog2(P)`를 false-reject(엔진이 elaborate-time fold 없이 상수로 평가)해서 **revert**, 이유를 site에 주석으로 고정. (b) part-select 바운드에 `const_bound_u32` 폴백 추가 → 테스트는 통과했으나 프로브 f1/f5가 **불변**(`const_eval_in_scope`에 `Cast` arm이 없어 애초에 발화 안 함) → **측정된 이득 0이므로 hot path 변경을 revert**.
+
+**최종 3라운드 리뷰 결과 = CLEAN**(4092 설계·false-loud 0·280-case fuzz·panic/hang 0). PRE 바이너리에서 발견된 진짜 hang 2건도 수정.
+
+**교훈(추가)**: (15) **호출 지점을 전수했다는 것이 판별자가 맞다는 뜻은 아니다** — 게이트를 40곳에 심어도 그 안의 술어가 생산자를 모르면 전부 no-op다. 술어를 넓힐 때는 **값의 생산자 목록**(변환 함수·컨테이너 원소·리덕션·함수 반환)을 세어라. (16) **IR에 마커가 없으면 AST에서 조회하라** — "IR 위 판정이 구조적으로 완전"(교훈 4)은 **IR이 그 정보를 보존할 때만** 참이고, real 반환 타입은 보존되지 않는다. (17) **기존 술어를 재구현하지 말고 위임하라** — near-copy는 원본의 가드를 빠뜨리고, 그 차이가 false-loud로 나타난다. (18) **이득이 측정되지 않은 hot-path 변경은 되돌려라** — "도움이 될 것"은 근거가 아니다(테스트 통과는 무해함의 증거이지 유용함의 증거가 아니다).
+
+**correct-or-loud 잔여(LOUD)**: 정수 상수 문맥의 real param(width/range/`$clog2`) · `localparam real B = A;`(real→real alias) · real 식 override · generate/package/interface-body/defparam 바인딩 · **바운드가 산술식**인 경우(`v[R+2:R]` — 직접 real `Const`가 아니라 경계 변환 불가·iverilog도 거부) · `$clog2(<real>)`(iverilog는 3) · 계층/package-scoped callee의 real 반환(다른 테이블로 resolve되어 미청구·보수적).
 
 **교훈**: (1) **타입 변환은 leaf 가 아니라 문맥 경계에서** — 조용한 1-bit 를 고치려 leaf 변환하면 조용한 잘못된 분기가 된다(두 silent-wrong 을 맞바꾼 셈). (2) **"고쳤다"를 리뷰 없이 믿지 말 것** — differential 과 soundness 가 **서로 다른 진입점**으로 같은 근본을 잡았다(전자=generate-if/비교, 후자=real→real alias 와 `R*2`); 한 렌즈만 돌렸으면 나머지 절반이 배포됐다. (3) **선언 타입 키잉**이라야 `parameter real R = 3;` 이 real 로 바인딩. (4) **IR 위 판정이 구조적으로 완전**(`lower_index_expr`) — AST walker 는 shape 를 놓치지만 lower 된 값은 못 숨는다. (5) 리터럴 부정은 **파싱된 값**을 부정(텍스트 재조립은 중첩에서 깨짐). 신규 `real_params.rs`×27.
 
