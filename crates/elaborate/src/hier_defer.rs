@@ -121,7 +121,14 @@ impl Elaborator<'_> {
     pub(crate) fn resolve_deferred_hier_sel(&mut self) {
         let pending = std::mem::take(&mut self.deferred_hier_sel);
         for d in pending {
-            let Some(net) = self.hier_lookup(&d.prefix, &d.path) else {
+            // T1-6: a ROUTED string array is registered under a mangled net name, so the
+            // symbol table cannot find it by the declared one — the same side map the
+            // local resolver consults is checked here, with the same commit-to-scope
+            // walk. Second, so an ordinary net of that name still wins.
+            let Some(net) = self
+                .hier_lookup(&d.prefix, &d.path)
+                .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key))
+            else {
                 self.error(
                     MsgCode::ElabUnresolvedName,
                     &format!(
@@ -131,6 +138,36 @@ impl Elaborator<'_> {
                 );
                 continue;
             };
+            // T1-6: a POSITIONALLY indexed dynamic container (`u.s[0]` on a dyn array,
+            // a queue, or a routed string array) reads as the word-indexed `Signal` the
+            // local `dyn_select_read` builds — the engine's element read does not care
+            // how the name was reached. Only this exact shape: ONE index, and a
+            // DynArray/Queue whose position IS its index.
+            //
+            // Everything else in the family stays loud. An ASSOC array is keyed, not
+            // positioned, so a bare index is a different operation. A MULTI-index access
+            // on a routed multi-dim array needs the row-major flatten, which is applied
+            // at lowering against dimensions this resolution pass does not carry — and
+            // reading the first index as a flat one would be a silent wrong element. The
+            // WRITE twin (`u.s[0] = "x"`) is a separate deferred machine and is still
+            // loud; that asymmetry is a gap, not a regression (both were loud before).
+            if d.part.is_none()
+                && d.idx_eids.len() == 1
+                && matches!(
+                    self.nets.get(net as usize).map(|n| n.kind),
+                    Some(ir::NetKind::DynArray | ir::NetKind::Queue)
+                )
+                && self
+                    .fixed_string_dyn_dims(net)
+                    .is_none_or(|ds| ds.len() == 1)
+            {
+                let word = d.idx_eids[0];
+                self.exprs[d.eid as usize] = ir::Expr::Signal {
+                    net,
+                    word: Some(word),
+                };
+                continue;
+            }
             // Events and dynamic handles have no indexable readable value here (a dyn
             // element read routes through `dyn_select_read` at lowering, on a 1-seg
             // base — never a hierarchical ref). Loud-reject.
