@@ -2,8 +2,8 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-07-25 · main `1d2d7eb`)**: format_version **23** · **4474 tests green** · 3-OS CI green · MsgCode **59**(W3057) · **MSRV 1.85**.
-> - **최신 완료 5건**: §4.5.221 real-valued parameters(`parameter real` — 적대 리뷰 6R·후속 브랜치서 잔여 해소·머지) · §4.5.220 DYN string-array element byte-select silent-0 수정 + write-twin loud화 · §4.5.219 FIXED string-array decl-init · §4.5.218 inner-scope local의 string-array side-map shadow · §4.5.217 string-ARRAY ELEMENT packed 누출. **완료 슬라이스 220건 전체 목록·상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 로 검색).
+> - **기준(2026-07-27)**: format_version **23** · **4535 tests green** · 3-OS CI green · MsgCode **59**(W3057) · **MSRV 1.85**.
+> - **최신 완료 5건**: **§4.5.222~226 §0 T1 string-array 7종 전부 RESOLVED**(runtime index/`foreach` · queue-of-string · multi-dim · frame-local · 계층 read — **T1이 한 가족이 아니라 근인 4갈래임을 측정으로 확인**하고 각각 전용 슬라이스로 처리) · §4.5.221 real-valued parameters(`parameter real` — 적대 리뷰 6R·후속 브랜치서 잔여 해소·머지) · §4.5.220 DYN string-array element byte-select silent-0 수정 + write-twin loud화 · §4.5.219 FIXED string-array decl-init · §4.5.218 inner-scope local의 string-array side-map shadow. **완료 슬라이스 220건 전체 목록·상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 로 검색).
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
 > - **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* RTL 시뮬레이터(correct-or-loud) · **G2** = AI-Agent 친화 simulator(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
@@ -18,8 +18,7 @@
 
 | # | 항목 | 근거/오라클 |
 |---|---|---|
-| 1 | **§0 승격 큐 T1** — string-array 가족 6종(runtime index·`foreach`·`string q[$]`·multi-dim·hier·frame-local) | iverilog ✓ 7/7 재현. **전제조건 해소됨**(§4.5.219+220 → dyn ⊇ fixed) |
-| 2 | **§0 승격 큐 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound | iverilog ✓ 4/4 |
+| 1 | **§0 승격 큐 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound | iverilog ✓ 4/4 |
 | 3 | **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(동근: `const_eval_in_scope` `Cast`/`Call` arm) · package-scope real · 구조적 지연 · real→`input int` formal | iverilog 라이브 차분 |
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
@@ -31,7 +30,7 @@
 
 | 분류 | 항목 수 | 내용 | 정본 |
 |---|---:|---|---|
-| correct-support 승격 큐 | 16 | T1 string-array 6 · T2 독립 4 · T3 전제조건 2 · 정정(stale) 3 | ROADMAP §0 |
+| correct-support 승격 큐 | 6 | **T1 전부 완료** · T2 독립 4 · T3 전제조건 2 | ROADMAP §0 |
 | 🔴 silent-wrong 잔여 | 39 | **오라클-有 7**(part-select 바운드·replication count·package real·구조적 지연·real→int formal·inner-NET shadow·block-local package clobber) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
 | honest-loud 잔여 | 35 | string/heap·함수/formal·소형 큐·EXT2 3건·deep 저우선(VCD fidelity·X→real·x/z-fill param) | ROADMAP §3 |
 | SVA/검증 잔여 | 6 | empty-match 융합·N2c full·prop-ref skew 고급형·QUAD default-flip·N4 clocking 잔여·class down-cast | ROADMAP §4 |

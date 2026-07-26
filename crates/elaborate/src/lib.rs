@@ -89,6 +89,7 @@ mod ports;
 mod scope;
 mod stmt_flow;
 mod stmt_main;
+mod string_array_route;
 mod strings;
 mod sva_ast;
 mod sva_check;
@@ -513,6 +514,28 @@ struct Elaborator<'s> {
     // resolves to the K-th net (read + write + `.method()`). A RUNTIME index / dynamic
     // (`string s[]`) / init-pattern is loud (correct-or-loud). elaborate-LOCAL.
     string_array_elems: BTreeMap<String, (i64, i64, Vec<u32>)>,
+    // T1: DynArray net id → declared element count, for a FIXED string array that was
+    // ROUTED to the dynamic representation (`string s[n]` / `string s[0:n-1]` at a
+    // scope that runs the t0 var-init flush). The routing is what gives a fixed string
+    // array a RUNTIME index and `foreach`, which the per-element-net form above cannot
+    // express (the index would have to select among N distinct nets).
+    //
+    // Membership means "fixed-size storage that merely happens to be dyn-backed", so
+    // `new[]` on it stays LOUD — a fixed array is not resizable, and without this the
+    // routing would turn today's honest reject into a SILENT resize. elaborate-LOCAL
+    // (the engine only needs `string_elem_dyn_nets`, which the routed net also joins).
+    fixed_string_dyn: BTreeMap<u32, Vec<u32>>,
+    // T1: FQ name of a routed fixed string array → its DynArray net. The net is
+    // registered under a MANGLED name (`<name>$sad`), never the declared one, so the
+    // bare name stays FREE in the module namespace — exactly as the per-element-net
+    // form leaves it free by storing elements as `<name>$sae$<i>`.
+    //
+    // That is load-bearing, not cosmetic: v1 flattens block-locals onto module nets by
+    // BARE NAME, so putting the array on its own name made a block-local `logic [7:0]
+    // sa` collide with a module `string sa[2]` and hit the dynamic-storage collision
+    // reject — two designs iverilog runs, and vita ran correctly before the routing,
+    // went loud. Keeping the name free restores that namespace exactly.
+    fixed_string_dyn_key: BTreeMap<String, u32>,
     // PERSISTENT FQ param-name → value, NEVER restored (unlike `params`). Lets a
     // post-elaboration hierarchical READ (`dut.WIDTH`) fold to the sibling
     // instance's param value. Out-of-band (golden-free).

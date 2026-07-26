@@ -148,8 +148,38 @@ impl Elaborator<'_> {
                 // `NetKind::String` element nets (`<name>$sae$<i>`); `files[K]` (CONST K)
                 // resolves to the K-th net. A dynamic (`string s[]`) / multi-dim /
                 // init-pattern array stays loud (correct-or-loud) via the reject below.
-                if d.range.is_none() && d.packed.is_empty() && decl.unpacked.len() == 1 {
-                    if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
+                if d.range.is_none() && d.packed.is_empty() && !decl.unpacked.is_empty() {
+                    // T1: a ZERO-BASED ASCENDING fixed string array routes to the
+                    // DYNAMIC representation instead of N per-element nets. Measured
+                    // capability parity (23 shapes, fixed vs dyn, iverilog-differential)
+                    // shows dyn is a strict SUPERSET — it additionally supports a runtime
+                    // index, `foreach`, a runtime element write and `.size()`, and since
+                    // §4.5.220 fixed the dyn element BYTE select it no longer loses
+                    // anything fixed had. Unifying is therefore a climb, not a trade.
+                    //
+                    // Restricted to `allow_string_init` scopes (module body + block-local)
+                    // because the routed net needs a `new[n]` pre-size driven from the t0
+                    // var-init flush, which only those scopes run. Generate / package /
+                    // interface / port scopes keep the per-element-net path verbatim.
+                    //
+                    // T1-5: MULTI-dim (`string s[2][3]`) rides the same route — one FLAT
+                    // row-major container, with `s[i][j]` flattened at each access. Every
+                    // dimension must qualify (`fixed_string_dims_zero_asc`), because the
+                    // flat container renumbers any axis that does not.
+                    if allow_string_init {
+                        if let Some(dims) = self.fixed_string_dims_zero_asc(&decl.unpacked) {
+                            if self.route_fixed_string_array(decl, &dims, ports, body) {
+                                continue;
+                            }
+                        }
+                    }
+                    if decl.unpacked.len() != 1 {
+                        // Multi-dim that did NOT qualify for the route (a non-zero base,
+                        // a descending dim, a non-constant bound, or too many elements):
+                        // the per-element-net path below speaks one dimension only, so
+                        // fall through to the dimension reject rather than silently
+                        // building storage for the first dimension alone.
+                    } else if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
                         // r19: a `'{…}` decl-init EXPANDS to per-element assignments in
                         // the t0 var-init pre-sweep (`fixed_string_array_init_pairs`,
                         // collected by `collect_var_init_drivers` / the block-local
@@ -217,11 +247,27 @@ impl Elaborator<'_> {
                 // shared dyn-array `'{…}` flush like any dyn array. A FIXED string array
                 // (`string s[0:1]`) took the element-net path above; a queue/assoc/multi-
                 // dim string container stays loud.
-                if d.range.is_none()
-                    && d.packed.is_empty()
-                    && decl.unpacked.len() == 1
-                    && matches!(decl.unpacked[0], ast::Dim::Dyn)
-                {
+                // T1-4: `string q[$]` joins it — an UNBOUNDED queue of strings. One
+                // handle net and the same `string_elem_dyn_nets` marker (the engine's
+                // `dyn_str_elem` is a per-NET flag, not a DynArray-only one); only the
+                // `NetKind` differs.
+                //
+                // Admitting the dimension is NOT sufficient on its own, and the first
+                // attempt at this shipped nothing: `q.size()` was right while every
+                // element read back EMPTY, because the queue push/insert paths did their
+                // own `.resize(w)` — width 0 → 1 → the byte string truncated to a bit.
+                // They now share `coerce_dyn_elem` with the dyn-array element write.
+                //
+                // A BOUNDED queue (`[$:N]`) is loud everywhere in the MVP and stays loud.
+                let str_container_kind = match decl.unpacked.first() {
+                    Some(ast::Dim::Dyn) if decl.unpacked.len() == 1 => Some(ir::NetKind::DynArray),
+                    Some(ast::Dim::Queue(None)) if decl.unpacked.len() == 1 => {
+                        Some(ir::NetKind::Queue)
+                    }
+                    _ => None,
+                };
+                if d.range.is_none() && d.packed.is_empty() && str_container_kind.is_some() {
+                    let kind = str_container_kind.expect("guarded by is_some above");
                     let dir = self.dir_for_name(&decl.name.name, ports, body);
                     if dir != ir::PortDir::Internal {
                         self.error(
@@ -234,7 +280,7 @@ impl Elaborator<'_> {
                     self.add_net(
                         &decl.name.name,
                         ir::NetVar {
-                            kind: ir::NetKind::DynArray,
+                            kind,
                             width: 0,
                             msb: 0,
                             lsb: 0,
@@ -711,9 +757,10 @@ impl Elaborator<'_> {
                     // N3 Phase 2: a `string s[]` DYNAMIC array with a `'{…}` init IS
                     // collected — the flush expands it via `dyn_decl_init_stmts` (like
                     // an int/real dyn array).
-                    let is_dyn_str_init = name.unpacked.len() == 1
-                        && matches!(name.unpacked[0], ast::Dim::Dyn)
-                        && matches!(init.kind, ast::ExprKind::AssignPattern(_));
+                    let is_dyn_str_init = crate::string_array_route::is_dyn_string_container_init(
+                        &name.unpacked,
+                        init,
+                    );
                     if !is_dyn_str_init {
                         // r19: a FIXED string array (`string s[3] = '{…}`) expands to one
                         // `s[k] = <elem>` per declared index, pushed in declaration order
@@ -729,9 +776,7 @@ impl Elaborator<'_> {
                         // E3010s. Keying off the decl's own output makes the two
                         // structurally unable to disagree.
                         if name.unpacked.len() == 1
-                            && self
-                                .string_array_elems
-                                .contains_key(&self.fq(&name.name.name))
+                            && self.has_fixed_string_array_storage(&name.name.name)
                         {
                             if let Some(pairs) = self.fixed_string_array_init_pairs(
                                 &name.name,

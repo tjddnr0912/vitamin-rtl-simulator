@@ -345,29 +345,15 @@ fn unassigned_element_concats_as_empty() {
 }
 
 #[test]
-fn runtime_index_on_fixed_string_array_stays_loud() {
-    // A FIXED string array still requires a constant index (deeper follow-on); the
-    // new string-domain arm must not silently route a runtime index anywhere.
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("vita_saed_loud_{}_{n}.sv", std::process::id()));
-    std::fs::write(
-        &path,
-        "module t;\n\
+fn runtime_index_on_fixed_string_array_in_a_concat() {
+    // T1 FLIP (was `runtime_index_on_fixed_string_array_stays_loud`): a runtime index
+    // on a zero-based fixed string array is supported now that the declaration routes
+    // to the dynamic representation — and it keeps the STRING domain inside a concat
+    // (`[a!]`, not the packed-bit reading this file's other tests pin). iverilog agrees.
+    let out = run("module t;\n\
            string s[2];\n\
            int i;\n\
            initial begin s[0]=\"a\"; i=0; $display(\"[%s]\", {s[i], \"!\"}); end\n\
-         endmodule\n",
-    )
-    .unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
-        .arg(&path)
-        .output()
-        .expect("run vita");
-    let _ = std::fs::remove_file(&path);
-    assert!(!out.status.success(), "expected a loud reject");
-    let se = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        se.contains("requires a constant index"),
-        "unexpected diagnostic:\n{se}"
-    );
+         endmodule\n");
+    assert_eq!(out, "[a!]\n");
 }

@@ -114,16 +114,73 @@ fn output_struct_tf_port_copies_out() {
     );
 }
 
-// correct-or-loud: a NON-packable (string member) record queue stays loud. (Errors
-// print to stderr, which `run` does not capture — so a loud run prints NO sentinel.)
+// T1-4 FLIP (was `non_packable_record_queue_stays_loud`): a NON-packable (string
+// member) record queue WORKS now — as an unplanned consequence of `string q[$]`.
+//
+// A non-packable record container is SoA (`hdl-parser/src/soa.rs`): one container per
+// member. The string member is therefore literally a `string q[$]`, and it was the
+// string-queue reject that made the whole record queue loud. Opening one opened the
+// other.
+//
+// iverilog rejects every shape here, so the teeth are vita-INTERNAL equivalence: the
+// string member IS the `string q[$]` storage that `queue_of_string.rs` verifies against
+// iverilog directly, and the integral members were already the working packable path.
+// The surface was swept (10 shapes) before accepting the widening — every one is
+// correct or loud, and the one that is loud is the whole-record read below.
 #[test]
-fn non_packable_record_queue_stays_loud() {
+fn non_packable_record_queue_push_and_read() {
     let o = run("module t; typedef struct { int k; string s; } np_t; np_t q[$];\n\
-         initial begin np_t p; p.k=1; p.s=\"x\"; q.push_back(p); $display(\"SZ=%0d\", q.size()); $finish; end endmodule\n");
+         initial begin np_t p; p.k=1; p.s=\"aa\"; q.push_back(p); p.k=2; p.s=\"bb\"; q.push_back(p);\n\
+         $display(\"SZ=%0d %0d:%s %0d:%s\", q.size(), q[0].k, q[0].s, q[1].k, q[1].s); $finish; end endmodule\n");
     assert!(
-        !o.contains("SZ="),
-        "non-packable record queue must be loud:\n{o}"
+        o.contains("SZ=2 1:aa 2:bb"),
+        "non-packable record queue:\n{o}"
     );
+}
+
+#[test]
+fn non_packable_record_queue_ops_keep_the_members_aligned() {
+    // The members are separate containers, so every mutation must move them in step —
+    // a push_front / insert / delete that reordered one and not the other would show up
+    // as a mismatched pair here.
+    let o = run(
+        "module t; typedef struct { int k; string s; } np_t; np_t q[$];\n\
+         initial begin np_t p;\n\
+           p.k=1; p.s=\"aa\"; q.push_back(p);\n\
+           p.k=2; p.s=\"bb\"; q.push_front(p);\n\
+           p.k=9; p.s=\"mid\"; q.insert(1,p);\n\
+           $display(\"A %0d:%s %0d:%s %0d:%s\", q[0].k,q[0].s, q[1].k,q[1].s, q[2].k,q[2].s);\n\
+           q.delete(0);\n\
+           $display(\"B %0d %0d:%s %0d:%s\", q.size(), q[0].k,q[0].s, q[1].k,q[1].s);\n\
+         $finish; end endmodule\n",
+    );
+    assert!(
+        o.contains("A 2:bb 9:mid 1:aa") && o.contains("B 2 9:mid 1:aa"),
+        "SoA members drifted out of step:\n{o}"
+    );
+}
+
+#[test]
+fn non_packable_record_queue_multiple_string_members() {
+    let o = run("module t; typedef struct { string a; int k; string b; } np_t; np_t q[$];\n\
+         initial begin np_t p; p.a=\"AA\"; p.k=5; p.b=\"BB\"; q.push_back(p);\n\
+           p.a=\"CC\"; p.k=6; p.b=\"DD\"; q.push_back(p);\n\
+           $display(\"%s/%0d/%s %s/%0d/%s\", q[0].a,q[0].k,q[0].b, q[1].a,q[1].k,q[1].b); $finish; end endmodule\n");
+    assert!(o.contains("AA/5/BB CC/6/DD"), "two string members:\n{o}");
+}
+
+#[test]
+fn non_packable_record_whole_element_read_stays_loud() {
+    // correct-or-loud: reading a whole SoA element back into a record variable
+    // (`o = q[0];`) has no single-value surface and is still an honest reject. Member
+    // reads (`q[0].s`) are the supported form. A `pop_front()` into a record variable
+    // IS supported (the SoA pop path), so this is specifically the indexed whole read.
+    let o = run(
+        "module t; typedef struct { int k; string s; } np_t; np_t q[$];\n\
+         initial begin np_t p; np_t o; p.k=7; p.s=\"hi\"; q.push_back(p); o=q[0];\n\
+         $display(\"SEEN k=%0d\", o.k); $finish; end endmodule\n",
+    );
+    assert!(!o.contains("SEEN"), "expected a loud reject:\n{o}");
 }
 
 // correct-or-loud: a BOUNDED queue of record (`[$:N]`) stays loud.

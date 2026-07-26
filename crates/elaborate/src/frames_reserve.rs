@@ -132,10 +132,18 @@ impl Elaborator<'_> {
             // concurrent reentry (correct-or-loud; a full per-activation stash is a
             // follow-on). Multi-dim / packed / non-bit-vector-element dynamic arrays
             // stay loud (`frame_array_local`).
+            // T1-7: a `string` ELEMENT joins the bit-vector ones. The container is the
+            // same `DynArray` heap handle; only the element storage differs, and
+            // `string_elem_dyn_nets` is what tells the engine to hold these elements as
+            // byte strings (and fill `new[]` with ""). Note this is the element type —
+            // a frame-local SCALAR `string` is a different thing entirely (a slab-stored
+            // `NetKind::String`, §4.5.167) and never reaches here, because it has no
+            // unpacked dimension.
+            let str_elem = matches!(d.kind, ast::NetVarKind::String);
             if unpacked.len() == 1
                 && matches!(unpacked[0], ast::Dim::Dyn)
                 && d.packed.is_empty()
-                && ast_kind_is_bit_vector(d.kind)
+                && (ast_kind_is_bit_vector(d.kind) || str_elem)
             {
                 let (w, msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
                 let net = self.nets.len() as u32;
@@ -143,20 +151,55 @@ impl Elaborator<'_> {
                     name,
                     ir::NetVar {
                         kind: ir::NetKind::DynArray,
-                        width: w.max(1),
-                        msb,
-                        lsb,
-                        signed,
+                        // A string element has no packed width; the handle carries 0 so
+                        // `coerce_dyn_elem` / `resize_keep_sign` take their `is_str`
+                        // paths instead of truncating the byte string.
+                        width: if str_elem { 0 } else { w.max(1) },
+                        msb: if str_elem { 0 } else { msb },
+                        lsb: if str_elem { 0 } else { lsb },
+                        signed: signed && !str_elem,
                         array_len: 0, // heap handle — elements live in the engine heap
                         dir: ir::PortDir::Internal,
                         init: default_init(d.kind, w.max(1)),
                     },
                 );
+                if str_elem {
+                    self.string_elem_dyn_nets.insert(net);
+                }
                 // IEEE §7.5.2: a 2-state element defaults to 0 (not X) on `new[]` fill.
                 if net_kind_is_two_state(d.kind) {
                     self.two_state_heap_handles.insert(net);
                 }
                 return net;
+            }
+            // T1-7: a FIXED frame-local string array (`string s[2]` in a task body) takes
+            // the same heap handle, pre-sized at frame ENTRY by `emit_frame_local_inits`
+            // (the module-scope twin rides the t0 var-init flush, which a frame local
+            // never reaches). Registering it in `fixed_string_dyn` is what makes it
+            // behave as FIXED storage: `new[]` on it stays loud, a multi-dim declaration
+            // flattens row-major through the same chain walk, and a partial index is
+            // rejected — one shared set, so the frame-local and module-scope forms cannot
+            // drift apart.
+            if str_elem && d.packed.is_empty() {
+                if let Some(dims) = self.fixed_string_dims_zero_asc(unpacked) {
+                    let net = self.nets.len() as u32;
+                    self.add_net(
+                        name,
+                        ir::NetVar {
+                            kind: ir::NetKind::DynArray,
+                            width: 0,
+                            msb: 0,
+                            lsb: 0,
+                            signed: false,
+                            array_len: 0,
+                            dir: ir::PortDir::Internal,
+                            init: default_init(ast::NetVarKind::Reg, 1),
+                        },
+                    );
+                    self.string_elem_dyn_nets.insert(net);
+                    self.fixed_string_dyn.insert(net, dims);
+                    return net;
+                }
             }
             if let Some(Ok(af)) = self.classify_unpacked_array(
                 unpacked,

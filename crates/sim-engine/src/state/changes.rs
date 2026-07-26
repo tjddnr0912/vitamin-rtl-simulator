@@ -497,6 +497,34 @@ impl SimState<'_> {
     /// here and defer any `enforce_queue_bound`/warn to AFTER this returns (the
     /// closure form replaces the old `&mut DynObj`-returning `dyn_entry`, whose
     /// escaping reference cannot survive a `RefCell`).
+    /// THE funnel for storing a value as a dynamic-container ELEMENT (dyn array or
+    /// queue). Every write site must go through it — a site that resizes on its own
+    /// silently destroys a string element.
+    ///
+    /// A `string` element stores the raw byte string: the value carries `is_str` and
+    /// its length is dynamic, while the handle net has width 0 (so `w` is 1 here), and
+    /// `resize(1)` truncates the whole byte string to one bit. That is exactly how
+    /// `string q[$]` first read back EMPTY — `q.size()` was right and every element was
+    /// "" — because the queue push did its own `.resize(w)` while the dyn-array element
+    /// write had this branch. A `real` element needs no branch: `resize` is a no-op on
+    /// `is_real`. Everything else resizes with assignment semantics (§5.5).
+    ///
+    /// The discriminator is `dyn_str_elem`, the SAME flag that makes the engine store
+    /// these elements as byte strings in the first place, so this cannot disagree with
+    /// the storage it is coercing for.
+    pub(crate) fn coerce_dyn_elem(&self, net: u32, v: &Value, w: u32) -> Value {
+        if self
+            .dyn_str_elem
+            .get(net as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            Value::from_str_bytes(&v.to_str_bytes())
+        } else {
+            v.clone().resize(w)
+        }
+    }
+
     pub(crate) fn with_dyn_entry<R>(
         &self,
         net: u32,
@@ -678,6 +706,7 @@ impl SimState<'_> {
                 Cap,
                 Oob,
             }
+            let coerced = self.coerce_dyn_elem(net, piece, w);
             let step = self.with_dyn_entry(
                 net,
                 || DynObj::Queue {
@@ -690,13 +719,13 @@ impl SimState<'_> {
                     let len = elems.len();
                     match i.cmp(&len) {
                         std::cmp::Ordering::Less => {
-                            elems[i] = piece.clone().resize(w);
+                            elems[i] = coerced;
                             QStep::Done
                         }
                         // The u32::MAX X-sentinel can never land in the Equal arm:
                         // len ≤ the cap, far below the sentinel.
                         std::cmp::Ordering::Equal if len < MAX_DYN_ELEMS => {
-                            elems.push_back(piece.clone().resize(w));
+                            elems.push_back(coerced);
                             QStep::Pushed
                         }
                         std::cmp::Ordering::Equal => QStep::Cap,
@@ -717,25 +746,14 @@ impl SimState<'_> {
             }
             return false;
         }
-        // N3 Phase 2: a `string s[]` element stores the raw byte-string (a width
-        // resize would corrupt the dynamic-length `is_str` value); a real element
-        // rides the `is_real` resize no-op above. Every other element resizes.
-        let str_elem = self
-            .dyn_str_elem
-            .get(net as usize)
-            .copied()
-            .unwrap_or(false);
         let hit = {
+            let coerced = self.coerce_dyn_elem(net, piece, w);
             let mut heap = self.dyn_heap.borrow_mut();
             if let Some(DynObj::DynArray { elems }) =
                 heap.get_mut(net as usize).and_then(|o| o.as_mut())
             {
                 if i < elems.len() {
-                    elems[i] = if str_elem {
-                        Value::from_str_bytes(&piece.to_str_bytes())
-                    } else {
-                        piece.clone().resize(w)
-                    };
+                    elems[i] = coerced;
                     true
                 } else {
                     false

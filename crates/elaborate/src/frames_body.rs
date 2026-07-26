@@ -336,6 +336,45 @@ impl Elaborator<'_> {
     ) {
         for d in body_decls {
             for decl in &d.names {
+                // T1-7: a FIXED frame-local string array is a heap handle with no length
+                // of its own, so it is PRE-SIZED here, at frame entry — the module-scope
+                // twin gets its `new[n]` from the t0 var-init flush, which a frame local
+                // never reaches. Emitted before the initializer below so a decl with both
+                // sizes first. `lowering_decl_init` exempts it from the `new[]`-on-fixed
+                // reject the same way the module-scope pre-size is exempted.
+                if let Some(n) = self
+                    .lookup_net_scoped(&decl.name.name)
+                    .and_then(|net| self.fixed_string_dyn_dims(net))
+                    .map(|dims| dims.iter().map(|&x| u64::from(x)).product::<u64>())
+                {
+                    let span = decl.name.span;
+                    let pre = ast::Stmt::Blocking {
+                        lhs: ast::Lvalue::Ident(ast::HierPath {
+                            segments: vec![decl.name.clone()],
+                            span,
+                        }),
+                        delay: None,
+                        event: None,
+                        rhs: ast::Expr {
+                            kind: ast::ExprKind::New {
+                                size: Box::new(ast::Expr {
+                                    kind: ast::ExprKind::IntLit {
+                                        kind: ast::IntLitKind::Decimal,
+                                        raw: n.to_string(),
+                                    },
+                                    span,
+                                }),
+                                src: None,
+                            },
+                            span,
+                        },
+                        span,
+                    };
+                    let saved = self.lowering_decl_init;
+                    self.lowering_decl_init = true;
+                    self.lower_stmt(b, &pre);
+                    self.lowering_decl_init = saved;
+                }
                 let Some(init) = &decl.init else { continue };
                 let stmt = ast::Stmt::Blocking {
                     lhs: ast::Lvalue::Ident(ast::HierPath {

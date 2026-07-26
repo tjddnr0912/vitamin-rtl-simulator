@@ -205,10 +205,14 @@ pub(crate) fn dispatch(
                 dyn_warn_once(sched, net, "queue push on a non-queue handle (ignored)");
                 return Ctl::Continue;
             }
+            // `coerce_dyn_elem`, not a bare `.resize(w)` — a string element must keep
+            // its byte string (see the funnel's doc; a private resize here is what made
+            // `string q[$]` read back empty).
             let v = match args.get(1) {
                 Some(&a) => {
                     let sw = sched.st.wt.get(a);
-                    sched.eval_ctx_top(a, w.max(sw.width), sw.signed).resize(w)
+                    let raw = sched.eval_ctx_top(a, w.max(sw.width), sw.signed);
+                    sched.st.coerce_dyn_elem(net, &raw, w)
                 }
                 None => Value::xs(w, false),
             };
@@ -304,11 +308,13 @@ pub(crate) fn dispatch(
                     );
                     return Ctl::Continue;
                 }
-                // Element cast = the push recipe (§5.5 assignment semantics).
+                // Element cast = the push recipe (§5.5 assignment semantics), through
+                // the same funnel so a string element is not resized away.
                 let v = match args.get(2) {
                     Some(&a) => {
                         let sw = sched.st.wt.get(a);
-                        sched.eval_ctx_top(a, w.max(sw.width), sw.signed).resize(w)
+                        let raw = sched.eval_ctx_top(a, w.max(sw.width), sw.signed);
+                        sched.st.coerce_dyn_elem(net, &raw, w)
                     }
                     None => Value::xs(w, false),
                 };
