@@ -236,19 +236,27 @@ impl Elaborator<'_> {
                 // shared dyn-array `'{…}` flush like any dyn array. A FIXED string array
                 // (`string s[0:1]`) took the element-net path above; a queue/assoc/multi-
                 // dim string container stays loud.
-                // T1 MEASURED, NOT DONE — `string q[$]` stays loud. Admitting `Dim::Queue`
-                // here with the same `string_elem_dyn_nets` marker compiles and gets
-                // `q.size()` right, but every element reads back EMPTY (`2 aa bb` from
-                // iverilog became a silent `2   `): the queue push/read path does not
-                // route a string VALUE into the string element storage the way the
-                // dyn-array path does. That is engine work, not a gate widening, so the
-                // honest reject stays until the storage exists. See ROADMAP §0 T1-4.
-                if d.range.is_none()
-                    && d.packed.is_empty()
-                    && decl.unpacked.len() == 1
-                    && matches!(decl.unpacked[0], ast::Dim::Dyn)
-                {
-                    let kind = ir::NetKind::DynArray;
+                // T1-4: `string q[$]` joins it — an UNBOUNDED queue of strings. One
+                // handle net and the same `string_elem_dyn_nets` marker (the engine's
+                // `dyn_str_elem` is a per-NET flag, not a DynArray-only one); only the
+                // `NetKind` differs.
+                //
+                // Admitting the dimension is NOT sufficient on its own, and the first
+                // attempt at this shipped nothing: `q.size()` was right while every
+                // element read back EMPTY, because the queue push/insert paths did their
+                // own `.resize(w)` — width 0 → 1 → the byte string truncated to a bit.
+                // They now share `coerce_dyn_elem` with the dyn-array element write.
+                //
+                // A BOUNDED queue (`[$:N]`) is loud everywhere in the MVP and stays loud.
+                let str_container_kind = match decl.unpacked.first() {
+                    Some(ast::Dim::Dyn) if decl.unpacked.len() == 1 => Some(ir::NetKind::DynArray),
+                    Some(ast::Dim::Queue(None)) if decl.unpacked.len() == 1 => {
+                        Some(ir::NetKind::Queue)
+                    }
+                    _ => None,
+                };
+                if d.range.is_none() && d.packed.is_empty() && str_container_kind.is_some() {
+                    let kind = str_container_kind.expect("guarded by is_some above");
                     let dir = self.dir_for_name(&decl.name.name, ports, body);
                     if dir != ir::PortDir::Internal {
                         self.error(
@@ -738,9 +746,10 @@ impl Elaborator<'_> {
                     // N3 Phase 2: a `string s[]` DYNAMIC array with a `'{…}` init IS
                     // collected — the flush expands it via `dyn_decl_init_stmts` (like
                     // an int/real dyn array).
-                    let is_dyn_str_init = name.unpacked.len() == 1
-                        && matches!(name.unpacked[0], ast::Dim::Dyn)
-                        && matches!(init.kind, ast::ExprKind::AssignPattern(_));
+                    let is_dyn_str_init = crate::string_array_route::is_dyn_string_container_init(
+                        &name.unpacked,
+                        init,
+                    );
                     if !is_dyn_str_init {
                         // r19: a FIXED string array (`string s[3] = '{…}`) expands to one
                         // `s[k] = <elem>` per declared index, pushed in declaration order

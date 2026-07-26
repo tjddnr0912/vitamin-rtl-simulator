@@ -810,9 +810,10 @@ impl Elaborator<'_> {
                                 // Other string dims (fixed / multi / non-`'{…}`) were
                                 // loud-rejected at the decl, so they never reach here.
                                 name.unpacked.is_empty()
-                                    || (name.unpacked.len() == 1
-                                        && matches!(name.unpacked[0], ast::Dim::Dyn)
-                                        && matches!(init.kind, ast::ExprKind::AssignPattern(_)))
+                                    || crate::string_array_route::is_dyn_string_container_init(
+                                        &name.unpacked,
+                                        init,
+                                    )
                             } else {
                                 // Mirror `collect_var_init_drivers`: a non-constant
                                 // initializer rides the t0 pre-sweep. This INCLUDES an

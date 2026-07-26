@@ -18,6 +18,25 @@
 
 use super::*;
 
+/// T1: true iff this declaration is a DYNAMIC string CONTAINER with a `'{…}` decl-init
+/// that the t0 var-init flush expands — `string s[] = '{…}` (`new[N]` + element writes)
+/// or `string q[$] = '{…}` (one `push_back` per element).
+///
+/// ONE predicate shared by BOTH decl-init collectors (module-scope
+/// `collect_var_init_drivers` and the block-local hoist) so they cannot drift. They
+/// drifted once before and silently emptied a block-local `string s[] = '{…}`, and
+/// admitting `string q[$]` without updating both did it again: the int-queue twin
+/// initialised fine while the string queue came out size 0 with no diagnostic.
+///
+/// A `{…}` §10.10 unpacked CONCAT is deliberately NOT admitted here even though the
+/// flush's `dyn_pattern_elems` accepts one: a string-element `{…}` is loud at the decl
+/// gate, and widening this would route it to a silently-empty container instead.
+pub(crate) fn is_dyn_string_container_init(unpacked: &[ast::Dim], init: &ast::Expr) -> bool {
+    unpacked.len() == 1
+        && matches!(unpacked[0], ast::Dim::Dyn | ast::Dim::Queue(None))
+        && matches!(init.kind, ast::ExprKind::AssignPattern(_))
+}
+
 impl Elaborator<'_> {
     /// Route one `string <name> [n]` / `[0:n-1]` declaration to a `DynArray` handle.
     ///
