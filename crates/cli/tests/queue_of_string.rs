@@ -202,12 +202,26 @@ fn int_queue_is_unchanged() {
 
 #[test]
 fn a_bounded_string_queue_stays_loud() {
-    // `[$:N]` is loud for every element type in the MVP; admitting `[$]` must not have
-    // widened that.
+    // This slice admits `Dim::Queue(None)` only, so a BOUNDED `[$:N]` string queue is
+    // still rejected at the declaration.
+    //
+    // It is a string-specific gap, NOT a general MVP limit: `int q[$:1]` runs and
+    // enforces its bound (vita warns and drops the tail, `sz=2`, matching iverilog).
+    // So this is a recorded capability gap on the string side, not evidence that
+    // bounded queues are unimplemented.
     let (_, ok) = compile(
         "module m; string q[$:3];\n\
          initial begin q.push_back(\"a\"); $display(\"%0d\", q.size()); $finish; end\n\
          endmodule\n",
     );
     assert!(!ok, "expected a loud reject for a bounded string queue");
+    // The integral twin, pinned so the asymmetry above stays honest if it ever changes.
+    let (out, ok) = compile(
+        "module m; int q[$:1];\n\
+         initial begin q.push_back(1); q.push_back(2); q.push_back(3); \
+         $display(\"sz=%0d\", q.size()); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "an integral bounded queue must still run");
+    assert_eq!(out, "sz=2\n");
 }

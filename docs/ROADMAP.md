@@ -34,12 +34,25 @@
 
 > **정정(기록 보존)**: 이 큐는 T1을 "한 가족·머신러리 공유"로 묶었으나 **틀린 전제였다** — 근인이 4갈래였고, 6·7은 **DYN 배열에서도 똑같이 loud**라 라우팅과 무관했다. 각각 전용 슬라이스로 갔다. 큐를 묶을 때 근인을 측정하지 않으면 이렇게 된다.
 
-**T1 잔여(전부 honest-loud·§3으로 이관 대상)**:
+**T1 잔여 — 전부 honest-loud·2026-07-27 전수 실측**(int 쌍둥이로 string-전용/일반 갭 분리):
 
-- **non-zero-base/descending 선언의 런타임 인덱스** — 라우팅은 zero-based ASCENDING만 한다. `foreach`가 **선언 인덱스**를 내고 descending은 **역순**(iverilog 실측 `int a[1:3]`→1,2,3 / `a[3:1]`→3,2,1)이라, 0-base 컨테이너로 보내면 인덱스 공간이 조용히 renumber된다. 지원하려면 인덱스 오프셋 + `foreach` 인덱스 remap 필요.
-- **상수 OOB 인덱스 진단 하강** — `string s[2]; s[5]`가 PRE는 elaborate 에러였는데 POST는 런타임 W4020 경고(값은 iverilog 일치·non-silent). `fixed_string_dyn`이 길이를 아므로 복원 가능.
-- **계층 element WRITE**(`u.s[0]="x"`) — 별개 deferred write 머신. read는 §4.5.226서 열렸으나 write는 loud(비대칭이나 PRE도 loud였으므로 회귀 아님).
-- **계층 multi-dim**(`u.s[0][0]`) · **계층 assoc**(키드 접근) · **multi-dim `foreach(s[i,j])`** · **multi-dim `'{…}` decl-init** · **recursion 중 frame-local string 배열**(§4.5.171 per-activation heap 가드·F4004).
+| # | 항목 | iverilog | vita | 성격 | 비고 |
+|---|---|---|---|---|---|
+| 1 | non-zero-base 런타임 인덱스 `string s[1:3]; s[k]` | `aa` | LOUD | **string 전용** | `int a[1:3]`은 동작. 라우팅이 zero-based만 → 인덱스 오프셋 + `foreach` remap 필요 |
+| 2 | descending 런타임 인덱스 `string s[3:1]` | `aa` | LOUD | **string 전용** | 1과 동근. descending은 `foreach`가 역순이라 remap이 추가로 필요 |
+| 3 | multi-dim `foreach(s[i,j])` | `a...d.` | LOUD | **string 전용** | `int a[2][2]`는 동작 |
+| 4 | multi-dim `'{'{…},'{…}}` decl-init | `a` | LOUD | **string 전용** | flat 컨테이너에 row-major로 펼치는 확장 필요 |
+| 5 | multi-dim non-zero-base `string s[1:2][1:2]` | `aa` | LOUD | **string 전용** | 1·2와 동근(모든 축이 zero-based여야 라우팅) |
+| 6 | bounded queue `string q[$:3]` | `1` | LOUD | **string 전용** | **`int q[$:1]`은 bound까지 정상**(`sz=2`) — `Dim::Queue(None)`만 수용한 탓 |
+| 7 | 계층 multi-dim `u.s[0][0]` | `aa` | LOUD | **string 전용** | resolve pass가 dims를 안 들고 있어 flatten 불가 |
+| 8 | 계층 element WRITE `u.s[0]="x"` | `zz` | LOUD | **dyn 공통** | `int d[]`도 동일 loud(`int mem[2]` 정적 배열은 동작). 별개 deferred write 머신 |
+| 9 | recursion 중 frame-local 배열 | `lvl0/1/2` | F4004 | **dyn 공통** | `int a[]`도 동일. §4.5.171 per-net heap 가드 — per-activation stash가 전제 |
+| 10 | 계층 assoc `u.a[5]` | REJECT | LOUD | 무오라클 | 키드 접근 = 위치 인덱스와 다른 연산 |
+| 11 | record queue whole-element read `o=q[0]` | REJECT | LOUD | 무오라클 | §4.5.223 부수효과 표면의 유일한 loud |
+
+**의도적 loud(갭 아님)**: fixed 배열에 `new[]`(iverilog도 거부) · multi-dim partial 인덱스 `s[0]`(iverilog도 거부·조용한 오원소 방지).
+
+**내가 만든 진단 품질 하강 1건**: 상수 OOB `string s[2]; s[5]`가 PRE는 elaborate 에러였는데 POST는 런타임 W4020 경고. **값은 iverilog와 바이트 동일**(`[ ]`)이고 non-silent이므로 사다리 하강은 아니나, 컴파일 타임에 잡히던 진단이 런타임으로 내려갔다. `fixed_string_dyn`이 길이를 알고 있으므로 복원 가능.
 
 **T2 — 독립 항목 (오라클 ✓·각자 전용 슬라이스)**
 
