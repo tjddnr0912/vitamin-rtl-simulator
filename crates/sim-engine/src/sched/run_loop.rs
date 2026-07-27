@@ -447,7 +447,11 @@ impl Scheduler<'_, '_> {
                 self.st.cur_scope = cap.scope.clone(); // registering module's %m
                 let mut line = format_args_str(&*self.st, cap.fmt, &cap.args, cap.radix);
                 line.push('\n');
-                write_out(self.st, &line);
+                // `$fstrobe` routes to its descriptor; `$strobe` to stdout.
+                match cap.fd {
+                    Some(fd) => crate::builtins::file_write(self, fd, &line),
+                    None => write_out(self.st, &line),
+                }
             }
             // `batch` dropped here; `self.st.postponed.strobes` is now empty.
         }
@@ -467,7 +471,22 @@ impl Scheduler<'_, '_> {
         //     surviving across the render — render-then-record, zero overlap.
         //     `Option::take` is used so the old baseline is moved out (not
         //     cloned) and the slot is rewritten unconditionally below.
-        let mon = match self.st.postponed.monitor.as_mut() {
+        // One monitor per DESTINATION. stdout first (so a design with no `$fmonitor` is
+        // byte-identical), then each descriptor in ascending fd for determinism.
+        let mut keys: Vec<Option<u32>> = vec![None];
+        keys.extend(self.st.postponed.file_monitors.keys().map(|&d| Some(d)));
+        for mkey in keys {
+            self.flush_one_monitor(mkey);
+        }
+        // Restore the entering multiplier (see the save at the top of this fn).
+        self.st.cur_time_mult = saved_mult;
+    }
+
+    /// Render + print ONE monitor destination (`None` = stdout, `Some(fd)` = `$fmonitor`).
+    /// Body unchanged from the single-monitor version; only the slot it reads and re-seeds
+    /// is now selected by `mkey`.
+    fn flush_one_monitor(&mut self, mkey: Option<u32>) {
+        let mon = match monitor_slot_mut(self.st, mkey) {
             Some(m) => {
                 let fmt = m.cap.fmt;
                 let args = m.cap.args.clone();
@@ -475,21 +494,22 @@ impl Scheduler<'_, '_> {
                 let radix = m.cap.radix;
                 let scope = m.cap.scope.clone();
                 let prev = m.last_vals.take(); // moves baseline out; slot now None
-                Some((fmt, args, tmult, radix, scope, prev))
+                let fd = m.cap.fd;
+                Some((fmt, args, tmult, radix, scope, prev, fd))
             }
             // no monitor established → nothing to do. (DISABLED is no longer
             // gated here: the establishment print must fire even when disabled,
             // so the enable check moved INTO the change-detection below.)
             _ => None,
         };
-        if let Some((fmt, args, tmult, radix, scope, prev)) = mon {
+        if let Some((fmt, args, tmult, radix, scope, prev, fd)) = mon {
             if fmt.is_none() && args.is_empty() {
                 // No-arg monitor (`$monitor;` → fmt=None, args=[]) prints nothing —
                 // not even a bare newline. Guarded so a future bare-`$monitor`
                 // lowering cannot silently inject a lone "\n" into golden RTL output
                 // (see §7.4). Seed an empty baseline (`[]` == `[]` keeps it silent
                 // forever); a zero-expression monitor has no value to track.
-                if let Some(m) = self.st.postponed.monitor.as_mut() {
+                if let Some(m) = monitor_slot_mut(self.st, mkey) {
                     m.last_vals = Some(Vec::new());
                 }
             } else {
@@ -571,18 +591,20 @@ impl Scheduler<'_, '_> {
                 if do_print {
                     let mut line = format_args_str(&*self.st, fmt, &args, radix);
                     line.push('\n');
-                    write_out(self.st, &line);
+                    // `$fmonitor` routes to its descriptor; `$monitor` to stdout.
+                    match fd {
+                        Some(fd) => crate::builtins::file_write(self, fd, &line),
+                        None => write_out(self.st, &line),
+                    }
                 }
                 // Re-seed the baseline with the freshly-evaluated values regardless
                 // of whether we printed: an unchanged step must keep the same
                 // baseline, and a printed step adopts the new one.
-                if let Some(m) = self.st.postponed.monitor.as_mut() {
+                if let Some(m) = monitor_slot_mut(self.st, mkey) {
                     m.last_vals = Some(cur_vals);
                 }
             }
         }
-        // Restore the entering multiplier (see the save at the top of this fn).
-        self.st.cur_time_mult = saved_mult;
     }
 
     // ── NBA ──────────────────────────────────────────────────────────────
@@ -717,5 +739,19 @@ impl Scheduler<'_, '_> {
             }
         }
         self.scratch_edge_marked.clear();
+    }
+}
+
+/// The `MonitorState` slot for a destination: `None` = the stdout `$monitor` singleton,
+/// `Some(fd)` = that descriptor's `$fmonitor`. A free function so the flush can re-borrow
+/// the slot at its two re-seed points without holding a borrow across the render (the
+/// borrow shape the flush's comment describes).
+fn monitor_slot_mut<'a>(
+    st: &'a mut crate::state::SimState<'_>,
+    key: Option<u32>,
+) -> Option<&'a mut crate::state::MonitorState> {
+    match key {
+        None => st.postponed.monitor.as_mut(),
+        Some(fd) => st.postponed.file_monitors.get_mut(&fd),
     }
 }

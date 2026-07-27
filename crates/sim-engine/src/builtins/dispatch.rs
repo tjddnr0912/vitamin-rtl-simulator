@@ -2,6 +2,34 @@
 
 use super::*;
 
+/// Split a postponed print's args when the call site is `$fmonitor`/`$fstrobe`.
+///
+/// Those share the frozen `Monitor`/`Strobe` ids, so the ONLY thing that marks
+/// `args[0]` as a descriptor is `file_directed_stmts` (written by elaborate from the
+/// dollar-name). The fd is evaluated HERE, at registration, for the same reason
+/// `time_mult` and `scope` are captured here: by the time the postponed flush renders,
+/// the fd variable may have been reassigned or the file closed.
+///
+/// Returns `(None, args)` unchanged for every plain `$monitor`/`$strobe`.
+fn split_file_directed<'a>(
+    sched: &Scheduler,
+    sid: u32,
+    args: &'a [u32],
+) -> (Option<u32>, &'a [u32]) {
+    if !sched.st.file_directed_stmts.contains(&sid) {
+        return (None, args);
+    }
+    let fd = args
+        .first()
+        .map(|&a| sched.eval(a))
+        .filter(|v| !v.has_xz())
+        .and_then(|v| v.to_u64())
+        .map(|v| v as u32);
+    // An unusable descriptor still consumes `args[0]` — printing it as a value would be
+    // worse than the `bad_fd_warn` the flush emits.
+    (Some(fd.unwrap_or(u32::MAX)), args.get(1..).unwrap_or(&[]))
+}
+
 pub(crate) fn dispatch(
     sched: &mut Scheduler,
     which: SysTaskId,
@@ -411,12 +439,16 @@ pub(crate) fn dispatch(
         // in call order (FIFO push).
         SysTaskId::Strobe => {
             let time_mult = sched.st.cur_time_mult;
+            // `$fstrobe`: `args[0]` is the descriptor (see `file_directed_stmts`), so it
+            // is consumed here and the remaining args are the value list.
+            let (fd, args) = split_file_directed(sched, sid, args);
             sched.st.postponed.strobes.push(FmtCapture {
                 fmt,
                 args: args.to_vec(),
                 time_mult,
                 radix,
                 scope: sched.st.cur_scope.clone(),
+                fd,
             });
             Ctl::Continue
         }
@@ -426,16 +458,26 @@ pub(crate) fn dispatch(
         // baseline value list.
         SysTaskId::Monitor => {
             let time_mult = sched.st.cur_time_mult;
-            sched.st.postponed.monitor = Some(MonitorState {
+            let (fd, args) = split_file_directed(sched, sid, args);
+            let ms = MonitorState {
                 cap: FmtCapture {
                     fmt,
                     args: args.to_vec(),
                     time_mult,
                     radix,
                     scope: sched.st.cur_scope.clone(),
+                    fd,
                 },
                 last_vals: None,
-            });
+            };
+            // One monitor per DESTINATION: `$fmonitor` replaces the monitor for its own
+            // descriptor and leaves a standing `$monitor` (stdout) alone.
+            match fd {
+                Some(d) => {
+                    sched.st.postponed.file_monitors.insert(d, ms);
+                }
+                None => sched.st.postponed.monitor = Some(ms),
+            }
             // v9 rank 6: (re-)establishing a monitor does NOT touch the global
             // enable flag — a standing `$monitoroff` persists across re-`$monitor`
             // (the establishment line still prints, see the flush). So this does
@@ -676,6 +718,10 @@ pub(crate) fn dispatch(
         SysTaskId::MonitorOn => {
             sched.st.postponed.monitor_disabled = false;
             if let Some(m) = sched.st.postponed.monitor.as_mut() {
+                m.last_vals = None;
+            }
+            // The flag is sim-wide, so the forced reprint covers every destination.
+            for m in sched.st.postponed.file_monitors.values_mut() {
                 m.last_vals = None;
             }
             Ctl::Continue

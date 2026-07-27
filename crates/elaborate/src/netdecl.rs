@@ -679,6 +679,16 @@ impl Elaborator<'_> {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
                     self.net_decl_neg_lsb.insert(id, l);
+                    // …and the full declared pair, for the VCD `$var` label (the stored
+                    // range is normalized, so without this a waveform viewer numbers the
+                    // bits `[5:0]` where iverilog numbers them `[3:-2]`).
+                    if let Some(m) = d
+                        .range
+                        .as_ref()
+                        .and_then(|r| self.const_eval_in_scope(&r.msb))
+                    {
+                        self.net_decl_range.insert(id, (m, l));
+                    }
                 }
             }
             if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0) {

@@ -161,3 +161,39 @@ fn a_pathological_span_is_loud_not_a_panic() {
     assert!(!o.contains("panicked"), "must not panic:\n{o}");
     assert!(o.contains("element cap"), "{o}");
 }
+
+// ── the VCD `$var` line must carry the DECLARED range, not the normalized storage one:
+// same bits either way, but a waveform viewer labels every bit from this. Rides the
+// `net_decl_ranges` sidecar so the STAGED path agrees. iverilog: `x [3:-2]`.
+#[test]
+fn the_vcd_var_line_uses_the_declared_range() {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_npbv_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(
+        &f,
+        "module t;\n\
+           logic [3:-2] x;\n\
+           logic [1:0][3:-2] mp;\n\
+           initial begin $dumpfile(\"w.vcd\"); $dumpvars(0, t);\n\
+             x = 6'b101010; mp = 12'b111000000111; #1 $finish; end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let vcd = std::fs::read_to_string(d.join("w.vcd")).unwrap_or_default();
+    let vars: Vec<&str> = vcd.lines().filter(|l| l.starts_with("$var")).collect();
+    assert!(
+        vars.iter().any(|l| l.contains("x [3:-2]")),
+        "declared range missing (run: {}{})\n{vars:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // A multi-packed vector still flattens to `[11:0]`, exactly as iverilog dumps it.
+    assert!(vars.iter().any(|l| l.contains("mp [11:0]")), "{vars:?}");
+}

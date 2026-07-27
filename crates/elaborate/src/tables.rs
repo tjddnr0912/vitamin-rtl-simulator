@@ -115,6 +115,14 @@ pub type QueueBoundTable = std::collections::BTreeMap<u32, u32>;
 /// (`mem[4]`, `g[1][2]`). Out-of-band like every other sidecar.
 pub type NetDimsTable = std::collections::BTreeMap<u32, Vec<(i64, u32)>>;
 
+/// DECLARED packed `(msb, lsb)` for a net whose stored `NetVar.msb`/`lsb` cannot express
+/// it — today exactly the nets declared with a NEGATIVE low bound (`logic [3:-2] x`),
+/// which are stored NORMALIZED as `[w-1:0]` because those fields are frozen `u32`.
+/// SPARSE: absent for every ordinary net, so the VCD `$var` line is byte-identical
+/// without it. Drives waveform bit labelling only (`x [3:-2]`, matching iverilog);
+/// the bits themselves are already right. Out-of-band like every other sidecar.
+pub type NetDeclRangeTable = std::collections::BTreeMap<u32, (i64, i64)>;
+
 /// Frame-call metadata (B1, automatic/recursive functions), INDEX-ALIGNED to
 /// `ir.funcs[i]` by construction (pushed in the same `lower_frame_func` that
 /// writes `ir.funcs[idx]`). The frozen `FuncDef` carries only `entry/n_params/
@@ -326,6 +334,12 @@ pub struct Sidecars {
     pub queue_bounds: QueueBoundTable,
     /// Unpacked-array dims for per-element VCD naming (Phase-1.x ⑤).
     pub net_dims: NetDimsTable,
+    /// DECLARED packed `(msb, lsb)` for nets stored with a NORMALIZED range (a negative
+    /// low bound). Drives the VCD `$var` label only; empty for almost every design.
+    pub net_decl_ranges: NetDeclRangeTable,
+    /// `$fmonitor`/`$fstrobe` call-site StmtIds (they share the frozen `Monitor`/
+    /// `Strobe` ids; this is what makes `args[0]` a descriptor).
+    pub file_directed_stmts: std::collections::BTreeSet<u32>,
     /// P2-E: ProcIds of `final` blocks (skip arming; run at end of sim).
     pub final_procs: std::collections::BTreeSet<u32>,
     /// §16.4 deferred-assert flush markers: marker StmtId → region.

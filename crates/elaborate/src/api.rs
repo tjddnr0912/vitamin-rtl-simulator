@@ -119,6 +119,8 @@ pub fn elaborate_with_timescale_prec_roots(
         assign_ranks: std::mem::take(&mut el.assign_ranks),
         queue_bounds: std::mem::take(&mut el.queue_bounds),
         net_dims: el.array_dims.clone(), // the sparse decl map IS the table
+        net_decl_ranges: std::mem::take(&mut el.net_decl_range),
+        file_directed_stmts: std::mem::take(&mut el.file_directed_stmts),
         final_procs: el.final_procs.clone(),
         defer_marks: std::mem::take(&mut el.defer_marks),
         defer_acts: std::mem::take(&mut el.defer_acts),

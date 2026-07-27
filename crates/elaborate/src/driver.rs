@@ -24,6 +24,8 @@ impl<'s> Elaborator<'s> {
             const_dedup: BTreeMap::new(),
             array_dims: BTreeMap::new(),
             net_decl_neg_lsb: BTreeMap::new(),
+            net_decl_range: BTreeMap::new(),
+            file_directed_stmts: std::collections::BTreeSet::new(),
             bits_prescan: BTreeMap::new(),
             local_decl_names: std::collections::BTreeSet::new(),
             scoped_block_locals: BTreeMap::new(),

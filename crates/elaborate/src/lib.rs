@@ -281,6 +281,16 @@ struct Elaborator<'s> {
     /// width and this record must be turned on together, or the net is wide while its
     /// selects address the wrong bits.
     net_decl_neg_lsb: BTreeMap<u32, i64>,
+    /// The DECLARED `(msb, lsb)` of those same nets, exported as the `net_decl_ranges`
+    /// sidecar so the VCD `$var` line can print `x [3:-2]` instead of the normalized
+    /// `[5:0]`. Same keys as `net_decl_neg_lsb`; kept separate because that one drives
+    /// select normalization (needs only the low bound) and this one drives labelling.
+    net_decl_range: BTreeMap<u32, (i64, i64)>,
+    /// StmtIds of `$fmonitor`/`$fstrobe` calls — the FILE-directed twins of
+    /// `$monitor`/`$strobe`, which share their frozen `SysTaskId`. The engine reads
+    /// `args[0]` as a descriptor for these and routes the postponed render through
+    /// `file_write`. EMPTY for every design that uses neither.
+    file_directed_stmts: std::collections::BTreeSet<u32>,
     /// v7 `$bits` prescan: name → (element bits, unpacked dim lengths) for the
     /// CURRENT module's body decls, recorded in declaration order during the
     /// body param-binding walk (3b) — a `localparam X = $bits(mem[0])` binds

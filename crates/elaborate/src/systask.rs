@@ -121,6 +121,24 @@ pub(crate) fn radix_of_systask(dollar_name: &str) -> Option<u8> {
     }
 }
 
+/// True for the FILE-directed `$monitor`/`$strobe` twins, whose first argument is a
+/// descriptor. They share the frozen `Monitor`/`Strobe` ids, so this name test is the
+/// only thing that distinguishes them — used BOTH by the fmt/args split and by the
+/// sidecar record, so the two cannot disagree about which argument is the fd.
+pub(crate) fn is_file_monitor_strobe(dollar_name: &str) -> bool {
+    matches!(
+        dollar_name,
+        "$fmonitor"
+            | "$fmonitorb"
+            | "$fmonitoro"
+            | "$fmonitorh"
+            | "$fstrobe"
+            | "$fstrobeb"
+            | "$fstrobeo"
+            | "$fstrobeh"
+    )
+}
+
 pub(crate) fn map_systask(dollar_name: &str) -> Option<ir::SysTaskId> {
     match dollar_name {
         "$display" | "$displayb" | "$displayo" | "$displayh" => Some(ir::SysTaskId::Display),
@@ -155,6 +173,13 @@ pub(crate) fn map_systask(dollar_name: &str) -> Option<ir::SysTaskId> {
         }
         "$fdisplay" | "$fdisplayb" | "$fdisplayo" | "$fdisplayh" => Some(ir::SysTaskId::Fdisplay),
         "$fwrite" | "$fwriteb" | "$fwriteo" | "$fwriteh" => Some(ir::SysTaskId::Fwrite),
+        // `$fmonitor`/`$fstrobe` are the FILE-directed twins of `$monitor`/`$strobe` —
+        // identical postponed semantics, output routed to `args[0]`'s descriptor instead
+        // of stdout. They reuse the FROZEN `Monitor`/`Strobe` ids rather than adding
+        // variants (which would flip the SimIr schema hash and re-pin every golden); the
+        // fd-ness rides the `file_directed_stmts` sidecar, keyed by StmtId.
+        "$fmonitor" | "$fmonitorb" | "$fmonitoro" | "$fmonitorh" => Some(ir::SysTaskId::Monitor),
+        "$fstrobe" | "$fstrobeb" | "$fstrobeo" | "$fstrobeh" => Some(ir::SysTaskId::Strobe),
         // v9 rank 6: monitor enable/disable + the $cast TASK form (`$cast(d, s);`
         // as a statement — the func form `ok = $cast(d, s)` is a direct-rhs
         // intercept, see `cast_special`).
@@ -509,10 +534,15 @@ impl Elaborator<'_> {
         let mut fmt_raw: Option<String> = None;
         // v7 file print family: args[0] is the DESCRIPTOR; the format (when a
         // string literal) is args[1]. Stmt args stay [fd, value-args…].
+        // Keyed on `which` for the ids that are unambiguously file-directed, PLUS the
+        // name for `$fmonitor`/`$fstrobe`, whose `which` is the shared `Monitor`/`Strobe`
+        // id. Getting this wrong would treat the descriptor as a value argument and print
+        // it — so the two places that decide fd-ness (this split and the sidecar record
+        // below) both read `is_file_monitor_strobe`.
         let file_fmt = matches!(
             which,
             ir::SysTaskId::Fdisplay | ir::SysTaskId::Fwrite | ir::SysTaskId::Sformat
-        );
+        ) || is_file_monitor_strobe(&name.name);
         let mut file_args_buf: Vec<ast::Expr> = Vec::new();
         let (fmt, value_args): (Option<u32>, &[ast::Expr]) = if file_fmt {
             match args.get(1).map(|e| &e.kind) {
@@ -642,6 +672,11 @@ impl Elaborator<'_> {
         // executors render it.
         if matches!(which, ir::SysTaskId::Display | ir::SysTaskId::Write) {
             self.frame_print_stmts.insert(sid);
+        }
+        // `$fmonitor`/`$fstrobe`: mark this call site file-directed so the engine reads
+        // `args[0]` as a descriptor and routes the postponed render through `file_write`.
+        if is_file_monitor_strobe(&name.name) {
+            self.file_directed_stmts.insert(sid);
         }
         Some(sid)
     }

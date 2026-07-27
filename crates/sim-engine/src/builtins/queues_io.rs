@@ -291,6 +291,9 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
     let mut ids: Vec<Option<IdCode>> = vec![None; st.ir.nets.len()];
     let mut word_ids: Vec<Vec<Option<IdCode>>> = vec![Vec::new(); st.ir.nets.len()];
     let st_dims = st.net_dims.clone();
+    // Declared ranges for nets stored with a NORMALIZED range (a negative low bound);
+    // empty for almost every design, so the `$var` lines below are unchanged.
+    let st_decl_ranges = st.net_decl_ranges.clone();
     let dump_filter = st.dump_filter.clone();
     // B1 frame-call: frame-local nets are REAL ir.nets entries (for width/
     // metadata) but live in the call frame arena, never the flat store — they
@@ -391,13 +394,26 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
                     let mut wv = Vec::with_capacity(nets[i].array_len as usize);
                     for word in 0..nets[i].array_len {
                         let name = elem_name(leaf, &dims, word);
-                        let r =
-                            vcd_var_reference(vt, &name, nets[i].width, nets[i].msb, nets[i].lsb);
+                        let r = vcd_var_reference_decl(
+                            vt,
+                            &name,
+                            nets[i].width,
+                            nets[i].msb,
+                            nets[i].lsb,
+                            st_decl_ranges.get(&(i as u32)).copied(),
+                        );
                         wv.push(w.declare_var(vt, nets[i].width.max(1), &r).ok());
                     }
                     word_ids[i] = wv;
                 } else {
-                    let r = vcd_var_reference(vt, leaf, nets[i].width, nets[i].msb, nets[i].lsb);
+                    let r = vcd_var_reference_decl(
+                        vt,
+                        leaf,
+                        nets[i].width,
+                        nets[i].msb,
+                        nets[i].lsb,
+                        st_decl_ranges.get(&(i as u32)).copied(),
+                    );
                     if let Ok(id) = w.declare_var(vt, nets[i].width.max(1), &r) {
                         ids[i] = Some(id);
                     }
@@ -439,12 +455,26 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
                     let mut wv = Vec::with_capacity(nv.array_len as usize);
                     for word in 0..nv.array_len {
                         let ename = elem_name(&name, &dims, word);
-                        let r = vcd_var_reference(vt, &ename, nv.width, nv.msb, nv.lsb);
+                        let r = vcd_var_reference_decl(
+                            vt,
+                            &ename,
+                            nv.width,
+                            nv.msb,
+                            nv.lsb,
+                            st_decl_ranges.get(&(i as u32)).copied(),
+                        );
                         wv.push(w.declare_var(vt, nv.width.max(1), &r).ok());
                     }
                     word_ids[i] = wv;
                 } else {
-                    let r = vcd_var_reference(vt, &name, nv.width, nv.msb, nv.lsb);
+                    let r = vcd_var_reference_decl(
+                        vt,
+                        &name,
+                        nv.width,
+                        nv.msb,
+                        nv.lsb,
+                        st_decl_ranges.get(&(i as u32)).copied(),
+                    );
                     if let Ok(id) = w.declare_var(vt, nv.width.max(1), &r) {
                         ids[i] = Some(id);
                     }
