@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–243**
+**§4.5.220–244**
+- `4.5.244` 남은 대형 3건 착수 판단표(C>A>B) — 사이드카 우회 불가·B payoff 작음을 실측 …
 - `4.5.243` generate case 의 real scrutinee = 비목표 확정(iverilog 도 거부) — real 가족 완결 …
 - `4.5.242` generate 제어식 real 라우팅(`const_truth_in_scope`) — "real→정수 문맥" 완결 …
 - `4.5.241` generate 스코프 `localparam real` loud→correct-support(퍼널은 이미 있었고 한 호출부만 안 쓰고 있었다) …
@@ -298,6 +299,21 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.244 남은 대형 항목 3건 착수 판단표 — 비용·payoff·선행조건 실측 (2026-07-28, branch feat-remaining-assessment, format 25 불변) ✅
+
+**착수 근거**: §4.5.229~243 으로 소형·중형 잔여가 소진돼 남은 것이 전부 대형 항목이 됐다. 셋 중 무엇을 먼저 할지가 **다음 착수의 실제 병목**이므로, 추측 대신 **실측해서 판단표를 만들었다**(§4.5.233/240 이 보여준 대로, 잘못된 크기 추정은 다음 반복을 오도한다).
+
+**핵심 실측 3건**:
+- **A(파일위치 함수군)**: `$ftell`/`$fseek`/`$rewind` 는 **format bump 확정**이다. §4.5.228 의 "동결 enum 에 변종 더하기 전에 사이드카를 보라"를 적용해 봤으나 **여기엔 안 통한다** — `$fmonitor` 는 `$monitor` 의 destination 변종이라 기존 id 재사용이 가능했지만, `$ftell`/`$rewind` 는 **의미가 겹치는 기존 id 가 없다**. 반면 `$feof`/`$fgetc`/`$ungetc` 는 **이미 `SysFuncId` 가 있으므로** 그 범위만 여는 것은 bump 없이 가능하다(부분 착수 경로 발견).
+- **B(literal 공유 크레이트)**: **payoff 가 예상보다 작다**. 현재 파서가 거부하는 형태는 절단 리터럴과 unsized+`s` 인데, **절단 형태는 iverilog 도 거부**한다 → 능력 이득이 거의 없고 얻는 것은 *두-술어 위험의 구조적 제거*뿐. 게다가 단순 이동은 **hdl-parser 가 sim-ir 을 보게 되는 레이어링 역전**이라, 올바른 분해는 digit→bits(중립)/ConstVal 패킹(IR) 2단이다.
+- **C(inner NET shadow)**: 셋 중 **유일한 ①-급 silent-wrong**이고 오라클도 있다 → §1 우선순위 룰상 **1순위**. 선행(order-independent AST-gathered name set)과 실패 전력(§4.5.218 S1: 중첩 generate body 조용히 삭제)을 함께 기록.
+
+**권장 순서 = C > A > B**를 근거와 함께 §0-C 표로 남겼다.
+
+**게이트**: 4675 tests green(변경 없음) · **코드 변경 0**.
+
+**교훈**: **"다음에 뭘 할지"가 병목이 되면, 그 판단 자체가 슬라이스다.** 단 판단은 **실측**이어야 한다 — 사이드카 우회 가능성(A)과 실제 능력 이득(B)은 코드를 열어보기 전엔 둘 다 반대로 추정하고 있었다.
 
 #### 4.5.243 generate case 의 real scrutinee = 비목표 확정 (2026-07-28, branch feat-gencase-nongoal, format 25 불변) ✅
 
