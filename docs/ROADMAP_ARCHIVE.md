@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–238**
+**§4.5.220–239**
+- `4.5.239` 스캔 4차 완료 — `$typename` 핀(iverilog 미구현)·`%u`/`%z`/`%l` 정리 …
 - `4.5.238` 스캔 3차 honest-loud 확인 + LOOPROMPT §8 압축(20142→18934B, 규칙 무삭제) …
 - `4.5.237` 테스트 0건 스펙 스캔 2차 — `$sformat`/`$swrite`/plusargs 검증 후 핀(결함 없음) …
 - `4.5.236` `%p` 가 real 을 정수 반올림하던 silent-wrong(`2.5`→`3`) — 무오라클 스펙, 테스트 0건이었다 …
@@ -293,6 +294,18 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.239 스캔 4차 완료 — `$typename` 핀 + `%u`/`%z`/`%l` 정리 (2026-07-28, branch feat-typename-pins, format 25 불변) ✅
+
+**스캔 마무리**: §4.5.237 이 남긴 후보를 소진했다.
+- **`$typename`** — iverilog 13.0 은 **미구현**("not defined by any module")인데 vita 는 동작하고 정확하다: atom 9종(`logic/int/integer/byte/shortint/longint/real/time/string`)·packed 벡터(`logic[7:0]`·`bit[3:0]`)·**unpacked 배열은 IEEE `$[lo:hi]` 표기**(`logic[7:0]$[0:2]`). 테스트 0건이었다 → **핀**(신규 `typename_pins.rs`×3).
+- **`%u`/`%z`** — iverilog 는 raw 바이너리 바이트를 뱉고(텍스트 로그에선 깨진 문자) vita 는 무출력. 둘 다 **문서화된 선택**이며 silent-wrong 아님. `%l` 은 vita 가 리터럴 통과, iverilog 는 `<%l>`+warn — cosmetic.
+
+**잔여 기록(ROADMAP §3·무오라클)**: `$typename` 의 **enum·packed struct** 가 base 타입으로 렌더된다(`logic[1:0]`·`logic[3:0]`; IEEE 는 `enum{...}`·`struct packed{...}`). **타입 이름 렌더링 단순화**일 뿐 값·다른 사용처엔 영향 없음. 무오라클이라 추측 대신 **현행을 핀**해 가시화했다.
+
+**게이트**: 4662 → **4665** tests · clippy/fmt clean · format 25 불변 · **코드 변경 0**.
+
+**스캔 전략 4회 총평**: 1회차 `%p` **실제 결함 1건**(real→정수 반올림) · 2회차 `$sformat`/plusargs clean → 핀 · 3회차 파일위치군 honest-loud → §3 · 4회차 `$typename` clean → 핀. **결함 1 / 무오라클 능력 핀 3 / loud→supported 후보 1** — "안 보던 곳"을 기계적 신호로 소진하는 전략의 실제 수율이다.
 
 #### 4.5.238 스캔 3차(파일위치군·`$sscanf`) = honest-loud 확인 + LOOPROMPT §8 압축 (2026-07-28, branch feat-loop-compress, format 25 불변) ✅
 
