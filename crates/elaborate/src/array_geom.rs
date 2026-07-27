@@ -246,11 +246,42 @@ impl Elaborator<'_> {
         out
     }
 
+    /// The DECLARED low bound of `range` when it folds NEGATIVE (`logic [3:-2]` → -2),
+    /// else `None`. Recorded per net by the declaration site so bit/part selects can
+    /// normalize against the real bound; see [`Self::range_to_dims_opt`].
+    pub(crate) fn declared_neg_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
+        let r = range?;
+        let m = self.const_eval_in_scope(&r.msb)?;
+        let l = self.const_eval_in_scope(&r.lsb)?;
+        // ONLY the `[hi:neg]` shape. `msb < 0` with `lsb >= 0` is the degenerate
+        // `[W-1:0]`-with-W==0 parameter underflow, which keeps its graceful width-1.
+        (l < 0 && m >= l).then_some(l)
+    }
+
     pub(crate) fn range_to_dims(
         &mut self,
         kind: ast::NetVarKind,
         range: Option<&ast::Range>,
         signed: bool,
+    ) -> (u32, u32, u32, bool) {
+        self.range_to_dims_opt(kind, range, signed, false)
+    }
+
+    /// [`Self::range_to_dims`] with an OPT-IN for a negative declared low bound.
+    ///
+    /// `allow_neg_lsb` is `false` at every call site that has not wired up the
+    /// companion `declared_neg_lsb` side-map record, and a literal `false` short-circuits
+    /// to the long-standing warn-and-clamp — so those sites are byte-identical and stay
+    /// LOUD rather than silently receiving a wide net whose selects nobody normalizes.
+    /// That is the whole reason this is a parameter instead of a behaviour change: the
+    /// width and the select normalization have to be turned on together, and the sites
+    /// that create nets are not all in one place.
+    pub(crate) fn range_to_dims_opt(
+        &mut self,
+        kind: ast::NetVarKind,
+        range: Option<&ast::Range>,
+        signed: bool,
+        allow_neg_lsb: bool,
     ) -> (u32, u32, u32, bool) {
         if matches!(kind, ast::NetVarKind::Integer) {
             // `integer` defaults signed; honor an explicit `unsigned` (the parser
@@ -310,6 +341,19 @@ impl Elaborator<'_> {
                 // The old message misdiagnosed the literal case as "parameterized";
                 // keep the diagnostic honest for both shapes.
                 if lsb_v.is_some_and(|v| v < 0) {
+                    // OPT-IN (see `allow_neg_lsb`): size the net `|msb-lsb|+1` as IEEE
+                    // §7.4.2 / iverilog do and store the range NORMALIZED to `[w-1:0]`
+                    // (`NetVar.msb`/`lsb` are frozen `u32` and cannot hold -2). The real
+                    // low bound rides `net_decl_neg_lsb`, which `norm_offset_for_net`
+                    // consults so `x[3]` on a `[3:-2]` addresses internal bit 5.
+                    if allow_neg_lsb {
+                        if let (Some(m), Some(l)) = (msb_v, lsb_v) {
+                            if m >= l {
+                                let w = ((m - l) as u64 + 1).min(MAX_NET_WIDTH) as u32;
+                                return (w, w.saturating_sub(1), 0, signed);
+                            }
+                        }
+                    }
                     self.warn(
                         "negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width 1",
                     );

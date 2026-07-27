@@ -130,8 +130,15 @@ impl Elaborator<'_> {
         // ROT[i]` folds). Idempotent.
         self.capture_const_array_vals(d);
         for decl in &d.names {
+            // A plain net DECLARATION is the one place that both sizes the net and can
+            // record its declared low bound, so it is the one place that opts in to a
+            // NEGATIVE one (`logic [3:-2] x` — 6 bits, IEEE §7.4.2). Every other
+            // `range_to_dims` caller keeps the warn-and-clamp: a port/formal/class-property
+            // with a negative bound stays LOUD rather than becoming a wide net whose
+            // selects nobody normalizes.
+            let neg_lsb = self.declared_neg_lsb(d.range.as_ref());
             let (mut width, mut msb, lsb, signed) =
-                self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                self.range_to_dims_opt(d.kind, d.range.as_ref(), d.signed, neg_lsb.is_some());
             if !d.packed.is_empty() {
                 width = packed_ext
                     .iter()
@@ -212,7 +219,29 @@ impl Elaborator<'_> {
                             );
                             continue;
                         }
-                        let n = (max - min) as usize + 1;
+                        // CHECKED + capped: `max - min` overflows i64 on a pathological
+                        // declaration (`string s[9223372036854775807:-9223372036854775807]`
+                        // — iverilog asserts on it too) and the bare subtraction PANICKED,
+                        // which is below loud on the accuracy ladder. Element count also
+                        // has to respect the array cap before it is used as a `Vec`
+                        // capacity.
+                        let Some(n) = max
+                            .checked_sub(min)
+                            .and_then(|d| u64::try_from(d).ok())
+                            .and_then(|d| d.checked_add(1))
+                            .filter(|&d| d <= MAX_ARRAY_LEN)
+                            .map(|d| d as usize)
+                        else {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "string array `{}` declares more than the v1 element \
+                                     cap ({MAX_ARRAY_LEN})",
+                                    decl.name.name
+                                ),
+                            );
+                            continue;
+                        };
                         let mut elem_ids = Vec::with_capacity(n);
                         for i in 0..n {
                             let ename = format!("{}$sae${i}", decl.name.name);
@@ -642,6 +671,16 @@ impl Elaborator<'_> {
             // `[(0, array_len)]` — byte-identical to the long-standing golden IR.
             // Keyed by the just-assigned NetId (looked up post-add so a duplicate-skip
             // does not mis-key). (a)-flattening: no frozen-IR field added.
+            // Twin of the extents record above, for a NEGATIVE packed low bound: the net
+            // was sized `|msb-lsb|+1` and stored normalized as `[w-1:0]`, so this is what
+            // lets a bit/part select address the declared numbering. Recorded post-add for
+            // the same reason (a duplicate-decl skip must not mis-key).
+            if let Some(l) = neg_lsb {
+                let key = self.fq(&decl.name.name);
+                if let Some(&id) = self.symbols.get(&key) {
+                    self.net_decl_neg_lsb.insert(id, l);
+                }
+            }
             if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0) {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {

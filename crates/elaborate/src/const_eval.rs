@@ -7,15 +7,6 @@ use super::*;
 /// arena order — see determinism note).
 pub(crate) type ConstKey = (u32, bool, u8, Vec<u64>, Vec<u64>);
 
-/// Clamp a folded i64 range bound to the u32 width math: negative (underflow
-/// artifact) → 0, beyond u32 → u32::MAX (the over-cap width check then fires
-/// loudly). None (non-constant) → 0 (caller's legacy default).
-pub(crate) fn clamp_bound_u32(v: Option<i64>) -> u32 {
-    v.map_or(0, |v| {
-        u32::try_from(v).unwrap_or(if v < 0 { 0 } else { u32::MAX })
-    })
-}
-
 /// Sign-aware i64 fold of an integer literal: an EXPLICITLY signed based
 /// literal with its sign bit set (`8'shFF`) folds negative. A plain decimal
 /// (`4294967295`) is the positive value as written — IEEE marks unsized

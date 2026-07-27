@@ -271,6 +271,16 @@ struct Elaborator<'s> {
     // word `(i-lo0)*s1 + (j-lo1)`, so the IR backbone is untouched. Plain 0-based 1-D
     // arrays are absent (the access path falls back to `[(0, array_len)]`).
     array_dims: BTreeMap<u32, Vec<(i64, u32)>>,
+    /// Nets declared with a NEGATIVE packed low bound (`logic [3:-2] x`) → that bound.
+    /// `NetVar.msb`/`lsb` are frozen `u32`, so such a net is stored NORMALIZED as
+    /// `[w-1:0]` and this is what recovers the declared numbering for a bit/part select
+    /// (`norm_offset_for_net`). SPARSE — absent for every ordinary net, so the common
+    /// path is one `BTreeMap` miss and the lowering is byte-identical.
+    ///
+    /// Written ONLY where `range_to_dims_opt(.., allow_neg_lsb = true)` was used: the
+    /// width and this record must be turned on together, or the net is wide while its
+    /// selects address the wrong bits.
+    net_decl_neg_lsb: BTreeMap<u32, i64>,
     /// v7 `$bits` prescan: name → (element bits, unpacked dim lengths) for the
     /// CURRENT module's body decls, recorded in declaration order during the
     /// body param-binding walk (3b) — a `localparam X = $bits(mem[0])` binds
@@ -445,7 +455,7 @@ struct Elaborator<'s> {
     // dim (msb<lsb): the source index maps to `coord = hi - i` instead of `i - lo`
     // (N3.3 — mirrors `norm_offset_for_net` for plain vectors). elaborate-LOCAL —
     // NEVER in the frozen sim-ir.
-    packed_dims: BTreeMap<u32, Vec<(u32, u32, bool)>>,
+    packed_dims: BTreeMap<u32, Vec<(i64, u32, bool)>>,
     // v5 ⑥: the active `$` substitution while lowering a QUEUE element index —
     // the ExprId of `size(handle)-1`. Save/restore around each queue index so
     // nested selects (`q[$ - r[$]]`) bind each `$` to ITS OWN queue. `None`

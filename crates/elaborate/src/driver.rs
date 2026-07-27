@@ -23,6 +23,7 @@ impl<'s> Elaborator<'s> {
             bind_targets: BTreeMap::new(),
             const_dedup: BTreeMap::new(),
             array_dims: BTreeMap::new(),
+            net_decl_neg_lsb: BTreeMap::new(),
             bits_prescan: BTreeMap::new(),
             local_decl_names: std::collections::BTreeSet::new(),
             scoped_block_locals: BTreeMap::new(),

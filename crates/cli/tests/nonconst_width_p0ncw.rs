@@ -221,22 +221,42 @@ fn run_stderr(src: &str) -> (String, Option<i32>) {
 }
 
 #[test]
-fn literal_negative_low_bound_diag_is_honest() {
-    // `logic [3:-2]` — a literal negative LOW bound (iverilog sizes it 6 bits;
-    // vita cannot yet, ROADMAP §3, so it warns + clamps to width 1). The
-    // diagnostic must name the real cause, NOT the misleading "parameterized
-    // range underflowed" the unified guard used to print for it.
+fn literal_negative_low_bound_is_sized_and_selectable() {
+    // `logic [3:-2]` used to warn and clamp to width 1 (whole-value damage). It is sized
+    // `|msb-lsb|+1` now, stored normalized as `[w-1:0]` because `NetVar.msb`/`lsb` are
+    // frozen `u32`, with the declared bound in the `net_decl_neg_lsb` side map so a bit
+    // select addresses the declared numbering. iverilog: 6 bits, `101010`, `x[3]`=1,
+    // `x[-2]`=0, `$left`=3, `$right`=-2.
     let (err, _c) = run_stderr(
         "module t; logic [3:-2] x;\n\
-         initial $display(\"B %0d\", $bits(x)); endmodule\n",
+         initial begin x = 6'b101010;\n\
+           $display(\"B %0d %b %b %b %0d %0d\", $bits(x), x, x[3], x[-2], $left(x), $right(x));\n\
+         end endmodule\n",
     );
     assert!(
-        err.contains("negative packed-range low bound"),
-        "literal negative low bound must be named honestly:\n{err}"
+        !err.contains("negative packed-range low bound"),
+        "the clamp warning must be gone:\n{err}"
     );
+    let (out, _) = run("module t; logic [3:-2] x;\n\
+         initial begin x = 6'b101010;\n\
+           $display(\"B %0d %b %b %b %0d %0d\", $bits(x), x, x[3], x[-2], $left(x), $right(x));\n\
+         end endmodule\n");
+    assert!(out.contains("B 6 101010 1 0 3 -2"), "{out}");
+}
+
+#[test]
+fn a_part_select_of_a_negative_low_bound_net_is_loud_for_the_right_reason() {
+    // The remaining gap: a PART select folds its own bounds through the UNSIGNED
+    // `const_eval_u32`, where `-2` reads as 0xFFFFFFFE and used to trip a direction
+    // check that blamed the wrong thing. Loud with the real reason instead.
+    let (err, c) = run_stderr(
+        "module t; logic [3:-2] x;\n\
+         initial begin x = 6'b101010; $display(\"%b\", x[1:-2]); end endmodule\n",
+    );
+    assert_ne!(c, Some(0), "must stay loud:\n{err}");
     assert!(
-        !err.contains("parameterized range underflowed"),
-        "must NOT misdiagnose a literal `[3:-2]` as a parameter underflow:\n{err}"
+        err.contains("PART select of a net declared with a negative low bound"),
+        "must name the real reason:\n{err}"
     );
 }
 
