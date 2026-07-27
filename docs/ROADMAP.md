@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-27)**: format_version **23** · **4535 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.222~226**(§0 **T1 string-array 7종 전부 RESOLVED** — runtime index/`foreach` · queue-of-string · multi-dim · frame-local · 계층 read). 직전 = §4.5.221(real-valued parameters·머지 완료·잔여는 §2 첫 항목 1건). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-27)**: format_version **23** · **4550 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.227**(§0 **T1 잔여 11항목 전부 RESOLVED** — 임의 선언 bounds/방향·multi-dim `foreach`·중첩 decl-init·bounded string queue·계층 read+write·계층 assoc·frame-local 재귀·SoA whole-element). 직전 = §4.5.222~226(T1 1차 6종). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -11,8 +11,8 @@
 
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
-| **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 전부 완료(§4.5.222~226)** · 남은 것 = T2 real const-fold/generate string/enum label/음수 range 4 + T3 전제조건 2 |
-| **2** | §2 | Silent-wrong 잔여 | 39 | ✓ 7 | part-select 바운드 0 · replication count 0 · package real · 구조적 지연 · inner-NET shadow(DEEP) |
+| **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · 남은 것 = T2 real const-fold/generate string/enum label/음수 range 4 + T3 전제조건 2 |
+| **2** | §2 | Silent-wrong 잔여 | 41 | ✓ 7 | part-select 바운드 0 · replication count 0 · package real · 구조적 지연 · inner-NET shadow(DEEP) |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
@@ -30,29 +30,29 @@
 >
 > **순위 근거**: 전부 iverilog 오라클 有 = §1 우선순위 ②(additive·저위험). ~~T1은 한 가족이라 머신러리가 공유된다~~ — **§4.5.222 실측이 이 전제를 기각했다**(아래 T1 머리말). T2는 서로 독립적이라 개별 슬라이스.
 
-**~~T1 — string-array 7종~~ 전부 RESOLVED** (§4.5.219 decl-init · §4.5.220 전제조건 dyn byte-select · **§4.5.222 runtime index + `foreach`** · **§4.5.223 queue-of-string** · **§4.5.224 multi-dim** · **§4.5.225 frame-local** · **§4.5.226 hier read**). 최초 6 프로브 전부 iverilog 일치 실측. 상세=ARCHIVE.
+**~~T1 — string-array~~ 전부 RESOLVED** (§4.5.219 decl-init · §4.5.220 전제조건 dyn byte-select · §4.5.222 runtime index + `foreach` · §4.5.223 queue-of-string · §4.5.224 multi-dim · §4.5.225 frame-local · §4.5.226 hier read · **§4.5.227 잔여 11항목**). 상세=ARCHIVE.
 
 > **정정(기록 보존)**: 이 큐는 T1을 "한 가족·머신러리 공유"로 묶었으나 **틀린 전제였다** — 근인이 4갈래였고, 6·7은 **DYN 배열에서도 똑같이 loud**라 라우팅과 무관했다. 각각 전용 슬라이스로 갔다. 큐를 묶을 때 근인을 측정하지 않으면 이렇게 된다.
 
-**T1 잔여 — 전부 honest-loud·2026-07-27 전수 실측**(int 쌍둥이로 string-전용/일반 갭 분리):
+**T1 잔여 = 없음 (§4.5.227·2026-07-27).** 위 표의 11항목 전부 correct-support. 근인은 4갈래였다 —
+**geometry**(1·2·3·4·5·7: 라우팅이 zero-based를 *가정*하던 것을 `flatten_word`/`lower_fixed_foreach_step`로
+*적용*으로 바꿈) · **bound**(6: 엔진 bound는 원소타입 무관, 선언 패턴이 `Queue(None)`만 받던 것) ·
+**hierarchical**(7·8·10: deferred read/write가 주소 규칙 하나를 공유하게) · **per-activation**(9: §4.5.171
+frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whole-element를 멤버별로 fan-out).
+상세=ARCHIVE §4.5.227.
 
-| # | 항목 | iverilog | vita | 성격 | 비고 |
-|---|---|---|---|---|---|
-| 1 | non-zero-base 런타임 인덱스 `string s[1:3]; s[k]` | `aa` | LOUD | **string 전용** | `int a[1:3]`은 동작. 라우팅이 zero-based만 → 인덱스 오프셋 + `foreach` remap 필요 |
-| 2 | descending 런타임 인덱스 `string s[3:1]` | `aa` | LOUD | **string 전용** | 1과 동근. descending은 `foreach`가 역순이라 remap이 추가로 필요 |
-| 3 | multi-dim `foreach(s[i,j])` | `a...d.` | LOUD | **string 전용** | `int a[2][2]`는 동작 |
-| 4 | multi-dim `'{'{…},'{…}}` decl-init | `a` | LOUD | **string 전용** | flat 컨테이너에 row-major로 펼치는 확장 필요 |
-| 5 | multi-dim non-zero-base `string s[1:2][1:2]` | `aa` | LOUD | **string 전용** | 1·2와 동근(모든 축이 zero-based여야 라우팅) |
-| 6 | bounded queue `string q[$:3]` | `1` | LOUD | **string 전용** | **`int q[$:1]`은 bound까지 정상**(`sz=2`) — `Dim::Queue(None)`만 수용한 탓 |
-| 7 | 계층 multi-dim `u.s[0][0]` | `aa` | LOUD | **string 전용** | resolve pass가 dims를 안 들고 있어 flatten 불가 |
-| 8 | 계층 element WRITE `u.s[0]="x"` | `zz` | LOUD | **dyn 공통** | `int d[]`도 동일 loud(`int mem[2]` 정적 배열은 동작). 별개 deferred write 머신 |
-| 9 | recursion 중 frame-local 배열 | `lvl0/1/2` | F4004 | **dyn 공통** | `int a[]`도 동일. §4.5.171 per-net heap 가드 — per-activation stash가 전제 |
-| 10 | 계층 assoc `u.a[5]` | REJECT | LOUD | 무오라클 | 키드 접근 = 위치 인덱스와 다른 연산 |
-| 11 | record queue whole-element read `o=q[0]` | REJECT | LOUD | 무오라클 | §4.5.223 부수효과 표면의 유일한 loud |
+**T1에서 새로 발굴한 잔여(전부 honest-loud·§2/§3로 이관)**:
 
-**의도적 loud(갭 아님)**: fixed 배열에 `new[]`(iverilog도 거부) · multi-dim partial 인덱스 `s[0]`(iverilog도 거부·조용한 오원소 방지).
+| 항목 | iverilog | vita | 성격 |
+|---|---|---|---|
+| generate 스코프 fixed string array 라우팅 (`for(g…) begin string s[1:2]; s[k]`) | 동작 | LOUD | `allow_string_init=false`. **플래그만 뒤집는 건 불충분함을 실측** — `new[n]` pre-size가 그 스코프에서 핸들을 못 찾는다(전용 슬라이스 필요) |
+| **fork arm이 부른 suspendable task가 재개되지 않음** | 동작 | **조용히 drop** | 🔴 **string 무관·pre-existing silent-wrong**. `fork tk(1); tk(2); join`에서 `enter`는 찍히고 `@` 이후가 안 온다. 스칼라 로컬에서도 동일 → §2로 |
+| 같은 task의 **동시** 활성화가 frame-local dyn 배열 공유 | 동작 | F4004 | 활성화 구간이 nest가 아니라 overlap → stash로 분리 불가. 위 fork 재개 버그가 선행 조건 |
+| 음수 하한 unpacked 배열 `int a[-1:1]` | `-1:1 0:2 1:3` | E4002+원소 누락 | **string 무관·일반 갭**. `flatten_word`의 `lo`가 u32 → string 배열은 라우팅 거절로 회피 중 |
 
-**내가 만든 진단 품질 하강 1건**: 상수 OOB `string s[2]; s[5]`가 PRE는 elaborate 에러였는데 POST는 런타임 W4020 경고. **값은 iverilog와 바이트 동일**(`[ ]`)이고 non-silent이므로 사다리 하강은 아니나, 컴파일 타임에 잡히던 진단이 런타임으로 내려갔다. `fixed_string_dyn`이 길이를 알고 있으므로 복원 가능.
+**의도적 loud(갭 아님)**: fixed 배열에 `new[]`(iverilog도 거부) · multi-dim partial 인덱스 `s[0]`(iverilog도 거부·조용한 오원소 방지) · cross-type SoA whole-element 복사(멤버 대응 보장 없음).
+
+**오라클 주의 — iverilog 결함 2건(vita가 IEEE 정답)**: ① string **배열 원소**의 `.len()`이 문자열 길이가 아니라 **배열 크기**를 낸다(`string s[5]; s[0]="abcdefg"` → iverilog 5, vita 7; 같은 텍스트를 스칼라에 넣으면 iverilog도 7). ② 동시 fork 활성화가 automatic string 배열을 공유한다(`A!` 대신 `A!!`). 둘 다 회귀 테스트로 핀 고정.
 
 **T2 — 독립 항목 (오라클 ✓·각자 전용 슬라이스)**
 
@@ -110,6 +110,8 @@
 - **🔴 상수-foldable 식을 part-select 바운드로 쓰면 조용히 0 / 비트 덮어씀**(pre-existing·재리뷰 발견·**근인 규명됨**): `v[fi(7):fi(4)]` → iverilog `a`, vita `0`; `c[int'(5):int'(4)] = 2'b00` → iverilog `85`, vita `5`(상위 비트 clobber). **근인**: 바운드 접기가 `const_fn.rs::const_eval_u32` 를 쓰는데 이건 **`&self` 없는 자유 함수**라 `IntLit`/`Paren`/`Unary` 3개 arm뿐 — params·const 함수·cast 를 못 본다. 호출부(`packed.rs:425,616,630`·`packed_lval.rs:279,288`)는 `None` 을 "상수 아님"으로 보고 0 또는 net-width 폴백. **`const_eval_in_scope` 로 폴백을 시도했으나 이득 0으로 되돌림** — 그쪽에도 **`Cast` arm 이 없어** `int'(5)` 가 여전히 None 이고 `fi(7)` 의 `Call` arm 도 발화하지 않았다. **fix 전제** = `const_eval_in_scope` 에 `Cast` arm 추가 + `Call` arm 이 automatic 함수에 왜 안 무는지 규명. hot path 이므로 리뷰 필수.
 - **🔴 replication count 가 상수로 안 접히면 조용히 0**(pre-existing·differential 발견): `{P*2{1'b1}}`·`{(P>1?3:2){1'b1}}`·`{int'(3){1'b1}}`·`{cf(3){1'b1}}` 가 iverilog `111…` 인데 vita `0`(`{P+1{…}}` 는 동작 — `*`·ternary·cast·const-fn 만 깨짐).
 - **🔴 package-scope `parameter real` 이 정수 나눗셈**(pre-existing·differential 발견·"미라우팅"보다 넓음): `pk::PR/2`(PR=3) 가 iverilog `1.5000` 인데 vita `1.0000`. module-scope 쌍둥이는 정상. 비-정수 package real 은 loud.
+- **🔴 fork arm 이 부른 SUSPENDABLE task 가 재개되지 않음**(pre-existing·PRE==POST 실측·§4.5.227 발굴): `fork tk(1); tk(2); join` 에서 `tk` 가 `@`/`#` 를 만나면 **frame 진입은 하고**(진입부 `$display` 는 찍힘) **재개가 오지 않아 나머지 body 가 조용히 사라진다** — iverilog 는 정상 실행. **string/dyn 과 무관**: 스칼라 로컬만 가진 task 로도 동일 재현(`c0` 프로브). 같은 fork 라도 (a) 비-suspending task 호출 (b) task 없이 `@` 를 쓴 arm 은 둘 다 정상이라, 근인은 **fork child activity 의 call_stack 프레임 재개 경로** 한 곳. §4.5.227 이 frame-dyn fatal 을 걷어내면서 **드러났을 뿐 새로 만든 것이 아니다**(F4004 가 dyn 부분집합을 가리고 있었음). 이 버그가 살아 있는 한 **같은 task 의 동시 활성화**는 stash 로 분리해도 관측 불가라, §4.5.227 은 그 조합을 정직한 fatal 로 유지했다.
+- **음수 하한 unpacked 배열이 원소를 누락**(pre-existing·PRE==POST): `int a[-1:1]` 에 `a[-1]=7` 후 `foreach` 가 `0:8 1:9` 만 내고 E4002. 근인 = `flatten_word` 의 `lo` 가 `u32`. string 배열은 §4.5.227 이 **라우팅 거절**로 회피(per-element-net 경로에서 const 인덱스는 정상)해 같은 깨진 매핑을 물려받지 않는다.
 - **`$urandom_range(R,0)` 가 범위 1 로 붕괴**(soundness S5): `bits(3.0)` 의 하위 32비트가 0. generic SysCall 인자 경로라 위치별 게이트 필요.
 - **파라미터 구조적 지연이 조용히 무시됨(pre-existing·PRE==POST)**: `assign #P y = x;` · `wire #P y = x;` · `and #P g(o,a,b);` 가 P 가 **정수 param 이어도** 지연을 무시(리터럴 `#3` 은 동작). §4.5.221 이 `parameter real` 을 지원하면서 **클럭 주기/지연 관용구가 이 경로의 주 사용처**가 되어 도달성이 크게 넓어졌다 — 우선순위 상향 후보.
 - **real→`input int` formal 미강제(pre-existing·PRE==POST)**: `f(2.4)` → vita `24`, iverilog `20`.

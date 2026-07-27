@@ -60,6 +60,7 @@ mod crv;
 mod da;
 mod driver;
 mod dynarr;
+mod dynarr_method;
 mod events;
 mod expr_cast;
 mod expr_ctx;

@@ -284,6 +284,34 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.227 §0 T1 잔여 11항목 loud→supported (임의 bounds/방향·multi-dim foreach·중첩 decl-init·bounded string queue·계층 write·계층 assoc·frame-local 재귀·SoA whole-element·format 23 불변) (2026-07-27, branch feat-t1-residual) ✅
+
+**4535→4550 green** · 근인이 **4갈래**였고, 하나의 "string-array 잔여"가 아니었다.
+
+**① GEOMETRY (항목 1·2·3·4·5·7)** — 라우팅된 컨테이너는 원소를 `0..n-1`로 번호매기는데 그건 `string s[1:3]`/`s[3:1]`/`s[2][2]`의 선언 인덱스 공간이 아니다. 1차 슬라이스(§4.5.222/224)가 zero-based ascending만 라우팅한 이유. **해제한 것은 새 머신러리가 아니라 "가정" → "적용"**: `flatten_word`는 이미 dim마다 `idx - lo`를 row-major stride로 정규화하고, `lower_fixed_foreach_step`은 이미 선언 bounds를 선언 방향으로 걷는다. 그래서 선언 시점에 `StrArrayGeom{extents, desc}`를 기록하고 **모든 접근 + foreach가 그걸 조회**하게 했다. zero-based 1-D는 `lo==0`이면 `Sub` 없음·stride 1이면 `Mul` 없음이라 **IR이 바이트 동일**로 보존된다.
+
+**② BOUND (항목 6)** — queue bound는 **엔진에서** net-keyed로 강제되고 원소 타입을 안 본다(`int q[$:1]`은 이미 동작했다). `string q[$:3]`을 막고 있던 건 선언 패턴이 `Queue(None)`만 매치한 것 하나뿐. 둘이 `queue_dim_bound`를 공유하게 하고 정수 쌍둥이를 같은 테스트에 핀으로 박았다.
+
+**③ HIERARCHICAL (항목 7·8·10)** — deferred READ와 deferred WRITE는 **별개 sentinel 공간의 별개 pass**이고, write를 여는 위험은 정확히 "같은 소스 텍스트인데 read와 **다른 원소**를 가리키는 것". 그래서 주소 규칙을 `hier_dyn_container_word` **하나로** 만들고 둘 다 그걸 부른다(routed 배열은 `flatten_word_eids` — 로컬 funnel이 쓰는 `flatten_word`의 pre-lowered-eid 쌍둥이 — 로 같은 산술). assoc도 같은 1-인덱스 철자로 합류: **keyed vs positional 구분은 net이 downstream에서** 정하기 때문(`resolve_lvalue_offsets`가 `is_assoc(net)`이면 같은 word EID를 `AssocKey`로 다시 읽는다).
+
+**④ PER-ACTIVATION (항목 9)** — §4.5.171의 frame-local dyn 배열 fatal. heap slot은 net-keyed로 두고, frame **ENTRY가 바깥 활성화의 내용을 stash로 가져가고** EXIT가 되돌린다. stash는 **활성화와 함께** 이동한다(동기 호출은 지역변수, suspendable은 `FrameRec`) — 전역 스택이면 A가 suspend→B 진입→A 재개·종료 순서에서 LIFO가 깨져 A가 B의 배열을 되돌려 받는다. 구간이 **nest**할 때만 건전하므로 재귀는 지원, **overlap하는 동시 활성화는 fatal 유지**(문구를 실제 이유로 교체).
+
+**⑤ SoA (항목 11)** — non-packable record 컨테이너는 자기 이름의 net이 없어(멤버당 하나) whole-element `o = q[i]`에 표면이 없었다. `pop_front()`/스칼라 whole-copy가 이미 하던 대로 멤버별 fan-out. 리뷰가 `q[i] = d[j]`(element↔element)가 남은 걸 잡아 같이 닫았다.
+
+**과정에서 내가 만든 silent-wrong 4건 — 전부 리뷰가 아니라 측정이 잡았다**:
+1. decl-init collector 2개가 여전히 **1개 dim으로** 펼쳐서 중첩 `'{'{…},'{…}}`가 string 원소에 assignment-pattern을 대입 → exit 0에 빈 문자열 4개. 두 collector가 full `unpacked`를 **하나의 공유 확장**에 넘기도록.
+2. frame-dyn fatal 제거가 **선행 silent-wrong을 드러냄**(fork 동시 활성화) → loud→silent 하강. nesting 판별자로 그 형태만 loud 복원.
+3. 재귀 호출이 **자기 dyn FORMAL을 actual로** 넘기면 이미 비워진 slot을 복사 → `sz=0` + 가짜 OOB warn at exit 0. 순서를 capture → stash → install로.
+4. INOUT dyn formal 재귀에서 caller net == formal net이라 in-place copy-out이 restore에 덮여 3/2/1(iverilog 3/3/3). copy-out을 restore **뒤로** 옮김. **적대 리뷰의 soundness 렌즈가 잡았고 differential matrix는 못 잡았다.**
+
+**적대 2렌즈**: differential = 프로브 **168파일 3-way**(iverilog/PRE/POST) — 28건이 이 브랜치로 바뀌었고 **전부 loud→iverilog 일치**, 회귀 0. soundness = routed 원소의 모든 read/write 문맥(12종)·frame 스코프 foreach·bounded queue 전 표면·shadowing·fork-in-recursion·inout/output formal 재귀·cross-type SoA 가드·무오라클 2건(계층 assoc·SoA record)의 vita-internal 등가성.
+
+**오라클 결함 2건 규명(vita가 IEEE 정답·회귀 테스트로 고정)**: iverilog의 string **배열 원소** `.len()`이 **배열 크기**를 낸다(`string s[5]; s[0]="abcdefg"` → 5; 같은 텍스트가 스칼라면 7) · 동시 fork 활성화가 automatic string 배열을 공유한다(`A!` 대신 `A!!`).
+
+**열지 않고 기록한 것**: generate 스코프 라우팅 — `allow_string_init` 플래그만 뒤집는 건 **불충분함을 실측**(`new[n]` pre-size가 그 스코프에서 핸들을 못 찾음)해서 반쯤 열지 않고 되돌린 뒤 ROADMAP §0에 남겼다.
+
+신규 테스트 파일 없음(기존 6파일 확장); loud를 핀으로 박고 있던 테스트 8개를 correct-support 기대값으로 교체.
+
 #### 4.5.226 §0 T1-6: 계층 dynamic-container element READ loud→supported (`u.s[0]`·`u.d[0]`·`u.q[0]`·format 23 불변) (2026-07-27, branch feat-string-array-t1) ✅
 
 **4526→4535 green** · **string 전용 아님**: `resolve_deferred_hier_sel`이 dynamic-storage handle을 전부 거부했는데("dyn element read는 lowering의 1-seg base로만 라우팅된다"), 그건 **lowering 경로**에만 참이고 resolve된 element read는 word-indexed `Signal`일 뿐이라 엔진은 이름을 어떻게 도달했는지 신경쓰지 않는다. `int d[]`·`int q[$]`도 같은 이유로 loud였고 같이 열렸다.
