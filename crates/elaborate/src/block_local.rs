@@ -844,7 +844,9 @@ impl Elaborator<'_> {
                                 // inits (it may read one); a non-string keeps its
                                 // existing `pending_var_inits` slot (byte-identical).
                                 if scalar_string {
-                                    self.pending_block_local_string_inits
+                                    self.pending_scoped_bl_strings
+                                        .entry(self.cur_prefix.clone())
+                                        .or_default()
                                         .push((ast::Lvalue::Ident(path), init.clone()));
                                 } else {
                                     self.pending_var_inits
@@ -877,7 +879,10 @@ impl Elaborator<'_> {
                                 if let Some(pairs) =
                                     self.string_array_init_pairs(&name.name, &name.unpacked, init)
                                 {
-                                    self.pending_block_local_string_inits.extend(pairs);
+                                    self.pending_scoped_bl_strings
+                                        .entry(self.cur_prefix.clone())
+                                        .or_default()
+                                        .extend(pairs);
                                 }
                             }
                         }

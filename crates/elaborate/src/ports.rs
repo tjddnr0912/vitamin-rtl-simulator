@@ -368,7 +368,12 @@ impl Elaborator<'_> {
                         // (collect + flush, `lowering_decl_init`-exempt), so it is a
                         // supported form now (the A2a scope-gate is lifted). User
                         // writes still hit the net-id-keyed const-param deny.
-                        self.elaborate_netvar_decl(d, &decl.ports, &decl.body, false);
+                        // `allow_string_init` is TRUE here now, for the same reason as the
+                        // generate walk: the flag was standing in for a string
+                        // declaration's decl-time writes landing in the MODULE-scope
+                        // pending list, where the bare-name lvalue resolved outside this
+                        // instance's prefix. Those are keyed by the declaring scope now.
+                        self.elaborate_netvar_decl(d, &decl.ports, &decl.body, true);
                     }
                 }
                 // §6.8 pre-sweep for the interface body (mirrors the module-body
@@ -386,11 +391,15 @@ impl Elaborator<'_> {
                 // both a loud misresolve and (with same-named members) a silent
                 // module-side drop. The generate VarInit walk isolates the same way.
                 let saved_pending = std::mem::take(&mut self.pending_var_inits);
+                // Same two drains as the module and generate flushes: this scope's
+                // decl-time pre-sizes first, its block-local string inits last.
+                self.drain_scoped_presize();
                 for it in &decl.body {
                     if let ast::ModuleItem::NetVar(d) = it {
                         self.collect_var_init_drivers(d);
                     }
                 }
+                self.drain_scoped_bl_strings();
                 self.flush_pending_var_inits();
                 self.pending_var_inits = saved_pending;
                 for it in &decl.body {

@@ -145,6 +145,8 @@ impl<'s> Elaborator<'s> {
             proc_scopes: Vec::new(),
             pending_var_inits: Vec::new(),
             pending_block_local_string_inits: Vec::new(),
+            pending_scoped_presize: BTreeMap::new(),
+            pending_scoped_bl_strings: BTreeMap::new(),
             pending_sva: Vec::new(),
             pending_cover: Vec::new(),
             deferred_hier: Vec::new(),

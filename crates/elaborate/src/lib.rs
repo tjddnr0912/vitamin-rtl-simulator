@@ -911,6 +911,20 @@ struct Elaborator<'s> {
     // module strings first. (Block-local INT inits keep their existing slot in
     // `pending_var_inits` — byte-identical for non-string designs.)
     pending_block_local_string_inits: Vec<(ast::Lvalue, ast::Expr)>,
+    // The two lists above are drained at MODULE scope, with `cur_prefix` empty. Both are
+    // pushed at DECLARATION time — the routed string array's `new[n]` pre-size (which must
+    // precede its element writes) and a block-local string init — and both carry a BARE
+    // name, so a declaration inside a GENERATE scope emitted an lvalue that resolved to
+    // `t.s` instead of `t.gb[0].s`: the generate walk only isolates `pending_var_inits`
+    // during its VarInit phase, and these are pushed during Nets.
+    //
+    // These twins are keyed by the `cur_prefix` in effect at the declaration, so each scope
+    // drains its own at its own flush point (module scope is the `""` key, and its drain
+    // order is unchanged — byte-identical for every design without a generate-scope string).
+    // Kept as SEPARATE maps rather than one because their positions differ: a pre-size goes
+    // BEFORE the scope's collected inits, a block-local string init AFTER them.
+    pending_scoped_presize: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
+    pending_scoped_bl_strings: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
     // v8 SVA: concurrent assertions collected during statement lowering, drained
     // into synthesized clocked checker processes after each module's process loop.
     pending_sva: Vec<PendingSva>,

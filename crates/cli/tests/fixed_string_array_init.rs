@@ -359,18 +359,20 @@ fn brace_concat_initializer_is_loud() {
 }
 
 #[test]
-fn generate_scope_init_stays_loud() {
-    // Generate bodies do not run the string var-init flush (`allow_string_init` is
-    // false there), so this stays a loud reject rather than a silently empty array.
-    // Documented follow-on, same as the scalar-string generate-scope init.
-    loud(
-        "module t;\n\
-           genvar i;\n\
-           generate for (i=0;i<1;i=i+1) begin : g\n\
-             string s[2] = '{\"aa\",\"bb\"};\n\
-             initial $display(\"%s\", s[0]);\n\
-           end endgenerate\n\
-         endmodule\n",
-        "string-array initializer",
+fn generate_scope_init_is_supported() {
+    // Was loud because generate bodies passed `allow_string_init = false`. The flag was
+    // standing in for a real defect: a string declaration's decl-time writes (a scalar's
+    // t0 init, an array's `new[n]` pre-size) went into the MODULE-scope pending list, so
+    // their bare-name lvalue resolved to `t.s` rather than `t.g[0].s`. Those are keyed by
+    // the declaring scope now and drained at its own flush. iverilog: `aa bb`.
+    assert_eq!(
+        run("module t;\n\
+             genvar i;\n\
+             generate for (i=0;i<1;i=i+1) begin : g\n\
+               string s[2] = '{\"aa\",\"bb\"};\n\
+               initial $display(\"%s %s\", s[0], s[1]);\n\
+             end endgenerate\n\
+             endmodule\n"),
+        "aa bb\n"
     );
 }

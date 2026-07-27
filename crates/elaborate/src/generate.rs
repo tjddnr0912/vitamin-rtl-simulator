@@ -95,10 +95,18 @@ impl Elaborator<'_> {
         // sibling scopes independent regardless. (No-op for other phases.)
         let saved_pending =
             (phase == GenPhase::VarInit).then(|| std::mem::take(&mut self.pending_var_inits));
+        if saved_pending.is_some() {
+            // Mirrors the module-scope flush: this scope's decl-time pre-sizes (recorded
+            // during the NETS phase, when `pending_var_inits` is NOT isolated) come first.
+            // Without the scope key they landed in the module list and their bare-name
+            // lvalue resolved to `t.s` instead of `t.gb[0].s`.
+            self.drain_scoped_presize();
+        }
         for item in items {
             self.elaborate_gen_item(item, phase, depth, map);
         }
         if let Some(outer) = saved_pending {
+            self.drain_scoped_bl_strings();
             self.flush_pending_var_inits();
             self.pending_var_inits = outer;
         }
@@ -335,7 +343,29 @@ impl Elaborator<'_> {
                 // as an exempt (`lowering_decl_init`) pre-sweep, so it is now a
                 // supported form (the old A2a scope-gate that loud-rejected it is
                 // lifted). User writes still hit the net-id-keyed const-param deny.
-                self.elaborate_netvar_decl(d, &ast::PortList::None, &[], false);
+                // `allow_string_init` is TRUE here now. It was false because the decl-time
+                // work a string declaration does — a scalar's t0 init, and a fixed string
+                // array's `new[n]` pre-size — went straight into the MODULE-scope pending
+                // list, so its bare-name lvalue resolved to `t.s` instead of `t.gb[0].s`.
+                // Those two pushes are keyed by the declaring scope now
+                // (`pending_scoped_presize` / `pending_scoped_bl_strings`) and drained at
+                // this scope's own flush, which is what the flag was standing in for.
+                self.elaborate_netvar_decl(d, &ast::PortList::None, &[], true);
+            }
+            // NETS phase: procedural block-local declarations (`initial begin int k; …`).
+            // v1 flattens a block-local to a module-scope net, created in the Nets phase so
+            // references inside the block resolve; `elaborate_instance` does this for every
+            // top-level `module.body` process, and NOT doing it here was a plain scope
+            // asymmetry — the identical process one level up worked, while inside a
+            // generate scope `int k` was an E3010 at every use. (A generate-scope net
+            // DECLARATION already worked; only a decl inside the process did not.)
+            //
+            // The scope prefix is active, so the net lands as `blk[i].k` and each unrolled
+            // iteration gets its own — no cross-iteration coalescing. Ports/body are empty
+            // for the same reason the arm above passes them empty (the LRM forbids port
+            // decls inside a generate).
+            (GenPhase::Nets, ast::ModuleItem::Proc(p)) => {
+                self.hoist_block_local_nets(&p.body, &ast::PortList::None, &[]);
             }
             // VARINIT phase: collect this decl's §6.8 pre-sweep initializer (an
             // unpacked-array `'{…}` or a non-constant scalar). For those supported

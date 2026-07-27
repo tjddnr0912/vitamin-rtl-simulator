@@ -847,6 +847,25 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Move this scope's decl-time PRE-SIZE writes (`pending_scoped_presize[cur_prefix]`)
+    /// to the front of `pending_var_inits`, so a routed string array's `new[n]` precedes
+    /// the element writes the collectors are about to push. Called once per flush point —
+    /// module/interface scope (the `""` key) and each generate scope.
+    pub(crate) fn drain_scoped_presize(&mut self) {
+        if let Some(v) = self.pending_scoped_presize.remove(&self.cur_prefix) {
+            self.pending_var_inits.splice(0..0, v);
+        }
+    }
+
+    /// Twin of [`Self::drain_scoped_presize`] for block-local STRING inits, which go at the
+    /// END instead: a block-local string may read a module-scope string, so it must be
+    /// assigned after the ordinary inits rather than before them.
+    pub(crate) fn drain_scoped_bl_strings(&mut self) {
+        if let Some(v) = self.pending_scoped_bl_strings.remove(&self.cur_prefix) {
+            self.pending_var_inits.extend(v);
+        }
+    }
+
     /// Drain `pending_var_inits` into ONE synthesized `initial` process whose body
     /// assigns each non-constant variable initializer in declaration order (§6.8).
     /// Lowered in the current instance scope; a no-op when none were collected (so

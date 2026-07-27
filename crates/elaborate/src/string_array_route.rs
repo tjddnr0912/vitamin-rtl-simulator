@@ -253,18 +253,24 @@ impl Elaborator<'_> {
         let key = self.fq(&decl.name.name);
         self.fixed_string_dyn_key.insert(key, next_id);
 
-        // Pre-size to the declared length. This rides `pending_var_inits` (the t0
-        // var-init pre-sweep) rather than being synthesized at the net, because a
-        // `DynArray` net carries no length. It is pushed HERE, at the declaration, so
-        // it always precedes the element writes the collectors push later — the decl
-        // pass runs before `collect_var_init_drivers`, and a block-local's writes are
-        // appended after the module-scope list entirely.
+        // Pre-size to the declared length. This rides the t0 var-init pre-sweep rather
+        // than being synthesized at the net, because a `DynArray` net carries no length.
+        // It is recorded HERE, at the declaration, so it always precedes the element
+        // writes the collectors push later — the decl pass runs before
+        // `collect_var_init_drivers`, and a block-local's writes are appended after the
+        // module-scope list entirely.
+        //
+        // Keyed by the DECLARING scope's prefix (see `pending_scoped_presize`): the lvalue
+        // below is a bare name, and it must be lowered while that scope is active. Pushing
+        // it straight into `pending_var_inits` resolved a generate-scope declaration
+        // against the module namespace.
         let span = decl.name.span;
         let path = ast::HierPath {
             segments: vec![decl.name.clone()],
             span,
         };
-        self.pending_var_inits.push((
+        let scope = self.cur_prefix.clone();
+        self.pending_scoped_presize.entry(scope).or_default().push((
             ast::Lvalue::Ident(path),
             ast::Expr {
                 kind: ast::ExprKind::New {
