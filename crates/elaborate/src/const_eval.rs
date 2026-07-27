@@ -305,6 +305,18 @@ impl Elaborator<'_> {
             ast::ExprKind::Ternary { then_e, else_e, .. } => {
                 self.const_expr_signed(then_e) && self.const_expr_signed(else_e)
             }
+            // A cast carries the CASTING TYPE's signedness (§6.24). This arm must
+            // exist for every cast form `const_eval_cast` can fold, or an untyped
+            // `localparam P = int'(-300)` binds the folded −300 as UNSIGNED and
+            // materializes 4294966996 — the fold made it reachable, so the two must
+            // stay in step. `Named` is not folded there, so it stays unsigned here.
+            ast::ExprKind::Cast { target, expr } => match target {
+                ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
+                ast::CastTarget::Signing { signed } => *signed,
+                // `N'(e)` INHERITS the operand's signedness.
+                ast::CastTarget::Size(_) => self.const_expr_signed(expr),
+                ast::CastTarget::Named(_) => false,
+            },
             _ => false, // Call / select / concat / unmodeled: conservatively unsigned
         }
     }

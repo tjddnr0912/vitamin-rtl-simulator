@@ -12,6 +12,7 @@
 
 
 **§4.5.220–229**
+- `4.5.229` 상수식 BOUND/COUNT 단일 퍼널 — part-select 폭·replication count·indexed part 폭 silent-wrong 8가족 (`const_bound_u32` + `Cast` const arm; 가드는 리프가 아니라 값) …
 - `4.5.228` round-20 8항목: fork-arm 재개 🔴 · 음수 하한 unpacked 🔴 / packed(multi-packed 는 silent) · 동시 활성화 dyn 배열 · generate/interface 스코프 · VCD 선언범위 · `$fmonitor`/`$fstrobe` (format 23→25) …
 - `4.5.226` §0 T1-6: 계층 dynamic-container element READ loud→supported (`u.s[0]`·`u.d[0]`·`u.q[0]`) …
 - `4.5.225` §0 T1-7: task/function body-local string ARRAY loud→supported (frame-entry pre-size) …
@@ -284,6 +285,38 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.229 상수식 BOUND/COUNT 단일 퍼널 — part-select 폭·replication count·indexed part 폭의 silent-wrong 8가족 (2026-07-27, branch feat-constfold-bounds, format 25 불변) ✅
+
+**착수 근거**: ROADMAP §1 NEXT 2번(§2 오라클-有 silent-wrong "part-select 바운드 silent-0 + replication count silent-0, 동근이니 한 슬라이스로"). 선택 전 재현에서 **기록보다 훨씬 넓었다** — 기록은 2가족이었으나 실측은 **8가족**(전부 exit 0·진단 0건).
+
+**근인 = 하나**. 선택 BOUND 와 replication/part COUNT 는 IEEE 상수식(§11.4.12.2·§11.5.1)인데, vita 는 파라미터에 쓰는 정본 상수 도메인(`const_eval_in_scope`) 대신 **훨씬 약한 두 folder** 를 썼다 — 리터럴 전용 자유함수 `const_eval_u32`(IntLit/Paren/unary±) 와 엔진의 얕은 `const_u32_of_expr`(Const·폭 트리의 Add/Sub·Const 인자 `$clog2`). 나머지 상수형(`* / % ** << >>`·ternary·cast·상수함수 호출·`$clog2(식)`·`$bits(x)/k`·`pkg::X*k`)은 전부 **조용히 열화**했다:
+
+| 가족 | 예 | iverilog | PRE |
+|---|---|---|---|
+| part-select READ 폭 | `v[int'(11):int'(8)]` | `c` | `0` (폭 1) |
+| part-select WRITE 폭 | `w[int'(11):int'(8)]=0` | `f0ff` | `000f` (lsb 위 전부 clobber) |
+| ascending net | `va[int'(4):int'(7)]` | `c` | `0` |
+| md-packed outer | `mp[int'(2):int'(1)]` | `bbcc` | `0` |
+| md-packed leaf | `mp[2][int'(7):int'(4)]` | `b` | `1` |
+| 배열 원소 | `mem[1][int'(7):int'(4)]` | `f` | `1` |
+| indexed part 폭(R/W) | `v[8+:int'(8)]` | `be` | `0` |
+| replication count | `{P*2{1'b1}}` 외 10형 | `1111` | 빈 결과 |
+
+**구현**: 단일 퍼널 `const_bound_u32` — 리터럴 folder 를 **먼저**(음수 리터럴의 의도적 `wrapping_neg` 포함, 기존 shape 전부 바이트 동일) 시도하고 실패할 때만 강한 도메인. 폭 사이트는 `lower_const_width_expr`(이미 reducible 이면 그 노드 verbatim). `const_eval_in_scope` 에 **`Cast` arm** 신설(`cast_prim_wsign` 공유 테이블 + `coerce_int_width`; `Size(N)` 은 부호 무관이 증명될 때만; `Signing`/`Named` 은 loud 유지).
+
+**적대 리뷰가 6건을 잡았다(전부 수정 후 재리뷰)**. 초판 가드는 "리프가 전부 ≥32비트"였는데 **두 방향으로 틀렸다**:
+- `x[-1:0]` → `0xFFFF_FFFF-0+1` **u32 오버플로 패닉**(release 면 0폭). → `folded_part_width` u64 checked + `MAX_NET_WIDTH` 상한.
+- `(32'd1<<32'd33)>>32'd30` → 리프는 32비트인데 **중간값이 32비트를 넘었다 돌아온다**. SV=0, i64=8. PRE 는 폭 1 = **정답**이었으므로 correct→silent-wrong 하강이었고, `v[7:그것]` 은 **false loud** 까지 냈다.
+- `localparam P = int'(-300)` → `const_expr_signed` 에 `Cast` arm 이 없어 **unsigned 로 바인딩**(4294966996). loud→silent-wrong.
+- `function byte g8(); g8=(8'd200+8'd100)>>2;` → `Call` 이 width-growing 이 아니라 판정돼 **리프 검사 자체를 건너뛰었다**(75 vs SV 11).
+- 반환은 `int` 인데 **로컬이 narrow**(`bit [3:0] t`)면 여전히 발산(30 vs 14) — 인터프리터가 대입을 선언 폭으로 coerce 하지 않는다.
+
+**최종 가드 = 3조건**(공유 traversal `const_fold_children` 하나로 구동): ① 이름이 inline `subst`/`out_subst` 에 묶이면 거부(lowering resolver 와 불일치 방지) ② **모든 하위식 값이 `0..=i32::MAX`**(중간 오버플로를 리프로는 못 잡는다) ③ width-growing 연산이 있으면 리프 전부 ≥32비트이고, **`Call` 은 항상 growing**(시그니처+전 body decl 이 ≥32비트여야 통과).
+
+**교훈**: 폭 정확성 가드를 **리프**로 세우면 중간값 오버플로를 놓치고 max-폭 규칙을 과잉거부한다 — 판정은 **값**(모든 하위식)으로. 그리고 "이 잔차는 기존 Add/Sub 도 갖고 있다"는 정당화는 **측정 없이 쓰면 거짓**이었다: 엔진은 `<<`/`*`/`%` 를 애초에 접지 않아 폭 1 로 떨어졌고 그게 정답이었다.
+
+**게이트**: 4613 → **4627** tests(신규 `const_fold_bounds.rs`×14) · clippy/fmt clean · **format_version 25 불변**(sim-ir·hdl-ast·artifact 무변경) · 3-way(iverilog/PRE/POST) 18 상수형 × 15 문맥 = 270 포인트 **전부 iverilog MATCH**(PRE 는 16형 불일치), 리터럴/괄호 2형은 PRE==POST 바이트 동일.
 
 #### 4.5.228 round-20 8항목: fork-arm 재개·음수 하한(unpacked/packed)·동시 활성화 dyn·generate/interface 스코프·VCD 선언범위·`$fmonitor`/`$fstrobe` (2026-07-27, branch feat-round20, format 23→25) ✅
 

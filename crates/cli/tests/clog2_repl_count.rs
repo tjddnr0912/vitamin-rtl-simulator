@@ -5,10 +5,10 @@
 //! `const_u32_of_expr`, which reduced only Const/±-of-const; `$clog2` survives
 //! lowering as a `SysFunc` node and was never folded. The fix folds `$clog2` of a
 //! SINGLE Const argument (its value alone determines clog2 — no width/sign/wrap
-//! dependence). An ARITHMETIC argument (`$clog2(N+1)`) is a deliberate follow-on:
-//! it stays a silent 0-width count (never a wrong non-zero), pending a fix for the
-//! pre-existing derived-localparam self-width limitation. Every value pinned to
-//! LIVE iverilog 13.0.
+//! dependence). An ARITHMETIC argument now folds too, in the elaborate const
+//! domain, but only when that domain provably agrees with SV's width-limited
+//! arithmetic — see `const_fold_bounds.rs`, which owns that rule. Every value
+//! pinned to LIVE iverilog 13.0.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -71,11 +71,17 @@ fn clog2_edge_and_large_values() {
 }
 
 #[test]
-fn clog2_arithmetic_arg_declines_no_wrong_nonzero() {
-    // Correct-or-loud: an ARITHMETIC `$clog2` argument is NOT folded (a documented
-    // follow-on — SV width-limited const arithmetic + the pre-existing derived-
-    // localparam self-width limitation make it unsafe). It stays a silent 0-width
-    // count — the KEY invariant is that it is NEVER a WRONG NON-ZERO count.
+fn clog2_arithmetic_arg_folds_when_width_exact_else_declines() {
+    // An ARITHMETIC `$clog2` argument used to be left entirely to the engine's
+    // shallow fold, so BOTH of these were a silent 0-width count. The elaborate
+    // const domain now folds the bound/count, but ONLY where its width-unlimited
+    // i64 arithmetic provably matches SV's width-limited kind:
+    //   a) `N + 1` (N = 255) — every leaf is ≥ 32 bits, so 256 is exact and
+    //      `$clog2` is 8, which is what iverilog prints (the old `0` was wrong).
+    //   b) `4'd15 + 4'd15` — 4-bit operands WRAP in SV (14, `$clog2` = 4) while
+    //      i64 gives 30 (`$clog2` = 5). `const_fold_is_width_exact` declines, so
+    //      this keeps the old empty count rather than becoming a WRONG NON-ZERO
+    //      one. That decline is the tracked self-width residual (ROADMAP §2).
     let (out, c) = run(
         "module m; parameter N = 255; logic [63:0] a, b; initial begin \
          a = {$clog2(N + 1){1'b1}}; b = {$clog2(4'd15 + 4'd15){1'b1}}; \
@@ -83,8 +89,9 @@ fn clog2_arithmetic_arg_declines_no_wrong_nonzero() {
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("R=0 0"),
-        "arithmetic clog2 arg declines to 0, never a wrong non-zero; got:\n{out}"
+        out.contains("R=8 0"),
+        "wide arithmetic clog2 arg folds (8, = iverilog); a narrow one declines to \
+         0 rather than a wrong non-zero; got:\n{out}"
     );
 }
 

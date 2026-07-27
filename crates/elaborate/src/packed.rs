@@ -473,6 +473,21 @@ impl Elaborator<'_> {
         );
     }
 
+    /// `hi - lo + 1` for a part-select whose bounds both folded — or None when that
+    /// is not a believable width, in which case the caller keeps the unfolded arena
+    /// tree (its previous behavior) instead of acting on the number.
+    ///
+    /// Both bounds arrive as `u32` through [`const_eval_u32`], which folds a NEGATIVE
+    /// literal by `wrapping_neg` — so `x[-1:0]` presents as `0xFFFF_FFFF - 0 + 1` and
+    /// used to overflow (a debug panic; a wrap to a 0-width select in release). The
+    /// `MAX_NET_WIDTH` ceiling rejects that class outright: a genuine part-select is
+    /// never wider than a net may be, and a wrapped negative bound always lands far
+    /// above it. The u64 arithmetic means the check itself cannot overflow.
+    fn folded_part_width(hi: u32, lo: u32) -> Option<u32> {
+        let w = (hi as u64).checked_sub(lo as u64)?.checked_add(1)?;
+        (w <= MAX_NET_WIDTH).then_some(w as u32)
+    }
+
     pub(crate) fn width_from_msb_lsb_dir(
         &mut self,
         msb_ast: &ast::Expr,
@@ -481,7 +496,7 @@ impl Elaborator<'_> {
         lsb_id: u32,
         ascending: bool,
     ) -> u32 {
-        let folded = (const_eval_u32(msb_ast), const_eval_u32(lsb_ast));
+        let folded = (self.const_bound_u32(msb_ast), self.const_bound_u32(lsb_ast));
         if let (Some(m), Some(l)) = folded {
             if ascending {
                 if m > l {
@@ -489,15 +504,32 @@ impl Elaborator<'_> {
                         MsgCode::ElabUnsupported,
                         "part-select bounds [msb:lsb] descend but the net is ascending [lo:hi] (out of order)",
                     );
-                } else {
+                } else if let Some(w) = Self::folded_part_width(l, m) {
                     // width = (l - m) + 1, folded; offset handled by norm_offset.
-                    return self.const_u32_expr(l - m + 1, 32);
+                    return self.const_u32_expr(w, 32);
                 }
             } else if m < l {
                 self.error(
                     MsgCode::ElabUnsupported,
                     "part-select bounds [msb:lsb] ascend but the net is descending [hi:lo] (out of order)",
                 );
+            } else if self.const_of_expr_u32(msb_id).is_none()
+                || self.const_of_expr_u32(lsb_id).is_none()
+            {
+                // The bounds ARE constant, but at least one did not LOWER to a
+                // foldable `Const` tree (a cast, a constant-function call, `*`, a
+                // ternary…), so the `(msb - lsb) + 1` arena tree below would not
+                // fold downstream — the read then took the `unwrap_or(1)` fallback
+                // (a silent 1-bit part-select) and the write clobbered the whole
+                // net above `lsb`. Return the folded width directly.
+                //
+                // Guarded on the LOWERED form, not on the AST: when both bounds do
+                // lower to `Const` (every shape that worked before, literals
+                // included) this falls through to the arena tree verbatim, so the
+                // golden IR of a design that already worked is byte-identical.
+                if let Some(w) = Self::folded_part_width(m, l) {
+                    return self.const_u32_expr(w, 32);
+                }
             }
         }
         let diff = self.push_expr(ir::Expr::Binary {
@@ -672,7 +704,7 @@ impl Elaborator<'_> {
         width: &ast::Expr,
         dir: &ast::PartDir,
     ) -> Result<(u32, u32), ()> {
-        let Some(w) = const_eval_u32(width) else {
+        let Some(w) = self.const_bound_u32(width) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "indexed part-select width must be constant",
@@ -686,7 +718,7 @@ impl Elaborator<'_> {
             );
             return Err(());
         }
-        let Some(c) = const_eval_u32(offset) else {
+        let Some(c) = self.const_bound_u32(offset) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "variable indexed part-select on a multi-dim packed array is \
@@ -756,7 +788,7 @@ impl Elaborator<'_> {
         msb: &ast::Expr,
         lsb: &ast::Expr,
     ) -> Option<Result<(u32, u32), ()>> {
-        let (a, b) = (const_eval_u32(msb)?, const_eval_u32(lsb)?);
+        let (a, b) = (self.const_bound_u32(msb)?, self.const_bound_u32(lsb)?);
         // The part-select direction must match the net's outer-dim direction — a
         // descending net (`[3:0]`) takes a descending select (`x[3:2]`, a≥b), an
         // ascending net (`[0:3]`) takes an ascending select (`x[0:1]`, a≤b). A

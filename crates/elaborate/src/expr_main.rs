@@ -708,7 +708,7 @@ impl Elaborator<'_> {
                     let idx_eids: Vec<u32> =
                         idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
-                    let w = self.lower_index_expr(width);
+                    let w = self.lower_const_width_expr(width);
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
                         word: None,
@@ -743,7 +743,7 @@ impl Elaborator<'_> {
                 } else {
                     self.norm_offset_if_net(base, raw_off)
                 };
-                let width = self.lower_index_expr(width);
+                let width = self.lower_const_width_expr(width);
                 let kind = indexed_sel_kind(dir, asc);
                 self.push_expr(ir::Expr::Select {
                     base: base_id,
@@ -877,7 +877,14 @@ impl Elaborator<'_> {
                     // folded Const" check — tried, and it false-rejected `$clog2(P)`
                     // on an INTEGER param, which the engine evaluates as a constant
                     // without folding at elaborate time.
-                    self.lower_index_expr(count)
+                    // …and because the engine's fold is SHALLOW, a count it cannot
+                    // reduce became `unwrap_or(0)` = a SILENT 0-width replication:
+                    // `{P*2{…}}`, `{int'(3){…}}`, `{f(3){…}}`, `{(P>1?3:2){…}}` and
+                    // `{$bits(v)/4{…}}` all printed nothing while iverilog replicated.
+                    // §11.4.12.2 requires a constant count, so the shared width/count
+                    // funnel hands the engine a `Const` when the const domain can
+                    // prove one (and changes nothing otherwise).
+                    self.lower_const_width_expr(count)
                 };
                 // hdl-ast `value: Vec<Expr>` is the element LIST (no wrapper
                 // Concat); sim-ir Replicate wants ONE `value: u32` → wrap in a

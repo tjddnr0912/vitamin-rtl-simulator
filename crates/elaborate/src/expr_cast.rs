@@ -2,6 +2,25 @@
 
 use super::*;
 
+/// `(width, signed, two_state)` of a primitive casting type — the ONE table shared
+/// by the lowering ([`Elaborator::lower_prim_cast`]) and the integer const domain
+/// (`const_eval_cast`), so a cast can never fold to one type at elaborate time and
+/// lower as another. `Real` has no integral shape and yields None.
+pub(crate) fn cast_prim_wsign(p: ast::CastPrim) -> Option<(u32, bool, bool)> {
+    use ast::CastPrim as P;
+    Some(match p {
+        P::Int => (32, true, true),
+        P::Integer => (32, true, false),
+        P::Byte => (8, true, true),
+        P::Shortint => (16, true, true),
+        P::Longint => (64, true, true),
+        P::Bit => (1, false, true),
+        P::Logic | P::Reg => (1, false, false),
+        P::Time => (64, false, false),
+        P::Real => return None,
+    })
+}
+
 impl Elaborator<'_> {
     // ── SV static cast `casting_type'(expr)` (IEEE 1800 §6.24) ──────────────
     // Lowered entirely to EXISTING IR (IR-0; format_version unchanged). Numeric,
@@ -400,17 +419,8 @@ impl Elaborator<'_> {
                 args: vec![e],
             });
         }
-        let (tw, tsigned, t2state) = match p {
-            P::Int => (32u32, true, true),
-            P::Integer => (32, true, false),
-            P::Byte => (8, true, true),
-            P::Shortint => (16, true, true),
-            P::Longint => (64, true, true),
-            P::Bit => (1, false, true),
-            P::Logic | P::Reg => (1, false, false),
-            P::Time => (64, false, false),
-            P::Real => unreachable!("handled above"),
-        };
+        let (tw, tsigned, t2state) = cast_prim_wsign(p)
+            .expect("`Real` is handled above; every other prim has a table entry");
         // The target width `tw` is the operand's context, so a fill literal grows
         // to `tw` bits (a bare `lower_expr` sizes it to 1 bit, then the resize below
         // zero-extends it = silent-wrong: `int'('1)` gave `00000001`, not all-ones).

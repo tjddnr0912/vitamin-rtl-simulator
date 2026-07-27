@@ -97,6 +97,36 @@ impl Elaborator<'_> {
                         .and_then(|m| m.get(&name.name))
                         .copied();
                 }
+                // A CAST initializer is type-determined, not value-determined: the
+                // casting type states the width outright (§6.24), so `localparam
+                // PL = longint'(-1)` is 64 bits and `byte'(-1)` is 8 — the
+                // value-inferred `.max(32)` below would call all of them 32, which
+                // shows up as a wrong `$bits`, a wrong `%h`, and a concatenation of
+                // the wrong LENGTH. This is the third predicate that reads a folded
+                // value (after `const_eval_in_scope` and `const_expr_signed`), and
+                // all three have to widen together or the trio disagrees.
+                if let ast::ExprKind::Cast { target, expr } = &p.value.kind {
+                    if self.const_eval_in_scope(&p.value).is_some() {
+                        match target {
+                            ast::CastTarget::Prim(pr) => {
+                                if let Some((w, s, _)) = cast_prim_wsign(*pr) {
+                                    return Some((w, s));
+                                }
+                            }
+                            // `N'(e)`: N bits, signedness inherited from the operand.
+                            ast::CastTarget::Size(n) => {
+                                if let Some(n) = self.const_eval_in_scope(n) {
+                                    if let Ok(w) = u32::try_from(n) {
+                                        return Some((w, self.const_expr_signed(expr)));
+                                    }
+                                }
+                            }
+                            // Not folded by `const_eval_cast`, so unreachable with a
+                            // Some value — fall through to value-inference anyway.
+                            ast::CastTarget::Signing { .. } | ast::CastTarget::Named(_) => {}
+                        }
+                    }
+                }
                 // Any other constant EXPRESSION initializer (`localparam E = 3 + 4;`)
                 // is value-determined (§6.20.2): signedness from the expression
                 // (§11.8.1), width from the folded value's minimal signed width.

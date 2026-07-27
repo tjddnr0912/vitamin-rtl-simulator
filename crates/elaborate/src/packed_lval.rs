@@ -276,7 +276,10 @@ impl Elaborator<'_> {
         // "is not allowed in a constant expression"); a variable UNPACKED array index is
         // fine. A variable packed index has no oracle, so fall through to the generic
         // loud path rather than compute an unverifiable offset.
-        if all_idxs[ud..].iter().any(|e| const_eval_u32(e).is_none()) {
+        if all_idxs[ud..]
+            .iter()
+            .any(|e| self.const_bound_u32(e).is_none())
+        {
             return None;
         }
         // Fail-closed: the leaf must be a plain descending zero-LSB vector so `l` is the
@@ -285,7 +288,7 @@ impl Elaborator<'_> {
         if leaf.2 || leaf.0 != 0 {
             return None;
         }
-        let (Some(m), Some(l)) = (const_eval_u32(msb), const_eval_u32(lsb)) else {
+        let (Some(m), Some(l)) = (self.const_bound_u32(msb), self.const_bound_u32(lsb)) else {
             return None; // variable bounds → generic loud path
         };
         if m < l || m >= leaf.1 {

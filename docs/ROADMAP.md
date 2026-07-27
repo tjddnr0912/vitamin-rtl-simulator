@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-27)**: format_version **25** · **4613 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.228**(round-20 8항목 — fork-arm 재개·음수 하한 unpacked/packed·동시 활성화 dyn·generate/interface 스코프·VCD 선언범위·`$fmonitor`/`$fstrobe`). 직전 = **§4.5.227**(§0 **T1 잔여 11항목 전부 RESOLVED** — 임의 선언 bounds/방향·multi-dim `foreach`·중첩 decl-init·bounded string queue·계층 read+write·계층 assoc·frame-local 재귀·SoA whole-element). 직전 = §4.5.222~226(T1 1차 6종). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-27)**: format_version **25** · **4627 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.229**(상수식 BOUND/COUNT 단일 퍼널 — part-select 폭·replication count·indexed part 폭의 silent-wrong 8가족; format 불변). 직전 = **§4.5.228**(round-20 8항목 — fork-arm 재개·음수 하한 unpacked/packed·동시 활성화 dyn·generate/interface 스코프·VCD 선언범위·`$fmonitor`/`$fstrobe`). 직전 = **§4.5.227**(§0 **T1 잔여 11항목 전부 RESOLVED** — 임의 선언 bounds/방향·multi-dim `foreach`·중첩 decl-init·bounded string queue·계층 read+write·계층 assoc·frame-local 재귀·SoA whole-element). 직전 = §4.5.222~226(T1 1차 6종). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -12,7 +12,7 @@
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
 | **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · 남은 것 = T2 real const-fold/generate string/enum label/음수 range 4 + T3 전제조건 2 |
-| **2** | §2 | Silent-wrong 잔여 | 41 | ✓ 7 | part-select 바운드 0 · replication count 0 · package real · 구조적 지연 · inner-NET shadow(DEEP) |
+| **2** | §2 | Silent-wrong 잔여 | 42 | ✓ 8 | **폭 인식 상수 접기(3건 동근)** · package real · 구조적 지연 · inner-NET shadow(DEEP) |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
@@ -89,8 +89,8 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228).
-2. **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(**동근**: `const_eval_in_scope`의 `Cast`/`Call` arm → 한 슬라이스로 묶을 것) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
+1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
+2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
 4. **OBS-2 sva.jsonl**(R-L6).
 
@@ -101,12 +101,16 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **🔴 §4.5.221이 도입한 좁은 하강(pre-existing 아님 — 내 책임)**: 계층 real param 이 상수 범위 바운드에 오면 조용히 1-bit. `logic [$clog2(u.R)-1:0]`(u 는 real param R 을 가진 인스턴스) → PRE 는 loud(`E3009`) 였으나 POST 는 **진단 없이 width 1**. 원인 = `count_reads_real_param` 의 `Ident` arm 이 `segments.len()==1` 을 요구해 `u.R` 을 못 봄. **iverilog 도 거부**하므로 무오라클이고 범위는 좁으나 loud→silent 는 하강. **fix 전제** = 바운드 문맥에서의 계층 이름 해석(현재 `nonconst_bound_reason` 은 false-loud 회피 때문에 call/hier 로 안 내려감) — 이름 매칭 근사는 동명 정수 hier param 을 false-reject 할 수 있어 실측 hazard set 없이는 금지(§4.5.218 선례).
 - **replication 비대칭(기록)**: 같은 `parameter real R = 3.0` 에서 `{R{'1}}`·`{(R:R:R){1'b1}}` 는 supported(`111`)인데 `{R{1'b1}}`·`{R{2'b10}}` 는 loud. 일관성은 없으나 loud 쪽이 정직함.
 - **concat 원소가 정수 산술식이면 바이트가 아니라 워드 폭으로 렌더**(pre-existing·§4.5.222 3-way 실측서 PRE==POST 확인): `{"e", "0"+k}`(k=1) = iverilog `e1` / vita `e\0\0\01`. 스칼라 string·fixed 배열·non-zero-base 전부 동일 발화 = §4.5.134/217의 "string concat 폭" 가족과 동근. §4.5.222가 런타임 인덱스 write라는 **철자 하나를 더 도달 가능하게** 했을 뿐(신규 결함 아님). 올바른 concat(`{s[k],"!"}`)은 iverilog 일치라 blanket 가드는 false-loud → 술어는 **산술 피연산자의 self-width**여야 함.
-- **🔴 상수-foldable 식을 part-select 바운드로 쓰면 조용히 0 / 비트 덮어씀**(pre-existing·재리뷰 발견·**근인 규명됨**): `v[fi(7):fi(4)]` → iverilog `a`, vita `0`; `c[int'(5):int'(4)] = 2'b00` → iverilog `85`, vita `5`(상위 비트 clobber). **근인**: 바운드 접기가 `const_fn.rs::const_eval_u32` 를 쓰는데 이건 **`&self` 없는 자유 함수**라 `IntLit`/`Paren`/`Unary` 3개 arm뿐 — params·const 함수·cast 를 못 본다. 호출부(`packed.rs:425,616,630`·`packed_lval.rs:279,288`)는 `None` 을 "상수 아님"으로 보고 0 또는 net-width 폴백. **`const_eval_in_scope` 로 폴백을 시도했으나 이득 0으로 되돌림** — 그쪽에도 **`Cast` arm 이 없어** `int'(5)` 가 여전히 None 이고 `fi(7)` 의 `Call` arm 도 발화하지 않았다. **fix 전제** = `const_eval_in_scope` 에 `Cast` arm 추가 + `Call` arm 이 automatic 함수에 왜 안 무는지 규명. hot path 이므로 리뷰 필수.
-- **🔴 replication count 가 상수로 안 접히면 조용히 0**(pre-existing·differential 발견): `{P*2{1'b1}}`·`{(P>1?3:2){1'b1}}`·`{int'(3){1'b1}}`·`{cf(3){1'b1}}` 가 iverilog `111…` 인데 vita `0`(`{P+1{…}}` 는 동작 — `*`·ternary·cast·const-fn 만 깨짐).
+- ~~🔴 상수-foldable 식을 part-select 바운드로~~ · ~~🔴 replication count 가 안 접히면 0~~ **둘 다 RESOLVED**(§4.5.229·동근이었고 실측은 기록의 2가족이 아니라 **8가족**). 잔여 = 아래 "상수 폭 잔차" 3줄.
+- **상수 폭 잔차 ①: 32비트를 넘었다 돌아오는 상수식**(§4.5.229 가드가 의도적으로 거부·PRE==POST): `v[((32'd1<<32'd33)>>32'd30):0]` 는 SV 가 0(폭 1)이고 vita 도 폭 1 로 **맞지만**, `v[7:((32'd1<<32'd33)>>32'd30)]` 는 iverilog `ef` / vita 폭 1. 근인 = i64 도메인이 폭 무제한이라 중간값을 못 재현 → 가드가 `0..=i32::MAX` 밖이면 접기를 거부(정답 대신 **기존 동작 유지**). 근본 fix = 폭 인식 상수 접기(=§2 "expr self-determined WIDTH" 항목과 동근).
+- **상수 폭 잔차 ②: 상수함수 인터프리터가 대입을 선언 폭으로 coerce 하지 않음**(§4.5.229 실측·pre-existing): `function int f(); bit [3:0] t; t=4'd15+4'd15; return t;` → iverilog 14 / vita 인터프리터 30. **런타임은 14 로 정확**하므로 인터프리터만의 발산이고, `localparam W=f()` 에서는 **지금도 조용히 틀린 파라미터 값**이다(P0-5 급). §4.5.229 는 퍼널에서 그런 함수를 **거부**할 뿐이며, 그 거부 술어는 재리뷰에서 **두 번 새어** 전이(wide wrapper 가 narrow callee 를 세탁)와 **중첩 블록/`for` 선언**까지 훑도록 고쳤다(narrow 한 것은 피연산자가 아니라 **대입 대상**이다 — SV 는 RHS 를 LHS 폭으로 계산). 근본 fix = `exec_const_stmt`/`eval_const_call` 이 대입마다 `coerce_int_width`(전용 슬라이스).
+- **상수함수 DEFAULT 인자식은 폭 검사 밖**(§4.5.229 재리뷰 발굴·no-oracle 성격): `function int f(input int a = 4'd15+4'd15)` 를 인자 없이 부르면 vita 30 / iverilog 14(iverilog 는 default 를 self-determined 로 본다). 명시 인자 쪽은 반대로 **과잉거부**(iverilog 는 formal 폭으로 넓혀 30 이 정답). §13.5.3 해석이 갈리므로 **두 경로를 의도적으로 대칭화**하는 별도 판단이 필요 — 지금은 비대칭.
+- **상수 폭 잔차 ③: 좁은 sized 리터럴 산술은 엔진 Add fold 가 그대로 발산**(pre-existing·PRE==POST): `{(4'd15+4'd15){1'b1}}` = iverilog 14 copies / vita 30. 엔진 `const_u32_of_expr` 의 Add arm 은 폭을 모른다. ①과 동근.
 - **🔴 package-scope `parameter real` 이 정수 나눗셈**(pre-existing·differential 발견·"미라우팅"보다 넓음): `pk::PR/2`(PR=3) 가 iverilog `1.5000` 인데 vita `1.0000`. module-scope 쌍둥이는 정상. 비-정수 package real 은 loud.
 - ~~🔴 fork arm 이 부른 SUSPENDABLE task 미재개~~ **RESOLVED**(§4.5.228) — 근인은 스케줄러 rework 가 아니라 **bb 번호공간 충돌** 한 곳(`FrameRec::is_arm`). `join_none`+`wait fork`·`join_any` 생존 arm 도 같이 고쳐졌다.
 - ~~음수 하한 unpacked 배열 원소 누락~~ **RESOLVED**(§4.5.228) — `foreach` 만 쓰는 형태는 **silent** 였다(진단 0건). `lo` 를 i64 로. 부수로 `$bits(a[0])` 오프바이원과 `$readmem` 비-0 base 도 수정.
-- **PART select 가 상수 바운드를 unsigned 로 접는다**(§4.5.228 발굴·현재 loud): `logic [3:-2] x; x[1:-2]` — `-2` 가 `const_eval_u32` 에서 0xFFFFFFFE 로 읽혀 방향 검사에 걸린다. 위 "상수-foldable 식을 part-select 바운드로" 항목과 **같은 자유 함수**가 근인이라 한 슬라이스로 묶을 후보.
+- **PART select 가 상수 바운드를 unsigned 로 접는다**(§4.5.228 발굴·현재 loud): `logic [3:-2] x; x[1:-2]` — `-2` 가 `const_eval_u32` 에서 0xFFFFFFFE 로 읽혀 방향 검사에 걸린다. §4.5.229 는 이 wrapping 을 **의도적으로 보존**했고(그 값으로 폭을 계산하다 u32 오버플로 패닉이 났던 것을 `folded_part_width` 의 `MAX_NET_WIDTH` 상한으로 막았다), 음수 바운드의 정식 지원은 별도 슬라이스로 남는다.
+- **`int'(<real param>)` 를 바운드로 쓰면 조용히 1비트**(§4.5.229 실측·pre-existing·PRE==POST): `parameter real R=3.5; v[int'(R):0]` = iverilog `0d`(=`v[4:0]`) / vita 1비트. `int'(real)` 은 합법적 정수 바운드지만 상수 도메인에 real 산술이 없어 접히지 않는다 — 선행 = §0 T2 `real` const-fold.
 - **`$urandom_range(R,0)` 가 범위 1 로 붕괴**(soundness S5): `bits(3.0)` 의 하위 32비트가 0. generic SysCall 인자 경로라 위치별 게이트 필요.
 - **파라미터 구조적 지연이 조용히 무시됨(pre-existing·PRE==POST)**: `assign #P y = x;` · `wire #P y = x;` · `and #P g(o,a,b);` 가 P 가 **정수 param 이어도** 지연을 무시(리터럴 `#3` 은 동작). §4.5.221 이 `parameter real` 을 지원하면서 **클럭 주기/지연 관용구가 이 경로의 주 사용처**가 되어 도달성이 크게 넓어졌다 — 우선순위 상향 후보.
 - **real→`input int` formal 미강제(pre-existing·PRE==POST)**: `f(2.4)` → vita `24`, iverilog `20`.

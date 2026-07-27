@@ -48,11 +48,24 @@
 - **source가 destination과 aliasing될 수 있으면 capture→mutate→install 순서로** — 재귀에서 caller net == callee net이 되는 경우(자기 formal을 자기 actual로 넘김·copy-out) in-place 순서는 조용히 값을 잃는다. 두 net이 다를 때와 같을 때 **양쪽 다 옳은** 순서를 고르고 doc에 두 경우를 다 적어라.
 - **"executor가 X를 못 한다"는 대개 거짓** — (a) 저장소 interior-mutability (b) 그 경로로 보낸 분류/라우팅이 틀린 것. 재작성 전에 **가장 단순한 형태를 fresh-probe**. 깊다고 판정한 기능도 **Case 분할**하면 대부분이 기존 모델로 공짜 동작하고 일부만 신규 인프라가 필요.
 
+- **한 술어로 두 resolver 를 못 섬긴다** — 값이 두 표현을 가지면 subsystem 마다 lookup 순서가 달라진다(const-fold=`params` vs lower=`real_param_val` 우선). consumer 를 resolver 별로 묶고 **술어를 갈라라**.
+- **가드를 구문(리터럴 모양)으로 세우지 마라** — 새 슬라이스가 그 구문 밖의 값을 도달시키는 순간 뚫린다(`expr_is_real_literal` 가드가 `R`·`R+1` 을 흘려 자식이 조용히 잘못된 param 으로 실행). **값 기반**으로.
+- **새 저장 클래스로 재분류하면 기존 클래스의 능력을 상속시켜라** — real 재분류만으로 정수 능력 8형이 통째 false-loud된 사례 有. **두 표현이 정확히 일치할 때는 양쪽 등록이 정답**(근사면 등록 금지).
+- **shape(AST walker) 판정보다 값(lower된 IR/전 하위식) 판정이 구조적으로 완전** — walker는 새 shape를 놓치지만 값은 못 숨는다(`_`-free 열거보다 강함). 폭 가드를 리프로 세웠다가 중간값 오버플로를 놓친 §4.5.229 가 같은 교훈.
+
 ### 영역별 레퍼런스 (그 영역을 건드릴 때만)
 
 - **width/type 축**: self-width table(`width.rs`)·eval 일치. **width-분기는 width-0 HANDLE(string/dyn/queue) 오분기**→NetKind discriminator를 width 前·is_str 라우팅=설정처 grep 단일소스. target-width fill=`lower_ctx_or_plain`. 4-state raw=`val&!unk`. resize=RHS 부호 extend·TARGET 부호 stamp. **real→int 가드=strict `<2^N`**. **2-state X/Z→0=per-WRITE-path·per-STORAGE**. string/dyn HANDLE formal=사이드카 마스크. **타입-signedness=全 decl 대칭**·**signedness fidelity가 全 consumer 도달**·**compare/case=COLLECTIVE**(§11.8.1)·**untyped param=값이 타입 결정**(§6.20.2·fail-open). **const-fold=단일-Const만 provably-safe**. 상세=ARCHIVE.
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
+
+### 상수 접기 (§4.5.229)
+
+- **폭 정확성 가드는 리프가 아니라 값으로 세워라.** "모든 리프가 ≥32비트면 안전"은 두 방향으로 틀렸다 — `(32'd1<<32'd33)>>32'd30` 은 리프가 전부 32비트인데 **중간값이 32비트를 넘었다 돌아와** SV 와 갈리고(그 자리는 PRE 가 **정답**이었으므로 correct→silent-wrong 하강), 반대로 `4비트 param * 2` 는 SV 가 max-폭으로 32비트에 계산하는데 과잉거부된다. 판정은 **모든 하위식의 값**이 안전 범위에 있는지로 하고, 그 traversal 은 세 조건이 **하나를 공유**하게 하라.
+- **"이 잔차는 기존 경로도 갖고 있다"는 정당화는 측정 전엔 거짓으로 취급하라.** `*`·`<<`·`%` 는 엔진이 애초에 접지 않아 폭 1 로 떨어졌고 **그 폭 1 이 정답**이었다. 기존 경로가 접는 연산(`+`/`-`)만 그 잔차를 갖고 있었다.
+- **약한 folder 를 강한 것으로 바꿀 때, 약한 쪽의 "이상한 동작"에 의존하던 곳을 먼저 찾아라.** 리터럴 folder 의 의도적 `wrapping_neg`(음수 리터럴 → 0xFFFF_FFFF)는 방향 검사가 읽던 신호였는데, 그 값으로 폭을 계산하자 **u32 오버플로 패닉**(release 는 0폭)이 됐다. 폭 산술은 u64 checked + `MAX_NET_WIDTH` 상한.
+- **fold 를 넓히면 그 값의 SIGNEDNESS 를 읽는 형제 술어도 같이 넓혀라.** `const_eval_in_scope` 에 `Cast` arm 을 더하자 `localparam P = int'(-300)` 이 **접히기는 하는데 `const_expr_signed` 에 Cast arm 이 없어 unsigned 로 바인딩**됐다(loud→silent-wrong). 값 술어와 부호 술어는 같은 arm 집합을 가져야 한다.
+- **인터프리터를 신뢰 경계로 쓸 거면 그 내부 폭도 확인하라.** 상수함수 호출을 접기 전에 **반환 폭만** 보면 부족하다 — 인터프리터가 대입을 선언 폭으로 coerce 하지 않으므로 narrow 한 **로컬/포멀 하나**로 발산한다(`bit [3:0] t = 4'd15+4'd15` = SV 14, i64 30).
 
 ### round-20 (§4.5.228) — 기록된 전제를 먼저 재측정하라
 

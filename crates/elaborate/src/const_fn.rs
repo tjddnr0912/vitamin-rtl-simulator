@@ -250,6 +250,11 @@ impl Elaborator<'_> {
             ast::ExprKind::SysCall { name, args } if name.name == "$bits" && args.len() == 1 => {
                 self.bits_of_view(&args[0], true).map(|n| n as i64)
             }
+            // A static cast in a constant context (`int'(7)`, `8'(P+1)`). Without
+            // this arm `int'(7)` was NOT a foldable constant, so every bound/count
+            // site fell back to a weaker folder and degraded SILENTLY (a part-select
+            // width collapsed to 1, a replication count to 0).
+            ast::ExprKind::Cast { target, expr } => self.const_eval_cast(target, expr),
             ast::ExprKind::Binary { op, lhs, rhs } => {
                 let a = self.const_eval_in_scope(lhs)?;
                 // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
@@ -308,6 +313,45 @@ impl Elaborator<'_> {
                 self.eval_const_call(&name.segments[0].name, args, &BTreeMap::new(), 0)
             }
             _ => None,
+        }
+    }
+
+    /// A static cast `casting_type'(e)` in the INTEGER const domain (the
+    /// `const_eval_in_scope` arm). Correct-or-loud: only the forms whose value is
+    /// exact without tracking an operand WIDTH fold; everything else is None ⇒ the
+    /// caller stays loud rather than binding a reinterpreted value.
+    fn const_eval_cast(&self, target: &ast::CastTarget, operand: &ast::Expr) -> Option<i64> {
+        let v = self.const_eval_in_scope(operand)?;
+        match target {
+            // `int'(e)`, `byte'(e)`, … — a fixed (width, signedness) target, so the
+            // runtime cast's resize-then-sign-stamp is exactly `coerce_int_width`.
+            // `real'` yields None from the shared table (no integral value here).
+            ast::CastTarget::Prim(p) => {
+                let (w, s, _) = cast_prim_wsign(*p)?;
+                Some(coerce_int_width(v, w, s))
+            }
+            // `N'(e)`: N bits, signedness INHERITED from the operand — which this
+            // domain does not track. Fold only where both interpretations agree: a
+            // non-negative value that leaves the target's sign bit clear. (`4'(9)`
+            // is 9 unsigned but −7 signed, so it stays loud.)
+            ast::CastTarget::Size(w_expr) => {
+                let n = self.const_eval_in_scope(w_expr)?;
+                if !(1..=64).contains(&n) || v < 0 {
+                    return None;
+                }
+                // At 64 bits every non-negative i64 is already representable with the
+                // sign bit clear; below that the check must actually run (at exactly
+                // 63 it is `v < 2^62`, NOT a bypass — bypassing it would return a
+                // positive value the 63-bit signed reading calls negative).
+                if n >= 64 {
+                    return Some(v);
+                }
+                (v < (1i64 << (n - 1))).then_some(v)
+            }
+            // `signed'`/`unsigned'` PRESERVE the operand's width, which this domain
+            // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), and a
+            // typedef/class NAME cast is not resolved here. Both stay loud.
+            ast::CastTarget::Signing { .. } | ast::CastTarget::Named(_) => None,
         }
     }
 

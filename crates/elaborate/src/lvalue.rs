@@ -481,7 +481,7 @@ impl Elaborator<'_> {
                     let idx_eids: Vec<u32> =
                         idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
-                    let w = self.lower_index_expr(width);
+                    let w = self.lower_const_width_expr(width);
                     let part = HierPart {
                         raw_off,
                         width: w,
@@ -500,7 +500,7 @@ impl Elaborator<'_> {
                 let (net, word) = self.lval_part_base(base);
                 let raw_off = self.lower_index_expr(offset);
                 let off = self.norm_offset_for_net(net, raw_off);
-                let w = self.lower_index_expr(width);
+                let w = self.lower_const_width_expr(width);
                 // Ascending net: flip the indexed direction (the offset is already
                 // normalized by `norm_offset_for_net`). Descending keeps `kind`.
                 let kind = indexed_sel_kind(dir, self.net_ascending(net));
