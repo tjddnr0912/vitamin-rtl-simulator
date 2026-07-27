@@ -216,12 +216,71 @@ impl Elaborator<'_> {
         // `generate if (R > 2)`, `arr [R]`, integer overrides) — binding it real-only
         // took a byte-correct design loud, which is a descent down the accuracy ladder.
         if let Some(f) = Self::real_literal_value(value) {
+            // NO i64 twin. Giving an exactly-integral real literal one buys spelling
+            // parity (`real R = 4` can size `logic [R-1:0]`; `real R = 4.0` cannot),
+            // and it was tried — but a twin makes the INTEGER const domain succeed on
+            // an expression that mentions a real, and `param_real_value` is the only
+            // site that applies the §11.8.1 "any real operand ⇒ real domain" ordering.
+            // Every other const-evaluation context (generate-if / generate-for
+            // control, a generate-scope `localparam real`, an integral-typed
+            // localparam, any expression the real domain declines) then answered from
+            // the truncated integer instead: `generate if (R/2 > 2)` with R = 5.0 took
+            // the ELSE branch, and `localparam real X = R/2` inside a generate bound
+            // 2.0. Parity is not worth five silent-wrongs; the asymmetry is recorded
+            // in ROADMAP §3 and closing it means routing those sites through the real
+            // domain, which is its own slice.
+            return Some((f, None));
+        }
+        // §11.8.1: an operation with ANY real operand is evaluated in the REAL
+        // domain. So the moment the initializer mentions a real — a literal or a
+        // real-declared parameter — the real fold must run BEFORE the integer one.
+        // Order matters and was measured: once an exactly-integral real parameter
+        // gained its i64 twin, `localparam real HALF = CLK/2;` (CLK = 5.0) became
+        // foldable by the INTEGER domain, which answered 2 instead of 2.5. The
+        // integer fold is for a wholly integral initializer only.
+        if self.expr_mentions_real(value) {
+            // Real arithmetic binds its f64 and NO integer twin, for the reason
+            // above: a twin here would let the integer domain answer this same
+            // expression elsewhere, truncating it.
+            let f = self.const_eval_real_in_scope(value)?;
             return Some((f, None));
         }
         declared_real
             .then(|| self.const_eval_in_scope(value))
             .flatten()
             .map(|v| (v as f64, Some(v)))
+    }
+
+    /// Does `e` mention a real value — a real literal, or a name bound in the real
+    /// parameter map? Decides whether §11.8.1 puts the whole expression in the real
+    /// domain. Structural and conservative: a shape it cannot see through answers
+    /// false and the integer path stays in charge, exactly as before.
+    pub(crate) fn expr_mentions_real(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        match &e.kind {
+            K::RealLit { .. } => true,
+            K::Ident(p) if p.segments.len() == 1 => self
+                .walk_scopes(&p.segments[0].name, &self.real_param_val)
+                .is_some(),
+            K::Paren { inner } => self.expr_mentions_real(inner),
+            K::Unary { operand, .. } => self.expr_mentions_real(operand),
+            K::Binary { lhs, rhs, .. } => {
+                self.expr_mentions_real(lhs) || self.expr_mentions_real(rhs)
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.expr_mentions_real(cond)
+                    || self.expr_mentions_real(then_e)
+                    || self.expr_mentions_real(else_e)
+            }
+            K::SysCall { args, .. } | K::Call { args, .. } => {
+                args.iter().any(|a| self.expr_mentions_real(a))
+            }
+            _ => false,
+        }
     }
 
     /// r19: is `e` a REAL literal (through parens / unary sign)? Used by the override

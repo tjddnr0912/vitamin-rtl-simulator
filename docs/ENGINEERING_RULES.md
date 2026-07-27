@@ -59,6 +59,11 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
+### 능력 확장 (§4.5.232)
+
+- **철자 비대칭을 없애려는 "능력 확장"이 규칙의 전제를 무너뜨릴 수 있다.** 어떤 규칙(§11.8.1 실수 우선 순서)을 적용하는 site 가 **하나뿐**인데 그 규칙이 막고 있던 능력(정수 twin)을 전역에 열면, 규칙을 모르는 **모든 consumer** 가 조용히 틀린다 — generate 분기 오선택 등 5건이 한 번에 열렸다. 확장 전에 **"이 능력을 소비하는 site 가 몇 개이고 각자 이 규칙을 아는가"** 를 세라. 셋 이상이면 규칙을 먼저 공통 퍼널로 올린 뒤에 확장하라.
+- **핵심 성과와 확장을 분리해서 평가하라** — 실수 산술 폴드(핵심)는 twin 과 무관해 철회해도 100% 남았다. 리뷰가 blocking 을 내면 **확장만 떼어내 슬라이스를 살리는** 선택지가 있는지 먼저 보라.
+
 ### 오라클 검증 (§4.5.231)
 
 - **"오라클과 다르다"를 결함으로 접수하기 前에 오라클의 자기일관성을 먼저 측정하라.** 같은 하위식을 `+0` 으로 감싸 값이 바뀌는지, 형제 연산자(`+`/`*` vs `<<`)가 같은 문맥 폭을 쓰는지 — **한 모델로 오라클의 답 전부를 재현할 수 있는지**를 물어라. 재현 못 하면 그건 갭이 아니라 오라클 결함이고, 쫓아가면 우리 쪽이 비일관이 된다.

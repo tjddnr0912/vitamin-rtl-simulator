@@ -175,15 +175,20 @@ fn integer_parameters_and_overrides_unaffected() {
 // ── shapes that must stay loud ───────────────────────────────────────────────
 
 #[test]
-fn real_arithmetic_initializer_is_loud() {
-    // No real const-fold path exists; a wrong parameter value would poison every
-    // downstream use with no trace, so this stays loud rather than guessing.
-    loud(
-        "module t;\n\
-           localparam real R = 2.0 + 3.0;\n\
-           initial $display(\"%0.1f\", R);\n\
-         endmodule\n",
-        "not a foldable constant expression",
+fn real_arithmetic_initializer_folds_in_the_real_domain() {
+    // There is a real const-fold path now: `+ - * / **`, comparisons and a ternary
+    // all evaluate in f64, and an INTEGER operand promotes (§11.8.1), so `10 / 4.0`
+    // is 2.5 rather than 2. Every value pinned to LIVE iverilog 13.0.
+    let out = run("module t;\n\
+           localparam real A = 2.0 + 3.0, B = 2.0 * 3.5, C = 7.0 / 2.0;\n\
+           localparam real D = 9.0 - 1.5, E = 2.0 ** 3.0, F = 10 / 4.0;\n\
+           localparam real G = A + B, H = (2.0 > 1.0) ? 1.5 : 2.5;\n\
+           initial $display(\"R=%0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f\", \
+                            A, B, C, D, E, F, G, H);\n\
+         endmodule\n");
+    assert!(
+        out.contains("R=5.0000 7.0000 3.5000 7.5000 8.0000 2.5000 12.0000 1.5000"),
+        "real arithmetic folds; got:\n{out}"
     );
 }
 
@@ -247,13 +252,15 @@ fn integer_replication_counts_unaffected() {
 
 #[test]
 fn real_param_in_an_integer_constant_context_is_loud() {
-    // A real param has no integral value. Two wrong answers were tried before this
-    // one: folding to None left `$clog2(R)` with NO diagnostic and a silent 1-bit
-    // width, and converting at the const-eval LEAF destroyed the real value before
-    // the enclosing expression chose its context — `if (R > 2)` with R=2.4 took the
-    // wrong generate branch, `R == 2` folded TRUE, and `localparam real B = A;`
-    // silently rounded. Loud here, converted nowhere. iverilog does convert, so this
-    // is a recorded capability gap, not a correctness one.
+    // A real param has no integral value here. Two wrong answers were tried before:
+    // folding to None left `$clog2(R)` with NO diagnostic and a silent 1-bit width,
+    // and converting at the const-eval LEAF destroyed the real value before the
+    // enclosing expression chose its context. A third was tried in the real
+    // const-fold slice — giving an exactly-integral real literal an i64 twin — and
+    // it let the INTEGER domain answer real expressions at four other const-eval
+    // sites (wrong generate branch, truncated generate-scope real param). Loud here,
+    // converted nowhere. iverilog does convert, so this is a recorded capability
+    // gap, not a correctness one.
     for body in [
         "logic [R-1:0] x; initial begin x=0; $display(\"%0d\", $bits(x)); end",
         "logic [$clog2(R)-1:0] y; initial begin y=0; $display(\"%0d\", $bits(y)); end",
@@ -266,17 +273,33 @@ fn real_param_in_an_integer_constant_context_is_loud() {
 }
 
 #[test]
-fn a_real_param_never_folds_into_the_integer_domain() {
-    // The generate-condition / comparison / real-alias shapes that the leaf
-    // conversion got wrong. Each must be loud, never a silently rounded answer.
+fn a_non_integral_real_never_folds_into_the_integer_domain() {
+    // THE invariant: converting at the const-eval LEAF destroyed the real value
+    // before the enclosing expression chose its context — `R > 2` with R = 2.4 took
+    // the wrong generate branch and `R == 2` folded TRUE. A real is converted at the
+    // CONTEXT boundary or nowhere, so a non-integral one in an integer context stays
+    // loud (iverilog rounds; that is a recorded capability gap, not a correctness
+    // one). An integer parameter initialized from a real comparison has no boundary
+    // to convert at, so it stays loud too.
     for src in [
         "module t;\n  parameter real R = 2.4;\n  localparam int A = (R == 2);\n           initial $display(\"%0d\", A);\nendmodule\n",
-        "module t;\n  localparam real A = 1.5;\n  localparam real B = A;\n           initial $display(\"%0.2f\", B);\nendmodule\n",
-        "module t;\n  localparam real CLK = 5.0;\n  localparam real HALF = CLK/2;\n           initial $display(\"%0.2f\", HALF);\nendmodule\n",
+        "module t;\n  localparam real R = 2.5;\n  logic [R-1:0] x;\n           initial begin x=0; $display(\"%0d\", $bits(x)); end\nendmodule\n",
+        "module t;\n  localparam real R = 8.5;\n  logic [$clog2(R)-1:0] y;\n           initial begin y=0; $display(\"%0d\", $bits(y)); end\nendmodule\n",
     ] {
         let (_, ok, _) = run_raw(src);
         assert!(!ok, "expected a loud reject for:\n{src}");
     }
+    // …while the real-to-real shapes that were loud only for lack of machinery now
+    // fold, and agree with iverilog.
+    let out = run("module t;\n\
+           localparam real A = 1.5, B = A;\n\
+           localparam real CLK = 5.0, HALF = CLK/2;\n\
+           initial $display(\"V=%0.2f %0.2f\", B, HALF);\n\
+         endmodule\n");
+    assert!(
+        out.contains("V=1.50 2.50"),
+        "real alias / expression; got:\n{out}"
+    );
 }
 
 #[test]

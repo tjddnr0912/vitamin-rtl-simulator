@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–231**
+**§4.5.220–232**
+- `4.5.232` `real` const-fold — 실수 산술 loud→correct-support(§11.8.1 순서가 핵심; i64 twin 확장은 5건 silent-wrong 을 열어 철회) …
 - `4.5.231` 모듈 스코프 상수식 = **비목표 판정**(iverilog 3갈래 자기모순 실측) + vita 자기일관성 teeth …
 - `4.5.230` 상수함수 인터프리터 폭 인식 — 좁은 대입 대상이 안 잘려 `localparam W=f()` 가 조용히 틀렸다(내부 차분: 인터프리터 vs 런타임) …
 - `4.5.229` 상수식 BOUND/COUNT 단일 퍼널 — part-select 폭·replication count·indexed part 폭 silent-wrong 8가족 (`const_bound_u32` + `Cast` const arm; 가드는 리프가 아니라 값) …
@@ -287,6 +288,22 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.232 `real` const-fold — `localparam real R = 2.0+3.0` loud→correct-support (2026-07-27, branch feat-real-constfold, format 25 불변) ✅
+
+**착수 근거**: §0 T2 승격 큐 최상단(오라클 ✓). `localparam real` 은 흔한 관용구인데 **실수 산술이 통째로 E3009** 였다 — vita 런타임은 같은 식을 정확히 계산하는데도.
+
+**근인**: `param_real_value` 가 실수 **리터럴**만 접거나, 선언이 `real` 이면 **정수** 상수 도메인으로 폴백했다. 실수 **산술**은 둘 다 도달 못 해 loud. → 신규 `const_real.rs::const_eval_real_in_scope`(f64 일관: `+ - * / **`·비교/논리(0.0/1.0)·ternary·정수 피연산자 승격(§11.8.1)·`real_param_val` 조회), 0 나눗셈/비유한은 None=loud.
+
+**순서가 핵심이었다**: `expr_mentions_real` 이면 **실수 폴드를 정수 폴드보다 먼저**. §11.8.1(피연산자에 실수가 하나라도 있으면 실수 도메인)이며, 순서를 틀리면 `localparam real HALF = CLK/2`(CLK=5.0)가 **정수 도메인에 잡혀 2.00** 이 된다 — 슬라이스 도중 자체 프로브가 잡았다.
+
+**적대 리뷰가 5건의 blocking silent-wrong 을 잡았고, 근인은 전부 하나 — 내가 중간에 넣은 "정확히 정수인 real 리터럴에 i64 twin 등록"** 이었다(`real R = 4` 는 정수 경로로 twin 이 생기는데 `real R = 4.0` 은 안 생기는 **철자 비대칭**을 없애려던 확장). twin 이 생기는 순간 **정수 상수 도메인이 real 을 언급한 식에 성공**하고, §11.8.1 순서 규칙을 적용하는 곳은 `param_real_value` **하나뿐**이라 나머지 네 곳이 전부 절단했다 — generate-if 가 **반대 분기**(`R/2>2`, R=5.0 → ELSE) · generate 스코프 `localparam real X=R/2` → **2.0** · 정수형 localparam · 실수 도메인이 거부한 식의 정수 재시도. **twin 을 도로 뺐다**: 핵심 성과(실수 산술 폴드)는 twin 과 무관하므로 100% 유지되고, 5건은 전부 PRE 의 loud 로 복귀했다(그중 ternary 조건 건은 오히려 **정답 9.5** 가 됐다).
+
+**전달 범위**: 실수 산술·실수→실수 alias·실수 체인·정수 피연산자 승격(`10/4.0`=2.5)·`3/2`는 정수나눗셈 1.0 유지. **의도적 loud 유지**: 실수를 정수 문맥에(폭/`$clog2`/replication/정수 localparam), `1.0/0.0`, `<<` 등 실수 미정의 연산자, 실수 override.
+
+**게이트**: 4642 → **4646** tests(신규 `real_const_fold.rs`×4 + `real_params.rs` 4건 재작성) · clippy/fmt clean · format 25 불변 · 3-way: **의도한 6형은 전부 iverilog MATCH**, 나머지 **16형은 PRE==POST 바이트 동일**.
+
+**교훈**: **철자 비대칭을 없애려는 확장이 다섯 곳의 silent-wrong 을 열 수 있다.** 규칙(§11.8.1 순서)을 적용하는 site 가 하나뿐인데 그 규칙의 **전제를 무너뜨리는 능력**(twin)을 전역에 풀면, 규칙을 모르는 모든 consumer 가 조용히 틀린다. 확장 전에 "이 능력을 소비하는 site 가 몇 개이고 각자 이 규칙을 아는가"를 세라.
 
 #### 4.5.231 모듈 스코프 상수식 = 비목표 판정 + 자기일관성 teeth (2026-07-27, branch feat-constexpr-selfconsistency, format 25 불변) ✅
 
