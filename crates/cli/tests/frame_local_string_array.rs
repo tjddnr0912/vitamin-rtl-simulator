@@ -199,20 +199,39 @@ fn recursion_with_a_frame_local_string_array_works() {
 }
 
 #[test]
-fn concurrent_activations_sharing_a_frame_local_string_array_stay_loud() {
-    // T1-9 BOUNDARY. Two fork arms suspend inside the same task, so their activation
-    // lifetimes OVERLAP rather than nest and the stash cannot separate them — still a
-    // fatal, and now one that names the actual reason. (The recursion above nests, which
-    // is the whole difference.)
-    let (_, ok) = compile(
-        "module m; reg clk=0; always #1 clk=~clk;\n\
+fn concurrent_activations_each_get_their_own_frame_local_string_array() {
+    // Was the T1-9 boundary: two fork arms suspend inside the same task, so their
+    // activation lifetimes OVERLAP rather than nest and the entry stash could not
+    // separate them (graceful F4004). The dyn slots now park off the net-keyed heap for
+    // the duration of a suspend, exactly like the AUTOMATIC window, so each activation
+    // keeps its own container. iverilog: `1 A` / `2 A`.
+    let o = run("module m; reg clk=0; always #1 clk=~clk;\n\
          task automatic tk(input int id); string s[2]; s[0]=\"A\";\n\
            @(posedge clk); $display(\"%0d %s\", id, s[0]); endtask\n\
          initial fork tk(1); tk(2); join\n\
          initial #10 $finish;\n\
-         endmodule\n",
-    );
-    assert!(!ok, "expected the concurrent-activation fatal");
+         endmodule\n");
+    assert!(o.contains("1 A") && o.contains("2 A"), "got:\n{o}");
+}
+
+#[test]
+fn concurrent_activations_do_not_see_each_others_string_mutations() {
+    // The DISCRIMINATING form — the one above cannot tell isolation from sharing, since
+    // both activations write the same text. Here each mutates its own element after the
+    // resume, so a shared container would show `A!!` on the second.
+    //
+    // ORACLE NOTE: this is hand-IEEE, NOT iverilog. iverilog 13.0 prints `1 A!` / `2 A!!`
+    // — it SHARES the automatic string array across concurrent activations, which
+    // §13.4.2 does not allow (each activation gets its own automatic storage). Recorded
+    // as one of the two known iverilog defects in this area; vita is the correct side.
+    let o = run("module m; reg clk=0; always #1 clk=~clk;\n\
+         task automatic tk(input int id); string s[2]; s[0]=\"A\";\n\
+           @(posedge clk); s[0]={s[0],\"!\"}; $display(\"%0d %s\", id, s[0]); endtask\n\
+         initial fork tk(1); tk(2); join\n\
+         initial #10 $finish;\n\
+         endmodule\n");
+    assert!(o.contains("1 A!") && o.contains("2 A!"), "got:\n{o}");
+    assert!(!o.contains("A!!"), "activations shared one container:\n{o}");
 }
 
 #[test]

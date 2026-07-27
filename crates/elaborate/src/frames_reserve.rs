@@ -76,7 +76,7 @@ impl Elaborator<'_> {
     pub(crate) fn frame_packed_width(
         &mut self,
         d: &ast::NetVarDecl,
-    ) -> Option<(u32, u32, Vec<(u32, u32, bool)>)> {
+    ) -> Option<(u32, u32, Vec<(i64, u32, bool)>)> {
         if d.packed.is_empty() {
             return None;
         }
@@ -97,7 +97,7 @@ impl Elaborator<'_> {
         net: u32,
         d: &ast::NetVarDecl,
         unpacked: &[ast::Dim],
-        ext: Vec<(u32, u32, bool)>,
+        ext: Vec<(i64, u32, bool)>,
     ) {
         self.packed_dims.insert(net, ext);
         let dd = self.compute_dim_desc(d.kind, d.range.as_ref(), &d.packed, unpacked);

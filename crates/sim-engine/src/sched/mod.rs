@@ -81,6 +81,31 @@ pub(crate) struct FrameRec {
     ///
     /// Empty for the overwhelming majority of frames (a callee with no dyn-array local).
     pub dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
+    /// This frame's OWN frame-local dyn-array contents while the activity is SUSPENDED —
+    /// the heap-object twin of `window`, parked and unparked at exactly the same two
+    /// points. Non-empty only across a suspend, and only on the TOP frame (the heap slots
+    /// hold the top frame's values; outer activations live in the `dyn_stash` above them).
+    ///
+    /// This is what lets two CONCURRENT activations of one task each keep their own array:
+    /// `dyn_stash` alone is sound only when their lifetimes NEST, which a `fork` breaks.
+    pub dyn_parked: Vec<(u32, Option<crate::state::DynObj>)>,
+    /// Has this frame executed a `fork`? Its arms run IN it and read its frame-locals, so
+    /// its dyn-array slots must stay in the shared heap (see `park_frame_dyn`) — a parked
+    /// array is absent, not shared, and the arm would read X.
+    pub forked: bool,
+    /// Is this a fork ARM frame (built by `exec_fork` for an in-frame fork), as opposed
+    /// to a real CALLEE frame pushed by a `Call`?
+    ///
+    /// Load-bearing, not cosmetic: the child-completion intercept compares this frame's
+    /// `bb` against the barrier's `join_bb`, and the two live in DIFFERENT numbering
+    /// spaces unless the frame is an arm. An arm's `bb` and an in-frame fork's `join_bb`
+    /// are both global `ir.blocks` ids; a callee frame's `bb` is a global id while a
+    /// TOP-LEVEL fork's `join_bb` is a process-local block index. Without this flag a
+    /// plain `fork tk(1); tk(2); join` — where each child merely CALLS a suspendable task
+    /// — also reached the intercept with `call_stack.len() == 1`, and any numeric
+    /// collision between the two spaces killed the child mid-task: its remaining body
+    /// vanished at exit 0 and `exit_arm_frame` tore down a window that was not an arm's.
+    pub is_arm: bool,
 }
 
 pub(crate) struct Activity {

@@ -130,8 +130,15 @@ impl Elaborator<'_> {
         // ROT[i]` folds). Idempotent.
         self.capture_const_array_vals(d);
         for decl in &d.names {
+            // A plain net DECLARATION is the one place that both sizes the net and can
+            // record its declared low bound, so it is the one place that opts in to a
+            // NEGATIVE one (`logic [3:-2] x` — 6 bits, IEEE §7.4.2). Every other
+            // `range_to_dims` caller keeps the warn-and-clamp: a port/formal/class-property
+            // with a negative bound stays LOUD rather than becoming a wide net whose
+            // selects nobody normalizes.
+            let neg_lsb = self.declared_neg_lsb(d.range.as_ref());
             let (mut width, mut msb, lsb, signed) =
-                self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                self.range_to_dims_opt(d.kind, d.range.as_ref(), d.signed, neg_lsb.is_some());
             if !d.packed.is_empty() {
                 width = packed_ext
                     .iter()
@@ -212,7 +219,29 @@ impl Elaborator<'_> {
                             );
                             continue;
                         }
-                        let n = (max - min) as usize + 1;
+                        // CHECKED + capped: `max - min` overflows i64 on a pathological
+                        // declaration (`string s[9223372036854775807:-9223372036854775807]`
+                        // — iverilog asserts on it too) and the bare subtraction PANICKED,
+                        // which is below loud on the accuracy ladder. Element count also
+                        // has to respect the array cap before it is used as a `Vec`
+                        // capacity.
+                        let Some(n) = max
+                            .checked_sub(min)
+                            .and_then(|d| u64::try_from(d).ok())
+                            .and_then(|d| d.checked_add(1))
+                            .filter(|&d| d <= MAX_ARRAY_LEN)
+                            .map(|d| d as usize)
+                        else {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "string array `{}` declares more than the v1 element \
+                                     cap ({MAX_ARRAY_LEN})",
+                                    decl.name.name
+                                ),
+                            );
+                            continue;
+                        };
                         let mut elem_ids = Vec::with_capacity(n);
                         for i in 0..n {
                             let ename = format!("{}$sae${i}", decl.name.name);
@@ -642,6 +671,26 @@ impl Elaborator<'_> {
             // `[(0, array_len)]` — byte-identical to the long-standing golden IR.
             // Keyed by the just-assigned NetId (looked up post-add so a duplicate-skip
             // does not mis-key). (a)-flattening: no frozen-IR field added.
+            // Twin of the extents record above, for a NEGATIVE packed low bound: the net
+            // was sized `|msb-lsb|+1` and stored normalized as `[w-1:0]`, so this is what
+            // lets a bit/part select address the declared numbering. Recorded post-add for
+            // the same reason (a duplicate-decl skip must not mis-key).
+            if let Some(l) = neg_lsb {
+                let key = self.fq(&decl.name.name);
+                if let Some(&id) = self.symbols.get(&key) {
+                    self.net_decl_neg_lsb.insert(id, l);
+                    // …and the full declared pair, for the VCD `$var` label (the stored
+                    // range is normalized, so without this a waveform viewer numbers the
+                    // bits `[5:0]` where iverilog numbers them `[3:-2]`).
+                    if let Some(m) = d
+                        .range
+                        .as_ref()
+                        .and_then(|r| self.const_eval_in_scope(&r.msb))
+                    {
+                        self.net_decl_range.insert(id, (m, l));
+                    }
+                }
+            }
             if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0) {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
@@ -714,202 +763,6 @@ impl Elaborator<'_> {
             }
         }
         None
-    }
-
-    /// §6.8: collect a VARIABLE declaration's NON-constant initializer
-    /// (`logic [7:0] b = a;`) into `pending_var_inits` so a pre-sweep can emit it
-    /// as a synthesized `initial b = a;` that runs BEFORE user initial blocks. A
-    /// constant initializer is already folded into the net's `init` field at
-    /// declaration, so it is skipped here (byte-identical IR for those designs).
-    /// A net (wire) decl is not a variable — its initializer is a continuous
-    /// driver, handled by `elaborate_net_init_drivers`.
-    pub(crate) fn collect_var_init_drivers(&mut self, d: &ast::NetVarDecl) {
-        // A `string s = expr;` initializer (v7): the heap-backed string has no
-        // foldable `init` field, so its initializer ALWAYS rides this t0 pre-sweep
-        // (like a non-constant var init), collected here in declaration order with
-        // the other variable initializers. Only a SCALAR string is registered as a
-        // net (`elaborate_netvar_decl` rejects packed/unpacked dims), so a dimensioned
-        // string's init is skipped here too (the decl already errored loud).
-        let scalar_string =
-            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
-        if !netvar_kind_is_var(d.kind) && !scalar_string {
-            return;
-        }
-        for name in &d.names {
-            let Some(init) = &name.init else {
-                continue;
-            };
-            // A queue / dynamic-array `'{…}` decl-init has no whole-value init
-            // surface; it rides the normal `pending_var_inits` path (in DECLARATION
-            // order, alongside scalar inits) and is EXPANDED to runtime ops at flush
-            // (a push_back sequence / `new[N]` + element writes) — see
-            // `flush_pending_var_inits`. Keeping it in the one ordered list lets a
-            // scalar init read an earlier queue's `.size()` correctly.
-            if scalar_string {
-                if !name.unpacked.is_empty() {
-                    // N3 Phase 2: a `string s[]` DYNAMIC array with a `'{…}` init IS
-                    // collected — the flush expands it via `dyn_decl_init_stmts` (like
-                    // an int/real dyn array).
-                    let is_dyn_str_init = crate::string_array_route::is_dyn_string_container_init(
-                        &name.unpacked,
-                        init,
-                    );
-                    if !is_dyn_str_init {
-                        // r19: a FIXED string array (`string s[3] = '{…}`) expands to one
-                        // `s[k] = <elem>` per declared index, pushed in declaration order
-                        // alongside the scalar inits so a later init can read an earlier
-                        // element.
-                        //
-                        // Gated on the decl having actually CREATED the element storage
-                        // (`string_array_elems`), not on re-deciding the shape here: the
-                        // decl also consults `allow_string_init`, which the collectors do
-                        // not see, so a scope that louds the decl (interface / generate /
-                        // package body) but still runs a collector would otherwise push
-                        // element writes for nets that were never created — cascading
-                        // E3010s. Keying off the decl's own output makes the two
-                        // structurally unable to disagree.
-                        //
-                        // T1-4: the FULL `unpacked` is handed over, so a routed multi-dim
-                        // array expands its nested `'{'{…},'{…}}` here too. Passing only
-                        // the first dim was a SILENT-WRONG the moment the decl started
-                        // accepting a nested pattern: the 1-D expansion matched the OUTER
-                        // level (2 rows, 2 elements) and emitted `s[0] = '{"a","b"}` —
-                        // an assignment-pattern into a string element — which rendered
-                        // four empty strings at exit 0.
-                        if self.has_fixed_string_array_storage(&name.name.name) {
-                            if let Some(pairs) =
-                                self.string_array_init_pairs(&name.name, &name.unpacked, init)
-                            {
-                                self.pending_var_inits.extend(pairs);
-                            }
-                        }
-                        continue;
-                    }
-                }
-            } else {
-                let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                if fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some() {
-                    continue; // constant ⇒ already folded into net.init
-                }
-            }
-            let path = ast::HierPath {
-                segments: vec![name.name.clone()],
-                span: name.name.span,
-            };
-            self.pending_var_inits
-                .push((ast::Lvalue::Ident(path), init.clone()));
-        }
-    }
-
-    // ── PASS 2: continuous assigns ─────────────────────────────────
-    /// A NET-type declaration initializer (`wire [3:0] x = a & b;`) is an IMPLICIT
-    /// continuous assign — a driver, equivalent to a separate `assign x = a & b;`.
-    /// A variable (reg/logic/integer/real/…) initializer is instead a one-time
-    /// value applied at net creation, so it is skipped here.
-    pub(crate) fn elaborate_net_init_drivers(&mut self, d: &ast::NetVarDecl) {
-        // A `string` is a heap-backed VARIABLE, not a continuously-driven net — its
-        // initializer is a one-time t0 assignment (`collect_var_init_drivers`), NOT
-        // a continuous driver. Without this guard a `string s = "x";` would gain a
-        // spurious `assign s = "x"` that fights later procedural writes (silent-wrong).
-        if netvar_kind_is_var(d.kind) || matches!(d.kind, ast::NetVarKind::String) {
-            // A variable's initializer is handled by `collect_var_init_drivers`
-            // (a pre-sweep, so the synthesized `initial` runs before user blocks);
-            // here a variable decl contributes no continuous driver.
-            return;
-        }
-        // IEEE §6.1.3: an optional net-declaration delay (`wire #3 w = a;`) applies
-        // to EVERY net-decl-assignment in this decl, IDENTICAL to a delay on the
-        // equivalent `assign #3 w = a;` — fold it the same way (uniform delay +
-        // distinct rise/fall/turnoff `ca_delays` sidecar). `None` (no delay, the
-        // common case) ⇒ `(None, None)` ⇒ byte-identical to before.
-        let (delay, rft) = self.fold_ca_delay(d.delay.as_ref());
-        for name in &d.names {
-            let Some(init) = &name.init else {
-                continue;
-            };
-            let path = ast::HierPath {
-                segments: vec![name.name.clone()],
-                span: name.name.span,
-            };
-            let lhs = self.lower_lvalue(&ast::Lvalue::Ident(path));
-            let rhs_id = self.lower_expr(init);
-            // The index of THIS cont-assign is the len BEFORE the push (matches
-            // `elaborate_cont_assign`'s sidecar keying).
-            let idx = self.cont_assigns.len() as u32;
-            if let Some(rft) = rft {
-                self.ca_delays.insert(idx, rft);
-            }
-            self.cont_assigns.push(ir::ContAssign {
-                lhs,
-                rhs: rhs_id,
-                delay,
-            });
-        }
-    }
-
-    /// Drain `pending_var_inits` into ONE synthesized `initial` process whose body
-    /// assigns each non-constant variable initializer in declaration order (§6.8).
-    /// Lowered in the current instance scope; a no-op when none were collected (so
-    /// a design with no such initializer adds no process — byte-identical IR).
-    pub(crate) fn flush_pending_var_inits(&mut self) {
-        if self.pending_var_inits.is_empty() {
-            return;
-        }
-        let inits = std::mem::take(&mut self.pending_var_inits);
-        let sp = inits[0].1.span;
-        // Each (lvalue, rhs) becomes a `Blocking` t0 assignment — EXCEPT a queue /
-        // dynamic-array `'{…}` init, which has no whole-value surface and is
-        // EXPANDED here (in declaration order, where the handle net is registered) to
-        // runtime ops: a queue pushes each element (`push_back`), a dyn array does
-        // `new[N]` + element writes. Keeping it in the one ordered list means a later
-        // scalar init reads an earlier queue's `.size()` correctly.
-        let mut stmts: Vec<ast::Stmt> = Vec::with_capacity(inits.len());
-        for (lhs, rhs) in inits {
-            if let ast::Lvalue::Ident(p) = &lhs {
-                // A queue / dyn-array `'{…}` OR `{…}` (§10.10 unpacked concat) decl-init —
-                // both expand to the same push_back / `new[N]`+element-write sequence for a
-                // registered handle. A STRING-element `{…}` never reaches here as a handle
-                // (loud at the decl gate), so no silent-empty slips through.
-                if let Some(elems) = dyn_pattern_elems(&rhs) {
-                    if p.segments.len() == 1 {
-                        if let Some((_, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
-                            self.dyn_handle(&p.segments[0].name)
-                        {
-                            stmts.extend(self.dyn_decl_init_stmts(&p.segments[0], kind, elems));
-                            continue;
-                        }
-                    }
-                }
-            }
-            let span = rhs.span;
-            stmts.push(ast::Stmt::Blocking {
-                lhs,
-                delay: None,
-                event: None,
-                rhs,
-                span,
-            });
-        }
-        let pb = ast::ProceduralBlock {
-            kind: ast::ProcKind::Initial,
-            sensitivity: None,
-            body: Box::new(ast::Stmt::Block {
-                label: None,
-                decls: vec![],
-                stmts,
-                span: sp,
-            }),
-            span: sp,
-        };
-        // A2a: this synthesized initial holds ONLY declaration initializers —
-        // a desugared array parameter's own `= '{…}` is its legitimate
-        // one-time init (§6.8), not a user write; the const-param deny must
-        // not fire on it.
-        let saved = self.lowering_decl_init;
-        self.lowering_decl_init = true;
-        let proc = self.lower_proc_block(&pb);
-        self.lowering_decl_init = saved;
-        self.push_process(proc);
     }
 
     pub(crate) fn elaborate_cont_assign(&mut self, ca: &ast::ContinuousAssign) {

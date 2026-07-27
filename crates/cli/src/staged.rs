@@ -684,6 +684,8 @@ pub(crate) fn run_vrun_gated(
         two_state_nets: extra.two_state_nets,
         real_elem_dyn_nets: extra.real_elem_dyn_nets,
         string_elem_dyn_nets: extra.string_elem_dyn_nets,
+        net_decl_ranges: extra.net_decl_ranges,
+        file_directed_stmts: extra.file_directed_stmts,
         class_handle_nets: extra.class_handle_nets,
         class_new_sites: extra.class_new_sites,
         class_layouts: extra.class_layouts,

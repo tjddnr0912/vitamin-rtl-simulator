@@ -442,6 +442,12 @@ impl Elaborator<'_> {
                 let lsb_id = self.lower_index_expr(lsb);
                 let msb_id = self.lower_index_expr(msb);
                 let asc = self.net_ascending(net);
+                // WRITE twin of the read-path guard: a part select of a negative-low-bound
+                // net is loud with the real reason, not the direction message it would
+                // otherwise trip (see `base_has_neg_decl_lsb`).
+                if self.net_decl_neg_lsb.contains_key(&net) {
+                    self.error_neg_lsb_part_select();
+                }
                 let width = self.width_from_msb_lsb_dir(msb, lsb, msb_id, lsb_id, asc);
                 let offset = self.norm_offset_for_net(net, lsb_id);
                 out.push(ir::LvalChunk {

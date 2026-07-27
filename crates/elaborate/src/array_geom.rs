@@ -3,6 +3,89 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// Per-dim bounds-guard conjunct for `idx ∈ [lo, lo+size-1]`, shared by both
+    /// `flatten_word` twins so the rule exists once.
+    ///
+    /// For `lo >= 0` this is the long-standing form verbatim — `idx >= lo && idx <= hi`
+    /// on the RAW index with UNSIGNED 32-bit constants — so every existing design's
+    /// golden IR is byte-for-byte unchanged.
+    ///
+    /// For `lo < 0` that form would be wrong twice over: an unsigned `hi`/`lo` constant
+    /// mis-reads the bound, and making the constants signed instead would make the
+    /// comparison depend on whether the user's index expression happens to be signed
+    /// (`int i` vs `logic [3:0] i` would disagree). So a negative-`lo` dim is guarded on
+    /// the NORMALIZED coordinate — `coord <u size` — which is exact for either
+    /// signedness because an out-of-range index wraps the 32-bit subtraction to a huge
+    /// unsigned value. Only dims that were broken before take this path.
+    fn dim_guard(&mut self, i_eid: u32, coord_eid: u32, lo: i64, size: u32) -> u32 {
+        if lo < 0 {
+            let size_c = self.const_u32_expr(size, 32);
+            return self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Lt,
+                lhs: coord_eid,
+                rhs: size_c,
+            });
+        }
+        let lo_c = self.const_u32_expr(lo as u32, 32);
+        let hi_c = self.const_u32_expr((lo as u32).saturating_add(size - 1), 32);
+        let ge = self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Ge,
+            lhs: i_eid,
+            rhs: lo_c,
+        });
+        let le = self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Le,
+            lhs: i_eid,
+            rhs: hi_c,
+        });
+        self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::LogAnd,
+            lhs: ge,
+            rhs: le,
+        })
+    }
+
+    /// Per-dim 0-based coordinate for a source index, shared by both `flatten_word`
+    /// twins. `lo == 0` emits NOTHING (the byte-identical common case), `lo > 0` emits
+    /// `idx - lo`, `lo < 0` emits `idx + (-lo)` — an `Add` rather than a `Sub` by a
+    /// wrapped unsigned constant, so the arithmetic is right by construction instead of
+    /// by relying on 32-bit wrap. `ascending` (packed little-endian `[lo:hi]`) maps to
+    /// `hi - idx` and never carries a negative `lo` (packed bounds clamp elsewhere).
+    fn dim_coord(&mut self, i_eid: u32, lo: i64, size: u32, ascending: bool) -> u32 {
+        if ascending {
+            // `ascending` is a PACKED-dim convention and `packed_extents` clamps a packed
+            // bound that folds negative, so `lo >= 0` on every reachable path. Assert
+            // rather than clamp silently: a future caller handing this an unpacked
+            // negative-`lo` dim should fail, not get a quietly wrong coordinate.
+            debug_assert!(lo >= 0, "ascending dim with a negative low bound: {lo}");
+            let hi_c = self.const_u32_expr((lo.max(0) as u32).saturating_add(size - 1), 32);
+            return self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Sub,
+                lhs: hi_c,
+                rhs: i_eid,
+            });
+        }
+        match lo.cmp(&0) {
+            std::cmp::Ordering::Equal => i_eid,
+            std::cmp::Ordering::Greater => {
+                let lo_c = self.const_u32_expr(lo as u32, 32);
+                self.push_expr(ir::Expr::Binary {
+                    op: ir::BinOp::Sub,
+                    lhs: i_eid,
+                    rhs: lo_c,
+                })
+            }
+            std::cmp::Ordering::Less => {
+                let add_c = self.const_u32_expr(lo.unsigned_abs().min(u32::MAX as u64) as u32, 32);
+                self.push_expr(ir::Expr::Binary {
+                    op: ir::BinOp::Add,
+                    lhs: i_eid,
+                    rhs: add_c,
+                })
+            }
+        }
+    }
+
     /// PRE-LOWERED-eid twin of [`Self::flatten_word`]: identical row-major offset
     /// arithmetic and per-dim bounds guards (`d ≥ 2` → `idx∈[lo,hi]` conjunction, OOB
     /// sentinel `0x8000_0000`), but the per-index `i_eid` comes from `idx_eids` (lowered
@@ -12,7 +95,7 @@ impl Elaborator<'_> {
     /// fresh exprs appended after all designs are lowered.
     pub(crate) fn flatten_word_eids(
         &mut self,
-        extents: &[(u32, u32)],
+        extents: &[(i64, u32)],
         idx_eids: &[u32],
         ascending: &[bool],
     ) -> u32 {
@@ -26,24 +109,14 @@ impl Elaborator<'_> {
         let mut acc: Option<u32> = None;
         for (k, &i_eid) in idx_eids.iter().enumerate() {
             let (lo, size) = extents[k];
+            let asc = ascending.get(k).copied().unwrap_or(false);
+            // A negative-`lo` dim guards on the coordinate, so it must be built first;
+            // for every other dim the guard comes first, exactly as before (push order
+            // is the golden IR).
+            let coord_first = lo < 0;
+            let mut coord = coord_first.then(|| self.dim_coord(i_eid, lo, size, asc));
             if guard_dims {
-                let lo_c = self.const_u32_expr(lo, 32);
-                let hi_c = self.const_u32_expr(lo.saturating_add(size - 1), 32);
-                let ge = self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Ge,
-                    lhs: i_eid,
-                    rhs: lo_c,
-                });
-                let le = self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Le,
-                    lhs: i_eid,
-                    rhs: hi_c,
-                });
-                let both = self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::LogAnd,
-                    lhs: ge,
-                    rhs: le,
-                });
+                let both = self.dim_guard(i_eid, coord.unwrap_or(i_eid), lo, size);
                 valid = Some(match valid {
                     None => both,
                     Some(v) => self.push_expr(ir::Expr::Binary {
@@ -53,22 +126,9 @@ impl Elaborator<'_> {
                     }),
                 });
             }
-            let coord = if ascending.get(k).copied().unwrap_or(false) {
-                let hi_c = self.const_u32_expr(lo.saturating_add(size - 1), 32);
-                self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Sub,
-                    lhs: hi_c,
-                    rhs: i_eid,
-                })
-            } else if lo == 0 {
-                i_eid
-            } else {
-                let lo_c = self.const_u32_expr(lo, 32);
-                self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Sub,
-                    lhs: i_eid,
-                    rhs: lo_c,
-                })
+            let coord = match coord.take() {
+                Some(c) => c,
+                None => self.dim_coord(i_eid, lo, size, asc),
             };
             let term = if strides[k] == 1 {
                 coord
@@ -144,7 +204,13 @@ impl Elaborator<'_> {
     /// clamped to `u32` to avoid the [`Self::range_to_dims`] panic), floored at 1 so
     /// a degenerate `[0:0]` dim contributes one word. The product of the sizes is
     /// the flat `array_len`.
-    pub(crate) fn array_dim_extents(&mut self, dims: &[ast::Dim]) -> Vec<(u32, u32)> {
+    ///
+    /// `lo` is `i64`, NOT `u32`: a declared low bound may be NEGATIVE (`int a[-1:1]`,
+    /// IEEE §7.4.2). Clamping it to 0 used to shrink the dim (`[-1:1]` became lo 0
+    /// size 2), so the array lost a word and `foreach` yielded two iterations instead
+    /// of three — silently, at exit 0. The size below is computed from the UNCLAMPED
+    /// bounds for the same reason.
+    pub(crate) fn array_dim_extents(&mut self, dims: &[ast::Dim]) -> Vec<(i64, u32)> {
         let mut out = Vec::with_capacity(dims.len());
         for d in dims {
             out.push(match d {
@@ -155,9 +221,9 @@ impl Elaborator<'_> {
                     // bound is loud, NOT a silent length-1 dim.
                     self.check_const_range_bound(&r.msb, msb_v);
                     self.check_const_range_bound(&r.lsb, lsb_v);
-                    let msb = clamp_bound_u32(msb_v);
-                    let lsb = clamp_bound_u32(lsb_v);
-                    let size = (((msb.abs_diff(lsb) as u64) + 1).min(u32::MAX as u64)) as u32;
+                    let msb = msb_v.unwrap_or(0);
+                    let lsb = lsb_v.unwrap_or(0);
+                    let size = ((msb.abs_diff(lsb)) + 1).min(u32::MAX as u64) as u32;
                     (msb.min(lsb), size.max(1))
                 }
                 ast::Dim::Size(e) => {
@@ -180,11 +246,42 @@ impl Elaborator<'_> {
         out
     }
 
+    /// The DECLARED low bound of `range` when it folds NEGATIVE (`logic [3:-2]` → -2),
+    /// else `None`. Recorded per net by the declaration site so bit/part selects can
+    /// normalize against the real bound; see [`Self::range_to_dims_opt`].
+    pub(crate) fn declared_neg_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
+        let r = range?;
+        let m = self.const_eval_in_scope(&r.msb)?;
+        let l = self.const_eval_in_scope(&r.lsb)?;
+        // ONLY the `[hi:neg]` shape. `msb < 0` with `lsb >= 0` is the degenerate
+        // `[W-1:0]`-with-W==0 parameter underflow, which keeps its graceful width-1.
+        (l < 0 && m >= l).then_some(l)
+    }
+
     pub(crate) fn range_to_dims(
         &mut self,
         kind: ast::NetVarKind,
         range: Option<&ast::Range>,
         signed: bool,
+    ) -> (u32, u32, u32, bool) {
+        self.range_to_dims_opt(kind, range, signed, false)
+    }
+
+    /// [`Self::range_to_dims`] with an OPT-IN for a negative declared low bound.
+    ///
+    /// `allow_neg_lsb` is `false` at every call site that has not wired up the
+    /// companion `declared_neg_lsb` side-map record, and a literal `false` short-circuits
+    /// to the long-standing warn-and-clamp — so those sites are byte-identical and stay
+    /// LOUD rather than silently receiving a wide net whose selects nobody normalizes.
+    /// That is the whole reason this is a parameter instead of a behaviour change: the
+    /// width and the select normalization have to be turned on together, and the sites
+    /// that create nets are not all in one place.
+    pub(crate) fn range_to_dims_opt(
+        &mut self,
+        kind: ast::NetVarKind,
+        range: Option<&ast::Range>,
+        signed: bool,
+        allow_neg_lsb: bool,
     ) -> (u32, u32, u32, bool) {
         if matches!(kind, ast::NetVarKind::Integer) {
             // `integer` defaults signed; honor an explicit `unsigned` (the parser
@@ -244,6 +341,19 @@ impl Elaborator<'_> {
                 // The old message misdiagnosed the literal case as "parameterized";
                 // keep the diagnostic honest for both shapes.
                 if lsb_v.is_some_and(|v| v < 0) {
+                    // OPT-IN (see `allow_neg_lsb`): size the net `|msb-lsb|+1` as IEEE
+                    // §7.4.2 / iverilog do and store the range NORMALIZED to `[w-1:0]`
+                    // (`NetVar.msb`/`lsb` are frozen `u32` and cannot hold -2). The real
+                    // low bound rides `net_decl_neg_lsb`, which `norm_offset_for_net`
+                    // consults so `x[3]` on a `[3:-2]` addresses internal bit 5.
+                    if allow_neg_lsb {
+                        if let (Some(m), Some(l)) = (msb_v, lsb_v) {
+                            if m >= l {
+                                let w = ((m - l) as u64 + 1).min(MAX_NET_WIDTH) as u32;
+                                return (w, w.saturating_sub(1), 0, signed);
+                            }
+                        }
+                    }
                     self.warn(
                         "negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width 1",
                     );
@@ -322,7 +432,7 @@ impl Elaborator<'_> {
     /// Per-dim `(lo, size)` extents of array `net` (source order). Arrays with
     /// non-0-based or multi-dim addressing record their shape in `array_dims`; a
     /// plain 0-based 1-D array falls back to a single `(0, array_len)` extent.
-    pub(crate) fn net_dim_extents(&self, net: u32) -> Vec<(u32, u32)> {
+    pub(crate) fn net_dim_extents(&self, net: u32) -> Vec<(i64, u32)> {
         self.array_dims
             .get(&net)
             .cloned()
@@ -341,7 +451,7 @@ impl Elaborator<'_> {
     /// `coord = hi - idx` (N3.3, little-endian `[lo:hi]`).
     pub(crate) fn flatten_word(
         &mut self,
-        extents: &[(u32, u32)],
+        extents: &[(i64, u32)],
         word_idxs: &[&ast::Expr],
         ascending: &[bool],
     ) -> u32 {
@@ -366,28 +476,17 @@ impl Elaborator<'_> {
             // element index both funnel here. Gating only the flat-vector
             // bit-select left `p[0][R]` reading the wrong nibble at exit 0.
             let i_eid = self.lower_index_expr(idx);
+            let asc = ascending.get(k).copied().unwrap_or(false);
+            // `idx >= lo && idx <= hi` on the RAW index. A negative or wrapped index
+            // always fails one side in either signedness reading (bounds < 2^24 «
+            // 2^31); an X index X-poisons the conjunction and the final ternary merge
+            // below. A NEGATIVE-`lo` dim guards on the coordinate instead, so its
+            // coordinate must be built first (see `dim_guard`); every other dim keeps
+            // the original guard-then-coordinate push order = the golden IR.
+            let coord_first = lo < 0;
+            let mut coord = coord_first.then(|| self.dim_coord(i_eid, lo, size, asc));
             if guard_dims {
-                // `idx >= lo && idx <= hi` on the RAW index. A negative or
-                // wrapped index always fails one side in either signedness
-                // reading (bounds < 2^24 « 2^31); an X index X-poisons the
-                // conjunction and the final ternary merge below.
-                let lo_c = self.const_u32_expr(lo, 32);
-                let hi_c = self.const_u32_expr(lo.saturating_add(size - 1), 32);
-                let ge = self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Ge,
-                    lhs: i_eid,
-                    rhs: lo_c,
-                });
-                let le = self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Le,
-                    lhs: i_eid,
-                    rhs: hi_c,
-                });
-                let both = self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::LogAnd,
-                    lhs: ge,
-                    rhs: le,
-                });
+                let both = self.dim_guard(i_eid, coord.unwrap_or(i_eid), lo, size);
                 valid = Some(match valid {
                     None => both,
                     Some(v) => self.push_expr(ir::Expr::Binary {
@@ -398,25 +497,12 @@ impl Elaborator<'_> {
                 });
             }
             // normalized 0-based coordinate. Descending (or unpacked): `idx - lo`
-            // (lo==0 ⇒ raw index, no Sub). Ascending `[lo:hi]`: `hi - idx` where
-            // hi = lo+size-1 is the lsb endpoint — internal bit 0 (mirrors
-            // `norm_offset_for_net`).
-            let coord = if ascending.get(k).copied().unwrap_or(false) {
-                let hi_c = self.const_u32_expr(lo.saturating_add(size - 1), 32);
-                self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Sub,
-                    lhs: hi_c,
-                    rhs: i_eid,
-                })
-            } else if lo == 0 {
-                i_eid
-            } else {
-                let lo_c = self.const_u32_expr(lo, 32);
-                self.push_expr(ir::Expr::Binary {
-                    op: ir::BinOp::Sub,
-                    lhs: i_eid,
-                    rhs: lo_c,
-                })
+            // (lo==0 ⇒ raw index, no Sub; lo<0 ⇒ `idx + |lo|`). Ascending `[lo:hi]`:
+            // `hi - idx` where hi = lo+size-1 is the lsb endpoint — internal bit 0
+            // (mirrors `norm_offset_for_net`).
+            let coord = match coord.take() {
+                Some(c) => c,
+                None => self.dim_coord(i_eid, lo, size, asc),
             };
             let term = if strides[k] == 1 {
                 coord

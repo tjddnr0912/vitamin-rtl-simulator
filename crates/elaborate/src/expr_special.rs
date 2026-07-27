@@ -607,9 +607,13 @@ impl Elaborator<'_> {
                 if idxs.len() > dims.len() {
                     return None; // trailing packed selects → lowering path
                 }
+                // `array_dims` stores `(lo, SIZE)`, not `(lo, hi)` — reading the second
+                // field as an upper bound made `$bits` of a partially-indexed array view
+                // off by one on every 0-based dim (`int a[2][3]` → `$bits(a[0])` counted
+                // 4 elements) and arbitrarily wrong on a non-0-based one. iverilog-pinned.
                 let rem: u64 = dims[idxs.len()..]
                     .iter()
-                    .map(|&(lo, hi)| hi.abs_diff(lo) as u64 + 1)
+                    .map(|&(_, size)| u64::from(size))
                     .product();
                 return u32::try_from(rem * w).ok();
             }

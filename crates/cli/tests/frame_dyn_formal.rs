@@ -225,15 +225,35 @@ fn non_recursive_inout_and_output_dyn_formals_are_unchanged() {
 
 // ── LOUD: concurrent fork of the same dyn-formal task (two live activations) ──
 #[test]
-fn concurrent_fork_stays_loud() {
+fn concurrent_fork_activations_each_get_their_own_formal() {
+    // Was a graceful F4004: two overlapping activations shared the net-keyed formal slot.
+    // The dyn slots now park off the heap while an activity is suspended (the AUTOMATIC
+    // window's lifetime), so each activation keeps its own copy. iverilog: `b0=5` twice.
     let o = run("module top;\n\
          int a[];\n\
          task automatic slow(input int b[]); #10; $display(\"b0=%0d\", b[0]); endtask\n\
          initial begin a=new[2]; a[0]=5; fork slow(a); slow(a); join end\n\
          endmodule\n");
+    assert_eq!(
+        o.matches("b0=5").count(),
+        2,
+        "both activations must report their own formal:\n{o}"
+    );
+}
+
+// ── each activation gets its own COPY: distinct actuals must not cross-contaminate ──
+#[test]
+fn concurrent_fork_dyn_formals_do_not_cross_contaminate() {
+    let o = run("module top;\n\
+         int p[]; int q[];\n\
+         task automatic slow(input int id, input int b[]);\n\
+           #10; $display(\"id=%0d b0=%0d sz=%0d\", id, b[0], b.size()); endtask\n\
+         initial begin p=new[1]; p[0]=11; q=new[2]; q[0]=22;\n\
+           fork slow(1,p); slow(2,q); join end\n\
+         endmodule\n");
     assert!(
-        o.contains("F4004") || o.contains("recursive or concurrent"),
-        "concurrent dyn-formal activation must be fatal-loud:\n{o}"
+        o.contains("id=1 b0=11 sz=1") && o.contains("id=2 b0=22 sz=2"),
+        "each activation keeps its own actual:\n{o}"
     );
 }
 

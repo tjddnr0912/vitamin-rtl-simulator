@@ -29,19 +29,23 @@ impl Elaborator<'_> {
         &mut self,
         range: Option<&ast::Range>,
         packed: &[ast::Range],
-    ) -> Vec<(u32, u32, bool)> {
+    ) -> Vec<(i64, u32, bool)> {
         let mut out = Vec::new();
         for r in range.into_iter().chain(packed.iter()) {
-            // Negative folded bounds (underflow artifact) clamp to 0 — width math
-            // stays small instead of the old u32-wrap explosion.
             let msb_v = self.const_eval_in_scope(&r.msb);
             let lsb_v = self.const_eval_in_scope(&r.lsb);
             // P0-NCW: net/hierarchical-referenced (non-constant) packed bound is loud.
             self.check_const_range_bound(&r.msb, msb_v);
             self.check_const_range_bound(&r.lsb, lsb_v);
-            let msb = clamp_bound_u32(msb_v);
-            let lsb = clamp_bound_u32(lsb_v);
-            let w = (((msb.abs_diff(lsb) as u64) + 1).min(u32::MAX as u64)) as u32;
+            // `lo` is `i64` and the bounds are NOT clamped: a NEGATIVE inner packed bound
+            // is legal (`logic [1:0][3:-2]`, IEEE §7.4.1) and clamping it to 0 made the
+            // dim 4 bits instead of 6 — the whole vector came out 8 bits wide instead of
+            // 12, SILENTLY (measured against iverilog; the clamp warning came from a
+            // sibling declaration, never from here). `flatten_word` carries a signed `lo`
+            // now, so the coordinate map handles it.
+            let msb = msb_v.unwrap_or(0);
+            let lsb = lsb_v.unwrap_or(0);
+            let w = ((msb.abs_diff(lsb)) + 1).min(u32::MAX as u64) as u32;
             out.push((msb.min(lsb), w.max(1), msb < lsb));
         }
         out
@@ -172,6 +176,20 @@ impl Elaborator<'_> {
         let Some((msb, lsb)) = self.nets.get(net as usize).map(|nv| (nv.msb, nv.lsb)) else {
             return raw_off;
         };
+        // A net declared with a NEGATIVE low bound is STORED normalized as `[w-1:0]`
+        // (frozen `u32` fields), so `lsb == 0` above would take the raw index verbatim and
+        // read the wrong bit — `x[3]` on a `logic [3:-2]` is internal bit 5, not 3. The
+        // declared bound comes back from the sparse side map; the offset is `raw + |lsb|`
+        // rather than a `Sub` by a wrapped constant, so the arithmetic is right by
+        // construction. Absent for every ordinary net ⇒ byte-identical below.
+        if let Some(&neg) = self.net_decl_neg_lsb.get(&net) {
+            let add = self.const_u32_expr(neg.unsigned_abs().min(u32::MAX as u64) as u32, 32);
+            return self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Add,
+                lhs: raw_off,
+                rhs: add,
+            });
+        }
         if msb >= lsb {
             if lsb == 0 {
                 return raw_off; // `[N:0]` — raw index is already internal
@@ -202,7 +220,7 @@ impl Elaborator<'_> {
     /// `dbase`; the element extract (`lower_expr(pm[i])`) is already the `[w-1:0]`
     /// value. `None` for a bare net, a fully-indexed (bit) access, or a residual of
     /// >1 dim (a deeper follow-on) — those stay on their existing paths.
-    pub(crate) fn packed_elem_resid(&self, base: &ast::Expr) -> Option<(u32, u32, bool)> {
+    pub(crate) fn packed_elem_resid(&self, base: &ast::Expr) -> Option<(i64, u32, bool)> {
         let mut n_idx = 0usize;
         let mut cur = base;
         loop {
@@ -251,22 +269,40 @@ impl Elaborator<'_> {
     pub(crate) fn norm_offset_for_range(
         &mut self,
         raw_off: u32,
-        lo: u32,
+        lo: i64,
         width: u32,
         asc: bool,
     ) -> u32 {
         if !asc {
-            if lo == 0 {
-                return raw_off;
+            match lo.cmp(&0) {
+                // byte-identical common case: a `[w-1:0]` residual dim
+                std::cmp::Ordering::Equal => raw_off,
+                std::cmp::Ordering::Greater => {
+                    let lo_c = self.const_u32_expr(lo as u32, 32);
+                    self.push_expr(ir::Expr::Binary {
+                        op: ir::BinOp::Sub,
+                        lhs: raw_off,
+                        rhs: lo_c,
+                    })
+                }
+                // NEGATIVE declared bound (`[1:0][3:-2]`): `idx + |lo|`, an `Add` rather
+                // than a `Sub` by a wrapped constant.
+                std::cmp::Ordering::Less => {
+                    let add =
+                        self.const_u32_expr(lo.unsigned_abs().min(u32::MAX as u64) as u32, 32);
+                    self.push_expr(ir::Expr::Binary {
+                        op: ir::BinOp::Add,
+                        lhs: raw_off,
+                        rhs: add,
+                    })
+                }
             }
-            let lo_c = self.const_u32_expr(lo, 32);
-            self.push_expr(ir::Expr::Binary {
-                op: ir::BinOp::Sub,
-                lhs: raw_off,
-                rhs: lo_c,
-            })
         } else {
-            let hi_c = self.const_u32_expr(lo + width - 1, 32);
+            // `hi = lo + width - 1` in the DECLARED domain; the subtraction below is on
+            // 32-bit values, so a negative `hi` cannot arise for any reachable dim
+            // (an ascending dim's `hi` is its larger endpoint).
+            let hi = lo.saturating_add(i64::from(width).saturating_sub(1));
+            let hi_c = self.const_u32_expr(hi.max(0).min(i64::from(u32::MAX)) as u32, 32);
             self.push_expr(ir::Expr::Binary {
                 op: ir::BinOp::Sub,
                 lhs: hi_c,
@@ -287,7 +323,7 @@ impl Elaborator<'_> {
                 // `walk_scopes` as the value). A zero-LSB param has no entry → raw
                 // (byte-identical).
                 if let Some((lo, w, asc)) = self.param_sel_range(base) {
-                    return self.norm_offset_for_range(raw_off, lo, w, asc);
+                    return self.norm_offset_for_range(raw_off, i64::from(lo), w, asc);
                 }
             } else if let Some(net) = self.iface_member_net(path) {
                 // Interface-member alias (`bi.data`, ≥2-seg) — a KNOWN dotted symbol
@@ -372,7 +408,7 @@ impl Elaborator<'_> {
         }
         // Ascending non-zero-LSB param — normalize against its declared range.
         if let Some((lo, w, asc)) = self.param_sel_range(base) {
-            return self.norm_offset_for_range(raw_off, lo, w, asc);
+            return self.norm_offset_for_range(raw_off, i64::from(lo), w, asc);
         }
         match self.base_root_net(base) {
             Some(net) => self.norm_offset_for_net(net, raw_off),
@@ -414,6 +450,29 @@ impl Elaborator<'_> {
     /// lsb_const` is a direction mismatch → `ElabUnsupported`. The offset machinery
     /// (`norm_offset_for_net`) already maps the larger source index onto internal
     /// bit 0, so only the width differs.
+    /// True when a select's base is a net declared with a NEGATIVE low bound.
+    ///
+    /// Its whole value and its BIT selects are exact (`norm_offset_for_net` maps `x[-1]`
+    /// onto the right internal bit), but a PART select folds its own bounds through the
+    /// UNSIGNED `const_eval_u32`, where `-2` reads as `0xFFFFFFFE` and trips the
+    /// direction check with a message about the wrong thing. Callers use this to say
+    /// what is actually unsupported instead.
+    pub(crate) fn base_has_neg_decl_lsb(&self, base: &ast::Expr) -> bool {
+        self.actual_root_net(base)
+            .is_some_and(|n| self.net_decl_neg_lsb.contains_key(&n))
+    }
+
+    /// The diagnostic for [`Self::base_has_neg_decl_lsb`], shared by the read and write
+    /// part-select paths so they cannot drift.
+    pub(crate) fn error_neg_lsb_part_select(&mut self) {
+        self.error(
+            MsgCode::ElabUnsupported,
+            "a PART select of a net declared with a negative low bound \
+             (`logic [3:-2] x; x[1:-2]`) is not yet supported — the whole value and \
+             single-BIT selects (`x[-1]`) are exact, so select bits individually",
+        );
+    }
+
     pub(crate) fn width_from_msb_lsb_dir(
         &mut self,
         msb_ast: &ast::Expr,
@@ -733,6 +792,10 @@ impl Elaborator<'_> {
     ) -> Result<(u32, u32), ()> {
         let dims = self.packed_dims[&net].clone();
         let (olo, osize, ascending) = dims[0];
+        // Signed throughout: `olo` may be a NEGATIVE declared bound (`[1:0][3:-2]`), and
+        // the caller's `lo`/`hi` are source indices in that same declared domain.
+        let (lo, hi) = (i64::from(lo), i64::from(hi));
+        let osize = i64::from(osize);
         // the FULL `[lo ..= hi]` span (the selected index SET, `lo ≤ hi`) must lie
         // inside the outer dim (dims[0]). iverilog rejects an over-bounds part-select
         // at compile time (a variable indexed part-select aborts in 13.0, which
@@ -766,7 +829,7 @@ impl Elaborator<'_> {
     /// Split a packed-dim table `(lo, size, ascending)` into the `(lo, size)` extents
     /// `flatten_word` consumes plus the per-dim `ascending` flags (N3.3). Lets the
     /// packed read/write paths share `flatten_word` with the unpacked path.
-    pub(crate) fn packed_split(dims: &[(u32, u32, bool)]) -> (Vec<(u32, u32)>, Vec<bool>) {
+    pub(crate) fn packed_split(dims: &[(i64, u32, bool)]) -> (Vec<(i64, u32)>, Vec<bool>) {
         let ext = dims.iter().map(|&(l, s, _)| (l, s)).collect();
         let dirs = dims.iter().map(|&(_, _, a)| a).collect();
         (ext, dirs)
@@ -777,7 +840,7 @@ impl Elaborator<'_> {
     /// `dims` are the residual `(lo, size)` extents (trailing dims of the
     /// full array, so suffix-product strides within the residual equal the
     /// full array's strides); `desc[k]` flips dim `k`'s traversal.
-    pub(crate) fn residual_word_offsets(dims: &[(u32, u32)], desc: &[bool]) -> Vec<u32> {
+    pub(crate) fn residual_word_offsets(dims: &[(i64, u32)], desc: &[bool]) -> Vec<u32> {
         let n: u64 = dims.iter().map(|&(_, s)| s as u64).product();
         let mut strides = vec![1u64; dims.len()];
         for k in (0..dims.len().saturating_sub(1)).rev() {

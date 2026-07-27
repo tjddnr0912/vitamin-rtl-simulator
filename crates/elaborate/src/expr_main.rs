@@ -643,6 +643,9 @@ impl Elaborator<'_> {
                 let lsb_id = self.lower_index_expr(lsb);
                 let msb_id = self.lower_index_expr(msb);
                 let asc = self.base_net_ascending(base);
+                if self.base_has_neg_decl_lsb(base) {
+                    self.error_neg_lsb_part_select();
+                }
                 let width = self.width_from_msb_lsb_dir(msb, lsb, msb_id, lsb_id, asc);
                 // Ascending: normalize via the root net (handles array elements,
                 // whose base is not a single-segment ident). Descending: the classic

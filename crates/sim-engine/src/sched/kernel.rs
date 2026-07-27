@@ -764,13 +764,21 @@ impl Kernel for Scheduler<'_, '_> {
             return Value::from_i128(got.len() as i128, 32, true);
         }
         // ── memory: fill elements ascending from `start` (declared index) ──
-        let base = self
-            .st
-            .net_dims
-            .get(&net)
-            .and_then(|d| d.first())
-            .map(|&(lo, hi)| lo.min(hi) as u64)
-            .unwrap_or(0);
+        let Some(base) = crate::builtins::declared_array_base(&self.st.net_dims, net) else {
+            self.st
+                .sink
+                .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
+                    severity: diag::Severity::Warning,
+                    code: diag::MsgCode::RunReadmem,
+                    message: "$fread into a memory with a NEGATIVE declared base \
+                              (e.g. `reg m[-1:1]`) is not supported; no elements read"
+                        .to_string(),
+                    location: None,
+                    context: Vec::new(),
+                    sim_time: Some(diag::TimeStamp { ticks: self.st.now }),
+                }));
+            return Value::from_i128(0, 32, true);
+        };
         let last = base + alen - 1;
         // iverilog evaluates the start/count operands by coercing each x/z bit
         // to 0 (NOT by treating an x/z operand as absent), so a present operand

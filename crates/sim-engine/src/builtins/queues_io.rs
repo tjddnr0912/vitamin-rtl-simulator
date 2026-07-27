@@ -291,6 +291,9 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
     let mut ids: Vec<Option<IdCode>> = vec![None; st.ir.nets.len()];
     let mut word_ids: Vec<Vec<Option<IdCode>>> = vec![Vec::new(); st.ir.nets.len()];
     let st_dims = st.net_dims.clone();
+    // Declared ranges for nets stored with a NORMALIZED range (a negative low bound);
+    // empty for almost every design, so the `$var` lines below are unchanged.
+    let st_decl_ranges = st.net_decl_ranges.clone();
     let dump_filter = st.dump_filter.clone();
     // B1 frame-call: frame-local nets are REAL ir.nets entries (for width/
     // metadata) but live in the call frame arena, never the flat store — they
@@ -391,13 +394,26 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
                     let mut wv = Vec::with_capacity(nets[i].array_len as usize);
                     for word in 0..nets[i].array_len {
                         let name = elem_name(leaf, &dims, word);
-                        let r =
-                            vcd_var_reference(vt, &name, nets[i].width, nets[i].msb, nets[i].lsb);
+                        let r = vcd_var_reference_decl(
+                            vt,
+                            &name,
+                            nets[i].width,
+                            nets[i].msb,
+                            nets[i].lsb,
+                            st_decl_ranges.get(&(i as u32)).copied(),
+                        );
                         wv.push(w.declare_var(vt, nets[i].width.max(1), &r).ok());
                     }
                     word_ids[i] = wv;
                 } else {
-                    let r = vcd_var_reference(vt, leaf, nets[i].width, nets[i].msb, nets[i].lsb);
+                    let r = vcd_var_reference_decl(
+                        vt,
+                        leaf,
+                        nets[i].width,
+                        nets[i].msb,
+                        nets[i].lsb,
+                        st_decl_ranges.get(&(i as u32)).copied(),
+                    );
                     if let Ok(id) = w.declare_var(vt, nets[i].width.max(1), &r) {
                         ids[i] = Some(id);
                     }
@@ -439,12 +455,26 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
                     let mut wv = Vec::with_capacity(nv.array_len as usize);
                     for word in 0..nv.array_len {
                         let ename = elem_name(&name, &dims, word);
-                        let r = vcd_var_reference(vt, &ename, nv.width, nv.msb, nv.lsb);
+                        let r = vcd_var_reference_decl(
+                            vt,
+                            &ename,
+                            nv.width,
+                            nv.msb,
+                            nv.lsb,
+                            st_decl_ranges.get(&(i as u32)).copied(),
+                        );
                         wv.push(w.declare_var(vt, nv.width.max(1), &r).ok());
                     }
                     word_ids[i] = wv;
                 } else {
-                    let r = vcd_var_reference(vt, &name, nv.width, nv.msb, nv.lsb);
+                    let r = vcd_var_reference_decl(
+                        vt,
+                        &name,
+                        nv.width,
+                        nv.msb,
+                        nv.lsb,
+                        st_decl_ranges.get(&(i as u32)).copied(),
+                    );
                     if let Ok(id) = w.declare_var(vt, nv.width.max(1), &r) {
                         ids[i] = Some(id);
                     }
@@ -599,12 +629,12 @@ pub(crate) fn nth_word(store: &sim_ir::BitPacked, width: u32, word: u32) -> sim_
 
 /// Per-element VCD var name: row-major word → declared indices (`lo + digit`
 /// per dim, e.g. word 5 of `[0:1][0:2]` ⇒ `leaf[1][2]`).
-pub(crate) fn elem_name(leaf: &str, dims: &[(u32, u32)], word: u32) -> String {
-    let mut digits = vec![0u32; dims.len()];
+pub(crate) fn elem_name(leaf: &str, dims: &[(i64, u32)], word: u32) -> String {
+    let mut digits = vec![0i64; dims.len()];
     let mut rem = u64::from(word);
     for k in (0..dims.len()).rev() {
         let size = u64::from(dims[k].1.max(1));
-        digits[k] = (rem % size) as u32;
+        digits[k] = (rem % size) as i64;
         rem /= size;
     }
     let mut s = String::from(leaf);
@@ -614,6 +644,24 @@ pub(crate) fn elem_name(leaf: &str, dims: &[(u32, u32)], word: u32) -> String {
         s.push(']');
     }
     s
+}
+
+/// Declared base (minimum declared index) of `net`'s FIRST unpacked dim, for the
+/// file-I/O tasks whose address arguments live in the DECLARED index domain
+/// (`$readmem`/`$writemem`/`$fread`). Absent from the sparse table ⇒ 0-based.
+///
+/// `net_dims` stores `(lo, SIZE)`. Reading the second field as an upper bound —
+/// `lo.min(hi)` — happened to agree whenever `lo <= size` and silently addressed
+/// `reg m[10:11]` from base 2 when it did not.
+///
+/// `None` when the declared base is NEGATIVE (`reg m[-1:1]`): every address below is
+/// `u64`, so that domain has no representation here. The caller warns rather than
+/// silently reading or writing from word 0.
+pub(crate) fn declared_array_base(dims: &crate::NetDimsTable, net: u32) -> Option<u64> {
+    match dims.get(&net).and_then(|d| d.first()) {
+        Some(&(lo, _)) => u64::try_from(lo).ok(),
+        None => Some(0),
+    }
 }
 
 /// Extract array-word-0 (`width` bits) from a packed net store.

@@ -75,12 +75,15 @@ mod generate;
 mod hier;
 mod hier_defer;
 mod hoist;
+mod iface_inst;
 mod inline_fn;
 mod inline_task;
 mod instance;
 mod instance_array;
+mod limits;
 mod lvalue;
 mod net_util;
+pub(crate) use limits::*;
 mod netdecl;
 mod package;
 mod packed;
@@ -104,6 +107,7 @@ mod sys_special;
 mod systask;
 mod tables;
 mod toplevel;
+mod var_init;
 pub use api::*;
 pub(crate) use array_formal::*;
 pub(crate) use ast_query::*;
@@ -137,85 +141,6 @@ pub(crate) use systask::*;
 pub use tables::*;
 pub use toplevel::instantiated_names;
 pub(crate) use toplevel::*;
-/// in hostile input cannot explode the block arena. Above the cap → `ElabUnsupported`.
-const REPEAT_UNROLL_CAP: u32 = 1024;
-
-/// Hard cap on generate-for unroll iterations. A malformed/hostile
-/// `for(i=0;i<HUGE;i=i+1)` cannot explode the arena: above this we emit
-/// `ElabUnsupported` and stop unrolling. Mirrors `REPEAT_UNROLL_CAP`'s intent
-/// (generate bodies can each contribute many nets, so the cap is conservative).
-const GENERATE_UNROLL_CAP: u32 = 4096;
-
-/// Hard cap on generate nesting depth (nested for/if/case/block). Guards against
-/// pathological recursion; deep-nesting beyond this is deferred per PR scope.
-const GENERATE_DEPTH_CAP: u32 = 32;
-
-/// ELAB-ERR-CAP: soft cap on emitted error diagnostics. A broken construct
-/// unrolled across a large/nested generate would otherwise emit one error per
-/// iteration (thousands of identical lines). After this many, emission stops
-/// (with one suppression notice); `had_error` stays latched so the run is still
-/// loud (exit 1). 200 ≫ any realistic multi-error report (parser caps at 50).
-const MAX_ELAB_ERRORS: usize = 200;
-
-/// Hard cap on a single net's declared bit width. Above this we reject the decl
-/// with `ElabUnsupported` rather than `vec![0u64; huge]` (which would OOM) or
-/// overflow the `+1` width arithmetic. 2^20 bits = 16 KiB of planes per net —
-/// generous for real RTL, hostile-input-safe. (COVERAGE verdict HIGH.)
-const MAX_NET_WIDTH: u64 = 1 << 20;
-
-/// GEN-NET-CAP: hard cap on the TOTAL net/variable arena. `GENERATE_UNROLL_CAP`
-/// bounds each loop individually, but nested generates multiply
-/// (1000 × 1000 = 1M live nets ≈ 670 MiB), so the aggregate needs its own budget
-/// (the `MAX_NET_WIDTH` idiom, applied to count instead of width). 2^17 nets
-/// (≈85 MiB of planes) ≫ any realistic v1 design; above it `add_net` no-ops and
-/// the run is loud (the pathological 1000×1000 is still rejected).
-const MAX_TOTAL_NETS: usize = 1 << 17;
-/// P2-6: unpacked-array element cap (16M elements; with the 1 MiB-bit width cap
-/// the worst legal net is still bounded far below an OOM-kill allocation).
-const MAX_ARRAY_LEN: u64 = 1 << 24;
-
-/// Poison NetId returned on an unresolvable reference. `u32::MAX` (not 0) so an
-/// accidentally-surviving placeholder edge is detectable, never a silent alias
-/// of the first real net. The whole IR is discarded on error anyway (had_error),
-/// but a poison sentinel makes any future error-recovery path fail loud.
-/// (COVERAGE verdict MEDIUM.)
-const POISON_NET: u32 = u32::MAX;
-
-/// Family D (r17): placeholder FuncId for a DEFERRED hierarchical function call
-/// (`u1.f(x)`), patched to the callee's real per-instance FuncId by
-/// `resolve_deferred_hier_call`. Like `POISON_NET`, it must never survive to the
-/// engine on a clean run — an unresolved call latches `had_error` (IR discarded).
-const POISON_FID: u32 = u32::MAX;
-
-/// Base of the sentinel net-id range used for a DEFERRED hierarchical WRITE
-/// target (`tb.dut.x = …`): the real net does not exist when the lvalue is
-/// lowered (the child instance's nets are created later), so the `LvalChunk`
-/// gets `HIER_WRITE_SENTINEL_BASE + i` and `resolve_deferred_hier_write` patches
-/// it to the real NetId (or `POISON_NET`) once every instance is elaborated.
-/// Far above any real net id and below `POISON_NET`, so a surviving sentinel is
-/// detectable and never aliases a real net.
-const HIER_WRITE_SENTINEL_BASE: u32 = 0xFF00_0000;
-
-/// Base of the sentinel net-id range used for a DEFERRED hierarchical ELEMENT/
-/// bit-select WRITE (`tb.dut.mem[i] = …`, `m.l.v[3] <= …`): like the whole-net
-/// write the target net is created later, but here resolution must also REBUILD
-/// the chunk's word/offset/width/kind from the resolved net's shape. A distinct
-/// range below `HIER_WRITE_SENTINEL_BASE` keeps the two deferral lanes disjoint.
-const HIER_SEL_WRITE_SENTINEL_BASE: u32 = 0xFE00_0000;
-
-/// A poison `LvalChunk` (sentinel net, no select) emitted after a loud error while
-/// rebuilding a deferred hierarchical element/bit-select write — never aliases a
-/// real net (`POISON_NET` is above every real net id).
-fn poison_chunk() -> ir::LvalChunk {
-    ir::LvalChunk {
-        net: POISON_NET,
-        word: None,
-        offset: None,
-        width: None,
-        kind: ir::SelKind::Bit,
-    }
-}
-
 /// Public entry point. Returns `Some(SimIr)` iff no hard error was emitted;
 /// every error path still produces valid placeholder arena edges so the partial
 /// IR is never structurally broken (the result is simply discarded on error).
@@ -270,7 +195,27 @@ struct Elaborator<'s> {
     // keeps a scalar `array_len`); a multi-index `g[i][j]` lowers to the row-major flat
     // word `(i-lo0)*s1 + (j-lo1)`, so the IR backbone is untouched. Plain 0-based 1-D
     // arrays are absent (the access path falls back to `[(0, array_len)]`).
-    array_dims: BTreeMap<u32, Vec<(u32, u32)>>,
+    array_dims: BTreeMap<u32, Vec<(i64, u32)>>,
+    /// Nets declared with a NEGATIVE packed low bound (`logic [3:-2] x`) → that bound.
+    /// `NetVar.msb`/`lsb` are frozen `u32`, so such a net is stored NORMALIZED as
+    /// `[w-1:0]` and this is what recovers the declared numbering for a bit/part select
+    /// (`norm_offset_for_net`). SPARSE — absent for every ordinary net, so the common
+    /// path is one `BTreeMap` miss and the lowering is byte-identical.
+    ///
+    /// Written ONLY where `range_to_dims_opt(.., allow_neg_lsb = true)` was used: the
+    /// width and this record must be turned on together, or the net is wide while its
+    /// selects address the wrong bits.
+    net_decl_neg_lsb: BTreeMap<u32, i64>,
+    /// The DECLARED `(msb, lsb)` of those same nets, exported as the `net_decl_ranges`
+    /// sidecar so the VCD `$var` line can print `x [3:-2]` instead of the normalized
+    /// `[5:0]`. Same keys as `net_decl_neg_lsb`; kept separate because that one drives
+    /// select normalization (needs only the low bound) and this one drives labelling.
+    net_decl_range: BTreeMap<u32, (i64, i64)>,
+    /// StmtIds of `$fmonitor`/`$fstrobe` calls — the FILE-directed twins of
+    /// `$monitor`/`$strobe`, which share their frozen `SysTaskId`. The engine reads
+    /// `args[0]` as a descriptor for these and routes the postponed render through
+    /// `file_write`. EMPTY for every design that uses neither.
+    file_directed_stmts: std::collections::BTreeSet<u32>,
     /// v7 `$bits` prescan: name → (element bits, unpacked dim lengths) for the
     /// CURRENT module's body decls, recorded in declaration order during the
     /// body param-binding walk (3b) — a `localparam X = $bits(mem[0])` binds
@@ -445,7 +390,7 @@ struct Elaborator<'s> {
     // dim (msb<lsb): the source index maps to `coord = hi - i` instead of `i - lo`
     // (N3.3 — mirrors `norm_offset_for_net` for plain vectors). elaborate-LOCAL —
     // NEVER in the frozen sim-ir.
-    packed_dims: BTreeMap<u32, Vec<(u32, u32, bool)>>,
+    packed_dims: BTreeMap<u32, Vec<(i64, u32, bool)>>,
     // v5 ⑥: the active `$` substitution while lowering a QUEUE element index —
     // the ExprId of `size(handle)-1`. Save/restore around each queue index so
     // nested selects (`q[$ - r[$]]`) bind each `$` to ITS OWN queue. `None`
@@ -911,6 +856,20 @@ struct Elaborator<'s> {
     // module strings first. (Block-local INT inits keep their existing slot in
     // `pending_var_inits` — byte-identical for non-string designs.)
     pending_block_local_string_inits: Vec<(ast::Lvalue, ast::Expr)>,
+    // The two lists above are drained at MODULE scope, with `cur_prefix` empty. Both are
+    // pushed at DECLARATION time — the routed string array's `new[n]` pre-size (which must
+    // precede its element writes) and a block-local string init — and both carry a BARE
+    // name, so a declaration inside a GENERATE scope emitted an lvalue that resolved to
+    // `t.s` instead of `t.gb[0].s`: the generate walk only isolates `pending_var_inits`
+    // during its VarInit phase, and these are pushed during Nets.
+    //
+    // These twins are keyed by the `cur_prefix` in effect at the declaration, so each scope
+    // drains its own at its own flush point (module scope is the `""` key, and its drain
+    // order is unchanged — byte-identical for every design without a generate-scope string).
+    // Kept as SEPARATE maps rather than one because their positions differ: a pre-size goes
+    // BEFORE the scope's collected inits, a block-local string init AFTER them.
+    pending_scoped_presize: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
+    pending_scoped_bl_strings: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
     // v8 SVA: concurrent assertions collected during statement lowering, drained
     // into synthesized clocked checker processes after each module's process loop.
     pending_sva: Vec<PendingSva>,

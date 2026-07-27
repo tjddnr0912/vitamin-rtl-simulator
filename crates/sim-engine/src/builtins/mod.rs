@@ -9,7 +9,7 @@ use vcd_writer::{IdCode, ScopeType};
 
 use crate::eval::NetReader;
 use crate::sched::Scheduler;
-use crate::state::{vcd_var_reference, vcd_var_type, FmtCapture, MonitorState, SimState};
+use crate::state::{vcd_var_reference_decl, vcd_var_type, FmtCapture, MonitorState, SimState};
 use crate::value::Value;
 
 // ---- split parts (mechanical refactor) ----

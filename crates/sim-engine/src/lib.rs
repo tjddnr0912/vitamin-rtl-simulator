@@ -48,8 +48,9 @@ use sim_ir::SimIr;
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
 pub use elaborate::{
     AssignRankTable, CovItem, CovgInstMeta, DeferActTable, DeferMarkTable, DeferRegion,
-    ForkModeTable, FuncMeta, FuncTable, JoinMode, NetDimsTable, NetNameTable, QueueBoundTable,
-    RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
+    ForkModeTable, FuncMeta, FuncTable, JoinMode, NetDeclRangeTable, NetDimsTable, NetNameTable,
+    QueueBoundTable, RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo,
+    TaskCallProc,
 };
 pub use sched::FinishReason;
 
@@ -202,6 +203,12 @@ pub struct SimOpts {
     /// SPARSE — an absent array means 1-D 0-based, so per-element VCD names
     /// fall back to `mem[k]`. EMPTY by default. Never enters the IR.
     pub net_dims: NetDimsTable,
+    /// DECLARED packed `(msb, lsb)` for nets stored with a normalized range (a NEGATIVE
+    /// low bound). Drives the VCD `$var` label only. EMPTY ⇒ byte-identical.
+    pub net_decl_ranges: NetDeclRangeTable,
+    /// `$fmonitor`/`$fstrobe` call-site StmtIds — for these the postponed capture takes
+    /// `args[0]` as a file descriptor. EMPTY ⇒ every monitor/strobe goes to stdout.
+    pub file_directed_stmts: std::collections::BTreeSet<u32>,
     /// Worker-thread budget (P4-T1, CLI `--threads`/`-j`). `1` (the default) is
     /// the exact single-thread path; `≥2` moves VCD file writes onto a dedicated
     /// writer thread behind an order-preserving bounded FIFO. CONTRACT: output
@@ -332,6 +339,8 @@ impl Default for SimOpts {
             coverage_manifest: Vec::new(),
             probed_nets: Vec::new(),
             net_dims: NetDimsTable::new(),
+            net_decl_ranges: NetDeclRangeTable::new(),
+            file_directed_stmts: std::collections::BTreeSet::new(),
             threads: 1,
             plusargs: Vec::new(),
             final_procs: std::collections::BTreeSet::new(),
@@ -522,6 +531,8 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.queue_bounds = opts.queue_bounds.clone();
     st.proc_scopes = opts.proc_scopes.clone();
     st.net_dims = opts.net_dims.clone();
+    st.net_decl_ranges = opts.net_decl_ranges.clone();
+    st.file_directed_stmts = opts.file_directed_stmts.clone();
     st.threads = opts.threads;
     st.plusargs = opts.plusargs.clone();
     // OBS-3: `$vita_stage` captures to stage.jsonl only under `+STAGE_TRACE`; without

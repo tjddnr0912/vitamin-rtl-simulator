@@ -612,11 +612,12 @@ impl SimState<'_> {
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Fatal,
             code: MsgCode::RunFatal,
-            message: "concurrent activations of one task sharing a frame-local dynamic \
-                      array (or dynamic-array input formal) are unsupported — their \
-                      lifetimes overlap rather than nest, so the per-activation stash \
-                      cannot separate them; RECURSION is supported. Rewrite without \
-                      concurrency, or use a module-scope dynamic array"
+            message: "internal: a frame-local dynamic array (or dynamic-array input \
+                      formal) was still held at frame entry by an activation that is not \
+                      on this activity's call stack. Concurrent activations are supported \
+                      — each parks its arrays off the shared heap while suspended — so \
+                      reaching this means that park/unpark invariant was broken rather \
+                      than a construct being unsupported. Please report the design"
                 .to_string(),
             location: None,
             context: Vec::new(),
@@ -829,10 +830,31 @@ pub(crate) fn vcd_var_type(kind: NetKind) -> VarType {
 /// a `[0:0]` net both collapse to a bare name, as iverilog does. A dimensionless
 /// `real`/`realtime` never carries a range. `base` is the leaf name, already
 /// array-indexed for a per-element word.
-pub(crate) fn vcd_var_reference(vt: VarType, base: &str, width: u32, msb: u32, lsb: u32) -> String {
+/// The `$var` reference text for a net, with the DECLARED `(msb, lsb)` when the net's
+/// stored range cannot express it.
+///
+/// A net declared with a negative low bound (`logic [3:-2] x`) is stored NORMALIZED as
+/// `[w-1:0]`, because `NetVar.msb`/`lsb` are frozen `u32` — so the `$var` line said
+/// `x [5:0]` where iverilog says `x [3:-2]`. Same bits, but a waveform viewer then labels
+/// every bit with the wrong index. `decl` comes from the `net_decl_ranges` sidecar and is
+/// `None` for every ordinary net (byte-identical output).
+pub(crate) fn vcd_var_reference_decl(
+    vt: VarType,
+    base: &str,
+    width: u32,
+    msb: u32,
+    lsb: u32,
+    decl: Option<(i64, i64)>,
+) -> String {
     let is_vector = width > 1 || msb != 0 || lsb != 0;
     if !is_vector || matches!(vt, VarType::Real | VarType::Realtime) {
         return base.to_string();
+    }
+    if let Some((dm, dl)) = decl {
+        // Trusted only when span-consistent, the same rule the stored range gets below.
+        if (dm - dl).unsigned_abs() as u32 + 1 == width {
+            return format!("{base} [{dm}:{dl}]");
+        }
     }
     // A packed multi-dim net (`logic [0:3][7:0]`) stores msb = width-1 but a STALE
     // OUTER-dim lsb (elaborate's packed override resets width+msb, never lsb), so

@@ -70,6 +70,8 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
     s.handle_copy_stmts = std::collections::BTreeMap::from([(23u32, (2u32, 5u32))]);
     s.queue_slice_stmts = std::collections::BTreeSet::from([29u32]);
     s.func_names = vec!["top.f".to_string(), "top.g".to_string()];
+    s.net_decl_ranges = std::collections::BTreeMap::from([(31u32, (3i64, -2i64))]);
+    s.file_directed_stmts = std::collections::BTreeSet::from([37u32]);
     let bytes = postcard::to_stdvec(&s).expect("postcard encode");
     let got = blake3::hash(&bytes).to_hex().to_string();
     // REGEN_GOLDEN=1 cargo test -p cli staged_extra_sidecars_wire_shape -- --nocapture
@@ -77,7 +79,7 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
         println!("REGEN StagedExtraSidecars wire = {got}");
         return;
     }
-    const EXPECTED: &str = "a514007733d5dc74354d654e17fe8a5f673735779ad33cc4e984d22368196ed9";
+    const EXPECTED: &str = "232e5800c088cbd2ee3417d319251471560a24661156cfcde21b0573c4763b15";
     assert_eq!(
         got, EXPECTED,
         "StagedExtraSidecars wire shape changed — a field was added / removed / \

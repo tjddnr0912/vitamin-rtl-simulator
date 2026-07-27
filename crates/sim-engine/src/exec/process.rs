@@ -2,72 +2,6 @@
 
 use super::*;
 
-/// Execute activity `pi` starting at body block `start`. `pi` is a runtime
-/// ACTIVITY id (index into `Scheduler::activities`), NOT a declaration index —
-/// the body/sensitivity are resolved through `activities[pi].template`.
-/// Round-14 V3/V4 Phase 3: pop this activity's live AUTOMATIC frame windows off the
-/// SHARED `frame_stack` into their `FrameRec`s before the activity suspends — so an
-/// interleaving activity's frame calls can't corrupt them (a `frame_slot_read` always
-/// reads `frame_stack.last()`, which must be THIS activity's window only while it runs).
-/// Popped TOP-first (reverse call order), matching `enter_task_frame`'s push order.
-pub(crate) fn stash_frame_windows(sched: &mut Scheduler, pi: u32) {
-    let n = sched.activities[pi as usize].call_stack.len();
-    for i in (0..n).rev() {
-        let callee = sched.activities[pi as usize].call_stack[i].callee;
-        if sched.st.func_has_auto[callee as usize] {
-            let w = sched
-                .st
-                .frame_stack
-                .borrow_mut()
-                .pop()
-                .expect("frame window to stash");
-            sched.activities[pi as usize].call_stack[i].window = Some(w);
-        }
-    }
-}
-
-/// The inverse of [`stash_frame_windows`]: push the stashed windows back onto
-/// `frame_stack` in call order (bottom `FrameRec` first) so this activity's live frame
-/// context is on top again before it resumes executing the frame CFG.
-pub(crate) fn restore_frame_windows(sched: &mut Scheduler, pi: u32) {
-    let n = sched.activities[pi as usize].call_stack.len();
-    for i in 0..n {
-        // Tolerant: only a STASHED (`Some`) window is pushed back; a live/None frame is
-        // skipped, so a spurious call during normal in-frame execution is a no-op.
-        if let Some(w) = sched.activities[pi as usize].call_stack[i].window.take() {
-            sched.st.frame_stack.borrow_mut().push(w);
-        }
-    }
-}
-
-/// T1-9: may this SUSPENDABLE frame entry proceed on the per-activation dyn stash?
-///
-/// The stash makes a net-keyed frame-local dyn array per-activation by taking the outer
-/// contents at entry and putting them back at exit — sound exactly when the `[enter, exit]`
-/// intervals NEST. An empty or all-`None` stash means no outer activation held the slot,
-/// so there is nothing to nest inside and the entry is always fine (the overwhelmingly
-/// common case, and the only one a design without recursion ever reaches).
-///
-/// When an outer activation DOES hold it, nesting is guaranteed only if that activation is
-/// on THIS activity's own call stack — a recursive call returns before its parent by
-/// construction. A holder in another activity can interleave (A suspends, B enters, A
-/// resumes and exits first), which would make A's restore clobber B's live array, so that
-/// stays the loud fatal it has always been.
-fn frame_dyn_nesting_ok(
-    sched: &Scheduler,
-    pi: u32,
-    callee: u32,
-    stash: &[(u32, Option<crate::state::DynObj>)],
-) -> bool {
-    if !stash.iter().any(|(_, o)| o.is_some()) {
-        return true;
-    }
-    sched.activities[pi as usize]
-        .call_stack
-        .iter()
-        .any(|f| f.callee == callee)
-}
-
 pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
     let mut guard: u64 = 0;
     loop {
@@ -102,9 +36,18 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
         // cannot mis-fire — only the arm frame itself, once every nested call has
         // returned. Runs BEFORE the window-restore below so we tear the arm window down
         // instead of restoring it.
+        //
+        // `is_arm` is what makes the `bb == join_bb` comparison meaningful: both sides are
+        // global `ir.blocks` ids ONLY for an arm frame. A TOP-LEVEL `fork` whose child
+        // merely CALLS a suspendable task also has `call_stack.len() == 1`, but there the
+        // frame's `bb` is global while `join_bb` is process-local — comparing them killed
+        // the child on any numeric collision, silently dropping the rest of the task body
+        // (a top-level child completes through the `!in_frame` intercept above instead,
+        // once its callee frame has returned).
         if in_frame
             && sched.activity_is_child(pi)
             && sched.activities[pi as usize].call_stack.len() == 1
+            && sched.activities[pi as usize].call_stack[0].is_arm
         {
             let arm = sched.activities[pi as usize].call_stack.last().unwrap();
             let arm_bb = arm.bb;
@@ -380,6 +323,14 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                 resume_bb,
             } => {
                 if in_frame {
+                    // Mark BEFORE the stash: the arms about to be spawned RIDE this frame,
+                    // and unlike the automatic window (which they share through a
+                    // `WindowSlot::Shared` handle) a parked dyn array is simply absent from
+                    // the heap. An arm reading the parent's `a[0]` would get X. See
+                    // `FrameRec::forked`.
+                    if let Some(top) = sched.activities[pi as usize].call_stack.last_mut() {
+                        top.forked = true;
+                    }
                     // Stage-1 fork-in-frame: stash the parent frame's window (as the
                     // in-frame Delay/Wait arms do) so the concurrent children — which take
                     // turns on the shared `frame_stack` — never see it; the parent restores
@@ -427,7 +378,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             let captured =
                                 sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
                             let dyn_stash = sched.st.frame_dyn_enter(info.callee);
-                            if !frame_dyn_nesting_ok(sched, pi, info.callee, &dyn_stash) {
+                            if !frame_dyn_park_invariant_ok(sched, pi, info.callee, &dyn_stash) {
                                 sched.st.frame_dyn_exit(dyn_stash);
                                 sched.st.fatal_frame_dyn_concurrent();
                                 return Step::Fatal;
@@ -446,6 +397,9 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                     out_binds: info.out_binds.clone(),
                                     window: None,
                                     dyn_stash,
+                                    dyn_parked: Vec::new(),
+                                    forked: false,
+                                    is_arm: false,
                                 });
                             continue; // execute the nested frame next iteration
                         }
@@ -503,7 +457,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         // T1-9: CAPTURE the actuals before the stash.
                         let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
                         let dyn_stash = sched.st.frame_dyn_enter(info.callee);
-                        if !frame_dyn_nesting_ok(sched, pi, info.callee, &dyn_stash) {
+                        if !frame_dyn_park_invariant_ok(sched, pi, info.callee, &dyn_stash) {
                             sched.st.frame_dyn_exit(dyn_stash);
                             sched.st.fatal_frame_dyn_concurrent();
                             return Step::Fatal;
@@ -522,6 +476,9 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 out_binds: info.out_binds.clone(),
                                 window: None,
                                 dyn_stash,
+                                dyn_parked: Vec::new(),
+                                forked: false,
+                                is_arm: false,
                             });
                         continue; // re-fetch from the new frame next iteration
                     }

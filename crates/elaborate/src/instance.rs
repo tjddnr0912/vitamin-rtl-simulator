@@ -551,6 +551,10 @@ impl Elaborator<'_> {
         //       synthesized `initial` BEFORE user processes, so it has a lower ProcId
         //       and runs first at time 0 (a user `initial` then reads the set value,
         //       not the X/0 default). Constant inits already folded into net.init.
+        // Decl-time pre-sizes recorded for THIS scope (the `""` key) go first: a routed
+        // string array's `new[n]` must precede its element writes. Same position the
+        // straight-into-`pending_var_inits` push had, so the module path is unchanged.
+        self.drain_scoped_presize();
         for item in &module.body {
             if let ast::ModuleItem::NetVar(d) = item {
                 self.collect_var_init_drivers(d);
@@ -561,6 +565,7 @@ impl Elaborator<'_> {
         // single t0 pre-sweep `initial`.
         let mut bl_strings = std::mem::take(&mut self.pending_block_local_string_inits);
         self.pending_var_inits.append(&mut bl_strings);
+        self.drain_scoped_bl_strings();
         self.flush_pending_var_inits();
 
         // (6.9b) §6.8 for GENERATE scopes: the module-body sweep above walks the

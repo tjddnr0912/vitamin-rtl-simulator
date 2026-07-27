@@ -191,23 +191,23 @@ fn suspending_task_dyn_recursion_is_per_activation() {
 }
 
 #[test]
-fn task_dyn_concurrent_fatal_loud() {
-    // T1-9 BOUNDARY, and the reason the stash is not enough on its own. Two fork
-    // activations both allocate and then SUSPEND, so their `[enter, exit]` intervals
-    // OVERLAP rather than nest — A can resume and exit while B is still live, at which
-    // point A's restore would overwrite B's array. Recursion cannot do that (the inner
-    // call is on the same call stack and returns first), which is exactly the
-    // discriminator: an occupied slot held by a frame that is NOT on this activity's own
-    // call stack stays the fatal it has always been.
+fn task_dyn_concurrent_activations_each_keep_their_own() {
+    // This was the T1-9 boundary and a graceful F4004: two fork activations both
+    // allocate and then SUSPEND, so their `[enter, exit]` intervals OVERLAP rather than
+    // nest, and the entry stash alone would hand A back B's array.
+    //
+    // Lifted by giving the dyn slots the AUTOMATIC window's lifetime — parked off the
+    // net-keyed heap while the activity is suspended, unparked when it resumes, at the
+    // same two points (`stash_frame_windows`/`restore_frame_windows`). Only the TOP frame
+    // parks: outer activations already live in the `dyn_stash` above them, which is what
+    // keeps recursion (the test above) working. iverilog: `x=3 y=2`.
     let src = "module t;\n\
         task automatic mk(input int n, output int r);\n\
           int loc[]; loc=new[n]; #5; loc[0]=n; r=loc.size(); endtask\n\
         int x,y; initial begin fork mk(3,x); mk(2,y); join $display(\"x=%0d y=%0d\",x,y); end endmodule";
     let (out, ok) = run(src);
-    assert!(
-        !ok,
-        "concurrent frame dyn-array must be fatal-loud, got:\n{out}"
-    );
+    assert!(ok, "got:\n{out}");
+    assert!(out.contains("x=3 y=2"), "got:\n{out}");
 }
 
 #[test]

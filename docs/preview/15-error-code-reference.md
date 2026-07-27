@@ -519,7 +519,7 @@ if (cfg_invalid) $fatal(1, "bad config word %0h", cfg);
 
 | 메시지 머리 | 조건 | 회피 |
 |---|---|---|
-| `concurrent activations of one task sharing a frame-local dynamic array…` | 같은 task의 **동시**(재귀 아님) 활성화가 frame-local dynamic 배열/dyn `input` formal을 공유. 활성화 구간이 nest가 아니라 overlap이라 per-activation stash로 분리 불가 | 동시성 제거, 또는 module-scope dynamic 배열 사용. **재귀는 지원됨** |
+| `internal: a frame-local dynamic array … was still held at frame entry…` | **불변식** 가드(능력 한계 아님). 동시 활성화는 §4.5.228 이후 **지원된다** — 각 활성화가 서스펜드 중 자기 배열을 힙 밖으로 park 한다. 이 메시지가 나오면 그 park/unpark 불변식이 깨진 것 | 설계를 리포트 — 회피 대상이 아니다 |
 | `writing an element of (or a whole store to) a dynamic-array \`input\` formal…` | 읽기 전용으로 aliasing된 dyn-array formal에 쓰기 | 값을 로컬 dyn 배열에 복사 후 수정 |
 | `an associative-array iteration (\`first/next/last/prev\`) whose key…` | assoc 순회 키가 지원 위치 밖 | 키를 frame-local 변수로 |
 | `frame-task recursion exceeded the depth limit (N)` / `frame-call …` | 재귀 깊이가 `MAX_CALL_DEPTH` 초과 — 무한 재귀를 hang 대신 loud로 | 종료 조건 점검 |

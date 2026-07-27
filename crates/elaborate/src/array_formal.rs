@@ -411,10 +411,10 @@ impl Elaborator<'_> {
     pub(crate) fn array_formal_ext_dims(
         dims: &[(u32, u32, bool)],
         elem_w: u32,
-    ) -> Vec<(u32, u32, bool)> {
+    ) -> Vec<(i64, u32, bool)> {
         dims.iter()
-            .map(|&(lo, sz, _)| (lo, sz, false))
-            .chain(std::iter::once((0u32, elem_w, false)))
+            .map(|&(lo, sz, _)| (i64::from(lo), sz, false))
+            .chain(std::iter::once((0i64, elem_w, false)))
             .collect()
     }
 

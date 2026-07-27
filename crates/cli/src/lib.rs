@@ -397,6 +397,20 @@ struct StagedExtraSidecars {
     real_elem_dyn_nets: std::collections::BTreeSet<u32>,
     #[serde(default)]
     string_elem_dyn_nets: std::collections::BTreeSet<u32>,
+    /// DECLARED packed `(msb, lsb)` for a net whose stored `NetVar.msb`/`lsb` cannot
+    /// express it — a NEGATIVE low bound (`logic [3:-2] x`), stored normalized as
+    /// `[w-1:0]` because those fields are frozen `u32`. Drives the VCD `$var` range only
+    /// (`x [3:-2]`, matching iverilog); without it a STAGED run labels the bits
+    /// `[5:0]` — the values are right, the indices in the waveform are not.
+    /// APPEND-ONLY tail; rides the format_version 25 bump. EMPTY for any design without
+    /// such a net ⇒ byte-identical.
+    #[serde(default)]
+    net_decl_ranges: sim_engine::NetDeclRangeTable,
+    /// `$fmonitor`/`$fstrobe` call-site StmtIds (they share the frozen `Monitor`/`Strobe`
+    /// ids, so without this a STAGED run prints them to stdout instead of the file).
+    /// APPEND-ONLY tail; rides the format_version 25 bump. EMPTY ⇒ byte-identical.
+    #[serde(default)]
+    file_directed_stmts: std::collections::BTreeSet<u32>,
 }
 
 impl StagedExtraSidecars {
@@ -434,6 +448,8 @@ impl StagedExtraSidecars {
             func_names: sc.func_names.clone(),
             real_elem_dyn_nets: sc.real_elem_dyn_nets.clone(),
             string_elem_dyn_nets: sc.string_elem_dyn_nets.clone(),
+            net_decl_ranges: sc.net_decl_ranges.clone(),
+            file_directed_stmts: sc.file_directed_stmts.clone(),
         }
     }
 }

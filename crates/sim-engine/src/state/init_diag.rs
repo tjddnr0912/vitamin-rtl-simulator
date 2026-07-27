@@ -126,6 +126,8 @@ impl<'a> SimState<'a> {
             probe_prev: Vec::new(),
             trace_lines: Vec::new(),
             net_dims: crate::NetDimsTable::new(),
+            net_decl_ranges: crate::NetDeclRangeTable::new(),
+            file_directed_stmts: std::collections::BTreeSet::new(),
             dump_filter: None,
             dump_multi_warned: false,
             rng: RngCells::default(),

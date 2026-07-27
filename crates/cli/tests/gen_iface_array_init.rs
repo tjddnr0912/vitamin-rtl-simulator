@@ -327,13 +327,24 @@ fn interface_flush_does_not_steal_module_block_local_init() {
 }
 
 #[test]
-fn queue_pattern_in_generate_stays_loud() {
-    // A queue `'{…}` decl-init works at MODULE scope but is rejected at
-    // net-creation inside a generate (pre-existing — the dynamic-handle init
-    // path is not the array pre-sweep this fix touches). Loud = safe; a
-    // follow-on "loud→supported" candidate. Canary: catch any silent change.
-    let (_, _, c) = run("module top; generate if(1) begin: g\n\
-           int q[$] = '{1,2,3}; initial $display(\"%0d\", q[0]);\n\
+fn queue_and_dyn_pattern_in_generate_are_supported() {
+    // The follow-on this file recorded as "loud = safe". A dynamic-handle decl-init in a
+    // generate scope was rejected at net creation via `allow_string_init = false`; that
+    // flag was standing in for the real defect, which is that a string/handle declaration's
+    // decl-time writes went into the MODULE-scope pending list and resolved their bare-name
+    // lvalue outside the generate prefix. Scope-keyed now. iverilog: `1 2 3 sz=3`.
+    let (o, _, c) = run("module top; generate if(1) begin: g\n\
+           int q[$] = '{1,2,3};\n\
+           initial $display(\"%0d %0d %0d sz=%0d\", q[0], q[1], q[2], q.size());\n\
          end endgenerate initial #1 $finish; endmodule\n");
-    assert_ne!(c, 0, "queue '{{…}} in generate must stay loud (follow-on)");
+    assert_eq!(c, 0, "{o}");
+    assert!(o.contains("1 2 3 sz=3"), "{o}");
+
+    // …and the dynamic-array / string-queue twins, which shared the same block.
+    let (o2, _, c2) = run("module top; generate if(1) begin: g\n\
+           int d[] = '{7,8}; string sq[$] = '{\"p\",\"q\"};\n\
+           initial $display(\"%0d %0d | %s %s\", d[0], d[1], sq[0], sq[1]);\n\
+         end endgenerate initial #1 $finish; endmodule\n");
+    assert_eq!(c2, 0, "{o2}");
+    assert!(o2.contains("7 8 | p q"), "{o2}");
 }

@@ -78,6 +78,12 @@ pub(crate) struct FmtCapture {
     /// which by flush time holds whatever process ran LAST in the timestep, a
     /// DIFFERENT module's `M` under mixed `` `timescale ``s.
     pub time_mult: u64,
+    /// `$fmonitor`/`$fstrobe`: the DESCRIPTOR expression (`args[0]` at the call site),
+    /// evaluated at REGISTRATION like every other capture field. `None` ⇒ stdout, the
+    /// plain `$monitor`/`$strobe`. Held here rather than re-derived at flush time because
+    /// the fd variable may have been reassigned (or the file closed and reopened) between
+    /// registration and the postponed render.
+    pub fd: Option<u32>,
     /// Default radix for unformatted args (P1-5 b/o/h variants); `None` ⇒ decimal.
     pub radix: Option<u8>,
     /// `%m` scope of the registering process (P2-11) — snapshot, like `time_mult`.
@@ -131,7 +137,19 @@ pub(crate) struct Postponed {
     /// FIFO of pending strobes for the CURRENT timestep. Drained-and-CLEARED at
     /// every postponed flush (one-shot-per-call semantics).
     pub strobes: Vec<FmtCapture>,
-    /// The global monitor (replace-on-redefine). `None` until first `$monitor`.
+    /// `$fmonitor` monitors, keyed by DESCRIPTOR. IEEE §21.3.4 makes `$fmonitor` the
+    /// file analogue of `$monitor`, so each output destination keeps one monitor
+    /// (replace-on-redefine) exactly as stdout does — a `$fmonitor` must NOT displace a
+    /// standing `$monitor`, which a single shared slot did (measured: iverilog keeps both
+    /// firing). Iterated in ascending fd for determinism, after the stdout monitor, so a
+    /// design with no `$fmonitor` is byte-identical.
+    ///
+    /// DIVERGENCE, pinned: iverilog ACCUMULATES `$fmonitor`s even on the same fd (two
+    /// calls with one descriptor print two lines per change), which contradicts its own
+    /// singleton `$monitor`. Per-destination replace is the defensible reading and is
+    /// what a second `$monitor` already does.
+    pub file_monitors: std::collections::BTreeMap<u32, MonitorState>,
+    /// The stdout monitor (replace-on-redefine). `None` until first `$monitor`.
     pub monitor: Option<MonitorState>,
     /// v9 rank 6: the GLOBAL monitor-enable, modeled as `$monitoroff`-disabled
     /// (IEEE 1364-2005 §17.1). It is independent of monitor (re-)establishment —
@@ -355,6 +373,11 @@ pub(crate) struct SimState<'a> {
     /// Unpacked-array dims for per-element VCD naming (Phase-1.x ⑤, from
     /// `SimOpts.net_dims`); an absent array falls back to 1-D 0-based names.
     pub net_dims: crate::NetDimsTable,
+    /// Declared packed range for a net stored normalized (`SimOpts.net_decl_ranges`);
+    /// absent ⇒ the stored `NetVar.msb`/`lsb` are authoritative.
+    pub net_decl_ranges: crate::NetDeclRangeTable,
+    /// `$fmonitor`/`$fstrobe` call-site StmtIds (`SimOpts.file_directed_stmts`).
+    pub file_directed_stmts: std::collections::BTreeSet<u32>,
     /// ⑤b: net ids selected by the FIRST `$dumpvars` call's depth/scope/net
     /// args. `None` ⇒ dump everything (bare `$dumpvars` / level-only forms).
     pub dump_filter: Option<std::collections::BTreeSet<u32>>,
