@@ -59,6 +59,10 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
+### 무오라클 능력 (§4.5.235)
+
+- **오라클이 거부하는 영역에서 우리가 앞서 있으면, 테스트가 유일한 방어선이다.** iverilog 가 구문을 거부하는 기능(modport 타입 포트·함수 결과 part-select 등)은 **차분으로 회귀를 감지할 수 없다** — 핀이 없으면 리팩터 한 번에 조용히 사라진다. fresh 스윕이 clean 으로 끝나도 결론은 "할 일 없음"이 아니라 **"핀 없는 무오라클 능력을 찾아 핀하라"**.
+
 ### 두 술어 봉인 (§4.5.234)
 
 - **값 술어가 둘이 되는 걸 피할 수 없으면, 두 구현이 반드시 일치하는 부분집합으로 좁혀라.** 규칙이 같기를 바라지 말고 **불일치가 가능한 입력을 거부**하라 — 파서의 리터럴 폴드는 *절단이 필요한* 리터럴을 아예 안 받는다(`'h1FFFFFFFF` 를 elaborate 는 33비트로 키우고 파서는 32비트로 마스킹했다). 남는 것은 정의상 안전하고, 거부된 것은 이전 동작(loud) 그대로다.

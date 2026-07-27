@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–234**
+**§4.5.220–235**
+- `4.5.235` fresh-area 스윕 CLEAN + 무오라클 능력 2건(modport 포트·함수결과 part-select) 핀 …
 - `4.5.234` sized-literal enum label — enum 메서드 전부 loud→correct-support(두 술어를 "합의 가능한 부분집합"으로 봉인) …
 - `4.5.232` `real` const-fold — 실수 산술 loud→correct-support(§11.8.1 순서가 핵심; i64 twin 확장은 5건 silent-wrong 을 열어 철회) …
 - `4.5.231` 모듈 스코프 상수식 = **비목표 판정**(iverilog 3갈래 자기모순 실측) + vita 자기일관성 teeth …
@@ -289,6 +290,21 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.235 fresh-area 스윕 = CLEAN + 무오라클 능력 2건 핀 (2026-07-28, branch feat-freshsweep-teeth, format 25 불변) ✅
+
+**착수 근거**: 큐 1번(real→정수 문맥·literal 공유 크레이트)은 **둘 다 선행 인프라**가 필요하고, 2번(inner NET shadow)은 DEEP + 실패 전력(§4.5.218 S1). 그래서 3번 **fresh-area probe 로 신규 ① 발굴**.
+
+**결과 = CLEAN**. 스윕한 영역(iverilog 오라클 대조):
+- 배열 질의 `$left/$right/$low/$high/$size/$increment/$dimensions/$bits` — unpacked·**非0-LSB 하강**(`[15:4]`)·**상승**(`[0:7]`) 전부 일치(`$increment` 부호 포함)
+- 비트 질의 `$countones/$onehot/$onehot0/$isunknown/$countbits`·`$clog2(0|1)`·`do…while`·sized 패턴 `case` — 전부 일치
+- `$sformatf` 4포맷·`$signed`/`$unsigned` 왕복 — 일치
+
+**vita 가 iverilog 보다 앞선 2건(무오라클)** — iverilog 13.0 이 **구문 자체를 거부**한다: modport 타입 포트(`sub(ib.mp p)`) · **함수 결과의 part-select**(`f(0)[7:0]`). 둘 다 hand-IEEE 로 값이 정확한데 **핀이 없었다** — 오라클이 못 보는 능력은 리팩터 한 번에 조용히 사라진다. 그래서 이번 전달물은 **teeth**(신규 `fresh_sweep_pins.rs`×4). 스트리밍 연산자(`{<<8{x}}`)는 양쪽 다 거부라 vita 의 loud 가 정직하고 핀할 것이 없다.
+
+**게이트**: 4652 → **4656** tests · clippy/fmt clean · format 25 불변 · **코드 변경 0**.
+
+**교훈**: **스윕이 clean 이어도 산출물은 있다** — 오라클이 거부하는 영역에서 vita 가 앞서 있으면 그 능력은 **오라클로 회귀를 감지할 수 없으므로** 테스트가 유일한 방어선이다. clean 스윕의 결론은 "할 일 없음"이 아니라 "핀 없는 무오라클 능력을 찾아 핀하라".
 
 #### 4.5.234 sized-literal enum label — enum 메서드 전부 loud→correct-support (2026-07-28, branch feat-enum-sized-label, format 25 불변) ✅
 
