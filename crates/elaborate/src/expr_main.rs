@@ -189,6 +189,7 @@ impl Elaborator<'_> {
                     // `lookup_scoped`, this pass found the outer string) — a silent-wrong.
                     // Re-derive the innermost key over the COMBINED binding set and only
                     // fold the string when that exact key is the string param.
+                    let mut local_shadows_param = false;
                     if let Some(key) = self.walk_scopes_key(seg, |k| {
                         self.str_param_raw.contains_key(k)
                             || self.real_param_val.contains_key(k)
@@ -210,14 +211,27 @@ impl Elaborator<'_> {
                             let cid = self.intern_const(make_const_real(v));
                             return self.push_expr(ir::Expr::Const { val: cid });
                         }
-                        // else: an inner net / numeric param wins — fall through to the
+                        // An inner NET wins over an outer parameter (§23.9 name
+                        // resolution). The fall-through below calls `lookup_scoped`,
+                        // which runs its OWN params-only walk and therefore ignores
+                        // the innermost key just derived — so an outer `localparam W`
+                        // beat a function/task/block-local `int W` and the local's
+                        // value silently vanished (`W = 9; return W;` returned the
+                        // param's 4). Skip the parameter branch when the innermost
+                        // binding is a net that is NOT itself a parameter; resolution
+                        // then falls to `resolve_net`, which is what the comment above
+                        // always intended.
+                        if self.symbols.contains_key(&key) && !self.params.contains_key(&key) {
+                            local_shadows_param = true;
+                        }
+                        // else: an inner numeric param wins — fall through to the
                         // normal resolution below (which resolves that innermost binding).
                     }
                     // parameter / localparam / genvar: a constant in THIS scope (or
                     // an enclosing generate scope) folds to a Const, NOT a net read.
                     // Resolved before `resolve_net` so a param never errors as an
                     // undeclared net (mirrors `const_eval_in_scope`'s lookup_scoped).
-                    if let Some(v) = self.lookup_scoped(seg) {
+                    if let Some(v) = self.lookup_scoped(seg).filter(|_| !local_shadows_param) {
                         // A TYPED param (`logic [63:0] P`, `int W`) materializes at
                         // its DECLARED width, not the value-inferred 32 bits — so
                         // `$display("%h", P)` of a 64-bit param shows all 16 nibbles.

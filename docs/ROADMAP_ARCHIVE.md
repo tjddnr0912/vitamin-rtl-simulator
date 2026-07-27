@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–245**
+**§4.5.220–246**
+- `4.5.246` inner NET 이 outer PARAM 을 shadow — 마지막 ①-급 해소(퍼널은 이미 있었고 fall-through 가 무시했다) …
 - `4.5.245` inner-NET shadow 메커니즘 확정(트리거=param 이름충돌·범위는 task/블록까지·근인=해석 순서) …
 - `4.5.244` 남은 대형 3건 착수 판단표(C>A>B) — 사이드카 우회 불가·B payoff 작음을 실측 …
 - `4.5.243` generate case 의 real scrutinee = 비목표 확정(iverilog 도 거부) — real 가족 완결 …
@@ -300,6 +301,20 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.246 inner NET 이 outer PARAM 을 shadow — 마지막 ①-급 silent-wrong 해소 (2026-07-28, branch feat-inner-net-shadow, format 25 불변) ✅
+
+**착수 근거**: §4.5.244 판단표의 **C**, §4.5.245 가 메커니즘을 확정한 항목. 남아 있던 **유일한 ①-급 silent-wrong**.
+
+**결함**: 서브루틴 로컬이 모듈 param 과 이름 충돌하면 **param 이 이겨서 로컬 값이 조용히 사라졌다** — `localparam W=4` + `function int f(); int W; W=9; return W;` = vita **4** / iverilog 9. function·**task**(output 경유)·**begin/end 블록**·`localparam int` 전부 동일(`9 4 4 3` vs `9 9 9 8`).
+
+**근인 = 규칙이 절반만 적용돼 있었다**. `lower_expr` 은 이미 `walk_scopes_key` 로 **결합 집합**(params|nets|string-param|real-param) 위에서 **innermost 바인딩을 재도출**하고, 주석에도 "inner net 이 이긴다"고 적혀 있었다. 그런데 fall-through 가 `lookup_scoped` 를 부르는데 **그건 params 만 도는 자기 walk** 라서 방금 도출한 키를 무시했다 — 그래서 OUTER param 이 INNER net 을 이겼다. **fix = 도출된 innermost 키가 net(≠param)이면 param 분기를 건너뛴다**(16줄, 한 site). 새 머신러리 0 — §4.5.227/241 과 같은 패턴("퍼널은 이미 있고 호출부가 안 쓴다")이 **세 번째** 반복됐다.
+
+**실패 전력에 대한 방어**: §4.5.218 S1(같은 fix 시도가 **중첩 generate body 를 조용히 삭제**)을 회귀 테스트로 직접 박았다 — generate-scope localparam 이 내부 for 바운드와 if 를 구동하는 형태가 iverilog 와 완전 일치. 반대 방향(로컬 없을 때 outer param 이 계속 이겨야 함)과 충돌 없는 로컬(항상 정상이었음)도 컨트롤로 핀.
+
+**게이트**: 4675 → **4679** tests(신규 `inner_net_shadow.rs`×4) · clippy/fmt clean · format 25 불변 · diff = **1 파일 16줄**.
+
+**리뷰 고지**: 이름 해석은 blast radius 최대 영역이라 적대 리뷰를 띄웠으나, 사용자 요청으로 **루프를 이 반복에서 종료**하므로 그 결과는 이 로그에 반영되지 않았다. 리뷰 결과가 도착하면 별도로 처리해야 한다.
 
 #### 4.5.245 inner-NET shadow 메커니즘 확정 (2026-07-28, branch feat-shadow-grounding, format 25 불변) ✅
 
