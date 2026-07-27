@@ -70,6 +70,17 @@ pub(crate) struct FrameRec {
     /// a `WindowSlot::Shared(h)` here is a Case-B task frame (parent) or its fork arm — the
     /// stashed slot is just the arena handle; the window data stays in `frame_windows`.
     pub window: Option<crate::state::WindowSlot>,
+    /// T1-9: this activation's frame-local dyn-array STASH — the heap objects the OUTER
+    /// activation held in those net-keyed slots, taken at entry and put back at `Return`.
+    ///
+    /// It lives HERE, on the per-activity call stack, rather than on a shared stack,
+    /// because a suspendable frame's entry and exit are separated by arbitrary scheduler
+    /// activity: A can enter this task, suspend, let B enter the SAME task, then resume
+    /// and exit first. A shared stack would hand A back B's array. Riding the call stack
+    /// makes the lifetime exactly the activation's, which is what the stash means.
+    ///
+    /// Empty for the overwhelming majority of frames (a callee with no dyn-array local).
+    pub dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
 }
 
 pub(crate) struct Activity {

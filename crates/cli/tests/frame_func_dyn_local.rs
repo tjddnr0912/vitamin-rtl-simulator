@@ -116,9 +116,11 @@ fn subset_task_dyn_local() {
 }
 
 #[test]
-fn recursion_with_dyn_local_stays_loud() {
-    // A per-net heap can't hold two live activations of the same dyn local → fatal-loud
-    // (correct-or-loud; a per-activation heap stash is a follow-on, as §4.5.171).
+fn recursion_with_a_dyn_local_is_per_activation() {
+    // T1-9: §4.5.171's per-activation heap stash, landed. The slot is still keyed by NET;
+    // the frame ENTRY takes whatever the outer activation left there and the EXIT puts it
+    // back, which is enough because a recursive call's lifetime NESTS inside its parent's.
+    // iverilog: r=6 (3+2+1+0).
     let o = run("module top;\n\
          function automatic int f(input int n);\n\
            int loc[]; loc=new[2]; loc[0]=n;\n\
@@ -127,9 +129,5 @@ fn recursion_with_dyn_local_stays_loud() {
          endfunction\n\
          initial $display(\"r=%0d\", f(3));\n\
          endmodule\n");
-    assert!(
-        !o.1 && o.0.contains("F4004"),
-        "recursive dyn-local must be fatal-loud, not silent:\n{}",
-        o.0
-    );
+    assert!(o.1 && o.0.contains("r=6"), "got:\n{}", o.0);
 }

@@ -142,15 +142,28 @@ fn survives_a_suspend() {
 
 #[test]
 fn in_a_framed_function() {
-    // A function body-local, not just a task's. `.len()` of "abc" is 3 — iverilog says 2
-    // here, which is its own long-standing defect on a string-array element, so this is
-    // pinned to the IEEE answer rather than the oracle.
+    // A function body-local, not just a task's. `.len()` of "abc" is 3.
+    //
+    // Pinned to IEEE, not to the oracle: iverilog's `.len()` on a string-ARRAY element
+    // returns the ARRAY SIZE rather than the string length. Diagnosed by measurement, not
+    // assumed — `string s[5]; s[0]="abcdefg"` gives iverilog `5` for the element and a
+    // correct `7` for a scalar string holding the same text, and `string s[2]` here gives
+    // it `2` for "abc". vita answers the string length in every one of those.
     assert_eq!(
         run("module m;\n\
              function automatic int f(); string s[2]; s[0]=\"abc\"; return s[0].len(); endfunction\n\
              initial begin $display(\"%0d\", f()); $finish; end\n\
              endmodule\n"),
         "3\n"
+    );
+    // The measurement above, as a regression pin: element and scalar must agree, and the
+    // answer must track the TEXT (7), not the declared array size (5).
+    assert_eq!(
+        run("module m; string s[5]; string sc;\n\
+             initial begin s[0]=\"abcdefg\"; sc=\"abcdefg\";\n\
+               $display(\"%0d %0d\", s[0].len(), sc.len()); $finish; end\n\
+             endmodule\n"),
+        "7 7\n"
     );
 }
 
@@ -168,18 +181,38 @@ fn a_frame_local_fixed_array_is_not_resizable() {
 }
 
 #[test]
-fn recursion_with_a_frame_local_string_array_is_loud() {
-    // §4.5.171's per-activation guard: the heap slot is per-NET, not per-activation, so
-    // a recursive or concurrent entry is a runtime fatal rather than a silently shared
-    // array. iverilog runs this — a recorded capability gap, not a wrong answer.
+fn recursion_with_a_frame_local_string_array_works() {
+    // T1-9. §4.5.171's guard made this a fatal because the heap slot is per-NET; the
+    // entry now TAKES the outer activation's contents into a stash carried by the
+    // activation itself and the exit restores them, so each level gets its own array.
+    // A routed frame-local string array is a `DynArray` net, so it rides that machinery
+    // unchanged. iverilog: lvl0 / lvl1 / lvl2.
+    assert_eq!(
+        run("module m;\n\
+             task automatic tk(input int n); string s[2]; s[0]=\"lvl\"; s[1]=\"x\";\n\
+               if(n>0) tk(n-1);\n\
+               $display(\"%s%0d %s\", s[0], n, s[1]); endtask\n\
+             initial begin tk(2); $finish; end\n\
+             endmodule\n"),
+        "lvl0 x\nlvl1 x\nlvl2 x\n"
+    );
+}
+
+#[test]
+fn concurrent_activations_sharing_a_frame_local_string_array_stay_loud() {
+    // T1-9 BOUNDARY. Two fork arms suspend inside the same task, so their activation
+    // lifetimes OVERLAP rather than nest and the stash cannot separate them — still a
+    // fatal, and now one that names the actual reason. (The recursion above nests, which
+    // is the whole difference.)
     let (_, ok) = compile(
-        "module m;\n\
-         task automatic tk(input int n); string s[2]; s[0]=\"lvl\"; if(n>0) tk(n-1);\n\
-           $display(\"%s%0d\", s[0], n); endtask\n\
-         initial begin tk(2); $finish; end\n\
+        "module m; reg clk=0; always #1 clk=~clk;\n\
+         task automatic tk(input int id); string s[2]; s[0]=\"A\";\n\
+           @(posedge clk); $display(\"%0d %s\", id, s[0]); endtask\n\
+         initial fork tk(1); tk(2); join\n\
+         initial #10 $finish;\n\
          endmodule\n",
     );
-    assert!(!ok, "expected the per-activation fatal");
+    assert!(!ok, "expected the concurrent-activation fatal");
 }
 
 #[test]

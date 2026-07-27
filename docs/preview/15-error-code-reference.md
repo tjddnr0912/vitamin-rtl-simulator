@@ -501,16 +501,33 @@ if (dut_result !== expected) $error("MISMATCH got=%0h exp=%0h", dut_result, expe
 `--error-exit`로 `$error` 발화 시 nonzero(corpus가 이걸로 게이트). `-Wno-`/`-Werror=`(통합 게이트).
 
 ### VITA-F4004 · `F-RUN-FATAL` (Fatal)
-**시뮬레이션 시점 RTL `$fatal` 발화 — 묵시 `$finish`로 중단.** IEEE §20.11상 `$fatal`은 묵시
-`$finish`로 즉시 종료. Fatal 진단 후 시뮬 단계 중단, **exit class 1**(staleness class 2와 구별).
-앞 `n`(0/1/2)은 shell code가 아니라 exit-stats verbosity(0=silent,1=time+loc,2=+stats).
+**시뮬레이션 단계에서 실행을 중단시킨 치명 조건.** Fatal 진단 후 시뮬 단계 중단,
+**exit class 1**(staleness class 2와 구별). 앞 `n`(0/1/2)은 shell code가 아니라 exit-stats
+verbosity(0=silent,1=time+loc,2=+stats). **두 부류가 이 코드를 공유하므로 메시지로 구분한다.**
+
+**(a) RTL `$fatal` 발화** — IEEE §20.11상 묵시 `$finish`로 즉시 종료.
 ```
 if (cfg_invalid) $fatal(1, "bad config word %0h", cfg);
 ->  fatal[VITA-F4004] F-RUN-FATAL: bad config word deadbeef at tb.dut (dut.sv:88) time=500ns (exit 1)
 ```
 **해결:** 치명 조건 해소 — `$fatal`은 작성자의 명시적 "계속 불가". Fatal은 continue로 억제 불가.
-corpus는 class-1 내 compile-fail vs runtime-fail을 요약 MsgCode로 구분(`F-RUN-FATAL`=돌다 중단).
 (elaboration 시점 `$fatal`은 `F-ELAB-USER-FATAL`.)
+
+**(b) 엔진 능력 한계 — correct-or-loud의 런타임 쪽.** 조용히 틀린 값을 내느니 멈춘다.
+설계에 `$fatal`이 없는데 이 코드가 나오면 전부 이쪽이고, **사용자 코드의 버그가 아니라
+시뮬레이터의 미지원 형태**다. 현재 발화 조건:
+
+| 메시지 머리 | 조건 | 회피 |
+|---|---|---|
+| `concurrent activations of one task sharing a frame-local dynamic array…` | 같은 task의 **동시**(재귀 아님) 활성화가 frame-local dynamic 배열/dyn `input` formal을 공유. 활성화 구간이 nest가 아니라 overlap이라 per-activation stash로 분리 불가 | 동시성 제거, 또는 module-scope dynamic 배열 사용. **재귀는 지원됨** |
+| `writing an element of (or a whole store to) a dynamic-array \`input\` formal…` | 읽기 전용으로 aliasing된 dyn-array formal에 쓰기 | 값을 로컬 dyn 배열에 복사 후 수정 |
+| `an associative-array iteration (\`first/next/last/prev\`) whose key…` | assoc 순회 키가 지원 위치 밖 | 키를 frame-local 변수로 |
+| `frame-task recursion exceeded the depth limit (N)` / `frame-call …` | 재귀 깊이가 `MAX_CALL_DEPTH` 초과 — 무한 재귀를 hang 대신 loud로 | 종료 조건 점검 |
+| `fork exceeds the v1 tie-encoding limit …` | top-level 프로세스 > 65534 또는 arm > 65536(결정적 순서 인코딩 한계) | 해당 없음(실 벤치 범위 밖) |
+
+**해결:** (b)는 사용자가 고칠 조건이 아니라 **회피**하는 조건이다 — 위 표의 회피 열을 따르거나
+ROADMAP에 등재된 후속 슬라이스를 기다린다. corpus는 class-1 내 compile-fail vs runtime-fail을
+요약 MsgCode로 구분(`F-RUN-FATAL`=돌다 중단).
 
 ### VITA-I4005 · `I-RUN-USER-INFO` (Info)
 **시뮬레이션 시점 RTL `$info` 발화.** 절차/시뮬 문맥에서 정보 출력(예 "test PASSED"). IEEE

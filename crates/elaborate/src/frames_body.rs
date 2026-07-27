@@ -344,8 +344,8 @@ impl Elaborator<'_> {
                 // reject the same way the module-scope pre-size is exempted.
                 if let Some(n) = self
                     .lookup_net_scoped(&decl.name.name)
-                    .and_then(|net| self.fixed_string_dyn_dims(net))
-                    .map(|dims| dims.iter().map(|&x| u64::from(x)).product::<u64>())
+                    .and_then(|net| self.fixed_string_dyn_geom(net))
+                    .map(|g| g.elem_count())
                 {
                     let span = decl.name.span;
                     let pre = ast::Stmt::Blocking {

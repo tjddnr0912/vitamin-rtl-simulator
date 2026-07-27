@@ -505,18 +505,18 @@ fn n6_runtime_index_supported() {
 }
 
 #[test]
-fn n6_runtime_index_non_zero_base_stays_loud() {
-    // The routing is restricted to ZERO-BASED ASCENDING declarations, because the dyn
-    // representation numbers elements 0..n-1 and `foreach` walks them in that order —
-    // routing `[1:3]` would silently renumber the index space (iverilog's `foreach`
-    // over `a[1:3]` yields 1,2,3) and `[3:1]` would additionally re-order it. Those
-    // keep the per-element-net path, where a runtime index is still honestly loud.
-    let nz = "module t; string files [1:3]; int i;\n\
-        initial begin i=1; files[i]=\"x\"; $display(\"PASS\"); $finish; end endmodule";
-    assert!(loud(nz));
-    let desc = "module t; string files [1:0]; int i;\n\
-        initial begin i=1; files[i]=\"x\"; $display(\"PASS\"); $finish; end endmodule";
-    assert!(loud(desc));
+fn n6_runtime_index_on_any_declared_bounds() {
+    // T1-1/2 FLIP. The routing no longer requires zero-based ascending: the container is
+    // still a flat `0..n-1` block, but the declared→flat map (`idx - lo` per dim) is now
+    // APPLIED at every access instead of assumed to be the identity, and the declared
+    // DIRECTION is carried separately for the `foreach` walk. iverilog agrees on all three.
+    for decl in ["[1:3]", "[3:1]", "[1:0]"] {
+        let src = format!(
+            "module t; string files {decl}; int i;\n\
+             initial begin i=1; files[i]=\"x\"; if(files[1]==\"x\") $display(\"PASS\"); $finish; end endmodule"
+        );
+        assert_eq!(run(&src).0, "PASS", "decl: {decl}");
+    }
 }
 
 #[test]

@@ -155,29 +155,50 @@ fn task_dyn_nested_different_tasks() {
 
 // ───────────────────────── correct-or-loud boundaries ─────────────────────────
 #[test]
-fn task_dyn_recursion_fatal_loud() {
-    // A RECURSIVE task with a dyn-array local would share its per-net heap object with
-    // the parent activation — FATAL-loud (F4004), NOT a silent-wrong (was r=3 vs 6).
+fn task_dyn_recursion_is_per_activation() {
+    // T1-9. The heap object is keyed by NET, so every activation of `mk` addresses the
+    // same slot — which is why this used to be a fatal. It is now per-ACTIVATION: the
+    // entry TAKES the outer contents into a stash that travels with the activation and
+    // the exit puts them back, so the inner call starts from an unallocated array and the
+    // outer one gets its own back. iverilog: r=6 (3 + 2 + 1). The old fatal's silent-wrong
+    // answer was r=3, so a collapsed recursion is still caught by the value.
     let src = "module t;\n\
         task automatic mk(input int n, output int r);\n\
           int loc[]; loc=new[n]; loc[0]=n;\n\
           if(n<=1) r=loc.size(); else begin int s; mk(n-1,s); r=loc.size()+s; end endtask\n\
         int x; initial begin mk(3,x); $display(\"r=%0d\", x); end endmodule";
     let (out, ok) = run(src);
+    assert!(ok, "recursive frame dyn-array must run, got:\n{out}");
+    assert!(out.contains("r=6"), "got:\n{out}");
+}
+
+#[test]
+fn suspending_task_dyn_recursion_is_per_activation() {
+    // T1-9, the SUSPENDABLE path: the stash rides the activity's own `FrameRec`, so it
+    // survives the `@` and is restored at that frame's own Return. iverilog prints the
+    // three levels innermost-first with each level's own array intact.
+    let src = "module t; reg clk=0; always #1 clk=~clk;\n\
+        task automatic tk(input int n); int a[]; a=new[2]; a[0]=n; a[1]=n*10;\n\
+          @(posedge clk); if(n>0) tk(n-1);\n\
+          $display(\"n=%0d a=[%0d,%0d]\", n, a[0], a[1]); endtask\n\
+        initial begin tk(2); $finish; end endmodule";
+    let (out, ok) = run(src);
+    assert!(ok, "got:\n{out}");
     assert!(
-        !ok,
-        "recursive frame dyn-array must be fatal-loud, got:\n{out}"
-    );
-    assert!(
-        !out.contains("r=3"),
-        "must not silently collapse the recursion, got:\n{out}"
+        out.contains("n=0 a=[0,0]") && out.contains("n=1 a=[1,10]") && out.contains("n=2 a=[2,20]"),
+        "each activation must keep its own array, got:\n{out}"
     );
 }
 
 #[test]
 fn task_dyn_concurrent_fatal_loud() {
-    // Two fork activations that both allocate then suspend reenter the shared per-net
-    // heap — FATAL-loud, not silent cross-contamination.
+    // T1-9 BOUNDARY, and the reason the stash is not enough on its own. Two fork
+    // activations both allocate and then SUSPEND, so their `[enter, exit]` intervals
+    // OVERLAP rather than nest — A can resume and exit while B is still live, at which
+    // point A's restore would overwrite B's array. Recursion cannot do that (the inner
+    // call is on the same call stack and returns first), which is exactly the
+    // discriminator: an occupied slot held by a frame that is NOT on this activity's own
+    // call stack stays the fatal it has always been.
     let src = "module t;\n\
         task automatic mk(input int n, output int r);\n\
           int loc[]; loc=new[n]; #5; loc[0]=n; r=loc.size(); endtask\n\

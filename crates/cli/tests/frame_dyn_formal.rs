@@ -160,19 +160,66 @@ fn empty_array_size_zero() {
     assert!(o.contains("sz=0"), "empty dyn array size 0:\n{o}");
 }
 
-// ── LOUD: recursion with a dyn formal (per-net heap can't hold two activations) ──
+// ── T1-9: recursion with a dyn formal — per-ACTIVATION, no longer a fatal ──
 #[test]
-fn recursion_stays_loud() {
+fn recursion_keeps_each_activation_s_formal() {
+    // The formal's heap slot is keyed by NET, so every activation addressed the same one.
+    // The entry now stashes the outer activation's contents and the exit restores them.
+    // Here the recursive call passes the formal AS its own actual, which is why the
+    // actual is CAPTURED before the stash takes the slot. iverilog: 42 at every level.
     let o = run("module top;\n\
          task automatic rec(input int b[], input int n);\n\
-           $display(\"n=%0d b0=%0d\", n, b[0]);\n\
+           $display(\"n=%0d b0=%0d sz=%0d\", n, b[0], b.size());\n\
            if (n>0) rec(b, n-1);\n\
          endtask\n\
          int a[]; initial begin a=new[2]; a[0]=42; rec(a,2); end\n\
          endmodule\n");
+    for n in 0..=2 {
+        assert!(
+            o.contains(&format!("n={n} b0=42 sz=2")),
+            "level {n} must see the full actual:\n{o}"
+        );
+    }
+}
+
+#[test]
+fn recursive_inout_dyn_formal_copies_out_up_the_chain() {
+    // T1-9 / §13.5.2. Found by adversarial review, not by the differential matrix: with
+    // an INOUT dyn formal the caller's array net and the callee's formal net are THE SAME
+    // net under recursion, so an in-place copy-out before the stash restore was silently
+    // discarded — three increments printed 3/2/1 and left the actual at 1, where iverilog
+    // prints 3/3/3 and leaves 3. The copy-out is now CAPTURED before the restore and
+    // installed after it.
+    let o = run("module top;\n\
+         task automatic tk(inout int b[], input int n); b[0]=b[0]+1;\n\
+           if(n>0) tk(b, n-1);\n\
+           $display(\"n=%0d b0=%0d\", n, b[0]); endtask\n\
+         int a[]; initial begin a=new[1]; a[0]=0; tk(a,2); $display(\"FINAL %0d\", a[0]); end\n\
+         endmodule\n");
+    for n in 0..=2 {
+        assert!(o.contains(&format!("n={n} b0=3")), "level {n}:\n{o}");
+    }
     assert!(
-        o.contains("F4004") || o.contains("recursive or concurrent"),
-        "recursive dyn-formal must be fatal-loud, not silent:\n{o}"
+        o.contains("FINAL 3"),
+        "copy-out must reach the actual:\n{o}"
+    );
+}
+
+#[test]
+fn non_recursive_inout_and_output_dyn_formals_are_unchanged() {
+    // REGRESSION GUARD for the capture/install reorder above: with DISTINCT caller and
+    // formal nets the install writes somewhere the restore never touched, so the ordinary
+    // one-level inout and output paths must be byte-identical. iverilog: 13, then 2 5 6.
+    let o = run("module top;\n\
+         task automatic once(inout int b[]); b[0]=b[0]+10; endtask\n\
+         task automatic outp(output int c[]); c=new[2]; c[0]=5; c[1]=6; endtask\n\
+         int a[]; int z[];\n\
+         initial begin a=new[1]; a[0]=3; once(a); $display(\"ONCE %0d\", a[0]);\n\
+           outp(z); $display(\"OUT %0d %0d %0d\", z.size(), z[0], z[1]); end\n\
+         endmodule\n");
+    assert!(
+        o.contains("ONCE 13") && o.contains("OUT 2 5 6"),
+        "got:\n{o}"
     );
 }
 

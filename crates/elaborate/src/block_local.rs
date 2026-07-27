@@ -851,7 +851,7 @@ impl Elaborator<'_> {
                                         .push((ast::Lvalue::Ident(path), init.clone()));
                                 }
                             } else if scalar_string
-                                && name.unpacked.len() == 1
+                                && !name.unpacked.is_empty()
                                 && self.has_fixed_string_array_storage(&name.name.name)
                             {
                                 // r19: a block-local FIXED string array (`string s[2] =
@@ -869,11 +869,14 @@ impl Elaborator<'_> {
                                 // that set only ever holds scalars and dyn/queue locals,
                                 // so excluding it here would be dead code that silently
                                 // opts INTO dropping the init if that set ever widens.
-                                if let Some(pairs) = self.fixed_string_array_init_pairs(
-                                    &name.name,
-                                    &name.unpacked[0],
-                                    init,
-                                ) {
+                                //
+                                // T1-4: the FULL `unpacked`, exactly as the module-scope
+                                // collector passes it — the two scopes share ONE expansion
+                                // and must hand it the same shape, or a nested pattern
+                                // expands here and not there.
+                                if let Some(pairs) =
+                                    self.string_array_init_pairs(&name.name, &name.unpacked, init)
+                                {
                                     self.pending_block_local_string_inits.extend(pairs);
                                 }
                             }

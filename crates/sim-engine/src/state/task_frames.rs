@@ -131,25 +131,14 @@ impl SimState<'_> {
             );
         }
 
-        // V5 (§4.5.194): guard this task's own dyn LOCALS against recursive/concurrent
-        // reentry (formals `[0, np)` are caller-managed, first_slot=np). A subset dyn-local
-        // task is normally LIFTED to the suspendable path; this keeps run_task self-consistent
-        // if one is routed here (the DynNew arm below executes its `new[]`).
+        // V5 (§4.5.194) / T1-9: open this task's own dyn LOCALS for this activation
+        // (formals `[0, np)` are caller-managed, first_slot=np). A subset dyn-local task
+        // is normally LIFTED to the suspendable path; this keeps run_task self-consistent
+        // if one is routed here (the DynNew arm below executes its `new[]`). The stash is
+        // a LOCAL: this path is straight-line to its `frame_dyn_exit` below, so it cannot
+        // interleave with another activation of the same callee.
         let np = self.ir.funcs[callee as usize].n_params;
-        if !self.frame_dyn_reentry_ok_from(callee, np) {
-            if has_auto {
-                self.frame_stack.borrow_mut().pop();
-            }
-            return Some(
-                out_slots
-                    .iter()
-                    .map(|&s| {
-                        let nv = &self.ir.nets[(base + s) as usize];
-                        Value::xs(nv.width.max(1), nv.signed)
-                    })
-                    .collect(),
-            );
-        }
+        let dyn_stash = self.frame_dyn_enter_from(callee, np);
 
         // ── BB LOOP over the GLOBAL func arena from fd.entry. ──
         let mut cur = fd.entry;
@@ -282,24 +271,31 @@ impl SimState<'_> {
                     }
                     let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
                     // V2A/V2B (§4.5.194): snapshot dyn INPUT formals IN; deep-copy OUTPUT/INOUT
-                    // dyn formals OUT — BEFORE the free clears the formal slot. Self-gating, so
-                    // call reentry/snapshot/free unconditionally.
-                    if !self.frame_dyn_reentry_ok(info.callee) {
-                        break; // recursive/concurrent dyn formal → fatal latched; stop
-                    }
-                    self.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                    // dyn formals OUT — BEFORE the exit restores the formal slot. Self-gating,
+                    // so call enter/snapshot/exit unconditionally.
+                    // T1-9: the stash is a LOCAL over a straight-line nested call.
+                    // T1-9: CAPTURE the actuals before the stash — a recursive call can
+                    // pass the formal as its own actual, and the stash is about to take it.
+                    let captured = self.frame_dyn_capture_formals(info.callee, &dyn_snaps);
+                    let nested_stash = self.frame_dyn_enter(info.callee);
+                    self.frame_dyn_install_formals(captured);
                     let outs = self
                         .run_task(info.callee, &in_v, &out_s)
                         .unwrap_or_default();
                     // callee popped → top frame is the calling task again; write its
                     // frame-local output lvalues (a dyn out-formal deep-copies to the heap).
+                    // T1-9: CAPTURE the dyn out/inout results before the restore, and
+                    // install them AFTER — under recursion the caller's array net IS the
+                    // callee's formal net, so an in-place copy-out would be discarded.
+                    let outs_dyn = self.frame_dyn_capture_out(info.callee, &info.out_binds);
                     for ((s, lval), val) in info.out_binds.iter().zip(outs) {
                         if self.frame_dyn_out_bind(info.callee, *s, lval) {
                             continue;
                         }
                         self.frame_write_lvalue(lval, val);
                     }
-                    self.frame_dyn_free(info.callee);
+                    self.frame_dyn_exit(nested_stash);
+                    self.frame_dyn_install_formals(outs_dyn);
                     cur = *ret_bb;
                 }
                 Terminator::Return => break,
@@ -307,8 +303,10 @@ impl SimState<'_> {
             }
         }
 
-        // V5 (§4.5.194): free this activation's dyn LOCALS (formals excluded, first_slot=np).
-        self.frame_dyn_free_from(callee, np);
+        // V5 (§4.5.194) / T1-9: close this activation's dyn LOCALS, restoring whatever the
+        // outer activation held (all `None` for a non-reentrant call — byte-identically
+        // the old free).
+        self.frame_dyn_exit(dyn_stash);
 
         // ── COPY-OUT the requested output slots (resize to slot width). ──
         let outs: Vec<Value> = out_slots
@@ -540,88 +538,110 @@ impl SimState<'_> {
         }
     }
 
-    /// V5: reentry guard for a frame-local DYNAMIC array (`int loc[]`). Its heap
-    /// object (`dyn_heap[net]`, keyed by net) is SHARED across activations of the same
-    /// func/task, so a RECURSIVE or CONCURRENT entry while a parent activation's array
-    /// is still live would clobber it (silent-wrong). Until a per-activation dyn-array
-    /// heap stash lands (a follow-on), that is a fatal-loud (correct-or-loud). A fresh
-    /// (non-reentrant) entry finds the slot None — freed at the prior `frame_dyn_free`.
-    /// Returns `true` when the frame may enter; `false` (after emitting the fatal) on
-    /// reentry. Cheap: skips the scan unless the callee actually has a dyn-array local.
-    /// §4.5.194: `&self` (was `&mut`) — reachable from BOTH the `&mut` process path
-    /// (suspendable V2A/V5) and the `&self` run_task path (a NESTED subset dyn-formal
-    /// call), so the reentry fatal must latch `call_fatal` (a `Cell`, like
-    /// `fatal_frame_heap_write`) rather than the `&mut` `fatal_run`. The scheduler
-    /// converts a latched `call_fatal` into a fatal run end at the next region seam.
-    pub(crate) fn frame_dyn_reentry_ok(&self, callee: u32) -> bool {
-        self.frame_dyn_reentry_ok_from(callee, 0)
+    /// T1-9: OPEN this activation's frame-local dyn-array slots and hand back the
+    /// caller's contents as a STASH the exit restores.
+    ///
+    /// The heap object lives in `dyn_heap[net]`, keyed by NET — one slot per declared
+    /// local, shared by every activation of the same func/task. That is why a RECURSIVE
+    /// or CONCURRENT entry used to be a fatal: the inner activation would write the
+    /// outer one's array. Taking the slot here and putting it back at exit makes the
+    /// slot per-ACTIVATION without a per-activation heap: the inner activation starts
+    /// from `None` (an unallocated array, exactly as a first call does) and the outer
+    /// one gets its own object back untouched.
+    ///
+    /// The returned stash travels WITH the activation — a local for the synchronous
+    /// paths, the `FrameRec` for the suspendable one — never a shared stack. That is the
+    /// load-bearing choice: a global stack would be LIFO-violated by two activities
+    /// interleaving in the same task (A enters, suspends; B enters; A resumes and exits),
+    /// which is precisely the concurrency this is meant to make safe.
+    ///
+    /// Cheap: skips the scan entirely unless the callee actually has a dyn-array local,
+    /// and returns an empty stash then — so every design without one is untouched.
+    pub(crate) fn frame_dyn_enter(&self, callee: u32) -> Vec<(u32, Option<DynObj>)> {
+        self.frame_dyn_enter_from(callee, 0)
     }
 
     /// §4.5.194: `first_slot` skips FORMAL slots (`[0, n_params)`) for the FUNCTION path —
     /// a function's `input` dyn formal is snapshotted by the caller BEFORE `run_frame_call`,
-    /// so its slot is legitimately `Some` at entry and must NOT trip the reentry guard;
+    /// so its slot is legitimately live at entry and is NOT this activation's to take;
     /// only the function's own dyn LOCALS (slots >= n_params) are per-activation. The
-    /// suspendable/task callers pass 0 (their snapshot runs AFTER this check).
-    pub(crate) fn frame_dyn_reentry_ok_from(&self, callee: u32, first_slot: u32) -> bool {
+    /// suspendable/task callers pass 0 (their snapshot runs AFTER this).
+    pub(crate) fn frame_dyn_enter_from(
+        &self,
+        callee: u32,
+        first_slot: u32,
+    ) -> Vec<(u32, Option<DynObj>)> {
         if !self
             .func_has_dyn_local
             .get(callee as usize)
             .copied()
             .unwrap_or(false)
         {
-            return true;
+            return Vec::new();
         }
         let m = self.func_table[callee as usize];
-        for s in first_slot..m.locals_len {
-            let net = (m.base_net + s) as usize;
-            if self.ir.nets[net].kind == NetKind::DynArray && self.dyn_heap.borrow()[net].is_some()
-            {
-                if !self.call_fatal.get() {
-                    self.call_fatal.set(true);
-                    self.sink.emit(LogEvent::Diagnostic(Diagnostic {
-                        severity: Severity::Fatal,
-                        code: MsgCode::RunFatal,
-                        message: "recursive or concurrent frame-local dynamic array (or \
-                                  dynamic-array input formal) is unsupported (a per-activation \
-                                  dynamic-array heap is a follow-on); rewrite without \
-                                  recursion/concurrency, or use a module-scope dynamic array"
-                            .to_string(),
-                        location: None,
-                        context: Vec::new(),
-                        sim_time: Some(TimeStamp { ticks: self.now }),
-                    }));
-                }
-                return false;
-            }
-        }
-        true
-    }
-
-    /// V5: free this activation's frame-local dyn-array heap objects at frame exit, so a
-    /// later call to the same func/task starts fresh (an unallocated array is size 0) and
-    /// the reentry guard above next sees `None`.
-    pub(crate) fn frame_dyn_free(&self, callee: u32) {
-        self.frame_dyn_free_from(callee, 0)
-    }
-
-    /// §4.5.194: `first_slot` skips FORMAL slots for the FUNCTION path (see
-    /// `frame_dyn_reentry_ok_from`) — a function frees only its own dyn LOCALS at exit; its
-    /// `input` formal snapshot is overwritten by the caller on the next call.
-    pub(crate) fn frame_dyn_free_from(&self, callee: u32, first_slot: u32) {
-        if !self
-            .func_has_dyn_local
-            .get(callee as usize)
-            .copied()
-            .unwrap_or(false)
-        {
-            return;
-        }
-        let m = self.func_table[callee as usize];
+        let mut heap = self.dyn_heap.borrow_mut();
+        let mut saved = Vec::new();
         for s in first_slot..m.locals_len {
             let net = (m.base_net + s) as usize;
             if self.ir.nets[net].kind == NetKind::DynArray {
-                self.dyn_heap.borrow_mut()[net].take();
+                saved.push((net as u32, heap[net].take()));
             }
+        }
+        saved
+    }
+
+    /// T1-9: the one shape stash/restore does NOT make safe — two SUSPENDABLE frames of
+    /// the same callee whose `[enter, exit]` intervals OVERLAP rather than nest.
+    ///
+    /// Within a single activity the intervals are always properly nested: a synchronous
+    /// call is straight-line, and a recursive suspendable call sits on the same
+    /// `call_stack` and returns before its parent. Across activities they need not be —
+    /// A can enter, suspend, let B enter, then resume and exit FIRST, at which point A's
+    /// restore would overwrite B's live array. So that shape keeps the fatal, and the
+    /// caller puts the stash back untouched before raising it.
+    ///
+    /// Latches `call_fatal` (a `Cell`) rather than `fatal_run`, because this is reachable
+    /// from the `&self` paths too; the scheduler converts it to a fatal run end at the
+    /// next region seam.
+    pub(crate) fn fatal_frame_dyn_concurrent(&self) {
+        if self.call_fatal.get() {
+            return;
+        }
+        self.call_fatal.set(true);
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Fatal,
+            code: MsgCode::RunFatal,
+            message: "concurrent activations of one task sharing a frame-local dynamic \
+                      array (or dynamic-array input formal) are unsupported — their \
+                      lifetimes overlap rather than nest, so the per-activation stash \
+                      cannot separate them; RECURSION is supported. Rewrite without \
+                      concurrency, or use a module-scope dynamic array"
+                .to_string(),
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(TimeStamp { ticks: self.now }),
+        }));
+    }
+
+    /// T1-9: close the activation `frame_dyn_enter*` opened — RESTORE the stashed outer
+    /// contents into exactly the slots that were taken.
+    ///
+    /// Replaces the old free-at-exit. For a non-reentrant call the stash is all `None`,
+    /// so this is byte-identically the old `.take()`: the next call still starts from an
+    /// unallocated array. For a nested one it hands the parent its array back.
+    ///
+    /// Restoring the RECORDED slots (rather than re-deriving them from `callee`/
+    /// `first_slot`) is what keeps enter and exit symmetric even if the two are called
+    /// with different `first_slot` — the function path takes locals only, the task path
+    /// takes formals too, and each puts back precisely what it took.
+    pub(crate) fn frame_dyn_exit(&self, saved: Vec<(u32, Option<DynObj>)>) {
+        if saved.is_empty() {
+            return;
+        }
+        let mut heap = self.dyn_heap.borrow_mut();
+        for (net, obj) in saved {
+            heap[net as usize] = obj;
         }
     }
 
@@ -633,19 +653,44 @@ impl SimState<'_> {
     /// array). The formal's slot is freed at `exit_task_frame` (`frame_dyn_free`) and
     /// guarded against recursive/concurrent reentry (`frame_dyn_reentry_ok`), exactly
     /// like a frame-local dyn-array LOCAL (§4.5.171). No dyn formals ⇒ no-op.
-    pub(crate) fn frame_dyn_snapshot_formals(&self, callee: u32, dyn_snaps: &[(u32, u32)]) {
+    /// T1-9: the READ half of the caller→formal snapshot — deep-copy each actual's heap
+    /// object OUT of the heap without writing anything.
+    ///
+    /// Split from the write half because a RECURSIVE call can pass the formal AS its own
+    /// actual (`task rec(input int b[], input int n); … rec(b, n-1);`). Then the snapshot
+    /// SOURCE is the formal's own net, which `frame_dyn_enter` is about to take — so the
+    /// three must be ordered capture → stash → install. Snapshotting AFTER the stash
+    /// copied an already-emptied slot and the inner activations read `sz=0` with a bogus
+    /// OOB warn at exit 0 (measured against iverilog, which reads the full array at every
+    /// level); the old code never hit it because that shape was a fatal.
+    pub(crate) fn frame_dyn_capture_formals(
+        &self,
+        callee: u32,
+        dyn_snaps: &[(u32, u32)],
+    ) -> Vec<(u32, Option<DynObj>)> {
         if dyn_snaps.is_empty() {
-            return;
+            return Vec::new();
         }
         let base = self.func_table[callee as usize].base_net;
-        for &(slot, src_net) in dyn_snaps {
-            let obj = self
-                .dyn_heap
-                .borrow()
-                .get(src_net as usize)
-                .and_then(|o| o.as_ref().cloned());
-            let dst = (base + slot) as usize;
-            if let Some(cell) = self.dyn_heap.borrow_mut().get_mut(dst) {
+        let heap = self.dyn_heap.borrow();
+        dyn_snaps
+            .iter()
+            .map(|&(slot, src_net)| {
+                let obj = heap.get(src_net as usize).and_then(|o| o.as_ref().cloned());
+                (base + slot, obj)
+            })
+            .collect()
+    }
+
+    /// T1-9: the WRITE half — install captured actuals into the callee's formal slots.
+    /// Run AFTER `frame_dyn_enter` has stashed whatever those slots held.
+    pub(crate) fn frame_dyn_install_formals(&self, captured: Vec<(u32, Option<DynObj>)>) {
+        if captured.is_empty() {
+            return;
+        }
+        let mut heap = self.dyn_heap.borrow_mut();
+        for (dst, obj) in captured {
+            if let Some(cell) = heap.get_mut(dst as usize) {
                 *cell = obj;
             }
         }
@@ -669,15 +714,47 @@ impl SimState<'_> {
     /// it out to the caller net (`lval.chunks[0].net`) and return `true` (the caller skips
     /// its scalar `write_lvalue`/`frame_write_lvalue`, whose value would be a meaningless
     /// read of the unused scalar frame slot). A non-dyn out-slot returns `false`.
-    pub(crate) fn frame_dyn_out_bind(&self, callee: u32, slot: u32, lval: &Lvalue) -> bool {
+    pub(crate) fn frame_dyn_out_bind(&self, callee: u32, slot: u32, _lval: &Lvalue) -> bool {
         let formal_net = self.func_table[callee as usize].base_net + slot;
-        if self.ir.nets[formal_net as usize].kind != NetKind::DynArray {
-            return false;
-        }
-        if let Some(c) = lval.chunks.first() {
-            self.frame_dyn_copy_out(formal_net, c.net);
-        }
-        true
+        // The COPY itself moved to `frame_dyn_capture_out` — see there for why. This is
+        // now only the "the scalar slot value is not the payload, skip that write"
+        // decision it always also was.
+        self.ir.nets[formal_net as usize].kind == NetKind::DynArray
+    }
+
+    /// T1-9: capture what a callee's dyn OUTPUT/INOUT formals produced, as
+    /// `(caller net, cloned object)` pairs — to be installed AFTER `frame_dyn_exit`.
+    ///
+    /// The copy-out used to write the caller's net directly, in place, before the exit.
+    /// Under RECURSION that is wrong, because the caller's array net and the callee's
+    /// formal net are THE SAME net: the restore then puts the parent's pre-call array
+    /// back over the copy-out and the result is discarded. Measured — a recursive
+    /// `inout int b[]` incrementing `b[0]` at each of three levels printed 3/2/1 and
+    /// left the actual at 1, where iverilog prints 3/3/3 and leaves 3 (§13.5.2
+    /// copy-out propagates back up the chain).
+    ///
+    /// Capturing first and installing after the restore is correct for BOTH cases: with
+    /// distinct nets the install writes somewhere the restore never touched, and with
+    /// the same net it deliberately lands on top of the restored parent array, which is
+    /// exactly what copy-out means.
+    pub(crate) fn frame_dyn_capture_out(
+        &self,
+        callee: u32,
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(u32, Option<DynObj>)> {
+        let base = self.func_table[callee as usize].base_net;
+        let heap = self.dyn_heap.borrow();
+        out_binds
+            .iter()
+            .filter_map(|(slot, lval)| {
+                let formal_net = (base + slot) as usize;
+                if self.ir.nets[formal_net].kind != NetKind::DynArray {
+                    return None;
+                }
+                let dst = lval.chunks.first()?.net;
+                Some((dst, heap.get(formal_net).and_then(|o| o.as_ref().cloned())))
+            })
+            .collect()
     }
 
     /// §4.5.194 (V5): execute a `loc = new[n]` (`Stmt::SysTask { DynNew, args }`) inside a

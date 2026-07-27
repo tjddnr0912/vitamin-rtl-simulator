@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// T1-11: builds the per-FIELD source expression of a SoA whole-element write, given the
+/// member name. One closure per rhs FORM (a record var / a container element), so the
+/// fan-out loop is written once — duplicating it per form is how a read and its write
+/// drift onto different elements.
+type SoaFieldSrc<'a> = Box<dyn Fn(&str) -> Expr + 'a>;
+
 impl Parser<'_, '_> {
     /// N3 SoA: transpose a record-array decl-init `'{ '{a,b}, '{c,d} }` into per-FIELD
     /// unpacked-array inits — field 0 → `'{a,c}`, field 1 → `'{b,d}`. Each field's dyn
@@ -250,6 +256,63 @@ impl Parser<'_, '_> {
                 }
             }
         }
+        // T1-11: whole-ELEMENT read `rec = q[i]` / `rec = arr[i]` — a SoA record
+        // container element copied into a record var, per field
+        // (`$unp$rec$f = $unp$q$f[i]`).
+        //
+        // The per-FIELD element access (`q[0].len`) and the whole-element read on a
+        // PACKABLE record queue both already worked; only the non-packable (SoA) form had
+        // no surface, because a SoA container has no net under its own name at all — the
+        // bare `q[i]` resolved to "undeclared net/variable `q`" downstream.
+        //
+        // Same-TYPE gate, identical in force to the scalar whole-copy below: same declared
+        // type ⇒ the two member lists came from one `unpacked_struct_layouts` entry, so
+        // the per-field correspondence is by construction rather than by position.
+        //
+        // The index expression is CLONED per field, so it is evaluated once per member.
+        // That is sound only because vita's subset cannot express a side-effecting index
+        // — a function that writes anything outside itself is loud at the frame gate, and
+        // `q[k++]` does not parse. The pre-existing `arr[i] = '{…}` fan-out below rests on
+        // the same invariant; if the frame subset ever widens, BOTH need a replay guard.
+        if let (Lvalue::Ident(lp), ExprKind::BitSelect { base, index }) = (lhs, &rhs.kind) {
+            if let (1, ExprKind::Ident(bp)) = (lp.segments.len(), &base.kind) {
+                if bp.segments.len() == 1 {
+                    let lvar = lp.segments[0].name.clone();
+                    let qvar = bp.segments[0].name.clone();
+                    if let Some(qty) = self.record_soa_vars.get(&qvar).cloned() {
+                        if self.var_unpacked_struct.get(&lvar) == Some(&qty) {
+                            let members = self.unpacked_struct_layouts.get(&qty)?.clone();
+                            let stmts = members
+                                .iter()
+                                .map(|m| {
+                                    let dst = Self::unpacked_member_net(&lvar, &m.name.name);
+                                    let srcq = Self::unpacked_member_net(&qvar, &m.name.name);
+                                    let elem = Expr {
+                                        kind: ExprKind::BitSelect {
+                                            base: Box::new(Self::ident_expr(&srcq, span)),
+                                            index: index.clone(),
+                                        },
+                                        span,
+                                    };
+                                    Self::assign_stmt(
+                                        Self::ident_lval(&dst, span),
+                                        elem,
+                                        blocking,
+                                        span,
+                                    )
+                                })
+                                .collect();
+                            return Some(Stmt::Block {
+                                label: None,
+                                decls: Vec::new(),
+                                stmts,
+                                span,
+                            });
+                        }
+                    }
+                }
+            }
+        }
         // Q (round-19): scalar-record whole-copy `a = b` / `a <= b` where BOTH `a`
         // and `b` are scalar `var_unpacked_struct` records of the SAME type name →
         // per-member fan-out `$unp$a$f <op> $unp$b$f` for every field. The record
@@ -382,6 +445,74 @@ impl Parser<'_, '_> {
                     let var = p.segments[0].name.clone();
                     let ty = self.record_soa_vars.get(&var)?.clone();
                     let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+                    // T1-11: the WRITE twin of the whole-element read above. Two rhs
+                    // forms, one fan-out:
+                    //   `q[i] = rec`    — from a same-type record VAR   (`$unp$rec$f`)
+                    //   `q[i] = d[j]`   — from a same-type SoA ELEMENT  (`$unp$d$f[j]`)
+                    // Both live in this branch, alongside the `'{…}` pattern, so every
+                    // element rhs shares one place and one index-clone rule.
+                    //
+                    // The two are the same operation with a different per-field SOURCE
+                    // EXPRESSION, so they are expressed that way rather than as two
+                    // copies of the loop — the failure mode of duplicating it is exactly
+                    // the read/write asymmetry this slice exists to avoid.
+                    let src_field: Option<SoaFieldSrc<'_>> = match &rhs.kind {
+                        ExprKind::Ident(rp)
+                            if rp.segments.len() == 1
+                                && self.var_unpacked_struct.get(&rp.segments[0].name)
+                                    == Some(&ty) =>
+                        {
+                            let rvar = rp.segments[0].name.clone();
+                            Some(Box::new(move |f: &str| {
+                                Self::ident_expr(&Self::unpacked_member_net(&rvar, f), span)
+                            }))
+                        }
+                        ExprKind::BitSelect {
+                            base: rb,
+                            index: ri,
+                        } => match &rb.kind {
+                            ExprKind::Ident(rp)
+                                if rp.segments.len() == 1
+                                    && self.record_soa_vars.get(&rp.segments[0].name)
+                                        == Some(&ty) =>
+                            {
+                                let rvar = rp.segments[0].name.clone();
+                                let ri = ri.clone();
+                                Some(Box::new(move |f: &str| Expr {
+                                    kind: ExprKind::BitSelect {
+                                        base: Box::new(Self::ident_expr(
+                                            &Self::unpacked_member_net(&rvar, f),
+                                            span,
+                                        )),
+                                        index: ri.clone(),
+                                    },
+                                    span,
+                                }))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(mk_src) = src_field {
+                        let stmts = members
+                            .iter()
+                            .map(|m| {
+                                let mnet = Self::unpacked_member_net(&var, &m.name.name);
+                                let elem = Lvalue::BitSelect {
+                                    base: Box::new(Self::ident_lval(&mnet, span)),
+                                    index: index.clone(),
+                                    span,
+                                };
+                                Self::assign_stmt(elem, mk_src(&m.name.name), blocking, span)
+                            })
+                            .collect();
+                        return Some(Stmt::Block {
+                            label: None,
+                            decls: Vec::new(),
+                            stmts,
+                            span,
+                        });
+                    }
                     let ExprKind::AssignPattern(vals) = &rhs.kind else {
                         return None; // a non-pattern element rhs → loud fallthrough
                     };

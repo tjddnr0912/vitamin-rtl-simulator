@@ -164,21 +164,21 @@ impl Elaborator<'_> {
                     //
                     // T1-5: MULTI-dim (`string s[2][3]`) rides the same route — one FLAT
                     // row-major container, with `s[i][j]` flattened at each access. Every
-                    // dimension must qualify (`fixed_string_dims_zero_asc`), because the
-                    // flat container renumbers any axis that does not.
+                    // dimension must qualify (`fixed_string_geom`), because the flat
+                    // container has no map for an axis whose bounds are not constant.
                     if allow_string_init {
-                        if let Some(dims) = self.fixed_string_dims_zero_asc(&decl.unpacked) {
-                            if self.route_fixed_string_array(decl, &dims, ports, body) {
+                        if let Some(geom) = self.fixed_string_geom(&decl.unpacked) {
+                            if self.route_fixed_string_array(decl, &geom, ports, body) {
                                 continue;
                             }
                         }
                     }
                     if decl.unpacked.len() != 1 {
-                        // Multi-dim that did NOT qualify for the route (a non-zero base,
-                        // a descending dim, a non-constant bound, or too many elements):
-                        // the per-element-net path below speaks one dimension only, so
-                        // fall through to the dimension reject rather than silently
-                        // building storage for the first dimension alone.
+                        // Multi-dim that did NOT qualify for the route (a non-constant or
+                        // negative bound, too many elements, or a scope that does not run
+                        // the var-init flush): the per-element-net path below speaks one
+                        // dimension only, so fall through to the dimension reject rather
+                        // than silently building storage for the first dimension alone.
                     } else if let Some((min, max)) = self.fixed_dim_bounds(&decl.unpacked[0]) {
                         // r19: a `'{…}` decl-init EXPANDS to per-element assignments in
                         // the t0 var-init pre-sweep (`fixed_string_array_init_pairs`,
@@ -191,11 +191,7 @@ impl Elaborator<'_> {
                         if let Some(init) = &decl.init {
                             let ok = allow_string_init
                                 && self
-                                    .fixed_string_array_init_pairs(
-                                        &decl.name,
-                                        &decl.unpacked[0],
-                                        init,
-                                    )
+                                    .string_array_init_pairs(&decl.name, &decl.unpacked, init)
                                     .is_some();
                             if !ok {
                                 self.error(
@@ -258,16 +254,23 @@ impl Elaborator<'_> {
                 // own `.resize(w)` — width 0 → 1 → the byte string truncated to a bit.
                 // They now share `coerce_dyn_elem` with the dyn-array element write.
                 //
-                // A BOUNDED queue (`[$:N]`) is loud everywhere in the MVP and stays loud.
+                // T1-6: a BOUNDED queue (`string q[$:N]`) joins it. The bound is enforced
+                // in the ENGINE, keyed on the net and blind to the element type — the
+                // integral twin `int q[$:1]` already ran and dropped its tail — so the
+                // only thing that kept `string q[$:3]` loud was this pattern admitting
+                // `Queue(None)` alone. It shares `queue_dim_bound` with that twin.
                 let str_container_kind = match decl.unpacked.first() {
                     Some(ast::Dim::Dyn) if decl.unpacked.len() == 1 => Some(ir::NetKind::DynArray),
-                    Some(ast::Dim::Queue(None)) if decl.unpacked.len() == 1 => {
+                    Some(ast::Dim::Queue(_)) if decl.unpacked.len() == 1 => {
                         Some(ir::NetKind::Queue)
                     }
                     _ => None,
                 };
                 if d.range.is_none() && d.packed.is_empty() && str_container_kind.is_some() {
                     let kind = str_container_kind.expect("guarded by is_some above");
+                    let Ok(queue_bound) = self.queue_dim_bound(&decl.unpacked[0]) else {
+                        continue;
+                    };
                     let dir = self.dir_for_name(&decl.name.name, ports, body);
                     if dir != ir::PortDir::Internal {
                         self.error(
@@ -292,6 +295,9 @@ impl Elaborator<'_> {
                     );
                     if self.nets.len() as u32 > next_id {
                         self.string_elem_dyn_nets.insert(next_id);
+                        if let Some(b) = queue_bound {
+                            self.queue_bounds.insert(next_id, b);
+                        }
                     }
                     // A `'{…}` decl-init rides the var-init flush (`new[N]` + element
                     // writes), collected in `collect_var_init_drivers`; a whole-value /
@@ -375,21 +381,8 @@ impl Elaborator<'_> {
                 // v6 ③: bounded queue `[$:N]` — fold N (a non-negative
                 // const) into the sidecar; the engine truncates the TAIL of
                 // any op that exceeds size N+1 (iverilog live).
-                let queue_bound: Option<u32> = match &decl.unpacked[0] {
-                    ast::Dim::Queue(Some(be)) => {
-                        let n = self.const_eval_in_scope(be);
-                        match n {
-                            Some(v) if (0..=i64::from(u32::MAX)).contains(&v) => Some(v as u32),
-                            _ => {
-                                self.error(
-                                    MsgCode::ElabUnsupported,
-                                    "a queue bound must be a non-negative constant expression",
-                                );
-                                continue;
-                            }
-                        }
-                    }
-                    _ => None,
+                let Ok(queue_bound) = self.queue_dim_bound(&decl.unpacked[0]) else {
+                    continue;
                 };
                 if let Some(init) = &decl.init {
                     // A queue / dynamic-array `'{…}` (or `{…}`) initializer is EXPANDED to
@@ -775,14 +768,18 @@ impl Elaborator<'_> {
                         // element writes for nets that were never created — cascading
                         // E3010s. Keying off the decl's own output makes the two
                         // structurally unable to disagree.
-                        if name.unpacked.len() == 1
-                            && self.has_fixed_string_array_storage(&name.name.name)
-                        {
-                            if let Some(pairs) = self.fixed_string_array_init_pairs(
-                                &name.name,
-                                &name.unpacked[0],
-                                init,
-                            ) {
+                        //
+                        // T1-4: the FULL `unpacked` is handed over, so a routed multi-dim
+                        // array expands its nested `'{'{…},'{…}}` here too. Passing only
+                        // the first dim was a SILENT-WRONG the moment the decl started
+                        // accepting a nested pattern: the 1-D expansion matched the OUTER
+                        // level (2 rows, 2 elements) and emitted `s[0] = '{"a","b"}` —
+                        // an assignment-pattern into a string element — which rendered
+                        // four empty strings at exit 0.
+                        if self.has_fixed_string_array_storage(&name.name.name) {
+                            if let Some(pairs) =
+                                self.string_array_init_pairs(&name.name, &name.unpacked, init)
+                            {
                                 self.pending_var_inits.extend(pairs);
                             }
                         }

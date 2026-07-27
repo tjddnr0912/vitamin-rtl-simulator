@@ -104,18 +104,24 @@ fn module_process_direct_rhs_unchanged() {
     assert!(o.contains("PASS"), "module-process direct-rhs:\n{o}");
 }
 
-// correct-or-loud: RECURSION through a dyn-formal call is caught (F4004), never
-// silently wrong (the per-net formal slot would clobber across activations).
+// T1-9: RECURSION through a dyn-formal call is per-ACTIVATION now — each level's formal
+// slot holds its own snapshot of the actual.
+//
+// This shape is what forced the capture/stash/install ORDER: the recursive call passes
+// the formal `b` as its own actual, so the snapshot SOURCE is the very slot the stash is
+// about to take. Stashing first copied an already-emptied slot, and the inner levels read
+// `sz=0` with a bogus OOB warn at exit 0 — a silent-wrong where the old code was a clean
+// fatal. iverilog: `d=0 s=6 sz=3` then `d=1 s=6 sz=3`.
 #[test]
-fn recursive_dyn_formal_call_is_loud() {
+fn recursive_dyn_formal_call_keeps_each_activation_s_array() {
     let o = run(&format!(
         "module t;\n{SUM}\
          task automatic run(input int depth, input byte b[]); int s; if(depth>0) run(depth-1,b); \
-           s=sum(b); if(s==6 && depth==0) $display(\"got d=%0d\",depth); endtask\n\
+           s=sum(b); $display(\"d=%0d s=%0d sz=%0d\", depth, s, b.size()); endtask\n\
          initial begin byte v[]; v=new[3]; v[0]=1;v[1]=2;v[2]=3; run(1,v); $finish; end endmodule\n"
     ));
     assert!(
-        o.contains("F4004") || o.contains("recursive") || !o.contains("got d=0"),
-        "recursive dyn-formal call must be loud, not silently wrong:\n{o}"
+        o.contains("d=0 s=6 sz=3") && o.contains("d=1 s=6 sz=3"),
+        "every activation must see the full actual:\n{o}"
     );
 }

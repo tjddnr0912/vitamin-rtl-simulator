@@ -110,6 +110,44 @@ pub(crate) struct DeferredHierSelect {
 }
 
 impl Elaborator<'_> {
+    /// T1-6/7/8: the flat WORD index for a hierarchical element access on a DYNAMIC
+    /// container (`u.d[i]`, `u.q[i]`, `u.s[i]`, `u.s[i][j]`), or `None` to decline.
+    ///
+    /// ONE addressing rule shared by the deferred READ and the deferred WRITE. They are
+    /// two separate resolution passes over two separate sentinel spaces, and the whole
+    /// hazard of admitting the write is that it addresses a DIFFERENT element than the
+    /// read of the same source text — so the rule is stated once, here, and both call it.
+    ///
+    /// A ROUTED string array maps its DECLARED index space onto the flat container
+    /// through `flatten_word_eids`, the pre-lowered-eid twin of the `flatten_word` the
+    /// LOCAL funnel uses. Same arithmetic, so `u.s[i][j]` and a local `s[i][j]` cannot
+    /// select different elements. A partial index (fewer eids than dims) declines rather
+    /// than reading a row number as an element number.
+    ///
+    /// A plain dyn array / queue takes the ONE-index positional rule: its position IS
+    /// its index and it has no other geometry.
+    ///
+    /// T1-10: an ASSOC array takes the same ONE-index shape for a different reason — its
+    /// single index is a KEY, and the engine already dispatches on that. The chunk /
+    /// `Signal` carries a word EID either way; `resolve_lvalue_offsets` re-reads it as an
+    /// `AssocKey` when `is_assoc(net)`, and the element read does the same. So the
+    /// keyed-vs-positional distinction is settled downstream by the NET, never by how the
+    /// name was reached — which is why the local `a[k]` and this share one spelling.
+    /// (No oracle: iverilog 13.0 cannot parse `int a[int]` at all. The pin is the
+    /// vita-internal equivalence — `u.a[k]` must read what the child's own `a[k]` reads.)
+    pub(crate) fn hier_dyn_container_word(&mut self, net: u32, idx_eids: &[u32]) -> Option<u32> {
+        if !self.is_dyn_handle_net(net) {
+            return None;
+        }
+        match self.fixed_string_dyn_geom(net).map(|g| g.extents.clone()) {
+            Some(ext) if ext.len() == idx_eids.len() => {
+                Some(self.flatten_word_eids(&ext, idx_eids, &[]))
+            }
+            Some(_) => None,
+            None => (idx_eids.len() == 1).then(|| idx_eids[0]),
+        }
+    }
+
     /// Resolve the N3.1 deferred hierarchical INDEXED reads (`dut.mem[i]`). The index
     /// is already lowered (`idx_eid`, with the original lowering context); here we
     /// resolve the base net and build the correct select FROM ITS SHAPE around that
@@ -138,35 +176,19 @@ impl Elaborator<'_> {
                 );
                 continue;
             };
-            // T1-6: a POSITIONALLY indexed dynamic container (`u.s[0]` on a dyn array,
-            // a queue, or a routed string array) reads as the word-indexed `Signal` the
-            // local `dyn_select_read` builds — the engine's element read does not care
-            // how the name was reached. Only this exact shape: ONE index, and a
-            // DynArray/Queue whose position IS its index.
-            //
-            // Everything else in the family stays loud. An ASSOC array is keyed, not
-            // positioned, so a bare index is a different operation. A MULTI-index access
-            // on a routed multi-dim array needs the row-major flatten, which is applied
-            // at lowering against dimensions this resolution pass does not carry — and
-            // reading the first index as a flat one would be a silent wrong element. The
-            // WRITE twin (`u.s[0] = "x"`) is a separate deferred machine and is still
-            // loud; that asymmetry is a gap, not a regression (both were loud before).
-            if d.part.is_none()
-                && d.idx_eids.len() == 1
-                && matches!(
-                    self.nets.get(net as usize).map(|n| n.kind),
-                    Some(ir::NetKind::DynArray | ir::NetKind::Queue)
-                )
-                && self
-                    .fixed_string_dyn_dims(net)
-                    .is_none_or(|ds| ds.len() == 1)
-            {
-                let word = d.idx_eids[0];
-                self.exprs[d.eid as usize] = ir::Expr::Signal {
-                    net,
-                    word: Some(word),
-                };
-                continue;
+            // T1-6/7: an indexed dynamic container (`u.s[0]` on a dyn array, a queue, or
+            // a routed string array) reads as the word-indexed `Signal` the local
+            // `dyn_select_read` builds — the engine's element read does not care how the
+            // name was reached. `hier_dyn_container_word` is the shared addressing rule;
+            // the WRITE twin calls the SAME function.
+            if d.part.is_none() {
+                if let Some(word) = self.hier_dyn_container_word(net, &d.idx_eids) {
+                    self.exprs[d.eid as usize] = ir::Expr::Signal {
+                        net,
+                        word: Some(word),
+                    };
+                    continue;
+                }
             }
             // Events and dynamic handles have no indexable readable value here (a dyn
             // element read routes through `dyn_select_read` at lowering, on a 1-seg
@@ -783,7 +805,13 @@ impl Elaborator<'_> {
         for (i, d) in pending.into_iter().enumerate() {
             let sentinel = HIER_SEL_WRITE_SENTINEL_BASE + i as u32;
             let path = d.path.join(".");
-            let chunk = match self.hier_lookup(&d.prefix, &d.path) {
+            // T1-8: the routed string array lives under a MANGLED net name, so the same
+            // side-map fallback the READ resolution uses is applied here — second, so an
+            // ordinary net of that name still wins, and with the same commit-to-scope walk.
+            let resolved = self
+                .hier_lookup(&d.prefix, &d.path)
+                .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key));
+            let chunk = match resolved {
                 None => {
                     self.error(
                         MsgCode::ElabUnresolvedName,
@@ -808,6 +836,24 @@ impl Elaborator<'_> {
                         // the resolved net (`u1.RHO[0] = …` was a silent mutation).
                         self.deny_const_param_write(net, "assign to");
                         poison_chunk()
+                    } else if let Some(word) = (d.part.is_none() && !self.event_nets.contains(&net))
+                        .then(|| self.hier_dyn_container_word(net, &d.idx_eids))
+                        .flatten()
+                    {
+                        // T1-8: a hierarchical element WRITE into a dynamic container
+                        // (`u.s[0] = "x"`, `u.d[i] = v`, `u.q[i] = v`). The addressing is
+                        // the READ's, verbatim — `hier_dyn_container_word` — and the chunk
+                        // is the one the LOCAL dyn element write builds in `lvalue.rs`
+                        // (word-indexed, no offset/width, neutral `Bit` tag). Nothing
+                        // about the engine's element store cares how the name was reached,
+                        // which is why the loud reject below was never about capability.
+                        ir::LvalChunk {
+                            net,
+                            word: Some(word),
+                            offset: None,
+                            width: None,
+                            kind: ir::SelKind::Bit,
+                        }
                     } else if self.event_nets.contains(&net) || self.is_dyn_handle_net(net) {
                         self.error(
                             MsgCode::ElabUnsupported,

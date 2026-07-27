@@ -181,7 +181,7 @@ impl Elaborator<'_> {
             // rejected — one shared set, so the frame-local and module-scope forms cannot
             // drift apart.
             if str_elem && d.packed.is_empty() {
-                if let Some(dims) = self.fixed_string_dims_zero_asc(unpacked) {
+                if let Some(geom) = self.fixed_string_geom(unpacked) {
                     let net = self.nets.len() as u32;
                     self.add_net(
                         name,
@@ -197,7 +197,7 @@ impl Elaborator<'_> {
                         },
                     );
                     self.string_elem_dyn_nets.insert(net);
-                    self.fixed_string_dyn.insert(net, dims);
+                    self.fixed_string_dyn.insert(net, geom);
                     return net;
                 }
             }
