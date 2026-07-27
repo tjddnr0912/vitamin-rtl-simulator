@@ -13,7 +13,9 @@ use crate::sched::Scheduler;
 use crate::value::Value;
 
 // ---- split parts (mechanical refactor) ----
+pub(crate) use frame_window::*;
 pub(crate) use process::*;
+mod frame_window;
 mod process;
 
 /// Outcome of one process activation.
