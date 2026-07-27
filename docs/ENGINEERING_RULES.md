@@ -53,6 +53,10 @@
 - **새 저장 클래스로 재분류하면 기존 클래스의 능력을 상속시켜라** — real 재분류만으로 정수 능력 8형이 통째 false-loud된 사례 有. **두 표현이 정확히 일치할 때는 양쪽 등록이 정답**(근사면 등록 금지).
 - **shape(AST walker) 판정보다 값(lower된 IR/전 하위식) 판정이 구조적으로 완전** — walker는 새 shape를 놓치지만 값은 못 숨는다(`_`-free 열거보다 강함). 폭 가드를 리프로 세웠다가 중간값 오버플로를 놓친 §4.5.229 가 같은 교훈.
 
+- **loud 를 silent 로 넓히지 마라** — 근인이 pre-existing 이어도 내 변경이 그 표면을 loud→silent 로 확대하면 내 회귀다(근인은 defer, 표면은 loud 유지).
+- **"이 래퍼가 모든 site 를 덮는다" 는 주석은 테스트로 고정하라** — 6 중 4 만 참이었고 남은 2 가 폭주였다.
+- **loud gate 를 추가하면 그 gate 를 우회하는 간접 경로(함수 호출·계층 이름·메서드)를 전수하라** — "이 gate 가 유일한 그물"이라고 썼으면 실제로 유일한지 측정하라.
+
 ### 영역별 레퍼런스 (그 영역을 건드릴 때만)
 
 - **width/type 축**: self-width table(`width.rs`)·eval 일치. **width-분기는 width-0 HANDLE(string/dyn/queue) 오분기**→NetKind discriminator를 width 前·is_str 라우팅=설정처 grep 단일소스. target-width fill=`lower_ctx_or_plain`. 4-state raw=`val&!unk`. resize=RHS 부호 extend·TARGET 부호 stamp. **real→int 가드=strict `<2^N`**. **2-state X/Z→0=per-WRITE-path·per-STORAGE**. string/dyn HANDLE formal=사이드카 마스크. **타입-signedness=全 decl 대칭**·**signedness fidelity가 全 consumer 도달**·**compare/case=COLLECTIVE**(§11.8.1)·**untyped param=값이 타입 결정**(§6.20.2·fail-open). **const-fold=단일-Const만 provably-safe**. 상세=ARCHIVE.
