@@ -43,6 +43,7 @@
 - **loud verdict도 재검증 대상**: 직접 테스트 없이 mental model로 gate한 것은 과보수일 수 있다(인접 동작 사실과 대조·distinct-value/non-square로 경험 확인). 단, 상호작용이 예측 불가면 **cleanly-verifiable subset만 지원하고 나머지는 loud**(억지 지원=silent).
 - **pre-resolve(elaborate) vs post-resolve(engine) compute divergence**는 sidecar flag로 over-approximate(양측이 동일 소스에서 derive→divergence 무의미화).
 - **defer→resolve 머신**: defer 시점에 미지인 것(callee shape)은 resolve로 미루고, caller-scope 의존(actual net)은 defer 시 미리 resolve해 사이드카에 저장. 방향 등 미지 정보는 각 arg를 필요한 표현 전부(value+lvalue)로 lower해두고 resolve 시 sidecar로 선택.
+- **"이름이 안쪽 스코프 키에 있다"와 "그 스코프가 선언했다"는 다르다** — v1 이 flatten 한 블록 로컬은 키만 안쪽(`t.g.W`)일 뿐 **한 프로세스의 사설 변수**다. shadow 판정 집합은 **그 스코프가 실제로 선언한 것**이어야 하며, 아니면 그 스코프의 다른 모든 reader 가 남의 지역변수를 집는다(§4.5.247: per-instance override·genvar·enum label 까지 오염).
 - **주석이 "X 가 이긴다"고 말하는데 코드가 그렇지 않으면, 대개 fall-through 가 자기 walk 를 다시 돈다** — `lower_expr` 은 결합 집합 위에서 innermost 키를 도출해 놓고, 떨어지는 곳에서 `lookup_scoped`(params 전용)를 불러 그 키를 버렸다(§4.5.246). **도출한 결정을 소비하는지**를 확인하라.
 - **"공통 퍼널을 먼저 만들어야 한다"는 선행조건도 의심하라** — 퍼널이 이미 있고 **한 호출부만 안 부르는** 경우가 있다(§4.5.241: generate 스코프 param 이 `param_real_value` 를 건너뛰고 정수 도메인만 썼다). 인프라 착수 전에 **누가 안 부르는지**부터 세라.
 - **제약이 "머신러리 부재"로 보이면 대개 "가정"이다** — 기존 코드가 이미 일반형을 계산하는데 호출부가 특수형을 *가정*해 좁혀둔 경우가 흔하다. 새로 만들기 전에 **일반 경로가 이미 무엇을 정규화하는지** 확인하고, 가정 대신 **조회**로 바꿔라(특수형은 그 조회가 항등이 되게 해서 IR byte-identical 유지).

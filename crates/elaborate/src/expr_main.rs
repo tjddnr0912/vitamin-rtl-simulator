@@ -221,7 +221,10 @@ impl Elaborator<'_> {
                         // binding is a net that is NOT itself a parameter; resolution
                         // then falls to `resolve_net`, which is what the comment above
                         // always intended.
-                        if self.symbols.contains_key(&key) && !self.params.contains_key(&key) {
+                        if self.symbols.contains_key(&key)
+                            && !self.params.contains_key(&key)
+                            && !self.hoisted_block_local.contains(&key)
+                        {
                             local_shadows_param = true;
                         }
                         // else: an inner numeric param wins — fall through to the

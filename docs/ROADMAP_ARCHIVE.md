@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–246**
+**§4.5.220–247**
+- `4.5.247` §4.5.246 회귀 수정 — flatten 블록 로컬이 generate 스코프를 shadow(적대 리뷰 발굴) …
 - `4.5.246` inner NET 이 outer PARAM 을 shadow — 마지막 ①-급 해소(퍼널은 이미 있었고 fall-through 가 무시했다) …
 - `4.5.245` inner-NET shadow 메커니즘 확정(트리거=param 이름충돌·범위는 task/블록까지·근인=해석 순서) …
 - `4.5.244` 남은 대형 3건 착수 판단표(C>A>B) — 사이드카 우회 불가·B payoff 작음을 실측 …
@@ -302,6 +303,27 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.247 §4.5.246 회귀 수정 — flatten 된 블록 로컬이 generate 스코프를 shadow 하던 문제 (2026-07-28, branch fix-shadow-generate-leak, format 25 불변) ✅
+
+**적대 리뷰가 잡은 BLOCKING 회귀**(§4.5.246 머지 직후 도착). v1 은 절차 블록 로컬을 **둘러싼 prefix 의 bare name** 으로 flatten 하는데, generate 블록 안에서는 그 키가 `t.g.W` 로 **모듈 상수 `t.W` 와 다르다**. 그래서 §4.5.246 의 inner-net-wins 술어가 이것을 **정당한 shadow 로 오인**했고, 그 generate 스코프의 **다른 모든 reader**(형제 `initial`·continuous assign·중첩 generate)가 **한 프로세스의 사설 변수**를 집었다.
+
+**영향은 §4.5.246 이 만든 것**이다 — 아래는 전부 변경 前 byte-correct 였다:
+
+| 형태 | iverilog | §4.5.246 |
+|---|---|---|
+| `assign y = W`(블록 로컬 W 는 write-only) | 4 | **9** |
+| **per-instance override** `#(.W(4))`/`#(.W(5))` | 4 5 | **9 9**(override 무력화) |
+| **genvar** `i` | 0,1 | **77,77** |
+| enum label · package import · `#W` delay · `assert` | 정상 | 전부 오염 |
+
+**수정**: flatten 경로(`hoist_block_local_nets` 의 `elaborate_netvar_decl(..., true)`)가 만든 FQ 키를 사이드셋 `hoisted_block_local` 에 기록하고, shadow 술어에서 **그 키를 제외**한다. 리뷰어가 제안한 판별자 그대로다 — 대안(블록 로컬 leak 게이트를 generate 스코프 전체로 확대)은 오늘 byte-correct 인 설계들을 loud 로 만든다.
+
+**범위 정정도 함께**: §4.5.246 의 커밋/테스트가 "블록 로컬 해소"라고 적었으나 실제로는 **서브루틴 안의** 블록만이다 — 모듈 레벨 프로세스의 `initial begin int W; … end` 는 flatten 키가 param 과 같아 술어가 구분할 수 없다(iverilog 9 / vita 4·§2 잔여로 기록). 테스트 주석을 정정했다.
+
+**게이트**: 4679 → **4680** tests(회귀 3형: continuous assign·genvar·per-instance override) · clippy/fmt clean · format 25 불변.
+
+**교훈**: **"이름이 안쪽 스코프에 있다"는 것과 "그 스코프의 것이다"는 다르다.** flatten 된 블록 로컬은 키만 안쪽일 뿐 **한 프로세스의 사설 변수**다 — shadow 판정에 쓸 집합은 "안쪽 키" 가 아니라 **"그 스코프가 실제로 선언한 것"** 이어야 한다. 그리고 이번 세션에서 **유일하게 리뷰 없이 머지한 변경**이 바로 회귀를 담고 있었다.
+
 #### 4.5.246 inner NET 이 outer PARAM 을 shadow — 마지막 ①-급 silent-wrong 해소 (2026-07-28, branch feat-inner-net-shadow, format 25 불변) ✅
 
 **착수 근거**: §4.5.244 판단표의 **C**, §4.5.245 가 메커니즘을 확정한 항목. 남아 있던 **유일한 ①-급 silent-wrong**.
@@ -314,7 +336,7 @@
 
 **게이트**: 4675 → **4679** tests(신규 `inner_net_shadow.rs`×4) · clippy/fmt clean · format 25 불변 · diff = **1 파일 16줄**.
 
-**리뷰 고지**: 이름 해석은 blast radius 최대 영역이라 적대 리뷰를 띄웠으나, 사용자 요청으로 **루프를 이 반복에서 종료**하므로 그 결과는 이 로그에 반영되지 않았다. 리뷰 결과가 도착하면 별도로 처리해야 한다.
+**적대 리뷰가 BLOCKING 회귀 1건을 잡았고 즉시 수정했다(§4.5.247)** — 아래 참조. 머지 후 도착이라 후속 커밋으로 처리.
 
 #### 4.5.245 inner-NET shadow 메커니즘 확정 (2026-07-28, branch feat-shadow-grounding, format 25 불변) ✅
 

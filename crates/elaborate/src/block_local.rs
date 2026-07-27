@@ -781,6 +781,18 @@ impl Elaborator<'_> {
                         }
                     }
                     self.elaborate_netvar_decl(d, ports, body, true);
+                    // Record the FLATTENED key. This net belongs to ONE process, but
+                    // the v1 flatten publishes it under the enclosing prefix's bare
+                    // name — inside a generate block that is `t.g.W`, a DIFFERENT key
+                    // from the module constant `t.W`. Name resolution's inner-net-wins
+                    // rule must not treat it as a legitimate shadow of an outer
+                    // constant, or every OTHER reader in that generate scope (a
+                    // sibling `initial`, a continuous assign, an inner generate) picks
+                    // up one process's private variable instead of the constant.
+                    for n in &d.names {
+                        let k = self.fq(&n.name.name);
+                        self.hoisted_block_local.insert(k);
+                    }
                     // §6.8/§6.21: a NON-constant PROCESS block-local initializer
                     // (`begin logic x = g+1; …`) is STATIC-lifetime — applied ONCE
                     // at time 0 (the block-local net is module-flattened), NOT on

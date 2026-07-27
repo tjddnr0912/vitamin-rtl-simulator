@@ -80,6 +80,52 @@ fn a_non_colliding_local_is_unaffected() {
     assert!(out.contains("N=9 4"), "no-collision control; got:\n{out}");
 }
 
+/// A block-local hoisted into a GENERATE scope must NOT shadow the outer constant
+/// for other readers of that scope. The v1 flatten publishes such a net under the
+/// enclosing prefix's bare name (`t.g.W`), which is a DIFFERENT key from the
+/// module constant (`t.W`) — so the inner-net-wins rule saw a legitimate-looking
+/// shadow and handed every other reader in the generate block one process's
+/// private variable. Adversarial review caught this; each design below was
+/// byte-correct before the shadow fix and must stay so.
+#[test]
+fn a_hoisted_block_local_does_not_shadow_the_scope_it_was_flattened_into() {
+    // A continuous assign reading the constant, beside a write-only block-local.
+    let (out, c) = run("module t;\n  localparam W = 4;\n  logic [7:0] y;\n\
+           generate if (1) begin : g\n\
+             initial begin int W; W = 9; end\n\
+             assign y = W;\n\
+           end endgenerate\n\
+           initial begin #1 $display(\"D=%0d\", y); $finish; end\nendmodule\n");
+    assert_eq!(c, Some(0), "no diagnostics expected; got:\n{out}");
+    assert!(
+        out.contains("D=4"),
+        "the constant must win here; got:\n{out}"
+    );
+
+    // A GENVAR read in the same generate body.
+    let (out, c) = run("module t;\n  genvar i;\n\
+           generate for (i = 0; i < 2; i = i + 1) begin : g\n\
+             initial begin int i; i = 77; end\n\
+             initial #1 $display(\"K=%0d\", i);\n\
+           end endgenerate\n  initial #2 $finish;\nendmodule\n");
+    assert_eq!(c, Some(0), "no diagnostics expected; got:\n{out}");
+    assert!(
+        out.contains("K=0") && out.contains("K=1"),
+        "genvar; got:\n{out}"
+    );
+
+    // A PER-INSTANCE parameter override — the leak defeated the override entirely.
+    let (out, c) = run("module c #(parameter W = 0) (output logic [7:0] o);\n\
+           generate if (1) begin : g\n\
+             initial begin int W; W = 9; end\n\
+             assign o = W;\n\
+           end endgenerate\nendmodule\n\
+         module t; logic [7:0] a, b; c #(.W(4)) u1(a); c #(.W(5)) u2(b);\n\
+           initial begin #1 $display(\"I=%0d %0d\", a, b); $finish; end\nendmodule\n");
+    assert_eq!(c, Some(0), "no diagnostics expected; got:\n{out}");
+    assert!(out.contains("I=4 5"), "per-instance overrides; got:\n{out}");
+}
+
 /// Regression guard for §4.5.218's S1 failure, where an earlier attempt at this
 /// fix made a nested generate body vanish silently at exit 0. A generate-scope
 /// localparam drives an inner loop bound and an inner if — all bodies must run.

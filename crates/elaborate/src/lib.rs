@@ -460,6 +460,13 @@ struct Elaborator<'s> {
     /// non-grammar strings (`-(-1.25)` became `"--1.25"`), which `parse_real_literal`
     /// silently turns into 0.0.
     real_param_val: BTreeMap<String, f64>,
+    /// FQ keys of nets created by the v1 procedural block-local FLATTEN
+    /// (`hoist_block_local_nets`). Such a net is one process's private variable
+    /// published under the enclosing prefix's bare name, so it must NOT count as a
+    /// scope shadow of an outer constant — inside a generate block its key differs
+    /// from the module constant's, which would otherwise make every other reader in
+    /// that scope resolve to it.
+    hoisted_block_local: BTreeSet<String>,
     // N6: FQ name of a FIXED `string` ARRAY (`string files[0:1]`) → (lo, hi, element
     // net ids in index order). A string is heap-backed with no packed width, so a fixed
     // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)
