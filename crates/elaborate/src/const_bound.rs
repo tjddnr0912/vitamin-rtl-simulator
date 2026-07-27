@@ -133,7 +133,7 @@ impl Elaborator<'_> {
     /// [`Self::const_eval_in_scope`] has a fold arm for. Any other kind returns None
     /// there, so the whole fold declines before these predicates could matter — which
     /// is why an empty child list for an unlisted kind is safe rather than a hole.
-    fn const_fold_children(e: &ast::Expr) -> Vec<&ast::Expr> {
+    pub(crate) fn const_fold_children(e: &ast::Expr) -> Vec<&ast::Expr> {
         use ast::ExprKind as K;
         match &e.kind {
             K::Paren { inner } => vec![inner],

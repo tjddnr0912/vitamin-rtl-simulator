@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–229**
+**§4.5.220–230**
+- `4.5.230` 상수함수 인터프리터 폭 인식 — 좁은 대입 대상이 안 잘려 `localparam W=f()` 가 조용히 틀렸다(내부 차분: 인터프리터 vs 런타임) …
 - `4.5.229` 상수식 BOUND/COUNT 단일 퍼널 — part-select 폭·replication count·indexed part 폭 silent-wrong 8가족 (`const_bound_u32` + `Cast` const arm; 가드는 리프가 아니라 값) …
 - `4.5.228` round-20 8항목: fork-arm 재개 🔴 · 음수 하한 unpacked 🔴 / packed(multi-packed 는 silent) · 동시 활성화 dyn 배열 · generate/interface 스코프 · VCD 선언범위 · `$fmonitor`/`$fstrobe` (format 23→25) …
 - `4.5.226` §0 T1-6: 계층 dynamic-container element READ loud→supported (`u.s[0]`·`u.d[0]`·`u.q[0]`) …
@@ -285,6 +286,35 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.230 상수함수 인터프리터 폭 인식 — `localparam W=f()` 의 조용히 틀린 파라미터 값 (2026-07-27, branch feat-constfn-width, format 25 불변) ✅
+
+**착수 근거**: §4.5.229 가 남긴 "폭 인식 상수 접기" 3건 중 **도달성이 가장 높은 것**(ROADMAP §2 잔차 ②). 인터프리터가 모든 본문 식을 폭 무제한 i64 로 계산해 **좁은 대입 대상이 절대 잘리지 않았다**.
+
+**결정적 신호는 오라클이 아니라 내부 불일치였다** — vita 의 **런타임은 같은 함수를 이미 정확히 실행**하고 있었다. 9가지 형태 중 **6개에서 인터프리터가 자기 엔진과 달랐고**, iverilog 는 런타임 편이었다:
+
+| 본문 | iverilog = vita 런타임 | vita 인터프리터(PRE) |
+|---|---|---|
+| `bit [3:0] t = 4'd15+4'd15` | 14 | 30 |
+| `byte t = (8'd200+8'd100)>>2` | 11 | 75 |
+| `bit [3:0] t = 4'd8*4'd3` | 8 | 24 |
+| `byte t = 8'sd100+8'sd100` | −56 | 200 |
+| `bit [3:0] t = 20` | 4 | 20 |
+| 좁은 formal `t = a+a` | 14 | 30 |
+
+**구현(IEEE §11.6 / Table 11-21)**: 대입은 RHS 를 `max(self-width(RHS), 대상 폭)` 에서 계산하고 대상으로 coerce · 문맥결정 연산자는 그 폭에서 마스킹 · **부호는 문맥 루트에서 한 번 정해 아래로 전파**(§11.8.1) · **자기결정 위치는 스스로 크기를 정한다**(shift COUNT·`**` 지수·ternary 조건·비교 피연산자[서로 폭·부호 통일]·`$clog2` 인자·`!` 피연산자·전 statement 조건/`repeat` 카운트) · 폭을 알면 shift 는 **비트패턴**으로 계산(음수의 논리 `>>` 가 더는 거부되지 않음). 폭 env `(name→(width,signed))` 를 formal·body decl·**중첩 블록**·`for` init·함수명 반환변수·**중첩 호출**까지 전부 관통.
+
+**적대 리뷰 2라운드가 9건을 잡았다**(전부 수정 후 재리뷰). 특히:
+- **부호를 노드마다 다시 계산한 것**이 최악이었다 — 부호 있는 하위식이 부호 없는 부모 밑에서 sign-extend 돼 `bit[7:0] r=(b+b)/u` 가 **정답 100 → 228** 로 하강했다(§11.8.1 은 문맥당 **한 번**).
+- 폭 63 대상에서 `(1i64<<63)-1` **오버플로 패닉**(공유 `coerce_int_width`, 릴리스면 wrap).
+- `bit [f()-1:0]` 이 `const_eval_in_scope` 로 재진입하며 호출 깊이를 0 으로 리셋 → **스택 오버플로**(PRE 는 깨끗). 깊이 캡이 아니라 **호출을 포함한 바운드는 접지 않는다**로 구조적 제거.
+- `return e` 가 폭 규칙을 우회해 `f = e` 와 **같은 식이 다른 값**(15 vs 7).
+- 접기를 넓히면 **폭·부호 술어도 같이** — `int unsigned` 강제 signed, multi-packed 를 첫 dim 으로 마스킹, `Call` 의 반환 타입을 `const_expr_signed`/`param_decl_width` 가 모름(−56 → 4294967240).
+- **3라운드에서 2건 더**: ① 좁은 **signed** 리프가 **unsigned** 문맥에 들어갈 때 자기 폭에서 zero-extend 돼야 하는데(§11.6.1) i64 에 이미 sign-extend 돼 있어 비교가 뒤집혔다(`(a*8'sd1)>LIMIT` 0→1) ② `const_decl_wsign` 이 **거부**한 선언을 읽는 쪽이 `(32, unsigned)` 로 **추측**해 64비트 multi-packed 를 조용히 잘랐다 — 거부는 "모름"이어야 하고 모름은 **마스킹 안 함**으로 전파돼야 한다.
+
+**게이트**: 4629 → **4640** tests(신규 `const_fn_width.rs`×11) · clippy/fmt clean · **format_version 25 불변** · 3-way 스윕 **11 대상타입 × 15 RHS = 165 포인트 전부 iverilog MATCH**(PRE 는 **84 불일치**).
+
+**교훈**: 오라클이 없거나 모호할 때 **자기 엔진이 오라클**이다 — 인터프리터 대 런타임 차분이 이 슬라이스 전체를 이끌었다. 그리고 **부호는 값·폭과 함께 움직이는 세 번째 술어**다(§4.5.229 의 교훈이 `Cast` 에서 `Call` 로 그대로 반복됐다).
 
 #### 4.5.229 상수식 BOUND/COUNT 단일 퍼널 — part-select 폭·replication count·indexed part 폭의 silent-wrong 8가족 (2026-07-27, branch feat-constfold-bounds, format 25 불변) ✅
 

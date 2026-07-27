@@ -97,6 +97,21 @@ impl Elaborator<'_> {
                         .and_then(|m| m.get(&name.name))
                         .copied();
                 }
+                // A constant-function CALL is type-determined too: the parameter
+                // takes the function's declared RETURN type (§13.4.1), so
+                // `localparam X = fb()` with `function byte fb()` is 8 bits signed,
+                // not the value-inferred 32 unsigned. Same trio as the cast below.
+                if let ast::ExprKind::Call { name, .. } = &p.value.kind {
+                    if name.segments.len() == 1 && self.const_eval_in_scope(&p.value).is_some() {
+                        if let Some(m) = self
+                            .const_func_table
+                            .get(&name.segments[0].name)
+                            .and_then(|f| self.const_fn_ret_wsign(f))
+                        {
+                            return Some(m);
+                        }
+                    }
+                }
                 // A CAST initializer is type-determined, not value-determined: the
                 // casting type states the width outright (§6.24), so `localparam
                 // PL = longint'(-1)` is 64 bits and `byte'(-1)` is 8 — the

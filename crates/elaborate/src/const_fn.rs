@@ -309,9 +309,13 @@ impl Elaborator<'_> {
             // (`localparam W = clog2(N)`). Evaluated by interpreting the function body
             // at compile time (integer domain only; anything it cannot fold → None →
             // LOUD at the binding site, never a silently-wrong param value).
-            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
-                self.eval_const_call(&name.segments[0].name, args, &BTreeMap::new(), 0)
-            }
+            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => self.eval_const_call(
+                &name.segments[0].name,
+                args,
+                &BTreeMap::new(),
+                &ConstWidths::new(),
+                0,
+            ),
             _ => None,
         }
     }
@@ -365,17 +369,18 @@ impl Elaborator<'_> {
         &self,
         e: &ast::Expr,
         env: &std::collections::BTreeMap<String, i64>,
+        envw: &ConstWidths,
         depth: u32,
     ) -> Option<i64> {
         match &e.kind {
             ast::ExprKind::IntLit { .. } => const_eval_i64_lit(e),
-            ast::ExprKind::Paren { inner } => self.eval_const_env(inner, env, depth),
+            ast::ExprKind::Paren { inner } => self.eval_const_env(inner, env, envw, depth),
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => env
                 .get(&path.segments[0].name)
                 .copied()
                 .or_else(|| self.lookup_scoped(&path.segments[0].name)),
             ast::ExprKind::Unary { op, operand } => {
-                let v = self.eval_const_env(operand, env, depth)?;
+                let v = self.eval_const_env(operand, env, envw, depth)?;
                 match op {
                     ast::UnOp::Plus => Some(v),
                     ast::UnOp::Minus => v.checked_neg(),
@@ -385,8 +390,8 @@ impl Elaborator<'_> {
                 }
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
-                let a = self.eval_const_env(lhs, env, depth)?;
-                let b = self.eval_const_env(rhs, env, depth)?;
+                let a = self.eval_const_env(lhs, env, envw, depth)?;
+                let b = self.eval_const_env(rhs, env, envw, depth)?;
                 const_binop(*op, a, b)
             }
             ast::ExprKind::Ternary {
@@ -394,14 +399,14 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                if self.eval_const_env(cond, env, depth)? != 0 {
-                    self.eval_const_env(then_e, env, depth)
+                if self.eval_const_env_self(cond, env, envw, depth)? != 0 {
+                    self.eval_const_env(then_e, env, envw, depth)
                 } else {
-                    self.eval_const_env(else_e, env, depth)
+                    self.eval_const_env(else_e, env, envw, depth)
                 }
             }
             ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
-                let n = self.eval_const_env(&args[0], env, depth)?;
+                let n = self.eval_const_env(&args[0], env, envw, depth)?;
                 if n < 0 {
                     return None;
                 }
@@ -411,8 +416,12 @@ impl Elaborator<'_> {
                     Some((64 - ((n - 1) as u64).leading_zeros()) as i64)
                 }
             }
+            // A nested call's ARGUMENTS are expressions in THIS body, so they must
+            // be sized with THIS body's widths — handing over an empty map made
+            // `g((b + b) / 8'sd3)` size `b` as 32 bits and compute 66 instead of
+            // −18, while the same expression written inline was correct.
             ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
-                self.eval_const_call(&name.segments[0].name, args, env, depth)
+                self.eval_const_call(&name.segments[0].name, args, env, envw, depth)
             }
             _ => None,
         }
@@ -433,6 +442,7 @@ impl Elaborator<'_> {
         name: &str,
         args: &[ast::Expr],
         caller_env: &std::collections::BTreeMap<String, i64>,
+        caller_w: &ConstWidths,
         depth: u32,
     ) -> Option<i64> {
         const MAX_DEPTH: u32 = 64;
@@ -445,6 +455,7 @@ impl Elaborator<'_> {
             return None; // too many args
         }
         let mut env: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
+        let mut envw: ConstWidths = ConstWidths::new();
         for (i, p) in f.ports.iter().enumerate() {
             if p.dir != ast::PortDir::Input || !p.unpacked.is_empty() {
                 return None; // output/inout/ref or unpacked-array formal → loud
@@ -454,31 +465,58 @@ impl Elaborator<'_> {
                     return None; // real/string/… formal → loud
                 }
             }
+            // §11.6: an argument is assigned to the formal, so it takes the
+            // FORMAL's declared width — a `bit [3:0]` formal receiving `4'd15+1`
+            // gets 0, not 16.
+            // A tf-port with no data type is `logic` with the given range (1 bit
+            // when there is none) — `input [3:0] a` is the commonest Verilog-2005
+            // spelling and used to get no width at all.
+            let tw = self.const_decl_wsign(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Logic),
+                p.range.as_ref(),
+                &[],
+                p.signed,
+            );
             let av = if let Some(a) = args.get(i) {
-                self.eval_const_env(a, caller_env, depth)?
+                self.eval_const_assign(a, caller_env, caller_w, depth, tw)?
             } else if let Some(d) = &p.default {
-                self.eval_const_env(d, &env, depth)?
+                self.eval_const_assign(d, &env, &envw, depth, tw)?
             } else {
                 return None; // too few args, no default
             };
+            // Record the shape — or UNKNOWN (width 0) when it could not be
+            // determined, so a later reader propagates "no masking" instead of
+            // falling back to a guessed 32-bit unsigned.
+            envw.insert(p.name.name.clone(), tw.unwrap_or((0, false)));
             env.insert(p.name.name.clone(), av);
         }
         for d in &f.body_decls {
             if !netvar_kind_is_int_const(d.kind) {
                 return None; // real/string/array local → loud
             }
+            let m = self.const_decl_wsign(d.kind, d.range.as_ref(), &d.packed, d.signed);
             for n in &d.names {
+                envw.insert(n.name.name.clone(), m.unwrap_or((0, false)));
                 let iv = n
                     .init
                     .as_ref()
-                    .and_then(|e| self.eval_const_env(e, &env, depth))
+                    .and_then(|e| self.eval_const_assign(e, &env, &envw, depth, m))
                     .unwrap_or(0);
                 env.insert(n.name.name.clone(), iv);
             }
         }
+        // The function-name return variable is itself a declared target.
+        envw.insert(name.to_string(), (rw, rs));
         env.entry(name.to_string()).or_insert(0);
         let mut steps: u64 = 0;
-        let ret = match self.exec_const_stmt(&f.body, &mut env, depth + 1, &mut steps)? {
+        let ret = match self.exec_const_stmt(
+            &f.body,
+            &mut env,
+            &mut envw,
+            Some((rw, rs)),
+            depth + 1,
+            &mut steps,
+        )? {
             ConstFlow::Return(Some(v)) => v,
             ConstFlow::Return(None) | ConstFlow::Normal => *env.get(name)?,
         };
@@ -494,6 +532,8 @@ impl Elaborator<'_> {
         &self,
         s: &ast::Stmt,
         env: &mut std::collections::BTreeMap<String, i64>,
+        envw: &mut ConstWidths,
+        ret: Option<(u32, bool)>,
         depth: u32,
         steps: &mut u64,
     ) -> Option<ConstFlow> {
@@ -513,17 +553,19 @@ impl Elaborator<'_> {
                     if !netvar_kind_is_int_const(d.kind) {
                         return None;
                     }
+                    let m = self.const_decl_wsign(d.kind, d.range.as_ref(), &d.packed, d.signed);
                     for n in &d.names {
+                        envw.insert(n.name.name.clone(), m.unwrap_or((0, false)));
                         let iv = n
                             .init
                             .as_ref()
-                            .and_then(|e| self.eval_const_env(e, env, depth))
+                            .and_then(|e| self.eval_const_assign(e, env, envw, depth, m))
                             .unwrap_or(0);
                         env.insert(n.name.name.clone(), iv);
                     }
                 }
                 for st in stmts {
-                    match self.exec_const_stmt(st, env, depth, steps)? {
+                    match self.exec_const_stmt(st, env, envw, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }
@@ -546,7 +588,11 @@ impl Elaborator<'_> {
                 if path.segments.len() != 1 {
                     return None;
                 }
-                let v = self.eval_const_env(rhs, env, depth)?;
+                // §11.6: the RHS runs at max(its self width, the TARGET's width)
+                // and is then assigned — this is where `bit [3:0] t = 4'd15+4'd15`
+                // becomes 14 instead of 30.
+                let tw = envw.get(&path.segments[0].name).copied();
+                let v = self.eval_const_assign(rhs, env, envw, depth, tw)?;
                 env.insert(path.segments[0].name.clone(), v);
                 Some(ConstFlow::Normal)
             }
@@ -556,24 +602,30 @@ impl Elaborator<'_> {
                 else_s,
                 ..
             } => {
-                if self.eval_const_env(cond, env, depth)? != 0 {
-                    self.exec_const_stmt(then_s, env, depth, steps)
+                if self.eval_const_env_self(cond, env, envw, depth)? != 0 {
+                    self.exec_const_stmt(then_s, env, envw, ret, depth, steps)
                 } else if let Some(e) = else_s {
-                    self.exec_const_stmt(e, env, depth, steps)
+                    self.exec_const_stmt(e, env, envw, ret, depth, steps)
                 } else {
                     Some(ConstFlow::Normal)
                 }
             }
             ast::Stmt::Return { value, .. } => {
+                // `return e` assigns the function's declared return type; the
+                // caller coerces again, which is idempotent.
                 let v = match value {
-                    Some(e) => Some(self.eval_const_env(e, env, depth)?),
+                    // `return e` assigns the function's DECLARED return type, so it
+                    // takes the same context width as `f = e` — without this the two
+                    // spellings of one expression disagreed (`return (4'd15+4'd15)>>1`
+                    // gave 15 where the assignment form gave iverilog's 7).
+                    Some(e) => Some(self.eval_const_assign(e, env, envw, depth, ret)?),
                     None => None,
                 };
                 Some(ConstFlow::Return(v))
             }
             ast::Stmt::While { cond, body, .. } => {
-                while self.eval_const_env(cond, env, depth)? != 0 {
-                    match self.exec_const_stmt(body, env, depth, steps)? {
+                while self.eval_const_env_self(cond, env, envw, depth)? != 0 {
+                    match self.exec_const_stmt(body, env, envw, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }
@@ -587,23 +639,23 @@ impl Elaborator<'_> {
                 body,
                 ..
             } => {
-                self.exec_const_stmt(init, env, depth, steps)?;
-                while self.eval_const_env(cond, env, depth)? != 0 {
-                    match self.exec_const_stmt(body, env, depth, steps)? {
+                self.exec_const_stmt(init, env, envw, ret, depth, steps)?;
+                while self.eval_const_env_self(cond, env, envw, depth)? != 0 {
+                    match self.exec_const_stmt(body, env, envw, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }
-                    self.exec_const_stmt(step, env, depth, steps)?;
+                    self.exec_const_stmt(step, env, envw, ret, depth, steps)?;
                 }
                 Some(ConstFlow::Normal)
             }
             ast::Stmt::Repeat { count, body, .. } => {
-                let n = self.eval_const_env(count, env, depth)?;
+                let n = self.eval_const_env_self(count, env, envw, depth)?;
                 if n < 0 {
                     return None;
                 }
                 for _ in 0..n {
-                    match self.exec_const_stmt(body, env, depth, steps)? {
+                    match self.exec_const_stmt(body, env, envw, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }

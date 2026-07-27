@@ -91,9 +91,12 @@ pub(crate) fn coerce_int_width(v: i64, width: u32, signed: bool) -> i64 {
     if width == 0 || width >= 64 {
         return v;
     }
-    let mask = (1i64 << width) - 1;
+    // u64 shift: at width 63 the i64 form `(1i64 << 63) - 1` overflows (a debug
+    // panic, a wrap in release). The mask is a bit pattern, so build it unsigned
+    // and reinterpret — exact for every width in 1..=63.
+    let mask = ((1u64 << width) - 1) as i64;
     let m = v & mask;
-    if signed && (m & (1i64 << (width - 1))) != 0 {
+    if signed && (m >> (width - 1)) & 1 == 1 {
         m | !mask
     } else {
         m
@@ -310,6 +313,16 @@ impl Elaborator<'_> {
             // `localparam P = int'(-300)` binds the folded −300 as UNSIGNED and
             // materializes 4294966996 — the fold made it reachable, so the two must
             // stay in step. `Named` is not folded there, so it stays unsigned here.
+            // A constant-function call carries its DECLARED RETURN type's sign
+            // (§13.4.1). Without this arm a `function int f(); f = -56;` bound its
+            // folded −56 as UNSIGNED and materialized 4294967240 — the same
+            // three-predicates-must-agree trap the `Cast` arm below closed, reached
+            // once width-aware evaluation made a negative return value possible.
+            ast::ExprKind::Call { name, .. } if name.segments.len() == 1 => self
+                .const_func_table
+                .get(&name.segments[0].name)
+                .and_then(|f| self.const_fn_ret_wsign(f))
+                .is_some_and(|(_, s)| s),
             ast::ExprKind::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
                 ast::CastTarget::Signing { signed } => *signed,

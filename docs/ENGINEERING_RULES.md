@@ -59,6 +59,14 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
+### 상수 접기 (§4.5.230)
+
+- **오라클이 없거나 모호하면 자기 엔진이 오라클이다.** elaborate 인터프리터와 런타임이 **같은 소스**를 다르게 계산하면 그 자체가 결함이다 — 이 차분이 슬라이스 전체를 이끌었고(9형 중 6형 불일치), iverilog 는 사후 확인이었을 뿐이다.
+- **값·폭·부호는 세 개의 술어이고 함께 움직인다.** 접기를 넓히면 `const_expr_signed` 와 `param_decl_width` 도 같은 arm 집합을 가져야 한다 — `Cast` 에서 배운 교훈이 `Call` 에서 **그대로 반복**됐다(반환 타입을 몰라 −56 이 4294967240 으로).
+- **폭 문맥에서 부호는 문맥당 한 번 정하고 내려보내라**(IEEE §11.8.1). 노드마다 다시 계산하면 부호 있는 하위식이 부호 없는 부모 밑에서 sign-extend 돼 **정답이 오답으로 하강**한다(`(b+b)/u` 100→228). 자기결정 위치(비교 피연산자 등)만 자기들끼리 다시 통일한다.
+- **재진입하는 헬퍼는 깊이를 리셋한다.** 폭을 구하려고 `const_eval_in_scope` 를 부르면 그 안의 call 깊이가 0 부터 다시 세어져 `bit [f()-1:0]` 이 스택을 넘겼다. 깊이 캡보다 **그 형태를 아예 접지 않는** 구조적 제거가 낫다.
+- **폭을 알게 되면 "모르니 거부"였던 규칙을 재검토하라** — 음수의 논리 `>>` 는 폭 의존이라 거부하고 있었는데, 문맥 폭이 생긴 순간 **비트패턴으로 정확히 계산**할 수 있게 됐다(거부를 남겨두면 correct→loud 하강).
+
 ### 상수 접기 (§4.5.229)
 
 - **폭 정확성 가드는 리프가 아니라 값으로 세워라.** "모든 리프가 ≥32비트면 안전"은 두 방향으로 틀렸다 — `(32'd1<<32'd33)>>32'd30` 은 리프가 전부 32비트인데 **중간값이 32비트를 넘었다 돌아와** SV 와 갈리고(그 자리는 PRE 가 **정답**이었으므로 correct→silent-wrong 하강), 반대로 `4비트 param * 2` 는 SV 가 max-폭으로 32비트에 계산하는데 과잉거부된다. 판정은 **모든 하위식의 값**이 안전 범위에 있는지로 하고, 그 traversal 은 세 조건이 **하나를 공유**하게 하라.
