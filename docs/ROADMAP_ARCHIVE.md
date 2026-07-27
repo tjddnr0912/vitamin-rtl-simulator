@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–244**
+**§4.5.220–245**
+- `4.5.245` inner-NET shadow 메커니즘 확정(트리거=param 이름충돌·범위는 task/블록까지·근인=해석 순서) …
 - `4.5.244` 남은 대형 3건 착수 판단표(C>A>B) — 사이드카 우회 불가·B payoff 작음을 실측 …
 - `4.5.243` generate case 의 real scrutinee = 비목표 확정(iverilog 도 거부) — real 가족 완결 …
 - `4.5.242` generate 제어식 real 라우팅(`const_truth_in_scope`) — "real→정수 문맥" 완결 …
@@ -299,6 +300,32 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.245 inner-NET shadow 메커니즘 확정 (2026-07-28, branch feat-shadow-grounding, format 25 불변) ✅
+
+**착수 근거**: §4.5.244 판단표의 **C** — 유일하게 남은 ①-급 silent-wrong. 구현 전 §2 그라운딩(예측 금지)을 먼저 했고, **기록보다 넓고 트리거는 더 좁다**는 것이 드러났다.
+
+**트리거 = 모듈 스코프 param 과의 이름 충돌, 그것뿐**(실측): 충돌 없는 로컬(`int X`)은 **정상**(9). 충돌하면 **param 이 이긴다**.
+
+| 형태 | iverilog | vita |
+|---|---|---|
+| 로컬 `int X`(충돌 없음) | 9 | **9** ✓ |
+| function-local `int W`(`localparam W=4`) | 9 | **4** ✗ |
+| `begin…end` 블록 로컬 `int W` | 9 | **4** ✗ |
+| function-local `int E`(`localparam int E=3`) | 8 | **3** ✗ |
+| **task**-local `int W` → `output` | 7 | **4** ✗ |
+
+**기록보다 넓다**: ROADMAP 은 function-local 만 적어뒀으나 **task-local 과 블록 로컬도 동일 발화**다.
+
+**근인 확정**: `lower_expr` 의 이름 해석 순서가 **subst → out_subst → string-param → `lookup_scoped`(params) → net** — 서브루틴 로컬 net 보다 **param 이 먼저** 잡힌다. 충돌이 없을 때 정상인 이유도 이것으로 설명된다(param 조회가 miss 하면 net 으로 내려간다).
+
+**선행조건 정정**: ROADMAP 은 `gather_local_decl_names` 패턴을 쓰라고 했는데, **그 함수는 모듈 레벨(params+ports)만 모은다** — 필요한 것은 **서브루틴별 로컬 이름 집합**이라 신규다(패턴은 재사용하되 함수는 새로). 순서 독립·AST 순수함수여야 §4.5.218 S1(중첩 generate body 조용한 삭제) 재발이 없다.
+
+**이번 반복은 여기서 멈춘다** — 이름 해석은 blast radius 가 가장 큰 영역이고 실패 전력이 1회 있다. 절반만 바꾼 상태로 남기는 것보다, **메커니즘·범위·선행조건을 확정한 체크포인트**가 다음 착수에 더 안전하다.
+
+**게이트**: 4675 tests green(변경 없음) · **코드 변경 0**.
+
+**교훈**: **DEEP 항목은 "구현"과 "그라운딩"을 별도 반복으로 쪼개도 된다.** 근인·범위·선행조건이 확정되면 그 자체가 산출물이고, 특히 실패 전력이 있는 영역에서는 **절반 구현보다 확정된 체크포인트가 낫다**.
 
 #### 4.5.244 남은 대형 항목 3건 착수 판단표 — 비용·payoff·선행조건 실측 (2026-07-28, branch feat-remaining-assessment, format 25 불변) ✅
 
