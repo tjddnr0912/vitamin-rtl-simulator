@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–239**
+**§4.5.220–240**
+- `4.5.240` `$value$plusargs` 크기 추정 정정(관용 배치 2종 이미 동작·남은 loud 는 패밀리 불변식) + if-cond 핀 …
 - `4.5.239` 스캔 4차 완료 — `$typename` 핀(iverilog 미구현)·`%u`/`%z`/`%l` 정리 …
 - `4.5.238` 스캔 3차 honest-loud 확인 + LOOPROMPT §8 압축(20142→18934B, 규칙 무삭제) …
 - `4.5.237` 테스트 0건 스펙 스캔 2차 — `$sformat`/`$swrite`/plusargs 검증 후 핀(결함 없음) …
@@ -294,6 +295,18 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.240 `$value$plusargs` 크기 추정 정정 + if-condition 배치 핀 (2026-07-28, branch feat-plusargs-record, format 25 불변) ✅
+
+**착수 근거**: §4.5.237 이 §3 에 "소형 loud→supported 후보"로 적어둔 항목을 실제로 집어들었다.
+
+**정정 — 소형이 아니었고, 애초에 갭도 거의 아니었다**: 관용적 배치 **둘 다 이미 동작**한다 — `ok = $value$plusargs(…)`(기존 핀)와 **`if ($value$plusargs(…))`**(iverilog 일치 확인, 이번에 핀). 남은 loud 는 `$display("%0d", $value$plusargs(…))` 같은 임의 expression 위치뿐인데, 이는 **side-effect sysfunc 패밀리 전체의 의도된 설계**다 — seeded `$random`·`$fopen`·`$sformatf`·fd-advancing 파일읽기(`$fgetc`/`$ungetc`/`$fgets`/`$fread`/`$fscanf`/`$sscanf`)가 전부 **single-eval 보장을 위해 statement-form 으로 lower** 된다(ENGINEERING_RULES "side-effect sysfunc expr=statement-form desugar"). 임의 expression 위치엔 desugar 할 statement 가 없으므로 **loud 가 정답**이고, 넓히려면 패밀리 전체의 desugar 확장이 선행이다.
+
+**전달물**: if-condition 배치 핀(관용 배치 중 유일하게 테스트가 없던 것) + §3 항목을 "소형 후보" → "패밀리 설계·소형 아님"으로 정정.
+
+**게이트**: 4665 → **4666** tests · clippy/fmt clean · format 25 불변 · **코드 변경 0**.
+
+**교훈**: **내가 큐에 적은 크기 추정도 다음 반복을 오도한다.** §4.5.233 이 "근인이 한 줄이어도 그 줄이 사는 레이어가 크기를 정한다"였다면, 이번은 그 자매편 — **"loud 하다"를 갭으로 적기 전에 그 loud 가 어느 패밀리의 규칙인지 보라**. 여기선 실제 갭이 거의 없었고, 남은 것은 고칠 대상이 아니라 지켜야 할 불변식이었다.
 
 #### 4.5.239 스캔 4차 완료 — `$typename` 핀 + `%u`/`%z`/`%l` 정리 (2026-07-28, branch feat-typename-pins, format 25 불변) ✅
 

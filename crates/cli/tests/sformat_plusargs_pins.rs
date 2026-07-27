@@ -95,8 +95,31 @@ fn plusargs_match_and_convert() {
     );
 }
 
-/// The documented restriction, pinned so it is visible rather than surprising:
-/// `$value$plusargs` must be the direct RHS of a blocking assignment.
+/// The IF-CONDITION placement is supported too and matches iverilog — it was the
+/// one idiomatic form with no test. Both placements that real testbenches use
+/// (`ok = $value$plusargs(...)` and `if ($value$plusargs(...))`) therefore work.
+#[test]
+fn value_plusargs_works_as_an_if_condition() {
+    let src = "module m;\n  int v;\n  initial begin\n\
+           if ($value$plusargs(\"num=%d\", v)) $display(\"A=hit %0d\", v); \
+             else $display(\"A=miss\");\n\
+           if ($value$plusargs(\"zzz=%d\", v)) $display(\"B=hit\"); \
+             else $display(\"B=miss\");\n\
+           #1 $finish; end\nendmodule\n";
+    let (out, c) = run_args(src, &["+num=7"]);
+    assert_eq!(c, Some(0), "no diagnostics expected; got:\n{out}");
+    assert!(
+        out.contains("A=hit 7") && out.contains("B=miss"),
+        "got:\n{out}"
+    );
+}
+
+/// The remaining restriction, pinned so it is visible rather than surprising.
+/// `$value$plusargs` WRITES its second argument, so like the rest of the
+/// side-effecting system-function family (seeded `$random`, `$fopen`,
+/// `$sformatf`, the fd-advancing file reads) it is lowered as a statement form to
+/// guarantee single evaluation. An arbitrary expression position has no statement
+/// to desugar into, so it is loud — deliberately, not as a gap to close cheaply.
 #[test]
 fn value_plusargs_in_an_expression_is_loud() {
     let (out, c) = run("module m;\n  int v;\n  initial begin\n\
