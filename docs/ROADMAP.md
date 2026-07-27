@@ -52,7 +52,9 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 8. ~~`real` const-fold 전면 미지원~~ **RESOLVED**(§4.5.232) — 실수 산술·alias·체인·정수 승격 전부 correct-support. **잔여(의도적 loud)**: 실수를 정수 문맥에(폭/`$clog2`/replication/정수 localparam) — **i64 twin 등록은 시도했다가 철회**(twin 이 정수 도메인에 real 식을 열어 generate 분기 오선택 등 5건 silent-wrong; §11.8.1 순서를 아는 site 가 `param_real_value` 하나뿐) · generate 스코프/제어식의 real(같은 근인·별도 슬라이스) · `1.0/0.0` · 실수 미정의 연산자 · 실수 override.
 9. ~~generate/interface 스코프 string decl-init~~ **RESOLVED**(§4.5.228) — 근인은 `allow_string_init` 플래그가 아니라 decl-time 쓰기가 모듈 스코프 pending 리스트로 새던 것. queue/dyn decl-init·generate 내 block-local 도 같이 열림.
-10. **sized-literal enum label → enum-method** — `enum bit[3:0]{A=4'h3}` + `.name()` = iverilog `A` / vita E3009. `const_lit`이 unsized-decimal만 fold해 `enum_defs` 미등록. 진단 문구도 오도("hierarchical function call").
+10. **sized-literal enum label → enum-method**(§4.5.233 그라운딩 — **크기 재평가됨: 소형 아님**) — `enum bit[3:0]{A=4'h3}` 의 `.name()`/`.first()`/`.next()`/`.num()` **전부** E3009(iverilog `A`/3/5/3). 근인 확정: `hdl-parser/expr_primary.rs::const_lit` 이 `IntLitKind::Decimal` 만 접어서 sized/based 라벨이면 `foldable=false` → **enum 이 `enum_defs` 에 아예 미등록** → `.name()` 합성(파스타임 `function string` codegen)이 안 생기고 hier-call fallback 으로 떨어진다(그래서 진단이 "hierarchical function call" 로 오도).
+    **왜 소형이 아닌가**: 값이 **파스 타임에** 필요한데(`.name()` 케이스표를 파서가 생성) `parse_int_literal` 은 `elaborate` 에 있고 elaborate 는 hdl-parser 에 **의존**한다 — 순환. 선택지는 두 개뿐이고 둘 다 슬라이스 감이다: ① `literal.rs`(559줄, deps=`hdl_ast::IntLitKind`+`sim_ir`)를 공유 크레이트로 분리 — hdl-parser 가 `sim_ir` 을 보게 되는 **레이어링 변경** ② 파서에 based-literal 파서를 **두 번째로** 작성 — 값 술어가 둘이 되어 `.name()` 표와 elaborate 상수가 어긋나면 **이름만 조용히 틀린다**(정확히 "한 술어로 두 resolver" 함정). ②를 택한다면 teeth 는 **내부 차분**(`x.name()` 과 `x` 값의 짝이 소스와 일치)이 필수.
+    **진단 개선도 단독으로는 불가** — 파서가 "labels unfoldable" 표시를 남기지 않아 elaborate 에 그 enum 이었다는 정보 자체가 없다.
 11. ~~음수 range bound~~ **RESOLVED**(§4.5.228) — plain net·multi-packed inner(**후자는 silent 였다**)·배열 원소·VCD `$var` 범위까지. 잔여 = **PART select**(`x[1:-2]`, 정직한 loud·바운드 접기가 unsigned) · **포트/formal**(warn+clamp 유지·의도적 opt-in 비대칭).
 
 **T3 — 전제조건 필요 (즉시 착수 대상 아님)**

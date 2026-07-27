@@ -59,6 +59,11 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
+### 크기 추정 (§4.5.233)
+
+- **"작아 보이는 loud→supported" 는 값이 필요한 TIME 을 먼저 물어라.** enum 라벨 폴드는 30줄짜리로 보였지만 값이 **파스 타임**에 필요했고, 그 값을 만드는 함수는 파서에 **의존하는** 크레이트에 있었다(순환). 근인이 한 줄이어도 **그 한 줄이 사는 레이어**가 슬라이스 크기를 정한다.
+- **같은 값을 두 번 파싱하게 되면 그것은 "두 술어" 함정이다** — 어긋나는 순간 조용히 틀린다(여기선 `.name()` 표와 상수가 다른 라벨을 가리킴). 불가피하면 teeth 는 반드시 **내부 차분**(두 술어의 결과가 같은 소스에서 일치하는지)으로.
+
 ### 능력 확장 (§4.5.232)
 
 - **철자 비대칭을 없애려는 "능력 확장"이 규칙의 전제를 무너뜨릴 수 있다.** 어떤 규칙(§11.8.1 실수 우선 순서)을 적용하는 site 가 **하나뿐**인데 그 규칙이 막고 있던 능력(정수 twin)을 전역에 열면, 규칙을 모르는 **모든 consumer** 가 조용히 틀린다 — generate 분기 오선택 등 5건이 한 번에 열렸다. 확장 전에 **"이 능력을 소비하는 site 가 몇 개이고 각자 이 규칙을 아는가"** 를 세라. 셋 이상이면 규칙을 먼저 공통 퍼널로 올린 뒤에 확장하라.
