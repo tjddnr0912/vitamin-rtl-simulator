@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–241**
+**§4.5.220–242**
+- `4.5.242` generate 제어식 real 라우팅(`const_truth_in_scope`) — "real→정수 문맥" 완결 …
 - `4.5.241` generate 스코프 `localparam real` loud→correct-support(퍼널은 이미 있었고 한 호출부만 안 쓰고 있었다) …
 - `4.5.240` `$value$plusargs` 크기 추정 정정(관용 배치 2종 이미 동작·남은 loud 는 패밀리 불변식) + if-cond 핀 …
 - `4.5.239` 스캔 4차 완료 — `$typename` 핀(iverilog 미구현)·`%u`/`%z`/`%l` 정리 …
@@ -296,6 +297,20 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.242 generate 제어식의 real 도메인 라우팅 — "real→정수 문맥" 항목 완결 (2026-07-28, branch feat-generate-real-control, format 25 불변) ✅
+
+**착수 근거**: §4.5.241 이 남긴 나머지 절반. generate 제어식이 정수 도메인으로만 접혀서 `generate if (R/2 > 2)` 와 `for (i = 0; i < R/2; …)` 가 **"is not a constant" loud** 였다(iverilog: then · 3회 반복).
+
+**수정 = 문맥 경계 하나**: 신규 `const_truth_in_scope` — 정수 도메인 먼저, 거부되고 **expr 이 real 을 언급하면** real 도메인에서 접고 **거기서** 진리값을 취한다. if-cond·for-cond 두 site 가 이것을 공유한다. `R/2 > 2` 는 real 비교이고 **1비트 결과만** 정수 세계로 넘어오는 게 핵심 — `R` 을 먼저 정수로 만들면 2.5 가 아니라 2 로 분기를 정하게 되고, 그게 이 도메인이 존재하는 이유인 leaf 변환 실수다.
+
+**분수부가 실제로 분기를 정한다는 것**을 오라클로 핀했다: `R>2` 가 2.5→then · 2.0→else · 1.9→else(전부 iverilog 일치). for 바운드도 `i < R/2`(=2.5) 가 0/1/2 세 번 — 절단됐다면 두 번이다.
+
+**비대상 불변**: 정수 제어식은 정수 도메인이 **먼저** 시도되므로 그대로이고, 진짜 비상수(`if (v)`, v=net)는 여전히 loud — real fallback 이 "못 접는다"를 추측으로 바꾸지 않는다(테스트로 핀).
+
+**게이트**: 4669 → **4673** tests(신규 `generate_real_control.rs`×4) · clippy/fmt clean · format 25 불변.
+
+**§4.5.232→241→242 로 "real→정수 문맥" 항목이 닫혔다**: 파라미터 바인딩(§4.5.232) · generate 스코프 선언(§4.5.241) · generate 제어식(§4.5.242). 셋 다 근인은 같았다 — **`param_real_value` 라는 퍼널은 처음부터 있었고, 호출부가 하나씩 그것을 안 부르고 있었다.**
 
 #### 4.5.241 generate 스코프 `localparam real` loud→correct-support (2026-07-28, branch feat-generate-real-param, format 25 불변) ✅
 

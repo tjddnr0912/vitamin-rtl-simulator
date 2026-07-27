@@ -22,6 +22,26 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// The TRUTH of a constant control expression (a generate-if condition, a
+    /// generate-for condition). Folds in the integer domain first; if that
+    /// declines and the expression mentions a real, folds in the real domain and
+    /// converts to a truth value THERE.
+    ///
+    /// This is the context boundary for a real control expression: the comparison
+    /// `R/2 > 2` is evaluated wholly in the real domain (§11.8.1) and only its
+    /// 1-bit RESULT crosses into the integer world. Converting `R` to an integer
+    /// first would decide the branch on the wrong value — the exact leaf-conversion
+    /// mistake this domain exists to avoid.
+    pub(crate) fn const_truth_in_scope(&self, e: &ast::Expr) -> Option<bool> {
+        if let Some(v) = self.const_eval_in_scope(e) {
+            return Some(v != 0);
+        }
+        if !self.expr_mentions_real(e) {
+            return None;
+        }
+        Some(self.const_eval_real_in_scope(e)? != 0.0)
+    }
+
     /// Fold `e` in the REAL domain. `None` (⇒ the caller stays loud) for anything
     /// this domain cannot evaluate exactly: an unmodeled node, an unbound name, a
     /// division by zero, or a non-finite result.

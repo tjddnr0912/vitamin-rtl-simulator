@@ -149,8 +149,8 @@ impl Elaborator<'_> {
                 let mut idx_count: u32 = 0;
                 loop {
                     // cond folded WITH the genvar bound (so `i < N` resolves).
-                    let keep = match self.const_eval_in_scope(cond) {
-                        Some(c) => c != 0,
+                    let keep = match self.const_truth_in_scope(cond) {
+                        Some(c) => c,
                         None => {
                             if phase == GenPhase::Nets {
                                 self.error(
@@ -235,8 +235,8 @@ impl Elaborator<'_> {
                 label,
                 ..
             } => {
-                let taken = match self.const_eval_in_scope(cond) {
-                    Some(c) => c != 0,
+                let taken = match self.const_truth_in_scope(cond) {
+                    Some(c) => c,
                     None => {
                         if phase == GenPhase::Nets {
                             self.error(
