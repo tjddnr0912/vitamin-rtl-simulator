@@ -81,6 +81,18 @@ pub(crate) struct FrameRec {
     ///
     /// Empty for the overwhelming majority of frames (a callee with no dyn-array local).
     pub dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
+    /// This frame's OWN frame-local dyn-array contents while the activity is SUSPENDED —
+    /// the heap-object twin of `window`, parked and unparked at exactly the same two
+    /// points. Non-empty only across a suspend, and only on the TOP frame (the heap slots
+    /// hold the top frame's values; outer activations live in the `dyn_stash` above them).
+    ///
+    /// This is what lets two CONCURRENT activations of one task each keep their own array:
+    /// `dyn_stash` alone is sound only when their lifetimes NEST, which a `fork` breaks.
+    pub dyn_parked: Vec<(u32, Option<crate::state::DynObj>)>,
+    /// Has this frame executed a `fork`? Its arms run IN it and read its frame-locals, so
+    /// its dyn-array slots must stay in the shared heap (see `park_frame_dyn`) — a parked
+    /// array is absent, not shared, and the arm would read X.
+    pub forked: bool,
     /// Is this a fork ARM frame (built by `exec_fork` for an in-frame fork), as opposed
     /// to a real CALLEE frame pushed by a `Call`?
     ///

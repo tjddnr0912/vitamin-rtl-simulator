@@ -612,11 +612,12 @@ impl SimState<'_> {
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Fatal,
             code: MsgCode::RunFatal,
-            message: "concurrent activations of one task sharing a frame-local dynamic \
-                      array (or dynamic-array input formal) are unsupported — their \
-                      lifetimes overlap rather than nest, so the per-activation stash \
-                      cannot separate them; RECURSION is supported. Rewrite without \
-                      concurrency, or use a module-scope dynamic array"
+            message: "internal: a frame-local dynamic array (or dynamic-array input \
+                      formal) was still held at frame entry by an activation that is not \
+                      on this activity's call stack. Concurrent activations are supported \
+                      — each parks its arrays off the shared heap while suspended — so \
+                      reaching this means that park/unpark invariant was broken rather \
+                      than a construct being unsupported. Please report the design"
                 .to_string(),
             location: None,
             context: Vec::new(),
