@@ -201,27 +201,48 @@ fn int_queue_is_unchanged() {
 }
 
 #[test]
-fn a_bounded_string_queue_stays_loud() {
-    // This slice admits `Dim::Queue(None)` only, so a BOUNDED `[$:N]` string queue is
-    // still rejected at the declaration.
+fn a_bounded_string_queue_enforces_its_bound() {
+    // T1-6. The bound is enforced in the ENGINE, keyed on the net and blind to the
+    // element type — the integral twin `int q[$:1]` already ran and dropped its tail — so
+    // the only thing keeping `string q[$:3]` loud was the decl pattern admitting
+    // `Queue(None)` alone. Both now share `queue_dim_bound`, and the two are pinned
+    // TOGETHER here so the asymmetry cannot silently return.
     //
-    // It is a string-specific gap, NOT a general MVP limit: `int q[$:1]` runs and
-    // enforces its bound (vita warns and drops the tail, `sz=2`, matching iverilog).
-    // So this is a recorded capability gap on the string side, not evidence that
-    // bounded queues are unimplemented.
-    let (_, ok) = compile(
-        "module m; string q[$:3];\n\
-         initial begin q.push_back(\"a\"); $display(\"%0d\", q.size()); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(!ok, "expected a loud reject for a bounded string queue");
-    // The integral twin, pinned so the asymmetry above stays honest if it ever changes.
+    // iverilog: warns and keeps 4 for both, `a b c d` / `1 2 3 4`.
     let (out, ok) = compile(
-        "module m; int q[$:1];\n\
-         initial begin q.push_back(1); q.push_back(2); q.push_back(3); \
-         $display(\"sz=%0d\", q.size()); $finish; end\n\
+        "module m; string q[$:3];\n\
+         initial begin q.push_back(\"a\"); q.push_back(\"b\"); q.push_back(\"c\");\n\
+           q.push_back(\"d\"); q.push_back(\"e\");\n\
+           $display(\"%0d %s %s %s %s\", q.size(), q[0], q[1], q[2], q[3]); $finish; end\n\
          endmodule\n",
     );
-    assert!(ok, "an integral bounded queue must still run");
-    assert_eq!(out, "sz=2\n");
+    assert!(ok, "a bounded string queue must run");
+    assert_eq!(out, "4 a b c d\n");
+    let (out, ok) = compile(
+        "module m; int q[$:3];\n\
+         initial begin q.push_back(1); q.push_back(2); q.push_back(3);\n\
+           q.push_back(4); q.push_back(5);\n\
+           $display(\"%0d %0d %0d %0d %0d\", q.size(), q[0], q[1], q[2], q[3]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "the integral twin must behave identically");
+    assert_eq!(out, "4 1 2 3 4\n");
+    // A `'{…}` decl-init on a bounded string queue rides the same push expansion.
+    let (out, ok) = compile(
+        "module m; string q[$:2] = '{\"a\",\"b\"};\n\
+         initial begin $display(\"%0d %s %s\", q.size(), q[0], q[1]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected success");
+    assert_eq!(out, "2 a b\n");
+    // A non-constant bound is still the honest reject it is for every element type.
+    assert!(
+        !compile(
+            "module m; int k; string q[$:k];\n\
+             initial begin $display(\"%0d\", q.size()); $finish; end\n\
+             endmodule\n",
+        )
+        .1,
+        "a non-constant queue bound must stay loud"
+    );
 }

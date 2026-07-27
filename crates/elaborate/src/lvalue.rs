@@ -322,10 +322,11 @@ impl Elaborator<'_> {
                         }
                     }
                 }
-                // T1-5: a routed MULTI-dim string array element (`s[i][j] = v`) — the
-                // chain flattens row-major to one word of the flat container. Must be
-                // tried before the Ident arm below, which cannot see a nested base.
-                if let Some((net, word)) = self.routed_md_string_lval(base, index) {
+                // T1: a routed string-array element write (`s[k] = v`, `s[i][j] = v`) —
+                // the chain maps the declared index space onto one word of the flat
+                // container, through the same funnel the READ uses. Must be tried before
+                // the Ident arm below, which cannot see a nested base.
+                if let Some((net, word)) = self.routed_string_lval(base, index) {
                     out.push(ir::LvalChunk {
                         net,
                         word: Some(word),

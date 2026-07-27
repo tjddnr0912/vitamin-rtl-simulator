@@ -128,6 +128,7 @@ pub(crate) use package::*;
 pub(crate) use packed::*;
 pub(crate) use ports::*;
 pub(crate) use stmt_flow::*;
+pub(crate) use string_array_route::*;
 pub(crate) use sva_ast::*;
 pub(crate) use sva_prop::*;
 pub(crate) use sva_seq::*;
@@ -514,17 +515,18 @@ struct Elaborator<'s> {
     // resolves to the K-th net (read + write + `.method()`). A RUNTIME index / dynamic
     // (`string s[]`) / init-pattern is loud (correct-or-loud). elaborate-LOCAL.
     string_array_elems: BTreeMap<String, (i64, i64, Vec<u32>)>,
-    // T1: DynArray net id → declared element count, for a FIXED string array that was
-    // ROUTED to the dynamic representation (`string s[n]` / `string s[0:n-1]` at a
-    // scope that runs the t0 var-init flush). The routing is what gives a fixed string
-    // array a RUNTIME index and `foreach`, which the per-element-net form above cannot
-    // express (the index would have to select among N distinct nets).
+    // T1: DynArray net id → declared GEOMETRY, for a FIXED string array that was
+    // ROUTED to the dynamic representation (`string s[n]`, `string s[1:3]`,
+    // `string s[3:1]`, `string s[2][2]` … at a scope that runs the t0 var-init flush).
+    // The routing is what gives a fixed string array a RUNTIME index and `foreach`,
+    // which the per-element-net form above cannot express (the index would have to
+    // select among N distinct nets).
     //
     // Membership means "fixed-size storage that merely happens to be dyn-backed", so
     // `new[]` on it stays LOUD — a fixed array is not resizable, and without this the
     // routing would turn today's honest reject into a SILENT resize. elaborate-LOCAL
     // (the engine only needs `string_elem_dyn_nets`, which the routed net also joins).
-    fixed_string_dyn: BTreeMap<u32, Vec<u32>>,
+    fixed_string_dyn: BTreeMap<u32, StrArrayGeom>,
     // T1: FQ name of a routed fixed string array → its DynArray net. The net is
     // registered under a MANGLED name (`<name>$sad`), never the declared one, so the
     // bare name stays FREE in the module namespace — exactly as the per-element-net

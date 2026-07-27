@@ -160,20 +160,26 @@ fn empty_array_size_zero() {
     assert!(o.contains("sz=0"), "empty dyn array size 0:\n{o}");
 }
 
-// ── LOUD: recursion with a dyn formal (per-net heap can't hold two activations) ──
+// ── T1-9: recursion with a dyn formal — per-ACTIVATION, no longer a fatal ──
 #[test]
-fn recursion_stays_loud() {
+fn recursion_keeps_each_activation_s_formal() {
+    // The formal's heap slot is keyed by NET, so every activation addressed the same one.
+    // The entry now stashes the outer activation's contents and the exit restores them.
+    // Here the recursive call passes the formal AS its own actual, which is why the
+    // actual is CAPTURED before the stash takes the slot. iverilog: 42 at every level.
     let o = run("module top;\n\
          task automatic rec(input int b[], input int n);\n\
-           $display(\"n=%0d b0=%0d\", n, b[0]);\n\
+           $display(\"n=%0d b0=%0d sz=%0d\", n, b[0], b.size());\n\
            if (n>0) rec(b, n-1);\n\
          endtask\n\
          int a[]; initial begin a=new[2]; a[0]=42; rec(a,2); end\n\
          endmodule\n");
-    assert!(
-        o.contains("F4004") || o.contains("recursive or concurrent"),
-        "recursive dyn-formal must be fatal-loud, not silent:\n{o}"
-    );
+    for n in 0..=2 {
+        assert!(
+            o.contains(&format!("n={n} b0=42 sz=2")),
+            "level {n} must see the full actual:\n{o}"
+        );
+    }
 }
 
 // ── LOUD: concurrent fork of the same dyn-formal task (two live activations) ──

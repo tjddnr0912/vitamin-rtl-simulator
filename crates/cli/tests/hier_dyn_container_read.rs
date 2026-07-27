@@ -134,41 +134,132 @@ fn each_instance_resolves_to_its_own_array() {
     );
 }
 
-// ── what stays loud ──────────────────────────────────────────────────────────
-
 #[test]
-fn a_hierarchical_associative_array_read_stays_loud() {
-    // An assoc array is KEYED, not positioned, so a bare index is a different operation
-    // — admitting it under the positional arm would read the wrong thing.
-    assert!(loud(
-        "module sub; int a[int]; initial begin a[5]=7; end endmodule\n\
-         module m; sub u();\n\
-         initial begin #1; $display(\"%0d\", u.a[5]); $finish; end\n\
-         endmodule\n"
-    ));
+fn hierarchical_multi_dim_element() {
+    // T1-7. The declared→flat map is applied here through `flatten_word_eids`, the
+    // pre-lowered-eid twin of the `flatten_word` the LOCAL funnel uses — same arithmetic,
+    // so `u.s[i][j]` and a local `s[i][j]` cannot select different elements. iverilog: aa dd.
+    assert_eq!(
+        run(
+            "module sub; string s[2][2]; initial begin s[0][0]=\"aa\"; s[1][1]=\"dd\"; end endmodule\n\
+             module m; sub u();\n\
+             initial begin #1; $display(\"%s %s\", u.s[0][0], u.s[1][1]); $finish; end\n\
+             endmodule\n"
+        ),
+        "aa dd\n"
+    );
 }
 
 #[test]
-fn a_hierarchical_multi_dim_element_stays_loud() {
-    // The row-major flatten is applied at lowering against dimensions this resolution
-    // pass does not carry; reading the first index as a flat one would be a silently
-    // wrong element. iverilog runs it — a recorded gap, not a wrong answer.
+fn hierarchical_element_write() {
+    // T1-8. The write is a separate deferred pass over a separate sentinel space, and the
+    // hazard of admitting it is that it addresses a DIFFERENT element than the read of the
+    // same source text — so both call ONE `hier_dyn_container_word`. iverilog: zz yy.
+    assert_eq!(
+        run("module sub; string s[2]; endmodule\n\
+             module m; sub u();\n\
+             initial begin #1; u.s[0]=\"zz\"; u.s[1]=\"yy\"; $display(\"%s %s\", u.s[0], u.s[1]); $finish; end\n\
+             endmodule\n"),
+        "zz yy\n"
+    );
+    // Not string-specific — `int d[]` / `int q[$]` were loud for the same reason.
+    // iverilog: 7 9 and 5 6.
+    assert_eq!(
+        run("module sub; int d[]; initial d=new[2]; endmodule\n\
+             module m; sub u();\n\
+             initial begin #1; u.d[0]=7; u.d[1]=9; $display(\"%0d %0d\", u.d[0], u.d[1]); $finish; end\n\
+             endmodule\n"),
+        "7 9\n"
+    );
+    assert_eq!(
+        run(
+            "module sub; int q[$]; initial begin q.push_back(0); q.push_back(0); end endmodule\n\
+             module m; sub u();\n\
+             initial begin #1; u.q[0]=5; u.q[1]=6; $display(\"%0d %0d\", u.q[0], u.q[1]); $finish; end\n\
+             endmodule\n"
+        ),
+        "5 6\n"
+    );
+}
+
+#[test]
+fn hierarchical_multi_dim_and_non_zero_base_write() {
+    // T1-7/8 together: the write goes through the same declared→flat map as the read, so
+    // a non-zero base and a nested index behave hierarchically exactly as they do locally.
+    // iverilog: aa dd, then lo mid.
+    assert_eq!(
+        run("module sub; string s[2][2]; endmodule\n\
+             module m; sub u();\n\
+             initial begin #1; u.s[0][0]=\"aa\"; u.s[1][1]=\"dd\";\n\
+               $display(\"%s %s\", u.s[0][0], u.s[1][1]); $finish; end\n\
+             endmodule\n"),
+        "aa dd\n"
+    );
+    assert_eq!(
+        run("module sub; string s[1:3]; endmodule\n\
+             module m; sub u(); int k;\n\
+             initial begin #1; k=2; u.s[k]=\"mid\"; u.s[1]=\"lo\";\n\
+               $display(\"%s %s\", u.s[1], u.s[2]); $finish; end\n\
+             endmodule\n"),
+        "lo mid\n"
+    );
+}
+
+#[test]
+fn hierarchical_associative_array_read_and_write() {
+    // T1-10. An assoc array is KEYED rather than positioned, but that distinction is
+    // settled DOWNSTREAM by the net — `resolve_lvalue_offsets` re-reads the same word EID
+    // as an `AssocKey` when `is_assoc(net)`, and the element read does the same — so it
+    // takes the identical one-index spelling.
+    //
+    // No oracle: iverilog 13.0 cannot parse `int a[int]` at all. The pin is the
+    // vita-internal equivalence — the hierarchical view must equal the child's own view
+    // of the same array, before AND after a hierarchical write.
+    assert_eq!(
+        run("module sub; int a[int]; int sm[string];\n\
+               initial begin a[5]=7; a[-3]=9; sm[\"k\"]=42; end\n\
+               task show; $display(\"%0d %0d %0d\", a[5], a[-3], sm[\"k\"]); endtask\n\
+             endmodule\n\
+             module m; sub u();\n\
+             initial begin #1; $display(\"%0d %0d %0d\", u.a[5], u.a[-3], u.sm[\"k\"]); u.show();\n\
+               u.a[5]=77; u.sm[\"k\"]=43; u.show(); $finish; end\n\
+             endmodule\n"),
+        "7 9 42\n7 9 42\n77 9 43\n"
+    );
+}
+
+#[test]
+fn a_missing_associative_key_is_not_invented_by_the_hierarchical_path() {
+    // The keyed lookup must MISS the same way locally and hierarchically — a warn plus X,
+    // not a silently defaulted 0 that a positional read of an empty slot could produce.
+    let (out, ok) = compile(
+        "module sub; int a[int]; initial a[5]=7; endmodule\n\
+         module m; sub u();\n\
+         initial begin #1; $display(\"%0d\", u.a[99]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected a warn, not a reject");
+    assert_eq!(out, "x\n");
+}
+
+// ── boundaries ───────────────────────────────────────────────────────────────
+
+#[test]
+fn a_partial_hierarchical_index_of_a_multi_dim_array_stays_loud() {
+    // A single index on a 2-D routed array selects a whole row, which has no value
+    // surface (iverilog rejects the source). The addressing rule DECLINES on an index
+    // count that does not match the dimension count, so the flat container never takes
+    // the row number as an element number — loud on both the read and the write.
     assert!(loud(
         "module sub; string s[2][2]; initial begin s[0][0]=\"aa\"; end endmodule\n\
          module m; sub u();\n\
-         initial begin #1; $display(\"%s\", u.s[0][0]); $finish; end\n\
+         initial begin #1; $display(\"%s\", u.s[0]); $finish; end\n\
          endmodule\n"
     ));
-}
-
-#[test]
-fn a_hierarchical_element_write_stays_loud() {
-    // The write is a separate deferred machine. Loud before this slice and loud after —
-    // an asymmetry with the read, but a gap rather than a regression.
     assert!(loud(
-        "module sub; string s[2]; endmodule\n\
+        "module sub; string s[2][2]; endmodule\n\
          module m; sub u();\n\
-         initial begin #1; u.s[0]=\"zz\"; $display(\"%s\", u.s[0]); $finish; end\n\
+         initial begin #1; u.s[0]=\"aa\"; $display(\"done\"); $finish; end\n\
          endmodule\n"
     ));
 }

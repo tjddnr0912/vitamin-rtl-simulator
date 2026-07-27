@@ -741,16 +741,13 @@ impl<'a> SimState<'a> {
             self.frame_slot_write(func, self.frame_slot_auto[(base + i) as usize], i, v);
         }
 
-        // V5 (§4.5.194): guard the function's own dyn LOCAL against a recursive/concurrent
-        // activation sharing its per-net heap slot. Formals `[0, np)` are caller-snapshotted
-        // (§4.5.177), so `first_slot = np` excludes them (their slot is legitimately live at
-        // entry). Fatal-loud, never a silent shared-slot clobber.
-        if !self.frame_dyn_reentry_ok_from(func, np) {
-            if has_auto {
-                self.frame_stack.borrow_mut().pop();
-            }
-            return Some(Value::xs(rw, rsig));
-        }
+        // V5 (§4.5.194) / T1-9: open the function's own dyn LOCAL for THIS activation,
+        // stashing whatever the outer one held. Formals `[0, np)` are caller-snapshotted
+        // (§4.5.177), so `first_slot = np` excludes them (their slot is legitimately live
+        // at entry and is not this activation's to take).
+        // The stash is a LOCAL — a pure function body cannot suspend, so entry and
+        // exit here are straight-line and cannot interleave with another activation.
+        let dyn_stash = self.frame_dyn_enter_from(func, np);
 
         // ── BB LOOP over the GLOBAL func arena from `fd.entry`. Process bodies
         //    live in a SEPARATE `Process.body` space and are never touched. ──
@@ -872,9 +869,10 @@ impl<'a> SimState<'a> {
             }
         }
 
-        // V5 (§4.5.194): free this activation's dyn LOCALS so the next call starts fresh
-        // (formals `[0, np)` excluded — they are caller-managed snapshots, §4.5.177).
-        self.frame_dyn_free_from(func, np);
+        // V5 (§4.5.194) / T1-9: close this activation's dyn LOCALS, restoring whatever the
+        // outer activation held so a RECURSIVE call finds its own array again (formals
+        // `[0, np)` excluded — they are caller-managed snapshots, §4.5.177).
+        self.frame_dyn_exit(dyn_stash);
 
         // ── READ the return slot (clone + release), resize to declared width. ──
         let ret_auto = self.frame_slot_auto[(base + m.return_slot) as usize];

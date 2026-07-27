@@ -40,6 +40,34 @@ pub(crate) fn restore_frame_windows(sched: &mut Scheduler, pi: u32) {
     }
 }
 
+/// T1-9: may this SUSPENDABLE frame entry proceed on the per-activation dyn stash?
+///
+/// The stash makes a net-keyed frame-local dyn array per-activation by taking the outer
+/// contents at entry and putting them back at exit — sound exactly when the `[enter, exit]`
+/// intervals NEST. An empty or all-`None` stash means no outer activation held the slot,
+/// so there is nothing to nest inside and the entry is always fine (the overwhelmingly
+/// common case, and the only one a design without recursion ever reaches).
+///
+/// When an outer activation DOES hold it, nesting is guaranteed only if that activation is
+/// on THIS activity's own call stack — a recursive call returns before its parent by
+/// construction. A holder in another activity can interleave (A suspends, B enters, A
+/// resumes and exits first), which would make A's restore clobber B's live array, so that
+/// stays the loud fatal it has always been.
+fn frame_dyn_nesting_ok(
+    sched: &Scheduler,
+    pi: u32,
+    callee: u32,
+    stash: &[(u32, Option<crate::state::DynObj>)],
+) -> bool {
+    if !stash.iter().any(|(_, o)| o.is_some()) {
+        return true;
+    }
+    sched.activities[pi as usize]
+        .call_stack
+        .iter()
+        .any(|f| f.callee == callee)
+}
+
 pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
     let mut guard: u64 = 0;
     loop {
@@ -317,9 +345,10 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         let offs = sched.resolve_lvalue_offsets(lval);
                         sched.st.write_lvalue(lval, val, &offs);
                     }
-                    // V5: free this activation's frame dyn-array formals/locals so a later
-                    // call starts fresh (size 0) and the reentry guard next sees None.
-                    sched.st.frame_dyn_free(frame.callee);
+                    // V5 / T1-9: close this activation's frame dyn-array formals/locals,
+                    // restoring whatever the OUTER activation held. All `None` for a
+                    // non-reentrant call, so a later call still starts fresh (size 0).
+                    sched.st.frame_dyn_exit(frame.dyn_stash);
                     if sched.activities[pi as usize].call_stack.is_empty() {
                         bb = frame.ret_bb;
                     } else {
@@ -383,16 +412,24 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 sched.mark_fatal(); // runaway recursion → loud, never a hang
                                 return Step::Fatal;
                             }
-                            // V5: a recursive/concurrent frame dyn-array local would share
-                            // its per-net heap object with the parent activation — fatal-loud.
-                            // (V2A-frame: also guards a recursive dyn-array INPUT formal.)
-                            if !sched.st.frame_dyn_reentry_ok(info.callee) {
+                            // V5 / T1-9: a frame dyn-array local shares its per-net heap
+                            // object across activations, so this activation TAKES it and
+                            // carries the outer contents in its own `FrameRec` until Return.
+                            // (V2A-frame: covers a recursive dyn-array INPUT formal too.)
+                            // T1-9: CAPTURE the actuals before the stash — a recursive
+                            // call can pass the formal as its own actual.
+                            let captured =
+                                sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
+                            let dyn_stash = sched.st.frame_dyn_enter(info.callee);
+                            if !frame_dyn_nesting_ok(sched, pi, info.callee, &dyn_stash) {
+                                sched.st.frame_dyn_exit(dyn_stash);
+                                sched.st.fatal_frame_dyn_concurrent();
                                 return Step::Fatal;
                             }
                             sched.st.enter_task_frame(info.callee, &in_v);
                             // V2A-frame: deep-copy caller dyn-array actuals into the fresh
                             // per-activation formal slots (pass-by-value, IEEE §13.5.1).
-                            sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                            sched.st.frame_dyn_install_formals(captured);
                             let entry = sched.st.ir.funcs[info.callee as usize].entry;
                             sched.activities[pi as usize]
                                 .call_stack
@@ -402,6 +439,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                     ret_bb: *ret_bb,
                                     out_binds: info.out_binds.clone(),
                                     window: None,
+                                    dyn_stash,
                                 });
                             continue; // execute the nested frame next iteration
                         }
@@ -414,10 +452,11 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         // reentry_ok/snapshot/free self-gate on the callee's dyn state, so call
                         // them unconditionally (snapshot no-ops with no input dyn; reentry/free
                         // no-op with no dyn formal/local).
-                        if !sched.st.frame_dyn_reentry_ok(info.callee) {
-                            return Step::Fatal;
-                        }
-                        sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                        // T1-9: straight-line synchronous call → the stash is a local.
+                        // CAPTURE before the stash (a recursive call may pass the formal).
+                        let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
+                        let dyn_stash = sched.st.frame_dyn_enter(info.callee);
+                        sched.st.frame_dyn_install_formals(captured);
                         if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
                             for ((s, lval), val) in info.out_binds.iter().zip(outs) {
                                 if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
@@ -427,7 +466,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 sched.st.write_lvalue(lval, val, &offs);
                             }
                         }
-                        sched.st.frame_dyn_free(info.callee);
+                        sched.st.frame_dyn_exit(dyn_stash);
                     }
                     // advance THIS frame past the (subset / no-info) call.
                     sched.activities[pi as usize]
@@ -449,15 +488,20 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     if sched.st.suspendable_tasks.contains(&info.callee) {
                         // Suspendable: push a frame; do NOT advance `bb` — the base process
                         // resumes at `ret_bb` when the frame returns.
-                        // V5: reentry guard for a frame dyn-array local (see the nested arm).
-                        // (V2A-frame: also guards a recursive dyn-array INPUT formal.)
-                        if !sched.st.frame_dyn_reentry_ok(info.callee) {
+                        // V5 / T1-9: take this activation's frame dyn-array slots (see the
+                        // nested arm). (V2A-frame: covers a recursive dyn INPUT formal too.)
+                        // T1-9: CAPTURE the actuals before the stash.
+                        let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
+                        let dyn_stash = sched.st.frame_dyn_enter(info.callee);
+                        if !frame_dyn_nesting_ok(sched, pi, info.callee, &dyn_stash) {
+                            sched.st.frame_dyn_exit(dyn_stash);
+                            sched.st.fatal_frame_dyn_concurrent();
                             return Step::Fatal;
                         }
                         sched.st.enter_task_frame(info.callee, &in_v);
                         // V2A-frame: deep-copy caller dyn-array actuals into the fresh
                         // per-activation formal slots (pass-by-value, IEEE §13.5.1).
-                        sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                        sched.st.frame_dyn_install_formals(captured);
                         let entry = sched.st.ir.funcs[info.callee as usize].entry;
                         sched.activities[pi as usize]
                             .call_stack
@@ -467,6 +511,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 ret_bb: *ret_bb,
                                 out_binds: info.out_binds.clone(),
                                 window: None,
+                                dyn_stash,
                             });
                         continue; // re-fetch from the new frame next iteration
                     }
@@ -479,10 +524,11 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     // V2A/V2B (§4.5.194): snapshot a dyn INPUT formal IN before the call;
                     // deep-copy an OUTPUT/INOUT dyn formal OUT after. All three self-gate on
                     // the callee's dyn state → call unconditionally.
-                    if !sched.st.frame_dyn_reentry_ok(info.callee) {
-                        return Step::Fatal;
-                    }
-                    sched.st.frame_dyn_snapshot_formals(info.callee, &dyn_snaps);
+                    // T1-9: straight-line synchronous call → the stash is a local.
+                    // CAPTURE before the stash (a recursive call may pass the formal).
+                    let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
+                    let dyn_stash = sched.st.frame_dyn_enter(info.callee);
+                    sched.st.frame_dyn_install_formals(captured);
                     if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
                         for ((s, lval), val) in info.out_binds.iter().zip(outs) {
                             if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
@@ -492,7 +538,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             sched.st.write_lvalue(lval, val, &offs);
                         }
                     }
-                    sched.st.frame_dyn_free(info.callee);
+                    sched.st.frame_dyn_exit(dyn_stash);
                 }
                 bb = *ret_bb;
             }

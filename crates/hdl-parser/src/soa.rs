@@ -250,6 +250,63 @@ impl Parser<'_, '_> {
                 }
             }
         }
+        // T1-11: whole-ELEMENT read `rec = q[i]` / `rec = arr[i]` — a SoA record
+        // container element copied into a record var, per field
+        // (`$unp$rec$f = $unp$q$f[i]`).
+        //
+        // The per-FIELD element access (`q[0].len`) and the whole-element read on a
+        // PACKABLE record queue both already worked; only the non-packable (SoA) form had
+        // no surface, because a SoA container has no net under its own name at all — the
+        // bare `q[i]` resolved to "undeclared net/variable `q`" downstream.
+        //
+        // Same-TYPE gate, identical in force to the scalar whole-copy below: same declared
+        // type ⇒ the two member lists came from one `unpacked_struct_layouts` entry, so
+        // the per-field correspondence is by construction rather than by position.
+        //
+        // The index expression is CLONED per field, so it is evaluated once per member.
+        // That is sound only because vita's subset cannot express a side-effecting index
+        // — a function that writes anything outside itself is loud at the frame gate, and
+        // `q[k++]` does not parse. The pre-existing `arr[i] = '{…}` fan-out below rests on
+        // the same invariant; if the frame subset ever widens, BOTH need a replay guard.
+        if let (Lvalue::Ident(lp), ExprKind::BitSelect { base, index }) = (lhs, &rhs.kind) {
+            if let (1, ExprKind::Ident(bp)) = (lp.segments.len(), &base.kind) {
+                if bp.segments.len() == 1 {
+                    let lvar = lp.segments[0].name.clone();
+                    let qvar = bp.segments[0].name.clone();
+                    if let Some(qty) = self.record_soa_vars.get(&qvar).cloned() {
+                        if self.var_unpacked_struct.get(&lvar) == Some(&qty) {
+                            let members = self.unpacked_struct_layouts.get(&qty)?.clone();
+                            let stmts = members
+                                .iter()
+                                .map(|m| {
+                                    let dst = Self::unpacked_member_net(&lvar, &m.name.name);
+                                    let srcq = Self::unpacked_member_net(&qvar, &m.name.name);
+                                    let elem = Expr {
+                                        kind: ExprKind::BitSelect {
+                                            base: Box::new(Self::ident_expr(&srcq, span)),
+                                            index: index.clone(),
+                                        },
+                                        span,
+                                    };
+                                    Self::assign_stmt(
+                                        Self::ident_lval(&dst, span),
+                                        elem,
+                                        blocking,
+                                        span,
+                                    )
+                                })
+                                .collect();
+                            return Some(Stmt::Block {
+                                label: None,
+                                decls: Vec::new(),
+                                stmts,
+                                span,
+                            });
+                        }
+                    }
+                }
+            }
+        }
         // Q (round-19): scalar-record whole-copy `a = b` / `a <= b` where BOTH `a`
         // and `b` are scalar `var_unpacked_struct` records of the SAME type name →
         // per-member fan-out `$unp$a$f <op> $unp$b$f` for every field. The record
@@ -382,6 +439,42 @@ impl Parser<'_, '_> {
                     let var = p.segments[0].name.clone();
                     let ty = self.record_soa_vars.get(&var)?.clone();
                     let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+                    // T1-11: the WRITE twin of the whole-element read above —
+                    // `q[i] = rec` from a same-type record var, fanned out per field.
+                    // Emitted here, in the element-write branch, so the two element
+                    // rhs forms (`'{…}` pattern and whole record) share one place and
+                    // one index-clone rule.
+                    if let ExprKind::Ident(rp) = &rhs.kind {
+                        if rp.segments.len() == 1
+                            && self.var_unpacked_struct.get(&rp.segments[0].name) == Some(&ty)
+                        {
+                            let rvar = rp.segments[0].name.clone();
+                            let stmts = members
+                                .iter()
+                                .map(|m| {
+                                    let mnet = Self::unpacked_member_net(&var, &m.name.name);
+                                    let srcn = Self::unpacked_member_net(&rvar, &m.name.name);
+                                    let elem = Lvalue::BitSelect {
+                                        base: Box::new(Self::ident_lval(&mnet, span)),
+                                        index: index.clone(),
+                                        span,
+                                    };
+                                    Self::assign_stmt(
+                                        elem,
+                                        Self::ident_expr(&srcn, span),
+                                        blocking,
+                                        span,
+                                    )
+                                })
+                                .collect();
+                            return Some(Stmt::Block {
+                                label: None,
+                                decls: Vec::new(),
+                                stmts,
+                                span,
+                            });
+                        }
+                    }
                     let ExprKind::AssignPattern(vals) = &rhs.kind else {
                         return None; // a non-pattern element rhs → loud fallthrough
                     };

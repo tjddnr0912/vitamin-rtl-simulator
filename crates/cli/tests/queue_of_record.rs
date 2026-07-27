@@ -170,16 +170,47 @@ fn non_packable_record_queue_multiple_string_members() {
 }
 
 #[test]
-fn non_packable_record_whole_element_read_stays_loud() {
-    // correct-or-loud: reading a whole SoA element back into a record variable
-    // (`o = q[0];`) has no single-value surface and is still an honest reject. Member
-    // reads (`q[0].s`) are the supported form. A `pop_front()` into a record variable
-    // IS supported (the SoA pop path), so this is specifically the indexed whole read.
+fn non_packable_record_whole_element_read_and_write() {
+    // T1-11. A SoA container has no net under its own name — one per MEMBER — so a bare
+    // `q[i]` resolved to "undeclared net/variable `q`" and the whole-element copy was an
+    // honest reject. It now fans out per field, exactly like the `pop_front()` into a
+    // record var and the scalar whole-copy `a = b` already did.
+    //
+    // Same-TYPE gate, same force as those: one declared type ⇒ one member list ⇒ the
+    // per-field correspondence is by construction, not by position.
+    //
+    // No oracle (iverilog: "sorry: Unpacked structs not supported"), so the pin is the
+    // vita-internal equivalence — the whole copy must agree field-for-field with the
+    // member reads (`q[i].k` / `q[i].s`) that are already verified.
     let o = run(
-        "module t; typedef struct { int k; string s; } np_t; np_t q[$];\n\
-         initial begin np_t p; np_t o; p.k=7; p.s=\"hi\"; q.push_back(p); o=q[0];\n\
-         $display(\"SEEN k=%0d\", o.k); $finish; end endmodule\n",
+        "module t; typedef struct { int k; string s; } np_t; np_t q[$]; np_t d[3];\n\
+         initial begin np_t p; np_t o; p.k=7; p.s=\"hi\"; q.push_back(p);\n\
+           p.k=8; p.s=\"yo\"; q.push_back(p);\n\
+           o=q[1]; $display(\"R1 %0d/%s vs %0d/%s\", o.k, o.s, q[1].k, q[1].s);\n\
+           o=q[0]; $display(\"R0 %0d/%s vs %0d/%s\", o.k, o.s, q[0].k, q[0].s);\n\
+           d[2]=o;  $display(\"W  %0d/%s\", d[2].k, d[2].s);\n\
+           q[0]=p;  $display(\"Q  %0d/%s\", q[0].k, q[0].s);\n\
+         $finish; end endmodule\n",
     );
+    assert!(o.contains("R1 8/yo vs 8/yo"), "whole read q[1]:\n{o}");
+    assert!(o.contains("R0 7/hi vs 7/hi"), "whole read q[0]:\n{o}");
+    assert!(
+        o.contains("W  7/hi"),
+        "whole write into an array elem:\n{o}"
+    );
+    assert!(o.contains("Q  8/yo"), "whole write into a queue elem:\n{o}");
+}
+
+#[test]
+fn a_cross_type_whole_element_copy_stays_loud() {
+    // The same-type gate is the whole correctness argument, so a DIFFERENT record type is
+    // refused rather than copied field-by-position — two types carry no guaranteed
+    // correspondence, and a positional copy would silently truncate or reorder.
+    let o = run("module t; typedef struct { int k; string s; } a_t;\n\
+         typedef struct { int k; string s; } b_t;\n\
+         a_t q[$]; b_t o;\n\
+         initial begin a_t p; p.k=7; p.s=\"hi\"; q.push_back(p); o=q[0];\n\
+         $display(\"SEEN k=%0d\", o.k); $finish; end endmodule\n");
     assert!(!o.contains("SEEN"), "expected a loud reject:\n{o}");
 }
 

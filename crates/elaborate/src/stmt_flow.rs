@@ -316,25 +316,41 @@ impl Elaborator<'_> {
         // `foreach (a[i,j])` tags each index with its dimension). A reference past
         // the array's actual unpacked dimensions is loud (e.g. `a[i,j]` on a 1-D
         // array), matching iverilog's reject.
-        let extents = self.net_dim_extents(arr_net);
-        let Some(&(lo, size)) = extents.get((dim - 1) as usize) else {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "a foreach index dimension exceeds the array's unpacked dimensions",
-            );
-            return true;
-        };
-        let hi = lo.saturating_add(size.saturating_sub(1));
+        //
         // IEEE 1800 §12.7.3: `foreach` traverses the declared bounds left-to-right.
         // A descending range (`a[hi:lo]`) walks hi DOWN to lo; ascending walks lo up
-        // to hi. `array_dim_desc` records each unpacked dim's direction. All walk
-        // arithmetic is SIGNED (the index is `integer`) so a descending walk's
-        // transient `lo-1` (e.g. -1 when lo=0) terminates instead of wrapping.
-        let desc = self
-            .array_dim_desc
-            .get(&arr_net)
-            .and_then(|v| v.get((dim - 1) as usize).copied())
-            .unwrap_or(false);
+        // to hi. All walk arithmetic is SIGNED (the index is `integer`) so a descending
+        // walk's transient `lo-1` (e.g. -1 when lo=0) terminates instead of wrapping.
+        //
+        // T1: a ROUTED fixed string array carries its geometry in `fixed_string_dyn`
+        // instead of `array_dims`/`array_dim_desc` — it is a `DynArray` handle, so the
+        // flat-word-store descriptors do not describe it. Asked FIRST, and the two
+        // sources are disjoint by construction (a net is a routed string array or a
+        // static array, never both), so this cannot change what any existing array walks.
+        let (lo, size, desc) = match self.routed_foreach_dim(arr_net, dim) {
+            Some(g) => g,
+            None => {
+                let extents = self.net_dim_extents(arr_net);
+                match extents.get((dim - 1) as usize) {
+                    Some(&(lo, size)) => (
+                        lo,
+                        size,
+                        self.array_dim_desc
+                            .get(&arr_net)
+                            .and_then(|v| v.get((dim - 1) as usize).copied())
+                            .unwrap_or(false),
+                    ),
+                    None => {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a foreach index dimension exceeds the array's unpacked dimensions",
+                        );
+                        return true;
+                    }
+                }
+            }
+        };
+        let hi = lo.saturating_add(size.saturating_sub(1));
         let (lo_i, hi_i) = (lo as i32, hi as i32);
         let st_lv = self.lower_lvalue(st_lhs);
         self.check_lvalue_kind(&st_lv, true);

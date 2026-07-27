@@ -1,5 +1,6 @@
-//! T1: a ZERO-BASED ASCENDING fixed `string` array routes to the DYNAMIC-array
-//! representation, which is what gives it a RUNTIME index and `foreach`.
+//! T1: a fixed `string` array routes to the DYNAMIC-array representation, which is what
+//! gives it a RUNTIME index and `foreach` — for ANY constant declared bounds
+//! (`s[2]`, `s[1:3]`, `s[3:1]`, `s[2][3]`, `s[1:2][2:1]`, …).
 //!
 //! The per-element-net form (`string s[2]` → nets `s$sae$0`, `s$sae$1`) cannot express
 //! a runtime index at all — the index would have to select among N distinct nets. The
@@ -202,6 +203,42 @@ fn three_dimensional() {
 }
 
 #[test]
+fn multi_dim_foreach_walks_every_dimension() {
+    // T1-3. The parser desugars `foreach(s[i,j])` to `.first/.next(idx, DIM)`; the
+    // dimension tag resolves against the ROUTED geometry, which the flat-word-store
+    // descriptors (`array_dims`) do not describe because a routed array is a `DynArray`
+    // net. iverilog: 00:a 01:b 10:c 11:d.
+    assert_eq!(
+        run("module m; string s[2][2];\n\
+             initial begin s[0][0]=\"a\"; s[0][1]=\"b\"; s[1][0]=\"c\"; s[1][1]=\"d\";\n\
+               foreach(s[i,j]) $write(\"%0d%0d:%s \", i, j, s[i][j]); $display(\"\"); $finish; end\n\
+             endmodule\n"),
+        "00:a 01:b 10:c 11:d \n"
+    );
+    // …and the walk follows each dim's own bounds and direction, not the flat order.
+    // iverilog: 21 22 11 12 (dim 1 descending `[2:1]`, dim 2 ascending `[1:2]`).
+    assert_eq!(
+        run("module m; string s[2:1][1:2];\n\
+             initial begin foreach(s[i,j]) $write(\"%0d%0d \", i, j); $display(\"\"); $finish; end\n\
+             endmodule\n"),
+        "21 22 11 12 \n"
+    );
+}
+
+#[test]
+fn multi_dim_non_zero_base() {
+    // T1-5. iverilog: aa dd, then the foreach index pairs.
+    assert_eq!(
+        run("module m; string s[1:2][1:2];\n\
+             initial begin s[1][1]=\"aa\"; s[2][2]=\"dd\";\n\
+               $display(\"%s %s\", s[1][1], s[2][2]);\n\
+               foreach(s[i,j]) $write(\"%0d%0d \", i, j); $display(\"\"); $finish; end\n\
+             endmodule\n"),
+        "aa dd\n11 12 21 22 \n"
+    );
+}
+
+#[test]
 fn a_partial_index_of_a_multi_dim_array_is_loud() {
     // REGRESSION GUARD. A single index on a 2-D array is a partial index — it selects a
     // whole row, which has no value surface (iverilog rejects the source). The flat
@@ -221,50 +258,123 @@ fn a_partial_index_of_a_multi_dim_array_is_loud() {
 }
 
 #[test]
-fn a_multi_dim_declaration_that_does_not_qualify_stays_loud() {
-    // Every dimension must be zero-based ascending, because the container is FLAT: a
-    // non-conforming axis would be renumbered silently. `string s[1:2][1:2]` is a
-    // capability gap (iverilog runs it) and an honest reject — not a wrong answer.
-    // A multi-dim `'{…}` decl-init is loud for the same reason: the expansion speaks one
-    // dimension, and filling the first N elements of the flat container is not the same
-    // array.
-    assert!(loud(
-        "module m; string s[1:2][1:2];\n\
-        initial begin s[1][1]=\"aa\"; $display(\"%s\", s[1][1]); $finish; end\n\
-        endmodule\n"
-    ));
-    assert!(loud(
-        "module m; string s[2][2] = '{\"a\",\"b\",\"c\",\"d\"};\n\
-        initial begin $display(\"%s\", s[0][0]); $finish; end\n\
-        endmodule\n"
-    ));
+fn a_multi_dim_init_pattern_must_match_the_declared_nesting() {
+    // T1-4. The nested `'{'{…},'{…}}` is walked in lockstep with the declared dims, so
+    // every level must hold EXACTLY that dim's element count and only the innermost
+    // level holds values. Each malformed shape below is rejected by iverilog too
+    // ("Unpacked array assignment pattern expects N element(s)"), so these are the
+    // oracle's own boundaries, not a vita limitation.
+    //
+    // The FLAT form is the load-bearing one: it is the shape a 1-D expansion would
+    // have accepted (2 outer elements on a `[2][2]`), and letting it through assigned
+    // an assignment-pattern into a string element — four empty strings at exit 0.
+    for init in [
+        "'{\"a\",\"b\",\"c\",\"d\"}", // flat: right total, wrong nesting
+        "'{'{\"a\",\"b\"},'{\"c\"}}", // short inner level
+        "'{'{\"a\",\"b\"}}",          // short outer level
+    ] {
+        assert!(
+            loud(&format!(
+                "module m; string s[2][2] = {init};\n\
+                 initial begin $display(\"%s\", s[0][0]); $finish; end\n\
+                 endmodule\n"
+            )),
+            "init: {init}"
+        );
+    }
+}
+
+#[test]
+fn a_multi_dim_init_pattern_fills_row_major_in_the_declared_direction() {
+    // T1-4. iverilog: `[a][d]` and `[a][e]`. The second case is non-square, so a
+    // transposed flatten would print `[a][d]` — the shape a square array cannot
+    // distinguish. The first mixes directions per axis (`[2:1]` descending, `[1:2]`
+    // ascending), which is the pattern-order rule (IEEE §10.9.1, left bound first)
+    // applied per dimension rather than to the flat container.
+    assert_eq!(
+        run(
+            "module m; string s[2:1][1:2] = '{'{\"a\",\"b\"},'{\"c\",\"d\"}};\n\
+             initial begin $display(\"[%s][%s]\", s[2][1], s[1][2]); $finish; end\n\
+             endmodule\n"
+        ),
+        "[a][d]\n"
+    );
+    assert_eq!(
+        run(
+            "module m; string s[2][3] = '{'{\"a\",\"b\",\"c\"},'{\"d\",\"e\",\"f\"}};\n\
+             initial begin $display(\"[%s][%s]\", s[0][0], s[1][1]); $finish; end\n\
+             endmodule\n"
+        ),
+        "[a][e]\n"
+    );
 }
 
 // ── what must NOT change ─────────────────────────────────────────────────────
 
 #[test]
-fn non_zero_base_and_descending_are_not_routed() {
-    // The dyn representation numbers elements 0..n-1 and `foreach` walks them in that
-    // order, so routing `[1:3]` would silently RENUMBER the index space (iverilog's
-    // `foreach` over `a[1:3]` yields 1,2,3) and `[3:1]` would additionally re-order it.
-    // Those keep the per-element-net path: const index still works, runtime index is
-    // still honestly loud.
-    for decl in ["string s[1:3];", "string s[3:1];"] {
-        let out = run(&format!(
-            "module m; {decl}\n\
-             initial begin s[1]=\"aa\"; s[3]=\"cc\"; $display(\"%s %s\", s[1], s[3]); $finish; end\n\
-             endmodule\n"
-        ));
-        assert_eq!(out, "aa cc\n", "decl: {decl}");
-        assert!(
-            loud(&format!(
-                "module m; {decl} int k;\n\
-                 initial begin k=1; s[k]=\"aa\"; $display(\"%s\", s[1]); $finish; end\n\
-                 endmodule\n"
-            )),
-            "decl: {decl}"
-        );
-    }
+fn a_non_zero_base_keeps_its_declared_index_space() {
+    // T1-1. The container is still a flat `0..n-1` block; what changed is that the
+    // declared→flat map is now APPLIED (`idx - lo` at every access) instead of assumed
+    // to be the identity. iverilog: `aa cc`, then `aa`, then `1:aa 2:bb 3:cc`.
+    assert_eq!(
+        run("module m; string s[1:3]; int k;\n\
+             initial begin s[1]=\"aa\"; s[2]=\"bb\"; s[3]=\"cc\";\n\
+               k=1; $display(\"%s %s|%s\", s[1], s[3], s[k]);\n\
+               foreach(s[j]) $write(\"%0d:%s \", j, s[j]); $display(\"\"); $finish; end\n\
+             endmodule\n"),
+        "aa cc|aa\n1:aa 2:bb 3:cc \n"
+    );
+}
+
+#[test]
+fn a_descending_declaration_walks_high_to_low() {
+    // T1-2. The storage order is an arbitrary bijection (`idx - lo` either way), so the
+    // direction shows up in ONE place: `foreach` traverses the declared bounds
+    // left-to-right (IEEE §12.7.3), which for `[3:1]` is 3, 2, 1. iverilog agrees.
+    assert_eq!(
+        run("module m; string s[3:1]; int k;\n\
+             initial begin s[1]=\"aa\"; s[2]=\"bb\"; s[3]=\"cc\";\n\
+               k=1; $display(\"%s %s|%s\", s[1], s[3], s[k]);\n\
+               foreach(s[j]) $write(\"%0d:%s \", j, s[j]); $display(\"\"); $finish; end\n\
+             endmodule\n"),
+        "aa cc|aa\n3:cc 2:bb 1:aa \n"
+    );
+}
+
+#[test]
+fn an_index_outside_the_declared_range_is_not_silently_remapped() {
+    // The normalization is `idx - lo`, so an under-index on `[1:3]` would map to
+    // word -1. That must NOT wrap into a valid element: it warns (W4020) and reads
+    // empty, matching iverilog's `[ ]` for an out-of-bounds element.
+    let (out, ok, err) = compile(
+        "module m; string s[1:3];\n\
+         initial begin s[1]=\"aa\"; $display(\"[%s][%s]\", s[0], s[4]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected a warn, not a reject");
+    assert_eq!(out, "[ ][ ]\n");
+    assert!(err.contains("W4020"), "expected the OOB warn, got:\n{err}");
+}
+
+#[test]
+fn a_negative_bound_is_not_routed() {
+    // `flatten_word` carries `lo` as `u32`, so a negative base has no map — and the
+    // GENERAL unpacked-array path shares that limit (`int a[-1:1]` drops the `-1`
+    // element with an E4002 at HEAD). Declining keeps the string form on the
+    // per-element-net path, where a CONST index still resolves, rather than inheriting
+    // a known-broken mapping. iverilog: `aa cc`.
+    assert_eq!(
+        run("module m; string s[-1:1];\n\
+             initial begin s[-1]=\"aa\"; s[1]=\"cc\"; $display(\"%s %s\", s[-1], s[1]); $finish; end\n\
+             endmodule\n"),
+        "aa cc\n"
+    );
+    // …and a runtime index there is still honestly loud, not silently zero-based.
+    assert!(loud(
+        "module m; string s[-1:1]; int k;\n\
+         initial begin k=1; s[k]=\"aa\"; $display(\"%s\", s[1]); $finish; end\n\
+         endmodule\n"
+    ));
 }
 
 #[test]

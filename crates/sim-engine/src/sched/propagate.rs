@@ -827,6 +827,11 @@ impl Scheduler<'_, '_> {
                     ret_bb: join,
                     out_binds: Vec::new(),
                     window,
+                    // T1-9: a fork ARM frame is not a fresh ACTIVATION of the callee — it
+                    // rides the parent's window and the parent's dyn slots, and its own
+                    // teardown (`exit_arm_frame`) does not go through the Return handler.
+                    // It therefore takes nothing and restores nothing.
+                    dyn_stash: Vec::new(),
                 }]
             } else {
                 Vec::new()

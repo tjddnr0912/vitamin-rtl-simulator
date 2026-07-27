@@ -112,6 +112,32 @@ impl Elaborator<'_> {
     }
     // ── v5 ⑥: dynamic-storage front-end (decl/index/method lowering) ─────────
 
+    /// v6 ③ / T1-6: the declared bound of a `[$:N]` queue dimension — `Ok(Some(N))` for
+    /// a bounded queue, `Ok(None)` for any other dim (including `[$]`), and `Err(())`
+    /// when the bound is present but not a non-negative constant (diagnostic already
+    /// emitted; the caller abandons the declaration).
+    ///
+    /// ONE derivation for every element type. The bound is enforced entirely in the
+    /// engine (`enforce_queue_bound`, keyed on the net) and never looks at what the
+    /// elements are, so a `string q[$:3]` needs exactly this and nothing else — the
+    /// string-specific work is the element STORAGE, which `string_elem_dyn_nets`
+    /// already carries. Re-deriving it per element type is how the two drift.
+    pub(crate) fn queue_dim_bound(&mut self, dim: &ast::Dim) -> Result<Option<u32>, ()> {
+        let ast::Dim::Queue(Some(be)) = dim else {
+            return Ok(None);
+        };
+        match self.const_eval_in_scope(be) {
+            Some(v) if (0..=i64::from(u32::MAX)).contains(&v) => Ok(Some(v as u32)),
+            _ => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a queue bound must be a non-negative constant expression",
+                );
+                Err(())
+            }
+        }
+    }
+
     /// The handle NetKind when `dims` declares dynamic storage.
     pub(crate) fn dyn_dim_kind(&self, dims: &[ast::Dim]) -> Option<ir::NetKind> {
         dims.iter().find_map(|d| match d {
@@ -308,11 +334,12 @@ impl Elaborator<'_> {
     /// Read-side `handle[idx]` interception — `None` for non-handles so the
     /// caller's array/packed/scalar logic runs unchanged.
     pub(crate) fn dyn_select_read(&mut self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
-        // T1-5: a routed MULTI-dim string array nests (`s[i][j]`), so its base is a
-        // BitSelect rather than an Ident. Tried first because the Ident arm below would
-        // not match it at all; it declines for every other shape, including a 1-D routed
-        // array (which keeps the single-index path byte-identically).
-        if let Some((net, word)) = self.routed_md_string_elem(base, index) {
+        // T1: a routed string array maps its DECLARED index space onto the flat
+        // container, so every full-index access goes through the one funnel — including
+        // the 1-D case, which stays byte-identical on a plain `string s[N]` (`lo == 0`
+        // and stride 1 emit neither a `Sub` nor a `Mul`). Tried first because a
+        // multi-dim access nests (`s[i][j]`) and the Ident arm below cannot match it.
+        if let Some((net, word)) = self.routed_string_elem(base, index) {
             return Some(self.push_expr(ir::Expr::Signal {
                 net,
                 word: Some(word),
@@ -868,6 +895,27 @@ impl Elaborator<'_> {
                                 && p.segments[0].name.starts_with("__foreach_")
                     )
                 {
+                    // T1-1/2/3/5: a ROUTED fixed string array walks its DECLARED bounds,
+                    // not the container's `0..size-1`. It is dyn-BACKED but fixed-SIZE
+                    // storage with a real index space (`string s[1:3]` yields 1,2,3;
+                    // `string s[3:1]` yields 3,2,1; `string s[2][2]` takes a dimension
+                    // tag), which is exactly what `lower_fixed_foreach_step` walks — so
+                    // it is dispatched by STORAGE CLASS here rather than by NetKind.
+                    // Checked before both arms below because `dyn_handle_read` succeeds
+                    // on it (it is a `DynArray` net) and `lookup_net_scoped` does not
+                    // (it lives under a mangled name).
+                    let routed = self
+                        .dyn_handle_read(&name.segments[0].name)
+                        .map(|(n, _)| n)
+                        .filter(|&n| self.is_fixed_string_dyn(n));
+                    if let Some(arr) = routed {
+                        let dim = if args.len() == 2 {
+                            self.const_eval_in_scope(&args[1]).unwrap_or(1).max(1) as u32
+                        } else {
+                            1
+                        };
+                        return self.lower_fixed_foreach_step(b, lhs, arr, m, &args[0], dim);
+                    }
                     if args.len() == 2 {
                         if let Some(arr) = self.lookup_net_scoped(&name.segments[0].name) {
                             if self.net_is_static_array(arr) {
