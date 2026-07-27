@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–236**
+**§4.5.220–237**
+- `4.5.237` 테스트 0건 스펙 스캔 2차 — `$sformat`/`$swrite`/plusargs 검증 후 핀(결함 없음) …
 - `4.5.236` `%p` 가 real 을 정수 반올림하던 silent-wrong(`2.5`→`3`) — 무오라클 스펙, 테스트 0건이었다 …
 - `4.5.235` fresh-area 스윕 CLEAN + 무오라클 능력 2건(modport 포트·함수결과 part-select) 핀 …
 - `4.5.234` sized-literal enum label — enum 메서드 전부 loud→correct-support(두 술어를 "합의 가능한 부분집합"으로 봉인) …
@@ -291,6 +292,18 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.237 테스트 0건 스펙 스캔 2차 — `$sformat`/`$swrite`/plusargs 핀 (2026-07-28, branch feat-untested-spec-pins, format 25 불변) ✅
+
+**착수 근거**: §4.5.236 이 세운 전략(`grep -rl '<spec>' crates/cli/tests/` 가 비면 후보)을 **체계적으로 1회 실행**. 포맷 스펙 13종·시스템 함수 12종을 스캔해 커버리지 0인 것을 뽑았다 — 포맷 `%u`·`%z`·`%l`, 함수 `$typename`·`$value$plusargs`·`$test$plusargs`·`$sformat`·`$swrite`·`$ferror`·`$rewind`·`$fseek`·`$ftell`·`$sscanf`·`$ungetc`·`$feof`.
+
+**결과**: 오라클 있고 실사용 빈도 높은 것부터 검증 — `$sformat`(string 대상·**packed reg 벡터 대상**)·`$swrite`·`$test$plusargs`(hit/miss)·`$value$plusargs`(`%d`/`%s`, 실제 `+arg` 공급) 전부 **iverilog 일치**. §4.5.236 의 `%p` 와 달리 **결함은 없었고**, 위험은 "아무도 안 보고 있었다"는 것뿐이었다 → **핀**(신규 `sformat_plusargs_pins.rs`×3).
+
+**기록한 제약(결함 아님·ROADMAP §3)**: `$value$plusargs` 는 **blocking 대입의 직접 rhs 로만** 지원 — `$display("%0d", $value$plusargs(...))` 는 loud(iverilog 는 허용). `$test$plusargs` 는 제약 없음. plusargs 미공급 시 목적지가 **호출 전 값을 유지**하는 것(IEEE)도 함께 핀.
+
+**게이트**: 4659 → **4662** tests · clippy/fmt clean · format 25 불변 · **코드 변경 0**.
+
+**교훈**: **스캔 전략은 재사용 가능한 자산이다.** §4.5.236 이 우연히 `%p` 를 잡은 게 아니라 "커버리지 0" 이라는 기계적 신호가 잡았고, 같은 신호를 한 번 더 돌리자 12개 후보가 즉시 나왔다. 남은 후보(`$sscanf`·파일 위치 함수군·`$typename`·`%u`/`%z`/`%l`)는 큐에 남긴다.
 
 #### 4.5.236 `%p` 가 real 을 정수로 반올림하던 silent-wrong (2026-07-28, branch feat-fmt-p-real, format 25 불변) ✅
 
