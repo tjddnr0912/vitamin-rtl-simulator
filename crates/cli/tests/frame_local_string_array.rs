@@ -142,15 +142,28 @@ fn survives_a_suspend() {
 
 #[test]
 fn in_a_framed_function() {
-    // A function body-local, not just a task's. `.len()` of "abc" is 3 — iverilog says 2
-    // here, which is its own long-standing defect on a string-array element, so this is
-    // pinned to the IEEE answer rather than the oracle.
+    // A function body-local, not just a task's. `.len()` of "abc" is 3.
+    //
+    // Pinned to IEEE, not to the oracle: iverilog's `.len()` on a string-ARRAY element
+    // returns the ARRAY SIZE rather than the string length. Diagnosed by measurement, not
+    // assumed — `string s[5]; s[0]="abcdefg"` gives iverilog `5` for the element and a
+    // correct `7` for a scalar string holding the same text, and `string s[2]` here gives
+    // it `2` for "abc". vita answers the string length in every one of those.
     assert_eq!(
         run("module m;\n\
              function automatic int f(); string s[2]; s[0]=\"abc\"; return s[0].len(); endfunction\n\
              initial begin $display(\"%0d\", f()); $finish; end\n\
              endmodule\n"),
         "3\n"
+    );
+    // The measurement above, as a regression pin: element and scalar must agree, and the
+    // answer must track the TEXT (7), not the declared array size (5).
+    assert_eq!(
+        run("module m; string s[5]; string sc;\n\
+             initial begin s[0]=\"abcdefg\"; sc=\"abcdefg\";\n\
+               $display(\"%0d %0d\", s[0].len(), sc.len()); $finish; end\n\
+             endmodule\n"),
+        "7 7\n"
     );
 }
 

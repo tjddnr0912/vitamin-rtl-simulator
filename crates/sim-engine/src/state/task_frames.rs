@@ -284,6 +284,10 @@ impl SimState<'_> {
                         .unwrap_or_default();
                     // callee popped → top frame is the calling task again; write its
                     // frame-local output lvalues (a dyn out-formal deep-copies to the heap).
+                    // T1-9: CAPTURE the dyn out/inout results before the restore, and
+                    // install them AFTER — under recursion the caller's array net IS the
+                    // callee's formal net, so an in-place copy-out would be discarded.
+                    let outs_dyn = self.frame_dyn_capture_out(info.callee, &info.out_binds);
                     for ((s, lval), val) in info.out_binds.iter().zip(outs) {
                         if self.frame_dyn_out_bind(info.callee, *s, lval) {
                             continue;
@@ -291,6 +295,7 @@ impl SimState<'_> {
                         self.frame_write_lvalue(lval, val);
                     }
                     self.frame_dyn_exit(nested_stash);
+                    self.frame_dyn_install_formals(outs_dyn);
                     cur = *ret_bb;
                 }
                 Terminator::Return => break,
@@ -709,15 +714,47 @@ impl SimState<'_> {
     /// it out to the caller net (`lval.chunks[0].net`) and return `true` (the caller skips
     /// its scalar `write_lvalue`/`frame_write_lvalue`, whose value would be a meaningless
     /// read of the unused scalar frame slot). A non-dyn out-slot returns `false`.
-    pub(crate) fn frame_dyn_out_bind(&self, callee: u32, slot: u32, lval: &Lvalue) -> bool {
+    pub(crate) fn frame_dyn_out_bind(&self, callee: u32, slot: u32, _lval: &Lvalue) -> bool {
         let formal_net = self.func_table[callee as usize].base_net + slot;
-        if self.ir.nets[formal_net as usize].kind != NetKind::DynArray {
-            return false;
-        }
-        if let Some(c) = lval.chunks.first() {
-            self.frame_dyn_copy_out(formal_net, c.net);
-        }
-        true
+        // The COPY itself moved to `frame_dyn_capture_out` — see there for why. This is
+        // now only the "the scalar slot value is not the payload, skip that write"
+        // decision it always also was.
+        self.ir.nets[formal_net as usize].kind == NetKind::DynArray
+    }
+
+    /// T1-9: capture what a callee's dyn OUTPUT/INOUT formals produced, as
+    /// `(caller net, cloned object)` pairs — to be installed AFTER `frame_dyn_exit`.
+    ///
+    /// The copy-out used to write the caller's net directly, in place, before the exit.
+    /// Under RECURSION that is wrong, because the caller's array net and the callee's
+    /// formal net are THE SAME net: the restore then puts the parent's pre-call array
+    /// back over the copy-out and the result is discarded. Measured — a recursive
+    /// `inout int b[]` incrementing `b[0]` at each of three levels printed 3/2/1 and
+    /// left the actual at 1, where iverilog prints 3/3/3 and leaves 3 (§13.5.2
+    /// copy-out propagates back up the chain).
+    ///
+    /// Capturing first and installing after the restore is correct for BOTH cases: with
+    /// distinct nets the install writes somewhere the restore never touched, and with
+    /// the same net it deliberately lands on top of the restored parent array, which is
+    /// exactly what copy-out means.
+    pub(crate) fn frame_dyn_capture_out(
+        &self,
+        callee: u32,
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(u32, Option<DynObj>)> {
+        let base = self.func_table[callee as usize].base_net;
+        let heap = self.dyn_heap.borrow();
+        out_binds
+            .iter()
+            .filter_map(|(slot, lval)| {
+                let formal_net = (base + slot) as usize;
+                if self.ir.nets[formal_net].kind != NetKind::DynArray {
+                    return None;
+                }
+                let dst = lval.chunks.first()?.net;
+                Some((dst, heap.get(formal_net).and_then(|o| o.as_ref().cloned())))
+            })
+            .collect()
     }
 
     /// §4.5.194 (V5): execute a `loc = new[n]` (`Stmt::SysTask { DynNew, args }`) inside a

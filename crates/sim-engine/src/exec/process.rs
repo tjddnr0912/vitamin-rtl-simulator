@@ -338,6 +338,11 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     let outs = sched.st.exit_task_frame(frame.callee, &out_s);
                     // V2B (§4.5.194): copy out BEFORE the free — the deep-copy of an OUTPUT/
                     // INOUT dyn formal reads its heap slot, which frame_dyn_free would clear.
+                    // T1-9: CAPTURE before the restore, install after (see
+                    // `frame_dyn_capture_out` — recursion aliases caller and formal nets).
+                    let outs_dyn = sched
+                        .st
+                        .frame_dyn_capture_out(frame.callee, &frame.out_binds);
                     for ((s, lval), val) in frame.out_binds.iter().zip(outs) {
                         if sched.st.frame_dyn_out_bind(frame.callee, *s, lval) {
                             continue; // dyn formal → heap deep-copy, not the scalar slot value
@@ -349,6 +354,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     // restoring whatever the OUTER activation held. All `None` for a
                     // non-reentrant call, so a later call still starts fresh (size 0).
                     sched.st.frame_dyn_exit(frame.dyn_stash);
+                    sched.st.frame_dyn_install_formals(outs_dyn);
                     if sched.activities[pi as usize].call_stack.is_empty() {
                         bb = frame.ret_bb;
                     } else {
@@ -457,7 +463,10 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
                         let dyn_stash = sched.st.frame_dyn_enter(info.callee);
                         sched.st.frame_dyn_install_formals(captured);
+                        let mut outs_dyn = Vec::new();
                         if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
+                            // T1-9: capture before the restore, install after.
+                            outs_dyn = sched.st.frame_dyn_capture_out(info.callee, &info.out_binds);
                             for ((s, lval), val) in info.out_binds.iter().zip(outs) {
                                 if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
                                     continue; // dyn formal → heap deep-copy, not the scalar value
@@ -467,6 +476,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             }
                         }
                         sched.st.frame_dyn_exit(dyn_stash);
+                        sched.st.frame_dyn_install_formals(outs_dyn);
                     }
                     // advance THIS frame past the (subset / no-info) call.
                     sched.activities[pi as usize]
@@ -529,7 +539,10 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                     let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
                     let dyn_stash = sched.st.frame_dyn_enter(info.callee);
                     sched.st.frame_dyn_install_formals(captured);
+                    let mut outs_dyn = Vec::new();
                     if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
+                        // T1-9: capture before the restore, install after.
+                        outs_dyn = sched.st.frame_dyn_capture_out(info.callee, &info.out_binds);
                         for ((s, lval), val) in info.out_binds.iter().zip(outs) {
                             if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
                                 continue; // dyn formal → heap deep-copy, not the scalar value
@@ -539,6 +552,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                         }
                     }
                     sched.st.frame_dyn_exit(dyn_stash);
+                    sched.st.frame_dyn_install_formals(outs_dyn);
                 }
                 bb = *ret_bb;
             }

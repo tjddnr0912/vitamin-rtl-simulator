@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// T1-11: builds the per-FIELD source expression of a SoA whole-element write, given the
+/// member name. One closure per rhs FORM (a record var / a container element), so the
+/// fan-out loop is written once — duplicating it per form is how a read and its write
+/// drift onto different elements.
+type SoaFieldSrc<'a> = Box<dyn Fn(&str) -> Expr + 'a>;
+
 impl Parser<'_, '_> {
     /// N3 SoA: transpose a record-array decl-init `'{ '{a,b}, '{c,d} }` into per-FIELD
     /// unpacked-array inits — field 0 → `'{a,c}`, field 1 → `'{b,d}`. Each field's dyn
@@ -439,41 +445,73 @@ impl Parser<'_, '_> {
                     let var = p.segments[0].name.clone();
                     let ty = self.record_soa_vars.get(&var)?.clone();
                     let members = self.unpacked_struct_layouts.get(&ty)?.clone();
-                    // T1-11: the WRITE twin of the whole-element read above —
-                    // `q[i] = rec` from a same-type record var, fanned out per field.
-                    // Emitted here, in the element-write branch, so the two element
-                    // rhs forms (`'{…}` pattern and whole record) share one place and
-                    // one index-clone rule.
-                    if let ExprKind::Ident(rp) = &rhs.kind {
-                        if rp.segments.len() == 1
-                            && self.var_unpacked_struct.get(&rp.segments[0].name) == Some(&ty)
+                    // T1-11: the WRITE twin of the whole-element read above. Two rhs
+                    // forms, one fan-out:
+                    //   `q[i] = rec`    — from a same-type record VAR   (`$unp$rec$f`)
+                    //   `q[i] = d[j]`   — from a same-type SoA ELEMENT  (`$unp$d$f[j]`)
+                    // Both live in this branch, alongside the `'{…}` pattern, so every
+                    // element rhs shares one place and one index-clone rule.
+                    //
+                    // The two are the same operation with a different per-field SOURCE
+                    // EXPRESSION, so they are expressed that way rather than as two
+                    // copies of the loop — the failure mode of duplicating it is exactly
+                    // the read/write asymmetry this slice exists to avoid.
+                    let src_field: Option<SoaFieldSrc<'_>> = match &rhs.kind {
+                        ExprKind::Ident(rp)
+                            if rp.segments.len() == 1
+                                && self.var_unpacked_struct.get(&rp.segments[0].name)
+                                    == Some(&ty) =>
                         {
                             let rvar = rp.segments[0].name.clone();
-                            let stmts = members
-                                .iter()
-                                .map(|m| {
-                                    let mnet = Self::unpacked_member_net(&var, &m.name.name);
-                                    let srcn = Self::unpacked_member_net(&rvar, &m.name.name);
-                                    let elem = Lvalue::BitSelect {
-                                        base: Box::new(Self::ident_lval(&mnet, span)),
-                                        index: index.clone(),
-                                        span,
-                                    };
-                                    Self::assign_stmt(
-                                        elem,
-                                        Self::ident_expr(&srcn, span),
-                                        blocking,
-                                        span,
-                                    )
-                                })
-                                .collect();
-                            return Some(Stmt::Block {
-                                label: None,
-                                decls: Vec::new(),
-                                stmts,
-                                span,
-                            });
+                            Some(Box::new(move |f: &str| {
+                                Self::ident_expr(&Self::unpacked_member_net(&rvar, f), span)
+                            }))
                         }
+                        ExprKind::BitSelect {
+                            base: rb,
+                            index: ri,
+                        } => match &rb.kind {
+                            ExprKind::Ident(rp)
+                                if rp.segments.len() == 1
+                                    && self.record_soa_vars.get(&rp.segments[0].name)
+                                        == Some(&ty) =>
+                            {
+                                let rvar = rp.segments[0].name.clone();
+                                let ri = ri.clone();
+                                Some(Box::new(move |f: &str| Expr {
+                                    kind: ExprKind::BitSelect {
+                                        base: Box::new(Self::ident_expr(
+                                            &Self::unpacked_member_net(&rvar, f),
+                                            span,
+                                        )),
+                                        index: ri.clone(),
+                                    },
+                                    span,
+                                }))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(mk_src) = src_field {
+                        let stmts = members
+                            .iter()
+                            .map(|m| {
+                                let mnet = Self::unpacked_member_net(&var, &m.name.name);
+                                let elem = Lvalue::BitSelect {
+                                    base: Box::new(Self::ident_lval(&mnet, span)),
+                                    index: index.clone(),
+                                    span,
+                                };
+                                Self::assign_stmt(elem, mk_src(&m.name.name), blocking, span)
+                            })
+                            .collect();
+                        return Some(Stmt::Block {
+                            label: None,
+                            decls: Vec::new(),
+                            stmts,
+                            span,
+                        });
                     }
                     let ExprKind::AssignPattern(vals) = &rhs.kind else {
                         return None; // a non-pattern element rhs → loud fallthrough
