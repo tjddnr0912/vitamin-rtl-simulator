@@ -2,15 +2,15 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-07-27)**: format_version **23** · **4550 tests green** · 3-OS CI green · MsgCode **59**(W3057) · **MSRV 1.85**.
-> - **최신 완료 5건**: **§4.5.227 §0 T1 잔여 11항목 전부 RESOLVED**(임의 선언 bounds/방향 · multi-dim `foreach` · 중첩 decl-init · bounded string queue · 계층 read+write+assoc · frame-local **재귀** · SoA whole-element — 여기서도 근인 4갈래) · §4.5.222~226 T1 1차 6종(runtime index/`foreach` · queue-of-string · multi-dim · frame-local · 계층 read) · §4.5.221 real-valued parameters(`parameter real` — 적대 리뷰 6R·후속 브랜치서 잔여 해소·머지) · §4.5.220 DYN string-array element byte-select silent-0 수정 + write-twin loud화 · §4.5.219 FIXED string-array decl-init · §4.5.218 inner-scope local의 string-array side-map shadow. **완료 슬라이스 220건 전체 목록·상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 로 검색).
+> - **기준(2026-07-27)**: format_version **25** · **4613 tests green** · 3-OS CI green · MsgCode **59**(W3057) · **MSRV 1.85**.
+> - **최신 완료 6건**: **§4.5.228 round-20 8항목**(fork-arm 재개 🔴 · 음수 하한 unpacked 🔴 · 동시 활성화 dyn 배열 · generate/interface 스코프 block-local+string decl-init · 음수 packed bound 🔴(multi-packed 는 silent 였다) · VCD 선언범위 · `$fmonitor`/`$fstrobe`) · **§4.5.227 §0 T1 잔여 11항목 전부 RESOLVED**(임의 선언 bounds/방향 · multi-dim `foreach` · 중첩 decl-init · bounded string queue · 계층 read+write+assoc · frame-local **재귀** · SoA whole-element — 여기서도 근인 4갈래) · §4.5.222~226 T1 1차 6종(runtime index/`foreach` · queue-of-string · multi-dim · frame-local · 계층 read) · §4.5.221 real-valued parameters(`parameter real` — 적대 리뷰 6R·후속 브랜치서 잔여 해소·머지) · §4.5.220 DYN string-array element byte-select silent-0 수정 + write-twin loud화 · §4.5.219 FIXED string-array decl-init · §4.5.218 inner-scope local의 string-array side-map shadow. **완료 슬라이스 220건 전체 목록·상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 로 검색).
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
 > - **최종 목표**: **G1** = icarus·verilator·xcelium·vcs급 *정확한* RTL 시뮬레이터(correct-or-loud) · **G2** = AI-Agent 친화 simulator(SPEC=[preview/19](preview/19-ai-agent-observability.md)).
 
 ## A. 현재 상태 한 줄 요약
 
-- **오라클 있는 열린 silent-wrong = 8건**(ROADMAP §2 상단) — §4.5.227이 **fork arm이 부른 suspendable task가 재개되지 않아 body가 조용히 사라지는** pre-existing 결함을 발굴(string/dyn 무관·스칼라 로컬로도 재현·PRE==POST). 2026-07-23 판이 "소진"이라고 적었던 것은 그 시점 기준이며, §4.5.217~221의 적대 리뷰·PRE 3-way 측정이 pre-existing 7건을 새로 **발굴**했다(악화가 아니라 가시화). 그중 **1건은 pre-existing이 아니다** — §4.5.221이 도입한 좁은 loud→silent 하강(계층 real param 바운드).
+- **오라클 있는 열린 silent-wrong = 6건**(ROADMAP §2 상단) — §4.5.228 이 그중 2건(fork-arm 재개 · 음수 하한 unpacked)을 닫았고, 같은 라운드에서 **multi-packed 음수 inner bound 가 silent 였다는 것**을 새로 측정해 함께 닫았다(ROADMAP 이 "warn+clamp"로 적어둔 것은 틀렸다 — 경고는 형제 선언에서 나오고 있었다). 2026-07-23 판이 "소진"이라 적은 것은 그 시점 기준이며, §4.5.217~228 의 적대 리뷰·PRE 3-way 측정이 pre-existing 결함을 계속 **발굴**했다(악화가 아니라 가시화). 그중 **1건은 pre-existing이 아니다** — §4.5.221이 도입한 좁은 loud→silent 하강(계층 real param 바운드).
 - 외부 리포트 1·2차(EXT2)·round 3~19 = **사실상 완결**(잔여 3건=A2c·NAP·DOC, 전부 no-oracle/docs).
 - 나머지 잔여는 **honest-loud=안전**(ROADMAP §3~§5) + **G2 OBS 트랙**(ROADMAP §6).
 
@@ -18,8 +18,8 @@
 
 | # | 항목 | 근거/오라클 |
 |---|---|---|
-| 1 | **§0 승격 큐 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound | iverilog ✓ 4/4 |
-| 2 | **fork arm의 suspendable task 재개**(§2 신규 🔴) — 이게 살아야 같은 task의 동시 활성화 + frame-local dyn 배열 조합도 열린다 | iverilog ✓ |
+| 1 | **§0 승격 큐 T2 잔여 2건** — `real` const-fold · sized-literal enum label | iverilog ✓ 2/2 |
+| 2 | ~~fork arm의 suspendable task 재개~~ **완료**(§4.5.228) — 동시 활성화 dyn 배열까지 같이 열렸다 | — |
 | 3 | **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(동근: `const_eval_in_scope` `Cast`/`Call` arm) · package-scope real · 구조적 지연 · real→`input int` formal | iverilog 라이브 차분 |
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |

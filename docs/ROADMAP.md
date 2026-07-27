@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그·옛 §번호(§0~§7·§4.5.x) 원문은 전부 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존)로 이관했다. 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-27)**: format_version **23** · **4550 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.227**(§0 **T1 잔여 11항목 전부 RESOLVED** — 임의 선언 bounds/방향·multi-dim `foreach`·중첩 decl-init·bounded string queue·계층 read+write·계층 assoc·frame-local 재귀·SoA whole-element). 직전 = §4.5.222~226(T1 1차 6종). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-27)**: format_version **25** · **4613 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.228**(round-20 8항목 — fork-arm 재개·음수 하한 unpacked/packed·동시 활성화 dyn·generate/interface 스코프·VCD 선언범위·`$fmonitor`/`$fstrobe`). 직전 = **§4.5.227**(§0 **T1 잔여 11항목 전부 RESOLVED** — 임의 선언 bounds/방향·multi-dim `foreach`·중첩 decl-init·bounded string queue·계층 read+write·계층 assoc·frame-local 재귀·SoA whole-element). 직전 = §4.5.222~226(T1 1차 6종). **완료 슬라이스 상세·§번호별 원문 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(최신이 위) — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -41,29 +41,23 @@
 frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whole-element를 멤버별로 fan-out).
 상세=ARCHIVE §4.5.227.
 
-**T1에서 새로 발굴한 잔여(전부 honest-loud·§2/§3로 이관)**:
-
-| 항목 | iverilog | vita | 성격 |
-|---|---|---|---|
-| generate 스코프 fixed string array 라우팅 (`for(g…) begin string s[1:2]; s[k]`) | 동작 | LOUD | `allow_string_init=false`. **플래그만 뒤집는 건 불충분함을 실측** — `new[n]` pre-size가 그 스코프에서 핸들을 못 찾는다(전용 슬라이스 필요) |
-| **fork arm이 부른 suspendable task가 재개되지 않음** | 동작 | **조용히 drop** | 🔴 **string 무관·pre-existing silent-wrong**. `fork tk(1); tk(2); join`에서 `enter`는 찍히고 `@` 이후가 안 온다. 스칼라 로컬에서도 동일 → §2로 |
-| 같은 task의 **동시** 활성화가 frame-local dyn 배열 공유 | 동작 | F4004 | 활성화 구간이 nest가 아니라 overlap → stash로 분리 불가. 위 fork 재개 버그가 선행 조건 |
-| 음수 하한 unpacked 배열 `int a[-1:1]` | `-1:1 0:2 1:3` | E4002+원소 누락 | **string 무관·일반 갭**. `flatten_word`의 `lo`가 u32 → string 배열은 라우팅 거절로 회피 중 |
+**T1에서 발굴한 잔여 4건 = 전부 RESOLVED (§4.5.228·round-20).** generate 스코프 라우팅 ·
+fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked 배열. 상세=ARCHIVE §4.5.228.
 
 **의도적 loud(갭 아님)**: fixed 배열에 `new[]`(iverilog도 거부) · multi-dim partial 인덱스 `s[0]`(iverilog도 거부·조용한 오원소 방지) · cross-type SoA whole-element 복사(멤버 대응 보장 없음).
 
-**오라클 주의 — iverilog 결함 2건(vita가 IEEE 정답)**: ① string **배열 원소**의 `.len()`이 문자열 길이가 아니라 **배열 크기**를 낸다(`string s[5]; s[0]="abcdefg"` → iverilog 5, vita 7; 같은 텍스트를 스칼라에 넣으면 iverilog도 7). ② 동시 fork 활성화가 automatic string 배열을 공유한다(`A!` 대신 `A!!`). 둘 다 회귀 테스트로 핀 고정.
+**오라클 주의 — iverilog 결함 2건(vita가 IEEE 정답)**: ① string **배열 원소**의 `.len()`이 문자열 길이가 아니라 **배열 크기**를 낸다(`string s[5]; s[0]="abcdefg"` → iverilog 5, vita 7; 같은 텍스트를 스칼라에 넣으면 iverilog도 7). ② 동시 fork 활성화가 automatic string 배열을 공유한다(`A!` 대신 `A!!`). ③ 같은 fd 에 `$fmonitor` 를 두 번 걸면 **누적**해 둘 다 찍는다 — 자기 자신의 싱글턴 `$monitor` 와 모순(vita 는 destination 별 replace). ④ 빈 string **배열 원소**를 `%s` 로 찍으면 공백 1칸(스칼라는 빈 문자열). 전부 회귀 테스트로 핀 고정.
 
 **T2 — 독립 항목 (오라클 ✓·각자 전용 슬라이스)**
 
 8. **`real` const-fold 전면 미지원** — `localparam real R = 2.0+3.0` = iverilog `5.0` / vita E3009 "not a foldable". `*`·`/`·`-`·`**` 전부 동일. **`localparam real`은 흔한 관용구**라 체감 가치가 크다(§4.5.141 발굴).
-9. **generate/interface 스코프 string decl-init** — `begin : g string s = "hi";` = iverilog `hi` / vita E3009 "supported only at module scope". 모듈 스코프는 이미 동작 → **스코프 비대칭 = 정확도 갭**(§4.5.198 논리).
+9. ~~generate/interface 스코프 string decl-init~~ **RESOLVED**(§4.5.228) — 근인은 `allow_string_init` 플래그가 아니라 decl-time 쓰기가 모듈 스코프 pending 리스트로 새던 것. queue/dyn decl-init·generate 내 block-local 도 같이 열림.
 10. **sized-literal enum label → enum-method** — `enum bit[3:0]{A=4'h3}` + `.name()` = iverilog `A` / vita E3009. `const_lit`이 unsized-decimal만 fold해 `enum_defs` 미등록. 진단 문구도 오도("hierarchical function call").
-11. **음수 range bound** `logic [3:-2]` — iverilog 6-bit `101010` / vita **W3056 warn+clamp**(non-silent이나 whole-value 손상).
+11. ~~음수 range bound~~ **RESOLVED**(§4.5.228) — plain net·multi-packed inner(**후자는 silent 였다**)·배열 원소·VCD `$var` 범위까지. 잔여 = **PART select**(`x[1:-2]`, 정직한 loud·바운드 접기가 unsigned) · **포트/formal**(warn+clamp 유지·의도적 opt-in 비대칭).
 
 **T3 — 전제조건 필요 (즉시 착수 대상 아님)**
 
-12. `$fmonitor`/`$fstrobe` — 파일 출력이 W3056로 skip. 지원엔 **format bump** 필요(SysTaskId 변종 or 사이드카).
+12. ~~`$fmonitor`/`$fstrobe`~~ **RESOLVED**(§4.5.228·format 25) — 동결 `Monitor`/`Strobe` id 재사용 + `file_directed_stmts` 사이드카. 모니터는 **destination 별**로 유지된다.
 13. `case (x) inside {…}` — **no-oracle**(iverilog 13.0이 `case inside`/`inside` op/array reduction 전부 거부) → hand-IEEE + 내부 차분.
 
 **정정 — 재그라운딩에서 stale로 판명(§3에서 삭제, 비목표)**
@@ -95,7 +89,7 @@ frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whol
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-1. **§0 T2** — real const-fold · generate/iface string decl-init · sized-literal enum label · 음수 range bound(각자 독립 슬라이스). **§0 T1은 §4.5.222~226으로 전부 완료.**
+1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228).
 2. **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(**동근**: `const_eval_in_scope`의 `Cast`/`Call` arm → 한 슬라이스로 묶을 것) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
 4. **OBS-2 sva.jsonl**(R-L6).
@@ -110,8 +104,9 @@ frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whol
 - **🔴 상수-foldable 식을 part-select 바운드로 쓰면 조용히 0 / 비트 덮어씀**(pre-existing·재리뷰 발견·**근인 규명됨**): `v[fi(7):fi(4)]` → iverilog `a`, vita `0`; `c[int'(5):int'(4)] = 2'b00` → iverilog `85`, vita `5`(상위 비트 clobber). **근인**: 바운드 접기가 `const_fn.rs::const_eval_u32` 를 쓰는데 이건 **`&self` 없는 자유 함수**라 `IntLit`/`Paren`/`Unary` 3개 arm뿐 — params·const 함수·cast 를 못 본다. 호출부(`packed.rs:425,616,630`·`packed_lval.rs:279,288`)는 `None` 을 "상수 아님"으로 보고 0 또는 net-width 폴백. **`const_eval_in_scope` 로 폴백을 시도했으나 이득 0으로 되돌림** — 그쪽에도 **`Cast` arm 이 없어** `int'(5)` 가 여전히 None 이고 `fi(7)` 의 `Call` arm 도 발화하지 않았다. **fix 전제** = `const_eval_in_scope` 에 `Cast` arm 추가 + `Call` arm 이 automatic 함수에 왜 안 무는지 규명. hot path 이므로 리뷰 필수.
 - **🔴 replication count 가 상수로 안 접히면 조용히 0**(pre-existing·differential 발견): `{P*2{1'b1}}`·`{(P>1?3:2){1'b1}}`·`{int'(3){1'b1}}`·`{cf(3){1'b1}}` 가 iverilog `111…` 인데 vita `0`(`{P+1{…}}` 는 동작 — `*`·ternary·cast·const-fn 만 깨짐).
 - **🔴 package-scope `parameter real` 이 정수 나눗셈**(pre-existing·differential 발견·"미라우팅"보다 넓음): `pk::PR/2`(PR=3) 가 iverilog `1.5000` 인데 vita `1.0000`. module-scope 쌍둥이는 정상. 비-정수 package real 은 loud.
-- **🔴 fork arm 이 부른 SUSPENDABLE task 가 재개되지 않음**(pre-existing·PRE==POST 실측·§4.5.227 발굴): `fork tk(1); tk(2); join` 에서 `tk` 가 `@`/`#` 를 만나면 **frame 진입은 하고**(진입부 `$display` 는 찍힘) **재개가 오지 않아 나머지 body 가 조용히 사라진다** — iverilog 는 정상 실행. **string/dyn 과 무관**: 스칼라 로컬만 가진 task 로도 동일 재현(`c0` 프로브). 같은 fork 라도 (a) 비-suspending task 호출 (b) task 없이 `@` 를 쓴 arm 은 둘 다 정상이라, 근인은 **fork child activity 의 call_stack 프레임 재개 경로** 한 곳. §4.5.227 이 frame-dyn fatal 을 걷어내면서 **드러났을 뿐 새로 만든 것이 아니다**(F4004 가 dyn 부분집합을 가리고 있었음). 이 버그가 살아 있는 한 **같은 task 의 동시 활성화**는 stash 로 분리해도 관측 불가라, §4.5.227 은 그 조합을 정직한 fatal 로 유지했다.
-- **음수 하한 unpacked 배열이 원소를 누락**(pre-existing·PRE==POST): `int a[-1:1]` 에 `a[-1]=7` 후 `foreach` 가 `0:8 1:9` 만 내고 E4002. 근인 = `flatten_word` 의 `lo` 가 `u32`. string 배열은 §4.5.227 이 **라우팅 거절**로 회피(per-element-net 경로에서 const 인덱스는 정상)해 같은 깨진 매핑을 물려받지 않는다.
+- ~~🔴 fork arm 이 부른 SUSPENDABLE task 미재개~~ **RESOLVED**(§4.5.228) — 근인은 스케줄러 rework 가 아니라 **bb 번호공간 충돌** 한 곳(`FrameRec::is_arm`). `join_none`+`wait fork`·`join_any` 생존 arm 도 같이 고쳐졌다.
+- ~~음수 하한 unpacked 배열 원소 누락~~ **RESOLVED**(§4.5.228) — `foreach` 만 쓰는 형태는 **silent** 였다(진단 0건). `lo` 를 i64 로. 부수로 `$bits(a[0])` 오프바이원과 `$readmem` 비-0 base 도 수정.
+- **PART select 가 상수 바운드를 unsigned 로 접는다**(§4.5.228 발굴·현재 loud): `logic [3:-2] x; x[1:-2]` — `-2` 가 `const_eval_u32` 에서 0xFFFFFFFE 로 읽혀 방향 검사에 걸린다. 위 "상수-foldable 식을 part-select 바운드로" 항목과 **같은 자유 함수**가 근인이라 한 슬라이스로 묶을 후보.
 - **`$urandom_range(R,0)` 가 범위 1 로 붕괴**(soundness S5): `bits(3.0)` 의 하위 32비트가 0. generic SysCall 인자 경로라 위치별 게이트 필요.
 - **파라미터 구조적 지연이 조용히 무시됨(pre-existing·PRE==POST)**: `assign #P y = x;` · `wire #P y = x;` · `and #P g(o,a,b);` 가 P 가 **정수 param 이어도** 지연을 무시(리터럴 `#3` 은 동작). §4.5.221 이 `parameter real` 을 지원하면서 **클럭 주기/지연 관용구가 이 경로의 주 사용처**가 되어 도달성이 크게 넓어졌다 — 우선순위 상향 후보.
 - **real→`input int` formal 미강제(pre-existing·PRE==POST)**: `f(2.4)` → vita `24`, iverilog `20`.
@@ -204,7 +199,7 @@ frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whol
 - **array reduction method가 var-init initializer에서 loud**(§4.5.219 재감사 발굴·pre-existing): `string s = $sformatf("%0d", arr.sum());` 및 배열 원소 형태 모두 E3009 "unsupported hierarchical function call arr.sum" — t0 pre-sweep 경로의 갭이며 scalar/array 동일(=게이트 문제 아님). `q.size()`·`.len()`·`.substr()`·`.name()`은 동작.
 - **string-array 잔여 → §0 승격 큐 T1로 이관(2026-07-25)**: FIXED string array decl-init(`string s[2]='{"a","b"}`·module/block 양쪽 loud·iverilog ✓·§4.5.183 기록 항목) · fixed array **runtime index**/`foreach`(dyn 배열은 이미 동작→fixed만 element-net 표현 때문에 const-index 전용) · `string q[$]`(queue of string·iverilog ✓) · multi-dim `string s[2][2]`(iverilog ✓) · hierarchical `u.s[0]` · **frame-local**(task/function body) string array(static task=E3018·function/automatic=E3009). dyn element의 byte select `d[0][0]`(no-oracle)도 잔여.
 
-- gen/iface **string** decl-init(→ §0 승격 큐 T2-9; queue/dyn은 **이미 동작**·2026-07-25 확인) · generate-case 스코프 이름 `gcase[0].x`.
+- ~~gen/iface string decl-init~~ **RESOLVED**(§4.5.228). 잔여 = generate-case 스코프 이름 `gcase[0].x` · 인터페이스 queue 원소의 **계층 read**(`u.q[0]`).
 - SYS-READ hier-element dest · hier-write sentinel panic→loud · generate-내 `import` · package 자기-func init(㉽). explicit `import p::t`(TYPE)=**§4.5.148 지원**.
 - `$fmonitor`/`$fstrobe`(파일 strobe/monitor) — 현재 W3056 skip=**파일출력 silent drop**(non-silent·warned). 지원=**format bump 필요**(`SysTaskId` 변종 ① or 직렬화 사이드카 ②·staged 파리티): `FmtCapture`에 `fd:Option<u32>` 추가(engine-local)+strobe drain을 `file_write` 라우팅·전용 슬라이스. STDIN read(결정성 설계 필요).
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).
@@ -223,7 +218,7 @@ frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whol
 
 - t0 race 그라운딩(계단식 CA 체인) · `@(*)` decl-init wake · runtime `==?` pattern.
 - inline body NON-fill context-width · modport 방향 강제 · force part-select · assoc 배열-key/clocking 배열-output word0.
-- **음수 range bound**(`logic [3:-2]`/`[-1:-8]` net·multi-packed inner `[1:0][3:-2]`·unpacked `[-1:2]`) — iverilog=`|msb-lsb|+1`(예: `[3:-2]`=6bit). 현재 net/multi-packed=W3056 warn+clamp-1(**whole-value 손상**)·unpacked=E4002. 전부 non-silent(§4.5.135 후 diag 정직화). 정식 지원=**packed-struct-member 선례 미러**(whole=flat offset 정확+sub-select loud; `struct_field_select.rs`): `range_to_dims` 정확 폭+정규화 base·neg-base 마커로 sub-select loud-guard(u32 dbase→signed 또는 사이드카). 단, `[W-1:0]`-with-W==0 param underflow(lsb≥0)는 graceful width-1 유지(test `v3_12`).
+- ~~음수 range bound~~ **RESOLVED**(§4.5.228) — net·multi-packed inner·unpacked·VCD 범위. 정규화 저장(`[w-1:0]`) + 선언 바운드 사이드맵, 선택 정규화와 폭을 **함께** 켜는 opt-in. `[W-1:0]`-with-W==0 param underflow 는 graceful width-1 유지(test `v3_12`). **잔여**: PART select(§2) · 포트/formal(의도적 비대칭).
 - **VCD 잔여 fidelity**(§4.5.138 range fix 후·전부 **cosmetic·decode 동일**·§4.5.139서 VALUE 검증 완료: x/z·real·wide·readmem·format 全 decoded waveform iverilog 일치). 남은 encoding 차이: ① value 미압축=vita full-width(`bxxxxxxxx`) vs iverilog leading-redundant strip(`bx`·`b0`)—decode 동일·큰 golden churn ② t=0 초기덤프 구조=vita `$dumpvars`에 pre-assign X + `#0` change vs iverilog settled값—final 동일 ③ var-type=logic 절차구동시 vita `wire` vs iverilog `reg`(연속구동=both wire·usage 의존이라 non-trivial)·`int`=`reg` vs `integer` ④ real size `64` vs `1` ⑤ `parameter` 미덤프. + 근본: elaborate packed-md NetVar.lsb stale(lib.rs 8435/7862·VCD helper서 flat fallback 우회).
 - **real const-fold 전면 미지원**(§4.5.141 발굴): `localparam/parameter real` = `2.0+3.0`·`*`·`/`·`-`·`**` 全 E3009 "not foldable"(iverilog=folds). `localparam=$clog2(real-lit)`도 동근(const_eval_in_scope=i64-only·real arg→None loud·§4.5.143 런타임은 해결). 런타임 real 산술은 정상(§4.5.141서 `**`도 지원)·const 경로만 uniformly loud. const_eval_in_scope에 real f64 arithmetic 추가 필요(broad·non-silent).
 - **X-bearing integral→real 변환 divergence**(§4.5.141 발굴): vita=whole X값→`0.0`(`real_arg`=`to_i128_signed().unwrap_or(0)`) vs iverilog=per-bit X→0(예 `4'bxx01`→1). `$itor`/`$sqrt`/`$pow`/real-`**` 공통·pre-existing. non-silent 아니지만 divergent(impl-defined X→real).

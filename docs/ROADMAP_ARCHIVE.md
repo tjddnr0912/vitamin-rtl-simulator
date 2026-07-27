@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 220건 (최신순)
+## 인덱스 — 완료 슬라이스 221건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–229**
+- `4.5.228` round-20 8항목: fork-arm 재개 🔴 · 음수 하한 unpacked 🔴 / packed(multi-packed 는 silent) · 동시 활성화 dyn 배열 · generate/interface 스코프 · VCD 선언범위 · `$fmonitor`/`$fstrobe` (format 23→25) …
 - `4.5.226` §0 T1-6: 계층 dynamic-container element READ loud→supported (`u.s[0]`·`u.d[0]`·`u.q[0]`) …
 - `4.5.225` §0 T1-7: task/function body-local string ARRAY loud→supported (frame-entry pre-size) …
 - `4.5.224` §0 T1-5: multi-dim fixed string array loud→supported (row-major flat 컨테이너) …
@@ -283,6 +284,31 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.228 round-20 8항목: fork-arm 재개·음수 하한(unpacked/packed)·동시 활성화 dyn·generate/interface 스코프·VCD 선언범위·`$fmonitor`/`$fstrobe` (2026-07-27, branch feat-round20, format 23→25) ✅
+
+**착수 근거**: "못 고친 3가지"의 선행을 실측으로 재구성한 결과, ROADMAP 이 적어둔 전제 2개가 **틀렸다**.
+① fork 건은 "깊은 스케줄러 rework"가 아니라 **bb 번호공간 충돌 한 곳**이었고(task CFG 에 dead `if` 9개를 넣어 resume bb 를 밀면 같은 설계가 통과 — 이 판별 실험이 근인을 지목),
+② 음수 하한 건은 "E4002 로 loud"가 아니라 순수 `foreach` 형태에서 **silent**(iverilog 3 / vita 2, 진단 0건)였다.
+추가로 **미기재 선행 1건**을 발굴 — generate 스코프 *프로세스 안*의 block-local 이 E3010(모듈 스코프·generate 스코프 선언은 정상 = 순수 스코프 비대칭).
+
+**1. fork arm 이 부른 suspendable task 미재개 (🔴 silent-wrong)** — in-frame child-완료 intercept 가 프레임 `bb`(전역 `ir.blocks`)를 barrier `join_bb`(top-level fork 에선 **프로세스-로컬**)와 비교. 충돌하면 자식을 완료 처리해 죽이고 `exit_arm_frame` 이 arm 아닌 window 를 헐었다. `FrameRec::is_arm` 으로 두 공간을 절대 비교하지 않게. `join_none`+`wait fork`·`join_any` 생존 arm 도 동반 수정. 중첩 프레임·output copy-out·활성화별 격리는 **이미 동작**하고 있었다.
+
+**2. 동시 활성화 frame-local dyn 배열 (F4004 해제)** — net-keyed 슬롯의 entry-stash 는 구간이 **nest** 할 때만 건전. fork 는 overlap 시킨다. 새 머신러리가 아니라 **AUTOMATIC window 의 수명을 그대로** 부여: 서스펜드 중 힙에서 park, 재개 시 unpark, 같은 두 지점(`stash_frame_windows`/`restore_frame_windows`). TOP 프레임만 park(바깥 활성화 값은 위 프레임의 `dyn_stash` 에 있다 — 재귀가 그것에 의존). **회귀 1건은 16k 스윕만 잡았다**: 부모가 fork barrier 에서도 park 하는데 parked 배열은 arm 에게 *공유*가 아니라 *부재* → arm 이 부모 `a[0]` 을 x 로 읽음(`FrameRec::forked` 로 해결). entry 가드는 **불변식** 가드로 개명·메시지 정정(더 이상 "동시 활성화 미지원"이 아니다).
+
+**3~6. generate/interface 스코프** — `allow_string_init=false` 는 "그 스코프는 flush 를 안 돈다"고 설명돼 있었으나 flush 는 있었다. 진짜 결함: string/handle 선언이 **선언 시점에** 하는 쓰기(스칼라 t0 init, 라우팅된 배열의 `new[n]` pre-size)가 **bare-name lvalue 로 모듈 스코프 pending 리스트**에 들어가고, 그 리스트는 `cur_prefix` 가 빈 채로 flush 된다 → `t.g[0].s` 대신 `t.s`. 선언 스코프 prefix 로 키잉(`pending_scoped_presize`/`pending_scoped_bl_strings`)하고 각 스코프의 기존 flush 지점에서 drain. 모듈 스코프는 `""` 키·같은 위치 = 바이트 동일. 그 결과 한꺼번에 열림: generate/interface 스칼라 string decl-init(T2-9 양쪽) · string ARRAY decl-init+런타임 인덱스 · generate 스코프 queue/dyn/string-queue `'{…}`(별도 follow-on 이었다) · generate 프로세스 안 block-local(항목 3). **항목 3 이 항목 4 를 드러냈다**(E3010 → 오도하는 `new[n]` 에러; loud→loud 라 하강은 아니지만 "게이트를 걷으면 그 밑이 드러난다" 패턴).
+
+**7~8a. 음수 하한** — unpacked: `array_dim_extents` 가 `clamp_bound_u32` 로 lo 를 0 으로 깎으면서 **dim 자체가 줄었다**(`[-1:1]`→lo 0/size 2). `lo` 를 i64 로(`array_dims`·`net_dim_extents`·`flatten_word` 쌍둥이·`net_dims` 사이드카). packed: plain net 은 warn+clamp-1(whole-value 손상), **multi-packed inner 는 silent**(8비트 vs 12비트). 저장은 정규화 `[w-1:0]`(`NetVar.msb`/`lsb` 동결 u32) + 선언 바운드 사이드맵, **폭과 선택 정규화를 함께 켜는 opt-in**(리터럴 `false` 단락 ⇒ 나머지 호출부 바이트 동일·loud 유지). 부수로 잡힌 pre-existing 3건: `$bits(a[0])` 가 `(lo,SIZE)` 를 `(lo,hi)` 로 읽던 오프바이원 · 엔진 file-I/O base 의 같은 오독(`$readmemh` 비-0 base 레인지 폼) · `string s[i64::MAX:-i64::MAX]` PANIC(크래시는 loud 아래).
+
+**8b~12. bump 배치(24→25)** — VCD `$var` 가 정규화 범위 `[5:0]` 를 찍어 파형 뷰어가 비트를 잘못 라벨(값은 정확). `net_decl_ranges` 사이드카로 선언 범위 전달, staged 경로 확인. `$fmonitor`/`$fstrobe` 는 W3056 skip = 파일 출력 무성 소실 → **동결 `Monitor`/`Strobe` id 재사용**(SysTaskId 변종은 SimIr 해시 flip) + `file_directed_stmts` 사이드카. 술어 하나(`is_file_monitor_strobe`)가 fmt/args 분할과 사이드카 기록을 **둘 다** 몰아 fd 위치에 대해 이견이 생길 수 없게. 모니터는 **destination 별**로 유지 — 공유 슬롯은 `$fmonitor` 가 서 있던 `$monitor` 를 밀어내 stdout 이 조용히 멈췄다(iverilog 는 둘 다 계속 찍는다).
+
+**적대 리뷰 2렌즈**: differential = 스크래치패드 **16,316 설계** PRE vs POST 전수(항목마다 재실행) — 최종 115건 변경, 비-프로브 24건 전수 개별 검증(15건 loud→iverilog 정확 일치, 나머지 loud→loud 또는 iverilog 가 컴파일 못 하는 hand-IEEE). **회귀 1건 검출·수정**(위 §2). soundness = 각 항목별 형상 매트릭스(재귀×동시성, 다차원×방향, 스코프 대칭, drain 순서, fd 유효/무효).
+
+**오라클 결함 2건 추가 기록**(vita 가 IEEE 정답): 같은 fd 에 `$fmonitor` 2회 → iverilog 는 **누적**(자기 싱글턴 `$monitor` 와 모순) · 빈 string **배열 원소**의 `%s` → iverilog 는 공백 1칸(스칼라는 빈 문자열).
+
+**잔여(정직 기록)**: 음수 바운드의 **PART select**(바운드 접기가 unsigned — §2 의 part-select 상수 접기와 **같은 자유 함수**가 근인) · **포트/formal** 음수 바운드(의도적 opt-in 비대칭·warn+clamp 유지) · 인터페이스 queue 원소의 **계층 read**(`u.q[0]`) · generate 내 block-local 이 generate-net 과 이름 충돌하며 **시간상 겹칠 때** loud(모듈 스코프 쌍둥이는 여전히 silent-wrong·pre-existing).
+
+**게이트**: 4613 tests green(+63) · clippy 0 · fmt 0 · 3-OS 미실행(로컬) · format_version **25**(사이드카 2개 append-only, sim-ir 불변 — 골든 무영향, wire-shape fixture 재핀) · 1000줄 정책 복구(4개 파일 분리: `exec/frame_window.rs`·`elaborate/{var_init,iface_inst,limits}.rs`).
 
 #### 4.5.227 §0 T1 잔여 11항목 loud→supported (임의 bounds/방향·multi-dim foreach·중첩 decl-init·bounded string queue·계층 write·계층 assoc·frame-local 재귀·SoA whole-element·format 23 불변) (2026-07-27, branch feat-t1-residual) ✅
 
