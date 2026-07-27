@@ -59,7 +59,9 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
-### 무오라클 능력 (§4.5.235)
+### 무오라클 능력 (§4.5.235 · §4.5.236)
+
+- **오라클이 미지원하는 스펙은 결함이 있어도 영원히 안 보인다.** iverilog 가 `%p` 를 아예 구현하지 않아 차분이 침묵했고, 실제로 real 이 정수로 반올림돼(2.5→3) 값이 사라지고 있었다. **테스트 0건인 스펙/포맷을 찾는 것** 자체가 유효한 silent-wrong 탐색 전략이다(`grep -rl '%p' tests/` 가 비면 그 자리가 후보).
 
 - **오라클이 거부하는 영역에서 우리가 앞서 있으면, 테스트가 유일한 방어선이다.** iverilog 가 구문을 거부하는 기능(modport 타입 포트·함수 결과 part-select 등)은 **차분으로 회귀를 감지할 수 없다** — 핀이 없으면 리팩터 한 번에 조용히 사라진다. fresh 스윕이 clean 으로 끝나도 결론은 "할 일 없음"이 아니라 **"핀 없는 무오라클 능력을 찾아 핀하라"**.
 

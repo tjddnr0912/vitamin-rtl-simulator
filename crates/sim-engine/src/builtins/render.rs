@@ -269,10 +269,28 @@ pub(crate) fn render_template(
             'u' | 'U' | 'z' | 'Z' => {
                 let _ = next_arg(st, args, argi);
             }
-            // `%p` (SV assignment pattern): minimal-width value form (v1).
+            // `%p` (SV assignment pattern, §21.2.1.7): minimal-width value form.
+            // A REAL must render as a real — `fmt_dec` rounds it to an integer, so
+            // `$display("%p", 2.5)` printed `3` and the value was silently gone.
+            // `%g` is the assignment-pattern spelling of a real (shortest form that
+            // still reads back as the same number). Integrals keep `fmt_dec`, which
+            // is already the right pattern form for them.
+            //
+            // RESIDUAL (ROADMAP §3, no oracle — iverilog has no `%p` at all): a
+            // STRING renders as its packed byte value (`"hi"` → 26729) and an
+            // UNPACKED STRUCT as its fields concatenated, where IEEE wants `"hi"`
+            // and `'{x:7, y:-2}`. Neither is distinguishable from an ordinary packed
+            // value at this point — `Value` carries `is_real` but no string/struct
+            // marker — so fixing them needs type information this renderer does not
+            // receive, not a spelling change here.
             'p' | 'P' => {
                 let v = next_arg(st, args, argi);
-                out.push_str(&fmt_dec(&v));
+                if v.is_real {
+                    let s = fmt_real(&v, 'g', field_width, precision, left_just, min_zero, plus);
+                    out.push_str(&s);
+                } else {
+                    out.push_str(&fmt_dec(&v));
+                }
             }
             other => {
                 out.push('%');

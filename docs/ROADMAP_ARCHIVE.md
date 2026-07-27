@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–235**
+**§4.5.220–236**
+- `4.5.236` `%p` 가 real 을 정수 반올림하던 silent-wrong(`2.5`→`3`) — 무오라클 스펙, 테스트 0건이었다 …
 - `4.5.235` fresh-area 스윕 CLEAN + 무오라클 능력 2건(modport 포트·함수결과 part-select) 핀 …
 - `4.5.234` sized-literal enum label — enum 메서드 전부 loud→correct-support(두 술어를 "합의 가능한 부분집합"으로 봉인) …
 - `4.5.232` `real` const-fold — 실수 산술 loud→correct-support(§11.8.1 순서가 핵심; i64 twin 확장은 5건 silent-wrong 을 열어 철회) …
@@ -290,6 +291,20 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.236 `%p` 가 real 을 정수로 반올림하던 silent-wrong (2026-07-28, branch feat-fmt-p-real, format 25 불변) ✅
+
+**착수 근거**: §4.5.235 가 남긴 fresh 후보(`%p`·assoc 메서드 등) 스윕. assoc 메서드는 int-key 전 메서드(`size/exists/first/next/last/prev/delete`)가 hand-IEEE 정확했고 기존 테스트도 있었다. **`%p` 는 테스트가 0건**이었고 — iverilog 13.0 은 `%p` 를 아예 미지원(warn + `<%p>`)이라 **차분으로는 영원히 못 잡는 자리** — 실제로 결함이 있었다.
+
+**결함**: `%p` 가 모든 인자를 정수 경로(`fmt_dec`)로 렌더했다. `$display("%p", 2.5)` → **`3`**(반올림, 값 소실). 정수엔 맞지만 real 엔 값이 통째로 사라진다 = silent-wrong.
+
+**수정**: `is_real` 이면 `%g` 형태로 렌더(assignment-pattern 의 real 철자이자 되읽으면 같은 수가 되는 최단형). 정수 경로는 그대로 → 기존 동작 바이트 불변. `2.5`/`-0.125`/`1e+06` 로 정확, `%g` 와 일치.
+
+**잔여(ROADMAP §3 기록·무오라클)**: **string** 은 packed 바이트 값으로(`"hi"`→26729), **unpacked struct** 는 필드 연접 정수로 렌더된다(IEEE 는 `"hi"`·`'{x:7, y:-2}`). 렌더러가 받는 `Value` 에 `is_real` 은 있어도 **string/struct 마커가 없어서** 이 층에서 구분 불가 — 철자 문제가 아니라 **타입 정보가 안 내려오는 문제**라 별도 슬라이스. unpacked 배열/queue/dyn 은 whole-value 표면이 없어 **loud 유지**(정직).
+
+**게이트**: 4656 → **4659** tests(신규 `fmt_p_spec.rs`×3 — real/정수/packed+aggregate) · clippy/fmt clean · format 25 불변.
+
+**교훈**: **오라클이 미지원하는 스펙은 결함이 있어도 영원히 안 보인다.** §4.5.235 가 "무오라클 능력을 핀하라"였다면 이번은 그 뒷면 — **무오라클 스펙은 핀이 없으면 결함조차 발견되지 않는다**. 테스트 0건인 포맷 스펙을 찾는 것 자체가 유효한 탐색 전략이었다.
 
 #### 4.5.235 fresh-area 스윕 = CLEAN + 무오라클 능력 2건 핀 (2026-07-28, branch feat-freshsweep-teeth, format 25 불변) ✅
 
