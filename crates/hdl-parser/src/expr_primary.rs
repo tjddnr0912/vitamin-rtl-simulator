@@ -470,6 +470,143 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// Fold an ENUM LABEL expression to `i64`, including sized / unsized-based
+    /// literals (`4'h3`, `8'shFF`, `'b1011`) that [`Self::const_lit`] cannot see.
+    ///
+    /// `base_signed` is the ENUM BASE TYPE's signedness, and it — not the literal's
+    /// own `s` marker — decides how the literal's bit pattern is read. §6.19: a
+    /// label is a value OF the base type, so `enum integer { A = 32'hDEADBEEF }` is
+    /// −559038737 (iverilog agrees) even though the literal is unsigned, and
+    /// `enum bit [7:0] { A = 8'shFF }` is 255 even though the literal is signed.
+    /// Folding the marker's sign instead rejected the first as out of range and gave
+    /// the second a `.name()` table keyed on −1 while the constant was 255 — the
+    /// label's NAME came back empty.
+    ///
+    /// Deliberately a SEPARATE entry point rather than a widening of `const_lit`:
+    /// that one also decides packed-struct member layout and typedef ranges at parse
+    /// time, so folding more there would move layout decisions across the front end.
+    ///
+    /// This is a SECOND place that turns literal text into a value — the first is
+    /// `elaborate`'s `parse_int_literal`, unreachable from here (it lives in a crate
+    /// that depends on this one). Two predicates for one value is a hazard: a
+    /// disagreement shows up as a `.name()` table pointing at a different label than
+    /// the constant, so only the NAME is wrong, silently. The accept-set is therefore
+    /// narrowed to inputs where the two provably agree — see
+    /// [`Self::based_lit_pattern`] — and `enum_sized_label.rs` pins every accepted
+    /// form by printing `x.name()` and `x` together.
+    pub(crate) fn const_lit_enum(e: &Expr, base_signed: bool) -> Option<i64> {
+        match &e.kind {
+            ExprKind::IntLit {
+                kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
+                raw,
+            } => {
+                let (pat, w) = Self::based_lit_pattern(raw, matches!(kind, IntLitKind::Sized))?;
+                Self::read_pattern(pat, w, base_signed)
+            }
+            // `-4'sd1` negates WITHIN the literal's width (→ the 4-bit pattern
+            // `1111`), then the base type reads it: 15 in an unsigned base.
+            ExprKind::Unary {
+                op: UnOp::Minus,
+                operand,
+            } => match &operand.kind {
+                ExprKind::IntLit {
+                    kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
+                    raw,
+                } => {
+                    let (pat, w) = Self::based_lit_pattern(raw, matches!(kind, IntLitKind::Sized))?;
+                    let mask = if w == 64 { !0u64 } else { (1u64 << w) - 1 };
+                    Self::read_pattern((pat as i64).checked_neg()? as u64 & mask, w, base_signed)
+                }
+                _ => Self::const_lit(e),
+            },
+            _ => Self::const_lit(e),
+        }
+    }
+
+    /// Read a `w`-bit pattern as a value of a signed / unsigned type.
+    fn read_pattern(pat: u64, w: u32, signed: bool) -> Option<i64> {
+        if w >= 64 {
+            // Every 64-bit pattern is an i64 bit-for-bit. An UNSIGNED 64-bit value
+            // above i64::MAX therefore lands here as a negative i64 — the label
+            // table's own representation limit, tracked in ROADMAP §3.
+            return Some(pat as i64);
+        }
+        if signed && (pat >> (w - 1)) & 1 == 1 {
+            return Some((pat | (!0u64 << w)) as i64);
+        }
+        i64::try_from(pat).ok()
+    }
+
+    /// The `w`-bit unsigned PATTERN of a based literal `[W]'[s]B digits`, with its
+    /// width. No sign extension happens here: the caller's type decides that.
+    ///
+    /// Declines (None) every input whose value this cannot reproduce EXACTLY the way
+    /// `elaborate::parse_int_literal` does, which leaves the caller where it was:
+    ///   * x/z/? digits, a fill literal (`'0`/`'1`/`'x`/`'z`) — no integer value;
+    ///   * width 0 or above 64, or digits overflowing u64;
+    ///   * digits that do NOT already fit the declared width. Reproducing truncation
+    ///     is exactly where the two implementations part company (an UNSIZED based
+    ///     literal grows past 32 bits there and would be masked to 32 here), so it
+    ///     is refused rather than guessed;
+    ///   * an UNSIZED literal carrying an `s` marker. Its width is 32 here but
+    ///     `natural.max(32)` there, and the two only differ in whether bit 31 is a
+    ///     sign bit — `'sd2147483648` would be −2147483648 here and +2147483648
+    ///     there. Unsized WITHOUT `s` is safe: no sign bit is consulted, and the
+    ///     fits-the-width rule above already forces the value below 2^32.
+    fn based_lit_pattern(raw: &str, sized: bool) -> Option<(u64, u32)> {
+        let tick = raw.find('\'')?;
+        let width: u32 = if sized {
+            let w: String = raw[..tick].chars().filter(|c| *c != '_').collect();
+            let w = w.parse::<u32>().ok()?;
+            if w == 0 || w > 64 {
+                return None;
+            }
+            w
+        } else {
+            if !raw[..tick].is_empty() {
+                return None;
+            }
+            32
+        };
+        let mut rest = raw[tick + 1..].chars().peekable();
+        let signed_marker = matches!(rest.peek(), Some('s') | Some('S'));
+        if signed_marker {
+            rest.next();
+            if !sized {
+                return None; // unsized + `s`: width rules differ (see above)
+            }
+        }
+        let base: u32 = match rest.next()? {
+            'b' | 'B' => 2,
+            'o' | 'O' => 8,
+            'd' | 'D' => 10,
+            'h' | 'H' => 16,
+            _ => return None, // single-char fill: context-sized, no fixed value
+        };
+        let mut acc: u64 = 0;
+        let mut any = false;
+        for c in rest {
+            if c == '_' {
+                continue;
+            }
+            let d = c.to_digit(base)?; // x/z/? decline here
+            acc = acc.checked_mul(base as u64)?.checked_add(d as u64)?;
+            any = true;
+        }
+        if !any {
+            return None;
+        }
+        let masked = if width == 64 {
+            acc
+        } else {
+            acc & ((1u64 << width) - 1)
+        };
+        if masked != acc {
+            return None; // truncation is declined, not reproduced
+        }
+        Some((masked, width))
+    }
+
     /// A `[hi:0]` range made of decimal literals, for the synthesized struct vector.
     pub(crate) fn dec_range(hi: u32) -> Range {
         Range {

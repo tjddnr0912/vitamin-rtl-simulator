@@ -59,6 +59,13 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
+### 두 술어 봉인 (§4.5.234)
+
+- **값 술어가 둘이 되는 걸 피할 수 없으면, 두 구현이 반드시 일치하는 부분집합으로 좁혀라.** 규칙이 같기를 바라지 말고 **불일치가 가능한 입력을 거부**하라 — 파서의 리터럴 폴드는 *절단이 필요한* 리터럴을 아예 안 받는다(`'h1FFFFFFFF` 를 elaborate 는 33비트로 키우고 파서는 32비트로 마스킹했다). 남는 것은 정의상 안전하고, 거부된 것은 이전 동작(loud) 그대로다.
+- **두 술어의 teeth 는 결과를 한 줄에 같이 찍는 것**(`x.name()` 과 `x` 값). 어느 한쪽만 보면 불일치가 "이름만 빈 문자열" 같은 조용한 형태로 숨는다.
+- **타입이 있는 값의 부호는 "리터럴이 뭐라 쓰였나"가 아니라 "어떤 타입의 값인가"가 정한다.** enum 라벨은 §6.19 상 **base 타입의 값**이므로 `32'hDEADBEEF` 는 `enum integer` 에서 −559038737 이다 — 리터럴의 `s` 마커로 부호를 정하면 한쪽은 **false-loud**, 반대쪽은 **이름만 조용히 빈 문자열**이 된다. 폴드는 **패턴+폭**만 내놓고 **해석은 타입을 아는 호출부**에서.
+- **범위/유효성 검사의 판별자가 정말 "폭"인지 의심하라** — enum 라벨 검사는 폭이 아니라 **출처**(명시 값 vs 자동증가)가 기준이었다. 명시적 `-1` 은 오류지만 `64'sh7FFF…` 다음의 wrap 은 합법이다. 값만 보면 둘 다 "음수 i64" 로 같아 보인다.
+
 ### 크기 추정 (§4.5.233)
 
 - **"작아 보이는 loud→supported" 는 값이 필요한 TIME 을 먼저 물어라.** enum 라벨 폴드는 30줄짜리로 보였지만 값이 **파스 타임**에 필요했고, 그 값을 만드는 함수는 파서에 **의존하는** 크레이트에 있었다(순환). 근인이 한 줄이어도 **그 한 줄이 사는 레이어**가 슬라이스 크기를 정한다.

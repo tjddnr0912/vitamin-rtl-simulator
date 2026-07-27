@@ -117,18 +117,29 @@ fn param_width_base_is_failopen() {
 }
 
 #[test]
-fn sized_literal_label_is_failopen() {
-    // A sized/based literal label (`8'hFF`) does not const-fold, so the check is
-    // skipped — no over-rejection even though it exceeds the 4-bit base.
+fn sized_literal_label_range_is_checked() {
+    // A sized/based literal label used NOT to const-fold, so the range check was
+    // skipped and an out-of-range value silently truncated. The enum-method slice
+    // folds these labels, so the check now fires — and iverilog rejects the same
+    // source ("has a value that is too large: 8'd255"), so this is silent-truncate
+    // turning into a loud reject, not an over-rejection.
     let (out, code) = run(
         "module t;\n  typedef enum logic [3:0] {A=4'h5, B=8'hFF} e_t;\n  e_t e;\n\
          initial begin e=A; $display(\"%0d\", e); $finish; end\nendmodule\n",
     );
-    assert_eq!(
+    assert_ne!(
         code,
         Some(0),
-        "sized-literal label must be fail-open:\n{out}"
+        "an out-of-range sized label must be loud:\n{out}"
     );
+
+    // An IN-range sized label is accepted and behaves like any other label.
+    let (out, code) = run(
+        "module t;\n  typedef enum logic [3:0] {A=4'h5, B=4'hF} e_t;\n  e_t e;\n\
+         initial begin e=B; $display(\"R=%0d %s\", e, e.name()); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "an in-range sized label must work:\n{out}");
+    assert!(out.contains("R=15 B"), "in-range sized label; got:\n{out}");
 }
 
 #[test]

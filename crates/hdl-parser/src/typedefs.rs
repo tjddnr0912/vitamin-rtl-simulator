@@ -348,7 +348,11 @@ impl Parser<'_, '_> {
             for lab in &labels {
                 let v = match &lab.value {
                     None => counter,
-                    Some(e) => match Self::const_lit(e) {
+                    // The enum-label fold OPTS IN to based literals (`A = 4'h3`);
+                    // without it the whole enum stayed out of `enum_defs` and
+                    // every enum method on it went loud with a misleading
+                    // "hierarchical function call" message.
+                    Some(e) => match Self::const_lit_enum(e, enum_signed) {
                         Some(v) => v,
                         None => {
                             foldable = false;
@@ -361,7 +365,16 @@ impl Parser<'_, '_> {
                 // vita previously TRUNCATED it silently (`{X=16}` in `[3:0]` read 0). Loud
                 // it — only for const-foldable values against a known base width, so the
                 // check never fires on a legitimately-typed label (correct-or-loud).
-                if let Some(w) = base_w {
+                // At width 64 the distinction is PROVENANCE, not magnitude. An
+                // explicitly WRITTEN negative in an unsigned 64-bit base is an error
+                // (iverilog: "has a negative value"), but an AUTO-INCREMENTED label
+                // that wraps past `64'sh7FFF_FFFF_FFFF_FFFF` is a perfectly good
+                // `logic [63:0]` pattern that iverilog accepts — and it only became
+                // visible here once sized labels started folding. So the check runs
+                // for every explicit value, and for auto-increment only where the
+                // width can actually overflow.
+                let explicit = lab.value.is_some();
+                if let Some(w) = base_w.filter(|w| *w < 64 || explicit) {
                     let vi = v as i128;
                     let (lo, hi): (i128, i128) = if enum_signed {
                         (-(1i128 << (w - 1)), (1i128 << (w - 1)) - 1)

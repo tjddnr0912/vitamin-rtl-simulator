@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–232**
+**§4.5.220–234**
+- `4.5.234` sized-literal enum label — enum 메서드 전부 loud→correct-support(두 술어를 "합의 가능한 부분집합"으로 봉인) …
 - `4.5.232` `real` const-fold — 실수 산술 loud→correct-support(§11.8.1 순서가 핵심; i64 twin 확장은 5건 silent-wrong 을 열어 철회) …
 - `4.5.231` 모듈 스코프 상수식 = **비목표 판정**(iverilog 3갈래 자기모순 실측) + vita 자기일관성 teeth …
 - `4.5.230` 상수함수 인터프리터 폭 인식 — 좁은 대입 대상이 안 잘려 `localparam W=f()` 가 조용히 틀렸다(내부 차분: 인터프리터 vs 런타임) …
@@ -288,6 +289,22 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.234 sized-literal enum label — enum 메서드 전부 loud→correct-support (2026-07-28, branch feat-enum-sized-label, format 25 불변) ✅
+
+**착수 근거**: §4.5.233 이 defer 한 항목(§1 "연속 defer 면 다음 반복은 그 항목 전념"). 근인은 이미 확정돼 있었다 — `hdl-parser::const_lit` 이 unsized **decimal** 만 접어서 sized 라벨 하나면 `foldable=false` → enum 이 `enum_defs` 에 미등록 → 파서의 `.name()` 케이스 함수 합성 자체가 안 일어나고 hier-call fallback 으로 떨어진다(진단이 "hierarchical function call" 로 오도된 이유).
+
+**선택**: §4.5.233 이 적어둔 두 안 중 ②(파서에 based-literal 폴드 추가). ①(literal.rs 공유 크레이트 분리)은 hdl-parser 가 `sim_ir` 을 보게 되는 레이어링 변경이라 더 큰 슬라이스. **`const_lit` 자체는 건드리지 않고** 신규 `const_lit_based` 를 만들어 **enum 라벨만 opt-in** — `const_lit` 은 packed-struct 멤버 레이아웃·typedef 범위도 결정하므로 전역 확장은 파스타임 레이아웃을 통째로 움직인다.
+
+**②의 위험(값 술어가 둘)을 "합의 가능한 부분집합"으로 봉인했다.** 자체 프로브가 실제 발산을 찾았다 — `'h1FFFFFFFF`(unsized) 를 elaborate 는 33비트로 키우고 파서는 32비트로 마스킹해서, `.name()` 표와 상수가 **다른 라벨**을 가리키고 **이름만 빈 문자열**이 됐다(iverilog 도 우연히 같았지만 우연에 기대는 건 취약). → **절단이 일어나면 아예 거부**(`masked != acc` → None). 이제 파서가 받아들이는 값은 두 구현이 **반드시 일치하는 것들만**이고, 나머지는 enum 이 미폴드로 남아 기존 loud 유지. iverilog 도 같은 자리에서 더 엄격하다("Extra digits given for sized constant").
+
+**부수 발굴 — 범위검사의 근거는 폭이 아니라 출처였다**: 라벨을 접기 시작하자 `64'sh7FFF…` 다음의 **자동증가 wrap**(i64::MIN)이 unsigned 64비트 base 범위검사에 걸려 **false-loud** 가 됐다(iverilog 는 수용). 그런데 명시적 `-1` 은 loud 여야 한다(선행 soundness 리뷰가 핀). → 검사 조건을 `w < 64 || explicit` 로. 폭이 아니라 **명시/자동증가**가 판별자다.
+
+**게이트**: 4646 → **4652** tests(신규 `enum_sized_label.rs`×6 — teeth 는 **내부 차분**: `x.name()` 과 `x` 값을 **함께** 출력해 두 술어의 불일치가 숨지 못하게) · 기존 2건 갱신(sized 라벨 out-of-range 는 이제 iverilog 처럼 loud) · clippy/fmt clean · format 25 불변.
+
+**적대 리뷰가 blocking 2건을 더 잡았고 둘 다 같은 근인 — 부호를 리터럴의 `s` 마커에서 가져온 것**. §6.19 는 라벨을 **base 타입의 값**으로 정의하므로 부호는 **base** 가 정한다: `enum integer{A=32'hDEADBEEF}` 는 −559038737 인데 마커 기준으로는 범위초과 **false-loud**(correct→loud 하강), `enum bit[7:0]{A=8'shFF}` 는 255 인데 표는 −1 로 키잉돼 **이름만 빈 문자열**. → 폴드를 **W비트 패턴 + 폭**으로 바꾸고 **호출부에서 `enum_signed` 로 해석**. 리뷰가 나열한 valid-but-rejected 9형 전부 iverilog 일치. 추가로 **unsized + `s`** 는 폭 규칙이 elaborate(`natural.max(32)`)와 달라 거부(`'sd2147483648`) — 절단 규칙으로는 안 잡히는 축.
+
+**교훈**: **두 술어가 불가피하면 "합의 가능한 부분집합"으로 좁혀라** — 두 구현의 규칙이 일치하길 바라는 대신, **불일치가 가능한 입력을 거부**하면 남는 것은 정의상 안전하다. 그리고 teeth 는 두 술어의 결과를 **한 줄에 같이 찍는 것**이다.
 
 #### 4.5.232 `real` const-fold — `localparam real R = 2.0+3.0` loud→correct-support (2026-07-27, branch feat-real-constfold, format 25 불변) ✅
 
