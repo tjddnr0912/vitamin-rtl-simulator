@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–242**
+**§4.5.220–243**
+- `4.5.243` generate case 의 real scrutinee = 비목표 확정(iverilog 도 거부) — real 가족 완결 …
 - `4.5.242` generate 제어식 real 라우팅(`const_truth_in_scope`) — "real→정수 문맥" 완결 …
 - `4.5.241` generate 스코프 `localparam real` loud→correct-support(퍼널은 이미 있었고 한 호출부만 안 쓰고 있었다) …
 - `4.5.240` `$value$plusargs` 크기 추정 정정(관용 배치 2종 이미 동작·남은 loud 는 패밀리 불변식) + if-cond 핀 …
@@ -297,6 +298,20 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.243 generate case 의 real scrutinee = 비목표 확정 (2026-07-28, branch feat-gencase-nongoal, format 25 불변) ✅
+
+**착수 근거**: §4.5.242 가 "real→정수 문맥" 을 닫으면서 유일하게 남겼던 항목. §4.5.241/242 가 generate 스코프 선언과 if/for **조건**을 real 도메인으로 라우팅했으니 case scrutinee 도 따라가야 하는가 — 라는 공정한 질문이었다.
+
+**답 = 아니다.** `generate case (R)` 는 **iverilog 도 거부**한다("Cannot evaluate genvar case expression: R"). 오라클이 같은 소스를 거부하므로 **수렴할 대상이 없고**, vita 의 loud 가 정직하다. 갭이 아니라 **비목표**.
+
+**전달물**: 비목표를 핀(신규 `generate_case_real_nongoal.rs`×2) — real 형태가 loud 라는 것과 **정수 scrutinee 는 동작한다**는 것을 **함께** 박았다. 후자가 없으면 real 쪽 loud 가 나중에 조용히 넓어져 정수형까지 삼켜도 아무도 모른다.
+
+**게이트**: 4673 → **4675** tests · clippy/fmt clean · format 25 불변 · **코드 변경 0**.
+
+**이로써 "real→정수 문맥" 가족이 완전히 닫혔다**: §4.5.232(파라미터 바인딩) · §4.5.241(generate 스코프 선언) · §4.5.242(generate if/for 조건) · §4.5.243(case scrutinee = 비목표).
+
+**교훈**: **"형제 경로도 따라가야 하는가"는 오라클에게 먼저 물어라.** 일관성 논증만으로 확장하면 오라클조차 거부하는 형태를 지원하게 되고, 그건 검증 불가 영역을 자발적으로 늘리는 것이다. 그리고 **비목표를 핀할 때는 반대편(동작하는 형태)도 같이 핀하라** — 그래야 loud 가 나중에 조용히 번지지 않는다.
 
 #### 4.5.242 generate 제어식의 real 도메인 라우팅 — "real→정수 문맥" 항목 완결 (2026-07-28, branch feat-generate-real-control, format 25 불변) ✅
 

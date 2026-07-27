@@ -64,6 +64,11 @@
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
 
+### 형제 경로 확장 (§4.5.243)
+
+- **"형제 경로도 따라가야 하는가"는 일관성 논증이 아니라 오라클에게 물어라.** generate 의 스코프 선언·if/for 조건을 real 도메인으로 넓힌 뒤 case scrutinee 도 자연스러워 보였지만, **iverilog 가 그 형태를 거부**한다 — 일관성만으로 확장하면 **검증 불가 영역을 자발적으로 늘리는 것**이다.
+- **비목표를 핀할 때는 반대편(동작하는 형태)도 같이 핀하라** — real 이 loud 라는 것만 박아두면, 그 loud 가 나중에 조용히 넓어져 정수형까지 삼켜도 아무도 모른다.
+
 ### 무오라클 능력 (§4.5.235 · §4.5.236)
 
 - **오라클이 미지원하는 스펙은 결함이 있어도 영원히 안 보인다.** iverilog 가 `%p` 를 아예 구현하지 않아 차분이 침묵했고, 실제로 real 이 정수로 반올림돼(2.5→3) 값이 사라지고 있었다. **테스트 0건인 스펙/포맷을 찾는 것** 자체가 유효한 silent-wrong 탐색 전략이다(`grep -rl '%p' tests/` 가 비면 그 자리가 후보).
