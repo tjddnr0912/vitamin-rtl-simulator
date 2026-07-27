@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–240**
+**§4.5.220–241**
+- `4.5.241` generate 스코프 `localparam real` loud→correct-support(퍼널은 이미 있었고 한 호출부만 안 쓰고 있었다) …
 - `4.5.240` `$value$plusargs` 크기 추정 정정(관용 배치 2종 이미 동작·남은 loud 는 패밀리 불변식) + if-cond 핀 …
 - `4.5.239` 스캔 4차 완료 — `$typename` 핀(iverilog 미구현)·`%u`/`%z`/`%l` 정리 …
 - `4.5.238` 스캔 3차 honest-loud 확인 + LOOPROMPT §8 압축(20142→18934B, 규칙 무삭제) …
@@ -295,6 +296,20 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.241 generate 스코프 `localparam real` loud→correct-support (2026-07-28, branch feat-generate-real-param, format 25 불변) ✅
+
+**착수 근거**: §4.5.232 리뷰가 남긴 "real→정수 문맥" 항목의 **선행 인프라 중 실제로 분리 가능한 조각**. 큐가 "§11.8.1 순서를 공통 퍼널로 먼저"라고 했는데, 그 퍼널은 이미 `param_real_value` 로 존재했고 **generate 스코프만 그것을 안 부르고 있었다**.
+
+**결함**: `generate.rs` 의 Param arm 이 `const_eval_in_scope`(정수 도메인) **하나만** 썼다. real 은 None 이므로 `localparam real X = 2.5;` 조차 loud 였고, 이름을 읽는 곳마다 "undeclared net/variable" 2차 오류까지 났다. iverilog 는 `X=2.50`.
+
+**수정**: 모듈 스코프와 **동일하게** `param_real_value` 를 먼저 호출 — §11.8.1 순서(피연산자에 real 있으면 real 도메인)와 i64-twin 규칙(초기화식이 전부 정수일 때만 twin)이 **두 스코프에서 같은 규칙 하나**가 된다. generate phase 마다 재실행돼도 idempotent(정수 arm 과 동일).
+
+**전달 범위**(전부 iverilog 일치): 리터럴(`2.5`)·외부 real param 식(`R/2`)·순수 real 산술(`1.5+1.0`)·**genvar 의존 real**(`1.5*(i+1)` → 인스턴스별 1.50/3.00, 같은 블록의 정수 localparam 과 공존). **규칙 동일성도 핀**: 정수형 초기화(`real W = 4`)는 generate 안에서도 `logic [W-1:0]` 로 쓸 수 있고, 비정수(`2.5`)는 정수 문맥에서 여전히 loud.
+
+**게이트**: 4666 → **4669** tests(신규 `generate_real_param.rs`×3) · clippy/fmt clean · format 25 불변.
+
+**교훈**: **"공통 퍼널을 먼저 만들어야 한다"고 적힌 선행조건이, 알고 보니 퍼널은 이미 있고 한 호출부만 안 쓰는 경우가 있다.** 인프라 착수 전에 **그 인프라가 이미 존재하는지, 누가 안 부르는지**부터 세라 — §4.5.227 의 "제약이 머신러리 부재로 보이면 대개 가정이다"가 스코프 축에서 반복됐다.
 
 #### 4.5.240 `$value$plusargs` 크기 추정 정정 + if-condition 배치 핀 (2026-07-28, branch feat-plusargs-record, format 25 불변) ✅
 

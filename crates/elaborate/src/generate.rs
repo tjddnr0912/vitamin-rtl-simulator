@@ -422,25 +422,45 @@ impl Elaborator<'_> {
             // failure is reported LOUD once (Nets phase only, to avoid a 4×
             // duplicate). This replaces the old blanket "not allowed inside
             // generate" reject for parameters.
-            (_, ast::ModuleItem::Param(p)) => match self.const_eval_in_scope(&p.value) {
-                Some(v) => {
-                    let v = self.coerce_param_value(v, p);
+            (_, ast::ModuleItem::Param(p)) => {
+                // A REAL-valued parameter has no i64 value, so the integer fold
+                // below returns None and the whole declaration went loud — even a
+                // bare `localparam real X = 2.5;`. Route it to the real side map
+                // first, exactly as the module-scope path does; `param_real_value`
+                // applies the §11.8.1 ordering (a real operand puts the expression
+                // in the real domain) and hands back an i64 twin only when the
+                // initializer was wholly integral, which is what keeps
+                // `localparam real R = 4;` usable in integral contexts here too.
+                // Idempotent across generate phases, like the integer arm.
+                if let Some((rv, exact)) = self.param_real_value(&p.ty, &p.value) {
                     let key = self.fq(&p.name.name);
-                    self.hier_params.insert(key.clone(), v);
-                    self.params.insert(key, v);
+                    self.real_param_val.insert(key.clone(), rv);
+                    if let Some(i) = exact {
+                        self.hier_params.insert(key.clone(), i);
+                        self.params.insert(key, i);
+                    }
+                    return;
                 }
-                None => {
-                    if phase == GenPhase::Nets {
-                        self.error(
+                match self.const_eval_in_scope(&p.value) {
+                    Some(v) => {
+                        let v = self.coerce_param_value(v, p);
+                        let key = self.fq(&p.name.name);
+                        self.hier_params.insert(key.clone(), v);
+                        self.params.insert(key, v);
+                    }
+                    None => {
+                        if phase == GenPhase::Nets {
+                            self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
                                 "generate-scope parameter `{}` value is not a foldable constant expression",
                                 p.name.name
                             ),
                         );
+                        }
                     }
                 }
-            },
+            }
             // A PORT declaration inside generate stays forbidden (IEEE §27:
             // ports are module-boundary, not per-instance). Reported once.
             (GenPhase::Nets, ast::ModuleItem::PortDecl(_)) => {
