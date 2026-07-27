@@ -102,9 +102,18 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
         // cannot mis-fire — only the arm frame itself, once every nested call has
         // returned. Runs BEFORE the window-restore below so we tear the arm window down
         // instead of restoring it.
+        //
+        // `is_arm` is what makes the `bb == join_bb` comparison meaningful: both sides are
+        // global `ir.blocks` ids ONLY for an arm frame. A TOP-LEVEL `fork` whose child
+        // merely CALLS a suspendable task also has `call_stack.len() == 1`, but there the
+        // frame's `bb` is global while `join_bb` is process-local — comparing them killed
+        // the child on any numeric collision, silently dropping the rest of the task body
+        // (a top-level child completes through the `!in_frame` intercept above instead,
+        // once its callee frame has returned).
         if in_frame
             && sched.activity_is_child(pi)
             && sched.activities[pi as usize].call_stack.len() == 1
+            && sched.activities[pi as usize].call_stack[0].is_arm
         {
             let arm = sched.activities[pi as usize].call_stack.last().unwrap();
             let arm_bb = arm.bb;
@@ -446,6 +455,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                     out_binds: info.out_binds.clone(),
                                     window: None,
                                     dyn_stash,
+                                    is_arm: false,
                                 });
                             continue; // execute the nested frame next iteration
                         }
@@ -522,6 +532,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                                 out_binds: info.out_binds.clone(),
                                 window: None,
                                 dyn_stash,
+                                is_arm: false,
                             });
                         continue; // re-fetch from the new frame next iteration
                     }

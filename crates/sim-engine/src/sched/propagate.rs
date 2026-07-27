@@ -832,6 +832,9 @@ impl Scheduler<'_, '_> {
                     // teardown (`exit_arm_frame`) does not go through the Return handler.
                     // It therefore takes nothing and restores nothing.
                     dyn_stash: Vec::new(),
+                    // The ONE site that builds an arm frame — every other `FrameRec` is a
+                    // callee pushed by a `Call`. See `FrameRec::is_arm`.
+                    is_arm: true,
                 }]
             } else {
                 Vec::new()
