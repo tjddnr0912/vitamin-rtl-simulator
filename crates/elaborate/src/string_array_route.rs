@@ -46,7 +46,7 @@ pub(crate) struct StrArrayGeom {
     /// Per unpacked dim, `(lo, size)` — `lo` is the dim's MINIMUM declared index
     /// (`[3:1]` and `[1:3]` both give `(1, 3)`), which is the convention
     /// `flatten_word` normalizes against.
-    pub(crate) extents: Vec<(u32, u32)>,
+    pub(crate) extents: Vec<(i64, u32)>,
     /// Per unpacked dim: the declaration is DESCENDING (`[3:1]`), so `foreach` walks
     /// that dim from `hi` down to `lo`.
     pub(crate) desc: Vec<bool>,
@@ -81,7 +81,7 @@ pub(crate) fn is_dyn_string_container_init(unpacked: &[ast::Dim], init: &ast::Ex
 
 impl Elaborator<'_> {
     /// T1: `Some((lo, size, descending))` iff `dim` declares a CONSTANT fixed unpacked
-    /// dimension with NON-NEGATIVE bounds — `string s[n]`, `s[1:3]`, `s[3:1]`.
+    /// dimension — `string s[n]`, `s[1:3]`, `s[3:1]`, `s[-1:1]`.
     ///
     /// **Positive precondition (when it is safe to route):** the routed container is a
     /// flat `0..n-1` block, so a declaration may be routed exactly when its index space
@@ -91,13 +91,11 @@ impl Elaborator<'_> {
     /// the base and direction no longer have to be zero/ascending: the map is applied
     /// rather than assumed.
     ///
-    /// Fail-closed twice. A NON-CONSTANT bound cannot be mapped at all. A NEGATIVE
-    /// bound is declined because `flatten_word` carries `lo` as `u32`; the general
-    /// unpacked-array path shares that limit (measured: `int a[-1:1]` drops the `-1`
-    /// element with an E4002 at HEAD), so declining keeps the string form on the
-    /// per-element-net path — where a CONST index still resolves — instead of
-    /// inheriting a known-broken mapping.
-    fn fixed_string_dim_extent(&self, dim: &ast::Dim) -> Option<(u32, u32, bool)> {
+    /// A NEGATIVE low bound used to be declined here because `flatten_word` carried its
+    /// `lo` as `u32`; it carries `i64` now, so the same "apply the map" argument covers
+    /// it and the decline is gone. Only a NON-CONSTANT bound still fails closed — it
+    /// cannot be mapped at all.
+    fn fixed_string_dim_extent(&self, dim: &ast::Dim) -> Option<(i64, u32, bool)> {
         match dim {
             // `[N]` is the `[0:N-1]` shorthand (IEEE §7.4.2) — always ascending.
             ast::Dim::Size(e) => {
@@ -108,12 +106,13 @@ impl Elaborator<'_> {
             ast::Dim::Range(r) => {
                 let m = self.const_eval_in_scope(&r.msb)?;
                 let l = self.const_eval_in_scope(&r.lsb)?;
-                if m < 0 || l < 0 {
-                    return None;
-                }
                 let (lo, hi) = if m <= l { (m, l) } else { (l, m) };
-                let size = u32::try_from(hi - lo + 1).ok()?;
-                Some((u32::try_from(lo).ok()?, size, m > l))
+                // CHECKED: `hi - lo` overflows i64 on a pathological declaration such as
+                // `[4611686018427387904:-4611686018427387905]`. The old negative-bound
+                // decline masked that (either endpoint negative → returned early); with
+                // negatives admitted, the span itself is what has to fail closed.
+                let size = u32::try_from(hi.checked_sub(lo)?.checked_add(1)?).ok()?;
+                Some((lo, size, m > l))
             }
             _ => None,
         }
@@ -486,7 +485,7 @@ impl Elaborator<'_> {
     /// there — which would also change what the engine-facing `net_dims` table says
     /// about a handle — the walk asks THIS, and the two sources stay disjoint by
     /// construction: a net is either a routed string array or a static array, never both.
-    pub(crate) fn routed_foreach_dim(&self, net: u32, dim: u32) -> Option<(u32, u32, bool)> {
+    pub(crate) fn routed_foreach_dim(&self, net: u32, dim: u32) -> Option<(i64, u32, bool)> {
         let g = self.fixed_string_dyn.get(&net)?;
         let k = (dim.max(1) - 1) as usize;
         let &(lo, size) = g.extents.get(k)?;

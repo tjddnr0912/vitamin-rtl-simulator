@@ -357,24 +357,33 @@ fn an_index_outside_the_declared_range_is_not_silently_remapped() {
 }
 
 #[test]
-fn a_negative_bound_is_not_routed() {
-    // `flatten_word` carries `lo` as `u32`, so a negative base has no map — and the
-    // GENERAL unpacked-array path shares that limit (`int a[-1:1]` drops the `-1`
-    // element with an E4002 at HEAD). Declining keeps the string form on the
-    // per-element-net path, where a CONST index still resolves, rather than inheriting
-    // a known-broken mapping. iverilog: `aa cc`.
+fn a_negative_bound_is_routed() {
+    // The decline here used to read "`flatten_word` carries `lo` as `u32`, so a negative
+    // base has no map". `lo` is `i64` now and the general unpacked-array path speaks the
+    // declared index space, so the same "apply the map" argument covers a negative base
+    // and the string form is routed like any other. iverilog: `aa cc`.
     assert_eq!(
         run("module m; string s[-1:1];\n\
              initial begin s[-1]=\"aa\"; s[1]=\"cc\"; $display(\"%s %s\", s[-1], s[1]); $finish; end\n\
              endmodule\n"),
         "aa cc\n"
     );
-    // …and a runtime index there is still honestly loud, not silently zero-based.
-    assert!(loud(
-        "module m; string s[-1:1]; int k;\n\
-         initial begin k=1; s[k]=\"aa\"; $display(\"%s\", s[1]); $finish; end\n\
-         endmodule\n"
-    ));
+    // …and a RUNTIME index now resolves in the declared domain rather than being loud.
+    assert_eq!(
+        run("module m; string s[-1:1]; int k;\n\
+             initial begin k=-1; s[k]=\"aa\"; k=1; s[k]=\"cc\";\n\
+               $display(\"[%s][%s]\", s[-1], s[1]); $finish; end\n\
+             endmodule\n"),
+        "[aa][cc]\n"
+    );
+    // …and `foreach` walks -1, 0, 1 (iverilog-confirmed, including the empty middle).
+    assert_eq!(
+        run("module m; string s[-1:1];\n\
+             initial begin s[-1]=\"aa\"; s[1]=\"cc\";\n\
+               foreach (s[i]) $display(\"%0d=[%s]\", i, s[i]); $finish; end\n\
+             endmodule\n"),
+        "-1=[aa]\n0=[]\n1=[cc]\n"
+    );
 }
 
 #[test]

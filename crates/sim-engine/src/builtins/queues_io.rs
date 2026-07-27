@@ -599,12 +599,12 @@ pub(crate) fn nth_word(store: &sim_ir::BitPacked, width: u32, word: u32) -> sim_
 
 /// Per-element VCD var name: row-major word → declared indices (`lo + digit`
 /// per dim, e.g. word 5 of `[0:1][0:2]` ⇒ `leaf[1][2]`).
-pub(crate) fn elem_name(leaf: &str, dims: &[(u32, u32)], word: u32) -> String {
-    let mut digits = vec![0u32; dims.len()];
+pub(crate) fn elem_name(leaf: &str, dims: &[(i64, u32)], word: u32) -> String {
+    let mut digits = vec![0i64; dims.len()];
     let mut rem = u64::from(word);
     for k in (0..dims.len()).rev() {
         let size = u64::from(dims[k].1.max(1));
-        digits[k] = (rem % size) as u32;
+        digits[k] = (rem % size) as i64;
         rem /= size;
     }
     let mut s = String::from(leaf);
@@ -614,6 +614,24 @@ pub(crate) fn elem_name(leaf: &str, dims: &[(u32, u32)], word: u32) -> String {
         s.push(']');
     }
     s
+}
+
+/// Declared base (minimum declared index) of `net`'s FIRST unpacked dim, for the
+/// file-I/O tasks whose address arguments live in the DECLARED index domain
+/// (`$readmem`/`$writemem`/`$fread`). Absent from the sparse table ⇒ 0-based.
+///
+/// `net_dims` stores `(lo, SIZE)`. Reading the second field as an upper bound —
+/// `lo.min(hi)` — happened to agree whenever `lo <= size` and silently addressed
+/// `reg m[10:11]` from base 2 when it did not.
+///
+/// `None` when the declared base is NEGATIVE (`reg m[-1:1]`): every address below is
+/// `u64`, so that domain has no representation here. The caller warns rather than
+/// silently reading or writing from word 0.
+pub(crate) fn declared_array_base(dims: &crate::NetDimsTable, net: u32) -> Option<u64> {
+    match dims.get(&net).and_then(|d| d.first()) {
+        Some(&(lo, _)) => u64::try_from(lo).ok(),
+        None => Some(0),
+    }
 }
 
 /// Extract array-word-0 (`width` bits) from a packed net store.

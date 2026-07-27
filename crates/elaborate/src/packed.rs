@@ -766,8 +766,8 @@ impl Elaborator<'_> {
     /// Split a packed-dim table `(lo, size, ascending)` into the `(lo, size)` extents
     /// `flatten_word` consumes plus the per-dim `ascending` flags (N3.3). Lets the
     /// packed read/write paths share `flatten_word` with the unpacked path.
-    pub(crate) fn packed_split(dims: &[(u32, u32, bool)]) -> (Vec<(u32, u32)>, Vec<bool>) {
-        let ext = dims.iter().map(|&(l, s, _)| (l, s)).collect();
+    pub(crate) fn packed_split(dims: &[(u32, u32, bool)]) -> (Vec<(i64, u32)>, Vec<bool>) {
+        let ext = dims.iter().map(|&(l, s, _)| (i64::from(l), s)).collect();
         let dirs = dims.iter().map(|&(_, _, a)| a).collect();
         (ext, dirs)
     }
@@ -777,7 +777,7 @@ impl Elaborator<'_> {
     /// `dims` are the residual `(lo, size)` extents (trailing dims of the
     /// full array, so suffix-product strides within the residual equal the
     /// full array's strides); `desc[k]` flips dim `k`'s traversal.
-    pub(crate) fn residual_word_offsets(dims: &[(u32, u32)], desc: &[bool]) -> Vec<u32> {
+    pub(crate) fn residual_word_offsets(dims: &[(i64, u32)], desc: &[bool]) -> Vec<u32> {
         let n: u64 = dims.iter().map(|&(_, s)| s as u64).product();
         let mut strides = vec![1u64; dims.len()];
         for k in (0..dims.len().saturating_sub(1)).rev() {

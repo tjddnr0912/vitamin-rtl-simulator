@@ -429,13 +429,15 @@ pub(crate) fn readmem(sched: &mut Scheduler, args: &[u32], hex: bool) {
     };
     // declared base = min index of dim 0 (sparse table; absent ⇒ 0-based).
     // Multi-dim memories use flat word-offset addressing from that base.
-    let base = sched
-        .st
-        .net_dims
-        .get(&net)
-        .and_then(|d| d.first())
-        .map(|&(lo, hi)| lo.min(hi) as u64)
-        .unwrap_or(0);
+    let Some(base) = super::queues_io::declared_array_base(&sched.st.net_dims, net) else {
+        warn(
+            sched,
+            "$readmem into a memory with a NEGATIVE declared base (e.g. `reg m[-1:1]`) \
+             is not supported; no elements loaded"
+                .to_string(),
+        );
+        return;
+    };
     let Ok(text) = std::fs::read_to_string(&name) else {
         warn(
             sched,
@@ -575,13 +577,15 @@ pub(crate) fn writemem(sched: &mut Scheduler, args: &[u32], hex: bool) {
         (nv.array_len.max(1) as u64, nv.width.max(1))
     };
     // declared base = min index of dim 0 (sparse table; absent ⇒ 0-based).
-    let base = sched
-        .st
-        .net_dims
-        .get(&net)
-        .and_then(|d| d.first())
-        .map(|&(lo, hi)| lo.min(hi) as u64)
-        .unwrap_or(0);
+    let Some(base) = super::queues_io::declared_array_base(&sched.st.net_dims, net) else {
+        warn(
+            sched,
+            "$writemem from a memory with a NEGATIVE declared base (e.g. `reg m[-1:1]`) \
+             is not supported; no file written"
+                .to_string(),
+        );
+        return;
+    };
     let last = base + alen - 1;
     // range window (declared-index domain). Default: full array ascending.
     let r_start = args.get(2).and_then(|&a| sched.eval(a).to_u64());

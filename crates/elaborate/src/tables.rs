@@ -113,7 +113,7 @@ pub type QueueBoundTable = std::collections::BTreeMap<u32, u32>;
 /// `array_dims` map, so a plain 0-based 1-D array is ABSENT and the engine
 /// falls back to `[(0, array_len)]`. Drives per-element VCD naming
 /// (`mem[4]`, `g[1][2]`). Out-of-band like every other sidecar.
-pub type NetDimsTable = std::collections::BTreeMap<u32, Vec<(u32, u32)>>;
+pub type NetDimsTable = std::collections::BTreeMap<u32, Vec<(i64, u32)>>;
 
 /// Frame-call metadata (B1, automatic/recursive functions), INDEX-ALIGNED to
 /// `ir.funcs[i]` by construction (pushed in the same `lower_frame_func` that

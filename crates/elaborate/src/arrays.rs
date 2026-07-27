@@ -575,7 +575,7 @@ impl Elaborator<'_> {
     pub(crate) fn flatten_assign_pattern<'a>(
         &mut self,
         elems: &'a [ast::Expr],
-        dims: &[(u32, u32)],
+        dims: &[(i64, u32)],
     ) -> Option<Vec<&'a ast::Expr>> {
         let size = dims[0].1 as usize;
         if elems.len() != size {

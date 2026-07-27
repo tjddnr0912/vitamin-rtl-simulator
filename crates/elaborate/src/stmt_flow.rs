@@ -350,8 +350,13 @@ impl Elaborator<'_> {
                 }
             }
         };
-        let hi = lo.saturating_add(size.saturating_sub(1));
-        let (lo_i, hi_i) = (lo as i32, hi as i32);
+        // `lo` is the DECLARED minimum and may be negative (`int a[-1:1]`); the walk
+        // already runs on signed 32-bit constants (`const_s32_expr`), so the bounds only
+        // have to arrive intact. Saturating conversion keeps a pathological declaration
+        // from wrapping into a bogus range.
+        let hi = lo.saturating_add(i64::from(size.saturating_sub(1)));
+        let clamp_i32 = |v: i64| v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+        let (lo_i, hi_i) = (clamp_i32(lo), clamp_i32(hi));
         let st_lv = self.lower_lvalue(st_lhs);
         self.check_lvalue_kind(&st_lv, true);
         if method == "first" {

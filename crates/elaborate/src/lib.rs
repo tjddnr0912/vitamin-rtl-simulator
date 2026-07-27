@@ -270,7 +270,7 @@ struct Elaborator<'s> {
     // keeps a scalar `array_len`); a multi-index `g[i][j]` lowers to the row-major flat
     // word `(i-lo0)*s1 + (j-lo1)`, so the IR backbone is untouched. Plain 0-based 1-D
     // arrays are absent (the access path falls back to `[(0, array_len)]`).
-    array_dims: BTreeMap<u32, Vec<(u32, u32)>>,
+    array_dims: BTreeMap<u32, Vec<(i64, u32)>>,
     /// v7 `$bits` prescan: name → (element bits, unpacked dim lengths) for the
     /// CURRENT module's body decls, recorded in declaration order during the
     /// body param-binding walk (3b) — a `localparam X = $bits(mem[0])` binds
