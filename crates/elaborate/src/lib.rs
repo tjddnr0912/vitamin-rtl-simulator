@@ -467,6 +467,11 @@ struct Elaborator<'s> {
     /// from the module constant's, which would otherwise make every other reader in
     /// that scope resolve to it.
     hoisted_block_local: BTreeSet<String>,
+    /// §4.5.248: the per-entry (`automatic`) block-local NAMES currently in scope
+    /// during the Nets-phase hoist walk, so a NESTED block's STATIC initializer can be
+    /// checked against an OUTER block's automatic (see
+    /// `deny_static_init_reading_per_entry`). Pushed/popped around each block's stmts.
+    per_entry_in_scope: BTreeSet<String>,
     // N6: FQ name of a FIXED `string` ARRAY (`string files[0:1]`) → (lo, hi, element
     // net ids in index order). A string is heap-backed with no packed width, so a fixed
     // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)

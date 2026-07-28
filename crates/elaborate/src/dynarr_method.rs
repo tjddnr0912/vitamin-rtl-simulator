@@ -202,10 +202,54 @@ impl Elaborator<'_> {
                 );
                 return;
             }
+            ("pop_back" | "pop_front", K::Queue, 0) => {
+                // §13.4.1: `void'(q.pop_front());` — pop for the SIDE EFFECT and discard
+                // the value. The parser has already lowered the `void'()` wrapper to this
+                // statement form, so reaching here means the result is genuinely unwanted;
+                // the AXI-model idiom "drop the head" has no other spelling.
+                //
+                // The engine's pop is an expression op, so the removal only happens if the
+                // value is consumed — hence a per-call sink net rather than a bare op. It
+                // is written and never read, which is exactly "discarded".
+                let (ew, esign) = self.handle_elem_type(net).unwrap_or((32, false));
+                let sink = self.nets.len() as u32;
+                self.add_net(
+                    &format!("__popsink_{sink}"),
+                    ir::NetVar {
+                        kind: ir::NetKind::Reg,
+                        width: ew,
+                        msb: ew.max(1) - 1,
+                        lsb: 0,
+                        signed: esign,
+                        array_len: 1,
+                        dir: ir::PortDir::Internal,
+                        init: default_init(ast::NetVarKind::Reg, ew.max(1)),
+                    },
+                );
+                ir::Stmt::BlockingAssign {
+                    lhs: ir::Lvalue {
+                        chunks: vec![ir::LvalChunk {
+                            net: sink,
+                            word: None,
+                            offset: None,
+                            width: None,
+                            kind: ir::SelKind::Bit,
+                        }],
+                    },
+                    rhs: self.push_expr(ir::Expr::SysFunc {
+                        which: if method == "pop_front" {
+                            ir::SysFuncId::QPopFront
+                        } else {
+                            ir::SysFuncId::QPopBack
+                        },
+                        args: vec![handle],
+                    }),
+                }
+            }
             ("pop_back" | "pop_front", K::Queue, _) => {
                 self.error(
                     MsgCode::ElabUnsupported,
-                    "a queue pop result must be assigned (`x = q.pop_back();`)",
+                    "pop_back()/pop_front() take no arguments",
                 );
                 return;
             }

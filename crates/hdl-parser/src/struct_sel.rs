@@ -449,6 +449,52 @@ impl Parser<'_, '_> {
     /// `s = '{…}` and the 1-D-array-element path `arr[i] = '{…}`). `rhs` must be an
     /// `AssignPattern`. A count mismatch or a 2-state field wider than 64 bits is a
     /// loud parse error (returning the pattern unchanged).
+    /// §7.10.2/§10.9.2: a `'{…}` ACTUAL to a container method whose element is a
+    /// struct — `q.push_back('{1, 2})`, the standard way to enqueue a record in an
+    /// AXI/transaction model. The element's packed value is the same field concat
+    /// `q[i] = '{…}` already desugars to, so this reuses `build_struct_pattern_concat`
+    /// rather than inventing a second layout rule; keying on the RECEIVER's type is
+    /// what makes each element land at its declared width instead of a bare concat's
+    /// self-determined one.
+    ///
+    /// Only `'{…}` actuals are rewritten, so `q.insert(i, '{…})`'s index is untouched
+    /// and every non-pattern call is byte-identical.
+    pub(crate) fn desugar_container_pattern_args(
+        &mut self,
+        path: &HierPath,
+        args: Vec<Expr>,
+    ) -> Vec<Expr> {
+        if path.segments.len() != 2
+            || !matches!(
+                path.segments[1].name.as_str(),
+                "push_back" | "push_front" | "insert"
+            )
+            || !args
+                .iter()
+                .any(|a| matches!(a.kind, ExprKind::AssignPattern(_)))
+        {
+            return args;
+        }
+        let recv = &path.segments[0].name;
+        let Some(tyname) = self
+            .var_struct
+            .get(recv)
+            .cloned()
+            .or_else(|| self.record_array_vars.get(recv).cloned())
+        else {
+            return args;
+        };
+        args.into_iter()
+            .map(|a| {
+                if matches!(a.kind, ExprKind::AssignPattern(_)) {
+                    self.build_struct_pattern_concat(&tyname, a)
+                } else {
+                    a
+                }
+            })
+            .collect()
+    }
+
     pub(crate) fn build_struct_pattern_concat(&mut self, tyname: &str, rhs: Expr) -> Expr {
         // Each field's (width, is_two_state) in declaration order (field 0 = MSB =
         // leftmost concat part); cloned out so `self` is free for `error` below.

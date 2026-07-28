@@ -223,12 +223,18 @@ impl Elaborator<'_> {
         module: &ast::ModuleDecl,
         module_names: &std::collections::BTreeSet<String>,
     ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
+        /// `fork_multi` — this statement sits under a `fork` arm that can be SPAWNED
+        /// more than once, so two activations of the same block may be live at once and
+        /// the one flattened net cannot represent both. `repeatable` — this statement
+        /// itself can execute more than once (a repeating process, or a loop ancestor).
         fn walk(
             s: &ast::Stmt,
-            under_fork: bool,
+            fork_multi: bool,
+            repeatable: bool,
             module_names: &std::collections::BTreeSet<String>,
             out: &mut BTreeMap<u32, std::collections::BTreeSet<String>>,
         ) {
+            let under_fork = fork_multi;
             match s {
                 ast::Stmt::Block {
                     decls, stmts, span, ..
@@ -249,6 +255,15 @@ impl Elaborator<'_> {
                                     && !matches!(d.kind, ast::NetVarKind::String)
                                     && n.init.is_some()
                                     && n.unpacked.is_empty();
+                                // A scalar `string` local with an initializer. Its re-init is
+                                // the SAME plain `s = init` blocking the scalar case emits (a
+                                // string net holds one whole value; there is no handle to
+                                // reallocate), which is why `begin automatic string s; s = "a";
+                                // … end` already worked — only the decl-init spelling was left
+                                // out of family D, for no reason the emission path shares.
+                                let string_var = matches!(d.kind, ast::NetVarKind::String)
+                                    && n.init.is_some()
+                                    && n.unpacked.is_empty();
                                 // BL2/BL3 (round-19): a DYNAMIC-STORAGE block-local — a single
                                 // `Dim::Dyn`/`Dim::Queue` unpacked dim (a dyn array, a string
                                 // dyn array, or a queue) — declared `automatic` with a
@@ -263,6 +278,10 @@ impl Elaborator<'_> {
                                 // (`unpacked.len() != 1`), and a non-pattern init. (A `new[]`
                                 // decl-init is separately rejected at the decl for any dyn
                                 // handle — vita supports only a `'{…}` pattern there.)
+                                //
+                                // §4.5.248: a `new[N]` init joins them — it re-allocates, so it
+                                // is self-resetting in exactly the way this gate requires, and
+                                // it emits as the plain `d = new[N]` statement.
                                 let dyn_pattern = n.unpacked.len() == 1
                                     && matches!(n.unpacked[0], ast::Dim::Dyn | ast::Dim::Queue(_))
                                     && n.init.as_ref().is_some_and(|init| {
@@ -270,46 +289,70 @@ impl Elaborator<'_> {
                                             init.kind,
                                             ast::ExprKind::AssignPattern(_)
                                                 | ast::ExprKind::Concat { .. }
-                                        )
+                                        ) || (matches!(init.kind, ast::ExprKind::New { .. })
+                                            && matches!(n.unpacked[0], ast::Dim::Dyn))
                                     });
-                                if scalar_var || dyn_pattern {
+                                if scalar_var || string_var || dyn_pattern {
                                     out.entry(span.lo).or_default().insert(n.name.name.clone());
                                 }
                             }
                         }
                     }
                     for st in stmts {
-                        walk(st, under_fork, module_names, out);
+                        walk(st, fork_multi, repeatable, module_names, out);
                     }
                 }
-                // A fork's children run CONCURRENTLY (`join_any`/`join_none` outlive the
-                // fork point) — one flattened net cannot represent per-child storage, so
-                // everything under a fork stays loud.
+                // A fork's children run CONCURRENTLY and a `join_any`/`join_none` arm
+                // OUTLIVES the fork point. What breaks the one-flattened-net model is not
+                // concurrency as such — it is TWO LIVE ACTIVATIONS OF THE SAME BLOCK, which
+                // needs the fork itself to be spawned more than once. So the arms inherit
+                // `fork_multi = fork_multi || repeatable`: a fork reached once (an `initial`
+                // with no loop above it) gives each arm exactly one activation, and the
+                // flattened net is then as correct for the arm as for any straight-line
+                // block. A fork under a loop, or in a repeating process, keeps the loud.
+                //
+                // A loop INSIDE an arm does not reintroduce the hazard — one arm is one
+                // thread, so its iterations are sequential — which is why `repeatable`
+                // (about this statement) and `fork_multi` (about the spawning) are two
+                // flags and not one.
+                //
+                // This is what left the standard watchdog — `fork begin automatic int
+                // timeout = D; void'($value$plusargs(…, timeout)); #(timeout*1ns); end
+                // join_none` — loud in essentially every testbench.
                 ast::Stmt::Fork { stmts, .. } => {
+                    let arm_multi = fork_multi || repeatable;
                     for st in stmts {
-                        walk(st, true, module_names, out);
+                        walk(st, arm_multi, repeatable, module_names, out);
                     }
                 }
                 ast::Stmt::If { then_s, else_s, .. } => {
-                    walk(then_s, under_fork, module_names, out);
+                    walk(then_s, fork_multi, repeatable, module_names, out);
                     if let Some(e) = else_s {
-                        walk(e, under_fork, module_names, out);
+                        walk(e, fork_multi, repeatable, module_names, out);
                     }
                 }
                 ast::Stmt::Case { items, .. } => {
                     for it in items {
-                        walk(case_item_body(it), under_fork, module_names, out);
+                        walk(
+                            case_item_body(it),
+                            fork_multi,
+                            repeatable,
+                            module_names,
+                            out,
+                        );
                     }
                 }
                 ast::Stmt::For { body, .. }
                 | ast::Stmt::While { body, .. }
                 | ast::Stmt::Repeat { body, .. }
-                | ast::Stmt::Forever { body, .. } => walk(body, under_fork, module_names, out),
+                | ast::Stmt::Forever { body, .. } => {
+                    walk(body, fork_multi, true, module_names, out)
+                }
                 ast::Stmt::DelayCtrl { body, .. }
                 | ast::Stmt::EventCtrl { body, .. }
                 | ast::Stmt::Wait { body, .. } => {
                     if let Some(b) = body {
-                        walk(b, under_fork, module_names, out);
+                        walk(b, fork_multi, repeatable, module_names, out);
                     }
                 }
                 _ => {}
@@ -318,7 +361,11 @@ impl Elaborator<'_> {
         let mut out = BTreeMap::new();
         for item in &module.body {
             if let ast::ModuleItem::Proc(p) = item {
-                walk(&p.body, false, module_names, &mut out);
+                // An `initial` / `final` process body executes ONCE; every `always*` form
+                // re-runs, so a `join_none` arm it spawned can still be live when the next
+                // iteration spawns another.
+                let repeats = !matches!(p.kind, ast::ProcKind::Initial | ast::ProcKind::Final);
+                walk(&p.body, false, repeats, module_names, &mut out);
             }
         }
         out
@@ -445,6 +492,57 @@ impl Elaborator<'_> {
         })
     }
 
+    /// §6.21: a STATIC block-local's initializer runs ONCE at time zero, before any
+    /// process starts; an `automatic` sibling's runs on each BLOCK ENTRY. So a static
+    /// initializer that reads a per-entry sibling reads it at a time the automatic has
+    /// not been initialized — and worse, anything the static initializer WRITES back
+    /// into that sibling (an `inout`/`output` copy-out: `int z = f(c);`) is then clobbered
+    /// by the entry re-init. Both values are wrong and neither is recoverable, so this
+    /// combination is loud.
+    ///
+    /// Found while lifting the fork restriction (§4.5.248): the whole fork arm used to be
+    /// loud for a different reason, which masked this. The identical NON-fork shape was
+    /// already silently printing `c=5` where the copy-out said 6 — so this is a
+    /// silent-wrong being raised to loud, not a capability being taken away.
+    fn deny_static_init_reading_per_entry(&mut self, decls: &[ast::NetVarDecl], span: ast::Span) {
+        let mut per_entry = self.per_entry_in_scope.clone();
+        if let Some(here) = self.per_entry_block_locals.get(&span.lo) {
+            per_entry.extend(here.iter().cloned());
+        }
+        if per_entry.is_empty() {
+            return;
+        }
+        let per_entry = &per_entry;
+        // Conservative: `expr_no_ref` returns "may reference" for any form it has not
+        // fully vetted, so an exotic initializer errs toward the loud rather than toward
+        // the two wrong values above.
+        let hits: Vec<(String, String)> = decls
+            .iter()
+            .filter(|d| d.lifetime != Some(true))
+            .flat_map(|d| d.names.iter())
+            .filter(|n| !per_entry.contains(&n.name.name))
+            .filter_map(|n| {
+                let init = n.init.as_ref()?;
+                let hit = per_entry.iter().find(|pn| !expr_no_ref(init, pn))?;
+                Some((n.name.name.clone(), hit.clone()))
+            })
+            .collect();
+        for (stat, auto) in hits {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "the STATIC block-local `{stat}`'s initializer reads the `automatic` \
+                     block-local `{auto}` declared in the same block; a static initializer \
+                     runs once at time 0 while an `automatic` is initialized on each block \
+                     entry, so `{auto}` has no value yet there (and a write back into it \
+                     through an output/inout formal is overwritten by the entry \
+                     initialization) — declare `{stat}` `automatic`, or move the \
+                     initialization into the block body"
+                ),
+            );
+        }
+    }
+
     /// Recursively create nets for every `begin…end`/`fork…join` block-local
     /// declaration reachable from a procedural-block body. v1 flattens these to
     /// module-scope nets (no per-process frame). Called in the Nets phase.
@@ -461,6 +559,7 @@ impl Elaborator<'_> {
             | ast::Stmt::Fork {
                 decls, stmts, span, ..
             } => {
+                self.deny_static_init_reading_per_entry(decls, *span);
                 for d in decls {
                     // DUP (round-5): a colliding `automatic` block-local that the
                     // pure pre-scan marked (disjoint blocks, no module-net collision,
@@ -900,8 +999,25 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+                // This block's per-entry locals are in scope for every NESTED block's
+                // static initializers too (`begin automatic int c = 5; begin int z =
+                // f(c); … end end`), so publish them for the recursion and take them
+                // back on the way out.
+                let pushed: Vec<String> = self
+                    .per_entry_block_locals
+                    .get(&span.lo)
+                    .map(|s| {
+                        s.iter()
+                            .filter(|n| self.per_entry_in_scope.insert((*n).clone()))
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 for st in stmts {
                     self.hoist_block_local_nets(st, ports, body);
+                }
+                for n in pushed {
+                    self.per_entry_in_scope.remove(&n);
                 }
             }
             ast::Stmt::If { then_s, else_s, .. } => {

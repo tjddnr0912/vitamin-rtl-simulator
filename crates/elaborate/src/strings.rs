@@ -782,6 +782,19 @@ impl Elaborator<'_> {
             );
             return true;
         }
+        // §4.5.248: render any `$sformatf` PART to a temp first (`s = {s,
+        // $sformatf("%02x", b[i])}` — the hex-string accumulator every testbench has).
+        // Done here, after the string-concat decision, so a rhs this helper declines
+        // never gets a stray temp emitted for it. Every part is evaluated exactly once
+        // by the concat, so hoisting preserves both the count and the order.
+        let hoisted: Vec<ast::Expr> = part_exprs
+            .iter()
+            .map(|p| {
+                self.hoist_nested_sformatf(b, p)
+                    .unwrap_or_else(|| (*p).clone())
+            })
+            .collect();
+        let part_exprs: Vec<&ast::Expr> = hoisted.iter().collect();
         let rhs_id = self.lower_string_concat_parts(&part_exprs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true);

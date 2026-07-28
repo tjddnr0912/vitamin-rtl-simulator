@@ -345,7 +345,8 @@ impl Parser<'_, '_> {
                         Vec::new()
                     };
                     let args = self.expand_struct_call_args(args); // R5: struct actual → members
-                                                                   // `obj.randomize() with { … };` as a void statement (§18.7).
+                    let args = self.desugar_container_pattern_args(&path, args);
+                    // `obj.randomize() with { … };` as a void statement (§18.7).
                     if self.at_ident_kw("with") && self.peek_at(1) == Some(TokenKind::LBrace) {
                         self.bump(); // `with`
                         let constraints = self.parse_with_constraints();

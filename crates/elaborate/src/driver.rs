@@ -89,6 +89,7 @@ impl<'s> Elaborator<'s> {
             str_param_raw: BTreeMap::new(),
             real_param_val: BTreeMap::new(),
             hoisted_block_local: BTreeSet::new(),
+            per_entry_in_scope: BTreeSet::new(),
             string_array_elems: BTreeMap::new(),
             fixed_string_dyn: BTreeMap::new(),
             fixed_string_dyn_key: BTreeMap::new(),

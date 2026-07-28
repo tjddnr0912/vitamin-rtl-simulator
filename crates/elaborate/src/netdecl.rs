@@ -434,9 +434,20 @@ impl Elaborator<'_> {
                         ast::ExprKind::Concat { .. } => !matches!(d.kind, ast::NetVarKind::String),
                         _ => false,
                     };
-                    let desugared = allow_string_init
-                        && init_is_pattern
-                        && matches!(handle_kind, ir::NetKind::Queue | ir::NetKind::DynArray);
+                    // §7.5.1: `byte b[] = new[20];` — a sizing constructor is a legal
+                    // dynamic-array declaration initializer, and it needs no expansion at
+                    // all: the generic flush emits `b = new[20]`, the very statement the
+                    // split-decl workaround wrote by hand. Rejecting it here `continue`d
+                    // past the handle registration, so ONE declaration produced eight
+                    // diagnostics — including two "undeclared `t.aa_key`" for a name
+                    // declared on the line above. A `new[n](src)` copy-constructor rides
+                    // the same statement path. Queues/assoc take no `new[]` (loud below).
+                    let init_is_new = matches!(init.kind, ast::ExprKind::New { .. })
+                        && handle_kind == ir::NetKind::DynArray;
+                    let desugared = init_is_new
+                        || (allow_string_init
+                            && init_is_pattern
+                            && matches!(handle_kind, ir::NetKind::Queue | ir::NetKind::DynArray));
                     if !desugared {
                         self.error(
                             MsgCode::ElabUnsupported,

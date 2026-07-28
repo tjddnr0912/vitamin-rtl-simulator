@@ -11,9 +11,14 @@
 //! `automatic` assigned-then-read (no initializer) fork arm both run today. So BL1's
 //! gap was ONLY the `automatic` + constant-initializer form.
 //!
-//! correct-or-loud: a NON-const init under a fork (init reads a module net) and a
-//! REASSIGNED-after-init local under a fork (`automatic int c=0; c=c+1;`) genuinely
-//! need per-activation storage a shared module net cannot provide, so they stay loud.
+//! §4.5.248 SUPERSEDES the "stays loud" half of this file. BL1's rule was
+//! "concurrency-immune because the value is a constant nobody writes"; the real
+//! invariant is ONE LIVE ACTIVATION OF THE BLOCK, and that holds for every arm of a
+//! fork the process reaches once — an `initial` with no loop above it. So a NON-const
+//! init and a REASSIGNED-after-init local under such a fork are supported now, with
+//! their values pinned below. What stays loud is a fork that can be SPAWNED MORE THAN
+//! ONCE (inside a loop, or in a repeating process): two live activations genuinely
+//! cannot share one flattened net.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -137,15 +142,14 @@ fn const_fork_time_literal_delay() {
     );
 }
 
-// ── correct-or-loud (MUST stay loud) ────────────────────────────────────────
+// ── §4.5.248: single-spawn fork arms — now supported, values pinned ─────────
 
 #[test]
-fn nonconst_fork_stays_loud() {
-    // The initializer reads a module net → not a compile-time constant → the arm
-    // genuinely needs fresh per-activation storage, which a shared flattened net
-    // cannot provide under concurrency. Stays E3009.
-    assert!(loud(
-        "module top;\n\
+fn nonconst_init_in_a_single_spawn_fork_arm_runs() {
+    // The initializer reads a module net, so BL1's constant argument does not apply —
+    // but this `fork` is reached exactly once, so the arm has exactly one activation
+    // and the flattened net holds exactly one value. Was E3009.
+    let (o, ok) = run("module top;\n\
          logic [31:0] some_net;\n\
          initial begin\n\
            some_net = 7;\n\
@@ -156,18 +160,22 @@ fn nonconst_fork_stays_loud() {
                $display(\"x=%0d\", x);\n\
              end\n\
            join_none\n\
-           #1 $finish;\n\
+           #10 $finish;\n\
          end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("x=7"),
+        "the init must observe the net's value:\n{o}"
+    );
 }
 
 #[test]
-fn reassigned_const_fork_stays_loud() {
-    // Constant initializer but REASSIGNED in the body — concurrency would alias the
-    // mutable value across activations on one shared net. Stays E3009.
-    assert!(loud(
-        "module top;\n\
+fn a_written_block_local_in_a_single_spawn_fork_arm_runs() {
+    // Constant initializer, then REASSIGNED — the standard watchdog shape
+    // (`automatic int t = D; void'($value$plusargs(…, t)); #(t*1ns);`) in miniature.
+    // One activation ⇒ the write is this activation's own. Was E3009.
+    let (o, ok) = run("module top;\n\
          initial begin\n\
            fork\n\
              begin\n\
@@ -178,20 +186,17 @@ fn reassigned_const_fork_stays_loud() {
            join_none\n\
            #1 $finish;\n\
          end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("c=1"), "the write must land:\n{o}");
 }
 
 #[test]
-fn fork_inout_call_writes_const_stays_loud() {
-    // CRITICAL-1 (adversarial): a function/method CALL in an EXPRESSION can WRITE the
-    // const-init local via an `output`/`inout` copy-out. `y = f(c)` where `f` has an
-    // `inout int io` mutates `c`, so it is NOT concurrency-immune — the write-scanner
-    // must inspect the call in the rhs (it previously only saw lvalue roots and
-    // statement-level task-call args, and silently ACCEPTED this → aliased net). Stays
-    // E3009.
-    assert!(loud(
-        "module top;\n\
+fn a_copy_out_into_a_single_spawn_fork_local_lands() {
+    // The write arrives through an `inout` formal's copy-out rather than an assignment
+    // — the shape BL1's adversarial review used to argue the local was NOT immune. It
+    // is not immune; it does not need to be, because there is one activation.
+    let (o, ok) = run("module top;\n\
          function automatic int f(inout int io); io = io + 1; return io; endfunction\n\
          int y;\n\
          initial begin\n\
@@ -199,44 +204,109 @@ fn fork_inout_call_writes_const_stays_loud() {
              begin\n\
                automatic int c = 5;\n\
                y = f(c);\n\
-               #10 $display(\"%0d\", c);\n\
+               #10 $display(\"c=%0d y=%0d\", c, y);\n\
              end\n\
            join_none\n\
-           #1 $finish;\n\
+           #20 $finish;\n\
          end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("c=6 y=6"), "inout copy-out:\n{o}");
 }
 
 #[test]
-fn fork_assert_action_writes_const_stays_loud() {
-    // CRITICAL-2 (adversarial): an assert ACTION block can WRITE the const-init local.
-    // `assert #0 (x) else c = 0;` writes `c` in the fail action — the write-scanner
-    // must recurse into a `DeferredAssert`'s then/else statements (previously swallowed
-    // by the `_ => false` arm → silently accepted). Stays E3009.
-    assert!(loud(
-        "module top;\n\
+fn an_assert_action_write_in_a_single_spawn_fork_arm_lands() {
+    // The write is in a deferred assertion's else-action. Same argument.
+    let (o, ok) = run("module top;\n\
          logic x;\n\
          initial begin\n\
-           x = 1'b1;\n\
+           x = 1'b0;\n\
            fork\n\
              begin\n\
                automatic int c = 5;\n\
                assert #0 (x) else c = 0;\n\
-               #10 $display(\"%0d\", c);\n\
+               #10 $display(\"c=%0d\", c);\n\
              end\n\
            join_none\n\
-           #1 $finish;\n\
+           #20 $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("c=0"),
+        "the failing assertion's action must write c:\n{o}"
+    );
+}
+
+// ── still loud: a fork that can be SPAWNED MORE THAN ONCE ───────────────────
+
+#[test]
+fn a_fork_inside_a_loop_stays_loud() {
+    // Iteration N+1 spawns a second arm while N's may still be live (`join_none`), so
+    // two activations would share one flattened net. This is the case the old blanket
+    // `under_fork` rejection was really protecting against.
+    assert!(loud(
+        "module top;\n\
+         initial begin\n\
+           for (int i = 0; i < 2; i++)\n\
+             fork begin automatic int c = i; #2 $display(\"c=%0d\", c); end join_none\n\
+           #10 $finish;\n\
          end\n\
          endmodule\n"
     ));
 }
 
 #[test]
-fn fork_nested_decl_init_call_writes_stays_loud() {
-    // "Also fix": a NESTED-block decl-init `int z = f(c);` writes `c` via `f`'s inout
-    // copy-out. The Block/Fork arm previously walked `stmts` but NOT nested `decls`, so
-    // this decl-init write was missed. Stays E3009.
+fn a_fork_in_a_repeating_process_stays_loud() {
+    // An `always` re-runs, so the same spawn point fires again while the previous
+    // arm may still be live. The local is REASSIGNED, so BL1's separate
+    // constant-is-immune exemption (a value every activation agrees on) does not
+    // apply — this is the multiplicity gate itself.
+    assert!(loud(
+        "module top;\n\
+         logic clk = 0; always #5 clk = ~clk;\n\
+         always @(posedge clk)\n\
+           fork begin automatic int c = 3; c = c + 1; #1 $display(\"c=%0d\", c); end join_none\n\
+         initial #40 $finish;\n\
+         endmodule\n"
+    ));
+    // A non-constant init in the same shape — BL1 never covered this one either.
+    assert!(loud(
+        "module top;\n\
+         logic clk = 0; always #5 clk = ~clk;\n\
+         int g = 4;\n\
+         always @(posedge clk)\n\
+           fork begin automatic int c = g; #1 $display(\"c=%0d\", c); end join_none\n\
+         initial #40 $finish;\n\
+         endmodule\n"
+    ));
+}
+
+#[test]
+fn a_fork_under_a_loop_under_a_fork_stays_loud() {
+    // The OUTER fork is single-spawn, but a `forever` inside its arm re-reaches the
+    // INNER fork — so `fork_multi` must propagate through the loop, not be cleared by
+    // the outer fork's single-spawn verdict.
+    assert!(loud(
+        "module top;\n\
+         initial fork\n\
+           forever begin\n\
+             fork begin automatic int c = 1; #1 $display(\"c=%0d\", c); end join_none\n\
+             #3;\n\
+           end\n\
+         join_none\n\
+         initial #9 $finish;\n\
+         endmodule\n"
+    ));
+}
+
+#[test]
+fn a_static_decl_init_reading_an_automatic_sibling_stays_loud() {
+    // §6.21: the static initializer runs at time 0, the `automatic` is initialized on
+    // block entry — so the read has no value and a copy-out back into it is overwritten
+    // by that entry initialization. Lifting the fork restriction UNCOVERED this (the
+    // identical non-fork shape was silently printing the pre-copy-out value), so it is
+    // pinned here as the loud it should always have been.
     assert!(loud(
         "module top;\n\
          function automatic int f(inout int io); io = io + 1; return io; endfunction\n\
@@ -251,6 +321,16 @@ fn fork_nested_decl_init_call_writes_stays_loud() {
              end\n\
            join_none\n\
            #1 $finish;\n\
+         end\n\
+         endmodule\n"
+    ));
+    // The NON-fork spelling of the same mistake — this one was silent-wrong before.
+    assert!(loud(
+        "module top;\n\
+         function automatic int f(inout int io); io = io + 1; return io; endfunction\n\
+         initial begin\n\
+           begin automatic int c = 5; int z = f(c); $display(\"%0d %0d\", z, c); end\n\
+           $finish;\n\
          end\n\
          endmodule\n"
     ));

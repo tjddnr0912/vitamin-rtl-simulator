@@ -141,13 +141,15 @@ fn generate_scope_decl_init_is_loud() {
 
 #[test]
 fn whole_value_assignment_and_copy_stay_loud() {
-    // Runtime whole-value assignment and an assoc positional pattern are NOT
-    // part of this slice — they stay loud. (Queue COPY `r = q` graduated to a
-    // supported §7.10 deep copy — see handle_copy.rs — so its old loud assert
-    // flipped to a positive check.)
-    let (_a, oka) = run("module top; int q[$];\n\
-         initial begin q='{1,2}; #1 $finish; end endmodule");
-    assert!(!oka, "runtime q='{{…}} must be loud");
+    // §4.5.248: a runtime whole-value `'{…}` assignment is SUPPORTED now — it expands
+    // through the same `dyn_decl_init_stmts` the declaration initializer already used,
+    // so `int q[$]; q = '{1,2};` and `int q[$] = '{1,2};` finally agree. (Queue COPY
+    // `r = q` graduated earlier to a §7.10 deep copy — see handle_copy.rs.) An assoc
+    // positional pattern has no such expansion and stays loud.
+    let (out_a, oka) = run("module top; int q[$];\n\
+         initial begin q='{1,2}; $display(\"a=%0d %0d\", q.size(), q[1]); #1 $finish; end endmodule");
+    assert!(oka, "runtime q='{{…}} is supported now:\n{out_a}");
+    assert!(out_a.contains("a=2 2"), "pattern assign replaces:\n{out_a}");
     let (out_b, okb) = run(
         "module top; int q[$]; int r[$];\n\
          initial begin q.push_back(1); r=q; $display(\"c=%0d\", r.size()); #1 $finish; end endmodule",

@@ -307,19 +307,62 @@ fn nonfork_scalar_per_entry_still_works() {
 // ── correct-or-loud (MUST stay loud) ─────────────────────────────────────────
 
 #[test]
-fn under_fork_dyn_stays_loud() {
-    // A dyn `'{…}` block-local under a `fork` genuinely needs per-activation storage
-    // (concurrent children); a module process has no frame arena. Stays E3009.
-    assert!(loud3009(
-        "module top;\n\
+fn a_single_spawn_fork_arm_gets_its_dynamic_init() {
+    // §4.5.248 supersedes the old "under a fork ⇒ loud" rule here too. A `fork` the
+    // process reaches ONCE gives each arm exactly one activation, so the one flattened
+    // handle holds one array — the per-entry expansion (`m = new[N]; m[i] = e;`) at
+    // block entry is as correct here as in a straight-line block.
+    let (o, ok) = run("module top;\n\
          initial begin\n\
            fork\n\
              begin\n\
-               automatic byte m[] = '{8'd0, 8'd1};\n\
-               if (m.size() == 2) $display(\"SHOULD_NOT\");\n\
+               automatic byte m[] = '{8'd7, 8'd9};\n\
+               $display(\"m=%0d %0d %0d\", m.size(), m[0], m[1]);\n\
              end\n\
            join_none\n\
            #1 $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("m=2 7 9"),
+        "dyn per-entry init in a fork arm:\n{o}"
+    );
+
+    // A queue in the same position — its expansion clears, then push_backs.
+    let (o, ok) = run("module top;\n\
+         initial begin\n\
+           fork\n\
+             begin\n\
+               automatic int q[$] = '{1, 2, 3};\n\
+               $display(\"q=%0d %0d\", q.size(), q[2]);\n\
+             end\n\
+           join_none\n\
+           #1 $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("q=3 3"),
+        "queue per-entry init in a fork arm:\n{o}"
+    );
+}
+
+#[test]
+fn a_multi_spawn_fork_arm_dyn_local_stays_loud() {
+    // The spawn point is inside a loop, so arm N+1 starts while N may still be live —
+    // two activations, one heap handle. This is what the fork exclusion is really for.
+    assert!(loud3009(
+        "module top;\n\
+         initial begin\n\
+           for (int i = 0; i < 2; i++)\n\
+             fork\n\
+               begin\n\
+                 automatic byte m[] = '{8'd0, 8'd1};\n\
+                 #1 $display(\"SHOULD_NOT %0d\", m.size());\n\
+               end\n\
+             join_none\n\
+           #5 $finish;\n\
          end\n\
          endmodule\n"
     ));

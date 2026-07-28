@@ -392,6 +392,12 @@ pub(crate) fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
                 }
         }
         K::AssignPattern(parts) => parts.iter().all(|x| expr_no_ref(x, name)),
+        // A named argument's FORMAL is a name in the CALLEE's namespace — never a
+        // reference to the caller's `name`. Only its value can reference anything
+        // here. Leaving this unvetted made `r = add(1, .b(2));` — a clean whole-var
+        // write — read as "the rhs may reference `r`", so the definite-assignment
+        // gate rejected the assignment that was staring right at it and blamed `r`.
+        K::NamedArg { value, .. } => value.as_ref().is_none_or(|v| expr_no_ref(v, name)),
         K::New { size, src } => {
             expr_no_ref(size, name) && src.as_ref().is_none_or(|s| expr_no_ref(s, name))
         }
@@ -452,6 +458,21 @@ pub(crate) fn stmt_no_ref(st: &ast::Stmt, name: &str) -> bool {
             delay.is_none() && event.is_none() && lvalue_no_ref(lhs, name) && expr_no_ref(rhs, name)
         }
         S::SysTaskCall { args, .. } => args.iter().all(|a| expr_no_ref(a, name)),
+        // A user task enable / void method call (`q.delete();`, `show(x);`). It can
+        // only touch `name` through its callee HEAD (a method receiver — `name.delete()`)
+        // or an actual, so a call that references neither cannot read OR write it: a
+        // task can write a caller variable only through an output actual naming it.
+        // (A hierarchical write from inside the body — `t.name = …` — would be a WRITE
+        // this reports as absent, which only ever keeps the gate louder, never looser.)
+        //
+        // Leaving this unvetted was a misdiagnosis engine: one container-method
+        // statement anywhere in an `if` arm (`if (c) begin d = 0; q.delete(); end`)
+        // aborted the whole definite-assignment walk, and the error named `d` — a
+        // variable assigned two tokens earlier — instead of the queue.
+        S::UserTaskCall { name: cn, args, .. } => {
+            cn.segments.first().is_none_or(|s| s.name != name)
+                && args.iter().all(|a| expr_no_ref(a, name))
+        }
         _ => false,
     }
 }

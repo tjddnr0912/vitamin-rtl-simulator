@@ -294,6 +294,7 @@ impl Parser<'_, '_> {
                     let path = self.soa_rewrite_method_recv(path);
                     let args = self.call_args();
                     let args = self.expand_struct_call_args(args); // R5: struct actual → members
+                    let args = self.desugar_container_pattern_args(&path, args);
                     Expr {
                         kind: ExprKind::Call { name: path, args },
                         span: start.to(self.prev_span()),

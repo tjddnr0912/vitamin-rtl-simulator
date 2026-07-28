@@ -143,6 +143,18 @@ impl Elaborator<'_> {
                 // `emit_frame_call` (no marker ⇒ no support). The flag is cleared right
                 // after the rhs lowers so it never leaks to a later statement.
                 let dyn_blessed = self.emit_frame_dyn_formal_markers(b, delay.as_ref(), rhs);
+                // §4.5.248: a `$sformatf(…)` still buried in this rhs — a concat operand
+                // (`s = {s, $sformatf("%02x", b[i])}`), a call argument, an operand of a
+                // comparison. Every direct-rhs spelling already returned above, so anything
+                // left is a NESTED occurrence: render it to a temp first and read the temp.
+                let hoisted;
+                let rhs: &ast::Expr = match self.hoist_nested_sformatf(b, rhs) {
+                    Some(r) => {
+                        hoisted = r;
+                        &hoisted
+                    }
+                    None => rhs,
+                };
                 // N7: reject forging a handle from an integral / leaking a handle
                 // to an integral (closes the use-after-free hole).
                 self.check_handle_assign(lhs, rhs);
@@ -214,6 +226,17 @@ impl Elaborator<'_> {
                     );
                     return;
                 }
+                // §4.5.248: `s <= $sformatf(…)` (and any nested occurrence). An NBA's rhs
+                // is evaluated NOW and only the WRITE is deferred, so rendering into a temp
+                // here and scheduling the temp is exactly the defined semantics.
+                let hoisted;
+                let rhs: &ast::Expr = match self.hoist_nested_sformatf(b, rhs) {
+                    Some(r) => {
+                        hoisted = r;
+                        &hoisted
+                    }
+                    None => rhs,
+                };
                 // N1: non-blocking intra-assignment EVENT control
                 // (`a <= [repeat(n)] @(ev) rhs`). Capture-now / fork-join_none /
                 // NBA-write desugar — the process does NOT block.
@@ -353,6 +376,18 @@ impl Elaborator<'_> {
                 // `$sformat`/`$swrite*` write their rendered text to a string DEST at
                 // index 0 (like an `$f…` task's fd) and are IMMEDIATE (rendered once at
                 // execution), so their format is at index 1 and value args at i > 1.
+                // §4.5.248: a `$sformatf` buried INSIDE an argument (`$display("%0d",
+                // len($sformatf(…)))`) is not an argument itself, so the format-string
+                // gating below does not apply to it — hoist those first, leaving every
+                // top-level `$sformatf` arg for the gated logic that follows.
+                let arg_hoisted: Vec<ast::Expr> = args
+                    .iter()
+                    .map(|a| {
+                        self.hoist_sformatf_children(b, a)
+                            .unwrap_or_else(|| a.clone())
+                    })
+                    .collect();
+                let args: &[ast::Expr] = &arg_hoisted;
                 let fmt_idx = usize::from(
                     name.name.starts_with("$f")
                         || matches!(
@@ -867,6 +902,28 @@ impl Elaborator<'_> {
                 }
             }
             ast::Stmt::UserTaskCall { name, args, .. } => {
+                // §4.5.248: `show($sformatf("n=%0d", n));` — a task enable's actuals are
+                // all evaluated when the call is reached, so rendering each `$sformatf`
+                // into a temp immediately before the enable preserves both the count and
+                // the left-to-right order.
+                let hoisted;
+                let args: &[ast::Expr] = match self.hoist_expr_list_pub(b, args) {
+                    Some(a) => {
+                        hoisted = a;
+                        &hoisted
+                    }
+                    None => args,
+                };
+                // §4.5.248: a non-empty `'{…}` actual on an `input` dyn-array formal —
+                // materialize it into a temp before the enable.
+                let dyn_hoisted;
+                let args: &[ast::Expr] = match self.hoist_dyn_pattern_actuals(b, name, args) {
+                    Some(a) => {
+                        dyn_hoisted = a;
+                        &dyn_hoisted
+                    }
+                    None => args,
+                };
                 // N7-REST: `obj.randomize();` as a statement (discards the result).
                 if self.try_emit_randomize(b, name, args, None, None) {
                     return;

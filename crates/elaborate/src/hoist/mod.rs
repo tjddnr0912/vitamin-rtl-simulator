@@ -764,6 +764,152 @@ impl Elaborator<'_> {
         })
     }
 
+    /// §4.5.248: hoist EVERY `$sformatf(…)` inside `e` that sits in an
+    /// unconditionally-evaluated position out to a fresh string temp, returning the
+    /// rewritten expression (`None` ⇒ nothing to hoist, so the caller stays on its
+    /// byte-identical path). Post-order, so a `$sformatf` nested in another one's
+    /// arguments is rendered first — the same order a left-to-right evaluation gives.
+    ///
+    /// `$sformatf` is PURE (it renders a value; it mutates nothing), so moving its
+    /// evaluation earlier within the same statement is unobservable — the ONE thing
+    /// that matters is that it still runs exactly as many times as before. That is why
+    /// the descent stops at every conditional or repeating position:
+    ///
+    ///   * a ternary's ARMS (only one runs) — the condition is descended, the arms are
+    ///     not, so `c ? $sformatf(…) : s` keeps its existing loud rather than becoming
+    ///     a render that happens on both branches;
+    ///   * anything not enumerated below (a `with` clause, a constraint, a randomize
+    ///     body, a method call on a result) — unvetted ⇒ left alone ⇒ still loud.
+    ///
+    /// The CALLER is responsible for only invoking this on statement positions that
+    /// run once (a blocking / non-blocking rhs, a task-enable argument list) — never on
+    /// a loop condition, which re-evaluates.
+    pub(crate) fn hoist_nested_sformatf(
+        &mut self,
+        b: &mut ProcessBuilder,
+        e: &ast::Expr,
+    ) -> Option<ast::Expr> {
+        let inner = self.hoist_sformatf_children(b, e);
+        let node = inner.clone().unwrap_or_else(|| e.clone());
+        if let Some(t) = self.hoist_sformatf_arg(b, &node) {
+            return Some(t);
+        }
+        inner
+    }
+
+    /// [`Self::hoist_nested_sformatf`] restricted to STRICTLY NESTED occurrences — the
+    /// root node itself is left alone. Used where the root has its own handling that
+    /// must not be disturbed: a `$display` VALUE argument, whose top-level hoist is
+    /// gated on the format string (§4.5.127) because replacing a surplus arg with a
+    /// string temp changes how it renders. A `$sformatf` buried inside such an argument
+    /// (`$display("%0d", len($sformatf(…)))`) is not an argument at all — the enclosing
+    /// expression keeps its own type — so it carries none of that hazard.
+    pub(crate) fn hoist_sformatf_children(
+        &mut self,
+        b: &mut ProcessBuilder,
+        e: &ast::Expr,
+    ) -> Option<ast::Expr> {
+        use ast::ExprKind as K;
+        // Rewrite the children first (post-order), then this node.
+        let rebuilt: Option<K> = match &e.kind {
+            K::Paren { inner } => self
+                .hoist_nested_sformatf(b, inner)
+                .map(|i| K::Paren { inner: Box::new(i) }),
+            K::Unary { op, operand } => self.hoist_nested_sformatf(b, operand).map(|o| K::Unary {
+                op: *op,
+                operand: Box::new(o),
+            }),
+            K::Binary { op, lhs, rhs } => {
+                let (l, r) = (
+                    self.hoist_nested_sformatf(b, lhs),
+                    self.hoist_nested_sformatf(b, rhs),
+                );
+                (l.is_some() || r.is_some()).then(|| K::Binary {
+                    op: *op,
+                    lhs: Box::new(l.unwrap_or_else(|| (**lhs).clone())),
+                    rhs: Box::new(r.unwrap_or_else(|| (**rhs).clone())),
+                })
+            }
+            K::Cast { target, expr } => self.hoist_nested_sformatf(b, expr).map(|x| K::Cast {
+                target: target.clone(),
+                expr: Box::new(x),
+            }),
+            K::Concat { parts } => self
+                .hoist_expr_list(b, parts)
+                .map(|parts| K::Concat { parts }),
+            K::Replicate { count, value } => {
+                self.hoist_expr_list(b, value).map(|value| K::Replicate {
+                    count: count.clone(),
+                    value,
+                })
+            }
+            // A nested call gets BOTH rewrites: its arguments' own `$sformatf`s, and any
+            // non-empty `'{…}` actual bound to an `input` dyn-array formal (which must be
+            // materialized into a temp — see `hoist_dyn_pattern_actuals`). Both are
+            // statement-level for the same reason, so they ride one traversal.
+            K::Call { name, args } => {
+                let inner = self.hoist_expr_list(b, args);
+                let cur: &[ast::Expr] = inner.as_deref().unwrap_or(args);
+                match self.hoist_dyn_pattern_actuals(b, name, cur) {
+                    Some(args) => Some(K::Call {
+                        name: name.clone(),
+                        args,
+                    }),
+                    None => inner.map(|args| K::Call {
+                        name: name.clone(),
+                        args,
+                    }),
+                }
+            }
+            K::SysCall { name, args } if name.name != "$sformatf" => {
+                self.hoist_expr_list(b, args).map(|args| K::SysCall {
+                    name: name.clone(),
+                    args,
+                })
+            }
+            // Only the CONDITION — the arms are conditionally evaluated.
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => self.hoist_nested_sformatf(b, cond).map(|c| K::Ternary {
+                cond: Box::new(c),
+                then_e: then_e.clone(),
+                else_e: else_e.clone(),
+            }),
+            _ => None,
+        };
+        rebuilt.map(|kind| ast::Expr { kind, span: e.span })
+    }
+
+    /// [`Self::hoist_nested_sformatf`] over a statement's actual-argument list.
+    pub(crate) fn hoist_expr_list_pub(
+        &mut self,
+        b: &mut ProcessBuilder,
+        list: &[ast::Expr],
+    ) -> Option<Vec<ast::Expr>> {
+        self.hoist_expr_list(b, list)
+    }
+
+    /// [`Self::hoist_nested_sformatf`] over a list; `None` ⇒ no element changed.
+    fn hoist_expr_list(
+        &mut self,
+        b: &mut ProcessBuilder,
+        list: &[ast::Expr],
+    ) -> Option<Vec<ast::Expr>> {
+        let rewritten: Vec<Option<ast::Expr>> = list
+            .iter()
+            .map(|x| self.hoist_nested_sformatf(b, x))
+            .collect();
+        rewritten.iter().any(|x| x.is_some()).then(|| {
+            rewritten
+                .into_iter()
+                .zip(list)
+                .map(|(new, old)| new.unwrap_or_else(|| old.clone()))
+                .collect()
+        })
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     //  §4.5.216 — output/inout-formal call in a CONDITIONALLY-EVALUATED rhs
     // ══════════════════════════════════════════════════════════════════════

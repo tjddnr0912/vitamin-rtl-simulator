@@ -102,6 +102,108 @@ impl Elaborator<'_> {
         out
     }
 
+    /// A fresh `DynArray` net for materializing a `'{…}` actual (`$dyn_tmp$<n>` — the
+    /// leading `$` keeps it collision-proof against user identifiers). Returns the
+    /// registered NAME so a synthetic `Ident` can reference it, mirroring
+    /// [`Self::fresh_string_temp`].
+    pub(crate) fn fresh_dyn_temp_named(&mut self, elem_w: u32, elem_signed: bool) -> String {
+        let name = format!("$dyn_tmp${}", self.nets.len());
+        self.add_net(
+            &name,
+            ir::NetVar {
+                kind: ir::NetKind::DynArray,
+                width: elem_w,
+                msb: elem_w.max(1) - 1,
+                lsb: 0,
+                signed: elem_signed,
+                array_len: 0, // heap handle
+                dir: ir::PortDir::Internal,
+                init: default_init(ast::NetVarKind::Reg, elem_w.max(1)),
+            },
+        );
+        name
+    }
+
+    /// [`Self::fresh_dyn_temp_named`] returning the NetId (the empty-`'{}` case needs no
+    /// name — nothing is ever written to it).
+    pub(crate) fn fresh_dyn_temp(&mut self, elem_w: u32, elem_signed: bool) -> u32 {
+        let name = self.fresh_dyn_temp_named(elem_w, elem_signed);
+        self.lookup_net_scoped(&name).unwrap_or(0)
+    }
+
+    /// §10.9.2: rewrite a call's `'{e0,…}` actuals that land on `input` DYNAMIC-ARRAY
+    /// formals into freshly materialized temps, emitting `tmp = new[N]; tmp[i] = e;`
+    /// into `b` first. Returns the rewritten actual list, or `None` when nothing
+    /// matched (so every ordinary call keeps its byte-identical path).
+    ///
+    /// Statement-level on purpose: the elements must be WRITTEN, which needs a
+    /// statement sink that expression lowering does not have — the same reason the
+    /// `$sformatf` hoist lives at statement level. The empty pattern needs no writes and
+    /// is handled inside `dyn_array_actual_net`, so it works in expression contexts too.
+    ///
+    /// Actuals are materialized in ARGUMENT ORDER, which is the order the call itself
+    /// evaluates them; only `input` formals qualify, so no copy-out is lost.
+    pub(crate) fn hoist_dyn_pattern_actuals(
+        &mut self,
+        b: &mut ProcessBuilder,
+        callee: &ast::HierPath,
+        args: &[ast::Expr],
+    ) -> Option<Vec<ast::Expr>> {
+        if callee.segments.len() != 1
+            || !args.iter().any(|a| {
+                matches!(&a.kind,
+                    ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts }
+                        if !parts.is_empty())
+            })
+        {
+            return None;
+        }
+        let nm = callee.segments[0].name.as_str();
+        let ports: Vec<ast::TfPort> = match self.task_table.get(nm) {
+            Some(t) => t.ports.clone(),
+            None => self.func_table.get(nm)?.ports.clone(),
+        };
+        let mut out: Vec<ast::Expr> = Vec::with_capacity(args.len());
+        let mut changed = false;
+        for (i, a) in args.iter().enumerate() {
+            let elems = match (&a.kind, ports.get(i)) {
+                (
+                    ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts },
+                    Some(p),
+                ) if !parts.is_empty()
+                    && matches!(p.dir, ast::PortDir::Input)
+                    && self.is_input_dyn_array_formal(p) =>
+                {
+                    parts.clone()
+                }
+                _ => {
+                    out.push(a.clone());
+                    continue;
+                }
+            };
+            let p = &ports[i];
+            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+            let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let tmp = self.fresh_dyn_temp_named(fw, fs);
+            let id = ast::Ident {
+                name: tmp,
+                span: a.span,
+            };
+            for st in &self.dyn_decl_init_stmts(&id, ir::NetKind::DynArray, &elems) {
+                self.lower_stmt(b, st);
+            }
+            out.push(ast::Expr {
+                kind: ast::ExprKind::Ident(ast::HierPath {
+                    segments: vec![id],
+                    span: a.span,
+                }),
+                span: a.span,
+            });
+            changed = true;
+        }
+        changed.then_some(out)
+    }
+
     /// R2: a read-only `input` dyn-array formal aliased to a caller DynArray net.
     pub(crate) fn dyn_subst_lookup(&self, name: &str) -> Option<u32> {
         self.dyn_subst
@@ -238,6 +340,23 @@ impl Elaborator<'_> {
     /// formal's. `None` (→ loud) for a select / queue / assoc / non-dyn / mismatched
     /// element (correct-or-loud: the alias only shares storage of the same shape).
     pub(crate) fn dyn_array_actual_net(&mut self, a: &ast::Expr, p: &ast::TfPort) -> Option<u32> {
+        // §10.9.2: an EMPTY `'{}` actual — `run_scenario('{}, msg, exp)`, the standard
+        // way to say "no key" for an optional dyn-array argument. A fresh DynArray net
+        // that is never allocated IS the empty array (`size()` 0, `foreach` iterates
+        // zero times), which is why the documented workaround — declaring a module-scope
+        // `byte no_key [];` and passing that — already worked. This gives the pattern
+        // the same net without the boilerplate, and needs no statements, so it is
+        // available in EVERY calling context including a function-call expression.
+        //
+        // A NON-empty pattern needs its elements written at the call site and is hoisted
+        // to a temp by `hoist_dyn_pattern_actuals` before lowering ever reaches here.
+        if matches!(&a.kind,
+            ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts } if parts.is_empty())
+        {
+            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+            let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            return Some(self.fresh_dyn_temp(fw, fs));
+        }
         let ast::ExprKind::Ident(path) = &a.kind else {
             return None;
         };
@@ -383,6 +502,63 @@ impl Elaborator<'_> {
         rhs: &ast::Expr,
     ) -> bool {
         match &rhs.kind {
+            // §7.4.5/§10.9.2: a whole-value `'{e0,…}` (or `{e0,…}`, §10.10) assignment
+            // to a queue / dynamic array — `exp = '{8'h0a, 8'h0b};`. This is the SAME
+            // element list the DECLARATION initializer already accepts, expanded by the
+            // same `dyn_decl_init_stmts`; only the statement spelling was missing, so
+            // `byte e[] = '{…};` worked while `byte e[]; e = '{…};` was doubly loud.
+            //
+            // A queue is CLEARED first: `dyn_decl_init_stmts` push_backs, which appends,
+            // and an assignment REPLACES. A dyn array needs no clear — its `new[N]`
+            // reallocates. `'{}` is the empty list: `new[0]` / clear-only, which is
+            // exactly "assign an empty value".
+            ast::ExprKind::AssignPattern(_) | ast::ExprKind::Concat { .. } => {
+                let ast::Lvalue::Ident(p) = lhs else {
+                    return false;
+                };
+                if p.segments.len() != 1 {
+                    return false;
+                }
+                let Some((_, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
+                    self.dyn_handle(&p.segments[0].name)
+                else {
+                    return false; // not a dyn handle → the plain (packed/array) path
+                };
+                if delay.is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a delayed whole-value pattern assignment to a dynamic-storage \
+                         handle is outside the MVP",
+                    );
+                    return true;
+                }
+                let Some(elems) = dyn_pattern_elems(rhs) else {
+                    return false;
+                };
+                let elems: Vec<ast::Expr> = elems.to_vec();
+                let id = p.segments[0].clone();
+                if kind == ir::NetKind::Queue {
+                    let clear = ast::Stmt::UserTaskCall {
+                        name: ast::HierPath {
+                            segments: vec![
+                                id.clone(),
+                                ast::Ident {
+                                    name: "delete".to_string(),
+                                    span: id.span,
+                                },
+                            ],
+                            span: id.span,
+                        },
+                        args: vec![],
+                        span: rhs.span,
+                    };
+                    self.lower_stmt(b, &clear);
+                }
+                for st in &self.dyn_decl_init_stmts(&id, kind, &elems) {
+                    self.lower_stmt(b, st);
+                }
+                true
+            }
             // §7.5.1/§7.9/§7.10: whole-handle copy `dst = src` — VALUE
             // semantics (a DEEP copy: later writes to either side never show
             // through, iverilog-pinned for dyn/queue; assoc = hand-IEEE, no

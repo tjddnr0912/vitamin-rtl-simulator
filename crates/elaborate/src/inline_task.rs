@@ -140,6 +140,25 @@ impl Elaborator<'_> {
                 return;
             }
         };
+        // §13.5.4: reorder named arguments (`.formal(v)` / `.formal()`) to positional
+        // using the callee's formals, exactly as the FUNCTION path does. Without this a
+        // `.formal(v)` actual fell through to `lower_expr`, whose `NamedArg` arm reports
+        // "only valid in a user function / task call" — while standing inside one.
+        let reordered_args;
+        let args: &[ast::Expr] = if args
+            .iter()
+            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
+        {
+            match self.resolve_named_args(&tname, &task.ports, args) {
+                Some(v) => {
+                    reordered_args = v;
+                    &reordered_args
+                }
+                None => return,
+            }
+        } else {
+            args
+        };
         // §13.3 UARR: an unpacked-array TASK formal is outside the supported slice
         // (the md-packed representation targets FUNCTION input formals; a task's
         // output/inout array formal is pass-by-reference, not covered). Loud-reject
