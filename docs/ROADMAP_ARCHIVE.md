@@ -6,12 +6,16 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 229건 (최신순)
+## 인덱스 — 완료 슬라이스 233건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–255**
+**§4.5.220–259**
+- `4.5.259` 초기화 phase 적대 리뷰 — 하강 4(dirty 통째 clear·슬롯 공유 카운터·랭크 없는 package flush·인터페이스 슬롯) + false-loud 1 …
+- `4.5.258` generate 안 블록 로컬 — 분류기가 generate 프로세스를 아예 안 보고 있었다 …
+- `4.5.257` 초기화는 프로세스가 아니라 **arm 이전 PHASE**(이벤트 0) · 상수 fold 제거로 자기모순 해소 …
+- `4.5.256` t0 초기화 순서를 랭크 경로 데이터로 — 소유권 축과 초기화 축 분리 …
 - `4.5.255` 같은-이름 `string` 배열 correct-support + 리뷰 2연(generate 본문엔 prefix 가 없다 · 소유권은 플래그) …
 - `4.5.254` t0 정적 초기화자 순서 = 모듈 전부 → 블록 로컬 전부(실측) · 리스트 3개를 하나로 …
 - `4.5.253` §4.5.251 적대 리뷰 — 하강 4건(kind-only 술어·선언 순서 2·gather 확장이 뺏은 스코핑) …
@@ -310,6 +314,45 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.259 초기화 phase 적대 리뷰 — 하강 4 + false-loud 1 (2026-07-28, format 26 불변) ✅
+
+두 렌즈가 **반대편에서 상위 2건을 각각 독립 발견**했다.
+
+**F1(최광범위·silent)**: 초기화 자신의 이벤트를 죽이려고 dirty 리스트를 **통째로** 비웠는데, 그 리스트엔 **arm 이전에 도는 t0 cont-assign settle** 의 쓰기도 올라와 있었다. 그건 복구 불가다 — run 루프 안의 두 번째 settle 은 같은 값을 쓰고 `note_change` 는 **실제 변화만** 기록하므로 `assign w = 1'b1;` 에 걸린 `always @(w)` 가 영영 안 뜬다. 게이트가 "설계 어디든 초기화자 하나라도"였으므로 **무관한 `reg r = 1'b0;` 하나로 전 설계 발화**. phase 가 **자기가 쓴 것만** un-dirty 하도록.
+
+**F2(silent)**: 랭크 카운터가 스코프당 하나였는데 네 generate walk 중 **Instances walk 만** `Instance` 항목을 방문한다 → 인스턴스 **뒤에** 쓰인 generate 가 VarInit 과 Instances 에서 **다른 번호**를 뽑고, 그 자식 인스턴스가 자기 generate 의 flush 와 안 맞는 경로에 실렸다. 인스턴스를 옮기면 답이 바뀌는 것으로 differential 렌즈가 잡았다. **슬롯당 카운터**로 — 한 walk 만 방문하는 슬롯은 그 walk 안에서 계속 세고, generate 슬롯은 영향 없음.
+
+**F3(silent)**: `package.rs` 가 크레이트에서 **유일하게 랭크 없는 flush** 였다 → 패키지 초기화자가 phase 에 아예 없어서 모든 모듈 초기화자 **뒤에** 돌고(모듈 `int m = p::pv + 100;` 가 0 을 읽음) 쓰기가 이벤트를 냈다(패키지 `logic pclk = 1'b1;` 에 **가짜 posedge**). 그 자리 주석이 예전엔 안전을 보장하던 불변식("패키지가 먼저 elaborate 되므로 ProcId 가 앞선다")을 여전히 주장하고 있었다 — **초기화가 phase 가 된 순간 그 보장은 무효**다. 실제로 "낮은 ProcId = 먼저 실행"에 의존하던 유일한 곳.
+
+**F4(silent)**: 인터페이스 인스턴스는 스코프인데 랭크 스코프를 아무도 안 밀어서, 그 flush 가 **바깥 스코프의 자기-변수 슬롯**을 빌려 썼다. 게다가 두 호출부가 모듈 자기 flush 와 **다른 pass** 에서 도니 랭크 벡터가 그냥 충돌 → 순서가 ProcId tie-break 로 결정됐다. 모듈 자기 초기화자가 **두 인터페이스 사이**에 끼고, generate 안 인터페이스가 그 generate 의 자기 변수 뒤로 갔다.
+
+**F5(false-loud)**: 중첩 관계인 span 이 **이름 전체**를 실격시켜서, 죽은 `generate if (0)` arm 이 자기 안의 중첩 `k` 로 **다른 곳의 살아있는 쌍**의 스코핑을 철회시켰다. 후보에서 **그 span 만** 빼도록(리뷰 S3 규칙의 일반화). 뺀 span 은 예전 그대로 flat net 을 쓰고 살아남은 것들은 서로 다른 `$blk$` net 을 받으므로 alias 불가 · 진짜 중첩 쌍은 생존자가 2 미만이라 여전히 loud. 프로세스 walk 가 **branch path** 를 들고 다녀 한 generate if/case 의 서로 다른 arm(동시 존재 불가)은 서로 shadow 하지 않는다.
+
+부수: 잘린 사이드카가 IR 에 없는 프로세스를 지목하면 **조용히 skip 이 아니라 fatal**(20줄 위 fork-mode 게이트와 같은 급) · 두 렌즈가 나열한 낡은 주석 전부 교정(상수 fold 가 남긴 `net.init` 전제 · tie-permutation 설계를 아직 설명하던 사이드카 문서 3곳).
+
+#### 4.5.258 generate 안 블록 로컬도 모듈과 같은 같은-이름 규칙 (2026-07-28, format 26 불변) ✅
+
+마지막 형태: generate **안**에서 같은 `string s[2]` 를 선언한 두 블록이 loud 였고, 가족 전체(queue·dyn·assoc·스칼라 string)가 거기서만 그랬다. 원인은 이번 라운드가 다뤄온 string 배열 기계가 아니라 — **분류기 둘이 `module.body` 의 `ModuleItem::Proc` 만 훑어서** generate 안 프로세스가 분류 대상 집합에 아예 없었다. generate 를 아는 공용 walk 으로 둘 다 고쳤다(둘은 순수 AST 함수이고 Nets 단계 hoist 와 Logic 단계 lowering 이 **같은 집합**을 봐야 하므로 공유가 필수). generate-for 본문은 몇 번을 unroll 하든 **AST 하나**이고 각 unroll 이 자기 prefix 로 elaborate 되므로, 루프 안에서 한 번 선언된 이름은 **한 블록** — 이건 한계가 아니라 정답이다(복사본끼리는 충돌 불가·서로 다른 두 블록만 충돌).
+
+#### 4.5.257 초기화는 프로세스가 아니라 PHASE (2026-07-28, **format 25 → 26**) ✅
+
+iverilog 실측 둘이 같은 결론을 강제했고 **둘 다 순서 얘기가 아니다**: `reg clk = 0;` 의 `always @clk` 가 iverilog 2 / vita **3**, 비상수 `int nc = src+1;` 의 `always @nc` 가 iverilog 0 / vita **1**. **선언 초기화자는 이벤트를 만들지 않는다.** §6.21 의 "before any initial or always block starts" 는 문자 그대로 **arm 이전 phase** 이며, 초기화자 프로세스를 올바른 **순서**로 돌려도 그때는 이미 arm 이 끝난 뒤라 못 고친다. 엔진이 arm 루프 **앞에서** 초기화 순서대로 실행하고 `final` 블록처럼 arm 에서 제외한다(`run_body` 는 `run_finals` 가 이미 쓰던 경로·합성 초기화자 본문은 직선이라 suspend 불가).
+
+그 phase 가 있어야 **상수 fold 제거**가 안전해진다. 상수 초기화자는 net 생성 시점에 `net.init` 으로 접혀 **초기화 순서 밖**에 있었고, 그래서 vita 가 **자기와 모순**했다 — generate 초기화자가 모듈 `int mm = 77;` 을 읽으면 77, 같은 읽기가 `int mm = f();` 이면 0(iverilog 는 둘 다 0). phase 없이 fold 만 뺐다면 하강이었고 **테스트 29개가 그렇게 말했다**(초기화 엣지를 죽이고 있던 게 그 fold였다).
+
+옛 핀 2개가 뒤집혔고 **둘 다 작성 당시 스스로 "발산"이라 적어둔 것**: `cross_scope_module_read_is_a_documented_init_order_race`("iverilog 는 0 … oracle-matched 아님" → 이제 0, 이름도 교체) · `forward_ref_init_is_documented_leniency`(패키지 `int a = b + 1; int b = 5;` — iverilog 는 아예 거부라 오라클 없음 — `a=6` → `a=1`, 비상수 쌍둥이가 원래 주던 값).
+
+#### 4.5.256 t0 정적 초기화 순서를 pass 순서가 아니라 데이터로 (2026-07-28, format 25 불변) ✅
+
+**축이 둘인데 자료구조가 하나**였던 게 이전 시도들이 계속 실패한 이유다. **소유권**(어느 flush 가 어느 pending 을 가져가나) = innermost-first, **초기화 순서** = 완전히 다른 축. `$random` 증인으로 실측한 규칙:
+
+- **모듈**: ①generate 스코프 ②자식 인스턴스 ③자기 변수 ④자기 블록 로컬
+- **generate**: ①자식 인스턴스 ②자기 변수 ③자기 블록 로컬 ④중첩 generate
+
+14 프로브가 각 규칙의 **양방향**을 핀한다(모듈 generate 는 마지막에 써도 먼저·자기 변수는 처음에 써도 마지막; generate 의 중첩 generate 는 앞에 써도 자기 변수 뒤·자식 인스턴스는 앞). **어떤 pass 순서로도 안 나온다** — 자식 초기화자가 부모보다 먼저인데 부모 프로세스는 자식이 존재하기도 전에 생성된다. 그래서 `(slot, seq)` **랭크 경로**로 기록하고 per-ProcId 키로 내보내 스케줄러가 소비한다. elaborate pass 는 **그대로 뒀다**.
+
+부수로 cross-scope 읽기 없이도 보이는 것 하나: vita 는 §6.21 을 "낮은 ProcId" 로 근사했는데 그 근사는 **인스턴스 경계를 못 넘는다** — 부모 `initial` 이 자식의 `string` 을 읽으면 빈 기본값(자식 초기화자 프로세스는 pass 8, 부모 자기 프로세스는 pass 7).
 
 #### 4.5.255 같은-이름 `string` 배열 correct-support + 그 리뷰가 잡은 2연 하강 (2026-07-28, format 25 불변) ✅
 

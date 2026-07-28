@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(둘 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-28)**: format_version **25** · **4757 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.255**(같은-이름 `string` 배열 correct-support + 리뷰 2연 — 소유권은 prefix 가 아니라 플래그). 직전 = **§4.5.254**(t0 정적 초기화 순서 = 모듈 전부 → 블록 로컬 전부·generate 는 모듈보다 먼저). 직전 = **§4.5.253**(§4.5.251 적대 리뷰 — 하강 4건). 직전 = **§4.5.252**(`$sformatf` — 근인은 degenerate `eval` arm). 직전 = **§4.5.251**(`$blk$` decl-init 수집). 직전 = **§4.5.250**(§4.5.248/249 적대 리뷰 — 하강 6건). 직전 = **§4.5.249**(외부 round-20 §6 진단 위치 + §4.11 같은 이름 동적 로컬). 직전 = **§4.5.248**(외부 round-20 8 가족 — fork-arm 블록 로컬·queue 관용구·named arg·`$sformatf`). 직전 = **§4.5.247**(§4.5.246 회귀 수정). 직전 = **§4.5.246**(inner NET shadow — 마지막 ①-급 해소). 그 이전 슬라이스(§4.5.222~245)의 한 줄 요약과 상세는 전부 **[ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) — 이 문서는 **전방 전용**이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-28)**: format_version **26** · **4776 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.259**(초기화 phase 적대 리뷰 — 하강 4 + false-loud 1). 직전 = **§4.5.258**(generate 안 블록 로컬도 모듈과 같은 규칙). 직전 = **§4.5.257**(초기화는 프로세스가 아니라 **arm 이전 phase** · 상수 fold 제거, **format 26**). 직전 = **§4.5.256**(t0 초기화 순서를 랭크 경로 데이터로 — 축 분리). 직전 = **§4.5.255**(같은-이름 `string` 배열 correct-support). 직전 = **§4.5.254**(t0 정적 초기화 순서 = 모듈 전부 → 블록 로컬 전부·generate 는 모듈보다 먼저). 직전 = **§4.5.253**(§4.5.251 적대 리뷰 — 하강 4건). 직전 = **§4.5.252**(`$sformatf` — 근인은 degenerate `eval` arm). 직전 = **§4.5.251**(`$blk$` decl-init 수집). 직전 = **§4.5.250**(§4.5.248/249 적대 리뷰 — 하강 6건). 직전 = **§4.5.249**(외부 round-20 §6 진단 위치 + §4.11 같은 이름 동적 로컬). 직전 = **§4.5.248**(외부 round-20 8 가족 — fork-arm 블록 로컬·queue 관용구·named arg·`$sformatf`). 직전 = **§4.5.247**(§4.5.246 회귀 수정). 직전 = **§4.5.246**(inner NET shadow — 마지막 ①-급 해소). 그 이전 슬라이스(§4.5.222~245)의 한 줄 요약과 상세는 전부 **[ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) — 이 문서는 **전방 전용**이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -125,12 +125,8 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **`$urandom_range(R,0)` 가 범위 1 로 붕괴**(soundness S5): `bits(3.0)` 의 하위 32비트가 0. generic SysCall 인자 경로라 위치별 게이트 필요.
 - **파라미터 구조적 지연이 조용히 무시됨(pre-existing·PRE==POST)**: `assign #P y = x;` · `wire #P y = x;` · `and #P g(o,a,b);` 가 P 가 **정수 param 이어도** 지연을 무시(리터럴 `#3` 은 동작). §4.5.221 이 `parameter real` 을 지원하면서 **클럭 주기/지연 관용구가 이 경로의 주 사용처**가 되어 도달성이 크게 넓어졌다 — 우선순위 상향 후보.
 - **real→`input int` formal 미강제(pre-existing·PRE==POST)**: `f(2.4)` → vita `24`, iverilog `20`.
-- **t0 초기화 순서 잔여 3건**(§4.5.254/255 가 모듈-vs-블록로컬·generate-vs-모듈을 닫으면서 **실측으로 남긴 것** — 전부 pre-existing·PRE==POST):
-  ① **중첩 generate 는 바깥이 먼저** — iverilog `g1.a`=D1 → `g1.g2.b`=D2 → 모듈 D3. vita 는 flush 가 innermost-first(=소유권 순서)라 안팎이 뒤집힌다. 소유권 순서와 초기화 순서가 **다른 축**임을 인정하고 바깥 스코프가 자손 키까지 오프셋 순으로 방출해야 한다(안쪽 flush 억제 필요 → presize 소유권과 충돌하므로 별도 슬라이스).
-  ② **상수 초기화자는 이 순서 모델 밖** — vita 는 상수를 `net.init` 으로 접으므로 `int mm=77;` 은 "대입"이 아니다. iverilog 는 상수도 순서대로 대입해서 generate 의 `gm=t.mm` 가 **0** 을 본다(vita 77). 비상수 소스면 vita 가 맞다.
-  ③ **자식 인스턴스 static 이 부모보다 뒤** — iverilog 는 자식 먼저(`sub` D1/D2 → `top` D3/D4), vita 는 부모 먼저. ①과 같은 축(스코프 방출 순서).
-- **generate 안 같은-이름 `string s[2]` 쌍은 여전히 loud**(E3009) — §4.5.255 가 모듈 스코프에서 연 것이 generate 스코프에는 아직 안 닿는다. 진단 문구도 "declared at module scope"라 **위치를 틀리게 지목**한다(충돌은 generate 안).
-- **generate 중첩 user `initial` 방출 순서**: vita innermost-first / iverilog outermost-first. 위 ①과 같은 뿌리(사용자 프로세스 쪽 발현).
+- ~~t0 초기화 순서 잔여 3건 + generate 안 같은-이름 loud~~ **4건 전부 RESOLVED**(§4.5.256~259) — ①중첩 generate·③자식 인스턴스는 **랭크 경로**(소유권 축과 초기화 축 분리)로, ②상수 초기화자는 **arm 이전 phase**(초기화는 프로세스가 아니다 → 이벤트 0) 도입 후 `net.init` fold 제거로, ④generate 안 같은-이름은 분류기가 generate 프로세스를 보게 해서. 부수로 **기존 silent-wrong 4건**이 같이 닫혔다: 선언 초기화자가 만들던 가짜 엣지 2종(상수·비상수) · 부모 `initial` 이 자식 `string` 을 빈 값으로 읽던 것 · 패키지 초기화자 순서/이벤트.
+- **generate 중첩 user `initial` 방출 순서**(잔여·초기화와 무관): vita innermost-first / iverilog outermost-first. **초기화자 순서는 §4.5.256 이 닫았고**, 이건 사용자 프로세스 쪽 발현이라 별개다. 값에 영향이 없고(각 프로세스가 자기 것만 출력) 출력 줄 순서만 다르다.
 
 > 발굴 경위·재현·범위 상세는 ARCHIVE의 해당 §4.5.x 참조.
 
