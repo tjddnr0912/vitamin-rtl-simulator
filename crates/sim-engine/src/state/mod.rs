@@ -331,7 +331,7 @@ pub(crate) struct SimState<'a> {
     pub proc_multipliers: Vec<u64>,
     /// §4.5.256 per-ProcId t0 ordering key; EMPTY ⇒ `tie == ProcId`. Consumed once by
     /// `arm_processes`, which is why it is taken rather than read.
-    pub proc_ties: Vec<u32>,
+    pub init_procs: Vec<u32>,
     /// Per-ProcId `S = 10^(prec − global)` (from `SimOpts.proc_prec_mults`);
     /// empty ⇒ S=1 ⇒ two-stage `#delay` rounding degenerates to `round(d × M)`.
     pub proc_prec_mults: Vec<u64>,

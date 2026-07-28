@@ -75,10 +75,9 @@ impl Elaborator<'_> {
                     }
                 }
             } else {
-                let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                if fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some() {
-                    continue; // constant ⇒ already folded into net.init
-                }
+                // §4.5.257: a CONSTANT initializer is collected too. It used to be folded
+                // into `net.init` and skipped here, which removed it from the
+                // initialization order entirely.
             }
             let path = ast::HierPath {
                 segments: vec![name.name.clone()],
@@ -157,30 +156,18 @@ impl Elaborator<'_> {
             .splice(0..0, mine.into_iter().map(|(_, l, r)| (l, r)));
     }
 
-    /// Turn the recorded initialization ranks into a per-ProcId t0 ordering key: every
-    /// ranked (= synthesized declaration-initializer) process first, in rank order, then
-    /// every other process in ProcId order. Returns EMPTY when that is already the
-    /// identity permutation, so a design whose creation order happens to match pays
-    /// nothing and stays byte-identical.
-    pub(crate) fn proc_ties(&self) -> Vec<u32> {
-        let n = self.processes.len();
-        let mut order: Vec<u32> = (0..n as u32).collect();
-        order.sort_by(
-            |a, b| match (self.init_ranks.get(a), self.init_ranks.get(b)) {
-                (Some(ra), Some(rb)) => ra.cmp(rb).then(a.cmp(b)),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => a.cmp(b),
-            },
-        );
-        let mut ties = vec![0u32; n];
-        for (tie, pid) in order.iter().enumerate() {
-            ties[*pid as usize] = tie as u32;
-        }
-        if ties.iter().enumerate().all(|(i, t)| i as u32 == *t) {
-            return Vec::new();
-        }
-        ties
+    /// The synthesized declaration-initializer processes, in INITIALIZATION order.
+    ///
+    /// The engine runs these to completion BEFORE arming anything — measured: iverilog
+    /// applies a declaration initializer without producing an event, so `reg clk = 0;`
+    /// does not give `always @clk` an X→0 edge, and neither does a NON-constant
+    /// `int nc = src + 1;`. Running them as ordinary t0 processes did both. IEEE 1800
+    /// §6.21 says the assignment happens "before any initial or always block starts",
+    /// which is exactly a pre-arm phase, not a low ProcId.
+    pub(crate) fn init_procs(&self) -> Vec<u32> {
+        let mut v: Vec<(&Vec<u32>, u32)> = self.init_ranks.iter().map(|(p, r)| (r, *p)).collect();
+        v.sort();
+        v.into_iter().map(|(_, p)| p).collect()
     }
 
     /// Slot numbers inside one scope's initialization rank. Two tables because the two

@@ -621,22 +621,13 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // template == declaration index` so existing single-process ordering is
         // byte-identical to before the activity-id refactor.
         //
-        // §4.5.256: unless the design carries a `proc_ties` permutation, which reorders
-        // the t0 queue WITHOUT touching ProcIds. Static initialization runs "before any
-        // initial or always block starts" (IEEE 1800 §6.21) and, among the initializers,
-        // in a scope order the elaboration pass structure cannot produce — a child
-        // instance's initializers precede its parent's, while the parent's own processes
-        // are created before the child even exists. `tie` is the one thing the t0 queue
-        // sorts on, so expressing the order there needs nothing else: `template` still
-        // indexes the process, only the RUN order changes. EMPTY ⇒ identity ⇒ unchanged.
         self.free_activities.clear();
         self.free_barriers.clear();
-        let ties = std::mem::take(&mut self.st.proc_ties);
         self.activities = (0..self.st.ir.processes.len() as u32)
             .map(|pi| Activity {
                 call_stack: Vec::new(),
                 template: pi,
-                tie: ties.get(pi as usize).copied().unwrap_or(pi),
+                tie: pi,
                 join_ref: None,
                 is_child: false,
                 reported: false,
@@ -669,11 +660,47 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             return; // nothing armed; run() sees `finished` and ends immediately
         }
 
+        // §4.5.256: STATIC INITIALIZATION, before anything is armed. IEEE 1800 §6.21 puts
+        // a declaration initializer "before any initial or always block starts", and
+        // measurement says that is literal — iverilog gives `always @clk` no edge for
+        // `reg clk = 0;`, and none for a non-constant `int nc = src + 1;` either. Running
+        // these as ordinary t0 processes produced both edges, and running them in the
+        // right ORDER (the previous half of this slice) does not help: the arming has
+        // already happened. They are executed here, in initialization order, and then
+        // skipped by the arming loop exactly like a `final` block.
+        //
+        // A synthesized initializer body is straight-line — blocking assignments plus the
+        // queue / dyn-array `'{…}` expansions — so it cannot suspend, and `run_body` runs
+        // it to completion the same way `run_finals` does.
+        let inits = std::mem::take(&mut self.st.init_procs);
+        for pid in &inits {
+            if (*pid as usize) < self.activities.len() {
+                let entry = self.st.ir.processes[*pid as usize].entry;
+                let _ = self.run_body(*pid, entry);
+            }
+        }
+        // …and drop what those writes made dirty. "Before any process is armed" means the
+        // initialization is not a transition anyone can observe: `reg clk = 0;` must not
+        // hand `always @clk` an X→0 edge, and `int nc = src + 1;` must not hand one to
+        // `always @nc` either (both measured against iverilog, both wrong before). The
+        // t0 continuous-assign settle re-evaluates every assign from scratch rather than
+        // from this list, so clearing it costs nothing there.
+        if !inits.is_empty() {
+            for n in std::mem::take(&mut self.st.dirty) {
+                self.st.dirty_flag[n as usize] = false;
+            }
+        }
+        let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
+
         for aid in 0..self.activities.len() as u32 {
             let tmpl = self.activities[aid as usize].template as usize;
             // P2-E: `final` blocks are Initial-shaped in the IR but never
             // armed — `run_finals` executes them after the main loop ends.
             if self.st.final_procs.contains(&(tmpl as u32)) {
+                continue;
+            }
+            // …and neither is a declaration-initializer body: it already ran above.
+            if init_set.contains(&(tmpl as u32)) {
                 continue;
             }
             let tie = self.activities[aid as usize].tie;

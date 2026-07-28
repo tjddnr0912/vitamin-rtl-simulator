@@ -527,3 +527,86 @@ fn sibling_scopes_keep_source_order() {
         "generates in source order, then instances in source order:\n{o}"
     );
 }
+
+// ── §4.5.257: initialization is a PHASE, not a process ───────────────────────
+
+/// Measured: a declaration initializer produces no event. `reg clk = 0;` gives
+/// `always @clk` no X→0 edge, and neither does a NON-constant `int nc = src + 1;` give
+/// one to `always @nc`. Running the initializers as ordinary t0 processes produced both,
+/// and ordering them correctly does not help — by then the arming has happened. IEEE 1800
+/// §6.21's "before any initial or always block starts" is literal: a pre-arm phase.
+#[test]
+fn a_declaration_initializer_produces_no_event() {
+    let (o, ok) = run("module t;\n\
+           reg clk = 0;\n\
+           int src = 7;\n\
+           int nc = src + 1;\n\
+           int ec = 0, en = 0;\n\
+           always @clk ec = ec + 1;\n\
+           always @nc  en = en + 1;\n\
+           initial begin #1 clk = 1; #1 clk = 0; #1\n\
+             $display(\"P nc=%0d clk_edges=%0d nc_edges=%0d\", nc, ec, en); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P nc=8 clk_edges=2 nc_edges=0"),
+        "iverilog: the two user edges only:\n{o}"
+    );
+}
+
+/// …and it still preserves Z, which the pre-applied `net.init` value used to be the only
+/// carrier of.
+#[test]
+fn a_four_state_initializer_keeps_z() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             logic [3:0] zi = 4'bz0z1;\n\
+             $display(\"P declinit %b\", 8'(zi));\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("P declinit 0000z0z1"), "iverilog value:\n{o}");
+}
+
+/// A CONSTANT initializer is an ordered assignment like any other. Pre-applying it at net
+/// creation took it out of the initialization order, so vita disagreed with ITSELF: a
+/// generate initializer reading a module `int mm = 77;` saw 77, while the same read of a
+/// non-constant `int mm = f();` correctly saw 0. iverilog gives 0 for both.
+#[test]
+fn a_constant_initializer_participates_in_the_order() {
+    let src = |init: &str| {
+        format!(
+            "module t;\n\
+               function int f(); return 77; endfunction\n\
+               int mm = {init};\n\
+               generate if (1) begin : g\n\
+                 int gm = t.mm;\n\
+                 initial #1 $display(\"P gm=%0d\", gm);\n\
+               end endgenerate\n\
+               initial begin #1 $display(\"P mm=%0d\", mm); #1 $finish; end\n\
+             endmodule\n"
+        )
+    };
+    for init in ["77", "f()"] {
+        let (o, ok) = run(&src(init));
+        assert!(ok, "expected clean sim for `{init}`, got:\n{o}");
+        assert!(
+            o.contains("P gm=0") && o.contains("P mm=77"),
+            "`{init}`: the generate scope initializes first, so it reads mm's default:\n{o}"
+        );
+    }
+}
+
+/// The same rule inside one scope, where it is plain declaration order: a later
+/// declaration's initializer sees an earlier one's value, an earlier one does not see a
+/// later one's — whether or not the later initializer is constant.
+#[test]
+fn declaration_order_holds_for_constants_too() {
+    let (o, ok) = run("module t;\n\
+           int a = 5;\n\
+           int b = a + 1;\n\
+           initial begin $display(\"P a=%0d b=%0d\", a, b); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("P a=5 b=6"), "iverilog value:\n{o}");
+}

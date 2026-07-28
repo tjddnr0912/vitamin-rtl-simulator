@@ -626,17 +626,15 @@ impl Elaborator<'_> {
             // and a PACKAGE body does the same (A2b — `elaborate_pkg_netvar`
             // collects, `elaborate_package` flushes its own pre-sweep initial
             // whose ProcId precedes every module process).
-            let init = match &decl.init {
-                Some(e) => fold_init(e, width)
-                    .or_else(|| {
-                        self.const_eval_in_scope(e).map(|v| {
-                            let cv = make_const_i64(v, 64, true);
-                            resize_bits(&cv.bits, cv.width, width, cv.signed)
-                        })
-                    })
-                    .unwrap_or_else(|| default_init(d.kind, width)),
-                None => default_init(d.kind, width),
-            };
+            // §4.5.257: the DEFAULT only. A declaration initializer — constant or not — is
+            // an ASSIGNMENT that happens in the static-initialization phase, in scope
+            // order, and pre-applying a constant here took it out of that order: a
+            // generate initializer reading a module `int mm = 77;` saw 77, while the same
+            // read of a NON-constant `int mm = f();` correctly saw 0. vita disagreed with
+            // itself depending on whether the initializer happened to fold. The value now
+            // always rides the pre-sweep, which the engine runs before arming anything, so
+            // it still produces no event and still lands before every user process.
+            let init = default_init(d.kind, width);
             self.add_net(
                 &decl.name.name,
                 ir::NetVar {

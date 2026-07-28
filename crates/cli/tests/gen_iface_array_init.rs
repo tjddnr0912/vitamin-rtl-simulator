@@ -282,19 +282,20 @@ fn write_to_localparam_array_in_interface_is_loud() {
 // ─────────────────────── documented boundaries ───────────────────────
 
 #[test]
-fn cross_scope_module_read_is_a_documented_init_order_race() {
-    // A generate init reading a MODULE non-constant var: vita runs the module
-    // pre-sweep first (module `k` = 9 applied), so the generate init reads 9;
-    // iverilog runs the generate init first and reads k's default (0). Both are
-    // legal §6.8 orderings. Pin vita's DETERMINISTIC value so a semantic change
-    // is caught (this is NOT oracle-matched — it is a documented race, ㉯ family).
+fn cross_scope_module_read_matches_the_measured_init_order() {
+    // Was pinned as a documented race: vita ran the module pre-sweep first, so the
+    // generate init read `k` = 9 where iverilog reads k's default (0). §4.5.256/257
+    // settled the order by measurement — a generate scope initializes before the module,
+    // and a CONSTANT initializer is an ordered assignment like any other rather than a
+    // value pre-applied at net creation — so this is oracle-matched now. Live iverilog
+    // 13.0 prints `0 1`.
     let (o, e, c) = run("module top; int k = 9;\n\
          generate if(1) begin: g\n\
            int a[0:1] = '{k, k+1};\n\
            initial $display(\"%0d %0d\", a[0], a[1]);\n\
          end endgenerate initial #1 $finish; endmodule\n");
     assert_eq!(c, 0, "must elaborate clean:\n{e}");
-    assert!(o.starts_with("9 10\n"), "vita init-order value:\n{o}");
+    assert!(o.starts_with("0 1\n"), "iverilog init-order value:\n{o}");
 }
 
 #[test]

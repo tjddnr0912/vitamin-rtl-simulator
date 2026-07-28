@@ -72,7 +72,7 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
     s.func_names = vec!["top.f".to_string(), "top.g".to_string()];
     s.net_decl_ranges = std::collections::BTreeMap::from([(31u32, (3i64, -2i64))]);
     s.file_directed_stmts = std::collections::BTreeSet::from([37u32]);
-    s.proc_ties = vec![2u32, 0, 1];
+    s.init_procs = vec![2u32, 0, 1];
     let bytes = postcard::to_stdvec(&s).expect("postcard encode");
     let got = blake3::hash(&bytes).to_hex().to_string();
     // REGEN_GOLDEN=1 cargo test -p cli staged_extra_sidecars_wire_shape -- --nocapture

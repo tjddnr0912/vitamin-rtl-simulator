@@ -349,8 +349,11 @@ impl Elaborator<'_> {
                     // whose synthesized `a = '{…}` is routed through
                     // `array_assign_special` — previously a bare
                     // `name.unpacked.is_empty()` guard silently dropped it.
-                    let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                    fold_init(init, w).is_none() && self.const_eval_in_scope(init).is_none()
+                    // §4.5.257: a constant rides the t0 sweep like everything else now —
+                    // `net.init` carries only the type default, so skipping it here would
+                    // drop the value outright.
+                    let _ = &self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    true
                 };
                 // r18 (family D): a per-entry local's initializer is emitted at
                 // BLOCK ENTRY (the Logic-phase Block arm), so it must NOT also

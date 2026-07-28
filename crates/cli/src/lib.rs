@@ -420,7 +420,7 @@ struct StagedExtraSidecars {
     /// the format_version 26 bump. EMPTY when the order IS the identity permutation
     /// (every design with no decl-initializer, and most with one) ⇒ byte-identical.
     #[serde(default)]
-    proc_ties: Vec<u32>,
+    init_procs: Vec<u32>,
 }
 
 impl StagedExtraSidecars {
@@ -460,7 +460,7 @@ impl StagedExtraSidecars {
             string_elem_dyn_nets: sc.string_elem_dyn_nets.clone(),
             net_decl_ranges: sc.net_decl_ranges.clone(),
             file_directed_stmts: sc.file_directed_stmts.clone(),
-            proc_ties: sc.proc_ties.clone(),
+            init_procs: sc.init_procs.clone(),
         }
     }
 }

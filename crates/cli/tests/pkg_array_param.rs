@@ -170,16 +170,19 @@ fn two_packages_each_flush_their_own_presweep() {
 
 #[test]
 fn forward_ref_init_is_documented_leniency() {
-    // iverilog REJECTS declaration-after-use inside a package; vita lowers by
-    // pass, so the pre-sweep runs in DECL order with well-defined values
-    // (a=6: b's const init is already in net.init at creation). Documented
-    // leniency (F4 family) — pinned here so a semantic change is caught.
+    // iverilog REJECTS declaration-after-use inside a package, so there is no oracle;
+    // vita lowers by pass, so the pre-sweep runs in DECLARATION order. It used to print
+    // a=6, because b's constant was pre-applied at net creation and so sat outside that
+    // order — the same expression with a NON-constant `b` printed a=1. §4.5.257 made a
+    // constant initializer an ordered assignment like any other, so both spellings now
+    // give the declaration-order answer. Documented leniency (F4 family), pinned at the
+    // value vita is self-consistent about.
     let (o, e, c) = run(
         "package p; int a = b + 1; int b = 5; endpackage\n\
          module top; import p::*;\n  initial begin $display(\"a=%0d b=%0d\", a, b); $finish; end\nendmodule\n",
     );
     assert_eq!(c, 0, "documented-leniency value must stay clean:\n{e}");
-    assert_eq!(o, "a=6 b=5\nsimulation ended (Finish) at time 0\n");
+    assert_eq!(o, "a=1 b=5\nsimulation ended (Finish) at time 0\n");
 }
 
 #[test]

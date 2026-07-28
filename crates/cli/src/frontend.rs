@@ -570,7 +570,7 @@ pub(crate) fn run_vita_str_gated(
         net_dims: sc.net_dims,
         net_decl_ranges: sc.net_decl_ranges,
         file_directed_stmts: sc.file_directed_stmts,
-        proc_ties: sc.proc_ties,
+        init_procs: sc.init_procs,
         final_procs: sc.final_procs,
         // N4 clocking: thread the preponed-sampler sidecars (one-shot path; empty
         // for designs with no clocking block → byte-identical).

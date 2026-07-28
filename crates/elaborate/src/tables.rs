@@ -344,7 +344,7 @@ pub struct Sidecars {
     /// process (IEEE 1800 §6.21) and, among the initializers, in the measured scope order
     /// that the elaboration pass structure cannot produce. EMPTY when the order is the
     /// identity permutation ⇒ the engine keeps `tie == ProcId` ⇒ byte-identical.
-    pub proc_ties: Vec<u32>,
+    pub init_procs: Vec<u32>,
     /// P2-E: ProcIds of `final` blocks (skip arming; run at end of sim).
     pub final_procs: std::collections::BTreeSet<u32>,
     /// §16.4 deferred-assert flush markers: marker StmtId → region.
