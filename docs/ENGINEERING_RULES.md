@@ -43,6 +43,9 @@
 - **loud verdict도 재검증 대상**: 직접 테스트 없이 mental model로 gate한 것은 과보수일 수 있다(인접 동작 사실과 대조·distinct-value/non-square로 경험 확인). 단, 상호작용이 예측 불가면 **cleanly-verifiable subset만 지원하고 나머지는 loud**(억지 지원=silent).
 - **pre-resolve(elaborate) vs post-resolve(engine) compute divergence**는 sidecar flag로 over-approximate(양측이 동일 소스에서 derive→divergence 무의미화).
 - **defer→resolve 머신**: defer 시점에 미지인 것(callee shape)은 resolve로 미루고, caller-scope 의존(actual net)은 defer 시 미리 resolve해 사이드카에 저장. 방향 등 미지 정보는 각 arg를 필요한 표현 전부(value+lvalue)로 lower해두고 resolve 시 sidecar로 선택.
+- **제약의 근거가 충분조건이면 필요조건을 직접 써라.** BL1 은 fork arm 블록 로컬을 "값이 상수라 concurrency-immune"으로 열었는데 그건 충분조건일 뿐이고, 진짜 불변식은 **블록의 살아있는 활성이 하나**다. 그걸 직접 쓰자(§4.5.248: `fork_multi` 를 fork 의 *존재*가 아니라 *spawn 이 반복되는가*에서 전파) 실전 관용구(워치독)가 통째로 열렸다. "X 라서 안 된다"를 만나면 X 가 정말 필요조건인지 다시 물어라.
+- **외부 리포트의 진단명을 믿지 마라 — 재현은 하되 원인은 다시 찾아라.** round-20 §4.8 은 "named argument 미지원"으로 보고됐지만 함수 호출에서는 이미 동작했고, 근인은 **보수적 참조 워커에 `NamedArg` arm 이 없어** 명백한 whole-var write 를 "참조할지도 모름"으로 답한 것이었다. 증상 위치와 원인 위치가 다른 것이 사람·에이전트 모두에게 가장 비싼 실패다.
+- **진단에 위치가 없으면 그 진단은 좁힐 수 없다.** 같은 문구 81 개는 정보량이 1 개다(§4.5.249). elaborate 처럼 span 은 있는데 resolver 가 없는 계층은 **트레이트 한 개**로 프런트엔드에서 주입하면 되고, 이는 G2(에이전트 친화)의 전제이기도 하다. 새 loud 를 넣을 때는 **식별자와 판별 규칙**을 문구에 넣어라 — "왜 이건 안 되고 저건 되는가"가 메시지 안에 있어야 한다.
 - **"이름이 안쪽 스코프 키에 있다"와 "그 스코프가 선언했다"는 다르다** — v1 이 flatten 한 블록 로컬은 키만 안쪽(`t.g.W`)일 뿐 **한 프로세스의 사설 변수**다. shadow 판정 집합은 **그 스코프가 실제로 선언한 것**이어야 하며, 아니면 그 스코프의 다른 모든 reader 가 남의 지역변수를 집는다(§4.5.247: per-instance override·genvar·enum label 까지 오염).
 - **주석이 "X 가 이긴다"고 말하는데 코드가 그렇지 않으면, 대개 fall-through 가 자기 walk 를 다시 돈다** — `lower_expr` 은 결합 집합 위에서 innermost 키를 도출해 놓고, 떨어지는 곳에서 `lookup_scoped`(params 전용)를 불러 그 키를 버렸다(§4.5.246). **도출한 결정을 소비하는지**를 확인하라.
 - **"공통 퍼널을 먼저 만들어야 한다"는 선행조건도 의심하라** — 퍼널이 이미 있고 **한 호출부만 안 부르는** 경우가 있다(§4.5.241: generate 스코프 param 이 `param_real_value` 를 건너뛰고 정수 도메인만 썼다). 인프라 착수 전에 **누가 안 부르는지**부터 세라.
