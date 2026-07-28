@@ -178,7 +178,7 @@ impl Elaborator<'_> {
                 // two interfaces, and a generate-nested interface ran after the generate's
                 // own variable. Both are the enclosing scope's slot, decided by tie-break.
                 let slot = self.rank_slot_for_instance();
-                self.with_rank_scope_keyed(slot, item.name.span.lo, |s| {
+                self.with_rank_scope_keyed(slot, (self.rank_band, item.name.span.lo, 0), |s| {
                     for it in &decl.body {
                         if let ast::ModuleItem::NetVar(d) = it {
                             s.collect_var_init_drivers(d);

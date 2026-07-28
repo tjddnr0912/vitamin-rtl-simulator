@@ -75,7 +75,7 @@ impl Elaborator<'_> {
         param_overrides: &[ResolvedOverride],
         binding: PortBinding<'_>,
         map: &ModuleMap<'_>,
-        rank_key: u32,
+        rank_key: crate::var_init::RankKey,
     ) {
         // (1) CYCLE GUARD — recursive instantiation is illegal (LRM). Bail this
         //     subtree WITHOUT creating any net/Instance so the arena stays valid.
@@ -120,9 +120,11 @@ impl Elaborator<'_> {
         // Read BEFORE the flag is cleared: the slot depends on the PARENT's kind.
         let rank_slot = self.rank_slot_for_instance();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, false);
-        // The DECLARING name's source offset, not a counter — see `with_rank_scope_keyed`.
+        // The DECLARING position, not a counter — see `with_rank_scope_keyed`.
         self.rank_path.push(rank_slot);
-        self.rank_path.push(rank_key);
+        self.rank_path.push(rank_key.0);
+        self.rank_path.push(rank_key.1);
+        self.rank_path.push(rank_key.2);
         let saved_rank_seq = std::mem::take(&mut self.rank_seq);
         // Record this as the instance currently being lowered, so a child created
         // inside a generate block can set its `Instance.parent` to `inst_id`.
@@ -727,9 +729,15 @@ impl Elaborator<'_> {
         //      step (7.5). `binds.clone()` releases the `self.bind_targets` borrow
         //      before the `&mut self` recursion.
         if let Some(binds) = self.bind_targets.get(&module.name.name) {
+            // §4.5.261: BAND 1 with its own counter. A `bind` directive lives in the
+            // compilation unit, so its source offset is not a position inside this
+            // module's body — using it made the answer depend on where the `bind` line
+            // was written, and on the order the files were listed.
+            let saved_band = std::mem::replace(&mut self.rank_band, 1);
             for mi in binds.clone() {
                 self.elaborate_child_instances(&mi, inst_id, map);
             }
+            self.rank_band = saved_band;
         }
 
         // restore scope/params so siblings + ancestors resolve correctly.
@@ -751,7 +759,7 @@ impl Elaborator<'_> {
         self.cur_prefix = saved_prefix;
         self.in_generate_body = saved_in_gen;
         self.rank_seq = saved_rank_seq;
-        self.rank_path.truncate(self.rank_path.len() - 2);
+        self.rank_path.truncate(self.rank_path.len() - 4);
         self.cur_inst = saved_inst;
         self.cur_time_mult = saved_mult;
         self.cur_prec_mult = saved_prec_mult;
@@ -905,7 +913,7 @@ impl Elaborator<'_> {
                 &overrides,
                 binding,
                 map,
-                item.name.span.lo,
+                (self.rank_band, item.name.span.lo, 0),
             );
         }
     }

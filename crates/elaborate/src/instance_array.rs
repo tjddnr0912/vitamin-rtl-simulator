@@ -278,7 +278,11 @@ impl Elaborator<'_> {
                 overrides,
                 PortBinding::Named(&inst_conns, false),
                 map,
-                item.name.span.lo,
+                // §4.5.261: the element index is part of the key. Sharing one key does not
+                // fall back to a ProcId tie-break — an element's child scopes and its own
+                // variables have DIFFERENT rank vectors, so equal keys made the sort group
+                // by slot ACROSS elements and interleave their subtrees.
+                (self.rank_band, item.name.span.lo, idx as u32),
             );
         }
     }

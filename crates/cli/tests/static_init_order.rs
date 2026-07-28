@@ -42,6 +42,29 @@ fn run(src: &str) -> (String, bool) {
 
 /// The three `$random` draws every test below reads, in the order iverilog produces
 /// them from a fresh seed.
+/// [`run`] with extra CLI arguments.
+fn run_args(src: &str, args: &[&str]) -> (String, bool) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_initord_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .args(args)
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    (
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+        out.status.code() == Some(0),
+    )
+}
+
 const D1: &str = "303379748";
 const D2: &str = "-1064739199";
 const D3: &str = "-2071669239";
@@ -765,5 +788,71 @@ fn an_interface_and_a_module_instance_interleave_by_source_order() {
         ));
         assert!(ok, "expected clean sim, got:\n{o}");
         assert!(o.contains(&want), "source order decides:\n{o}");
+    }
+}
+
+/// §4.5.261. One source offset cannot carry three different questions, and the review
+/// found all three ways it fails. A ROOT's key is its position in the root list, not its
+/// offset — `--top zz --top aa` elaborates in the order given, and `-L` library mode
+/// compiles each unit separately so offsets from different units are not comparable.
+#[test]
+fn the_top_option_decides_root_initialization_order() {
+    let src = "module aa; int v = 1 + zz.v; initial $display(\"P aa=%0d\", v); endmodule\n\
+               module zz; int v = 1 + aa.v; initial $display(\"P zz=%0d\", v); endmodule\n";
+    let (o, ok) = run_args(src, &["--top", "zz", "--top", "aa"]);
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P zz=1") && o.contains("P aa=2"),
+        "iverilog -s zz -s aa:\n{o}"
+    );
+
+    let (o, ok) = run_args(src, &["--top", "aa", "--top", "zz"]);
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P aa=1") && o.contains("P zz=2"),
+        "the other order:\n{o}"
+    );
+}
+
+/// An instance ARRAY's elements each keep their own subtree. Sharing one key does NOT
+/// fall back to a ProcId tie-break: an element's child scopes and its own variables
+/// produce DIFFERENT rank vectors, so equal keys made the sort group by slot ACROSS
+/// elements and interleave them. iverilog: 5.
+#[test]
+fn instance_array_elements_keep_their_subtrees_together() {
+    let (o, ok) = run("module inner(); int gz = 1; endmodule\n\
+         module ch();\n\
+           inner n();\n\
+           int own = 1 + tb.u[0].n.gz + tb.u[1].n.gz;\n\
+         endmodule\n\
+         module tb;\n\
+           ch u[1:0]();\n\
+           initial $display(\"P sum=%0d\", tb.u[0].own + tb.u[1].own);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P sum=5"),
+        "each element's child before its own:\n{o}"
+    );
+}
+
+/// A `bind` directive lives in the compilation unit, so its source offset is not a
+/// position inside the target module's body. Using it as one made the answer depend on
+/// where the `bind` line was written — and, across files, on the order they were listed.
+/// Bound checkers go in their own band, after everything the target declares itself.
+#[test]
+fn a_bind_directives_position_does_not_change_initialization_order() {
+    let chk = "module chk;   int c = 1 + tb.u.w.z; initial $display(\"P chk=%0d\", c); endmodule\n\
+               module grand; int z = 1 + tb.u.bk.c; initial $display(\"P gr=%0d\", z); endmodule\n";
+    for src in [
+        format!("{chk}bind sub chk bk();\nmodule sub; grand w(); endmodule\nmodule tb; sub u(); endmodule\n"),
+        format!("{chk}module sub; grand w(); endmodule\nbind sub chk bk();\nmodule tb; sub u(); endmodule\n"),
+    ] {
+        let (o, ok) = run(&src);
+        assert!(ok, "expected clean sim, got:\n{o}");
+        assert!(
+            o.contains("P gr=1") && o.contains("P chk=2"),
+            "the bind line's position must not matter:\n{o}"
+        );
     }
 }

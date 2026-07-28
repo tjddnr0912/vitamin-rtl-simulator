@@ -3,6 +3,10 @@
 
 use super::*;
 
+/// The rank key for an INSTANCE-slot scope: `(band, key, sub)` — see
+/// [`Elaborator::with_rank_scope_keyed`].
+pub(crate) type RankKey = (u32, u32, u32);
+
 impl Elaborator<'_> {
     /// §6.8: collect a VARIABLE declaration's NON-constant initializer
     /// (`logic [7:0] b = a;`) into `pending_var_inits` so a pre-sweep can emit it
@@ -208,20 +212,31 @@ impl Elaborator<'_> {
     /// Instances), so a per-scope counter cannot order them — every interface drew a lower
     /// number than every module child regardless of source order. Both pass the declaring
     /// name's source offset, which is what "declaration order" means and is the same in
-    /// every pass. Two array elements of one declaration share it; `init_procs` breaks
-    /// that tie by ProcId, which is their unroll order.
+    /// every pass.
+    ///
+    /// §4.5.261: three components, because one offset cannot carry all three questions.
+    /// `band` separates instances DECLARED in this scope's body from ones a `bind`
+    /// injected — a bind directive's offset lives in the compilation unit, not in the
+    /// target module's body, so comparing the two as "declaration order" is meaningless
+    /// and made the answer depend on where the `bind` line sat. `sub` is the
+    /// instance-ARRAY element index: sharing one key does NOT let `init_procs` tie-break
+    /// by ProcId, because an element's child scopes and its own variables produce
+    /// DIFFERENT rank vectors, so the sort grouped by slot ACROSS elements and interleaved
+    /// them. Distinct keys per element is what keeps each element's subtree together.
     pub(crate) fn with_rank_scope_keyed<R>(
         &mut self,
         slot: u32,
-        key: u32,
+        key: RankKey,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
         self.rank_path.push(slot);
-        self.rank_path.push(key);
+        self.rank_path.push(key.0);
+        self.rank_path.push(key.1);
+        self.rank_path.push(key.2);
         let saved = std::mem::take(&mut self.rank_seq);
         let r = f(self);
         self.rank_seq = saved;
-        self.rank_path.truncate(self.rank_path.len() - 2);
+        self.rank_path.truncate(self.rank_path.len() - 4);
         r
     }
 

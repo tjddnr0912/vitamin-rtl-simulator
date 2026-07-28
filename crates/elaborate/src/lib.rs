@@ -932,6 +932,10 @@ struct Elaborator<'s> {
     /// carry both on the elaboration pass order is what made the earlier attempts trade
     /// one wrong order for another.
     rank_path: Vec<u32>,
+    /// Which BAND the instance scope being entered belongs to: 0 = declared in the
+    /// enclosing scope's own body (or a root), 1 = injected by a `bind`. A bind directive
+    /// has no position inside the target module, so the two cannot share a key space.
+    rank_band: u32,
     /// Per-SLOT monotonic counters for the CURRENT scope, saved/restored on entry so each
     /// scope numbers its own children. One counter per slot, not one per scope: the four
     /// generate walks visit the same generates, but only the Instances walk visits

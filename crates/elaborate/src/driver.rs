@@ -157,6 +157,7 @@ impl<'s> Elaborator<'s> {
             pending_block_local_inits: BTreeMap::new(),
             in_generate_body: false,
             rank_path: Vec::new(),
+            rank_band: 0,
             rank_seq: [0; 4],
             init_ranks: BTreeMap::new(),
             pending_sva: Vec::new(),
@@ -476,12 +477,21 @@ impl<'s> Elaborator<'s> {
         // func_table/task_table/inst_stack), so roots are independent and the flat
         // arenas stay contiguous per instance. The common single-top design has one
         // root → byte-identical to the old single-pick path.
-        for top in roots {
+        for (idx, top) in roots.iter().enumerate() {
             let top_path = top.name.name.clone();
-            // A root has no declaring instance; its own module name's offset orders the
-            // roots in source order, which is the order they are elaborated in anyway.
-            let key = top.name.span.lo;
-            self.elaborate_instance(top, &top_path, None, &[], PortBinding::None, &map, key);
+            // §4.5.261: a root's key is its POSITION IN THE ROOT LIST, not its source
+            // offset. `--top zz --top aa` elaborates in the order given, and `-L` library
+            // mode compiles each unit separately so offsets from different units are not
+            // even comparable — either way the offset is not the order.
+            self.elaborate_instance(
+                top,
+                &top_path,
+                None,
+                &[],
+                PortBinding::None,
+                &map,
+                (0, idx as u32, 0),
+            );
         }
         // Any defparam still in the map targeted an instance that was never
         // elaborated — a typo'd or out-of-scope path, or an array `u.N` with no
