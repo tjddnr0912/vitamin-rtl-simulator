@@ -158,6 +158,59 @@ impl Elaborator<'_> {
     /// assigns each non-constant variable initializer in declaration order (§6.8).
     /// Lowered in the current instance scope; a no-op when none were collected (so
     /// a design with no such initializer adds no process — byte-identical IR).
+    /// The prefix a scoped block-local's t0 init is recorded under: the current
+    /// instance prefix, plus the `$blk$<lo>` segment when the declaration has one.
+    pub(crate) fn scoped_init_key(&self, scope: Option<&str>) -> String {
+        match scope {
+            Some(seg) if self.cur_prefix.is_empty() => seg.to_string(),
+            Some(seg) => format!("{}.{seg}", self.cur_prefix),
+            None => self.cur_prefix.clone(),
+        }
+    }
+
+    /// §4.5.251: replay the t0 initializers of `$blk$`-scoped block-locals, each under
+    /// the prefix it was declared in. Emitted AFTER the main sweep and as its own
+    /// `initial`, so a scoped init may read a module-scope one — the same ordering
+    /// `pending_scoped_bl_strings` already relies on.
+    pub(crate) fn flush_pending_blk_inits(&mut self) {
+        let here = self.cur_prefix.clone();
+        let dot = if here.is_empty() {
+            String::new()
+        } else {
+            format!("{here}.")
+        };
+        let is_here = |k: &String| {
+            k.strip_prefix(&dot)
+                .is_some_and(|rest| rest.starts_with("$blk$") && !rest.contains('.'))
+        };
+        // A scoped block-local's inits can be in EITHER pending list — a string one goes
+        // to `pending_scoped_bl_strings` (drained last, since it may read a module-scope
+        // string), everything else to `pending_blk_inits`. Both are keyed by the same
+        // scoped prefix, so replay every scope that appears in either.
+        let mut keys: Vec<String> = self
+            .pending_blk_inits
+            .keys()
+            .filter(|k| is_here(k))
+            .cloned()
+            .collect();
+        keys.extend(
+            self.pending_scoped_bl_strings
+                .keys()
+                .filter(|k| is_here(k))
+                .cloned(),
+        );
+        keys.sort();
+        keys.dedup();
+        for key in keys {
+            let inits = self.pending_blk_inits.remove(&key).unwrap_or_default();
+            let saved = std::mem::replace(&mut self.cur_prefix, key);
+            self.pending_var_inits = inits;
+            self.drain_scoped_bl_strings();
+            self.flush_pending_var_inits();
+            self.cur_prefix = saved;
+        }
+    }
+
     pub(crate) fn flush_pending_var_inits(&mut self) {
         if self.pending_var_inits.is_empty() {
             return;

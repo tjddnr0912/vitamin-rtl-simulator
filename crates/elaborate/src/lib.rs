@@ -904,6 +904,11 @@ struct Elaborator<'s> {
     // BEFORE the scope's collected inits, a block-local string init AFTER them.
     pending_scoped_presize: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
     pending_scoped_bl_strings: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
+    /// §4.5.251: t0 initializers for block-locals that were given their OWN `$blk$`
+    /// scope, keyed by the FULL prefix they live under (`top.$blk$123`). They cannot
+    /// ride `pending_var_inits`, whose bare `Ident` lvalues resolve in whatever prefix
+    /// the flush happens to be in; each group is replayed with its own prefix restored.
+    pending_blk_inits: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
     // v8 SVA: concurrent assertions collected during statement lowering, drained
     // into synthesized clocked checker processes after each module's process loop.
     pending_sva: Vec<PendingSva>,

@@ -567,6 +567,7 @@ impl Elaborator<'_> {
         self.pending_var_inits.append(&mut bl_strings);
         self.drain_scoped_bl_strings();
         self.flush_pending_var_inits();
+        self.flush_pending_blk_inits();
 
         // (6.9b) §6.8 for GENERATE scopes: the module-body sweep above walks the
         //        module body ONLY, so an array `'{…}` / non-constant / queue

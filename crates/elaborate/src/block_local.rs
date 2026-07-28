@@ -296,6 +296,133 @@ impl Elaborator<'_> {
         }
     }
 
+    /// §6.8/§6.21: collect a block-local declaration's non-constant initializers into
+    /// the t0 var-init sweep. `scope` is the `$blk$<lo>` segment when the declaration
+    /// was given its own scope, `None` for the flattened path.
+    ///
+    /// §4.5.251: the scoped path used to skip this entirely, which is why a scoped
+    /// `byte m[] = '{…}` came back EMPTY and why the same-name widening had to exclude
+    /// every initializer-bearing declaration. The push target is the only difference —
+    /// a scoped init is recorded under its own prefix and replayed there.
+    fn collect_block_local_decl_inits(
+        &mut self,
+        d: &ast::NetVarDecl,
+        span: ast::Span,
+        scope: Option<&str>,
+    ) {
+        // §6.8/§6.21: a NON-constant PROCESS block-local initializer
+        // (`begin logic x = g+1; …`) is STATIC-lifetime — applied ONCE
+        // at time 0 (the block-local net is module-flattened), NOT on
+        // each block entry. So it rides the SAME synthesized var-init
+        // `initial` as a module-scope non-const var-init (matches
+        // iverilog for an `always`/`for` body, which freezes the t0
+        // value). A constant init already folded into net.init (skip).
+        // A scalar `string s = expr;` block-local has no foldable
+        // net.init field, so it always rides this t0 pre-sweep (a
+        // dimensioned string was loud-rejected in `elaborate_netvar_decl`).
+        let scalar_string =
+            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
+        if netvar_kind_is_var(d.kind) || scalar_string {
+            for name in &d.names {
+                let Some(init) = &name.init else { continue };
+                let push = if scalar_string {
+                    // A scalar string (no dims) rides the t0 pre-sweep. A
+                    // string DYNAMIC array (`string s[] = '{…}`) rides it too:
+                    // its `'{…}` is expanded by the flush (`new[N]` + element
+                    // writes) exactly like the module-scope path
+                    // (`collect_var_init_drivers`'s `is_dyn_str_init`). Without
+                    // this the dimensioned-string branch dropped the init here
+                    // (`name.unpacked` is non-empty → `push` false), leaving the
+                    // block-local array silently EMPTY while the identical
+                    // module-scope decl worked (a pre-existing silent-wrong).
+                    // Other string dims (fixed / multi / non-`'{…}`) were
+                    // loud-rejected at the decl, so they never reach here.
+                    name.unpacked.is_empty()
+                        || crate::string_array_route::is_dyn_string_container_init(
+                            &name.unpacked,
+                            init,
+                        )
+                } else {
+                    // Mirror `collect_var_init_drivers`: a non-constant
+                    // initializer rides the t0 pre-sweep. This INCLUDES an
+                    // unpacked-array pattern (`int a[4] = '{1,2,3,4}`),
+                    // whose synthesized `a = '{…}` is routed through
+                    // `array_assign_special` — previously a bare
+                    // `name.unpacked.is_empty()` guard silently dropped it.
+                    let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    fold_init(init, w).is_none() && self.const_eval_in_scope(init).is_none()
+                };
+                // r18 (family D): a per-entry local's initializer is emitted at
+                // BLOCK ENTRY (the Logic-phase Block arm), so it must NOT also
+                // ride the t0 static pre-sweep — that would double-init (and a
+                // loop-var-reading init reads X at t0). Skip the push here.
+                let per_entry = self
+                    .per_entry_block_locals
+                    .get(&span.lo)
+                    .is_some_and(|s| s.contains(&name.name.name));
+                if push && !per_entry {
+                    let path = ast::HierPath {
+                        segments: vec![name.name.clone()],
+                        span: name.name.span,
+                    };
+                    // A block-local STRING init goes to the deferred
+                    // list so it is assigned AFTER module-scope string
+                    // inits (it may read one); a non-string keeps its
+                    // existing `pending_var_inits` slot (byte-identical).
+                    if scalar_string {
+                        let key = self.scoped_init_key(scope);
+                        self.pending_scoped_bl_strings
+                            .entry(key)
+                            .or_default()
+                            .push((ast::Lvalue::Ident(path), init.clone()));
+                    } else if let Some(seg) = scope {
+                        let key = self.scoped_init_key(Some(seg));
+                        self.pending_blk_inits
+                            .entry(key)
+                            .or_default()
+                            .push((ast::Lvalue::Ident(path), init.clone()));
+                    } else {
+                        self.pending_var_inits
+                            .push((ast::Lvalue::Ident(path), init.clone()));
+                    }
+                } else if scalar_string
+                    && !name.unpacked.is_empty()
+                    && self.has_fixed_string_array_storage(&name.name.name)
+                {
+                    // r19: a block-local FIXED string array (`string s[2] =
+                    // '{…}`) — `push` is false for it (the gate above admits
+                    // only a scalar or a `string s[]`), so expand it to one
+                    // `s[k] = <elem>` per declared index here, into the same
+                    // deferred string list so it lands after the module-scope
+                    // string inits it may read.
+                    //
+                    // Gated on the decl having created the element storage,
+                    // exactly like the module-scope collector — that is what
+                    // keeps the two scopes from drifting (the class of bug
+                    // that silently emptied a block-local `string s[] = '{…}`
+                    // once before). Deliberately NOT gated on `per_entry`:
+                    // that set only ever holds scalars and dyn/queue locals,
+                    // so excluding it here would be dead code that silently
+                    // opts INTO dropping the init if that set ever widens.
+                    //
+                    // T1-4: the FULL `unpacked`, exactly as the module-scope
+                    // collector passes it — the two scopes share ONE expansion
+                    // and must hand it the same shape, or a nested pattern
+                    // expands here and not there.
+                    if let Some(pairs) =
+                        self.string_array_init_pairs(&name.name, &name.unpacked, init)
+                    {
+                        let key = self.scoped_init_key(scope);
+                        self.pending_scoped_bl_strings
+                            .entry(key)
+                            .or_default()
+                            .extend(pairs);
+                    }
+                }
+            }
+        }
+    }
+
     /// One block-local declaration's Nets-phase hoist (extracted so the caller can
     /// wrap it in a `cur_span` anchor).
     #[allow(clippy::too_many_arguments)]
@@ -326,16 +453,15 @@ impl Elaborator<'_> {
         // loud → support move. The per-entry-lifetime gate inside is keyed on
         // `d.lifetime`, so a static decl skips it exactly as it does on the
         // unscoped path; only the NET it gets changes.
-        // Must match `gather_auto_block_locals` exactly, including the
-        // no-initializer condition — a decl scoped here but not gathered
-        // there (or the reverse) breaks the invariant that EVERY colliding
+        // Must match `gather_auto_block_locals` exactly — a decl scoped here but not
+        // gathered there (or the reverse) breaks the invariant that EVERY colliding
         // occurrence of a name is scoped.
-        // Review F1: the no-initializer condition is a property of the whole DECL, not
-        // of one name — `$blk$` scoping is applied per-DECL, so one qualifying name
-        // drags an init-bearing sibling onto the scoped arm and that sibling's
-        // initializer is silently dropped.
-        let dyn_storage = d.names.iter().all(|n| n.init.is_none())
-            && d.names.iter().any(|n| {
+        //
+        // §4.5.251: a scalar `string` qualifies too, and an initializer no longer
+        // disqualifies either — the scoped path records its initializers under its own
+        // prefix now and replays them there.
+        let dyn_storage = matches!(d.kind, ast::NetVarKind::String)
+            || d.names.iter().any(|n| {
                 n.unpacked.iter().any(|dim| {
                     matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
                 })
@@ -395,6 +521,7 @@ impl Elaborator<'_> {
                 // neither via `fold_init` nor `const_eval_in_scope`, and `per_entry` never
                 // holds a string array). Pinned by `automatic_block_local_init_stays_loud`.
                 self.with_scope(&seg, |s| s.elaborate_netvar_decl(d, ports, body, true));
+                self.collect_block_local_decl_inits(d, span, Some(&seg));
                 return;
             }
         }
@@ -686,109 +813,7 @@ impl Elaborator<'_> {
             let k = self.fq(&n.name.name);
             self.hoisted_block_local.insert(k);
         }
-        // §6.8/§6.21: a NON-constant PROCESS block-local initializer
-        // (`begin logic x = g+1; …`) is STATIC-lifetime — applied ONCE
-        // at time 0 (the block-local net is module-flattened), NOT on
-        // each block entry. So it rides the SAME synthesized var-init
-        // `initial` as a module-scope non-const var-init (matches
-        // iverilog for an `always`/`for` body, which freezes the t0
-        // value). A constant init already folded into net.init (skip).
-        // A scalar `string s = expr;` block-local has no foldable
-        // net.init field, so it always rides this t0 pre-sweep (a
-        // dimensioned string was loud-rejected in `elaborate_netvar_decl`).
-        let scalar_string =
-            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
-        if netvar_kind_is_var(d.kind) || scalar_string {
-            for name in &d.names {
-                let Some(init) = &name.init else { continue };
-                let push = if scalar_string {
-                    // A scalar string (no dims) rides the t0 pre-sweep. A
-                    // string DYNAMIC array (`string s[] = '{…}`) rides it too:
-                    // its `'{…}` is expanded by the flush (`new[N]` + element
-                    // writes) exactly like the module-scope path
-                    // (`collect_var_init_drivers`'s `is_dyn_str_init`). Without
-                    // this the dimensioned-string branch dropped the init here
-                    // (`name.unpacked` is non-empty → `push` false), leaving the
-                    // block-local array silently EMPTY while the identical
-                    // module-scope decl worked (a pre-existing silent-wrong).
-                    // Other string dims (fixed / multi / non-`'{…}`) were
-                    // loud-rejected at the decl, so they never reach here.
-                    name.unpacked.is_empty()
-                        || crate::string_array_route::is_dyn_string_container_init(
-                            &name.unpacked,
-                            init,
-                        )
-                } else {
-                    // Mirror `collect_var_init_drivers`: a non-constant
-                    // initializer rides the t0 pre-sweep. This INCLUDES an
-                    // unpacked-array pattern (`int a[4] = '{1,2,3,4}`),
-                    // whose synthesized `a = '{…}` is routed through
-                    // `array_assign_special` — previously a bare
-                    // `name.unpacked.is_empty()` guard silently dropped it.
-                    let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-                    fold_init(init, w).is_none() && self.const_eval_in_scope(init).is_none()
-                };
-                // r18 (family D): a per-entry local's initializer is emitted at
-                // BLOCK ENTRY (the Logic-phase Block arm), so it must NOT also
-                // ride the t0 static pre-sweep — that would double-init (and a
-                // loop-var-reading init reads X at t0). Skip the push here.
-                let per_entry = self
-                    .per_entry_block_locals
-                    .get(&span.lo)
-                    .is_some_and(|s| s.contains(&name.name.name));
-                if push && !per_entry {
-                    let path = ast::HierPath {
-                        segments: vec![name.name.clone()],
-                        span: name.name.span,
-                    };
-                    // A block-local STRING init goes to the deferred
-                    // list so it is assigned AFTER module-scope string
-                    // inits (it may read one); a non-string keeps its
-                    // existing `pending_var_inits` slot (byte-identical).
-                    if scalar_string {
-                        self.pending_scoped_bl_strings
-                            .entry(self.cur_prefix.clone())
-                            .or_default()
-                            .push((ast::Lvalue::Ident(path), init.clone()));
-                    } else {
-                        self.pending_var_inits
-                            .push((ast::Lvalue::Ident(path), init.clone()));
-                    }
-                } else if scalar_string
-                    && !name.unpacked.is_empty()
-                    && self.has_fixed_string_array_storage(&name.name.name)
-                {
-                    // r19: a block-local FIXED string array (`string s[2] =
-                    // '{…}`) — `push` is false for it (the gate above admits
-                    // only a scalar or a `string s[]`), so expand it to one
-                    // `s[k] = <elem>` per declared index here, into the same
-                    // deferred string list so it lands after the module-scope
-                    // string inits it may read.
-                    //
-                    // Gated on the decl having created the element storage,
-                    // exactly like the module-scope collector — that is what
-                    // keeps the two scopes from drifting (the class of bug
-                    // that silently emptied a block-local `string s[] = '{…}`
-                    // once before). Deliberately NOT gated on `per_entry`:
-                    // that set only ever holds scalars and dyn/queue locals,
-                    // so excluding it here would be dead code that silently
-                    // opts INTO dropping the init if that set ever widens.
-                    //
-                    // T1-4: the FULL `unpacked`, exactly as the module-scope
-                    // collector passes it — the two scopes share ONE expansion
-                    // and must hand it the same shape, or a nested pattern
-                    // expands here and not there.
-                    if let Some(pairs) =
-                        self.string_array_init_pairs(&name.name, &name.unpacked, init)
-                    {
-                        self.pending_scoped_bl_strings
-                            .entry(self.cur_prefix.clone())
-                            .or_default()
-                            .extend(pairs);
-                    }
-                }
-            }
-        }
+        self.collect_block_local_decl_inits(d, span, None);
     }
 
     /// Recursively create nets for every `begin…end`/`fork…join` block-local

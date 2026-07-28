@@ -157,35 +157,32 @@ fn a_render_is_not_hoisted_past_a_side_effecting_sibling() {
 
 // ── a multi-name declaration is scoped as a WHOLE ────────────────────────────
 
-/// `$blk$` scoping is decided per DECLARATION, so the "no initializer" exclusion has to
-/// be a property of the declaration too. Asking it per NAME let a qualifying `m` drag
-/// its init-bearing sibling onto the scoped arm, which returns before the decl-init
-/// collector — `n` came back 0 at exit 0.
+/// Review F1 was a SILENT ZERO: `$blk$` scoping is decided per DECLARATION, so asking
+/// the "no initializer" exclusion per NAME let a qualifying `m` drag its init-bearing
+/// sibling onto the scoped arm, which returned before the decl-init collector.
+///
+/// §4.5.251 removed the exclusion entirely by making the scoped path collect its own
+/// initializers, so this shape is now CORRECT rather than merely loud — the stronger
+/// guarantee, and the one pinned here against live iverilog 13.0.
 #[test]
-fn a_multi_name_declaration_does_not_lose_a_siblings_initializer() {
-    assert!(loud(
-        "module t;\n\
+fn a_multi_name_declaration_keeps_every_initializer() {
+    let (o, ok) = run("module t;\n\
            byte g = 8'd9;\n\
            initial begin\n\
-             begin byte m[], n = g; m = new[2]; $display(\"A=%0d\", n); end\n\
-             begin byte m[], k = g; m = new[3]; $display(\"B=%0d\", k); end\n\
+             begin byte m[], n = g; m = new[2]; $display(\"A=%0d %0d\", m.size(), n); end\n\
+             begin byte m[], k = g; m = new[3]; $display(\"B=%0d %0d\", m.size(), k); end\n\
              $finish;\n\
            end\n\
-         endmodule\n"
-    ));
-    assert!(loud(
-        "module t;\n\
-           initial begin\n\
-             begin int m[], n[] = '{1,2,3}; m = new[1]; $display(\"A=%0d\", n.size()); end\n\
-             begin int m[]; m = new[2]; $display(\"B=%0d\", m.size()); end\n\
-             $finish;\n\
-           end\n\
-         endmodule\n"
-    ));
-    // Split into two declarations, the same code is supported and correct.
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=2 9") && o.contains("B=3 9"),
+        "iverilog A=2 9 B=3 9:\n{o}"
+    );
+
     let (o, ok) = run("module t;\n\
            initial begin\n\
-             begin int m[]; int n[] = '{1,2,3}; m = new[1]; $display(\"A=%0d %0d\", m.size(), n.size()); end\n\
+             begin int m[], n[] = '{1,2,3}; m = new[1]; $display(\"A=%0d %0d\", m.size(), n.size()); end\n\
              begin int m[]; m = new[2]; $display(\"B=%0d\", m.size()); end\n\
              $finish;\n\
            end\n\
@@ -193,7 +190,7 @@ fn a_multi_name_declaration_does_not_lose_a_siblings_initializer() {
     assert!(ok, "expected clean sim, got:\n{o}");
     assert!(
         o.contains("A=1 3") && o.contains("B=2"),
-        "split decls:\n{o}"
+        "iverilog A=1 3 B=2:\n{o}"
     );
 }
 

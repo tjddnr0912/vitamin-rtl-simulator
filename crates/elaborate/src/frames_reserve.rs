@@ -38,22 +38,17 @@ impl Elaborator<'_> {
                         // side is static. Scoping them is therefore a pure loud → support
                         // move: every shape it newly reaches was rejected before.
                         //
-                        // A scalar `string` is deliberately NOT included. Its own
-                        // same-name coalesce has its own guards (the READ-gated
-                        // `new_str_read`, the fixed-string-array collision), and the
-                        // `$blk$` path skips the decl-init collector, so an init-bearing
-                        // string would lose its initializer — a loud traded for a silent
-                        // empty. That one keeps the (now identifier-bearing) loud.
-                        //
-                        // WITH an initializer it is excluded: the `$blk$` path skips the
-                        // decl-init collector (which does not compute the `$blk$<lo>.`
-                        // prefix), so a scoped `byte m[] = '{…}` would come up EMPTY —
-                        // trading the loud for a silent 0. Measured, not assumed: the
-                        // first cut of this change printed `size()==0`. An `automatic`
-                        // decl is unaffected — its init rides `emit_per_entry_block_inits`,
-                        // which resolves the name inside the scope wrap.
-                        let dyn_storage = !decl_has_init
-                            && n.unpacked.iter().any(|dim| {
+                        // §4.5.251: a scalar `string` joins them, and an INITIALIZER no
+                        // longer disqualifies either. Both exclusions existed for ONE
+                        // reason — the scoped path returned before the decl-init collector,
+                        // so a scoped `byte m[] = '{…}` / `string s = "a"` came up EMPTY,
+                        // trading the loud for a silent zero. The scoped path now records
+                        // its initializers under its own prefix and replays them there
+                        // (`collect_block_local_decl_inits` + `flush_pending_blk_inits`),
+                        // so the reason is gone and with it both exclusions.
+                        let _ = decl_has_init;
+                        let dyn_storage = matches!(d.kind, ast::NetVarKind::String)
+                            || n.unpacked.iter().any(|dim| {
                                 matches!(
                                     dim,
                                     ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)

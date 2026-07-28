@@ -134,18 +134,26 @@ fn block_local_string_init_reads_module_string() {
 }
 
 #[test]
-fn coalescing_block_local_string_is_loud() {
-    // Two sibling blocks declaring the same-named string coalesce to one
-    // module-flattened net with no per-block heap — a shared-heap leak — so it
-    // stays loud (correct-or-loud), unaffected by enabling block-local string init.
-    let (_o, code) = run("module top; initial begin \
-         begin string s=\"a\"; end begin string s=\"b\"; #1 $display(\"%s\",s); end \
-         $finish; end endmodule\n");
-    assert_ne!(
-        code,
-        Some(0),
-        "coalescing block-local string must stay loud"
-    );
+fn same_named_block_local_strings_get_their_own_storage() {
+    // Two sibling blocks declaring the same-named string used to coalesce to one
+    // module-flattened net with no per-block heap — a shared-heap leak — and were loud.
+    // §4.5.251 gives each disjoint block its own `$blk$` net, which is what IEEE says
+    // they are, so the leak is gone by construction. Pinned to LIVE iverilog 13.0.
+    let (out, code) = run("module top; initial begin \
+         begin string s=\"a\"; $display(\"A=%s\",s); end \
+         begin string s=\"b\"; $display(\"B=%s\",s); end \
+         begin string s; $display(\"C=[%s]\",s); end \
+         #1 $finish; end endmodule\n");
+    assert_eq!(code, Some(0), "expected clean sim; got:\n{out}");
+    for want in ["A=a", "B=b", "C=[]"] {
+        assert!(out.contains(want), "expected `{want}`; got:\n{out}");
+    }
+
+    // A block-local string shadowing a MODULE string is still loud — one declaring
+    // block, and the name is a module name, so it cannot be scoped.
+    let (_o, code) = run("module top; string s=\"M\"; initial begin \
+         begin string s=\"L\"; $display(\"%s\",s); end $display(\"%s\",s); $finish; end endmodule\n");
+    assert_ne!(code, Some(0), "a module-net shadow must stay loud");
 }
 
 #[test]

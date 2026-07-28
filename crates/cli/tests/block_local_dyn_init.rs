@@ -394,21 +394,43 @@ fn same_name_dyn_locals_across_blocks_do_not_leak() {
 }
 
 #[test]
-fn a_same_name_dyn_local_with_an_initializer_stays_loud() {
-    // The `$blk$` path skips the decl-init collector, so a SCOPED static
-    // `byte m[] = '{…}` would come up EMPTY. Measured, not assumed — the first cut of
-    // §4.5.249 printed `size()==0` here. So an initializer-bearing STATIC dynamic local
-    // is excluded from the widening and keeps the loud, which now names the identifier
-    // and states the actual rule.
-    assert!(loud3009(
-        "module top;\n\
+fn a_same_name_dyn_local_keeps_its_initializer() {
+    // §4.5.251 closed the reason this used to be loud. The `$blk$` path returned before
+    // the decl-init collector, so a scoped `byte m[] = '{…}` came up EMPTY — a loud
+    // traded for a silent zero, which is why the widening excluded every initializer.
+    // The scoped path now records its initializers under its own prefix and replays them
+    // there, so the exclusion is gone and the shape is correct. Pinned against LIVE
+    // iverilog 13.0 on every line.
+    let (o, ok) = run("module top;\n\
          initial begin\n\
-           begin byte m[] = '{8'd1, 8'd2}; $display(\"A=%0d\", m.size()); end\n\
-           begin byte m[]; $display(\"B=%0d\", m.size()); end\n\
+           begin byte m[] = '{8'd1, 8'd2}; $display(\"A=%0d %h\", m.size(), m[1]); end\n\
+           begin byte m[] = '{8'd7};       $display(\"B=%0d %h\", m.size(), m[0]); end\n\
+           begin byte m[];                 $display(\"C=%0d\", m.size()); end\n\
            $finish;\n\
          end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    for want in ["A=2 02", "B=1 07", "C=0"] {
+        assert!(o.contains(want), "expected `{want}`; got:\n{o}");
+    }
+
+    // A queue in the same shape, and a MULTI-NAME declaration whose sibling carries the
+    // initializer — the case that had to be excluded per-decl while the collector was
+    // being skipped.
+    let (o, ok) = run("module top;\n\
+         byte g = 8'd9;\n\
+         initial begin\n\
+           begin int q[$] = '{1,2,3}; $display(\"Q=%0d %0d\", q.size(), q[2]); end\n\
+           begin int q[$] = '{9};     $display(\"R=%0d %0d\", q.size(), q[0]); end\n\
+           begin byte m[], n = g; m = new[2]; $display(\"M=%0d %0d\", m.size(), n); end\n\
+           begin byte m[], k = g; m = new[3]; $display(\"N=%0d %0d\", m.size(), k); end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    for want in ["Q=3 3", "R=1 9", "M=2 9", "N=3 9"] {
+        assert!(o.contains(want), "expected `{want}`; got:\n{o}");
+    }
 }
 
 #[test]
@@ -501,4 +523,44 @@ fn a_scoped_static_dyn_local_does_not_shadow_a_module_net() {
          endmodule\n");
     assert!(ok, "expected clean sim, got:\n{o}");
     assert!(o.contains("A=3"), "the module net:\n{o}");
+}
+
+/// §4.5.251: a scalar `string` block-local declared under the same name in two blocks.
+/// It was the last kind excluded from the widening, for the one reason that has now
+/// gone away — the scoped path skipped the decl-init collector, so an init-bearing
+/// string came back EMPTY. Every line matches LIVE iverilog 13.0.
+#[test]
+fn same_named_string_locals_keep_their_own_initializers() {
+    let (o, ok) = run("module top;\n\
+         string g = \"G\";\n\
+         initial begin\n\
+           begin string s = \"aa\";      $display(\"A=%s %0d\", s, s.len()); end\n\
+           begin string s = \"bbb\";     $display(\"B=%s %0d\", s, s.len()); end\n\
+           begin string s;             $display(\"C=[%s]\", s); end\n\
+           begin string s = {g, \"1\"};  $display(\"D=%s\", s); end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    for want in ["A=aa 2", "B=bbb 3", "C=[]", "D=G1"] {
+        assert!(o.contains(want), "expected `{want}`; got:\n{o}");
+    }
+}
+
+/// What the widening still cannot reach, so the (identifier-bearing) loud is not dead
+/// code: a block-local that shadows a MODULE net of the same name — one declaring
+/// block, and the name is a module name, so `compute_scoped_block_locals` excludes it
+/// on both counts.
+#[test]
+fn a_block_local_shadowing_a_module_dynamic_net_stays_loud() {
+    assert!(loud3009(
+        "module top;\n\
+         byte m [];\n\
+         initial begin\n\
+           m = new[5];\n\
+           begin byte m[]; m = new[1]; $display(\"A=%0d\", m.size()); end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n"
+    ));
 }
