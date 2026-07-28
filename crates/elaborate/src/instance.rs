@@ -120,6 +120,14 @@ impl Elaborator<'_> {
         // Read BEFORE the flag is cleared: the slot depends on the PARENT's kind.
         let rank_slot = self.rank_slot_for_instance();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, false);
+        // §4.5.262: and neither is a module body "inside a bind". The band says how THIS
+        // instance was reached; the children it declares itself are ordinary body items
+        // however their parent got here. Leaving it set made a module reached through a
+        // bind key its own children band 1 too — so if that module was itself a bind
+        // target, its body children and its bound children collided on band and fell back
+        // to comparing a body offset against a compilation-unit one, which is the exact
+        // comparison the band exists to prevent.
+        let saved_band = std::mem::replace(&mut self.rank_band, 0);
         // The DECLARING position, not a counter — see `with_rank_scope_keyed`.
         self.rank_path.push(rank_slot);
         self.rank_path.push(rank_key.0);
@@ -729,7 +737,7 @@ impl Elaborator<'_> {
         //      step (7.5). `binds.clone()` releases the `self.bind_targets` borrow
         //      before the `&mut self` recursion.
         if let Some(binds) = self.bind_targets.get(&module.name.name) {
-            // §4.5.261: BAND 1 with its own counter. A `bind` directive lives in the
+            // §4.5.261: BAND 1. A `bind` directive lives in the
             // compilation unit, so its source offset is not a position inside this
             // module's body — using it made the answer depend on where the `bind` line
             // was written, and on the order the files were listed.
@@ -758,6 +766,7 @@ impl Elaborator<'_> {
         self.let_table = saved_lets;
         self.cur_prefix = saved_prefix;
         self.in_generate_body = saved_in_gen;
+        self.rank_band = saved_band;
         self.rank_seq = saved_rank_seq;
         self.rank_path.truncate(self.rank_path.len() - 4);
         self.cur_inst = saved_inst;

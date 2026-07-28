@@ -856,3 +856,46 @@ fn a_bind_directives_position_does_not_change_initialization_order() {
         );
     }
 }
+
+/// §4.5.262. The band says how THIS instance was reached; the children a module declares
+/// itself are ordinary body items however their parent got here. Leaving `rank_band` set
+/// leaked it into the whole bound subtree, so a module reached through a bind keyed its
+/// own body children band 1 too — and when that module was itself a bind target, its body
+/// children and its bound children collided on band and fell back to comparing a body
+/// offset against a compilation-unit one. iverilog cannot parse `bind`, so this pins the
+/// invariant rather than an oracle value: the answer must not depend on source layout.
+#[test]
+fn a_nested_bind_does_not_leak_its_band_into_the_bound_subtree() {
+    let head = "package pk;\n\
+           function automatic int tick(input string s); $display(\"P %s\", s); return 0; endfunction\n\
+         endpackage\n\
+         import pk::*;\n\
+         module chk2; int d = tick(\"chk2.d\"); endmodule\n\
+         module leaf; int lv = tick(\"leaf.lv\"); endmodule\n";
+    let tail = "module sub; int sv = tick(\"sub.sv\"); endmodule\n\
+         bind sub chk bk();\n\
+         module tb; sub u(); initial $display(\"done\"); endmodule\n";
+    let mut seen: Vec<String> = Vec::new();
+    for body in [
+        "bind chk chk2 bk2();\nmodule chk; leaf L(); int c = tick(\"chk.c\"); endmodule\n",
+        "module chk; leaf L(); int c = tick(\"chk.c\"); endmodule\nbind chk chk2 bk2();\n",
+    ] {
+        let (o, ok) = run(&format!("{head}{body}{tail}"));
+        assert!(ok, "expected clean sim, got:\n{o}");
+        seen.push(
+            o.lines()
+                .filter(|l| l.starts_with("P "))
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+    }
+    assert_eq!(
+        seen[0], seen[1],
+        "where the `bind` line sits must not change the initialization order"
+    );
+    assert!(
+        seen[0].contains("P leaf.lv") && seen[0].contains("P chk.c"),
+        "and the bound checker's own body children still come first: {}",
+        seen[0]
+    );
+}
