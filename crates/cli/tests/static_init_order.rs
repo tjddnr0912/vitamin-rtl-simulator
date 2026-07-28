@@ -194,3 +194,75 @@ fn a_generate_scopes_block_locals_flush_in_that_scope() {
         "generate-scope block-local reads its own scope's init:\n{o}"
     );
 }
+
+// ── §4.5.255: what the adversarial review of the ordering slice found ────────
+
+/// A generate body is a SCOPE to iverilog even where vita mints no prefix segment for it
+/// — a `case` arm, an unlabeled `if`/`begin`. Its initializers run BEFORE the enclosing
+/// module's, so keying them at the module prefix and filing them under "block-local, so
+/// last" made three shapes silently wrong that had been right. iverilog: `a` first.
+#[test]
+fn an_unscoped_generate_bodys_initializers_precede_the_modules() {
+    for gen in [
+        "generate if (1) begin\n\
+           initial begin begin int a = $random; #1 $display(\"P a=%0d mm=%0d\", a, mm); end end\n\
+         end endgenerate\n",
+        "generate case (1) 1: begin\n\
+           initial begin begin int a = $random; #1 $display(\"P a=%0d mm=%0d\", a, mm); end end\n\
+         end endcase endgenerate\n",
+    ] {
+        let (o, ok) = run(&format!(
+            "module t;\n  int mm = $random;\n  {gen}  initial #2 $finish;\nendmodule\n"
+        ));
+        assert!(ok, "expected clean sim, got:\n{o}");
+        assert!(
+            o.contains(&format!("P a={D1} mm={D2}")),
+            "generate content initializes first:\n{o}"
+        );
+    }
+}
+
+/// The same rule for a LABELED generate scope, which also pins the order INSIDE it: the
+/// scope's own declarations, then its block-locals, then the enclosing module's.
+/// iverilog: `gm` `a` `mm`.
+#[test]
+fn a_generate_scope_initializes_before_the_module_and_in_order_within() {
+    let (o, ok) = run("module t;\n\
+           genvar i;\n\
+           int mm = $random;\n\
+           generate for (i = 0; i < 1; i = i + 1) begin : g\n\
+             int gm = $random;\n\
+             initial begin\n\
+               begin int a = $random; #1 $display(\"P gm=%0d a=%0d mm=%0d\", gm, a, mm); end\n\
+             end\n\
+           end endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P gm={D1} a={D2} mm={D3}")),
+        "generate scope first, module last:\n{o}"
+    );
+}
+
+/// A routed string array's `new[n]` pre-size must be drained by the scope that OWNS the
+/// declaration. Draining it when a walk OPENS handed an inner generate body's pre-size to
+/// the outer process, so `new[n]` ran after the element writes the inner had already
+/// emitted and wiped them — an empty array at exit 0. Flush order is innermost-first,
+/// which is ownership order.
+#[test]
+fn a_pre_size_is_drained_by_the_scope_that_owns_the_declaration() {
+    let (o, ok) = run("module t;\n\
+           generate if (1) begin\n\
+             initial begin\n\
+               begin string s[2] = '{\"a\",\"b\"}; $display(\"P=|%s|%s|\", s[0], s[1]); end\n\
+             end\n\
+           end endgenerate\n\
+           initial #1 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P=|a|b|"),
+        "the writes survive the pre-size:\n{o}"
+    );
+}

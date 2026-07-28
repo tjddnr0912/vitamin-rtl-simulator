@@ -554,7 +554,24 @@ impl Elaborator<'_> {
         // Decl-time pre-sizes recorded for THIS scope (the `""` key) go first: a routed
         // string array's `new[n]` must precede its element writes. Same position the
         // straight-into-`pending_var_inits` push had, so the module path is unchanged.
-        self.drain_scoped_presize();
+        // (6.9a) §6.8 for GENERATE scopes: the module-body sweep below walks the
+        //        module body ONLY, so an array `'{…}` / non-constant / queue
+        //        decl-init inside a generate block was silently dropped. Collect +
+        //        flush them (VarInit phase, ONE synthesized `initial` per gen scope)
+        //        BEFORE the module pre-sweep and BEFORE the Logic pass, so every
+        //        pre-sweep initial precedes the user processes that read it.
+        //
+        // §4.5.255: BEFORE, not after — measured against live iverilog, a generate
+        // scope's statics initialize ahead of the enclosing module's. `genvar i; …
+        // begin : g int gm = $random; … end` gives `gm` the first draw and a module
+        // `int mm = $random;` the second, in either source order. vita emitted the
+        // module sweep first, so every generate-scope initializer read the module's
+        // already-initialized values and the module read none of the generate's.
+        for item in &module.body {
+            if let ast::ModuleItem::Generate(g) = item {
+                self.elaborate_generate(&g.items, GenPhase::VarInit, 0, map);
+            }
+        }
         for item in &module.body {
             if let ast::ModuleItem::NetVar(d) = item {
                 self.collect_var_init_drivers(d);
@@ -564,18 +581,6 @@ impl Elaborator<'_> {
         // iverilog initializes module-scope statics first), in declaration order among
         // themselves — see `flush_block_local_inits`, which also flushes the sweep above.
         self.flush_block_local_inits();
-
-        // (6.9b) §6.8 for GENERATE scopes: the module-body sweep above walks the
-        //        module body ONLY, so an array `'{…}` / non-constant / queue
-        //        decl-init inside a generate block was silently dropped. Collect +
-        //        flush them now (VarInit phase, ONE synthesized `initial` per gen
-        //        scope) — AFTER the module pre-sweep and BEFORE the Logic pass, so
-        //        every pre-sweep initial precedes the user processes that read it.
-        for item in &module.body {
-            if let ast::ModuleItem::Generate(g) = item {
-                self.elaborate_generate(&g.items, GenPhase::VarInit, 0, map);
-            }
-        }
 
         // (6.5) N4 clocking: synthesize preponed-sampled holding nets + a marked
         // commit handler per clocking block, and register `@(cb)` events — AFTER the

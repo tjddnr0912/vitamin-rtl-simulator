@@ -172,7 +172,6 @@ impl Elaborator<'_> {
                 let saved_pending = std::mem::take(&mut self.pending_var_inits);
                 // Same two drains as the module and generate flushes: this scope's
                 // decl-time pre-sizes first, its block-local string inits last.
-                self.drain_scoped_presize();
                 for it in &decl.body {
                     if let ast::ModuleItem::NetVar(d) = it {
                         self.collect_var_init_drivers(d);

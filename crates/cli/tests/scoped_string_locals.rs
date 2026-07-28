@@ -1,0 +1,212 @@
+//! §4.5.255 — a `string` ARRAY declared under the same name in two blocks.
+//!
+//! Two same-named block-locals are two distinct variables (IEEE 1800 §6.21), and vita
+//! gives such a pair distinct storage by putting each declaration in its own `$blk$<lo>`
+//! scope. String arrays had been excluded from that: their per-element storage is
+//! registered under the DECLARING prefix, while the collector that expands the
+//! initializer and the pre-size that sets the length both ran in the MODULE prefix — so a
+//! scoped one came up length 0. Review S1 answered that by excluding the shape (back to
+//! loud); this slice answers it by removing the asymmetry (the collector runs inside the
+//! scope, and the pre-size is recorded there), which makes the shape correct.
+//!
+//! Every expectation below is live iverilog 13.0's, with one exception called out at
+//! `an_unassigned_element_is_the_empty_string`.
+use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
+fn run(src: &str) -> (String, bool) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_sstr_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    (
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+        out.status.code() == Some(0),
+    )
+}
+
+fn loud(src: &str) -> bool {
+    let (o, ok) = run(src);
+    !ok && o.contains("error[VITA")
+}
+
+/// Declaration initializers on both sides, each block keeping its own elements.
+#[test]
+fn each_blocks_string_array_initializer_fills_its_own_storage() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin string s[2] = '{\"x\",\"y\"}; $display(\"A=|%s|%s|\", s[0], s[1]); end\n\
+             begin string s[2] = '{\"p\",\"q\"}; $display(\"B=|%s|%s|\", s[0], s[1]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=|x|y|") && o.contains("B=|p|q|"),
+        "iverilog A=|x|y| B=|p|q|:\n{o}"
+    );
+}
+
+/// Multi-dimensional, which flattens row-major onto one container — the scoped copy must
+/// use the same geometry as the module-scope one.
+#[test]
+fn a_multi_dim_string_array_keeps_its_row_major_geometry() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin string s[2][2] = '{'{\"a\",\"b\"},'{\"c\",\"d\"}};\n\
+               $display(\"A=|%s|%s|\", s[0][1], s[1][0]); end\n\
+             begin string s[2][2]; s[1][1]=\"z\"; $display(\"B=|%s|\", s[1][1]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=|b|c|") && o.contains("B=|z|"),
+        "iverilog A=|b|c| B=|z|:\n{o}"
+    );
+}
+
+/// A DESCENDING declared range: pattern element k fills from the left bound (§10.9.1),
+/// and an index read must agree with it.
+#[test]
+fn a_descending_string_array_fills_from_the_left_bound() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin string s[3:1] = '{\"a1\",\"b2\",\"c3\"};\n\
+               $display(\"A=|%s|%s|%s|\", s[3], s[2], s[1]); end\n\
+             begin string s[3:1]; s[2]=\"zz\"; $display(\"B=|%s|\", s[2]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=|a1|b2|c3|") && o.contains("B=|zz|"),
+        "iverilog A=|a1|b2|c3| B=|zz|:\n{o}"
+    );
+}
+
+/// The same name declared with DIFFERENT string shapes in two blocks — a fixed array and
+/// a dynamic one. Each gets the storage its own declaration asks for.
+#[test]
+fn a_fixed_and_a_dynamic_string_array_can_share_a_name() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin string s[2]; s[0]=\"aa\"; $display(\"A=|%s|\", s[0]); end\n\
+             begin string s[]; s = new[1]; s[0]=\"bb\";\n\
+               $display(\"B=|%s| n=%0d\", s[0], s.size()); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=|aa|") && o.contains("B=|bb| n=1"),
+        "iverilog A=|aa| B=|bb| n=1:\n{o}"
+    );
+}
+
+/// A scoped block re-entered by a loop. The storage is STATIC, so it persists across
+/// iterations and is simply rewritten — not re-created.
+#[test]
+fn a_scoped_string_array_in_a_loop_body_is_static_storage() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             for (int i = 0; i < 2; i++) begin\n\
+               begin string s[2]; s[0] = $sformatf(\"i%0d\", i); $display(\"L=|%s|\", s[0]); end\n\
+             end\n\
+             begin string s[2]; s[1]=\"q\"; $display(\"B=|%s|\", s[1]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("L=|i0|") && o.contains("L=|i1|") && o.contains("B=|q|"),
+        "iverilog L=|i0| L=|i1| B=|q|:\n{o}"
+    );
+}
+
+/// Two `fork` ARMS declaring the same name. Each arm is its own block with its own span,
+/// so each gets its own net — and a process reaches an arm once per fork, which is the
+/// single-live-activation condition the flatten needs. This was loud before.
+#[test]
+fn two_fork_arms_can_declare_the_same_string_array() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             fork\n\
+               begin string s[2]; s[0]=\"f1\"; $display(\"F1=|%s|\", s[0]); end\n\
+               begin string s[2]; s[0]=\"f2\"; $display(\"F2=|%s|\", s[0]); end\n\
+             join\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("F1=|f1|") && o.contains("F2=|f2|"),
+        "each arm keeps its own array (arm ORDER is unspecified):\n{o}"
+    );
+}
+
+/// The exclusions this slice does NOT lift, kept loud rather than guessed at: a name that
+/// also names a module net, and two blocks where one encloses the other. iverilog runs
+/// both; vita says so instead of aliasing them.
+#[test]
+fn the_two_unsupported_same_name_shapes_stay_loud() {
+    assert!(loud(
+        "module t;\n\
+           string s[2];\n\
+           initial begin\n\
+             begin string s[2]; s[0]=\"aa\"; $display(\"A=|%s|\", s[0]); end\n\
+             begin string s[2]; s[0]=\"bb\"; $display(\"B=|%s|\", s[0]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    ));
+    assert!(loud(
+        "module t;\n\
+           initial begin\n\
+             begin\n\
+               string s[2]; s[0]=\"out\";\n\
+               begin string s[2]; s[0]=\"in\"; $display(\"I=|%s|\", s[0]); end\n\
+               $display(\"O=|%s|\", s[0]);\n\
+             end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    ));
+}
+
+/// The one place vita and iverilog differ here, pinned deliberately. An element that was
+/// never assigned is the EMPTY string (IEEE 1800 §6.16 — an unset `string` is `""`).
+/// iverilog prints one space for it and reports `.len()` as 2 even in a single block that
+/// never wrote it, which is uninitialized memory rather than a rule, so this follows the
+/// LRM. The distinctness of the two blocks' storage does NOT rest on this: iverilog's own
+/// second block does not see `aa`/`bb` either.
+#[test]
+fn an_unassigned_element_is_the_empty_string() {
+    let (o, ok) = run("module t;\n\
+           string m[2];\n\
+           initial begin\n\
+             $display(\"M=|%s| len=%0d\", m[1], m[1].len());\n\
+             begin string s[2]; s[0]=\"aa\"; s[1]=\"bb\"; $display(\"A=|%s|%s|\", s[0], s[1]); end\n\
+             begin string s[2]; $display(\"B=|%s|%s|\", s[0], s[1]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("M=|| len=0"), "module scope, §6.16:\n{o}");
+    assert!(
+        o.contains("A=|aa|bb|") && o.contains("B=|||"),
+        "block scope, same rule — and no leak from A:\n{o}"
+    );
+}

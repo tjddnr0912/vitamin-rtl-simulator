@@ -454,17 +454,17 @@ impl Elaborator<'_> {
         // §4.5.251: a scalar `string` qualifies too, and an initializer no longer
         // disqualifies either — the scoped path records its initializers under its own
         // prefix now and replays them there.
-        // Must match `gather_auto_block_locals` EXACTLY, including the scalar-string
-        // condition (review S1 — a kind-only spelling admitted `string s[2]`, whose
-        // element storage the scoped path cannot reach, giving it length 0 at exit 0).
-        let scalar_string =
+        // Must match `gather_auto_block_locals` EXACTLY — a decl scoped here but not
+        // gathered there (or the reverse) breaks the invariant that every colliding
+        // occurrence of a name is scoped.
+        let string_local =
             matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
-        let dyn_storage = d.names.iter().any(|n| {
-            (scalar_string && n.unpacked.is_empty())
-                || n.unpacked.iter().any(|dim| {
+        let dyn_storage = string_local
+            || d.names.iter().any(|n| {
+                n.unpacked.iter().any(|dim| {
                     matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
                 })
-        });
+            });
         if d.lifetime == Some(true) || dyn_storage {
             if let Some(seg) = self.block_local_scope_seg(span, d) {
                 for n in &d.names {
@@ -512,15 +512,19 @@ impl Elaborator<'_> {
                                     );
                     }
                 }
-                // r19: this `$blk$`-scoped arm `continue`s past the decl-init collector
-                // below, and it registers the decl under a `$blk$<lo>.` prefix that the
-                // collector does not compute — so an init-bearing FIXED string array must
-                // never reach here, or its init would be silently dropped. Today the
-                // `automatic`-lifetime loud above guarantees that (an `AssignPattern` folds
-                // neither via `fold_init` nor `const_eval_in_scope`, and `per_entry` never
-                // holds a string array). Pinned by `automatic_block_local_init_stays_loud`.
-                self.with_scope(&seg, |s| s.elaborate_netvar_decl(d, ports, body, true));
-                self.collect_block_local_decl_inits(d, span, Some(&seg));
+                // §4.5.255: the collector runs INSIDE the scope, so every prefix-sensitive
+                // question it asks is answered in the prefix the declaration was created
+                // in. That is what a routed `string s[2]` needs — its storage is registered
+                // under `…$blk$<lo>.s`, and `has_fixed_string_array_storage` asked from the
+                // module prefix said "no storage" and dropped the initializer. It also
+                // aligns the collector's const-fold test with the one `elaborate_netvar_decl`
+                // just made, which had been resolving names in a different scope.
+                // `scoped_init_key(None)` inside the scope is the same key
+                // `scoped_init_key(Some(seg))` produced outside it.
+                self.with_scope(&seg, |s| {
+                    s.elaborate_netvar_decl(d, ports, body, true);
+                    s.collect_block_local_decl_inits(d, span, None);
+                });
                 return;
             }
         }

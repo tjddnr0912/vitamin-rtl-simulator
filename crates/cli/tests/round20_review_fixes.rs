@@ -423,17 +423,34 @@ fn the_pop_discard_sink_is_not_in_the_user_namespace() {
 /// `string s[2]` — whose per-element storage lives under the DECLARING prefix, invisible
 /// from the module prefix the pre-size and the element writes resolve in. A scoped one
 /// got length 0 and every write was discarded, at exit 0, where PRE was loud.
+///
+/// §4.5.255 removed the asymmetry instead of the shape: the collector now runs inside the
+/// scope and the pre-size is recorded there, so this is CORRECT rather than loud. iverilog
+/// agrees the two arrays are DISTINCT (its second block does not see `aa`/`bb`), which is
+/// what this asserts. It is deliberately not asserted through the UNASSIGNED element's
+/// rendering: iverilog prints one space for it and reports `.len()` as 2 even in a single
+/// block that never wrote it, so that surface is its uninitialized-memory quirk, not a
+/// specification — IEEE 1800 §6.16 gives an unset string the value `""`, which is vita's.
 #[test]
-fn a_same_named_string_array_local_stays_loud() {
-    assert!(loud(
-        "module t;\n\
+fn a_same_named_string_array_local_gets_its_own_storage() {
+    let (o, ok) = run("module t;\n\
            initial begin\n\
-             begin string s[2]; s[0]=\"aa\"; s[1]=\"bb\"; $display(\"A=%s\", s[0]); end\n\
-             begin string s[2]; s[0]=\"cc\";              $display(\"B=%s\", s[0]); end\n\
+             begin string s[2]; s[0]=\"aa\"; s[1]=\"bb\"; $display(\"A=|%s|%s|\", s[0], s[1]); end\n\
+             begin string s[2]; s[0]=\"cc\";              $display(\"B=|%s|\", s[0]); end\n\
+             begin string s[2];                          $display(\"C=|%s|%s|\", s[0], s[1]); end\n\
              $finish;\n\
            end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=|aa|bb|") && o.contains("B=|cc|"),
+        "own storage:\n{o}"
+    );
+    let c = o.lines().find(|l| l.starts_with("C=")).unwrap_or("");
+    assert!(
+        !c.contains("aa") && !c.contains("bb") && !c.contains("cc"),
+        "a third block must not see the earlier blocks' elements: {c}"
+    );
     // The two kinds it must still admit: a SCALAR string, and a string DYNAMIC array
     // (whose storage is a heap handle the scope does reach). Both match live iverilog.
     let (o, ok) = run("module t;\n\

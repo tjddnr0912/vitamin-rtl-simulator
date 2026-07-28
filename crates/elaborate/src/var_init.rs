@@ -139,10 +139,32 @@ impl Elaborator<'_> {
     /// to the front of `pending_var_inits`, so a routed string array's `new[n]` precedes
     /// the element writes the collectors are about to push. Called once per flush point —
     /// module/interface scope (the `""` key) and each generate scope.
+    /// Only the entries this scope OWNS: an unlabeled generate body shares its parent's
+    /// prefix, and draining its pre-size here would run `new[n]` in a later process than
+    /// the element writes its own flush already emitted — wiping them silently.
     pub(crate) fn drain_scoped_presize(&mut self) {
-        if let Some(v) = self.pending_scoped_presize.remove(&self.cur_prefix) {
-            self.pending_var_inits.splice(0..0, v);
+        let Some(v) = self.pending_scoped_presize.remove(&self.cur_prefix) else {
+            return;
+        };
+        let (mine, theirs): (Vec<_>, Vec<_>) = v
+            .into_iter()
+            .partition(|(g, ..)| *g == self.in_generate_body);
+        if !theirs.is_empty() {
+            self.pending_scoped_presize
+                .insert(self.cur_prefix.clone(), theirs);
         }
+        self.pending_var_inits
+            .splice(0..0, mine.into_iter().map(|(_, l, r)| (l, r)));
+    }
+
+    /// Is the active prefix a block-local `$blk$<lo>` scope? That is exactly the shape
+    /// `flush_block_local_inits` claims, so it is also the test for "this scope's t0 writes
+    /// are replayed by that flush, not by the enclosing scope's".
+    pub(crate) fn in_block_local_scope(&self) -> bool {
+        self.cur_prefix
+            .rsplit('.')
+            .next()
+            .is_some_and(|seg| seg.starts_with("$blk$"))
     }
 
     /// Record one block-local declaration initializer for the deferred, declaration-ordered
@@ -156,10 +178,11 @@ impl Elaborator<'_> {
         rhs: ast::Expr,
     ) {
         let key = self.scoped_init_key(scope);
+        let in_gen = self.in_generate_body;
         self.pending_block_local_inits
             .entry(key)
             .or_default()
-            .push((lo, lhs, rhs));
+            .push((lo, in_gen, lhs, rhs));
     }
 
     /// Every recorded block-local initializer must have been claimed by exactly one flush
@@ -167,10 +190,19 @@ impl Elaborator<'_> {
     /// — a silent-wrong by construction, so say so instead of returning a clean IR. Only
     /// checked on the success path: an already-failed elaboration may bail before a flush.
     pub(crate) fn assert_block_local_inits_drained(&mut self) {
-        if self.had_error || self.pending_block_local_inits.is_empty() {
+        // The pre-size map is checked with it: a routed string array whose `new[n]` is
+        // never emitted stays length 0, and every element write is discarded — the exact
+        // silent-wrong shape this guard exists for.
+        let orphans = self.pending_block_local_inits.len() + self.pending_scoped_presize.len();
+        if self.had_error || orphans == 0 {
             return;
         }
-        let keys: Vec<String> = self.pending_block_local_inits.keys().cloned().collect();
+        let keys: Vec<String> = self
+            .pending_block_local_inits
+            .keys()
+            .chain(self.pending_scoped_presize.keys())
+            .cloned()
+            .collect();
         self.error(
             MsgCode::ElabUnsupported,
             &format!(
@@ -209,6 +241,14 @@ impl Elaborator<'_> {
     /// a process — which is the whole design in every module with no scoped block-local, so
     /// their IR is unchanged.
     pub(crate) fn flush_block_local_inits(&mut self) {
+        // At FLUSH time, not when the scope's walk opened. A generate body nested in
+        // another shares its prefix, and the outer call's walk begins before the inner
+        // one's flush — draining there handed the inner body's pre-size to the OUTER
+        // process, so `new[n]` ran after the element writes the inner had already emitted
+        // and silently wiped them. Flush order is innermost-first, which is ownership
+        // order. Still spliced to the front of this scope's list, so the pre-size keeps
+        // preceding the writes that ride it.
+        self.drain_scoped_presize();
         let here = self.cur_prefix.clone();
         let dot = if here.is_empty() {
             String::new()
@@ -228,19 +268,34 @@ impl Elaborator<'_> {
             .filter(|k| is_here(k))
             .cloned()
             .collect();
-        let mut all: Vec<(u32, String, ast::Lvalue, ast::Expr)> = Vec::new();
+        let mut all: Vec<(u32, String, bool, ast::Lvalue, ast::Expr)> = Vec::new();
         for key in keys {
             let Some(v) = self.pending_block_local_inits.remove(&key) else {
                 continue;
             };
-            all.extend(v.into_iter().map(|(lo, l, r)| (lo, key.clone(), l, r)));
+            all.extend(
+                v.into_iter()
+                    .map(|(lo, g, l, r)| (lo, key.clone(), g, l, r)),
+            );
         }
         // Stable: one declaration's several element writes share an offset and keep the
         // order the expansion built them in.
         all.sort_by_key(|(lo, ..)| *lo);
+        // §4.5.255: an initializer declared in a CHILD generate body that vita gave no
+        // prefix segment (a `case` arm, an unlabeled `if`/`begin`) is keyed at this very
+        // scope, but iverilog runs it BEFORE this scope's own declarations — measured:
+        // a `case`-arm block-local takes the first `$random` draw and the module variable
+        // the second. Those go in front; the rest keep the measured module-then-block-local
+        // order. Inside a generate flush both flags are set, so nothing is reordered there.
+        let child = !self.in_generate_body;
+        let (front, own): (Vec<_>, Vec<_>) = all
+            .into_iter()
+            .partition(|(_, k, g, ..)| *g && child && *k == here);
+        self.pending_var_inits
+            .splice(0..0, front.into_iter().map(|(_, _, _, l, r)| (l, r)));
         // Split into consecutive same-prefix runs.
         let mut runs: Vec<(String, Vec<(ast::Lvalue, ast::Expr)>)> = Vec::new();
-        for (_, key, lhs, rhs) in all {
+        for (_, key, _, lhs, rhs) in own {
             match runs.last_mut() {
                 Some((k, v)) if *k == key => v.push((lhs, rhs)),
                 _ => runs.push((key, vec![(lhs, rhs)])),

@@ -93,15 +93,15 @@ impl Elaborator<'_> {
         // synthesized `initial` lands in this scope. `pending_var_inits` is empty
         // outside the module/interface flush windows, but the save/restore keeps
         // sibling scopes independent regardless. (No-op for other phases.)
+        // §4.5.255: a generate body is a SCOPE OF ITS OWN to iverilog even where vita
+        // mints no prefix segment for it (a `case` arm, an unlabeled `if`/`begin`), and it
+        // initializes before the enclosing module. The flag travels with each initializer
+        // this walk collects so the enclosing flush can tell "declared in a child generate
+        // body" from "declared in my own body" — the two go on opposite sides of the
+        // module-scope initializers, and they are indistinguishable by prefix alone.
+        let saved_in_gen = std::mem::replace(&mut self.in_generate_body, true);
         let saved_pending =
             (phase == GenPhase::VarInit).then(|| std::mem::take(&mut self.pending_var_inits));
-        if saved_pending.is_some() {
-            // Mirrors the module-scope flush: this scope's decl-time pre-sizes (recorded
-            // during the NETS phase, when `pending_var_inits` is NOT isolated) come first.
-            // Without the scope key they landed in the module list and their bare-name
-            // lvalue resolved to `t.s` instead of `t.gb[0].s`.
-            self.drain_scoped_presize();
-        }
         for item in items {
             self.elaborate_gen_item(item, phase, depth, map);
         }
@@ -109,6 +109,7 @@ impl Elaborator<'_> {
             self.flush_block_local_inits();
             self.pending_var_inits = outer;
         }
+        self.in_generate_body = saved_in_gen;
     }
 
     pub(crate) fn elaborate_gen_item(

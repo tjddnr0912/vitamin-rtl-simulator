@@ -47,17 +47,18 @@ impl Elaborator<'_> {
                         // (`collect_block_local_decl_inits` + `flush_pending_blk_inits`),
                         // so the reason is gone and with it both exclusions.
                         let _ = decl_has_init;
-                        // SCALAR string only. Review S1: the kind-only spelling admitted
-                        // `string s[2]`, whose per-element storage lives under the DECLARING
-                        // prefix — invisible from the module prefix the pre-size and the
-                        // element writes are resolved in — so a scoped one got length 0 and
-                        // every write was discarded at exit 0. The comment said "scalar"; the
-                        // predicate did not.
-                        let scalar_string = matches!(d.kind, ast::NetVarKind::String)
+                        // §4.5.255: a `string` local of ANY unpacked shape. Review S1 had cut
+                        // this back to SCALAR because a scoped `string s[2]` came up length 0
+                        // — its element storage is registered under the DECLARING prefix while
+                        // the pre-size and the element writes were resolved in the module one.
+                        // That asymmetry is gone (the collector runs inside the scope and the
+                        // pre-size is recorded there), so the whole kind qualifies: every
+                        // string local owns per-name storage that cannot be shared by a
+                        // flatten.
+                        let string_local = matches!(d.kind, ast::NetVarKind::String)
                             && d.range.is_none()
-                            && d.packed.is_empty()
-                            && n.unpacked.is_empty();
-                        let dyn_storage = scalar_string
+                            && d.packed.is_empty();
+                        let dyn_storage = string_local
                             || n.unpacked.iter().any(|dim| {
                                 matches!(
                                     dim,

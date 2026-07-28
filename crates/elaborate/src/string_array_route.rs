@@ -269,23 +269,38 @@ impl Elaborator<'_> {
             segments: vec![decl.name.clone()],
             span,
         };
-        let scope = self.cur_prefix.clone();
-        self.pending_scoped_presize.entry(scope).or_default().push((
-            ast::Lvalue::Ident(path),
-            ast::Expr {
-                kind: ast::ExprKind::New {
-                    size: Box::new(ast::Expr {
-                        kind: ast::ExprKind::IntLit {
-                            kind: ast::IntLitKind::Decimal,
-                            raw: n.to_string(),
-                        },
-                        span,
-                    }),
-                    src: None,
-                },
-                span,
+        let lhs = ast::Lvalue::Ident(path);
+        let rhs = ast::Expr {
+            kind: ast::ExprKind::New {
+                size: Box::new(ast::Expr {
+                    kind: ast::ExprKind::IntLit {
+                        kind: ast::IntLitKind::Decimal,
+                        raw: n.to_string(),
+                    },
+                    span,
+                }),
+                src: None,
             },
-        ));
+            span,
+        };
+        // §4.5.255: inside a `$blk$` scope the pre-size joins the block-local list rather
+        // than the per-scope pre-size map, because that list is what orders and replays a
+        // block-local scope. It carries the declaration's own offset and is pushed HERE, at
+        // the declaration — before `collect_block_local_decl_inits` pushes the element
+        // writes, which share that offset — so the stable sort keeps `new[n]` ahead of
+        // them. The pre-size map has no flush point of its own for such a scope, and a
+        // pre-size left in it is an array that silently stays length 0.
+        if self.in_block_local_scope() {
+            let lo = decl.name.span.lo;
+            self.push_block_local_init(None, lo, lhs, rhs);
+        } else {
+            let scope = self.cur_prefix.clone();
+            let in_gen = self.in_generate_body;
+            self.pending_scoped_presize
+                .entry(scope)
+                .or_default()
+                .push((in_gen, lhs, rhs));
+        }
         true
     }
 
