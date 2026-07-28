@@ -178,8 +178,7 @@ impl Elaborator<'_> {
                         self.collect_var_init_drivers(d);
                     }
                 }
-                self.drain_scoped_bl_strings();
-                self.flush_pending_var_inits();
+                self.flush_block_local_inits();
                 self.pending_var_inits = saved_pending;
                 for it in &decl.body {
                     match it {

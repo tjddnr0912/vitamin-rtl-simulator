@@ -106,9 +106,7 @@ impl Elaborator<'_> {
             self.elaborate_gen_item(item, phase, depth, map);
         }
         if let Some(outer) = saved_pending {
-            self.drain_scoped_bl_strings();
-            self.flush_pending_var_inits();
-            self.flush_pending_blk_inits();
+            self.flush_block_local_inits();
             self.pending_var_inits = outer;
         }
     }

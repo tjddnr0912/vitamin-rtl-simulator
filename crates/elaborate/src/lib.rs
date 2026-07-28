@@ -885,35 +885,28 @@ struct Elaborator<'s> {
     // ONE synthesized `initial` process after the module's item loop, so `b`
     // sees `a`'s value instead of silently keeping its X/0 default. (lvalue, rhs).
     pending_var_inits: Vec<(ast::Lvalue, ast::Expr)>,
-    // Block-local `string s = expr;` initializers (collected by
-    // `hoist_block_local_nets`). A block-local string init can READ a module-scope
-    // string, but `hoist_block_local_nets` runs BEFORE `collect_var_init_drivers`,
-    // so pushing it straight into `pending_var_inits` would order the block-local
-    // assignment ahead of the module one (the block-local would read the module
-    // string's empty default). These are held here and appended to
-    // `pending_var_inits` AFTER the module inits, so the t0 pre-sweep assigns
-    // module strings first. (Block-local INT inits keep their existing slot in
-    // `pending_var_inits` — byte-identical for non-string designs.)
-    pending_block_local_string_inits: Vec<(ast::Lvalue, ast::Expr)>,
-    // The two lists above are drained at MODULE scope, with `cur_prefix` empty. Both are
-    // pushed at DECLARATION time — the routed string array's `new[n]` pre-size (which must
-    // precede its element writes) and a block-local string init — and both carry a BARE
-    // name, so a declaration inside a GENERATE scope emitted an lvalue that resolved to
-    // `t.s` instead of `t.gb[0].s`: the generate walk only isolates `pending_var_inits`
-    // during its VarInit phase, and these are pushed during Nets.
-    //
-    // These twins are keyed by the `cur_prefix` in effect at the declaration, so each scope
-    // drains its own at its own flush point (module scope is the `""` key, and its drain
-    // order is unchanged — byte-identical for every design without a generate-scope string).
-    // Kept as SEPARATE maps rather than one because their positions differ: a pre-size goes
-    // BEFORE the scope's collected inits, a block-local string init AFTER them.
+    // A routed string array's decl-time `new[n]` pre-size, which must precede the element
+    // writes. Pushed at DECLARATION time with a BARE name, so a declaration inside a
+    // GENERATE scope emitted an lvalue that resolved to `t.s` instead of `t.gb[0].s`: the
+    // generate walk only isolates `pending_var_inits` during its VarInit phase, and this is
+    // pushed during Nets. Keyed by the `cur_prefix` in effect at the declaration, so each
+    // scope drains its own at its own flush point (module scope is the `""` key, and its
+    // drain order is unchanged — byte-identical for every design without a generate-scope
+    // string). Spliced to the FRONT of that scope's collected inits.
     pending_scoped_presize: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
-    pending_scoped_bl_strings: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
-    /// §4.5.251: t0 initializers for block-locals that were given their OWN `$blk$`
-    /// scope, keyed by the FULL prefix they live under (`top.$blk$123`). They cannot
-    /// ride `pending_var_inits`, whose bare `Ident` lvalues resolve in whatever prefix
-    /// the flush happens to be in; each group is replayed with its own prefix restored.
-    pending_blk_inits: BTreeMap<String, Vec<(ast::Lvalue, ast::Expr)>>,
+    /// §4.5.254: EVERY block-local declaration initializer, keyed by the FULL prefix it
+    /// lives under — the instance/generate prefix for a flattened one, plus a `$blk$<lo>`
+    /// segment for one that earned its own scope. `u32` is the declaring name's source
+    /// offset, the DECLARATION ORDER key.
+    ///
+    /// Measured against iverilog: every module-scope static initializer runs before every
+    /// block-local one (`int m = $random;` before a `begin int a = $random;` regardless of
+    /// which is written first), and block-locals then run in declaration order among
+    /// themselves. Both halves need this one list: `hoist_block_local_nets` runs BEFORE
+    /// `collect_var_init_drivers`, so a block-local pushed straight into `pending_var_inits`
+    /// landed ahead of every module-scope init; and holding only the STRING ones back (what
+    /// r19 did) reordered a block against its own non-string declarations.
+    pending_block_local_inits: BTreeMap<String, Vec<(u32, ast::Lvalue, ast::Expr)>>,
     // v8 SVA: concurrent assertions collected during statement lowering, drained
     // into synthesized clocked checker processes after each module's process loop.
     pending_sva: Vec<PendingSva>,

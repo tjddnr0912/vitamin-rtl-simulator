@@ -125,6 +125,7 @@ pub fn elaborate_located(
     el.global_prec_exp = global_prec_exp;
     el.root_override = roots.map(<[String]>::to_vec);
     el.run(unit);
+    el.assert_block_local_inits_drained();
     let class_rand = el.class_rand_table();
     let class_constraints = el.class_constraints_table();
     let class_dist = el.class_dist_table();

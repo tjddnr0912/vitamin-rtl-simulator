@@ -560,14 +560,10 @@ impl Elaborator<'_> {
                 self.collect_var_init_drivers(d);
             }
         }
-        // Deferred block-local string inits run AFTER the module-scope inits above
-        // (a block-local string may read a module string), but still in the same
-        // single t0 pre-sweep `initial`.
-        let mut bl_strings = std::mem::take(&mut self.pending_block_local_string_inits);
-        self.pending_var_inits.append(&mut bl_strings);
-        self.drain_scoped_bl_strings();
-        self.flush_pending_var_inits();
-        self.flush_pending_blk_inits();
+        // Every block-local initializer runs AFTER the module-scope ones above (measured:
+        // iverilog initializes module-scope statics first), in declaration order among
+        // themselves — see `flush_block_local_inits`, which also flushes the sweep above.
+        self.flush_block_local_inits();
 
         // (6.9b) §6.8 for GENERATE scopes: the module-body sweep above walks the
         //        module body ONLY, so an array `'{…}` / non-constant / queue

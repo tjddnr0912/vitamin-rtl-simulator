@@ -365,26 +365,19 @@ impl Elaborator<'_> {
                         segments: vec![name.name.clone()],
                         span: name.name.span,
                     };
-                    // A block-local STRING init goes to the deferred
-                    // list so it is assigned AFTER module-scope string
-                    // inits (it may read one); a non-string keeps its
-                    // existing `pending_var_inits` slot (byte-identical).
-                    if scalar_string {
-                        let key = self.scoped_init_key(scope);
-                        self.pending_scoped_bl_strings
-                            .entry(key)
-                            .or_default()
-                            .push((ast::Lvalue::Ident(path), init.clone()));
-                    } else if let Some(seg) = scope {
-                        let key = self.scoped_init_key(Some(seg));
-                        self.pending_blk_inits
-                            .entry(key)
-                            .or_default()
-                            .push((ast::Lvalue::Ident(path), init.clone()));
-                    } else {
-                        self.pending_var_inits
-                            .push((ast::Lvalue::Ident(path), init.clone()));
-                    }
+                    // §4.5.254: EVERY block-local init goes to the one deferred
+                    // list, tagged with its declaration offset. It cannot ride
+                    // `pending_var_inits`, which is filled by the module-scope
+                    // sweep that has not run yet — a block-local pushed there
+                    // preceded module-scope inits it may read. Holding back only
+                    // the STRING ones (r19) fixed that for strings while
+                    // reordering them against their own block's non-strings.
+                    self.push_block_local_init(
+                        scope,
+                        name.name.span.lo,
+                        ast::Lvalue::Ident(path),
+                        init.clone(),
+                    );
                 } else if scalar_string
                     && !name.unpacked.is_empty()
                     && self.has_fixed_string_array_storage(&name.name.name)
@@ -412,11 +405,12 @@ impl Elaborator<'_> {
                     if let Some(pairs) =
                         self.string_array_init_pairs(&name.name, &name.unpacked, init)
                     {
-                        let key = self.scoped_init_key(scope);
-                        self.pending_scoped_bl_strings
-                            .entry(key)
-                            .or_default()
-                            .extend(pairs);
+                        // One declaration ⇒ ONE order key for every element write, so
+                        // the stable sort keeps them in the order the expansion built.
+                        let lo = name.name.span.lo;
+                        for (lhs, rhs) in pairs {
+                            self.push_block_local_init(scope, lo, lhs, rhs);
+                        }
                     }
                 }
             }

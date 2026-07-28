@@ -145,13 +145,42 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Twin of [`Self::drain_scoped_presize`] for block-local STRING inits, which go at the
-    /// END instead: a block-local string may read a module-scope string, so it must be
-    /// assigned after the ordinary inits rather than before them.
-    pub(crate) fn drain_scoped_bl_strings(&mut self) {
-        if let Some(v) = self.pending_scoped_bl_strings.remove(&self.cur_prefix) {
-            self.pending_var_inits.extend(v);
+    /// Record one block-local declaration initializer for the deferred, declaration-ordered
+    /// replay in [`Self::flush_block_local_inits`]. `scope` is the `$blk$<lo>` segment when
+    /// the declaration earned its own scope; `lo` is the declaring name's source offset.
+    pub(crate) fn push_block_local_init(
+        &mut self,
+        scope: Option<&str>,
+        lo: u32,
+        lhs: ast::Lvalue,
+        rhs: ast::Expr,
+    ) {
+        let key = self.scoped_init_key(scope);
+        self.pending_block_local_inits
+            .entry(key)
+            .or_default()
+            .push((lo, lhs, rhs));
+    }
+
+    /// Every recorded block-local initializer must have been claimed by exactly one flush
+    /// point. One left behind is an initializer the design wrote and the IR does not carry
+    /// — a silent-wrong by construction, so say so instead of returning a clean IR. Only
+    /// checked on the success path: an already-failed elaboration may bail before a flush.
+    pub(crate) fn assert_block_local_inits_drained(&mut self) {
+        if self.had_error || self.pending_block_local_inits.is_empty() {
+            return;
         }
+        let keys: Vec<String> = self.pending_block_local_inits.keys().cloned().collect();
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!(
+                "internal: block-local declaration initializers recorded under {} were \
+                 never emitted — no flush point claimed the scope(s) `{}`; the design's \
+                 initializers would be missing from the simulation",
+                keys.len(),
+                keys.join("`, `")
+            ),
+        );
     }
 
     /// Drain `pending_var_inits` into ONE synthesized `initial` process whose body
@@ -168,53 +197,68 @@ impl Elaborator<'_> {
         }
     }
 
-    /// §4.5.251: replay the t0 initializers of `$blk$`-scoped block-locals, each under
-    /// the prefix it was declared in. Emitted AFTER the main sweep and as its own
-    /// `initial`, so a scoped init may read a module-scope one — the same ordering
-    /// `pending_scoped_bl_strings` already relies on.
-    pub(crate) fn flush_pending_blk_inits(&mut self) {
+    /// §4.5.254: flush this scope's collected module-scope initializers and then EVERY
+    /// block-local one belonging to it, in DECLARATION order across blocks.
+    ///
+    /// Measured order (live iverilog): all module-scope statics first, then the
+    /// block-locals by declaration offset — whether or not the declaring block earned a
+    /// `$blk$` scope, and whether or not the declaration is a string. A run of consecutive
+    /// same-prefix initializers becomes one synthesized `initial`; a t0 `initial` runs in
+    /// ProcId order, so emitting the runs in order preserves the global order across them.
+    /// A LEADING run in this very scope joins the main sweep's `initial` instead of adding
+    /// a process — which is the whole design in every module with no scoped block-local, so
+    /// their IR is unchanged.
+    pub(crate) fn flush_block_local_inits(&mut self) {
         let here = self.cur_prefix.clone();
         let dot = if here.is_empty() {
             String::new()
         } else {
             format!("{here}.")
         };
+        // This scope owns its own key and its direct `$blk$` children (not a nested
+        // scope's — that one flushes at its own point).
         let is_here = |k: &String| {
-            k.strip_prefix(&dot)
-                .is_some_and(|rest| rest.starts_with("$blk$") && !rest.contains('.'))
+            *k == here
+                || k.strip_prefix(&dot)
+                    .is_some_and(|rest| rest.starts_with("$blk$") && !rest.contains('.'))
         };
-        // A scoped block-local's inits can be in EITHER pending list — a string one goes
-        // to `pending_scoped_bl_strings` (drained last, since it may read a module-scope
-        // string), everything else to `pending_blk_inits`. Both are keyed by the same
-        // scoped prefix, so replay every scope that appears in either.
-        let mut keys: Vec<String> = self
-            .pending_blk_inits
+        let keys: Vec<String> = self
+            .pending_block_local_inits
             .keys()
             .filter(|k| is_here(k))
             .cloned()
             .collect();
-        keys.extend(
-            self.pending_scoped_bl_strings
-                .keys()
-                .filter(|k| is_here(k))
-                .cloned(),
-        );
-        // Review S2(b): order by the block's SOURCE OFFSET, not by the ASCII order of
-        // its decimal spelling — `"$blk$148" < "$blk$32"` ran the later block first.
-        keys.sort_by_key(|k| {
-            let n = k
-                .rsplit("$blk$")
-                .next()
-                .and_then(|d| d.parse::<u32>().ok())
-                .unwrap_or(u32::MAX);
-            (n, k.clone())
-        });
-        keys.dedup();
+        let mut all: Vec<(u32, String, ast::Lvalue, ast::Expr)> = Vec::new();
         for key in keys {
-            let inits = self.pending_blk_inits.remove(&key).unwrap_or_default();
+            let Some(v) = self.pending_block_local_inits.remove(&key) else {
+                continue;
+            };
+            all.extend(v.into_iter().map(|(lo, l, r)| (lo, key.clone(), l, r)));
+        }
+        // Stable: one declaration's several element writes share an offset and keep the
+        // order the expansion built them in.
+        all.sort_by_key(|(lo, ..)| *lo);
+        // Split into consecutive same-prefix runs.
+        let mut runs: Vec<(String, Vec<(ast::Lvalue, ast::Expr)>)> = Vec::new();
+        for (_, key, lhs, rhs) in all {
+            match runs.last_mut() {
+                Some((k, v)) if *k == key => v.push((lhs, rhs)),
+                _ => runs.push((key, vec![(lhs, rhs)])),
+            }
+        }
+        // A leading run declared in THIS scope needs no process of its own.
+        if runs.first().is_some_and(|(k, _)| *k == here) {
+            let (_, v) = runs.remove(0);
+            self.pending_var_inits.extend(v);
+        }
+        self.flush_pending_var_inits();
+        for (key, v) in runs {
             let saved = std::mem::replace(&mut self.cur_prefix, key);
-            self.pending_var_inits = inits;
-            self.drain_scoped_bl_strings();
+            self.pending_var_inits = v;
+            // A scoped routed string array records its `new[n]` under the SCOPED prefix;
+            // it must precede the element writes. A no-op for every other run (the key
+            // was already drained, or never had one).
+            self.drain_scoped_presize();
             self.flush_pending_var_inits();
             self.cur_prefix = saved;
         }
