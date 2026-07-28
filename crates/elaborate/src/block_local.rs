@@ -234,8 +234,104 @@ impl Elaborator<'_> {
     /// releases the borrow before the surrounding `&mut self` hoist continues.
     fn block_local_definitely_assigned(&self, stmts: &[ast::Stmt], name: &str) -> bool {
         automatic_local_definitely_assigned(stmts, name, &|cn, args, nm| {
-            self.call_out_actual_writes(cn, args, nm)
+            self.call_effect(cn, args, nm)
         })
+    }
+
+    /// R16 §3.2: how far the callee-body walk chases nested user calls before giving
+    /// up. A cycle (`a` calls `b` calls `a`) is bounded by this counter rather than a
+    /// visited-set, which keeps the walk `&self`-pure; the budget only ever costs
+    /// precision (an exhausted budget answers "may touch" and the local stays loud).
+    const CALL_INERT_DEPTH: u32 = 8;
+
+    /// R16 §3.2: the three-way verdict [`crate::da::CallEffect`] for one call, and the
+    /// resolver threaded into the definite-assignment walk.
+    ///
+    /// `Writes` is the pre-existing pure-output-actual case, unchanged. `Inert` is the
+    /// new one: a call proven to touch `name` at NO position, which the walk can step
+    /// over. Proving it needs the callee's BODY, not just its signature — v1 flattens
+    /// block-locals into the module namespace, so a body can name the flattened net
+    /// with neither the call head nor any argument mentioning it (verified: a
+    /// `task poke; t.a = 99; endtask` writes a block-local `a` through a hierarchical
+    /// self-path). That hazard is exactly why a bare `show(x);` statement was left
+    /// unvetted; it is answered here rather than assumed away.
+    fn call_effect(
+        &self,
+        callee: &ast::HierPath,
+        args: &[ast::Expr],
+        name: &str,
+    ) -> crate::da::CallEffect {
+        use crate::da::CallEffect as E;
+        if self.call_out_actual_writes(callee, args, name) {
+            return E::Writes;
+        }
+        if self.call_is_inert(callee, args, name, Self::CALL_INERT_DEPTH) {
+            return E::Inert;
+        }
+        E::Unknown
+    }
+
+    /// R16 §3.2: can `callee(args)` be proven to touch `name` at no position?
+    ///
+    /// Three obligations, all conservative (any doubt answers `false`):
+    ///   1. every ACTUAL is ref-free under the all-segments rule;
+    ///   2. the callee RESOLVES — a single-segment name in this module's
+    ///      `func_table`/`task_table`, or a 2-segment container-method enable whose
+    ///      receiver is not `name` (`q.delete();` touches only `q`);
+    ///   3. the resolved BODY (its declarations' initializers included) is clean under
+    ///      [`stmt_no_ref_deep`], which recurses here for any call the body itself
+    ///      makes.
+    ///
+    /// A hierarchical callee, a `$system` task, an unknown name, or an exhausted depth
+    /// budget all answer `false` and leave the local loud — the same outcome as before
+    /// this existed.
+    fn call_is_inert(
+        &self,
+        callee: &ast::HierPath,
+        args: &[ast::Expr],
+        name: &str,
+        depth: u32,
+    ) -> bool {
+        if !args.iter().all(|a| expr_no_ref_deep(a, name)) {
+            return false;
+        }
+        // A container-method enable (`q.delete();`, `s.putc(i, c);`) touches only its
+        // receiver and arguments — no user body to walk.
+        if callee.segments.len() == 2 {
+            return callee.segments.iter().all(|s| s.name != name);
+        }
+        if callee.segments.len() != 1 || depth == 0 {
+            return false;
+        }
+        let nm = callee.segments[0].name.as_str();
+        if nm == name {
+            return false;
+        }
+        let (body, body_decls) = if let Some(f) = self.func_table.get(nm) {
+            (&f.body, &f.body_decls)
+        } else if let Some(t) = self.task_table.get(nm) {
+            (&t.body, &t.body_decls)
+        } else {
+            return false;
+        };
+        // A formal or body-local of the callee named `name` SHADOWS the flattened net,
+        // so references inside are not to our local — but proving which is which needs
+        // the callee's scope, so treat the whole body as unvettable instead. Loud, not
+        // wrong.
+        if body_decls
+            .iter()
+            .flat_map(|d| d.names.iter())
+            .any(|n| n.name.name == name)
+        {
+            return false;
+        }
+        body_decls
+            .iter()
+            .flat_map(|d| d.names.iter())
+            .all(|n| n.init.as_ref().is_none_or(|e| expr_no_ref_deep(e, name)))
+            && stmt_no_ref_deep(body, name, &|cn, ar, nm2| {
+                self.call_is_inert(cn, ar, nm2, depth - 1)
+            })
     }
 
     /// §6.21: a STATIC block-local's initializer runs ONCE at time zero, before any

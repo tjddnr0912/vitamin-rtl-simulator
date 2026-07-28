@@ -18,7 +18,27 @@ pub(crate) use writes::*;
 /// named args, unknown name) → the DA walk then treats the reference conservatively
 /// as a read (correct-or-loud). da.rs itself has no view of port directions, hence
 /// the closure.
-pub(crate) type OutActualWrites<'a> = &'a dyn Fn(&ast::HierPath, &[ast::Expr], &str) -> bool;
+pub(crate) type OutActualWrites<'a> = &'a dyn Fn(&ast::HierPath, &[ast::Expr], &str) -> CallEffect;
+
+/// R16 §3.2: what a CALL does to the local `name`.
+///
+/// The pre-R16 resolver answered one bit — "is this a pure output-actual write?" —
+/// and everything else collapsed to "conservatively a read", which made a statement
+/// call like `show(0);` abort the definite-assignment walk. Three verdicts separate
+/// the two distinct reasons a call can be harmless from the reason it is not.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CallEffect {
+    /// Provably touches `name` at no position — no actual references it AND the
+    /// callee's body (transitively) cannot reach the flattened net. The walk steps
+    /// over it with the assigned-state unchanged.
+    Inert,
+    /// Definitely WRITES `name` whole, through a pure output actual with no
+    /// same-call read (IEEE §13.5.2 copy-out).
+    Writes,
+    /// Anything else: an input / inout / select reference, a callee that cannot be
+    /// resolved, or a body that may reach `name`. Conservatively a read.
+    Unknown,
+}
 
 /// BL4: true when the WHOLE expression `e` — after unwrapping any unary operator
 /// (`!`/`~`/`-`) and `(paren)` — is a function CALL that WRITES `name` through an
@@ -32,9 +52,65 @@ fn cond_out_writes(e: &ast::Expr, name: &str, out_writes: OutActualWrites) -> bo
     match &e.kind {
         K::Paren { inner } => cond_out_writes(inner, name, out_writes),
         K::Unary { operand, .. } => cond_out_writes(operand, name, out_writes),
-        K::Call { name: cn, args } => out_writes(cn, args, name),
+        K::Call { name: cn, args } => out_writes(cn, args, name) == CallEffect::Writes,
         _ => false,
     }
+}
+
+/// R16 §3.1: what control does AFTER a statement, for definite-assignment purposes.
+///
+/// The pre-R16 walker carried only the assigned BOOL, which silently equated "runs
+/// on to the next statement" with "jumps away". That made a `break`/`continue`
+/// placed BEFORE the first write read as a live path reaching the later read, and
+/// 49 of the 84 diagnostics in the round-16 report were that one conflation: every
+/// path that actually reaches the read has already executed the write.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DaOut {
+    /// Control reaches the NEXT statement, with this assigned-state.
+    Falls(bool),
+    /// Control does NOT reach the next statement — a `break`/`continue` (which the
+    /// parser desugars to a `disable` of a synthetic enclosing-loop label) or a
+    /// `return`. A join ignores such a path entirely (IEEE 1800 §11.5 / the standard
+    /// definite-assignment rule): nothing downstream of it executes on this path.
+    Jumps,
+}
+
+impl DaOut {
+    /// The assigned-state to enter the next statement with. A `Jumps` path never
+    /// reaches it, so it contributes the identity of the `&&` merge below.
+    fn state(self) -> bool {
+        match self {
+            DaOut::Falls(a) => a,
+            DaOut::Jumps => true,
+        }
+    }
+
+    /// Merge two arms of an `if` / `case` at their join point. A non-falling arm
+    /// drops out (it never reaches the join); if BOTH jump, the join is unreachable
+    /// and the whole construct jumps.
+    fn merge(self, other: DaOut) -> DaOut {
+        match (self, other) {
+            (DaOut::Jumps, DaOut::Jumps) => DaOut::Jumps,
+            _ => DaOut::Falls(self.state() && other.state()),
+        }
+    }
+}
+
+/// R16 §3.1: is this `disable` target the parser's synthetic label for a `break` /
+/// `continue`? Those labels are `$break$<lo>` / `$continue$<lo>` (see
+/// `hdl-parser::stmt_ctl`), and the leading `$` makes them unwritable as a user
+/// block name — so this cannot mistake a real `disable` for a loop jump.
+///
+/// The distinction is load-bearing and must NOT be widened to `disable` at large: a
+/// `disable` naming a block that is not an ancestor of this statement kills that
+/// other block and lets THIS one run on, so treating it as `Jumps` would drop a live
+/// path from the join and silently accept a genuine read-before-write. A loop jump,
+/// by contrast, always targets a lexical ancestor, so control provably leaves every
+/// statement between here and that loop.
+fn is_loop_jump(target: &ast::HierPath) -> bool {
+    target.segments.len() == 1
+        && matches!(target.segments.first(), Some(s)
+            if s.name.starts_with("$break$") || s.name.starts_with("$continue$"))
 }
 
 /// GAP-D definite-assignment (round-4, guard-aware). Returns the assigned-state
@@ -56,12 +132,26 @@ pub(crate) fn da_stmt(
     assigned: bool,
     name: &str,
     out_writes: OutActualWrites,
-) -> Option<bool> {
+) -> Option<DaOut> {
     use ast::Stmt as S;
+    // R16 §3.1: a `disable` — whether the parser's `break`/`continue` desugaring or a
+    // user one — names a BLOCK, never a variable, so it can neither read nor write
+    // `name`. Checked ahead of the `stmt_no_ref` fast path because that path answers
+    // only the reference question and would flatten the control-flow answer to
+    // `Falls`. A loop jump is the precise `Jumps`; anything else conservatively falls
+    // through (sound whether or not it actually transfers control — see
+    // [`is_loop_jump`]).
+    if let S::Disable { target, .. } = st {
+        return Some(if is_loop_jump(target) {
+            DaOut::Jumps
+        } else {
+            DaOut::Falls(assigned)
+        });
+    }
     // A statement with no reference to `name` at all can neither read nor assign
     // it — the assigned-state passes through unchanged.
     if stmt_no_ref(st, name) {
-        return Some(assigned);
+        return Some(DaOut::Falls(assigned));
     }
     match st {
         S::Blocking {
@@ -78,7 +168,7 @@ pub(crate) fn da_stmt(
             // A clean WHOLE-var write (`name = …`) makes it definitely assigned.
             if let ast::Lvalue::Ident(p) = lhs {
                 if p.segments.len() == 1 && p.segments[0].name == name {
-                    return Some(true);
+                    return Some(DaOut::Falls(true));
                 }
             }
             // Otherwise the lvalue references `name` only through a select base
@@ -91,7 +181,7 @@ pub(crate) fn da_stmt(
             if !assigned {
                 return None;
             }
-            Some(assigned)
+            Some(DaOut::Falls(assigned))
         }
         S::If {
             cond,
@@ -108,11 +198,13 @@ pub(crate) fn da_stmt(
                 return None;
             }
             let a_then = da_stmt(then_s, after, name, out_writes)?;
+            // R16 §3.1: an absent `else` is an empty arm that FALLS THROUGH with the
+            // entry state — it is not a jump, so it always participates in the merge.
             let a_else = match else_s {
                 Some(e) => da_stmt(e, after, name, out_writes)?,
-                None => after,
+                None => DaOut::Falls(after),
             };
-            Some(a_then && a_else)
+            Some(a_then.merge(a_else))
         }
         S::Block { stmts, decls, .. } => {
             // A nested block-local decl whose initializer reads `name` observes
@@ -128,9 +220,16 @@ pub(crate) fn da_stmt(
             }
             let mut a = assigned;
             for s in stmts {
-                a = da_stmt(s, a, name, out_writes)?;
+                match da_stmt(s, a, name, out_writes)? {
+                    DaOut::Falls(next) => a = next,
+                    // R16 §3.1: the rest of this block is UNREACHABLE — a jump has
+                    // already left it. Stop rather than keep walking statements that
+                    // cannot execute (walking them is what turned a `continue`-first
+                    // loop body loud).
+                    DaOut::Jumps => return Some(DaOut::Jumps),
+                }
             }
-            Some(a)
+            Some(DaOut::Falls(a))
         }
         S::Fork { .. } => {
             // Fork branches run CONCURRENTLY — a write in one branch does not
@@ -142,7 +241,7 @@ pub(crate) fn da_stmt(
             // means the fork DOES reference `name` (else `stmt_no_ref` fast-pathed
             // it), so an unassigned fork is conservatively loud.
             if assigned {
-                Some(true)
+                Some(DaOut::Falls(true))
             } else {
                 None
             }
@@ -156,7 +255,9 @@ pub(crate) fn da_stmt(
             if !after && !expr_no_ref(scrutinee, name) {
                 return None;
             }
-            let mut all = true;
+            // R16 §3.1: arms merge with the same rule as `if` — an arm that jumps
+            // (`case (x) 2: continue; …`) never reaches the join and drops out.
+            let mut all: Option<DaOut> = None;
             let mut has_default = false;
             for it in items {
                 let body = match it {
@@ -171,12 +272,20 @@ pub(crate) fn da_stmt(
                         body
                     }
                 };
-                all = da_stmt(body, after, name, out_writes)? && all;
+                let arm = da_stmt(body, after, name, out_writes)?;
+                all = Some(match all {
+                    Some(acc) => acc.merge(arm),
+                    None => arm,
+                });
             }
             // Definitely assigned after the case if the scrutinee wrote `name`, or if
             // EVERY arm assigns AND a default exists (else a scrutinee value can match
-            // no arm → skip all).
-            Some(after || (has_default && all))
+            // no arm → skip all). Without a default the no-match path falls through
+            // with the entry state, so the case as a whole always falls through then.
+            match all {
+                Some(m) if has_default && !after => Some(m),
+                _ => Some(DaOut::Falls(after)),
+            }
         }
         S::For {
             init,
@@ -185,7 +294,7 @@ pub(crate) fn da_stmt(
             body,
             ..
         } => {
-            let a0 = da_stmt(init, assigned, name, out_writes)?;
+            let a0 = da_stmt(init, assigned, name, out_writes)?.state();
             if !a0 && !expr_no_ref(cond, name) {
                 return None;
             }
@@ -195,7 +304,10 @@ pub(crate) fn da_stmt(
             // MORE assigned than the first.
             da_stmt(body, a0, name, out_writes)?;
             da_stmt(step, a0, name, out_writes)?;
-            Some(a0) // a loop cannot newly guarantee assignment (may run 0 times)
+            // A loop cannot newly guarantee assignment (may run 0 times), and it always
+            // FALLS THROUGH for this analysis — a `break` inside its body targets THIS
+            // loop, so it lands right here rather than skipping what follows.
+            Some(DaOut::Falls(a0))
         }
         S::While { cond, body, .. } => {
             // BL4: a `while` cond is evaluated at least once (unconditionally) — a
@@ -206,18 +318,20 @@ pub(crate) fn da_stmt(
                 return None;
             }
             da_stmt(body, after, name, out_writes)?;
-            Some(after)
+            Some(DaOut::Falls(after))
         }
         S::Repeat { count, body, .. } => {
             if !assigned && !expr_no_ref(count, name) {
                 return None;
             }
             da_stmt(body, assigned, name, out_writes)?;
-            Some(assigned)
+            Some(DaOut::Falls(assigned))
         }
         S::Forever { body, .. } => {
             da_stmt(body, assigned, name, out_writes)?;
-            Some(assigned)
+            // Conservatively falls through even though a `forever` without a `break`
+            // never does — over-stating reachability only ever costs precision here.
+            Some(DaOut::Falls(assigned))
         }
         S::Return { value, .. } => {
             if let Some(v) = value {
@@ -225,7 +339,9 @@ pub(crate) fn da_stmt(
                     return None;
                 }
             }
-            Some(assigned)
+            // R16 §3.1: a `return` leaves the subroutine — nothing after it in this
+            // block executes, so it drops out of any enclosing join.
+            Some(DaOut::Jumps)
         }
         // BL4: a bare call STATEMENT `f(…, name, …);` (a task or void-function call —
         // both parse to `UserTaskCall`) is evaluated unconditionally. When `name` is at
@@ -236,7 +352,15 @@ pub(crate) fn da_stmt(
         // the `_ => None` below — BYTE-IDENTICAL to the prior behavior for every
         // non-output-actual call (this arm only ever turns a genuine output-write from
         // loud into supported, never the reverse).
-        S::UserTaskCall { name: cn, args, .. } if out_writes(cn, args, name) => Some(true),
+        S::UserTaskCall { name: cn, args, .. } => match out_writes(cn, args, name) {
+            CallEffect::Writes => Some(DaOut::Falls(true)),
+            // R16 §3.2: a call proven to touch `name` at no position leaves the
+            // assigned-state exactly as it was, and the walk continues past it. This
+            // is what makes `show(0); a = 1; … a …` legal instead of a diagnostic
+            // pointing at `a`.
+            CallEffect::Inert => Some(DaOut::Falls(assigned)),
+            CallEffect::Unknown => None,
+        },
         // Any other statement that references `name` (timing, `assign`/`force`,
         // event control, disable, non-blocking, a task call with a referencing
         // arg, SVA, …) is not vetted for read-before-write → conservatively unsafe.
@@ -270,7 +394,11 @@ pub(crate) fn automatic_local_definitely_assigned(
             return true;
         }
         match da_stmt(st, false, name, out_writes) {
-            Some(a) => assigned = a,
+            Some(DaOut::Falls(a)) => assigned = a,
+            // R16 §3.1: control left the block here (a top-level `break`/`continue`/
+            // `return`), so every remaining statement is unreachable and cannot
+            // contain a read.
+            Some(DaOut::Jumps) => return true,
             None => return false,
         }
     }

@@ -343,64 +343,82 @@ pub(crate) fn stmt_refs_ident_outside(s: &ast::Stmt, skip: ast::Span, name: &str
 /// leaf / composite forms with EVERY sub-expression provably ref-free return
 /// `true`. (Sound-by-construction: unknown ⇒ "may reference".)
 pub(crate) fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
+    expr_no_ref_with(e, name, false)
+}
+
+/// R16 §3.2: [`expr_no_ref`] with the path rule widened to EVERY segment, for
+/// reasoning about a CALLEE's body rather than the caller's own statements.
+///
+/// The caller-side rule ("only the head segment counts") is right where it is used:
+/// a local `a` is referenced by `a`, `a.f`, `a[i]`, and a path headed by anything
+/// else is a different object. But v1 flattens a block-local into the MODULE
+/// namespace, so a callee can also reach it through a hierarchical self-path —
+/// `task poke; t.a = 99; endtask` writes the flattened `a` (measured, not assumed).
+/// Whenever the question is "can this callee touch the flattened net", the head rule
+/// under-detects and the all-segments rule is the sound one.
+pub(crate) fn expr_no_ref_deep(e: &ast::Expr, name: &str) -> bool {
+    expr_no_ref_with(e, name, true)
+}
+
+/// The shared walker behind [`expr_no_ref`] and [`expr_no_ref_deep`]. `deep` is an
+/// OPT-IN parameter: passing the literal `false` short-circuits every widened test
+/// back to the head-segment rule, so `expr_no_ref` is mechanically what it was.
+fn expr_no_ref_with(e: &ast::Expr, name: &str, deep: bool) -> bool {
     use ast::ExprKind as K;
+    // The FIRST segment matching `name` is a reference — a bare read (`t`), a
+    // field / hierarchical read (`t.field`, a multi-seg ident for a class
+    // handle), all count. Only a path whose HEAD is some other name (`other.x`)
+    // is ref-free. Under `deep`, a match at ANY segment counts (see above).
+    let path_ok = |p: &ast::HierPath| {
+        if deep {
+            p.segments.iter().all(|s| s.name != name)
+        } else {
+            p.segments.first().is_none_or(|s| s.name != name)
+        }
+    };
+    let sub = |x: &ast::Expr| expr_no_ref_with(x, name, deep);
     match &e.kind {
         K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::Null | K::Dollar => true,
-        // The FIRST segment matching `name` is a reference — a bare read (`t`), a
-        // field / hierarchical read (`t.field`, a multi-seg ident for a class
-        // handle), all count. Only a path whose HEAD is some other name (`other.x`)
-        // is ref-free.
-        K::Ident(p) => p.segments.first().is_none_or(|s| s.name != name),
-        K::Unary { operand, .. } => expr_no_ref(operand, name),
-        K::Binary { lhs, rhs, .. } => expr_no_ref(lhs, name) && expr_no_ref(rhs, name),
+        K::Ident(p) => path_ok(p),
+        K::Unary { operand, .. } => sub(operand),
+        K::Binary { lhs, rhs, .. } => sub(lhs) && sub(rhs),
         K::Ternary {
             cond,
             then_e,
             else_e,
-        } => expr_no_ref(cond, name) && expr_no_ref(then_e, name) && expr_no_ref(else_e, name),
-        K::BitSelect { base, index } => expr_no_ref(base, name) && expr_no_ref(index, name),
-        K::PartSelect { base, msb, lsb } => {
-            expr_no_ref(base, name) && expr_no_ref(msb, name) && expr_no_ref(lsb, name)
-        }
+        } => sub(cond) && sub(then_e) && sub(else_e),
+        K::BitSelect { base, index } => sub(base) && sub(index),
+        K::PartSelect { base, msb, lsb } => sub(base) && sub(msb) && sub(lsb),
         K::IndexedPart {
             base,
             offset,
             width,
             ..
-        } => expr_no_ref(base, name) && expr_no_ref(offset, name) && expr_no_ref(width, name),
-        K::Concat { parts } => parts.iter().all(|x| expr_no_ref(x, name)),
-        K::Replicate { count, value } => {
-            expr_no_ref(count, name) && value.iter().all(|x| expr_no_ref(x, name))
-        }
+        } => sub(base) && sub(offset) && sub(width),
+        K::Concat { parts } => parts.iter().all(sub),
+        K::Replicate { count, value } => sub(count) && value.iter().all(sub),
         // A call's NAME head can be the receiver of a method call (`t.size()`,
         // `t.method(a)`) — a read of `name`. A plain `f(args)` head is some other
         // function. So the head must not be `name`, AND every arg must be ref-free.
-        K::Call { name: cn, args } => {
-            cn.segments.first().is_none_or(|s| s.name != name)
-                && args.iter().all(|x| expr_no_ref(x, name))
-        }
-        K::SysCall { args, .. } => args.iter().all(|x| expr_no_ref(x, name)),
-        K::Paren { inner } => expr_no_ref(inner, name),
-        K::MinTypMax { min, typ, max } => {
-            expr_no_ref(min, name) && expr_no_ref(typ, name) && expr_no_ref(max, name)
-        }
+        K::Call { name: cn, args } => path_ok(cn) && args.iter().all(sub),
+        K::SysCall { args, .. } => args.iter().all(sub),
+        K::Paren { inner } => sub(inner),
+        K::MinTypMax { min, typ, max } => sub(min) && sub(typ) && sub(max),
         K::Cast { target, expr } => {
-            expr_no_ref(expr, name)
+            sub(expr)
                 && match target {
-                    ast::CastTarget::Size(s) => expr_no_ref(s, name),
+                    ast::CastTarget::Size(s) => sub(s),
                     _ => true,
                 }
         }
-        K::AssignPattern(parts) => parts.iter().all(|x| expr_no_ref(x, name)),
+        K::AssignPattern(parts) => parts.iter().all(sub),
         // A named argument's FORMAL is a name in the CALLEE's namespace — never a
         // reference to the caller's `name`. Only its value can reference anything
         // here. Leaving this unvetted made `r = add(1, .b(2));` — a clean whole-var
         // write — read as "the rhs may reference `r`", so the definite-assignment
         // gate rejected the assignment that was staring right at it and blamed `r`.
-        K::NamedArg { value, .. } => value.as_ref().is_none_or(|v| expr_no_ref(v, name)),
-        K::New { size, src } => {
-            expr_no_ref(size, name) && src.as_ref().is_none_or(|s| expr_no_ref(s, name))
-        }
+        K::NamedArg { value, .. } => value.as_ref().is_none_or(|v| sub(v)),
+        K::New { size, src } => sub(size) && src.as_ref().is_none_or(|s| sub(s)),
         // PkgScoped / ClassNew / ArrayMethodWith / RandomizeWith / Dist / Error —
         // not vetted → conservatively "may reference".
         _ => false,
@@ -494,22 +512,38 @@ pub(crate) fn expr_definitely_refs(e: &ast::Expr, name: &str) -> bool {
 /// and any select index) certainly does NOT reference `name`. Uses `expr_no_ref`
 /// for index sub-exprs (so a read hidden in an index is not a blind spot).
 pub(crate) fn lvalue_no_ref(lv: &ast::Lvalue, name: &str) -> bool {
+    lvalue_no_ref_with(lv, name, false)
+}
+
+/// R16 §3.2: the lvalue twin of [`expr_no_ref_deep`] — an all-segments path rule, so
+/// a callee's hierarchical self-write `t.a = 99;` is seen as touching `a`.
+pub(crate) fn lvalue_no_ref_deep(lv: &ast::Lvalue, name: &str) -> bool {
+    lvalue_no_ref_with(lv, name, true)
+}
+
+fn lvalue_no_ref_with(lv: &ast::Lvalue, name: &str, deep: bool) -> bool {
     use ast::Lvalue as L;
+    let sub_l = |x: &ast::Lvalue| lvalue_no_ref_with(x, name, deep);
+    let sub_e = |x: &ast::Expr| expr_no_ref_with(x, name, deep);
     match lv {
         // As in `expr_no_ref`: any path headed by `name` references it (a whole
         // write `name`, a field/hier write `name.f`). Only another head is ref-free.
-        L::Ident(p) => p.segments.first().is_none_or(|s| s.name != name),
-        L::BitSelect { base, index, .. } => lvalue_no_ref(base, name) && expr_no_ref(index, name),
-        L::PartSelect { base, msb, lsb, .. } => {
-            lvalue_no_ref(base, name) && expr_no_ref(msb, name) && expr_no_ref(lsb, name)
+        L::Ident(p) => {
+            if deep {
+                p.segments.iter().all(|s| s.name != name)
+            } else {
+                p.segments.first().is_none_or(|s| s.name != name)
+            }
         }
+        L::BitSelect { base, index, .. } => sub_l(base) && sub_e(index),
+        L::PartSelect { base, msb, lsb, .. } => sub_l(base) && sub_e(msb) && sub_e(lsb),
         L::IndexedPart {
             base,
             offset,
             width,
             ..
-        } => lvalue_no_ref(base, name) && expr_no_ref(offset, name) && expr_no_ref(width, name),
-        L::Concat { parts, .. } => parts.iter().all(|p| lvalue_no_ref(p, name)),
+        } => sub_l(base) && sub_e(offset) && sub_e(width),
+        L::Concat { parts, .. } => parts.iter().all(sub_l),
         L::Error(_) => true,
     }
 }
@@ -560,6 +594,94 @@ pub(crate) fn stmt_no_ref(st: &ast::Stmt, name: &str) -> bool {
             cn.segments.first().is_none_or(|s| s.name != name)
                 && args.iter().all(|a| expr_no_ref(a, name))
         }
+        _ => false,
+    }
+}
+
+/// R16 §3.2: CONSERVATIVE "this whole statement TREE certainly does not touch
+/// `name`" — the callee-body question, as opposed to [`stmt_no_ref`]'s
+/// single-statement one.
+///
+/// Needed because v1 publishes block-locals as MODULE nets: a callee body can name
+/// the flattened bare name (or reach it hierarchically) with neither the call's head
+/// nor any argument mentioning it. That is why a plain `show(x);` statement stayed
+/// unvetted and aborted the definite-assignment walk — the walk then blamed whatever
+/// local it was tracking, several lines away from the call.
+///
+/// Sound by construction: every leaf uses the all-segments [`expr_no_ref_deep`] /
+/// [`lvalue_no_ref_deep`], every composite requires ALL children to be clean, and any
+/// form not enumerated answers `false` ("may touch"). A nested user call is delegated
+/// to `call_inert`, which resolves the callee and recurses with a depth budget — an
+/// unresolvable or too-deep callee answers `false`.
+pub(crate) fn stmt_no_ref_deep(
+    s: &ast::Stmt,
+    name: &str,
+    call_inert: &dyn Fn(&ast::HierPath, &[ast::Expr], &str) -> bool,
+) -> bool {
+    use ast::Stmt as S;
+    let sub = |st: &ast::Stmt| stmt_no_ref_deep(st, name, call_inert);
+    let e_ok = |x: &ast::Expr| expr_no_ref_deep(x, name);
+    match s {
+        S::Null(_) => true,
+        // A `disable` names a BLOCK, never a variable.
+        S::Disable { .. } => true,
+        S::Block { stmts, decls, .. } | S::Fork { stmts, decls, .. } => {
+            decls
+                .iter()
+                .flat_map(|d| d.names.iter())
+                .all(|n| n.init.as_ref().is_none_or(e_ok))
+                && stmts.iter().all(sub)
+        }
+        S::Blocking {
+            lhs,
+            delay,
+            event,
+            rhs,
+            ..
+        }
+        | S::NonBlocking {
+            lhs,
+            delay,
+            event,
+            rhs,
+            ..
+        } => {
+            delay.is_none()
+                && event.is_none()
+                && lvalue_no_ref_deep(lhs, name)
+                && expr_no_ref_deep(rhs, name)
+        }
+        S::If {
+            cond,
+            then_s,
+            else_s,
+            ..
+        } => e_ok(cond) && sub(then_s) && else_s.as_ref().is_none_or(|x| sub(x)),
+        S::Case {
+            scrutinee, items, ..
+        } => {
+            e_ok(scrutinee)
+                && items.iter().all(|it| match it {
+                    ast::CaseItem::Match { labels, body, .. } => {
+                        labels.iter().all(e_ok) && sub(body)
+                    }
+                    ast::CaseItem::Default { body, .. } => sub(body),
+                })
+        }
+        S::For {
+            init,
+            cond,
+            step,
+            body,
+            ..
+        } => sub(init) && e_ok(cond) && sub(step) && sub(body),
+        S::While { cond, body, .. } => e_ok(cond) && sub(body),
+        S::Repeat { count, body, .. } => e_ok(count) && sub(body),
+        S::Forever { body, .. } => sub(body),
+        S::Return { value, .. } => value.as_ref().is_none_or(e_ok),
+        S::SysTaskCall { args, .. } => args.iter().all(e_ok),
+        S::UserTaskCall { name: cn, args, .. } => call_inert(cn, args, name),
+        // Timing / `assign` / `force` / SVA / anything else — not vetted.
         _ => false,
     }
 }

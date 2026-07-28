@@ -401,7 +401,25 @@ impl Elaborator<'_> {
                     rhs: init.clone(),
                     span: decl.span,
                 };
+                // R16-X1: this IS a declaration initializer, so it carries the same
+                // exemption the module-scope t0 var-init flush gives its own
+                // (`var_init.rs`). Without it a frame-local `string f[3] = '{…}` was
+                // rejected by the `new[]`-on-fixed guard — the `'{…}` expansion emits
+                // `f = new[3]` to establish the fixed length, and the guard read that
+                // synthesized allocation as a user resize.
+                //
+                // A user-written `new[…]` initializer is excluded BY MEASUREMENT, not by
+                // assumption: exempting it too made `string f[3] = new[5];` inside a task
+                // print an empty element at exit 0, where 6b6b8ef rejected it loudly (and
+                // iverilog aborts on it). The module-scope declaration gate that catches
+                // that shape does not cover the frame path, so the discriminator has to
+                // live here. Only an allocation the LOWERING synthesizes — never one the
+                // user wrote — earns the exemption.
+                let user_alloc = matches!(init.kind, ast::ExprKind::New { .. });
+                let saved = self.lowering_decl_init;
+                self.lowering_decl_init = !user_alloc;
                 self.lower_stmt(b, &stmt);
+                self.lowering_decl_init = saved;
             }
         }
     }
