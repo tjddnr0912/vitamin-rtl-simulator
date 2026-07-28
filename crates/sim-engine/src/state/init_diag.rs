@@ -150,6 +150,7 @@ impl<'a> SimState<'a> {
             read_state: std::collections::BTreeMap::new(),
             readable_fds: std::collections::BTreeSet::new(),
             proc_multipliers: Vec::new(),
+            proc_ties: Vec::new(),
             proc_prec_mults: Vec::new(),
             severities: crate::SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),

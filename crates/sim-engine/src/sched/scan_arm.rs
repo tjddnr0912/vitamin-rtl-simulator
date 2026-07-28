@@ -620,13 +620,23 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // Pre-seed top-level activities 1:1 with process declarations. `tie ==
         // template == declaration index` so existing single-process ordering is
         // byte-identical to before the activity-id refactor.
+        //
+        // §4.5.256: unless the design carries a `proc_ties` permutation, which reorders
+        // the t0 queue WITHOUT touching ProcIds. Static initialization runs "before any
+        // initial or always block starts" (IEEE 1800 §6.21) and, among the initializers,
+        // in a scope order the elaboration pass structure cannot produce — a child
+        // instance's initializers precede its parent's, while the parent's own processes
+        // are created before the child even exists. `tie` is the one thing the t0 queue
+        // sorts on, so expressing the order there needs nothing else: `template` still
+        // indexes the process, only the RUN order changes. EMPTY ⇒ identity ⇒ unchanged.
         self.free_activities.clear();
         self.free_barriers.clear();
+        let ties = std::mem::take(&mut self.st.proc_ties);
         self.activities = (0..self.st.ir.processes.len() as u32)
             .map(|pi| Activity {
                 call_stack: Vec::new(),
                 template: pi,
-                tie: pi,
+                tie: ties.get(pi as usize).copied().unwrap_or(pi),
                 join_ref: None,
                 is_child: false,
                 reported: false,

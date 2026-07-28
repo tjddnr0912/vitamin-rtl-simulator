@@ -572,13 +572,22 @@ impl Elaborator<'_> {
             None
         };
         if let Some(nm) = shadowed_string_array {
+            // Name the scope the collision is actually IN. `has_fixed_string_array_storage`
+            // resolves outward from `cur_prefix`, so the other declaration can live in a
+            // generate scope or an enclosing instance, and saying "module scope" sent the
+            // reader to the wrong place.
+            let scope = if self.cur_prefix.is_empty() {
+                "the enclosing scope".to_string()
+            } else {
+                format!("`{}`", self.cur_prefix)
+            };
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
-                    "a block-local `{nm}` collides with a string ARRAY of the same \
-                                 name declared at module scope; v1 flattens block-locals into \
-                                 the module namespace and cannot give this one its own scope \
-                                 (the two would alias) — rename it",
+                    "a block-local `{nm}` collides with a string ARRAY of the same name \
+                     visible in {scope}; v1 flattens block-locals into the enclosing \
+                     namespace and cannot give this one its own scope (the two would \
+                     alias) — rename it",
                 ),
             );
         }

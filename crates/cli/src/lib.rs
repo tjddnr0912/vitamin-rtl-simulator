@@ -411,6 +411,16 @@ struct StagedExtraSidecars {
     /// APPEND-ONLY tail; rides the format_version 25 bump. EMPTY ⇒ byte-identical.
     #[serde(default)]
     file_directed_stmts: std::collections::BTreeSet<u32>,
+    /// Per-ProcId t0 ordering key (§4.5.256). Static initialization happens "before any
+    /// initial or always block starts" (IEEE 1800 §6.21) and, among the initializers,
+    /// in an order that is NOT the order vita creates the processes in — a child
+    /// instance's initializers precede its parent's, which the pass structure cannot
+    /// express. Without this a STAGED run puts them back in ProcId order, so a parent
+    /// `initial` reading `u.some_string` sees the empty default. APPEND-ONLY tail; rides
+    /// the format_version 26 bump. EMPTY when the order IS the identity permutation
+    /// (every design with no decl-initializer, and most with one) ⇒ byte-identical.
+    #[serde(default)]
+    proc_ties: Vec<u32>,
 }
 
 impl StagedExtraSidecars {
@@ -450,6 +460,7 @@ impl StagedExtraSidecars {
             string_elem_dyn_nets: sc.string_elem_dyn_nets.clone(),
             net_decl_ranges: sc.net_decl_ranges.clone(),
             file_directed_stmts: sc.file_directed_stmts.clone(),
+            proc_ties: sc.proc_ties.clone(),
         }
     }
 }

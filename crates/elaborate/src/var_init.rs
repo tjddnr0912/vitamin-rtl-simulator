@@ -157,6 +157,86 @@ impl Elaborator<'_> {
             .splice(0..0, mine.into_iter().map(|(_, l, r)| (l, r)));
     }
 
+    /// Turn the recorded initialization ranks into a per-ProcId t0 ordering key: every
+    /// ranked (= synthesized declaration-initializer) process first, in rank order, then
+    /// every other process in ProcId order. Returns EMPTY when that is already the
+    /// identity permutation, so a design whose creation order happens to match pays
+    /// nothing and stays byte-identical.
+    pub(crate) fn proc_ties(&self) -> Vec<u32> {
+        let n = self.processes.len();
+        let mut order: Vec<u32> = (0..n as u32).collect();
+        order.sort_by(
+            |a, b| match (self.init_ranks.get(a), self.init_ranks.get(b)) {
+                (Some(ra), Some(rb)) => ra.cmp(rb).then(a.cmp(b)),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.cmp(b),
+            },
+        );
+        let mut ties = vec![0u32; n];
+        for (tie, pid) in order.iter().enumerate() {
+            ties[*pid as usize] = tie as u32;
+        }
+        if ties.iter().enumerate().all(|(i, t)| i as u32 == *t) {
+            return Vec::new();
+        }
+        ties
+    }
+
+    /// Slot numbers inside one scope's initialization rank. Two tables because the two
+    /// scope kinds order their parts differently — measured, not assumed.
+    pub(crate) const RANK_MOD_GENERATE: u32 = 0;
+    pub(crate) const RANK_MOD_INSTANCE: u32 = 1;
+    pub(crate) const RANK_MOD_OWN: u32 = 2;
+    pub(crate) const RANK_MOD_BLOCK_LOCAL: u32 = 3;
+    pub(crate) const RANK_GEN_INSTANCE: u32 = 0;
+    pub(crate) const RANK_GEN_OWN: u32 = 1;
+    pub(crate) const RANK_GEN_BLOCK_LOCAL: u32 = 2;
+    pub(crate) const RANK_GEN_NESTED: u32 = 3;
+
+    /// Run `f` with the rank path extended by this scope's `(slot, seq)`. `seq` comes from
+    /// the ENCLOSING scope's counter, so siblings in one slot keep source order, and the
+    /// counter resets inside so each scope numbers its own children independently.
+    pub(crate) fn with_rank_scope<R>(&mut self, slot: u32, f: impl FnOnce(&mut Self) -> R) -> R {
+        let seq = self.rank_seq;
+        self.rank_seq += 1;
+        self.rank_path.push(slot);
+        self.rank_path.push(seq);
+        let saved = std::mem::replace(&mut self.rank_seq, 0);
+        let r = f(self);
+        self.rank_seq = saved;
+        self.rank_path.truncate(self.rank_path.len() - 2);
+        r
+    }
+
+    /// The rank for an initializer process emitted by THIS scope in `slot`.
+    pub(crate) fn init_rank(&mut self, slot: u32) -> Vec<u32> {
+        let seq = self.rank_seq;
+        self.rank_seq += 1;
+        let mut r = self.rank_path.clone();
+        r.push(slot);
+        r.push(seq);
+        r
+    }
+
+    /// Which slot a scope of the given kind occupies inside its PARENT — the parent's kind
+    /// decides, which is why `in_generate_body` is read at the point of entry.
+    pub(crate) fn rank_slot_for_instance(&self) -> u32 {
+        if self.in_generate_body {
+            Self::RANK_GEN_INSTANCE
+        } else {
+            Self::RANK_MOD_INSTANCE
+        }
+    }
+
+    pub(crate) fn rank_slot_for_generate(&self) -> u32 {
+        if self.in_generate_body {
+            Self::RANK_GEN_NESTED
+        } else {
+            Self::RANK_MOD_GENERATE
+        }
+    }
+
     /// Is the active prefix a block-local `$blk$<lo>` scope? That is exactly the shape
     /// `flush_block_local_inits` claims, so it is also the test for "this scope's t0 writes
     /// are replayed by that flush, not by the enclosing scope's".
@@ -306,7 +386,17 @@ impl Elaborator<'_> {
             let (_, v) = runs.remove(0);
             self.pending_var_inits.extend(v);
         }
-        self.flush_pending_var_inits();
+        let own = if self.in_generate_body {
+            Self::RANK_GEN_OWN
+        } else {
+            Self::RANK_MOD_OWN
+        };
+        self.flush_ranked(own);
+        let bl = if self.in_generate_body {
+            Self::RANK_GEN_BLOCK_LOCAL
+        } else {
+            Self::RANK_MOD_BLOCK_LOCAL
+        };
         for (key, v) in runs {
             let saved = std::mem::replace(&mut self.cur_prefix, key);
             self.pending_var_inits = v;
@@ -316,9 +406,22 @@ impl Elaborator<'_> {
             // that runs after it. `pending_scoped_presize` never holds a `$blk$` key — and
             // if one ever appeared, `assert_block_local_inits_drained` reports it loudly
             // rather than letting the array stay length 0.
-            self.flush_pending_var_inits();
+            self.flush_ranked(bl);
             self.cur_prefix = saved;
         }
+    }
+
+    /// [`Self::flush_pending_var_inits`], recording the emitted process's initialization
+    /// rank in `slot`. A no-op flush consumes no `seq`, so the ranks stay dense and a
+    /// design that emits nothing is unaffected.
+    pub(crate) fn flush_ranked(&mut self, slot: u32) {
+        if self.pending_var_inits.is_empty() {
+            return;
+        }
+        let rank = self.init_rank(slot);
+        let pid = self.processes.len() as u32;
+        self.flush_pending_var_inits();
+        self.init_ranks.insert(pid, rank);
     }
 
     pub(crate) fn flush_pending_var_inits(&mut self) {

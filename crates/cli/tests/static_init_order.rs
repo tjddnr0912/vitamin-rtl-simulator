@@ -345,3 +345,185 @@ fn a_child_instantiated_inside_a_generate_owns_its_own_body() {
         "the child's own body owns its initializers:\n{o}"
     );
 }
+
+// ── §4.5.256: the scope order, measured as a matrix ──────────────────────────
+//
+// Static initialization runs before any user process (IEEE 1800 §6.21), and the order
+// AMONG the initializers is, against live iverilog 13.0:
+//
+//   MODULE   scope: ① its generate scopes ② its child instances ③ its own variables
+//                   ④ its own block-locals
+//   GENERATE scope: ① its child instances ② its own variables ③ its own block-locals
+//                   ④ its nested generate scopes
+//
+// Neither is the order vita creates the processes in, and no pass reordering can produce
+// both — a child instance's initializers must precede its parent's, while the parent's
+// own processes are created before the child exists. So the order is carried as data (a
+// rank path per initializer process, exported as a t0 ordering key) and the elaboration
+// pass order is left alone. Each test below states the iverilog draws it pins.
+
+/// The two directions that make the module rule: its generate scope goes first even when
+/// written last, and its own variables go last even when written first.
+#[test]
+fn a_modules_own_variables_initialize_after_its_generate_scopes() {
+    let (o, ok) = run("module t;\n\
+           int mm = $random;\n\
+           generate if (1) begin : g\n\
+             int gm = $random;\n\
+             initial #1 $display(\"P gm=%0d\", gm);\n\
+           end endgenerate\n\
+           initial begin #1 $display(\"P mm=%0d\", mm); #1 $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P gm={D1}")) && o.contains(&format!("P mm={D2}")),
+        "generate scope first:\n{o}"
+    );
+}
+
+/// A child instance initializes before its parent — the case vita could not express at
+/// all, because the parent's processes are created in an earlier pass than the child.
+#[test]
+fn a_child_instance_initializes_before_its_parent() {
+    let (o, ok) = run(
+        "module sub; int sm = $random; initial #1 $display(\"P sm=%0d\", sm); endmodule\n\
+         module t;\n\
+           int mm = $random;\n\
+           sub u();\n\
+           initial begin #1 $display(\"P mm=%0d\", mm); #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P sm={D1}")) && o.contains(&format!("P mm={D2}")),
+        "child first:\n{o}"
+    );
+}
+
+/// …which is observable without `$random` too: a parent `initial` reading a child's
+/// STRING saw the empty default, because "before any process" had been approximated by
+/// "gets a lower ProcId" and that approximation does not survive an instance boundary.
+#[test]
+fn a_parent_process_sees_a_childs_initialized_string() {
+    let (o, ok) = run("module sub; int sm = 5; string ss = \"CHILD\"; endmodule\n\
+         module t;\n\
+           sub u();\n\
+           initial $display(\"P sm=%0d ss=|%s|\", u.sm, u.ss);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("P sm=5 ss=|CHILD|"), "iverilog value:\n{o}");
+}
+
+/// Generate scopes go before child instances, whichever is written first.
+#[test]
+fn generate_scopes_initialize_before_child_instances() {
+    let (o, ok) = run(
+        "module sub; int sm = $random; initial #1 $display(\"P sm=%0d\", sm); endmodule\n\
+         module t;\n\
+           sub u();\n\
+           generate if (1) begin : g\n\
+             int a = $random;\n\
+             initial #1 $display(\"P a=%0d\", a);\n\
+           end endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P a={D1}")) && o.contains(&format!("P sm={D2}")),
+        "generate before instance:\n{o}"
+    );
+}
+
+/// Inside a GENERATE scope the order is different, and both halves are pinned here: a
+/// nested generate goes AFTER the scope's own variables (even when written before them),
+/// while a child instance goes BEFORE them.
+#[test]
+fn a_generate_scope_orders_its_instance_before_and_its_nested_generate_after() {
+    let (o, ok) = run(
+        "module sub; int sm = $random; initial #1 $display(\"P sm=%0d\", sm); endmodule\n\
+         module t;\n\
+           generate if (1) begin : g1\n\
+             sub u();\n\
+             int a = $random;\n\
+             if (1) begin : g2\n\
+               int b = $random;\n\
+               initial #1 $display(\"P b=%0d\", b);\n\
+             end\n\
+             initial #1 $display(\"P a=%0d\", a);\n\
+           end endgenerate\n\
+           int mm = $random;\n\
+           initial begin #1 $display(\"P mm=%0d\", mm); #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P sm={D1}"))
+            && o.contains(&format!("P a={D2}"))
+            && o.contains(&format!("P b={D3}"))
+            && o.contains("P mm=-1309649309"),
+        "instance, own, nested generate, then the module:\n{o}"
+    );
+}
+
+/// A non-root module follows the same rule, and its whole subtree precedes its parent's
+/// own variables.
+#[test]
+fn the_rule_is_the_same_at_every_level_of_the_hierarchy() {
+    let (o, ok) = run(
+        "module leaf; int lv = $random; initial #1 $display(\"P lv=%0d\", lv); endmodule\n\
+         module mid;\n\
+           int mv = $random;\n\
+           generate if (1) begin : mg\n\
+             int gv = $random;\n\
+             initial #1 $display(\"P gv=%0d\", gv);\n\
+           end endgenerate\n\
+           leaf lf();\n\
+           initial #1 $display(\"P mv=%0d\", mv);\n\
+         endmodule\n\
+         module t;\n\
+           int tv = $random;\n\
+           mid u();\n\
+           initial begin #1 $display(\"P tv=%0d\", tv); #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P gv={D1}"))
+            && o.contains(&format!("P lv={D2}"))
+            && o.contains(&format!("P mv={D3}"))
+            && o.contains("P tv=-1309649309"),
+        "mid's generate, mid's child, mid's own, then the root's own:\n{o}"
+    );
+}
+
+/// Sibling scopes keep source order, and two instances of one module keep declaration
+/// order — the rank is a path, so siblings differ only in their own slot.
+#[test]
+fn sibling_scopes_keep_source_order() {
+    let (o, ok) = run("module sub(input int id);\n\
+           int sm = $random;\n\
+           initial #1 $display(\"P id=%0d sm=%0d\", id, sm);\n\
+         endmodule\n\
+         module t;\n\
+           sub u1(.id(1));\n\
+           generate if (1) begin : ga\n\
+             int a = $random;\n\
+             initial #1 $display(\"P a=%0d\", a);\n\
+           end endgenerate\n\
+           sub u2(.id(2));\n\
+           generate if (1) begin : gb\n\
+             int b = $random;\n\
+             initial #1 $display(\"P b=%0d\", b);\n\
+           end endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P a={D1}"))
+            && o.contains(&format!("P b={D2}"))
+            && o.contains(&format!("P id=1 sm={D3}"))
+            && o.contains("P id=2 sm=-1309649309"),
+        "generates in source order, then instances in source order:\n{o}"
+    );
+}

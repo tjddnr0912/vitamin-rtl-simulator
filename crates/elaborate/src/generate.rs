@@ -99,14 +99,21 @@ impl Elaborator<'_> {
         // this walk collects so the enclosing flush can tell "declared in a child generate
         // body" from "declared in my own body" — the two go on opposite sides of the
         // module-scope initializers, and they are indistinguishable by prefix alone.
+        // The rank slot a generate body occupies depends on its PARENT's kind, so it is
+        // read BEFORE the flag flips.
+        let slot = self.rank_slot_for_generate();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, true);
         let saved_pending =
             (phase == GenPhase::VarInit).then(|| std::mem::take(&mut self.pending_var_inits));
-        for item in items {
-            self.elaborate_gen_item(item, phase, depth, map);
-        }
+        self.with_rank_scope(slot, |s| {
+            for item in items {
+                s.elaborate_gen_item(item, phase, depth, map);
+            }
+            if saved_pending.is_some() {
+                s.flush_block_local_inits();
+            }
+        });
         if let Some(outer) = saved_pending {
-            self.flush_block_local_inits();
             self.pending_var_inits = outer;
         }
         self.in_generate_body = saved_in_gen;

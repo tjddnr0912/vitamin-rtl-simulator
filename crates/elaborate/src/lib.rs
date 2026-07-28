@@ -917,6 +917,30 @@ struct Elaborator<'s> {
     /// `if`/`begin` bodies share the enclosing prefix), and its initializers run BEFORE
     /// the enclosing scope's own. Prefix alone cannot distinguish those, so the flag does.
     in_generate_body: bool,
+    /// §4.5.256 — where the scope being elaborated sits in the STATIC-INITIALIZATION
+    /// order, as a path of `(slot, seq)` pairs compared lexicographically. Measured
+    /// against live iverilog, that order is NOT the order vita creates the processes in:
+    ///
+    /// - a MODULE initializes ① its generate scopes ② its child instances ③ its own
+    ///   variables ④ its own block-locals;
+    /// - a GENERATE scope initializes ① its child instances ② its own variables
+    ///   ③ its own block-locals ④ its nested generate scopes.
+    ///
+    /// Expressing it as data is what lets the two axes separate: OWNERSHIP (which flush
+    /// drains which pending entry) stays innermost-first, because a scope must claim its
+    /// own before an ancestor sees it, while INITIALIZATION order is this path. Trying to
+    /// carry both on the elaboration pass order is what made the earlier attempts trade
+    /// one wrong order for another.
+    rank_path: Vec<u32>,
+    /// Monotonic counter for the CURRENT scope; saved/restored on entry so each scope
+    /// numbers its own children. Compared only after `slot`, so one counter per scope is
+    /// enough to keep source order inside every slot.
+    rank_seq: u32,
+    /// ProcId → its initialization rank. Only synthesized decl-init processes appear;
+    /// everything else runs after all of them (IEEE 1800 §6.21 — a static initializer is
+    /// assigned "before any initial or always block starts", which vita had been
+    /// approximating with "gets a lower ProcId" and losing across an instance boundary).
+    init_ranks: BTreeMap<u32, Vec<u32>>,
     // v8 SVA: concurrent assertions collected during statement lowering, drained
     // into synthesized clocked checker processes after each module's process loop.
     pending_sva: Vec<PendingSva>,

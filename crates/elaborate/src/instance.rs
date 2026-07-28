@@ -115,7 +115,14 @@ impl Elaborator<'_> {
         // stuck on, so its own module-scope block-locals were tagged as generate-owned and
         // claimed by the wrong flush — the ownership question is per-body, and an instance
         // boundary starts a new body.
+        // Read BEFORE the flag is cleared: the slot depends on the PARENT's kind.
+        let rank_slot = self.rank_slot_for_instance();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, false);
+        let rank_seq = self.rank_seq;
+        self.rank_seq += 1;
+        self.rank_path.push(rank_slot);
+        self.rank_path.push(rank_seq);
+        let saved_rank_seq = std::mem::replace(&mut self.rank_seq, 0);
         // Record this as the instance currently being lowered, so a child created
         // inside a generate block can set its `Instance.parent` to `inst_id`.
         let saved_inst = std::mem::replace(&mut self.cur_inst, inst_id);
@@ -500,6 +507,12 @@ impl Elaborator<'_> {
         // unroll the generate, in the Nets phase only, right after the plain
         // body nets so they precede every cont-assign/process (pass 7) that may
         // reference them, and precede child-instance recursion (pass 8).
+        // §4.5.256: restart this scope's rank counter. The four generate walks are the
+        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
+        // every phase — required because a child instance's initializers are ranked
+        // during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during the VarInit walk.
+        self.rank_seq = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
                 self.elaborate_generate(&g.items, GenPhase::Nets, 0, map);
@@ -573,6 +586,12 @@ impl Elaborator<'_> {
         // `int mm = $random;` the second, in either source order. vita emitted the
         // module sweep first, so every generate-scope initializer read the module's
         // already-initialized values and the module read none of the generate's.
+        // §4.5.256: restart this scope's rank counter. The four generate walks are the
+        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
+        // every phase — required because a child instance's initializers are ranked
+        // during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during the VarInit walk.
+        self.rank_seq = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
                 self.elaborate_generate(&g.items, GenPhase::VarInit, 0, map);
@@ -595,6 +614,12 @@ impl Elaborator<'_> {
         self.lower_clocking_blocks(&module.body);
 
         // (7) lower THIS body: cont-assigns + processes (reuse v1/v2 helpers).
+        // §4.5.256: restart this scope's rank counter. The four generate walks are the
+        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
+        // every phase — required because a child instance's initializers are ranked
+        // during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during the VarInit walk.
+        self.rank_seq = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
@@ -668,6 +693,12 @@ impl Elaborator<'_> {
 
         // (8) recurse into child instances, in body declaration order — including
         //     those nested inside a generate construct (Instances phase).
+        // §4.5.256: restart this scope's rank counter. The four generate walks are the
+        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
+        // every phase — required because a child instance's initializers are ranked
+        // during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during the VarInit walk.
+        self.rank_seq = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::Instance(mi) => {
@@ -713,6 +744,8 @@ impl Elaborator<'_> {
         self.let_table = saved_lets;
         self.cur_prefix = saved_prefix;
         self.in_generate_body = saved_in_gen;
+        self.rank_seq = saved_rank_seq;
+        self.rank_path.truncate(self.rank_path.len() - 2);
         self.cur_inst = saved_inst;
         self.cur_time_mult = saved_mult;
         self.cur_prec_mult = saved_prec_mult;

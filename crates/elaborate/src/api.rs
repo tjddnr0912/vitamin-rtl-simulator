@@ -151,6 +151,7 @@ pub fn elaborate_located(
         net_dims: el.array_dims.clone(), // the sparse decl map IS the table
         net_decl_ranges: std::mem::take(&mut el.net_decl_range),
         file_directed_stmts: std::mem::take(&mut el.file_directed_stmts),
+        proc_ties: el.proc_ties(),
         final_procs: el.final_procs.clone(),
         defer_marks: std::mem::take(&mut el.defer_marks),
         defer_acts: std::mem::take(&mut el.defer_acts),

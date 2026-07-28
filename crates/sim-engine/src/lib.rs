@@ -209,6 +209,11 @@ pub struct SimOpts {
     /// `$fmonitor`/`$fstrobe` call-site StmtIds — for these the postponed capture takes
     /// `args[0]` as a file descriptor. EMPTY ⇒ every monitor/strobe goes to stdout.
     pub file_directed_stmts: std::collections::BTreeSet<u32>,
+    /// Per-ProcId t0 ordering key (`tie`). EMPTY ⇒ `tie == ProcId`, the pre-§4.5.256
+    /// behaviour. Otherwise a permutation of `0..processes.len()` that puts every
+    /// synthesized declaration-initializer process ahead of every user process, in the
+    /// measured static-initialization order.
+    pub proc_ties: Vec<u32>,
     /// Worker-thread budget (P4-T1, CLI `--threads`/`-j`). `1` (the default) is
     /// the exact single-thread path; `≥2` moves VCD file writes onto a dedicated
     /// writer thread behind an order-preserving bounded FIFO. CONTRACT: output
@@ -341,6 +346,7 @@ impl Default for SimOpts {
             net_dims: NetDimsTable::new(),
             net_decl_ranges: NetDeclRangeTable::new(),
             file_directed_stmts: std::collections::BTreeSet::new(),
+            proc_ties: Vec::new(),
             threads: 1,
             plusargs: Vec::new(),
             final_procs: std::collections::BTreeSet::new(),
@@ -533,6 +539,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.net_dims = opts.net_dims.clone();
     st.net_decl_ranges = opts.net_decl_ranges.clone();
     st.file_directed_stmts = opts.file_directed_stmts.clone();
+    st.proc_ties = opts.proc_ties.clone();
     st.threads = opts.threads;
     st.plusargs = opts.plusargs.clone();
     // OBS-3: `$vita_stage` captures to stage.jsonl only under `+STAGE_TRACE`; without
