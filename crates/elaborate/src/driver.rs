@@ -157,7 +157,7 @@ impl<'s> Elaborator<'s> {
             pending_block_local_inits: BTreeMap::new(),
             in_generate_body: false,
             rank_path: Vec::new(),
-            rank_seq: 0,
+            rank_seq: [0; 4],
             init_ranks: BTreeMap::new(),
             pending_sva: Vec::new(),
             pending_cover: Vec::new(),

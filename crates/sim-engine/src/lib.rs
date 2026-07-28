@@ -209,10 +209,10 @@ pub struct SimOpts {
     /// `$fmonitor`/`$fstrobe` call-site StmtIds — for these the postponed capture takes
     /// `args[0]` as a file descriptor. EMPTY ⇒ every monitor/strobe goes to stdout.
     pub file_directed_stmts: std::collections::BTreeSet<u32>,
-    /// Per-ProcId t0 ordering key (`tie`). EMPTY ⇒ `tie == ProcId`, the pre-§4.5.256
-    /// behaviour. Otherwise a permutation of `0..processes.len()` that puts every
-    /// synthesized declaration-initializer process ahead of every user process, in the
-    /// measured static-initialization order.
+    /// The synthesized declaration-initializer ProcIds, in INITIALIZATION order.
+    /// `arm_processes` runs these to completion BEFORE arming anything and then skips
+    /// them, so initialization precedes every user process and produces no event
+    /// (IEEE 1800 §6.21). EMPTY ⇒ no declaration initializers ⇒ nothing changes.
     pub init_procs: Vec<u32>,
     /// Worker-thread budget (P4-T1, CLI `--threads`/`-j`). `1` (the default) is
     /// the exact single-thread path; `≥2` moves VCD file writes onto a dedicated

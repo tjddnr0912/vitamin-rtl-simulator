@@ -673,11 +673,24 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // queue / dyn-array `'{…}` expansions — so it cannot suspend, and `run_body` runs
         // it to completion the same way `run_finals` does.
         let inits = std::mem::take(&mut self.st.init_procs);
+        // Only what the INIT PHASE itself made dirty is un-dirtied below, so the mark is
+        // taken first. `settle_cont_assigns` already ran (lib.rs, before arming) and its
+        // t0 writes are on this same list; clearing the list wholesale threw those away
+        // too, and they are not recoverable — the settle inside `run()` writes the same
+        // value, and `note_change` only records an ACTUAL change, so an
+        // `always @(w)` on `assign w = 1'b1;` simply never fired. Design-wide, since one
+        // unrelated `reg r = 1'b0;` anywhere is enough to enter this branch.
+        let settled = self.st.dirty.len();
         for pid in &inits {
-            if (*pid as usize) < self.activities.len() {
-                let entry = self.st.ir.processes[*pid as usize].entry;
-                let _ = self.run_body(*pid, entry);
+            // An out-of-range ProcId means a truncated / mismatched sidecar, exactly like
+            // the fork-mode gate above — silently skipping it would drop a design's
+            // initializers with no diagnostic. The IR is unusable either way, so say so.
+            if (*pid as usize) >= self.activities.len() {
+                self.fatal_init_proc_missing(*pid);
+                return;
             }
+            let entry = self.st.ir.processes[*pid as usize].entry;
+            let _ = self.run_body(*pid, entry);
         }
         // …and drop what those writes made dirty. "Before any process is armed" means the
         // initialization is not a transition anyone can observe: `reg clk = 0;` must not
@@ -685,10 +698,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // `always @nc` either (both measured against iverilog, both wrong before). The
         // t0 continuous-assign settle re-evaluates every assign from scratch rather than
         // from this list, so clearing it costs nothing there.
-        if !inits.is_empty() {
-            for n in std::mem::take(&mut self.st.dirty) {
-                self.st.dirty_flag[n as usize] = false;
-            }
+        for n in self.st.dirty.split_off(settled) {
+            self.st.dirty_flag[n as usize] = false;
         }
         let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
 

@@ -316,7 +316,8 @@ impl Elaborator<'_> {
         // each block entry. So it rides the SAME synthesized var-init
         // `initial` as a module-scope non-const var-init (matches
         // iverilog for an `always`/`for` body, which freezes the t0
-        // value). A constant init already folded into net.init (skip).
+        // value). §4.5.257: a constant init rides the same sweep — `net.init` carries only
+        // the type default now, so skipping one here would drop the value outright.
         // A scalar `string s = expr;` block-local has no foldable
         // net.init field, so it always rides this t0 pre-sweep (a
         // dimensioned string was loud-rejected in `elaborate_netvar_decl`).
@@ -352,7 +353,6 @@ impl Elaborator<'_> {
                     // §4.5.257: a constant rides the t0 sweep like everything else now —
                     // `net.init` carries only the type default, so skipping it here would
                     // drop the value outright.
-                    let _ = &self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
                     true
                 };
                 // r18 (family D): a per-entry local's initializer is emitted at
@@ -486,9 +486,12 @@ impl Elaborator<'_> {
                         .get(&span.lo)
                         .is_some_and(|s| s.contains(nm));
                     // BL1 (round-19): a const-folding, never-reassigned local is
-                    // byte-identical to the static flatten (the constant rides
-                    // `net.init`; a never-written net holds it forever) — skip the
-                    // loud (see the non-scoped gate below for the full rationale).
+                    // byte-identical to the static flatten — skip the loud (see the
+                    // non-scoped gate below for the full rationale). §4.5.257 changed the
+                    // MECHANISM, not the conclusion: the constant no longer rides
+                    // `net.init`, it is applied once by the pre-arm initialization phase
+                    // before any process runs, and `stmt_never_assigns_ident` still
+                    // guarantees nothing overwrites it afterwards.
                     let const_immune = n.init.as_ref().is_some_and(|init| {
                         let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
                         fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
@@ -790,8 +793,8 @@ impl Elaborator<'_> {
                     .is_some_and(|s| s.contains(nm));
                 // BL1 (round-19): an `automatic` block-local whose initializer
                 // FOLDS TO A CONSTANT and which is NEVER reassigned in the block is
-                // byte-identical to the static flatten — the folded constant already
-                // rides `net.init` (a never-written net holds it forever), so it is
+                // byte-identical to the static flatten — the constant is applied once by
+                // the pre-arm initialization phase and never rewritten, so it is
                 // CONCURRENCY-IMMUNE even under a `fork` (module-process forks have no
                 // frame arena, but every activation reads the SAME constant off one
                 // shared net). Skip the loud for it; do NOT mark per-entry — a

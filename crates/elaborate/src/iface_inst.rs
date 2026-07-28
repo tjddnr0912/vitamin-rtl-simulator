@@ -170,14 +170,22 @@ impl Elaborator<'_> {
                 // both a loud misresolve and (with same-named members) a silent
                 // module-side drop. The generate VarInit walk isolates the same way.
                 let saved_pending = std::mem::take(&mut self.pending_var_inits);
-                // Same two drains as the module and generate flushes: this scope's
-                // decl-time pre-sizes first, its block-local string inits last.
-                for it in &decl.body {
-                    if let ast::ModuleItem::NetVar(d) = it {
-                        self.collect_var_init_drivers(d);
+                // §4.5.259: an interface instance is a SCOPE of its own, so it takes the
+                // instance slot like a module child. Without a scope of its own its flush
+                // borrowed the ENCLOSING scope's own-variables slot, and — because its two
+                // call sites run in different passes than the module's own flush — the
+                // rank vectors collided outright: a module's own initializer ran BETWEEN
+                // two interfaces, and a generate-nested interface ran after the generate's
+                // own variable. Both are the enclosing scope's slot, decided by tie-break.
+                let slot = self.rank_slot_for_instance();
+                self.with_rank_scope(slot, |s| {
+                    for it in &decl.body {
+                        if let ast::ModuleItem::NetVar(d) = it {
+                            s.collect_var_init_drivers(d);
+                        }
                     }
-                }
-                self.flush_block_local_inits();
+                    s.flush_block_local_inits();
+                });
                 self.pending_var_inits = saved_pending;
                 for it in &decl.body {
                     match it {

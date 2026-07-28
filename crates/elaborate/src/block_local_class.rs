@@ -20,36 +20,77 @@ use super::*;
 /// elaborates under its own prefix, so a name declared once inside the loop body is
 /// declared in ONE block here — which is correct: the copies cannot collide with each
 /// other, only two distinct blocks can.
-pub(crate) fn for_each_proc(items: &[ast::ModuleItem], f: &mut impl FnMut(&ast::ProceduralBlock)) {
-    fn gen_items(items: &[ast::GenItem], f: &mut impl FnMut(&ast::ProceduralBlock)) {
+/// §4.5.259: each process also carries the BRANCH PATH it sits under — one
+/// `(decision, arm)` pair per enclosing generate `if`/`case`, keyed by the construct's own
+/// span so two different constructs at the same depth are never confused. Exactly ONE arm
+/// of a decision is elaborated, so two blocks whose paths disagree at a shared decision
+/// can never both exist, and letting them interact turned a supported pair back into a
+/// loud one: an `if (0)` arm carrying a nested same-name local made the live pair look
+/// shadowed. Comparing paths keeps the classifier a pure function of the AST — no
+/// condition is evaluated, so it cannot depend on parameter binding or pass order.
+pub(crate) type BranchPath = Vec<(u32, u32)>;
+
+/// Can two blocks with these branch paths BOTH be elaborated?
+pub(crate) fn branches_coexist(a: &BranchPath, b: &BranchPath) -> bool {
+    !a.iter()
+        .any(|(da, arm_a)| b.iter().any(|(db, arm_b)| da == db && arm_a != arm_b))
+}
+
+pub(crate) fn for_each_proc(
+    items: &[ast::ModuleItem],
+    f: &mut impl FnMut(&ast::ProceduralBlock, &BranchPath),
+) {
+    fn gen_items(
+        items: &[ast::GenItem],
+        path: &mut BranchPath,
+        f: &mut impl FnMut(&ast::ProceduralBlock, &BranchPath),
+    ) {
         for it in items {
             match it {
                 ast::GenItem::For { body, .. } | ast::GenItem::Block { items: body, .. } => {
-                    gen_items(body, f)
+                    gen_items(body, path, f)
                 }
-                ast::GenItem::If { then_b, else_b, .. } => {
-                    gen_items(then_b, f);
-                    gen_items(else_b, f);
-                }
-                ast::GenItem::Case { items, .. } => {
-                    for ci in items {
-                        match ci {
-                            ast::GenCaseItem::Match { body, .. }
-                            | ast::GenCaseItem::Default { body, .. } => gen_items(body, f),
-                        }
+                ast::GenItem::If {
+                    then_b,
+                    else_b,
+                    span,
+                    ..
+                } => {
+                    for (arm, b) in [(0u32, then_b), (1, else_b)] {
+                        path.push((span.lo, arm));
+                        gen_items(b, path, f);
+                        path.pop();
                     }
                 }
-                ast::GenItem::Item(mi) => for_each_proc(std::slice::from_ref(mi), f),
+                ast::GenItem::Case { items, span, .. } => {
+                    for (arm, ci) in items.iter().enumerate() {
+                        let body = match ci {
+                            ast::GenCaseItem::Match { body, .. }
+                            | ast::GenCaseItem::Default { body, .. } => body,
+                        };
+                        path.push((span.lo, arm as u32));
+                        gen_items(body, path, f);
+                        path.pop();
+                    }
+                }
+                ast::GenItem::Item(mi) => walk_items(std::slice::from_ref(mi), path, f),
             }
         }
     }
-    for item in items {
-        match item {
-            ast::ModuleItem::Proc(p) => f(p),
-            ast::ModuleItem::Generate(g) => gen_items(&g.items, f),
-            _ => {}
+    fn walk_items(
+        items: &[ast::ModuleItem],
+        path: &mut BranchPath,
+        f: &mut impl FnMut(&ast::ProceduralBlock, &BranchPath),
+    ) {
+        for item in items {
+            match item {
+                ast::ModuleItem::Proc(p) => f(p, path),
+                ast::ModuleItem::Generate(g) => gen_items(&g.items, path, f),
+                _ => {}
+            }
         }
     }
+    walk_items(items, &mut Vec::new(), f);
 }
 
 impl Elaborator<'_> {
@@ -71,11 +112,24 @@ impl Elaborator<'_> {
         fn contains(outer: (u32, u32), inner: (u32, u32)) -> bool {
             outer.0 <= inner.0 && inner.1 <= outer.1 && outer != inner
         }
-        // (1) gather automatic block-locals across all procedural blocks.
+        // (1) gather automatic block-locals across all procedural blocks, each carrying
+        //     the generate branch it sits under.
         let mut per_name: BTreeMap<String, Vec<(u32, u32, bool)>> = BTreeMap::new();
-        for_each_proc(&module.body, &mut |p| {
-            Self::gather_auto_block_locals(&p.body, &mut per_name)
+        let mut branch_of: BTreeMap<(u32, u32), BranchPath> = BTreeMap::new();
+        for_each_proc(&module.body, &mut |p, path| {
+            let before: BTreeMap<String, usize> =
+                per_name.iter().map(|(k, v)| (k.clone(), v.len())).collect();
+            Self::gather_auto_block_locals(&p.body, &mut per_name);
+            for (name, spans) in per_name.iter() {
+                for &(lo, hi, _) in &spans[before.get(name).copied().unwrap_or(0)..] {
+                    branch_of.entry((lo, hi)).or_insert_with(|| path.clone());
+                }
+            }
         });
+        let coexist = |a: (u32, u32), b: (u32, u32)| match (branch_of.get(&a), branch_of.get(&b)) {
+            (Some(pa), Some(pb)) => branches_coexist(pa, pb),
+            _ => true,
+        };
         // (2) candidate (span, name): declared in ≥2 blocks, no module-net
         //     collision, and no two declaring spans nested (shadowing).
         let mut cand: Vec<(u32, u32, String)> = Vec::new();
@@ -96,13 +150,26 @@ impl Elaborator<'_> {
             if spans.len() < 2 || module_names.contains(name) {
                 continue;
             }
-            let shadowed = spans.iter().enumerate().any(|(i, &a)| {
-                spans
-                    .iter()
-                    .enumerate()
-                    .any(|(j, &b)| i != j && contains(a, b))
-            });
-            if shadowed {
+            // §4.5.259: a span in a NESTING relation with another declaring span of this
+            // name is dropped from candidacy — it is not a reason to disqualify the NAME.
+            // Globally disqualifying it meant an `if (0)` generate arm carrying its own
+            // nested `k` withdrew the scoping of a live, disjoint pair elsewhere. A
+            // dropped span keeps the flattened net exactly as before, and the survivors
+            // get distinct `$blk$` nets, so the two cannot alias. This generalizes the
+            // review-S3 rule, which dropped exactly one shape of the same thing.
+            //
+            // Two declarations in different arms of ONE generate `if`/`case` never both
+            // exist, so they do not shadow each other either.
+            let spans: Vec<(u32, u32)> = spans
+                .iter()
+                .copied()
+                .filter(|&a| {
+                    !spans
+                        .iter()
+                        .any(|&b| a != b && (contains(a, b) || contains(b, a)) && coexist(a, b))
+                })
+                .collect();
+            if spans.len() < 2 {
                 continue;
             }
             for &(lo, hi) in &spans {
@@ -113,7 +180,9 @@ impl Elaborator<'_> {
         let cand_spans: Vec<(u32, u32)> = cand.iter().map(|&(lo, hi, _)| (lo, hi)).collect();
         let mut out: BTreeMap<u32, std::collections::BTreeSet<String>> = BTreeMap::new();
         for (lo, hi, name) in cand {
-            let nested = cand_spans.iter().any(|&s| contains(s, (lo, hi)));
+            let nested = cand_spans
+                .iter()
+                .any(|&s| contains(s, (lo, hi)) && coexist(s, (lo, hi)));
             if nested {
                 continue;
             }
@@ -277,10 +346,12 @@ impl Elaborator<'_> {
             }
         }
         let mut out = BTreeMap::new();
-        for_each_proc(&module.body, &mut |p| {
+        for_each_proc(&module.body, &mut |p, _branch| {
             // An `initial` / `final` process body executes ONCE; every `always*` form
             // re-runs, so a `join_none` arm it spawned can still be live when the next
-            // iteration spawns another.
+            // iteration spawns another. The branch path is irrelevant here: this
+            // classifier is per-BLOCK (it never compares two blocks), so a dead arm's
+            // block can only mark itself.
             let repeats = !matches!(p.kind, ast::ProcKind::Initial | ast::ProcKind::Final);
             walk(&p.body, false, repeats, module_names, &mut out);
         });

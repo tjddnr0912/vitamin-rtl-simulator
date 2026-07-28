@@ -493,11 +493,16 @@ impl Elaborator<'_> {
         // non-constant scalars) as the package's own §6.8 pre-sweep `initial`
         // — INSIDE the `$pkg$<pkg>` scope (lvalues/RHS resolve against the
         // package nets and still-live package params) and BEFORE the param
-        // restore. Packages elaborate before any instance, so this process's
-        // ProcId precedes every module process: module code observes the
-        // initialized values at t0 (iverilog-pinned). Empty collection = no-op
-        // (flush early-returns), so init-free packages stay byte-identical.
-        self.flush_pending_var_inits();
+        // restore. Empty collection = no-op (flush early-returns), so init-free
+        // packages stay byte-identical.
+        //
+        // §4.5.259: RANKED, like every other initializer. "Packages elaborate before any
+        // instance, so this process's ProcId precedes every module process" stopped being
+        // enough the moment initialization became a pre-arm PHASE — an unranked process
+        // is not in that phase at all, so it ran after every module's initializers (a
+        // module `int m = p::pv + 100;` read 0) and its writes produced events an
+        // `always @(p::pv)` could see. `RANK_PACKAGE` sorts below every root instance.
+        self.flush_ranked(Self::RANK_PACKAGE);
         for (k, prev) in saved.into_iter().rev() {
             match prev {
                 Some(v) => {

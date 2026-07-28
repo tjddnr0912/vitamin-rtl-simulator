@@ -7,8 +7,9 @@ impl Elaborator<'_> {
     /// §6.8: collect a VARIABLE declaration's NON-constant initializer
     /// (`logic [7:0] b = a;`) into `pending_var_inits` so a pre-sweep can emit it
     /// as a synthesized `initial b = a;` that runs BEFORE user initial blocks. A
-    /// constant initializer is already folded into the net's `init` field at
-    /// declaration, so it is skipped here (byte-identical IR for those designs).
+    /// §4.5.257: a CONSTANT initializer is collected too. It used to fold into the net's
+    /// `init` field at declaration and be skipped here, which took it out of the
+    /// initialization order — see `netdecl.rs`.
     /// A net (wire) decl is not a variable — its initializer is a continuous
     /// driver, handled by `elaborate_net_init_drivers`.
     pub(crate) fn collect_var_init_drivers(&mut self, d: &ast::NetVarDecl) {
@@ -172,6 +173,10 @@ impl Elaborator<'_> {
 
     /// Slot numbers inside one scope's initialization rank. Two tables because the two
     /// scope kinds order their parts differently — measured, not assumed.
+    /// A PACKAGE initializes before every root instance — packages elaborate first and
+    /// module code observes their values at t0. Root instances take `RANK_MOD_INSTANCE`,
+    /// so a slot below it puts packages ahead of the whole hierarchy.
+    pub(crate) const RANK_PACKAGE: u32 = 0;
     pub(crate) const RANK_MOD_GENERATE: u32 = 0;
     pub(crate) const RANK_MOD_INSTANCE: u32 = 1;
     pub(crate) const RANK_MOD_OWN: u32 = 2;
@@ -185,11 +190,11 @@ impl Elaborator<'_> {
     /// the ENCLOSING scope's counter, so siblings in one slot keep source order, and the
     /// counter resets inside so each scope numbers its own children independently.
     pub(crate) fn with_rank_scope<R>(&mut self, slot: u32, f: impl FnOnce(&mut Self) -> R) -> R {
-        let seq = self.rank_seq;
-        self.rank_seq += 1;
+        let seq = self.rank_seq[slot as usize];
+        self.rank_seq[slot as usize] += 1;
         self.rank_path.push(slot);
         self.rank_path.push(seq);
-        let saved = std::mem::replace(&mut self.rank_seq, 0);
+        let saved = std::mem::take(&mut self.rank_seq);
         let r = f(self);
         self.rank_seq = saved;
         self.rank_path.truncate(self.rank_path.len() - 2);
@@ -198,8 +203,8 @@ impl Elaborator<'_> {
 
     /// The rank for an initializer process emitted by THIS scope in `slot`.
     pub(crate) fn init_rank(&mut self, slot: u32) -> Vec<u32> {
-        let seq = self.rank_seq;
-        self.rank_seq += 1;
+        let seq = self.rank_seq[slot as usize];
+        self.rank_seq[slot as usize] += 1;
         let mut r = self.rank_path.clone();
         r.push(slot);
         r.push(seq);

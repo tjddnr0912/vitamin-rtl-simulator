@@ -118,11 +118,11 @@ impl Elaborator<'_> {
         // Read BEFORE the flag is cleared: the slot depends on the PARENT's kind.
         let rank_slot = self.rank_slot_for_instance();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, false);
-        let rank_seq = self.rank_seq;
-        self.rank_seq += 1;
+        let rank_seq = self.rank_seq[rank_slot as usize];
+        self.rank_seq[rank_slot as usize] += 1;
         self.rank_path.push(rank_slot);
         self.rank_path.push(rank_seq);
-        let saved_rank_seq = std::mem::replace(&mut self.rank_seq, 0);
+        let saved_rank_seq = std::mem::take(&mut self.rank_seq);
         // Record this as the instance currently being lowered, so a child created
         // inside a generate block can set its `Instance.parent` to `inst_id`.
         let saved_inst = std::mem::replace(&mut self.cur_inst, inst_id);
@@ -507,12 +507,13 @@ impl Elaborator<'_> {
         // unroll the generate, in the Nets phase only, right after the plain
         // body nets so they precede every cont-assign/process (pass 7) that may
         // reference them, and precede child-instance recursion (pass 8).
-        // §4.5.256: restart this scope's rank counter. The four generate walks are the
-        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
-        // every phase — required because a child instance's initializers are ranked
-        // during the Instances walk under the path its generate got, while that
-        // generate's own flush was ranked during the VarInit walk.
-        self.rank_seq = 0;
+        // §4.5.256: restart the GENERATE slot's counter for this walk. The four generate
+        // walks are the same traversal, so each generate draws the same number in every
+        // phase — which the ranks depend on, because a child instance's initializers are
+        // ranked during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during VarInit. Only this slot is reset: the
+        // instance slot is visited by ONE walk and must keep counting across it.
+        self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
                 self.elaborate_generate(&g.items, GenPhase::Nets, 0, map);
@@ -567,9 +568,10 @@ impl Elaborator<'_> {
         }
 
         // (6.9) §6.8: emit non-constant variable initializers (`int b = a;`) as ONE
-        //       synthesized `initial` BEFORE user processes, so it has a lower ProcId
-        //       and runs first at time 0 (a user `initial` then reads the set value,
-        //       not the X/0 default). Constant inits already folded into net.init.
+        //       synthesized `initial`. It is not a t0 process any more: the engine runs
+        //       the ranked initializer bodies as a PRE-ARM phase (IEEE 1800 §6.21), so it
+        //       precedes every user process by construction rather than by ProcId, and
+        //       produces no event. Constant inits ride it too (§4.5.257).
         // Decl-time pre-sizes recorded for THIS scope (the `""` key) go first: a routed
         // string array's `new[n]` must precede its element writes. Same position the
         // straight-into-`pending_var_inits` push had, so the module path is unchanged.
@@ -586,12 +588,13 @@ impl Elaborator<'_> {
         // `int mm = $random;` the second, in either source order. vita emitted the
         // module sweep first, so every generate-scope initializer read the module's
         // already-initialized values and the module read none of the generate's.
-        // §4.5.256: restart this scope's rank counter. The four generate walks are the
-        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
-        // every phase — required because a child instance's initializers are ranked
-        // during the Instances walk under the path its generate got, while that
-        // generate's own flush was ranked during the VarInit walk.
-        self.rank_seq = 0;
+        // §4.5.256: restart the GENERATE slot's counter for this walk. The four generate
+        // walks are the same traversal, so each generate draws the same number in every
+        // phase — which the ranks depend on, because a child instance's initializers are
+        // ranked during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during VarInit. Only this slot is reset: the
+        // instance slot is visited by ONE walk and must keep counting across it.
+        self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
                 self.elaborate_generate(&g.items, GenPhase::VarInit, 0, map);
@@ -614,12 +617,13 @@ impl Elaborator<'_> {
         self.lower_clocking_blocks(&module.body);
 
         // (7) lower THIS body: cont-assigns + processes (reuse v1/v2 helpers).
-        // §4.5.256: restart this scope's rank counter. The four generate walks are the
-        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
-        // every phase — required because a child instance's initializers are ranked
-        // during the Instances walk under the path its generate got, while that
-        // generate's own flush was ranked during the VarInit walk.
-        self.rank_seq = 0;
+        // §4.5.256: restart the GENERATE slot's counter for this walk. The four generate
+        // walks are the same traversal, so each generate draws the same number in every
+        // phase — which the ranks depend on, because a child instance's initializers are
+        // ranked during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during VarInit. Only this slot is reset: the
+        // instance slot is visited by ONE walk and must keep counting across it.
+        self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
@@ -693,12 +697,13 @@ impl Elaborator<'_> {
 
         // (8) recurse into child instances, in body declaration order — including
         //     those nested inside a generate construct (Instances phase).
-        // §4.5.256: restart this scope's rank counter. The four generate walks are the
-        // SAME traversal, so restarting makes a generate's `(slot, seq)` identical in
-        // every phase — required because a child instance's initializers are ranked
-        // during the Instances walk under the path its generate got, while that
-        // generate's own flush was ranked during the VarInit walk.
-        self.rank_seq = 0;
+        // §4.5.256: restart the GENERATE slot's counter for this walk. The four generate
+        // walks are the same traversal, so each generate draws the same number in every
+        // phase — which the ranks depend on, because a child instance's initializers are
+        // ranked during the Instances walk under the path its generate got, while that
+        // generate's own flush was ranked during VarInit. Only this slot is reset: the
+        // instance slot is visited by ONE walk and must keep counting across it.
+        self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::Instance(mi) => {

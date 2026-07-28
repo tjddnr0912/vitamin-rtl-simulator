@@ -301,3 +301,49 @@ fn generate_and_module_same_name_pairs_are_independent() {
         "iverilog values:\n{o}"
     );
 }
+
+/// F5 (§4.5.259). A span in a nesting relation with another declaring span of the same
+/// name is dropped from CANDIDACY; it is not a reason to disqualify the NAME. Globally
+/// disqualifying it meant a dead `generate if (0)` arm carrying its own nested `k`
+/// withdrew the scoping of a live, disjoint pair elsewhere in the design.
+#[test]
+fn a_nested_declaration_elsewhere_does_not_disqualify_a_disjoint_pair() {
+    let live = "module t;\n\
+           generate if (1) begin : live\n\
+             initial begin\n\
+               begin automatic int k; k = 1; $display(\"A=%0d\", k); end\n\
+               begin automatic int k; k = 2; $display(\"B=%0d\", k); end\n\
+             end\n\
+           end endgenerate\n";
+    let dead = "generate if (0) begin : dead\n\
+             initial begin\n\
+               begin automatic int k; k = 3;\n\
+                 begin automatic int k; k = 4; $display(\"X=%0d\", k); end\n\
+               end\n\
+             end\n\
+           end endgenerate\n";
+    for src in [
+        format!("{live}  initial #1 $finish;\nendmodule\n"),
+        format!("{live}  {dead}  initial #1 $finish;\nendmodule\n"),
+    ] {
+        let (o, ok) = run(&src);
+        assert!(ok, "expected clean sim, got:\n{o}");
+        assert!(
+            o.contains("A=1") && o.contains("B=2"),
+            "live pair scoped:\n{o}"
+        );
+    }
+
+    // A genuinely nested LIVE pair still has nothing to scope, so it stays loud.
+    assert!(loud(
+        "module t;\n\
+           initial begin\n\
+             begin\n\
+               string s[2]; s[0]=\"out\";\n\
+               begin string s[2]; s[0]=\"in\"; $display(\"I=|%s|\", s[0]); end\n\
+             end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    ));
+}

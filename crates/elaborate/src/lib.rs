@@ -932,10 +932,13 @@ struct Elaborator<'s> {
     /// carry both on the elaboration pass order is what made the earlier attempts trade
     /// one wrong order for another.
     rank_path: Vec<u32>,
-    /// Monotonic counter for the CURRENT scope; saved/restored on entry so each scope
-    /// numbers its own children. Compared only after `slot`, so one counter per scope is
-    /// enough to keep source order inside every slot.
-    rank_seq: u32,
+    /// Per-SLOT monotonic counters for the CURRENT scope, saved/restored on entry so each
+    /// scope numbers its own children. One counter per slot, not one per scope: the four
+    /// generate walks visit the same generates, but only the Instances walk visits
+    /// `Instance` items, so a shared counter handed a generate a different number in the
+    /// VarInit and Instances phases — and a child instance was then filed under a rank
+    /// path that no longer matched its own generate's flush.
+    rank_seq: [u32; 4],
     /// ProcId → its initialization rank. Only synthesized decl-init processes appear;
     /// everything else runs after all of them (IEEE 1800 §6.21 — a static initializer is
     /// assigned "before any initial or always block starts", which vita had been

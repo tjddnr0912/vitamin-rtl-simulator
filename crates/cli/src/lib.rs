@@ -411,14 +411,14 @@ struct StagedExtraSidecars {
     /// APPEND-ONLY tail; rides the format_version 25 bump. EMPTY ⇒ byte-identical.
     #[serde(default)]
     file_directed_stmts: std::collections::BTreeSet<u32>,
-    /// Per-ProcId t0 ordering key (§4.5.256). Static initialization happens "before any
-    /// initial or always block starts" (IEEE 1800 §6.21) and, among the initializers,
-    /// in an order that is NOT the order vita creates the processes in — a child
-    /// instance's initializers precede its parent's, which the pass structure cannot
-    /// express. Without this a STAGED run puts them back in ProcId order, so a parent
-    /// `initial` reading `u.some_string` sees the empty default. APPEND-ONLY tail; rides
-    /// the format_version 26 bump. EMPTY when the order IS the identity permutation
-    /// (every design with no decl-initializer, and most with one) ⇒ byte-identical.
+    /// The synthesized declaration-initializer ProcIds, in INITIALIZATION order
+    /// (§4.5.256/257). The engine runs these before arming anything — IEEE 1800 §6.21's
+    /// "before any initial or always block starts" — in an order that is NOT the order
+    /// vita creates the processes in (a child instance's initializers precede its
+    /// parent's, which the pass structure cannot express). Without this a STAGED run arms
+    /// them as ordinary t0 processes: a parent `initial` reading `u.some_string` sees the
+    /// empty default, and `reg clk = 0;` hands `always @clk` a spurious edge. APPEND-ONLY
+    /// tail; rides the format_version 26 bump. EMPTY ⇒ no declaration initializers.
     #[serde(default)]
     init_procs: Vec<u32>,
 }

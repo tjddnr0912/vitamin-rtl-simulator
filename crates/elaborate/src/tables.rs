@@ -340,10 +340,9 @@ pub struct Sidecars {
     /// `$fmonitor`/`$fstrobe` call-site StmtIds (they share the frozen `Monitor`/
     /// `Strobe` ids; this is what makes `args[0]` a descriptor).
     pub file_directed_stmts: std::collections::BTreeSet<u32>,
-    /// §4.5.256 — per-ProcId t0 ordering key. Static initialization runs before any user
-    /// process (IEEE 1800 §6.21) and, among the initializers, in the measured scope order
-    /// that the elaboration pass structure cannot produce. EMPTY when the order is the
-    /// identity permutation ⇒ the engine keeps `tie == ProcId` ⇒ byte-identical.
+    /// §4.5.256/257 — the synthesized declaration-initializer ProcIds, in INITIALIZATION
+    /// order. The engine runs them as a pre-arm phase (IEEE 1800 §6.21) in the measured
+    /// scope order, which the elaboration pass structure cannot produce.
     pub init_procs: Vec<u32>,
     /// P2-E: ProcIds of `final` blocks (skip arming; run at end of sim).
     pub final_procs: std::collections::BTreeSet<u32>,

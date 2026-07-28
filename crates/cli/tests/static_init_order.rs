@@ -610,3 +610,121 @@ fn declaration_order_holds_for_constants_too() {
     assert!(ok, "expected clean sim, got:\n{o}");
     assert!(o.contains("P a=5 b=6"), "iverilog value:\n{o}");
 }
+
+// ── §4.5.259: what the adversarial review of the phase found ─────────────────
+
+/// F1. Clearing the whole dirty list to suppress the initialization's own events also
+/// discarded the t0 continuous-assign settle's, which run BEFORE arming on the same list.
+/// Those are not recoverable — the settle inside the run loop writes the same value, and
+/// only an ACTUAL change is recorded — so `always @(w)` on `assign w = 1'b1;` never fired.
+/// Design-wide: one unrelated `reg r = 1'b0;` anywhere was enough to arm it.
+#[test]
+fn the_t0_continuous_assign_settle_still_produces_its_events() {
+    let (o, ok) = run("module t;\n\
+           reg unrelated = 1'b0;\n\
+           wire w1, w0;\n\
+           assign w1 = 1'b1;\n\
+           assign w0 = 1'b0;\n\
+           int c1 = 0, c0 = 0;\n\
+           always @(w1) c1 = c1 + 1;\n\
+           always @(w0) c0 = c0 + 1;\n\
+           initial begin #1 $display(\"P c1=%0d c0=%0d\", c1, c0); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("P c1=1 c0=1"), "iverilog fires each once:\n{o}");
+}
+
+/// F2. The rank counter was shared across slots, and only ONE of the four generate walks
+/// visits `Instance` items — so a generate written after an instance drew a different
+/// number in the VarInit and Instances phases, and its child instance was filed under a
+/// path that no longer matched its own flush. Moving the instance changed the answer.
+#[test]
+fn an_instance_written_before_a_generate_does_not_shift_its_rank() {
+    let (o, ok) = run(
+        "module m_a; int v = $random; initial #1 $display(\"P a=%0d\", v); endmodule\n\
+         module m_b; int v = $random; initial #1 $display(\"P b=%0d\", v); endmodule\n\
+         module t;\n\
+           m_a u_a();\n\
+           generate if (1) begin : g\n\
+             m_b u_b();\n\
+             int gv = $random;\n\
+             initial #1 $display(\"P gv=%0d\", gv);\n\
+           end endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P b={D1}"))
+            && o.contains(&format!("P gv={D2}"))
+            && o.contains(&format!("P a={D3}")),
+        "the generate's child instance still initializes before its own variable:\n{o}"
+    );
+}
+
+/// F3. The package flush was the one unranked flush in the crate, so package initializers
+/// were not in the phase at all: they ran after every module's, and their writes produced
+/// events. Both halves are pinned — the value a module reads, and the absence of an edge.
+#[test]
+fn package_initializers_are_part_of_the_phase() {
+    let (o, ok) = run("package pk;\n\
+           int pv = 11;\n\
+           logic [7:0] pb = 8'hA5;\n\
+           int pa[2] = '{7,8};\n\
+           logic pclk = 1'b1;\n\
+         endpackage\n\
+         module t;\n\
+           import pk::*;\n\
+           int mv = pv + 1;\n\
+           logic [7:0] mb = pb ^ 8'h0F;\n\
+           int ma = pa[0] + 1;\n\
+           int pos = 0, any = 0;\n\
+           always @(posedge pclk) pos = pos + 1;\n\
+           always @(pv) any = any + 1;\n\
+           initial begin #1\n\
+             $display(\"P mv=%0d mb=%h ma=%0d pos=%0d any=%0d\", mv, mb, ma, pos, any);\n\
+             $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P mv=12 mb=aa ma=8 pos=0 any=0"),
+        "iverilog values, and no spurious edge on a package constant:\n{o}"
+    );
+}
+
+/// F4. An interface instance is a scope; without a rank scope of its own its flush
+/// borrowed the ENCLOSING scope's own-variables slot, and since its two call sites run in
+/// different passes than the module's own flush, the rank vectors collided — a module's
+/// own initializer ran BETWEEN two interfaces.
+#[test]
+fn an_interface_instance_is_ranked_as_a_scope() {
+    let (o, ok) = run("interface i_a; int a = $random; endinterface\n\
+         interface i_b; int b = $random; endinterface\n\
+         module t;\n\
+           i_a u1();\n\
+           i_b u2();\n\
+           int mm = $random;\n\
+           initial begin #1 $display(\"P a=%0d b=%0d mm=%0d\", u1.a, u2.b, mm); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P a={D1} b={D2} mm={D3}")),
+        "both interfaces before the module's own:\n{o}"
+    );
+
+    // …and a generate-nested one initializes before the generate's own variable.
+    let (o, ok) = run("interface i_v; int iv = $random; endinterface\n\
+         module t;\n\
+           generate if (1) begin : g\n\
+             i_v u();\n\
+             int gv = $random;\n\
+             initial #1 $display(\"P iv=%0d gv=%0d\", u.iv, gv);\n\
+           end endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P iv={D1} gv={D2}")),
+        "instance slot:\n{o}"
+    );
+}

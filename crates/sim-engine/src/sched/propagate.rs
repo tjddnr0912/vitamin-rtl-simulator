@@ -647,6 +647,27 @@ impl Scheduler<'_, '_> {
     /// hand-truncated artifact can reach here). Fabricating a mode would silently
     /// turn a `join_none` into a deadlock — emit a FATAL artifact diagnostic and
     /// end the run instead (was: panic!).
+    /// A declaration-initializer ProcId the sidecar names but the IR does not have.
+    /// Same class as `fatal_fork_mode_missing`: the trailer rides outside the schema gate,
+    /// so a truncated `.velab` can reach here, and skipping it would silently drop the
+    /// design's initializers.
+    pub(crate) fn fatal_init_proc_missing(&mut self, pid: u32) {
+        use diag::{Diagnostic, LogEvent, MsgCode, Severity, TimeStamp};
+        self.st.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Fatal,
+            code: MsgCode::ArtFormatMismatch,
+            message: format!(
+                "declaration-initializer sidecar names process {pid}, which this IR does \
+                 not have — .velab trailer lost or stale; re-run velab"
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(TimeStamp { ticks: self.st.now }),
+        }));
+        self.st.had_fatal = true;
+        self.st.finished = true;
+    }
+
     pub(crate) fn fatal_fork_mode_missing(&mut self, template: u32, join_bb: u32) {
         use diag::{Diagnostic, LogEvent, MsgCode, Severity, TimeStamp};
         self.st.sink.emit(LogEvent::Diagnostic(Diagnostic {

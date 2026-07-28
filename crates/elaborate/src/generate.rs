@@ -28,9 +28,8 @@ pub(crate) enum GenPhase {
     Nets,
     /// Collect + flush §6.8 variable decl-init pre-sweeps (unpacked-array `'{…}`
     /// patterns and non-constant scalars) as t0 `initial` blocks, ONE per generate
-    /// scope. Runs AFTER the Nets walk (nets exist) and BEFORE the Logic walk (so
-    /// the synthesized initial precedes the scope's user processes). A constant
-    /// scalar is already folded into `net.init` and is not collected here. Queue /
+    /// scope. Runs AFTER the Nets walk (nets exist) and BEFORE the Logic walk. A constant
+    /// scalar is collected here like any other initializer (§4.5.257). Queue /
     /// dyn-array / string decl-inits in a generate scope stay a LOUD reject (their
     /// handle net is not created here — `allow_string_init` is `false`), a
     /// documented follow-on.
