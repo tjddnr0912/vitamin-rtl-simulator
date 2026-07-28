@@ -6,12 +6,15 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 224건 (최신순)
+## 인덱스 — 완료 슬라이스 227건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–250**
+**§4.5.220–253**
+- `4.5.253` §4.5.251 적대 리뷰 — 하강 4건(kind-only 술어·선언 순서 2·gather 확장이 뺏은 스코핑) …
+- `4.5.252` `$sformatf` — 근인은 포맷을 무시하는 degenerate `eval` arm, hoist 는 그 우회였다 …
+- `4.5.251` `$blk$` 경로 decl-init 수집 — 제외 3개(초기화자·스칼라 string·multi-name)가 함께 사라짐 …
 - `4.5.250` §4.5.248/249 적대 리뷰 — 사다리 하강 6건(평가 이동 5 + 게이트 극성 1) …
 - `4.5.249` 외부 round-20 §6+§4.11 — elaborate 진단 file:line · 같은 이름 동적 로컬 분리 …
 - `4.5.248` 외부 round-20 8 가족 — fork-arm 블록 로컬 · queue 관용구 · named arg · `$sformatf` …
@@ -305,6 +308,45 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.253 §4.5.251 적대 리뷰 — 하강 4건 수정 (2026-07-28, format 25 불변) ✅
+
+**S1(최광범위·loud→silent)**: `dyn_storage` 를 **kind-only**(`matches!(d.kind, String)`)로 적었는데 바로 옆 주석은 "스칼라 `string` 이 합류한다"고 말한다. 그래서 `string s[2]` 가 통과했고, **원소 저장소는 선언 prefix 아래**라 pre-size `new[n]` 과 원소 쓰기를 해석하는 모듈 prefix 에서 보이지 않는다 → 길이 0, 모든 쓰기 폐기, **exit 0**(PRE 는 loud). 버그 두 줄 위에는 r19 주석이 "초기화자 있는 fixed string array 는 여기 못 온다"고 여전히 보증하고 있었다 — 가드가 `automatic` lifetime loud 였을 땐 참, static 이 자격을 얻은 뒤엔 거짓. **술어가 자기 주석과 다르면 그 간극이 곧 버그다.**
+
+**S2(§6.8 선언 순서·loud→silent)** 두 갈래: ① 한 블록의 초기화자를 메인 sweep 과 후행 그룹으로 **쪼개서** 인터리브가 사라졌다(`int a = $random; int q[$] = '{$random};` → `a` 가 1번째, `q` 가 **4번째** draw). 이제 스코프가 있는 블록은 **모든** 초기화자를 그 그룹으로 보낸다(스코프 없는 이름도 `$blk$` prefix 아래서 바깥으로 걸어 해석되므로 안전). ② 그룹을 **ASCII** 로 정렬해 `"$blk$148" < "$blk$32"` — 뒤 블록이 먼저 돌았다 → 숫자 정렬.
+
+**S3(회귀)**: 감싸는 선언을 **gather 에 넣은 것만으로** 그 이름이 shadowed 로 보여, 이미 잘 돌던 inner/sibling 쌍의 스코핑이 **철회**됐다. 같은 이름의 다른 선언 span 을 **포함하는** widened span 은 후보에서 제외한다 — 스코프를 얻지도 않지만 남의 것을 빼앗지도 않는다.
+
+**S4** 는 리뷰가 기존 결함으로 확인(블록 로컬 string 초기화자가 항상 같은 블록의 비-string 뒤에 배치 — `pending_scoped_bl_strings` 설계 그대로). 기록만.
+
+**게이트**: 4733 → **4736** tests · clippy/fmt clean.
+
+#### 4.5.252 frame executor 가 temp 를 못 나르는 자리의 `$sformatf` (2026-07-28, format 25 불변) ✅
+
+round-20 인접 마지막 갭(frame **function** 본문의 `$sformatf`)을 그라운딩하자 **근인이 frame 이 아니었다**: `$sformatf("<%s>", $sformatf("%0d",7))` 은 **모든 문맥에서** `<   >` 로 빈다. `eval` 의 `SysFuncId::Sformatf` arm 이 **포맷 문자열을 무시**한다 — concat desugar(`"%s"×N`) 전용으로 쓰였고 코드 주석이 그렇게 적고 있다. **hoist 자체가 그 갭의 우회**였다.
+
+수정 3개(전부 실측): `%s` 인자 리더가 중첩 `$sformatf` 를 `format_args_str` 로 재귀 · `expr_is_string_ast` 가 `$sformatf` 를 문자열 도메인으로(§6.16 — 반환형이 string; 없으면 `{"x", $sformatf(…)}` 가 packed concat 으로 샌다) · **formatter 를 반드시 거치는 위치**(문자열 대입의 직접 rhs·문자열 `return`)에서만 표현식 노드로 낮추기.
+
+마지막 게이트는 **위치 하나씩 측정해서** 잘랐다 — ternary arm 과 태스크 인자는 generic `eval` 을 거쳐 빈 문자열/쓰레기가 나오므로 플래그를 세우지 않고 loud 유지. 부수 승격: `{2{$sformatf("a%0d",1)}}` = `a1a1`(iverilog), `{0{…}}` = 빈 문자열 — hoist 로는 표현 불가였다(한 번 렌더해 temp 를 반복하니까).
+
+**남은 뿌리 = 그 degenerate `eval` arm.** 렌더러를 `EvalCtx` 에서 쓸 수 있게 만들면 ternary·단락·`$monitor`/`$strobe`·태스크 인자가 함께 닫히고 hoist 를 은퇴시킬 수 있다.
+
+#### 4.5.251 `$blk$` 스코프 경로의 decl-init 수집 (2026-07-28, format 25 불변) ✅
+
+같은-이름 확장이 제외해야 했던 것들은 **전부 한 가지 이유** 때문이었다 — `$blk$` 경로가 decl-init 수집기 **前에 return** 해서 스코프된 `byte m[] = '{…}` 가 **비어서** 나왔다(loud→silent 0). 그래서 §4.5.249 는 초기화자 있는 선언과 스칼라 `string` 을 빼고 나갔고, §4.5.250 은 리뷰가 잡은 multi-name 가드를 그 위에 더 얹어야 했다.
+
+그건 진짜 제약이 아니다. 스코프 경로가 이제 자기 초기화자를 수집하고(`collect_block_local_decl_inits` — 두 경로가 push 규칙 하나를 공유하도록 추출), `flush_pending_blk_inits` 가 **각 그룹을 자기 prefix 로 복원해** 재생한다(일반 리스트와 string 리스트 양쪽 — 후자는 모듈 스코프 string 을 읽을 수 있어 따로 배수된다).
+
+그러자 제외 3개가 전부 사라지고, 각 형태가 loud 가 아니라 **정답**이 된다(전 줄 iverilog 일치):
+
+| 형태 | 결과 |
+|---|---|
+| `byte m[] = '{1,2}` / `byte m[] = '{7}` | A=2 02 · B=1 07 |
+| `int q[$] = '{1,2,3}` / `int q[$] = '{9}` | Q=3 3 · R=1 9 |
+| `string s = "aa"` / `string s = "bbb"` | A=aa 2 · B=bbb 3 |
+| `byte m[], n = g` / `byte m[], k = g` | M=2 9 · N=3 9 ← §4.5.250 F1 형태 |
+
+**남는 loud**: 모듈 넷과 이름이 겹치는 블록 로컬(선언 블록이 하나이고 모듈 이름이라 두 조건 모두 탈락) · 한 블록이 다른 블록을 감싸는 쌍(단일 레벨 hoist 로는 중첩 세그먼트를 못 맞춘다).
 
 #### 4.5.250 §4.5.248/249 적대 리뷰 — 사다리 하강 6건 수정 (2026-07-28, branch feat-round20-report, format 25 불변) ✅
 
