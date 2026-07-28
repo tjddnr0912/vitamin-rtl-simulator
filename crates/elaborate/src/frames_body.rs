@@ -442,10 +442,10 @@ impl Elaborator<'_> {
         };
         for d in body_decls {
             for decl in &d.names {
-                let Some(init) = &decl.init else { continue };
                 if !names.contains(&decl.name.name) {
                     continue;
                 }
+                let Some(init) = &decl.init else { continue };
                 // BL2/BL3 (round-19): a DYNAMIC-STORAGE per-entry local re-inits via its
                 // decl-init EXPANSION — a raw whole-handle `x = '{…}'` assign is loud ("no
                 // whole-value surface"). Resolve the handle; a `'{…}`/`{…}` pattern init
@@ -474,10 +474,18 @@ impl Elaborator<'_> {
                             };
                             self.lower_stmt(b, &clear);
                         }
+                        // R16 §3.3: a FIXED string array is dyn-BACKED, so its re-init
+                        // runs through this same expansion and its `d = new[N]` is the
+                        // length the declaration already fixed — not a user resize.
+                        // Marked as a declaration initializer for exactly the reason the
+                        // module-scope t0 flush marks its own.
                         let stmts = self.dyn_decl_init_stmts(&decl.name, kind, elems);
+                        let saved = self.lowering_decl_init;
+                        self.lowering_decl_init = true;
                         for st in &stmts {
                             self.lower_stmt(b, st);
                         }
+                        self.lowering_decl_init = saved;
                         continue;
                     }
                 }

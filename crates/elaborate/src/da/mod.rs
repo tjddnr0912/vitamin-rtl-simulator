@@ -381,17 +381,83 @@ pub(crate) fn da_stmt(
 /// prefix-builder shape) which the earlier top-level-only scan rejected. Still
 /// conservative: iverilog cannot oracle block-local `automatic`, so any un-vetted
 /// form stays loud rather than silently given static semantics.
+/// R16 §3.3: the constant index of a straight-line whole-ELEMENT write
+/// `name[<literal>] = rhs`, when `rhs` cannot reference `name`. `None` for anything
+/// else — a computed index, a bit-select inside the element, a delayed or
+/// event-controlled assign, or an rhs that may read the array.
+fn const_elem_write(st: &ast::Stmt, name: &str) -> Option<i64> {
+    let ast::Stmt::Blocking {
+        lhs,
+        delay: None,
+        event: None,
+        rhs,
+        ..
+    } = st
+    else {
+        return None;
+    };
+    if !expr_no_ref(rhs, name) {
+        return None;
+    }
+    let ast::Lvalue::BitSelect { base, index, .. } = lhs else {
+        return None;
+    };
+    let ast::Lvalue::Ident(p) = &**base else {
+        return None;
+    };
+    if p.segments.len() != 1 || p.segments[0].name != name {
+        return None;
+    }
+    // Only a plain decimal literal. A parameter or a folded expression would need
+    // the elaborator's scope, and answering "unknown" here only costs precision.
+    let mut e: &ast::Expr = index;
+    while let ast::ExprKind::Paren { inner } = &e.kind {
+        e = inner;
+    }
+    match &e.kind {
+        ast::ExprKind::IntLit {
+            kind: ast::IntLitKind::Decimal,
+            raw,
+        } => raw.replace('_', "").parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
 pub(crate) fn automatic_local_definitely_assigned(
     stmts: &[ast::Stmt],
     name: &str,
     out_writes: OutActualWrites,
+    elem_bounds: Option<(i64, i64)>,
 ) -> bool {
     let mut assigned = false;
+    // R16 §3.3: indices of `name` written by straight-line constant-index element
+    // writes so far. A fixed unpacked array has no whole-value write until every
+    // element has one, so `automatic int a[4]; a[0]=…; a[1]=…; a[2]=…; a[3]=…;` was
+    // rejected as read-before-write even though nothing was read at all — which, with
+    // the decl-init case, left the type essentially unusable.
+    //
+    // Coverage is only ever claimed where it is PROVEN: literal indices, at the top
+    // level of the block (so unconditional), with an rhs that cannot read the array.
+    // A computed or `foreach` index is not counted, and the local stays loud — the
+    // alternative, resetting the array at each block entry, was measured WRONG
+    // (iverilog keeps the leftover across loop re-entries; storage is per activation).
+    let mut covered: std::collections::BTreeSet<i64> = std::collections::BTreeSet::new();
     for st in stmts {
         // Once definitely assigned at the top level, every later read observes a
         // current-execution value → safe regardless of the statement form.
         if assigned {
             return true;
+        }
+        if let Some((lo, hi)) = elem_bounds {
+            if let Some(ix) = const_elem_write(st, name) {
+                if (lo..=hi).contains(&ix) {
+                    covered.insert(ix);
+                    if i64::try_from(covered.len()).is_ok_and(|n| n == hi - lo + 1) {
+                        assigned = true;
+                    }
+                    continue;
+                }
+            }
         }
         match da_stmt(st, false, name, out_writes) {
             Some(DaOut::Falls(a)) => assigned = a,

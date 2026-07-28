@@ -279,7 +279,46 @@ impl Elaborator<'_> {
                                         ) || (matches!(init.kind, ast::ExprKind::New { .. })
                                             && matches!(n.unpacked[0], ast::Dim::Dyn))
                                     });
-                                if scalar_var || string_var || dyn_pattern {
+                                // R16 §3.3: a FIXED-size unpacked array with a `'{…}` /
+                                // `{…}` initializer. The report measured that the
+                                // identical declaration with a DYNAMIC `[]` dim passes
+                                // while `[4]` is loud, with the same contents and the
+                                // same element type — the only thing missing was this
+                                // arm, not any emission capability. Re-initializing one
+                                // is the whole-array assign `a = '{…}`, a statement form
+                                // that already works today INCLUDING under `automatic`
+                                // (measured: `automatic logic [4:0] m[4]; m = '{…};` is
+                                // accepted and prints correctly), so the emission path is
+                                // reused verbatim.
+                                //
+                                // `Dim::Size(N)` (`a[4]`) and `Dim::Range(hi:lo)`
+                                // (`a[3:0]`) are the same fixed array spelled two ways.
+                                let fixed_pattern = n.unpacked.len() == 1
+                                    && matches!(
+                                        n.unpacked[0],
+                                        ast::Dim::Range(_) | ast::Dim::Size(_)
+                                    )
+                                    && n.init.as_ref().is_some_and(|init| {
+                                        matches!(
+                                            init.kind,
+                                            ast::ExprKind::AssignPattern(_)
+                                                | ast::ExprKind::Concat { .. }
+                                        )
+                                    });
+                                // R16 §3.3 (the report's side case) is deliberately NOT
+                                // here. Marking an initializer-FREE local per-entry
+                                // would reset it at every block entry, and that is not
+                                // what a conforming simulator does: automatic storage is
+                                // created per ACTIVATION, not per block entry. Measured
+                                // in iverilog with a block inside an `automatic` task —
+                                // three loop iterations print `xx, 10, 11` (the leftover
+                                // survives), while three separate CALLS print `xx, xx,
+                                // xx`. An initializer, by contrast, does re-run on each
+                                // entry (`w=11` every iteration), which is exactly what
+                                // the arms above emit. The element-write case is closed
+                                // in the definite-assignment walk instead, where it can
+                                // be proven rather than assumed.
+                                if scalar_var || string_var || dyn_pattern || fixed_pattern {
                                     out.entry(span.lo).or_default().insert(n.name.name.clone());
                                 }
                             }

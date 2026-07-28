@@ -308,18 +308,25 @@ fn pathological_bounds_are_loud_not_a_panic() {
 }
 
 #[test]
-fn automatic_block_local_init_stays_loud() {
-    // The `automatic` block-local path creates the nets under a `$blk$` scope and does
-    // NOT run the collector, so it must keep rejecting rather than silently emptying.
-    loud(
-        "module t;\n\
+fn automatic_block_local_init_is_supported() {
+    // Was `automatic_block_local_init_stays_loud`. The loud rested on a premise that
+    // two later slices retired: the `$blk$`-scoped path did not run the decl-init
+    // collector, so accepting would have emptied the array. §4.5.255 moved the
+    // collector inside the scope, and R16 §3.3 admitted a fixed-size unpacked array
+    // with a `'{…}` initializer to the per-entry set — so the initializer now re-runs
+    // at block entry like every other per-entry local.
+    //
+    // Re-measured rather than assumed: this prints `[aa][bb]`, which is exactly what
+    // iverilog prints for the same declaration inside an `automatic` task (where an
+    // un-keyworded local IS automatic). The silent-empty the old pin guarded against
+    // is gone, so the pin is now on the VALUE.
+    let out = run("module t;\n\
            initial begin : blk\n\
              automatic string s[2] = '{\"aa\",\"bb\"};\n\
-             $display(\"%s\", s[0]);\n\
+             $display(\"[%s][%s]\", s[0], s[1]);\n\
            end\n\
-         endmodule\n",
-        "unsupported",
-    );
+         endmodule\n");
+    assert_eq!(out, "[aa][bb]\n");
 }
 
 #[test]

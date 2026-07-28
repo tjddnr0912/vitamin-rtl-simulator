@@ -232,10 +232,32 @@ impl Elaborator<'_> {
     /// whose OUTPUT actual is `name` (unconditionally evaluated) is seen as a definite
     /// assignment, not a read-before-write. `&self` (immutable) — the returned `bool`
     /// releases the borrow before the surrounding `&mut self` hoist continues.
-    fn block_local_definitely_assigned(&self, stmts: &[ast::Stmt], name: &str) -> bool {
-        automatic_local_definitely_assigned(stmts, name, &|cn, args, nm| {
-            self.call_effect(cn, args, nm)
-        })
+    /// `elem_bounds` is the declared index range when `name` is a single-dimension
+    /// FIXED unpacked array (R16 §3.3) — the walk then accepts a complete set of
+    /// straight-line constant-index element writes as the first whole write. Computed
+    /// by the caller because folding a dimension needs `&mut self`.
+    fn block_local_definitely_assigned(
+        &self,
+        stmts: &[ast::Stmt],
+        name: &str,
+        elem_bounds: Option<(i64, i64)>,
+    ) -> bool {
+        automatic_local_definitely_assigned(
+            stmts,
+            name,
+            &|cn, args, nm| self.call_effect(cn, args, nm),
+            elem_bounds,
+        )
+    }
+
+    /// R16 §3.3: the declared index bounds of a single-dimension FIXED unpacked array
+    /// declarator, or `None` for a scalar, a dynamic/queue/assoc dim, a multi-dim
+    /// array, or a bound that does not fold.
+    fn fixed_elem_bounds(&mut self, n: &ast::DeclName) -> Option<(i64, i64)> {
+        if n.unpacked.len() != 1 {
+            return None;
+        }
+        self.fixed_dim_bounds(&n.unpacked[0])
     }
 
     /// R16 §3.2: how far the callee-body walk chases nested user calls before giving
@@ -592,6 +614,7 @@ impl Elaborator<'_> {
                         let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
                         fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                     }) && stmt_never_assigns_ident(stmts, nm);
+                    let elem_bounds = self.fixed_elem_bounds(n);
                     // The gate is about the `automatic` PER-ENTRY lifetime, so
                     // it applies only to an `automatic` decl — the same
                     // condition the unscoped path below wraps it in. A STATIC
@@ -603,7 +626,7 @@ impl Elaborator<'_> {
                         && !const_immune
                         && (n.init.is_some()
                             || read_in_sibling_init
-                            || !self.block_local_definitely_assigned(stmts, nm))
+                            || !self.block_local_definitely_assigned(stmts, nm, elem_bounds))
                     {
                         self.error(
                                         MsgCode::ElabUnsupported,
@@ -828,6 +851,7 @@ impl Elaborator<'_> {
                         let e = &self.nets[ex as usize];
                         (e.width, e.signed)
                     };
+                    let elem_bounds = self.fixed_elem_bounds(n);
                     if nw != ew || nsig != esig {
                         self.error(
                             MsgCode::ElabUnsupported,
@@ -840,7 +864,7 @@ impl Elaborator<'_> {
                                              one"
                             ),
                         );
-                    } else if !self.block_local_definitely_assigned(stmts, nm) {
+                    } else if !self.block_local_definitely_assigned(stmts, nm, elem_bounds) {
                         self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
@@ -899,11 +923,12 @@ impl Elaborator<'_> {
                     let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
                     fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                 }) && stmt_never_assigns_ident(stmts, nm);
+                let elem_bounds = self.fixed_elem_bounds(n);
                 if !per_entry
                     && !const_immune
                     && (n.init.is_some()
                         || read_in_sibling_init
-                        || !self.block_local_definitely_assigned(stmts, nm))
+                        || !self.block_local_definitely_assigned(stmts, nm, elem_bounds))
                 {
                     self.error(
                         MsgCode::ElabUnsupported,
