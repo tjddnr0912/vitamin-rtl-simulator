@@ -68,12 +68,22 @@ impl Elaborator<'_> {
     /// `depth` is the nesting guard. Genvars bind into `self.params` (like a
     /// param) so `const_eval_in_scope` resolves them; `with_scope` gives each
     /// loop iteration its `label[idx].` namespace.
-    pub(crate) fn elaborate_generate(
+    /// `is_scope` distinguishes the two things this function serves.
+    ///
+    /// §4.5.263: a `generate … endgenerate` REGION is purely syntactic (IEEE 1800 §27.3)
+    /// — items written directly in it, outside any `if`/`for`/`case`, are ordinary module
+    /// items. A generate BLOCK BODY is a scope. This one function is called for both, so
+    /// giving it a rank scope, the `in_generate_body` flag and its own flush made a region
+    /// behave like a block: `generate int mv = g.gv; endgenerate` read 0 instead of the
+    /// block's 7, and a bare instance in a region initialized before the block beside it.
+    /// Regions pass `false` and are transparent, exactly as they were before this series.
+    pub(crate) fn elaborate_generate_scoped(
         &mut self,
         items: &[ast::GenItem],
         phase: GenPhase,
         depth: u32,
         map: &ModuleMap<'_>,
+        is_scope: bool,
     ) {
         if depth > GENERATE_DEPTH_CAP {
             // depth guard reported ONCE (in the Nets phase) to avoid 3× dup.
@@ -100,6 +110,16 @@ impl Elaborator<'_> {
         // module-scope initializers, and they are indistinguishable by prefix alone.
         // The rank slot a generate body occupies depends on its PARENT's kind, so it is
         // read BEFORE the flag flips.
+        if !is_scope {
+            // A REGION: transparent. Its items belong to the enclosing scope, so no rank
+            // scope, no `in_generate_body`, no isolated pending list and no flush of its
+            // own — the enclosing scope's flush takes them, in declaration order with its
+            // own items.
+            for item in items {
+                self.elaborate_gen_item(item, phase, depth, map);
+            }
+            return;
+        }
         let slot = self.rank_slot_for_generate();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, true);
         let saved_pending =
@@ -187,7 +207,7 @@ impl Elaborator<'_> {
                     let block_prefix = format!("{lbl}[{iter_val}]");
 
                     self.with_scope(&block_prefix, |me| {
-                        me.elaborate_generate(body, phase, depth + 1, map);
+                        me.elaborate_generate_scoped(body, phase, depth + 1, map, true);
                     });
 
                     // step: fold (with genvar bound) → rebind the genvar.
@@ -289,7 +309,7 @@ impl Elaborator<'_> {
                     }
                 }
                 if let Some(body) = chosen.or(default) {
-                    self.elaborate_generate(body, phase, depth + 1, map);
+                    self.elaborate_generate_scoped(body, phase, depth + 1, map, true);
                 }
             }
 
@@ -323,10 +343,10 @@ impl Elaborator<'_> {
                 // boundary, stopping the outward walk → `t.g.y` undeclared).
                 let seg = format!("{}[0]", l.name);
                 self.with_scope(&seg, |me| {
-                    me.elaborate_generate(items, phase, depth + 1, map);
+                    me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
                 });
             }
-            None => self.elaborate_generate(items, phase, depth + 1, map),
+            None => self.elaborate_generate_scoped(items, phase, depth + 1, map, true),
         }
     }
 
@@ -414,7 +434,8 @@ impl Elaborator<'_> {
             }
             // generate-inside-generate: recurse in the SAME phase, +1 depth.
             (_, ast::ModuleItem::Generate(g)) => {
-                self.elaborate_generate(&g.items, phase, depth + 1, map);
+                // A nested `generate … endgenerate` is another REGION, not a scope.
+                self.elaborate_generate_scoped(&g.items, phase, depth + 1, map, false);
             }
             // GAP-G: a `localparam` (or `parameter`) declared INSIDE a generate
             // block (IEEE §27) is a per-instance elaboration constant. Const-fold

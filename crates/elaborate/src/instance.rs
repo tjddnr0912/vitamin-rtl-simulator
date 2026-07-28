@@ -527,7 +527,7 @@ impl Elaborator<'_> {
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
-                self.elaborate_generate(&g.items, GenPhase::Nets, 0, map);
+                self.elaborate_generate_scoped(&g.items, GenPhase::Nets, 0, map, false);
             }
         }
 
@@ -605,15 +605,23 @@ impl Elaborator<'_> {
         // ranked during the Instances walk under the path its generate got, while that
         // generate's own flush was ranked during VarInit. Only this slot is reset: the
         // instance slot is visited by ONE walk and must keep counting across it.
+        //
+        // §4.5.263: ONE walk, in declaration order. A generate REGION is transparent
+        // (IEEE 1800 §27.3), so a variable written directly inside `generate …
+        // endgenerate` is an ordinary module item and must interleave with the module's
+        // own by declaration order — `int a; generate int b; endgenerate int c;` draws
+        // a, b, c. Two separate loops could not express that. A generate BLOCK still
+        // flushes as it is reached, which is before this sweep's own flush at the end,
+        // so generate scopes still precede the module's own variables whatever their
+        // source position.
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
-            if let ast::ModuleItem::Generate(g) = item {
-                self.elaborate_generate(&g.items, GenPhase::VarInit, 0, map);
-            }
-        }
-        for item in &module.body {
-            if let ast::ModuleItem::NetVar(d) = item {
-                self.collect_var_init_drivers(d);
+            match item {
+                ast::ModuleItem::Generate(g) => {
+                    self.elaborate_generate_scoped(&g.items, GenPhase::VarInit, 0, map, false);
+                }
+                ast::ModuleItem::NetVar(d) => self.collect_var_init_drivers(d),
+                _ => {}
             }
         }
         // Every block-local initializer runs AFTER the module-scope ones above (measured:
@@ -653,7 +661,7 @@ impl Elaborator<'_> {
                 // cont-assigns + processes (Logic phase). Child instances inside it
                 // recurse in pass (8) below.
                 ast::ModuleItem::Generate(g) => {
-                    self.elaborate_generate(&g.items, GenPhase::Logic, 0, map);
+                    self.elaborate_generate_scoped(&g.items, GenPhase::Logic, 0, map, false);
                 }
                 // Func/Task are DEFINITIONS, not logic: collected in step (3.5)
                 // and expanded at their call sites (inline). No-op here.
@@ -721,7 +729,7 @@ impl Elaborator<'_> {
                     self.elaborate_child_instances(mi, inst_id, map);
                 }
                 ast::ModuleItem::Generate(g) => {
-                    self.elaborate_generate(&g.items, GenPhase::Instances, 0, map);
+                    self.elaborate_generate_scoped(&g.items, GenPhase::Instances, 0, map, false);
                 }
                 _ => {}
             }

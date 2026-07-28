@@ -899,3 +899,67 @@ fn a_nested_bind_does_not_leak_its_band_into_the_bound_subtree() {
         seen[0]
     );
 }
+
+/// §4.5.263. A `generate … endgenerate` REGION is purely syntactic (IEEE 1800 §27.3):
+/// items written directly in it, outside any `if`/`for`/`case`, are ordinary module items.
+/// One function serves both the region and a generate BLOCK body, so giving it a rank
+/// scope made a region behave like a block — a region-level `int mv = g.gv;` read 0
+/// instead of the block's 7, and a region-level instance initialized before the block
+/// beside it. Regions are transparent again, and the module sweep walks them in
+/// declaration order so a region-level variable interleaves with the module's own.
+#[test]
+fn a_generate_region_is_transparent() {
+    // Value: the region-level variable reads the BLOCK's variable, so the block must
+    // initialize first. iverilog: 7.
+    let (o, ok) = run("module t;\n\
+           generate\n\
+             if (1) begin : g\n\
+               int gv = 7;\n\
+             end\n\
+             int mv = g.gv;\n\
+             initial $display(\"P mv=%0d\", mv);\n\
+           endgenerate\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P mv=7"),
+        "the block initializes before the region item:\n{o}"
+    );
+
+    // Order: a bare instance in the region is a MODULE child, so the block beside it
+    // still goes first. iverilog: gv, lv.
+    let (o, ok) = run(
+        "module leaf; int lv = $random; initial #1 $display(\"P lv=%0d\", lv); endmodule\n\
+         module t;\n\
+           generate\n\
+             leaf u1();\n\
+             if (1) begin : g\n\
+               int gv = $random;\n\
+               initial #1 $display(\"P gv=%0d\", gv);\n\
+             end\n\
+           endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n",
+    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P gv={D1}")) && o.contains(&format!("P lv={D2}")),
+        "the region does not make its bare instance a generate child:\n{o}"
+    );
+
+    // Interleaving: a region-level variable takes its DECLARATION position among the
+    // module's own. iverilog: a, b, c — which vita never got right, before or after.
+    let (o, ok) = run("module t;\n\
+           int a = $random;\n\
+           generate\n\
+             int b = $random;\n\
+           endgenerate\n\
+           int c = $random;\n\
+           initial #1 $display(\"P a=%0d b=%0d c=%0d\", a, b, c);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P a={D1} b={D2} c={D3}")),
+        "declaration order straight through the region:\n{o}"
+    );
+}
