@@ -369,21 +369,42 @@ fn a_multi_spawn_fork_arm_dyn_local_stays_loud() {
 }
 
 #[test]
-fn same_name_dyn_no_reinit_stays_loud() {
-    // Block 1 is an `automatic` dyn `'{…}`; block 2 declares the SAME name STATIC (no
-    // `automatic`, so it is NOT `$blk$`-scoped) and READS it — it would coalesce onto
-    // block 1's persistent dyn heap and leak its elements. Stays loud (correct-or-loud).
-    assert!(loud3009(
-        "module top;\n\
+fn same_name_dyn_locals_across_blocks_do_not_leak() {
+    // The loud this replaces existed to stop a LEAK: block 2 declares the same name
+    // STATIC and would coalesce onto block 1's persistent dyn heap, reading its
+    // elements. §4.5.249 gives each disjoint block's dynamic local its own `$blk$` net,
+    // so the leak is gone by construction — block 2 sees the empty array it declared,
+    // which is exactly what the loud was protecting.
+    let (o, ok) = run("module top;\n\
          initial begin\n\
            begin\n\
              automatic byte msg[] = '{8'd1, 8'd2};\n\
-             if (msg.size() == 2) $display(\"A\");\n\
+             $display(\"A=%0d\", msg.size());\n\
            end\n\
            begin\n\
              byte msg[];\n\
-             if (msg.size() != 0) $display(\"LEAK=%0d\", msg.size());\n\
+             $display(\"B=%0d\", msg.size());\n\
            end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("A=2"), "block 1 keeps its elements:\n{o}");
+    assert!(o.contains("B=0"), "block 2 must NOT see them:\n{o}");
+}
+
+#[test]
+fn a_same_name_dyn_local_with_an_initializer_stays_loud() {
+    // The `$blk$` path skips the decl-init collector, so a SCOPED static
+    // `byte m[] = '{…}` would come up EMPTY. Measured, not assumed — the first cut of
+    // §4.5.249 printed `size()==0` here. So an initializer-bearing STATIC dynamic local
+    // is excluded from the widening and keeps the loud, which now names the identifier
+    // and states the actual rule.
+    assert!(loud3009(
+        "module top;\n\
+         initial begin\n\
+           begin byte m[] = '{8'd1, 8'd2}; $display(\"A=%0d\", m.size()); end\n\
+           begin byte m[]; $display(\"B=%0d\", m.size()); end\n\
            $finish;\n\
          end\n\
          endmodule\n"
@@ -421,4 +442,63 @@ fn assoc_block_local_stays_loud() {
          end\n\
          endmodule\n"
     ));
+}
+
+// ── §4.5.249: same-named DYNAMIC locals in disjoint blocks get distinct storage ──
+
+#[test]
+fn same_named_dyn_locals_are_distinct_variables_whatever_their_lifetime() {
+    // `$blk$` scoping used to require BOTH declarations be `automatic`, so any static
+    // one in the group left the whole name loud — the round-20 report measured exactly
+    // this ("static ↔ automatic mixed → loud") as one trigger of its 81 unisolated
+    // diagnostics. Two same-named dynamic locals in DISJOINT blocks are two distinct
+    // variables in IEEE regardless of lifetime, and the pair was loud whenever either
+    // side was static, so scoping them is a pure loud → support move.
+    //
+    // The 3-block dynamic-array form below is pinned against LIVE iverilog 13.0
+    // (`A1 B2 C0`).
+    let (o, ok) = run("module top;\n\
+         initial begin\n\
+           begin byte m[]; m = new[1]; $display(\"A=%0d\", m.size()); end\n\
+           begin byte m[]; m = new[2]; $display(\"B=%0d\", m.size()); end\n\
+           begin byte m[]; $display(\"C=%0d\", m.size()); end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=1") && o.contains("B=2") && o.contains("C=0"),
+        "three distinct heaps:\n{o}"
+    );
+
+    // Queue and associative array, same shape — the third block must see nothing.
+    let (o, ok) = run("module top;\n\
+         initial begin\n\
+           begin int q[$]; q.push_back(1); q.push_back(2); $display(\"Q=%0d\", q.size()); end\n\
+           begin int q[$]; $display(\"R=%0d\", q.size()); end\n\
+           begin int aa[int]; aa[3] = 7; $display(\"S=%0d\", aa.num()); end\n\
+           begin int aa[int]; $display(\"T=%0d\", aa.num()); end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    for want in ["Q=2", "R=0", "S=1", "T=0"] {
+        assert!(o.contains(want), "expected `{want}`; got:\n{o}");
+    }
+}
+
+#[test]
+fn a_scoped_static_dyn_local_does_not_shadow_a_module_net() {
+    // The `module_names` exclusion still holds: a name that ALSO names a module-scope
+    // net is not scoped, so the module net keeps its single identity.
+    let (o, ok) = run("module top;\n\
+         byte m [];\n\
+         initial begin\n\
+           m = new[3];\n\
+           begin $display(\"A=%0d\", m.size()); end\n\
+           $finish;\n\
+         end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("A=3"), "the module net:\n{o}");
 }

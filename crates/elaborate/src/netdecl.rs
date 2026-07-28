@@ -96,6 +96,19 @@ impl Elaborator<'_> {
         // it stays a LOUD reject here rather than a silently-dropped initializer.
         allow_string_init: bool,
     ) {
+        // §4.5.249: anchor this declaration's diagnostics at the declaration.
+        let saved_span = self.cur_span.replace(d.span);
+        self.elaborate_netvar_decl_inner(d, ports, body, allow_string_init);
+        self.cur_span = saved_span;
+    }
+
+    fn elaborate_netvar_decl_inner(
+        &mut self,
+        d: &ast::NetVarDecl,
+        ports: &ast::PortList,
+        body: &[ast::ModuleItem],
+        allow_string_init: bool,
+    ) {
         // ⓑ-breadth (§25.9): a `virtual INTERFACE vif;` handle is NOT a net — it is
         // a STATIC ALIAS resolved in the post-instance pass (`resolve_virtual_ifaces`),
         // AFTER the bound interface instances are flattened. No net here.

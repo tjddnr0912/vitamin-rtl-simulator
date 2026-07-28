@@ -438,7 +438,7 @@ impl Elaborator<'_> {
                             None => self.error(
                                 MsgCode::ElabUnsupported,
                                 &format!(
-                                    "frame task `{tname}`: dynamic-array formal `{}` needs a \
+                                    "task `{tname}`: dynamic-array formal `{}` needs a \
                                      bare matching dynamic-array actual",
                                     p.name.name
                                 ),
@@ -458,7 +458,7 @@ impl Elaborator<'_> {
                             Err(reason) => self.error(
                                 MsgCode::ElabUnsupported,
                                 &format!(
-                                    "frame task `{tname}`: unpacked-array formal `{}` is \
+                                    "task `{tname}`: unpacked-array formal `{}` is \
                                      unsupported — {reason}",
                                     p.name.name
                                 ),
@@ -496,7 +496,7 @@ impl Elaborator<'_> {
                             None => self.error(
                                 MsgCode::ElabUnsupported,
                                 &format!(
-                                    "frame task `{tname}`: output/inout dynamic-array formal \
+                                    "task `{tname}`: output/inout dynamic-array formal \
                                      `{}` needs a bare matching dynamic-array actual",
                                     p.name.name
                                 ),
@@ -561,7 +561,7 @@ impl Elaborator<'_> {
                                     self.error(
                                         MsgCode::ElabUnsupported,
                                         &format!(
-                                            "frame task `{tname}`: output array formal `{}` \
+                                            "task `{tname}`: output array formal `{}` \
                                              needs a bare array actual",
                                             p.name.name
                                         ),
@@ -572,7 +572,7 @@ impl Elaborator<'_> {
                                     self.error(
                                         MsgCode::ElabUnsupported,
                                         &format!(
-                                            "frame task `{tname}`: output array formal `{}` \
+                                            "task `{tname}`: output array formal `{}` \
                                              unsupported — {reason}",
                                             p.name.name
                                         ),
@@ -610,7 +610,7 @@ impl Elaborator<'_> {
                             self.error(
                                 MsgCode::ElabUnsupported,
                                 &format!(
-                                    "frame task `{tname}` output/inout arg cannot be a select of an automatic (frame-local) variable"
+                                    "task `{tname}` output/inout arg cannot be a select of an automatic (frame-local) variable"
                                 ),
                             );
                         }
@@ -624,13 +624,13 @@ impl Elaborator<'_> {
                             None => self.error(
                                 MsgCode::ElabUnsupported,
                                 &format!(
-                                    "frame task `{tname}` output/inout arg must be a simple net or select"
+                                    "task `{tname}` output/inout arg must be a simple net or select"
                                 ),
                             ),
                         },
                         _ => self.error(
                             MsgCode::ElabUnsupported,
-                            &format!("frame task `{tname}` output/inout arg must be a simple net"),
+                            &format!("task `{tname}` output/inout arg must be a simple net"),
                         ),
                     }
                 }

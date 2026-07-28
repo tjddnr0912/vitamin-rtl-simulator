@@ -49,6 +49,7 @@ mod array_geom;
 mod arrays;
 mod ast_query;
 mod block_local;
+mod block_local_class;
 mod class_lower;
 mod classes;
 mod const_bound;
@@ -151,6 +152,14 @@ pub(crate) use toplevel::*;
 /// IR is never structurally broken (the result is simply discarded on error).
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,
+    /// §4.5.249: resolves an AST byte span back to `file:line:col` for diagnostics.
+    /// `None` on the paths that have no `SourceMap` (unit tests, `.velab` replay) —
+    /// diagnostics then read exactly as before.
+    span_resolver: Option<&'s dyn diag::SpanResolver>,
+    /// The span of the construct currently being elaborated. Set by the statement /
+    /// declaration walkers and consulted by `error`, so a diagnostic raised deep in a
+    /// helper still points at the source the user wrote.
+    cur_span: Option<ast::Span>,
     had_error: bool,
     /// ELAB-ERR-CAP: count of error diagnostics emitted so far. Emission is soft-
     /// capped at `MAX_ELAB_ERRORS` so a broken construct unrolled across a large

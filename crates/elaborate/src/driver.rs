@@ -6,6 +6,8 @@ impl<'s> Elaborator<'s> {
     pub(crate) fn new(sink: &'s dyn LogSink) -> Self {
         Self {
             sink,
+            span_resolver: None,
+            cur_span: None,
             had_error: false,
             error_count: 0,
             net_budget_blown: false,
@@ -225,14 +227,21 @@ impl<'s> Elaborator<'s> {
             }
             return;
         }
+        let location = self.cur_location();
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Error,
             code,
             message: msg.to_string(),
-            location: None,
+            location,
             context: Vec::new(),
             sim_time: None,
         }));
+    }
+
+    /// The `SourceLoc` for `cur_span`, when both a span and a resolver are present.
+    pub(crate) fn cur_location(&self) -> Option<diag::SourceLoc> {
+        let sp = self.cur_span?;
+        Some(self.span_resolver?.resolve(sp.lo, sp.hi))
     }
 
     /// Emit a WARNING-severity diagnostic and KEEP GOING — does NOT set
@@ -252,11 +261,12 @@ impl<'s> Elaborator<'s> {
     /// Emit a Warning with a SPECIFIC code (the generic [`Self::warn`] uses
     /// `W-ELAB-FEATURE-LIMIT`).
     pub(crate) fn warn_code(&mut self, code: MsgCode, msg: &str) {
+        let location = self.cur_location();
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Warning,
             code,
             message: msg.to_string(),
-            location: None,
+            location,
             context: Vec::new(),
             sim_time: None,
         }));

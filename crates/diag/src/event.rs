@@ -60,3 +60,14 @@ pub enum LogEvent {
 pub trait LogSink {
     fn emit(&self, event: LogEvent);
 }
+
+/// Resolve an EXPANDED-text byte span back to an original `file:line:col`.
+///
+/// Elaborate carries AST spans but not the preprocessor's `SourceMap`, and it must
+/// not depend on the preprocessor to get one. The front end owns the map and hands
+/// the elaborator this view of it, so every elaborate-time diagnostic can point at
+/// the declaration it is about — without which 81 identical messages in one run are
+/// indistinguishable, and the construct that caused them cannot be found at all.
+pub trait SpanResolver {
+    fn resolve(&self, lo: u32, hi: u32) -> SourceLoc;
+}

@@ -90,7 +90,36 @@ pub fn elaborate_with_timescale_prec_roots(
     global_prec_exp: i8,
     roots: Option<&[String]>,
 ) -> (Option<ir::SimIr>, Sidecars) {
+    elaborate_located(
+        unit,
+        sink,
+        mod_unit_exp,
+        mod_prec_exp,
+        global_prec_exp,
+        roots,
+        None,
+    )
+}
+
+/// [`elaborate_with_timescale_prec_roots`] plus a `SpanResolver`, so every
+/// elaborate-time diagnostic carries `file:line:col`.
+///
+/// The front end owns the preprocessor's `SourceMap` and passes this view of it;
+/// elaborate stays free of any preprocessor dependency. `resolver: None` reproduces
+/// the previous behavior exactly (unlocated diagnostics), which is what the crate's
+/// own unit tests and any AST-only caller use.
+#[allow(clippy::too_many_arguments)]
+pub fn elaborate_located(
+    unit: &ast::SourceUnit,
+    sink: &dyn LogSink,
+    mod_unit_exp: &std::collections::BTreeMap<String, i8>,
+    mod_prec_exp: &std::collections::BTreeMap<String, i8>,
+    global_prec_exp: i8,
+    roots: Option<&[String]>,
+    resolver: Option<&dyn diag::SpanResolver>,
+) -> (Option<ir::SimIr>, Sidecars) {
     let mut el = Elaborator::new(sink);
+    el.span_resolver = resolver;
     el.mod_unit_exp = mod_unit_exp.clone();
     el.mod_prec_exp = mod_prec_exp.clone();
     el.global_prec_exp = global_prec_exp;

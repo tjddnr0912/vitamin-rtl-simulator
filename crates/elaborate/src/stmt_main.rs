@@ -7,13 +7,22 @@ impl Elaborator<'_> {
     /// CONTRACT: on entry `b.cur` is open; on exit `b.cur` is open and is the
     /// "continue point" (where control flows next). Every form upholds this.
     pub(crate) fn lower_stmt(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
+        // §4.5.249: anchor every diagnostic raised while lowering this statement (and
+        // any expression inside it) to the statement's own source position. Restored on
+        // the way out, so the enclosing construct keeps its own anchor.
+        let saved_span = self.cur_span.replace(s.span());
+        self.lower_stmt_inner(b, s);
+        self.cur_span = saved_span;
+    }
+
+    fn lower_stmt_inner(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
         // R5-B: hoist an inout/output-function call out of a once-evaluated expression
         // to a temp (emitting its copy-out `Terminator::Call` first), so the statement
         // below lowers as a plain read of the temp. Gated on `inout_func_names`, so a
         // design with no such function skips this entirely and is byte-identical.
         if !self.inout_func_names.is_empty() || !self.dyn_formal_func_names.is_empty() {
             if let Some(rewritten) = self.hoist_stmt_top(b, s) {
-                return self.lower_stmt(b, &rewritten);
+                return self.lower_stmt_inner(b, &rewritten);
             }
         }
         match s {

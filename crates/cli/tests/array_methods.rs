@@ -304,16 +304,21 @@ fn min_max_signed_by_declared_type() {
 }
 
 #[test]
-fn same_named_queue_local_across_blocks_is_loud() {
-    // HUNT bug 2: two named blocks each declaring `int q[$]` would share one
-    // flattened net + heap (blk2 sees blk1's elements). v1 has no per-block heap,
-    // so this is now a loud reject rather than a silent contaminated reduction.
-    assert_loud_reject(
-        "module t;\n\
-           initial begin : blk1 int q[$]; q.push_back(10); end\n\
-           initial begin : blk2 int q[$]; q.push_back(2); $display(\"%0d\", q.sum()); end\n\
-         endmodule\n",
-        "same-named queue local across blocks",
+fn same_named_queue_locals_across_blocks_get_distinct_heaps() {
+    // HUNT bug 2 was a SILENT contaminated reduction (blk2 saw blk1's elements) and
+    // became a loud reject. §4.5.249 finishes the climb: two same-named DYNAMIC-storage
+    // block-locals in disjoint blocks now each get their own `$blk$` net, which is what
+    // IEEE says they are — two distinct variables. The heaps are separate, so blk2's
+    // sum is its own. Pinned against LIVE iverilog 13.0 on the `size()`/element form
+    // (iverilog has no queue `.sum()`).
+    let out = run("module t;\n\
+           initial begin : blk1 int q[$]; q.push_back(10); $display(\"A=%0d %0d\", q.size(), q.sum()); end\n\
+           initial begin : blk2 int q[$]; q.push_back(2); $display(\"B=%0d %0d\", q.size(), q.sum()); end\n\
+         endmodule\n");
+    assert!(out.contains("A=1 10"), "blk1 keeps its own heap:\n{out}");
+    assert!(
+        out.contains("B=1 2"),
+        "blk2 must NOT see blk1's element:\n{out}"
     );
 }
 

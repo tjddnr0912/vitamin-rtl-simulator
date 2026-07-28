@@ -125,6 +125,16 @@ pub(crate) fn byte_to_line_col(src: &str, byte: usize) -> (u32, u32) {
     (line, col)
 }
 
+/// A [`diag::SpanResolver`] over the preprocessor's `SourceMap`, so elaborate-time
+/// diagnostics resolve to the original `file:line:col` the same way lex/parse ones do.
+pub(crate) struct MapResolver<'a>(pub(crate) &'a hdl_preprocess::SourceMap);
+
+impl diag::SpanResolver for MapResolver<'_> {
+    fn resolve(&self, lo: u32, hi: u32) -> SourceLoc {
+        self.0.resolve_span(lo as usize, hi as usize)
+    }
+}
+
 /// Build a `SourceLoc` for the half-open expanded-byte range `[lo, hi)` by
 /// resolving it through the preprocessor's `SourceMap` back to original positions.
 pub(crate) fn loc_from_span(map: &hdl_preprocess::SourceMap, lo: usize, hi: usize) -> SourceLoc {
@@ -233,6 +243,16 @@ pub fn frontend_sources_to_unit_pre_with_includes(
     sink: &dyn LogSink,
     pre_opts: &hdl_preprocess::PreOpts,
 ) -> Option<FrontendUnit> {
+    frontend_sources_mapped(sources, sink, pre_opts).map(|(u, _)| u)
+}
+
+/// [`frontend_sources_to_unit_pre_with_includes`] keeping the `SourceMap`, so the
+/// one-shot driver can locate elaborate-time diagnostics.
+pub fn frontend_sources_mapped(
+    sources: &[(String, String)],
+    sink: &dyn LogSink,
+    pre_opts: &hdl_preprocess::PreOpts,
+) -> Option<(FrontendUnit, hdl_preprocess::SourceMap)> {
     // ── preprocess ─────────────────────────────────────────────────────────
     // raw sources -> expanded text + multi-file SourceMap. The expanded text (one
     // buffer) is what the lexer and parser consume; spans they produce index the
@@ -242,17 +262,18 @@ pub fn frontend_sources_to_unit_pre_with_includes(
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
     let pp = hdl_preprocess::preprocess_sources(base_dir, sources, pre_opts);
-    frontend_pp_to_unit(pp, sink)
+    frontend_pp_to_unit_mapped(pp, sink)
 }
 
 /// Post-preprocess front-end shared by the single-file and multi-source entry points:
 /// consume a `PpResult` (expanded text + SourceMap) → lex → parse → resolve module
 /// timescales, plus the `\`include` closure. Diagnostics resolve through `pp.map` to
-/// the correct per-file name + local line.
-pub(crate) fn frontend_pp_to_unit(
+/// the correct per-file name + local line, and the map is RETURNED so the caller can
+/// build a [`MapResolver`] and locate elaborate-time diagnostics too.
+pub(crate) fn frontend_pp_to_unit_mapped(
     pp: hdl_preprocess::PpResult,
     sink: &dyn LogSink,
-) -> Option<FrontendUnit> {
+) -> Option<(FrontendUnit, hdl_preprocess::SourceMap)> {
     for d in &pp.diags {
         let loc = pp.map.resolve_span(d.at, d.at);
         sink.emit(LogEvent::Diagnostic(Diagnostic {
@@ -342,7 +363,7 @@ pub(crate) fn frontend_pp_to_unit(
             })
         })
         .collect();
-    Some((unit, rt, includes))
+    Some(((unit, rt, includes), pp.map))
 }
 
 /// Render a base-10 second exponent as a `` `timescale ``-style unit string
@@ -455,7 +476,8 @@ pub(crate) fn run_vita_str_gated(
     // `--obs-dir` is set; the Instant read is cheap and never affects output).
     let obs_start = std::time::Instant::now();
     // ── preprocess → lex → parse (shared front-end) ─────────────────────────
-    let Some((unit, rt)) = frontend_sources_to_unit_pre(sources, sink, &pre_opts_of(opts)) else {
+    let Some(((unit, rt, _inc), smap)) = frontend_sources_mapped(sources, sink, &pre_opts_of(opts))
+    else {
         return EXIT_USER_ERROR;
     };
 
@@ -471,13 +493,19 @@ pub(crate) fn run_vita_str_gated(
     } else {
         Some(&opts.tops)
     };
-    let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
+    // §4.5.249: the one-shot flow still holds the preprocessor's SourceMap, so give
+    // elaborate-time diagnostics the same `file:line:col` lex/parse ones get. Without
+    // it, N identical E3009s in one run are indistinguishable and the declaration that
+    // caused them cannot be found at all.
+    let resolver = MapResolver(&smap);
+    let (ir, sc) = elaborate::elaborate_located(
         &unit,
         sink,
         &rt.unit_exp,
         &rt.prec_exp,
         rt.global_prec_exp,
         root_sel,
+        Some(&resolver),
     );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;

@@ -20,8 +20,39 @@ impl Elaborator<'_> {
                 decls, stmts, span, ..
             } => {
                 for d in decls {
-                    if d.lifetime == Some(true) {
-                        for n in &d.names {
+                    for n in &d.names {
+                        // `automatic` earns a `$blk$` scope because the per-entry
+                        // storage demands it. §4.5.249 adds one more kind: a
+                        // DYNAMIC-STORAGE local (a `Dim::Dyn`/`Dim::Queue`/`Dim::Assoc`
+                        // unpacked dim). Two same-named dynamic locals in disjoint
+                        // blocks are two distinct variables in IEEE and CANNOT share a
+                        // flattened handle — the first block's elements leak into the
+                        // second — which is why the pair is loud today whenever either
+                        // side is static. Scoping them is therefore a pure loud → support
+                        // move: every shape it newly reaches was rejected before.
+                        //
+                        // A scalar `string` is deliberately NOT included. Its own
+                        // same-name coalesce has its own guards (the READ-gated
+                        // `new_str_read`, the fixed-string-array collision), and the
+                        // `$blk$` path skips the decl-init collector, so an init-bearing
+                        // string would lose its initializer — a loud traded for a silent
+                        // empty. That one keeps the (now identifier-bearing) loud.
+                        //
+                        // WITH an initializer it is excluded: the `$blk$` path skips the
+                        // decl-init collector (which does not compute the `$blk$<lo>.`
+                        // prefix), so a scoped `byte m[] = '{…}` would come up EMPTY —
+                        // trading the loud for a silent 0. Measured, not assumed: the
+                        // first cut of this change printed `size()==0`. An `automatic`
+                        // decl is unaffected — its init rides `emit_per_entry_block_inits`,
+                        // which resolves the name inside the scope wrap.
+                        let dyn_storage = n.init.is_none()
+                            && n.unpacked.iter().any(|dim| {
+                                matches!(
+                                    dim,
+                                    ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)
+                                )
+                            });
+                        if d.lifetime == Some(true) || dyn_storage {
                             out.entry(n.name.name.clone())
                                 .or_default()
                                 .push((span.lo, span.hi));

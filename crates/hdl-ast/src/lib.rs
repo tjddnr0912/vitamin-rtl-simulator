@@ -1622,6 +1622,43 @@ impl Lvalue {
     }
 }
 
+impl Stmt {
+    /// The source span of this statement — the anchor an elaborate-time diagnostic
+    /// points at (`Elaborator::with_span`). Every variant carries one.
+    pub fn span(&self) -> Span {
+        match self {
+            Stmt::Null(span) | Stmt::Error(span) => *span,
+            Stmt::Blocking { span, .. }
+            | Stmt::NonBlocking { span, .. }
+            | Stmt::If { span, .. }
+            | Stmt::Return { span, .. }
+            | Stmt::Case { span, .. }
+            | Stmt::For { span, .. }
+            | Stmt::While { span, .. }
+            | Stmt::Repeat { span, .. }
+            | Stmt::Forever { span, .. }
+            | Stmt::Block { span, .. }
+            | Stmt::Fork { span, .. }
+            | Stmt::SysTaskCall { span, .. }
+            | Stmt::UserTaskCall { span, .. }
+            | Stmt::RandomizeWith { span, .. }
+            | Stmt::DelayCtrl { span, .. }
+            | Stmt::EventCtrl { span, .. }
+            | Stmt::EventTrigger { span, .. }
+            | Stmt::Wait { span, .. }
+            | Stmt::Disable { span, .. }
+            | Stmt::WaitFork { span, .. }
+            | Stmt::ConcurrentAssert { span, .. }
+            | Stmt::DeferredAssert { span, .. }
+            | Stmt::Assign { span, .. }
+            | Stmt::Deassign { span, .. }
+            | Stmt::Force { span, .. }
+            | Stmt::Release { span, .. }
+            | Stmt::CoverProperty { span, .. } => *span,
+        }
+    }
+}
+
 // ──────────────────── ModuleInstance / Generate / TF [A] ────────────────────
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct ModuleInstance {
