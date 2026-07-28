@@ -199,7 +199,16 @@ impl Elaborator<'_> {
                 .filter(|k| is_here(k))
                 .cloned(),
         );
-        keys.sort();
+        // Review S2(b): order by the block's SOURCE OFFSET, not by the ASCII order of
+        // its decimal spelling — `"$blk$148" < "$blk$32"` ran the later block first.
+        keys.sort_by_key(|k| {
+            let n = k
+                .rsplit("$blk$")
+                .next()
+                .and_then(|d| d.parse::<u32>().ok())
+                .unwrap_or(u32::MAX);
+            (n, k.clone())
+        });
         keys.dedup();
         for key in keys {
             let inits = self.pending_blk_inits.remove(&key).unwrap_or_default();

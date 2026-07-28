@@ -415,3 +415,110 @@ fn the_pop_discard_sink_is_not_in_the_user_namespace() {
     assert!(ok, "a user name must not collide with a temp:\n{o}");
     assert!(o.contains("R=1 1"), "both survive:\n{o}");
 }
+
+// ── §4.5.253: what the review of the scoped decl-init slice found ────────────
+
+/// S1 was the widest: `dyn_storage` was spelled kind-only (`matches!(d.kind, String)`)
+/// while its own comment said "a scalar `string` joins them", so it admitted
+/// `string s[2]` — whose per-element storage lives under the DECLARING prefix, invisible
+/// from the module prefix the pre-size and the element writes resolve in. A scoped one
+/// got length 0 and every write was discarded, at exit 0, where PRE was loud.
+#[test]
+fn a_same_named_string_array_local_stays_loud() {
+    assert!(loud(
+        "module t;\n\
+           initial begin\n\
+             begin string s[2]; s[0]=\"aa\"; s[1]=\"bb\"; $display(\"A=%s\", s[0]); end\n\
+             begin string s[2]; s[0]=\"cc\";              $display(\"B=%s\", s[0]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    ));
+    // The two kinds it must still admit: a SCALAR string, and a string DYNAMIC array
+    // (whose storage is a heap handle the scope does reach). Both match live iverilog.
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin string s = \"aa\";  $display(\"A=%s\", s); end\n\
+             begin string s = \"bbb\"; $display(\"B=%s\", s); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=aa") && o.contains("B=bbb"),
+        "scalar string:\n{o}"
+    );
+
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin string s[]; s = new[2]; s[0]=\"x\"; $display(\"C=%0d %s\", s.size(), s[0]); end\n\
+             begin string s[]; $display(\"D=%0d\", s.size()); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("C=2 x") && o.contains("D=0"),
+        "string dyn array:\n{o}"
+    );
+}
+
+/// S2: §6.8 declaration order. Splitting a block's initializers between the main sweep
+/// and a trailing per-scope group lost the interleave — `int a = $random; int q[$] =
+/// '{$random};` handed `a` the first draw and `q` the FOURTH. A block with a scope now
+/// routes ALL its initializers into that group, and groups run in source-offset order
+/// rather than the ASCII order of their decimal spelling (`"$blk$148" < "$blk$32"`).
+/// Both lines are live iverilog values.
+#[test]
+fn scoped_declaration_initializers_keep_their_order() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin int a = $random; int q[$] = '{$random}; $display(\"A=%0d Q=%0d\", a, q[0]); end\n\
+             begin int b = $random; int q[$] = '{$random}; $display(\"B=%0d R=%0d\", b, q[0]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=303379748 Q=-1064739199") && o.contains("B=-2071669239 R=-1309649309"),
+        "declaration order within each block:\n{o}"
+    );
+
+    // Two scoped groups whose block offsets straddle a decimal-width boundary.
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin int q[$] = '{$random}; $display(\"Q=%0d\", q[0]); end\n\
+             // ----------------------------------------------------------------\n\
+             begin int q[$] = '{$random}; $display(\"R=%0d\", q[0]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("Q=303379748") && o.contains("R=-1064739199"),
+        "source order, not ASCII order:\n{o}"
+    );
+}
+
+/// S3 was a plain regression: merely GATHERING the enclosing declaration made the name
+/// look shadowed, and `compute_scoped_block_locals` withdrew scoping from an inner /
+/// sibling pair that already worked. A widened span that encloses another declaring span
+/// of the same name is dropped from candidacy instead. iverilog: `IN=1 7`, `C=1 8`.
+#[test]
+fn widening_the_gather_does_not_withdraw_scoping_that_worked() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin\n\
+               int q[$] = '{1,2};\n\
+               begin int q[$]; q.push_back(7); $display(\"IN=%0d %0d\", q.size(), q[0]); end\n\
+             end\n\
+             begin int q[$]; q.push_back(8); $display(\"C=%0d %0d\", q.size(), q[0]); end\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("IN=1 7") && o.contains("C=1 8"),
+        "iverilog IN=1 7 C=1 8:\n{o}"
+    );
+}

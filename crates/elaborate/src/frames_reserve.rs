@@ -13,7 +13,7 @@ impl Elaborator<'_> {
     /// `hoist_block_local_nets`), so they need no separate scope.
     pub(crate) fn gather_auto_block_locals(
         s: &ast::Stmt,
-        out: &mut BTreeMap<String, Vec<(u32, u32)>>,
+        out: &mut BTreeMap<String, Vec<(u32, u32, bool)>>,
     ) {
         match s {
             ast::Stmt::Block {
@@ -47,17 +47,35 @@ impl Elaborator<'_> {
                         // (`collect_block_local_decl_inits` + `flush_pending_blk_inits`),
                         // so the reason is gone and with it both exclusions.
                         let _ = decl_has_init;
-                        let dyn_storage = matches!(d.kind, ast::NetVarKind::String)
+                        // SCALAR string only. Review S1: the kind-only spelling admitted
+                        // `string s[2]`, whose per-element storage lives under the DECLARING
+                        // prefix — invisible from the module prefix the pre-size and the
+                        // element writes are resolved in — so a scoped one got length 0 and
+                        // every write was discarded at exit 0. The comment said "scalar"; the
+                        // predicate did not.
+                        let scalar_string = matches!(d.kind, ast::NetVarKind::String)
+                            && d.range.is_none()
+                            && d.packed.is_empty()
+                            && n.unpacked.is_empty();
+                        let dyn_storage = scalar_string
                             || n.unpacked.iter().any(|dim| {
                                 matches!(
                                     dim,
                                     ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)
                                 )
                             });
+                        // The third field marks a span admitted by the §4.5.249 WIDENING
+                        // rather than by `automatic`. `compute_scoped_block_locals` needs
+                        // the distinction: a widened span that ENCLOSES another declaring
+                        // span of the same name must not withdraw the scoping the
+                        // automatic-only set already granted (review S3 — it turned a
+                        // working inner/sibling pair loud).
                         if d.lifetime == Some(true) || dyn_storage {
-                            out.entry(n.name.name.clone())
-                                .or_default()
-                                .push((span.lo, span.hi));
+                            out.entry(n.name.name.clone()).or_default().push((
+                                span.lo,
+                                span.hi,
+                                d.lifetime != Some(true),
+                            ));
                         }
                     }
                 }

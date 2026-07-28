@@ -27,7 +27,7 @@ impl Elaborator<'_> {
             outer.0 <= inner.0 && inner.1 <= outer.1 && outer != inner
         }
         // (1) gather automatic block-locals across all procedural blocks.
-        let mut per_name: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+        let mut per_name: BTreeMap<String, Vec<(u32, u32, bool)>> = BTreeMap::new();
         for item in &module.body {
             if let ast::ModuleItem::Proc(p) = item {
                 Self::gather_auto_block_locals(&p.body, &mut per_name);
@@ -36,7 +36,20 @@ impl Elaborator<'_> {
         // (2) candidate (span, name): declared in ≥2 blocks, no module-net
         //     collision, and no two declaring spans nested (shadowing).
         let mut cand: Vec<(u32, u32, String)> = Vec::new();
-        for (name, spans) in &per_name {
+        for (name, all) in &per_name {
+            // Review S3: a WIDENED span (admitted by the dynamic-storage rule, not by
+            // `automatic`) that ENCLOSES another declaring span of this name is dropped
+            // rather than counted. Otherwise merely gathering it makes the name look
+            // shadowed and withdraws scoping that already worked — a correct design
+            // turned loud. It is only ever dropped from CANDIDACY; its declaration still
+            // takes the ordinary flattened path, exactly as before the widening.
+            let spans: Vec<(u32, u32)> = all
+                .iter()
+                .filter(|&&(lo, hi, widened)| {
+                    !widened || !all.iter().any(|&(l2, h2, _)| contains((lo, hi), (l2, h2)))
+                })
+                .map(|&(lo, hi, _)| (lo, hi))
+                .collect();
             if spans.len() < 2 || module_names.contains(name) {
                 continue;
             }
@@ -49,7 +62,7 @@ impl Elaborator<'_> {
             if shadowed {
                 continue;
             }
-            for &(lo, hi) in spans {
+            for &(lo, hi) in &spans {
                 cand.push((lo, hi, name.clone()));
             }
         }

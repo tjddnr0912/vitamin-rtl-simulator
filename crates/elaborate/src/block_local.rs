@@ -460,12 +460,17 @@ impl Elaborator<'_> {
         // §4.5.251: a scalar `string` qualifies too, and an initializer no longer
         // disqualifies either — the scoped path records its initializers under its own
         // prefix now and replays them there.
-        let dyn_storage = matches!(d.kind, ast::NetVarKind::String)
-            || d.names.iter().any(|n| {
-                n.unpacked.iter().any(|dim| {
+        // Must match `gather_auto_block_locals` EXACTLY, including the scalar-string
+        // condition (review S1 — a kind-only spelling admitted `string s[2]`, whose
+        // element storage the scoped path cannot reach, giving it length 0 at exit 0).
+        let scalar_string =
+            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
+        let dyn_storage = d.names.iter().any(|n| {
+            (scalar_string && n.unpacked.is_empty())
+                || n.unpacked.iter().any(|dim| {
                     matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
                 })
-            });
+        });
         if d.lifetime == Some(true) || dyn_storage {
             if let Some(seg) = self.block_local_scope_seg(span, d) {
                 for n in &d.names {
@@ -623,12 +628,13 @@ impl Elaborator<'_> {
                     .map(|n| n.name.name.as_str())
                     .unwrap_or("<unnamed>");
                 let has_init = d.names.iter().any(|n| n.init.is_some());
-                let lifetime = match (d.lifetime == Some(true), has_init) {
-                    (true, _) => "this one is `automatic`, so the OTHER is not",
-                    (false, true) => {
-                        "this one is static AND has an initializer, which the scoped                          path would drop"
-                    }
-                    (false, false) => "this one is static and the other is not eligible",
+                let _ = has_init;
+                let lifetime = if d.lifetime == Some(true) {
+                    "this one is `automatic`, so the OTHER is not"
+                } else {
+                    "this one is static and its block is not eligible for a scope of its \
+                     own (a name declared in only one block, a name that also names a \
+                     module net, or two blocks where one encloses the other)"
                 };
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -637,10 +643,10 @@ impl Elaborator<'_> {
                          associative array / string) is declared under the same name in \
                          another block, and this pair cannot be given distinct storage: \
                          v1 does that for two `automatic` locals, or for two dynamic \
-                         locals with NO initializer, and only when neither block encloses \
-                         the other — {lifetime}. As written both would share one flattened \
-                         handle and one heap; declare them `automatic`, drop the \
-                         initializer, or rename one"
+                         (or scalar-`string`) locals, and only when neither block \
+                         encloses the other — {lifetime}. As written both would share one flattened \
+                         handle and one heap; declare them `automatic`, or \
+                         rename one"
                     ),
                 );
             }
@@ -813,7 +819,21 @@ impl Elaborator<'_> {
             let k = self.fq(&n.name.name);
             self.hoisted_block_local.insert(k);
         }
-        self.collect_block_local_decl_inits(d, span, None);
+        // Review S2: if THIS BLOCK has a `$blk$` scope, every one of its declaration
+        // initializers goes into that group — not just the scoped names. Splitting them
+        // put the scoped half after the whole main sweep, so `int a = $random; int q[$]
+        // = '{$random};` in one block handed `a` the first draw and `q` the fourth.
+        // Routing the block as a unit keeps declaration order inside it, and the group
+        // still runs after the module-scope inits (which is the ordering a block-local
+        // needs anyway — it may read them, never the reverse).
+        //
+        // A non-scoped name lowered under the `$blk$` prefix still resolves: lookup walks
+        // OUTWARD, so it finds its module-flattened net exactly as before.
+        let blk_scope = self
+            .scoped_block_locals
+            .get(&span.lo)
+            .map(|_| format!("$blk${}", span.lo));
+        self.collect_block_local_decl_inits(d, span, blk_scope.as_deref());
     }
 
     /// Recursively create nets for every `begin…end`/`fork…join` block-local
