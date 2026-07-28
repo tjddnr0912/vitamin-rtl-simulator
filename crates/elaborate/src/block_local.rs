@@ -454,9 +454,12 @@ impl Elaborator<'_> {
         // §4.5.251: a scalar `string` qualifies too, and an initializer no longer
         // disqualifies either — the scoped path records its initializers under its own
         // prefix now and replays them there.
-        // Must match `gather_auto_block_locals` EXACTLY — a decl scoped here but not
-        // gathered there (or the reverse) breaks the invariant that every colliding
-        // occurrence of a name is scoped.
+        // Must be implied BY `gather_auto_block_locals` — a decl scoped here but not
+        // gathered there breaks the invariant that every colliding occurrence of a name is
+        // scoped. The `string_local` term is character-identical in both. The dyn-dim term
+        // is deliberately not: gather tests it per NAME, this tests it decl-ANY, so this
+        // side is the weaker test and gather ⇒ hoist holds. The extra permissiveness is
+        // absorbed by `block_local_scope_seg`, which only ever scopes a name gather marked.
         let string_local =
             matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
         let dyn_storage = string_local

@@ -266,3 +266,82 @@ fn a_pre_size_is_drained_by_the_scope_that_owns_the_declaration() {
         "the writes survive the pre-size:\n{o}"
     );
 }
+
+/// The cross-product the first round of these tests missed entirely, and where both
+/// review lenses found the same regression: a MODULE-BODY block-local alongside a
+/// `generate` region. An unlabeled generate body shares the module's prefix, so a
+/// prefix-only claim let the generate walk's flush emit the MODULE's block-locals ahead
+/// of the module sweep. Ownership is the flag, not the prefix.
+#[test]
+fn a_generate_region_does_not_capture_the_modules_own_block_locals() {
+    // Even an EMPTY generate arms it — the flush is unconditional.
+    for gen in [
+        "generate\n  endgenerate\n",
+        "generate if (1) begin : g\n    wire dummy;\n  end endgenerate\n",
+        "generate if (0) begin : g\n    wire dummy;\n  end endgenerate\n",
+        "genvar i;\n  generate for (i = 0; i < 2; i = i + 1) begin : g\n    wire dummy;\n  end endgenerate\n",
+    ] {
+        let (o, ok) = run(&format!(
+            "module t;\n  {gen}  int mm = $random;\n\
+             initial begin begin int a = $random; $display(\"P mm=%0d a=%0d\", mm, a); end $finish; end\n\
+             endmodule\n"
+        ));
+        assert!(ok, "expected clean sim, got:\n{o}");
+        assert!(
+            o.contains(&format!("P mm={D1} a={D2}")),
+            "module sweep still runs first with a generate present:\n{o}"
+        );
+    }
+}
+
+/// The same shape for the two things a captured initializer breaks: a block-local that
+/// READS a module variable, and a routed string array split from its `new[n]` (the
+/// pre-size drain partitions by owner, so a captured write left its pre-size behind and
+/// the array came out empty at exit 0).
+#[test]
+fn a_generate_region_breaks_neither_a_read_nor_a_pre_size() {
+    let (o, ok) = run("module t;\n\
+           int mm = $random;\n\
+           initial begin\n\
+             string s = (mm != 0) ? \"SET\" : \"ZERO\";\n\
+             string arr[2] = '{\"a\",\"b\"};\n\
+             $display(\"P s=%s arr=|%s|%s|\", s, arr[0], arr[1]);\n\
+             $finish;\n\
+           end\n\
+           generate if (1) begin : g\n    wire dummy;\n  end endgenerate\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P s=SET arr=|a|b|"),
+        "the read sees mm, and the pre-size still precedes the writes:\n{o}"
+    );
+}
+
+/// A module body is never "inside a generate", however it was reached. A child
+/// instantiated inside a generate used to elaborate its whole body with the flag stuck
+/// on, so its own module-scope block-locals were tagged as generate-owned.
+#[test]
+fn a_child_instantiated_inside_a_generate_owns_its_own_body() {
+    let (o, ok) = run("module sub;\n\
+           int mm = $random;\n\
+           string m = \"M\";\n\
+           initial begin\n\
+             begin\n\
+               int a = $random;\n\
+               string bl = {m, \"-x\"};\n\
+               string arr[2] = '{\"p\",\"q\"};\n\
+               #1 $display(\"P mm=%0d a=%0d bl=%s arr=|%s|%s|\", mm, a, bl, arr[0], arr[1]);\n\
+             end\n\
+           end\n\
+         endmodule\n\
+         module t;\n\
+           genvar i;\n\
+           generate for (i = 0; i < 1; i = i + 1) begin : g\n    sub u();\n  end endgenerate\n\
+           initial #2 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P mm={D1} a={D2} bl=M-x arr=|p|q|")),
+        "the child's own body owns its initializers:\n{o}"
+    );
+}

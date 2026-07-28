@@ -110,6 +110,12 @@ impl Elaborator<'_> {
 
         // Enter this instance's scope (restored before returning).
         let saved_prefix = std::mem::replace(&mut self.cur_prefix, inst_path.to_string());
+        // A module body is never "inside a generate", however it was reached. Without this
+        // a child instantiated inside a generate elaborated its WHOLE body with the flag
+        // stuck on, so its own module-scope block-locals were tagged as generate-owned and
+        // claimed by the wrong flush — the ownership question is per-body, and an instance
+        // boundary starts a new body.
+        let saved_in_gen = std::mem::replace(&mut self.in_generate_body, false);
         // Record this as the instance currently being lowered, so a child created
         // inside a generate block can set its `Instance.parent` to `inst_id`.
         let saved_inst = std::mem::replace(&mut self.cur_inst, inst_id);
@@ -706,6 +712,7 @@ impl Elaborator<'_> {
         self.prop_table = saved_props;
         self.let_table = saved_lets;
         self.cur_prefix = saved_prefix;
+        self.in_generate_body = saved_in_gen;
         self.cur_inst = saved_inst;
         self.cur_time_mult = saved_mult;
         self.cur_prec_mult = saved_prec_mult;

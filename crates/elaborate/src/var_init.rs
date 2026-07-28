@@ -268,34 +268,34 @@ impl Elaborator<'_> {
             .filter(|k| is_here(k))
             .cloned()
             .collect();
-        let mut all: Vec<(u32, String, bool, ast::Lvalue, ast::Expr)> = Vec::new();
+        // …and only the entries this scope OWNS, by the same flag the pre-size drain uses.
+        // A generate body that vita gives no prefix segment shares the MODULE's key, so a
+        // generate walk's flush matched the module's own block-locals and emitted them
+        // ahead of the module sweep — which both robbed a module block-local initializer of
+        // the module variables it reads and split a routed string array from its `new[n]`
+        // (left behind by the flag-partitioned pre-size drain), emptying it at exit 0.
+        // Prefix answers WHICH scope; the flag answers WHOSE.
+        let ours = self.in_generate_body;
+        let mut all: Vec<(u32, String, ast::Lvalue, ast::Expr)> = Vec::new();
         for key in keys {
             let Some(v) = self.pending_block_local_inits.remove(&key) else {
                 continue;
             };
+            let (mine, theirs): (Vec<_>, Vec<_>) = v.into_iter().partition(|(_, g, ..)| *g == ours);
+            if !theirs.is_empty() {
+                self.pending_block_local_inits.insert(key.clone(), theirs);
+            }
             all.extend(
-                v.into_iter()
-                    .map(|(lo, g, l, r)| (lo, key.clone(), g, l, r)),
+                mine.into_iter()
+                    .map(|(lo, _, l, r)| (lo, key.clone(), l, r)),
             );
         }
         // Stable: one declaration's several element writes share an offset and keep the
         // order the expansion built them in.
         all.sort_by_key(|(lo, ..)| *lo);
-        // §4.5.255: an initializer declared in a CHILD generate body that vita gave no
-        // prefix segment (a `case` arm, an unlabeled `if`/`begin`) is keyed at this very
-        // scope, but iverilog runs it BEFORE this scope's own declarations — measured:
-        // a `case`-arm block-local takes the first `$random` draw and the module variable
-        // the second. Those go in front; the rest keep the measured module-then-block-local
-        // order. Inside a generate flush both flags are set, so nothing is reordered there.
-        let child = !self.in_generate_body;
-        let (front, own): (Vec<_>, Vec<_>) = all
-            .into_iter()
-            .partition(|(_, k, g, ..)| *g && child && *k == here);
-        self.pending_var_inits
-            .splice(0..0, front.into_iter().map(|(_, _, _, l, r)| (l, r)));
         // Split into consecutive same-prefix runs.
         let mut runs: Vec<(String, Vec<(ast::Lvalue, ast::Expr)>)> = Vec::new();
-        for (_, key, _, lhs, rhs) in own {
+        for (_, key, lhs, rhs) in all {
             match runs.last_mut() {
                 Some((k, v)) if *k == key => v.push((lhs, rhs)),
                 _ => runs.push((key, vec![(lhs, rhs)])),
@@ -310,10 +310,12 @@ impl Elaborator<'_> {
         for (key, v) in runs {
             let saved = std::mem::replace(&mut self.cur_prefix, key);
             self.pending_var_inits = v;
-            // A scoped routed string array records its `new[n]` under the SCOPED prefix;
-            // it must precede the element writes. A no-op for every other run (the key
-            // was already drained, or never had one).
-            self.drain_scoped_presize();
+            // No pre-size drain here: a `$blk$`-scope pre-size is recorded in THIS list
+            // (`route_fixed_string_array`), ahead of the element writes it must precede,
+            // because it is pushed at the declaration and they are pushed by the collector
+            // that runs after it. `pending_scoped_presize` never holds a `$blk$` key — and
+            // if one ever appeared, `assert_block_local_inits_drained` reports it loudly
+            // rather than letting the array stay length 0.
             self.flush_pending_var_inits();
             self.cur_prefix = saved;
         }
