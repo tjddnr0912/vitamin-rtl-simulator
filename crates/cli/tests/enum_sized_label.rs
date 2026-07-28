@@ -108,6 +108,34 @@ fn a_param_width_base_still_pairs_name_with_value() {
     );
 }
 
+/// The round-20 external report's §4.7, verbatim — `.name()` on an enum TASK INPUT
+/// FORMAL, which it measured as loud ("unsupported hierarchical function call `m.name`")
+/// and called the last blocker for its SHA-3 testbench. It was closed as a side effect
+/// of folding sized labels: `M_A = 5'd0` is a SIZED literal, so the enum never reached
+/// `enum_defs`, so `.name()` was never synthesized and the call fell through to the
+/// hierarchical-call path — which is also where that misleading message came from.
+/// Pinned here in the report's own words so the connection is not lost.
+#[test]
+fn name_works_on_an_enum_task_input_formal() {
+    let (out, c) = run("module t;\n\
+           typedef enum logic [4:0] { M_A = 5'd0, M_B = 5'd1 } mode_e;\n\
+           task automatic run_test (input string name, input mode_e m);\n\
+             $display(\"[R] %-10s mode=%s\", name, m.name());\n\
+           endtask\n\
+           function automatic string f (input mode_e m); return m.name(); endfunction\n\
+           initial begin\n\
+             run_test(\"alpha\", M_A);\n\
+             run_test(\"beta\", M_B);\n\
+             $display(\"[F] %s\", f(M_B));\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert_eq!(c, Some(0), "no diagnostics expected; got:\n{out}");
+    for want in ["mode=M_A", "mode=M_B", "[F] M_B"] {
+        assert!(out.contains(want), "expected `{want}`; got:\n{out}");
+    }
+}
+
 /// The methods that were loud purely because the enum never reached `enum_defs`.
 #[test]
 fn enum_methods_work_on_a_sized_label_enum() {

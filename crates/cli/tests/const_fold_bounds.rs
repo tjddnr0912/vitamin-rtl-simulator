@@ -118,6 +118,54 @@ fn part_select_bounds_fold_every_const_form() {
     );
 }
 
+/// The round-20 external report's CRITICAL repro, verbatim. It was filed against a
+/// commit that predates this slice, and it is the lane-slicing spelling real RTL uses
+/// (`[2*W-1:W]`, `[N*W-1:(N-1)*W]`) rather than the literal-bound forms above — so it
+/// is pinned separately, in the report's own words, with the report's own values.
+///
+/// The failure was as bad as it gets: no diagnostic, and the 64-bit upper lane came
+/// back as ONE BIT (`d[W]`, zero-extended). It made a production SHA-3 core produce a
+/// silently wrong digest for every message of 9 bytes or more, because messages of 8
+/// or fewer never touch the upper lane — which is why nineteen rounds of KAT testing
+/// never saw it. Every line here matches live iverilog 13.0.
+#[test]
+fn a_multiplied_parameter_bound_selects_the_full_lane() {
+    let (out, c) = run("module t;\n\
+           localparam int W = 64;\n\
+           localparam int H = 128;\n\
+           logic [127:0] d = 128'hAABBCCDDEEFF0011_2233445566778899;\n\
+           logic [2*W-1:0] v;\n\
+           initial begin\n\
+             $display(\"B=%h\", d[127:64]);\n\
+             $display(\"B=%h\", d[127:W]);\n\
+             $display(\"B=%h\", d[H-1:W]);\n\
+             $display(\"B=%h\", d[W+63:W]);\n\
+             $display(\"B=%h\", d[W+W-1:W]);\n\
+             $display(\"B=%h\", d[W +: W]);\n\
+             $display(\"B=%h\", d[2*W-1 -: W]);\n\
+             $display(\"B=%h\", d[2*W-1:W]);\n\
+             $display(\"B=%h\", d[2*64-1:64]);\n\
+             $display(\"B=%h\", d[W*2-1:W]);\n\
+             $display(\"B=%h\", d[W/1*2-1:W]);\n\
+             $display(\"B=%h\", d[(W<<1)-1:W]);\n\
+             $display(\"B=%h\", d[2*W-1:2*W-64]);\n\
+             $display(\"N=%0d\", $bits(v));\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    assert_eq!(c, Some(0), "no diagnostics expected; got:\n{out}");
+    all_eq(
+        &out,
+        "B=",
+        "aabbccddeeff0011",
+        "the report's lane-select table",
+    );
+    assert!(
+        out.contains("N=128"),
+        "declared width path too; got:\n{out}"
+    );
+}
+
 /// The WRITE twin of the read above: a bound that did not fold used to widen the
 /// write to the whole net above `lsb`, silently destroying bits 15:12.
 #[test]
