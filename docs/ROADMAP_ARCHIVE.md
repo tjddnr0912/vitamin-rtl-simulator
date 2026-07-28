@@ -6,12 +6,14 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 227건 (최신순)
+## 인덱스 — 완료 슬라이스 229건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–253**
+**§4.5.220–255**
+- `4.5.255` 같은-이름 `string` 배열 correct-support + 리뷰 2연(generate 본문엔 prefix 가 없다 · 소유권은 플래그) …
+- `4.5.254` t0 정적 초기화자 순서 = 모듈 전부 → 블록 로컬 전부(실측) · 리스트 3개를 하나로 …
 - `4.5.253` §4.5.251 적대 리뷰 — 하강 4건(kind-only 술어·선언 순서 2·gather 확장이 뺏은 스코핑) …
 - `4.5.252` `$sformatf` — 근인은 포맷을 무시하는 degenerate `eval` arm, hoist 는 그 우회였다 …
 - `4.5.251` `$blk$` 경로 decl-init 수집 — 제외 3개(초기화자·스칼라 string·multi-name)가 함께 사라짐 …
@@ -308,6 +310,24 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.255 같은-이름 `string` 배열 correct-support + 그 리뷰가 잡은 2연 하강 (2026-07-28, format 25 불변) ✅
+
+**S1 은 형태를 제외해서 답했었다.** §4.5.253 이 `dyn_storage` 를 스칼라로 되돌리자 두 블록의 `string s[2]` 는 다시 loud 가 됐다 — 하강은 막았지만 정답은 아니다. **제외가 결함이 아니었다**: 라우팅된 string 배열은 원소 저장소를 **선언 prefix** 에 등록하는데, 그걸 채우는 두 곳(decl-init 수집기의 `has_fixed_string_array_storage`, `new[n]` pre-size)이 **모듈 prefix** 에서 돌고 있었다. 수집기를 `with_scope` **안**으로 옮기고 pre-size 를 거기 기록하니 비대칭이 사라졌고, `string` 로컬은 unpacked 모양과 무관하게 전부 스코프 자격을 얻는다. iverilog 대조: 양쪽 초기화자 · `string s[2][2]` row-major · 내림차순 `s[3:1]` · fixed+dyn 한 이름 · 루프 재진입 · **fork 두 arm**(전엔 loud). 안 여는 2개(모듈 넷 이름충돌 · 블록 중첩)는 loud 로 핀. 의도적 불일치 1건 = 미대입 원소는 `""`(§6.16) — iverilog 는 공백 한 칸을 찍고 `.len()` 을 2 라 하는데 **한 블록만 있어도** 그러니 규칙이 아니라 미초기화 메모리다.
+
+**리뷰 1차 — generate 본문에 prefix 가 없다는 걸 순서 규칙이 몰랐다.** iverilog 는 `case` arm·라벨 없는 `if`/`begin` 도 스코프로 보고, generate 스코프 static 을 **모듈보다 먼저** 초기화한다(`begin : g int gm=$random;` 가 1번, 모듈 `int mm=$random;` 가 2번 — 소스 순서 무관). vita 는 그것들을 "블록 로컬이니 맨 뒤"로 분류해 **잘 되던 3형태가 조용히 틀어졌다**. 소유권 플래그(`in_generate_body`)를 달고 generate VarInit walk 을 모듈 sweep **앞으로** 옮겼다 — 블록 로컬과 무관한 **기존 모듈-먼저 역전**도 같이 닫혔다. 두 번째 하강은 pre-size: walk **시작 때** 배출하니 안쪽 generate 본문의 `new[n]` 이 바깥 프로세스로 가서, 안쪽이 이미 내보낸 원소 쓰기를 **지웠다**(빈 배열·exit 0). flush 시점 배출로 — flush 순서가 곧 소유 순서다.
+
+**리뷰 2차 — 두 렌즈가 반대편에서 같은 회귀를 찾았다.** prefix 만으로 claim 하는데 소유권은 플래그가 되었으니, walk 재배치 후 **generate 의 flush 가 모듈 자신의 블록 로컬을 가져가** 모듈 sweep 앞에서 방출했다. **빈 generate 하나·`if(0)` 하나로도 발화**(flush 가 무조건이라). 결과 둘 다 exit 0: 모듈 블록 로컬 초기화자가 모듈 변수를 **초기화 전에** 읽고(`(mm!=0)?"SET":"ZERO"` → `ZERO`), 라우팅 string 배열이 `new[n]` 과 **분리**됐다(presize 배출은 이미 소유권으로 나뉘어 있었으므로 쓰기만 가져가고 presize 는 남아 뒤늦게 배열을 지움) — 이 작업이 없애려던 바로 그 silent-empty 가 반대편에서 재도달. **prefix 는 어느 스코프냐를, 플래그는 누구 것이냐를 답한다.** 부수로 soundness 렌즈가 계측으로 `child`/`front` 분기가 **한 번도 안 탄다**는 걸 보였고(순서는 전적으로 walk 재배치가 만든다), 인스턴스 경계에서 플래그를 리셋하지 않아 **generate 안에 인스턴스화된 자식이 자기 본문 전체를 generate-owned 로** 태깅하던 것도 찾았다. 테스트가 놓친 이유가 정확히 진단됐다 — 두 파일 다 generate 가 있고 둘 다 모듈 블록 로컬이 있는데, **둘을 함께 가진 테스트가 없었다**.
+
+**잔여(실측·전부 pre-existing)** → ROADMAP §2: 중첩 generate 안팎 순서 · 상수 초기화자가 순서 모델 밖 · 자식 인스턴스가 부모보다 뒤 · generate 안 같은-이름 `string s[2]` 는 아직 loud(문구도 위치를 틀리게 지목).
+
+#### 4.5.254 t0 정적 초기화자 순서 — iverilog 실측 규칙으로 (2026-07-28, format 25 불변) ✅
+
+리포트의 S4 는 "블록 로컬 string 초기화자가 항상 같은 블록의 비-string 뒤"였는데, **`$random` 을 순서 증인으로** 재보니 그건 한 면이었다. 실측 규칙 = **모듈 스코프 초기화자 전부(선언 순서) → 그다음 블록 로컬 전부(선언 순서)**, 블록이 모듈 선언보다 앞/뒤인지·string 인지·`$blk$` 스코프를 받았는지와 무관.
+
+vita 는 앞쪽 절반이 거꾸로였다. `hoist_block_local_nets` 가 `collect_var_init_drivers` **보다 먼저** 돌기 때문에 `pending_var_inits` 로 직행한 블록 로컬이 모든 모듈 초기화자를 앞질렀다. r19 가 그걸 **string 사례로만** 보고 string 만 끝으로 미뤄 고쳤고 — 모듈 관계는 고쳤지만 블록 안 관계를 깼다(=S4). HEAD 와 1fe06e7 에서 **똑같이** 조용히 틀린 형태 3개: 모듈-vs-블록로컬 · 한 블록 안 string-vs-비string · 스코프-vs-플랫 인터리브.
+
+리스트 3개(`pending_block_local_string_inits`·`pending_scoped_bl_strings`·`pending_blk_inits`)를 **하나**로 합쳤다 — 키는 선언이 사는 전체 prefix, 값에 **선언 오프셋**. 각 flush 는 자기 키 + 직속 `$blk$` 자식을 claim 하고 오프셋 정렬 후 **연속 같은-prefix run** 을 방출한다(t0 `initial` 은 ProcId 순 실행이라 run 을 순서대로 방출하면 초기화자가 순서대로 실행된다). **선행 run 은 새 프로세스를 만들지 않고 sweep 의 initial 에 합류** — 스코프 블록 로컬이 없는 모든 모듈이 그 경우라 IR 불변(골든 무이동). `pending_block_local_string_inits` 는 이미 **writer 가 하나도 없는 죽은 필드**였다. 초기화자가 하나라도 미방출로 남으면 성공 경로에서 **loud** 로 실패한다 — 누락은 구조상 안 보이는 결함이라서.
 
 #### 4.5.253 §4.5.251 적대 리뷰 — 하강 4건 수정 (2026-07-28, format 25 불변) ✅
 
