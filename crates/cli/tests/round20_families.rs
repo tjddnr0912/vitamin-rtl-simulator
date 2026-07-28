@@ -542,15 +542,20 @@ fn a_hoisted_sformatf_reevaluates_each_iteration() {
     }
 }
 
-/// The one placement the hoist deliberately does NOT reach: a FRAME FUNCTION body.
-/// Its temp would be a module net, and the frame-function executor cannot write one —
-/// measured, not assumed: exempting the scratch net in the subset validator makes the
-/// engine panic `frame lvalue net is routed`, and lowering `$sformatf` directly as an
-/// expression there renders the wrong bytes (`+<` for `1a2b3c`) at exit 0. So the hoist
-/// is suppressed while a frame function body is lowered and the honest loud stays.
-/// A frame TASK body takes a different executor path and IS covered.
+/// §4.5.252: a frame FUNCTION body renders `$sformatf` now — the shape the round-20
+/// report's `s = {s, $sformatf("%02x", b[i])}` sites take when they live in a
+/// string-returning helper.
+///
+/// It does NOT get there by hoisting: the temp would be a module net, and the
+/// frame-function executor cannot write one (exempting it in the subset validator makes
+/// the engine panic `frame lvalue net is routed`). It lowers as a plain expression node,
+/// which is safe HERE and only here — the direct rhs of a string assign and a string
+/// `return` are rendered by `format_args_str`, which honors the format string, while the
+/// generic `eval` arm cannot see one and would produce the wrong bytes. Every position
+/// that goes through `eval` therefore keeps its loud; see `round20_review_fixes.rs`.
 #[test]
-fn a_frame_function_body_keeps_the_sformatf_loud() {
+fn a_frame_function_body_renders_sformatf() {
+    // The report's accumulator, in a string-returning function. iverilog: 1a2b3c.
     let (o, ok) = run("module t;\n\
            function automatic string hx (input byte b []);\n\
              string s = \"\";\n\
@@ -560,14 +565,19 @@ fn a_frame_function_body_keeps_the_sformatf_loud() {
            byte m [] = '{8'h1a, 8'h2b, 8'h3c};\n\
            initial begin $display(\"R=%s\", hx(m)); $finish; end\n\
          endmodule\n");
-    assert!(!ok, "must stay loud, got:\n{o}");
-    assert!(
-        o.contains("$sformatf is supported only as the direct rhs"),
-        "and with the ACCURATE reason, not a frame-subset rename:\n{o}"
-    );
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("R=1a2b3c"), "iverilog 1a2b3c:\n{o}");
 
-    // A frame TASK body renders fine — the suppression must not be broader than the
-    // executor limit that motivates it.
+    // Returned directly, with a literal first part — that spelling took the PACKED
+    // concat path until `$sformatf` was made string-domain (§6.16). iverilog: x7.
+    let (o, ok) = run("module t;\n\
+           function automatic string f (); return {\"x\", $sformatf(\"%0d\", 7)}; endfunction\n\
+           initial begin $display(\"R=%s\", f()); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("R=x7"), "iverilog x7:\n{o}");
+
+    // A frame TASK body was already covered by the hoist and must stay so.
     let (o, ok) = run("module t;\n\
            task automatic outer (input int n);\n\
              string s; s = {\"a\", $sformatf(\"%0d\", n)}; $display(\"T=%s\", s);\n\

@@ -512,6 +512,13 @@ impl Elaborator<'_> {
                         "substr" | "toupper" | "tolower"
                     )
             }
+            // §6.16: `$sformatf(...)` RETURNS a string, so it is a string-domain operand
+            // — a concat containing one must take the string path, and a comparison with
+            // one must compare lexicographically. `ir_expr_is_string` already says so at
+            // the IR level; the AST classifier did not, so `{"x", $sformatf(…)}` (no OTHER
+            // string part) fell to the PACKED concat and rendered the wrong bytes wherever
+            // the statement-level hoist could not rewrite it first.
+            ast::ExprKind::SysCall { name, .. } => name.name == "$sformatf",
             // r19: a string-ARRAY ELEMENT (`sa[i]`) is itself a string-domain value.
             // Without this arm an element fell through to the PACKED lowering in every
             // context that gates on this classifier — concatenation, replication and the
@@ -795,7 +802,13 @@ impl Elaborator<'_> {
             })
             .collect();
         let part_exprs: Vec<&ast::Expr> = hoisted.iter().collect();
+        // §4.5.252: this is the DIRECT rhs of a string blocking assign, whose value is
+        // rendered by `format_args_str` — so a `$sformatf` part the hoist declined
+        // (inside a frame FUNCTION body, where the temp would have to be a module net)
+        // may lower as a plain expression node here instead of staying loud.
+        let saved_ok = std::mem::replace(&mut self.sformatf_expr_ok, true);
         let rhs_id = self.lower_string_concat_parts(&part_exprs);
+        self.sformatf_expr_ok = saved_ok;
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true);
         let sid = self.push_stmt(ir::Stmt::BlockingAssign {

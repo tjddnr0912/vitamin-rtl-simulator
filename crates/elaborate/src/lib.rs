@@ -489,6 +489,11 @@ struct Elaborator<'s> {
     /// hoist is suppressed there — its temp is a module net, and the frame-function
     /// executor cannot write one (measured: the engine panics).
     frame_fn_lowering: bool,
+    /// §4.5.252: true while lowering an expression that is GUARANTEED to be rendered by
+    /// the format-aware evaluator (`format_args_str`) rather than the degenerate `eval`
+    /// arm — the direct rhs of a string blocking assign, and a string `return`. Only
+    /// there may a `$sformatf` lower as a plain expression node.
+    sformatf_expr_ok: bool,
     // N6: FQ name of a FIXED `string` ARRAY (`string files[0:1]`) → (lo, hi, element
     // net ids in index order). A string is heap-backed with no packed width, so a fixed
     // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)

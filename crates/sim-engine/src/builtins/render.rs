@@ -231,6 +231,31 @@ pub(crate) fn render_template(
                     {
                         (arg_string(st, Some(eid)), None)
                     }
+                    // A NESTED `$sformatf` argument (`$sformatf("<%s>", $sformatf(…))`,
+                    // and every string CONCAT, which elaborate desugars to exactly that
+                    // shape). It must be rendered through THIS formatter: the generic
+                    // `eval_sysfunc` arm cannot see a format string and would dump the raw
+                    // args, so the inner text came back blank — `<%s>` of `$sformatf("%0d",
+                    // 7)` printed `<   >`. That blank is why the `$sformatf` hoist exists at
+                    // all, and why it could not reach a frame FUNCTION body, whose temp
+                    // would have to be a module net.
+                    Some(eid)
+                        if matches!(
+                            st.ir.exprs.get(eid as usize),
+                            Some(sim_ir::Expr::SysFunc {
+                                which: sim_ir::SysFuncId::Sformatf,
+                                ..
+                            })
+                        ) =>
+                    {
+                        let Some(sim_ir::Expr::SysFunc { args: sa, .. }) =
+                            st.ir.exprs.get(eid as usize)
+                        else {
+                            unreachable!("matched just above")
+                        };
+                        let (f, rest) = (sa.first().copied(), sa.get(1..).unwrap_or(&[]).to_vec());
+                        (crate::builtins::format_args_str(st, f, &rest, None), None)
+                    }
                     Some(eid) => {
                         let v = st.eval_expr(eid);
                         if v.is_str {

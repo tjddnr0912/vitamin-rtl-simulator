@@ -965,6 +965,32 @@ impl Elaborator<'_> {
                 // engine — direct-rhs only (the dominant TB pattern is
                 // `msg = $sformatf(...); $display("%s", msg);`).
                 if name.name == "$sformatf" {
+                    // §4.5.252: normally loud — a `$sformatf` node reaching the generic
+                    // `eval` is rendered by a DEGENERATE arm that cannot see its format
+                    // string (`eval/sysfunc.rs`), so it would silently produce the wrong
+                    // bytes. `sformatf_expr_ok` is set only where the node is guaranteed to
+                    // reach a FORMAT-AWARE evaluator instead: the direct rhs of a string
+                    // blocking assign and a string `return`, both of which render through
+                    // `format_args_str` (`k_sformatf` / `frame_rhs_value`). Measured, one
+                    // shape at a time — a ternary arm and a task argument both go through
+                    // `eval` and were blank / garbage, so neither sets the flag.
+                    if self.sformatf_expr_ok {
+                        if !matches!(
+                            args.first().map(|a| &a.kind),
+                            Some(ast::ExprKind::StrLit { .. })
+                        ) {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "$sformatf needs a string-literal format (v7)",
+                            );
+                            return self.placeholder_expr();
+                        }
+                        let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+                        return self.push_expr(ir::Expr::SysFunc {
+                            which: ir::SysFuncId::Sformatf,
+                            args: arg_ids,
+                        });
+                    }
                     self.error(
                         MsgCode::ElabUnsupported,
                         "$sformatf is supported only as the direct rhs of a \

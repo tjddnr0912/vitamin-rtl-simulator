@@ -118,16 +118,30 @@ fn a_short_circuited_operand_is_not_hoisted_out_of() {
     assert!(o.contains("R=1"), "`==` still hoists:\n{o}");
 }
 
-/// A replication evaluates its value `count` times — ZERO for `{0{…}}`. Not "exactly
-/// as many times as before" for any count but one, so it is not descended into.
+/// A replication evaluates its value `count` times — ZERO for `{0{…}}`. The HOIST
+/// cannot express that (it renders once and repeats a temp), so it does not descend
+/// into a replication value.
+///
+/// §4.5.252 makes the direct rhs of a string assign lower `$sformatf` as a plain node
+/// instead, where elaborate has already flattened the replication into `count` copies —
+/// so each copy renders on its own and the count is right by construction. Pinned
+/// against live iverilog 13.0 (`a1a1`); iverilog rejects the zero-count spelling, where
+/// IEEE §11.4.12.1 gives the empty string.
 #[test]
-fn a_replication_value_is_not_hoisted_out_of() {
-    assert!(loud(
-        "module t;\n\
+fn a_replication_of_a_render_repeats_the_render() {
+    let (o, ok) = run("module t;\n\
            string u;\n\
-           initial begin u = {2{$sformatf(\"a\")}}; $display(\"%s\", u); $finish; end\n\
-         endmodule\n"
-    ));
+           initial begin u = {2{$sformatf(\"a%0d\", 1)}}; $display(\"R=%s\", u); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("R=a1a1"), "iverilog a1a1:\n{o}");
+
+    let (o, ok) = run("module t;\n\
+           string u;\n\
+           initial begin u = \"z\"; u = {0{$sformatf(\"a\")}}; $display(\"R=[%s]\", u); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("R=[]"), "zero count is the empty string:\n{o}");
 }
 
 // ── the hoist must not change the ORDER of sibling evaluations ───────────────

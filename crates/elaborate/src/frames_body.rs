@@ -27,11 +27,17 @@ impl Elaborator<'_> {
                 });
             }
         }
-        if ctx_w == 0 {
+        // §4.5.252: a string `return` renders through `format_args_str` too, so a
+        // `$sformatf` inside the returned expression (`return {s, $sformatf(…)}`) may
+        // lower as a plain node rather than staying loud.
+        let saved_ok = std::mem::replace(&mut self.sformatf_expr_ok, true);
+        let id = if ctx_w == 0 {
             self.lower_expr(val)
         } else {
             self.lower_ctx_or_plain(val, ctx_w)
-        }
+        };
+        self.sformatf_expr_ok = saved_ok;
+        id
     }
 
     /// Reserve + lower every frame function of the CURRENT module instance. Runs
