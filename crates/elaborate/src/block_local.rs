@@ -259,26 +259,32 @@ impl Elaborator<'_> {
             return;
         }
         let per_entry = &per_entry;
-        // Conservative: `expr_no_ref` returns "may reference" for any form it has not
-        // fully vetted, so an exotic initializer errs toward the loud rather than toward
-        // the two wrong values above.
-        let hits: Vec<(String, String)> = decls
+        // POLARITY (review F4): this is a REJECT gate, so it uses the POSITIVE walker.
+        // `expr_no_ref` answers "may reference" for anything it has not vetted, which is
+        // right for an accept gate and turns every unvetted initializer into a rejection
+        // here — `int idx = pkg::BASE;` beside any `automatic` sibling was rejected, with
+        // a message naming a variable it never mentions.
+        // Carry each hit's own DECL span so the diagnostic points at the declaration
+        // rather than at nothing (review F9 — this gate runs at block level, before the
+        // per-decl `cur_span` anchor in the hoist loop).
+        let hits: Vec<(String, String, ast::Span)> = decls
             .iter()
             .filter(|d| d.lifetime != Some(true))
-            .flat_map(|d| d.names.iter())
-            .filter(|n| !per_entry.contains(&n.name.name))
-            .filter_map(|n| {
+            .flat_map(|d| d.names.iter().map(move |n| (n, d.span)))
+            .filter(|(n, _)| !per_entry.contains(&n.name.name))
+            .filter_map(|(n, sp)| {
                 let init = n.init.as_ref()?;
-                let hit = per_entry.iter().find(|pn| !expr_no_ref(init, pn))?;
-                Some((n.name.name.clone(), hit.clone()))
+                let hit = per_entry.iter().find(|pn| expr_definitely_refs(init, pn))?;
+                Some((n.name.name.clone(), hit.clone(), sp))
             })
             .collect();
-        for (stat, auto) in hits {
+        for (stat, auto, sp) in hits {
+            let saved = self.cur_span.replace(sp);
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
                     "the STATIC block-local `{stat}`'s initializer reads the `automatic` \
-                     block-local `{auto}` declared in the same block; a static initializer \
+                     block-local `{auto}` in scope here; a static initializer \
                      runs once at time 0 while an `automatic` is initialized on each block \
                      entry, so `{auto}` has no value yet there (and a write back into it \
                      through an output/inout formal is overwritten by the entry \
@@ -286,6 +292,7 @@ impl Elaborator<'_> {
                      initialization into the block body"
                 ),
             );
+            self.cur_span = saved;
         }
     }
 
@@ -323,12 +330,16 @@ impl Elaborator<'_> {
         // no-initializer condition — a decl scoped here but not gathered
         // there (or the reverse) breaks the invariant that EVERY colliding
         // occurrence of a name is scoped.
-        let dyn_storage = d.names.iter().any(|n| {
-            n.init.is_none()
-                && n.unpacked.iter().any(|dim| {
+        // Review F1: the no-initializer condition is a property of the whole DECL, not
+        // of one name — `$blk$` scoping is applied per-DECL, so one qualifying name
+        // drags an init-bearing sibling onto the scoped arm and that sibling's
+        // initializer is silently dropped.
+        let dyn_storage = d.names.iter().all(|n| n.init.is_none())
+            && d.names.iter().any(|n| {
+                n.unpacked.iter().any(|dim| {
                     matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
                 })
-        });
+            });
         if d.lifetime == Some(true) || dyn_storage {
             if let Some(seg) = self.block_local_scope_seg(span, d) {
                 for n in &d.names {
@@ -484,21 +495,25 @@ impl Elaborator<'_> {
                     .first()
                     .map(|n| n.name.name.as_str())
                     .unwrap_or("<unnamed>");
-                let lifetime = if d.lifetime == Some(true) {
-                    "this one is `automatic`, so the OTHER declaration is not"
-                } else {
-                    "this one is not `automatic`"
+                let has_init = d.names.iter().any(|n| n.init.is_some());
+                let lifetime = match (d.lifetime == Some(true), has_init) {
+                    (true, _) => "this one is `automatic`, so the OTHER is not",
+                    (false, true) => {
+                        "this one is static AND has an initializer, which the scoped                          path would drop"
+                    }
+                    (false, false) => "this one is static and the other is not eligible",
                 };
                 self.error(
                     MsgCode::ElabUnsupported,
                     &format!(
                         "the dynamic-storage local `{nm}` (queue / dynamic array / \
-                                     associative array / string) is declared under the same name \
-                                     in another block; v1 gives two same-named block-locals \
-                                     distinct storage only when BOTH are `automatic` and neither \
-                                     block encloses the other — {lifetime}, so both would share \
-                                     one flattened handle and one heap. Declare both \
-                                     `automatic`, or rename one"
+                         associative array / string) is declared under the same name in \
+                         another block, and this pair cannot be given distinct storage: \
+                         v1 does that for two `automatic` locals, or for two dynamic \
+                         locals with NO initializer, and only when neither block encloses \
+                         the other — {lifetime}. As written both would share one flattened \
+                         handle and one heap; declare them `automatic`, drop the \
+                         initializer, or rename one"
                     ),
                 );
             }

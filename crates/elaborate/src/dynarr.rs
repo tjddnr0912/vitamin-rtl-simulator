@@ -350,8 +350,13 @@ impl Elaborator<'_> {
         //
         // A NON-empty pattern needs its elements written at the call site and is hoisted
         // to a temp by `hoist_dyn_pattern_actuals` before lowering ever reaches here.
-        if matches!(&a.kind,
-            ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts } if parts.is_empty())
+        // INPUT only (review F3). §13.5.2 requires an `output`/`inout` actual to be an
+        // lvalue, which `'{}` is not — accepting it there silently discarded the
+        // copy-out, and because one temp net is minted per CALL SITE, a call in a loop
+        // then observed the PREVIOUS activation's write (`size=0,1,2`).
+        if matches!(p.dir, ast::PortDir::Input)
+            && matches!(&a.kind,
+                ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts } if parts.is_empty())
         {
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
             let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
@@ -519,7 +524,7 @@ impl Elaborator<'_> {
                 if p.segments.len() != 1 {
                     return false;
                 }
-                let Some((_, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
+                let Some((net_of, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
                     self.dyn_handle(&p.segments[0].name)
                 else {
                     return false; // not a dyn handle → the plain (packed/array) path
@@ -535,9 +540,53 @@ impl Elaborator<'_> {
                 let Some(elems) = dyn_pattern_elems(rhs) else {
                     return false;
                 };
-                let elems: Vec<ast::Expr> = elems.to_vec();
+                let mut elems: Vec<ast::Expr> = elems.to_vec();
                 let id = p.segments[0].clone();
                 if kind == ir::NetKind::Queue {
+                    // Review F7: the expansion CLEARS the queue first (an assignment
+                    // replaces, and push_back appends), so an element that reads the
+                    // TARGET — `q = '{q[0], 9}` / `q = '{q.size(), 9}` — would read the
+                    // emptied queue and come back X / 0. Snapshot every element into a
+                    // scalar temp BEFORE the clear, in source order, and push the temps.
+                    // Only when the pattern actually names the target: an ordinary
+                    // `q = '{1,2}` keeps its byte-identical two-statement expansion.
+                    let target = id.name.clone();
+                    if elems.iter().any(|e| !expr_no_ref(e, &target)) {
+                        let ew = self.handle_elem_type(net_of).map_or(32, |(w, _)| w.max(1));
+                        let mut snap: Vec<ast::Expr> = Vec::with_capacity(elems.len());
+                        for e in &elems {
+                            let t = self.fresh_ia_tmp(ew);
+                            let tid = self
+                                .symbols
+                                .iter()
+                                .find(|(_, &v)| v == t)
+                                .map(|(k, _)| k.rsplit('.').next().unwrap_or(k).to_string())
+                                .unwrap_or_default();
+                            let tname = ast::Ident {
+                                name: tid,
+                                span: e.span,
+                            };
+                            let cap = ast::Stmt::Blocking {
+                                lhs: ast::Lvalue::Ident(ast::HierPath {
+                                    segments: vec![tname.clone()],
+                                    span: e.span,
+                                }),
+                                delay: None,
+                                event: None,
+                                rhs: e.clone(),
+                                span: e.span,
+                            };
+                            self.lower_stmt(b, &cap);
+                            snap.push(ast::Expr {
+                                kind: ast::ExprKind::Ident(ast::HierPath {
+                                    segments: vec![tname],
+                                    span: e.span,
+                                }),
+                                span: e.span,
+                            });
+                        }
+                        elems = snap;
+                    }
                     let clear = ast::Stmt::UserTaskCall {
                         name: ast::HierPath {
                             segments: vec![

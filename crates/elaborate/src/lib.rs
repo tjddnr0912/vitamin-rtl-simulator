@@ -481,6 +481,14 @@ struct Elaborator<'s> {
     /// checked against an OUTER block's automatic (see
     /// `deny_static_init_reading_per_entry`). Pushed/popped around each block's stmts.
     per_entry_in_scope: BTreeSet<String>,
+    /// §4.5.250: the `$sfmt_tmp$<n>` scratch nets the `$sformatf` hoist creates. They
+    /// are written and read back within ONE statement sequence with no timing control
+    /// between, so no other process can observe or clobber one — which is why the
+    /// frame-call subset validator may treat a whole write to one as frame-local.
+    /// §4.5.250: true while a FRAME FUNCTION body is being lowered. The `$sformatf`
+    /// hoist is suppressed there — its temp is a module net, and the frame-function
+    /// executor cannot write one (measured: the engine panics).
+    frame_fn_lowering: bool,
     // N6: FQ name of a FIXED `string` ARRAY (`string files[0:1]`) → (lo, hi, element
     // net ids in index order). A string is heap-backed with no packed width, so a fixed
     // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)

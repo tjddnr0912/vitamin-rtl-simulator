@@ -407,6 +407,89 @@ pub(crate) fn expr_no_ref(e: &ast::Expr, name: &str) -> bool {
     }
 }
 
+/// The POSITIVE twin of [`expr_no_ref`]: "expression `e` DEFINITELY references
+/// `name`". Same enumerated forms, opposite default — an unvetted node answers
+/// `false` ("no definite reference") instead of `true` ("may reference").
+///
+/// The two exist because polarity is a property of the GATE, not of the walker.
+/// `expr_no_ref` feeds ACCEPT gates, where "unknown ⇒ may reference" is the safe
+/// answer. A REJECT gate needs the opposite: with `expr_no_ref`'s polarity every
+/// unvetted initializer becomes a rejection, and §4.5.250's review found exactly
+/// that — `int idx = pkg::BASE;` beside any `automatic` sibling was rejected with a
+/// message naming a variable it never mentions.
+///
+/// Under-detection here means a REJECT gate can miss a hazard and fall back to the
+/// behavior it would have had anyway; over-detection would break working designs.
+pub(crate) fn expr_definitely_refs(e: &ast::Expr, name: &str) -> bool {
+    use ast::ExprKind as K;
+    match &e.kind {
+        K::Ident(p) => p.segments.first().is_some_and(|s| s.name == name),
+        K::Unary { operand, .. } => expr_definitely_refs(operand, name),
+        K::Binary { lhs, rhs, .. } => {
+            expr_definitely_refs(lhs, name) || expr_definitely_refs(rhs, name)
+        }
+        K::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            expr_definitely_refs(cond, name)
+                || expr_definitely_refs(then_e, name)
+                || expr_definitely_refs(else_e, name)
+        }
+        K::BitSelect { base, index } => {
+            expr_definitely_refs(base, name) || expr_definitely_refs(index, name)
+        }
+        K::PartSelect { base, msb, lsb } => {
+            expr_definitely_refs(base, name)
+                || expr_definitely_refs(msb, name)
+                || expr_definitely_refs(lsb, name)
+        }
+        K::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => {
+            expr_definitely_refs(base, name)
+                || expr_definitely_refs(offset, name)
+                || expr_definitely_refs(width, name)
+        }
+        K::Concat { parts } | K::AssignPattern(parts) => {
+            parts.iter().any(|x| expr_definitely_refs(x, name))
+        }
+        K::Replicate { count, value } => {
+            expr_definitely_refs(count, name) || value.iter().any(|x| expr_definitely_refs(x, name))
+        }
+        K::Call { name: cn, args } => {
+            cn.segments.first().is_some_and(|s| s.name == name)
+                || args.iter().any(|x| expr_definitely_refs(x, name))
+        }
+        K::SysCall { args, .. } => args.iter().any(|x| expr_definitely_refs(x, name)),
+        K::Paren { inner } => expr_definitely_refs(inner, name),
+        K::MinTypMax { min, typ, max } => {
+            expr_definitely_refs(min, name)
+                || expr_definitely_refs(typ, name)
+                || expr_definitely_refs(max, name)
+        }
+        K::Cast { target, expr } => {
+            expr_definitely_refs(expr, name)
+                || match target {
+                    ast::CastTarget::Size(s) => expr_definitely_refs(s, name),
+                    _ => false,
+                }
+        }
+        K::New { size, src } => {
+            expr_definitely_refs(size, name)
+                || src.as_ref().is_some_and(|s| expr_definitely_refs(s, name))
+        }
+        K::NamedArg { value, .. } => value
+            .as_ref()
+            .is_some_and(|v| expr_definitely_refs(v, name)),
+        _ => false,
+    }
+}
+
 /// CONSERVATIVE lvalue counterpart of [`expr_no_ref`] — the lvalue (write target
 /// and any select index) certainly does NOT reference `name`. Uses `expr_no_ref`
 /// for index sub-exprs (so a read hidden in an index is not a blind spot).
@@ -458,18 +541,22 @@ pub(crate) fn stmt_no_ref(st: &ast::Stmt, name: &str) -> bool {
             delay.is_none() && event.is_none() && lvalue_no_ref(lhs, name) && expr_no_ref(rhs, name)
         }
         S::SysTaskCall { args, .. } => args.iter().all(|a| expr_no_ref(a, name)),
-        // A user task enable / void method call (`q.delete();`, `show(x);`). It can
-        // only touch `name` through its callee HEAD (a method receiver — `name.delete()`)
-        // or an actual, so a call that references neither cannot read OR write it: a
-        // task can write a caller variable only through an output actual naming it.
-        // (A hierarchical write from inside the body — `t.name = …` — would be a WRITE
-        // this reports as absent, which only ever keeps the gate louder, never looser.)
+        // A CONTAINER-METHOD statement (`q.delete();`, `s.putc(i,c);`) — a 2-segment
+        // enable whose head is the receiver. It touches only that receiver and its
+        // arguments, so one naming neither cannot read or write `name`.
         //
         // Leaving this unvetted was a misdiagnosis engine: one container-method
         // statement anywhere in an `if` arm (`if (c) begin d = 0; q.delete(); end`)
         // aborted the whole definite-assignment walk, and the error named `d` — a
         // variable assigned two tokens earlier — instead of the queue.
-        S::UserTaskCall { name: cn, args, .. } => {
+        //
+        // Deliberately NOT extended to a plain `show(x);` user task enable (review F5):
+        // v1 publishes block-locals as MODULE nets, so a callee body can name the
+        // flattened bare name and read it with neither the head nor an argument
+        // mentioning it — "a task writes only through an output actual" is an IEEE
+        // scoping argument, and the flatten is precisely where IEEE scoping does not
+        // hold. A single-segment enable stays unvetted, exactly as before.
+        S::UserTaskCall { name: cn, args, .. } if cn.segments.len() == 2 => {
             cn.segments.first().is_none_or(|s| s.name != name)
                 && args.iter().all(|a| expr_no_ref(a, name))
         }

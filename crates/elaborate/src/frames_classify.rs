@@ -864,6 +864,12 @@ impl Elaborator<'_> {
                             // (`c.word`), or a select of an UNPACKED-array local (a 1-elem
                             // net — `frame_array_local` — where `mem[k]` mis-lowers to a
                             // bit-select), stays rejected.
+                            // MEASURED, not assumed: exempting the `$sformatf` hoist's
+                            // `$sfmt_tmp$` scratch nets here (they are written and read
+                            // back within one statement sequence, so they LOOK frame-local)
+                            // makes the engine panic `frame lvalue net is routed` — the
+                            // frame-function executor genuinely cannot write a module net.
+                            // The gate is right; the hoist is what must not run there.
                             if whole {
                                 if !in_frame {
                                     why = Some("an assignment to a net outside the function");

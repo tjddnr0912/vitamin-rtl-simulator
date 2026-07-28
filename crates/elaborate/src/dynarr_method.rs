@@ -214,7 +214,10 @@ impl Elaborator<'_> {
                 let (ew, esign) = self.handle_elem_type(net).unwrap_or((32, false));
                 let sink = self.nets.len() as u32;
                 self.add_net(
-                    &format!("__popsink_{sink}"),
+                    // `$`-fenced like every other elaborator temp: a legal SV identifier
+                    // here both DUMPED into the VCD and collided with a user declaration
+                    // of the same name (review F6).
+                    &format!("$popsink${sink}"),
                     ir::NetVar {
                         kind: ir::NetKind::Reg,
                         width: ew,

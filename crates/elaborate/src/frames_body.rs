@@ -111,6 +111,14 @@ impl Elaborator<'_> {
     /// process-local CFG (reusing `lower_stmt`), append it with every `Goto`/
     /// `Branch` target rebased by `+base`, set `FuncDef.entry`, then validate.
     pub(crate) fn lower_frame_func_body(&mut self, name: &str, func: &ast::FunctionDef, fid: u32) {
+        // §4.5.250: a FRAME FUNCTION body is validated by `classify_frame_body`, which
+        // rejects a whole write to any net outside the frame — and the engine backs that
+        // up (exempting a scratch net there panics `frame lvalue net is routed`). So the
+        // `$sformatf` hoist, whose temp IS a module net, must not run here: it would
+        // replace one honest loud with a different, more confusing one. Frame TASK bodies
+        // take a different executor path and are unaffected.
+        let saved_ffl = self.frame_fn_lowering;
+        self.frame_fn_lowering = true;
         let scope_seg = format!("$func${name}");
         // return-kw: a frame function's `return [expr]` assigns the func-named return
         // var (base_net + return_slot) and jumps to a single exit block; the body also
@@ -206,6 +214,7 @@ impl Elaborator<'_> {
         let m = self.func_metas[fid as usize];
         let entry_bb = self.funcs[fid as usize].entry;
         self.validate_frame_body(name, entry_bb, m.base_net, m.locals_len, false);
+        self.frame_fn_lowering = saved_ffl;
     }
 
     /// B2: lower a frame TASK body into the global `func_blocks` arena — like

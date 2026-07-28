@@ -541,3 +541,39 @@ fn a_hoisted_sformatf_reevaluates_each_iteration() {
         assert!(o.contains(want), "expected `{want}`; got:\n{o}");
     }
 }
+
+/// The one placement the hoist deliberately does NOT reach: a FRAME FUNCTION body.
+/// Its temp would be a module net, and the frame-function executor cannot write one —
+/// measured, not assumed: exempting the scratch net in the subset validator makes the
+/// engine panic `frame lvalue net is routed`, and lowering `$sformatf` directly as an
+/// expression there renders the wrong bytes (`+<` for `1a2b3c`) at exit 0. So the hoist
+/// is suppressed while a frame function body is lowered and the honest loud stays.
+/// A frame TASK body takes a different executor path and IS covered.
+#[test]
+fn a_frame_function_body_keeps_the_sformatf_loud() {
+    let (o, ok) = run("module t;\n\
+           function automatic string hx (input byte b []);\n\
+             string s = \"\";\n\
+             foreach (b[i]) s = {s, $sformatf(\"%02x\", b[i])};\n\
+             return s;\n\
+           endfunction\n\
+           byte m [] = '{8'h1a, 8'h2b, 8'h3c};\n\
+           initial begin $display(\"R=%s\", hx(m)); $finish; end\n\
+         endmodule\n");
+    assert!(!ok, "must stay loud, got:\n{o}");
+    assert!(
+        o.contains("$sformatf is supported only as the direct rhs"),
+        "and with the ACCURATE reason, not a frame-subset rename:\n{o}"
+    );
+
+    // A frame TASK body renders fine — the suppression must not be broader than the
+    // executor limit that motivates it.
+    let (o, ok) = run("module t;\n\
+           task automatic outer (input int n);\n\
+             string s; s = {\"a\", $sformatf(\"%0d\", n)}; $display(\"T=%s\", s);\n\
+           endtask\n\
+           initial begin outer(3); $finish; end\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(o.contains("T=a3"), "frame task body:\n{o}");
+}

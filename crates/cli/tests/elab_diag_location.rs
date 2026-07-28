@@ -140,7 +140,7 @@ fn the_same_name_dynamic_local_message_names_the_local_and_the_rule() {
     assert!(out.contains("error[VITA-E3009]"), "expected loud:\n{out}");
     assert!(out.contains("`m`"), "must name the local:\n{out}");
     assert!(
-        out.contains("BOTH are `automatic`"),
+        out.contains("v1 does that for two `automatic` locals"),
         "must state the rule that would make it work:\n{out}"
     );
 }

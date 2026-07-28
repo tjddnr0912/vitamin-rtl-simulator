@@ -389,13 +389,42 @@ impl Elaborator<'_> {
                 // len($sformatf(…)))`) is not an argument itself, so the format-string
                 // gating below does not apply to it — hoist those first, leaving every
                 // top-level `$sformatf` arg for the gated logic that follows.
-                let arg_hoisted: Vec<ast::Expr> = args
-                    .iter()
-                    .map(|a| {
-                        self.hoist_sformatf_children(b, a)
-                            .unwrap_or_else(|| a.clone())
-                    })
-                    .collect();
+                //
+                // NOT for the DEFERRED print tasks (review F1/F2). `$monitor` re-displays
+                // whenever an argument changes (§21.2.3) and `$strobe` renders at the END
+                // of the time step (§21.2.2); a hoisted render happens ONCE, at the
+                // statement, so `$monitor` watched a frozen temp and printed only at t=0,
+                // and `$strobe` reported the value from before the rest of the time step.
+                // The top-level hoist below already excluded them for the same reason.
+                let deferred_print = matches!(
+                    name.name.as_str(),
+                    "$monitor"
+                        | "$monitorb"
+                        | "$monitoro"
+                        | "$monitorh"
+                        | "$fmonitor"
+                        | "$fmonitorb"
+                        | "$fmonitoro"
+                        | "$fmonitorh"
+                        | "$strobe"
+                        | "$strobeb"
+                        | "$strobeo"
+                        | "$strobeh"
+                        | "$fstrobe"
+                        | "$fstrobeb"
+                        | "$fstrobeo"
+                        | "$fstrobeh"
+                );
+                let arg_hoisted: Vec<ast::Expr> = if deferred_print {
+                    args.to_vec()
+                } else {
+                    args.iter()
+                        .map(|a| {
+                            self.hoist_sformatf_children(b, a)
+                                .unwrap_or_else(|| a.clone())
+                        })
+                        .collect()
+                };
                 let args: &[ast::Expr] = &arg_hoisted;
                 let fmt_idx = usize::from(
                     name.name.starts_with("$f")

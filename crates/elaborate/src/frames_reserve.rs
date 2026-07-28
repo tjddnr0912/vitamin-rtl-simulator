@@ -20,6 +20,13 @@ impl Elaborator<'_> {
                 decls, stmts, span, ..
             } => {
                 for d in decls {
+                    // §4.5.250 (review F1): the no-initializer exclusion below must be a
+                    // property of the whole DECLARATION, not of one name. `$blk$` scoping
+                    // is applied per-DECL (see `block_local_scope_seg`'s deliberate ANY
+                    // rule), so in `byte m[], n = g;` a qualifying `m` drags its
+                    // init-bearing sibling `n` onto the scoped arm — which returns before
+                    // the decl-init collector, and `n` comes up 0 at exit 0.
+                    let decl_has_init = d.names.iter().any(|n| n.init.is_some());
                     for n in &d.names {
                         // `automatic` earns a `$blk$` scope because the per-entry
                         // storage demands it. §4.5.249 adds one more kind: a
@@ -45,7 +52,7 @@ impl Elaborator<'_> {
                         // first cut of this change printed `size()==0`. An `automatic`
                         // decl is unaffected — its init rides `emit_per_entry_block_inits`,
                         // which resolves the name inside the scope wrap.
-                        let dyn_storage = n.init.is_none()
+                        let dyn_storage = !decl_has_init
                             && n.unpacked.iter().any(|dim| {
                                 matches!(
                                     dim,
