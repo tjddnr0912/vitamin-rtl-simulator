@@ -274,7 +274,9 @@ impl Elaborator<'_> {
                     }
                 };
                 let body = if taken { then_b } else { else_b };
-                self.elaborate_gen_scoped(label, body, phase, depth, map);
+                // An `if` BODY is a scope even unlabeled — measured: its content
+                // initializes before the enclosing module's own variables.
+                self.elaborate_gen_scoped(label, body, phase, depth, map, true);
             }
 
             // ── generate-case: const-eval scrutinee, match ONE item ──
@@ -315,7 +317,13 @@ impl Elaborator<'_> {
 
             // ── named/unnamed begin…end block inside generate ────────
             ast::GenItem::Block { label, items, .. } => {
-                self.elaborate_gen_scoped(label, items, phase, depth, map);
+                // §4.5.264: a bare `begin…end` in a gen-item list is the ANACHRONISTIC
+                // SURROUND (iverilog warns and treats it as syntax) — `parse_gen_branch`
+                // unwraps an `if`/`for`/`case` body's `begin…end` and hoists its label, so
+                // a `GenItem::Block` only ever arrives here as a free-standing item. Like
+                // the region one level up, an UNLABELED one is transparent; a labeled one
+                // still mints its scope.
+                self.elaborate_gen_scoped(label, items, phase, depth, map, false);
             }
 
             // ── a plain module-item directly inside generate ─────────
@@ -326,6 +334,11 @@ impl Elaborator<'_> {
     /// Elaborate a gen-block body under an OPTIONAL label scope. A `Some(label)`
     /// adds a `label.` prefix segment; an unlabeled body contributes directly to
     /// the current scope (the common LRM behavior when no `begin:label` is given).
+    ///
+    /// `unlabeled_is_scope` says what an UNLABELED body is for INITIALIZATION ORDER: an
+    /// `if`/`for`/`case` body is a generate scope (its content initializes before the
+    /// enclosing module's own), while a free-standing `begin…end` in a gen-item list is
+    /// only syntax. A labeled body is a scope either way.
     pub(crate) fn elaborate_gen_scoped(
         &mut self,
         label: &Option<ast::Ident>,
@@ -333,6 +346,7 @@ impl Elaborator<'_> {
         phase: GenPhase,
         depth: u32,
         map: &ModuleMap<'_>,
+        unlabeled_is_scope: bool,
     ) {
         match label {
             Some(l) => {
@@ -346,7 +360,9 @@ impl Elaborator<'_> {
                     me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
                 });
             }
-            None => self.elaborate_generate_scoped(items, phase, depth + 1, map, true),
+            None => {
+                self.elaborate_generate_scoped(items, phase, depth + 1, map, unlabeled_is_scope)
+            }
         }
     }
 

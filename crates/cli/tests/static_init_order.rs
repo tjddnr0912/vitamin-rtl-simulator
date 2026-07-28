@@ -963,3 +963,51 @@ fn a_generate_region_is_transparent() {
         "declaration order straight through the region:\n{o}"
     );
 }
+
+/// §4.5.264. One level below the region: a free-standing `begin…end` in a gen-item list
+/// is the ANACHRONISTIC SURROUND (iverilog warns and treats it as syntax), because the
+/// parser unwraps an `if`/`for`/`case` body's `begin…end` and hoists its label — so a
+/// `GenItem::Block` only ever arrives as a free item. Unlabeled, it is transparent;
+/// labeled, it still mints a scope; and an unlabeled `if` BODY is a scope either way.
+/// All three iverilog-measured.
+#[test]
+fn a_bare_begin_in_a_generate_list_is_syntax_but_a_labeled_one_is_a_scope() {
+    let (o, ok) = run("module t;\n\
+           int m0 = $random;\n\
+           generate begin int u = $random; end endgenerate\n\
+           int m1 = $random;\n\
+           initial $display(\"P m0=%0d u=%0d m1=%0d\", m0, u, m1);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P m0={D1} u={D2} m1={D3}")),
+        "unlabeled: declaration order straight through:\n{o}"
+    );
+
+    let (o, ok) = run("module t;\n\
+           int m0 = $random;\n\
+           generate begin : lb int u = $random; end endgenerate\n\
+           int m1 = $random;\n\
+           initial $display(\"P m0=%0d u=%0d m1=%0d\", m0, lb.u, m1);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P m0={D2} u={D1} m1={D3}")),
+        "labeled: a scope, so it initializes first:\n{o}"
+    );
+
+    let (o, ok) = run("module t;\n\
+           int m0 = $random;\n\
+           generate if (1) begin\n\
+             int u = $random;\n\
+             initial $display(\"P u=%0d\", u);\n\
+           end endgenerate\n\
+           int m1 = $random;\n\
+           initial $display(\"P m0=%0d m1=%0d\", m0, m1);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains(&format!("P u={D1}")) && o.contains(&format!("P m0={D2} m1={D3}")),
+        "an unlabeled `if` body is a scope either way:\n{o}"
+    );
+}
