@@ -2,7 +2,7 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-07-28)**: format_version **26** · **4783 tests green** · 3-OS CI green · MsgCode **59**(W3057) · **MSRV 1.85**.
+> - **기준(2026-07-28)**: format_version **26** · **4784 tests green** · 3-OS CI green · MsgCode **59**(W3057) · **MSRV 1.85**.
 > - **최신 완료 7건**: **§4.5.253** §4.5.251 적대 리뷰 하강 4건 · **§4.5.252** `$sformatf` 근인 재배치(degenerate `eval` arm) · **§4.5.251** `$blk$` decl-init 수집(제외 3개 동시 해소) · **§4.5.250** §4.5.248/249 적대 리뷰(2 렌즈)가 잡은 **사다리 하강 6건** 수정 — 평가 이동 5(`$monitor`/`$strobe` 동결 · 단락 우변 · replication · 인자 순서 역전 · self-ref 큐) + **게이트 극성** 1 · **§4.5.249** 외부 round-20 §6(elaborate 진단 `file:line:col` — `diag::SpanResolver`) + §4.11 일부(같은 이름 **동적** 로컬을 lifetime 무관 분리) · **§4.5.248** 외부 round-20 **8 가족**(fork-arm 블록 로컬 🔴 · `automatic string` decl-init · queue `'{…}`/`void'(pop)` · DA 워크 오진 🔴 · dyn-array formal `'{}` actual · 문장 `'{…}` 대입 · task named arg · `new[N]` decl-init · `$sformatf` 위치) · **§4.5.247** §4.5.246 회귀 수정(flatten 블록 로컬이 generate 스코프 shadow). **완료 슬라이스 223건 전체 목록·상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 로 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
