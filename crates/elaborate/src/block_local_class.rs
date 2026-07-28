@@ -7,6 +7,51 @@
 
 use super::*;
 
+/// Every procedural block in a module, INCLUDING the ones inside generate constructs.
+///
+/// §4.5.258: the two classifiers below used to walk `module.body` for `ModuleItem::Proc`
+/// only, so a process inside a `generate` was invisible to them — no block-local of one
+/// could ever earn a `$blk$` scope, and the whole same-name family (queues, dynamic and
+/// associative arrays, strings and string arrays) stayed loud there while the identical
+/// code at module scope worked. Both classifiers are pure functions of the AST and must
+/// see the same set, so they share this walk.
+///
+/// A generate-for body is one AST subtree however many times it unrolls, and each unroll
+/// elaborates under its own prefix, so a name declared once inside the loop body is
+/// declared in ONE block here — which is correct: the copies cannot collide with each
+/// other, only two distinct blocks can.
+pub(crate) fn for_each_proc(items: &[ast::ModuleItem], f: &mut impl FnMut(&ast::ProceduralBlock)) {
+    fn gen_items(items: &[ast::GenItem], f: &mut impl FnMut(&ast::ProceduralBlock)) {
+        for it in items {
+            match it {
+                ast::GenItem::For { body, .. } | ast::GenItem::Block { items: body, .. } => {
+                    gen_items(body, f)
+                }
+                ast::GenItem::If { then_b, else_b, .. } => {
+                    gen_items(then_b, f);
+                    gen_items(else_b, f);
+                }
+                ast::GenItem::Case { items, .. } => {
+                    for ci in items {
+                        match ci {
+                            ast::GenCaseItem::Match { body, .. }
+                            | ast::GenCaseItem::Default { body, .. } => gen_items(body, f),
+                        }
+                    }
+                }
+                ast::GenItem::Item(mi) => for_each_proc(std::slice::from_ref(mi), f),
+            }
+        }
+    }
+    for item in items {
+        match item {
+            ast::ModuleItem::Proc(p) => f(p),
+            ast::ModuleItem::Generate(g) => gen_items(&g.items, f),
+            _ => {}
+        }
+    }
+}
+
 impl Elaborator<'_> {
     /// DUP (round-5): decide which `automatic` block-locals need a `$blk$<span>`
     /// scope segment. Returns block `span.lo` → the set of local NAMES to scope in
@@ -28,11 +73,9 @@ impl Elaborator<'_> {
         }
         // (1) gather automatic block-locals across all procedural blocks.
         let mut per_name: BTreeMap<String, Vec<(u32, u32, bool)>> = BTreeMap::new();
-        for item in &module.body {
-            if let ast::ModuleItem::Proc(p) = item {
-                Self::gather_auto_block_locals(&p.body, &mut per_name);
-            }
-        }
+        for_each_proc(&module.body, &mut |p| {
+            Self::gather_auto_block_locals(&p.body, &mut per_name)
+        });
         // (2) candidate (span, name): declared in ≥2 blocks, no module-net
         //     collision, and no two declaring spans nested (shadowing).
         let mut cand: Vec<(u32, u32, String)> = Vec::new();
@@ -234,15 +277,13 @@ impl Elaborator<'_> {
             }
         }
         let mut out = BTreeMap::new();
-        for item in &module.body {
-            if let ast::ModuleItem::Proc(p) = item {
-                // An `initial` / `final` process body executes ONCE; every `always*` form
-                // re-runs, so a `join_none` arm it spawned can still be live when the next
-                // iteration spawns another.
-                let repeats = !matches!(p.kind, ast::ProcKind::Initial | ast::ProcKind::Final);
-                walk(&p.body, false, repeats, module_names, &mut out);
-            }
-        }
+        for_each_proc(&module.body, &mut |p| {
+            // An `initial` / `final` process body executes ONCE; every `always*` form
+            // re-runs, so a `join_none` arm it spawned can still be live when the next
+            // iteration spawns another.
+            let repeats = !matches!(p.kind, ast::ProcKind::Initial | ast::ProcKind::Final);
+            walk(&p.body, false, repeats, module_names, &mut out);
+        });
         out
     }
 

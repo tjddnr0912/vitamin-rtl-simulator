@@ -210,3 +210,94 @@ fn an_unassigned_element_is_the_empty_string() {
         "block scope, same rule — and no leak from A:\n{o}"
     );
 }
+
+// ── §4.5.258: the same rules inside a generate scope ─────────────────────────
+
+/// The two classifiers that decide which block-locals earn a `$blk$` scope walked
+/// `module.body` for `ModuleItem::Proc` only, so a process inside a `generate` was
+/// invisible to them. The whole same-name family stayed loud there while the identical
+/// code at module scope worked — this was the last shape §4.5.255 did not reach.
+#[test]
+fn a_generate_scope_gets_the_same_name_rules_as_a_module() {
+    let (o, ok) = run("module t;\n\
+           generate if (1) begin : g\n\
+             initial begin\n\
+               begin string s[2] = '{\"a\",\"b\"}; $display(\"A=|%s|%s|\", s[0], s[1]); end\n\
+               begin string s[2] = '{\"c\",\"d\"}; $display(\"B=|%s|%s|\", s[0], s[1]); end\n\
+               $finish;\n\
+             end\n\
+           end endgenerate\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("A=|a|b|") && o.contains("B=|c|d|"),
+        "own storage:\n{o}"
+    );
+
+    // …and for the rest of the family, which was loud there for the same reason.
+    let (o, ok) = run("module t;\n\
+           generate if (1) begin : g\n\
+             initial begin\n\
+               begin int q[$] = '{1,2}; $display(\"C=%0d\", q.size()); end\n\
+               begin int q[$] = '{7};   $display(\"D=%0d %0d\", q.size(), q[0]); end\n\
+               $finish;\n\
+             end\n\
+           end endgenerate\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("C=2") && o.contains("D=1 7"),
+        "iverilog values:\n{o}"
+    );
+}
+
+/// A generate-for body is ONE subtree however many times it unrolls, and each unroll
+/// elaborates under its own prefix — so a name declared once inside the loop is declared
+/// in one block, and only two DISTINCT blocks can collide. Each unroll keeps its own
+/// storage.
+#[test]
+fn an_unrolled_generate_keeps_each_iterations_storage() {
+    let (o, ok) = run("module t;\n\
+           genvar i;\n\
+           generate for (i = 0; i < 2; i = i + 1) begin : g\n\
+             initial begin\n\
+               begin string s[2] = '{\"a\",\"b\"}; $display(\"L%0d A=|%s|\", i, s[0]); end\n\
+               begin string s[2] = '{\"c\",\"d\"}; $display(\"L%0d B=|%s|\", i, s[0]); end\n\
+             end\n\
+           end endgenerate\n\
+           initial #1 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    for k in 0..2 {
+        assert!(
+            o.contains(&format!("L{k} A=|a|")) && o.contains(&format!("L{k} B=|c|")),
+            "iteration {k}:\n{o}"
+        );
+    }
+}
+
+/// A nested generate scope, and a module that has BOTH its own same-name pair and one
+/// inside a generate — the two families must not see each other's blocks.
+#[test]
+fn generate_and_module_same_name_pairs_are_independent() {
+    let (o, ok) = run("module t;\n\
+           initial begin\n\
+             begin int q[$] = '{1,2}; $display(\"M=%0d\", q.size()); end\n\
+             begin int q[$] = '{7};   $display(\"N=%0d\", q.size()); end\n\
+           end\n\
+           generate if (1) begin : g1\n\
+             if (1) begin : g2\n\
+               initial begin\n\
+                 begin int q[$] = '{1,2,3}; $display(\"A=%0d\", q.size()); end\n\
+                 begin int q[$] = '{9};     $display(\"B=%0d\", q.size()); end\n\
+               end\n\
+             end\n\
+           end endgenerate\n\
+           initial #1 $finish;\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("M=2") && o.contains("N=1") && o.contains("A=3") && o.contains("B=1"),
+        "iverilog values:\n{o}"
+    );
+}
