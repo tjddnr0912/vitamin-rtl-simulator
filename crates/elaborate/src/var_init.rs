@@ -201,6 +201,30 @@ impl Elaborator<'_> {
         r
     }
 
+    /// [`Self::with_rank_scope`] with an EXPLICIT key instead of the scope counter.
+    ///
+    /// §4.5.260: an interface instance and a module instance share the instance slot but
+    /// are elaborated in DIFFERENT passes (interfaces in Nets, module children in
+    /// Instances), so a per-scope counter cannot order them — every interface drew a lower
+    /// number than every module child regardless of source order. Both pass the declaring
+    /// name's source offset, which is what "declaration order" means and is the same in
+    /// every pass. Two array elements of one declaration share it; `init_procs` breaks
+    /// that tie by ProcId, which is their unroll order.
+    pub(crate) fn with_rank_scope_keyed<R>(
+        &mut self,
+        slot: u32,
+        key: u32,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.rank_path.push(slot);
+        self.rank_path.push(key);
+        let saved = std::mem::take(&mut self.rank_seq);
+        let r = f(self);
+        self.rank_seq = saved;
+        self.rank_path.truncate(self.rank_path.len() - 2);
+        r
+    }
+
     /// The rank for an initializer process emitted by THIS scope in `slot`.
     pub(crate) fn init_rank(&mut self, slot: u32) -> Vec<u32> {
         let seq = self.rank_seq[slot as usize];

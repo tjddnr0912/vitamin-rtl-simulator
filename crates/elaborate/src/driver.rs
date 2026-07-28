@@ -478,7 +478,10 @@ impl<'s> Elaborator<'s> {
         // root → byte-identical to the old single-pick path.
         for top in roots {
             let top_path = top.name.name.clone();
-            self.elaborate_instance(top, &top_path, None, &[], PortBinding::None, &map);
+            // A root has no declaring instance; its own module name's offset orders the
+            // roots in source order, which is the order they are elaborated in anyway.
+            let key = top.name.span.lo;
+            self.elaborate_instance(top, &top_path, None, &[], PortBinding::None, &map, key);
         }
         // Any defparam still in the map targeted an instance that was never
         // elaborated — a typo'd or out-of-scope path, or an array `u.N` with no

@@ -728,3 +728,42 @@ fn an_interface_instance_is_ranked_as_a_scope() {
         "instance slot:\n{o}"
     );
 }
+
+/// §4.5.260. An interface instance and a module instance share the instance slot but are
+/// elaborated in DIFFERENT passes — interfaces in Nets, module children in Instances — so
+/// the per-scope counter could not order them: every interface drew a lower number than
+/// every module child, whatever the source said. Giving the earlier fix a counter made the
+/// "interface written first" half right and the "module instance written first" half
+/// wrong. Both draw the declaring name's source offset now, which is the same in every
+/// pass. Pinned in BOTH orders, and with a hierarchical read as the value witness.
+#[test]
+fn an_interface_and_a_module_instance_interleave_by_source_order() {
+    let (o, ok) = run("module ch; int c = 5; endmodule\n\
+         interface ifc; int iv = tb.u0.c + 1; endinterface\n\
+         module tb;\n\
+           ch u0();\n\
+           ifc f1();\n\
+           initial $display(\"P iv=%0d\", f1.iv);\n\
+         endmodule\n");
+    assert!(ok, "expected clean sim, got:\n{o}");
+    assert!(
+        o.contains("P iv=6"),
+        "the instance declared first initializes first:\n{o}"
+    );
+
+    for (order, want) in [
+        ("  ch  u0();\n  ifc i0();\n", format!("P c={D1} iv={D2}")),
+        ("  ifc i0();\n  ch  u0();\n", format!("P c={D2} iv={D1}")),
+    ] {
+        let (o, ok) = run(&format!(
+            "interface ifc; int iv = $random; endinterface\n\
+             module ch; int c = $random; endmodule\n\
+             module tb;\n{order}\
+               initial #1 $display(\"P c=%0d iv=%0d\", u0.c, i0.iv);\n\
+               initial #2 $finish;\n\
+             endmodule\n"
+        ));
+        assert!(ok, "expected clean sim, got:\n{o}");
+        assert!(o.contains(&want), "source order decides:\n{o}");
+    }
+}

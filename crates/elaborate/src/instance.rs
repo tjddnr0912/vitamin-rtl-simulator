@@ -66,6 +66,7 @@ impl Elaborator<'_> {
     /// Step (8) runs strictly AFTER (4), so the parent's `[first_net,
     /// first_net+net_count)` slice is a contiguous run with no child nets spliced
     /// in — the Instance slice invariant.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_instance(
         &mut self,
         module: &ast::ModuleDecl,
@@ -74,6 +75,7 @@ impl Elaborator<'_> {
         param_overrides: &[ResolvedOverride],
         binding: PortBinding<'_>,
         map: &ModuleMap<'_>,
+        rank_key: u32,
     ) {
         // (1) CYCLE GUARD — recursive instantiation is illegal (LRM). Bail this
         //     subtree WITHOUT creating any net/Instance so the arena stays valid.
@@ -118,10 +120,9 @@ impl Elaborator<'_> {
         // Read BEFORE the flag is cleared: the slot depends on the PARENT's kind.
         let rank_slot = self.rank_slot_for_instance();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, false);
-        let rank_seq = self.rank_seq[rank_slot as usize];
-        self.rank_seq[rank_slot as usize] += 1;
+        // The DECLARING name's source offset, not a counter — see `with_rank_scope_keyed`.
         self.rank_path.push(rank_slot);
-        self.rank_path.push(rank_seq);
+        self.rank_path.push(rank_key);
         let saved_rank_seq = std::mem::take(&mut self.rank_seq);
         // Record this as the instance currently being lowered, so a child created
         // inside a generate block can set its `Instance.parent` to `inst_id`.
@@ -904,6 +905,7 @@ impl Elaborator<'_> {
                 &overrides,
                 binding,
                 map,
+                item.name.span.lo,
             );
         }
     }

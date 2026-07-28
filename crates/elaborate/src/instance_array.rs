@@ -278,6 +278,7 @@ impl Elaborator<'_> {
                 overrides,
                 PortBinding::Named(&inst_conns, false),
                 map,
+                item.name.span.lo,
             );
         }
     }
