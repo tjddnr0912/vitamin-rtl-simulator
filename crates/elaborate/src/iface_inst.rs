@@ -140,53 +140,60 @@ impl Elaborator<'_> {
                 self.elaborate_ports(&decl.ports);
                 // nets first (declaration order), then logic — mirroring the
                 // module body passes (4)/(7).
-                for it in &decl.body {
-                    if let ast::ModuleItem::NetVar(d) = it {
-                        // A desugared array parameter is created like any var; its
-                        // `'{…}` decl-init rides the interface §6.8 pre-sweep below
-                        // (collect + flush, `lowering_decl_init`-exempt), so it is a
-                        // supported form now (the A2a scope-gate is lifted). User
-                        // writes still hit the net-id-keyed const-param deny.
-                        // `allow_string_init` is TRUE here now, for the same reason as the
-                        // generate walk: the flag was standing in for a string
-                        // declaration's decl-time writes landing in the MODULE-scope
-                        // pending list, where the bare-name lvalue resolved outside this
-                        // instance's prefix. Those are keyed by the declaring scope now.
-                        self.elaborate_netvar_decl(d, &decl.ports, &decl.body, true);
-                    }
-                }
-                // §6.8 pre-sweep for the interface body (mirrors the module-body
-                // sweep): an array `'{…}` / non-constant decl-init has no foldable
-                // `net.init`, so without this collect+flush it was silently dropped.
-                // Runs in the interface INSTANCE scope (bare-name lvalues resolve to
-                // `path.name`) and BEFORE the logic pass below, so the synthesized
-                // `initial` precedes the interface's own procs.
-                //
-                // SAVE/RESTORE the shared `pending_var_inits` around it: this pass
-                // runs during the PARENT's Nets phase, and `hoist_block_local_nets`
-                // may already have queued a module block-local non-const init there
-                // (it runs earlier, in pass 4a). Without the isolation this flush
-                // would STEAL that init and re-lower it in the interface scope —
-                // both a loud misresolve and (with same-named members) a silent
-                // module-side drop. The generate VarInit walk isolates the same way.
-                let saved_pending = std::mem::take(&mut self.pending_var_inits);
-                // §4.5.259: an interface instance is a SCOPE of its own, so it takes the
-                // instance slot like a module child. Without a scope of its own its flush
-                // borrowed the ENCLOSING scope's own-variables slot, and — because its two
-                // call sites run in different passes than the module's own flush — the
-                // rank vectors collided outright: a module's own initializer ran BETWEEN
-                // two interfaces, and a generate-nested interface ran after the generate's
-                // own variable. Both are the enclosing scope's slot, decided by tie-break.
+                // §4.5.265: the net-decl loop runs INSIDE the instance's rank scope too,
+                // because a declaration records its pre-size and its block-local
+                // initializers under the rank path in effect at the DECLARATION — and the
+                // flush below claims by that path. Creating the nets outside the scope and
+                // flushing inside it meant no flush ever claimed them, which the
+                // never-emitted guard reported (loudly, which is the point of it).
                 let slot = self.rank_slot_for_instance();
-                self.with_rank_scope_keyed(slot, (self.rank_band, item.name.span.lo, 0), |s| {
+                let rkey = (self.rank_band, item.name.span.lo, 0);
+                self.with_rank_scope_keyed(slot, rkey, |sc| {
                     for it in &decl.body {
                         if let ast::ModuleItem::NetVar(d) = it {
-                            s.collect_var_init_drivers(d);
+                            // A desugared array parameter is created like any var; its
+                            // `'{…}` decl-init rides the interface §6.8 pre-sweep below
+                            // (collect + flush, `lowering_decl_init`-exempt), so it is a
+                            // supported form now (the A2a scope-gate is lifted). User
+                            // writes still hit the net-id-keyed const-param deny.
+                            // `allow_string_init` is TRUE here now, for the same reason as the
+                            // generate walk: the flag was standing in for a string
+                            // declaration's decl-time writes landing in the MODULE-scope
+                            // pending list, where the bare-name lvalue resolved outside this
+                            // instance's prefix. Those are keyed by the declaring scope now.
+                            sc.elaborate_netvar_decl(d, &decl.ports, &decl.body, true);
                         }
                     }
-                    s.flush_block_local_inits();
+                    // §6.8 pre-sweep for the interface body (mirrors the module-body
+                    // sweep): an array `'{…}` / non-constant decl-init has no foldable
+                    // `net.init`, so without this collect+flush it was silently dropped.
+                    // Runs in the interface INSTANCE scope (bare-name lvalues resolve to
+                    // `path.name`) and BEFORE the logic pass below, so the synthesized
+                    // `initial` precedes the interface's own procs.
+                    //
+                    // SAVE/RESTORE the shared `pending_var_inits` around it: this pass
+                    // runs during the PARENT's Nets phase, and `hoist_block_local_nets`
+                    // may already have queued a module block-local non-const init there
+                    // (it runs earlier, in pass 4a). Without the isolation this flush
+                    // would STEAL that init and re-lower it in the interface scope —
+                    // both a loud misresolve and (with same-named members) a silent
+                    // module-side drop. The generate VarInit walk isolates the same way.
+                    // §4.5.259: an interface instance is a SCOPE of its own, so it takes the
+                    // instance slot like a module child. Without a scope of its own its flush
+                    // borrowed the ENCLOSING scope's own-variables slot, and — because its two
+                    // call sites run in different passes than the module's own flush — the
+                    // rank vectors collided outright: a module's own initializer ran BETWEEN
+                    // two interfaces, and a generate-nested interface ran after the generate's
+                    // own variable. Both are the enclosing scope's slot, decided by tie-break.
+                    let saved_pending = std::mem::take(&mut sc.pending_var_inits);
+                    for it in &decl.body {
+                        if let ast::ModuleItem::NetVar(d) = it {
+                            sc.collect_var_init_drivers(d);
+                        }
+                    }
+                    sc.flush_block_local_inits();
+                    sc.pending_var_inits = saved_pending;
                 });
-                self.pending_var_inits = saved_pending;
                 for it in &decl.body {
                     match it {
                         ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),

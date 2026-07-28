@@ -150,6 +150,11 @@ pub(crate) use toplevel::*;
 /// Public entry point. Returns `Some(SimIr)` iff no hard error was emitted;
 /// every error path still produces valid placeholder arena edges so the partial
 /// IR is never structurally broken (the result is simply discarded on error).
+/// A recorded declaration-time pre-size: `(owner rank path, lvalue, `new[n]`)`.
+pub(crate) type PresizeEntry = (Vec<u32>, ast::Lvalue, ast::Expr);
+/// A recorded block-local initializer: `(declaration offset, owner rank path, lvalue, rhs)`.
+pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
+
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,
     /// §4.5.249: resolves an AST byte span back to `file:line:col` for diagnostics.
@@ -893,11 +898,13 @@ struct Elaborator<'s> {
     // scope drains its own at its own flush point (module scope is the `""` key, and its
     // drain order is unchanged — byte-identical for every design without a generate-scope
     // string). Spliced to the FRONT of that scope's collected inits.
-    /// `bool` = declared inside a GENERATE body (see `in_generate_body`) — a `case` arm and
-    /// an unlabeled `if`/`begin` body share the enclosing prefix, so the key alone cannot
-    /// say which scope's flush owns the entry, and a pre-size drained by the WRONG one runs
-    /// `new[n]` after the element writes and wipes them.
-    pending_scoped_presize: BTreeMap<String, Vec<(bool, ast::Lvalue, ast::Expr)>>,
+    /// `Vec<u32>` = the OWNING scope's rank path. A `case` arm and an unlabeled `if`/`begin`
+    /// body share the enclosing prefix, so the key alone cannot say which scope's flush owns
+    /// the entry, and a pre-size drained by the WRONG one runs `new[n]` after the element
+    /// writes and wipes them. §4.5.265: this was a `bool` (inside a generate body or not),
+    /// which cannot separate two NESTED generate scopes that both share a prefix — the rank
+    /// path can, and is stable across the elaboration phases by construction.
+    pending_scoped_presize: BTreeMap<String, Vec<PresizeEntry>>,
     /// §4.5.254: EVERY block-local declaration initializer, keyed by the FULL prefix it
     /// lives under — the instance/generate prefix for a flattened one, plus a `$blk$<lo>`
     /// segment for one that earned its own scope. `u32` is the declaring name's source
@@ -910,8 +917,8 @@ struct Elaborator<'s> {
     /// `collect_var_init_drivers`, so a block-local pushed straight into `pending_var_inits`
     /// landed ahead of every module-scope init; and holding only the STRING ones back (what
     /// r19 did) reordered a block against its own non-string declarations.
-    /// `bool` = collected inside a GENERATE body (see `in_generate_body`).
-    pending_block_local_inits: BTreeMap<String, Vec<(u32, bool, ast::Lvalue, ast::Expr)>>,
+    /// `Vec<u32>` = the OWNING scope's rank path (see `pending_scoped_presize`).
+    pending_block_local_inits: BTreeMap<String, Vec<BlockLocalInit>>,
     /// Is the walk currently inside a generate body? A generate body is a scope to
     /// iverilog even when vita mints no prefix segment for it (`case` arms and unlabeled
     /// `if`/`begin` bodies share the enclosing prefix), and its initializers run BEFORE

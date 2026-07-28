@@ -152,7 +152,7 @@ impl Elaborator<'_> {
         };
         let (mine, theirs): (Vec<_>, Vec<_>) = v
             .into_iter()
-            .partition(|(g, ..)| *g == self.in_generate_body);
+            .partition(|(owner, ..)| *owner == self.rank_path);
         if !theirs.is_empty() {
             self.pending_scoped_presize
                 .insert(self.cur_prefix.clone(), theirs);
@@ -289,11 +289,11 @@ impl Elaborator<'_> {
         rhs: ast::Expr,
     ) {
         let key = self.scoped_init_key(scope);
-        let in_gen = self.in_generate_body;
+        let owner = self.rank_path.clone();
         self.pending_block_local_inits
             .entry(key)
             .or_default()
-            .push((lo, in_gen, lhs, rhs));
+            .push((lo, owner, lhs, rhs));
     }
 
     /// Every recorded block-local initializer must have been claimed by exactly one flush
@@ -385,14 +385,18 @@ impl Elaborator<'_> {
         // ahead of the module sweep — which both robbed a module block-local initializer of
         // the module variables it reads and split a routed string array from its `new[n]`
         // (left behind by the flag-partitioned pre-size drain), emptying it at exit 0.
-        // Prefix answers WHICH scope; the flag answers WHOSE.
-        let ours = self.in_generate_body;
+        // Prefix answers WHICH scope; the owner's RANK PATH answers whose. §4.5.265: a
+        // bool could not, because two NESTED generate scopes sharing a prefix are both
+        // "in a generate" — so a prefix-less nested scope claimed its PARENT's
+        // block-locals and emitted them under its own (later) rank.
+        let ours = self.rank_path.clone();
         let mut all: Vec<(u32, String, ast::Lvalue, ast::Expr)> = Vec::new();
         for key in keys {
             let Some(v) = self.pending_block_local_inits.remove(&key) else {
                 continue;
             };
-            let (mine, theirs): (Vec<_>, Vec<_>) = v.into_iter().partition(|(_, g, ..)| *g == ours);
+            let (mine, theirs): (Vec<_>, Vec<_>) =
+                v.into_iter().partition(|(_, owner, ..)| *owner == ours);
             if !theirs.is_empty() {
                 self.pending_block_local_inits.insert(key.clone(), theirs);
             }

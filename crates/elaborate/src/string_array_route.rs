@@ -295,11 +295,11 @@ impl Elaborator<'_> {
             self.push_block_local_init(None, lo, lhs, rhs);
         } else {
             let scope = self.cur_prefix.clone();
-            let in_gen = self.in_generate_body;
+            let owner = self.rank_path.clone();
             self.pending_scoped_presize
                 .entry(scope)
                 .or_default()
-                .push((in_gen, lhs, rhs));
+                .push((owner, lhs, rhs));
         }
         true
     }

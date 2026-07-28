@@ -1011,3 +1011,42 @@ fn a_bare_begin_in_a_generate_list_is_syntax_but_a_labeled_one_is_a_scope() {
         "an unlabeled `if` body is a scope either way:\n{o}"
     );
 }
+
+/// §4.5.265. Ownership by a BOOL could not separate two nested generate scopes: a `case`
+/// arm and an unlabeled `if` body mint no prefix segment, so a nested one shares its
+/// parent's key AND is "in a generate" too — and its flush claimed the PARENT's
+/// block-local initializers, emitting them under its own (later) rank. iverilog runs the
+/// enclosing scope's own block-locals first. The owner's RANK PATH says whose, and it is
+/// stable across the elaboration phases by construction.
+#[test]
+fn a_prefix_less_nested_generate_does_not_claim_its_parents_block_locals() {
+    let tick = "package pk;\n\
+           function automatic int tick(input string s); $display(\"P %s\", s); return 0; endfunction\n\
+         endpackage\n\
+         import pk::*;\n";
+    // Both nestings that mint no segment, and both source orders.
+    for inner in [
+        "case (1) 1: begin : h int v = tick(\"IN\"); end endcase\n",
+        "if (1) begin int v = tick(\"IN\"); end\n",
+    ] {
+        for order in 0..2 {
+            let bl = "initial begin int l = tick(\"OUT\"); end\n";
+            let body = if order == 0 {
+                format!("{inner}{bl}")
+            } else {
+                format!("{bl}{inner}")
+            };
+            let (o, ok) = run(&format!(
+                "{tick}module t;\n  generate case (1) 1: begin : g\n{body}  end endcase endgenerate\n\
+                 endmodule\n"
+            ));
+            assert!(ok, "expected clean sim, got:\n{o}");
+            let seen: Vec<&str> = o.lines().filter(|l| l.starts_with("P ")).collect();
+            assert_eq!(
+                seen,
+                vec!["P OUT", "P IN"],
+                "the enclosing scope's own block-local runs first:\n{o}"
+            );
+        }
+    }
+}
