@@ -32,7 +32,8 @@ The forward-looking ("Phase-2") side of each item lives in the project's
 | Out-of-range array index | Read → `X`; write dropped | Loud (`E-RUN-RANGE` / `VITA-E4002`, rate-limited) |
 | Arithmetic lane = 128-bit unsigned / 64-bit signed | Wider arithmetic poisons to `X` | Fail-safe (`X`, never a wrong number) |
 | `$dumpvars(depth, scope)` args ignored | Always a full dump (a correct superset) | Silent |
-| `automatic` block-local that may be read before written | Rejected, not given a leftover value | Loud (`E3009`) |
+| `automatic` block-local that may be read before written | Rejected, not given a leftover value | Loud (`E3009`, with a `note:` at the construct that stopped the analysis) |
+| Hierarchical reference to an `automatic` block-local (`tb.a`) | Rejected (IEEE 1800 §23.9 forbids it) | Loud (`E3009`) |
 | Same dynamic-array-formal function twice in one expression | Rejected, not given the wrong snapshot | Loud (`E3009`) |
 
 The sections below give the detail behind each row. (Earlier editions of this
@@ -163,6 +164,24 @@ matching IEEE 1800 §6.21 — including for a fixed-size unpacked array
 (`automatic int m[4] = '{1,2,3,4};`). An array filled element-by-element with
 literal indices is accepted once every declared index has been written.
 
+A local that is **never written anywhere in the block** is also accepted, for
+any type. There is no first write for a read to be before: the flattened
+variable is initialized to the type default once and nothing changes it, which
+is exactly what fresh per-entry storage supplies at every entry. This is the
+idiomatic "deliberately empty" argument —
+
+```systemverilog
+byte exp [];              // no digest is expected in this scenario
+run("dma-error", msg, exp);   //  -> e.size() == 0, as IEEE 1800 §7.5 says
+```
+
+The **first** write may also be timing-controlled — `#1 x = 7;`,
+`@(posedge clk) x = 7;`, `x = #1 7;`, `#1 begin x = 7; end`, and
+`wait (c) x = 7;` are all blocking writes, so nothing runs before the write
+lands. And once the local is definitely written on a path, no later statement
+of any form can make the flattening differ, so the rest of the block is
+unconstrained.
+
 **What stays loud, and why.**
 
 - Reading an element the block has not written this entry, or filling an array
@@ -173,6 +192,27 @@ literal indices is accepted once every declared index has been written.
 - Two blocks where one **encloses** the other and both declare the same name is
   shadowing, which vitamin cannot resolve through the flattening. Two disjoint
   (sibling) blocks reusing a name are fine, at any nesting depth.
+- When two blocks **do** share one flattened variable (same name, different
+  blocks), a statement that lets simulation time advance inside either of them
+  is rejected: suspending hands the scheduler to the other block, which writes
+  the one variable, so a later read here would see a value its own storage
+  never held.
+- Referring to an `automatic` block-local **hierarchically** (`tb.a`, or `t.a`
+  from a task in the same module) is rejected. IEEE 1800 §23.9 forbids it —
+  automatic storage has no static address to name — and accepting it would let
+  an outside write reach per-entry storage.
+
+Whenever the rejection comes from the analysis stopping rather than from a read
+you can see, the error is followed by a `note:` pointing at the construct that
+stopped it and saying why. That location is often several statements later than
+the declaration, or in another file:
+
+```
+t.sv:4:14: error[VITA-E3009]: an `automatic` block-local `x` whose per-entry lifetime …
+t.sv:5:24: note[VITA-E3009]: definite-assignment for `x` stopped here: it is read here
+           before any write on this path. Everything after this point is treated as if
+           `x` were still unwritten
+```
 
 Storage lifetime follows the LRM: automatic storage is created per *activation*,
 not per block entry, so a local without an initializer keeps its value across

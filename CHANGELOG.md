@@ -6,6 +6,67 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
 ## [Unreleased] — 2026-07-29
 
 ### Fixed
+
+- **A chained method call no longer ends the definite-assignment scan.** The
+  expression walker had no arm for `s.substr(a, b).atoi()` (IEEE §8.13 chaining),
+  so it answered "may reference" for *every* name — one chain anywhere in a block
+  rejected the chain's own assignment target and every local declared after it. It
+  also blamed the wrong file: a chain inside a callee body was reported against a
+  local in the caller.
+- **The definite-assignment walk no longer forgets that a local is already
+  written.** Its catch-all rejected any unmodelled statement outright, even on a
+  path where the local was definitely assigned. Once written this execution the
+  per-entry reset it would have observed is already overwritten, and nothing
+  un-assigns it. This is why a dummy write *before* a loop cleared the diagnostic
+  while the same write *inside* the loop did not.
+- **A timing-controlled first write is supported.** `#1 x = 7;`,
+  `@(posedge clk) x = 7;`, `x = #1 7;`, `#1 begin x = 7; end` and
+  `wait (c) x = 7;` are blocking writes — the process does not continue until the
+  write has happened. A timing prefix that reads the local is still a genuine
+  read-before-write and stays loud, and on a *shared* flattened net any
+  time-advancing statement stays loud (the scheduler can hand the one net to the
+  other block in between).
+- **A local that is never written is accepted.** `automatic byte exp[];` passed
+  to an `input` formal is not a read-before-write — there is no first write for the
+  read to be before. With no writer the flattened static net holds the type default
+  at every entry, which is exactly what `automatic` supplies. Proving "no writer"
+  consults the callee resolver, so a task that pokes the flattened net through a
+  hierarchical self-path still counts as one.
+- **SILENT-WRONG: a method call was not seen as a read of its receiver.** The
+  shared reference walker checked a call's arguments but not its path head, so
+  `s.atoi()` did not count as reading `s`. The block-local scope-leak detector is
+  built on that walker: a block-local referenced outside its block only through a
+  method call went undetected, coalesced onto the outer binding's net, and the
+  outside read returned the block's value (vita printed `1234` where iverilog
+  prints `9999`).
+- **SILENT-WRONG: `atoi`/`atohex`/`atooct`/`atobin` parsed like `strtol`.** They
+  skipped leading whitespace, honored a sign, and stopped at an underscore. IEEE
+  1800 §6.16.9 says the conversion "scans all leading digits and underscore
+  characters (`_`) and stops as soon as it encounters any other character" — so
+  `" 3".atoi()` is 0 (not 3), `"-7".atoi()` is 0 (not -7) and `"1_0".atoi()` is 10
+  (not 1). Verified byte-identical to iverilog 13 over 17 inputs. The old code
+  carried a comment asserting iverilog's stricter reading was "its bug".
+- **SILENT-WRONG: a hierarchical reference could reach an `automatic` block-local.**
+  IEEE 1800 §23.9 forbids naming an automatic variable hierarchically — it has no
+  static address — but v1's flatten publishes one as a module net, so `tb.a = 99`
+  from another module silently wrote per-entry storage. Now rejected on read,
+  write and select-write, as iverilog rejects it.
+
+### Added
+
+- **`note:` telling you where the definite-assignment walk stopped.** E3009's
+  lifetime message names two possible causes; the third — "the analyzer stopped
+  here" — was the real one for most sites and was invisible, because only the
+  declaration's location was printed. The note carries the construct's own
+  file:line:col and one of six reasons.
+- The block-local scope-leak diagnostic now has a location at all: the error
+  points at the declaration, a note at the reference that makes it illegal. The
+  deferred hierarchical read/write/select-write passes likewise carry the
+  originating statement's span, so every diagnostic they raise is locatable.
+
+## [2026-07-29 · round-16] 
+
+### Fixed
 - **Definite-assignment for `automatic` block-locals now understands control
   flow.** A `break`/`continue` placed before the local's first write no longer
   reads as a live path arriving at a later read unwritten — every path that
