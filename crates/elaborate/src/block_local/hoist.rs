@@ -1,419 +1,12 @@
-//! procedural block-local hoisting — split out of the original `elaborate` lib.rs (mechanical move).
+//! block-local HOISTING — creating the flattened module nets for a procedural
+//! block's declarations, and collecting their declaration initializers.
+//!
+//! Split from `block_local.rs` (R17). The acceptance gates these call live in
+//! `gate.rs`.
 
 use super::*;
 
-/// Collect every NESTED `begin…end`/`fork` block (i.e. not the top-level body
-/// block) together with the names it declares as locals. `is_top` is true only for
-/// the outermost body statement, whose own decls are function/task-scoped (not
-/// block-scoped) and so are skipped.
-pub(crate) fn gather_nested_block_locals(
-    s: &ast::Stmt,
-    is_top: bool,
-    out: &mut Vec<(ast::Span, Vec<String>)>,
-) {
-    use ast::Stmt::*;
-    match s {
-        Block {
-            stmts, decls, span, ..
-        }
-        | Fork {
-            stmts, decls, span, ..
-        } => {
-            if !is_top && !decls.is_empty() {
-                let names: Vec<String> = decls
-                    .iter()
-                    .flat_map(|d| d.names.iter().map(|n| n.name.name.clone()))
-                    .collect();
-                if !names.is_empty() {
-                    out.push((*span, names));
-                }
-            }
-            for st in stmts {
-                gather_nested_block_locals(st, false, out);
-            }
-        }
-        If { then_s, else_s, .. } => {
-            gather_nested_block_locals(then_s, false, out);
-            if let Some(e) = else_s {
-                gather_nested_block_locals(e, false, out);
-            }
-        }
-        Case { items, .. } => {
-            for it in items {
-                match it {
-                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
-                        gather_nested_block_locals(body, false, out)
-                    }
-                }
-            }
-        }
-        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
-            gather_nested_block_locals(body, false, out)
-        }
-        Wait { body, .. } | DelayCtrl { body, .. } | EventCtrl { body, .. } => {
-            if let Some(b) = body {
-                gather_nested_block_locals(b, false, out)
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Collect every `begin`/`fork` block-local declaration in `s`, in source order
-/// (recursing into nested blocks and control-flow bodies). Used to reserve a
-/// frame body's block-locals under its `$func$<name>` scope so a local declared
-/// inside a `begin … end` resolves (previously unresolved → E3010, for frame
-/// functions AND tasks alike).
-pub(crate) fn collect_block_local_decls(s: &ast::Stmt, out: &mut Vec<ast::NetVarDecl>) {
-    use ast::Stmt::*;
-    match s {
-        Block { decls, stmts, .. } | Fork { decls, stmts, .. } => {
-            out.extend(decls.iter().cloned());
-            for st in stmts {
-                collect_block_local_decls(st, out);
-            }
-        }
-        If { then_s, else_s, .. } => {
-            collect_block_local_decls(then_s, out);
-            if let Some(e) = else_s {
-                collect_block_local_decls(e, out);
-            }
-        }
-        Case { items, .. } => {
-            for it in items {
-                match it {
-                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
-                        collect_block_local_decls(body, out)
-                    }
-                }
-            }
-        }
-        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
-            collect_block_local_decls(body, out)
-        }
-        _ => {}
-    }
-}
-
 impl Elaborator<'_> {
-    /// Param-aware const-eval in a SIGNED 64-bit domain (P0-6, 2026-06-10).
-    /// Folds: literals (sign-aware), params/genvars in scope, unary `+ - ~ !`,
-    /// the binary operator set with i64 semantics (so a descending genvar
-    /// condition `i >= 0` actually terminates), ternary `?:` and `$clog2`
-    /// (P0-5 — the `localparam AW = $clog2(DEPTH)` / `W = M ? a : b` idioms).
-    /// Overflow and ill-defined folds return None — param-binding callers
-    /// escalate None to an ERROR (never a silent 0), width callers clamp
-    /// loudly. NOTE: this is a width-less mathematical-integer model; a
-    /// logical `>>` of a NEGATIVE value is width-dependent and folds None.
-    /// GAP-G shadow guard: the bare names the module declares locally — header
-    /// (`#(...)`) params, ports, and top-level body nets/params. A name in this
-    /// set SHADOWS a same-named wildcard-imported package array, so a const
-    /// element read of it must not fold the imported array. See `local_decl_names`.
-    pub(crate) fn gather_local_decl_names(
-        &self,
-        module: &ast::ModuleDecl,
-    ) -> std::collections::BTreeSet<String> {
-        let mut names = std::collections::BTreeSet::new();
-        for p in &module.params {
-            names.insert(p.name.name.clone());
-        }
-        match &module.ports {
-            ast::PortList::Ansi(ports) => {
-                for pt in ports {
-                    names.insert(pt.name.name.clone());
-                }
-            }
-            ast::PortList::NonAnsi(idents) => {
-                for id in idents {
-                    names.insert(id.name.clone());
-                }
-            }
-            ast::PortList::None => {}
-        }
-        for item in &module.body {
-            match item {
-                ast::ModuleItem::NetVar(d) => {
-                    for n in &d.names {
-                        names.insert(n.name.name.clone());
-                    }
-                }
-                ast::ModuleItem::Param(p) => {
-                    names.insert(p.name.name.clone());
-                }
-                _ => {}
-            }
-        }
-        names
-    }
-
-    /// BL4 (round-19): resolve a callee NAME to its formal port DIRECTIONS, in port
-    /// order, for the block-local definite-assignment gate. A single-segment name is
-    /// looked up in `func_table` then `task_table` (both hold the per-module AST def
-    /// with `ports: Vec<TfPort>`). Returns `None` for a hierarchical `u.f` (the child
-    /// module's ports are out of scope here), an unknown name, or a `$system` call —
-    /// leaving the DA walk to treat the reference conservatively as a read.
-    fn callee_port_dirs(&self, callee: &ast::HierPath) -> Option<Vec<ast::PortDir>> {
-        if callee.segments.len() != 1 {
-            return None;
-        }
-        let nm = callee.segments[0].name.as_str();
-        if let Some(f) = self.func_table.get(nm) {
-            return Some(f.ports.iter().map(|p| p.dir).collect());
-        }
-        if let Some(t) = self.task_table.get(nm) {
-            return Some(t.ports.iter().map(|p| p.dir).collect());
-        }
-        None
-    }
-
-    /// BL4 (round-19): true iff the call `callee(args)` DEFINITELY (whole-var) WRITES
-    /// `name` through a PURE OUTPUT actual and READS `name` at NO position of the same
-    /// call. This is the resolver threaded into `automatic_local_definitely_assigned` /
-    /// `da_stmt` (see [`crate::da::OutActualWrites`]). Soundness (this is an ACCEPT gate
-    /// — a wrong "assigned" reads a leftover/X value instead of erroring = silent-wrong):
-    ///   * ONLY a bare whole-var `Ident(name)` at an OUTPUT formal position counts as a
-    ///     write (copy-out only, no copy-in). A SELECT actual `name[i]` is a PARTIAL
-    ///     write (the other bits stay unwritten) → NOT a definite whole assignment; it
-    ///     is caught as a READ below and blocks the accept.
-    ///   * An INOUT actual is NOT a write here: its copy-IN reads `name`'s current value
-    ///     (the leftover on the v1 flatten ≠ a fresh automatic's default), so an inout
-    ///     `name` is a READ (blocks the accept unless `name` is already assigned).
-    ///   * `name` at ANY input actual, or inside a select index of any actual, or at an
-    ///     arg beyond the resolved formals, is a READ.
-    ///   * Named args (can't map positionally) or an unresolvable callee → `false`.
-    ///
-    /// The verdict is `writes && !reads`: a genuine output-write with no shadow read.
-    fn call_out_actual_writes(
-        &self,
-        callee: &ast::HierPath,
-        args: &[ast::Expr],
-        name: &str,
-    ) -> bool {
-        // Named args defeat positional formal mapping → conservative (stays loud).
-        if args
-            .iter()
-            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
-        {
-            return false;
-        }
-        let Some(dirs) = self.callee_port_dirs(callee) else {
-            return false;
-        };
-        let mut writes = false;
-        let mut reads = false;
-        for (i, arg) in args.iter().enumerate() {
-            // A clean whole-var OUTPUT actual `name` at an OUTPUT formal — copy-out only.
-            let clean_output_whole = matches!(dirs.get(i), Some(ast::PortDir::Output))
-                && matches!(&arg.kind, ast::ExprKind::Ident(p)
-                    if p.segments.len() == 1 && p.segments[0].name == name);
-            if clean_output_whole {
-                writes = true;
-            } else if !expr_no_ref(arg, name) {
-                // Any OTHER reference to `name` (input actual, inout copy-in, select
-                // index, partial-write select base, arg beyond arity, OR a same-call
-                // member / method read `name.field` / `name.size()`) is a read that
-                // observes the copy-IN value before the output copy-OUT. Use the
-                // CONSERVATIVE `expr_no_ref` (any unvetted form ⇒ "may reference"), NOT
-                // `expr_reads_ident` — the latter is the known under-detecting walker
-                // (single-seg only, no `MethodCall`/`Dist`/… arm), so a co-arg
-                // `name.field` (a multi-seg ident) / `name.method()` would slip through
-                // and let the accept gate skip the loud → the flattened net's leftover
-                // is read on re-entry = silent-wrong (BL4 adversarial-review finding;
-                // latent today since member/method-bearing OUTPUT-formal types are
-                // otherwise loud, but this keeps the gate sound as support widens).
-                reads = true;
-            }
-        }
-        writes && !reads
-    }
-
-    /// BL4 (round-19): [`automatic_local_definitely_assigned`] with this Elaborator's
-    /// output-actual resolver ([`Self::call_out_actual_writes`]) bound in — so a call
-    /// whose OUTPUT actual is `name` (unconditionally evaluated) is seen as a definite
-    /// assignment, not a read-before-write. `&self` (immutable) — the returned `bool`
-    /// releases the borrow before the surrounding `&mut self` hoist continues.
-    /// `elem_bounds` is the declared index range when `name` is a single-dimension
-    /// FIXED unpacked array (R16 §3.3) — the walk then accepts a complete set of
-    /// straight-line constant-index element writes as the first whole write. Computed
-    /// by the caller because folding a dimension needs `&mut self`.
-    fn block_local_definitely_assigned(
-        &self,
-        stmts: &[ast::Stmt],
-        name: &str,
-        elem_bounds: Option<(i64, i64)>,
-    ) -> bool {
-        automatic_local_definitely_assigned(
-            stmts,
-            name,
-            &|cn, args, nm| self.call_effect(cn, args, nm),
-            elem_bounds,
-        )
-    }
-
-    /// R16 §3.3: the declared index bounds of a single-dimension FIXED unpacked array
-    /// declarator, or `None` for a scalar, a dynamic/queue/assoc dim, a multi-dim
-    /// array, or a bound that does not fold.
-    fn fixed_elem_bounds(&mut self, n: &ast::DeclName) -> Option<(i64, i64)> {
-        if n.unpacked.len() != 1 {
-            return None;
-        }
-        self.fixed_dim_bounds(&n.unpacked[0])
-    }
-
-    /// R16 §3.2: how far the callee-body walk chases nested user calls before giving
-    /// up. A cycle (`a` calls `b` calls `a`) is bounded by this counter rather than a
-    /// visited-set, which keeps the walk `&self`-pure; the budget only ever costs
-    /// precision (an exhausted budget answers "may touch" and the local stays loud).
-    const CALL_INERT_DEPTH: u32 = 8;
-
-    /// R16 §3.2: the three-way verdict [`crate::da::CallEffect`] for one call, and the
-    /// resolver threaded into the definite-assignment walk.
-    ///
-    /// `Writes` is the pre-existing pure-output-actual case, unchanged. `Inert` is the
-    /// new one: a call proven to touch `name` at NO position, which the walk can step
-    /// over. Proving it needs the callee's BODY, not just its signature — v1 flattens
-    /// block-locals into the module namespace, so a body can name the flattened net
-    /// with neither the call head nor any argument mentioning it (verified: a
-    /// `task poke; t.a = 99; endtask` writes a block-local `a` through a hierarchical
-    /// self-path). That hazard is exactly why a bare `show(x);` statement was left
-    /// unvetted; it is answered here rather than assumed away.
-    fn call_effect(
-        &self,
-        callee: &ast::HierPath,
-        args: &[ast::Expr],
-        name: &str,
-    ) -> crate::da::CallEffect {
-        use crate::da::CallEffect as E;
-        if self.call_out_actual_writes(callee, args, name) {
-            return E::Writes;
-        }
-        if self.call_is_inert(callee, args, name, Self::CALL_INERT_DEPTH) {
-            return E::Inert;
-        }
-        E::Unknown
-    }
-
-    /// R16 §3.2: can `callee(args)` be proven to touch `name` at no position?
-    ///
-    /// Three obligations, all conservative (any doubt answers `false`):
-    ///   1. every ACTUAL is ref-free under the all-segments rule;
-    ///   2. the callee RESOLVES — a single-segment name in this module's
-    ///      `func_table`/`task_table`, or a 2-segment container-method enable whose
-    ///      receiver is not `name` (`q.delete();` touches only `q`);
-    ///   3. the resolved BODY (its declarations' initializers included) is clean under
-    ///      [`stmt_no_ref_deep`], which recurses here for any call the body itself
-    ///      makes.
-    ///
-    /// A hierarchical callee, a `$system` task, an unknown name, or an exhausted depth
-    /// budget all answer `false` and leave the local loud — the same outcome as before
-    /// this existed.
-    fn call_is_inert(
-        &self,
-        callee: &ast::HierPath,
-        args: &[ast::Expr],
-        name: &str,
-        depth: u32,
-    ) -> bool {
-        if !args.iter().all(|a| expr_no_ref_deep(a, name)) {
-            return false;
-        }
-        // A container-method enable (`q.delete();`, `s.putc(i, c);`) touches only its
-        // receiver and arguments — no user body to walk.
-        if callee.segments.len() == 2 {
-            return callee.segments.iter().all(|s| s.name != name);
-        }
-        if callee.segments.len() != 1 || depth == 0 {
-            return false;
-        }
-        let nm = callee.segments[0].name.as_str();
-        if nm == name {
-            return false;
-        }
-        let (body, body_decls) = if let Some(f) = self.func_table.get(nm) {
-            (&f.body, &f.body_decls)
-        } else if let Some(t) = self.task_table.get(nm) {
-            (&t.body, &t.body_decls)
-        } else {
-            return false;
-        };
-        // A formal or body-local of the callee named `name` SHADOWS the flattened net,
-        // so references inside are not to our local — but proving which is which needs
-        // the callee's scope, so treat the whole body as unvettable instead. Loud, not
-        // wrong.
-        if body_decls
-            .iter()
-            .flat_map(|d| d.names.iter())
-            .any(|n| n.name.name == name)
-        {
-            return false;
-        }
-        body_decls
-            .iter()
-            .flat_map(|d| d.names.iter())
-            .all(|n| n.init.as_ref().is_none_or(|e| expr_no_ref_deep(e, name)))
-            && stmt_no_ref_deep(body, name, &|cn, ar, nm2| {
-                self.call_is_inert(cn, ar, nm2, depth - 1)
-            })
-    }
-
-    /// §6.21: a STATIC block-local's initializer runs ONCE at time zero, before any
-    /// process starts; an `automatic` sibling's runs on each BLOCK ENTRY. So a static
-    /// initializer that reads a per-entry sibling reads it at a time the automatic has
-    /// not been initialized — and worse, anything the static initializer WRITES back
-    /// into that sibling (an `inout`/`output` copy-out: `int z = f(c);`) is then clobbered
-    /// by the entry re-init. Both values are wrong and neither is recoverable, so this
-    /// combination is loud.
-    ///
-    /// Found while lifting the fork restriction (§4.5.248): the whole fork arm used to be
-    /// loud for a different reason, which masked this. The identical NON-fork shape was
-    /// already silently printing `c=5` where the copy-out said 6 — so this is a
-    /// silent-wrong being raised to loud, not a capability being taken away.
-    fn deny_static_init_reading_per_entry(&mut self, decls: &[ast::NetVarDecl], span: ast::Span) {
-        let mut per_entry = self.per_entry_in_scope.clone();
-        if let Some(here) = self.per_entry_block_locals.get(&span.lo) {
-            per_entry.extend(here.iter().cloned());
-        }
-        if per_entry.is_empty() {
-            return;
-        }
-        let per_entry = &per_entry;
-        // POLARITY (review F4): this is a REJECT gate, so it uses the POSITIVE walker.
-        // `expr_no_ref` answers "may reference" for anything it has not vetted, which is
-        // right for an accept gate and turns every unvetted initializer into a rejection
-        // here — `int idx = pkg::BASE;` beside any `automatic` sibling was rejected, with
-        // a message naming a variable it never mentions.
-        // Carry each hit's own DECL span so the diagnostic points at the declaration
-        // rather than at nothing (review F9 — this gate runs at block level, before the
-        // per-decl `cur_span` anchor in the hoist loop).
-        let hits: Vec<(String, String, ast::Span)> = decls
-            .iter()
-            .filter(|d| d.lifetime != Some(true))
-            .flat_map(|d| d.names.iter().map(move |n| (n, d.span)))
-            .filter(|(n, _)| !per_entry.contains(&n.name.name))
-            .filter_map(|(n, sp)| {
-                let init = n.init.as_ref()?;
-                let hit = per_entry.iter().find(|pn| expr_definitely_refs(init, pn))?;
-                Some((n.name.name.clone(), hit.clone(), sp))
-            })
-            .collect();
-        for (stat, auto, sp) in hits {
-            let saved = self.cur_span.replace(sp);
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "the STATIC block-local `{stat}`'s initializer reads the `automatic` \
-                     block-local `{auto}` in scope here; a static initializer \
-                     runs once at time 0 while an `automatic` is initialized on each block \
-                     entry, so `{auto}` has no value yet there (and a write back into it \
-                     through an output/inout formal is overwritten by the entry \
-                     initialization) — declare `{stat}` `automatic`, or move the \
-                     initialization into the block body"
-                ),
-            );
-            self.cur_span = saved;
-        }
-    }
-
     /// §6.8/§6.21: collect a block-local declaration's non-constant initializers into
     /// the t0 var-init sweep. `scope` is the `$blk$<lo>` segment when the declaration
     /// was given its own scope, `None` for the flattened path.
@@ -649,23 +242,11 @@ impl Elaborator<'_> {
                     // decl reaches this arm only since §4.5.249 (a static
                     // dynamic-storage local now earns a `$blk$` net too), and
                     // for it there is no per-entry reset to be unfaithful to.
-                    if d.lifetime == Some(true)
-                        && !per_entry
-                        && !const_immune
-                        && (n.init.is_some()
-                            || read_in_sibling_init
-                            || !self.block_local_definitely_assigned(stmts, nm, elem_bounds))
-                    {
-                        self.error(
-                                        MsgCode::ElabUnsupported,
-                                        &format!(
-                                            "an `automatic` block-local `{nm}` whose per-entry \
-                                             lifetime differs from static (an initializer, or a \
-                                             read before its first write) is unsupported in a \
-                                             procedural block (v1 flattens block-locals to one \
-                                             static net); assign it before use, or drop `automatic`",
-                                        ),
-                                    );
+                    if d.lifetime == Some(true) && !per_entry && !const_immune {
+                        let da = self.block_local_definitely_assigned(stmts, nm, elem_bounds, true);
+                        if n.init.is_some() || read_in_sibling_init || da.is_err() {
+                            self.deny_per_entry_lifetime(nm, da.err());
+                        }
                     }
                 }
                 // §4.5.255: the collector runs INSIDE the scope, so every prefix-sensitive
@@ -679,6 +260,7 @@ impl Elaborator<'_> {
                 // `scoped_init_key(Some(seg))` produced outside it.
                 self.with_scope(&seg, |s| {
                     s.elaborate_netvar_decl(d, ports, body, true);
+                    s.mark_automatic_local_nets(d);
                     s.collect_block_local_decl_inits(d, span, None);
                 });
                 return;
@@ -896,7 +478,17 @@ impl Elaborator<'_> {
                                              one"
                             ),
                         );
-                    } else if !self.block_local_definitely_assigned(stmts, nm, elem_bounds) {
+                    } else if let Err(g) =
+                        // `sole_writer: false` — the other block's write is exactly the
+                        // leftover this gate is about, so "never written HERE" proves
+                        // nothing.
+                        self.block_local_definitely_assigned(
+                            stmts,
+                            nm,
+                            elem_bounds,
+                            false,
+                        )
+                    {
                         self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
@@ -907,6 +499,7 @@ impl Elaborator<'_> {
                                              default; assign it before use, or rename one"
                             ),
                         );
+                        self.note_da_gave_up(nm, g);
                     }
                 }
             }
@@ -956,26 +549,16 @@ impl Elaborator<'_> {
                     fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                 }) && stmt_never_assigns_ident(stmts, nm);
                 let elem_bounds = self.fixed_elem_bounds(n);
-                if !per_entry
-                    && !const_immune
-                    && (n.init.is_some()
-                        || read_in_sibling_init
-                        || !self.block_local_definitely_assigned(stmts, nm, elem_bounds))
-                {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "an `automatic` block-local `{nm}` whose per-entry \
-                                         lifetime differs from static (an initializer, or a \
-                                         read before its first write) is unsupported in a \
-                                         procedural block (v1 flattens block-locals to one \
-                                         static net); assign it before use, or drop `automatic`",
-                        ),
-                    );
+                if !per_entry && !const_immune {
+                    let da = self.block_local_definitely_assigned(stmts, nm, elem_bounds, true);
+                    if n.init.is_some() || read_in_sibling_init || da.is_err() {
+                        self.deny_per_entry_lifetime(nm, da.err());
+                    }
                 }
             }
         }
         self.elaborate_netvar_decl(d, ports, body, true);
+        self.mark_automatic_local_nets(d);
         // Record the FLATTENED key. This net belongs to ONE process, but
         // the v1 flatten publishes it under the enclosing prefix's bare
         // name — inside a generate block that is `t.g.W`, a DIFFERENT key
@@ -1104,39 +687,17 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Allocate this frame function's nets (formals, return-var, body_decls — in
-    /// that slot order) under a synthetic `$func$<name>` scope, push a placeholder
-    /// `FuncDef` + the complete `FuncMeta`, and record the name→FuncId divert.
-    /// Reserve a frame body's block-local declarations (`begin int tmp; …`) under
-    /// the current `$func$<name>` scope, in source order, AFTER the formals /
-    /// return / top-level `body_decls`. A name already reserved (a formal, the
-    /// return var, a top-level local, or an earlier same-named block) is COALESCED
-    /// (shared net) — like the process-body hoist for two sequential blocks reusing
-    /// IEEE §6.21: a local declared in a nested `begin…end` is visible only within
-    /// that block. vita keeps a function/task/procedural body's block-locals in a
-    /// FLAT per-body table, so a reference OUTSIDE the declaring block would
-    /// silently resolve to the block-local instead of the lexically-correct outer
-    /// binding (a module variable, a formal, or an enclosing local). Proper
-    /// per-block scope lowering is a large follow-on (ROADMAP §4.5.18); until then,
-    /// detect that exact leak and reject it LOUD (correct-or-loud) rather than
-    /// produce a silent-wrong. A block-local referenced only inside its own block
-    /// resolves correctly and is left untouched (no diagnostic, byte-identical).
-    pub(crate) fn check_block_local_scope_leaks(&mut self, body: &ast::Stmt) {
-        let mut nested = Vec::new();
-        gather_nested_block_locals(body, true, &mut nested);
-        for (bspan, names) in &nested {
-            for n in names {
-                if stmt_refs_ident_outside(body, *bspan, n) {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "block-local `{n}` is referenced outside its `begin…end` block; \
-                             vita cannot resolve this to the outer `{n}` yet (it would silently \
-                             read the block-local) — rename the block-local or hoist its \
-                             declaration to the enclosing scope"
-                        ),
-                    );
-                }
+    /// R17: record the nets just created for an `automatic` block-local declaration so
+    /// a hierarchical reference to one can be rejected (IEEE 1800 §23.9 — an automatic
+    /// variable has no static address to name; v1's flatten accidentally gives it one).
+    /// Called right after the nets exist, in whatever scope the hoist created them.
+    fn mark_automatic_local_nets(&mut self, d: &ast::NetVarDecl) {
+        if d.lifetime != Some(true) {
+            return;
+        }
+        for n in &d.names {
+            if let Some(&id) = self.symbols.get(&self.fq(&n.name.name)) {
+                self.automatic_local_nets.insert(id);
             }
         }
     }

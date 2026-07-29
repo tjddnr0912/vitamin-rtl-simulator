@@ -43,8 +43,25 @@ pub(crate) fn expr_reads_ident(e: &ast::Expr, name: &str) -> bool {
         K::Replicate { count, value } => {
             expr_reads_ident(count, name) || value.iter().any(|x| expr_reads_ident(x, name))
         }
-        K::Call { args, .. } | K::SysCall { args, .. } => {
-            args.iter().any(|x| expr_reads_ident(x, name))
+        // R17-X1: a call's PATH HEAD is the RECEIVER when the path has two or more
+        // segments — `s.atoi()`, `q.size()`, `a.push_back(x)` all READ `s`/`q`/`a`.
+        // Checking only the args missed every one of them, and the block-local
+        // scope-leak detector is built on this walker: a block-local referenced
+        // outside its block ONLY through a method call was not detected, the local
+        // coalesced onto the outer binding's net, and the outside read returned the
+        // block's value. Measured against iverilog (`B 1234` vs `B 9999`) — a
+        // silent-wrong, not a missed diagnostic. A ONE-segment head is an ordinary
+        // function name (`f(x)`), never a variable read; `pkg::f()` parses as
+        // `PkgScoped`, so a multi-segment head here is always a dot-path.
+        K::Call { name: cn, args } => {
+            (cn.segments.len() >= 2 && cn.segments[0].name == name)
+                || args.iter().any(|x| expr_reads_ident(x, name))
+        }
+        K::SysCall { args, .. } => args.iter().any(|x| expr_reads_ident(x, name)),
+        // R17 §3.1: a method chained on a call RESULT (`s.substr(2,4).atoi()`). The
+        // receiver is an expression, not a path, so the arm above cannot see it.
+        K::MethodCall { recv, args, .. } => {
+            expr_reads_ident(recv, name) || args.iter().any(|x| expr_reads_ident(x, name))
         }
         K::Paren { inner } => expr_reads_ident(inner, name),
         K::MinTypMax { min, typ, max } => {
@@ -213,16 +230,25 @@ pub(crate) fn stmt_contains_block_span(s: &ast::Stmt, target: ast::Span) -> bool
 /// detect a block-local that is referenced outside its declaring block — vita's
 /// flat per-function local table would silently resolve such a reference to the
 /// block-local instead of the lexically-correct outer binding (IEEE §6.21 scope).
-/// Conservative: an unhandled statement form simply returns `false` (under-
-/// detection is safe — it only means the loud diagnostic is not raised).
-pub(crate) fn stmt_refs_ident_outside(s: &ast::Stmt, skip: ast::Span, name: &str) -> bool {
+/// Returns the SPAN of the first such reference (R17 §4.1), or `None`. Conservative:
+/// an unhandled statement form simply returns `None` (under-detection is safe — it
+/// only means the loud diagnostic is not raised).
+pub(crate) fn stmt_refs_ident_outside(
+    s: &ast::Stmt,
+    skip: ast::Span,
+    name: &str,
+) -> Option<ast::Span> {
     use ast::Stmt::*;
+    // R17 §4.1: the walk now yields WHERE the outside reference is, not just that one
+    // exists — the diagnostic points at the declaration, and the note has to point at
+    // the reference that makes it illegal. `Option<Span>` short-circuits exactly like
+    // the `bool` it replaces (`||` → `.or_else`, `.any` → `.find_map`).
+    let e_ref = |e: &ast::Expr| expr_reads_ident(e, name).then_some(e.span);
+    let lv_ref = |lv: &ast::Lvalue, sp: ast::Span| lvalue_refs_ident(lv, name).then_some(sp);
     let decl_inits = |decls: &[ast::NetVarDecl]| {
-        decls.iter().any(|d| {
-            d.names
-                .iter()
-                .any(|n| n.init.as_ref().is_some_and(|e| expr_reads_ident(e, name)))
-        })
+        decls
+            .iter()
+            .find_map(|d| d.names.iter().find_map(|n| n.init.as_ref().and_then(e_ref)))
     };
     match s {
         Block {
@@ -232,89 +258,83 @@ pub(crate) fn stmt_refs_ident_outside(s: &ast::Stmt, skip: ast::Span, name: &str
             stmts, decls, span, ..
         } => {
             if *span == skip {
-                return false; // the declaring block itself — references here are in-scope
+                return None; // the declaring block itself — references here are in-scope
             }
             // If THIS block ALSO declares `name`, references to `name` inside it
             // bind to its own local — BUT only when it is a TRUE SIBLING of the
-            // declaring block (does not contain `skip`). If it is an ANCESTOR of
+            // declaring block (does not contain it). If it is an ANCESTOR of
             // `skip`, references here that are outside `skip` still hit the
             // coalesced flat slot and are a genuine hazard, so we must recurse
-            // (the recursion returns false once it reaches `skip` itself).
+            // (the recursion returns None once it reaches `skip` itself).
             if decls
                 .iter()
                 .flat_map(|d| d.names.iter())
                 .any(|n| n.name.name == name)
                 && !stmts.iter().any(|st| stmt_contains_block_span(st, skip))
             {
-                return false;
+                return None;
             }
-            decl_inits(decls)
-                || stmts
+            decl_inits(decls).or_else(|| {
+                stmts
                     .iter()
-                    .any(|st| stmt_refs_ident_outside(st, skip, name))
+                    .find_map(|st| stmt_refs_ident_outside(st, skip, name))
+            })
         }
-        Blocking { lhs, rhs, .. } | NonBlocking { lhs, rhs, .. } => {
-            lvalue_refs_ident(lhs, name) || expr_reads_ident(rhs, name)
+        Blocking { lhs, rhs, span, .. } | NonBlocking { lhs, rhs, span, .. } => {
+            lv_ref(lhs, *span).or_else(|| e_ref(rhs))
         }
         If {
             cond,
             then_s,
             else_s,
             ..
-        } => {
-            expr_reads_ident(cond, name)
-                || stmt_refs_ident_outside(then_s, skip, name)
-                || else_s
+        } => e_ref(cond)
+            .or_else(|| stmt_refs_ident_outside(then_s, skip, name))
+            .or_else(|| {
+                else_s
                     .as_ref()
-                    .is_some_and(|e| stmt_refs_ident_outside(e, skip, name))
-        }
-        Return { value, .. } => value.as_ref().is_some_and(|e| expr_reads_ident(e, name)),
+                    .and_then(|e| stmt_refs_ident_outside(e, skip, name))
+            }),
+        Return { value, .. } => value.as_ref().and_then(e_ref),
         Case {
             scrutinee, items, ..
-        } => {
-            expr_reads_ident(scrutinee, name)
-                || items.iter().any(|it| match it {
-                    ast::CaseItem::Match { labels, body, .. } => {
-                        labels.iter().any(|e| expr_reads_ident(e, name))
-                            || stmt_refs_ident_outside(body, skip, name)
-                    }
-                    ast::CaseItem::Default { body, .. } => {
-                        stmt_refs_ident_outside(body, skip, name)
-                    }
-                })
-        }
+        } => e_ref(scrutinee).or_else(|| {
+            items.iter().find_map(|it| match it {
+                ast::CaseItem::Match { labels, body, .. } => labels
+                    .iter()
+                    .find_map(&e_ref)
+                    .or_else(|| stmt_refs_ident_outside(body, skip, name)),
+                ast::CaseItem::Default { body, .. } => stmt_refs_ident_outside(body, skip, name),
+            })
+        }),
         For {
             init,
             cond,
             step,
             body,
             ..
-        } => {
-            stmt_refs_ident_outside(init, skip, name)
-                || expr_reads_ident(cond, name)
-                || stmt_refs_ident_outside(step, skip, name)
-                || stmt_refs_ident_outside(body, skip, name)
-        }
+        } => stmt_refs_ident_outside(init, skip, name)
+            .or_else(|| e_ref(cond))
+            .or_else(|| stmt_refs_ident_outside(step, skip, name))
+            .or_else(|| stmt_refs_ident_outside(body, skip, name)),
         While { cond, body, .. } => {
-            expr_reads_ident(cond, name) || stmt_refs_ident_outside(body, skip, name)
+            e_ref(cond).or_else(|| stmt_refs_ident_outside(body, skip, name))
         }
         Repeat { count, body, .. } => {
-            expr_reads_ident(count, name) || stmt_refs_ident_outside(body, skip, name)
+            e_ref(count).or_else(|| stmt_refs_ident_outside(body, skip, name))
         }
         Forever { body, .. } => stmt_refs_ident_outside(body, skip, name),
-        Wait { cond, body, .. } => {
-            expr_reads_ident(cond, name)
-                || body
-                    .as_ref()
-                    .is_some_and(|b| stmt_refs_ident_outside(b, skip, name))
-        }
+        Wait { cond, body, .. } => e_ref(cond).or_else(|| {
+            body.as_ref()
+                .and_then(|b| stmt_refs_ident_outside(b, skip, name))
+        }),
         DelayCtrl { body, .. } | EventCtrl { body, .. } => body
             .as_ref()
-            .is_some_and(|b| stmt_refs_ident_outside(b, skip, name)),
+            .and_then(|b| stmt_refs_ident_outside(b, skip, name)),
         SysTaskCall { args, .. } | UserTaskCall { args, .. } | RandomizeWith { args, .. } => {
-            args.iter().any(|e| expr_reads_ident(e, name))
+            args.iter().find_map(&e_ref)
         }
-        _ => false,
+        _ => None,
     }
 }
 
@@ -401,6 +421,16 @@ fn expr_no_ref_with(e: &ast::Expr, name: &str, deep: bool) -> bool {
         // `t.method(a)`) — a read of `name`. A plain `f(args)` head is some other
         // function. So the head must not be `name`, AND every arg must be ref-free.
         K::Call { name: cn, args } => path_ok(cn) && args.iter().all(sub),
+        // R17 §3.1: a method CHAINED on a call result — `line.substr(4,5).atoi()`.
+        // The receiver is an expression (the inner call), not a path, so the `Call`
+        // arm above never saw it and the chain fell to `_ => false` = "may reference
+        // `name`". That answer is given for EVERY name, so one chain anywhere in a
+        // block rejected the chain's own assignment target and every local declared
+        // after it — 12 of the 34 diagnostics in the round-17 report, plus the
+        // cross-file misattribution (§3.1b) when the chain sat in a callee body.
+        // The `method` Ident is a name in the RECEIVER's namespace, never a reference
+        // to the caller's `name`, so only `recv` and the args are vetted.
+        K::MethodCall { recv, args, .. } => sub(recv) && args.iter().all(sub),
         K::SysCall { args, .. } => args.iter().all(sub),
         K::Paren { inner } => sub(inner),
         K::MinTypMax { min, typ, max } => sub(min) && sub(typ) && sub(max),
@@ -484,6 +514,9 @@ pub(crate) fn expr_definitely_refs(e: &ast::Expr, name: &str) -> bool {
                 || args.iter().any(|x| expr_definitely_refs(x, name))
         }
         K::SysCall { args, .. } => args.iter().any(|x| expr_definitely_refs(x, name)),
+        K::MethodCall { recv, args, .. } => {
+            expr_definitely_refs(recv, name) || args.iter().any(|x| expr_definitely_refs(x, name))
+        }
         K::Paren { inner } => expr_definitely_refs(inner, name),
         K::MinTypMax { min, typ, max } => {
             expr_definitely_refs(min, name)
@@ -506,6 +539,24 @@ pub(crate) fn expr_definitely_refs(e: &ast::Expr, name: &str) -> bool {
             .is_some_and(|v| expr_definitely_refs(v, name)),
         _ => false,
     }
+}
+
+/// R17 §3.3: CONSERVATIVE "this `@(…)` sensitivity list certainly does NOT reference
+/// `name`". The accept-gate twin of [`sensitivity_reads_ident`], built on
+/// [`expr_no_ref`] so an unvetted event expression answers "may reference".
+/// `@(*)` names no expression at all and is trivially ref-free.
+pub(crate) fn sensitivity_no_ref(s: &ast::Sensitivity, name: &str) -> bool {
+    match s {
+        ast::Sensitivity::Star => true,
+        ast::Sensitivity::List(evs) => evs.iter().all(|ev| expr_no_ref(&ev.expr, name)),
+    }
+}
+
+/// R17 §3.3: CONSERVATIVE "this intra-assignment event control (`= @(ev) rhs` /
+/// `= repeat(n) @(ev) rhs`) certainly does NOT reference `name`". Both the repeat
+/// count and the event expressions are reads.
+pub(crate) fn intra_event_no_ref(e: &ast::IntraEvent, name: &str) -> bool {
+    e.repeat.as_ref().is_none_or(|r| expr_no_ref(r, name)) && sensitivity_no_ref(&e.ctrl, name)
 }
 
 /// CONSERVATIVE lvalue counterpart of [`expr_no_ref`] — the lvalue (write target
@@ -572,7 +623,18 @@ pub(crate) fn stmt_no_ref(st: &ast::Stmt, name: &str) -> bool {
             rhs,
             ..
         } => {
-            delay.is_none() && event.is_none() && lvalue_no_ref(lhs, name) && expr_no_ref(rhs, name)
+            // R17 §3.3: a TIMING prefix is just more expressions. `#1 y = 3;` references
+            // `name` exactly as much as `y = 3;` does — not at all — but the timed form
+            // used to answer `false` here purely because `delay`/`event` were present,
+            // and then fell to `da_stmt`'s catch-all and aborted the whole walk. Vetting
+            // the prefix expressions is both more precise and what the predicate's own
+            // contract ("certainly does NOT reference `name`") already claimed.
+            delay
+                .as_ref()
+                .is_none_or(|d| d.values.iter().all(|e| expr_no_ref(e, name)))
+                && event.as_ref().is_none_or(|e| intra_event_no_ref(e, name))
+                && lvalue_no_ref(lhs, name)
+                && expr_no_ref(rhs, name)
         }
         S::SysTaskCall { args, .. } => args.iter().all(|a| expr_no_ref(a, name)),
         // A CONTAINER-METHOD statement (`q.delete();`, `s.putc(i,c);`) — a 2-segment

@@ -35,6 +35,14 @@ pub(crate) enum CallEffect {
     /// Definitely WRITES `name` whole, through a pure output actual with no
     /// same-call read (IEEE §13.5.2 copy-out).
     Writes,
+    /// R17 §3.2: provably does NOT write `name`, but does READ it — every actual
+    /// mentioning `name` sits at an `input` formal (copy-in only), the callee
+    /// resolves, and its body cannot reach the flattened net. Distinct from
+    /// `Unknown` because "cannot write" is the fact the never-written argument needs:
+    /// a local deliberately left empty and passed by value stays at its default, so
+    /// the flatten and per-entry storage agree. For the walk itself this is still a
+    /// read, and behaves exactly like `Unknown`.
+    Reads,
     /// Anything else: an input / inout / select reference, a callee that cannot be
     /// resolved, or a body that may reach `name`. Conservatively a read.
     Unknown,
@@ -96,6 +104,39 @@ impl DaOut {
     }
 }
 
+/// R17 §3.3 / §4.2: WHERE and WHY the definite-assignment walk stopped.
+///
+/// The round-17 report could not reduce 21 of its 34 diagnostics because E3009's
+/// lifetime message names only two possible causes — "an initializer" and "a read
+/// before its first write" — while the actual cause for most sites is a third one
+/// the message never mentions: the walk reached a construct it does not model and
+/// answered "unsafe" for the whole block. The declaration is the only location
+/// printed, so the construct that ended the scan can be in another statement, another
+/// function, or another FILE (§3.1b), and nothing at the printed location is wrong.
+///
+/// `da_stmt` now carries this out of the walk so the caller can attach a `note:` at
+/// the construct's own span. It is diagnostic-only: no accept/reject decision reads
+/// it.
+#[derive(Clone, Copy)]
+pub(crate) struct DaGiveUp {
+    /// The span of the construct that stopped the walk — a statement, or the
+    /// expression within it that referenced the local.
+    pub(crate) span: ast::Span,
+    /// A short phrase completing "…stopped here: {what}".
+    pub(crate) what: &'static str,
+}
+
+impl DaGiveUp {
+    fn at(span: ast::Span, what: &'static str) -> Self {
+        DaGiveUp { span, what }
+    }
+}
+
+/// The walk's result: the control-flow/assigned state after a statement, or the
+/// give-up that ended it. `Result` rather than `Option` so every `?` propagates the
+/// FIRST (innermost, earliest) give-up — the one the user has to look at.
+type DaResult = Result<DaOut, DaGiveUp>;
+
 /// R16 §3.1: is this `disable` target the parser's synthetic label for a `break` /
 /// `continue`? Those labels are `$break$<lo>` / `$continue$<lo>` (see
 /// `hdl-parser::stmt_ctl`), and the leading `$` makes them unwritable as a user
@@ -111,6 +152,44 @@ fn is_loop_jump(target: &ast::HierPath) -> bool {
     target.segments.len() == 1
         && matches!(target.segments.first(), Some(s)
             if s.name.starts_with("$break$") || s.name.starts_with("$continue$"))
+}
+
+/// R17: does `st` (or anything nested in it) let SIMULATION TIME ADVANCE?
+///
+/// Only used for the shared-flattened-net rule (see [`da_stmt`]); a fresh net has no
+/// other writer, so suspending is irrelevant to it. RECURSIVE, and checked before the
+/// `stmt_no_ref` fast path, because a suspending statement that never mentions the
+/// local (`begin #1 y = 3; end`) hands the scheduler over just the same.
+///
+/// Covers exactly the forms the pre-R17 walk rejected by falling to its catch-all:
+/// delay / event / wait control, in prefix or wrapper position. A user task CALL can
+/// also suspend, but the pre-R17 walk accepted a provably-inert one and this rule is
+/// not the place to take that back.
+fn stmt_advances_time(st: &ast::Stmt) -> bool {
+    use ast::Stmt::*;
+    let sub = |s: &ast::Stmt| stmt_advances_time(s);
+    let opt = |s: &Option<Box<ast::Stmt>>| s.as_deref().is_some_and(stmt_advances_time);
+    match st {
+        DelayCtrl { .. } | EventCtrl { .. } | Wait { .. } | WaitFork { .. } => true,
+        Blocking { delay, event, .. } | NonBlocking { delay, event, .. } => {
+            delay.is_some() || event.is_some()
+        }
+        Block { stmts, .. } | Fork { stmts, .. } => stmts.iter().any(sub),
+        If { then_s, else_s, .. } => sub(then_s) || opt(else_s),
+        Case { items, .. } => items.iter().any(|it| match it {
+            ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => sub(body),
+        }),
+        For {
+            init, step, body, ..
+        } => sub(init) || sub(step) || sub(body),
+        While { body, .. } | Repeat { body, .. } | Forever { body, .. } => sub(body),
+        DeferredAssert { then_s, else_s, .. } => sub(then_s) || sub(else_s),
+        ConcurrentAssert { pass, fail, .. } => {
+            pass.as_deref().is_some_and(stmt_advances_time)
+                || fail.as_deref().is_some_and(stmt_advances_time)
+        }
+        _ => false,
+    }
 }
 
 /// GAP-D definite-assignment (round-4, guard-aware). Returns the assigned-state
@@ -132,8 +211,32 @@ pub(crate) fn da_stmt(
     assigned: bool,
     name: &str,
     out_writes: OutActualWrites,
-) -> Option<DaOut> {
+    sole: bool,
+) -> DaResult {
     use ast::Stmt as S;
+    // R17: does a statement that lets TIME ADVANCE break the flatten here? Only when
+    // the net is SHARED with a same-named block-local in another block (`sole` false):
+    // suspending hands the scheduler to that other block, which writes the one net, so
+    // this block's later read observes a value its own `automatic` storage never would.
+    // With a fresh net there is no other writer and suspending changes nothing.
+    //
+    // This is what the pre-R17 walk enforced by ACCIDENT — every timing form fell to
+    // the catch-all — and the accident was load-bearing: modelling those forms without
+    // this rule turned an `initial begin int k; #1; k=2; … end` sharing a generate-scope
+    // `k` from loud into a silent `2` where iverilog prints `1`. Positional, exactly
+    // like the accident it replaces: a timing statement reached AFTER the local is
+    // definitely assigned was accepted before and still is.
+    const SHARED_SUSPEND: &str = "time can advance here, and the flattened net is shared \
+         with a same-named block-local in another block — that block can write it before \
+         this one reads it again";
+    if !sole && stmt_advances_time(st) {
+        return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
+    }
+    // R17 §3.3: the give-up for "this expression reads `name` and nothing has written
+    // it yet on this path" — reported at the EXPRESSION's span, which is the token the
+    // user must look at (the statement span would point at the whole `if`/`while`).
+    let read =
+        |e: &ast::Expr| DaGiveUp::at(e.span, "it is read here before any write on this path");
     // R16 §3.1: a `disable` — whether the parser's `break`/`continue` desugaring or a
     // user one — names a BLOCK, never a variable, so it can neither read nor write
     // `name`. Checked ahead of the `stmt_no_ref` fast path because that path answers
@@ -142,7 +245,7 @@ pub(crate) fn da_stmt(
     // through (sound whether or not it actually transfers control — see
     // [`is_loop_jump`]).
     if let S::Disable { target, .. } = st {
-        return Some(if is_loop_jump(target) {
+        return Ok(if is_loop_jump(target) {
             DaOut::Jumps
         } else {
             DaOut::Falls(assigned)
@@ -151,24 +254,51 @@ pub(crate) fn da_stmt(
     // A statement with no reference to `name` at all can neither read nor assign
     // it — the assigned-state passes through unchanged.
     if stmt_no_ref(st, name) {
-        return Some(DaOut::Falls(assigned));
+        return Ok(DaOut::Falls(assigned));
     }
     match st {
         S::Blocking {
             lhs,
-            delay: None,
-            event: None,
+            delay,
+            event,
             rhs,
             ..
         } => {
+            // R17 §3.3: a TIMING-CONTROLLED blocking assign — `#1 name = e;`,
+            // `@(posedge clk) name = e;`, `name = #1 e;`, `name = @(ev) e;` — is still a
+            // blocking assign. The process does not continue until the write has
+            // happened, so by the time any later statement runs, `name` is written
+            // exactly as in the un-delayed form. Only the PREFIX expressions are extra,
+            // and they are reads evaluated before the write.
+            //
+            // These fell to the catch-all and rejected the block, which made the very
+            // common testbench idiom "first write is clock- or delay-aligned" loud for
+            // no reason. The un-timed form was already handled; the arms differed only
+            // in that the timed one was never written.
+            if !assigned {
+                if let Some(d) = delay {
+                    if let Some(e) = d.values.iter().find(|e| !expr_no_ref(e, name)) {
+                        return Err(read(e));
+                    }
+                }
+                if let Some(ev) = event {
+                    if !intra_event_no_ref(ev, name) {
+                        return Err(DaGiveUp::at(
+                            st.span(),
+                            "the event control on this assignment reads it before any \
+                             write on this path",
+                        ));
+                    }
+                }
+            }
             // RHS is evaluated first: reading `name` here while unassigned is unsafe.
             if !assigned && !expr_no_ref(rhs, name) {
-                return None;
+                return Err(read(rhs));
             }
             // A clean WHOLE-var write (`name = …`) makes it definitely assigned.
             if let ast::Lvalue::Ident(p) = lhs {
                 if p.segments.len() == 1 && p.segments[0].name == name {
-                    return Some(DaOut::Falls(true));
+                    return Ok(DaOut::Falls(true));
                 }
             }
             // Otherwise the lvalue references `name` only through a select base
@@ -179,9 +309,13 @@ pub(crate) fn da_stmt(
             // `stmt_no_ref` fast path, so reaching here means one side references
             // `name`.)
             if !assigned {
-                return None;
+                return Err(DaGiveUp::at(
+                    st.span(),
+                    "this assignment writes only PART of it (a select), so the rest is \
+                     still unwritten",
+                ));
             }
-            Some(DaOut::Falls(assigned))
+            Ok(DaOut::Falls(assigned))
         }
         S::If {
             cond,
@@ -195,16 +329,16 @@ pub(crate) fn da_stmt(
             // the `if` (the cond ran on every path).
             let after = assigned || cond_out_writes(cond, name, out_writes);
             if !after && !expr_no_ref(cond, name) {
-                return None;
+                return Err(read(cond));
             }
-            let a_then = da_stmt(then_s, after, name, out_writes)?;
+            let a_then = da_stmt(then_s, after, name, out_writes, sole)?;
             // R16 §3.1: an absent `else` is an empty arm that FALLS THROUGH with the
             // entry state — it is not a jump, so it always participates in the merge.
             let a_else = match else_s {
-                Some(e) => da_stmt(e, after, name, out_writes)?,
+                Some(e) => da_stmt(e, after, name, out_writes, sole)?,
                 None => DaOut::Falls(after),
             };
-            Some(a_then.merge(a_else))
+            Ok(a_then.merge(a_else))
         }
         S::Block { stmts, decls, .. } => {
             // A nested block-local decl whose initializer reads `name` observes
@@ -213,23 +347,23 @@ pub(crate) fn da_stmt(
                 for nn in &dd.names {
                     if let Some(e) = &nn.init {
                         if !assigned && !expr_no_ref(e, name) {
-                            return None;
+                            return Err(read(e));
                         }
                     }
                 }
             }
             let mut a = assigned;
             for s in stmts {
-                match da_stmt(s, a, name, out_writes)? {
+                match da_stmt(s, a, name, out_writes, sole)? {
                     DaOut::Falls(next) => a = next,
                     // R16 §3.1: the rest of this block is UNREACHABLE — a jump has
                     // already left it. Stop rather than keep walking statements that
                     // cannot execute (walking them is what turned a `continue`-first
                     // loop body loud).
-                    DaOut::Jumps => return Some(DaOut::Jumps),
+                    DaOut::Jumps => return Ok(DaOut::Jumps),
                 }
             }
-            Some(DaOut::Falls(a))
+            Ok(DaOut::Falls(a))
         }
         S::Fork { .. } => {
             // Fork branches run CONCURRENTLY — a write in one branch does not
@@ -241,9 +375,13 @@ pub(crate) fn da_stmt(
             // means the fork DOES reference `name` (else `stmt_no_ref` fast-pathed
             // it), so an unassigned fork is conservatively loud.
             if assigned {
-                Some(DaOut::Falls(true))
+                Ok(DaOut::Falls(true))
             } else {
-                None
+                Err(DaGiveUp::at(
+                    st.span(),
+                    "a `fork` references it, and concurrent arms give no order in which \
+                     a write precedes a read",
+                ))
             }
         }
         S::Case {
@@ -253,7 +391,7 @@ pub(crate) fn da_stmt(
             // output-actual call WRITES `name` before the arms and after the case.
             let after = assigned || cond_out_writes(scrutinee, name, out_writes);
             if !after && !expr_no_ref(scrutinee, name) {
-                return None;
+                return Err(read(scrutinee));
             }
             // R16 §3.1: arms merge with the same rule as `if` — an arm that jumps
             // (`case (x) 2: continue; …`) never reaches the join and drops out.
@@ -262,8 +400,10 @@ pub(crate) fn da_stmt(
             for it in items {
                 let body = match it {
                     ast::CaseItem::Match { labels, body, .. } => {
-                        if !after && labels.iter().any(|l| !expr_no_ref(l, name)) {
-                            return None;
+                        if !after {
+                            if let Some(l) = labels.iter().find(|l| !expr_no_ref(l, name)) {
+                                return Err(read(l));
+                            }
                         }
                         body
                     }
@@ -272,7 +412,7 @@ pub(crate) fn da_stmt(
                         body
                     }
                 };
-                let arm = da_stmt(body, after, name, out_writes)?;
+                let arm = da_stmt(body, after, name, out_writes, sole)?;
                 all = Some(match all {
                     Some(acc) => acc.merge(arm),
                     None => arm,
@@ -283,8 +423,8 @@ pub(crate) fn da_stmt(
             // no arm → skip all). Without a default the no-match path falls through
             // with the entry state, so the case as a whole always falls through then.
             match all {
-                Some(m) if has_default && !after => Some(m),
-                _ => Some(DaOut::Falls(after)),
+                Some(m) if has_default && !after => Ok(m),
+                _ => Ok(DaOut::Falls(after)),
             }
         }
         S::For {
@@ -294,20 +434,20 @@ pub(crate) fn da_stmt(
             body,
             ..
         } => {
-            let a0 = da_stmt(init, assigned, name, out_writes)?.state();
+            let a0 = da_stmt(init, assigned, name, out_writes, sole)?.state();
             if !a0 && !expr_no_ref(cond, name) {
-                return None;
+                return Err(read(cond));
             }
             // The FIRST iteration enters with `a0` (the binding read-before-write
             // case; the loop may also run zero times). Body / step are checked
             // against `a0` — conservative, since a later iteration only ever has
             // MORE assigned than the first.
-            da_stmt(body, a0, name, out_writes)?;
-            da_stmt(step, a0, name, out_writes)?;
+            da_stmt(body, a0, name, out_writes, sole)?;
+            da_stmt(step, a0, name, out_writes, sole)?;
             // A loop cannot newly guarantee assignment (may run 0 times), and it always
             // FALLS THROUGH for this analysis — a `break` inside its body targets THIS
             // loop, so it lands right here rather than skipping what follows.
-            Some(DaOut::Falls(a0))
+            Ok(DaOut::Falls(a0))
         }
         S::While { cond, body, .. } => {
             // BL4: a `while` cond is evaluated at least once (unconditionally) — a
@@ -315,33 +455,33 @@ pub(crate) fn da_stmt(
             // after the loop.
             let after = assigned || cond_out_writes(cond, name, out_writes);
             if !after && !expr_no_ref(cond, name) {
-                return None;
+                return Err(read(cond));
             }
-            da_stmt(body, after, name, out_writes)?;
-            Some(DaOut::Falls(after))
+            da_stmt(body, after, name, out_writes, sole)?;
+            Ok(DaOut::Falls(after))
         }
         S::Repeat { count, body, .. } => {
             if !assigned && !expr_no_ref(count, name) {
-                return None;
+                return Err(read(count));
             }
-            da_stmt(body, assigned, name, out_writes)?;
-            Some(DaOut::Falls(assigned))
+            da_stmt(body, assigned, name, out_writes, sole)?;
+            Ok(DaOut::Falls(assigned))
         }
         S::Forever { body, .. } => {
-            da_stmt(body, assigned, name, out_writes)?;
+            da_stmt(body, assigned, name, out_writes, sole)?;
             // Conservatively falls through even though a `forever` without a `break`
             // never does — over-stating reachability only ever costs precision here.
-            Some(DaOut::Falls(assigned))
+            Ok(DaOut::Falls(assigned))
         }
         S::Return { value, .. } => {
             if let Some(v) = value {
                 if !assigned && !expr_no_ref(v, name) {
-                    return None;
+                    return Err(read(v));
                 }
             }
             // R16 §3.1: a `return` leaves the subroutine — nothing after it in this
             // block executes, so it drops out of any enclosing join.
-            Some(DaOut::Jumps)
+            Ok(DaOut::Jumps)
         }
         // BL4: a bare call STATEMENT `f(…, name, …);` (a task or void-function call —
         // both parse to `UserTaskCall`) is evaluated unconditionally. When `name` is at
@@ -353,18 +493,106 @@ pub(crate) fn da_stmt(
         // non-output-actual call (this arm only ever turns a genuine output-write from
         // loud into supported, never the reverse).
         S::UserTaskCall { name: cn, args, .. } => match out_writes(cn, args, name) {
-            CallEffect::Writes => Some(DaOut::Falls(true)),
+            CallEffect::Writes => Ok(DaOut::Falls(true)),
             // R16 §3.2: a call proven to touch `name` at no position leaves the
             // assigned-state exactly as it was, and the walk continues past it. This
             // is what makes `show(0); a = 1; … a …` legal instead of a diagnostic
             // pointing at `a`.
-            CallEffect::Inert => Some(DaOut::Falls(assigned)),
-            CallEffect::Unknown => None,
+            CallEffect::Inert => Ok(DaOut::Falls(assigned)),
+            CallEffect::Reads | CallEffect::Unknown if assigned => Ok(DaOut::Falls(true)),
+            // R17 §3.2: a proven-read-only call is still a READ of an unwritten local
+            // here. It is reported as one (not as an unresolvable call) because that is
+            // what it is, and because the never-written rule below can forgive it.
+            CallEffect::Reads => Err(DaGiveUp::at(
+                st.span(),
+                "this call reads it (an `input` actual) before any write on this path",
+            )),
+            CallEffect::Unknown => Err(DaGiveUp::at(
+                st.span(),
+                "this call could not be proven to leave it alone (an unresolved callee, \
+                 a hierarchical or named-argument call, or a body that may reach the \
+                 flattened net)",
+            )),
         },
+        // R17 §3.3: a NON-blocking assign `name <= e;`. Its write lands in the NBA
+        // region, AFTER every later blocking statement in this process, so it does NOT
+        // make `name` definitely assigned for a read that follows in the same time step
+        // — that read would still observe the entry value, and on the flatten that is
+        // the leftover. But it is also not a READ of `name` when the rhs is ref-free,
+        // so the honest answer is "state unchanged", not "give up": a later real write
+        // still establishes assignment, and any read before it is judged exactly as it
+        // was. (Reaching here means the lvalue is rooted at `name` or the rhs
+        // references it — the ref-free case took the `stmt_no_ref` fast path.)
+        S::NonBlocking { rhs, .. } => {
+            // A non-blocking write lands in the NBA region, so on a SHARED net another
+            // block scheduled in between sees it — the same hazard as suspending, and
+            // the same thing the pre-R17 catch-all rejected here.
+            if !sole {
+                return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
+            }
+            if !assigned && !expr_no_ref(rhs, name) {
+                return Err(read(rhs));
+            }
+            Ok(DaOut::Falls(assigned))
+        }
+        // R17 §3.3: a timing / event / wait WRAPPER around a statement. The prefix is a
+        // read; the body then runs with the same state, and control falls through to the
+        // next statement with whatever the body established. `Wait`'s body may be absent
+        // (`wait (c);`).
+        S::DelayCtrl { delay, body, .. } => {
+            if !assigned {
+                if let Some(e) = delay.values.iter().find(|e| !expr_no_ref(e, name)) {
+                    return Err(read(e));
+                }
+            }
+            match body {
+                Some(b) => da_stmt(b, assigned, name, out_writes, sole),
+                None => Ok(DaOut::Falls(assigned)),
+            }
+        }
+        S::EventCtrl { ctrl, body, .. } => {
+            if !assigned && !sensitivity_no_ref(ctrl, name) {
+                return Err(DaGiveUp::at(
+                    st.span(),
+                    "this event control reads it before any write on this path",
+                ));
+            }
+            match body {
+                Some(b) => da_stmt(b, assigned, name, out_writes, sole),
+                None => Ok(DaOut::Falls(assigned)),
+            }
+        }
+        S::Wait { cond, body, .. } => {
+            if !assigned && !expr_no_ref(cond, name) {
+                return Err(read(cond));
+            }
+            match body {
+                Some(b) => da_stmt(b, assigned, name, out_writes, sole),
+                None => Ok(DaOut::Falls(assigned)),
+            }
+        }
+        // R17 §3.3: once `name` is DEFINITELY ASSIGNED on this path, no later
+        // statement can make the flatten diverge — the per-entry reset it would have
+        // observed has already been overwritten this execution, so every later read
+        // sees a current-execution value and every later write keeps it that way.
+        // There is no operation that un-assigns it. This is the same rule the
+        // top-level scan already applied between statements (`if assigned { return
+        // true }`) and the `Fork` arm applied locally; NOT applying it inside a
+        // nested construct is what made a write followed by an unmodelled statement
+        // — `x = 5; #1 x = x + 1;` inside a `while` body — loud, and it is why the
+        // reporter measured that a dummy write BEFORE the loop clears the diagnostic
+        // while the same write INSIDE the loop does not (their in-situ facts 2 and 3).
+        // `Falls(true)` is never weaker than `Jumps` at a join, so over-stating
+        // reachability for a statement that might transfer control costs nothing.
+        _ if assigned => Ok(DaOut::Falls(true)),
         // Any other statement that references `name` (timing, `assign`/`force`,
         // event control, disable, non-blocking, a task call with a referencing
         // arg, SVA, …) is not vetted for read-before-write → conservatively unsafe.
-        _ => None,
+        _ => Err(DaGiveUp::at(
+            st.span(),
+            "this statement form is not modelled by the walk, and it references the \
+             local before any write on this path",
+        )),
     }
 }
 
@@ -428,7 +656,36 @@ pub(crate) fn automatic_local_definitely_assigned(
     name: &str,
     out_writes: OutActualWrites,
     elem_bounds: Option<(i64, i64)>,
-) -> bool {
+    sole_writer: bool,
+) -> Result<(), DaGiveUp> {
+    // R17 §3.2: a local that is NEVER WRITTEN anywhere in the block is byte-identical
+    // to per-entry storage without any path reasoning at all. `automatic` gives a
+    // fresh default each entry; the flattened static net is default-initialized once
+    // and — with no write reaching it — still holds that same default at every entry.
+    // The two are equal because neither ever changes.
+    //
+    // This is the whole of the report's §3.2: `automatic byte exp[];` deliberately
+    // left empty and passed as an INPUT actual is not a "read before its first write",
+    // it is a variable with no first write to be before. IEEE 1800 §7.5 makes an
+    // unassigned dynamic array size 0, and passing it by value is legal.
+    //
+    // The writer-detector is the conservative one used elsewhere (`_`-free over every
+    // statement form; any doubt answers "may be written"), given the SAME call
+    // resolver the walk uses so that a pure `input` actual is not miscounted as a
+    // possible copy-out. Checked FIRST: a local with no writer needs no path
+    // reasoning, and no give-up below can be anything but spurious for it.
+    //
+    // SCOPE of the claim, and why `sole_writer` exists: the walk sees only THIS
+    // block's statements, so "never written" is a statement about this block alone.
+    // That is the whole truth for a local with a fresh net, but NOT for the
+    // same-name coalesce gate, where a block-local in ANOTHER block shares the
+    // flattened net and its write is the leftover being read here — the exact
+    // silent-wrong that gate exists to stop. Its call site passes `false`; the
+    // fresh-net gates pass `true`. (Writes from outside the declaring block are a
+    // third case, rejected independently by `check_block_local_scope_leaks`.)
+    if sole_writer && stmt_never_writes_ident(stmts, name, Some(out_writes)) {
+        return Ok(());
+    }
     let mut assigned = false;
     // R16 §3.3: indices of `name` written by straight-line constant-index element
     // writes so far. A fixed unpacked array has no whole-value write until every
@@ -446,7 +703,7 @@ pub(crate) fn automatic_local_definitely_assigned(
         // Once definitely assigned at the top level, every later read observes a
         // current-execution value → safe regardless of the statement form.
         if assigned {
-            return true;
+            return Ok(());
         }
         if let Some((lo, hi)) = elem_bounds {
             if let Some(ix) = const_elem_write(st, name) {
@@ -459,14 +716,14 @@ pub(crate) fn automatic_local_definitely_assigned(
                 }
             }
         }
-        match da_stmt(st, false, name, out_writes) {
-            Some(DaOut::Falls(a)) => assigned = a,
+        match da_stmt(st, false, name, out_writes, sole_writer) {
+            Ok(DaOut::Falls(a)) => assigned = a,
             // R16 §3.1: control left the block here (a top-level `break`/`continue`/
             // `return`), so every remaining statement is unreachable and cannot
             // contain a read.
-            Some(DaOut::Jumps) => return true,
-            None => return false,
+            Ok(DaOut::Jumps) => return Ok(()),
+            Err(g) => return Err(g),
         }
     }
-    true
+    Ok(())
 }
