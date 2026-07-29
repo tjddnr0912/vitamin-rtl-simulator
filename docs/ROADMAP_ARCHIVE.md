@@ -338,6 +338,10 @@
 
 **§4** — 계층 task call 거부는 리포트 84건 중 **유일하게** `file:line:col` 이 없었다(그 TB 에선 그게 유일한 진단이라 로그 전체에 위치가 없었다). resolve 패스에서 뜨므로 enable 의 span 을 deferred 레코드에 실었다. dyn-formal 메시지는 r17 이 이미 없앤 "module-process level" 제약을 더는 주장하지 않고, 같은-이름 메시지는 상대 선언의 lifetime 을 **추론하지 않는다**.
 
+**§3.8(리포트의 "미분류 1건")도 같은 뿌리다** — 구조체 로컬이 멤버별 넷으로 분해되며 `automatic` 플래그를 잃어 STATIC coalesce 분기의 다른 문구를 달았을 뿐이고, 두 레벨에서 스코핑을 잃은 것이 정확히 그 멤버들이었다. 같은 문구의 이웃 형태(초기화자를 가진 static 블록 로컬 둘이 한 이름)는 **loud 로 남는다** — 평탄화된 넷 하나에 pre-arm 초기화가 둘 걸려 뒤가 앞을 덮으므로 받아들이면 앞 블록이 뒤 블록 값을 읽는다(iverilog 7/9 → 9/9).
+
+**검증**: harvested 4266 설계 PRE/POST 스윕 = **불일치 20, 전부 loud→동작, 회귀 0**. 조합 코퍼스 100 쌍 differential(불일치 20 = 전부 iverilog 결함) · staged==one-shot 14/14 · VCD PRE==POST.
+
 **적대 리뷰**: escaped identifier 는 `$` 를 담을 수 있어 사용자가 `\$break$77` 이라는 블록을 만들 수 있다 — 파서의 `break` 합성 라벨과 **같은 철자**다. 충돌했다면 그 `disable` 이 loop jump 로 읽혀 join 에서 빠지고 미기록 읽기가 조용히 통과했을 것. 판별자가 둘을 구분함을 핀으로 고정했다.
 
 #### 4.5.267 고정 크기 `automatic` unpacked 배열 — 리셋은 측정으로 기각됐다 (2026-07-29, format 26 불변) ✅
