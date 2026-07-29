@@ -35,6 +35,8 @@ The forward-looking ("Phase-2") side of each item lives in the project's
 | `automatic` block-local that may be read before written | Rejected, not given a leftover value | Loud (`E3009`, with a `note:` at the construct that stopped the analysis) |
 | Hierarchical reference to an `automatic` block-local (`tb.a`) | Rejected (IEEE 1800 §23.9 forbids it) | Loud (`E3009`) |
 | Same dynamic-array-formal function twice in one expression | Rejected, not given the wrong snapshot | Loud (`E3009`) |
+| `$fgets`/`$fscanf`/`$sscanf`/`$fread` inside a framed subroutine body | Rejected, not a silent 0 with an untouched destination | Loud (`F4004`, at the call) |
+| A default argument value whose names bind differently at the call site | Rejected (IEEE 1800 §13.5.4 evaluates it in the subroutine's scope) | Loud (`E3009`) |
 
 The sections below give the detail behind each row. (Earlier editions of this
 chapter also listed `casez`/`casex` wildcard leniency, `%t`/`$timeformat`,
@@ -196,6 +198,22 @@ declared after a call to it are analysed normally. (Before 2026-07-29 one
 timing control anywhere in a callee made every later local in the caller
 loud.)
 
+A call that **returns a value** while writing an `output` argument counts as
+writing it, wherever the call sits:
+
+```systemverilog
+go = rsp_next(fd, r);                            // the rhs of an assignment
+if (rsp_next(fd, r) == 1) …                      // an operand of `==`
+while (n < limit && rsp_next(fd, r) == 1) …      // an operand of `&&`
+```
+
+The copy-out happens while the expression is being evaluated, so `r` holds a
+value written this entry by the time anything downstream reads it. A branch also
+knows what its condition evaluated to: `a && f(r)` is true only when *both*
+operands ran, so the loop body and the `then` branch know `r` is written — the
+loop *exit* does not, because a false condition may have short-circuited the call
+away. `a || f(r)` is the mirror image and informs the `else` branch.
+
 Writing a **struct member** counts toward the whole variable. A member is a
 constant bit range, so `rm.c = 5;` on a single-member struct writes all of
 `rm`, and `rm.a = …; rm.b = …;` covers a two-member one. The same rule accepts
@@ -220,10 +238,14 @@ a hand-written `x[31:16] = a; x[15:0] = b;`. Partial coverage stays loud.
   already written the variable, because being written does not make the shared
   variable yours. Declaring the locals `automatic` avoids the sharing entirely:
   each block then gets its own storage.
-- A write that reaches the variable only through the right-hand side of a
-  short-circuit `&&`/`||`, or through a `?:` branch (`while (n < 2 && f(r)))`),
-  is not counted — the call may not be evaluated at all, and vitamin does not
-  propagate values to decide whether it is.
+- A write that reaches the variable only through a `?:` branch is not counted —
+  exactly one arm runs, so neither arm's write is guaranteed. The same is true
+  *after* a loop whose condition was `a && f(r)`: the loop can exit because `a`
+  was false, in which case `f` never ran. (Inside the body it *is* counted; see
+  above.)
+- A read of the variable elsewhere in the same expression as the call
+  (`g = f(r) + r;`) blocks the claim. Operand order is unspecified for `+`, so
+  the read may come first.
 - Referring to an `automatic` block-local **hierarchically** (`tb.a`, or `t.a`
   from a task in the same module) is rejected. IEEE 1800 §23.9 forbids it —
   automatic storage has no static address to name — and accepting it would let
@@ -289,6 +311,73 @@ replication count** (`$clog2(R)` on its own evaluates normally).
 > in the integer domain with no diagnostic. A module-scope `parameter real` is
 > correct. Until this is fixed, declare real constants at module scope, or pass them
 > as parameters. Tracked in `docs/ROADMAP.md` §2.
+
+---
+
+## File reads inside a subroutine body
+
+`$fgets`, `$fscanf`, `$sscanf`, `$fread`, `$fgetc` and `$ungetc` write their
+destination as a *statement-level* effect. vitamin performs that effect in the
+process executor; a subroutine that runs on the frame-call path — one declared
+`automatic`, or one with an `output`/`inout` formal, or one returning a string —
+executes its body through a different evaluator, which cannot perform it.
+
+Rather than return 0 with the destination untouched (which is what happened
+before the 2026-07-29 release, silently), such a read is now a **fatal** the
+moment that body actually runs:
+
+```
+fatal[VITA-F4004]: `$fgets` writes its destination as a statement-level effect that
+this synchronous `&self` frame executor cannot perform, so the read would silently
+return 0 and leave the destination untouched. Do the read in a module process, or in
+a task vita can inline (no output/inout formals, no `automatic` lifetime), and pass
+the result in.
+```
+
+The idiomatic workaround for a vector-file walker is to read the line in the
+process and pass it to the parser:
+
+```systemverilog
+initial begin
+  fd = $fopen("vectors.rsp", "r");
+  rc = $fgets(line, fd);          // read in the process …
+  while (rc != 0) begin
+    parse_line(line, r);          // … parse in the subroutine
+    rc = $fgets(line, fd);
+  end
+end
+```
+
+A task with no `output`/`inout` formals and no `automatic` lifetime is inlined
+into the calling process, so a read inside *it* works normally.
+
+---
+
+## Default argument values
+
+A subroutine's default argument value is evaluated in the scope where the
+subroutine is **declared** (IEEE 1800 §13.5.4), not at the call site. vitamin
+lowers it at the call site, which gives the same answer whenever both scopes see
+the same object — a default naming a module net resolves outward to that net from
+a module process, from a generate block, and from another subroutine's body
+alike.
+
+When they would differ — the caller declares its own variable of that name — the
+call is rejected rather than quietly binding to the caller's:
+
+```systemverilog
+int g = 5;
+task automatic tw (output int x, input int y = g); x = y + 1; endtask
+
+task automatic outer();
+  int g;              // shadows the module `g` at this call site only
+  g = 90;
+  tw(a);              // error: the default's names bind differently here
+endtask
+```
+
+Pass the argument explicitly (`tw(a, g)`), or make the default a literal or a
+`pkg::` constant.
 
 ---
 

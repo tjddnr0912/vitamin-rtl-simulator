@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 247건 (최신순)
+## 인덱스 — 완료 슬라이스 248건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–273**
+**§4.5.220–274**
+- `4.5.274` 외부 round-19 — 값을 반환하는 호출의 output actual(33/34) · `void'(f(out))` 문장 · named arg 매핑 · 그리고 그 밑의 silent-wrong 2건(default 인자 스코프 · frame body 안의 파일 읽기) …
 - `4.5.273` 외부 round-18 — suspend 하는 callee(11/12) · struct 멤버 비트 커버리지 · `automatic` unpacked struct 의 lifetime 이 파서에서 사라지던 것 · 그리고 그 밑의 silent-wrong …
 - `4.5.272` `-v` 유효 invocation echo — 그리고 그것이 드러낸 filelist 플래그-값 결함(`--top` false-loud · `--hier-tree` silent 위치) …
 - `4.5.271` 오라클을 만들다 나온 silent-wrong 2건 — 리시버를 못 보는 참조 워커 · `atoi` 계열이 `strtol` 이었다 …
@@ -328,6 +329,30 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.274 외부 round-19 — 값을 반환하는 호출의 output actual, 그리고 그 밑의 silent-wrong 2건 (2026-07-29, format 26 불변) ✅
+
+**리포트 34건 중 33건이 §3.1 하나였고, 트리거는 리포트가 짚은 그대로 "호출이 값을 반환하는가"였다.** BL4 가 output actual 의 쓰기를 인정하는 자리는 딱 둘 — 맨몸 호출 **문장**, 그리고 `!`/`(…)` 를 벗기면 호출인 **조건 전체**(`cond_out_writes`) — 이고, 그 둘은 *문장 모양*의 부분집합이다. 호출이 값을 반환하는 순간 그것은 표현식이 갈 수 있는 아무 데나 갈 수 있는데, 거기서 워크가 묻는 것은 `expr_no_ref` 하나뿐이었고 **그 워커에게 "언급"은 언제나 읽기**다. 그래서 `go = nxt(5, r);` · `if (nxt(5,r) == 1)` · `while (n < lim && rsp_next(fd, r) == 1)` 셋 다 거부됐고, R18 이 `automatic` unpacked struct 의 lifetime 을 되살리자마자 그 게이트가 도달 가능해져 **`TB=sha2` 가 24/24 → elaborate 불가**로 회귀했다.
+
+**수정 = 표현식 단위 효과 워크**(`da/expr_effect.rs` 신규). `ExprDa::{Clean, Writes, Reads}` — `Clean` 은 "이 표현식을 평가하는 동안 읽기는 일어날 수 없다"이고 **조건부 쓰기는 Clean 에 포함**된다(쓰기는 읽기가 아니고, 주장하지 않는 쪽이 보수적이다). 노드 집합은 **로워링이 copy-out 을 hoist 하는 집합과 같게** 맞췄다(`hoist_inout_calls` = Paren/Unary/Binary, +Ternary) — 그 밖의 노드는 pre-R19 답(`expr_no_ref`)을 그대로 낸다. `&&`/`||` 만 평가 순서가 고정이라(IEEE 1800 §11.4.7) 좌항의 쓰기는 우항의 읽기보다 **먼저**임을 말할 수 있고, 그 밖의 이항 연산자는 순서가 안 정해져 있어 반대편에 읽기가 있으면 주장을 접는다.
+
+**그리고 분기는 조건의 *값*을 안다**(`expr_writes_when`). `a && f(r)` 이 **참**이면 두 피연산자가 모두 평가됐다 — 그래서 루프 **본문**은 `r` 이 쓰였음을 알고, 루프 **탈출**은 모른다(거짓은 단락일 수 있다). `a || f(r)` 이 **거짓**이면 둘 다 평가됐다 → `else` 가지가 안다. 이 4가지 전제를 iverilog 로 **실측**했다(출력 부작용을 output-formal copy-out 대신 세워서): `BODY se=1/11/21` · `EXIT se=-1` · `LEFT se=91` · `OR-else se=21` — 네 규칙이 정확히 그대로다. 그것이 리포트의 실제 사이트(`.rsp` 워커 = CAVP/Monte 벡터 순회의 표준형)를 여는 규칙이다.
+
+**§3.2 는 우회로가 막혀 있었다는 리포트의 지적이 맞았고, 문장 위치는 가장 쉬운 경우였다.** `void'(nxt(5, r));` 와 맨몸 `nxt(5, r);` 는 같은 `Stmt::UserTaskCall` 로 파싱되는데, `lower_stmt` 의 그 arm 이 `lower_expr` 로 보내 `emit_frame_call` 의 **무조건** out-formal 거부에 걸렸다. 반환값을 버리는 자리이므로 R5-B copy-out 이 버리는 temp 하나만 있으면 된다(`inout_call_target` → `emit_frame_func_out_call`). `inout` 의 copy-IN/copy-OUT 도 같이 산다(실측 `o=11 x=6`). 그리고 **stale 문구**를 고쳤다 — 그 메시지가 지원 위치 목록에서 문장 위치를 빼먹은 것이 리포트가 없는 우회로를 찾아 헤맨 이유다.
+
+**§3.3 은 매핑이 안 쓰여 있었을 뿐이다.** DA 리졸버 둘(`call_out_actual_writes`/`call_only_reads`)이 **첫 `NamedArg` 를 보면 그대로 포기**해서, 나머지 기본값을 건드리지 않으려고 named 를 쓴 호출이 통째로 `Unknown` 이 됐고 워크는 거기서 멈춰 **몇 인자 왼쪽의 로컬**을 지목했다. `callee_arg_dirs`(위치 인자 → 이름 인자, IEEE 1800 §13.5.4)로 한 번에 풀린다. **그걸 만들자 결함이 드러났다**: `emit_frame_func_out_call` 은 G10 named-arg 재정렬을 **아예 안 하고 있었다**(inline 경로와 plain frame 경로만 했다) — `f(.a(1), .o(x))` 가 `NamedArg` 노드를 단 채 루프에 들어가 원인을 안 가리키는 진단 2개("named argument is only valid in a user function/task call" + "output/inout arg must be a simple net")를 냈다.
+
+**R19-X1 SILENT-WRONG — 기본 인자 값의 스코프.** vita 는 채워 넣은 default 를 **호출자** 스코프에서 낮추는데 IEEE 1800 §13.5.4 는 **서브루틴이 선언된** 스코프에서 평가한다. 자기 `g` 를 선언한 태스크 본문에서 모듈 태스크를 부르면 callee 의 default `g` 가 **호출자의 `g`** 를 집었다 — **vita `91` / iverilog `6`, exit 0, 진단 없음**. 같은 위험을 **클래스 메서드에서는 이미 닫아 뒀다**(`default_is_scope_safe`, "IEEE §13.5.3 는 메서드의 CLASS 스코프에서 푼다"라고 주석까지 달아서) — 평범한 함수/태스크 쌍둥이만 안 닫혀 있었다. 수정은 **이름을 금지하는 대신 바인딩을 비교**한다: 금지하면 generate 블록/서브루틴 본문에서 모듈 넷을 가리키는 **정상** 케이스(바깥으로 걸어 같은 넷을 찾는다)까지 죽는다. 스코프 프리픽스가 같고 subst 가 비었으면 두 낮추기는 같은 낮추기라 O(1) 로 통과하고(대부분의 호출), 다를 때만 자유 이름들의 net/param 바인딩을 `tf_decl_scope` 에서 다시 조회해 비교한다. **실측 대조**: 그림자 → loud, 모듈 프로세스/generate 블록 → 둘 다 `6`(iverilog 일치).
+
+**R19-X2 SILENT-WRONG — frame body 안의 파일 읽기가 조용히 0.** `$fgets`/`$fscanf`/`$sscanf`/`$fread`/`$fgetc`/`$ungetc` 의 실제 일(목적지 쓰기)은 **프로세스 실행기만** 하는 문장 수준 효과(`StmtEffect::Fgets`/…)다. frame body 는 `run_frame_call` 이 같은 `SysFunc` 를 순수 `eval` 로 돌리는데 그 arm 은 **X 를 내고 아무것도 안 만진다** → `rc = $fgets(line, fd);` 가 `function automatic` 안에서 **rc=0 + 빈 문자열**. **vita `inside: rc=0 loc=[]` / iverilog `inside: rc=9 loc=[Len = 16]`, exit 0.** 그게 바로 §3.1 이 방금 열어준 `.rsp` 워커의 모양이라 같이 닫았다. **elaborate 게이트로 먼저 시도했다가 실측으로 기각**했다 — `task automatic` 은 frame 과 inline **두 벌**로 낮춰지고 호출자가 실제로 쓰는 건 inline 쪽이라, frame 사본에 건 게이트가 **정상 동작하는 설계를 false-loud** 로 만들었다(`useglobal()` 이 `rc=9` 를 내던 것이 죽었다). 그래서 `fatal_frame_heap_write`/`fatal_frame_assoc_iter` 와 같은 **런타임 fatal** 채널로 — frame 사본이 **실제로 실행될 때만** 터진다.
+
+**적대 리뷰(2 렌즈) — 자기 수정 1건.** soundness 렌즈가 `expr_da` 의 `Call` arm 을 잡았다: 처음엔 `CallEffect::{Reads,Unknown}` 을 그대로 `ExprDa::Reads` 로 보냈는데, `call_effect` 는 **해결 못 하거나 본문을 못 훑는 모든 callee** 에 `Unknown` 을 주므로 `while (b < 3 && g(1)) … a …` — `a` 를 **언급조차 안 하는** 조건 — 이 `a` 의 읽기가 된다(동작하던 코드의 false-loud). 문장 위치는 R16 부터 엄격했고 표현식 위치는 아니었다 — 그 **비대칭은 pre-existing** 이고 이번에 건드리지 않았다(엄격화는 loud 표면이 크고 이 슬라이스에서 검증 불가). PRE/POST 로 확인(불일치 0).
+
+**측정으로 기각한 조임 1건**: `call_out_actual_writes` 는 callee **본문**이 플래튼 넷에 닿는지는 안 본다(BL4 이래의 극성). 조여 보려다 기각했다 — callee 의 unpacked-struct **formal 도 같은 `$unp$r$len` 로 fan-out** 되므로 본문 워커가 항상 "닿는다"고 답해 §3.1 을 통째로 false-loud 로 만든다.
+
+**잔여**: ①package 함수의 default 는 여전히 caller 스코프에서 낮춰진다(`tf_decl_scope` 가 import 한 모듈 프리픽스로 기록됨) — 가드는 개선이지 완결이 아니다. ②R19-X2 의 correct-support = `SimState::files`/`read_state` 를 interior-mutable 로 만들어 `&self` frame 실행기가 몰 수 있게(=`dyn_heap` 이 frame-local `new[]` 에 해준 것, §4.5.194) → ROADMAP §3.
+
+**검증**: 하베스트 코퍼스 **256 designs PRE/POST**(불일치 5 = **전부 이번 신규 테스트**, 회귀 0) · iverilog 차분 2종(**named arg + default + output formal on tasks** = 12/11/8/9 · 7/6/3/4 완전 일치 · **단락 평가 전제 4가지**) · **4909 tests green**(신규 `r19_value_call_out.rs` **19** — soundness 핀 7: `&&` 우변은 탈출 경로를 안 쓴다 / 같은 식의 다른 읽기 / `?:` arm / `inout` actual / 생략된 default 가 로컬을 읽음 / caller-그림자 default / frame body 안의 `$fgets`, + **회귀 핀** 인라인된 태스크는 여전히 파일을 읽는다) · clippy 0 · fmt clean · **format_version 26 불변**. 모듈 사이즈 정책: `frames_call.rs` 1152 → `frames_call/{mod,args,emit}.rs` 125/197/851.
 
 #### 4.5.273 외부 round-18 — suspend 하는 callee, struct 멤버, 그리고 그 밑의 silent-wrong (2026-07-29, format 26 불변) ✅
 

@@ -229,8 +229,12 @@ support):
   (+ b/o/h variants), `$fgetc`/`$ungetc`/`$feof`/`$fgets`/`$fread`/`$fscanf`/
   `$sscanf`, `$sformat`/`$sformatf`, and the pre-opened STDOUT/STDERR
   descriptors (`32'h8000_0001/2`). Reads are supported as the direct rhs of a
-  blocking assignment (`n = $fscanf(fd, …)`). STDIN reads are deferred
-  (a stdin-driven simulation breaks byte-determinism).
+  blocking assignment (`n = $fscanf(fd, …)`), **in a module process or in a
+  task vitamin can inline**; inside a framed subroutine body (one declared
+  `automatic`, one with an `output`/`inout` formal, or one returning a string)
+  a read is a fatal rather than a silent 0 — see
+  [Limitations](006_limitations.md#file-reads-inside-a-subroutine-body).
+  STDIN reads are deferred (a stdin-driven simulation breaks byte-determinism).
 - **Time formatting** — `$timeformat` + full `%t` (see above).
 - **Randomization** — `$random`/`$urandom`/`$urandom_range` (seeded, Icarus
   bit-stream compatible) and the non-uniform `$dist_uniform`/`$dist_normal`/

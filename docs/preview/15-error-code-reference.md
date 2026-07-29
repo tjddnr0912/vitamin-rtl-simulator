@@ -561,6 +561,7 @@ if (cfg_invalid) $fatal(1, "bad config word %0h", cfg);
 | `internal: a frame-local dynamic array … was still held at frame entry…` | **불변식** 가드(능력 한계 아님). 동시 활성화는 §4.5.228 이후 **지원된다** — 각 활성화가 서스펜드 중 자기 배열을 힙 밖으로 park 한다. 이 메시지가 나오면 그 park/unpark 불변식이 깨진 것 | 설계를 리포트 — 회피 대상이 아니다 |
 | `writing an element of (or a whole store to) a dynamic-array \`input\` formal…` | 읽기 전용으로 aliasing된 dyn-array formal에 쓰기 | 값을 로컬 dyn 배열에 복사 후 수정 |
 | `an associative-array iteration (\`first/next/last/prev\`) whose key…` | assoc 순회 키가 지원 위치 밖 | 키를 frame-local 변수로 |
+| `` `$fgets` writes its destination as a statement-level effect… `` | **R19-X2**: `$fgets`/`$fscanf`/`$sscanf`/`$fread`/`$fgetc`/`$ungetc` 의 목적지 쓰기는 프로세스 실행기만 하는 문장 수준 효과라, frame body 의 순수 `eval` 경로에서는 조용히 0 + 목적지 미변경이었다(§4.5.274 에서 fatal 로 승격) | 읽기를 모듈 프로세스에서, 혹은 vita 가 인라인할 수 있는 태스크(output/inout formal 없음·`automatic` 아님)에서 하고 결과를 넘긴다 |
 | `frame-task recursion exceeded the depth limit (N)` / `frame-call …` | 재귀 깊이가 `MAX_CALL_DEPTH` 초과 — 무한 재귀를 hang 대신 loud로 | 종료 조건 점검 |
 | `fork exceeds the v1 tie-encoding limit …` | top-level 프로세스 > 65534 또는 arm > 65536(결정적 순서 인코딩 한계) | 해당 없음(실 벤치 범위 밖) |
 

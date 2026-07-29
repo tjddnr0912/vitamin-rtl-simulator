@@ -7,6 +7,51 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
 
 ### Fixed
 
+- **A call that RETURNS A VALUE now counts as writing its `output` actual.** The
+  definite-assignment walk recognized that write only where a call can stand as a
+  *statement* — a bare enable, or a whole `if`/`while` condition. The moment the call
+  returns a value it can sit anywhere an expression can, and there the walk asked only
+  "does this mention the name?", for which a mention is always a read. So
+  `go = nxt(5, r);`, `if (nxt(5, r) == 1)` and `while (n < lim && rsp_next(fd, r) == 1)`
+  — the standard table-driven `.rsp` / CAVP vector walker — were all rejected. That was
+  33 of the 34 diagnostics in the round-19 report, and the whole of its `TB=sha2`
+  regression.
+- **A branch knows what its condition evaluated to.** `a && f(out r)` is true only when
+  BOTH operands ran, so the loop body / `then` branch knows `r` is written even though
+  the loop exit does not; `a || f(out r)` is false only when both ran, which is what an
+  `else` branch gets. (Verified against iverilog 13 with an observable side effect in
+  place of the copy-out.)
+- **`void'(f(…, out r));` and the bare `f(…, out r);` statement now lower.** Discarding
+  the return value is the natural way to make an out-formal call a statement — and it
+  was rejected, which left a testbench no way to express the write at all. Statement
+  position is in fact the easiest case: the return slot goes to a throwaway temp and the
+  copy-out (including an `inout`'s copy-in) happens. The "supported positions" message
+  had also gone stale by omitting statement position; it now lists it.
+- **A named argument no longer ends the definite-assignment walk.** The call resolvers
+  bailed on the first `.formal(v)` they saw, so a call that uses one precisely to leave
+  the other defaults alone read as unanalysable and the walk blamed a local several
+  arguments to its left. Positional-then-named mapping (IEEE 1800 §13.5.4) is now
+  applied. Building it exposed that the output/inout-formal function path never
+  performed the named-argument reorder at all, and produced two diagnostics naming
+  neither cause.
+- **SILENT-WRONG: a default argument value was evaluated in the CALLER's scope.**
+  IEEE 1800 §13.5.4 evaluates it where the subroutine is declared. A caller that
+  declared its own `g` therefore hijacked a callee default that names `g`: vita printed
+  `91` where iverilog prints `6`, at exit 0 with no diagnostic. The same hazard for a
+  class method's default was already closed; the plain function/task twin was not. The
+  guard compares BINDINGS rather than banning names, so a default naming a module net
+  still resolves — from a module process and from a generate block alike.
+- **SILENT-WRONG: file reads inside a framed subroutine body returned 0.** `$fgets`,
+  `$fscanf`, `$sscanf`, `$fread`, `$fgetc` and `$ungetc` do their real work as a
+  statement-level effect that only the process executor performs; a frame body ran the
+  same expression through the pure evaluator, which returns X and touches nothing. So
+  `rc = $fgets(line, fd);` inside a `function automatic` yielded `rc=0` and an empty
+  string where iverilog reads the line — exactly the walker shape the fix above just
+  made reachable. It is now a runtime fatal. (An elaborate-time gate was tried and
+  measured wrong: a `task automatic` is lowered both framed and inline, and the inline
+  copy — the one its callers run — reads the file correctly.)
+
+
 - **A callee that advances time no longer ends the caller's definite-assignment
   scan.** The deep (callee-body) reference walker had no arm for `@(posedge clk)`,
   `#1`, `wait`, or `wait fork`, and a `_ => false` in a walker keyed on a name means
