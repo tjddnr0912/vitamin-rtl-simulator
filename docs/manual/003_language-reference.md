@@ -204,7 +204,7 @@ end
 | `while` | Yes | |
 | `repeat` | Yes | |
 | `forever` | Yes | |
-| `begin` / `end`, named `begin : name` | Yes | Block-local declarations supported. |
+| `begin` / `end`, named `begin : name` | Yes | Block-local declarations supported, including `automatic` ones and sibling blocks reusing a name at any nesting depth. A block that ENCLOSES another and redeclares the same name is shadowing, which is rejected loudly. See [Limitations](006_limitations.md). |
 | `fork` / `join` | Yes | |
 | `fork` / `join_any` | Yes | |
 | `fork` / `join_none` | Yes | |
@@ -264,7 +264,7 @@ The `**` power operator (including `2**N` width computations) is supported.
 | `function` with return value | Yes | ANSI or non-ANSI ports; range and `signed` qualifiers. |
 | `task` (may consume time) | Yes | |
 | Local declarations in func/task bodies | Yes | |
-| `automatic` qualifier | Yes | Per-call frame storage; recursive functions/tasks work (recursion depth is capped loudly). |
+| `automatic` qualifier | Yes | Per-call frame storage; recursive functions/tasks work (recursion depth is capped loudly). On a procedural block-local it is accepted where the flattening is indistinguishable from per-entry storage — a declaration initializer re-runs on each block entry, and a read that may precede the first write is rejected loudly. See [Limitations](006_limitations.md). |
 
 ---
 

@@ -393,6 +393,30 @@ module m; parameter real R = 4.5; s #(.W(R)) u(); endmodule
 interface body/generate scope의 `parameter real` 바인딩 · dynamic-storage 핸들의
 whole-value 대입. 현행 전체 목록은 [ROADMAP §3](../ROADMAP.md)와 매뉴얼 [006 Limitations].
 
+**④ 블록 로컬 `automatic` 의 per-entry 등가성**(2026-07-29 갱신)
+
+v1 은 절차 블록의 로컬을 **평탄화된 변수 하나**로 만든다. `automatic` 은 그 평탄화가 진짜
+per-entry 저장과 **구분 불가능할 때만** 받아들이고, 아니면 이 코드로 거부한다. 받아들이는
+쪽이 넓어졌으므로 **거부가 남는 자리**만 적는다:
+
+- 이번 진입에서 **쓰지 않은** 원소를 읽거나, 계산 인덱스(`foreach (a[i]) a[i] = …;`)로 채워
+  커버리지를 증명할 수 없는 고정 배열.
+- callee 본문이 평탄화된 이름에 닿을 수 있는 호출 — bare name 이든 계층 self-path(`t.a`)든.
+- 한 블록이 다른 블록을 **감싸면서** 같은 이름을 재선언하는 shadowing(형제 블록의 재사용은
+  중첩 깊이와 무관하게 지원).
+
+**⑤ dynamic-array formal 의 스냅샷 슬롯**(2026-07-29 갱신)
+
+`function f(input byte b []);` 는 호출 표현식 직전에 caller 배열을 formal 슬롯으로
+스냅샷한다. formal 당 슬롯이 **하나**이므로, 한 표현식 안에서 **같은 함수를 두 번** 부르거나
+함수 본문 안에서 **자기를 재귀** 호출하는 형태는 거부한다(둘 다 마지막 스냅샷을 읽게 된다).
+조건부로 평가되는 피연산자(`?:` arm · `&&`/`||` 우변)도 같은 이유로 거부. 해결은 호출을
+변수에 먼저 대입하는 것(`x = f(arr);`).
+
+> 이 코드의 **문구가 곧 진단**이다 — 2026-07-29 에 "module-process level" 이라는 이미
+> 사라진 제약과, 상대 선언의 lifetime 을 **추론**하던 문장을 제거했다. 진단은 아는 사실만
+> 말하고 조건은 나열한다.
+
 > **주의 — package-scope `parameter real`은 이 코드를 내지 않는다.** loud가 아니라
 > **조용히 정수 나눗셈**을 한다(`pk::PR/2`가 1.5 대신 1.0). ROADMAP §2의 알려진 결함이며,
 > "미지원=E3009"로 오인하지 말 것.

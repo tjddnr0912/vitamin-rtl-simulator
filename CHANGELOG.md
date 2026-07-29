@@ -3,6 +3,46 @@
 All notable changes to **vitamin** are recorded here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); dates are ISO-8601.
 
+## [Unreleased] — 2026-07-29
+
+### Fixed
+- **Definite-assignment for `automatic` block-locals now understands control
+  flow.** A `break`/`continue` placed before the local's first write no longer
+  reads as a live path arriving at a later read unwritten — every path that
+  reaches that read has already executed the write. `if`/`else` and `case` arms
+  that jump drop out of the merge the standard way. A real `disable` is
+  deliberately *not* treated as a jump: it may name a block that is not an
+  ancestor, so the statement runs on.
+- **A statement-position call no longer ends the definite-assignment scan.**
+  Calls are now proven harmless instead of assumed harmful: the callee's body is
+  walked (transitively, on a depth budget) for any reference to the name,
+  including hierarchical self-paths such as `t.a`. A callee that can reach the
+  name still makes the call a read.
+- **Fixed-size unpacked arrays declared `automatic` in a block.** A `'{…}`
+  declaration initializer is supported (it re-runs on each block entry, matching
+  the dynamic-dimension form), and an array filled element-by-element with
+  literal indices is accepted once every declared index has been written.
+- **The same name reused at two nesting levels of sibling block trees.** The
+  net-creation and body-lowering phases nested their per-block scopes
+  differently, so with both levels scoped the nets were created under one path
+  and resolved under another. They agree at any depth now.
+- **A comma declaration is treated as independent declarators.** Previously a
+  collision on the first name rejected all of them — with a message naming a net
+  that did not exist — and dropped the whole declaration, so every later use
+  reported "undeclared net/variable" one line below its own declaration.
+- **`q.pop_front();` / `void'(q.pop_front());` on a queue of structs** whose
+  member width comes from a named parameter. Such a queue is stored per field,
+  and the per-field fan-out had no discarding-pop case.
+- **`return f(arr);` where `f` takes a dynamic-array formal**, and the same call
+  buried in a concatenation.
+
+### Changed
+- Diagnostics: the hierarchical-task-call rejection now carries
+  `file:line:col`; the dynamic-array-formal message no longer states a
+  "module-process level" restriction that no longer exists, and names the actual
+  reason instead; the same-name block-local message no longer infers the other
+  declaration's lifetime.
+
 ## [Unreleased] — 2026-07-17
 
 ### Changed

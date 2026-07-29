@@ -32,6 +32,8 @@ The forward-looking ("Phase-2") side of each item lives in the project's
 | Out-of-range array index | Read → `X`; write dropped | Loud (`E-RUN-RANGE` / `VITA-E4002`, rate-limited) |
 | Arithmetic lane = 128-bit unsigned / 64-bit signed | Wider arithmetic poisons to `X` | Fail-safe (`X`, never a wrong number) |
 | `$dumpvars(depth, scope)` args ignored | Always a full dump (a correct superset) | Silent |
+| `automatic` block-local that may be read before written | Rejected, not given a leftover value | Loud (`E3009`) |
+| Same dynamic-array-formal function twice in one expression | Rejected, not given the wrong snapshot | Loud (`E3009`) |
 
 The sections below give the detail behind each row. (Earlier editions of this
 chapter also listed `casez`/`casex` wildcard leniency, `%t`/`$timeformat`,
@@ -144,14 +146,56 @@ A few smaller, fully-documented choices round out the list:
 
 ---
 
-## Where to go next
+## `automatic` variables declared inside a procedural block
 
-- [Error Codes](007_error-codes.md) — the full message-code reference, including
-  `W3011` and `E-RUN-RANGE` (`VITA-E4002`).
-- [Installation](001_installation.md) — supported platforms (Linux / macOS /
-  Windows, 3-OS CI).
-- `docs/REMAINING_WORK.md` (in the repository) — the live tracker of Phase-2
-  refinements for each item above.
+vitamin gives a procedural block's locals one flattened variable rather than a
+fresh one per block entry, so an `automatic` block-local is accepted when that
+flattening is indistinguishable from real per-entry storage — and rejected
+loudly (`E3009`) when it is not. Two things follow from that, and both changed
+in the 2026-07-29 release.
+
+**What is accepted.** A local that is written before it is read, on every path,
+behaves identically either way. The analysis understands `break`/`continue`
+(a jump leaves the block, so it never carries an unwritten value to a later
+read), `case` and `if`/`else` arms, and calls to subroutines that provably
+cannot touch the name. A declaration initializer re-runs on each block entry,
+matching IEEE 1800 §6.21 — including for a fixed-size unpacked array
+(`automatic int m[4] = '{1,2,3,4};`). An array filled element-by-element with
+literal indices is accepted once every declared index has been written.
+
+**What stays loud, and why.**
+
+- Reading an element the block has not written this entry, or filling an array
+  through a computed index (`foreach (a[i]) a[i] = …;`), cannot be proven
+  complete, so it is rejected rather than given the previous entry's leftover.
+- A subroutine whose body can reach the flattened name — by the bare name, or
+  through a hierarchical path such as `t.a` — makes the call a read.
+- Two blocks where one **encloses** the other and both declare the same name is
+  shadowing, which vitamin cannot resolve through the flattening. Two disjoint
+  (sibling) blocks reusing a name are fine, at any nesting depth.
+
+Storage lifetime follows the LRM: automatic storage is created per *activation*,
+not per block entry, so a local without an initializer keeps its value across
+loop iterations of the same activation and is fresh on each new call.
+
+---
+
+## Dynamic-array arguments to functions
+
+A `function f(input byte b []);` receives a snapshot of the caller's array,
+taken immediately before the calling expression runs. That works for a
+blocking-assign right-hand side, a `return` value, and any unconditionally
+evaluated operand of one (a concatenation, arithmetic, a comparison, a
+system-task argument).
+
+There is one snapshot slot per formal, so two forms are rejected loudly rather
+than given the wrong array: calling the **same** function twice in a single
+expression inside another function/task body, and a **recursive** call inside
+the function's own body. Assigning the call to a variable first
+(`x = f(arr);`) resolves both. A conditionally evaluated operand (a `?:` arm,
+the right side of `&&`/`||`) is rejected for the same reason.
+
+---
 
 ## Real (`real` / `realtime`) parameters
 
@@ -178,3 +222,14 @@ replication count** (`$clog2(R)` on its own evaluates normally).
 > in the integer domain with no diagnostic. A module-scope `parameter real` is
 > correct. Until this is fixed, declare real constants at module scope, or pass them
 > as parameters. Tracked in `docs/ROADMAP.md` §2.
+
+---
+
+## Where to go next
+
+- [Error Codes](007_error-codes.md) — the full message-code reference, including
+  `W3011` and `E-RUN-RANGE` (`VITA-E4002`).
+- [Installation](001_installation.md) — supported platforms (Linux / macOS /
+  Windows, 3-OS CI).
+- `docs/REMAINING_WORK.md` (in the repository) — the live tracker of Phase-2
+  refinements for each item above.

@@ -273,6 +273,32 @@ fn jump_before_write_of_string_and_dynarray() {
     );
 }
 
+/// SOUNDNESS PIN. Verilog escaped identifiers may contain `$`, so a user CAN write a
+/// block literally named `\$break$77` — the same spelling the parser synthesizes for a
+/// `break`. If the two collided, the `disable` below would be read as a loop jump, its
+/// arm would drop out of the merge, and the read of the unwritten `x` would be silently
+/// accepted. The discriminator distinguishes them (this stays loud, while the genuine
+/// `continue` in `jump_in_one_arm_drops_out_of_the_join` is accepted).
+#[test]
+fn an_escaped_identifier_cannot_spoof_a_loop_jump() {
+    loud(
+        r#"module t;
+             int c = 1;
+             initial begin
+               begin
+                 automatic int x;
+                 begin : \$break$77
+                   if (c) disable \$break$77 ;
+                   else x = 1;
+                 end
+                 $display("R %0d", x);
+               end
+             end
+           endmodule"#,
+        "x",
+    );
+}
+
 /// SOUNDNESS PIN. A real `disable` of some OTHER block is not a loop jump: it kills
 /// that block and lets this one run on, so its arm still reaches the join with the
 /// local unwritten. Treating every `disable` as a jump would silently accept this
