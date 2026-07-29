@@ -5,7 +5,34 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
 
 ## [Unreleased] — 2026-07-29
 
+### Added
+
+- **`-v` now prints what actually ran.** Driven from a Makefile or a wrapper
+  script, the arguments you read and the arguments the process received are
+  different texts: the shell has already substituted `$(WIDTH)`, the filelist
+  expander has spliced `-f` frames away, and `VITA_THREADS` never appears in the
+  command line at all. `-v` prints the resolved form as a block at the top of the
+  transcript — the invocation (shell-quoted, paste-able), cwd, every filelist
+  opened, the sources actually compiled, incdirs, defines, runtime plusargs,
+  output/log paths, elaboration roots and libraries, timeout, and the thread count
+  *with its provenance* (`--threads`, `VITA_THREADS`, or `auto`). Empty rows are
+  omitted, long lists wrap at the value column, and a flag never wraps away from
+  its value. Because it goes through the normal progress stream, `-l/--log`
+  captures it in the same file and the same order as the diagnostics it explains.
+  Every applet echoes its own stage. Pure reporting: nothing about the run changes
+  and nothing is hashed into an artifact.
+
 ### Fixed
+
+- **A flag's value inside a filelist is no longer treated as a source path.** The
+  expander's list of value-taking flags had not been updated since the original
+  five, so every flag added later had its value rewritten against the frame's base
+  directory inside a `-F` filelist: `--top top` became `--top /abs/ip/top` and the
+  run died with "top module not found", while `--hier-tree h.txt` silently wrote
+  `ip/h.txt` instead of the path the caller named. Affected `--top`, `-L`,
+  `--work`, `--workdir`, `--upstream`, `--obs-dir`, `--hier-tree`, `--inst-paths`,
+  `--probe` and `--probe-file`. Source positionals still resolve, which is the
+  whole point of `-F`.
 
 - **A chained method call no longer ends the definite-assignment scan.** The
   expression walker had no arm for `s.substr(a, b).atoi()` (IEEE §8.13 chaining),

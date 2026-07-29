@@ -53,6 +53,12 @@ the output an `.fst` extension — `-o waves.fst` on the command line, or
 the tools onto your `PATH`, run
 `./install.sh` (or see [Installation](docs/manual/001_installation.md)).
 
+Once the command lives in a Makefile, add `-v` and vitamin prints the *resolved*
+invocation — every macro value, the files actually compiled, the runtime
+plusargs, and where the thread count came from — at the top of the transcript,
+so a `--log` file can answer "what did this run actually use?" on its own. See
+[What actually ran](docs/manual/004_cli-reference.md#what-actually-ran--v).
+
 A minimal design:
 
 ```systemverilog

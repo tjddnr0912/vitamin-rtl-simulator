@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(둘 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-29)**: format_version **26** · **4866 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.271**(오라클을 만들다 나온 silent-wrong 2건 — 리시버를 못 보는 참조 워커 · `atoi` 계열이 `strtol` 이었다). 직전 = **§4.5.270**(안 쓴 로컬은 per-entry 저장과 바이트 동일 — 그리고 그걸 열자 §23.9 구멍이 드러났다). 직전 = **§4.5.269**(외부 round-17 §3.1/§3.1b/§3.3 — arm 하나가 없었고, catch-all 하나가 이미 쓴 걸 잊고 있었다). 직전 = **§4.5.268**(외부 round-16 §3.4~§3.7+§4 — 두 단계가 스코프를 다르게 중첩). 직전 = **§4.5.267**(고정 크기 `automatic` unpacked 배열 — per-entry 리셋은 측정으로 기각). 직전 = **§4.5.266**(definite-assignment 이 제어 흐름과 callee 본문을 본다 — 리포트 84건 중 53건). 직전 = **§4.5.265**(초기화자 소유권을 랭크 경로로). 직전 = **§4.5.264**(gen-item 리스트의 맨몸 `begin…end` 도 문법). 직전 = **§4.5.263**(generate REGION 은 스코프가 아니라 문법). 직전 = **§4.5.262**(bind band 를 인스턴스 경계에서 리셋). 직전 = **§4.5.261**(인스턴스 랭크 성분 3개 — root 순서·`bind` 위치·배열 원소). 직전 = **§4.5.260**(인스턴스 랭크를 선언 오프셋으로 — 재리뷰가 잡은 F4 맞바꿈). 직전 = **§4.5.259**(초기화 phase 적대 리뷰 — 하강 4 + false-loud 1). 직전 = **§4.5.258**(generate 안 블록 로컬도 모듈과 같은 규칙). 직전 = **§4.5.257**(초기화는 프로세스가 아니라 **arm 이전 phase** · 상수 fold 제거, **format 26**). 직전 = **§4.5.256**(t0 초기화 순서를 랭크 경로 데이터로 — 축 분리). 직전 = **§4.5.255**(같은-이름 `string` 배열 correct-support). 직전 = **§4.5.254**(t0 정적 초기화 순서 = 모듈 전부 → 블록 로컬 전부·generate 는 모듈보다 먼저). 직전 = **§4.5.253**(§4.5.251 적대 리뷰 — 하강 4건). 직전 = **§4.5.252**(`$sformatf` — 근인은 degenerate `eval` arm). 직전 = **§4.5.251**(`$blk$` decl-init 수집). 직전 = **§4.5.250**(§4.5.248/249 적대 리뷰 — 하강 6건). 직전 = **§4.5.249**(외부 round-20 §6 진단 위치 + §4.11 같은 이름 동적 로컬). 직전 = **§4.5.248**(외부 round-20 8 가족 — fork-arm 블록 로컬·queue 관용구·named arg·`$sformatf`). 직전 = **§4.5.247**(§4.5.246 회귀 수정). 직전 = **§4.5.246**(inner NET shadow — 마지막 ①-급 해소). 그 이전 슬라이스(§4.5.222~245)의 한 줄 요약과 상세는 전부 **[ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) — 이 문서는 **전방 전용**이므로 완료 서사를 두지 않는다.
+> **기준선(2026-07-29)**: format_version **26** · **4880 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.271**(오라클을 만들다 나온 silent-wrong 2건 — 리시버를 못 보는 참조 워커 · `atoi` 계열이 `strtol` 이었다). 직전 = **§4.5.270**(안 쓴 로컬은 per-entry 저장과 바이트 동일 — 그리고 그걸 열자 §23.9 구멍이 드러났다). 직전 = **§4.5.269**(외부 round-17 §3.1/§3.1b/§3.3 — arm 하나가 없었고, catch-all 하나가 이미 쓴 걸 잊고 있었다). 직전 = **§4.5.268**(외부 round-16 §3.4~§3.7+§4 — 두 단계가 스코프를 다르게 중첩). 직전 = **§4.5.267**(고정 크기 `automatic` unpacked 배열 — per-entry 리셋은 측정으로 기각). 직전 = **§4.5.266**(definite-assignment 이 제어 흐름과 callee 본문을 본다 — 리포트 84건 중 53건). 직전 = **§4.5.265**(초기화자 소유권을 랭크 경로로). 직전 = **§4.5.264**(gen-item 리스트의 맨몸 `begin…end` 도 문법). 직전 = **§4.5.263**(generate REGION 은 스코프가 아니라 문법). 직전 = **§4.5.262**(bind band 를 인스턴스 경계에서 리셋). 직전 = **§4.5.261**(인스턴스 랭크 성분 3개 — root 순서·`bind` 위치·배열 원소). 직전 = **§4.5.260**(인스턴스 랭크를 선언 오프셋으로 — 재리뷰가 잡은 F4 맞바꿈). 직전 = **§4.5.259**(초기화 phase 적대 리뷰 — 하강 4 + false-loud 1). 직전 = **§4.5.258**(generate 안 블록 로컬도 모듈과 같은 규칙). 직전 = **§4.5.257**(초기화는 프로세스가 아니라 **arm 이전 phase** · 상수 fold 제거, **format 26**). 직전 = **§4.5.256**(t0 초기화 순서를 랭크 경로 데이터로 — 축 분리). 직전 = **§4.5.255**(같은-이름 `string` 배열 correct-support). 직전 = **§4.5.254**(t0 정적 초기화 순서 = 모듈 전부 → 블록 로컬 전부·generate 는 모듈보다 먼저). 직전 = **§4.5.253**(§4.5.251 적대 리뷰 — 하강 4건). 직전 = **§4.5.252**(`$sformatf` — 근인은 degenerate `eval` arm). 직전 = **§4.5.251**(`$blk$` decl-init 수집). 직전 = **§4.5.250**(§4.5.248/249 적대 리뷰 — 하강 6건). 직전 = **§4.5.249**(외부 round-20 §6 진단 위치 + §4.11 같은 이름 동적 로컬). 직전 = **§4.5.248**(외부 round-20 8 가족 — fork-arm 블록 로컬·queue 관용구·named arg·`$sformatf`). 직전 = **§4.5.247**(§4.5.246 회귀 수정). 직전 = **§4.5.246**(inner NET shadow — 마지막 ①-급 해소). 그 이전 슬라이스(§4.5.222~245)의 한 줄 요약과 상세는 전부 **[ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) — 이 문서는 **전방 전용**이므로 완료 서사를 두지 않는다.
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -11,7 +11,7 @@
 
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
-| **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · 남은 것 = T2 real const-fold/generate string/enum label/음수 range 4 + T3 전제조건 2 |
+| **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · 남은 것 = T2 잔여(real 정수문맥·리터럴 절단·PART select) + **T2-14 `-G`/`-pvalue+` elaborate param override**(신규·오라클 有) + T3-13 `case inside` |
 | **2** | §2 | Silent-wrong 잔여 | 42 | ✓ 8 | **폭 인식 상수 접기(3건 동근)** · package real · 구조적 지연 · inner-NET shadow(DEEP) |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
@@ -54,6 +54,20 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 9. ~~generate/interface 스코프 string decl-init~~ **RESOLVED**(§4.5.228) — 근인은 `allow_string_init` 플래그가 아니라 decl-time 쓰기가 모듈 스코프 pending 리스트로 새던 것. queue/dyn decl-init·generate 내 block-local 도 같이 열림.
 10. ~~sized-literal enum label → enum-method~~ **RESOLVED**(§4.5.234) — 신규 `const_lit_based` 를 enum 라벨만 opt-in. **잔여**: 파서 폴드는 **절단이 필요한 리터럴을 거부**한다(unsized `'h1FFFFFFFF`·mis-sized `4'hFF`) — elaborate 의 `parse_int_literal` 과 폭 규칙이 달라 값이 갈릴 수 있는 입력을 아예 안 받는 설계이며, 근본 해소는 §4.5.233 의 안 ①(literal 파싱 공유 크레이트 분리)뿐.
 11. ~~음수 range bound~~ **RESOLVED**(§4.5.228) — plain net·multi-packed inner(**후자는 silent 였다**)·배열 원소·VCD `$var` 범위까지. 잔여 = **PART select**(`x[1:-2]`, 정직한 loud·바운드 접기가 unsigned) · **포트/formal**(warn+clamp 유지·의도적 opt-in 비대칭).
+
+14. **elaborate 단계 파라미터 override — `-G<name>=<val>` / `-pvalue+<name>=<val>`(+ 후속 `-P<path>=`).**
+    상용 3단계 흐름의 knob 은 compile=`+define+` · elaborate=**param override** · run=`+plusarg` 인데,
+    vita 는 **양 끝만 있다**(`-D`/`+define+` ✓ · `$test/$value$plusargs` ✓ · `velab -G` → `unknown flag '-G'` 실측
+    2026-07-29). 지금은 소스 안의 `#(.P())`/`defparam` 뿐이라 **"재컴파일 없이 top param 만 바꿔 재실행"이 불가**.
+    **스펙은 이미 있다** — doc-14 §RULE B 가 `-G`/`-pvalue+`/`-P<path>=` 를 velab 합성-해시 입력으로,
+    §596-597 이 의미 구분(`-G`=clean scoped override · `-P`=defparam 식)까지 규정했고 doc-15 E8007 설명도
+    `-G` 를 velab 소속으로 적는다 → **문서가 코드보다 앞선 상태**(플래그만 미배선).
+    **인프라 대부분 존재**: `ResolvedOverride` 경로 + §4.5.27 defparam 의 `defparams: BTreeMap<path,[(param,const)]>`
+    병합 지점 재사용. 남는 일 = argv 파싱 · `.velab` 합성 해시 입력 등록(**빠뜨리면 override 를 바꿔도 stale
+    재사용 = silent-wrong**) · vcmp/vrun wrong-stage loud 거부 · `.f` typed bucket 등록 · **매칭 안 된 `-G`
+    이름의 처리 판단**(defparam unmatched 는 iverilog parity 로 warn 이지만, 명령줄 오타는 loud 가 맞을 수 있다).
+    오라클 = iverilog `-P<path>=<value>` 차분. v1 범위 = **top-level 스코프 파라미터만**(계층 경로는 `-P` 후속,
+    defparam 이 아직 direct-child 한정이라 같은 제약을 물려받는다).
 
 **T3 — 전제조건 필요 (즉시 착수 대상 아님)**
 

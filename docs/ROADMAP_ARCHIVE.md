@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 245건 (최신순)
+## 인덱스 — 완료 슬라이스 246건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–271**
+**§4.5.220–272**
+- `4.5.272` `-v` 유효 invocation echo — 그리고 그것이 드러낸 filelist 플래그-값 결함(`--top` false-loud · `--hier-tree` silent 위치) …
 - `4.5.271` 오라클을 만들다 나온 silent-wrong 2건 — 리시버를 못 보는 참조 워커 · `atoi` 계열이 `strtol` 이었다 …
 - `4.5.270` 안 쓴 로컬은 per-entry 저장과 바이트 동일 — 그리고 그걸 열자 §23.9 구멍이 드러났다 …
 - `4.5.269` 외부 round-17 §3.1/§3.1b/§3.3 — arm 하나가 없었고, catch-all 하나가 이미 쓴 걸 잊고 있었다 …
@@ -326,6 +327,56 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.272 `-v` 유효 invocation echo — 그리고 그것이 드러낸 filelist 플래그-값 결함 (2026-07-29, format 26 불변) ✅
+
+**질문이 먼저였다.** "Makefile/셸 스크립트로 vita 를 돌리면 환경변수가 흩어져 최종 호출 인자의
+*변수명이 아닌 최종 형태*를 확인하기 어렵다 — 터미널에 해석돼서 출력되나(그래서 log 로 확인
+가능한가)?" 실측 답은 **아니다**. `-v` 는 `defines:`/`incdirs:` **두 줄만** 찍었고, 나머지는
+전부 전사(transcript)에 없었다 — 어떤 소스가 실제로 컴파일됐는지(`--dump-filelist` 는 **exit
+하므로** 실행 로그와 공존 불가) · 런타임 plusarg(`+SEED=$(SEED)` — Makefile 에서 가장 자주
+틀리는 것) · 출력 경로 · **`VITA_THREADS`(argv 에 아예 없다)** · 어떤 `.f` 들이 전개됐는지 ·
+cwd · 원본 명령줄.
+
+**근본 인식**: 사람이 *읽는* 인자와 프로세스가 *받는* 인자는 다른 텍스트이고, **후자만이 실행을
+결정했다**. 그리고 후자는 로깅 시점엔 이미 복원 불가다 — 셸이 `$(WIDTH)` 를 치환했고, filelist
+전개기가 `-f` 프레임을 없앴고, env 는 argv 에 흔적이 없다. **그 사본을 남기는 곳이 없었다.**
+
+**구현**(`cli/src/echo.rs` 신규 · `Invocation` 레코드): 전개 **前** argv + cwd 를 `run()` 에서
+포착해 `VitaOpts` 로 흘리고, `filelist::expand_argv` 가 **실제로 연 `.f` 목록**을 반환하게 했다
+(`Expander.opened`, 깊이우선 순서). echo 는 `Progress` 이벤트라 `--log` tee 가 **같은 writer**로
+같은 순서에 담는다(doc-13 단일 writer) — 로그 파일이 완전한 실행 기록이 된다. 행: `invocation`
+(셸 인용·붙여넣기 가능)·`cwd`·`filelists`·`sources`·`incdirs`·`defines`·`plusargs`·`tops`·
+`output`·`obs-dir`·`probes`·`timeout`·`threads`(**출처 표기** `--threads`/`VITA_THREADS`/`auto`)·
+`log`·`env`. **빈 행은 생략**(평범한 `vita tb.sv -v` 는 4줄) · 값 컬럼 정렬 + 92열 줄바꿈 ·
+위아래 빈 줄 · 단일 값이 마진보다 길면 **쪼개지 않는다**(끊긴 경로가 긴 줄보다 나쁘다). 전
+applet 이 자기 단계를 찍는다(vcmp=define 표면, velab=root/library, vrun=plusargs). 순수 보고 —
+bucket C, 해시 무진입.
+
+**echo 를 만들자 결함이 하나 드러났다 — `takes_value` 가 원래 5개뿐이었다.** filelist 전개기는
+값 받는 플래그의 다음 토큰을 건너뛰어야 하는데, 그 목록이 `-o/--threads/--timeout/-D/-I/-l/
+--verbosity` 시절 그대로였다. 그 뒤 추가된 **모든** 플래그(`--top`·`-L`·`--work`·`--workdir`·
+`--upstream`·`--obs-dir`·`--hier-tree`·`--inst-paths`·`--probe`·`--probe-file`)의 **값이 소스
+positional 로 취급**돼 `-F` 프레임 안에서 프레임 디렉터리 기준으로 재작성됐다. PRE/POST 실측:
+`ip/build.f` 의 `--top top` → PRE `error: top module '/abs/ip/top' not found`(**false-loud**) /
+POST 정상 실행 · `--hier-tree h.txt` → PRE 가 **exit 0 으로 조용히** `ip/h.txt` 에 씀(호출자가
+지정한 위치가 아니다) / POST `h.txt`. 후자가 **silent** 였다. 수정 = 목록 완성(정본은
+`cli/src/filelist.rs::takes_value`, 주석에 재발 방지 근거) — `-f`/`-F` 는 **제외**(전개기가 직접
+소비하고 그 값은 진짜 경로라 해소돼야 한다).
+
+**부수 규칙 하나**: argv 행의 줄바꿈은 **플래그와 값을 절대 가르지 않는다**(`argv_atoms`) — `-D`
+가 줄 끝에 남고 `W=32` 가 다음 줄 머리에 오면 맨몸 플래그 + 떠도는 소스 파일로 읽혀서, echo 의
+목적과 정반대가 된다.
+
+**검증**: 신규 `cli/tests/invocation_echo.rs` 7 테스트(Makefile 형태 전 경로 해소 · env-only knob
+의 출처 표기 · `--log` tee 포착 + 순서 · `-v` 없으면 부재 · staged 3단계 각자 · 그리고 filelist
+결함 2건은 **PRE 바이너리로 재현 후** 회귀 핀). `echo.rs` 인라인 6 유닛 테스트(줄바꿈·과대
+단일값·빈 행·셸 인용·플래그 접착·꼬리 플래그). 4880 tests green · clippy 0 · fmt clean ·
+format_version **26 불변**(bucket C 라 산출물 무영향).
+
+**남은 것(별개 슬라이스)**: 상용 3단계 knob 중 **elaborate 단계 파라미터 override**(`-G`/
+`-pvalue+`/`-P<path>=`)만 여전히 미배선 — doc-14 §RULE B 에 **스펙은 이미 있고** 코드가 없다.
+ROADMAP §0 T2-14 에 근거·범위·오라클과 함께 등록했다.
 
 #### 4.5.271 오라클을 만들다 나온 silent-wrong 2건 + 진단 품질 (2026-07-29, format 26 불변) ✅
 

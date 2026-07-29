@@ -109,7 +109,7 @@ name.
 | `--threads, -j <N>` | Worker threads — output stays byte-identical for any N. |
 | `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
-| `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose terminal output. |
+| `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
 | `-l, --log <file>` [`--log-append`] | Tee the full transcript (RTL + diags + progress) to a file. |
 | `-h, --help` / `-V, --version` | Help / version. |
 
@@ -125,6 +125,75 @@ vita pkg.sv dut.sv tb.sv         # concatenate three files, then run
 vita -f files.f +VERBOSE +N=42   # filelist + runtime plusargs
 vita -D WIDTH=16 -I rtl/inc tb.sv
 ```
+
+---
+
+## What actually ran (`-v`)
+
+Run vitamin from a Makefile or a wrapper script and the arguments you *read*
+and the arguments the process *received* stop being the same text. The shell
+substitutes `$(WIDTH)` before `vita` starts; the filelist expander splices `-f`
+frames away; `VITA_THREADS` never appears in the command line at all. When a
+nightly job fails, the log has to answer "which `W` was compiled in?" on its
+own — nobody can reconstruct it afterwards.
+
+`-v` prints that answer as the first thing in the transcript:
+
+```
+$ make sim
+VITA_THREADS=4 vita -f build.f -o out.vcd +SEED=7 -l sim.log -v
+
+invocation: vita -f build.f -o out.vcd +SEED=7 -l sim.log -v
+cwd:        /work/proj
+filelists:  /work/proj/build.f
+sources:    /work/proj/rtl/t.sv
+incdirs:    /work/proj/inc
+defines:    FAST_MODE W=32
+plusargs:   +SEED=7
+output:     out.vcd
+threads:    4 (VITA_THREADS)
+log:        sim.log
+env:        VITA_THREADS=4
+
+FAST W=32
+seed=7
+simulation ended (Quiescent) at time 0
+```
+
+The `build.f` behind that block reads `+define+FAST_MODE+W=$(WIDTH)` and
+`$(RTL_DIR)/t.sv`. The echo shows `W=32` and the real path, because those are
+what the run used.
+
+Rows are omitted when they are empty, so a plain `vita tb.sv -v` prints four
+lines, not fifteen. Long lists wrap at the value column, and a flag never wraps
+away from its value (`-D` and `W=32` stay on one line). The `invocation:` row is
+shell-quoted, so it can be pasted back into a terminal verbatim.
+
+| row | what it answers |
+|-----|-----------------|
+| `invocation:` / `cwd:` | The command as the shell delivered it, and where relative paths point. |
+| `filelists:` | Every `-f`/`-F` opened, including nested ones. |
+| `sources:` | The files actually compiled, post-expansion, in order. |
+| `incdirs:` / `defines:` | The preprocessor surface (`+define+` and `-D` merged). |
+| `plusargs:` | Runtime `+NAME=VAL` — invisible everywhere else in the log. |
+| `output:` / `log:` / `obs-dir:` / `probes:` | Where output goes. |
+| `tops:` / `libs:` / `work:` / `upstream:` | Elaboration roots and library wiring. |
+| `timeout:` / `threads:` | Run limits, with the thread count's **provenance** (`--threads`, `VITA_THREADS`, or `auto`). |
+| `env:` | Environment variables that changed this run. |
+
+Because the block is emitted through the normal progress stream, `-l/--log`
+captures it in the same file, in the same order, as the diagnostics and
+`$display` output — a `--log` transcript is a complete record of the run. Every
+applet echoes its own stage: `vcmp` shows the define surface, `velab` the roots
+and libraries, `vrun` the plusargs.
+
+`-v` is pure reporting. It never changes what is compiled, simulated, or
+written, and it is not hashed into any artifact.
+
+> **Note.** Flag *values* inside a filelist are taken verbatim, exactly as on
+> the command line — only source positionals are resolved against the frame's
+> base directory. So `--top top` in an `-F` filelist names the unit `top`, and
+> `--hier-tree h.txt` writes next to the caller, not next to the `.f`.
 
 ---
 

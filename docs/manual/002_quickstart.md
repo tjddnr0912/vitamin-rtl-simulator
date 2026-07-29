@@ -144,6 +144,22 @@ surfer counter.vcd
 Add `clk`, `rst`, and `count` to the view and you will see `count` step up one
 per rising `clk` edge, holding at `0` through the reset pulse.
 
+## 5. Once it lives in a Makefile
+
+The moment the command moves into a Makefile or a script, `$(WIDTH)` and
+`$(SEED)` stop being visible to anyone reading the log. Add `-v` and vitamin
+prints the resolved command — every macro value, every source file, the runtime
+plusargs, and where the thread count came from — as the first thing in the
+transcript:
+
+```bash
+vita -f build.f -o counter.vcd +SEED=7 -v -l sim.log
+```
+
+Pair it with `-l/--log` and that file becomes a complete record of the run:
+the invocation, the diagnostics, and the `$display` output, in order. See
+[What actually ran](004_cli-reference.md#what-actually-ran--v).
+
 ## Next steps
 
 - [Installation](001_installation.md) — building `vita` from source on Linux/macOS.

@@ -391,6 +391,15 @@ git/프로젝트 루트 자동탐지(`.git` 등 상향 탐색) → ③ invocatio
 *동일한* typed `PreprocInputs`/`ElabInputs`로 정규화된다(한 코드 경로). 그래서 `-f`-출처
 `+define`과 inline `+define`은 downstream에서 물리적으로 구별 불가 → 해싱에서 발산 불가.
 
+> **플래그의 VALUE는 경로가 아니다(2026-07-29 수정·실측).** 프레임 베이스 해소는 **소스
+> positional 에만** 적용된다 — 값 받는 플래그의 다음 토큰은 명령줄에서와 **바이트 동일**하게
+> 전달된다(`cli/src/filelist.rs::takes_value`가 정본 목록). 이 목록이 원래 5개뿐이라 그 뒤에
+> 추가된 모든 플래그의 값이 `-F` 프레임 안에서 소스처럼 재작성되고 있었다: `ip/build.f`의
+> `--top top`이 `--top /abs/ip/top`이 되어 **false-loud**("top module not found"), `--hier-tree
+> h.txt`는 조용히 `ip/h.txt`에 썼다(호출자가 지정한 위치가 아님). `-f`/`-F`는 목록에서 **제외**
+> — 전개기가 직접 소비하고 그 값은 *진짜 경로*라 해소돼야 한다. 새 값-플래그를 추가하면 이
+> 목록도 같이 갱신해야 한다.
+
 > **wrong-stage 에러(silent no-op 금지).** 각 단계의 `.f` 전개기는 전체 토큰 문법을 파싱하지만
 > (같은 `.f`가 어디서나 파싱됨), 호출 단계에 속하지 않는 버킷의 디렉티브는 **hard error
 > `E-FLIST-WRONG-STAGE`**다. 예: `velab -f x.f`인데 `x.f`에 `+define+`(전처리 버킷)이 있으면

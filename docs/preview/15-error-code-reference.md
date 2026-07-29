@@ -796,11 +796,22 @@ error[VITA-E8006] E-FLIST-UNDEF-ENV: undefined environment variable 'RTL_ROOT' i
 호출 단계가 소유하지 않는 버킷의 디렉티브는 silent no-op이 아니라 hard error. 예: `velab -f x.f`에
 `+define+`(전처리/bucket A) — velab엔 전처리 패스가 없어 무시하면 의도 위반.
 ```
-# elab.f: -s top  /  +define+WIDTH=8     # 전처리 디렉티브 — elaborate에 무효
-error[VITA-E8007] E-FLIST-WRONG-STAGE: '+define+WIDTH=8' is a vcmp-stage flag, invalid during elaborate
+# elab.f: --top top  /  +define+WIDTH=8     # 전처리 디렉티브 — elaborate에 무효
+$ velab t.vu +define+WIDTH=8
+error[VITA-E8007]: +define+/+incdir+/-D/-I are compile-stage (vcmp/vita) inputs — 'velab'
+has no preprocess pass, so they would be silently meaningless
 ```
-**해결:** 소유 단계로 옮긴다(`+define+`/`+incdir+`/`-y`는 vcmp, `-s`/`-G`/`-L`은 velab), 또는
-union을 받는 원샷 `vita` 사용. 억제 불가(exit class 3).
+**해결:** 소유 단계로 옮긴다(`+define+`/`+incdir+`/`-D`/`-I`는 vcmp, `--top`/`-L`은 velab,
+`+plusarg`는 vrun), 또는 union을 받는 원샷 `vita` 사용. 억제 불가(exit class 3).
+런타임 plusarg를 컴파일 단계에 주면 대칭적으로 거부된다(`runtime plusargs (+FOO) are
+vita/vrun arguments — 'vcmp' compiles, it does not simulate`).
+> 이 단락의 옛 판본은 `-s`/`-G`를 velab 플래그로 적었으나 **둘 다 미구현**이다 — 루트 지정은
+> `--top`이고, elaborate 단계 파라미터 override(`-G`/`-pvalue+`)는 doc-14 §RULE B에 스펙만
+> 있는 미배선 항목이다(ROADMAP §0 T2-14).
+
+> **어떤 인자가 실제로 어느 단계에 도달했는지 보려면 `-v`** — 해소된 invocation 블록
+> (`invocation`/`cwd`/`filelists`/`sources`/`defines`/`plusargs`/…)을 전사 맨 앞에 찍고,
+> `-l/--log` 가 같은 파일에 담는다(doc-13 · manual 004 "What actually ran").
 
 ### VITA-W8008 · `W-FLIST-MIXED-BASE` (Warning)
 **`-F` 프레임 안의 `-f` 줄이 재배치 가능 서브트리를 CWD에 re-anchor.** `-F`는 자기 디렉터리 기준

@@ -218,8 +218,8 @@ span/caret은 diag, side-table 룩업·include/macro/-f 스택·sim_time·instan
 > `GatePolicy`/`GatedSink` — 전 applet, 알 수 없는 mnemonic은 E0001 exit 3, Error/Fatal
 > spine은 억제 불가, 승격 실패 시 산출물 미생성). **2단계도 구현됨**(2026-06-10, 전 applet):
 > `-q`/`-v`/`-vv`/`--verbosity=<0..3>`(`-q`는 터미널의 `$display`+progress 복사만 억제 — 진단
-> spine·`--log` 복사는 무관; `-v`는 유효 files/defines/incdirs echo; `-vv`는 표면만 예약 = 현재
-> `-v`와 동일 렌더), `--log <file>`/`-l`(단일 writer tee: RTL+진단+progress를 방출 순서대로
+> spine·`--log` 복사는 무관; **`-v`는 유효 invocation 블록 echo** — 아래 참조; `-vv`는 표면만
+> 예약 = 현재 `-v`와 동일 렌더), `--log <file>`/`-l`(단일 writer tee: RTL+진단+progress를 방출 순서대로
 > 한 파일에, `-`=stderr, 기본 overwrite)·`--log-append`, **counts epilogue**(`errors=E
 > warnings=W notes=N`를 stage 끝 stderr에 항상 — Fatal은 errors에 합산, notes=Info+Note,
 > post-gate 카운트라 `-Werror` 승격이 errors로 이동; `--help`/`--version`/usage-error엔 없음).
@@ -231,6 +231,19 @@ span/caret은 diag, side-table 룩업·include/macro/-f 스택·sim_time·instan
 
 - **verbosity:** `-q`/`--quiet`(vvp `-q`, stdout `$display` 억제, 파일·Error는 무관),
   `-v`/`-vv`, `--verbosity=<N>`(0=quiet,1=default,2=verbose,3=trace).
+- **`-v` 유효 invocation echo (2026-07-29 구현·`cli/src/echo.rs`):** Makefile/래퍼 스크립트로
+  실행하면 사람이 *읽는* 인자와 프로세스가 *받는* 인자가 다른 텍스트가 된다 — 셸이 `$(WIDTH)`를
+  이미 치환했고, filelist 전개가 `-f` 프레임을 없앴고, `VITA_THREADS`는 argv에 **아예 없다**.
+  실패한 CI 로그가 "어떤 `W`로 컴파일됐나"에 스스로 답해야 하므로, `-v`는 **해소된 형태**를
+  전사(transcript) 맨 앞에 블록으로 찍는다: `invocation`(셸 인용된 원본 argv)·`cwd`·
+  `filelists`(중첩 포함 전부)·`sources`(전개 후 실제 컴파일 대상)·`incdirs`/`defines`·
+  `plusargs`·`output`/`log`/`obs-dir`/`probes`·`tops`/`libs`/`work`/`upstream`·`timeout`/
+  `threads`(**출처 표기** = `--threads`/`VITA_THREADS`/`auto`)·`env`. 빈 행은 **생략**하고,
+  긴 목록은 값 컬럼에 맞춰 줄바꿈하되 **플래그와 그 값은 절대 갈라지지 않는다**(`-D`와 `W=32`가
+  한 줄). 위아래로 빈 줄 하나씩 — 평평한 라인 스트림에서 한 덩어리로 읽히게. `Progress` 이벤트라
+  `--log` tee가 **같은 writer**로 같은 순서에 담는다(= 로그 파일이 완전한 실행 기록). 전 applet이
+  자기 단계 것을 찍는다(vcmp=define 표면, velab=root/library, vrun=plusargs). 순수 보고 —
+  컴파일/시뮬/출력을 바꾸지 않고 산출물에 해시되지 않는다(bucket C).
 - **코드별 suppress/promote(Verilator 모델):** `-Wno-<CODE>`, `-Werror[=<CODE>]`(맨몸 = 전체
   승격), `-Wwarn=<CODE>`(기본-off 재활성), `--suppress=<CODE>`(VCS alias), `--error-limit=<N>`.
   compile 진단과 RTL `$warning`이 **같은 게이트**를 지나므로 `-Werror=W-RUN-USER-WARNING`은 RTL
