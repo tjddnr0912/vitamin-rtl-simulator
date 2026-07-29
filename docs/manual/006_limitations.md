@@ -180,7 +180,26 @@ The **first** write may also be timing-controlled — `#1 x = 7;`,
 `wait (c) x = 7;` are all blocking writes, so nothing runs before the write
 lands. And once the local is definitely written on a path, no later statement
 of any form can make the flattening differ, so the rest of the block is
-unconstrained.
+unconstrained (on a *shared* variable, see the time-advance rule below).
+
+Calling a subroutine that **waits** is fine. A clocked driver task —
+
+```systemverilog
+task automatic preload (input int addr, input byte m []);
+  @(posedge clk);
+  for (int i = 0; i < m.size(); i++) @(posedge clk);
+endtask
+```
+
+— does not touch the caller's locals, and the analysis now says so: locals
+declared after a call to it are analysed normally. (Before 2026-07-29 one
+timing control anywhere in a callee made every later local in the caller
+loud.)
+
+Writing a **struct member** counts toward the whole variable. A member is a
+constant bit range, so `rm.c = 5;` on a single-member struct writes all of
+`rm`, and `rm.a = …; rm.b = …;` covers a two-member one. The same rule accepts
+a hand-written `x[31:16] = a; x[15:0] = b;`. Partial coverage stays loud.
 
 **What stays loud, and why.**
 
@@ -193,10 +212,18 @@ unconstrained.
   shadowing, which vitamin cannot resolve through the flattening. Two disjoint
   (sibling) blocks reusing a name are fine, at any nesting depth.
 - When two blocks **do** share one flattened variable (same name, different
-  blocks), a statement that lets simulation time advance inside either of them
-  is rejected: suspending hands the scheduler to the other block, which writes
-  the one variable, so a later read here would see a value its own storage
-  never held.
+  blocks), anything that lets simulation time advance in either of them is
+  rejected: suspending hands the scheduler to the other block, which writes the
+  one variable, so a later read here would see a value its own storage never
+  held. This includes **calling a subroutine that waits** — the wait does not
+  have to be written inline — and it applies whether or not this block has
+  already written the variable, because being written does not make the shared
+  variable yours. Declaring the locals `automatic` avoids the sharing entirely:
+  each block then gets its own storage.
+- A write that reaches the variable only through the right-hand side of a
+  short-circuit `&&`/`||`, or through a `?:` branch (`while (n < 2 && f(r)))`),
+  is not counted — the call may not be evaluated at all, and vitamin does not
+  propagate values to decide whether it is.
 - Referring to an `automatic` block-local **hierarchically** (`tb.a`, or `t.a`
   from a task in the same module) is rejected. IEEE 1800 §23.9 forbids it —
   automatic storage has no static address to name — and accepting it would let

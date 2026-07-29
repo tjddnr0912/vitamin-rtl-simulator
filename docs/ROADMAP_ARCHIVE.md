@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 246건 (최신순)
+## 인덱스 — 완료 슬라이스 247건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–272**
+**§4.5.220–273**
+- `4.5.273` 외부 round-18 — suspend 하는 callee(11/12) · struct 멤버 비트 커버리지 · `automatic` unpacked struct 의 lifetime 이 파서에서 사라지던 것 · 그리고 그 밑의 silent-wrong …
 - `4.5.272` `-v` 유효 invocation echo — 그리고 그것이 드러낸 filelist 플래그-값 결함(`--top` false-loud · `--hier-tree` silent 위치) …
 - `4.5.271` 오라클을 만들다 나온 silent-wrong 2건 — 리시버를 못 보는 참조 워커 · `atoi` 계열이 `strtol` 이었다 …
 - `4.5.270` 안 쓴 로컬은 per-entry 저장과 바이트 동일 — 그리고 그걸 열자 §23.9 구멍이 드러났다 …
@@ -327,6 +328,24 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.273 외부 round-18 — suspend 하는 callee, struct 멤버, 그리고 그 밑의 silent-wrong (2026-07-29, format 26 불변) ✅
+
+**리포트 12건 중 11건이 §3.1 하나였다.** `stmt_no_ref_deep` — callee 본문을 보는 **깊은** 참조 워커 — 에 `DelayCtrl`/`EventCtrl`/`Wait`/`WaitFork` arm 이 **아예 없었고**, 대입문 arm 은 `delay.is_none() && event.is_none()` 을 요구했다. 참조 워커에서 `_ => false` 는 "모르겠다"가 아니라 **"이 노드는 무엇이든 참조할 수 있다"** 이고, 그 답은 **질문한 이름과 무관하다**. 그래서 `@(posedge clk)` 한 줄이 든 callee 를 **한 번이라도 부르면** caller 의 뒤쪽 블록 로컬이 전부 못 쓰게 됐다 — `preload()`/`run_scenario()` 같은 표준 클럭 드라이버 태스크가 정확히 그 모양이다. **R17 이 얕은 `stmt_no_ref` 에서 고친 것과 똑같은 실수가 깊은 쌍둥이에 남아 있었다.**
+
+**그 게이트를 열기 전에, 밑에 깔린 silent-wrong 을 먼저 닫아야 했다(R18-X1).** 공유 플래튼 넷 + **suspend 하는 호출**: 블록 A 가 로컬을 쓰고, suspend 하는 헬퍼를 부르고, 다시 읽는 사이에 같은-이름 형제 블록 B 가 그 한 넷을 덮어쓴다. `c8ad2b4` 와 `46b9816` 에서 **실측 동일** — vita `A v=99` / iverilog `A v=1`, **exit 0** = pre-existing. 두 겹으로 새고 있었다: ①R17 의 공유-넷 규칙이 **문법적 타이밍만** 봤다(한 줄짜리 `task tick(); @(posedge clk); endtask` 가 suspend 를 가린다) ②최상위 워크가 **대입되면 早期 return** 해서 그 규칙에 **닿지도 않았다**(R17 의 주석은 "대입 뒤의 타이밍 문장은 전에도 허용했고 지금도 허용한다"고 적었는데, 그건 *참조* 질문의 논리였고 suspend 는 다른 질문이다 — inert 한 callee 도 스케줄러를 넘긴다). 수정 = `CallSuspends` 리졸버(`da` 는 callee 본문을 못 보므로 `OutActualWrites` 와 같은 클로저 패턴, **모든 미해결은 `true`** — REJECT 쪽만 읽으므로) + 공유 넷일 때는 早期 return 대신 계속 걷기.
+
+**§3.2 는 멤버 세기가 아니라 비트 커버리지로 풀린다.** struct 는 **파서 desugar** 라 DA 워크 시점엔 멤버가 없고 비트만 있다 — `rm.c = 5` 는 단일 멤버 struct의 **전 비트**를 쓰는 상수 part-select다. 그래서 `const_bit_span_write` + 커버리지 집합(`elem_bounds` 배열 커버리지의 한 단계 아래)으로 하니 필드별 쓰기(`rm.a=…; rm.b=…;`)와 손으로 쓴 `x[31:16]=a; x[15:0]=b;` 가 **공짜로 따라왔다**. 폭은 `decl_bit_width`(unpacked 없음 + 4096비트 상한)로 caller 가 계산.
+
+**§3.3 의 뿌리는 DA 가 아니라 파서였다.** `automatic rec_t r;` 에서 **unpacked struct 타입명은 `typedefs` 에 없어** `parse_automatic_block_decl` 이 이름을 못 풀고 `None` 을 냈고(`automatic` 키워드는 이미 소비된 뒤), 그 다음 순번의 멤버 fan-out(`try_block_unpacked_struct_decl`)이 **lifetime 을 안 찍은 채** 선언을 파싱했다 → **`automatic` 이 조용히 static 으로 강등**. 그래서 같은-이름 struct 로컬 2개가 한 플래튼 넷을 공유했고, **같은 모양의 `automatic int`/enum/typedef-alias 는 전부 `$blk$` 스코프를 받았다**(실측 대조 3종으로 격리 — 구조체만 `auto_per_name={}`). 한 줄 수정으로 세 형태가 같아졌다.
+
+**부수로 순서 의존 하나를 없앴다.** coalesce 게이트는 **"넷이 이미 존재할 때"** 켜지므로 **두 번째 이후 선언 블록만** 검사한다 — 첫 블록은 자기 넷이 사설(private)인 줄 알고 통과했다. 그건 의미가 아니라 순서다(두 블록이 같은 넷을 쓴다). `compute_coalesced_block_locals`(순수 AST 사전 계산, `compute_scoped_block_locals`/`compute_per_entry_block_locals` 와 같은 패턴)를 신설해 모든 선언 블록이 같은 답을 받게 했다. **`$blk$` 스코프를 받은 블록은 자기 넷을 가지므로 세지 않는다** — 처음엔 그걸 빼먹어 이미 동작하던 2단계 struct 쌍을 false-loud 로 만들었다(`block_scope_two_level` 핀이 잡았다).
+
+**SoA 호출 인자.** unpacked struct 는 파서가 `$unp$<var>$<member>` 로 fan-out 하지만 **호출 인자는 레코드 이름 그대로** 남는다 — 그래서 `rsp_next(fd, rm)` 이 `$unp$rm$count` 를 건드리는 것이 워크에 **안 보였다**(formal 을 통한 쓰기는 false-loud, 그리고 `inout` 의 copy-**IN** 읽기는 잠재적 unsound). `actual_is_record_of` 로 두 철자를 같은 저장소로 인식(var 부분은 **정확 일치**).
+
+**잔여(정직한 loud, 1건)**: 리포트 §3.3 의 정확한 모양 — `while (a && f(fd, rm))` 처럼 **쓰기가 `&&` 우변에 있는** 경우. `cond_out_writes` 는 단락 평가 때문에 Binary 를 의도적으로 풀지 않으므로 그 호출이 반드시 실행된다고 증명할 수 없다(`cnt_done=0 < 2` 가 첫 평가에서 참임을 알려면 상수 전파가 필요하다). 공유 넷 문제는 사라졌고 남은 것은 per-entry 질문뿐이며, 진단은 포기 지점을 정확히 가리킨다.
+
+**검증**: 4890 tests green(신규 `r18_suspend_and_members.rs` 10) · clippy 0 · fmt clean · format_version **26 불변**. 신규 핀에는 soundness 3건(공유 넷 + suspend 호출 / 인라인 suspend / 부분 멤버 커버리지)이 포함된다.
 
 #### 4.5.272 `-v` 유효 invocation echo — 그리고 그것이 드러낸 filelist 플래그-값 결함 (2026-07-29, format 26 불변) ✅
 

@@ -5,6 +5,41 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
 
 ## [Unreleased] — 2026-07-29
 
+### Fixed
+
+- **A callee that advances time no longer ends the caller's definite-assignment
+  scan.** The deep (callee-body) reference walker had no arm for `@(posedge clk)`,
+  `#1`, `wait`, or `wait fork`, and a `_ => false` in a walker keyed on a name means
+  "may reference ANY name". One timing control anywhere in a task therefore made every
+  block-local declared after a call to it unusable — which is the standard clocked
+  driver (`preload()`, `run_scenario()`), and was 11 of the 12 diagnostics in the
+  round-18 report. The same mistake had been fixed in the shallow twin a round earlier.
+- **SILENT-WRONG: a shared flattened net plus a call that suspends.** Two same-named
+  block-locals share one net; one block writes it, calls a one-line helper that does
+  `@(posedge clk)`, and reads back — observing the sibling block's write. vita printed
+  `A v=99` where iverilog prints `A v=1`, at exit 0, identically at `c8ad2b4` and
+  `46b9816`. The shared-net rule read only *syntactic* timing, so a wrapper hid the
+  suspend; and the top-level walk returned early once the local was assigned, so the
+  rule was never consulted at all. Both are closed.
+- **A struct member write that covers the whole variable is a whole write.**
+  `rm.c = 5;` on a single-member struct left the walk believing `rm` was unwritten.
+  Members are constant part-selects after the parser's desugar, so the rule is bit
+  coverage — which also accepts field-by-field writes and hand-written
+  `x[31:16] = a; x[15:0] = b;`. Partial coverage stays loud.
+- **`automatic` is no longer silently dropped from an unpacked-struct block-local.**
+  `automatic rec_t r;` could not be resolved by the automatic-lifetime parse helper
+  (an unpacked struct is not in the typedef table), so the member fan-out parsed it
+  with no lifetime at all and the declaration became static. Two same-named struct
+  locals in disjoint blocks then shared one net, while the identical `automatic int`,
+  enum, and typedef-alias forms each got their own scope.
+- **The first block declaring a shared name is now asked the same question as the
+  rest.** The coalesce guard keys on the net already existing, so it only ever saw the
+  second and later declarations — an ordering artefact, not a semantic distinction.
+  The decision is now a pure AST pre-pass.
+- **A call actual naming an unpacked-struct record is seen as touching its member
+  nets.** The SoA fan-out renames the variable but not the call arguments, so a write
+  through a formal was invisible (a false-loud) and an `inout` copy-in read was too.
+
 ### Added
 
 - **`-v` now prints what actually ran.** Driven from a Makefile or a wrapper
