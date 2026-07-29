@@ -492,23 +492,24 @@ impl<N: NetReader> EvalCtx<'_, N> {
                     _ => Value::xs(32, true),
                 }
             }
-            // ⓑ-breadth (v18): string→number conversions (IEEE §6.16.9-13).
-            // Parse the leading numeric prefix in the requested base; a leading
-            // sign is honored for decimal (IEEE §6.16.9 — note iverilog 13 drops
-            // it, its bug). Empty / non-numeric prefix → 0. Result truncates to
-            // a 32-bit int.
+            // ⓑ-breadth (v18): string→number conversions (IEEE §6.16.9-12).
+            // The scan takes ONLY leading digits and underscores in the requested
+            // base and stops at the first other character — no whitespace skipping
+            // and no sign, per §6.16.9 (see `parse_radix_prefix`, corrected in R17
+            // after measuring both against the LRM and iverilog 13). Empty /
+            // non-numeric prefix → 0. Result truncates to a 32-bit int.
             SysFuncId::StrAtoi
             | SysFuncId::StrAtohex
             | SysFuncId::StrAtooct
             | SysFuncId::StrAtobin => match self.handle_str_bytes(args.first()) {
                 Some(b) => {
-                    let (radix, signed) = match which {
-                        SysFuncId::StrAtoi => (10, true),
-                        SysFuncId::StrAtohex => (16, false),
-                        SysFuncId::StrAtooct => (8, false),
-                        _ => (2, false),
+                    let radix = match which {
+                        SysFuncId::StrAtoi => 10,
+                        SysFuncId::StrAtohex => 16,
+                        SysFuncId::StrAtooct => 8,
+                        _ => 2,
                     };
-                    let n = parse_radix_prefix(&b, radix, signed);
+                    let n = parse_radix_prefix(&b, radix);
                     Value::from_i128((n as i32) as i128, 32, true)
                 }
                 None => Value::xs(32, true),

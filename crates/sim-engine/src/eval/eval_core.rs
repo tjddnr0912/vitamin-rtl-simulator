@@ -63,34 +63,49 @@ pub(crate) fn value_str_bytes(v: &Value) -> Vec<u8> {
 }
 
 /// ⓑ-breadth (v18): parse the leading integer prefix of `bytes` in `radix`
-/// (IEEE §6.16.9-12 conversion family). Skips leading ASCII whitespace; honors a
-/// single leading `+`/`-` when `signed`; accumulates `radix`-digits until the
-/// first non-digit; empty/garbage yields 0. Wrapping accumulation matches the
-/// C `strtol`-style overflow behavior the callers then truncate to 32 bits.
-pub(crate) fn parse_radix_prefix(bytes: &[u8], radix: u32, signed: bool) -> i64 {
-    let mut i = 0;
-    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
-        i += 1;
-    }
-    let mut neg = false;
-    if signed && i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
-        neg = bytes[i] == b'-';
-        i += 1;
-    }
+/// (IEEE §6.16.9-12 `atoi`/`atohex`/`atooct`/`atobin`).
+///
+/// IEEE 1800 §6.16.9 states the rule exactly: "The conversion scans all leading
+/// digits and underscore characters (`_`) and stops as soon as it encounters any
+/// other character or the end of the string. It returns zero if no digits were
+/// encountered." That is deliberately NOT `strtol`: there is no whitespace skipping
+/// and no sign, and underscores are SCANNED (skipped in the value) rather than
+/// terminating the scan.
+///
+/// R17: this was written as a `strtol`-style parser, with a comment asserting that
+/// iverilog's stricter reading was "its bug". Measured against iverilog 13 and read
+/// against the LRM, it was the other way round on three shapes — `" 3"` → 3 not 0,
+/// `"-7"` → -7 not 0, `"1_0"` → 1 not 10 — all silently, all in the exact API the
+/// round-17 reporter's `.rsp` header reader calls (`line.substr(a,b).atoi()`), where
+/// a substring that happens to include the leading space of `"[L = 32]"` decided
+/// whether a header field parsed at all. Both lenses agree, so the LRM wins over the
+/// old comment.
+///
+/// Wrapping accumulation keeps the C-like overflow behavior the callers then truncate
+/// to 32 bits (the LRM explicitly declines to define overflow here).
+pub(crate) fn parse_radix_prefix(bytes: &[u8], radix: u32) -> i64 {
     let mut acc: i64 = 0;
-    while i < bytes.len() {
-        match (bytes[i] as char).to_digit(radix) {
+    let mut any = false;
+    for &b in bytes {
+        // An underscore is a separator INSIDE the run of digits; it neither
+        // contributes a value nor ends the scan. A leading underscore before any
+        // digit is likewise scanned (the LRM says "leading digits and underscore
+        // characters"), and still yields 0 when no digit ever follows.
+        if b == b'_' {
+            continue;
+        }
+        match (b as char).to_digit(radix) {
             Some(d) => {
                 acc = acc.wrapping_mul(radix as i64).wrapping_add(d as i64);
-                i += 1;
+                any = true;
             }
             None => break,
         }
     }
-    if neg {
-        acc.wrapping_neg()
-    } else {
+    if any {
         acc
+    } else {
+        0
     }
 }
 

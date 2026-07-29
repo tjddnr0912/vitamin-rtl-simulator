@@ -47,11 +47,37 @@ fn atoi_decimal() {
 }
 
 #[test]
-fn atoi_negative_is_ieee_signed() {
-    // IEEE §6.16.9: leading sign honored → -7. (iverilog 13 returns 0; its bug.)
+fn atoi_takes_no_sign() {
+    // R17 correction. This pinned `-7` with the comment "IEEE §6.16.9: leading sign
+    // honored → -7. (iverilog 13 returns 0; its bug.)" — and both halves of that were
+    // wrong. §6.16.9 says the conversion "scans all leading digits and underscore
+    // characters (`_`) and stops as soon as it encounters any other character"; `-` is
+    // another character, so the scan stops immediately and the result is 0. iverilog 13
+    // agrees. The implementation was a `strtol` parser wearing an LRM citation.
     let out = run("module t; string s; int x;\n\
          initial begin s=\"-7\"; x=s.atoi(); $display(\"%0d\", x); end endmodule\n");
-    assert_eq!(out, "-7\n");
+    assert_eq!(out, "0\n");
+}
+
+#[test]
+fn atoi_takes_no_leading_whitespace() {
+    // Same rule, the shape that actually bit the round-17 reporter: their `.rsp` header
+    // reader does `line.substr(a, b).atoi()`, and a substring that includes the space in
+    // `"[L = 32]"` must yield 0, not 3. Measured identical to iverilog 13.
+    let out = run("module t; string s; int x;\n\
+         initial begin s=\" 3\"; x=s.atoi(); $display(\"%0d\", x); end endmodule\n");
+    assert_eq!(out, "0\n");
+}
+
+#[test]
+fn atoi_scans_through_underscores() {
+    // The other half of the same sentence: an underscore does not TERMINATE the scan,
+    // it is scanned and contributes nothing — `"1_0"` is 10, not 1. Measured identical
+    // to iverilog 13, in every base (`"f_f".atohex()` is 255).
+    let out = run("module t; string s; int x; int y;\n\
+         initial begin s=\"1_0\"; x=s.atoi(); s=\"f_f\"; y=s.atohex();\n\
+         $display(\"%0d %0d\", x, y); end endmodule\n");
+    assert_eq!(out, "10 255\n");
 }
 
 #[test]
