@@ -352,6 +352,11 @@ impl Elaborator<'_> {
                     || self.expr_has_dyn_formal_call(then_e)
                     || self.expr_has_dyn_formal_call(else_e)
             }
+            // R16 §3.7: a concat part — the string-building idiom `{s, f(arr)}`. Without
+            // this the detector answered "no dyn-formal call here" and `hoist_stmt_top`
+            // never engaged, so the hoist arms below could not have fired however they
+            // were written.
+            K::Concat { parts } => parts.iter().any(|p| self.expr_has_dyn_formal_call(p)),
             _ => false,
         }
     }
@@ -383,6 +388,10 @@ impl Elaborator<'_> {
                     && self.dyn_formal_expr_all_pure(then_e)
                     && self.dyn_formal_expr_all_pure(else_e)
             }
+            // R16 §3.7: a concat is now a hoist site, so purity has to be answerable
+            // through one — otherwise a concat inside a `?:` arm would report "impure"
+            // purely because this walker could not see into it.
+            K::Concat { parts } => parts.iter().all(|p| self.dyn_formal_expr_all_pure(p)),
             _ => !self.expr_has_dyn_formal_call(e),
         }
     }
@@ -425,8 +434,17 @@ impl Elaborator<'_> {
                     || self.has_unhoistable_dyn_formal_call(else_e)
                     || !self.dyn_formal_expr_all_pure(e)
             }
-            // Any other node (Concat, a non-dyn Call's args, …) is not a hoist site — a
-            // dyn-formal call anywhere inside is un-hoistable.
+            // R16 §3.7: a CONCAT evaluates every part, unconditionally and exactly once —
+            // the same property `Binary` relies on — so each part is a hoist site. This
+            // was the one shape left after `return f(dyn)` was closed: `s = {h(arr), "!"}`
+            // and `return {h(b), "!"}` were the forms the report named as genuinely
+            // unsupported, and the string-building idiom they come from is common enough
+            // that leaving them out would have kept the stale wording half-true.
+            K::Concat { parts } => parts
+                .iter()
+                .any(|p| self.has_unhoistable_dyn_formal_call(p)),
+            // Any other node (a non-dyn Call's args, a replication, …) is not a hoist
+            // site — a dyn-formal call anywhere inside is un-hoistable.
             _ => self.expr_has_dyn_formal_call(e),
         }
     }
@@ -525,6 +543,19 @@ impl Elaborator<'_> {
                     cond: Box::new(self.hoist_dyn_formal_calls(b, cond)),
                     then_e: Box::new(self.hoist_dyn_formal_calls(b, then_e)),
                     else_e: Box::new(self.hoist_dyn_formal_calls(b, else_e)),
+                },
+                span: e.span,
+            },
+            // R16 §3.7: every concat part, left to right. Hoisting them in source order
+            // preserves evaluation order among themselves, and a framed dyn-formal
+            // function has no output formals, so moving its evaluation ahead of a later
+            // part cannot change that part's value.
+            K::Concat { parts } => ast::Expr {
+                kind: K::Concat {
+                    parts: parts
+                        .iter()
+                        .map(|p| self.hoist_dyn_formal_calls(b, p))
+                        .collect(),
                 },
                 span: e.span,
             },
@@ -683,6 +714,24 @@ impl Elaborator<'_> {
                     delay: delay.clone(),
                     event: event.clone(),
                     rhs: rhs2,
+                    span: *span,
+                })
+            }
+            // R16 §3.7: a `return <expr>` whose value merely CONTAINS a dyn-formal call
+            // (`return {h(b), "!"}`). The direct form `return h(b)` is handled by the
+            // marker path in `lower_stmt`'s Return arm and is excluded here, exactly as
+            // the Blocking arm excludes its own direct case — hoisting it would loop.
+            S::Return {
+                value: Some(val),
+                span,
+            } if !self.frame_fn_lowering
+                && self.expr_has_dyn_formal_call(val)
+                && self.dyn_formal_call_target(val).is_none()
+                && !self.has_unhoistable_dyn_formal_call(val) =>
+            {
+                let val2 = self.hoist_dyn_formal_calls(b, val);
+                Some(S::Return {
+                    value: Some(val2),
                     span: *span,
                 })
             }

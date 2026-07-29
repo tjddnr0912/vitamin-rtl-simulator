@@ -99,6 +99,8 @@ impl Elaborator<'_> {
                 });
                 b.start_block(ret);
                 let call = DeferredHierTaskCall {
+                    // R16 §4-1: anchor the resolve-time diagnostics at the enable itself.
+                    span: self.cur_span,
                     proc: self.cur_proc,
                     call_block,
                     // §4.5.208: a frame-body enable's block is process-LOCAL now; it is

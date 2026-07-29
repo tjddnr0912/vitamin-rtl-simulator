@@ -176,16 +176,24 @@ impl Elaborator<'_> {
                 cand.push((lo, hi, name.clone()));
             }
         }
-        // (3) drop any candidate block nested inside ANOTHER candidate block.
-        let cand_spans: Vec<(u32, u32)> = cand.iter().map(|&(lo, hi, _)| (lo, hi)).collect();
+        // (3) R16 §3.4: a candidate block nested inside ANOTHER candidate block used to
+        // be dropped here, because the Nets-phase hoist recursed FLAT while the Logic
+        // phase lowered a scoped block's body inside its own segment — so with both
+        // levels scoped the inner block's nets sat at `$blk$<inner>` while its body
+        // resolved under `$blk$<outer>.$blk$<inner>`, missed them, and fell through to
+        // the module net. Dropping the inner candidate avoided the mismatch at the cost
+        // of the whole two-level shape: a name reused at ONE level worked, the same name
+        // reused at TWO levels was loud, and the standard table-driven `.rsp` walker
+        // (`foreach (files[fi]) begin automatic int fd = …; … begin <inner locals> end
+        // end`, repeated in sibling blocks) sits exactly on that shape.
+        //
+        // The hoist now nests its scopes the same way the lowering does, so the two
+        // agree at any depth and there is nothing left to drop. Note this is NOT the
+        // same rule as the same-NAME nesting filter in (2) above, which is about
+        // shadowing — an inner block redeclaring a name an enclosing block also
+        // declares — and stays.
         let mut out: BTreeMap<u32, std::collections::BTreeSet<String>> = BTreeMap::new();
-        for (lo, hi, name) in cand {
-            let nested = cand_spans
-                .iter()
-                .any(|&s| contains(s, (lo, hi)) && coexist(s, (lo, hi)));
-            if nested {
-                continue;
-            }
+        for (lo, _hi, name) in cand {
             out.entry(lo).or_default().insert(name);
         }
         out

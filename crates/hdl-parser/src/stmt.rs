@@ -400,7 +400,13 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';'");
         let span = start.to(self.prev_span());
         match inner.kind {
-            ExprKind::Call { name, args } => Stmt::UserTaskCall { name, args, span },
+            // R16 §3.6: route through the SoA record-queue fan-out first, exactly as the
+            // bare `q.method();` statement path does. Building the `UserTaskCall`
+            // directly here meant `void'(q.pop_front());` on a SoA record queue skipped
+            // the fan-out that the identical un-wrapped statement would have taken.
+            ExprKind::Call { name, args } => self
+                .try_soa_queue_method_stmt(&name, &args, span)
+                .unwrap_or(Stmt::UserTaskCall { name, args, span }),
             ExprKind::SysCall { name, args } => Stmt::SysTaskCall { name, args, span },
             _ => {
                 self.error_at(inner.span, "a call expression inside void'( … )");

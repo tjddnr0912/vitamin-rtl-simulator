@@ -176,6 +176,27 @@ impl Parser<'_, '_> {
                 .iter()
                 .map(|m| call(&m.name.name, args.to_vec()))
                 .collect(),
+            // R16 §3.6: a DISCARDING pop (`q.pop_front();` or `void'(q.pop_front());`)
+            // — drop the head and throw the record away. Only the ASSIGNING form
+            // (`rec = q.pop_front()`, in `try_soa_assign`) existed, so the statement form
+            // fell through to the generic 2-segment enable, found no net named `q` (a SoA
+            // record queue has only its per-field `$unp$q$f` nets), and surfaced as
+            // "unsupported hierarchical task call `q.pop_front`" — a message about
+            // instance paths for something that is neither.
+            //
+            // Only a struct with a NAMED-PARAMETER-width member takes the SoA path (a
+            // literal-width member packs into one vector, which is why the report saw
+            // this fail only for the product of the two), so the same source with `[7:0]`
+            // in place of `[W-1:0]` was fine and the shape looked far narrower than the
+            // missing arm actually is.
+            //
+            // Each field queue pops exactly once, so the fields stay in step — the same
+            // all-or-nothing invariant `delete` relies on. An argument is rejected rather
+            // than dropped: `pop_*` takes none, and elaborate says so per field.
+            "pop_front" | "pop_back" => members
+                .iter()
+                .map(|m| call(&m.name.name, args.to_vec()))
+                .collect(),
             _ => return None,
         };
         Some(Stmt::Block {

@@ -250,12 +250,34 @@ impl Elaborator<'_> {
             // window slot for a dyn-array formal is never read — reads go to the heap).
             if self.is_input_dyn_array_formal(p) {
                 if !self.dyn_formal_call_ok {
+                    // R16 §3.7: the old wording said "the DIRECT rhs of a blocking
+                    // assignment at module-process level". Both halves were stale — r17
+                    // lifted the module-process restriction (a function body, a task body
+                    // and a loop body all work), and R16 added the `return` and buried
+                    // positions. A user reading it moved the call out to a module process
+                    // for nothing, which is the misdiagnosis class this report is about.
+                    //
+                    // What is left is narrow and specific, so say it: the caller array is
+                    // snapshotted into the callee's formal slot by a marker emitted just
+                    // before the expression, and there is one slot per formal. Two calls
+                    // to the SAME function in one expression would therefore both see the
+                    // last snapshot. Outside a frame body those are split across temps
+                    // instead; inside one there is nowhere to put a temp.
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!(
-                            "function `{fname}`: a dynamic-array formal `{}` is supported only \
-                             as the DIRECT rhs of a blocking assignment at module-process level \
-                             (`x = {fname}(arr);`), where the caller array is snapshotted",
+                            "function `{fname}`: a dynamic-array formal `{}` is supported \
+                             where the caller array can be snapshotted into the formal — a \
+                             blocking-assign rhs, a `return` value, or an unconditionally \
+                             evaluated operand of one (concat, arithmetic, comparison, \
+                             system-task argument). It is not supported here, because the \
+                             snapshot would be taken at the wrong time or into a slot \
+                             already in use: a conditionally evaluated operand (a `?:` arm, \
+                             the right side of `&&`/`||`), a RECURSIVE call inside \
+                             `{fname}`'s own body, or two calls to `{fname}` in ONE \
+                             expression inside a function/task body — the last two would \
+                             share the single formal slot. Assign the call to a variable \
+                             first (`x = {fname}(arr);`)",
                             p.name.name
                         ),
                     );
@@ -379,6 +401,138 @@ impl Elaborator<'_> {
         }
         self.dyn_formal_call_ok = true;
         true
+    }
+
+    /// R16 §3.7: collect the frame ids of every dyn-formal call inside `e`, in source
+    /// order. Only the positions [`Self::has_unhoistable_dyn_formal_call`] already
+    /// accepts are walked, so a caller that checked that predicate knows this list is
+    /// complete.
+    fn dyn_formal_call_targets(&self, e: &ast::Expr, out: &mut Vec<(u32, String)>) {
+        use ast::ExprKind as K;
+        if let Some((fid, func)) = self.dyn_formal_call_target(e) {
+            out.push((fid, func.name.name.clone()));
+            return;
+        }
+        match &e.kind {
+            K::Unary { operand, .. } => self.dyn_formal_call_targets(operand, out),
+            K::Paren { inner } => self.dyn_formal_call_targets(inner, out),
+            K::Binary { lhs, rhs, .. } => {
+                self.dyn_formal_call_targets(lhs, out);
+                self.dyn_formal_call_targets(rhs, out);
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.dyn_formal_call_targets(cond, out);
+                self.dyn_formal_call_targets(then_e, out);
+                self.dyn_formal_call_targets(else_e, out);
+            }
+            K::Concat { parts } => {
+                for p in parts {
+                    self.dyn_formal_call_targets(p, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// R16 §3.7: emit snapshot markers for dyn-formal calls BURIED in `e` and bless the
+    /// expression, without hoisting anything to a temp.
+    ///
+    /// This is what makes `return {h(b), "!"}` work INSIDE a frame body, where the temp
+    /// hoist cannot go: `fresh_ret_temp` allocates a MODULE net, and a frame body writing
+    /// one is outside the frame-call subset (it produced a diagnostic about "an assignment
+    /// to a net outside the function" — a true statement about a temp the user never
+    /// wrote). Markers need no storage of their own: each fills its callee's formal heap
+    /// slot, and the expression then evaluates normally.
+    ///
+    /// SOUNDNESS. The markers all run BEFORE the expression, so two calls sharing one
+    /// formal slot would both read the LAST snapshot. Repeated targets are therefore
+    /// refused outright rather than mis-ordered — the temp hoist handles those wherever it
+    /// is available. Distinct targets have distinct slots and cannot interfere. The caller
+    /// must have checked `has_unhoistable_dyn_formal_call` first: the blessing is a global
+    /// flag, so a call in a position this walk does not reach would be blessed without a
+    /// marker and would read an empty array.
+    pub(crate) fn emit_dyn_formal_markers_nested(
+        &mut self,
+        b: &mut ProcessBuilder,
+        e: &ast::Expr,
+    ) -> bool {
+        let mut fids = Vec::new();
+        self.dyn_formal_call_targets(e, &mut fids);
+        if fids.is_empty() {
+            return false;
+        }
+        // RECURSION. A marker writes the callee's formal slot BEFORE the expression
+        // evaluates. When the callee is the function being lowered, those are the very
+        // formals the rest of the expression reads — `return c[n-1] + f(c, n-1);` would
+        // read `c` through a slot the marker had already overwritten for the recursive
+        // call. It happens to give the right answer when every level passes the same
+        // array and a silently wrong one the moment a level passes a different one, so
+        // this is refused outright rather than left to chance. The enclosing frame is
+        // the trailing `$func$<name>` / `$itask$<name>` segment of the active prefix.
+        let enclosing = self.cur_prefix.rsplit('.').next().and_then(|s| {
+            s.strip_prefix("$func$")
+                .or_else(|| s.strip_prefix("$itask$"))
+        });
+        if let Some(encl) = enclosing {
+            if fids.iter().any(|(_, n)| n == encl) {
+                return false;
+            }
+        }
+        let mut sorted: Vec<u32> = fids.iter().map(|(f, _)| *f).collect();
+        sorted.sort_unstable();
+        sorted.dedup();
+        if sorted.len() != fids.len() {
+            return false; // a repeated target would share one formal slot
+        }
+        let mut any = false;
+        for e in Self::dyn_formal_call_exprs(e) {
+            any |= self.emit_frame_dyn_formal_markers(b, None, &e);
+        }
+        any
+    }
+
+    /// R16 §3.7: the dyn-formal call sub-expressions of `e`, in source order — the same
+    /// positions [`Self::dyn_formal_call_targets`] walks.
+    fn dyn_formal_call_exprs(e: &ast::Expr) -> Vec<ast::Expr> {
+        use ast::ExprKind as K;
+        let mut out = Vec::new();
+        fn go(e: &ast::Expr, out: &mut Vec<ast::Expr>) {
+            use ast::ExprKind as K;
+            match &e.kind {
+                K::Call { .. } => out.push(e.clone()),
+                K::Unary { operand, .. } => go(operand, out),
+                K::Paren { inner } => go(inner, out),
+                K::Binary { lhs, rhs, .. } => {
+                    go(lhs, out);
+                    go(rhs, out);
+                }
+                K::Ternary {
+                    cond,
+                    then_e,
+                    else_e,
+                } => {
+                    go(cond, out);
+                    go(then_e, out);
+                    go(else_e, out);
+                }
+                K::Concat { parts } => {
+                    for p in parts {
+                        go(p, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if matches!(e.kind, K::Call { .. }) {
+            out.push(e.clone());
+        } else {
+            go(e, &mut out);
+        }
+        out
     }
 
     /// B2: emit a frame-TASK call. Seals the current block with `Terminator::Call`

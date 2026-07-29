@@ -581,6 +581,34 @@ impl Elaborator<'_> {
         // is deliberately not: gather tests it per NAME, this tests it decl-ANY, so this
         // side is the weaker test and gather ⇒ hoist holds. The extra permissiveness is
         // absorbed by `block_local_scope_seg`, which only ever scopes a name gather marked.
+        // R16 §3.5: a comma declaration is N INDEPENDENT declarators, but the collision
+        // decision below reads `d.names.first()` and then applies its verdict to every
+        // name. In `automatic int n = 0, n_skip = 0;` only `n` collides, yet `n_skip`
+        // was rejected too — with a message naming an existing net of that name, which
+        // does not exist anywhere in the design — and then the whole declaration was
+        // dropped, so every later use of `n_skip` reported "undeclared net/variable" one
+        // line below its declaration. One `int n;` at module scope produced eight
+        // diagnostics, seven of them about a variable with nothing wrong with it.
+        //
+        // Handled by splitting only when the declarators DISAGREE. A declaration whose
+        // names all collide, or none of which do, takes the original path unchanged, so
+        // this cannot perturb any design that elaborates today — the split is reachable
+        // only from the mixed case, which is broken in every instance.
+        if d.names.len() > 1 {
+            let collides =
+                |s: &Self, n: &ast::DeclName| s.symbols.contains_key(&s.fq(&n.name.name));
+            let first = collides(self, &d.names[0]);
+            if d.names.iter().any(|n| collides(self, n) != first) {
+                for n in &d.names {
+                    let one = ast::NetVarDecl {
+                        names: vec![n.clone()],
+                        ..d.clone()
+                    };
+                    self.hoist_one_block_local(&one, decls, stmts, span, ports, body);
+                }
+                return;
+            }
+        }
         let string_local =
             matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
         let dyn_storage = string_local
@@ -762,26 +790,30 @@ impl Elaborator<'_> {
                     .first()
                     .map(|n| n.name.name.as_str())
                     .unwrap_or("<unnamed>");
-                let has_init = d.names.iter().any(|n| n.init.is_some());
-                let _ = has_init;
-                let lifetime = if d.lifetime == Some(true) {
-                    "this one is `automatic`, so the OTHER is not"
-                } else {
-                    "this one is static and its block is not eligible for a scope of its \
-                     own (a name declared in only one block, a name that also names a \
-                     module net, or two blocks where one encloses the other)"
+                // R16 §4-2: the old text ended "this one is `automatic`, so the OTHER is
+                // not" — an INFERENCE from "the pair was not scoped", and a false one.
+                // Scoping is withheld for several reasons, and in the reported case BOTH
+                // declarations were spelled `automatic`; the reader was sent looking for
+                // a static twin that did not exist. State what is known — this
+                // declaration's own lifetime — and list the conditions without claiming
+                // which one failed.
+                let lifetime = match d.lifetime {
+                    Some(true) => "this one is declared `automatic`",
+                    Some(false) => "this one is declared `static`",
+                    None => "this one takes the enclosing default lifetime",
                 };
                 self.error(
                     MsgCode::ElabUnsupported,
                     &format!(
                         "the dynamic-storage local `{nm}` (queue / dynamic array / \
                          associative array / string) is declared under the same name in \
-                         another block, and this pair cannot be given distinct storage: \
-                         v1 does that for two `automatic` locals, or for two dynamic \
-                         (or scalar-`string`) locals, and only when neither block \
-                         encloses the other — {lifetime}. As written both would share one flattened \
-                         handle and one heap; declare them `automatic`, or \
-                         rename one"
+                         another block, and this pair cannot be given distinct storage \
+                         ({lifetime}). A pair earns distinct storage when both are \
+                         `automatic`, or both are dynamic (or scalar-`string`), AND \
+                         neither declaring block encloses the other, AND the name does \
+                         not also name a net in the enclosing scope. As written both \
+                         would share one flattened handle and one heap; make both \
+                         `automatic`, or rename one"
                     ),
                 );
             }
@@ -1013,8 +1045,35 @@ impl Elaborator<'_> {
                             .collect()
                     })
                     .unwrap_or_default();
-                for st in stmts {
-                    self.hoist_block_local_nets(st, ports, body);
+                // R16 §3.4: recurse under THIS block's `$blk$` segment when it has one,
+                // mirroring the Logic phase (`stmt_main.rs`), which lowers a scoped
+                // block's body inside `with_scope("$blk$<lo>")` and therefore NESTS the
+                // segments when an outer and an inner block are both scoped.
+                //
+                // The hoist used to recurse flat, so a scoped inner block's nets were
+                // created at `t.$blk$<inner>.n` while its body was lowered under
+                // `t.$blk$<outer>.$blk$<inner>` — the outward walk then missed them and
+                // fell through to the module. That mismatch is what forced the classifier
+                // to drop every candidate block nested inside another candidate, which is
+                // why a name reused at ONE level worked and the same name reused at TWO
+                // levels did not: the standard table-driven walker shape
+                // (`foreach (files[fi]) begin automatic int fd = $fopen(…); … begin
+                // <inner locals> end end`) repeated in sibling blocks.
+                let seg = self
+                    .scoped_block_locals
+                    .contains_key(&span.lo)
+                    .then(|| format!("$blk${}", span.lo));
+                match seg {
+                    Some(seg) => self.with_scope(&seg, |s| {
+                        for st in stmts {
+                            s.hoist_block_local_nets(st, ports, body);
+                        }
+                    }),
+                    None => {
+                        for st in stmts {
+                            self.hoist_block_local_nets(st, ports, body);
+                        }
+                    }
                 }
                 for n in pushed {
                     self.per_entry_in_scope.remove(&n);

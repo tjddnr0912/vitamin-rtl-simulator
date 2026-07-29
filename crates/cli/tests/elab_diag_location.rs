@@ -144,8 +144,17 @@ fn the_same_name_dynamic_local_message_names_the_local_and_the_rule() {
     assert!(out.contains("error[VITA-E3009]"), "expected loud:\n{out}");
     assert!(out.contains("`m`"), "must name the local:\n{out}");
     assert!(
-        out.contains("v1 does that for two `automatic` locals"),
+        out.contains("A pair earns distinct storage when both are `automatic`"),
         "must state the rule that would make it work:\n{out}"
+    );
+    // R16 §4-2: and it must not INFER the other declaration's lifetime. The old text
+    // ended "this one is `automatic`, so the OTHER is not", which was simply false
+    // whenever the pair failed for one of the other reasons — in the round-16 report
+    // both declarations were spelled `automatic` and the reader was sent looking for a
+    // static twin that did not exist.
+    assert!(
+        !out.contains("so the OTHER is not"),
+        "must not infer the other declaration's lifetime:\n{out}"
     );
 }
 

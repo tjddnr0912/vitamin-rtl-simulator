@@ -366,12 +366,21 @@ impl Elaborator<'_> {
         } else {
             format!("{here}.")
         };
-        // This scope owns its own key and its direct `$blk$` children (not a nested
-        // scope's — that one flushes at its own point).
+        // This scope owns its own key and every `$blk$` key BELOW it — at any depth, as
+        // long as the whole remainder is `$blk$` segments. A generate or instance
+        // segment in the remainder means that scope flushes at its own point, and is not
+        // claimed here.
+        //
+        // R16 §3.4: the depth-1 form of this rule (`!rest.contains('.')`) was written
+        // when procedural blocks could never nest their scopes, because the classifier
+        // dropped any candidate block inside another candidate. With that restriction
+        // lifted, a block-local inside a scoped block inside a scoped block records
+        // under `t.$blk$<outer>.$blk$<inner>`, which no scope claimed — caught not by a
+        // test but by the never-emitted guard, which named both orphaned keys.
         let is_here = |k: &String| {
             *k == here
                 || k.strip_prefix(&dot)
-                    .is_some_and(|rest| rest.starts_with("$blk$") && !rest.contains('.'))
+                    .is_some_and(|rest| rest.split('.').all(|seg| seg.starts_with("$blk$")))
         };
         let keys: Vec<String> = self
             .pending_block_local_inits

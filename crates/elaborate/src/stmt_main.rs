@@ -1006,7 +1006,31 @@ impl Elaborator<'_> {
                             Some(rv) => self.nets.get(rv as usize).map(|n| n.width).unwrap_or(32),
                             None => 0,
                         };
+                        // R16 §3.7: `return f(arr);` where `f` has an `input` dynamic-array
+                        // formal. The formal's heap slot is filled by a `handle_copy`
+                        // snapshot marker, and only a direct blocking-assign rhs emitted
+                        // one — so a `return` whose whole value is such a call was loud,
+                        // and the workaround was to spell it `x = f(arr); return x;`.
+                        //
+                        // A `return <expr>` IS that assignment: it lowers to a whole-net
+                        // write of the return variable, in the same block, immediately
+                        // after the markers. So the same emit-then-bless sequence applies
+                        // verbatim; nothing about the marker mechanism is `return`-specific
+                        // (the module-process-only restriction it once had was already
+                        // lifted in r17). The blessing is cleared right after the value
+                        // lowers so it cannot leak to a later statement.
+                        // A BURIED call (`return {h(b), "!"}`) takes the marker route too
+                        // when every call sits in a position the walk reaches and no two
+                        // share a formal slot. Inside a frame body that is the only route
+                        // — the temp hoist allocates a module net, which a frame body may
+                        // not write.
+                        let dyn_blessed = self.emit_frame_dyn_formal_markers(b, None, val)
+                            || (!self.has_unhoistable_dyn_formal_call(val)
+                                && self.emit_dyn_formal_markers_nested(b, val));
                         let rhs = self.lower_return_rhs(val, ctx_w);
+                        if dyn_blessed {
+                            self.dyn_formal_call_ok = false;
+                        }
                         if let Some(rv) = retvar {
                             let sid = self.push_stmt(ir::Stmt::BlockingAssign {
                                 lhs: whole_net_lvalue(rv),

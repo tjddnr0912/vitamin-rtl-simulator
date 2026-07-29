@@ -40,6 +40,14 @@ pub(crate) struct DeferredHierCall {
 /// instance isn't elaborated yet), so `resolve_deferred_hier_task_call` picks between them
 /// per port using `hier_task_port_dirs[fid]`.
 pub(crate) struct DeferredHierTaskCall {
+    /// R16 §4-1: the enable's own source span, captured at DEFER time.
+    ///
+    /// These diagnostics fire in a resolve pass that runs long after the statement was
+    /// lowered, so `cur_span` no longer points at anything the user wrote — and the
+    /// hierarchical-task-call reject was the ONLY diagnostic in the round-16 report with
+    /// no `file:line:col` at all (84 errors, 83 located). In the `TB=partial` run it was
+    /// the only diagnostic, so that log had no position anywhere in it.
+    pub(crate) span: Option<ast::Span>,
     pub(crate) proc: u32,
     pub(crate) call_block: u32,
     /// §4.5.208: `Some(func_block)` when the enable is NESTED inside a frame TASK body (the
@@ -380,7 +388,14 @@ impl Elaborator<'_> {
     /// unread for a process-body call).
     pub(crate) fn resolve_deferred_hier_task_call(&mut self) {
         let deferred = std::mem::take(&mut self.deferred_hier_task_calls);
+        // R16 §4-1: this pass runs long after the enables were lowered, so `cur_span`
+        // points at whatever was last elaborated. Anchor each iteration at the enable the
+        // user actually wrote, and put the ambient span back when the pass ends. Saved
+        // once rather than per iteration because the loop body `continue`s in half a dozen
+        // places and each iteration overwrites the previous one anyway.
+        let ambient_span = self.cur_span;
         for d in deferred {
+            self.cur_span = d.span;
             let Some(fid) = self.hier_resolve(&d.prefix, &d.path, &self.hier_tasks) else {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -649,6 +664,7 @@ impl Elaborator<'_> {
                 }
             }
         }
+        self.cur_span = ambient_span;
     }
 
     /// Record a deferred hierarchical WRITE target and return its sentinel net id
