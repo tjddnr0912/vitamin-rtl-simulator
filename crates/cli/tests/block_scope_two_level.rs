@@ -253,6 +253,58 @@ fn table_driven_walker_shape() {
     );
 }
 
+/// R16 §3.8 — the report's one "unclassified" diagnostic. It carried a different
+/// wording ("shares one flattened net … but is READ before it is assigned here", the
+/// STATIC coalesce branch rather than the `automatic` one) so the report listed it
+/// apart, while guessing it shared §3.4's root. It does: a struct local decomposes to
+/// per-member nets that no longer carry the `automatic` flag, so it lands in the static
+/// branch — and in the two-level shape those members were exactly what lost their
+/// scoping. Reproduced at 6b6b8ef with that wording; it runs now.
+#[test]
+fn struct_member_static_branch_message_at_two_levels() {
+    runs(
+        r#"module t;
+             typedef struct { int a; int b; } rec_t;
+             initial begin
+               begin
+                 automatic int fd = 1;
+                 begin
+                   automatic rec_t r;
+                   r.a = fd; r.b = 2;
+                   $display("R A %0d %0d", r.a, r.b);
+                 end
+               end
+               begin
+                 automatic int fd = 2;
+                 begin
+                   automatic rec_t r;
+                   r.a = fd; r.b = 3;
+                   $display("R B %0d %0d", r.a, r.b);
+                 end
+               end
+             end
+           endmodule"#,
+        &["R A 1 2", "R B 2 3"],
+    );
+}
+
+/// SOUNDNESS PIN. Two STATIC block-locals of the same name, each with an initializer,
+/// wear the same wording as §3.8 but must STAY loud. They share one flattened net and
+/// both initializers run in the pre-arm initialization phase, so the second overwrites
+/// the first and the earlier block would read the later block's value. iverilog prints
+/// `7` then `9`; accepting this would print `9` twice.
+#[test]
+fn two_static_initialized_locals_of_one_name_stay_loud() {
+    let (o, ok) = run(r#"module t;
+             initial begin
+               begin int n = 7; $display("R A %0d", n); end
+               begin int n = 9; $display("R B %0d", n); end
+             end
+           endmodule"#);
+    assert!(!ok, "expected a diagnostic, got acceptance:\n{o}");
+    assert!(o.contains("E3009"), "expected E3009, got:\n{o}");
+}
+
 /// SOUNDNESS PIN. A name declared at an outer level AND again at an inner level of the
 /// SAME tree is SHADOWING, not two disjoint blocks — a distinct rule that stays. vita
 /// cannot resolve the outer binding through the flatten, so it must stay loud rather
