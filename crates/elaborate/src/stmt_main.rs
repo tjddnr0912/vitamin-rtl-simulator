@@ -988,6 +988,34 @@ impl Elaborator<'_> {
                         },
                         span: name.span,
                     };
+                    // R19 §3.2: a function with an OUTPUT/INOUT formal cannot be lowered
+                    // as a plain expression — `emit_frame_call` rejects it, because the
+                    // copy-out has to be a `Terminator::Call`. Statement position is the
+                    // easiest case there is: the return value is discarded, so the R5-B
+                    // copy-out emitter gets a throwaway temp for the return slot and the
+                    // write-back to the actuals — the entire point of the call — happens.
+                    //
+                    // This is what `void'(nxt(5, r));` and the bare `nxt(5, r);` form
+                    // parse to, and it is the report's §3.2: the natural workaround for a
+                    // value-returning out-formal call (throw the value away, so the call
+                    // is a statement) was itself rejected, which left the TB no way to
+                    // express the write at all.
+                    if let Some((fid, func)) = self.inout_call_target(&call_expr) {
+                        let (rw, rsig) = self
+                            .func_metas
+                            .get(fid as usize)
+                            .map(|m| (m.ret_width, m.ret_signed))
+                            .unwrap_or((32, true));
+                        let (tmp_net, _) = self.fresh_ret_temp(&func, rw, rsig);
+                        self.emit_frame_func_out_call(
+                            b,
+                            fid,
+                            &func,
+                            args,
+                            whole_net_lvalue(tmp_net),
+                        );
+                        return;
+                    }
                     let call = self.lower_expr(&call_expr);
                     self.emit_discarded_call(b, call);
                     return;

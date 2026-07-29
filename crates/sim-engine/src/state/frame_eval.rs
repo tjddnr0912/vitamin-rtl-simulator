@@ -42,6 +42,18 @@ impl<'a> SimState<'a> {
     /// vita leaves it on the pre-existing generic path rather than changing its value.
     /// Any other RHS evaluates normally in the assignment-width context.
     pub(crate) fn frame_rhs_value(&self, lhs: &Lvalue, rhs: u32) -> Value {
+        // R19-X2 SILENT-WRONG (measured against iverilog 13, exit 0, no diagnostic):
+        // the file-read family's real work is a statement-level effect that only the
+        // PROCESS executor performs (`StmtEffect::Fgets` / `Fread` / `Scanf` / …). Here
+        // the same `SysFunc` goes through the pure `eval` path, whose arm for these ids
+        // returns X and touches nothing — so `rc = $fgets(line, fd);` inside a
+        // `function automatic` yielded `rc=0` and an EMPTY string where iverilog reads
+        // the line. That is exactly the `.rsp` / CAVP walker shape round-19 §3.1 has
+        // just made reachable, so it is latched as a FATAL rather than left silent.
+        if self.rhs_is_sysread(rhs) {
+            self.fatal_frame_sysread(rhs);
+            return Value::xs(self.lvalue_width(lhs).max(1), true);
+        }
         let lhs_is_string = lhs
             .chunks
             .first()
@@ -568,6 +580,66 @@ impl<'a> SimState<'a> {
                 sim_time: Some(TimeStamp { ticks: self.now }),
             }));
         }
+    }
+
+    /// R19-X2: is `rhs` one of the file-read system functions whose destination write is
+    /// a PROCESS-only statement effect? Named for the reason, not for a list of ids: the
+    /// property is "its value comes with a write this executor cannot perform".
+    pub(crate) fn rhs_is_sysread(&self, rhs: u32) -> bool {
+        matches!(
+            self.ir.exprs.get(rhs as usize),
+            Some(sim_ir::Expr::SysFunc {
+                which: sim_ir::SysFuncId::Fgets
+                    | sim_ir::SysFuncId::Fread
+                    | sim_ir::SysFuncId::Fscanf
+                    | sim_ir::SysFuncId::Sscanf
+                    | sim_ir::SysFuncId::Fgetc
+                    | sim_ir::SysFuncId::Ungetc,
+                ..
+            })
+        )
+    }
+
+    /// R19-X2: latch the fatal for [`Self::rhs_is_sysread`], the same `call_fatal`
+    /// channel `fatal_frame_heap_write` uses (fires once; the scheduler converts it to
+    /// `FinishReason::Error`).
+    ///
+    /// Deliberately a RUNTIME fatal, not an elaborate-time reject: a `task automatic`
+    /// with no output formals is lowered BOTH as a frame body and inline, and the inline
+    /// copy is the one its callers run — reading the file correctly. An elaborate gate on
+    /// the frame body would have loud-rejected that working design (measured while
+    /// building this). Firing where the frame copy actually executes rejects exactly the
+    /// calls that would have got nothing.
+    pub(crate) fn fatal_frame_sysread(&self, rhs: u32) {
+        if self.call_fatal.get() {
+            return;
+        }
+        let which = match self.ir.exprs.get(rhs as usize) {
+            Some(sim_ir::Expr::SysFunc { which, .. }) => match which {
+                sim_ir::SysFuncId::Fgets => "$fgets",
+                sim_ir::SysFuncId::Fread => "$fread",
+                sim_ir::SysFuncId::Fscanf => "$fscanf",
+                sim_ir::SysFuncId::Sscanf => "$sscanf",
+                sim_ir::SysFuncId::Fgetc => "$fgetc",
+                _ => "$ungetc",
+            },
+            _ => "a file-read system function",
+        };
+        self.call_fatal.set(true);
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Fatal,
+            code: MsgCode::RunFatal,
+            message: format!(
+                "`{which}` writes its destination as a statement-level effect that this \
+                 synchronous `&self` frame executor cannot perform, so the read would \
+                 silently return 0 and leave the destination untouched. Do the read in a \
+                 module process, or in a task vita can inline (no output/inout formals, \
+                 no `automatic` lifetime), and pass the result in."
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(TimeStamp { ticks: self.now }),
+        }));
     }
 
     pub(crate) fn fatal_frame_assoc_iter(&self) {

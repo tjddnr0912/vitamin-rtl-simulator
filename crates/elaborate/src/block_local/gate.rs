@@ -33,24 +33,81 @@ fn actual_is_record_of(arg: &ast::Expr, name: &str) -> bool {
 }
 
 impl Elaborator<'_> {
-    /// BL4 (round-19): resolve a callee NAME to its formal port DIRECTIONS, in port
+    /// BL4 (round-19): resolve a callee NAME to its formal PORTS, in declaration
     /// order, for the block-local definite-assignment gate. A single-segment name is
     /// looked up in `func_table` then `task_table` (both hold the per-module AST def
     /// with `ports: Vec<TfPort>`). Returns `None` for a hierarchical `u.f` (the child
     /// module's ports are out of scope here), an unknown name, or a `$system` call —
     /// leaving the DA walk to treat the reference conservatively as a read.
-    fn callee_port_dirs(&self, callee: &ast::HierPath) -> Option<Vec<ast::PortDir>> {
+    fn callee_ports(&self, callee: &ast::HierPath) -> Option<&[ast::TfPort]> {
         if callee.segments.len() != 1 {
             return None;
         }
         let nm = callee.segments[0].name.as_str();
         if let Some(f) = self.func_table.get(nm) {
-            return Some(f.ports.iter().map(|p| p.dir).collect());
+            return Some(&f.ports);
         }
         if let Some(t) = self.task_table.get(nm) {
-            return Some(t.ports.iter().map(|p| p.dir).collect());
+            return Some(&t.ports);
         }
         None
+    }
+
+    /// R19 §3.3: bind every ACTUAL of a call to the FORMAL DIRECTION it connects to.
+    ///
+    /// Positional actuals fill formals left to right; a `.formal(value)` names its own,
+    /// and a positional actual may not follow a named one (IEEE 1800 §13.5.4). The two
+    /// DA resolvers used to bail on the FIRST `NamedArg` they saw — so a call carrying
+    /// one, which is exactly how a testbench leaves the other defaults alone
+    /// (`run_scenario("D11", HASH_SHA2_256, '{}, msg, exp, .inject_rresp_error(1))`),
+    /// answered `Unknown` and ended the walk, blaming a local several arguments to its
+    /// left. Nothing about the named argument made the call unanalysable; the mapping
+    /// was simply never written.
+    ///
+    /// `None` for anything not well-formed — an unresolvable callee, a name that is not
+    /// a formal, a formal bound twice, a positional after a named one, more actuals
+    /// than formals — leaving the caller exactly as conservative as it was.
+    ///
+    /// An OMITTED formal (and a valueless `.formal()`) binds its DEFAULT, an expression
+    /// lowered in the caller's own scope, so it CAN read the flattened `name`. It is
+    /// reported as an `Input` bind rather than dropped: a read is a read, whoever wrote
+    /// the expression. (`default_binding_matches_decl_scope` is the separate, and
+    /// stricter, question of whether that lowering is legitimate at all.)
+    fn callee_arg_dirs<'a>(
+        &'a self,
+        callee: &ast::HierPath,
+        args: &'a [ast::Expr],
+    ) -> Option<Vec<(ast::PortDir, &'a ast::Expr)>> {
+        let ports = self.callee_ports(callee)?;
+        let mut out: Vec<(ast::PortDir, &'a ast::Expr)> = Vec::with_capacity(ports.len());
+        let mut bound = vec![false; ports.len()];
+        let mut pos = 0usize;
+        let mut seen_named = false;
+        for a in args {
+            if let ast::ExprKind::NamedArg { formal, value } = &a.kind {
+                seen_named = true;
+                let idx = ports.iter().position(|p| p.name.name == formal.name)?;
+                if std::mem::replace(&mut bound[idx], true) {
+                    return None;
+                }
+                match value {
+                    Some(v) => out.push((ports[idx].dir, v)),
+                    None => out.push((ast::PortDir::Input, ports[idx].default.as_ref()?)),
+                }
+            } else {
+                if seen_named || pos >= ports.len() || std::mem::replace(&mut bound[pos], true) {
+                    return None;
+                }
+                out.push((ports[pos].dir, a));
+                pos += 1;
+            }
+        }
+        for (p, b) in ports.iter().zip(bound) {
+            if !b {
+                out.push((ast::PortDir::Input, p.default.as_ref()?));
+            }
+        }
+        Some(out)
     }
 
     /// BL4 (round-19): true iff the call `callee(args)` DEFINITELY (whole-var) WRITES
@@ -76,19 +133,12 @@ impl Elaborator<'_> {
         args: &[ast::Expr],
         name: &str,
     ) -> bool {
-        // Named args defeat positional formal mapping → conservative (stays loud).
-        if args
-            .iter()
-            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
-        {
-            return false;
-        }
-        let Some(dirs) = self.callee_port_dirs(callee) else {
+        let Some(binds) = self.callee_arg_dirs(callee, args) else {
             return false;
         };
         let mut writes = false;
         let mut reads = false;
-        for (i, arg) in args.iter().enumerate() {
+        for (dir, arg) in binds {
             // A clean whole-var OUTPUT actual `name` at an OUTPUT formal — copy-out only.
             // R18 §3.3: `name` may be a MEMBER NET of an unpacked struct
             // (`$unp$rm$count`) whose actual still names the record (`rm`) — the SoA
@@ -97,7 +147,7 @@ impl Elaborator<'_> {
             let whole_var = matches!(&arg.kind, ast::ExprKind::Ident(p)
                     if p.segments.len() == 1 && p.segments[0].name == name)
                 || actual_is_record_of(arg, name);
-            let clean_output_whole = matches!(dirs.get(i), Some(ast::PortDir::Output)) && whole_var;
+            let clean_output_whole = matches!(dir, ast::PortDir::Output) && whole_var;
             if clean_output_whole {
                 writes = true;
             } else if whole_var || !expr_no_ref(arg, name) {
@@ -278,12 +328,6 @@ impl Elaborator<'_> {
     /// formals are not visible here — and an `output` formal reached that way would
     /// turn this proof into a silent-wrong, so it is not claimed.
     fn call_only_reads(&self, callee: &ast::HierPath, args: &[ast::Expr], name: &str) -> bool {
-        if args
-            .iter()
-            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
-        {
-            return false;
-        }
         // A two-segment path whose HEAD IS `name` is unambiguously a method on our own
         // local: `name` is a block-local VARIABLE, so it can never also be the instance
         // name a hierarchical `inst.task(…)` would need. That removes the one hazard
@@ -296,16 +340,17 @@ impl Elaborator<'_> {
         if callee.segments.len() != 1 {
             return false;
         }
-        let Some(dirs) = self.callee_port_dirs(callee) else {
+        let Some(binds) = self.callee_arg_dirs(callee, args) else {
             return false;
         };
-        // Every actual that MAY mention `name` must be at an `input` formal — and must
-        // BE one (an arg beyond the resolved arity has no direction to check).
-        for (i, arg) in args.iter().enumerate() {
+        // Every actual that MAY mention `name` must be at an `input` formal (a copy-in
+        // is a pure read). `callee_arg_dirs` has already rejected any binding it could
+        // not map, so an unmapped position cannot reach here.
+        for (dir, arg) in binds {
             if expr_no_ref_deep(arg, name) {
                 continue;
             }
-            if !matches!(dirs.get(i), Some(ast::PortDir::Input)) {
+            if !matches!(dir, ast::PortDir::Input) {
                 return false;
             }
         }
@@ -369,6 +414,15 @@ impl Elaborator<'_> {
         // receiver and arguments — no user body to walk.
         if callee.segments.len() == 2 {
             return callee.segments.iter().all(|s| s.name != name);
+        }
+        // R19: an OMITTED formal's DEFAULT is lowered in the caller's scope too, so a
+        // call whose written-out arguments never mention `name` can still read it. The
+        // args loop above cannot see that — the expression is on the callee's port.
+        if !self
+            .callee_arg_dirs(callee, args)
+            .is_some_and(|b| b.iter().all(|(_, a)| expr_no_ref_deep(a, name)))
+        {
+            return false;
         }
         self.callee_body_cannot_touch(callee, name, depth)
     }

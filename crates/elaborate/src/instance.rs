@@ -381,6 +381,10 @@ impl Elaborator<'_> {
         //       hierarchical in v1, so the bare name is the key.
         let saved_funcs = std::mem::take(&mut self.func_table);
         let saved_tasks = std::mem::take(&mut self.task_table);
+        // R19-X1: these two tables' contents are declared HERE, at this instance's own
+        // prefix. Record it so a filled default-argument value can be checked against
+        // the scope IEEE evaluates it in (see `default_binding_matches_decl_scope`).
+        let saved_decl_scope = std::mem::replace(&mut self.tf_decl_scope, self.cur_prefix.clone());
         // R5-B: the inout-function set is module-local too (it is rebuilt by this
         // module's `lower_frame_funcs`), so a nested child instance elaborated in the
         // middle of this module must not clobber it — save/restore alongside func_table.
@@ -772,6 +776,7 @@ impl Elaborator<'_> {
         self.per_entry_block_locals = saved_per_entry_blocks;
         self.coalesced_block_locals = saved_coalesced;
         self.func_table = saved_funcs;
+        self.tf_decl_scope = saved_decl_scope;
         self.const_func_table = saved_const_funcs;
         self.task_table = saved_tasks;
         self.inout_func_names = saved_inout_funcs; // R5-B

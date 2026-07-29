@@ -213,6 +213,117 @@ impl Elaborator<'_> {
         }
     }
 
+    /// R19-X1: every BARE NAME a default-argument expression can resolve, or `false`
+    /// if it holds a form this walk does not model.
+    ///
+    /// [`Self::default_is_scope_safe`] with ONE variant added — a single-segment
+    /// `Ident`, collected rather than rejected. Everything else keeps that function's
+    /// allow-list polarity: an unrecognised node (a user call, a method, `new`, a
+    /// multi-segment path, or any variant added later) answers `false`, and the caller
+    /// then treats the default as scope-ambiguous. Sharing the shape with the
+    /// scope-safe predicate is the point: a default this returns `true` for is
+    /// composed only of literals, `pkg::` constants, system calls and names, so
+    /// comparing the NAMES settles the whole expression.
+    pub(crate) fn default_free_names(e: &ast::Expr, out: &mut Vec<String>) -> bool {
+        use ast::ExprKind as K;
+        let mut r = |x: &ast::Expr| Self::default_free_names(x, out);
+        match &e.kind {
+            K::Ident(p) => match p.segments.as_slice() {
+                [one] => {
+                    out.push(one.name.clone());
+                    true
+                }
+                // A dotted path resolves through the joined key, whose scope walk this
+                // comparison does not model → ambiguous.
+                _ => false,
+            },
+            K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::Null => true,
+            K::PkgScoped { .. } => true,
+            K::SysCall { args, .. } => args.iter().all(r),
+            K::Unary { operand, .. } => r(operand),
+            K::Binary { lhs, rhs, .. } => r(lhs) && r(rhs),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => r(cond) && r(then_e) && r(else_e),
+            K::BitSelect { base, index } => r(base) && r(index),
+            K::PartSelect { base, msb, lsb } => r(base) && r(msb) && r(lsb),
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => r(base) && r(offset) && r(width),
+            K::Concat { parts } => parts.iter().all(r),
+            K::Replicate { count, value } => r(count) && value.iter().all(r),
+            K::Paren { inner } => r(inner),
+            K::MinTypMax { min, typ, max } => r(min) && r(typ) && r(max),
+            K::Cast { target, expr } => {
+                r(expr)
+                    && match target {
+                        ast::CastTarget::Size(s) => r(s),
+                        _ => true,
+                    }
+            }
+            _ => false,
+        }
+    }
+
+    /// R19-X1: does this filled DEFAULT argument value mean the same thing HERE as it
+    /// does where the subroutine is DECLARED?
+    ///
+    /// vita lowers a default in the CALLER's scope; IEEE 1800 §13.5.4 evaluates it in
+    /// the subroutine's own. MEASURED divergence — a module task
+    /// `tw(output int x, input int y = g)` called from a task body that declares its
+    /// own `g` read the CALLER's `g`: vita printed `91` where iverilog prints `6`, at
+    /// exit 0, no diagnostic. (The same hazard for a CLASS-method default was already
+    /// closed by [`Self::default_is_scope_safe`]; the plain function/task twin was
+    /// not — the pattern this codebase keeps re-learning.)
+    ///
+    /// Answers by COMPARING BINDINGS rather than by banning names, because banning
+    /// them would loud-reject the common and correct case: a module-level default
+    /// naming a module net, called from a generate block or a subroutine body, still
+    /// resolves outward to the very same net. Only a name that actually binds
+    /// elsewhere here is rejected.
+    pub(crate) fn default_binding_matches_decl_scope(&mut self, def: &ast::Expr) -> bool {
+        // Identical scope, no formal substitution in flight ⇒ the two lowerings are the
+        // same lowering. Covers every call that is not inside another subroutine, a
+        // generate block, or a scoped block — i.e. almost all of them, byte-identically.
+        if self.cur_prefix == self.tf_decl_scope
+            && self.subst.is_empty()
+            && self.out_subst.is_empty()
+        {
+            return true;
+        }
+        if Self::default_is_scope_safe(def) {
+            return true;
+        }
+        let mut names = Vec::new();
+        if !Self::default_free_names(def, &mut names) {
+            return false;
+        }
+        // An INLINE-path formal substitution binds a callee formal to a caller net by
+        // bare name; a default resolved through one is reading the wrong object by
+        // construction, whatever the prefixes say.
+        if names
+            .iter()
+            .any(|n| self.subst_lookup(n).is_some() || self.out_subst_lookup(n).is_some())
+        {
+            return false;
+        }
+        let saved = std::mem::replace(&mut self.cur_prefix, self.tf_decl_scope.clone());
+        let there: Vec<(Option<u32>, Option<i64>)> = names
+            .iter()
+            .map(|n| (self.lookup_net_scoped(n), self.lookup_scoped(n)))
+            .collect();
+        self.cur_prefix = saved;
+        names
+            .iter()
+            .zip(there)
+            .all(|(n, t)| (self.lookup_net_scoped(n), self.lookup_scoped(n)) == t)
+    }
+
     // ── name resolution ────────────────────────────────────────────
     /// Resolve a HierPath → NetId. v1: single-segment (flat) names only. Unknown
     /// → emit + return [`POISON_NET`] (u32::MAX, NOT 0 — so a surviving poison

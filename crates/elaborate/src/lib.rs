@@ -597,6 +597,12 @@ struct Elaborator<'s> {
     // instance scope alongside `func_table`.
     const_func_table: BTreeMap<String, ast::FunctionDef>,
     task_table: BTreeMap<String, ast::TaskDef>,
+    // R19-X1: the scope prefix in force when `func_table`/`task_table` were collected —
+    // i.e. the scope in which every function/task in them is DECLARED. Saved/restored
+    // with those tables. Read only by `default_binding_matches_decl_scope`: a filled
+    // DEFAULT argument value is lowered in the CALLER's scope, but IEEE 1800 §13.5.4
+    // evaluates it in the subroutine's own, and the two can name different objects.
+    tf_decl_scope: String,
     // R5-B: names of FRAME functions that have an output/inout formal. A call to
     // one carries copy-out (like a task) plus a return value, so it is lowered as a
     // `Terminator::Call` (statement context) via `emit_frame_func_out_call` rather

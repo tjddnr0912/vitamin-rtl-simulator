@@ -110,6 +110,7 @@ impl<'s> Elaborator<'s> {
             func_table: BTreeMap::new(),
             const_func_table: BTreeMap::new(),
             task_table: BTreeMap::new(),
+            tf_decl_scope: String::new(),
             inout_func_names: std::collections::BTreeSet::new(),
             dyn_formal_func_names: std::collections::BTreeSet::new(),
             seq_table: BTreeMap::new(),

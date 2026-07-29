@@ -2,9 +2,11 @@
 
 use super::*;
 
+mod expr_effect;
 mod reads;
 mod writes;
 
+pub(crate) use expr_effect::*;
 pub(crate) use reads::*;
 pub(crate) use writes::*;
 
@@ -58,21 +60,28 @@ pub(crate) enum CallEffect {
     Unknown,
 }
 
-/// BL4: true when the WHOLE expression `e` — after unwrapping any unary operator
-/// (`!`/`~`/`-`) and `(paren)` — is a function CALL that WRITES `name` through an
-/// OUTPUT actual with no read of `name` (per `out_writes`). Such a cond / scrutinee
-/// is evaluated UNCONDITIONALLY (a unary operator and a paren always evaluate their
-/// operand), so the write establishes `name` before the branch. A `&&`/`||` (Binary)
-/// or `?:` (Ternary) is deliberately NOT unwrapped — the call inside it may be
-/// short-circuited / not taken, so it cannot be counted as a definite write.
-fn cond_out_writes(e: &ast::Expr, name: &str, out_writes: OutActualWrites) -> bool {
-    use ast::ExprKind as K;
-    match &e.kind {
-        K::Paren { inner } => cond_out_writes(inner, name, out_writes),
-        K::Unary { operand, .. } => cond_out_writes(operand, name, out_writes),
-        K::Call { name: cn, args } => out_writes(cn, args, name) == CallEffect::Writes,
-        _ => false,
-    }
+/// BL4, generalized in R19 §3.1: is the WHOLE expression `e` guaranteed to WRITE
+/// `name` through an output actual, with no read of `name` first?
+///
+/// BL4's version unwrapped only `!`/`(…)` and matched a bare `Call`, which is the
+/// STATEMENT-shaped subset. [`expr_da`] answers the same question for an expression
+/// of any shape the lowering can emit a copy-out from — the rhs of an assignment,
+/// an operand of `==`, the left operand of `&&` — which is where a call that
+/// RETURNS A VALUE actually appears.
+fn expr_out_writes(e: &ast::Expr, name: &str, out_writes: OutActualWrites) -> bool {
+    expr_da(e, name, out_writes) == ExprDa::Writes
+}
+
+/// R19 §3.1: does `e` READ `name`? The read side of [`expr_da`], and the replacement
+/// for the bare `!expr_no_ref(e, name)` the walk used to ask.
+///
+/// The difference is only ever in vita's favour and only ever about CALLS: an
+/// expression whose sole mention of `name` is an output actual (`nxt(5, r)`) does
+/// not read it, and one where that call sits in a conditionally-evaluated operand
+/// (`c && nxt(5, r)`) does not read it either — it merely may or may not write. For
+/// every other node `expr_da` falls back to `expr_no_ref` verbatim.
+fn expr_reads(e: &ast::Expr, name: &str, out_writes: OutActualWrites) -> bool {
+    expr_da(e, name, out_writes) == ExprDa::Reads
 }
 
 /// R16 §3.1: what control does AFTER a statement, for definite-assignment purposes.
@@ -320,7 +329,7 @@ pub(crate) fn da_stmt(
             // in that the timed one was never written.
             if !assigned {
                 if let Some(d) = delay {
-                    if let Some(e) = d.values.iter().find(|e| !expr_no_ref(e, name)) {
+                    if let Some(e) = d.values.iter().find(|e| expr_reads(e, name, out_writes)) {
                         return Err(read(e));
                     }
                 }
@@ -335,9 +344,21 @@ pub(crate) fn da_stmt(
                 }
             }
             // RHS is evaluated first: reading `name` here while unassigned is unsafe.
-            if !assigned && !expr_no_ref(rhs, name) {
+            if !assigned && expr_reads(rhs, name, out_writes) {
                 return Err(read(rhs));
             }
+            // R19 §3.1: …and by the same token, an output-actual call in the rhs has
+            // ALREADY written `name` by the time the assignment lands — `go = nxt(5, r);`
+            // establishes `r`, which is the single most common shape in the report (33 of
+            // 34 diagnostics). This is not a new claim about calls, it is BL4's claim
+            // applied where the call actually is: BL4 recognized the write only in
+            // statement position, so it saw `fill(5, r);` and missed `go = nxt(5, r);`.
+            //
+            // Claimed only when the LVALUE cannot itself reference `name` — a `name[i] =`
+            // base or an `other[name] =` index is a read whose order against the rhs is
+            // not fixed, and a whole-var `name = …` lvalue is handled right below anyway.
+            let assigned =
+                assigned || (lvalue_no_ref(lhs, name) && expr_out_writes(rhs, name, out_writes));
             // A clean WHOLE-var write (`name = …`) makes it definitely assigned.
             if let ast::Lvalue::Ident(p) = lhs {
                 if p.segments.len() == 1 && p.segments[0].name == name {
@@ -370,15 +391,23 @@ pub(crate) fn da_stmt(
             // evaluated unconditionally and WRITES `name` before either branch — not a
             // read-before-write. `after` is then true entering both branches AND after
             // the `if` (the cond ran on every path).
-            let after = assigned || cond_out_writes(cond, name, out_writes);
-            if !after && !expr_no_ref(cond, name) {
+            let after = assigned || expr_out_writes(cond, name, out_writes);
+            if !after && expr_reads(cond, name, out_writes) {
                 return Err(read(cond));
             }
-            let a_then = da_stmt(then_s, after, name, out_writes, sole, suspends)?;
+            // R19 §3.1: a branch is entered only for a particular VALUE of the cond, and
+            // that value can imply an operand ran which `after` cannot claim: `a && f(r)`
+            // is true only when BOTH ran, `a || f(r)` false only when both ran. So the
+            // taken branch may know `name` is written where the join does not.
+            let in_then = after || expr_writes_when(cond, name, out_writes, true);
+            let in_else = after || expr_writes_when(cond, name, out_writes, false);
+            let a_then = da_stmt(then_s, in_then, name, out_writes, sole, suspends)?;
             // R16 §3.1: an absent `else` is an empty arm that FALLS THROUGH with the
             // entry state — it is not a jump, so it always participates in the merge.
             let a_else = match else_s {
-                Some(e) => da_stmt(e, after, name, out_writes, sole, suspends)?,
+                Some(e) => da_stmt(e, in_else, name, out_writes, sole, suspends)?,
+                // The join state is `after`, NOT `in_else`: an absent `else` reaches the
+                // join, and what the join may assume is what EVERY path establishes.
                 None => DaOut::Falls(after),
             };
             Ok(a_then.merge(a_else))
@@ -389,7 +418,7 @@ pub(crate) fn da_stmt(
             for dd in decls {
                 for nn in &dd.names {
                     if let Some(e) = &nn.init {
-                        if !assigned && !expr_no_ref(e, name) {
+                        if !assigned && expr_reads(e, name, out_writes) {
                             return Err(read(e));
                         }
                     }
@@ -432,8 +461,8 @@ pub(crate) fn da_stmt(
         } => {
             // BL4: the scrutinee is evaluated unconditionally, so a whole-scrutinee
             // output-actual call WRITES `name` before the arms and after the case.
-            let after = assigned || cond_out_writes(scrutinee, name, out_writes);
-            if !after && !expr_no_ref(scrutinee, name) {
+            let after = assigned || expr_out_writes(scrutinee, name, out_writes);
+            if !after && expr_reads(scrutinee, name, out_writes) {
                 return Err(read(scrutinee));
             }
             // R16 §3.1: arms merge with the same rule as `if` — an arm that jumps
@@ -444,7 +473,8 @@ pub(crate) fn da_stmt(
                 let body = match it {
                     ast::CaseItem::Match { labels, body, .. } => {
                         if !after {
-                            if let Some(l) = labels.iter().find(|l| !expr_no_ref(l, name)) {
+                            if let Some(l) = labels.iter().find(|l| expr_reads(l, name, out_writes))
+                            {
                                 return Err(read(l));
                             }
                         }
@@ -478,15 +508,19 @@ pub(crate) fn da_stmt(
             ..
         } => {
             let a0 = da_stmt(init, assigned, name, out_writes, sole, suspends)?.state();
-            if !a0 && !expr_no_ref(cond, name) {
+            let a0 = a0 || expr_out_writes(cond, name, out_writes);
+            if !a0 && expr_reads(cond, name, out_writes) {
                 return Err(read(cond));
             }
             // The FIRST iteration enters with `a0` (the binding read-before-write
             // case; the loop may also run zero times). Body / step are checked
             // against `a0` — conservative, since a later iteration only ever has
             // MORE assigned than the first.
-            da_stmt(body, a0, name, out_writes, sole, suspends)?;
-            da_stmt(step, a0, name, out_writes, sole, suspends)?;
+            // R19 §3.1: the body and the step run only when the cond was TRUE (see the
+            // `If` arm) — the `.rsp`-walker idiom `for (…; n < lim && next(fd, r); …)`.
+            let in_body = a0 || expr_writes_when(cond, name, out_writes, true);
+            da_stmt(body, in_body, name, out_writes, sole, suspends)?;
+            da_stmt(step, in_body, name, out_writes, sole, suspends)?;
             // A loop cannot newly guarantee assignment (may run 0 times), and it always
             // FALLS THROUGH for this analysis — a `break` inside its body targets THIS
             // loop, so it lands right here rather than skipping what follows.
@@ -496,15 +530,24 @@ pub(crate) fn da_stmt(
             // BL4: a `while` cond is evaluated at least once (unconditionally) — a
             // whole-cond output-actual call there WRITES `name` before the body and
             // after the loop.
-            let after = assigned || cond_out_writes(cond, name, out_writes);
-            if !after && !expr_no_ref(cond, name) {
+            let after = assigned || expr_out_writes(cond, name, out_writes);
+            if !after && expr_reads(cond, name, out_writes) {
                 return Err(read(cond));
             }
-            da_stmt(body, after, name, out_writes, sole, suspends)?;
+            // R19 §3.1: the BODY runs only when the cond is TRUE, and `a && next(fd, r)`
+            // is true only when the call ran. This is the report's real site — the
+            // table-driven `.rsp` walker, the standard shape for CAVP/Monte vectors:
+            //   `while (n < sweep_limit && rsp_next(fd, r) == 1) begin … r … end`
+            // The loop EXIT keeps `after`, because a FALSE cond may have short-circuited
+            // the call away.
+            let in_body = after || expr_writes_when(cond, name, out_writes, true);
+            da_stmt(body, in_body, name, out_writes, sole, suspends)?;
             Ok(DaOut::Falls(after))
         }
         S::Repeat { count, body, .. } => {
-            if !assigned && !expr_no_ref(count, name) {
+            // The count is evaluated exactly once, before the first iteration.
+            let assigned = assigned || expr_out_writes(count, name, out_writes);
+            if !assigned && expr_reads(count, name, out_writes) {
                 return Err(read(count));
             }
             da_stmt(body, assigned, name, out_writes, sole, suspends)?;
@@ -518,7 +561,7 @@ pub(crate) fn da_stmt(
         }
         S::Return { value, .. } => {
             if let Some(v) = value {
-                if !assigned && !expr_no_ref(v, name) {
+                if !assigned && expr_reads(v, name, out_writes) {
                     return Err(read(v));
                 }
             }
@@ -573,18 +616,33 @@ pub(crate) fn da_stmt(
             if !sole {
                 return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
             }
-            if !assigned && !expr_no_ref(rhs, name) {
+            if !assigned && expr_reads(rhs, name, out_writes) {
                 return Err(read(rhs));
             }
-            Ok(DaOut::Falls(assigned))
+            // R19 §3.1: the rhs of a NON-blocking assign is evaluated in the ACTIVE
+            // region, right here — only the target UPDATE is deferred to the NBA region.
+            // So an output-actual call in it has written `name` by the next statement,
+            // exactly as in the blocking form.
+            Ok(DaOut::Falls(
+                assigned || expr_out_writes(rhs, name, out_writes),
+            ))
         }
         // R17 §3.3: a timing / event / wait WRAPPER around a statement. The prefix is a
         // read; the body then runs with the same state, and control falls through to the
         // next statement with whatever the body established. `Wait`'s body may be absent
         // (`wait (c);`).
+        // R19 §3.1: these two use `expr_reads` for the same reason every other arm does
+        // — a mention of `name` at an output actual is not a read. No WRITE is claimed
+        // from them: a delay / wait expression is not a position the lowering emits a
+        // copy-out from, so a call there is loud anyway and claiming the write would be
+        // an accept gate running ahead of what can execute.
         S::DelayCtrl { delay, body, .. } => {
             if !assigned {
-                if let Some(e) = delay.values.iter().find(|e| !expr_no_ref(e, name)) {
+                if let Some(e) = delay
+                    .values
+                    .iter()
+                    .find(|e| expr_reads(e, name, out_writes))
+                {
                     return Err(read(e));
                 }
             }
@@ -606,7 +664,7 @@ pub(crate) fn da_stmt(
             }
         }
         S::Wait { cond, body, .. } => {
-            if !assigned && !expr_no_ref(cond, name) {
+            if !assigned && expr_reads(cond, name, out_writes) {
                 return Err(read(cond));
             }
             match body {

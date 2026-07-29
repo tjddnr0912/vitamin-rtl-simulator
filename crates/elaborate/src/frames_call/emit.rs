@@ -1,210 +1,10 @@
-//! frame call sites — split out of the original `elaborate` lib.rs (mechanical move).
+//! the frame-call emitters — a plain `Expr::Call`, the dyn-array-formal snapshot
+//! markers, a task enable, and the output/inout-formal copy-out call. Split from
+//! `frames_call.rs` (R19) to keep every module under the 1000-line cap.
 
 use super::*;
 
 impl Elaborator<'_> {
-    pub(crate) fn emit_discarded_call(&mut self, b: &mut ProcessBuilder, call: u32) {
-        let tmp = match self.cur_discard {
-            Some(d) => d,
-            None => {
-                let w = self.ir_bits_of(call).unwrap_or(32).max(1);
-                self.fresh_ia_tmp(w)
-            }
-        };
-        let sid = self.push_stmt(ir::Stmt::BlockingAssign {
-            lhs: whole_net_lvalue(tmp),
-            rhs: call,
-        });
-        b.push_stmt_id(sid);
-    }
-
-    /// v7 P2-C: is `name` a formal DECLARED `string` in the body being lowered?
-    /// Innermost-wins (a shadowing inner non-string formal returns `false`, so an
-    /// outer string formal of the same name never leaks in). `false` if not a formal.
-    pub(crate) fn formal_is_string(&self, name: &str) -> bool {
-        self.formal_str
-            .iter()
-            .rev()
-            .find(|(n, _)| n == name)
-            .map(|(_, s)| *s)
-            .unwrap_or(false)
-    }
-
-    /// Inline a user-function call at an expression site → the ExprId of its return
-    /// value (SD2 inline path; a 0-time function = zero schema cost). The common
-    /// case is a combinational function whose body reduces to the return expression
-    /// once the formals are substituted by the actual-arg ExprIds. Returns a
-    /// placeholder ExprId on any unsupported shape (after emitting the diagnostic)
-    /// so arena edges stay valid.
-    /// IEEE §13.5.3: build the effective actual-argument list for a tf call, filling
-    /// omitted TRAILING formals with their default values. Returns None (after a loud
-    /// diagnostic) on too many actuals, or a missing actual for a formal that has no
-    /// default. The default expressions are lowered in the CALLER scope at the call
-    /// site, like any other actual (so a constant / module-scope default just works;
-    /// a default that references an earlier FORMAL resolves in the caller's scope,
-    /// not the formal — out of scope here).
-    /// G10 (IEEE §13.5.4): reorder named arguments (`.formal(v)` / `.formal()`) to
-    /// positional using the callee's formal list. Leading positional args fill slots
-    /// 0..k; each named arg scatters to its formal's index; every unbound slot uses the
-    /// formal's default. Loud (correct-or-loud) on: an unknown / duplicated formal, a
-    /// positional arg after a named one, a `.formal()` with no default, a default that
-    /// references another formal, a missing actual, or too many positionals. Returns the
-    /// fully-positional args (owned) so both the frame and inline call paths see a plain
-    /// list. Only invoked when at least one arg is a `NamedArg`.
-    pub(crate) fn resolve_named_args(
-        &mut self,
-        fname: &str,
-        ports: &[ast::TfPort],
-        args: &[ast::Expr],
-    ) -> Option<Vec<ast::Expr>> {
-        let mut slots: Vec<Option<ast::Expr>> = vec![None; ports.len()];
-        let mut seen_named = false;
-        let mut pos = 0usize;
-        for a in args {
-            if let ast::ExprKind::NamedArg { formal, value } = &a.kind {
-                seen_named = true;
-                let Some(idx) = ports.iter().position(|p| p.name.name == formal.name) else {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!("call to `{fname}`: no formal named `{}`", formal.name),
-                    );
-                    return None;
-                };
-                if slots[idx].is_some() {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "call to `{fname}`: formal `{}` is bound more than once",
-                            formal.name
-                        ),
-                    );
-                    return None;
-                }
-                match value {
-                    Some(v) => slots[idx] = Some((**v).clone()),
-                    None => match &ports[idx].default {
-                        Some(def) => slots[idx] = Some(def.clone()),
-                        None => {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
-                                    "call to `{fname}`: `.{}()` has no default value",
-                                    formal.name
-                                ),
-                            );
-                            return None;
-                        }
-                    },
-                }
-            } else {
-                if seen_named {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "call to `{fname}`: a positional argument cannot follow a named one"
-                        ),
-                    );
-                    return None;
-                }
-                if pos >= ports.len() {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!("call to `{fname}`: too many positional arguments"),
-                    );
-                    return None;
-                }
-                slots[pos] = Some(a.clone());
-                pos += 1;
-            }
-        }
-        let mut out = Vec::with_capacity(ports.len());
-        for (i, slot) in slots.into_iter().enumerate() {
-            match slot {
-                Some(e) => out.push(e),
-                None => match &ports[i].default {
-                    Some(def) => {
-                        // Same guard as `fill_default_args`: a default referencing another
-                        // formal would wrongly bind to a caller variable (silent-wrong).
-                        if ports.iter().any(|q| expr_reads_ident(def, &q.name.name)) {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
-                                    "function/task `{fname}`: a default argument value that references another formal is unsupported"
-                                ),
-                            );
-                            return None;
-                        }
-                        out.push(def.clone());
-                    }
-                    None => {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            &format!(
-                                "call to `{fname}`: missing actual for formal `{}` (no default value)",
-                                ports[i].name.name
-                            ),
-                        );
-                        return None;
-                    }
-                },
-            }
-        }
-        Some(out)
-    }
-
-    pub(crate) fn fill_default_args<'a>(
-        &mut self,
-        fname: &str,
-        ports: &'a [ast::TfPort],
-        args: &'a [ast::Expr],
-    ) -> Option<Vec<&'a ast::Expr>> {
-        if args.len() > ports.len() {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "function/task `{fname}`: {} args for {} formals",
-                    args.len(),
-                    ports.len()
-                ),
-            );
-            return None;
-        }
-        let mut eff: Vec<&'a ast::Expr> = args.iter().collect();
-        for p in &ports[args.len()..] {
-            match &p.default {
-                Some(def) => {
-                    // The default is lowered in the CALLER scope; a default that
-                    // references another FORMAL (`int b = a + 1`) would wrongly bind to
-                    // a same-named caller variable (a silent-wrong vs iverilog, which
-                    // resolves it in the subroutine scope). Loud-reject that case.
-                    if ports.iter().any(|q| expr_reads_ident(def, &q.name.name)) {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            &format!(
-                                "function/task `{fname}`: a default argument value that references another formal is unsupported"
-                            ),
-                        );
-                        return None;
-                    }
-                    eff.push(def);
-                }
-                None => {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "function/task `{fname}`: missing actual for formal `{}` (no default value)",
-                            p.name.name
-                        ),
-                    );
-                    return None;
-                }
-            }
-        }
-        Some(eff)
-    }
-
-    // ── B1 frame-call: automatic/recursive function lowering ────────────────
-
     /// Emit an `Expr::Call` to a reserved frame `FuncId` (the call-site divert).
     /// Args are lowered in the CALLER scope (caller nets / outer subst). Returns a
     /// placeholder on an arity / out-formal violation (after the diagnostic).
@@ -223,10 +23,15 @@ impl Elaborator<'_> {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
+                    // R19 §3.2: statement position now works too (`{fname}(...);` and
+                    // `void'({fname}(...))` — see `lower_stmt`'s UserTaskCall arm), so it
+                    // belongs in the list. Leaving it out is what sent the reporter looking
+                    // for a workaround that did not exist.
                     "function `{fname}` has an output/inout formal — such a call is supported \
-                     only as a direct rhs (`x = {fname}(...)`), a plain while/if condition, or \
-                     one operand of a top-level `&&`/`||` in a while/for condition; it is not \
-                     supported in a `?:` arm or a deeper-nested expression"
+                     as a STATEMENT (`{fname}(...);` or `void'({fname}(...));`), a direct rhs \
+                     (`x = {fname}(...)`), a plain while/if condition, or one operand of a \
+                     top-level `&&`/`||` in a while/for condition; it is not supported in a \
+                     `?:` arm or a deeper-nested expression"
                 ),
             );
             return self.placeholder_expr();
@@ -900,6 +705,27 @@ impl Elaborator<'_> {
         ret_lval: ir::Lvalue,
     ) {
         let fname = func.name.name.clone();
+        // R19 §3.3: reorder `.formal(v)` to positional first — the same G10 step the
+        // inline and plain-frame paths take. Only THIS path (a frame function WITH an
+        // output/inout formal) never did it, so `f(.a(1), .o(x))` reached the loop below
+        // with a `NamedArg` node still in place and produced two diagnostics that named
+        // neither cause: "a named argument is only valid in a user function/task call"
+        // and "output/inout arg must be a simple net".
+        let reordered;
+        let args: &[ast::Expr] = if args
+            .iter()
+            .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
+        {
+            match self.resolve_named_args(&fname, &func.ports, args) {
+                Some(v) => {
+                    reordered = v;
+                    &reordered
+                }
+                None => return,
+            }
+        } else {
+            args
+        };
         let Some(eff_args) = self.fill_default_args(&fname, &func.ports, args) else {
             return;
         };
@@ -1020,71 +846,6 @@ impl Elaborator<'_> {
         } else {
             self.task_calls_proc
                 .insert((self.cur_proc, call_block), info);
-        }
-    }
-
-    /// R5-B: a fresh named temp holding an inout-function call's RETURN value. The
-    /// name lets a synthetic `Ident` reference it (module-scoped, like
-    /// `fresh_string_temp`); the net id builds the return-capture out-bind lvalue.
-    pub(crate) fn fresh_ret_temp(
-        &mut self,
-        func: &ast::FunctionDef,
-        rw: u32,
-        rsig: bool,
-    ) -> (u32, String) {
-        if func.ret_string {
-            let name = self.fresh_string_temp();
-            ((self.nets.len() - 1) as u32, name)
-        } else {
-            let w = rw.max(1);
-            let name = format!("$ia_ret${}", self.nets.len());
-            let net = self.nets.len() as u32;
-            self.add_net(
-                &name,
-                ir::NetVar {
-                    kind: if w == 32 && rsig {
-                        ir::NetKind::Integer
-                    } else {
-                        ir::NetKind::Reg
-                    },
-                    width: w,
-                    msb: w.saturating_sub(1),
-                    lsb: 0,
-                    signed: rsig,
-                    array_len: 1,
-                    dir: ir::PortDir::Internal,
-                    init: default_init(ast::NetVarKind::Reg, w),
-                },
-            );
-            (net, name)
-        }
-    }
-
-    /// Declared return self-width + signedness of a function (`function [15:0]`,
-    /// `function integer`, `function signed [7:0]`, bare `function`).
-    pub(crate) fn func_return_dims(&mut self, func: &ast::FunctionDef) -> (u32, bool) {
-        let kind = match func.ret_type {
-            ast::ParamType::Integer => ast::NetVarKind::Integer,
-            ast::ParamType::Real => ast::NetVarKind::Real,
-            ast::ParamType::Realtime => ast::NetVarKind::Realtime,
-            ast::ParamType::Time => ast::NetVarKind::Time,
-            ast::ParamType::Implicit => ast::NetVarKind::Reg,
-        };
-        let (w, _msb, _lsb, signed) = self.range_to_dims(kind, func.range.as_ref(), func.signed);
-        (w, signed)
-    }
-
-    /// True if `a` is a bare net Ident or an integer/string literal — i.e. a thing
-    /// `lower_expr` can lower without a fatal unresolved-name. A hierarchical /
-    /// scope name (`top.dut`) or anything else returns false (dump-family skips it).
-    pub(crate) fn is_net_or_const_arg(&self, a: &ast::Expr) -> bool {
-        match &a.kind {
-            ast::ExprKind::Ident(path) => {
-                path.segments.len() == 1
-                    && self.symbols.contains_key(&self.fq(&path.segments[0].name))
-            }
-            ast::ExprKind::IntLit { .. } | ast::ExprKind::StrLit { .. } => true,
-            _ => false,
         }
     }
 }
