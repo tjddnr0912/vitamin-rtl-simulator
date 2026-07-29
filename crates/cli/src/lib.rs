@@ -49,9 +49,37 @@ pub const EXIT_STALE: i32 = 2;
 /// Exit code for a CLI/usage error (no sources, file not found, unknown applet).
 pub const EXIT_CLI_ERROR: i32 = 3;
 
+mod echo;
 mod filelist;
 mod obs;
 pub mod worklib;
+
+/// The resolved command line a `-v` run echoes back (doc-13 bucket C).
+///
+/// A `vita` invocation driven by a Makefile or a shell script reaches the
+/// process with every `$(VAR)` already substituted, so the *variable names* the
+/// author reads in the Makefile and the *values* the simulator actually saw are
+/// two different texts. Nothing downstream can reconstruct the second from the
+/// first — env vars are gone by then, `-f` frames have been spliced away, and
+/// `VITA_THREADS` never appears in argv at all. This record is the one place
+/// that copy is kept, so `-v` can print it into the transcript (and therefore
+/// into `--log`).
+///
+/// Populated ONLY by the argv driver ([`run`]). The library entry points
+/// (`run_vita_str`, `run_vita_sources` from unit tests) leave it `None` — their
+/// output must not depend on the harness's own command line.
+#[derive(Debug, Clone, Default)]
+pub struct Invocation {
+    /// The process argv — argv[0] by basename, then the arguments exactly as
+    /// they arrived (post-shell-expansion, pre-filelist-expansion). This is
+    /// what the Makefile really ran, including the multicall subcommand token
+    /// when one was used (`vita velab …`).
+    pub argv: Vec<String>,
+    /// Directory every relative path in `argv` resolved against.
+    pub cwd: String,
+    /// `-f`/`-F` filelists that were opened, in depth-first expansion order.
+    pub filelists: Vec<String>,
+}
 
 /// Knobs the `vita` driver threads down into the pipeline. Kept tiny for v1 — the
 /// full bucket-C flag surface (doc-13) lands with `vita-log`.
@@ -121,6 +149,10 @@ pub struct VitaOpts {
     /// emitted through the GATED sink at pipeline start so `-Wno-*`/`-Werror=`
     /// and the counts epilogue apply uniformly (doc-13).
     pub overrides: Vec<(String, String, String)>,
+    /// The resolved command line, for the `-v` invocation echo. `None` outside
+    /// the argv driver (see [`Invocation`]) — the echo then prints only the
+    /// facts it can state without inventing an argv.
+    pub invocation: Option<Invocation>,
 }
 
 impl VitaOpts {

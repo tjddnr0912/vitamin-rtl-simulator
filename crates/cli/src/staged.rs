@@ -261,9 +261,15 @@ pub fn run_vrun(velab_path: &str, opts: &VitaOpts) -> i32 {
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
     emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
-        sink.emit(LogEvent::Progress(diag::ProgressEvent {
-            message: format!("in: {velab_path}"),
-        }));
+        let src = [velab_path.to_string()];
+        let up: Vec<String> = opts.upstream.iter().cloned().collect();
+        echo::echo_effective_invocation(
+            &sink,
+            &src,
+            opts.vcd_path_override.as_deref(),
+            opts,
+            &[("upstream", up)],
+        );
     }
     let code = run_vrun_gated(velab_path, opts, &inner, &sink);
     inner.epilogue();

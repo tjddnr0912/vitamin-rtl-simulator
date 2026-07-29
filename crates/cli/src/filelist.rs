@@ -31,7 +31,16 @@ const MAX_DEPTH: u32 = 256;
 
 /// Flags whose NEXT token is a value, not a source path — the value must not
 /// be base-resolved (e.g. `--timeout 200`: "200" is not a path).
-fn takes_value(flag: &str) -> bool {
+///
+/// MUST list every value-taking flag `parse_io_args` accepts. A missing entry
+/// is not a no-op: inside a `-F` frame the value is treated as a source
+/// positional and rewritten against the frame directory, so `--top top` in
+/// `ip/build.f` became `--top /abs/ip/top` and the run died with "top module
+/// `/abs/ip/top` not found" (measured 2026-07-29, round-17 follow-on). Every
+/// flag added after the original five was missing here. `-f`/`-F` are absent
+/// on purpose — the expander consumes their targets itself, and those ARE
+/// paths that must resolve.
+pub(crate) fn takes_value(flag: &str) -> bool {
     matches!(
         flag,
         "-o" | "--out"
@@ -45,6 +54,16 @@ fn takes_value(flag: &str) -> bool {
             | "-l"
             | "--log"
             | "--verbosity"
+            | "--upstream"
+            | "--work"
+            | "--workdir"
+            | "-L"
+            | "--top"
+            | "--obs-dir"
+            | "--hier-tree"
+            | "--inst-paths"
+            | "--probe"
+            | "--probe-file"
     )
 }
 
@@ -178,6 +197,12 @@ struct Expander<'a> {
     stack: Vec<PathBuf>,
     /// Active physical identities (cycle guard key 2 — catches symlink loops).
     phys: Vec<String>,
+    /// Every filelist actually READ, in expansion order (depth-first
+    /// pre-order), lexically canonical. Reported to the `-v` invocation echo:
+    /// a `.f` that pulls in three nested `.f`s is otherwise invisible in the
+    /// transcript, and "which list contributed this flag" is the first
+    /// question a Makefile-driven run raises.
+    opened: Vec<String>,
 }
 
 impl Expander<'_> {
@@ -256,6 +281,7 @@ impl Expander<'_> {
                 return Err(());
             }
         };
+        self.opened.push(canon.to_string_lossy().into_owned());
         self.stack.push(canon.clone());
         if let Some(p) = pid.clone() {
             self.phys.push(p);
@@ -394,9 +420,12 @@ impl Expander<'_> {
 /// Expand every `-f`/`-F` in `args` in place (depth-first pre-order). Returns
 /// the flat argv, or `Err(exit_code)` after the error diagnostic was emitted
 /// (filelist failures are usage errors — doc-13 class 3).
-pub(crate) fn expand_argv(args: &[String], sink: &dyn LogSink) -> Result<Vec<String>, i32> {
+pub(crate) fn expand_argv(
+    args: &[String],
+    sink: &dyn LogSink,
+) -> Result<(Vec<String>, Vec<String>), i32> {
     if !args.iter().any(|a| a == "-f" || a == "-F") {
-        return Ok(args.to_vec()); // fast path: nothing to expand
+        return Ok((args.to_vec(), Vec::new())); // fast path: nothing to expand
     }
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut ex = Expander {
@@ -404,6 +433,7 @@ pub(crate) fn expand_argv(args: &[String], sink: &dyn LogSink) -> Result<Vec<Str
         cwd,
         stack: Vec::new(),
         phys: Vec::new(),
+        opened: Vec::new(),
     };
     let mut out = Vec::new();
     let mut i = 0;
@@ -475,7 +505,7 @@ pub(crate) fn expand_argv(args: &[String], sink: &dyn LogSink) -> Result<Vec<Str
     if has_dup && !check_dup_contexts(&ex, &out) {
         return Err(crate::EXIT_CLI_ERROR);
     }
-    Ok(deduped)
+    Ok((deduped, ex.opened))
 }
 
 /// v6 ⑤ (E8003 CONFLICT arm): walk the PRE-dedup token stream in order,

@@ -64,10 +64,33 @@ pub fn run(argv: &[String]) -> i32 {
     // Filelist expansion (doc-14 §3.1) happens at the ARGV level, before any
     // per-applet flag parsing — every applet accepts `-f`/`-F` uniformly and
     // a `.f` may carry any flag legal on the command line.
-    let args = match filelist::expand_argv(&args, &StderrSink::new()) {
+    //
+    // The PRE-expansion argv is captured first: that is the line the Makefile
+    // or wrapper script actually ran, and the `-v` echo replays it next to the
+    // expanded result so the two can be compared (see [`Invocation`]).
+    let inv = Invocation {
+        // The REAL argv, not a reconstruction from `applet_name` + `args`: the
+        // multicall subcommand form (`vita velab …`) would otherwise echo back
+        // as `velab …`, which is not the line anyone ran. argv[0] is shown by
+        // basename — the full interpreter path adds width and no information.
+        argv: argv
+            .first()
+            .map(std::path::Path::new)
+            .and_then(|p| p.file_name())
+            .map(|s| s.to_string_lossy().into_owned())
+            .into_iter()
+            .chain(argv.iter().skip(1).cloned())
+            .collect(),
+        cwd: std::env::current_dir()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        filelists: Vec::new(),
+    };
+    let (args, filelists) = match filelist::expand_argv(&args, &StderrSink::new()) {
         Ok(a) => a,
         Err(code) => return code,
     };
+    let inv = Invocation { filelists, ..inv };
     match applet {
         Applet::Vita => {
             // `vita explain <CODE>` — doc-15 catalog lookup (no pipeline).
@@ -110,12 +133,13 @@ pub fn run(argv: &[String]) -> i32 {
                 probes: io.probes,
                 probe_file: io.probe_file,
                 overrides: io.overrides.clone(),
+                invocation: Some(inv),
             };
             run_vita(&io.pos, &opts)
         }
-        Applet::Staged("vcmp") => dispatch_vcmp(&args),
-        Applet::Staged("velab") => dispatch_velab(&args),
-        Applet::Staged("vrun") => dispatch_vrun(&args),
+        Applet::Staged("vcmp") => dispatch_vcmp(&args, inv),
+        Applet::Staged("velab") => dispatch_velab(&args, inv),
+        Applet::Staged("vrun") => dispatch_vrun(&args, inv),
         Applet::Staged(other) => {
             eprintln!(
                 "error[{}]: unknown staged applet '{other}'",
@@ -366,10 +390,8 @@ pub fn run_vcmp(sources: &[String], out: Option<&str>, opts: &VitaOpts) -> i32 {
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
     emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
-        sink.emit(LogEvent::Progress(diag::ProgressEvent {
-            message: format!("files: {}", sources.join(" ")),
-        }));
-        echo_effective_inputs(&sink, opts);
+        let work: Vec<String> = opts.work.iter().map(|(n, d)| format!("{n}={d}")).collect();
+        echo::echo_effective_invocation(&sink, sources, out, opts, &[("work", work)]);
     }
     let code = run_vcmp_gated(sources, out, opts, &inner, &sink);
     inner.epilogue();
@@ -554,9 +576,8 @@ pub fn run_velab(vu_path: &str, out: &str, opts: &VitaOpts) -> i32 {
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
     emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
-        sink.emit(LogEvent::Progress(diag::ProgressEvent {
-            message: format!("in: {vu_path}  out: {out}"),
-        }));
+        let src = [vu_path.to_string()];
+        echo::echo_effective_invocation(&sink, &src, Some(out), opts, &[]);
     }
     let code = run_velab_gated(vu_path, out, opts, &inner, &sink);
     inner.epilogue();
@@ -840,16 +861,9 @@ pub fn run_velab_lib(
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
     emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
-        sink.emit(LogEvent::Progress(diag::ProgressEvent {
-            message: format!(
-                "libs: {}  tops: {}  out: {out}",
-                libs.iter()
-                    .map(|(n, d)| format!("{n}={d}"))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                tops.join(" ")
-            ),
-        }));
+        let l: Vec<String> = libs.iter().map(|(n, d)| format!("{n}={d}")).collect();
+        // Library mode has no positional source — the `-L` set IS the input.
+        echo::echo_effective_invocation(&sink, &[], Some(out), opts, &[("libs", l)]);
     }
     let code = run_velab_lib_gated(libs, tops, out, &inner, &sink);
     inner.epilogue();

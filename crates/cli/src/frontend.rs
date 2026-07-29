@@ -66,32 +66,8 @@ pub(crate) fn open_log(opts: &VitaOpts) -> Result<Option<Box<dyn Write>>, i32> {
     }
 }
 
-/// `-v` effective-inputs echo (doc-13): the define/incdir sets the run will
-/// actually use, as Progress events (⇒ terminal stdout + `--log` tee).
-pub(crate) fn echo_effective_inputs(sink: &dyn LogSink, opts: &VitaOpts) {
-    if !opts.defines.is_empty() {
-        let s = opts
-            .defines
-            .iter()
-            .map(|(n, v)| {
-                if v.is_empty() {
-                    n.clone()
-                } else {
-                    format!("{n}={v}")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        sink.emit(LogEvent::Progress(diag::ProgressEvent {
-            message: format!("defines: {s}"),
-        }));
-    }
-    if !opts.incdirs.is_empty() {
-        sink.emit(LogEvent::Progress(diag::ProgressEvent {
-            message: format!("incdirs: {}", opts.incdirs.join(" ")),
-        }));
-    }
-}
+// The `-v` echo moved to `echo.rs` (doc-13): it now replays the whole resolved
+// invocation, not just the define/incdir sets.
 
 /// Map a byte offset into `src` to a 1-based `(line, col)`. Columns count
 /// Unicode scalar values from the last newline (good enough for v1 caret-less
@@ -457,7 +433,14 @@ pub fn run_vita_sources(sources: &[(String, String)], opts: &VitaOpts) -> i32 {
     let sink = vita_log::GatedSink::new(&inner, opts.gate.clone());
     emit_flist_overrides(&sink, &opts.overrides);
     if inner.verbose() {
-        echo_effective_inputs(&sink, opts);
+        let names: Vec<String> = sources.iter().map(|(n, _)| n.clone()).collect();
+        echo::echo_effective_invocation(
+            &sink,
+            &names,
+            opts.vcd_path_override.as_deref(),
+            opts,
+            &[],
+        );
     }
     let code = run_vita_str_gated(sources, opts, &inner, &sink);
     // doc-13: the counts summary epilogue is the unsuppressible end-of-stage

@@ -651,6 +651,9 @@ fn quiet_hides_terminal_rtl_output_but_not_log_or_diags() {
 
 #[test]
 fn verbose_echoes_effective_inputs() {
+    // The rows are column-aligned now (the `-v` echo grew from two lines to the
+    // whole resolved invocation) — match on the label and the value, not the
+    // exact run of spaces between them. Full coverage: `invocation_echo.rs`.
     let src = talky_design("verb.sv");
     let out = vita(&[
         src.to_str().unwrap(),
@@ -663,8 +666,13 @@ fn verbose_echoes_effective_inputs() {
     let _ = std::fs::remove_file(&src);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "got:\n{stdout}");
-    assert!(stdout.contains("defines: FOO=1"), "got:\n{stdout}");
-    assert!(stdout.contains("incdirs: somewhere"), "got:\n{stdout}");
+    let row = |label: &str, val: &str| {
+        stdout
+            .lines()
+            .any(|l| l.starts_with(label) && l.split_whitespace().any(|t| t == val))
+    };
+    assert!(row("defines:", "FOO=1"), "got:\n{stdout}");
+    assert!(row("incdirs:", "somewhere"), "got:\n{stdout}");
 }
 
 #[test]

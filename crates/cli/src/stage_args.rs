@@ -611,7 +611,7 @@ pub(crate) fn parse_work_spec(io: &IoArgs) -> Result<Option<(String, String)>, i
     Ok(Some(spec))
 }
 
-pub(crate) fn dispatch_vcmp(args: &[String]) -> i32 {
+pub(crate) fn dispatch_vcmp(args: &[String], inv: Invocation) -> i32 {
     let io = match parse_io_args(args) {
         Ok(x) => x,
         Err(c) => return c,
@@ -663,12 +663,13 @@ pub(crate) fn dispatch_vcmp(args: &[String]) -> i32 {
             log_append: io.log_append,
             work,
             overrides: io.overrides.clone(),
+            invocation: Some(inv),
             ..VitaOpts::default()
         },
     )
 }
 
-pub(crate) fn dispatch_velab(args: &[String]) -> i32 {
+pub(crate) fn dispatch_velab(args: &[String], inv: Invocation) -> i32 {
     let io = match parse_io_args(args) {
         Ok(x) => x,
         Err(c) => return c,
@@ -732,6 +733,7 @@ pub(crate) fn dispatch_velab(args: &[String]) -> i32 {
                 log: io.log,
                 log_append: io.log_append,
                 overrides: io.overrides.clone(),
+                invocation: Some(inv),
                 ..VitaOpts::default()
             },
         );
@@ -757,12 +759,13 @@ pub(crate) fn dispatch_velab(args: &[String]) -> i32 {
             log_append: io.log_append,
             tops: io.tops,
             overrides: io.overrides.clone(),
+            invocation: Some(inv),
             ..VitaOpts::default()
         },
     )
 }
 
-pub(crate) fn dispatch_vrun(args: &[String]) -> i32 {
+pub(crate) fn dispatch_vrun(args: &[String], inv: Invocation) -> i32 {
     let io = match parse_io_args(args) {
         Ok(x) => x,
         Err(c) => return c,
@@ -804,6 +807,7 @@ pub(crate) fn dispatch_vrun(args: &[String]) -> i32 {
         upstream: io.upstream,
         plusargs: io.plusargs,
         overrides: io.overrides.clone(),
+        invocation: Some(inv),
         ..VitaOpts::default()
     };
     run_vrun(&io.pos[0], &opts)
