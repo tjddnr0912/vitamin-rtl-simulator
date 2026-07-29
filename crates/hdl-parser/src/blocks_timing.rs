@@ -380,6 +380,23 @@ impl Parser<'_, '_> {
                 // `parse_with_postfix` on the expr path.
                 if let Some(d) = self.parse_automatic_block_decl(&mut scope) {
                     decls.push(d);
+                } else {
+                    // R18 §3.3: `automatic` in front of an UNPACKED-STRUCT type. The
+                    // helper above has already consumed the keyword and cannot resolve
+                    // the name (an unpacked struct lives in `struct_layouts`, not
+                    // `typedefs`), so the member fan-out below is what actually parses
+                    // the declaration — and it stamped NO lifetime. `automatic rec_t r;`
+                    // was therefore downgraded to static in silence, which is why two
+                    // same-named struct locals in disjoint blocks shared one flattened
+                    // net while the identical `automatic int` / enum / alias pair each
+                    // got its own `$blk$` scope (measured: alias ok, enum ok, struct
+                    // not gathered at all).
+                    let before = decls.len();
+                    if self.try_block_unpacked_struct_decl(&mut decls, &mut scope) {
+                        for d in &mut decls[before..] {
+                            d.lifetime = Some(true);
+                        }
+                    }
                 }
             } else if self.try_block_unpacked_struct_decl(&mut decls, &mut scope) {
                 // Round-9: a block-local scalar UNPACKED-struct variable

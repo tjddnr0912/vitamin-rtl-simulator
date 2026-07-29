@@ -20,6 +20,16 @@ pub(crate) use writes::*;
 /// the closure.
 pub(crate) type OutActualWrites<'a> = &'a dyn Fn(&ast::HierPath, &[ast::Expr], &str) -> CallEffect;
 
+/// R18-X1: "can enabling this task let simulation time advance?" — resolved against
+/// the Elaborator's `task_table`/`func_table` in `block_local::gate`, because `da`
+/// itself has no view of callee bodies (the same reason [`OutActualWrites`] is a
+/// closure).
+///
+/// Answers `true` for anything it cannot resolve. This predicate is only ever read
+/// on the REJECT side (a shared flattened net plus a suspend ⇒ loud), so an
+/// unresolvable callee must be assumed to suspend.
+pub(crate) type CallSuspends<'a> = &'a dyn Fn(&ast::HierPath) -> bool;
+
 /// R16 §3.2: what a CALL does to the local `name`.
 ///
 /// The pre-R16 resolver answered one bit — "is this a pure output-actual write?" —
@@ -137,6 +147,13 @@ impl DaGiveUp {
 /// FIRST (innermost, earliest) give-up — the one the user has to look at.
 type DaResult = Result<DaOut, DaGiveUp>;
 
+/// The give-up phrase for "the flattened net is shared and time can advance here".
+/// Module-level because BOTH the per-statement walk and the top-level loop raise it —
+/// the top-level one is R18-X1's fix and the reason it must not be a `da_stmt` local.
+const SHARED_SUSPEND: &str = "time can advance here, and the flattened net is shared \
+     with a same-named block-local in another block — that block can write it before \
+     this one reads it again";
+
 /// R16 §3.1: is this `disable` target the parser's synthetic label for a `break` /
 /// `continue`? Those labels are `$break$<lo>` / `$continue$<lo>` (see
 /// `hdl-parser::stmt_ctl`), and the leading `$` makes them unwritable as a user
@@ -161,19 +178,38 @@ fn is_loop_jump(target: &ast::HierPath) -> bool {
 /// `stmt_no_ref` fast path, because a suspending statement that never mentions the
 /// local (`begin #1 y = 3; end`) hands the scheduler over just the same.
 ///
-/// Covers exactly the forms the pre-R17 walk rejected by falling to its catch-all:
-/// delay / event / wait control, in prefix or wrapper position. A user task CALL can
-/// also suspend, but the pre-R17 walk accepted a provably-inert one and this rule is
-/// not the place to take that back.
-fn stmt_advances_time(st: &ast::Stmt) -> bool {
+/// Covers the forms the pre-R17 walk rejected by falling to its catch-all — delay /
+/// event / wait control, in prefix or wrapper position — AND a user task CALL whose
+/// body reaches one of them, via `call_suspends`.
+///
+/// R18-X1: the call arm closes a SILENT-WRONG that predates R17 (measured identical
+/// at `c8ad2b4` and `46b9816`). Wrapping the suspend in a one-line helper —
+/// `task automatic tick(); @(posedge clk); endtask` — hid it from a rule that read
+/// only syntax, so a block that wrote its local, called the helper, and read the
+/// local back observed a sibling block's write to the shared net instead: vita
+/// printed `A v=99` where iverilog prints `A v=1`, at exit 0. R17's own comment here
+/// argued the call case could be left alone because the pre-R17 walk accepted a
+/// provably-inert callee; that reasoning was about the REFERENCE question, and
+/// suspending is a different one — an inert callee still hands the scheduler over.
+///
+/// POLARITY: this feeds a REJECT decision (`!sole && advances_time` ⇒ loud), so every
+/// unknown must answer `true`. `call_suspends` returns `true` for an unresolvable
+/// callee, a hierarchical path, and an exhausted depth budget.
+fn stmt_advances_time(st: &ast::Stmt, call_suspends: CallSuspends<'_>) -> bool {
     use ast::Stmt::*;
-    let sub = |s: &ast::Stmt| stmt_advances_time(s);
-    let opt = |s: &Option<Box<ast::Stmt>>| s.as_deref().is_some_and(stmt_advances_time);
+    let sub = |s: &ast::Stmt| stmt_advances_time(s, call_suspends);
+    let opt = |s: &Option<Box<ast::Stmt>>| {
+        s.as_deref()
+            .is_some_and(|x| stmt_advances_time(x, call_suspends))
+    };
     match st {
         DelayCtrl { .. } | EventCtrl { .. } | Wait { .. } | WaitFork { .. } => true,
         Blocking { delay, event, .. } | NonBlocking { delay, event, .. } => {
             delay.is_some() || event.is_some()
         }
+        // IEEE 1800 §13.4.4 forbids a FUNCTION from consuming time, so only a task
+        // enable can suspend — and a task enable is always this statement form.
+        UserTaskCall { name, .. } => call_suspends(name),
         Block { stmts, .. } | Fork { stmts, .. } => stmts.iter().any(sub),
         If { then_s, else_s, .. } => sub(then_s) || opt(else_s),
         Case { items, .. } => items.iter().any(|it| match it {
@@ -184,12 +220,16 @@ fn stmt_advances_time(st: &ast::Stmt) -> bool {
         } => sub(init) || sub(step) || sub(body),
         While { body, .. } | Repeat { body, .. } | Forever { body, .. } => sub(body),
         DeferredAssert { then_s, else_s, .. } => sub(then_s) || sub(else_s),
-        ConcurrentAssert { pass, fail, .. } => {
-            pass.as_deref().is_some_and(stmt_advances_time)
-                || fail.as_deref().is_some_and(stmt_advances_time)
-        }
+        ConcurrentAssert { pass, fail, .. } => opt(pass) || opt(fail),
         _ => false,
     }
+}
+
+/// Walk a callee body for the suspend question — the time-side twin of
+/// [`reads::stmt_no_ref_deep`]. Public so the resolver in `block_local::gate` can
+/// recurse through it with its own depth budget.
+pub(crate) fn body_advances_time(body: &ast::Stmt, call_suspends: CallSuspends<'_>) -> bool {
+    stmt_advances_time(body, call_suspends)
 }
 
 /// GAP-D definite-assignment (round-4, guard-aware). Returns the assigned-state
@@ -212,6 +252,7 @@ pub(crate) fn da_stmt(
     name: &str,
     out_writes: OutActualWrites,
     sole: bool,
+    suspends: CallSuspends,
 ) -> DaResult {
     use ast::Stmt as S;
     // R17: does a statement that lets TIME ADVANCE break the flatten here? Only when
@@ -223,13 +264,15 @@ pub(crate) fn da_stmt(
     // This is what the pre-R17 walk enforced by ACCIDENT — every timing form fell to
     // the catch-all — and the accident was load-bearing: modelling those forms without
     // this rule turned an `initial begin int k; #1; k=2; … end` sharing a generate-scope
-    // `k` from loud into a silent `2` where iverilog prints `1`. Positional, exactly
-    // like the accident it replaces: a timing statement reached AFTER the local is
-    // definitely assigned was accepted before and still is.
-    const SHARED_SUSPEND: &str = "time can advance here, and the flattened net is shared \
-         with a same-named block-local in another block — that block can write it before \
-         this one reads it again";
-    if !sole && stmt_advances_time(st) {
+    // `k` from loud into a silent `2` where iverilog prints `1`.
+    //
+    // R18-X1 CORRECTION: R17 also wrote here that "a timing statement reached AFTER the
+    // local is definitely assigned was accepted before and still is", and treated that
+    // as safe. It is not. Being written does not make the net OURS — the other block
+    // writes the same one net, and the suspend is exactly the moment it gets to. See
+    // the entry loop, which used to return early on `assigned` and so never reached
+    // this guard at all.
+    if !sole && stmt_advances_time(st, suspends) {
         return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
     }
     // R17 §3.3: the give-up for "this expression reads `name` and nothing has written
@@ -331,11 +374,11 @@ pub(crate) fn da_stmt(
             if !after && !expr_no_ref(cond, name) {
                 return Err(read(cond));
             }
-            let a_then = da_stmt(then_s, after, name, out_writes, sole)?;
+            let a_then = da_stmt(then_s, after, name, out_writes, sole, suspends)?;
             // R16 §3.1: an absent `else` is an empty arm that FALLS THROUGH with the
             // entry state — it is not a jump, so it always participates in the merge.
             let a_else = match else_s {
-                Some(e) => da_stmt(e, after, name, out_writes, sole)?,
+                Some(e) => da_stmt(e, after, name, out_writes, sole, suspends)?,
                 None => DaOut::Falls(after),
             };
             Ok(a_then.merge(a_else))
@@ -354,7 +397,7 @@ pub(crate) fn da_stmt(
             }
             let mut a = assigned;
             for s in stmts {
-                match da_stmt(s, a, name, out_writes, sole)? {
+                match da_stmt(s, a, name, out_writes, sole, suspends)? {
                     DaOut::Falls(next) => a = next,
                     // R16 §3.1: the rest of this block is UNREACHABLE — a jump has
                     // already left it. Stop rather than keep walking statements that
@@ -412,7 +455,7 @@ pub(crate) fn da_stmt(
                         body
                     }
                 };
-                let arm = da_stmt(body, after, name, out_writes, sole)?;
+                let arm = da_stmt(body, after, name, out_writes, sole, suspends)?;
                 all = Some(match all {
                     Some(acc) => acc.merge(arm),
                     None => arm,
@@ -434,7 +477,7 @@ pub(crate) fn da_stmt(
             body,
             ..
         } => {
-            let a0 = da_stmt(init, assigned, name, out_writes, sole)?.state();
+            let a0 = da_stmt(init, assigned, name, out_writes, sole, suspends)?.state();
             if !a0 && !expr_no_ref(cond, name) {
                 return Err(read(cond));
             }
@@ -442,8 +485,8 @@ pub(crate) fn da_stmt(
             // case; the loop may also run zero times). Body / step are checked
             // against `a0` — conservative, since a later iteration only ever has
             // MORE assigned than the first.
-            da_stmt(body, a0, name, out_writes, sole)?;
-            da_stmt(step, a0, name, out_writes, sole)?;
+            da_stmt(body, a0, name, out_writes, sole, suspends)?;
+            da_stmt(step, a0, name, out_writes, sole, suspends)?;
             // A loop cannot newly guarantee assignment (may run 0 times), and it always
             // FALLS THROUGH for this analysis — a `break` inside its body targets THIS
             // loop, so it lands right here rather than skipping what follows.
@@ -457,18 +500,18 @@ pub(crate) fn da_stmt(
             if !after && !expr_no_ref(cond, name) {
                 return Err(read(cond));
             }
-            da_stmt(body, after, name, out_writes, sole)?;
+            da_stmt(body, after, name, out_writes, sole, suspends)?;
             Ok(DaOut::Falls(after))
         }
         S::Repeat { count, body, .. } => {
             if !assigned && !expr_no_ref(count, name) {
                 return Err(read(count));
             }
-            da_stmt(body, assigned, name, out_writes, sole)?;
+            da_stmt(body, assigned, name, out_writes, sole, suspends)?;
             Ok(DaOut::Falls(assigned))
         }
         S::Forever { body, .. } => {
-            da_stmt(body, assigned, name, out_writes, sole)?;
+            da_stmt(body, assigned, name, out_writes, sole, suspends)?;
             // Conservatively falls through even though a `forever` without a `break`
             // never does — over-stating reachability only ever costs precision here.
             Ok(DaOut::Falls(assigned))
@@ -546,7 +589,7 @@ pub(crate) fn da_stmt(
                 }
             }
             match body {
-                Some(b) => da_stmt(b, assigned, name, out_writes, sole),
+                Some(b) => da_stmt(b, assigned, name, out_writes, sole, suspends),
                 None => Ok(DaOut::Falls(assigned)),
             }
         }
@@ -558,7 +601,7 @@ pub(crate) fn da_stmt(
                 ));
             }
             match body {
-                Some(b) => da_stmt(b, assigned, name, out_writes, sole),
+                Some(b) => da_stmt(b, assigned, name, out_writes, sole, suspends),
                 None => Ok(DaOut::Falls(assigned)),
             }
         }
@@ -567,7 +610,7 @@ pub(crate) fn da_stmt(
                 return Err(read(cond));
             }
             match body {
-                Some(b) => da_stmt(b, assigned, name, out_writes, sole),
+                Some(b) => da_stmt(b, assigned, name, out_writes, sole, suspends),
                 None => Ok(DaOut::Falls(assigned)),
             }
         }
@@ -613,6 +656,67 @@ pub(crate) fn da_stmt(
 /// `name[<literal>] = rhs`, when `rhs` cannot reference `name`. `None` for anything
 /// else — a computed index, a bit-select inside the element, a delayed or
 /// event-controlled assign, or an rhs that may read the array.
+/// R18 §3.2: the constant BIT SPAN a straight-line select-write covers —
+/// `name[<lit>:<lit>] = rhs` (inclusive, in either bound order) or
+/// `name[<lit>] = rhs` — when `rhs` cannot reference `name`. `None` for anything
+/// else, with the same conservatism as [`const_elem_write`].
+///
+/// Why bits and not members: a struct is PARSER-desugared (`s.c` becomes a constant
+/// part-select into one flat vector, see `hdl-parser::typedefs`), so by the time the
+/// definite-assignment walk runs there are no members left to count — only bits. That
+/// makes the rule both simpler and more general than member counting: a single-member
+/// struct is the case the reporter hit (`rm.c = 5;` writes ALL of `rm`, yet the walk
+/// called it partial), and a two-member struct written field by field falls out for
+/// free. It also covers a hand-written `x[31:16] = a; x[15:0] = b;`.
+fn const_bit_span_write(st: &ast::Stmt, name: &str) -> Option<(u32, u32)> {
+    let ast::Stmt::Blocking {
+        lhs,
+        delay: None,
+        event: None,
+        rhs,
+        ..
+    } = st
+    else {
+        return None;
+    };
+    if !expr_no_ref(rhs, name) {
+        return None;
+    }
+    let base_is_name = |b: &ast::Lvalue| {
+        matches!(b, ast::Lvalue::Ident(p)
+            if p.segments.len() == 1 && p.segments[0].name == name)
+    };
+    match lhs {
+        ast::Lvalue::PartSelect { base, msb, lsb, .. } if base_is_name(base) => {
+            let (a, b) = (const_index(msb)?, const_index(lsb)?);
+            let (a, b) = (u32::try_from(a).ok()?, u32::try_from(b).ok()?);
+            Some((a.min(b), a.max(b)))
+        }
+        ast::Lvalue::BitSelect { base, index, .. } if base_is_name(base) => {
+            let i = u32::try_from(const_index(index)?).ok()?;
+            Some((i, i))
+        }
+        _ => None,
+    }
+}
+
+/// A plain decimal literal index, unwrapping parens. Anything else (a parameter, a
+/// folded expression) needs the elaborator's scope, and answering "unknown" here only
+/// costs precision. Shared by [`const_elem_write`] and [`const_bit_span_write`].
+fn const_index(e: &ast::Expr) -> Option<i64> {
+    let mut e = e;
+    while let ast::ExprKind::Paren { inner } = &e.kind {
+        e = inner;
+    }
+    match &e.kind {
+        ast::ExprKind::IntLit {
+            kind: ast::IntLitKind::Decimal,
+            raw,
+        } => raw.replace('_', "").parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
 fn const_elem_write(st: &ast::Stmt, name: &str) -> Option<i64> {
     let ast::Stmt::Blocking {
         lhs,
@@ -636,19 +740,7 @@ fn const_elem_write(st: &ast::Stmt, name: &str) -> Option<i64> {
     if p.segments.len() != 1 || p.segments[0].name != name {
         return None;
     }
-    // Only a plain decimal literal. A parameter or a folded expression would need
-    // the elaborator's scope, and answering "unknown" here only costs precision.
-    let mut e: &ast::Expr = index;
-    while let ast::ExprKind::Paren { inner } = &e.kind {
-        e = inner;
-    }
-    match &e.kind {
-        ast::ExprKind::IntLit {
-            kind: ast::IntLitKind::Decimal,
-            raw,
-        } => raw.replace('_', "").parse::<i64>().ok(),
-        _ => None,
-    }
+    const_index(index)
 }
 
 pub(crate) fn automatic_local_definitely_assigned(
@@ -657,6 +749,8 @@ pub(crate) fn automatic_local_definitely_assigned(
     out_writes: OutActualWrites,
     elem_bounds: Option<(i64, i64)>,
     sole_writer: bool,
+    suspends: CallSuspends,
+    bit_width: Option<u32>,
 ) -> Result<(), DaGiveUp> {
     // R17 §3.2: a local that is NEVER WRITTEN anywhere in the block is byte-identical
     // to per-entry storage without any path reasoning at all. `automatic` gives a
@@ -699,11 +793,30 @@ pub(crate) fn automatic_local_definitely_assigned(
     // alternative, resetting the array at each block entry, was measured WRONG
     // (iverilog keeps the leftover across loop re-entries; storage is per activation).
     let mut covered: std::collections::BTreeSet<i64> = std::collections::BTreeSet::new();
+    // R18 §3.2: bit indices written by straight-line constant select writes. Bounded
+    // by `MAX_COVERED_BITS` at the caller, so this set can never be pathological.
+    let mut covered_bits: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     for st in stmts {
-        // Once definitely assigned at the top level, every later read observes a
-        // current-execution value → safe regardless of the statement form.
         if assigned {
-            return Ok(());
+            // A FRESH net has no other writer, so once this block has written it every
+            // later read observes a current-execution value — safe regardless of the
+            // statement form, and the walk is done.
+            if sole_writer {
+                return Ok(());
+            }
+            // R18-X1: a SHARED net is not done. Being written does not make the net
+            // ours; the same one net is written by a same-named block-local in another
+            // block, and a suspend is exactly when that block gets to run. Returning
+            // here is what let the silent-wrong through — the guard inside `da_stmt`
+            // was never reached once the local was assigned, so `v = 1; tick(); read v`
+            // printed the OTHER block's 99 where iverilog prints 1, at exit 0.
+            //
+            // Keep walking instead: a statement that cannot advance time preserves the
+            // claim, one that can ends it.
+            if stmt_advances_time(st, suspends) {
+                return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
+            }
+            continue;
         }
         if let Some((lo, hi)) = elem_bounds {
             if let Some(ix) = const_elem_write(st, name) {
@@ -716,7 +829,25 @@ pub(crate) fn automatic_local_definitely_assigned(
                 }
             }
         }
-        match da_stmt(st, false, name, out_writes, sole_writer) {
+        // R18 §3.2: the same coverage argument one level down, in BITS. A struct
+        // member write is a constant part-select after the parser's desugar, so
+        // `rm.c = 5;` on a single-member struct writes every bit of `rm` — yet the
+        // walk called it "only PART" and treated the local as still unwritten. Field
+        // by field (`rm.a = …; rm.b = …;`) reaches full coverage the same way.
+        if let Some(w) = bit_width {
+            if let Some((lo, hi)) = const_bit_span_write(st, name) {
+                if hi < w {
+                    for b in lo..=hi {
+                        covered_bits.insert(b);
+                    }
+                    if covered_bits.len() as u32 == w {
+                        assigned = true;
+                    }
+                    continue;
+                }
+            }
+        }
+        match da_stmt(st, false, name, out_writes, sole_writer, suspends) {
             Ok(DaOut::Falls(a)) => assigned = a,
             // R16 §3.1: control left the block here (a top-level `break`/`continue`/
             // `return`), so every remaining statement is unreachable and cannot

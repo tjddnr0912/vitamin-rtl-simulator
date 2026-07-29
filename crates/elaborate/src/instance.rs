@@ -229,6 +229,14 @@ impl Elaborator<'_> {
         let per_entry_blocks = Self::compute_per_entry_block_locals(module, &names);
         let saved_per_entry_blocks =
             std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
+        // R18-X1: which bare block-local names land on ONE shared flattened net. Same
+        // shared-set pattern, and for the same reason: the hoist's own coalesce guard
+        // is order-dependent (it fires only once the net exists), so the FIRST
+        // declaring block would otherwise be analysed as the sole writer of a net it
+        // shares. Depends on `scoped_blocks`, so it is computed after it.
+        let coalesced =
+            Self::compute_coalesced_block_locals(module, &names, &self.scoped_block_locals.clone());
+        let saved_coalesced = std::mem::replace(&mut self.coalesced_block_locals, coalesced);
         let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
         // §4.5.186: collect this module's functions into `const_func_table` BEFORE the
@@ -762,6 +770,7 @@ impl Elaborator<'_> {
         self.local_decl_names = saved_local_names;
         self.scoped_block_locals = saved_scoped_blocks;
         self.per_entry_block_locals = saved_per_entry_blocks;
+        self.coalesced_block_locals = saved_coalesced;
         self.func_table = saved_funcs;
         self.const_func_table = saved_const_funcs;
         self.task_table = saved_tasks;

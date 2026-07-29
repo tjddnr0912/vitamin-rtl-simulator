@@ -7,6 +7,31 @@
 
 use super::*;
 
+/// R18 §3.3: does this call ACTUAL name the record variable whose SoA member net is
+/// `name`?
+///
+/// An unpacked struct is fanned out by the PARSER into one net per member,
+/// `$unp$<var>$<member>`, and `rm.count` is rewritten to it — but a call argument
+/// stays the bare record name `rm`. So the definite-assignment walk, which tracks the
+/// member net, saw `rsp_next(fd, rm)` as touching nothing: the write through the
+/// formal was invisible (a false-loud) and, worse, so was the copy-IN read of an
+/// `inout` (a latent unsoundness the same blindness hid).
+///
+/// The var part is matched EXACTLY (prefix `$unp$` + the actual's own identifier + a
+/// `$`), so a name that merely looks similar cannot claim to be a member of it. Names
+/// not of that shape answer `false`, leaving every non-SoA call decision byte-identical.
+fn actual_is_record_of(arg: &ast::Expr, name: &str) -> bool {
+    let ast::ExprKind::Ident(p) = &arg.kind else {
+        return false;
+    };
+    if p.segments.len() != 1 {
+        return false;
+    }
+    name.strip_prefix("$unp$")
+        .and_then(|r| r.strip_prefix(p.segments[0].name.as_str()))
+        .is_some_and(|r| r.starts_with('$'))
+}
+
 impl Elaborator<'_> {
     /// BL4 (round-19): resolve a callee NAME to its formal port DIRECTIONS, in port
     /// order, for the block-local definite-assignment gate. A single-segment name is
@@ -65,12 +90,17 @@ impl Elaborator<'_> {
         let mut reads = false;
         for (i, arg) in args.iter().enumerate() {
             // A clean whole-var OUTPUT actual `name` at an OUTPUT formal — copy-out only.
-            let clean_output_whole = matches!(dirs.get(i), Some(ast::PortDir::Output))
-                && matches!(&arg.kind, ast::ExprKind::Ident(p)
-                    if p.segments.len() == 1 && p.segments[0].name == name);
+            // R18 §3.3: `name` may be a MEMBER NET of an unpacked struct
+            // (`$unp$rm$count`) whose actual still names the record (`rm`) — the SoA
+            // fan-out is a parser rewrite that never reached the call arguments. Both
+            // spellings denote the same storage here.
+            let whole_var = matches!(&arg.kind, ast::ExprKind::Ident(p)
+                    if p.segments.len() == 1 && p.segments[0].name == name)
+                || actual_is_record_of(arg, name);
+            let clean_output_whole = matches!(dirs.get(i), Some(ast::PortDir::Output)) && whole_var;
             if clean_output_whole {
                 writes = true;
-            } else if !expr_no_ref(arg, name) {
+            } else if whole_var || !expr_no_ref(arg, name) {
                 // Any OTHER reference to `name` (input actual, inout copy-in, select
                 // index, partial-write select base, arg beyond arity, OR a same-call
                 // member / method read `name.field` / `name.size()`) is a read that
@@ -108,6 +138,7 @@ impl Elaborator<'_> {
         name: &str,
         elem_bounds: Option<(i64, i64)>,
         sole_writer: bool,
+        bit_width: Option<u32>,
     ) -> Result<(), crate::da::DaGiveUp> {
         automatic_local_definitely_assigned(
             stmts,
@@ -115,7 +146,29 @@ impl Elaborator<'_> {
             &|cn, args, nm| self.call_effect(cn, args, nm),
             elem_bounds,
             sole_writer,
+            &|cn| self.call_may_suspend(cn, Self::CALL_INERT_DEPTH),
+            bit_width,
         )
+    }
+
+    /// R18 §3.2: the flattened bit WIDTH of a block-local declarator, for the
+    /// select-coverage rule — `Some(w)` only for a plain packed scalar/vector with no
+    /// unpacked dimensions, where "bit `i` of `name`" is unambiguous. A struct is one
+    /// of these after the parser's desugar (its members are constant part-selects into
+    /// the flat vector), which is exactly the shape the rule exists for.
+    ///
+    /// `None` disables the rule, so an unpacked array (whose select indices are
+    /// ELEMENTS, covered by `elem_bounds` instead) and anything absurdly wide keep the
+    /// previous behaviour.
+    pub(crate) fn decl_bit_width(&mut self, d: &ast::NetVarDecl, n: &ast::DeclName) -> Option<u32> {
+        /// A local wider than this cannot plausibly be covered by literal selects, and
+        /// the bit set would be the only unbounded thing in the walk.
+        const MAX_COVERED_BITS: u32 = 4096;
+        if !n.unpacked.is_empty() {
+            return None;
+        }
+        let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        (w > 0 && w <= MAX_COVERED_BITS).then_some(w)
     }
 
     /// R17 §3.3 / §4.2: the follow-on `note:` naming WHERE the definite-assignment
@@ -273,6 +326,35 @@ impl Elaborator<'_> {
     /// A hierarchical callee, a `$system` task, an unknown name, or an exhausted depth
     /// budget all answer `false` and leave the local loud — the same outcome as before
     /// this existed.
+    /// R18-X1: can enabling `callee` let simulation TIME ADVANCE (transitively)?
+    ///
+    /// The time-side twin of [`Self::call_is_inert`], and deliberately independent of
+    /// it: a callee can be provably inert with respect to a name and still suspend,
+    /// and suspending is what hands the one shared flattened net to another block.
+    /// Wrapping `@(posedge clk)` in a one-line helper used to hide the suspend from
+    /// the shared-net rule entirely — a silent-wrong measured identical at `c8ad2b4`
+    /// and `46b9816` (vita `A v=99` / iverilog `A v=1`, exit 0).
+    ///
+    /// POLARITY: every unknown answers `true` (may suspend), because the only reader
+    /// is a REJECT gate. Hierarchical callee, unresolvable name, exhausted budget —
+    /// all `true`. Functions are walked too even though IEEE 1800 §13.4.4 forbids
+    /// them from consuming time: costs nothing and needs no trust in the parser
+    /// having enforced it.
+    pub(crate) fn call_may_suspend(&self, callee: &ast::HierPath, depth: u32) -> bool {
+        if callee.segments.len() != 1 || depth == 0 {
+            return true;
+        }
+        let nm = callee.segments[0].name.as_str();
+        let body = if let Some(t) = self.task_table.get(nm) {
+            &t.body
+        } else if let Some(f) = self.func_table.get(nm) {
+            &f.body
+        } else {
+            return true;
+        };
+        crate::da::body_advances_time(body, &|cn| self.call_may_suspend(cn, depth - 1))
+    }
+
     fn call_is_inert(
         &self,
         callee: &ast::HierPath,

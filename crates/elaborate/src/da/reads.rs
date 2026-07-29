@@ -546,9 +546,24 @@ pub(crate) fn expr_definitely_refs(e: &ast::Expr, name: &str) -> bool {
 /// [`expr_no_ref`] so an unvetted event expression answers "may reference".
 /// `@(*)` names no expression at all and is trivially ref-free.
 pub(crate) fn sensitivity_no_ref(s: &ast::Sensitivity, name: &str) -> bool {
+    sensitivity_no_ref_with(s, name, false)
+}
+
+/// R18 §3.1: the all-segments twin, for a callee body (see [`expr_no_ref_deep`]).
+pub(crate) fn sensitivity_no_ref_deep(s: &ast::Sensitivity, name: &str) -> bool {
+    sensitivity_no_ref_with(s, name, true)
+}
+
+/// `deep` is an OPT-IN parameter, as everywhere in this module: the literal `false`
+/// short-circuits to the head-segment rule, so `sensitivity_no_ref` is mechanically
+/// what it was.
+///
+/// `Star` (`@*`) is ref-free by construction — an implicit sensitivity list names
+/// nothing, and a block-local can never be in one anyway.
+fn sensitivity_no_ref_with(s: &ast::Sensitivity, name: &str, deep: bool) -> bool {
     match s {
         ast::Sensitivity::Star => true,
-        ast::Sensitivity::List(evs) => evs.iter().all(|ev| expr_no_ref(&ev.expr, name)),
+        ast::Sensitivity::List(evs) => evs.iter().all(|ev| expr_no_ref_with(&ev.expr, name, deep)),
     }
 }
 
@@ -556,7 +571,19 @@ pub(crate) fn sensitivity_no_ref(s: &ast::Sensitivity, name: &str) -> bool {
 /// `= repeat(n) @(ev) rhs`) certainly does NOT reference `name`". Both the repeat
 /// count and the event expressions are reads.
 pub(crate) fn intra_event_no_ref(e: &ast::IntraEvent, name: &str) -> bool {
-    e.repeat.as_ref().is_none_or(|r| expr_no_ref(r, name)) && sensitivity_no_ref(&e.ctrl, name)
+    intra_event_no_ref_with(e, name, false)
+}
+
+/// R18 §3.1: the all-segments twin, for a callee body (see [`expr_no_ref_deep`]).
+pub(crate) fn intra_event_no_ref_deep(e: &ast::IntraEvent, name: &str) -> bool {
+    intra_event_no_ref_with(e, name, true)
+}
+
+fn intra_event_no_ref_with(e: &ast::IntraEvent, name: &str, deep: bool) -> bool {
+    e.repeat
+        .as_ref()
+        .is_none_or(|r| expr_no_ref_with(r, name, deep))
+        && sensitivity_no_ref_with(&e.ctrl, name, deep)
 }
 
 /// CONSERVATIVE lvalue counterpart of [`expr_no_ref`] — the lvalue (write target
@@ -708,11 +735,40 @@ pub(crate) fn stmt_no_ref_deep(
             rhs,
             ..
         } => {
-            delay.is_none()
-                && event.is_none()
+            // R18 §3.1: a timing PREFIX is more expressions, not a different kind of
+            // statement — `@(posedge clk) q <= d;` references `name` exactly as much
+            // as `q <= d;` does. Requiring `delay.is_none() && event.is_none()` here
+            // is the same mistake R17 fixed in the shallow `stmt_no_ref`, left behind
+            // in the deep twin.
+            delay
+                .as_ref()
+                .is_none_or(|d| d.values.iter().all(|e| expr_no_ref_deep(e, name)))
+                && event
+                    .as_ref()
+                    .is_none_or(|e| intra_event_no_ref_deep(e, name))
                 && lvalue_no_ref_deep(lhs, name)
                 && expr_no_ref_deep(rhs, name)
         }
+        // R18 §3.1: standalone timing control, with or without a body. These had NO
+        // arm at all, so `@(posedge clk);` — the body of every clock-driver task ever
+        // written — fell to `_ => false`, and `_ => false` in a walker keyed on a name
+        // means "may reference ANY name". One `@(posedge clk)` anywhere in a callee
+        // therefore made every caller's later block-local unusable: 11 of the 12
+        // diagnostics in the round-18 report, all of them `preload(...)` /
+        // `run_scenario(...)`, the standard clocked-driver idiom.
+        //
+        // Vetting these is a REFERENCE claim only. Whether the callee SUSPENDS is a
+        // separate question with its own resolver (`call_may_suspend`), because a
+        // callee that is provably inert for `name` still hands the scheduler to a
+        // block sharing the flattened net.
+        S::DelayCtrl { delay, body, .. } => {
+            delay.values.iter().all(&e_ok) && body.as_deref().is_none_or(sub)
+        }
+        S::EventCtrl { ctrl, body, .. } => {
+            sensitivity_no_ref_deep(ctrl, name) && body.as_deref().is_none_or(sub)
+        }
+        S::Wait { cond, body, .. } => e_ok(cond) && body.as_deref().is_none_or(sub),
+        S::WaitFork { .. } => true,
         S::If {
             cond,
             then_s,

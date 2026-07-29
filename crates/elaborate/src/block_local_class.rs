@@ -405,6 +405,57 @@ impl Elaborator<'_> {
         out
     }
 
+    /// R18-X1: bare names that end up sharing ONE flattened net because they are
+    /// declared as block-locals in two or more DISJOINT blocks and are not given
+    /// `$blk$` scoping.
+    ///
+    /// Why this has to be a pure AST pre-pass, like its two siblings above. The
+    /// coalesce guard in `hoist` fires when a name's net ALREADY EXISTS, so it only
+    /// ever examines the SECOND and later declaring blocks — the first one is checked
+    /// as if its net were private, because at that moment it is. That asymmetry is
+    /// order, not semantics: both blocks write the same net. It was a silent-wrong
+    /// (measured identical at `c8ad2b4` and `46b9816`): the first block wrote its
+    /// local, called a task that suspends, and read the local back — observing the
+    /// second block's write. vita printed `A v=99` where iverilog prints `A v=1`, at
+    /// exit 0, because nothing ever asked the first block the shared-net question.
+    ///
+    /// Conservative on every axis, since the only consumer is a REJECT gate:
+    /// * a name declared in ≥2 distinct blocks counts, whatever the lifetimes;
+    /// * `module_names` is excluded to match the hoist guard, which treats a
+    ///   module-scope collision as a legitimate SHADOW and hands it to the
+    ///   struct/enum/typedef shadow-scoping instead;
+    /// * only blocks that put the name on the FLAT net are counted — a block whose
+    ///   copy earned a `$blk$<lo>` scope has its own net and does not participate in
+    ///   the sharing, so two `automatic` locals that both got scoped are two
+    ///   variables, not one. Counting them was a false-loud on a shape that already
+    ///   worked (`block_scope_two_level::struct_member_static_branch…`).
+    pub(crate) fn compute_coalesced_block_locals(
+        module: &ast::ModuleDecl,
+        module_names: &std::collections::BTreeSet<String>,
+        scoped: &BTreeMap<u32, std::collections::BTreeSet<String>>,
+    ) -> std::collections::BTreeSet<String> {
+        let mut per_name: BTreeMap<String, std::collections::BTreeSet<u32>> = BTreeMap::new();
+        for_each_proc(&module.body, &mut |p, _branch| {
+            let mut blocks: Vec<(ast::Span, Vec<(String, ast::Span)>)> = Vec::new();
+            crate::block_local::gather_nested_block_locals(&p.body, true, &mut blocks);
+            for (blk, names) in blocks {
+                for (nm, _) in names {
+                    // A block that gives this name its own scope segment owns a
+                    // distinct net; only the FLAT declarations share one.
+                    if scoped.get(&blk.lo).is_some_and(|s| s.contains(&nm)) {
+                        continue;
+                    }
+                    per_name.entry(nm).or_default().insert(blk.lo);
+                }
+            }
+        });
+        per_name
+            .into_iter()
+            .filter(|(nm, blocks)| blocks.len() >= 2 && !module_names.contains(nm))
+            .map(|(nm, _)| nm)
+            .collect()
+    }
+
     /// DUP (round-5): the `$blk$<span>` scope segment for a decl `d` in the block at
     /// `span`, if ANY name it declares is marked for scoping. `None` ⇒ not scoped
     /// (pre-existing behavior).

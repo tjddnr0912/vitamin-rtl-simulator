@@ -267,6 +267,15 @@ struct Elaborator<'s> {
     /// Empty for every design with no such collision → byte-identical. Saved/
     /// restored per module.
     scoped_block_locals: BTreeMap<u32, std::collections::BTreeSet<String>>,
+    /// R18-X1: bare block-local names that share ONE flattened net across two or more
+    /// disjoint blocks (see `compute_coalesced_block_locals`). Read wherever the
+    /// definite-assignment gate needs to know whether THIS block is the only writer of
+    /// the net — the coalesce guard in `hoist` can only answer that for the second and
+    /// later declaring blocks, because it keys on the net already existing. Computed
+    /// ONCE per module as a pure function of the AST, so every declaring block gets the
+    /// same answer regardless of hoist order. Empty for every design with no such
+    /// collision ⇒ byte-identical. Saved/restored per module.
+    coalesced_block_locals: std::collections::BTreeSet<String>,
     /// r18 (family D): module-process block-locals that are `automatic` WITH AN
     /// INITIALIZER and are safe to give per-entry (IEEE §6.21) semantics on the single
     /// flattened net — the initializer re-runs at BLOCK ENTRY instead of once at t0. Keyed

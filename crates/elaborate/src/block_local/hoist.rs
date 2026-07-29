@@ -243,7 +243,10 @@ impl Elaborator<'_> {
                     // dynamic-storage local now earns a `$blk$` net too), and
                     // for it there is no per-entry reset to be unfaithful to.
                     if d.lifetime == Some(true) && !per_entry && !const_immune {
-                        let da = self.block_local_definitely_assigned(stmts, nm, elem_bounds, true);
+                        let sole = !self.coalesced_block_locals.contains(nm);
+                        let bw = self.decl_bit_width(d, n);
+                        let da =
+                            self.block_local_definitely_assigned(stmts, nm, elem_bounds, sole, bw);
                         if n.init.is_some() || read_in_sibling_init || da.is_err() {
                             self.deny_per_entry_lifetime(nm, da.err());
                         }
@@ -466,6 +469,7 @@ impl Elaborator<'_> {
                         (e.width, e.signed)
                     };
                     let elem_bounds = self.fixed_elem_bounds(n);
+                    let bw = self.decl_bit_width(d, n);
                     if nw != ew || nsig != esig {
                         self.error(
                             MsgCode::ElabUnsupported,
@@ -487,6 +491,7 @@ impl Elaborator<'_> {
                             nm,
                             elem_bounds,
                             false,
+                            bw,
                         )
                     {
                         self.error(
@@ -550,10 +555,46 @@ impl Elaborator<'_> {
                 }) && stmt_never_assigns_ident(stmts, nm);
                 let elem_bounds = self.fixed_elem_bounds(n);
                 if !per_entry && !const_immune {
-                    let da = self.block_local_definitely_assigned(stmts, nm, elem_bounds, true);
+                    let sole = !self.coalesced_block_locals.contains(nm);
+                    let bw = self.decl_bit_width(d, n);
+                    let da = self.block_local_definitely_assigned(stmts, nm, elem_bounds, sole, bw);
                     if n.init.is_some() || read_in_sibling_init || da.is_err() {
                         self.deny_per_entry_lifetime(nm, da.err());
                     }
+                }
+            }
+        } else {
+            // R18-X1: the FIRST declaring block of a coalesced name, when the decl is
+            // not `automatic` (a plain `int v;` never reaches the gate above at all).
+            //
+            // The coalesce guard earlier in this function only sees the SECOND and
+            // later blocks — it keys on the net already existing — so this block, which
+            // shares the very same net, was analysed as its sole writer and accepted
+            // whatever it did. That is where `A v=99` came from where iverilog prints
+            // `A v=1`: write, call a task that suspends, read back, and the sibling
+            // block's write to the one net lands in between. `coalesced_block_locals`
+            // is order-independent, so both blocks now get the same question.
+            for n in &d.names {
+                let nm = &n.name.name;
+                if !self.coalesced_block_locals.contains(nm) {
+                    continue;
+                }
+                let elem_bounds = self.fixed_elem_bounds(n);
+                let bw = self.decl_bit_width(d, n);
+                if let Err(g) =
+                    self.block_local_definitely_assigned(stmts, nm, elem_bounds, false, bw)
+                {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "block-local `{nm}` shares one flattened net with a \
+                             same-named block-local in another block but is READ before \
+                             it is assigned here — it would observe the other block's \
+                             leftover value, not a fresh variable's default; assign it \
+                             before use, or rename one"
+                        ),
+                    );
+                    self.note_da_gave_up(nm, g);
                 }
             }
         }
