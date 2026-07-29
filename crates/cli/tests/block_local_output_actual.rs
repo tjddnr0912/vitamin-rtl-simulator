@@ -189,9 +189,41 @@ fn output_call_in_case_scrutinee_stays_loud() {
 }
 
 #[test]
-fn input_actual_stays_loud() {
-    // `f(x)`'s formal is INPUT — passing the still-unwritten `x` is a genuine
-    // read-before-write, so the flatten (leftover) diverges from a fresh automatic.
+fn input_actual_of_a_never_written_local_is_supported() {
+    // R17 §3.2 retires this pin's premise. It read `f(x)` with `x` unwritten as a
+    // "genuine read-before-write, so the flatten (leftover) diverges from a fresh
+    // automatic" — but there is no leftover to diverge to: `x` is never written
+    // ANYWHERE in the block, so the flattened static net holds the type default at
+    // every entry, which is exactly what a fresh `automatic` supplies.
+    //
+    // MEASURED, not argued. The `task automatic` twin (iverilog rejects an explicit
+    // `automatic` override, and §6.21 makes an un-keyworded local in one automatic
+    // anyway), called TWICE so a leftover would show:
+    //     int x; $display("entry x=%0d f=%0d", x, f(x));
+    // iverilog 13 → `entry x=0 f=1` twice; vita → identical. The 4-state twin
+    // (`integer`) prints `x=x f=x` twice in both.
+    let (o, ok) = run("module t;\n\
+         function automatic int f (input int a); f = a + 1; endfunction\n\
+         initial begin\n\
+           begin\n\
+             automatic int x;\n\
+             if (f(x) == 5) $display(\"hm\");\n\
+             if (x == 0) $display(\"PASS x=%0d f=%0d\", x, f(x));\n\
+           end\n\
+           $finish;\n\
+         end\n\
+         endmodule");
+    assert!(ok, "{o}");
+    assert!(o.contains("PASS x=0 f=1"), "{o}");
+    assert!(!o.contains("hm"), "{o}");
+}
+
+#[test]
+fn input_actual_stays_loud_when_the_local_is_written_later() {
+    // The companion to the case above, and the reason it is not a blanket accept: as
+    // soon as ANY write to `x` exists in the block, the flattened net can carry that
+    // write into the next entry while a fresh `automatic` cannot. The read at `f(x)`
+    // then genuinely observes a leftover, and stays loud.
     assert!(loud(
         "module t;\n\
          function automatic int f (input int a); f = a + 1; endfunction\n\
@@ -199,6 +231,7 @@ fn input_actual_stays_loud() {
            begin\n\
              automatic int x;\n\
              if (f(x) == 5) $display(\"hm\");\n\
+             x = 3;\n\
              if (x == 3) $display(\"PASS\");\n\
            end\n\
            $finish;\n\

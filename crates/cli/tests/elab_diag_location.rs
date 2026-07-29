@@ -38,6 +38,10 @@ fn run(src: &str) -> String {
 
 /// The line must be the DECLARATION's, not the module's or the file's first line —
 /// otherwise 81 of these are still indistinguishable.
+///
+/// R17: the trailing `x = 1;` is load-bearing. Without a write anywhere in the block
+/// the local is byte-identical to per-entry storage and is now correctly ACCEPTED
+/// (§3.2), so a read-only body no longer produces the diagnostic this test locates.
 #[test]
 fn a_block_local_diagnostic_points_at_its_declaration() {
     let out = run("module t;\n\
@@ -46,6 +50,7 @@ fn a_block_local_diagnostic_points_at_its_declaration() {
            begin\n\
              automatic int x;\n\
              if (x == 0) $display(\"q\");\n\
+             x = 1;\n\
            end\n\
            $finish;\n\
          end\n\
@@ -67,7 +72,7 @@ fn each_source_file_gets_its_own_name_and_local_line() {
             "a.sv",
             "module a;\n\
              initial begin\n\
-               begin automatic int x; if (x == 0) $display(\"q\"); end\n\
+               begin automatic int x; if (x == 0) $display(\"q\"); x = 1; end\n\
                $finish;\n\
              end\n\
              endmodule\n",
@@ -78,7 +83,7 @@ fn each_source_file_gets_its_own_name_and_local_line() {
              \n\
              \n\
              initial begin\n\
-               begin automatic int y; if (y == 1) $display(\"w\"); end\n\
+               begin automatic int y; if (y == 1) $display(\"w\"); y = 2; end\n\
                $finish;\n\
              end\n\
              endmodule\n",

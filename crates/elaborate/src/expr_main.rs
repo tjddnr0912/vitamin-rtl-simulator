@@ -288,6 +288,7 @@ impl Elaborator<'_> {
                             word: None,
                         });
                         self.deferred_hier.push(DeferredHier {
+                            span: self.cur_span,
                             eid,
                             prefix: self.cur_prefix.clone(),
                             path: path.segments.iter().map(|s| s.name.clone()).collect(),

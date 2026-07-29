@@ -46,6 +46,7 @@ impl<'s> Elaborator<'s> {
             ca_delays: std::collections::BTreeMap::new(),
             clocking_events: std::collections::BTreeMap::new(),
             clocking_hold_nets: std::collections::BTreeSet::new(),
+            automatic_local_nets: std::collections::BTreeSet::new(),
             const_param_nets: std::collections::BTreeMap::new(),
             lowering_decl_init: false,
             pkg_vars: std::collections::BTreeMap::new(),
@@ -236,6 +237,34 @@ impl<'s> Elaborator<'s> {
         let location = self.cur_location();
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Error,
+            code,
+            message: msg.to_string(),
+            location,
+            context: Vec::new(),
+            sim_time: None,
+        }));
+    }
+
+    /// R17 §3.3 / §4.2: emit a NOTE anchored at `span` — a follow-on line that
+    /// explains the error just emitted by pointing at a DIFFERENT location.
+    ///
+    /// Every other elaborate diagnostic is anchored at `cur_span`, which for a
+    /// block-local gate is the declaration. That is the right place for "this
+    /// declaration is unsupported", and the wrong place for "…because of the
+    /// construct over there" — which is what the definite-assignment rejections
+    /// actually mean, and why a report could locate 21 diagnostics precisely and
+    /// still not reduce a single one of them to a test case. Carries the same
+    /// `MsgCode` as its error so `-Wno-`/`-Werror=` routing treats the pair as one
+    /// diagnostic. Notes never set `had_error` and never count as errors.
+    pub(crate) fn note_at(&mut self, code: MsgCode, span: ast::Span, msg: &str) {
+        // Past the error cap the parent error was suppressed; a note explaining a
+        // diagnostic that was never printed is noise.
+        if self.error_count > MAX_ELAB_ERRORS {
+            return;
+        }
+        let location = self.span_resolver.map(|r| r.resolve(span.lo, span.hi));
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Note,
             code,
             message: msg.to_string(),
             location,

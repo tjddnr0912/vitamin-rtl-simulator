@@ -705,6 +705,14 @@ struct Elaborator<'s> {
     /// Holding NetIds of clocking INPUTs (`cb.sig`) — read-only; an lvalue write
     /// to one is loud (you cannot drive a clocking input, §14.3).
     clocking_hold_nets: std::collections::BTreeSet<u32>,
+    /// R17: NetIds created by FLATTENING an `automatic` procedural block-local into
+    /// the module namespace. IEEE 1800 §23.9 forbids a hierarchical reference to an
+    /// automatic variable — it has no static address to name — but v1's flatten gives
+    /// it one, so `other.tb.a` silently resolved to the block-local's net and read or
+    /// wrote per-entry storage from outside. Measured: iverilog rejects the same
+    /// program ("Hierarchical reference to automatically allocated item"), vita printed
+    /// the poked value. Elaborate-local (never serialized).
+    automatic_local_nets: std::collections::BTreeSet<u32>,
     /// A2a: NetIds of DESUGARED array parameters (`localparam int RHO[0:4] =
     /// '{…}` — stored as an ordinary variable array) → the source name. Any
     /// write to one (assignment / force / $readmem / SYS-READ dest / task
