@@ -257,6 +257,106 @@ impl Elaborator<'_> {
         }
     }
 
+    /// R20: can the call `cn(args)`, which the hoister does NOT lift, be proven unable to read
+    /// `v` from anywhere the rewrite cannot reach?
+    ///
+    /// The hoisted copy-outs all land before the expression, so anything the surviving call
+    /// reads is read AFTER them. A read inside this expression is repairable (the pre-call
+    /// snapshot substitutes it); a read the expression does not contain is not. Two such places
+    /// are answered here, and the round-2 review found the second one missing after this site
+    /// stopped calling `call_effect`:
+    ///
+    ///   1. the callee's BODY ([`Elaborator::callee_body_cannot_touch`]);
+    ///   2. an OMITTED formal's DEFAULT, which is lowered in the CALLER's scope and so can
+    ///      name `v` while no written-out argument does. `call_effect` had an explicit clause
+    ///      for this (R19); `callee_body_cannot_touch` never looks at `ports[i].default`.
+    ///      Measured: `q = rd() + nxt(5,o)` with `rd(input int x = o)` returned a value
+    ///      inconsistent with vita's own explicit `rd(o)` spelling, at exit 0. It is loud now:
+    ///      the default lives on the callee's port, outside this expression, so no snapshot
+    ///      substitution can reach it.
+    ///
+    /// A THIRD place holds such a read and is NOT answered here: a call the body makes at a
+    /// level the body walk cannot see. `stmt_no_ref_deep` threads its inertness resolver in at
+    /// `UserTaskCall` only, so `expr_no_ref_with`'s `Call` arm (`path_ok(cn) && args.all(..)`)
+    /// never consults it and ONE level of function indirection hides everything below it
+    /// (`f1 -> f0 -> return o` measures `q=12` where the direct `f0` form is loud). That is
+    /// PRE-EXISTING and unchanged by this site: `call_effect` reached the same predicate
+    /// through `call_is_inert`, so the depth limit was already load-bearing here. Recorded in
+    /// ROADMAP §2; closing it means making that expression walker resolver-aware, which is a
+    /// shared-walker change with its own consumers and its own review.
+    fn enclosing_call_cannot_read(&self, cn: &ast::HierPath, args: &[ast::Expr], v: &str) -> bool {
+        // A TWO-segment `Call` is a method on its head, and `callee_body_cannot_touch` answers
+        // `false` for it (no single-segment body to walk) — which stood every such statement
+        // down. `call_is_inert` had an arm for this that did not get carried over, and losing it
+        // was a loud REGRESSION: `q = qq.size() + nxt(5,o)` and `q = ss.len() + nxt(5,o)` both
+        // worked at `8cf4165` and went loud.
+        //
+        // The old arm accepted ANY 2-segment call, which was unsound for a CLASS method — its
+        // body can reach a module net through a hierarchical path (measured at `8cf4165`:
+        // `function int get(); return t.o; endfunction` gave `q=12` where 11 is correct, a
+        // silent-wrong). A BUILT-IN container/string query is different: it has no user body at
+        // all, so the only storage it can read is its receiver (checked here) and its arguments
+        // (walked as `shape` children, hence repairable).
+        //
+        // `container_method_is_pure` alone does NOT select for "built-in" — it is a whitelist of
+        // METHOD NAMES, and a user subroutine may carry any of them. Round 3 measured that a
+        // class method, a child-instance function and a plain module-scope function all named
+        // `size` were admitted and read the POST-call value (`q=12`, iverilog 11) — 30 of the 34
+        // whitelisted names, in three receiver forms. So the RECEIVER is identified positively:
+        // it must resolve to a net that actually IS a container or string. A class handle is an
+        // integral net, and a module instance or the enclosing module's own name is not a net at
+        // all, so all three unsound forms fall through to the conservative branch below.
+        if let [recv, method] = &cn.segments[..] {
+            // Resolved with `dyn_handle` — the SAME resolver the LOWERING uses, which is the
+            // whole point. A first version asked `lookup_net_scoped(&recv.name)` and lost the
+            // routed fixed `string` array: it is registered under a MANGLED net name
+            // (`<name>$sad`, deliberately, so the bare name stays free in the module
+            // namespace), so the declared name resolves to nothing and `string rv[3];
+            // rv.size()` went from working to loud — the classifier/lowering-resolver mismatch
+            // this codebase keeps re-learning. `dyn_handle` consults the side map first with the
+            // shadow-aware walk and falls back to `symbols`, exactly as the lowering does.
+            //
+            // Container/string KINDS only. An `|| n.array_len != 1` clause was tried and removed
+            // as pure liability: vita routes every `x.m()` whose head is a plain unpacked-ARRAY
+            // net to the hierarchical function-call path, so it admitted an arbitrary user body
+            // (measured `q=12` where iverilog says 11, via a generate-scope instance shadowing
+            // an array of the same name) — and it bought nothing, since all nine fixed-array
+            // methods are loud here anyway.
+            // `dyn_handle` covers the heap-backed containers INCLUDING the routed fixed string
+            // array; it does not report a scalar `string`, whose methods (`len`, `substr`, …)
+            // are equally body-less, so that one is resolved plainly.
+            let recv_is_container = self.dyn_handle(&recv.name).is_some()
+                || self
+                    .lookup_net_scoped(&recv.name)
+                    .and_then(|id| self.nets.get(id as usize))
+                    .is_some_and(|n| matches!(n.kind, ir::NetKind::String));
+            // A PACKAGE-scoped call `pk::h(...)` is safe for a different reason, and vita has
+            // already proven it: `inline_pkg_function` admits only a "self-contained,
+            // straight-line" package function — its body may reference nothing but its own
+            // formals/locals and same-package constants, and any body that reads a module net
+            // (or has control flow) is loud there, at PRE and POST alike (measured). That IS
+            // obligation 1 of this predicate, discharged upstream, so re-deriving it here would
+            // only lose ground: without this arm every `pk::h(3) + nxt(5, gv)` went from working
+            // (PRE `q=12`) to loud.
+            if self.pkg_funcs.contains_key(&recv.name) {
+                return recv.name != v && method.name != v;
+            }
+            return recv_is_container
+                && crate::da::container_method_is_pure(&method.name)
+                && recv.name != v
+                && method.name != v;
+        }
+        self.callee_body_cannot_touch(cn, v, Self::CALL_INERT_DEPTH)
+            && self.callee_arg_binds(cn, args).is_some_and(|b| {
+                b.iter().all(|(_, p, a)| {
+                    // A binding that came from the formal's DEFAULT is the caller-scope
+                    // expression of obligation 2; a written-out actual is repairable.
+                    !p.default.as_ref().is_some_and(|d| std::ptr::eq(d, *a))
+                        || crate::da::expr_no_ref_deep(a, v)
+                })
+            })
+    }
+
     /// Is hoisting the copy-outs out of `e` EVAL-ORDER-safe?
     ///
     /// A hoist moves a call's write to before the whole expression is evaluated, while
@@ -346,15 +446,21 @@ impl Elaborator<'_> {
         // A call the hoister does not lift stays in the expression, and its BODY is
         // evaluated there — after every hoisted copy-out. If the body can reach a root a
         // hoisted call writes, that read moved, and no substitution can fix it because it
-        // is not in this expression. `call_effect` answers `Inert` only on a proof that the
-        // callee touches the name nowhere (R16 §3.2), so an inert callee costs nothing
+        // is not in this expression. So an inert callee costs nothing
         // (`q = h(5) + nxt(5,o)` keeps working) while `function rd(); return o;` is caught.
+        //
+        // R20: the question is about what the callee can read WITHOUT the read appearing in
+        // this expression. This asked `call_effect`, whose `Inert` also requires the call's OWN
+        // ACTUALS to be free of `v` — and the actual here IS the nested call that writes `v`
+        // (`q = other(nxt(fd, v));`). So the enclosing call's inertness was denied by the very
+        // hoist being planned, `v` went opaque, and the hazard read as UNREPAIRABLE. Every
+        // user-function argument was false-loud (pre-existing: measured identical at
+        // `8cf4165`; `$signed(nxt(fd,v))` and `tk(nxt(fd,v))` worked, `other(nxt(fd,v))` did
+        // not). The written-out actuals are already walked as `shape` children, so they are
+        // legitimately repairable and must NOT be asked about here.
         if let ast::ExprKind::Call { name, args } = &e.kind {
             for v in st.candidates.clone() {
-                if !matches!(
-                    self.call_effect(name, args, &v),
-                    crate::da::CallEffect::Inert
-                ) {
+                if !self.enclosing_call_cannot_read(name, args, &v) {
                     st.opaque.insert(v);
                 }
             }

@@ -355,6 +355,65 @@ fn call_writes(
     }
 }
 
+/// R20 §3.2: does `st` (or anything nested in it) make ANY call?
+///
+/// Used by the inout copy-in proof to refuse a callee whose body delegates: `callee_body_cannot_touch`
+/// vets the callee it is handed, but its own body walk goes through `expr_no_ref_deep`, whose
+/// `Call` arm does not enter the called function — so `rd2() -> rd() -> return r` slipped one
+/// level past the vet (measured loud at `8cf4165`, silently wrong after). Refusing any nested
+/// call closes it without touching that shared walker (ROADMAP §2 holds the deep fix).
+///
+/// Implemented on [`stmt_may_write_or_observe`] because that walk is already `_`-free-exhaustive
+/// over every `Stmt` and `ExprKind`: [`NO_SUCH_NAME`] cannot be a legal SV identifier, so no
+/// reference test can fire, and `direct: false` disables the lvalue test — leaving "did we find
+/// a call at all" as the only thing the walk can report.
+///
+/// PRECISION, not soundness: the resolver is consulted only for `Call` / `UserTaskCall`, so a
+/// `$system` call, `new`, `randomize` or an array-`with` is not reported as "a call" here. That
+/// is safe by composition — those forms have no user body to hide a read in, and the caller's
+/// other obligations (`expr_no_ref_deep`, `callee_body_cannot_touch`) already answer for them —
+/// but it is why this must not be read as "contains any callable at all".
+/// A name no SystemVerilog identifier can equal (a simple identifier is `[A-Za-z_][\w$]*`, and
+/// every synthesized internal name — `$unp$`, `$blk$`, `$func$`, `$ia_snap$` — is `$`-prefixed
+/// ASCII). Used to run a reference-walker purely for its CALL detection.
+const NO_SUCH_NAME: &str = "\u{0}not-an-identifier";
+
+pub(crate) fn stmt_makes_any_call(st: &ast::Stmt) -> bool {
+    stmt_may_write_or_observe(
+        st,
+        NO_SUCH_NAME,
+        Some(&|_, _, _| CallEffect::Unknown),
+        false,
+    )
+}
+
+/// R20 §3.2: [`stmt_makes_any_call`] for a bare EXPRESSION — a declaration initializer, which
+/// runs before the statements and is not a statement itself.
+pub(crate) fn expr_makes_any_call(e: &ast::Expr) -> bool {
+    expr_call_may_write_ident(e, NO_SUCH_NAME, Some(&|_, _, _| CallEffect::Unknown))
+}
+
+/// R20 §3.2: the expression-level twin of [`stmt_may_observe_via_call`], for a declaration
+/// INITIALIZER (which runs before the statements and is not a statement itself).
+pub(crate) fn expr_may_observe_via_call(e: &ast::Expr, name: &str, out: OutActualWrites) -> bool {
+    expr_call_may_write_ident(e, name, Some(out))
+}
+
+/// R20 §3.2: can `st` OBSERVE `name` through a CALL — its own body, or any call nested in any
+/// of its expressions — ignoring a direct lvalue write of `name`?
+///
+/// The inout copy-in proof needs this and nothing else covers it: `expr_no_ref_deep` is
+/// syntactic (its `Call` arm never enters the callee), and `da_stmt` steps over any statement
+/// `stmt_no_ref` says does not MENTION the name — so a call that reads the flattened net without
+/// naming it in this statement is invisible to both. Routed through the `_`-free-exhaustive
+/// [`stmt_may_write_or_observe`] so no expression position can be missed.
+///
+/// `out` should answer `Inert` only for a call whose body is proven unable to reach `name`;
+/// every other verdict makes this `true` and ends the proof.
+pub(crate) fn stmt_may_observe_via_call(st: &ast::Stmt, name: &str, out: OutActualWrites) -> bool {
+    stmt_may_write_or_observe(st, name, Some(out), false)
+}
+
 /// The recursive worker for [`stmt_never_assigns_ident`] — true if `s` (or any
 /// nested sub-statement) can WRITE `name`. Enumerates EVERY `Stmt` variant (no `_`
 /// catch-all) so a future statement form with a write position is a compile error,
@@ -362,7 +421,31 @@ fn call_writes(
 /// expression position ([`expr_call_may_write_ident`]), an assertion ACTION block, or
 /// a nested block's decl-initializer.
 fn stmt_may_write_ident(s: &ast::Stmt, name: &str, out: Option<OutActualWrites>) -> bool {
+    stmt_may_write_or_observe(s, name, out, true)
+}
+
+/// R20 §3.2: [`stmt_may_write_ident`], but able to ignore a DIRECT lvalue write of `name`.
+///
+/// `direct` is an OPT-IN parameter in the project's sense: passing the literal `true` is
+/// mechanically the walk as it was. `false` answers the different question the inout proof
+/// needs — "can this statement OBSERVE `name` through a CALL?" — where a plain `r = fd;` is the
+/// write being proven, not a hazard. The value of routing it through this walker rather than a
+/// new one is that this one is already `_`-free-exhaustive over every `Stmt` and `ExprKind`, and
+/// already consults the resolver for every call it finds; the syntactic walkers the proof used
+/// before (`expr_no_ref_deep`, and `da_stmt`'s `stmt_no_ref` fast path) do NOT enter a callee's
+/// body, which is exactly how `int save = rd();` — with `function rd(); return r; endfunction` —
+/// observed the copy-in the proof had declared dead.
+fn stmt_may_write_or_observe(
+    s: &ast::Stmt,
+    name: &str,
+    out: Option<OutActualWrites>,
+    direct: bool,
+) -> bool {
     use ast::Stmt::*;
+    let lvalue_root_is = |lv: &ast::Lvalue, n: &str| direct && lvalue_root_is(lv, n);
+    let stmt_may_write_ident = |s: &ast::Stmt, n: &str, o: Option<OutActualWrites>| {
+        stmt_may_write_or_observe(s, n, o, direct)
+    };
     match s {
         // Direct lvalue write rooted at `name`, PLUS a copy-back call hidden in the
         // rhs / lvalue-index / delay / intra-event.

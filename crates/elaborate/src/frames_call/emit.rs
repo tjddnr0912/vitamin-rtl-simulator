@@ -35,11 +35,18 @@ impl Elaborator<'_> {
                      cases are: a CONTINUOUSLY re-evaluated expression (`assign`, `force`, a \
                      `wait` condition) — the copy-out cannot re-fire on every change; an \
                      intra-assignment delay (`x = #1 {fname}(...)`); a `min:typ:max` or a \
-                     constraint/`with` expression; and an evaluation-order case the hoist \
-                     cannot preserve — an output actual read to the LEFT of the call when the \
-                     actual is not a plain bit-vector net, or when two calls in the same \
-                     expression write it. Assign the call to a temporary first \
-                     (`t = {fname}(...);`) and use `t`."
+                     constraint/`with` expression; any position inside a function or task body \
+                     lowered as a CALL FRAME that needs the copy-out HOISTED out of an \
+                     expression (an assignment rhs, a condition, a `case` scrutinee) — a frame \
+                     body's writes have to stay frame-local while the copy-out targets the \
+                     caller's net, though a BARE call statement there does work, and so does \
+                     the same expression in a module process; and an evaluation-order case the \
+                     hoist cannot preserve — \
+                     an output actual read to the LEFT of the call when the actual is not a \
+                     plain bit-vector net, when two calls in the same expression write it, or \
+                     when a call the hoist leaves in place could read it (its body, or an \
+                     OMITTED formal's default, or a method on a non-container receiver). \
+                     Assign the call to a temporary first (`t = {fname}(...);`) and use `t`."
                 ),
             );
             return self.placeholder_expr();
@@ -70,27 +77,48 @@ impl Elaborator<'_> {
                     // positions. A user reading it moved the call out to a module process
                     // for nothing, which is the misdiagnosis class this report is about.
                     //
-                    // What is left is narrow and specific, so say it: the caller array is
-                    // snapshotted into the callee's formal slot by a marker emitted just
-                    // before the expression, and there is one slot per formal. Two calls
-                    // to the SAME function in one expression would therefore both see the
-                    // last snapshot. Outside a frame body those are split across temps
-                    // instead; inside one there is nowhere to put a temp.
+                    // R20 §4: it had gone stale again, and in BOTH directions — it named a
+                    // `?:` arm as unsupported when r18 made it work, and never mentioned any
+                    // of the positions that actually remain. So the round-20 reporter, whose
+                    // call sat in a supported position (a comparison) and was loud for an
+                    // entirely different reason (the §3.1 crosstalk regression), read three
+                    // listed causes and found none of them present.
+                    //
+                    // Both lists below are measured, not inferred — a 25-position matrix
+                    // against iverilog, re-run with a callee that is genuinely FRAMED. That
+                    // last part matters: a trivial `function int cnt(input byte b[]); return
+                    // b.size(); endfunction` is INLINED, so none of this machinery applies to
+                    // it and a matrix built on one measures nothing. The first draft of this
+                    // message was written from such a matrix and carried a stale clause.
+                    //
+                    // Dropped from the list: "two calls to `{fname}` in ONE expression inside a
+                    // function/task body". Measured supported and CORRECT — `h = {b2h(d),
+                    // b2h(e)}` yields `6162` and `h = {b2h(d), b2h(d)}` yields `6161`, both
+                    // matching iverilog, because each call is hoisted to its own temp before
+                    // the expression and the single slot is reused in sequence, not shared.
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!(
-                            "function `{fname}`: a dynamic-array formal `{}` is supported \
-                             where the caller array can be snapshotted into the formal — a \
-                             blocking-assign rhs, a `return` value, or an unconditionally \
+                            "function `{fname}`: a dynamic-array formal `{}` is passed by \
+                             snapshotting the caller array into the formal's slot, with a \
+                             marker emitted just before the enclosing statement — so the call \
+                             has to sit where that marker can go: a blocking- or \
+                             nonblocking-assign rhs, a `return` value, or an unconditionally \
                              evaluated operand of one (concat, arithmetic, comparison, \
-                             system-task argument). It is not supported here, because the \
-                             snapshot would be taken at the wrong time or into a slot \
-                             already in use: a conditionally evaluated operand (a `?:` arm, \
-                             the right side of `&&`/`||`), a RECURSIVE call inside \
-                             `{fname}`'s own body, or two calls to `{fname}` in ONE \
-                             expression inside a function/task body — the last two would \
-                             share the single formal slot. Assign the call to a variable \
-                             first (`x = {fname}(arr);`)",
+                             system-TASK argument) — and a `?:` arm, but only when \
+                             `{fname}` is side-effect free, because a conditionally evaluated \
+                             call cannot be hoisted without performing its effect on the arm \
+                             that was not taken. It is not supported here. The \
+                             remaining positions are: the right side of `&&`/`||`; a `while` \
+                             or `for` CONDITION (re-evaluated every iteration, so one snapshot \
+                             cannot serve it); a delay expression; an argument of another \
+                             call, including a system FUNCTION such as `$sformatf`; the BASE \
+                             of a select (`{fname}(arr)[7:0]` — a plain concat part is fine); \
+                             an lvalue index; a `case` scrutinee; a `repeat` count; a cast or \
+                             replication operand; and a RECURSIVE call inside `{fname}`'s own \
+                             body when it is not the whole right-hand side, which would need a \
+                             second snapshot slot while the first is still live. Assign the \
+                             call to a variable first (`x = {fname}(arr);`) and use `x`",
                             p.name.name
                         ),
                     );

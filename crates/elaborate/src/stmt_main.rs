@@ -981,21 +981,39 @@ impl Elaborator<'_> {
                     // value-returning out-formal call (throw the value away, so the call
                     // is a statement) was itself rejected, which left the TB no way to
                     // express the write at all.
-                    if let Some((fid, func)) = self.inout_call_target(&call_expr) {
-                        let (rw, rsig) = self
-                            .func_metas
-                            .get(fid as usize)
-                            .map(|m| (m.ret_width, m.ret_signed))
-                            .unwrap_or((32, true));
-                        let (tmp_net, _) = self.fresh_ret_temp(&func, rw, rsig);
-                        self.emit_frame_func_out_call(
-                            b,
-                            fid,
-                            &func,
-                            args,
-                            whole_net_lvalue(tmp_net),
-                        );
-                        return;
+                    // NOTE: a copy-out here CAN trip the engine's frame-local assertion (rc=101,
+                    // `frame_eval.rs`). An `in_frame_body()` stand-down was tried and REVERTED:
+                    // it is far wider than the panic, and it made 10 of 12 measured frame-body
+                    // shapes loud that PRE answered CORRECTLY (iverilog-oracled), including the
+                    // round-20 report's own `.rsp` walker moved into a `task automatic`.
+                    //
+                    // The panic's real condition is NOT YET NAMED, and deliberately not guessed
+                    // at here. Measured: it fires in a `task automatic tk(output int r)` whether
+                    // or not a statement precedes the call, and does NOT fire in a task with no
+                    // output formal whose body is a nested `begin … end` carrying declarations.
+                    // (An earlier version of this comment claimed a single preceding statement
+                    // was enough to avoid it — measured false, and it was load-bearing
+                    // justification, so it is corrected rather than dropped.)
+                    //
+                    // Pre-existing and byte-identical at `8cf4165`; ROADMAP §2 carries the
+                    // measured shapes for a slice that can name the condition.
+                    {
+                        if let Some((fid, func)) = self.inout_call_target(&call_expr) {
+                            let (rw, rsig) = self
+                                .func_metas
+                                .get(fid as usize)
+                                .map(|m| (m.ret_width, m.ret_signed))
+                                .unwrap_or((32, true));
+                            let (tmp_net, _) = self.fresh_ret_temp(&func, rw, rsig);
+                            self.emit_frame_func_out_call(
+                                b,
+                                fid,
+                                &func,
+                                args,
+                                whole_net_lvalue(tmp_net),
+                            );
+                            return;
+                        }
                     }
                     let call = self.lower_expr(&call_expr);
                     self.emit_discarded_call(b, call);

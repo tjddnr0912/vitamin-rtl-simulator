@@ -13,6 +13,7 @@ use super::*;
 
 mod gate;
 mod hoist;
+mod proofs;
 
 /// Collect every NESTED `begin…end`/`fork` block (i.e. not the top-level body
 /// block) together with the names it declares as locals. `is_top` is true only for

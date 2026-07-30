@@ -467,13 +467,20 @@ impl Elaborator<'_> {
         s: &ast::Stmt,
     ) -> Option<ast::Stmt> {
         use ast::Stmt as S;
-        // See `hoist_stmt_general`: a copy-out `Terminator::Call` inside a frame body writes
-        // a MODULE net from a context whose writes must be frame-local. The narrow arms hit
-        // the same wall — pre-existing, and it surfaced as an engine panic rather than a
-        // diagnostic. Stand down so the call reports its own accurate message.
-        if self.in_frame_body() && !self.inout_func_names.is_empty() {
-            return None;
-        }
+        // NOTE on the frame-body stand-down (see `hoist_stmt_general`): a copy-out
+        // `Terminator::Call` inside a frame body writes a MODULE net from a context whose
+        // writes must be frame-local, so the two INOUT arms below stand down there (each
+        // carries `!self.in_frame_body()`) and the call reports its own accurate message.
+        //
+        // It is deliberately NOT a function-wide early return. It was one, gated on
+        // `!inout_func_names.is_empty()`, and that gate is a MODULE-GLOBAL property — "does
+        // this design declare any output/inout-formal function" — while the arms it disabled
+        // include the DYN-FORMAL ones (below), which have nothing to do with output formals.
+        // So declaring one such function anywhere in the module, even a function that is
+        // never called, silently stopped every dyn-array-formal hoist inside a frame body:
+        // `if (b2h(d) != "61")` went from PASS to E3009 because an unrelated `f` existed.
+        // A stand-down for one arm's hazard belongs in that arm's guard, where the arm's own
+        // `expr_has_inout_call` already says the hazard is present.
         match s {
             S::If {
                 cond,
@@ -481,6 +488,7 @@ impl Elaborator<'_> {
                 else_s,
                 span,
             } if self.expr_has_inout_call(cond)
+                && !self.in_frame_body()
                 && !self.has_unhoistable_inout_call(cond)
                 && self.order_clean(cond) =>
             {
@@ -501,6 +509,7 @@ impl Elaborator<'_> {
             } if delay.is_none()
                 && event.is_none()
                 && self.expr_has_inout_call(rhs)
+                && !self.in_frame_body()
                 && !self.has_unhoistable_inout_call(rhs)
                 && self.order_clean(rhs) =>
             {
@@ -516,12 +525,23 @@ impl Elaborator<'_> {
             // §4.5.179: the same one-shot hoist for a BURIED framed dyn-formal call. These
             // arms are reached only when the inout arms above did NOT match (their guard
             // was false), so a design with both kinds still hoists each across passes.
+            //
+            // R20: each carries `!self.frame_fn_lowering`, matching the `S::Return` arm which
+            // has had it all along. The hoist emits `__t = f(arr)` into a MODULE net temp
+            // (`fresh_ret_temp`), and a frame FUNCTION body may not write one — so the temp
+            // tripped the frame-body validator and the user got "body uses an assignment to a
+            // net outside the function", naming a temp they never wrote, instead of the
+            // dyn-formal message that says what is actually unsupported. No capability is
+            // lost: every such position is loud in a frame function body either way (measured
+            // PRE and POST). A frame TASK body is NOT gated — a dyn-formal hoist there works
+            // and is exactly what §3.1 restored (`if (b2h(d) != "61")` inside a task).
             S::If {
                 cond,
                 then_s,
                 else_s,
                 span,
             } if self.expr_has_dyn_formal_call(cond)
+                && !self.frame_fn_lowering
                 && !self.has_unhoistable_dyn_formal_call(cond) =>
             {
                 let cond2 = self.hoist_dyn_formal_calls(b, cond);
@@ -541,6 +561,7 @@ impl Elaborator<'_> {
             } if delay.is_none()
                 && event.is_none()
                 && self.expr_has_dyn_formal_call(rhs)
+                && !self.frame_fn_lowering
                 // EXCLUDE a rhs that IS the direct call — §4.5.177 handles `x = f(arr)`
                 // itself (and re-hoisting it would loop). Only a NESTED call is hoisted.
                 && self.dyn_formal_call_target(rhs).is_none()
@@ -570,6 +591,7 @@ impl Elaborator<'_> {
             } if delay.is_none()
                 && event.is_none()
                 && self.expr_has_dyn_formal_call(rhs)
+                && !self.frame_fn_lowering
                 && !self.has_unhoistable_dyn_formal_call(rhs) =>
             {
                 let rhs2 = self.hoist_dyn_formal_calls(b, rhs);
@@ -603,6 +625,7 @@ impl Elaborator<'_> {
             // unconditionally → hoist a framed dyn-formal call out of any of them.
             S::SysTaskCall { name, args, span }
                 if args.iter().any(|a| self.expr_has_dyn_formal_call(a))
+                    && !self.frame_fn_lowering
                     && !args.iter().any(|a| self.has_unhoistable_dyn_formal_call(a)) =>
             {
                 let args2 = args

@@ -78,8 +78,31 @@ impl Elaborator<'_> {
         callee: &ast::HierPath,
         args: &'a [ast::Expr],
     ) -> Option<Vec<(ast::PortDir, &'a ast::Expr)>> {
+        Some(
+            self.callee_arg_binds(callee, args)?
+                .into_iter()
+                .map(|(d, _, a)| (d, a))
+                .collect(),
+        )
+    }
+
+    /// R20 §3.2: [`Self::callee_arg_dirs`] keeping the whole FORMAL, not just its
+    /// direction. The inout proof needs the formal's NAME to ask what the callee's body
+    /// does to it, so the binding walk — the one place the IEEE §13.5.4 mapping lives —
+    /// yields the port and `callee_arg_dirs` became a projection of it. One mapping, two
+    /// views, so a future rule cannot be applied to one and missed by the other.
+    ///
+    /// The EFFECTIVE direction is carried alongside the port rather than read off it: a
+    /// valueless `.formal()` binds the formal's DEFAULT, an expression in the caller's own
+    /// scope, and that is an Input READ whatever the formal is declared to be.
+    pub(crate) fn callee_arg_binds<'a>(
+        &'a self,
+        callee: &ast::HierPath,
+        args: &'a [ast::Expr],
+    ) -> Option<Vec<(ast::PortDir, &'a ast::TfPort, &'a ast::Expr)>> {
         let ports = self.callee_ports(callee)?;
-        let mut out: Vec<(ast::PortDir, &'a ast::Expr)> = Vec::with_capacity(ports.len());
+        let mut out: Vec<(ast::PortDir, &'a ast::TfPort, &'a ast::Expr)> =
+            Vec::with_capacity(ports.len());
         let mut bound = vec![false; ports.len()];
         let mut pos = 0usize;
         let mut seen_named = false;
@@ -91,20 +114,24 @@ impl Elaborator<'_> {
                     return None;
                 }
                 match value {
-                    Some(v) => out.push((ports[idx].dir, v)),
-                    None => out.push((ast::PortDir::Input, ports[idx].default.as_ref()?)),
+                    Some(v) => out.push((ports[idx].dir, &ports[idx], v)),
+                    None => out.push((
+                        ast::PortDir::Input,
+                        &ports[idx],
+                        ports[idx].default.as_ref()?,
+                    )),
                 }
             } else {
                 if seen_named || pos >= ports.len() || std::mem::replace(&mut bound[pos], true) {
                     return None;
                 }
-                out.push((ports[pos].dir, a));
+                out.push((ports[pos].dir, &ports[pos], a));
                 pos += 1;
             }
         }
         for (p, b) in ports.iter().zip(bound) {
             if !b {
-                out.push((ast::PortDir::Input, p.default.as_ref()?));
+                out.push((ast::PortDir::Input, p, p.default.as_ref()?));
             }
         }
         Some(out)
@@ -127,18 +154,22 @@ impl Elaborator<'_> {
     ///   * Named args (can't map positionally) or an unresolvable callee → `false`.
     ///
     /// The verdict is `writes && !reads`: a genuine output-write with no shadow read.
+    ///
+    /// R20 §3.2 lifts the INOUT clause above, but only on a PROOF (see
+    /// [`Self::inout_copy_in_is_dead`]) — the copy-in still reads, it is just no longer
+    /// OBSERVABLE when the callee overwrites the whole formal before looking at it.
     fn call_out_actual_writes(
         &self,
         callee: &ast::HierPath,
         args: &[ast::Expr],
         name: &str,
     ) -> bool {
-        let Some(binds) = self.callee_arg_dirs(callee, args) else {
+        let Some(binds) = self.callee_arg_binds(callee, args) else {
             return false;
         };
         let mut writes = false;
         let mut reads = false;
-        for (dir, arg) in binds {
+        for (dir, port, arg) in binds {
             // A clean whole-var OUTPUT actual `name` at an OUTPUT formal — copy-out only.
             // R18 §3.3: `name` may be a MEMBER NET of an unpacked struct
             // (`$unp$rm$count`) whose actual still names the record (`rm`) — the SoA
@@ -148,7 +179,13 @@ impl Elaborator<'_> {
                     if p.segments.len() == 1 && p.segments[0].name == name)
                 || actual_is_record_of(arg, name);
             let clean_output_whole = matches!(dir, ast::PortDir::Output) && whole_var;
-            if clean_output_whole {
+            // R20 §3.2: an INOUT whole-var actual whose copy-in the callee cannot observe.
+            let dead_inout_whole = matches!(dir, ast::PortDir::Inout)
+                && whole_var
+                && self
+                    .callee_side_member_name(arg, &port.name.name, name)
+                    .is_some_and(|f| self.inout_copy_in_is_dead(callee, &f));
+            if clean_output_whole || dead_inout_whole {
                 writes = true;
             } else if whole_var || !expr_no_ref(arg, name) {
                 // Any OTHER reference to `name` (input actual, inout copy-in, select
@@ -193,32 +230,15 @@ impl Elaborator<'_> {
         automatic_local_definitely_assigned(
             stmts,
             name,
-            &|cn, args, nm| self.call_effect(cn, args, nm),
+            &crate::da::DaCtx {
+                out_writes: &|cn, args, nm| self.call_effect(cn, args, nm),
+                suspends: &|cn| self.call_may_suspend(cn, Self::CALL_INERT_DEPTH),
+                loop_once: &|st| self.loop_runs_once(st),
+                sole: sole_writer,
+            },
             elem_bounds,
-            sole_writer,
-            &|cn| self.call_may_suspend(cn, Self::CALL_INERT_DEPTH),
             bit_width,
         )
-    }
-
-    /// R18 §3.2: the flattened bit WIDTH of a block-local declarator, for the
-    /// select-coverage rule — `Some(w)` only for a plain packed scalar/vector with no
-    /// unpacked dimensions, where "bit `i` of `name`" is unambiguous. A struct is one
-    /// of these after the parser's desugar (its members are constant part-selects into
-    /// the flat vector), which is exactly the shape the rule exists for.
-    ///
-    /// `None` disables the rule, so an unpacked array (whose select indices are
-    /// ELEMENTS, covered by `elem_bounds` instead) and anything absurdly wide keep the
-    /// previous behaviour.
-    pub(crate) fn decl_bit_width(&mut self, d: &ast::NetVarDecl, n: &ast::DeclName) -> Option<u32> {
-        /// A local wider than this cannot plausibly be covered by literal selects, and
-        /// the bit set would be the only unbounded thing in the walk.
-        const MAX_COVERED_BITS: u32 = 4096;
-        if !n.unpacked.is_empty() {
-            return None;
-        }
-        let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-        (w > 0 && w <= MAX_COVERED_BITS).then_some(w)
     }
 
     /// R17 §3.3 / §4.2: the follow-on `note:` naming WHERE the definite-assignment
@@ -279,7 +299,7 @@ impl Elaborator<'_> {
     /// up. A cycle (`a` calls `b` calls `a`) is bounded by this counter rather than a
     /// visited-set, which keeps the walk `&self`-pure; the budget only ever costs
     /// precision (an exhausted budget answers "may touch" and the local stays loud).
-    const CALL_INERT_DEPTH: u32 = 8;
+    pub(crate) const CALL_INERT_DEPTH: u32 = 8;
 
     /// R16 §3.2: the three-way verdict [`crate::da::CallEffect`] for one call, and the
     /// resolver threaded into the definite-assignment walk.
@@ -434,7 +454,12 @@ impl Elaborator<'_> {
     /// Nothing about the ACTUALS is claimed here — that is each caller's own
     /// obligation, and the two callers state different ones (ref-free actuals for
     /// `Inert`, `input`-only actuals for `Reads`).
-    fn callee_body_cannot_touch(&self, callee: &ast::HierPath, name: &str, depth: u32) -> bool {
+    pub(crate) fn callee_body_cannot_touch(
+        &self,
+        callee: &ast::HierPath,
+        name: &str,
+        depth: u32,
+    ) -> bool {
         if callee.segments.len() != 1 || depth == 0 {
             return false;
         }

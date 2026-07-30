@@ -3,10 +3,12 @@
 use super::*;
 
 mod expr_effect;
+mod loops;
 mod reads;
 mod writes;
 
 pub(crate) use expr_effect::*;
+pub(crate) use loops::*;
 pub(crate) use reads::*;
 pub(crate) use writes::*;
 
@@ -31,6 +33,36 @@ pub(crate) type OutActualWrites<'a> = &'a dyn Fn(&ast::HierPath, &[ast::Expr], &
 /// on the REJECT side (a shared flattened net plus a suspend ⇒ loud), so an
 /// unresolvable callee must be assumed to suspend.
 pub(crate) type CallSuspends<'a> = &'a dyn Fn(&ast::HierPath) -> bool;
+
+/// R20 §3.3: "does this LOOP statement provably execute its body at least once?"
+///
+/// A loop cannot normally carry its body's assignment out, because it may run zero
+/// times — so `for (int j = 0; j < 3; j++) fill(cur);` left `cur` unwritten for the
+/// walk and the read after the loop was a read-before-write. The trip count is a
+/// CONSTANT question, and answering it needs the Elaborator's parameter scope
+/// (`const_eval_in_scope`), which `da` has no view of — the same reason
+/// [`OutActualWrites`] and [`CallSuspends`] are closures.
+///
+/// POLARITY: this is read on the ACCEPT side (a `true` lets the walk claim the local
+/// assigned), so every unknown must answer `false`. Passing a closure that always
+/// answers `false` is mechanically the pre-R20 walk.
+pub(crate) type LoopRunsOnce<'a> = &'a dyn Fn(&ast::Stmt) -> bool;
+
+/// R20: the resolvers and flags the definite-assignment walk carries unchanged from top to
+/// bottom, bundled so adding one does not re-thread every recursive call (and does not push
+/// the walk past clippy's argument limit, which is the same warning about the same thing).
+#[derive(Clone, Copy)]
+pub(crate) struct DaCtx<'a> {
+    /// What a CALL does to the local — see [`OutActualWrites`].
+    pub(crate) out_writes: OutActualWrites<'a>,
+    /// Can enabling a task let time advance? — see [`CallSuspends`].
+    pub(crate) suspends: CallSuspends<'a>,
+    /// Does a loop provably run its body once? — see [`LoopRunsOnce`].
+    pub(crate) loop_once: LoopRunsOnce<'a>,
+    /// Is this block the ONLY writer of the flattened net? `false` when a same-named
+    /// block-local in another block shares it, which is what makes a suspend dangerous.
+    pub(crate) sole: bool,
+}
 
 /// R16 §3.2: what a CALL does to the local `name`.
 ///
@@ -255,14 +287,7 @@ pub(crate) fn body_advances_time(body: &ast::Stmt, call_suspends: CallSuspends<'
 /// OUTPUT actual is `name` as a definite ASSIGNMENT when the call is
 /// unconditionally evaluated (a bare call statement, or the whole cond / scrutinee
 /// of an `if`/`while`/`case`, incl. a `!`/paren wrapper).
-pub(crate) fn da_stmt(
-    st: &ast::Stmt,
-    assigned: bool,
-    name: &str,
-    out_writes: OutActualWrites,
-    sole: bool,
-    suspends: CallSuspends,
-) -> DaResult {
+pub(crate) fn da_stmt(st: &ast::Stmt, assigned: bool, name: &str, ctx: &DaCtx) -> DaResult {
     use ast::Stmt as S;
     // R17: does a statement that lets TIME ADVANCE break the flatten here? Only when
     // the net is SHARED with a same-named block-local in another block (`sole` false):
@@ -281,7 +306,7 @@ pub(crate) fn da_stmt(
     // writes the same one net, and the suspend is exactly the moment it gets to. See
     // the entry loop, which used to return early on `assigned` and so never reached
     // this guard at all.
-    if !sole && stmt_advances_time(st, suspends) {
+    if !ctx.sole && stmt_advances_time(st, ctx.suspends) {
         return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
     }
     // R17 §3.3: the give-up for "this expression reads `name` and nothing has written
@@ -329,7 +354,11 @@ pub(crate) fn da_stmt(
             // in that the timed one was never written.
             if !assigned {
                 if let Some(d) = delay {
-                    if let Some(e) = d.values.iter().find(|e| expr_reads(e, name, out_writes)) {
+                    if let Some(e) = d
+                        .values
+                        .iter()
+                        .find(|e| expr_reads(e, name, ctx.out_writes))
+                    {
                         return Err(read(e));
                     }
                 }
@@ -344,7 +373,7 @@ pub(crate) fn da_stmt(
                 }
             }
             // RHS is evaluated first: reading `name` here while unassigned is unsafe.
-            if !assigned && expr_reads(rhs, name, out_writes) {
+            if !assigned && expr_reads(rhs, name, ctx.out_writes) {
                 return Err(read(rhs));
             }
             // R19 §3.1: …and by the same token, an output-actual call in the rhs has
@@ -357,8 +386,8 @@ pub(crate) fn da_stmt(
             // Claimed only when the LVALUE cannot itself reference `name` — a `name[i] =`
             // base or an `other[name] =` index is a read whose order against the rhs is
             // not fixed, and a whole-var `name = …` lvalue is handled right below anyway.
-            let assigned =
-                assigned || (lvalue_no_ref(lhs, name) && expr_out_writes(rhs, name, out_writes));
+            let assigned = assigned
+                || (lvalue_no_ref(lhs, name) && expr_out_writes(rhs, name, ctx.out_writes));
             // A clean WHOLE-var write (`name = …`) makes it definitely assigned.
             if let ast::Lvalue::Ident(p) = lhs {
                 if p.segments.len() == 1 && p.segments[0].name == name {
@@ -391,21 +420,21 @@ pub(crate) fn da_stmt(
             // evaluated unconditionally and WRITES `name` before either branch — not a
             // read-before-write. `after` is then true entering both branches AND after
             // the `if` (the cond ran on every path).
-            let after = assigned || expr_out_writes(cond, name, out_writes);
-            if !after && expr_reads(cond, name, out_writes) {
+            let after = assigned || expr_out_writes(cond, name, ctx.out_writes);
+            if !after && expr_reads(cond, name, ctx.out_writes) {
                 return Err(read(cond));
             }
             // R19 §3.1: a branch is entered only for a particular VALUE of the cond, and
             // that value can imply an operand ran which `after` cannot claim: `a && f(r)`
             // is true only when BOTH ran, `a || f(r)` false only when both ran. So the
             // taken branch may know `name` is written where the join does not.
-            let in_then = after || expr_writes_when(cond, name, out_writes, true);
-            let in_else = after || expr_writes_when(cond, name, out_writes, false);
-            let a_then = da_stmt(then_s, in_then, name, out_writes, sole, suspends)?;
+            let in_then = after || expr_writes_when(cond, name, ctx.out_writes, true);
+            let in_else = after || expr_writes_when(cond, name, ctx.out_writes, false);
+            let a_then = da_stmt(then_s, in_then, name, ctx)?;
             // R16 §3.1: an absent `else` is an empty arm that FALLS THROUGH with the
             // entry state — it is not a jump, so it always participates in the merge.
             let a_else = match else_s {
-                Some(e) => da_stmt(e, in_else, name, out_writes, sole, suspends)?,
+                Some(e) => da_stmt(e, in_else, name, ctx)?,
                 // The join state is `after`, NOT `in_else`: an absent `else` reaches the
                 // join, and what the join may assume is what EVERY path establishes.
                 None => DaOut::Falls(after),
@@ -418,7 +447,7 @@ pub(crate) fn da_stmt(
             for dd in decls {
                 for nn in &dd.names {
                     if let Some(e) = &nn.init {
-                        if !assigned && expr_reads(e, name, out_writes) {
+                        if !assigned && expr_reads(e, name, ctx.out_writes) {
                             return Err(read(e));
                         }
                     }
@@ -426,7 +455,7 @@ pub(crate) fn da_stmt(
             }
             let mut a = assigned;
             for s in stmts {
-                match da_stmt(s, a, name, out_writes, sole, suspends)? {
+                match da_stmt(s, a, name, ctx)? {
                     DaOut::Falls(next) => a = next,
                     // R16 §3.1: the rest of this block is UNREACHABLE — a jump has
                     // already left it. Stop rather than keep walking statements that
@@ -461,8 +490,8 @@ pub(crate) fn da_stmt(
         } => {
             // BL4: the scrutinee is evaluated unconditionally, so a whole-scrutinee
             // output-actual call WRITES `name` before the arms and after the case.
-            let after = assigned || expr_out_writes(scrutinee, name, out_writes);
-            if !after && expr_reads(scrutinee, name, out_writes) {
+            let after = assigned || expr_out_writes(scrutinee, name, ctx.out_writes);
+            if !after && expr_reads(scrutinee, name, ctx.out_writes) {
                 return Err(read(scrutinee));
             }
             // R16 §3.1: arms merge with the same rule as `if` — an arm that jumps
@@ -473,7 +502,8 @@ pub(crate) fn da_stmt(
                 let body = match it {
                     ast::CaseItem::Match { labels, body, .. } => {
                         if !after {
-                            if let Some(l) = labels.iter().find(|l| expr_reads(l, name, out_writes))
+                            if let Some(l) =
+                                labels.iter().find(|l| expr_reads(l, name, ctx.out_writes))
                             {
                                 return Err(read(l));
                             }
@@ -485,7 +515,7 @@ pub(crate) fn da_stmt(
                         body
                     }
                 };
-                let arm = da_stmt(body, after, name, out_writes, sole, suspends)?;
+                let arm = da_stmt(body, after, name, ctx)?;
                 all = Some(match all {
                     Some(acc) => acc.merge(arm),
                     None => arm,
@@ -507,9 +537,9 @@ pub(crate) fn da_stmt(
             body,
             ..
         } => {
-            let a0 = da_stmt(init, assigned, name, out_writes, sole, suspends)?.state();
-            let a0 = a0 || expr_out_writes(cond, name, out_writes);
-            if !a0 && expr_reads(cond, name, out_writes) {
+            let a0 = da_stmt(init, assigned, name, ctx)?.state();
+            let a0 = a0 || expr_out_writes(cond, name, ctx.out_writes);
+            if !a0 && expr_reads(cond, name, ctx.out_writes) {
                 return Err(read(cond));
             }
             // The FIRST iteration enters with `a0` (the binding read-before-write
@@ -518,20 +548,25 @@ pub(crate) fn da_stmt(
             // MORE assigned than the first.
             // R19 §3.1: the body and the step run only when the cond was TRUE (see the
             // `If` arm) — the `.rsp`-walker idiom `for (…; n < lim && next(fd, r); …)`.
-            let in_body = a0 || expr_writes_when(cond, name, out_writes, true);
-            da_stmt(body, in_body, name, out_writes, sole, suspends)?;
-            da_stmt(step, in_body, name, out_writes, sole, suspends)?;
-            // A loop cannot newly guarantee assignment (may run 0 times), and it always
-            // FALLS THROUGH for this analysis — a `break` inside its body targets THIS
-            // loop, so it lands right here rather than skipping what follows.
-            Ok(DaOut::Falls(a0))
+            let in_body = a0 || expr_writes_when(cond, name, ctx.out_writes, true);
+            let body_out = da_stmt(body, in_body, name, ctx)?;
+            da_stmt(step, in_body, name, ctx)?;
+            // A loop always FALLS THROUGH for this analysis — a `break` inside its body
+            // targets THIS loop, so it lands right here rather than skipping what follows.
+            //
+            // R20 §3.3: it CAN newly guarantee assignment, when the trip count proves the
+            // body ran and nothing could jump past the write — `for (int j = 0; j < 3;
+            // j++) fill(cur);` writes `cur` before the `cur.size()` after the loop.
+            Ok(DaOut::Falls(
+                a0 || loop_body_assigns(st, body, body_out, ctx.loop_once),
+            ))
         }
         S::While { cond, body, .. } => {
             // BL4: a `while` cond is evaluated at least once (unconditionally) — a
             // whole-cond output-actual call there WRITES `name` before the body and
             // after the loop.
-            let after = assigned || expr_out_writes(cond, name, out_writes);
-            if !after && expr_reads(cond, name, out_writes) {
+            let after = assigned || expr_out_writes(cond, name, ctx.out_writes);
+            if !after && expr_reads(cond, name, ctx.out_writes) {
                 return Err(read(cond));
             }
             // R19 §3.1: the BODY runs only when the cond is TRUE, and `a && next(fd, r)`
@@ -540,28 +575,34 @@ pub(crate) fn da_stmt(
             //   `while (n < sweep_limit && rsp_next(fd, r) == 1) begin … r … end`
             // The loop EXIT keeps `after`, because a FALSE cond may have short-circuited
             // the call away.
-            let in_body = after || expr_writes_when(cond, name, out_writes, true);
-            da_stmt(body, in_body, name, out_writes, sole, suspends)?;
-            Ok(DaOut::Falls(after))
+            let in_body = after || expr_writes_when(cond, name, ctx.out_writes, true);
+            let body_out = da_stmt(body, in_body, name, ctx)?;
+            Ok(DaOut::Falls(
+                after || loop_body_assigns(st, body, body_out, ctx.loop_once),
+            ))
         }
         S::Repeat { count, body, .. } => {
             // The count is evaluated exactly once, before the first iteration.
-            let assigned = assigned || expr_out_writes(count, name, out_writes);
-            if !assigned && expr_reads(count, name, out_writes) {
+            let assigned = assigned || expr_out_writes(count, name, ctx.out_writes);
+            if !assigned && expr_reads(count, name, ctx.out_writes) {
                 return Err(read(count));
             }
-            da_stmt(body, assigned, name, out_writes, sole, suspends)?;
-            Ok(DaOut::Falls(assigned))
+            let body_out = da_stmt(body, assigned, name, ctx)?;
+            Ok(DaOut::Falls(
+                assigned || loop_body_assigns(st, body, body_out, ctx.loop_once),
+            ))
         }
         S::Forever { body, .. } => {
-            da_stmt(body, assigned, name, out_writes, sole, suspends)?;
+            let body_out = da_stmt(body, assigned, name, ctx)?;
             // Conservatively falls through even though a `forever` without a `break`
             // never does — over-stating reachability only ever costs precision here.
-            Ok(DaOut::Falls(assigned))
+            Ok(DaOut::Falls(
+                assigned || loop_body_assigns(st, body, body_out, ctx.loop_once),
+            ))
         }
         S::Return { value, .. } => {
             if let Some(v) = value {
-                if !assigned && expr_reads(v, name, out_writes) {
+                if !assigned && expr_reads(v, name, ctx.out_writes) {
                     return Err(read(v));
                 }
             }
@@ -578,7 +619,7 @@ pub(crate) fn da_stmt(
         // the `_ => None` below — BYTE-IDENTICAL to the prior behavior for every
         // non-output-actual call (this arm only ever turns a genuine output-write from
         // loud into supported, never the reverse).
-        S::UserTaskCall { name: cn, args, .. } => match out_writes(cn, args, name) {
+        S::UserTaskCall { name: cn, args, .. } => match (ctx.out_writes)(cn, args, name) {
             CallEffect::Writes => Ok(DaOut::Falls(true)),
             // R16 §3.2: a call proven to touch `name` at no position leaves the
             // assigned-state exactly as it was, and the walk continues past it. This
@@ -613,10 +654,10 @@ pub(crate) fn da_stmt(
             // A non-blocking write lands in the NBA region, so on a SHARED net another
             // block scheduled in between sees it — the same hazard as suspending, and
             // the same thing the pre-R17 catch-all rejected here.
-            if !sole {
+            if !ctx.sole {
                 return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
             }
-            if !assigned && expr_reads(rhs, name, out_writes) {
+            if !assigned && expr_reads(rhs, name, ctx.out_writes) {
                 return Err(read(rhs));
             }
             // R19 §3.1: the rhs of a NON-blocking assign is evaluated in the ACTIVE
@@ -624,7 +665,7 @@ pub(crate) fn da_stmt(
             // So an output-actual call in it has written `name` by the next statement,
             // exactly as in the blocking form.
             Ok(DaOut::Falls(
-                assigned || expr_out_writes(rhs, name, out_writes),
+                assigned || expr_out_writes(rhs, name, ctx.out_writes),
             ))
         }
         // R17 §3.3: a timing / event / wait WRAPPER around a statement. The prefix is a
@@ -641,13 +682,13 @@ pub(crate) fn da_stmt(
                 if let Some(e) = delay
                     .values
                     .iter()
-                    .find(|e| expr_reads(e, name, out_writes))
+                    .find(|e| expr_reads(e, name, ctx.out_writes))
                 {
                     return Err(read(e));
                 }
             }
             match body {
-                Some(b) => da_stmt(b, assigned, name, out_writes, sole, suspends),
+                Some(b) => da_stmt(b, assigned, name, ctx),
                 None => Ok(DaOut::Falls(assigned)),
             }
         }
@@ -659,16 +700,16 @@ pub(crate) fn da_stmt(
                 ));
             }
             match body {
-                Some(b) => da_stmt(b, assigned, name, out_writes, sole, suspends),
+                Some(b) => da_stmt(b, assigned, name, ctx),
                 None => Ok(DaOut::Falls(assigned)),
             }
         }
         S::Wait { cond, body, .. } => {
-            if !assigned && expr_reads(cond, name, out_writes) {
+            if !assigned && expr_reads(cond, name, ctx.out_writes) {
                 return Err(read(cond));
             }
             match body {
-                Some(b) => da_stmt(b, assigned, name, out_writes, sole, suspends),
+                Some(b) => da_stmt(b, assigned, name, ctx),
                 None => Ok(DaOut::Falls(assigned)),
             }
         }
@@ -804,10 +845,8 @@ fn const_elem_write(st: &ast::Stmt, name: &str) -> Option<i64> {
 pub(crate) fn automatic_local_definitely_assigned(
     stmts: &[ast::Stmt],
     name: &str,
-    out_writes: OutActualWrites,
+    ctx: &DaCtx,
     elem_bounds: Option<(i64, i64)>,
-    sole_writer: bool,
-    suspends: CallSuspends,
     bit_width: Option<u32>,
 ) -> Result<(), DaGiveUp> {
     // R17 §3.2: a local that is NEVER WRITTEN anywhere in the block is byte-identical
@@ -827,7 +866,7 @@ pub(crate) fn automatic_local_definitely_assigned(
     // possible copy-out. Checked FIRST: a local with no writer needs no path
     // reasoning, and no give-up below can be anything but spurious for it.
     //
-    // SCOPE of the claim, and why `sole_writer` exists: the walk sees only THIS
+    // SCOPE of the claim, and why `ctx.sole` exists: the walk sees only THIS
     // block's statements, so "never written" is a statement about this block alone.
     // That is the whole truth for a local with a fresh net, but NOT for the
     // same-name coalesce gate, where a block-local in ANOTHER block shares the
@@ -835,7 +874,7 @@ pub(crate) fn automatic_local_definitely_assigned(
     // silent-wrong that gate exists to stop. Its call site passes `false`; the
     // fresh-net gates pass `true`. (Writes from outside the declaring block are a
     // third case, rejected independently by `check_block_local_scope_leaks`.)
-    if sole_writer && stmt_never_writes_ident(stmts, name, Some(out_writes)) {
+    if ctx.sole && stmt_never_writes_ident(stmts, name, Some(ctx.out_writes)) {
         return Ok(());
     }
     let mut assigned = false;
@@ -859,7 +898,7 @@ pub(crate) fn automatic_local_definitely_assigned(
             // A FRESH net has no other writer, so once this block has written it every
             // later read observes a current-execution value — safe regardless of the
             // statement form, and the walk is done.
-            if sole_writer {
+            if ctx.sole {
                 return Ok(());
             }
             // R18-X1: a SHARED net is not done. Being written does not make the net
@@ -871,7 +910,7 @@ pub(crate) fn automatic_local_definitely_assigned(
             //
             // Keep walking instead: a statement that cannot advance time preserves the
             // claim, one that can ends it.
-            if stmt_advances_time(st, suspends) {
+            if stmt_advances_time(st, ctx.suspends) {
                 return Err(DaGiveUp::at(st.span(), SHARED_SUSPEND));
             }
             continue;
@@ -905,7 +944,7 @@ pub(crate) fn automatic_local_definitely_assigned(
                 }
             }
         }
-        match da_stmt(st, false, name, out_writes, sole_writer, suspends) {
+        match da_stmt(st, false, name, ctx) {
             Ok(DaOut::Falls(a)) => assigned = a,
             // R16 §3.1: control left the block here (a top-level `break`/`continue`/
             // `return`), so every remaining statement is unreachable and cannot

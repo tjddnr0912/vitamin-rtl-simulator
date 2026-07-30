@@ -34,7 +34,7 @@ The forward-looking ("Phase-2") side of each item lives in the project's
 | `$dumpvars(depth, scope)` args ignored | Always a full dump (a correct superset) | Silent |
 | `automatic` block-local that may be read before written | Rejected, not given a leftover value | Loud (`E3009`, with a `note:` at the construct that stopped the analysis) |
 | Hierarchical reference to an `automatic` block-local (`tb.a`) | Rejected (IEEE 1800 §23.9 forbids it) | Loud (`E3009`) |
-| Same dynamic-array-formal function twice in one expression | Rejected, not given the wrong snapshot | Loud (`E3009`) |
+| Dynamic-array-formal call in a `&&`/`||` rhs, another call's argument, a select index, a `case` scrutinee, a `repeat` count, a cast or replication | Rejected, not given a stale snapshot | Loud (`E3009`) |
 | `$fgets`/`$fscanf`/`$sscanf`/`$fread` inside a framed subroutine body | Rejected, not a silent 0 with an untouched destination | Loud (`F4004`, at the call) |
 | A default argument value whose names bind differently at the call site | Rejected (IEEE 1800 §13.5.4 evaluates it in the subroutine's scope) | Loud (`E3009`) |
 
@@ -166,6 +166,30 @@ matching IEEE 1800 §6.21 — including for a fixed-size unpacked array
 (`automatic int m[4] = '{1,2,3,4};`). An array filled element-by-element with
 literal indices is accepted once every declared index has been written.
 
+Since the 2026-07-30 release, a write inside a **loop body** counts too, when
+the trip count proves the body runs at least once and nothing in it can jump
+past the write:
+
+```systemverilog
+automatic byte cur [];
+for (int j = 0; j < 3; j++) fill(cur);   // 3 is constant -> the body ran
+ok = (cur.size() == 2);                  // so this is not a read-before-write
+```
+
+`repeat (2)` / a constant-true `while` / `forever` are answered by the same
+rule. The bound must be written with **plain decimal literals**: a zero trip
+count, a `break`/`continue`/`return` reachable before the write, a sized
+literal such as `4'd3`, and — for now — a `localparam` bound all keep the local
+loud. Two of those deserve a word, because they look over-cautious and are not:
+
+- With a `break`, the statement after the loop really can be reached with the
+  local unwritten, so the write cannot be assumed.
+- A `localparam` bound would have to be folded by name, and the folder used for
+  constants resolves parameters only; a variable of the same name in an inner
+  scope shadows the parameter for the *lowering* but not for the folder, so the
+  two would disagree. Writing the bound as a literal, or assigning the local
+  once before the loop, both work today.
+
 A local that is **never written anywhere in the block** is also accepted, for
 any type. There is no first write for a read to be before: the flattened
 variable is initialized to the type default once and nothing changes it, which
@@ -222,6 +246,25 @@ knows what its condition evaluated to: `a && f(r)` is true only when *both*
 operands ran, so the loop body and the `then` branch know `r` is written — the
 loop *exit* does not, because a false condition may have short-circuited the call
 away. `a || f(r)` is the mirror image and informs the `else` branch.
+
+An **`inout` argument** normally counts as a *read*, because its copy-in reads the
+variable at the call. Since the 2026-07-30 release it counts as a write instead
+when the callee overwrites the whole formal before ever looking at it — then no
+one can observe the copied-in value, so it does not matter what was there:
+
+```systemverilog
+function automatic int nxt (input int fd, inout rec_t r);
+  r.count = fd; r.h = "x";        // the whole formal, before any read of it
+  return (fd < 2);
+endfunction
+…
+automatic rec_t r;                             // no longer needs pre-filling
+while (n < 5 && nxt(n, r) == 1) begin … r … end
+```
+
+Unpacked-struct formals are answered member by member. The callee decides this,
+so it stays loud when the callee writes the formal only on some paths, reads it
+first, `return`s before writing it, or hands the filling off to another call.
 
 Writing a **struct member** counts toward the whole variable. A member is a
 constant bit range, so `rm.c = 5;` on a single-member struct writes all of
@@ -287,17 +330,27 @@ loop iterations of the same activation and is fresh on each new call.
 ## Dynamic-array arguments to functions
 
 A `function f(input byte b []);` receives a snapshot of the caller's array,
-taken immediately before the calling expression runs. That works for a
-blocking-assign right-hand side, a `return` value, and any unconditionally
-evaluated operand of one (a concatenation, arithmetic, a comparison, a
-system-task argument).
+taken immediately before the calling expression runs. Because the snapshot is a
+marker placed before the enclosing statement, the call has to sit where that
+marker can go: a blocking- or nonblocking-assign right-hand side, a `return`
+value, or any unconditionally evaluated operand of one (a concatenation,
+arithmetic, a comparison, a system-task argument). A `?:` arm works too, but
+only when the function is side-effect free — a conditionally evaluated call
+cannot be hoisted without performing its effect on the arm that was not taken,
+so a function whose body contains, say, a `$display` stays loud there.
 
-There is one snapshot slot per formal, so two forms are rejected loudly rather
-than given the wrong array: calling the **same** function twice in a single
-expression inside another function/task body, and a **recursive** call inside
-the function's own body. Assigning the call to a variable first
-(`x = f(arr);`) resolves both. A conditionally evaluated operand (a `?:` arm,
-the right side of `&&`/`||`) is rejected for the same reason.
+These positions are rejected loudly rather than given the wrong array: the
+right side of `&&`/`||`, an argument of **another** call, a select or lvalue
+**index**, a `case` scrutinee, a `repeat` count, and a cast or replication
+operand. There is also one snapshot slot per formal, so calling the **same**
+function twice in a single expression inside another function/task body, and a
+**recursive** call inside the function's own body, are rejected too. Assigning
+the call to a variable first (`x = f(arr);`) resolves all of them.
+
+> Before the 2026-07-30 release, merely *declaring* a value-returning function
+> with an `output`/`inout` argument anywhere in the module — even one that is
+> never called — rejected these calls in every position but a bare assignment.
+> That was a bug, now fixed; no rewrite is needed to work around it.
 
 ---
 
