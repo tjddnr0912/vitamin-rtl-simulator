@@ -461,26 +461,25 @@ fn ternary_value_matches_bare_xcorner() {
     );
 }
 
-// §4.5.217 (was `ternary_width_mismatch_matches_bare`, a supported "value matches"): the
-// arms here are NOT coercion-safe — a signed `byte` arm and an unsigned 16-bit arm, lhs only
-// 4-bit. The taken value is COINCIDENTALLY correct (the low nibble is 0x7 either way — the
-// sign/width divergence lands above bit 3 and is truncated), but the gate cannot prove that
-// statically, so it conservatively declines the split → loud (correct-or-loud). Before the
-// §4.5.217 gate this was silently transformed. (Contrast `ternary_arm_width_mismatch_stays_loud`,
-// where a shift pulls the divergence down INTO the surviving bits — a genuine silent-wrong.)
+// §4.5.217 made this loud because the ARM-ISOLATING transform (`x = T` / `x = E`) could not
+// prove the coercion safe. The r19 follow-on general hoister keeps the `?:` NODE and lifts
+// only the call, so the arms stay context-determined and no coercion can change — the shape
+// is correct-support now, and the value is pinned against a call-free twin (`refv`) rather
+// than against the diagnostic.
 #[test]
-fn ternary_width_mismatch_now_loud() {
+fn ternary_width_mismatch_matches_bare() {
     let o = run("module t;\n\
         int calls = 0;\n\
         function automatic byte f (input byte v, inout int c); c = c + 1; f = v; endfunction\n\
-        initial begin bit sel = 1; logic [3:0] mine; byte a = 8'hA7;\n\
+        initial begin bit sel = 1; logic [3:0] mine, refv; byte a = 8'hA7;\n\
           mine = sel ? f(8'hA7, calls) : 16'h0123;\n\
-          $display(\"mine=%h\", mine); $finish;\n\
+          refv = sel ? a : 16'h0123;\n\
+          $display(\"eq=%b mine=%h calls=%0d\", mine === refv, mine, calls); $finish;\n\
         end\n\
         endmodule\n");
     assert!(
-        is_loud(&o),
-        "sign/width-mismatched ?: arms must stay loud (coercion-unsafe):\n{o}"
+        !is_loud(&o) && o.contains("eq=1") && o.contains("mine=7") && o.contains("calls=1"),
+        "coercion-unsafe ?: arms must match the bare ternary, call firing once:\n{o}"
     );
 }
 
@@ -491,19 +490,23 @@ fn ternary_width_mismatch_now_loud() {
 // `a` (0xFA) — silently wrong. The gate sees the sign mismatch and declines → loud; it must
 // NEVER silently produce 0xFA.
 #[test]
-fn ternary_arm_sign_mismatch_stays_loud() {
+fn ternary_arm_sign_mismatch_matches_bare() {
+    // The r19 general hoister keeps the `?:` node, so §11.8.1 still makes the whole
+    // expression UNSIGNED (one unsigned arm) and `a` is ZERO-extended ⇒ 0x0a, the same as
+    // the bare ternary. 0xFA — what arm isolation would have produced — must never appear.
+    // `sel`=1 takes the THEN arm, so the ELSE arm's call must NOT fire (`calls=0`).
     let o = run("module t;\n\
         int calls = 0;\n\
         logic signed [3:0] a = 4'sb1010;\n\
         function automatic logic [7:0] f (input int d, inout int c); c = c + 1; f = 8'h0A; endfunction\n\
         initial begin logic sel = 1; logic [7:0] x;\n\
           x = sel ? a : f(0, calls);\n\
-          $display(\"x=%h\", x); $finish;\n\
+          $display(\"x=%h calls=%0d\", x, calls); $finish;\n\
         end\n\
         endmodule\n");
     assert!(
-        is_loud(&o) && !o.contains("x=fa"),
-        "sign-mismatched ?: arms must stay loud, never silently 0xFA:\n{o}"
+        !is_loud(&o) && o.contains("x=0a") && o.contains("calls=0") && !o.contains("x=fa"),
+        "sign-mismatched ?: must be §11.8.1 unsigned 0x0a with no call, never 0xFA:\n{o}"
     );
 }
 
@@ -514,19 +517,22 @@ fn ternary_arm_sign_mismatch_stays_loud() {
 // ⇒ 0x7d — silently wrong, because the shift pulls the extended top bit DOWN into the low
 // (surviving) bits. lhs < max(arm self-widths) ⇒ gate declines → loud.
 #[test]
-fn ternary_arm_width_mismatch_stays_loud() {
+fn ternary_arm_width_mismatch_matches_bare() {
+    // Keeping the `?:` node keeps the unified context width at 16, so `a` is sign-extended
+    // to 16 BEFORE the `>>1` ⇒ 0xfd, the same as the bare ternary. 0x7d — what isolating
+    // the arm at lhs width 8 would have produced — must never appear.
     let o = run("module t;\n\
         int calls = 0;\n\
         logic signed [3:0] a = 4'sb1010;\n\
         function automatic logic signed [15:0] g (input int d, inout int c); c = c + 1; g = 16'sh0005; endfunction\n\
         initial begin logic sel = 1; logic [7:0] x;\n\
           x = sel ? (a >> 1) : g(0, calls);\n\
-          $display(\"x=%h\", x); $finish;\n\
+          $display(\"x=%h calls=%0d\", x, calls); $finish;\n\
         end\n\
         endmodule\n");
     assert!(
-        is_loud(&o) && !o.contains("x=7d"),
-        "width-mismatched ?: arms must stay loud, never silently 0x7d:\n{o}"
+        !is_loud(&o) && o.contains("x=fd") && o.contains("calls=0") && !o.contains("x=7d"),
+        "width-mismatched ?: must be unified-width 0xfd with no call, never 0x7d:\n{o}"
     );
 }
 
@@ -628,36 +634,53 @@ fn general_expr_and_value_matches_bare_xcorner() {
 // A BURIED call (`y = (A && f()) + 1` — the call is NOT the whole rhs) stays loud: the
 // intercept matches only a WHOLE-rhs ternary / short-circuit form (correct-or-loud).
 #[test]
-fn output_formal_buried_and_stays_loud() {
+fn output_formal_buried_and_supported() {
+    // WAS loud: §4.5.216 only claimed a `&&` that was the WHOLE rhs. The r19 general
+    // hoister guards the right operand's copy-out with the captured truth of the left, at
+    // any depth, so a buried `&&` works. `n < 5` is true ⇒ the call fires exactly once.
     let o = run(&format!(
         "module t;\n{STEP_CNT}\
         initial begin int n = 0; int y;\n\
           y = ((n < 5) && (step(n, calls) == 1)) + 1;\n\
-          $display(\"y=%0d\", y); $finish;\n\
+          $display(\"y=%0d calls=%0d\", y, calls); $finish;\n\
         end\n\
         endmodule\n"
     ));
     assert!(
-        is_loud(&o),
-        "buried && call (not the whole rhs) should stay loud:\n{o}"
+        !is_loud(&o) && o.contains("y=2") && o.contains("calls=1"),
+        "buried && call must evaluate once and yield 2:\n{o}"
     );
 }
 
-// The call NESTED inside a loop-condition operand's own `&&`/`||` (not a top-level operand)
-// stays loud — the split only isolates the two TOP-LEVEL operands.
+// A call NESTED inside a loop-condition operand's own `&&`/`||` — the top-level split only
+// isolates the two TOP-LEVEL operands, so this WAS loud. The r19 general hoister nests the
+// guard blocks, so the inner `||` short-circuits correctly at depth.
 #[test]
-fn output_formal_nested_in_operand_stays_loud() {
-    let o = run(&format!(
-        "module t;\n{STEP_CNT}\
-        logic b = 0;\n\
+fn output_formal_nested_in_operand_supported() {
+    let src = |b: u8| {
+        format!(
+            "module t;\n{STEP_CNT}\
+        logic b = {b};\n\
         initial begin int n = 0;\n\
-          while (n < 5 && (b || step(n, calls) == 1)) n++;\n\
-          $display(\"n=%0d\", n); $finish;\n\
+          while (n < 3 && (b || step(n, calls) == 1)) n++;\n\
+          $display(\"n=%0d calls=%0d\", n, calls); $finish;\n\
         end\n\
         endmodule\n"
-    ));
+        )
+    };
+    // b=0 ⇒ the `||` must evaluate its rhs on every iteration that reaches it. Three, not
+    // four: on the exit iteration the OUTER `&&` short-circuits on `n < 3` first, so the
+    // nested call is never reached (verified equal to a hand-hoisted twin).
+    let o = run(&src(0));
     assert!(
-        is_loud(&o),
-        "call nested in a `||` operand should stay loud:\n{o}"
+        !is_loud(&o) && o.contains("n=3") && o.contains("calls=3"),
+        "nested `||` call must fire once per condition evaluation:\n{o}"
+    );
+    // b=1 ⇒ the `||` short-circuits, so the nested call must NEVER be evaluated. This is
+    // the property the guard block exists for: a conditional call never made unconditional.
+    let o = run(&src(1));
+    assert!(
+        !is_loud(&o) && o.contains("n=3") && o.contains("calls=0"),
+        "short-circuited nested call must not fire at all:\n{o}"
     );
 }

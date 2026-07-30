@@ -162,17 +162,14 @@ fn output_actual_while_cond() {
     assert!(ok && o.contains("PASS"), "output_actual_while_cond: {o}");
 }
 
-// ── correct-or-loud (must stay E3009) ───────────────────────────────────────
-
 #[test]
-fn output_call_in_case_scrutinee_stays_loud() {
-    // The DA walk recognizes a whole-scrutinee output-actual call in a `case` as a
-    // definite write, but vita does not yet lower a function-with-output-formal call in
-    // a case-scrutinee (a separate hoist gap — the F-record-out family), so this stays
-    // LOUD overall (a different E3009, "function … has an output/inout formal
-    // (illegal)"). Proves the DA acceptance never yields a silent-wrong here.
-    assert!(loud(
-        "module t;\n\
+fn output_call_in_case_scrutinee() {
+    // WAS a correct-or-loud pin: the DA walk accepted the whole-scrutinee output-actual
+    // call as a definite write, but no hoist site existed for a `case` scrutinee, so the
+    // statement stayed loud overall. The r19 follow-on general hoister added that site —
+    // a scrutinee is evaluated exactly once before any label compare — so the shape is
+    // now correct-support and this pins the VALUE instead of the diagnostic.
+    let (o, ok) = run("module t;\n\
          function automatic int pick (output int s); s = 2; pick = s; endfunction\n\
          initial begin\n\
            begin\n\
@@ -184,8 +181,11 @@ fn output_call_in_case_scrutinee_stays_loud() {
            end\n\
            $finish;\n\
          end\n\
-         endmodule"
-    ));
+         endmodule");
+    assert!(
+        ok && o.contains("PASS"),
+        "output_call_in_case_scrutinee: {o}"
+    );
 }
 
 #[test]

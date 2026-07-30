@@ -23,15 +23,23 @@ impl Elaborator<'_> {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
-                    // R19 §3.2: statement position now works too (`{fname}(...);` and
-                    // `void'({fname}(...))` — see `lower_stmt`'s UserTaskCall arm), so it
-                    // belongs in the list. Leaving it out is what sent the reporter looking
-                    // for a workaround that did not exist.
-                    "function `{fname}` has an output/inout formal — such a call is supported \
-                     as a STATEMENT (`{fname}(...);` or `void'({fname}(...));`), a direct rhs \
-                     (`x = {fname}(...)`), a plain while/if condition, or one operand of a \
-                     top-level `&&`/`||` in a while/for condition; it is not supported in a \
-                     `?:` arm or a deeper-nested expression"
+                    // The r19 follow-on general hoister (`hoist/general.rs`) made every
+                    // ONCE-EVALUATED expression position work, so listing the supported
+                    // positions is no longer useful — the message now names what is left.
+                    // Keeping the old enumeration would be a stale claim in the other
+                    // direction: it said a `?:` arm and a nested expression were
+                    // unsupported, which they no longer are.
+                    "function `{fname}` has an output/inout formal, so its copy-out has to be \
+                     emitted as a statement before the expression that calls it. That works in \
+                     any position evaluated ONCE per statement, but not here. The remaining \
+                     cases are: a CONTINUOUSLY re-evaluated expression (`assign`, `force`, a \
+                     `wait` condition) — the copy-out cannot re-fire on every change; an \
+                     intra-assignment delay (`x = #1 {fname}(...)`); a `min:typ:max` or a \
+                     constraint/`with` expression; and an evaluation-order case the hoist \
+                     cannot preserve — an output actual read to the LEFT of the call when the \
+                     actual is not a plain bit-vector net, or when two calls in the same \
+                     expression write it. Assign the call to a temporary first \
+                     (`t = {fname}(...);`) and use `t`."
                 ),
             );
             return self.placeholder_expr();

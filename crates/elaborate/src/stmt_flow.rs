@@ -691,8 +691,19 @@ impl Elaborator<'_> {
     /// place and loud-rejects at `emit_frame_call` (correct-or-loud). With no inout-call
     /// this is exactly `lower_expr` (byte-identical).
     pub(crate) fn lower_loop_cond_operand(&mut self, b: &mut ProcessBuilder, e: &ast::Expr) -> u32 {
-        if self.expr_has_inout_call(e) && self.hoist_is_safe(e) {
+        // The narrow hoister owns the operand only when it can lift EVERY call in it;
+        // otherwise it would emit some copy-outs and leave one behind to loud.
+        if self.expr_has_inout_call(e) && self.order_clean(e) && !self.has_unhoistable_inout_call(e)
+        {
             let hoisted = self.hoist_inout_calls(b, e);
+            self.lower_expr(&hoisted)
+        } else if self.general_hoist_ok(e) {
+            // r19 follow-on: the general hoister reaches what the narrow one does not —
+            // a read to the RIGHT of the call (eval-order-safe, so no longer declined),
+            // and a call in a node kind / conditional arm it does not walk. The copy-out
+            // still lands in the CURRENT condition-eval block, which the loop re-enters
+            // every iteration.
+            let hoisted = self.hoist_inout_general_top(b, e);
             self.lower_expr(&hoisted)
         } else {
             self.lower_expr(e)

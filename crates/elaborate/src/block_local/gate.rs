@@ -73,7 +73,7 @@ impl Elaborator<'_> {
     /// reported as an `Input` bind rather than dropped: a read is a read, whoever wrote
     /// the expression. (`default_binding_matches_decl_scope` is the separate, and
     /// stricter, question of whether that lowering is legitimate at all.)
-    fn callee_arg_dirs<'a>(
+    pub(crate) fn callee_arg_dirs<'a>(
         &'a self,
         callee: &ast::HierPath,
         args: &'a [ast::Expr],

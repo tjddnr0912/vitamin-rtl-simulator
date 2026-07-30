@@ -14,7 +14,7 @@ impl Elaborator<'_> {
     /// it false → the caller declines the split → the whole rhs stays loud
     /// (correct-or-loud), never a partial transform.
     pub(crate) fn arm_transformable(&self, e: &ast::Expr) -> bool {
-        !self.has_unhoistable_inout_call(e) && self.hoist_is_safe(e)
+        !self.has_unhoistable_inout_call(e) && self.order_clean(e)
     }
 
     /// §4.5.217: `(signed, width)` of a net IFF it is a plain bit-vector coercion
@@ -191,46 +191,75 @@ impl Elaborator<'_> {
         delay: Option<&ast::Delay>,
         rhs: &ast::Expr,
     ) -> bool {
+        if !self.sc_rhs_owned(lhs, delay, rhs) {
+            return false;
+        }
+        match &rhs.kind {
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.lower_ternary_rhs(b, lhs, cond, then_e, else_e);
+                true
+            }
+            ast::ExprKind::Binary {
+                op,
+                lhs: a,
+                rhs: bexpr,
+            } => {
+                self.lower_shortcircuit_rhs(b, lhs, *op, a, bexpr);
+                true
+            }
+            _ => unreachable!("sc_rhs_owned admits only a Ternary / logical Binary rhs"),
+        }
+    }
+
+    /// §4.5.216: the exact condition under which [`Self::shortcircuit_rhs_special`] takes
+    /// ownership of a blocking-assign rhs. Split out so the r19 GENERAL hoister
+    /// (`hoist/general.rs`) can stand down on precisely the shapes this path claims —
+    /// including the ones it claims and then declines to loud — without a second copy of
+    /// the predicate that could drift out of step with it.
+    pub(crate) fn sc_rhs_owned(
+        &self,
+        lhs: &ast::Lvalue,
+        delay: Option<&ast::Delay>,
+        rhs: &ast::Expr,
+    ) -> bool {
         if delay.is_some() || self.inout_func_names.is_empty() {
             return false;
         }
         match &rhs.kind {
             // `x = c ? T : E` with an inout/output-formal call in a CONDITIONALLY-evaluated
-            // arm (`then_e` / `else_e`). A call only in `cond` (unconditional) is NOT matched
-            // here — it stays loud (a separate follow-on), like an if/loop cond that carries a
-            // deeper call.
+            // arm (`then_e` / `else_e`). A call only in `cond` is unconditional, so it is
+            // not this path's business — the general hoister takes that one.
             ast::ExprKind::Ternary {
                 cond,
                 then_e,
                 else_e,
-            } if (self.expr_has_inout_call(then_e) || self.expr_has_inout_call(else_e))
-                && self.arm_transformable(cond)
-                && self.arm_transformable(then_e)
-                && self.arm_transformable(else_e)
-                // §4.5.217: the definite-arm transform lowers each taken arm in ISOLATION
-                // (`x = T` / `x = E`); that is byte-identical to the unified bare ternary
-                // ONLY when the arms are coercion-safe (same effective sign; lhs ≥ both
-                // self-widths). Otherwise §11.8.1 sign-flip / §11.6.1 shift-width divergence
-                // silently changes the value → decline the split → generic lowering → loud.
-                && self.ternary_arms_coercion_safe(lhs, then_e, else_e) =>
-            {
-                self.lower_ternary_rhs(b, lhs, cond, then_e, else_e);
-                true
+            } => {
+                (self.expr_has_inout_call(then_e) || self.expr_has_inout_call(else_e))
+                    && self.arm_transformable(cond)
+                    && self.arm_transformable(then_e)
+                    && self.arm_transformable(else_e)
+                    // §4.5.217: the definite-arm transform lowers each taken arm in ISOLATION
+                    // (`x = T` / `x = E`); that is byte-identical to the unified bare ternary
+                    // ONLY when the arms are coercion-safe (same effective sign; lhs ≥ both
+                    // self-widths). Otherwise §11.8.1 sign-flip / §11.6.1 shift-width
+                    // divergence silently changes the value → decline → loud.
+                    && self.ternary_arms_coercion_safe(lhs, then_e, else_e)
             }
             // `x = A && B` / `x = A || B` with an inout/output-formal call in the SHORT-CIRCUIT
-            // operand `B`. (A call in `A` alone is unconditionally evaluated and already hoisted
-            // by `hoist_stmt_top`, so it never reaches here.)
+            // operand `B`. (A call in `A` alone is unconditionally evaluated and already
+            // hoisted by `hoist_stmt_top`, so it never reaches here.)
             ast::ExprKind::Binary {
-                op,
+                op: ast::BinOp::LogAnd | ast::BinOp::LogOr,
                 lhs: a,
                 rhs: bexpr,
-            } if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr)
-                && self.expr_has_inout_call(bexpr)
-                && self.arm_transformable(a)
-                && self.arm_transformable(bexpr) =>
-            {
-                self.lower_shortcircuit_rhs(b, lhs, *op, a, bexpr);
-                true
+            } => {
+                self.expr_has_inout_call(bexpr)
+                    && self.arm_transformable(a)
+                    && self.arm_transformable(bexpr)
             }
             _ => false,
         }
@@ -269,11 +298,9 @@ impl Elaborator<'_> {
         let is_and = matches!(op, ast::BinOp::LogAnd);
         // head: A → 1-bit tri-valued bool(A), captured in a fresh net (immune to B's copy-out).
         let a_id = self.lower_loop_cond_operand(b, a);
-        let boola = self.push_expr(ir::Expr::Binary {
-            op: ir::BinOp::LogOr,
-            lhs: a_id,
-            rhs: a_id,
-        });
+        // `!!x`, not `x || x`: the same expr id read twice evaluates the operand twice,
+        // which draws twice from a `$random` in it (measured as an LFSR skew).
+        let boola = self.bool_of(a_id);
         let ta_net = self.fresh_ia_tmp(1);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(ta_net),
@@ -386,11 +413,8 @@ impl Elaborator<'_> {
     ) {
         // head: evaluate & CAPTURE bool(cond) — only its truth selects the arm(s).
         let c_id = self.lower_loop_cond_operand(b, cond);
-        let boolc = self.push_expr(ir::Expr::Binary {
-            op: ir::BinOp::LogOr,
-            lhs: c_id,
-            rhs: c_id,
-        });
+        // `!!x`, not `x || x` — see `lower_shortcircuit_rhs`.
+        let boolc = self.bool_of(c_id);
         let cc_net = self.fresh_ia_tmp(1);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(cc_net),

@@ -89,7 +89,7 @@ pub(crate) fn expr_da(e: &ast::Expr, name: &str, out_writes: OutActualWrites) ->
         // `&&` / `||` evaluate the LEFT operand first and always; the right one only
         // when the left did not already decide the result (IEEE 1800 §11.4.7).
         K::Binary {
-            op: ast::BinOp::LogAnd | ast::BinOp::LogOr,
+            op: op @ (ast::BinOp::LogAnd | ast::BinOp::LogOr),
             lhs,
             rhs,
         } => {
@@ -104,7 +104,38 @@ pub(crate) fn expr_da(e: &ast::Expr, name: &str, out_writes: OutActualWrites) ->
                     // A write the right operand might not perform cannot be claimed —
                     // but it is not a read either, so this is `Clean`, not `Reads`.
                     ExprDa::Writes | ExprDa::Clean => ExprDa::Clean,
-                    ExprDa::Reads => ExprDa::Reads,
+                    // r19 follow-on. `Clean` on the left does not mean "no write on the
+                    // left" — it also covers a CONDITIONAL write, which is what a nested
+                    // `&&` yields (`(n < 10 && rsp_next(n, r) == 1) && r.len >= 0`: the
+                    // inner right operand writes, so the inner verdict is `Clean`). The
+                    // read on the right is then reached ONLY on a path where that
+                    // conditional write did happen, so it is not a read-before-write and
+                    // must not end the walk.
+                    //
+                    // The verdict is `Clean`, NOT `Writes`. `Writes` means EVERY evaluation
+                    // of this expression writes `name`, and that is false here: when the
+                    // left short-circuits, the call never runs and the right is never
+                    // reached — nothing is written. Claiming `Writes` made the gate treat
+                    // the local as assigned on the short-circuit path too, so a sibling
+                    // block's leftover value was read at exit 0 instead of being rejected
+                    // (caught by the differential review; `Clean` is the exact claim: the
+                    // read is safe, the write is not promised).
+                    //
+                    // Sound including an x-valued left operand, which also reaches the
+                    // right. `expr_writes_when` can only answer `true` by descending the
+                    // left's own short-circuit chain to a leaf that writes whenever it is
+                    // evaluated, and reaching THIS right operand means the left chain did
+                    // not short-circuit — so every operand of it, including that leaf, was
+                    // evaluated. (Measured: an x left operand does leave the write done; a
+                    // definitely-false one never evaluates the right at all.)
+                    ExprDa::Reads => {
+                        let reaches_rhs = matches!(op, ast::BinOp::LogAnd);
+                        if expr_writes_when(lhs, name, out_writes, reaches_rhs) {
+                            ExprDa::Clean
+                        } else {
+                            ExprDa::Reads
+                        }
+                    }
                 },
             }
         }

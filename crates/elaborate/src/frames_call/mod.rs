@@ -71,13 +71,25 @@ impl Elaborator<'_> {
             let name = self.fresh_string_temp();
             ((self.nets.len() - 1) as u32, name)
         } else {
-            let w = rw.max(1);
+            // A `real`/`realtime` return needs an IEEE-754 f64 net. Building a `Reg` for it
+            // (which this did for every non-string return) rounded the value through the
+            // integer domain — `return 1.5` came back as `2.000000`, silently, on every path
+            // that goes through this temp. Pre-existing, and reachable from the direct rhs
+            // since §4.5.274; the general hoister would have carried it into every other
+            // expression position, so it is closed here rather than multiplied.
+            let is_real = matches!(
+                func.ret_type,
+                ast::ParamType::Real | ast::ParamType::Realtime
+            );
+            let w = if is_real { 64 } else { rw.max(1) };
             let name = format!("$ia_ret${}", self.nets.len());
             let net = self.nets.len() as u32;
             self.add_net(
                 &name,
                 ir::NetVar {
-                    kind: if w == 32 && rsig {
+                    kind: if is_real {
+                        ir::NetKind::Real
+                    } else if w == 32 && rsig {
                         ir::NetKind::Integer
                     } else {
                         ir::NetKind::Reg
@@ -85,10 +97,17 @@ impl Elaborator<'_> {
                     width: w,
                     msb: w.saturating_sub(1),
                     lsb: 0,
-                    signed: rsig,
+                    signed: is_real || rsig,
                     array_len: 1,
                     dir: ir::PortDir::Internal,
-                    init: default_init(ast::NetVarKind::Reg, w),
+                    init: default_init(
+                        if is_real {
+                            ast::NetVarKind::Real
+                        } else {
+                            ast::NetVarKind::Reg
+                        },
+                        w,
+                    ),
                 },
             );
             (net, name)

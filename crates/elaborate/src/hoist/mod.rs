@@ -1,7 +1,15 @@
 //! call hoisting — split out of the original `elaborate` lib.rs (mechanical move).
 
 mod arms;
+mod general;
+mod general_ast;
+mod general_query;
+mod general_stmt;
 mod sformatf;
+
+// `lower_stmt`'s `$sformatf` child hoist reads the same deferred-print list, so there is
+// exactly one copy of it.
+pub(crate) use general_ast::is_deferred_print_task;
 
 use super::*;
 
@@ -63,9 +71,17 @@ impl Elaborator<'_> {
     /// inside an operand, or eval-order-unsafe) degrades to loud there (correct-or-loud).
     pub(crate) fn has_unhoistable_inout_call(&self, e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
-        // A call `e` itself IS hoistable (handled at the top of `hoist_inout_calls`).
+        // A call `e` itself IS hoistable (handled at the top of `hoist_inout_calls`) —
+        // but only its own copy-out. `hoist_inout_calls` clones the ARGUMENTS verbatim,
+        // so a NESTED output-formal call in one of them (`nxt(nxt(2, o), o)`) would be
+        // left sitting in the arg list and loud at `emit_frame_call`. Report it as
+        // un-hoistable HERE so the narrow path stands down and the general hoister
+        // (`hoist/general.rs`), which rewrites arguments first, takes it.
         if self.inout_call_target(e).is_some() {
-            return false;
+            let K::Call { args, .. } = &e.kind else {
+                return false;
+            };
+            return args.iter().any(|a| self.expr_has_inout_call_deep(a));
         }
         match &e.kind {
             K::Binary { op, lhs, rhs } => {
@@ -82,165 +98,6 @@ impl Elaborator<'_> {
             // Any other node (Ternary, Concat, a non-inout Call's args, …) is not a
             // hoist site — an inout-call anywhere inside is un-hoistable.
             _ => self.expr_has_inout_call(e),
-        }
-    }
-
-    /// R5-B: is it SAFE to hoist the inout-calls out of `e`? A hoist moves a call's
-    /// copy-out (its output/inout side-effect) to BEFORE the whole expression, but
-    /// IEEE evaluates the expression's operands in place, left-to-right. So if any
-    /// OTHER part of `e` READS a variable a hoisted call MUTATES, that read would see
-    /// the post-call value instead of the in-order (pre-call, if to the left) value —
-    /// a silent eval-order wrong (`y = x + f(x)` must be `x_old + f(x)`, not
-    /// `x_new + …`). Decline the hoist in that case → the call loud-rejects at
-    /// `emit_frame_call`. Conservative: also declines a harmless read to the RIGHT of
-    /// the call (which would in fact be correct) — acceptable (correct-or-loud).
-    pub(crate) fn hoist_is_safe(&self, e: &ast::Expr) -> bool {
-        let mut mutated: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        self.collect_inout_mutated(e, &mut mutated);
-        !mutated.iter().any(|v| self.reads_ident_outside_inout(e, v))
-    }
-
-    /// R5-B: collect the root net names of every output/inout ACTUAL of every
-    /// inout-call in `e` — the variables a hoist of those calls would mutate.
-    pub(crate) fn collect_inout_mutated(
-        &self,
-        e: &ast::Expr,
-        out: &mut std::collections::BTreeSet<String>,
-    ) {
-        use ast::ExprKind as K;
-        if let Some((_fid, func)) = self.inout_call_target(e) {
-            if let K::Call { args, .. } = &e.kind {
-                for (p, a) in func.ports.iter().zip(args.iter()) {
-                    if !matches!(p.dir, ast::PortDir::Input) {
-                        if let Some(root) = expr_root_ident(a) {
-                            out.insert(root);
-                        }
-                    }
-                }
-            }
-            return; // the call's own args are the mutated set; don't double-count
-        }
-        match &e.kind {
-            K::Unary { operand, .. } => self.collect_inout_mutated(operand, out),
-            K::Binary { lhs, rhs, .. } => {
-                self.collect_inout_mutated(lhs, out);
-                self.collect_inout_mutated(rhs, out);
-            }
-            K::Paren { inner } => self.collect_inout_mutated(inner, out),
-            K::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => {
-                self.collect_inout_mutated(cond, out);
-                self.collect_inout_mutated(then_e, out);
-                self.collect_inout_mutated(else_e, out);
-            }
-            _ => {}
-        }
-    }
-
-    /// R5-B: does `e` read `name` in a position OUTSIDE any inout-call subtree? (An
-    /// inout-call's own args are its copy-in, evaluated at the hoisted call site, so
-    /// they are skipped; every other read is evaluated in place and matters for the
-    /// hoist-safety check.) Mirrors `expr_reads_ident` minus the inout-call subtrees.
-    pub(crate) fn reads_ident_outside_inout(&self, e: &ast::Expr, name: &str) -> bool {
-        use ast::ExprKind as K;
-        if self.inout_call_target(e).is_some() {
-            return false;
-        }
-        match &e.kind {
-            K::Ident(p) => p.segments.len() == 1 && p.segments[0].name == name,
-            K::Unary { operand, .. } => self.reads_ident_outside_inout(operand, name),
-            K::Binary { lhs, rhs, .. } => {
-                self.reads_ident_outside_inout(lhs, name)
-                    || self.reads_ident_outside_inout(rhs, name)
-            }
-            K::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => {
-                self.reads_ident_outside_inout(cond, name)
-                    || self.reads_ident_outside_inout(then_e, name)
-                    || self.reads_ident_outside_inout(else_e, name)
-            }
-            K::BitSelect { base, index } => {
-                self.reads_ident_outside_inout(base, name)
-                    || self.reads_ident_outside_inout(index, name)
-            }
-            K::PartSelect { base, msb, lsb } => {
-                self.reads_ident_outside_inout(base, name)
-                    || self.reads_ident_outside_inout(msb, name)
-                    || self.reads_ident_outside_inout(lsb, name)
-            }
-            K::IndexedPart {
-                base,
-                offset,
-                width,
-                ..
-            } => {
-                self.reads_ident_outside_inout(base, name)
-                    || self.reads_ident_outside_inout(offset, name)
-                    || self.reads_ident_outside_inout(width, name)
-            }
-            K::Concat { parts } => parts
-                .iter()
-                .any(|x| self.reads_ident_outside_inout(x, name)),
-            K::Replicate { count, value } => {
-                self.reads_ident_outside_inout(count, name)
-                    || value
-                        .iter()
-                        .any(|x| self.reads_ident_outside_inout(x, name))
-            }
-            K::Call { args, .. } | K::SysCall { args, .. } => {
-                args.iter().any(|x| self.reads_ident_outside_inout(x, name))
-            }
-            K::Paren { inner } => self.reads_ident_outside_inout(inner, name),
-            K::MinTypMax { min, typ, max } => {
-                self.reads_ident_outside_inout(min, name)
-                    || self.reads_ident_outside_inout(typ, name)
-                    || self.reads_ident_outside_inout(max, name)
-            }
-            K::Cast { target, expr } => {
-                self.reads_ident_outside_inout(expr, name)
-                    || matches!(target, ast::CastTarget::Size(s) if self.reads_ident_outside_inout(s, name))
-            }
-            // A method call / `new` / assignment-pattern reads its receiver + args —
-            // MUST be walked (a mutated var read here is the eval-order hazard the
-            // soundness review flagged: `y = obj.m(x) + f(x)` would silently read the
-            // post-`f` x). `Dist` `value` likewise.
-            K::MethodCall { recv, args, .. } => {
-                self.reads_ident_outside_inout(recv, name)
-                    || args.iter().any(|x| self.reads_ident_outside_inout(x, name))
-            }
-            K::New { size, src } => {
-                self.reads_ident_outside_inout(size, name)
-                    || src
-                        .as_ref()
-                        .is_some_and(|s| self.reads_ident_outside_inout(s, name))
-            }
-            K::ClassNew { args } => args.iter().any(|x| self.reads_ident_outside_inout(x, name)),
-            K::NamedArg { value, .. } => value
-                .as_ref()
-                .is_some_and(|v| self.reads_ident_outside_inout(v, name)),
-            K::AssignPattern(parts) => parts
-                .iter()
-                .any(|x| self.reads_ident_outside_inout(x, name)),
-            K::Dist { value, .. } => self.reads_ident_outside_inout(value, name),
-            // Leaves that read no variable → cannot read `name`.
-            K::IntLit { .. }
-            | K::RealLit { .. }
-            | K::StrLit { .. }
-            | K::TimeLit { .. }
-            | K::PkgScoped { .. }
-            | K::Null
-            | K::Dollar
-            | K::Error => false,
-            // Any OTHER kind (RandomizeWith / ArrayMethodWith / a future node) may
-            // read the variable in a way this walker does not model — assume it does
-            // so the hoist is DECLINED (→ loud), never silently mis-ordered.
-            _ => true,
         }
     }
 
@@ -610,6 +467,13 @@ impl Elaborator<'_> {
         s: &ast::Stmt,
     ) -> Option<ast::Stmt> {
         use ast::Stmt as S;
+        // See `hoist_stmt_general`: a copy-out `Terminator::Call` inside a frame body writes
+        // a MODULE net from a context whose writes must be frame-local. The narrow arms hit
+        // the same wall — pre-existing, and it surfaced as an engine panic rather than a
+        // diagnostic. Stand down so the call reports its own accurate message.
+        if self.in_frame_body() && !self.inout_func_names.is_empty() {
+            return None;
+        }
         match s {
             S::If {
                 cond,
@@ -618,7 +482,7 @@ impl Elaborator<'_> {
                 span,
             } if self.expr_has_inout_call(cond)
                 && !self.has_unhoistable_inout_call(cond)
-                && self.hoist_is_safe(cond) =>
+                && self.order_clean(cond) =>
             {
                 let cond2 = self.hoist_inout_calls(b, cond);
                 Some(S::If {
@@ -638,7 +502,7 @@ impl Elaborator<'_> {
                 && event.is_none()
                 && self.expr_has_inout_call(rhs)
                 && !self.has_unhoistable_inout_call(rhs)
-                && self.hoist_is_safe(rhs) =>
+                && self.order_clean(rhs) =>
             {
                 let rhs2 = self.hoist_inout_calls(b, rhs);
                 Some(S::Blocking {
@@ -755,7 +619,12 @@ impl Elaborator<'_> {
             // hoisted at the loop head (`lower_while`/`lower_for`) — the call's copy-out temp
             // is emitted at the condition-eval block, which is re-entered every iteration. No
             // loud here; an eval-order-UNSAFE condition still loud-rejects at `emit_frame_call`.
-            _ => None,
+            //
+            // Everything the shape-specific arms above declined falls through to the r19
+            // GENERAL hoister (`hoist/general_stmt.rs`), which reaches the positions a
+            // value-returning output-formal call can occupy that they cannot. Being LAST is
+            // exactly what keeps every arm above byte-identical.
+            _ => self.hoist_stmt_general(b, s),
         }
     }
 

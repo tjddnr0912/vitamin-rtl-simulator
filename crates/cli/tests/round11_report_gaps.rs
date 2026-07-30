@@ -706,15 +706,16 @@ fn r5b_short_circuit_if_cond_now_supported() {
 }
 
 #[test]
-fn r5b_eval_order_read_of_mutated_is_loud() {
+fn r5b_eval_order_read_of_mutated_supported() {
     // `y = x + f(x)`: IEEE evaluates the `x` operand BEFORE `f(x)`, so it must read x's
-    // OLD value. Hoisting f(x) (which mutates x) to before the statement would make
-    // that `x` read the NEW value = a silent eval-order wrong (12 vs 11). The hoist is
-    // declined when a mutated actual is read elsewhere in the expression → loud.
+    // OLD value — 11, not 12. Declining the hoist (loud) was the original answer; the r19
+    // follow-on emits a pre-call SNAPSHOT of `x` and points the left operand at it, so the
+    // order is preserved and the shape is correct-support. Pinned against iverilog, using a
+    // task twin for the inout side effect (`t1 = x; f(x, t2); y = t1 + t2` → y=11, x=6).
     let src = "module t;\n\
         function automatic int f(inout int a); a=a+1; return a; endfunction\n\
-        initial begin int x=5; int y; y = x + f(x); $display(\"y=%0d\",y); $finish; end endmodule";
-    assert!(loud(src));
+        initial begin int x=5; int y; y = x + f(x); $display(\"x=%0d y=%0d\",x,y); $finish; end endmodule";
+    assert_eq!(run(src).0, "x=6 y=11");
 }
 
 #[test]
@@ -729,14 +730,16 @@ fn r5b_disjoint_operand_supported() {
 
 #[test]
 fn r5b_mutated_read_in_methodcall_arg_is_loud() {
-    // Completeness of the eval-order guard: a mutated var read INSIDE a method-call
-    // arg (`c.m(x) + f(x)`) must also decline the hoist — else `c.m(x)` would read
-    // the post-`f` x. (Found by the soundness review; `reads_ident_outside_inout`
-    // walks MethodCall/New/AssignPattern/… so this is loud, not silent.)
+    // `c.m(x)` must read the PRE-`f` x (5*2 + 6 = 16). The r19 pre-call snapshot could
+    // rewrite the ARGUMENT, but not a read of `x` inside `m`'s BODY — and a user class
+    // method body is not resolvable here, so "this callee does not read `x`" cannot be
+    // proven. Correct-or-loud: decline. (A plain function IS resolvable, so
+    // `r5b_eval_order_read_of_mutated_supported` above is correct-support; only an
+    // unresolvable callee body keeps this shape loud. Follow-on = ROADMAP §3.)
     let src = "module t;\n\
         class C; function int m(int z); return z*2; endfunction endclass\n\
         function automatic int f(inout int a); a=a+1; return a; endfunction\n\
-        initial begin C c; int x=5; int y; c=new(); y = c.m(x) + f(x); $display(\"y=%0d\",y); $finish; end endmodule";
+        initial begin C c; int x=5; int y; c=new(); y = c.m(x) + f(x); $display(\"x=%0d y=%0d\",x,y); $finish; end endmodule";
     assert!(loud(src));
 }
 

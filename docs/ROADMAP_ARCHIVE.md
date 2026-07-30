@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–274**
+**§4.5.220–275**
+- `4.5.275` 값을 반환하는 output-formal 호출을 **아무 표현식 위치에서나** — 한 shape 서술을 네 워커가 공유 · 조건부 자리는 guard 블록 · 왼쪽 읽기는 pre-call 스냅샷 …
 - `4.5.274` 외부 round-19 — 값을 반환하는 호출의 output actual(33/34) · `void'(f(out))` 문장 · named arg 매핑 · 그리고 그 밑의 silent-wrong 2건(default 인자 스코프 · frame body 안의 파일 읽기) …
 - `4.5.273` 외부 round-18 — suspend 하는 callee(11/12) · struct 멤버 비트 커버리지 · `automatic` unpacked struct 의 lifetime 이 파서에서 사라지던 것 · 그리고 그 밑의 silent-wrong …
 - `4.5.272` `-v` 유효 invocation echo — 그리고 그것이 드러낸 filelist 플래그-값 결함(`--top` false-loud · `--hier-tree` silent 위치) …
@@ -329,6 +330,38 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.275 값을 반환하는 output-formal 호출을 아무 표현식 위치에서나 (2026-07-30, branch feat-r19-value-call-out-general, format 26 불변) ✅
+
+**round-19 리포트(§3.1/§3.2/§3.3)는 HEAD `a5baeb3`에서 전부 재현되지 않았다** — §4.5.274 가 이미 닫았고, 34건 각각을 다시 돌려 확인했다(`go = nxt(5,r)` · `if (nxt(5,r)==1)` · `while (n<lim && rsp_next(fd,r)==1)` · `void'(nxt(5,r))` · named arg). **남아 있던 것은 §4.5.274 가 닿지 못한 *자리*들**이었고, 그것을 35-케이스 행렬로 측정하니 **pass 14 / honest-loud 21 / wrong 0** 이었다. correct-or-loud 는 지켜져 있었으나 **21건이 false-loud** 였다.
+
+**진단의 핵심 = §4.5.274 가 연 자리는 전부 "문장 모양"의 부분집합이었다.** 맨몸 호출 문장 · 직접 rhs · 맨몸 조건 · while/for 조건의 top-level `&&`/`||` 한 피연산자. 호출이 값을 반환하면 표현식이 갈 수 있는 **아무 데나** 가는데, 나머지 전부(concat 조각 · 다른 호출의 인자 · select 인덱스 · cast 피연산자 · `case` scrutinee · `repeat` 카운트 · `$display` 인자 · task 인자 · NBA rhs · `return` 값 · lvalue 인덱스 · 더 깊이 묻힌 `?:` arm 과 `&&` 우변)는 hoist site 가 아예 없었다.
+
+**수정 = 범용 hoist(`hoist/general.rs` 신규 + `hoist/general_stmt.rs`).** 노드마다 "어떤 자식을, 어떤 순서로, 어떤 조건에서 평가하는가"를 **한 곳(`shape`)에만** 적고, 탐지기·도달성 게이트·평가순서 게이트·변환기 **네 워커가 그것을 공유**한다 — 분류기와 lowering 이 갈리는 실패(ENGINEERING_RULES 의 기록된 함정)를 구조적으로 막는 배치다. 극성은 **답할 수 없으면 물러난다**: `Opaque` 노드는 탐지기가 "있다"로 보수 응답하고 도달성 게이트가 거부하므로, 모르는 payload 안의 호출은 조용히 빠지지 않고 loud 로 남는다.
+
+**조건부 자리는 노드를 그대로 두고 copy-out 만 guard 블록에 넣는다.** 좌항/조건의 진리값을 1비트 temp 에 포착하고, `포착값 !== <단락값>`(`&&`=0 · `||`=1 · `?:` then-arm=0 · else-arm=1)일 때만 들어가는 블록에서 copy-out 을 emit 한다. case-inequality 이므로 **x 는 블록에 들어간다** — 그것이 바로 IEEE 가 평가하는 경우다(`log_and(x,B)` 는 B 가 필요하고, x 조건의 `?:` 는 두 arm 을 다 평가한다). 건너뛴 경로에서 temp 는 기본값으로 읽히지만 선택되지 않는다(`log_and(0,·)=0` · `log_or(1,·)=1` · 확정 조건의 `?:` 는 반대 arm). **노드를 유지하는 것이 `?:` 에서 결정적이다** — arm 이 바깥 문맥으로 결정되는 성질이 그대로 남아, arm 을 고립시키던 변환이 막아야 했던 §4.5.217 부호/폭 발산이 **애초에 생기지 않는다**.
+
+**그래서 §4.5.217 이 loud 로 막아 둔 3건이 loud → correct-support 로 올라갔다.** 등가 차분으로 값을 확인했다: 부호 불일치 arm = **`x=0a`**(§11.8.1 unsigned zero-extend, 고립 변환이 냈을 `0xfa` 아님) · 폭 불일치 arm = **`x=fd`**(통합 폭 16 에서 sign-extend 후 `>>1`, 고립이 냈을 `0x7d` 아님) · coercion-unsafe 통합 = `mine=7`(호출 없는 쌍둥이와 `===`). §4.5.216 특수 경로는 `sc_rhs_owned` 로 **소유권을 그대로 유지**했고(원래 guard 를 그 함수로 추출해 특수 경로와 범용 경로가 **같은 술어 하나**를 본다), 범용 arm 은 `hoist_stmt_top` 의 **맨 마지막**에 둬서 위의 모든 arm 이 바이트 동일하게 남는다.
+
+**평가 순서는 읽기가 호출의 어느 쪽인지로 갈린다(실측).** 오른쪽 읽기는 안전하다 — 소스도 호출 뒤에 읽는다(`q = nxt(5,o) + o` = `6+50` · `if (nxt(5,o)==6 && o==50)` = taken). 그것을 거부한 것이 리포트의 `.rsp` 워커에 `r.len` 읽기를 붙이면 loud 가 되던 이유였다. **왼쪽 읽기는 pre-call 스냅샷으로 살렸다** — 호출 앞에 `snap = v`(넷 전체 복사)를 emit 하고 왼쪽 읽기를 `snap` 으로 바꾼다(`q = o + nxt(5,o)` = `7+6` = **11**, iverilog 일치). 못 고치는 두 경우는 **정직한 loud** 로 남겼고 이유를 메시지에 적었다: 스냅샷 대상이 평범한 비트벡터 넷이 아닐 때(unpacked 배열/struct 루트는 넷 하나로 복사 불가) · **한 표현식에서 두 호출이 같은 루트를 쓸 때**(세대가 둘이라 스냅샷 하나로 안 된다).
+
+**게이트를 열자 DA 워커의 false-loud 가 드러났다.** `expr_da` 의 `&&` arm 은 좌항이 `Clean`(= 조건부 쓰기 포함)이고 우항이 `Reads` 면 `Reads` 로 끝냈는데, 중첩 `&&` 가 정확히 그 모양이다(`(n<10 && rsp_next(n,r)==1) && r.len>=0` — 안쪽 우항이 쓰므로 안쪽 판정이 `Clean`). 우항의 읽기는 **그 조건부 쓰기가 일어난 경로에서만** 도달하므로 read-before-write 가 아니다 → `expr_writes_when(lhs, ·, op==LogAnd)` 로 물어 `Writes` 로 승격. **x 좌항까지 건전한 이유를 실측했다**: `expr_writes_when` 이 참을 낼 수 있는 길은 좌항 자신의 단락 체인을 타고 "평가되면 반드시 쓰는" 잎까지 내려가는 것뿐이고, **이 우항에 도달했다는 것 자체가 좌항 체인이 단락하지 않았다는 뜻**이라 그 잎도 평가됐다(좌항 x → `r=77` 로 쓰기 확인 · 좌항 0 → 우항 자체가 평가되지 않아 읽기도 없음).
+
+**진단 메시지를 실측 기준으로 다시 썼다.** 옛 문구는 지원 위치를 열거하며 "`?:` arm 과 더 깊은 중첩은 미지원"이라고 적었는데 그게 더 이상 사실이 아니다(반대 방향의 stale claim). 새 문구는 **남은 것만** 적는다 — 연속 재평가 표현식(`assign`/`force`/`wait` 조건: copy-out 이 변화마다 다시 터질 수 없다) · intra-assignment delay · `min:typ:max`/제약·`with` · 위의 평가순서 2경우 — 그리고 우회로(`t = f(...);`)를 제시한다. 남은 목록은 **추측이 아니라 10형태 실측**으로 정했다(`foreach` 는 loud 로 보였지만 실은 무관한 pre-existing DA 게이트였다 — 모듈 레벨 배열로 바꾸니 `o=20 a2=3`).
+
+**적대 리뷰(2 렌즈) — 내 수정에서 silent-wrong 6건 + 하강 2건이 나왔고, 두 렌즈가 가장 중요한 것 하나에서 수렴했다.** 그 하나는 **DA 판정을 너무 강하게 준 것**: 중첩 `&&` 의 조건부 쓰기에 `ExprDa::Writes` 를 줬는데 그 판정의 계약은 "**모든** 평가가 쓴다"이고 좌항이 단락하면 아무것도 안 쓴다. 그래서 게이트가 단락 경로에서도 로컬을 assigned 로 봐 **같은 이름 형제 블록의 잔값을 exit 0 에 읽었다**(vita `else r=777` / 신선한 automatic 이면 기본값). 옳은 판정은 `Clean` — 읽기는 안전하고 쓰기는 약속하지 않는다. 나머지 5건: ①`$bits` 는 피연산자를 **평가하지 않는데**(IEEE §20.5) hoist 가 copy-out 을 태워 소스에 없는 부작용을 냈다(`o` 가 7→50) ②`$monitor`/`$strobe` 는 인자를 **나중에 다시 렌더**하므로 hoist 가 temp 를 얼려 매 변화마다 같은 값을 찍었다(§4.5.250 이 이미 닫아 둔 클래스 — 목록을 **한 벌로 공유**해 해결) ③인자 리스트·rhs↔lvalue 인덱스·인덱스↔인덱스를 **따로** 분석해 경계를 넘는 위험을 못 봤고(`$display("%0d %0d", o+0, nxt(5,o))` 가 `50 6`, iverilog `7 6`) 두-호출 가드까지 무력화했다 → **문장 전체를 한 시퀀스로** ④포착 피연산자의 스크래치 집합을 **빈 것으로 시작**해 그 안의 호출이 왼쪽 읽기를 못 봤다(`q = o + (nxt(5,o) && 1)` 가 51, iverilog 8) ⑤frame body 안에서 hoist 가 copy-out 을 내자 분류기가 **소스에 없는 이유**를 보고했다("timing/suspend/fork control"). 하강 2건은 리뷰가 잡은 게 아니라 **리뷰가 열어 준 것**이다 — 계층 읽기(`top.o`)와 **callee 본문 안의 읽기**는 PRE 에서도 조용히 post-call 값이었고(`q=56` / iverilog 13) 둘 다 **pre-existing silent-wrong**이었다.
+
+**그 두 개를 닫으면서 안전 게이트가 하나로 합쳐졌다.** `hoist_is_safe`+`reads_ident_outside_inout`(이름별·비방향·단일 세그먼트만·callee 본문 안 봄)을 **삭제**하고, 좁은 hoister·§4.5.216 arm 변환·범용 hoister 전부가 `order_clean`(= `order_plan` 이 위험 0) 하나를 본다. 수리 불가 위험은 별도 채널(`opaque`)로 분리했다 — 계층 경로, 그리고 `call_effect` 가 `Inert` 를 증명하지 못하는 callee 본문. **`Inert` 증명이 있는 callee 는 비용이 없다**(`q = h(5) + nxt(5,o)` 는 계속 동작) — R16 §3.2 의 기존 리졸버를 그대로 재사용했기 때문이다. 클래스 메서드 본문은 해소 불가라 loud 로 남고(`y = c.m(x) + f(x)`), 그 테스트는 값 핀에서 loud 핀으로 되돌렸다(사유를 주석에).
+
+**리뷰가 드러낸 pre-existing 2건도 같이 닫았다**: ①포착 진리값이 `x || x` — 같은 expr id 를 **두 번** 읽으므로 `$random` 피연산자가 두 번 뽑혀 시퀀스가 어긋났다 → `!!x`(같은 4-state 축약, 평가 1회)로. §4.5.216 의 두 자리도 같이. ②`fresh_ret_temp` 이 문자열 아닌 모든 반환에 `Reg` 넷을 만들어 **`real` 반환이 정수 도메인으로 반올림**됐다(`return 1.5` → `2.000000`, **직접 rhs 에서도**, exit 0) → `NetKind::Real` f64 넷으로(iverilog `1.500000` 일치).
+
+**재리뷰(설계를 바꿨으니 필수) — 2 렌즈가 또 6건, 그중 하나는 PANIC.** ①**frame body 판별자가 틀렸다**: `frame_fn_lowering` 만 봐서 `task automatic` 본문(=`frame_task_lowering`)에서 copy-out 이 emit 되고 엔진의 `debug_assert!(frame_local[net])` 를 밟았다 — **진단 없이 exit 101**, release 면 assert 가 빠져 **다른 넷에 쓴다**. 좁은 경로에도 같은 구멍이 **pre-existing** 으로 있었다(`r = nxt(5,gv);` 가 PRE 에서도 패닉) → 두 flag 를 다 보는 `in_frame_body()` 를 **양쪽 arm 에** 걸어 panic→loud. ②**`subst_pre_call_reads` 가 output actual 을 스냅샷으로 바꿨다** — 문장 자기 call 의 write **목적지**를 읽기로 취급해 callee 의 copy-out 이 스냅샷 넷에 떨어지고 **사용자 변수는 낡은 값**(vita `o=50` / iverilog `o=60`). **쓰기 사라짐**. 방향을 물어(`callee_arg_dirs`) `input` actual 만 시퀀스에 넣고, `inout` 은 copy-in 이 **읽기이면서 목적지**라 스냅샷으로 못 고치므로 stand-down. ③**`Opaque` 가 아무것도 기록하지 않았다** — 그 정당화("범용 경로는 어차피 거부")는 `order_clean` 이 **좁은 경로의 게이트이기도** 하기 때문에 성립하지 않았고, 삭제된 `reads_ident_outside_inout` 의 `_ => true` catch-all 이 막던 것이 그대로 열렸다(`(1:gv:3) + nxt(5,gv)` 가 12, iverilog 56). `Opaque` 를 **`NoHoist`(평가됨·읽음) / `Unevaluated`(`$bits` — 평가 안 됨)** 로 쪼개고 자식을 **명시**했다. ④그 쪼갬이 **false-loud 도 고쳤다**: 탐지기가 `Opaque` 에서 무조건 "있다"고 답해 **호출이 없는** `$bits`/`min:typ:max` 가 인자로 있기만 해도 문장 전체가 stand-down 했다(PRE 는 `nxt($bits(gv), gv)` 를 정상 처리). ⑤**계층 읽기를 세그먼트 철자로** 오염시켜 무관한 자식 스코프(`sub.gv`)가 부모의 `gv` 를 죽였다 → **self-path 만** 별칭일 수 있다(플래튼은 bare name 이므로 `t.gv`≡`gv`, `sub.gv`는 다른 넷). ⑥**candidates 를 좁은 워커로** 모아 concat/인자 경유 호출에서 집합이 **비었고**, 그것만 소비하는 callee-body/method-body 불투명 검사가 아예 안 돌았다 → shape 기반 + **named-arg 인식**(`.formal(o)` output actual 이 위치-zip 때문에 통째로 안 보였다 — pre-existing, 두-호출 가드까지 무력화).
+
+**그리고 재리뷰가 파서의 pre-existing silent-wrong 을 하나 더 드러냈다** — typedef 된 return 타입을 return 필드로 옮기는 자리가 `int`/`integer` 만 `ParamType` 에 매핑하고 **`real`/`realtime` 은 안 했다**. `ParamType` 이 반환의 실수성을 기록하는 **유일한** 곳이라 `typedef real myreal; function myreal f(…)` 는 정수 반환이 됐다(inline 은 반올림, frame return temp 를 지나면 **0.0**). AST **값**만 바뀌므로 format/해시 불변.
+
+**검증**: 35-케이스 행렬 **pass 35 / loud 0 / wrong 0**(기대값은 전부 iverilog 실측 — 함수 output formal 은 iverilog 가 거부하므로 §4.5.274 와 같은 **합성 오라클**: 모듈 넷을 쓰는 함수로 순서·조건부 평가를 고정, 매핑은 task 로) · **하베스트 코퍼스 4074 designs PRE/POST 2회**(PRE = `git archive main` 별도 빌드) — **회귀 0**, 차이는 전부 loud→정답 · silent-wrong→loud · 진단 문구 · 등가 차분(hand-hoisted 쌍둥이) 다수 일치 · iverilog 직접 대조(`y=11 x=6` · `o=60` · `arr1=3 o=0` · `q=8` · `q=13 gv=6` · `1.500000` · `3.750000`) · **4942 tests green**(신규 `output_formal_any_position.rs` **33** — 그중 **17개가 두 리뷰 라운드의 발견 핀**, 옛 loud 핀 7건을 값 핀으로 전환하고 각 주석에 이유) · clippy 0 · fmt clean · **format_version 26·AST 스키마 해시 불변**. 모듈 사이즈: `hoist/mod.rs` 977 → 689 · 신규 `general.rs` 859 · `general_ast.rs` 339 · `general_query.rs` 215 · `general_stmt.rs` 205(전부 1000 이하).
+
+**잔여**(전부 정직한 loud·진단 메시지에 명시): 연속 재평가 표현식(`assign`/`force`/`wait` 조건) · intra-assignment delay · `min:typ:max`/제약/`with` **안의** 읽기(치환이 못 닿는다) · 계층 self-path 또는 해소 불가 callee 본문에서의 왼쪽 읽기 · 비-비트벡터 위험 루트 · 한 시퀀스에서 같은 루트를 쓰는 호출 2개 · frame body 안의 모든 위치 · `inout` actual 의 루트를 형제 인자가 쓰는 경우. **후속 후보**(ROADMAP §3): 클래스/2-세그먼트 메서드 본문 해소 · frame body 안 copy-out(엔진 쪽 작업).
 
 #### 4.5.274 외부 round-19 — 값을 반환하는 호출의 output actual, 그리고 그 밑의 silent-wrong 2건 (2026-07-29, format 26 불변) ✅
 

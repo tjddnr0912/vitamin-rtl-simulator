@@ -199,13 +199,22 @@ timing control anywhere in a callee made every later local in the caller
 loud.)
 
 A call that **returns a value** while writing an `output` argument counts as
-writing it, wherever the call sits:
+writing it, wherever the call sits — any position the statement evaluates once:
 
 ```systemverilog
 go = rsp_next(fd, r);                            // the rhs of an assignment
 if (rsp_next(fd, r) == 1) …                      // an operand of `==`
 while (n < limit && rsp_next(fd, r) == 1) …      // an operand of `&&`
+case (rsp_next(fd, r)) …                         // a case scrutinee
+$display("%0d", rsp_next(fd, r));                // a system-task argument
+q = {rsp_next(fd, r)} + other(rsp_next(fd, r2)); // a concat part, another call's argument
+arr[rsp_next(fd, r)] = 1;                        // an lvalue index
 ```
+
+A call in a **conditionally** evaluated operand — the right side of `&&`/`||`, or
+a `?:` arm — is evaluated only when that operand is reached, and the write
+happens only then, however deeply the operand is nested. An `x` condition
+evaluates both `?:` arms, so both writes happen, as the LRM requires.
 
 The copy-out happens while the expression is being evaluated, so `r` holds a
 value written this entry by the time anything downstream reads it. A branch also
@@ -243,9 +252,15 @@ a hand-written `x[31:16] = a; x[15:0] = b;`. Partial coverage stays loud.
   *after* a loop whose condition was `a && f(r)`: the loop can exit because `a`
   was false, in which case `f` never ran. (Inside the body it *is* counted; see
   above.)
-- A read of the variable elsewhere in the same expression as the call
-  (`g = f(r) + r;`) blocks the claim. Operand order is unspecified for `+`, so
-  the read may come first.
+- A read of the variable elsewhere in the same expression is fine when it sits
+  to the **right** of the call (`g = f(r) + r;` reads the written value, matching
+  the reference simulator). A read to the **left** (`g = r + f(r);`) has to see
+  the value from *before* the call, and vitamin arranges that by taking a copy
+  first — so that works too. It is rejected only when the copy cannot serve: when
+  the read is spelled as a hierarchical path (`g = t.r + f(r);`), when it happens
+  inside a called function's body, when the variable is not a plain bit vector,
+  or when two calls in the same expression write it (each would need its own
+  copy).
 - Referring to an `automatic` block-local **hierarchically** (`tb.a`, or `t.a`
   from a task in the same module) is rejected. IEEE 1800 §23.9 forbids it —
   automatic storage has no static address to name — and accepting it would let

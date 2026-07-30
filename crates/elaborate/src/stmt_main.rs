@@ -396,26 +396,7 @@ impl Elaborator<'_> {
                 // statement, so `$monitor` watched a frozen temp and printed only at t=0,
                 // and `$strobe` reported the value from before the rest of the time step.
                 // The top-level hoist below already excluded them for the same reason.
-                let deferred_print = matches!(
-                    name.name.as_str(),
-                    "$monitor"
-                        | "$monitorb"
-                        | "$monitoro"
-                        | "$monitorh"
-                        | "$fmonitor"
-                        | "$fmonitorb"
-                        | "$fmonitoro"
-                        | "$fmonitorh"
-                        | "$strobe"
-                        | "$strobeb"
-                        | "$strobeo"
-                        | "$strobeh"
-                        | "$fstrobe"
-                        | "$fstrobeb"
-                        | "$fstrobeo"
-                        | "$fstrobeh"
-                );
-                let arg_hoisted: Vec<ast::Expr> = if deferred_print {
+                let arg_hoisted: Vec<ast::Expr> = if is_deferred_print_task(&name.name) {
                     args.to_vec()
                 } else {
                     args.iter()
