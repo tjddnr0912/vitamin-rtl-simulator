@@ -151,10 +151,18 @@ impl Parser<'_, '_> {
                         | NetVarKind::Longint
                 );
                 // `int`/`integer` carry their 32-bit width via ParamType::Integer;
-                // every other kind sizes from `range` (a named atom with no explicit
-                // range gets its fixed atom width here).
+                // `real`/`realtime` MUST map onto ParamType::Real/Realtime — that enum is the
+                // only place the return's realness is recorded, so leaving it `Implicit` made
+                // `typedef real myreal; function myreal f(…)` return an INTEGER: the value was
+                // rounded (and, through a frame call's return temp, came back 0.0), silently.
+                // Every other kind sizes from `range` (a named atom with no explicit range
+                // gets its fixed atom width here).
                 if matches!(info.kind, NetVarKind::Int | NetVarKind::Integer) {
                     ret_type = ParamType::Integer;
+                } else if info.kind == NetVarKind::Real {
+                    ret_type = ParamType::Real;
+                } else if info.kind == NetVarKind::Realtime {
+                    ret_type = ParamType::Realtime;
                 } else if range.is_none() {
                     if let Some(w) = Self::atom_member_width(info.kind) {
                         range = Some(Self::dec_range(w - 1));
