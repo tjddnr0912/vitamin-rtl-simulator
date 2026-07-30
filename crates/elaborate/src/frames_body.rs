@@ -99,6 +99,46 @@ impl Elaborator<'_> {
             let fid = self.frame_idx[name];
             self.lower_frame_func_body(name, &func, fid);
         }
+        // R22 §3.1 (function half): a framed FUNCTION whose body carries an effect the
+        // `&self` executor cannot perform MUST reach the engine as a `Terminator::Call` —
+        // that is the only call shape the `run_process` router can look at. A function
+        // with an output/inout formal already gets one (it is in `inout_func_names`); an
+        // INPUT-ONLY one does not: `r = rd(fd)` lowers to an `Expr::Call` that `eval`
+        // runs through the synchronous `&self` `run_task`, where the effect silently does
+        // nothing. Joining the same set routes it through `emit_frame_func_out_call`,
+        // whose only out-bind is the return slot.
+        //
+        // THIS is the only correct point in the pass. It has to be after the function
+        // bodies above (the predicate walks them) and before the task bodies below (a
+        // frame TASK body may call such a function, and unlike a frame FUNCTION body it
+        // is allowed to — `classify_frame_body` runs with `allow_call = true` for tasks).
+        // Doing it later, alongside the task rejects, left exactly that shape loud: the
+        // task body was already lowered with a plain `Expr::Call` by the time the name
+        // joined the set.
+        //
+        // Keyed on `func_body_needs_stmt_executor`, NOT on the suspendable set. The two
+        // differ, and using the suspendable set here was measured wrong: a `foreach` over
+        // a dyn-array formal desugars to `b.first(i)` / `b.next(i)`, which puts the
+        // function in that set, but the `&self` executor runs it correctly (the key is a
+        // body-local). Rerouting it cost a working design its dyn-array input formal,
+        // which only the direct-call path can bind — over-marking is free for the SUSPEND
+        // classifier and is not free for anything that changes a call's SHAPE.
+        for name in &frame_set {
+            let Some(&fid) = self.frame_idx.get(name) else {
+                continue;
+            };
+            if !self.funcs[fid as usize].is_task
+                && ir::func_body_needs_stmt_executor(
+                    &self.funcs,
+                    &self.func_blocks,
+                    &self.stmts,
+                    &self.exprs,
+                    fid,
+                )
+            {
+                self.inout_func_names.insert(name.clone());
+            }
+        }
         // B2: lower each frame TASK body (sorted) — task_frame_idx all reserved,
         // so self + mutual task recursion resolves.
         for name in &task_set {

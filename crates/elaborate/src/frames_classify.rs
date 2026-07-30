@@ -313,6 +313,7 @@ impl Elaborator<'_> {
             &self.funcs,
             &self.func_blocks,
             &self.stmts,
+            &self.exprs,
             &base_nets,
             &force_suspend,
         );

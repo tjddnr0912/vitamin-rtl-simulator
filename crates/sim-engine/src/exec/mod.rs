@@ -182,6 +182,12 @@ pub(crate) trait Kernel {
     /// the full kernel (the format engine renders through the Scheduler), so
     /// it is a statement-level effect; other placements are loud at elaborate.
     fn k_sformatf_rhs(&self, rhs: u32) -> bool;
+    /// READ (R22, drift pin only): does `sim_ir::sysfunc_is_stmt_effect` — the
+    /// canonical statement-effect family, which the suspend classifier routes
+    /// bodies onto this executor because of — claim `rhs`? Used by a
+    /// `debug_assert!` at `compute_effect`'s fall-through so the family and this
+    /// executor's arms cannot silently drift apart.
+    fn k_rhs_is_stmt_effect_family(&self, rhs: u32) -> bool;
     /// WRITE-phase render of a `$sformatf` rhs → the STRING-domain value.
     fn k_sformatf(&mut self, rhs: u32) -> Value;
     /// READ: is `rhs` an assoc-iteration SysFunc (`first`/`next`/`last`/

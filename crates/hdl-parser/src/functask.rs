@@ -44,6 +44,35 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// R22 §3.4: consume an explicit `static` lifetime on a task/function header
+    /// (IEEE 1800 §13.3), the sibling of `automatic`. Returns whether one was eaten.
+    ///
+    /// `static` is NOT a reserved word in this lexer — Verilog-2005 lets it be an
+    /// ordinary identifier, and the per-decl lifetime branch below relies on that — so it
+    /// arrives as an `Ident` and has to be told apart from a subprogram actually NAMED
+    /// `static`. The discriminator is the token AFTER it: a lifetime is always followed by
+    /// more header (the subprogram name, or for a function a return type / range), while a
+    /// name is immediately followed by `;` or the port-list `(`. So `task static tk (…)` is
+    /// a static task named `tk`, and `task static (…)` is a task named `static` — both keep
+    /// working.
+    ///
+    /// The result is deliberately dropped by both callers: `static` IS the default lifetime
+    /// for a subprogram declared in a (non-`automatic`) module, so writing it explicitly
+    /// asks for the behaviour `automatic = false` already gives. Accepting it is a pure
+    /// parse fix, with no downstream semantics to add.
+    fn eat_lifetime_static(&mut self) -> bool {
+        if self.at_ident_kw("static")
+            && !matches!(
+                self.peek_at(1),
+                Some(TokenKind::Semi) | Some(TokenKind::LParen) | None
+            )
+        {
+            self.bump();
+            return true;
+        }
+        false
+    }
+
     /// Returns the parsed `FunctionDef` plus a `is_void` flag. A `function void`
     /// in module/package scope is task-equivalent (statement-called, output
     /// formals, control flow) — the module-item caller converts it to a `TaskDef`
@@ -53,6 +82,9 @@ impl Parser<'_, '_> {
         let start = self.cur_span();
         self.bump(); // 'function'
         let automatic = self.eat_kw(Kw::Automatic);
+        if !automatic {
+            self.eat_lifetime_static(); // §13.3 explicit `static` — the default
+        }
         // N7/SV: a return-type KIND keyword (`logic`/`reg`/`bit`/`int`/`byte`/
         // `shortint`/`longint`) — `function int f` / `function logic [7:0] g`.
         // `integer`/`real`/`realtime`/`time` stay in `opt_param_type` below.
@@ -219,6 +251,9 @@ impl Parser<'_, '_> {
         let start = self.cur_span();
         self.bump(); // 'task'
         let automatic = self.eat_kw(Kw::Automatic);
+        if !automatic {
+            self.eat_lifetime_static(); // §13.3 explicit `static` — the default
+        }
         let name = self.ident().unwrap_or_else(|| Ident {
             name: String::new(),
             span: self.cur_span(),

@@ -948,6 +948,9 @@ impl Kernel for Scheduler<'_, '_> {
             })
         )
     }
+    fn k_rhs_is_stmt_effect_family(&self, rhs: u32) -> bool {
+        sim_ir::rhs_is_stmt_effect(self.st.ir.exprs.as_slice(), rhs)
+    }
     fn k_sformatf(&mut self, rhs: u32) -> Value {
         // args = [fmt string-literal Const, value args…] (elaborate contract).
         let Some(sim_ir::Expr::SysFunc { args, .. }) = self.st.ir.exprs.get(rhs as usize) else {

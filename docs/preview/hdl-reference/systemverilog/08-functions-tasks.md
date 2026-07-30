@@ -157,6 +157,14 @@ SV는 컨텍스트에 따라 기본값이 다르다.
 | `package` 함수/태스크 | static (명시 권장) |
 | 명시 선언 | `automatic`/`static` 키워드로 재정의 |
 
+> **vitamin 지원 (§4.5.277)**: `task static tk (…)` / `function static int fn (…)` 의 **명시적
+> `static` lifetime 키워드**(IEEE 1800 §13.3)가 파싱된다. 그 전에는 헤더 하나가 E2002 10건을
+> 냈다(`automatic` 만 파싱됐다). 동작상으로는 무의미한 명시다 — `static` 은 (non-`automatic`
+> 모듈의) 서브루틴 기본 lifetime 이므로 키워드를 쓰든 안 쓰든 같다. `static` 은 vitamin lexer 의
+> **예약어가 아니므로**(Verilog-2005 식별자) `task static;` 처럼 **`static` 이라는 이름의**
+> 서브루틴도 계속 합법이다 — 구별은 뒤 토큰으로 한다(lifetime 뒤엔 헤더가 더 오고, 이름 뒤엔
+> `;` 또는 `(` 가 온다).
+
 ```systemverilog
 // module 내부 — static이 기본값이므로 automatic 명시 필요
 module my_mod;

@@ -9,7 +9,10 @@
 extern crate self as sim_ir;
 
 mod analysis;
-pub use analysis::compute_suspendable_tasks;
+pub use analysis::{
+    compute_suspendable_tasks, func_body_needs_stmt_executor, rhs_frame_executor_cannot_perform,
+    rhs_is_stmt_effect, sysfunc_frame_executor_cannot_perform, sysfunc_is_stmt_effect,
+};
 
 use serde::{Deserialize, Serialize};
 use vita_artifact_derive::SchemaHash;

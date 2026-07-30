@@ -605,7 +605,19 @@ impl Elaborator<'_> {
                 self.add_net(
                     &decl.name.name,
                     ir::NetVar {
-                        kind: map_net_kind_or_wire(d.kind),
+                        // R22: `frame_local_net_kind`, NOT `map_net_kind_or_wire` — a body-local
+                        // `string` is WRITTEN by the body, so it needs a heap-backed
+                        // `NetKind::String` slot; `map_net_kind_or_wire` has no String arm and
+                        // dropped it to `_ => Wire`. This is the THIRD collector for the same
+                        // concept (module scope, frame body-locals, inline/static task
+                        // body-locals) and it was the one that never got the String arm, so a
+                        // `string` local was correct in a `task automatic` and broken in the
+                        // otherwise-identical static `task`. Two failure modes came out of the
+                        // one Wire: a plain `s = "hi"` was loud (E3018 procedural assignment to
+                        // a net), while `$fgets(s, fd)` — whose destination write does not go
+                        // through the lvalue check that raises E3018 — was SILENT, returning 0
+                        // and leaving `s` untouched at exit 0.
+                        kind: frame_local_net_kind(d.kind),
                         width: w,
                         msb,
                         lsb,

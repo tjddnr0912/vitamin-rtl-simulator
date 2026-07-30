@@ -406,16 +406,24 @@ fn vector_file(tag: &str) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
-/// SOUNDNESS PIN — a pre-existing silent-wrong, measured against iverilog 13:
-/// vita printed `rc=0` with an EMPTY string, iverilog reads the line, at exit 0.
+/// This shape was round-19's SOUNDNESS PIN for a pre-existing silent-wrong (vita printed
+/// `rc=0` with an EMPTY string at exit 0 where iverilog reads the line), which round 19
+/// could only raise to a loud runtime fatal. **Round 22 made it correct-support**, so the
+/// pin now asserts the read rather than the diagnostic — a loud that has become correct is
+/// a test to update, not a behaviour to preserve.
 ///
-/// `$fgets` (and `$fscanf`/`$sscanf`/`$fread`/`$fgetc`/`$ungetc`) write their
-/// destination as a statement-level effect that only the PROCESS executor performs.
-/// A frame body evaluates the same `SysFunc` through the pure evaluator, whose arm
-/// for these ids returns X and touches nothing — which is exactly the `.rsp` walker
-/// shape §3.1 has just made reachable.
+/// What round 22 changed: the frame body was on the synchronous `&self` executor because
+/// `compute_suspendable_tasks` classified `rc = $fgets(s, fd)` by its DESTINATION (an
+/// in-frame local ⇒ "subset") and never looked at the rhs, where the effect actually is.
+///
+/// Hand-IEEE pin (§21.3.4): iverilog 13 cannot oracle this shape — it rejects an
+/// output-formal function outright ("Function arguments must be input ports") — so the
+/// numbers come from the spec: `$fgets` reads through the newline and returns the
+/// character count, so the first line `"Len = 8\n"` gives `rc=8`. The VALUE semantics are
+/// iverilog-verified separately, on the same read in shapes iverilog does accept
+/// (`r22_stmt_effect_executor`'s task and module-process pins).
 #[test]
-fn a_file_read_inside_a_framed_body_is_fatal_not_a_quiet_zero() {
+fn a_file_read_inside_a_framed_body_reads_the_line() {
     let f = vector_file("framed");
     let (o, ok) = run(&format!(
         r#"module t;
@@ -435,8 +443,9 @@ fn a_file_read_inside_a_framed_body_is_fatal_not_a_quiet_zero() {
            endmodule"#
     ));
     let _ = std::fs::remove_file(&f);
-    assert!(!ok, "expected a diagnostic, got a clean run:\n{o}");
-    assert!(o.contains("F4004") && o.contains("$fgets"), "got:\n{o}");
+    assert!(ok, "expected a clean run:\n{o}");
+    assert!(o.contains("X rc=8"), "expected the byte count 8:\n{o}");
+    assert!(o.contains("s=[Len = 8"), "expected the line in `s`:\n{o}");
 }
 
 /// REGRESSION PIN for how that fatal is placed. An elaborate-time gate on the framed

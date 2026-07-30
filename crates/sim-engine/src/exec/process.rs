@@ -140,6 +140,16 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             if let Some(step) = apply_effect(sched, effect) {
                 return step; // a SysTask returned Finish/Stop/Fatal
             }
+            // R22 §4: a fatal raised from a `&self` eval context (a frame body, a
+            // cont-assign rhs) can only latch the `call_fatal` Cell — it has no way to
+            // return `Step::Fatal` from inside an expression. Consume it at the next
+            // statement boundary so the process STOPS where the fatal happened instead of
+            // running the rest of its body on state the fatal just declared invalid. That
+            // tail is what let a testbench print its own PASS verdict after a read had
+            // already failed. One predictable `Cell` load per statement.
+            if sched.st.call_fatal.get() {
+                return Step::Fatal;
+            }
         }
 
         // ── terminator ── (`set_pos!` writes the base-process `bb` or, in a task
@@ -677,6 +687,19 @@ pub(crate) fn compute_effect<'s, K: Kernel>(k: &K, stmt: &'s Stmt, sid: u32) -> 
                     is_file: false,
                 };
             }
+            // R22 DRIFT PIN: reaching here means no arm above claimed this rhs, so it is
+            // about to be evaluated as an ordinary value. `sim_ir::sysfunc_is_stmt_effect`
+            // is the canonical statement-effect family, and the suspend classifier routes
+            // whole subroutine bodies onto this executor because of it — so the two lists
+            // MUST agree. If the family claims an rhs that no arm above handles, the
+            // classifier is sending work here that this executor then silently evaluates
+            // as a pure expression, which is the exact failure the round-22 report is
+            // about. Debug-only, so release builds pay nothing; the test suite runs debug.
+            debug_assert!(
+                !k.k_rhs_is_stmt_effect_family(*rhs),
+                "compute_effect has no arm for an rhs that sim_ir::sysfunc_is_stmt_effect \
+                 classifies as a statement-level effect — the two lists have drifted"
+            );
             let value = k.k_eval_for_lvalue(lhs, *rhs); // CONTEXT-SIZED to lhs width
             let offsets = k.k_resolve_lvalue_offsets(lhs); // dynamic index NOW
             StmtEffect::Blocking {

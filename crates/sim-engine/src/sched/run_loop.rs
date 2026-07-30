@@ -53,7 +53,22 @@ impl Scheduler<'_, '_> {
                         if self.check_call_fatal() {
                             return FinishReason::Error;
                         }
-                        match self.run_body(r.proc, r.block) {
+                        let step = self.run_body(r.proc, r.block);
+                        // R22 §4: consume a fatal latched BY THIS BODY, before the step it
+                        // returned is honored. A frame-body fatal is raised from a `&self`
+                        // eval context deep inside an expression, so it cannot return
+                        // `Step::Fatal` itself — it sets the `call_fatal` Cell instead. The
+                        // three seams above poll that Cell only BEFORE running a body, so a
+                        // body that latched a fatal and then reached its own `$finish`
+                        // returned `Step::Finish` and the run ended as a clean Finish: the
+                        // diagnostic was printed, the simulation carried on past it, and
+                        // every judgement after it was made on state the fatal had already
+                        // declared invalid. Chronology decides — the fatal happened first,
+                        // inside the body, so it wins over a `$finish` reached afterwards.
+                        if self.check_call_fatal() {
+                            return FinishReason::Error;
+                        }
+                        match step {
                             // P1-6 (IEEE 1364-2005 §5.4/§17): drain the CURRENT
                             // timestep's postponed region ($strobe/$monitor) before
                             // terminating — Icarus/VCS parity. $fatal/$stop are

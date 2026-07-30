@@ -15,6 +15,17 @@
   ($sformatf도 대입 RHS 특수형 — string-literal 포맷 필수).
 - **✅ 구현됨 (READ family, v9)**: `$fread`/`$fscanf`/`$fgets`/`$sscanf`/`$feof`/`$fgetc` — 모두 blocking
   assign의 직접 rhs 형태(`n = $fscanf(...)`)로만 지원(statement-level intercept; ref-VAR/메모리 쓰기).
+  **반환을 버리는 맨몸 문장**(`$fgets(line, fd);`)도 지원 — 모듈 프로세스·인라인 태스크·프레임
+  태스크 본문 전부(§4.5.277; 프레임 태스크 본문은 그 전까지 `W3056 … skipped` 로 효과가 조용히
+  사라졌다). 프레임 **함수** 본문의 맨몸 형태만 여전히 loud.
+- **📍 어느 서브루틴 안에서 읽을 수 있나 (§4.5.277)**: 문장 수준 효과(목적지·ref 인자 쓰기, fd
+  전진, seed 갱신)는 `&mut` 프로세스 실행기만 수행한다. **모듈 프로세스, 그리고 문장에서 호출되는
+  태스크·함수 전부에서 동작한다** — `automatic` 여부, output/inout formal 유무, static lifetime,
+  중첩·재귀·루프·다중 호출 자리 무관. 남은 loud 는 셋뿐: **클래스 메서드 본문** · **연속 재평가
+  위치**(`assign`/`force`/`wait` 조건) · **intra-assignment delay**(`x = #1 f(...)`) → `fatal[VITA-F4004]`.
+  §4.5.277 전에는 `automatic` + formal 조합에 따라 loud/silent 가 갈렸고, 무관한 `$display("x")`
+  한 줄이 결과를 바꿨다. 같은 규칙이 `$fopen`·`$value$plusargs`·seeded `$random`/`$dist_*`·`$cast`·
+  queue pop 에도 적용된다(같은 계열).
 - **✅ 구현됨 (pre-opened descriptors §21.3.4, 2026-07-02 ROADMAP §4.5.61)**: STDOUT
   `32'h8000_0001`(=`$display`와 같은 결정적 싱크로 문장 순서 interleave)·STDERR `32'h8000_0002`
   (프로세스 stderr). `$fclose`(pre-opened)=warn+no-op(계속 사용 가능)·read는 write-only 룰

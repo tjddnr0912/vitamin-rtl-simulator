@@ -723,6 +723,41 @@ impl Elaborator<'_> {
         }
     }
 
+    /// R22: would EVERY destination of `emit_frame_func_out_call` land on a frame-local
+    /// net, for this callee and these actuals?
+    ///
+    /// A copy-out call has more than one destination: the return slot (checked by the
+    /// caller, which owns the assignment lvalue) AND one per `output`/`inout` formal. The
+    /// engine's `frame_write_lvalue` asserts every write it performs is frame-local
+    /// (`debug_assert!(self.frame_local[net])`, rc=101 in a debug build and a write into
+    /// the wrong net with the assert stripped), so ALL of them must qualify before this
+    /// call may be emitted from inside a frame body.
+    ///
+    /// Missing this is how `r = nxt(5, gv)` in a `task automatic tk(output int r)` still
+    /// panicked after the destination gate went in: `r` is frame-local and passes, but the
+    /// output actual `gv` is a module net and is the write that trips the assert. Checking
+    /// only the value's destination checks the wrong half of the statement.
+    ///
+    /// Conservative on anything it cannot resolve — an unresolvable actual, or an arg
+    /// count that does not line up with the port list (a default-filled trailing formal
+    /// resolves in `fill_default_args`, later than this) — because declining only means
+    /// the pre-existing path runs, which is loud.
+    pub(crate) fn frame_out_call_dests_are_frame_local(
+        &self,
+        func: &ast::FunctionDef,
+        args: &[ast::Expr],
+    ) -> bool {
+        if args.len() != func.ports.len() {
+            return false;
+        }
+        func.ports.iter().zip(args).all(|(p, a)| match p.dir {
+            ast::PortDir::Input => true,
+            ast::PortDir::Output | ast::PortDir::Inout => self
+                .actual_root_net(a)
+                .is_some_and(|n| self.net_is_frame_local(n)),
+        })
+    }
+
     /// R5-B: emit a call to a frame FUNCTION that has output/inout formals as a
     /// `Terminator::Call` (statement context), reusing the task copy-out machinery.
     /// `in_binds` cover input + inout formals; `out_binds` cover output + inout

@@ -84,6 +84,54 @@ impl Elaborator<'_> {
                 if self.array_assign_special(b, lhs, delay.as_ref(), rhs, false) {
                     return;
                 }
+                // R22: `x = f(args);` INSIDE A FRAME BODY, where `f` needs the copy-out
+                // `Terminator::Call` shape. `hoist_stmt_top`'s `S::Blocking` arm stands
+                // down here, and for a good reason that does not apply to this one shape:
+                // the hoist rewrites the rhs to a TEMP and the temp is a MODULE net, which
+                // a frame body may not write. When the rhs is the call and nothing else,
+                // no temp is needed — the copy-out can target the statement's own lvalue,
+                // exactly as a nested TASK call already writes an enclosing frame-local
+                // through its `out_binds`. Without this, a `task automatic` body calling a
+                // `$fgets`-bearing function was the one shape left loud after §3.1, while
+                // the identical call from a module process or an inlined task worked.
+                //
+                // Deliberately narrow: only a frame body (elsewhere the hoist already
+                // handles it), only a DIRECT call rhs, no delay/event, only a callee the
+                // routing set claims, and — the load-bearing one — only when the
+                // destination is FRAME-LOCAL. Anything else keeps the pre-existing path.
+                //
+                // That last condition is the engine panic this file's §3.2 note called
+                // "NOT YET NAMED", and it is now named and measured: a copy-out
+                // `Terminator::Call` whose destination lvalue lies OUTSIDE the enclosing
+                // frame's window aborts the engine with `frame lvalue net is routed`
+                // (rc=101). Routing `x = f(a, o)` in a frame body is safe when `x` is a
+                // frame-local (a body-local or this subroutine's own output formal) —
+                // that is the same write a nested TASK call's `out_binds` already
+                // performs — and unsafe the moment `x` is a module/instance net. Gating
+                // on the destination rather than on `in_frame_body` is what makes this
+                // narrow enough to be correct: the earlier attempts stood down for the
+                // whole frame body and took ten measured-correct shapes with them.
+                //
+                // Placed HERE, below the string-element and array/class/dyn lvalue
+                // specials, not at the top of the arm. It calls `lower_lvalue`, and the
+                // §6.16.3 note above is explicit that reaching `lower_lvalue` ahead of the
+                // `s[i]` detection emits a silent packed BIT-write — so an `s[i] = f(…)`
+                // would have been mis-lowered by an earlier placement.
+                if self.in_frame_body() && delay.is_none() && event.is_none() {
+                    if let Some((fid, func)) = self.inout_call_target(rhs) {
+                        if let ast::ExprKind::Call { args, .. } = &rhs.kind {
+                            let args = args.clone();
+                            if self.frame_out_call_dests_are_frame_local(&func, &args) {
+                                let lv = self.lower_lvalue(lhs);
+                                if lv.chunks.iter().all(|c| self.net_is_frame_local(c.net)) {
+                                    self.check_lvalue_kind(&lv, true);
+                                    self.emit_frame_func_out_call(b, fid, &func, &args, lv);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
                 // v7: `x = $random(seed)` — the seeded draw writes the seed
                 // back, statement-level intercept (the only legal placement).
                 if self.random_seeded_special(b, Some(lhs), delay.as_ref(), rhs) {
@@ -289,15 +337,31 @@ impl Elaborator<'_> {
                 // with NO lhs (return discarded). ($feof is a pure query — a bare
                 // $feof has no effect, so it is not routed here.)
                 //
-                // NOT in a FRAME function/task/method body (`in_frame_body`): the
-                // discard uses a fresh MODULE net (`emit_discarded_call`→
-                // `fresh_ia_tmp`), which is outside the frame, and `run_frame_call`
-                // cannot execute the sys-read StmtEffect anyway — so leave the
-                // pre-existing `lower_systask` (warn+skip) path there unchanged (a
-                // bare sys-read in a subprogram body is a separate follow-on; its
-                // ASSIGNMENT form is equally unsupported). A process body and an
-                // INLINE task body (both in the process stream) DO execute it.
-                if !self.in_frame_body
+                // A process body and an INLINE task body (both in the process stream)
+                // execute it directly.
+                //
+                // R22: a FRAME TASK body is routed too (`frame_task_lowering`). The old
+                // exclusion rested on "`run_frame_call` cannot execute the sys-read
+                // StmtEffect anyway", which was true only because the classifier never
+                // marked such a task suspendable — the same root as §3.1. The routing
+                // now makes that premise false, and it is self-fulfilling here: the
+                // discard writes a fresh MODULE net, so the rewritten statement is a
+                // suspend signal TWICE OVER (an out-of-frame lhs and a statement-effect
+                // rhs), which puts the whole body on the `&mut` executor that performs
+                // the read. Leaving it out would have kept a silent-wrong wearing a
+                // warning: `W3056 … skipped` at exit 0, with the destination untouched
+                // and the fd not advanced, while iverilog performs the read.
+                // `fresh_ia_tmp` allocating a module net is safe here because every
+                // frame's `locals_len` is fixed at RESERVE time, before any body is
+                // lowered, so a net created now necessarily sits past every frame
+                // window.
+                //
+                // A frame FUNCTION body (and a class method) still takes the old path:
+                // there `classify_frame_body(allow_call = false)` rejects an
+                // out-of-frame write outright, so routing it would only trade the
+                // warning for a confusing E3009 about an assignment the user never
+                // wrote.
+                if (!self.in_frame_body || self.frame_task_lowering)
                     && matches!(
                         name.name.as_str(),
                         "$sscanf"

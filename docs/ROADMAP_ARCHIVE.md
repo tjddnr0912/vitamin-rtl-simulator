@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–276**
+**§4.5.220–277**
+- `4.5.277` 외부 round-22 — 실행기 선택이 **무관한 `$display` 한 줄**에 달려 있었다(분류기가 문장을 목적지로만 봤고 효과는 rhs 에 있었다) · 함수도 같은 뿌리 · static task 의 `string` 로컬은 **세 번째 수집기** · fatal 이 안 멈추던 것 · 그리고 "이름 없던" 패닉 조건에 이름을 붙였다(목적지가 프레임 창 밖인가) …
 - `4.5.276` 외부 round-20 — **내가 만든 회귀**(모듈 전역 키의 함수 전체 stand-down 이 무관한 dyn arm 을 껐다) · `inout` copy-in 이 죽었음의 증명 · 루프 trip-count · 그리고 그것을 고치다 만든 silent-wrong 5건(fold 도메인·resolver·스코프 교차·decl-init·재선언) …
 - `4.5.275` 값을 반환하는 output-formal 호출을 **아무 표현식 위치에서나** — 한 shape 서술을 네 워커가 공유 · 조건부 자리는 guard 블록 · 왼쪽 읽기는 pre-call 스냅샷 …
 - `4.5.274` 외부 round-19 — 값을 반환하는 호출의 output actual(33/34) · `void'(f(out))` 문장 · named arg 매핑 · 그리고 그 밑의 silent-wrong 2건(default 인자 스코프 · frame body 안의 파일 읽기) …
@@ -331,6 +332,32 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.277 외부 round-22 — 실행기 선택이 무관한 `$display` 한 줄에 달려 있었다 (2026-07-31, branch feat-r22-report, format 26 불변) ✅
+
+**리포터가 뿌리를 한 줄로 좁혀 왔고, 그 한 줄이 정확했다.** 세 증상(`$fgets`/`$fscanf`/`$sscanf` 가 F4004 · `$value$plusargs` 가 진단 없이 default 유지 · `$random(seed)` 가 0 반환·seed 미갱신)은 전부 **같은 뿌리**였고, 경계는 **본문에 무관한 `$display("x")` 한 줄을 넣느냐**였다. 리포터의 3 재현 전부 HEAD 에서 그대로 재현됐다.
+
+**근인 = 분류기가 문장을 목적지로만 봤다.** `compute_suspendable_tasks` 의 `stmt_signal` 은 blocking assign 에 대해 **lhs 가 프레임 창 밖을 쓰나**만 물었다. `rc = $fgets(line, fd)` 의 lhs 는 in-frame output formal 이므로 "subset" 으로 읽혔고 태스크가 동기 `&self` 프레임 실행기에 남았다 — 거기서 같은 `SysFunc` 는 순수 `eval` 경로로 떨어져 **0 을 돌려주고 목적지를 안 건드린다**. 효과는 목적지가 아니라 **rhs** 에 있었다. `$display` 가 고친 이유도 정확히 이것이다: `Stmt::SysTask` 가 `_ => true` arm 으로 떨어져 태스크가 suspendable 로 표시되고 본문 전체가 효과를 수행할 수 있는 `&mut` 실행기로 옮겨간다. 수정 = **단일 정본 술어** `sim_ir::sysfunc_is_stmt_effect`(`SysFuncId` 전수 match, `_` arm 없음 — 새 id 는 컴파일 에러로 결정을 강제)를 만들고 `stmt_signal` 의 blocking arm 이 rhs 도 묻게 했다. `exprs` 를 인자로 추가(elaborate `&self.exprs` == engine `&st.ir.exprs`, `driver.rs` 에서 동일 arena 확인 — pure-function 계약 유지).
+
+**함수도 같은 뿌리였고, 이유는 "IEEE 가 함수의 타이밍 제어를 금지한다"가 아니었다.** `compute_suspendable_tasks` 는 `is_task == false` 를 건너뛰고 있었는데, 이 집합이 실제로 주는 것은 **`&mut` 실행기**이지 suspend 가 아니다. 그리고 프레임 함수는 이미 `validate_frame_body` → `classify_frame_body(allow_call=false)` 가 **모든** 본문에 대해 Delay/Wait/Fork/Call terminator·프레임 밖 쓰기·print 아닌 `$systask` 를 거부하므로 **엔진에 도달하는 프레임 함수는 이미 leaf·non-suspending** — 태스크가 lift 前에 증명받는 바로 그 속성이다. 그래서 skip 을 걷었다.
+
+**input-only 함수는 호출 형태부터 달랐다.** output formal 이 있으면 `emit_frame_func_out_call` 이 `Terminator::Call` 을 내주는데(엔진 라우터가 볼 수 있는 유일한 형태), input-only 면 `r = rd(fd)` 가 `Expr::Call` 로 낮춰져 `eval` → 동기 `run_task` 로 간다. `inout_func_names` 에 합류시켜 copy-out 경로로 보냈다(out-bind 는 return slot 하나).
+
+**static task 의 `string` 로컬 — 같은 개념의 세 번째 수집기.** body-local 넷 kind 수집기가 셋인데(모듈 스코프 · frame body-local · **inline/static task** body-local) `string` arm 이 있는 곳은 앞의 둘뿐이었다(`map_net_kind_or_wire` 는 String arm 이 없어 `_ => Wire`). 그 하나의 Wire 가 두 가지 실패를 냈다 — 평범한 `s = "hi"` 는 **loud**(E3018 "procedural assignment to net `t.$itask$w$L.s`"), `$fgets(s, fd)` 는 **silent**(시스템 함수의 목적지 쓰기는 E3018 을 내는 lvalue 검사를 지나가지 않는다). 이것이 리포터의 "lifetime 키워드를 떼면 진단이 사라지면서 rc=0 은 그대로"(§3.1 마지막 문단)의 정체다. `frame_local_net_kind` 로 교체.
+
+**bare sys-read 문장도 열었다.** `$fgets(line, fd);`(반환 버림)가 프레임 태스크 본문에서 `W3056 … skipped` + exit 0 + 목적지 미변경이었다. 옛 제외의 근거("`run_frame_call` 이 어차피 못 한다")는 분류기가 그런 태스크를 표시하지 않아서 참이었을 뿐이고, 이제 자기충족적으로 거짓이다 — discard temp 가 모듈 넷이라 rewritten 문장은 **두 겹으로** suspend 신호다. frame **FUNCTION** 본문은 그대로 둔다(거기서는 프레임 밖 쓰기를 `classify_frame_body` 가 거부하므로 사용자가 쓰지 않은 대입에 대한 E3009 로 바뀔 뿐).
+
+**§4 fatal 이 멈추지 않던 것.** `&self` 문맥의 fatal 은 표현식 한가운데서 `Step::Fatal` 을 못 돌려주니 `call_fatal` Cell 에 래치하는데, 스케줄러가 그 래치를 **본문 실행 前** 세 자리에서만 폴링했다. 그래서 자기 본문에서 fatal 을 켠 프로세스가 **자기 `$finish` 까지 달려** `FinishReason::Finish` 로 끝났다 — 진단은 찍히지만 시뮬레이션은 그 위를 계속 갔고 TB 는 자기 PASS 를 출력했다. 시간 순서가 결정한다: (a) `run_body` **직후** 폴링해 body 가 돌려준 step 보다 fatal 이 이기게 하고 (b) `run_process` 의 **문장 루프**에도 폴링을 넣어 fatal 지점에서 프로세스를 세웠다. 부수 효과로 리포터의 "진단이 1건으로 합쳐진다"가 **정답**이 된다(첫 건에서 멈추므로).
+
+**진단 문구가 실측과 반대였다.** F4004 는 *"a task vita can inline (no output/inout formals, no `automatic` lifetime)"* 을 권했는데 `automatic` 은 판별자가 아니었고(오히려 lifetime 을 떼면 **silent** 가 됐다), "inline 할 수 있는 task" 는 `string` 목적지에서 틀렸다. 남은 자리를 **측정해서** 다시 썼다 — 클래스 메서드 본문 · 연속 재평가 위치(`assign`/`force`/`wait` 조건) · intra-assignment delay. 그리고 그 자리들에서 **file-read 계열만 loud 이고 `$fopen`/`$value$plusargs`/seeded `$random`/`$dist_*`/`$cast` 5종은 silent** 였다(pre-existing, 클래스 메서드 15-probe 행렬로 PRE==POST 확인) → 게이트를 정본 술어로 교체해 전부 loud.
+
+**적대 리뷰 2 렌즈가 내 수정에서 3건을 잡았다(전부 내가 만든 것).** ①**과대표시 비용을 소비자별로 안 물었다**: 함수 라우팅을 suspendable 집합으로 키잉했더니 `foreach (b[i])` 가 `b.first(i)`/`b.next(i)` 로 desugar 되는 바람에 dyn-formal 함수 `packk` 이 재라우팅됐고 copy-out 경로는 dyn 배열 formal 을 바인딩 못 해 **동작하던 설계가 loud**(`dyn_formal_wrapped_call::blocking_ternary` 가 잡았다). 과대표시는 **라우팅 superset 에는 공짜, 호출 SHAPE 에는 유료**다 → 술어를 둘로 갈랐다(`sysfunc_frame_executor_cannot_perform` = 계열 − assoc 반복; assoc 반복은 **효과이지만** 키가 body-local 이면 `&self` 가 해내고 `fatal_frame_assoc_iter` 가 그 조건을 정확히 묻는다). ②**삽입 지점이 늦었다**: 라우팅 집합을 태스크 reject 단계에서 채웠더니 프레임 **태스크** 본문의 호출 자리는 이미 낮춰진 뒤였다(프레임 함수 본문과 달리 태스크 본문은 중첩 Call 이 허용된다) → 함수 본문 lowering **직후**·태스크 본문 lowering **직전**으로 이동. ③**`lower_lvalue` 를 부르는 새 arm 을 체인 맨 위에 놨다**: `s[i] = f(…)` 가 §6.16.3 이 경고하는 **조용한 packed BIT-write** 가 될 자리였다 → string-element/array 특수형 **아래**로 이동(실측 loud 유지).
+
+**그리고 그 리뷰가 "이름 없는 조건"에 이름을 붙였다.** §4.5.275/276 이 두 번 시도해 두 번 되돌린 frame-body copy-out 패닉(rc=101 `frame lvalue net is routed`)의 진짜 조건은 `in_frame_body` 가 **아니라** **copy-out 목적지가 프레임 창 밖인가** 였다 — 5-probe 로 측정: frame-local 목적지(body-local·자기 output formal)는 PASS, 모듈 넷 목적지만 패닉. 중첩 TASK 호출의 `out_binds` 가 이미 하는 그 쓰기이므로 안전한 쪽은 처음부터 안전했다. 그래서 `x = f(args)` 가 프레임 본문에서도 동작한다(직접 호출 rhs · delay/event 없음 · 목적지 frame-local 일 때). 이것으로 **프레임 태스크 본문이 statement-effect 함수를 호출하는** 마지막 형태가 열렸다.
+
+**검증(4994 green).** 행렬 = statement-effect 15종 × subroutine 6형(90) + 클래스 메서드 15 + 상호작용 8 + 패닉 5. **PRE(218dba2)/POST/iverilog 3-way 로 전수** — **회귀 0 · fixed 35**. 예제 4종 stdout+VCD **바이트 동일**(효과 없는 설계 무영향). 신규 테스트 20(`r22_stmt_effect_executor.rs`) + 사다리를 올린 r19 pin 1건 갱신(`a_file_read_inside_a_framed_body_is_fatal_not_a_quiet_zero` → `…_reads_the_line`). drift pin = `compute_effect` fall-through 의 `debug_assert!(!k_rhs_is_stmt_effect_family(rhs))` — 정본 계열과 실행기 arm 이 갈리면 debug 빌드가 잡는다.
+
+**§3.4 `task static`/`function static`.** `static` 은 이 lexer 에서 **예약어가 아니다**(Verilog-2005 식별자 · per-decl lifetime arm 이 그 사실에 의존). 그래서 `Ident` 로 도착하고 **`static` 이라는 이름의 subprogram** 과 구별해야 한다 — 판별자는 **뒤 토큰**이다(lifetime 뒤엔 헤더가 더 오고, 이름 뒤엔 `;` 또는 `(` 가 온다). 결과는 양쪽 콜러에서 버린다: `static` 은 (non-`automatic` 모듈의) subprogram 기본 lifetime 이라 `automatic = false` 가 이미 주는 동작이다 = 순수 파서 수정.
 
 #### 4.5.276 외부 round-20 — 내가 만든 회귀 하나와, 그것을 고치다 만든 silent-wrong 5건 (2026-07-30, branch feat-r20-report, format 26 불변) ✅
 

@@ -582,22 +582,28 @@ impl<'a> SimState<'a> {
         }
     }
 
-    /// R19-X2: is `rhs` one of the file-read system functions whose destination write is
-    /// a PROCESS-only statement effect? Named for the reason, not for a list of ids: the
-    /// property is "its value comes with a write this executor cannot perform".
+    /// R19-X2: is `rhs` a system function whose value comes with a write this executor
+    /// cannot perform? Named for the reason, not for a list of ids.
+    ///
+    /// R22: the id list WAS the file-read family alone, and the six it left out were
+    /// silently wrong here — `$fopen`, `$value$plusargs`, a seeded `$random`/`$dist_*`
+    /// and `$cast` returned 0 (or left their destination at its default) at exit 0 with
+    /// no diagnostic at all, which is strictly worse than the loud `$fgets` next to them.
+    /// It now defers to [`sim_ir::rhs_frame_executor_cannot_perform`] — the canonical
+    /// answer to exactly this question, shared with the elaborate-side routing decision —
+    /// so the two can never drift apart again.
+    ///
+    /// Two members of the statement-effect family are deliberately outside that predicate,
+    /// both because a MORE precise gate already owns them:
+    /// * `Sformatf` — this executor has a working intercept for it (`frame_rhs_value`'s
+    ///   `NetKind::String` arm), measured correct.
+    /// * the assoc-iteration steps (`first`/`next`/`last`/`prev`) — whether THIS executor
+    ///   can run one depends on the key: a body-local key works, and only a non-local key
+    ///   cannot. `fatal_frame_assoc_iter` tests exactly that and says so; a blanket answer
+    ///   here would both regress the working local-key case and replace a diagnostic that
+    ///   names the fix with one that does not.
     pub(crate) fn rhs_is_sysread(&self, rhs: u32) -> bool {
-        matches!(
-            self.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Fgets
-                    | sim_ir::SysFuncId::Fread
-                    | sim_ir::SysFuncId::Fscanf
-                    | sim_ir::SysFuncId::Sscanf
-                    | sim_ir::SysFuncId::Fgetc
-                    | sim_ir::SysFuncId::Ungetc,
-                ..
-            })
-        )
+        sim_ir::rhs_frame_executor_cannot_perform(self.ir.exprs.as_slice(), rhs)
     }
 
     /// R19-X2: latch the fatal for [`Self::rhs_is_sysread`], the same `call_fatal`
@@ -621,20 +627,41 @@ impl<'a> SimState<'a> {
                 sim_ir::SysFuncId::Fscanf => "$fscanf",
                 sim_ir::SysFuncId::Sscanf => "$sscanf",
                 sim_ir::SysFuncId::Fgetc => "$fgetc",
-                _ => "$ungetc",
+                sim_ir::SysFuncId::Feof => "$feof",
+                sim_ir::SysFuncId::Ungetc => "$ungetc",
+                sim_ir::SysFuncId::Fopen => "$fopen",
+                sim_ir::SysFuncId::ValuePlusargs => "$value$plusargs",
+                sim_ir::SysFuncId::Random => "a seeded `$random`",
+                sim_ir::SysFuncId::Cast => "$cast",
+                sim_ir::SysFuncId::QPopBack | sim_ir::SysFuncId::QPopFront => "a queue pop",
+                _ => "a seeded `$dist_*`",
             },
-            _ => "a file-read system function",
+            _ => "a side-effecting system function",
         };
         self.call_fatal.set(true);
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Fatal,
             code: MsgCode::RunFatal,
+            // R22 §3.1: the old advice was stale in BOTH directions. It told the user to
+            // avoid `automatic` and output/inout formals, but those were never the
+            // discriminator — an `automatic` task with an output formal is exactly what
+            // now works, and dropping the lifetime keyword (its suggested fix) made the
+            // failure SILENT instead of loud. It also promised a task "vita can inline"
+            // would work, which for a `string` destination it did not. What is actually
+            // left is a handful of positions vita cannot route to the statement executor,
+            // so the message names those and nothing else. Measured against a matrix of
+            // every statement-effect system function in every subroutine shape.
             message: format!(
-                "`{which}` writes its destination as a statement-level effect that this \
-                 synchronous `&self` frame executor cannot perform, so the read would \
-                 silently return 0 and leave the destination untouched. Do the read in a \
-                 module process, or in a task vita can inline (no output/inout formals, \
-                 no `automatic` lifetime), and pass the result in."
+                "`{which}` does its work as a statement-level effect, which the \
+                 synchronous `&self` frame executor cannot perform — the call would \
+                 return 0 and leave its destination untouched, so the run stops here \
+                 rather than continuing on that value. This is one of the few positions \
+                 vita cannot route to the statement executor: a class-method body, a \
+                 CONTINUOUSLY re-evaluated expression (`assign`, `force`, a `wait` \
+                 condition), or an intra-assignment delay (`x = #1 f(...)`). It DOES work \
+                 in a module process, and in a task or function called from a statement \
+                 — with or without `automatic`, with or without output formals. Call it \
+                 there, assign the result to a variable, and use that variable here."
             ),
             location: None,
             context: Vec::new(),

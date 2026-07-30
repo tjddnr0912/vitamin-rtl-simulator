@@ -677,6 +677,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         &st.ir.funcs,
         &st.ir.blocks,
         &st.ir.stmts,
+        &st.ir.exprs,
         &base_nets,
         &force_suspend,
     );
