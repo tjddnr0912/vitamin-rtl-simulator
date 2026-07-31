@@ -733,6 +733,26 @@ const SHA256_FUNCS: &str = "module top;\n\
   end\n\
 endmodule\n";
 
+/// STIMULUS-LIKE: an eligible body doing what a *stimulus* body does — a couple of
+/// trivial assignments per activation and nothing else. This is the shape C
+/// (expanding the P9 allow-list over suspend-bearing bodies) would absorb, so the
+/// VM ratio HERE is the upper bound on what C could realize: C's bodies are this
+/// light AND carry suspend points, which add resume-state work this one does not.
+const STIM_LIKE: &str = "module top;\n\
+  reg tick; reg clk; reg [7:0] ctr;\n\
+  integer k;\n\
+  always @(posedge tick) begin\n\
+    clk = ~clk;\n\
+    ctr = ctr + 8'd1;\n\
+  end\n\
+  initial begin\n\
+    tick = 0; clk = 0; ctr = 0;\n\
+    for (k = 0; k < 200000; k = k + 1) begin #1 tick = 1; #1 tick = 0; end\n\
+    $display(\"%0d\", ctr);\n\
+    $finish;\n\
+  end\n\
+endmodule\n";
+
 /// Print P9 coverage AND the backend ratio for one design.
 fn report_coverage(name: &str, src: &str, reps: u32) {
     let ir = build(src);
@@ -760,6 +780,7 @@ fn perf_p9_coverage() {
     report_coverage("struct-heavy", STRUCT_HEAVY, 3);
     report_coverage("clock-bound", CODEGEN_HEAVY, 3);
     report_coverage("mem-heavy", MEM_HEAVY, 3);
+    report_coverage("stimulus-like", STIM_LIKE, 3);
 
     // The repository's own example designs — what a first-time user actually runs.
     println!("\n[P9 coverage] examples/ (skipped if the directory is absent):\n");
@@ -792,4 +813,62 @@ fn perf_p9_coverage() {
             cov.ratio() * 100.0
         );
     }
+}
+
+/// An eligible body carrying exactly `stmts` trivial statements, driven by a fixed
+/// number of edges. Sweeping `stmts` finds the CROSSOVER: how much work a body must
+/// carry before the VM's per-activation fixed cost (register-file lease, prologue,
+/// dispatch loop) is amortized. Everything below the crossover is a body the VM
+/// makes SLOWER.
+fn work_per_body_src(stmts: usize, cycles: usize) -> String {
+    let mut body = String::new();
+    for _ in 0..stmts {
+        body.push_str("    ctr = ctr + 8'd1;\n");
+    }
+    format!(
+        "module top;\n\
+           reg tick; reg [7:0] ctr;\n\
+           integer k;\n\
+           always @(posedge tick) begin\n{body}  end\n\
+           initial begin\n\
+             tick = 0; ctr = 0;\n\
+             for (k = 0; k < {cycles}; k = k + 1) begin #1 tick = 1; #1 tick = 0; end\n\
+             $display(\"%0d\", ctr);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    )
+}
+
+/// [C-GAIN] Does expanding the P9 allow-list (step C) pay?
+///
+/// C would absorb the suspend-bearing STIMULUS bodies — the `#delay`-driven half of
+/// every design. Those bodies are eval-light, so the question is not "can the VM run
+/// them" but "does the VM make a light body faster at all". This sweep answers it
+/// without building C: it measures the VM ratio as a function of work per activation,
+/// on bodies the VM ALREADY takes.
+#[test]
+#[ignore = "perf probe (DATA, not a gate); run with --ignored --nocapture"]
+fn perf_work_per_body_crossover() {
+    println!("\n[C-GAIN] VM ratio vs work per activation (100k edges, fixed):\n");
+    println!(
+        "  {:>6}  {:>10}  {:>10}  {:>8}",
+        "stmts", "interp ms", "vm ms", "vm/interp"
+    );
+    for stmts in [1usize, 2, 4, 8, 16, 32, 64] {
+        let ir = build(&work_per_body_src(stmts, 100_000));
+        let i = time_backend(&ir, Backend::Interpreter, 3) as f64;
+        let v = time_backend(&ir, Backend::Bytecode, 3) as f64;
+        println!(
+            "  {stmts:>6}  {:>10.1}  {:>10.1}  {:>7.2}x{}",
+            i / 1e6,
+            v / 1e6,
+            v / i,
+            if v < i { "   <- VM wins" } else { "" }
+        );
+    }
+    println!(
+        "\n  A stimulus body carries 1-3 statements. If the crossover sits above that,\n  \
+         step C would move those bodies onto a path that is SLOWER for them."
+    );
 }
