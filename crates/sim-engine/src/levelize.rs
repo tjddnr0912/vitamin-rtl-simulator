@@ -330,3 +330,222 @@ pub(crate) fn ca_deps(ir: &SimIr, is_heap: &dyn Fn(u32) -> bool) -> Vec<(BTreeSe
         })
         .collect()
 }
+
+/// Nets a process writes NONBLOCKING (they land in the NBA region, a delta boundary).
+fn nba_writes(ir: &SimIr, tmpl: usize) -> BTreeSet<u32> {
+    let mut out = BTreeSet::new();
+    for block in &ir.processes[tmpl].body {
+        for &sid in &block.stmts {
+            if let Stmt::NonblockingAssign { lhs, .. } = &ir.stmts[sid as usize] {
+                for c in &lhs.chunks {
+                    out.insert(c.net);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Nets a process is EDGE-sensitive to (`@(posedge n)`), which is a wake nobody may
+/// reorder around.
+fn edge_reads(ir: &SimIr, tmpl: usize) -> BTreeSet<u32> {
+    let s = &ir.processes[tmpl].sensitivity;
+    match s.kind {
+        SensKind::Edge => s.edges.iter().map(|e| e.net).collect(),
+        SensKind::Comb | SensKind::Latch | SensKind::Level | SensKind::Initial => BTreeSet::new(),
+    }
+}
+
+/// A fusable pair: running `producer`'s body immediately before `consumer`'s, in ONE
+/// activation, is observationally identical to running them in separate deltas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FusionPair {
+    pub producer: usize,
+    pub consumer: usize,
+    /// The net that connects them — written by `producer`, read by `consumer` alone.
+    pub net: u32,
+}
+
+/// Which combinational process pairs may be fused without moving any process order.
+///
+/// Fusion is what raises work per activation, and work per activation is what decides
+/// whether a compiled backend pays at all (the C-GAIN crossover: 0.99x at one statement
+/// per activation, 0.75x at 64). The measured payoff of doing it is large — 3.6x on the
+/// interpreter and 1.19x -> 2.44x on the VM at depth 48 — so the only question is when
+/// it is SAFE.
+///
+/// It is safe exactly when nothing can observe the delta between the two bodies. The
+/// connecting net `n` must therefore have `consumer` as its ONLY consumer of any kind
+/// and `producer` as its only producer:
+///
+/// - no other process level-reads `n` — it would have run between them
+/// - no process edge-reads `n` — `@(posedge n)` is a wake nobody may reorder around
+/// - no continuous assign reads `n` (RHS or lvalue index) — the settle between the two
+///   bodies would have seen the new value and could feed it back into `consumer`
+/// - no continuous assign writes `n`, and no other process writes it, blocking or NBA
+/// - `producer` writes NOTHING BUT `n`, since another write of its would carry its own
+///   observers whose ordering would move
+///
+/// The VCD is unaffected either way: the write to `n` still goes through the same funnel
+/// at the same simulation time, so its recorded value sequence is unchanged. That is why
+/// fusing does not cost the G2 observability rails.
+pub fn fusion_candidates(ir: &SimIr) -> Vec<FusionPair> {
+    let n = ir.processes.len();
+    let comb = |p: usize| matches!(ir.processes[p].sensitivity.kind, SensKind::Comb);
+    let lreads: Vec<BTreeSet<u32>> = (0..n).map(|p| level_reads(ir, p)).collect();
+    let ereads: Vec<BTreeSet<u32>> = (0..n).map(|p| edge_reads(ir, p)).collect();
+    let bwrites: Vec<BTreeSet<u32>> = (0..n).map(|p| blocking_writes(ir, p)).collect();
+    let nwrites: Vec<BTreeSet<u32>> = (0..n).map(|p| nba_writes(ir, p)).collect();
+
+    // Everything the continuous assigns touch, on either side.
+    let mut ca_reads: BTreeSet<u32> = BTreeSet::new();
+    let mut ca_writes: BTreeSet<u32> = BTreeSet::new();
+    for c in &ir.cont_assigns {
+        expr_nets(ir, c.rhs, &mut ca_reads);
+        lvalue_index_nets(ir, &c.lhs, &mut ca_reads);
+        for k in &c.lhs.chunks {
+            ca_writes.insert(k.net);
+        }
+    }
+
+    let mut out = Vec::new();
+    for p in 0..n {
+        if !comb(p) || bwrites[p].len() != 1 {
+            continue;
+        }
+        let net = *bwrites[p].iter().next().expect("len checked");
+        if ca_reads.contains(&net) || ca_writes.contains(&net) {
+            continue;
+        }
+        // Exactly one level reader, no edge reader, no other writer of any kind.
+        let mut consumer = None;
+        let mut ok = true;
+        for q in 0..n {
+            if ereads[q].contains(&net) || nwrites[q].contains(&net) {
+                ok = false;
+                break;
+            }
+            if q != p && bwrites[q].contains(&net) {
+                ok = false;
+                break;
+            }
+            if lreads[q].contains(&net) {
+                if consumer.is_some() || q == p {
+                    ok = false;
+                    break;
+                }
+                consumer = Some(q);
+            }
+        }
+        let Some(q) = consumer.filter(|_| ok) else {
+            continue;
+        };
+        if comb(q) {
+            out.push(FusionPair {
+                producer: p,
+                consumer: q,
+                net,
+            });
+        }
+    }
+    out
+}
+
+/// A continuous assign that is a WHOLE-NET COPY (`assign y = r`) — the shape a module
+/// port connection lowers to, and the reason `fusion_candidates` fires on nothing real:
+/// a chain of instances is `always_comb r` → `assign y = r` → next stage, so the
+/// producer's net is always read by a continuous assign.
+///
+/// Returns `(rhs_net, lhs_net)` for each such copy.
+fn whole_net_copies(ir: &SimIr) -> Vec<(u32, u32, usize)> {
+    ir.cont_assigns
+        .iter()
+        .enumerate()
+        .filter_map(|(ci, c)| {
+            if c.delay.is_some() || c.lhs.chunks.len() != 1 {
+                return None;
+            }
+            let k = &c.lhs.chunks[0];
+            if k.word.is_some() || k.offset.is_some() || k.width.is_some() {
+                return None;
+            }
+            match &ir.exprs[c.rhs as usize] {
+                sim_ir::Expr::Signal { net, word: None } => Some((*net, k.net, ci)),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// How many fusable pairs appear if a chain is allowed to cross a whole-net copy
+/// continuous assign (`assign y = r`) — i.e. what an instance-chained design, the shape
+/// real RTL actually has, would offer.
+///
+/// This is a MEASUREMENT of the opportunity, not a transform: crossing a copy means the
+/// fused body must also perform that copy and the settle must stop doing so, which is
+/// strictly more machinery than fusing two adjacent processes. Reported so the decision
+/// to build that machinery rests on the count, not on the assumption that real designs
+/// look like the synthetic chain.
+pub fn fusion_candidates_across_copies(ir: &SimIr) -> usize {
+    let n = ir.processes.len();
+    let comb = |p: usize| matches!(ir.processes[p].sensitivity.kind, SensKind::Comb);
+    let lreads: Vec<BTreeSet<u32>> = (0..n).map(|p| level_reads(ir, p)).collect();
+    let ereads: Vec<BTreeSet<u32>> = (0..n).map(|p| edge_reads(ir, p)).collect();
+    let bwrites: Vec<BTreeSet<u32>> = (0..n).map(|p| blocking_writes(ir, p)).collect();
+    let copies = whole_net_copies(ir);
+
+    let copy_cis: BTreeSet<usize> = copies.iter().map(|&(_, _, ci)| ci).collect();
+    let mut other_ca: BTreeSet<u32> = BTreeSet::new();
+    for (ci, c) in ir.cont_assigns.iter().enumerate() {
+        if copy_cis.contains(&ci) {
+            continue;
+        }
+        expr_nets(ir, c.rhs, &mut other_ca);
+        lvalue_index_nets(ir, &c.lhs, &mut other_ca);
+        for k in &c.lhs.chunks {
+            other_ca.insert(k.net);
+        }
+    }
+
+    let mut count = 0usize;
+    for (p, bw) in bwrites.iter().enumerate() {
+        if !comb(p) || bw.len() != 1 {
+            continue;
+        }
+        // A port connection lowers to a CHAIN of whole-net copies (`r` -> module output
+        // `y` -> parent wire `w` -> child input `a`), not a single one, so the walk has
+        // to follow the chain to its end before asking who reads it. Crossing only one
+        // copy found nothing on exactly the shape this exists for.
+        let mut cur = *bw.iter().next().expect("len checked");
+        let mut hops = 0usize;
+        let end = loop {
+            if other_ca.contains(&cur) || ereads.iter().any(|s| s.contains(&cur)) {
+                break None;
+            }
+            let outs: Vec<&(u32, u32, usize)> =
+                copies.iter().filter(|(rn, _, _)| *rn == cur).collect();
+            let read_here = (0..n).any(|q| lreads[q].contains(&cur));
+            match (outs.as_slice(), read_here) {
+                // Read by a process here and by nothing else: this is the chain end.
+                ([], true) => break Some(cur),
+                // Feeds exactly one copy and no process: keep walking.
+                ([one], false) => {
+                    cur = one.1;
+                    hops += 1;
+                    if hops > copies.len() + 1 {
+                        break None; // a copy cycle; refuse rather than spin
+                    }
+                }
+                _ => break None,
+            }
+        };
+        let Some(y) = end else { continue };
+        let readers: Vec<usize> = (0..n).filter(|&q| lreads[q].contains(&y)).collect();
+        if let [q] = readers.as_slice() {
+            if comb(*q) && *q != p {
+                count += 1;
+            }
+        }
+    }
+    count
+}

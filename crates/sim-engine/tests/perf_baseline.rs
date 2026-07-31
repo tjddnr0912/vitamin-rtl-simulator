@@ -1007,7 +1007,10 @@ fn fused_chain_src(d: usize, cycles: usize) -> String {
             i + 1
         ));
     }
-    let decls: String = (0..d).map(|i| format!("  reg [31:0] s{i};\n")).collect();
+    let mut decls = String::new();
+    for i in 0..d {
+        decls.push_str(&format!("  reg [31:0] s{i};\n"));
+    }
     format!(
         "module top;\n\
            reg clk; reg [31:0] seed; reg [31:0] acc;\n{decls}\
@@ -1051,8 +1054,8 @@ fn fused_chain_src(d: usize, cycles: usize) -> String {
 fn perf_fusion_spike() {
     println!("\n[E-SPIKE] identical logic, three process shapes (2000 cycles):\n");
     println!(
-        "  {:>5}  {:<10} {:>9} {:>9} {:>9}  {}",
-        "depth", "form", "interp", "vm", "vm/interp", "value"
+        "  {:>5}  {:<10} {:>9} {:>9} {:>9}  value",
+        "depth", "form", "interp", "vm", "vm/interp"
     );
     for d in [6usize, 12, 24, 48] {
         let forms: [(&str, String); 3] = [
@@ -1072,5 +1075,75 @@ fn perf_fusion_spike() {
             );
         }
         println!();
+    }
+}
+
+/// [E-OPP] How much fusion opportunity do real designs actually have?
+///
+/// Building fusion is only worth it if real designs contain fusable chains. This
+/// reports, per design, how many combinational processes could be fused away under the
+/// order-preserving condition — measured BEFORE any fusion machinery is built, the same
+/// discipline that stopped steps C and F from being built on an assumed payoff.
+#[test]
+#[ignore = "E opportunity probe (DATA); run with --ignored --nocapture"]
+fn perf_fusion_opportunity() {
+    println!("\n[E-OPP] fusable combinational pairs per design:\n");
+    println!(
+        "  {:<24} {:>10} {:>10}  {:>5}   {:>8}",
+        "design", "processes", "fusable", "chain", "x-copy"
+    );
+    let report = |name: &str, src: &str| {
+        let ir = build(src);
+        let pairs = sim_engine::fusion_candidates(&ir);
+        // Longest fusable chain: how many bodies would collapse into one.
+        let mut succ = std::collections::BTreeMap::new();
+        for p in &pairs {
+            succ.insert(p.producer, p.consumer);
+        }
+        let mut longest = 0usize;
+        for &start in succ.keys() {
+            let (mut cur, mut len) = (start, 1usize);
+            while let Some(&nx) = succ.get(&cur) {
+                len += 1;
+                cur = nx;
+                if len > ir.processes.len() {
+                    break;
+                }
+            }
+            longest = longest.max(len);
+        }
+        println!(
+            "  {name:<24} {:>10} {:>10}  {longest:>5}   {:>8}",
+            ir.processes.len(),
+            pairs.len(),
+            sim_engine::fusion_candidates_across_copies(&ir)
+        );
+    };
+    report("inst-chain d=24", &inst_chain_src(24, 10));
+    report("separate d=24", &comb_chain_src(24, 10));
+    report("fused d=24", &fused_chain_src(24, 10));
+    report("sha256-round", SHA256_INLINE);
+    report("expr-heavy", EXPR_HEAVY);
+
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    let mut paths: Vec<_> = rd
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "sv"))
+        .collect();
+    paths.sort();
+    for p in paths {
+        let raw = std::fs::read_to_string(&p).expect("example is readable");
+        let pp = hdl_preprocess::preprocess_sources(
+            &dir,
+            &[(p.to_string_lossy().into_owned(), raw)],
+            &hdl_preprocess::PreOpts::default(),
+        );
+        report(
+            &p.file_name().unwrap_or_default().to_string_lossy(),
+            &pp.text,
+        );
     }
 }
