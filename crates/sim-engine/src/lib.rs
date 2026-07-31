@@ -26,6 +26,7 @@ mod backend;
 mod builtins;
 mod eval;
 mod exec;
+mod levelize;
 mod native_eval;
 mod rng;
 mod sched;
@@ -53,6 +54,7 @@ pub use elaborate::{
     QueueBoundTable, RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo,
     TaskCallProc,
 };
+pub use levelize::comb_ranks;
 pub use sched::FinishReason;
 
 use sched::Scheduler;

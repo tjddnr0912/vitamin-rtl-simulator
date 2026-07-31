@@ -872,3 +872,121 @@ fn perf_work_per_body_crossover() {
          step C would move those bodies onto a path that is SLOWER for them."
     );
 }
+
+/// A chain of `d` combinational stages between two clocked endpoints — the shape whose
+/// per-cycle activation profile is the `D²/2` triangle levelization targets.
+fn comb_chain_src(d: usize, cycles: usize) -> String {
+    let mut decls = String::new();
+    for i in 0..d {
+        decls.push_str(&format!("  reg [31:0] s{i};\n"));
+    }
+    let mut stages = String::new();
+    for i in 0..d {
+        let src = if i == 0 {
+            "seed".to_string()
+        } else {
+            format!("s{}", i - 1)
+        };
+        stages.push_str(&format!(
+            "  always_comb s{i} = ({src} ^ (({src} << 1) | ({src} >> 31))) + 32'd{};\n",
+            i + 1
+        ));
+    }
+    format!(
+        "module top;\n\
+           reg clk; reg [31:0] seed; reg [31:0] acc;\n{decls}{stages}\
+           integer k;\n\
+           always @(posedge clk) begin\n\
+             seed <= seed + 32'd1;\n\
+             acc  <= acc ^ s{last};\n\
+           end\n\
+           initial begin\n\
+             clk = 0; seed = 32'd1; acc = 0;\n\
+             for (k = 0; k < {cycles}; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+             $display(\"acc=%h\", acc);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+        last = d - 1
+    )
+}
+
+/// The §4.5.278 triangle shape: stages chained through module INSTANCES with port
+/// continuous assigns. The port settle drives every stage's input in one go, so all
+/// `d` stages wake in the SAME delta and each runs on a partially stale input — the
+/// `7 6 5 4 3 2 1 …` profile. A chain of plain `always_comb` in one module does NOT
+/// reproduce it (the wake chain is naturally one-at-a-time), which is why the first
+/// version of this probe measured a flat 1.00x.
+fn inst_chain_src(d: usize, cycles: usize) -> String {
+    let mut insts = String::new();
+    let mut decls = String::new();
+    for i in 0..d {
+        decls.push_str(&format!("  wire [31:0] w{i};\n"));
+        let src = if i == 0 {
+            "seed".to_string()
+        } else {
+            format!("w{}", i - 1)
+        };
+        insts.push_str(&format!("  stage u{i} (.a({src}), .y(w{i}));\n"));
+    }
+    format!(
+        "module stage(input [31:0] a, output [31:0] y);\n\
+           reg [31:0] r;\n\
+           always_comb r = (a ^ ((a << 1) | (a >> 31))) + 32'd1;\n\
+           assign y = r;\n\
+         endmodule\n\
+         module top;\n\
+           reg clk; reg [31:0] seed; reg [31:0] acc;\n{decls}{insts}\
+           integer k;\n\
+           always @(posedge clk) begin\n\
+             seed <= seed + 32'd1;\n\
+             acc  <= acc ^ w{last};\n\
+           end\n\
+           initial begin\n\
+             clk = 0; seed = 32'd1; acc = 0;\n\
+             for (k = 0; k < {cycles}; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+             $display(\"acc=%h\", acc);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+        last = d - 1
+    )
+}
+
+/// [D] Where the depth cost actually lives.
+///
+/// Total cycles are held fixed and only DEPTH varies, so any growth is pure
+/// depth cost. `maxrank` is the design's combinational depth as
+/// `levelize::comb_ranks` computes it — reported so the number the cost is
+/// plotted against is the measured one, not the one the generator intended.
+///
+/// The measured conclusion (2026-08-01): the growth is NOT in process
+/// activations, so rank-ordering the Active drain does not touch it. A
+/// rank-ordered drain with inter-rank settle was built and measured at 1.00x on
+/// exactly this shape, then reverted. The cost is in `settle_cont_assigns`,
+/// which makes a FULL pass over every continuous assign, to fixpoint, on EVERY
+/// delta — and a depth-D chain takes D deltas to propagate, so the settle work
+/// is paid D times over D assigns.
+#[test]
+#[ignore = "perf probe (DATA); run with --ignored --nocapture"]
+fn perf_depth_cost_shape() {
+    println!("\n[D] depth cost, total cycles held fixed:\n");
+    println!(
+        "  {:>6} {:>8} {:>10} {:>10}",
+        "depth", "maxrank", "chain ms", "instances ms"
+    );
+    for d in [1usize, 2, 3, 6, 12, 24] {
+        let one = |src: String| {
+            let ir = build(&src);
+            let mr = sim_engine::comb_ranks(&ir)
+                .iter()
+                .copied()
+                .max()
+                .unwrap_or(0);
+            (time_backend(&ir, Backend::Interpreter, 3) as f64 / 1e6, mr)
+        };
+        let (chain, mr) = one(comb_chain_src(d, 2000));
+        let (inst, _) = one(inst_chain_src(d, 2000));
+        println!("  {d:>6} {mr:>8} {chain:>10.1} {inst:>12.1}");
+    }
+}
