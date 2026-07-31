@@ -990,3 +990,87 @@ fn perf_depth_cost_shape() {
         println!("  {d:>6} {mr:>8} {chain:>10.1} {inst:>12.1}");
     }
 }
+
+/// The SAME combinational logic as `comb_chain_src`/`inst_chain_src`, but FUSED into a
+/// single `always_comb` body. This is what process fusion (step E) would produce, so
+/// comparing the three forms measures E's payoff without building E.
+fn fused_chain_src(d: usize, cycles: usize) -> String {
+    let mut body = String::new();
+    for i in 0..d {
+        let src = if i == 0 {
+            "seed".to_string()
+        } else {
+            format!("s{}", i - 1)
+        };
+        body.push_str(&format!(
+            "    s{i} = ({src} ^ (({src} << 1) | ({src} >> 31))) + 32'd{};\n",
+            i + 1
+        ));
+    }
+    let decls: String = (0..d).map(|i| format!("  reg [31:0] s{i};\n")).collect();
+    format!(
+        "module top;\n\
+           reg clk; reg [31:0] seed; reg [31:0] acc;\n{decls}\
+           integer k;\n\
+           always_comb begin\n{body}  end\n\
+           always @(posedge clk) begin\n\
+             seed <= seed + 32'd1;\n\
+             acc  <= acc ^ s{last};\n\
+           end\n\
+           initial begin\n\
+             clk = 0; seed = 32'd1; acc = 0;\n\
+             for (k = 0; k < {cycles}; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+             $display(\"acc=%h\", acc);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+        last = d - 1
+    )
+}
+
+/// [E-SPIKE] Does fusing chained combinational processes raise what the VM can pay?
+///
+/// The C-GAIN crossover says the VM returns ~nothing at 1-2 statements per activation
+/// and 1.33x at 64. Fusion is the transform that moves a design rightward on that
+/// curve. Three forms of IDENTICAL logic, same depth, same cycle count:
+///
+/// - `instances` — d modules chained through port cont-assigns (1 stmt/body)
+/// - `separate`  — d `always_comb` in one module      (1 stmt/body)
+/// - `fused`     — ONE `always_comb` with d statements (d stmts/body)
+///
+/// NOTE on the `value` column: `instances` legitimately computes a DIFFERENT function
+/// (the shared `stage` module adds a uniform `+1`, while the other two add `+i+1` at
+/// stage `i`), so its value differs by construction. The equivalence that matters is
+/// `fused == separate`, which holds at every depth — fusion must not change the value.
+///
+/// If `fused` shows a materially better VM ratio than the other two, E is the enabler
+/// and step ② is worth building. If it does not, the compiled path is closed for good
+/// and this probe is the record of why.
+#[test]
+#[ignore = "E-spike (DATA); run with --ignored --nocapture"]
+fn perf_fusion_spike() {
+    println!("\n[E-SPIKE] identical logic, three process shapes (2000 cycles):\n");
+    println!(
+        "  {:>5}  {:<10} {:>9} {:>9} {:>9}  {}",
+        "depth", "form", "interp", "vm", "vm/interp", "value"
+    );
+    for d in [6usize, 12, 24, 48] {
+        let forms: [(&str, String); 3] = [
+            ("instances", inst_chain_src(d, 2000)),
+            ("separate", comb_chain_src(d, 2000)),
+            ("fused", fused_chain_src(d, 2000)),
+        ];
+        for (name, src) in forms {
+            let ir = build(&src);
+            let i = time_backend(&ir, Backend::Interpreter, 3) as f64 / 1e6;
+            let v = time_backend(&ir, Backend::Bytecode, 3) as f64 / 1e6;
+            let (_, out) = sim_engine::simulate_capture(&ir, SimOpts::default());
+            println!(
+                "  {d:>5}  {name:<10} {i:>9.1} {v:>9.1} {:>8.2}x  {}",
+                v / i,
+                out.trim()
+            );
+        }
+        println!();
+    }
+}
