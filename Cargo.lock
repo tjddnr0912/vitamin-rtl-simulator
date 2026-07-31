@@ -90,7 +90,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "diag",
@@ -126,7 +126,7 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "corpus-runner"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "critical-section"
@@ -136,11 +136,11 @@ checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "diag"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "elaborate"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "diag",
  "hdl-ast",
@@ -227,7 +227,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hdl-ast"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "postcard",
  "serde",
@@ -237,18 +237,18 @@ dependencies = [
 
 [[package]]
 name = "hdl-builtins"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "hdl-lexer"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "logos",
 ]
 
 [[package]]
 name = "hdl-parser"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "hdl-ast",
  "hdl-lexer",
@@ -256,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "hdl-preprocess"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "diag",
 ]
@@ -555,7 +555,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sim-engine"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "diag",
  "elaborate",
@@ -570,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "sim-ir"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "hex",
@@ -697,11 +697,11 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "vcd-diff"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "vcd-writer"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "fst-reader",
  "fst-writer",
@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "vita-artifact"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "diag",
  "hex",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "vita-artifact-derive"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -732,14 +732,14 @@ dependencies = [
 
 [[package]]
 name = "vita-log"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "diag",
 ]
 
 [[package]]
 name = "vita-schema"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
 ]

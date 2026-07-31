@@ -25,13 +25,18 @@ members = [
 exclude = ["third_party/libm"]
 
 [workspace.package]
+# v0.1.0 = the initial release. The MAJOR stays 0 deliberately: `tool_semver_major`
+# is a hard staleness gate (`vita-artifact/src/gate.rs`), so a 0→1 bump would
+# invalidate every existing `.velab`/`.vu`, and semver-0 is the honest signal
+# while docs/ROADMAP.md §2/§3 still carry open correctness items.
+version = "0.1.0"
 edition = "2021"
 # 1.85 (was 1.82): required by fst-writer 0.3.x, whose 0.2.x line writes a
 # malformed FST time-table that GTKWave/fst-reader tolerate but wellen (Surfer)
 # rejects. vita's own crates stay edition 2021 — 1.85 only raises the floor.
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-org/vitamin"
+repository = "https://github.com/tjddnr0912/vitamin-rtl-simulator"
 
 [workspace.dependencies]
 logos            = { version = "0.16", default-features = false }

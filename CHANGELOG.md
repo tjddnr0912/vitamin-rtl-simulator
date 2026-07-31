@@ -3,7 +3,65 @@
 All notable changes to **vitamin** are recorded here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); dates are ISO-8601.
 
-## [Unreleased] — 2026-07-29
+Per-slice engineering detail lives in [docs/ROADMAP_ARCHIVE.md](docs/ROADMAP_ARCHIVE.md)
+(§4.5.x) and [docs/DEVLOG.md](docs/DEVLOG.md); the sections below summarise what
+changed for a user of the simulator.
+
+## [0.1.0] — 2026-07-31 · initial release
+
+The first tagged release. Everything below this heading is the development
+history that led to it.
+
+**The major version stays at `0` deliberately.** `tool_semver_major` is a hard
+staleness gate (`crates/vita-artifact/src/gate.rs`), so a `0 → 1` bump would
+invalidate every existing `.velab` / `.vu` artifact — and semver-0 is the honest
+signal while [docs/ROADMAP.md](docs/ROADMAP.md) §2/§3 still carry open
+correctness items.
+
+Release state: **5009 tests** green on Ubuntu, macOS and RHEL 9 · `format_version`
+**26** · MSRV **1.85** · 59 diagnostic codes.
+
+### Fixed
+
+- **A call's copy-out destination was invisible to the classifier.** `Terminator::Call`
+  carries only `{target, ret_bb}`; the destinations live in a call-site side table, so a
+  statement-level walk over lvalues never saw them. A bare call inside a call frame whose
+  `output`/`inout` actual was a module net therefore reached an executor that cannot route
+  that write and **panicked with no diagnostic and no source location** (exit 101). Three
+  earlier slices had recorded the trigger as "not yet named" and reverted twice, because
+  they were looking at statement *position* rather than at the classifier's blind spot.
+  Fixing it also turned four neighbouring loud rejections into working support.
+- **An unrelated `$display("x")` decided which executor ran a subroutine body.** The
+  classifier looked at a blocking assignment's *destination* only, so an effect carried in
+  the right-hand side was invisible. Functions shared the same root; a `static task`'s
+  `string` local needed a third collector; and `$fatal` could lose to its own `$finish`.
+- **A frame-local `string`'s byte writes went to the wrong storage.** `s[i] = c` wrote
+  through the dynamic heap while a frame-local string is slab-stored in the frame slot, so
+  the write silently vanished. (Pre-existing; surfaced when the loud gate above was lifted.)
+- **Eleven further silent-wrongs** found while fixing the round-20 report, including a
+  constant fold that was not shadow-aware and a stand-down guard whose scope was a whole
+  function and whose key was module-global.
+
+### Changed
+
+- `E3009`'s message no longer claims that a bare call statement in that position works —
+  that is precisely the form that used to panic. It now names the real boundary, and a
+  rejected call terminator is no longer reported as "a timing/suspend/fork control".
+- An unroutable frame write is a **runtime fatal naming the net** instead of a panic.
+- `--threads` / `-j` help text now says what it is: a waveform-writer budget. Simulation
+  is single-threaded, and the flag never affected it.
+
+### Notes on performance
+
+An external report attributed a 4.3× slowdown at combinational depth 6 to vitamin not
+levelizing deep combinational cones. Measured against Icarus Verilog with total work held
+fixed, **Icarus scales the same or worse** (4.15× vs 3.55× at depth 12) and vitamin's
+absolute wall time is 0.80–0.99× of it. The depth cost is a property of interpreted
+event-driven delta cycles, not a defect; the gap to a compiled, compile-time-levelizing
+simulator is a separate axis, analysed in
+[docs/preview/18-acceleration-analysis.md](docs/preview/18-acceleration-analysis.md).
+
+## [2026-07-29 · round-19/20]
 
 ### Fixed
 
@@ -211,7 +269,7 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
   reason instead; the same-name block-local message no longer infers the other
   declaration's lifetime.
 
-## [Unreleased] — 2026-07-17
+## [2026-07-17]
 
 ### Changed
 - `format_version` 21 → 22: IEEE **two-stage `#delay` conversion** — in
@@ -234,7 +292,7 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
 - The dev-only `separate-bins` Cargo feature now really builds standalone
   `vcmp`/`velab`/`vrun` binaries (thin shims sharing the multicall path).
 
-## [Unreleased] — Phase-1 MVP
+## [Phase-1 MVP]
 
 vitamin's first milestone: a working, deterministic, 3-OS-reproducible RTL
 simulator for the Verilog-2005 synthesizable subset plus a synthesizable
