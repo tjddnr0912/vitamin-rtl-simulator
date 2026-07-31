@@ -209,6 +209,17 @@ pub(crate) struct SimState<'a> {
     /// to the old ascending scan (byte-identity).
     pub dirty: Vec<u32>,
     pub dirty_flag: Vec<bool>,
+    /// DIRTY-SETTLE: net → continuous assigns whose VALUE depends on that net (RHS
+    /// nets plus the lvalue's dynamic index nets). Built once from the frozen `SimIr`.
+    /// Only assigns certified skippable by `levelize::ca_deps` appear here; the rest
+    /// are re-evaluated unconditionally, so an entry's ABSENCE never means "skip".
+    /// Empty vectors for the overwhelming majority of nets, so the marking below costs
+    /// a length check on the hot path.
+    pub ca_of_net: Vec<Vec<u32>>,
+    /// DIRTY-SETTLE worklist: assigns whose dependencies moved since the last settle
+    /// pass, plus a membership flag so a net changing twice enqueues once.
+    pub ca_dirty: Vec<u32>,
+    pub ca_dirty_flag: Vec<bool>,
     /// Per-net `force` flag (IEEE §9.3.2): while set, EVERY normal write path
     /// (procedural, NBA commit, cont-assign settle, delayed CA) is a silent
     /// no-op for that net — only `force_write`/`release` touch it. Whole-net

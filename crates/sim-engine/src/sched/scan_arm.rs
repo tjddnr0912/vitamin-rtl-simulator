@@ -442,7 +442,41 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                         .all(|c| net_drivers.get(&c.net) == Some(&1))
             })
             .collect();
+        // DIRTY-SETTLE: split the assigns into "always re-evaluate" and "re-evaluate
+        // only when a dependency moved", and build the net → dependents reverse index
+        // the write funnel marks through. `ca_deps` certifies skippability; anything it
+        // refuses (delayed, impure RHS, heap-handle dependency) lands in `ca_always`, as
+        // does every multi-driver member, whose value comes from the resolution below
+        // rather than from its own RHS.
+        let heap = |net: u32| -> bool {
+            let i = net as usize;
+            st.dyn_is_handle.get(i).copied().unwrap_or(false)
+                || st.class_is_handle.get(i).copied().unwrap_or(false)
+        };
+        let deps = crate::levelize::ca_deps(st.ir, &heap);
+        let mut ca_always: Vec<u32> = Vec::new();
+        let mut ca_of_net: Vec<Vec<u32>> = vec![Vec::new(); nnets];
+        for (ci, (dep, ok)) in deps.iter().enumerate() {
+            if !*ok || ca_md[ci] {
+                ca_always.push(ci as u32);
+                continue;
+            }
+            for &net in dep {
+                if let Some(slot) = ca_of_net.get_mut(net as usize) {
+                    slot.push(ci as u32);
+                }
+            }
+        }
+        st.ca_of_net = ca_of_net;
+        st.ca_dirty_flag = vec![false; nca];
+        // Seed EVERY certified assign: nothing has been evaluated yet, so the first
+        // settle must behave exactly like the old full pass.
+        st.ca_dirty = (0..nca as u32).collect();
+        for &ci in &st.ca_dirty {
+            st.ca_dirty_flag[ci as usize] = true;
+        }
         Scheduler {
+            ca_always,
             st,
             cur: SlotQueues::default(),
             nba: Vec::new(),
@@ -499,7 +533,29 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let mut any = false;
         loop {
             let mut changed = false;
-            for ci in 0..self.st.ir.cont_assigns.len() {
+            // DIRTY-SETTLE: visit the assigns that must be re-evaluated, not all of
+            // them. `ca_always` holds every assign `levelize::ca_deps` refused to
+            // certify (delayed, multi-driver member, impure RHS, heap-handle
+            // dependency); `st.ca_dirty` holds the certified ones whose dependency
+            // nets moved since the last pass. The union is visited in ASCENDING index
+            // = declaration order, which is the order the fixpoint has always used and
+            // which several goldens depend on.
+            //
+            // Skipping is sound precisely because a certified assign whose inputs did
+            // not move recomputes its previous value, and the write funnel drops a
+            // same-value write without noting a change — so the visit it replaces was
+            // observationally a no-op. The teeth are in `ca_deps` being COMPLETE.
+            let pass: Vec<u32> = {
+                let mut v = std::mem::take(&mut self.st.ca_dirty);
+                for &ci in &v {
+                    self.st.ca_dirty_flag[ci as usize] = false;
+                }
+                v.extend_from_slice(&self.ca_always);
+                v.sort_unstable();
+                v.dedup();
+                v
+            };
+            for ci in pass.into_iter().map(|c| c as usize) {
                 if self.st.ir.cont_assigns[ci].delay.is_some() {
                     // A delayed driver's output register holds x until its FIRST
                     // delayed write lands — iverilog-pinned: `assign #3 o = a&b`

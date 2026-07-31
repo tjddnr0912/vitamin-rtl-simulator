@@ -250,6 +250,12 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// dispatch choke) — `disable fork` kills THIS activity's descendants.
     cur_aid: u32,
     /// net → edge-sensitive process resumes.
+    /// DIRTY-SETTLE: continuous assigns that must be re-evaluated on EVERY settle
+    /// pass because `levelize::ca_deps` could not certify them skippable (a delayed
+    /// assign, a multi-driver member, an impure RHS, or a heap-handle dependency whose
+    /// contents can move without the handle net changing). Ascending, so the union with
+    /// the dirty worklist stays in declaration order.
+    ca_always: Vec<u32>,
     net_to_edge: Vec<Vec<(EdgeKind, Ready)>>,
     /// Per-activity private state. `index == Ready.proc` (activity id). Seeded 1:1
     /// with `ir.processes` at t0; fork appends children (append-only, never reused).

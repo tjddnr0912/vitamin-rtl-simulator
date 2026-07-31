@@ -24,6 +24,17 @@ impl SimState<'_> {
         // clocking/force, `blocking_writer = None`) tags `u32::MAX` = re-fire
         // normally. Overwritten each change, so it is fresh for the next sweep.
         self.last_blocking_writer[i] = self.blocking_writer.unwrap_or(u32::MAX);
+        // DIRTY-SETTLE: this net moved, so every continuous assign whose value reads it
+        // must be re-evaluated by the next settle pass. Indexed re-borrow because the
+        // flag write below aliases `self`. Nets no assign depends on (almost all of
+        // them) pay one length check.
+        for k in 0..self.ca_of_net.get(i).map_or(0, Vec::len) {
+            let ci = self.ca_of_net[i][k] as usize;
+            if !self.ca_dirty_flag[ci] {
+                self.ca_dirty_flag[ci] = true;
+                self.ca_dirty.push(ci as u32);
+            }
+        }
         self.emit_vcd_change(net, word);
         self.emit_probe_change(net, word);
     }

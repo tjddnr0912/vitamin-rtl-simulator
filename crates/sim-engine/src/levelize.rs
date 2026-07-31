@@ -115,10 +115,16 @@ fn level_reads(ir: &SimIr, tmpl: usize) -> BTreeSet<u32> {
 fn expr_nets(ir: &SimIr, eid: u32, out: &mut BTreeSet<u32>) {
     use sim_ir::Expr as E;
     match &ir.exprs[eid as usize] {
-        E::Signal { net, .. } => {
+        E::Signal { net, word } => {
             out.insert(*net);
+            // `word` IS an ExprId, not a constant index — `eval_core` evaluates it
+            // (`assoc_key(*weid)` / the u32 word funnel). Missing it only costs a rank
+            // here, but the same walk feeds the dirty settle, where a dropped index net
+            // means `assign y = mem[idx]` never re-evaluates when `idx` moves.
+            if let Some(w) = word {
+                expr_nets(ir, *w, out);
+            }
         }
-        // `word` on a Signal is a CONSTANT word index, not an ExprId — nothing to walk.
         E::Const { .. } | E::ArrayItem { .. } => {}
         E::Select {
             base,
@@ -243,4 +249,84 @@ pub fn comb_ranks(ir: &SimIr) -> Vec<u32> {
         }
     }
     rank
+}
+
+/// Nets an `Lvalue` DEPENDS ON (its dynamic word/offset/width index expressions) —
+/// not the nets it writes. `resolve_lvalue_offsets` evaluates these at settle time, so
+/// a change to one of them changes where the assign lands.
+fn lvalue_index_nets(ir: &SimIr, lv: &sim_ir::Lvalue, out: &mut BTreeSet<u32>) {
+    for c in &lv.chunks {
+        for e in [c.word, c.offset, c.width].into_iter().flatten() {
+            expr_nets(ir, e, out);
+        }
+    }
+}
+
+/// Is every node of the expression rooted at `eid` a PURE function of the nets it
+/// reads? A positive allow-list, never a deny-list: an unrecognised node must read as
+/// "not pure" so a future `Expr` variant cannot quietly opt itself into being skipped.
+///
+/// `SysFunc` is excluded because `$random`/`$time` do not depend on their inputs alone,
+/// `Call` because a user function can read state no net records, and `ArrayItem`
+/// because it is an array-method iterator value with no net of its own.
+fn expr_is_pure_of_nets(ir: &SimIr, eid: u32) -> bool {
+    use sim_ir::Expr as E;
+    match &ir.exprs[eid as usize] {
+        E::Const { .. } => true,
+        E::Signal { word, .. } => word.is_none_or(|w| expr_is_pure_of_nets(ir, w)),
+        E::Select { base, offset, .. } => {
+            expr_is_pure_of_nets(ir, *base) && expr_is_pure_of_nets(ir, *offset)
+        }
+        E::Concat { parts } => parts.iter().all(|&p| expr_is_pure_of_nets(ir, p)),
+        E::Replicate { count, value } => {
+            expr_is_pure_of_nets(ir, *count) && expr_is_pure_of_nets(ir, *value)
+        }
+        E::Unary { operand, .. } => expr_is_pure_of_nets(ir, *operand),
+        E::Binary { lhs, rhs, .. } => {
+            expr_is_pure_of_nets(ir, *lhs) && expr_is_pure_of_nets(ir, *rhs)
+        }
+        E::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            expr_is_pure_of_nets(ir, *cond)
+                && expr_is_pure_of_nets(ir, *then_e)
+                && expr_is_pure_of_nets(ir, *else_e)
+        }
+        E::SysFunc { .. } | E::Call { .. } | E::ArrayItem { .. } => false,
+    }
+}
+
+/// Per continuous assign: the nets its value depends on, and whether it may be skipped
+/// when none of them changed.
+///
+/// **Why skipping is sound when it is.** An assign whose dependency nets are unchanged
+/// recomputes the same value, and the write funnel drops a same-value write without
+/// noting a change — so evaluating it is observationally a no-op. The whole risk is
+/// therefore in the DEPENDENCY SET being complete and the value being a pure function
+/// of it, which is what `dirty_ok` certifies.
+///
+/// `dirty_ok` is false for an impure RHS, and for any dependency that is a heap handle
+/// (dynamic array / queue / associative array / class), whose CONTENTS can change while
+/// the handle net itself does not — a change no `note_change` would report.
+pub(crate) fn ca_deps(ir: &SimIr, is_heap: &dyn Fn(u32) -> bool) -> Vec<(BTreeSet<u32>, bool)> {
+    ir.cont_assigns
+        .iter()
+        .map(|c| {
+            let mut deps = BTreeSet::new();
+            expr_nets(ir, c.rhs, &mut deps);
+            lvalue_index_nets(ir, &c.lhs, &mut deps);
+            let dirty_ok = c.delay.is_none()
+                && expr_is_pure_of_nets(ir, c.rhs)
+                && c.lhs.chunks.iter().all(|k| {
+                    [k.word, k.offset, k.width]
+                        .into_iter()
+                        .flatten()
+                        .all(|e| expr_is_pure_of_nets(ir, e))
+                })
+                && !deps.iter().copied().any(is_heap);
+            (deps, dirty_ok)
+        })
+        .collect()
 }
