@@ -607,20 +607,11 @@ pub(crate) fn dispatch(
             let i = args.get(1).and_then(|&a| sched.eval(a).to_u64());
             let c = args.get(2).and_then(|&a| sched.eval(a).to_u64());
             if let (Some(net), Some(i), Some(c)) = (net, i, c) {
-                let c = (c & 0xff) as u8;
-                if c != 0 {
-                    if let Some(crate::state::DynObj::Str { bytes }) = sched
-                        .st
-                        .dyn_heap
-                        .borrow_mut()
-                        .get_mut(net as usize)
-                        .and_then(|o| o.as_mut())
-                    {
-                        if let Some(slot) = bytes.get_mut(i as usize) {
-                            *slot = c;
-                        }
-                    }
-                }
+                // R23: `str_putc` routes by where this string's bytes live. Writing
+                // `dyn_heap[net]` here unconditionally missed a FRAME-LOCAL `string`,
+                // whose bytes are slab-stored in the frame slot — `s[0] = 65` inside a
+                // `task automatic` silently did nothing at exit 0.
+                sched.st.str_putc(net, i, (c & 0xff) as u8);
             }
             Ctl::Continue
         }

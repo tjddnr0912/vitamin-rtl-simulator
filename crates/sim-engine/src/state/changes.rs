@@ -584,6 +584,56 @@ impl SimState<'_> {
         self.dyn_heap.borrow_mut()[net as usize] = Some(DynObj::DynArray { elems });
     }
 
+    /// R23: byte-set `s[i] = c` on a `string` net (`$sformatf`-free §6.16.2 element
+    /// write, lowered as `SysTaskId::StrPutC`), routed by WHERE that string's bytes live.
+    ///
+    /// The `StrPutC` handler used to write `dyn_heap[net]` unconditionally. That is the
+    /// MODULE-scope string store, and a frame-local `string` is not there — it is
+    /// slab-stored in the frame slot (§4.5.167). So `task automatic tk(); string s; s =
+    /// "zz"; s[0] = 65;` left `s` as `"zz"` at exit 0, with no diagnostic, while the same
+    /// two lines in a module process produced iverilog's `"Az"`. A pre-existing
+    /// silent-wrong: it needed no call, no output formal and no frame routing to reproduce.
+    /// R23 surfaced it because the loud gate that used to reject `s[i] = f(a, o)` in a
+    /// frame body was removed, and removing a gate makes what it masked yours to own.
+    ///
+    /// Both stores are reachable through `&self` (`dyn_heap` and the frame slab are both
+    /// interior-mutable), so this needs no executor change — only the routing question
+    /// `read_net` has always asked, asked on the write side too.
+    pub(crate) fn str_putc(&self, net: u32, i: u64, c: u8) {
+        if c == 0 {
+            return; // §6.16.2: writing NUL is ignored (iverilog-pinned)
+        }
+        if self.frame_local.get(net as usize).copied().unwrap_or(false) {
+            let Some((fidx, slot)) = self.frame_route[net as usize] else {
+                return;
+            };
+            let mut bytes = self
+                .frame_slot_read(fidx, self.frame_slot_auto[net as usize], slot)
+                .to_str_bytes();
+            let Some(b) = bytes.get_mut(i as usize) else {
+                return; // out of range → no-op, same as the module path below
+            };
+            *b = c;
+            self.frame_slot_write(
+                fidx,
+                self.frame_slot_auto[net as usize],
+                slot,
+                Value::from_str_bytes(&bytes),
+            );
+            return;
+        }
+        if let Some(DynObj::Str { bytes }) = self
+            .dyn_heap
+            .borrow_mut()
+            .get_mut(net as usize)
+            .and_then(|o| o.as_mut())
+        {
+            if let Some(b) = bytes.get_mut(i as usize) {
+                *b = c;
+            }
+        }
+    }
+
     /// §4.5.194: `&self` (was `&mut`) — the dyn heap is interior-mutable, so this
     /// element/whole store is reachable from BOTH the `&mut` module path
     /// (`write_chunk`) and the `&self` frame executors (`frame_write_lvalue`, for a

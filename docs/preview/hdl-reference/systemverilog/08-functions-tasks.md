@@ -89,6 +89,28 @@ print_state(curr_state);   // 반환값 무시 — SV에서는 합법적
 void'(some_func_with_return());   // 반환값 명시적 무시
 ```
 
+> **vitamin 지원 (§4.5.278) — output/inout formal 을 가진 호출이 서브루틴 본문 안에 있을 때.**
+> IEEE §13.4 는 함수가 `output`/`inout` formal 을 갖는 것을 허용하고, vitamin 은 그 호출의
+> **copy-out** 을 호출 표현식 앞의 문장으로 방출한다. **`task` 본문 안에서는 한 번만 평가되는
+> 모든 위치가 지원되고, copy-out 목적지도 제한이 없다** — 호출자의 로컬·자기 output formal 은
+> 물론 **모듈/인스턴스 net** 도 된다(`inner(a, gv);` · `r = nxt(a, gv);` · `void'(nxt(a, gv));` ·
+> `r = nxt(a, gv) + 10;` · bit/part-select · 배열 원소 · `string` 목적지 · 중첩 프레임 · 루프 안).
+>
+> ```systemverilog
+> int gv;
+> task automatic outer (input int a, output int done);
+>     inner(a, gv);        // bare call statement, 목적지 = 모듈 net
+>     done = 1;
+> endtask
+> ```
+>
+> §4.5.278 전에는 이 형태가 **진단 없이 exit 101 로 죽었고**, 같은 본문에 무관한 `#5` 나 `else`
+> 가지를 하나 넣으면 동작했다 — 호출이 메모리를 쓰는지가 **옆에 무슨 문장이 있는지**로 갈렸다.
+>
+> **남은 미지원은 `function` 본문 하나뿐**이다: 함수는 자기를 부른 표현식 안에서 진입하므로
+> callee 의 copy-out 을 실어 나를 **자기 소유의 호출 문장이 없다**. 같은 호출을 `task` 본문이나
+> 모듈 프로세스에 두거나, 임시 변수에 먼저 받아라. 진단(`E3009`)이 어느 경우인지 말해 준다.
+
 ---
 
 ## ref 인자 — 참조 전달 (§13.5.2)

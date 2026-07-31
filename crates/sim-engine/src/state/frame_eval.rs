@@ -233,7 +233,22 @@ impl<'a> SimState<'a> {
             self.fatal_frame_heap_write();
             return;
         }
-        let (fidx, slot) = self.frame_route[net].expect("frame lvalue net is routed");
+        // R23 §3.1/§4: an UNROUTED net here means a write this `&self` executor cannot
+        // perform reached it anyway — the copy-out destination is a module/instance net, not
+        // a frame slot. The `.expect()` that used to sit here aborted the process with
+        // `frame lvalue net is routed` at `frame_eval.rs:236`: rc=101, `errors=` never
+        // printed, and a vita-internal file:line where the user needed their own.
+        //
+        // The shape that produced it (a bare call statement inside a frame body whose output
+        // actual is a module net) is now correct-support — `compute_suspendable_tasks` reads
+        // a `Terminator::Call`'s copy-out destinations and routes such a caller to the `&mut`
+        // process executor. This stays as the correct-or-loud floor for anything that still
+        // reaches it: a fatal on the same channel as the other two frame-executor limits, so
+        // the run ends as `FinishReason::Error` with a diagnostic instead of an abort.
+        let Some((fidx, slot)) = self.frame_route[net] else {
+            self.fatal_frame_unrouted_write(net);
+            return;
+        };
         let auto = self.frame_slot_auto[net];
         let nv = &self.ir.nets[net];
         let net_w = nv.width.max(1);
@@ -575,6 +590,42 @@ impl<'a> SimState<'a> {
                           vanish). Read the formal without mutating it, or restructure to a \
                           process / suspendable task."
                     .to_string(),
+                location: None,
+                context: Vec::new(),
+                sim_time: Some(TimeStamp { ticks: self.now }),
+            }));
+        }
+    }
+
+    /// R23 §3.1/§4: latch a fatal for a frame write whose destination net is NOT routed to
+    /// a frame slot — i.e. a module/instance net reached the synchronous `&self` executor,
+    /// which has no way to write the flat store or to raise the dirty channel.
+    ///
+    /// This replaces a bare `.expect("frame lvalue net is routed")`, which aborted the whole
+    /// process at rc=101 naming a vita source line. The message names the net so the user
+    /// can find it, states the condition in the terms of their own source, and gives the two
+    /// restructurings that work — because a diagnostic whose only actionable content is an
+    /// internal file:line is the failure the report filed this under.
+    pub(crate) fn fatal_frame_unrouted_write(&self, net: usize) {
+        if !self.call_fatal.get() {
+            self.call_fatal.set(true);
+            let name = self
+                .net_names
+                .get(net)
+                .filter(|n| !n.is_empty())
+                .cloned()
+                .unwrap_or_else(|| format!("net #{net}"));
+            self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+                severity: Severity::Fatal,
+                code: MsgCode::RunFatal,
+                message: format!(
+                    "a subroutine running on the synchronous frame executor tried to write \
+                     `{name}`, which is not one of its frame-local variables — a module / \
+                     instance net can only be written from the process executor, which has \
+                     the dirty channel that makes the change visible. Move the write into a \
+                     `task` (a task body's out-of-frame write routes there automatically), or \
+                     into the calling process."
+                ),
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: self.now }),

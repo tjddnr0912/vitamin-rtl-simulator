@@ -673,6 +673,16 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // §4.5.208: `has_hier_call` forces a frame task with a deferred hier enable suspendable —
     // consistently with elaborate (both derive it from the same serialized `FuncMeta`).
     let force_suspend: Vec<bool> = st.func_table.iter().map(|m| m.has_hier_call).collect();
+    // R23 §3.1: the nested call sites' COPY-OUT destinations, reduced through the shared
+    // `sim_ir::call_out_nets` — elaborate calls the same function over the same table
+    // (`task_calls_func` is threaded verbatim), so both computes agree by construction. A
+    // call whose output actual escapes the calling frame's window routes that caller here,
+    // to `run_process`, whose copy-out goes through the `write_lvalue` funnel.
+    let call_out_nets = sim_ir::call_out_nets(
+        st.task_calls_func
+            .iter()
+            .map(|(b, info)| (*b, info.out_binds.as_slice())),
+    );
     st.suspendable_tasks = sim_ir::compute_suspendable_tasks(
         &st.ir.funcs,
         &st.ir.blocks,
@@ -680,6 +690,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         &st.ir.exprs,
         &base_nets,
         &force_suspend,
+        &call_out_nets,
     );
 
     let reason = {

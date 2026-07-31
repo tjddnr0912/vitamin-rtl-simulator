@@ -583,16 +583,27 @@ fn task_call_output_actual_keeps_its_write() {
 }
 
 #[test]
-fn frame_body_never_emits_a_copy_out() {
-    // A frame function/task body's writes must target frame-LOCAL nets. Emitting a copy-out
-    // there reached the engine and tripped `debug_assert!(frame_local[net])` — a PANIC with
-    // no diagnostic (and, with the assert stripped, a write into the wrong net). Both
-    // lowering flags matter: a function body sets one, a task body the other.
-    for body in [
-        "case (nxt(5,gv)) 6: r=111; default: r=222; endcase",
-        "r = nxt(5,gv);",
-        "r = nxt(5,gv) + 1;",
-        "if (nxt(5,gv) == 6) r = 1; else r = 2;",
+fn a_frame_task_body_emits_the_copy_out_and_it_lands() {
+    // R23 §3.1 raised this whole family from LOUD to correct-support. It used to read "a
+    // frame function/task body's writes must target frame-LOCAL nets", and the E3009 was the
+    // honest half of a wrong model: the real defect was that `compute_suspendable_tasks`
+    // never inspected a `Terminator::Call`'s copy-out destinations (they live in the
+    // call-site side table, not in `Stmt` lvalues), so a task with an escaping one stayed on
+    // the synchronous `&self` executor and aborted with `frame lvalue net is routed`.
+    //
+    // With the classifier reading them, an escaping destination is a suspend signal, the
+    // task runs on the `&mut` process executor, and the copy-out goes through the same
+    // `write_lvalue` funnel a plain `gv = 5;` in that body already used. Hand-IEEE §13.4:
+    // `nxt(5, gv)` writes gv = 6 and returns 6 (iverilog rejects a function output formal,
+    // so there is no differential oracle for the return value).
+    for (body, want) in [
+        (
+            "case (nxt(5,gv)) 6: r=111; default: r=222; endcase",
+            "z=111 gv=6",
+        ),
+        ("r = nxt(5,gv);", "z=6 gv=6"),
+        ("r = nxt(5,gv) + 1;", "z=7 gv=6"),
+        ("if (nxt(5,gv) == 6) r = 1; else r = 2;", "z=1 gv=6"),
     ] {
         let o = run_src(&format!(
             "module t;\n\
@@ -603,10 +614,25 @@ fn frame_body_never_emits_a_copy_out() {
              endmodule\n"
         ));
         assert!(
-            !o.contains("panicked") && o.contains("error[VITA-E3009]"),
-            "a frame task body must report, not panic ({body}):\n{o}"
+            !o.contains("panicked") && !o.contains("error[VITA") && o.contains(want),
+            "a frame task body's copy-out must land ({body} ⇒ {want}):\n{o}"
         );
     }
+    // A frame FUNCTION body still declines: it is entered from `Expr::Call` during
+    // expression evaluation, so it has no call terminator of its own for the engine to
+    // route. Loud, not a panic, and not a silent write into the wrong net.
+    let o = run_src(
+        "module t;\n\
+         int gv;\n\
+         function automatic int nxt (input int a, output int o); o = a + 1; nxt = o; endfunction\n\
+         function automatic int fn (input int k); automatic int r; r = nxt(k,gv); return r; endfunction\n\
+         initial begin int z; gv = 50; z = fn(5); $display(\"z=%0d gv=%0d\", z, gv); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(
+        !o.contains("panicked") && o.contains("error[VITA-E3009]"),
+        "a frame FUNCTION body must report, not panic:\n{o}"
+    );
 }
 
 #[test]

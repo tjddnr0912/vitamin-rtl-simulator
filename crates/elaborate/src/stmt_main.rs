@@ -117,13 +117,36 @@ impl Elaborator<'_> {
                 // §6.16.3 note above is explicit that reaching `lower_lvalue` ahead of the
                 // `s[i]` detection emits a silent packed BIT-write — so an `s[i] = f(…)`
                 // would have been mis-lowered by an earlier placement.
+                //
+                // R23 §3.1: "only when the destination is FRAME-LOCAL" was the right gate
+                // for the panic it was written against, but the panic itself was the
+                // classifier's, not this shape's — a `Terminator::Call`'s copy-out
+                // destinations were invisible to `compute_suspendable_tasks`, so a caller
+                // with an escaping one stayed on the `&self` executor. Now that the
+                // classifier reads them, an escaping destination LIFTS the calling task to
+                // the `&mut` process executor, where the copy-out goes through the same
+                // `write_lvalue` funnel a plain `gv = a;` in that body already uses. So a
+                // TASK body drops the destination condition entirely.
+                //
+                // A frame FUNCTION body keeps it. That is not caution — it is the shape:
+                // a framed function is invoked from `Expr::Call` inside expression
+                // evaluation, so it has no `Terminator::Call` of its own to be routed
+                // through, and `emit_frame_func_out_call` would key the call site by
+                // `(cur_proc, block)` into the PROCESS table while emitting the block into
+                // the function arena. `validate_frame_body(allow_call = false)` catches
+                // that as a loud E3009 today; letting the escaping form through would
+                // trade a loud for a mis-keyed call site.
                 if self.in_frame_body() && delay.is_none() && event.is_none() {
                     if let Some((fid, func)) = self.inout_call_target(rhs) {
                         if let ast::ExprKind::Call { args, .. } = &rhs.kind {
                             let args = args.clone();
-                            if self.frame_out_call_dests_are_frame_local(&func, &args) {
+                            if self.frame_task_lowering
+                                || self.frame_out_call_dests_are_frame_local(&func, &args)
+                            {
                                 let lv = self.lower_lvalue(lhs);
-                                if lv.chunks.iter().all(|c| self.net_is_frame_local(c.net)) {
+                                if self.frame_task_lowering
+                                    || lv.chunks.iter().all(|c| self.net_is_frame_local(c.net))
+                                {
                                     self.check_lvalue_kind(&lv, true);
                                     self.emit_frame_func_out_call(b, fid, &func, &args, lv);
                                     return;

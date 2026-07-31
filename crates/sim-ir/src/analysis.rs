@@ -185,6 +185,38 @@ pub fn rhs_is_stmt_effect(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
     )
 }
 
+/// R23 §3.1: reduce a call-site copy-out table to the ONE fact
+/// [`compute_suspendable_tasks`] needs from it — global block id → the NET ids the
+/// `Terminator::Call` at that block copies out to.
+///
+/// Elaborate's `TaskCallInfo` and the engine's are two distinct structs (one is the
+/// elaborate side table, one the `SimOpts` sidecar) that carry the same
+/// `out_binds: Vec<(slot, sim_ir::Lvalue)>`. Both callers reduce through THIS function
+/// rather than each writing the loop, so the pure-function contract (elaborate and the
+/// engine must compute the identical suspendable set) is a property of one expression
+/// instead of two that can drift apart.
+///
+/// Only `chunk.net` matters: the question downstream is "does this destination lie
+/// outside the calling frame's window `[base_net, base_net + locals_len)`", and a window
+/// is a NET-id range. A chunk's offset/width/word cannot move it across that boundary.
+pub fn call_out_nets<'a, I>(sites: I) -> std::collections::BTreeMap<u32, Vec<u32>>
+where
+    I: IntoIterator<Item = (u32, &'a [(u32, sim_ir::Lvalue)])>,
+{
+    sites
+        .into_iter()
+        .map(|(block, out_binds)| {
+            (
+                block,
+                out_binds
+                    .iter()
+                    .flat_map(|(_, lv)| lv.chunks.iter().map(|c| c.net))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
 /// Round-14 V3/V4: the set of TASK `FuncId`s that must run on the suspendable-frame
 /// path (executed by the scheduler's `run_process` with a call-stack) instead of the
 /// synchronous `run_task`. A task is suspendable iff its reachable body carries a
@@ -219,6 +251,7 @@ pub fn compute_suspendable_tasks(
     exprs: &[sim_ir::Expr],
     base_nets: &[u32],
     force_suspend: &[bool],
+    call_out_nets: &std::collections::BTreeMap<u32, Vec<u32>>,
 ) -> std::collections::BTreeSet<u32> {
     use sim_ir::{DisableKind, Stmt, Terminator};
     // A statement is a suspend signal unless it is a blocking assign or a `disable
@@ -303,6 +336,42 @@ pub fn compute_suspendable_tasks(
                     stack.push(*else_bb);
                 }
                 Terminator::Call { target, ret_bb } => {
+                    // R23 §3.1 ROOT: a `Terminator::Call`'s COPY-OUT destinations are not
+                    // `Stmt` lvalues — they ride the call-site side table, keyed by this
+                    // block's global id. The walk above therefore never saw them, and a
+                    // destination OUTSIDE this func's window `[lo, hi)` (`inner(a, gv)`
+                    // with `gv` a module net) left the caller classified "subset": the
+                    // synchronous `&self` `run_task` then reached `frame_write_lvalue`
+                    // with an unrouted net and aborted the process — `frame lvalue net is
+                    // routed`, rc=101, no diagnostic, no source location.
+                    //
+                    // It is the same question the `BlockingAssign` arm already asks of its
+                    // lhs, asked of the other statement form that writes a caller lvalue,
+                    // and the answer has the same consequence: the write needs `&mut`,
+                    // which only the suspendable process path has. Marking it here routes
+                    // the caller to `run_process`, whose `Terminator::Return` arm copies
+                    // out through `write_lvalue` — the funnel that splits frame-local
+                    // (frame slot) from module net (flat store + dirty channel).
+                    //
+                    // Measured, and the reason this could not be found by reading one
+                    // body: `#5 inner(a, gv);` and `if (c) inner(a, gv); else gv = 0;`
+                    // both already WORKED, because the `Delay` terminator / the `else`
+                    // arm's own out-of-window write marked the task suspendable for an
+                    // unrelated reason. Which statements sit NEXT TO the call decided
+                    // whether the call itself wrote memory.
+                    //
+                    // A MISSING entry is a deferred hierarchical enable whose actuals are
+                    // not resolved when elaborate runs this pass (the engine, running
+                    // post-resolve, does have them). Not a signal here — deliberately:
+                    // `force_suspend` (`FuncMeta.has_hier_call`) already forces exactly
+                    // those callers suspendable in BOTH computes, so leaving them out is
+                    // what keeps the two computes identical over a table that legitimately
+                    // differs in size between them.
+                    if let Some(dests) = call_out_nets.get(&b) {
+                        if dests.iter().any(|&n| n < lo || n >= hi) {
+                            direct[fi] = true;
+                        }
+                    }
                     if let Some(&cf) = entry_to_func.get(target) {
                         calls[fi].push(cf);
                     }

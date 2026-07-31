@@ -348,7 +348,7 @@ endmodule"#);
 /// round-19 note recorded as "NOT YET NAMED", found by measuring rather than guessing a
 /// third guard. A module-net destination must stay loud; it must never panic.
 #[test]
-fn a_copy_out_to_a_module_net_from_a_frame_body_stays_loud() {
+fn a_copy_out_to_a_module_net_from_a_frame_body_lands() {
     let (o, ok) = run(r#"`timescale 1ns/1ps
 module t;
   int g;
@@ -362,11 +362,18 @@ module t;
   endtask
   initial begin int r; tk(r); $display("r=%0d", r); $finish; end
 endmodule"#);
-    assert!(!ok, "a module-net destination must stay loud:\n{o}");
-    assert!(o.contains("E3009"), "expected the elaborate reject:\n{o}");
+    // R23 §3.1 raised this from loud to correct-support: an escaping copy-out
+    // destination is a suspend signal now, so the task runs on the `&mut` executor and
+    // the write lands. Hand-IEEE §13.4: `fn(5, o)` sets o = 10 and returns 6, so g = 6
+    // and r = 16. iverilog rejects a function output formal, so there is no differential
+    // lane; the frame ROUTING half is what this pins.
     assert!(
         !o.contains("panicked") && !o.contains("frame lvalue net is routed"),
         "must not reach the engine assertion:\n{o}"
+    );
+    assert!(
+        ok && !o.contains("error[VITA") && o.contains("r=16"),
+        "the module-net destination must receive the copy-out:\n{o}"
     );
 }
 
@@ -397,7 +404,7 @@ endmodule"#);
 /// `frame_write_lvalue`'s assert (rc=101 in debug; a write into the wrong net with the
 /// assert stripped). Checking only the value's destination checks the wrong half.
 #[test]
-fn an_output_actual_on_a_module_net_keeps_the_frame_body_loud() {
+fn an_output_actual_on_a_module_net_lands_in_the_frame_body() {
     let (o, ok) = run(r#"`timescale 1ns/1ps
 module t;
   int gv;
@@ -409,20 +416,31 @@ module t;
   endtask
   initial begin int z; gv = 50; tk(z); $display("z=%0d gv=%0d", z, gv); $finish; end
 endmodule"#);
-    assert!(!ok, "a module-net output actual must stay loud:\n{o}");
-    assert!(o.contains("E3009"), "expected the elaborate reject:\n{o}");
+    // R23 §3.1: correct-support. `nxt(5, gv)` writes gv = 6 and returns 6 (hand-IEEE
+    // §13.4). This is the exact shape the round-23 report filed as an rc=101 abort in
+    // its bare-statement form, so the "must not panic" half stays as the floor.
     assert!(
         !o.contains("panicked"),
         "must report, not panic — the engine assert is not a diagnostic:\n{o}"
+    );
+    assert!(
+        ok && !o.contains("error[VITA") && o.contains("z=6 gv=6"),
+        "the output actual must receive the copy-out:\n{o}"
     );
 }
 
 /// Placement guard for that same path: it calls `lower_lvalue`, and `lower_stmt`'s
 /// §6.16.3 note is explicit that reaching `lower_lvalue` ahead of the `s[i]` detection
 /// emits a silent packed BIT-write. So it sits BELOW the string-element and array
-/// specials, and an `s[i] = f(…)` must stay loud rather than be quietly mis-lowered.
+/// specials — and R23, which lifted the loud, has to show the write is a BYTE write.
+///
+/// R23 also found the reason this shape could not simply be un-louded: `SysTaskId::StrPutC`
+/// wrote `dyn_heap[net]`, the MODULE string store, so a FRAME-LOCAL `string` (slab-stored
+/// in the frame slot) silently kept its old bytes. That was pre-existing and needed no call
+/// to reproduce (`string s; s = "zz"; s[0] = 65;` in a `task automatic` printed `zz`);
+/// removing the gate is what made it reachable, and therefore ours.
 #[test]
-fn a_string_element_destination_is_not_silently_bit_written() {
+fn a_string_element_destination_is_a_byte_write_not_a_bit_write() {
     let (o, ok) = run(r#"`timescale 1ns/1ps
 module t;
   function automatic int fn (input int a, output int o);
@@ -436,8 +454,32 @@ module t;
   endtask
   initial begin int r; tk(r); $display("r=%0d", r); $finish; end
 endmodule"#);
-    assert!(!ok, "expected a loud reject:\n{o}");
-    assert!(o.contains("E3009"), "expected the elaborate reject:\n{o}");
+    // `fn(7, o)` returns 65 = 'A' and writes o = 7, so `s` must become "Az" (a BYTE
+    // write; a packed bit-write would leave "zz" or corrupt the vector) and r == o == 7.
+    assert!(
+        ok && !o.contains("error[VITA") && o.contains("r=7"),
+        "the string element must take the byte, and o must survive:\n{o}"
+    );
+}
+
+/// The frame-local half of that store, with no call and no output formal in sight — the
+/// minimal form of the `StrPutC` routing bug R23 found underneath the gate. iverilog: `Az`.
+#[test]
+fn a_frame_local_string_element_write_reaches_the_frame_slot() {
+    let (o, ok) = run(r#"`timescale 1ns/1ps
+module t;
+  task automatic tk (output int r);
+    string s;
+    s = "zz";
+    s[0] = 65;
+    r = (s == "Az") ? 1 : 0;
+  endtask
+  initial begin int r; tk(r); $display("r=%0d", r); $finish; end
+endmodule"#);
+    assert!(
+        ok && !o.contains("error[VITA") && o.contains("r=1"),
+        "a frame-local string element write must land:\n{o}"
+    );
 }
 
 // ── §4 the fatal must actually stop the run ──────────────────────────────────

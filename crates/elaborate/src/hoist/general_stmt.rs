@@ -21,14 +21,23 @@ impl Elaborator<'_> {
         s: &ast::Stmt,
     ) -> Option<ast::Stmt> {
         use ast::Stmt as S;
-        // A frame function/task body cannot host a copy-out `Terminator::Call`: its writes
-        // must target frame-LOCAL nets, and an output actual is a module net. Emitting one
-        // there made `frames_classify` report a cause the source does not contain, and in a
-        // `task automatic` body it reached the engine and tripped
-        // `debug_assert!(frame_local[net])` — a panic with no diagnostic (and, with the
-        // assert stripped, a write into the wrong net). BOTH flags matter: a function body
-        // sets `frame_fn_lowering`, a task body sets `frame_task_lowering`.
-        if self.in_frame_body() {
+        // A frame FUNCTION body cannot host a copy-out `Terminator::Call`: it is entered
+        // from `Expr::Call` during expression evaluation, so there is no call terminator of
+        // its own for the engine to route, and `emit_frame_func_out_call` would key the
+        // site into the PROCESS table while emitting the block into the function arena.
+        //
+        // R23 §3.1: a frame TASK body no longer stands down. The reason it did — "its
+        // writes must target frame-LOCAL nets, and an output actual is a module net", which
+        // reached the engine as `frame lvalue net is routed` — was the classifier failing
+        // to look at a `Terminator::Call`'s copy-out destinations, not a property of the
+        // hoist. With those destinations now read, an escaping one marks the calling task
+        // suspendable and the write lands through `write_lvalue`. The hoist TEMP is a
+        // module net, and that is fine for the same reason and by the older r18 rule: a
+        // frame body writing an out-of-window net is already a suspend signal. No
+        // suspension point exists between the temp write and its use (a framed callee
+        // carries no timing control and `run_process`'s `Call` arm does not yield), so one
+        // temp per call site cannot be observed across activations.
+        if self.frame_fn_lowering {
             return None;
         }
         match s {

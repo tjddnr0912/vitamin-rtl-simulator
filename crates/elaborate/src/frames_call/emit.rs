@@ -29,19 +29,29 @@ impl Elaborator<'_> {
                     // Keeping the old enumeration would be a stale claim in the other
                     // direction: it said a `?:` arm and a nested expression were
                     // unsupported, which they no longer are.
+                    //
+                    // R23 §4: it had gone stale in the FALSE-CLAIM direction, which is worse.
+                    // It said "a frame body's writes have to stay frame-local … though a BARE
+                    // call statement there does work" — and a bare call statement there was
+                    // exactly what aborted the engine with `frame lvalue net is routed`
+                    // (rc=101, no diagnostic). A user who trusted the message and rewrote an
+                    // expression as a bare statement traded a loud error for a crash. Both
+                    // halves are now measured, not asserted: a frame TASK body supports every
+                    // once-evaluated position (§3.1 made the escaping copy-out a suspend
+                    // signal), and a frame FUNCTION body is what is actually left — it is
+                    // entered from `Expr::Call` during expression evaluation, so it has no
+                    // call terminator of its own for the engine to route the copy-out through.
                     "function `{fname}` has an output/inout formal, so its copy-out has to be \
                      emitted as a statement before the expression that calls it. That works in \
                      any position evaluated ONCE per statement, but not here. The remaining \
                      cases are: a CONTINUOUSLY re-evaluated expression (`assign`, `force`, a \
                      `wait` condition) — the copy-out cannot re-fire on every change; an \
                      intra-assignment delay (`x = #1 {fname}(...)`); a `min:typ:max` or a \
-                     constraint/`with` expression; any position inside a function or task body \
-                     lowered as a CALL FRAME that needs the copy-out HOISTED out of an \
-                     expression (an assignment rhs, a condition, a `case` scrutinee) — a frame \
-                     body's writes have to stay frame-local while the copy-out targets the \
-                     caller's net, though a BARE call statement there does work, and so does \
-                     the same expression in a module process; and an evaluation-order case the \
-                     hoist cannot preserve — \
+                     constraint/`with` expression; any position inside a FUNCTION body lowered \
+                     as a call frame (a function is entered from the expression that calls it, \
+                     so it has no call statement of its own to carry the copy-out) — the same \
+                     call in a TASK body, or in a module process, does work; and an \
+                     evaluation-order case the hoist cannot preserve — \
                      an output actual read to the LEFT of the call when the actual is not a \
                      plain bit-vector net, when two calls in the same expression write it, or \
                      when a call the hoist leaves in place could read it (its body, or an \

@@ -309,6 +309,15 @@ impl Elaborator<'_> {
         // §4.5.208: `has_hier_call` forces a frame task with a deferred hier enable
         // suspendable — the SAME derivation the engine uses (both from `FuncMeta`).
         let force_suspend: Vec<bool> = self.func_metas.iter().map(|m| m.has_hier_call).collect();
+        // R23 §3.1: the nested call sites' COPY-OUT destinations. Reduced through the
+        // shared `ir::call_out_nets` (the engine calls the same function over the same
+        // table, threaded verbatim), so a call whose output actual is a module net makes
+        // the CALLING task suspendable instead of aborting the `&self` executor.
+        let call_out_nets = ir::call_out_nets(
+            self.task_calls_func
+                .iter()
+                .map(|(b, info)| (*b, info.out_binds.as_slice())),
+        );
         let full = ir::compute_suspendable_tasks(
             &self.funcs,
             &self.func_blocks,
@@ -316,6 +325,7 @@ impl Elaborator<'_> {
             &self.exprs,
             &base_nets,
             &force_suspend,
+            &call_out_nets,
         );
         let pending = std::mem::take(&mut self.frame_task_pending);
         for (fid, name, base_net, locals_len, unsafe_repeat) in pending {
@@ -829,7 +839,21 @@ impl Elaborator<'_> {
                     | ir::Terminator::Return
             ) || (allow_call && matches!(blk.term, ir::Terminator::Call { .. }));
             if !term_ok {
-                why = Some("a timing/suspend/fork control (#delay, @, wait, fork)");
+                // R23 §4: name the terminator that actually failed. This arm answered
+                // "a timing/suspend/fork control (#delay, @, wait, fork)" for EVERY
+                // rejected terminator, including a `Call` in a body lowered with
+                // `allow_call = false` — so `function automatic int outer(input int a);
+                // r = nxt(a, loc); …` (no timing control anywhere in it) was reported as
+                // carrying one. A diagnostic that names a cause the source does not
+                // contain sends the reader looking for something that is not there.
+                why = Some(if matches!(blk.term, ir::Terminator::Call { .. }) {
+                    "a call to a subroutine with an output/inout formal (a FUNCTION body is \
+                     entered from the expression that calls it, so it has no call statement \
+                     of its own to carry the callee's copy-out — the same call in a `task` \
+                     body, or in a module process, does work)"
+                } else {
+                    "a timing/suspend/fork control (#delay, @, wait, fork)"
+                });
             }
             for &sid in &blk.stmts {
                 match &self.stmts[sid as usize] {

@@ -89,7 +89,7 @@ All of the following declaration keywords are accepted:
 | `time` | Yes | 64-bit, 4-state. |
 | `real` / `realtime` | Yes | IEEE-754 f64, 2-state. `realtime` is a synonym. |
 | `signed` / `unsigned` qualifier | Yes | e.g. `reg signed [7:0] x;`, `'sd5`. |
-| `string` | Yes | Dynamic `string` variables with `len`/`getc`/`putc`/`substr`/`toupper`/`tolower`/`compare`, `atoi`-family and `itoa`-family conversions (the `ato*` scan takes only leading digits and underscores per IEEE 1800 §6.16.9 — no whitespace skipping, no sign, and `_` is skipped rather than terminating: `" 3".atoi()` and `"-7".atoi()` are both `0`, `"1_0".atoi()` is `10`), element indexing `s[i]`, comparisons, and `{a, b}` concatenation on assignment. String *queues* (`string sq[$]`) are not yet supported. |
+| `string` | Yes | Dynamic `string` variables with `len`/`getc`/`putc`/`substr`/`toupper`/`tolower`/`compare`, `atoi`-family and `itoa`-family conversions (the `ato*` scan takes only leading digits and underscores per IEEE 1800 §6.16.9 — no whitespace skipping, no sign, and `_` is skipped rather than terminating: `" 3".atoi()` and `"-7".atoi()` are both `0`, `"1_0".atoi()` is `10`), element indexing `s[i]` (a byte write, and since the 2026-07-31 release it also lands on a `string` declared **inside** an `automatic` task or function — those live in the call frame, and the element write used to be silently dropped there), comparisons, and `{a, b}` concatenation on assignment. String *queues* (`string sq[$]`) are not yet supported. |
 
 `real`/`realtime` support includes the conversion system functions `$rtoi`,
 `$itor`, `$realtobits`, `$bitstoreal`.

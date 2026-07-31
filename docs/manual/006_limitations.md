@@ -240,6 +240,26 @@ a `?:` arm — is evaluated only when that operand is reached, and the write
 happens only then, however deeply the operand is nested. An `x` condition
 evaluates both `?:` arms, so both writes happen, as the LRM requires.
 
+Since the 2026-07-31 release the same positions work inside a **`task` body**, and
+the destination no longer has to be a local of that task — an output actual (or the
+assignment's own target) may be a module-scope net:
+
+```systemverilog
+int gv;
+task automatic outer (input int a, output int done);
+  inner(a, gv);                 // a bare call statement, writing a module net
+  done = 1;
+endtask
+```
+
+Before that release this exact shape **aborted the simulator** (`frame lvalue net is
+routed`, exit 101, with no diagnostic), and adding an unrelated `#5` or an `else`
+branch in the same body made it work — so whether a call wrote memory depended on
+what sat next to it. A **`function` body** is the one place still not supported: a
+function is entered from the expression that calls it, so it has no call statement of
+its own to carry the callee's copy-out. Put the call in a `task` body or a module
+process, or assign it to a temporary first. The diagnostic says which case you hit.
+
 The copy-out happens while the expression is being evaluated, so `r` holds a
 value written this entry by the time anything downstream reads it. A branch also
 knows what its condition evaluated to: `a && f(r)` is true only when *both*

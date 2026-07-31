@@ -242,7 +242,9 @@ pub(crate) fn print_help(applet: &str) {
          -I, --incdir <DIR>    `include search dir (+incdir+a+b also accepted)\n  \
          -F <FILE>             expand a filelist (paths relative to the file's dir)\n  \
          --dump-filelist       print the effective post-expansion inputs and exit\n  \
-         --threads, -j <N>     worker threads (output byte-identical for any N)\n  \
+         --threads, -j <N>     waveform-writer thread budget; N>=2 moves VCD writing off\n                        \
+                       the sim thread. Simulation itself is single-threaded, so\n                        \
+                       this does NOT speed up a run with no waveform dump.\n  \
          --timeout <TICKS>     stop cleanly after TICKS sim time (CI killswitch)\n  \
          --upstream <FILE>     (vrun) verify the .velab's recorded upstream digest\n  \
          --work <NAME[=DIR]>   (vcmp) record units into a work library (default dir ./NAME)\n  \

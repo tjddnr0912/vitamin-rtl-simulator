@@ -145,15 +145,25 @@ fn every_trigger_spelling_is_equally_irrelevant() {
 }
 
 #[test]
-fn a_frame_body_still_refuses_to_emit_a_copy_out() {
-    // The stand-down the regression came from is still needed for the arms it was written
-    // for: a copy-out inside a frame body writes a module net from a frame-local context
-    // (it panicked in the engine before §4.5.275). Narrowing its scope must not re-open it.
-    for body in [
-        "r = nxt(5,gv);",
-        "r = nxt(5,gv) + 1;",
-        "if (nxt(5,gv) == 6) r = 1; else r = 2;",
-        "case (nxt(5,gv)) 6: r=111; default: r=222; endcase",
+fn a_frame_body_emits_the_copy_out_and_never_panics() {
+    // This began as `a_frame_body_still_refuses_to_emit_a_copy_out` — the stand-down the
+    // §4.5.276 regression came from, kept because a copy-out inside a frame body writes a
+    // module net from a frame-local context and PANICKED in the engine.
+    //
+    // R23 §3.1 fixed the panic at its root instead of gating around it: the classifier
+    // never inspected a `Terminator::Call`'s copy-out destinations, so a frame task with an
+    // escaping one stayed on the synchronous executor. It is a suspend signal now, the task
+    // runs on the `&mut` executor, and every one of these bodies produces its value.
+    // Hand-IEEE §13.4 (iverilog rejects the function's output formal): `nxt(5, gv)` sets
+    // gv = 6 and returns 6. The "never panics" half is the invariant that survives.
+    for (body, want) in [
+        ("r = nxt(5,gv);", "z=6 gv=6"),
+        ("r = nxt(5,gv) + 1;", "z=7 gv=6"),
+        ("if (nxt(5,gv) == 6) r = 1; else r = 2;", "z=1 gv=6"),
+        (
+            "case (nxt(5,gv)) 6: r=111; default: r=222; endcase",
+            "z=111 gv=6",
+        ),
     ] {
         let o = run_src(&format!(
             "module t;\n\
@@ -164,8 +174,12 @@ fn a_frame_body_still_refuses_to_emit_a_copy_out() {
              endmodule\n"
         ));
         assert!(
-            !o.contains("panicked") && o.contains("error[VITA-E3009]"),
-            "a frame task body must report, not panic ({body}):\n{o}"
+            !o.contains("panicked"),
+            "a frame task body must never abort the engine ({body}):\n{o}"
+        );
+        assert!(
+            !o.contains("error[VITA") && o.contains(want),
+            "the copy-out must land ({body} => {want}):\n{o}"
         );
     }
 }

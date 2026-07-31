@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 249건 (최신순)
+## 인덱스 — 완료 슬라이스 250건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–277**
+**§4.5.220–278**
+- `4.5.278` 외부 round-23 — 호출의 **copy-out 목적지**를 분류기가 아예 안 보고 있었다(그건 `Stmt` lvalue 가 아니라 call-site 사이드 테이블에 있다) · 옆 문장이 답을 정하던 마지막 자리 · E3009 문구가 **패닉하는 형태를 "동작한다"고 명시**하던 것 · 그리고 loud 를 걷자 드러난 `StrPutC` 프레임-로컬 silent-wrong · §3.2 성능은 **iverilog 가 같은 깊이 스케일링**임을 실측(리포트의 뿌리 가설 반증) …
 - `4.5.277` 외부 round-22 — 실행기 선택이 **무관한 `$display` 한 줄**에 달려 있었다(분류기가 문장을 목적지로만 봤고 효과는 rhs 에 있었다) · 함수도 같은 뿌리 · static task 의 `string` 로컬은 **세 번째 수집기** · fatal 이 안 멈추던 것 · 그리고 "이름 없던" 패닉 조건에 이름을 붙였다(목적지가 프레임 창 밖인가) …
 - `4.5.276` 외부 round-20 — **내가 만든 회귀**(모듈 전역 키의 함수 전체 stand-down 이 무관한 dyn arm 을 껐다) · `inout` copy-in 이 죽었음의 증명 · 루프 trip-count · 그리고 그것을 고치다 만든 silent-wrong 5건(fold 도메인·resolver·스코프 교차·decl-init·재선언) …
 - `4.5.275` 값을 반환하는 output-formal 호출을 **아무 표현식 위치에서나** — 한 shape 서술을 네 워커가 공유 · 조건부 자리는 guard 블록 · 왼쪽 읽기는 pre-call 스냅샷 …
@@ -332,6 +333,37 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.278 외부 round-23 — 분류기가 호출의 copy-out 목적지를 아예 안 보고 있었다 (2026-07-31, branch feat-r23-report, format 26 불변) ✅
+
+**리포트 = 2건.** §3.1 COPYOUT-NET-PANIC(프레임 본문 안의 bare call statement 의 output/inout actual 이 모듈 net 이면 `frame lvalue net is routed` 로 **exit 101 패닉, 진단·소스위치 없음**) · §3.2 PERF-COMB-DEPTH(같은 총 작업량인데 조합 깊이 1→6 이 4.3× 느림) · §4 진단 품질(같은 구성의 E3009 문구가 **패닉하는 형태를 "동작한다"고 명시**). 리포터의 재현 6개(패닉 2 + 경계 4) 전부 HEAD 에서 그대로 재현됐다.
+
+**§3.1 근인 = `Terminator::Call` 의 copy-out 목적지는 `Stmt` lvalue 가 아니다.** `compute_suspendable_tasks` 는 문장의 lhs 만 걷는다(r18 이래 "이 문장이 프레임 창 `[lo,hi)` 밖을 쓰나"). 그런데 호출의 copy-out 목적지는 문장이 아니라 **call-site 사이드 테이블**(`task_calls_func`, Call 블록의 전역 id 로 키)에 산다 — 그래서 워크가 **한 번도 본 적이 없다**. `inner(a, gv)` 의 caller 는 "subset" 으로 남았고, 동기 `&self` `run_task` 가 copy-out 을 수행하다 `frame_write_lvalue` 에서 라우팅 안 된 net 을 만나 `.expect()` 로 프로세스를 죽였다. 수정 = 워크의 `Terminator::Call` arm 이 그 블록의 목적지 net 들을 보고 하나라도 창 밖이면 **suspend 신호**로 친다. 그러면 caller 가 `run_process` 로 라우팅되고 copy-out 은 `write_lvalue` 퍼널(프레임-로컬↔모듈 net 분기 + dirty 채널)을 탄다 — 같은 본문의 `gv = a;` 가 이미 쓰던 그 길이다.
+
+**pure-function 계약**: 새 입력은 양쪽이 **같은 함수** `sim_ir::call_out_nets` 로 줄인다(elaborate 의 `TaskCallInfo` 와 엔진의 것은 서로 다른 struct 라 각자 루프를 쓰면 드리프트한다). 엔진 맵은 elaborate 맵의 **상위집합**이고 차이는 resolve-time 에 추가되는 deferred hier enable 뿐인데, 그 caller 들은 `FuncMeta.has_hier_call` 로 이미 양쪽에서 force-suspend 되므로 **없는 엔트리는 신호 아님**이 두 계산을 일치시킨다(§4.5.208 선례).
+
+**"옆 문장이 답을 정한다"가 마지막까지 남아 있었다.** `#5 inner(a, gv);` 도 `if (c) inner(a,gv); else gv = 0;` 도 **PRE 에서 이미 동작**했다 — 전자는 `Delay` terminator 가, 후자는 else arm 자신의 창-밖 쓰기가 무관한 이유로 태스크를 suspendable 로 만들었기 때문이다. 호출이 메모리를 쓰는지가 **옆에 무슨 문장이 있는지**로 갈렸다. round-22 와 같은 탐지 규칙(무관한 문장을 넣고 빼서 답이 바뀌면 분류기가 문장의 일부만 보고 있다)이 두 라운드 연속 적중했다.
+
+**§3.1 을 고치자 loud 였던 이웃 4형태가 correct-support 로 올라갔다.** `stmt_main` 의 직접-rhs arm 과 general hoist 의 stand-down 은 둘 다 "프레임 본문의 쓰기는 프레임-로컬이어야 한다"를 근거로 걸려 있었는데, 그 근거가 바로 방금 없앤 패닉이었다. 태스크 본문은 조건을 통째로 뺐고(`frame_task_lowering`), 프레임 **함수** 본문만 남겼다 — 함수는 `Expr::Call` 로 표현식 평가 중에 진입하므로 **자기 소유의 call terminator 가 없다**(라우팅할 대상이 없다). 이건 신중함이 아니라 형태의 문제다.
+
+**§4 진단 3건.** ⑴ E3009 문구에서 *"a BARE call statement there does work"* 를 걷어내고 실제로 남은 것(프레임 **함수** 본문)과 동작하는 것(`task` 본문·모듈 프로세스)을 적었다 — 문구를 믿고 식을 bare 문장으로 바꾸면 loud 가 **crash 로 바뀌던** 자리다. ⑵ `classify_frame_body` 가 거부한 terminator 를 **전부** "a timing/suspend/fork control (#delay, @, wait, fork)" 로 보고하고 있었다 — 타이밍 제어가 한 줄도 없는 본문이 그렇게 보고됐다. `Call` arm 을 갈라 진짜 이유를 적는다. ⑶ `frame_eval.rs` 의 `.expect("frame lvalue net is routed")` 를 `fatal_frame_unrouted_write` 로 교체 — 남은 어떤 경로가 여기 닿아도 vita 내부 file:line 이 아니라 **net 이름과 두 가지 우회**를 말하는 fatal 이 나온다(rc=101 abort → `FinishReason::Error`).
+
+**loud 를 걷자 그 밑의 silent-wrong 이 드러났다 (`StrPutC`).** `s[i] = f(a, o)` 를 프레임 본문에서 허용하자 문자열이 **조용히 안 바뀌었다**. 뿌리는 호출과 무관했다: `SysTaskId::StrPutC` 가 `dyn_heap[net]`(모듈 문자열 저장소)를 무조건 썼는데, **프레임-로컬 `string` 은 프레임 슬롯에 slab-저장**된다(§4.5.167). 그래서 `task automatic tk(); string s; s = "zz"; s[0] = 65;` 는 호출도 output formal 도 없이 `"zz"` 를 유지한 채 exit 0 이었다 — **pre-existing**. `str_putc` 로 저장 위치를 먼저 묻게 했다(`read_net` 이 늘 물어온 그 질문을 쓰기 쪽에서도). 게이트를 걷으면 그것이 가리던 것은 내 것이 된다.
+
+**§3.2 는 성능이고, 리포트의 뿌리 가설이 측정으로 반증됐다.** 리포터는 "깊은 조합 cone 을 levelize 하지 않아서"로 진단했다. 그런데 **총 라운드 수를 1200 으로 고정**한 깊이 스윕(UNROLL=1/2/3/6/12, 조합 단을 인스턴스로 체인)에서:
+
+| UNROLL | cycles | iverilog | rel | vita | rel | vita/iv |
+|---|---|---|---|---|---|---|
+| 1 | 1200 | 0.137 s | 1.00× | 0.128 s | 1.00× | 0.93× |
+| 3 | 400 | 0.187 s | 1.37× | 0.184 s | 1.44× | 0.99× |
+| 6 | 200 | 0.281 s | 2.05× | 0.273 s | 2.14× | 0.97× |
+| 12 | 100 | 0.569 s | **4.15×** | 0.453 s | **3.55×** | 0.80× |
+
+**iverilog 가 같은(오히려 더 가파른) 깊이 스케일링을 보인다.** 깊이 비용은 vita 의 결함이 아니라 **인터프리티드 이벤트구동 델타사이클의 성질**이다 — 리포터의 비교 대상(Xcelium)은 컴파일-타임에 levelize 하는 컴파일드 시뮬레이터다. 원인도 배치 추적으로 특정했다: UNROLL=6 에서 사이클당 프로세스 활성이 `7 6 5 4 3 2 1…` 삼각형(D²/2)이고, **배치 정렬은 지렛대가 아니다**(오름/내림차순 정렬이 4.86/4.85 s 로 동일) — 단 사이의 전파가 cont-assign settle, 즉 **델타 경계**를 거치기 때문이다. 상수항은 따로 측정했다: trivial flop 200k 사이클에서 vita 1.03M cyc/s vs iverilog 1.96M cyc/s(**1.91×**). 프로파일이 가리킨 `Value::resize`/`mask_top` 원워드 fast-path 를 시험 구현했으나 **측정 이득 0**(0.190→0.188 s)이라 두 번째 코드 경로를 남기지 않고 폐기했다. `-j` 는 파형 라이터 예산이라 실제로 시뮬레이션을 빠르게 하지 않으므로 `--help` 문구를 그렇게 고쳤다(리포트 §3.2 ④).
+
+**검증.** 3-way(iverilog / PRE=`b05b69d` / POST) 70 프로브 — **회귀 0 · 패닉→정답 15 · loud→정답 11**, 나머지는 전부 PRE 와 동일하고 iverilog 와 일치. 적대 프로브(내 변경이 **만드는** 위험 전용: hoist temp 재진입·lvalue special 우선순위·over-marking·pure-function 계약·copy-out 시점)에서 `StrPutC` silent-wrong 1건 적발·수정. 테스트 `crates/cli/tests/r23_frame_copyout_escape.rs` 14건 신규. `format_version` 26 불변(직렬화 형상 무변경 — 새 분류기 입력은 이미 out-of-band 인 사이드 테이블에서 유도).
+
+**남은 loud(의도적).** 프레임 **함수** 본문 안의 output-formal 호출(위 형태 사유 — 진단이 이제 그 이유를 말한다) · `repeat(<비상수>) @(edge)` 가 프레임-로컬을 읽는 형태(공유 카운터 위험, §4.5.14) · 프레임 본문의 `return $fgets(...)`(직접-rhs 아님).
 
 #### 4.5.277 외부 round-22 — 실행기 선택이 무관한 `$display` 한 줄에 달려 있었다 (2026-07-31, branch feat-r22-report, format 26 불변) ✅
 

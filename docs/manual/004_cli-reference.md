@@ -106,7 +106,7 @@ name.
 | `-I, --incdir <dir>` | Add an `` `include `` search directory (`+incdir+a+b` also accepted). |
 | `--dump-filelist` | Print the effective post-expansion input list and exit. |
 | `+NAME[=VAL]` | Runtime plusarg, visible to `$test$plusargs` / `$value$plusargs`. |
-| `--threads, -j <N>` | Worker threads — output stays byte-identical for any N. |
+| `--threads, -j <N>` | **Waveform-writer** thread budget; `N ≥ 2` moves VCD writing off the sim thread. Simulation itself is single-threaded, so this does **not** speed up a run with no waveform dump. Output stays byte-identical for any N. |
 | `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
 | `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |

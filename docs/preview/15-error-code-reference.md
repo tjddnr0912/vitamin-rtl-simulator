@@ -344,6 +344,18 @@ silent-wrong(틀린 출력·무에러)을 내느니 명시적으로 중단한다
 이 코드는 **잔여 미지원 서브폼**에서 나온다. 아래 목록은 실제 바이너리로 검증한 현행 표면이다
 (전체 잔여 목록 = [ROADMAP §3](../ROADMAP.md)).
 
+> **§4.5.278 — output/inout formal 을 가진 함수 호출의 문구가 바뀌었다.** 이 코드의 가장 긴 메시지는
+> `function \`f\` has an output/inout formal, so its copy-out has to be emitted as a statement before
+> the expression that calls it …` 로 시작해 **남은 미지원 위치**를 열거한다. 이전 판은 그 열거에
+> *"a frame body's writes have to stay frame-local … though a BARE call statement there does work"* 가
+> 있었는데, **그 bare call statement 가 바로 rc=101 로 abort 하던 형태**였다 — 문구를 믿고 식을 bare
+> 문장으로 바꾸면 loud 가 crash 로 바뀌었다. 지금은 프레임 **태스크** 본문이 모든 once-evaluated 위치를
+> 지원하고, 남은 것은 프레임 **함수** 본문뿐이다(함수는 `Expr::Call` 로 표현식 평가 중에 진입하므로
+> 자기 소유의 call terminator 가 없다 — 같은 호출을 `task` 본문이나 모듈 프로세스에 두면 동작한다).
+> 같은 슬라이스에서 `classify_frame_body` 가 거부한 terminator 를 **전부** "a timing/suspend/fork
+> control (#delay, @, wait, fork)" 로 보고하던 것도 고쳤다 — 타이밍 제어가 한 줄도 없는 본문이 그렇게
+> 보고되고 있었다.
+
 **① 정수를 요구하는 자리에 real 값이 온 경우** (가장 흔한 발생 원인)
 
 IEEE §11.5.1은 select 인덱스·범위 바운드를, §11.4.12.2는 replication count를 **정수 상수**로
@@ -597,6 +609,7 @@ if (cfg_invalid) $fatal(1, "bad config word %0h", cfg);
 | `an associative-array iteration (\`first/next/last/prev\`) whose key…` | assoc 순회 키가 지원 위치 밖 | 키를 frame-local 변수로 |
 | `` `X` does its work as a statement-level effect… `` | **R19-X2 → §4.5.277 재작성.** 문장 수준 효과(목적지·ref 인자 쓰기, fd 전진, seed 갱신)는 `&mut` 프로세스 실행기만 수행한다. 동기 `&self` 프레임 실행기가 그 자리에 오면 순수 `eval` 로 떨어져 **0 + 목적지 미변경**이 된다. 계열(정본 = `sim_ir::sysfunc_frame_executor_cannot_perform`) = `$fgets`/`$fscanf`/`$sscanf`/`$fread`/`$feof`/`$fgetc`/`$ungetc` · `$fopen` · `$value$plusargs` · seeded `$random`/`$dist_*` · `$cast` · queue pop. **§4.5.277 전까지는 앞의 6종만 loud 였고 나머지는 silent 였다.** `$sformatf` 는 계열이 아니다(프레임 실행기에 동작하는 인터셉트가 있다) | **§4.5.277 이후 남은 자리는 세 곳뿐**: 클래스 메서드 본문 · 연속 재평가 위치(`assign`/`force`/`wait` 조건) · intra-assignment delay(`x = #1 f(...)`). 모듈 프로세스, 그리고 **문장에서 호출되는 태스크/함수**(`automatic` 여부·output formal 유무 무관)에서는 **동작한다** — 거기서 변수에 받아 그 변수를 쓴다. *(옛 문구가 권하던 "`automatic` 을 떼라"는 실측과 반대였다 — 떼면 `string` 목적지에서 loud 가 아니라 **silent** 가 됐다.)* |
 | `frame-task recursion exceeded the depth limit (N)` / `frame-call …` | 재귀 깊이가 `MAX_CALL_DEPTH` 초과 — 무한 재귀를 hang 대신 loud로 | 종료 조건 점검 |
+| `a subroutine running on the synchronous frame executor tried to write \`NAME\`…` | **§4.5.278 신설.** 프레임 실행기가 자기 프레임-로컬이 아닌 net(모듈/인스턴스 net)을 쓰려 했다 — 그 실행기에는 flat store 도 dirty 채널도 없다. **이전에는 진단이 아니라 `.expect("frame lvalue net is routed")` 로 프로세스가 abort 했다**(rc=101, `errors=` 줄 없음, vita 내부 file:line). 그 자리를 만들던 형태(프레임 본문의 bare call statement 가 모듈 net 에 copy-out)는 §4.5.278 에서 **correct-support** 가 되었으므로, 이것은 남은 어떤 경로가 닿을 때의 correct-or-loud 바닥이다 | 쓰기를 `task` 본문으로 옮기거나(태스크 본문의 창-밖 쓰기는 자동으로 프로세스 실행기로 라우팅된다) 호출하는 프로세스로 옮긴다 |
 | `fork exceeds the v1 tie-encoding limit …` | top-level 프로세스 > 65534 또는 arm > 65536(결정적 순서 인코딩 한계) | 해당 없음(실 벤치 범위 밖) |
 
 **해결:** (b)는 사용자가 고칠 조건이 아니라 **회피**하는 조건이다 — 위 표의 회피 열을 따르거나

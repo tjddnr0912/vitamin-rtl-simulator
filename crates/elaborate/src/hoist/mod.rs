@@ -468,9 +468,11 @@ impl Elaborator<'_> {
     ) -> Option<ast::Stmt> {
         use ast::Stmt as S;
         // NOTE on the frame-body stand-down (see `hoist_stmt_general`): a copy-out
-        // `Terminator::Call` inside a frame body writes a MODULE net from a context whose
-        // writes must be frame-local, so the two INOUT arms below stand down there (each
-        // carries `!self.in_frame_body()`) and the call reports its own accurate message.
+        // `Terminator::Call` inside a frame FUNCTION body has no terminator of its own for
+        // the engine to route, so the two INOUT arms below stand down there (each carries
+        // `!self.frame_fn_lowering`) and the call reports its own accurate message. R23
+        // §3.1 narrowed this from `!in_frame_body()`: a frame TASK body hoists now, because
+        // the destination-escape that used to abort the engine is a suspend signal.
         //
         // It is deliberately NOT a function-wide early return. It was one, gated on
         // `!inout_func_names.is_empty()`, and that gate is a MODULE-GLOBAL property — "does
@@ -488,7 +490,7 @@ impl Elaborator<'_> {
                 else_s,
                 span,
             } if self.expr_has_inout_call(cond)
-                && !self.in_frame_body()
+                && !self.frame_fn_lowering
                 && !self.has_unhoistable_inout_call(cond)
                 && self.order_clean(cond) =>
             {
@@ -509,7 +511,7 @@ impl Elaborator<'_> {
             } if delay.is_none()
                 && event.is_none()
                 && self.expr_has_inout_call(rhs)
-                && !self.in_frame_body()
+                && !self.frame_fn_lowering
                 && !self.has_unhoistable_inout_call(rhs)
                 && self.order_clean(rhs) =>
             {
