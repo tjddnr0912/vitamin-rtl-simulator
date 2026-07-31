@@ -10,11 +10,12 @@
 //! `#[test]` in the default suite, it runs under `cargo test --workspace --locked`
 //! on every CI leg with no skip → a HARD equivalence gate.
 //!
-//! STAGE-B STATE: the bytecode backend currently falls back to the interpreter for
-//! every body, so this passes by construction today. That is exactly the point —
-//! the gate is wired and green BEFORE the kernel refactor (P7a/P7b) and BEFORE any
-//! VM lowering (Stage C), so the moment a real VM body diverges in stdout or a
-//! single VCD byte, this test goes red and names the offending design.
+//! The gate was wired and green BEFORE the kernel refactor (P7a/P7b) and BEFORE any
+//! VM lowering, back when every body still fell back to the interpreter and it passed
+//! by construction. It no longer does: Stage C landed the compiler + register VM, so
+//! a corpus design whose body clears the P9 allow-list really executes on the VM here.
+//! The moment such a body diverges in stdout or a single VCD byte, this test goes red
+//! and names the offending design.
 
 mod common;
 

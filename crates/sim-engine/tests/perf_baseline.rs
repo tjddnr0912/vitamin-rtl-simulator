@@ -656,3 +656,140 @@ fn perf_pdes_bsp_mock() {
         }
     }
 }
+
+// ── P9 coverage probe (2026-07-31) ───────────────────────────────────────────
+//
+// Speedup numbers above are per-BODY. They only matter to a user if that user's
+// bodies actually clear the P9 allow-list, and a body outside it runs on the
+// interpreter under EITHER backend. So the question that decides whether
+// `Backend::Bytecode` is worth exposing — and whether a faster (native/JIT)
+// backend could ever pay, since it would inherit the SAME allow-list — is
+// coverage, not ratio.
+//
+// The two designs below are the same SHA-256 compression round written the two
+// ways real RTL is written: transforms inline, and transforms behind `function`.
+
+/// SHA-256 round, transforms written INLINE. No calls, no delays in the body.
+const SHA256_INLINE: &str = "module top;\n\
+  reg clk = 0;\n\
+  reg [31:0] a,b,c,d,e,f,g,h,w,k;\n\
+  reg [31:0] s0,s1,ch,maj,t1,t2;\n\
+  integer i;\n\
+  always @(posedge clk) begin\n\
+    s1  = {e[5:0],e[31:6]} ^ {e[10:0],e[31:11]} ^ {e[24:0],e[31:25]};\n\
+    ch  = (e & f) ^ (~e & g);\n\
+    t1  = h + s1 + ch + k + w;\n\
+    s0  = {a[1:0],a[31:2]} ^ {a[12:0],a[31:13]} ^ {a[21:0],a[31:22]};\n\
+    maj = (a & b) ^ (a & c) ^ (b & c);\n\
+    t2  = s0 + maj;\n\
+    h <= g; g <= f; f <= e; e <= d + t1;\n\
+    d <= c; c <= b; b <= a; a <= t1 + t2;\n\
+    w <= {w[6:0],w[31:7]} ^ w ^ k;\n\
+    k <= k + 32'h9e3779b9;\n\
+  end\n\
+  initial begin\n\
+    a=32'h6a09e667; b=32'hbb67ae85; c=32'h3c6ef372; d=32'ha54ff53a;\n\
+    e=32'h510e527f; f=32'h9b05688c; g=32'h1f83d9ab; h=32'h5be0cd19;\n\
+    w=32'h428a2f98; k=32'h71374491;\n\
+    for (i=0;i<20000;i=i+1) begin clk=~clk; #1; end\n\
+    $display(\"%h\", a^b^c^d^e^f^g^h);\n\
+    $finish;\n\
+  end\n\
+endmodule\n";
+
+/// The SAME round with the transforms behind `function` — the idiomatic form.
+const SHA256_FUNCS: &str = "module top;\n\
+  reg clk = 0;\n\
+  reg [31:0] a,b,c,d,e,f,g,h,w,k;\n\
+  reg [31:0] t1,t2;\n\
+  integer i;\n\
+  function [31:0] bsig1(input [31:0] x);\n\
+    bsig1 = {x[5:0],x[31:6]} ^ {x[10:0],x[31:11]} ^ {x[24:0],x[31:25]};\n\
+  endfunction\n\
+  function [31:0] bsig0(input [31:0] x);\n\
+    bsig0 = {x[1:0],x[31:2]} ^ {x[12:0],x[31:13]} ^ {x[21:0],x[31:22]};\n\
+  endfunction\n\
+  function [31:0] choose(input [31:0] x, y, z);\n\
+    choose = (x & y) ^ (~x & z);\n\
+  endfunction\n\
+  function [31:0] major(input [31:0] x, y, z);\n\
+    major = (x & y) ^ (x & z) ^ (y & z);\n\
+  endfunction\n\
+  always @(posedge clk) begin\n\
+    t1 = h + bsig1(e) + choose(e,f,g) + k + w;\n\
+    t2 = bsig0(a) + major(a,b,c);\n\
+    h <= g; g <= f; f <= e; e <= d + t1;\n\
+    d <= c; c <= b; b <= a; a <= t1 + t2;\n\
+    w <= {w[6:0],w[31:7]} ^ w ^ k;\n\
+    k <= k + 32'h9e3779b9;\n\
+  end\n\
+  initial begin\n\
+    a=32'h6a09e667; b=32'hbb67ae85; c=32'h3c6ef372; d=32'ha54ff53a;\n\
+    e=32'h510e527f; f=32'h9b05688c; g=32'h1f83d9ab; h=32'h5be0cd19;\n\
+    w=32'h428a2f98; k=32'h71374491;\n\
+    for (i=0;i<20000;i=i+1) begin clk=~clk; #1; end\n\
+    $display(\"%h\", a^b^c^d^e^f^g^h);\n\
+    $finish;\n\
+  end\n\
+endmodule\n";
+
+/// Print P9 coverage AND the backend ratio for one design.
+fn report_coverage(name: &str, src: &str, reps: u32) {
+    let ir = build(src);
+    let cov = sim_engine::codegen_coverage(&ir);
+    let interp = time_backend(&ir, Backend::Interpreter, reps);
+    let vm = time_backend(&ir, Backend::Bytecode, reps);
+    println!(
+        "  {name:<22} P9 {:>2}/{:<2} ({:>5.1}%)   interp {:>8.3} ms   vm {:>8.3} ms   {:.2}x",
+        cov.codegen_able,
+        cov.total,
+        cov.ratio() * 100.0,
+        interp as f64 / 1e6,
+        vm as f64 / 1e6,
+        vm as f64 / interp as f64
+    );
+}
+
+#[test]
+#[ignore = "perf/coverage probe (DATA, not a gate); run with --ignored --nocapture"]
+fn perf_p9_coverage() {
+    println!("\n[P9 coverage] process templates the bytecode VM can claim:\n");
+    report_coverage("sha256-round inline", SHA256_INLINE, 3);
+    report_coverage("sha256-round funcs", SHA256_FUNCS, 3);
+    report_coverage("expr-heavy", EXPR_HEAVY, 3);
+    report_coverage("struct-heavy", STRUCT_HEAVY, 3);
+    report_coverage("clock-bound", CODEGEN_HEAVY, 3);
+    report_coverage("mem-heavy", MEM_HEAVY, 3);
+
+    // The repository's own example designs — what a first-time user actually runs.
+    println!("\n[P9 coverage] examples/ (skipped if the directory is absent):\n");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        println!("  (examples/ not found — skipped)");
+        return;
+    };
+    let mut paths: Vec<_> = rd
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "sv" || x == "v"))
+        .collect();
+    paths.sort();
+    for p in paths {
+        let raw = std::fs::read_to_string(&p).expect("example is readable");
+        // Examples carry `` `timescale ``, so they must go through the preprocessor —
+        // `build` starts at the lexer and would see a bare Directive token.
+        let pp = hdl_preprocess::preprocess_sources(
+            &dir,
+            &[(p.to_string_lossy().into_owned(), raw)],
+            &hdl_preprocess::PreOpts::default(),
+        );
+        let ir = build(&pp.text);
+        let cov = sim_engine::codegen_coverage(&ir);
+        println!(
+            "  {:<22} P9 {:>2}/{:<2} ({:>5.1}%)",
+            p.file_name().unwrap_or_default().to_string_lossy(),
+            cov.codegen_able,
+            cov.total,
+            cov.ratio() * 100.0
+        );
+    }
+}

@@ -7,6 +7,32 @@ Per-slice engineering detail lives in [docs/ROADMAP_ARCHIVE.md](docs/ROADMAP_ARC
 (§4.5.x) and [docs/DEVLOG.md](docs/DEVLOG.md); the sections below summarise what
 changed for a user of the simulator.
 
+## [Unreleased]
+
+### Added
+
+- **`--backend <interp|vm>`** on `vita` and `vrun` — selects which executor runs process
+  bodies. `interp` (the default) is the reference semantics; `vm` runs suspend-free bodies
+  on the bytecode VM. **Output is byte-identical either way**, enforced over the whole
+  corpus by `sim-engine/tests/backend_equiv.rs`, so this is a wall-clock knob like
+  `--threads`. `vcmp`/`velab` reject it: nothing in the artifact they write depends on the
+  backend, and accepting it would suggest otherwise.
+
+  The VM had been implemented and measured since Stage C, but `SimOpts::backend` was
+  library-only — no user could select it. Measured on release builds: expression-heavy
+  1.9×, structure-heavy 2.0×, a SHA-256 compression round 1.5×, clock-bound ~1.1×.
+- **`sim_engine::codegen_coverage`** reports how many of a design's process templates the
+  VM can claim — the number that decides whether the flag is worth setting, since a body
+  outside the allow-list runs on the interpreter either way. Real designs measure 50–67%,
+  the remainder being the `#delay`-bearing stimulus half. Writing transforms as `function`
+  costs nothing: vitamin inlines them during elaborate.
+
+### Fixed
+
+- Two doc comments (`sim-engine/src/lib.rs`, `tests/backend_equiv.rs`) still described the
+  Stage-B state — "the VM is not yet built, so ALL bodies fall back" — which the dispatch
+  in `sched/scan_arm.rs` has contradicted since Stage C landed.
+
 ## [0.1.0] — 2026-07-31 · initial release
 
 The first tagged release. Everything below this heading is the development

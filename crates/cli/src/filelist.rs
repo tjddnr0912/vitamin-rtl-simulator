@@ -46,6 +46,7 @@ pub(crate) fn takes_value(flag: &str) -> bool {
         "-o" | "--out"
             | "--threads"
             | "-j"
+            | "--backend"
             | "--timeout"
             | "-D"
             | "--define"

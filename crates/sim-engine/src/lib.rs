@@ -44,6 +44,7 @@ use std::rc::Rc;
 use diag::{LogEvent, LogSink, ProgressEvent, RtlText};
 use sim_ir::SimIr;
 
+pub use backend::{codegen_coverage, CodegenCoverage};
 /// Re-exported from `elaborate` so callers thread the join-mode side table into
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
 pub use elaborate::{
@@ -79,11 +80,18 @@ pub enum Backend {
     #[default]
     Interpreter,
     /// Bytecode VM (P0a, opt-in acceleration). Codegen-able bodies (the P9
-    /// suspend-free allow-list) run on the VM; every other body falls back to the
-    /// interpreter. STAGE-B STATE: the VM is not yet built, so ALL bodies fall back
-    /// — Bytecode is therefore byte-identical to Interpreter today. That equivalence
-    /// is exactly what the P5 gate locks as Stage C incrementally moves bodies onto
-    /// the VM.
+    /// suspend-free allow-list, `backend::is_codegen_able`) are compiled once per
+    /// process template and run on the VM (`sched::scan_arm::vm_run_body`); every
+    /// other body falls back to the interpreter, so a design mixing both is normal.
+    ///
+    /// The VM is LIVE — Stage C landed the compiler + register VM, and native-eval
+    /// lowers assign right-hand sides to a register program on top of it. Measured
+    /// (release, best-of-5, `tests/perf_baseline.rs`): expression-bound ~2.2x,
+    /// structure-bound ~2.8x, wide 100-bit ~1.7x, clock/scheduler-bound ~1.0x
+    /// (eval is not the bottleneck there).
+    ///
+    /// Selecting it must never change a single output byte: that is what the P5
+    /// gate (`tests/backend_equiv.rs`) locks, over the whole deterministic corpus.
     Bytecode,
 }
 

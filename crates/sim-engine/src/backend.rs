@@ -154,6 +154,49 @@ pub(crate) fn is_codegen_able(stmts: &[Stmt], exprs: &[Expr], body: &[BasicBlock
     })
 }
 
+/// How much of a design the bytecode VM can claim — the answer to "is
+/// [`Backend::Bytecode`](crate::Backend::Bytecode) worth selecting here?".
+///
+/// A body outside the P9 allow-list runs on the interpreter under EITHER backend, so a
+/// design at `0/N` cannot speed up no matter how good the VM gets. That makes this the
+/// first thing to measure before reaching for the VM — or before investing in a faster
+/// one, since a native backend would inherit exactly the same allow-list.
+///
+/// Counted over process TEMPLATES (`ir.processes`) — what the VM compiles and caches —
+/// not over runtime activations. It is a static property of the elaborated design, so it
+/// costs one allow-list walk and touches no simulation state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CodegenCoverage {
+    /// Process templates the VM can compile.
+    pub codegen_able: usize,
+    /// Process templates in the design.
+    pub total: usize,
+}
+
+impl CodegenCoverage {
+    /// Fraction of templates the VM can claim, in `0.0..=1.0`. A design with no
+    /// processes reports `0.0` (nothing to accelerate), not a division by zero.
+    pub fn ratio(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            self.codegen_able as f64 / self.total as f64
+        }
+    }
+}
+
+/// Compute [`CodegenCoverage`] for an elaborated design.
+pub fn codegen_coverage(ir: &SimIr) -> CodegenCoverage {
+    CodegenCoverage {
+        codegen_able: ir
+            .processes
+            .iter()
+            .filter(|p| is_codegen_able(&ir.stmts, &ir.exprs, &p.body))
+            .count(),
+        total: ir.processes.len(),
+    }
+}
+
 /// B1: does the expr subtree rooted at `eid` REACH an `Expr::Call`? Walks all
 /// child ExprId edges; the frozen arena is post-order (every child < its
 /// parent), so the recursion depth is bounded by the expression nesting.

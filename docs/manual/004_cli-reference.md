@@ -107,6 +107,7 @@ name.
 | `--dump-filelist` | Print the effective post-expansion input list and exit. |
 | `+NAME[=VAL]` | Runtime plusarg, visible to `$test$plusargs` / `$value$plusargs`. |
 | `--threads, -j <N>` | **Waveform-writer** thread budget; `N ≥ 2` moves VCD writing off the sim thread. Simulation itself is single-threaded, so this does **not** speed up a run with no waveform dump. Output stays byte-identical for any N. |
+| `--backend <interp\|vm>` | Which executor runs process bodies. `interp` (default) is the reference semantics; `vm` runs suspend-free bodies on the bytecode VM. **Output is byte-identical either way** — a wall-clock knob only. See [Choosing a backend](#choosing-a-backend). |
 | `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
 | `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
@@ -127,6 +128,42 @@ vita -D WIDTH=16 -I rtl/inc tb.sv
 ```
 
 ---
+
+## Choosing a backend
+
+`--backend vm` runs process bodies on vitamin's bytecode VM instead of the
+tree-walking interpreter. **It cannot change your results** — every output byte,
+stdout and waveform alike, is identical to `interp`. That equivalence is enforced
+as a hard test over the whole deterministic corpus
+(`sim-engine/tests/backend_equiv.rs`), not merely intended.
+
+What it changes is wall-clock, and only for the bodies it can claim. A body that
+suspends — `#delay`, `@(event)`, `wait`, `fork` — runs on the interpreter under
+either setting, so a testbench-dominated run sees little or nothing while a
+datapath-dominated one sees the full effect.
+
+Measured (`cargo test -p sim-engine --test perf_baseline -- --ignored --nocapture`,
+release, best-of-3, 2026-07-31):
+
+| workload | bodies on the VM | speedup |
+|---|---|---|
+| expression-heavy (wide arithmetic / logic) | 1 of 2 | **1.9×** |
+| structure-heavy (select / concat / replicate) | 1 of 2 | **2.0×** |
+| SHA-256 compression round | 2 of 3 | **1.5×** |
+| memory-indexed (`mem[p]` per statement) | 1 of 2 | 1.4× |
+| clock/scheduler-bound | 1 of 2 | 1.1× |
+
+The `examples/` designs sit at 50–60% coverage, which is typical: roughly the DUT
+half of a design qualifies and the stimulus half does not.
+
+Writing a transform as a `function` does **not** cost you coverage — vitamin
+inlines those during elaborate, so the SHA-256 round above measures the same
+either way.
+
+**When to use it.** Reach for `vm` on long expression-bound runs (crypto
+datapaths, wide ALUs, vector sweeps). Leave the default alone otherwise; there is
+no correctness reason to prefer either, so the only question is whether your run
+is long enough for 1.5× to matter.
 
 ## What actually ran (`-v`)
 
@@ -302,6 +339,7 @@ logging, plusargs) plus:
 | flag | meaning |
 |------|---------|
 | `-o <path>` | Override the VCD output path (same semantics as `vita -o`). Rejected if it names the input `.velab`. |
+| `--backend <interp\|vm>` | (`vrun` only) Same meaning as `vita --backend`. `vcmp`/`velab` **reject** it: nothing in the artifact they write depends on the backend, so accepting it would misleadingly suggest otherwise. |
 | `--upstream <file>` | Verify the `.velab`'s recorded upstream digest against a specific `.vu`. |
 
 ```

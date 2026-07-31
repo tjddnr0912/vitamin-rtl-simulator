@@ -132,6 +132,7 @@ pub fn run(argv: &[String]) -> i32 {
                 inst_paths: io.inst_paths,
                 probes: io.probes,
                 probe_file: io.probe_file,
+                backend: io.backend,
                 overrides: io.overrides.clone(),
                 invocation: Some(inv),
             };
@@ -245,6 +246,11 @@ pub(crate) fn print_help(applet: &str) {
          --threads, -j <N>     waveform-writer thread budget; N>=2 moves VCD writing off\n                        \
                        the sim thread. Simulation itself is single-threaded, so\n                        \
                        this does NOT speed up a run with no waveform dump.\n  \
+         --backend <interp|vm> (vita/vrun) process-body executor. 'interp' (default) is\n                        \
+                       the reference semantics; 'vm' runs suspend-free bodies on the\n                        \
+                       bytecode VM. Output is byte-identical either way -- this only\n                        \
+                       moves wall-clock (measured ~1.4-2.0x on expression-heavy RTL,\n                        \
+                       ~1.0x when the run is clock/scheduler-bound).\n  \
          --timeout <TICKS>     stop cleanly after TICKS sim time (CI killswitch)\n  \
          --upstream <FILE>     (vrun) verify the .velab's recorded upstream digest\n  \
          --work <NAME[=DIR]>   (vcmp) record units into a work library (default dir ./NAME)\n  \

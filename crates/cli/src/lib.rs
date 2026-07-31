@@ -21,7 +21,7 @@ use std::cell::{Cell, RefCell};
 use std::io::Write;
 
 use diag::{Diagnostic, LogEvent, LogSink, MsgCode, Severity, SourceLoc};
-use sim_engine::{ExitClass, FinishReason, SimOpts};
+use sim_engine::{Backend, ExitClass, FinishReason, SimOpts};
 
 // ---- split parts (mechanical refactor) ----
 mod frontend;
@@ -153,6 +153,13 @@ pub struct VitaOpts {
     /// the argv driver (see [`Invocation`]) — the echo then prints only the
     /// facts it can state without inventing an argv.
     pub invocation: Option<Invocation>,
+    /// `--backend <interp|vm>`: which executor runs process bodies. `None` ⇒
+    /// [`Backend::Interpreter`], the reference semantics.
+    ///
+    /// Selecting `vm` must not change a single output byte — that equivalence is
+    /// what `sim-engine/tests/backend_equiv.rs` locks over the whole corpus — so
+    /// this is a wall-clock knob only, exactly like `--threads`.
+    pub backend: Option<Backend>,
 }
 
 impl VitaOpts {
@@ -162,6 +169,7 @@ impl VitaOpts {
             threads: resolve_threads(self.threads),
             time_limit: self.time_limit,
             plusargs: self.plusargs.clone(),
+            backend: self.backend.unwrap_or_default(),
             ..SimOpts::default()
         }
     }
@@ -600,6 +608,10 @@ struct IoArgs {
     probes: Vec<String>,
     /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
     probe_file: Option<String>,
+    /// `--backend <interp|vm>`: process-body executor. `None` ⇒ the interpreter,
+    /// which is the reference semantics. Simulate-side only (`vita`/`vrun`) —
+    /// it changes nothing an artifact records, so `vcmp`/`velab` reject it.
+    backend: Option<Backend>,
     /// W-FLIST-OVERRIDE events recorded during arg parsing (knob, old, new) —
     /// replayed through the gated sink by [`emit_flist_overrides`].
     overrides: Vec<(String, String, String)>,

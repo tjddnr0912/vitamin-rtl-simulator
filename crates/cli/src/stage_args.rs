@@ -25,6 +25,7 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut inst_paths: Option<String> = None;
     let mut probes: Vec<String> = Vec::new();
     let mut probe_file: Option<String> = None;
+    let mut backend: Option<sim_engine::Backend> = None;
     let mut overrides: Vec<(String, String, String)> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -63,6 +64,35 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     );
                 }
                 threads = Some(n.max(1));
+                i += 2;
+            }
+            // Process-body executor. Output is byte-identical for either value
+            // (locked by the P5 gate, `sim-engine/tests/backend_equiv.rs`); the
+            // value only moves wall-clock, like `--threads`.
+            "--backend" => {
+                let parsed = match args.get(i + 1).map(String::as_str) {
+                    Some("interp") | Some("interpreter") => Some(sim_engine::Backend::Interpreter),
+                    Some("vm") | Some("bytecode") => Some(sim_engine::Backend::Bytecode),
+                    _ => None,
+                };
+                let Some(b) = parsed else {
+                    eprintln!(
+                        "error[{}]: '--backend' takes 'interp' (default, the reference \
+                         semantics) or 'vm' (bytecode VM — same output, often faster on \
+                         expression-heavy designs)",
+                        MsgCode::CliBadFlag.code_num()
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                if let Some(prev) = backend {
+                    record_override(
+                        &mut overrides,
+                        "--backend",
+                        backend_name(prev),
+                        backend_name(b),
+                    );
+                }
+                backend = Some(b);
                 i += 2;
             }
             // P2-9: CI killswitch — cap advanced sim time (ticks). Reaching the
@@ -365,8 +395,17 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         inst_paths,
         probes,
         probe_file,
+        backend,
         overrides,
     })
+}
+
+/// The spelling `--backend` accepts, for override records and the `-v` echo.
+pub(crate) fn backend_name(b: sim_engine::Backend) -> &'static str {
+    match b {
+        sim_engine::Backend::Interpreter => "interp",
+        sim_engine::Backend::Bytecode => "vm",
+    }
 }
 
 /// `--dump-filelist` (doc-14 §3.1 debugging surface): print the EFFECTIVE
@@ -443,6 +482,25 @@ pub(crate) fn reject_stage_staged(sc: &elaborate::Sidecars) -> Result<(), i32> {
             "error[{}]: `$vita_stage` is a one-shot `vita` task — `velab` does not \
              stage it (run one-shot: `vita <design> --obs-dir <D> +STAGE_TRACE`)",
             MsgCode::CliBadFlag.code_num()
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
+    Ok(())
+}
+
+/// `--backend` selects the SIMULATE-side executor, so it means nothing to a
+/// compile/elaborate applet: nothing an artifact records depends on it (the
+/// backend rides `SimOpts` out-of-band and never enters the frozen `SimIr`).
+/// Accepting-and-ignoring it would silently mislead — `vcmp --backend vm` would
+/// look like it had produced a faster artifact.
+pub(crate) fn reject_backend(stage: &str, io: &IoArgs) -> Result<(), i32> {
+    if let Some(b) = io.backend {
+        eprintln!(
+            "error[{}]: '--backend {}' is a simulate-side argument — '{stage}' does not \
+             run process bodies. Pass it to `vita` or `vrun` instead; the choice does not \
+             affect the artifact '{stage}' writes",
+            MsgCode::CliBadFlag.code_num(),
+            backend_name(b)
         );
         return Err(EXIT_CLI_ERROR);
     }
@@ -628,6 +686,9 @@ pub(crate) fn dispatch_vcmp(args: &[String], inv: Invocation) -> i32 {
     if let Err(c) = reject_obs_dir("vcmp", &io) {
         return c;
     }
+    if let Err(c) = reject_backend("vcmp", &io) {
+        return c;
+    }
     if io.pos.is_empty() {
         eprintln!(
             "error[{}]: vcmp: no source files",
@@ -687,6 +748,9 @@ pub(crate) fn dispatch_velab(args: &[String], inv: Invocation) -> i32 {
         return c;
     }
     if let Err(c) = reject_obs_dir("velab", &io) {
+        return c;
+    }
+    if let Err(c) = reject_backend("velab", &io) {
         return c;
     }
     // ── library mode (`-L`): logical discovery instead of a positional .vu ──
@@ -806,6 +870,7 @@ pub(crate) fn dispatch_vrun(args: &[String], inv: Invocation) -> i32 {
         log_append: io.log_append,
         upstream: io.upstream,
         plusargs: io.plusargs,
+        backend: io.backend,
         overrides: io.overrides.clone(),
         invocation: Some(inv),
         ..VitaOpts::default()
