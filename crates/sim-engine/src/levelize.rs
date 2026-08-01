@@ -251,6 +251,27 @@ pub fn comb_ranks(ir: &SimIr) -> Vec<u32> {
     rank
 }
 
+/// The design's combinational DEPTH, or `None` when the dependency graph did not
+/// converge — i.e. it contains a combinational cycle (or a bit-level-acyclic loop that
+/// looks cyclic at net granularity, which is the common case in real RTL).
+///
+/// `comb_ranks` relaxes under a hard iteration cap so it always terminates. On a cyclic
+/// graph the ranks grow until that cap and the largest one is a SATURATION ARTIFACT, not
+/// a depth — PicoRV32 reports 195 from 43 processes, which is simply the cap. Reading
+/// that number as a depth is how a measurement lies, so callers that want the depth must
+/// go through here and handle the `None`.
+pub fn comb_depth(ir: &SimIr) -> Option<u32> {
+    let cap = (ir.processes.len() + ir.cont_assigns.len() + 1) as u32;
+    let max = comb_ranks(ir).iter().copied().max().unwrap_or(0);
+    // A converged relaxation cannot produce a rank at or above the number of rounds it
+    // was allowed; reaching it means the fixpoint was still moving when the cap hit.
+    if max + 1 >= cap {
+        None
+    } else {
+        Some(max)
+    }
+}
+
 /// Nets an `Lvalue` DEPENDS ON (its dynamic word/offset/width index expressions) —
 /// not the nets it writes. `resolve_lvalue_offsets` evaluates these at settle time, so
 /// a change to one of them changes where the assign lands.

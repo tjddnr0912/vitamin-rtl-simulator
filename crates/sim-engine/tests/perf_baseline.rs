@@ -1147,3 +1147,91 @@ fn perf_fusion_opportunity() {
         );
     }
 }
+
+/// [M1-M3] Phase-1 prerequisites, taken on a REAL design rather than a generated chain.
+///
+/// Reads the design from `bench/` (gitignored, third-party, local measurement only).
+/// Skips gracefully when absent so this is never a CI dependency.
+///
+/// M1 = combinational depth (`comb_ranks().max()`) — is there a deep cone at all?
+/// M2 = process/net shape and P9 coverage — how much can a body-side backend reach?
+/// M3 = fusion opportunity — would a cycle mode have anything to fuse?
+#[test]
+#[ignore = "Phase-1 measurement on bench/ designs; run with --ignored --nocapture"]
+fn perf_real_design_m1_m3() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench");
+    let Ok(rd) = std::fs::read_dir(&root) else {
+        println!("\n[M1-M3] bench/ absent — skipped");
+        return;
+    };
+    println!("\n[M1-M3] real designs:\n");
+    println!(
+        "  {:<22} {:>6} {:>6} {:>7} {:>8} {:>8} {:>7}",
+        "design", "procs", "nets", "cont-a", "M1 depth", "M2 P9", "M3 fuse"
+    );
+    let mut dirs: Vec<_> = rd.filter_map(|e| e.ok().map(|e| e.path())).collect();
+    dirs.sort();
+    for d in dirs {
+        let Ok(files) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        let mut srcs: Vec<_> = files
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "v" || x == "sv"))
+            .collect();
+        srcs.sort();
+        for p in srcs {
+            let raw = std::fs::read_to_string(&p).expect("bench source is readable");
+            let pp = hdl_preprocess::preprocess_sources(
+                &d,
+                &[(p.to_string_lossy().into_owned(), raw)],
+                &hdl_preprocess::PreOpts::default(),
+            );
+            let (toks, le) = hdl_lexer::lex(&pp.text);
+            if !le.is_empty() {
+                println!("  {:<22} LEX FAILED ({} errors)", name_of(&p), le.len());
+                continue;
+            }
+            let (su, pe) = hdl_parser::parse(&toks, &pp.text);
+            if !pe.is_empty() {
+                println!("  {:<22} PARSE FAILED ({} errors)", name_of(&p), pe.len());
+                continue;
+            }
+            let sink = QuietSink;
+            let Some(ir) = elaborate::elaborate(&su.expect("source unit"), &sink) else {
+                println!("  {:<22} ELABORATE FAILED", name_of(&p));
+                continue;
+            };
+            let ranks = sim_engine::comb_ranks(&ir);
+            let cov = sim_engine::codegen_coverage(&ir);
+            println!(
+                "  {:<22} {:>6} {:>6} {:>7} {:>8} {:>7.0}% {:>7}",
+                name_of(&p),
+                ir.processes.len(),
+                ir.nets.len(),
+                ir.cont_assigns.len(),
+                match sim_engine::comb_depth(&ir) {
+                    Some(d) => format!("{d}"),
+                    None => format!("cyc>{}", ranks.iter().copied().max().unwrap_or(0)),
+                },
+                cov.ratio() * 100.0,
+                sim_engine::fusion_candidates(&ir).len()
+                    + sim_engine::fusion_candidates_across_copies(&ir),
+            );
+        }
+    }
+}
+
+fn name_of(p: &std::path::Path) -> String {
+    p.file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Swallows elaborate diagnostics — a third-party design emits plenty that are not
+/// this measurement's concern.
+struct QuietSink;
+impl LogSink for QuietSink {
+    fn emit(&self, _e: LogEvent) {}
+}

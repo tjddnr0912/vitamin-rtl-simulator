@@ -54,7 +54,9 @@ pub use elaborate::{
     QueueBoundTable, RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo,
     TaskCallProc,
 };
-pub use levelize::{comb_ranks, fusion_candidates, fusion_candidates_across_copies, FusionPair};
+pub use levelize::{
+    comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies, FusionPair,
+};
 pub use sched::FinishReason;
 
 use sched::Scheduler;

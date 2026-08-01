@@ -140,6 +140,18 @@ impl LexErrorKind {
 // the intended behavior, so we opt in with `allow_greedy = true`. The newline is
 // left unconsumed for the whitespace skip above.
 #[logos(skip("//[^\n]*", allow_greedy = true))]
+// ATTRIBUTE INSTANCE `(* ... *)` (IEEE 1800-2017 §5.12) — a tool hint attached to a
+// module item, statement, port connection or declaration. It carries no simulation
+// semantics, so it is SKIPPED exactly like a comment. Real RTL is full of them:
+// `(* parallel_case *)`, `(* full_case *)`, `(* keep *)`, `(* ASYNC_REG = "TRUE" *)`.
+// Without this the `(` fell through as LParen and the parser reported a cascade
+// pointing at the wrong construct (measured on PicoRV32 line 331).
+//
+// ⭐ The regex must NOT match `(*)`, which is the implicit sensitivity list in
+// `always @(*)`. It cannot: after `\(\*` the body alternation is `[^*]` or `\*[^)]`,
+// and the terminator is `\*\)`, so `(*)` — whose only remaining char is `)` — has no
+// way to reach a terminator. `always @(*)` keeps lexing as LParen/Star/RParen.
+#[logos(skip r"\(\*([^*]|\*[^)])*\*\)")]
 pub enum TokenKind {
     // ---- identifiers / keywords (one regex, keyword resolved in callback) ----
     /// Simple identifier OR a keyword (distinguished by the inner `WordKind`).
@@ -201,12 +213,28 @@ pub enum TokenKind {
     /// Sized based integer: `8'hAB`, `4'b1010`, `12'd255`, `6'o63`, `4'sd5`,
     /// `12'sh800`, `4'bx`, `8'hzz`, `32'hDEAD_BEEF`. Base letter is
     /// case-insensitive; digits include `x X z Z ? _`.
-    #[regex(r"\d[\d_]*'[sS]?[dDbBoOhH][0-9a-fA-FxXzZ?_]+")]
+    ///
+    /// IEEE 1800-2017 §5.7.1 permits white space BETWEEN THE SIZE AND THE BASE
+    /// SPECIFIER and BETWEEN THE BASE SPECIFIER AND THE VALUE, so `32'h 0000_0000`
+    /// and `8 'hFF` are both legal and must lex as ONE literal. Without this the
+    /// apostrophe fell out as a bare `Apostrophe` token and the parser reported a
+    /// cascade of syntax errors pointing at the wrong thing — measured on PicoRV32,
+    /// whose parameter block is written `32'h 0000_0000` throughout.
+    ///
+    /// Only spaces and tabs are admitted, not newlines: the LRM's "white space"
+    /// includes line breaks, but a literal split across lines is not something real
+    /// code does, and matching across a newline would let a stray apostrophe swallow
+    /// the start of the next line.
+    #[regex(r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+")]
     IntSized,
 
     /// Unsized based integer: `'hFF`, `'b1101`, `'sd9`, and unsized fills
     /// `'0 '1 'x 'z` (the `?_` class also admits `'?`).
-    #[regex(r"'[sS]?([dDbBoOhH][0-9a-fA-FxXzZ?_]+|[01xXzZ])")]
+    /// (§5.7.1 white space after the base specifier is admitted here too — see
+    /// [`Self::IntSized`]. The unsized FILL forms `'0 '1 'x 'z` take no space:
+    /// `' 0` is not a fill literal, and admitting it would swallow an apostrophe
+    /// that belongs to a cast or an assignment pattern.)
+    #[regex(r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+|[01xXzZ])")]
     IntUnsizedBased,
 
     /// Plain unsized decimal: `42`, `0`, `1_000`. Underscores allowed (not first).

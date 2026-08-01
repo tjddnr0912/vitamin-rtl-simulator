@@ -2,6 +2,22 @@
 
 use super::*;
 
+/// Value AND width of a constant sub-expression, for the width-carrying folds
+/// (concatenation) where an `i64` alone loses the information that decides the
+/// result. `None` whenever the width is not statically determinable — the caller
+/// then stays loud rather than guessing a width, which would silently change the
+/// value (a concat's result depends on every operand's width, not just its value).
+fn const_eval_sized(e: &ast::Expr) -> Option<(i64, u32)> {
+    match &e.kind {
+        ast::ExprKind::Paren { inner } => const_eval_sized(inner),
+        ast::ExprKind::IntLit { kind, raw } => {
+            let cv = literal::parse_int_literal(raw, *kind)?;
+            Some((const_eval_i64_lit(e)?, cv.width))
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn const_eval_i64_lit(e: &ast::Expr) -> Option<i64> {
     let ast::ExprKind::IntLit { kind, raw } = &e.kind else {
         return None;
@@ -159,6 +175,31 @@ impl Elaborator<'_> {
     pub(crate) fn const_eval_in_scope(&self, e: &ast::Expr) -> Option<i64> {
         match &e.kind {
             ast::ExprKind::IntLit { .. } => const_eval_i64_lit(e),
+            // §11.4.12 concatenation of constants: `{4'b0001, 32'b0}`. Each operand is
+            // SELF-DETERMINED, so the result is the operands' bits laid end to end and
+            // its value depends on every operand's WIDTH — which is why this needs
+            // `const_eval_sized_in_scope` and not the plain i64 fold.
+            //
+            // Folds only while every operand's width is known and the total stays inside
+            // the i64 const domain; anything else returns None and the caller reports its
+            // usual "not a foldable constant expression" rather than inventing a value.
+            //
+            // Found by elaborating PicoRV32, whose trace-mask localparams are written
+            // `localparam [35:0] TRACE_BRANCH = {4'b 0001, 32'b 0};`.
+            ast::ExprKind::Concat { parts } => {
+                let mut acc: i64 = 0;
+                let mut total: u32 = 0;
+                for p in parts {
+                    let (v, w) = const_eval_sized(p)?;
+                    if w == 0 || total.checked_add(w)? > 63 {
+                        return None; // outside the i64 const domain — stay loud
+                    }
+                    let masked = if w >= 64 { v } else { v & ((1i64 << w) - 1) };
+                    acc = acc.checked_shl(w)? | masked;
+                    total += w;
+                }
+                Some(acc)
+            }
             // G11: a time literal folds to the CURRENT module's time unit. Final ticks =
             // value × 10^(unit_exp − global_prec_exp); the delay path × cur_time_mult, so
             // the folded value is that / cur_time_mult (module units). `None` (loud at the

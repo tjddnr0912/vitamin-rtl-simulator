@@ -299,6 +299,21 @@ pub fn parse_int_literal(raw: &str, kind: IntLitKind) -> Option<ConstVal> {
 
         // ── sized / unsized based: [W]'[s]B digits ─────────────────────
         IntLitKind::Sized | IntLitKind::UnsizedBased => {
+            // IEEE 1800-2017 §5.7.1 permits white space between the SIZE and the base
+            // specifier and between the base SPECIFIER and the value, so the lexer hands
+            // us `32'h 0000_0000` and `8 'hFF` as single literals. Strip it here, in ONE
+            // place, before anything indexes into the text — the size split below and the
+            // digit walk further down would each have had to learn about it otherwise,
+            // and a decoder that silently mis-reads a literal is the worst kind of bug
+            // this codebase has. Spaces and tabs only, matching what the lexer admits;
+            // `_` is already dropped by the per-field filters.
+            let despaced;
+            let raw = if raw.as_bytes().iter().any(|b| *b == b' ' || *b == b'\t') {
+                despaced = raw.replace([' ', '\t'], "");
+                despaced.as_str()
+            } else {
+                raw
+            };
             let tick = raw.find('\'')?;
             let size_part = &raw[..tick];
             let mut rest = raw[tick + 1..].chars().peekable();
