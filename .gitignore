@@ -7,3 +7,8 @@ CLAUDE.md
 
 # generated simulation output
 *.vcd
+
+# Phase-1 benchmark designs — third-party RTL fetched for LOCAL measurement only.
+# Never redistributed: not committed, not packaged. Each design keeps its upstream
+# license in place under bench/<name>/. See docs/study/01-interpreted-vs-compiled.md.
+/bench
