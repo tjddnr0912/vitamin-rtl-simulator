@@ -406,6 +406,60 @@ impl Value {
             self.mask_top();
             return self;
         }
+        // ONE-WORD FAST PATH. Both widths fit a single word, which is the overwhelmingly
+        // common case in RTL (32-bit datapaths resized to 1 for a condition, to 5 for a
+        // shift amount, and so on). The general path below builds two fresh `Words`,
+        // copies through a bounds-checked loop, calls `fill_bits`, and then calls
+        // `mask_top` — all to move one u64 pair.
+        //
+        // §4.5.278 tried a fast path here and measured ZERO gain, then discarded it. That
+        // measurement was taken on a 64-bit synthetic benchmark where `new_width ==
+        // self.width` almost always, so the early return above already caught it and the
+        // slow path was barely reached. A real 32-bit design resizes constantly.
+        //
+        // Every step below mirrors the general path exactly, in the same order:
+        // copy the low word (nothing when the source width is 0), sign-fill
+        // `[self.width, new_width)` only when EXTENDING a signed value whose sign bit is
+        // 1 or x, then mask to `top_mask(new_width)`. `is_str` is dropped, as it is
+        // there. Locked by `resize_fast_path_matches_general`.
+        if self.width <= 64 && new_width <= 64 {
+            let (mut v, mut u) = if self.width == 0 {
+                (0, 0)
+            } else {
+                (
+                    self.val.first().copied().unwrap_or(0),
+                    self.unk.first().copied().unwrap_or(0),
+                )
+            };
+            if new_width > self.width && self.signed && self.width > 0 {
+                let bit = self.width - 1;
+                let fv = (v >> bit) & 1;
+                let fu = (u >> bit) & 1;
+                if fv != 0 || fu != 0 {
+                    let bits = new_width - self.width;
+                    let mask = if bits >= 64 {
+                        u64::MAX
+                    } else {
+                        ((1u64 << bits) - 1) << self.width
+                    };
+                    v = (v & !mask) | (if fv != 0 { u64::MAX } else { 0 } & mask);
+                    u = (u & !mask) | (if fu != 0 { u64::MAX } else { 0 } & mask);
+                }
+            }
+            let m = top_mask(new_width);
+            let mut val = Words::zeros(1);
+            let mut unk = Words::zeros(1);
+            val[0] = v & m;
+            unk[0] = u & m;
+            return Value {
+                val,
+                unk,
+                width: new_width,
+                signed: self.signed,
+                is_real: false,
+                is_str: false,
+            };
+        }
         let n = nwords(new_width).max(1);
         let copy_w = nwords(self.width.min(new_width)).min(n);
         let mut val = Words::zeros(n);
@@ -943,5 +997,113 @@ mod tests {
         let back = v.into_bitpacked(4);
         assert_eq!(back.val[0] & 0xF, 0b1010);
         assert_eq!(back.unk[0] & 0xF, 0b0100);
+    }
+}
+
+#[cfg(test)]
+mod resize_parity_tests {
+    use super::*;
+
+    /// The general resize path, verbatim, with the one-word fast path REMOVED. The
+    /// oracle for `resize_fast_path_matches_general`.
+    fn resize_general(mut v: Value, new_width: u32) -> Value {
+        if v.is_real {
+            return v;
+        }
+        if new_width == v.width {
+            v.mask_top();
+            return v;
+        }
+        let n = nwords(new_width).max(1);
+        let copy_w = nwords(v.width.min(new_width)).min(n);
+        let mut val = Words::zeros(n);
+        let mut unk = Words::zeros(n);
+        for k in 0..copy_w {
+            val[k] = v.val.get(k).copied().unwrap_or(0);
+            unk[k] = v.unk.get(k).copied().unwrap_or(0);
+        }
+        if new_width > v.width && v.signed && v.width > 0 {
+            let (fv, fu) = v.get_vu(v.width - 1);
+            if fv != 0 || fu != 0 {
+                fill_bits(&mut val, &mut unk, v.width, new_width, fv, fu);
+            }
+        }
+        let mut out = Value {
+            val,
+            unk,
+            width: new_width,
+            signed: v.signed,
+            is_real: false,
+            is_str: false,
+        };
+        out.mask_top();
+        out
+    }
+
+    /// Every one-word (width, new_width, signed, bit pattern) combination must give
+    /// bit-identical planes through the fast path and the general path.
+    ///
+    /// A resize fast path that is subtly wrong is invisible: it produces a plausible
+    /// number, not a crash, and the difference only shows on sign extension or on an
+    /// x in the sign bit. This sweeps both.
+    #[test]
+    fn resize_fast_path_matches_general() {
+        let pats: [(u64, u64); 7] = [
+            (0, 0),
+            (u64::MAX, 0),
+            (0, u64::MAX),
+            (0xDEAD_BEEF_1234_5678, 0),
+            (0x8000_0000, 0), // sign bit of a 32-bit value
+            (0, 0x8000_0000), // x in the sign bit
+            (0xFFFF_FFFF, 0xFF00_FF00),
+        ];
+        let widths = [0u32, 1, 3, 7, 8, 15, 16, 31, 32, 33, 63, 64];
+        let mut checked = 0usize;
+        for &(pv, pu) in &pats {
+            for &w in &widths {
+                for &nw in &widths {
+                    for &signed in &[false, true] {
+                        let mk = || {
+                            let mut val = Words::zeros(1);
+                            let mut unk = Words::zeros(1);
+                            val[0] = pv;
+                            unk[0] = pu;
+                            let mut v = Value {
+                                val,
+                                unk,
+                                width: w,
+                                signed,
+                                is_real: false,
+                                is_str: false,
+                            };
+                            v.mask_top(); // canonical input, as every constructor produces
+                            v
+                        };
+                        let fast = mk().resize(nw);
+                        let slow = resize_general(mk(), nw);
+                        assert_eq!(
+                            (
+                                fast.val.first().copied(),
+                                fast.unk.first().copied(),
+                                fast.width,
+                                fast.signed
+                            ),
+                            (
+                                slow.val.first().copied(),
+                                slow.unk.first().copied(),
+                                slow.width,
+                                slow.signed
+                            ),
+                            "resize({w} -> {nw}, signed={signed}) on ({pv:#x},{pu:#x})"
+                        );
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(
+            checked > 1000,
+            "teeth: the sweep must actually cover a lot ({checked})"
+        );
     }
 }
