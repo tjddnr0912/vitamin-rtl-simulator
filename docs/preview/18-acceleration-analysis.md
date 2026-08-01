@@ -142,7 +142,7 @@
 
 ### vitamin 경로
 - **2a. 컴파일드 이벤트구동 (VCS/Xcelium 길) — 먼저.** 기존 이벤트 커널·`val`/`unk` 4-state·word化(①)를 **그대로 두고** 프로세스 바디(BB의 Stmt/Expr)만 네이티브(Rust) 코드로 lowering. eval-디스패치/트리워크/Value 힙할당 제거. **의미 100% 보존**(인터프리터가 골든), 중간 가속. vitamin의 이벤트구동 코어와 자연 정합.
-- **2b. 사이클기반 컴파일드 (Verilator 길) — 별도 공격적 모드.** combinational rank 정적 스케줄 + 클럭당 일괄 평가. 최대 가속이나 합성가능 서브셋·사이클 의미 제약. 2a 이후 옵트인 모드로.
+- **2b. 사이클기반 컴파일드 (Verilator 길) — 별도 공격적 모드.** ⚠️ **타당성 스케치 = [20-cycle-mode-feasibility](20-cycle-mode-feasibility.md)**(2026-08-01, 선결 측정 M1–M3 미충족 시 착수 금지). combinational rank 정적 스케줄 + 클럭당 일괄 평가. 최대 가속이나 합성가능 서브셋·사이클 의미 제약. 2a 이후 옵트인 모드로.
 
 ## 결정 기록 — 코드젠 substrate (P0a/P0b · 2026-06-06)
 
