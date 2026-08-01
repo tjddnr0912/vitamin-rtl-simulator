@@ -55,13 +55,13 @@ pub(crate) trait Kernel {
     /// (the full enum, not the pair slice — the assoc lane carries an i64 key).
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets);
     /// WRITE: schedule a nonblocking update (LHS index sampled at schedule time).
-    fn k_schedule_nba(&mut self, lhs: Lvalue, value: Value);
+    fn k_schedule_nba(&mut self, lhs: &Lvalue, value: Value);
     /// READ: evaluate a delay ExprId into global-precision ticks (module-mult
     /// scaled; X/Z → 0 — the shared `Terminator::Delay` rule).
     fn k_delay_ticks(&self, eid: u32) -> u64;
     /// WRITE: schedule a TRANSPORT nonblocking update into the NBA region of
     /// `now + ticks` (v5 increment A; index sampled at schedule time).
-    fn k_schedule_nba_at(&mut self, lhs: Lvalue, value: Value, ticks: u64);
+    fn k_schedule_nba_at(&mut self, lhs: &Lvalue, value: Value, ticks: u64);
     /// WRITE: `force lhs = value` (whole-net, continuous re-eval — §9.3.2). `sid`
     /// keys the assign-rank side table: a marked stmt is a procedural `assign`
     /// (§9.3.1, WEAK rank — a real force overrides it and parks it as latent).

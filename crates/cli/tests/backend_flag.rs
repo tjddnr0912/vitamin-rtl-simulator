@@ -532,3 +532,56 @@ fn a_seeded_dist_draw_advances_its_seed_on_both_backends() {
     assert_eq!(seen[0], seen[1], "backends produced different seed streams");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The NBA queue's destination is stored INLINE for a single chunk and only heap-boxed
+/// for a concat LHS. This exercises the rare arm.
+///
+/// A nonblocking assignment's destination has to outlive the activation that scheduled
+/// it, so it used to be an owned `Lvalue` — a heap `Vec` allocated at every `<=` and
+/// freed at every NBA flush. Measured on picorv32 + testbench (40000 cycles), 99.5% of
+/// 2,474,446 updates are a SINGLE chunk, so the chunk now travels by value and only
+/// `{a,b} <= x` still allocates.
+///
+/// Pinned here because nothing else guarantees the multi-chunk arm is ever taken: the
+/// P5 corpus generator emits no concat LHS, so the split could have shipped with the
+/// rare half never executed. Values are absolute (iverilog 13 agrees), not merely equal
+/// across backends — two backends sharing one wrong split is what a pure differential
+/// cannot see.
+#[test]
+fn a_concat_lhs_nonblocking_assign_splits_correctly() {
+    let dir = scratch("nba_concat");
+    let src = "module t;\n\
+      reg clk = 0;\n\
+      reg [7:0] a, b;\n\
+      reg [3:0] c, d, e;\n\
+      reg [15:0] src = 16'hA5C3;\n\
+      reg [11:0] s2 = 12'h123;\n\
+      reg [7:0] mem [0:3];\n\
+      integer i;\n\
+      always @(posedge clk) begin\n\
+        {a, b}    <= src;\n\
+        {c, d, e} <= s2;\n\
+        mem[1]    <= 8'h77;\n\
+      end\n\
+      initial begin\n\
+        for (i = 0; i < 3; i = i + 1) begin clk = ~clk; #1; end\n\
+        $display(\"a=%h b=%h c=%h d=%h e=%h mem1=%h\", a, b, c, d, e, mem[1]);\n\
+        $finish;\n\
+      end\n\
+    endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    for args in [
+        vec!["--backend", "interp", "t.sv"],
+        vec!["--backend", "vm", "t.sv"],
+    ] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok && !o.contains("error[VITA"), "{args:?} failed:\n{o}");
+        assert!(
+            o.contains("a=a5 b=c3 c=1 d=2 e=3 mem1=77"),
+            "{args:?}: concat-LHS nonblocking split is wrong (iverilog 13 prints \
+             `a=a5 b=c3 c=1 d=2 e=3 mem1=77`):\n{o}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

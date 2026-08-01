@@ -613,7 +613,24 @@ iverilog 추월이 아니다. vita 의 0.78 s 중 ~0.13 s 는 parse+elaborate �
 | sort | 3.4 | 배치는 거의 정렬된 상태로 도착 |
 
 update 의 **99.5%**(2,463,015 / 2,474,446)가 단일 chunk whole-net 쓰기(`word/offset/width` 전부 `None`)이고
-힙 `Value` 는 **0건**. 그런데 전부 push 때 `Vec` 을 할당하고 apply 때 해제한다. (미착수 — 설계만 기록.)
+힙 `Value` 는 **0건**. 그런데 전부 push 때 `Vec` 을 할당하고 apply 때 해제한다.
+
+**착수·랜딩(2026-08-02).** NBA 큐는 그것을 넣은 활성화보다 오래 살아야 하므로 목적지는 **소유**여야 하는데,
+`Lvalue` 가 `Vec<LvalChunk>` 를 소유한다는 이유만으로 모든 `<=` 가 malloc 하나, 모든 flush 가 free 하나였다.
+→ `NbaLhs::One(LvalChunk)` / `Many(Lvalue)`. 단일 chunk 는 **값으로** 이동해 할당이 없고,
+`apply_nba` 는 flush 당 하나짜리 scratch `Lvalue` 를 빌려줘 `&Lvalue` 쓰기 퍼널을 그대로 쓴다.
+`{a,b} <= x` 만 여전히 할당한다.
+
+| | before | after |
+|---|---|---|
+| 기본(vm) | 0.78 s | **0.74 s** (1.054x) |
+| `--backend interp` | 1.10 s | 1.08 s (1.019x) |
+
+iverilog(0.61 s) 대비 격차 **1.28x → 1.21x**.
+
+핀: `backend_flag.rs::a_concat_lhs_nonblocking_assign_splits_correctly` — P5 corpus 생성기는 concat LHS 를
+만들지 않으므로 **rare arm 이 한 번도 안 돌고 배포될 수 있었다**. 값은 iverilog 절대값으로 박았다(두 백엔드가
+같은 잘못된 split 을 공유하는 것은 순수 differential 이 못 본다).
 
 ### 그 위에서 나온 등가성 판정 — §4.5.279
 

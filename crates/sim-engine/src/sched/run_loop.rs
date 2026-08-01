@@ -627,9 +627,27 @@ impl Scheduler<'_, '_> {
     pub(crate) fn apply_nba(&mut self) {
         let mut batch = std::mem::take(&mut self.nba);
         batch.sort_by_key(|u| u.seq);
+        // `write_lvalue` wants an `&Lvalue`, and an `Lvalue` owns its chunk `Vec`. Rather
+        // than let every single-chunk update carry a heap `Vec` from its push site to
+        // here (2.4M malloc/free pairs on a 40000-cycle picorv32 run — the free side
+        // alone measured 25.8 ms of this region's 117 ms), the update carries the chunk
+        // BY VALUE and this one scratch `Lvalue` — allocated once per flush, reused for
+        // every update in it — lends it the `Vec` shape the write funnel expects.
+        let mut scratch =
+            std::mem::replace(&mut self.nba_scratch_lhs, Lvalue { chunks: Vec::new() });
         for u in batch.drain(..) {
-            self.st.write_lvalue(&u.lhs, u.sampled, &u.offsets);
+            match u.lhs {
+                NbaLhs::One(c) => {
+                    scratch.chunks.clear();
+                    scratch.chunks.push(c);
+                    self.st.write_lvalue(&scratch, u.sampled, &u.offsets);
+                }
+                NbaLhs::Many(lv) => {
+                    self.st.write_lvalue(&lv, u.sampled, &u.offsets);
+                }
+            }
         }
+        self.nba_scratch_lhs = scratch;
         // Hand the drained Vec back so the next timestep's NBA pushes reuse its
         // capacity (consuming it dropped one allocation per NBA flush).
         self.nba = batch;

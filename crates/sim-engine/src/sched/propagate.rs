@@ -607,28 +607,28 @@ impl Scheduler<'_, '_> {
 
     /// v5 increment (A): a transport NBA — index + value sampled NOW, update
     /// due in the NBA region of `now + ticks` (saturating).
-    pub(crate) fn schedule_nba_at(&mut self, lhs: Lvalue, sampled: Value, ticks: u64) {
-        let offsets = self.resolve_lvalue_offsets(&lhs);
+    pub(crate) fn schedule_nba_at(&mut self, lhs: &Lvalue, sampled: Value, ticks: u64) {
+        let offsets = self.resolve_lvalue_offsets(lhs);
         let seq = self.nba_seq;
         self.nba_seq += 1;
         let at = self.st.now.saturating_add(ticks);
         self.delayed_nba.entry(at).or_default().push(NbaUpdate {
             seq,
-            lhs,
+            lhs: NbaLhs::of(lhs),
             sampled,
             offsets,
         });
     }
 
-    pub(crate) fn schedule_nba(&mut self, lhs: Lvalue, sampled: Value) {
+    pub(crate) fn schedule_nba(&mut self, lhs: &Lvalue, sampled: Value) {
         // Sample the dynamic LHS index NOW (Active region), BEFORE the mutable
         // push, so a later same-step write to the index net cannot move the target.
-        let offsets = self.resolve_lvalue_offsets(&lhs);
+        let offsets = self.resolve_lvalue_offsets(lhs);
         let seq = self.nba_seq;
         self.nba_seq += 1;
         self.nba.push(NbaUpdate {
             seq,
-            lhs,
+            lhs: NbaLhs::of(lhs),
             sampled,
             offsets,
         });

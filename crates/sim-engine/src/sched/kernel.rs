@@ -86,13 +86,13 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
         self.st.write_lvalue(lhs, value, offsets);
     }
-    fn k_schedule_nba(&mut self, lhs: Lvalue, value: Value) {
+    fn k_schedule_nba(&mut self, lhs: &Lvalue, value: Value) {
         self.schedule_nba(lhs, value);
     }
     fn k_delay_ticks(&self, eid: u32) -> u64 {
         self.delay_ticks(eid)
     }
-    fn k_schedule_nba_at(&mut self, lhs: Lvalue, value: Value, ticks: u64) {
+    fn k_schedule_nba_at(&mut self, lhs: &Lvalue, value: Value, ticks: u64) {
         self.schedule_nba_at(lhs, value, ticks);
     }
     fn k_dispatch_systask(

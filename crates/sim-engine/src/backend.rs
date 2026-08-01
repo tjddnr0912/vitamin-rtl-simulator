@@ -535,7 +535,7 @@ pub(crate) fn vm_exec(
                     let value = regs[val as usize]
                         .take()
                         .expect("ScheduleNba before EvalForLval");
-                    k.k_schedule_nba(body.lvalues[lhs as usize].clone(), value);
+                    k.k_schedule_nba(&body.lvalues[lhs as usize], value);
                 }
                 Op::SysTask {
                     which,

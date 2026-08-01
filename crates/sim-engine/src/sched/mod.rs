@@ -181,9 +181,36 @@ pub(crate) struct JoinBarrier {
 }
 
 /// A pending nonblocking LHS update: RHS sampled in Active, applied in NBA.
+/// An NBA update's destination.
+///
+/// The queue outlives the activation that pushed it, so the destination must be OWNED —
+/// and `Lvalue` owns a `Vec<LvalChunk>`, which made every nonblocking assignment a
+/// malloc at push and a free at apply. On picorv32 + testbench (40000 cycles) that is
+/// 2,474,446 allocation pairs, and the free side alone measured 25.8 ms of the NBA
+/// region's 117 ms.
+///
+/// Measured on the same run: 2,463,015 of those 2,474,446 updates — **99.5%** — are a
+/// SINGLE chunk. `One` stores that chunk by value, so the overwhelmingly common
+/// nonblocking assignment allocates nothing at all. `Many` keeps the old owned `Lvalue`
+/// for a concat LHS (`{a,b} <= x`).
+pub(crate) enum NbaLhs {
+    One(sim_ir::LvalChunk),
+    Many(Lvalue),
+}
+
+impl NbaLhs {
+    /// Take an owned destination from a borrowed one, allocating only for a concat LHS.
+    pub(crate) fn of(lhs: &Lvalue) -> Self {
+        match lhs.chunks.as_slice() {
+            [c] => NbaLhs::One(c.clone()),
+            _ => NbaLhs::Many(lhs.clone()),
+        }
+    }
+}
+
 pub(crate) struct NbaUpdate {
     pub seq: u64,
-    pub lhs: Lvalue,
+    pub lhs: NbaLhs,
     pub sampled: Value,
     /// Per-chunk `(bit-offset, array-word)` sampled in the ACTIVE region when the
     /// `<=` executed (so `a[i] <= x; i = i+1;` / `m[k] <= x;` use the OLD `i`/`k`),
@@ -231,6 +258,10 @@ pub(crate) struct Scheduler<'a, 'ir> {
     cur: SlotQueues,
     /// NBA region (applied as a batch when Active+Inactive empty).
     nba: Vec<NbaUpdate>,
+    /// The `Lvalue` `apply_nba` lends to a single-chunk update so it can call the
+    /// `&Lvalue` write funnel without the update having carried a heap `Vec` here. Its
+    /// one-element allocation is made once and reused for the whole run.
+    nba_scratch_lhs: Lvalue,
     nba_seq: u64,
     /// Future events keyed by absolute tick.
     wheel: BTreeMap<u64, Vec<(RegionTag, Ready)>>,

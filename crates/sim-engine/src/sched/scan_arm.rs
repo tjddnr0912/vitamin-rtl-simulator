@@ -516,6 +516,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             st,
             cur: SlotQueues::default(),
             nba: Vec::new(),
+            nba_scratch_lhs: Lvalue {
+                chunks: Vec::with_capacity(1),
+            },
             nba_seq: 0,
             wheel: BTreeMap::new(),
             waiters: Vec::new(),

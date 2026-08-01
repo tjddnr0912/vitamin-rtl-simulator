@@ -850,10 +850,13 @@ pub(crate) fn apply_effect<K: Kernel>(k: &mut K, effect: StmtEffect<'_>) -> Opti
             value,
             delay_ticks,
         } => {
-            // The NBA queue outlives this activation — the one owned clone left.
+            // The NBA queue outlives this activation, so the destination must be
+            // owned — but `NbaLhs::of` takes it without allocating for the 99.5% of
+            // updates that are a single chunk, so the clone that used to be here is
+            // gone.
             match delay_ticks {
-                Some(d) if d > 0 => k.k_schedule_nba_at(lhs.clone(), value, d),
-                _ => k.k_schedule_nba(lhs.clone(), value),
+                Some(d) if d > 0 => k.k_schedule_nba_at(lhs, value, d),
+                _ => k.k_schedule_nba(lhs, value),
             }
             None
         }
