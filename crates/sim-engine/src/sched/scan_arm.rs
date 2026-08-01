@@ -451,6 +451,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // NATIVE-TYPE GUARD: fill the per-net eligibility bitset BEFORE the `heap`
         // closure takes its immutable borrow of `st` (the fill needs `&mut self` to
         // memoize).
+        st.build_plain_scalar();
         let ca_nonint = st.native_ineligible();
         let heap = |net: u32| -> bool {
             let i = net as usize;

@@ -116,6 +116,7 @@ impl<'a> SimState<'a> {
                 .collect(),
             dyn_str_elem: vec![false; nnets],
             native_ineligible: None,
+            plain_scalar: Vec::new(),
             wt,
             vcd: None,
             vcd_path: None,
@@ -456,6 +457,80 @@ impl<'a> SimState<'a> {
         value: Value,
         offsets: &crate::exec::Offsets,
     ) -> bool {
+        // WHOLE-SCALAR FAST PATH. Measured on picorv32 + testbench (40000 cycles):
+        // `write_lvalue` is called 4,012,246 times and 4,000,553 of them — 99.7% — are
+        // this one shape: a single `Bit` chunk with no word/offset/width, onto a plain
+        // flat-store scalar net. For that shape everything between here and
+        // `store_words` is a decision already known: eleven branches across six separate
+        // `Vec<bool>` side tables (six cache lines), a `chunk_width` call, an `Offsets`
+        // slice and a `debug_assert`, all to conclude "resize to the net width and store
+        // the words".
+        //
+        // `plain_scalar` collapses the net-shaped half of that into ONE lookup, baked
+        // once per run (see `build_plain_scalar`). What is NOT baked is what can change
+        // during a run — `forced` (force/release) and the incoming value's `is_real`
+        // (which selects the real->int rounding arm) — so those stay live tests.
+        //
+        // This is a shortcut THROUGH `write_lvalue_general`, not a reimplementation of
+        // it: `write_parity_tests` drives both over a width/pattern sweep and compares
+        // the returned `changed`, every stored word, the dirty channel AND the
+        // accumulated edge mask. A fast path that stored the right bits but skipped
+        // `note_change` would leave values correct and the design frozen.
+        if let [c] = lhs.chunks.as_slice() {
+            if matches!(c.kind, SelKind::Bit)
+                && c.word.is_none()
+                && c.offset.is_none()
+                && c.width.is_none()
+                && !value.is_real
+            {
+                let n = c.net as usize;
+                if self.plain_scalar.get(n).copied().unwrap_or(false) && !self.forced[n] {
+                    debug_assert_eq!(offsets.as_slice().len(), 1, "one (offset,word) per chunk");
+                    let net_w = self.nets[n].width;
+                    let src = value.resize(net_w.max(1));
+                    return self.store_words(n, 0, net_w, &src);
+                }
+            }
+        }
+        self.write_lvalue_general(lhs, value, offsets)
+    }
+
+    /// Per-net "a whole-net write here is exactly resize-then-`store_words`".
+    ///
+    /// Every clause mirrors a branch `write_lvalue_general`/`write_chunk` would take for
+    /// a whole-net single-chunk write, and each is a property that CANNOT change during a
+    /// run — which is what makes baking it sound. The two properties that can change
+    /// (`forced`, and the incoming value's `is_real`) are deliberately absent and are
+    /// tested live at the call site.
+    ///
+    /// Filled at `Scheduler::new`, after every out-of-band sidecar is installed. Before
+    /// that it is empty and `.get(n)` yields `None` -> the general path, so a write during
+    /// initialisation is correct, merely not accelerated.
+    pub(crate) fn build_plain_scalar(&mut self) {
+        let n = self.nets.len();
+        let mut v = vec![false; n];
+        for (i, slot) in v.iter_mut().enumerate() {
+            *slot = !self.nets[i].is_real                     // real coercion arm
+                && !self.frame_local[i]                       // frame write lane
+                && !self.dyn_is_handle[i]                     // heap element lane
+                && !self.class_is_handle[i]                   // class field lane
+                && !self.two_state[i]                         // X/Z coercion arm
+                && !self.dyn_str_elem[i]                      // string-element lane
+                && self.ir.nets[i].kind != NetKind::String    // byte-strip lane
+                && self.nets[i].array_len == 1                // base = 0, word = 0
+                && self.nets[i].width > 0; // a 0-width net has no words
+        }
+        self.plain_scalar = v;
+    }
+
+    /// The general write funnel. `write_lvalue` shortcuts the 99.7% case ahead of this;
+    /// everything else arrives here exactly as it always did.
+    pub(crate) fn write_lvalue_general(
+        &mut self,
+        lhs: &Lvalue,
+        value: Value,
+        offsets: &crate::exec::Offsets,
+    ) -> bool {
         // ── real↔int assignment coercion (IEEE 1364 §6.2) ──
         // Only a WHOLE-NET lvalue (single Bit chunk, no offset/width) can be a
         // real destination: a real is dimensionless and never bit/part-selected
@@ -713,6 +788,20 @@ impl<'a> SimState<'a> {
             }
         };
 
+        // WORD-PARALLEL store: a whole-element write to a 64-aligned destination
+        // (every scalar whole-net assign, plus array elements whose width is a multiple
+        // of 64). Guard: `array_len <= 1 || net_w % 64 == 0` guarantees the element
+        // occupies WHOLE store words, so masking the top word cannot clobber a
+        // neighbouring element packed in the same word. Everything else (part/bit-select,
+        // unaligned base, OOR) falls through to the bit-serial path below.
+        if lsb == 0
+            && width == net_w
+            && base % 64 == 0
+            && (self.nets[net].array_len <= 1 || net_w % 64 == 0)
+        {
+            return self.store_words(net, word, net_w, piece);
+        }
+
         // GLITCH: capture scalar bit0 BEFORE the mutation so a same-slot re-write
         // (A→B→A) records its real `B→A` transition (the endpoint compare would
         // see only A==A). Gated on `is_edge_target`, so non-clock nets pay nothing.
@@ -725,47 +814,6 @@ impl<'a> SimState<'a> {
 
         let slot = &mut self.nets[net];
 
-        // WORD-PARALLEL fast path: a whole-element write to a 64-aligned destination
-        // (every scalar whole-net assign, plus array elements whose width is a multiple
-        // of 64). Copy `piece`'s words into the store with word-granular change detection
-        // + a top-word mask, replacing the per-bit `set_bit` loop. Guard:
-        // `array_len <= 1 || net_w % 64 == 0` guarantees the element occupies WHOLE store
-        // words, so masking the top word cannot clobber a neighbouring element packed in
-        // the same word. Everything else (part/bit-select, unaligned base, OOR) falls
-        // through to the proven bit-serial path below — byte-identical by construction.
-        if lsb == 0 && width == net_w && base % 64 == 0 && (slot.array_len <= 1 || net_w % 64 == 0)
-        {
-            let wbase = (base / 64) as usize;
-            let nw = nwords(net_w).max(1);
-            let m = top_mask(net_w);
-            let mut changed = false;
-            for k in 0..nw {
-                let mut nv = piece.val.get(k).copied().unwrap_or(0);
-                let mut nu = piece.unk.get(k).copied().unwrap_or(0);
-                if k == nw - 1 {
-                    nv &= m;
-                    nu &= m;
-                }
-                let idx = wbase + k;
-                if slot.cur.val.len() <= idx {
-                    slot.cur.val.resize(idx + 1, 0);
-                    slot.cur.unk.resize(idx + 1, 0);
-                }
-                if slot.cur.val[idx] != nv || slot.cur.unk[idx] != nu {
-                    slot.cur.val[idx] = nv;
-                    slot.cur.unk[idx] = nu;
-                    changed = true;
-                }
-            }
-            if changed {
-                self.note_change(net as u32, word);
-                if track_edge {
-                    self.accumulate_edge(net, old_b0);
-                }
-            }
-            return changed;
-        }
-
         let mut changed = false;
         for i in 0..width {
             // P0-IPU: the destination net-bit is `lsb + i` in a SIGNED domain — a bit
@@ -777,6 +825,60 @@ impl<'a> SimState<'a> {
             }
             let (v, u) = piece.get_vu(i);
             if set_bit(&mut slot.cur, base + dst as u32, v, u) {
+                changed = true;
+            }
+        }
+        if changed {
+            self.note_change(net as u32, word);
+            if track_edge {
+                self.accumulate_edge(net, old_b0);
+            }
+        }
+        changed
+    }
+
+    /// THE word-parallel whole-element store — the one copy of this loop.
+    ///
+    /// Writes `piece` over element `word` of `net`, word at a time, with word-granular
+    /// change detection and a top-word mask. The caller has already established that the
+    /// destination is 64-aligned and occupies whole store words; this does the store, the
+    /// dirty note and the edge accumulation.
+    ///
+    /// Two callers: `write_chunk`'s aligned branch, and `write_lvalue`'s whole-scalar fast
+    /// path. It is a shared function rather than two copies because it is the point where
+    /// a net's value actually changes — the dirty channel and the glitch-accurate edge
+    /// capture both hang off it, and a second copy that forgot either would be silent.
+    pub(crate) fn store_words(&mut self, net: usize, word: u32, net_w: u32, piece: &Value) -> bool {
+        // GLITCH: capture scalar bit0 BEFORE the mutation so a same-slot re-write
+        // (A→B→A) records its real `B→A` transition (the endpoint compare would see only
+        // A==A). Gated on `is_edge_target`, so non-clock nets pay nothing.
+        let track_edge = self.is_edge_target[net];
+        let old_b0 = if track_edge {
+            scalar_bit0(&self.nets[net].cur)
+        } else {
+            sim_ir::FourState::Zero
+        };
+        let base = word * net_w;
+        let slot = &mut self.nets[net];
+        let wbase = (base / 64) as usize;
+        let nw = nwords(net_w).max(1);
+        let m = top_mask(net_w);
+        let mut changed = false;
+        for k in 0..nw {
+            let mut nv = piece.val.get(k).copied().unwrap_or(0);
+            let mut nu = piece.unk.get(k).copied().unwrap_or(0);
+            if k == nw - 1 {
+                nv &= m;
+                nu &= m;
+            }
+            let idx = wbase + k;
+            if slot.cur.val.len() <= idx {
+                slot.cur.val.resize(idx + 1, 0);
+                slot.cur.unk.resize(idx + 1, 0);
+            }
+            if slot.cur.val[idx] != nv || slot.cur.unk[idx] != nu {
+                slot.cur.val[idx] = nv;
+                slot.cur.unk[idx] = nu;
                 changed = true;
             }
         }

@@ -21,6 +21,8 @@ mod task_frames;
 pub(crate) use task_frames::*;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod write_parity_tests;
 
 /// A boxed `Write` sink for the VCD. v1 production uses a `File`; tests use an
 /// in-memory buffer captured via an `Rc<RefCell<Vec<u8>>>` adapter.
@@ -321,6 +323,10 @@ pub(crate) struct SimState<'a> {
     /// AFTER `SimState::new` returns — a value computed in the constructor would miss
     /// every one of them, which is precisely the hole this guard closes.
     pub(crate) native_ineligible: Option<std::rc::Rc<Vec<bool>>>,
+    /// WHOLE-SCALAR FAST PATH: per-net "a whole-net write here is exactly
+    /// resize-then-`store_words`". Empty until `build_plain_scalar` runs at
+    /// `Scheduler::new`; an empty table simply routes every write down the general path.
+    pub(crate) plain_scalar: Vec<bool>,
     /// IEEE 1364-2005 self-width side table — built once, immutable for the run.
     pub wt: crate::width::WidthTable,
 

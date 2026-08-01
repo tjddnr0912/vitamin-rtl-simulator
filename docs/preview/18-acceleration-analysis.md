@@ -644,3 +644,28 @@ iverilog(0.61 s) 대비 격차 **1.28x → 1.21x**.
 
 **측정 방법론상의 결론**: `--backend` 두 값으로 corpus 를 도는 differential 보다, **default 를 뒤집고 전 스위트를 도는 것**이
 압도적으로 강하다. 비용은 한 줄 + 10분이고, 후자만이 5035개 테스트가 이미 인코딩해 둔 모양 전부를 동원한다.
+
+### `write_lvalue` whole-scalar fast path (2026-08-02)
+
+NBA 랜딩 후 재계측. `write_lvalue` 호출 **4,012,246 회** 중 **4,000,553 (99.7%)** 가 한 모양이다:
+단일 `Bit` chunk · `word/offset/width` 전부 `None` · 목적지가 평범한 flat-store 스칼라 넷.
+
+그 모양에서 진짜 저장(`store_words`)까지 가는 길에 있는 것은 전부 **이미 정해진 결정**이다 —
+서로 다른 `Vec<bool>` 사이드 테이블 6개(캐시라인 6개)를 훑는 분기 11개 · `chunk_width` 호출 ·
+`Offsets` 슬라이스 · `debug_assert`. 결론은 언제나 "넷 폭으로 resize 하고 워드를 저장".
+
+→ `plain_scalar[net]` 하나로 **넷 모양 쪽 절반을 한 번의 lookup 으로** 접었다(런당 1회 계산).
+런 중 변할 수 있는 둘(`forced`, 들어온 값의 `is_real`)은 **일부러 굽지 않고** 호출부에서 live 로 본다.
+
+| | before | after |
+|---|---|---|
+| 기본(vm) | 0.74 s | **0.71 s** |
+| `--backend interp` | 1.08 s | 1.06 s |
+
+**구조**: 워드 병렬 저장 루프를 `store_words` 로 **추출**해 `write_chunk` 와 fast path 가 **같은 한 벌**을 쓴다.
+값이 실제로 바뀌는 지점이라 dirty 채널과 glitch-정확 엣지 포착이 둘 다 여기 매달려 있다 —
+둘 중 하나를 잊은 두 번째 복사본은 **조용하다**(값은 맞고 설계는 멈춘다).
+
+**핀**: `write_parity_tests` 가 넷 폭 15종 × 값 폭/패턴/부호 96종 × edge-target 2종을 두 경로로 돌려
+`changed` · 저장된 **모든** 워드 · dirty 리스트/플래그 · 누적 엣지 마스크를 비교한다(5040 케이스).
+teeth 확인: resize 폭 오프바이원 · net_w 절단 · resize 생략 **3종 전부 잡힌다**.
