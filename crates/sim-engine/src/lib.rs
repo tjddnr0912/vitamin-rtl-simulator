@@ -55,7 +55,8 @@ pub use elaborate::{
     TaskCallProc,
 };
 pub use levelize::{
-    comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies, FusionPair,
+    comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies,
+    self_read_write_processes, FusionPair,
 };
 pub use sched::FinishReason;
 

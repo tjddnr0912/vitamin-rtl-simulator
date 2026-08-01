@@ -1218,6 +1218,13 @@ fn perf_real_design_m1_m3() {
                 sim_engine::fusion_candidates(&ir).len()
                     + sim_engine::fusion_candidates_across_copies(&ir),
             );
+            let srw = sim_engine::self_read_write_processes(&ir);
+            println!(
+                "      self read+write processes: {} of {} (nets involved: {})",
+                srw.len(),
+                ir.processes.len(),
+                srw.iter().map(|(_, n)| n.len()).sum::<usize>()
+            );
         }
     }
 }

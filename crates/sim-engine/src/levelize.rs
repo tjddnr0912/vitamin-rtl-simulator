@@ -182,8 +182,19 @@ pub fn comb_ranks(ir: &SimIr) -> Vec<u32> {
         return rank;
     }
 
-    let reads: Vec<BTreeSet<u32>> = (0..n).map(|p| level_reads(ir, p)).collect();
     let writes: Vec<BTreeSet<u32>> = (0..n).map(|p| blocking_writes(ir, p)).collect();
+    // A process that reads a net IT ITSELF blocking-writes is reading its own
+    // intermediate value inside one activation — `always_comb begin y = a; z = y+1; end`
+    // — not waiting on another producer. Counting that as a dependency makes the
+    // relaxation climb forever: `rank[p] >= net_rank[n]` and `net_rank[n] >= rank[p]+1`
+    // cannot both hold. The climb is bounded only by the iteration cap, so the result
+    // looks like a combinational CYCLE that is not there.
+    //
+    // Measured on PicoRV32: 4 of its 43 processes do this over 6 nets, and that alone
+    // made `comb_depth` report "cyclic" for a CPU that has no combinational loop.
+    let reads: Vec<BTreeSet<u32>> = (0..n)
+        .map(|p| level_reads(ir, p).difference(&writes[p]).copied().collect())
+        .collect();
     // Continuous assigns must CARRY rank without ADDING a level: they settle to a
     // fixpoint at the top of every delta, so a value crossing one is already stable
     // when the next rank runs. Skipping them was measured to leave every rank at 0 on
@@ -569,4 +580,22 @@ pub fn fusion_candidates_across_copies(ir: &SimIr) -> usize {
         }
     }
     count
+}
+
+/// DIAGNOSTIC: processes that both level-READ and blocking-WRITE the same net, plus the
+/// nets involved. Used to tell a genuine combinational loop from an artifact of the
+/// rank analysis.
+pub fn self_read_write_processes(ir: &SimIr) -> Vec<(usize, Vec<u32>)> {
+    (0..ir.processes.len())
+        .filter_map(|p| {
+            let r = level_reads(ir, p);
+            let w = blocking_writes(ir, p);
+            let both: Vec<u32> = r.intersection(&w).copied().collect();
+            if both.is_empty() {
+                None
+            } else {
+                Some((p, both))
+            }
+        })
+        .collect()
 }

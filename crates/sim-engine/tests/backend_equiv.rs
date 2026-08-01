@@ -788,3 +788,46 @@ fn a_comb_chain_output_is_sampled_mid_propagation() {
         );
     }
 }
+
+/// `comb_depth` measures INTER-process combinational depth, and a process reading a net
+/// it itself writes must not count as a dependency on itself.
+///
+/// `always_comb begin y = a; z = y + 1; end` reads `y` and writes `y`. Treating that as
+/// a dependency makes the rank relaxation climb without bound — `rank[p] >= net_rank[y]`
+/// and `net_rank[y] >= rank[p]+1` cannot both hold — so the analysis reported CYCLIC for
+/// designs that have no combinational loop. Measured on PicoRV32: 4 of 43 processes do
+/// this, and that alone was enough to make a RISC-V CPU look cyclic.
+#[test]
+fn a_process_reading_its_own_output_is_not_a_cycle() {
+    // Self read+write, no inter-process chain at all: depth 0, and NOT cyclic.
+    let ir = build(
+        "module t;\n\
+           reg [7:0] a, y, z;\n\
+           always @* begin y = a; z = y + 8'd1; end\n\
+           initial begin a = 8'd1; #1 $display(\"z=%0d\", z); $finish; end\n\
+         endmodule",
+    );
+    assert!(
+        sim_engine::comb_depth(&ir).is_some(),
+        "a self read+write process is not a combinational cycle"
+    );
+    assert!(
+        !sim_engine::self_read_write_processes(&ir).is_empty(),
+        "teeth: this design must actually contain the shape being tested"
+    );
+
+    // A genuine two-stage chain still measures 2 — the fix must not flatten real depth.
+    let chain = build(
+        "module t;\n\
+           reg [7:0] a, s0, s1;\n\
+           always_comb s0 = a + 8'd1;\n\
+           always_comb s1 = s0 + 8'd1;\n\
+           initial begin a = 8'd1; #1 $display(\"s1=%0d\", s1); $finish; end\n\
+         endmodule",
+    );
+    assert_eq!(
+        sim_engine::comb_depth(&chain),
+        Some(2),
+        "a real two-stage combinational chain must still measure depth 2"
+    );
+}
