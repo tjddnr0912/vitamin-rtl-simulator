@@ -3,6 +3,50 @@
 use super::*;
 
 impl NetReader for SimState<'_> {
+    /// See [`NetReader::read_scalar_words`]. Mirrors, exactly and in the same order,
+    /// what `read_net(net, None)` then `resize_keep_sign(w, ctx_signed)` produce:
+    /// read word 0 of the flat store, mask to the net's declared width, narrow the
+    /// signedness to `slot.signed && ctx_signed`, sign-extend only when EXTENDING a
+    /// signed value whose sign bit is 1 or x, then mask to `w`.
+    ///
+    /// Bails to `None` — and therefore to the original path — for every case that is not
+    /// a plain single-word scalar. Locked by `leaf_fast_path_matches_read_net`.
+    fn read_scalar_words(&self, net: u32, w: u32, ctx_signed: bool) -> Option<(u64, u64)> {
+        let i = net as usize;
+        if self.class_is_handle[i] || self.frame_local[i] || self.dyn_is_handle[i] {
+            return None;
+        }
+        let slot = self.nets.get(i)?;
+        // `is_str` is not a slot flag; a string net is a dyn handle, already excluded.
+        if slot.is_real || slot.array_len != 1 || slot.width == 0 || slot.width > 64 || w > 64 {
+            return None;
+        }
+        let nw = slot.width;
+        let nm = crate::value::top_mask(nw);
+        let mut v = slot.cur.val.first().copied().unwrap_or(0) & nm;
+        let mut u = slot.cur.unk.first().copied().unwrap_or(0) & nm;
+        // `resize_keep_sign`: the value's own signedness is narrowed by the context's
+        // before the resize decides whether to sign-extend.
+        let eff_signed = slot.signed && ctx_signed;
+        if w > nw && eff_signed {
+            let bit = nw - 1;
+            let fv = (v >> bit) & 1;
+            let fu = (u >> bit) & 1;
+            if fv != 0 || fu != 0 {
+                let bits = w - nw;
+                let mask = if bits >= 64 {
+                    u64::MAX
+                } else {
+                    ((1u64 << bits) - 1) << nw
+                };
+                v = (v & !mask) | (if fv != 0 { u64::MAX } else { 0 } & mask);
+                u = (u & !mask) | (if fu != 0 { u64::MAX } else { 0 } & mask);
+            }
+        }
+        let m = crate::value::top_mask(w);
+        Some((v & m, u & m))
+    }
+
     fn dyn_size(&self, net: u32) -> Option<u64> {
         // Only a dyn HANDLE answers; a missing heap entry IS the empty object
         // (size 0 — IEEE: a declared dynamic array/queue/assoc starts empty).

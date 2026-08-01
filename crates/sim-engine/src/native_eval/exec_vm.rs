@@ -39,12 +39,19 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader) -> Value {
         match *op {
             NOp::Const { val, unk } => stack.push((val, unk)),
             NOp::LoadScalar { net, w, signed } => {
-                let v = nets.read_net(net, None).resize_keep_sign(w, signed);
-                let m = low_mask(w);
-                stack.push((
-                    v.val.first().copied().unwrap_or(0) & m,
-                    v.unk.first().copied().unwrap_or(0) & m,
-                ));
+                // LEAF FAST PATH: a plain scalar net yields its word pair without ever
+                // building a `Value`. Everything else falls through to the original
+                // read-then-resize, so the special cases are untouched.
+                if let Some((pv, pu)) = nets.read_scalar_words(net, w, signed) {
+                    stack.push((pv, pu));
+                } else {
+                    let v = nets.read_net(net, None).resize_keep_sign(w, signed);
+                    let m = low_mask(w);
+                    stack.push((
+                        v.val.first().copied().unwrap_or(0) & m,
+                        v.unk.first().copied().unwrap_or(0) & m,
+                    ));
+                }
             }
             NOp::Arith { kind, w } => {
                 let (bv, bu) = stack.pop().expect("native arith: missing rhs");

@@ -131,6 +131,31 @@
 >
 > ⇒ **구조적 레버는 `unk` 평면을 없애는 것**(2-state)뿐이다. `mask_top`·`resize`·net 저장이 전부 절반이 된다. 그게 Verilator 의 10–100× 가 나오는 자리이고, [preview/20](20-cycle-mode-feasibility.md) 의 별도 모드가 **융합이 아니라 이 이유로** 다시 후보가 된다.
 
+> **✅✅ 2026-08-01 — leaf fast path. 실물 설계에서 VM 1.191× · 종합 1.364×. 세션 최대 성과.**
+>
+> M1(2-state)이 7% 로 기각된 뒤 남은 가설은 **"비용이 4-state 가 아니라 인터프리테이션 구조"** 였다. 그런데 native-eval 이 **이미 내부 트리워크를 제거한 실험**인데도 `resize`·`netread` 가 뜨거웠다 ⇒ 비용은 내부 노드가 아니라 **leaf** 다. 코드를 보니 정확했다:
+>
+> ```rust
+> NOp::LoadScalar { net, w, signed } => {
+>     let v = nets.read_net(net, None).resize_keep_sign(w, signed);  // Value 2개 생성
+>     stack.push((v.val.first()…, v.unk.first()…));                   // u64 2개만 쓰고 버림
+> }
+> ```
+>
+> **모든 native leaf 로드가 full `Value`(두 `Words` 평면, ~56 B) 두 개를 만들고 버렸다.** 프로파일의 `netread` 13.1% + `resize` 16.6% 가 여기였다 — native-eval 이 없앤 트리워크가 아니라, 그것이 **손대지 않은 leaf**.
+>
+> 수정 = `NetReader::read_scalar_words(net, w, ctx_signed) -> Option<(u64,u64)>`. **평범한 스칼라 넷**만 워드를 직독하고, class handle·frame local·dyn handle·real·string·배열·>64bit 는 전부 `None` 으로 기존 경로에 남긴다(default `None` 이라 다른 `NetReader` 구현은 무영향).
+>
+> | | before(`802ca41`) | after | |
+> |---|---|---|---|
+> | VM | 1078.9 ms | **905.9 ms** | **1.191×** |
+> | interp | 1235.3 ms | 1235.3 ms | (VM 전용 경로) |
+> | **interp → VM** | 1.16× | **1.364×** | |
+>
+> 검증 = P5 코퍼스 게이트 · 5026 tests · `leaf_fast_path_matches_read_net`(부호비트 set·**부호비트의 x**·미부호·1/2/8/32/64bit 를 5개 문맥폭으로 읽어 인터프리터와 대조) · picorv32 에서 **iverilog/interp/vm 3자 일치**.
+>
+> ⭐ **교훈**: "native-eval 이 이미 최적화했다"가 leaf 까지 최적화했다는 뜻이 아니었다. **최적화된 경로의 가장자리를 보라.**
+
 ## 요약 판정
 
 | 방향 | 평가 | 이유 |

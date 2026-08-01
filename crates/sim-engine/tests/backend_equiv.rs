@@ -890,3 +890,69 @@ fn a_natively_compiled_branch_condition_keeps_the_tri_valued_rule() {
         }
     }
 }
+
+/// The native-eval LEAF fast path must equal the read-then-resize it replaces.
+///
+/// `read_scalar_words` reproduces `read_net(net, None).resize_keep_sign(w, signed)`
+/// without building either `Value`. Getting it subtly wrong is invisible on ordinary
+/// values and shows only on sign extension or on an x in the sign bit, so this sweeps a
+/// design over signed/unsigned nets of several widths read into several context widths,
+/// with X present, on BOTH backends — the interpreter is the oracle.
+#[test]
+fn leaf_fast_path_matches_read_net() {
+    for (decl, init) in [
+        ("reg signed [7:0]  a", "8'sh80"), // sign bit set
+        ("reg signed [7:0]  a", "8'sh7f"),
+        ("reg signed [3:0]  a", "4'sb1x0x"), // x beside the sign bit
+        ("reg        [7:0]  a", "8'hff"),
+        ("reg        [31:0] a", "32'hdead_beef"),
+        ("reg signed [31:0] a", "-32'sd12345"),
+        ("reg        [1:0]  a", "2'bx1"),
+        ("reg signed [63:0] a", "-64'sd1"),
+    ] {
+        // Read `a` into several context widths, signed and unsigned, inside a
+        // codegen-able body so the native path is the one exercised.
+        let src = format!(
+            "module t;\n\
+               {decl};\n\
+               reg [63:0] w64; reg [15:0] w16; reg [3:0] w4;\n\
+               reg signed [63:0] s64; reg signed [15:0] s16;\n\
+               reg clk = 0;\n\
+               integer i;\n\
+               always @(posedge clk) begin\n\
+                 w64 = a; w16 = a; w4 = a; s64 = a; s16 = a;\n\
+               end\n\
+               initial begin\n\
+                 a = {init};\n\
+                 for (i = 0; i < 3; i = i + 1) begin #1 clk = ~clk; end\n\
+                 $display(\"%h %h %h %h %h\", w64, w16, w4, s64, s16);\n\
+                 $finish;\n\
+               end\n\
+             endmodule"
+        );
+        let ir = build(&src);
+        let (_ri, oi) = simulate_capture(
+            &ir,
+            SimOpts {
+                backend: Backend::Interpreter,
+                ..SimOpts::default()
+            },
+        );
+        let (_rb, ob) = simulate_capture(
+            &ir,
+            SimOpts {
+                backend: Backend::Bytecode,
+                ..SimOpts::default()
+            },
+        );
+        assert_eq!(
+            oi, ob,
+            "leaf fast path diverged for `{decl} = {init}` — the VM must read exactly \
+             what read_net + resize_keep_sign produce"
+        );
+        assert!(
+            oi.split_whitespace().count() >= 5,
+            "teeth: the design must actually have printed five values, got:\n{oi}"
+        );
+    }
+}

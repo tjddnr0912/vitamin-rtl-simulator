@@ -131,6 +131,23 @@ pub(crate) fn parse_real_prefix(bytes: &[u8]) -> f64 {
 pub trait NetReader {
     /// Current 4-state value of net `net`, optional array word index.
     fn read_net(&self, net: u32, word: Option<u32>) -> Value;
+    /// LEAF FAST PATH: the `(val, unk)` word pair of a PLAIN SCALAR net, already
+    /// resized to `w` under `ctx_signed` — i.e. exactly what
+    /// `read_net(net, None).resize_keep_sign(w, ctx_signed)` yields in its low word,
+    /// but WITHOUT constructing either `Value`.
+    ///
+    /// Every native-eval leaf load built two full `Value`s (~56 bytes each, two `Words`
+    /// planes) and then threw both away keeping two `u64`s. That is where `netread`
+    /// (13.1%) and `resize` (16.6%) came from in the real-design profile: not the
+    /// interior tree walk, which native-eval had already removed, but the LEAVES.
+    ///
+    /// `None` for anything that is not a plain scalar — class handle, frame local, dyn
+    /// handle, real, string, array, or a width over one word — so every special case
+    /// keeps the original path. Default `None` leaves non-engine readers (native-eval
+    /// test fakes) unchanged.
+    fn read_scalar_words(&self, _net: u32, _w: u32, _ctx_signed: bool) -> Option<(u64, u64)> {
+        None
+    }
     /// v5 (C): element count of the dynamic-storage object behind HANDLE net
     /// `net`. `Some(0)` for a declared-but-never-`new`ed handle (IEEE: empty),
     /// `None` when the net is not a dyn handle (the caller X-poisons). Default
