@@ -45,7 +45,7 @@ use std::rc::Rc;
 use diag::{LogEvent, LogSink, ProgressEvent, RtlText};
 use sim_ir::SimIr;
 
-pub use backend::{codegen_coverage, CodegenCoverage};
+pub use backend::{codegen_coverage, native_eval_coverage, CodegenCoverage};
 /// Re-exported from `elaborate` so callers thread the join-mode side table into
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
 pub use elaborate::{

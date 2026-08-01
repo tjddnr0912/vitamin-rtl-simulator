@@ -1299,7 +1299,20 @@ fn perf_real_design_operator_census() {
             }
         }
     }
-    println!("\n[B-OPS] picorv32 + tb: {} binary-op nodes\n", sup + unsup);
+    let (nok, ntot) = sim_engine::native_eval_coverage(&ir);
+    println!(
+        "\n[B-OPS] picorv32 + tb: native-eval compiles {nok}/{ntot} assign RHS in \
+         codegen-able bodies = {:.0}%",
+        if ntot == 0 {
+            0.0
+        } else {
+            100.0 * nok as f64 / ntot as f64
+        }
+    );
+    println!(
+        "\n  (operator census below is over ALL binary nodes, {} of them)\n",
+        sup + unsup
+    );
     let mut rows: Vec<_> = counts.into_iter().collect();
     rows.sort_by_key(|(_, (n, _))| std::cmp::Reverse(*n));
     for (op, (n, ok)) in &rows {

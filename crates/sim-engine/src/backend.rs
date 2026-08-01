@@ -553,6 +553,49 @@ pub(crate) enum VmSlot {
     Compiled(Rc<CompiledBody>),
 }
 
+/// How many assign right-hand sides inside codegen-able bodies native-eval can compile.
+///
+/// This is the number that explains a VM speedup, and it must be measured through the
+/// REAL `try_compile` rather than inferred from a list of supported operators. Reading
+/// `classify_binop`'s seven-op table as "the supported set" produced a census claiming
+/// real RTL bails on 48% of binary nodes; the lowering in `native_eval::compile` in fact
+/// handles comparisons, equality, case-equality and the logical binaries through
+/// separate arms, so that census was wrong.
+///
+/// Returns `(compiled, total)` over assign statements in bodies that clear the P9
+/// allow-list. Bodies outside it are excluded because their RHS never reaches
+/// `try_compile` at all.
+pub fn native_eval_coverage(ir: &SimIr) -> (usize, usize) {
+    let wt = crate::width::WidthTable::build(ir, &crate::FuncTable::new());
+    let (mut ok, mut total) = (0usize, 0usize);
+    for p in &ir.processes {
+        if !is_codegen_able(&ir.stmts, &ir.exprs, &p.body) {
+            continue;
+        }
+        for block in &p.body {
+            for &sid in &block.stmts {
+                let (lhs, rhs) = match &ir.stmts[sid as usize] {
+                    Stmt::BlockingAssign { lhs, rhs } => (lhs, *rhs),
+                    Stmt::NonblockingAssign { lhs, rhs, .. } => (lhs, *rhs),
+                    _ => continue,
+                };
+                total += 1;
+                // Context width/sign as the lowering sees it: the lvalue's own width.
+                let ctx_w = lhs
+                    .chunks
+                    .iter()
+                    .map(|c| c.width.map_or(wt.width(rhs), |_| wt.width(rhs)))
+                    .max()
+                    .unwrap_or_else(|| wt.width(rhs));
+                if crate::native_eval::try_compile(ir, &wt, rhs, ctx_w, wt.signed(rhs)).is_some() {
+                    ok += 1;
+                }
+            }
+        }
+    }
+    (ok, total)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
