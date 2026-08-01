@@ -115,6 +115,7 @@ impl<'a> SimState<'a> {
                 })
                 .collect(),
             dyn_str_elem: vec![false; nnets],
+            native_ineligible: None,
             wt,
             vcd: None,
             vcd_path: None,
@@ -302,6 +303,34 @@ impl<'a> SimState<'a> {
         }
     }
 
+    /// NATIVE-TYPE GUARD: the per-net "the native expression path must not read this"
+    /// flags, memoized on first use.
+    ///
+    /// `native_eval::ineligible_nets` supplies the IR-visible half (a positive allow-list
+    /// of plain integral net kinds). This ORs in the half no net KIND can reveal: a class
+    /// handle, a dyn/queue handle, a `real r[]` element handle (which re-flags `is_real`
+    /// on an otherwise ordinary slot) and a `string s[]` element handle are all installed
+    /// as out-of-band sidecars after construction. Hence lazy: called at first compile,
+    /// which is always after every sidecar has landed.
+    pub(crate) fn native_ineligible(&mut self) -> std::rc::Rc<Vec<bool>> {
+        if let Some(v) = &self.native_ineligible {
+            return std::rc::Rc::clone(v);
+        }
+        let mut v = crate::native_eval::ineligible_nets(self.ir);
+        for (i, slot) in v.iter_mut().enumerate() {
+            if self.nets.get(i).is_none_or(|n| n.is_real)
+                || self.class_is_handle.get(i).copied().unwrap_or(false)
+                || self.dyn_is_handle.get(i).copied().unwrap_or(false)
+                || self.dyn_str_elem.get(i).copied().unwrap_or(false)
+            {
+                *slot = true;
+            }
+        }
+        let rc = std::rc::Rc::new(v);
+        self.native_ineligible = Some(std::rc::Rc::clone(&rc));
+        rc
+    }
+
     /// Stage-C VM dispatch (P0a): return the cached `CompiledBody` for template `tmpl`
     /// if it is codegen-able, compiling + caching on first sight; `None` ⇒ interpret.
     /// The decision is made ONCE per template (the per-fire `is_codegen_able` scan is
@@ -318,14 +347,20 @@ impl<'a> SimState<'a> {
         // `self.ir` is a `&SimIr` field — copy the reference out so the immutable read
         // of the IR does not borrow `self` across the `self.vm_cache` write below.
         let ir: &SimIr = self.ir;
-        if !crate::backend::is_codegen_able(&ir.stmts, &ir.exprs, &ir.processes[tmpl].body) {
+        if !crate::backend::is_codegen_able(
+            &ir.stmts,
+            &ir.exprs,
+            &ir.processes[tmpl].body,
+            &self.class_new_sites,
+        ) {
             self.vm_cache[tmpl] = VmSlot::NotCodegenable;
             return None;
         }
+        let nonint = self.native_ineligible();
         let compiled = Rc::new(crate::backend::compile_body(
             &ir.stmts,
             &ir.processes[tmpl].body,
-            Some((ir, &self.wt)),
+            Some((ir, &self.wt, &nonint)),
         ));
         self.vm_cache[tmpl] = VmSlot::Compiled(Rc::clone(&compiled));
         Some(compiled)

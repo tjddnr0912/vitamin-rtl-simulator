@@ -321,14 +321,14 @@ fn wide_lane_bails_outside_subset() {
         vec![],
         vec![nv(100, true), nv(100, true)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 2, 100, true).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 2, 100, true).is_none());
     // shift AMOUNT wider than 64 bits.
     let ir = ir_of(
         vec![sig(0), sig(1), bin(BinOp::Shl, 0, 1)],
         vec![],
         vec![nv(32, false), nv(100, false)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 2, 32, false).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 2, 32, false).is_none());
     // select over a >128-bit source stays oracle-bound (the v6 ④ wide
     // structural trio runs to 128; beyond it the whole tree bails).
     let ir = ir_of(
@@ -346,7 +346,7 @@ fn wide_lane_bails_outside_subset() {
         vec![cnum(32, 4), cnum(32, 8)],
         vec![nv(200, false)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 3, 8, false).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 3, 8, false).is_none());
     // select OFFSET wider than 64 bits (base narrow).
     let ir = ir_of(
         vec![
@@ -363,14 +363,14 @@ fn wide_lane_bails_outside_subset() {
         vec![cnum(32, 4)],
         vec![nv(16, false), nv(100, false)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 3, 16, false).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 3, 16, false).is_none());
     // logical &&/|| over a wide operand.
     let ir = ir_of(
         vec![sig(0), sig(1), bin(BinOp::LogAnd, 0, 1)],
         vec![],
         vec![nv(100, false), nv(8, false)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 2, 8, false).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 2, 8, false).is_none());
     // narrow-result ternary steered by a WIDE cond.
     let ir = ir_of(
         vec![
@@ -386,7 +386,7 @@ fn wide_lane_bails_outside_subset() {
         vec![],
         vec![nv(8, false), nv(8, false), nv(100, false)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 3, 8, false).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 3, 8, false).is_none());
     // array index expr wider than 64 bits.
     let ir = ir_of(
         vec![
@@ -399,7 +399,7 @@ fn wide_lane_bails_outside_subset() {
         vec![],
         vec![nv(8, false), nv(100, false)],
     );
-    assert!(try_compile(&ir, &wt_of(&ir), 1, 8, false).is_none());
+    assert!(try_compile(&ir, &wt_of(&ir), &ineligible_nets(&ir), 1, 8, false).is_none());
 }
 
 // ── v6 ④ wide structural trio (select/concat/replicate to 128 bits) ──

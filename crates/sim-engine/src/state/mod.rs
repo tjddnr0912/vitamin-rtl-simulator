@@ -314,6 +314,13 @@ pub(crate) struct SimState<'a> {
     /// (`string s[]`). Element store/read use the `is_str` byte-string path (no
     /// bit-vector resize) and `new[]` fills "". EMPTY/all-false ⇒ golden-neutral.
     pub dyn_str_elem: Vec<bool>,
+    /// NATIVE-TYPE GUARD: per-net "the native expression path must not read this",
+    /// memoized on first use by [`SimState::native_ineligible`]. Filled LAZILY, not at
+    /// construction, because the deciding inputs (`class_is_handle`, `dyn_is_handle`,
+    /// `nets[i].is_real` for a `real r[]` element handle) are installed out of band
+    /// AFTER `SimState::new` returns — a value computed in the constructor would miss
+    /// every one of them, which is precisely the hole this guard closes.
+    pub(crate) native_ineligible: Option<std::rc::Rc<Vec<bool>>>,
     /// IEEE 1364-2005 self-width side table — built once, immutable for the run.
     pub wt: crate::width::WidthTable,
 

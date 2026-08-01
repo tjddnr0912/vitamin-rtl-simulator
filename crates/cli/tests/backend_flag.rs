@@ -266,3 +266,243 @@ fn a_cont_assign_calling_a_function_still_evaluates() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// NATIVE-TYPE GUARD — the shapes whose value is not a plain 4-state integer.
+///
+/// A native program's register is a bare `(val, unk)` word pair, so it structurally
+/// cannot carry `is_real` / `is_str` / a heap handle. Until the guard landed,
+/// `try_compile` had no type test at all — only a width test — and every one of these
+/// silently lost the flag the write path dispatches on. Measured at `7937c94`, all under
+/// `--backend vm`, all silent (exit 0, no diagnostic):
+///
+/// | source                    | interpreter | VM before the guard      |
+/// |---------------------------|-------------|--------------------------|
+/// | `q = r;` (real→real)      | `2.750000`  | `4613374868287651840.0`  |
+/// | `i = r;` (real→int)       | `3`         | `0`                      |
+/// | `s2 = s;` (string→string) | `hi`        | `` (empty)               |
+/// | `s2 = arr[1];`            | `bb`        | `` (empty)               |
+///
+/// The string case is the guard's clearest signature: `"a"` is 0x61 and the destination
+/// `string`'s net width is 0, so `lvalue_width().max(1)` handed the compiler a ONE-BIT
+/// context and the whole string became the single bit 0x61 & 1 = 1.
+///
+/// A class field read is the same hole wearing different clothes: it is
+/// `Signal { word: Some(field_id) }`, and the indexed funnel would read the FIELD id as
+/// an ARRAY word.
+///
+/// This lives at CLI level ON PURPOSE. `class_is_handle`, `dyn_is_handle` and the
+/// `real r[]` / `string s[]` element flags are installed as out-of-band sidecars from
+/// `SimOpts`, which the library test harness does not build — a library-level pin would
+/// run with every sidecar empty and pass without testing the thing it names.
+const NONINTEGRAL: &str = "module t;\n\
+  real r = 2.75, q;\n\
+  string s = \"hi\", s2;\n\
+  string arr [2] = '{\"aa\",\"bb\"};\n\
+  byte  dq [];\n\
+  int   i;\n\
+  initial begin\n\
+    q = 2.75;    $display(\"L1 %0f\", q);\n\
+    q = r;       $display(\"L2 %0f\", q);\n\
+    q = r + 1.0; $display(\"L3 %0f\", q);\n\
+    q = r * 2;   $display(\"L4 %0f\", q);\n\
+    i = r;       $display(\"L5 %0d\", i);\n\
+    s2 = s;      $display(\"L6 [%s]\", s2);\n\
+    s2 = arr[1]; $display(\"L7 [%s]\", s2);\n\
+    s2 = \"lit\";  $display(\"L8 [%s]\", s2);\n\
+    dq = new[3]; dq[0] = 8'h5a;\n\
+    i = dq[0];   $display(\"L9 %0h\", i);\n\
+    i = s[0];    $display(\"L10 %0h\", i);\n\
+  end\n\
+endmodule\n";
+
+#[test]
+fn a_non_integral_value_never_rides_the_native_path() {
+    let dir = scratch("nonint");
+    std::fs::write(dir.join("t.sv"), NONINTEGRAL).unwrap();
+
+    let (oi, ok_i) = vita_in(&dir, &["t.sv"]);
+    assert!(
+        ok_i && !oi.contains("error[VITA"),
+        "interp run failed:\n{oi}"
+    );
+    let (ov, ok_v) = vita_in(&dir, &["--backend", "vm", "t.sv"]);
+    assert!(ok_v && !ov.contains("error[VITA"), "vm run failed:\n{ov}");
+    assert_eq!(oi, ov, "backends differ on non-integral values");
+
+    // Absolute values too, not just agreement — both backends agreeing on the SAME
+    // wrong answer is exactly what a pure differential cannot see.
+    for want in [
+        "L1 2.750000",
+        "L2 2.750000",
+        "L3 3.750000",
+        "L4 5.500000",
+        "L5 3",
+        "L6 [hi]",
+        "L7 [bb]",
+        "L8 [lit]",
+        "L9 5a",
+        "L10 68",
+    ] {
+        assert!(oi.contains(want), "missing `{want}` in:\n{oi}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The same hole, reached through a CONTINUOUS ASSIGN — which is not backend-specific.
+///
+/// Compiling cont-assign right-hand sides natively (`7937c94`) put every assign RHS
+/// through `try_compile` on BOTH backends, so this shape turned a correct DEFAULT-path
+/// result into a silent-wrong one. Three-way at the time: iverilog `3`, vita before the
+/// change `3`, vita after `4613374868287651840` — the raw IEEE-754 bits of 2.75, because
+/// the native program dropped `is_real` and `write_lvalue`'s real→int rounding
+/// (IEEE 1364-2005 §6.2, round half away from zero) never ran.
+///
+/// Pinned on the interpreter as well as the VM: this is not a VM bug, and running it
+/// only under `--backend vm` would have left the regression invisible.
+#[test]
+fn a_real_valued_continuous_assign_still_rounds() {
+    let dir = scratch("ca_real");
+    let src = "module t;\n\
+      real r = 2.75;\n\
+      wire [63:0] w;\n\
+      assign w = r;\n\
+      initial #1 $display(\"w=%0d\", w);\n\
+    endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    for args in [vec!["t.sv"], vec!["--backend", "vm", "t.sv"]] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok && !o.contains("error[VITA"), "{args:?} failed:\n{o}");
+        assert!(
+            o.contains("w=3"),
+            "{args:?}: a real continuous-assign RHS must round to the integer net \
+             (iverilog prints 3), not deliver its IEEE bit pattern — got:\n{o}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The per-body PROLOGUE — the `SimState` fields that say which process is running.
+///
+/// `vm_run_body` used to carry a hand-copied excerpt of `run_process`'s prologue that
+/// set `cur_time_mult` and dropped the other two. Both omissions were silently
+/// observable under `--backend vm`, at exit 0 with no diagnostic:
+///
+/// - `%m` in a submodule rendered whatever scope another process had left behind
+///   (`in tb` instead of `in tb.u1`);
+/// - `$time` in a module with its own `timescale` PRECISION rendered at whatever
+///   precision ran previously.
+///
+/// Both now go through one `exec::enter_body`, called by both executors. This is a CLI
+/// test because the second half needs per-module `timescale`, which means the
+/// preprocessor, which means the real pipeline.
+#[test]
+fn the_per_body_prologue_reaches_both_executors() {
+    let dir = scratch("prologue");
+    let src = "`timescale 1ns/1ps\n\
+      module sub;\n\
+        initial begin $display(\"in %m\"); #1 $display(\"sub t=%0t\", $time); end\n\
+      endmodule\n\
+      `timescale 1ns/1ns\n\
+      module tb;\n\
+        sub u1();\n\
+        initial begin\n\
+          $display(\"at %m\");\n\
+          #2 $display(\"tb t=%0t\", $time);\n\
+          $finish;\n\
+        end\n\
+      endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    for args in [
+        vec!["--top", "tb", "t.sv"],
+        vec!["--backend", "vm", "--top", "tb", "t.sv"],
+    ] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok && !o.contains("error[VITA"), "{args:?} failed:\n{o}");
+        // iverilog 13 prints exactly these four lines.
+        for want in ["at tb", "in tb.u1", "sub t=1000", "tb t=2000"] {
+            assert!(
+                o.contains(want),
+                "{args:?}: missing `{want}` — the per-body prologue did not reach this \
+                 executor:\n{o}"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `c = new` — an allocation site whose meaning lives in a StmtId-keyed sidecar.
+///
+/// In the IR this is an ordinary `BlockingAssign` with a placeholder const rhs;
+/// `compute_effect` checks `class_new_sites` FIRST and never evaluates that placeholder.
+/// The VM's classifier was IR-only and could not see the sidecar, so it compiled the
+/// placeholder: the handle stayed X, every later field write was dropped with a
+/// null-dereference warning, and the run still exited 0 printing `a=X b=0X`.
+///
+/// Note the shape: a class with an EXPLICIT constructor was fine, because `new(7)` is a
+/// call and the B1 rule already kept it off the VM. Only the implicit-default `new`
+/// reached the hole.
+#[test]
+fn a_bare_class_new_allocates_on_both_backends() {
+    let dir = scratch("class_new");
+    let src = "class C; int a; logic [7:0] b; endclass\n\
+      module t; C c;\n\
+      initial begin c = new; c.a = 5; c.b = 8'hAB;\n\
+        $display(\"a=%0d b=%h\", c.a, c.b);\n\
+      end endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    for args in [vec!["t.sv"], vec!["--backend", "vm", "t.sv"]] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok, "{args:?} failed:\n{o}");
+        assert!(
+            o.contains("a=5 b=ab"),
+            "{args:?}: bare `new` did not allocate:\n{o}"
+        );
+        assert!(
+            !o.contains("W4020"),
+            "{args:?}: null/X handle dereference — the allocation was skipped:\n{o}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A seeded `$dist_*` writes its seed variable back, so the draw MUST advance.
+///
+/// The VM's intercept list was a hand-written copy of `sim_ir::sysfunc_is_stmt_effect`
+/// that named `DistUniform` and none of its six siblings. `$dist_normal(seed, …)` was
+/// therefore compiled, the seed was never written back, and every draw repeated the
+/// first — silently, at exit 0. `$dist_uniform` in the same program was correct, which
+/// is what made it look like an RNG quirk rather than a classifier hole.
+#[test]
+fn a_seeded_dist_draw_advances_its_seed_on_both_backends() {
+    let dir = scratch("dist_seed");
+    let src = "module t;\n\
+      integer seed = 5; integer i, v;\n\
+      initial for (i = 0; i < 4; i = i + 1) begin\n\
+        v = $dist_normal(seed, 50, 10); $display(\"N %0d\", v);\n\
+      end\n\
+    endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    let mut seen: Vec<String> = Vec::new();
+    for args in [vec!["t.sv"], vec!["--backend", "vm", "t.sv"]] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok && !o.contains("error[VITA"), "{args:?} failed:\n{o}");
+        let draws: Vec<&str> = o.lines().filter(|l| l.starts_with("N ")).collect();
+        assert_eq!(draws.len(), 4, "{args:?}: expected 4 draws:\n{o}");
+        // Teeth: a frozen seed makes every draw identical. That is the bug's signature.
+        assert!(
+            draws
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                > 1,
+            "{args:?}: every draw identical — the seed was never written back:\n{o}"
+        );
+        seen.push(draws.join("|"));
+    }
+    assert_eq!(seen[0], seen[1], "backends produced different seed streams");
+    let _ = std::fs::remove_dir_all(&dir);
+}

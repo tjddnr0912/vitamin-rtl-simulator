@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–278**
+**§4.5.220–279**
+- `4.5.279` **백엔드 default 를 뒤집어 전 스위트를 돌렸더니 18 타깃 39건이 터졌다** — P5 게이트(72 디자인)는 그 전부를 초록으로 통과하고 있었다. 뿌리 넷: 네이티브 레지스터가 `(val,unk)` 한 쌍이라 **`is_real`/`is_str` 를 나를 수 없는데 `try_compile` 에 타입 게이트가 아예 없었다**(`assign w = real` 이 IEEE 비트를 그대로 뱉었다 — **내가 §4.5.278 다음 커밋에서 만든 회귀**) · 바디 prologue 가 **복사되어 표류**(3개 중 1개만 · `%m` 과 시간 정밀도) · `c = new` 는 **StmtId 사이드테이블에 의미가 있는데 분류기는 IR 만 봤다** · 그리고 intercept 목록이 정본(`sysfunc_is_stmt_effect`, `_` arm 없는 exhaustive)의 **손복사본**이라 seeded `$dist_*` 7개 중 1개만 담고 있었다 …
 - `4.5.278` 외부 round-23 — 호출의 **copy-out 목적지**를 분류기가 아예 안 보고 있었다(그건 `Stmt` lvalue 가 아니라 call-site 사이드 테이블에 있다) · 옆 문장이 답을 정하던 마지막 자리 · E3009 문구가 **패닉하는 형태를 "동작한다"고 명시**하던 것 · 그리고 loud 를 걷자 드러난 `StrPutC` 프레임-로컬 silent-wrong · §3.2 성능은 **iverilog 가 같은 깊이 스케일링**임을 실측(리포트의 뿌리 가설 반증) …
 - `4.5.277` 외부 round-22 — 실행기 선택이 **무관한 `$display` 한 줄**에 달려 있었다(분류기가 문장을 목적지로만 봤고 효과는 rhs 에 있었다) · 함수도 같은 뿌리 · static task 의 `string` 로컬은 **세 번째 수집기** · fatal 이 안 멈추던 것 · 그리고 "이름 없던" 패닉 조건에 이름을 붙였다(목적지가 프레임 창 밖인가) …
 - `4.5.276` 외부 round-20 — **내가 만든 회귀**(모듈 전역 키의 함수 전체 stand-down 이 무관한 dyn arm 을 껐다) · `inout` copy-in 이 죽었음의 증명 · 루프 trip-count · 그리고 그것을 고치다 만든 silent-wrong 5건(fold 도메인·resolver·스코프 교차·decl-init·재선언) …
@@ -333,6 +334,62 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.279 백엔드 default 를 뒤집자 P5 게이트가 초록으로 통과시키던 39건이 드러났다 (2026-08-01, format 26 불변) ✅
+
+**계기.** 실물 설계(picorv32+TB, 40000 cycle)의 리전 분해가 `bodies` 를 67%(interp)/53%(vm)로 지목했고, VM 은 이미
+그 리전을 1.76x 로 만들고 있었다 — 즉 **가장 큰 남은 레버는 새 코드가 아니라 VM 을 기본값으로 만드는 것**이었다.
+그 전제(“VM 은 바이트 동일하다”)를 실제로 검증하려고 `Backend` 의 `#[default]` 를 `Bytecode` 로 임시로 뒤집고
+`cargo test --workspace --no-fail-fast` 를 돌렸다.
+
+**결과: 18 타깃 39건 실패.** P5 게이트(`backend_equiv.rs`, 72 디자인)는 그 전부를 통과하고 있었다 — 그 corpus 는
+9개 산술/클럭/구조 템플릿의 파라미터 스윕이라, 아래 네 뿌리가 건드리는 모양을 **하나도 만들지 않는다**.
+
+**뿌리 1 — 네이티브 경로에 타입 게이트가 없었다.** 네이티브 프로그램의 레지스터는 `(val, unk)` u64 쌍이고 소비자는
+평범한 정수 `Value` 를 재조립한다. 즉 `is_real`/`is_str`/힙 핸들을 **구조적으로 나를 수 없다**. 그런데
+`try_compile` 의 유일한 거부 조건은 **폭**(`root_w == 0 || > 128`)이었다. `string` 의 넷 폭은 0 이므로
+`lvalue_width().max(1)` 이 컴파일러에게 **1비트 문맥**을 넘겼고 `"a"`(0x61)는 비트 하나 `0x01` 이 됐다.
+`q = r` 은 2.75 의 IEEE 비트 `4613374868287651840` 이 됐다. 클래스 필드 읽기는 `Signal{word:Some(field_id)}` 라
+인덱스 퍼널이 **필드 id 를 배열 워드로** 읽었다.
+→ `native_eval::ineligible_nets`(넷 kind **포지티브** allow-list) + `SimState::native_ineligible`(kind 로는 절대
+드러나지 않는 사이드카 — class handle · dyn handle · `real r[]`/`string s[]` element — 를 OR). 범위 밖은 ineligible.
+지연 채움인 이유: 그 사이드카들은 `SimState::new` **이후** out-of-band 로 설치된다.
+
+**그 중 하나는 내가 만든 회귀다.** cont-assign RHS 를 네이티브로 컴파일한 직전 커밋(`7937c94`)이 모든 assign RHS 를
+`try_compile` 에 태웠으므로, `assign w = r;`(real→64bit wire)이 **기본 인터프리터 경로에서** correct→silent-wrong 이
+됐다. 3-way: iverilog `3` · PRE(`4abfcda`) `3` · POST `4613374868287651840`. `--backend` 는 태그된 v0.1.0 에 없으므로
+릴리스된 버전은 무영향.
+
+**뿌리 2 — 바디 prologue 가 복사되어 표류.** `run_process` 의 prologue 는 `cur_time_mult`/`cur_prec_mult`/`cur_scope`
+셋을 세운다. `vm_run_body` 는 그 중 **첫 하나만** 손으로 옮겨 적은 발췌본을 들고 있었다. 빠진 둘은 둘 다 조용히
+관측된다: 서브모듈의 `%m` 이 **다른 프로세스가 마지막에 남긴 스코프**를 렌더했고(`tb` vs `tb.u1`), 자기
+`timescale` 정밀도를 가진 모듈의 `$time` 이 직전 정밀도로 렌더됐다. → `exec::enter_body` 하나로 합치고 양쪽이 호출.
+
+**뿌리 3 — `c = new` 의 의미는 StmtId 사이드테이블에 있다.** IR 상으로는 placeholder const 를 rhs 로 가진 평범한
+`BlockingAssign` 이고, `compute_effect` 가 `class_new_sites` 를 **먼저** 확인해 그 placeholder 를 아예 평가하지 않는다.
+IR 만 보는 분류기에는 보이지 않는다 → VM 이 placeholder 를 컴파일 → 핸들이 X 인 채로 이후 필드 쓰기가 전부
+"null/X 핸들 역참조(무시됨)" 경고와 함께 버려지고 **exit 0**. 명시적 생성자(`new(7)`)는 Call 이라 B1 이 이미 막고 있었다 —
+**암시적 default `new` 만** 구멍에 닿았다.
+
+**뿌리 4 — intercept 목록이 정본의 손복사본이었다.** `sim_ir::sysfunc_is_stmt_effect` 는 `_` arm 없는 exhaustive 정본이고
+(새 `SysFuncId` 는 누군가 편을 정할 때까지 컴파일이 안 된다), `k_rhs_is_stmt_effect_family` 와
+`compute_suspendable_tasks` 가 그것을 쓴다. `is_codegen_able` 만 **그 목록을 손으로 다시 적고 있었고**, seeded `$dist_*`
+7개 중 `DistUniform` 하나만 담고 있었다. `v = $dist_normal(seed,…)` 는 VM 으로 컴파일돼 **시드를 되쓰지 않았고**, 이후
+모든 draw 가 첫 값을 반복했다 — 같은 프로그램의 `$dist_uniform` 은 맞았기 때문에 RNG 특성처럼 보였다.
+→ 손복사본을 지우고 정본을 호출. 차이는 **정확히 하나**(`$sformatf`)이고 그 이유를 주석에 박았다: 정본이 답하는 질문은
+"프레임 실행기가 이걸 할 수 있나"이고 프레임 경로에는 전용 intercept 가 있다 — VM 에는 없다.
+
+**결과.** 39건(18 타깃) → 24건(5 타깃) → **0**. 전 워크스페이스 스위트가 `Backend::Bytecode` 를 default 로 두고 통과한다.
+default 를 실제로 뒤집을지는 별개의 오너 판정으로 남긴다(성능·기본 동작 변경).
+
+**게이트를 non-vacuous 로.** P5 corpus 에 생성기가 만들 수 없는 hand shape 를 추가(`backend_equiv.rs::HAND_SHAPES`) ·
+CLI 레벨 핀 5개(`backend_flag.rs`) — 라이브러리 하네스는 사이드카를 만들지 않으므로 그 절반은 **거기서는 공허하게 통과한다** ·
+`backend.rs` 단위 핀 2개(seeded `$dist_*` 7종 전부 + `$sformatf` 델타 + `class_new_sites`). 각 핀은 게이트를 끄고 실패를 확인했다.
+
+**교훈.** ① 분류기가 실행기의 판단을 **복사**하면 반드시 표류한다 — 정본을 호출해라(§4.5.276 과 같은 뿌리, 이번엔 두 번). ②
+공유 헬퍼를 재사용해도 **호출자 쪽 전제조건은 따라오지 않는다**(`try_compile` 의 타입 계약은 호출자에게 있었다). ③
+게이트의 힘은 게이트 코드가 아니라 **그 안의 모양**이 정한다 — 이번 세션 다섯 번째. ④ default 를 뒤집어 전 스위트를 돌리는
+것은 72 디자인 differential 보다 **압도적으로 강한** 측정이고, 비용은 한 줄 + 10분이다.
 
 #### 4.5.278 외부 round-23 — 분류기가 호출의 copy-out 목적지를 아예 안 보고 있었다 (2026-07-31, branch feat-r23-report, format 26 불변) ✅
 

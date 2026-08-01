@@ -2,6 +2,39 @@
 
 use super::*;
 
+/// Per-body PROLOGUE: the `SimState` fields that say WHICH process is running.
+///
+/// Shared by both executors on purpose. It used to be inline here, and `vm_run_body`
+/// carried a hand-copied excerpt of it — which copied ONE of the three assignments.
+/// The two that were dropped were both silently observable: `%m` in a submodule
+/// rendered the LAST scope set by any other process (`tb` instead of `tb.u1`), and a
+/// `$time`/`$realtime` in a module with its own `timescale` precision rendered at
+/// whatever precision ran previously. Neither raised a diagnostic.
+///
+/// A prologue that two executors must agree on is not something to copy — one funnel,
+/// called from both, so the next field added here cannot reach only one of them.
+pub(crate) fn enter_body(st: &mut crate::state::SimState<'_>, tmpl: usize) {
+    // $time/$realtime evaluated in this process scale by its module multiplier.
+    st.cur_time_mult = st.proc_multipliers.get(tmpl).copied().unwrap_or(1).max(1);
+    st.cur_prec_mult = st.proc_prec_mults.get(tmpl).copied().unwrap_or(1).max(1);
+    // `%m` scope of this process (P2-11); flat "top" when no sidecar. Skip the
+    // String alloc when the scope is already current (the common case for a
+    // process resumed many times) — `clone_from` reuses capacity otherwise.
+    match st.proc_scopes.get(tmpl) {
+        Some(s) => {
+            if &st.cur_scope != s {
+                st.cur_scope.clone_from(s);
+            }
+        }
+        None => {
+            if st.cur_scope != "top" {
+                st.cur_scope.clear();
+                st.cur_scope.push_str("top");
+            }
+        }
+    }
+}
+
 pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
     let mut guard: u64 = 0;
     loop {
@@ -77,37 +110,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
         // Snapshot the block's stmt ids + terminator (process-local indexing,
         // resolved through this activity's template).
         let tmpl = sched.activity_template(pi) as usize;
-        // $time/$realtime evaluated in this process scale by its module multiplier.
-        sched.st.cur_time_mult = sched
-            .st
-            .proc_multipliers
-            .get(tmpl)
-            .copied()
-            .unwrap_or(1)
-            .max(1);
-        sched.st.cur_prec_mult = sched
-            .st
-            .proc_prec_mults
-            .get(tmpl)
-            .copied()
-            .unwrap_or(1)
-            .max(1);
-        // `%m` scope of this process (P2-11); flat "top" when no sidecar. Skip the
-        // String alloc when the scope is already current (the common case for a
-        // process resumed many times) — `clone_from` reuses capacity otherwise.
-        match sched.st.proc_scopes.get(tmpl) {
-            Some(s) => {
-                if &sched.st.cur_scope != s {
-                    sched.st.cur_scope.clone_from(s);
-                }
-            }
-            None => {
-                if sched.st.cur_scope != "top" {
-                    sched.st.cur_scope.clear();
-                    sched.st.cur_scope.push_str("top");
-                }
-            }
-        }
+        enter_body(sched.st, tmpl);
         // `ir` is `&'ir SimIr` (shared, outliving this `&mut sched` borrow), so the
         // block's stmt list and terminator are read IN PLACE. The previous
         // `stmts.clone()`/`term.clone()`/per-stmt `Stmt::clone()` allocated on every

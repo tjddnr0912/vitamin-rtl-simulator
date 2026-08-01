@@ -131,12 +131,37 @@ pub(crate) fn const_pow_exponent(ir: &SimIr, eid: u32) -> Option<u32> {
     }
 }
 
+/// Per-net "the native path must not read this" flags, from the IR alone.
+///
+/// A POSITIVE allow-list of net kinds whose read yields a plain 4-state integer
+/// vector. Everything else — `Real` (an f64 in `is_real` disguise), `String` and the
+/// heap-handle aggregates (`DynArray`/`Queue`/`Assoc`/`AssocStr`) — is ineligible.
+///
+/// The engine ORs in the sidecar-only cases on top of this (`SimState::native_ineligible`):
+/// a class-handle net or a `real r[]`/`string s[]` element handle is flagged out of band,
+/// so its declared kind cannot be trusted to reveal it.
+pub(crate) fn ineligible_nets(ir: &SimIr) -> Vec<bool> {
+    ir.nets
+        .iter()
+        .map(|n| {
+            !matches!(
+                n.kind,
+                sim_ir::NetKind::Wire
+                    | sim_ir::NetKind::Reg
+                    | sim_ir::NetKind::Logic
+                    | sim_ir::NetKind::Integer
+            )
+        })
+        .collect()
+}
+
 /// Try to compile `eid` evaluated in context `(ctx_width, ctx_signed)` — the SAME
 /// context `eval_for_lvalue` passes (`ctx_width = max(lvalue_w, self_w(rhs))`,
 /// `ctx_signed = rhs self-sign`). `None` ⇒ outside the supported subset ⇒ fall back.
 pub(crate) fn try_compile(
     ir: &SimIr,
     wt: &WidthTable,
+    nonint: &[bool],
     eid: u32,
     ctx_width: u32,
     ctx_signed: bool,
@@ -147,7 +172,7 @@ pub(crate) fn try_compile(
         return None;
     }
     let mut ops = Vec::new();
-    lower(ir, wt, eid, ctx_width, ctx_signed, &mut ops)?;
+    lower(ir, wt, nonint, eid, ctx_width, ctx_signed, &mut ops)?;
     // P3-5: verify the post-order program fits BOTH fixed run-time stacks.
     let (mut nbal, mut wbal): (u32, u32) = (0, 0);
     let (mut nmax, mut wmax): (u32, u32) = (0, 0);
@@ -187,6 +212,7 @@ pub(crate) fn try_compile(
 pub(crate) fn lower(
     ir: &SimIr,
     wt: &WidthTable,
+    nonint: &[bool],
     eid: u32,
     ctx_width: u32,
     ctx_signed: bool,
@@ -219,24 +245,36 @@ pub(crate) fn lower(
             Some(())
         }
         Expr::Signal { net, word } => {
+            // NATIVE-TYPE GUARD. A native register is a bare `(val, unk)` word pair
+            // and the consumer rebuilds a plain integer `Value` — the program
+            // structurally CANNOT carry `is_real`/`is_str`, nor a heap handle. So a
+            // net whose read yields a real, a string, a class handle or a heap
+            // aggregate loses exactly the flag the write path dispatches on:
+            // `write_lvalue`'s real→int rounding and the `NetKind::String` byte-strip
+            // lane both key off it. Measured consequences of not having this guard:
+            // `assign w = r;` (real→64-bit wire) printed the raw IEEE bit pattern
+            // 4613374868287651840 where iverilog and the interpreter print 3, and
+            // `s = files[0];` truncated the string to ONE bit (`"a"` = 0x61 → 0x01).
+            // A class field read is `Signal { word: Some(field_id) }`, where the
+            // funnel below would treat the FIELD id as an ARRAY index.
+            //
+            // `nonint` is a positive allow-list (plain integral net kinds, minus every
+            // net an out-of-band sidecar has since re-flagged as real / string-element
+            // / class or dyn handle), not a deny-list: a net kind or sidecar added
+            // later is ineligible until someone measures it, and out-of-range is
+            // ineligible too. Ineligible only means "evaluate on the interpreter",
+            // which is the reference path — never a diagnostic, never a wrong value.
+            if nonint.get(*net as usize).copied().unwrap_or(true) {
+                return None;
+            }
             if let Some(weid) = word {
-                // v5 ⑤/v6: assoc keys are SIGNED-i64 (or byte-string) domain
-                // — the u32 LoadIndexed funnel cannot carry them (a negative
-                // key would sentinel to X while the interpreter reads the
-                // element). Stay oracle-bound (eval_ctx fallback).
-                if matches!(
-                    ir.nets.get(*net as usize).map(|n| n.kind),
-                    Some(sim_ir::NetKind::Assoc | sim_ir::NetKind::AssocStr)
-                ) {
-                    return None;
-                }
                 // dynamic array-word read: index is SELF-determined (oracle
                 // `self.eval(weid)`); a wide index stays oracle-bound.
                 let iw = wt.get(*weid).width;
                 if iw == 0 || iw > 64 {
                     return None;
                 }
-                lower(ir, wt, *weid, 0, true, ops)?;
+                lower(ir, wt, nonint, *weid, 0, true, ops)?;
                 ops.push(if wide {
                     NOp::WLoadIndexed {
                         net: *net,
@@ -269,9 +307,9 @@ pub(crate) fn lower(
         }
         Expr::Unary { op, operand } => match op {
             // context-determined unary: propagate (w, eff_signed) into the operand.
-            UnOp::Plus => lower(ir, wt, *operand, w, eff_signed, ops), // passthrough
+            UnOp::Plus => lower(ir, wt, nonint, *operand, w, eff_signed, ops), // passthrough
             UnOp::Minus => {
-                lower(ir, wt, *operand, w, eff_signed, ops)?;
+                lower(ir, wt, nonint, *operand, w, eff_signed, ops)?;
                 ops.push(if wide {
                     NOp::WNeg { w }
                 } else {
@@ -280,7 +318,7 @@ pub(crate) fn lower(
                 Some(())
             }
             UnOp::BitNot => {
-                lower(ir, wt, *operand, w, eff_signed, ops)?;
+                lower(ir, wt, nonint, *operand, w, eff_signed, ops)?;
                 ops.push(if wide {
                     NOp::WNot { w }
                 } else {
@@ -294,7 +332,7 @@ pub(crate) fn lower(
             // the register's upper bits are already 0 and parents mask).
             UnOp::LogNot => {
                 let opw = wt.get(*operand).width;
-                lower(ir, wt, *operand, 0, true, ops)?;
+                lower(ir, wt, nonint, *operand, 0, true, ops)?;
                 ops.push(if opw > 64 {
                     NOp::WLogNot { opw }
                 } else {
@@ -310,7 +348,7 @@ pub(crate) fn lower(
             | UnOp::RedXor
             | UnOp::RedXnor => {
                 let opw = wt.get(*operand).width;
-                lower(ir, wt, *operand, 0, true, ops)?;
+                lower(ir, wt, nonint, *operand, 0, true, ops)?;
                 let (kind, neg) = match op {
                     UnOp::RedAnd => (RedK::And, false),
                     UnOp::RedNand => (RedK::And, true),
@@ -340,8 +378,8 @@ pub(crate) fn lower(
                     }
                     let cmp_wide = cmp_w > 64;
                     let pair_signed = wt.get(*lhs).signed && wt.get(*rhs).signed;
-                    lower(ir, wt, *lhs, cmp_w, pair_signed, ops)?;
-                    lower(ir, wt, *rhs, cmp_w, pair_signed, ops)?;
+                    lower(ir, wt, nonint, *lhs, cmp_w, pair_signed, ops)?;
+                    lower(ir, wt, nonint, *rhs, cmp_w, pair_signed, ops)?;
                     let cmp = |kind| {
                         if cmp_wide {
                             NOp::WCmp {
@@ -392,8 +430,8 @@ pub(crate) fn lower(
                     if lw > 64 || rw > 64 {
                         return None;
                     }
-                    lower(ir, wt, *lhs, 0, true, ops)?;
-                    lower(ir, wt, *rhs, 0, true, ops)?;
+                    lower(ir, wt, nonint, *lhs, 0, true, ops)?;
+                    lower(ir, wt, nonint, *rhs, 0, true, ops)?;
                     ops.push(NOp::LogBin {
                         and: matches!(op, B::LogAnd),
                         lw,
@@ -408,8 +446,8 @@ pub(crate) fn lower(
                     if wt.get(*rhs).width > 64 {
                         return None;
                     }
-                    lower(ir, wt, *lhs, w, eff_signed, ops)?;
-                    lower(ir, wt, *rhs, 0, true, ops)?;
+                    lower(ir, wt, nonint, *lhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *rhs, 0, true, ops)?;
                     ops.push(if wide {
                         NOp::WShl { w }
                     } else {
@@ -421,8 +459,8 @@ pub(crate) fn lower(
                     if wt.get(*rhs).width > 64 {
                         return None;
                     }
-                    lower(ir, wt, *lhs, w, eff_signed, ops)?;
-                    lower(ir, wt, *rhs, 0, true, ops)?;
+                    lower(ir, wt, nonint, *lhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *rhs, 0, true, ops)?;
                     ops.push(if wide {
                         NOp::WShr { w, arith: false }
                     } else {
@@ -438,8 +476,8 @@ pub(crate) fn lower(
                         return None;
                     }
                     let lhs_signed = wt.get(*lhs).signed;
-                    lower(ir, wt, *lhs, w, lhs_signed, ops)?;
-                    lower(ir, wt, *rhs, 0, true, ops)?;
+                    lower(ir, wt, nonint, *lhs, w, lhs_signed, ops)?;
+                    lower(ir, wt, nonint, *rhs, 0, true, ops)?;
                     ops.push(if wide {
                         NOp::WShr {
                             w,
@@ -459,8 +497,8 @@ pub(crate) fn lower(
                     if wide && eff_signed {
                         return None;
                     }
-                    lower(ir, wt, *lhs, w, eff_signed, ops)?;
-                    lower(ir, wt, *rhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *lhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *rhs, w, eff_signed, ops)?;
                     let kind = if matches!(op, B::Div) {
                         DivKind::Div
                     } else {
@@ -491,9 +529,9 @@ pub(crate) fn lower(
                     if eff_signed || (w as u128) * (n as u128) > 128 {
                         return None;
                     }
-                    lower(ir, wt, *lhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *lhs, w, eff_signed, ops)?;
                     for _ in 1..n {
-                        lower(ir, wt, *lhs, w, eff_signed, ops)?;
+                        lower(ir, wt, nonint, *lhs, w, eff_signed, ops)?;
                         ops.push(if wide {
                             NOp::WArith {
                                 kind: ArithKind::Mul,
@@ -516,8 +554,8 @@ pub(crate) fn lower(
                         return None;
                     }
                     // ARITHMETIC + BITWISE: BOTH operands at (w, eff_signed).
-                    lower(ir, wt, *lhs, w, eff_signed, ops)?;
-                    lower(ir, wt, *rhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *lhs, w, eff_signed, ops)?;
+                    lower(ir, wt, nonint, *rhs, w, eff_signed, ops)?;
                     ops.push(match (class, wide) {
                         (BinClass::Arith(kind), false) => NOp::Arith { kind, w },
                         (BinClass::Arith(kind), true) => NOp::WArith { kind, w },
@@ -540,9 +578,9 @@ pub(crate) fn lower(
             if !wide && cond_w > 64 {
                 return None;
             }
-            lower(ir, wt, *cond, 0, true, ops)?;
-            lower(ir, wt, *then_e, w, eff_signed, ops)?;
-            lower(ir, wt, *else_e, w, eff_signed, ops)?;
+            lower(ir, wt, nonint, *cond, 0, true, ops)?;
+            lower(ir, wt, nonint, *then_e, w, eff_signed, ops)?;
+            lower(ir, wt, nonint, *else_e, w, eff_signed, ops)?;
             ops.push(if wide {
                 NOp::WTernary {
                     w,
@@ -581,8 +619,8 @@ pub(crate) fn lower(
             if wt.get(*offset).width > 64 {
                 return None;
             }
-            lower(ir, wt, *base, 0, true, ops)?; // oracle: self.eval(base)
-            lower(ir, wt, *offset, 0, true, ops)?; // oracle: self.eval(offset)
+            lower(ir, wt, nonint, *base, 0, true, ops)?; // oracle: self.eval(base)
+            lower(ir, wt, nonint, *offset, 0, true, ops)?; // oracle: self.eval(offset)
             let base_wide = src_w > 64;
             let out_wide = sel_w > 64;
             if !base_wide && !out_wide {
@@ -613,7 +651,7 @@ pub(crate) fn lower(
             if tot == 0 || tot > 128 {
                 return None;
             }
-            lower(ir, wt, first, 0, true, ops)?;
+            lower(ir, wt, nonint, first, 0, true, ops)?;
             for &p in rest {
                 let pw = wt.get(p).width;
                 if pw == 0 || pw > 128 {
@@ -621,7 +659,7 @@ pub(crate) fn lower(
                 }
                 let acc_wide = tot > 64; // where the RUNNING acc lives
                 tot = tot.checked_add(pw).filter(|&t| t <= 128)?;
-                lower(ir, wt, p, 0, true, ops)?;
+                lower(ir, wt, nonint, p, 0, true, ops)?;
                 if tot <= 64 {
                     ops.push(NOp::ConcatPair { lo_w: pw, w: tot });
                 } else {
@@ -652,7 +690,7 @@ pub(crate) fn lower(
                 return None;
             }
             let total = part_w.checked_mul(count).filter(|&t| t <= 128)?;
-            lower(ir, wt, *value, 0, true, ops)?;
+            lower(ir, wt, nonint, *value, 0, true, ops)?;
             if total <= 64 {
                 ops.push(NOp::Repl {
                     part_w,

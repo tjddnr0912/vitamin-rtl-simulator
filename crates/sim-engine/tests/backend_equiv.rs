@@ -956,3 +956,81 @@ fn leaf_fast_path_matches_read_net() {
         );
     }
 }
+
+/// Shapes the GENERATED corpus cannot produce — pinned by hand, both backends.
+///
+/// The corpus above is nine parameterised templates of arithmetic, clocking and
+/// structure. That is a fine sweep of the expression lowering and a poor sweep of
+/// everything else, and "72 designs agree" reads like far broader coverage than it is.
+/// Running the whole workspace suite with the backend default flipped to `Bytecode`
+/// turned up 39 failures across 18 targets that this gate was green through — every one
+/// of them a shape no template emits.
+///
+/// Two roots, both landed with this test:
+///
+/// 1. NON-INTEGRAL VALUES. A native program's register is a `(val, unk)` word pair, so
+///    it cannot carry `is_real`/`is_str`/a heap handle, and `try_compile` had no type
+///    test — only a width test. A real read delivered its raw IEEE-754 bits as an
+///    integer; a `string` destination has net width 0, so `lvalue_width().max(1)` handed
+///    the compiler a ONE-BIT context and `"a"` (0x61) became the single bit 1.
+/// 2. THE PER-BODY PROLOGUE. `vm_run_body` carried a hand-copied excerpt of
+///    `run_process`'s prologue that set `cur_time_mult` and neither `cur_prec_mult` nor
+///    the `%m` scope — so a submodule `$display("%m")` rendered whatever scope ran last.
+///
+/// Each entry is a shape, not a regression note: keep them here so the gate stays
+/// non-vacuous for the class rather than for the four bugs that revealed it.
+///
+/// `cur_prec_mult`, the prologue's third field, is pinned in `cli/tests/backend_flag.rs`
+/// instead: it needs per-module `timescale`, and this harness calls `elaborate` directly
+/// without the preprocessor, so the directive would not even parse here.
+const HAND_SHAPES: &[(&str, &str)] = &[
+    (
+        "real_and_string_values",
+        "module t;\n\
+           real r = 2.75, q;\n\
+           string s = \"hi\", s2;\n\
+           int i;\n\
+           initial begin\n\
+             q = r;   $display(\"q=%0f\", q);\n\
+             i = r;   $display(\"i=%0d\", i);\n\
+             s2 = s;  $display(\"s2=[%s]\", s2);\n\
+           end\n\
+         endmodule\n",
+    ),
+    (
+        "real_continuous_assign",
+        "module t;\n\
+           real r = 2.75;\n\
+           wire [63:0] w;\n\
+           assign w = r;\n\
+           initial #1 $display(\"w=%0d\", w);\n\
+         endmodule\n",
+    ),
+    (
+        "submodule_percent_m",
+        "module sub;\n\
+           initial $display(\"in %m\");\n\
+         endmodule\n\
+         module t;\n\
+           sub u1();\n\
+           initial begin $display(\"at %m\"); #1 $finish; end\n\
+         endmodule\n",
+    ),
+];
+
+#[test]
+fn hand_written_shapes_agree_across_backends() {
+    for (name, src) in HAND_SHAPES {
+        let ir = build(src);
+        let (ri, oi, _) = run_capture(&ir, Backend::Interpreter, name);
+        let (rb, ob, _) = run_capture(&ir, Backend::Bytecode, name);
+        assert_eq!(oi, ob, "stdout differs across backends for `{name}`");
+        assert_eq!(ri.sim_time, rb.sim_time, "sim_time differs for `{name}`");
+        assert_eq!(
+            ri.finish_reason, rb.finish_reason,
+            "finish_reason differs for `{name}`"
+        );
+        // Not vacuous: each shape must actually have printed something.
+        assert!(!oi.trim().is_empty(), "`{name}` produced no transcript");
+    }
+}

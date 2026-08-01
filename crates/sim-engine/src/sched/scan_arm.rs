@@ -448,6 +448,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // refuses (delayed, impure RHS, heap-handle dependency) lands in `ca_always`, as
         // does every multi-driver member, whose value comes from the resolution below
         // rather than from its own RHS.
+        // NATIVE-TYPE GUARD: fill the per-net eligibility bitset BEFORE the `heap`
+        // closure takes its immutable borrow of `st` (the fill needs `&mut self` to
+        // memoize).
+        let ca_nonint = st.native_ineligible();
         let heap = |net: u32| -> bool {
             let i = net as usize;
             st.dyn_is_handle.get(i).copied().unwrap_or(false)
@@ -477,6 +481,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 crate::native_eval::try_compile(
                     st.ir,
                     &st.wt,
+                    &ca_nonint,
                     c.rhs,
                     ctx_w,
                     st.wt.get(c.rhs).signed,
@@ -932,10 +937,12 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// confirmed this body is suspend-free; `body` is its compiled form, handed in as an
     /// owned `Rc` so this `&mut self` kernel call cannot alias the cache (§2.3).
     ///
-    /// The VM bypasses `run_process` — the SOLE writer of `cur_time_mult` — so the
-    /// PROLOGUE sets it from THIS process's module multiplier exactly as exec.rs:80-87
-    /// does, before `vm_exec` evaluates any `$time`/`$realtime`. The per-activation
-    /// termination guard then lives inside `vm_exec` (mirror of exec.rs:176-180).
+    /// The VM bypasses `run_process`, which is where the per-body prologue lives, so it
+    /// calls the SAME `exec::enter_body` before `vm_exec` evaluates anything. It used to
+    /// carry a hand-copied excerpt that set `cur_time_mult` only; `cur_prec_mult` and the
+    /// `%m` scope were missing, so a submodule `$display("%m")` printed whatever scope
+    /// another process had left behind. The per-activation termination guard lives inside
+    /// `vm_exec` (mirror of exec.rs:176-180).
     pub(crate) fn vm_run_body(
         &mut self,
         proc: u32,
@@ -943,13 +950,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         block: u32,
         body: Rc<crate::backend::CompiledBody>,
     ) -> Step {
-        self.st.cur_time_mult = self
-            .st
-            .proc_multipliers
-            .get(tmpl)
-            .copied()
-            .unwrap_or(1)
-            .max(1);
+        crate::exec::enter_body(self.st, tmpl);
         // VM-REGPOOL: lease the register/offset files from the pool, sized to this
         // body, and return them afterwards (a `pop` yields an OWNED buffer, so it no
         // longer borrows `self` and cannot alias the `&mut self` kernel call).

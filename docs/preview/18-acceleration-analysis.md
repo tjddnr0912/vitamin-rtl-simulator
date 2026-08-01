@@ -558,3 +558,61 @@ W≤8 소형 바디 ≤1.6x~손해, **W=1(corpus의 테스트벤치형 전부)�
   Amdahl+머지 상수가 잠식. 진입 시 위 스케치 + T1식 byte-diff 게이트가 출발점.
 
 향후 과제·전략 결정(VM 동결 vs native-eval vs 인프라)은 [`../ROADMAP.md`](../ROADMAP.md).
+
+---
+
+## 리전 재측정 (2026-08-01) + 그 위에서 나온 등가성 판정
+
+### ⚠️ 앞선 리전 수치 정정
+
+이 문서의 이전 리전 수치는 **바디마다 `Instant::now()` 두 번**을 찍는 계측으로 얻은 것이라 부풀려져 있다 —
+`bodies = 3762 ms` 라고 적힌 런의 **비계측 wall-clock 은 1234 ms** 였다. 활성화 240만 회에 타임스탬프 480만 개는
+작은 관측자 효과가 아니다. 아래 표가 정본이며 이전 수치를 대체한다(리전 타이머는 델타당 1회 호출 수준으로 옮기고,
+합계는 비계측 런과 대조했다).
+
+picorv32 + testbench, 40000 cycle, release, best-of-7:
+
+| region | interp | vm | 백엔드가 닿나 |
+|---|---|---|---|
+| bodies | 762.8 ms (67%) | 432.7 ms (53%) | ✅ 1.76x |
+| nba    | 112.1 ms | 113.4 ms | ❌ |
+| settle | 105.8 ms | 105.1 ms | ✅ `ca_native`(양쪽 백엔드) |
+| prop   |  33.5 ms |  33.2 ms | ❌ |
+| **총** | **1140 ms** | **810 ms** | |
+
+미계상 ~126 ms = parse + elaborate + 프로세스 시작. 40000 cycle 런의 11% 이고, 짧은 런에서는 지배적이지만
+**시뮬레이션 속도 레버는 아니다**.
+
+### iverilog 대조 (같은 설계)
+
+| | compile | run | total |
+|---|---|---|---|
+| iverilog 13 | 0.03 s | 0.85 s | **0.88 s** |
+| vita `--backend interp` | (in-process) | | 1.14 s |
+| vita `--backend vm` | (in-process) | | **0.81 s** |
+
+### `apply_nba` 분해 (다음 후보)
+
+117 ms / 2,474,446 update / 39,999 flush:
+
+| | ms | |
+|---|---|---|
+| `write_lvalue` | 77.7 | whole-net 쓰기 1건당 31 ns |
+| **drop** | **25.8** | update 당 1-element `Vec<LvalChunk>` 해제 — **free 쪽만** |
+| sort | 3.4 | 배치는 거의 정렬된 상태로 도착 |
+
+update 의 **99.5%**(2,463,015 / 2,474,446)가 단일 chunk whole-net 쓰기(`word/offset/width` 전부 `None`)이고
+힙 `Value` 는 **0건**. 그런데 전부 push 때 `Vec` 을 할당하고 apply 때 해제한다. (미착수 — 설계만 기록.)
+
+### 그 위에서 나온 등가성 판정 — §4.5.279
+
+`bodies` 가 67% 이고 VM 이 그것을 1.76x 로 만든다는 것은, **가장 큰 남은 레버가 새 코드가 아니라 VM 을 기본값으로
+만드는 것**이라는 뜻이다. 그 전제를 실제로 검증하려고 `Backend` 의 `#[default]` 를 뒤집고 전 스위트를 돌렸더니
+**18 타깃 39건**이 실패했다 — P5 게이트(72 디자인)는 그 전부를 초록으로 통과하고 있었다.
+
+뿌리 넷(타입 게이트 부재 · prologue 표류 · StmtId 사이드테이블 · intercept 손복사본)과 수정·핀은
+[ROADMAP_ARCHIVE §4.5.279](../ROADMAP_ARCHIVE.md)에 있다. 수정 후 **39 → 24 → 0**: 전 워크스페이스 스위트가
+`Backend::Bytecode` 를 default 로 두고 통과한다. 실제로 default 를 뒤집을지는 별개의 오너 판정으로 남는다.
+
+**측정 방법론상의 결론**: `--backend` 두 값으로 corpus 를 도는 differential 보다, **default 를 뒤집고 전 스위트를 도는 것**이
+압도적으로 강하다. 비용은 한 줄 + 10분이고, 후자만이 5035개 테스트가 이미 인코딩해 둔 모양 전부를 동원한다.

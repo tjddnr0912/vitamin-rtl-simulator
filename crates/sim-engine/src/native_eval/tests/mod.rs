@@ -78,7 +78,7 @@ fn assert_matches_oracle_on(
         };
         ctx.eval_ctx(eid, ctx_w, ctx_signed)
     };
-    let prog = try_compile(ir, &wt, eid, ctx_w, ctx_signed)
+    let prog = try_compile(ir, &wt, &ineligible_nets(ir), eid, ctx_w, ctx_signed)
         .expect("expression must be native-compilable in this test");
     let native = run(&prog, fake);
     assert_eq!(

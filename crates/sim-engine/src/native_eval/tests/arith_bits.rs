@@ -96,7 +96,7 @@ fn pow_uncompilable_cases_bail_to_oracle() {
             vec![nv(w, signed), nv(w, false)],
         );
         let wt = WidthTable::build(&ir, &wt_none);
-        try_compile(&ir, &wt, 2, w, signed).is_some()
+        try_compile(&ir, &wt, &ineligible_nets(&ir), 2, w, signed).is_some()
     };
     // a ** 0 : oracle X-poisons an X base, but a Const-1 would say 1.
     assert!(
@@ -192,7 +192,7 @@ fn over_128_bits_is_not_native_compilable() {
         vec![nv(200, false), nv(200, false)],
     );
     let wt = WidthTable::build(&ir, &crate::FuncTable::new());
-    assert!(try_compile(&ir, &wt, 2, 200, false).is_none());
+    assert!(try_compile(&ir, &wt, &ineligible_nets(&ir), 2, 200, false).is_none());
 }
 
 #[test]
@@ -212,7 +212,7 @@ fn unsupported_operator_bails() {
         vec![nv(32, false)],
     );
     let wt = WidthTable::build(&ir, &crate::FuncTable::new());
-    assert!(try_compile(&ir, &wt, 2, 64, false).is_none());
+    assert!(try_compile(&ir, &wt, &ineligible_nets(&ir), 2, 64, false).is_none());
 }
 
 #[test]

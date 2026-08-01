@@ -55,7 +55,12 @@ use crate::width::WidthTable;
 ///
 /// Anything not on the allow-list falls back to the interpreter, so an unknown or
 /// future terminator/statement variant is safe by default.
-pub(crate) fn is_codegen_able(stmts: &[Stmt], exprs: &[Expr], body: &[BasicBlock]) -> bool {
+pub(crate) fn is_codegen_able(
+    stmts: &[Stmt],
+    exprs: &[Expr],
+    body: &[BasicBlock],
+    class_new_sites: &std::collections::BTreeMap<u32, u32>,
+) -> bool {
     body.iter().all(|block| {
         let term_ok = match block.term {
             Terminator::Goto { .. } | Terminator::Return => true,
@@ -64,63 +69,49 @@ pub(crate) fn is_codegen_able(stmts: &[Stmt], exprs: &[Expr], body: &[BasicBlock
             _ => false,
         };
         let stmts_ok = block.stmts.iter().all(|&sid| {
-            // v5 ④ pops + v6 assoc-iteration calls: both WRITE state from an
-            // rhs position (queue shrink / ref key arg), so both are
-            // statement-level intercepts the VM's pure EvalForLval funnel
-            // cannot reproduce — interpreter-only.
-            let pop_rhs = matches!(
-                &stmts[sid as usize],
-                Stmt::BlockingAssign { rhs, .. } if matches!(
-                    exprs.get(*rhs as usize),
-                    Some(Expr::SysFunc {
-                        which: SysFuncId::QPopBack
-                            | SysFuncId::QPopFront
-                            | SysFuncId::AssocFirst
-                            | SysFuncId::AssocNext
-                            | SysFuncId::AssocLast
-                            | SysFuncId::AssocPrev,
-                        ..
-                    })
-                )
-            );
-            // v7: a SEEDED $random rhs writes the seed variable back, and
-            // $value$plusargs writes its ref var — the same statement-level
-            // intercept family (the NO-ARG $random form stays codegen-able:
-            // the draw rides the shared eval kernel).
-            let seeded_random_rhs = matches!(
-                &stmts[sid as usize],
-                Stmt::BlockingAssign { rhs, .. } if matches!(
-                    exprs.get(*rhs as usize),
-                    Some(Expr::SysFunc { which: SysFuncId::Random, args }) if !args.is_empty()
-                )
-            );
-            let value_plusargs_rhs = matches!(
-                &stmts[sid as usize],
-                Stmt::BlockingAssign { rhs, .. } if matches!(
-                    exprs.get(*rhs as usize),
-                    Some(Expr::SysFunc {
-                        which: SysFuncId::ValuePlusargs
-                            | SysFuncId::Fopen
-                            | SysFuncId::Sformatf
-                            // v9 SYS-READ: the file-read family advances/mutates
-                            // fd state via a statement-level intercept — the VM's
-                            // pure EvalForLval funnel would X-poison them.
-                            | SysFuncId::Fgetc
-                            | SysFuncId::Feof
-                            | SysFuncId::Ungetc
-                            | SysFuncId::Fgets
-                            | SysFuncId::Fread
-                            | SysFuncId::Fscanf
-                            | SysFuncId::Sscanf
-                            // v9 rank 6: $dist_uniform writes the ref seed; $cast
-                            // writes the ref dst — both statement-level intercepts.
-                            | SysFuncId::DistUniform
-                            | SysFuncId::Cast,
-                        ..
-                    })
-                )
-            );
-            let pop_rhs = pop_rhs || seeded_random_rhs || value_plusargs_rhs;
+            // STATEMENT-LEVEL INTERCEPTS. `compute_effect` turns certain
+            // `BlockingAssign`s into something other than "evaluate rhs, write lhs" —
+            // a queue pop shrinks the queue, an assoc-iteration writes its ref key, a
+            // seeded `$random`/`$dist_*` writes the seed back, `$cast` writes its dst,
+            // the file family advances fd state. The VM's `EvalForLval` + `WriteLval`
+            // funnel reproduces none of that, so such a body stays on the interpreter.
+            //
+            // The membership question is answered by `sim_ir::rhs_is_stmt_effect`, the
+            // SAME predicate `k_rhs_is_stmt_effect_family` uses — not by a copy of it.
+            // This used to be a hand-written list here, and it had drifted: it named
+            // `DistUniform` and none of the other six seeded `$dist_*` ids, so
+            // `$dist_normal(seed, …)` compiled onto the VM, never wrote the seed back,
+            // and every subsequent draw repeated. That list is exhaustive with no `_`
+            // arm precisely so a new `SysFuncId` cannot default to the silent side;
+            // duplicating it here threw that guarantee away.
+            //
+            // ONE documented delta: `$sformatf`. The canonical predicate answers "can
+            // the &self FRAME executor run this", and it says yes for `$sformatf`
+            // because the frame path has its own intercept for it. The VM has no such
+            // intercept — `compute_effect` still routes it to `StmtEffect::Sformatf` —
+            // so it is excluded here and only here.
+            let effect_rhs = match &stmts[sid as usize] {
+                Stmt::BlockingAssign { rhs, .. } => {
+                    sim_ir::rhs_is_stmt_effect(exprs, *rhs)
+                        || matches!(
+                            exprs.get(*rhs as usize),
+                            Some(Expr::SysFunc {
+                                which: SysFuncId::Sformatf,
+                                ..
+                            })
+                        )
+                }
+                _ => false,
+            };
+            // N7 `c = new`: an allocation site is a plain `BlockingAssign` in the IR
+            // whose MEANING lives in a StmtId-keyed sidecar — `compute_effect` checks
+            // `class_new_sites` FIRST and never evaluates the placeholder rhs. Nothing
+            // in the statement itself reveals this, so an IR-only classifier cannot see
+            // it: the VM compiled the placeholder, the handle stayed X, and every later
+            // field write was dropped with a null-dereference warning while the run
+            // exited 0.
+            let class_new = class_new_sites.contains_key(&sid);
+            let pop_rhs = effect_rhs || class_new;
             // B1: any expr position that can REACH a frame Call excludes the body.
             let has_call = match &stmts[sid as usize] {
                 Stmt::BlockingAssign { rhs, .. } | Stmt::Force { rhs, .. } => {
@@ -191,7 +182,17 @@ pub fn codegen_coverage(ir: &SimIr) -> CodegenCoverage {
         codegen_able: ir
             .processes
             .iter()
-            .filter(|p| is_codegen_able(&ir.stmts, &ir.exprs, &p.body))
+            .filter(|p| {
+                // IR-only census: `class_new_sites` is a `SimOpts` sidecar this
+                // signature cannot reach, so a `c = new` body counts as codegen-able
+                // here and is refused at the real gate. Over-counts on class designs.
+                is_codegen_able(
+                    &ir.stmts,
+                    &ir.exprs,
+                    &p.body,
+                    &std::collections::BTreeMap::new(),
+                )
+            })
             .count(),
         total: ir.processes.len(),
     }
@@ -368,17 +369,18 @@ fn chunk_width_of(ir: &SimIr, c: &LvalChunk) -> u32 {
 /// kernel-delegating `EvalForLval`. The native and delegated paths are byte-identical
 /// (the P5 gate enforces it), so this choice never changes observable behaviour.
 fn eval_rhs_op(
-    native: Option<(&SimIr, &WidthTable)>,
+    native: Option<(&SimIr, &WidthTable, &[bool])>,
     lhs: &Lvalue,
     rhs: u32,
     dst: u32,
     li: u32,
     natives: &mut Vec<NativeProg>,
 ) -> Op {
-    if let Some((ir, wt)) = native {
+    if let Some((ir, wt, nonint)) = native {
         let ctx_w = lvalue_width_of(ir, lhs).max(wt.width(rhs));
         let ctx_signed = wt.signed(rhs);
-        if let Some(prog) = crate::native_eval::try_compile(ir, wt, rhs, ctx_w, ctx_signed) {
+        if let Some(prog) = crate::native_eval::try_compile(ir, wt, nonint, rhs, ctx_w, ctx_signed)
+        {
             let ni = natives.len() as u32;
             natives.push(prog);
             return Op::EvalNative { dst, native: ni };
@@ -390,7 +392,7 @@ fn eval_rhs_op(
 pub(crate) fn compile_body(
     stmts: &[Stmt],
     body: &[BasicBlock],
-    native: Option<(&SimIr, &WidthTable)>,
+    native: Option<(&SimIr, &WidthTable, &[bool])>,
 ) -> CompiledBody {
     let mut lvalues: Vec<Lvalue> = Vec::new();
     let mut arglists: Vec<Vec<u32>> = Vec::new();
@@ -453,13 +455,15 @@ pub(crate) fn compile_body(
                 // Self-width context: a condition is self-determined (§11.6.1 does not
                 // propagate a context width into it), which is exactly what the
                 // interpreter's `eval(cond)` produces before `truthiness`.
-                let native = native.and_then(|(ir, wt)| {
+                let native = native.and_then(|(ir, wt, nonint)| {
                     let w = wt.width(*cond).max(1);
-                    crate::native_eval::try_compile(ir, wt, *cond, w, wt.signed(*cond)).map(|p| {
-                        let ni = natives.len() as u32;
-                        natives.push(p);
-                        ni
-                    })
+                    crate::native_eval::try_compile(ir, wt, nonint, *cond, w, wt.signed(*cond)).map(
+                        |p| {
+                            let ni = natives.len() as u32;
+                            natives.push(p);
+                            ni
+                        },
+                    )
                 });
                 CompiledTerm::Branch {
                     cond: *cond,
@@ -612,10 +616,20 @@ pub fn native_eval_coverage(ir: &SimIr) -> (usize, usize) {
 /// decoder-shaped design actually spends its time.
 pub fn native_eval_coverage_split(ir: &SimIr) -> ((usize, usize), (usize, usize)) {
     let wt = crate::width::WidthTable::build(ir, &crate::FuncTable::new());
+    // IR-only view of the native type guard. A class-handle / real-or-string dyn-element
+    // net is flagged out of band (`SimState::native_ineligible`), so this census can only
+    // OVER-count those; it is a measurement, not a gate.
+    let nonint = crate::native_eval::ineligible_nets(ir);
     let (mut ok, mut total) = (0usize, 0usize);
     let (mut bok, mut btotal) = (0usize, 0usize);
     for p in &ir.processes {
-        if !is_codegen_able(&ir.stmts, &ir.exprs, &p.body) {
+        // IR-only census — see `codegen_coverage` on the `class_new_sites` caveat.
+        if !is_codegen_able(
+            &ir.stmts,
+            &ir.exprs,
+            &p.body,
+            &std::collections::BTreeMap::new(),
+        ) {
             continue;
         }
         for block in &p.body {
@@ -633,14 +647,18 @@ pub fn native_eval_coverage_split(ir: &SimIr) -> ((usize, usize), (usize, usize)
                     .map(|c| c.width.map_or(wt.width(rhs), |_| wt.width(rhs)))
                     .max()
                     .unwrap_or_else(|| wt.width(rhs));
-                if crate::native_eval::try_compile(ir, &wt, rhs, ctx_w, wt.signed(rhs)).is_some() {
+                if crate::native_eval::try_compile(ir, &wt, &nonint, rhs, ctx_w, wt.signed(rhs))
+                    .is_some()
+                {
                     ok += 1;
                 }
             }
             if let Terminator::Branch { cond, .. } = block.term {
                 btotal += 1;
                 let w = wt.width(cond).max(1);
-                if crate::native_eval::try_compile(ir, &wt, cond, w, wt.signed(cond)).is_some() {
+                if crate::native_eval::try_compile(ir, &wt, &nonint, cond, w, wt.signed(cond))
+                    .is_some()
+                {
                     bok += 1;
                 }
             }
@@ -690,7 +708,12 @@ mod tests {
             block(vec![0], Terminator::Goto { target: 0 }),
             block(vec![0], Terminator::Return),
         ];
-        assert!(is_codegen_able(&a, &[], &body));
+        assert!(is_codegen_able(
+            &a,
+            &[],
+            &body,
+            &std::collections::BTreeMap::new()
+        ));
     }
 
     #[test]
@@ -704,7 +727,12 @@ mod tests {
                 resume: 0,
             },
         )];
-        assert!(!is_codegen_able(&a, &[], &body));
+        assert!(!is_codegen_able(
+            &a,
+            &[],
+            &body,
+            &std::collections::BTreeMap::new()
+        ));
     }
 
     #[test]
@@ -721,7 +749,10 @@ mod tests {
             WaitCause::Fork,            // v8: wait fork — suspend-bearing, excluded
         ] {
             let body = vec![block(vec![], Terminator::Wait { cond, resume: 0 })];
-            assert!(!is_codegen_able(&a, &[], &body), "Wait must exclude");
+            assert!(
+                !is_codegen_able(&a, &[], &body, &std::collections::BTreeMap::new()),
+                "Wait must exclude"
+            );
         }
     }
 
@@ -736,7 +767,12 @@ mod tests {
                 resume_bb: 0,
             },
         )];
-        assert!(!is_codegen_able(&a, &[], &fork));
+        assert!(!is_codegen_able(
+            &a,
+            &[],
+            &fork,
+            &std::collections::BTreeMap::new()
+        ));
         let call = vec![block(
             vec![],
             Terminator::Call {
@@ -744,7 +780,12 @@ mod tests {
                 ret_bb: 0,
             },
         )];
-        assert!(!is_codegen_able(&a, &[], &call));
+        assert!(!is_codegen_able(
+            &a,
+            &[],
+            &call,
+            &std::collections::BTreeMap::new()
+        ));
     }
 
     /// B1 frame-call: a process body that REACHES an `Expr::Call` (a user
@@ -773,7 +814,12 @@ mod tests {
         }];
         let body = vec![block(vec![0], Terminator::Return)];
         assert!(
-            !is_codegen_able(&rhs_assign, &exprs, &body),
+            !is_codegen_able(
+                &rhs_assign,
+                &exprs,
+                &body,
+                &std::collections::BTreeMap::new()
+            ),
             "a frame Call nested in an RHS must exclude the body"
         );
 
@@ -787,7 +833,12 @@ mod tests {
             },
         )];
         assert!(
-            !is_codegen_able(&arena(), &exprs, &cond_body),
+            !is_codegen_able(
+                &arena(),
+                &exprs,
+                &cond_body,
+                &std::collections::BTreeMap::new()
+            ),
             "a frame Call in a Branch cond must exclude the body"
         );
 
@@ -798,7 +849,7 @@ mod tests {
             args: vec![1], // fact(n)
         }];
         assert!(
-            !is_codegen_able(&task, &exprs, &body),
+            !is_codegen_able(&task, &exprs, &body, &std::collections::BTreeMap::new()),
             "a frame Call in a $systask arg must exclude the body"
         );
 
@@ -808,7 +859,7 @@ mod tests {
             rhs: 2, // the Const
         }];
         assert!(
-            is_codegen_able(&no_call, &exprs, &body),
+            is_codegen_able(&no_call, &exprs, &body, &std::collections::BTreeMap::new()),
             "a Call-free body must stay codegen-able"
         );
     }
@@ -821,7 +872,12 @@ mod tests {
             block(vec![1], Terminator::Goto { target: 1 }),
             block(vec![0], Terminator::Return),
         ];
-        assert!(!is_codegen_able(&a, &[], &body));
+        assert!(!is_codegen_able(
+            &a,
+            &[],
+            &body,
+            &std::collections::BTreeMap::new()
+        ));
     }
 
     /// v5 ④: a BlockingAssign whose rhs is a queue pop (side-effecting
@@ -844,7 +900,7 @@ mod tests {
             }];
             let body = vec![block(vec![0], Terminator::Return)];
             assert!(
-                !is_codegen_able(&a, &exprs, &body),
+                !is_codegen_able(&a, &exprs, &body, &std::collections::BTreeMap::new()),
                 "{which:?} must exclude"
             );
         }
@@ -855,7 +911,7 @@ mod tests {
         }];
         let body = vec![block(vec![0], Terminator::Return)];
         assert!(
-            is_codegen_able(&push, &[], &body),
+            is_codegen_able(&push, &[], &body, &std::collections::BTreeMap::new()),
             "pushes stay codegen-able"
         );
     }
@@ -877,12 +933,112 @@ mod tests {
             ),
             block(vec![0], Terminator::Return),
         ];
-        assert!(!is_codegen_able(&a, &[], &body));
+        assert!(!is_codegen_able(
+            &a,
+            &[],
+            &body,
+            &std::collections::BTreeMap::new()
+        ));
     }
 
     /// [C2] The compile pass maps blocks 1:1 (P16 debugger correspondence) and lowers
     /// each terminator onto the P9 allow-list verbatim — checked WITHOUT running the VM
     /// (independent of the P5 differential gate, which proves *behaviour*).
+    /// The VM's intercept rule IS `sim_ir::rhs_is_stmt_effect`, plus exactly one
+    /// documented addition. This pins both halves.
+    ///
+    /// It used to be a hand-written copy of that list, and the copy had drifted: it
+    /// named `DistUniform` and none of the other six seeded `$dist_*` ids. A
+    /// `v = $dist_normal(seed, …)` body therefore compiled onto the VM, where the
+    /// `EvalForLval` funnel evaluates the rhs and writes the lhs and nothing writes
+    /// the SEED back — so every later draw repeated the first, silently, at exit 0.
+    ///
+    /// Written over the real `is_codegen_able` rather than over the predicate alone,
+    /// because the defect was in the classifier, not in the predicate.
+    #[test]
+    fn the_vm_intercept_rule_is_the_canonical_predicate_plus_sformatf() {
+        use sim_ir::SysFuncId as S;
+        // A seeded arg list (`args` non-empty) — what makes `$random`/`$dist_*`
+        // effectful. Expr 0 is the seed operand, expr 1 the call under test.
+        let seeded = |which: S| -> bool {
+            let exprs = vec![
+                Expr::Const { val: 0 },
+                Expr::SysFunc {
+                    which,
+                    args: vec![0],
+                },
+            ];
+            let stmts = vec![Stmt::BlockingAssign {
+                lhs: Lvalue { chunks: vec![] },
+                rhs: 1,
+            }];
+            let body = vec![BasicBlock {
+                stmts: vec![0],
+                term: Terminator::Return,
+            }];
+            is_codegen_able(&stmts, &exprs, &body, &std::collections::BTreeMap::new())
+        };
+
+        // Every seeded `$dist_*` is excluded — the six that the hand-written copy
+        // silently admitted, and the one it named.
+        for which in [
+            S::DistUniform,
+            S::DistNormal,
+            S::DistExponential,
+            S::DistPoisson,
+            S::DistChiSquare,
+            S::DistT,
+            S::DistErlang,
+            S::Random,
+        ] {
+            assert!(
+                !seeded(which),
+                "{which:?} writes its seed back and must not reach the VM"
+            );
+        }
+
+        // The one delta: `$sformatf` is `false` in the canonical predicate (the FRAME
+        // executor has its own intercept for it) but must still be excluded here,
+        // because the VM has none and `compute_effect` routes it to a `StmtEffect`.
+        assert!(
+            !sim_ir::sysfunc_is_stmt_effect(S::Sformatf, &[0]),
+            "canonical predicate changed its mind about $sformatf — re-check the VM"
+        );
+        assert!(!seeded(S::Sformatf), "$sformatf must not reach the VM");
+
+        // Not vacuous: a pure sysfunc rhs still compiles.
+        assert!(
+            seeded(S::Clog2),
+            "a pure sysfunc rhs must stay codegen-able"
+        );
+    }
+
+    /// `c = new` is a plain `BlockingAssign` in the IR whose meaning lives in the
+    /// StmtId-keyed `class_new_sites` sidecar, so an IR-only classifier cannot see it.
+    /// Compiled, the VM evaluated the placeholder rhs, the handle stayed X, and every
+    /// later field write was dropped at exit 0.
+    #[test]
+    fn a_class_new_site_is_not_codegen_able() {
+        let exprs = vec![Expr::Const { val: 0 }];
+        let stmts = vec![Stmt::BlockingAssign {
+            lhs: Lvalue { chunks: vec![] },
+            rhs: 0,
+        }];
+        let body = vec![BasicBlock {
+            stmts: vec![0],
+            term: Terminator::Return,
+        }];
+        assert!(
+            is_codegen_able(&stmts, &exprs, &body, &std::collections::BTreeMap::new()),
+            "without the sidecar this is an ordinary assign"
+        );
+        let sites: std::collections::BTreeMap<u32, u32> = [(0u32, 7u32)].into_iter().collect();
+        assert!(
+            !is_codegen_able(&stmts, &exprs, &body, &sites),
+            "the same statement, once `class_new_sites` claims it, must stay interpreted"
+        );
+    }
+
     #[test]
     fn compile_pass_maps_blocks_and_terminators_one_to_one() {
         let a = arena(); // stmt 0 = a blocking assign
@@ -898,7 +1054,12 @@ mod tests {
             block(vec![0], Terminator::Goto { target: 0 }),
             block(vec![0], Terminator::Return),
         ];
-        assert!(is_codegen_able(&a, &[], &body));
+        assert!(is_codegen_able(
+            &a,
+            &[],
+            &body,
+            &std::collections::BTreeMap::new()
+        ));
         let cb = compile_body(&a, &body, None);
 
         // 1:1 block count + per-index terminator mapping.
