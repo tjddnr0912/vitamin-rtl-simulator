@@ -1242,3 +1242,78 @@ struct QuietSink;
 impl LogSink for QuietSink {
     fn emit(&self, _e: LogEvent) {}
 }
+
+/// [B-OPS] Which operators does a REAL design actually use, and which of them can
+/// native-eval compile?
+///
+/// The benchmark suite in this file was written from the ops native-eval already
+/// supported — `EXPR_HEAVY` is a chain of `+`, `STRUCT_HEAVY` is select/concat/replicate.
+/// So it measured 1.9-2.8x while never exercising anything that bails. This counts the
+/// operators a real design contains instead.
+#[test]
+#[ignore = "operator census on bench/ designs; run with --ignored --nocapture"]
+fn perf_real_design_operator_census() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/picorv32");
+    let (Ok(tb), Ok(core)) = (
+        std::fs::read_to_string(dir.join("tb.v")),
+        std::fs::read_to_string(dir.join("picorv32.v")),
+    ) else {
+        println!("\n[B-OPS] bench/picorv32 absent — skipped");
+        return;
+    };
+    let pp = hdl_preprocess::preprocess_sources(
+        &dir,
+        &[("tb.v".into(), tb), ("picorv32.v".into(), core)],
+        &hdl_preprocess::PreOpts::default(),
+    );
+    let (toks, _) = hdl_lexer::lex(&pp.text);
+    let (su, _) = hdl_parser::parse(&toks, &pp.text);
+    let sink = QuietSink;
+    let (ir, _sc) = elaborate::elaborate_with_timescale_roots(
+        &su.expect("source unit"),
+        &sink,
+        &std::collections::BTreeMap::new(),
+        -9,
+        Some(&["tb".to_string()]),
+    );
+    let ir = ir.expect("picorv32 tb elaborates");
+
+    // The seven binary ops native-eval can compile today (native_eval/compile.rs).
+    let supported = |op: sim_ir::BinOp| {
+        use sim_ir::BinOp::*;
+        matches!(op, Add | Sub | Mul | BitAnd | BitOr | BitXor | BitXnor)
+    };
+    let mut counts: std::collections::BTreeMap<String, (usize, bool)> =
+        std::collections::BTreeMap::new();
+    let (mut sup, mut unsup) = (0usize, 0usize);
+    for e in &ir.exprs {
+        if let sim_ir::Expr::Binary { op, .. } = e {
+            let ok = supported(*op);
+            let k = format!("{op:?}");
+            let ent = counts.entry(k).or_insert((0, ok));
+            ent.0 += 1;
+            if ok {
+                sup += 1
+            } else {
+                unsup += 1
+            }
+        }
+    }
+    println!("\n[B-OPS] picorv32 + tb: {} binary-op nodes\n", sup + unsup);
+    let mut rows: Vec<_> = counts.into_iter().collect();
+    rows.sort_by_key(|(_, (n, _))| std::cmp::Reverse(*n));
+    for (op, (n, ok)) in &rows {
+        println!(
+            "  {:<10} {:>6}  {}",
+            op,
+            n,
+            if *ok { "native" } else { "BAILS to eval_ctx" }
+        );
+    }
+    println!(
+        "\n  native-eval can compile {}/{} = {:.0}% of binary-op nodes",
+        sup,
+        sup + unsup,
+        100.0 * sup as f64 / (sup + unsup) as f64
+    );
+}
