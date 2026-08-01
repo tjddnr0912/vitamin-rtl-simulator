@@ -583,13 +583,24 @@ picorv32 + testbench, 40000 cycle, release, best-of-7:
 미계상 ~126 ms = parse + elaborate + 프로세스 시작. 40000 cycle 런의 11% 이고, 짧은 런에서는 지배적이지만
 **시뮬레이션 속도 레버는 아니다**.
 
-### iverilog 대조 (같은 설계)
+### iverilog 대조 (같은 설계) — ⚠️ 정정됨
+
+**앞서 이 표에 적었던 iverilog 0.85 s 는 틀렸다.** 갓 쓴 `.vvp` 의 **cold 첫 실행**을 잰 값이었고,
+그 수치로 "vita+VM 이 iverilog 보다 빠르다"고 썼다(커밋 `fd73726` 메시지와 `Backend` doc 주석에도 들어갔다).
+같은 바이너리를 **번갈아 6회씩** 재면 iverilog 는 일관되게 0.57–0.59 s 다. 둘은 동일 워크로드(399995000 = 40000 cycle)에
+동일 결과(`trap=0 addr=00000014`)를 낸다.
 
 | | compile | run | total |
 |---|---|---|---|
-| iverilog 13 | 0.03 s | 0.85 s | **0.88 s** |
-| vita `--backend interp` | (in-process) | | 1.14 s |
-| vita `--backend vm` | (in-process) | | **0.81 s** |
+| iverilog 13 | 0.03 s | 0.58 s | **0.61 s** |
+| vita 기본(= vm) | (in-process) | | **0.78 s** |
+| vita `--backend interp` | (in-process) | | 1.10 s |
+
+**즉 vita+VM 은 이 설계에서 iverilog 보다 약 1.28x 느리다** (0.78 / 0.61). VM 전환은 vita 자신의 1.41x 개선이지
+iverilog 추월이 아니다. vita 의 0.78 s 중 ~0.13 s 는 parse+elaborate 이고 iverilog 의 0.61 s 중 0.03 s 가 compile 이므로,
+**순수 시뮬레이션만 비교해도 0.65 vs 0.58 로 여전히 vita 가 뒤진다.**
+
+측정 교훈: 벤치 대상 바이너리를 **갓 만든 직후 한 번 재지 마라**. 번갈아(interleaved) 반복하고 best-of-N 을 쓴다.
 
 ### `apply_nba` 분해 (다음 후보)
 

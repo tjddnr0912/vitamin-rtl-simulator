@@ -1034,3 +1034,18 @@ fn hand_written_shapes_agree_across_backends() {
         assert!(!oi.trim().is_empty(), "`{name}` produced no transcript");
     }
 }
+
+/// The default backend IS the VM.
+///
+/// Pinned as a VALUE, not inferred from behaviour: every differential in this file and
+/// in `cli/tests/backend_flag.rs` names both backends explicitly precisely so it cannot
+/// notice the default moving. Something has to, and this is it.
+///
+/// The flip is defensible because the whole workspace suite — not merely the corpus
+/// differential above — passes with `Bytecode` in this slot. The corpus was green
+/// through 39 failures across 18 targets (§4.5.279); the suite was not.
+#[test]
+fn the_default_backend_is_the_vm() {
+    assert_eq!(SimOpts::default().backend, Backend::Bytecode);
+    assert_eq!(Backend::default(), Backend::Bytecode);
+}

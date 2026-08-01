@@ -154,11 +154,13 @@ pub struct VitaOpts {
     /// facts it can state without inventing an argv.
     pub invocation: Option<Invocation>,
     /// `--backend <interp|vm>`: which executor runs process bodies. `None` ⇒
-    /// [`Backend::Interpreter`], the reference semantics.
+    /// [`Backend::Bytecode`], the VM (the default since it was measured equivalent
+    /// across the whole test suite, not merely across the differential corpus).
     ///
-    /// Selecting `vm` must not change a single output byte — that equivalence is
-    /// what `sim-engine/tests/backend_equiv.rs` locks over the whole corpus — so
-    /// this is a wall-clock knob only, exactly like `--threads`.
+    /// Neither value may change a single output byte — that equivalence is what
+    /// `sim-engine/tests/backend_equiv.rs` locks — so this is a wall-clock knob only,
+    /// exactly like `--threads`. `interp` exists to bisect a suspected VM defect
+    /// against the reference semantics in one flag.
     pub backend: Option<Backend>,
 }
 
@@ -608,9 +610,10 @@ struct IoArgs {
     probes: Vec<String>,
     /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
     probe_file: Option<String>,
-    /// `--backend <interp|vm>`: process-body executor. `None` ⇒ the interpreter,
-    /// which is the reference semantics. Simulate-side only (`vita`/`vrun`) —
-    /// it changes nothing an artifact records, so `vcmp`/`velab` reject it.
+    /// `--backend <interp|vm>`: process-body executor. `None` ⇒ the VM, which is the
+    /// default; `interp` selects the reference semantics for bisecting. Simulate-side
+    /// only (`vita`/`vrun`) — it changes nothing an artifact records, so `vcmp`/`velab`
+    /// reject it.
     backend: Option<Backend>,
     /// W-FLIST-OVERRIDE events recorded during arg parsing (knob, old, new) —
     /// replayed through the gated sink by [`emit_flist_overrides`].

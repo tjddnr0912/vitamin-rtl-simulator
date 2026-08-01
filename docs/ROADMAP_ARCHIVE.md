@@ -11,7 +11,8 @@
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
-**§4.5.220–279**
+**§4.5.220–280**
+- `4.5.280` 백엔드 **default 를 VM 으로 뒤집었다** — 근거는 72-디자인 differential 이 아니라 **전 스위트가 그 default 로 통과**한다는 것 · 뒤집자 기존 differential 셋이 **VM 대 VM** 이 되어 공허해지는 것을 같이 고쳤다(양변 명시 + default 값 별도 핀) · 그리고 **iverilog 대조 수치를 정정**했다(cold 첫 실행을 쟀다 — vita 가 1.28x **느리다**) …
 - `4.5.279` **백엔드 default 를 뒤집어 전 스위트를 돌렸더니 18 타깃 39건이 터졌다** — P5 게이트(72 디자인)는 그 전부를 초록으로 통과하고 있었다. 뿌리 넷: 네이티브 레지스터가 `(val,unk)` 한 쌍이라 **`is_real`/`is_str` 를 나를 수 없는데 `try_compile` 에 타입 게이트가 아예 없었다**(`assign w = real` 이 IEEE 비트를 그대로 뱉었다 — **내가 §4.5.278 다음 커밋에서 만든 회귀**) · 바디 prologue 가 **복사되어 표류**(3개 중 1개만 · `%m` 과 시간 정밀도) · `c = new` 는 **StmtId 사이드테이블에 의미가 있는데 분류기는 IR 만 봤다** · 그리고 intercept 목록이 정본(`sysfunc_is_stmt_effect`, `_` arm 없는 exhaustive)의 **손복사본**이라 seeded `$dist_*` 7개 중 1개만 담고 있었다 …
 - `4.5.278` 외부 round-23 — 호출의 **copy-out 목적지**를 분류기가 아예 안 보고 있었다(그건 `Stmt` lvalue 가 아니라 call-site 사이드 테이블에 있다) · 옆 문장이 답을 정하던 마지막 자리 · E3009 문구가 **패닉하는 형태를 "동작한다"고 명시**하던 것 · 그리고 loud 를 걷자 드러난 `StrPutC` 프레임-로컬 silent-wrong · §3.2 성능은 **iverilog 가 같은 깊이 스케일링**임을 실측(리포트의 뿌리 가설 반증) …
 - `4.5.277` 외부 round-22 — 실행기 선택이 **무관한 `$display` 한 줄**에 달려 있었다(분류기가 문장을 목적지로만 봤고 효과는 rhs 에 있었다) · 함수도 같은 뿌리 · static task 의 `string` 로컬은 **세 번째 수집기** · fatal 이 안 멈추던 것 · 그리고 "이름 없던" 패닉 조건에 이름을 붙였다(목적지가 프레임 창 밖인가) …
@@ -390,6 +391,31 @@ CLI 레벨 핀 5개(`backend_flag.rs`) — 라이브러리 하네스는 사이�
 공유 헬퍼를 재사용해도 **호출자 쪽 전제조건은 따라오지 않는다**(`try_compile` 의 타입 계약은 호출자에게 있었다). ③
 게이트의 힘은 게이트 코드가 아니라 **그 안의 모양**이 정한다 — 이번 세션 다섯 번째. ④ default 를 뒤집어 전 스위트를 돌리는
 것은 72 디자인 differential 보다 **압도적으로 강한** 측정이고, 비용은 한 줄 + 10분이다.
+
+#### 4.5.280 백엔드 default 를 VM 으로 뒤집었다 (2026-08-02, format 26 불변) ✅
+
+§4.5.279 가 만든 근거 위에서 오너 판정으로 뒤집었다. `Backend::default()` = `Bytecode`,
+`SimOpts::default().backend` = `Bytecode`. VM 이 못 먹는 바디는 **바디 단위로** 인터프리터로 떨어지므로
+설계 종류를 가리지 않는다. `--backend interp` 는 남는다 — 속도용이 아니라 VM 결함을 레퍼런스와 한 플래그로
+이분하기 위한 것.
+
+**근거.** 전 워크스페이스 스위트(5000+)가 `Bytecode` default 로 통과한다(§4.5.279 에서 39→24→0).
+72-디자인 P5 differential 만으로는 부족했다는 것이 §4.5.279 의 요지이므로, 근거는 스위트 쪽이다.
+
+**게이트를 뒤집기에 맞춰 고쳤다 — 안 고쳤으면 셋이 공허해졌다.**
+`selecting_the_vm_moves_no_output_byte` / `naming_the_default_explicitly_changes_nothing` /
+`the_staged_run_honours_the_flag_and_still_matches` 는 전부 "플래그 없음" vs `--backend vm` 을 비교했다.
+인터프리터가 default 이던 동안엔 진짜 differential 이었지만, default 가 `vm` 이 되는 순간 **VM 대 VM** 이 되어
+공짜로 통과한다. 셋 다 양쪽을 **명시**하도록 고치고, default 값 자체는 별도 핀
+(`backend_equiv.rs::the_default_backend_is_the_vm`)이 값으로 못박는다.
+→ **differential 은 두 변 중 하나를 default 에서 가져오면 안 된다.**
+
+**⚠️ 성능 주장 정정.** §4.5.279 커밋 메시지와 doc-18 에 "vita+VM 0.81 s vs iverilog 0.88 s" 라고 적었는데
+**iverilog 수치가 틀렸다** — 갓 컴파일한 `.vvp` 의 cold 첫 실행이었다. 번갈아 6회씩 재면 iverilog 는 0.57–0.59 s.
+정정: iverilog **0.61 s**(compile 0.03 + run 0.58) vs vita 기본 **0.78 s** — **vita 가 약 1.28x 느리다.**
+parse/elaborate(~0.13 s)를 빼고 순수 시뮬만 비교해도 0.65 vs 0.58 로 여전히 뒤진다.
+VM 전환은 **vita 자신에 대한 1.41x**(1.10 → 0.78)이지 iverilog 추월이 아니다.
+교훈: 벤치 바이너리를 갓 만든 직후 한 번 재지 마라 — interleaved 반복 + best-of-N.
 
 #### 4.5.278 외부 round-23 — 분류기가 호출의 copy-out 목적지를 아예 안 보고 있었다 (2026-07-31, branch feat-r23-report, format 26 불변) ✅
 

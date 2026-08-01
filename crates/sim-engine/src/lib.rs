@@ -83,22 +83,31 @@ pub enum ExitClass {
 /// VCD/stdout bytes cannot diverge in a backend-specific way (enforced by the P5 gate).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Backend {
-    /// Tree-walking interpreter (`exec.rs::run_process`) — the reference semantics.
-    #[default]
+    /// Tree-walking interpreter (`exec.rs::run_process`) — the REFERENCE semantics.
+    ///
+    /// No longer the default, and it is not meant to be selected for speed: it is here
+    /// so a suspected VM defect can be bisected against the reference in one flag, and
+    /// because the VM falls back to it body-by-body anyway.
     Interpreter,
-    /// Bytecode VM (P0a, opt-in acceleration). Codegen-able bodies (the P9
-    /// suspend-free allow-list, `backend::is_codegen_able`) are compiled once per
-    /// process template and run on the VM (`sched::scan_arm::vm_run_body`); every
-    /// other body falls back to the interpreter, so a design mixing both is normal.
+    /// Bytecode VM (P0a) — the DEFAULT. Codegen-able bodies (the P9 suspend-free
+    /// allow-list, `backend::is_codegen_able`) are compiled once per process template
+    /// and run on the VM (`sched::scan_arm::vm_run_body`); every other body falls back
+    /// to the interpreter, so a design mixing both is normal and is the common case.
     ///
-    /// The VM is LIVE — Stage C landed the compiler + register VM, and native-eval
-    /// lowers assign right-hand sides to a register program on top of it. Measured
-    /// (release, best-of-5, `tests/perf_baseline.rs`): expression-bound ~2.2x,
-    /// structure-bound ~2.8x, wide 100-bit ~1.7x, clock/scheduler-bound ~1.0x
-    /// (eval is not the bottleneck there).
+    /// Measured (release, best-of-5, `tests/perf_baseline.rs`): expression-bound ~2.2x,
+    /// structure-bound ~2.8x, wide 100-bit ~1.7x, clock/scheduler-bound ~1.0x (eval is
+    /// not the bottleneck there). On a real design (picorv32 + testbench, 40000 cycles,
+    /// best-of-7): 1.10 s -> 0.78 s. That is vita against itself; iverilog 13 runs the
+    /// same design in 0.58 s + 0.03 s compile, so the VM narrows a gap rather than
+    /// closing it.
     ///
-    /// Selecting it must never change a single output byte: that is what the P5
-    /// gate (`tests/backend_equiv.rs`) locks, over the whole deterministic corpus.
+    /// Selecting a backend must never change a single output byte. Two gates hold that:
+    /// the P5 differential (`tests/backend_equiv.rs`) over the deterministic corpus PLUS
+    /// hand-written shapes the generator cannot emit, and — the one that actually found
+    /// the four defects that were hiding behind a green P5 — running the entire
+    /// workspace suite with this default in place. Do that again before trusting a
+    /// change to the VM: a corpus differential is far weaker than 5000 real tests.
+    #[default]
     Bytecode,
 }
 
@@ -166,9 +175,10 @@ pub struct SimOpts {
     /// byte-identical to the prior single `round(d × M)` (single-timescale
     /// designs and every existing `SimOpts::default()` caller unaffected).
     pub proc_prec_mults: Vec<u64>,
-    /// Process-body execution backend (P0a). Default [`Backend::Interpreter`] so
-    /// every existing caller is byte-identical. Rides out-of-band (never enters the
-    /// frozen `SimIr`).
+    /// Process-body execution backend (P0a). Default [`Backend::Bytecode`] — the VM
+    /// compiles the bodies it can and falls back to the interpreter body-by-body for the
+    /// rest, so a caller that never sets this gets the faster executor with the same
+    /// output bytes. Rides out-of-band (never enters the frozen `SimIr`).
     pub backend: Backend,
     /// Severity side table from `elaborate::elaborate_with_timescale`, keyed by
     /// StmtId: marks `$fatal`/`$error`/`$warning`/`$info` statements (lowered as
@@ -345,7 +355,7 @@ impl Default for SimOpts {
             net_names: Vec::new(),
             proc_multipliers: Vec::new(),
             proc_prec_mults: Vec::new(),
-            backend: Backend::Interpreter,
+            backend: Backend::Bytecode,
             severities: SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),

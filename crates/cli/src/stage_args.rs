@@ -77,9 +77,9 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 };
                 let Some(b) = parsed else {
                     eprintln!(
-                        "error[{}]: '--backend' takes 'interp' (default, the reference \
-                         semantics) or 'vm' (bytecode VM — same output, often faster on \
-                         expression-heavy designs)",
+                        "error[{}]: '--backend' takes 'vm' (default, the bytecode VM) or \
+                         'interp' (the reference tree-walking semantics, for bisecting) \
+                         — same output either way, this only moves wall-clock",
                         MsgCode::CliBadFlag.code_num()
                     );
                     return Err(EXIT_CLI_ERROR);

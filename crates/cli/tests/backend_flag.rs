@@ -65,12 +65,18 @@ fn vita_in(dir: &std::path::Path, args: &[&str]) -> (String, bool) {
 /// The whole point of the flag: it changes wall-clock, never a byte. Compared on BOTH
 /// output channels, because the backends differ in process-body control flow and a
 /// divergence could surface in the waveform without touching `$display` at all.
+///
+/// BOTH backends are named EXPLICITLY. This test used to compare "no flag" against
+/// `--backend vm`, which was a real comparison only while the interpreter was the
+/// default — the moment the default became `vm` it would have been comparing the VM
+/// against itself and passing for free. A differential must never take one of its two
+/// sides from a default.
 #[test]
 fn selecting_the_vm_moves_no_output_byte() {
     let dir = scratch("oneshot");
     std::fs::write(dir.join("t.sv"), MIXED).unwrap();
 
-    let (oi, ok_i) = vita_in(&dir, &["-o", "i.vcd", "t.sv"]);
+    let (oi, ok_i) = vita_in(&dir, &["--backend", "interp", "-o", "i.vcd", "t.sv"]);
     assert!(
         ok_i && !oi.contains("error[VITA"),
         "interp run failed:\n{oi}"
@@ -88,20 +94,35 @@ fn selecting_the_vm_moves_no_output_byte() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `--backend interp` is the default spelled out, so it must be byte-identical to
-/// passing nothing. (A flag whose "default" value behaves differently from its absence
-/// is a trap: CI scripts pin one and humans use the other.)
+/// `--backend vm` is the default spelled out, so it must be byte-identical to passing
+/// nothing. (A flag whose "default" value behaves differently from its absence is a
+/// trap: CI scripts pin one and humans use the other.)
+///
+/// This is also the CLI-visible pin on WHICH backend is the default: if the default
+/// reverted to `interp`, the `vm`-vs-absent comparison would still pass — but the
+/// `interp`-vs-absent inequality below could not be asserted, so the two halves
+/// together are what fix the default. The exact value lives in
+/// `sim-engine/tests/backend_equiv.rs::the_default_backend_is_the_vm`.
 #[test]
 fn naming_the_default_explicitly_changes_nothing() {
     let dir = scratch("explicit");
     std::fs::write(dir.join("t.sv"), MIXED).unwrap();
 
     let (a, _) = vita_in(&dir, &["-o", "a.vcd", "t.sv"]);
-    let (b, _) = vita_in(&dir, &["--backend", "interp", "-o", "b.vcd", "t.sv"]);
-    assert_eq!(a, b);
+    let (b, _) = vita_in(&dir, &["--backend", "vm", "-o", "b.vcd", "t.sv"]);
+    assert_eq!(a, b, "the default must behave exactly like `--backend vm`");
     assert_eq!(
         std::fs::read(dir.join("a.vcd")).unwrap(),
         std::fs::read(dir.join("b.vcd")).unwrap()
+    );
+
+    // And naming the OTHER backend must also change nothing observable — that is the
+    // equivalence the flag promises, in the direction the default does not cover.
+    let (c, _) = vita_in(&dir, &["--backend", "interp", "-o", "c.vcd", "t.sv"]);
+    assert_eq!(a, c, "`--backend interp` moved an output byte");
+    assert_eq!(
+        std::fs::read(dir.join("a.vcd")).unwrap(),
+        std::fs::read(dir.join("c.vcd")).unwrap()
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -119,7 +140,12 @@ fn the_staged_run_honours_the_flag_and_still_matches() {
     let (o, ok) = vita_in(&dir, &["velab", "-o", "t.velab", "t.vu"]);
     assert!(ok, "velab failed:\n{o}");
 
-    let (oi, ok_i) = vita_in(&dir, &["vrun", "-o", "i.vcd", "t.velab"]);
+    // Both backends named explicitly — see `selecting_the_vm_moves_no_output_byte`
+    // on why a differential must not take one side from a default.
+    let (oi, ok_i) = vita_in(
+        &dir,
+        &["vrun", "--backend", "interp", "-o", "i.vcd", "t.velab"],
+    );
     assert!(
         ok_i && !oi.contains("error[VITA"),
         "vrun interp failed:\n{oi}"
