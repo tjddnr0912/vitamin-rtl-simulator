@@ -453,6 +453,36 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             st.dyn_is_handle.get(i).copied().unwrap_or(false)
                 || st.class_is_handle.get(i).copied().unwrap_or(false)
         };
+        // CONT-ASSIGN NATIVE: compile each RHS once, in the SAME context
+        // `eval_for_lvalue` builds (`lvalue_width(lhs).max(self_width(rhs))`, signed from
+        // the RHS). `try_compile` returns `None` for anything it cannot lower, so an
+        // uncompilable assign simply keeps the interpreter path.
+        let ca_native: Vec<Option<crate::native_eval::NativeProg>> = st
+            .ir
+            .cont_assigns
+            .iter()
+            .map(|c| {
+                // B1 frame-call: an RHS that REACHES a user function call must stay on
+                // the interpreter. `is_codegen_able` enforces this for process bodies at
+                // the BODY level, not inside `try_compile`, so reusing `try_compile`
+                // alone silently dropped the precondition — the frame evaluator runs only
+                // on the `&self` interpreter read path (re-entrant frame arena, and the
+                // left-to-right operand order static recursion depends on), and routing a
+                // call through the native funnel broke 18 tests across package-scoped
+                // calls, enum-returning functions and a cont-assign-originated runaway.
+                if crate::backend::expr_has_call(&st.ir.exprs, c.rhs) {
+                    return None;
+                }
+                let ctx_w = st.lvalue_width(&c.lhs).max(st.wt.get(c.rhs).width);
+                crate::native_eval::try_compile(
+                    st.ir,
+                    &st.wt,
+                    c.rhs,
+                    ctx_w,
+                    st.wt.get(c.rhs).signed,
+                )
+            })
+            .collect();
         let deps = crate::levelize::ca_deps(st.ir, &heap);
         let mut ca_always: Vec<u32> = Vec::new();
         let mut ca_of_net: Vec<Vec<u32>> = vec![Vec::new(); nnets];
@@ -476,6 +506,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             st.ca_dirty_flag[ci as usize] = true;
         }
         Scheduler {
+            ca_native,
             ca_always,
             st,
             cur: SlotQueues::default(),
@@ -581,7 +612,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 }
                 let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                 let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-                let v = self.eval_for_lvalue(&lhs, ca_rhs); // CONTEXT-SIZED to lhs width
+                let v = self.eval_cont_assign(ci, &lhs, ca_rhs); // CONTEXT-SIZED to lhs width
                 let offs = self.resolve_lvalue_offsets(&lhs); // dynamic index NOW (settle time)
                 changed |= self.st.write_lvalue(&lhs, v, &offs);
             }
@@ -603,7 +634,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 for ci in cis {
                     let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                     let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-                    let v = self.eval_for_lvalue(&lhs, ca_rhs);
+                    let v = self.eval_cont_assign(ci, &lhs, ca_rhs);
                     match kind {
                         1 => resolve_wand_into(&mut acc, &v),
                         2 => resolve_wor_into(&mut acc, &v),
@@ -637,7 +668,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             };
             let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
             let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-            let v = self.eval_for_lvalue(&lhs, ca_rhs);
+            let v = self.eval_cont_assign(ci, &lhs, ca_rhs);
             if self.last_ca[ci].as_ref() == Some(&v) {
                 continue; // RHS unchanged → no new scheduled write
             }

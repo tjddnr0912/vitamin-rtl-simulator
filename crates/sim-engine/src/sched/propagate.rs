@@ -300,6 +300,20 @@ impl Scheduler<'_, '_> {
     /// Evaluate `rhs` in the context of `lhs`'s width (IEEE assignment rule):
     /// width = max(lhs_width, self_width(rhs)); sign = rhs self-sign (lhs sign
     /// does NOT propagate).
+    /// Value of continuous assign `ci`'s RHS, using its pre-compiled native program when
+    /// one exists and falling back to [`Self::eval_for_lvalue`] otherwise.
+    ///
+    /// The program was compiled in exactly the context this function's fallback builds,
+    /// so the two are the same (context, expression) pairing whose equivalence the P5
+    /// gate already locks for process bodies — this only extends it to the one evaluation
+    /// the bytecode backend never reached, because a continuous assign is not a body.
+    pub(crate) fn eval_cont_assign(&self, ci: usize, lhs: &Lvalue, rhs: u32) -> Value {
+        match self.ca_native.get(ci).and_then(Option::as_ref) {
+            Some(p) => self.eval_native(p),
+            None => self.eval_for_lvalue(lhs, rhs),
+        }
+    }
+
     pub(crate) fn eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value {
         let lw = self.st.lvalue_width(lhs);
         let sw = self.st.wt.get(rhs);

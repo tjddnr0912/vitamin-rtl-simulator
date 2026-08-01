@@ -255,6 +255,18 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// assign, a multi-driver member, an impure RHS, or a heap-handle dependency whose
     /// contents can move without the handle net changing). Ascending, so the union with
     /// the dirty worklist stays in declaration order.
+    /// CONT-ASSIGN NATIVE: one pre-compiled native program per continuous assign, or
+    /// `None` where `try_compile` refused. Continuous assigns are the one evaluation the
+    /// bytecode backend never touched — they are not process bodies — and on a real
+    /// design the settle is the largest block the backend leaves alone (measured on
+    /// picorv32 + testbench: bodies 3762 -> 2171 ms under the VM while the settle stayed
+    /// at ~1090 ms, 23.4% of the run).
+    ///
+    /// Compiled in EXACTLY the context `eval_for_lvalue` uses — `lvalue_width(lhs)`
+    /// widened by the RHS self-width, signedness from the RHS — which is the same
+    /// (context, program) pairing the body path's `Op::EvalNative` uses and the P5 gate
+    /// already locks.
+    ca_native: Vec<Option<crate::native_eval::NativeProg>>,
     ca_always: Vec<u32>,
     net_to_edge: Vec<Vec<(EdgeKind, Ready)>>,
     /// Per-activity private state. `index == Ready.proc` (activity id). Seeded 1:1

@@ -200,7 +200,7 @@ pub fn codegen_coverage(ir: &SimIr) -> CodegenCoverage {
 /// B1: does the expr subtree rooted at `eid` REACH an `Expr::Call`? Walks all
 /// child ExprId edges; the frozen arena is post-order (every child < its
 /// parent), so the recursion depth is bounded by the expression nesting.
-fn expr_has_call(exprs: &[Expr], eid: u32) -> bool {
+pub(crate) fn expr_has_call(exprs: &[Expr], eid: u32) -> bool {
     match exprs.get(eid as usize) {
         Some(Expr::Call { .. }) => true,
         None | Some(Expr::Const { .. } | Expr::Signal { .. } | Expr::ArrayItem { .. }) => false,

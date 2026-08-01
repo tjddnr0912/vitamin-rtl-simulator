@@ -217,3 +217,52 @@ fn the_help_states_that_output_is_identical() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Continuous assigns are evaluated through a pre-compiled native program when one
+/// exists. An RHS that reaches a user FUNCTION call must NOT take that path.
+///
+/// The body path excludes calls at the BODY level (`is_codegen_able`'s B1 rule), not
+/// inside `try_compile` — the frame evaluator runs only on the `&self` interpreter read
+/// path, with a re-entrant frame arena and the left-to-right operand order static
+/// recursion depends on. Reusing `try_compile` for continuous assigns without
+/// reproducing that caller-side precondition broke 18 tests across package-scoped calls,
+/// enum-returning functions and a cont-assign-originated runaway.
+///
+/// Pinned at the CLI level on purpose: the library test harness elaborates WITHOUT
+/// sidecars, so it has no `func_table` and every function call reads X there — a
+/// library-level version of this test would pass vacuously on a broken build.
+///
+/// Both backends, because the settle is backend-INDEPENDENT: the guard has to hold on
+/// the default interpreter too. Values verified against iverilog 13.
+#[test]
+fn a_cont_assign_calling_a_function_still_evaluates() {
+    let dir = scratch("ca_fn");
+    let src = "module t;\n\
+      function automatic [31:0] twice(input [31:0] x);\n\
+        twice = x + x;\n\
+      endfunction\n\
+      reg  [31:0] a;\n\
+      wire [31:0] y = twice(a) + 32'd1;\n\
+      wire [31:0] z = a ^ 32'hff;\n\
+      initial begin\n\
+        a = 32'd21;\n\
+        #1 $display(\"y=%0d z=%0h\", y, z);\n\
+        a = 32'd100;\n\
+        #1 $display(\"y=%0d z=%0h\", y, z);\n\
+        $finish;\n\
+      end\n\
+    endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    for args in [vec!["t.sv"], vec!["--backend", "vm", "t.sv"]] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok && !o.contains("error[VITA"), "{args:?} failed:\n{o}");
+        // iverilog 13: y=43 z=ea then y=201 z=9b.
+        assert!(
+            o.contains("y=43 z=ea") && o.contains("y=201 z=9b"),
+            "{args:?}: a function-calling continuous assign must keep evaluating on the \
+             interpreter and re-evaluate when its input moves — got:\n{o}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
