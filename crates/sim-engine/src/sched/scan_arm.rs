@@ -457,11 +457,6 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let mut ca_always: Vec<u32> = Vec::new();
         let mut ca_of_net: Vec<Vec<u32>> = vec![Vec::new(); nnets];
         for (ci, (dep, ok)) in deps.iter().enumerate() {
-            // FUSE: a copy performed by a prelude is neither dirty-tracked nor always-run
-            // — the fused body is its sole evaluator now.
-            if st.fused_copies.get(ci).copied().unwrap_or(false) {
-                continue;
-            }
             if !*ok || ca_md[ci] {
                 ca_always.push(ci as u32);
                 continue;
@@ -476,9 +471,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         st.ca_dirty_flag = vec![false; nca];
         // Seed EVERY certified assign: nothing has been evaluated yet, so the first
         // settle must behave exactly like the old full pass.
-        st.ca_dirty = (0..nca as u32)
-            .filter(|&ci| !st.fused_copies.get(ci as usize).copied().unwrap_or(false))
-            .collect();
+        st.ca_dirty = (0..nca as u32).collect();
         for &ci in &st.ca_dirty {
             st.ca_dirty_flag[ci as usize] = true;
         }
@@ -777,12 +770,6 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             if init_set.contains(&(tmpl as u32)) {
                 continue;
             }
-            // FUSE: a prelude member runs only as part of its consumer's activation,
-            // so it is neither seeded at t0 nor armed. Seeding it would run its body
-            // twice at t0 — once alone and once inside the consumer.
-            if self.st.fused_away.get(tmpl).copied().unwrap_or(false) {
-                continue;
-            }
             let tie = self.activities[aid as usize].tie;
             let entry = self.st.ir.processes[tmpl].entry;
             let ready = Ready {
@@ -827,24 +814,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // re-fire on ANY change of a read net. Empty edges (e.g. a bare
             // self-timed `always` that re-arms via in-body #/@) register nothing.
             SensKind::Level | SensKind::Comb | SensKind::Latch => {
-                // FUSE: a consumer must wake on anything ITS WHOLE CHAIN reads, not just
-                // its own inputs — the prelude bodies no longer have arming of their own.
-                let mut nets: Vec<u32> = p.sensitivity.edges.iter().map(|e| e.net).collect();
-                for k in 0..self.st.fuse_prelude.get(tmpl).map_or(0, Vec::len) {
-                    let crate::PreludeStep::Body(anc) = self.st.fuse_prelude[tmpl][k] else {
-                        continue; // a Copy step reads only what its producer already wrote
-                    };
-                    nets.extend(
-                        self.st.ir.processes[anc as usize]
-                            .sensitivity
-                            .edges
-                            .iter()
-                            .map(|e| e.net),
-                    );
-                }
-                nets.sort_unstable();
-                nets.dedup();
-                let nets: Vec<u32> = nets;
+                let nets: Vec<u32> = p.sensitivity.edges.iter().map(|e| e.net).collect();
                 if !nets.is_empty() {
                     self.waiters.push(Waiter {
                         cause: WaitCause::Level { nets },
@@ -913,49 +883,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // cont-assign settle and clocking commit (all outside `run_body`) then
         // author their writes as `None` (= re-fire normally).
         self.st.blocking_writer = Some(proc);
-        // FUSE: run the chain's ancestor bodies first, in dependency order, inside THIS
-        // activation. Each ancestor keeps its own activity — activities are seeded 1:1
-        // with `ir.processes`, so a top-level template id IS its activity id — which is
-        // why nothing about HOW a body executes changes here, only WHEN.
-        let ftmpl = self.activity_template(proc) as usize;
-        for k in 0..self.st.fuse_prelude.get(ftmpl).map_or(0, Vec::len) {
-            match self.st.fuse_prelude[ftmpl][k] {
-                crate::PreludeStep::Body(anc) => {
-                    let entry = self.st.ir.processes[anc as usize].entry;
-                    match self.dispatch_body(anc, entry) {
-                        Step::Done | Step::Suspended => {}
-                        // An ancestor that ends the run does so BEFORE the consumer body
-                        // is entered — the same chronology it would have had unfused.
-                        other => {
-                            self.st.blocking_writer = None;
-                            return other;
-                        }
-                    }
-                }
-                // A port-connection copy, performed here instead of in the settle, so the
-                // next body in the chain sees its input already forwarded. Same three
-                // calls the settle makes, so the write funnel, VCD and change marking are
-                // all identical — only the moment moves.
-                crate::PreludeStep::Copy(ci) => {
-                    let ci = ci as usize;
-                    let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-                    let rhs = self.st.ir.cont_assigns[ci].rhs;
-                    let v = self.eval_for_lvalue(&lhs, rhs);
-                    let offs = self.resolve_lvalue_offsets(&lhs);
-                    self.st.write_lvalue(&lhs, v, &offs);
-                }
-            }
-        }
-        let step = self.dispatch_body(proc, block);
-        self.st.blocking_writer = None;
-        step
-    }
-
-    /// The body-execution choke point: pick the executor and run ONE body. Split out of
-    /// [`Self::run_body`] so a fusion prelude runs its ancestors through exactly the same
-    /// path (including the bytecode VM) rather than a second, divergent one.
-    fn dispatch_body(&mut self, proc: u32, block: u32) -> Step {
-        match self.st.backend {
+        let step = match self.st.backend {
             crate::Backend::Interpreter => run_process(self, proc, block),
             crate::Backend::Bytecode => {
                 let tmpl = self.activity_template(proc) as usize;
@@ -964,7 +892,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                     None => run_process(self, proc, block),
                 }
             }
-        }
+        };
+        self.st.blocking_writer = None;
+        step
     }
 
     /// Bytecode-VM body entry (Stage C / C2). The P9 predicate (via `vm_compiled`) has

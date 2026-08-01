@@ -725,127 +725,66 @@ fn wide_arith_equals_across_backends() {
     );
 }
 
-/// [E] The fusion equivalence gate, the twin of `compiled_equals_interpreter_over_corpus`.
+/// WHY COMBINATIONAL PROCESS FUSION WAS BUILT AND REVERTED (2026-08-01).
 ///
-/// `SimOpts.fuse` collapses a chain of combinational processes into ONE activation. It
-/// only fires where nothing can observe the delta between two bodies, so it must not
-/// move a single output byte — and unlike a speed knob whose failure is visible, a
-/// fusion that fires one process too eagerly produces a WRONG VALUE at exit 0. This runs
-/// the whole deterministic corpus with fusion off and on and asserts stdout, VCD bytes
-/// and the summary are identical, on BOTH backends.
-#[test]
-fn fused_equals_unfused_over_corpus() {
-    for d in corpus(0x5EED_F00D, 72) {
-        let ir = build(&d.src);
-        for backend in [Backend::Interpreter, Backend::Bytecode] {
-            let run = |fuse: bool| {
-                let path = std::env::temp_dir().join(format!(
-                    "vita_fuse_{}_{}_{fuse}_{backend:?}.vcd",
-                    std::process::id(),
-                    d.name
-                ));
-                let _ = std::fs::remove_file(&path);
-                let opts = SimOpts {
-                    fuse,
-                    backend,
-                    vcd_path_override: Some(path.to_string_lossy().into_owned()),
-                    ..SimOpts::default()
-                };
-                let (res, out) = simulate_capture(&ir, opts);
-                let vcd = std::fs::read(&path).ok();
-                let _ = std::fs::remove_file(&path);
-                (res, out, vcd)
-            };
-            let (r0, o0, v0) = run(false);
-            let (r1, o1, v1) = run(true);
-            assert_eq!(o0, o1, "{}/{backend:?}: fusion moved stdout", d.name);
-            assert_eq!(v0, v1, "{}/{backend:?}: fusion moved VCD bytes", d.name);
-            assert_eq!(
-                (r0.sim_time, r0.finish_reason, r0.exit_class),
-                (r1.sim_time, r1.finish_reason, r1.exit_class),
-                "{}/{backend:?}: fusion moved the run summary",
-                d.name
-            );
-        }
-    }
-}
-
-/// TEETH for `fused_equals_unfused_over_corpus`: the corpus must actually CONTAIN
-/// designs the transform fires on, or that gate passes vacuously — the exact failure
-/// mode the Stage-B comments on this file described for years while the VM was inert.
-#[test]
-fn the_fusion_gate_is_not_vacuous() {
-    let fired = corpus(0x5EED_F00D, 72)
-        .into_iter()
-        .filter(|d| !sim_engine::fusion_chains(&build(&d.src)).is_empty())
-        .count();
-    assert!(
-        fired > 0,
-        "no corpus design contains a fusable chain, so the fusion equivalence gate \
-         proves nothing — add a chained-combinational template to the corpus"
-    );
-}
-
-/// An iverilog-pinned value on the shape fusion is FOR: eight combinational stages
-/// chained through module ports, i.e. through the whole-net copy assigns a prelude now
-/// performs inline instead of the settle.
+/// Fusing a chain of combinational processes into one activation was implemented,
+/// measured at 1.7-2.5x, gated against the whole corpus — and was still WRONG. This
+/// test pins the design that proves it, so the transform cannot be rebuilt without
+/// meeting the counter-example.
 ///
-/// The corpus gate proves fused == unfused. This proves the shared answer is also the
-/// RIGHT one, against an outside oracle — measured live with iverilog 13:
-/// `acc=0000340c` after 300 clocks.
+/// Unfused, a depth-D combinational chain takes D deltas to propagate. A process that
+/// wakes in the SAME batch and reads the chain's OUTPUT therefore samples a PARTIALLY
+/// propagated value. Fused, the chain completes inside one activation, so that reader
+/// sees a fully propagated one — a different value, at exit 0, with no diagnostic.
+///
+/// Here the flop samples `s2` at a posedge produced in the very activation that
+/// initialises `seed`, so unfused it reads the stale X and `acc` is X forever. iverilog
+/// 13 agrees: `acc=xxxxxxxx`. The fused build produced `acc=0000017c`.
+///
+/// The safety condition that was implemented guarded the chain's INTERMEDIATE nets
+/// (nothing else may read them). It did not guard WHEN THE CHAIN'S OUTPUT BECOMES
+/// FRESH relative to other processes in the same batch — and the reader of that output
+/// is the flop, which is the entire point of a combinational cone. Requiring "no
+/// concurrent reader of the chain output" empties the safe set, so fusion is not
+/// semantics-preserving for a simulator whose intra-delta ordering is pinned to
+/// another simulator's.
+///
+/// Note the stimulus: `#1 clk = 1; #1 clk = 0` does NOT expose this, because the
+/// initialisation and the first edge land in different timesteps. Every corpus design
+/// used that shape, which is exactly why the corpus gate passed while the transform was
+/// wrong. A gate is only as good as the shapes it contains.
 #[test]
-fn fused_instance_chain_matches_iverilog() {
-    let d = 8usize;
-    let mut decls = String::new();
-    let mut insts = String::new();
-    for i in 0..d {
-        decls.push_str(&format!("  wire [31:0] w{i};\n"));
-        let a = if i == 0 {
-            "seed".to_string()
-        } else {
-            format!("w{}", i - 1)
-        };
-        insts.push_str(&format!("  stage u{i} (.a({a}), .y(w{i}));\n"));
-    }
-    let src = format!(
-        "module stage(input [31:0] a, output [31:0] y);\n\
-           reg [31:0] r;\n\
-           always @* r = (a ^ ((a << 1) | (a >> 31))) + 32'd1;\n\
-           assign y = r;\n\
-         endmodule\n\
-         module top;\n\
-           reg clk; reg [31:0] seed; reg [31:0] acc;\n{decls}{insts}\
-           integer k;\n\
-           always @(posedge clk) begin\n\
-             seed <= seed + 32'd1;\n\
-             acc  <= acc ^ w{last};\n\
-           end\n\
-           initial begin\n\
-             clk = 0; seed = 32'd1; acc = 0;\n\
-             for (k = 0; k < 300; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
-             $display(\"acc=%h\", acc);\n\
-             $finish;\n\
-           end\n\
-         endmodule\n",
-        last = d - 1
-    );
-    let ir = build(&src);
-    assert!(
-        !sim_engine::fusion_chains(&ir).is_empty(),
-        "this design must actually fuse, or the pin proves nothing about fusion"
-    );
-    for fuse in [false, true] {
-        for backend in [Backend::Interpreter, Backend::Bytecode] {
-            let opts = SimOpts {
-                fuse,
+fn a_comb_chain_output_is_sampled_mid_propagation() {
+    let src = "module t;\n\
+      reg clk = 0;\n\
+      reg [31:0] seed, acc, s0, s1, s2;\n\
+      integer i;\n\
+      always_comb s0 = (seed ^ (seed << 1)) + 32'd1;\n\
+      always_comb s1 = (s0 ^ (s0 << 1)) + 32'd2;\n\
+      always_comb s2 = (s1 ^ (s1 << 1)) + 32'd3;\n\
+      always @(posedge clk) begin seed <= seed + 1; acc <= acc ^ s2; end\n\
+      initial begin\n\
+        seed = 1; acc = 0;\n\
+        for (i = 0; i < 40; i = i + 1) begin clk = ~clk; #1; end\n\
+        $display(\"acc=%h\", acc);\n\
+        $finish;\n\
+      end\n\
+    endmodule\n";
+    let ir = build(src);
+    for backend in [Backend::Interpreter, Backend::Bytecode] {
+        let (_r, out) = simulate_capture(
+            &ir,
+            SimOpts {
                 backend,
                 ..SimOpts::default()
-            };
-            let (_res, out) = simulate_capture(&ir, opts);
-            assert!(
-                out.contains("acc=0000340c"),
-                "fuse={fuse} {backend:?}: expected iverilog's acc=0000340c, got:\n{out}"
-            );
-        }
+            },
+        );
+        assert!(
+            out.contains("acc=xxxxxxxx"),
+            "{backend:?}: the flop must sample the chain output MID-propagation and read \
+             X, as iverilog 13 does. Getting a settled value here means something \
+             completed the combinational chain inside one activation — which is the \
+             fusion transform this test exists to keep out. Got:\n{out}"
+        );
     }
 }

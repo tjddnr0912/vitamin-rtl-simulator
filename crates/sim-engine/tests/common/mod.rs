@@ -204,16 +204,9 @@ pub fn corpus(seed: u64, n: usize) -> Vec<Design> {
 
 // ── templates ────────────────────────────────────────────────────────────────
 
-/// A CHAIN of combinational stages between two clocked endpoints — the shape process
-/// fusion fires on, and the shape the corpus had none of.
-///
-/// Added because the fusion equivalence gate was passing VACUOUSLY: no corpus design
-/// contained a fusable chain, so "fused output equals unfused output" was proving
-/// nothing. That is the same failure mode this file's Stage-B comments described for the
-/// bytecode VM, caught here by a teeth test rather than years later.
-///
-/// Depth and width vary so the corpus covers both a single fusable pair and a long
-/// ladder; the VCD dump is kept so the gate compares waveform bytes on this shape too.
+/// A CHAIN of combinational stages between two clocked endpoints. The corpus had no
+/// design of this shape at all, which is why several scheduling gates were passing on
+/// designs that could not exercise them.
 fn gen_comb_chain(rng: &mut Rng, idx: usize) -> Design {
     let depth = rng.range(2, 7);
     let w = rng.range(4, 16);
