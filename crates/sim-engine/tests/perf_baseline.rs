@@ -1299,7 +1299,16 @@ fn perf_real_design_operator_census() {
             }
         }
     }
-    let (nok, ntot) = sim_engine::native_eval_coverage(&ir);
+    let ((nok, ntot), (bok, btot)) = sim_engine::native_eval_coverage_split(&ir);
+    println!(
+        "\n[B-OPS] branch conditions: {bok}/{btot} natively compilable = {:.0}% \
+         -- but ALL of them are interpreted today (CompiledTerm::Branch -> k_truthy)",
+        if btot == 0 {
+            0.0
+        } else {
+            100.0 * bok as f64 / btot as f64
+        }
+    );
     println!(
         "\n[B-OPS] picorv32 + tb: native-eval compiles {nok}/{ntot} assign RHS in \
          codegen-able bodies = {:.0}%",

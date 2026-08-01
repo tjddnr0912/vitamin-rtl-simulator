@@ -1095,6 +1095,9 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_truthy(&self, eid: u32) -> bool {
         self.truthy(eid)
     }
+    fn k_truthy_value(&self, v: &Value) -> bool {
+        self.truthy_value(v)
+    }
     fn k_rearm(&mut self, proc: u32) {
         self.rearm(proc);
     }

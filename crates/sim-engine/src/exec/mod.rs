@@ -211,6 +211,13 @@ pub(crate) trait Kernel {
     /// CONTROL: tri-valued truthiness of `eid` for a `Branch` (X/Z → false), built on
     /// the same `EvalCtx` the interpreter's `Terminator::Branch` uses (exec.rs:120).
     fn k_truthy(&self, eid: u32) -> bool;
+    /// Verilog control-flow truthiness of an ALREADY-COMPUTED value.
+    ///
+    /// Exists so a natively-evaluated branch condition routes through the SAME
+    /// tri-valued rule `k_truthy` uses (`Tri::True` only — x/z takes the else branch).
+    /// Reimplementing the rule on the compiled side is exactly how a backend silently
+    /// diverges on X, so the value production moves and the decision does not.
+    fn k_truthy_value(&self, v: &Value) -> bool;
     /// CONTROL: re-arm the process after `Return`, preserving the Edge/Level/Initial
     /// asymmetry (NOT reimplemented). TOTAL on the codegen-able class: such a body has
     /// no `Fork` terminator, so it can never be entered as a fork child (a child's

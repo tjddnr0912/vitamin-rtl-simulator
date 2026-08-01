@@ -831,3 +831,62 @@ fn a_process_reading_its_own_output_is_not_a_cycle() {
         "a real two-stage combinational chain must still measure depth 2"
     );
 }
+
+/// Branch conditions are now compiled by native-eval on the VM path. Truthiness is a
+/// TRI-VALUED control-flow rule — `x`/`z` takes the ELSE branch, it is not "non-zero" —
+/// so the native path must route its computed value through the same `truthiness` the
+/// interpreter uses rather than reimplementing the test.
+///
+/// Reimplementing it as `value != 0` is the obvious mistake and would be silent: every
+/// X-free design keeps passing. These cases are the ones that would not.
+#[test]
+fn a_natively_compiled_branch_condition_keeps_the_tri_valued_rule() {
+    let cases: [(&str, &str, &str); 4] = [
+        // A pure-X condition takes else, even though its bit pattern is not "zero".
+        ("if (x)", "xz", "else"),
+        // X in ONE bit with no definite 1 anywhere: still else.
+        ("if (part_x)", "part", "else"),
+        // A definite 1 anywhere makes it true even with X elsewhere.
+        ("if (one_and_x)", "onex", "then"),
+        // Plain zero: else.
+        ("if (0)", "zero", "else"),
+    ];
+    for (label, which, want) in cases {
+        let src = format!(
+            "module t;\n\
+               reg [3:0] v;\n\
+               reg [7:0] r;\n\
+               integer k;\n\
+               always @* begin\n\
+                 if (v) r = 8'd1; else r = 8'd2;\n\
+               end\n\
+               initial begin\n\
+                 case (\"{which}\")\n\
+                   \"xz\":   v = 4'bxxxx;\n\
+                   \"part\": v = 4'b00x0;\n\
+                   \"onex\": v = 4'b01x0;\n\
+                   default: v = 4'b0000;\n\
+                 endcase\n\
+                 #1 $display(\"r=%0d\", r);\n\
+                 $finish;\n\
+               end\n\
+             endmodule"
+        );
+        let ir = build(&src);
+        let want_val = if want == "then" { "r=1" } else { "r=2" };
+        for backend in [Backend::Interpreter, Backend::Bytecode] {
+            let (_r, out) = simulate_capture(
+                &ir,
+                SimOpts {
+                    backend,
+                    ..SimOpts::default()
+                },
+            );
+            assert!(
+                out.contains(want_val),
+                "{label} on {backend:?}: expected {want_val} (x/z takes else; a definite 1 \
+                 anywhere is true) — got:\n{out}"
+            );
+        }
+    }
+}

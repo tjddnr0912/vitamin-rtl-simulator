@@ -278,13 +278,25 @@ struct CompiledBlock {
 }
 
 /// The P9 allow-list terminators ONLY — `is_codegen_able` guaranteed nothing else
-/// reaches the compiler. `Branch` carries the condition `ExprId` (truthiness is a
-/// tri-valued control-flow rule routed through `k_truthy`, NOT a register boolean).
+/// reaches the compiler.
+///
+/// `Branch` keeps the condition `ExprId` for the interpreter path AND, when the
+/// condition compiles, an index into `CompiledBody::natives`. Truthiness stays a
+/// tri-valued control-flow rule (`Tri::True` only), so the native path computes the
+/// VALUE natively and then routes it through the SAME `truthiness` the interpreter
+/// uses — the rule is not reimplemented, only the value production moves.
+///
+/// This matters more than it looks: real RTL writes combinational logic as if/case
+/// trees, so a decoder-shaped design spends most of its body time in these conditions.
+/// Measured on PicoRV32 + testbench: 316 of 316 branch conditions are natively
+/// compilable, and every one of them was interpreted.
 #[derive(Clone, Copy)]
 enum CompiledTerm {
     Goto(u32),
     Branch {
         cond: u32,
+        /// Index into `CompiledBody::natives`, when the condition compiled.
+        native: Option<u32>,
         then_bb: u32,
         else_bb: u32,
     },
@@ -437,11 +449,25 @@ pub(crate) fn compile_body(
                 cond,
                 then_bb,
                 else_bb,
-            } => CompiledTerm::Branch {
-                cond: *cond,
-                then_bb: *then_bb,
-                else_bb: *else_bb,
-            },
+            } => {
+                // Self-width context: a condition is self-determined (§11.6.1 does not
+                // propagate a context width into it), which is exactly what the
+                // interpreter's `eval(cond)` produces before `truthiness`.
+                let native = native.and_then(|(ir, wt)| {
+                    let w = wt.width(*cond).max(1);
+                    crate::native_eval::try_compile(ir, wt, *cond, w, wt.signed(*cond)).map(|p| {
+                        let ni = natives.len() as u32;
+                        natives.push(p);
+                        ni
+                    })
+                });
+                CompiledTerm::Branch {
+                    cond: *cond,
+                    native,
+                    then_bb: *then_bb,
+                    else_bb: *else_bb,
+                }
+            }
             Terminator::Return => CompiledTerm::Return,
             // `is_codegen_able` guarantees only the P9 allow-list reaches here.
             other => unreachable!("non-codegen-able terminator in compile_body: {other:?}"),
@@ -526,8 +552,16 @@ pub(crate) fn vm_exec(
                 cond,
                 then_bb,
                 else_bb,
+                native,
             } => {
-                bb = if k.k_truthy(cond) { then_bb } else { else_bb };
+                let t = match native {
+                    Some(ni) => {
+                        let v = k.k_eval_native(&body.natives[ni as usize]);
+                        k.k_truthy_value(&v)
+                    }
+                    None => k.k_truthy(cond),
+                };
+                bb = if t { then_bb } else { else_bb };
             }
             CompiledTerm::Return => {
                 k.k_rearm(proc);
@@ -566,8 +600,20 @@ pub(crate) enum VmSlot {
 /// allow-list. Bodies outside it are excluded because their RHS never reaches
 /// `try_compile` at all.
 pub fn native_eval_coverage(ir: &SimIr) -> (usize, usize) {
+    native_eval_coverage_split(ir).0
+}
+
+/// `((assign_ok, assign_total), (branch_ok, branch_total))`.
+///
+/// Branch conditions are counted separately because they are compiled DIFFERENTLY: a
+/// `CompiledTerm::Branch` stores the raw ExprId and evaluates it through the
+/// interpreter's `k_truthy`, so a natively-compilable condition is still interpreted
+/// today. Real RTL writes its combinational logic as if/case trees, so this is where a
+/// decoder-shaped design actually spends its time.
+pub fn native_eval_coverage_split(ir: &SimIr) -> ((usize, usize), (usize, usize)) {
     let wt = crate::width::WidthTable::build(ir, &crate::FuncTable::new());
     let (mut ok, mut total) = (0usize, 0usize);
+    let (mut bok, mut btotal) = (0usize, 0usize);
     for p in &ir.processes {
         if !is_codegen_able(&ir.stmts, &ir.exprs, &p.body) {
             continue;
@@ -591,9 +637,16 @@ pub fn native_eval_coverage(ir: &SimIr) -> (usize, usize) {
                     ok += 1;
                 }
             }
+            if let Terminator::Branch { cond, .. } = block.term {
+                btotal += 1;
+                let w = wt.width(cond).max(1);
+                if crate::native_eval::try_compile(ir, &wt, cond, w, wt.signed(cond)).is_some() {
+                    bok += 1;
+                }
+            }
         }
     }
-    (ok, total)
+    ((ok, total), (bok, btotal))
 }
 
 #[cfg(test)]
@@ -854,6 +907,7 @@ mod tests {
             cb.blocks[0].term,
             CompiledTerm::Branch {
                 cond: 0,
+                native: None,
                 then_bb: 0,
                 else_bb: 2
             }

@@ -268,6 +268,22 @@ impl Scheduler<'_, '_> {
         ctx.eval(eid)
     }
 
+    /// Truthiness of an already-computed value, through the same `truthiness` rule as
+    /// [`Self::truthy`] — the native branch-condition path uses this so the tri-valued
+    /// X/Z decision is never reimplemented on the compiled side.
+    pub(crate) fn truthy_value(&self, v: &Value) -> bool {
+        let ctx = EvalCtx {
+            ir: self.st.ir,
+            nets: self.st,
+            now: self.st.now,
+            wt: &self.st.wt,
+            time_mult: self.st.cur_time_mult,
+            rng: &self.st.rng,
+            plusargs: &self.st.plusargs,
+        };
+        matches!(ctx.truthiness(v), crate::eval::Tri::True)
+    }
+
     pub(crate) fn truthy(&self, eid: u32) -> bool {
         let ctx = EvalCtx {
             ir: self.st.ir,

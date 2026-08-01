@@ -102,6 +102,23 @@
 >
 > ⇒ **당장의 함의: 실물 RTL 의 레버는 백엔드가 아니라 공유 net-access 경로다.**
 
+> **✅ 2026-08-01 — 분기 조건 native 컴파일. 실물 설계에서 VM 1.065× → 1.160×.**
+>
+> 실물 프로파일이 인터프리터/VM **양쪽에서 형상이 같았다**(eval dispatch 60.7% · Value prim 32%). 바디가 시간의 62%이고 assign RHS 는 **97% native 컴파일**되는데도 VM 이 1.04× 였다 ⇒ 바디 안에서 뭔가가 인터프리터로 새고 있었다. 그것이 **분기 조건**이었다: `CompiledTerm::Branch` 가 조건 ExprId 를 그대로 들고 `k_truthy` 로 평가했다.
+>
+> **실물 RTL 은 조합 논리를 if/case 트리로 쓴다** — 디코더형 설계의 바디 시간은 거기 있다. 측정: picorv32+tb 의 분기 조건 **316/316 이 native 컴파일 가능한데 전부 인터프리터**였다.
+>
+> | | interp | vm | 배속 |
+> |---|---|---|---|
+> | PRE (`cf23f19`) | 1242.8 ms | 1166.7 | 1.065× |
+> | **POST** | 1244.1 ms(불변) | **1072.2** | **1.160×** |
+>
+> **VM 자체가 1.088× 빨라졌다.** 인터프리터는 손대지 않았다.
+>
+> **의미 보존 방식이 핵심**: truthiness 는 **tri-valued 제어흐름 규칙**이라 `x`/`z` 는 else 로 간다("0 이 아니면 참"이 아니다). 그래서 native 경로는 값만 native 로 계산하고 **판정은 인터프리터와 같은 `truthiness` 로 라우팅**한다(`k_truthy_value`). 규칙을 컴파일 쪽에 재구현하면 X-free 설계는 전부 통과하면서 조용히 갈라진다 — `a_natively_compiled_branch_condition_keeps_the_tri_valued_rule` 이 그 자리를 핀한다.
+>
+> 검증 = P5 게이트 · 5024 tests · picorv32 에서 iverilog/interp/vm **3자 일치**(`trap=0 addr=00000014`).
+
 ## 요약 판정
 
 | 방향 | 평가 | 이유 |
