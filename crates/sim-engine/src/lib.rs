@@ -54,7 +54,10 @@ pub use elaborate::{
     QueueBoundTable, RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo,
     TaskCallProc,
 };
-pub use levelize::{comb_ranks, fusion_candidates, fusion_candidates_across_copies, FusionPair};
+pub use levelize::{
+    comb_ranks, fusion_candidates, fusion_candidates_across_copies, fusion_chains, FusionChain,
+    FusionPair,
+};
 pub use sched::FinishReason;
 
 use sched::Scheduler;
@@ -161,6 +164,15 @@ pub struct SimOpts {
     /// byte-identical to the prior single `round(d × M)` (single-timescale
     /// designs and every existing `SimOpts::default()` caller unaffected).
     pub proc_prec_mults: Vec<u64>,
+    /// FUSE: run a chain of combinational processes as ONE activation instead of one
+    /// per delta. Only chains where nothing can observe the delta between two bodies are
+    /// fused (`levelize::fusion_candidates`), so no process order moves and no output
+    /// byte changes — it is a wall-clock knob, like `backend`.
+    ///
+    /// Measured payoff (`perf_fusion_spike`, depth 48): 143.4 ms unfused vs 39.8 ms
+    /// fused on the interpreter, and the bytecode VM's own payoff on top rising from
+    /// 1.19x to 2.44x, because fusion is what raises work per activation.
+    pub fuse: bool,
     /// Process-body execution backend (P0a). Default [`Backend::Interpreter`] so
     /// every existing caller is byte-identical. Rides out-of-band (never enters the
     /// frozen `SimIr`).
@@ -335,6 +347,7 @@ impl Default for SimOpts {
             vcd_date: "vitamin-sim".to_string(),
             max_deltas: 1_000_000,
             max_class_objs: 1_000_000,
+            fuse: false,
             time_limit: None,
             fork_modes: ForkModeTable::new(),
             net_names: Vec::new(),
@@ -536,6 +549,18 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.proc_multipliers = opts.proc_multipliers.clone();
     st.proc_prec_mults = opts.proc_prec_mults.clone();
     st.backend = opts.backend;
+    // FUSE: derived from the frozen `SimIr` alone, so it costs one pass here and
+    // nothing when the knob is off.
+    st.fuse_prelude = vec![Vec::new(); ir.processes.len()];
+    st.fused_away = vec![false; ir.processes.len()];
+    if opts.fuse {
+        for ch in levelize::fusion_chains(ir) {
+            for &p in &ch.prelude {
+                st.fused_away[p] = true;
+            }
+            st.fuse_prelude[ch.consumer] = ch.prelude.iter().map(|&p| p as u32).collect();
+        }
+    }
     st.severities = opts.severities.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
     st.stage_stmts = opts.stage_stmts.clone();

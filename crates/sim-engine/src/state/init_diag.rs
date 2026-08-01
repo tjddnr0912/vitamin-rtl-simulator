@@ -83,6 +83,8 @@ impl<'a> SimState<'a> {
             nets,
             dirty: Vec::new(),
             dirty_flag: vec![false; nnets],
+            fuse_prelude: Vec::new(),
+            fused_away: Vec::new(),
             ca_of_net: Vec::new(),
             ca_dirty: Vec::new(),
             ca_dirty_flag: Vec::new(),

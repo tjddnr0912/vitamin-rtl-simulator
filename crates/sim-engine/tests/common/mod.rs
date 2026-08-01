@@ -178,6 +178,7 @@ impl Rng {
 /// valid synthesizable RTL. Index in this array is stable (used to name designs).
 type Template = fn(&mut Rng, usize) -> Design;
 const TEMPLATES: &[Template] = &[
+    gen_comb_chain,
     gen_counter,
     gen_alu,
     gen_shift_register,
@@ -202,6 +203,56 @@ pub fn corpus(seed: u64, n: usize) -> Vec<Design> {
 }
 
 // ── templates ────────────────────────────────────────────────────────────────
+
+/// A CHAIN of combinational stages between two clocked endpoints — the shape process
+/// fusion fires on, and the shape the corpus had none of.
+///
+/// Added because the fusion equivalence gate was passing VACUOUSLY: no corpus design
+/// contained a fusable chain, so "fused output equals unfused output" was proving
+/// nothing. That is the same failure mode this file's Stage-B comments described for the
+/// bytecode VM, caught here by a teeth test rather than years later.
+///
+/// Depth and width vary so the corpus covers both a single fusable pair and a long
+/// ladder; the VCD dump is kept so the gate compares waveform bytes on this shape too.
+fn gen_comb_chain(rng: &mut Rng, idx: usize) -> Design {
+    let depth = rng.range(2, 7);
+    let w = rng.range(4, 16);
+    let cycles = rng.range(3, 10);
+    let mut decls = String::new();
+    let mut stages = String::new();
+    for i in 0..depth {
+        decls.push_str(&format!("  reg [{hi}:0] s{i};\n", hi = w - 1));
+        let src = if i == 0 {
+            "seed".to_string()
+        } else {
+            format!("s{}", i - 1)
+        };
+        stages.push_str(&format!(
+            "  always_comb s{i} = ({src} ^ ({src} << 1)) + {n};\n",
+            n = i + 1
+        ));
+    }
+    let src = format!(
+        "module top;\n\
+           reg clk;\n\
+           reg [{hi}:0] seed, acc;\n{decls}{stages}\
+           integer k;\n\
+           always @(posedge clk) begin seed <= seed + 1'b1; acc <= acc ^ s{last}; end\n\
+           initial begin\n\
+             $dumpfile(\"chain.vcd\"); $dumpvars(0, top);\n\
+             clk = 0; seed = 1; acc = 0;\n\
+             for (k = 0; k < {cycles}; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+             $display(\"%0d\", acc); $finish;\n\
+           end\n\
+         endmodule",
+        hi = w - 1,
+        last = depth - 1,
+    );
+    Design {
+        name: format!("comb_chain_{idx}_d{depth}_w{w}_c{cycles}"),
+        src,
+    }
+}
 
 /// Width-parameterized up-counter with sync reset, dumped to VCD.
 fn gen_counter(rng: &mut Rng, idx: usize) -> Design {

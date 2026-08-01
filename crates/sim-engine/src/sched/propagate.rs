@@ -623,6 +623,17 @@ impl Scheduler<'_, '_> {
             return;
         }
         let tmpl = self.activities[proc as usize].template as usize;
+        // FUSE: a prelude member must NEVER re-arm. It runs only inside its consumer's
+        // activation, and its body still returns through here, so without this guard it
+        // registers a fresh Level waiter on every consumer activation — one leaked
+        // waiter per cycle, which is a quadratic slowdown (measured: depth-6 chain at
+        // 400 cycles went 2.1 ms unfused to 378.2 ms "fused") — and, once one of those
+        // waiters fires, the producer runs independently again, defeating the fusion it
+        // was supposed to be part of. Its consumer arms on the chain's whole read set,
+        // so nothing is lost by staying silent here.
+        if self.st.fused_away.get(tmpl).copied().unwrap_or(false) {
+            return;
+        }
         let kind = self.st.ir.processes[tmpl].sensitivity.kind;
         match kind {
             // permanent net_to_edge entry / one-shot: do NOT re-register.

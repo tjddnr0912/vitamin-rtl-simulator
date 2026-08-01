@@ -724,3 +724,64 @@ fn wide_arith_equals_across_backends() {
         "000000000000000000000000000000000000000000000000000000e8d56b6d65 -12"
     );
 }
+
+/// [E] The fusion equivalence gate, the twin of `compiled_equals_interpreter_over_corpus`.
+///
+/// `SimOpts.fuse` collapses a chain of combinational processes into ONE activation. It
+/// only fires where nothing can observe the delta between two bodies, so it must not
+/// move a single output byte — and unlike a speed knob whose failure is visible, a
+/// fusion that fires one process too eagerly produces a WRONG VALUE at exit 0. This runs
+/// the whole deterministic corpus with fusion off and on and asserts stdout, VCD bytes
+/// and the summary are identical, on BOTH backends.
+#[test]
+fn fused_equals_unfused_over_corpus() {
+    for d in corpus(0x5EED_F00D, 72) {
+        let ir = build(&d.src);
+        for backend in [Backend::Interpreter, Backend::Bytecode] {
+            let run = |fuse: bool| {
+                let path = std::env::temp_dir().join(format!(
+                    "vita_fuse_{}_{}_{fuse}_{backend:?}.vcd",
+                    std::process::id(),
+                    d.name
+                ));
+                let _ = std::fs::remove_file(&path);
+                let opts = SimOpts {
+                    fuse,
+                    backend,
+                    vcd_path_override: Some(path.to_string_lossy().into_owned()),
+                    ..SimOpts::default()
+                };
+                let (res, out) = simulate_capture(&ir, opts);
+                let vcd = std::fs::read(&path).ok();
+                let _ = std::fs::remove_file(&path);
+                (res, out, vcd)
+            };
+            let (r0, o0, v0) = run(false);
+            let (r1, o1, v1) = run(true);
+            assert_eq!(o0, o1, "{}/{backend:?}: fusion moved stdout", d.name);
+            assert_eq!(v0, v1, "{}/{backend:?}: fusion moved VCD bytes", d.name);
+            assert_eq!(
+                (r0.sim_time, r0.finish_reason, r0.exit_class),
+                (r1.sim_time, r1.finish_reason, r1.exit_class),
+                "{}/{backend:?}: fusion moved the run summary",
+                d.name
+            );
+        }
+    }
+}
+
+/// TEETH for `fused_equals_unfused_over_corpus`: the corpus must actually CONTAIN
+/// designs the transform fires on, or that gate passes vacuously — the exact failure
+/// mode the Stage-B comments on this file described for years while the VM was inert.
+#[test]
+fn the_fusion_gate_is_not_vacuous() {
+    let fired = corpus(0x5EED_F00D, 72)
+        .into_iter()
+        .filter(|d| !sim_engine::fusion_chains(&build(&d.src)).is_empty())
+        .count();
+    assert!(
+        fired > 0,
+        "no corpus design contains a fusable chain, so the fusion equivalence gate \
+         proves nothing — add a chained-combinational template to the corpus"
+    );
+}

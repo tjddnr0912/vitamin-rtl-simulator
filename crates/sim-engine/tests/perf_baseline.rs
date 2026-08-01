@@ -1147,3 +1147,55 @@ fn perf_fusion_opportunity() {
         );
     }
 }
+
+/// [E-FUSE] Does the fusion transform actually pay, and does it move any output byte?
+///
+/// `separate` is the in-module chain that adjacent fusion fires on (23 of 24 pairs).
+/// The equivalence check is the point: fusion must be a wall-clock knob only.
+#[test]
+#[ignore = "E fusion probe (DATA); run with --ignored --nocapture"]
+fn perf_fusion_effect() {
+    println!("\n[E-FUSE] adjacent fusion on the in-module chain (2000 cycles):\n");
+    println!(
+        "  {:>5} {:>7}  {:>9} {:>9} {:>8}   {:>9} {:>9} {:>8}   output",
+        "depth", "chains", "off ms", "on ms", "speedup", "off+vm", "on+vm", "speedup"
+    );
+    for d in [6usize, 12, 24, 48] {
+        let ir = build(&comb_chain_src(d, 2000));
+        let chains = sim_engine::fusion_chains(&ir).len();
+        let run = |fuse: bool, backend: Backend| {
+            let mut best = u128::MAX;
+            let mut out = String::new();
+            for _ in 0..3 {
+                let opts = SimOpts {
+                    fuse,
+                    backend,
+                    ..SimOpts::default()
+                };
+                let t = Instant::now();
+                let (res, o) = sim_engine::simulate_capture(&ir, opts);
+                best = best.min(t.elapsed().as_nanos());
+                assert_eq!(res.finish_reason, FinishReason::Finish);
+                out = o;
+            }
+            (best as f64 / 1e6, out)
+        };
+        let (off, o_off) = run(false, Backend::Interpreter);
+        let (on, o_on) = run(true, Backend::Interpreter);
+        let (offv, o_offv) = run(false, Backend::Bytecode);
+        let (onv, o_onv) = run(true, Backend::Bytecode);
+        let same = o_off == o_on && o_off == o_offv && o_off == o_onv;
+        println!(
+            "  {d:>5} {chains:>7}  {off:>9.1} {on:>9.1} {:>7.2}x   {offv:>9.1} {onv:>9.1} {:>7.2}x   {}",
+            off / on,
+            offv / onv,
+            if same { "IDENTICAL" } else { "*** MOVED ***" }
+        );
+        if !same {
+            println!("      off      : {:?}", o_off.trim());
+            println!("      on       : {:?}", o_on.trim());
+            println!("      off+vm   : {:?}", o_offv.trim());
+            println!("      on+vm    : {:?}", o_onv.trim());
+        }
+    }
+}

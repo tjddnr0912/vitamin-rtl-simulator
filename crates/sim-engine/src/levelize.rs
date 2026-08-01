@@ -549,3 +549,66 @@ pub fn fusion_candidates_across_copies(ir: &SimIr) -> usize {
     }
     count
 }
+
+/// A fusion CHAIN, resolved into the form the engine executes.
+///
+/// `consumer` runs `prelude` (ancestor process templates, in dependency order) before
+/// its own body, all inside one activation. Every template in `prelude` is fused away:
+/// it is never armed and never wakes on its own, because the only thing that could
+/// observe it running separately is `consumer`, which now runs immediately after it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FusionChain {
+    pub consumer: usize,
+    pub prelude: Vec<usize>,
+}
+
+/// Resolve `fusion_candidates` pairs into maximal chains.
+///
+/// A pair `p → q` means "p may run immediately before q". Chaining them transitively is
+/// what turns a depth-D ladder into ONE activation of D bodies, which is the whole
+/// point: the E-spike measured a depth-48 ladder at 143.4 ms unfused against 39.8 ms
+/// fused on the interpreter, and the VM's payoff on top rising from 1.19x to 2.44x.
+///
+/// A template appears in at most one chain, as producer or as consumer, so the prelude
+/// lists partition cleanly and no body can run twice.
+pub fn fusion_chains(ir: &SimIr) -> Vec<FusionChain> {
+    let pairs = fusion_candidates(ir);
+    // producer → consumer, and the inverse. Both are functions: `fusion_candidates`
+    // only emits a pair when the connecting net has exactly one reader and one writer.
+    let mut succ: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut pred: BTreeMap<usize, usize> = BTreeMap::new();
+    for f in &pairs {
+        // Defensive: refuse to build on a non-function mapping rather than silently
+        // dropping one of the edges.
+        if succ.contains_key(&f.producer) || pred.contains_key(&f.consumer) {
+            return Vec::new();
+        }
+        succ.insert(f.producer, f.consumer);
+        pred.insert(f.consumer, f.producer);
+    }
+    let mut out = Vec::new();
+    // A chain ENDS at a consumer with no successor of its own; walk back from there.
+    for &tail in succ.values() {
+        if succ.contains_key(&tail) {
+            continue; // not the end of its chain
+        }
+        let mut prelude = Vec::new();
+        let mut cur = tail;
+        let mut guard = 0usize;
+        while let Some(&p) = pred.get(&cur) {
+            prelude.push(p);
+            cur = p;
+            guard += 1;
+            if guard > pairs.len() {
+                return Vec::new(); // a cycle: refuse the whole transform
+            }
+        }
+        prelude.reverse(); // dependency order: furthest ancestor first
+        out.push(FusionChain {
+            consumer: tail,
+            prelude,
+        });
+    }
+    out.sort_by_key(|c| c.consumer);
+    out
+}

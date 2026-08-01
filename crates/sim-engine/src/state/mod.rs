@@ -215,6 +215,14 @@ pub(crate) struct SimState<'a> {
     /// are re-evaluated unconditionally, so an entry's ABSENCE never means "skip".
     /// Empty vectors for the overwhelming majority of nets, so the marking below costs
     /// a length check on the hot path.
+    /// FUSE: per process template, the ancestor templates whose bodies run — in this
+    /// order — immediately before it, inside ONE activation. Empty for every template
+    /// when fusion is off, and for every template that is not a fusion consumer.
+    pub fuse_prelude: Vec<Vec<u32>>,
+    /// FUSE: templates that are a prelude member of some chain. They are never seeded at
+    /// t0 and never armed, because the only process that could observe them running
+    /// separately is the consumer that now runs them.
+    pub fused_away: Vec<bool>,
     pub ca_of_net: Vec<Vec<u32>>,
     /// DIRTY-SETTLE worklist: assigns whose dependencies moved since the last settle
     /// pass, plus a membership flag so a net changing twice enqueues once.
