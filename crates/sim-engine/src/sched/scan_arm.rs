@@ -457,6 +457,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let mut ca_always: Vec<u32> = Vec::new();
         let mut ca_of_net: Vec<Vec<u32>> = vec![Vec::new(); nnets];
         for (ci, (dep, ok)) in deps.iter().enumerate() {
+            // FUSE: a copy performed by a prelude is neither dirty-tracked nor always-run
+            // — the fused body is its sole evaluator now.
+            if st.fused_copies.get(ci).copied().unwrap_or(false) {
+                continue;
+            }
             if !*ok || ca_md[ci] {
                 ca_always.push(ci as u32);
                 continue;
@@ -471,7 +476,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         st.ca_dirty_flag = vec![false; nca];
         // Seed EVERY certified assign: nothing has been evaluated yet, so the first
         // settle must behave exactly like the old full pass.
-        st.ca_dirty = (0..nca as u32).collect();
+        st.ca_dirty = (0..nca as u32)
+            .filter(|&ci| !st.fused_copies.get(ci as usize).copied().unwrap_or(false))
+            .collect();
         for &ci in &st.ca_dirty {
             st.ca_dirty_flag[ci as usize] = true;
         }
@@ -824,9 +831,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // its own inputs — the prelude bodies no longer have arming of their own.
                 let mut nets: Vec<u32> = p.sensitivity.edges.iter().map(|e| e.net).collect();
                 for k in 0..self.st.fuse_prelude.get(tmpl).map_or(0, Vec::len) {
-                    let anc = self.st.fuse_prelude[tmpl][k] as usize;
+                    let crate::PreludeStep::Body(anc) = self.st.fuse_prelude[tmpl][k] else {
+                        continue; // a Copy step reads only what its producer already wrote
+                    };
                     nets.extend(
-                        self.st.ir.processes[anc]
+                        self.st.ir.processes[anc as usize]
                             .sensitivity
                             .edges
                             .iter()
@@ -910,15 +919,30 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // why nothing about HOW a body executes changes here, only WHEN.
         let ftmpl = self.activity_template(proc) as usize;
         for k in 0..self.st.fuse_prelude.get(ftmpl).map_or(0, Vec::len) {
-            let anc = self.st.fuse_prelude[ftmpl][k];
-            let entry = self.st.ir.processes[anc as usize].entry;
-            match self.dispatch_body(anc, entry) {
-                Step::Done | Step::Suspended => {}
-                // An ancestor that ends the run does so BEFORE the consumer body is
-                // entered — the same chronology it would have had unfused.
-                other => {
-                    self.st.blocking_writer = None;
-                    return other;
+            match self.st.fuse_prelude[ftmpl][k] {
+                crate::PreludeStep::Body(anc) => {
+                    let entry = self.st.ir.processes[anc as usize].entry;
+                    match self.dispatch_body(anc, entry) {
+                        Step::Done | Step::Suspended => {}
+                        // An ancestor that ends the run does so BEFORE the consumer body
+                        // is entered — the same chronology it would have had unfused.
+                        other => {
+                            self.st.blocking_writer = None;
+                            return other;
+                        }
+                    }
+                }
+                // A port-connection copy, performed here instead of in the settle, so the
+                // next body in the chain sees its input already forwarded. Same three
+                // calls the settle makes, so the write funnel, VCD and change marking are
+                // all identical — only the moment moves.
+                crate::PreludeStep::Copy(ci) => {
+                    let ci = ci as usize;
+                    let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                    let rhs = self.st.ir.cont_assigns[ci].rhs;
+                    let v = self.eval_for_lvalue(&lhs, rhs);
+                    let offs = self.resolve_lvalue_offsets(&lhs);
+                    self.st.write_lvalue(&lhs, v, &offs);
                 }
             }
         }

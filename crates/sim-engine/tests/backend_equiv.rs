@@ -785,3 +785,67 @@ fn the_fusion_gate_is_not_vacuous() {
          proves nothing — add a chained-combinational template to the corpus"
     );
 }
+
+/// An iverilog-pinned value on the shape fusion is FOR: eight combinational stages
+/// chained through module ports, i.e. through the whole-net copy assigns a prelude now
+/// performs inline instead of the settle.
+///
+/// The corpus gate proves fused == unfused. This proves the shared answer is also the
+/// RIGHT one, against an outside oracle — measured live with iverilog 13:
+/// `acc=0000340c` after 300 clocks.
+#[test]
+fn fused_instance_chain_matches_iverilog() {
+    let d = 8usize;
+    let mut decls = String::new();
+    let mut insts = String::new();
+    for i in 0..d {
+        decls.push_str(&format!("  wire [31:0] w{i};\n"));
+        let a = if i == 0 {
+            "seed".to_string()
+        } else {
+            format!("w{}", i - 1)
+        };
+        insts.push_str(&format!("  stage u{i} (.a({a}), .y(w{i}));\n"));
+    }
+    let src = format!(
+        "module stage(input [31:0] a, output [31:0] y);\n\
+           reg [31:0] r;\n\
+           always @* r = (a ^ ((a << 1) | (a >> 31))) + 32'd1;\n\
+           assign y = r;\n\
+         endmodule\n\
+         module top;\n\
+           reg clk; reg [31:0] seed; reg [31:0] acc;\n{decls}{insts}\
+           integer k;\n\
+           always @(posedge clk) begin\n\
+             seed <= seed + 32'd1;\n\
+             acc  <= acc ^ w{last};\n\
+           end\n\
+           initial begin\n\
+             clk = 0; seed = 32'd1; acc = 0;\n\
+             for (k = 0; k < 300; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+             $display(\"acc=%h\", acc);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+        last = d - 1
+    );
+    let ir = build(&src);
+    assert!(
+        !sim_engine::fusion_chains(&ir).is_empty(),
+        "this design must actually fuse, or the pin proves nothing about fusion"
+    );
+    for fuse in [false, true] {
+        for backend in [Backend::Interpreter, Backend::Bytecode] {
+            let opts = SimOpts {
+                fuse,
+                backend,
+                ..SimOpts::default()
+            };
+            let (_res, out) = simulate_capture(&ir, opts);
+            assert!(
+                out.contains("acc=0000340c"),
+                "fuse={fuse} {backend:?}: expected iverilog's acc=0000340c, got:\n{out}"
+            );
+        }
+    }
+}

@@ -55,8 +55,8 @@ pub use elaborate::{
     TaskCallProc,
 };
 pub use levelize::{
-    comb_ranks, fusion_candidates, fusion_candidates_across_copies, fusion_chains, FusionChain,
-    FusionPair,
+    comb_ranks, fused_copy_set, fusion_candidates, fusion_candidates_across_copies, fusion_chains,
+    FusionChain, FusionPair, PreludeStep,
 };
 pub use sched::FinishReason;
 
@@ -553,12 +553,19 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // nothing when the knob is off.
     st.fuse_prelude = vec![Vec::new(); ir.processes.len()];
     st.fused_away = vec![false; ir.processes.len()];
+    st.fused_copies = vec![false; ir.cont_assigns.len()];
     if opts.fuse {
-        for ch in levelize::fusion_chains(ir) {
-            for &p in &ch.prelude {
-                st.fused_away[p] = true;
+        let chains = levelize::fusion_chains(ir);
+        for ci in levelize::fused_copy_set(&chains) {
+            st.fused_copies[ci as usize] = true;
+        }
+        for ch in chains {
+            for step in &ch.prelude {
+                if let levelize::PreludeStep::Body(b) = step {
+                    st.fused_away[*b as usize] = true;
+                }
             }
-            st.fuse_prelude[ch.consumer] = ch.prelude.iter().map(|&p| p as u32).collect();
+            st.fuse_prelude[ch.consumer] = ch.prelude;
         }
     }
     st.severities = opts.severities.clone();

@@ -1155,13 +1155,25 @@ fn perf_fusion_opportunity() {
 #[test]
 #[ignore = "E fusion probe (DATA); run with --ignored --nocapture"]
 fn perf_fusion_effect() {
-    println!("\n[E-FUSE] adjacent fusion on the in-module chain (2000 cycles):\n");
+    println!("\n[E-FUSE] fusion on both chain shapes (2000 cycles):\n");
     println!(
-        "  {:>5} {:>7}  {:>9} {:>9} {:>8}   {:>9} {:>9} {:>8}   output",
-        "depth", "chains", "off ms", "on ms", "speedup", "off+vm", "on+vm", "speedup"
+        "  {:<10} {:>3} {:>4}  {:>8} {:>8} {:>8}  {:>8} {:>8} {:>8}  output",
+        "shape", "d", "ch", "off ms", "on ms", "speedup", "off+vm", "on+vm", "speedup"
     );
-    for d in [6usize, 12, 24, 48] {
-        let ir = build(&comb_chain_src(d, 2000));
+    for (shape, d) in [
+        ("in-module", 12usize),
+        ("in-module", 24),
+        ("in-module", 48),
+        ("instances", 12),
+        ("instances", 24),
+        ("instances", 48),
+    ] {
+        let src = if shape == "instances" {
+            inst_chain_src(d, 2000)
+        } else {
+            comb_chain_src(d, 2000)
+        };
+        let ir = build(&src);
         let chains = sim_engine::fusion_chains(&ir).len();
         let run = |fuse: bool, backend: Backend| {
             let mut best = u128::MAX;
@@ -1186,7 +1198,7 @@ fn perf_fusion_effect() {
         let (onv, o_onv) = run(true, Backend::Bytecode);
         let same = o_off == o_on && o_off == o_offv && o_off == o_onv;
         println!(
-            "  {d:>5} {chains:>7}  {off:>9.1} {on:>9.1} {:>7.2}x   {offv:>9.1} {onv:>9.1} {:>7.2}x   {}",
+            "  {shape:<10} {d:>3} {chains:>4}  {off:>8.1} {on:>8.1} {:>7.2}x  {offv:>8.1} {onv:>8.1} {:>7.2}x  {}",
             off / on,
             offv / onv,
             if same { "IDENTICAL" } else { "*** MOVED ***" }
