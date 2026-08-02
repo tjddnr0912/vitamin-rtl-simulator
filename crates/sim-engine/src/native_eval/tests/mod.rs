@@ -80,7 +80,7 @@ fn assert_matches_oracle_on(
     };
     let prog = try_compile(ir, &wt, &ineligible_nets(ir), eid, ctx_w, ctx_signed)
         .expect("expression must be native-compilable in this test");
-    let native = run(&prog, fake);
+    let native = run(&prog, fake, &mut NativeScratch::default());
     assert_eq!(
         native, oracle,
         "native eval diverged from oracle for eid {eid} ctx ({ctx_w},{ctx_signed})"

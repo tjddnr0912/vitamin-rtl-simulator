@@ -420,7 +420,19 @@ impl Scheduler<'_, '_> {
     /// fast path). `self.st` is the same `NetReader` `eval_ctx_top` builds its EvalCtx
     /// over, so a native leaf load reads exactly what the interpreter would.
     pub(crate) fn eval_native(&self, prog: &crate::native_eval::NativeProg) -> Value {
-        crate::native_eval::run(prog, self.st)
+        // The evaluation stacks are a REUSED scratch, not a fresh frame-local pair — see
+        // `NativeScratch`. `&self` here (this is the read path), so the scratch is
+        // interior-mutable. `try_borrow_mut` is not a fallback for correctness but for
+        // re-entrancy: nothing today evaluates a native program from inside another one
+        // (a native leaf load only reads the net table), and if that ever changes the
+        // inner run gets its own stacks instead of corrupting the outer one's.
+        match self.native_scratch.try_borrow_mut() {
+            Ok(mut sc) => crate::native_eval::run(prog, self.st, &mut sc),
+            Err(_) => {
+                let mut own = crate::native_eval::NativeScratch::default();
+                crate::native_eval::run(prog, self.st, &mut own)
+            }
+        }
     }
 
     /// V2A-frame (§4.5.173): split a frame task call's `in_binds` into SCALAR copy-in

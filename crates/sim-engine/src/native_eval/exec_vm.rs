@@ -4,22 +4,26 @@ use super::*;
 
 /// Run a compiled program against `nets`, producing the single `Value` the oracle's
 /// `eval_ctx` would return for the same `(ExprId, ctx)`.
-pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader) -> Value {
-    // P3-5: fixed arrays + manual sp — no heap allocation per evaluation.
-    // `try_compile` guaranteed the program's max depth fits BOTH stacks.
-    let mut buf = [(0u64, 0u64); NATIVE_STACK];
+pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeScratch) -> Value {
+    // P3-5: fixed arrays + manual sp — no heap allocation per evaluation. The arrays
+    // live on the CALLER (see `NativeScratch`) rather than in this frame: `try_compile`
+    // caps depth at `NATIVE_STACK` = 64, but the programs that actually run average 4.2
+    // ops at depth 2–3, so declaring them here zeroed and touched a kilobyte of stack per
+    // four-instruction expression, 6.5 million times.
+    //
+    // Stale contents are harmless: `sp` starts at 0 every run and `push` writes a slot
+    // before `pop` can read it — the ARITY check `try_compile` performs is what
+    // guarantees that, and the debug-only VM-ARITY-ASSERT below re-verifies it per op.
     let mut sp = 0usize;
     let mut stack = FixedStack {
-        buf: &mut buf,
+        buf: &mut scratch.narrow,
         sp: &mut sp,
     };
-    // VM-WIDEZERO: only zero-init the 256 B wide stack for programs that use it;
-    // a narrow-only program (wmax==0) never executes a W* opcode, so leave `wbuf`
-    // uninitialized and hand the wide stack an empty slice (never indexed).
-    let mut wbuf: [(u128, u128); WIDE_STACK];
+    // VM-WIDEZERO: a narrow-only program (wmax == 0) never executes a W* opcode, so hand
+    // the wide stack an empty slice — it is never indexed, and the cost of carrying it is
+    // now zero either way since the buffer is no longer built per call.
     let wbuf_slice: &mut [(u128, u128)] = if prog.needs_wide {
-        wbuf = [(0u128, 0u128); WIDE_STACK];
-        &mut wbuf
+        &mut scratch.wide
     } else {
         &mut []
     };

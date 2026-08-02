@@ -521,6 +521,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 chunks: Vec::with_capacity(1),
             },
             nba_seq: 0,
+            native_scratch: std::cell::RefCell::new(Default::default()),
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
             n_expr_waiters: 0,

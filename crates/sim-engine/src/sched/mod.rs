@@ -263,6 +263,10 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// one-element allocation is made once and reused for the whole run.
     nba_scratch_lhs: Lvalue,
     nba_seq: u64,
+    /// The native-eval evaluation stacks, allocated once and reused for every program
+    /// run (`NativeScratch`). Interior-mutable because `eval_native` is on the `&self`
+    /// read path.
+    native_scratch: std::cell::RefCell<crate::native_eval::NativeScratch>,
     /// Future events keyed by absolute tick.
     wheel: BTreeMap<u64, Vec<(RegionTag, Ready)>>,
     /// Processes blocked on Wait conditions.

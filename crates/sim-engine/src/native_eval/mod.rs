@@ -362,6 +362,33 @@ const POW_MAX: u128 = 16;
 
 /// Minimal push/pop facade over a fixed buffer so the op arms read identically
 /// to the previous `Vec` form (instantiated per stack: narrow u64 / wide u128).
+/// The two evaluation stacks, owned by the CALLER and reused across runs.
+///
+/// `run` used to declare both as local arrays. The narrow one is
+/// `[(u64, u64); NATIVE_STACK]` = 1 KiB, zero-initialised on entry — and on a real
+/// design `run` is called 6,509,189 times for programs averaging **4.2 ops**, whose peak
+/// stack depth is 2–3. That is a kilobyte zeroed and a kilobyte of stack touched, per
+/// four-instruction expression. Measured on picorv32 + testbench: shrinking the array
+/// alone took the run from 0.71 s to 0.65 s.
+///
+/// Shrinking the array is not the fix — `NATIVE_STACK` is the DEPTH CAP that decides
+/// which expressions `try_compile` accepts, so lowering it pushes deep expressions back
+/// onto the interpreter. Hoisting the buffer out keeps the cap and pays its cost once.
+/// Same move as VM-REGPOOL made for the VM's register and offset files.
+pub(crate) struct NativeScratch {
+    narrow: [(u64, u64); NATIVE_STACK],
+    wide: [(u128, u128); WIDE_STACK],
+}
+
+impl Default for NativeScratch {
+    fn default() -> Self {
+        NativeScratch {
+            narrow: [(0, 0); NATIVE_STACK],
+            wide: [(0, 0); WIDE_STACK],
+        }
+    }
+}
+
 struct FixedStack<'a, T: Copy> {
     buf: &'a mut [T],
     sp: &'a mut usize,
