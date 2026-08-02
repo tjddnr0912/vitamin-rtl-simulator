@@ -43,6 +43,10 @@ pub(crate) enum Step {
 /// interpreter, which owns the resume-PC state machine (a compiled body runs
 /// atomically entry→Return and never suspends — see the P9 predicate).
 pub(crate) trait Kernel {
+    /// READ (jit): the net table, so a compiled body's leaf loads go through exactly the
+    /// reader every other path uses.
+    #[cfg(feature = "jit")]
+    fn k_nets(&self) -> &dyn crate::eval::NetReader;
     /// READ: evaluate `rhs` context-sized to `lhs`'s width (IEEE assignment rule).
     fn k_eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value;
     /// READ: evaluate a pre-compiled native expression program (VM-only fast path,

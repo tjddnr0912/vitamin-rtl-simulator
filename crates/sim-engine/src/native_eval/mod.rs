@@ -352,6 +352,23 @@ pub(crate) struct NativeProg {
 }
 
 impl NativeProg {
+    #[cfg(feature = "jit")]
+    pub(crate) fn ops(&self) -> &[NOp] {
+        &self.ops
+    }
+    #[cfg(feature = "jit")]
+    pub(crate) fn needs_wide(&self) -> bool {
+        self.needs_wide
+    }
+    #[cfg(feature = "jit")]
+    pub(crate) fn root_width(&self) -> u32 {
+        self.root_w
+    }
+    #[cfg(feature = "jit")]
+    pub(crate) fn root_signed(&self) -> bool {
+        self.root_signed
+    }
+
     /// TEST ONLY: the same program with the trivial-shape shortcut disabled, so a test
     /// can run the op loop for a program that would otherwise skip it. Without this the
     /// shortcut has no oracle — the loop is the thing it claims to be equivalent to.

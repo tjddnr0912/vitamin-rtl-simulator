@@ -11,7 +11,7 @@ use super::*;
 /// `Value`. Everything else falls through to the original read-then-resize, so the
 /// special cases (real, frame-local, handle, array, wide) are untouched.
 #[inline]
-fn load_scalar(nets: &dyn NetReader, net: u32, w: u32, signed: bool) -> (u64, u64) {
+pub(crate) fn load_scalar(nets: &dyn NetReader, net: u32, w: u32, signed: bool) -> (u64, u64) {
     if let Some(pair) = nets.read_scalar_words(net, w, signed) {
         return pair;
     }
@@ -264,39 +264,11 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeS
                 let (ev, eu) = stack.pop().expect("native ternary: missing else");
                 let (tv, tu) = stack.pop().expect("native ternary: missing then");
                 let (cv, cu) = stack.pop().expect("native ternary: missing cond");
-                let mc = low_mask(cond_w);
-                let m = low_mask(w);
-                // truthiness: any definite-1 → True; else any unknown → Unknown;
-                // else False (matches oracle `Tri`).
-                let res = if (cv & !cu & mc) != 0 {
-                    (tv & m, tu & m)
-                } else if (cu & mc) != 0 {
-                    // merge_x: identical (val,unk) pairs pass through, else X.
-                    let ident = !((tv ^ ev) | (tu ^ eu)) & m;
-                    ((tv & ident), (tu & ident) | (m & !ident))
-                } else {
-                    (ev & m, eu & m)
-                };
-                stack.push(res);
+                stack.push(op_ternary(cv, cu, tv, tu, ev, eu, w, cond_w));
             }
             NOp::Reduce { kind, neg, opw } => {
                 let (av, au) = stack.pop().expect("native reduce: missing operand");
-                let m = low_mask(opw);
-                let known1 = av & !au & m;
-                let known0 = !au & !av & m;
-                let unk = au & m;
-                let (v, u): (u64, u64) = match kind {
-                    RedK::And if known0 != 0 => (0, 0),
-                    RedK::And if unk != 0 => (0, 1),
-                    RedK::And => (1, 0),
-                    RedK::Or if known1 != 0 => (1, 0),
-                    RedK::Or if unk != 0 => (0, 1),
-                    RedK::Or => (0, 0),
-                    RedK::Xor if unk != 0 => (0, 1),
-                    RedK::Xor => ((known1.count_ones() & 1) as u64, 0),
-                };
-                let out = if neg && u == 0 { (v ^ 1, 0) } else { (v, u) };
-                stack.push(out);
+                stack.push(op_reduce(av, au, kind, neg, opw));
             }
             NOp::LogNot { opw } => {
                 let (av, au) = stack.pop().expect("native lognot: missing operand");
@@ -342,34 +314,7 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeS
             NOp::Select { kind, sel_w, src_w } => {
                 let (off_v, off_u) = stack.pop().expect("native select: missing offset");
                 let (sv, su) = stack.pop().expect("native select: missing base");
-                let m = low_mask(sel_w);
-                // Oracle: X/Z offset (or one beyond the i64 lane) ⇒ the whole
-                // select reads X at its natural width (upper bits stay 0 — the
-                // unsigned resize is a zero-extend).
-                let res = match (off_u == 0)
-                    .then_some(off_v)
-                    .and_then(|v| i64::try_from(v).ok())
-                {
-                    None => (0, m),
-                    Some(off) => {
-                        let lsb = match kind {
-                            SelKind::Bit | SelKind::PartConst | SelKind::PartIdxUp => off,
-                            SelKind::PartIdxDown => off - (sel_w as i64) + 1,
-                        };
-                        let (mut rv, mut ru) = (0u64, 0u64);
-                        for i in 0..sel_w as i64 {
-                            let si = lsb + i;
-                            if si >= 0 && (si as u32) < src_w {
-                                rv |= ((sv >> si) & 1) << i;
-                                ru |= ((su >> si) & 1) << i;
-                            } else {
-                                ru |= 1 << i; // out-of-range read → X (val=0)
-                            }
-                        }
-                        (rv, ru)
-                    }
-                };
-                stack.push(res);
+                stack.push(op_select(sv, su, off_v, off_u, kind, sel_w, src_w));
             }
             NOp::ConcatPair { lo_w, w } => {
                 let (lo_v, lo_u) = stack.pop().expect("native concat: missing lo");
@@ -778,5 +723,100 @@ pub(crate) fn word_index(iv: u64, iu: u64) -> u32 {
         u32::MAX
     } else {
         u32::try_from(iv).unwrap_or(u32::MAX)
+    }
+}
+
+// ── OP BODIES SHARED WITH THE JIT ────────────────────────────────────────────
+//
+// These are the arms whose semantics are a LOOP or a table rather than a handful of
+// branchless bit operations. The body JIT calls them through `extern "C"` shims instead
+// of re-expressing them in cranelift IR, so there is no third implementation of them to
+// drift: the VM arm above and the compiled body run the same function.
+
+/// `NOp::Select` — a bit/part select, including the out-of-range and X-offset rules.
+pub(crate) fn op_select(
+    sv: u64,
+    su: u64,
+    off_v: u64,
+    off_u: u64,
+    kind: SelKind,
+    sel_w: u32,
+    src_w: u32,
+) -> (u64, u64) {
+    let m = low_mask(sel_w);
+    // Oracle: X/Z offset (or one beyond the i64 lane) ⇒ the whole select reads X at its
+    // natural width (upper bits stay 0 — the unsigned resize is a zero-extend).
+    match (off_u == 0)
+        .then_some(off_v)
+        .and_then(|v| i64::try_from(v).ok())
+    {
+        None => (0, m),
+        Some(off) => {
+            let lsb = match kind {
+                SelKind::Bit | SelKind::PartConst | SelKind::PartIdxUp => off,
+                SelKind::PartIdxDown => off - (sel_w as i64) + 1,
+            };
+            let (mut rv, mut ru) = (0u64, 0u64);
+            for i in 0..sel_w as i64 {
+                let si = lsb + i;
+                if si >= 0 && (si as u32) < src_w {
+                    rv |= ((sv >> si) & 1) << i;
+                    ru |= ((su >> si) & 1) << i;
+                } else {
+                    ru |= 1 << i; // out-of-range read → X (val=0)
+                }
+            }
+            (rv, ru)
+        }
+    }
+}
+
+/// `NOp::Reduce` — `&`/`|`/`^` over the operand's bits, with the N-forms' inversion.
+pub(crate) fn op_reduce(av: u64, au: u64, kind: RedK, neg: bool, opw: u32) -> (u64, u64) {
+    let m = low_mask(opw);
+    let known1 = av & !au & m;
+    let known0 = !au & !av & m;
+    let unk = au & m;
+    let (v, u): (u64, u64) = match kind {
+        RedK::And if known0 != 0 => (0, 0),
+        RedK::And if unk != 0 => (0, 1),
+        RedK::And => (1, 0),
+        RedK::Or if known1 != 0 => (1, 0),
+        RedK::Or if unk != 0 => (0, 1),
+        RedK::Or => (0, 0),
+        RedK::Xor if unk != 0 => (0, 1),
+        RedK::Xor => ((known1.count_ones() & 1) as u64, 0),
+    };
+    if neg && u == 0 {
+        (v ^ 1, 0)
+    } else {
+        (v, u)
+    }
+}
+
+/// `NOp::Ternary` — tri-valued condition, with `merge_x` when it is unknown.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn op_ternary(
+    cv: u64,
+    cu: u64,
+    tv: u64,
+    tu: u64,
+    ev: u64,
+    eu: u64,
+    w: u32,
+    cond_w: u32,
+) -> (u64, u64) {
+    let mc = low_mask(cond_w);
+    let m = low_mask(w);
+    // truthiness: any definite-1 → True; else any unknown → Unknown; else False
+    // (matches oracle `Tri`).
+    if (cv & !cu & mc) != 0 {
+        (tv & m, tu & m)
+    } else if (cu & mc) != 0 {
+        // merge_x: identical (val,unk) pairs pass through, else X.
+        let ident = !((tv ^ ev) | (tu ^ eu)) & m;
+        (tv & ident, (tu & ident) | (m & !ident))
+    } else {
+        (ev & m, eu & m)
     }
 }

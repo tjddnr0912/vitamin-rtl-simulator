@@ -5,6 +5,22 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# NATIVE CODEGEN (option A, experimental). OFF by default and deliberately so: it
+# adds ~29 crates to a workspace of 80, needs `unsafe` at the call boundary (this
+# workspace has exactly one `unsafe`, a `signal(2)` call), and introduces a THIRD
+# implementation of expression semantics next to the interpreter and the bytecode VM
+# — the second one drifted from the first in four independent, silent ways
+# (§4.5.279). Behind a feature, the default binary, `Cargo.lock` resolution for the
+# default build, and the 3-OS byte-identical contract are all untouched.
+jit = [
+    "dep:cranelift-jit",
+    "dep:cranelift-module",
+    "dep:cranelift-codegen",
+    "dep:cranelift-frontend",
+    "dep:cranelift-native",
+]
+
 [dependencies]
 sim-ir     = { path = "../sim-ir" }
 diag       = { path = "../diag" }
@@ -18,6 +34,14 @@ libm       = { workspace = true }
 elaborate  = { path = "../elaborate" }
 # NOTE: hdl-builtins intentionally NOT a dep in v1 — $task handlers are inlined
 # in the private `builtins` module (HOOK: extract to hdl-builtins post-v1).
+
+# cranelift 0.120 is the newest line that builds on the pinned rustc 1.85 — 0.134
+# requires 1.94. Optional: absent unless the `jit` feature is on.
+cranelift-jit      = { version = "0.120", optional = true }
+cranelift-module   = { version = "0.120", optional = true }
+cranelift-codegen  = { version = "0.120", optional = true }
+cranelift-frontend = { version = "0.120", optional = true }
+cranelift-native   = { version = "0.120", optional = true }
 
 [dev-dependencies]
 # End-to-end tests build a SimIr via the real lex → parse → elaborate pipeline,

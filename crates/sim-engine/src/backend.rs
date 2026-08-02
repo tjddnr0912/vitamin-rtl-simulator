@@ -273,7 +273,7 @@ pub(crate) struct CompiledBody {
     pub(crate) noffs: u32,
 }
 
-struct CompiledBlock {
+pub(crate) struct CompiledBlock {
     ops: Vec<Op>,
     term: CompiledTerm,
 }
@@ -292,7 +292,7 @@ struct CompiledBlock {
 /// Measured on PicoRV32 + testbench: 316 of 316 branch conditions are natively
 /// compilable, and every one of them was interpreted.
 #[derive(Clone, Copy)]
-enum CompiledTerm {
+pub(crate) enum CompiledTerm {
     Goto(u32),
     Branch {
         cond: u32,
@@ -307,7 +307,7 @@ enum CompiledTerm {
 /// One VM instruction. `Copy`-small: `Lvalue`/arg vectors live in `CompiledBody` side
 /// tables, referenced by index. C2 ops delegate eval to the kernel (no native eval yet).
 #[derive(Clone, Copy, Debug)]
-enum Op {
+pub(crate) enum Op {
     /// `regs[dst] = k_eval_for_lvalue(&lvalues[lhs], rhs)` — RHS context-sized to LHS.
     EvalForLval { dst: u32, lhs: u32, rhs: u32 },
     /// `regs[dst] = k_eval_native(&natives[native])` — VM-only native fast path
@@ -562,6 +562,35 @@ pub(crate) fn compile_body(
         natives,
         nregs,
         noffs,
+    }
+}
+
+#[cfg(feature = "jit")]
+impl CompiledBody {
+    pub(crate) fn blocks(&self) -> &[CompiledBlock] {
+        &self.blocks
+    }
+    pub(crate) fn lvalue(&self, i: u32) -> &Lvalue {
+        &self.lvalues[i as usize]
+    }
+    pub(crate) fn arglist(&self, i: u32) -> &[u32] {
+        &self.arglists[i as usize]
+    }
+    pub(crate) fn native(&self, i: u32) -> &NativeProg {
+        &self.natives[i as usize]
+    }
+    pub(crate) fn op_at(&self, blk: u32, opi: u32) -> Op {
+        self.blocks[blk as usize].ops[opi as usize]
+    }
+}
+
+#[cfg(feature = "jit")]
+impl CompiledBlock {
+    pub(crate) fn ops(&self) -> &[Op] {
+        &self.ops
+    }
+    pub(crate) fn term(&self) -> CompiledTerm {
+        self.term
     }
 }
 

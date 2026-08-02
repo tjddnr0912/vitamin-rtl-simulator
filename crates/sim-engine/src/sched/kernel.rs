@@ -9,6 +9,10 @@ use super::*;
 /// interpreter through exactly this surface, so the existing suite already exercises
 /// the seam byte-identically — and a Stage-C compiled body will call the same methods.
 impl Kernel for Scheduler<'_, '_> {
+    #[cfg(feature = "jit")]
+    fn k_nets(&self) -> &dyn crate::eval::NetReader {
+        self.st
+    }
     fn k_eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value {
         self.eval_for_lvalue(lhs, rhs)
     }

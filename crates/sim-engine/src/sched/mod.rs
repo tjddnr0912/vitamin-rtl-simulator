@@ -267,6 +267,14 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// run (`NativeScratch`). Interior-mutable because `eval_native` is on the `&self`
     /// read path.
     native_scratch: std::cell::RefCell<crate::native_eval::NativeScratch>,
+    /// NATIVE CODEGEN (option A, `jit` feature): the cranelift module and the per-program
+    /// compile results, keyed by program address. A `None` entry means "tried and
+    /// refused" — it must be remembered, or every run would re-attempt the compile.
+    #[cfg(feature = "jit")]
+    jit: std::cell::RefCell<Option<crate::jit::JitEngine>>,
+    /// Body-level compile results, keyed by process template.
+    #[cfg(feature = "jit")]
+    jit_bodies: std::cell::RefCell<std::collections::BTreeMap<usize, Option<crate::jit::BodyFn>>>,
     /// Future events keyed by absolute tick.
     wheel: BTreeMap<u64, Vec<(RegionTag, Ready)>>,
     /// Processes blocked on Wait conditions.

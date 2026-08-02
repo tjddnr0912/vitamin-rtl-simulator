@@ -26,6 +26,8 @@ mod backend;
 mod builtins;
 mod eval;
 mod exec;
+#[cfg(feature = "jit")]
+mod jit;
 mod levelize;
 mod native_eval;
 mod rng;
@@ -725,6 +727,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         if sched.settle_cont_assigns().is_some() {
             sched.arm_processes();
             let reason = sched.run();
+            #[cfg(feature = "jit")]
+            if std::env::var_os("VITA_JIT_STATS").is_some() {
+                crate::jit::jit_stats();
+            }
             // P2-E: end-of-simulation `final` blocks (zero-time one-shots),
             // whatever the finish reason — including the delta-limit path's
             // else arm below NOT running them (a divergent t0 has no

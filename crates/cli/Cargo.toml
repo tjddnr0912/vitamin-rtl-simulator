@@ -15,6 +15,8 @@ path = "src/main.rs"
 
 [features]
 separate-bins = [] # dev 전용 — 기본 빌드는 vita 단일 multicall 바이너리만 산출 (doc-03)
+# Forward the sim-engine native-codegen experiment (option A). OFF by default.
+jit = ["sim-engine/jit"]
 
 [[bin]]
 name = "vcmp"

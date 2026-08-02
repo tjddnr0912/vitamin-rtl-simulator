@@ -522,6 +522,12 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             },
             nba_seq: 0,
             native_scratch: std::cell::RefCell::new(Default::default()),
+            #[cfg(feature = "jit")]
+            jit: std::cell::RefCell::new(
+                std::env::var_os("VITA_JIT").and_then(|_| crate::jit::JitEngine::new()),
+            ),
+            #[cfg(feature = "jit")]
+            jit_bodies: std::cell::RefCell::new(Default::default()),
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
             n_expr_waiters: 0,
@@ -956,6 +962,31 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         body: Rc<crate::backend::CompiledBody>,
     ) -> Step {
         crate::exec::enter_body(self.st, tmpl);
+        #[cfg(feature = "jit")]
+        {
+            // BODY-LEVEL CODEGEN: one boundary crossing per activation instead of one per
+            // expression. Compiled once per TEMPLATE (a `None` entry means "tried and
+            // refused" and must be remembered).
+            if self.jit.borrow().is_some() {
+                let cached = self.jit_bodies.borrow().get(&tmpl).copied();
+                let f = match cached {
+                    Some(f) => f,
+                    None => {
+                        let f = self
+                            .jit
+                            .borrow_mut()
+                            .as_mut()
+                            .and_then(|e| e.compile_body(&body));
+                        self.jit_bodies.borrow_mut().insert(tmpl, f);
+                        f
+                    }
+                };
+                if let Some(f) = f {
+                    let b = std::rc::Rc::clone(&body);
+                    return crate::jit::run_body_jit(f, self, &b, proc);
+                }
+            }
+        }
         // VM-REGPOOL: lease the register/offset files from the pool, sized to this
         // body, and return them afterwards (a `pop` yields an OWNED buffer, so it no
         // longer borrows `self` and cannot alias the `&mut self` kernel call).
