@@ -932,3 +932,7 @@ VCS·Xcelium 은 그걸 하지 않는다 — 되돌아갈 커널이 없다.
 복잡도 계층이 아니라 **상수항**이다. 상세 = [study/01 §9.9](../study/01-interpreted-vs-compiled.md).
 
 > 다음에 ③층을 간다면 **첫 줄은 `Value` 를 없애는 것이지 cranelift 를 부르는 것이 아니다.**
+
+> ③층으로 가는 방향의 조사·계획은 **[doc-21](21-tier3-native-backend.md)** 로 분리했다 —
+> 계약 감사(막는 것은 no-unsafe 와 MSRV 둘뿐) · 구조 판정(설계 단위 all-or-nothing, 정지 필수) ·
+> 단계 계획(S0~S6, 각 단계가 중단 판정을 갖는다).
