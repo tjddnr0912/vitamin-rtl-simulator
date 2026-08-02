@@ -85,6 +85,23 @@ fn assert_matches_oracle_on(
         native, oracle,
         "native eval diverged from oracle for eid {eid} ctx ({ctx_w},{ctx_signed})"
     );
+    // TRIVIAL-SHAPE SHORTCUT: when this program took the shortcut, the op loop is its
+    // oracle — run it too and require byte identity. Every existing case in this file
+    // therefore also covers the shortcut, including the `Const`-only and `LoadScalar`-only
+    // programs that are 46.3% of real executions.
+    if prog.fast_shape() != crate::native_eval::FastShape::Vm {
+        let via_vm = run(
+            &prog.forced_through_the_vm(),
+            fake,
+            &mut NativeScratch::default(),
+        );
+        assert_eq!(
+            native,
+            via_vm,
+            "shortcut {:?} diverged from the op loop for eid {eid} ctx ({ctx_w},{ctx_signed})",
+            prog.fast_shape()
+        );
+    }
 }
 
 fn sig(net: u32) -> Expr {
@@ -206,4 +223,142 @@ fn cnum2(w: u32, lo: u64, hi: u64) -> sim_ir::ConstVal {
             unk: vec![0, 0],
         },
     }
+}
+
+/// The TRIVIAL-SHAPE SHORTCUT, against the op loop it replaces.
+///
+/// 46.3% of native-eval executions on a real design are ONE op — 27.4% a lone
+/// `LoadScalar`, 18.9% a lone `Const` — so `run` skips the loop for them entirely and
+/// `NativeProg::fast` says which. The loop is the shortcut's oracle, and this is the
+/// only place that contrast happens: every OTHER test in this file compiles a compound
+/// expression, so not one of them produces a program the shortcut claims. Written after
+/// discovering exactly that — the first version of this check was folded into
+/// `assert_matches_oracle_on` and passed with the shortcut deliberately broken, because
+/// its condition was never true.
+///
+/// Both shapes are swept over the value axes `run` actually branches on: net width vs
+/// context width (which decides truncation vs extension), signedness (sign vs zero
+/// extension), and X/Z bits (which must survive into `unk`).
+#[test]
+fn the_trivial_shape_shortcut_matches_the_op_loop() {
+    let mut claimed = 0usize;
+    for &(net_w, ctx_w) in &[
+        (1u32, 1u32),
+        (1, 8),
+        (8, 8),
+        (8, 4),
+        (8, 32),
+        (32, 32),
+        (32, 64),
+        (64, 64),
+        (7, 33),
+        (33, 7),
+    ] {
+        for &net_signed in &[false, true] {
+            for &ctx_signed in &[false, true] {
+                let ir = ir_of(vec![sig(0)], vec![], vec![nv(net_w, net_signed)]);
+                let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+                let prog = try_compile(&ir, &wt, &ineligible_nets(&ir), 0, ctx_w, ctx_signed)
+                    .expect("a bare signal read must compile");
+                assert!(
+                    matches!(
+                        prog.fast_shape(),
+                        crate::native_eval::FastShape::LoadScalar { .. }
+                    ),
+                    "a bare signal read is one op and must take the shortcut"
+                );
+                claimed += 1;
+
+                // Values covering zero, all-ones, a set high bit (sign extension), and
+                // both unknown states.
+                let mut vals = vec![Value::zeros(net_w, net_signed)];
+                let mut ones = Value::zeros(net_w, net_signed);
+                for i in 0..net_w {
+                    ones.set_vu(i, 1, 0);
+                }
+                vals.push(ones);
+                let mut hi = Value::zeros(net_w, net_signed);
+                hi.set_vu(net_w - 1, 1, 0);
+                vals.push(hi);
+                let mut xs = Value::zeros(net_w, net_signed);
+                xs.set_vu(0, 0, 1);
+                vals.push(xs);
+                let mut zs = Value::zeros(net_w, net_signed);
+                zs.set_vu(0, 1, 1);
+                vals.push(zs);
+
+                for v in vals {
+                    let fake = FakeNets(vec![v.clone()]);
+                    let via_fast = run(&prog, &fake, &mut NativeScratch::default());
+                    let via_vm = run(
+                        &prog.forced_through_the_vm(),
+                        &fake,
+                        &mut NativeScratch::default(),
+                    );
+                    assert_eq!(
+                        via_fast, via_vm,
+                        "LoadScalar shortcut diverged: net {net_w}/{net_signed} \
+                         ctx {ctx_w}/{ctx_signed}"
+                    );
+                }
+            }
+        }
+    }
+
+    // The `Const`-only shape, over the same context axes. `unk` is swept too — a
+    // literal can carry X/Z (`4'b10x1`), and a shortcut that returned only `val` would
+    // otherwise pass every case here.
+    for &(bits, unk) in &[
+        (0u64, 0u64),
+        (1, 0),
+        (0xff, 0),
+        (0x8000_0000, 0),
+        (u64::MAX, 0),
+        (0, 0xf),
+        (0xff, 0x0f),
+        (0x5555, 0xaaaa),
+    ] {
+        for &ctx_w in &[1u32, 8, 32, 64] {
+            for &ctx_signed in &[false, true] {
+                let ir = ir_of(
+                    vec![Expr::Const { val: 0 }],
+                    vec![sim_ir::ConstVal {
+                        width: 64,
+                        signed: false,
+                        repr: sim_ir::ConstRepr::Numeric,
+                        bits: sim_ir::BitPacked {
+                            val: vec![bits],
+                            unk: vec![unk],
+                        },
+                    }],
+                    vec![],
+                );
+                let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+                let Some(prog) = try_compile(&ir, &wt, &ineligible_nets(&ir), 0, ctx_w, ctx_signed)
+                else {
+                    continue;
+                };
+                assert!(
+                    matches!(
+                        prog.fast_shape(),
+                        crate::native_eval::FastShape::Const { .. }
+                    ),
+                    "a bare const is one op and must take the shortcut"
+                );
+                claimed += 1;
+                let fake = FakeNets(vec![]);
+                let via_fast = run(&prog, &fake, &mut NativeScratch::default());
+                let via_vm = run(
+                    &prog.forced_through_the_vm(),
+                    &fake,
+                    &mut NativeScratch::default(),
+                );
+                assert_eq!(
+                    via_fast, via_vm,
+                    "Const shortcut diverged: {bits:#x} ctx {ctx_w}"
+                );
+            }
+        }
+    }
+    assert!(claimed > 60, "only {claimed} programs took the shortcut");
 }

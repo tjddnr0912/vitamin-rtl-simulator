@@ -779,3 +779,38 @@ lvalue 모양은 elaborate 에서 고정, `plain_scalar` 는 넷의 **저장 형
 `is_codegen_able` 이 `Stmt::Force` 를 품은 바디를 통째로 제외하므로 **그 블록이 인터프리터로 돌아
 `Op::WriteScalar` 가 한 번도 실행되지 않았다** — live 검사를 지워도 통과했다. force 를 **다른 프로세스**로
 옮겨야 codegen-able 바디가 특수화 op 를 태운다. teeth 확인 후 통과.
+
+### ⓐ 착수 전 프로브 — 실행된 프로그램 모양 인구조사 (2026-08-02)
+
+JIT 이 걷어낼 수 있는 몫(디스패치+스택 트래픽)의 상한을 재려고, **실제로 실행된** native 프로그램의
+opcode 시퀀스를 세었다. superinstruction 후보를 찾을 생각이었는데 답이 달랐다:
+
+```
+HIST total_runs=6,509,189  distinct_shapes=90
+  27.39%  LoadScalar          ← op 1개
+  18.88%  Const               ← op 1개
+   3.07%  LoadScalar,Const,CaseEqNe
+   2.81%  LoadScalar,Const,EqNe
+   2.81%  LoadScalar,LogNot
+   ...
+```
+
+**실행의 46.3% 가 op 한 개짜리 프로그램이다.** 값 하나를 옮기려고 `FixedStack` 두 개를 세우고, 루프에
+들어가고, push 하고, 나와서 pop 하고, 결과를 조립한다. superinstruction(op 2–3개 융합)이 아니라
+**"루프를 아예 돌지 마라"** 가 답이었다.
+
+→ `NativeProg::fast: FastShape` — 컴파일 시점에 **완성된 op 벡터에서** 결정하므로 루프가 했을 일과
+어긋날 수 없다. `Const{val,unk}` / `LoadScalar{net,w,signed}` / `Vm`.
+
+| | |
+|---|---|
+| 0.58 s → **0.57 s** | (10 ms) |
+
+**작다** — scratch hoist 가 이미 per-run 고정비의 비싼 부분을 걷어냈기 때문이다. 그리고 이것이
+**ⓐ 의 상한을 다시 깎는다**: 46% 의 실행에서 루프를 통째로 제거해 10 ms 라면, 남은 54% 에서 JIT 이
+디스패치만 걷어 얻을 몫은 그보다 크지 않다.
+
+**⭐ 핀이 두 번 공허했다.** ① 처음엔 `assert_matches_oracle_on` 안에 "shortcut 을 탄 경우 루프와 대조"를
+넣었는데, 이 파일의 기존 테스트는 **전부 compound 식**이라 그 조건이 **한 번도 참이 아니었다** — shortcut 을
+고의로 망가뜨려도 통과했다. ② 명시 테스트를 쓴 뒤에도 `unk` 를 0으로 만드는 교란을 놓쳤다 — 상수 스윕이
+전부 `unk = 0` 이었기 때문. X/Z 를 품은 상수를 넣고서야 3종 교란(`unk` 소거 · 폭 절단 · `val` 오염)이 전부 잡혔다.

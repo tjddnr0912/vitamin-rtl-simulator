@@ -4,7 +4,46 @@ use super::*;
 
 /// Run a compiled program against `nets`, producing the single `Value` the oracle's
 /// `eval_ctx` would return for the same `(ExprId, ctx)`.
+/// Read one scalar net as a `(val, unk)` word pair — the single copy of this, shared by
+/// the `LoadScalar` op and by `FastShape::LoadScalar`.
+///
+/// LEAF FAST PATH: a plain scalar net yields its word pair without ever building a
+/// `Value`. Everything else falls through to the original read-then-resize, so the
+/// special cases (real, frame-local, handle, array, wide) are untouched.
+#[inline]
+fn load_scalar(nets: &dyn NetReader, net: u32, w: u32, signed: bool) -> (u64, u64) {
+    if let Some(pair) = nets.read_scalar_words(net, w, signed) {
+        return pair;
+    }
+    let v = nets.read_net(net, None).resize_keep_sign(w, signed);
+    let m = low_mask(w);
+    (
+        v.val.first().copied().unwrap_or(0) & m,
+        v.unk.first().copied().unwrap_or(0) & m,
+    )
+}
+
 pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeScratch) -> Value {
+    // TRIVIAL-SHAPE SHORTCUT: 46.3% of executions are ONE op (measured). For those the
+    // whole apparatus below — two stacks over the scratch, the loop, a push and a pop —
+    // moves a value that is already in hand. `NativeProg::fast` records which, decided
+    // once at compile time from the finished op vector.
+    match prog.fast {
+        FastShape::Const { val, unk } => {
+            let mut out = Value::zeros(prog.root_w, prog.root_signed);
+            out.val[0] = val;
+            out.unk[0] = unk;
+            return out;
+        }
+        FastShape::LoadScalar { net, w, signed } => {
+            let (pv, pu) = load_scalar(nets, net, w, signed);
+            let mut out = Value::zeros(prog.root_w, prog.root_signed);
+            out.val[0] = pv;
+            out.unk[0] = pu;
+            return out;
+        }
+        FastShape::Vm => {}
+    }
     // P3-5: fixed arrays + manual sp — no heap allocation per evaluation. The arrays
     // live on the CALLER (see `NativeScratch`) rather than in this frame: `try_compile`
     // caps depth at `NATIVE_STACK` = 64, but the programs that actually run average 4.2
@@ -42,21 +81,7 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeS
         let (sp_dbg, wsp_dbg) = (*stack.sp, *wstack.sp);
         match *op {
             NOp::Const { val, unk } => stack.push((val, unk)),
-            NOp::LoadScalar { net, w, signed } => {
-                // LEAF FAST PATH: a plain scalar net yields its word pair without ever
-                // building a `Value`. Everything else falls through to the original
-                // read-then-resize, so the special cases are untouched.
-                if let Some((pv, pu)) = nets.read_scalar_words(net, w, signed) {
-                    stack.push((pv, pu));
-                } else {
-                    let v = nets.read_net(net, None).resize_keep_sign(w, signed);
-                    let m = low_mask(w);
-                    stack.push((
-                        v.val.first().copied().unwrap_or(0) & m,
-                        v.unk.first().copied().unwrap_or(0) & m,
-                    ));
-                }
-            }
+            NOp::LoadScalar { net, w, signed } => stack.push(load_scalar(nets, net, w, signed)),
             NOp::Arith { kind, w } => {
                 let (bv, bu) = stack.pop().expect("native arith: missing rhs");
                 let (av, au) = stack.pop().expect("native arith: missing lhs");

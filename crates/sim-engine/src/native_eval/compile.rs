@@ -199,11 +199,28 @@ pub(crate) fn try_compile(
         Some(Expr::Select { .. } | Expr::Concat { .. } | Expr::Replicate { .. }) => false,
         _ => ctx_signed,
     };
+    // TRIVIAL-SHAPE SHORTCUT: decided HERE, from the finished op vector, so it cannot
+    // describe something other than what the loop would have executed. Narrow only —
+    // a wide result assembles from the u128 stack, and the one-op wide forms are rare
+    // enough not to be worth a second shape.
+    let fast = match (ops.as_slice(), root_w <= 64) {
+        ([NOp::Const { val, unk }], true) => FastShape::Const {
+            val: *val,
+            unk: *unk,
+        },
+        ([NOp::LoadScalar { net, w, signed }], true) => FastShape::LoadScalar {
+            net: *net,
+            w: *w,
+            signed: *signed,
+        },
+        _ => FastShape::Vm,
+    };
     Some(NativeProg {
         ops,
         root_w,
         root_signed,
         needs_wide: wmax > 0, // VM-WIDEZERO
+        fast,
     })
 }
 

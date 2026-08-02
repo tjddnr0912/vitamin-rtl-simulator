@@ -332,10 +332,55 @@ pub(crate) struct NativeProg {
     ops: Vec<NOp>,
     root_w: u32,
     root_signed: bool,
+    /// TRIVIAL-SHAPE SHORTCUT: what this program does, when it does only one thing.
+    ///
+    /// Measured on picorv32 + testbench: of 6,509,189 program executions, **27.4% are a
+    /// single `LoadScalar` and 18.9% a single `Const` — 46.3% are one op long.** For
+    /// those, everything `run` does around the op (build two `FixedStack`s over the
+    /// scratch, enter the loop, push, exit, pop, assemble the result) exists to move a
+    /// value that was already sitting there. This field says so at COMPILE time, so the
+    /// loop is never entered.
+    ///
+    /// Decided in `try_compile` from the finished op vector, so it cannot disagree with
+    /// what the loop would have done; `fast_shape_matches_the_vm` runs both over a value
+    /// sweep and compares.
+    fast: FastShape,
     /// VM-WIDEZERO: true iff the program uses the wide (u128-pair) stack
     /// (`wmax > 0`). A narrow-only program skips the wide-stack zero-init in
     /// `run`, which is otherwise a per-eval tax on every narrow expression.
     needs_wide: bool,
+}
+
+impl NativeProg {
+    /// TEST ONLY: the same program with the trivial-shape shortcut disabled, so a test
+    /// can run the op loop for a program that would otherwise skip it. Without this the
+    /// shortcut has no oracle — the loop is the thing it claims to be equivalent to.
+    #[cfg(test)]
+    pub(crate) fn forced_through_the_vm(&self) -> NativeProg {
+        NativeProg {
+            ops: self.ops.clone(),
+            root_w: self.root_w,
+            root_signed: self.root_signed,
+            needs_wide: self.needs_wide,
+            fast: FastShape::Vm,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fast_shape(&self) -> FastShape {
+        self.fast
+    }
+}
+
+/// What a `NativeProg` reduces to when its whole body is one op. See `NativeProg::fast`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum FastShape {
+    /// Run the op loop — the general case.
+    Vm,
+    /// The program is one narrow `Const`: the result words are already known.
+    Const { val: u64, unk: u64 },
+    /// The program is one narrow `LoadScalar`: read the net and return it.
+    LoadScalar { net: u32, w: u32, signed: bool },
 }
 
 /// P3-5: the run-time value stacks are FIXED arrays (zero per-call heap
