@@ -407,10 +407,27 @@ pub(crate) fn compile_body(
                 Stmt::BlockingAssign { lhs, rhs } => {
                     let li = lvalues.len() as u32;
                     lvalues.push(lhs.clone());
-                    let v = nregs;
-                    nregs += 1;
-                    let o = noffs;
-                    noffs += 1;
+                    // REGISTER REUSE: slot 0, always. A value register's entire live
+                    // range is the CONTIGUOUS op triple emitted just below — written by
+                    // the eval op, `take`n by `WriteLval` two ops later — and nothing
+                    // emitted by this compiler holds a register across statements or
+                    // across blocks (the terminator arms use none). So one slot serves
+                    // the whole body.
+                    //
+                    // The counter used to increment per statement, giving a 40-assignment
+                    // `always` block 40 registers of which one was ever live. That cost
+                    // is paid per ACTIVATION, not per compile: `vm_run_body` clears and
+                    // refills the leased file every time the body runs, and each slot is
+                    // an `Option<Value>` (~64 B, non-trivial Drop). Measured by ablation
+                    // on picorv32 + testbench: the lease cycle was 92 ns of the 709 ns
+                    // activation — 7.6% of the whole run — for slots that were all None.
+                    //
+                    // `compiled_bodies_write_every_register_before_reading_it` pins the
+                    // liveness property this rests on.
+                    let v = 0;
+                    nregs = 1;
+                    let o = 0;
+                    noffs = 1;
                     ops.push(eval_rhs_op(native, lhs, *rhs, v, li, &mut natives));
                     ops.push(Op::ResolveOff { dst: o, lhs: li });
                     ops.push(Op::WriteLval {
@@ -424,8 +441,10 @@ pub(crate) fn compile_body(
                     debug_assert!(delay.is_none());
                     let li = lvalues.len() as u32;
                     lvalues.push(lhs.clone());
-                    let v = nregs;
-                    nregs += 1;
+                    // REGISTER REUSE — see the blocking-assign arm. Written here, taken
+                    // by the very next op.
+                    let v = 0;
+                    nregs = 1;
                     ops.push(eval_rhs_op(native, lhs, *rhs, v, li, &mut natives));
                     ops.push(Op::ScheduleNba { lhs: li, val: v });
                 }
@@ -955,6 +974,103 @@ mod tests {
     ///
     /// Written over the real `is_codegen_able` rather than over the predicate alone,
     /// because the defect was in the classifier, not in the predicate.
+    /// The liveness property register reuse rests on: within a block, every register
+    /// and offset a op READS was WRITTEN by an earlier op in that same block.
+    ///
+    /// Slot 0 now serves the whole body, so a compiler change that made a register live
+    /// across statements — or emitted a read before its write — would no longer be caught
+    /// by `Option::take().expect(...)`: it would silently pick up the value the PREVIOUS
+    /// statement (or the previous activation) left there. That is a loud-to-silent
+    /// trade, so the property is pinned here rather than left to the runtime `expect`.
+    ///
+    /// Checked over a body mixing both assign kinds and a system task, in a
+    /// three-block loop, so the walk sees blocks that start mid-flow rather than a
+    /// single straight line.
+    #[test]
+    fn compiled_bodies_write_every_register_before_reading_it() {
+        let lv = |net: u32| Lvalue {
+            chunks: vec![sim_ir::LvalChunk {
+                net,
+                word: None,
+                offset: None,
+                width: None,
+                kind: sim_ir::SelKind::Bit,
+            }],
+        };
+        let stmts = vec![
+            Stmt::BlockingAssign { lhs: lv(0), rhs: 0 },
+            Stmt::NonblockingAssign {
+                lhs: lv(1),
+                rhs: 0,
+                delay: None,
+            },
+            Stmt::SysTask {
+                which: SysTaskId::Display,
+                fmt: None,
+                args: vec![],
+            },
+            Stmt::BlockingAssign { lhs: lv(2), rhs: 0 },
+        ];
+        let body = vec![
+            BasicBlock {
+                stmts: vec![0, 1, 2, 3],
+                term: Terminator::Branch {
+                    cond: 0,
+                    then_bb: 1,
+                    else_bb: 2,
+                },
+            },
+            BasicBlock {
+                stmts: vec![1, 0],
+                term: Terminator::Goto { target: 2 },
+            },
+            BasicBlock {
+                stmts: vec![3],
+                term: Terminator::Return,
+            },
+        ];
+        let cb = compile_body(&stmts, &body, None);
+        assert_eq!(cb.nregs, 1, "one live register serves the whole body");
+        assert_eq!(cb.noffs, 1);
+
+        let mut seen = 0usize;
+        for (bi, b) in cb.blocks.iter().enumerate() {
+            let mut reg_written: std::collections::BTreeSet<u32> = Default::default();
+            let mut off_written: std::collections::BTreeSet<u32> = Default::default();
+            for (oi, op) in b.ops.iter().enumerate() {
+                match *op {
+                    Op::EvalForLval { dst, .. } | Op::EvalNative { dst, .. } => {
+                        reg_written.insert(dst);
+                    }
+                    Op::ResolveOff { dst, .. } => {
+                        off_written.insert(dst);
+                    }
+                    Op::WriteLval { val, off, .. } => {
+                        assert!(
+                            reg_written.contains(&val),
+                            "block {bi} op {oi}: reads register {val} never written in this block"
+                        );
+                        assert!(
+                            off_written.contains(&off),
+                            "block {bi} op {oi}: reads offset {off} never written in this block"
+                        );
+                        seen += 1;
+                    }
+                    Op::ScheduleNba { val, .. } => {
+                        assert!(
+                            reg_written.contains(&val),
+                            "block {bi} op {oi}: reads register {val} never written in this block"
+                        );
+                        seen += 1;
+                    }
+                    Op::SysTask { .. } => {}
+                }
+            }
+        }
+        // Not vacuous: the walk must actually have inspected reads.
+        assert!(seen >= 6, "only {seen} register reads walked");
+    }
+
     #[test]
     fn the_vm_intercept_rule_is_the_canonical_predicate_plus_sformatf() {
         use sim_ir::SysFuncId as S;
@@ -1076,16 +1192,19 @@ mod tests {
         assert!(matches!(cb.blocks[1].term, CompiledTerm::Goto(0)));
         assert!(matches!(cb.blocks[2].term, CompiledTerm::Return));
 
-        // Each blocking assign lowers to exactly Eval → Resolve → Write (3 ops), and the
-        // register counts equal the number of blocking assigns (3 across the 3 blocks).
+        // Each blocking assign lowers to exactly Eval → Resolve → Write (3 ops).
         for b in &cb.blocks {
             assert_eq!(b.ops.len(), 3, "blocking assign ⇒ 3 ops");
             assert!(matches!(b.ops[0], Op::EvalForLval { .. }));
             assert!(matches!(b.ops[1], Op::ResolveOff { .. }));
             assert!(matches!(b.ops[2], Op::WriteLval { .. }));
         }
-        assert_eq!(cb.nregs, 3);
-        assert_eq!(cb.noffs, 3);
+        // ONE register and ONE offset, for three assigns across three blocks. The count
+        // used to equal the number of assigns; a register's live range is the contiguous
+        // op triple above, so they all share slot 0. This is what makes the leased file
+        // cheap to reset per activation.
+        assert_eq!(cb.nregs, 1);
+        assert_eq!(cb.noffs, 1);
     }
 
     /// [C2] A nonblocking assign lowers to Eval → ScheduleNba (no `ResolveOff` — the NBA
