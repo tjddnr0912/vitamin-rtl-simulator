@@ -306,7 +306,7 @@ enum CompiledTerm {
 
 /// One VM instruction. `Copy`-small: `Lvalue`/arg vectors live in `CompiledBody` side
 /// tables, referenced by index. C2 ops delegate eval to the kernel (no native eval yet).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Op {
     /// `regs[dst] = k_eval_for_lvalue(&lvalues[lhs], rhs)` — RHS context-sized to LHS.
     EvalForLval { dst: u32, lhs: u32, rhs: u32 },
@@ -319,6 +319,20 @@ enum Op {
     WriteLval { lhs: u32, val: u32, off: u32 },
     /// `k_schedule_nba(lvalues[lhs].clone(), take(regs[val]))` — LHS index sampled in NBA.
     ScheduleNba { lhs: u32, val: u32 },
+    /// COMPILE-TIME SPECIALISATION of `ScheduleNba` for a destination the compiler has
+    /// already proved is a plain whole-net scalar: no dynamic index to sample, so the
+    /// `resolve_lvalue_offsets` call and the `Offsets` it returns are both statically
+    /// known (`Inline{[(0,0)], len:1}`) and the queue entry is unconditionally
+    /// `NbaLhs::One`. Nothing about that decision can change during a run — an lvalue's
+    /// SHAPE is fixed at elaboration and `plain_scalar` is a property of the net, not of
+    /// its value — so it is decided once per template instead of 2.5 million times.
+    ScheduleNbaScalar { lhs: u32, val: u32 },
+    /// COMPILE-TIME SPECIALISATION of `ResolveOff` + `WriteLval` into ONE op, same
+    /// proof. Two live conditions remain and are tested here rather than baked, because
+    /// both CAN change during a run: `forced` (a `force`/`release` re-targets the net)
+    /// and the incoming value's `is_real` (which selects the real→int rounding arm).
+    /// Either one falls back to the general funnel.
+    WriteScalar { lhs: u32, net: u32, val: u32 },
     /// `k_dispatch_systask(which, fmt, &arglists[args], sid)`. `sid` is the source
     /// StmtId — it keys the severity side table (`$fatal`/`$error`/…, P1-1).
     SysTask {
@@ -368,15 +382,43 @@ fn chunk_width_of(ir: &SimIr, c: &LvalChunk) -> u32 {
 /// `native` ctx is present AND `try_compile` accepts the whole tree, else the
 /// kernel-delegating `EvalForLval`. The native and delegated paths are byte-identical
 /// (the P5 gate enforces it), so this choice never changes observable behaviour.
+/// Can this destination take the specialised whole-net-scalar path?
+///
+/// Exactly the shape `SimState::write_lvalue`'s fast path claims, decided ONCE per
+/// template here instead of per write at run time: a single `Bit` chunk with no
+/// word/offset/width, onto a net `plain_scalar` accepts. Both halves are immutable for
+/// the run — an lvalue's shape is fixed at elaboration, and `plain_scalar` describes the
+/// net's STORAGE (real / frame / handle / two-state / array / width), not its value.
+///
+/// The two conditions that are NOT immutable — `forced`, and whether the incoming value
+/// is real — are deliberately excluded and stay live tests inside the ops.
+fn plain_scalar_dest(
+    native: Option<(&SimIr, &WidthTable, &[bool], &[bool])>,
+    lhs: &Lvalue,
+) -> Option<u32> {
+    let (_, _, _, plain) = native?;
+    match lhs.chunks.as_slice() {
+        [c] if matches!(c.kind, sim_ir::SelKind::Bit)
+            && c.word.is_none()
+            && c.offset.is_none()
+            && c.width.is_none()
+            && plain.get(c.net as usize).copied().unwrap_or(false) =>
+        {
+            Some(c.net)
+        }
+        _ => None,
+    }
+}
+
 fn eval_rhs_op(
-    native: Option<(&SimIr, &WidthTable, &[bool])>,
+    native: Option<(&SimIr, &WidthTable, &[bool], &[bool])>,
     lhs: &Lvalue,
     rhs: u32,
     dst: u32,
     li: u32,
     natives: &mut Vec<NativeProg>,
 ) -> Op {
-    if let Some((ir, wt, nonint)) = native {
+    if let Some((ir, wt, nonint, _plain)) = native {
         let ctx_w = lvalue_width_of(ir, lhs).max(wt.width(rhs));
         let ctx_signed = wt.signed(rhs);
         if let Some(prog) = crate::native_eval::try_compile(ir, wt, nonint, rhs, ctx_w, ctx_signed)
@@ -392,7 +434,7 @@ fn eval_rhs_op(
 pub(crate) fn compile_body(
     stmts: &[Stmt],
     body: &[BasicBlock],
-    native: Option<(&SimIr, &WidthTable, &[bool])>,
+    native: Option<(&SimIr, &WidthTable, &[bool], &[bool])>,
 ) -> CompiledBody {
     let mut lvalues: Vec<Lvalue> = Vec::new();
     let mut arglists: Vec<Vec<u32>> = Vec::new();
@@ -426,15 +468,28 @@ pub(crate) fn compile_body(
                     // liveness property this rests on.
                     let v = 0;
                     nregs = 1;
-                    let o = 0;
-                    noffs = 1;
                     ops.push(eval_rhs_op(native, lhs, *rhs, v, li, &mut natives));
-                    ops.push(Op::ResolveOff { dst: o, lhs: li });
-                    ops.push(Op::WriteLval {
-                        lhs: li,
-                        val: v,
-                        off: o,
-                    });
+                    // COMPILE-TIME SPECIALISATION: a destination the compiler can prove
+                    // is a plain whole-net scalar has no dynamic index to sample, so the
+                    // `ResolveOff` op and the `Offsets` value it produces both vanish —
+                    // one fewer op in the stream and one fewer kernel call per assign.
+                    match plain_scalar_dest(native, lhs) {
+                        Some(net) => ops.push(Op::WriteScalar {
+                            lhs: li,
+                            net,
+                            val: v,
+                        }),
+                        None => {
+                            let o = 0;
+                            noffs = 1;
+                            ops.push(Op::ResolveOff { dst: o, lhs: li });
+                            ops.push(Op::WriteLval {
+                                lhs: li,
+                                val: v,
+                                off: o,
+                            });
+                        }
+                    }
                 }
                 Stmt::NonblockingAssign { lhs, rhs, delay } => {
                     // delay: Some(_) is excluded by `is_codegen_able` above.
@@ -446,7 +501,10 @@ pub(crate) fn compile_body(
                     let v = 0;
                     nregs = 1;
                     ops.push(eval_rhs_op(native, lhs, *rhs, v, li, &mut natives));
-                    ops.push(Op::ScheduleNba { lhs: li, val: v });
+                    ops.push(match plain_scalar_dest(native, lhs) {
+                        Some(_) => Op::ScheduleNbaScalar { lhs: li, val: v },
+                        None => Op::ScheduleNba { lhs: li, val: v },
+                    });
                 }
                 Stmt::SysTask { which, fmt, args } => {
                     let ai = arglists.len() as u32;
@@ -474,7 +532,7 @@ pub(crate) fn compile_body(
                 // Self-width context: a condition is self-determined (§11.6.1 does not
                 // propagate a context width into it), which is exactly what the
                 // interpreter's `eval(cond)` produces before `truthiness`.
-                let native = native.and_then(|(ir, wt, nonint)| {
+                let native = native.and_then(|(ir, wt, nonint, _plain)| {
                     let w = wt.width(*cond).max(1);
                     crate::native_eval::try_compile(ir, wt, nonint, *cond, w, wt.signed(*cond)).map(
                         |p| {
@@ -555,6 +613,21 @@ pub(crate) fn vm_exec(
                         .take()
                         .expect("ScheduleNba before EvalForLval");
                     k.k_schedule_nba(&body.lvalues[lhs as usize], value);
+                }
+                Op::ScheduleNbaScalar { lhs, val } => {
+                    let value = regs[val as usize]
+                        .take()
+                        .expect("ScheduleNbaScalar before EvalForLval");
+                    // The compiler proved the destination is a plain whole-net scalar, so
+                    // there is no dynamic index to sample: the offsets are the constant
+                    // `(0, 0)` pair the general path would have computed.
+                    k.k_schedule_nba_scalar(&body.lvalues[lhs as usize], value);
+                }
+                Op::WriteScalar { lhs, net, val } => {
+                    let value = regs[val as usize]
+                        .take()
+                        .expect("WriteScalar before EvalForLval");
+                    k.k_write_scalar(&body.lvalues[lhs as usize], net, value);
                 }
                 Op::SysTask {
                     which,
@@ -974,6 +1047,124 @@ mod tests {
     ///
     /// Written over the real `is_codegen_able` rather than over the predicate alone,
     /// because the defect was in the classifier, not in the predicate.
+    /// The compile-time specialisation must actually FIRE, and must NOT fire on a shape
+    /// it cannot prove.
+    ///
+    /// `Op::WriteScalar`/`Op::ScheduleNbaScalar` are chosen once per template by
+    /// `plain_scalar_dest`. If that predicate silently stopped matching, every other test
+    /// would stay green — the general ops are correct, only slower — and the
+    /// specialisation would be dead code nobody noticed. If it matched a shape it cannot
+    /// prove (an array element with a dynamic index, a net `plain_scalar` rejects), the
+    /// specialised handler would write the wrong place. Both directions are pinned.
+    #[test]
+    fn the_scalar_specialisation_fires_only_on_a_provable_destination() {
+        let src = "module t; reg [31:0] a; reg [31:0] b; initial begin a = 0; b = 0; end endmodule";
+        let (toks, _) = hdl_lexer::lex(src);
+        let (su, _) = hdl_parser::parse(&toks, src);
+        struct S;
+        impl diag::LogSink for S {
+            fn emit(&self, _e: diag::LogEvent) {}
+        }
+        let ir = elaborate::elaborate(&su.expect("unit"), &S).expect("elaborate");
+        let wt = crate::width::WidthTable::build(&ir, &crate::FuncTable::new());
+        let nn = ir.nets.len();
+        let nonint = vec![false; nn];
+        // Claim only net 0 as a plain scalar; every other destination must stay general.
+        let mut plain = vec![false; nn];
+        plain[0] = true;
+
+        let whole = |net: u32| Lvalue {
+            chunks: vec![sim_ir::LvalChunk {
+                net,
+                word: None,
+                offset: None,
+                width: None,
+                kind: sim_ir::SelKind::Bit,
+            }],
+        };
+        // An ARRAY ELEMENT — `word` present, a dynamic index the specialised op cannot
+        // sample — on the SAME net the table claims, so the only thing separating it from
+        // the specialised case is the shape.
+        let elem = Lvalue {
+            chunks: vec![sim_ir::LvalChunk {
+                net: 0,
+                word: Some(0),
+                offset: None,
+                width: None,
+                kind: sim_ir::SelKind::Bit,
+            }],
+        };
+        let stmts = vec![
+            Stmt::BlockingAssign {
+                lhs: whole(0),
+                rhs: 0,
+            },
+            Stmt::NonblockingAssign {
+                lhs: whole(0),
+                rhs: 0,
+                delay: None,
+            },
+            Stmt::BlockingAssign {
+                lhs: elem.clone(),
+                rhs: 0,
+            },
+            Stmt::NonblockingAssign {
+                lhs: elem,
+                rhs: 0,
+                delay: None,
+            },
+            // net 1 is NOT in the plain-scalar table.
+            Stmt::BlockingAssign {
+                lhs: whole(1),
+                rhs: 0,
+            },
+        ];
+        let body = vec![BasicBlock {
+            stmts: vec![0, 1, 2, 3, 4],
+            term: Terminator::Return,
+        }];
+        let cb = compile_body(&stmts, &body, Some((&ir, &wt, &nonint, &plain)));
+        let ops = &cb.blocks[0].ops;
+        let n = |f: &dyn Fn(&Op) -> bool| ops.iter().filter(|o| f(o)).count();
+
+        assert_eq!(
+            n(&|o: &Op| matches!(o, Op::WriteScalar { .. })),
+            1,
+            "the whole-net scalar blocking assign must specialise: {ops:?}"
+        );
+        assert_eq!(
+            n(&|o: &Op| matches!(o, Op::ScheduleNbaScalar { .. })),
+            1,
+            "the whole-net scalar NBA must specialise: {ops:?}"
+        );
+        assert_eq!(
+            n(&|o: &Op| matches!(o, Op::WriteLval { .. })),
+            2,
+            "array element and non-plain net keep the general write: {ops:?}"
+        );
+        assert_eq!(
+            n(&|o: &Op| matches!(o, Op::ScheduleNba { .. })),
+            1,
+            "the array-element NBA keeps the general form: {ops:?}"
+        );
+        // A specialised blocking assign drops its `ResolveOff` — two general blocking
+        // assigns remain, so two `ResolveOff` remain.
+        assert_eq!(n(&|o: &Op| matches!(o, Op::ResolveOff { .. })), 2);
+
+        // Without a native context NOTHING specialises: the fallback is the general form,
+        // never a guess.
+        let cb2 = compile_body(&stmts, &body, None);
+        assert_eq!(
+            cb2.blocks[0]
+                .ops
+                .iter()
+                .filter(|o| matches!(o, Op::WriteScalar { .. } | Op::ScheduleNbaScalar { .. }))
+                .count(),
+            0,
+            "no native context ⇒ no specialisation"
+        );
+    }
+
     /// The liveness property register reuse rests on: within a block, every register
     /// and offset a op READS was WRITTEN by an earlier op in that same block.
     ///
@@ -1056,7 +1247,9 @@ mod tests {
                         );
                         seen += 1;
                     }
-                    Op::ScheduleNba { val, .. } => {
+                    Op::ScheduleNba { val, .. }
+                    | Op::ScheduleNbaScalar { val, .. }
+                    | Op::WriteScalar { val, .. } => {
                         assert!(
                             reg_written.contains(&val),
                             "block {bi} op {oi}: reads register {val} never written in this block"

@@ -632,6 +632,34 @@ impl Scheduler<'_, '_> {
         });
     }
 
+    /// `schedule_nba` for a destination the COMPILER proved is a plain whole-net scalar.
+    ///
+    /// The only thing the general form does that this skips is `resolve_lvalue_offsets`,
+    /// and for this shape that call is a constant: no `word` and no `offset` expression
+    /// means `pair()` yields `(0, 0)`, one chunk means `Inline { len: 1 }`. Producing that
+    /// constant 2.5 million times is what this removes. The queue entry is likewise
+    /// unconditionally `NbaLhs::One` — the shape test inside `NbaLhs::of` is the same test
+    /// the compiler already made.
+    pub(crate) fn schedule_nba_scalar(&mut self, lhs: &Lvalue, sampled: Value) {
+        debug_assert_eq!(
+            self.resolve_lvalue_offsets(lhs).as_slice(),
+            &[(0, 0)],
+            "specialised NBA destination must resolve to the constant offsets"
+        );
+        let seq = self.nba_seq;
+        self.nba_seq += 1;
+        let chunk = lhs.chunks[0].clone();
+        self.nba.push(NbaUpdate {
+            seq,
+            lhs: NbaLhs::One(chunk),
+            sampled,
+            offsets: crate::exec::Offsets::Inline {
+                buf: [(0, 0); 2],
+                len: 1,
+            },
+        });
+    }
+
     pub(crate) fn schedule_nba(&mut self, lhs: &Lvalue, sampled: Value) {
         // Sample the dynamic LHS index NOW (Active region), BEFORE the mutable
         // push, so a later same-step write to the index net cannot move the target.

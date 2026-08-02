@@ -358,11 +358,13 @@ impl<'a> SimState<'a> {
             return None;
         }
         let nonint = self.native_ineligible();
+        let plain = std::mem::take(&mut self.plain_scalar);
         let compiled = Rc::new(crate::backend::compile_body(
             &ir.stmts,
             &ir.processes[tmpl].body,
-            Some((ir, &self.wt, &nonint)),
+            Some((ir, &self.wt, &nonint, &plain)),
         ));
+        self.plain_scalar = plain;
         self.vm_cache[tmpl] = VmSlot::Compiled(Rc::clone(&compiled));
         Some(compiled)
     }
@@ -521,6 +523,34 @@ impl<'a> SimState<'a> {
                 && self.nets[i].width > 0; // a 0-width net has no words
         }
         self.plain_scalar = v;
+    }
+
+    /// `write_lvalue` for a destination the COMPILER proved is a plain whole-net scalar
+    /// (`backend::plain_scalar_dest`), so the shape match and the `plain_scalar` lookup
+    /// `write_lvalue` performs are already done and the `Offsets` are a known constant.
+    ///
+    /// The two live conditions remain, because both can change during a run and neither
+    /// is a property of the lvalue: `forced` (a `force`/`release` re-targets the net) and
+    /// the incoming value's `is_real` (which selects the real→int rounding arm). Either
+    /// one drops to the general funnel, which needs the `Offsets` — a whole-net scalar
+    /// destination resolves to the constant `(0, 0)` pair, which is why it can be built
+    /// here rather than passed in.
+    pub(crate) fn write_scalar(&mut self, lhs: &Lvalue, net: u32, value: Value) -> bool {
+        let n = net as usize;
+        if self.forced[n] || value.is_real {
+            let offsets = crate::exec::Offsets::Inline {
+                buf: [(0, 0); 2],
+                len: 1,
+            };
+            return self.write_lvalue_general(lhs, value, &offsets);
+        }
+        debug_assert!(
+            self.plain_scalar.get(n).copied().unwrap_or(false),
+            "compiler claimed a plain-scalar destination the net table denies"
+        );
+        let net_w = self.nets[n].width;
+        let src = value.resize(net_w.max(1));
+        self.store_words(n, 0, net_w, &src)
     }
 
     /// The general write funnel. `write_lvalue` shortcuts the 99.7% case ahead of this;

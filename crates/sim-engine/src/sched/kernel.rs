@@ -89,6 +89,12 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_schedule_nba(&mut self, lhs: &Lvalue, value: Value) {
         self.schedule_nba(lhs, value);
     }
+    fn k_schedule_nba_scalar(&mut self, lhs: &Lvalue, value: Value) {
+        self.schedule_nba_scalar(lhs, value);
+    }
+    fn k_write_scalar(&mut self, lhs: &Lvalue, net: u32, value: Value) {
+        self.st.write_scalar(lhs, net, value);
+    }
     fn k_delay_ticks(&self, eid: u32) -> u64 {
         self.delay_ticks(eid)
     }

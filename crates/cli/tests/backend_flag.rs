@@ -585,3 +585,68 @@ fn a_concat_lhs_nonblocking_assign_splits_correctly() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The two conditions the scalar-write specialisation must NOT bake in.
+///
+/// `Op::WriteScalar` is chosen once per template, from the lvalue's SHAPE and the net's
+/// STORAGE — both fixed for the run. Two things it depends on are NOT fixed, so they are
+/// tested live inside the op, and this pins both:
+///
+/// - `force` re-targets a net for the rest of the run, and a forced net must IGNORE
+///   every ordinary driver (IEEE 1364-2005 §9.3.2). Baking that in would let a
+///   specialised write overwrite a forced value.
+/// - a real-valued source into an integer net must ROUND (§6.2, half away from zero),
+///   which only the general funnel does; the specialised store would deliver the raw
+///   IEEE-754 bits.
+///
+/// SHAPE OF THE TEST IS LOAD-BEARING. The first version put the `force` and the writes
+/// in ONE `initial` block — and `is_codegen_able` excludes any body containing
+/// `Stmt::Force`, so that whole block ran on the interpreter and `Op::WriteScalar` never
+/// executed. It passed with the live checks deleted. The force must therefore come from
+/// a DIFFERENT process than the codegen-able body doing the writes, which is what this
+/// version does: the `always` block is blocking-assign-only (so it compiles, and its
+/// destination `a` is a plain scalar, so it specialises) while the `initial` drives the
+/// clock and applies the force.
+///
+/// iverilog 13 prints exactly the three lines asserted below.
+#[test]
+fn the_scalar_write_specialisation_still_honours_force_and_real() {
+    let dir = scratch("spec_live");
+    let src = "module t;\n\
+      reg clk = 0;\n\
+      reg [31:0] a;\n\
+      reg [63:0] w;\n\
+      real r = 2.75;\n\
+      always @(posedge clk) begin\n\
+        a = a + 32'd1;\n\
+        w = r;\n\
+      end\n\
+      initial begin\n\
+        a = 32'd0;\n\
+        #1 clk = 1; #1 clk = 0;\n\
+        $display(\"t1 a=%0d w=%0d\", a, w);\n\
+        force a = 32'd99;\n\
+        #1 clk = 1; #1 clk = 0;\n\
+        $display(\"forced a=%0d\", a);\n\
+        release a;\n\
+        #1 clk = 1; #1 clk = 0;\n\
+        $display(\"released a=%0d\", a);\n\
+        $finish;\n\
+      end\n\
+    endmodule\n";
+    std::fs::write(dir.join("t.sv"), src).unwrap();
+
+    for args in [
+        vec!["--backend", "interp", "t.sv"],
+        vec!["--backend", "vm", "t.sv"],
+    ] {
+        let (o, ok) = vita_in(&dir, &args);
+        assert!(ok && !o.contains("error[VITA"), "{args:?} failed:\n{o}");
+        // `w=3` is the real→int rounding; `forced a=99` is the always block's blocking
+        // write being ignored; `released a=100` is it taking effect again from 99.
+        for want in ["t1 a=1 w=3", "forced a=99", "released a=100"] {
+            assert!(o.contains(want), "{args:?}: missing `{want}`:\n{o}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

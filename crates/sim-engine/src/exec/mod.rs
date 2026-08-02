@@ -56,6 +56,12 @@ pub(crate) trait Kernel {
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets);
     /// WRITE: schedule a nonblocking update (LHS index sampled at schedule time).
     fn k_schedule_nba(&mut self, lhs: &Lvalue, value: Value);
+    /// WRITE: the compile-time-specialised twin of `k_schedule_nba` for a destination
+    /// already proved to be a plain whole-net scalar — no dynamic index to sample.
+    fn k_schedule_nba_scalar(&mut self, lhs: &Lvalue, value: Value);
+    /// WRITE: the compile-time-specialised twin of `k_write_lvalue` for the same shape.
+    /// `net` is the destination net id the compiler resolved.
+    fn k_write_scalar(&mut self, lhs: &Lvalue, net: u32, value: Value);
     /// READ: evaluate a delay ExprId into global-precision ticks (module-mult
     /// scaled; X/Z → 0 — the shared `Terminator::Delay` rule).
     fn k_delay_ticks(&self, eid: u32) -> u64;

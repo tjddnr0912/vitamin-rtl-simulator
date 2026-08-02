@@ -745,3 +745,37 @@ JIT 이 만들어도 그 Rust 함수를 그대로 호출한다. op 당 11 ns 가
 레지스터를 문장 너머로 살리거나 쓰기 전에 읽으면 `take().expect()` 가 **더 이상 잡지 못한다**(직전 문장이나
 직전 활성화가 남긴 값을 조용히 집는다). loud→silent 거래라 불변식을 테스트로 박았다. teeth 확인
 (`val: v + 1` 교란 → 잡힘).
+
+### ⓑ 마무리 — 런타임 결정을 컴파일 타임으로 (2026-08-02)
+
+레지스터 재사용 뒤 남은 것들을 ablation 으로 하나씩 쟀더니 **전부 10 ms 급**이었다:
+
+```
+resolve_lvalue_offsets  10 ms (1.7%)      enter_body  10 ms (1.7%)
+write_lvalue ~57 ms (9.5%)                schedule_nba ~22 ms (3.7%)
+native eval 130 ms (22%)                  startup ~85 ms (14%)
+```
+
+**단일 레버는 더 없다.** 그래서 ⓑ 의 원래 아이디어를 그대로 적용했다 — 컴파일 시점에 lvalue 모양을 알면
+런타임 결정이 사라진다.
+
+`Op::WriteScalar` / `Op::ScheduleNbaScalar`: 목적지가 **평범한 whole-net 스칼라임을 컴파일러가 증명한** 경우
+`ResolveOff` op 자체가 사라지고(스트림에서 op 하나 감소), `Offsets` 는 정적 상수 `Inline{[(0,0)],len:1}` 가 되며,
+`NbaLhs::of` 의 모양 분기와 `write_lvalue` 의 `plain_scalar` 조회가 없어진다. 두 축 모두 런 중 불변이다 —
+lvalue 모양은 elaborate 에서 고정, `plain_scalar` 는 넷의 **저장 형태**(real/frame/handle/2-state/배열/폭)이지 값이 아니다.
+
+**굽지 않은 둘**: `forced`(force/release 가 런 중에 넷을 재타깃) 와 들어온 값의 `is_real`(real→int 반올림 arm 선택).
+둘 다 op 안에서 live 로 검사하고 실패하면 일반 퍼널로 떨어진다.
+
+| | |
+|---|---|
+| 0.60 s → **0.58 s** | |
+| iverilog 13 | 0.58 s run + 0.03 s compile |
+
+번갈아 6회: **iverilog 0.58, vita 0.58** — 실행 시간 동일, 컴파일까지 넣으면 vita 가 앞선다.
+(vita 의 0.58 에는 parse+elaborate ~85 ms 가 포함돼 있다.)
+
+**⭐ 핀을 두 번 썼다.** 첫 번째 force/real 핀은 `force` 와 쓰기를 **한 `initial` 블록**에 넣었는데,
+`is_codegen_able` 이 `Stmt::Force` 를 품은 바디를 통째로 제외하므로 **그 블록이 인터프리터로 돌아
+`Op::WriteScalar` 가 한 번도 실행되지 않았다** — live 검사를 지워도 통과했다. force 를 **다른 프로세스**로
+옮겨야 codegen-able 바디가 특수화 op 를 태운다. teeth 확인 후 통과.
