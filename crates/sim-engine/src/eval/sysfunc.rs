@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl<N: NetReader> EvalCtx<'_, N> {
+impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     // ── SysFunc ────────────────────────────────────────────────────────────
 
     pub(crate) fn eval_sysfunc(&self, which: SysFuncId, args: &[u32]) -> Value {

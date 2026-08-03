@@ -305,7 +305,7 @@ pub trait NetReader {
     }
 }
 
-impl<N: NetReader> EvalCtx<'_, N> {
+impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     /// Self-determined eval: size the node to its own self-width. Unchanged
     /// public surface; used by control-flow truthiness and systask args.
     pub fn eval(&self, eid: u32) -> Value {

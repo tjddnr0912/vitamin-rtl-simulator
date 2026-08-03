@@ -2,8 +2,9 @@
 
 use super::*;
 
-pub(crate) fn render_template(
+pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
     st: &SimState,
+    nets: &N,
     template: &str,
     args: &[u32],
     argi: &mut usize,
@@ -113,11 +114,11 @@ pub(crate) fn render_template(
                 // `$timeformat` units (default: the global precision) and justified
                 // in the min field width (default 20; an explicit `%Nt`/`%0t`
                 // OVERRIDES it — iverilog-pinned).
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 out.push_str(&fmt_time_spec(st, &v, field_width, min_zero, left_just));
             }
             'd' | 'D' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 // IEEE 1364 %d: right-justify in a field width. `%0d` ⇒ minimal;
                 // `%Nd` ⇒ width N; bare `%d` ⇒ the operand's default decimal width
                 // (digit count of its max value). An X/Z prints as a right-justified
@@ -168,19 +169,19 @@ pub(crate) fn render_template(
                 }
             }
             'h' | 'H' | 'x' | 'X' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 out.push_str(&fmt_radix(&v, 4, min_zero, field_width, left_just));
             }
             'o' | 'O' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 out.push_str(&fmt_radix(&v, 3, min_zero, field_width, left_just));
             }
             'b' | 'B' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 out.push_str(&fmt_radix(&v, 1, min_zero, field_width, left_just));
             }
             'f' | 'F' | 'g' | 'G' | 'e' | 'E' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 let s = fmt_real(&v, spec, field_width, precision, left_just, min_zero, plus);
                 // `%E`/`%G` uppercase the exponent letter and non-finite labels
                 // (iverilog: `%E` → "1.5E+20", `%G` → "1E-05", `%E` of inf → "INF").
@@ -195,7 +196,7 @@ pub(crate) fn render_template(
                 }
             }
             'c' | 'C' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 out.push_str(&justify(&char_of(&v).to_string(), field_width, left_just));
             }
             's' | 'S' => {
@@ -229,7 +230,14 @@ pub(crate) fn render_template(
                                     == sim_ir::ConstRepr::StrUtf8
                         ) =>
                     {
-                        (arg_string(st, Some(eid)), None)
+                        // `arg_string`, not a reader-threaded twin: this arm is guarded on
+                        // `Expr::Const` of `StrUtf8` just above, so the value is a string
+                        // LITERAL and its evaluation cannot touch a net. A `_with` twin here
+                        // would carry a parameter no test could pin — the mutation that drops
+                        // it survives by construction, which reads exactly like a real gap.
+                        // `$dumpfile(name)` (dispatch.rs) is the caller that WILL need one,
+                        // and that is S1d-4b-2's, where a test can pin it.
+                        (crate::builtins::arg_string(st, Some(eid)), None)
                     }
                     // A NESTED `$sformatf` argument (`$sformatf("<%s>", $sformatf(…))`,
                     // and every string CONCAT, which elaborate desugars to exactly that
@@ -254,10 +262,13 @@ pub(crate) fn render_template(
                             unreachable!("matched just above")
                         };
                         let (f, rest) = (sa.first().copied(), sa.get(1..).unwrap_or(&[]).to_vec());
-                        (crate::builtins::format_args_str(st, f, &rest, None), None)
+                        (
+                            crate::builtins::format_args_str_with(st, nets, f, &rest, None),
+                            None,
+                        )
                     }
                     Some(eid) => {
-                        let v = st.eval_expr(eid);
+                        let v = st.eval_expr_with(nets, eid);
                         if v.is_str {
                             // v7 P2-C: a STRING-domain value renders its EXACT bytes.
                             (
@@ -286,13 +297,13 @@ pub(crate) fn render_template(
             // P0-8③: the remaining IEEE specs CONSUME their argument — leaving
             // them unconsumed shifted every later spec onto the wrong arg.
             'v' | 'V' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 out.push_str(&justify(&strength_form(&v), field_width, left_just));
             }
             // binary-dump specs: consume; vitamin emits no text for them (v1 —
             // the IEEE form writes raw bytes, useless in a text log).
             'u' | 'U' | 'z' | 'Z' => {
-                let _ = next_arg(st, args, argi);
+                let _ = next_arg_with(st, nets, args, argi);
             }
             // `%p` (SV assignment pattern, §21.2.1.7): minimal-width value form.
             // A REAL must render as a real — `fmt_dec` rounds it to an integer, so
@@ -309,7 +320,7 @@ pub(crate) fn render_template(
             // marker — so fixing them needs type information this renderer does not
             // receive, not a spelling change here.
             'p' | 'P' => {
-                let v = next_arg(st, args, argi);
+                let v = next_arg_with(st, nets, args, argi);
                 if v.is_real {
                     let s = fmt_real(&v, 'g', field_width, precision, left_just, min_zero, plus);
                     out.push_str(&s);
@@ -371,10 +382,17 @@ pub(crate) fn fmt_packed_chars_min(v: &Value) -> String {
     s
 }
 
-pub(crate) fn next_arg(st: &SimState, args: &[u32], argi: &mut usize) -> Value {
+/// `next_arg` against an alternate net store — see `format_args_str_with`.
+pub(crate) fn next_arg_with<N: crate::eval::NetReader + ?Sized>(
+    st: &SimState,
+    nets: &N,
+    args: &[u32],
+    argi: &mut usize,
+) -> Value {
     let e = args.get(*argi).copied();
     *argi += 1;
-    e.map(|x| st.eval_expr(x)).unwrap_or_else(Value::x1)
+    e.map(|x| st.eval_expr_with(nets, x))
+        .unwrap_or_else(Value::x1)
 }
 
 /// IEEE %d default field width = decimal digit count of an `n`-bit operand's max

@@ -49,21 +49,43 @@
 //! ## What is deliberately NOT here
 //!
 //! - **`k_dispatch_systask` is loud** (with `k_sformatf`, which shares its
-//!   blocker: both need the format engine, which renders through `&SimState`).
-//!   The first draft sized 4b at "exactly 4 read sites … a parameterisation, not
-//!   a rewrite". **That number was at least 3× low and the soundness review
-//!   measured it.** The original grep looked for `eval_expr`/`read_net`/
-//!   `write_lvalue` and so missed every access spelled another way. The reachable
-//!   set in an ELIGIBLE design is at least: `render.rs:260,377` (format args),
-//!   `render.rs:676,695` (`$timeformat` non-literal args), `queues_io.rs:690,756`,
-//!   `dispatch.rs:528,541,558` (`$dumplimit`, the `$fdisplay`/`$fwrite` fd,
-//!   `$fclose`), and `crv_draw.rs:591,592,617` (`$writemem*` — which reads the
-//!   MEMORY itself, a direct store read, not a formatter read).
-//!   And "zero write sites" was true only of net VALUES: `queues_io.rs:488,491`
-//!   write `st.nets[i].vcd_id`/`vcd_word_ids` from inside `$dumpvars`, and
-//!   `arena::Slot` has no such field — a categorically different problem, and one
-//!   S1d-4d's VCD byte-identity gate runs straight into. 4b must re-measure from
-//!   the store side (`&st.nets`, `st.nets[i]`), not from a name list.
+//!   blocker: both need the format engine).
+//!
+//!   **S1d-4b-1 built the format half.** `builtins::format_args_str_with` takes
+//!   the net reader as a GENERIC parameter, so the engine renders from either
+//!   store and the old entry point is a literal forward — no engine call site
+//!   moved, and tiers 1 and 2 keep their monomorphised path. It is not yet
+//!   callable from here: `builtins::dispatch` still hard-codes `sched.st` at its
+//!   render sites, which is 4b-2.
+//!
+//!   ⚠️ **And threading the READER is only half of 4b-2.** The formatter also
+//!   reads `now`, `cur_time_mult`, `rng`, `timeformat`, `global_prec_exp` and
+//!   `cur_scope` off `&SimState`. This kernel used to carry its OWN copies of
+//!   the first three, so wiring dispatch would have rendered `$time`, `%t` and
+//!   `$random` from a different clock and a different stream than the nets came
+//!   from — a silent wrong line, on a design measured `eligible: true,
+//!   buildable: true`. Hence the `st` borrow above: one origin, no copies. 4b-2
+//!   must not reintroduce them.
+//!
+//!   **Render sites reachable from an ELIGIBLE design (measured, and the earlier
+//!   count was wrong in both directions):** `dispatch.rs` `$display`, `$write`,
+//!   `$fdisplay`/`$fwrite`; `queues_io.rs::run_severity` (`$error`/`$fatal`/
+//!   `$warning`/`$info` — reached from `dispatch`, and NOT in `dispatch.rs`);
+//!   plus two in the postponed flush that `dispatch` only registers,
+//!   `sched/run_loop.rs`'s `$strobe` and `$monitor` renders. `dispatch.rs`'s
+//!   `$sformat` site is gate-refused (`stmt_effect`, `NetWrite::Flat`), as is
+//!   `run_loop.rs`'s deferred-assert render.
+//!
+//!   **Still `SimState`-tied, and these are STORE reads rather than formatter
+//!   reads, so they do not thread through the seam at all:** `full_snapshot`
+//!   (`$dumpvars`, which walks `&st.nets` wholesale), `$timeformat`'s
+//!   non-literal args, `$fclose`/`$fdisplay`'s fd argument, `$dumplimit`,
+//!   `$dumpfile`'s name argument, and `$writemem*`, which reads the memory
+//!   itself. Line numbers are deliberately omitted: the previous version cited
+//!   six and this slice moved three of them without re-pinning, which is what a
+//!   line citation costs. Re-measure from the store side (`&st.nets`,
+//!   `st.nets[`, `read_net`, `eval_expr`) rather than from a name list — the
+//!   first attempt grepped three spellings and came out 3x low.
 //! - **The NBA queue here is a flat `Vec`, not the region machinery.** Entries
 //!   are `NbaUpdate` — the ENGINE's type, not a parallel one — so the gate can
 //!   compare them field by field, and so 4c inherits a queue whose shape it does
@@ -129,16 +151,28 @@ macro_rules! not_built {
 pub(crate) struct NativeKernel<'i> {
     pub(crate) ir: &'i SimIr,
     pub(crate) arena: NetArena,
-    pub(crate) wt: &'i crate::width::WidthTable,
+    /// The engine state, for everything that is NOT net values.
+    ///
+    /// A BORROW, not a copy, and that is the fix for a hazard the adversarial
+    /// review measured. The first version carried its own `now`, `time_mult`,
+    /// `prec_mult`, `rng`, `wt` and `plusargs` — and the format engine reads
+    /// `now`, `cur_time_mult`, `rng`, `timeformat`, `global_prec_exp` and
+    /// `cur_scope` off `&SimState`. So the moment S1d-4b-2 wires
+    /// `k_dispatch_systask`, a design like
+    /// `$display("t=%t r=%0d n=%0d", $time, $random, n)` — eligible AND
+    /// buildable, measured — would have taken its net values from the arena and
+    /// its `$time` and `$random` from a DIFFERENT clock and a DIFFERENT stream.
+    /// Not a compile error: a silent wrong line.
+    ///
+    /// `now` and `cur_time_mult` are also not "cold" in the sense the first doc
+    /// claimed. `exec/process.rs` rewrites `cur_time_mult` on every process
+    /// dispatch and the run loop rewrites `now` every timestep, so a copy is a
+    /// staleness bug waiting for its first timestep.
+    pub(crate) st: &'i crate::SimState<'i>,
     /// `class_new_sites`, the one classification question that is not a function
     /// of `ir.exprs` (see `exec::kpred`'s module doc). Shared by reference for
     /// the same single-spelling reason the predicates are shared by call.
     pub(crate) class_new_sites: &'i BTreeMap<u32, u32>,
-    pub(crate) plusargs: &'i [String],
-    pub(crate) rng: crate::state::RngCells,
-    pub(crate) now: u64,
-    pub(crate) time_mult: u64,
-    pub(crate) prec_mult: u64,
     /// The in-body step ceiling. A CONSTRUCTOR ARGUMENT, not a default: it was
     /// briefly `u64::MAX`, which is not "no opinion" but "no termination guard",
     /// and a runaway combinational body would have spun forever instead of
@@ -155,21 +189,15 @@ impl<'i> NativeKernel<'i> {
     pub(crate) fn new(
         ir: &'i SimIr,
         arena: NetArena,
-        wt: &'i crate::width::WidthTable,
+        st: &'i crate::SimState<'i>,
         class_new_sites: &'i BTreeMap<u32, u32>,
-        plusargs: &'i [String],
         max_body_steps: u64,
     ) -> NativeKernel<'i> {
         NativeKernel {
             ir,
             arena,
-            wt,
+            st,
             class_new_sites,
-            plusargs,
-            rng: crate::state::RngCells::default(),
-            now: 0,
-            time_mult: 1,
-            prec_mult: 1,
             max_body_steps,
             nba: Vec::new(),
             nba_seq: 0,
@@ -177,19 +205,21 @@ impl<'i> NativeKernel<'i> {
         }
     }
 
-    /// The read context, built exactly as `SimState::mk_eval_ctx` builds its own
-    /// — same fields, same order — with the arena as the reader. Every read in
-    /// this file goes through it, so there is one place where the two stores can
-    /// differ and it is the `nets` field.
+    /// The read context: `SimState::mk_eval_ctx` with exactly ONE field changed.
+    ///
+    /// Every other field is read from `self.st`, not copied at construction, so
+    /// `nets` is the only place the two backends can differ — which is the whole
+    /// claim this file rests on, now true by construction rather than by
+    /// discipline.
     pub(crate) fn ctx(&self) -> crate::eval::EvalCtx<'_, NetArena> {
         crate::eval::EvalCtx {
             ir: self.ir,
             nets: &self.arena,
-            now: self.now,
-            wt: self.wt,
-            time_mult: self.time_mult,
-            rng: &self.rng,
-            plusargs: self.plusargs,
+            now: self.st.now,
+            wt: &self.st.wt,
+            time_mult: self.st.cur_time_mult,
+            rng: &self.st.rng,
+            plusargs: &self.st.plusargs,
         }
     }
 }
@@ -206,7 +236,7 @@ impl Kernel for NativeKernel<'_> {
         // `Scheduler::eval_for_lvalue`, restated over this store: the IEEE
         // assignment rule is width = max(lhs, self(rhs)), sign = rhs self-sign.
         let lw = self.arena.lvalue_width(self.ir, lhs);
-        let sw = self.wt.get(rhs);
+        let sw = self.st.wt.get(rhs);
         self.ctx().eval_ctx(rhs, lw.max(sw.width), sw.signed)
     }
 
@@ -230,7 +260,7 @@ impl Kernel for NativeKernel<'_> {
         // unbounded delay fired at t+0. Sharing it is what makes that class of
         // divergence unrepresentable rather than merely fixed.
         let v = self.ctx().eval(eid);
-        crate::eval::delay_ticks_of(&v, self.time_mult, self.prec_mult)
+        crate::eval::delay_ticks_of(&v, self.st.cur_time_mult, self.st.cur_prec_mult)
     }
 
     fn k_truthy(&self, eid: u32) -> bool {

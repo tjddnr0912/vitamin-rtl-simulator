@@ -140,13 +140,13 @@ fn s1d4a_walk(src: &str, name: &str, seed: u64) -> usize {
         st.two_state[n as usize] = true;
     }
     let n_nets = ir.nets.len() as u32;
-    let wt = crate::width::WidthTable::build(&ir, &crate::FuncTable::new());
     let empty_sites: BTreeMap<u32, u32> = BTreeMap::new();
     let sites = executable_sites(&ir, &empty_sites);
     if sites.is_empty() {
         return 0;
     }
-    let mut nk = NativeKernel::new(&ir, arena, &wt, &empty_sites, &[], 10_000);
+    let st_n = fresh_state(&ir, &sink);
+    let mut nk = NativeKernel::new(&ir, arena, &st_n, &empty_sites, 10_000);
     let mut rng = Rng::new(seed);
     let mut compared = 0usize;
 
@@ -329,9 +329,12 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
             "{name}: expected the S0 gate to refuse this design"
         );
         let arena = NetArena::build(&ir, &opts).expect("arena builds");
-        let wt = crate::width::WidthTable::build(&ir, &crate::FuncTable::new());
         let empty: BTreeMap<u32, u32> = BTreeMap::new();
-        let mut nk = NativeKernel::new(&ir, arena, &wt, &empty, &[], 10_000);
+        let sink = NullSink;
+        let st_n = fresh_state(&ir, &sink);
+        let mut nk = NativeKernel::new(&ir, arena, &st_n, &empty, 10_000);
+        nk.nba.clear();
+        nk.nba_seq = 0;
         let sid = (0..ir.stmts.len() as u32)
             .find(|&s| match &ir.stmts[s as usize] {
                 Stmt::Force { .. } => name == "force",
@@ -393,11 +396,11 @@ fn s1d4a_both_kernels_classify_the_same_rhs_identically() {
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
     let arena = NetArena::build(&ir, &opts).expect("arena builds");
-    let wt = crate::width::WidthTable::build(&ir, &crate::FuncTable::new());
     let empty: BTreeMap<u32, u32> = BTreeMap::new();
     let sink = NullSink;
     let mut st = fresh_state(&ir, &sink);
-    let nk = NativeKernel::new(&ir, arena, &wt, &empty, &[], 10_000);
+    let st_n = fresh_state(&ir, &sink);
+    let nk = NativeKernel::new(&ir, arena, &st_n, &empty, 10_000);
     let sched = Scheduler::new(&mut st, 10_000, 10_000, None, Default::default());
 
     // Every predicate, over every expression in the design — so a stub cannot
@@ -527,7 +530,11 @@ fn s1d4a_control_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
     let n_nets = ir.nets.len() as u32;
     let wt = crate::width::WidthTable::build(&ir, &crate::FuncTable::new());
     let empty: BTreeMap<u32, u32> = BTreeMap::new();
-    let mut nk = NativeKernel::new(&ir, arena, &wt, &empty, &[], 10_000);
+    let mut st_n = fresh_state(&ir, &sink);
+    for &n in &opts.two_state_nets {
+        st_n.two_state[n as usize] = true;
+    }
+    let mut arena = arena;
     let mut rng = Rng::new(seed);
     // Whole-net scalar destinations — the shape the compiler proves before it
     // emits the specialised twins.
@@ -557,16 +564,7 @@ fn s1d4a_control_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
     }
 
     for pass in 0..3 {
-        mirror_state(
-            &mut st,
-            &mut nk.arena,
-            &mut rng,
-            n_nets,
-            pass == 1,
-            pass == 2,
-        );
-        nk.nba.clear();
-        nk.nba_seq = 0;
+        mirror_state(&mut st, &mut arena, &mut rng, n_nets, pass == 1, pass == 2);
         // A NON-UNIT timescale on both sides. With `cur_time_mult == 1`
         // everywhere (every corpus design is 1ns/1ns), dropping the multiplier
         // from `k_delay_ticks` entirely was invisible — measured, it survived.
@@ -575,13 +573,18 @@ fn s1d4a_control_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
         // …and a non-zero `now`, for the same reason: `$time`/`$realtime` read
         // it, and a kernel whose context reported the wrong simulation time was
         // invisible while every pass ran at t=0 (measured — it survived).
+        // Set on BOTH states: the kernel reads its context from `st_n` now, so a
+        // per-pass context has to be installed on both or the comparison is
+        // between two different clocks rather than between two stores.
         let (tm, pm, now) = [(1u64, 1u64, 0u64), (1000, 1, 41), (1000, 10, 7_500)][pass];
-        st.cur_time_mult = tm;
-        st.cur_prec_mult = pm;
-        st.now = now;
-        nk.time_mult = tm;
-        nk.prec_mult = pm;
-        nk.now = now;
+        for t in [&mut st, &mut st_n] {
+            t.cur_time_mult = tm;
+            t.cur_prec_mult = pm;
+            t.now = now;
+        }
+        let mut nk = NativeKernel::new(&ir, arena, &st_n, &empty, 10_000);
+        nk.nba.clear();
+        nk.nba_seq = 0;
         // DISTINCT values: `max_deltas` and `max_body_steps` were both 10_000, so the
         // `k_max_deltas` comparison was 10_000 == 10_000 and blind to a swap of the
         // two — the confusion the kernel's own constructor doc warns about.
@@ -665,6 +668,10 @@ fn s1d4a_control_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
             "{name}: max_deltas"
         );
         sched.nba.clear();
+        // Hand the store back: the kernel is rebuilt each pass so its state's
+        // render context can vary with the engine's.
+        drop(sched);
+        arena = nk.arena;
     }
     (n_expr, n_spec)
 }
@@ -763,7 +770,6 @@ fn s1d4a_class_new_site_is_read_not_stubbed() {
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
     let arena = NetArena::build(&ir, &opts).expect("arena builds");
-    let wt = crate::width::WidthTable::build(&ir, &crate::FuncTable::new());
     let sink = NullSink;
     let mut st = fresh_state(&ir, &sink);
     // Mark every blocking assign as an allocation site, on BOTH sides.
@@ -778,7 +784,8 @@ fn s1d4a_class_new_site_is_read_not_stubbed() {
         "the design must contain blocking assigns"
     );
     st.class_new_sites = sites.clone();
-    let nk = NativeKernel::new(&ir, arena, &wt, &sites, &[], 10_000);
+    let st_n = fresh_state(&ir, &sink);
+    let nk = NativeKernel::new(&ir, arena, &st_n, &sites, 10_000);
     let sched = Scheduler::new(&mut st, 10_000, 10_000, None, Default::default());
     let mut class_new = 0usize;
     for (&sid, _) in sites.iter() {
@@ -859,4 +866,273 @@ fn s1d4a_assignment_context_width_is_carried() {
         compared, 72,
         "context-width coverage moved — re-pin deliberately"
     );
+}
+
+/// S1d-4b-1 — **the format engine reads the store it is GIVEN.**
+///
+/// `k_dispatch_systask` was S1d-4a's one CORE method left unbuilt, because
+/// `builtins` renders through `&SimState` while tier-3's nets live in a
+/// `NetArena`. The seam is `format_args_str_with`: `st` keeps supplying every
+/// cold field (IR, `now`, widths, time multiplier, format state) and the reader
+/// becomes a parameter. The old entry point is a literal forward passing `st`,
+/// so no engine call site changed.
+///
+/// **The first version of this gate was vacuous and four mutations proved it.**
+/// It mirrored the two stores and asserted the two renders matched — but with
+/// identical stores, a reader that ignores its parameter and reads `SimState`
+/// produces the identical string. Every "ignore the `nets` argument" mutation
+/// survived. Sameness cannot test provenance.
+///
+/// So the stores are made to DISAGREE. State A goes into `SimState`, state B
+/// into the arena, and rendering with the arena as reader must equal what a
+/// `SimState` holding B renders — not what the `SimState` holding A renders.
+/// The `differing` counter is the anti-vacuity guard: if A and B happened to
+/// render alike everywhere, the assertion would be satisfiable by either store.
+fn s1d4b_render_walk(src: &str, name: &str, seed: u64) -> (usize, usize, Vec<bool>) {
+    let (ir, opts) = build_with_opts(src);
+    let arena = match NetArena::build(&ir, &opts) {
+        Ok(a) => a,
+        Err(_) => return (0, 0, Vec::new()),
+    };
+    let sink = NullSink;
+    // TWO states over the same design: cold fields identical (same `fresh_state`,
+    // same ir), net values independent. `st_a` is the one handed to the renderer;
+    // `st_b` exists only to produce the expected string for the arena's contents.
+    let mut st_a = fresh_state(&ir, &sink);
+    let mut st_b = fresh_state(&ir, &sink);
+    for &n in &opts.two_state_nets {
+        st_a.two_state[n as usize] = true;
+        st_b.two_state[n as usize] = true;
+    }
+    let n_nets = ir.nets.len() as u32;
+    let mut arena = arena;
+    let sites: Vec<(Option<u32>, Vec<u32>)> = ir
+        .stmts
+        .iter()
+        .filter_map(|s| match s {
+            // `Display | Write` ONLY. `$monitor`/`$strobe` were in this list and
+            // collected zero sites in every design — and had they collected any,
+            // the assertion would have been aimed at the wrong entry point:
+            // neither renders through `format_args_str` at dispatch time. They
+            // register a `FmtCapture` and render later in `flush_postponed`
+            // (`sched/run_loop.rs`), which this slice did not thread. A filter
+            // arm that cannot fire reads as coverage that does not exist.
+            Stmt::SysTask {
+                which: sim_ir::SysTaskId::Display | sim_ir::SysTaskId::Write,
+                fmt,
+                args,
+            } => Some((*fmt, args.clone())),
+            _ => None,
+        })
+        .collect();
+    if sites.is_empty() {
+        return (0, 0, Vec::new());
+    }
+    let mut rng = Rng::new(seed);
+    let (mut compared, mut differing) = (0usize, 0usize);
+    // PER SITE, not just in the aggregate: a global "half the comparisons
+    // differ" guard is satisfied by the net-formatting sites while a site that
+    // silently rendered from `st_a` sits beside them unnoticed. A site whose
+    // output cannot depend on the store at all (`%m`, a string literal, a real
+    // literal) is expected to be uniform — the caller says which.
+    let mut site_differs = vec![false; sites.len()];
+    for pass in 0..4 {
+        // State A into st_a (and transiently the arena), then state B into BOTH
+        // st_b and the arena — leaving st_a at A and the arena at B.
+        let mut scratch = NetArena::build(&ir, &opts).expect("arena rebuilds");
+        mirror_state(
+            &mut st_a,
+            &mut scratch,
+            &mut rng,
+            n_nets,
+            pass % 2 == 1,
+            pass >= 2,
+        );
+        mirror_state(
+            &mut st_b,
+            &mut arena,
+            &mut rng,
+            n_nets,
+            pass % 2 == 1,
+            pass >= 2,
+        );
+        for (i, (fmt, args)) in sites.iter().enumerate() {
+            for radix in [None, Some(b'h'), Some(b'b'), Some(b'o')] {
+                let from_a = crate::builtins::format_args_str(&st_a, *fmt, args, radix);
+                let from_b = crate::builtins::format_args_str(&st_b, *fmt, args, radix);
+                let via_arena =
+                    crate::builtins::format_args_str_with(&st_a, &arena, *fmt, args, radix);
+                // The reader decides. Rendering through `st_a` with the ARENA as
+                // the net source must produce B's string, not A's.
+                assert_eq!(
+                    via_arena, from_b,
+                    "{name}/pass{pass}/site{i}/radix{radix:?}: the arena reader did not \
+                     supply the values (got A's render, or a third thing)"
+                );
+                assert!(
+                    !via_arena.is_empty(),
+                    "{name}/pass{pass}/site{i}: rendered nothing"
+                );
+                if from_a != from_b {
+                    differing += 1;
+                    site_differs[i] = true;
+                }
+                compared += 1;
+            }
+        }
+    }
+    (compared, differing, site_differs)
+}
+
+#[test]
+fn s1d4b_format_engine_renders_identically_from_either_store() {
+    let (mut compared, mut differing) = (0usize, 0usize);
+    for (i, d) in corpus(0x5EED_F00D, 72).into_iter().enumerate() {
+        let (c, d2, per_site) = s1d4b_render_walk(&d.src, &d.name, 0x4B00_0000 + i as u64);
+        // EVERY corpus render site formats a net (verified: the generator's
+        // templates all interpolate one), so every one must discriminate.
+        for (k, ok) in per_site.iter().enumerate() {
+            assert!(*ok, "{}/site{k}: never differed between stores", d.name);
+        }
+        compared += c;
+        differing += d2;
+    }
+    assert_eq!(
+        compared, 1264,
+        "render coverage moved — re-pin deliberately"
+    );
+    // ANTI-VACUITY: on this many sites the two stores must actually render
+    // differently, or the equality above is satisfiable by reading either one.
+    assert!(
+        differing * 2 >= compared,
+        "the two stores render alike too often ({differing}/{compared}) — the \
+         provenance assertion is not discriminating"
+    );
+}
+
+/// The format shapes the corpus does not exercise: every conversion the engine
+/// supports, X/Z operands, string values, a real, `%t`, `%m`, width/pad specs,
+/// and the trailing-arg rule (an arg not consumed by the format string prints
+/// sequentially, and a string arg is itself a format segment).
+#[test]
+fn s1d4b_render_agrees_on_the_full_conversion_matrix() {
+    let designs: [(&str, &str); 3] = [
+        (
+            "conversions",
+            "module t;\n\
+               reg [31:0] w; reg [7:0] b; reg signed [15:0] sv; reg [63:0] q;\n\
+               initial begin\n\
+                 w = 32'hdead_beef; b = 8'b1010_xz01; sv = -1234; q = 64'h0123_4567_89ab_cdef;\n\
+                 $display(\"%d %h %o %b %c %s %0d %8d %-8d|\", w, w, w, b, b, b, w, w, w);\n\
+                 $display(\"%x %X %H %B %O %v %u %z\", w, w, w, b, b, b, w, w);\n\
+                 $display(\"sv=%d %0d %h\", sv, sv, sv);\n\
+                 $display(\"q=%h %d\", q, q);\n\
+                 $display(\"xz=%b %h %d %o\", b, b, b, b);\n\
+                 $write(\"nofmt\", w, b, sv);\n\
+                 $display(\"%%literal%% %m\");\n\
+                 $display(\"%t\", w);\n\
+                 $display(\"lit=%s\", \"a string literal\");\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "real_and_time",
+            "module t;\n\
+               reg [31:0] a; reg [63:0] tv;\n\
+               initial begin\n\
+                 a = 42; tv = 64'd1234567;\n\
+                 $display(\"%f %e %g\", 1.5, 2.5e10, 0.0001);\n\
+                 $display(\"%0f|%12.3f|%-12.3e|\", 3.14159, 3.14159, 3.14159);\n\
+                 $display(\"t=%t a=%0d\", tv, a);\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "trailing_args",
+            "module t;\n\
+               reg [7:0] a; reg [7:0] b;\n\
+               initial begin\n\
+                 a = 8'h41; b = 8'h42;\n\
+                 $display(a, b);\n\
+                 $display(\"lead %d\", a, \" mid %d \", b, a);\n\
+                 $display(\"%s and %s\", a, b);\n\
+               end\n\
+             endmodule\n",
+        ),
+    ];
+    let (mut compared, mut differing) = (0usize, 0usize);
+    for (i, (name, src)) in designs.iter().enumerate() {
+        let (c, d, per_site) = s1d4b_render_walk(src, name, 0x4BC0_0000 + i as u64);
+        assert!(c > 0, "{name}: produced no comparisons");
+        // These designs DO carry sites whose output cannot depend on the store —
+        // `%m`, a string literal, real literals — so a per-site requirement is
+        // stated as a count of sites that must discriminate, named per design.
+        // EXACT, measured. `conversions` has 9 sites of which 7 read a net —
+        // the two that cannot are `%%literal%% %m` and `lit=%s` of a string
+        // literal. `real_and_time` has 3, of which only the `%t`/`%0d` line reads
+        // one (the other two format real LITERALS). `trailing_args` reads a net
+        // at all 3. An inequality here would let a site quietly stop
+        // discriminating; this catches it.
+        let must: usize = match *name {
+            "conversions" => 7,
+            "real_and_time" => 1,
+            _ => 3,
+        };
+        let got = per_site.iter().filter(|b| **b).count();
+        assert_eq!(
+            got,
+            must,
+            "{name}: {got} of {} sites discriminate between the stores (expected \
+             {must}) — re-pin deliberately",
+            per_site.len()
+        );
+        compared += c;
+        differing += d;
+    }
+    assert_eq!(
+        compared, 240,
+        "conversion-matrix coverage moved — re-pin deliberately"
+    );
+    assert!(
+        differing * 2 >= compared,
+        "the two stores render alike too often ({differing}/{compared})"
+    );
+    // THREE arms of the threaded path are deliberately NOT pinned, and saying
+    // which beats letting a surviving mutation look like an oversight. The list
+    // said TWO until an adversarial mutation sweep found the third — the failure
+    // mode this list exists to prevent, committed in the list itself. All three
+    // measured, not assumed:
+    //
+    // 1. Three helpers on the render path are deliberately NOT reader-threaded,
+    //    because none of them can read a net: `expr_const_string` and
+    //    `str_const_of_expr` match `Expr::Const` and return early otherwise, and
+    //    `arg_string`'s one render call site is guarded on a `StrUtf8` const.
+    //    Threading them would ship parameters no mutation could ever kill, which
+    //    is indistinguishable from a real gap. `$display("lit=%s", "...")` above
+    //    drives the third arm, so it is REACHED; its provenance simply is not a
+    //    question. (`$dumpfile(name)` DOES pass an arbitrary expression to
+    //    `arg_string`; threading that is S1d-4b-2, where a test can pin it.)
+    // 2. The RUNTIME-STRING trailing arm (`format_args_str_with`'s `v.is_str`
+    //    branch, where a string-VALUED argument becomes its own format segment).
+    //    Every shape that reaches it needs a `string` net or a string method on
+    //    one, so `NetArena::build` refuses the design — measured: `$display("x",
+    //    s)` and `$display("x", s.toupper())` both report `refused: "string"`.
+    //    A `{"p","q"}` concat IS eligible but folds to a numeric const and never
+    //    enters the arm (instrumented). Correct code, untestable today.
+    // 3. The nested-`$sformatf` arm (`$display("<%s>", $sformatf(…))`, which is
+    //    also every string CONCAT after elaborate's desugar). Unreachable for any
+    //    design tier-3 can build: the `$sformatf` hoist allocates a `string`
+    //    module net for its temp, and `NetArena::build` refuses string storage.
+    //    Measured — `run.json` reports `refused: "string"` for exactly that
+    //    design. It becomes testable when S3 gives the arena string storage —
+    //    which is also when arm 2 becomes testable, since both are gated on the
+    //    same missing storage.
+    //
+    //    ⚠️ The stated REASON for this one is narrower than the arm: the hoist
+    //    (`elaborate/stmt_main.rs`) closes the literal `$sformatf` spelling, but
+    //    a string CONCAT reaches the same IR node through `lower_string_concat_
+    //    parts` at expression lowering, and what refuses THAT is the `string`
+    //    net its parts need. Same conclusion, two different mechanisms — the
+    //    §4.5.287 shape, where the argument answers the destination side while
+    //    the condition lives on the value side.
 }

@@ -31,6 +31,43 @@ impl<'a> SimState<'a> {
         self.mk_eval_ctx().eval(eid)
     }
 
+    /// `eval_expr` against an ALTERNATE net store, sharing every cold field
+    /// (`ir`, `now`, widths, time multiplier, RNG, plusargs) with this state.
+    ///
+    /// The tier-3 seam. `builtins` renders through `&SimState`, so a tier-3
+    /// kernel — whose nets live in a `NetArena`, not in `SimState.nets` — cannot
+    /// call `$display` without either duplicating the format engine or reading a
+    /// stale store. This is the third option: the formatter keeps its one
+    /// implementation and takes the reader as a parameter.
+    ///
+    /// The engine's own calls pass `self`, which is byte-identical to
+    /// `eval_expr` by construction — same fields, same order, same reader.
+    ///
+    /// GENERIC, not `&dyn NetReader`, and the difference is not stylistic. With
+    /// a trait object the engine's own `$display` path would have moved from a
+    /// monomorphised `EvalCtx<SimState>` to a virtual one — and `EvalCtx.nets` is
+    /// called several times per NET ACCESS (`is_assoc_str`, `is_assoc`,
+    /// `read_net` on the leaf arm alone), not once per `eval_expr`. That would
+    /// have made every tier-1 and tier-2 format argument pay for tier-3's seam.
+    /// Generic, both readers monomorphise and the engine's path is the code it
+    /// was before.
+    pub(crate) fn eval_expr_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: &N,
+        eid: u32,
+    ) -> Value {
+        crate::eval::EvalCtx {
+            ir: self.ir,
+            nets,
+            now: self.now,
+            wt: &self.wt,
+            time_mult: self.cur_time_mult,
+            rng: &self.rng,
+            plusargs: &self.plusargs,
+        }
+        .eval(eid)
+    }
+
     /// N1: evaluate a frame-body `BlockingAssign` RHS. `$sformatf(fmt, …)` written to
     /// a `string` target is rendered through the SHARED formatter (`format_args_str`) —
     /// the generic `eval_sysfunc` arm cannot see the format string (it would dump the

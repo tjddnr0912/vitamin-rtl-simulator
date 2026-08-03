@@ -236,6 +236,12 @@ impl NetArena {
 /// Every other `NetReader` method keeps its default: in an ELIGIBLE design
 /// there are no heap kinds, no class handles, and no frame calls, so the
 /// defaults (`None`/X-poison) are unreachable by construction.
+/// ⚠️ ONE defaulted `NetReader` method is NOT covered by the "no heap kinds, no
+/// class handles, no frame calls" argument below: `fd_eof`. It is closed only by
+/// `$feof` being OVER-marked as a statement effect (§4.5.291, ROADMAP §5.1) —
+/// so the day that over-mark is corrected, `$display("%0d", $feof(fd))` becomes
+/// eligible and this reader returns X where the engine returns the live flag.
+/// Whoever fixes the over-mark owes this an override.
 impl NetReader for NetArena {
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
         let s = self.slots[net as usize];

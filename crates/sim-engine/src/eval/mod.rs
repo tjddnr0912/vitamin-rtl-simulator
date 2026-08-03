@@ -43,7 +43,11 @@ pub(crate) enum RedKind {
 
 /// Evaluation context: the IR (consts/exprs), the net table, current time, and
 /// the self-width side table that drives context-determined sizing.
-pub struct EvalCtx<'a, N: NetReader> {
+/// `?Sized` is NOT load-bearing today — measured, the workspace compiles without
+/// it, because nothing yet instantiates `EvalCtx<dyn NetReader>`. It is here for
+/// S1d-4b-2, whose `Kernel::k_nets()` hands back a `&dyn NetReader`. Recorded
+/// rather than left to look exercised.
+pub struct EvalCtx<'a, N: NetReader + ?Sized> {
     pub ir: &'a SimIr,
     pub nets: &'a N,
     pub now: u64,
@@ -114,7 +118,7 @@ pub(crate) fn delay_ticks_of(v: &crate::value::Value, mult: u64, prec_mult: u64)
 /// resolve an index with the SAME rule. Two spellings of "what bit position does
 /// this index name" would drift exactly where it hurts most — an X/Z index that
 /// one side drops and the other writes is a silent wrong value.
-pub(crate) fn resolve_offsets<N: NetReader>(
+pub(crate) fn resolve_offsets<N: NetReader + ?Sized>(
     ctx: &EvalCtx<N>,
     lhs: &sim_ir::Lvalue,
 ) -> crate::exec::Offsets {

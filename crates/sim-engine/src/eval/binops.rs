@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl<N: NetReader> EvalCtx<'_, N> {
+impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     pub(crate) fn arith(&self, op: BinOp, l: &Value, r: &Value) -> Value {
         if l.is_real || r.is_real {
             // IEEE 1364 §4.3: if either operand is real, the other promotes to real.

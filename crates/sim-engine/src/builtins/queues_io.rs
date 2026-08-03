@@ -727,8 +727,49 @@ pub(crate) fn const_string(ir: &sim_ir::SimIr, cid: u32) -> String {
 
 // ── $display format engine (4-state aware) ─────────────────────────────────
 
+/// The `$display` format engine, rendering against THIS state's nets.
+///
+/// A literal forward to [`format_args_str_with`] passing `st` as the reader, so
+/// every existing caller keeps its behaviour by construction rather than by
+/// inspection — the tier-3 seam added a parameter without touching a single
+/// engine call site.
 pub(crate) fn format_args_str(
     st: &SimState,
+    fmt: Option<u32>,
+    args: &[u32],
+    radix: Option<u8>,
+) -> String {
+    format_args_str_with(st, st, fmt, args, radix)
+}
+
+/// `format_args_str` against an ALTERNATE net store (tier-3 seam, S1d-4b).
+///
+/// `st` still supplies every COLD field — the IR, `now`, widths, the time
+/// multiplier, the format state — and `nets` supplies the net VALUES. The split
+/// exists because tier-3's nets live in a `NetArena`, not in `SimState.nets`,
+/// and the alternative to a parameter here was a second format engine. A second
+/// format engine is the exact shape of defect this codebase keeps finding: two
+/// spellings of one rule, drifting.
+///
+/// The reader threads down through `render_template`/`next_arg_with`, which is
+/// the whole VALUE-reading path of the `$display` family.
+///
+/// ⚠️ WHAT THIS DOES NOT YET DO, stated because a seam is easy to mistake for a
+/// wiring: **`builtins::dispatch` still hard-codes `sched.st` as the reader** at
+/// each of its four render sites, so `k_dispatch_systask` cannot call it with an
+/// arena yet. `dispatch` takes `&mut Scheduler` and would need the reader
+/// threaded to it as well — that is S1d-4b-2, and it is the step that turns this
+/// from a capability into a call. What this slice buys is that the format engine
+/// itself no longer has to be duplicated or changed to get there.
+///
+/// Also still `SimState`-tied (same slice): `full_snapshot` (`$dumpvars`, which
+/// walks `&st.nets` wholesale), `$timeformat`'s non-literal args, `$fclose`/
+/// `$fdisplay`'s fd argument, `$dumplimit`, and `$writemem*`, which reads the
+/// memory itself. Those are STORE reads rather than formatter reads, so they do
+/// not thread through here at all.
+pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
+    st: &SimState,
+    nets: &N,
     fmt: Option<u32>,
     args: &[u32],
     radix: Option<u8>,
@@ -738,8 +779,13 @@ pub(crate) fn format_args_str(
     if let Some(fmt_eid) = fmt {
         // FROZEN IR: `SysTask.fmt` is an ExprId pointing to a `Const{val}` whose
         // `val` is the format-string ConstId (verified against elaborate).
+        // NOT threaded, and that is a contract not an omission: `expr_const_string`
+        // and `str_const_of_expr` read `Expr::Const` and return early for anything
+        // else, so they cannot touch a net. Giving them a reader would add a
+        // parameter no test could ever pin — the mutation that drops it survives
+        // by construction, which is indistinguishable from a real gap.
         let template = expr_const_string(st, fmt_eid);
-        render_template(st, &template, args, &mut argi, &mut out);
+        render_template(st, nets, &template, args, &mut argi, &mut out);
     }
     // IEEE 1364-2005 §17.1 (P0-8): any argument NOT consumed by a format
     // string prints sequentially — a string-literal arg is itself a format
@@ -751,9 +797,9 @@ pub(crate) fn format_args_str(
         let e = args[argi];
         argi += 1;
         if let Some(text) = str_const_of_expr(st, e) {
-            render_template(st, &text, args, &mut argi, &mut out);
+            render_template(st, nets, &text, args, &mut argi, &mut out);
         } else {
-            let v = st.eval_expr(e);
+            let v = st.eval_expr_with(nets, e);
             if v.is_str {
                 // A string-typed VALUE (a `string` variable, not just a literal)
                 // is itself a format segment (IEEE 1364-2005 §17.1): its `%` specs
@@ -761,7 +807,7 @@ pub(crate) fn format_args_str(
                 // Previously a runtime string fell through to push_default_radix
                 // and printed as a packed-ASCII decimal (silently wrong).
                 let text = String::from_utf8_lossy(&v.to_str_bytes()).into_owned();
-                render_template(st, &text, args, &mut argi, &mut out);
+                render_template(st, nets, &text, args, &mut argi, &mut out);
             } else {
                 push_default_radix(&v, &mut out, radix);
             }
