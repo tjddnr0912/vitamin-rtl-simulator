@@ -237,19 +237,15 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     flag(&mut out, "file_directed", file_directed_stmts.len());
 
     // ── statement-level families with no v1 machinery ──────────────────────
-    // NOT exhaustive, and deliberately narrow: these two are the constructs
-    // whose ABSENCE the S1c write funnel is built on. The wider body-level
-    // question ("can the executor reproduce every statement's effect") belongs
-    // to S1d/S3 — `native/write.rs` lists what is still owed, including the
-    // `sim_ir::rhs_is_stmt_effect` family (a seeded `$random`/`$dist_*`, `$cast`,
-    // `$value$plusargs`, the file family) and the effectful `SysTask`s
-    // (`$readmem*`, `$sformat`), whose writes never pass through this funnel at
-    // all. Those are NOT rejected here: which of them S1d can plumb is an open
-    // design question, and guessing would corrupt the eligibility measurement in
-    // the other direction.
+    // THREE families, none of them sidecar-borne — only a scan of `ir.stmts`,
+    // the arena EVERY body's statements live in (process and subroutine alike),
+    // finds them.
     //
-    // Neither is sidecar-borne, so only a scan of `ir.stmts` — the arena EVERY
-    // body's statements live in, process and subroutine alike — finds them.
+    // The third (`stmt_effect`) was carried as a note from S1c until the
+    // `Kernel` trait made the question structural: an `impl Kernel` cannot be
+    // written without answering all of these, so "decide later" stopped being
+    // available and the gate answers instead. Wiring them later is what LIFTS
+    // the reject, not what was needed to add it.
     //
     // - `force`/`release`: a whole machine v1 does not have (the per-net force
     //   flag that suppresses every normal driver, the continuous re-evaluation,
@@ -268,6 +264,7 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     //   body-level fallback at all.
     let mut force_release = 0usize;
     let mut disable_fork = 0usize;
+    let mut stmt_effect = 0usize;
     for s in &ir.stmts {
         match s {
             sim_ir::Stmt::Force { .. } | sim_ir::Stmt::Release { .. } => force_release += 1,
@@ -276,13 +273,54 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
                     disable_fork += 1;
                 }
             }
-            sim_ir::Stmt::BlockingAssign { .. }
-            | sim_ir::Stmt::NonblockingAssign { .. }
-            | sim_ir::Stmt::SysTask { .. } => {}
+            // EFFECTS THAT NEVER PASS THROUGH THE WRITE FUNNEL. A seeded
+            // `$random`/`$dist_*` writes its seed back, `$cast` writes its
+            // destination, `$value$plusargs` writes its output, and the whole
+            // file family advances descriptor state — all INSIDE the call, not
+            // through `write_lvalue`. `$readmem*` writes a memory net and
+            // `$sformat` writes a packed destination the same way.
+            //
+            // BOTH halves go through a canonical, `_`-free predicate in sim-ir:
+            // `rhs_is_stmt_effect` (the SAME function the tier-2 VM's compile
+            // gate consults — two spellings would let the backends disagree
+            // about one statement) and `systask_writes_net`. The SysTask half
+            // was written here as a three-id `matches!` first, and its implicit
+            // catch-all immediately cost a miss: the TASK form of `$cast` writes
+            // its destination exactly as `$sformat` does and was accepted.
+            //
+            // ⚠️ This row's criterion is "writes a NET from inside the call". It
+            // is NOT the full list of what an executor must reproduce: every
+            // `$display`/`$fdisplay`/`$dumpvars`/`$writemem*` reads nets and
+            // mutates output or descriptor state. Those are runtime SERVICES,
+            // answered by whoever implements `k_dispatch_systask`, not by this
+            // gate. Reading this row as "the SysTasks tier-3 must worry about"
+            // would understate the work.
+            //
+            // ⚠️ `$sformatf` (the FUNCTION form) is deliberately NOT here: its
+            // only effect is the rendered value, written through the ordinary
+            // funnel. That is true only for an executor that routes statements
+            // through `compute_effect`/`apply_effect` — the tier-2 VM bypasses
+            // them and therefore has to exclude it. The tier-3 plan is to BE a
+            // `Kernel` impl, so this exclusion is correct and conditional on it.
+            sim_ir::Stmt::BlockingAssign { rhs, .. } => {
+                if sim_ir::rhs_is_stmt_effect(&ir.exprs, *rhs) {
+                    stmt_effect += 1;
+                }
+            }
+            sim_ir::Stmt::SysTask { which, .. } => {
+                // FLAT only: a heap mutator writes too, but its design is
+                // already refused by the storage-kind row above, and counting it
+                // here would double-book the same statement.
+                if sim_ir::systask_net_write(*which) == sim_ir::NetWrite::Flat {
+                    stmt_effect += 1;
+                }
+            }
+            sim_ir::Stmt::NonblockingAssign { .. } => {}
         }
     }
     flag(&mut out, "force_release", force_release);
     flag(&mut out, "disable_fork", disable_fork);
+    flag(&mut out, "stmt_effect", stmt_effect);
 
     // ── heap-storage net kinds — the doc's `*_dyn_nets` intent, done right:
     // a PLAIN `int q[$]` has no sidecar entry at all, so the only complete

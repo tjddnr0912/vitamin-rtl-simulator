@@ -32,18 +32,15 @@
 //!   (read and write). Values match without it; stderr does not.
 //! - **Wired-AND/OR resolution** (`wired_and_nets`/`wired_or_nets`, CORE at S0)
 //!   is a multi-driver SETTLE rule, not a write-funnel rule — S1d owns it.
-//! - **Effects that never pass through this funnel at all.** A statement can
-//!   mutate state without a single `write_lvalue` call, and the S0 gate does not
-//!   reject these: the `sim_ir::rhs_is_stmt_effect` family (a seeded
+//! - ~~Effects that never pass through this funnel at all~~ **now REFUSED at the
+//!   gate** (`stmt_effect`, added when the `Kernel` trait made the question
+//!   structural): the `sim_ir::rhs_is_stmt_effect` family (a seeded
 //!   `$random`/`$dist_*` writes its seed back, `$cast(dst,src)`,
-//!   `$value$plusargs`, and the whole file family `$fopen`/`$fgets`/`$fscanf`/
-//!   `$sscanf`/`$fread`/`$feof`/`$fgetc`/`$ungetc`), plus effectful `SysTask`s
-//!   (`$readmem*` writes a memory net, `$sformat` writes a packed destination).
-//!   `r = $random(seed)` is an ELIGIBLE design today, and an executor that
-//!   ignored the write-back would repeat every draw. Before S1d runs anything,
-//!   each of these is plumbed or its design is refused — the tier-2 VM answers
-//!   the same question with `sim_ir::rhs_is_stmt_effect`, which is the predicate
-//!   to reuse rather than re-enumerate.
+//!   `$value$plusargs`, the file family) and `sim_ir::systask_writes_net`
+//!   (`$readmem*`, `$sformat`, the `$cast` TASK form, the string/heap mutators).
+//!   `r = $random(seed)` is NO LONGER eligible. Plumbing them is what lifts the
+//!   reject; until then the refusal is what keeps an executor from repeating
+//!   every draw in silence.
 
 use sim_ir::{LvalChunk, Lvalue, SelKind, SimIr};
 

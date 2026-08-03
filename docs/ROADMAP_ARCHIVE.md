@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 256건 (최신순)
+## 인덱스 — 완료 슬라이스 257건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.291` **③층 S1d-4a — 트레이트가 강제한 결정: 퍼널을 안 거치는 효과를 게이트가 답한다.** 먼저 계획을 고쳤다 — ③층 실행기는 두 번째 실행기가 아니라 **`Kernel` 의 두 번째 구현자**이고(이음매는 **가운데만** 제네릭: `run_process`·`builtins::dispatch` 는 `Scheduler` 고정), 52 메서드 중 **~27 이 그 선결 과제**라 *"나중에 배선"* 이 선택지에서 사라진다. → **`stmt_effect` 거부 행**을 tier-2 와 **같은 술어**로 추가. ⭐ **적격률이 처음 움직였다 79/79 → 77/79**(keccak 둘, 이유는 TB 의 `$value$plusargs` 하나) — 그리고 **②→③ 76× 와 성공 기준이 keccak 위에 서 있어서** 그 배선이 재측정의 선행조건이 됐다. 리뷰: **`$cast` TASK 형 누락**(내 SysTask 쪽만 `matches!` 암묵 catch-all — 주석은 여섯 줄 위에서 exhaustive 라고 주장 중이었다) → sim-ir 정본 `systask_net_write` **41 변종 `_`-free** 신설 + **`NetWrite{Flat,Heap}`** 로 double-booking 제거 …
 - `4.5.290` **③층 S1d-3 — wake 결정, 그리고 게이트가 수정을 거부하도록 굳어 있던 일.** 변경 집합 → **어느 프로세스가 ready 이고 어떤 순서인가**(값이 아니라 **결정**을 비교). 적격성이 사준 단순화 = fork 거부 ⇒ activity ≡ process·`Ready` 가 proc id 로 붕괴. 게이트가 갭을 두 번 잡았다: `always @(a)` = static Level(첫 실행에 발산) → 그리고 적대 리뷰가 **`Level|Comb|Latch` 셋 다 같은 웨이터**임을 짚어 **조합 프로세스 전체가 잠들어 있었음**을 발견. ⭐⭐ **등록만 고치면 게이트가 깨진다** — `arm_processes` 가 Comb/Latch 를 t0 에 arm 하지 않고 **큐잉**하므로 `level_armed` 초기값이 `kind == Level` 이어야 한다(두 줄이 짝). 관측 granularity 는 **축**이고, 리뷰가 dedup 리셋 주기·저자 분포·granularity 커플링 셋을 더 잡아 **8규칙 전부 teeth** …
 - `4.5.289` **③층 S1d-2 — dirty/edge 채널, 그리고 내 게이트의 teeth 를 세 번 재확인.** 스케줄링의 절반은 루프가 아니라 **쓰기**에 달린다 — `dirty`(멤버십 = 변경 집합이라 A→B→A 왕복도 관측)·`last_blocking_writer`·**`slot_edge`**(끝점이 잃은 엣지 **종류** 복원 · 값 비교로는 절대 안 보임). edge-target 스캔은 **한 철자로 추출**(두 번째 스캔이 func/task arena 를 빠뜨리면 증상은 틀린 값이 아니라 **안 뜨는 posedge**). ⭐ 게이트 첫 판은 7개 행동 중 **2개가 공허**했다(쓰기마다 take → dirty 길이 1 → 정렬 계약 무의미·같은 슬롯 재기록 없음 → glitch 누적 없음) → **배치**로 4/6, writer tag 구동 + edge-target `0→1→0→1` 퍼널 구동으로 **7/7 teeth**. 교훈 = *게이트를 짰다 ≠ 게이트가 검사한다*(공허함의 원인은 대개 **관측 시점**) …
 - `4.5.288` **③층 S1d-1 — 백엔드 선택과 런타임 게이트: 판정을 두 층으로.** S1d 도 넷으로 분해(배선+게이트 → 스케줄러 코어 → settle/wired → 바이트 게이트). `Backend::Native`+`--backend native` 는 실행기가 없어 **항상 VM 폴백**하되 run.json 이 **요청이 아니라 결과**를 적는다(요청을 적으면 돌지 않은 실행기를 보고하게 된다). ⭐ `native{eligible, buildable, refused}` = **범위 상한 / 오늘의 저장소 / AND 의 이유** — 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible ∧ ¬buildable). `buildable` 은 `build` 의 **무할당 쌍둥이**(build 가 먼저 호출 = 드리프트 불가). S1c 가 남긴 필수 4건 중 **2건 종료** …
@@ -345,6 +346,45 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.291 ③층 S1d-4a — 트레이트가 강제한 결정: 퍼널을 안 거치는 효과를 게이트가 답한다 (2026-08-03, branch feat-tier3-s1d4a-kernel, format 26 불변) ✅
+
+**계획을 먼저 고쳤다(별도 커밋 `ceb63e3`).** S1d-4 를 "두 번째 실행기를 쓴다"로 잡고 있었는데
+엔진이 이미 그 이음매를 **의도적으로** 만들어 뒀다(`exec/mod.rs`: *"`apply_effect` 의 커널 호출이
+P7b 의 트레이트 표면이 된다"*). 실측: `compute_effect`/`apply_effect` 는 `K: Kernel` **제네릭**이라
+문장 의미가 전부 재사용되고 byte-identity 가 **구조적**이 되는 반면, `run_process`(바디 워크)와
+`builtins::dispatch` 는 **양 끝이 `Scheduler` 고정**이다 — 이음매는 **가운데만** 제네릭이다.
+그리고 52 메서드가 셋으로 갈린다(코어 ~16 · 게이트 거부 ~9 · **~27 = 그 선결 과제**).
+
+**그래서 이 슬라이스의 실물은 그 선결 과제의 종결이다.** `Kernel` 을 구현하면서 27개를 답하지 않을
+방법이 없으므로 *"나중에 배선"* 이 더는 선택지가 아니다 → **`stmt_effect` 거부 행**을 추가하되
+판정은 **tier-2 와 같은 술어**(`sim_ir::rhs_is_stmt_effect`)로. 두 철자면 두 백엔드가 같은 문장을
+두고 갈릴 수 있다.
+
+**⭐ 처음으로 적격률 숫자가 움직였다: 79/79 → 77/79.** 잃은 둘은 keccak 두 형태이고 이유는 하나 —
+TB 의 `$value$plusargs("N=%d", nperm)` 가 `nperm` 을 **호출 안에서** 쓴다. 무시하면 초기화 안 된 값으로
+도는 조용한 오답이므로 거부가 정답이다. ⚠️ **숫자보다 무거운 결과**: keccak 이 빠지면 ③층을 실제로
+보일 설계가 examples 4 + picorv32 로 줄고, **②→③ 76×** 와 **§7.3 성공 기준**이 둘 다 keccak 위에
+서 있다 → `$value$plusargs` 배선은 편의가 아니라 **재측정 게이트의 선행조건**(doc-21 §7.3.1 기록).
+
+**적대 리뷰 — BLOCKING 1 + MAJOR 3, 전부 실질.** ① **`$cast` 의 TASK 형이 빠져 있었다**: 그것은
+`$sformat` 과 **같은 메커니즘**으로 목적지를 쓰는데(리뷰어 실측: 적격 + reject 맵이 **비어 있음**)
+내가 SysTask 쪽을 **3-id `matches!`** 로 써서 암묵 catch-all 로 흘렸다 — **내 주석이 여섯 줄 위에서
+"`_` arm 없는 exhaustive 라 새 id 가 조용한 쪽으로 기본값이 될 수 없다"고 주장하는 동안**. 그 주장은
+`sysfunc_is_stmt_effect` 에만 참이었다. 수정 = sim-ir 에 정본 `systask_net_write` 를 **`_` 없이**
+신설(41 변종 전수) → `$cast` 포함. ② 그리고 그것이 **double-booking** 을 드러냈다(기존 테스트가 잡음):
+heap 뮤테이터도 넷을 쓰지만 그 설계는 이미 storage 행이 거부한다 → 술어가 **`NetWrite{None,Flat,Heap}`**
+을 답하게 하고 게이트는 **Flat 만** 센다(내 코드가 `*_dyn_nets` 에 대해 이미 지키던 규칙). ③ 주석 둘이
+코드와 **반대**를 말하게 됐고(`write.rs` 가 *"`r=$random(seed)` 는 오늘 적격"*) ④ 최초 측정표의 keccak
+✅ 두 줄이 stale — 전부 수정. teeth 도 보강: 3 id 중 **`$readmemh` 하나만** 밟히고 있었고 음성
+케이스가 **상수 rhs**라 "순수 SysFunc 는 false" 를 증명 못 했다 → `$sformat`·`$readmemb`·`$cast` +
+**순수 SysFunc 음성**(`$clog2`·무시드 `$random`/`$urandom`).
+
+**기록(별도 슬라이스)**: `$feof` 가 정본 술어에서 **과잉표시**(`k_feof` 는 순수 읽기인데 true) →
+`e = $feof(fd);` 는 거부·`while (!$feof(fd))` 는 통과. 한 소비자에서만 고치면 철자가 둘이 되므로
+**정본을 고쳐야 하고 그건 tier-2 게이트도 넓히는** 별도 슬라이스(ROADMAP §5.1).
+
+**게이트.** 전 스위트 **5103 green** · clippy `-D warnings` · fmt · format_version 26 불변.
 
 #### 4.5.290 ③층 S1d-3 — wake 결정, 그리고 **게이트가 수정을 거부하도록 굳어 있던** 일 (2026-08-03, branch feat-tier3-s1d3-wake, format 26 불변) ✅
 

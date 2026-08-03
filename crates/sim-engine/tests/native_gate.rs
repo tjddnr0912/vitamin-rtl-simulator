@@ -163,6 +163,96 @@ fn statement_level_families_reject() {
     assert_eq!(rs3, vec![("disable_fork", 1)]);
 }
 
+/// EFFECTS THAT NEVER PASS THROUGH THE WRITE FUNNEL — the prerequisite the
+/// `Kernel` trait makes structural: a seeded `$random`/`$dist_*` writes its seed
+/// back, `$cast`/`$value$plusargs` write their destination, the file family
+/// advances descriptor state, `$readmem*` fills a memory and `$sformat` writes a
+/// packed target — all INSIDE the call. An executor that only reproduced
+/// `write_lvalue` would run these and silently drop every one of their effects
+/// (`r = $random(seed)` would repeat the same draw forever).
+///
+/// The verdict uses `sim_ir::rhs_is_stmt_effect`, the SAME predicate the tier-2
+/// VM's compile gate consults — two spellings would let the backends disagree
+/// about one statement.
+#[test]
+fn effects_outside_the_write_funnel_reject() {
+    // rhs form: the seed write-back happens in the call.
+    let (ok, rs) = reasons(
+        "module t; reg [31:0] r; integer seed;\n\
+           initial begin seed = 1; r = $random(seed); $display(\"%0d\", r); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok);
+    assert_eq!(rs, vec![("stmt_effect", 1)]);
+
+    // `$value$plusargs` — the shape a real testbench uses (bench/keccak's TB).
+    let (ok2, rs2) = reasons(
+        "module t; integer n; reg ok;\n\
+           initial begin ok = $value$plusargs(\"N=%d\", n); $display(\"%0d\", n); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok2);
+    assert_eq!(rs2, vec![("stmt_effect", 1)]);
+
+    // SysTask form: `$readmem*` writes a memory net without a funnel write.
+    let (ok3, rs3) = reasons(
+        "module t; reg [7:0] m [0:3];\n\
+           initial begin $readmemh(\"x.hex\", m); $display(\"%0d\", m[0]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok3);
+    assert_eq!(rs3, vec![("stmt_effect", 1)]);
+
+    // `$sformat` and `$readmemb` — the other two net-writing task ids. Named by
+    // this test's own doc but previously unreached (only `$readmemh` fired), so
+    // two of the three were riding on the third.
+    let (ok3b, rs3b) = reasons(
+        "module t; reg [63:0] d;\n\
+           initial begin $sformat(d, \"%0d\", 7); $display(\"%0d\", d); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok3b);
+    assert_eq!(rs3b, vec![("stmt_effect", 1)]);
+    let (ok3c, rs3c) = reasons(
+        "module t; reg [7:0] m [0:3];\n\
+           initial begin $readmemb(\"x.bin\", m); $display(\"%0d\", m[0]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok3c);
+    assert_eq!(rs3c, vec![("stmt_effect", 1)]);
+
+    // The `$cast` TASK form: it writes its destination exactly as `$sformat`
+    // does. A three-id `matches!` with an implicit catch-all accepted it —
+    // measured eligible with an EMPTY reject map — which is why the predicate
+    // now lives in sim-ir as an `_`-free match.
+    let (ok3d, rs3d) = reasons(
+        "module t; reg [7:0] d; reg [7:0] s;\n\
+           initial begin s = 7; $cast(d, s); $display(\"%0d\", d); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(
+        !ok3d,
+        "the $cast TASK form writes its destination: {rs3d:?}"
+    );
+    assert_eq!(rs3d, vec![("stmt_effect", 1)]);
+
+    // NEGATIVE, and it must be a SysFunc rhs — not a constant. A `q = 1` negative
+    // cannot tell "the predicate says false for a PURE SysFunc" apart from "the
+    // row fires on any SysFunc rhs at all".
+    let (ok4, rs4) = reasons(
+        "module t; reg [31:0] a, b, c;\n\
+           initial begin\n\
+             a = $clog2(33); b = $random(); c = $urandom();\n\
+             $display(\"%0d %0d\", a, b ^ c); $finish;\n\
+           end\n\
+         endmodule\n",
+    );
+    assert!(
+        ok4,
+        "pure SysFunc rhs (incl. an UNSEEDED $random/$urandom) must stay eligible: {rs4:?}"
+    );
+}
+
 /// The P6 corpus (the same 72 designs the P5 backend differential sweeps) is
 /// ENTIRELY eligible: it generates plain-RTL processes by construction. Pinned
 /// as an exact count — doc-21 §5 S0's corpus measurement, and teeth against a

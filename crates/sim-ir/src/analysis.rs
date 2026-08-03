@@ -178,6 +178,71 @@ pub fn func_body_needs_stmt_executor(
 /// blocking assignment"`), and the executor's `compute_effect` likewise matches only the
 /// direct rhs. Keying the classifier on the same shape the lowering keys on is what stops
 /// the two from disagreeing.
+/// The `SysTask` twin of [`sysfunc_is_stmt_effect`]: what storage does
+/// dispatching this task write from inside the call, rather than through the
+/// statement's own `write_lvalue`?
+///
+/// Same contract, same reason for the shape: the match is `_`-free so a new
+/// `SysTaskId` — this enum has grown at v5/v6/v7/v9/v10/v16/v17/v18 — cannot
+/// default to the silent side. It exists because a backend that OWNS its net
+/// storage (tier-3) cannot inherit these writes the way the interpreter and the
+/// bytecode VM do, and a gate built on a `matches!` list missed `Cast` on its
+/// first outing precisely because the list had an implicit catch-all.
+///
+/// "Writes a net" is the criterion, deliberately — not "touches engine state".
+/// `$fdisplay`/`$dumpvars`/`$writemem*`/`$monitor` all READ nets and mutate
+/// output or descriptor state; reproducing those is a runtime-services question
+/// for whoever implements `k_dispatch_systask`, not a storage question.
+pub fn systask_net_write(which: sim_ir::SysTaskId) -> NetWrite {
+    use sim_ir::SysTaskId as T;
+    use NetWrite::{Flat, Heap, None};
+    match which {
+        // ── writes a FLAT net inside the call ──
+        // `$sformat(dest, …)` renders into `dest`; `$readmem*` fills a memory;
+        // the TASK form of `$cast(dst, src)` writes `dst` (its FUNCTION form is
+        // a `SysFuncId`, covered by the twin above).
+        T::Sformat | T::ReadmemB | T::ReadmemH | T::Cast => Flat,
+        // ── writes HEAP storage ──
+        // Also funnel-free, but every one needs a string/queue/assoc/dyn/class
+        // net to name, so a consumer that refuses those storage KINDS has
+        // already refused the design — counting them again double-books.
+        T::StrPutC | T::StrItoa | T::StrHextoa | T::StrOcttoa | T::StrBintoa => Heap,
+        T::DynNew | T::DynDelete => Heap,
+        T::QPushBack | T::QPushFront | T::QInsert | T::QDeleteIdx => Heap,
+        T::AssocDeleteKey => Heap,
+        T::ArrSort | T::ArrRsort | T::ArrReverse | T::ArrLocator => Heap,
+        T::ClassRandomize => Heap,
+
+        // ── writes no net ──
+        // Output, control and waveform tasks: they read nets and mutate output /
+        // descriptor / dump state, never a net.
+        T::Display | T::Write | T::Monitor | T::Strobe => None,
+        T::MonitorOn | T::MonitorOff => None,
+        T::Finish | T::Stop => None,
+        T::DumpFile
+        | T::DumpVars
+        | T::DumpOn
+        | T::DumpOff
+        | T::DumpAll
+        | T::DumpFlush
+        | T::DumpLimit => None,
+        T::Fclose | T::Fdisplay | T::Fwrite => None,
+        T::WritememB | T::WritememH => None,
+    }
+}
+
+/// What kind of storage a `SysTask` writes from inside its own dispatch — the
+/// answer [`systask_net_write`] gives. The FLAT/HEAP split is not cosmetic: a
+/// consumer that already refuses heap storage kinds must not count the heap
+/// mutators a second time, or its count stops answering "how many statements
+/// need funnel-outside plumbing" for the designs it actually accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetWrite {
+    None,
+    Flat,
+    Heap,
+}
+
 pub fn rhs_is_stmt_effect(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
     matches!(
         exprs.get(rhs as usize),

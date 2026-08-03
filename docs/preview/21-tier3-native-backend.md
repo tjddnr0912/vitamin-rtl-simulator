@@ -569,11 +569,12 @@ vita 는 그 둘을 이미 갖고 있다.** 이것이 이 시도가 무모하지
 | examples/002_traffic_fsm | 3/5 | delay 2 · wait 1 | ✅ |
 | examples/003_shift_register | 3/5 | delay 2 · wait 1 | ✅ |
 | bench/picorv32 + TB | **65/68** | delay 1 · wait 2 | ✅ |
-| bench/keccak **호출형** | **1/4** · frame_bodies **3** | delay 1 · stmt_effect_rhs 1 · **user_call_in_expr 1** · wait 1 | ✅ |
-| bench/keccak 인라인 | 2/4 | delay 1 · stmt_effect_rhs 1 · wait 1 | ✅ |
+| bench/keccak **호출형** | **1/4** · frame_bodies **3** | delay 1 · stmt_effect_rhs 1 · **user_call_in_expr 1** · wait 1 | ❌ *(갱신: `stmt_effect` — 아래 참조)* |
+| bench/keccak 인라인 | 2/4 | delay 1 · stmt_effect_rhs 1 · wait 1 | ❌ *(갱신: `stmt_effect` — 아래 참조)* |
 | P6 corpus 72개 | — | — | **72/72** (`native_gate.rs` 핀) |
 
-- **중단 판정("실사용 4종 0%") 통과 — 여유 있게.** 실사용 7종 + corpus 72 = **79/79 적격**.
+- **중단 판정("실사용 4종 0%") 통과 — 여유 있게.** 실사용 7종 + corpus 72 = **79/79 적격**
+  *(이 줄은 최초 측정치다 — 2026-08-03 `stmt_effect` 추가 후 **77/79**, 아래 갱신 블록이 정본)*.
   ③층 v1 의 "합성 RTL + 기본 TB" 범위가 실제 설계 모양과 일치한다는 뜻이다.
 - keccak 호출형 행이 **round-26 맹점의 계기화 그 자체다**: 프로세스 4개 중 1개만 VM 이 받고
   일 전부는 frame_bodies 3 에 있다 — 이것이 이제 `--backend` A/B 타이밍 없이 JSON 한 줄로 보인다.
