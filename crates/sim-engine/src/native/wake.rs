@@ -67,6 +67,20 @@ pub struct WakeTable {
     /// Until bodies can run (S1d-4) nothing re-arms, so this only ever falls;
     /// modelling it anyway is what keeps the decision comparable.
     level_armed: Vec<bool>,
+    /// Does this process have a NON-EMPTY sensitivity read set?
+    ///
+    /// `arm_sensitivity` builds its waiter only `if !nets.is_empty()`, so a
+    /// process whose inferred read set is empty (`always_comb o = 1'b0;`, a
+    /// self-timed bare `always`) registers nothing and re-arming it must register
+    /// nothing either.
+    ///
+    /// Derived for EVERY kind, not only the level-ish ones, and that is
+    /// deliberate: with it keyed on kind as well, an `Edge` process was
+    /// unarmable for TWO independent reasons, and a mutation that let `k_rearm`
+    /// arm an Edge process became invisible — the guard silently covered for the
+    /// match. One condition per question: this answers "is there a read set",
+    /// `k_rearm`'s match answers "should this kind re-arm at all".
+    has_level_nets: Vec<bool>,
     /// Per-process: suspended mid-body. S1d-4 maintains it; all-false until
     /// bodies can suspend, which is why rule 2 above is stated rather than
     /// merely implemented.
@@ -96,7 +110,9 @@ impl WakeTable {
         // combinational process — the most common synthesizable shape, and what
         // the corpus's own `gen_comb_chain` template emits — permanently asleep.
         let mut net_to_level = vec![Vec::new(); ir.nets.len()];
+        let mut has_level_nets = vec![false; ir.processes.len()];
         for (pi, p) in ir.processes.iter().enumerate() {
+            has_level_nets[pi] = !p.sensitivity.edges.is_empty();
             if matches!(
                 p.sensitivity.kind,
                 SensKind::Level | SensKind::Comb | SensKind::Latch
@@ -121,6 +137,7 @@ impl WakeTable {
                 .iter()
                 .map(|p| p.sensitivity.kind == SensKind::Level)
                 .collect(),
+            has_level_nets,
             busy: vec![false; ir.processes.len()],
             seen: vec![false; ir.processes.len()],
             marked: Vec::new(),
@@ -181,11 +198,53 @@ impl WakeTable {
     }
 
     /// Re-arm a static level waiter — what the engine does when the process
-    /// completes and `arm_sensitivity` runs again. S1d-4's body execution is the
-    /// caller; exposed now so the state it manipulates is not private to a
-    /// module that cannot yet reach it.
+    /// completes and `arm_sensitivity` runs again (`k_rearm` is the caller).
+    ///
+    /// The EMPTY-READ-SET guard is not defensive: `arm_sensitivity` builds its
+    /// waiter only `if !nets.is_empty()`, so a process with no inferred reads
+    /// registers nothing and re-arming it must register nothing either. Without
+    /// this the two diverged on `always_comb o = 1'b0;` — engine "no live
+    /// waiter", kernel "armed" — measured on a design the gate reports eligible
+    /// and buildable. It was invisible only because `net_to_level` has no entry
+    /// for such a process either, so `wake` never read the bit; that is an
+    /// accident, not a design, and 4c-2's `busy` / quiescence work reads this
+    /// state directly.
+    ///
+    /// ⚠️ One difference REMAINS and is deliberate: `arm_sensitivity` PUSHES a
+    /// waiter, so calling it twice without an intervening fire leaves two
+    /// (measured 1 → 2 → 3) where this leaves one `true`. Faithful for every
+    /// reachable sequence — a waiter is consumed when it fires and re-armed once
+    /// on the completion that follows — but a model of the DECISION, not of the
+    /// engine's multiplicity. `n_level_waiters` is likewise absent here; it is a
+    /// fast-path counter guarding whether the engine runs its level pass at all,
+    /// and this table always runs its own.
     pub fn rearm_level(&mut self, proc: u32) {
+        if !self.has_level_nets[proc as usize] {
+            return;
+        }
         self.level_armed[proc as usize] = true;
+    }
+
+    /// The kernel-side twin of `Scheduler::edge_registration_count`.
+    #[cfg(test)]
+    pub fn edge_registration_count(&self, proc: u32) -> usize {
+        self.net_to_edge
+            .iter()
+            .flat_map(|v| v.iter())
+            .filter(|(_, p)| *p == proc)
+            .count()
+    }
+
+    /// Read/write the arm state of one process — the differential's only way to
+    /// observe what `k_rearm` did. Test-only: production reads it through `wake`.
+    #[cfg(test)]
+    pub fn level_armed_for_test(&self, proc: u32) -> bool {
+        self.level_armed[proc as usize]
+    }
+
+    #[cfg(test)]
+    pub fn set_level_armed_for_test(&mut self, proc: u32, v: bool) {
+        self.level_armed[proc as usize] = v;
     }
 
     /// A new event cluster (time advance, a `#0` batch, the NBA region) — the

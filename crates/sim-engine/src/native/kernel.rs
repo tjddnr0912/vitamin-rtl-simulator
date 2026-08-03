@@ -12,10 +12,15 @@
 //! ## What "honest" means for the methods that are not implemented, in TWO kinds
 //!
 //! 52 declarations (51 without the `jit` feature). They divide four ways, and
-//! two slices moved three of them: **16 store core** · **17 classification
-//! predicates** · **18 gate-refused workers** · **1 NOT BUILT** (`k_rearm`).
-//! S1d-4b-2 implemented `k_dispatch_systask` and `k_sformatf`; S1d-4c-1
-//! implemented `k_schedule_nba_at`. The counts are counted, not estimated — an early draft said
+//! three slices moved four of them: **17 store core** · **17 classification
+//! predicates** · **18 gate-refused workers** · **0 NOT BUILT**. 17+17+18 = 52
+//! WITH the `jit` feature; the default build has 51, because `k_nets` is
+//! jit-gated and sits in store core — the arithmetic is the point, so the
+//! feature it depends on has to be stated too. S1d-4b-2
+//! implemented `k_dispatch_systask` and `k_sformatf`, S1d-4c-1
+//! `k_schedule_nba_at`, and S1d-4c-2a `k_rearm` — the surface is complete, which
+//! is NOT the same as the backend being runnable: 4c-2 still owes the region
+//! queues, the delta loop, the in-body waiters and `busy`. The counts are counted, not estimated — an early draft said
 //! "20 refused" and "16 file methods" and both were wrong (18 and 8).
 //!
 //! The two-kind split is the correction both reviewers of this slice forced, and
@@ -26,7 +31,7 @@
 //!   alloc, `disable fork`, and the eleven funnel-outside workers §4.5.291's
 //!   `stmt_effect` row covers (seeded `$random`/`$dist_*`, `$cast`,
 //!   `$value$plusargs`, the 8 file methods). `gate_refused!` names the row.
-//! - **NOT BUILT (1)**: `k_rearm`. An ELIGIBLE design reaches every one of these; what keeps them
+//! - **NOT BUILT (0)** as of S1d-4c-2a. An ELIGIBLE design reaches every one of these; what keeps them
 //!   out of production is `native::runtime_gate` choosing the VM, one layer below
 //!   eligibility (§4.5.288's two-layer verdict). `not_built!` says so and names
 //!   the slice that builds it. Using the gate-refused wording here — which the
@@ -202,17 +207,36 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// a transport NBA would therefore be reported quiescent and its update
     /// dropped. 4c-2's loop must fold THIS map into that minimum.
     ///
-    /// Not reachable today — `simulate` forces `Backend::Native` to the VM — and
-    /// note the surviving `k_rearm` guard does NOT cover it: `k_rearm` is called
-    /// only from the VM and JIT, and the VM refuses transport NBAs outright, so
-    /// the interpreter path this backend routes through has no loud guard for a
-    /// transport at all. Recorded rather than left to be re-derived.
+    /// Not reachable today — `simulate` forces `Backend::Native` to the VM. (An
+    /// earlier version of this note pointed at `k_rearm` as a surviving guard;
+    /// S1d-4c-2a implemented it, so there is no guard left anywhere on this
+    /// path.) Recorded rather than left to be re-derived.
     pub(crate) delayed_nba: BTreeMap<u64, Vec<NbaUpdate>>,
     /// The reused destination for a single-chunk NBA write. The engine keeps one
     /// per flush for a measured reason (2.4M malloc/free pairs on a 40000-cycle
     /// picorv32 run), and carrying the same shape here keeps the write funnel's
     /// input identical rather than merely equivalent.
     nba_scratch_lhs: Lvalue,
+    /// The S1d-3 wake table, which until S1d-4c-2a was driven only by its own
+    /// differential. `k_rearm` writes it.
+    ///
+    /// ⚠️ **Same shape as `delayed_nba` above, and worth saying rather than
+    /// leaving to be rediscovered**: `k_rearm` went from a `not_built!` panic to
+    /// a write that NOTHING in production reads — `WakeTable::wake` has no
+    /// production caller, and `NativeKernel` has no production constructor. The
+    /// `Kernel` surface being complete is not the backend being runnable.
+    ///
+    /// ⚠️ And implementing `k_rearm` does NOT by itself give the native path
+    /// re-arming: `k_rearm` is called only from `backend.rs` (the VM) and
+    /// `jit.rs`. The interpreter's `run_process` calls `sched.rearm(pi)`
+    /// DIRECTLY, not through the trait — so 4c-2 must either drive bodies
+    /// through the VM path or route its own walk through this method.
+    ///
+    /// ⚠️ No reset: the t0 state is derived from `kind` alone, so a kernel built
+    /// at t > 0 would re-arm every `Level` and dis-arm every `Comb`/`Latch` that
+    /// had already run. Every construction site today builds a fresh arena
+    /// alongside, so the lifetime is per-run; nothing structurally enforces it.
+    pub(crate) wake: crate::native::wake::WakeTable,
     pub(crate) fatal: bool,
 }
 
@@ -235,6 +259,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             nba_seq: 0,
             delayed_nba: BTreeMap::new(),
             nba_scratch_lhs: Lvalue { chunks: Vec::new() },
+            wake: crate::native::wake::WakeTable::new(ir),
             fatal: false,
         }
     }
@@ -350,6 +375,44 @@ impl Kernel for NativeKernel<'_, '_, '_> {
 
     fn k_max_deltas(&self) -> u64 {
         self.max_body_steps
+    }
+
+    /// CONTROL: re-arm after `Return`. (Lives here, with the other implemented
+    /// control methods, rather than under the refused-workers banner it was
+    /// first filed under.)
+    fn k_rearm(&mut self, proc: u32) {
+        // The LAST unbuilt method (S1d-4c-2a). `Scheduler::rearm`, restated over
+        // the wake table S1d-3 built:
+        //
+        // - a fork CHILD never re-arms. Unreachable here — `fork_modes` non-empty
+        //   is an S0 reject, so an activity is 1:1 with a process and `is_child`
+        //   is always false — but the engine's first line is a guard on it, and
+        //   omitting the reason would leave a reader wondering which of the two
+        //   is wrong.
+        // - `Edge` and `Initial` MUST NOT re-arm: an edge registration is
+        //   permanent (`net_to_edge` is read, not consumed), so re-registering
+        //   would make the process fire 2^k times on edge k. `Initial` is
+        //   one-shot.
+        // - `Comb`/`Latch`/`Level` MUST re-arm: their waiter is CONSUMED when it
+        //   fires, so without this they wake once and never again.
+        //
+        // The asymmetry is the whole content of this method, and it is the same
+        // asymmetry `WakeTable::new` encodes at t0 (`level_armed = kind ==
+        // Level`, because `arm_processes` QUEUES Comb/Latch rather than arming
+        // them).
+        //
+        // `Initial` shares the do-nothing arm to mirror the engine's spelling,
+        // and it is protected a second way: an `initial` process never carries a
+        // read set, so `rearm_level` would no-op even if this arm let it through.
+        // Measured over the corpus rather than assumed — which is why folding
+        // `Initial` into the other arm is an EQUIVALENT mutation, not a gap.
+        let tmpl = proc as usize;
+        match self.ir.processes[tmpl].sensitivity.kind {
+            sim_ir::SensKind::Edge | sim_ir::SensKind::Initial => {}
+            sim_ir::SensKind::Comb | sim_ir::SensKind::Latch | sim_ir::SensKind::Level => {
+                self.wake.rearm_level(proc)
+            }
+        }
     }
 
     fn k_mark_fatal(&mut self) {
@@ -564,15 +627,6 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
     fn k_class_alloc(&mut self, _class_id: u32) -> Value {
         gate_refused!("k_class_alloc", "the `class` sidecar row — `class_new_sites`, the very table `k_class_new_site` reads; `NetKind` has no class variant")
-    }
-    fn k_rearm(&mut self, _proc: u32) {
-        not_built!(
-            "k_rearm",
-            "S1d-4c",
-            "re-arming reads the activity arena's `is_child` flag and the process's \
-             sensitivity kind, which the scheduler 4c builds. A silent no-op would \
-             leave a Level process asleep forever — a hang, not an error"
-        )
     }
 
     // The funnel-outside family (§4.5.291): every one of these writes through

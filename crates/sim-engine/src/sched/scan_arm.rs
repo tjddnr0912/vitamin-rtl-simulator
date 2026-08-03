@@ -841,6 +841,47 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// is an ACTIVITY id; the body/sensitivity is resolved through its template.
     /// Only ever called for TOP-LEVEL activities (children have no static
     /// sensitivity — they run a sub-chain of their template body).
+    /// Does a LIVE static-level waiter exist for `pi`? The engine-side twin of
+    /// `native::wake::WakeTable::level_armed`, so the tier-3 differential can
+    /// compare re-arming against the engine instead of against a hard-coded
+    /// expectation. `arm = None` is what makes a waiter STATIC sensitivity.
+    #[cfg(test)]
+    pub(crate) fn has_static_level_waiter(&self, pi: u32) -> bool {
+        self.waiters.iter().any(|w| {
+            w.ready.proc == pi
+                && w.arm.is_none()
+                && matches!(w.cause, crate::sched::WaitCause::Level { .. })
+        })
+    }
+
+    /// How many EDGE registrations does `pi` hold? The other half of the arm
+    /// state, and the differential was one-sided without it: `has_static_level_
+    /// waiter` inspects only `WaitCause::Level`, so a `Scheduler::rearm` that
+    /// wrongly re-registered an Edge landed in `net_to_edge` where no probe
+    /// looked — the exact 2^k bug the tier-3 restatement exists to mirror, and it
+    /// passed. Measured.
+    #[cfg(test)]
+    pub(crate) fn edge_registration_count(&self, pi: u32) -> usize {
+        self.net_to_edge
+            .iter()
+            .flat_map(|v| v.iter())
+            .filter(|(_, r)| r.proc == pi)
+            .count()
+    }
+
+    /// Drop `pi`'s live static-level waiter, as a fire does. Test-only: the
+    /// differential needs the same consume-then-re-arm sequence on both sides.
+    #[cfg(test)]
+    pub(crate) fn consume_static_level_waiter_for_test(&mut self, pi: u32) {
+        let before = self.waiters.len();
+        self.waiters.retain(|w| {
+            !(w.ready.proc == pi
+                && w.arm.is_none()
+                && matches!(w.cause, crate::sched::WaitCause::Level { .. }))
+        });
+        self.n_level_waiters -= before - self.waiters.len();
+    }
+
     pub(crate) fn arm_sensitivity(&mut self, pi: u32) {
         let tmpl = self.activities[pi as usize].template as usize;
         let tie = self.activities[pi as usize].tie;

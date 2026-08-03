@@ -1911,3 +1911,190 @@ fn s1d4c1_apply_nba_sorts_by_seq_not_by_queue() {
         "the highest-seq update must win"
     );
 }
+
+/// S1d-4c-2a — **`k_rearm` against the ENGINE, not against my expectations.**
+///
+/// Re-arming is one `match` and its whole content is an asymmetry: `Edge` and
+/// `Initial` must NOT re-register (an edge entry is read, not consumed, so
+/// re-registering makes a process fire 2^k times on edge k), while `Comb`,
+/// `Latch` and `Level` MUST (their waiter is consumed when it fires, so without
+/// it they wake once and never again). Getting either half backwards is silent —
+/// no value is wrong, a process just fires too often or stops firing.
+///
+/// **The first version compared against hard-coded booleans while its name and
+/// doc claimed a differential.** It never called `Scheduler::rearm` nor read a
+/// single engine waiter. Building the real one immediately found that
+/// `rearm_level` was a PARTIAL restatement: `arm_sensitivity` registers nothing
+/// when the read set is empty, and the kernel armed unconditionally — divergent
+/// on `always_comb o = 1'b0;`, a design the gate reports eligible and buildable.
+///
+/// The engine-side observable is "is there a live static-level waiter", which is
+/// exactly what `level_armed` models; both are read after the same
+/// consume-then-re-arm sequence.
+#[test]
+fn s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry() {
+    // One design per sensitivity kind the S0 gate admits — and the first version
+    // said exactly that while carrying no `Latch` at all, so moving `Latch` into
+    // the do-nothing arm survived the whole package. The corpus cannot cover it
+    // either: measured, it carries `Comb` and `Edge` only.
+    let designs: [(&str, &str); 6] = [
+        (
+            "edge",
+            "module t;\n\
+               reg clk; reg [7:0] q; reg [7:0] d;\n\
+               always @(posedge clk) q <= d;\n\
+               initial begin clk = 0; d = 8'h11; end\n\
+             endmodule\n",
+        ),
+        (
+            "level",
+            "module t;\n\
+               reg a; reg b; reg [7:0] y;\n\
+               always @(a or b) y = {7'b0, a ^ b};\n\
+               initial begin a = 0; b = 0; end\n\
+             endmodule\n",
+        ),
+        (
+            "comb",
+            "module t;\n\
+               reg [7:0] x; reg [7:0] z;\n\
+               always @(*) z = x + 8'd1;\n\
+               initial x = 8'h20;\n\
+             endmodule\n",
+        ),
+        (
+            "latch",
+            "module t;\n\
+               reg en; reg [7:0] din; reg [7:0] dout;\n\
+               always_latch if (en) dout = din;\n\
+               initial begin en = 0; din = 8'h5a; end\n\
+             endmodule\n",
+        ),
+        (
+            // EMPTY read set: `arm_sensitivity` registers nothing, so re-arming
+            // must register nothing. This is the shape the two diverged on.
+            "comb_empty_readset",
+            "module t;\n\
+               reg [7:0] o;\n\
+               always @(*) o = 8'd0;\n\
+               initial begin o = 8'd1; end\n\
+             endmodule\n",
+        ),
+        (
+            "mixed",
+            "module t;\n\
+               reg clk; reg en; reg [7:0] r; reg [7:0] c;\n\
+               always @(posedge clk) r <= r + 8'd1;\n\
+               always @(*) c = r ^ {7'b0, en};\n\
+               initial begin clk = 0; en = 0; r = 0; end\n\
+             endmodule\n",
+        ),
+    ];
+    let mut kinds_seen: std::collections::BTreeSet<String> = Default::default();
+    let mut compared = 0usize;
+    for (name, src) in designs {
+        let (ir, opts) = build_with_opts(src);
+        let arena = NetArena::build(&ir, &opts).expect("arena builds");
+        let sink = NullSink;
+        // TWO states: the engine arms on its own, the kernel on its own.
+        let mut st_e = fresh_state(&ir, &sink);
+        let mut st_n = fresh_state(&ir, &sink);
+        let empty: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut sched_e = Scheduler::new(&mut st_e, 33_000, 10_000, None, opts.fork_modes.clone());
+        sched_e.arm_processes();
+        let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
+
+        // Snapshot the edge registrations BEFORE any re-arm, on both sides.
+        let edges_before_e: Vec<usize> = (0..ir.processes.len() as u32)
+            .map(|p| sched_e.edge_registration_count(p))
+            .collect();
+        let edges_before_n: Vec<usize> = (0..ir.processes.len() as u32)
+            .map(|p| nk.wake.edge_registration_count(p))
+            .collect();
+        for (pi, p) in ir.processes.iter().enumerate() {
+            let kind = p.sensitivity.kind;
+            kinds_seen.insert(format!("{kind:?}"));
+            let pi = pi as u32;
+            // t0 state must already agree, or the re-arm comparison starts from
+            // two different places.
+            assert_eq!(
+                sched_e.has_static_level_waiter(pi),
+                nk.wake.level_armed_for_test(pi),
+                "{name}/proc{pi}/{kind:?}: t0 arm state diverged"
+            );
+            // CONSUME as a fire does, then re-arm on BOTH sides.
+            sched_e.consume_static_level_waiter_for_test(pi);
+            nk.wake.set_level_armed_for_test(pi, false);
+            sched_e.rearm(pi);
+            nk.k_rearm(pi);
+            assert_eq!(
+                sched_e.has_static_level_waiter(pi),
+                nk.wake.level_armed_for_test(pi),
+                "{name}/proc{pi}/{kind:?}: arm state after re-arm diverged"
+            );
+            // …and the EDGE half. Without this the differential was one-sided:
+            // the level probe cannot see `net_to_edge`, so an engine `rearm` that
+            // re-registered an Edge — the 2^k bug this whole asymmetry exists to
+            // prevent — passed. Measured, on the engine side.
+            assert_eq!(
+                sched_e.edge_registration_count(pi),
+                edges_before_e[pi as usize],
+                "{name}/proc{pi}/{kind:?}: the engine's EDGE registrations changed \
+                 across re-arm — an edge entry is permanent, so re-registering \
+                 makes the process fire 2^k times on edge k"
+            );
+            assert_eq!(
+                nk.wake.edge_registration_count(pi),
+                edges_before_n[pi as usize],
+                "{name}/proc{pi}/{kind:?}: the kernel's EDGE registrations changed"
+            );
+            assert_eq!(
+                sched_e.edge_registration_count(pi),
+                nk.wake.edge_registration_count(pi),
+                "{name}/proc{pi}/{kind:?}: edge registration COUNT diverged"
+            );
+            compared += 1;
+        }
+    }
+    // Every kind the gate admits must appear, NAMED — a floor on a count let
+    // `Latch` go missing while two `Comb` satisfied the number.
+    for k in ["Edge", "Level", "Comb", "Latch", "Initial"] {
+        assert!(
+            kinds_seen.contains(k),
+            "sensitivity kind {k} never appeared — the designs do not cover the \
+             match. Seen: {kinds_seen:?}"
+        );
+    }
+    assert_eq!(compared, 13, "re-arm coverage moved — re-pin deliberately");
+}
+
+/// Is `Initial` ever a process with a NON-EMPTY sensitivity read set? If it were,
+/// folding it into `k_rearm`'s re-arm arm would be a real defect; if it never is,
+/// that fold is an EQUIVALENT mutation and saying so is more useful than a test
+/// that cannot distinguish it.
+///
+/// Measured here rather than asserted from the grammar, over the P6 corpus plus
+/// every hand-written design in this file's sensitivity set.
+#[test]
+fn s1d4c2a_initial_processes_never_carry_a_read_set() {
+    let mut initials = 0usize;
+    for d in corpus(0x5EED_F00D, 72) {
+        let (ir, _) = build_with_opts(&d.src);
+        for p in &ir.processes {
+            if p.sensitivity.kind == sim_ir::SensKind::Initial {
+                assert!(
+                    p.sensitivity.edges.is_empty(),
+                    "{}: an Initial process carries a read set — `k_rearm`'s \
+                     Edge|Initial arm is then load-bearing on its own",
+                    d.name
+                );
+                initials += 1;
+            }
+        }
+    }
+    assert!(
+        initials >= 50,
+        "too few Initial processes seen ({initials})"
+    );
+}
