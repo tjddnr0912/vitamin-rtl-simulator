@@ -399,8 +399,21 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > |---|---|---|
 > | **S1a ✅ (2026-08-03)** | `NetArena` — 슬롯 레이아웃·t0 초기값. **R1 의 중단 판정("폭별로 안 나뉘면 중단")이 여기서 답해진다 → 통과**(corpus 72 설계 전수에서 폭별 고정 슬롯 빌드 성공) | ✅ corpus 297넷 전수: 아레나 `read_net` ≡ 엔진 `read_net`(원소·whole·OOB) + 워드 경계 사다리(1~200b) 라운드트립 |
 > | **S1b ✅ (2026-08-03)** | 아레나 **read-path 를 기존 eval 밑에**(`impl NetReader for NetArena` — 슬롯 desc 한 번의 dense 로드가 NetSlot 메타 질문·라우팅 비트맵 전부를 대체). **평가기 의미는 공유 = byte-parity by construction**; 평가기 교체(인라인 값·폭 특수화)는 R2 = S2 의 일이다 | ✅ 미러 차분 **17,940건 발산 0**(72 설계 × 5 랜덤 4-state 상태 × 全 pure expr × 2 문맥 폭 · 카운트 정확 핀) |
-> | **S1c** | **문장 실행 + 쓰기 퍼널**(bit/part/array lvalue·OOB drop·X-index no-op·NBA 샘플) | 같은 상태에서 한 문장 실행 후 **양쪽 스토어 값 동일** |
+> | **S1c ✅ (2026-08-03)** | **쓰기 퍼널**(whole/bit/part/array lvalue·concat LHS·OOB drop·X-index no-op·2-state 강제·real→int 반올림·change 판정). 오프셋 해석은 엔진과 **한 함수**(`eval::resolve_offsets`)로 통일 | ✅ 문장 단위 차분 **3,150(corpus) + 270(적대 형태) 발산 0** + drop-arm 결정적 teeth. ⭐ 이 게이트가 **내 퍼널의 silent-wrong 1건**을 잡았다(§4.5.287) |
 > | **S1d** | **자기 스케줄러** + `--backend native` 배선(설계 게이트 거부 시 Bytecode 폴백·run.json 은 실제 실행기를 기록) | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일** |
+>
+> ⚠️ **S1d 착수 前 필수 4건**(S1c 와 그 적대 리뷰가 발굴 · 정본은 `native/write.rs` 모듈 독):
+> ① ~~프레임 로컬~~ **구조적으로 닫힘** — `NetArena::build` 가 `func_table` 비어있지 않으면 거부한다
+> (읽기 경로도 frame-blind 라 쓰기만의 문제가 아니었다 · S3 이 푼다). 남는 의무는 **런타임 게이트가
+> 설계 게이트 ∧ 아레나 빌드**여야 한다는 것(`native.eligible` 은 설계 수준 **상한**이다).
+> ② **퍼널을 통과하지 않는 효과** — `sim_ir::rhs_is_stmt_effect` 가족(seed 를 되쓰는 `$random`/
+> `$dist_*`·`$cast`·`$value$plusargs`·파일 계열)과 효과 있는 SysTask(`$readmem*`·`$sformat`)는
+> **`write_lvalue` 를 한 번도 부르지 않는다**. `r = $random(seed)` 는 **오늘 적격**이고, 배선 없이
+> 돌리면 매 draw 가 같은 값이 된다. S0 는 이것을 **일부러 거부하지 않는다**(무엇을 S1d 가 배선할 수
+> 있는지가 미정 — 추측 거부는 측정을 반대 방향으로 오염시킨다). 판정은 tier-2 와 **같은 술어**로.
+> ③ **dirty/edge 채널** — `note_change`+`accumulate_edge` 는 정확히 두 store 지점에 달린다.
+> `changed` 만 소비하고 intra-slot 엣지 마스크를 안 남기면 값은 맞고 **posedge 가 사라진다**.
+> ④ **`warn_run_range` stderr** — 값은 이미 일치하지만 바이트 동일 게이트는 stderr 도 본다.
 >
 > S1d 전에는 `--backend native` 가 존재하지 않으므로 run.json `native.eligible` 는 문서대로
 > "설계 수준 상한"으로 남는다 — 실행기-수준 거부(예: 아레나가 아직 못 싣는 형태)와 게이트의
@@ -537,6 +550,18 @@ vita 는 그 둘을 이미 갖고 있다.** 이것이 이 시도가 무모하지
 - ⚠️ 이 100% 는 **설계 수준 상한**이다(§4.3 사이드카 + NetKind 스캔). 문장 수준 능력("S3 컴파일러가
   모든 body 의 모든 문장을 emit 할 수 있나")은 S3 이 생기는 시점에 게이트에 합류한다 — S0 가
   그 질문에 미리 답하는 척하는 것이 더 나쁘다(정직한 상한 > 추측한 정답).
+- **⭐ 두 번째 숫자(2026-08-03, S1c 적대 리뷰 후 추가)**: 상한 옆에 **아레나가 실제로 지을 수 있는
+  집합**을 같이 적는다 — 둘을 한 숫자로 뭉치면 상한이 능력으로 읽힌다.
+
+  | | 적격(설계 수준 상한) | **아레나 빌드 성공(S1a 실측)** |
+  |---|---|---|
+  | 실사용 7종 | 7/7 | **6/7** — keccak **호출형**은 `NetArena::build` 가 거부(frame-local 저장은 S3) |
+  | P6 corpus | 72/72 | **72/72** |
+  | 합계 | **79/79** | **78/79** |
+
+  게이트는 이 라운드에 **세 방향으로 정정**됐는데(`disable` → `disable_fork` 로 축소·`real` 을 거부로
+  추가·frame-local 을 `build` 의 구조적 거부로) **측정 집합은 움직이지 않았다** — 엄격해진 쪽도
+  느슨해진 쪽도 실사용 설계를 잃거나 얻지 않았다. S1d 의 런타임 게이트는 **오른쪽 열**이 정본이다.
 - ⚠️ **열린 모순 하나를 기록한다**: 리포터 워크로드(hash_top 류)는 TB 가 string 을 쓰므로
   **v1 범위 밖**인데(string net = 거부), §7.3 의 성공 기준은 "리포터 워크로드 ≥30×"다.
   즉 v1 게이트 그대로면 성공 기준을 **잴 수 없다**. 해소 후보 = ⓐ S3 시점에 string 을 v1 로 승격

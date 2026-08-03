@@ -42,6 +42,10 @@ pub struct Slot {
     /// Element count (`array_len.max(1)`; 1 = scalar).
     pub elems: u32,
     pub signed: bool,
+    /// SVPART: a 2-state variable (`bit`/`int`/…) — the write funnel coerces
+    /// every X/Z bit to 0 before it lands (IEEE §6.11.3). Resolved at build from
+    /// the `two_state_nets` sidecar, so the write path never asks a side table.
+    pub two_state: bool,
 }
 
 /// The tier-3 net store: every net of the design, in slot form.
@@ -58,15 +62,30 @@ impl NetArena {
     /// (the same broadcast rule as the engine's `expand_init` — elaborate emits
     /// ONE width-wide init plane; an array replicates it per element).
     ///
+    /// `opts` supplies the per-net STATIC properties the write funnel would
+    /// otherwise have to ask a side table for on every write (today:
+    /// `two_state_nets`) — resolving them into the slot is the same R1 move as
+    /// the geometry.
+    ///
     /// `Err(reason)` names the first net kind this storage cannot own. The S0
     /// design gate already rejects designs carrying heap kinds, so the heap
     /// arms are defense in depth; `Real` is a genuine narrowing (an f64 slot is
     /// an S2 width class — recorded, and the S1d wiring must fold this into the
     /// runtime gate so eligibility-set ≡ executor-set).
-    pub fn build(ir: &SimIr) -> Result<NetArena, &'static str> {
+    pub fn build(ir: &SimIr, opts: &crate::SimOpts) -> Result<NetArena, &'static str> {
+        // FRAME-LOCAL: a subroutine's locals are ordinary nets in `ir.nets`, so
+        // this storage would happily give them slots — but their VALUES live in
+        // the activation's frame window, not in a net slot, and both the read
+        // path and the write funnel here are frame-blind. User calls are CORE at
+        // S0 (revision 4), so an eligible design CAN carry them; refusing here
+        // makes the mitigation structural instead of a comment, and puts it in
+        // the same place as the `Real` refusal. S3 owns lifting it.
+        if !opts.func_table.is_empty() {
+            return Err("frame-local storage: S3 (subroutine frames)");
+        }
         let mut slots = Vec::with_capacity(ir.nets.len());
         let mut off: u64 = 0;
-        for nv in &ir.nets {
+        for (n, nv) in ir.nets.iter().enumerate() {
             match nv.kind {
                 NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
                 NetKind::Real => return Err("real: S2 width class"),
@@ -84,6 +103,7 @@ impl NetArena {
                 width: nv.width,
                 elems,
                 signed: nv.signed,
+                two_state: opts.two_state_nets.contains(&(n as u32)),
             };
             slots.push(slot);
             off += u64::from(words) * 2 * u64::from(elems);
@@ -96,6 +116,20 @@ impl NetArena {
         // t0 init: extract the width-wide element init once, broadcast per element.
         for (n, nv) in ir.nets.iter().enumerate() {
             let s = arena.slots[n];
+            // The arena keeps bits above `width` ZERO; the engine's scalar init
+            // path word-RESIZES without masking, so if elaborate ever emitted an
+            // init with junk above the width the two stores would agree on every
+            // READ (both mask) and disagree ONCE on a whole-net write's `changed`
+            // verdict — an order-dependent, single-shot divergence. `default_init`
+            // sets bits only in `0..width` today; this pins that.
+            debug_assert!(
+                (s.width..64 * s.words).all(|i| {
+                    let (w, b) = ((i / 64) as usize, i % 64);
+                    (nv.init.val.get(w).copied().unwrap_or(0) >> b) & 1 == 0
+                        && (nv.init.unk.get(w).copied().unwrap_or(0) >> b) & 1 == 0
+                }),
+                "net {n}: declared init carries bits above its width"
+            );
             let mut vplane = vec![0u64; s.words as usize];
             let mut uplane = vec![0u64; s.words as usize];
             for i in 0..s.width {

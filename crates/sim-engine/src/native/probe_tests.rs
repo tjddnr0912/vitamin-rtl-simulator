@@ -31,6 +31,7 @@ use crate::native::arena::NetArena;
 use crate::state::SimState;
 use crate::value::{top_mask, Value, Words};
 use crate::width::WidthTable;
+use crate::SimOpts;
 
 #[derive(Default)]
 struct NullSink;
@@ -215,7 +216,7 @@ endmodule\n";
 fn probe_a_adversarial_width_arrays_direct_read() {
     let sink = NullSink;
     let ir = build(A_SRC);
-    let mut arena = NetArena::build(&ir).expect("flat design");
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat design");
     let mut st = fresh_state(&ir, &sink);
 
     // Anti-vacuity: the design must actually contain the unaligned seam — at
@@ -358,7 +359,7 @@ fn probe_b_xz_oob_overflow_index_reads() {
     let sink = NullSink;
     let ir = build(B_SRC);
     let wt = WidthTable::build(&ir, &crate::FuncTable::new());
-    let mut arena = NetArena::build(&ir).expect("flat design");
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat design");
     let mut st = fresh_state(&ir, &sink);
 
     let m = find_net(&ir, "m", |nv| nv.array_len == 3);
@@ -540,7 +541,7 @@ fn probe_c_signed_context_resize_matrix() {
     let sink = NullSink;
     let ir = build(C_SRC);
     let wt = WidthTable::build(&ir, &crate::FuncTable::new());
-    let mut arena = NetArena::build(&ir).expect("flat design");
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat design");
     let mut st = fresh_state(&ir, &sink);
 
     let pure = pure_exprs(&ir);

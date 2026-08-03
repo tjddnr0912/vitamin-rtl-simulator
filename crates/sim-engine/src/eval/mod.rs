@@ -63,3 +63,79 @@ pub(crate) enum Tri {
     False,
     Unknown,
 }
+
+/// Evaluate each LHS chunk's bit-offset expression NOW, returning one offset per
+/// chunk (0 for a whole-net `None` chunk). The `&mut self` write path has no
+/// `EvalCtx`, so dynamic indices like `a[i]` are resolved here at the correct
+/// sampling moment (statement time for blocking, SAMPLE time for NBA, settle
+/// time for a cont-assign).
+///
+/// This is THE offset resolver: it lives here, generic over the reader, so the
+/// engine (`Scheduler::resolve_lvalue_offsets`) and the tier-3 arena write funnel
+/// resolve an index with the SAME rule. Two spellings of "what bit position does
+/// this index name" would drift exactly where it hurts most — an X/Z index that
+/// one side drops and the other writes is a silent wrong value.
+pub(crate) fn resolve_offsets<N: NetReader>(
+    ctx: &EvalCtx<N>,
+    lhs: &sim_ir::Lvalue,
+) -> crate::exec::Offsets {
+    use crate::exec::Offsets;
+    // ── v5 ⑤: single-chunk assoc-element lvalue → i64 key side-channel ──
+    // (the SIGNED key domain cannot ride the u32 pairs). Concat/offset
+    // shapes fall through to the pair path, where the dyn write funnel
+    // degrades them loud+ignored (outside the MVP; ⑥ rejects them).
+    if let [c] = lhs.chunks.as_slice() {
+        if c.offset.is_none() && c.width.is_none() {
+            if let Some(weid) = c.word {
+                if ctx.nets.is_assoc_str(c.net) {
+                    return Offsets::AssocStrKey(ctx.assoc_str_key(weid));
+                }
+                if ctx.nets.is_assoc(c.net) {
+                    return Offsets::AssocKey(ctx.assoc_key(weid));
+                }
+            }
+        }
+    }
+    let ev = |eid: u32| {
+        let v = ctx.eval(eid);
+        // Resolve a runtime select index to a bit-position offset. The valid
+        // domain is the SIGNED i32 range: a small negative (`a[-1+:4]`) is a
+        // legitimate underflow that partial-writes the in-range bits (P0-IPU),
+        // and a small/large positive writes (or lands OOB-high and drops). An
+        // index OUTSIDE that domain is dropped entirely (iverilog parity):
+        //   - X/Z          → the bit position is UNKNOWN
+        //   - huge positive / UNSIGNED > i31 / clean beyond-u32 / > 64-bit
+        //                  → out of any net's range
+        // `OOR_DROP` (2^30) sits far above any net width (≤2^20) so every
+        // selected bit lands out of range for bit/part/indexed-part and
+        // array-word chunks alike. Signed-aware: an unsigned 0xFFFFFFFF is the
+        // huge 4294967295 (drop), NOT a wrapped −1 (which would partial-write).
+        const OOR_DROP: u32 = 1 << 30;
+        if v.has_xz() {
+            return OOR_DROP;
+        }
+        match v.to_i128_signed() {
+            Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => i as i32 as u32,
+            _ => OOR_DROP,
+        }
+    };
+    let pair = |c: &sim_ir::LvalChunk| {
+        let off = c.offset.map(ev).unwrap_or(0);
+        // `word` is an ExprId array index (`mem[k] = …`); resolve NOW.
+        let word = c.word.map(ev).unwrap_or(0);
+        (off, word)
+    };
+    // Inline the ≤2-chunk case (virtually all lvalues) — no allocation.
+    if lhs.chunks.len() <= 2 {
+        let mut buf = [(0u32, 0u32); 2];
+        for (i, c) in lhs.chunks.iter().enumerate() {
+            buf[i] = pair(c);
+        }
+        Offsets::Inline {
+            buf,
+            len: lhs.chunks.len() as u8,
+        }
+    } else {
+        Offsets::Heap(lhs.chunks.iter().map(pair).collect())
+    }
+}

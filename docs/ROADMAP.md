@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S1c 착수 (T0·S0·S1a·S1b ✅)** | 6 | 실측 | ⭐⭐ **S1a+S1b 완료(2026-08-03, §4.5.286)** — `NetArena` R1 저장 + 기존 eval 밑 read-path. **R1 중단 판정 통과** · 미러 차분 **17,940건 발산 0**. 다음 = **S1c 쓰기 퍼널**(엔진 `write_lvalue` 미러·문장 단위 차분 게이트) → S1d 스케줄러+배선. 단계·중단 판정·파괴 범위 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S1d 착수 (T0·S0·S1a·S1b·S1c ✅)** | 5 | 실측 | ⭐⭐ **S1c 완료(2026-08-03, §4.5.287)** — 쓰기 퍼널이 엔진과 문장 단위로 일치(3,150+228 발산 0). 그 게이트가 **내 퍼널의 silent-wrong 1건**을 잡았다(real 값 rhs). 다음 = **S1d 스케줄러+`--backend native`** — ⚠️ 착수 前 필수 3건(프레임 로컬 쓰기·dirty/edge 채널·`warn_run_range`). 단계·중단 판정·파괴 범위 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -126,15 +126,19 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-0. ★★ **③층 S1c — 쓰기 퍼널** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
-   T0+S0(§4.5.285)·S1a+S1b(§4.5.286) 완료 — 아레나가 서고 기존 eval 이 그 위에서 돈다(미러 차분
-   17,940건 발산 0 · R1 중단 판정 통과). **S1c 범위** = 아레나 쓰기 퍼널: whole/bit/part/array-elem
-   lvalue · OOB write drop · X-index no-op · same-value 판정(엔진 `write_lvalue` 의 Value-수준 미러) ·
-   NBA 샘플 오프셋. 게이트 = 같은 상태에서 한 문장 실행 후 **양 스토어 값 동일**(엔진 오라클 in-crate
-   차분). 그 다음 = **S1d 자기 스케줄러 + `--backend native` 배선**(runtime 게이트 = S0 설계 게이트 ∧
-   아레나 빌드 — eligibility-set ≡ executor-set 의무 · run.json 은 실제 실행기 기록 · corpus 적격분
-   stdout+VCD 바이트 동일). ⚠️ 성공 기준(리포터 ≥30×) vs v1 string 거부 모순은 열림(preview/21
-   §7.3.1 — S2 실측 후 판정). **T4**(함수 지역 배열 쓰기 21×)는 기회 슬라이스로 독립 유지.
+0. ★★ **③층 S1d — 자기 스케줄러 + `--backend native` 배선** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
+   T0+S0(§4.5.285)·S1a+S1b(§4.5.286)·**S1c(§4.5.287)** 완료 — 아레나 저장·read-path·쓰기 퍼널이
+   전부 엔진과 차분 일치(미러 17,940 + 문장 단위 3,150+228, 발산 0). **S1d 범위** = 아레나 위
+   스케줄러(리전 큐·델타·NBA·cont-assign settle) + 백엔드 선택 배선. 게이트 = corpus 적격분
+   **stdout+VCD 바이트 동일**. ⚠️ **착수 前 필수 4건**(S1c + 적대 리뷰 발굴 · 정본 = `native/write.rs` 모듈 독):
+   ① **런타임 게이트 = S0 설계 게이트 ∧ 아레나 빌드**(프레임 로컬은 `NetArena::build` 가 `func_table` 을
+   **이미 구조적으로 거부** — 읽기 경로도 frame-blind 였다 · `native.eligible` 은 설계 수준 **상한**)
+   ② **퍼널을 안 거치는 효과 배선** — `rhs_is_stmt_effect` 가족(seed 되쓰는 `$random`/`$dist_*`·`$cast`·
+   `$value$plusargs`·파일 계열)과 `$readmem*`/`$sformat` 은 `write_lvalue` 를 한 번도 안 부른다.
+   `r = $random(seed)` 는 **오늘 적격**이고, 배선 없이 돌리면 매 draw 가 같은 값이 된다
+   ③ **dirty/edge 채널**(두 store 지점에 달린다 — 없으면 값은 맞고 **posedge 가 사라진다**)
+   ④ **`warn_run_range` stderr**. ⚠️ 성공 기준(리포터 ≥30×) vs v1 string 거부 모순은
+   열림(preview/21 §7.3.1 — S2 실측 후 판정). **T4**(함수 지역 배열 쓰기 21×)는 기회 슬라이스로 유지.
 1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
 2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
@@ -332,12 +336,17 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0 ✅ → S0 ✅ → S1a ✅ S1b ✅ → **S1c → S1d** … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0 ✅ → S0 ✅ → S1a ✅ S1b ✅ S1c ✅ → **S1d** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
 > **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트.
 > **적격률 79/79 → S0 중단 판정 통과.**
+>
+> **S1c 완료 (2026-08-03 · §4.5.287)** — 아레나 쓰기 퍼널(엔진 write 사슬의 Value-수준 미러) +
+> 오프셋 해석기 단일화(`eval::resolve_offsets`) + 게이트 문장 스캔 2행(force/release·disable).
+> ⭐ 문장 단위 차분이 **내 퍼널의 silent-wrong 1건**을 잡았다(real 값 rhs + real 넷 없음 = 적격인데
+> 엔진은 반올림·아레나는 IEEE 비트). 적격률 79/79 불변. **S1d 착수 前 필수 3건**은 §1 NEXT 0번.
 >
 > **S1a+S1b 완료 (2026-08-03 · §4.5.286)** — S1 을 4 내부 단계로 분해(정본 = preview/21 §5 S1
 > 분해 표). `NetArena`(R1 저장 소유·슬롯 desc 가 per-access 질문 전부 대체) + `impl NetReader

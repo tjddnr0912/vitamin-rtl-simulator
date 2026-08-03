@@ -111,6 +111,58 @@ fn sidecar_families_reject_from_opts() {
     );
 }
 
+/// Statement-level families: `force`/`release` and `disable` are ordinary `Stmt`
+/// variants, so ONLY a scan of the statement arena finds them — no sidecar
+/// reports them (a plain `force b = c;` leaves `assign_ranks` empty). v1 has no
+/// force machinery at all, so a design carrying one must go to the existing
+/// engine rather than run with every `force` silently doing nothing.
+#[test]
+fn statement_level_families_reject() {
+    let (ok, rs) = reasons(
+        "module t;\n\
+           reg a = 0; wire b; reg c = 1;\n\
+           assign b = a;\n\
+           initial begin force b = c; #1 release b; #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok);
+    assert_eq!(rs, vec![("force_release", 2)], "one force + one release");
+
+    // ⭐ `disable` splits, and the split is the whole point: a plain
+    // `disable <named block>` is the break/continue idiom, which elaborate
+    // lowers as a diagnostic-shaped marker plus a sibling `Goto` that does the
+    // control flow — the engine runs the marker as `StmtEffect::Nop`. It needs
+    // NOTHING from tier-3, so rejecting it would cost a whole design (tier-3 has
+    // no body-level fallback) for a statement with no runtime effect.
+    let (ok2, rs2) = reasons(
+        "module t;\n\
+           integer i; reg [7:0] acc;\n\
+           initial begin\n\
+             acc = 0;\n\
+             for (i = 0; i < 8; i = i + 1) begin : blk\n\
+               if (i == 4) disable blk;\n\
+               acc = acc + i[7:0];\n\
+             end\n\
+             $display(\"%0d\", acc); $finish;\n\
+           end\n\
+         endmodule\n",
+    );
+    assert!(
+        ok2,
+        "the break/continue idiom needs no tier-3 machinery: {rs2:?}"
+    );
+
+    // `disable fork` DOES kill descendants — that one stays a reject, and it can
+    // appear with no `fork` in the design, so the sidecars never report it.
+    let (ok3, rs3) = reasons(
+        "module t;\n\
+           initial begin #1 disable fork; #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok3);
+    assert_eq!(rs3, vec![("disable_fork", 1)]);
+}
+
 /// The P6 corpus (the same 72 designs the P5 backend differential sweeps) is
 /// ENTIRELY eligible: it generates plain-RTL processes by construction. Pinned
 /// as an exact count — doc-21 §5 S0's corpus measurement, and teeth against a

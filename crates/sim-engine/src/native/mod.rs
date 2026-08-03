@@ -38,6 +38,7 @@ use crate::SimOpts;
 pub mod arena;
 #[cfg(test)]
 mod probe_tests;
+pub mod write;
 // The SHARED corpus/harness source, included exactly ONCE for both test
 // modules (clippy duplicate_mod forbids a per-file include) — see the
 // `extern crate self as sim_engine` note in lib.rs.
@@ -197,6 +198,54 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     flag(&mut out, "sva", assert_fire.len() + assert_ctl.len());
     flag(&mut out, "file_directed", file_directed_stmts.len());
 
+    // ── statement-level families with no v1 machinery ──────────────────────
+    // NOT exhaustive, and deliberately narrow: these two are the constructs
+    // whose ABSENCE the S1c write funnel is built on. The wider body-level
+    // question ("can the executor reproduce every statement's effect") belongs
+    // to S1d/S3 — `native/write.rs` lists what is still owed, including the
+    // `sim_ir::rhs_is_stmt_effect` family (a seeded `$random`/`$dist_*`, `$cast`,
+    // `$value$plusargs`, the file family) and the effectful `SysTask`s
+    // (`$readmem*`, `$sformat`), whose writes never pass through this funnel at
+    // all. Those are NOT rejected here: which of them S1d can plumb is an open
+    // design question, and guessing would corrupt the eligibility measurement in
+    // the other direction.
+    //
+    // Neither is sidecar-borne, so only a scan of `ir.stmts` — the arena EVERY
+    // body's statements live in, process and subroutine alike — finds them.
+    //
+    // - `force`/`release`: a whole machine v1 does not have (the per-net force
+    //   flag that suppresses every normal driver, the continuous re-evaluation,
+    //   the assign/deassign weak rank). The write funnel deliberately does NOT
+    //   carry the flag — honoring it without the machinery would read as support
+    //   while every `force` silently did nothing. Note procedural
+    //   `assign`/`deassign` ALSO lower to Force/Release, so this row is the only
+    //   thing that catches them (`assign_ranks` is a core sidecar).
+    // - `disable fork` only. A plain `disable <named block>` is the
+    //   break/continue idiom and needs NOTHING here: elaborate lowers it as a
+    //   diagnostic-shaped marker plus a sibling `Goto` that does the actual
+    //   control flow (and rejects every non-lexically-enclosing target loudly),
+    //   so the engine executes it as `StmtEffect::Nop`. Counting all `Disable`
+    //   rejected whole designs for a statement with no runtime effect —
+    //   costlier here than for the VM, which loses one body while tier-3 has no
+    //   body-level fallback at all.
+    let mut force_release = 0usize;
+    let mut disable_fork = 0usize;
+    for s in &ir.stmts {
+        match s {
+            sim_ir::Stmt::Force { .. } | sim_ir::Stmt::Release { .. } => force_release += 1,
+            sim_ir::Stmt::Disable { scope_kind, .. } => {
+                if matches!(scope_kind, sim_ir::DisableKind::Fork) {
+                    disable_fork += 1;
+                }
+            }
+            sim_ir::Stmt::BlockingAssign { .. }
+            | sim_ir::Stmt::NonblockingAssign { .. }
+            | sim_ir::Stmt::SysTask { .. } => {}
+        }
+    }
+    flag(&mut out, "force_release", force_release);
+    flag(&mut out, "disable_fork", disable_fork);
+
     // ── heap-storage net kinds — the doc's `*_dyn_nets` intent, done right:
     // a PLAIN `int q[$]` has no sidecar entry at all, so the only complete
     // detector is the net table itself. The match is `_`-free: a new NetKind
@@ -205,16 +254,23 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     let mut queue_n = 0usize;
     let mut assoc_n = 0usize;
     let mut string_n = 0usize;
+    let mut real_n = 0usize;
     for net in &ir.nets {
         match net.kind {
-            // Flat 4-state storage + real: the S1 arena's own ground (R1/R2).
-            NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer | NetKind::Real => {}
+            // Flat 4-state storage — the S1 arena's own ground (R1).
+            NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
+            // `real` is an f64 slot = an S2 WIDTH CLASS, not v1 core, and
+            // `NetArena::build` already refuses it. Saying so here keeps the
+            // published eligibility number from counting designs the storage
+            // cannot take (differential-review find: the two gates disagreed).
+            NetKind::Real => real_n += 1,
             NetKind::DynArray => dyn_n += 1,
             NetKind::Queue => queue_n += 1,
             NetKind::Assoc | NetKind::AssocStr => assoc_n += 1,
             NetKind::String => string_n += 1,
         }
     }
+    flag(&mut out, "real", real_n);
     flag(&mut out, "dyn_array", dyn_n);
     flag(&mut out, "queue", queue_n);
     flag(&mut out, "assoc", assoc_n);
