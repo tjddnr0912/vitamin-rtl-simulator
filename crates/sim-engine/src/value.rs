@@ -667,9 +667,25 @@ impl Value {
     pub fn from_i128(i: i128, width: u32, signed: bool) -> Value {
         let mut v = Value::zeros(width.max(1), signed);
         let bits = i as u128; // reinterpret two's-complement bit image
+                              // Words at or above the i128's own 128 bits are the SIGN FILL — that is
+                              // what extending a two's-complement image means, and iverilog agrees
+                              // (`reg [191:0] n; n = -3.0;` → `ffff…fffd`).
+                              //
+                              // This used to shift `bits` by `w * 64` unconditionally, so a width ≥129
+                              // shifted a u128 by ≥128: a debug PANIC, and in release the shift wraps to
+                              // `>> 0` and REPLICATES word 0 into every word above 128 — a wrong value
+                              // with `errors=0` (`reg [191:0] p; p = 3.0;` printed
+                              // `…0003_0000000000000000_0000000000000003`). Reachable through
+                              // `real_to_int_round`, the only variable-width caller: every other call
+                              // site passes a literal 32.
+        let fill = if i < 0 { u64::MAX } else { 0 };
         let words = (width as usize).div_ceil(64);
         for w in 0..words.min(v.val.len()) {
-            v.val[w] = (bits >> (w * 64)) as u64;
+            v.val[w] = if w < 2 {
+                (bits >> (w * 64)) as u64
+            } else {
+                fill
+            };
         }
         v.width = width;
         v.mask_top(); // is_real=false so mask_top applies (clears bits above width)
