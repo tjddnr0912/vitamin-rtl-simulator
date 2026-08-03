@@ -551,6 +551,29 @@ impl Parser<'_, '_> {
                         d.lifetime = Some(true);
                         body_decls.push(d);
                     }
+                } else if let Some(tyname) = self.peek_unpacked_struct_decl() {
+                    // R25 §3.1: `automatic <unpacked struct> <name>;` in a SUBROUTINE
+                    // body. An unpacked struct type lives in `unpacked_struct_layouts`,
+                    // not `typedefs`, so neither arm above sees it — and the fallthrough
+                    // below then `bump()`ed the TYPE NAME and left `r;` behind, which
+                    // parses as a task enable (`E3010: call to undeclared task \`r\``).
+                    //
+                    // `block_body` hit exactly this and fixed it (R18 §3.3); the
+                    // subroutine twin was left. Same fan-out, same lifetime stamp: each
+                    // member becomes its own `$unp$r$field` decl and every one of them
+                    // carries `automatic`, so two same-named struct locals in disjoint
+                    // subroutine bodies get their own frame slots instead of sharing one
+                    // flattened net.
+                    if typedef_scope.is_none() {
+                        typedef_scope = Some(self.snapshot_scope());
+                    }
+                    if let Some(member_decls) = self.parse_unpacked_struct_decl(tyname) {
+                        let at = body_decls.len();
+                        body_decls.extend(member_decls);
+                        for d in &mut body_decls[at..] {
+                            d.lifetime = Some(true);
+                        }
+                    }
                 }
                 if self.pos == before {
                     self.bump();

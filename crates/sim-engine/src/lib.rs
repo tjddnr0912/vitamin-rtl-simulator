@@ -147,6 +147,22 @@ pub struct SimOpts {
     pub vcd_date: String,
     /// Max delta cycles per time-step before the infinite-delta guard fires.
     pub max_deltas: u64,
+    /// Cap on BLOCK STEPS a single process activation may execute WITHOUT suspending.
+    ///
+    /// A distinct question from `max_deltas`, and it used to borrow that number, which
+    /// made a plain `for (i = 0; i < 500000; i++)` in an `initial` fatal at 1,000,000
+    /// steps and reported it as "zero-delay loop / combinational oscillation" — a cause
+    /// that was not present. A loop with no feedback and no delay is legal and finite;
+    /// what the counter actually observes is only that ONE ACTIVATION has run a long
+    /// time. So it gets its own budget, its own message, and a much larger default: the
+    /// guard exists to stop a genuinely unbounded loop from hanging the run, not to
+    /// bound how much work a testbench may do at time 0 (vector-file parsing and memory
+    /// preloads routinely exceed a million steps).
+    ///
+    /// Default 100,000,000 — a hundred times the old shared limit, which covers the
+    /// reported real site (a time-0 CAVP vector parse) with room, while still tripping an
+    /// unbounded loop in about a second rather than the ten a billion would take.
+    pub max_body_steps: u64,
     /// CLASS-HEAP-CAP: max live class objects before a graceful fatal fires. The
     /// class heap is never garbage-collected, so an unbounded `new()` in a loop
     /// would grow without limit; this bounds it to a loud `F-RUN-CLASS-LIMIT`
@@ -351,6 +367,7 @@ impl Default for SimOpts {
             timescale_unit: "1ns".to_string(),
             vcd_date: "vitamin-sim".to_string(),
             max_deltas: 1_000_000,
+            max_body_steps: 100_000_000,
             max_class_objs: 1_000_000,
             time_limit: None,
             fork_modes: ForkModeTable::new(),
@@ -721,7 +738,13 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     );
 
     let reason = {
-        let mut sched = Scheduler::new(&mut st, opts.max_deltas, opts.time_limit, opts.fork_modes);
+        let mut sched = Scheduler::new(
+            &mut st,
+            opts.max_deltas,
+            opts.max_body_steps,
+            opts.time_limit,
+            opts.fork_modes,
+        );
         // t0 structural settle. If it can't converge (cont-assign oscillator),
         // stop immediately with DeltaLimit rather than running on a divergent t0.
         if sched.settle_cont_assigns().is_some() {

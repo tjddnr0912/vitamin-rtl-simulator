@@ -118,6 +118,54 @@ impl<'a> SimState<'a> {
         }
     }
 
+    /// One packed-ASCII byte of a frame slot, WITHOUT cloning the slot's `Value`.
+    ///
+    /// `frame_slot_read` clones — correct, and ruinous for `.getc()`. A frame `string`
+    /// slot holds the whole string as an 8-bits-per-character `Value`, so cloning it per
+    /// character made a per-character loop O(len^2): the reporter's `hex2bytes` over
+    /// 32,000 chars cost 6.90 s. This borrows the slot for exactly the one shift-and-mask.
+    ///
+    /// Mirrors `frame_slot_read`'s routing arm for arm (automatic window / shared arena /
+    /// static slab) so the two cannot disagree about WHICH slot they read.
+    pub(crate) fn frame_slot_byte_at(
+        &self,
+        func: u32,
+        automatic: bool,
+        slot: u32,
+        i: usize,
+    ) -> Option<u8> {
+        let pick = |v: &Value| crate::eval::packed_byte_at(v, i);
+        if automatic {
+            match self
+                .frame_stack
+                .borrow()
+                .last()
+                .expect("frame read: no active call window")
+            {
+                crate::state::WindowSlot::Owned(w) => pick(&w[slot as usize]),
+                crate::state::WindowSlot::Shared(h) => {
+                    debug_assert!(
+                        self.frame_window_rc.borrow()[*h as usize] > 0,
+                        "frame_slot_byte_at: arena access on a freed shared window (h={h})"
+                    );
+                    pick(
+                        &self.frame_windows.borrow()[*h as usize]
+                            .as_ref()
+                            .expect("frame read: live shared window")[slot as usize],
+                    )
+                }
+            }
+        } else {
+            pick(
+                &self
+                    .static_store
+                    .borrow()
+                    .get(&func)
+                    .expect("static read: no storage slab")[slot as usize],
+            )
+        }
+    }
+
     /// Store `v` into frame slot `slot` (arg binding). `v` is an already-owned
     /// Value (computed before any borrow); the `borrow_mut` is scoped to the
     /// single index-store — NO eval inside (§borrowDiscipline rule 3).

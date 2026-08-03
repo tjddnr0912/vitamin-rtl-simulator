@@ -370,6 +370,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     pub fn new(
         st: &'a mut SimState<'ir>,
         max_deltas: u64,
+        max_body_steps: u64,
         time_limit: Option<u64>,
         fork_modes: ForkModeTable,
     ) -> Self {
@@ -549,6 +550,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             delayed_nba: BTreeMap::new(),
             delta_count: 0,
             max_deltas,
+            max_body_steps,
             time_limit,
             scratch_changed: Vec::new(),
             scratch_edges: Vec::new(),

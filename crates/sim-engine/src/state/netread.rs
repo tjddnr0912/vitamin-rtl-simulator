@@ -185,6 +185,45 @@ impl NetReader for SimState<'_> {
             },
         )
     }
+    fn str_byte_at(&self, net: u32, i: usize) -> Option<u8> {
+        // FRAME FIRST, and WITHOUT a `NetKind::String` test. A frame string FORMAL is a
+        // one-bit wire whose slot holds the materialised string `Value` (the same thing
+        // `handle_str_bytes` documents), so gating on the declared kind rejected exactly
+        // the case this exists for: the formal fell through to `eval`, which clones the
+        // whole string on every `.getc()`. Only genuine string operands reach the string
+        // primitives (elaborate routes them), which is what makes the missing kind test
+        // sound here — the same argument `handle_str_bytes` already relies on.
+        if self.frame_local.get(net as usize).copied().unwrap_or(false) {
+            // `read_net`'s frame routing, verbatim: a frame-local DYN ARRAY (`int loc[]`)
+            // is `dyn_is_handle` AND not a string, and its elements live in the heap — it
+            // is not a string operand at all. Everything else frame-local, INCLUDING a
+            // frame-local `string` (which is `dyn_is_handle` but slab-stored), reads from
+            // the frame slot. Getting this split wrong sent frame-local strings to an
+            // empty `dyn_heap` entry and `s[1]` read 0 instead of 'B'.
+            if self
+                .dyn_is_handle
+                .get(net as usize)
+                .copied()
+                .unwrap_or(false)
+                && self.ir.nets.get(net as usize).map(|n| n.kind) != Some(NetKind::String)
+            {
+                return None;
+            }
+            let (fidx, slot) = self.frame_route[net as usize].expect("frame-local net is routed");
+            let auto = self.frame_slot_auto[net as usize];
+            return Some(self.frame_slot_byte_at(fidx, auto, slot, i).unwrap_or(0));
+        }
+        if self.ir.nets.get(net as usize).map(|n| n.kind) != Some(NetKind::String) {
+            return None;
+        }
+        let h = self.dyn_heap.borrow();
+        let Some(crate::state::DynObj::Str { bytes }) =
+            h.get(net as usize).and_then(|o| o.as_ref())
+        else {
+            return Some(0);
+        };
+        Some(bytes.get(i).copied().unwrap_or(0))
+    }
     fn str_bytes(&self, net: u32) -> Option<Vec<u8>> {
         if self.ir.nets.get(net as usize).map(|n| n.kind) != Some(NetKind::String) {
             return None;

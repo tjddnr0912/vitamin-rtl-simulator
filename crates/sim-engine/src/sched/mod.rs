@@ -372,6 +372,10 @@ pub(crate) struct Scheduler<'a, 'ir> {
     delayed_nba: BTreeMap<u64, Vec<NbaUpdate>>,
     delta_count: u64,
     max_deltas: u64,
+    /// Body-step budget — see `SimOpts::max_body_steps`. Separate from `max_deltas`
+    /// because it answers a different question: not "did the scheduler reach a
+    /// fixpoint" but "has ONE activation run this long without suspending".
+    max_body_steps: u64,
     time_limit: Option<u64>,
     /// Scratch buffers reused across `propagate_changes` calls (take/restore —
     /// the alternative per-call `Vec::new` allocates on every delta).

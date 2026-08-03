@@ -763,6 +763,26 @@ package-level 변수(예약 `$pkg$<pkg>` 스코프의 저장소)는 v1에서 VCD
 - **원인**: `$dumpvars` 인자로 import된 package 변수(또는 그 스코프)를 직접 지정.
 - **해결**: 관찰이 필요하면 모듈 변수에 복사해 덤프하거나 `$display`/OBS probe로 관찰(패키지 변수 파형은 후속).
 
+### VITA-F4027 · `F-RUN-BODY-STEP-LIMIT` (Fatal)
+
+**한 프로세스 활성화가 정지 없이 body-step 예산을 넘겼다.** `#delay`/`@(…)`/`wait` 에 한 번도
+도달하지 않은 채 블록 스텝을 `SimOpts::max_body_steps`(기본 **100,000,000**)회 실행했다.
+
+```
+->  fatal[VITA-F4027] F-RUN-BODY-STEP-LIMIT: one process executed 100000000 block steps at time 0
+    without reaching a `#delay`, `@(…)` or `wait` — either it is an unbounded loop, or it is a long
+    computation that needs a larger budget (`SimOpts::max_body_steps`)
+```
+
+- **원인**: `while (1) x = x + 1;` 처럼 정지 지점 없는 무한 루프. 또는 time 0 에서 벡터 파일 파싱·
+  메모리 프리로드처럼 **진짜로 오래 걸리는 계산**.
+- **해결**: 전자면 루프에 정지 지점을 넣는다. 후자면 예산을 올린다.
+- **⚠️ `VITA-F4016`(`F-RUN-NO-CONVERGE`)과 다른 조건이다.** F4016 은 **스케줄러가 fixpoint 에
+  도달하지 못한 것**(zero-delay loop / 조합 발진)이고, 이것은 **한 활성화가 오래 돈 것**뿐이다.
+  이 둘이 한 진단을 공유하던 동안, 피드백도 발진도 없는 `for (i=0;i<500000;i++)` 한 줄이
+  "zero-delay loop / combinational oscillation" 으로 보고됐다(외부 리포트 round-25 §3.4).
+  진단은 **관측한 것만** 말한다.
+
 ---
 
 ## 8xxx · FILELIST

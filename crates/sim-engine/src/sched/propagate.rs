@@ -545,14 +545,39 @@ impl Scheduler<'_, '_> {
         self.st.now
     }
 
+    /// The BODY-STEP budget — how many block steps one activation may take without
+    /// suspending. Deliberately not `max_deltas`: see `SimOpts::max_body_steps`.
     pub(crate) fn max_deltas_guard(&self) -> u64 {
-        self.max_deltas
+        self.max_body_steps
     }
 
+    /// The in-body step guard fired (interpreter loop + VM `k_mark_fatal`).
+    ///
+    /// NOT the same condition as `fatal_delta_limit`, which is the scheduler failing to
+    /// reach a fixpoint. This one only knows that a single activation ran a long time
+    /// without suspending, so it says that and nothing more — it used to borrow the
+    /// converge message and assert "zero-delay loop / combinational oscillation" about
+    /// a loop that had neither.
     pub(crate) fn mark_fatal(&mut self) {
-        // Only the in-body delta guards (interpreter + VM `k_mark_fatal`) call
-        // this — same condition class, same single-shot diagnostic.
-        self.fatal_delta_limit();
+        if self.st.had_fatal {
+            self.st.had_fatal = true;
+            return;
+        }
+        use diag::{Diagnostic, LogEvent, MsgCode, Severity, TimeStamp};
+        self.st.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Fatal,
+            code: MsgCode::RunBodyStepLimit,
+            message: format!(
+                "one process executed {} block steps at time {} without reaching a \
+                 `#delay`, `@(…)` or `wait` — either it is an unbounded loop, or it is a \
+                 long computation that needs a larger budget (`SimOpts::max_body_steps`)",
+                self.max_body_steps, self.st.now
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(TimeStamp { ticks: self.st.now }),
+        }));
+        self.st.had_fatal = true;
     }
 
     pub(crate) fn schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool) {

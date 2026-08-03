@@ -45,14 +45,7 @@ pub(crate) fn value_str_bytes(v: &Value) -> Vec<u8> {
     let mut out = Vec::with_capacity(nbytes as usize);
     let mut leading = true;
     for bi in (0..nbytes).rev() {
-        let mut b: u8 = 0;
-        for bit in 0..8u32 {
-            let idx = bi * 8 + bit;
-            if idx < v.width {
-                let (val, _) = v.get_vu(idx);
-                b |= (val as u8) << bit;
-            }
-        }
+        let b = packed_byte(v, bi);
         if b == 0 && leading {
             continue; // strip leading nulls (width padding)
         }
@@ -60,6 +53,56 @@ pub(crate) fn value_str_bytes(v: &Value) -> Vec<u8> {
         out.push(b);
     }
     out
+}
+
+/// Byte `bi` of a packed-ASCII value, taken from its WORD rather than assembled
+/// bit by bit.
+///
+/// The bit-at-a-time version this replaces cost eight `get_vu` calls per byte, and
+/// `value_str_bytes` runs it over the whole string — so one `.getc()` on a 16,000-char
+/// string was 128,000 `get_vu` calls, and a per-character loop over that string was
+/// O(len^2). Measured on the reporter's `hex2bytes`: N=16,000 took 1.55 s, doubling to
+/// ~4x per doubling.
+///
+/// A byte lives entirely inside one 64-bit word (8 bytes per word, no straddling), so
+/// this is a shift and a mask. Bits at or above `width` read 0, matching the old loop's
+/// `idx < v.width` guard.
+#[inline]
+pub(crate) fn packed_byte(v: &Value, bi: u32) -> u8 {
+    let lo = bi * 8;
+    if lo >= v.width {
+        return 0;
+    }
+    let w = v.val.get((lo / 64) as usize).copied().unwrap_or(0);
+    let mut b = ((w >> (lo % 64)) & 0xff) as u8;
+    // A partial top byte: the bits at or above `width` must read 0.
+    let avail = v.width - lo;
+    if avail < 8 {
+        b &= (1u8 << avail) - 1;
+    }
+    b
+}
+
+/// One byte of a packed-ASCII value at STRING index `i`, without materialising the
+/// string.
+///
+/// `value_str_bytes` strips leading NUL bytes (they are width padding, not content), so
+/// string index 0 is the first non-zero byte from the top. This finds that start and
+/// indexes from it — O(1) whenever the value has no padding, which is every string whose
+/// width was set from its own length.
+///
+/// Returns `None` for an index past the end, which the caller renders as the IEEE
+/// §6.16.2 out-of-range read.
+pub(crate) fn packed_byte_at(v: &Value, i: usize) -> Option<u8> {
+    let nbytes = v.width.div_ceil(8);
+    let mut top = nbytes;
+    while top > 0 && packed_byte(v, top - 1) == 0 {
+        top -= 1;
+    }
+    // `top` is now the count of bytes after stripping; string index `i` is byte
+    // `top - 1 - i` counting from the value's low end.
+    let idx = (top as usize).checked_sub(i + 1)?;
+    Some(packed_byte(v, idx as u32))
 }
 
 /// ⓑ-breadth (v18): parse the leading integer prefix of `bytes` in `radix`
@@ -233,6 +276,15 @@ pub trait NetReader {
         false
     }
     /// v7 P2-C: the raw bytes of a STRING handle (`None` = not a string net).
+    /// One byte of a string NET at index `i`, without cloning the heap bytes.
+    ///
+    /// `str_bytes` returns an owned `Vec` — fine for `.len()`/`.substr()`, ruinous for
+    /// `.getc()` in a loop, which is O(len) per character and so O(len^2) overall.
+    /// `None` means "not a string operand here" (the caller falls back); an
+    /// out-of-range index yields `Some(0)` per IEEE §6.16.2.
+    fn str_byte_at(&self, _net: u32, _i: usize) -> Option<u8> {
+        None
+    }
     fn str_bytes(&self, _net: u32) -> Option<Vec<u8>> {
         None
     }
@@ -299,6 +351,33 @@ impl<N: NetReader> EvalCtx<'_, N> {
         } else {
             Some(value_str_bytes(&v))
         }
+    }
+
+    /// One byte of a string operand at index `i`, WITHOUT materialising the string.
+    ///
+    /// The byte-vector form (`handle_str_bytes`) is O(len) per call: for a string NET it
+    /// clones the heap bytes, and for a FRAME formal it builds the whole packed-ASCII
+    /// `Value` and unpacks it. `.getc()` in a per-character loop therefore ran O(len^2)
+    /// — the reporter's `hex2bytes` over 32,000 chars took 6.90 s and quadrupled per
+    /// doubling. Both operand kinds are indexed in place here.
+    ///
+    /// `None` = no valid byte string (X/Z, or a real) → the caller renders X. A valid
+    /// string with an out-of-range index yields `Some(0)`, matching what the old
+    /// `b.get(i).copied().unwrap_or(0)` produced.
+    pub(crate) fn str_byte_at(&self, arg: Option<&u32>, i: Option<u64>) -> Option<u8> {
+        let &a = arg?;
+        let i = i? as usize;
+        // A real string NET's heap bytes are authoritative (embedded NULs survive).
+        if let Some(Expr::Signal { net, word: None }) = self.ir.exprs.get(a as usize) {
+            if let Some(c) = self.nets.str_byte_at(*net, i) {
+                return Some(c);
+            }
+        }
+        let v = self.eval(a);
+        if v.is_real || v.has_xz() {
+            return None;
+        }
+        Some(packed_byte_at(&v, i).unwrap_or(0))
     }
 
     /// v5 ⑤: evaluate an assoc KEY expression into the engine's signed-i64

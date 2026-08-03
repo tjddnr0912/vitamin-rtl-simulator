@@ -963,6 +963,33 @@ impl Elaborator<'_> {
                         which: ir::SysTaskId::Display,
                         ..
                     } if self.severities.contains_key(&sid) => {}
+                    // R25 §3.2: name the statement that ACTUALLY failed. This arm
+                    // answered with a four-way list for every rejected statement, and
+                    // for the commonest one — `s[i] = v` on a `string`, which lowers to
+                    // a `StrPutC` system task — the source contains NONE of the four.
+                    // The reader is told the body "uses a $systask / nonblocking / force
+                    // / release statement" while looking at a line the same message
+                    // calls supported ("blocking assigns to its own locals"). Same
+                    // defect class as R23 §4 on the terminator arm, and the same fix:
+                    // report what is there.
+                    ir::Stmt::SysTask {
+                        which: ir::SysTaskId::StrPutC,
+                        ..
+                    } => {
+                        why = Some(
+                            "a string element assignment (`s[i] = v`), which lowers to a \
+                             system task — a FUNCTION body is entered from the expression \
+                             that calls it, so it has no call statement of its own to \
+                             carry the write out; the same assignment in a `task` body, \
+                             or in a module process, does work",
+                        )
+                    }
+                    ir::Stmt::NonblockingAssign { .. } => {
+                        why = Some("a nonblocking assignment (`<=`)")
+                    }
+                    ir::Stmt::Force { .. } => why = Some("a `force` statement"),
+                    ir::Stmt::Release { .. } => why = Some("a `release` statement"),
+                    ir::Stmt::SysTask { .. } => why = Some("a system task call"),
                     _ => why = Some("a $systask / nonblocking / force / release statement"),
                 }
             }

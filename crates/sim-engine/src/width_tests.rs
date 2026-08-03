@@ -176,7 +176,7 @@ fn with_sched<R>(ir: &SimIr, f: impl FnOnce(&Scheduler) -> R) -> R {
     let out: Box<dyn std::io::Write> = Box::new(std::io::sink());
     let null = NullSink;
     let mut st = SimState::new(ir, out, &null, "1ns".to_string(), "test".to_string(), None);
-    let sched = Scheduler::new(&mut st, 1_000_000, None, Default::default());
+    let sched = Scheduler::new(&mut st, 1_000_000, 100_000_000, None, Default::default());
     f(&sched)
 }
 

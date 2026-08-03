@@ -86,7 +86,15 @@ endmodule
     );
 }
 
-/// A suspend-free `forever` body trips the in-body activation guard — same code.
+/// A suspend-free `forever` body trips the in-body activation guard.
+///
+/// It emits `F4027` (`F-RUN-BODY-STEP-LIMIT`), NOT the `F4016` non-convergence fatal
+/// above. The two used to share one diagnostic and one budget, and the cost of that was
+/// a plain `for (i = 0; i < 500000; i++)` in an `initial` being reported as a
+/// "zero-delay loop / combinational oscillation" — a loop with no feedback and nothing
+/// oscillating (external report round-25 §3.4). They are different questions: F4016 is
+/// the SCHEDULER failing to reach a fixpoint, F4027 is ONE ACTIVATION running a long
+/// time without suspending.
 #[test]
 fn delta_limit_zero_delay_loop_interp() {
     let (res, _out, diags) = run(r#"
@@ -100,8 +108,9 @@ endmodule
 "#);
     assert_eq!(res.exit_class, ExitClass::Fatal);
     assert!(
-        diags.iter().any(|d| d.starts_with("fatal[VITA-F4016]")),
-        "in-body guard must emit F-RUN-NO-CONVERGE; got {diags:?}"
+        diags.iter().any(|d| d.starts_with("fatal[VITA-F4027]")),
+        "in-body guard must emit F-RUN-BODY-STEP-LIMIT (not the scheduler's \
+         non-convergence fatal); got {diags:?}"
     );
 }
 

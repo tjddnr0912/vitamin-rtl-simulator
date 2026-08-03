@@ -430,17 +430,18 @@ impl<N: NetReader> EvalCtx<'_, N> {
                 }
             }
             SysFuncId::StrGetC => {
-                let b = self.handle_str_bytes(args.first());
                 let i = args.get(1).and_then(|&a| self.eval(a).to_u64());
-                match (b, i) {
-                    // OOB index reads 0 (IEEE §6.16.2).
-                    (Some(b), Some(i)) => {
-                        let c = b.get(i as usize).copied().unwrap_or(0);
+                // O(1): index the string in place. Materialising it first made every
+                // `.getc()` cost O(len) — a per-character loop over a 16,000-char string
+                // was 1.55 s and scaled quadratically (reporter's `hex2bytes`).
+                match (self.str_byte_at(args.first(), i), i) {
+                    (Some(c), Some(_)) => {
                         let mut v = Value::zeros(8, false);
                         v.val[0] = c as u64;
                         v
                     }
-                    _ => Value::xs(8, false),
+                    // No valid byte string (X/Z, or a real) → X, as before.
+                    (None, _) | (_, None) => Value::xs(8, false),
                 }
             }
             SysFuncId::StrSubstr => {
