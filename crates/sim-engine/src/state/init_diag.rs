@@ -41,42 +41,7 @@ impl<'a> SimState<'a> {
         // `WaitCause::Edge`). Both are compile-time-fixed net ids, so one scan
         // at construction yields the complete set; `slot_edge` is then only
         // maintained/consulted for these nets (every other net byte-identical).
-        let mut is_edge_target = vec![false; nnets];
-        let mark_edge = |net: u32, set: &mut Vec<bool>| {
-            if (net as usize) < nnets {
-                set[net as usize] = true;
-            }
-        };
-        for p in &ir.processes {
-            // Static edge sensitivity (`always @(posedge clk …)`).
-            if p.sensitivity.kind == sim_ir::SensKind::Edge {
-                for et in &p.sensitivity.edges {
-                    mark_edge(et.net, &mut is_edge_target);
-                }
-            }
-            // Procedural edge wait (`@(posedge x)` in this process's body — its
-            // blocks are PROCESS-LOCAL in `body`, NOT in the global `ir.blocks`
-            // arena, which holds only func/task bodies).
-            for blk in &p.body {
-                if let sim_ir::Terminator::Wait {
-                    cond: sim_ir::WaitCause::Edge { net, .. },
-                    ..
-                } = &blk.term
-                {
-                    mark_edge(*net, &mut is_edge_target);
-                }
-            }
-        }
-        // Func/task bodies (global arena) may also carry an `@(edge …)` wait.
-        for blk in &ir.blocks {
-            if let sim_ir::Terminator::Wait {
-                cond: sim_ir::WaitCause::Edge { net, .. },
-                ..
-            } = &blk.term
-            {
-                mark_edge(*net, &mut is_edge_target);
-            }
-        }
+        let is_edge_target = crate::state::edge_target_nets(ir);
         SimState {
             ir,
             now: 0,

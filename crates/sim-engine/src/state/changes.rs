@@ -932,3 +932,49 @@ impl SimState<'_> {
         }
     }
 }
+
+/// Which nets are EDGE targets — statically edge-sensitive `always` processes
+/// plus every procedural `@(posedge x)` wait, in the process-local bodies and in
+/// the global func/task arena. Compile-time-fixed net ids, so one scan at
+/// construction yields the complete set; the intra-slot edge mask (`slot_edge`)
+/// is then maintained and consulted only for these nets.
+///
+/// Extracted so the engine store and the tier-3 arena build it from ONE
+/// spelling: a second scan that missed the func/task arena would leave a clock
+/// net untracked, and the symptom is not a wrong value but a `posedge` that
+/// never fires — invisible to any value comparison.
+pub(crate) fn edge_target_nets(ir: &sim_ir::SimIr) -> Vec<bool> {
+    let nnets = ir.nets.len();
+    let mut is_edge_target = vec![false; nnets];
+    let mark_edge = |net: u32, set: &mut Vec<bool>| {
+        if (net as usize) < nnets {
+            set[net as usize] = true;
+        }
+    };
+    for p in &ir.processes {
+        if p.sensitivity.kind == sim_ir::SensKind::Edge {
+            for et in &p.sensitivity.edges {
+                mark_edge(et.net, &mut is_edge_target);
+            }
+        }
+        for blk in &p.body {
+            if let sim_ir::Terminator::Wait {
+                cond: sim_ir::WaitCause::Edge { net, .. },
+                ..
+            } = &blk.term
+            {
+                mark_edge(*net, &mut is_edge_target);
+            }
+        }
+    }
+    for blk in &ir.blocks {
+        if let sim_ir::Terminator::Wait {
+            cond: sim_ir::WaitCause::Edge { net, .. },
+            ..
+        } = &blk.term
+        {
+            mark_edge(*net, &mut is_edge_target);
+        }
+    }
+    is_edge_target
+}

@@ -830,3 +830,297 @@ fn a_subroutine_design_is_eligible_but_the_arena_refuses_it() {
         "the arena must refuse rather than give frame locals ordinary slots"
     );
 }
+
+// ── S1d-2: the dirty/edge channel ─────────────────────────────────────────────
+//
+// The gate for S1c compared VALUES. This one compares what a value comparison
+// structurally cannot see: which nets the write funnel reported as changed, in
+// what order, with which intra-slot edge mask. A channel that stored every bit
+// correctly and dropped a `posedge` would pass every S1a/S1b/S1c gate and freeze
+// the design — so the engine's channel is the oracle here, sampled at the same
+// two store points.
+
+/// Execute one write on BOTH stores WITHOUT taking the channel — so a batch of
+/// them accumulates, which is what a real delta does and what makes the ORDER
+/// and the same-slot GLITCH mask observable at all.
+fn write_both_stores(
+    st: &mut SimState,
+    arena: &mut NetArena,
+    ir: &SimIr,
+    wt: &WidthTable,
+    lhs: &sim_ir::Lvalue,
+    rhs: u32,
+) -> (bool, bool) {
+    let rng_a = crate::state::RngCells::default();
+    let ctx_e = EvalCtx {
+        ir,
+        nets: &*st,
+        now: 0,
+        wt,
+        time_mult: 1,
+        rng: &rng_a,
+        plusargs: &[],
+    };
+    let sw = wt.get(rhs);
+    let ctx_w = st.lvalue_width(lhs).max(sw.width);
+    let off_e = crate::eval::resolve_offsets(&ctx_e, lhs);
+    let val_e = ctx_e.eval_ctx(rhs, ctx_w, sw.signed);
+    let rng_b = crate::state::RngCells::default();
+    let ctx_n = EvalCtx {
+        ir,
+        nets: &*arena,
+        now: 0,
+        wt,
+        time_mult: 1,
+        rng: &rng_b,
+        plusargs: &[],
+    };
+    let off_n = crate::eval::resolve_offsets(&ctx_n, lhs);
+    let val_n = ctx_n.eval_ctx(rhs, ctx_w, sw.signed);
+    let ch_e = st.write_lvalue(lhs, val_e, &off_e);
+    let ch_n = arena.write_lvalue(ir, lhs, val_n, &off_n);
+    (ch_e, ch_n)
+}
+
+/// Take the engine's channel exactly as `propagate_changes` does.
+fn engine_take(st: &mut SimState) -> Vec<(u32, u8, u32)> {
+    let mut cand = std::mem::take(&mut st.dirty);
+    cand.sort_unstable();
+    let out: Vec<(u32, u8, u32)> = cand
+        .iter()
+        .map(|&n| {
+            st.dirty_flag[n as usize] = false;
+            (
+                n,
+                st.slot_edge[n as usize],
+                st.last_blocking_writer[n as usize],
+            )
+        })
+        .collect();
+    cand.clear();
+    st.dirty = cand;
+    out
+}
+
+/// S1d-2 over the corpus + the clock-shaped designs the corpus lacks: after every
+/// write, the two channels must agree on the changed set, its ORDER, each net's
+/// edge mask and each net's authoring writer.
+#[test]
+fn s1d2_dirty_and_edge_channel_matches_engine() {
+    let mut designs: Vec<(String, String)> = corpus(0x5EED_F00D, 72)
+        .into_iter()
+        .map(|d| (d.name, d.src))
+        .collect();
+    // The corpus has clocked designs, but none that re-writes a clock TWICE in
+    // one slot — and the glitch mask exists precisely for that. These do.
+    designs.push((
+        "glitch_clock".to_string(),
+        ("module t;\n\
+           reg clk; reg [7:0] q; reg a, b;\n\
+           always @(posedge clk) q <= q + 1;\n\
+           always @(negedge a) q <= q + 2;\n\
+           always @(b) q <= q + 3;\n\
+           initial begin\n\
+             clk = 0; q = 0; a = 1; b = 0;\n\
+             clk = 1; clk = 0; clk = 1;\n\
+             a = 0; a = 1; a = 0;\n\
+             b = 1; b = 1'bx; b = 1'bz; b = 0;\n\
+             #1 $display(\"q=%0d\", q); $finish;\n\
+           end\n\
+         endmodule\n")
+            .to_string(),
+    ));
+    // ⭐ The BIT-SERIAL store point. Measured by the S1d-2 review: without a
+    // bit-/part-select lvalue that arm is NEVER ENTERED (`ser_enter = 0`), so
+    // deleting its entire channel block left the whole package green — the exact
+    // defect this slice exists to prevent, at half its surface. The 7-behaviour
+    // teeth list had been derived from `dirty.rs`'s three concepts instead of
+    // from the two STORE POINTS `write.rs` enumerates.
+    designs.push((
+        "bit_select_clock".to_string(),
+        ("module t;\n\
+           reg [7:0] bus; reg [7:0] q;\n\
+           always @(posedge bus[0]) q <= q + 1;\n\
+           always @(negedge bus[0]) q <= q + 2;\n\
+           initial begin\n\
+             bus = 0; q = 0;\n\
+             bus[0] = 1; bus[0] = 0; bus[0] = 1;\n\
+             bus[3:1] = 3'b101; bus[7] = 1;\n\
+             #1 $display(\"q=%0d\", q); $finish;\n\
+           end\n\
+         endmodule\n")
+            .to_string(),
+    ));
+    designs.push((
+        "wide_edge_target".to_string(),
+        ("module t;\n\
+           reg [63:0] wclk; reg [7:0] q; reg [3:0] m [0:2];\n\
+           always @(posedge wclk[0]) q <= q + 1;\n\
+           initial begin\n\
+             wclk = 0; q = 0;\n\
+             wclk = 64'h1; wclk = 64'h0; wclk = 64'hFFFF_FFFF_FFFF_FFFF;\n\
+             m[0] = 4'h5; m[1] = 4'h6; m[0] = 4'h5;\n\
+             #1 $display(\"q=%0d\", q); $finish;\n\
+           end\n\
+         endmodule\n")
+            .to_string(),
+    ));
+
+    let sink = NullSink;
+    let mut compared = 0usize;
+    let mut saw_edge_mask = 0usize;
+    let mut saw_multi = 0usize;
+    let mut batches = 0usize;
+    let mut saw_writer = 0usize;
+    let mut saw_negedge = 0usize;
+    let mut clocked = 0usize;
+    for (i, (name, src)) in designs.iter().enumerate() {
+        let (ir, opts) = build_with_opts(src);
+        let Ok(mut arena) = NetArena::build(&ir, &opts) else {
+            continue;
+        };
+        let mut st = fresh_state(&ir, &sink);
+        for &n in &opts.two_state_nets {
+            if (n as usize) < st.two_state.len() {
+                st.two_state[n as usize] = true;
+            }
+        }
+        st.build_plain_scalar();
+        // The two channels must start from the SAME notion of which nets are
+        // edge targets — that set is built by one shared scan, and this asserts
+        // the arena actually received it.
+        assert_eq!(
+            arena.ch.is_edge_target, st.is_edge_target,
+            "{name}: edge-target sets differ"
+        );
+        let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+        let sites = write_sites(&ir);
+        let n_nets = ir.nets.len() as u32;
+        let mut rng = Rng::new(0x0D1E_0000 + i as u64);
+        for pass in 0..4 {
+            mirror_state(
+                &mut st,
+                &mut arena,
+                &mut rng,
+                n_nets,
+                pass % 2 == 1,
+                pass >= 2,
+            );
+            // A mirror writes the stores directly, so neither channel saw it —
+            // clear both so the comparison starts from a common empty state.
+            st.dirty
+                .iter()
+                .for_each(|&n| st.dirty_flag[n as usize] = false);
+            st.dirty.clear();
+            let mut drop = Vec::new();
+            arena.take_changed(&mut drop);
+            // BATCH the whole design's writes before taking the channel — one
+            // take per write would leave every dirty list length 1, which makes
+            // the ORDER contract and the same-slot glitch accumulator vacuous
+            // (measured: with per-write takes, deliberately dropping the sort
+            // and the posedge bit both still passed).
+            // The AUTHOR tag: `blocking_writer` is what stops a process being
+            // re-fired on a net it wrote itself. Set BEFORE the batch — set
+            // after, the tag a batch observes is a carry-over from the previous
+            // pass, so the arm is non-vacuous only by accident (review find).
+            let writer = if pass % 2 == 0 {
+                Some(pass as u32)
+            } else {
+                None
+            };
+            st.blocking_writer = writer;
+            arena.ch.blocking_writer = writer;
+            for (si, (lhs, rhs)) in sites.iter().enumerate() {
+                let (ce, cn) = write_both_stores(&mut st, &mut arena, &ir, &wt, lhs, *rhs);
+                assert_eq!(ce, cn, "{name}/pass{pass}/site{si}: changed verdict");
+                compared += 1;
+            }
+            // The AUTHOR tag: `blocking_writer` is what stops a process being
+            // re-fired on a net it wrote itself. Left `None` it degenerates to
+            // `u32::MAX` and the arm is untested (measured), so drive it.
+            let writer = if pass % 2 == 0 {
+                Some(pass as u32)
+            } else {
+                None
+            };
+            st.blocking_writer = writer;
+            arena.ch.blocking_writer = writer;
+            let eng = engine_take(&mut st);
+            let mut nat = Vec::new();
+            arena.take_changed(&mut nat);
+            assert_eq!(
+                eng, nat,
+                "{name}/pass{pass}: dirty/edge channel diverged after the batch"
+            );
+            saw_edge_mask += eng.iter().filter(|(_, m, _)| *m & 1 != 0).count();
+            saw_multi += usize::from(eng.len() > 1);
+            saw_writer += eng.iter().filter(|(_, _, w)| *w != u32::MAX).count();
+            batches += 1;
+
+            // CROSS-BATCH: the mask must be per-SLOT, not cumulative. Drive each
+            // edge-target net 0 → 1 → 0 through the funnel, taking the channel
+            // between each, so successive batches see DIFFERENT masks (posedge
+            // then negedge). Without the first-dirty reset the second batch would
+            // report the OR of both — and with one take per batch that is the
+            // only way to see it (measured: dropping the reset otherwise passed).
+            for net in 0..n_nets {
+                if !arena.ch.is_edge_target[net as usize] {
+                    continue;
+                }
+                let w = arena.slots[net as usize].width.max(1);
+                let lhs = sim_ir::Lvalue {
+                    chunks: vec![sim_ir::LvalChunk {
+                        net,
+                        word: None,
+                        offset: None,
+                        width: None,
+                        kind: sim_ir::SelKind::Bit,
+                    }],
+                };
+                let offs = crate::exec::Offsets::Inline {
+                    buf: [(0, 0); 2],
+                    len: 1,
+                };
+                for step in [0u64, 1, 0, 1] {
+                    let mut v = crate::value::Value::zeros(w, false);
+                    if step == 1 {
+                        v.set_vu(0, 1, 0);
+                    }
+                    let ce = st.write_lvalue(&lhs, v.clone(), &offs);
+                    let cn = arena.write_lvalue(&ir, &lhs, v, &offs);
+                    assert_eq!(ce, cn, "{name}/pass{pass}/net{net}: clock changed verdict");
+                    let e2 = engine_take(&mut st);
+                    let mut n2 = Vec::new();
+                    arena.take_changed(&mut n2);
+                    assert_eq!(
+                        e2, n2,
+                        "{name}/pass{pass}/net{net}/step{step}: per-slot mask diverged"
+                    );
+                    saw_edge_mask += e2.iter().filter(|(_, m, _)| *m & 1 != 0).count();
+                    saw_negedge += e2.iter().filter(|(_, m, _)| *m & 2 != 0).count();
+                    clocked += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(compared, 2240, "S1d-2 coverage moved — re-pin deliberately");
+    // NON-VACUITY, verified by deliberately breaking each behaviour and
+    // watching this test fail: a POSEDGE must actually have been accumulated
+    // (else `m |= 1` is untested), and some batch must have had TWO OR MORE
+    // changed nets (else the ascending-order contract is untested — with one
+    // net, sorting is a no-op).
+    assert!(
+        saw_edge_mask > 0,
+        "no posedge was ever accumulated — the edge arm is untested"
+    );
+    assert!(
+        saw_multi > 0,
+        "no batch changed 2+ nets — the ascending-order contract is untested"
+    );
+    assert!(saw_negedge > 0, "no negedge was accumulated");
+    assert!(
+        saw_writer > 0,
+        "the blocking-writer tag was never non-default"
+    );
+    assert!(batches > 0 && clocked > 0);
+}

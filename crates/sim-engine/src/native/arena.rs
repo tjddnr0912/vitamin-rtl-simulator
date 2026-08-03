@@ -51,6 +51,12 @@ pub struct Slot {
 /// The tier-3 net store: every net of the design, in slot form.
 pub struct NetArena {
     pub slots: Vec<Slot>,
+    /// S1d-2: the dirty/edge channel, driven by the write funnel's two store
+    /// points. It lives HERE, as it does on `SimState`, because those points are
+    /// inside the funnel — a channel the funnel could not reach would have to be
+    /// updated by its callers, and the one caller that forgot would produce
+    /// correct values and a frozen design.
+    pub ch: crate::native::dirty::DirtyChannel,
     /// The single flat storage buffer. Top-word bits beyond `width` are kept
     /// ZERO as an invariant (writes mask; reads may therefore copy words
     /// verbatim and only re-mask the top word, mirroring the engine's read).
@@ -93,6 +99,7 @@ impl NetArena {
         let total = usize::try_from(off).map_err(|_| "arena exceeds usize")?;
         let mut arena = NetArena {
             slots,
+            ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
         };
         // t0 init: extract the width-wide element init once, broadcast per element.
@@ -187,10 +194,18 @@ impl NetArena {
         )
     }
 
-    /// Overwrite element `elem` of net `net` (test/mirror helper until the S1c
-    /// write funnel lands). Extra input words are ignored, missing ones zero;
-    /// the top word is masked to keep the buffer invariant.
-    pub fn set_elem(&mut self, net: u32, elem: u32, val: &[u64], unk: &[u64]) {
+    /// Overwrite element `elem` of net `net` — a TEST/mirror helper that
+    /// deliberately BYPASSES the dirty/edge channel, so a state planted with it
+    /// is invisible to `take_changed` (which is what a differential wants: the
+    /// mirror is setup, not a simulated write). Never use it for a write the
+    /// scheduler should observe — `write_lvalue` is the funnel that reports.
+    /// `pub(crate)`: the S1c write funnel landed, so nothing outside this crate
+    /// has a reason to plant state.
+    ///
+    /// Extra input words are ignored, missing ones zero; the top word is masked
+    /// to keep the buffer invariant.
+    #[cfg(test)]
+    pub(crate) fn set_elem(&mut self, net: u32, elem: u32, val: &[u64], unk: &[u64]) {
         let s = self.slots[net as usize];
         debug_assert!(elem < s.elems);
         let m = top_mask(s.width.max(1));

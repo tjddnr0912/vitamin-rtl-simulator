@@ -14,6 +14,7 @@ use crate::value::{nwords, top_mask, Value, Words};
 
 // ---- split parts (mechanical refactor) ----
 mod changes;
+pub(crate) use changes::edge_target_nets;
 mod frame_eval;
 mod init_diag;
 mod netread;

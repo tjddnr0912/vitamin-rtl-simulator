@@ -24,11 +24,10 @@
 //!
 //! ## Not here (S1d obligations, stated so they are not forgotten)
 //!
-//! - **The dirty/edge channel.** The engine's `note_change` + `accumulate_edge`
-//!   hang off exactly these two store points; this funnel returns `changed` and
-//!   nothing else. A scheduler that consumed `changed` but never recorded the
-//!   glitch-accurate intra-slot edge mask would keep every value correct and
-//!   still lose a `posedge` — so S1d must add both AT these call sites.
+//! - ~~The dirty/edge channel~~ **landed (S1d-2)**: `note_change` +
+//!   `accumulate_edge` now hang off the same two store points, so a scheduler
+//!   reading `NetArena::take_changed` gets the glitch-accurate intra-slot edge
+//!   mask and not merely `changed` (see `native/dirty.rs`).
 //! - **`warn_run_range`.** The engine emits it on an out-of-range array word
 //!   (read and write). Values match without it; stderr does not.
 //! - **Wired-AND/OR resolution** (`wired_and_nets`/`wired_or_nets`, CORE at S0)
@@ -264,6 +263,16 @@ impl NetArena {
             return self.store_words(c.net, word, piece);
         }
 
+        // GLITCH: capture bit 0 BEFORE the mutation so a same-slot re-write
+        // (A→B→A) records its real B→A transition — the endpoint compare would
+        // see only A==A. Gated on `is_edge_target`, so non-clock nets pay a
+        // bounds check.
+        let track_edge = self.ch.is_edge_target[c.net as usize];
+        let old_b0 = if track_edge {
+            self.scalar_bit0(c.net)
+        } else {
+            sim_ir::FourState::Zero
+        };
         // Bit-serial: only the in-range destination bits are written.
         let mut changed = false;
         let base = s.off as usize + (word as usize) * 2 * s.words as usize;
@@ -293,6 +302,12 @@ impl NetArena {
                 changed = true;
             }
         }
+        if changed {
+            self.note_change(c.net);
+            if track_edge {
+                self.accumulate_edge(c.net, old_b0);
+            }
+        }
         changed
     }
 
@@ -301,6 +316,13 @@ impl NetArena {
     /// the arena's "no bits above `width`" invariant holds after every write.
     fn store_words(&mut self, net: u32, word: u32, piece: &Value) -> bool {
         let s = self.slots[net as usize];
+        // GLITCH: bit 0 before the mutation (see the bit-serial twin).
+        let track_edge = self.ch.is_edge_target[net as usize];
+        let old_b0 = if track_edge {
+            self.scalar_bit0(net)
+        } else {
+            sim_ir::FourState::Zero
+        };
         let base = s.off as usize + (word as usize) * 2 * s.words as usize;
         // `s.words == nwords(width).max(1)` by construction (the allocation used
         // it) — using the slot's own count keeps the indices provably in bounds.
@@ -320,6 +342,12 @@ impl NetArena {
                 self.buf[vi] = nv;
                 self.buf[ui] = nu;
                 changed = true;
+            }
+        }
+        if changed {
+            self.note_change(net);
+            if track_edge {
+                self.accumulate_edge(net, old_b0);
             }
         }
         changed
