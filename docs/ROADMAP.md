@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| — | §5 | perf / 하드닝 | 4 | — | **전부 보류 판정** — 트리거 시만 |
+| **★** | §5 | **성능 T0~T4 — ②층 미청구 10.7×** | 5 | 실측 | ⭐ **오너 지시 최우선(2026-08-03).** VM 커버리지가 **함수 호출 RTL 에서 0%**(`--backend interp` == `bytecode` 실측) · ③층 격차 76× 는 verilator 로 실측. 단계·중단 판정 = **[preview/21 §7.3](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -117,8 +117,20 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 3. **전제조건 충족된 honest-loud 승격** (§4~§5).
 4. **G2 OBS 슬라이스** (§6).
 
+> ⚠️ **2026-08-03 오너 지시 — 위 4단계 위에 성능 T 단계가 올라간다.** 근거는 §4.5.282 의 실측:
+> ③층 격차가 **76×**(verilator, 같은 설계·기계)이고, 동시에 **②층에 10.7× 가 미청구**로 남아
+> 있다 — `is_codegen_able` 이 `Terminator::Call` 을 가진 프로세스를 통째로 거부하고
+> `codegen_coverage` 는 `ir.processes` 만 보므로, **사용자 함수를 부르는 RTL 에서 바이트코드 VM 의
+> 기여가 정확히 0%** 다(`--backend interp` 와 `bytecode` 가 같은 시간). 정확성 큐는 사라지지 않고
+> **T 단계 뒤로 밀린다**.
+
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
+0. ★ **성능 T0 → T1 → T2 → T3 → T4** (§5 · 정본 계획 = [preview/21 §7.3](preview/21-tier3-native-backend.md)).
+   각 단계는 **측정 목표와 중단 판정**을 가진다 — T0 커버리지 계기화 / T1 `Call` 프로세스를 VM 이
+   받게(≥1.5×) / T2 프레임 바디를 VM 대상으로(격차 절반) / T3 프레임 호출 650→≤300 ns /
+   T4 함수 지역 배열 원소 쓰기 514 ns → iverilog 2배 이내. **T 뒤에 재측정 게이트**가 있고,
+   그때의 ②→③ 격차가 ③층(S0~S6) 예산이다.
 1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
 2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
@@ -306,7 +318,33 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - N4 clocking 잔여: non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)`.
 - class: down-cast `Derived'(base)`($cast 런타임 타입가드 선행) · real→longint cast · base-shadow 명시 접근 `Base'(d).v` · cast-as-receiver `(B'(d)).foo()`.
 
-## 5. perf / 하드닝 잔여 (전부 보류 판정 — 트리거 시만)
+## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
+
+### 5.0 ★ T0~T4 — ②층의 **측정된** 10.7× 를 청구한다 (§4.5.282)
+
+정본 계획·중단 판정·근거표 = **[preview/21 §7.3](preview/21-tier3-native-backend.md)**.
+측정 원본 = **[preview/18 round-26](preview/18-acceleration-analysis.md)**. 요약:
+
+| | 서브루틴 호출 있음 | 인라인 | |
+|---|---|---|---|
+| vita | 5340 µs/순열 | **498 µs** | ← **10.7× 차이, 차이는 함수 호출뿐** |
+| iverilog 13 | 4450 µs | 1398 µs | |
+| verilator (③층) | 6.6 µs | 6.56 µs | ← ②→③ = **76×** |
+
+| 단계 | 무엇 | 측정 목표 | 중단 판정 |
+|---|---|---|---|
+| **T0** | VM 커버리지 계기화 — 설계별 codegen 적격률 + **거부 사유 히스토그램**을 `--obs-dir` run.json 에. 현재 유일한 관측 수단이 `--backend` A/B 다 | 설계 4종 적격률·사유 상위 3 | — (계기) |
+| **T1** | `Terminator::Call` 을 가진 프로세스를 VM 이 받는다(호출만 기존 프레임 실행기로 콜아웃) | Keccak 호출형 **≥1.5×** | <1.2× → 중단, T2 로 |
+| **T2** | 프레임 바디를 VM 대상으로 — `codegen_coverage` 를 `func_blocks` 까지. 상한은 이미 실측(2.1×) | 인라인형 대비 격차 **절반 이하** | <1.3× → 중단 |
+| **T3** | 프레임 호출 단가 **650 ns**(iverilog 375). 프로파일 1위가 `Value::resize`/`mask_top`/`clone` ⇒ 인자·반환 Value 왕복이 표적 | **≤300 ns** | 500 ns 못 내리면 기록 후 중단 |
+| **T4** | 함수 지역 배열 원소 쓰기 **514 ns**(iverilog **24 ns**, 21×). 모듈 배열은 대등 ⇒ 국소 결함 | iverilog **2배 이내** | 5배 이내 실패 시 기록 후 중단 |
+| — | **재측정 게이트** — Keccak·PicoRV32·리포터 워크로드 3종. 그때의 ②→③ 격차가 ③층 예산 | — | — |
+
+> **T 는 ③층을 미루는 것이 아니라 ③층 예산을 확정한다.** 그리고 ③층 백엔드도 **같은 호출 문제**를
+> 풀어야 하므로(호출을 못 삼키는 ③층은 똑같이 커버리지 0%), T1/T2 의 콜아웃 ABI 설계가
+> doc-21 §4.1(설계 단위 all-or-nothing)의 **리허설**이다.
+
+### 5.1 나머지 (전부 보류 판정 — 트리거 시만)
 
 - **✅ COMB-DEPTH 해결 (2026-08-01) — dirty-settle. 깊이 24 에서 14.1× · 출력 바이트 동일 · 골든 재판정 0건.** `settle_cont_assigns` 가 매 델타 전체 cont-assign 을 전수 재평가하던 것을 **의존성이 움직인 것만** 재평가하도록 바꿨다(`propagate_changes` 를 305→15.5 ms 로 만든 dirty-list 와 같은 형태). 인스턴스 체인, 총 사이클 고정:
 

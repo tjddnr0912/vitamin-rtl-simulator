@@ -11,6 +11,10 @@
 
 ## A. 현재 상태 한 줄 요약
 
+> **★ 2026-08-03 최우선 = 성능 T0~T4** (§B 0번 · 정본 = [ROADMAP §5.0](ROADMAP.md) / [preview/21 §7.3](preview/21-tier3-native-backend.md)). 아래 정확성 큐는 사라지지 않고 **그 뒤로 밀린다**.
+>
+> **직전 = §4.5.283 (외부 round-27, 최고 심각도)** — `@(*)` 가 attribute instance 로 렉싱되어 **주석이 실행 코드로 승격**되고 `errors=0` 으로 틀린 값이 나왔다. 원문 정규식 스캔이 주석·문자열을 뚫고, 짝을 못 찾으면 조용히 폴백해 발현이 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달렸다(파일 경계도 넘었다). attribute 인식을 **토큰 스트림**으로 옮기고, `@` 직후는 event control 로 두고, 안 닫힌 opener 를 loud 로 만들어 닫았다 — 3-way 16형 **회귀 0 · 수정 8**.
+
 - **오라클 있는 열린 silent-wrong = 6건**(ROADMAP §2 상단) — §4.5.228 이 그중 2건(fork-arm 재개 · 음수 하한 unpacked)을 닫았고, 같은 라운드에서 **multi-packed 음수 inner bound 가 silent 였다는 것**을 새로 측정해 함께 닫았다(ROADMAP 이 "warn+clamp"로 적어둔 것은 틀렸다 — 경고는 형제 선언에서 나오고 있었다). 2026-07-23 판이 "소진"이라 적은 것은 그 시점 기준이며, §4.5.217~228 의 적대 리뷰·PRE 3-way 측정이 pre-existing 결함을 계속 **발굴**했다(악화가 아니라 가시화). 그중 **1건은 pre-existing이 아니다** — §4.5.221이 도입한 좁은 loud→silent 하강(계층 real param 바운드).
 - 외부 리포트 1·2차(EXT2)·round 3~19 = **사실상 완결**(잔여 3건=A2c·NAP·DOC, 전부 no-oracle/docs).
 - 나머지 잔여는 **honest-loud=안전**(ROADMAP §3~§5) + **G2 OBS 트랙**(ROADMAP §6).
@@ -26,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **P** | **⭐ 성능 T0~T4 — ②층 미청구 10.7×**(§4.5.282). `is_codegen_able` 이 `Terminator::Call` 을 가진 프로세스를 통째로 거부하고 `codegen_coverage` 는 `ir.processes` 만 보므로, **사용자 함수를 부르는 RTL 에서 VM 기여가 0%**(`--backend interp` == `bytecode` 실측). 단계·중단 판정 = **doc-21 §7.3** | `--backend` A/B · iverilog · verilator(③층 상한) |
+| **0** | **★★ 성능 T0~T4 — ②층 미청구 10.7×**(§4.5.282) · **2026-08-03 오너 지시로 이 표의 1번보다 앞**. `is_codegen_able` 이 `Terminator::Call` 을 가진 프로세스를 통째로 거부하고 `codegen_coverage` 는 `ir.processes` 만 보므로, **사용자 함수를 부르는 RTL 에서 VM 기여가 0%**(`--backend interp` == `bytecode` 실측). 단계·중단 판정 = **doc-21 §7.3** | `--backend` A/B · iverilog · verilator(③층 상한) |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 

@@ -77,9 +77,18 @@ fn a_based_literal_may_have_space_around_the_base_specifier() {
 /// simulation semantics, so they are skipped like a comment. PicoRV32 uses
 /// `(* parallel_case *)` and `(* full_case *)` on its decoder `case` statements.
 ///
-/// The trap: `always @(*)` must keep lexing as `(`/`*`/`)`. The skip regex cannot match
-/// `(*)` — after `(*` its body is `[^*]` or `*[^)]` and its terminator is `*)`, so a
-/// lone `)` can never reach one — and this test holds that line.
+/// The trap: `always @(*)` must keep lexing as `(`/`*`/`)`.
+///
+/// ⚠️ This test was written to hold that line and DID NOT — see round-27. The reasoning
+/// quoted here was wrong ("the skip regex cannot match `(*)` — after `(*` its body is
+/// `[^*]` or `*[^)]` and its terminator is `*)`, so a lone `)` can never reach one"):
+/// true of those three characters alone, and irrelevant, because the body consumed the
+/// `)` and ran on to the next `*)` anywhere later in the unit. Every design below has
+/// exactly ONE `@(*)` and no later `*)`, so the regex silently failed to match and the
+/// fallback rescued it. Two `@(*)` blocks — the shape real RTL actually has — destroyed
+/// the code between them, and a `*)` in a trailing comment became live code with
+/// `errors=0`. The real pins are in `round27_report.rs`; this one keeps its original
+/// coverage (attributes are skipped, and PicoRV32's `(* parallel_case *)` works).
 #[test]
 fn attribute_instances_are_skipped_without_eating_implicit_sensitivity() {
     pins(
@@ -108,7 +117,9 @@ fn attribute_instances_are_skipped_without_eating_implicit_sensitivity() {
          endmodule",
         "c=7",
     );
-    // The implicit sensitivity list is NOT an attribute — teeth for the regex boundary.
+    // The implicit sensitivity list is NOT an attribute. NOTE: one `@(*)` and no later
+    // `*)` is precisely the shape that passed while the defect was live — this assertion
+    // has no teeth on its own. `round27_report.rs` carries the ones that do.
     pins(
         "@(*) alone",
         "module t;\n\

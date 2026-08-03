@@ -91,6 +91,15 @@ pub enum LexErrorKind {
     /// A bare `$` or backtick not followed by an identifier body (produced by the
     /// `lone_sigil` callback; the single sigil byte is the error span).
     LoneSigil,
+    /// `(*` opening an attribute instance with no `*)` closing it before EOF.
+    ///
+    /// This used to be SILENT: the skip regex simply failed to match and the `(*`
+    /// fell through as `LParen`/`Star`. That silence is what made the R27 defect
+    /// non-local — whether a `(*` behaved as an attribute depended on whether some
+    /// LATER text in the whole compilation unit happened to supply a `*)`, so one
+    /// `@(*)` in a file passed and two broke, and the break was reported at the
+    /// second one. An opener that finds no closer is a real error; say so.
+    UnterminatedAttribute,
 }
 
 impl LexErrorKind {
@@ -107,7 +116,8 @@ impl LexErrorKind {
             | LexErrorKind::UnterminatedString
             | LexErrorKind::UnterminatedBlockComment
             | LexErrorKind::EmptyEscapedIdent
-            | LexErrorKind::LoneSigil => ("E-PARSE-UNEXPECTED-TOKEN", "VITA-E2002"),
+            | LexErrorKind::LoneSigil
+            | LexErrorKind::UnterminatedAttribute => ("E-PARSE-UNEXPECTED-TOKEN", "VITA-E2002"),
         }
     }
 }
@@ -140,18 +150,28 @@ impl LexErrorKind {
 // the intended behavior, so we opt in with `allow_greedy = true`. The newline is
 // left unconsumed for the whitespace skip above.
 #[logos(skip("//[^\n]*", allow_greedy = true))]
-// ATTRIBUTE INSTANCE `(* ... *)` (IEEE 1800-2017 §5.12) — a tool hint attached to a
-// module item, statement, port connection or declaration. It carries no simulation
-// semantics, so it is SKIPPED exactly like a comment. Real RTL is full of them:
-// `(* parallel_case *)`, `(* full_case *)`, `(* keep *)`, `(* ASYNC_REG = "TRUE" *)`.
-// Without this the `(` fell through as LParen and the parser reported a cascade
-// pointing at the wrong construct (measured on PicoRV32 line 331).
+// ATTRIBUTE INSTANCE `(* ... *)` (IEEE 1800-2017 §5.12) is NOT handled here — see
+// `strip_attribute_instances` below. It used to be a `#[logos(skip ...)]` regex over
+// RAW TEXT, and that was wrong in a way that produced a silently wrong simulation
+// (external report round-27):
 //
-// ⭐ The regex must NOT match `(*)`, which is the implicit sensitivity list in
-// `always @(*)`. It cannot: after `\(\*` the body alternation is `[^*]` or `\*[^)]`,
-// and the terminator is `\*\)`, so `(*)` — whose only remaining char is `)` — has no
-// way to reach a terminator. `always @(*)` keeps lexing as LParen/Star/RParen.
-#[logos(skip r"\(\*([^*]|\*[^)])*\*\)")]
+//   always @(*) a = b;  // *)(b) begin a = 1'b1; $display("!!"); end
+//
+// The regex opened at the `(*` of the SENSITIVITY LIST, scanned forward THROUGH the
+// line comment, closed on the `*)` inside it, and the rest of the comment became live
+// code. `errors=0`, and `a` took the wrong value. A raw-text scan cannot see comments
+// or string literals, so text that is not code decided the code's structure.
+//
+// The old comment here argued the regex "cannot match `(*)` — a lone `)` can never
+// reach a terminator". True of those three characters ALONE, and irrelevant: the body
+// `([^*]|\*[^)])*` happily consumed the `)` and everything after it until the next
+// `*)` ANYWHERE LATER in the compilation unit. A second `@(*)` supplies exactly that,
+// which is why one `@(*)` in a file passed and two destroyed the code between them.
+//
+// The fix is not a better regex. Attributes are recognised over the TOKEN STREAM,
+// where comments and string literals are already single (or zero) tokens and so cannot
+// contribute a delimiter. `(*` and `*)` therefore lex as ordinary `LParen`/`Star` and
+// `Star`/`RParen` here.
 pub enum TokenKind {
     // ---- identifiers / keywords (one regex, keyword resolved in callback) ----
     /// Simple identifier OR a keyword (distinguished by the inner `WordKind`).
@@ -716,18 +736,121 @@ pub fn lex(src: &str) -> (Vec<Spanned>, Vec<LexError>) {
             }
         }
     }
+    strip_attribute_instances(&mut tokens, &mut errors);
     (tokens, errors)
+}
+
+/// Is `a` immediately followed by `b` in the source, with nothing between them?
+///
+/// `(*` and `*)` are single lexical delimiters (IEEE 1800-2017 §5.12) — `( *` is a
+/// paren and a star, not an attribute opener. Adjacency is the whole test, and on the
+/// token stream it is exactly "one span ends where the next begins".
+#[inline]
+fn adjacent(a: &Spanned, b: &Spanned) -> bool {
+    a.span.end == b.span.start
+}
+
+/// Drop IEEE 1800-2017 §5.12 attribute instances `(* … *)` from the token stream.
+///
+/// Attributes are tool hints with no simulation semantics, so they are removed like a
+/// comment. Doing it HERE rather than in the lexer regex is the round-27 fix, and it
+/// buys three properties that a raw-text scan cannot have:
+///
+/// 1. **Comments and string literals cannot supply a delimiter.** They are already
+///    skipped (comments) or collapsed to one token (strings) by the time this runs, so
+///    `// … *)` and `"… (*) …"` are invisible to the pairing. That was the silent-wrong:
+///    a `*)` inside a trailing comment closed the sensitivity list's `(*` and promoted
+///    the rest of the comment to live code, with `errors=0`.
+/// 2. **`@(*)` is never an attribute.** IEEE 1364-2005 A.6.5 lists `@ (*)` as an
+///    event_control production, and an attribute instance cannot stand where an event
+///    control must, so a `(*` whose previous token is `@` is left alone. Without this,
+///    two `@(*)` blocks in one compilation unit paired with each other and deleted
+///    everything in between — across file boundaries, since the unit is one token
+///    stream, and the diagnostic landed on the SECOND block while the cause was the
+///    first.
+/// 3. **An opener with no closer is loud.** The old regex just failed to match and the
+///    `(*` fell through silently, which made the whole defect non-local: whether a `(*`
+///    behaved as an attribute depended on the `(*`/`*)` census of the entire unit.
+fn strip_attribute_instances(tokens: &mut Vec<Spanned>, errors: &mut Vec<LexError>) {
+    // Cheap pre-pass: almost no source has an adjacent `(` `*`, and the common case
+    // should not pay for a rebuild of the vector.
+    let has_opener = tokens.windows(2).any(|w| {
+        w[0].kind == TokenKind::LParen && w[1].kind == TokenKind::Star && adjacent(&w[0], &w[1])
+    });
+    if !has_opener {
+        return;
+    }
+    let src = std::mem::take(tokens);
+    let mut out: Vec<Spanned> = Vec::with_capacity(src.len());
+    let mut i = 0usize;
+    while i < src.len() {
+        let opens = src[i].kind == TokenKind::LParen
+            && src
+                .get(i + 1)
+                .is_some_and(|n| n.kind == TokenKind::Star && adjacent(&src[i], n))
+            // (2) an event control, not an attribute. `out.last()` is the previous
+            // SIGNIFICANT token — whitespace and comments never reach this vector — so
+            // `@(*)`, `@ (*)` and `@ /* c */ (*)` are all recognised by the same test.
+            && out.last().map(|p| p.kind) != Some(TokenKind::At);
+        if !opens {
+            out.push(src[i].clone());
+            i += 1;
+            continue;
+        }
+        // Scan for the closing `*)`. Start at i+2: the opener's own `*` must not be
+        // read as the closer's, so `(*)` cannot self-close.
+        //
+        // An `@(*)` further on is NOT a candidate closer either. It contains an
+        // adjacent `*` `)`, so without this an UNTERMINATED attribute would still
+        // swallow forward to the next sensitivity list and stay silent — exactly the
+        // non-local behaviour this pass exists to remove. Skipping the `@` `(` `*`
+        // leaves the `)` with no `*` in front of it, so the scan runs off the end and
+        // the opener is reported.
+        let mut close = None;
+        let mut j = i + 2;
+        while j + 1 < src.len() {
+            if src[j].kind == TokenKind::At
+                && src[j + 1].kind == TokenKind::LParen
+                && src
+                    .get(j + 2)
+                    .is_some_and(|s| s.kind == TokenKind::Star && adjacent(&src[j + 1], s))
+            {
+                j += 3;
+                continue;
+            }
+            if src[j].kind == TokenKind::Star
+                && src[j + 1].kind == TokenKind::RParen
+                && adjacent(&src[j], &src[j + 1])
+            {
+                close = Some(j);
+                break;
+            }
+            j += 1;
+        }
+        match close {
+            Some(j) => i = j + 2,
+            None => {
+                // (3) loud, and the tokens stay so the parser can still recover.
+                errors.push(LexError {
+                    kind: LexErrorKind::UnterminatedAttribute,
+                    span: src[i].span.start..src[i + 1].span.end,
+                });
+                out.push(src[i].clone());
+                i += 1;
+            }
+        }
+    }
+    *tokens = out;
 }
 
 /// Streaming variant: yields `Spanned` only (errors surface as `Error` tokens).
 /// Useful when the parser drives lazily and inspects `TokenKind::Error` itself.
+///
+/// Attribute stripping needs the whole stream (an attribute's extent is only known at
+/// its closer), so this shares [`lex`]'s pass rather than keeping a second, subtly
+/// different notion of what an attribute is.
 pub fn lex_iter(src: &str) -> impl Iterator<Item = Spanned> + '_ {
-    TokenKind::lexer(src)
-        .spanned()
-        .map(|(result, span)| match result {
-            Ok(kind) => Spanned::new(kind, span),
-            Err(kind) => Spanned::new(TokenKind::Error(kind), span),
-        })
+    lex(src).0.into_iter()
 }
 
 #[cfg(test)]

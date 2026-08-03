@@ -754,6 +754,10 @@ pub(crate) fn lex_error_message(kind: hdl_lexer::LexErrorKind) -> &'static str {
         K::UnterminatedBlockComment => "unterminated block comment",
         K::EmptyEscapedIdent => "empty escaped identifier",
         K::LoneSigil => "stray `$` or backtick with no identifier body",
+        K::UnterminatedAttribute => {
+            "`(*` opens an attribute instance that is never closed by a `*)` \
+             (an implicit sensitivity list is `@(*)` or `@*`)"
+        }
     }
 }
 
