@@ -352,24 +352,7 @@ impl Scheduler<'_, '_> {
     /// the scaling the old const-fold path applied at elaborate time.
     pub(crate) fn delay_ticks(&self, eid: u32) -> u64 {
         let v = self.eval(eid);
-        let mult = self.st.cur_time_mult.max(1);
-        if v.is_real {
-            // TWO-STAGE (doc-08): round to the module's OWN precision first
-            // (P = M/S), then scale by S = 10^(prec − global) to global ticks.
-            // S == 1 (single-timescale / legacy) ⇒ round(v × M), byte-identical
-            // to the prior single rounding.
-            let s_mult = self.st.cur_prec_mult.max(1);
-            let p_mult = (mult / s_mult).max(1);
-            let x = v.to_f64().unwrap_or(0.0) * p_mult as f64;
-            if x <= 0.0 {
-                return 0;
-            }
-            return (x.round() as u64).saturating_mul(s_mult);
-        }
-        if v.has_xz() {
-            return 0;
-        }
-        v.to_u64().unwrap_or(u64::MAX).saturating_mul(mult)
+        crate::eval::delay_ticks_of(&v, self.st.cur_time_mult, self.st.cur_prec_mult)
     }
 
     /// Run a pre-compiled native expression program against the net table (VM-only

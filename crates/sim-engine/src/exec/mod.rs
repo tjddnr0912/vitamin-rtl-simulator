@@ -16,6 +16,7 @@ use crate::value::Value;
 pub(crate) use frame_window::*;
 pub(crate) use process::*;
 mod frame_window;
+pub(crate) mod kpred;
 mod process;
 
 /// Outcome of one process activation.

@@ -32,12 +32,12 @@ use crate::SimOpts;
 /// A diag sink for `SimState::new` (its diagnostics are irrelevant here — the
 /// designs are the validated corpus).
 #[derive(Default)]
-struct NullSink;
+pub(super) struct NullSink;
 impl diag::LogSink for NullSink {
     fn emit(&self, _e: diag::LogEvent) {}
 }
 
-fn fresh_state<'a>(ir: &'a SimIr, sink: &'a NullSink) -> SimState<'a> {
+pub(super) fn fresh_state<'a>(ir: &'a SimIr, sink: &'a NullSink) -> SimState<'a> {
     SimState::new(
         ir,
         Box::new(std::io::sink()),
@@ -319,7 +319,7 @@ fn arena_reader_matches_engine_reader_under_shared_eval() {
 /// receive. Needed because `two_state_nets` (a CORE sidecar at S0, so this
 /// funnel's job) exists only on the sidecar path — a plain `build` would leave
 /// both sides 4-state and the coercion arm untested.
-fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
+pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
     let (toks, le) = hdl_lexer::lex(src);
     assert!(le.is_empty(), "lex errors: {le:?}");
     let (su, pe) = hdl_parser::parse(&toks, src);
@@ -366,7 +366,7 @@ fn write_sites(ir: &SimIr) -> Vec<(sim_ir::Lvalue, u32)> {
 /// value so array indices and part-select offsets land IN range (a full-range
 /// 32-bit index is out of range for every array, which would test only the drop
 /// arm); `xz` mixes in X/Z bits (the 2-state coercion + unknown-index arms).
-fn mirror_state(
+pub(super) fn mirror_state(
     st: &mut SimState,
     arena: &mut NetArena,
     rng: &mut Rng,
@@ -404,7 +404,7 @@ fn mirror_state(
 }
 
 /// Assert the two stores read identically everywhere.
-fn assert_stores_equal(st: &SimState, arena: &NetArena, n_nets: u32, what: &str) {
+pub(super) fn assert_stores_equal(st: &SimState, arena: &NetArena, n_nets: u32, what: &str) {
     for n in 0..n_nets {
         for e in 0..arena.slots[n as usize].elems {
             assert_eq!(

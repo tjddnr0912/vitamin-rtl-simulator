@@ -64,6 +64,33 @@ pub(crate) enum Tri {
     Unknown,
 }
 
+/// Scale an already-evaluated `#delay` amount into global-precision ticks:
+/// real → two-stage round (to the module's own precision `P = M/S`, then by `S`)
+/// clamped at 0; any X/Z → 0 (iverilog parity); integral → `v × M`, u64-saturating
+/// with a too-wide value saturating to `u64::MAX` rather than collapsing to 0.
+///
+/// Shared for the same reason `resolve_offsets` is, and the S1d-4a gate proved
+/// the need rather than assuming it: this rule was first RESTATED on the tier-3
+/// side and lost two of its four clauses (the X/Z guard and the `u64::MAX`
+/// sentinel), so a delay the engine treats as unbounded fired immediately. Both
+/// were invisible to a value comparison — a delay amount is not a stored bit.
+pub(crate) fn delay_ticks_of(v: &crate::value::Value, mult: u64, prec_mult: u64) -> u64 {
+    let mult = mult.max(1);
+    if v.is_real {
+        let s_mult = prec_mult.max(1);
+        let p_mult = (mult / s_mult).max(1);
+        let x = v.to_f64().unwrap_or(0.0) * p_mult as f64;
+        if x <= 0.0 {
+            return 0;
+        }
+        return (x.round() as u64).saturating_mul(s_mult);
+    }
+    if v.has_xz() {
+        return 0;
+    }
+    v.to_u64().unwrap_or(u64::MAX).saturating_mul(mult)
+}
+
 /// Evaluate each LHS chunk's bit-offset expression NOW, returning one offset per
 /// chunk (0 for a whole-net `None` chunk). The `&mut self` write path has no
 /// `EvalCtx`, so dynamic indices like `a[i]` are resolved here at the correct

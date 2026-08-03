@@ -115,22 +115,10 @@ impl Kernel for Scheduler<'_, '_> {
         crate::builtins::dispatch(self, which, fmt, args, sid)
     }
     fn k_queue_pop_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::QPopBack | sim_ir::SysFuncId::QPopFront,
-                ..
-            })
-        )
+        crate::exec::kpred::queue_pop_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_random_seeded_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Random,
-                args,
-            }) if !args.is_empty()
-        )
+        crate::exec::kpred::random_seeded_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_random_seeded(&mut self, rhs: u32) -> Value {
         // shape guaranteed by `k_random_seeded_rhs` + elaborate's whole-net
@@ -174,20 +162,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(r as i128, 32, true)
     }
     fn k_dist_seeded_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc { which, args })
-                if matches!(
-                    which,
-                    sim_ir::SysFuncId::DistUniform
-                        | sim_ir::SysFuncId::DistNormal
-                        | sim_ir::SysFuncId::DistExponential
-                        | sim_ir::SysFuncId::DistPoisson
-                        | sim_ir::SysFuncId::DistChiSquare
-                        | sim_ir::SysFuncId::DistT
-                        | sim_ir::SysFuncId::DistErlang
-                ) && !args.is_empty()
-        )
+        crate::exec::kpred::dist_seeded_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_dist_seeded(&mut self, rhs: u32) -> Value {
         // shape guaranteed by `k_dist_seeded_rhs` + elaborate's whole-net seed
@@ -255,13 +230,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(r as i128, 32, true)
     }
     fn k_cast_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Cast,
-                args,
-            }) if args.len() == 2
-        )
+        crate::exec::kpred::cast_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_cast(&mut self, rhs: u32) -> Value {
         // func-form `ok = $cast(dst, src)`: write the resized `src` into the `dst`
@@ -298,13 +267,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(1, 32, true)
     }
     fn k_value_plusargs_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::ValuePlusargs,
-                ..
-            })
-        )
+        crate::exec::kpred::value_plusargs_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_value_plusargs(&mut self, rhs: u32) -> Value {
         // args = [fmt string-literal Const, ref-var whole-net Signal] —
@@ -390,13 +353,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(1, 32, true)
     }
     fn k_fopen_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Fopen,
-                ..
-            })
-        )
+        crate::exec::kpred::fopen_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fopen(&mut self, rhs: u32) -> Value {
         // args = [name (, mode)] — each is a string LITERAL, a runtime `string`
@@ -478,13 +435,7 @@ impl Kernel for Scheduler<'_, '_> {
     }
     // ── v9 SYS-READ: file-read int functions ($fgetc/$feof/$ungetc) ──
     fn k_fgetc_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Fgetc,
-                ..
-            })
-        )
+        crate::exec::kpred::fgetc_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fgetc(&mut self, rhs: u32) -> Value {
         let fd_arg = match self.st.ir.exprs.get(rhs as usize) {
@@ -502,13 +453,7 @@ impl Kernel for Scheduler<'_, '_> {
         }
     }
     fn k_feof_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Feof,
-                ..
-            })
-        )
+        crate::exec::kpred::feof_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_feof(&mut self, rhs: u32) -> Value {
         let fd_arg = match self.st.ir.exprs.get(rhs as usize) {
@@ -536,13 +481,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(if eof { 1 } else { 0 }, 32, true)
     }
     fn k_ungetc_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Ungetc,
-                ..
-            })
-        )
+        crate::exec::kpred::ungetc_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_ungetc(&mut self, rhs: u32) -> Value {
         let (c_arg, fd_arg) = match self.st.ir.exprs.get(rhs as usize) {
@@ -594,13 +533,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(0, 32, true)
     }
     fn k_fgets_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Fgets,
-                ..
-            })
-        )
+        crate::exec::kpred::fgets_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fgets(&mut self, rhs: u32) -> Value {
         // args = [str-dest whole-net Signal, fd] — elaborate's contract.
@@ -712,13 +645,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(n as i128, 32, true)
     }
     fn k_fread_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Fread,
-                ..
-            })
-        )
+        crate::exec::kpred::fread_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fread(&mut self, rhs: u32) -> Value {
         // args = [target whole-net Signal, fd, start?, count?] — elaborate's
@@ -884,13 +811,7 @@ impl Kernel for Scheduler<'_, '_> {
         Value::from_i128(rc as i128, 32, true)
     }
     fn k_fscanf_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Fscanf,
-                ..
-            })
-        )
+        crate::exec::kpred::fscanf_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fscanf(&mut self, rhs: u32) -> Value {
         // args = [fd, fmt strconst, dst0, dst1, ...] — elaborate's contract.
@@ -919,13 +840,7 @@ impl Kernel for Scheduler<'_, '_> {
         scan_run(self, Some(fd), &[], &fmt, &dsts)
     }
     fn k_sscanf_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Sscanf,
-                ..
-            })
-        )
+        crate::exec::kpred::sscanf_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_sscanf(&mut self, rhs: u32) -> Value {
         // args = [source string-VALUE, fmt strconst, dst0, ...].
@@ -950,13 +865,7 @@ impl Kernel for Scheduler<'_, '_> {
         scan_run(self, None, &src, &fmt, &dsts)
     }
     fn k_sformatf_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Sformatf,
-                ..
-            })
-        )
+        crate::exec::kpred::sformatf_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_rhs_is_stmt_effect_family(&self, rhs: u32) -> bool {
         sim_ir::rhs_is_stmt_effect(self.st.ir.exprs.as_slice(), rhs)
@@ -1079,16 +988,7 @@ impl Kernel for Scheduler<'_, '_> {
         popped.resize_keep_sign(lw.max(sw.width), sw.signed)
     }
     fn k_assoc_iter_rhs(&self, rhs: u32) -> bool {
-        matches!(
-            self.st.ir.exprs.get(rhs as usize),
-            Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::AssocFirst
-                    | sim_ir::SysFuncId::AssocNext
-                    | sim_ir::SysFuncId::AssocLast
-                    | sim_ir::SysFuncId::AssocPrev,
-                ..
-            })
-        )
+        crate::exec::kpred::assoc_iter_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_assoc_iter(&mut self, lhs: &Lvalue, rhs: u32) -> Value {
         let status = self.assoc_iter_step(rhs);

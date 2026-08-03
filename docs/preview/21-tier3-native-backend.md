@@ -423,6 +423,36 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > 파일 계열 16·`$sformatf`). **즉 노트로 들고 있던 그 선결 과제는 트레이트가 구조적으로 강제한다** —
 > `Kernel` 을 구현하면서 그것들을 답하지 않을 방법이 없다.
 >
+> **✅ S1d-4a 완료 (2026-08-03) — 그리고 셋으로 갈린 게 아니라 넷이었다.**
+> 52 를 실제로 구현하면서 분해가 정정됐다: **① 스토어 코어 13**(eval·eval_native·offsets·write·
+> write_scalar·NBA 3종·delay·truthy 2종·max_deltas·mark_fatal) · **② 분류 술어 17**
+> (`k_*_rhs` 15 + `rhs_is_stmt_effect_family` + `class_new_site`) · **③ 거부 워커 20** ·
+> **④ 미배선 1**(`k_dispatch_systask`). ②가 계획에 없던 축이고 **이 슬라이스에서 제일 중요한 결정**이다:
+> 술어는 값을 만들지 않고 **`compute_effect` 가 어떤 문장을 짓는지**를 정한다. 거부 가족이라고 `false`
+> 로 스텁하면 그 문장은 **loud 해지지 않고 다른 문장이 된다**(pure-eval 경로로 조용히 흘러간다) —
+> 그래서 술어는 **전부 진짜로 답하고**, `exec::kpred` 로 **엔진과 한 철자**를 쓴다(§4.5.291 의 교훈을
+> 강제 가능한 형태로 바꾼 것: 쌍둥이를 안 쓰면 쌍둥이가 갈릴 수 없다). 워커만 loud.
+>
+> ⭐ **`k_dispatch_systask` 의 범위가 숫자가 됐다.** 그것만은 스토어에서 답할 수 없다
+> (`builtins::dispatch` 가 `&SimState` 로 렌더한다). 실측: **적격 설계에서 `builtins` 가 넷을 만지는
+> 곳은 읽기 4 곳뿐**(`render.rs:260,377` · `queues_io.rs:690,756`)이고 **쓰기는 0**이다 — 넷을 쓰는
+> 태스크(`$sformat`·`$readmem*`·`$cast`·string/heap 뮤테이터·`ClassRandomize`)는 §4.5.291 의
+> `stmt_effect` 행이나 storage 행이 이미 전부 거부한다. **즉 4b 의 dispatch 배선은 3.6k 줄 재작성이
+> 아니라 4-site 파라미터화다.**
+>
+> ⚠️ **게이트가 또 내 결함을 잡았다 — 그리고 이번엔 "다시 옮겨 적기"가 원인이었다.**
+> `delay_ticks` 를 엔진에서 **기억으로 재진술**했더니 네 절 중 둘(X/Z 가드 · `u64::MAX` 포화 센티널)이
+> 사라져 **무한 지연이 t+0 에 발화**했다. 값 비교로는 절대 안 보인다(지연량은 저장된 비트가 아니다).
+> 수정은 "더 잘 옮겨 적기"가 아니라 **`eval::delay_ticks_of` 로 공유**(`resolve_offsets` 와 같은 자리).
+> 그리고 `max_body_steps` 기본값이 `u64::MAX` 였다 — "의견 없음"이 아니라 **종료 가드 없음**이라
+> **생성자 인자로 승격**.
+>
+> ⚠️ **teeth 가 처음엔 절반이었다**: 17 뮤테이션 중 **5개 생존**(컨텍스트 폭 규칙 · write_scalar ·
+> truthy · delay_ticks · eval_native — 뒤 넷은 `compute_effect` 가 assign 에서 **부르지 않는 표면**이라
+> 진입 0회). 게이트를 **control/VM 표면 워크 + 컨텍스트-폭 설계군 + `class_new_site` 표 주입**으로
+> 넓혀 전부 kill. 남은 두 생존(`prec_mult` · `now`)은 **코퍼스가 그 형태를 안 갖고 있어서**였고
+> (real 값 지연 · `$time` 읽기 · 비-1 타임스케일), 전용 설계로 닫았다.
+>
 > 그래서 S1d-4 는 다시 쪼갠다: **S1d-4a = `impl Kernel` 코어 16 + 거부 가족 9 의 정직한 본문**
 > (게이트 = 같은 상태·같은 문장에서 `apply_effect` 결과가 양 스토어 동일 — 문장 실행기를 **공유**
 > 하므로 미러가 아니라 **구조적** 동일) → **S1d-4b = 바디 워크**(블록·terminator·정지) →

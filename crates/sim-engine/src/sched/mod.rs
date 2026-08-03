@@ -257,7 +257,7 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// Current time's Active/Inactive buckets.
     cur: SlotQueues,
     /// NBA region (applied as a batch when Active+Inactive empty).
-    nba: Vec<NbaUpdate>,
+    pub(crate) nba: Vec<NbaUpdate>,
     /// The `Lvalue` `apply_nba` lends to a single-chunk update so it can call the
     /// `&Lvalue` write funnel without the update having carried a heap `Vec` here. Its
     /// one-element allocation is made once and reused for the whole run.

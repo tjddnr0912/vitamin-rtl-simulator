@@ -39,6 +39,9 @@ use crate::SimOpts;
 
 pub mod arena;
 pub mod dirty;
+pub mod kernel;
+#[cfg(test)]
+mod kernel_tests;
 #[cfg(test)]
 mod probe_tests;
 pub mod wake;
