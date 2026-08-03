@@ -153,7 +153,7 @@ pub struct VitaOpts {
     /// the argv driver (see [`Invocation`]) — the echo then prints only the
     /// facts it can state without inventing an argv.
     pub invocation: Option<Invocation>,
-    /// `--backend <interp|vm>`: which executor runs process bodies. `None` ⇒
+    /// `--backend <interp|vm|native>`: which executor runs process bodies. `None` ⇒
     /// [`Backend::Bytecode`], the VM (the default since it was measured equivalent
     /// across the whole test suite, not merely across the differential corpus).
     ///
@@ -610,7 +610,7 @@ struct IoArgs {
     probes: Vec<String>,
     /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
     probe_file: Option<String>,
-    /// `--backend <interp|vm>`: process-body executor. `None` ⇒ the VM, which is the
+    /// `--backend <interp|vm|native>`: process-body executor. `None` ⇒ the VM, which is the
     /// default; `interp` selects the reference semantics for bisecting. Simulate-side
     /// only (`vita`/`vrun`) — it changes nothing an artifact records, so `vcmp`/`velab`
     /// reject it.

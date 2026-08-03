@@ -246,10 +246,13 @@ pub(crate) fn print_help(applet: &str) {
          --threads, -j <N>     waveform-writer thread budget; N>=2 moves VCD writing off\n                        \
                        the sim thread. Simulation itself is single-threaded, so\n                        \
                        this does NOT speed up a run with no waveform dump.\n  \
-         --backend <interp|vm> (vita/vrun) process-body executor. 'vm' (default) runs\n                        \
+         --backend <interp|vm|native> (vita/vrun) process-body executor. 'vm' (default) runs\n                        \
                        suspend-free bodies on the bytecode VM and interprets the rest;\n                        \
-                       'interp' forces the reference semantics, for bisecting. Output is\n                        \
-                       byte-identical either way -- this only moves wall-clock (measured\n                        \
+                       'interp' forces the reference semantics, for bisecting; 'native'\n                        \
+                       selects the tier-3 backend, which is NOT executable yet and falls\n                        \
+                       back to the VM (run.json reports 'backend' vs 'backend_requested').\n                        \
+                       Output is byte-identical whichever you pick -- this only moves\n                        \
+                       wall-clock (measured\n                        \
                        1.4x on a real design, up to 2.8x on expression-heavy RTL, ~1.0x\n                        \
                        when the run is clock/scheduler-bound).\n  \
          --timeout <TICKS>     stop cleanly after TICKS sim time (CI killswitch)\n  \

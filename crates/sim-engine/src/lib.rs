@@ -121,6 +121,15 @@ pub enum Backend {
     /// change to the VM: a corpus differential is far weaker than 5000 real tests.
     #[default]
     Bytecode,
+    /// ③층 native backend (doc-21) — **not executable yet.** S1a-S1c built the
+    /// storage, the read path and the write funnel; S1d builds the scheduler.
+    /// Until then `simulate` resolves this to [`Backend::Bytecode`], so selecting
+    /// it never changes an output byte. It stays OBSERVABLE because run.json
+    /// carries both `backend_requested` and the effective `backend`: a reader
+    /// comparing them sees the fall-back, which `native.refused` alone cannot
+    /// show (that field is a property of the DESIGN and is `null` whenever
+    /// nothing refuses it — including on this fall-back).
+    Native,
 }
 
 /// N7-REST: one rand field's draw spec — `(field_id, width, signed, lo, hi, constrained)`.
@@ -460,11 +469,15 @@ pub struct SimResult {
     /// executor did. A static property of the design: always present, one
     /// allow-list walk per process template.
     pub codegen: CodegenReport,
-    /// S0 (doc-21 §7.3): the ③층 design-level eligibility verdict — serialized
-    /// as run.json's `native` object. Always present; static per (design, run
-    /// options) — NOT per design alone: an instrumented run (`--probe`, stage
-    /// capture) is ineligible by design, doc-21 §4.3.
+    /// S0 (doc-21 §7.3): the ③층 eligibility verdict — serialized as run.json's
+    /// `native` object. Always present; static per (design, run options) — NOT
+    /// per design alone: an instrumented run (`--probe`, stage capture) is
+    /// ineligible by design, doc-21 §4.3.
     pub native: native::NativeEligibility,
+    /// The executor that ACTUALLY ran process bodies. Differs from the requested
+    /// `SimOpts.backend` when `Backend::Native` fell back (see the resolution in
+    /// `simulate`), which is why run.json reports this one.
+    pub backend: Backend,
 }
 
 /// OBS-2: format a net's 4-state value as an MSB..LSB binary string (`bit_char`
@@ -590,7 +603,30 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     }
     st.proc_multipliers = opts.proc_multipliers.clone();
     st.proc_prec_mults = opts.proc_prec_mults.clone();
-    st.backend = opts.backend;
+    // ③층: resolve the EFFECTIVE executor once. `Backend::Native` falls back to
+    // the VM whenever the runtime gate refuses the design — and, today, always,
+    // because no native executor exists yet (S1d). `SimResult.backend` carries
+    // the result so run.json reports what RAN; the CLI reports the request
+    // beside it, because a fall-back only the wall-clock could reveal would be
+    // exactly the wrong-log doc-19 §3 forbids.
+    // S0: the ③층 verdict, taken here — while `opts` is still WHOLE (the
+    // scheduler consumes `opts.fork_modes` by value further down, and a late
+    // read would see an emptied table and silently call a fork design eligible).
+    // Computed ONCE: `refused` IS the runtime gate's answer, so the backend
+    // resolution below and run.json read the same verdict.
+    let native_eligibility = native::design_eligibility(ir, &opts);
+    let native_refusal = native_eligibility.refused.or({
+        if opts.backend == Backend::Native {
+            Some("no native executor yet (S1d)")
+        } else {
+            None
+        }
+    });
+    let effective_backend = match opts.backend {
+        Backend::Native if native_refusal.is_some() => Backend::Bytecode,
+        b => b,
+    };
+    st.backend = effective_backend;
     st.severities = opts.severities.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
     st.stage_stmts = opts.stage_stmts.clone();
@@ -758,11 +794,6 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         &call_out_nets,
     );
 
-    // S0: take the ③층 design-level verdict while `opts` is still WHOLE — the
-    // scheduler consumes `opts.fork_modes` by value on the next line, and a
-    // late `&opts` read would see an emptied table and silently claim a fork
-    // design eligible (the exact wrong-log failure doc-19 §3 forbids).
-    let native_eligibility = native::design_eligibility(ir, &opts);
     let reason = {
         let mut sched = Scheduler::new(
             &mut st,
@@ -913,6 +944,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         // itself reads, so this is the real gate's verdict, not a re-derivation.
         codegen: backend::codegen_report(ir, &st.class_new_sites),
         native: native_eligibility,
+        backend: effective_backend,
     }
 }
 

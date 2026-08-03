@@ -73,13 +73,17 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 let parsed = match args.get(i + 1).map(String::as_str) {
                     Some("interp") | Some("interpreter") => Some(sim_engine::Backend::Interpreter),
                     Some("vm") | Some("bytecode") => Some(sim_engine::Backend::Bytecode),
+                    Some("native") => Some(sim_engine::Backend::Native),
                     _ => None,
                 };
                 let Some(b) = parsed else {
                     eprintln!(
-                        "error[{}]: '--backend' takes 'vm' (default, the bytecode VM) or \
-                         'interp' (the reference tree-walking semantics, for bisecting) \
-                         — same output either way, this only moves wall-clock",
+                        "error[{}]: '--backend' takes 'vm' (default, the bytecode VM), \
+                         'interp' (the reference tree-walking semantics, for bisecting), \
+                         or 'native' (the tier-3 backend — NOT executable yet: it falls \
+                         back to the VM, and --obs-dir run.json reports which executor \
+                         actually ran plus this design's native verdict) \
+                         — same output whichever you pick, this only moves wall-clock",
                         MsgCode::CliBadFlag.code_num()
                     );
                     return Err(EXIT_CLI_ERROR);
@@ -421,6 +425,7 @@ pub(crate) fn backend_name(b: sim_engine::Backend) -> &'static str {
     match b {
         sim_engine::Backend::Interpreter => "interp",
         sim_engine::Backend::Bytecode => "vm",
+        sim_engine::Backend::Native => "native",
     }
 }
 

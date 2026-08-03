@@ -73,28 +73,10 @@ impl NetArena {
     /// an S2 width class — recorded, and the S1d wiring must fold this into the
     /// runtime gate so eligibility-set ≡ executor-set).
     pub fn build(ir: &SimIr, opts: &crate::SimOpts) -> Result<NetArena, &'static str> {
-        // FRAME-LOCAL: a subroutine's locals are ordinary nets in `ir.nets`, so
-        // this storage would happily give them slots — but their VALUES live in
-        // the activation's frame window, not in a net slot, and both the read
-        // path and the write funnel here are frame-blind. User calls are CORE at
-        // S0 (revision 4), so an eligible design CAN carry them; refusing here
-        // makes the mitigation structural instead of a comment, and puts it in
-        // the same place as the `Real` refusal. S3 owns lifting it.
-        if !opts.func_table.is_empty() {
-            return Err("frame-local storage: S3 (subroutine frames)");
-        }
+        Self::buildable(ir, opts)?;
         let mut slots = Vec::with_capacity(ir.nets.len());
         let mut off: u64 = 0;
         for (n, nv) in ir.nets.iter().enumerate() {
-            match nv.kind {
-                NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
-                NetKind::Real => return Err("real: S2 width class"),
-                NetKind::DynArray
-                | NetKind::Queue
-                | NetKind::Assoc
-                | NetKind::AssocStr
-                | NetKind::String => return Err("heap kind: outside R1 storage"),
-            }
             let words = nwords(nv.width.max(1)).max(1) as u32;
             let elems = nv.array_len.max(1);
             let slot = Slot {
@@ -153,6 +135,44 @@ impl NetArena {
             }
         }
         Ok(arena)
+    }
+
+    /// Would [`build`](Self::build) succeed? The SAME refusals, WITHOUT
+    /// allocating the buffer — so the observability rail can report the
+    /// storage-level verdict on every run (run.json `native.buildable`) at the
+    /// cost of one scan, and `build` calls it first so the two answers are one
+    /// predicate rather than two that can drift.
+    pub fn buildable(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'static str> {
+        // FRAME-LOCAL: a subroutine's locals are ordinary nets in `ir.nets`, so
+        // this storage would happily give them slots — but their VALUES live in
+        // the activation's frame window, not in a net slot, and both the read
+        // path and the write funnel are frame-blind. User calls are CORE at S0
+        // (revision 4), so an eligible design CAN carry them; refusing makes the
+        // mitigation structural instead of a comment. S3 owns lifting it.
+        if !opts.func_table.is_empty() {
+            return Err("frame-local storage: S3 (subroutine frames)");
+        }
+        let mut off: u64 = 0;
+        for nv in &ir.nets {
+            match nv.kind {
+                NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
+                NetKind::Real => return Err("real: S2 width class"),
+                NetKind::DynArray
+                | NetKind::Queue
+                | NetKind::Assoc
+                | NetKind::AssocStr
+                | NetKind::String => return Err("heap kind: outside R1 storage"),
+            }
+            let words = nwords(nv.width.max(1)).max(1) as u64;
+            off += words * 2 * u64::from(nv.array_len.max(1));
+            if u32::try_from(off).is_err() {
+                return Err("arena exceeds u32 words");
+            }
+        }
+        if usize::try_from(off).is_err() {
+            return Err("arena exceeds usize");
+        }
+        Ok(())
     }
 
     /// The `(val, unk)` plane slices of element `elem` of net `net`.

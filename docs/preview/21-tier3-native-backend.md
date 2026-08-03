@@ -400,12 +400,13 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > | **S1a ✅ (2026-08-03)** | `NetArena` — 슬롯 레이아웃·t0 초기값. **R1 의 중단 판정("폭별로 안 나뉘면 중단")이 여기서 답해진다 → 통과**(corpus 72 설계 전수에서 폭별 고정 슬롯 빌드 성공) | ✅ corpus 297넷 전수: 아레나 `read_net` ≡ 엔진 `read_net`(원소·whole·OOB) + 워드 경계 사다리(1~200b) 라운드트립 |
 > | **S1b ✅ (2026-08-03)** | 아레나 **read-path 를 기존 eval 밑에**(`impl NetReader for NetArena` — 슬롯 desc 한 번의 dense 로드가 NetSlot 메타 질문·라우팅 비트맵 전부를 대체). **평가기 의미는 공유 = byte-parity by construction**; 평가기 교체(인라인 값·폭 특수화)는 R2 = S2 의 일이다 | ✅ 미러 차분 **17,940건 발산 0**(72 설계 × 5 랜덤 4-state 상태 × 全 pure expr × 2 문맥 폭 · 카운트 정확 핀) |
 > | **S1c ✅ (2026-08-03)** | **쓰기 퍼널**(whole/bit/part/array lvalue·concat LHS·OOB drop·X-index no-op·2-state 강제·real→int 반올림·change 판정). 오프셋 해석은 엔진과 **한 함수**(`eval::resolve_offsets`)로 통일 | ✅ 문장 단위 차분 **3,150(corpus) + 270(적대 형태) 발산 0** + drop-arm 결정적 teeth. ⭐ 이 게이트가 **내 퍼널의 silent-wrong 1건**을 잡았다(§4.5.287) |
-> | **S1d** | **자기 스케줄러** + `--backend native` 배선(설계 게이트 거부 시 Bytecode 폴백·run.json 은 실제 실행기를 기록) | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일** |
+> | **S1d-1 ✅ (2026-08-03)** | **백엔드 선택 + 런타임 게이트** — `Backend::Native` · `--backend native` · `native::runtime_gate`(설계 게이트 ∧ 아레나 빌드) · run.json 이 **실제 실행기**와 **두 층 판정**(`eligible`/`buildable`/`refused`)을 기록 | ✅ 요청해도 **출력 바이트 불변**(stdout+VCD, 게이트 수용/거부 양쪽) · runtime gate ≡ 두 반쪽(corpus 전수) · `buildable` ≡ `build` |
+> | **S1d-2…4** | **자기 스케줄러**(리전 큐·델타·NBA·settle + dirty/edge 채널) → cont-assign settle·wired 해소 → 바이트 동일 게이트 | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일** |
 >
 > ⚠️ **S1d 착수 前 필수 4건**(S1c 와 그 적대 리뷰가 발굴 · 정본은 `native/write.rs` 모듈 독):
-> ① ~~프레임 로컬~~ **구조적으로 닫힘** — `NetArena::build` 가 `func_table` 비어있지 않으면 거부한다
-> (읽기 경로도 frame-blind 라 쓰기만의 문제가 아니었다 · S3 이 푼다). 남는 의무는 **런타임 게이트가
-> 설계 게이트 ∧ 아레나 빌드**여야 한다는 것(`native.eligible` 은 설계 수준 **상한**이다).
+> ① ~~프레임 로컬~~ · ~~런타임 게이트 통일~~ **둘 다 닫힘(S1d-1)** — `NetArena::build`/`buildable` 이
+> `func_table` 을 거부하고, `native::runtime_gate` 가 **설계 게이트 ∧ 아레나 빌드**다. run.json 이
+> 두 층을 따로 싣는다(`eligible` = 범위 상한 · `buildable` = 오늘의 저장소 · `refused` = AND 의 이유).
 > ② **퍼널을 통과하지 않는 효과** — `sim_ir::rhs_is_stmt_effect` 가족(seed 를 되쓰는 `$random`/
 > `$dist_*`·`$cast`·`$value$plusargs`·파일 계열)과 효과 있는 SysTask(`$readmem*`·`$sformat`)는
 > **`write_lvalue` 를 한 번도 부르지 않는다**. `r = $random(seed)` 는 **오늘 적격**이고, 배선 없이
@@ -415,9 +416,10 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > `changed` 만 소비하고 intra-slot 엣지 마스크를 안 남기면 값은 맞고 **posedge 가 사라진다**.
 > ④ **`warn_run_range` stderr** — 값은 이미 일치하지만 바이트 동일 게이트는 stderr 도 본다.
 >
-> S1d 전에는 `--backend native` 가 존재하지 않으므로 run.json `native.eligible` 는 문서대로
-> "설계 수준 상한"으로 남는다 — 실행기-수준 거부(예: 아레나가 아직 못 싣는 형태)와 게이트의
-> 일치(eligibility-set ≡ executor-set)는 **S1d 배선 시점의 의무**다.
+> ~~S1d 전에는 `--backend native` 가 존재하지 않으므로~~ **S1d-1 에서 배선됐다**: 플래그는 받되
+> 실행기가 없어 **항상 VM 폴백**이고, run.json 이 `backend`/`backend_requested`(폴백 가시화)와
+> `native{eligible, buildable, refused}`(범위 상한 / 오늘의 저장소 / AND 의 이유)를 싣는다.
+> eligibility-set ≡ executor-set 은 `native::runtime_gate` 로 코드가 됐다.
 
 ### S2 · 폭별 특수화 연산 (R2)
 

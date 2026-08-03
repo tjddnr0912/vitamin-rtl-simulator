@@ -181,3 +181,128 @@ fn p6_corpus_eligibility_is_72_of_72() {
     assert_eq!(total, 72);
     assert_eq!(eligible, 72, "the P6 corpus is plain RTL by construction");
 }
+
+/// The RUNTIME gate is the AND of the two halves — pinned on shapes that
+/// actually reach EVERY arm.
+///
+/// The corpus alone cannot test this: measured, all 72 designs are
+/// `eligible ∧ buildable`, so a gate hard-wired to `Ok(())` would pass. And the
+/// `buildable`-vs-`build` comparison is a tautology while `build` delegates —
+/// unless it is made on a REFUSED shape, where it becomes the guard that
+/// catches the delegation being dropped (a `build` that stopped calling
+/// `buildable` would happily lay out a design its own predicate refuses).
+#[test]
+fn the_runtime_gate_is_exactly_design_and_storage() {
+    use sim_engine::native::arena::NetArena;
+
+    let clean = "module t; reg [7:0] q = 0;\n\
+         initial begin #1 q = 1; $display(\"q=%0d\", q); $finish; end endmodule\n";
+    // Design gate refuses (heap kinds), storage would too.
+    let design_refused = "module t; string s; int q[$];\n\
+         initial begin s = \"a\"; q.push_back(1); $display(\"%s\", s); $finish; end endmodule\n";
+    // Design gate PASSES (calls are core), storage refuses (frame locals).
+    let storage_refused = "module t;\n\
+           function automatic integer inc(input integer x);\n\
+             integer loc; begin loc = x + 1; inc = loc; end\n\
+           endfunction\n\
+           integer r;\n\
+           initial begin r = inc(3); $display(\"r=%0d\", r); $finish; end\n\
+         endmodule\n";
+
+    let mut saw_clean = 0;
+    let mut saw_design_refused = 0;
+    let mut saw_storage_refused = 0;
+    for (name, src, want) in [
+        ("clean", clean, None),
+        ("design", design_refused, Some("queue")),
+        (
+            "storage",
+            storage_refused,
+            Some("frame-local storage: S3 (subroutine frames)"),
+        ),
+    ] {
+        let ir = build(src);
+        // The storage-refused shape needs the REAL sidecars: with an empty
+        // `func_table` the engine has no frame table and the design looks flat.
+        let opts = sidecar_opts(src);
+        let e = design_eligibility(&ir, &opts);
+        let storage = NetArena::buildable(&ir, &opts);
+        let gate = sim_engine::native::runtime_gate(&ir, &opts);
+        assert_eq!(
+            gate.err(),
+            want,
+            "{name}: runtime gate reason (eligible={}, storage={storage:?})",
+            e.eligible
+        );
+        assert_eq!(gate_ok(&e), gate_expected(&e, &storage), "{name}");
+        assert_eq!(e.buildable, storage.is_ok(), "{name}: buildable field");
+        assert_eq!(e.refused, want, "{name}: reported reason");
+        // Teeth for the delegation: on a refused shape the REAL build must
+        // refuse too. This is the assertion that fails if `build` ever stops
+        // calling `buildable`.
+        assert_eq!(
+            NetArena::build(&ir, &opts).is_ok(),
+            storage.is_ok(),
+            "{name}: `build` and `buildable` disagree"
+        );
+        match (e.eligible, storage.is_ok()) {
+            (true, true) => saw_clean += 1,
+            (false, _) => saw_design_refused += 1,
+            (true, false) => saw_storage_refused += 1,
+        }
+    }
+    // Non-vacuity: every arm was actually reached.
+    assert_eq!(
+        (saw_clean, saw_design_refused, saw_storage_refused),
+        (1, 1, 1),
+        "the three arms must each be exercised"
+    );
+
+    // And the property holds across the whole corpus (all clean, measured).
+    for d in corpus(0x5EED_F00D, 72) {
+        let ir = build(&d.src);
+        let opts = SimOpts::default();
+        let e = design_eligibility(&ir, &opts);
+        assert!(
+            e.eligible && e.buildable && e.refused.is_none(),
+            "{}: corpus design unexpectedly refused: {:?}",
+            d.name,
+            e.refused
+        );
+        assert!(sim_engine::native::runtime_gate(&ir, &opts).is_ok());
+    }
+}
+
+fn gate_ok(e: &sim_engine::native::NativeEligibility) -> bool {
+    e.refused.is_none()
+}
+
+fn gate_expected(
+    e: &sim_engine::native::NativeEligibility,
+    storage: &Result<(), &'static str>,
+) -> bool {
+    e.eligible && storage.is_ok()
+}
+
+/// Elaborate WITH sidecars — `func_table` is what makes a subroutine design's
+/// frame locals visible, and `SimOpts::default()` has none.
+fn sidecar_opts(src: &str) -> SimOpts {
+    struct Null;
+    impl diag::LogSink for Null {
+        fn emit(&self, _e: diag::LogEvent) {}
+    }
+    let (toks, _) = hdl_lexer::lex(src);
+    let (su, _) = hdl_parser::parse(&toks, src);
+    let sink = Null;
+    let (_ir, sc) = elaborate::elaborate_with_timescale(
+        &su.expect("unit"),
+        &sink,
+        &std::collections::BTreeMap::new(),
+        -9,
+    );
+    SimOpts {
+        two_state_nets: sc.two_state_nets,
+        func_table: sc.func_table,
+        ..SimOpts::default()
+    }
+}

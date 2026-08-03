@@ -933,7 +933,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // author their writes as `None` (= re-fire normally).
         self.st.blocking_writer = Some(proc);
         let step = match self.st.backend {
-            crate::Backend::Interpreter => run_process(self, proc, block),
+            // `Native` is resolved away by `simulate` (it falls back whenever the
+            // runtime gate refuses, and today always — there is no native
+            // executor yet), so it cannot arrive here. If that ever changes, the
+            // REFERENCE semantics are the safe default, never a panic.
+            crate::Backend::Interpreter | crate::Backend::Native => run_process(self, proc, block),
             crate::Backend::Bytecode => {
                 let tmpl = self.activity_template(proc) as usize;
                 match self.st.vm_compiled(tmpl) {

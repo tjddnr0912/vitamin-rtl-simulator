@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 253건 (최신순)
+## 인덱스 — 완료 슬라이스 254건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.288` **③층 S1d-1 — 백엔드 선택과 런타임 게이트: 판정을 두 층으로.** S1d 도 넷으로 분해(배선+게이트 → 스케줄러 코어 → settle/wired → 바이트 게이트). `Backend::Native`+`--backend native` 는 실행기가 없어 **항상 VM 폴백**하되 run.json 이 **요청이 아니라 결과**를 적는다(요청을 적으면 돌지 않은 실행기를 보고하게 된다). ⭐ `native{eligible, buildable, refused}` = **범위 상한 / 오늘의 저장소 / AND 의 이유** — 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible ∧ ¬buildable). `buildable` 은 `build` 의 **무할당 쌍둥이**(build 가 먼저 호출 = 드리프트 불가). S1c 가 남긴 필수 4건 중 **2건 종료** …
 - `4.5.287` **③층 S1c — 쓰기 퍼널, 그리고 그 게이트가 내 퍼널의 silent-wrong 을 잡았다.** 엔진 write 사슬의 Value-수준 미러(기하는 살리고 적격성이 답한 레인은 지운다·아레나 원소는 구성상 워드 정렬이라 정렬 테스트가 접힌다). ⭐ 문장 단위 차분(한 문장 실행 후 `changed`+전 스토어 비교)이 **방금 쓴 퍼널에서 결함 1건**을 냈다 — **real 값 rhs + real 넷 없음**(적격!)에서 엔진은 §6.2 반올림, 아레나는 IEEE 비트 그대로. 원인은 코드가 아니라 **주석의 논증**: "Real 은 아레나를 못 짓는다"는 **목적지** 쪽 답인데 강제 변환 조건은 **값** 쪽이다. 오프셋 해석기는 `eval::resolve_offsets` 로 **한 철자**(X/Z 인덱스를 한쪽만 버리는 발산 차단) · 게이트에 `force_release`/`disable` **문장 스캔** 2행(사이드카는 이들을 보고하지 않는다·적격률 79/79 불변) · **S1d 착수 前 필수 3건**(프레임 로컬 쓰기·dirty/edge 채널·`warn_run_range`) 기록 …
 - `4.5.286` **③층 S1a+S1b — R1 아레나가 서고, 기존 eval 이 그 위에서 돈다.** S1 을 4 내부 단계로 분해(스케줄러를 한 번에 짓지 않는다 — 검증이 구현을 못 따라간다)하고 첫 둘을 완결: `NetArena`(원소당 `(val,unk)` 인접·워드 정렬·슬롯 desc 가 per-access 질문 전부를 대체) + `impl NetReader for NetArena`(기존 `EvalCtx` 가 제네릭이라 **평가 의미 공유 = parity by construction**·차분 표면이 read-path 로 좁아짐). **R1 중단 판정 통과**(corpus 72 폭별 슬롯 빌드 전수 성공). 게이트 = init parity 297넷 + 워드 경계 라운드트립 + **미러 차분 17,940건 발산 0**(정확 핀). 평가기 교체는 R2=S2 의 일 …
 - `4.5.285` **③층 T0+S0 — 계기 두 개를 달고 적격률을 쟀다: 79/79, S1 go.** run.json 에 `codegen`(②층 VM claim + 거부 사유 히스토그램 — REAL gate 와 **한 walk 공유**라 드리프트가 구조적으로 불가)·`native`(③층 설계 수준 판정 — SimOpts **`..` 없는 전수 destructure** + **NetKind 스캔**[plain `int q[$]` 는 사이드카가 없다]). `func_table` 은 §4.3 초판의 거부 목록에서 **코어로**(개정 4 가 T1/T2 를 S3 에 흡수). 함정 = `opts.fork_modes` 가 스케줄러로 move — 런 끝에서 읽었으면 fork 설계가 빈 테이블 위에서 eligible 로 조작될 뻔(컴파일러가 잡음). **측정 = 실사용 7종 + corpus 72 전부 적격 → S0 중단 판정 통과, S1 go**. keccak 호출형 = `able 1/4 · frame_bodies 3` 이 JSON 한 줄(round-26 맹점의 계기화). ≥30× 기준 vs v1 string 거부의 모순은 **열어 둔 채 기록**(preview/21 §7.3.1) …
@@ -342,6 +343,62 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.288 ③층 S1d-1 — 백엔드 선택과 런타임 게이트: 판정을 **두 층**으로 (2026-08-03, branch feat-tier3-s1d-gate, format 26 불변) ✅
+
+**S1d 도 넷으로 갈랐다**(S1 분해가 결함 2건을 잡은 그 방식): **S1d-1 배선+런타임 게이트** →
+S1d-2 스케줄러 코어+dirty/edge → S1d-3 settle+wired 해소 → S1d-4 바이트 동일 게이트. 이 조각은
+**되돌리기 싸고**, 이후 전부를 end-to-end 로 측정 가능하게 만든다.
+
+**무엇.** `Backend::Native` + `--backend native` + `native::runtime_gate`(**설계 게이트 ∧ 아레나
+빌드**). 실행기가 아직 없으므로 요청은 **항상 VM 으로 폴백**하고, `simulate` 가 EFFECTIVE 백엔드를
+한 번 결정해 `SimResult.backend` 로 싣는다 — run.json 은 **요청이 아니라 결과**를 적는다(요청을
+그대로 적으면 **돌지도 않은 실행기를 보고**하게 된다). `scan_arm` 의 강제된 새 arm 은 패닉이 아니라
+**레퍼런스 인터프리터**(안전 기본값).
+
+**⭐ 판정을 두 층으로 나눈 것이 이 조각의 값이다.** `native{eligible, buildable, refused}`:
+`eligible` = v1 **범위**가 받는가(설계 수준 상한) · `buildable` = 오늘의 **저장소**가 담을 수 있는가
+(`NetArena::buildable` — `build` 의 **무할당 쌍둥이**로, `build` 가 그것을 먼저 부르므로 두 답이 갈릴
+수 없다) · `refused` = 둘의 AND 가 거부한 이유 또는 `null`. **한 플래그로 접었으면 상한이 능력으로
+읽혔을 자리다** — 서브루틴 설계는 eligible 이면서 buildable 이 아니고, 그 격차(79/79 vs 78/79)가
+이제 손 계수가 아니라 **run.json 에서 기계로 읽힌다**.
+
+**S1c 리뷰가 남긴 필수 4건 중 2건이 닫혔다**: ① 프레임 로컬(구조적 거부) ② 런타임 게이트 통일.
+남은 둘 = 퍼널을 안 거치는 효과 배선 · dirty/edge 채널(+ `warn_run_range` stderr).
+
+**적대 리뷰(soundness+differential 단일 리뷰어) — 핵심 안전 속성은 깨지지 않았다.** "native 를
+선택해도 출력 바이트가 안 움직인다"를 **네 사분면 전부**(적격∧빌드가능 / 적격∧빌드불가 / 설계거부 /
+fork)에서 stdout+stderr+VCD+exit code 로 실측, **staged 경로**(`vrun`)와 rc≠0 런까지 확인. 결정
+지점 1개·`st.backend` 독자 1개·`Backend` 에 `_` fallthrough 0·artifact/해시 노출 0 도 코드로 확인.
+**결함은 전부 보고 축**이었고 둘이 실질:
+
+**① MAJOR — 폴백 이유가 run.json 에 안 실리는데 주석 둘이 실린다고 주장했다**(§4.5.287 과 **같은
+실패 모드**: 슬라이스가 존재하는 이유인 바로 그 속성에 대한 거짓 주석). 깨끗한 설계에서
+`--backend vm` 과 `--backend native` 의 run.json 이 **완전히 동일**해서, 매니페스트만 읽는 소비자는
+폴백을 볼 수 없었다(`refused: null` 이 `backend: "vm"` 옆에 있으면 *"막은 게 없는데 vm 이 돌았다"*
+로 읽힌다). 수정 = **`backend_requested` 필드 신설**(리뷰어 권고대로 `native.refused` 에 접지 않았다 —
+그러면 판정이 `--backend` 에 의존하게 된다) + 주석 둘을 사실로.
+
+**② MINOR — 새 게이트 테스트가 vacuous 였다**(리뷰어가 **측정**: corpus 72 에서 `elig_false=0,
+storage_err=0, gate_err=0` — `runtime_gate` 가 `Ok(())` 여도 통과). 게다가 `buildable ≡ build` 는
+`build` 가 위임하는 한 **항진명제**였다. 수정 = 세 형태(깨끗/설계거부/저장소거부)로 **모든 arm 을
+실제로 밟고** 이유 문자열을 단언 + **arm 도달 카운트를 단언**(non-vacuity) + 위임 teeth 는 **거부
+형태에서** 비교(위임을 빼면 그때 터진다). **teeth 검증**: 게이트를 `Ok(())` 로 부수면 새 테스트가
+실패한다(옛 것은 통과했다).
+
+부수 반영: `runtime_gate` 를 끼워 넣으며 `design_eligibility` 의 rustdoc 이 **다른 함수에 붙어
+있었다**(destructure 를 설명하는 지시문이 그 destructure 없는 함수에) · `refused` 가 **어휘 둘**을
+섞는다는 사실 명문화(설계=맵의 키·저장소=맵에 없는 문구) · `--help`/doc 주석의 `<interp|vm>` stale ·
+`scan_arm` 의 Native arm 에 `debug_assert`(문서상 도달불가를 **테스트 가능**하게) · 기존 두 테스트를
+**세 번째 값까지** 확장(backend-invariance·staged).
+
+**게이트.** `--backend native` 가 **출력 바이트를 안 움직인다**(stdout+VCD, 네 사분면 + staged) ·
+runtime gate 가 **모든 arm 에서** 두 반쪽과 일치 · 전 스위트 **5100 green** · clippy `-D warnings` ·
+fmt · format_version 26 불변 · schema_ver 1 유지(기존 kind 위 필드 추가).
+
+**기록(수정 안 함)**: staged 경로에는 obs 표면이 아예 없어(`vrun --obs-dir` 는 거부) `vrun --backend
+native` 의 폴백은 **어느 표면에도 신호가 없다** — 선재 제약(obs 는 one-shot 전용)이고, 그래서 staged
+바이트 비교를 테스트로 못 박았다.
 
 #### 4.5.287 ③층 S1c — 쓰기 퍼널, 그리고 그 게이트가 **내 퍼널의 silent-wrong** 을 잡았다 (2026-08-03, branch feat-tier3-s1c-write, format 26 불변) ✅
 

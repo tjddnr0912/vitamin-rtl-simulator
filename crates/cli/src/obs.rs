@@ -53,8 +53,14 @@ pub struct ObsRun<'a> {
     pub fatals: u32,
     /// `"PASS"|"FAIL"` (PASS iff `exit_code == 0`).
     pub status: &'static str,
+    /// What `--backend` ASKED for (same vocabulary). Present because it can
+    /// differ from `backend`: `native` falls back while no native executor
+    /// exists, and `native.refused` cannot reveal that — it describes the
+    /// DESIGN and is `null` precisely when nothing refuses it. Comparing the
+    /// two fields is the only way a manifest reader sees an unhonored request.
+    pub backend_requested: &'static str,
     /// The EFFECTIVE process-body executor of this run, in the `--backend` flag's
-    /// vocabulary (`"vm"`|`"interp"`). Recorded so `codegen` below cannot be
+    /// vocabulary (`"vm"`|`"interp"`|`"native"`). Recorded so `codegen` below cannot be
     /// misread: that object is a static capability census, and on an
     /// `--backend interp` run `able == total` with 0% of the runtime on the VM
     /// is normal — this field is what says so (soundness-review F1).
@@ -147,10 +153,14 @@ impl ObsRun<'_> {
         s.push_str(&self.fatals.to_string());
         s.push_str("},\n  \"status\": ");
         json_str(&mut s, self.status);
-        // The executor that actually ran (see the field docs — guards `codegen`
-        // against the "able==total means the VM ran it" misreading).
+        // What ran, and what was asked for (see the field docs — the pair is
+        // what makes an unhonored `--backend native` visible, and `backend`
+        // guards `codegen` against the "able==total means the VM ran it"
+        // misreading).
         s.push_str(",\n  \"backend\": ");
         json_str(&mut s, self.backend);
+        s.push_str(",\n  \"backend_requested\": ");
+        json_str(&mut s, self.backend_requested);
         // T0: the ②층(bytecode VM) claim on this design + why the rest was
         // refused. `able == total` with `frame_bodies > 0` and a `frame_call`/
         // `user_call_in_expr` row is the round-26 shape: full process coverage,
@@ -179,6 +189,22 @@ impl ObsRun<'_> {
         } else {
             "false"
         });
+        // The STORAGE-level half next to the scope-level one: they answer
+        // different questions and their counts differ (a subroutine design is
+        // eligible and not buildable), so folding them into one flag would let
+        // an upper bound read as a capability. `refused` is the RUNTIME gate's
+        // answer — `null` means nothing refuses this design.
+        s.push_str(", \"buildable\": ");
+        s.push_str(if self.native.buildable {
+            "true"
+        } else {
+            "false"
+        });
+        s.push_str(", \"refused\": ");
+        match self.native.refused {
+            Some(r) => json_str(&mut s, r),
+            None => s.push_str("null"),
+        }
         s.push_str(", \"reject_reasons\": {");
         for (i, (k, n)) in self.native.reject_reasons.iter().enumerate() {
             if i > 0 {

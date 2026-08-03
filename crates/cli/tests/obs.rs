@@ -728,10 +728,14 @@ fn run_json_codegen_pins_the_vm_claim_and_reasons() {
         "full manifest:\n{manifest}"
     );
     // S0: framed user calls are CORE (rev-4: S3 absorbs T1/T2), and #delay is
-    // the v1 target's normal TB shape — so this design is tier-3 eligible.
+    // the v1 target's normal TB shape — so this design is within v1's SCOPE.
+    // It is NOT buildable, though: a subroutine's locals live in the
+    // activation's frame window, not a net slot. The two halves reported apart
+    // is the point — one flag would let the upper bound read as a capability.
     assert_eq!(
         field(&manifest, "native"),
-        "{\"eligible\": true, \"reject_reasons\": {}}",
+        "{\"eligible\": true, \"buildable\": false, \
+         \"refused\": \"frame-local storage: S3 (subroutine frames)\", \"reject_reasons\": {}}",
         "full manifest:\n{manifest}"
     );
     // The effective executor is recorded next to the census (soundness F1):
@@ -748,11 +752,20 @@ fn run_json_codegen_pins_the_vm_claim_and_reasons() {
 fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
     let (_, c1, obs1) = run(PASS_SV, &[]);
     let (_, c2, obs2) = run(PASS_SV, &["--backend", "interp"]);
-    assert_eq!((c1, c2), (0, 0));
+    let (_, c3, obs3) = run(PASS_SV, &["--backend", "native"]);
+    assert_eq!((c1, c2, c3), (0, 0, 0));
     let m1 = read(&obs1.join("run.json"));
     let m2 = read(&obs2.join("run.json"));
+    let m3 = read(&obs3.join("run.json"));
     assert_eq!(field(&m1, "backend"), "\"vm\"");
     assert_eq!(field(&m2, "backend"), "\"interp\"");
+    // ③층: requested but not honored — the PAIR is what shows it, since
+    // `native.refused` is null here (nothing about the DESIGN refuses it).
+    assert_eq!(field(&m3, "backend"), "\"vm\"", "{m3}");
+    assert_eq!(field(&m3, "backend_requested"), "\"native\"", "{m3}");
+    assert_eq!(field(&m1, "backend_requested"), "\"vm\"");
+    assert_eq!(field(&m3, "native"), field(&m1, "native"), "verdict moved");
+    assert_eq!(field(&m3, "codegen"), field(&m1, "codegen"), "census moved");
     assert_eq!(
         field(&m1, "codegen"),
         field(&m2, "codegen"),
@@ -783,7 +796,7 @@ fn run_json_native_pins_the_reject_families() {
     let manifest = read(&obs.join("run.json"));
     assert_eq!(
         field(&manifest, "native"),
-        "{\"eligible\": false, \
+        "{\"eligible\": false, \"buildable\": false, \"refused\": \"fork\", \
          \"reject_reasons\": {\"fork\": 1, \"queue\": 1, \"string\": 1}}",
         "full manifest:\n{manifest}"
     );

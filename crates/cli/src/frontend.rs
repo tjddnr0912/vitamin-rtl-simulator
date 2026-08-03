@@ -629,18 +629,24 @@ pub(crate) fn run_vita_str_gated(
                 text.push('\n');
             }
         }
-        // The EFFECTIVE executor, in the `--backend` flag's vocabulary — the
-        // same default resolution `sim_opts()` applied (`None` ⇒ the VM).
-        let backend = match opts.backend.unwrap_or_default() {
+        // The EFFECTIVE executor, in the `--backend` flag's vocabulary — read
+        // from the RESULT, not from the request: `--backend native` falls back
+        // to the VM (there is no native executor yet), and a manifest that
+        // echoed the request would report an executor that never ran.
+        let name = |b| match b {
             sim_engine::Backend::Interpreter => "interp",
             sim_engine::Backend::Bytecode => "vm",
+            sim_engine::Backend::Native => "native",
         };
+        let backend = name(result.backend);
+        let backend_requested = name(opts.backend.unwrap_or_default());
         emit_obs(
             dir,
             file,
             &text,
             &opts.plusargs,
             backend,
+            backend_requested,
             &result,
             inner,
             final_code,
@@ -661,6 +667,7 @@ pub(crate) fn emit_obs(
     text: &str,
     plusargs: &[String],
     backend: &'static str,
+    backend_requested: &'static str,
     result: &sim_engine::SimResult,
     inner: &StderrSink,
     final_code: i32,
@@ -709,6 +716,7 @@ pub(crate) fn emit_obs(
             "FAIL"
         },
         backend,
+        backend_requested,
         codegen: &result.codegen,
         native: &result.native,
         utc_unix_s,

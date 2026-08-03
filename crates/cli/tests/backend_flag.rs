@@ -153,11 +153,30 @@ fn the_staged_run_honours_the_flag_and_still_matches() {
     let (ov, ok_v) = vita_in(&dir, &["vrun", "--backend", "vm", "-o", "v.vcd", "t.velab"]);
     assert!(ok_v && !ov.contains("error[VITA"), "vrun vm failed:\n{ov}");
 
+    // ③층: `native` falls back on the staged path too, and must move nothing.
+    // The staged flow has NO obs surface (`vrun --obs-dir` is rejected), so this
+    // byte comparison is the ONLY thing standing between a fall-back and a
+    // silent behaviour change there — which is why it is pinned here.
+    let (on, ok_n) = vita_in(
+        &dir,
+        &["vrun", "--backend", "native", "-o", "n.vcd", "t.velab"],
+    );
+    assert!(
+        ok_n && !on.contains("error[VITA"),
+        "vrun native failed:\n{on}"
+    );
+
     assert_eq!(oi, ov, "staged stdout differs between backends");
+    assert_eq!(on, ov, "staged stdout moved when native was requested");
     assert_eq!(
         std::fs::read(dir.join("i.vcd")).unwrap(),
         std::fs::read(dir.join("v.vcd")).unwrap(),
         "staged VCD bytes differ between backends"
+    );
+    assert_eq!(
+        std::fs::read(dir.join("n.vcd")).unwrap(),
+        std::fs::read(dir.join("v.vcd")).unwrap(),
+        "staged VCD bytes moved when native was requested"
     );
     assert!(
         oi.contains("a="),
@@ -648,5 +667,117 @@ fn the_scalar_write_specialisation_still_honours_force_and_real() {
             assert!(o.contains(want), "{args:?}: missing `{want}`:\n{o}");
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ── ③층 (doc-21 S1d): `--backend native` selects a backend that does not execute
+// yet. The contract while that is true: it NEVER changes an output byte, and the
+// observability rail says which executor actually ran — a fallback only the
+// wall-clock could reveal would be the wrong-log doc-19 §3 forbids.
+
+/// Extract the value token of a top-level `"key": <value>` line from run.json.
+fn manifest_field<'a>(json: &'a str, key: &str) -> &'a str {
+    for line in json.lines() {
+        let t = line.trim().trim_end_matches(',');
+        if let Some(rest) = t.strip_prefix(&format!("\"{key}\": ")) {
+            return rest;
+        }
+    }
+    ""
+}
+
+#[test]
+fn requesting_native_falls_back_without_moving_an_output_byte() {
+    let dir = scratch("native_fb");
+    std::fs::write(dir.join("t.sv"), MIXED).unwrap();
+
+    let (vm_out, ok1) = vita_in(&dir, &["--backend", "vm", "-o", "vm.vcd", "t.sv"]);
+    let (nat_out, ok2) = vita_in(&dir, &["--backend", "native", "-o", "nat.vcd", "t.sv"]);
+    assert!(ok1 && ok2, "runs failed:\n{vm_out}\n---\n{nat_out}");
+    assert_eq!(vm_out, nat_out, "requesting native moved stdout");
+    let vm_vcd = std::fs::read(dir.join("vm.vcd")).unwrap();
+    let nat_vcd = std::fs::read(dir.join("nat.vcd")).unwrap();
+    assert_eq!(vm_vcd, nat_vcd, "requesting native moved VCD bytes");
+
+    // …and run.json names the executor that RAN, not the one requested.
+    let (o, ok) = vita_in(
+        &dir,
+        &[
+            "--backend",
+            "native",
+            "--obs-dir",
+            "obs",
+            "-o",
+            "o.vcd",
+            "t.sv",
+        ],
+    );
+    assert!(ok, "obs run failed:\n{o}");
+    let m = std::fs::read_to_string(dir.join("obs/run.json")).unwrap();
+    assert_eq!(manifest_field(&m, "backend"), "\"vm\"", "{m}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The runtime gate has TWO halves and run.json reports both, because their
+/// answers differ: a design with subroutines is within v1's SCOPE (calls are
+/// core — S3 compiles them) but outside what today's STORAGE can hold (frame
+/// locals live in an activation window, not a net slot). Folding them into one
+/// flag would let an upper bound read as a capability.
+#[test]
+fn the_native_verdict_reports_scope_and_storage_separately() {
+    let dir = scratch("native_verdict");
+
+    // Clean design: nothing refuses it — it runs natively the moment S1d lands.
+    std::fs::write(dir.join("t.sv"), MIXED).unwrap();
+    let (o, ok) = vita_in(&dir, &["--obs-dir", "obs1", "-o", "a.vcd", "t.sv"]);
+    assert!(ok, "{o}");
+    let m = std::fs::read_to_string(dir.join("obs1/run.json")).unwrap();
+    assert_eq!(
+        manifest_field(&m, "native"),
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",
+        "{m}"
+    );
+
+    // Subroutine design: eligible (scope) but NOT buildable (storage).
+    std::fs::write(
+        dir.join("f.sv"),
+        "module t;\n\
+           function automatic integer inc(input integer x);\n\
+             integer loc; begin loc = x + 1; inc = loc; end\n\
+           endfunction\n\
+           integer r;\n\
+           initial begin r = inc(3); $display(\"r=%0d\", r); #1 $finish; end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let (o, ok) = vita_in(&dir, &["--obs-dir", "obs2", "-o", "b.vcd", "f.sv"]);
+    assert!(ok && o.contains("r=4"), "{o}");
+    let m = std::fs::read_to_string(dir.join("obs2/run.json")).unwrap();
+    assert_eq!(
+        manifest_field(&m, "native"),
+        "{\"eligible\": true, \"buildable\": false, \
+         \"refused\": \"frame-local storage: S3 (subroutine frames)\", \"reject_reasons\": {}}",
+        "{m}"
+    );
+
+    // Design-gate refusal: `refused` names the family, the map keeps the detail.
+    std::fs::write(
+        dir.join("q.sv"),
+        "module t;\n\
+           string s; int q[$];\n\
+           initial begin s = \"a\"; q.push_back(1);\n\
+             $display(\"%s %0d\", s, q[0]); #1 $finish; end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let (o, ok) = vita_in(&dir, &["--obs-dir", "obs3", "-o", "c.vcd", "q.sv"]);
+    assert!(ok, "{o}");
+    let m = std::fs::read_to_string(dir.join("obs3/run.json")).unwrap();
+    assert_eq!(
+        manifest_field(&m, "native"),
+        "{\"eligible\": false, \"buildable\": false, \"refused\": \"queue\", \
+         \"reject_reasons\": {\"queue\": 1, \"string\": 1}}",
+        "{m}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -11,7 +11,7 @@
 
 ## A. 현재 상태 한 줄 요약
 
-> **★★ 2026-08-03 최우선 = ③층 S1d(자기 스케줄러 + `--backend native` 배선)** (§B 0번 · 정본 = [ROADMAP §5.0](ROADMAP.md) / [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)). **T0+S0(§4.5.285)·S1a+S1b(§4.5.286)·S1c(§4.5.287) 완료** — 적격률 79/79 · 아레나 저장·read-path·쓰기 퍼널이 전부 엔진과 차분 일치(미러 17,940 + 문장 단위 3,150+228, 발산 0). ⚠️ **S1d 착수 前 필수 4건**: 런타임 게이트 = 설계 게이트 ∧ 아레나 빌드(프레임 로컬은 `build` 가 이미 구조적으로 거부) · **퍼널 밖 효과 배선**(`$random(seed)` 류는 `write_lvalue` 를 안 거치고 오늘 적격이다) · dirty/edge 채널(없으면 posedge 가 사라진다) · `warn_run_range` stderr. 아래 정확성 큐는 사라지지 않고 **그 뒤로 밀린다**.
+> **★★ 2026-08-03 최우선 = ③층 S1d-2(아레나 스케줄러 코어 + dirty/edge 채널)** (§B 0번 · 정본 = [ROADMAP §5.0](ROADMAP.md) / [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)). **T0+S0(§4.5.285)·S1a+S1b(§4.5.286)·S1c(§4.5.287)·S1d-1(§4.5.288) 완료** — 적격률 79/79 · 아레나 저장·read-path·쓰기 퍼널이 전부 엔진과 차분 일치(미러 17,940 + 문장 단위 3,150+228, 발산 0). S1d-1 이 백엔드 선택과 **런타임 게이트**(설계 ∧ 아레나 빌드)를 배선했고 run.json 이 두 층 판정을 싣는다(79/79 vs **78/79**). ⚠️ **남은 필수 2건**: **퍼널 밖 효과 배선**(`$random(seed)` 류는 `write_lvalue` 를 안 거치고 오늘 적격이다) · `warn_run_range` stderr. S1d-2 = 리전 큐·델타·NBA + **dirty/edge 채널**(없으면 값은 맞고 posedge 가 사라진다). 아래 정확성 큐는 사라지지 않고 **그 뒤로 밀린다**.
 >
 > **직전 = §4.5.283 (외부 round-27, 최고 심각도)** — `@(*)` 가 attribute instance 로 렉싱되어 **주석이 실행 코드로 승격**되고 `errors=0` 으로 틀린 값이 나왔다. 원문 정규식 스캔이 주석·문자열을 뚫고, 짝을 못 찾으면 조용히 폴백해 발현이 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달렸다(파일 경계도 넘었다). attribute 인식을 **토큰 스트림**으로 옮기고, `@` 직후는 event control 로 두고, 안 닫힌 opener 를 loud 로 만들어 닫았다 — 3-way 16형 **회귀 0 · 수정 8**.
 
@@ -30,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **★★ ③층 S1d — 스케줄러 + `--backend native` 배선**(T0·S0·S1a·S1b·S1c ✅ §4.5.285/286/287). 아레나 위 리전 큐·델타·NBA·cont-assign settle + 백엔드 선택. 게이트 = corpus 적격분 **stdout+VCD 바이트 동일**. ⚠️ 착수 前 필수 4건 = 런타임 게이트 통일 · 퍼널 밖 효과 · dirty/edge 채널 · `warn_run_range`. runtime 게이트 = S0 ∧ 아레나 빌드 ∧ frame 처리 = **eligibility≡executor** | 엔진 오라클 in-crate 차분 · `--backend` A/B |
+| **0** | **★★ ③층 S1d-2 — 스케줄러 코어 + dirty/edge**(…S1c·S1d-1 ✅ §4.5.285~288). 아레나 위 리전 큐·델타·NBA + `note_change`/`accumulate_edge`(쓰기 퍼널의 두 store 지점에 달린다). 그 다음 S1d-3(settle+wired) → S1d-4(corpus **stdout+VCD 바이트 동일**). ⚠️ 남은 필수 2건 = 퍼널 밖 효과 배선 · `warn_run_range` | 엔진 오라클 in-crate 차분 · `--backend` A/B |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 

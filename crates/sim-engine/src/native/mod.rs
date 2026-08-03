@@ -33,6 +33,8 @@
 
 use sim_ir::{NetKind, SimIr};
 
+use crate::native::arena::NetArena;
+
 use crate::SimOpts;
 
 pub mod arena;
@@ -54,6 +56,23 @@ pub struct NativeEligibility {
     /// No design-level disqualifier found (see module docs: an upper bound
     /// until the S3 body-level gate exists).
     pub eligible: bool,
+    /// The STORAGE-level half: `NetArena::buildable` accepted this design.
+    /// Reported next to `eligible` rather than folded into it because they
+    /// answer different questions and the numbers differ — `eligible` is what
+    /// v1's SCOPE admits, `buildable` is what today's storage can actually
+    /// take (a design with subroutines is eligible and not buildable).
+    pub buildable: bool,
+    /// Why the RUNTIME gate — design ∧ storage — said no. `None` ⇒ nothing
+    /// refuses this design; it runs natively the moment an executor exists.
+    ///
+    /// TWO VOCABULARIES, deliberately: when the DESIGN gate refused, this is a
+    /// KEY of `reject_reasons` (and, when several fired, the first in that map's
+    /// byte-lexicographic order — deterministic, but "a" reason, not "the" one:
+    /// removing that feature can expose the next). When the design gate passed
+    /// and the STORAGE refused, it is that refusal's own text, which appears in
+    /// no map. A consumer joining `refused` back to `reject_reasons` must treat
+    /// a miss as the storage case rather than as an error.
+    pub refused: Option<&'static str>,
     /// Reject FAMILY → count of offending items. The unit varies per family
     /// (nets for storage kinds, table entries for sidecars) — a row answers
     /// "how much of this feature exists", and ANY non-zero row disqualifies.
@@ -67,6 +86,23 @@ fn flag(out: &mut std::collections::BTreeMap<&'static str, u32>, family: &'stati
     if n > 0 {
         *out.entry(family).or_insert(0) += n as u32;
     }
+}
+
+/// The RUNTIME gate: **design gate ∧ arena build**, the two halves that must
+/// agree before `--backend native` may run anything.
+///
+/// This exists as one function because the S1d obligation is exactly that they
+/// stop disagreeing: `design_eligibility` alone says yes to designs
+/// `NetArena::build` refuses (a subroutine design), and an executor wired to
+/// the design gate alone would run one of those on storage that cannot hold it.
+/// The reason string is the design gate's first reject family, or the storage's
+/// own refusal.
+pub fn runtime_gate(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static str> {
+    let e = design_eligibility(ir, opts);
+    if let Some(r) = e.refused {
+        return Err(r);
+    }
+    Ok(())
 }
 
 /// S0 (doc-21 §5/§7.3): can tier-3 v1 take this WHOLE design? Answered from
@@ -276,8 +312,21 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     flag(&mut out, "assoc", assoc_n);
     flag(&mut out, "string", string_n);
 
+    // The storage-level half. `buildable` is allocation-free, so asking on every
+    // run costs one scan — worth it: run.json then carries BOTH numbers and the
+    // eligible-vs-buildable gap is measured rather than hand-counted.
+    let storage = NetArena::buildable(ir, opts);
+    let eligible = out.is_empty();
+    let refused = if !eligible {
+        // The first reject family names it; the full map is right there for detail.
+        out.keys().next().copied()
+    } else {
+        storage.err()
+    };
     NativeEligibility {
-        eligible: out.is_empty(),
+        eligible,
+        buildable: storage.is_ok(),
+        refused,
         reject_reasons: out,
     }
 }
