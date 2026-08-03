@@ -405,6 +405,32 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > | **S1d-3 ✅ (2026-08-03)** | **wake 결정** — 변경 집합 → 어느 프로세스가 ready 이고 어떤 순서인가(정적 Edge = pass (a) · 정적 Level/**Comb/Latch** = pass (b) `arm=None`). 적격성이 fork/clocking 을 거부하므로 activity ≡ process·`Ready` 가 proc id 로 붕괴 | ✅ 결정 차분(Active 큐 **델타** 대조 · 두 관측 granularity) · **8규칙 teeth** · ⭐ 리뷰가 **조합 프로세스 전체 미등록**을 잡았다 |
 > | **S1d-4** | 리전 큐·델타 루프·NBA·**in-body 웨이터**(`busy` 유지자 포함) → cont-assign settle·wired 해소 → 바이트 동일 게이트 | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일** |
 >
+> **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
+> 엔진은 이미 이 이음매를 **의도적으로** 만들어 뒀다(`exec/mod.rs`: *"`apply_effect` 의 커널 호출이
+> P7b 의 트레이트 표면이 된다"*). 실측으로 그 경계가 **어디까지인지** 확정했다:
+>
+> | | 제네릭인가 | 결과 |
+> |---|---|---|
+> | `compute_effect` / `apply_effect` | ✅ `K: Kernel` | 문장 단위 의미 **전부 재사용** — `$display` 디스패치·NBA 예약·형변환까지 |
+> | `run_process`(바디 워크: 블록 순회·terminator·정지/재개) | ❌ `&mut Scheduler` 고정 | 아레나 쪽이 **자기 워크를 가져야** 한다 |
+> | `Kernel` 구현자 | **1개**(`Scheduler`) | 두 번째 구현자가 곧 ③층 실행기다 |
+>
+> **`Kernel` 표면 52 메서드가 정확히 셋으로 갈린다** — 그리고 이 분해가 S1d-4 의 진짜 크기다:
+> **① 코어 ~16**(eval·write·NBA·delay·systask·truthy·rearm·fatal) = 반드시 구현 ·
+> **② 게이트가 거부하는 가족 ~9**(force/release·queue·assoc-iter·class·disable fork) = S0 가
+> 도달 불가로 만들지만 **트레이트는 본문을 요구한다** — 각각 정직한 답이 필요(조용한 no-op 은 금지) ·
+> **③ ~27 = 바로 그 "퍼널 밖 효과" 선결 과제**(seeded `$random`/`$dist_*`·`$cast`·`$value$plusargs`·
+> 파일 계열 16·`$sformatf`). **즉 노트로 들고 있던 그 선결 과제는 트레이트가 구조적으로 강제한다** —
+> `Kernel` 을 구현하면서 그것들을 답하지 않을 방법이 없다.
+>
+> 그래서 S1d-4 는 다시 쪼갠다: **S1d-4a = `impl Kernel` 코어 16 + 거부 가족 9 의 정직한 본문**
+> (게이트 = 같은 상태·같은 문장에서 `apply_effect` 결과가 양 스토어 동일 — 문장 실행기를 **공유**
+> 하므로 미러가 아니라 **구조적** 동일) → **S1d-4b = 바디 워크**(블록·terminator·정지) →
+> **S1d-4c = 리전 큐·델타·in-body 웨이터·`busy`** → **S1d-4d = settle·wired + 바이트 동일 게이트**.
+> ③의 27개는 4a 에서 **정직한 loud** 로 두고(도달하면 fatal, 조용한 오답 불가), 실제 배선은 그
+> 가족이 필요한 설계를 게이트가 받을 때 — 즉 **`rhs_is_stmt_effect` 를 S0 거부로 올릴지**를 4a 에서
+> 결정한다(tier-2 와 같은 술어를 쓰면 판정이 갈릴 수 없다).
+>
 > ⚠️ **S1d 착수 前 필수 4건**(S1c 와 그 적대 리뷰가 발굴 · 정본은 `native/write.rs` 모듈 독):
 > ① ~~프레임 로컬~~ · ~~런타임 게이트 통일~~ **둘 다 닫힘(S1d-1)** — `NetArena::build`/`buildable` 이
 > `func_table` 을 거부하고, `native::runtime_gate` 가 **설계 게이트 ∧ 아레나 빌드**다. run.json 이

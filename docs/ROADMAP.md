@@ -126,7 +126,12 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-0. ★★ **③층 S1d-4 — 리전 큐 · 델타 루프 · NBA · in-body 웨이터** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
+0. ★★ **③층 S1d-4a — `impl Kernel`** (§5 · 정본 = [preview/21 §5 S1 분해 표 + S1d-4 그라운딩 블록](preview/21-tier3-native-backend.md)).
+   **그라운딩이 계획을 바꿨다(2026-08-03)**: ③층 실행기는 두 번째 실행기가 아니라 **`Kernel` 의 두
+   번째 구현자**다 — `compute_effect`/`apply_effect` 가 이미 `K: Kernel` 제네릭이라 문장 단위 의미가
+   **전부 재사용**되고(`$display`·NBA·형변환) byte-identity 가 미러가 아니라 **구조적**이 된다.
+   `run_process`(바디 워크)만 `&mut Scheduler` 고정이라 4b 로 분리. 52 메서드 = 코어 ~16 + 게이트
+   거부 ~9 + **~27 = "퍼널 밖 효과" 선결 과제**(트레이트가 구조적으로 강제 — 노트로 들고 있을 수 없다).
    T0·S0(§4.5.285)·S1a~c(§4.5.286/287)·S1d-1(§4.5.288)·S1d-2(§4.5.289)·**S1d-3(§4.5.290)** 완료 —
    저장·read-path·쓰기 퍼널·dirty/edge 채널·**wake 결정**이 전부 엔진과 차분 일치한다.
    **S1d-4 범위** = Active/Inactive/NBA 리전 큐 + 델타 루프 + **in-body 웨이터**(`WaitCause::Edge`/
