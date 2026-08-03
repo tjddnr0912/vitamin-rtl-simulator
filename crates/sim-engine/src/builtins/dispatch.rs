@@ -37,6 +37,34 @@ pub(crate) fn dispatch(
     args: &[u32],
     sid: u32,
 ) -> Ctl {
+    dispatch_with(sched, None::<&crate::SimState>, which, fmt, args, sid)
+}
+
+/// `dispatch` against an ALTERNATE net store (tier-3, S1d-4b-2).
+///
+/// `nets = None` is the engine's own state and every arm below then reduces to
+/// the call it made before, so the engine path is unchanged by construction.
+/// `Some(&arena)` is tier-3: the format engine reads net VALUES from the arena
+/// while everything else — the file table, the output sink, `$time`, the RNG,
+/// the format cache, the assertion-control side tables — comes from `sched`,
+/// which is where those live for both backends.
+///
+/// ⚠️ SCOPE. Only the RENDER path takes the alternate store. Arms that read the
+/// store directly rather than through the formatter (`$dumpvars`'s full
+/// snapshot, `$writemem*`'s memory read, `$dumpfile`/`$fclose`/`$dumplimit`'s
+/// arguments, `$timeformat`'s non-literal arguments) still read `sched.st`, and
+/// tier-3 designs reaching them would render from the wrong store. They are not
+/// silently accepted: `native::design_eligibility` does not refuse them today,
+/// so `k_dispatch_systask` REFUSES the task ids that reach them rather than
+/// dispatching — see its arm list.
+pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    which: SysTaskId,
+    fmt: Option<u32>,
+    args: &[u32],
+    sid: u32,
+) -> Ctl {
     // SVA-REST assertion control. A `$assertoff`/`$asserton`/`$assertkill` site is a
     // no-op `Display` whose StmtId is in `assert_ctl`: flip the global enable instead
     // of printing. A gated assertion FIRE (`assert_fire`) is SUPPRESSED while disabled
@@ -61,14 +89,14 @@ pub(crate) fn dispatch(
     // out-of-band severity entry keyed by StmtId — intercept BEFORE the normal
     // stdout print so the text reaches the DIAGNOSTIC stream only (doc-13).
     if let Some(sev) = sched.st.severities.get(&sid).copied() {
-        return run_severity(sched, sev, fmt, args);
+        return crate::builtins::run_severity_with(sched, nets, sev, fmt, args);
     }
     // §21.3.2: a `$timeformat` call is a no-op `Display` whose StmtId is in
     // `timeformat_stmts` (the assert_ctl pattern) — update the live `%t` format
     // state instead of printing. Args are evaluated HERE, at execution time
     // (runtime-variable args are legal; iverilog-pinned).
     if sched.st.timeformat_stmts.contains(&sid) {
-        return run_timeformat(sched, args);
+        return crate::builtins::run_timeformat_with(sched, nets, args);
     }
     // OBS-3: a `$vita_stage("label", vals…)` call is a no-op `Display` whose StmtId is
     // in `stage_stmts` — NEVER print; instead (under `+STAGE_TRACE`) append a
@@ -423,13 +451,13 @@ pub(crate) fn dispatch(
             Ctl::Continue
         }
         SysTaskId::Display => {
-            let mut s = format_args_str(sched.st, fmt, args, radix);
+            let mut s = crate::builtins::render_task_args(sched, nets, fmt, args, radix);
             s.push('\n');
             write_out(sched.st, &s);
             Ctl::Continue
         }
         SysTaskId::Write => {
-            let s = format_args_str(sched.st, fmt, args, radix);
+            let s = crate::builtins::render_task_args(sched, nets, fmt, args, radix);
             write_out(sched.st, &s);
             Ctl::Continue
         }
@@ -538,11 +566,17 @@ pub(crate) fn dispatch(
         SysTaskId::Fdisplay | SysTaskId::Fwrite => {
             let fd = args
                 .first()
-                .map(|&a| sched.eval(a))
+                .map(|&a| crate::builtins::eval_task_arg(sched, nets, a))
                 .filter(|v| !v.has_xz())
                 .and_then(|v| v.to_u64())
                 .map(|v| v as u32);
-            let mut text = format_args_str(sched.st, fmt, args.get(1..).unwrap_or(&[]), radix);
+            let mut text = crate::builtins::render_task_args(
+                sched,
+                nets,
+                fmt,
+                args.get(1..).unwrap_or(&[]),
+                radix,
+            );
             if matches!(which, SysTaskId::Fdisplay) {
                 text.push('\n');
             }
@@ -663,7 +697,13 @@ pub(crate) fn dispatch(
         // format engine and writes dest (string net = byte store; packed =
         // the normal funnel with §6.16 conversion).
         SysTaskId::Sformat => {
-            let text = format_args_str(sched.st, fmt, args.get(1..).unwrap_or(&[]), radix);
+            let text = crate::builtins::render_task_args(
+                sched,
+                nets,
+                fmt,
+                args.get(1..).unwrap_or(&[]),
+                radix,
+            );
             let dest = args
                 .first()
                 .and_then(|&a| match sched.st.ir.exprs.get(a as usize) {

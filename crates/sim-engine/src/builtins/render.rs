@@ -682,16 +682,32 @@ pub(crate) fn run_vita_stage(sched: &mut Scheduler, args: &[u32]) -> Ctl {
     Ctl::Continue
 }
 
-pub(crate) fn run_timeformat(sched: &mut Scheduler, args: &[u32]) -> Ctl {
+/// `$timeformat`, optionally against an alternate net store.
+///
+/// Its arguments are deliberately allowed to be runtime values (iverilog-pinned),
+/// so they are net reads that never touch the format engine — a `$timeformat`
+/// with variable units read the ENGINE's store while the rest of a tier-3 run
+/// read the arena. It also cannot be refused by task id: `$timeformat` lowers to
+/// a `Display` plus a `timeformat_stmts` sid, so a refusal keyed on `which` is
+/// structurally the wrong key. Threading it is what removes both problems.
+pub(crate) fn run_timeformat_with<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    args: &[u32],
+) -> Ctl {
     if args.is_empty() {
         sched.st.timeformat = None;
         return Ctl::Continue;
     }
-    fn int_arg(sched: &Scheduler, args: &[u32], i: usize) -> i64 {
+    fn int_arg<N: crate::eval::NetReader + ?Sized>(
+        sched: &Scheduler,
+        nets: Option<&N>,
+        args: &[u32],
+        i: usize,
+    ) -> i64 {
         args.get(i)
             .map(|&e| {
-                sched
-                    .eval(e)
+                crate::builtins::eval_task_arg(sched, nets, e)
                     .to_i128_signed()
                     .unwrap_or(0)
                     .clamp(i64::MIN as i128, i64::MAX as i128) as i64
@@ -699,8 +715,8 @@ pub(crate) fn run_timeformat(sched: &mut Scheduler, args: &[u32]) -> Ctl {
             .unwrap_or(0)
     }
     let gp = sched.st.global_prec_exp as i64;
-    let units_exp = int_arg(sched, args, 0).clamp(gp - 64, gp + 64) as i32;
-    let prec = int_arg(sched, args, 1).clamp(0, 64) as u32;
+    let units_exp = int_arg(sched, nets, args, 0).clamp(gp - 64, gp + 64) as i32;
+    let prec = int_arg(sched, nets, args, 1).clamp(0, 64) as u32;
     let suffix = match args.get(2).copied() {
         // String LITERAL: exact text. Every OTHER expr — including a NUMERIC
         // literal — goes through the same value path (`fmt_packed_chars_min`),
@@ -710,7 +726,7 @@ pub(crate) fn run_timeformat(sched: &mut Scheduler, args: &[u32]) -> Ctl {
         Some(eid) => match str_const_of_expr(sched.st, eid) {
             Some(text) => text,
             None => {
-                let v = sched.eval(eid);
+                let v = crate::builtins::eval_task_arg(sched, nets, eid);
                 if v.is_str {
                     String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
                 } else {
@@ -720,7 +736,7 @@ pub(crate) fn run_timeformat(sched: &mut Scheduler, args: &[u32]) -> Ctl {
         },
         None => String::new(),
     };
-    let minw = int_arg(sched, args, 3).clamp(-4096, 4096) as i32;
+    let minw = int_arg(sched, nets, args, 3).clamp(-4096, 4096) as i32;
     sched.st.timeformat = Some(crate::state::TfState {
         units_exp,
         prec,

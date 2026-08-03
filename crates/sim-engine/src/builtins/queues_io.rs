@@ -130,24 +130,31 @@ pub(crate) fn write_out(st: &mut SimState, text: &str) {
     let _ = st.out.write_all(text.as_bytes());
 }
 
-/// P1-1: execute a severity task (doc-13 §Severity). The user message renders
-/// through the SAME `format_args_str` engine as `$display` (so `%0d`/defaults
-/// behave identically) but is emitted as a `LogEvent::Diagnostic` — stderr in
-/// production, never the stdout stream. Empty message ⇒ the code's title.
-/// `$fatal` aborts (implicit `$finish`, `ExitClass::Fatal`); `$error` flags
-/// `HadErrors` and continues; `$warning`/`$info` only print.
-pub(crate) fn run_severity(
+/// P1-1: execute a severity task (doc-13 §Severity), optionally against an
+/// ALTERNATE net store.
+///
+/// The user message renders through the SAME `format_args_str` engine as
+/// `$display` (so `%0d`/defaults behave identically) but is emitted as a
+/// `LogEvent::Diagnostic` — stderr in production, never the stdout stream.
+/// Empty message ⇒ the code's title. `$fatal` aborts (implicit `$finish`,
+/// `ExitClass::Fatal`); `$error` flags `HadErrors` and continues;
+/// `$warning`/`$info` only print.
+///
+/// `nets = None` is the scheduler's own state. This IS a render site and it is
+/// not in `dispatch.rs`, which is why the first enumeration of them missed it.
+pub(crate) fn run_severity_with<N: crate::eval::NetReader + ?Sized>(
     sched: &mut Scheduler,
+    nets: Option<&N>,
     sev: crate::SeverityKind,
     fmt: Option<u32>,
     args: &[u32],
 ) -> Ctl {
-    let message = format_args_str(sched.st, fmt, args, None);
+    let message = render_task_args(sched, nets, fmt, args, None);
     emit_severity_message(sched, sev, message)
 }
 
 /// Emit an already-rendered severity message to the diagnostic stream and apply
-/// its control/exit-class effect. Split out of `run_severity` so a §16.4
+/// its control/exit-class effect. Split out of `run_severity_with` so a §16.4
 /// deferred assert can render its text at REACH and emit it at maturation
 /// (the args are sampled at reach per §16.4.3, not re-evaluated here).
 pub(crate) fn emit_severity_message(
@@ -726,6 +733,48 @@ pub(crate) fn const_string(ir: &sim_ir::SimIr, cid: u32) -> String {
 }
 
 // ── $display format engine (4-state aware) ─────────────────────────────────
+
+/// Render a task's args, optionally against an ALTERNATE net store.
+///
+/// `nets = None` means "the scheduler's own state", which is what every engine
+/// call site passes and what makes those sites byte-identical: the `None` arm is
+/// literally the pre-existing `format_args_str(sched.st, …)` call. An
+/// `Option` rather than a plain reader because the engine CANNOT pass both — its
+/// reader IS `sched.st`, and `&mut Scheduler` plus a reborrow of `sched.st` do
+/// not coexist. Tier-3 passes `Some(&arena)`, whose store is genuinely a
+/// different object.
+pub(crate) fn render_task_args<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    fmt: Option<u32>,
+    args: &[u32],
+    radix: Option<u8>,
+) -> String {
+    match nets {
+        Some(n) => format_args_str_with(sched.st, n, fmt, args, radix),
+        None => format_args_str(sched.st, fmt, args, radix),
+    }
+}
+
+/// Evaluate a task ARGUMENT (not a format arg) against an optional alternate
+/// net store — the fd of `$fdisplay`, the units of `$timeformat`.
+///
+/// The reader has to reach these too, and it is easy to miss that it does not:
+/// they are net reads that never pass through the format engine, so threading
+/// `render_task_args` alone leaves them reading `sched.st`. Measured, that is
+/// exactly what happened — `$fdisplay(fd, …)` with a NET fd read the untouched
+/// engine store, got X, and DROPPED the line with a bad-descriptor warning on a
+/// design the gate reports fully runnable.
+pub(crate) fn eval_task_arg<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    eid: u32,
+) -> crate::value::Value {
+    match nets {
+        Some(n) => sched.st.eval_expr_with(n, eid),
+        None => sched.eval(eid),
+    }
+}
 
 /// The `$display` format engine, rendering against THIS state's nets.
 ///

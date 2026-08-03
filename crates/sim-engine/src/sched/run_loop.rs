@@ -346,7 +346,7 @@ impl Scheduler<'_, '_> {
         if let Some(&(marker, region)) = self.st.defer_acts.get(&sid) {
             // §16.4.3: render the action text NOW, at reach (sampling reach-time
             // arg values / `$time` / `%m`). A severity task renders with no
-            // default radix (matching `run_severity`); a plain print uses its
+            // default radix (matching `run_severity_with`); a plain print uses its
             // b/o/h radix.
             let radix = if self.st.severities.contains_key(&sid) {
                 None

@@ -11,11 +11,12 @@
 //!
 //! ## What "honest" means for the methods that are not implemented, in TWO kinds
 //!
-//! 52 declarations (51 without the `jit` feature). They divide four ways:
-//! **13 store core** · **17 classification predicates** · **18 gate-refused
-//! workers** · **4 NOT BUILT**. The counts are counted, not estimated — the
-//! first draft said "20 refused" and "16 file methods" and both were wrong
-//! (there are 18 and 8).
+//! 52 declarations (51 without the `jit` feature). They divide four ways, and
+//! S1d-4b-2 moved two of them: **15 store core** · **17 classification
+//! predicates** · **18 gate-refused workers** · **2 NOT BUILT**
+//! (`k_schedule_nba_at`, `k_rearm`). `k_dispatch_systask` and `k_sformatf` are
+//! now implemented. The counts are counted, not estimated — an early draft said
+//! "20 refused" and "16 file methods" and both were wrong (18 and 8).
 //!
 //! The two-kind split is the correction both reviewers of this slice forced, and
 //! it matters more than the arithmetic:
@@ -25,8 +26,7 @@
 //!   alloc, `disable fork`, and the eleven funnel-outside workers §4.5.291's
 //!   `stmt_effect` row covers (seeded `$random`/`$dist_*`, `$cast`,
 //!   `$value$plusargs`, the 8 file methods). `gate_refused!` names the row.
-//! - **NOT BUILT (4)**: `k_dispatch_systask`, `k_sformatf`, `k_schedule_nba_at`,
-//!   `k_rearm`. An ELIGIBLE design reaches every one of these; what keeps them
+//! - **NOT BUILT (2)**: `k_schedule_nba_at` and `k_rearm`. An ELIGIBLE design reaches every one of these; what keeps them
 //!   out of production is `native::runtime_gate` choosing the VM, one layer below
 //!   eligibility (§4.5.288's two-layer verdict). `not_built!` says so and names
 //!   the slice that builds it. Using the gate-refused wording here — which the
@@ -48,44 +48,44 @@
 //!
 //! ## What is deliberately NOT here
 //!
-//! - **`k_dispatch_systask` is loud** (with `k_sformatf`, which shares its
-//!   blocker: both need the format engine).
+//! - **`k_dispatch_systask` and `k_sformatf` are WIRED (S1d-4b-2).** The format
+//!   engine takes the arena as a generic reader (4b-1) and `dispatch` now takes
+//!   it too, as an `Option` — `None` is the scheduler's own state, which is what
+//!   every engine call site passes and what makes those sites byte-identical.
 //!
-//!   **S1d-4b-1 built the format half.** `builtins::format_args_str_with` takes
-//!   the net reader as a GENERIC parameter, so the engine renders from either
-//!   store and the old entry point is a literal forward — no engine call site
-//!   moved, and tiers 1 and 2 keep their monomorphised path. It is not yet
-//!   callable from here: `builtins::dispatch` still hard-codes `sched.st` at its
-//!   render sites, which is 4b-2.
+//!   ⚠️ **Threading the FORMATTER was only half of it.** A task's own arguments
+//!   are net reads that never pass through the format engine — the fd of
+//!   `$fdisplay`, the units of `$timeformat` — and threading the formatter alone
+//!   left them reading `sched.st`. Measured: `$fdisplay(fd, …)` with a NET fd
+//!   read the untouched engine store, got X, and DROPPED the line with a
+//!   bad-descriptor warning, on a design the gate reports fully runnable. Both
+//!   are now threaded through `eval_task_arg`.
 //!
-//!   ⚠️ **And threading the READER is only half of 4b-2.** The formatter also
-//!   reads `now`, `cur_time_mult`, `rng`, `timeformat`, `global_prec_exp` and
-//!   `cur_scope` off `&SimState`. This kernel used to carry its OWN copies of
-//!   the first three, so wiring dispatch would have rendered `$time`, `%t` and
-//!   `$random` from a different clock and a different stream than the nets came
-//!   from — a silent wrong line, on a design measured `eligible: true,
-//!   buildable: true`. Hence the `st` borrow above: one origin, no copies. 4b-2
-//!   must not reintroduce them.
+//!   ⚠️ **And `$timeformat` could not have been refused by task id.** It lowers
+//!   to a `Display` plus a `timeformat_stmts` sid, so a refusal keyed on `which`
+//!   is structurally the wrong key — an argument for threading rather than
+//!   refusing whenever the shape allows it.
 //!
-//!   **Render sites reachable from an ELIGIBLE design (measured, and the earlier
-//!   count was wrong in both directions):** `dispatch.rs` `$display`, `$write`,
-//!   `$fdisplay`/`$fwrite`; `queues_io.rs::run_severity` (`$error`/`$fatal`/
-//!   `$warning`/`$info` — reached from `dispatch`, and NOT in `dispatch.rs`);
-//!   plus two in the postponed flush that `dispatch` only registers,
-//!   `sched/run_loop.rs`'s `$strobe` and `$monitor` renders. `dispatch.rs`'s
-//!   `$sformat` site is gate-refused (`stmt_effect`, `NetWrite::Flat`), as is
-//!   `run_loop.rs`'s deferred-assert render.
+//!   **Refused, and why each is a REAL wrong-store read rather than caution:**
+//!   `$dumpvars`/`$dumpall`/`$dumpon` (`full_snapshot` walks `&st.nets`
+//!   wholesale — S1d-4d owns VCD); `$dumpfile`/`$dumplimit`/`$fclose` (argument
+//!   read outside the formatter, and unlike the fd above these have no tier-3
+//!   consumer yet); `$writememb`/`$writememh` (reads the MEMORY itself);
+//!   `$monitor`/`$strobe` (dispatch only REGISTERS them — it captures ExprIds,
+//!   and the render happens in `sched/run_loop.rs::flush_postponed`, which this
+//!   seam does not reach; a `$monitor` would print its t0 line and never
+//!   re-fire). Every one of these is `eligible: true, buildable: true`, which is
+//!   exactly why the refusal has to live here rather than in the design gate.
 //!
-//!   **Still `SimState`-tied, and these are STORE reads rather than formatter
-//!   reads, so they do not thread through the seam at all:** `full_snapshot`
-//!   (`$dumpvars`, which walks `&st.nets` wholesale), `$timeformat`'s
-//!   non-literal args, `$fclose`/`$fdisplay`'s fd argument, `$dumplimit`,
-//!   `$dumpfile`'s name argument, and `$writemem*`, which reads the memory
-//!   itself. Line numbers are deliberately omitted: the previous version cited
-//!   six and this slice moved three of them without re-pinning, which is what a
-//!   line citation costs. Re-measure from the store side (`&st.nets`,
-//!   `st.nets[`, `read_net`, `eval_expr`) rather than from a name list — the
-//!   first attempt grepped three spellings and came out 3x low.
+//!   Gate-refused elsewhere and so unreachable: `$sformat` and `$readmem*`
+//!   (`stmt_effect`, `NetWrite::Flat`), the deferred-assert render, `$fmonitor`/
+//!   `$fstrobe` (`file_directed_stmts`), `$vita_stage` (`stage`).
+//!
+//!   Line numbers are deliberately omitted throughout: an earlier version cited
+//!   six and the next slice moved three of them without re-pinning. Re-measure
+//!   from the store side (`&st.nets`, `st.nets[`, `read_net`, `eval_expr`,
+//!   `sched.eval`) rather than from a name list — the first attempt grepped
+//!   three spellings and came out 3x low.
 //! - **The NBA queue here is a flat `Vec`, not the region machinery.** Entries
 //!   are `NbaUpdate` — the ENGINE's type, not a parallel one — so the gate can
 //!   compare them field by field, and so 4c inherits a queue whose shape it does
@@ -148,7 +148,7 @@ macro_rules! not_built {
 #[allow(dead_code)] // S1d-4b's body walk is the production constructor; today
                     // only the shared-executor differential builds one. Saying that is more
                     // honest than a fake call site or a widened visibility.
-pub(crate) struct NativeKernel<'i> {
+pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) ir: &'i SimIr,
     pub(crate) arena: NetArena,
     /// The engine state, for everything that is NOT net values.
@@ -168,7 +168,12 @@ pub(crate) struct NativeKernel<'i> {
     /// claimed. `exec/process.rs` rewrites `cur_time_mult` on every process
     /// dispatch and the run loop rewrites `now` every timestep, so a copy is a
     /// staleness bug waiting for its first timestep.
-    pub(crate) st: &'i crate::SimState<'i>,
+    /// Upgraded from `&SimState` to `&mut Scheduler` in S1d-4b-2: dispatching a
+    /// system task needs the output sink, the file table and the assertion side
+    /// tables, all reached mutably through the scheduler. The reasoning above is
+    /// unchanged — `sched.st` is still the ONE origin for `now`, `cur_time_mult`,
+    /// `rng`, `timeformat` and `cur_scope`, and this kernel keeps no copies.
+    pub(crate) sched: &'i mut crate::sched::Scheduler<'a, 'b>,
     /// `class_new_sites`, the one classification question that is not a function
     /// of `ir.exprs` (see `exec::kpred`'s module doc). Shared by reference for
     /// the same single-spelling reason the predicates are shared by call.
@@ -185,18 +190,18 @@ pub(crate) struct NativeKernel<'i> {
 }
 
 #[allow(dead_code)] // ditto — `new`/`ctx` have exactly one caller, the gate.
-impl<'i> NativeKernel<'i> {
+impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     pub(crate) fn new(
         ir: &'i SimIr,
         arena: NetArena,
-        st: &'i crate::SimState<'i>,
+        sched: &'i mut crate::sched::Scheduler<'a, 'b>,
         class_new_sites: &'i BTreeMap<u32, u32>,
         max_body_steps: u64,
-    ) -> NativeKernel<'i> {
+    ) -> NativeKernel<'i, 'a, 'b> {
         NativeKernel {
             ir,
             arena,
-            st,
+            sched,
             class_new_sites,
             max_body_steps,
             nba: Vec::new(),
@@ -215,16 +220,16 @@ impl<'i> NativeKernel<'i> {
         crate::eval::EvalCtx {
             ir: self.ir,
             nets: &self.arena,
-            now: self.st.now,
-            wt: &self.st.wt,
-            time_mult: self.st.cur_time_mult,
-            rng: &self.st.rng,
-            plusargs: &self.st.plusargs,
+            now: self.sched.st.now,
+            wt: &self.sched.st.wt,
+            time_mult: self.sched.st.cur_time_mult,
+            rng: &self.sched.st.rng,
+            plusargs: &self.sched.st.plusargs,
         }
     }
 }
 
-impl Kernel for NativeKernel<'_> {
+impl Kernel for NativeKernel<'_, '_, '_> {
     #[cfg(feature = "jit")]
     fn k_nets(&self) -> &dyn crate::eval::NetReader {
         &self.arena
@@ -236,7 +241,7 @@ impl Kernel for NativeKernel<'_> {
         // `Scheduler::eval_for_lvalue`, restated over this store: the IEEE
         // assignment rule is width = max(lhs, self(rhs)), sign = rhs self-sign.
         let lw = self.arena.lvalue_width(self.ir, lhs);
-        let sw = self.st.wt.get(rhs);
+        let sw = self.sched.st.wt.get(rhs);
         self.ctx().eval_ctx(rhs, lw.max(sw.width), sw.signed)
     }
 
@@ -260,7 +265,7 @@ impl Kernel for NativeKernel<'_> {
         // unbounded delay fired at t+0. Sharing it is what makes that class of
         // divergence unrepresentable rather than merely fixed.
         let v = self.ctx().eval(eid);
-        crate::eval::delay_ticks_of(&v, self.st.cur_time_mult, self.st.cur_prec_mult)
+        crate::eval::delay_ticks_of(&v, self.sched.st.cur_time_mult, self.sched.st.cur_prec_mult)
     }
 
     fn k_truthy(&self, eid: u32) -> bool {
@@ -412,20 +417,54 @@ impl Kernel for NativeKernel<'_> {
     fn k_dispatch_systask(
         &mut self,
         which: SysTaskId,
-        _fmt: Option<u32>,
-        _args: &[u32],
-        _sid: u32,
+        fmt: Option<u32>,
+        args: &[u32],
+        sid: u32,
     ) -> Ctl {
-        // NOT gate-refused — this one is CORE and simply not wired yet. The
-        // measured scope is in the module doc: `builtins::dispatch` renders
-        // through `&SimState` at 4 read sites, which 4b parameterises. Until
-        // then the runtime gate keeps every design on the VM, and arriving here
-        // says the wiring order was broken.
-        panic!(
-            "tier-3 native kernel: k_dispatch_systask({which:?}) is not wired — \
-             `builtins::dispatch` reads nets through `&SimState` (4 sites; S1d-4b). \
-             `native::runtime_gate` must keep eligible designs on the VM until it is."
-        )
+        // WIRED (S1d-4b-2). The format engine takes the arena as its net reader;
+        // everything else a task touches — output sink, file table, `$time`, the
+        // RNG, the assertion side tables — comes from the scheduler, which is
+        // where those live for BOTH backends. That split is the whole reason this
+        // kernel borrows the scheduler rather than copying its fields.
+        //
+        // The refused arms are not convenience: they read the store WITHOUT going
+        // through the formatter, so the reader parameter never reaches them and
+        // they would render `SimState`'s nets while every other value came from
+        // the arena — one wrong line in an otherwise right run.
+        // `design_eligibility` does not refuse them, so this does.
+        match which {
+            SysTaskId::DumpVars | SysTaskId::DumpAll | SysTaskId::DumpOn => not_built!(
+                "k_dispatch_systask($dumpvars/$dumpall/$dumpon)",
+                "S1d-4d",
+                "`full_snapshot` walks `&st.nets` wholesale rather than through the \
+                 formatter, so the arena reader never reaches it. S1d-4d owns VCD \
+                 and its byte-identity gate is what needs this"
+            ),
+            SysTaskId::Monitor | SysTaskId::Strobe => not_built!(
+                "k_dispatch_systask($monitor/$strobe)",
+                "S1d-4c",
+                "dispatch only REGISTERS them — it captures ExprIds, and the render \
+                 happens later in `sched/run_loop.rs::flush_postponed`, which this \
+                 seam does not reach. A `$monitor` would print its t0 line and then \
+                 never re-fire, because the store its change detection compares \
+                 against is the engine's and never moves"
+            ),
+            SysTaskId::DumpFile | SysTaskId::DumpLimit | SysTaskId::Fclose => not_built!(
+                "k_dispatch_systask($dumpfile/$dumplimit/$fclose)",
+                "S1d-4b-3",
+                "the ARGUMENT is read through `arg_string`/`int_arg`, not the \
+                 formatter — a store read this seam does not cover"
+            ),
+            SysTaskId::WritememB | SysTaskId::WritememH => not_built!(
+                "k_dispatch_systask($writememb/$writememh)",
+                "S1d-4b-3",
+                "it reads the MEMORY itself, not a formatted argument"
+            ),
+            _ => {
+                let (sched, arena) = (&mut *self.sched, &self.arena);
+                crate::builtins::dispatch_with(sched, Some(arena), which, fmt, args, sid)
+            }
+        }
     }
 
     fn k_force(&mut self, _lhs: &Lvalue, _value: Value, _rhs: u32, _sid: u32) {
@@ -502,25 +541,28 @@ impl Kernel for NativeKernel<'_> {
     fn k_sscanf(&mut self, _rhs: u32) -> Value {
         gate_refused!("k_sscanf", "`stmt_effect` row (§4.5.291)")
     }
-    fn k_sformatf(&mut self, _rhs: u32) -> Value {
-        // NOT the `stmt_effect` row, and the first version of this file said it was.
-        // `sysfunc_is_stmt_effect` answers FALSE for `Sformatf` on purpose
-        // (sim-ir/src/analysis.rs:27) — the &self frame executor has its own
-        // intercept — so the S0 row built on it does not refuse this. Tier-2 hit
-        // the identical hole and patched it with an explicit extra reject
-        // (`backend.rs`, "ONE documented delta"); tier-3 needed the same delta and
-        // did not have it. It is `not_built` rather than gate-refused because the
-        // blocker is the RENDERER, not the write: `$sformatf` writes its value
-        // through the ordinary funnel, but producing that value needs the format
-        // engine, which renders through `&SimState` exactly as `k_dispatch_systask`
-        // does. One blocker, two methods, one slice (4b).
-        not_built!(
-            "k_sformatf",
-            "S1d-4b",
-            "rendering needs the format engine, which reads through `&SimState` — \
-             the same blocker as `k_dispatch_systask`. NOTE the reachable set is \
-             wider than the `$sformatf` spelling: elaborate desugars string \
-             CONCATENATION into a synthetic Sformatf node"
-        )
+    fn k_sformatf(&mut self, rhs: u32) -> Value {
+        // WIRED (S1d-4b-2) through the same seam. `$sformatf` never needed a
+        // funnel-outside write — its value stores through the ordinary lvalue
+        // path once rendered; what it needed was the format engine.
+        //
+        // Nothing reaches it yet: both this and the string CONCAT that elaborate
+        // desugars to the same node require a `string` destination, which
+        // `NetArena::build` refuses. It is wired rather than left panicking so the
+        // remaining blocker is described accurately — that blocker is STORAGE
+        // (S3), not the formatter.
+        // A non-`SysFunc` rhs is unreachable (`compute_effect` guards on
+        // `k_sformatf_rhs`), and the ENGINE answers it with an empty string. This
+        // returned `not_built!` — a panic — which made two `Kernel` implementors
+        // disagree on one input in a slice whose thesis is that they cannot. It
+        // is also not "not built": it is an impossible input, a third category
+        // the two macros deliberately do not have. Match the engine.
+        let Some(sim_ir::Expr::SysFunc { args, .. }) = self.ir.exprs.get(rhs as usize) else {
+            return Value::from_str_bytes(&[]);
+        };
+        let (f, rest) = (args.first().copied(), args.get(1..).unwrap_or(&[]).to_vec());
+        let text =
+            crate::builtins::format_args_str_with(self.sched.st, &self.arena, f, &rest, None);
+        Value::from_str_bytes(text.as_bytes())
     }
 }

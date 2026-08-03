@@ -54,7 +54,7 @@ fn r64(rng: &mut Rng) -> u64 {
 }
 
 /// Set bit `i` of a `BitPacked` plane pair.
-fn set_bit(bp: &mut sim_ir::BitPacked, i: u32, v: u64, u: u64) {
+pub(super) fn set_bit(bp: &mut sim_ir::BitPacked, i: u32, v: u64, u: u64) {
     let w = (i / 64) as usize;
     let b = i % 64;
     bp.val[w] = (bp.val[w] & !(1 << b)) | (v << b);
@@ -336,9 +336,20 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
     // the same flat path the arena does and the mirror would agree FOR THE WRONG
     // REASON (differential-review find). With it installed, such a design is
     // refused by `NetArena::build` instead — which is the honest answer today.
+    // `severities` too (S1d-4b-2): `$error`/`$fatal`/`$warning`/`$info` lower as
+    // a `Display` plus an out-of-band severity entry keyed by StmtId, so WITHOUT
+    // this table those tasks take the plain-display path and `run_severity_with` — a
+    // render site, and the one that is not in `dispatch.rs` — is never entered.
+    // Measured: dropping the reader from that arm survived every test until this
+    // line existed.
     let opts = SimOpts {
         two_state_nets: sc.two_state_nets,
         func_table: sc.func_table,
+        severities: sc.severities,
+        // …and `timeformat_stmts`, for the same reason: `$timeformat` lowers to a
+        // `Display` plus a sid, so WITHOUT the table it prints its own arguments
+        // instead of applying them, and the `%t` path is never entered.
+        timeformat_stmts: sc.timeformat_stmts,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

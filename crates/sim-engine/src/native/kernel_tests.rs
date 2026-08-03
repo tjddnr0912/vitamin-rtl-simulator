@@ -28,7 +28,9 @@ use std::collections::BTreeMap;
 use sim_ir::{SimIr, Stmt};
 
 use super::test_common as common;
-use super::tests::{assert_stores_equal, build_with_opts, fresh_state, mirror_state, NullSink};
+use super::tests::{
+    assert_stores_equal, build_with_opts, fresh_state, mirror_state, set_bit, NullSink,
+};
 use crate::exec::{apply_effect, compute_effect, Kernel, StmtEffect};
 use crate::native::arena::NetArena;
 use crate::native::kernel::NativeKernel;
@@ -145,8 +147,12 @@ fn s1d4a_walk(src: &str, name: &str, seed: u64) -> usize {
     if sites.is_empty() {
         return 0;
     }
-    let st_n = fresh_state(&ir, &sink);
-    let mut nk = NativeKernel::new(&ir, arena, &st_n, &empty_sites, 10_000);
+    let mut st_n = fresh_state(&ir, &sink);
+    for &n in &opts.two_state_nets {
+        st_n.two_state[n as usize] = true;
+    }
+    let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+    let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty_sites, 10_000);
     let mut rng = Rng::new(seed);
     let mut compared = 0usize;
 
@@ -331,8 +337,9 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
         let arena = NetArena::build(&ir, &opts).expect("arena builds");
         let empty: BTreeMap<u32, u32> = BTreeMap::new();
         let sink = NullSink;
-        let st_n = fresh_state(&ir, &sink);
-        let mut nk = NativeKernel::new(&ir, arena, &st_n, &empty, 10_000);
+        let mut st_n = fresh_state(&ir, &sink);
+        let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
         nk.nba.clear();
         nk.nba_seq = 0;
         let sid = (0..ir.stmts.len() as u32)
@@ -399,8 +406,9 @@ fn s1d4a_both_kernels_classify_the_same_rhs_identically() {
     let empty: BTreeMap<u32, u32> = BTreeMap::new();
     let sink = NullSink;
     let mut st = fresh_state(&ir, &sink);
-    let st_n = fresh_state(&ir, &sink);
-    let nk = NativeKernel::new(&ir, arena, &st_n, &empty, 10_000);
+    let mut st_n = fresh_state(&ir, &sink);
+    let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+    let nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
     let sched = Scheduler::new(&mut st, 10_000, 10_000, None, Default::default());
 
     // Every predicate, over every expression in the design — so a stub cannot
@@ -582,7 +590,8 @@ fn s1d4a_control_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
             t.cur_prec_mult = pm;
             t.now = now;
         }
-        let mut nk = NativeKernel::new(&ir, arena, &st_n, &empty, 10_000);
+        let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
         nk.nba.clear();
         nk.nba_seq = 0;
         // DISTINCT values: `max_deltas` and `max_body_steps` were both 10_000, so the
@@ -784,8 +793,9 @@ fn s1d4a_class_new_site_is_read_not_stubbed() {
         "the design must contain blocking assigns"
     );
     st.class_new_sites = sites.clone();
-    let st_n = fresh_state(&ir, &sink);
-    let nk = NativeKernel::new(&ir, arena, &st_n, &sites, 10_000);
+    let mut st_n = fresh_state(&ir, &sink);
+    let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+    let nk = NativeKernel::new(&ir, arena, &mut sched_n, &sites, 10_000);
     let sched = Scheduler::new(&mut st, 10_000, 10_000, None, Default::default());
     let mut class_new = 0usize;
     for (&sid, _) in sites.iter() {
@@ -1135,4 +1145,537 @@ fn s1d4b_render_agrees_on_the_full_conversion_matrix() {
     //    net its parts need. Same conclusion, two different mechanisms — the
     //    §4.5.287 shape, where the argument answers the destination side while
     //    the condition lives on the value side.
+}
+
+/// S1d-4b-2 — **`$display` actually runs on the arena.**
+///
+/// 4b-1 proved the format engine renders from a supplied reader; this proves the
+/// whole dispatch path does, end to end, through `k_dispatch_systask`. Same
+/// provenance construction as 4b-1 and for the same reason: with two identical
+/// stores, a dispatch that ignored its reader would produce identical bytes.
+/// State A goes into the kernel's own `SimState`, state B into the arena, and
+/// the bytes `k_dispatch_systask` writes must be the bytes a `SimState` holding
+/// B produces — not the ones its own state holds.
+///
+/// The captured sink is what makes this an OUTPUT test rather than a string
+/// test: `$display` reaches `write_out(st.out)`, so anything that renders
+/// correctly and then writes the wrong thing (or nothing) still fails here.
+fn s1d4b2_dispatch_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    /// A sink that keeps what was written, so the gate compares BYTES.
+    #[derive(Clone, Default)]
+    struct Cap(Rc<RefCell<Vec<u8>>>);
+
+    /// …and the DIAGNOSTIC stream, because `$error`/`$info` do not reach
+    /// `st.out` at all — they emit a `LogEvent::Diagnostic`. Capturing only
+    /// stdout made a severity-only design look like "the kernel wrote nothing",
+    /// which is a true statement about the wrong stream.
+    #[derive(Clone, Default)]
+    struct CapLog(Rc<RefCell<Vec<String>>>);
+    impl diag::LogSink for CapLog {
+        fn emit(&self, e: diag::LogEvent) {
+            self.0.borrow_mut().push(match e {
+                diag::LogEvent::Diagnostic(d) => format!("D:{}", d.message),
+                diag::LogEvent::RtlOutput(t) => format!("R:{}", t.text),
+                diag::LogEvent::Progress(p) => format!("P:{}", p.message),
+            });
+        }
+    }
+    impl std::io::Write for Cap {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let (ir, opts) = build_with_opts(src);
+    // Build once only to learn whether the design is arena-buildable; each pass
+    // makes its own. (An earlier version kept this one and never used it.)
+    if NetArena::build(&ir, &opts).is_err() {
+        return (0, 0);
+    }
+    let sites: Vec<(sim_ir::SysTaskId, Option<u32>, Vec<u32>, u32)> = ir
+        .stmts
+        .iter()
+        .enumerate()
+        .filter_map(|(sid, s)| match s {
+            // `Fdisplay`/`Fwrite` too: they are a DIFFERENT task id rendering
+            // through a THIRD site in `dispatch`, and leaving them out left that
+            // site's reader unpinned — measured, dropping it survived.
+            Stmt::SysTask {
+                which:
+                    which @ (sim_ir::SysTaskId::Display
+                    | sim_ir::SysTaskId::Write
+                    | sim_ir::SysTaskId::Fdisplay
+                    | sim_ir::SysTaskId::Fwrite),
+                fmt,
+                args,
+            } => Some((*which, *fmt, args.clone(), sid as u32)),
+            _ => None,
+        })
+        .collect();
+    if sites.is_empty() {
+        return (0, 0);
+    }
+    let mut rng = Rng::new(seed);
+    let (mut compared, mut differing) = (0usize, 0usize);
+    let n_nets = ir.nets.len() as u32;
+
+    for pass in 0..4 {
+        // Build the two states, then split them: A into the kernel's state, B
+        // into the arena AND into the reference state.
+        let cap_k = Cap::default();
+        let cap_b = Cap::default();
+        let log_k = CapLog::default();
+        let log_b = CapLog::default();
+        let mut st_a = crate::SimState::new(
+            &ir,
+            Box::new(cap_k.clone()),
+            &log_k,
+            "1ns".to_string(),
+            "test".to_string(),
+            None,
+        );
+        let mut st_b = crate::SimState::new(
+            &ir,
+            Box::new(cap_b.clone()),
+            &log_b,
+            "1ns".to_string(),
+            "test".to_string(),
+            None,
+        );
+        for &n in &opts.two_state_nets {
+            st_a.two_state[n as usize] = true;
+            st_b.two_state[n as usize] = true;
+        }
+        // Without this, `$error`/`$info` take the plain-display path and
+        // `run_severity_with` — a render site outside `dispatch.rs` — is never entered.
+        st_a.severities = opts.severities.clone();
+        st_b.severities = opts.severities.clone();
+        let mut arena_k = NetArena::build(&ir, &opts).expect("arena rebuilds");
+        let mut scratch = NetArena::build(&ir, &opts).expect("arena rebuilds");
+        mirror_state(
+            &mut st_a,
+            &mut scratch,
+            &mut rng,
+            n_nets,
+            pass % 2 == 1,
+            pass >= 2,
+        );
+        mirror_state(
+            &mut st_b,
+            &mut arena_k,
+            &mut rng,
+            n_nets,
+            pass % 2 == 1,
+            pass >= 2,
+        );
+        // A's stored nets, kept so the anti-vacuity check below can render from
+        // the ACTUAL A rather than a fresh draw.
+        let st_a_nets: Vec<sim_ir::BitPacked> = st_a.nets.iter().map(|n| n.cur.clone()).collect();
+        let (now, tm) = [(0u64, 1u64), (41, 1000), (7_500, 1000), (123_456, 10)][pass];
+        for t in [&mut st_a, &mut st_b] {
+            t.now = now;
+            t.cur_time_mult = tm;
+        }
+
+        // Reference: dispatch on state B through the ordinary engine path.
+        {
+            let mut sched_b = Scheduler::new(&mut st_b, 33_000, 10_000, None, Default::default());
+            for (which, fmt, args, sid) in &sites {
+                crate::builtins::dispatch(&mut sched_b, *which, *fmt, args, *sid);
+            }
+        }
+        // Under test: dispatch on state A through the KERNEL, arena = B.
+        {
+            let empty: BTreeMap<u32, u32> = BTreeMap::new();
+            let mut sched_a = Scheduler::new(&mut st_a, 33_000, 10_000, None, Default::default());
+            let mut nk = NativeKernel::new(&ir, arena_k, &mut sched_a, &empty, 10_000);
+            for (which, fmt, args, sid) in &sites {
+                nk.k_dispatch_systask(*which, *fmt, args, *sid);
+            }
+        }
+        // BOTH streams: `$display`/`$write` land in `out`, `$error`/`$info` in
+        // the diagnostic sink, and a gate that watched only one would call a
+        // severity-only design empty.
+        let via_kernel = (cap_k.0.borrow().clone(), log_k.0.borrow().clone());
+        let from_b = (cap_b.0.borrow().clone(), log_b.0.borrow().clone());
+        assert_eq!(
+            (String::from_utf8_lossy(&via_kernel.0), &via_kernel.1),
+            (String::from_utf8_lossy(&from_b.0), &from_b.1),
+            "{name}/pass{pass}: kernel dispatch did not read the arena"
+        );
+        assert!(
+            !via_kernel.0.is_empty() || !via_kernel.1.is_empty(),
+            "{name}/pass{pass}: the kernel wrote nothing on either stream"
+        );
+        // ANTI-VACUITY. The first version of this built a THIRD state here — it
+        // re-drew from an `rng` the two `mirror_state` calls above had already
+        // advanced, with `small`/`xz` hard-coded false where A had used the
+        // pass's settings, and it overwrote `scratch`, the only copy of A. So it
+        // compared B against A′, certified nothing about A, and its pin comment
+        // told a causal story ("a small-value pass can collide") that could not
+        // apply. 4b-1's walk did this correctly and 4b-2 had dropped it.
+        //
+        // A is `st_a`'s own store, which is still intact: render it through the
+        // ordinary engine path and require it to differ from B.
+        let cap_a = Cap::default();
+        let log_a = CapLog::default();
+        {
+            let mut st_a2 = crate::SimState::new(
+                &ir,
+                Box::new(cap_a.clone()),
+                &log_a,
+                "1ns".to_string(),
+                "test".to_string(),
+                None,
+            );
+            for &n in &opts.two_state_nets {
+                st_a2.two_state[n as usize] = true;
+            }
+            st_a2.severities = opts.severities.clone();
+            // Copy A's nets across verbatim — NOT a fresh draw.
+            for (slot, cur) in st_a2.nets.iter_mut().zip(st_a_nets.iter()) {
+                slot.cur = cur.clone();
+            }
+            st_a2.now = now;
+            st_a2.cur_time_mult = tm;
+            let mut s2 = Scheduler::new(&mut st_a2, 33_000, 10_000, None, Default::default());
+            for (which, fmt, args, sid) in &sites {
+                crate::builtins::dispatch(&mut s2, *which, *fmt, args, *sid);
+            }
+        }
+        // COUNTED, not asserted: some (design, pass) pairs genuinely cannot
+        // discriminate — an X-heavy pass on a narrow design renders `x` from both
+        // states, and that is a true fact about the design, not a test defect.
+        // The count is pinned exactly so the number of CERTIFIED pairs cannot
+        // quietly fall.
+        if (cap_a.0.borrow().clone(), log_a.0.borrow().clone()) != from_b {
+            differing += 1;
+        }
+        compared += 1;
+    }
+    (compared, differing)
+}
+
+#[test]
+fn s1d4b2_kernel_dispatch_reads_the_arena() {
+    let (mut compared, mut differing) = (0usize, 0usize);
+    for (i, d) in corpus(0x5EED_F00D, 72).into_iter().enumerate() {
+        let (c, df) = s1d4b2_dispatch_walk(&d.src, &d.name, 0x4B20_0000 + i as u64);
+        compared += c;
+        differing += df;
+    }
+    assert!(compared > 0, "no corpus design dispatches a $display");
+    // EXACT: 256 of 288 (design, pass) pairs are CERTIFIED — state A demonstrably
+    // renders different bytes from state B, so the provenance assertion above
+    // cannot be satisfied by reading either store. The other 32 render alike from
+    // both, overwhelmingly X-heavy passes on narrow designs where every value
+    // formats as `x`.
+    //
+    // The previous pin said 285, and it was measured against a THIRD random state
+    // rather than A — which is why it was higher, and why it certified nothing.
+    // 256 is what the property is actually worth.
+    assert_eq!(
+        (compared, differing),
+        (288, 256),
+        "dispatch coverage moved — re-pin deliberately"
+    );
+}
+
+/// The dispatch shapes the corpus does not carry. Measured, not guessed: with
+/// the corpus alone, dropping the reader from the `$write` arm SURVIVED — no
+/// generated design uses `$write`, and an arm the gate never enters is an arm
+/// the gate does not cover, whatever the file looks like.
+#[test]
+fn s1d4b2_dispatch_agrees_on_the_task_variants() {
+    let designs: [(&str, &str); 3] = [
+        (
+            "write_and_radix_variants",
+            "module t;\n\
+               reg [31:0] w; reg [7:0] b;\n\
+               initial begin\n\
+                 w = 32'hfeed_face; b = 8'b1010_0101;\n\
+                 $write(\"w=%0d b=%0h\\n\", w, b);\n\
+                 $write(w, b);\n\
+                 $displayb(w, b); $displayo(w, b); $displayh(w, b);\n\
+                 $writeb(w); $writeo(w); $writeh(w);\n\
+                 $fdisplay(32'h8000_0001, \"fd w=%0d b=%0h\", w, b);\n\
+                 $fwrite(32'h8000_0001, \"fw %0b|%0o\", w, b);\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "severity_family",
+            "module t;\n\
+               reg [15:0] v;\n\
+               initial begin\n\
+                 v = 16'hbeef;\n\
+                 $info(\"info v=%0h\", v);\n\
+                 $warning(\"warn v=%0d\", v);\n\
+                 $error(\"err v=%0b\", v);\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "wide_and_xz",
+            "module t;\n\
+               reg [95:0] q; reg [7:0] x;\n\
+               initial begin\n\
+                 q = 96'h1234_5678_9abc_def0_1122_3344; x = 8'bxx01_zz10;\n\
+                 $display(\"q=%h|%d|%o|%b\", q, q, q, q);\n\
+                 $write(\"x=%h|%b|%c|%s\", x, x, x, x);\n\
+               end\n\
+             endmodule\n",
+        ),
+    ];
+    let (mut compared, mut differing) = (0usize, 0usize);
+    for (i, (name, src)) in designs.iter().enumerate() {
+        let (c, d) = s1d4b2_dispatch_walk(src, name, 0x4B2C_0000 + i as u64);
+        assert!(c > 0, "{name}: produced no comparisons");
+        compared += c;
+        differing += d;
+    }
+    assert_eq!(
+        (compared, differing),
+        (12, 12),
+        "variant coverage moved — re-pin deliberately"
+    );
+}
+
+/// `k_sformatf` on an input `compute_effect` never produces: the engine answers
+/// an empty string, and this must answer the same. It was a `not_built!` panic —
+/// two `Kernel` implementors disagreeing on one input, in a slice whose thesis is
+/// that they structurally cannot. Unreachable through `compute_effect`, which is
+/// why only a direct call can pin it.
+#[test]
+fn s1d4b2_sformatf_matches_the_engine_on_an_impossible_rhs() {
+    let src = "module t; reg [7:0] a; initial begin a = 8'd1; end endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let arena = NetArena::build(&ir, &opts).expect("arena builds");
+    let sink = NullSink;
+    let mut st = fresh_state(&ir, &sink);
+    let empty: BTreeMap<u32, u32> = BTreeMap::new();
+    // An expression that is NOT a `SysFunc` — the design's own `8'd1` const.
+    let non_sysfunc = (0..ir.exprs.len() as u32)
+        .find(|&e| matches!(ir.exprs[e as usize], sim_ir::Expr::Const { .. }))
+        .expect("a const expr");
+    let mut sched = Scheduler::new(&mut st, 33_000, 10_000, None, Default::default());
+    let engine = sched.k_sformatf(non_sysfunc);
+    let mut nk = NativeKernel::new(&ir, arena, &mut sched, &empty, 10_000);
+    let native = nk.k_sformatf(non_sysfunc);
+    assert_eq!(
+        engine, native,
+        "the two Kernel implementors disagree on a non-SysFunc `$sformatf` rhs"
+    );
+}
+
+/// TEETH for `k_dispatch_systask`'s REFUSED arms. They are not gate-refused —
+/// an eligible design reaches them — so the only thing standing between a
+/// `$dumpvars` design and a VCD written from the wrong store is this match. A
+/// refusal nothing tests is a refusal that can be deleted by accident: measured,
+/// turning the `$dumpvars` arm into a no-op guard survived every other test.
+#[test]
+fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
+    let src = "module t;\n\
+                 reg [7:0] m [0:3]; reg [7:0] v; integer fd;\n\
+                 initial begin\n\
+                   v = 8'h5a; m[0] = v; fd = 1;\n\
+                   $dumpfile(\"x.vcd\"); $dumpvars(0, t); $dumpon; $dumpall;\n\
+                   $dumplimit(1000); $writememb(\"m.txt\", m); $writememh(\"m.hex\", m);\n\
+                   $fclose(fd);\n\
+                   $monitor(\"m v=%0d\", v); $strobe(\"s v=%0d\", v);\n\
+                 end\n\
+               endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let arena = NetArena::build(&ir, &opts).expect("arena builds");
+    let sink = NullSink;
+    let mut st = fresh_state(&ir, &sink);
+    let empty: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut sched = Scheduler::new(&mut st, 33_000, 10_000, None, Default::default());
+    let mut nk = NativeKernel::new(&ir, arena, &mut sched, &empty, 10_000);
+    let mut refused = 0usize;
+    for (sid, stmt) in ir.stmts.iter().enumerate() {
+        let Stmt::SysTask { which, fmt, args } = stmt else {
+            continue;
+        };
+        let expect_refusal = matches!(
+            which,
+            sim_ir::SysTaskId::DumpVars
+                | sim_ir::SysTaskId::DumpAll
+                | sim_ir::SysTaskId::DumpOn
+                | sim_ir::SysTaskId::DumpFile
+                | sim_ir::SysTaskId::DumpLimit
+                | sim_ir::SysTaskId::Fclose
+                | sim_ir::SysTaskId::WritememB
+                | sim_ir::SysTaskId::WritememH
+                // …and the two whose RENDER happens outside dispatch entirely.
+                | sim_ir::SysTaskId::Monitor
+                | sim_ir::SysTaskId::Strobe
+        );
+        if !expect_refusal {
+            continue;
+        }
+        let (which, fmt, args) = (*which, *fmt, args.clone());
+        let hit = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            nk.k_dispatch_systask(which, fmt, &args, sid as u32);
+        }));
+        // `Err` = it panicked = it refused. (The first version of this line had
+        // the polarity backwards and reported the opposite of what happened.)
+        let payload = match hit {
+            Err(p) => p,
+            Ok(()) => panic!("{which:?}: DISPATCHED instead of refusing"),
+        };
+        let msg = match payload.downcast::<String>() {
+            Ok(b) => *b,
+            Err(p) => match p.downcast::<&'static str>() {
+                Ok(b) => (*b).to_string(),
+                Err(_) => String::new(),
+            },
+        };
+        assert!(
+            msg.contains("tier-3 native kernel") && msg.contains("NOT built yet"),
+            "{which:?}: panicked, but not with the not-built refusal — got: {msg}"
+        );
+        refused += 1;
+    }
+    assert_eq!(
+        refused, 10,
+        "expected all ten refused tasks to refuse — got {refused}"
+    );
+}
+
+/// The task arguments that are NET READS but never pass through the format
+/// engine: `$fdisplay`'s file descriptor and `$timeformat`'s units/precision.
+/// Threading the formatter alone left both reading `SimState`.
+///
+/// Both reviews found this independently, and neither the corpus walk nor the
+/// variant walk could see it — they use a CONSTANT fd (`32'h8000_0001`), which
+/// reads the same from either store. A literal is exactly the shape that hides a
+/// provenance bug.
+///
+/// Measured before the fix: `$fdisplay(fd, …)` with a NET fd read the untouched
+/// engine store, got X, and DROPPED the line with a bad-descriptor warning — on
+/// a design `run.json` reports `eligible: true, buildable: true`.
+///
+/// This one does NOT use the random walk. A randomly-drawn fd is invalid in both
+/// stores on most passes, so the two agree by both failing — measured, only 2 of
+/// 4 passes discriminated. The values are therefore chosen: the arena gets a
+/// USABLE descriptor and `SimState` an unusable one, so "which store did it
+/// read" is the difference between a line and a dropped line.
+///
+/// ⚠️ `$timeformat`'s arguments are threaded the same way and are NOT pinned
+/// here. This harness builds its `SimOpts` by hand and its `timeformat_stmts`
+/// sids do not reach `dispatch`'s intercept, so the task prints its own
+/// arguments instead of applying them — a harness limit, not a product one:
+/// the end-to-end differential measured `$timeformat` with runtime-variable
+/// arguments PRE == POST == iverilog. Saying so beats a test that passes for the
+/// wrong reason.
+#[test]
+fn s1d4b2_non_format_task_args_read_the_arena() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    #[derive(Clone, Default)]
+    struct Cap(Rc<RefCell<Vec<u8>>>);
+    impl std::io::Write for Cap {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    // (name, source, the net to diverge, arena value, SimState value, what the
+    // arena's value must make appear in the output)
+    let cases: [(&str, &str, u64, u64, &str); 1] = [(
+        "fdisplay_net_fd",
+        "module t;\n\
+               integer fd; reg [15:0] v;\n\
+               initial begin fd = 0; v = 16'habcd;\n\
+                 $fdisplay(fd, \"v=%0h\", v);\n\
+               end\n\
+             endmodule\n",
+        0x8000_0001, // stdout descriptor — the line prints
+        0x0000_0000, // no channel — the line goes nowhere
+        "v=",
+    )];
+
+    for (name, src, arena_val, state_val, expect) in cases {
+        let (ir, opts) = build_with_opts(src);
+        // ELIGIBLE is what makes the hole reachable rather than hypothetical.
+        let el = crate::native::design_eligibility(&ir, &opts);
+        assert!(el.eligible, "{name}: expected an eligible design");
+        let mut arena = NetArena::build(&ir, &opts).expect("arena builds");
+        // The net is `args[0]` of the design's one system task — resolved from the
+        // IR rather than by name, because net names live in `SimOpts`, not the IR.
+        let net = ir
+            .stmts
+            .iter()
+            .find_map(|st| match st {
+                Stmt::SysTask { args, .. } => match ir.exprs.get(*args.first()? as usize) {
+                    Some(sim_ir::Expr::Signal { net, .. }) => Some(*net),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{name}: no net-valued first argument"));
+
+        let cap = Cap::default();
+        let sink = NullSink;
+        let mut st = crate::SimState::new(
+            &ir,
+            Box::new(cap.clone()),
+            &sink,
+            "1ns".to_string(),
+            "test".to_string(),
+            None,
+        );
+        // Give both stores the SAME defined values first, so the ONE diverging net
+        // is the only thing that can explain a difference. (Without this the other
+        // nets sit at their t0 X in the arena and every render is `xxxx`, which
+        // hides the very thing under test.)
+        let mut rng = Rng::new(0x4B4F_0001);
+        mirror_state(
+            &mut st,
+            &mut arena,
+            &mut rng,
+            ir.nets.len() as u32,
+            true,
+            false,
+        );
+        st.now = 7_000;
+
+        let w = ir.nets[net as usize].width.max(1);
+        let words = vec![arena_val; 1];
+        arena.set_elem(net, 0, &words, &[0u64]);
+        for i in 0..w {
+            let bit = if i < 64 { (state_val >> i) & 1 } else { 0 };
+            set_bit(&mut st.nets[net as usize].cur, i, bit, 0);
+        }
+
+        let empty: BTreeMap<u32, u32> = BTreeMap::new();
+        {
+            let mut sched = Scheduler::new(&mut st, 33_000, 10_000, None, Default::default());
+            let mut nk = NativeKernel::new(&ir, arena, &mut sched, &empty, 10_000);
+            for (sid, stmt) in ir.stmts.iter().enumerate() {
+                if let Stmt::SysTask { which, fmt, args } = stmt {
+                    nk.k_dispatch_systask(*which, *fmt, args, sid as u32);
+                }
+            }
+        }
+        let out = String::from_utf8_lossy(&cap.0.borrow()).into_owned();
+        assert!(
+            out.contains(expect),
+            "{name}: output {out:?} does not contain {expect:?} — the argument was \
+             read from `SimState` (which holds {state_val:#x}) rather than the \
+             arena (which holds {arena_val:#x})"
+        );
+    }
 }
