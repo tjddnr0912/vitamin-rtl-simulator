@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 251건 (최신순)
+## 인덱스 — 완료 슬라이스 252건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.286` **③층 S1a+S1b — R1 아레나가 서고, 기존 eval 이 그 위에서 돈다.** S1 을 4 내부 단계로 분해(스케줄러를 한 번에 짓지 않는다 — 검증이 구현을 못 따라간다)하고 첫 둘을 완결: `NetArena`(원소당 `(val,unk)` 인접·워드 정렬·슬롯 desc 가 per-access 질문 전부를 대체) + `impl NetReader for NetArena`(기존 `EvalCtx` 가 제네릭이라 **평가 의미 공유 = parity by construction**·차분 표면이 read-path 로 좁아짐). **R1 중단 판정 통과**(corpus 72 폭별 슬롯 빌드 전수 성공). 게이트 = init parity 297넷 + 워드 경계 라운드트립 + **미러 차분 17,940건 발산 0**(정확 핀). 평가기 교체는 R2=S2 의 일 …
 - `4.5.285` **③층 T0+S0 — 계기 두 개를 달고 적격률을 쟀다: 79/79, S1 go.** run.json 에 `codegen`(②층 VM claim + 거부 사유 히스토그램 — REAL gate 와 **한 walk 공유**라 드리프트가 구조적으로 불가)·`native`(③층 설계 수준 판정 — SimOpts **`..` 없는 전수 destructure** + **NetKind 스캔**[plain `int q[$]` 는 사이드카가 없다]). `func_table` 은 §4.3 초판의 거부 목록에서 **코어로**(개정 4 가 T1/T2 를 S3 에 흡수). 함정 = `opts.fork_modes` 가 스케줄러로 move — 런 끝에서 읽었으면 fork 설계가 빈 테이블 위에서 eligible 로 조작될 뻔(컴파일러가 잡음). **측정 = 실사용 7종 + corpus 72 전부 적격 → S0 중단 판정 통과, S1 go**. keccak 호출형 = `able 1/4 · frame_bodies 3` 이 JSON 한 줄(round-26 맹점의 계기화). ≥30× 기준 vs v1 string 거부의 모순은 **열어 둔 채 기록**(preview/21 §7.3.1) …
 - `4.5.284` **외부 round-28 — IEEE 1364-2005 §3.5 암시적 net 선언을 구현했다.** 리포터가 상용 ASIC 트리의 `E3010` 97 + `E3009` 3 건을 사이트별로 "표준에서 합법인가"로 분류했고 **고유 원인 7개 중 6개가 vita 갭**이었다. 핵심 = vita 가 항상 `BTdefault_nettype none` 처럼 동작했다(doc-15 가 **의도된 정책**으로 명문화). 보수적이지만 **비준수**이고, 결정적으로 **사용자가 고칠 수 없다** — 7개 중 2개가 파운드리 납품 셀 라이브러리/IP 모델 안이다. 안전은 refusal 대신 **`W2003`**(doc-15 가 이미 예약해 둔 코드)이 산다. **경계는 iverilog 로 핀**(rhs·procedural lvalue·`none` 은 전부 error). 8-D(12→1비트 절단)는 값은 iverilog 와 같게 두고 **폭을 말하는 W3056** 을 낸다 — 모든 시뮬레이터가 조용히 하는 일을 vita 만 말한다. 부수: `BTdefault_nettype` 디렉티브 · `specparam` · 9-A 진단(EVENT CONTROL 을 lvalue 라 부르던 것) …
 - `4.5.283` ★★ **외부 round-27 — `@(*)` 가 attribute instance 로 렉싱되어 소스가 통째로 삼켜졌다.** 이 저장소가 받은 **최고 심각도** 리포트: `//` 주석 안의 `*)` 가 감도 리스트의 `(*` 를 닫아 **주석이 실행 코드로 승격**되고 `errors=0` 으로 **틀린 값**이 나왔다(correct-or-loud 위반). 뿌리 = attribute 스킵이 **원문(raw text) 정규식**이라 주석·문자열을 뚫고 지나가고, 짝을 못 찾으면 **조용히** 폴백했다 — 그래서 발현 여부가 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달려 `@(*)` 하나면 통과·둘이면 파괴, 진단은 **원인이 아닌 두 번째 블록**에 찍혔고 **파일 경계를 넘었다**. 수정 = attribute 를 **토큰 스트림**에서 인식(주석은 이미 사라졌고 문자열은 한 토큰) + `@` 직후는 event control + 안 닫힌 opener 는 loud. 3-way(PRE/POST/iverilog) 16형 전수 **회귀 0 · 수정 8** …
@@ -341,7 +342,49 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
-#### 4.5.285 ③층 T0+S0 — 계기 두 개를 달고 적격률을 쟀다: 79/79, S1 go (2026-08-03, branch feat-tier3-t0-s0, format 26 불변) ✅
+#### 4.5.286 ③층 S1a+S1b — R1 아레나가 서고, 기존 eval 이 그 위에서 돈다: 미러 차분 17,940건 발산 0 (2026-08-03, branch feat-tier3-s1-arena, format 26 불변) ✅
+
+**S1 분해 결정이 이 슬라이스의 절반이다.** 기존 스케줄러는 측정으로 핀된 행동 수십 개를 담고
+있어(glitch 엣지 마스크·inertial 세대 취소·edge collapse·waiter arm 스냅샷·self-write 억제 …)
+"새 스케줄러 + corpus 바이트 동일"을 한 번에 지으면 검증이 구현을 못 따라간다 → **S1a(저장)
+S1b(read-path) S1c(쓰기 퍼널) S1d(스케줄러+배선)** 로 갈라 각각 자기 게이트를 갖게 했다(정본 =
+preview/21 §5 S1 분해 표). 또 하나의 재독해: **평가기 교체는 R2(=S2)의 일**이다 — S1 은
+"인터프리터 형태" 그대로이므로 S1b 는 새 평가기가 아니라 **기존 `EvalCtx`(제네릭 `NetReader`)
+밑에 아레나 read-path 를 꽂는 것**. 평가 의미가 공유되므로 eval parity 는 by construction 이고,
+차분이 조준할 표면이 정확히 read-path(원소 인덱싱·OOB→X·top-word 마스킹)로 좁아진다.
+
+**S1a — `native/arena.rs`.** 넷마다 컴파일 시점 확정 `Slot{off,words,width,elems,signed}` —
+이 dense 레코드 하나가 flat store 의 per-access 질문(`NetSlot` 메타 + `class_is_handle`→
+`frame_local`→`dyn_is_handle` 라우팅 비트맵)을 전부 대체한다. 레이아웃 = 원소당 `(val,unk)`
+인접 2 plane, **원소가 워드 정렬**(기존 store 는 비트 연속 패킹이라 비정렬 원소가 bit-serial
+폴백을 탄다 — 그 경로 자체가 없다). t0 init 은 엔진 `expand_init` 의 브로드캐스트 규칙 미러.
+**R1 중단 판정("넷 저장이 폭별로 안 나뉘면 중단") = 통과** — corpus 72 전수 빌드 성공.
+
+**S1b — `impl NetReader for NetArena`.** 엔진 `read_net` flat arm 의 Value-수준 미러(OOB all-X
+비클램프 · scalar `word.unwrap_or(0)` · top-word 재마스킹). 의도적 부재 2건을 문서로 남김:
+OOB 시 `warn_run_range` 진단(stderr 는 S1d 의 몫)과 `read_scalar_words` fast path(S2).
+
+**게이트(전부 in-crate 차분·엔진이 오라클).** ① init parity: corpus **297넷 전수** 아레나 ≡
+엔진(원소·whole·OOB 읽기) + 레이아웃 타일링 어서션 ② 워드 경계 사다리(1/7/63/64/65/127/128/
+129/200b + 배열·signed) 마스킹 라운드트립 ③ **미러 차분 17,940건 발산 0** — 같은 랜덤 4-state
+상태를 양 스토어에 미러하고 같은 평가기를 두 리더로 돌려 全 pure expr × 5 상태 × 2 문맥 폭
+비교, 카운트를 정확 핀(커버리지가 조용히 줄면 핀이 운다).
+
+**기반 정비 둘.** `extern crate self as sim_engine`(sim-ir 선례)로 통합 테스트의 공유 corpus
+파일을 unit test 가 `#[path]` 재사용(중복 0·clippy `duplicate_mod` 때문에 include 는 native/mod.rs
+한 곳) · 그 파일의 `tmp_dir` 를 `option_env!`+fallback 으로(unit test 에는 `CARGO_TARGET_TMPDIR` 가
+없다 — 통합 테스트 쪽은 compile-time Some 그대로). 부수 발견: 공유 `Rng::range(0, u64::MAX)` 는
+span 산술이 오버플로한다(hi-lo+1·loud) — 테스트 로컬 `r64()` 로 우회, 기존 호출부는 전수 유한 상한.
+
+**적대 2렌즈 — BLOCKING/MAJOR 0.** soundness 가 read_net/init 을 엔진과 arm-별 대조(전 Value 필드
+PartialEq 포섭·`array_len==0` 경계 동일까지)하고 **S2 의무 1건**을 냈다(OOB arm 이 엔진의
+`is_real` 스탬프를 생략 — 오늘은 Real 거부라 sound·차분이 구조적으로 못 잡는 자리 → OOB arm 에
+의무 코멘트로 핀). differential 은 **깰 수 없었다**: 자체 프로브 ~21,600점(광폭 배열 1~193b ·
+엔진 비정렬 bit-serial 전 위상 0..63 스윕 · X/Z/OOB/2^64 인덱스 · signed×문맥 resize 행렬 ·
+distinct-원소 whole-read) 3-way(ground truth 포함) 전부 동일 — 다만 **출하 차분의 측정 공백 2건**
+(corpus 원소 폭이 4~16 뿐·whole-read 가 브로드캐스트 init 라 vacuous)을 지적했고, 리뷰어의 프로브
+파일을 권고대로 **업스트림에 흡수**해 닫았다(`native/probe_tests.rs`·3 테스트·카운트 핀).
+검증 = 전 스위트 5090 green · clippy `-D warnings` · fmt.
 
 **무엇.** preview/21 §7.3 의 첫 두 단계. ① **T0** — run.json 에 `codegen{able,total,frame_bodies,
 reject_reasons}`: ②층 VM 이 이 설계에서 무엇을 거부했고 왜인지. 그 전까지 유일한 관측 수단이

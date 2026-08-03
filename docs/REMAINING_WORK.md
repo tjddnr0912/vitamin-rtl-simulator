@@ -11,7 +11,7 @@
 
 ## A. 현재 상태 한 줄 요약
 
-> **★★ 2026-08-03 최우선 = ③층 S1(R1 정적 넷 할당)** (§B 0번 · 정본 = [ROADMAP §5.0](ROADMAP.md) / [preview/21 §7](preview/21-tier3-native-backend.md)). **T0+S0 은 완료(§4.5.285)** — run.json `codegen`/`native` 계기 + `native::design_eligibility` 설계 수준 게이트. **적격률 실측 79/79(실사용 7 + P6 corpus 72) → S0 중단 판정 통과, S1 go**(측정표 = preview/21 §7.3.1). 아래 정확성 큐는 사라지지 않고 **그 뒤로 밀린다**.
+> **★★ 2026-08-03 최우선 = ③층 S1c(아레나 쓰기 퍼널)** (§B 0번 · 정본 = [ROADMAP §5.0](ROADMAP.md) / [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)). **T0+S0(§4.5.285)·S1a+S1b(§4.5.286) 완료** — 적격률 79/79 · `NetArena` R1 저장 + 기존 eval 밑 read-path(미러 차분 17,940건 발산 0 · R1 중단 판정 통과). 남은 S1 = **S1c 쓰기 퍼널**(엔진 `write_lvalue` Value-수준 미러·문장 단위 차분) → **S1d 자기 스케줄러 + `--backend native`**(corpus stdout+VCD 바이트 동일·eligibility≡executor 게이트 통일). 아래 정확성 큐는 사라지지 않고 **그 뒤로 밀린다**.
 >
 > **직전 = §4.5.283 (외부 round-27, 최고 심각도)** — `@(*)` 가 attribute instance 로 렉싱되어 **주석이 실행 코드로 승격**되고 `errors=0` 으로 틀린 값이 나왔다. 원문 정규식 스캔이 주석·문자열을 뚫고, 짝을 못 찾으면 조용히 폴백해 발현이 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달렸다(파일 경계도 넘었다). attribute 인식을 **토큰 스트림**으로 옮기고, `@` 직후는 event control 로 두고, 안 닫힌 opener 를 loud 로 만들어 닫았다 — 3-way 16형 **회귀 0 · 수정 8**.
 
@@ -30,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **★★ ③층 S1 — R1 정적 넷 할당**(T0·S0 ✅ §4.5.285 — 적격률 79/79·S1 go). S1 = `native::NetArena`(컴파일 시점 확정 폭 슬롯·`(val,unk)` 인접) 위 인터프리터형 최소 실행기, 코드 생성 없음. 게이트 = corpus 적격분 `--backend native` **바이트 동일**. 중단 판정 = 넷 저장이 폭별로 안 나뉘면 중단(R2 불가). VM 기여 관측은 이제 run.json `codegen` 한 줄(T0 계기) | `--backend` A/B · iverilog · verilator(③층 상한) |
+| **0** | **★★ ③층 S1c — 아레나 쓰기 퍼널**(T0·S0·S1a·S1b ✅ §4.5.285/286). whole/bit/part/array-elem lvalue · OOB drop · X-index no-op · NBA 샘플 오프셋 = 엔진 `write_lvalue` 의 Value-수준 미러. 게이트 = 한 문장 실행 후 **양 스토어 값 동일**(in-crate 차분). 그 다음 S1d = 자기 스케줄러 + `--backend native`(corpus stdout+VCD 바이트 동일) | 엔진 오라클 in-crate 차분 · `--backend` A/B |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 

@@ -22,6 +22,11 @@
 //! multi-word arithmetic. All three engine-facing side tables ride out-of-band in
 //! `SimOpts` and never enter the frozen `SimIr`.
 
+// The shared test harness (`tests/common/mod.rs`) names this crate as
+// `sim_engine::…`; aliasing self lets in-crate unit tests `#[path]`-include that
+// SAME file (single corpus source) instead of duplicating it. sim-ir precedent.
+extern crate self as sim_engine;
+
 mod backend;
 mod builtins;
 mod eval;

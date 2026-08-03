@@ -85,8 +85,15 @@ pub fn build(src: &str) -> sim_ir::SimIr {
 /// Cargo-guaranteed-writable scratch dir for integration tests. `std::env::temp_dir`
 /// can be sandboxed/non-writable under the test harness (its `$dumpfile` `File::create`
 /// would then silently fail and emit no VCD), so use `CARGO_TARGET_TMPDIR` instead.
+/// `option_env!`: the variable exists only for INTEGRATION tests — this same file is
+/// `#[path]`-included by in-crate unit tests (`src/native/tests.rs`), where cargo does
+/// not define it and the std temp dir is an acceptable fallback (those tests never
+/// write a VCD).
 fn tmp_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+    match option_env!("CARGO_TARGET_TMPDIR") {
+        Some(d) => std::path::PathBuf::from(d),
+        None => std::env::temp_dir(),
+    }
 }
 
 /// Run `ir` on `backend`, capturing stdout. The VCD is redirected to a per-`tag`

@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S1 착수 (T0·S0 ✅)** | 7 | 실측 | ⭐⭐ **T0+S0 완료(2026-08-03, §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트. **적격률 실측 79/79(실사용 7 + corpus 72) → 중단 판정 통과, S1 go.** 다음 = **S1 R1 정적 넷 할당**(새 모듈·`Value` 소거·게이트 = corpus 적격분 바이트 동일). 단계·중단 판정·파괴 범위 = **[preview/21 §7](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S1c 착수 (T0·S0·S1a·S1b ✅)** | 6 | 실측 | ⭐⭐ **S1a+S1b 완료(2026-08-03, §4.5.286)** — `NetArena` R1 저장 + 기존 eval 밑 read-path. **R1 중단 판정 통과** · 미러 차분 **17,940건 발산 0**. 다음 = **S1c 쓰기 퍼널**(엔진 `write_lvalue` 미러·문장 단위 차분 게이트) → S1d 스케줄러+배선. 단계·중단 판정·파괴 범위 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -126,14 +126,15 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-0. ★★ **③층 S1 — R1 정적 넷 할당** (§5 · 정본 = [preview/21 §5 S1 + §7.3](preview/21-tier3-native-backend.md)).
-   **T0+S0 완료(§4.5.285)**: run.json `codegen{able,total,frame_bodies,reject_reasons}`/`native{eligible,
-   reject_reasons}` 계기 + `sim_engine::native::design_eligibility`(SimOpts 전수 destructure·NetKind 스캔).
-   **적격률 79/79 → S1 go.** S1 범위 = `native::NetArena`(넷마다 컴파일 시점 확정 폭 슬롯·`(val,unk)`
-   인접) 위에서 도는 **인터프리터형 최소 실행기** — 코드 생성 없음. 게이트 = corpus 적격분
-   `--backend native` 바이트 동일. 중단 판정 = 넷 저장이 폭별로 안 나뉘면 중단(R2 불가).
-   ⚠️ 성공 기준(리포터 워크로드 ≥30×)과 v1 string 거부의 **모순은 열림** — preview/21 §7.3.1 마지막 항,
-   S2 실측 후 재측정 게이트에서 판정. **T4**(함수 지역 배열 쓰기 21×)는 기회 슬라이스로 독립 유지.
+0. ★★ **③층 S1c — 쓰기 퍼널** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
+   T0+S0(§4.5.285)·S1a+S1b(§4.5.286) 완료 — 아레나가 서고 기존 eval 이 그 위에서 돈다(미러 차분
+   17,940건 발산 0 · R1 중단 판정 통과). **S1c 범위** = 아레나 쓰기 퍼널: whole/bit/part/array-elem
+   lvalue · OOB write drop · X-index no-op · same-value 판정(엔진 `write_lvalue` 의 Value-수준 미러) ·
+   NBA 샘플 오프셋. 게이트 = 같은 상태에서 한 문장 실행 후 **양 스토어 값 동일**(엔진 오라클 in-crate
+   차분). 그 다음 = **S1d 자기 스케줄러 + `--backend native` 배선**(runtime 게이트 = S0 설계 게이트 ∧
+   아레나 빌드 — eligibility-set ≡ executor-set 의무 · run.json 은 실제 실행기 기록 · corpus 적격분
+   stdout+VCD 바이트 동일). ⚠️ 성공 기준(리포터 ≥30×) vs v1 string 거부 모순은 열림(preview/21
+   §7.3.1 — S2 실측 후 판정). **T4**(함수 지역 배열 쓰기 21×)는 기회 슬라이스로 독립 유지.
 1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
 2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
@@ -331,14 +332,19 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0 ✅ → S0 ✅ → **S1** … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0 ✅ → S0 ✅ → S1a ✅ S1b ✅ → **S1c → S1d** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
-> **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json 에 `codegen`(②층 VM claim + 거부 사유
-> 히스토그램, compile gate 와 walk 공유)·`native`(③층 설계 수준 판정, SimOpts 전수 destructure +
-> NetKind 스캔). **측정 = 실사용 7종 + P6 corpus 72 전부 적격(79/79) → S0 중단 판정 통과, S1 go**
-> (측정표 = preview/21 §7.3.1). 다음 = **S1 R1 정적 넷 할당**.
+> **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트.
+> **적격률 79/79 → S0 중단 판정 통과.**
+>
+> **S1a+S1b 완료 (2026-08-03 · §4.5.286)** — S1 을 4 내부 단계로 분해(정본 = preview/21 §5 S1
+> 분해 표). `NetArena`(R1 저장 소유·슬롯 desc 가 per-access 질문 전부 대체) + `impl NetReader
+> for NetArena`(기존 eval 밑 = 평가 의미 공유). **R1 중단 판정 통과**(corpus 72 폭별 슬롯 전수)
+> · 게이트 = init parity 297넷 + **미러 차분 17,940건 발산 0**. 다음 = **S1c 쓰기 퍼널**
+> (bit/part/array lvalue·OOB drop·X-index no-op·NBA 샘플 — 게이트 = 한 문장 실행 후 양 스토어
+> 값 동일), 그 다음 **S1d 자기 스케줄러 + `--backend native` 배선**(corpus stdout+VCD 바이트 동일).
 
 | | |
 |---|---|

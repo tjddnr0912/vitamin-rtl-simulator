@@ -35,6 +35,18 @@ use sim_ir::{NetKind, SimIr};
 
 use crate::SimOpts;
 
+pub mod arena;
+#[cfg(test)]
+mod probe_tests;
+// The SHARED corpus/harness source, included exactly ONCE for both test
+// modules (clippy duplicate_mod forbids a per-file include) — see the
+// `extern crate self as sim_engine` note in lib.rs.
+#[cfg(test)]
+#[path = "../../tests/common/mod.rs"]
+mod test_common;
+#[cfg(test)]
+mod tests;
+
 /// The S0 verdict for one design. `eligible` ⇔ `reject_reasons` is empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeEligibility {
