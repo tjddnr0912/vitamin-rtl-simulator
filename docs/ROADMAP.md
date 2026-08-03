@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S1d-2 착수 (…S1c·S1d-1 ✅)** | 4 | 실측 | ⭐⭐ **S1d-1 완료(2026-08-03, §4.5.288)** — 백엔드 선택 + **런타임 게이트**(설계 ∧ 아레나 빌드) · run.json 이 실제 실행기와 **두 층 판정**을 싣는다(79/79 vs **78/79**). 다음 = **S1d-2 스케줄러 코어 + dirty/edge** — ⚠️ 남은 필수 2건(퍼널 밖 효과 배선·`warn_run_range`). 정본 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S1d-3 착수 (…S1d-1·S1d-2 ✅)** | 3 | 실측 | ⭐⭐ **S1d-2 완료(2026-08-03, §4.5.289)** — **dirty/edge 채널**(`slot_edge` 까지) · 7행동+2 store 지점 **teeth 검증**(리뷰가 bit-serial 0회 진입을 실측해 닫음). 다음 = **S1d-3 리전 큐·델타·NBA**(게이트 = **ready 집합과 순서**를 엔진과 비교) → S1d-4 바이트 동일. 정본 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -126,19 +126,19 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-0. ★★ **③층 S1d-2 — 아레나 스케줄러 코어 + dirty/edge 채널** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
-   T0·S0(§4.5.285)·S1a·S1b(§4.5.286)·S1c(§4.5.287)·**S1d-1(§4.5.288)** 완료 — 저장·read-path·쓰기
-   퍼널이 엔진과 차분 일치하고, 백엔드 선택과 **런타임 게이트**(설계 ∧ 아레나 빌드)가 배선됐다
-   (`--backend native` 는 출력 바이트를 안 움직이며 run.json 이 실제 실행기와 두 층 판정을 싣는다).
-   **S1d-2 범위** = 아레나 위 리전 큐(Active/Inactive/NBA)·델타 루프 + **dirty/edge 채널**
-   (`note_change`+`accumulate_edge` 는 쓰기 퍼널의 두 store 지점에 달린다 — `changed` 만 소비하고
-   intra-slot 엣지 마스크를 안 남기면 값은 맞고 **posedge 가 사라진다**). 그 다음 **S1d-3**(cont-assign
-   settle + wired-AND/OR 다중 드라이버 해소) → **S1d-4**(corpus 적격분 **stdout+VCD 바이트 동일** =
-   원래 S1 게이트 · `warn_run_range` stderr 포함). ⚠️ **남은 필수 2건**: **퍼널 밖 효과 배선**
-   (`rhs_is_stmt_effect` 가족 + `$readmem*`/`$sformat` 은 `write_lvalue` 를 한 번도 안 부른다 ·
-   `r = $random(seed)` 는 **오늘 적격**이고 배선 없이 돌리면 매 draw 가 같다 · 판정은 tier-2 와 같은
-   술어로) · `warn_run_range` stderr. ⚠️ ≥30× vs v1 string 거부 모순 열림(preview/21 §7.3.1).
-   **T4**(함수 지역 배열 쓰기 21×)는 기회 슬라이스로 유지.
+0. ★★ **③층 S1d-3 — 리전 큐 · 델타 루프 · NBA** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
+   T0·S0(§4.5.285)·S1a·S1b(§4.5.286)·S1c(§4.5.287)·S1d-1(§4.5.288)·**S1d-2(§4.5.289)** 완료 —
+   저장·read-path·쓰기 퍼널·**dirty/edge 채널**이 전부 엔진과 차분 일치하고, 백엔드 선택과 런타임
+   게이트가 배선됐다. **S1d-3 범위** = 아레나 위 Active/Inactive/NBA 리전 큐 + 델타 루프 +
+   `take_changed` 를 소비하는 **wake 결정**(엣지 마스크→`net_to_edge` · level waiter · self-write
+   억제 · multi-edge dedup). 게이트 = 같은 초기 상태·같은 이벤트열에서 **ready 집합과 그 순서**가
+   엔진과 동일(값이 아니라 **결정**을 비교 — S1d-2 가 채널에 한 것과 같은 형태). 그 다음 **S1d-4** =
+   cont-assign settle + wired-AND/OR 해소 → corpus 적격분 **stdout+VCD 바이트 동일**(원래 S1 게이트).
+   ⚠️ **남은 필수 1건**: 퍼널 밖 효과 배선(`rhs_is_stmt_effect` 가족 + `$readmem*`/`$sformat` 은
+   `write_lvalue` 를 안 거친다 · `r = $random(seed)` 는 **오늘 적격**). ⚠️ **VCD 는 gate-reject 가
+   아니다** — S1d-4 게이트가 VCD 바이트 동일이므로 `note_change` 가 `word` 를 되찾고 emitter 는
+   **store 지점**에 있어야 한다(sweep 시점이면 슬롯 내 A→B→A 가 한 레코드로 합쳐진다 · `dirty.rs`).
+   ⚠️ ≥30× vs v1 string 거부 모순 열림(preview/21 §7.3.1). **T4** 는 기회 슬라이스로 유지.
 1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
 2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
@@ -336,12 +336,17 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a·S1b·S1c·S1d-1 ✅ → **S1d-2** … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a·S1b·S1c·S1d-1·S1d-2 ✅ → **S1d-3** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
 > **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트.
 > **적격률 79/79 → S0 중단 판정 통과.**
+>
+> **S1d-2 완료 (2026-08-03 · §4.5.289)** — **dirty/edge 채널**(`dirty` 멤버십 = 변경 집합 · 
+> `last_blocking_writer` · **`slot_edge`** = 끝점이 잃은 엣지 **종류**). edge-target 스캔은 엔진과
+> **한 철자**. ⭐ 게이트 teeth 를 세 번 재확인했고, 적대 리뷰가 **두 store 지점 중 bit-serial 쪽이
+> 0회 진입**(그 블록을 지워도 전 패키지 초록)임을 실측해 닫았다.
 >
 > **S1d-1 완료 (2026-08-03 · §4.5.288)** — S1d 를 넷으로 분해하고 첫 조각: `Backend::Native`·
 > `--backend native`·`native::runtime_gate`(설계 게이트 ∧ 아레나 빌드). 실행기가 없어 **항상 VM 폴백**,
