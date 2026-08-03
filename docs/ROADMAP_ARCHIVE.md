@@ -6,7 +6,7 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 258건 (최신순)
+## 인덱스 — 완료 슬라이스 259건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
@@ -346,6 +346,44 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.293 ③층 S1d-4b-1 — 포맷 엔진의 리더를 파라미터로: **seam 은 문제의 절반이었다** (2026-08-04, branch feat-tier3-s1d4b, format 26 불변) ✅
+
+4a 가 남긴 유일한 CORE 미배선 `k_dispatch_systask` 의 블로커는 **`builtins` 가 `&SimState` 로
+렌더한다**는 것. `format_args_str_with(st, nets, …)` 로 리더를 파라미터화하고
+`render_template`/`next_arg_with` 로 내려보냈다. **기존 진입점은 `st` 를 넘기는 리터럴 forward** 라
+엔진 호출부가 하나도 안 움직였다 = byte-identity 가 구조적. **`&dyn` 이 아니라 제네릭**: `EvalCtx.nets`
+는 **넷 접근마다 여러 번** 호출되므로 트레이트 객체면 ①②층 전부가 ③층의 seam 비용을 낸다(실측: 40만
+`$display` 설계 wall-clock 변화 없음).
+
+**⭐ 첫 게이트가 완전히 공허했고 뮤테이션 4개가 증명했다.** 두 스토어를 미러링해 놓고 "두 렌더가 같다"를
+단언했는데, **스토어가 같으면 리더 인자를 무시하는 구현도 같은 문자열을 낸다** — **같음으로는 출처를
+시험할 수 없다.** 스토어를 일부러 어긋나게(SimState=A · arena=B) 하고 arena 리더 렌더가 **B 의 렌더와
+같아야** 한다로 재구성. 같은 원칙으로 **테스트가 못 죽이는 파라미터 셋은 되돌렸다**
+(`expr_const_string`·`str_const_of_expr`·`arg_string` 은 `Expr::Const` early-return 이라 넷을 못 읽는다
+— 못 죽이는 파라미터는 진짜 갭과 구별이 안 된다).
+
+**⭐⭐ 그리고 리뷰가 seam 이 문제의 절반임을 실측했다.** 포맷터는 `now`·`cur_time_mult`·`rng`·
+`timeformat`·`global_prec_exp`·`cur_scope` 도 `&SimState` 에서 읽는데 `NativeKernel` 이 **앞 셋의 자기
+복사본**을 들고 있었다 → dispatch 를 배선하는 순간 `$time`·`%t`·`$random` 이 **넷과 다른 시계·다른
+스트림**에서 나온다(`eligible: true, buildable: true` 로 실측된 설계에서 · 컴파일 에러가 아니라 **틀린
+한 줄**). 수정 = 커널이 **`SimState` 를 빌린다**(복사 0 · `nets` 만이 다를 수 있는 필드). ⚠️ 그리고
+`now`/`cur_time_mult` 는 첫 주석이 주장한 **"cold" 가 아니다** — 런 루프가 매 타임스텝, 프로세스 디스패치가
+매 활성화마다 다시 쓴다. **이건 4a 가 이미 산 교훈이다**(4a 는 t=0 에서 안 보이던 것 때문에 패스마다
+`now`/`cur_time_mult` 를 바꿨다) — **한 슬라이스 뒤에 같은 축에서 안 적용했다.**
+
+**리뷰 나머지**: 집계 anti-vacuity → **사이트별**(한 사이트가 조용히 st_a 를 읽어도 다른 사이트가 가린다) ·
+`$monitor`/`$strobe` 는 **0 사이트 수집**이고 애초에 `flush_postponed` 에서 렌더하므로 필터에서 제거 ·
+못 죽이는 arm 이 **둘이 아니라 셋**(런타임 string trailing arm — 목록이 막으려던 실패를 목록 안에서 범함) ·
+**렌더 사이트 열거가 또 양방향으로 틀렸다**(`$error`/`$fatal` 은 `dispatch.rs` 밖 `run_severity` 에서
+렌더 · 정작 적어 둔 `$sformat` 사이트는 gate-refused).
+
+**기록(미수정)**: `NetArena` 의 `fd_eof` 기본값은 **X-poison 구멍**인데 지금은 `$feof` 과잉표시가 가리고
+있다 → 그 과잉표시를 고치는 사람이 override 를 빚진다 · `?Sized` 는 아직 **load-bearing 아님**(없어도
+컴파일) — 4b-2 의 `k_nets()` 가 `&dyn` 을 돌려준다.
+
+**게이트.** 5115 green · clippy `-D warnings` · fmt · format 26 불변 · PRE/POST **10 설계 stdout+VCD
+바이트 동일**.
 
 #### 4.5.292 ③층 S1d-4a — `impl Kernel`: 스텁하면 안 되는 절반은 술어다 (2026-08-03, branch feat-tier3-s1d4a-impl, format 26 불변) ✅
 
