@@ -269,9 +269,7 @@ impl Scheduler<'_, '_> {
             // Transport NBAs due now join this tick's NBA region; the global
             // seq sort in `apply_nba` interleaves them with NBAs scheduled
             // during the tick in original statement order.
-            if let Some(ups) = self.delayed_nba.remove(&next) {
-                self.nba.extend(ups);
-            }
+            self.take_due_delayed(next);
             let mut events = self.wheel.remove(&next).unwrap_or_default();
             for (region, ready) in events.drain(..) {
                 match region {
@@ -623,6 +621,21 @@ impl Scheduler<'_, '_> {
     }
 
     // ── NBA ──────────────────────────────────────────────────────────────
+
+    /// Move the transport updates due at `now` into this tick's NBA batch.
+    ///
+    /// Called by the run loop AND by the tier-3 differential, which is the point:
+    /// the first version of this was `#[cfg(test)]` with the run loop keeping its
+    /// own inline `delayed_nba.remove`, and its docstring claimed that avoided a
+    /// second spelling of an ordering rule while being exactly that. If this move
+    /// ever changes — a range drain, or a different position relative to the
+    /// `delayed_ca` apply and the wheel promotion — the tier-3 gate now changes
+    /// with it instead of validating against a stale rule.
+    pub(crate) fn take_due_delayed(&mut self, now: u64) {
+        if let Some(ups) = self.delayed_nba.remove(&now) {
+            self.nba.extend(ups);
+        }
+    }
 
     pub(crate) fn apply_nba(&mut self) {
         let mut batch = std::mem::take(&mut self.nba);

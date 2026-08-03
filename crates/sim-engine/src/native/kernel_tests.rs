@@ -98,11 +98,10 @@ fn effect_tag(e: &StmtEffect<'_>) -> &'static str {
 /// `kpred::rhs_routes_to_worker`, the disjunction of the arms `compute_effect`
 /// actually branches on, which cannot under-approximate that way.
 ///
-/// The `delay.is_none()` line is the same shape: the S0 gate does NOT inspect
-/// `NonblockingAssign.delay`, so a transport-delay NBA is eligible and reaches
-/// the unbuilt `k_schedule_nba_at`. This filter, not the gate, is what keeps it
-/// out — said plainly here because a reader who assumes otherwise will conclude
-/// the gate covers something it does not.
+/// Transport-delay NBAs are admitted since S1d-4c-1 built `k_schedule_nba_at`.
+/// Note the S0 gate still does NOT inspect `NonblockingAssign.delay` — it never
+/// needed to, and saying so keeps a reader from concluding the gate covers
+/// something it does not.
 fn executable_sites(ir: &SimIr, class_new_sites: &BTreeMap<u32, u32>) -> Vec<u32> {
     (0..ir.stmts.len() as u32)
         .filter(|&sid| {
@@ -113,7 +112,10 @@ fn executable_sites(ir: &SimIr, class_new_sites: &BTreeMap<u32, u32>) -> Vec<u32
                 Stmt::BlockingAssign { rhs, .. } => {
                     !crate::exec::kpred::rhs_routes_to_worker(ir.exprs.as_slice(), *rhs)
                 }
-                Stmt::NonblockingAssign { delay, .. } => delay.is_none(),
+                // Transport-delay NBAs are ADMITTED now: S1d-4c-1 implemented
+                // `k_schedule_nba_at`. The filter previously excluded them and
+                // said so, because the method was `not_built!`.
+                Stmt::NonblockingAssign { .. } => true,
                 _ => false,
             }
         })
@@ -168,6 +170,15 @@ fn s1d4a_walk(src: &str, name: &str, seed: u64) -> usize {
         );
         nk.nba.clear();
         nk.nba_seq = 0;
+        // A NON-ZERO `now`, on BOTH sides. `k_schedule_nba_at` files a transport
+        // under `now + ticks`, and with `now == 0` everywhere that term is
+        // indistinguishable from `ticks` alone — measured, replacing it with
+        // `ticks` survived the entire workspace suite. In production the same
+        // mutation would file every transport under a key BELOW `now`, which is
+        // never drained: the update vanishes silently.
+        const WALK_NOW: u64 = 7;
+        st.now = WALK_NOW;
+        nk.sched.st.now = WALK_NOW;
         // DISTINCT values: `max_deltas` and `max_body_steps` were both 10_000, so the
         // `k_max_deltas` comparison was 10_000 == 10_000 and blind to a swap of the
         // two — the confusion the kernel's own constructor doc warns about.
@@ -203,10 +214,54 @@ fn s1d4a_walk(src: &str, name: &str, seed: u64) -> usize {
             }
             compared += 1;
         }
-        // The scheduler's queue is per-pass state on the engine side; the
-        // kernel's is cleared above so the two stay index-aligned.
-        sched.nba.clear();
+        // ── S1d-4c-1: DRAIN both queues and compare the stores again ──
+        //
+        // Queueing was already compared entry by entry above, but a queue that
+        // holds the right entries and applies them in the wrong ORDER lands
+        // different bits — NBA order is `seq` order (statement order), not queue
+        // order, and the two differ the moment a transport update joins the tick.
+        // Draining is also the only thing that makes a transport NBA observable
+        // at all: it writes nothing when scheduled.
+        // TICK BY TICK, not once: a transport update is filed under `now + d`,
+        // so a single drain at `now` reaches only the same-tick queue and leaves
+        // every delayed bucket untouched — which is what made "file it at `now`"
+        // and "never move the due bucket" both survive mutation. The range covers
+        // the largest delay these designs use.
+        let now = sched.st.now;
+        for tick in now..=now + 8 {
+            sched.take_due_delayed(tick);
+            nk.take_due_delayed(tick);
+            sched.apply_nba();
+            nk.apply_nba();
+            assert_stores_equal(
+                sched.st,
+                &nk.arena,
+                n_nets,
+                &format!("{name}/pass{pass}/tick{tick}/after-nba-drain"),
+            );
+        }
+        // The window is now ASSERTED, not assumed. A bucket filed past `now + 8`
+        // was silently dropped on BOTH sides, so raising a design's delays past
+        // the window (or mis-filing every bucket at `ticks * 2`) left the gate
+        // green — measured. This turns the cliff into a failure.
+        assert!(
+            nk.delayed_nba.is_empty(),
+            "{name}/pass{pass}: transport buckets remain past the drain window \
+             ({:?}) — widen the window or the walk is not draining them",
+            nk.delayed_nba.keys().collect::<Vec<_>>()
+        );
+
+        // Both queues are empty after `apply_nba` hands its drained Vec back, so
+        // there is nothing to clear here — the line that used to do it, and the
+        // comment explaining why, described a state that no longer exists. What
+        // DOES need resetting is the kernel's delayed map: the engine's dies with
+        // its per-pass `Scheduler` and the kernel's would otherwise carry buckets
+        // into the next pass.
+        assert!(sched.nba.is_empty() && nk.nba.is_empty());
     }
+    // (`drained` was asserted == 36 here; it is 4 x 9 from two loop literals and
+    // no design property can move it, so it said nothing. The window assertion
+    // above is what that check was reaching for.)
     compared
 }
 
@@ -228,10 +283,90 @@ fn s1d4a_shared_executor_agrees_on_both_stores_over_corpus() {
     );
 }
 
+/// TRANSPORT-delay NBAs (`a <= #3 b`), which S1d-4c-1 implemented and which the
+/// corpus does not contain a single one of (measured). They are the only shape
+/// where the queue's ORDER can differ from its contents: a delayed update filed
+/// under an earlier tick and a same-tick update interleave by `seq`, not by
+/// which queue they came from — so the drain, not the push, is what can get them
+/// wrong. And a transport NBA writes nothing when scheduled, so before the drain
+/// existed it was unobservable in this walk regardless.
+#[test]
+fn s1d4c1_transport_delay_nbas_drain_in_seq_order() {
+    let designs: [(&str, &str); 4] = [
+        (
+            "transport_mixed_with_same_tick",
+            "module t;\n\
+               reg [15:0] a; reg [15:0] b; reg [15:0] c;\n\
+               initial begin\n\
+                 b = 16'h1111; c = 16'h2222;\n\
+                 a <= #3 b;  a <= c;  a <= #1 (b ^ c);\n\
+                 a <= b + c; a <= #2 16'hbeef;\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "transport_same_destination_last_wins",
+            "module t;\n\
+               reg [7:0] d; reg [7:0] s1; reg [7:0] s2;\n\
+               initial begin\n\
+                 s1 = 8'haa; s2 = 8'h55;\n\
+                 d <= #1 s1; d <= #1 s2; d <= #2 (s1 & s2); d <= #1 (s1 | s2);\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            // CONCAT destination — `NbaLhs::of`'s two-arm split. Measured: forcing
+            // the `One` arm (so `{a,b} <= #1 w` writes only `a`, from the wrong
+            // half of `w`) survived every test in the package. The same-tick twin
+            // `nba_concat_lhs` exists for exactly this hazard; its transport
+            // counterpart did not.
+            "transport_concat_lhs",
+            "module t;\n\
+               reg [7:0] hi; reg [7:0] lo; reg [15:0] w;\n\
+               initial begin\n\
+                 w = 16'h1234; hi = 8'h00; lo = 8'h00;\n\
+                 {hi, lo} <= #1 w;  {lo, hi} <= #2 ~w;\n\
+                 {hi, lo} <= w + 16'h1111;\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "transport_into_array_and_partselect",
+            "module t;\n\
+               reg [31:0] w; reg [7:0] m [0:3]; integer i; reg [7:0] v;\n\
+               initial begin\n\
+                 i = 2; v = 8'h3c;\n\
+                 m[i] <= #2 v; w[15:8] <= #1 v; i = 0; m[i] <= #3 ~v;\n\
+                 w[7:0] <= v; w[31:24] <= #1 8'hff;\n\
+               end\n\
+             endmodule\n",
+        ),
+    ];
+    let mut compared = 0usize;
+    for (i, (name, src)) in designs.iter().enumerate() {
+        let n = s1d4a_walk(src, name, 0x4C10_0000 + i as u64);
+        assert!(n > 0, "{name}: produced no comparisons");
+        // The design must actually carry a transport NBA, or the walk is testing
+        // the same-tick path under a name that says otherwise.
+        let (ir, _) = build_with_opts(src);
+        let transports = ir
+            .stmts
+            .iter()
+            .filter(|s| matches!(s, Stmt::NonblockingAssign { delay: Some(_), .. }))
+            .count();
+        assert!(transports > 0, "{name}: no transport-delay NBA in the IR");
+        compared += n;
+    }
+    assert_eq!(
+        compared, 108,
+        "transport coverage moved — re-pin deliberately"
+    );
+}
+
 /// The shapes the corpus does not carry: a nonblocking assign to a dynamic
 /// array element (the NBA sample-at-schedule rule), a concat LHS, a part-select
-/// destination, and an X index. Each is a place where a kernel could get the
-/// STORE right and the queued SAMPLE wrong.
+/// destination, an X index, and 2-state destinations. Each is a place where a
+/// kernel could get the STORE right and the queued SAMPLE wrong.
 #[test]
 fn s1d4a_shared_executor_agrees_on_adversarial_assigns() {
     let designs: [(&str, &str); 5] = [
@@ -594,6 +729,15 @@ fn s1d4a_control_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
         let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
         nk.nba.clear();
         nk.nba_seq = 0;
+        // A NON-ZERO `now`, on BOTH sides. `k_schedule_nba_at` files a transport
+        // under `now + ticks`, and with `now == 0` everywhere that term is
+        // indistinguishable from `ticks` alone — measured, replacing it with
+        // `ticks` survived the entire workspace suite. In production the same
+        // mutation would file every transport under a key BELOW `now`, which is
+        // never drained: the update vanishes silently.
+        const WALK_NOW: u64 = 7;
+        st.now = WALK_NOW;
+        nk.sched.st.now = WALK_NOW;
         // DISTINCT values: `max_deltas` and `max_body_steps` were both 10_000, so the
         // `k_max_deltas` comparison was 10_000 == 10_000 and blind to a swap of the
         // two — the confusion the kernel's own constructor doc warns about.
@@ -1678,4 +1822,92 @@ fn s1d4b2_non_format_task_args_read_the_arena() {
              arena (which holds {arena_val:#x})"
         );
     }
+}
+
+/// The `seq` SORT in `apply_nba`, which nothing else here can reach.
+///
+/// NBA order is statement order, not queue order, and the two diverge only when
+/// a delayed bucket merges into a queue that still holds same-tick entries —
+/// entries with HIGHER `seq` than the delayed ones scheduled before them. The
+/// walk cannot produce that: it drains at every tick, so by the time a bucket
+/// arrives the same-tick queue is already empty, and removing the sort survived
+/// every other test.
+///
+/// So the configuration is built directly: schedule a mix, merge every bucket
+/// WITHOUT draining in between, then apply once.
+///
+/// ⚠️ The store comparison is NOT what has teeth here, and saying so matters:
+/// both kernels get the identical call sequence, so removing the sort from BOTH
+/// leaves them agreeing — measured. What catches that is the explicit
+/// highest-seq expectation at the end. The store compare catches only a
+/// kernel-ONLY divergence. Two assertions, two different failures.
+#[test]
+fn s1d4c1_apply_nba_sorts_by_seq_not_by_queue() {
+    let src = "module t;\n\
+                 reg [15:0] a; reg [15:0] p; reg [15:0] q;\n\
+                 initial begin p = 16'h1111; q = 16'h2222; end\n\
+               endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let arena = NetArena::build(&ir, &opts).expect("arena builds");
+    let sink = NullSink;
+    let mut st_e = fresh_state(&ir, &sink);
+    let mut st_n = fresh_state(&ir, &sink);
+    let empty: BTreeMap<u32, u32> = BTreeMap::new();
+    // One destination, so ORDER decides the surviving value.
+    let dest = ir
+        .stmts
+        .iter()
+        .find_map(|s| match s {
+            Stmt::BlockingAssign { lhs, .. } => Some(lhs.clone()),
+            _ => None,
+        })
+        .expect("an lvalue to reuse");
+
+    let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+    let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
+    let mut sched_e = Scheduler::new(&mut st_e, 33_000, 10_000, None, Default::default());
+
+    // Interleave: delayed, same-tick, delayed, same-tick … so the merged queue
+    // is NOT in `seq` order and only the sort can restore it.
+    for (i, ticks) in [Some(2u64), None, Some(1), None, Some(2), Some(1), None]
+        .iter()
+        .enumerate()
+    {
+        let v = crate::value::Value::from_i128(0x1000 + i as i128, 16, false);
+        match ticks {
+            Some(t) => {
+                sched_e.k_schedule_nba_at(&dest, v.clone(), *t);
+                nk.k_schedule_nba_at(&dest, v, *t);
+            }
+            None => {
+                sched_e.k_schedule_nba(&dest, v.clone());
+                nk.k_schedule_nba(&dest, v);
+            }
+        }
+    }
+    // Merge every bucket BEFORE applying — the whole point.
+    for tick in 0..=3u64 {
+        sched_e.take_due_delayed(tick);
+        nk.take_due_delayed(tick);
+    }
+    assert_eq!(
+        nk.nba.len(),
+        7,
+        "expected exactly every update queued, once"
+    );
+    assert!(
+        nk.nba.windows(2).any(|w| w[0].seq > w[1].seq),
+        "the merged queue must be OUT of seq order, or the sort is a no-op here"
+    );
+    sched_e.apply_nba();
+    nk.apply_nba();
+    assert_stores_equal(sched_e.st, &nk.arena, ir.nets.len() as u32, "seq-sort");
+    // …and the surviving value must be the LAST by seq, not the last in queue
+    // order — pinned explicitly so "both agree" cannot mean "both wrong".
+    let net = dest.chunks[0].net;
+    assert_eq!(
+        crate::eval::NetReader::read_net(&nk.arena, net, None).to_u64(),
+        Some(0x1006),
+        "the highest-seq update must win"
+    );
 }

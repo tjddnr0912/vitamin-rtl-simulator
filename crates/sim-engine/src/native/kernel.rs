@@ -12,10 +12,10 @@
 //! ## What "honest" means for the methods that are not implemented, in TWO kinds
 //!
 //! 52 declarations (51 without the `jit` feature). They divide four ways, and
-//! S1d-4b-2 moved two of them: **15 store core** · **17 classification
-//! predicates** · **18 gate-refused workers** · **2 NOT BUILT**
-//! (`k_schedule_nba_at`, `k_rearm`). `k_dispatch_systask` and `k_sformatf` are
-//! now implemented. The counts are counted, not estimated — an early draft said
+//! two slices moved three of them: **16 store core** · **17 classification
+//! predicates** · **18 gate-refused workers** · **1 NOT BUILT** (`k_rearm`).
+//! S1d-4b-2 implemented `k_dispatch_systask` and `k_sformatf`; S1d-4c-1
+//! implemented `k_schedule_nba_at`. The counts are counted, not estimated — an early draft said
 //! "20 refused" and "16 file methods" and both were wrong (18 and 8).
 //!
 //! The two-kind split is the correction both reviewers of this slice forced, and
@@ -26,7 +26,7 @@
 //!   alloc, `disable fork`, and the eleven funnel-outside workers §4.5.291's
 //!   `stmt_effect` row covers (seeded `$random`/`$dist_*`, `$cast`,
 //!   `$value$plusargs`, the 8 file methods). `gate_refused!` names the row.
-//! - **NOT BUILT (2)**: `k_schedule_nba_at` and `k_rearm`. An ELIGIBLE design reaches every one of these; what keeps them
+//! - **NOT BUILT (1)**: `k_rearm`. An ELIGIBLE design reaches every one of these; what keeps them
 //!   out of production is `native::runtime_gate` choosing the VM, one layer below
 //!   eligibility (§4.5.288's two-layer verdict). `not_built!` says so and names
 //!   the slice that builds it. Using the gate-refused wording here — which the
@@ -86,7 +86,9 @@
 //!   from the store side (`&st.nets`, `st.nets[`, `read_net`, `eval_expr`,
 //!   `sched.eval`) rather than from a name list — the first attempt grepped
 //!   three spellings and came out 3x low.
-//! - **The NBA queue here is a flat `Vec`, not the region machinery.** Entries
+//! - **The NBA queues here are a flat `Vec` plus a delayed `BTreeMap`, not the
+//!   region machinery.** S1d-4c-1 added the DRAIN (`apply_nba`,
+//!   `take_due_delayed`); regions and the delta loop are 4c-2. Entries
 //!   are `NbaUpdate` — the ENGINE's type, not a parallel one — so the gate can
 //!   compare them field by field, and so 4c inherits a queue whose shape it does
 //!   not have to migrate. Draining/regions/delta are 4c.
@@ -183,9 +185,34 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// and a runaway combinational body would have spun forever instead of
     /// reporting `F4027`. The gate caught it by comparing against the engine's.
     pub(crate) max_body_steps: u64,
-    /// The NBA queue in engine shape. 4c gives it regions and a drain.
+    /// The NBA queue in engine shape. S1d-4c-1 gave it the drain; regions and
+    /// the delta loop are 4c-2.
     pub(crate) nba: Vec<NbaUpdate>,
     pub(crate) nba_seq: u64,
+    /// TRANSPORT-delay updates, filed under the tick they are due — the engine's
+    /// `delayed_nba`, same type and same key, so the two drains compare directly.
+    ///
+    /// ⚠️ **S1d-4c-2 OWES THIS QUIESCENCE.** `k_schedule_nba_at` used to be a
+    /// `not_built!` panic and is now a silent enqueue, which is a step DOWN the
+    /// accuracy ladder for as long as nothing drains it in production. The
+    /// engine decides "is there future work" from `Scheduler::delayed_nba`
+    /// (`run_loop.rs` computes `next` as the min over `wheel`/`delayed_ca`/
+    /// `delayed_nba`) — and that map stays EMPTY on a native run, because every
+    /// `k_schedule_nba*` lands here instead. A design whose only pending work is
+    /// a transport NBA would therefore be reported quiescent and its update
+    /// dropped. 4c-2's loop must fold THIS map into that minimum.
+    ///
+    /// Not reachable today — `simulate` forces `Backend::Native` to the VM — and
+    /// note the surviving `k_rearm` guard does NOT cover it: `k_rearm` is called
+    /// only from the VM and JIT, and the VM refuses transport NBAs outright, so
+    /// the interpreter path this backend routes through has no loud guard for a
+    /// transport at all. Recorded rather than left to be re-derived.
+    pub(crate) delayed_nba: BTreeMap<u64, Vec<NbaUpdate>>,
+    /// The reused destination for a single-chunk NBA write. The engine keeps one
+    /// per flush for a measured reason (2.4M malloc/free pairs on a 40000-cycle
+    /// picorv32 run), and carrying the same shape here keeps the write funnel's
+    /// input identical rather than merely equivalent.
+    nba_scratch_lhs: Lvalue,
     pub(crate) fatal: bool,
 }
 
@@ -206,8 +233,53 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             max_body_steps,
             nba: Vec::new(),
             nba_seq: 0,
+            delayed_nba: BTreeMap::new(),
+            nba_scratch_lhs: Lvalue { chunks: Vec::new() },
             fatal: false,
         }
+    }
+
+    /// Move the transport updates due at `now` into this tick's NBA batch.
+    ///
+    /// The engine does this with `delayed_nba.remove(&next)` at the top of a
+    /// timestep; the `seq` sort in `apply_nba` is what then interleaves them with
+    /// updates scheduled during the tick, in original statement order. Splitting
+    /// the two queues but sharing the sort is the whole mechanism.
+    pub(crate) fn take_due_delayed(&mut self, now: u64) {
+        if let Some(ups) = self.delayed_nba.remove(&now) {
+            self.nba.extend(ups);
+        }
+    }
+
+    /// Drain the NBA batch into the arena — the engine's `apply_nba`, restated
+    /// over this store.
+    ///
+    /// Restated rather than shared because the engine's version is a method on
+    /// `Scheduler` that writes `self.st`; what is shared is the thing that
+    /// matters, `write_lvalue`, which is the S1c funnel both backends use. The
+    /// two things this must not get wrong are the `seq` sort (NBA order is
+    /// statement order, not queue order) and the fact that a `NbaLhs::One`
+    /// borrows the engine's scratch `Lvalue` rather than allocating.
+    pub(crate) fn apply_nba(&mut self) {
+        let mut batch = std::mem::take(&mut self.nba);
+        batch.sort_by_key(|u| u.seq);
+        let mut scratch =
+            std::mem::replace(&mut self.nba_scratch_lhs, Lvalue { chunks: Vec::new() });
+        let ir = self.ir;
+        for u in batch.drain(..) {
+            match u.lhs {
+                NbaLhs::One(c) => {
+                    scratch.chunks.clear();
+                    scratch.chunks.push(c);
+                    self.arena.write_lvalue(ir, &scratch, u.sampled, &u.offsets);
+                }
+                NbaLhs::Many(lv) => {
+                    self.arena.write_lvalue(ir, &lv, u.sampled, &u.offsets);
+                }
+            }
+        }
+        self.nba_scratch_lhs = scratch;
+        self.nba = batch;
     }
 
     /// The read context: `SimState::mk_eval_ctx` with exactly ONE field changed.
@@ -340,19 +412,27 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
 
     fn k_schedule_nba_at(&mut self, lhs: &Lvalue, value: Value, ticks: u64) {
-        // TRANSPORT delay: the engine files this under `now + ticks` in a
-        // separate map. 4c owns the time-bucketed queue; until it exists the
-        // entry cannot be filed anywhere that would honour the delay, and
-        // dropping it into the same-step queue would run it EARLY — a wrong
-        // answer, not a missing feature.
-        let _ = (lhs, value, ticks);
-        not_built!(
-            "k_schedule_nba_at (transport-delay NBA)",
-            "S1d-4c",
-            "there is no time-bucketed queue, and filing the entry same-step would \
-             fire it EARLY — a wrong answer, not a missing feature. The S0 gate does \
-             not inspect `NonblockingAssign.delay`, so `a <= #3 b` is eligible"
-        )
+        // TRANSPORT delay: filed under `now + ticks`, exactly as the engine does.
+        //
+        // ⚠️ The interleave-by-`seq` this enables is, today, a rule with no
+        // production reader — measured: removing the `sort_by_key` from the
+        // ENGINE's `apply_nba` leaves the whole package green, because the run
+        // loop drains NBA to empty before the timestep advances, so the bucket
+        // always extends an EMPTY queue and per-bucket push order is already
+        // ascending. Keeping the sort in both is right (the rule is IEEE's, and
+        // 4c-2's delta loop is where a non-empty merge becomes reachable), but it
+        // is not a mechanism either backend currently exercises.
+        // The index is sampled NOW, before the push, like every other NBA.
+        let offsets = self.k_resolve_lvalue_offsets(lhs);
+        let seq = self.nba_seq;
+        self.nba_seq += 1;
+        let at = self.sched.st.now.saturating_add(ticks);
+        self.delayed_nba.entry(at).or_default().push(NbaUpdate {
+            seq,
+            lhs: NbaLhs::of(lhs),
+            sampled: value,
+            offsets,
+        });
     }
 
     // ── CLASSIFICATION: one spelling, shared with the engine's impl ──
