@@ -65,9 +65,10 @@ pub(crate) enum Tri {
 }
 
 /// Scale an already-evaluated `#delay` amount into global-precision ticks:
-/// real → two-stage round (to the module's own precision `P = M/S`, then by `S`)
-/// clamped at 0; any X/Z → 0 (iverilog parity); integral → `v × M`, u64-saturating
-/// with a too-wide value saturating to `u64::MAX` rather than collapsing to 0.
+/// real → two-stage round (to the module's own precision `P = M/S`, then by `S`);
+/// any X/Z → 0 (iverilog parity); integral → `v × M`, u64-saturating. NEGATIVE in
+/// either domain → `u64::MAX`, i.e. never fires, matching iverilog; zero (and a
+/// value that ROUNDS to zero, including `-0.0`) → 0, the `#0` delta delay.
 ///
 /// Shared for the same reason `resolve_offsets` is, and the S1d-4a gate proved
 /// the need rather than assuming it: this rule was first RESTATED on the tier-3
@@ -80,10 +81,21 @@ pub(crate) fn delay_ticks_of(v: &crate::value::Value, mult: u64, prec_mult: u64)
         let s_mult = prec_mult.max(1);
         let p_mult = (mult / s_mult).max(1);
         let x = v.to_f64().unwrap_or(0.0) * p_mult as f64;
-        if x <= 0.0 {
-            return 0;
+        // ROUND FIRST, then test the sign — measured, not assumed. A negative
+        // real fired IMMEDIATELY while a negative integer never fired
+        // (`to_u64()` on a negative yields `None` → `u64::MAX`); iverilog fires
+        // neither, so one function was giving two answers. But testing the sign
+        // of the RAW product overshoots: a tiny negative like `#(-1e-9)` rounds
+        // to zero and iverilog DOES fire it at 0. So the boundary is the ROUNDED
+        // value, and `-0.0` (which `round` yields for any `x` in `(-0.5, 0]`)
+        // compares `>= 0` and fires — the `#0` delta delay. The first fix here
+        // was right for `-1.0` and wrong for `-1e-9`; the three-way sweep caught
+        // it.
+        let r = x.round();
+        if r < 0.0 {
+            return u64::MAX;
         }
-        return (x.round() as u64).saturating_mul(s_mult);
+        return (r as u64).saturating_mul(s_mult);
     }
     if v.has_xz() {
         return 0;

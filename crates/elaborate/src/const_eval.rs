@@ -136,7 +136,46 @@ pub(crate) fn const_delay_ticks(e: &ast::Expr, mult: u64, prec_mult: u64) -> Opt
     // integer delay: exact `d × M` (saturating into u32) — a whole-unit count is
     // already an exact multiple of the module precision (unit ≥ prec), so
     // stage-1 rounding is the identity here.
-    const_eval_u32(pick).map(|d| (d as u64).saturating_mul(mult).min(u32::MAX as u64) as u32)
+    //
+    // Folded at 64 bits, NOT through `const_eval_u32`. That helper takes the low
+    // 32 bits (`const_fn.rs`: `… .first() … as u32`), which for a delay is a WRAP,
+    // and a wrap on a delay is a silent early fire — measured, `assign
+    // #5000000000` under `1ns/1ns` fired at t=705032704 (= 5e9 mod 2^32, 7.09×
+    // early) with `errors=0`, while iverilog never fired it. The other two branches
+    // of this function already saturate; the integer branch was the one that
+    // escaped its own policy.
+    const_delay_u64(pick).map(|d| d.saturating_mul(mult).min(u32::MAX as u64) as u32)
+}
+
+/// The delay path's own integer fold: the full low-64-bit value of a 2-state
+/// literal, so the caller can SATURATE rather than wrap.
+///
+/// Deliberately not a widening of `const_eval_u32`, which serves indices, bounds
+/// and widths as well — each of those has its own out-of-range policy, and giving
+/// them all this one silently would be the shared-machinery mistake
+/// ENGINEERING_RULES records ("adding a rule to a shared walk must be opt-in").
+///
+/// ⚠️ REMAINING GAP (ROADMAP §2): a delay that exceeds `u32::MAX` precision ticks
+/// is still CLAMPED rather than reported. The IR field is `u32`, so representing
+/// it needs a frozen-type change; reporting it needs a new W-code. Until then the
+/// clamp is wrong only for a run that actually reaches 4.29e9 ticks, instead of
+/// wrong for every such delay.
+fn const_delay_u64(e: &ast::Expr) -> Option<u64> {
+    match &e.kind {
+        ast::ExprKind::IntLit { kind, raw } => {
+            let cv = literal::parse_int_literal(raw, *kind)?;
+            // x/z in a delay is not a constant — same rule as `const_eval_u32`.
+            if cv.bits.unk.iter().any(|&w| w != 0) {
+                return None;
+            }
+            Some(cv.bits.val.first().copied().unwrap_or(0))
+        }
+        ast::ExprKind::Paren { inner } => const_delay_u64(inner),
+        // Anything else (a param ref, an expression) keeps the pre-existing
+        // 32-bit fold: widening those is a separate question about the constant
+        // evaluator, not about this wrap.
+        _ => const_eval_u32(e).map(|v| v as u64),
+    }
 }
 
 /// If `e` (looking through `Paren`) is an unsized single-bit fill literal

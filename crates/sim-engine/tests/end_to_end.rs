@@ -32,6 +32,74 @@ fn timescale_fractional_delay_exact() {
     assert_eq!(res.sim_time, 2500);
 }
 
+/// A continuous-assign delay wider than `u32` used to WRAP, firing early and
+/// silently. `assign #5000000000` under 1ns/1ns fired at t=705032704
+/// (= 5e9 mod 2^32, 7.09x early) with `errors=0`; iverilog never fires it within
+/// the run. The elaborate-time fold took the low 32 bits of the literal before
+/// the saturation its own two sibling branches already applied.
+///
+/// Oracle: iverilog 13 prints `w=xx` at every probe point, POST matches.
+#[test]
+fn ca_delay_wider_than_u32_does_not_wrap() {
+    let (ir, opts) = build_timescaled(
+        "`timescale 1ns/1ns\n\
+         module top; reg [7:0] src; wire [7:0] w;\n\
+           assign #5000000000 w = src;\n\
+           initial begin src = 8'h5a;\n\
+             #705032704 $display(\"A w=%0h\", w);\n\
+             #100000    $display(\"B w=%0h\", w);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+    );
+    let (_res, out) = simulate_capture(&ir, opts);
+    // The WRAPPED delay would have landed exactly at the first probe.
+    assert!(
+        out.contains("A w=xx") && out.contains("B w=xx"),
+        "a >u32 CA delay fired early (wrap regression): {out}"
+    );
+}
+
+/// A NEGATIVE real delay used to fire immediately while a negative INTEGER delay
+/// never fired — one function, two answers. iverilog fires neither. But the
+/// boundary is the ROUNDED value, not the raw one: `#(-1e-9)` rounds to zero and
+/// iverilog DOES fire it at 0, so a sign test on the product overshoots.
+///
+/// Three-way pinned (vita/PRE/iverilog) over 50 designs x 5 timescales.
+#[test]
+fn negative_delays_never_fire_but_tiny_negatives_round_to_zero() {
+    let (ir, opts) = build_timescaled(
+        "module top; real r; integer n; reg [7:0] a;\n\
+           initial begin a = 0; r = -1.0; n = -3;\n\
+             fork begin #(r)     a = 1; end join_none\n\
+             fork begin #(-0.5)  a = 2; end join_none\n\
+             fork begin #(n)     a = 3; end join_none\n\
+             fork begin #(-7)    a = 4; end join_none\n\
+             #50 $display(\"NEG a=%0d\", a);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+    );
+    let (_res, out) = simulate_capture(&ir, opts);
+    assert!(out.contains("NEG a=0"), "a negative delay fired: {out}");
+
+    // …and the rounds-to-zero case still fires, which a raw-sign test would kill.
+    let (ir2, opts2) = build_timescaled(
+        "module top; real r; reg [7:0] a;\n\
+           initial begin a = 0; r = -1e-9;\n\
+             fork begin #(r) a = 1; #3 a = 2; end join_none\n\
+             #50 $display(\"TINY a=%0d\", a);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+    );
+    let (_res2, out2) = simulate_capture(&ir2, opts2);
+    assert!(
+        out2.contains("TINY a=2"),
+        "a tiny negative delay that rounds to zero must still fire (iverilog does): {out2}"
+    );
+}
+
 #[test]
 fn timescale_default_is_1ns_1ns() {
     // No `timescale → 1ns/1ns base, multiplier 1: `#5` advances 5 ticks (unchanged).
