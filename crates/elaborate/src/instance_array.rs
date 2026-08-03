@@ -267,6 +267,9 @@ impl Elaborator<'_> {
                         name: pname.clone(),
                         value,
                         span: *span,
+                        // A per-index SLICE of an array instantiation is a rebuilt
+                        // explicit connection, never the `.name` shorthand.
+                        implicit_name: false,
                     }
                 })
                 .collect();

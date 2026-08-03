@@ -53,7 +53,22 @@ impl Preprocessor<'_> {
                 self.note_dir_newline(file, &line);
                 line.cursor
             }
-            "default_nettype" => self.consume_one_token(src, file, name_end),
+            // `default_nettype <type>` (IEEE 1364-2005 §19.2 / 1800 §22.8) governs
+            // whether an undeclared identifier in a §3.5 position becomes an implicit
+            // net. The directive line is stripped, so — exactly like `timescale` above —
+            // `self.out.len()` is the expanded offset from which it takes effect, and
+            // later stages resolve it per module by offset (file-order inheritance,
+            // "RULE S" sticky). Only `none` differs in behaviour; every other legal
+            // net type (`wire`, `tri`, `wand`, …) means "implicit nets allowed", which
+            // is also the state before any directive appears.
+            "default_nettype" => {
+                let line = self.consume_logical_line(src, name_end);
+                let arg = line.text.trim();
+                let is_none = arg.split_whitespace().next() == Some("none");
+                self.nettype_none.push((self.out.len(), is_none));
+                self.note_dir_newline(file, &line);
+                line.cursor
+            }
             // `begin_keywords "spec"` and `unconnected_drive pull1|pull0` carry an
             // argument on their line; consume the whole logical line (accept-ignore —
             // we keep the full keyword set / drive state). IEEE 1800 §22.14, §22.10.

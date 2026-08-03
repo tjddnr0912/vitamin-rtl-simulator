@@ -99,6 +99,10 @@ pub struct PpResult {
     /// `from_offset ≤ module.span.lo`. Empty ⇒ no directive seen (caller applies the
     /// `1ns/1ns` base + `W-PP-TIMESCALE-DEFAULT`).
     pub timescales: Vec<(usize, TimeScale)>,
+    /// `` `default_nettype `` regions as (expanded offset, is_none), in source order.
+    /// Same shape and same resolution rule as `timescales`: the LAST region whose
+    /// offset is <= a module's start governs that module.
+    pub nettype_none: Vec<(usize, bool)>,
 }
 
 /// A `` `timescale unit/precision `` value as base-10 exponents of SECONDS, e.g.
@@ -383,6 +387,7 @@ struct Preprocessor<'a> {
 
     /// `` `timescale `` regions captured in EXPANDED-text order (offset, scale).
     timescales: Vec<(usize, TimeScale)>,
+    nettype_none: Vec<(usize, bool)>,
 }
 
 /// A captured logical directive line (continuation-joined).
@@ -565,6 +570,7 @@ impl<'a> Preprocessor<'a> {
             saw_directive: false,
             budget_blown: false,
             timescales: Vec::new(),
+            nettype_none: Vec::new(),
         }
     }
 
@@ -616,6 +622,7 @@ impl<'a> Preprocessor<'a> {
             map,
             diags: self.diags,
             timescales: self.timescales,
+            nettype_none: self.nettype_none,
         }
     }
 }

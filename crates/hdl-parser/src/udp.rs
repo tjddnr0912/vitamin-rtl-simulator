@@ -790,6 +790,9 @@ impl Parser<'_, '_> {
             ports: PortList::Ansi(ports),
             body,
             span,
+            // Overwritten by the driver from `resolve_module_nettype`; the parser cannot
+            // see the stripped directive, so it writes the IEEE default (`wire`).
+            nettype_none: false,
         })
     }
 }

@@ -264,6 +264,7 @@ impl Parser<'_, '_> {
                 name,
                 value,
                 span: start.to(self.prev_span()),
+                implicit_name: true,
             };
         }
         self.expect(TokenKind::LParen, "'(' after port name");
@@ -277,6 +278,7 @@ impl Parser<'_, '_> {
             name,
             value,
             span: start.to(self.prev_span()),
+            implicit_name: false,
         }
     }
 

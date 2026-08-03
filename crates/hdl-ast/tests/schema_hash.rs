@@ -200,9 +200,17 @@ use vita_schema::schema_hash;
 /// `logic [1:0][3:0] m` member; empty for a single-dim member). Front-end only (the
 /// member desugars to a flat part-select in the parser; no sim-ir change,
 /// format_version stays 22). All `.vu` artifacts are stale. Re-pins this .vu hash.
+/// Re-pinned 2026-08-03 §4.5.284 IEEE 1364-2005 §3.5 implicit nets — THREE fields:
+/// `ModuleDecl.nettype_none` (was `` `default_nettype none `` in effect where this module
+/// was declared — it rides the AST so the staged `.vu` carries the policy that governed
+/// the source `velab` never sees), `ContinuousAssign.from_gate` (a gate-primitive desugar,
+/// whose read terminals are §3.5 positions while an ordinary `assign` rhs is not), and
+/// `PortConn.implicit_name` (the `.name` shorthand, which desugars to `.name(name)` but
+/// is NOT a §3.5 position — IEEE 1800 §23.3.2.2 requires a declared object). Front-end
+/// only; no sim-ir change, format_version stays 26. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    144, 62, 80, 227, 193, 2, 229, 171, 85, 68, 62, 91, 243, 142, 150, 38, 22, 205, 184, 180, 74,
-    66, 46, 208, 76, 69, 175, 146, 236, 204, 85, 72,
+    232, 197, 242, 26, 193, 127, 23, 186, 96, 240, 153, 25, 107, 39, 160, 86, 60, 216, 120, 173, 9,
+    9, 207, 107, 85, 103, 86, 136, 214, 28, 145, 114,
 ];
 
 #[test]

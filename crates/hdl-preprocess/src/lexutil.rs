@@ -691,3 +691,24 @@ pub(crate) fn skip_ws_comments(s: &str, mut i: usize) -> usize {
     }
     i
 }
+
+/// Per-module `` `default_nettype none `` state, resolved exactly like
+/// [`resolve_module_timescales`]: the LAST region whose offset is at or before the
+/// module's start governs it, and a module before any directive gets the IEEE default
+/// (`wire` ⇒ implicit nets allowed ⇒ `false`).
+pub fn resolve_module_nettype(
+    modules: &[(&str, usize)],
+    regions: &[(usize, bool)],
+) -> std::collections::BTreeMap<String, bool> {
+    let mut out = std::collections::BTreeMap::new();
+    for &(name, lo) in modules {
+        let none = regions
+            .iter()
+            .rev()
+            .find(|(off, _)| *off <= lo)
+            .map(|(_, n)| *n)
+            .unwrap_or(false);
+        out.insert(name.to_string(), none);
+    }
+    out
+}

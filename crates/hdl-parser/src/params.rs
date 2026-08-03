@@ -178,7 +178,14 @@ impl Parser<'_, '_> {
     /// out so a comma-list applies ONE prefix to every name.
     pub(crate) fn parse_param_prefix(&mut self) -> ParamPrefix {
         let start = self.cur_span();
-        let kind = if self.eat_kw(Kw::Localparam) {
+        // R28 appendix: `specparam` (IEEE 1364-2005 §3.12) is a module-local constant
+        // whose only differences from `localparam` are that it may also appear inside a
+        // `specify` block and that a back-annotation tool (SDF) may override it. Neither
+        // matters to a functional simulation, and a vendor model that keeps its timing
+        // constants there and references them from ordinary delay expressions
+        // (`#(tPROBE*0.5)`) is a common pattern — the reporter had to rewrite the
+        // KEYWORD to get a foundry EFUSE model through. Accepted as a localparam.
+        let kind = if self.eat_kw(Kw::Localparam) || self.eat_kw(Kw::Specparam) {
             ParamKind::Localparam
         } else {
             self.eat_kw(Kw::Parameter);

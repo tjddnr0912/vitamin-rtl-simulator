@@ -329,23 +329,30 @@ impl Elaborator<'_> {
     /// → emit + return [`POISON_NET`] (u32::MAX, NOT 0 — so a surviving poison
     /// edge is detectable, never a silent alias of net 0). The IR is discarded on
     /// `had_error` regardless. (COVERAGE verdict MEDIUM.)
+    /// Resolve a MULTI-segment path as a dotted symbol — interface member access
+    /// (`bus.sig`, `i.sig`), whose dotted name IS the symbol key (aliases inserted by
+    /// interface port binding; a direct `i.sig` hits the instance's own nets).
+    ///
+    /// Extracted so a caller that wants to give its OWN diagnostic for an unresolved
+    /// hierarchical name can ask the question with the exact predicate `resolve_net`
+    /// uses, instead of re-deriving it. Re-deriving is how a classifier drifts from its
+    /// lowering; the A2b-prereq F2 filter below (a dotted hit on a package-var import
+    /// alias is not a known dotted symbol, §26.3) is precisely the sort of clause that
+    /// gets forgotten in a copy.
+    pub(crate) fn lookup_dotted_net(&self, path: &ast::HierPath) -> Option<u32> {
+        let joined = path
+            .segments
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>()
+            .join(".");
+        self.lookup_net_scoped(&joined)
+            .filter(|_| !self.dotted_hit_is_pkg_alias(&joined))
+    }
+
     pub(crate) fn resolve_net(&mut self, path: &ast::HierPath) -> u32 {
         if path.segments.len() != 1 {
-            // v5 ⑥ (D): interface member access (`bus.sig`, `i.sig`) — the
-            // dotted name IS the symbol key (aliases inserted by interface
-            // port binding; direct `i.sig` hits the instance's own nets).
-            let joined = path
-                .segments
-                .iter()
-                .map(|s| s.name.as_str())
-                .collect::<Vec<_>>()
-                .join(".");
-            // A2b-prereq F2: a dotted hit on a package-var import alias is not
-            // a known dotted symbol (§26.3) — fall through to the loud reject.
-            if let Some(id) = self
-                .lookup_net_scoped(&joined)
-                .filter(|_| !self.dotted_hit_is_pkg_alias(&joined))
-            {
+            if let Some(id) = self.lookup_dotted_net(path) {
                 return id;
             }
             // A hierarchical READ in an expression is deferred (N3) and a hierarchical

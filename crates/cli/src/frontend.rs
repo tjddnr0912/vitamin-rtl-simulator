@@ -290,7 +290,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
         }
         return None;
     }
-    let Some(unit) = unit else {
+    let Some(mut unit) = unit else {
         // Empty source with no errors: nothing to simulate. Treat as a usage
         // error — the user pointed the tool at a file with no design units.
         sink.emit(LogEvent::Diagnostic(Diagnostic {
@@ -314,8 +314,18 @@ pub(crate) fn frontend_pp_to_unit_mapped(
         })
         .collect();
     let rt = hdl_preprocess::resolve_module_timescales(&modules, &pp.timescales);
+    // R28 §3.5: the same offset resolution answers `` `default_nettype ``. The parser
+    // wrote the IEEE default (`wire`) into every `ModuleDecl`; stamp the real policy on
+    // now, while the region offsets and the module spans still share one coordinate
+    // space. It rides the AST from here, so the staged `.vu` carries it too.
+    let nt = hdl_preprocess::resolve_module_nettype(&modules, &pp.nettype_none);
     drop(modules); // release the borrow of `unit` before moving it
-                   // doc-08: a design with NO `timescale at all gets the 1ns/1ns base + one warning.
+    for it in &mut unit.items {
+        if let hdl_ast::TopItem::Module(m) = it {
+            m.nettype_none = nt.get(&m.name.name).copied().unwrap_or(false);
+        }
+    }
+    // doc-08: a design with NO `timescale at all gets the 1ns/1ns base + one warning.
     if pp.timescales.is_empty() {
         sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Warning,

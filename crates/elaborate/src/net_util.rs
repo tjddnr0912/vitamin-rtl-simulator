@@ -428,6 +428,66 @@ impl Elaborator<'_> {
     /// dedicated slot), and do NOT push the orphan net — so `net_count` and the
     /// golden hash are not perturbed by an unreferenceable duplicate.
     /// (LOWERING + COVERAGE verdicts: duplicate-net silent acceptance.)
+    /// IEEE 1364-2005 §3.5 — declare `name` as an implicit scalar net, or answer
+    /// `false` if the policy forbids it.
+    ///
+    /// §3.5 says an undeclared identifier becomes a net of the current
+    /// `` `default_nettype `` when it appears in ONE OF TWO POSITIONS ONLY: the terminal
+    /// list of a gate or module instance, and the LHS of a continuous assignment.
+    /// Anywhere else — an ordinary rhs, a procedural lvalue — it stays an error, and
+    /// that boundary is iverilog-pinned, not inferred: all three of `assign y = TYPO;`,
+    /// `initial TYPO = 1;` and any position under `` `default_nettype none `` are hard
+    /// errors there too. So this is deliberately NOT wired into `resolve_net`'s generic
+    /// unresolved arm; the two callers that own a §3.5 position ask for it by name.
+    ///
+    /// vita refused to do this at all until R28 (doc-15 recorded the refusal as
+    /// policy: "오타가 조용히 wire가 되는 사고 클래스가 원천 차단"). The refusal is
+    /// conservative but it is also non-conforming, and it is unfixable from the user
+    /// side when the construct sits in a foundry-supplied cell library or IP model.
+    /// The safety it was buying is bought instead by `W2003`, which doc-15 reserved for
+    /// exactly this and which `-Werror=W-PARSE-IMPLICIT-NET` restores to a hard error.
+    ///
+    /// The net is SCALAR (1 bit) — that is what §3.5 mandates, and it is why a wider
+    /// continuous assignment to one silently loses its top bits in every simulator.
+    /// `check_implicit_net_width` makes that case loud rather than leaving it to the
+    /// reader (the reporter found a live 12→1 bit truncation this way).
+    pub(crate) fn declare_implicit_net(&mut self, name: &str) -> bool {
+        if self.cur_nettype_none {
+            return false;
+        }
+        let fq = self.fq(name);
+        let fq2 = fq.clone();
+        self.warn_code(
+            MsgCode::ParseImplicitNet,
+            &format!(
+                "implicit net `{fq}` inferred as a 1-bit wire (IEEE 1364-2005 §3.5); \
+                 declare it explicitly, or use ``default_nettype none`` to make this \
+                 an error"
+            ),
+        );
+        self.implicit_nets.insert(fq2);
+        self.add_net(
+            name,
+            ir::NetVar {
+                kind: ir::NetKind::Wire,
+                width: 1,
+                msb: 0,
+                lsb: 0,
+                signed: false,
+                array_len: 1,
+                dir: ir::PortDir::Internal,
+                init: default_init(ast::NetVarKind::Wire, 1),
+            },
+        );
+        true
+    }
+
+    /// Is `name` unresolved in this scope — i.e. would using it here be an E3010?
+    /// Asked with `lookup_net_scoped`, the same resolver `resolve_net` uses.
+    pub(crate) fn net_is_undeclared(&self, name: &str) -> bool {
+        self.lookup_net_scoped(name).is_none() && self.lookup_scoped(name).is_none()
+    }
+
     pub(crate) fn add_net(&mut self, name: &str, net: ir::NetVar) {
         let key = self.fq(name);
         // A2b-prereq S3: when a local decl shadows a wildcard alias, the alias
@@ -559,5 +619,179 @@ impl Elaborator<'_> {
             }
             self.bits_prescan.insert(n.name.name.clone(), (elem, dims));
         }
+    }
+}
+
+/// The bare single-segment name an lvalue targets, if that is all it is. A select, a
+/// concatenation, or a hierarchical path is NOT a §3.5 implicit-net position — §3.5
+/// declares a SCALAR, and `assign x[3] = …` on an undeclared `x` is an error in
+/// iverilog too (there is no width to select from).
+pub(crate) fn bare_lvalue_name(lv: &ast::Lvalue) -> Option<&str> {
+    match lv {
+        ast::Lvalue::Ident(p) => match p.segments.as_slice() {
+            [seg] => Some(seg.name.as_str()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Collect the bare single-segment identifiers an expression reads. Used only for a
+/// GATE-desugared continuous assign, where every terminal is a §3.5 position.
+pub(crate) fn collect_bare_idents(e: &ast::Expr, out: &mut Vec<String>) {
+    if let ast::ExprKind::Ident(p) = &e.kind {
+        if let [seg] = p.segments.as_slice() {
+            out.push(seg.name.clone());
+            return;
+        }
+    }
+    // Only the shapes `gate_desugar` builds need arms here (Binary for the multi-input
+    // reductions, Unary for buf/not, Ternary + IntLit for bufif/notif, Paren for
+    // grouping). Being CONSERVATIVE is the safe direction: a missed arm means a name
+    // stays undeclared and gets the loud E3010, never a silent net.
+    match &e.kind {
+        ast::ExprKind::Unary { operand, .. } => collect_bare_idents(operand, out),
+        ast::ExprKind::Paren { inner } => collect_bare_idents(inner, out),
+        ast::ExprKind::Binary { lhs, rhs, .. } => {
+            collect_bare_idents(lhs, out);
+            collect_bare_idents(rhs, out);
+        }
+        ast::ExprKind::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            collect_bare_idents(cond, out);
+            collect_bare_idents(then_e, out);
+            collect_bare_idents(else_e, out);
+        }
+        _ => {}
+    }
+}
+
+impl Elaborator<'_> {
+    /// IEEE 1364-2005 §3.5 — declare every implicit net this module body implies, in one
+    /// pass, before anything is lowered.
+    ///
+    /// §3.5 names exactly two positions, and this is the only place that decides what
+    /// counts as one:
+    ///
+    /// 1. the terminal list of a GATE or MODULE instance, and
+    /// 2. the LHS of a continuous assignment.
+    ///
+    /// Gate terminals arrive here as a `ContAssign` with `from_gate` set (the parser
+    /// desugars `not (Ax, AN);` to `assign Ax = ~AN;`), so for those BOTH sides count —
+    /// the read terminals are terminals too. For a user `assign` only the LHS counts:
+    /// an undeclared name in an ordinary rhs is an error in iverilog as well, and
+    /// admitting it here would restore the typo-becomes-a-wire hazard that the previous
+    /// blanket refusal existed to prevent.
+    ///
+    /// Runs over the module body only. A name that appears solely inside a generate
+    /// body stays loud — narrower than the standard, and on the safe side of the ladder.
+    pub(crate) fn declare_implicit_nets(&mut self, body: &[ast::ModuleItem]) {
+        let mut want: Vec<String> = Vec::new();
+        for item in body {
+            match item {
+                ast::ModuleItem::ContAssign(ca) => {
+                    for (lv, rhs) in &ca.assigns {
+                        if let Some(n) = bare_lvalue_name(lv) {
+                            want.push(n.to_string());
+                        }
+                        if ca.from_gate {
+                            collect_bare_idents(rhs, &mut want);
+                        }
+                    }
+                }
+                ast::ModuleItem::Instance(mi) => {
+                    for inst in &mi.instances {
+                        let actuals: Vec<&ast::Expr> = match &inst.conns {
+                            // `.name` shorthand is NOT a §3.5 position — IEEE 1800
+                            // §23.3.2.2 requires the same-named object to be DECLARED,
+                            // and iverilog rejects `.a` with no `a` while accepting the
+                            // explicit `.a(a)`. The parser desugars both to the same
+                            // `.name(name)` shape, so the flag is the only thing left
+                            // that tells them apart.
+                            ast::PortConnList::Named(v, _) => v
+                                .iter()
+                                .filter(|c| !c.implicit_name)
+                                .filter_map(|c| c.value.as_ref())
+                                .collect(),
+                            ast::PortConnList::Positional(v) => v.iter().flatten().collect(),
+                        };
+                        for a in actuals {
+                            if let ast::ExprKind::Ident(p) = &a.kind {
+                                if let [seg] = p.segments.as_slice() {
+                                    want.push(seg.name.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for n in want {
+            if self.net_is_undeclared(&n) {
+                self.declare_implicit_net(&n);
+            }
+        }
+        self.warn_implicit_net_truncation(body);
+    }
+
+    /// The 8-D hazard, made loud: a §3.5 net is SCALAR, so `assign IMPL = <12-bit>;`
+    /// keeps bit 0 and discards eleven bits — in every simulator, silently, because the
+    /// code is legal. The reporter found a live instance where a port declaration sat
+    /// behind an inactive ``ifdef` while its `assign` did not, and the only reason it
+    /// was harmless was that nothing read the net.
+    ///
+    /// This is the one place where matching iverilog's VALUE is not enough. The value
+    /// stays truncated (differential wins), and the fact is stated with the widths.
+    fn warn_implicit_net_truncation(&mut self, body: &[ast::ModuleItem]) {
+        for item in body {
+            let ast::ModuleItem::ContAssign(ca) = item else {
+                continue;
+            };
+            if ca.from_gate {
+                continue; // a gate output is scalar by construction
+            }
+            for (lv, rhs) in &ca.assigns {
+                let Some(n) = bare_lvalue_name(lv) else {
+                    continue;
+                };
+                if !self.implicit_nets.contains(&self.fq(n)) {
+                    continue;
+                }
+                let Some(w) = self.rhs_decl_width(rhs) else {
+                    continue;
+                };
+                if w > 1 {
+                    let fq = self.fq(n);
+                    self.warn_code(
+                        MsgCode::ElabFeatureLimit,
+                        &format!(
+                            "`{fq}` is an IMPLICIT net, so it is 1 bit wide (IEEE \
+                             1364-2005 §3.5) — this assignment drives it with {w} bits \
+                             and the top {} are discarded. Declare it with the width you \
+                             meant.",
+                            w - 1
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// The DECLARED width of a bare-identifier rhs, or `None` for anything else. Only
+    /// the unambiguous shape is answered — the point is to catch `assign IMPL = bus;`,
+    /// not to re-implement context-determined width rules.
+    fn rhs_decl_width(&self, e: &ast::Expr) -> Option<u32> {
+        let ast::ExprKind::Ident(p) = &e.kind else {
+            return None;
+        };
+        let [seg] = p.segments.as_slice() else {
+            return None;
+        };
+        let id = self.lookup_net_scoped(&seg.name)?;
+        self.nets.get(id as usize).map(|n| n.width)
     }
 }

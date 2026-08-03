@@ -232,11 +232,26 @@ warning[VITA-W2003]: implicit net 'enabel' inferred (default_nettype wire)  --> 
 **해결:** net 명시 선언 또는 오타 수정. 프로덕션 RTL은 `` `default_nettype none `` 권장.
 `-Wno-W-PARSE-IMPLICIT-NET`(또는 인라인 `lint_off`)로 억제, `-Werror=`로 승격.
 
-> **현 구현 정책(P2-12 명문화):** vitamin v1은 **implicit net을 생성하지 않는다** — 미선언
-> 식별자 참조는 일률적으로 `E-ELAB-UNRESOLVED-NAME`(E3010) hard error다. 즉 현재 동작은
-> IEEE 기본(`default_nettype wire`)이 아니라 사실상 `` `default_nettype none ``이며, 이 코드는
-> implicit-net 추론을 구현하는 시점까지 **예약(emitter 0)** 상태다. 오타가 조용히 wire가 되는
-> 사고 클래스가 원천 차단되는 보수적 선택.
+> **✅ 구현됨 (2026-08-03, §4.5.284).** 위 정책 — *"vitamin v1은 implicit net을 생성하지 않는다;
+> 사실상 `` `default_nettype none ``; 이 코드는 예약(emitter 0)"* — 은 **폐지됐다.** 보수적이었지만
+> **비준수**였고, 결정적으로 **사용자가 고칠 수 없었다**: 실사용 ASIC 트리에서 이 구문이 파운드리
+> 납품 셀 라이브러리와 IP 모델 안에 있었다(외부 round-28). 이제 IEEE 1364-2005 §3.5 를 구현하고,
+> refusal 이 사던 안전은 **이 경고가 산다**(`-Werror=W-PARSE-IMPLICIT-NET` 로 hard error 복원).
+>
+> **경계(iverilog 로 핀)** — §3.5 는 **두 위치만** 커버하고 나머지는 여전히 E3010 이다:
+>
+> | 위치 | 동작 |
+> |---|---|
+> | 게이트/모듈 인스턴스 **터미널 리스트** | 암시 1-bit wire + W2003 |
+> | continuous assign **LHS** | 암시 1-bit wire + W2003 |
+> | 평범한 rhs (`assign y = TYPO`) | **E3010** |
+> | procedural lvalue (`initial TYPO = 1`) | **E3010** |
+> | `` `default_nettype none `` 하의 모든 위치 | **E3010** |
+> | `.name` **shorthand** (IEEE 1800 §23.3.2.2) | **E3010** — 선언된 객체를 요구한다 |
+>
+> **§3.5 net 은 스칼라다.** 더 넓은 드라이버는 bit 0 만 남기고 버린다 — 모든 시뮬레이터가 조용히
+> 하는 일이므로 vita 는 폭을 말하는 **W3056** 을 추가로 낸다(`… drives it with 12 bits and the top
+> 11 are discarded`). `` `default_nettype `` 디렉티브는 파일 순서 sticky(RULE S)로 지원된다.
 
 ---
 

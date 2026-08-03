@@ -480,6 +480,9 @@ impl Parser<'_, '_> {
             ports,
             body,
             span: start.to(self.prev_span()),
+            // Overwritten by the driver from `resolve_module_nettype`; the parser cannot
+            // see the stripped directive, so it writes the IEEE default (`wire`).
+            nettype_none: false,
         })
     }
 
@@ -562,7 +565,7 @@ impl Parser<'_, '_> {
         // name (`localparam [T] A = 1, B = 2;` — IEEE §6.20.1). The first name emits
         // inline; the rest queue in `pending_module_items` and drain (in order, same
         // scope) at the next `parse_module_item`/`parse_gen_item`.
-        if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) {
+        if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) || self.at_kw(Kw::Specparam) {
             let pfx = self.parse_param_prefix();
             let mut first: Option<ModuleItem> = None;
             loop {

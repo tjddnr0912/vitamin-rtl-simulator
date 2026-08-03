@@ -859,6 +859,15 @@ struct Elaborator<'s> {
     // `--top` root override (worklib / multi-top selection): when `Some`, these
     // units are the roots — in the given order — instead of `pick_roots`.
     root_override: Option<Vec<String>>,
+    /// Is `` `default_nettype none `` in effect for the module being elaborated?
+    /// Saved/restored around each `elaborate_instance`, because the directive governs
+    /// the module DECLARATION site, not the instantiation site — a `none` module may
+    /// instantiate a `wire` one and vice versa.
+    pub(crate) cur_nettype_none: bool,
+    /// FQ names of nets created by [`Elaborator::declare_implicit_net`]. Only these get
+    /// the width-truncation warning — an explicitly declared 1-bit net driven by a wider
+    /// expression is the author's choice, not a §3.5 surprise.
+    pub(crate) implicit_nets: std::collections::BTreeSet<String>,
     // Delay multiplier `M = 10^(unit_exp − global_prec_exp)` of the module CURRENTLY
     // being lowered (saved/restored around each `elaborate_instance`, like cur_prefix).
     // `#delay` literals scale by this; `$time`/`$realtime` divide by it (per process).

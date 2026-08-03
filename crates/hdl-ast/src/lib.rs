@@ -219,6 +219,15 @@ pub struct ModuleDecl {
     pub ports: PortList,
     pub body: Vec<ModuleItem>,
     pub span: Span,
+    /// Was `` `default_nettype none `` in effect where this module was declared?
+    ///
+    /// The PARSER cannot answer this — the preprocessor strips directives — so it
+    /// always writes `false` (the IEEE default, `wire`) and the driver overwrites it
+    /// from `hdl_preprocess::resolve_module_nettype` before elaborate. It lives on the
+    /// AST rather than in an elaborate side table so that it rides the `.vu` artifact
+    /// automatically: the staged `velab` never sees the source text, and a policy that
+    /// changed between `vcmp` and `velab` would silently change what elaborates.
+    pub nettype_none: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
@@ -721,6 +730,13 @@ pub struct ContinuousAssign {
     pub delay: Option<Delay>,
     pub assigns: Vec<(Lvalue, Expr)>, // assign a=b, c=d;
     pub span: Span,
+    /// Did this come from a GATE primitive desugar (`not (Ax, AN);`) rather than a
+    /// user `assign`? IEEE 1364-2005 §3.5 makes every gate TERMINAL an implicit-net
+    /// position — both the driven one and the read ones — while a user `assign`
+    /// implies a net only on its LHS (an undeclared name in an ordinary rhs is an
+    /// error, iverilog-pinned). The desugar erases that distinction, so it is
+    /// recorded here.
+    pub from_gate: bool,
 }
 /// `#d` | `#(d)` | `#(rise,fall)` | `#(rise,fall,turnoff)`. Each value is a
 /// `MinTypMax`-or-plain expr (verdict M2 — `#(1:2:3)` is legal). The parser stores
@@ -1696,7 +1712,15 @@ pub struct PortConn {
     pub name: Ident,
     pub value: Option<Expr>,
     pub span: Span,
-} // .a(x) / .a()
+    /// Was this written as the `.name` SHORTHAND (IEEE 1800 §23.3.2.2) rather than an
+    /// explicit `.name(expr)`? The parser desugars the shorthand to `.name(name)`, which
+    /// erases a distinction §3.5 cares about: `.a(a)` is a terminal-list position and so
+    /// creates an implicit net for an undeclared `a`, while `.a` "shall connect the port
+    /// to a net or variable of the same name DECLARED in the instantiating module" — no
+    /// declaration, no connection, hard error. iverilog draws exactly this line, and the
+    /// `dotname_missing_signal_is_loud` pin holds it.
+    pub implicit_name: bool,
+} // .a(x) / .a() / .a
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct GenerateConstruct {

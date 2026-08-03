@@ -92,6 +92,10 @@ impl Elaborator<'_> {
             return;
         }
         self.inst_stack.push(module.name.name.clone());
+        // The directive governs the module's DECLARATION site, so it is saved/restored
+        // around this instance rather than inherited from the instantiator: a module
+        // compiled under `default_nettype none keeps that policy wherever it is used.
+        let saved_nettype = std::mem::replace(&mut self.cur_nettype_none, module.nettype_none);
 
         // (2) reserve Instance slot + first_net cursor.
         let inst_id = self.instances.len() as u32;
@@ -536,6 +540,14 @@ impl Elaborator<'_> {
         // ranked during the Instances walk under the path its generate got, while that
         // generate's own flush was ranked during VarInit. Only this slot is reset: the
         // instance slot is visited by ONE walk and must keep counting across it.
+        // IEEE 1364-2005 §3.5 — implicit nets are a DECLARATION, so they are created in
+        // their own pass BEFORE any item is lowered, exactly like explicit declarations.
+        // Doing it at the use site instead makes them order-dependent in a way the
+        // standard is not: this body lowers cont-assigns before instances, so
+        // `sub u(.o(IMPL)); assign o = IMPL;` declared `IMPL` from the terminal list
+        // AFTER the read had already failed with E3010 — one design, two verdicts,
+        // decided by the phase order. ONE funnel, one pass, order-free.
+        self.declare_implicit_nets(&module.body);
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
@@ -795,6 +807,7 @@ impl Elaborator<'_> {
         self.cur_time_mult = saved_mult;
         self.cur_prec_mult = saved_prec_mult;
         self.inst_stack.pop();
+        self.cur_nettype_none = saved_nettype;
     }
 
     /// Resolve a `ModuleInstance` statement (which may name several instances),

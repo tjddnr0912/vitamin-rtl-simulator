@@ -12,6 +12,7 @@
 
 
 **§4.5.220–280**
+- `4.5.284` **외부 round-28 — IEEE 1364-2005 §3.5 암시적 net 선언을 구현했다.** 리포터가 상용 ASIC 트리의 `E3010` 97 + `E3009` 3 건을 사이트별로 "표준에서 합법인가"로 분류했고 **고유 원인 7개 중 6개가 vita 갭**이었다. 핵심 = vita 가 항상 `BTdefault_nettype none` 처럼 동작했다(doc-15 가 **의도된 정책**으로 명문화). 보수적이지만 **비준수**이고, 결정적으로 **사용자가 고칠 수 없다** — 7개 중 2개가 파운드리 납품 셀 라이브러리/IP 모델 안이다. 안전은 refusal 대신 **`W2003`**(doc-15 가 이미 예약해 둔 코드)이 산다. **경계는 iverilog 로 핀**(rhs·procedural lvalue·`none` 은 전부 error). 8-D(12→1비트 절단)는 값은 iverilog 와 같게 두고 **폭을 말하는 W3056** 을 낸다 — 모든 시뮬레이터가 조용히 하는 일을 vita 만 말한다. 부수: `BTdefault_nettype` 디렉티브 · `specparam` · 9-A 진단(EVENT CONTROL 을 lvalue 라 부르던 것) …
 - `4.5.283` ★★ **외부 round-27 — `@(*)` 가 attribute instance 로 렉싱되어 소스가 통째로 삼켜졌다.** 이 저장소가 받은 **최고 심각도** 리포트: `//` 주석 안의 `*)` 가 감도 리스트의 `(*` 를 닫아 **주석이 실행 코드로 승격**되고 `errors=0` 으로 **틀린 값**이 나왔다(correct-or-loud 위반). 뿌리 = attribute 스킵이 **원문(raw text) 정규식**이라 주석·문자열을 뚫고 지나가고, 짝을 못 찾으면 **조용히** 폴백했다 — 그래서 발현 여부가 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달려 `@(*)` 하나면 통과·둘이면 파괴, 진단은 **원인이 아닌 두 번째 블록**에 찍혔고 **파일 경계를 넘었다**. 수정 = attribute 를 **토큰 스트림**에서 인식(주석은 이미 사라졌고 문자열은 한 토큰) + `@` 직후는 event control + 안 닫힌 opener 는 loud. 3-way(PRE/POST/iverilog) 16형 전수 **회귀 0 · 수정 8** …
 - `4.5.282` **③층 격차를 처음으로 쟀다(76×) — 그리고 ②층이 고갈되지 않았음을 알았다** · 외부 round-26 §3(진단 꼬리 절이 "동작한다"에 붙어 **동작하는 형태가 subset 밖**인 것처럼 읽히던 것)을 구조적으로 고치고(`(what, detail)` 분리), verilator 5.050 을 들여 **같은 설계·같은 기계로 3개 층**을 나란히 쟀다. 새 1st-party 벤치 `bench/keccak`(Keccak-f[1600], 오라클 4중 일치). 최대 발견은 격차가 아니라 **커버리지**였다 — 사용자 함수를 부르는 프로세스를 `is_codegen_able` 이 통째로 거부해 **VM 기여가 정확히 0%**, 거기 **10.7×** 가 미청구로 남아 있다 …
 - `4.5.281` 외부 round-25 4건 — ★ `string` 원소 읽기가 서브루틴 안에서 **O(len)** 이라 문자당 루프가 O(len²)였다(N=32000 에서 172×) · `automatic <unpacked struct>` 서브루틴 지역변수 파서 구멍 · body-step 가드가 `max_deltas` 를 빌려 써서 정상 `for` 루프를 "combinational oscillation" 으로 오진하던 것(→ `F4027` 신설) · E3009 문구 …
@@ -394,6 +395,78 @@ CLI 레벨 핀 5개(`backend_flag.rs`) — 라이브러리 하네스는 사이�
 공유 헬퍼를 재사용해도 **호출자 쪽 전제조건은 따라오지 않는다**(`try_compile` 의 타입 계약은 호출자에게 있었다). ③
 게이트의 힘은 게이트 코드가 아니라 **그 안의 모양**이 정한다 — 이번 세션 다섯 번째. ④ default 를 뒤집어 전 스위트를 돌리는
 것은 72 디자인 differential 보다 **압도적으로 강한** 측정이고, 비용은 한 줄 + 10분이다.
+
+#### 4.5.284 외부 round-28 — IEEE 1364-2005 §3.5 암시적 net 선언 (2026-08-03, format 26 불변) ✅
+
+**리포터가 사이트별 표준 판정을 붙여 왔다** — 상용 ASIC 트리(VM107, 소스 109개)의 `E3010` 97 +
+`E3009` 3 건을 고유 원인 **7개**로 접고, 각각 "표준 Verilog 에서 합법인가"로 분류했다. 결과:
+**6개가 vita 미지원, RTL 실제 결함은 1개(8-D)**. 그리고 **7개 중 2개(8-A 표준셀, 9-B EFUSE)가
+파운드리 납품 라이브러리 안**이라 사용자가 고칠 수 없다.
+
+**§3.5 = 이 슬라이스의 본체.** IEEE 1364-2005 §3.5 는 미선언 식별자가 ⓐ 게이트/모듈 인스턴스의
+**터미널 리스트**, ⓑ **continuous assignment 의 LHS** 에 나타나면 현재 `default_nettype` 의
+**스칼라 net 으로 암시 선언**된다고 규정하고, 기본값은 `wire` 다. vita 는 두 위치 모두 거절해
+**항상 `default_nettype none` 처럼** 동작했다 — 그리고 그것은 버그가 아니라 **doc-15 에 명문화된
+정책**이었다("오타가 조용히 wire 가 되는 사고 클래스가 원천 차단되는 보수적 선택").
+
+판정을 뒤집은 것은 두 가지다: ⓐ **비준수**이고 ⓑ **사용자 쪽 수정이 불가능**하다(파운드리 납품물).
+refusal 이 사던 안전은 **`W2003`** 이 대신 산다 — doc-15 가 **정확히 이것을 위해 예약**해 둔 코드이고
+(`emitter 0` 이라고 적혀 있었다), `-Werror=W-PARSE-IMPLICIT-NET` 이 hard error 로 되돌린다.
+
+**경계가 전부이고, 추론이 아니라 iverilog 로 핀했다** — §3.5 밖 세 방향은 iverilog 도 error 다:
+
+| 위치 | vita | iverilog |
+|---|---|---|
+| 게이트 터미널 `not (Ax, AN)` | ✅ 암시 net + W2003 | ✅ |
+| cont-assign LHS `assign mid = ~a` | ✅ 암시 net + W2003 | ✅ |
+| 인스턴스 터미널 `sub u(.o(IMPL))` | ✅ 암시 net + W2003 | ✅ |
+| 평범한 rhs `assign y = TYPO` | **E3010** | error |
+| procedural lvalue `initial TYPO = 1` | **E3010** | error |
+| `` `default_nettype none `` 하 | **E3010** | error |
+
+8형 3-way 전수 **POST = iverilog 8/8**.
+
+**⭐ 순서 함정 — §3.5 는 사용이 아니라 선언이다.** 처음엔 사용 지점(cont-assign lower / 인스턴스
+루프)에서 만들었다. vita 는 cont-assign 을 인스턴스보다 **먼저** 낮추므로
+`sub u(.o(IMPL)); assign o = IMPL;` 이 **읽기에서 E3010, 터미널에서는 성공** — 한 설계가 phase
+순서에 따라 두 판정을 냈다. 선언은 순서 무관이어야 하므로 **바디 전체를 도는 전용 pre-pass 하나**로
+옮겼다(수집기를 둘 만들지 않는다 — ENGINEERING_RULES "N 번째 수집기").
+
+**⭐ 8-D 를 loud 로.** §3.5 net 은 **스칼라**라 더 넓은 드라이버는 bit 0 만 남기고 버린다 —
+**모든 시뮬레이터가 조용히** 하는 일이다(합법이므로). 리포터가 찾은 실사이트는 포트 선언이 비활성
+`` `ifdef `` 뒤에 있고 `assign` 은 가드가 없어 **12비트가 1비트로** 들어갔다. vita 는 **값은
+iverilog 와 같게 두고**(differential 이 이긴다) `W3056` 으로 **폭 두 개를 말한다**:
+*"drives it with 12 bits and the top 11 are discarded"*. 리포터가 요청한 것보다 한 걸음 더 간 부분.
+
+**`` `default_nettype `` 디렉티브.** 전처리기가 `timescale` 과 **같은 형태**로 region 을 기록하고
+(`nettype_none: Vec<(offset, bool)>`), `resolve_module_nettype` 이 모듈별로 접고, 그 결과를 드라이버가
+**AST 필드**(`ModuleDecl.nettype_none`)에 찍는다. AST 에 둔 이유는 **`.vu` 를 자동으로 타기** 때문이다 —
+staged `velab` 은 소스를 못 보므로, 사이드테이블에 두면 `vcmp`↔`velab` 사이에서 정책이 조용히 바뀔 수
+있다. 파일 순서 sticky(RULE S)까지 핀했다.
+
+**9-A 진단 — EVENT CONTROL 을 lvalue 라 불렀다.** `always @(\`TOP.a_uVDC.RTRIM_I)` 가
+`resolve_net` 의 lvalue 문구로 보고돼("a whole-net hierarchical write `tb.dut.x = …` is supported"),
+리포터가 **존재하지 않는 계층 대입문을 찾느라 시간을 크게 썼다**. 문맥을 아는 호출자가 문구를
+소유하도록 바꾸고(바로 위 N4 clocking arm 과 같은 형태), 해상 질문은 `resolve_net` 자신의 술어를
+추출한 `lookup_dotted_net` 으로 던진다(복사하면 A2b-prereq F2 필터를 잃는다). 새 문구는 **동작하는
+우회**(`always @(*) local = <hier>;`)를 제시하고, 테스트가 **그 우회가 실제로 동작하는지**까지 건다.
+
+**`specparam`(부록).** 벤더 모델이 타이밍 상수를 `specparam` 에 두고 지연식에서 참조하는 것은 흔한
+패턴인데 vita 는 모듈 레벨에서도 거부해서 리포터가 **키워드를 바꿔야** 했다. `localparam` 과 같은
+경로로 받는다(차이는 SDF 백애노테이션뿐 — 기능 시뮬에 무관). `specify … endspecify` 블록 자체는
+아직 loud = **follow-on**(리포터의 우회 스크립트가 "specify 를 지우되 specparam 은 살린다"로
+단순해지는 것이 이번 요청이었다).
+
+**남은 요청 3건은 기록**: `specify` 블록 수용 · 이벤트 컨트롤의 계층 참조 **실지원**(감도 등록만의
+문제로 보이나 sensitivity 슬롯을 instance 확정 후 패치해야 한다) · cross-process `disable` 의
+no-op 케이스. 그리고 E3010/E3009 의 file:line 은 **일관되지 않다**(있는 자리도 있고 없는 자리도
+있다) — 별도 슬라이스.
+
+**게이트**: 5076 tests green · clippy `-D warnings` clean · fmt clean · format_version 26 불변
+(`.vu` 스키마 해시는 AST 필드 2개 추가로 re-pin — `ModuleDecl.nettype_none`,
+`ContinuousAssign.from_gate`).
+
+---
 
 #### 4.5.283 ★★ 외부 round-27 — `@(*)` 가 attribute 로 렉싱되어 소스가 삼켜졌다 (2026-08-03, format 26 불변) ✅
 

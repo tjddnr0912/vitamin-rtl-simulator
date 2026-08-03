@@ -532,6 +532,7 @@ impl Parser<'_, '_> {
             delay,
             assigns,
             span: start.to(self.prev_span()),
+            from_gate: false,
         })
     }
 }

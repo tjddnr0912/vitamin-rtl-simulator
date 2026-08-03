@@ -186,6 +186,8 @@ impl<'s> Elaborator<'s> {
             mod_unit_exp: BTreeMap::new(),
             mod_prec_exp: BTreeMap::new(),
             root_override: None,
+            cur_nettype_none: false,
+            implicit_nets: Default::default(),
             global_prec_exp: -9, // 1ns base precision (no-timescale lock)
             cur_time_mult: 1,
             cur_prec_mult: 1,

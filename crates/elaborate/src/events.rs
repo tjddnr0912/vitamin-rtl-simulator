@@ -479,6 +479,41 @@ impl Elaborator<'_> {
                     );
                     return POISON_NET;
                 }
+                // R28 9-A: an unresolved MULTI-segment path here is a hierarchical name
+                // in an EVENT CONTROL, and `resolve_net`'s message for that case names
+                // an lvalue ("a hierarchical name in this lvalue context … a whole-net
+                // hierarchical write `tb.dut.x = …` is supported; a hierarchical
+                // element/part-select write is a follow-on"). An event control is not an
+                // lvalue and the design contains no hierarchical write, so the reader is
+                // sent looking for an assignment that does not exist — the reporter
+                // spent significant time on exactly that, on a foundry ADC model whose
+                // `always @(\`TOP.a_uVDC.RTRIM_I)` is the only site. Same defect class as
+                // the N4 clocking arm just above, and the same fix: when a caller knows
+                // the context, it owns the message. The resolution question is asked
+                // with `lookup_dotted_net` — `resolve_net`'s own predicate, not a copy.
+                if path.segments.len() > 1 && self.lookup_dotted_net(path).is_none() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "a hierarchical name (`{}`) in an EVENT CONTROL is unsupported \
+                             in this subset — reading it is supported, so `@(*)` over a \
+                             local copy works: `always @(*) local = {};` then trigger on \
+                             `local`. (This is a sensitivity-registration limit, not a \
+                             name-resolution one.)",
+                            path.segments
+                                .iter()
+                                .map(|s| s.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join("."),
+                            path.segments
+                                .iter()
+                                .map(|s| s.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join("."),
+                        ),
+                    );
+                    return POISON_NET;
+                }
                 let n = self.resolve_net(path);
                 if self.is_dyn_handle_net(n) || self.is_string_net(n) {
                     // v5 ⑥/v7: handles carry no dirty channel — they can

@@ -106,6 +106,7 @@ fn cont_assign(lhs: ast::Lvalue, rhs: ast::Expr) -> ast::ModuleItem {
         delay: None,
         assigns: vec![(lhs, rhs)],
         span: SP,
+        from_gate: false,
     })
 }
 fn lv_id(name: &str) -> ast::Lvalue {
@@ -121,6 +122,7 @@ fn module(name: &str, body: Vec<ast::ModuleItem>) -> ast::SourceUnit {
             ports: ast::PortList::None,
             body,
             span: SP,
+            nettype_none: false,
         })],
         span: SP,
     }
@@ -406,6 +408,7 @@ fn module_p(
         },
         body,
         span: SP,
+        nettype_none: false,
     }
 }
 /// A SourceUnit from a list of ModuleDecls (declaration order).
@@ -430,6 +433,7 @@ fn inst_named(module: &str, inst: &str, conns: Vec<(&str, ast::Expr)>) -> ast::M
                         name: ident(p),
                         value: Some(e),
                         span: SP,
+                        implicit_name: false,
                     })
                     .collect(),
                 false,
@@ -466,6 +470,7 @@ fn inst_named_param(
                         name: ident(p),
                         value: Some(e),
                         span: SP,
+                        implicit_name: false,
                     })
                     .collect(),
                 false,
@@ -504,6 +509,7 @@ fn inst_named_param_expr(
                         name: ident(p),
                         value: Some(e),
                         span: SP,
+                        implicit_name: false,
                     })
                     .collect(),
                 false,
