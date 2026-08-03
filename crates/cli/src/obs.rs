@@ -53,6 +53,20 @@ pub struct ObsRun<'a> {
     pub fatals: u32,
     /// `"PASS"|"FAIL"` (PASS iff `exit_code == 0`).
     pub status: &'static str,
+    /// The EFFECTIVE process-body executor of this run, in the `--backend` flag's
+    /// vocabulary (`"vm"`|`"interp"`). Recorded so `codegen` below cannot be
+    /// misread: that object is a static capability census, and on an
+    /// `--backend interp` run `able == total` with 0% of the runtime on the VM
+    /// is normal — this field is what says so (soundness-review F1).
+    pub backend: &'static str,
+    /// T0 (doc-21 §7.3): the engine's VM-coverage report — computed by the same
+    /// walk the VM's compile gate runs (single source), serialized as the
+    /// `codegen` object. Deterministic (a static property of the design).
+    pub codegen: &'a sim_engine::CodegenReport,
+    /// S0 (doc-21 §7.3): the ③층 design-level eligibility verdict, serialized
+    /// as the `native` object. Deterministic; static per (design, run options)
+    /// — a `--probe`/stage-instrumented run is ineligible by design (§4.3).
+    pub native: &'a sim_engine::native::NativeEligibility,
     /// Isolated non-deterministic field (excluded from the determinism golden).
     pub utc_unix_s: u64,
     /// Isolated non-deterministic field (excluded from the determinism golden).
@@ -133,6 +147,48 @@ impl ObsRun<'_> {
         s.push_str(&self.fatals.to_string());
         s.push_str("},\n  \"status\": ");
         json_str(&mut s, self.status);
+        // The executor that actually ran (see the field docs — guards `codegen`
+        // against the "able==total means the VM ran it" misreading).
+        s.push_str(",\n  \"backend\": ");
+        json_str(&mut s, self.backend);
+        // T0: the ②층(bytecode VM) claim on this design + why the rest was
+        // refused. `able == total` with `frame_bodies > 0` and a `frame_call`/
+        // `user_call_in_expr` row is the round-26 shape: full process coverage,
+        // 0% of the runtime on the VM. BTreeMap iteration ⇒ key order is stable.
+        s.push_str(",\n  \"codegen\": {\"able\": ");
+        s.push_str(&self.codegen.coverage.codegen_able.to_string());
+        s.push_str(", \"total\": ");
+        s.push_str(&self.codegen.coverage.total.to_string());
+        s.push_str(", \"frame_bodies\": ");
+        s.push_str(&self.codegen.frame_bodies.to_string());
+        s.push_str(", \"reject_reasons\": {");
+        for (i, (k, n)) in self.codegen.reject_reasons.iter().enumerate() {
+            if i > 0 {
+                s.push_str(", ");
+            }
+            json_str(&mut s, k);
+            s.push_str(": ");
+            s.push_str(&n.to_string());
+        }
+        s.push_str("}}");
+        // S0: the ③층 design-level verdict (doc-21 §7.3) — same stable-order
+        // BTreeMap serialization as `codegen`.
+        s.push_str(",\n  \"native\": {\"eligible\": ");
+        s.push_str(if self.native.eligible {
+            "true"
+        } else {
+            "false"
+        });
+        s.push_str(", \"reject_reasons\": {");
+        for (i, (k, n)) in self.native.reject_reasons.iter().enumerate() {
+            if i > 0 {
+                s.push_str(", ");
+            }
+            json_str(&mut s, k);
+            s.push_str(": ");
+            s.push_str(&n.to_string());
+        }
+        s.push_str("}}");
         // ── isolated wall-clock (excluded from the determinism golden) ──
         s.push_str(",\n  \"utc_unix_s\": ");
         s.push_str(&self.utc_unix_s.to_string());

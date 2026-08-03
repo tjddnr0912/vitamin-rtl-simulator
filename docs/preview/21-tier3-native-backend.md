@@ -340,8 +340,15 @@ Terminator::Wait  { cause, resume }
 `two_state_nets` `wired_and_nets` `wired_or_nets` `radixes` `severities` `plusargs` `init_procs` `final_procs`
 
 **v1 이 거부 — 설계 수준 게이트가 하나라도 있으면 기존 엔진으로 (약 55)**
-`class_*`(16개) `fork_modes` `func_table`/`task_calls_*` `queue_*` `*_dyn_nets` `handle_copy_stmts`
+`class_*`(16개) `fork_modes` ~~`func_table`/`task_calls_*`~~ `queue_*` `*_dyn_nets` `handle_copy_stmts`
 `clocking_*` `defer_*` `coverage_*` `probed_nets` `trace` `stage` `assert_*` `file_directed_stmts` …
+
+> **개정 4 수정(S0 구현에 반영, 2026-08-03)**: `func_table`/`task_calls_*`(사용자 서브루틴 호출)는
+> **거부가 아니라 코어**다 — S3 이 T1/T2 를 흡수해 "정지 + **호출** 포함"이 됐고, S3 의 중단 판정이
+> 문자 그대로 *"호출을 삼키지 못하면 중단"* 이므로 호출을 거부하는 게이트는 자기 계획과 모순된다.
+> 또 `*_dyn_nets` 사이드카는 **plain `int q[$]` 를 못 본다**(사이드카가 없다) — 완전한 검출기는
+> net 테이블의 `NetKind` 스캔이고, S0 게이트(`native::design_eligibility`)는 그렇게 구현됐다.
+> 게이트의 SimOpts 분류는 **`..` 없는 전수 destructure** 라 새 사이드카 추가 = 컴파일 에러 = 강제 분류.
 
 > **핵심**: v1 의 범위는 **"합성 가능 RTL + 기본 테스트벤치"** 다. 즉 Phase-1 MVP 의 범위와 거의 일치하며,
 > class/CRV/dynamic/coverage/assertion 을 쓰는 설계는 **기존 엔진이 계속 담당**한다.
@@ -478,8 +485,8 @@ vita 는 그 둘을 이미 갖고 있다.** 이것이 이 시도가 무모하지
 
 | 단계 | 무엇 | 착수 게이트 | 중단 판정 |
 |---|---|---|---|
-| **T0** | codegen 적격률 + 거부 사유 히스토그램 → `--obs-dir` run.json | — | — (계기) |
-| **S0** | 설계 수준 게이트 + **적격률 측정**. "이 설계 전체를 ③층이 받을 수 있나"를 IR 만 보고 답한다 | T0 | 실사용 설계 4종에서 적격률이 **0%** 면 v1 범위를 다시 그린다 |
+| **T0 ✅ (2026-08-03)** | codegen 적격률 + 거부 사유 히스토그램 → `--obs-dir` run.json — **완료**: run.json `codegen{able,total,frame_bodies,reject_reasons}`. 히스토그램은 VM compile gate 와 **한 walk 를 공유**(`reject_reasons_into` — 로그가 실행기와 어긋날 수 없다) | — | — (계기) |
+| **S0 ✅ (2026-08-03)** | 설계 수준 게이트 + **적격률 측정** — **완료**: `sim_engine::native::design_eligibility(ir, opts)` + run.json `native{eligible,reject_reasons}`. **측정 결과는 §7.3.1** — 중단 판정 통과, **S1 go** | T0 | 실사용 설계 4종에서 적격률이 **0%** 면 v1 범위를 다시 그린다 |
 | **S1** | **R1 정적 넷 할당** — `Value` 를 없앤다. 새 모듈, 기존 엔진 무관 | S0 적격 설계 ≥1 | 넷 저장이 폭별로 안 나뉘면 중단(= R2 불가) |
 | **S2** | **R2 폭별 특수화 연산** | S1 | 64-bit 이하에서 `and_w` 가 **기계어 2 op** 로 안 떨어지면 재설계 |
 | **S3** | **바디 코드 생성 (정지 + 호출 포함)** ⭐ T1/T2 흡수 | S2 | **호출을 삼키지 못하면 중단** — 커버리지 0% 는 ②층에서 이미 본 실패 모드다 |
@@ -491,6 +498,34 @@ vita 는 그 둘을 이미 갖고 있다.** 이것이 이 시도가 무모하지
 **≥30× 를 성공 기준으로 잡는 근거**: verilator 는 2-state·levelize 를 거래하고 vita 는 안 한다.
 같은 설계에서 verilator 가 76× 였으므로, 4-state 를 유지한 ③층이 그 절반 이하를 내는 것은
 비현실적이지 않다 — 그리고 **30× 면 리포터의 56 분이 2 분이 된다**(sign-off 를 vita 로 옮길 수 있는 선).
+
+### 7.3.1 S0 측정 결과 (2026-08-03) — **적격률 100%, S1 go**
+
+`vita <design> --obs-dir` 한 번이 측정이다(run.json `codegen`/`native`). 전부 이 기계, HEAD 빌드:
+
+| 설계 | ② VM claim (able/total) | 거부 사유 | ③ 적격 |
+|---|---|---|---|
+| examples/000_counter | 2/4 | delay 2 · wait 1 | ✅ |
+| examples/001_alu | 1/2 | delay 1 | ✅ |
+| examples/002_traffic_fsm | 3/5 | delay 2 · wait 1 | ✅ |
+| examples/003_shift_register | 3/5 | delay 2 · wait 1 | ✅ |
+| bench/picorv32 + TB | **65/68** | delay 1 · wait 2 | ✅ |
+| bench/keccak **호출형** | **1/4** · frame_bodies **3** | delay 1 · stmt_effect_rhs 1 · **user_call_in_expr 1** · wait 1 | ✅ |
+| bench/keccak 인라인 | 2/4 | delay 1 · stmt_effect_rhs 1 · wait 1 | ✅ |
+| P6 corpus 72개 | — | — | **72/72** (`native_gate.rs` 핀) |
+
+- **중단 판정("실사용 4종 0%") 통과 — 여유 있게.** 실사용 7종 + corpus 72 = **79/79 적격**.
+  ③층 v1 의 "합성 RTL + 기본 TB" 범위가 실제 설계 모양과 일치한다는 뜻이다.
+- keccak 호출형 행이 **round-26 맹점의 계기화 그 자체다**: 프로세스 4개 중 1개만 VM 이 받고
+  일 전부는 frame_bodies 3 에 있다 — 이것이 이제 `--backend` A/B 타이밍 없이 JSON 한 줄로 보인다.
+- ⚠️ 이 100% 는 **설계 수준 상한**이다(§4.3 사이드카 + NetKind 스캔). 문장 수준 능력("S3 컴파일러가
+  모든 body 의 모든 문장을 emit 할 수 있나")은 S3 이 생기는 시점에 게이트에 합류한다 — S0 가
+  그 질문에 미리 답하는 척하는 것이 더 나쁘다(정직한 상한 > 추측한 정답).
+- ⚠️ **열린 모순 하나를 기록한다**: 리포터 워크로드(hash_top 류)는 TB 가 string 을 쓰므로
+  **v1 범위 밖**인데(string net = 거부), §7.3 의 성공 기준은 "리포터 워크로드 ≥30×"다.
+  즉 v1 게이트 그대로면 성공 기준을 **잴 수 없다**. 해소 후보 = ⓐ S3 시점에 string 을 v1 로 승격
+  ⓑ 기준을 DUT-직결형(리포터의 "라운드당 ~1.4 ms" 형태)으로 재정의. **여기서 정하지 않는다** —
+  S2 배속 실측이 나온 뒤 재측정 게이트에서 판정(스펙 변경은 2회+ 검토 룰).
 
 ### 7.4 무엇을 파괴하는가 — 사용자 승인 범위의 명시
 

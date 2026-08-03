@@ -55,20 +55,63 @@ use crate::width::WidthTable;
 ///
 /// Anything not on the allow-list falls back to the interpreter, so an unknown or
 /// future terminator/statement variant is safe by default.
+///
+/// T0 (doc-21 §7.3): this is a thin wrapper over [`reject_reasons_into`] — the
+/// REAL gate and the obs histogram share ONE walk, so the run.json reasons can
+/// never drift from what the VM actually refused (a wrong log is a silent-wrong,
+/// doc-19 §3).
 pub(crate) fn is_codegen_able(
     stmts: &[Stmt],
     exprs: &[Expr],
     body: &[BasicBlock],
     class_new_sites: &std::collections::BTreeMap<u32, u32>,
 ) -> bool {
-    body.iter().all(|block| {
-        let term_ok = match block.term {
-            Terminator::Goto { .. } | Terminator::Return => true,
+    let mut reasons = std::collections::BTreeSet::new();
+    reject_reasons_into(stmts, exprs, body, class_new_sites, &mut reasons);
+    reasons.is_empty()
+}
+
+/// The single-source P9 walk: record every DISTINCT rejection cause of `body`
+/// into `out` (empty ⇒ codegen-able). Stable snake_case strings — these are the
+/// `reject_reasons` keys of run.json's `codegen` object, so an obs consumer may
+/// pin them; rename = breaking change. Unlike the old bool `.all()` this does
+/// NOT short-circuit: the histogram must name every cause a body exhibits, and
+/// the walk runs once per process TEMPLATE (not per activation), so the extra
+/// visits cost nothing measurable.
+///
+/// The terminator match is `_`-free on purpose (accept-gate rule): `Terminator`
+/// is a frozen sim-ir type, so a new variant is a format bump AND a forced
+/// decision here — it cannot default onto the silent (accepted) side.
+fn reject_reasons_into(
+    stmts: &[Stmt],
+    exprs: &[Expr],
+    body: &[BasicBlock],
+    class_new_sites: &std::collections::BTreeMap<u32, u32>,
+    out: &mut std::collections::BTreeSet<&'static str>,
+) {
+    for block in body {
+        match block.term {
+            Terminator::Goto { .. } | Terminator::Return => {}
             // A Branch condition can itself be a Call (`if (fact(n) > 5)`).
-            Terminator::Branch { cond, .. } => !expr_has_call(exprs, cond),
-            _ => false,
-        };
-        let stmts_ok = block.stmts.iter().all(|&sid| {
+            Terminator::Branch { cond, .. } => {
+                if expr_has_call(exprs, cond) {
+                    out.insert("user_call_in_expr");
+                }
+            }
+            Terminator::Delay { .. } => {
+                out.insert("delay");
+            }
+            Terminator::Wait { .. } => {
+                out.insert("wait");
+            }
+            Terminator::Fork { .. } => {
+                out.insert("fork");
+            }
+            Terminator::Call { .. } => {
+                out.insert("frame_call");
+            }
+        }
+        for &sid in &block.stmts {
             // STATEMENT-LEVEL INTERCEPTS. `compute_effect` turns certain
             // `BlockingAssign`s into something other than "evaluate rhs, write lhs" —
             // a queue pop shrinks the queue, an assoc-iteration writes its ref key, a
@@ -90,19 +133,27 @@ pub(crate) fn is_codegen_able(
             // because the frame path has its own intercept for it. The VM has no such
             // intercept — `compute_effect` still routes it to `StmtEffect::Sformatf` —
             // so it is excluded here and only here.
-            let effect_rhs = match &stmts[sid as usize] {
-                Stmt::BlockingAssign { rhs, .. } => {
-                    sim_ir::rhs_is_stmt_effect(exprs, *rhs)
-                        || matches!(
-                            exprs.get(*rhs as usize),
-                            Some(Expr::SysFunc {
-                                which: SysFuncId::Sformatf,
-                                ..
-                            })
-                        )
+            if let Stmt::BlockingAssign { rhs, .. } = &stmts[sid as usize] {
+                if sim_ir::rhs_is_stmt_effect(exprs, *rhs) {
+                    out.insert("stmt_effect_rhs");
                 }
-                _ => false,
-            };
+                // Reported apart from the canonical stmt-effect family because it
+                // is a VM-only delta (the frame path DOES run `$sformatf`) — the
+                // histogram should not blur the two. NOTE the key reads "the body
+                // reaches a $sformatf-shaped IR node", not "the source spells
+                // $sformatf": elaborate desugars string CONCATENATION (`{s, "!"}`)
+                // into a synthetic Sformatf node (strings.rs), and that body is
+                // refused for exactly the same reason (differential-review find).
+                if matches!(
+                    exprs.get(*rhs as usize),
+                    Some(Expr::SysFunc {
+                        which: SysFuncId::Sformatf,
+                        ..
+                    })
+                ) {
+                    out.insert("sformatf");
+                }
+            }
             // N7 `c = new`: an allocation site is a plain `BlockingAssign` in the IR
             // whose MEANING lives in a StmtId-keyed sidecar — `compute_effect` checks
             // `class_new_sites` FIRST and never evaluates the placeholder rhs. Nothing
@@ -110,8 +161,9 @@ pub(crate) fn is_codegen_able(
             // it: the VM compiled the placeholder, the handle stayed X, and every later
             // field write was dropped with a null-dereference warning while the run
             // exited 0.
-            let class_new = class_new_sites.contains_key(&sid);
-            let pop_rhs = effect_rhs || class_new;
+            if class_new_sites.contains_key(&sid) {
+                out.insert("class_new");
+            }
             // B1: any expr position that can REACH a frame Call excludes the body.
             let has_call = match &stmts[sid as usize] {
                 Stmt::BlockingAssign { rhs, .. } | Stmt::Force { rhs, .. } => {
@@ -126,23 +178,28 @@ pub(crate) fn is_codegen_able(
                 }
                 Stmt::Disable { .. } | Stmt::Release { .. } => false,
             };
-            !pop_rhs
-                && !has_call
-                && !matches!(
-                    stmts[sid as usize],
-                    // Disable: Phase-2 control flow we will not bake into compiled
-                    // code. Force/Release: format_version-4 shape reserve — keep
-                    // compiled bodies away until the semantics increment lands.
-                    // NBA transport delay (v5): interp-only until increment (A)
-                    // wires the value-carrying delayed event into the VM path.
-                    Stmt::Disable { .. }
-                        | Stmt::Force { .. }
-                        | Stmt::Release { .. }
-                        | Stmt::NonblockingAssign { delay: Some(_), .. }
-                )
-        });
-        term_ok && stmts_ok
-    })
+            if has_call {
+                out.insert("user_call_in_expr");
+            }
+            // Disable: Phase-2 control flow we will not bake into compiled
+            // code. Force/Release: format_version-4 shape reserve — keep
+            // compiled bodies away until the semantics increment lands.
+            // NBA transport delay (v5): interp-only until increment (A)
+            // wires the value-carrying delayed event into the VM path.
+            match stmts[sid as usize] {
+                Stmt::Disable { .. } => {
+                    out.insert("disable");
+                }
+                Stmt::Force { .. } | Stmt::Release { .. } => {
+                    out.insert("force_release");
+                }
+                Stmt::NonblockingAssign { delay: Some(_), .. } => {
+                    out.insert("nba_transport_delay");
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 /// How much of a design the bytecode VM can claim — the answer to "is
@@ -177,24 +234,67 @@ impl CodegenCoverage {
 }
 
 /// Compute [`CodegenCoverage`] for an elaborated design.
+///
+/// IR-only census: `class_new_sites` is a `SimOpts` sidecar this signature cannot
+/// reach, so a `c = new` body counts as codegen-able here and is refused at the
+/// real gate. Over-counts on class designs — the run.json instrument uses
+/// [`codegen_report`] with the REAL sidecar instead.
 pub fn codegen_coverage(ir: &SimIr) -> CodegenCoverage {
-    CodegenCoverage {
-        codegen_able: ir
-            .processes
-            .iter()
-            .filter(|p| {
-                // IR-only census: `class_new_sites` is a `SimOpts` sidecar this
-                // signature cannot reach, so a `c = new` body counts as codegen-able
-                // here and is refused at the real gate. Over-counts on class designs.
-                is_codegen_able(
-                    &ir.stmts,
-                    &ir.exprs,
-                    &p.body,
-                    &std::collections::BTreeMap::new(),
-                )
-            })
-            .count(),
-        total: ir.processes.len(),
+    codegen_report(ir, &std::collections::BTreeMap::new()).coverage
+}
+
+/// T0 (doc-21 §7.3): the per-design VM-coverage instrument behind run.json's
+/// `codegen` object. Before this, the ONLY way to observe "does the bytecode VM
+/// claim anything here" was a `--backend interp` vs `bytecode` A/B timing run —
+/// which is how a design whose VM contribution was exactly 0% went unnoticed
+/// until an external round-26 measurement (`bench/keccak` 호출형).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodegenReport {
+    /// Process templates the VM claims / total (the existing P9 census).
+    pub coverage: CodegenCoverage,
+    /// Distinct rejection cause → how many process TEMPLATES exhibit it. A
+    /// template with two causes counts under both, so the column sum may exceed
+    /// the rejected-template count — each row answers "how many templates does
+    /// this cause touch", not a partition. Keys are the stable strings of
+    /// `reject_reasons_into`.
+    pub reject_reasons: std::collections::BTreeMap<&'static str, u32>,
+    /// Function/task templates (`ir.funcs`) — NONE of which are compile
+    /// candidates today. The round-26 blind spot made visible: a design whose
+    /// work lives in subroutine bodies can report 100% process coverage and
+    /// still run 0% of its time on the VM, and `frame_call`/`user_call_in_expr`
+    /// rows in the histogram plus a non-zero count here are exactly that shape.
+    pub frame_bodies: usize,
+}
+
+/// Compute [`CodegenReport`] with the REAL `class_new_sites` sidecar — the same
+/// walk (`reject_reasons_into`) the VM's compile gate runs, so the report cannot
+/// disagree with what the executor actually did (doc-19 §3: a wrong log is a
+/// silent-wrong).
+pub fn codegen_report(
+    ir: &SimIr,
+    class_new_sites: &std::collections::BTreeMap<u32, u32>,
+) -> CodegenReport {
+    let mut reject_reasons = std::collections::BTreeMap::new();
+    let mut codegen_able = 0usize;
+    let mut reasons = std::collections::BTreeSet::new();
+    for p in &ir.processes {
+        reasons.clear();
+        reject_reasons_into(&ir.stmts, &ir.exprs, &p.body, class_new_sites, &mut reasons);
+        if reasons.is_empty() {
+            codegen_able += 1;
+        } else {
+            for r in &reasons {
+                *reject_reasons.entry(*r).or_insert(0u32) += 1;
+            }
+        }
+    }
+    CodegenReport {
+        coverage: CodegenCoverage {
+            codegen_able,
+            total: ir.processes.len(),
+        },
+        reject_reasons,
+        frame_bodies: ir.funcs.len(),
     }
 }
 

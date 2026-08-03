@@ -697,3 +697,94 @@ fn stage_plusarg_value_form_enables() {
         "+STAGE_TRACEX must NOT enable"
     );
 }
+
+// ── T0 + S0 (doc-21 §7.3): the tier instruments in run.json ────────────────────
+
+/// T0: the `codegen` object pins the ②층 VM's claim on the design AND why the
+/// rest was refused — before this the only observation was a `--backend interp`
+/// vs `bytecode` A/B timing run, which is how a design with exactly 0% VM
+/// contribution (`bench/keccak` 호출형, round-26) went unnoticed. This design
+/// reproduces that shape in miniature: full of work, `frame_bodies > 0`, and
+/// the caller process refused for `user_call_in_expr` — so the report must say
+/// so, with exact counts (a wrong log is a silent-wrong, doc-19 §3).
+#[test]
+fn run_json_codegen_pins_the_vm_claim_and_reasons() {
+    let (_, code, obs) = run(
+        "module top;\n\
+           function automatic int add1(input int x); return x + 1; endfunction\n\
+           reg clk = 0; int v = 0;\n\
+           always #1 clk = ~clk;\n\
+           always @(posedge clk) v = add1(v);\n\
+           initial begin #10 $display(\"v=%0d\", v); $finish; end\n\
+         endmodule\n",
+        &[],
+    );
+    assert_eq!(code, 0);
+    let manifest = read(&obs.join("run.json"));
+    assert_eq!(
+        field(&manifest, "codegen"),
+        "{\"able\": 1, \"total\": 4, \"frame_bodies\": 1, \
+         \"reject_reasons\": {\"delay\": 2, \"user_call_in_expr\": 1}}",
+        "full manifest:\n{manifest}"
+    );
+    // S0: framed user calls are CORE (rev-4: S3 absorbs T1/T2), and #delay is
+    // the v1 target's normal TB shape — so this design is tier-3 eligible.
+    assert_eq!(
+        field(&manifest, "native"),
+        "{\"eligible\": true, \"reject_reasons\": {}}",
+        "full manifest:\n{manifest}"
+    );
+    // The effective executor is recorded next to the census (soundness F1):
+    // `codegen` is a STATIC capability claim, and without this field an
+    // `--backend interp` run's `able` rows read as "the VM ran this".
+    assert_eq!(field(&manifest, "backend"), "\"vm\"", "{manifest}");
+}
+
+/// The `codegen` object is a static property of the DESIGN — selecting the
+/// interpreter must not change one byte of it (it is a capability census, not
+/// an execution log). What DOES change is the `backend` field, which is what
+/// keeps the census from being misread on an interp-forced run.
+#[test]
+fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
+    let (_, c1, obs1) = run(PASS_SV, &[]);
+    let (_, c2, obs2) = run(PASS_SV, &["--backend", "interp"]);
+    assert_eq!((c1, c2), (0, 0));
+    let m1 = read(&obs1.join("run.json"));
+    let m2 = read(&obs2.join("run.json"));
+    assert_eq!(field(&m1, "backend"), "\"vm\"");
+    assert_eq!(field(&m2, "backend"), "\"interp\"");
+    assert_eq!(
+        field(&m1, "codegen"),
+        field(&m2, "codegen"),
+        "the census must not depend on the selected executor\n{m1}\n{m2}"
+    );
+    assert_eq!(field(&m1, "native"), field(&m2, "native"));
+}
+
+/// S0: the `native` object pins the ③층 design-level verdict. Fork + queue +
+/// string in one design — three distinct reject families, three rows, and the
+/// units are per-family counts (a net for storage kinds, a table entry for
+/// fork), so each is exactly 1 here.
+#[test]
+fn run_json_native_pins_the_reject_families() {
+    let (_, code, obs) = run(
+        "module top;\n\
+           string s;\n\
+           int q[$];\n\
+           initial begin\n\
+             fork begin s = \"a\"; end begin q.push_back(1); end join\n\
+             $display(\"%s %0d\", s, q[0]);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+        &[],
+    );
+    assert_eq!(code, 0);
+    let manifest = read(&obs.join("run.json"));
+    assert_eq!(
+        field(&manifest, "native"),
+        "{\"eligible\": false, \
+         \"reject_reasons\": {\"fork\": 1, \"queue\": 1, \"string\": 1}}",
+        "full manifest:\n{manifest}"
+    );
+}

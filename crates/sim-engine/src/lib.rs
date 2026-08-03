@@ -29,6 +29,10 @@ mod exec;
 #[cfg(feature = "jit")]
 mod jit;
 mod levelize;
+/// ③층 native backend (doc-21). S0: the design-level eligibility gate only —
+/// public because the CLI serializes its verdict (run.json `native`) and the
+/// S0 measurement calls it directly.
+pub mod native;
 mod native_eval;
 mod rng;
 mod sched;
@@ -48,7 +52,8 @@ use diag::{LogEvent, LogSink, ProgressEvent, RtlText};
 use sim_ir::SimIr;
 
 pub use backend::{
-    codegen_coverage, native_eval_coverage, native_eval_coverage_split, CodegenCoverage,
+    codegen_coverage, codegen_report, native_eval_coverage, native_eval_coverage_split,
+    CodegenCoverage, CodegenReport,
 };
 /// Re-exported from `elaborate` so callers thread the join-mode side table into
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
@@ -444,6 +449,17 @@ pub struct SimResult {
     /// OBS-3: `stage.jsonl` lines — one `{v,t,kind:"stage",…}` per `$vita_stage` call
     /// (time order). `None` ⇒ `+STAGE_TRACE` was not set (no capture).
     pub stage: Option<Vec<String>>,
+    /// T0: the VM-coverage report behind run.json's `codegen` object — computed
+    /// from the SAME walk and the SAME `class_new_sites` copy the compile gate
+    /// reads (`st.class_new_sites`), so the log cannot disagree with what the
+    /// executor did. A static property of the design: always present, one
+    /// allow-list walk per process template.
+    pub codegen: CodegenReport,
+    /// S0 (doc-21 §7.3): the ③층 design-level eligibility verdict — serialized
+    /// as run.json's `native` object. Always present; static per (design, run
+    /// options) — NOT per design alone: an instrumented run (`--probe`, stage
+    /// capture) is ineligible by design, doc-21 §4.3.
+    pub native: native::NativeEligibility,
 }
 
 /// OBS-2: format a net's 4-state value as an MSB..LSB binary string (`bit_char`
@@ -737,6 +753,11 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         &call_out_nets,
     );
 
+    // S0: take the ③층 design-level verdict while `opts` is still WHOLE — the
+    // scheduler consumes `opts.fork_modes` by value on the next line, and a
+    // late `&opts` read would see an emptied table and silently claim a fork
+    // design eligible (the exact wrong-log failure doc-19 §3 forbids).
+    let native_eligibility = native::design_eligibility(ir, &opts);
     let reason = {
         let mut sched = Scheduler::new(
             &mut st,
@@ -883,6 +904,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         coverage,
         trace,
         stage,
+        // T0: `st.class_new_sites` (not `opts.`) — the copy the VM compile gate
+        // itself reads, so this is the real gate's verdict, not a re-derivation.
+        codegen: backend::codegen_report(ir, &st.class_new_sites),
+        native: native_eligibility,
     }
 }
 

@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 착수 — T0 → S0 → S1…** | 8 | 실측 | ⭐⭐ **개정 4(2026-08-03): 착수 판정이 뒤집혔다.** 실사용 격차 **≈108×**(리포터가 작업량 기준으로 하향 정정)인데 **②층을 전부 청구해도 ~11×** → 남는 10× 는 ②층으로 도달 불가. T1~T3 은 ③층에 흡수(같은 문제를 두 번 하지 않는다), **T0+T4 만 독립 유지**. 단계·중단 판정·파괴 범위 = **[preview/21 §7](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S1 착수 (T0·S0 ✅)** | 7 | 실측 | ⭐⭐ **T0+S0 완료(2026-08-03, §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트. **적격률 실측 79/79(실사용 7 + corpus 72) → 중단 판정 통과, S1 go.** 다음 = **S1 R1 정적 넷 할당**(새 모듈·`Value` 소거·게이트 = corpus 적격분 바이트 동일). 단계·중단 판정·파괴 범위 = **[preview/21 §7](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -126,13 +126,14 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-0. ★★ **③층 착수 — T0 → S0 → S1 → … → S6** (§5 · 정본 = [preview/21 §7](preview/21-tier3-native-backend.md)).
-   **개정 4 에서 판정이 뒤집혔다**: 실사용 격차 **≈108×** 인데 ②층을 **전부** 청구해도 **~11×**
-   (T1~T4 는 같은 경로라 곱하지 않는다) → 남는 **≈10×** 는 ②층으로 도달 불가. 그리고 T1/T2 가 푸는
-   "호출을 가진 바디를 컴파일 대상으로" 는 ③층이 **폴백 없이 다시** 풀어야 하므로, 먼저 하면 같은
-   설계를 두 번 하고 한 번은 죽는다. → **T0(계기·되돌리기 0)만 남기고 T1~T3 은 ③층에 흡수**,
-   **T4**(함수 지역 배열 쓰기 21×)는 ③층과 무관한 국소 결함이라 **기회 슬라이스**로 독립 유지.
-   성공 기준 = 리포터 워크로드에서 **≥30×**(56 분 → 2 분 = sign-off 를 vita 로 옮길 수 있는 선).
+0. ★★ **③층 S1 — R1 정적 넷 할당** (§5 · 정본 = [preview/21 §5 S1 + §7.3](preview/21-tier3-native-backend.md)).
+   **T0+S0 완료(§4.5.285)**: run.json `codegen{able,total,frame_bodies,reject_reasons}`/`native{eligible,
+   reject_reasons}` 계기 + `sim_engine::native::design_eligibility`(SimOpts 전수 destructure·NetKind 스캔).
+   **적격률 79/79 → S1 go.** S1 범위 = `native::NetArena`(넷마다 컴파일 시점 확정 폭 슬롯·`(val,unk)`
+   인접) 위에서 도는 **인터프리터형 최소 실행기** — 코드 생성 없음. 게이트 = corpus 적격분
+   `--backend native` 바이트 동일. 중단 판정 = 넷 저장이 폭별로 안 나뉘면 중단(R2 불가).
+   ⚠️ 성공 기준(리포터 워크로드 ≥30×)과 v1 string 거부의 **모순은 열림** — preview/21 §7.3.1 마지막 항,
+   S2 실측 후 재측정 게이트에서 판정. **T4**(함수 지역 배열 쓰기 21×)는 기회 슬라이스로 독립 유지.
 1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
 2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
@@ -330,9 +331,14 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0 → S0 → S1 … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0 ✅ → S0 ✅ → **S1** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
+
+> **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json 에 `codegen`(②층 VM claim + 거부 사유
+> 히스토그램, compile gate 와 walk 공유)·`native`(③층 설계 수준 판정, SimOpts 전수 destructure +
+> NetKind 스캔). **측정 = 실사용 7종 + P6 corpus 72 전부 적격(79/79) → S0 중단 판정 통과, S1 go**
+> (측정표 = preview/21 §7.3.1). 다음 = **S1 R1 정적 넷 할당**.
 
 | | |
 |---|---|

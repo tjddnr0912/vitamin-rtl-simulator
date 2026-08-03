@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 250건 (최신순)
+## 인덱스 — 완료 슬라이스 251건 (최신순)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.285` **③층 T0+S0 — 계기 두 개를 달고 적격률을 쟀다: 79/79, S1 go.** run.json 에 `codegen`(②층 VM claim + 거부 사유 히스토그램 — REAL gate 와 **한 walk 공유**라 드리프트가 구조적으로 불가)·`native`(③층 설계 수준 판정 — SimOpts **`..` 없는 전수 destructure** + **NetKind 스캔**[plain `int q[$]` 는 사이드카가 없다]). `func_table` 은 §4.3 초판의 거부 목록에서 **코어로**(개정 4 가 T1/T2 를 S3 에 흡수). 함정 = `opts.fork_modes` 가 스케줄러로 move — 런 끝에서 읽었으면 fork 설계가 빈 테이블 위에서 eligible 로 조작될 뻔(컴파일러가 잡음). **측정 = 실사용 7종 + corpus 72 전부 적격 → S0 중단 판정 통과, S1 go**. keccak 호출형 = `able 1/4 · frame_bodies 3` 이 JSON 한 줄(round-26 맹점의 계기화). ≥30× 기준 vs v1 string 거부의 모순은 **열어 둔 채 기록**(preview/21 §7.3.1) …
 - `4.5.284` **외부 round-28 — IEEE 1364-2005 §3.5 암시적 net 선언을 구현했다.** 리포터가 상용 ASIC 트리의 `E3010` 97 + `E3009` 3 건을 사이트별로 "표준에서 합법인가"로 분류했고 **고유 원인 7개 중 6개가 vita 갭**이었다. 핵심 = vita 가 항상 `BTdefault_nettype none` 처럼 동작했다(doc-15 가 **의도된 정책**으로 명문화). 보수적이지만 **비준수**이고, 결정적으로 **사용자가 고칠 수 없다** — 7개 중 2개가 파운드리 납품 셀 라이브러리/IP 모델 안이다. 안전은 refusal 대신 **`W2003`**(doc-15 가 이미 예약해 둔 코드)이 산다. **경계는 iverilog 로 핀**(rhs·procedural lvalue·`none` 은 전부 error). 8-D(12→1비트 절단)는 값은 iverilog 와 같게 두고 **폭을 말하는 W3056** 을 낸다 — 모든 시뮬레이터가 조용히 하는 일을 vita 만 말한다. 부수: `BTdefault_nettype` 디렉티브 · `specparam` · 9-A 진단(EVENT CONTROL 을 lvalue 라 부르던 것) …
 - `4.5.283` ★★ **외부 round-27 — `@(*)` 가 attribute instance 로 렉싱되어 소스가 통째로 삼켜졌다.** 이 저장소가 받은 **최고 심각도** 리포트: `//` 주석 안의 `*)` 가 감도 리스트의 `(*` 를 닫아 **주석이 실행 코드로 승격**되고 `errors=0` 으로 **틀린 값**이 나왔다(correct-or-loud 위반). 뿌리 = attribute 스킵이 **원문(raw text) 정규식**이라 주석·문자열을 뚫고 지나가고, 짝을 못 찾으면 **조용히** 폴백했다 — 그래서 발현 여부가 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달려 `@(*)` 하나면 통과·둘이면 파괴, 진단은 **원인이 아닌 두 번째 블록**에 찍혔고 **파일 경계를 넘었다**. 수정 = attribute 를 **토큰 스트림**에서 인식(주석은 이미 사라졌고 문자열은 한 토큰) + `@` 직후는 event control + 안 닫힌 opener 는 loud. 3-way(PRE/POST/iverilog) 16형 전수 **회귀 0 · 수정 8** …
 - `4.5.282` **③층 격차를 처음으로 쟀다(76×) — 그리고 ②층이 고갈되지 않았음을 알았다** · 외부 round-26 §3(진단 꼬리 절이 "동작한다"에 붙어 **동작하는 형태가 subset 밖**인 것처럼 읽히던 것)을 구조적으로 고치고(`(what, detail)` 분리), verilator 5.050 을 들여 **같은 설계·같은 기계로 3개 층**을 나란히 쟀다. 새 1st-party 벤치 `bench/keccak`(Keccak-f[1600], 오라클 4중 일치). 최대 발견은 격차가 아니라 **커버리지**였다 — 사용자 함수를 부르는 프로세스를 `is_codegen_able` 이 통째로 거부해 **VM 기여가 정확히 0%**, 거기 **10.7×** 가 미청구로 남아 있다 …
@@ -339,6 +340,46 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.285 ③층 T0+S0 — 계기 두 개를 달고 적격률을 쟀다: 79/79, S1 go (2026-08-03, branch feat-tier3-t0-s0, format 26 불변) ✅
+
+**무엇.** preview/21 §7.3 의 첫 두 단계. ① **T0** — run.json 에 `codegen{able,total,frame_bodies,
+reject_reasons}`: ②층 VM 이 이 설계에서 무엇을 거부했고 왜인지. 그 전까지 유일한 관측 수단이
+`--backend` A/B 타이밍이었다(round-26 이 keccak 호출형의 **VM 기여 0%** 를 그 방법으로야 발견한
+이유). ② **S0** — `sim_engine::native::design_eligibility(ir, opts)` + run.json `native{eligible,
+reject_reasons}`: "이 설계 **전체**를 ③층이 받을 수 있나"(§4.1 설계 단위 all-or-nothing 의 전제)를
+IR + 사이드카만으로 답한다.
+
+**구조 결정 셋.** ① 히스토그램은 **새 술어가 아니다** — `is_codegen_able` 을 reason-수집 walk
+(`reject_reasons_into`) 위의 `is_empty()` 로 재구성해 REAL gate 와 obs 가 **한 walk 를 공유**한다
+(분류기-드리프트가 구조적으로 불가능 — §4.5.276 의 "두 술어" 함정을 설계로 봉쇄). terminator match 는
+`_`-free: frozen 타입에 변종이 늘면 컴파일 에러 = 강제 분류. ② S0 게이트의 SimOpts 분류는 **`..`
+없는 전수 destructure** — 사이드카를 새로 달면서 게이트 분류를 잊는 실수가 컴파일 에러가 된다.
+③ 검출기는 사이드카가 아니라 **NetKind 스캔** — plain `int q[$]` 는 사이드카가 없어서 `*_dyn_nets`
+로는 영원히 안 보인다(doc-21 §4.3 의 의도를 구현이 정정). `func_table` 은 §4.3 초판의 거부 목록에
+있었지만 **코어로 옮겼다**(개정 4 가 T1/T2 를 S3 에 흡수 — "호출을 삼키지 못하면 중단"인 계획이
+호출을 거부하는 게이트를 가질 수는 없다). doc-21 §4.3 에 개정 주석.
+
+**함정 하나(컴파일러가 잡음).** `design_eligibility(ir, &opts)` 를 SimResult 조립 지점(런 끝)에서
+부르려 했으나 `opts.fork_modes` 가 `Scheduler::new` 로 **move** 된다 — 사전 grep 감사는 clone 만
+보고 이 move 를 놓쳤다. 끝에서 읽었으면 fork 설계가 **빈 테이블 위에서 eligible 로 조작**될 뻔
+(정확히 doc-19 §3 이 금지하는 wrong-log). verdict 를 스케줄러 생성 **전에** 채취.
+
+**측정(= S0 의 산출물).** 실사용 7종(examples 4 · picorv32+TB · keccak 호출/인라인) **전부 적격**,
+P6 corpus **72/72**(`native_gate.rs` 가 정확 수치로 핀) → **중단 판정("실사용 4종 0%") 통과, S1 go**.
+keccak 호출형 행 = round-26 맹점의 계기화: `able 1/4 · frame_bodies 3 · user_call_in_expr` 가 JSON
+한 줄. ⚠️ 이 100% 는 **설계 수준 상한**(문장 수준 능력은 S3 컴파일러 시점에 게이트 합류)이고,
+성공 기준(리포터 워크로드 ≥30×) vs v1 string 거부의 **모순은 열어 둔 채 기록**(preview/21 §7.3.1,
+S2 실측 후 판정 — 스펙 변경 2회+ 검토 룰).
+
+**검증.** doc-19 R-L0 필드 목록 갱신(additive·schema_ver 1 유지). 신규 테스트 8(obs 핀 3 — 정확
+카운트 문자열 = teeth + backend-invariance · native_gate 5 — 가족별 발화 + corpus 정확 수치). 기존
+obs 결정성 골든이 신규 필드를 자동 포섭(wall-clock 제외 byte-diff). **적대 2렌즈 CLEAN-급**(BLOCKING/
+MAJOR 0): soundness 가 술어 교체를 arm 별 의무 이관으로 전수 검증(불리언 등가 확인) + subsumption
+주장을 populate site 4곳에서 검증, differential 이 25 설계 × 최대 4 실행기 구성에서 **바이트 발산 0**
++ run.json 값을 손 계수와 전수 대조. 리뷰 지적 3건 반영 = run.json `backend` 필드(정적 census 오독
+방지·F1) · `sformatf` 키가 desugar 된 string concat 도 포함함을 명문화 · `native` 의 "(설계, 런 옵션)
+별 정적" 정밀화(`--probe` 런은 설계상 부적격). 전 스위트 5084 green.
 
 #### 4.5.279 백엔드 default 를 뒤집자 P5 게이트가 초록으로 통과시키던 39건이 드러났다 (2026-08-01, format 26 불변) ✅
 

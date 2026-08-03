@@ -629,11 +629,18 @@ pub(crate) fn run_vita_str_gated(
                 text.push('\n');
             }
         }
+        // The EFFECTIVE executor, in the `--backend` flag's vocabulary — the
+        // same default resolution `sim_opts()` applied (`None` ⇒ the VM).
+        let backend = match opts.backend.unwrap_or_default() {
+            sim_engine::Backend::Interpreter => "interp",
+            sim_engine::Backend::Bytecode => "vm",
+        };
         emit_obs(
             dir,
             file,
             &text,
             &opts.plusargs,
+            backend,
             &result,
             inner,
             final_code,
@@ -653,6 +660,7 @@ pub(crate) fn emit_obs(
     file: &str,
     text: &str,
     plusargs: &[String],
+    backend: &'static str,
     result: &sim_engine::SimResult,
     inner: &StderrSink,
     final_code: i32,
@@ -700,6 +708,9 @@ pub(crate) fn emit_obs(
         } else {
             "FAIL"
         },
+        backend,
+        codegen: &result.codegen,
+        native: &result.native,
         utc_unix_s,
         wall_s: start.elapsed().as_secs_f64(),
     };
