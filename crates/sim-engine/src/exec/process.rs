@@ -110,7 +110,11 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
         // Snapshot the block's stmt ids + terminator (process-local indexing,
         // resolved through this activity's template).
         let tmpl = sched.activity_template(pi) as usize;
-        enter_body(sched.st, tmpl);
+        // Through the SEAM, not around it: `k_enter_body` was added for the
+        // tier-3 walk, and leaving the engine on a direct call would have made it
+        // a second spelling of "install the per-process context" — the shape a
+        // previous slice's `take_due_delayed` got caught on.
+        sched.k_enter_body(tmpl as u32);
         // `ir` is `&'ir SimIr` (shared, outliving this `&mut sched` borrow), so the
         // block's stmt list and terminator are read IN PLACE. The previous
         // `stmts.clone()`/`term.clone()`/per-stmt `Stmt::clone()` allocated on every
@@ -150,7 +154,7 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             // running the rest of its body on state the fatal just declared invalid. That
             // tail is what let a testbench print its own PASS verdict after a read had
             // already failed. One predictable `Cell` load per statement.
-            if sched.st.call_fatal.get() {
+            if sched.k_call_fatal() {
                 return Step::Fatal;
             }
         }

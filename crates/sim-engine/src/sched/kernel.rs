@@ -1011,6 +1011,12 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_rearm(&mut self, proc: u32) {
         self.rearm(proc);
     }
+    fn k_enter_body(&mut self, tmpl: u32) {
+        crate::exec::enter_body(self.st, tmpl as usize);
+    }
+    fn k_call_fatal(&self) -> bool {
+        self.st.call_fatal.get()
+    }
     fn k_max_deltas(&self) -> u64 {
         self.max_deltas_guard()
     }

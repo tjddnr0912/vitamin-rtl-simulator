@@ -1008,7 +1008,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         block: u32,
         body: Rc<crate::backend::CompiledBody>,
     ) -> Step {
-        crate::exec::enter_body(self.st, tmpl);
+        self.k_enter_body(tmpl as u32);
         #[cfg(feature = "jit")]
         {
             // BODY-LEVEL CODEGEN: one boundary crossing per activation instead of one per

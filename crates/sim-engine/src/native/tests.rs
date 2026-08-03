@@ -37,6 +37,27 @@ impl diag::LogSink for NullSink {
     fn emit(&self, _e: diag::LogEvent) {}
 }
 
+/// `fresh_state` with the per-process context installed from `opts`.
+///
+/// `SimState::new` does NOT apply `SimOpts`; production wires them in `simulate`.
+/// Without this, `proc_scopes`/`proc_multipliers` are empty, `enter_body` sets
+/// every process to "top"/1, and a body walk that skipped `enter_body` entirely
+/// was indistinguishable from one that called it — measured.
+pub(super) fn fresh_state_with<'a>(
+    ir: &'a SimIr,
+    sink: &'a NullSink,
+    opts: &SimOpts,
+) -> SimState<'a> {
+    let mut st = fresh_state(ir, sink);
+    st.proc_scopes = opts.proc_scopes.clone();
+    st.proc_multipliers = opts.proc_multipliers.clone();
+    st.proc_prec_mults = opts.proc_prec_mults.clone();
+    for &n in &opts.two_state_nets {
+        st.two_state[n as usize] = true;
+    }
+    st
+}
+
 pub(super) fn fresh_state<'a>(ir: &'a SimIr, sink: &'a NullSink) -> SimState<'a> {
     SimState::new(
         ir,
@@ -350,6 +371,13 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // `Display` plus a sid, so WITHOUT the table it prints its own arguments
         // instead of applying them, and the `%t` path is never entered.
         timeformat_stmts: sc.timeformat_stmts,
+        // …and the per-process context. `enter_body` installs `cur_scope` and the
+        // time multipliers from these, so without them every process shares
+        // "top"/1 and a body walk that skipped `enter_body` entirely was
+        // indistinguishable (measured).
+        proc_scopes: sc.proc_scopes,
+        proc_multipliers: sc.proc_multipliers,
+        proc_prec_mults: sc.proc_prec_mults,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

@@ -38,6 +38,7 @@ use crate::native::arena::NetArena;
 use crate::SimOpts;
 
 pub mod arena;
+pub mod body;
 pub mod dirty;
 pub mod kernel;
 #[cfg(test)]

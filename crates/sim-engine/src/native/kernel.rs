@@ -11,10 +11,11 @@
 //!
 //! ## What "honest" means for the methods that are not implemented, in TWO kinds
 //!
-//! 52 declarations (51 without the `jit` feature). They divide four ways, and
-//! three slices moved four of them: **17 store core** · **17 classification
-//! predicates** · **18 gate-refused workers** · **0 NOT BUILT**. 17+17+18 = 52
-//! WITH the `jit` feature; the default build has 51, because `k_nets` is
+//! 54 declarations (53 without the `jit` feature; S1d-4c-2b added `k_call_fatal`
+//! and `k_enter_body` for the body walk). They divide four ways, and three slices moved four of
+//! them: **18 store core** · **17 classification
+//! predicates** · **18 gate-refused workers** · **0 NOT BUILT**. 19+17+18 = 54
+//! WITH the `jit` feature; the default build has 53, because `k_nets` is
 //! jit-gated and sits in store core — the arithmetic is the point, so the
 //! feature it depends on has to be stated too. S1d-4b-2
 //! implemented `k_dispatch_systask` and `k_sformatf`, S1d-4c-1
@@ -237,7 +238,6 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// had already run. Every construction site today builds a fresh arena
     /// alongside, so the lifetime is per-run; nothing structurally enforces it.
     pub(crate) wake: crate::native::wake::WakeTable,
-    pub(crate) fatal: bool,
 }
 
 #[allow(dead_code)] // ditto — `new`/`ctx` have exactly one caller, the gate.
@@ -260,7 +260,6 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             delayed_nba: BTreeMap::new(),
             nba_scratch_lhs: Lvalue { chunks: Vec::new() },
             wake: crate::native::wake::WakeTable::new(ir),
-            fatal: false,
         }
     }
 
@@ -373,6 +372,17 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         matches!(self.ctx().truthiness(v), crate::eval::Tri::True)
     }
 
+    fn k_enter_body(&mut self, tmpl: u32) {
+        // The SAME function the engine calls — `cur_time_mult`/`cur_prec_mult`/
+        // `cur_scope` live on `sched.st`, which this kernel borrows rather than
+        // copies, so there is one origin and one spelling.
+        crate::exec::enter_body(self.sched.st, tmpl as usize);
+    }
+
+    fn k_call_fatal(&self) -> bool {
+        self.sched.st.call_fatal.get()
+    }
+
     fn k_max_deltas(&self) -> u64 {
         self.max_body_steps
     }
@@ -416,7 +426,14 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
 
     fn k_mark_fatal(&mut self) {
-        self.fatal = true;
+        // The SAME `Scheduler::mark_fatal` the engine calls. This used to set a
+        // local `self.fatal` flag that NOTHING in the workspace read — so the
+        // engine emitted `RunBodyStepLimit` and set `had_fatal` (which drives the
+        // process exit class) while the native side hit its step limit in total
+        // silence. A loud→silent step, on the one path a `correct-or-loud`
+        // project can least afford to take it: the guard exists to report a
+        // runaway body, and a runaway body that reports nothing is the failure.
+        self.sched.mark_fatal();
     }
 
     // ── WRITE: store-backed ──

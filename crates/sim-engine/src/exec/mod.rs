@@ -20,6 +20,7 @@ pub(crate) mod kpred;
 mod process;
 
 /// Outcome of one process activation.
+#[derive(Debug)]
 pub(crate) enum Step {
     Done,
     Suspended,
@@ -235,7 +236,32 @@ pub(crate) trait Kernel {
     /// `Return` is routed to `on_child_complete`, never to `rearm`) — `is_codegen_able`
     /// scans the WHOLE body, so the VM only ever drives top-level activities here.
     fn k_rearm(&mut self, proc: u32);
-    /// CONTROL: the infinite-delta termination-guard ceiling (mirror exec.rs:177).
+    /// CONTROL: install the per-process execution context before running its
+    /// body — `$time`'s multiplier, the precision multiplier, and the `%m` scope.
+    ///
+    /// These are exactly the fields an earlier tier-3 slice found the kernel must
+    /// not keep its own copies of, and they are written PER PROCESS, so a body
+    /// walk that skips this renders `$time` and `%m` from whatever process ran
+    /// last. Both implementors forward to the same `exec::enter_body`.
+    fn k_enter_body(&mut self, tmpl: u32);
+    /// CONTROL: has a fatal been latched from a `&self` eval context?
+    ///
+    /// A fatal raised inside an expression (a frame body, a cont-assign rhs) has
+    /// no way to return `Step::Fatal` — it can only set a `Cell`. The body walk
+    /// consumes it at the next statement boundary so the process STOPS where the
+    /// fatal happened instead of running the rest of its body on state the fatal
+    /// just declared invalid. Added to the seam by S1d-4c-2b: the tier-3 walk
+    /// needs the same check, and reading the flag through its own path would be a
+    /// second spelling of "when does a latched fatal take effect".
+    fn k_call_fatal(&self) -> bool;
+    /// CONTROL: the IN-BODY step budget — how many blocks one activation may run
+    /// without suspending.
+    ///
+    /// NOT the delta limit, despite the name: both implementors return
+    /// `max_body_steps`. Conflating the two is the round-25 defect that reported
+    /// an ordinary `for` loop as a combinational oscillation and produced
+    /// `F4027`, and the previous wording here ("the infinite-delta
+    /// termination-guard ceiling") was that same conflation written down.
     fn k_max_deltas(&self) -> u64;
     /// CONTROL: flag a fatal (delta-limit) termination (mirror exec.rs:178).
     fn k_mark_fatal(&mut self);

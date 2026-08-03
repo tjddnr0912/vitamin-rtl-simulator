@@ -29,7 +29,8 @@ use sim_ir::{SimIr, Stmt};
 
 use super::test_common as common;
 use super::tests::{
-    assert_stores_equal, build_with_opts, fresh_state, mirror_state, set_bit, NullSink,
+    assert_stores_equal, build_with_opts, fresh_state, fresh_state_with, mirror_state, set_bit,
+    NullSink,
 };
 use crate::exec::{apply_effect, compute_effect, Kernel, StmtEffect};
 use crate::native::arena::NetArena;
@@ -2097,4 +2098,451 @@ fn s1d4c2a_initial_processes_never_carry_a_read_set() {
         initials >= 50,
         "too few Initial processes seen ({initials})"
     );
+}
+
+/// S1d-4c-2b — **whole PROCESS BODIES, not statements.**
+///
+/// Every earlier gate drove one statement at a time through the shared executor.
+/// This drives the block loop: `Goto`, `Branch` and `Return`, the statement
+/// sequence inside each block, and the in-body step guard.
+///
+/// It does NOT drive the `call_fatal` boundary check, and an earlier version of
+/// this sentence claimed it did. That check cannot fire for the class the gate
+/// admits — every site that latches `call_fatal` is frame machinery, which needs
+/// a `func_table`, which the arena refuses — so deleting it survives the whole
+/// workspace. It is kept because the same loop is generic and the rule is
+/// load-bearing for `K = Scheduler`; see the note at its call site. Those are `run_process`'s decisions, and `run_process` is
+/// `Scheduler`-fixed, so they are the one part that had to be restated — which
+/// makes them the one part a differential has to cover.
+///
+/// The engine side runs its own `run_process` on its own state; the arena side
+/// runs `native::body::run_body`. Same design, same start state, and afterwards
+/// the two stores must agree — a control-flow decision that differs shows up as
+/// different bits, because a taken branch writes different things.
+fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
+    let (ir, opts) = build_with_opts(src);
+    let Ok(arena) = NetArena::build(&ir, &opts) else {
+        return 0;
+    };
+    // Only processes the walk can run. A body that suspends is 4c-2c's.
+    let runnable: Vec<u32> = ir
+        .processes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| {
+            crate::native::body::body_is_suspend_free(&ir, *i as u32, ir.processes[*i].entry)
+        })
+        .map(|(i, _)| i as u32)
+        .collect();
+    if runnable.is_empty() {
+        return 0;
+    }
+    let sink = NullSink;
+    let mut st_e = fresh_state_with(&ir, &sink, &opts);
+    let mut st_n = fresh_state_with(&ir, &sink, &opts);
+    let n_nets = ir.nets.len() as u32;
+    let empty: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut arena = arena;
+    let mut rng = Rng::new(seed);
+    let mut compared = 0usize;
+    let mut nba_applied = 0usize;
+
+    for pass in 0..4 {
+        // Same start state on both sides, then each runs its own executor.
+        mirror_state(
+            &mut st_e,
+            &mut arena,
+            &mut rng,
+            n_nets,
+            pass % 2 == 1,
+            pass >= 2,
+        );
+        {
+            let mut scratch = NetArena::build(&ir, &opts).expect("arena rebuilds");
+            let mut rng2 = Rng::new(seed);
+            for _ in 0..=pass {
+                mirror_state(
+                    &mut st_n,
+                    &mut scratch,
+                    &mut rng2,
+                    n_nets,
+                    pass % 2 == 1,
+                    pass >= 2,
+                );
+            }
+        }
+        assert_stores_equal(&st_e, &arena, n_nets, &format!("{name}/pass{pass}/start"));
+
+        let mut sched_e = Scheduler::new(&mut st_e, 33_000, 10_000, None, opts.fork_modes.clone());
+        sched_e.arm_processes();
+        let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
+
+        for &pi in &runnable {
+            let entry = ir.processes[pi as usize].entry;
+            let step_e = crate::exec::run_process(&mut sched_e, pi, entry);
+            let step_n = crate::native::body::run_body(&mut nk, &ir, pi, entry);
+            assert_eq!(
+                format!("{step_e:?}"),
+                format!("{step_n:?}"),
+                "{name}/pass{pass}/proc{pi}: the two walks ended differently"
+            );
+            // NBA QUEUES FIRST — 46 of the 83 statements these bodies execute are
+            // nonblocking assigns, and an NBA's entire effect is a queue push.
+            // A store-only comparison saw none of them: measured, dropping EVERY
+            // NBA from the walk left all three tests green. The gate's own claim
+            // that "a control-flow decision that differs shows up as different
+            // bits" was false for the majority of what it ran.
+            assert_eq!(
+                sched_e.nba.len(),
+                nk.nba.len(),
+                "{name}/pass{pass}/proc{pi}: NBA queue depth diverged"
+            );
+            for (a, b) in sched_e.nba.iter().zip(nk.nba.iter()) {
+                assert_eq!(
+                    (a.seq, &a.sampled, a.offsets.as_slice(), nba_dest(a)),
+                    (b.seq, &b.sampled, b.offsets.as_slice(), nba_dest(b)),
+                    "{name}/pass{pass}/proc{pi}: NBA entry diverged"
+                );
+            }
+            // …then APPLY them, so the queued values land in the stores and the
+            // comparison below covers what the NBAs actually wrote.
+            sched_e.apply_nba();
+            nk.apply_nba();
+            nba_applied += 1;
+            assert_stores_equal(
+                sched_e.st,
+                &nk.arena,
+                n_nets,
+                &format!("{name}/pass{pass}/proc{pi}/after-body"),
+            );
+            // The store is not the only thing a body walk changes. `Return` calls
+            // `k_rearm`, and `enter_body` installs the per-process context —
+            // neither writes a net, so both were invisible to a store-only
+            // comparison (measured: skipping either survived).
+            assert_eq!(
+                sched_e.has_static_level_waiter(pi),
+                nk.wake.level_armed_for_test(pi),
+                "{name}/pass{pass}/proc{pi}: arm state after the body diverged"
+            );
+            assert_eq!(
+                (
+                    sched_e.st.cur_time_mult,
+                    sched_e.st.cur_prec_mult,
+                    sched_e.st.cur_scope.clone()
+                ),
+                (
+                    nk.sched.st.cur_time_mult,
+                    nk.sched.st.cur_prec_mult,
+                    nk.sched.st.cur_scope.clone()
+                ),
+                "{name}/pass{pass}/proc{pi}: per-process context diverged — \
+                 `enter_body` sets `$time`'s multiplier and `%m`'s scope"
+            );
+            compared += 1;
+        }
+        drop(sched_e);
+        arena = nk.arena;
+    }
+    assert!(nba_applied > 0, "{name}: no body ran");
+    compared
+}
+
+#[test]
+fn s1d4c2b_body_walk_matches_the_engine_over_corpus() {
+    let mut compared = 0usize;
+    let mut designs = 0usize;
+    for (i, d) in corpus(0x5EED_F00D, 72).into_iter().enumerate() {
+        let n = s1d4c2b_body_walk(&d.src, &d.name, 0x4C20_0000 + i as u64);
+        if n > 0 {
+            designs += 1;
+        }
+        compared += n;
+    }
+    // Not a floor. A design with no suspend-free process contributes 0, and the
+    // count of those is itself the measurement: only **30 of 72** corpus designs
+    // carry a process this walk can run — the other 42 suspend somewhere in every
+    // body (a clock generator's `forever #5` is the common shape). So this gate
+    // covers well under half the corpus until S1d-4c-2c builds the region queues,
+    // and pinning the number keeps that visible rather than implied.
+    assert_eq!(
+        (designs, compared),
+        (30, 268),
+        "body-walk coverage moved — re-pin deliberately"
+    );
+}
+
+/// Multi-block suspend-free bodies — `Goto` and `Branch`, which the corpus walk
+/// cannot reach.
+///
+/// Measured: `Goto → Done` and swapping the `Branch` arms BOTH survive the
+/// corpus walk. (An earlier version of this comment explained that as "every
+/// runnable corpus body is a single block" — 8 of the 67 have two or more
+/// reachable blocks, so the explanation was wrong even though the consequence it
+/// predicted is real and reproduced.) These designs are what catches them.
+/// Two things a single-module design cannot exercise: the per-process CONTEXT
+/// (`%m`'s scope differs per instance, so `enter_body` has something to install)
+/// and the in-body STEP GUARD (a body long enough to exceed a small budget).
+///
+/// Both survived mutation without this: with one module every process shares one
+/// scope, so skipping `enter_body` changed nothing observable, and no corpus body
+/// iterates enough to reach any plausible budget.
+#[test]
+fn s1d4c2b_body_walk_agrees_on_context_and_the_step_guard() {
+    // Two INSTANCES, so `proc_scopes` differ and `enter_body` has work to do.
+    let src = "module leaf(input [7:0] i, output reg [7:0] o);\n\
+                 always @(*) o = i + 8'd1;\n\
+               endmodule\n\
+               module t;\n\
+                 reg [7:0] a; wire [7:0] x; reg [7:0] b; wire [7:0] y;\n\
+                 leaf u1(.i(a), .o(x));\n\
+                 leaf u2(.i(b), .o(y));\n\
+                 initial begin a = 8'h10; b = 8'h20; end\n\
+               endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let scopes: std::collections::BTreeSet<&String> = (0..ir.processes.len())
+        .filter(|&pi| {
+            crate::native::body::body_is_suspend_free(&ir, pi as u32, ir.processes[pi].entry)
+        })
+        .filter_map(|pi| opts.proc_scopes.get(pi))
+        .collect();
+    assert!(
+        scopes.len() >= 2,
+        "the design must give its runnable processes DIFFERENT scopes, or \
+         `enter_body` has nothing to install: {scopes:?}"
+    );
+    let n = s1d4c2b_body_walk(src, "two_instances", 0x4C2C_0000);
+    assert!(n > 0, "produced no comparisons");
+
+    // STEP GUARD: a bounded loop with a budget below its iteration count. Both
+    // sides must reach Fatal, and by the same route.
+    let loop_src = "module t;\n\
+                      reg [7:0] acc; integer i;\n\
+                      always @(*) begin\n\
+                        acc = 8'd0;\n\
+                        for (i = 0; i < 40; i = i + 1) acc = acc + 8'd1;\n\
+                      end\n\
+                      initial acc = 0;\n\
+                    endmodule\n";
+    let (ir2, opts2) = build_with_opts(loop_src);
+    let arena = NetArena::build(&ir2, &opts2).expect("arena builds");
+    let sink = NullSink;
+    let mut st_e = fresh_state_with(&ir2, &sink, &opts2);
+    let mut st_n = fresh_state_with(&ir2, &sink, &opts2);
+    let empty: BTreeMap<u32, u32> = BTreeMap::new();
+    let pi = (0..ir2.processes.len() as u32)
+        .find(|&p| {
+            crate::native::body::body_is_suspend_free(&ir2, p, ir2.processes[p as usize].entry)
+                && ir2.processes[p as usize].body.len() > 1
+        })
+        .expect("a multi-block runnable body");
+    // Budget of 20 against 40 iterations: the guard MUST fire on both sides. The
+    // budget sits BETWEEN one and two counts per block on purpose — counting
+    // twice per iteration would fatal at a different point, and with a budget far
+    // below the count both spellings fatal alike (measured: `guard += 2` survived).
+    let mut sched_e = Scheduler::new(&mut st_e, 33_000, 20, None, Default::default());
+    sched_e.arm_processes(); // `run_process` indexes `activities`
+    let mut sched_n = Scheduler::new(&mut st_n, 33_000, 20, None, Default::default());
+    let mut nk = NativeKernel::new(&ir2, arena, &mut sched_n, &empty, 20);
+    let entry = ir2.processes[pi as usize].entry;
+    let step_e = crate::exec::run_process(&mut sched_e, pi, entry);
+    let step_n = crate::native::body::run_body(&mut nk, &ir2, pi, entry);
+    assert_eq!(
+        format!("{step_e:?}"),
+        format!("{step_n:?}"),
+        "the step guard ended the two walks differently"
+    );
+    assert_eq!(
+        format!("{step_e:?}"),
+        "Fatal",
+        "the guard must actually fire"
+    );
+    // …and the store at the moment it fired must MATCH, which is what pins WHEN
+    // it fired rather than merely that it did. Without this, counting twice per
+    // block — or a hundred times — still ended in `Fatal` and survived.
+    assert_stores_equal(
+        sched_e.st,
+        &nk.arena,
+        ir2.nets.len() as u32,
+        "step-guard/at-fatal",
+    );
+    // …and the fatal must have been REPORTED on both sides. `k_mark_fatal` on the
+    // kernel used to set a local flag nothing read, so the engine emitted
+    // `RunBodyStepLimit` and set the exit-class bit while the native side hit its
+    // step limit in silence — and `Step::Fatal` plus a matching store said
+    // nothing about that. For a correct-or-loud project the guard's whole value
+    // is the report.
+    assert!(
+        sched_e.st.had_fatal,
+        "the engine did not record the fatal — the oracle for this assertion is wrong"
+    );
+    assert!(
+        nk.sched.st.had_fatal,
+        "the tier-3 kernel hit its step limit WITHOUT reporting it: \
+         `k_mark_fatal` must reach the same diagnostic the engine emits"
+    );
+}
+
+#[test]
+fn s1d4c2b_body_walk_agrees_on_multi_block_bodies() {
+    let designs: [(&str, &str); 4] = [
+        (
+            "if_else_chain",
+            "module t;\n\
+               reg [7:0] sel; reg [7:0] y;\n\
+               always @(*) begin\n\
+                 if (sel < 8'd4) y = 8'h11;\n\
+                 else if (sel < 8'd8) y = 8'h22;\n\
+                 else if (sel[0]) y = 8'h33;\n\
+                 else y = 8'h44;\n\
+               end\n\
+               initial sel = 8'd0;\n\
+             endmodule\n",
+        ),
+        (
+            "case_and_nested",
+            "module t;\n\
+               reg [7:0] op; reg [7:0] a; reg [7:0] b; reg [7:0] r;\n\
+               always @(*) begin\n\
+                 case (op[1:0])\n\
+                   2'd0: r = a + b;\n\
+                   2'd1: r = a - b;\n\
+                   2'd2: begin if (a > b) r = a; else r = b; end\n\
+                   default: r = 8'hff;\n\
+                 endcase\n\
+               end\n\
+               initial begin op = 0; a = 8'h10; b = 8'h20; end\n\
+             endmodule\n",
+        ),
+        (
+            "bounded_loop",
+            "module t;\n\
+               reg [7:0] src; reg [7:0] acc; integer i;\n\
+               always @(*) begin\n\
+                 acc = 8'd0;\n\
+                 for (i = 0; i < 8; i = i + 1)\n\
+                   if (src[i]) acc = acc + 8'd1;\n\
+               end\n\
+               initial src = 8'ha5;\n\
+             endmodule\n",
+        ),
+        (
+            "loop_with_break_and_continue",
+            "module t;\n\
+               reg [15:0] v; reg [7:0] first; integer j;\n\
+               always @(*) begin\n\
+                 first = 8'hff;\n\
+                 for (j = 0; j < 16; j = j + 1) begin\n\
+                   if (!v[j]) continue;\n\
+                   first = j[7:0];\n\
+                   break;\n\
+                 end\n\
+               end\n\
+               initial v = 16'h0100;\n\
+             endmodule\n",
+        ),
+    ];
+    let mut compared = 0usize;
+    for (i, (name, src)) in designs.iter().enumerate() {
+        // The design must actually have a MULTI-BLOCK runnable body, or it is
+        // testing the single-block path under a name that says otherwise.
+        let (ir, _) = build_with_opts(src);
+        let multi = ir.processes.iter().enumerate().any(|(pi, p)| {
+            p.body.len() > 1
+                && crate::native::body::body_is_suspend_free(&ir, pi as u32, ir.processes[pi].entry)
+        });
+        assert!(multi, "{name}: no multi-block suspend-free body");
+        let n = s1d4c2b_body_walk(src, name, 0x4C2B_0000 + i as u64);
+        assert!(n > 0, "{name}: produced no comparisons");
+        compared += n;
+    }
+    assert_eq!(
+        compared, 32,
+        "multi-block coverage moved — re-pin deliberately"
+    );
+}
+
+/// `body_is_suspend_free` must answer about the entry the WALK will use, not
+/// about the process's declared entry.
+///
+/// The two coincide for every caller today, which is exactly why the bug was
+/// invisible: reverting the predicate to scan from `ir.processes[proc].entry`
+/// survived the whole package. They come apart when a block is unreachable from
+/// the declared entry but reachable from a RESUME point — and the resume
+/// parameter is the only reason `run_body` takes an entry at all.
+///
+/// `disable <named block>` produces exactly that shape, and it is not gate-
+/// refused: `DisableKind::Scope` is deliberately outside the `disable_fork` row,
+/// so the design below is `eligible: true, buildable: true`.
+#[test]
+fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
+    let src = "module t;\n\
+                 reg [7:0] y;\n\
+                 initial begin : blk\n\
+                   y = 8'd1;\n\
+                   disable blk;\n\
+                   #5 y = 8'd2;\n\
+                 end\n\
+               endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let el = crate::native::design_eligibility(&ir, &opts);
+    assert!(
+        el.eligible && NetArena::build(&ir, &opts).is_ok(),
+        "the design must be eligible and buildable, or the hazard is hypothetical"
+    );
+    let proc = 0u32;
+    let entry = ir.processes[proc as usize].entry;
+    let body = &ir.processes[proc as usize].body;
+
+    // Reachable-from-entry set, so the unreachable blocks can be named.
+    let mut reachable = vec![false; body.len()];
+    let mut stack = vec![entry];
+    while let Some(bb) = stack.pop() {
+        if reachable[bb as usize] {
+            continue;
+        }
+        reachable[bb as usize] = true;
+        match &body[bb as usize].term {
+            sim_ir::Terminator::Goto { target } => stack.push(*target),
+            sim_ir::Terminator::Branch {
+                then_bb, else_bb, ..
+            } => {
+                stack.push(*then_bb);
+                stack.push(*else_bb);
+            }
+            _ => {}
+        }
+    }
+    let suspending_unreachable: Vec<u32> = (0..body.len() as u32)
+        .filter(|&b| !reachable[b as usize])
+        .filter(|&b| {
+            matches!(
+                body[b as usize].term,
+                sim_ir::Terminator::Delay { .. } | sim_ir::Terminator::Wait { .. }
+            )
+        })
+        .collect();
+    assert!(
+        !suspending_unreachable.is_empty(),
+        "the design must have a SUSPENDING block unreachable from entry, or it \
+         cannot distinguish the two spellings — blocks={}, reachable={}",
+        body.len(),
+        reachable.iter().filter(|b| **b).count()
+    );
+
+    // From the declared entry the body IS suspend-free …
+    assert!(
+        crate::native::body::body_is_suspend_free(&ir, proc, entry),
+        "scanning from the declared entry should find no suspension"
+    );
+    // … and from the resume point it is NOT. A predicate that ignored its entry
+    // would answer `true` here and the walk would then panic on a caller that
+    // had asked and been told yes.
+    for b in suspending_unreachable {
+        assert!(
+            !crate::native::body::body_is_suspend_free(&ir, proc, b),
+            "block {b} suspends, but the scan called it suspend-free — it is \
+             answering about the process entry rather than the given one"
+        );
+    }
 }
