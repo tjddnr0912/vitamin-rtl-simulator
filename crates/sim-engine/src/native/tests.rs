@@ -1124,3 +1124,369 @@ fn s1d2_dirty_and_edge_channel_matches_engine() {
     );
     assert!(batches > 0 && clocked > 0);
 }
+
+// ── S1d-3: the wake decision ──────────────────────────────────────────────────
+//
+// S1d-2 compared the changed SET; this compares what the scheduler DECIDES from
+// it — which processes go ready, in which order. The engine's
+// `propagate_changes` pass (a) is the oracle: the same writes are applied to
+// both stores, the engine propagates, and the delta of its Active queue is
+// compared against `WakeTable::wake`'s output.
+
+/// Designs whose clocked processes the wake decision is about. The corpus has
+/// clocked designs but the interesting rules (multi-net dedup, self-write
+/// suppression, glitch pulses, both edge kinds on one net) need shapes it lacks.
+fn wake_designs() -> Vec<(String, String)> {
+    let mut v: Vec<(String, String)> = corpus(0x5EED_F00D, 24)
+        .into_iter()
+        .map(|d| (d.name, d.src))
+        .collect();
+    for (n, src) in [
+        (
+            "multi_edge_one_proc",
+            "module t;\n\
+               reg c1, c2, rst; reg [7:0] q;\n\
+               always @(posedge c1 or posedge c2 or negedge rst) q <= q + 1;\n\
+               always @(posedge c1) q <= q + 2;\n\
+               always @(negedge c1) q <= q + 3;\n\
+               initial begin\n\
+                 c1 = 0; c2 = 0; rst = 1; q = 0;\n\
+                 c1 = 1; c2 = 1; rst = 0;\n\
+                 c1 = 0; c1 = 1; c1 = 0;\n\
+                 #1 $display(\"q=%0d\", q); $finish;\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "anyedge_and_xz",
+            "module t;\n\
+               reg a; reg [7:0] q;\n\
+               always @(a) q <= q + 1;\n\
+               always @(posedge a) q <= q + 2;\n\
+               initial begin\n\
+                 a = 0; q = 0;\n\
+                 a = 1'bx; a = 1'bz; a = 1; a = 0;\n\
+                 #1 $display(\"q=%0d\", q); $finish;\n\
+               end\n\
+             endmodule\n",
+        ),
+        // ORDER + LEVEL SELF-WRITE: a LOW-index level process and a HIGH-index
+        // edge process both sensitive to the same net. The edge loop pushes the
+        // high index first and the level loop the low one after, so without the
+        // final sort the order is wrong — and with the author cycling over
+        // processes, the level watcher eventually authors a change to its own
+        // watched net. Both rules were untested before this design (measured).
+        (
+            "level_before_edge",
+            "module t;\n\
+               reg a, b; reg [7:0] q0, q1;\n\
+               always @(a) q0 <= q0 + 1;\n\
+               always @(posedge a) q1 <= q1 + 1;\n\
+               initial begin\n\
+                 a = 0; b = 0; q0 = 0; q1 = 0;\n\
+                 a = 1; a = 0; a = 1; b = 1; b = 0; a = 0; a = 1;\n\
+                 #1 $display(\"q0=%0d q1=%0d\", q0, q1); $finish;\n\
+               end\n\
+             endmodule\n",
+        ),
+        // CONSUME + ORDER: a LEVEL process on TWO nets, indexed BELOW an edge
+        // process on one of them. Two nets changing in one delta must wake the
+        // level process ONCE (consume), and the level push lands after the edge
+        // push so the final sort is what restores tie order. Neither is reachable
+        // unless a delta carries 2+ changed nets — which is why the writes below
+        // are batched (the S1d-2 lesson, hit again).
+        (
+            "level_two_nets",
+            "module t;\n\
+               reg a, b; reg [7:0] q0, q1;\n\
+               always @(a or b) q0 <= q0 + 1;\n\
+               always @(posedge a) q1 <= q1 + 1;\n\
+               initial begin\n\
+                 a = 0; b = 0; q0 = 0; q1 = 0;\n\
+                 a = 1; b = 1; a = 0; b = 0; a = 1; b = 1;\n\
+                 #1 $display(\"q0=%0d q1=%0d\", q0, q1); $finish;\n\
+               end\n\
+             endmodule\n",
+        ),
+        (
+            "self_write_clock",
+            "module t;\n\
+               reg clk; reg [7:0] q;\n\
+               always @(posedge clk) begin q <= q + 1; clk = 1'b0; end\n\
+               initial begin clk = 0; q = 0; clk = 1; #1 clk = 1; #1 $finish; end\n\
+             endmodule\n",
+        ),
+    ] {
+        v.push((n.to_string(), src.to_string()));
+    }
+    v
+}
+
+#[test]
+fn s1d3_wake_decision_matches_engine() {
+    let sink = NullSink;
+    let mut compared = 0usize;
+    let mut saw_wake = 0usize;
+    let mut saw_multi_wake = 0usize;
+    let mut saw_dedup = 0usize;
+    let mut saw_authored = 0usize;
+    let mut saw_multi_net = 0usize;
+    let mut comparisons = 0usize;
+    let mut saw_comb = 0usize;
+    for (i, (name, src)) in wake_designs().iter().enumerate() {
+        let (ir, opts) = build_with_opts(src);
+        let Ok(mut arena) = NetArena::build(&ir, &opts) else {
+            continue;
+        };
+        let mut wake = crate::native::wake::WakeTable::new(&ir);
+        let mut st = fresh_state(&ir, &sink);
+        for &n in &opts.two_state_nets {
+            if (n as usize) < st.two_state.len() {
+                st.two_state[n as usize] = true;
+            }
+        }
+        st.build_plain_scalar();
+        let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+        let sites = write_sites(&ir);
+        let n_nets = ir.nets.len() as u32;
+        let mut rng = Rng::new(0x3A5E_0000 + i as u64);
+        // The engine needs a live scheduler for `propagate_changes`, and arming
+        // is what BUILDS `net_to_edge` — without it pass (a) has nothing
+        // registered and the comparison would be vacuous on both sides.
+        let mut sched = crate::sched::Scheduler::new(
+            &mut st,
+            1_000_000,
+            100_000_000,
+            None,
+            opts.fork_modes.clone(),
+        );
+        sched.arm_processes();
+        for pass in 0..4 {
+            // OBSERVATION GRANULARITY IS AN AXIS, NOT A CHOICE. Measured both
+            // ways: propagating after EVERY write leaves one changed net per
+            // delta, so a level and an edge process can never co-fire (the ORDER
+            // contract and the level CONSUME are unreachable); batching every
+            // write first lets a repeatedly-written clock accumulate a mask with
+            // all three bits, so "always fire" becomes indistinguishable from
+            // "fires" (the MASK rule goes untested). Each granularity hides what
+            // the other exposes, so the sweep runs both.
+            // Two INDEPENDENT axes. They shared one predicate before, so batched
+            // observation was only ever taken with in-range indices and per-write
+            // only with full-range — half the matrix went unswept.
+            let batched = pass % 2 == 1;
+            let small = (pass / 2) % 2 == 1;
+            {
+                let stx = sched.state_mut();
+                mirror_state(stx, &mut arena, &mut rng, n_nets, small, pass >= 2);
+                stx.dirty
+                    .iter()
+                    .for_each(|&n| stx.dirty_flag[n as usize] = false);
+                stx.dirty.clear();
+            }
+            let mut drop = Vec::new();
+            arena.take_changed(&mut drop);
+
+            let mut before = sched.active_ready_procs();
+            for (si, (lhs, rhs)) in sites.iter().enumerate() {
+                // SELF-WRITE suppression needs an author that is actually
+                // registered on the net — with `blocking_writer` left `None` the
+                // tag is always the sentinel and the rule is untested (measured).
+                // Every third write is UNAUTHORED (`None` → the `u32::MAX`
+                // sentinel), which in production is the COMMON case — an NBA
+                // apply, a cont-assign settle and a clocking commit all write
+                // with no blocking author. Forcing an author on every site
+                // inverted that distribution and left the sentinel arm
+                // differentially uncompared (measured).
+                let author = if si % 3 == 2 {
+                    None
+                } else {
+                    Some((si % ir.processes.len().max(1)) as u32)
+                };
+                {
+                    let stx = sched.state_mut();
+                    stx.blocking_writer = author;
+                    let rng_a = crate::state::RngCells::default();
+                    let ctx = EvalCtx {
+                        ir: &ir,
+                        nets: &*stx,
+                        now: 0,
+                        wt: &wt,
+                        time_mult: 1,
+                        rng: &rng_a,
+                        plusargs: &[],
+                    };
+                    let sw = wt.get(*rhs);
+                    let ctx_w = stx.lvalue_width(lhs).max(sw.width);
+                    let off = crate::eval::resolve_offsets(&ctx, lhs);
+                    let val = ctx.eval_ctx(*rhs, ctx_w, sw.signed);
+                    stx.write_lvalue(lhs, val, &off);
+                    stx.blocking_writer = None;
+                }
+                let rng_b = crate::state::RngCells::default();
+                let ctx_n = EvalCtx {
+                    ir: &ir,
+                    nets: &arena,
+                    now: 0,
+                    wt: &wt,
+                    time_mult: 1,
+                    rng: &rng_b,
+                    plusargs: &[],
+                };
+                let sw = wt.get(*rhs);
+                let ctx_w = arena.lvalue_width(&ir, lhs).max(sw.width);
+                let off_n = crate::eval::resolve_offsets(&ctx_n, lhs);
+                let val_n = ctx_n.eval_ctx(*rhs, ctx_w, sw.signed);
+                arena.ch.blocking_writer = author;
+                arena.write_lvalue(&ir, lhs, val_n, &off_n);
+                arena.ch.blocking_writer = None;
+                compared += 1;
+                if !batched {
+                    compare_wake(
+                        &mut sched,
+                        &mut arena,
+                        &mut wake,
+                        &ir,
+                        &mut before,
+                        name,
+                        pass,
+                        &mut comparisons,
+                        &mut saw_wake,
+                        &mut saw_multi_wake,
+                        &mut saw_authored,
+                        &mut saw_multi_net,
+                    );
+                }
+            }
+            if batched {
+                compare_wake(
+                    &mut sched,
+                    &mut arena,
+                    &mut wake,
+                    &ir,
+                    &mut before,
+                    name,
+                    pass,
+                    &mut comparisons,
+                    &mut saw_wake,
+                    &mut saw_multi_wake,
+                    &mut saw_authored,
+                    &mut saw_multi_net,
+                );
+            }
+            // A new event cluster: both sides drop their timestep dedup markers.
+            sched.reset_edge_seen_marks();
+            wake.reset_edge_seen();
+            saw_dedup += 1;
+            // `arm_processes` QUEUES Comb/Latch into Active at t0 rather than
+            // ARMING them; they arm when that first run completes. Bodies never
+            // run here, so model that completion — but only AFTER pass 0, so the
+            // sweep observes BOTH states. Re-arming immediately made the t0
+            // distinction unobservable (measured: the wrong arm state passed).
+            if pass == 0 {
+                for p in 0..ir.processes.len() as u32 {
+                    if matches!(
+                        ir.processes[p as usize].sensitivity.kind,
+                        sim_ir::SensKind::Comb | sim_ir::SensKind::Latch
+                    ) {
+                        sched.arm_sensitivity(p);
+                        wake.rearm_level(p);
+                        saw_comb += 1;
+                    }
+                }
+            }
+        }
+    }
+    // TWO numbers, because they measure different things and only the second is
+    // coverage: `compared` counts WRITES driven, `comparisons` counts wake
+    // decisions actually compared (a batched pass drives many writes and yields
+    // one decision). The pin message used to say "coverage" over the write count.
+    assert_eq!(
+        compared, 920,
+        "S1d-3 write count moved — re-pin deliberately"
+    );
+    assert_eq!(
+        comparisons, 518,
+        "S1d-3 wake-comparison coverage moved — re-pin deliberately"
+    );
+    assert!(
+        saw_wake > 0,
+        "no process was ever woken — the gate is vacuous"
+    );
+    assert!(
+        saw_multi_wake > 0,
+        "no delta woke 2+ processes — the ORDER contract is untested"
+    );
+    assert!(
+        saw_authored > 0,
+        "no change was ever authored by a named process — self-write suppression is untested"
+    );
+    assert!(
+        saw_multi_net > 0,
+        "no delta changed 2+ nets — consume and ORDER are untested (batch the writes)"
+    );
+    assert!(saw_dedup > 0);
+    assert!(
+        saw_comb > 0,
+        "no Comb/Latch process exists in the sweep — the class that was missing entirely"
+    );
+}
+
+/// One wake comparison: propagate on the engine, take the arena's changed set,
+/// and require the two decisions to agree. Factored out because the sweep makes
+/// it at two different granularities (per-write and per-batch) and a second copy
+/// would be the place they silently drift.
+#[allow(clippy::too_many_arguments)]
+fn compare_wake(
+    sched: &mut crate::sched::Scheduler,
+    arena: &mut NetArena,
+    wake: &mut crate::native::wake::WakeTable,
+    ir: &SimIr,
+    before: &mut Vec<u32>,
+    name: &str,
+    pass: usize,
+    comparisons: &mut usize,
+    saw_wake: &mut usize,
+    saw_multi_wake: &mut usize,
+    saw_authored: &mut usize,
+    saw_multi_net: &mut usize,
+) {
+    sched.propagate_changes();
+    let after = sched.active_ready_procs();
+    let mut engine_woken = after.clone();
+    for b in before.iter() {
+        if let Some(p) = engine_woken.iter().position(|x| x == b) {
+            engine_woken.remove(p);
+        }
+    }
+    let mut changed = Vec::new();
+    arena.take_changed(&mut changed);
+    let mut native_woken = Vec::new();
+    wake.wake(&changed, &mut native_woken);
+    assert_eq!(
+        engine_woken, native_woken,
+        "{name}/pass{pass}: wake decision diverged (changed={changed:?})"
+    );
+    // STEADY STATE: a woken LEVEL process runs to completion and re-arms.
+    // Without modelling that, its waiter is consumed once and the ORDER contract
+    // (level index < edge index) is never reached again.
+    for &p in &engine_woken {
+        if ir.processes[p as usize].sensitivity.kind == sim_ir::SensKind::Level {
+            sched.arm_sensitivity(p);
+            wake.rearm_level(p);
+        }
+    }
+    *comparisons += 1;
+    *saw_wake += usize::from(!engine_woken.is_empty());
+    *saw_multi_wake += usize::from(engine_woken.len() > 1);
+    *saw_authored += usize::from(changed.iter().any(|&(_, _, w)| w != u32::MAX));
+    *saw_multi_net += usize::from(changed.len() > 1);
+    *before = after;
+    // A comparison is one event cluster, and the run loop resets the timestep
+    // dedup markers at EVERY cluster boundary (#0 batch, NBA region, time
+    // advance). Resetting once per pass instead left each edge process able to
+    // fire at most once per pass, so a level and an edge process never co-fired
+    // — which is exactly what the two designs written for the ORDER contract
+    // were supposed to produce (measured: `lvl+edge = 0` before this).
+    sched.reset_edge_seen_marks();
+    wake.reset_edge_seen();
+}

@@ -419,6 +419,25 @@ pub(crate) struct Scheduler<'a, 'ir> {
     cur_gen: u32,
 }
 
+/// TEST-ONLY windows into scheduler state, for the tier-3 decision differential:
+/// `native::wake` must produce the same ready list the engine queues from the
+/// same changed set, and `cur` is private to this module. `#[cfg(test)]` because
+/// nothing in the product needs them — a differential that could not observe the
+/// queue, or could not drive a write, would have nothing to compare.
+#[cfg(test)]
+impl<'ir> Scheduler<'_, 'ir> {
+    /// Active-queue process ids in queue order.
+    pub(crate) fn active_ready_procs(&self) -> Vec<u32> {
+        self.cur.active.iter().map(|r| r.proc).collect()
+    }
+
+    /// The state the scheduler borrows, so the differential can drive the SAME
+    /// writes through the engine's own funnel before asking it to propagate.
+    pub(crate) fn state_mut(&mut self) -> &mut SimState<'ir> {
+        self.st
+    }
+}
+
 /// Why the run ended (scheduler precedence order).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FinishReason {

@@ -41,6 +41,7 @@ pub mod arena;
 pub mod dirty;
 #[cfg(test)]
 mod probe_tests;
+pub mod wake;
 pub mod write;
 // The SHARED corpus/harness source, included exactly ONCE for both test
 // modules (clippy duplicate_mod forbids a per-file include) — see the

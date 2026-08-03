@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S1d-3 착수 (…S1d-1·S1d-2 ✅)** | 3 | 실측 | ⭐⭐ **S1d-2 완료(2026-08-03, §4.5.289)** — **dirty/edge 채널**(`slot_edge` 까지) · 7행동+2 store 지점 **teeth 검증**(리뷰가 bit-serial 0회 진입을 실측해 닫음). 다음 = **S1d-3 리전 큐·델타·NBA**(게이트 = **ready 집합과 순서**를 엔진과 비교) → S1d-4 바이트 동일. 정본 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S1d-4 착수 (…S1d-2·S1d-3 ✅)** | 2 | 실측 | ⭐⭐ **S1d-3 완료(2026-08-03, §4.5.290)** — **wake 결정**(8규칙 teeth · 두 관측 granularity). 리뷰가 **조합 프로세스 전체 미등록**을 잡았고, **등록만 고치면 게이트가 깨지는**(t0 arm 상태가 짝) 구조였다. 다음 = **S1d-4 리전 큐·델타·NBA·in-body 웨이터**(⚠️ `busy` 는 적격 설계에서 실제로 참) → corpus **stdout+VCD 바이트 동일**. 정본 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -126,19 +126,19 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 현재 NEXT 큐(상세=LOOPROMPT · 스캔용 표 = 문서 상단):
 
-0. ★★ **③층 S1d-3 — 리전 큐 · 델타 루프 · NBA** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
-   T0·S0(§4.5.285)·S1a·S1b(§4.5.286)·S1c(§4.5.287)·S1d-1(§4.5.288)·**S1d-2(§4.5.289)** 완료 —
-   저장·read-path·쓰기 퍼널·**dirty/edge 채널**이 전부 엔진과 차분 일치하고, 백엔드 선택과 런타임
-   게이트가 배선됐다. **S1d-3 범위** = 아레나 위 Active/Inactive/NBA 리전 큐 + 델타 루프 +
-   `take_changed` 를 소비하는 **wake 결정**(엣지 마스크→`net_to_edge` · level waiter · self-write
-   억제 · multi-edge dedup). 게이트 = 같은 초기 상태·같은 이벤트열에서 **ready 집합과 그 순서**가
-   엔진과 동일(값이 아니라 **결정**을 비교 — S1d-2 가 채널에 한 것과 같은 형태). 그 다음 **S1d-4** =
-   cont-assign settle + wired-AND/OR 해소 → corpus 적격분 **stdout+VCD 바이트 동일**(원래 S1 게이트).
-   ⚠️ **남은 필수 1건**: 퍼널 밖 효과 배선(`rhs_is_stmt_effect` 가족 + `$readmem*`/`$sformat` 은
-   `write_lvalue` 를 안 거친다 · `r = $random(seed)` 는 **오늘 적격**). ⚠️ **VCD 는 gate-reject 가
-   아니다** — S1d-4 게이트가 VCD 바이트 동일이므로 `note_change` 가 `word` 를 되찾고 emitter 는
-   **store 지점**에 있어야 한다(sweep 시점이면 슬롯 내 A→B→A 가 한 레코드로 합쳐진다 · `dirty.rs`).
-   ⚠️ ≥30× vs v1 string 거부 모순 열림(preview/21 §7.3.1). **T4** 는 기회 슬라이스로 유지.
+0. ★★ **③층 S1d-4 — 리전 큐 · 델타 루프 · NBA · in-body 웨이터** (§5 · 정본 = [preview/21 §5 S1 분해 표](preview/21-tier3-native-backend.md)).
+   T0·S0(§4.5.285)·S1a~c(§4.5.286/287)·S1d-1(§4.5.288)·S1d-2(§4.5.289)·**S1d-3(§4.5.290)** 완료 —
+   저장·read-path·쓰기 퍼널·dirty/edge 채널·**wake 결정**이 전부 엔진과 차분 일치한다.
+   **S1d-4 범위** = Active/Inactive/NBA 리전 큐 + 델타 루프 + **in-body 웨이터**(`WaitCause::Edge`/
+   `Expr`·`Level{arm=Some}`)와 **`busy` 유지자** + cont-assign settle + wired-AND/OR 다중 드라이버
+   해소. 게이트 = corpus 적격분 **stdout+VCD 바이트 동일**(원래 S1 게이트).
+   ⚠️ **`busy` 는 적격 설계에서 실제로 참이 된다**(§4.5.290 실측: `always @(posedge clk) begin …
+   @(negedge rst); end` 이 S0 적격·아레나 빌드 가능인데 엔진 busy 가드가 wake 를 막는다) — 같은
+   설계가 in-body 웨이터 모델도 요구하므로 둘은 한 슬라이스다.
+   ⚠️ **VCD 는 gate-reject 가 아니다** — emitter 는 **store 지점**에 있어야 하고 `note_change` 가
+   `word` 를 되찾아야 한다(sweep 시점이면 슬롯 내 A→B→A 가 한 레코드로 합쳐진다 · `native/dirty.rs`).
+   ⚠️ **남은 필수 1건**: 퍼널 밖 효과 배선(`rhs_is_stmt_effect` 가족 + `$readmem*`/`$sformat` ·
+   `r = $random(seed)` 는 **오늘 적격**). **T4** 는 기회 슬라이스로 유지.
 1. **§0 T2 잔여 2건** — `real` const-fold · sized-literal enum label(각자 독립 슬라이스). generate/iface string decl-init·음수 range bound·`$fmonitor`/`$fstrobe`·T1 전부 완료(§4.5.222~228). `real` const-fold 는 §4.5.229 가 남긴 `int'(<real param>)` 바운드의 선행이기도 하다.
 2. **§2 오라클-有 silent-wrong** — ~~part-select 바운드 + replication count~~ **RESOLVED**(§4.5.229). 남은 것 = **폭 인식 상수 접기**(위 "상수 폭 잔차" ①②③ 3건이 전부 동근 — 인터프리터 coerce 가 가장 도달성 높음) · package-scope real · **구조적 지연**(§4.5.221이 도달성을 넓혀 우선순위 상향 후보) · real→`input int` formal.
 3. **§2 DEEP** — inner NET vs outer PARAM shadow(**선행 = order-INDEPENDENT AST-gathered per-scope name set**; 없이 켜면 §4.5.218 S1 재발) + 형제 항목(package 변수 clobber·block-local 잔여 2형).
@@ -336,12 +336,16 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a·S1b·S1c·S1d-1·S1d-2 ✅ → **S1d-3** … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a~c·S1d-1·S1d-2·S1d-3 ✅ → **S1d-4** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
 > **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트.
 > **적격률 79/79 → S0 중단 판정 통과.**
+>
+> **S1d-3 완료 (2026-08-03 · §4.5.290)** — **wake 결정**(변경 집합 → ready 집합과 순서). ⭐ 적대
+> 리뷰가 **조합 프로세스 전체가 미등록**임을 잡았다(`arm_sensitivity` 는 `Level|Comb|Latch` 셋 다
+> 같은 웨이터로 만든다) — 그리고 **등록만 고치면 게이트가 깨진다**(t0 arm 상태가 짝). 8규칙 teeth.
 >
 > **S1d-2 완료 (2026-08-03 · §4.5.289)** — **dirty/edge 채널**(`dirty` 멤버십 = 변경 집합 · 
 > `last_blocking_writer` · **`slot_edge`** = 끝점이 잃은 엣지 **종류**). edge-target 스캔은 엔진과
@@ -404,6 +408,8 @@ T1/T2 가 푸는 문제("호출을 가진 바디를 컴파일 대상으로")는 
 > doc-21 §4.1(설계 단위 all-or-nothing)의 **리허설**이다.
 
 ### 5.1 나머지 (전부 보류 판정 — 트리거 시만)
+
+- **`NetSlot.prev` 는 워크스페이스 전체에서 읽는 곳이 0** (§4.5.290 적대 리뷰가 필드명을 바꿔 빌드해 증명 — 선언·생성자·`propagate_changes` pass (c) 쓰기 세 곳만 걸린다). 즉 pass (c) 의 `clone_from` 2회/변경넷/델타가 **핫 루프의 순수 죽은 일**이다. 제거는 바이트 동일이 자명하나(아무도 안 읽음) 그 자명함 자체를 검증해야 하므로 **별도 슬라이스**로 둔다 — 값은 perf 축, 위험은 "정말 아무도 안 읽는가" 하나.
 
 - **✅ COMB-DEPTH 해결 (2026-08-01) — dirty-settle. 깊이 24 에서 14.1× · 출력 바이트 동일 · 골든 재판정 0건.** `settle_cont_assigns` 가 매 델타 전체 cont-assign 을 전수 재평가하던 것을 **의존성이 움직인 것만** 재평가하도록 바꿨다(`propagate_changes` 를 305→15.5 ms 로 만든 dirty-list 와 같은 형태). 인스턴스 체인, 총 사이클 고정:
 

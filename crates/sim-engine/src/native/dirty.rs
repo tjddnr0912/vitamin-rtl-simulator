@@ -26,8 +26,9 @@
 //! Deliberately NOT here — they belong to later pieces, and naming them keeps
 //! this module from looking finished:
 //!
-//! - the continuous-assign dirty worklist (`ca_of_net`/`ca_dirty`, S1d-3's
-//!   settle) — no arena consumer exists yet;
+//! - the continuous-assign dirty worklist (`ca_of_net`/`ca_dirty`, S1d-4's
+//!   settle, NOT S1d-3 — that slice delivered the wake decision) — no arena
+//!   consumer exists yet;
 //! - `emit_probe_change` — genuinely out of scope, `probed_nets` disqualifies
 //!   the design at S0;
 //! - **`emit_vcd_change` — NOT out of scope, and it constrains this module.**

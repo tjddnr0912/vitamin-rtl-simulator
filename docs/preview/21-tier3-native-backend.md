@@ -402,7 +402,8 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > | **S1c ✅ (2026-08-03)** | **쓰기 퍼널**(whole/bit/part/array lvalue·concat LHS·OOB drop·X-index no-op·2-state 강제·real→int 반올림·change 판정). 오프셋 해석은 엔진과 **한 함수**(`eval::resolve_offsets`)로 통일 | ✅ 문장 단위 차분 **3,150(corpus) + 270(적대 형태) 발산 0** + drop-arm 결정적 teeth. ⭐ 이 게이트가 **내 퍼널의 silent-wrong 1건**을 잡았다(§4.5.287) |
 > | **S1d-1 ✅ (2026-08-03)** | **백엔드 선택 + 런타임 게이트** — `Backend::Native` · `--backend native` · `native::runtime_gate`(설계 게이트 ∧ 아레나 빌드) · run.json 이 **실제 실행기**와 **두 층 판정**(`eligible`/`buildable`/`refused`)을 기록 | ✅ 요청해도 **출력 바이트 불변**(stdout+VCD, 게이트 수용/거부 양쪽) · runtime gate ≡ 두 반쪽(corpus 전수) · `buildable` ≡ `build` |
 > | **S1d-2 ✅ (2026-08-03)** | **dirty/edge 채널** — 스케줄링의 절반은 루프가 아니라 **쓰기**에 달린다: `dirty`(멤버십 = 변경 집합 · A→B→A 왕복 보존) · `last_blocking_writer` · **`slot_edge`**(끝점이 잃은 엣지 **종류**). edge-target 스캔은 엔진과 **한 철자** | ✅ 채널 차분(배치 후 (net, mask, writer) 3튜플 · corpus + 클럭 형태) · **7개 행동 전부 teeth 검증**(하나씩 깨면 게이트가 운다) |
-> | **S1d-3…4** | 리전 큐·델타 루프·NBA → cont-assign settle·wired 해소 → 바이트 동일 게이트 | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일** |
+> | **S1d-3 ✅ (2026-08-03)** | **wake 결정** — 변경 집합 → 어느 프로세스가 ready 이고 어떤 순서인가(정적 Edge = pass (a) · 정적 Level/**Comb/Latch** = pass (b) `arm=None`). 적격성이 fork/clocking 을 거부하므로 activity ≡ process·`Ready` 가 proc id 로 붕괴 | ✅ 결정 차분(Active 큐 **델타** 대조 · 두 관측 granularity) · **8규칙 teeth** · ⭐ 리뷰가 **조합 프로세스 전체 미등록**을 잡았다 |
+> | **S1d-4** | 리전 큐·델타 루프·NBA·**in-body 웨이터**(`busy` 유지자 포함) → cont-assign settle·wired 해소 → 바이트 동일 게이트 | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일** |
 >
 > ⚠️ **S1d 착수 前 필수 4건**(S1c 와 그 적대 리뷰가 발굴 · 정본은 `native/write.rs` 모듈 독):
 > ① ~~프레임 로컬~~ · ~~런타임 게이트 통일~~ **둘 다 닫힘(S1d-1)** — `NetArena::build`/`buildable` 이
