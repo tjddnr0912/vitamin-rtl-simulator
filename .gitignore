@@ -11,4 +11,9 @@ CLAUDE.md
 # Phase-1 benchmark designs — third-party RTL fetched for LOCAL measurement only.
 # Never redistributed: not committed, not packaged. Each design keeps its upstream
 # license in place under bench/<name>/. See docs/study/01-interpreted-vs-compiled.md.
-/bench
+/bench/*
+# ...except this one: bench/keccak is OUR OWN RTL (see its README), and the doc-18
+# round-26 three-tier measurement is only reproducible if it ships.
+!/bench/keccak/
+/bench/keccak/*.vvp
+/bench/keccak/obj_dir*/

@@ -347,6 +347,22 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 plusargs.push(s[1..].to_string());
                 i += 1;
             }
+            // ATTACHED-VALUE `-D<NAME>[=<VAL>]` / `-I<dir>`, the form every other tool
+            // takes. vita accepted only the separated `-D NAME` and the `+define+`
+            // plus-arg, so a command line copied from an iverilog or VCS flow died on
+            // `unknown flag '-DFAST_MODE'` — a compatibility trap, not a real
+            // disagreement about the flag. Placed AHEAD of the `-`-prefixed catch-all
+            // and below every exact-match arm, so `-D`/`-I` alone still take the next
+            // argv element and `-Wno-…` still reaches the gate parser (neither `-D` nor
+            // `-I` is a prefix of any flag vita already knows).
+            s if s.starts_with("-D") && s.len() > 2 => {
+                defines.push(split_define(&s[2..]));
+                i += 1;
+            }
+            s if s.starts_with("-I") && s.len() > 2 => {
+                incdirs.push(s[2..].to_string());
+                i += 1;
+            }
             s if s.starts_with('-') && s.len() > 1 => {
                 // Diagnostic gate flags (`-Wno-<CODE>` / `-Werror[=<CODE>]`).
                 match gate.parse_arg(s) {

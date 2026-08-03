@@ -500,6 +500,61 @@ fn define_flag_reaches_preprocessor() {
     assert_eq!(without.status.code(), Some(1), "undefined `W must fail");
 }
 
+/// `-DNAME` / `-DNAME=VAL` / `-Idir` — the ATTACHED form. vita took only the separated
+/// `-D NAME`, so a command line lifted from an iverilog or VCS flow failed with
+/// `unknown flag '-DFAST_MODE'`. The three forms have to agree, and `-I` attached must
+/// still be read as an include directory rather than a define.
+#[test]
+fn attached_define_and_incdir_match_the_separated_form() {
+    let src = write_tmp(
+        "attdef.sv",
+        "`timescale 1ns/1ns\nmodule t; reg [`W-1:0] q; initial begin q = {`W{1'b1}}; $display(\"%0d\", q); $finish; end endmodule\n",
+    );
+    let p = src.to_str().unwrap();
+    let attached = vita(&[p, "-DW=4"]);
+    let separated = vita(&[p, "-D", "W=4"]);
+    // `-I` attached is an incdir, NOT a define: `W` stays undefined and the run fails.
+    let as_incdir = vita(&[p, "-IW=4"]);
+    let _ = std::fs::remove_file(&src);
+    assert_eq!(
+        attached.status.code(),
+        Some(0),
+        "-DW=4 rejected: {}",
+        String::from_utf8_lossy(&attached.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&attached.stdout),
+        String::from_utf8_lossy(&separated.stdout),
+        "-DW=4 and -D W=4 must agree"
+    );
+    assert_eq!(
+        as_incdir.status.code(),
+        Some(1),
+        "-I must not be read as a define"
+    );
+
+    // A bare `-D<name>` with no value defines it as empty, same as `-D <name>`.
+    let flg = write_tmp(
+        "attflag.sv",
+        "`timescale 1ns/1ns\nmodule t; initial begin\n`ifdef FAST\n$display(\"FAST\");\n`else\n$display(\"SLOW\");\n`endif\n$finish; end endmodule\n",
+    );
+    let q = flg.to_str().unwrap();
+    let a = vita(&[q, "-DFAST"]);
+    let b = vita(&[q, "-D", "FAST"]);
+    let _ = std::fs::remove_file(&flg);
+    assert!(
+        String::from_utf8_lossy(&a.stdout).contains("FAST"),
+        "-DFAST did not define it: {}{}",
+        String::from_utf8_lossy(&a.stdout),
+        String::from_utf8_lossy(&a.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&a.stdout),
+        String::from_utf8_lossy(&b.stdout),
+        "-DFAST and -D FAST must agree"
+    );
+}
+
 #[test]
 fn plus_define_token_with_multiple_names() {
     let src = write_tmp(

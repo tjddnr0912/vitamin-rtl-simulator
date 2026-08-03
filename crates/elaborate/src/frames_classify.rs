@@ -786,13 +786,24 @@ impl Elaborator<'_> {
         locals_len: u32,
         allow_call: bool,
     ) {
-        if let Some(w) = self.classify_frame_body(entry, net_base, locals_len, allow_call) {
+        if let Some((what, detail)) =
+            self.classify_frame_body(entry, net_base, locals_len, allow_call)
+        {
+            // R26 §3: the subset clause must attach to the CONSTRUCT, so the construct
+            // (`what`) is a short noun phrase and every explanation (`detail`) is
+            // appended AFTER it as its own sentence. When R25 §3.2 grew the StrPutC
+            // reason into a multi-clause explanation ending "…the same assignment in a
+            // `task` body, or in a module process, does work", this `, which is outside
+            // the frame-call subset` landed on THAT — i.e. the message said the WORKING
+            // form was the unsupported one. Splitting the two makes the mis-attachment
+            // unreachable by construction rather than relying on each author to wrap
+            // their explanation in parentheses.
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
-                    "frame function/task `{name}` body uses {w}, which is outside the \
+                    "frame function/task `{name}` body uses {what}, which is outside the \
                      frame-call subset (only blocking assigns to its own locals, \
-                     if/else/case/loops, and nested task calls are supported)"
+                     if/else/case/loops, and nested task calls are supported){detail}"
                 ),
             );
         }
@@ -811,9 +822,15 @@ impl Elaborator<'_> {
         net_base: u32,
         locals_len: u32,
         allow_call: bool,
-    ) -> Option<&'static str> {
+    ) -> Option<(&'static str, &'static str)> {
         let (lo, hi) = (net_base, net_base + locals_len);
-        let mut why: Option<&'static str> = None;
+        // `(what, detail)` — `what` is a SHORT NOUN PHRASE naming the rejected construct,
+        // with no relative clause of its own (the caller appends ", which is outside the
+        // frame-call subset (…)" directly to it), and `detail` is either "" or one or
+        // more further sentences starting with ". ". Never grow `what` into an
+        // explanation: the caller's clause would then attach to the tail of that
+        // explanation instead of to the construct (R26 §3).
+        let mut why: Option<(&'static str, &'static str)> = None;
         // Walk only the blocks REACHABLE from this body's entry via its OWN CFG edges
         // (a `Call` terminator follows `ret_bb`, never the callee's entry — the walk
         // stays inside this function). A linear `block_base..func_blocks.len()` scan
@@ -847,12 +864,14 @@ impl Elaborator<'_> {
                 // carrying one. A diagnostic that names a cause the source does not
                 // contain sends the reader looking for something that is not there.
                 why = Some(if matches!(blk.term, ir::Terminator::Call { .. }) {
-                    "a call to a subroutine with an output/inout formal (a FUNCTION body is \
-                     entered from the expression that calls it, so it has no call statement \
-                     of its own to carry the callee's copy-out — the same call in a `task` \
-                     body, or in a module process, does work)"
+                    (
+                        "a call to a subroutine with an output/inout formal",
+                        ". A FUNCTION body is entered from the expression that calls it, so \
+                         it has no call statement of its own to carry the callee's copy-out; \
+                         the same call in a `task` body, or in a module process, does work.",
+                    )
                 } else {
-                    "a timing/suspend/fork control (#delay, @, wait, fork)"
+                    ("a timing/suspend/fork control (#delay, @, wait, fork)", "")
                 });
             }
             for &sid in &blk.stmts {
@@ -863,7 +882,7 @@ impl Elaborator<'_> {
                         // only, so a concat must stay loud (EXT2-H's per-chunk relax must
                         // not admit it — it would panic / silently write chunk 0).
                         if lhs.chunks.len() > 1 {
-                            why = Some("a concatenation-target assignment");
+                            why = Some(("a concatenation-target assignment", ""));
                         }
                         for c in &lhs.chunks {
                             // N7: a class field write (`this.f = v` / `obj.f = v`) is a
@@ -897,13 +916,13 @@ impl Elaborator<'_> {
                             // The gate is right; the hoist is what must not run there.
                             if whole {
                                 if !in_frame {
-                                    why = Some("an assignment to a net outside the function");
+                                    why = Some(("an assignment to a net outside the function", ""));
                                 }
                             } else if c.word.is_some()
                                 || !in_frame
                                 || self.frame_array_local.contains(&c.net)
                             {
-                                why = Some("a part-select / array-element assignment");
+                                why = Some(("a part-select / array-element assignment", ""));
                             }
                         }
                     }
@@ -976,21 +995,22 @@ impl Elaborator<'_> {
                         which: ir::SysTaskId::StrPutC,
                         ..
                     } => {
-                        why = Some(
-                            "a string element assignment (`s[i] = v`), which lowers to a \
-                             system task — a FUNCTION body is entered from the expression \
-                             that calls it, so it has no call statement of its own to \
-                             carry the write out; the same assignment in a `task` body, \
-                             or in a module process, does work",
-                        )
+                        why = Some((
+                            "a string element assignment (`s[i] = v`)",
+                            ". It lowers to a system task, and a FUNCTION body is entered from \
+                             the expression that calls it, so it has no call statement of its \
+                             own to carry the write out; \
+                             the same assignment in a `task` body, or in a module process, \
+                             does work.",
+                        ))
                     }
                     ir::Stmt::NonblockingAssign { .. } => {
-                        why = Some("a nonblocking assignment (`<=`)")
+                        why = Some(("a nonblocking assignment (`<=`)", ""))
                     }
-                    ir::Stmt::Force { .. } => why = Some("a `force` statement"),
-                    ir::Stmt::Release { .. } => why = Some("a `release` statement"),
-                    ir::Stmt::SysTask { .. } => why = Some("a system task call"),
-                    _ => why = Some("a $systask / nonblocking / force / release statement"),
+                    ir::Stmt::Force { .. } => why = Some(("a `force` statement", "")),
+                    ir::Stmt::Release { .. } => why = Some(("a `release` statement", "")),
+                    ir::Stmt::SysTask { .. } => why = Some(("a system task call", "")),
+                    _ => why = Some(("a $systask / nonblocking / force / release statement", "")),
                 }
             }
             // Follow this block's OWN successor edges (a `Call` stays in-function via
