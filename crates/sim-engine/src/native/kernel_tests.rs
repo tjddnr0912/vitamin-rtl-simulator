@@ -1669,12 +1669,14 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         let Stmt::SysTask { which, fmt, args } = stmt else {
             continue;
         };
+        // ⚠️ `$dumpvars` and `$dumpfile` LEFT this list in S1d-4d-2 — the first
+        // because `full_snapshot_with` takes the arena as its reader, the second
+        // because its argument is a string constant and never reaches the store
+        // at all. What remains genuinely reads somewhere this seam does not go.
         let expect_refusal = matches!(
             which,
-            sim_ir::SysTaskId::DumpVars
-                | sim_ir::SysTaskId::DumpAll
+            sim_ir::SysTaskId::DumpAll
                 | sim_ir::SysTaskId::DumpOn
-                | sim_ir::SysTaskId::DumpFile
                 | sim_ir::SysTaskId::DumpLimit
                 | sim_ir::SysTaskId::Fclose
                 | sim_ir::SysTaskId::WritememB
@@ -1710,8 +1712,8 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         refused += 1;
     }
     assert_eq!(
-        refused, 10,
-        "expected all ten refused tasks to refuse — got {refused}"
+        refused, 8,
+        "expected all eight refused tasks to refuse — got {refused}"
     );
 }
 
@@ -2295,15 +2297,13 @@ fn s1d4c2b_body_walk_matches_the_engine_over_corpus() {
         }
         compared += n;
     }
-    // Not a floor, and the number moved with S1d-4c-2c: **30 of 72** designs
-    // before, **58** now. The 28 that joined are the ones whose every body
-    // suspends on a `#delay` — a clock generator's `forever #5` is the common
-    // shape — which the walk refused when `Delay` had no arm. The 14 still
-    // absent contribute no admissible process at all: their bodies carry a
-    // refused system task, or the arena will not build.
+    // Not a floor, and the number has moved twice. **30 of 72** when `Delay` was
+    // unwalkable, **58** when S1d-4c-2c gave it an arm, and **all 72** since
+    // S1d-4d-2 wired `$dumpfile`/`$dumpvars` — the 14 that were absent carried a
+    // dump task, which `body_dispatch_ok` refused.
     assert_eq!(
         (designs, compared),
-        (58, 380),
+        (72, 556),
         "body-walk coverage moved — re-pin deliberately"
     );
 }

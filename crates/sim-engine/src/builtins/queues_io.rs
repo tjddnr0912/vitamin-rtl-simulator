@@ -195,7 +195,13 @@ pub(crate) fn emit_severity_message(
 
 // ── $dumpvars: declare all nets, header, initial dump ──────────────────────
 
-pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
+/// `dumpvars` against an ALTERNATE net store (tier-3 seam, S1d-4d-2). Only the
+/// t0 value snapshot differs; everything else reads IR and metadata.
+pub(crate) fn dumpvars_with<N: crate::eval::NetReader + ?Sized>(
+    st: &mut SimState,
+    nets: Option<&N>,
+    args: &[u32],
+) {
     // ⑤b: the FIRST call opens the VCD and fixes the filter; the header
     // cannot be rewritten, so later calls warn once (W4021) and no-op
     // (the LRM's accumulate-across-calls model is a v1 cut).
@@ -499,7 +505,7 @@ pub(crate) fn dumpvars(st: &mut SimState, args: &[u32]) {
     }
 
     // initial dump of every declared var (arrays: one entry per element).
-    let snap = full_snapshot(st);
+    let snap = full_snapshot_with(st, nets);
     {
         let w = st.vcd.as_mut().unwrap();
         let _ = w.dump_initial(snap.iter().map(|(id, b, wd)| (*id, b, *wd)));
@@ -599,23 +605,60 @@ pub(crate) fn dump_filter_from_args(
 }
 
 pub(crate) fn full_snapshot(st: &SimState) -> Vec<(IdCode, sim_ir::BitPacked, u32)> {
+    full_snapshot_with::<crate::state::SimState>(st, None)
+}
+
+/// `full_snapshot` against an ALTERNATE net store (tier-3 seam, S1d-4d-2).
+///
+/// The id tables come from `st` either way — they are static metadata
+/// `$dumpvars` filled — and only the VALUES come from `nets`. `None` means "use
+/// `st`'s own store", which is what every engine call site passes, so those
+/// sites are byte-identical by construction (the same shape `dispatch_with` and
+/// `format_args_str_with` use).
+///
+/// This is the ONLY store read in the whole `$dumpvars` path: the header, the
+/// scope/var declarations and `dump_filter_from_args` are IR and metadata. That
+/// is why the task's refusal — "`full_snapshot` walks `&st.nets` wholesale" —
+/// was one function rather than a subsystem.
+pub(crate) fn full_snapshot_with<N: crate::eval::NetReader + ?Sized>(
+    st: &SimState,
+    nets: Option<&N>,
+) -> Vec<(IdCode, sim_ir::BitPacked, u32)> {
     let mut out = Vec::new();
-    for slot in &st.nets {
+    for (n, slot) in st.nets.iter().enumerate() {
         if !slot.vcd_word_ids.is_empty() {
             for (word, id) in slot.vcd_word_ids.iter().enumerate() {
                 if let Some(id) = id {
-                    out.push((
-                        *id,
-                        nth_word(&slot.cur, slot.width, word as u32),
-                        slot.width,
-                    ));
+                    let v = match nets {
+                        Some(r) => bits_of(&r.read_net(n as u32, Some(word as u32)), slot.width),
+                        None => nth_word(&slot.cur, slot.width, word as u32),
+                    };
+                    out.push((*id, v, slot.width));
                 }
             }
         } else if let Some(id) = slot.vcd_id {
-            out.push((id, word0(&slot.cur, slot.width), slot.width));
+            let v = match nets {
+                Some(r) => bits_of(&r.read_net(n as u32, None), slot.width),
+                None => word0(&slot.cur, slot.width),
+            };
+            out.push((id, v, slot.width));
         }
     }
     out
+}
+
+/// A `Value`'s planes as the `BitPacked` the VCD writer wants, at `width`.
+fn bits_of(v: &Value, width: u32) -> sim_ir::BitPacked {
+    let mut out = Value::zeros(width.max(1), false);
+    out.width = width;
+    for i in 0..width {
+        let (bv, bu) = v.get_vu(i);
+        out.set_vu(i, bv, bu);
+    }
+    sim_ir::BitPacked {
+        val: out.val.to_vec(),
+        unk: out.unk.to_vec(),
+    }
 }
 
 /// Extract array word `k` (`width` bits) from a packed net store.
@@ -689,12 +732,31 @@ pub(crate) fn word0(store: &sim_ir::BitPacked, width: u32) -> sim_ir::BitPacked 
 
 /// Read a string from a $dumpfile/$display arg ExprId → Const{StrUtf8} → bytes.
 pub(crate) fn arg_string(st: &SimState, eid: Option<u32>) -> String {
+    arg_string_with::<crate::state::SimState>(st, None, eid)
+}
+
+/// `arg_string` against an ALTERNATE net store (tier-3 seam, S1d-4d-2 round 2).
+///
+/// ⚠️ This function does NOT return early for a non-`Const` argument, and a
+/// comment in `native/kernel.rs` claimed it did — which is what let `$dumpfile`
+/// off the refusal list with a false argument. `$dumpfile(nm)` with `nm` an
+/// ordinary reg falls through to the value render below, and on a native run
+/// the ENGINE's store never moves: the waveform silently landed in a file named
+/// `x` instead of `42`. Same stdout, same VCD content, wrong filename.
+pub(crate) fn arg_string_with<N: crate::eval::NetReader + ?Sized>(
+    st: &SimState,
+    nets: Option<&N>,
+    eid: Option<u32>,
+) -> String {
     let Some(eid) = eid else { return String::new() };
     if let sim_ir::Expr::Const { val } = &st.ir.exprs[eid as usize] {
         return const_string(st.ir, *val);
     }
     // non-const arg: render its value as decimal (best-effort)
-    fmt_dec(&st.eval_expr(eid))
+    match nets {
+        Some(r) => fmt_dec(&st.mk_eval_ctx_with(r).eval(eid)),
+        None => fmt_dec(&st.eval_expr(eid)),
+    }
 }
 
 /// Resolve an ExprId that is a `Const{val}` into its const string (format str).

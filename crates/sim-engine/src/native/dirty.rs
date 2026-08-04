@@ -50,6 +50,16 @@
 
 use sim_ir::{FourState, SimIr};
 
+use crate::eval::NetReader;
+
+/// A `Value`'s two planes as the `BitPacked` the VCD writer takes.
+pub(crate) fn packed_of(v: &crate::value::Value) -> sim_ir::BitPacked {
+    sim_ir::BitPacked {
+        val: v.val.to_vec(),
+        unk: v.unk.to_vec(),
+    }
+}
+
 use crate::native::arena::NetArena;
 
 /// One changed net as the sweep hands it to a scheduler: the net, its
@@ -89,6 +99,23 @@ pub struct DirtyChannel {
     pub ca_of_net: Vec<Vec<u32>>,
     pub ca_dirty: Vec<u32>,
     pub ca_dirty_flag: Vec<bool>,
+    /// VCD value-changes this store has RECORDED but not yet written
+    /// (S1d-4d-2), as `(net, word, value-at-the-store-point)`.
+    ///
+    /// ⚠️ The VALUE is captured here, not re-read at drain time, and that is
+    /// the whole design. Buffering only `(net, word)` would make an A→B→A
+    /// round-trip inside one slot emit two records carrying the SAME final
+    /// value — the glitch collapse this module's own header warns about, and
+    /// the reason the emitter has to live at the store point.
+    ///
+    /// `now` is NOT captured: every drain seam (a statement boundary, the
+    /// settle, the NBA apply) is a span across which `now` does not move, so
+    /// stamping at drain equals stamping at store — and a second `now` on this
+    /// side is the hazard §4.5.293 removed from the kernel.
+    pub vcd_pending: Vec<(u32, u32, sim_ir::BitPacked)>,
+    /// Is a dump open? Mirrors `SimState::dumping` so the funnel can skip the
+    /// capture entirely on the overwhelmingly common no-waveform run.
+    pub vcd_on: bool,
 }
 
 impl DirtyChannel {
@@ -104,6 +131,8 @@ impl DirtyChannel {
             ca_of_net: Vec::new(),
             ca_dirty: Vec::new(),
             ca_dirty_flag: Vec::new(),
+            vcd_pending: Vec::new(),
+            vcd_on: false,
         }
     }
 
@@ -154,7 +183,7 @@ impl NetArena {
     /// mask and records nothing in its place, which reads as "the net changed
     /// but no edge occurred" — the engine hit exactly this and documents it at
     /// its third store point (`commit_clocking_sample`).
-    pub(crate) fn note_change(&mut self, net: u32) {
+    pub(crate) fn note_change(&mut self, net: u32, word: u32) {
         let i = net as usize;
         if !self.ch.dirty_flag[i] {
             self.ch.dirty_flag[i] = true;
@@ -173,6 +202,15 @@ impl NetArena {
                 self.ch.ca_dirty_flag[ci] = true;
                 self.ch.ca_dirty.push(ci as u32);
             }
+        }
+        // VCD: capture the CHANGED WORD's value NOW. `word` is why this
+        // parameter came back — an array carries one VCD id per ELEMENT, so a
+        // record built from word 0 would name the wrong variable.
+        if self.ch.vcd_on {
+            let v = self.read_net(net, Some(word));
+            self.ch
+                .vcd_pending
+                .push((net, word, crate::native::dirty::packed_of(&v)));
         }
     }
 

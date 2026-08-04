@@ -305,12 +305,15 @@ pub(crate) struct SysTaskRefusal {
 /// That is precisely the twin-predicate hazard, so the twin is not written.
 pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
     let (label, slice, why) = match which {
-        SysTaskId::DumpVars | SysTaskId::DumpAll | SysTaskId::DumpOn => (
-            "k_dispatch_systask($dumpvars/$dumpall/$dumpon)",
-            "S1d-4d",
-            "`full_snapshot` walks `&st.nets` wholesale rather than through the \
-             formatter, so the arena reader never reaches it. S1d-4d owns VCD \
-             and its byte-identity gate is what needs this",
+        // `$dumpvars` is WIRED (S1d-4d-2) — `full_snapshot_with` takes the arena
+        // as its reader. `$dumpall`/`$dumpon` still are not: they re-snapshot
+        // through the same function but from `dispatch`'s own call sites, which
+        // this seam does not thread. One more slice, not a subsystem.
+        SysTaskId::DumpAll | SysTaskId::DumpOn => (
+            "k_dispatch_systask($dumpall/$dumpon)",
+            "S1d-4d-3",
+            "they re-snapshot through `full_snapshot`, and only the `$dumpvars` \
+             call site threads the arena reader so far",
         ),
         SysTaskId::Monitor | SysTaskId::Strobe => (
             "k_dispatch_systask($monitor/$strobe)",
@@ -321,11 +324,21 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
              line and then never re-fire, because the store its change detection \
              compares against is the engine's and never moves",
         ),
-        SysTaskId::DumpFile | SysTaskId::DumpLimit | SysTaskId::Fclose => (
-            "k_dispatch_systask($dumpfile/$dumplimit/$fclose)",
+        // `$dumpfile` is WIRED (S1d-4d-2) — but NOT for the reason the first
+        // version of this comment gave. It claimed `arg_string` returns early
+        // for anything that is not `Expr::Const`, so the task never reads a net.
+        // Measured false: it falls through to a VALUE RENDER, and on a native
+        // run that read the engine's untouched store — `$dumpfile(nm)` with
+        // `nm = 42` wrote a file named `x` instead of `42`, with identical
+        // stdout and identical VCD content. What actually makes it safe is that
+        // `dispatch_with` now threads the reader into `arg_string_with`.
+        // `$dumplimit`/`$fclose` still take INT arguments through `int_arg`,
+        // which is not threaded.
+        SysTaskId::DumpLimit | SysTaskId::Fclose => (
+            "k_dispatch_systask($dumplimit/$fclose)",
             "S1d-4b-3",
-            "the ARGUMENT is read through `arg_string`/`int_arg`, not the \
-             formatter — a store read this seam does not cover",
+            "the ARGUMENT is read through `int_arg`, not the formatter — a \
+             store read this seam does not cover",
         ),
         SysTaskId::WritememB | SysTaskId::WritememH => (
             "k_dispatch_systask($writememb/$writememh)",
@@ -333,14 +346,14 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
             "it reads the MEMORY itself, not a formatted argument",
         ),
         // ⚠️ `$dumpoff`/`$dumpflush`/`$monitoron`/`$monitoroff` are deliberately
-        // NOT here, and the reason is a DEPENDENCY rather than a property of
-        // theirs: each is inert without a live dump or monitor, and the only
-        // thing that opens `st.vcd` is the `$dumpfile` handler while the only
-        // thing that registers a monitor is `$monitor` — both refused above. If
-        // S1d-4d ever opens the VCD from another path (a `-o x.vcd` that does
-        // not go through `$dumpfile`, say), these go live with no row to catch
-        // them. Measured today: `vita -o x.vcd` on a dump-free design writes
-        // nothing on either backend.
+        // NOT here — and the reason they used to carry ("nothing opens `st.vcd`
+        // because `$dumpfile` is refused") DIED when S1d-4d-2 wired the dump
+        // tasks. What makes them correct now is direct rather than inherited:
+        // `$dumpoff` sets `dumping = false`, and `vcd_id_for` returns `None`
+        // while it is false, so the arena's captures are discarded at the drain
+        // exactly as the engine's emits are skipped. `$dumpflush` only flushes.
+        // Measured: `$dumpoff` standalone, mid-slot and before `$dumpvars` all
+        // match the VM byte for byte.
         _ => return None,
     };
     Some(SysTaskRefusal { label, slice, why })
@@ -468,6 +481,37 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         for _ in 0..n {
             self.sched.st.warn_run_range("array word index");
         }
+        self.drain_vcd();
+    }
+
+    /// Write out the VCD value-changes the arena recorded, through the ENGINE's
+    /// emitter and its id tables.
+    ///
+    /// Drained at the same seams as the range diagnostics because both are the
+    /// same problem: the store detected something at a point where it could not
+    /// reach the sink.
+    ///
+    /// ⚠️ The buffer is NOT the only order the file has — an earlier version of
+    /// this sentence said it was. `$dumpvars` (preamble + `dump_initial`) and
+    /// `$dumpoff` write to the same file SYNCHRONOUSLY, bypassing the buffer.
+    /// What keeps the interleaving right is stronger and elsewhere: the walk
+    /// drains at EVERY statement boundary, so no buffered record can outlive the
+    /// statement before a `$dump*` statement runs. `now` does not move across a
+    /// drain span, so stamping at drain equals stamping at store.
+    pub(crate) fn drain_vcd(&mut self) {
+        if self.arena.ch.vcd_pending.is_empty() {
+            return;
+        }
+        let pending = std::mem::take(&mut self.arena.ch.vcd_pending);
+        for (net, word, packed) in &pending {
+            if let Some((id, width)) = self.sched.st.vcd_id_for(*net, *word) {
+                self.sched.st.emit_vcd_packed(id, packed, width);
+            }
+        }
+        // Hand the capacity back: a dumping run does this once per statement.
+        let mut p = pending;
+        p.clear();
+        self.arena.ch.vcd_pending = p;
     }
 
     /// Every pending activation, as `(tick, inactive, proc, block)` — the twin of
@@ -842,8 +886,19 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         if let Some(r) = systask_refusal(which) {
             not_built!(r.label, r.slice, r.why)
         }
+        // `$dumpvars` takes its t0 value snapshot from the ARENA (S1d-4d-2) and
+        // then turns on the store-point capture. Everything else about it — the
+        // header, the scope/var declarations, the filter — reads IR and
+        // metadata, so it needs nothing from this seam.
         let (sched, arena) = (&mut *self.sched, &self.arena);
-        crate::builtins::dispatch_with(sched, Some(arena), which, fmt, args, sid)
+        let ctl = crate::builtins::dispatch_with(sched, Some(arena), which, fmt, args, sid);
+        // `$dumpoff` turns dumping off; keep the arena's capture flag in step so
+        // a long post-`$dumpoff` run stops buffering values the drain would only
+        // discard. Correctness does not depend on this — `vcd_id_for` already
+        // returns `None` — but capturing for nothing is work, and a flag that
+        // tracks its source is easier to reason about than one that does not.
+        self.arena.ch.vcd_on = self.sched.st.dumping;
+        ctl
     }
 
     fn k_force(&mut self, _lhs: &Lvalue, _value: Value, _rhs: u32, _sid: u32) {

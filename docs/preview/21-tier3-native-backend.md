@@ -406,7 +406,7 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > | **S1d-4a~4c ✅ (2026-08-04)** | `impl Kernel`(§4.5.292) → 포맷/dispatch(§4.5.293/294) → NBA 드레인(§4.5.295) → `k_rearm`(§4.5.296) → 바디 워크(§4.5.297) → **런 루프 + `Delay` 정지 + `simulate` 배선**(§4.5.298). ③층이 **실제로 설계를 돌린다** | ✅ 코퍼스 적격 **65 설계 stdout+finish+시간+exit class 동일** + 판별 설계 19 + 적대 differential **316 설계 0 diff**. ⭐⭐ 게이트가 `exit_class` 를 안 보던 동안 **OOB 배열 진단이 조용했다**(FIFO 가 FAIL→PASS) |
 > | **S1d-4c-2d ✅ (2026-08-04)** | **in-body 웨이터**(§4.5.299) — `k_suspend_on`·공유 워크의 `Wait` 암·`fire_waiters`. `Named` 는 **구성 불가**로 판명(named event → 카운터 넷) | ✅ 전용 설계 37(코퍼스 커버리지 0) · differential **246 native 확인 0 diff** · ⭐⭐ `wait(e)` 술어가 범위 진단의 **세 번째 생산자**라 세 종료 경로에서 진단이 사라졌다(FAIL→PASS) |
 > | **S1d-4d-1 ✅ (2026-08-05)** | **zero-delay cont-assign settle**(§4.5.300) — 거부는 delayed·wired·multi-driver 셋만. **picorv32 네이티브 실행 + 바이트 일치** | ✅ 판별 설계 41 · differential 218 native 0 diff · 뮤테이션 11/11. ⭐⭐ byte-identity 논증이 **값 축에서만** 참 · `arm_t0` 가 t0 settle 변경집합 유실 |
-> | **S1d-4d-2** | **VCD**(`$dumpfile`/`$dumpvars`·emitter 는 **store 지점**에) → 원래 S1 게이트 | ⚠️ `examples/` 4개는 `$dump*` 만 지우면 **이미 네이티브로 돌고 바이트 일치**(실측) — VCD 가 마지막 문 |
+> | **S1d-4d-2 ✅ (2026-08-05)** | **VCD**(§4.5.301) — `full_snapshot_with` 제네릭 리더 · `emit_vcd_change` 분리 · `note_change` 에 `word` 복원 · **값을 store 지점에서 캡처** | ✅ **`examples/` 4개 stdout+VCD 바이트 동일** — 원래 S1 게이트가 실사용 설계에서 통과. 코퍼스 dump 37 VCD 비교 · differential 498 native 0 diff · 뮤테이션 11/12 |
 
 > **S1d-4d-2 그라운딩 (2026-08-05, 착수 前 실측) — 이음매 넷이 특정됐다.**
 >

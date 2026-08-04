@@ -74,12 +74,37 @@ fn agree(src: &str, name: &str) -> Result<(), &'static str> {
     let (ir, opts) = build_with_opts(src);
     crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())?;
 
+    // Per-design VCD targets. A design with no `$dumpvars` writes neither file,
+    // which the comparison below treats as agreement — the `$dump*` designs are
+    // what make it bite, and since S1d-4d-2 the corpus supplies 44 of them.
+    // A per-CALL counter, not just the pid: `cargo test` runs test functions on
+    // parallel threads, and two of them walk the same corpus — so a tag built
+    // from the design name alone collides, one test removing the file the other
+    // is about to read. That reads as "the VM wrote no VCD", which is exactly
+    // how it presented.
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = std::env::temp_dir();
+    let tag = format!(
+        "vita_s1d4d2_{}_{}_{}",
+        name.chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect::<String>(),
+        std::process::id(),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    let vcd_vm = dir.join(format!("{tag}_vm.vcd"));
+    let vcd_nat = dir.join(format!("{tag}_nat.vcd"));
+    let _ = std::fs::remove_file(&vcd_vm);
+    let _ = std::fs::remove_file(&vcd_nat);
+
     let vm = SimOpts {
         backend: Backend::Bytecode,
+        vcd_path_override: Some(vcd_vm.to_string_lossy().into_owned()),
         ..opts.clone()
     };
     let nat = SimOpts {
         backend: Backend::Native,
+        vcd_path_override: Some(vcd_nat.to_string_lossy().into_owned()),
         ..opts
     };
     let sink_vm = MergedSink::default();
@@ -113,29 +138,44 @@ fn agree(src: &str, name: &str) -> Result<(), &'static str> {
         r_vm.exit_class, r_nat.exit_class,
         "{name}: exit class differs"
     );
+    // THE WAVEFORM. This is the half of the original S1 gate that could not be
+    // asserted until S1d-4d-2 — `$dumpvars` was a refused system task, so the
+    // corpus had to be stripped of its dump calls to be compared at all.
+    let b_vm = std::fs::read(&vcd_vm).ok();
+    let b_nat = std::fs::read(&vcd_nat).ok();
+    // ANTI-VACUITY: `None == None` passes both assertions below, so a design
+    // that dumps must be shown to have PRODUCED a file. Measured — making
+    // `dumpvars_with` a total no-op on both backends left the whole suite green
+    // before this line, which turned "37 waveforms match" into 37 matches of
+    // nothing against nothing.
+    if src.contains("$dumpvars") {
+        assert!(
+            b_nat.is_some() && b_vm.is_some(),
+            "{name}: the design dumps but a run produced no VCD"
+        );
+    }
+    assert_eq!(
+        b_vm.as_ref().map(|b| b.len()),
+        b_nat.as_ref().map(|b| b.len()),
+        "{name}: VCD length differs (or one side wrote no file)"
+    );
+    assert_eq!(b_vm, b_nat, "{name}: VCD bytes differ");
+    let _ = std::fs::remove_file(&vcd_vm);
+    let _ = std::fs::remove_file(&vcd_nat);
     Ok(())
 }
 
-/// The P6 corpus, with its `$dumpfile`/`$dumpvars` lines removed.
+/// The P6 corpus, AS GENERATED — dump calls and all.
 ///
-/// Stripping them is not papering over a difference: the two backends are
-/// compared on the SAME `SimIr` either way, so an unstripped corpus would simply
-/// be REFUSED wholesale (44 of the 72 designs carry a dump task, which
-/// `k_dispatch_systask` will not render from the arena). Removing the two lines
-/// converts 44 refusals into 44 comparisons, and the VCD path they exercise is
-/// S1d-4d's gate rather than this one. Both numbers are asserted below.
-fn corpus_no_vcd() -> Vec<(String, String)> {
+/// It used to be stripped of `$dumpfile`/`$dumpvars`, because those were refused
+/// system tasks and 44 of the 72 designs carry them: without stripping, 44
+/// comparisons were 44 refusals. S1d-4d-2 wired both, so the corpus is now
+/// compared in the form it is actually generated in — and `agree` compares the
+/// VCD bytes those calls produce.
+fn corpus_designs() -> Vec<(String, String)> {
     corpus(0x5EED_F00D, 72)
         .into_iter()
-        .map(|d| {
-            let src = d
-                .src
-                .lines()
-                .filter(|l| !l.contains("$dumpfile") && !l.contains("$dumpvars"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            (d.name, src)
-        })
+        .map(|d| (d.name, d.src))
         .collect()
 }
 
@@ -145,7 +185,7 @@ fn s1d4c2c_native_run_matches_the_vm_over_corpus() {
     let mut ran = 0usize;
     let mut refused: std::collections::BTreeMap<&'static str, usize> =
         std::collections::BTreeMap::new();
-    for (name, src) in corpus_no_vcd() {
+    for (name, src) in corpus_designs() {
         match agree(&src, &name) {
             Ok(()) => ran += 1,
             Err(r) => *refused.entry(r).or_default() += 1,
@@ -166,52 +206,33 @@ fn s1d4c2c_native_run_matches_the_vm_over_corpus() {
     );
 }
 
-/// The corpus AS GENERATED — i.e. with the VCD tasks — must be REFUSED, not run
-/// wrongly. The stripping above is only legitimate if the unstripped form is
-/// loud, and this is the assertion that keeps it so.
+/// The corpus's `$dumpvars` designs run NATIVELY and their waveforms match.
+///
+/// This test used to assert the opposite — that a dump design is refused — and
+/// the assertion was correct until S1d-4d-2 wired `$dumpfile`/`$dumpvars`. It is
+/// kept, inverted, because the population it counts (44 of 72) is the measure of
+/// how much of the corpus the VCD half of the gate covers.
 #[test]
-fn s1d4c2c_vcd_designs_are_refused_not_run() {
+fn s1d4d2_vcd_designs_run_and_their_waveforms_match() {
     let mut with_dump = 0usize;
-    for d in corpus(0x5EED_F00D, 72) {
-        if !d.src.contains("$dumpvars") {
+    let mut ran = 0usize;
+    for (name, src) in corpus_designs() {
+        if !src.contains("$dumpvars") {
             continue;
         }
         with_dump += 1;
-        let (ir, opts) = build_with_opts(&d.src);
-        let verdict =
-            crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len());
-        // The ROW is asserted only where it is the only candidate. A design that
-        // also has continuous assigns is refused by that row first (the checks
-        // are ordered), and pinning the message there would be pinning the ORDER
-        // of two independent refusals rather than the refusal itself.
-        if ir.cont_assigns.is_empty() {
-            assert_eq!(
-                verdict,
-                Err("a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)"),
-                "{}: a $dumpvars design must be refused by the dispatch row",
-                d.name
-            );
-        } else {
-            assert!(verdict.is_err(), "{}: must be refused", d.name);
+        // `agree` compares stdout, diagnostics, finish reason, time, exit class
+        // AND the VCD bytes; a refusal is counted rather than silently passed.
+        if agree(&src, &name).is_ok() {
+            ran += 1;
         }
-        // …and the refusal must reach `simulate`, not merely exist: a request for
-        // the native backend has to come back as a bytecode run.
-        let (r, _) = simulate_capture(
-            &ir,
-            SimOpts {
-                backend: Backend::Native,
-                vcd_path_override: Some(
-                    std::env::temp_dir()
-                        .join("vita_s1d4c2c_refused.vcd")
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                ..opts
-            },
-        );
-        assert_eq!(r.backend, Backend::Bytecode, "{}: no fall-back", d.name);
     }
-    assert_eq!(with_dump, 44, "corpus VCD population moved");
+    assert_eq!(
+        (with_dump, ran),
+        (44, 37),
+        "corpus VCD population moved — re-pin deliberately. The 7 that do not \
+         run are the delayed-CA designs (S1d-4d-3), not a VCD refusal"
+    );
 }
 
 /// One design per shape the corpus does not contain, each named for the rule it
@@ -722,6 +743,137 @@ endmodule
 "#
             .to_string(),
         ),
+        // WIDE dumped net (>64 bits). The corpus's wide template
+        // (`gen_wide_arith`) carries no `$dumpvars`, so the widest net the gate
+        // ever dumped was 32 bits — and a `packed_of`/`bits_of` that kept only
+        // the first word survived it.
+        (
+            "vcd_wide_net_records_every_word",
+            r#"
+module top;
+  reg [199:0] w;
+  initial begin
+    $dumpfile("w.vcd"); $dumpvars(0, top);
+    w = 200'd0;
+    #1 w = {8'hA5, 96'hDEADBEEF_CAFEBABE_12345678, 96'h0F0F0F0F_F0F0F0F0_5A5A5A5A};
+    #1 w[199:128] = 72'h7F_FEDCBA98_76543210;
+    #1 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A MID-RUN x/z write on a dumped net. t0 X is covered (every net starts
+        // X), but nothing in the gate turned a KNOWN net back into X later —
+        // which is what a `packed_of` that zeroed the unk plane needed.
+        (
+            "vcd_mid_run_x_and_z_are_recorded",
+            r#"
+module top;
+  reg [7:0] a;
+  initial begin
+    $dumpfile("xz.vcd"); $dumpvars(0, top);
+    a = 8'h3C;
+    #1 a = 8'bxxxx_0101;
+    #1 a = 8'bzz11_zz00;
+    #1 a = 8'h00;
+    #1 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // TWO writes to one net between two drains. The glitch template writes
+        // three times but in three STATEMENTS, and the walk drains at every
+        // statement boundary — so it cannot tell capture-at-the-store-point from
+        // re-read-at-drain, which is the whole reason the buffer holds values.
+        // Two NBAs to the same net land in ONE `apply_nba` with one drain after.
+        (
+            "vcd_two_writes_between_drains_keep_both_values",
+            r#"
+module top;
+  reg clk;
+  reg [7:0] x;
+  initial begin
+    $dumpfile("t.vcd"); $dumpvars(0, top);
+    clk = 1'b0; x = 8'd0;
+    #1 clk = 1'b1;
+    #2 $finish;
+  end
+  always @(posedge clk) begin
+    x <= 8'd11;
+    x <= 8'd22;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // `$dumpoff` — no coverage anywhere, and the `dumping` guard is what
+        // stops records (and bare `#N` time stamps) after it.
+        (
+            "vcd_dumpoff_stops_the_records",
+            r#"
+module top;
+  reg [7:0] a;
+  initial begin
+    $dumpfile("o.vcd"); $dumpvars(0, top);
+    a = 8'd1;
+    #1 a = 8'd2;
+    #1 $dumpoff;
+    #1 a = 8'd3;
+    #1 a = 8'd4;
+    #1 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // VCD (S1d-4d-2). The corpus's 44 dump designs are all SCALAR and all
+        // call `$dumpvars` before their first write, so two things the emitter
+        // must get right have no cover there.
+        //
+        // An ARRAY under `$dumpvars`, TWO covers in one design. (a) One VCD id
+        // per ELEMENT, so a record built from word 0 names the wrong variable —
+        // `mem[2]` is written on its own at t=1. (b) The elements are filled
+        // BEFORE `$dumpvars`, so the t0 snapshot's ARRAY branch has to read the
+        // arena; taking it from the engine store dumps x for every element and
+        // every later record still looks right.
+        (
+            "vcd_array_records_name_the_written_element",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  integer i;
+  initial begin
+    for (i = 0; i < 4; i = i + 1) mem[i] = i + 8'd1;
+    $dumpfile("m.vcd"); $dumpvars(0, top);
+    #1 mem[2] = 8'h55;
+    #1 mem[0] = 8'hAA;
+    #1 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // `$dumpvars` called AFTER the first writes: the t0 snapshot has to read
+        // the ARENA. Taking it from the engine store would dump x for every net
+        // — and every LATER record would still be right, so only the header's
+        // initial values differ.
+        (
+            "vcd_initial_snapshot_reads_the_live_store",
+            r#"
+module top;
+  reg [7:0] a, b;
+  initial begin
+    a = 8'h5A; b = 8'hA5;
+    $dumpfile("l.vcd"); $dumpvars(0, top);
+    #1 a = 8'h11;
+    #1 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // CONTINUOUS ASSIGNS (S1d-4d-1). The corpus contributes ZERO coverage
         // here — its cont-assign designs all pair a plain assign with a delayed
         // one, so every last of them is still refused — and a `panic!` at the
@@ -919,7 +1071,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 41, "adversarial set shrank");
+    assert_eq!(designs.len(), 47, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -1143,6 +1295,74 @@ endmodule
             .iter()
             .any(|e| e.starts_with("diag|Error|VITA-E4002")),
         "the condition's OOB read must report — no statement follows it: {events:?}"
+    );
+}
+
+/// `$dumpfile` with a NON-CONSTANT argument — the shape that made the
+/// un-refusal wrong.
+///
+/// `arg_string` does not return early for a non-`Const` argument (a comment
+/// once claimed it did): it renders the VALUE, and on a native run that read
+/// the engine's untouched store, so the waveform landed in a file named `x`
+/// instead of `42`. stdout, VCD content and exit code were all identical —
+/// only the FILENAME differed, which is why `agree`'s byte compare cannot see
+/// it. Compared through `SimResult::vcd_path` rather than by listing a
+/// directory: the path is the observable, and reading it needs no `chdir`
+/// (which is process-global and would race the parallel tests).
+#[test]
+fn s1d4d2_dumpfile_with_a_non_const_argument_picks_the_same_path() {
+    let src = r#"
+module top;
+  integer nm;
+  reg [7:0] a;
+  initial begin
+    nm = 42;
+    $dumpfile(nm);
+    $dumpvars(0, top);
+    a = 8'd0; #1 a = 8'h11; #1 $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
+        .expect("runnable");
+    let dir = std::env::temp_dir();
+    let mut paths = Vec::new();
+    for (backend, tag) in [(Backend::Bytecode, "vm"), (Backend::Native, "nat")] {
+        // NOT `vcd_path_override` — that would answer the question for the task
+        // and test nothing. The override is used only to keep the file out of
+        // the repo, by making the design's own argument resolve under a temp
+        // dir… which it cannot, so instead the run is allowed to write wherever
+        // it decides and the decision itself is what is compared.
+        let sink = MergedSink::default();
+        let r = simulate(
+            &ir,
+            &sink,
+            SimOpts {
+                backend,
+                ..opts.clone()
+            },
+        );
+        if backend == Backend::Native {
+            assert_eq!(r.backend, Backend::Native, "fell back");
+        }
+        paths.push((tag, r.vcd_path.clone()));
+        if let Some(p) = r.vcd_path {
+            let _ = std::fs::remove_file(&p);
+            let _ = std::fs::remove_file(dir.join(&p));
+        }
+    }
+    assert_eq!(
+        paths[0].1, paths[1].1,
+        "the two backends resolved `$dumpfile(nm)` to different paths: {paths:?}"
+    );
+    // ANTI-VACUITY: both must have opened SOMETHING, and it must be the value
+    // of `nm` — if the argument silently rendered empty on both sides the
+    // comparison above would pass on two wrongs.
+    assert_eq!(
+        paths[0].1.as_deref(),
+        Some("42"),
+        "the non-const argument must render as its VALUE: {paths:?}"
     );
 }
 

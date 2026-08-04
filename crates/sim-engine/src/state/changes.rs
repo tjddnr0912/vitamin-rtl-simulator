@@ -2,6 +2,8 @@
 
 use super::*;
 
+use crate::state::IdCode;
+
 impl SimState<'_> {
     /// Record an ACTUAL bit change on `net`: mark it for the next
     /// `propagate_changes` dirty sweep, then emit the VCD record. This is the
@@ -80,10 +82,52 @@ impl SimState<'_> {
             }
         };
         let packed = slice_word(&self.nets[i].cur, width, word);
+        self.emit_vcd_packed(id, &packed, width);
+    }
+
+    /// Emit a VCD value_change for a net word whose value the CALLER already
+    /// has, and whose VCD id the caller already resolved.
+    ///
+    /// Split out of `emit_vcd_change` for the tier-3 store, which cannot use
+    /// that one: it reads `self.nets[i].cur`, and on a native run the values
+    /// live in the arena. The id tables (`vcd_id`/`vcd_word_ids`) stay here
+    /// because they are static metadata `$dumpvars` fills — the same table for
+    /// both stores — so only the VALUE crosses the seam.
+    pub(crate) fn emit_vcd_packed(&mut self, id: IdCode, packed: &sim_ir::BitPacked, width: u32) {
+        // The `dumping` guard lives HERE too, not only in the callers. The
+        // writer gates `value_change` on its own flag but NOT `set_time`, so a
+        // caller that forgot would emit stray `#N` records.
+        //
+        // ⚠️ It is DEFENCE IN DEPTH, not a covered behaviour: with it and
+        // `vcd_id_for`'s copy BOTH removed, the gate stays green, because the
+        // arena's `vcd_on` tracks `dumping` and so nothing is captured after a
+        // `$dumpoff` in the first place. Recorded rather than claimed — a guard
+        // that no design can distinguish is worth keeping and worth not
+        // pretending about.
+        if !self.dumping {
+            return;
+        }
         if let Some(w) = self.vcd.as_mut() {
             let _ = w.set_time(self.now);
-            let _ = w.value_change(id, &packed, width);
+            let _ = w.value_change(id, packed, width);
         }
+    }
+
+    /// The VCD id a `(net, word)` change would be reported under, or `None`
+    /// when it is not being dumped. The lookup half of `emit_vcd_change`,
+    /// callable by a store that holds its own values.
+    pub(crate) fn vcd_id_for(&self, net: u32, word: u32) -> Option<(IdCode, u32)> {
+        if !self.dumping {
+            return None;
+        }
+        let i = net as usize;
+        let width = self.nets[i].width;
+        let id = if self.nets[i].vcd_word_ids.is_empty() {
+            self.nets[i].vcd_id?
+        } else {
+            (*self.nets[i].vcd_word_ids.get(word as usize)?)?
+        };
+        Some((id, width))
     }
 
     /// OBS-2 (`--probe`): record a `trace.jsonl` change line when a PROBED net's value

@@ -25,40 +25,14 @@
 //! it the other way (loop first, suspension later) would have produced a gate
 //! that could not run a single corpus design.
 //!
-//! ⚠️ **What the accepted class does NOT yet include, stated so 65/72 is not
-//! read as coverage of real designs**: all four of this repo's `examples/*.sv`
-//! and both `bench/` designs are REFUSED and fall back to the VM. Measured
-//! today, after S1d-4c-2d made in-body waiters runnable: three of the four
-//! examples are refused by the CONTINUOUS-ASSIGN row (module ports lower to
-//! them) and the fourth by the system-task row. None is refused by the waiter
-//! row any more. The corpus subset this gate runs is real coverage of the LOOP;
-//! it is not yet coverage of a design anyone would write, and S1d-4d's
-//! cont-assign settle is what moves that number.
-//!
-//! ## What this loop is NOT, and how each absence is kept honest
-//!
-//! `runnable` below is a THIRD gate layer, under `design_eligibility`
-//! (v1 SCOPE) and `NetArena::buildable` (today's STORAGE): it answers "can the
-//! executor that exists today run this". Every absence here is a row there, so
-//! an unbuilt piece is a REFUSAL rather than a wrong answer:
-//!
-//! - **cont-assign settle** (`settle_cont_assigns`, the delayed-CA wheel, the
-//!   multi-driver resolution) — S1d-4d. 65 of the 72 corpus designs have no
-//!   continuous assign at all, so refusing the other 7 costs little; running
-//!   them would silently freeze every `assign`.
-//! - **the postponed region** (`$strobe`/`$monitor`) and the deferred-assert
-//!   regions — the former because `k_dispatch_systask` refuses to REGISTER a
-//!   `$monitor` (so a design with one cannot get this far), the latter because
-//!   `defer_marks`/`defer_acts` are already S0 rejects.
-//! - **`final` blocks** — `run_finals` runs after the loop and is not restated.
-//! - **forces** — `reeval_active_forces` has no analogue; `force_release` is an
-//!   S0 reject, so `active_forces` is provably empty.
-//!
-//! ## The one thing that is deliberately NOT restated
-//!
-//! There is no second copy of "which process does a change wake" here — that is
-//! `WakeTable::wake`, whose own differential (S1d-3) pinned it against the
-//! engine's `propagate_changes` pass. This loop only decides WHEN to ask.
+//! ⚠️ **What the accepted class covers, re-measured after S1d-4d-2.** All four
+//! of this repo's `examples/*.sv` now RUN natively and match the VM byte for
+//! byte, stdout and VCD alike — they were refused by the system-task row until
+//! `$dumpfile`/`$dumpvars` were wired, which is what this paragraph used to
+//! say and no longer should. `bench/picorv32` likewise. Still refused: a
+//! delayed/multi-driven/wired continuous assign, `$monitor`/`$strobe`,
+//! `$dumpall`/`$dumpon`, `final`, `fork`, and frame-local storage (which is
+//! what keeps `bench/keccak`'s subroutine variants out).
 
 use sim_ir::SimIr;
 
@@ -211,7 +185,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         // straight-line assignments, and `run_body` would return `Step::Finish`
         // rather than set the flag anyway. (An earlier version of this comment
         // said the opposite; review measured it.)
-        return finish_kind(k);
+        return done(k, finish_kind(k));
     }
     let max_deltas = k.k_delta_budget();
     let time_limit = k.k_time_limit();
@@ -222,7 +196,8 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         // side by side and a missing check reads as a difference; recorded as
         // dead rather than described as a guard.
         if k.sched.st.finished {
-            return finish_kind(k);
+            let fk = finish_kind(k);
+            return done(k, fk);
         }
         let mut delta_count: u64 = 0;
         // ── drain the current time to a stable point ──────────────────────
@@ -232,7 +207,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             // edge on a cont-assign-driven net (a port-bound clock), so change
             // propagation has to run before the timestep is called stable.
             match settle_cont_assigns(k, ir, &mut delta_count) {
-                None => return FinishReason::DeltaLimit,
+                None => return done(k, FinishReason::DeltaLimit),
                 Some(true) => propagate(k),
                 Some(false) => {}
             }
@@ -244,7 +219,8 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 let batch = std::mem::take(&mut k.active);
                 for r in batch {
                     if k.sched.st.finished {
-                        return finish_kind(k);
+                        let fk = finish_kind(k);
+                        return done(k, fk);
                     }
                     // SELF-RETRIG: tag this body's blocking writes with their
                     // author, so it is not re-fired by its own write.
@@ -269,16 +245,16 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     match step {
                         Step::Finish => {
                             k.sched.st.finished = true;
-                            return FinishReason::Finish;
+                            return done(k, FinishReason::Finish);
                         }
                         Step::Stop => {
                             k.sched.st.finished = true;
-                            return FinishReason::Stop;
+                            return done(k, FinishReason::Stop);
                         }
                         Step::Fatal => {
                             k.sched.st.finished = true;
                             k.sched.st.had_fatal = true;
-                            return FinishReason::Error;
+                            return done(k, FinishReason::Error);
                         }
                         // `busy` suppresses a static-sensitivity wake for a
                         // process parked mid-body: its registration is permanent
@@ -293,7 +269,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 delta_count += 1;
                 if delta_count > max_deltas {
                     k.sched.fatal_delta_limit();
-                    return FinishReason::DeltaLimit;
+                    return done(k, FinishReason::DeltaLimit);
                 }
                 continue;
             }
@@ -306,7 +282,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 delta_count += 1;
                 if delta_count > max_deltas {
                     k.sched.fatal_delta_limit();
-                    return FinishReason::DeltaLimit;
+                    return done(k, FinishReason::DeltaLimit);
                 }
                 continue;
             }
@@ -322,7 +298,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 delta_count += 1;
                 if delta_count > max_deltas {
                     k.sched.fatal_delta_limit();
-                    return FinishReason::DeltaLimit;
+                    return done(k, FinishReason::DeltaLimit);
                 }
                 continue;
             }
@@ -343,12 +319,12 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         .flatten()
         .min()
         {
-            None => return FinishReason::Quiescent,
+            None => return done(k, FinishReason::Quiescent),
             Some(t) => t,
         };
         if let Some(lim) = time_limit {
             if next > lim {
-                return FinishReason::Quiescent;
+                return done(k, FinishReason::Quiescent);
             }
         }
         k.sched.st.now = next;
@@ -647,6 +623,23 @@ fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNe
     for r in woken {
         push_sorted_native(&mut k.active, r);
     }
+}
+
+/// Every `run` exit funnels through here so the buffered VCD records are
+/// written before the kernel is dropped.
+///
+/// The nine return paths were audited and instrumented (0 losses across the
+/// whole suite and 190 designs), but an audit is an argument and this is a
+/// guard: `propagate` already contains an early return that skips its own
+/// drain, and anything left behind would be a silently truncated waveform at
+/// exit 0.
+fn done(k: &mut NativeKernel, r: FinishReason) -> FinishReason {
+    k.drain_range_diags();
+    debug_assert!(
+        k.arena.ch.vcd_pending.is_empty(),
+        "tier-3 run left VCD records unwritten"
+    );
+    r
 }
 
 fn finish_kind(k: &NativeKernel) -> FinishReason {

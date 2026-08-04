@@ -309,7 +309,7 @@ impl NetArena {
             }
         }
         if changed {
-            self.note_change(c.net);
+            self.note_change(c.net, word);
             if track_edge {
                 self.accumulate_edge(c.net, old_b0);
             }
@@ -351,7 +351,7 @@ impl NetArena {
             }
         }
         if changed {
-            self.note_change(net);
+            self.note_change(net, word);
             if track_edge {
                 self.accumulate_edge(net, old_b0);
             }

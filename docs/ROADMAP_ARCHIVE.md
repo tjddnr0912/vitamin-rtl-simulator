@@ -347,6 +347,42 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.301 ③층 S1d-4d-2 — VCD: **실사용 설계가 stdout+파형까지 바이트 동일** (2026-08-05, branch feat-tier3-vcd, format 26 불변) ✅
+
+`$dumpfile`/`$dumpvars` 를 ③층이 실행한다 → **`examples/` 넷 전부가 네이티브로 돌고 stdout·VCD 둘 다
+바이트 동일**. 원래 S1 게이트가 실사용 설계에서 처음 통과했다. 직전 반복의 그라운딩이 특정한 이음매
+넷이 그대로 맞았다 — `full_snapshot_with` 제네릭 리더(**`$dumpvars` 안에서 스토어를 읽는 유일한
+함수**) · `emit_vcd_change` → `vcd_id_for`+`emit_vcd_packed` · `note_change` 에 **`word` 복원**(배열은
+원소마다 VCD id) · **값을 store 지점에서 캡처해 버퍼링**(아니면 슬롯 내 글리치가 한 레코드로 합쳐진다).
+
+코퍼스를 **더 이상 스트립하지 않는다** — dump 를 가진 44 중 37 이 게이트 안에서 돌고 VCD 바이트까지
+비교된다(나머지 7 = delayed-CA 행). body-walk 커버리지도 58/380 → **72/556**(전 코퍼스).
+
+⭐⭐ **differential 이 내 주석의 주장을 반증했다** — `$dumpfile` 을 거부에서 뺀 근거로 *"`arg_string` 은
+non-Const 에서 early-return 한다"* 라고 적었는데, 그 함수는 **값 렌더로 흘러가 엔진 스토어를 읽는다**.
+`$dumpfile(nm)`(nm=42)이 네이티브에서 **`x` 라는 파일**에 썼다 — stdout·VCD 내용·exit code 전부 동일,
+**파일 이름만** 다르다(그래서 바이트 비교가 못 본다). 수정 = `arg_string_with` 로 리더 threading +
+`SimResult::vcd_path` 를 비교하는 전용 테스트.
+
+⭐⭐ **soundness 가 게이트의 눈먼 축을 다섯 개 셌다** — 전부 "코퍼스에 그 형태가 없다": 폭 >64 dump 넷
+0(코퍼스의 wide 템플릿엔 `$dumpvars` 가 없다) · **런 중** x/z 쓰기 0 · **두 드레인 사이 두 쓰기** 0
+(글리치 템플릿은 세 문장이고 워크는 문장마다 드레인해 **capture-at-store 를 재현 불가**) · `$dumpoff`
+0. 판별 설계 4개로 전부 kill. ⭐ 그리고 **`agree` 의 VCD 비교가 공허할 수 있었다** — `None == None` 이
+통과하므로 `dumpvars_with` 를 양쪽 no-op 으로 만들면 "37 파형 일치" 가 **무 대 무 37건**이었다.
+
+⭐ **한 뮤테이션은 원리적으로 못 잡는다**: `emit_vcd_packed` 는 **공유 코드**라 거기를 깨면 차분의
+**양쪽이 같이 움직인다**(§4.5.293 의 "같음으로는 출처를 시험 못 한다" 가 한 층 위에서 재현). 잡는 것은
+iverilog 앵커 테스트뿐 — 기록.
+
+구조 개선(리뷰 지적): `$dumpvars` 인터셉트가 `dispatch.rs` 의 **쌍둥이**였다(그쪽이 이미 리더를
+받는다) → 삭제 · **모든 `run` 종료 경로에 최종 드레인 + `debug_assert`**(9 경로 감사는 논증이고 이건
+가드다) · `emit_vcd_packed` 에 자체 `dumping` 가드(단, `vcd_on` 이 `dumping` 을 추적하므로 **등가**임을
+측정해 적었다).
+
+**게이트.** 5140 green · clippy · fmt · format 26 불변 · **examples 4 stdout+VCD 바이트 동일** ·
+코퍼스 dump 37 VCD 비교 · 판별 설계 47 · differential **502 런 중 498 native 확인, 수정 후 0 diff** ·
+soundness **랜덤 150 + 손 38 + iverilog 3rd lens 0 신규 발산** · 뮤테이션 12 중 11 kill(생존 1 = 등가).
+
 #### 4.5.300 ③층 S1d-4d-1 — cont-assign settle, 그리고 **byte-identity 논증이 값 축에서만 참이었다** (2026-08-05, branch feat-tier3-ca-settle, format 26 불변) ✅
 
 zero-delay 연속대입 fixpoint 를 ③층이 돈다(t0 arm 前 + 매 델타 상단 · 움직였으면 전파). 거부는 blanket

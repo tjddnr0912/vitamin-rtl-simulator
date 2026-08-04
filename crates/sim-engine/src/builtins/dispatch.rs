@@ -515,12 +515,16 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         SysTaskId::Finish => Ctl::Finish,
         SysTaskId::Stop => Ctl::Stop,
         SysTaskId::DumpFile => {
-            let name = arg_string(sched.st, args.first().copied());
+            let name = arg_string_with(sched.st, nets, args.first().copied());
             sched.st.dump_pending_path = Some(name);
             Ctl::Continue
         }
         SysTaskId::DumpVars => {
-            dumpvars(sched.st, args);
+            // `nets` is already threaded into this function, so the tier-3 path
+            // needs no arm of its own. It briefly had one, in `k_dispatch_systask`,
+            // and that was a twin: any future change here would have been
+            // silently skipped on the native backend.
+            dumpvars_with(sched.st, nets, args);
             Ctl::Continue
         }
         SysTaskId::DumpOff => {

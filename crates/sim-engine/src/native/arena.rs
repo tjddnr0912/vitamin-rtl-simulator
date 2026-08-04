@@ -67,8 +67,12 @@ pub struct NetArena {
     /// store cannot, because the read path is `&self` through `NetReader` and
     /// the diagnostic sink lives on the scheduler, which the kernel owning this
     /// arena borrows mutably (the reverse edge would be a cycle). So the access
-    /// COUNTS and the run loop reports, at the two seams where `now` is
-    /// unchanged since the access: after a body, and after the NBA apply.
+    /// COUNTS and the run loop reports, at the FIVE seams where `now` is
+    /// unchanged since the access: every statement boundary, after a body,
+    /// after the NBA apply, in each cont-assign settle pass, and at the end of
+    /// `propagate`. (It was two when this note was written; each later slice
+    /// that made the arena readable from a new place added one, and `drain_vcd`
+    /// now rides all five.)
     ///
     /// ⚠️ This is a real correctness surface, not bookkeeping. `warn_run_range`
     /// emits `Severity::Error`, which latches `had_error` → `ExitClass::HadErrors`

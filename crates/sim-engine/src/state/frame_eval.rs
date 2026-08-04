@@ -21,6 +21,25 @@ impl<'a> SimState<'a> {
         }
     }
 
+    /// `mk_eval_ctx` against an ALTERNATE net store — the tier-3 seam, with
+    /// exactly one field changed. Every other field still comes from `self`, so
+    /// `$time`, the width table, the RNG and the plusargs cannot differ between
+    /// the two backends by construction.
+    pub(crate) fn mk_eval_ctx_with<'n, N: crate::eval::NetReader + ?Sized>(
+        &'n self,
+        nets: &'n N,
+    ) -> crate::eval::EvalCtx<'n, N> {
+        crate::eval::EvalCtx {
+            ir: self.ir,
+            nets,
+            now: self.now,
+            wt: &self.wt,
+            time_mult: self.cur_time_mult,
+            rng: &self.rng,
+            plusargs: &self.plusargs,
+        }
+    }
+
     /// Evaluate an expression to a self-width Value against the CURRENT state
     /// (module nets, or the active frame window if one is installed). Identical to
     /// `Scheduler::eval` — both build an `EvalCtx` over this `SimState` — so the

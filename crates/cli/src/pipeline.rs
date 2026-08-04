@@ -251,7 +251,7 @@ pub(crate) fn print_help(applet: &str) {
                        'interp' forces the reference semantics, for bisecting; 'native'\n                        \
                        selects the tier-3 backend, which runs a design when nothing in it\n                        \
                        is outside today's tier-3 subset -- no delayed/multi-driven/wired\n                        \
-                       continuous assign, no fork, no subroutine call, no waveform dump --\n                        \
+                       continuous assign, no fork, no subroutine call, no $monitor --\n                        \
                        and falls back to the VM otherwise (run.json reports 'backend' vs\n                        \
                        'backend_requested', and 'native.refused' names the row).\n                        \
                        Output is byte-identical whichever you pick -- this only moves\n                        \

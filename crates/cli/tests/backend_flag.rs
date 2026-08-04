@@ -714,7 +714,11 @@ fn requesting_native_falls_back_without_moving_an_output_byte() {
     );
     assert!(ok, "obs run failed:\n{o}");
     let m = std::fs::read_to_string(dir.join("obs/run.json")).unwrap();
-    assert_eq!(manifest_field(&m, "backend"), "\"vm\"", "{m}");
+    // ⚠️ `MIXED` used to FALL BACK here, on the `$dumpvars` row. S1d-4d-2 wired
+    // the dump tasks, so it now RUNS natively — and the property this test is
+    // named for holds more strongly for it: requesting native moved neither a
+    // stdout byte nor a VCD byte, on a design the native backend executed.
+    assert_eq!(manifest_field(&m, "backend"), "\"native\"", "{m}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -727,22 +731,17 @@ fn requesting_native_falls_back_without_moving_an_output_byte() {
 fn the_native_verdict_reports_scope_and_storage_separately() {
     let dir = scratch("native_verdict");
 
-    // In v1's SCOPE and buildable, but the EXECUTOR refuses it: `MIXED` dumps a
-    // waveform, and `$dumpvars` reads `&st.nets` wholesale rather than through
-    // the threaded reader (S1d-4d owns VCD). This assertion read `refused: null`
-    // until S1d-4c-2c, which is the slice that gave `refused` a third source —
-    // the field is now the answer of all three layers, not of the first two.
+    // NOTHING refuses `MIXED` any more, and the value here has now moved twice:
+    // `null` → the system-task row when S1d-4c-2c gave `refused` a third source
+    // → back to `null` when S1d-4d-2 wired `$dumpfile`/`$dumpvars`. The field is
+    // the answer of all three layers; this design passes all three.
     std::fs::write(dir.join("t.sv"), MIXED).unwrap();
     let (o, ok) = vita_in(&dir, &["--obs-dir", "obs1", "-o", "a.vcd", "t.sv"]);
     assert!(ok, "{o}");
     let m = std::fs::read_to_string(dir.join("obs1/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
-        concat!(
-            "{\"eligible\": true, \"buildable\": true, \"refused\": ",
-            "\"a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)\", ",
-            "\"reject_reasons\": {}}"
-        ),
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",
         "{m}"
     );
 

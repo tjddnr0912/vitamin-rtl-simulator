@@ -346,6 +346,13 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
+> **S1d-4d-2 완료 (2026-08-05 · §4.5.301) — VCD.** `$dumpfile`/`$dumpvars` 배선 → **`examples/` 넷
+> 전부 네이티브·stdout+VCD 바이트 동일**(원래 S1 게이트가 실사용 설계에서 통과). 코퍼스 스트립 폐지
+> (dump 44 중 37 이 VCD 까지 비교). ⭐⭐ differential 이 **내 주석의 주장을 반증**(`arg_string` 은
+> early-return 하지 않는다 → `$dumpfile(nm)` 이 `x` 파일에 썼다·이름만 다르다) · ⭐⭐ soundness 가
+> 게이트의 눈먼 축 **다섯**을 셌다(폭>64·런중 x/z·두 드레인 사이 두 쓰기·`$dumpoff`) · ⭐ 공유 코드
+> 뮤테이션은 **원리적으로** 이 차분이 못 잡는다(양쪽이 같이 움직인다).
+>
 > **S1d-4d-1 완료 (2026-08-05 · §4.5.300) — zero-delay cont-assign settle.** 거부가 blanket 에서
 > **delayed·wired·multi-driver** 셋으로 좁아졌고 **picorv32 가 네이티브로 돌며 바이트 일치**한다.
 > ⭐⭐ 내 byte-identity 논증이 **값 축에서만** 참이었다(워크리스트 없이 매 패스 방문 = 재평가마다
