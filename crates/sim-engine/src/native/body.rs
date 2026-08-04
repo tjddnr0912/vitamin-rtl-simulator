@@ -192,9 +192,16 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 return Step::Fatal;
             }
             // A store that can only RECORD a diagnostic reports it here, at the
-            // statement boundary, so an out-of-range access and the `$display`
-            // in the next statement come out in the order the engine produces
-            // them. No-op for `K = Scheduler`, which emits at the access.
+            // statement boundary. No-op for `K = Scheduler`, which emits at the
+            // access.
+            //
+            // ⚠️ This is NOT what gets the ORDER right, and saying so was wrong:
+            // `format_args_str_with` drains before every `$display`/`$error`
+            // line, and `native::run` drains after the body, so no design has
+            // been found that this line alone distinguishes (measured —
+            // deleting it leaves the workspace suite green and 25 out-of-range
+            // designs byte-identical). It is kept as the tightest available
+            // backstop, not as a covered behaviour; treat it as unproven.
             k.k_drain_diags();
         }
         match &block.term {

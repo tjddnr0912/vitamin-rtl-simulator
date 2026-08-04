@@ -417,13 +417,21 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// 8-per-run cap and its "further suppressed" note identical without any of
     /// them being restated. The arena can only COUNT (see `pending_range`).
     ///
-    /// ⚠️ ORDERING, stated because it is a real difference: the engine emits at
-    /// the access, this emits at the end of the body (or of the NBA apply) the
-    /// access happened in. `now` is unchanged across that span, so the timestamp
-    /// is right; what a same-run capture of BOTH streams would see is the
-    /// diagnostic after, rather than interleaved with, that body's `$display`
-    /// lines. stdout and diagnostics are separate destinations in the CLI, so
-    /// this is not observable there — but it is a difference, not an equivalence.
+    /// ⚠️ ORDERING is NOT this function's job, and an earlier version of this
+    /// doc said the opposite twice over. It claimed the late report was "a real
+    /// difference … not observable in the CLI because stdout and diagnostics
+    /// are separate destinations". Both halves were measured false: `-l/--log`
+    /// (and `2>&1`) is a SINGLE destination, and two diagnostics — a range
+    /// report and the `$error` whose own argument caused it — go to the same
+    /// stream regardless.
+    ///
+    /// What actually orders the report is `NetReader::take_deferred_range_reports`,
+    /// drained inside `format_args_str_with`: that function holds the alternate
+    /// reader and the sink at once, so it reports after the argument reads and
+    /// before the caller emits its line. This drain is the BACKSTOP for accesses
+    /// no formatter follows — a terminator condition, an NBA apply, a body that
+    /// ends the run. `now` is unchanged across that span, so the timestamp is
+    /// right either way.
     pub(crate) fn drain_range_diags(&mut self) {
         let n = self.arena.pending_range.replace(0);
         for _ in 0..n {
