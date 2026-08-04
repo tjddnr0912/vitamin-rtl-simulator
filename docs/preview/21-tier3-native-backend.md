@@ -406,7 +406,28 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > | **S1d-4a~4c ✅ (2026-08-04)** | `impl Kernel`(§4.5.292) → 포맷/dispatch(§4.5.293/294) → NBA 드레인(§4.5.295) → `k_rearm`(§4.5.296) → 바디 워크(§4.5.297) → **런 루프 + `Delay` 정지 + `simulate` 배선**(§4.5.298). ③층이 **실제로 설계를 돌린다** | ✅ 코퍼스 적격 **65 설계 stdout+finish+시간+exit class 동일** + 판별 설계 19 + 적대 differential **316 설계 0 diff**. ⭐⭐ 게이트가 `exit_class` 를 안 보던 동안 **OOB 배열 진단이 조용했다**(FIFO 가 FAIL→PASS) |
 > | **S1d-4c-2d ✅ (2026-08-04)** | **in-body 웨이터**(§4.5.299) — `k_suspend_on`·공유 워크의 `Wait` 암·`fire_waiters`. `Named` 는 **구성 불가**로 판명(named event → 카운터 넷) | ✅ 전용 설계 37(코퍼스 커버리지 0) · differential **246 native 확인 0 diff** · ⭐⭐ `wait(e)` 술어가 범위 진단의 **세 번째 생산자**라 세 종료 경로에서 진단이 사라졌다(FAIL→PASS) |
 > | **S1d-4d-1 ✅ (2026-08-05)** | **zero-delay cont-assign settle**(§4.5.300) — 거부는 delayed·wired·multi-driver 셋만. **picorv32 네이티브 실행 + 바이트 일치** | ✅ 판별 설계 41 · differential 218 native 0 diff · 뮤테이션 11/11. ⭐⭐ byte-identity 논증이 **값 축에서만** 참 · `arm_t0` 가 t0 settle 변경집합 유실 |
-> | **S1d-4d-2** | **VCD**(`$dumpfile`/`$dumpvars`·emitter 는 **store 지점**에)·`flush_postponed` → 원래 S1 게이트 | ⚠️ `examples/` 4개는 `$dump*` 만 지우면 **이미 네이티브로 돌고 바이트 일치**(실측) — VCD 가 마지막 문. 아레나 `note_change` 에 `emit_vcd_change` 대응이 없다 |
+> | **S1d-4d-2** | **VCD**(`$dumpfile`/`$dumpvars`·emitter 는 **store 지점**에) → 원래 S1 게이트 | ⚠️ `examples/` 4개는 `$dump*` 만 지우면 **이미 네이티브로 돌고 바이트 일치**(실측) — VCD 가 마지막 문 |
+
+> **S1d-4d-2 그라운딩 (2026-08-05, 착수 前 실측) — 이음매 넷이 특정됐다.**
+>
+> 1. **`full_snapshot(st)` → `full_snapshot_with<N: NetReader>(st, nets)`** (`builtins/queues_io.rs:601`).
+>    `$dumpvars`/`$dumpall`/`$dumpon` 이 부르는 t0 값 덤프만이 스토어를 읽는다 — 헤더·선언·필터
+>    (`dump_filter_from_args`)는 전부 IR/메타데이터라 **넷 값을 안 만진다**. 즉 `$dumpvars` 거부 사유
+>    (*"`full_snapshot` 이 `&st.nets` 를 통째로 걷는다"*)는 **한 함수**의 문제다. 패턴은
+>    `format_args_str_with`/`dispatch_with` 와 동일(리더를 제네릭으로).
+> 2. **`SimState::emit_vcd_change(net, word)` 를 둘로**(`state/changes.rs:65`): id 조회
+>    (`vcd_id`/`vcd_word_ids`)+writer 호출은 그대로 두고, **값을 인자로 받는** `emit_vcd_value`
+>    변종을 낸다. id 표는 `$dumpvars` 가 채우는 **정적 메타데이터**라 양쪽이 공유한다.
+> 3. **아레나 `note_change` 에 `word` 인자를 되돌린다**(현재 `note_change(net)` — 호출부 두 곳
+>    `native/write.rs:312,354` 은 원소 인덱스를 이미 갖고 있다). 배열은 **원소마다 VCD id** 가
+>    따로라 word 없이는 잘못된 레코드가 나간다. S1d-2 가 기록해 둔 의무.
+> 4. **값은 store 지점에서 캡처해 버퍼링**하고 드레인은 나중에 — `pending_range` 와 같은 구조.
+>    ⚠️ (net, word)만 버퍼링하고 드레인 때 읽으면 **한 슬롯 안의 A→B→A 글리치가 한 레코드로
+>    합쳐진다**(dirty.rs 가 경고해 둔 바로 그것). `now` 는 **복사하지 않는다** — 드레인 지점이
+>    전부 `now` 불변 구간(문장 경계·settle·NBA apply)이라 드레인 때 스탬프해도 같다.
+>
+> **게이트** = `examples/` 4개 + picorv32 의 **VCD 바이트 동일**(VM vs native). ⚠️ 바이트 게이트 前
+> 결정 6건(ROADMAP §2)은 전부 **vita-vs-iverilog** 차이라 이 게이트(vita-vs-vita)를 막지 않는다.
 > | **S1d-4d-3** | delayed CA(`delayed_ca`·`ca_gen` inertial)·multi-driver/wired 해소 | 코퍼스 CA 7설계가 전부 delayed 를 요구 — corpus 65 → 72 |
 >
 > **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
