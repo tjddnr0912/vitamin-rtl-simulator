@@ -45,6 +45,9 @@ pub mod kernel;
 mod kernel_tests;
 #[cfg(test)]
 mod probe_tests;
+pub mod run;
+#[cfg(test)]
+mod run_tests;
 pub mod wake;
 pub mod write;
 // The SHARED corpus/harness source, included exactly ONCE for both test

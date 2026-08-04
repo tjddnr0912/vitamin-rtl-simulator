@@ -153,6 +153,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 > **오라클 있는 것부터 위로.** 아래 🔴 중 A1~A7(오라클 ✓)이 §1 우선순위 ①에 해당하고, 무오라클/soundness 발굴분은 그 아래.
 
+- ~~③층 진단 인터리브 잔차~~ **RESOLVED (§4.5.298 round 2)** — 순서를 맞출 자리는 아레나가 아니라 **포맷 엔진**이었다(`format_args_str_with` 는 리더와 sink 를 동시에 들고 있다): 인자 렌더 직후·호출자 emit 직전에 드레인하면 엔진과 같은 순서가 된다. 리뷰어 설계 26 전수에서 merged 스트림·stderr·stdout·exit code **전부 동일**.
 - **🔴 §4.5.221이 도입한 좁은 하강(pre-existing 아님 — 내 책임)**: 계층 real param 이 상수 범위 바운드에 오면 조용히 1-bit. `logic [$clog2(u.R)-1:0]`(u 는 real param R 을 가진 인스턴스) → PRE 는 loud(`E3009`) 였으나 POST 는 **진단 없이 width 1**. 원인 = `count_reads_real_param` 의 `Ident` arm 이 `segments.len()==1` 을 요구해 `u.R` 을 못 봄. **iverilog 도 거부**하므로 무오라클이고 범위는 좁으나 loud→silent 는 하강. **fix 전제** = 바운드 문맥에서의 계층 이름 해석(현재 `nonconst_bound_reason` 은 false-loud 회피 때문에 call/hier 로 안 내려감) — 이름 매칭 근사는 동명 정수 hier param 을 false-reject 할 수 있어 실측 hazard set 없이는 금지(§4.5.218 선례).
 - ~~**🔴 frame body 의 copy-out 이 엔진 assert 를 밟는다**~~ **RESOLVED(§4.5.278·상세=ARCHIVE)** — 세 슬라이스가 "아직 이름 붙이지 못했다"고 적고 두 번 되돌린 조건은 **위치**(첫 문장/entry 블록)가 아니라 **분류기의 맹점**이었다: `Terminator::Call` 의 copy-out 목적지는 `Stmt` lvalue 가 아니라 call-site 사이드 테이블(`task_calls_func`)에 살아서 `compute_suspendable_tasks` 의 워크가 한 번도 본 적이 없었다. 워크가 그것을 보고 창 밖 목적지를 suspend 신호로 치면 caller 가 `&mut` 실행기로 가고 패닉이 사라진다 — 되돌린 두 시도가 지키려 했던 10개 정답 형태를 **하나도 잃지 않고**(3-way 70프로브 회귀 0). 잔여 = 프레임 **함수** 본문뿐(§4.5.275 후속 ② 참조).
 - **🔴 참조 워커가 EXPRESSION 위치의 호출을 한 단계만 본다**(pre-existing·오라클=vita-내부 등가·§4.5.276 리뷰 2렌즈 수렴 발굴): `stmt_no_ref_deep` 은 inertness 리졸버를 `S::UserTaskCall` **에만** 넘기고, `expr_no_ref_with` 의 `Call` arm 은 `path_ok(cn) && args.all(..)` 라 **호출된 함수의 본문에 들어가지 않는다**. 그래서 함수 간접 한 겹이 그 아래 전부를 가린다 — `function rd(); return o; endfunction` 을 직접 부르면 올바르게 loud 인데 `function rd2(); return rd(); endfunction` 을 거치면 `q = rd2() + nxt(5,o)` 가 **11 대신 12**(exit 0). **문장 위치 쌍둥이는 잡힌다**(`g2(z)` 형태)라 비대칭이 가려져 있었다. PRE(`8cf4165`) 동일 = pre-existing이고, `call_effect`→`call_is_inert` 도 같은 술어를 거치므로 §4.5.276 이 노출을 넓힌 것은 아니다. fix = 그 표현식 워커를 리졸버-aware 로 — **공유 워커 변경**이라 consumer 전수 + 자체 리뷰 라운드가 필요한 별도 슬라이스.
@@ -341,10 +342,20 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a~c·S1d-1·S1d-2·S1d-3 ✅ → **S1d-4** … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a~c·S1d-1~3·S1d-4a~4c ✅ → **S1d-4c-2d**(in-body 웨이터) · **S1d-4d** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
+> **S1d-4c-2c 완료 (2026-08-04 · §4.5.298) — ③층이 처음으로 설계를 돌린다.** 런 루프(리전 큐·델타
+> 루프·시간 진행·`Delay` 정지·`busy`) + `simulate` 배선 + **세 번째 게이트 층**
+> `native::run::executor_rows`. 슬라이스 경계는 측정이 정했다 — 코퍼스 **72 중 0** 이 전 프로세스
+> 정지-없음이고 정지 터미네이터 **138 개가 전부 `Delay`** 라, 오라클이 있는 단위는 "루프 + `Delay`"
+> 이고 in-body 웨이터는 다음이다. ⭐⭐ 두 적대 렌즈가 **같은 loud→silent 로 수렴**: OOB 배열 인덱스의
+> `warn_run_range` 가 아레나에 없어 평범한 FIFO 가 `FAIL` → `PASS`(stdout 은 바이트 동일) — 트리가
+> 이미 적어 뒀으나 "stderr 문제"로 **크기를 잘못 쟀다**(실제로는 exit class). ⭐ 뮤테이션 26 중 12
+> 생존 → 판별 설계 9개로 **2 로**(남은 둘은 등가). ⚠️ **`examples/` 4개와 `bench/` 둘은 전부 거부**
+> 된다 — 65/72 는 루프의 커버리지이지 실사용 설계의 커버리지가 아니다.
+>
 > **T0+S0 완료 (2026-08-03 · §4.5.285)** — run.json `codegen`/`native` 계기 + 설계 수준 게이트.
 > **적격률 79/79 → S0 중단 판정 통과.**
 >
@@ -413,6 +424,11 @@ T1/T2 가 푸는 문제("호출을 가진 바디를 컴파일 대상으로")는 
 > doc-21 §4.1(설계 단위 all-or-nothing)의 **리허설**이다.
 
 ### 5.1 나머지 (전부 보류 판정 — 트리거 시만)
+
+- **`native::run::executor_rows` 가 모든 `simulate` 호출에서 돈다**(§4.5.298 리뷰): 백엔드와 무관하게
+  전 프로세스의 전 문장을 훑는다. 요청 백엔드로 가드하면 run.json 의 `native` 판정이 요청에 따라
+  달라져 "census 는 실행기와 무관" 계약이 깨지므로 **무조건이 맞다** — 비용이 문제가 되면 캐시.
+
 
 - **u32::MAX 를 넘는 `#delay` 는 여전히 CLAMP(§4.5.292 잔여)**: 랩(7× 조기 발화)은 고쳤지만
   표현 불가 값은 조용히 `u32::MAX` 로 잘린다. 표현하려면 IR 필드(u32)를 바꿔야 하고(동결 타입 →

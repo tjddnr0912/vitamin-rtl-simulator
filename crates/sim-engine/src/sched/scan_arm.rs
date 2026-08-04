@@ -869,6 +869,30 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             .count()
     }
 
+    /// Every pending activation, as `(tick, inactive, proc, block)`.
+    ///
+    /// The engine-side twin of `NativeKernel::pending_resumes_for_test`, so a
+    /// `Terminator::Delay` can be compared for WHERE it filed the resume rather
+    /// than only for what it wrote — a suspension writes nothing, so the store
+    /// comparison the body differential already makes is blind to it entirely.
+    /// Current-time buckets report `now` as their tick.
+    #[cfg(test)]
+    pub(crate) fn pending_resumes_for_test(&self) -> Vec<(u64, bool, u32, u32)> {
+        let mut v: Vec<(u64, bool, u32, u32)> = Vec::new();
+        for r in &self.cur.active {
+            v.push((self.st.now, false, r.proc, r.block));
+        }
+        for r in &self.cur.inactive {
+            v.push((self.st.now, true, r.proc, r.block));
+        }
+        for (&t, evs) in &self.wheel {
+            for (region, r) in evs {
+                v.push((t, matches!(region, RegionTag::Inactive), r.proc, r.block));
+            }
+        }
+        v
+    }
+
     /// Drop `pi`'s live static-level waiter, as a fire does. Test-only: the
     /// differential needs the same consume-then-re-arm sequence on both sides.
     #[cfg(test)]
@@ -974,10 +998,19 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // author their writes as `None` (= re-fire normally).
         self.st.blocking_writer = Some(proc);
         let step = match self.st.backend {
-            // `Native` is resolved away by `simulate` (it falls back whenever the
-            // runtime gate refuses, and today always — there is no native
-            // executor yet), so it cannot arrive here. If that ever changes, the
-            // REFERENCE semantics are the safe default, never a panic.
+            // `Native` cannot arrive here, and since S1d-4c-2c the reason is
+            // different from what this comment used to say. It is no longer
+            // "there is no native executor": there is, and `simulate` drives it
+            // through `native::run::run`, which never calls `Scheduler::run_body`.
+            //
+            // ⚠️ And the old promise — "the REFERENCE semantics are the safe
+            // default, never a panic" — is NOT true any more, so do not lean on
+            // it. On a native run `Scheduler::new` is constructed but
+            // `arm_processes` is never called, so `self.activities` is EMPTY and
+            // the line above (`self.activities[proc].gen`) would panic before
+            // this match is reached. Any new `Scheduler` call site on the native
+            // path inherits that; the arm is kept because the interpreter and
+            // the VM still need it.
             crate::Backend::Interpreter | crate::Backend::Native => run_process(self, proc, block),
             crate::Backend::Bytecode => {
                 let tmpl = self.activity_template(proc) as usize;

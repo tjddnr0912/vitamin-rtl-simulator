@@ -727,11 +727,39 @@ fn requesting_native_falls_back_without_moving_an_output_byte() {
 fn the_native_verdict_reports_scope_and_storage_separately() {
     let dir = scratch("native_verdict");
 
-    // Clean design: nothing refuses it — it runs natively the moment S1d lands.
+    // In v1's SCOPE and buildable, but the EXECUTOR refuses it: `MIXED` dumps a
+    // waveform, and `$dumpvars` reads `&st.nets` wholesale rather than through
+    // the threaded reader (S1d-4d owns VCD). This assertion read `refused: null`
+    // until S1d-4c-2c, which is the slice that gave `refused` a third source —
+    // the field is now the answer of all three layers, not of the first two.
     std::fs::write(dir.join("t.sv"), MIXED).unwrap();
     let (o, ok) = vita_in(&dir, &["--obs-dir", "obs1", "-o", "a.vcd", "t.sv"]);
     assert!(ok, "{o}");
     let m = std::fs::read_to_string(dir.join("obs1/run.json")).unwrap();
+    assert_eq!(
+        manifest_field(&m, "native"),
+        concat!(
+            "{\"eligible\": true, \"buildable\": true, \"refused\": ",
+            "\"a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)\", ",
+            "\"reject_reasons\": {}}"
+        ),
+        "{m}"
+    );
+
+    // …and `null` must still be REACHABLE, or the update above would have
+    // quietly retired the case it changed. A design nothing refuses: no dump,
+    // no continuous assign, no in-body waiter.
+    std::fs::write(
+        dir.join("clean.sv"),
+        "module t;\n\
+           reg [7:0] n;\n\
+           initial begin n = 8'd0; #1 n = 8'd1; $display(\"n=%0d\", n); $finish; end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let (o, ok) = vita_in(&dir, &["--obs-dir", "obsc", "clean.sv"]);
+    assert!(ok, "{o}");
+    let m = std::fs::read_to_string(dir.join("obsc/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
         "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",

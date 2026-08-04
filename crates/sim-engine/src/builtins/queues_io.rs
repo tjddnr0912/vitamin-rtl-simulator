@@ -825,6 +825,21 @@ pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
 ) -> String {
     let mut out = String::new();
     let mut argi = 0usize;
+    // ORDER SEAM: this function holds BOTH the reader and (through `st`) the
+    // diagnostic sink, which makes it the one place a deferred out-of-range
+    // report can be emitted at the moment the engine would have emitted it —
+    // after the argument reads, before the caller writes its line or its
+    // severity message. `_drain` at the end of the body does it; declaring the
+    // guard here keeps the early `return` paths covered too.
+    struct DrainRange<'a, N: crate::eval::NetReader + ?Sized>(&'a SimState<'a>, &'a N);
+    impl<N: crate::eval::NetReader + ?Sized> Drop for DrainRange<'_, N> {
+        fn drop(&mut self) {
+            for _ in 0..self.1.take_deferred_range_reports() {
+                self.0.warn_run_range("array word index");
+            }
+        }
+    }
+    let _drain = DrainRange(st, nets);
     if let Some(fmt_eid) = fmt {
         // FROZEN IR: `SysTask.fmt` is an ExprId pointing to a `Const{val}` whose
         // `val` is the format-string ConstId (verified against elaborate).

@@ -137,7 +137,7 @@ macro_rules! gate_refused {
 /// no row refuses, which points a future maintainer at a gate widening that never
 /// happened — the exact opposite of what the message is for.
 macro_rules! not_built {
-    ($m:literal, $slice:literal, $why:literal) => {
+    ($m:expr, $slice:expr, $why:expr) => {
         panic!(
             "tier-3 native kernel: {} is NOT built yet ({} builds it) — {}. No \
              eligibility row refuses a design that calls it; `native::runtime_gate` \
@@ -238,6 +238,106 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// had already run. Every construction site today builds a fresh arena
     /// alongside, so the lifetime is per-run; nothing structurally enforces it.
     pub(crate) wake: crate::native::wake::WakeTable,
+    /// The REGION QUEUES and the time wheel (S1d-4c-2c). The engine's
+    /// `cur.active` / `cur.inactive` / `wheel`, restated over the collapsed
+    /// `Ready`: eligibility refuses forks, so `tie == proc == template` and a
+    /// ready entry is `(proc, resume block)`.
+    ///
+    /// They live on the KERNEL rather than on the run loop because
+    /// `k_schedule_resume` is what fills them — a `Terminator::Delay` decides to
+    /// suspend inside the SHARED body walk, and only the implementor knows where
+    /// the resume is filed.
+    pub(crate) active: Vec<NativeReady>,
+    pub(crate) inactive: Vec<NativeReady>,
+    pub(crate) wheel: BTreeMap<u64, Vec<(bool, NativeReady)>>,
+}
+
+/// A queued activation: which process, and which block it resumes at.
+///
+/// The engine's `Ready` carries a `tie` as well, because a fork child runs a
+/// sub-chain of its parent's body under a composite tie. `fork_modes` non-empty
+/// is an S0 reject, so here `tie == proc` and the field would be a second name
+/// for the same number — which is worse than absent, because it would look like
+/// the two could differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NativeReady {
+    pub(crate) proc: u32,
+    pub(crate) block: u32,
+}
+
+/// Why the tier-3 kernel refuses to dispatch one system task.
+pub(crate) struct SysTaskRefusal {
+    pub(crate) label: &'static str,
+    pub(crate) slice: &'static str,
+    pub(crate) why: &'static str,
+}
+
+/// Does the tier-3 kernel refuse to dispatch `which`, and why?
+///
+/// ONE match with TWO consumers, and that is the point rather than tidiness.
+/// `k_dispatch_systask` panics on a `Some`, and `native::run::runnable` refuses
+/// the design so nobody ever gets there. Written as two matches — the obvious
+/// spelling — the run gate would go stale the first time an arm is added here,
+/// and the symptom would be a mid-run panic on a design the gate called runnable.
+/// That is precisely the twin-predicate hazard, so the twin is not written.
+pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
+    let (label, slice, why) = match which {
+        SysTaskId::DumpVars | SysTaskId::DumpAll | SysTaskId::DumpOn => (
+            "k_dispatch_systask($dumpvars/$dumpall/$dumpon)",
+            "S1d-4d",
+            "`full_snapshot` walks `&st.nets` wholesale rather than through the \
+             formatter, so the arena reader never reaches it. S1d-4d owns VCD \
+             and its byte-identity gate is what needs this",
+        ),
+        SysTaskId::Monitor | SysTaskId::Strobe => (
+            "k_dispatch_systask($monitor/$strobe)",
+            "S1d-4d",
+            "dispatch only REGISTERS them — it captures ExprIds, and the render \
+             happens later in `sched/run_loop.rs::flush_postponed`, which the \
+             tier-3 run loop does not restate. A `$monitor` would print its t0 \
+             line and then never re-fire, because the store its change detection \
+             compares against is the engine's and never moves",
+        ),
+        SysTaskId::DumpFile | SysTaskId::DumpLimit | SysTaskId::Fclose => (
+            "k_dispatch_systask($dumpfile/$dumplimit/$fclose)",
+            "S1d-4b-3",
+            "the ARGUMENT is read through `arg_string`/`int_arg`, not the \
+             formatter — a store read this seam does not cover",
+        ),
+        SysTaskId::WritememB | SysTaskId::WritememH => (
+            "k_dispatch_systask($writememb/$writememh)",
+            "S1d-4b-3",
+            "it reads the MEMORY itself, not a formatted argument",
+        ),
+        // ⚠️ `$dumpoff`/`$dumpflush`/`$monitoron`/`$monitoroff` are deliberately
+        // NOT here, and the reason is a DEPENDENCY rather than a property of
+        // theirs: each is inert without a live dump or monitor, and the only
+        // thing that opens `st.vcd` is the `$dumpfile` handler while the only
+        // thing that registers a monitor is `$monitor` — both refused above. If
+        // S1d-4d ever opens the VCD from another path (a `-o x.vcd` that does
+        // not go through `$dumpfile`, say), these go live with no row to catch
+        // them. Measured today: `vita -o x.vcd` on a dump-free design writes
+        // nothing on either backend.
+        _ => return None,
+    };
+    Some(SysTaskRefusal { label, slice, why })
+}
+
+/// `sched::push_sorted` over the collapsed ready: insert keeping `proc`
+/// ascending, AFTER every equal entry.
+///
+/// ⚠️ The `<=` is written to match the engine, NOT because it can be observed
+/// here — an earlier version of this doc claimed it was load-bearing and that
+/// claim did not survive review. Two entries can never share a `proc` in the
+/// accepted class: `WakeTable::wake` dedups per process (`seen` for Edge,
+/// waiter CONSUMPTION for Level, and the two maps are kind-disjoint), `arm_t0`
+/// visits each process once, and a process has at most one pending resume. So
+/// `<=` → `<` is an EQUIVALENT mutation, and saying so is better than a teeth
+/// claim no design can back. It stays `<=` because the collapse is a property
+/// of today's gate, not of the ordering rule.
+pub(crate) fn push_sorted_native(q: &mut Vec<NativeReady>, r: NativeReady) {
+    let pos = q.partition_point(|x| x.proc <= r.proc);
+    q.insert(pos, r);
 }
 
 #[allow(dead_code)] // ditto — `new`/`ctx` have exactly one caller, the gate.
@@ -260,6 +360,9 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             delayed_nba: BTreeMap::new(),
             nba_scratch_lhs: Lvalue { chunks: Vec::new() },
             wake: crate::native::wake::WakeTable::new(ir),
+            active: Vec::new(),
+            inactive: Vec::new(),
+            wheel: BTreeMap::new(),
         }
     }
 
@@ -304,6 +407,49 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         }
         self.nba_scratch_lhs = scratch;
         self.nba = batch;
+    }
+
+    /// Report every out-of-range array access the arena has recorded since the
+    /// last drain, through the ENGINE's emitter.
+    ///
+    /// Calling `SimState::warn_run_range` rather than re-emitting is what keeps
+    /// the message text, the `Severity::Error` that sets the exit class, the
+    /// 8-per-run cap and its "further suppressed" note identical without any of
+    /// them being restated. The arena can only COUNT (see `pending_range`).
+    ///
+    /// ⚠️ ORDERING, stated because it is a real difference: the engine emits at
+    /// the access, this emits at the end of the body (or of the NBA apply) the
+    /// access happened in. `now` is unchanged across that span, so the timestamp
+    /// is right; what a same-run capture of BOTH streams would see is the
+    /// diagnostic after, rather than interleaved with, that body's `$display`
+    /// lines. stdout and diagnostics are separate destinations in the CLI, so
+    /// this is not observable there — but it is a difference, not an equivalence.
+    pub(crate) fn drain_range_diags(&mut self) {
+        let n = self.arena.pending_range.replace(0);
+        for _ in 0..n {
+            self.sched.st.warn_run_range("array word index");
+        }
+    }
+
+    /// Every pending activation, as `(tick, inactive, proc, block)` — the twin of
+    /// `Scheduler::pending_resumes_for_test`, in the same shape so the two can be
+    /// compared without either side naming the other's types.
+    #[cfg(test)]
+    pub(crate) fn pending_resumes_for_test(&self) -> Vec<(u64, bool, u32, u32)> {
+        let now = self.sched.st.now;
+        let mut v: Vec<(u64, bool, u32, u32)> = Vec::new();
+        for r in &self.active {
+            v.push((now, false, r.proc, r.block));
+        }
+        for r in &self.inactive {
+            v.push((now, true, r.proc, r.block));
+        }
+        for (&t, evs) in &self.wheel {
+            for (inactive, r) in evs {
+                v.push((t, *inactive, r.proc, r.block));
+            }
+        }
+        v
     }
 
     /// The read context: `SimState::mk_eval_ctx` with exactly ONE field changed.
@@ -381,6 +527,46 @@ impl Kernel for NativeKernel<'_, '_, '_> {
 
     fn k_call_fatal(&self) -> bool {
         self.sched.st.call_fatal.get()
+    }
+
+    fn k_drain_diags(&mut self) {
+        self.drain_range_diags();
+    }
+
+    fn k_now(&self) -> u64 {
+        // `sched.st` is the ONE origin for `now` (see the field doc): the arena
+        // holds net VALUES and nothing else, so a delay and a `$time` in the same
+        // body cannot come from two clocks.
+        self.sched.st.now
+    }
+
+    fn k_delta_budget(&self) -> u64 {
+        // Read through the borrowed scheduler for the same single-origin reason
+        // `now` is: `SimOpts::max_deltas` reaches exactly one field, and a
+        // constructor argument here would be a second place for it to be wrong.
+        self.sched.k_delta_budget()
+    }
+
+    fn k_time_limit(&self) -> Option<u64> {
+        self.sched.k_time_limit()
+    }
+
+    fn k_schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool) {
+        // `Scheduler::schedule_resume`, restated over the collapsed ready. The
+        // `tick == now` test is what puts a `#0` (and a `#d` that evaluated to
+        // zero ticks) into THIS timestep's Inactive region rather than onto the
+        // wheel — the wheel is keyed by time, so a same-time entry there would be
+        // drained only after the timestep it belongs to had already ended.
+        let r = NativeReady { proc, block };
+        if tick == self.sched.st.now {
+            if inactive {
+                push_sorted_native(&mut self.inactive, r);
+            } else {
+                push_sorted_native(&mut self.active, r);
+            }
+        } else {
+            self.wheel.entry(tick).or_default().push((inactive, r));
+        }
     }
 
     fn k_max_deltas(&self) -> u64 {
@@ -592,39 +778,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // they would render `SimState`'s nets while every other value came from
         // the arena — one wrong line in an otherwise right run.
         // `design_eligibility` does not refuse them, so this does.
-        match which {
-            SysTaskId::DumpVars | SysTaskId::DumpAll | SysTaskId::DumpOn => not_built!(
-                "k_dispatch_systask($dumpvars/$dumpall/$dumpon)",
-                "S1d-4d",
-                "`full_snapshot` walks `&st.nets` wholesale rather than through the \
-                 formatter, so the arena reader never reaches it. S1d-4d owns VCD \
-                 and its byte-identity gate is what needs this"
-            ),
-            SysTaskId::Monitor | SysTaskId::Strobe => not_built!(
-                "k_dispatch_systask($monitor/$strobe)",
-                "S1d-4c",
-                "dispatch only REGISTERS them — it captures ExprIds, and the render \
-                 happens later in `sched/run_loop.rs::flush_postponed`, which this \
-                 seam does not reach. A `$monitor` would print its t0 line and then \
-                 never re-fire, because the store its change detection compares \
-                 against is the engine's and never moves"
-            ),
-            SysTaskId::DumpFile | SysTaskId::DumpLimit | SysTaskId::Fclose => not_built!(
-                "k_dispatch_systask($dumpfile/$dumplimit/$fclose)",
-                "S1d-4b-3",
-                "the ARGUMENT is read through `arg_string`/`int_arg`, not the \
-                 formatter — a store read this seam does not cover"
-            ),
-            SysTaskId::WritememB | SysTaskId::WritememH => not_built!(
-                "k_dispatch_systask($writememb/$writememh)",
-                "S1d-4b-3",
-                "it reads the MEMORY itself, not a formatted argument"
-            ),
-            _ => {
-                let (sched, arena) = (&mut *self.sched, &self.arena);
-                crate::builtins::dispatch_with(sched, Some(arena), which, fmt, args, sid)
-            }
+        if let Some(r) = systask_refusal(which) {
+            not_built!(r.label, r.slice, r.why)
         }
+        let (sched, arena) = (&mut *self.sched, &self.arena);
+        crate::builtins::dispatch_with(sched, Some(arena), which, fmt, args, sid)
     }
 
     fn k_force(&mut self, _lhs: &Lvalue, _value: Value, _rhs: u32, _sid: u32) {

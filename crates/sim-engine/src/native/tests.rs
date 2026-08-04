@@ -378,6 +378,19 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         proc_scopes: sc.proc_scopes,
         proc_multipliers: sc.proc_multipliers,
         proc_prec_mults: sc.proc_prec_mults,
+        // …and the declaration-initializer list (S1d-4c-2c). `reg clk = 0;`
+        // lowers to an ordinary process PLUS an `init_procs` entry, and the
+        // entry is what makes `arm_processes` run it before arming and then drop
+        // the dirt. Without the table the same source becomes a normal `initial`
+        // block that hands `always @clk` an x→0 edge — so a run-loop
+        // differential built on the default `SimOpts` would compare two backends
+        // on a design neither was executing as written.
+        init_procs: sc.init_procs,
+        // …and `final_procs`, for the same reason: a `final` block lowers as an
+        // ordinary Initial-shaped process PLUS this sidecar, and the sidecar is
+        // the only thing that stops it being armed at t0. Without it the tier-3
+        // run gate's `final` row is unreachable from any test.
+        final_procs: sc.final_procs,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

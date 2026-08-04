@@ -28,8 +28,11 @@
 //!   `accumulate_edge` now hang off the same two store points, so a scheduler
 //!   reading `NetArena::take_changed` gets the glitch-accurate intra-slot edge
 //!   mask and not merely `changed` (see `native/dirty.rs`).
-//! - **`warn_run_range`.** The engine emits it on an out-of-range array word
-//!   (read and write). Values match without it; stderr does not.
+//! - ~~**`warn_run_range`**~~ — DISCHARGED by S1d-4c-2c. The count lives on
+//!   `NetArena::pending_range` and the run loop reports it through the engine's
+//!   own emitter. It was mis-sized while it sat here: the note said "values
+//!   match without it; stderr does not", but the diagnostic is `Severity::Error`
+//!   and therefore the run's EXIT CLASS.
 //! - **Wired-AND/OR resolution** (`wired_and_nets`/`wired_or_nets`, CORE at S0)
 //!   is a multi-driver SETTLE rule, not a write-funnel rule — S1d owns it.
 //! - ~~Effects that never pass through this funnel at all~~ **now REFUSED at the
@@ -214,6 +217,12 @@ impl NetArena {
         // resolver maps it to the far-out-of-range sentinel.
         let word = if c.word.is_some() {
             if raw_word >= s.elems {
+                // Counted, not clamped and not silent — the run loop reports it
+                // through the engine's own `warn_run_range` (see
+                // `NetArena::pending_range`). The engine emits here; dropping it
+                // turned an `ExitClass::HadErrors` run into a clean PASS.
+                self.pending_range
+                    .set(self.pending_range.get().saturating_add(1));
                 return false;
             }
             raw_word

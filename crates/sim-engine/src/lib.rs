@@ -121,14 +121,17 @@ pub enum Backend {
     /// change to the VM: a corpus differential is far weaker than 5000 real tests.
     #[default]
     Bytecode,
-    /// ③층 native backend (doc-21) — **not executable yet.** S1a-S1c built the
-    /// storage, the read path and the write funnel; S1d builds the scheduler.
-    /// Until then `simulate` resolves this to [`Backend::Bytecode`], so selecting
-    /// it never changes an output byte. It stays OBSERVABLE because run.json
-    /// carries both `backend_requested` and the effective `backend`: a reader
-    /// comparing them sees the fall-back, which `native.refused` alone cannot
-    /// show (that field is a property of the DESIGN and is `null` whenever
-    /// nothing refuses it — including on this fall-back).
+    /// ③층 native backend (doc-21) — **executable since S1d-4c-2c**, for the
+    /// subset three gate layers admit: v1 SCOPE (`native::design_eligibility`),
+    /// today's STORAGE (`NetArena::buildable`), and today's EXECUTOR
+    /// (`native::run::executor_rows` — no continuous assign, no in-body waiter,
+    /// no `final`, no system task the tier-3 kernel will not dispatch).
+    ///
+    /// Anything else falls back to [`Backend::Bytecode`], and the fall-back is
+    /// OBSERVABLE rather than silent: run.json carries `backend_requested`
+    /// beside the effective `backend`, and `native.refused` names the layer that
+    /// said no (all three layers — an earlier version published only the first
+    /// two, so an executor refusal read as `null`).
     Native,
 }
 
@@ -615,13 +618,23 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // Computed ONCE: `refused` IS the runtime gate's answer, so the backend
     // resolution below and run.json read the same verdict.
     let native_eligibility = native::design_eligibility(ir, &opts);
-    let native_refusal = native_eligibility.refused.or({
-        if opts.backend == Backend::Native {
-            Some("no native executor yet (S1d)")
-        } else {
-            None
-        }
-    });
+    // S1d-4c-2c: the THIRD layer — "can the executor that exists today run it".
+    // `design_eligibility.refused` already ANDs scope with storage; these are the
+    // rows the run loop itself adds (no cont-assign settle, no in-body waiter, no
+    // refused system task). Asked through `executor_rows` rather than `runnable`
+    // so the design gate is evaluated ONCE and the published verdict cannot come
+    // from a different evaluation than the executed decision.
+    let mut native_eligibility = native_eligibility;
+    if native_eligibility.refused.is_none() {
+        // PUBLISH the third layer, not just decide with it. An earlier version
+        // of this slice kept the executor's refusal in a local and serialized
+        // the two-layer struct, so run.json said `refused: null` on every
+        // fall-back the new rows caused — a G2 rail whose entire job is to
+        // explain `backend != backend_requested`, answering "nothing refused
+        // this". Both adversarial reviews found it independently.
+        native_eligibility.refused = native::run::executor_rows(ir, &opts).err();
+    }
+    let native_refusal = native_eligibility.refused;
     let effective_backend = match opts.backend {
         Backend::Native if native_refusal.is_some() => Backend::Bytecode,
         b => b,
@@ -794,7 +807,36 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         &call_out_nets,
     );
 
-    let reason = {
+    let reason = if effective_backend == Backend::Native {
+        // ③층 (S1d-4c-2c): the design passed all three gate layers, so the tier-3
+        // run loop owns the whole simulation — there is no body-level fallback
+        // (doc-21 §4.1: a native backend owns net storage, so the interpreter
+        // cannot see its nets). The scheduler is still constructed, as the HOST
+        // for everything that is not a net value: the output sink, the file
+        // table, `now`, the RNG.
+        //
+        // `class_new_sites` is cloned BEFORE the scheduler takes `&mut st`, and
+        // it is provably empty here (the `class` eligibility row counts it), so
+        // the clone is free and the map is the same one the engine would read.
+        let class_new_sites = opts.class_new_sites.clone();
+        let arena = native::arena::NetArena::build(ir, &opts)
+            .expect("the runtime gate ANDs the arena build, so a refused build cannot get here");
+        let mut sched = Scheduler::new(
+            &mut st,
+            opts.max_deltas,
+            opts.max_body_steps,
+            opts.time_limit,
+            opts.fork_modes,
+        );
+        let mut nk = native::kernel::NativeKernel::new(
+            ir,
+            arena,
+            &mut sched,
+            &class_new_sites,
+            opts.max_body_steps,
+        );
+        native::run::run(&mut nk, ir)
+    } else {
         let mut sched = Scheduler::new(
             &mut st,
             opts.max_deltas,

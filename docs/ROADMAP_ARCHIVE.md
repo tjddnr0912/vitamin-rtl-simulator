@@ -347,6 +347,75 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.298 ③층 S1d-4c-2c — 런 루프: **③층이 처음으로 설계를 돌린다**, 그리고 그 순간 loud 하나가 조용해졌다 (2026-08-04, branch feat-tier3-delta-loop, format 26 불변) ✅
+
+**계획의 슬라이스 경계를 측정이 옮겼다.** 계획은 "리전 큐 + 델타 루프 + in-body 웨이터 + `busy` +
+`flush_postponed`" 였다. 코퍼스를 먼저 재니 **72 설계 중 0 개가 전 프로세스 정지-없음**이었다 — 즉
+정지 모델이 **하나도 없는** 타임스텝 차분은 코퍼스 커버리지가 **0** 이고, 오직 그 게이트를 위해 쓴
+설계 위에서만 돌 수 있다(직전 네 슬라이스가 구멍을 찾아낸 바로 그 게이트 모양). 그리고 코퍼스의
+정지 터미네이터 **138 개가 전부 `Delay`/`Active`**(`Wait{Edge|Level|Expr}`·`Fork`·`Call` 은 0). →
+**오라클이 있는 단위는 "루프 + `Delay`"** 이고 in-body 웨이터는 다음 슬라이스다. 반대로 쪼갰으면
+코퍼스 설계를 **한 개도** 못 돌리는 게이트가 나왔다.
+
+**`Delay` 를 워크에 쓰되 두 구현자가 공유한다** — `k_now`/`k_schedule_resume` 두 커널 호출을 더해
+`Terminator::Delay` arm 을 `native/body.rs` 에 **한 번만** 적었다(리전 배정은 IEEE 규칙이고, 어디에
+파일링하는지만 구현자의 몫). `simulate` 배선까지 해서 `--backend native` 가 **실제로 실행**한다;
+세 번째 게이트 층 `native::run::executor_rows`(cont-assign·`final`·in-body 웨이터·거부 SysTask)가
+막는 설계는 VM 폴백.
+
+**⭐⭐ 두 적대 렌즈가 같은 결함으로 수렴했다 — 그리고 그것은 사다리 하강이다.** OOB/X 배열 인덱스에서
+엔진은 `warn_run_range`(**`Severity::Error`** → `ExitClass::HadErrors` → exit 1)를 내는데 아레나는
+**값만 맞추고 진단을 버렸다**. 소스에 리터럴 OOB 가 하나도 없는 평범한 FIFO(쓰기 포인터가 메모리를
+지나친다)에서 **stdout 은 바이트 동일한데 `FAIL` 이 `PASS` 로** 뒤집혔다. 트리는 이것을 이미 적어
+두고 있었으나(`native/write.rs`: *"값은 맞고 stderr 가 안 맞는다"*) **크기를 잘못 쟀다** — stderr 가
+아니라 **exit class** 다. 수정 = 아레나가 **세고**(읽기 경로가 `&self` 라 sink 에 못 닿는다), 워크가
+**문장 경계마다** 엔진 자신의 emitter 로 보고(`k_drain_diags`) → 캡·문구·severity 전부 재진술 0.
+
+**⭐⭐ 그 결함이 살아남은 이유는 게이트의 축이었다**: `simulate_capture` 의 sink 는 `RtlOutput` 만
+남기므로 stdout 비교는 **모든 진단에 구조적으로 눈멀어 있다**. `exit_class` 비교 한 줄이 즉시 잡는다.
+
+**⭐ 내 뮤테이션 26건이 게이트의 이빨 없음을 먼저 드러냈다(생존 12)** — 그리고 원인은 전부
+"판별하지 못하는 설계": `#0` 설계가 **순서를 뒤집지 못해** 리전 구분 3종이 통과 · 코퍼스에
+**정지하는 `always @(posedge)`** 가 없어 `busy` 양쪽이 통과 · self-write 설계가 그 넷을
+**감도 리스트에 안 넣어** `blocking_writer` 삭제가 통과 · 코퍼스 카운터는 **NBA 가 매 사이클
+`reset_edge_seen` 을 대신해** 세 클러스터 리셋이 전부 통과. 판별 설계 9개를 지어 **생존 12 → 2**,
+남은 둘은 등가 뮤테이션이라 **논증을 적었다**(`push_sorted` 의 `<=` 는 이 클래스에서 같은 proc 이
+두 번 큐잉될 수 없어 관측 불가 — teeth 주장 자체를 철회 · 초기화자 본문은 멱등).
+
+**리뷰가 더 잡은 것**: run.json 이 **두 층 판정을 실었다**(결정은 세 층으로 했는데) → 폴백마다
+`refused: null` — 설명이 일인 G2 rail 이 "아무것도 거부 안 했다"고 답하고 있었다 · `arm_t0` 에
+`fatal_init_proc_missing` 이 없어 잘린 `.velab` 트레일러가 **panic**(엔진은 loud) · `--backend`
+도움말이 *"NOT executable yet"* 이라고 거짓말 · `arm_t0` 가 엔진에 없는 early-return 을 갖고 있었다 ·
+`propagate` doc 이 **static Level 웨이터가 살아 있다는 걸 빠뜨렸고** 있지도 않은 prev-refresh 를
+설명했다 · `scan_arm` 주석이 *"never a panic"* 을 약속하는데 네이티브 런은 `activities` 가 비어 있다.
+
+**⚠️ 커버리지 정직**: `examples/*.sv` **4개 전부**와 `bench/` 둘이 **거부**된다(원인은 실 TB 가 전부
+갖는 것들 — `$dumpfile`/`$dumpvars`·모듈 포트[cont-assign 으로 낮아진다]·in-body `@(posedge clk);`).
+65/72 는 **루프의 커버리지**이지 아직 누가 쓸 설계의 커버리지가 아니다.
+
+**⭐⭐ 그리고 첫 수정의 게이트도 공허했다** — `exit_class` 를 비교하도록 고쳤는데 `warn_run_range` 는
+`st.had_error` 를 **세우지 않는다**(그 필드는 `$error` 계열 전용이고, 진단을 exit code 로 세는 것은
+**CLI 자기 sink**). 즉 방금 닫은 결함을 그 단언이 다시 통과시킨다 — OOB-NBA 설계가 양쪽에서 `Ok` 로
+읽히는 것으로 실측. 최종 형태 = **stdout 과 진단을 한 리스트에 인터리브해 비교**(sink 를 직접 짜서).
+그것이 순서 잔차까지 게이트 안으로 들여왔다.
+
+**⭐⭐ 그리고 재리뷰가 그 수정의 순서를 잡았다 — 두 번 정정해야 했다.** 아레나는 문장 경계에서
+보고하므로 읽기와 출력이 한 문장 안에 있으면(`$display("%0d", mem[9])`) 진단이 줄 **뒤에** 나온다.
+처음엔 "두 fd 를 합칠 때만 보이는 차이" 로 기록했는데, **`$error("%0d", mem[i])` 는 둘 다 stderr 로
+나가서** 같은 스트림 안에서 순서가 뒤집혔다(E4003 → E4002, 엔진은 반대) — 즉 기록이 틀렸다. 고칠 자리는
+아레나가 아니라 **포맷 엔진**이었다: `format_args_str_with` 는 리더와 (`&SimState` 를 통해) sink 를
+동시에 들고 있는 유일한 지점이라, 인자 렌더 직후·호출자 emit 직전에 드레인하면 엔진과 같은 순서가
+된다(`NetReader::take_deferred_range_reports`, 엔진은 기본 0 이라 그 경로는 구조적으로 no-op).
+리뷰어 설계 **26 전수 merged+stderr+stdout+exit 전부 동일**. 교훈 = **"관측 불가" 라고 적기 전에
+그 진단이 어느 스트림으로 나가는지 확인하라**.
+
+**게이트.** 5137 green(5128 **+9**) · clippy · fmt · format 26 불변 · 코퍼스 적격 **65 설계
+stdout+진단 인터리브 스트림 동일**(거부 breakdown 도 핀) · 판별 설계 19 + 거부 행 5 + 전용 6 ·
+적대 differential **316 설계 `backend: native` 확인 후 전수 비교, Finding 1 외 0 diff** ·
+PRE/POST 기본 백엔드 examples 4 **0 diff**(stdout·stderr·exit·VCD) · `--backend native` PRE/POST 6설계 0 diff ·
+**뮤테이션 34 중 31 kill**(생존 3 = `push_sorted` 의 `<=`·초기화자 재실행·잘린 트레일러 가드 — 전부
+등가이거나 소스에서 구성 불가, 각각 논증을 코드에 적었다).
+
 #### 4.5.297 ③층 S1d-4c-2b — 바디 워크: **차분이 실행한 것의 과반을 못 보고 있었다** (2026-08-04, branch feat-tier3-s1d4c2b, format 26 불변) ✅
 
 그라운딩이 4c-2 를 또 쪼갰다: **리전 큐를 짓기 전에 실행할 바디가 없다**(원래 "4b 바디 워크"가 dispatch

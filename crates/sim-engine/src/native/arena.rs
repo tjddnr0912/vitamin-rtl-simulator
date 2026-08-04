@@ -61,6 +61,26 @@ pub struct NetArena {
     /// ZERO as an invariant (writes mask; reads may therefore copy words
     /// verbatim and only re-mask the top word, mirroring the engine's read).
     pub buf: Vec<u64>,
+    /// Out-of-range array-word accesses that have not been REPORTED yet.
+    ///
+    /// The engine calls `SimState::warn_run_range` at the access itself; this
+    /// store cannot, because the read path is `&self` through `NetReader` and
+    /// the diagnostic sink lives on the scheduler, which the kernel owning this
+    /// arena borrows mutably (the reverse edge would be a cycle). So the access
+    /// COUNTS and the run loop reports, at the two seams where `now` is
+    /// unchanged since the access: after a body, and after the NBA apply.
+    ///
+    /// ⚠️ This is a real correctness surface, not bookkeeping. `warn_run_range`
+    /// emits `Severity::Error`, which latches `had_error` → `ExitClass::HadErrors`
+    /// → CLI exit 1. Without it a design whose write pointer walks past a memory
+    /// runs `--backend native` to a PASS verdict and the default backend to a
+    /// FAIL — measured on an ordinary FIFO, by both adversarial reviews of
+    /// S1d-4c-2c independently.
+    ///
+    /// The 8-per-run cap and its "further suppressed" note are NOT duplicated
+    /// here: draining calls the engine's own function, so the cap counter is the
+    /// engine's one and the messages are byte-identical by construction.
+    pub pending_range: std::cell::Cell<u32>,
 }
 
 impl NetArena {
@@ -101,6 +121,7 @@ impl NetArena {
             slots,
             ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
+            pending_range: std::cell::Cell::new(0),
         };
         // t0 init: extract the width-wide element init once, broadcast per element.
         for (n, nv) in ir.nets.iter().enumerate() {
@@ -229,9 +250,10 @@ impl NetArena {
 /// out-of-range all-X, and top-word masking, mirroring `SimState::read_net`'s
 /// flat arm byte-for-byte at the `Value` level.
 ///
-/// Deliberately NOT here yet: the engine's `warn_run_range` diagnostic on an
-/// OOB read (a stderr side effect owned by the run pipeline — S1d must emit it
-/// for stdout/stderr byte-parity), and the `read_scalar_words` fast path (an
+/// The engine's `warn_run_range` diagnostic on an OOB read is recorded here
+/// (`pending_range`) and emitted by the run loop — see that field's doc for why
+/// it cannot be emitted at the access. Still deliberately NOT here: the
+/// `read_scalar_words` fast path (an
 /// S2 concern; the default `None` keeps every read on the mirrored main path).
 /// Every other `NetReader` method keeps its default: in an ELIGIBLE design
 /// there are no heap kinds, no class handles, and no frame calls, so the
@@ -243,6 +265,10 @@ impl NetArena {
 /// eligible and this reader returns X where the engine returns the live flag.
 /// Whoever fixes the over-mark owes this an override.
 impl NetReader for NetArena {
+    fn take_deferred_range_reports(&self) -> u32 {
+        self.pending_range.replace(0)
+    }
+
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
         let s = self.slots[net as usize];
         let w = word.unwrap_or(0);
@@ -257,6 +283,8 @@ impl NetReader for NetArena {
         // real width class must carry an `is_real` slot flag through BOTH the
         // OOB and in-range arms, and add a Real leg to the mirror test.
         if w >= s.elems {
+            self.pending_range
+                .set(self.pending_range.get().saturating_add(1));
             let mut v = Value::xs(s.width.max(1), s.signed);
             v.width = s.width;
             return v;

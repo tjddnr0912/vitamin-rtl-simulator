@@ -244,6 +244,31 @@ pub(crate) trait Kernel {
     /// walk that skips this renders `$time` and `%m` from whatever process ran
     /// last. Both implementors forward to the same `exec::enter_body`.
     fn k_enter_body(&mut self, tmpl: u32);
+    /// CONTROL: the current simulation time, in global-precision ticks.
+    ///
+    /// The `Terminator::Delay` rule is `now + delay_ticks(amount)`, and both
+    /// halves have to come from the same clock: a kernel that read `now` from
+    /// somewhere other than where its nets live would file a resume under a tick
+    /// that has already passed, and a wheel key below `now` is never drained.
+    fn k_now(&self) -> u64;
+    /// CONTROL: the DELTA budget — how many region-cascade iterations one
+    /// timestep may take before it is declared an oscillator.
+    ///
+    /// Distinct from `k_max_deltas`, which despite its name is the IN-BODY step
+    /// budget. Both implementors read the field the CLI's `--max-deltas`
+    /// populates, so the two backends report the same oscillation at the same
+    /// point rather than at two thresholds that happen to be equal today.
+    fn k_delta_budget(&self) -> u64;
+    /// CONTROL: stop advancing time past this tick (`SimOpts::time_limit`).
+    fn k_time_limit(&self) -> Option<u64>;
+    /// CONTROL: park this activation and schedule its resume.
+    ///
+    /// `tick == now` lands in the CURRENT timestep's Active (or Inactive, for
+    /// `#0`) region; a later tick goes on the time wheel. Both implementors own
+    /// their own region queues, which is exactly why this is a kernel call: it
+    /// lets `run_body` decide WHEN to suspend — the IEEE rule — while leaving
+    /// WHERE the resume is filed to whoever owns the scheduler.
+    fn k_schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool);
     /// CONTROL: has a fatal been latched from a `&self` eval context?
     ///
     /// A fatal raised inside an expression (a frame body, a cont-assign rhs) has
@@ -254,6 +279,16 @@ pub(crate) trait Kernel {
     /// needs the same check, and reading the flag through its own path would be a
     /// second spelling of "when does a latched fatal take effect".
     fn k_call_fatal(&self) -> bool;
+    /// CONTROL: report any diagnostic the STORE could only record, not emit.
+    ///
+    /// Asymmetric on purpose, and the asymmetry is the whole content: the engine
+    /// store owns the diagnostic sink, so it emits at the access and this is a
+    /// no-op for it. The tier-3 arena is read through `&self` (`NetReader`) and
+    /// the sink lives on the scheduler its owner borrows mutably, so an
+    /// out-of-range array access can only be COUNTED there and reported here.
+    /// Called at the statement boundary — the finest granularity the seam has —
+    /// so an access and the `$display` in the NEXT statement stay in order.
+    fn k_drain_diags(&mut self);
     /// CONTROL: the IN-BODY step budget — how many blocks one activation may run
     /// without suspending.
     ///

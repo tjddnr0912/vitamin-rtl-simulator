@@ -123,6 +123,26 @@ fn executable_sites(ir: &SimIr, class_new_sites: &BTreeMap<u32, u32>) -> Vec<u32
         .collect()
 }
 
+/// Multiset difference `after - before`, sorted. One spelling for both sides, so
+/// a bug in the differencing cannot make them agree.
+fn resume_delta(
+    before: &[(u64, bool, u32, u32)],
+    after: &[(u64, bool, u32, u32)],
+) -> Vec<(u64, bool, u32, u32)> {
+    let mut rest: Vec<(u64, bool, u32, u32)> = before.to_vec();
+    let mut out = Vec::new();
+    for e in after {
+        match rest.iter().position(|x| x == e) {
+            Some(i) => {
+                rest.swap_remove(i);
+            }
+            None => out.push(*e),
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
 /// One design: mirror the stores, then run every executable statement through
 /// the shared executor on both kernels, comparing all three observables.
 /// Returns the number of (statement × state) comparisons made.
@@ -2124,15 +2144,14 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
     let Ok(arena) = NetArena::build(&ir, &opts) else {
         return 0;
     };
-    // Only processes the walk can run. A body that suspends is 4c-2c's.
-    let runnable: Vec<u32> = ir
-        .processes
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| {
-            crate::native::body::body_is_suspend_free(&ir, *i as u32, ir.processes[*i].entry)
-        })
-        .map(|(i, _)| i as u32)
+    // Only processes the walk can run. TWO conditions, and the second was
+    // discovered by this gate the moment S1d-4c-2c made `Delay` walkable: the
+    // corpus bodies that suspend also carry `$dumpfile`/`$dumpvars`, which
+    // `k_dispatch_systask` refuses, so admitting them on the terminator scan
+    // alone panicked. Both halves are the SAME predicate the production run gate
+    // asks (`native::run::body_admissible`) rather than a local restatement.
+    let runnable: Vec<u32> = (0..ir.processes.len() as u32)
+        .filter(|&i| crate::native::run::body_admissible(&ir, i))
         .collect();
     if runnable.is_empty() {
         return 0;
@@ -2180,6 +2199,8 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
 
         for &pi in &runnable {
             let entry = ir.processes[pi as usize].entry;
+            let before_e = sched_e.pending_resumes_for_test();
+            let before_n = nk.pending_resumes_for_test();
             let step_e = crate::exec::run_process(&mut sched_e, pi, entry);
             let step_n = crate::native::body::run_body(&mut nk, &ir, pi, entry);
             assert_eq!(
@@ -2205,6 +2226,21 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
                     "{name}/pass{pass}/proc{pi}: NBA entry diverged"
                 );
             }
+            // THE RESUME, which neither the store nor the NBA queue can see: a
+            // `Terminator::Delay` writes nothing at all — its whole effect is
+            // WHERE it filed the activation. Compared as a multiset difference
+            // against the pre-body snapshot because the engine enters with a t0
+            // Active queue this kernel does not have. (Intra-tick ORDER is not
+            // compared here and does not need to be: a body suspends at most
+            // once, so each delta is a single entry. Order is what the
+            // end-to-end run differential compares, through stdout.)
+            let after_e = sched_e.pending_resumes_for_test();
+            let after_n = nk.pending_resumes_for_test();
+            assert_eq!(
+                resume_delta(&before_e, &after_e),
+                resume_delta(&before_n, &after_n),
+                "{name}/pass{pass}/proc{pi}: the two walks filed the resume differently"
+            );
             // …then APPLY them, so the queued values land in the stores and the
             // comparison below covers what the NBAs actually wrote.
             sched_e.apply_nba();
@@ -2259,15 +2295,15 @@ fn s1d4c2b_body_walk_matches_the_engine_over_corpus() {
         }
         compared += n;
     }
-    // Not a floor. A design with no suspend-free process contributes 0, and the
-    // count of those is itself the measurement: only **30 of 72** corpus designs
-    // carry a process this walk can run — the other 42 suspend somewhere in every
-    // body (a clock generator's `forever #5` is the common shape). So this gate
-    // covers well under half the corpus until S1d-4c-2c builds the region queues,
-    // and pinning the number keeps that visible rather than implied.
+    // Not a floor, and the number moved with S1d-4c-2c: **30 of 72** designs
+    // before, **58** now. The 28 that joined are the ones whose every body
+    // suspends on a `#delay` — a clock generator's `forever #5` is the common
+    // shape — which the walk refused when `Delay` had no arm. The 14 still
+    // absent contribute no admissible process at all: their bodies carry a
+    // refused system task, or the arena will not build.
     assert_eq!(
         (designs, compared),
-        (30, 268),
+        (58, 380),
         "body-walk coverage moved — re-pin deliberately"
     );
 }
@@ -2301,9 +2337,7 @@ fn s1d4c2b_body_walk_agrees_on_context_and_the_step_guard() {
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
     let scopes: std::collections::BTreeSet<&String> = (0..ir.processes.len())
-        .filter(|&pi| {
-            crate::native::body::body_is_suspend_free(&ir, pi as u32, ir.processes[pi].entry)
-        })
+        .filter(|&pi| crate::native::run::body_admissible(&ir, pi as u32))
         .filter_map(|pi| opts.proc_scopes.get(pi))
         .collect();
     assert!(
@@ -2332,8 +2366,7 @@ fn s1d4c2b_body_walk_agrees_on_context_and_the_step_guard() {
     let empty: BTreeMap<u32, u32> = BTreeMap::new();
     let pi = (0..ir2.processes.len() as u32)
         .find(|&p| {
-            crate::native::body::body_is_suspend_free(&ir2, p, ir2.processes[p as usize].entry)
-                && ir2.processes[p as usize].body.len() > 1
+            crate::native::run::body_admissible(&ir2, p) && ir2.processes[p as usize].body.len() > 1
         })
         .expect("a multi-block runnable body");
     // Budget of 20 against 40 iterations: the guard MUST fire on both sides. The
@@ -2447,10 +2480,10 @@ fn s1d4c2b_body_walk_agrees_on_multi_block_bodies() {
         // The design must actually have a MULTI-BLOCK runnable body, or it is
         // testing the single-block path under a name that says otherwise.
         let (ir, _) = build_with_opts(src);
-        let multi = ir.processes.iter().enumerate().any(|(pi, p)| {
-            p.body.len() > 1
-                && crate::native::body::body_is_suspend_free(&ir, pi as u32, ir.processes[pi].entry)
-        });
+        let multi =
+            ir.processes.iter().enumerate().any(|(pi, p)| {
+                p.body.len() > 1 && crate::native::run::body_admissible(&ir, pi as u32)
+            });
         assert!(multi, "{name}: no multi-block suspend-free body");
         let n = s1d4c2b_body_walk(src, name, 0x4C2B_0000 + i as u64);
         assert!(n > 0, "{name}: produced no comparisons");
@@ -2462,7 +2495,7 @@ fn s1d4c2b_body_walk_agrees_on_multi_block_bodies() {
     );
 }
 
-/// `body_is_suspend_free` must answer about the entry the WALK will use, not
+/// `body_is_walkable` must answer about the entry the WALK will use, not
 /// about the process's declared entry.
 ///
 /// The two coincide for every caller today, which is exactly why the bug was
@@ -2476,12 +2509,18 @@ fn s1d4c2b_body_walk_agrees_on_multi_block_bodies() {
 /// so the design below is `eligible: true, buildable: true`.
 #[test]
 fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
+    // The unreachable block must end in a terminator the scan REFUSES, and
+    // S1d-4c-2c narrowed that set: `#5` used to qualify and no longer does
+    // (`Delay` is walkable now), so the design carries an `@(posedge clk)`
+    // instead. Reusing the old source here would have left this test asserting
+    // its property against a terminator that satisfies it trivially — the same
+    // vacuity it exists to prevent.
     let src = "module t;\n\
-                 reg [7:0] y;\n\
+                 reg [7:0] y; reg clk;\n\
                  initial begin : blk\n\
                    y = 8'd1;\n\
                    disable blk;\n\
-                   #5 y = 8'd2;\n\
+                   @(posedge clk) y = 8'd2;\n\
                  end\n\
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
@@ -2515,34 +2554,30 @@ fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
     }
     let suspending_unreachable: Vec<u32> = (0..body.len() as u32)
         .filter(|&b| !reachable[b as usize])
-        .filter(|&b| {
-            matches!(
-                body[b as usize].term,
-                sim_ir::Terminator::Delay { .. } | sim_ir::Terminator::Wait { .. }
-            )
-        })
+        .filter(|&b| matches!(body[b as usize].term, sim_ir::Terminator::Wait { .. }))
         .collect();
     assert!(
         !suspending_unreachable.is_empty(),
-        "the design must have a SUSPENDING block unreachable from entry, or it \
-         cannot distinguish the two spellings — blocks={}, reachable={}",
+        "the design must have a REFUSED-terminator block unreachable from entry, \
+         or it cannot distinguish the two spellings — blocks={}, reachable={}",
         body.len(),
         reachable.iter().filter(|b| **b).count()
     );
 
     // From the declared entry the body IS suspend-free …
     assert!(
-        crate::native::body::body_is_suspend_free(&ir, proc, entry),
-        "scanning from the declared entry should find no suspension"
+        crate::native::body::body_is_walkable(&ir, proc, entry),
+        "scanning from the declared entry should find no refused terminator"
     );
     // … and from the resume point it is NOT. A predicate that ignored its entry
     // would answer `true` here and the walk would then panic on a caller that
     // had asked and been told yes.
     for b in suspending_unreachable {
         assert!(
-            !crate::native::body::body_is_suspend_free(&ir, proc, b),
-            "block {b} suspends, but the scan called it suspend-free — it is \
-             answering about the process entry rather than the given one"
+            !crate::native::body::body_is_walkable(&ir, proc, b),
+            "block {b} ends in a refused terminator, but the scan called it \
+             walkable — it is answering about the process entry rather than the \
+             given one"
         );
     }
 }

@@ -759,10 +759,21 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
     let m3 = read(&obs3.join("run.json"));
     assert_eq!(field(&m1, "backend"), "\"vm\"");
     assert_eq!(field(&m2, "backend"), "\"interp\"");
-    // ③층: requested but not honored — the PAIR is what shows it, since
-    // `native.refused` is null here (nothing about the DESIGN refuses it).
-    assert_eq!(field(&m3, "backend"), "\"vm\"", "{m3}");
+    // ③층 (S1d-4c-2c): requested AND honored. This assertion used to read
+    // `"vm"`, and the change is the slice: `PASS_SV` has no continuous assign,
+    // no in-body waiter and no refused system task, so all three gate layers
+    // pass and the tier-3 run loop executes it. Updated rather than deleted —
+    // the old value encoded "there is no native executor yet", which is exactly
+    // what stopped being true. The fall-back PAIR is still asserted, on a design
+    // that is genuinely refused, in `run_json_reports_native_fallback` below.
+    assert_eq!(field(&m3, "backend"), "\"native\"", "{m3}");
     assert_eq!(field(&m3, "backend_requested"), "\"native\"", "{m3}");
+    // …and running it natively must not change one byte of what it printed.
+    assert_eq!(
+        std::fs::read_to_string(obs1.join("results.jsonl")).unwrap_or_default(),
+        std::fs::read_to_string(obs3.join("results.jsonl")).unwrap_or_default(),
+        "the native run's ledger differs from the VM's"
+    );
     assert_eq!(field(&m1, "backend_requested"), "\"vm\"");
     assert_eq!(field(&m3, "native"), field(&m1, "native"), "verdict moved");
     assert_eq!(field(&m3, "codegen"), field(&m1, "codegen"), "census moved");
@@ -772,6 +783,31 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
         "the census must not depend on the selected executor\n{m1}\n{m2}"
     );
     assert_eq!(field(&m1, "native"), field(&m2, "native"));
+}
+
+/// The FALL-BACK half of the pair above, on a design that is genuinely refused.
+///
+/// `--backend native` may not be silently ignored, and it may not be silently
+/// honored either: run.json has to carry both what was asked and what ran. A
+/// continuous assign is the refusal used here because it is the one the run gate
+/// adds on top of design eligibility (S1d-4d settles cont-assigns) — note
+/// `native.eligible` stays TRUE, which is the whole point of the layering: the
+/// design is within v1's scope, today's executor just cannot run it.
+#[test]
+fn run_json_reports_native_fallback_on_a_refused_design() {
+    const CA_SV: &str = "module top; wire [7:0] w; reg [7:0] r;\n\
+         assign w = r + 8'd1;\n\
+         initial begin r = 8'd1; #1 $display(\"w=%0d\", w); $finish; end endmodule\n";
+    let (_, code, obs) = run(CA_SV, &["--backend", "native"]);
+    assert_eq!(code, 0);
+    let m = read(&obs.join("run.json"));
+    assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
+    assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
+    assert!(
+        field(&m, "native").contains("\"eligible\": true"),
+        "a cont-assign design is within v1's SCOPE — the refusal is the \
+         executor's, not the gate's:\n{m}"
+    );
 }
 
 /// S0: the `native` object pins the ③층 design-level verdict. Fork + queue +

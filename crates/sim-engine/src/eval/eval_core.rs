@@ -198,6 +198,24 @@ pub trait NetReader {
     fn dyn_size(&self, _net: u32) -> Option<u64> {
         None
     }
+    /// How many out-of-range array accesses has this reader DEFERRED — i.e.
+    /// detected but not yet reported — and reset the count.
+    ///
+    /// The engine store reports at the access (`SimState::read_net` calls
+    /// `warn_run_range` inline) and so returns the default 0. The tier-3 arena
+    /// cannot: `read_net` takes `&self` and the diagnostic sink lives on the
+    /// scheduler its owner borrows mutably, so it COUNTS and someone with the
+    /// sink reports for it.
+    ///
+    /// This exists on `NetReader` rather than on the arena alone because of
+    /// ORDER. Whoever holds both the reader and the sink can drain at the right
+    /// moment — the format engine does it after rendering and before the caller
+    /// emits, which is what puts an out-of-range read inside `$error("%0d",
+    /// mem[i])` BEFORE the `$error` line, exactly where the engine puts it.
+    /// Measured: without this the two diagnostics came out swapped on stderr.
+    fn take_deferred_range_reports(&self) -> u32 {
+        0
+    }
     /// ⓑ-breadth (v15): element-value snapshot of a dyn handle in deterministic
     /// order, for the array reduction/ordering/locator methods. `None` for a
     /// non-handle / string handle (the caller X-poisons); `Some(vec![])` for an

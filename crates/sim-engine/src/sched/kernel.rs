@@ -1014,8 +1014,25 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_enter_body(&mut self, tmpl: u32) {
         crate::exec::enter_body(self.st, tmpl as usize);
     }
+    fn k_now(&self) -> u64 {
+        self.st.now
+    }
+    fn k_delta_budget(&self) -> u64 {
+        self.max_deltas
+    }
+    fn k_time_limit(&self) -> Option<u64> {
+        self.time_limit
+    }
+    fn k_schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool) {
+        self.schedule_resume(proc, block, tick, inactive);
+    }
     fn k_call_fatal(&self) -> bool {
         self.st.call_fatal.get()
+    }
+    fn k_drain_diags(&mut self) {
+        // Nothing to drain: this store emits at the access (`warn_run_range` is
+        // called from `read_net` and from the write funnel). A no-op here is the
+        // honest answer, not a stub — see the trait doc.
     }
     fn k_max_deltas(&self) -> u64 {
         self.max_deltas_guard()

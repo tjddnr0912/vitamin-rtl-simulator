@@ -28,32 +28,44 @@
 //! `fork_modes` is a `.velab` trailer, and `fatal_fork_mode_missing` exists
 //! precisely because a truncated one can arrive. With it lost, the gate sees an
 //! empty table and calls a `Fork`-carrying design eligible. What actually
-//! protects THIS walk is `body_is_suspend_free` returning `false` on `Fork` and
+//! protects THIS walk is `body_is_walkable` returning `false` on `Fork` and
 //! `Call` — the gate is the argument, the scan is the guard.
 //!
-//! ## What is NOT here
+//! ## Suspension (S1d-4c-2c) and what is still NOT here
 //!
-//! `Delay` and `Wait` SUSPEND, and a suspension needs somewhere to be resumed
-//! from — the region queues and the delta loop, which are S1d-4c-2c. Their arms
-//! here are `unreachable!`, so a caller that skips the precondition gets a LOUD
-//! panic in every profile, not a quiet stop — an earlier version of this
-//! paragraph described the opposite failure mode, and describing a panic as a
-//! silent hang is worse than saying nothing.
+//! `Delay` now has an arm, and it is written HERE rather than in the tier-3 run
+//! loop on purpose: the decision it encodes — Inactive iff `#0` or zero ticks,
+//! resume at `now + ticks` saturating — is an IEEE rule, not a storage question,
+//! and the two things it needs from the implementor (`k_now`,
+//! `k_schedule_resume`) are kernel calls. So both backends get the rule from one
+//! spelling, and the engine's copy in `run_process` is the one this was checked
+//! against rather than a twin that could drift.
 //!
-//! `body_is_suspend_free(ir, proc, entry)` is the precondition, and it must be
+//! `Wait` still has no arm. It suspends on an EVENT rather than a time, which
+//! needs a waiter table with armed snapshots — and the corpus contains exactly
+//! zero of them (measured: 138 suspending terminators, all `Delay`), so it is
+//! the next slice, built against dedicated designs rather than pretended here.
+//!
+//! `body_is_walkable(ir, proc, entry)` is the precondition, and it must be
 //! asked about the SAME entry the walk will use. There is a second, separate
 //! obligation the caller also owns: a body containing a `SysTask` this kernel
 //! refuses (`$dumpvars`, `$monitor`, `$strobe`, `$dumpfile`, `$fclose`,
 //! `$writemem*` — all `eligible: true, buildable: true`) panics inside
-//! `k_dispatch_systask`. No corpus body this walk runs contains a `SysTask` at
-//! all, so nothing exercises it; 4c-2c's scheduler must check both.
+//! `k_dispatch_systask`. `native::run::runnable` is where both are now asked.
 
 use sim_ir::{SimIr, Terminator};
 
 use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 
 /// Can this process body be executed by the walk below — i.e. does it reach no
-/// suspending or gate-refused terminator?
+/// terminator the walk has no arm for?
+///
+/// ⚠️ **`Delay` was in this set until S1d-4c-2c and no longer is.** The name
+/// changed with the meaning (it used to be called `body_is_suspend_free`)
+/// deliberately: a predicate whose truth set moves while its name stays put is
+/// how a caller ends up relying on the OLD property. What it refuses now is
+/// `Wait` (the in-body waiter model, next slice), `Fork` and `Call` (both
+/// gate-refused).
 ///
 /// A WHOLE-BODY scan, not a first-block one: a `Delay` behind two `Goto`s
 /// suspends just as much as one in the entry block. The engine's own
@@ -77,7 +89,7 @@ use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 #[allow(dead_code)] // The production consumer is S1d-4c-2c's region loop; today
                     // only the body differential calls this. Saying so beats a fake call
                     // site or a widened visibility.
-pub(crate) fn body_is_suspend_free(ir: &SimIr, proc: u32, entry: u32) -> bool {
+pub(crate) fn body_is_walkable(ir: &SimIr, proc: u32, entry: u32) -> bool {
     let body = &ir.processes[proc as usize].body;
     // A body with no blocks answers "nothing to suspend on" rather than indexing
     // out of range. Not constructible from elaborate today; a `pub(crate)`
@@ -105,11 +117,18 @@ pub(crate) fn body_is_suspend_free(ir: &SimIr, proc: u32, entry: u32) -> bool {
                 stack.push(*else_bb);
             }
             Terminator::Return => {}
-            // Suspends (4c-2c) or is gate-refused (fork/call).
-            Terminator::Delay { .. }
-            | Terminator::Wait { .. }
-            | Terminator::Fork { .. }
-            | Terminator::Call { .. } => return false,
+            // A `Delay` SUSPENDS but the walk now has an arm for it, so it does
+            // not disqualify the body — it only means the walk can return
+            // `Step::Suspended` and the caller must have somewhere to resume it
+            // from. The resume block is pushed as a scan target for the same
+            // reason the `Goto` target is: a `Wait` behind a `#5` is still a
+            // `Wait` this walk cannot execute.
+            Terminator::Delay { resume, .. } => stack.push(*resume),
+            // No arm in the walk: `Wait` needs the in-body waiter model, and
+            // `Fork`/`Call` are gate-refused.
+            Terminator::Wait { .. } | Terminator::Fork { .. } | Terminator::Call { .. } => {
+                return false
+            }
         }
     }
     true
@@ -118,7 +137,7 @@ pub(crate) fn body_is_suspend_free(ir: &SimIr, proc: u32, entry: u32) -> bool {
 /// Run one process body to completion. `Scheduler::run_process` for the class the
 /// S0 gate admits, restated over a `Kernel`.
 ///
-/// CALLER OBLIGATION: `body_is_suspend_free(ir, proc, entry)` must hold for the
+/// CALLER OBLIGATION: `body_is_walkable(ir, proc, entry)` must hold for the
 /// SAME `entry` passed here. Checked in debug rather than assumed — and note the
 /// failure mode is a LOUD panic in every profile (the arms below are
 /// `unreachable!`), not a quiet stop. An earlier version of this sentence said
@@ -128,9 +147,9 @@ pub(crate) fn body_is_suspend_free(ir: &SimIr, proc: u32, entry: u32) -> bool {
 #[allow(dead_code)] // ditto — nothing SCHEDULES a tier-3 process yet.
 pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) -> Step {
     debug_assert!(
-        body_is_suspend_free(ir, proc, entry),
-        "run_body entered for a body that can suspend — the walk has nowhere to \
-         resume from until S1d-4c-2c"
+        body_is_walkable(ir, proc, entry),
+        "run_body entered for a body reaching a terminator the walk has no arm \
+         for (`Wait`, `Fork` or `Call`)"
     );
     let mut bb = entry;
     let mut guard: u64 = 0;
@@ -172,6 +191,11 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
             if k.k_call_fatal() {
                 return Step::Fatal;
             }
+            // A store that can only RECORD a diagnostic reports it here, at the
+            // statement boundary, so an out-of-range access and the `$display`
+            // in the next statement come out in the order the engine produces
+            // them. No-op for `K = Scheduler`, which emits at the access.
+            k.k_drain_diags();
         }
         match &block.term {
             Terminator::Goto { target } => bb = *target,
@@ -197,16 +221,46 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 k.k_rearm(proc);
                 return Step::Done;
             }
+            // SUSPEND (S1d-4c-2c). `run_process`'s non-frame branch, verbatim —
+            // and it is written ONCE here rather than twice because the two
+            // things it needs are kernel calls: `k_now` (the clock the resume
+            // tick is measured from) and `k_schedule_resume` (whoever owns the
+            // region queues). The frame branch is absent for the same reason
+            // `Terminator::Call` is: `NetArena::build` refuses a non-empty
+            // `func_table`, so `in_frame` is structurally false here.
+            //
+            // The two rules that are NOT arithmetic:
+            //  - `#0` AND a `#d` that evaluates to ZERO ticks both go INACTIVE.
+            //    An X/Z delay amount yields 0 ticks (`delay_ticks_of`), so
+            //    `#(1'bx)` is a `#0` — dropping the `ticks == 0` half would put
+            //    it back in Active and let it run before this delta's other
+            //    processes.
+            //  - the tick is `now + ticks` SATURATING. `delay_ticks_of` returns
+            //    `u64::MAX` for a negative real delay, which must mean "never
+            //    fires", and a wrapping add would turn it into a resume in the
+            //    past.
+            Terminator::Delay {
+                amount,
+                region,
+                resume,
+            } => {
+                let ticks = k.k_delay_ticks(*amount);
+                let inactive = matches!(region, sim_ir::DelayRegion::Inactive) || ticks == 0;
+                let tick = k.k_now().saturating_add(ticks);
+                k.k_schedule_resume(proc, *resume, tick, inactive);
+                return Step::Suspended;
+            }
             // EXPLICIT arms, not a `_`: each is unreachable for a DIFFERENT
             // reason, and a wildcard would let a future gate widening land here
-            // silently. `Delay`/`Wait` need the region queues; `Fork`/`Call` are
-            // refused by `fork_modes` and by `NetArena::build`'s `func_table`
-            // rejection respectively.
-            Terminator::Delay { .. } | Terminator::Wait { .. } => {
+            // silently. `Wait` needs the in-body waiter model (the next slice);
+            // `Fork`/`Call` are refused by `fork_modes` and by `NetArena::build`'s
+            // `func_table` rejection respectively.
+            Terminator::Wait { .. } => {
                 unreachable!(
-                    "tier-3 body walk reached a suspending terminator — \
-                     `body_is_suspend_free` was not consulted (S1d-4c-2c builds the \
-                     region queues this would resume from)"
+                    "tier-3 body walk reached an in-body waiter — `body_is_walkable` \
+                     was not consulted (the `Wait` waiter model is the slice after \
+                     S1d-4c-2c; the corpus contains none, so it is built against \
+                     dedicated designs)"
                 )
             }
             Terminator::Fork { .. } => unreachable!(
