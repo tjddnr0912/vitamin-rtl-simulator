@@ -72,7 +72,7 @@ impl diag::LogSink for MergedSink {
 /// those rather than letting them pass silently as agreements.
 fn agree(src: &str, name: &str) -> Result<(), &'static str> {
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts)?;
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())?;
 
     let vm = SimOpts {
         backend: Backend::Bytecode,
@@ -160,9 +160,9 @@ fn s1d4c2c_native_run_matches_the_vm_over_corpus() {
         "corpus coverage moved — re-pin deliberately. ran={ran} refused={refused:?}"
     );
     assert_eq!(
-        refused.get("continuous assigns (S1d-4d settles them)"),
+        refused.get("a delayed continuous assign (`assign #d`)"),
         Some(&7),
-        "the only expected refusal is the cont-assign row: {refused:?}"
+        "the only expected refusal is the delayed-CA row: {refused:?}"
     );
 }
 
@@ -178,7 +178,8 @@ fn s1d4c2c_vcd_designs_are_refused_not_run() {
         }
         with_dump += 1;
         let (ir, opts) = build_with_opts(&d.src);
-        let verdict = crate::native::run::runnable(&ir, &opts);
+        let verdict =
+            crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len());
         // The ROW is asserted only where it is the only candidate. A design that
         // also has continuous assigns is refused by that row first (the checks
         // are ordered), and pinning the message there would be pinning the ORDER
@@ -721,6 +722,140 @@ endmodule
 "#
             .to_string(),
         ),
+        // CONTINUOUS ASSIGNS (S1d-4d-1). The corpus contributes ZERO coverage
+        // here — its cont-assign designs all pair a plain assign with a delayed
+        // one, so every last of them is still refused — and a `panic!` at the
+        // top of `settle_cont_assigns` left the whole workspace green before
+        // these existed. Each design below is named for the mutation it kills.
+        //
+        // The t0 settle, and its changed set surviving `arm_t0`. `w` is
+        // established once, at t0, and never moves again: if the settle does not
+        // run, or `arm_t0` drops its dirt, `always @(w)` never fires and the run
+        // is silently short one line at exit 0.
+        (
+            "t0_settle_change_reaches_a_level_process",
+            r#"
+module top;
+  wire w;
+  assign w = 1'b1;
+  always @(w) $display("saw w=%b at %0t", w, $time);
+  initial begin #10 $display("done"); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A PORT-BOUND CLOCK: the settle drives a child's `clk` through a
+        // continuous assign, and the edge has to reach the child's static
+        // sensitivity — which only happens if a settle that moved a net runs
+        // change propagation.
+        (
+            "settle_drives_a_port_bound_clock",
+            r#"
+module child(input c, output reg [7:0] n);
+  initial n = 8'd0;
+  always @(posedge c) n = n + 8'd1;
+endmodule
+module top;
+  reg drv;
+  wire gated;
+  wire [7:0] cnt;
+  assign gated = drv;
+  child u(.c(gated), .n(cnt));
+  initial begin drv = 1'b0; #1 drv = 1'b1; #1 drv = 1'b0; #1 drv = 1'b1; #2 $display("cnt=%0d", cnt); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // An IMPURE rhs (`$random`) is one `levelize::ca_deps` refuses to
+        // certify, so it lives in `ca_always` and must be visited every pass
+        // whatever the dirty worklist says. Dropping `ca_always` freezes it —
+        // and the rng stream makes the visit COUNT observable, not just the
+        // final value.
+        (
+            "impure_cont_assign_is_visited_every_pass",
+            r#"
+module top;
+  reg [7:0] a;
+  wire [31:0] r;
+  reg [7:0] seen;
+  assign r = $random;
+  initial begin a = 8'd0; seen = 8'd0; #1 a = 8'd1; #1 a = 8'd2; #1 $display("seen=%0d r=%0d", seen, r); $finish; end
+  always @(r) seen = seen + 8'd1;
+endmodule
+"#
+            .to_string(),
+        ),
+        // A cont-assign RHS that reads OUT OF RANGE with a MOVING index. Every
+        // re-evaluation emits another `E4002`, so the visit set is observable
+        // in the diagnostic stream — this is what proved that dropping the
+        // worklist and visiting all assigns each pass is NOT byte-identical.
+        (
+            "cont_assign_oob_read_counts_visits",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [7:0] idx;
+  wire [7:0] o;
+  assign o = mem[idx];
+  initial begin
+    mem[0] = 8'd1; idx = 8'd0;
+    #1 idx = 8'd9;
+    #1 idx = 8'd10;
+    #1 $display("o=%0d", o);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A settle-produced change racing an Active-queue write: the settle runs
+        // at the TOP of the delta, before bodies drain, so `b` is already the
+        // settled value when the process reads it.
+        (
+            "settle_runs_before_the_active_batch",
+            r#"
+module top;
+  reg [7:0] a;
+  wire [7:0] b;
+  reg [7:0] saw;
+  assign b = a + 8'd1;
+  initial begin a = 8'd0; saw = 8'd0; end
+  always @(a) saw = b;
+  initial begin #1 a = 8'd5; #1 $display("saw=%0d b=%0d", saw, b); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The t0 settle must run BEFORE the initializers, because a declaration
+        // initializer can READ a continuously-assigned net. Without it `x`
+        // samples X instead of 5 — and the in-loop settle is too late, it runs
+        // after `arm_t0`.
+        (
+            "declaration_initializer_reads_a_settled_net",
+            r#"
+module top;
+  wire [7:0] w;
+  assign w = 8'd5;
+  reg [7:0] x = w;
+  initial begin #1 $display("x=%0d", x); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // An out-of-range read from a cont-assign RHS in a design with NO
+        // process at all: the settle's own drain is the only thing that can
+        // report it, since no body runs and no formatter is ever called.
+        (
+            "cont_assign_oob_with_no_process_at_all",
+            r#"
+module top;
+  reg [7:0] mem [0:1];
+  wire [7:0] o;
+  assign o = mem[9];
+endmodule
+"#
+            .to_string(),
+        ),
         // OUT-OF-RANGE array access — the silent-wrong this slice's own review
         // found, and the only cover for it. The write pointer walks past the
         // memory in ordinary clocked RTL, with no literal OOB anywhere in the
@@ -784,7 +919,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 34, "adversarial set shrank");
+    assert_eq!(designs.len(), 41, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -802,14 +937,40 @@ fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
 fn s1d4c2c_each_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
         (
-            "continuous assign",
-            "continuous assigns (S1d-4d settles them)",
+            "delayed continuous assign",
+            "a delayed continuous assign (`assign #d`)",
             r#"
 module top;
   wire [7:0] w;
   reg [7:0] r;
-  assign w = r + 8'd1;
-  initial begin r = 8'd1; #1 $display("w=%0d", w); $finish; end
+  assign #2 w = r + 8'd1;
+  initial begin r = 8'd1; #5 $display("w=%0d", w); $finish; end
+endmodule
+"#,
+        ),
+        (
+            "multi-driven net",
+            "a multi-driven net (wire resolution)",
+            r#"
+module top;
+  wire [7:0] w;
+  reg [7:0] a, b;
+  assign w = a;
+  assign w = b;
+  initial begin a = 8'hFF; b = 8'h0F; #1 $display("w=%0h", w); $finish; end
+endmodule
+"#,
+        ),
+        (
+            "wired-and net",
+            "a `wand`/`wor` net (wired resolution)",
+            r#"
+module top;
+  wand w;
+  reg a, b;
+  assign w = a;
+  assign w = b;
+  initial begin a = 1'b1; b = 1'b0; #1 $display("w=%0b", w); $finish; end
 endmodule
 "#,
         ),
@@ -864,7 +1025,7 @@ endmodule
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
         assert_eq!(
-            crate::native::run::runnable(&ir, &opts),
+            crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len()),
             Err(*row),
             "{what}: wrong refusal row"
         );
@@ -878,7 +1039,7 @@ endmodule
             e.refused
         );
     }
-    assert_eq!(cases.len(), 5, "refusal-row coverage moved");
+    assert_eq!(cases.len(), 7, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit
@@ -1009,7 +1170,8 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
+        .expect("runnable");
     let mk = |backend| SimOpts {
         backend,
         max_deltas: 64,
@@ -1052,7 +1214,8 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
+        .expect("runnable");
     let mk = |backend| SimOpts {
         backend,
         max_deltas: 12,
@@ -1108,7 +1271,8 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
+        .expect("runnable");
     let mk = |backend| SimOpts {
         backend,
         max_body_steps: 500,
@@ -1142,7 +1306,8 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
+        .expect("runnable");
     let mk = |b| SimOpts {
         backend: b,
         time_limit: Some(5),

@@ -391,6 +391,12 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // the only thing that stops it being armed at t0. Without it the tier-3
         // run gate's `final` row is unreachable from any test.
         final_procs: sc.final_procs,
+        // …and the wired-resolution sets. `wand`/`wor` lowers as ordinary
+        // continuous assigns PLUS these sidecars, so without them the tier-3
+        // run gate's wired row is unreachable from any test and a `wand` design
+        // reads as an ordinary multi-driven net.
+        wired_and_nets: sc.wired_and_nets,
+        wired_or_nets: sc.wired_or_nets,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

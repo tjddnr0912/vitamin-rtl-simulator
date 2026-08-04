@@ -372,6 +372,13 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         class_new_sites: &'i BTreeMap<u32, u32>,
         max_body_steps: u64,
     ) -> NativeKernel<'i, 'a, 'b> {
+        // The cont-assign dependency map is the SCHEDULER's, already derived
+        // through `levelize::ca_deps`; the arena's write funnel maintains the
+        // worklist from it rather than deriving a second one.
+        let mut arena = arena;
+        arena
+            .ch
+            .install_ca_deps(&sched.st.ca_of_net, ir.cont_assigns.len());
         NativeKernel {
             ir,
             arena,

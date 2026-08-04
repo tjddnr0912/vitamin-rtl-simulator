@@ -346,6 +346,13 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
+> **S1d-4d-1 완료 (2026-08-05 · §4.5.300) — zero-delay cont-assign settle.** 거부가 blanket 에서
+> **delayed·wired·multi-driver** 셋으로 좁아졌고 **picorv32 가 네이티브로 돌며 바이트 일치**한다.
+> ⭐⭐ 내 byte-identity 논증이 **값 축에서만** 참이었다(워크리스트 없이 매 패스 방문 = 재평가마다
+> `E4002` 재발화 · picorv32 6→9) · ⭐⭐ 두 렌즈가 **`arm_t0` 가 t0 settle 의 변경 집합을 버린다**로
+> 수렴(퍼즈 270 중 49 발산) · ⭐⭐ **게이트 이빨 0**(settle 최상단 panic 이 전 스위트 통과 — 신호는
+> `ran` 이 65 에서 안 움직인 것이었다).
+>
 > **S1d-4c-2d 완료 (2026-08-04 · §4.5.299) — in-body 웨이터.** `Wait{Edge|Level|Expr}` 를 ③층이
 > 실행한다(`k_suspend_on` · 공유 워크의 `Wait` 암 · `fire_waiters`). ⭐ 그라운딩이 큐를 정정: **`Named`
 > 는 구성 불가**(named event → 카운터 넷 → `Level`). ⭐⭐ 두 렌즈가 같은 silent-wrong 으로 수렴 —

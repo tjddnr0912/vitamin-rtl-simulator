@@ -72,6 +72,23 @@ pub struct DirtyChannel {
     /// The activity currently executing a body, when the write is a BLOCKING
     /// procedural one. `None` for NBA / continuous-assign / clocking writers.
     pub blocking_writer: Option<u32>,
+    /// DIRTY-SETTLE (S1d-4d-1): net → the continuous assigns whose value READS
+    /// it, and the worklist of assigns a settle pass must re-evaluate.
+    ///
+    /// NOT recomputed here — installed from `SimState::ca_of_net`, which
+    /// `Scheduler::new` already derived through `levelize::ca_deps`. A second
+    /// derivation would be a second answer to "what does this assign read".
+    ///
+    /// ⚠️ It is not an optimization. Visiting every assign every pass produces
+    /// the same VALUES (the write funnel drops a same-value write), which is
+    /// what the engine's own comment says — but NOT the same DIAGNOSTICS: an
+    /// assign whose RHS reads out of range emits another `E4002` on every
+    /// re-read. Measured on picorv32: 6 errors became 9 (the 8-cap plus its
+    /// suppression note). The worklist is load-bearing for correctness of the
+    /// diagnostic stream, not just for speed.
+    pub ca_of_net: Vec<Vec<u32>>,
+    pub ca_dirty: Vec<u32>,
+    pub ca_dirty_flag: Vec<bool>,
 }
 
 impl DirtyChannel {
@@ -84,7 +101,19 @@ impl DirtyChannel {
             is_edge_target: crate::state::edge_target_nets(ir),
             last_blocking_writer: vec![u32::MAX; n],
             blocking_writer: None,
+            ca_of_net: Vec::new(),
+            ca_dirty: Vec::new(),
+            ca_dirty_flag: Vec::new(),
         }
+    }
+
+    /// Install the cont-assign dependency map and seed the worklist exactly as
+    /// `Scheduler::new` does: EVERY assign starts dirty, because nothing has
+    /// been evaluated yet and the first settle must behave like a full pass.
+    pub fn install_ca_deps(&mut self, ca_of_net: &[Vec<u32>], nca: usize) {
+        self.ca_of_net = ca_of_net.to_vec();
+        self.ca_dirty_flag = vec![true; nca];
+        self.ca_dirty = (0..nca as u32).collect();
     }
 }
 
@@ -135,6 +164,16 @@ impl NetArena {
             }
         }
         self.ch.last_blocking_writer[i] = self.ch.blocking_writer.unwrap_or(u32::MAX);
+        // DIRTY-SETTLE: this net moved, so every continuous assign that reads it
+        // must be re-evaluated by the next settle pass. The engine's third store
+        // effect, at the same point.
+        for k in 0..self.ch.ca_of_net.get(i).map_or(0, Vec::len) {
+            let ci = self.ch.ca_of_net[i][k] as usize;
+            if !self.ch.ca_dirty_flag[ci] {
+                self.ch.ca_dirty_flag[ci] = true;
+                self.ch.ca_dirty.push(ci as u32);
+            }
+        }
     }
 
     /// OR this transition into the net's intra-slot edge mask. `old_b0` is bit 0

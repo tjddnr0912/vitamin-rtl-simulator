@@ -82,20 +82,56 @@ use crate::sched::FinishReason;
 /// storage) `.or_else(executor_rows)`. This is the two-call convenience, so the
 /// gates verify exactly what `simulate` decides rather than a parallel one.
 #[cfg(test)]
-pub(crate) fn runnable(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'static str> {
+pub(crate) fn runnable(
+    ir: &SimIr,
+    opts: &crate::SimOpts,
+    md_nets: usize,
+) -> Result<(), &'static str> {
     crate::native::runtime_gate(ir, opts)?;
-    executor_rows(ir, opts)
+    executor_rows(ir, opts, md_nets)
 }
 
 /// The rows `runnable` adds on TOP of the runtime gate — split out because
 /// `simulate` has already computed the gate's half and recomputing it there
 /// would let the published verdict and the executed decision come from two
 /// evaluations of the same predicate.
-pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'static str> {
-    if !ir.cont_assigns.is_empty() {
-        // The loop has no `settle_cont_assigns`. Running such a design would not
-        // be slightly wrong: every `assign` would simply never evaluate.
-        return Err("continuous assigns (S1d-4d settles them)");
+pub(crate) fn executor_rows(
+    ir: &SimIr,
+    opts: &crate::SimOpts,
+    md_nets: usize,
+) -> Result<(), &'static str> {
+    // CONTINUOUS ASSIGNS (S1d-4d-1): the ZERO-DELAY fixpoint is built; the three
+    // families around it are not, and each would be a different wrong answer
+    // rather than a slower one.
+    if ir.cont_assigns.iter().any(|c| c.delay.is_some()) {
+        // `assign #d` needs the inertial wheel (`delayed_ca`, `ca_gen`,
+        // `last_ca_drv`, the sole-driver x-drive) — a pulse narrower than `d`
+        // must never reach the LHS, and without the generation check it would.
+        return Err("a delayed continuous assign (`assign #d`)");
+    }
+    // WIRED BEFORE MULTI-DRIVER, and the order is load-bearing rather than
+    // cosmetic: a `wand`/`wor` net is multi-driven BY CONSTRUCTION, so with the
+    // rows the other way round the wired row could never be the answer and its
+    // message would name a family no design ever sees.
+    if !opts.wired_and_nets.is_empty() || !opts.wired_or_nets.is_empty() {
+        return Err("a `wand`/`wor` net (wired resolution)");
+    }
+    // MULTI-DRIVER: a net resolved from several whole-net drivers by 4-state
+    // wire resolution, which a plain fixpoint would silently turn into
+    // last-write-wins. Asked through the SCHEDULER's own `md_nets`, computed
+    // once in `Scheduler::new`, rather than re-derived here.
+    //
+    // ⚠️ The first version of this row counted net occurrences across every
+    // cont-assign lvalue and refused at two. That over-approximated badly: the
+    // per-bit generate idiom (`for (g…) assign y[g] = ~x[g];`), a part-select
+    // pair (`y[7:4]` / `y[3:0]`), and even a single assign whose LHS concat
+    // names one net twice all read as multi-driven — and every one of them is a
+    // single logical driver the settle already handles by last-write-wins in
+    // the same ascending order the engine uses. That is the most common way
+    // real RTL drives a bus, so the proxy capped exactly the coverage this
+    // slice exists to unlock.
+    if md_nets > 0 {
+        return Err("a multi-driven net (wire resolution)");
     }
     if !opts.final_procs.is_empty() {
         return Err("`final` blocks (the post-loop drain is not restated)");
@@ -161,6 +197,13 @@ pub(crate) fn body_admissible(ir: &SimIr, proc: u32) -> bool {
 /// byte gate compares against: an OUTER loop over timesteps and an INNER loop
 /// that drains the current time to a stable point through the region cascade.
 pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
+    // t0 STRUCTURAL SETTLE, before anything is armed — `simulate` does this for
+    // the engine outside `run()`. A design that cannot converge here has a
+    // divergent t0 and is stopped rather than run on it.
+    let mut t0_deltas: u64 = 0;
+    if settle_cont_assigns(k, ir, &mut t0_deltas).is_none() {
+        return FinishReason::DeltaLimit;
+    }
     arm_t0(k, ir);
     if k.sched.st.finished {
         // The ONE live `finished` poll: `arm_t0`'s missing-init-proc guard latches
@@ -184,6 +227,15 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         let mut delta_count: u64 = 0;
         // ── drain the current time to a stable point ──────────────────────
         loop {
+            // ACTIVE: continuous assigns settle FIRST, then processes drain —
+            // the engine's order. A settle that moved nets may have produced an
+            // edge on a cont-assign-driven net (a port-bound clock), so change
+            // propagation has to run before the timestep is called stable.
+            match settle_cont_assigns(k, ir, &mut delta_count) {
+                None => return FinishReason::DeltaLimit,
+                Some(true) => propagate(k),
+                Some(false) => {}
+            }
             if !k.active.is_empty() {
                 // Take the batch so wakes triggered DURING it land in a fresh
                 // `active` — the engine's shape, and it is semantic rather than
@@ -313,6 +365,83 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
     }
 }
 
+/// `Scheduler::settle_cont_assigns` for the class the gate admits: re-evaluate
+/// every continuous assign until no net moves.
+///
+/// `None` ⇒ it did not converge (a cont-assign oscillator) and the caller must
+/// stop the run — otherwise an `assign`-only loop would spin the whole budget
+/// on EVERY outer delta while `active` stayed empty, and the outer delta limit
+/// would never fire. `Some(changed)` ⇒ converged, and `changed` says whether
+/// any net moved, which is what tells the caller to run change propagation (a
+/// port-bound clock's edge has to reach the child's `always @(posedge clk)`).
+///
+/// ONE deliberate simplification: **`eval_for_lvalue`, not `eval_cont_assign`**
+/// — the latter picks a tier-2 compiled program when one exists and falls back
+/// to exactly this. Same value, one less table.
+///
+/// ⚠️ There was a SECOND, and measurement killed it. Visiting every assign every
+/// pass (no worklist) looked byte-identical, and the engine's own comment
+/// appears to license it: the skip is sound "precisely because a certified
+/// assign whose inputs did not move recomputes its previous value, and the
+/// write funnel drops a same-value write without noting a change". That
+/// argument is about VALUES. An assign whose RHS reads out of range emits an
+/// `E4002` on every re-read, so the visit it replaces is NOT observationally a
+/// no-op — picorv32 went from 6 errors to 9. The worklist is reproduced here
+/// (from the scheduler's own `ca_of_net`/`ca_always`) for correctness of the
+/// diagnostic stream, not for speed.
+///
+/// The delta counter is the RUN LOOP's, passed by reference, because the engine
+/// shares `self.delta_count` between the settle and the region cascade: a design
+/// that settles slowly and oscillates slowly must hit the limit at the same
+/// point on both backends.
+fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) -> Option<bool> {
+    if ir.cont_assigns.is_empty() {
+        return Some(false);
+    }
+    let max_deltas = k.k_delta_budget();
+    let mut any = false;
+    loop {
+        let mut changed = false;
+        // The engine's visit set, not a superset of it: the assigns whose
+        // dependency nets moved (`ca_dirty`, maintained by the write funnel from
+        // `ca_of_net`) UNION the ones `levelize::ca_deps` refused to certify
+        // (`ca_always`). Ascending index = declaration order, which several
+        // goldens depend on.
+        let pass: Vec<u32> = {
+            let mut v = std::mem::take(&mut k.arena.ch.ca_dirty);
+            for &ci in &v {
+                k.arena.ch.ca_dirty_flag[ci as usize] = false;
+            }
+            v.extend_from_slice(k.sched.ca_always());
+            v.sort_unstable();
+            v.dedup();
+            v
+        };
+        for ci in pass.into_iter().map(|c| c as usize) {
+            let lhs = ir.cont_assigns[ci].lhs.clone();
+            let rhs = ir.cont_assigns[ci].rhs;
+            let v = k.k_eval_for_lvalue(&lhs, rhs);
+            let offs = k.k_resolve_lvalue_offsets(&lhs);
+            changed |= k.arena.write_lvalue(ir, &lhs, v, &offs);
+        }
+        // A cont-assign RHS can read an out-of-range array element, and the
+        // arena can only COUNT that — same third-producer problem the waiter
+        // predicate had. Drained here rather than left to the next body,
+        // because the t0 settle runs before any body exists.
+        k.drain_range_diags();
+        if !changed {
+            break;
+        }
+        any = true;
+        *delta_count += 1;
+        if *delta_count > max_deltas {
+            k.sched.fatal_delta_limit();
+            return None;
+        }
+    }
+    Some(any)
+}
+
 /// `arm_processes` for the class the gate admits.
 ///
 /// Two halves, and the second is easy to lose: declaration initializers run
@@ -322,6 +451,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
 /// `always @clk` an x→0 edge. Keeping the dirt would hand it exactly that.
 fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     let inits: Vec<u32> = k.sched.st.init_procs.to_vec();
+    // THE MARK. Everything already on the dirty list belongs to the t0
+    // cont-assign settle and must SURVIVE; only what the initializer bodies add
+    // below is dropped. `NetArena::build` dirties nothing (its `set_elem` is
+    // test-only and bypasses the channel), so this is exactly the settle's set.
+    let settled = k.arena.ch.dirty.len();
     for &pid in &inits {
         // RANGE GUARD, mirroring `arm_processes`'s `fatal_init_proc_missing`:
         // `init_procs` rides the `.velab` trailer, OUTSIDE the schema gate, so a
@@ -349,12 +483,22 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // absence would be a silent loss the day the walk's drain moves.
         k.drain_range_diags();
     }
-    // Drop what the initializers made dirty — the whole point of running them
-    // before arming. The engine splits its dirty list at the mark left by the t0
-    // cont-assign settle; here there is no settle (refused), so the initializers
-    // are the only writer and the list is drained wholesale into nothing.
-    let mut discard = Vec::new();
-    k.arena.take_changed(&mut discard);
+    // Drop what the INITIALIZERS made dirty — and only that. The engine splits
+    // its dirty list at a mark taken before it runs them, and the reason is
+    // written in `arm_processes`: the t0 cont-assign settle's writes are on the
+    // same list, and "clearing the list wholesale threw those away too … an
+    // `always @(w)` on `assign w = 1'b1;` simply never fired".
+    //
+    // ⚠️ This code DID clear it wholesale, and the comment that used to sit here
+    // said the settle was refused so the initializers were the only writer. That
+    // was true until S1d-4d-1 put a settle in front of `arm_t0` — the slice
+    // invalidated its own precondition and did not revisit the sentence.
+    // Measured: 49 of 270 generated cont-assign designs diverged, silently, at
+    // exit 0. The mark is what makes the split possible, so it is taken BEFORE
+    // the initializer loop above rather than derived afterwards.
+    for n in k.arena.ch.dirty.split_off(settled) {
+        k.arena.ch.dirty_flag[n as usize] = false;
+    }
     let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
     for pi in 0..ir.processes.len() as u32 {
         if init_set.contains(&pi) {

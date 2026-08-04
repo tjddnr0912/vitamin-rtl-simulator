@@ -249,10 +249,11 @@ pub(crate) fn print_help(applet: &str) {
          --backend <interp|vm|native> (vita/vrun) process-body executor. 'vm' (default) runs\n                        \
                        suspend-free bodies on the bytecode VM and interprets the rest;\n                        \
                        'interp' forces the reference semantics, for bisecting; 'native'\n                        \
-                       selects the tier-3 backend, which runs a design only when it uses\n                        \
-                       no continuous assign, in-body '@()'/wait, fork, subroutine call or\n                        \
-                       waveform dump, and falls back to the VM otherwise (run.json reports\n                        \
-                       'backend' vs 'backend_requested', and 'native.refused' says why).\n                        \
+                       selects the tier-3 backend, which runs a design when nothing in it\n                        \
+                       is outside today's tier-3 subset -- no delayed/multi-driven/wired\n                        \
+                       continuous assign, no fork, no subroutine call, no waveform dump --\n                        \
+                       and falls back to the VM otherwise (run.json reports 'backend' vs\n                        \
+                       'backend_requested', and 'native.refused' names the row).\n                        \
                        Output is byte-identical whichever you pick -- this only moves\n                        \
                        wall-clock (measured\n                        \
                        1.4x on a real design, up to 2.8x on expression-heavy RTL, ~1.0x\n                        \

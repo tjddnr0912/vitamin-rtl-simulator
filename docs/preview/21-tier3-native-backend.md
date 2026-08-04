@@ -405,7 +405,9 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > | **S1d-3 ✅ (2026-08-03)** | **wake 결정** — 변경 집합 → 어느 프로세스가 ready 이고 어떤 순서인가(정적 Edge = pass (a) · 정적 Level/**Comb/Latch** = pass (b) `arm=None`). 적격성이 fork/clocking 을 거부하므로 activity ≡ process·`Ready` 가 proc id 로 붕괴 | ✅ 결정 차분(Active 큐 **델타** 대조 · 두 관측 granularity) · **8규칙 teeth** · ⭐ 리뷰가 **조합 프로세스 전체 미등록**을 잡았다 |
 > | **S1d-4a~4c ✅ (2026-08-04)** | `impl Kernel`(§4.5.292) → 포맷/dispatch(§4.5.293/294) → NBA 드레인(§4.5.295) → `k_rearm`(§4.5.296) → 바디 워크(§4.5.297) → **런 루프 + `Delay` 정지 + `simulate` 배선**(§4.5.298). ③층이 **실제로 설계를 돌린다** | ✅ 코퍼스 적격 **65 설계 stdout+finish+시간+exit class 동일** + 판별 설계 19 + 적대 differential **316 설계 0 diff**. ⭐⭐ 게이트가 `exit_class` 를 안 보던 동안 **OOB 배열 진단이 조용했다**(FIFO 가 FAIL→PASS) |
 > | **S1d-4c-2d ✅ (2026-08-04)** | **in-body 웨이터**(§4.5.299) — `k_suspend_on`·공유 워크의 `Wait` 암·`fire_waiters`. `Named` 는 **구성 불가**로 판명(named event → 카운터 넷) | ✅ 전용 설계 37(코퍼스 커버리지 0) · differential **246 native 확인 0 diff** · ⭐⭐ `wait(e)` 술어가 범위 진단의 **세 번째 생산자**라 세 종료 경로에서 진단이 사라졌다(FAIL→PASS) |
-> | **S1d-4d** | cont-assign settle(+`delayed_ca`·multi-driver)·wired 해소·VCD·`flush_postponed` → 원래 S1 게이트 | 원래 S1 게이트 = corpus 적격분 **stdout+VCD 바이트 동일**. ⚠️ 오늘 거부되는 것이 실사용 설계의 전부다 — `examples/` 4개·`bench/` 둘이 여기서 열린다 |
+> | **S1d-4d-1 ✅ (2026-08-05)** | **zero-delay cont-assign settle**(§4.5.300) — 거부는 delayed·wired·multi-driver 셋만. **picorv32 네이티브 실행 + 바이트 일치** | ✅ 판별 설계 41 · differential 218 native 0 diff · 뮤테이션 11/11. ⭐⭐ byte-identity 논증이 **값 축에서만** 참 · `arm_t0` 가 t0 settle 변경집합 유실 |
+> | **S1d-4d-2** | **VCD**(`$dumpfile`/`$dumpvars`·emitter 는 **store 지점**에)·`flush_postponed` → 원래 S1 게이트 | ⚠️ `examples/` 4개는 `$dump*` 만 지우면 **이미 네이티브로 돌고 바이트 일치**(실측) — VCD 가 마지막 문. 아레나 `note_change` 에 `emit_vcd_change` 대응이 없다 |
+> | **S1d-4d-3** | delayed CA(`delayed_ca`·`ca_gen` inertial)·multi-driver/wired 해소 | 코퍼스 CA 7설계가 전부 delayed 를 요구 — corpus 65 → 72 |
 >
 > **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
 > 엔진은 이미 이 이음매를 **의도적으로** 만들어 뒀다(`exec/mod.rs`: *"`apply_effect` 의 커널 호출이

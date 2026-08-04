@@ -347,6 +347,42 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.300 ③층 S1d-4d-1 — cont-assign settle, 그리고 **byte-identity 논증이 값 축에서만 참이었다** (2026-08-05, branch feat-tier3-ca-settle, format 26 불변) ✅
+
+zero-delay 연속대입 fixpoint 를 ③층이 돈다(t0 arm 前 + 매 델타 상단 · 움직였으면 전파). 거부는 blanket
+"any cont-assign" 에서 **delayed `assign #d` · `wand`/`wor` · multi-driver** 셋으로 좁혔다. **picorv32
+가 네이티브로 돌고 바이트 일치**(E4002 9건·8-cap 노트 포함) · `keccak_f_flat` 도.
+
+⭐⭐ **내 byte-identity 논증이 절반만 맞았다.** "워크리스트 없이 매 패스 전 assign 방문 = 동일" 이라
+적었고 엔진 주석도 그렇게 읽힌다(*"입력이 안 움직인 assign 은 이전 값을 재계산하고 퍼널이 같은 값
+쓰기를 변경으로 안 친다"*). 그 논증은 **값**에 관한 것이다 — RHS 가 범위 밖 원소를 읽는 assign 은
+재평가마다 `E4002` 를 또 낸다. **picorv32 에서 errors 6 → 9.** 워크리스트를 엔진의
+`ca_of_net`/`ca_always` 에서 **재진술 없이** 가져와 연결했다.
+
+⭐⭐ **두 렌즈가 같은 reachable silent-wrong 으로 수렴**: `arm_t0` 가 dirty 를 **통째로** 비워 t0
+settle 의 변경 집합까지 버렸다 → `assign w = 1'b1;` + `always @(w)` 가 **안 뜬다**(exit 0, 조용히).
+엔진 주석이 **바로 그 결함을 이미 고쳤다고 적어 둔** 자리이고, 내 주석은 *"여기엔 settle 이 없다
+(거부됨)"* 였다 — **슬라이스가 자기 전제를 무효화하고 그 문장을 안 고쳤다**. 퍼즈 270 중 49 · 리뷰어
+설계 18 발산(값·exit class·`$finish` 시각 전부). 수정 = 엔진과 같은 mark/split.
+
+⭐⭐ **그리고 게이트에 이빨이 0 이었다** — settle 최상단 `panic!` 이 **전 워크스페이스를 통과**했다.
+코퍼스의 CA 설계는 plain+delayed 를 **쌍으로** 내보내 전부 delayed 행에 걸리고, 판별 설계 34 개에
+`assign` 이 **한 줄도** 없었다. 신호는 이미 단언 안에 있었다 — **`ran` 이 65 에서 안 움직였다**. 7 설계
+추가로 뮤테이션 11/11 kill.
+
+⭐ 리뷰가 **과잉거부**도 잡았다: multi-driver 행을 "lvalue 에 두 번 나오는 넷" 으로 근사해
+**per-bit generate 관용구**(`for (g…) assign y[g] = ~x[g];`)·disjoint part-select·한 assign 의 concat
+LHS 를 전부 거부했다 — 실 RTL 이 버스를 모는 가장 흔한 형태이고 전부 last-write-wins 로 충분하다.
+엔진 자신의 `md_nets` 술어를 **자유 함수로 추출해 양쪽이 부른다**(내 doc 이 "한 철자" 라고 주장했는데
+`Scheduler::new` 은 인라인 복사본을 갖고 있었다 — 그것도 리뷰가 잡았다).
+
+⚠️ **예상이 빗나갔다**: 이 슬라이스가 `examples/` 넷을 열 줄 알았는데, cont-assign 행이 좁아지자
+**다음 행(`$dumpvars`)이 발화**한다. 열린 것은 picorv32 와 keccak_f_flat 이고, examples 는
+`$dump*` 를 지우면 **넷 다 네이티브로 돌고 바이트 일치**한다(리뷰 실측) — VCD 슬라이스가 마지막 문이다.
+
+**게이트.** 5139 green · clippy · fmt · format 26 불변 · 판별 설계 **41** · differential **228 설계 중
+218 native 확인, 수정 후 0 diff** + picorv32/examples 바이트 일치 · 뮤테이션 **11/11 kill**.
+
 #### 4.5.299 ③층 S1d-4c-2d — in-body 웨이터, 그리고 **내 논증이 두 번 틀렸다** (2026-08-04, branch feat-tier3-inbody-wait, format 26 불변) ✅
 
 `Wait{Edge|Level|Expr}` 를 ③층이 실행한다 — `k_suspend_on`(구현자가 웨이터 목록과 **arm 스냅샷**을

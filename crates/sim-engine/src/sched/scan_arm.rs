@@ -366,6 +366,38 @@ pub(crate) fn scan_run(
     }
 }
 
+/// MULTI-DRIVER groups: nets driven by >=2 continuous assigns that are ALL
+/// whole-net (single chunk, no word/offset/width select) and non-delayed. A net
+/// with ANY partial/dynamic/array/delayed driver is EXCLUDED — those overlaps
+/// stay `E3001` at elaborate, and a per-bit `for (g...) assign y[g] = ...;` is
+/// one logical driver that needs only last-write-wins.
+///
+/// A free function because two callers need the same answer at different times:
+/// `Scheduler::new` builds its resolution table from it, and `simulate` asks the
+/// tier-3 run gate whether to refuse — BEFORE any scheduler exists. Two
+/// spellings would let the gate and the executor disagree about one design.
+pub(crate) fn multi_driver_groups(
+    ir: &sim_ir::SimIr,
+) -> std::collections::BTreeMap<u32, Vec<usize>> {
+    let mut whole: std::collections::BTreeMap<u32, Vec<usize>> = std::collections::BTreeMap::new();
+    let mut excluded: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for (ci, ca) in ir.cont_assigns.iter().enumerate() {
+        let is_whole = ca.delay.is_none() && ca.lhs.chunks.len() == 1 && {
+            let c = &ca.lhs.chunks[0];
+            c.word.is_none() && c.offset.is_none() && c.width.is_none()
+        };
+        if is_whole {
+            whole.entry(ca.lhs.chunks[0].net).or_default().push(ci);
+        } else {
+            for c in &ca.lhs.chunks {
+                excluded.insert(c.net);
+            }
+        }
+    }
+    whole.retain(|net, cis| cis.len() >= 2 && !excluded.contains(net));
+    whole
+}
+
 impl<'a, 'ir> Scheduler<'a, 'ir> {
     pub fn new(
         st: &'a mut SimState<'ir>,
@@ -381,26 +413,15 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // A net with ANY partial/dynamic/array/delayed driver is excluded (those
         // overlaps stay E3001 at elaborate). Computed once from `ir.cont_assigns`
         // — no sidecar. Empty unless a design actually has a multi-driven net.
-        let mut whole: std::collections::BTreeMap<u32, Vec<usize>> =
-            std::collections::BTreeMap::new();
-        let mut excluded: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
-        for (ci, ca) in st.ir.cont_assigns.iter().enumerate() {
-            let is_whole = ca.delay.is_none() && ca.lhs.chunks.len() == 1 && {
-                let c = &ca.lhs.chunks[0];
-                c.word.is_none() && c.offset.is_none() && c.width.is_none()
-            };
-            if is_whole {
-                whole.entry(ca.lhs.chunks[0].net).or_default().push(ci);
-            } else {
-                for c in &ca.lhs.chunks {
-                    excluded.insert(c.net);
-                }
-            }
-        }
+        // ONE SPELLING with the tier-3 run gate, which asks the same question
+        // before any scheduler exists. An inline copy lived here and the shared
+        // function's own doc claimed it did not — the two were character-
+        // identical, so nothing differed, but the invariant was not enforced.
+        let whole = multi_driver_groups(st.ir);
         let mut md_nets: Vec<(u32, Vec<usize>, u8)> = Vec::new();
         let mut ca_md = vec![false; nca];
         for (net, cis) in whole {
-            if cis.len() >= 2 && !excluded.contains(&net) {
+            {
                 for &ci in &cis {
                     ca_md[ci] = true;
                 }
@@ -867,6 +888,13 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             .flat_map(|v| v.iter())
             .filter(|(_, r)| r.proc == pi)
             .count()
+    }
+
+    /// The continuous assigns `levelize::ca_deps` refused to certify — the ones a
+    /// settle pass must visit unconditionally, whatever the dirty worklist says.
+    /// Read by the tier-3 settle so the two visit the same set.
+    pub(crate) fn ca_always(&self) -> &[u32] {
+        &self.ca_always
     }
 
     /// Every pending activation, as `(tick, inactive, proc, block)`.
