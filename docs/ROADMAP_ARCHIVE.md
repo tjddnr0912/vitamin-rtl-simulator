@@ -409,12 +409,13 @@
 리뷰어 설계 **26 전수 merged+stderr+stdout+exit 전부 동일**. 교훈 = **"관측 불가" 라고 적기 전에
 그 진단이 어느 스트림으로 나가는지 확인하라**.
 
-**게이트.** 5137 green(5128 **+9**) · clippy · fmt · format 26 불변 · 코퍼스 적격 **65 설계
+**게이트.** 5138 green(5128 **+10**) · clippy · fmt · format 26 불변 · 코퍼스 적격 **65 설계
 stdout+진단 인터리브 스트림 동일**(거부 breakdown 도 핀) · 판별 설계 19 + 거부 행 5 + 전용 6 ·
 적대 differential **316 설계 `backend: native` 확인 후 전수 비교, Finding 1 외 0 diff** ·
 PRE/POST 기본 백엔드 examples 4 **0 diff**(stdout·stderr·exit·VCD) · `--backend native` PRE/POST 6설계 0 diff ·
-**뮤테이션 34 중 31 kill**(생존 3 = `push_sorted` 의 `<=`·초기화자 재실행·잘린 트레일러 가드 — 전부
-등가이거나 소스에서 구성 불가, 각각 논증을 코드에 적었다).
+**뮤테이션 41 중 38 kill**(생존 3 = `push_sorted` 의 `<=`·초기화자 재실행·잘린 트레일러 가드 — 전부
+등가이거나 소스에서 구성 불가, 각각 논증을 코드에 적었다. 그리고 `arm_t0` 의 드레인은 **중복임을
+측정으로 확인**해 그렇게 적었다 — 워크가 문장마다 드레인하므로 초기화자 본문은 이미 덮인다).
 
 #### 4.5.297 ③층 S1d-4c-2b — 바디 워크: **차분이 실행한 것의 과반을 못 보고 있었다** (2026-08-04, branch feat-tier3-s1d4c2b, format 26 불변) ✅
 

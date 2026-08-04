@@ -660,6 +660,21 @@ module top;
 endmodule
 "#,
         ),
+        (
+            "refused system task in a LATER block",
+            "a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)",
+            r#"
+module top;
+  reg [7:0] n;
+  initial begin
+    n = 8'd0;
+    #1 n = 8'd1;
+    if (n == 8'd1) $monitor("n=%0d", n);
+    #1 $finish;
+  end
+endmodule
+"#,
+        ),
     ];
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
@@ -678,7 +693,12 @@ endmodule
             e.refused
         );
     }
-    assert_eq!(cases.len(), 5, "refusal-row coverage moved");
+    assert_eq!(cases.len(), 6, "refusal-row coverage moved");
+    // The sixth case exists for a property the other five do not have: its
+    // refused task is behind a `#1` and an `if`, so it lives in neither the
+    // entry block nor block 0. `body_dispatch_ok` scanning only the first block
+    // would admit it — and a design admitted with a refused task in it does not
+    // produce a wrong answer, it panics mid-run inside `k_dispatch_systask`.
     // ⚠️ The `fork` and subroutine-CALL halves of the waiter row have no case,
     // and cannot: a `Terminator::Call` needs a non-empty `func_table`, which
     // `NetArena::build` refuses first (measured — the case was written and the
@@ -814,6 +834,58 @@ endmodule
         FinishReason::Finish,
         "the design must complete under the delta budget, or reading the WRONG \
          budget would be indistinguishable: {out_nat}"
+    );
+}
+
+/// The delta budget's BOUNDARY, not just which field it reads.
+///
+/// `s1d4c2c_delta_budget_is_not_the_body_budget` pins that the loop reads
+/// `max_deltas` rather than `max_body_steps`, but its design finishes far below
+/// the limit, so shifting the comparison (`> n` → `>= n + 5`) survives it. An
+/// oscillator that PRINTS once per delta turns the budget into an observable
+/// line count: both backends must cut off after the same number of deltas, and
+/// must report the same termination.
+#[test]
+fn s1d4c2c_delta_limit_fires_at_the_same_delta() {
+    let src = r#"
+module top;
+  reg a, b;
+  initial begin a = 1'b0; b = 1'b0; end
+  always @(a) begin b = ~a; $display("d"); end
+  always @(b) begin a = b; end
+  initial begin #100 $finish; end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    let mk = |backend| SimOpts {
+        backend,
+        max_deltas: 12,
+        ..opts.clone()
+    };
+    let sink_vm = MergedSink::default();
+    let sink_nat = MergedSink::default();
+    let r_vm = simulate(&ir, &sink_vm, mk(Backend::Bytecode));
+    let r_nat = simulate(&ir, &sink_nat, mk(Backend::Native));
+    assert_eq!(r_nat.backend, Backend::Native, "fell back");
+    let ev_vm = sink_vm.events.into_inner();
+    let ev_nat = sink_nat.events.into_inner();
+    assert_eq!(
+        ev_vm, ev_nat,
+        "the two backends cut the oscillator at a different delta"
+    );
+    assert_eq!(r_vm.finish_reason, r_nat.finish_reason);
+    // ANTI-VACUITY: it must actually HIT the limit, and the line count must be
+    // small enough that a shifted boundary changes it.
+    assert_eq!(
+        r_nat.finish_reason,
+        FinishReason::DeltaLimit,
+        "the design must hit the delta limit: {ev_nat:?}"
+    );
+    let lines = ev_nat.iter().filter(|e| e.starts_with("out|d")).count();
+    assert!(
+        (1..=13).contains(&lines),
+        "expected the budget to bound the printed deltas, got {lines}"
     );
 }
 
