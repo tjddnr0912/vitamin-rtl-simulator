@@ -2509,25 +2509,39 @@ fn s1d4c2b_body_walk_agrees_on_multi_block_bodies() {
 /// so the design below is `eligible: true, buildable: true`.
 #[test]
 fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
-    // The unreachable block must end in a terminator the scan REFUSES, and
-    // S1d-4c-2c narrowed that set: `#5` used to qualify and no longer does
-    // (`Delay` is walkable now), so the design carries an `@(posedge clk)`
-    // instead. Reusing the old source here would have left this test asserting
-    // its property against a terminator that satisfies it trivially — the same
-    // vacuity it exists to prevent.
+    // The unreachable block must end in a terminator the scan REFUSES, and that
+    // set has shrunk TWICE: S1d-4c-2c made `Delay` walkable, S1d-4c-2d made
+    // `Wait{Edge|Level|Expr}` walkable. What is left is `Fork`, `Call` and a
+    // wait on a named event — none of which can appear in a design that is BOTH
+    // eligible and buildable, so this one is deliberately eligible and NOT
+    // buildable (a framed task call behind a `disable`).
+    //
+    // That does not weaken the property. The scan is what protects the walk when
+    // the sidecar reasoning is defeated — `fork_modes` and `func_table` ride the
+    // `.velab` trailer and a truncated one makes such a design look admissible —
+    // so "does the scan answer about the entry it was given" is exactly as
+    // load-bearing as before.
     let src = "module t;\n\
-                 reg [7:0] y; reg clk;\n\
+                 reg [7:0] y;\n\
+                 task automatic slow(); begin #5; end endtask\n\
                  initial begin : blk\n\
                    y = 8'd1;\n\
                    disable blk;\n\
-                   @(posedge clk) y = 8'd2;\n\
+                   slow();\n\
                  end\n\
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
     let el = crate::native::design_eligibility(&ir, &opts);
     assert!(
-        el.eligible && NetArena::build(&ir, &opts).is_ok(),
-        "the design must be eligible and buildable, or the hazard is hypothetical"
+        el.eligible,
+        "the design must be within v1's SCOPE, or the scan is not what keeps it \
+         out: {:?}",
+        el.refused
+    );
+    assert!(
+        NetArena::build(&ir, &opts).is_err(),
+        "…and NOT buildable, which is now the only way to get a scan-refused \
+         terminator into an eligible design"
     );
     let proc = 0u32;
     let entry = ir.processes[proc as usize].entry;
@@ -2554,7 +2568,12 @@ fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
     }
     let suspending_unreachable: Vec<u32> = (0..body.len() as u32)
         .filter(|&b| !reachable[b as usize])
-        .filter(|&b| matches!(body[b as usize].term, sim_ir::Terminator::Wait { .. }))
+        .filter(|&b| {
+            matches!(
+                body[b as usize].term,
+                sim_ir::Terminator::Call { .. } | sim_ir::Terminator::Fork { .. }
+            )
+        })
         .collect();
     assert!(
         !suspending_unreachable.is_empty(),

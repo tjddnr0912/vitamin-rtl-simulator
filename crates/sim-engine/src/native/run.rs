@@ -27,11 +27,13 @@
 //!
 //! ⚠️ **What the accepted class does NOT yet include, stated so 65/72 is not
 //! read as coverage of real designs**: all four of this repo's `examples/*.sv`
-//! and both `bench/` designs are REFUSED and fall back to the VM. The features
-//! doing the refusing are the ones every real testbench has — `$dumpfile`/
-//! `$dumpvars`, module ports (which lower to continuous assigns), and an in-body
-//! `@(posedge clk);`. The corpus subset this gate runs is real coverage of the
-//! LOOP; it is not yet coverage of a design anyone would write.
+//! and both `bench/` designs are REFUSED and fall back to the VM. Measured
+//! today, after S1d-4c-2d made in-body waiters runnable: three of the four
+//! examples are refused by the CONTINUOUS-ASSIGN row (module ports lower to
+//! them) and the fourth by the system-task row. None is refused by the waiter
+//! row any more. The corpus subset this gate runs is real coverage of the LOOP;
+//! it is not yet coverage of a design anyone would write, and S1d-4d's
+//! cont-assign settle is what moves that number.
 //!
 //! ## What this loop is NOT, and how each absence is kept honest
 //!
@@ -100,7 +102,18 @@ pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'s
     }
     for pi in 0..ir.processes.len() as u32 {
         if !body_is_walkable(ir, pi, ir.processes[pi as usize].entry) {
-            return Err("an in-body `wait`/`@(…)` waiter, `fork` or subroutine call");
+            // Names the REACHABLE cause first. The previous wording led with
+            // `fork`/subroutine — both normally refused an entire layer earlier
+            // (the S0 `fork` row, the arena's `func_table`) — and advertised a
+            // named-event wait, which elaborate never constructs. The one thing
+            // that actually arrives here in an eligible, buildable design is a
+            // bare `wait fork;`, which populates no `fork_modes` entry.
+            //
+            // A plain non-`automatic` task containing `@(posedge clk)` is NOT
+            // refused: elaborate inlines it, so there is no `Terminator::Call`.
+            // What the subroutine half really refuses is frame-local storage,
+            // and the arena says so in its own words.
+            return Err("a `wait fork`, or a `fork`/subroutine-call body whose sidecar was lost");
         }
         if !body_dispatch_ok(ir, pi) {
             return Err("a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)");
@@ -371,17 +384,18 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
 /// changed set, ask the wake table who that wakes, queue them.
 ///
 /// What has no analogue, each provably empty rather than skipped: force re-eval
-/// (`force_release` is an S0 reject), the clocking commit (`clocking` is an S0
-/// reject), and the IN-BODY half of the engine's waiter `retain` (`executor_rows`
-/// refuses `Wait`).
+/// (`force_release` is an S0 reject) and the clocking commit (`clocking` is an
+/// S0 reject).
 ///
-/// ⚠️ Two corrections to an earlier version of this paragraph, because they are
-/// the sentences a maintainer reasons from. (a) The waiter pass is NOT wholly
-/// absent: its STATIC `Level` half (`arm = None`) is alive, as the second loop
-/// of `WakeTable::wake`. Only the in-body half is refused. (b) There is no
-/// "prev-refresh" here to be the arena's `take_changed`, because this store has
-/// no `prev` at all — the changed set IS `dirty` membership, and the edge mask
-/// resets on a net's first dirtying of the next slot.
+/// The engine's waiter pass is NOT absent — it is split in two here, and both
+/// halves run: its STATIC `Level` arm (`arm = None`) is the second loop of
+/// `WakeTable::wake`, and its IN-BODY arms are `fire_waiters` below (S1d-4c-2d;
+/// an earlier version of this paragraph said the in-body half was refused,
+/// which stopped being true when that slice landed).
+///
+/// ⚠️ And there is no "prev-refresh" here to be the arena's `take_changed`:
+/// this store has no `prev` at all — the changed set IS `dirty` membership, and
+/// the edge mask resets on a net's first dirtying of the next slot.
 fn propagate(k: &mut NativeKernel) {
     let mut changed = Vec::new();
     k.arena.take_changed(&mut changed);
@@ -398,6 +412,96 @@ fn propagate(k: &mut NativeKernel) {
                 block: k.ir.processes[p as usize].entry,
             },
         );
+    }
+    fire_waiters(k, &changed);
+    // THE THIRD PRODUCER. `fire_waiters` evaluates every `wait(expr)` predicate
+    // through the arena, so it can leave a deferred out-of-range report behind —
+    // and `propagate` is called from two places that both `continue` straight
+    // into a region test, with every terminating exit (quiescent, time limit,
+    // delta limit) returning without another drain. Measured: a design whose
+    // only out-of-range read is in a wait predicate ran `--backend native` to
+    // exit 0 while the VM exited 1. Same class as the NBA path §4.5.298 fixed;
+    // this is the seam that slice did not have yet.
+    k.drain_range_diags();
+}
+
+/// The engine's `propagate_changes` pass (b): in-body waiters.
+///
+/// Runs AFTER the static-sensitivity pass, as it does there, and pushes through
+/// the same sorted insert — so a delta that wakes both an `always @(posedge clk)`
+/// and a body parked on `@(posedge clk)` queues them in process order rather
+/// than in "static first, in-body second" order.
+///
+/// A fired waiter is CONSUMED. `Level` and `Expr` re-arm by suspending again
+/// when the resumed body reaches the wait a second time; `Edge` is one-shot by
+/// nature. That is why there is no re-registration here — the engine has none
+/// either, and adding one would fire a waiter the body never re-armed.
+fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNet]) {
+    if k.waiters.is_empty() {
+        return;
+    }
+    // Decide FIRST, mutate second: the fire test reads the arena (and, for
+    // `Expr`, evaluates through it), which cannot happen while `waiters` is
+    // being drained. Same shape as the engine, which pre-computes `expr_now`
+    // and `level_fire` for exactly this reason.
+    let fires: Vec<bool> = k
+        .waiters
+        .iter()
+        .map(|w| match (&w.cause, &w.arm) {
+            // IN-BODY `@(sig)`: fires when a watched net differs from its
+            // ARM-TIME value — deliberately NOT "is it in the changed set". A
+            // change that landed before the arm is already in the snapshot, so
+            // a dirtiness test would re-fire the wait in its own arming slot.
+            //
+            // SELF-RETRIG: the author guard is the engine's spelling, kept for
+            // fidelity — but it CANNOT fire on this arm, and saying so beats a
+            // teeth claim no design can back (measured: removing it leaves the
+            // gate green). A suspended process cannot write, so `cur != arm`
+            // already implies somebody else wrote the net after the arm, which
+            // is what `last_blocking_writer` then holds. The guard earns its
+            // keep on the STATIC arm (`arm = None`), which lives in the wake
+            // table, and on `Edge` below — where the process CAN have made the
+            // edge itself, in the same slot, before the wait armed.
+            (sim_ir::WaitCause::Level { nets }, Some(arm)) => {
+                nets.iter().zip(arm).any(|(&n, av)| {
+                    k.arena.net_words(n) != av.as_slice()
+                        && k.arena.ch.last_blocking_writer[n as usize] != w.proc
+                })
+            }
+            // GLITCH: an in-body `@(posedge x)` fires from the intra-slot MASK,
+            // so a pulse that returns to its old value still wakes the waiter.
+            // SELF-RETRIG here is REACHABLE, unlike on the `Level` arm above:
+            // `clk = ~clk; @(posedge clk);` leaves the mask set by the waiter's
+            // own write, and without the guard the wait resumes on the edge it
+            // just caused (measured — the design is in the adversarial set).
+            (sim_ir::WaitCause::Edge { net, kind }, _) => changed.iter().any(|&(n, mask, wr)| {
+                n == *net && crate::sched::edge_fires_slot(mask, *kind) && wr != w.proc
+            }),
+            // `wait(e)`: re-check the predicate against the POST-change values.
+            (sim_ir::WaitCause::Expr { expr }, _) => k.ctx().truthy(*expr),
+            // A static `Level` (arm=None) cannot be here — those live in the
+            // wake table — and `Named`/`Fork` are refused by `body_is_walkable`.
+            _ => false,
+        })
+        .collect();
+    if !fires.iter().any(|&f| f) {
+        return;
+    }
+    let mut idx = 0usize;
+    let mut woken: Vec<NativeReady> = Vec::new();
+    k.waiters.retain(|w| {
+        let fired = fires[idx];
+        idx += 1;
+        if fired {
+            woken.push(NativeReady {
+                proc: w.proc,
+                block: w.block,
+            });
+        }
+        !fired
+    });
+    for r in woken {
+        push_sorted_native(&mut k.active, r);
     }
 }
 

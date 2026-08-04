@@ -89,6 +89,19 @@ impl DirtyChannel {
 }
 
 impl NetArena {
+    /// The WHOLE net's raw words — every element, both planes.
+    ///
+    /// The arm snapshot an in-body `@(sig)` needs. It is the whole net rather
+    /// than element 0 because that is what the engine snapshots
+    /// (`SimState.nets[n].cur` is the packed array), so `@(mem)` on an array
+    /// compares the same thing on both sides.
+    pub(crate) fn net_words(&self, net: u32) -> &[u64] {
+        let s = self.slots[net as usize];
+        let lo = s.off as usize;
+        let n = 2 * s.words as usize * s.elems as usize;
+        &self.buf[lo..lo + n]
+    }
+
     /// Bit 0 of element 0 — the scalar the edge predicates read.
     pub(crate) fn scalar_bit0(&self, net: u32) -> FourState {
         let s = self.slots[net as usize];

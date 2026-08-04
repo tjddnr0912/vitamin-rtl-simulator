@@ -523,6 +523,204 @@ endmodule
 "#
             .to_string(),
         ),
+        // IN-BODY WAITERS (S1d-4c-2d) — three causes, and the corpus contains
+        // none of them (measured: its 138 suspending terminators are all
+        // `Delay`). Each design makes the waiter fire more than once, so a
+        // model that armed but never re-armed would show a smaller count.
+        (
+            "in_body_edge_wait",
+            r#"
+module top;
+  reg clk;
+  reg [7:0] n;
+  initial begin clk = 1'b0; n = 8'd0; #1 clk = 1'b1; #1 clk = 1'b0; #1 clk = 1'b1; #2 $display("n=%0d", n); $finish; end
+  always begin @(posedge clk); n = n + 8'd1; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // `@(sig)` fires on a CHANGE from the arm-time value, so the middle
+        // write (same value) must not wake it — an implementation keyed on
+        // "was this net dirty" would count three instead of two.
+        (
+            "in_body_level_wait_ignores_same_value",
+            r#"
+module top;
+  reg [7:0] a;
+  reg [7:0] n;
+  initial begin a = 8'd0; n = 8'd0; #1 a = 8'd5; #1 a = 8'd5; #1 a = 8'd7; #2 $display("n=%0d", n); $finish; end
+  always begin @(a); n = n + 8'd1; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // `wait(e)` with `e` FALSE parks and resumes on the transition …
+        (
+            "in_body_wait_expr_blocks_then_resumes",
+            r#"
+module top;
+  reg go;
+  reg [7:0] n;
+  initial begin go = 1'b0; n = 8'd0; #2 go = 1'b1; #2 $display("n=%0d", n); $finish; end
+  initial begin wait (go); n = 8'd9; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // … and with `e` ALREADY TRUE it does not park at all — the
+        // short-circuit in the walk. Without it this design hangs rather than
+        // printing, which the time limit would turn into a different answer.
+        (
+            "in_body_wait_expr_already_true_falls_through",
+            r#"
+module top;
+  reg go;
+  reg [7:0] n;
+  initial begin go = 1'b1; n = 8'd0; end
+  initial begin #1 wait (go); n = 8'd4; $display("n=%0d", n); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A `@(sig)` body that writes the watched net after waking, then loops
+        // back to the wait. The re-arm snapshots the value the body just wrote,
+        // so the wait does not re-fire on it.
+        //
+        // ⚠️ NOT a cover for the `Level` author guard, despite what an earlier
+        // name and comment here claimed: by the time the body re-arms, its own
+        // write is already IN the snapshot, so `cur != arm` is false with or
+        // without the guard. That guard is unreachable on this arm (see
+        // `fire_waiters`); the `Edge` one is covered separately and really is
+        // reachable.
+        (
+            "in_body_level_wait_rearms_after_its_own_write",
+            r#"
+module top;
+  reg [7:0] a, n;
+  initial begin a = 8'd0; n = 8'd0; #1 a = 8'd1; #3 $display("n=%0d a=%0d", n, a); $finish; end
+  always begin @(a); n = n + 8'd1; a = a + 8'd16; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // An in-body EDGE waiter and a STATIC `always @(posedge clk)` woken by
+        // the same edge: the two live in different tables, and the order they
+        // reach the Active queue is process order, not table order.
+        (
+            "static_and_in_body_edge_share_a_delta",
+            r#"
+module top;
+  reg clk;
+  reg [7:0] s, w;
+  initial begin clk = 1'b0; s = 8'd0; w = 8'd0; #1 clk = 1'b1; #2 $display("s=%0d w=%0d", s, w); $finish; end
+  always @(posedge clk) begin s = s + 8'd1; $display("static"); end
+  always begin @(posedge clk); w = w + 8'd1; $display("inbody"); end
+endmodule
+"#
+            .to_string(),
+        ),
+        // SELF-EDGE: a body that CREATES an edge and then waits for that same
+        // edge must not be woken by its own write. The mask is intra-slot, so
+        // without the author guard the waiter reads the edge it just caused and
+        // resumes immediately — a free-running loop instead of a parked process.
+        //
+        // This is the ONLY reachable cover for that guard on the `Edge` arm: a
+        // process cannot write while suspended, so the write has to happen in
+        // the same slot BEFORE the wait arms.
+        (
+            "in_body_edge_wait_ignores_its_own_edge",
+            r#"
+module top;
+  reg clk;
+  reg [7:0] n;
+  initial begin clk = 1'b0; n = 8'd0; end
+  always begin
+    clk = ~clk;
+    @(posedge clk);
+    n = n + 8'd1;
+  end
+  initial begin #5 $display("n=%0d clk=%0b", n, clk); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ORDER: an in-body waiter whose process id is BELOW a statically
+        // sensitive one. The existing pair has the in-body process second, so a
+        // plain `push` and a sorted insert produce the same queue; this one
+        // separates them.
+        (
+            "in_body_waiter_sorts_before_a_static_process",
+            r#"
+module top;
+  reg clk;
+  reg [7:0] w, s;
+  initial begin w = 8'd0; s = 8'd0; end
+  always begin @(posedge clk); w = w + 8'd1; $display("inbody"); end
+  always @(posedge clk) begin s = s + 8'd1; $display("static"); end
+  initial begin clk = 1'b0; #1 clk = 1'b1; #2 $display("w=%0d s=%0d", w, s); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The arm snapshot must cover the UNK plane, not just the value plane:
+        // `a` starts X and is written 0, which moves only unk.
+        (
+            "in_body_level_wait_sees_an_unk_only_change",
+            r#"
+module top;
+  reg [7:0] a;
+  reg [7:0] n;
+  initial begin n = 8'd0; #1 a = 8'h00; #2 $display("n=%0d", n); $finish; end
+  always begin @(a); n = n + 8'd1; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // …and every ELEMENT, not just element 0: `@(mem)` with a write to
+        // `mem[3]`. A snapshot of element 0 alone would never see it.
+        (
+            "in_body_level_wait_watches_a_whole_array",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [7:0] n;
+  integer i;
+  initial begin n = 8'd0; for (i = 0; i < 4; i = i + 1) mem[i] = 8'd0; #1 mem[3] = 8'd9; #2 $display("n=%0d", n); $finish; end
+  always begin @(mem); n = n + 8'd1; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // …and every WATCHED NET of a multi-net `@(a or b)`: only the SECOND
+        // one moves, so a test of `nets[0]` alone never fires.
+        (
+            "in_body_level_wait_checks_every_watched_net",
+            r#"
+module top;
+  reg [7:0] a, b, n;
+  initial begin a = 8'd0; b = 8'd0; n = 8'd0; #1 b = 8'd3; #2 $display("n=%0d", n); $finish; end
+  always begin @(a or b); n = n + 8'd1; end
+endmodule
+"#
+            .to_string(),
+        ),
+        // An out-of-range read from a WAIT PREDICATE. `fire_waiters` evaluates
+        // it, which makes that pass a third producer of deferred range reports —
+        // and it sits after both of the drains the previous slice added, so
+        // without a drain at the end of `propagate` the diagnostic (and the
+        // exit class it sets) is lost entirely. Measured: exit 0 vs exit 1.
+        (
+            "oob_read_in_a_wait_predicate_reports",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [7:0] idx;
+  initial begin idx = 8'd0; #1 idx = 8'd9; end
+  initial begin wait (mem[idx] == 8'hAA); $display("never"); end
+endmodule
+"#
+            .to_string(),
+        ),
         // OUT-OF-RANGE array access — the silent-wrong this slice's own review
         // found, and the only cover for it. The write pointer walks past the
         // memory in ordinary clocked RTL, with no literal OOB anywhere in the
@@ -586,7 +784,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 22, "adversarial set shrank");
+    assert_eq!(designs.len(), 34, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -603,30 +801,6 @@ fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
 #[test]
 fn s1d4c2c_each_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
-        (
-            "in-body edge waiter",
-            "an in-body `wait`/`@(…)` waiter, `fork` or subroutine call",
-            r#"
-module top;
-  reg clk;
-  reg [7:0] n;
-  initial begin clk = 1'b0; n = 8'd0; #1 clk = 1'b1; #2 $finish; end
-  always begin @(posedge clk); n = n + 8'd1; end
-endmodule
-"#,
-        ),
-        (
-            "in-body wait(expr)",
-            "an in-body `wait`/`@(…)` waiter, `fork` or subroutine call",
-            r#"
-module top;
-  reg go;
-  reg [7:0] n;
-  initial begin go = 1'b0; n = 8'd0; #1 go = 1'b1; #2 $finish; end
-  initial begin wait (go); n = 8'd5; end
-endmodule
-"#,
-        ),
         (
             "continuous assign",
             "continuous assigns (S1d-4d settles them)",
@@ -675,6 +849,17 @@ module top;
 endmodule
 "#,
         ),
+        (
+            "wait fork",
+            "a `wait fork`, or a `fork`/subroutine-call body whose sidecar was lost",
+            r#"
+module top;
+  reg [7:0] n = 8'd0;
+  initial begin wait fork; n = 8'd7; $display("after n=%0d", n); end
+  initial #2 $finish;
+endmodule
+"#,
+        ),
     ];
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
@@ -693,12 +878,22 @@ endmodule
             e.refused
         );
     }
-    assert_eq!(cases.len(), 6, "refusal-row coverage moved");
-    // The sixth case exists for a property the other five do not have: its
-    // refused task is behind a `#1` and an `if`, so it lives in neither the
-    // entry block nor block 0. `body_dispatch_ok` scanning only the first block
-    // would admit it — and a design admitted with a refused task in it does not
-    // produce a wrong answer, it panics mid-run inside `k_dispatch_systask`.
+    assert_eq!(cases.len(), 5, "refusal-row coverage moved");
+    // The LAST case exists for a property the others do not have: its refused
+    // task is behind a `#1` and an `if`, so it lives in neither the entry block
+    // nor block 0. `body_dispatch_ok` scanning only the first block would admit
+    // it — and a design admitted with a refused task in it does not produce a
+    // wrong answer, it panics mid-run inside `k_dispatch_systask`.
+    //
+    // ⚠️ The `wait fork` case is here because the claim that replaced it was
+    // WRONG. S1d-4c-2d deleted the two in-body-waiter cases (correctly — those
+    // shapes run now) and asserted the remaining members of that row were each
+    // refused by an earlier layer. Measured false: a bare `wait fork;` lowers to
+    // `WaitCause::Fork` and populates NO `fork_modes` entry, so the design is
+    // `eligible: true, buildable: true` and this row is the only thing keeping
+    // it out — of a walk that would park it forever. `Call` is genuinely
+    // earlier-refused (`func_table` → the arena), and `WaitCause::Named` is
+    // never constructed at all.
     // ⚠️ The `fork` and subroutine-CALL halves of the waiter row have no case,
     // and cannot: a `Terminator::Call` needs a non-empty `func_table`, which
     // `NetArena::build` refuses first (measured — the case was written and the
@@ -886,6 +1081,51 @@ endmodule
     assert!(
         (1..=13).contains(&lines),
         "expected the budget to bound the printed deltas, got {lines}"
+    );
+}
+
+/// An ALREADY-TRUE `wait` in an unbounded loop terminates the same way on both
+/// backends — the in-body step guard, reached through the fall-through.
+///
+/// Its own test because it needs a small `max_body_steps`: with the default
+/// (100_000_000) the design spends four seconds counting to the limit before it
+/// says anything.
+///
+/// ⚠️ This does NOT pin the guard CHARGE on the fall-through itself. Measured:
+/// deleting `guard += 1` there leaves the gate green, because the loop's `Goto`
+/// charges the bottom guard on every iteration too, and `F4027` carries no
+/// count — so the charge only halves the iteration budget, which nothing
+/// observes. The charge is kept for fidelity with `run_process`, not because a
+/// design distinguishes it.
+#[test]
+fn s1d4c2d_already_true_wait_in_a_loop_hits_the_step_guard_alike() {
+    let src = r#"
+module top;
+  reg x;
+  initial begin x = 1'b1; end
+  initial forever wait (x);
+  initial begin #5 $finish; end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    let mk = |backend| SimOpts {
+        backend,
+        max_body_steps: 500,
+        ..opts.clone()
+    };
+    let sink_vm = MergedSink::default();
+    let sink_nat = MergedSink::default();
+    let r_vm = simulate(&ir, &sink_vm, mk(Backend::Bytecode));
+    let r_nat = simulate(&ir, &sink_nat, mk(Backend::Native));
+    assert_eq!(r_nat.backend, Backend::Native, "fell back");
+    let ev = sink_nat.events.into_inner();
+    assert_eq!(sink_vm.events.into_inner(), ev, "the two backends differ");
+    assert_eq!(r_vm.finish_reason, r_nat.finish_reason);
+    // ANTI-VACUITY: it must be the STEP guard that ended it, not `$finish`.
+    assert!(
+        ev.iter().any(|e| e.contains("F4027")),
+        "the design must hit the in-body step guard: {ev:?}"
     );
 }
 

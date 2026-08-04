@@ -20,8 +20,9 @@
 //! feature it depends on has to be stated too. S1d-4b-2
 //! implemented `k_dispatch_systask` and `k_sformatf`, S1d-4c-1
 //! `k_schedule_nba_at`, and S1d-4c-2a `k_rearm` — the surface is complete, which
-//! is NOT the same as the backend being runnable: 4c-2 still owes the region
-//! queues, the delta loop, the in-body waiters and `busy`. The counts are counted, not estimated — an early draft said
+//! is NOT the same as the backend being runnable — though as of S1d-4c-2d it
+//! IS: the region queues, the delta loop, `busy` and the in-body waiters all
+//! exist, and `--backend native` runs the designs three gate layers admit. The counts are counted, not estimated — an early draft said
 //! "20 refused" and "16 file methods" and both were wrong (18 and 8).
 //!
 //! The two-kind split is the correction both reviewers of this slice forced, and
@@ -250,6 +251,28 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) active: Vec<NativeReady>,
     pub(crate) inactive: Vec<NativeReady>,
     pub(crate) wheel: BTreeMap<u64, Vec<(bool, NativeReady)>>,
+    /// IN-BODY waiters (S1d-4c-2d) — `Scheduler::waiters`, restated.
+    ///
+    /// Separate from `WakeTable`, which holds the STATIC sensitivity of an
+    /// `always @(…)` header. These are the ones a body creates by suspending on
+    /// an event mid-execution, and the difference is not cosmetic: a static
+    /// Level waiter fires on any change to a watched net, while an in-body one
+    /// fires only when the net differs from what it was AT SUSPEND TIME.
+    pub(crate) waiters: Vec<NativeWaiter>,
+}
+
+/// One in-body waiter: what it waits for, where it resumes, and — for an
+/// `@(sig)` — the watched nets' values at suspend time.
+///
+/// `arm` is `Some` only for `Level`, exactly as the engine's `Waiter::arm` is.
+/// It holds the WHOLE net's raw words rather than a `Value` because that is what
+/// the engine compares (`SimState.nets[n].cur`, the packed array), so an
+/// `@(mem)` on an array asks the same question on both sides.
+pub(crate) struct NativeWaiter {
+    pub(crate) cause: sim_ir::WaitCause,
+    pub(crate) proc: u32,
+    pub(crate) block: u32,
+    pub(crate) arm: Option<Vec<Vec<u64>>>,
 }
 
 /// A queued activation: which process, and which block it resumes at.
@@ -363,6 +386,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             active: Vec::new(),
             inactive: Vec::new(),
             wheel: BTreeMap::new(),
+            waiters: Vec::new(),
         }
     }
 
@@ -557,6 +581,28 @@ impl Kernel for NativeKernel<'_, '_, '_> {
 
     fn k_time_limit(&self) -> Option<u64> {
         self.sched.k_time_limit()
+    }
+
+    fn k_suspend_on(&mut self, proc: u32, block: u32, cause: &sim_ir::WaitCause) {
+        // `Scheduler::suspend_on`, restated over this store. The one thing that
+        // is not a transcription is the arm snapshot: the engine clones
+        // `nets[n].cur` (a `BitPacked`), this copies the slot's raw words. Both
+        // are "the whole net as it stands now", which is what the fire test
+        // compares against.
+        let arm = match cause {
+            sim_ir::WaitCause::Level { nets } => Some(
+                nets.iter()
+                    .map(|&n| self.arena.net_words(n).to_vec())
+                    .collect(),
+            ),
+            _ => None,
+        };
+        self.waiters.push(NativeWaiter {
+            cause: cause.clone(),
+            proc,
+            block,
+            arm,
+        });
     }
 
     fn k_schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool) {

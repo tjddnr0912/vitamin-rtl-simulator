@@ -1023,6 +1023,9 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_time_limit(&self) -> Option<u64> {
         self.time_limit
     }
+    fn k_suspend_on(&mut self, proc: u32, block: u32, cause: &sim_ir::WaitCause) {
+        self.suspend_on(proc, block, cause.clone());
+    }
     fn k_schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool) {
         self.schedule_resume(proc, block, tick, inactive);
     }

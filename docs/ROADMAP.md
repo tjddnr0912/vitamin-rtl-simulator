@@ -342,10 +342,17 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a~c·S1d-1~3·S1d-4a~4c ✅ → **S1d-4c-2d**(in-body 웨이터) · **S1d-4d** … S6
+### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a~c·S1d-1~3·S1d-4a~4c(2d 포함) ✅ → **S1d-4d** … S6
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
+> **S1d-4c-2d 완료 (2026-08-04 · §4.5.299) — in-body 웨이터.** `Wait{Edge|Level|Expr}` 를 ③층이
+> 실행한다(`k_suspend_on` · 공유 워크의 `Wait` 암 · `fire_waiters`). ⭐ 그라운딩이 큐를 정정: **`Named`
+> 는 구성 불가**(named event → 카운터 넷 → `Level`). ⭐⭐ 두 렌즈가 같은 silent-wrong 으로 수렴 —
+> `fire_waiters` 가 범위 진단의 **세 번째 생산자**인데 `propagate` 뒤에 드레인이 없어 세 종료 경로
+> 전부에서 사라졌다(**FAIL→PASS**). ⭐⭐ 그리고 내가 코드에 적은 *"S0 가 먼저 거부한다"* 가 틀렸다 —
+> **`wait fork;` 는 `fork_modes` 를 안 만든다**(eligible ∧ buildable, 이 암이 유일한 거부자).
+>
 > **S1d-4c-2c 완료 (2026-08-04 · §4.5.298) — ③층이 처음으로 설계를 돌린다.** 런 루프(리전 큐·델타
 > 루프·시간 진행·`Delay` 정지·`busy`) + `simulate` 배선 + **세 번째 게이트 층**
 > `native::run::executor_rows`. 슬라이스 경계는 측정이 정했다 — 코퍼스 **72 중 0** 이 전 프로세스

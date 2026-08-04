@@ -261,6 +261,15 @@ pub(crate) trait Kernel {
     fn k_delta_budget(&self) -> u64;
     /// CONTROL: stop advancing time past this tick (`SimOpts::time_limit`).
     fn k_time_limit(&self) -> Option<u64>;
+    /// CONTROL: park this activation on an in-body EVENT (`@(posedge x)`,
+    /// `@(sig)`, `wait(expr)`), to be resumed when the cause is satisfied.
+    ///
+    /// The implementor owns the waiter list AND the arm snapshot an
+    /// `@(sig)` needs — the values of the watched nets at suspend time, so a
+    /// change that completed BEFORE the wait armed does not spuriously fire it.
+    /// Snapshotting is therefore not something the walk can do for it: the two
+    /// stores hold net values in different shapes.
+    fn k_suspend_on(&mut self, proc: u32, block: u32, cause: &sim_ir::WaitCause);
     /// CONTROL: park this activation and schedule its resume.
     ///
     /// `tick == now` lands in the CURRENT timestep's Active (or Inactive, for

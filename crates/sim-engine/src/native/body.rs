@@ -41,10 +41,12 @@
 //! spelling, and the engine's copy in `run_process` is the one this was checked
 //! against rather than a twin that could drift.
 //!
-//! `Wait` still has no arm. It suspends on an EVENT rather than a time, which
-//! needs a waiter table with armed snapshots — and the corpus contains exactly
-//! zero of them (measured: 138 suspending terminators, all `Delay`), so it is
-//! the next slice, built against dedicated designs rather than pretended here.
+//! `Wait` got its arm in S1d-4c-2d, and it is here for the same reason:
+//! WHEN to suspend and what the `wait(expr)` already-true fall-through does are
+//! IEEE rules, while WHERE the waiter is filed (and what an `@(sig)` snapshots)
+//! is the implementor's — `k_suspend_on`. The corpus contains exactly zero
+//! in-body waiters (measured: 138 suspending terminators, all `Delay`), so that
+//! model is tested entirely against dedicated designs.
 //!
 //! `body_is_walkable(ir, proc, entry)` is the precondition, and it must be
 //! asked about the SAME entry the walk will use. There is a second, separate
@@ -64,8 +66,8 @@ use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 /// changed with the meaning (it used to be called `body_is_suspend_free`)
 /// deliberately: a predicate whose truth set moves while its name stays put is
 /// how a caller ends up relying on the OLD property. What it refuses now is
-/// `Wait` (the in-body waiter model, next slice), `Fork` and `Call` (both
-/// gate-refused).
+/// `Fork`, `Call`, and a `Wait` on a cause nothing can satisfy (`wait fork`, a
+/// named event). `Wait{Edge|Level|Expr}` became walkable in S1d-4c-2d.
 ///
 /// A WHOLE-BODY scan, not a first-block one: a `Delay` behind two `Goto`s
 /// suspends just as much as one in the entry block. The engine's own
@@ -124,11 +126,34 @@ pub(crate) fn body_is_walkable(ir: &SimIr, proc: u32, entry: u32) -> bool {
             // reason the `Goto` target is: a `Wait` behind a `#5` is still a
             // `Wait` this walk cannot execute.
             Terminator::Delay { resume, .. } => stack.push(*resume),
-            // No arm in the walk: `Wait` needs the in-body waiter model, and
-            // `Fork`/`Call` are gate-refused.
-            Terminator::Wait { .. } | Terminator::Fork { .. } | Terminator::Call { .. } => {
-                return false
-            }
+            // A `Wait` on a cause the waiter model can satisfy is walkable;
+            // its resume block joins the scan for the same reason a `Delay`'s
+            // does. `Named` and `Fork` are NOT: nothing fires them, so parking
+            // on one is a hang. (`Named` is unconstructible today — elaborate
+            // lowers named events to a counter net and `@(ev)` to `Level` — but
+            // the arm is explicit so a future lowering change is a compile-time
+            // decision rather than a silent hang.)
+            Terminator::Wait { cond, resume } => match cond {
+                sim_ir::WaitCause::Edge { .. }
+                | sim_ir::WaitCause::Level { .. }
+                | sim_ir::WaitCause::Expr { .. } => stack.push(*resume),
+                // ⚠️ The `Fork` half is REACHABLE and this arm is the ONLY
+                // thing refusing it — an earlier version of this comment said
+                // the S0 `fork` row got there first, and that was measured
+                // false. A bare `wait fork;` lowers to `WaitCause::Fork` and
+                // populates NO `fork_modes` entry, so such a design is
+                // `eligible: true, buildable: true`. Nothing in `fire_waiters`
+                // can ever satisfy the cause, so admitting it would park the
+                // process forever — a hang and a lost `$display`, not a wrong
+                // value. Covered by `s1d4c2c_each_refusal_row_has_a_design`.
+                //
+                // `Named` really is unconstructible: elaborate lowers a named
+                // event to a 64-bit counter net and `@(ev)` to an ordinary
+                // `Level` wait, and never builds this variant.
+                sim_ir::WaitCause::Named { .. } | sim_ir::WaitCause::Fork => return false,
+            },
+            // No arm in the walk: `Fork`/`Call` are gate-refused.
+            Terminator::Fork { .. } | Terminator::Call { .. } => return false,
         }
     }
     true
@@ -257,18 +282,33 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 k.k_schedule_resume(proc, *resume, tick, inactive);
                 return Step::Suspended;
             }
-            // EXPLICIT arms, not a `_`: each is unreachable for a DIFFERENT
-            // reason, and a wildcard would let a future gate widening land here
-            // silently. `Wait` needs the in-body waiter model (the next slice);
-            // `Fork`/`Call` are refused by `fork_modes` and by `NetArena::build`'s
-            // `func_table` rejection respectively.
-            Terminator::Wait { .. } => {
-                unreachable!(
-                    "tier-3 body walk reached an in-body waiter — `body_is_walkable` \
-                     was not consulted (the `Wait` waiter model is the slice after \
-                     S1d-4c-2c; the corpus contains none, so it is built against \
-                     dedicated designs)"
-                )
+            // IN-BODY WAIT (S1d-4c-2d). `run_process`'s non-frame branch again,
+            // and again written once because what it needs is kernel calls.
+            //
+            // The `Expr` arm is the one with control flow in it: `wait(e)` with
+            // `e` ALREADY TRUE does not suspend at all, it falls through to the
+            // resume block — and that fall-through has to charge the step guard,
+            // or `wait(1)` in a loop spins forever instead of reporting F4027.
+            Terminator::Wait { cond, resume } => {
+                if let sim_ir::WaitCause::Expr { expr } = cond {
+                    if k.k_truthy(*expr) {
+                        bb = *resume;
+                        guard += 1;
+                        if guard > k.k_max_deltas() {
+                            k.k_mark_fatal();
+                            return Step::Fatal;
+                        }
+                        continue;
+                    }
+                }
+                // `Named` cannot appear: elaborate lowers a named event to a
+                // 64-bit counter net and `@(ev)` to an ordinary `Level` wait on
+                // it (`stmt_main.rs` says the variant stays "reserved-unused").
+                // `Fork` needs `fork_modes`, an S0 reject. Both would suspend on
+                // a cause nothing here can satisfy — a hang, not a wrong value —
+                // so they are refused by `body_is_walkable` rather than parked.
+                k.k_suspend_on(proc, *resume, cond);
+                return Step::Suspended;
             }
             Terminator::Fork { .. } => unreachable!(
                 "tier-3 body walk reached `Fork` — `fork_modes` non-empty is an S0 \
