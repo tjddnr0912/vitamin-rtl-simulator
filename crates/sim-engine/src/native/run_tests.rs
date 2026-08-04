@@ -503,6 +503,26 @@ endmodule
 "#
             .to_string(),
         ),
+        // A DECLARATION INITIALIZER that reads out of range, in a design with no
+        // processes at all — `arm_t0` runs it before anything is armed and the
+        // run then goes straight to quiescence, so the report has to survive a
+        // path with no format-engine call and no later body.
+        //
+        // ⚠️ It does NOT cover `arm_t0`'s own `drain_range_diags` — measured:
+        // removing that line keeps this green, because `run_body` drains at
+        // every statement boundary and an initializer body is straight-line.
+        // Saying so beats letting the design's name imply a cover it does not
+        // provide.
+        (
+            "oob_in_a_declaration_initializer",
+            r#"
+module top;
+  reg [7:0] mem [0:1];
+  reg [7:0] x = mem[9];
+endmodule
+"#
+            .to_string(),
+        ),
         // OUT-OF-RANGE array access — the silent-wrong this slice's own review
         // found, and the only cover for it. The write pointer walks past the
         // memory in ordinary clocked RTL, with no literal OOB anywhere in the
@@ -566,7 +586,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 21, "adversarial set shrank");
+    assert_eq!(designs.len(), 22, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

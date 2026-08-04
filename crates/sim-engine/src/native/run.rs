@@ -327,6 +327,13 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // an earlier version of this loop returned early, which was a
         // difference with no rule behind it.
         let _ = run_body(k, ir, pid, entry);
+        // REDUNDANT TODAY, and said so rather than left looking load-bearing:
+        // `run_body` drains at every statement boundary and an initializer body
+        // is straight-line assignments, so an out-of-range read in one is
+        // already reported before this line runs. Measured — removing it leaves
+        // the whole gate green, including a design whose ONLY statement is
+        // `reg x = mem[9];`. Kept because it costs one `Cell` read and its
+        // absence would be a silent loss the day the walk's drain moves.
         k.drain_range_diags();
     }
     // Drop what the initializers made dirty — the whole point of running them
