@@ -270,87 +270,15 @@ impl Kernel for Scheduler<'_, '_> {
         crate::exec::kpred::value_plusargs_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_value_plusargs(&mut self, rhs: u32) -> Value {
-        // args = [fmt string-literal Const, ref-var whole-net Signal] —
-        // elaborate's contract; defend a hand-built IR by returning 0.
-        let (fmt_eid, var_net) = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() == 2 => {
-                let var = match self.st.ir.exprs.get(args[1] as usize) {
-                    Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                    _ => None,
-                };
-                (args[0], var)
-            }
-            _ => (u32::MAX, None),
-        };
-        let fmt = match self.st.ir.exprs.get(fmt_eid as usize) {
-            Some(sim_ir::Expr::Const { val }) => crate::builtins::const_string(self.st.ir, *val),
-            _ => return Value::from_i128(0, 32, true),
-        };
-        let Some(net) = var_net else {
-            return Value::from_i128(0, 32, true);
-        };
-        // split "prefix%C" — elaborate validated exactly one supported spec.
-        let Some(pct) = fmt.find('%') else {
-            // degenerate no-spec format: a pure test probe, nothing written.
-            let hit = self.st.plusargs.iter().any(|p| p.starts_with(&fmt));
-            return Value::from_i128(hit as i128, 32, true);
-        };
-        let prefix = &fmt[..pct];
-        let conv = fmt[pct + 1..].chars().next().unwrap_or('d');
-        let Some(rest) = self
-            .st
-            .plusargs
-            .iter()
-            .find_map(|p| p.strip_prefix(prefix).map(|r| r.to_string()))
-        else {
-            return Value::from_i128(0, 32, true); // MISS: var untouched
-        };
-        let radix = match conv {
-            'd' | 'D' => 10,
-            'h' | 'H' | 'x' | 'X' => 16,
-            'o' | 'O' => 8,
-            'b' | 'B' => 2,
-            _ => 0, // %s
-        };
-        let value = if radix == 0 {
-            // %s: pack the raw bytes MSB-first (IEEE §5.9 string packing).
-            let bytes = rest.as_bytes();
-            let w = (bytes.len() as u32 * 8).max(8);
-            let mut v = Value::zeros(w, false);
-            for (i, &by) in bytes.iter().rev().enumerate() {
-                let bit = i * 8;
-                v.val[bit / 64] |= (by as u64) << (bit % 64);
-            }
-            v
-        } else {
-            // scanf-style: optional sign, then leading digits of the radix.
-            let (neg, digits) = match rest.strip_prefix('-') {
-                Some(d) => (true, d),
-                None => (false, rest.as_str()),
-            };
-            let lead: String = digits.chars().take_while(|c| c.is_digit(radix)).collect();
-            let mag = u64::from_str_radix(&lead, radix).unwrap_or(0);
-            let raw = if neg {
-                (mag as i64).wrapping_neg() as u64
-            } else {
-                mag
-            };
-            let mut v = Value::zeros(64, false);
-            v.val[0] = raw;
-            v
-        };
-        let lv = Lvalue {
-            chunks: vec![sim_ir::LvalChunk {
-                net,
-                word: None,
-                offset: None,
-                width: None,
-                kind: sim_ir::SelKind::Bit,
-            }],
-        };
-        let off = self.resolve_lvalue_offsets(&lv);
-        self.k_write_lvalue(&lv, value, &off);
-        Value::from_i128(1, 32, true)
+        // Parse/match/convert are the shared half (`exec::plusargs::effect`,
+        // extracted so the tier-3 kernel runs the same spelling); only the
+        // write is this store's.
+        let (status, write) = crate::exec::plusargs::effect(self.st.ir, &self.st.plusargs, rhs);
+        if let Some((lv, v)) = write {
+            let off = self.resolve_lvalue_offsets(&lv);
+            self.k_write_lvalue(&lv, v, &off);
+        }
+        status
     }
     fn k_fopen_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::fopen_rhs(self.st.ir.exprs.as_slice(), rhs)

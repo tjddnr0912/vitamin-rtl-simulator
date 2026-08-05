@@ -128,3 +128,71 @@ fn binary_and_octal_conversions() {
     assert!(out.contains("okb=1 nb=10"), "got:\n{out}");
     assert!(out.contains("oko=1 no=15"), "got:\n{out}");
 }
+
+/// WIDE conversions — every value here is iverilog 13's, measured. The
+/// previous conversion went through `u64::from_str_radix(..).unwrap_or(0)`,
+/// so all four of these silently wrote ZERO with `got=1`: a `%h` past 16
+/// digits, a `%b` past 64 digits, a `%d` past `u64::MAX`, and (the sibling
+/// axis) a negative `%d` into a wider-than-64 destination, which came out
+/// zero- instead of sign-extended.
+#[test]
+fn wide_conversions_do_not_truncate_to_a_word() {
+    let (out, err, code) = run_with(
+        "module top;\n\
+         reg [95:0] w; reg [69:0] b; reg [95:0] d; reg [95:0] neg;\n\
+         reg [31:0] ok;\n\
+         initial begin\n\
+           w = 0; b = 0; d = 0; neg = 96'hAA;\n\
+           ok = $value$plusargs(\"W=%h\", w);   $display(\"w: ok=%0d w=%h\", ok, w);\n\
+           ok = $value$plusargs(\"B=%b\", b);   $display(\"b: ok=%0d b=%b\", ok, b);\n\
+           ok = $value$plusargs(\"D=%d\", d);   $display(\"d: ok=%0d d=%0d\", ok, d);\n\
+           ok = $value$plusargs(\"NEG=%d\", neg); $display(\"neg: ok=%0d neg=%h\", ok, neg);\n\
+           $finish;\n\
+         end\n\
+         endmodule\n",
+        &[
+            "+W=123456789abcdef012345678",
+            "+B=1010111010101110101011101010111010101110101011101010111010101110101011",
+            "+D=79228162514264337593543950335",
+            "+NEG=-5",
+        ],
+    );
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(
+        out.contains("w: ok=1 w=123456789abcdef012345678"),
+        "got:\n{out}"
+    );
+    assert!(
+        out.contains(
+            "b: ok=1 b=1010111010101110101011101010111010101110101011101010111010101110101011"
+        ),
+        "got:\n{out}"
+    );
+    assert!(
+        out.contains("d: ok=1 d=79228162514264337593543950335"),
+        "got:\n{out}"
+    );
+    assert!(
+        out.contains("neg: ok=1 neg=fffffffffffffffffffffffb"),
+        "got:\n{out}"
+    );
+}
+
+/// Truncation keeps the LOW bits for every radix (iverilog-measured:
+/// `+D=4294967297` into 32 bits reads back 1, not saturation's ffffffff).
+#[test]
+fn wide_parse_into_a_narrow_destination_truncates() {
+    let (out, err, code) = run_with(
+        "module top;\n\
+         reg [31:0] d32, ok;\n\
+         initial begin\n\
+           d32 = 0;\n\
+           ok = $value$plusargs(\"D=%d\", d32); $display(\"d32: ok=%0d d32=%0d\", ok, d32);\n\
+           $finish;\n\
+         end\n\
+         endmodule\n",
+        &["+D=4294967297"],
+    );
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(out.contains("d32: ok=1 d32=1"), "got:\n{out}");
+}

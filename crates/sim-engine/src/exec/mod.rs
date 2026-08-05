@@ -17,6 +17,7 @@ pub(crate) use frame_window::*;
 pub(crate) use process::*;
 mod frame_window;
 pub(crate) mod kpred;
+pub(crate) mod plusargs;
 mod process;
 
 /// Outcome of one process activation.
