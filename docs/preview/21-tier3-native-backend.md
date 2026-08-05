@@ -430,6 +430,7 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > 결정 6건(ROADMAP §2)은 전부 **vita-vs-iverilog** 차이라 이 게이트(vita-vs-vita)를 막지 않는다.
 > | **S1d-4d-3 ✅ (2026-08-05)** | **delayed CA**(§4.5.302) — 엔진 로직을 `schedule_delayed_cas`/`take_due_delayed_ca` 로 **추출**해 양쪽이 공유 | ✅ **코퍼스 72/72 바이트 동일** · differential 175 native 0 diff · PRE/POST 엔진 경로 0 diff · 뮤테이션 9/9. ⭐⭐ LHS 오프셋만 엔진 스토어라 동적 인덱스 쓰기가 **조용히 사라졌다** · 공유 부분은 **차분이 못 지켜** iverilog 절대값 앵커 2개 신설 |
 > | **S1d-4d-4 ✅ (2026-08-05)** | **multi-driver·wired 해상**(§4.5.303) — fold 를 `resolve_md_group` 로 추출해 공유·그룹 분류는 스케줄러의 `md_groups` 한 철자 | ✅ **S1 거부 행에서 cont-assign 계열 소멸**(잔여 = `final`·fork·서브루틴·`$monitor` 계열). differential 45설계 3-way 0 diff·폴백 0 · 앵커 4(iverilog 절대값) · 뮤테이션 비등가 11/11 kill. ⭐ 평가 **순서**는 impure 드라이버 쌍으로, 루프 **위치**는 델타 예산 스윕으로 핀 — 값-전용 설계로는 못 보는 두 축 |
+> | **S1d-5 ✅ (2026-08-05)** | **`$value$plusargs` 배선**(§4.5.304) — `stmt_effect` 가족 첫 구성원. 공유 `exec::plusargs::effect` + 게이트 carve-out(`value_plusargs_rhs` 한 철자) | ✅ **keccak_f_flat 네이티브·바이트 동일**. ③층 기준선 실측(N=5000·release): interp 5.22 / vm 2.53 / **native 4.49** / iverilog 7.05 — ②보다 1.8× 느림 = S2/S3 이 지울 표현 비용의 시작점. ⚠️ stmt_effect 가 가리던 다음 행이 드러났다: 호출형·배열형 keccak = **frame-local(S3)** |
 >
 > **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
 > 엔진은 이미 이 이음매를 **의도적으로** 만들어 뒀다(`exec/mod.rs`: *"`apply_effect` 의 커널 호출이

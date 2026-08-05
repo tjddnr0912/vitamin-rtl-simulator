@@ -347,6 +347,22 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.304 ③층 S1d-5 — `$value$plusargs` 배선: keccak_f_flat 네이티브 + ③층 기준선 실측, 그리고 변환기의 침묵 셋 (2026-08-05, branch feat-tier3-plusargs, format 26 불변) ✅
+
+`stmt_effect` 가족의 첫 구성원이 배선됐다 — `k_value_plusargs` 가 공유 `exec::plusargs::effect`(파싱·매칭·변환)를 지나고 **쓰기만** 자기 스토어로, 게이트 행은 정본 술어 `value_plusargs_rhs` 로 정확히 그 구성원만 carve-out(분류 `rhs_is_stmt_effect` 는 불변 — tier-2 컴파일 게이트는 한 가족을 그대로 본다).
+
+**측정이 큐의 전제를 정정했다.** "이것 하나로 keccak 둘이 적격" 은 절반만 참 — stmt_effect 는 **첫 거부 행**이라 그 뒤의 행을 가리고 있었고, 걷어내자 호출형·배열형은 **frame-local storage(S3)** 로 넘어갔다. **keccak_f_flat 만 네이티브로 돌고 바이트 동일**(N=5000). 그 위에서 ③층 기준선을 처음 쟀다(release·best-of-3): **interp 5.22s · vm 2.53s · native 4.49s · iverilog 7.05s** — 오늘의 ③층 워크는 **②보다 1.8× 느리다**. 예상된 값이다(S2 폭별 특수화·S3 코드젠이 표현 비용을 지우는 단계) — 그 단계들이 움직여야 할 정직한 시작점으로 기록한다.
+
+**그라운딩이 pre-existing silent-wrong 을 둘 낳았다(커밋 분리).** ① **폭 축**: 변환 전체가 `u64::from_str_radix(..).unwrap_or(0)` 라 16자리 초과 %h·64자리 초과 %b·u64 초과 %d 가 전부 **조용한 0**(got=1), 음수 %d 는 64비트 초과 목적지에서 zero-extend. → 비트 radix 는 자릿수만큼 워드 누적·десimal 은 목적지 폭에서 wrap(부호 확장이 자동으로 떨어진다)·절단은 LOW bits(iverilog 실측 `+D=4294967297`→1). ② **4-state 축**(differential 렌즈 발굴): x/z 자리가 2-state 로 파싱돼 `1x2`→1, junk 접미사가 **선행 자리만** 조용히 파싱돼 `5x9`→5, `+5`→0. → 리터럴 관례 그대로(위치별 x/z·MSB 자리 종류가 목적지 폭까지 확장·밑줄 구분자·lone x/z = 전체 x/z) + invalid 는 **W4028 신설**(radix 명·값 인용) + all-X — 경고 없으면 철자 틀린 plusarg 가 exit 0 으로 X 만 남긴다. MsgCode 60→**61**. 검증 = 그라운딩 p1~p8 전 케이스 + 무작위 40값 퍼즈 3-way **0 diff**.
+
+**게이트.** **5153 green** · clippy · fmt · format 26 · 오라클 앵커(양 백엔드·경고 라인 포함) · native_gate 의 거부 단언 → **수용 단언** 반전.
+
+**적대 렌즈 ① differential(31설계+keccak 3종·3-way·PRE-A 12) — 배선 자체 발산 0·폴백 0·PRE/POST 0 diff.** 위 4-state 셋이 이 렌즈의 발견이고, 추가 기록 둘: no-% 퇴화형은 vita 확장(오라클은 런타임 거부 — no-oracle 유지)·`%0d` 는 vita 과잉거부(loud·§3).
+
+**적대 렌즈 ② soundness — "공유했으면 소비자마다 앵커" 위반을 실측.** ⭐⭐ **native 경로에서 `$value$plusargs` 를 돌리는 테스트가 0** — native 쓰기를 통째로 지워도(M6)·status 를 1 로 박아도(M7)·negation 의 목적지 폭 스팬을 지워도(M4) **전 스위트 초록**. 공유 반쪽이 Scheduler 소비자로만 앵커돼 있었다. → iverilog 절대값 앵커 1개(5축: hit·miss[변수 불변+status 0]·음수 %h/%b[목적지 폭 negation]·24자리 %h) 로 3/3 kill. ⭐ **이 슬라이스의 게이트 스위트가 이 트리에서 빨강** — `native_gate` 의 plusargs 거부 단언이 배선으로 뒤집혔는데 **그 빨간 테스트가 carve-out 반전 뮤테이션(M8)을 가렸다**(어느 단언이 죽는지만 바뀐다). 빨강 수정 후 M8 은 두 킬러. ⭐ 하네스 함정 **잠재 확인**: `build_with_opts` 는 plusargs 를 설치 안 하고(소스만 파싱), 프로덕션은 `simulate` 가 복사 — 최초의 native plusargs 테스트가 MISS 경로만 잴 뻔했다 → plusargs 받는 helper 신설 + 주석. stale 산술 셋(18→17 refused·"eleven"→"ten") 재계수.
+
+**경계(기록).** keccak 호출형·배열형 = S3 소유 · no-% 퇴화형 = vita 확장(no-oracle) · `%0d` = §3 · 4건 obs 병렬 flake(격리·재실행 초록·기지 클래스).
+
 #### 4.5.303 ③층 S1d-4d-4 — multi-driver·wired 해상: S1 거부 행에서 cont-assign 이 사라졌다 (2026-08-05, branch feat-tier3-wired, format 26 불변) ✅
 
 `wire`/`wand`/`wor` 다중 구동 넷의 4-state 해상을 ③층이 실행한다 → **S1 거부 행에서 continuous-assign 계열이 전부 사라졌다**(남은 행 = `final`·fork/`wait fork`·서브루틴/frame·`$monitor` 계열). 코퍼스 커버리지 **0**(실측 — multidriver·wired 둘 다)이라 검증 전부가 전용 설계다.
