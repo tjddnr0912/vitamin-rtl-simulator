@@ -419,6 +419,73 @@ impl Elaborator<'_> {
     /// here, so the whole normalization collapses to one signed constant and
     /// the underflow (`1 − 2 = −1`, a partial write of the in-range bits) is
     /// expressed directly.
+    /// Is this index a COMPILE-TIME CONSTANT, for the purpose of deciding
+    /// whether an out-of-range value should be diagnosed rather than wrapped?
+    ///
+    /// `const_index_value` alone answers only for a folded `Const` node, and the
+    /// shape that actually reaches here unfolded is a sign cast over one
+    /// (`mg[$unsigned(-32'sd3)]`) — both `$signed` and `$unsigned` preserve their
+    /// argument's value and width, so seeing through them changes nothing but
+    /// the classification. Deliberately shallow: anything it fails to recognize
+    /// is treated as a runtime index and wraps, which costs a diagnostic on an
+    /// exotic constant expression but can never produce a value the oracles
+    /// reject (ROADMAP §2).
+    fn index_is_compile_time_constant(&self, eid: u32) -> bool {
+        self.index_all_const(eid, 0)
+    }
+
+    /// Every leaf a `Const`, every interior node a pure operator.
+    ///
+    /// A shallow version of this (bare `Const`, the two sign casts, a unary sign
+    /// over a literal) shipped first and it was WRONG, not merely incomplete:
+    /// the unrecognized spellings fell to the runtime wrap, so `m[64'h1_0000_0002]`
+    /// dropped — loud, matching the oracle — while `m[~64'hFFFF_FFFE_FFFF_FFFD]`,
+    /// the SAME VALUE, silently wrote element 2 in the same design. Two spellings
+    /// of one constant have to answer the same, so the recognizer walks the whole
+    /// expression instead of naming spellings.
+    ///
+    /// `_`-free like [`Self::index_is_repeatable`], and fails closed for the same
+    /// reason: a `Call` or `SysFunc` is not a constant, and a variant this does
+    /// not know must be treated as runtime rather than assumed constant.
+    fn index_all_const(&self, eid: u32, depth: u32) -> bool {
+        if depth > 64 {
+            return false;
+        }
+        let kids: Vec<u32> = match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Const { .. }) => return true,
+            // The two sign casts preserve their argument's value and width.
+            Some(ir::Expr::SysFunc { which, args })
+                if matches!(which, ir::SysFuncId::Signed | ir::SysFuncId::Unsigned)
+                    && args.len() == 1 =>
+            {
+                args.clone()
+            }
+            Some(ir::Expr::Unary { operand, .. }) => vec![*operand],
+            Some(ir::Expr::Binary { lhs, rhs, .. }) => vec![*lhs, *rhs],
+            Some(ir::Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+            }) => vec![*cond, *then_e, *else_e],
+            Some(ir::Expr::Concat { parts }) => parts.clone(),
+            Some(ir::Expr::Replicate { count, value }) => vec![*count, *value],
+            Some(ir::Expr::Select {
+                base,
+                offset,
+                width,
+                ..
+            }) => vec![*base, *offset, *width],
+            // A `Signal` is runtime state even when nothing writes it; the rest
+            // are effects or bindings. All fail closed.
+            Some(ir::Expr::Signal { .. })
+            | Some(ir::Expr::SysFunc { .. })
+            | Some(ir::Expr::Call { .. })
+            | Some(ir::Expr::ArrayItem { .. })
+            | None => return false,
+        };
+        kids.into_iter().all(|k| self.index_all_const(k, depth + 1))
+    }
+
     fn const_index_value(&self, eid: u32) -> Option<i64> {
         let ir::Expr::Const { val } = self.exprs.get(eid as usize)? else {
             return None;
@@ -463,25 +530,211 @@ impl Elaborator<'_> {
     /// and iverilog still differ, and it differs because vita answers by VALUE
     /// where iverilog reinterprets (see `eval::offset_of_index_value`).
     pub(crate) fn seal_index_unsigned(&mut self, raw_off: u32) -> u32 {
-        // A SIGNED index cannot ride a concat — it erases the sign — and this
-        // path's arithmetic and bounds are unsigned throughout, so the seal is
-        // for the unsigned case only. A narrow signed index on an unpacked
-        // array is therefore still zero-extended rather than sign-extended;
-        // that is the one residual class §4.5.309 leaves, and closing it means
-        // moving this geometry into a signed domain (ROADMAP §2).
-        // `None` (an unresolved hierarchical reference below this index) declines
-        // too — the pre-§4.5.309 answer, and the only safe one.
+        // `None` — an unresolved hierarchical reference below this index — declines,
+        // because the width rule would answer from a fabricated 1-bit net (§4.5.309).
+        let Some(sw) = self.index_self_width(raw_off) else {
+            return raw_off;
+        };
+        // A CONSTANT index keeps its TRUE value and is deliberately left on the
+        // pre-§4.5.310 path — the widening seal, so an out-of-range constant
+        // stays out of range and the access is DIAGNOSED instead of wrapping
+        // into a neighbouring element.
         //
-        // …and an unsigned index is sealed on the PRE-§4.5.309 decision, which is
-        // this funnel's whole rule: see `unsigned_seal_admitted`.
-        match self.index_self_width(raw_off) {
-            Some(sw) if !sw.signed && self.unsigned_seal_admitted(raw_off) => {}
-            _ => return raw_off,
+        // The two oracles split here and the ladder decides: `mg[$unsigned(-32'sd3)]`
+        // on a `reg [7:0] mg[-3:2]` is dropped with a warning by iverilog 13 and
+        // written (as element `[-3]`) by verilator 5.050. vita used to be loud
+        // about it, and a statically known index outside a statically known
+        // range is exactly the thing a tool should say out loud, so silence is
+        // not an option here even though one oracle would allow it.
+        if self.index_is_compile_time_constant(raw_off) {
+            if !sw.signed && self.unsigned_seal_admitted(raw_off) {
+                let zero1 = self.const_u32_expr(0, 1);
+                return self.push_expr(ir::Expr::Concat {
+                    parts: vec![zero1, raw_off],
+                });
+            }
+            return raw_off;
         }
-        let zero1 = self.const_u32_expr(0, 1);
-        self.push_expr(ir::Expr::Concat {
-            parts: vec![zero1, raw_off],
-        })
+        // A WIDER-THAN-THIRTY-TWO index is TRUNCATED to its low thirty-two bits,
+        // which is the answer BOTH oracles give: `reg [7:0] m[0:5]; reg [63:0] b =
+        // 64'h1_0000_0002; m[b]` reads `m[2]` in iverilog 13 and in verilator
+        // 5.050 alike, where vita dropped the access entirely.
+        //
+        // Verilog's own operand truncation does not reach it: the coordinate for a
+        // zero base is the index ITSELF (no arithmetic to impose a width), and for
+        // a non-zero base the sum takes the WIDER operand's width, so a 64-bit
+        // index keeps all 64 bits either way and the value lands out of every
+        // net's range.
+        if sw.width > 32 {
+            // Truncating with `select_low` alone is a BIT operation, and that
+            // silently throws away any X/Z above bit 31: `reg [63:0] b;
+            // b[31:0] = 3;` (high half never driven, so X) read and WROTE
+            // element 3 where iverilog gives `x` and drops the write — an
+            // unknown index made known, loud → silent-wrong.
+            //
+            // So the dropped half is added back as `high * 0`, which is 0 when
+            // high is known and ALL-X when any bit of it is not (arithmetic
+            // returns X for an X operand — measured identical in iverilog 13 and
+            // vita). The index then stays unknown and the access still drops.
+            //
+            // `raw_off` appears twice, so this needs the same repeatability
+            // guard as the sign extension below.
+            if !self.index_is_repeatable(raw_off, 0) {
+                return raw_off;
+            }
+            let low = self.select_low(raw_off, 32);
+            let hi_off = self.const_u32_expr(32, 32);
+            let hi_w = self.const_u32_expr(sw.width - 32, 32);
+            let high = self.push_expr(ir::Expr::Select {
+                base: raw_off,
+                offset: hi_off,
+                width: hi_w,
+                kind: ir::SelKind::PartConst,
+            });
+            let zero = self.const_u32_expr(0, 32);
+            let poison = self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Mul,
+                lhs: high,
+                rhs: zero,
+            });
+            return self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Add,
+                lhs: low,
+                rhs: poison,
+            });
+        }
+        // Exactly thirty-two bits needs nothing: it is already the value the
+        // oracles read, and the arithmetic below is thirty-two bits too.
+        if sw.width == 32 {
+            return raw_off;
+        }
+        // A NARROWER index is EXTENDED to exactly thirty-two bits in its OWN
+        // signedness — and the index expression must appear EXACTLY ONCE.
+        //
+        // `extend_to` is the obvious tool and it is the wrong one here: it builds
+        // `Concat[Replicate(e[w-1]), e]`, so a SIGNED operand appears TWICE. vita
+        // evaluates each occurrence, so `m[byte'($urandom)]` drew two different
+        // random numbers and built the index out of one draw's sign bit and
+        // another draw's low bits — a wrong VALUE, not just a shifted stream
+        // (measured: the following `$urandom` also moved). The unsigned arm of
+        // `extend_to` is fine (its fill is a constant), but one arm being safe is
+        // not a reason to use a helper whose other arm is not.
+        //
+        // So the sign extension is asked of the CONTEXT instead, which needs no
+        // second occurrence: `$signed(e)` fixes the value's own width and sign
+        // (its argument is self-determined, which is the other half of what this
+        // funnel is for), and multiplying by a THIRTY-TWO-BIT SIGNED one makes
+        // the surrounding expression signed and thirty-two bits wide, so §5.5.1
+        // sign-extends `e` into it. `* 1` is the identity that carries the type;
+        // it is not dead code and removing it re-opens the `m[s8 >>> 1]` cell,
+        // where an unsigned context zero-extended -3 into 253.
+        //
+        // Both halves of that matter and each fixes a measured cell:
+        //
+        // - SELF-DETERMINED. Otherwise the enclosing thirty-two-bit context
+        //   reaches inside and evaluates a context-determined operator at the
+        //   wrong width: `m[~s8]` on `reg [7:0] m[2:5]` with `s8 = -8'sd6`
+        //   computed `~` over a widened operand and missed element 5, which both
+        //   oracles read.
+        // - EXACTLY thirty-two, in the index's OWN sign. Pinning it to the
+        //   index's width plus one (the pre-§4.5.310 spelling) made the whole
+        //   normalization thirty-THREE bits and quietly removed a wrap the
+        //   oracles rely on — under a negative declared base the coordinate is
+        //   `idx + |lo|`, and for `0xFFFF_FFFD` the thirty-two-bit sum is 0
+        //   (element `[-3]`, which both oracles read) while the thirty-three-bit
+        //   sum is 4294967296 and the access is dropped. And extending a SIGNED
+        //   index with zeros instead of its sign is the same bug from the other
+        //   side: `m[s8 >>> 1]` (−3) became 253 and went out of range, where it
+        //   had been correct before this slice touched it.
+        if sw.signed && !self.index_is_repeatable(raw_off, 0) {
+            return raw_off;
+        }
+        self.extend_to(raw_off, sw.width, 32, sw.signed)
+    }
+
+    /// May this index expression be written into the tree TWICE?
+    ///
+    /// Sign-extending without a cast means `Concat[Replicate(e[w-1]), e]`, and a
+    /// concat is the only self-determined construct Verilog has, so there is no
+    /// way to ask for the extension without naming `e` a second time. (Asking
+    /// the CONTEXT instead does not work: §5.5.1 signedness is decided by the
+    /// whole expression and propagates DOWN, so the enclosing unsigned
+    /// coordinate arithmetic re-determines any operand — measured, `$signed(e) *
+    /// 32'sd1 + 32'd9` gives 262, not 6.) The unsigned arm needs no second
+    /// occurrence, since its fill is a constant.
+    ///
+    /// So the question is whether evaluating `e` twice is observable, and it is
+    /// exactly when `e` can have an EFFECT: `m[byte'($urandom)]` built its index
+    /// out of one draw's sign bit and a different draw's low bits. This is
+    /// deliberately a whitelist over an `_`-free match — a walker that
+    /// under-detects here writes silent-wrongs, so a variant this does not
+    /// recognize must fail closed, and adding a variant to `sim_ir::Expr` should
+    /// make this stop compiling.
+    fn index_is_repeatable(&self, eid: u32, depth: u32) -> bool {
+        // Guard the recursion rather than trusting the arena's shape: a deep
+        // index tree is rare, and declining one is only a lost improvement.
+        if depth > 64 {
+            return false;
+        }
+        let kids: Vec<u32> = match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Const { .. }) => vec![],
+            Some(ir::Expr::Signal { net, word }) => {
+                // A POISON placeholder never reaches here (the caller declines
+                // first), and a word index is an ordinary subexpression.
+                let _ = net;
+                word.iter().copied().collect()
+            }
+            Some(ir::Expr::Select {
+                base,
+                offset,
+                width,
+                ..
+            }) => vec![*base, *offset, *width],
+            Some(ir::Expr::Concat { parts }) => parts.clone(),
+            Some(ir::Expr::Replicate { count, value }) => vec![*count, *value],
+            Some(ir::Expr::Unary { operand, .. }) => vec![*operand],
+            Some(ir::Expr::Binary { lhs, rhs, .. }) => vec![*lhs, *rhs],
+            Some(ir::Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+            }) => vec![*cond, *then_e, *else_e],
+            // A system function is repeatable when it neither has a statement
+            // effect NOR consumes a random draw. The first half is the canonical
+            // predicate — asking it a second time in a second spelling is how the
+            // two drift. The second half is this funnel's own question and it is
+            // NOT the same one: `sysfunc_is_stmt_effect` calls a bare `$urandom`
+            // PURE, correctly for its purpose (it writes no ref argument and
+            // touches no file or seed), yet drawing twice is exactly the harm
+            // here. So the draws are named as a delta, not re-derived.
+            Some(ir::Expr::SysFunc { which, args })
+                if !sim_ir::sysfunc_is_stmt_effect(*which, args)
+                    && !matches!(
+                        which,
+                        ir::SysFuncId::Random
+                            | ir::SysFuncId::Urandom
+                            | ir::SysFuncId::UrandomRange
+                            | ir::SysFuncId::DistUniform
+                            | ir::SysFuncId::DistNormal
+                            | ir::SysFuncId::DistExponential
+                            | ir::SysFuncId::DistPoisson
+                            | ir::SysFuncId::DistChiSquare
+                            | ir::SysFuncId::DistT
+                            | ir::SysFuncId::DistErlang
+                    ) =>
+            {
+                args.clone()
+            }
+            // `Call` runs a user body; the remaining `SysFunc`s draw or have an
+            // effect; `ArrayItem` is an iterator binding whose meaning depends on
+            // where it sits. All fail closed.
+            Some(ir::Expr::Call { .. })
+            | Some(ir::Expr::SysFunc { .. })
+            | Some(ir::Expr::ArrayItem { .. })
+            | None => return false,
+        };
+        kids.into_iter()
+            .all(|k| self.index_is_repeatable(k, depth + 1))
     }
 
     /// The index expression, ready to be normalized: SEALED at its own

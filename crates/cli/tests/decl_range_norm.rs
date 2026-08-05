@@ -313,25 +313,31 @@ fn the_hierarchical_dimension_funnel_is_sealed_too() {
 /// 13, which instead reinterprets the low 32 bits as `i32` for a RUNTIME array
 /// word but not for a packed bit offset and not for a CONSTANT array word:
 ///
-/// | row | index                        | iverilog | pre-fix | vita now |
-/// |-----|------------------------------|----------|---------|----------|
-/// | A   | `mg[u32]`        array word  | writes   | writes  | **drops**|
-/// | B   | `mg[$unsigned(s32)]`         | writes   | writes  | **drops**|
-/// | C   | `dn[u32]`        bit offset  | drops    | writes  | drops    |
-/// | D   | `dn[$unsigned(s32)]`         | drops    | writes  | drops    |
-/// | E   | `dn[s32]`        signed      | writes   | writes  | writes   |
-/// | F   | `mg[$unsigned(-32'sd3)]` const| drops   | writes  | drops    |
+/// | row | index                         | iverilog | verilator | vita |
+/// |-----|-------------------------------|----------|-----------|------|
+/// | A   | `mg[u32]`         array word  | writes   | writes    | writes |
+/// | B   | `mg[$unsigned(s32)]`          | writes   | writes    | writes |
+/// | C   | `dn[u32]`         bit offset  | drops    | writes    | drops  |
+/// | D   | `dn[$unsigned(s32)]`          | drops    | writes    | drops  |
+/// | E   | `dn[s32]`         signed      | writes   | writes    | writes |
+/// | F   | `mg[$unsigned(-32'sd3)]` const| drops    | writes    | drops  |
 ///
 /// iverilog is not self-contradictory here; it has one rule per path — a
 /// RUNTIME array-word index is its low 32 bits read as `i32`, a CONSTANT one
-/// keeps its true value, a packed bit offset keeps its true value. vita
-/// answers by VALUE on all three, which MATCHES the oracle on the constant and
-/// packed paths (C, D, F) and diverges only on the runtime array-word path
-/// (A, B). The pre-fix column was uniform 32-bit wrap and so agreed only where
-/// the oracle wraps. IEEE 1364 §5.2.1 has no reinterpretation step, so this
-/// test pins vita's answer, NOT the oracle's, and the table above is why.
+/// keeps its true value, a packed bit offset keeps its true value — and vita
+/// now matches it on all three.
+///
+/// §4.5.308 left rows A and B dropping, on the argument that IEEE 1364 §5.2.1
+/// has no reinterpretation step so vita should answer by VALUE everywhere and
+/// be "ahead of the oracle" in that one cell. §4.5.310 measured the cell against
+/// a SECOND oracle and that argument did not survive: verilator 5.050 lands on
+/// the same element iverilog does, so vita was not ahead, it was alone. (On C/D
+/// the two oracles genuinely split, and there vita stays with iverilog; on F
+/// they split too, and there the ladder decides — a statically known index
+/// outside a statically known range is exactly what a tool should say out loud.)
+/// The rows are unchanged; what changed is which column vita is in and why.
 #[test]
-fn one_bit_pattern_three_oracle_answers_vita_answers_by_value() {
+fn one_bit_pattern_three_index_paths_each_pinned_to_iverilog() {
     let out = run_loud(
         "module top;\n\
            reg [7:0] mg [-3:2]; reg [-2:-33] dn;\n\
@@ -348,12 +354,15 @@ fn one_bit_pattern_three_oracle_answers_vita_answers_by_value() {
            end\n\
          endmodule\n",
     );
-    assert!(out.contains("A 11"), "{out}");
-    assert!(out.contains("B 11"), "{out}");
+    // A/B: `0xFFFF_FFFD` read as `i32` is -3, so both writes land on `mg[-3]`
+    // — 8'hA5 then 8'hB6. They read 11 (untouched) before §4.5.310.
+    assert!(out.contains("A 165"), "{out}");
+    assert!(out.contains("B 182"), "{out}");
     assert!(out.contains("C 00000000"), "{out}");
     assert!(out.contains("D 00000000"), "{out}");
     assert!(out.contains("E 40000000"), "{out}");
-    assert!(out.contains("F 11"), "{out}");
+    // F: the constant path drops, so `mg[-3]` still holds what B wrote.
+    assert!(out.contains("F 182"), "{out}");
 }
 
 /// The cells where the SIGNED seal actually changes the answer.

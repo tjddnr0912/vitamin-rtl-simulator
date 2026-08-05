@@ -2029,21 +2029,26 @@ module top;
   end
 endmodule
 "#;
-    // Rows A-E are iverilog 13's. Row F is NOT: measured, iverilog truncates a
-    // beyond-i32 index to 32 bits and writes `mem[0] = 99`, because its index
-    // lane is 32 bits wide. IEEE 1364 §5.2.1 has no truncation step — an
-    // out-of-range index is ignored on a write and x on a read — so vita is
-    // ahead here and the row is a HAND-IEEE pin. It is also the only thing
-    // with teeth on the domain check: widening the accepted range to accept
-    // any i128 survives everything else, and turns this drop into a write to
-    // the wrong element at exit 0.
+    // Every row is iverilog 13's, row F included.
+    //
+    // F used to be a HAND-IEEE pin the other way, on the argument that §5.2.1
+    // has no truncation step so vita was "ahead of the oracle" in dropping a
+    // beyond-32-bit index. §4.5.310 measured that cell against a SECOND oracle
+    // and the argument did not survive: verilator 5.050 writes `mem[0] = 99`
+    // too, so vita was not ahead, it was alone. An array-word index is now
+    // read as a 32-bit integer (its low 32 bits, with any x/z above them still
+    // poisoning it — rows B and D).
+    //
+    // The row keeps its teeth on the domain check for the same reason it had
+    // them before: accepting any i128 turns F's write into the WRONG element,
+    // since the truncated index is 0 and an untruncated one is not.
     const WANT: &[&str] = &[
         "out|t=0 A 10 11 12 13\n",
         "out|t=0 B xxxxxxxx\n",
         "out|t=0 C 1234\n",
         "out|t=0 D 13 xxxxxxxx\n",
         "out|t=0 E 1235\n",
-        "out|t=0 F 10 xxxxxxxx\n",
+        "out|t=0 F 99 01100011\n",
     ];
     both_backends_print(src, WANT, "x/z index rule");
 }

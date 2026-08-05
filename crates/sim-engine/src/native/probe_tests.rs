@@ -499,10 +499,12 @@ fn probe_b_xz_oob_overflow_index_reads() {
         pure.len(),
         states.len()
     );
-    // 2 fills × 27 states × (24 pure exprs × 2 ctxs + 5 direct reads) = 2862.
-    // (The `14` here was stale: the count was re-pinned at §4.5.308 without
-    // re-deriving it, and 2·27·(14·2+5) is 1782, not 2862. Measured 24.)
-    assert_eq!(compared, 2862, "probe B coverage moved");
+    // 2 fills × 27 states × (49 pure exprs × 2 ctxs + 5 direct reads) = 5562.
+    // (§4.5.308 re-pinned this without re-deriving the formula — its `14` gave
+    // 1782, not the 2862 it asserted. §4.5.310 doubled the pure-expr count by
+    // giving the array-word index funnel a Select/Concat/Replicate/Mul form, so
+    // the derivation is restated here rather than the number bumped again.)
+    assert_eq!(compared, 5562, "probe B coverage moved");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

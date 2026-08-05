@@ -155,10 +155,25 @@ endmodule
     );
 }
 
-/// P0-4 (array word index): an index whose value exceeds u32 is OUT OF RANGE —
-/// read yields X and write is dropped; it must NOT wrap to a small element.
+/// P0-4 (array word index): an index whose value exceeds u32 keeps its LOW 32
+/// BITS — `2^32 + 1` reads and writes element 1, exactly as both oracles do.
+///
+/// This asserted the opposite until §4.5.310 ("must NOT wrap to a small
+/// element"), on the P0-4 reading that an `as u32` truncation is a silent
+/// value corruption. That reading is right about the CAUSE — the original
+/// defect was a Rust cast nobody chose — and wrong about the ANSWER: iverilog
+/// 13 and verilator 5.050 both index an unpacked array by the low 32 bits of
+/// the index read as a 32-bit integer. What P0-4 actually forbids is the
+/// truncation happening by accident; it happens deliberately now, in
+/// `elaborate::seal_index_unsigned`, and an x/z above bit 31 still poisons the
+/// index (`cli/tests/array_word_index_domain.rs`).
+///
+/// The sibling below (`select_offset_beyond_u64_is_x`) is UNCHANGED and is the
+/// contrast that makes this one a decision: a packed part-select offset is not
+/// an array word, the two oracles disagree about it, and vita stays with
+/// iverilog there.
 #[test]
-fn array_index_beyond_u32_is_out_of_range() {
+fn array_index_beyond_u32_keeps_its_low_32_bits() {
     let out = run(r#"
 module t;
   reg [7:0] mem [0:3];
@@ -166,15 +181,15 @@ module t;
   reg [7:0] v;
   initial begin
     mem[1] = 8'h55;
-    idx = 64'h1_0000_0001; // 2^32 + 1: `as u32` would wrap to 1
+    idx = 64'h1_0000_0001; // 2^32 + 1 -> element 1 in both oracles
     v = mem[idx];
     $display("v=%h", v);
-    mem[idx] = 8'hAA;       // must be a dropped OOR write, not mem[1]
+    mem[idx] = 8'hAA;       // lands on mem[1]
     $display("m1=%h", mem[1]);
   end
 endmodule
 "#);
-    assert_eq!(out.trim(), "v=xx\nm1=55");
+    assert_eq!(out.trim(), "v=55\nm1=aa");
 }
 
 /// P0-4 (part-select offset): an indexed part-select whose offset exceeds the

@@ -321,7 +321,7 @@ fn arena_reader_matches_engine_reader_under_shared_eval() {
         }
     }
     assert_eq!(
-        compared, 18220,
+        compared, 18500,
         "the differential's coverage moved — re-pin deliberately (a DROP means \
          the purity filter or the corpus silently shrank)"
     );
@@ -1764,7 +1764,7 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
         }
     }
     assert_eq!(
-        admitted_total, 7645,
+        admitted_total, 7715,
         "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
          the admission or the corpus silently shrank)"
     );

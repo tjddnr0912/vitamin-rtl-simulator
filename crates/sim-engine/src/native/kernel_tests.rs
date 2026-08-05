@@ -864,7 +864,7 @@ fn s1d4a_control_and_vm_surface_agrees_over_corpus() {
     // let half the walk disappear silently.
     assert_eq!(
         (expr, spec),
-        (5466, 1386),
+        (5550, 1386),
         "control-surface coverage moved — re-pin deliberately"
     );
 }
