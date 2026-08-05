@@ -273,7 +273,11 @@ impl Kernel for Scheduler<'_, '_> {
         // Parse/match/convert are the shared half (`exec::plusargs::effect`,
         // extracted so the tier-3 kernel runs the same spelling); only the
         // write is this store's.
-        let (status, write) = crate::exec::plusargs::effect(self.st.ir, &self.st.plusargs, rhs);
+        let (status, write, warn) =
+            crate::exec::plusargs::effect(self.st.ir, &self.st.plusargs, rhs);
+        if let Some((radix, text)) = warn {
+            self.st.warn_plusargs_invalid(radix, &text);
+        }
         if let Some((lv, v)) = write {
             let off = self.resolve_lvalue_offsets(&lv);
             self.k_write_lvalue(&lv, v, &off);

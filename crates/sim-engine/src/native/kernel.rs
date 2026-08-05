@@ -943,7 +943,14 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // the destination write is this store's. The gate row now admits
         // exactly this member (`value_plusargs_rhs` carve-out in
         // `design_eligibility`), so the design that reaches here RUNS.
-        let (status, write) = crate::exec::plusargs::effect(self.ir, &self.sched.st.plusargs, rhs);
+        let (status, write, warn) =
+            crate::exec::plusargs::effect(self.ir, &self.sched.st.plusargs, rhs);
+        if let Some((radix, text)) = warn {
+            // Same emitter as the engine's consumer — one spelling, and the
+            // warning lands at the same statement position in the merged
+            // stream on both backends.
+            self.sched.st.warn_plusargs_invalid(radix, &text);
+        }
         if let Some((lv, v)) = write {
             let off = self.k_resolve_lvalue_offsets(&lv);
             self.k_write_lvalue(&lv, v, &off);

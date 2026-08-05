@@ -196,3 +196,58 @@ fn wide_parse_into_a_narrow_destination_truncates() {
     assert_eq!(code, Some(0), "stderr:\n{err}");
     assert!(out.contains("d32: ok=1 d32=1"), "got:\n{out}");
 }
+
+/// 4-STATE values and INVALID values — every expectation iverilog-measured
+/// (grounding scratch p5–p8). x/z digits parse positionally for the bit
+/// radixes; the MSB digit's kind extends to the destination width; a lone
+/// x/z is a whole-value x/z for %d; underscores are separators (never
+/// leading); anything else is INVALID — W4028 + all-X, status still 1. The
+/// old spelling silently parsed the leading digits of "5x9" as 5.
+#[test]
+fn four_state_and_invalid_values() {
+    let (out, err, code) = run_with(
+        "module top;\n\
+         reg [31:0] h, d, got; reg [95:0] w;\n\
+         initial begin\n\
+           h=32'hAA; d=32'hBB; w=96'hCC;\n\
+           got = $value$plusargs(\"A=%h\", h);  $display(\"a: got=%0d h=%h\", got, h);\n\
+           got = $value$plusargs(\"B=%h\", w);  $display(\"b: got=%0d w=%h\", got, w);\n\
+           got = $value$plusargs(\"C=%d\", d);  $display(\"c: got=%0d d=%h\", got, d);\n\
+           got = $value$plusargs(\"E=%d\", d);  $display(\"e: got=%0d d=%h\", got, d);\n\
+           got = $value$plusargs(\"F=%h\", h);  $display(\"f: got=%0d h=%h\", got, h);\n\
+           got = $value$plusargs(\"G=%d\", d);  $display(\"g: got=%0d d=%h\", got, d);\n\
+           $finish;\n\
+         end\n\
+         endmodule\n",
+        &["+A=1x2z", "+B=z1", "+C=x", "+E=5x9", "+F=1_2", "+G=+5"],
+    );
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(
+        out.contains("a: got=1 h=00001x2z"),
+        "positional x/z:\n{out}"
+    );
+    assert!(
+        out.contains("b: got=1 w=zzzzzzzzzzzzzzzzzzzzzzz1"),
+        "MSB-z extension to dest width:\n{out}"
+    );
+    assert!(out.contains("c: got=1 d=xxxxxxxx"), "lone x for %d:\n{out}");
+    assert!(
+        out.contains("e: got=1 d=xxxxxxxx"),
+        "junk suffix -> all-X:\n{out}"
+    );
+    assert!(
+        out.contains("f: got=1 h=00000012"),
+        "underscore separator:\n{out}"
+    );
+    assert!(
+        out.contains("g: got=1 d=xxxxxxxx"),
+        "'+' sign is invalid:\n{out}"
+    );
+    // exactly the two INVALID cases warn; the 4-state ones do not.
+    assert_eq!(
+        err.matches("W4028").count(),
+        2,
+        "W4028 exactly twice (5x9, +5):\n{err}"
+    );
+    assert!(err.contains("\"5x9\""), "the value is quoted:\n{err}");
+}

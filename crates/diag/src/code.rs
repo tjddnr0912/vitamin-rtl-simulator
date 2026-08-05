@@ -83,6 +83,7 @@ msgcodes! {
     RunWideArith           => ("W-RUN-WIDE-ARITH",          "VITA-W4025", Warning, "multi-word arithmetic exceeds the width cap; result poisoned to X"),
     RunVcdPkgVarSkip       => ("W-RUN-VCD-PKGVAR-SKIP",     "VITA-W4026", Warning, "package variable has no VCD surface (v1); excluded from the dump"),
     RunBodyStepLimit       => ("F-RUN-BODY-STEP-LIMIT",     "VITA-F4027", Fatal,   "one process ran past the body-step budget without suspending (unbounded loop, or a genuinely long computation)"),
+    RunPlusargsInvalid     => ("W-RUN-PLUSARGS-INVALID",    "VITA-W4028", Warning, "invalid value in a matched plusarg; variable written all-X"),
     // 8xxx FILELIST
     FlistCycle             => ("E-FLIST-CYCLE",             "VITA-E8001", Error,   "filelist cycle"),
     FlistDepth             => ("E-FLIST-DEPTH",             "VITA-E8002", Error,   "filelist nesting exceeded depth cap"),

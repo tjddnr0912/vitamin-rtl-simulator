@@ -1887,6 +1887,8 @@ module top;
     ok = $value$plusargs("H=%h", h);    $display("t=%0t negh ok=%0d h=%h", $time, ok, h);
     ok = $value$plusargs("B=%b", b);    $display("t=%0t negb ok=%0d b=%h", $time, ok, b);
     ok = $value$plusargs("W=%h", w);    $display("t=%0t wide ok=%0d w=%h", $time, ok, w);
+    ok = $value$plusargs("XZ=%h", h);   $display("t=%0t xz ok=%0d h=%h", $time, ok, h);
+    ok = $value$plusargs("BAD=%d", n);  $display("t=%0t bad ok=%0d n=%h", $time, ok, n);
     $finish;
   end
 endmodule
@@ -1902,10 +1904,22 @@ endmodule
 ",
         "out|t=0 wide ok=1 w=123456789abcdef012345678
 ",
+        "out|t=0 xz ok=1 h=00001x2z
+",
+        "diag|Warning|VITA-W4028|invalid decimal value \"5x9\" in a matched plusarg; variable written all-X",
+        "out|t=0 bad ok=1 n=xxxxxxxx
+",
     ];
     both_backends_print_with_plusargs(
         src,
-        &["N=42", "H=-5", "B=-1", "W=123456789abcdef012345678"],
+        &[
+            "N=42",
+            "H=-5",
+            "B=-1",
+            "W=123456789abcdef012345678",
+            "XZ=1x2z",
+            "BAD=5x9",
+        ],
         WANT,
         "value_plusargs native",
     );
@@ -1944,7 +1958,12 @@ fn both_backends_print_with_plusargs(src: &str, plusargs: &[&str], want: &[&str]
             .events
             .into_inner()
             .into_iter()
-            .filter(|e| e.starts_with("out|t="))
+            // W4028 is let through as well: the plusargs anchor pins that the
+            // WARNING is emitted on both backends at the same statement
+            // position — a native arm that dropped the warn call would
+            // otherwise be invisible to a value-only anchor. `MergedSink`
+            // renders diagnostics as `diag|Severity|code|message`.
+            .filter(|e| e.starts_with("out|t=") || e.contains("VITA-W4028"))
             .collect();
         assert_eq!(lines, want, "{backend:?}: {what} moved");
     }

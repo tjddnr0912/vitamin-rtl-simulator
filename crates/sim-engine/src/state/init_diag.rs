@@ -363,6 +363,26 @@ impl<'a> SimState<'a> {
         self.run_range_count.set(n.saturating_add(1));
     }
 
+    /// Emit `VITA-W4028`: a matched plusarg's value cannot be converted by the
+    /// `$value$plusargs` format (a non-digit in `%d`, a non-hex-digit in `%h`,
+    /// a leading underscore, a bare `+` sign). The variable is written all-X
+    /// and the status is still 1 (a matching plusarg WAS found) — both
+    /// iverilog-measured — so without this line the wrong plusarg spelling
+    /// reads back as X with exit 0 and nothing says why. Uncapped: the call
+    /// count is bounded by the testbench's own `$value$plusargs` sites.
+    pub fn warn_plusargs_invalid(&self, radix: &str, value: &str) {
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code: MsgCode::RunPlusargsInvalid,
+            message: format!(
+                "invalid {radix} value \"{value}\" in a matched plusarg; variable written all-X"
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: Some(diag::TimeStamp { ticks: self.now }),
+        }));
+    }
+
     /// Emit a loud `RunFatal` (F-RUN-FATAL / exit class Fatal — same code as user
     /// `$fatal`) and latch `had_fatal`/`finished`. Used for malformed engine input
     /// that must not silently mis-route (e.g. a corrupt frame `func_table`), as a

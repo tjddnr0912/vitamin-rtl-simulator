@@ -800,6 +800,21 @@ package-level 변수(예약 `$pkg$<pkg>` 스코프의 저장소)는 v1에서 VCD
 
 ---
 
+### VITA-W4028 · `W-RUN-PLUSARGS-INVALID` (Warning)
+
+**매칭된 plusarg 의 값이 `$value$plusargs` 포맷으로 변환 불가.** `%d` 값에 숫자 아닌 문자
+(`+N=5x9`), 선행 밑줄(`+N=_5`), 맨 `+` 부호(`+N=+5`) 등. 변수는 **all-X** 로 쓰이고 status 는
+1(매칭된 plusarg 는 있었다) — 둘 다 iverilog 실측 동작이라, 이 경고가 없으면 잘못 철자한
+plusarg 가 exit 0 으로 X 만 남기고 이유를 아무도 말하지 않는다.
+
+```
+->  warning[VITA-W4028] W-RUN-PLUSARGS-INVALID: invalid decimal value "5x9" in a matched plusarg; variable written all-X
+```
+
+- **원인**: plusarg 값의 오타(`+N=5x9`), 잘못된 radix(`%o` 에 `19`), 지원 안 되는 부호 표기(`+5`).
+- **해결**: 값 철자를 고친다. x/z 자리·밑줄 구분자는 **유효**하다(`+A=1x2z`, `+F=1_2` 는 경고 없이
+  리터럴 관례로 파싱된다 — 단 밑줄이 앞에 올 수는 없다).
+
 ## 8xxx · FILELIST
 
 ### VITA-E8001 · `E-FLIST-CYCLE` (Error)
