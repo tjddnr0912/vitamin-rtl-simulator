@@ -735,10 +735,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.func_table = opts.func_table.clone();
     st.func_names = opts.func_names.clone();
     st.build_func_routing();
-    st.wt = crate::width::WidthTable::build(ir, &st.func_table);
-    // N7: a class field-read Signal's net is the 32-bit handle; patch its
-    // self-width to the FIELD's width (carried per-ExprId from elaborate).
-    st.wt.patch_class_fields(&opts.class_field_widths);
+    // N7: a class field-read Signal's net is the 32-bit handle, so the field's
+    // own width/sign is handed in and applied DURING the pass — a post-hoc patch
+    // reached the leaf only, leaving every operator above it unsigned/32-bit.
+    st.wt = crate::width::WidthTable::build_with(ir, &st.func_table, &opts.class_field_widths);
     // WIDE-ARITH-CAP: a multi-word `*`/`/`/`%`/`**` wider than the cap is poisoned
     // to X at eval (the kernels would otherwise stall). Warn ONCE here, by a
     // single static scan, so the degradation is loud, not silent. Uses each

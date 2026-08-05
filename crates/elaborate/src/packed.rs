@@ -8,6 +8,154 @@ use super::*;
 /// index runs opposite to the internal bit (index 0 is the MSB), so `+:` moves
 /// DOWN in internal bits and `-:` UP — the offset (`norm_offset_for_net`) already
 /// maps the base index onto its internal bit. IEEE 1800 §11.5.1 + §7.4.3.
+/// Was this index one the seal touched BEFORE §4.5.309 — a conservative,
+/// hand-written §5.5.1 proof of unsignedness?
+///
+/// It is kept, unchanged, for exactly one job: deciding whether to seal an
+/// UNSIGNED index. §4.5.309 replaced it with the canonical rule everywhere else,
+/// and doing the same here moved 13 measured cells from right to wrong, because
+/// what the seal does to an unsigned index under a NEGATIVE declared base is not
+/// "pin its width" but "remove a 32-bit wrap" — and that wrap is the answer
+/// iverilog gives (`reg [7:0] ma[-3:2]` indexed by `$stime + ii` reads `ma[-3]`
+/// there). Which unsigned shapes should be sealed is therefore not a signedness
+/// question at all; it is the array-word i32-reinterpretation question already
+/// open in ROADMAP §2, and no width/base predicate separates the two groups —
+/// measured: `reg [31:0] ix` and `$stime` are both 32-bit unsigned under the same
+/// negative base, and PRE is right about the first only when sealed and right
+/// about the second only when NOT sealed.
+///
+/// So the unsigned half is deliberately frozen at its pre-§4.5.309 decision and
+/// this predicate is its definition, not an independent claim about IEEE. The
+/// three arms review measured as WRONG about signedness (`**`, class fields, real
+/// literals) no longer decide anything: `sealed_signed_index` asks
+/// `index_self_width` first, and only an index that rule calls UNSIGNED ever
+/// reaches this function.
+pub fn expr_provably_unsigned(
+    exprs: &[ir::Expr],
+    consts: &[ir::ConstVal],
+    nets: &[ir::NetVar],
+    class_fields: &std::collections::BTreeMap<u32, (u32, bool)>,
+    eid: u32,
+) -> bool {
+    match exprs.get(eid as usize) {
+        // §5.4.1: a bit-select / part-select result is ALWAYS unsigned; a
+        // concat or replication likewise.
+        Some(ir::Expr::Select { .. })
+        | Some(ir::Expr::Concat { .. })
+        | Some(ir::Expr::Replicate { .. }) => true,
+        // A REAL literal is canonically SIGNED (`width.rs` gives it
+        // `{64, signed: true}`). The operative guard is `!c.signed`: the sole
+        // real producer sets `signed: true` and the sole `StrUtf8` producer
+        // sets `signed: false`, so naming `Real` in the `matches!` is
+        // defence-in-depth rather than the exclusion, and admitting `StrUtf8`
+        // costs no proofs. Both measured, not assumed.
+        Some(ir::Expr::Const { val }) => consts.get(*val as usize).is_some_and(|c| {
+            matches!(c.repr, ir::ConstRepr::Numeric | ir::ConstRepr::StrUtf8) && !c.signed
+        }),
+        Some(ir::Expr::Signal { net, word }) => {
+            // A CLASS-FIELD read is also a `Signal{net, word: Some(field)}`,
+            // but its net is the 32-bit HANDLE — the field's own signedness is
+            // in `class_field_widths`, the very map the engine applies through
+            // `WidthTable::patch_class_fields`. Asking that map here is what
+            // makes this function the WHOLE predicate: the first fix put a
+            // blanket refusal in a wrapper instead, which was sound but threw
+            // away the unsigned-field case the seal had just started getting
+            // right, and left the wrapper's own recursion untested.
+            if let Some(&(_, signed)) = class_fields.get(&eid) {
+                return !signed;
+            }
+            let _ = word;
+            nets.get(*net as usize).is_some_and(|n| !n.signed)
+        }
+        Some(ir::Expr::Unary { op, operand }) => match op {
+            // A reduction or logical negation yields ONE unsigned bit.
+            ir::UnOp::RedAnd
+            | ir::UnOp::RedOr
+            | ir::UnOp::RedXor
+            | ir::UnOp::RedNand
+            | ir::UnOp::RedNor
+            | ir::UnOp::RedXnor
+            | ir::UnOp::LogNot => true,
+            // `~`, unary `+`/`-` keep the operand's signedness.
+            _ => expr_provably_unsigned(exprs, consts, nets, class_fields, *operand),
+        },
+        Some(ir::Expr::Binary { op, lhs, rhs }) => match op {
+            // Relational / equality / logical: one unsigned bit.
+            ir::BinOp::Lt
+            | ir::BinOp::Le
+            | ir::BinOp::Gt
+            | ir::BinOp::Ge
+            | ir::BinOp::Eq
+            | ir::BinOp::Ne
+            | ir::BinOp::CaseEq
+            | ir::BinOp::CaseNe
+            | ir::BinOp::CasezEq
+            | ir::BinOp::LogAnd
+            | ir::BinOp::LogOr => true,
+            // Shifts keep the LEFT operand's signedness (§5.5.1: the right
+            // operand is self-determined and never signs the result).
+            ir::BinOp::Shl | ir::BinOp::Shr | ir::BinOp::AShl | ir::BinOp::AShr => {
+                expr_provably_unsigned(exprs, consts, nets, class_fields, *lhs)
+            }
+            // `**` takes the BASE's sign alone — an unsigned EXPONENT must not
+            // demote a signed base (`width.rs`'s rule, and iverilog's). It used
+            // to fall into the either-unsigned arm below, which proved
+            // `s32 ** u32` unsigned and made the seal reinterpret a negative
+            // result as huge: a measured regression, caught by review.
+            ir::BinOp::Pow => expr_provably_unsigned(exprs, consts, nets, class_fields, *lhs),
+            // Arithmetic / bitwise: unsigned if EITHER operand is unsigned.
+            _ => {
+                expr_provably_unsigned(exprs, consts, nets, class_fields, *lhs)
+                    || expr_provably_unsigned(exprs, consts, nets, class_fields, *rhs)
+            }
+        },
+        // A ternary is signed only when BOTH arms are; either arm proving
+        // unsigned is enough.
+        Some(ir::Expr::Ternary { then_e, else_e, .. }) => {
+            expr_provably_unsigned(exprs, consts, nets, class_fields, *then_e)
+                || expr_provably_unsigned(exprs, consts, nets, class_fields, *else_e)
+        }
+        // ONLY `$unsigned`. `$clog2` looked unsigned-when-its-argument-is and
+        // was written that way first; the canonical table says SIGNED (it
+        // returns an `integer`), and the cross-crate property test caught it
+        // on its first run. Every other system function is left unproven — the
+        // cost of a `false` here is one lowering that stays exactly as it was.
+        Some(ir::Expr::SysFunc { which, .. }) => matches!(which, ir::SysFuncId::Unsigned),
+        _ => false,
+    }
+}
+
+/// An expression node that is still a DEFERRED-HIERARCHY placeholder — its net
+/// or callee is `POISON_*` until `resolve_deferred_hier_*` patches it in place
+/// after every instance exists.
+///
+/// Two variants and no third: `POISON_NET` is only ever written into an
+/// `Expr::Signal`'s `net` and `POISON_FID` only into an `Expr::Call`'s `func`
+/// (`limits.rs`, and the `expr_main`/`params` sites that create them). A
+/// placeholder is a leaf as far as this question goes — what matters is that
+/// asking the width rule about one gets a FABRICATED answer, not a wrong one.
+///
+/// ⚠️ The `Call` arm is EQUIVALENT today and is here for the next change, not
+/// for this one — measured by mutation. Fabricating an answer for a `Call`
+/// yields "unsigned", and the unsigned half of the seal is frozen at the old
+/// predicate, which never admits an `Expr::Call`; so a hierarchical call
+/// declines through the fabricated path exactly as it declines through this
+/// one. Delete this arm and nothing observable moves — until the unsigned half
+/// is unfrozen (ROADMAP §2), at which point it is the only thing between a
+/// hierarchical call and a seal built on a one-bit lie.
+fn is_expr_placeholder(e: &ir::Expr) -> bool {
+    matches!(
+        e,
+        ir::Expr::Signal {
+            net: POISON_NET,
+            ..
+        } | ir::Expr::Call {
+            func: POISON_FID,
+            ..
+        }
+    )
+}
+
 pub(crate) fn indexed_sel_kind(dir: &ast::PartDir, ascending: bool) -> ir::SelKind {
     match (dir, ascending) {
         (ast::PartDir::PlusColon, false) | (ast::PartDir::MinusColon, true) => {
@@ -175,7 +323,18 @@ impl Elaborator<'_> {
     /// Is this lowered expression PROVABLY unsigned by IEEE 1364-2005 §5.5.1?
     /// Thin delegate to the free function, which the cross-crate soundness
     /// test can call directly.
-    fn provably_unsigned(&self, eid: u32) -> bool {
+    /// The index's CANONICAL self-signedness — `sim_ir::selfwidth`, the same
+    /// rule `sim-engine`'s `WidthTable` drives, not a conservative subset.
+    ///
+    /// §4.5.309 moved that rule into `sim-ir` precisely so this could ask it.
+    /// The predicate that stood here was hand-written, and three of its arms
+    /// were measurably wrong (`**` takes the base's sign alone; a class field's
+    /// sign is a sidecar, not its handle net's; a real literal is signed) —
+    /// each a silent-wrong until review found it. The answer is now the same
+    /// one the engine will use to evaluate the very expression being lowered.
+    /// The pre-§4.5.309 unsigned-seal decision, as a method (see the free
+    /// function for why it is still here and what it is now allowed to mean).
+    fn unsigned_seal_admitted(&self, eid: u32) -> bool {
         expr_provably_unsigned(
             &self.exprs,
             &self.consts,
@@ -183,6 +342,70 @@ impl Elaborator<'_> {
             &self.class_field_widths,
             eid,
         )
+    }
+
+    fn index_self_width(&mut self, eid: u32) -> Option<sim_ir::selfwidth::SelfWidth> {
+        // NOT YET KNOWABLE is not the same answer as UNSIGNED, and conflating
+        // them is a silent-wrong. A hierarchical reference lowers to a
+        // PLACEHOLDER — `Signal{net: POISON_NET}` / `Call{func: POISON_FID}` —
+        // patched to the real net/callee only after every instance exists. Ask
+        // the canonical rule about one of those and it reads a net that is not
+        // there, falls back to 1-bit unsigned, and the seal zero-extends an
+        // index that is about to become signed −1: `mg[u.k]` on
+        // `reg [7:0] mg[-3:2]` went from the oracle's `aa` to `x` plus an E4002
+        // (correct-support → loud-wrong, a rung DOWN the ladder). So say
+        // `None` and let the seal decline, exactly as it did before §4.5.309.
+        //
+        // The arena is post-order, so `eid`'s subtree lies inside `0..=eid` and
+        // scanning that range answers "is anything under me still a
+        // placeholder?" conservatively without a second expression walker (a
+        // walker that under-detects would put the silent-wrong straight back).
+        let last = eid as usize;
+        let mut i = self.selfw_scan as usize;
+        while i <= last {
+            if is_expr_placeholder(&self.exprs[i]) {
+                // Stay parked here rather than advancing: this one may be
+                // patched later, and then the scan resumes from the same spot.
+                self.selfw_scan = i as u32;
+                // Defensive, and measured to be a no-op: nothing at or above a
+                // live placeholder can have been cached, because a placeholder
+                // is created when its id is FRESH, so every id above it was
+                // answered later — and any such answer had to walk past this
+                // very scan. Removing the truncate changes no test. It states
+                // the invariant rather than trusting it, and it is what makes
+                // the cache below sound to keep across a resolve.
+                self.selfw_cache.truncate(i);
+                return None;
+            }
+            i += 1;
+        }
+        self.selfw_scan = i as u32;
+        // Past that scan the whole prefix is resolved, and a resolved expr is
+        // never rewritten, so these entries are final and the cache makes a
+        // design with many indexed selects pay for the fill once in total
+        // rather than once per select.
+        let metas = &self.func_metas;
+        let call_ret = move |f: u32| metas.get(f as usize).map(|m| (m.ret_width, m.ret_signed));
+        let ctx = sim_ir::selfwidth::ExprCtx {
+            exprs: &self.exprs,
+            consts: &self.consts,
+            nets: &self.nets,
+        };
+        let mut sw = std::mem::take(&mut self.selfw_cache);
+        for i in sw.len() as u32..=eid {
+            let s = if let Some(&(w, sg)) = self.class_field_widths.get(&i) {
+                sim_ir::selfwidth::SelfWidth {
+                    width: w.max(1),
+                    signed: sg,
+                }
+            } else {
+                sim_ir::selfwidth::self_width_of(ctx, &call_ret, &sw, i)
+            };
+            sw.push(s);
+        }
+        let out = sw[eid as usize];
+        self.selfw_cache = sw;
+        Some(out)
     }
 
     /// A CONSTANT index's integer value, interpreted with its own signedness —
@@ -240,8 +463,20 @@ impl Elaborator<'_> {
     /// and iverilog still differ, and it differs because vita answers by VALUE
     /// where iverilog reinterprets (see `eval::offset_of_index_value`).
     pub(crate) fn seal_index_unsigned(&mut self, raw_off: u32) -> u32 {
-        if !self.provably_unsigned(raw_off) {
-            return raw_off;
+        // A SIGNED index cannot ride a concat — it erases the sign — and this
+        // path's arithmetic and bounds are unsigned throughout, so the seal is
+        // for the unsigned case only. A narrow signed index on an unpacked
+        // array is therefore still zero-extended rather than sign-extended;
+        // that is the one residual class §4.5.309 leaves, and closing it means
+        // moving this geometry into a signed domain (ROADMAP §2).
+        // `None` (an unresolved hierarchical reference below this index) declines
+        // too — the pre-§4.5.309 answer, and the only safe one.
+        //
+        // …and an unsigned index is sealed on the PRE-§4.5.309 decision, which is
+        // this funnel's whole rule: see `unsigned_seal_admitted`.
+        match self.index_self_width(raw_off) {
+            Some(sw) if !sw.signed && self.unsigned_seal_admitted(raw_off) => {}
+            _ => return raw_off,
         }
         let zero1 = self.const_u32_expr(0, 1);
         self.push_expr(ir::Expr::Concat {
@@ -282,16 +517,35 @@ impl Elaborator<'_> {
     ///   is gated on a proof and possibly-signed indices are left alone —
     ///   still wrong, but no more wrong than before, and recorded in ROADMAP §2.
     fn sealed_signed_index(&mut self, raw_off: u32) -> Option<u32> {
-        if !self.provably_unsigned(raw_off) {
+        // `$signed(x)` preserves x's SELF width and forces the sign attribute
+        // (`sim_ir::selfwidth`'s own rule for it), so it is the seal in both
+        // cases — what differs is what has to be sealed first:
+        //
+        // - UNSIGNED index: `$signed({1'b0, idx})`. The concat pins the width;
+        //   the extra zero keeps the reinterpretation a zero-extension, so a
+        //   large unsigned value stays large instead of reading as negative.
+        // - SIGNED index: `$signed(idx)`. The value is already the number the
+        //   user wrote. Sealing it through a concat would erase the sign and
+        //   turn a negative index into a large positive — the silent-wrong the
+        //   first version of this shipped, and the reason the seal used to
+        //   DECLINE signed indices outright. Declining was honest but left four
+        //   classes wrong; asking the canonical rule closes them.
+        let sw = self.index_self_width(raw_off)?;
+        let signed = sw.signed;
+        if !signed && !self.unsigned_seal_admitted(raw_off) {
             return None;
         }
-        let zero1 = self.const_u32_expr(0, 1);
-        let sealed = self.push_expr(ir::Expr::Concat {
-            parts: vec![zero1, raw_off],
-        });
+        let inner = if signed {
+            raw_off
+        } else {
+            let zero1 = self.const_u32_expr(0, 1);
+            self.push_expr(ir::Expr::Concat {
+                parts: vec![zero1, raw_off],
+            })
+        };
         Some(self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Signed,
-            args: vec![sealed],
+            args: vec![inner],
         }))
     }
 
@@ -1134,121 +1388,5 @@ impl Elaborator<'_> {
             }
             _ => None,
         }
-    }
-}
-
-/// Is this lowered expression PROVABLY unsigned by IEEE 1364-2005 §5.5.1?
-///
-/// Conservative in the only direction that matters: it may answer `false`
-/// for something that is in fact unsigned (the caller then leaves the
-/// lowering exactly as it was), but a `true` must never be wrong, because
-/// `sealed_signed_index` reinterprets on the strength of it.
-///
-/// TWO arms are not statements of §5.5.1, and say so where they sit: the
-/// `Signal` arm reads a vita sidecar (`class_field_widths`), which is not a
-/// language rule but the thing that makes the language rule answerable for a
-/// class field; and the `Const` arm's real-literal exclusion is `!c.signed`,
-/// since every real literal is produced signed — naming `Real` in its
-/// `matches!` is inert defence-in-depth, measured.
-///
-/// `sim-engine`'s `WidthTable` is the canonical other spelling. The subset
-/// property is asserted by a test that applies `patch_class_fields` and passes
-/// this same map, over the corpus PLUS designs carrying `**`, `class` (signed
-/// AND unsigned fields), `real` and narrow signed types. The widening is the
-/// point rather than a detail: the corpus contains none of those shapes, so
-/// the first version of that test could not have failed on any of the three
-/// arms that were in fact wrong.
-pub fn expr_provably_unsigned(
-    exprs: &[ir::Expr],
-    consts: &[ir::ConstVal],
-    nets: &[ir::NetVar],
-    class_fields: &std::collections::BTreeMap<u32, (u32, bool)>,
-    eid: u32,
-) -> bool {
-    match exprs.get(eid as usize) {
-        // §5.4.1: a bit-select / part-select result is ALWAYS unsigned; a
-        // concat or replication likewise.
-        Some(ir::Expr::Select { .. })
-        | Some(ir::Expr::Concat { .. })
-        | Some(ir::Expr::Replicate { .. }) => true,
-        // A REAL literal is canonically SIGNED (`width.rs` gives it
-        // `{64, signed: true}`). The operative guard is `!c.signed`: the sole
-        // real producer sets `signed: true` and the sole `StrUtf8` producer
-        // sets `signed: false`, so naming `Real` in the `matches!` is
-        // defence-in-depth rather than the exclusion, and admitting `StrUtf8`
-        // costs no proofs. Both measured, not assumed.
-        Some(ir::Expr::Const { val }) => consts.get(*val as usize).is_some_and(|c| {
-            matches!(c.repr, ir::ConstRepr::Numeric | ir::ConstRepr::StrUtf8) && !c.signed
-        }),
-        Some(ir::Expr::Signal { net, word }) => {
-            // A CLASS-FIELD read is also a `Signal{net, word: Some(field)}`,
-            // but its net is the 32-bit HANDLE — the field's own signedness is
-            // in `class_field_widths`, the very map the engine applies through
-            // `WidthTable::patch_class_fields`. Asking that map here is what
-            // makes this function the WHOLE predicate: the first fix put a
-            // blanket refusal in a wrapper instead, which was sound but threw
-            // away the unsigned-field case the seal had just started getting
-            // right, and left the wrapper's own recursion untested.
-            if let Some(&(_, signed)) = class_fields.get(&eid) {
-                return !signed;
-            }
-            let _ = word;
-            nets.get(*net as usize).is_some_and(|n| !n.signed)
-        }
-        Some(ir::Expr::Unary { op, operand }) => match op {
-            // A reduction or logical negation yields ONE unsigned bit.
-            ir::UnOp::RedAnd
-            | ir::UnOp::RedOr
-            | ir::UnOp::RedXor
-            | ir::UnOp::RedNand
-            | ir::UnOp::RedNor
-            | ir::UnOp::RedXnor
-            | ir::UnOp::LogNot => true,
-            // `~`, unary `+`/`-` keep the operand's signedness.
-            _ => expr_provably_unsigned(exprs, consts, nets, class_fields, *operand),
-        },
-        Some(ir::Expr::Binary { op, lhs, rhs }) => match op {
-            // Relational / equality / logical: one unsigned bit.
-            ir::BinOp::Lt
-            | ir::BinOp::Le
-            | ir::BinOp::Gt
-            | ir::BinOp::Ge
-            | ir::BinOp::Eq
-            | ir::BinOp::Ne
-            | ir::BinOp::CaseEq
-            | ir::BinOp::CaseNe
-            | ir::BinOp::CasezEq
-            | ir::BinOp::LogAnd
-            | ir::BinOp::LogOr => true,
-            // Shifts keep the LEFT operand's signedness (§5.5.1: the right
-            // operand is self-determined and never signs the result).
-            ir::BinOp::Shl | ir::BinOp::Shr | ir::BinOp::AShl | ir::BinOp::AShr => {
-                expr_provably_unsigned(exprs, consts, nets, class_fields, *lhs)
-            }
-            // `**` takes the BASE's sign alone — an unsigned EXPONENT must not
-            // demote a signed base (`width.rs`'s rule, and iverilog's). It used
-            // to fall into the either-unsigned arm below, which proved
-            // `s32 ** u32` unsigned and made the seal reinterpret a negative
-            // result as huge: a measured regression, caught by review.
-            ir::BinOp::Pow => expr_provably_unsigned(exprs, consts, nets, class_fields, *lhs),
-            // Arithmetic / bitwise: unsigned if EITHER operand is unsigned.
-            _ => {
-                expr_provably_unsigned(exprs, consts, nets, class_fields, *lhs)
-                    || expr_provably_unsigned(exprs, consts, nets, class_fields, *rhs)
-            }
-        },
-        // A ternary is signed only when BOTH arms are; either arm proving
-        // unsigned is enough.
-        Some(ir::Expr::Ternary { then_e, else_e, .. }) => {
-            expr_provably_unsigned(exprs, consts, nets, class_fields, *then_e)
-                || expr_provably_unsigned(exprs, consts, nets, class_fields, *else_e)
-        }
-        // ONLY `$unsigned`. `$clog2` looked unsigned-when-its-argument-is and
-        // was written that way first; the canonical table says SIGNED (it
-        // returns an `integer`), and the cross-crate property test caught it
-        // on its first run. Every other system function is left unproven — the
-        // cost of a `false` here is one lowering that stays exactly as it was.
-        Some(ir::Expr::SysFunc { which, .. }) => matches!(which, ir::SysFuncId::Unsigned),
-        _ => false,
     }
 }

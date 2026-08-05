@@ -402,6 +402,13 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         ca_delays: sc.ca_delays,
         wired_and_nets: sc.wired_and_nets,
         wired_or_nets: sc.wired_or_nets,
+        // …and the class-field width sidecar (§4.5.309). `obj.f` lowers to a
+        // `Signal` on the 32-bit HANDLE net plus this entry, so without it
+        // `patch_class_fields` runs over an empty map and every `obj.f` in this
+        // file reports the handle's 32/unsigned instead of the field's own
+        // width and sign. Found by an anti-vacuity counter, not by a failure:
+        // the omission made a comparison agree because BOTH sides were blind.
+        class_field_widths: sc.class_field_widths,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)
@@ -1834,98 +1841,86 @@ fn s2_admission_census_on_the_hot_design() {
     );
 }
 
-/// The declared-range normalization's UNSIGNED PROOF is a subset of the
-/// canonical self-signedness (§4.5.308).
+/// The two DRIVERS of the shared self-width rule agree (§4.5.309).
 ///
-/// `elaborate::packed::expr_provably_unsigned` decides whether an index
-/// expression may be sealed into a signed domain. A wrong `true` there is a
-/// silent-wrong: a genuinely signed index would be reinterpreted as a large
-/// positive and write the wrong bit. The canonical rule is `WidthTable`'s
-/// self-signedness, which lives in this crate.
+/// `sim_ir::selfwidth` is now the only spelling of IEEE §5.4.1/§5.5, but it is
+/// driven two ways: the engine fills the whole arena in one forward pass, and
+/// `elaborate` fills a PREFIX on demand while it is still pushing expressions,
+/// with the class-field sidecar applied inline rather than as a later patch.
+/// Those two drivers are what can drift now, so that is what this asserts —
+/// prefix-by-prefix equality with the full build, class-field designs included.
 ///
-/// ⚠️ The test's REACH is the claim. The first version built the table without
-/// `patch_class_fields` and swept a corpus containing no `**`, no `class`, no
-/// `real` and no narrow signed types — so it could not have failed on any of
-/// the three arms that were actually wrong. It now applies the class-field
-/// patch and carries designs for every one of them, and the free function is
-/// the WHOLE predicate (the class map is a parameter), so what is asserted
-/// here is what the seal actually calls.
+/// It replaces a test that asserted a hand-written conservative predicate was a
+/// subset of the canonical rule. (That predicate still exists, but §4.5.309
+/// demoted it to one job — freezing the UNSIGNED half of the index seal at its
+/// pre-§4.5.309 decision — so it is no longer a second answer to the signedness
+/// question and the subset property is no longer the thing to assert.)
+///
+/// ⚠️ What this does NOT test, measured: the RULE. Both sides here call
+/// `self_width_of`, so any mutation inside `sim_ir::selfwidth` moves both and
+/// passes — flipping the `**` arm to "signed if BOTH operands are" survives this
+/// and is killed by `decl_range_norm::pow_and_class_field_indices_keep_their_sign`,
+/// which is the anchor for the rule's content. Nor does it see any of the three
+/// things `elaborate`'s driver actually carries: it runs on FINISHED IR, with no
+/// `Elaborator`, no `selfw_cache` and no placeholders (`cli/tests/hier_index_seal.rs`
+/// owns those). What it does own is the class-field sidecar reaching the pass
+/// rather than a later patch — it is the test that fails if `build_with` goes
+/// back to sweeping the finished table.
 #[test]
-fn s2_provably_unsigned_is_a_subset_of_the_canonical_self_sign() {
-    let mut checked = 0usize;
-    let mut proved = 0usize;
-    let extra = "module top;\n\
-       reg [4:0] u5; reg signed [4:0] s5; integer k; reg [31:0] v;\n\
-       reg [33:2] nz; reg [0:31] asc; byte bb; shortint sh; real rr;\n\
-       reg signed [31:0] s32; reg [31:0] u32;\n\
-       initial begin\n\
-         u5 = 5'd3; s5 = -3; k = -1; v = 0; bb = -8'sd5; sh = -16'sd5; rr = 2.0;\n\
-         s32 = -32'sd2; u32 = 32'd3;\n\
-         v[u5] = 1'b1; v[~u5] = 1'b1; v[u5 + 5'd2] = 1'b1; v[u5[2:0]] = 1'b1;\n\
-         v[s5] = 1'b1; v[~s5] = 1'b1; v[s5 - 5'sd1] = 1'b1; v[$signed(u5)] = 1'b1;\n\
-         v[$unsigned(s5)] = 1'b1; v[k] = 1'b1; v[u5 < s5] = 1'b1; v[|u5] = 1'b1;\n\
-         v[u5 ? u5 : s5] = 1'b1; v[{1'b0, u5}] = 1'b1; v[u5 >> 1] = 1'b1;\n\
-         v[s5 >>> 1] = 1'b1; v[$clog2(u5)] = 1'b1; v[-1] = 1'b1; v[3] = 1'b1;\n\
-         v[s32 ** u32] = 1'b1; v[u32 ** u32] = 1'b1; v[bb] = 1'b1; v[sh] = 1'b1;\n\
-         v[$rtoi(rr)] = 1'b1;\n\
-         nz[u5 +: 2] = 2'b11; nz[s5 +: 2] = 2'b11;\n\
-         asc[~u5] = 1'b1; asc[k] = 1'b1;\n\
-       end\n\
-     endmodule\n";
+fn s2_incremental_and_full_selfwidth_drivers_agree() {
     let cls = "class C; int si; bit [7:0] bu; endclass\n\
        module top;\n\
-         C c; reg [-2:-33] dn;\n\
+         C c; reg [-2:-33] dn; reg signed [7:0] s8; byte bb;\n\
+         function automatic signed [7:0] fs(input [7:0] x); fs = -8'sd6; endfunction\n\
          initial begin\n\
-           c = new(); c.si = -5; c.bu = 8'd5; dn = 0;\n\
-           dn[c.si] = 1'b1; dn[~c.si] = 1'b1; dn[c.si + 32'sd0] = 1'b1;\n\
-           dn[c.bu] = 1'b1; dn[~c.bu] = 1'b1;\n\
+           c = new(); c.si = -5; c.bu = 8'd5; dn = 0; s8 = -8'sd6; bb = -8'sd5;\n\
+           dn[c.si] = 1'b1; dn[~c.si] = 1'b1; dn[c.bu] = 1'b1;\n\
+           dn[s8] = 1'b1; dn[bb] = 1'b1; dn[fs(8'd6)] = 1'b1;\n\
+           dn[s8 ** 32'd3] = 1'b1;\n\
          end\n\
        endmodule\n";
     let mut srcs: Vec<String> = corpus(0x5EED_F00D, 72).into_iter().map(|d| d.src).collect();
-    srcs.push(extra.to_string());
     srcs.push(cls.to_string());
+    let (mut compared, mut signed_seen, mut cf_seen) = (0usize, 0usize, 0usize);
     for src in &srcs {
         let (ir, opts) = build_with_opts(src);
-        // The REAL function table, not an empty one: `Expr::Call`'s canonical
-        // width and sign come from it, so an empty table would call every call
-        // `{1, unsigned}` and a future `Call` arm in the predicate would be
-        // compared against the wrong canon. Vacuous today (there is no `Call`
-        // arm) and cheap to get right now.
-        let mut wt = WidthTable::build(&ir, &opts.func_table);
-        // The canonical table is only canonical AFTER this patch — a class
-        // field's width and sign come from the sidecar, not from its handle
-        // net, and omitting it is what made this test blind to the class arm.
-        wt.patch_class_fields(&opts.class_field_widths);
-        for eid in 0..ir.exprs.len() as u32 {
-            checked += 1;
-            if elaborate::packed::expr_provably_unsigned(
-                &ir.exprs,
-                &ir.consts,
-                &ir.nets,
-                &opts.class_field_widths,
-                eid,
-            ) {
-                proved += 1;
-                assert!(
-                    !wt.get(eid).signed,
-                    "expr {eid} proved unsigned but the canonical table says signed: {:?}",
-                    ir.exprs[eid as usize]
-                );
-            }
+        let full = WidthTable::build_with(&ir, &opts.func_table, &opts.class_field_widths);
+        let ctx = sim_ir::selfwidth::ExprCtx::of(&ir);
+        let call_ret = |f: u32| {
+            opts.func_table
+                .get(f as usize)
+                .map(|m| (m.ret_width, m.ret_signed))
+        };
+        // Elaborate's shape: a growing prefix, class fields applied as they go.
+        let mut sw: Vec<sim_ir::selfwidth::SelfWidth> = Vec::new();
+        for i in 0..ir.exprs.len() as u32 {
+            let s = if let Some(&(w, sg)) = opts.class_field_widths.get(&i) {
+                sim_ir::selfwidth::SelfWidth {
+                    width: w.max(1),
+                    signed: sg,
+                }
+            } else {
+                sim_ir::selfwidth::self_width_of(ctx, &call_ret, &sw, i)
+            };
+            sw.push(s);
+            let f = full.get(i);
+            assert_eq!(
+                (sw[i as usize].width, sw[i as usize].signed),
+                (f.width, f.signed),
+                "expr {i} differs between the incremental and full drivers: {:?}",
+                ir.exprs[i as usize]
+            );
+            compared += 1;
+            signed_seen += usize::from(f.signed);
         }
+        cf_seen += opts.class_field_widths.len();
     }
-    // Anti-vacuity: the predicate must actually fire, and must NOT fire on
-    // everything (a constant `true` would pass the assertion above while
-    // making the seal unsound for every signed index).
-    assert!(
-        proved > 0 && proved < checked,
-        "proved {proved} of {checked}"
-    );
-    assert_eq!(
-        (checked, proved),
-        (2019, 951),
-        "the proof's coverage moved — re-pin deliberately (a DROP means the \
-         predicate narrowed; a RISE means it widened, which is the direction \
-         that can be unsound)"
-    );
+    // A floor, not a pin: the value is coverage, and an exact count would churn
+    // on any IR-shape change. The two anti-vacuity counters are the real teeth —
+    // without them this passes when every expression is unsigned (the corpus
+    // alone very nearly is) and the sign axis, which is the whole reason the
+    // rule was shared, would never be compared at all.
+    assert!(compared > 1_500, "too few exprs compared: {compared}");
+    assert!(signed_seen > 0, "no signed expression compared");
+    assert!(cf_seen > 0, "no class field compared");
 }

@@ -355,3 +355,167 @@ fn one_bit_pattern_three_oracle_answers_vita_answers_by_value() {
     assert!(out.contains("E 40000000"), "{out}");
     assert!(out.contains("F 11"), "{out}");
 }
+
+/// The cells where the SIGNED seal actually changes the answer.
+///
+/// Every other signed-index test in this file uses `reg [-2:-33] dn`, i.e. a
+/// NEGATIVE declared LSB. There the old emission was `raw + |k|` and the new one
+/// is `$signed(idx) − k`, and those two agree modulo 2³² for every result that
+/// lands in range — so reverting the signed half of the seal passed all nine of
+/// them (measured; the differential review's M4). The seal is only observable
+/// where the normalization is a SUBTRACTION the old form got wrong: an ASCENDING
+/// range (`k − idx`) and a POSITIVE non-zero LSB.
+///
+/// Oracle: iverilog 13 on all six rows.
+#[test]
+fn the_signed_seal_is_pinned_where_it_is_observable() {
+    let src = "module top;\n\
+       reg [0:7] asc; reg [3:10] ascn; reg [10:3] dsc;\n\
+       reg signed [7:0] s8; byte bb;\n\
+       function automatic signed [7:0] fs(input [7:0] x); fs = -8'sd6; endfunction\n\
+       initial begin\n\
+         s8 = -8'sd6; bb = -8'sd6;\n\
+         asc = 8'b0; ascn = 8'b0; dsc = 8'b0;\n\
+         asc[~s8]  = 1'b1; $display(\"ASC %b\", asc);\n\
+         ascn[~bb] = 1'b1; $display(\"ASN %b\", ascn);\n\
+         dsc[~s8]  = 1'b1; $display(\"DSC %b\", dsc);\n\
+         asc = 8'b0; ascn = 8'b0; dsc = 8'b0;\n\
+         asc[fs(8'd0)+8]  = 1'b1; $display(\"ASF %b\", asc);\n\
+         ascn[fs(8'd0)+8] = 1'b1; $display(\"ANF %b\", ascn);\n\
+         dsc[fs(8'd0)+8]  = 1'b1; $display(\"DSF %b\", dsc);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let out = run(src);
+    // `~s8` is 5 at the index's own eight bits. Unsealed it evaluates at
+    // thirty-two (`~(-6)` widened) and misses every one of these.
+    // Values are the ORACLE's, measured, not predicted — my hand answers for the
+    // `fs()+8` rows were wrong twice before iverilog settled them.
+    for (tag, want) in [
+        ("ASC", "00000100"), // [0:7]  ascending, zero base — PRE wrote nothing
+        ("ASN", "00100000"), // [3:10] ascending, base 3     — PRE wrote nothing
+        ("DSC", "00000100"), // [10:3] descending, base 3    — PRE wrote nothing
+        ("ASF", "00100000"), // signed function return, ascending — PRE wrote nothing
+        // The last two are CONTROLS: `fs(0)+8` is 2, which is below base 3, so
+        // both readings agree it is out of range and both write nothing. They
+        // are here so a mutation that simply stops writing cannot pass.
+        ("ANF", "00000000"),
+        ("DSF", "00000000"),
+    ] {
+        assert!(
+            out.lines().any(|l| l == format!("{tag} {want}")),
+            "line `{tag} {want}` missing\n{out}"
+        );
+    }
+}
+
+/// The UNSIGNED half of the seal is FROZEN at its pre-§4.5.309 decision, and
+/// these are the cells that made that necessary.
+///
+/// Replacing the old hand predicate with the canonical rule here proved
+/// `$urandom`/`$urandom_range`/`$stime` unsigned for the first time, which put
+/// them through the seal — and under a NEGATIVE declared base the unsealed
+/// emission is `raw + |k|` at thirty-two bits, which WRAPS, and the wrap is the
+/// answer iverilog gives. Sealed at thirty-three bits it becomes 4294967296:
+/// out of range, so twelve unpacked cells went correct → `x` + E4002 + exit 1
+/// and one packed WRITE went correct → silently dropped.
+///
+/// Which unsigned shapes to seal is therefore not a signedness question at all
+/// — it is the array-word i32-reinterpretation question in ROADMAP §2, and no
+/// width/base predicate separates the two groups (`reg [31:0] ix` and `$stime`
+/// are both 32-bit unsigned under the same negative base, and the old decision
+/// is right about the first only when sealed and about the second only when
+/// not). Until that is decided, these rows must not move.
+#[test]
+fn the_unsigned_seal_keeps_its_frozen_decision_under_a_negative_base() {
+    let src = "module top;\n\
+       reg [7:0] ma [-3:2];\n\
+       reg [4:-3] pk;\n\
+       integer ii, q;\n\
+       initial begin\n\
+         for (q=-3; q<=2; q=q+1) ma[q] = (q+40);\n\
+         ii = -3; pk = 8'b0;\n\
+         $display(\"U1 %0d\", ma[($urandom%1)+ii]);\n\
+         $display(\"U2 %0d\", ma[$urandom_range(0,0)+ii]);\n\
+         $display(\"U3 %0d\", ma[$stime+ii]);\n\
+         ma[$stime+ii] = 8'd77; $display(\"U4 %0d\", ma[-3]);\n\
+         pk[$stime+ii] = 1'b1;  $display(\"U5 %b\", pk);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let out = run(src);
+    // `run` already asserts exit 0 — which is half the point: U1..U3 went to
+    // `x` plus an E4002 and exit 1, so a regression here is loud, and U5 is the
+    // one that went SILENT.
+    for (tag, want) in [
+        ("U1", "37"),
+        ("U2", "37"),
+        ("U3", "37"),
+        ("U4", "77"),
+        ("U5", "00000001"),
+    ] {
+        assert!(
+            out.lines().any(|l| l == format!("{tag} {want}")),
+            "line `{tag} {want}` missing — the unsigned seal moved\n{out}"
+        );
+    }
+}
+
+/// A CLASS FIELD as the index, paired with its plain twin.
+///
+/// The field's sign is a vita sidecar, not a language rule — the `Signal` the
+/// index reads sits on the 32-bit HANDLE net — so `elaborate`'s driver over the
+/// shared width rule applies that map inline as it fills. Dropping the arm makes
+/// `c.sb` (a `byte`) read as unsigned 32 and the seal declines: measured, all
+/// three rows below go to "wrote nothing" while the twin keeps working.
+///
+/// Oracle: iverilog 13 compiles both forms and agrees with the twin on all four.
+#[test]
+fn a_class_field_index_is_sealed_like_its_plain_twin() {
+    let mk = |cls: bool| {
+        let (decl, init, sb, u5) = if cls {
+            (
+                "class C; byte sb; bit [4:0] u5; endclass\nmodule top;\n  C c;",
+                "c = new(); c.sb = -8'sd6; c.u5 = 5'd6;",
+                "c.sb",
+                "c.u5",
+            )
+        } else {
+            (
+                "module top;\n  byte sb; reg [4:0] u5;",
+                "sb = -8'sd6; u5 = 5'd6;",
+                "sb",
+                "u5",
+            )
+        };
+        format!(
+            "{decl}\n\
+               reg [33:2] d2; reg [-2:-33] dn; reg [0:7] asc;\n\
+               initial begin\n\
+                 {init}\n\
+                 d2 = 32'h0; dn = 32'h0; asc = 8'b0;\n\
+                 d2[~{sb}] = 1'b1;  $display(\"E1 %h\", d2);\n\
+                 dn[~{sb}] = 1'b1;  $display(\"E2 %h\", dn);\n\
+                 asc[~{sb}] = 1'b1; $display(\"E3 %b\", asc);\n\
+                 d2 = 32'h0; d2[~{u5}] = 1'b1; $display(\"E4 %h\", d2);\n\
+                 $finish;\n\
+               end\n\
+             endmodule\n"
+        )
+    };
+    let cls = run(&mk(true));
+    let plain = run(&mk(false));
+    assert_eq!(
+        cls, plain,
+        "a class-field index must lower like its plain twin"
+    );
+    // …and an anti-vacuity floor: the twin must actually be doing the thing.
+    // `E2` is a control — `~c.sb` is 5, which is above `[-2:-33]`'s high end, so
+    // both readings write nothing and it cannot carry the assertion alone.
+    for want in ["E1 00000008", "E3 00000100", "E4 00800000", "E2 00000000"] {
+        assert!(
+            plain.lines().any(|l| l == want),
+            "line `{want}` missing\n{plain}"
+        );
+    }
+}

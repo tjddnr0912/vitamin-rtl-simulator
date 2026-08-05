@@ -699,6 +699,17 @@ struct Elaborator<'s> {
     class_vtable: Vec<Vec<u32>>,
     class_calls: std::collections::BTreeMap<u32, (Option<u32>, u32)>,
     class_field_widths: std::collections::BTreeMap<u32, (u32, bool)>,
+    /// How far `index_self_width`'s placeholder scan has got. Everything below
+    /// it is known placeholder-free FOREVER: a resolved node is never turned
+    /// back into a `POISON_*` placeholder (the deferred-hierarchy passes only
+    /// ever patch a placeholder INTO a resolved node), so "clean" is permanent
+    /// and the scan is amortized across the whole elaboration instead of being
+    /// re-run per indexed select. Measured: without it picorv32 paid 4.3%.
+    selfw_scan: u32,
+    /// Memo for `index_self_signed` (§4.5.309) — one `SelfWidth` per ExprId,
+    /// filled forward and never invalidated, because an expression's
+    /// self-width cannot change once it is pushed.
+    selfw_cache: Vec<sim_ir::selfwidth::SelfWidth>,
     // N7-REST B-CRV final: per-call inline `randomize() with` constraints, pushed
     // (and indexed) as each `obj.randomize() with {…}` is lowered.
     randomize_with: Vec<RandWithCall>,

@@ -9,6 +9,7 @@
 extern crate self as sim_ir;
 
 mod analysis;
+pub mod selfwidth;
 pub use analysis::{
     call_out_nets, compute_suspendable_tasks, func_body_needs_stmt_executor,
     rhs_frame_executor_cannot_perform, rhs_is_stmt_effect, sysfunc_frame_executor_cannot_perform,

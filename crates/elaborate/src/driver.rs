@@ -133,6 +133,8 @@ impl<'s> Elaborator<'s> {
             class_vtable: Vec::new(),
             class_calls: std::collections::BTreeMap::new(),
             class_field_widths: std::collections::BTreeMap::new(),
+            selfw_scan: 0,
+            selfw_cache: Vec::new(),
             randomize_with: Vec::new(),
             assert_fire: std::collections::BTreeSet::new(),
             assert_ctl: std::collections::BTreeMap::new(),
