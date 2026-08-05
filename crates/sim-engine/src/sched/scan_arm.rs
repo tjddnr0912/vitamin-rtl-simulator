@@ -694,20 +694,46 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 return None;
             }
         }
-        // Delayed `assign #d y = rhs`: the zero-delay fixpoint has settled, so
-        // the RHS is stable. On each RHS-value CHANGE, schedule an INERTIAL
-        // write of the new value at `now + d` — bumping `ca_gen[ci]` cancels
-        // any still-pending older write for THIS assign (a pulse narrower
-        // than d never lands; a pulse of EXACTLY d survives because pending
-        // writes apply at the tick start, before processes re-change the RHS
-        // — both iverilog-pinned live, 2026-06-12).
+        self.schedule_delayed_cas::<SimState>(None);
+        Some(any)
+    }
+
+    /// Delayed `assign #d y = rhs`: the zero-delay fixpoint has settled, so the
+    /// RHS is stable. On each RHS-value CHANGE, schedule an INERTIAL write of
+    /// the new value at `now + d` — bumping `ca_gen[ci]` cancels any still
+    /// pending older write for THIS assign (a pulse narrower than d never
+    /// lands; a pulse of EXACTLY d survives because pending writes apply at the
+    /// tick start, before processes re-change the RHS — both iverilog-pinned
+    /// live, 2026-06-12).
+    ///
+    /// `nets` is the tier-3 seam (S1d-4d-3): `None` reads this scheduler's own
+    /// store, `Some(arena)` reads the alternate one. Only the RHS EVALUATION
+    /// crosses — the generation bookkeeping, the transition-delay selection and
+    /// the wheel are scheduler state either way, which is why this is one
+    /// function rather than two.
+    pub(crate) fn schedule_delayed_cas<N: crate::eval::NetReader + ?Sized>(
+        &mut self,
+        nets: Option<&N>,
+    ) {
         for ci in 0..self.st.ir.cont_assigns.len() {
             let Some(d) = self.st.ir.cont_assigns[ci].delay else {
                 continue;
             };
             let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
             let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-            let v = self.eval_cont_assign(ci, &lhs, ca_rhs);
+            let v = match nets {
+                // Same assignment rule as `eval_for_lvalue`: width is
+                // max(lhs, self(rhs)), sign is the rhs's own. `lvalue_width`
+                // reads IR-derived widths, identical for both stores.
+                Some(r) => {
+                    let lw = self.st.lvalue_width(&lhs);
+                    let sw = self.st.wt.get(ca_rhs);
+                    self.st
+                        .mk_eval_ctx_with(r)
+                        .eval_ctx(ca_rhs, lw.max(sw.width), sw.signed)
+                }
+                None => self.eval_cont_assign(ci, &lhs, ca_rhs),
+            };
             if self.last_ca[ci].as_ref() == Some(&v) {
                 continue; // RHS unchanged → no new scheduled write
             }
@@ -720,7 +746,20 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             let old = self.last_ca_drv[ci].clone();
             self.last_ca[ci] = Some(v.clone());
             self.ca_gen[ci] += 1;
-            let offs = self.resolve_lvalue_offsets(&lhs);
+            // THE LHS OFFSETS MUST COME FROM THE SAME STORE AS THE RHS. This
+            // read `self.resolve_lvalue_offsets` unconditionally — the engine's
+            // own `EvalCtx` — while the value above already crossed the seam.
+            // On a native run `sched.st` is never written, so a dynamic index
+            // (`assign #1 y[i] = v;`) read X, became the out-of-range sentinel
+            // and the write was DROPPED: same exit code, same everything, one
+            // bit silently missing. Two halves of one feature reading two
+            // stores — and the X-drive half in `native/run.rs` was already
+            // using the arena, which is what made the survivor visible as an
+            // `x` at the right bit position.
+            let offs = match nets {
+                Some(r) => crate::eval::resolve_offsets(&self.st.mk_eval_ctx_with(r), &lhs),
+                None => self.resolve_lvalue_offsets(&lhs),
+            };
             // S1: when this cont-assign has differing rise/fall/turnoff delays,
             // the net updates atomically at `now + max(per-changed-bit dest
             // delay)`. Absent a sidecar entry, the uniform `d` is used (byte-
@@ -738,7 +777,43 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 offs,
             ));
         }
-        Some(any)
+    }
+
+    /// The delayed cont-assign writes due at `tick`, generation-filtered — the
+    /// inertial cancel. The CALLER performs the write, because the two backends
+    /// write different stores; everything about WHICH writes survive is here.
+    ///
+    /// `last_ca_drv` is updated for each surviving write: it is the baseline the
+    /// next transition's per-bit delay is measured from, and a superseded write
+    /// must not move it (which is why the filter and the update are one step).
+    pub(crate) fn take_due_delayed_ca(&mut self, tick: u64) -> Vec<(Lvalue, Value, Offsets)> {
+        let mut out = Vec::new();
+        if let Some(writes) = self.delayed_ca.remove(&tick) {
+            for (ci, gen, lhs, v, offs) in writes {
+                if self.ca_gen[ci as usize] != gen {
+                    continue;
+                }
+                self.last_ca_drv[ci as usize] = Some(v.clone());
+                out.push((lhs, v, offs));
+            }
+        }
+        out
+    }
+
+    /// The earliest tick with a pending delayed cont-assign write, if any.
+    pub(crate) fn next_delayed_ca(&self) -> Option<u64> {
+        self.delayed_ca.keys().next().copied()
+    }
+
+    /// Does this delayed cont-assign still owe its initial X drive?
+    ///
+    /// `assign #3 o = a & b` reads `o == x` during `[0, d)` — iverilog-pinned —
+    /// and that x has to propagate through the fixpoint, so it is driven inside
+    /// the settle rather than at the wheel. Only while the first real write has
+    /// not landed, and only for a SOLE driver (a shared net's every-delta
+    /// x-drive would oscillate against the concurrent driver).
+    pub(crate) fn delayed_owes_initial_x(&self, ci: usize) -> bool {
+        self.last_ca_drv[ci].is_none() && self.delayed_sole[ci]
     }
 
     /// Arm processes at t0 per Verilog initial/always semantics.

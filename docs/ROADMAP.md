@@ -158,6 +158,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - ~~**🔴 frame body 의 copy-out 이 엔진 assert 를 밟는다**~~ **RESOLVED(§4.5.278·상세=ARCHIVE)** — 세 슬라이스가 "아직 이름 붙이지 못했다"고 적고 두 번 되돌린 조건은 **위치**(첫 문장/entry 블록)가 아니라 **분류기의 맹점**이었다: `Terminator::Call` 의 copy-out 목적지는 `Stmt` lvalue 가 아니라 call-site 사이드 테이블(`task_calls_func`)에 살아서 `compute_suspendable_tasks` 의 워크가 한 번도 본 적이 없었다. 워크가 그것을 보고 창 밖 목적지를 suspend 신호로 치면 caller 가 `&mut` 실행기로 가고 패닉이 사라진다 — 되돌린 두 시도가 지키려 했던 10개 정답 형태를 **하나도 잃지 않고**(3-way 70프로브 회귀 0). 잔여 = 프레임 **함수** 본문뿐(§4.5.275 후속 ② 참조).
 - **🔴 참조 워커가 EXPRESSION 위치의 호출을 한 단계만 본다**(pre-existing·오라클=vita-내부 등가·§4.5.276 리뷰 2렌즈 수렴 발굴): `stmt_no_ref_deep` 은 inertness 리졸버를 `S::UserTaskCall` **에만** 넘기고, `expr_no_ref_with` 의 `Call` arm 은 `path_ok(cn) && args.all(..)` 라 **호출된 함수의 본문에 들어가지 않는다**. 그래서 함수 간접 한 겹이 그 아래 전부를 가린다 — `function rd(); return o; endfunction` 을 직접 부르면 올바르게 loud 인데 `function rd2(); return rd(); endfunction` 을 거치면 `q = rd2() + nxt(5,o)` 가 **11 대신 12**(exit 0). **문장 위치 쌍둥이는 잡힌다**(`g2(z)` 형태)라 비대칭이 가려져 있었다. PRE(`8cf4165`) 동일 = pre-existing이고, `call_effect`→`call_is_inert` 도 같은 술어를 거치므로 §4.5.276 이 노출을 넓힌 것은 아니다. fix = 그 표현식 워커를 리졸버-aware 로 — **공유 워커 변경**이라 consumer 전수 + 자체 리뷰 라운드가 필요한 별도 슬라이스.
 - **🔴 `repeat` 카운트가 self-determined 폭으로 절단되지 않는다**(pre-existing·오라클 ✓·§4.5.276 리뷰 부수 발굴): `repeat (8'd128 + 8'd128) …` 이 vita **256회** / iverilog **0회**(§11.6 — `8'd128+8'd128` 은 8비트 자기결정이라 0). PRE(`8cf4165`)도 동일. 카운트 표현식의 self-determined 폭을 엔진 앞에서 적용해야 한다. 같은 도메인 질문이 §4.5.276 의 trip-count 증명을 리터럴-only 로 묶어 둔 이유이기도 하다(그 증명은 sized 리터럴을 아예 거부해 이 결함에 **의존하지 않는다**).
+- **🔴 지연 CA 의 초기-X 창이 두 군데서 오라클과 갈린다**(pre-existing·양 백엔드 동일·오라클 ✓·§4.5.302 soundness 렌즈 발굴). `assign #d` 의 출력 레지스터는 첫 지연 쓰기가 착지하기 전까지 x 여야 한다(§11.2). vita 는 그 x 를 **t=0 의 변화로 몰아** 넣는다 — ⓐ `always @(y)` 가 iverilog 에 없는 **`event t=0 y=x` 를 한 번 더** 받는다(`assign #3 y = a;` 단일 드라이버로 재현), ⓑ 그리고 그 X-drive 는 `delayed_sole`(**넷 전체**의 유일 cont-assign 드라이버) 인 경우에만 걸려서, 한 넷의 **서로소 part-select 를 지연 구동하는 두 assign** 에서는 창 안이 x 가 아니라 **z** 다(`assign #3 y[3:2]=a; assign #3 y[1:0]=b;` → iverilog `t=1 y=xxxx` / vita `t=1 y=zzzz`; t=6 부터는 양쪽 `1001` 일치). ⓑ 의 올바른 술어는 "넷의" 가 아니라 **"이 lvalue 가 닿는 비트의"** 유일 드라이버이고, 그 비트 단위 드라이버 맵은 **S1d-4d-4**(multi-driver/wired 해상)가 짓는 바로 그 자료라 그 슬라이스가 소유한다. ⓐ 는 넷 초기값을 x 로 **세우는** 문제(변화로 몰지 않기)라 VCD 바이트가 움직이므로 별도. `sched/mod.rs::delayed_sole` 주석의 "delta 예산을 태운다" 는 이유는 **무지연 드라이버와 섞인 경우**에만 성립하고 ⓑ 의 전지연 경우엔 성립하지 않는다(기록해 둔다 — 그 주석이 fix 를 막는 것처럼 읽힌다).
 - **replication 비대칭(기록)**: 같은 `parameter real R = 3.0` 에서 `{R{'1}}`·`{(R:R:R){1'b1}}` 는 supported(`111`)인데 `{R{1'b1}}`·`{R{2'b10}}` 는 loud. 일관성은 없으나 loud 쪽이 정직함.
 - **concat 원소가 정수 산술식이면 바이트가 아니라 워드 폭으로 렌더**(pre-existing·§4.5.222 3-way 실측서 PRE==POST 확인): `{"e", "0"+k}`(k=1) = iverilog `e1` / vita `e\0\0\01`. 스칼라 string·fixed 배열·non-zero-base 전부 동일 발화 = §4.5.134/217의 "string concat 폭" 가족과 동근. §4.5.222가 런타임 인덱스 write라는 **철자 하나를 더 도달 가능하게** 했을 뿐(신규 결함 아님). 올바른 concat(`{s[k],"!"}`)은 iverilog 일치라 blanket 가드는 false-loud → 술어는 **산술 피연산자의 self-width**여야 함.
 - ~~🔴 상수-foldable 식을 part-select 바운드로~~ · ~~🔴 replication count 가 안 접히면 0~~ **둘 다 RESOLVED**(§4.5.229·동근이었고 실측은 기록의 2가족이 아니라 **8가족**). 잔여 = 아래 "상수 폭 잔차" 3줄.
@@ -346,6 +347,12 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
+> **S1d-4d-3 완료 (2026-08-05 · §4.5.302) — delayed CA.** `assign #d` 배선 → **코퍼스 72/72 네이티브·
+> 바이트 동일**(30→65→72). 재진술 대신 **추출**(엔진도 같은 함수를 통과·PRE/POST 179설계 0 diff).
+> ⭐⭐ 그런데 추출이 절반이었다 — **LHS 오프셋만 엔진 스토어**로 해석해 동적 인덱스 쓰기가 조용히
+> 사라졌다(10설계). ⭐⭐ 그리고 공유로 옮긴 부분은 **차분이 원리적으로 못 지킨다**(generation 필터·
+> `transition_delay` 를 지워도 전 게이트 통과) → **iverilog 절대값 앵커 2개** 신설.
+>
 > **S1d-4d-2 완료 (2026-08-05 · §4.5.301) — VCD.** `$dumpfile`/`$dumpvars` 배선 → **`examples/` 넷
 > 전부 네이티브·stdout+VCD 바이트 동일**(원래 S1 게이트가 실사용 설계에서 통과). 코퍼스 스트립 폐지
 > (dump 44 중 37 이 VCD 까지 비교). ⭐⭐ differential 이 **내 주석의 주장을 반증**(`arg_string` 은

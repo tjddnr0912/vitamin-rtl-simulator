@@ -789,18 +789,19 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
 ///
 /// `--backend native` may not be silently ignored, and it may not be silently
 /// honored either: run.json has to carry both what was asked and what ran. A
-/// DELAYED continuous assign is the refusal used here because it is one the run
-/// gate adds on top of design eligibility — S1d-4d-1 settles the zero-delay
-/// ones, while `assign #d` still needs the inertial wheel. Note
-/// `native.eligible` stays TRUE, which is the whole point of the layering: the
-/// design is within v1's scope, today's executor just cannot run it. A PLAIN
-/// `assign` sat here until S1d-4d-1 and now runs natively, which is why this
-/// reads `#2`.
+/// A MULTI-DRIVEN net is the refusal used here because it is one the run gate
+/// adds on top of design eligibility — wire resolution, not last-write-wins.
+/// Note `native.eligible` stays TRUE, which is the whole point of the layering:
+/// the design is within v1's scope, today's executor just cannot run it.
+///
+/// The design here has changed twice as the executor grew: a plain `assign`
+/// until S1d-4d-1, then `assign #2` until S1d-4d-3 wired the inertial wheel.
 #[test]
 fn run_json_reports_native_fallback_on_a_refused_design() {
-    const CA_SV: &str = "module top; wire [7:0] w; reg [7:0] r;\n\
-         assign #2 w = r + 8'd1;\n\
-         initial begin r = 8'd1; #5 $display(\"w=%0d\", w); $finish; end endmodule\n";
+    const CA_SV: &str = "module top; wire [7:0] w; reg [7:0] a, b;\n\
+         assign w = a;\n\
+         assign w = b;\n\
+         initial begin a = 8'hF0; b = 8'h0F; #1 $display(\"w=%0h\", w); $finish; end endmodule\n";
     let (_, code, obs) = run(CA_SV, &["--backend", "native"]);
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));

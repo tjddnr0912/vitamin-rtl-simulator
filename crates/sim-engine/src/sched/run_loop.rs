@@ -250,16 +250,13 @@ impl Scheduler<'_, '_> {
             // not process resumes, so the loop-top settle would not see them).
             // A write whose generation was superseded by a later RHS change is
             // STALE — dropped (the inertial cancel).
-            if let Some(writes) = self.delayed_ca.remove(&next) {
+            {
+                // The generation filter and the `last_ca_drv` baseline live in
+                // `take_due_delayed_ca`, shared with the tier-3 loop; only the
+                // write is per-store.
+                let due = self.take_due_delayed_ca(next);
                 let mut moved = false;
-                for (ci, gen, lhs, v, offs) in writes {
-                    if self.ca_gen[ci as usize] != gen {
-                        continue;
-                    }
-                    // S1: this write actually LANDS — record it as the gate's
-                    // output for the next transition's delay baseline. (Stale
-                    // superseded writes `continue` above, so they never update it.)
-                    self.last_ca_drv[ci as usize] = Some(v.clone());
+                for (lhs, v, offs) in due {
                     moved |= self.st.write_lvalue(&lhs, v, &offs);
                 }
                 if moved {

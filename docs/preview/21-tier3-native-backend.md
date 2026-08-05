@@ -428,7 +428,8 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 >
 > **게이트** = `examples/` 4개 + picorv32 의 **VCD 바이트 동일**(VM vs native). ⚠️ 바이트 게이트 前
 > 결정 6건(ROADMAP §2)은 전부 **vita-vs-iverilog** 차이라 이 게이트(vita-vs-vita)를 막지 않는다.
-> | **S1d-4d-3** | delayed CA(`delayed_ca`·`ca_gen` inertial)·multi-driver/wired 해소 | 코퍼스 CA 7설계가 전부 delayed 를 요구 — corpus 65 → 72 |
+> | **S1d-4d-3 ✅ (2026-08-05)** | **delayed CA**(§4.5.302) — 엔진 로직을 `schedule_delayed_cas`/`take_due_delayed_ca` 로 **추출**해 양쪽이 공유 | ✅ **코퍼스 72/72 바이트 동일** · differential 175 native 0 diff · PRE/POST 엔진 경로 0 diff · 뮤테이션 9/9. ⭐⭐ LHS 오프셋만 엔진 스토어라 동적 인덱스 쓰기가 **조용히 사라졌다** · 공유 부분은 **차분이 못 지켜** iverilog 절대값 앵커 2개 신설 |
+> | **S1d-4d-4** | multi-driver / `wand`·`wor` 해상(wire resolution) | 코퍼스 커버리지 **0**(실측)이라 전용 설계로. 닫히면 S1 거부 행은 `final`·fork·서브루틴·`$monitor` 계열만 남는다 |
 >
 > **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
 > 엔진은 이미 이 이음매를 **의도적으로** 만들어 뒀다(`exec/mod.rs`: *"`apply_effect` 의 커널 호출이

@@ -395,6 +395,11 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // continuous assigns PLUS these sidecars, so without them the tier-3
         // run gate's wired row is unreachable from any test and a `wand` design
         // reads as an ordinary multi-driven net.
+        // …and the per-transition delay table. `assign #(rise,fall)` lowers as an
+        // ordinary delayed assign PLUS this sidecar, so without it every
+        // transition uses the uniform delay and a test that pins rise/fall is
+        // measuring something the design does not say.
+        ca_delays: sc.ca_delays,
         wired_and_nets: sc.wired_and_nets,
         wired_or_nets: sc.wired_or_nets,
         ..SimOpts::default()

@@ -347,6 +347,51 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.302 ③층 S1d-4d-3 — delayed CA: **코퍼스 72/72**, 그리고 공유 코드는 차분이 못 지킨다 — 앵커 셋 (2026-08-05, branch feat-tier3-delayed-ca, format 26 불변) ✅
+
+`assign #d` 를 ③층이 실행한다 → **코퍼스 72 설계 전부가 네이티브로 돌고 stdout·진단·VCD 바이트 동일**
+(30 → 65 → **72**). 남은 거부는 `wand`/`wor`·multi-driver·`final`·fork·서브루틴·`$monitor` 계열뿐.
+
+⭐ **이번엔 재진술이 아니라 추출을 골랐다.** inertial 취소(`ca_gen`)·전이별 rise/fall/turnoff 선택·
+sole-driver X 창은 전부 **iverilog 로 핀된 미묘한 규칙**이라 두 철자가 갈리면 조용히 틀린다 → 엔진
+로직을 `schedule_delayed_cas`/`take_due_delayed_ca`/`delayed_owes_initial_x` 로 꺼내고 **엔진도 그것을
+통과**하게 했다(PRE/POST 179설계 0 diff 로 확인).
+
+⭐⭐ **그런데 추출이 절반만 됐다 — differential 이 reachable silent-wrong 을 잡았다.** RHS 는 seam 으로
+읽으면서 **LHS 오프셋은 `self.resolve_lvalue_offsets`**, 즉 엔진 스토어로 해석했다. 네이티브 런에서 그
+스토어는 안 움직이므로 동적 인덱스(`assign #1 y[i] = v;`)가 X → out-of-range 센티널 → **쓰기가 통째로
+사라진다**. exit code 동일·출력 동일·한 비트만 없다. 10 설계 재현(bit-select·`+:`/`-:`·배열 워드·VCD
+레코드 누락 포함). ⭐ 진단이 살아 있었던 이유가 재미있다 — **같은 기능의 X-drive 반쪽은 아레나를 썼다**
+(`native/run.rs`), 그래서 `x` 가 **맞는 비트 자리**에 찍혀 있었다. 한 기능, 두 반쪽, 두 스토어.
+
+⭐⭐ **그리고 직전 슬라이스의 교훈이 곧바로 청구서로 돌아왔다** — 공유로 옮긴 부분은 **VM-vs-native
+차분이 원리적으로 못 지킨다**(양쪽이 같이 움직인다). 실측: `take_due_delayed_ca` 의 **generation 필터를
+지워도 전 차분 게이트 통과** · `transition_delay` 선택을 무시해도 통과. → **절대값 앵커 두 개**를 지었다
+(iverilog 13 로 측정: 좁은 펄스는 LHS 에 절대 안 닿고[`narrow` 가 창 내내 x] 폭 == `d` 는 통과[t=4 에 9]
+· rise 2/fall 7 이 t=13/t=23 에 발화) → 둘 다 kill. **공유는 드리프트를 없애지만 감도도 없앤다**를
+규칙에서 실행으로 옮긴 것.
+
+⚠️ 하네스 갭 하나 더: `ca_delays` 사이드카가 `build_with_opts` 에 미설치라 rise/fall 테스트가 **균일
+지연을 재고 있었다**(`final_procs`·`wired_*` 와 같은 클래스 — 세 번째다).
+
+**게이트.** **5144 green** · clippy · fmt · format 26 불변 · **코퍼스 72/72 거부 0** · dump 44/44 VCD 비교 ·
+판별 설계 50 + **오라클 앵커 3** · differential **179 설계 중 175 native 확인, 수정 후 0 diff** + PRE/POST
+기본 백엔드 179 **0 diff**(추출이 엔진을 안 바꿨다는 증명) · 뮤테이션 **라운드1 9/9 + 라운드2 6/6 kill**.
+
+**적대 렌즈 ② soundness(라운드 2) — 뮤테이션이 게이트의 눈을 다시 쟀다.** 리뷰어가 제품 뮤테이션 21개를 지어 **14 생존**을 실측했고(각각 판별 설계로 비-등가 증명), 그중 6개가 이 슬라이스 확정분이었다. 재실행하니 **M10**(`next_delayed_ca` 를 시간 진행 min 에서 제거)·**M12**(휠 쓰기 뒤 `propagate` 제거)는 라운드 1 이 추가한 설계가 이미 죽이고 있었고 **셋이 남았다**:
+
+- **M4 — 전이 지연의 BASELINE.** `last_ca_drv`(이 assign 이 실제로 **구동한** 마지막 값)를 `last_ca`(마지막으로 **본** RHS)로 바꿔도 코퍼스 72·적대 50·앵커 2개가 전부 통과한다. 둘은 **inertial supersede 에서만** 갈리는데(대기 중 쓰기가 착지하기 전에 RHS 가 또 바뀌면 취소된 값이 baseline 이 되어 rise 가 fall 로 뒤집힌다) 게이트의 어떤 설계도 한 대기 쓰기당 RHS 를 두 번 바꾸지 않았다. 판별 설계 = `assign #(2,9)` 에 00→11(t=20)→10(t=21) → 정답 **t=23**(rise) · 뮤턴트 t=30(fall) · **iverilog 13 = 23**. `take_due_delayed_ca` 는 **공유 코드**라 차분이 원리적으로 못 본다 → 세 번째 절대값 앵커.
+- **M17/M18 — 네이티브 arm 의 평가 CONTEXT 는 숫자 둘(폭·부호)인데 둘 다 미핀.** 엔진 arm 은 `eval_cont_assign` 을 지나고 네이티브 arm 은 seam 에서 같은 규칙(`max(lhs, self(rhs))`·rhs 자신의 부호)을 **재진술**한다. 코퍼스의 유일한 지연 형태가 `assign #2 dly = a;`(양쪽 같은 폭·무부호)라 `lw.max(..)` 를 지워도(`4'hF+4'hF` 가 `1e` 대신 `0e`) 부호를 `false` 로 박아도(`-3` 이 `00001101`) **전부 통과**했다. 판별 설계 = 넓히는 캐리 + 부호 확장, 값은 iverilog 13.
+
+세 앵커를 세운 뒤 **6/6 전부 사망** — **M20**(엔진의 `propagate_changes` 를 쓰기 앞으로 옮기는 **엔진측** 뮤테이션·리뷰어 측정에선 `sim-engine` 전체가 초록이었다) 포함. 엔진이 움직이고 네이티브가 안 움직이니 이제 차분이 잡는다.
+
+⭐⭐ **앵커를 짓다가 오라클 발산 둘을 새로 쟀다.** 첫 M4 설계가 `always @(y)` 모니터를 썼더니 vita 가 iverilog 에 없는 **`t=0` 이벤트**를 하나 더 냈다 — 초기-X 창을 **넷 초기값이 아니라 t=0 의 변화**로 구현했기 때문이고, 같은 뿌리에서 **서로소 part-select 를 지연 구동하는 두 assign** 은 창 안이 x 가 아니라 **z** 다(iverilog `t=1 y=xxxx` / vita `zzzz`). 둘 다 pre-existing·양 백엔드 동일이라 이 슬라이스가 만든 하강이 아니고, 후자의 올바른 술어("넷의" 유일 드라이버가 아니라 **"이 lvalue 가 닿는 비트의"** 유일 드라이버)는 **S1d-4d-4 가 짓는 비트 단위 드라이버 맵**을 요구한다 → 측정과 함께 ROADMAP §2 에 기록하고 그 슬라이스에 넘겼다. ⭐ **교훈**: 기대 출력에 알려진 발산이 들어가면 **앵커가 앵커이길 그만둔다** — M4 설계를 엣지 모니터에서 **시각 지정 `$display` 샘플링**으로 바꿔, 뮤테이션이 움직이는 값만 재고 이벤트는 축복하지 않는다.
+
+⭐ 리뷰어는 **왜** 게이트가 못 봤는지도 쟀다: 코퍼스의 지연 형태는 `gen_cont_assign_mixed` 의 `assign #2 dly = a;` **하나뿐**(전체 넷 lvalue·맨 신호 RHS·`a` 는 t0 에 한 번만 쓰인다)이라 `(72, 0)` 이 사는 것은 초기-X 창과 휠 쓰기 한 번이 전부다. 그리고 inertial 의미를 iverilog 로 핀해 두고 M1/M3 을 워크스페이스 전역에서 죽이던 `cli/tests/inertial_ca.rs` 는 **기본 백엔드만** 돌리는 데다 설계가 `$monitor`(③층 거부 태스크)를 써서 `--backend native` 로도 네이티브 경로에 **구조적으로 못 들어간다**.
+
+CLEARED(측정): 시간 진행 순서가 엔진과 동일(`snapshot_preponed` 만 다르고 clocking 은 게이트 거부라 no-op) · settle 배치 동일 · 초기-X drive 의 술어/지점/폭 동일 · quiescence 소비처 2곳 대응 · RHS seam 값 9형태 · VCD 44/44 바이트 · **PRE/POST 엔진 0 diff**(코퍼스 72 + `examples/` 4 + picorv32 + keccak).
+
+
 #### 4.5.301 ③층 S1d-4d-2 — VCD: **실사용 설계가 stdout+파형까지 바이트 동일** (2026-08-05, branch feat-tier3-vcd, format 26 불변) ✅
 
 `$dumpfile`/`$dumpvars` 를 ③층이 실행한다 → **`examples/` 넷 전부가 네이티브로 돌고 stdout·VCD 둘 다

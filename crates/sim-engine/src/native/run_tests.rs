@@ -194,15 +194,14 @@ fn s1d4c2c_native_run_matches_the_vm_over_corpus() {
     // EXACT, not a floor. The refusal breakdown is asserted too, so a row that
     // starts firing on designs it never used to — the way a widened predicate
     // silently shrinks a gate — moves a number here instead of passing.
+    // THE WHOLE CORPUS. It was 30 designs when the body walk landed, 65 when the
+    // zero-delay settle did, and 72 — every one — since the delayed
+    // cont-assign wheel. Exact, not a floor: a row that starts firing on designs
+    // it never used to moves a number here instead of passing.
     assert_eq!(
         (ran, refused.len()),
-        (65, 1),
+        (72, 0),
         "corpus coverage moved — re-pin deliberately. ran={ran} refused={refused:?}"
-    );
-    assert_eq!(
-        refused.get("a delayed continuous assign (`assign #d`)"),
-        Some(&7),
-        "the only expected refusal is the delayed-CA row: {refused:?}"
     );
 }
 
@@ -229,9 +228,9 @@ fn s1d4d2_vcd_designs_run_and_their_waveforms_match() {
     }
     assert_eq!(
         (with_dump, ran),
-        (44, 37),
-        "corpus VCD population moved — re-pin deliberately. The 7 that do not \
-         run are the delayed-CA designs (S1d-4d-3), not a VCD refusal"
+        (44, 44),
+        "corpus VCD population moved — re-pin deliberately (the 7 delayed-CA \
+         hold-outs joined when S1d-4d-3 landed)"
     );
 }
 
@@ -828,6 +827,68 @@ endmodule
 "#
             .to_string(),
         ),
+        // DELAYED CONT-ASSIGN with a DYNAMIC LHS index (S1d-4d-3). The corpus's
+        // delayed assigns all have whole-net or constant destinations, so the
+        // one place the LHS offsets are resolved had no cover — and it read the
+        // ENGINE's store while the RHS beside it read the arena. On a native run
+        // that store never moves, so the index came back X, became the
+        // out-of-range sentinel and the write was DROPPED. Identical exit code,
+        // identical everything, one bit missing.
+        (
+            "delayed_cont_assign_with_a_dynamic_bit_index",
+            r#"
+module top;
+  wire [7:0] y;
+  reg [2:0] i;
+  reg v;
+  assign #1 y[i] = v;
+  initial begin
+    i = 3'd3; v = 1'b1;
+    #3 i = 3'd6;
+    #3 $display("y=%b", y);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // …and the indexed part-select spelling of the same destination, which
+        // resolves a WIDTH as well as an offset.
+        (
+            "delayed_cont_assign_with_an_indexed_part_select",
+            r#"
+module top;
+  wire [15:0] y;
+  reg [3:0] i;
+  reg [3:0] v;
+  assign #1 y[i*4 +: 4] = v;
+  initial begin
+    i = 4'd1; v = 4'hF;
+    #3 i = 4'd2; v = 4'hA;
+    #3 $display("y=%h", y);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A design whose ONLY pending work is a delayed cont-assign: the time
+        // advance has to fold `delayed_ca` into its minimum or the run is called
+        // quiescent and the write is dropped.
+        (
+            "delayed_cont_assign_is_the_sole_pending_work",
+            r#"
+module top;
+  wire [7:0] o;
+  reg [7:0] a;
+  reg [7:0] seen;
+  assign #5 o = a + 8'd1;
+  initial begin a = 8'd7; seen = 8'd0; end
+  always @(o) begin seen = seen + 8'd1; $display("t=%0t o=%0d seen=%0d", $time, o, seen); end
+endmodule
+"#
+            .to_string(),
+        ),
         // VCD (S1d-4d-2). The corpus's 44 dump designs are all SCALAR and all
         // call `$dumpvars` before their first write, so two things the emitter
         // must get right have no cover there.
@@ -874,11 +935,15 @@ endmodule
 "#
             .to_string(),
         ),
-        // CONTINUOUS ASSIGNS (S1d-4d-1). The corpus contributes ZERO coverage
-        // here — its cont-assign designs all pair a plain assign with a delayed
-        // one, so every last of them is still refused — and a `panic!` at the
-        // top of `settle_cont_assigns` left the whole workspace green before
-        // these existed. Each design below is named for the mutation it kills.
+        // CONTINUOUS ASSIGNS (S1d-4d-1). The corpus contributed ZERO coverage
+        // when these were written — its cont-assign designs all pair a plain
+        // assign with a delayed one, and delayed was still refused — and a
+        // `panic!` at the top of `settle_cont_assigns` left the whole workspace
+        // green before these existed. S1d-4d-3 admitted the delayed form, so
+        // those 7 designs now run; what they buy is still only ONE shape
+        // (whole-net lhs, bare-signal rhs, written once at t0), which is why
+        // every mutation below needed its own design anyway. Each is named for
+        // the mutation it kills.
         //
         // The t0 settle, and its changed set surviving `arm_t0`. `w` is
         // established once, at t0, and never moves again: if the settle does not
@@ -1071,7 +1136,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 47, "adversarial set shrank");
+    assert_eq!(designs.len(), 50, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -1088,18 +1153,6 @@ fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
 #[test]
 fn s1d4c2c_each_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
-        (
-            "delayed continuous assign",
-            "a delayed continuous assign (`assign #d`)",
-            r#"
-module top;
-  wire [7:0] w;
-  reg [7:0] r;
-  assign #2 w = r + 8'd1;
-  initial begin r = 8'd1; #5 $display("w=%0d", w); $finish; end
-endmodule
-"#,
-        ),
         (
             "multi-driven net",
             "a multi-driven net (wire resolution)",
@@ -1191,7 +1244,7 @@ endmodule
             e.refused
         );
     }
-    assert_eq!(cases.len(), 7, "refusal-row coverage moved");
+    assert_eq!(cases.len(), 6, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit
@@ -1364,6 +1417,188 @@ endmodule
         Some("42"),
         "the non-const argument must render as its VALUE: {paths:?}"
     );
+}
+
+/// The INERTIAL pulse filter, pinned to VALUES rather than to the other backend.
+///
+/// ⚠️ This is an ABSOLUTE assertion on purpose. The generation check that
+/// implements the filter lives in `Scheduler::take_due_delayed_ca`, which BOTH
+/// backends now call — so deleting it moves both sides of a VM-vs-native
+/// differential equally and that comparison cannot see it (measured: the
+/// mutation survives the whole differential gate). Sharing removes drift and
+/// removes the differential's sensitivity with it; the anchor has to come from
+/// outside.
+///
+/// The numbers below are iverilog 13's, measured: a pulse NARROWER than `d`
+/// never reaches the LHS (`narrow` stays x through the window), and one of
+/// EXACTLY `d` survives (`exact` shows 9 at t=4) — because a pending write
+/// applies at the tick start, before the RHS changes again.
+#[test]
+fn s1d4d3_inertial_pulse_filter_matches_the_oracle() {
+    let src = r#"
+module top;
+  wire [7:0] narrow, exact;
+  reg [7:0] a;
+  assign #4 narrow = a;
+  assign #2 exact = a;
+  initial begin
+    a = 8'd0;
+    #1 a = 8'd9;
+    #2 a = 8'd0;
+    #1 $display("t=%0t narrow=%0d exact=%0d", $time, narrow, exact);
+    #2 $display("t=%0t narrow=%0d exact=%0d", $time, narrow, exact);
+    #2 $display("t=%0t narrow=%0d exact=%0d", $time, narrow, exact);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &[
+        "out|t=4 narrow=x exact=9
+",
+        "out|t=6 narrow=x exact=0
+",
+        "out|t=8 narrow=0 exact=0
+",
+    ];
+    both_backends_print(src, WANT, "inertial filter");
+}
+
+/// The per-transition RISE/FALL delay selection, likewise pinned to VALUES.
+///
+/// `transition_delay` lives in the shared half too, so the same argument as
+/// above applies: a differential between the two backends cannot see a change
+/// there. Measured against iverilog 13 — rise 2 (`o` is 1 at t=13, not t=11),
+/// fall 7 (`o` is still 1 at t=20 and 0 at t=23).
+#[test]
+fn s1d4d3_rise_fall_delays_match_the_oracle() {
+    let src = r#"
+module top;
+  wire o;
+  reg a;
+  assign #(2,7) o = a;
+  initial begin
+    a = 1'b0;
+    #10 a = 1'b1;
+    #1 $display("t=%0t o=%b", $time, o);
+    #2 $display("t=%0t o=%b", $time, o);
+    #1 a = 1'b0;
+    #6 $display("t=%0t o=%b", $time, o);
+    #3 $display("t=%0t o=%b", $time, o);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &[
+        "out|t=11 o=0\n",
+        "out|t=13 o=1\n",
+        "out|t=20 o=1\n",
+        "out|t=23 o=0\n",
+    ];
+    both_backends_print(src, WANT, "rise/fall selection");
+}
+
+/// The rise/fall BASELINE is the last value this assign actually DROVE, not the
+/// last RHS it saw — and the two only differ on an inertial SUPERSEDE.
+///
+/// This is the third anchor in the shared half, and the adversarial soundness
+/// lens found it by mutation: swapping `last_ca_drv` for `last_ca` at
+/// `scan_arm.rs` survived the corpus, the 50 adversarial designs, and both
+/// anchors above, because every one of them changes the RHS at most once per
+/// pending write. The distinguishing shape needs a second RHS change BEFORE the
+/// first delayed write lands, with rise and fall far enough apart to name which
+/// baseline was used.
+///
+/// `a` goes 00 → 11 (t=20, schedules t=22 on rise 2) → 10 (t=21, superseding).
+/// The superseded write never landed, so the net still outputs 00 and the new
+/// transition 00 → 10 is a RISE: t=23. Reading `last_ca` instead makes the
+/// baseline the cancelled 11, turning bit 0 into a FALL: t=30. So a probe at
+/// t=25 separates them, and iverilog 13 says the value there is **10**.
+///
+/// The probes are timed `$display`s and NOT an `always @(y)` monitor, on
+/// purpose: an edge monitor here also reports vita's spurious t=0 event on the
+/// initial-X window (ROADMAP §2, pre-existing, both backends), and an anchor
+/// whose expected output encodes a known divergence from the oracle stops being
+/// an anchor. Sample the values the mutation moves; do not bless the events.
+#[test]
+fn s1d4d3_supersede_measures_from_what_was_driven() {
+    let src = r#"
+module top;
+  reg [1:0] a;
+  wire [1:0] y;
+  assign #(2,9) y = a;
+  initial begin
+    a = 2'b00;
+    #20 a = 2'b11;
+    #1  a = 2'b10;
+    #1  $display("t=%0t y=%b", $time, y);
+    #3  $display("t=%0t y=%b", $time, y);
+    #10 $display("t=%0t y=%b", $time, y);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &["out|t=22 y=00\n", "out|t=25 y=10\n", "out|t=35 y=10\n"];
+    both_backends_print(src, WANT, "supersede baseline");
+}
+
+/// The tier-3 arm builds its own evaluation CONTEXT, and the context is two
+/// numbers: the width and the sign. Both were unpinned.
+///
+/// The engine's arm goes through `eval_cont_assign`; the native arm re-spells
+/// the same rule (`max(lhs, self(rhs))`, rhs's own sign) at the seam. A corpus
+/// delayed assign is `assign #2 dly = a;` — same width both sides, unsigned —
+/// so dropping `lw.max(..)` and forcing `signed = false` BOTH survived every
+/// gate. Truncation needs an rhs whose self-determined width is narrower than
+/// the lvalue (4-bit + 4-bit carrying into 8), and sign needs a negative value
+/// crossing a widening boundary. Values are iverilog 13's.
+#[test]
+fn s1d4d3_delayed_rhs_context_is_width_and_sign() {
+    let src = r#"
+module top;
+  reg [3:0] a, b;
+  reg signed [3:0] c;
+  wire [7:0] y;
+  wire signed [7:0] z;
+  assign #2 y = a + b;
+  assign #2 z = c;
+  initial begin
+    a = 4'hF; b = 4'hF; c = -3;
+    #5 $display("t=%0t y=%h z=%b (%0d)", $time, y, z, z);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &["out|t=5 y=1e z=11111101 (-3)\n"];
+    both_backends_print(src, WANT, "delayed rhs context");
+}
+
+/// Run `src` on both backends and assert the printed lines EXACTLY match
+/// `want` — an absolute anchor, not a differential.
+fn both_backends_print(src: &str, want: &[&str], what: &str) {
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
+        .expect("runnable");
+    for backend in [Backend::Bytecode, Backend::Native] {
+        let sink = MergedSink::default();
+        let r = simulate(
+            &ir,
+            &sink,
+            SimOpts {
+                backend,
+                ..opts.clone()
+            },
+        );
+        if backend == Backend::Native {
+            assert_eq!(r.backend, Backend::Native, "fell back");
+        }
+        let lines: Vec<String> = sink
+            .events
+            .into_inner()
+            .into_iter()
+            .filter(|e| e.starts_with("out|t="))
+            .collect();
+        assert_eq!(lines, want, "{backend:?}: {what} moved");
+    }
 }
 
 /// The DELTA budget is not the BODY budget, and the two names are one letter

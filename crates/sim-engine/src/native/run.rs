@@ -77,12 +77,6 @@ pub(crate) fn executor_rows(
     // CONTINUOUS ASSIGNS (S1d-4d-1): the ZERO-DELAY fixpoint is built; the three
     // families around it are not, and each would be a different wrong answer
     // rather than a slower one.
-    if ir.cont_assigns.iter().any(|c| c.delay.is_some()) {
-        // `assign #d` needs the inertial wheel (`delayed_ca`, `ca_gen`,
-        // `last_ca_drv`, the sole-driver x-drive) — a pulse narrower than `d`
-        // must never reach the LHS, and without the generation check it would.
-        return Err("a delayed continuous assign (`assign #d`)");
-    }
     // WIRED BEFORE MULTI-DRIVER, and the order is load-bearing rather than
     // cosmetic: a `wand`/`wor` net is multi-driven BY CONSTRUCTION, so with the
     // rows the other way round the wired row could never be the answer and its
@@ -314,6 +308,10 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         let next = match [
             k.wheel.keys().next().copied(),
             k.delayed_nba.keys().next().copied(),
+            // …and the delayed cont-assign wheel (S1d-4d-3). A design whose only
+            // pending work is an `assign #d` would otherwise be called quiescent
+            // and its write dropped — the same hazard `delayed_nba` records.
+            k.sched.next_delayed_ca(),
         ]
         .into_iter()
         .flatten()
@@ -329,6 +327,21 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         }
         k.sched.st.now = next;
         k.wake.reset_edge_seen();
+        // Delayed cont-assign writes due at this tick, generation-filtered by
+        // the shared `take_due_delayed_ca`. These are NET writes, not process
+        // resumes, so the loop-top settle would not see them — propagate here
+        // so an edge on a delayed net reaches its waiters.
+        let due = k.sched.take_due_delayed_ca(next);
+        if !due.is_empty() {
+            let mut moved = false;
+            for (lhs, v, offs) in due {
+                moved |= k.arena.write_lvalue(ir, &lhs, v, &offs);
+            }
+            k.drain_range_diags();
+            if moved {
+                propagate(k);
+            }
+        }
         k.take_due_delayed(next);
         let events = k.wheel.remove(&next).unwrap_or_default();
         for (inactive, ready) in events {
@@ -396,6 +409,22 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
         for ci in pass.into_iter().map(|c| c as usize) {
             let lhs = ir.cont_assigns[ci].lhs.clone();
             let rhs = ir.cont_assigns[ci].rhs;
+            if ir.cont_assigns[ci].delay.is_some() {
+                // A DELAYED driver's output holds x until its first delayed
+                // write lands — `assign #3 o = a & b` reads `o == x` during
+                // `[0, d)`, iverilog-pinned. Driven INSIDE the fixpoint so it
+                // propagates to downstream assigns, and only while it is owed
+                // (see `delayed_owes_initial_x`). The value itself is scheduled
+                // after the fixpoint, not here.
+                if k.sched.delayed_owes_initial_x(ci) {
+                    let w = k.k_eval_for_lvalue(&lhs, rhs).width;
+                    let offs = k.k_resolve_lvalue_offsets(&lhs);
+                    changed |=
+                        k.arena
+                            .write_lvalue(ir, &lhs, crate::value::Value::xs(w, false), &offs);
+                }
+                continue;
+            }
             let v = k.k_eval_for_lvalue(&lhs, rhs);
             let offs = k.k_resolve_lvalue_offsets(&lhs);
             changed |= k.arena.write_lvalue(ir, &lhs, v, &offs);
@@ -415,6 +444,11 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             return None;
         }
     }
+    // The fixpoint has settled, so every delayed assign's RHS is stable — the
+    // point at which the engine schedules its inertial writes. Shared with the
+    // engine (`schedule_delayed_cas`); only the RHS evaluation reads the arena.
+    let (sched, arena) = (&mut *k.sched, &k.arena);
+    sched.schedule_delayed_cas(Some(arena));
     Some(any)
 }
 
