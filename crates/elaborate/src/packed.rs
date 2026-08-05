@@ -1,6 +1,7 @@
 //! packed selects (read) — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::array_geom::IndexDomain;
 
 /// Internal-bit select direction for an indexed part-select `[base ± width]`.
 /// On a DESCENDING net the source-index direction equals the internal-bit
@@ -356,30 +357,43 @@ impl Elaborator<'_> {
         // (correct-support → loud-wrong, a rung DOWN the ladder). So say
         // `None` and let the seal decline, exactly as it did before §4.5.309.
         //
-        // The arena is post-order, so `eid`'s subtree lies inside `0..=eid` and
-        // scanning that range answers "is anything under me still a
-        // placeholder?" conservatively without a second expression walker (a
-        // walker that under-detects would put the silent-wrong straight back).
-        let last = eid as usize;
+        // The question is about THIS index's subtree, so it is asked of the
+        // subtree. An earlier version scanned the whole arena prefix `0..=eid`,
+        // which is a superset — and it made the answer depend on unrelated
+        // statement ORDER: `$display(u.k); $display(mz[bg]);` declined and went
+        // loud while the same two lines swapped came out correct, because the
+        // hierarchical read had not been pushed yet. The walk is the same
+        // `_`-free shape as `index_is_repeatable`.
+        if self.index_has_placeholder(eid, 0) {
+            return None;
+        }
+        // The MEMO is a different question and keeps the older, coarser guard.
+        // It is a prefix `Vec`, so an entry is only sound once every id below it
+        // is final; a placeholder anywhere in the prefix makes the whole tail
+        // provisional. When that happens this index is still answerable — its
+        // own subtree is clean, checked above — so it is answered WITHOUT the
+        // cache rather than declined, which is what removed the statement-order
+        // dependence the earlier prefix-only guard had.
         let mut i = self.selfw_scan as usize;
+        let last = eid as usize;
+        let mut prefix_final = true;
         while i <= last {
             if is_expr_placeholder(&self.exprs[i]) {
-                // Stay parked here rather than advancing: this one may be
-                // patched later, and then the scan resumes from the same spot.
                 self.selfw_scan = i as u32;
                 // Defensive, and measured to be a no-op: nothing at or above a
                 // live placeholder can have been cached, because a placeholder
                 // is created when its id is FRESH, so every id above it was
                 // answered later — and any such answer had to walk past this
-                // very scan. Removing the truncate changes no test. It states
-                // the invariant rather than trusting it, and it is what makes
-                // the cache below sound to keep across a resolve.
+                // very scan.
                 self.selfw_cache.truncate(i);
-                return None;
+                prefix_final = false;
+                break;
             }
             i += 1;
         }
-        self.selfw_scan = i as u32;
+        if prefix_final {
+            self.selfw_scan = i as u32;
+        }
         // Past that scan the whole prefix is resolved, and a resolved expr is
         // never rewritten, so these entries are final and the cache makes a
         // design with many indexed selects pay for the fill once in total
@@ -391,7 +405,11 @@ impl Elaborator<'_> {
             consts: &self.consts,
             nets: &self.nets,
         };
-        let mut sw = std::mem::take(&mut self.selfw_cache);
+        let mut sw = if prefix_final {
+            std::mem::take(&mut self.selfw_cache)
+        } else {
+            Vec::with_capacity(last + 1)
+        };
         for i in sw.len() as u32..=eid {
             let s = if let Some(&(w, sg)) = self.class_field_widths.get(&i) {
                 sim_ir::selfwidth::SelfWidth {
@@ -404,7 +422,9 @@ impl Elaborator<'_> {
             sw.push(s);
         }
         let out = sw[eid as usize];
-        self.selfw_cache = sw;
+        if prefix_final {
+            self.selfw_cache = sw;
+        }
         Some(out)
     }
 
@@ -529,12 +549,31 @@ impl Elaborator<'_> {
     /// UNSIGNED-typed index holding `0xFFFF_FFFD` is the one cell where vita
     /// and iverilog still differ, and it differs because vita answers by VALUE
     /// where iverilog reinterprets (see `eval::offset_of_index_value`).
-    pub(crate) fn seal_index_unsigned(&mut self, raw_off: u32) -> u32 {
+    pub(crate) fn seal_index_unsigned(&mut self, raw_off: u32, domain: IndexDomain) -> u32 {
         // `None` — an unresolved hierarchical reference below this index — declines,
         // because the width rule would answer from a fabricated 1-bit net (§4.5.309).
         let Some(sw) = self.index_self_width(raw_off) else {
             return raw_off;
         };
+        // A PACKED element offset keeps the pre-§4.5.310 emission in full. The
+        // funnel serves both geometries (see `IndexDomain`), and the thirty-two-bit
+        // reading is an UNPACKED-array rule: `reg [3:0][7:0] p; p[64'h1_0000_0002]`
+        // is dropped by iverilog 13, and applying the truncation here wrote element
+        // 2 instead — silently, at exit 0, in twelve of twenty-four measured cells.
+        //
+        // Only the width PIN survives for packed, which is what §4.5.308 put here
+        // and what `decl_range_norm::unpacked_dimension_index_is_sealed_too` holds.
+        if domain == IndexDomain::PackedElem {
+            return match self.index_self_width(raw_off) {
+                Some(sw) if !sw.signed && self.unsigned_seal_admitted(raw_off) => {
+                    let zero1 = self.const_u32_expr(0, 1);
+                    self.push_expr(ir::Expr::Concat {
+                        parts: vec![zero1, raw_off],
+                    })
+                }
+                _ => raw_off,
+            };
+        }
         // A CONSTANT index keeps its TRUE value and is deliberately left on the
         // pre-§4.5.310 path — the widening seal, so an out-of-range constant
         // stays out of range and the access is DIAGNOSED instead of wrapping
@@ -572,36 +611,22 @@ impl Elaborator<'_> {
             // element 3 where iverilog gives `x` and drops the write — an
             // unknown index made known, loud → silent-wrong.
             //
-            // So the dropped half is added back as `high * 0`, which is 0 when
-            // high is known and ALL-X when any bit of it is not (arithmetic
-            // returns X for an X operand — measured identical in iverilog 13 and
-            // vita). The index then stays unknown and the access still drops.
-            //
-            // `raw_off` appears twice, so this needs the same repeatability
-            // guard as the sign extension below.
-            if !self.index_is_repeatable(raw_off, 0) {
-                return raw_off;
-            }
-            let low = self.select_low(raw_off, 32);
-            let hi_off = self.const_u32_expr(32, 32);
-            let hi_w = self.const_u32_expr(sw.width - 32, 32);
-            let high = self.push_expr(ir::Expr::Select {
-                base: raw_off,
-                offset: hi_off,
-                width: hi_w,
-                kind: ir::SelKind::PartConst,
-            });
-            let zero = self.const_u32_expr(0, 32);
-            let poison = self.push_expr(ir::Expr::Binary {
+            // Multiplying by one first fixes that with the index named ONCE:
+            // arithmetic returns all-X for an X operand, so an unknown anywhere
+            // in the value spreads across the whole width before the bits are
+            // cut, and a known value is unchanged. (Measured identical in
+            // iverilog 13 and vita at 33, 64 and 65 bits.) Naming it twice —
+            // `select_low(e,32) + (e[w-1:32] * 0)` — has the same semantics but
+            // needs a repeatability guard, and that guard then refuses a pure
+            // `Call`, leaving `ma[fw(0)]` loud while `ma[u64]` with the same
+            // value lands.
+            let one = self.const_u32_expr(1, 32);
+            let spread = self.push_expr(ir::Expr::Binary {
                 op: ir::BinOp::Mul,
-                lhs: high,
-                rhs: zero,
+                lhs: raw_off,
+                rhs: one,
             });
-            return self.push_expr(ir::Expr::Binary {
-                op: ir::BinOp::Add,
-                lhs: low,
-                rhs: poison,
-            });
+            return self.select_low(spread, 32);
         }
         // Exactly thirty-two bits needs nothing: it is already the value the
         // oracles read, and the arithmetic below is thirty-two bits too.
@@ -663,27 +688,36 @@ impl Elaborator<'_> {
     /// 32'sd1 + 32'd9` gives 262, not 6.) The unsigned arm needs no second
     /// occurrence, since its fill is a constant.
     ///
-    /// So the question is whether evaluating `e` twice is observable, and it is
-    /// exactly when `e` can have an EFFECT: `m[byte'($urandom)]` built its index
-    /// out of one draw's sign bit and a different draw's low bits. This is
-    /// deliberately a whitelist over an `_`-free match — a walker that
+    /// So the question is whether evaluating `e` twice is OBSERVABLE, and there
+    /// are two channels, not one:
+    ///
+    /// - VALUE. `m[byte'($urandom)]` built its index out of one draw's sign bit
+    ///   and a different draw's low bits, and shifted every later draw.
+    /// - DIAGNOSTICS. An out-of-range array read inside the index calls
+    ///   `warn_run_range`, which is an ERROR and rate-limited at eight per run,
+    ///   so a duplicated `m[ix[k]]` reports twice and can exhaust the budget
+    ///   that a genuine unrelated site needed — loud → silent for THAT site.
+    ///   That is why an array-element read is refused below even though it is
+    ///   perfectly pure.
+    ///
+    /// Deliberately a whitelist over an `_`-free match — a walker that
     /// under-detects here writes silent-wrongs, so a variant this does not
     /// recognize must fail closed, and adding a variant to `sim_ir::Expr` should
     /// make this stop compiling.
-    fn index_is_repeatable(&self, eid: u32, depth: u32) -> bool {
-        // Guard the recursion rather than trusting the arena's shape: a deep
-        // index tree is rare, and declining one is only a lost improvement.
+    /// Does this index's SUBTREE still contain a deferred-hierarchy placeholder?
+    ///
+    /// Same `_`-free whitelist shape as [`Self::index_is_repeatable`] and fails
+    /// closed for the same reason: an unrecognized variant must read as "might
+    /// be a placeholder" so the seal declines, which is the pre-§4.5.309 answer
+    /// and always safe.
+    fn index_has_placeholder(&self, eid: u32, depth: u32) -> bool {
         if depth > 64 {
-            return false;
+            return true;
         }
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
+            Some(e) if is_expr_placeholder(e) => return true,
             Some(ir::Expr::Const { .. }) => vec![],
-            Some(ir::Expr::Signal { net, word }) => {
-                // A POISON placeholder never reaches here (the caller declines
-                // first), and a word index is an ordinary subexpression.
-                let _ = net;
-                word.iter().copied().collect()
-            }
+            Some(ir::Expr::Signal { word, .. }) => word.iter().copied().collect(),
             Some(ir::Expr::Select {
                 base,
                 offset,
@@ -699,32 +733,65 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             }) => vec![*cond, *then_e, *else_e],
-            // A system function is repeatable when it neither has a statement
-            // effect NOR consumes a random draw. The first half is the canonical
-            // predicate — asking it a second time in a second spelling is how the
-            // two drift. The second half is this funnel's own question and it is
-            // NOT the same one: `sysfunc_is_stmt_effect` calls a bare `$urandom`
-            // PURE, correctly for its purpose (it writes no ref argument and
-            // touches no file or seed), yet drawing twice is exactly the harm
-            // here. So the draws are named as a delta, not re-derived.
-            Some(ir::Expr::SysFunc { which, args })
-                if !sim_ir::sysfunc_is_stmt_effect(*which, args)
-                    && !matches!(
-                        which,
-                        ir::SysFuncId::Random
-                            | ir::SysFuncId::Urandom
-                            | ir::SysFuncId::UrandomRange
-                            | ir::SysFuncId::DistUniform
-                            | ir::SysFuncId::DistNormal
-                            | ir::SysFuncId::DistExponential
-                            | ir::SysFuncId::DistPoisson
-                            | ir::SysFuncId::DistChiSquare
-                            | ir::SysFuncId::DistT
-                            | ir::SysFuncId::DistErlang
-                    ) =>
-            {
-                args.clone()
-            }
+            Some(ir::Expr::SysFunc { args, .. }) => args.clone(),
+            Some(ir::Expr::Call { args, .. }) => args.clone(),
+            Some(ir::Expr::ArrayItem { .. }) | None => return true,
+        };
+        kids.into_iter()
+            .any(|k| self.index_has_placeholder(k, depth + 1))
+    }
+
+    fn index_is_repeatable(&self, eid: u32, depth: u32) -> bool {
+        // Guard the recursion rather than trusting the arena's shape: a deep
+        // index tree is rare, and declining one is only a lost improvement.
+        if depth > 64 {
+            return false;
+        }
+        let kids: Vec<u32> = match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Const { .. }) => vec![],
+            // A scalar net read is pure and silent. An ARRAY-ELEMENT read is
+            // pure but not silent — see the diagnostics channel above — so it
+            // fails closed.
+            Some(ir::Expr::Signal { word: None, .. }) => vec![],
+            Some(ir::Expr::Signal { word: Some(_), .. }) => return false,
+            Some(ir::Expr::Select {
+                base,
+                offset,
+                width,
+                ..
+            }) => vec![*base, *offset, *width],
+            Some(ir::Expr::Concat { parts }) => parts.clone(),
+            Some(ir::Expr::Replicate { count, value }) => vec![*count, *value],
+            Some(ir::Expr::Unary { operand, .. }) => vec![*operand],
+            Some(ir::Expr::Binary { lhs, rhs, .. }) => vec![*lhs, *rhs],
+            Some(ir::Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+            }) => vec![*cond, *then_e, *else_e],
+            // System functions are named POSITIVELY — the ones measured safe to
+            // evaluate twice. Delegating to `sim_ir::sysfunc_is_stmt_effect` and
+            // subtracting the draws was the first shape and it is FAIL-OPEN in a
+            // function that promises the opposite: that predicate answers a
+            // different question (it calls a bare `$urandom` pure, correctly for
+            // its own purpose), so a future draw-consuming id would be admitted
+            // here by omission. Widening this list is a measurement, not an
+            // edit: `$time` earns its place because refusing it cost four
+            // oracle-agreeing cells.
+            Some(ir::Expr::SysFunc {
+                which:
+                    ir::SysFuncId::Time
+                    | ir::SysFuncId::Realtime
+                    | ir::SysFuncId::Stime
+                    | ir::SysFuncId::Signed
+                    | ir::SysFuncId::Unsigned
+                    | ir::SysFuncId::Clog2
+                    | ir::SysFuncId::CountOnes
+                    | ir::SysFuncId::OneHot
+                    | ir::SysFuncId::OneHot0
+                    | ir::SysFuncId::IsUnknown,
+                args,
+            }) => args.clone(),
             // `Call` runs a user body; the remaining `SysFunc`s draw or have an
             // effect; `ArrayItem` is an iterator binding whose meaning depends on
             // where it sits. All fail closed.
@@ -1289,7 +1356,7 @@ impl Elaborator<'_> {
             return self.placeholder_expr();
         }
         let (ext, dirs) = Self::packed_split(&dims);
-        let offset = self.flatten_word(&ext, idxs, &dirs);
+        let offset = self.flatten_word(&ext, idxs, &dirs, IndexDomain::PackedElem);
         let elem_w: u64 = dims[idxs.len()..]
             .iter()
             .map(|&(_, w, _)| w as u64)
@@ -1355,7 +1422,7 @@ impl Elaborator<'_> {
                 if idxs.len() != dims.len() {
                     return None;
                 }
-                let word = self.flatten_word(&dims, &idxs, &[]);
+                let word = self.flatten_word(&dims, &idxs, &[], IndexDomain::ArrayWord);
                 Some((net, Some(word)))
             }
             _ => None,

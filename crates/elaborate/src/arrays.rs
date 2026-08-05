@@ -1,6 +1,7 @@
 //! unpacked arrays — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::array_geom::IndexDomain;
 
 impl Elaborator<'_> {
     pub(crate) fn expr_array_chain<'a>(
@@ -132,7 +133,7 @@ impl Elaborator<'_> {
             );
             return self.placeholder_expr();
         }
-        let word = self.flatten_word(&dims, &idxs[..d], &[]);
+        let word = self.flatten_word(&dims, &idxs[..d], &[], IndexDomain::ArrayWord);
         let val = self.push_expr(ir::Expr::Signal {
             net,
             word: Some(word),
@@ -152,7 +153,7 @@ impl Elaborator<'_> {
                 return self.placeholder_expr();
             }
             let (ext, dirs) = Self::packed_split(&pdims);
-            let offset = self.flatten_word(&ext, trailing, &dirs);
+            let offset = self.flatten_word(&ext, trailing, &dirs, IndexDomain::PackedElem);
             let elem_w: u64 = pdims[trailing.len()..]
                 .iter()
                 .map(|&(_, w, _)| w as u64)
@@ -220,7 +221,7 @@ impl Elaborator<'_> {
             });
             return;
         }
-        let word = self.flatten_word(&dims, &idxs[..d], &[]);
+        let word = self.flatten_word(&dims, &idxs[..d], &[], IndexDomain::ArrayWord);
         let trailing = &idxs[d..];
         // Array-of-packed: trailing indices → an indexed part-select on the element.
         if !trailing.is_empty() {
@@ -240,7 +241,7 @@ impl Elaborator<'_> {
                     return;
                 }
                 let (ext, dirs) = Self::packed_split(&pdims);
-                let offset = self.flatten_word(&ext, trailing, &dirs);
+                let offset = self.flatten_word(&ext, trailing, &dirs, IndexDomain::PackedElem);
                 let elem_w: u64 = pdims[trailing.len()..]
                     .iter()
                     .map(|&(_, w, _)| w as u64)
@@ -514,8 +515,10 @@ impl Elaborator<'_> {
         let s_offs = Self::residual_word_offsets(s_res, &s_desc);
         // Leading (user) indices lower ONCE; every element shares the base
         // ExprId (pure reads — sharing is the function-inline precedent).
-        let t_base = (!t_lead.is_empty()).then(|| self.flatten_word(&t_dims, &t_lead, &[]));
-        let s_base = (!s_lead.is_empty()).then(|| self.flatten_word(&s_dims, &s_lead, &[]));
+        let t_base = (!t_lead.is_empty())
+            .then(|| self.flatten_word(&t_dims, &t_lead, &[], IndexDomain::ArrayWord));
+        let s_base = (!s_lead.is_empty())
+            .then(|| self.flatten_word(&s_dims, &s_lead, &[], IndexDomain::ArrayWord));
         let delay_id = if nonblocking {
             delay.map(|d| self.lower_delay(d).0)
         } else {
@@ -653,7 +656,8 @@ impl Elaborator<'_> {
             .map(|v| v[t_lead.len()..].to_vec())
             .unwrap_or_default();
         let t_offs = Self::residual_word_offsets(t_res, &t_desc);
-        let t_base = (!t_lead.is_empty()).then(|| self.flatten_word(&t_dims, t_lead, &[]));
+        let t_base = (!t_lead.is_empty())
+            .then(|| self.flatten_word(&t_dims, t_lead, &[], IndexDomain::ArrayWord));
         let delay_id = if nonblocking {
             delay.map(|d| self.lower_delay(d).0)
         } else {

@@ -2,6 +2,24 @@
 
 use super::*;
 
+/// Which geometry an index is being lowered for.
+///
+/// `flatten_word`/`flatten_word_eids` serve BOTH — the note at their loop says
+/// so — and the two want different answers for an index whose value does not
+/// fit thirty-two bits: an unpacked array WORD index is read as a 32-bit
+/// integer by iverilog 13 AND verilator 5.050 alike (§4.5.310), while the
+/// trailing element index of a packed array keeps its true value in iverilog
+/// and is therefore dropped. Deriving this from `ascending.is_empty()` would
+/// work today and is exactly the kind of proxy that false-rejects later, so the
+/// callers say which one they mean.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IndexDomain {
+    /// An unpacked array's word index.
+    ArrayWord,
+    /// A packed array's element index (and any other packed offset).
+    PackedElem,
+}
+
 impl Elaborator<'_> {
     /// Per-dim bounds-guard conjunct for `idx ∈ [lo, lo+size-1]`, shared by both
     /// `flatten_word` twins so the rule exists once.
@@ -101,6 +119,7 @@ impl Elaborator<'_> {
         extents: &[(i64, u32)],
         idx_eids: &[u32],
         ascending: &[bool],
+        domain: IndexDomain,
     ) -> u32 {
         let d = extents.len();
         let mut strides = vec![1u64; d];
@@ -117,7 +136,7 @@ impl Elaborator<'_> {
             // local ones. A patch that reached only the twin left the two
             // spellings of one geometry disagreeing about `mem[~i]` — local
             // right, hierarchical wrong — which the soundness review measured.
-            let i_eid = self.seal_index_unsigned(i_eid);
+            let i_eid = self.seal_index_unsigned(i_eid, domain);
             let asc = ascending.get(k).copied().unwrap_or(false);
             // A negative-`lo` dim guards on the coordinate, so it must be built first;
             // for every other dim the guard comes first, exactly as before (push order
@@ -463,6 +482,7 @@ impl Elaborator<'_> {
         extents: &[(i64, u32)],
         word_idxs: &[&ast::Expr],
         ascending: &[bool],
+        domain: IndexDomain,
     ) -> u32 {
         let d = extents.len();
         // strides[k] = product(size[k+1..]) as u64 (saturating into u32 at use).
@@ -488,7 +508,7 @@ impl Elaborator<'_> {
             // SEAL — the AST twin of the eid-taking `flatten_word_eids` above;
             // see the note there. Both funnels must do it or the two spellings
             // of one geometry disagree about `mem[~i]`.
-            let i_eid = self.seal_index_unsigned(i_eid);
+            let i_eid = self.seal_index_unsigned(i_eid, domain);
             let asc = ascending.get(k).copied().unwrap_or(false);
             // `idx >= lo && idx <= hi` on the RAW index. A negative or wrapped index
             // always fails one side in either signedness reading (bounds < 2^24 «

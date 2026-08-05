@@ -1,6 +1,7 @@
 //! packed selects (write) — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::array_geom::IndexDomain;
 
 impl Elaborator<'_> {
     /// N3.4: a `[msb:lsb]` part-select on a BARE multi-dim PACKED net (e.g.
@@ -79,7 +80,7 @@ impl Elaborator<'_> {
                 if idxs.len() != dims.len() {
                     return None;
                 }
-                let word = self.flatten_word(&dims, &idxs, &[]);
+                let word = self.flatten_word(&dims, &idxs, &[], IndexDomain::ArrayWord);
                 Some((net, Some(word)))
             }
             _ => None,
@@ -217,7 +218,7 @@ impl Elaborator<'_> {
             return;
         }
         let (ext, dirs) = Self::packed_split(&dims);
-        let offset = self.flatten_word(&ext, idxs, &dirs);
+        let offset = self.flatten_word(&ext, idxs, &dirs, IndexDomain::PackedElem);
         let elem_w: u64 = dims[idxs.len()..]
             .iter()
             .map(|&(_, w, _)| w as u64)
@@ -301,12 +302,12 @@ impl Elaborator<'_> {
         // Unpacked indices → element word (descending default, mirroring lval_part_base).
         let word = (ud > 0).then(|| {
             let ue = self.net_dim_extents(net);
-            self.flatten_word(&ue, &all_idxs[..ud], &[])
+            self.flatten_word(&ue, &all_idxs[..ud], &[], IndexDomain::ArrayWord)
         });
         // Packed indices → the leaf's base bit (bit offset, exactly as the read path's
         // flatten over the packed extents); then `+ l` for the part-select LSB.
         let (pext, pdirs) = Self::packed_split(&pdims);
-        let base_off = self.flatten_word(&pext, &all_idxs[ud..], &pdirs);
+        let base_off = self.flatten_word(&pext, &all_idxs[ud..], &pdirs, IndexDomain::PackedElem);
         let offset = if l == 0 {
             base_off
         } else {

@@ -287,3 +287,67 @@ fn a_wide_index_keeps_the_unknown_bits_it_truncates() {
         "an unknown index must not land\n{out2}"
     );
 }
+
+/// Two things this funnel must NOT do, each with a mutation that survived
+/// everything else until the row existed.
+///
+/// 1. It must not name the index twice. Sign-extending a narrower-than-32 index
+///    needs `Concat[Replicate(e[msb]), e]`, so it is gated on `e` being safe to
+///    evaluate twice — and "safe" is both channels: a random draw is the value
+///    channel, and an out-of-range array read inside the index is the DIAGNOSTIC
+///    channel (`warn_run_range` is an error, rate-limited at eight per run, so a
+///    doubled report can starve an unrelated site).
+/// 2. It must not apply the 32-bit reading to a PACKED element offset. The same
+///    funnel serves both geometries; iverilog drops a packed offset that does not
+///    fit, and truncating it wrote a neighbouring element at exit 0.
+#[test]
+fn the_funnel_does_not_duplicate_the_index_or_touch_the_packed_domain() {
+    // A draw inside a SIGNED NARROW index — the shape that reaches the
+    // extension. Evaluated twice it mixes two draws AND shifts the stream.
+    let draw = "module top;\n\
+       reg [7:0] m [0:3];\n\
+       integer i;\n\
+       initial begin\n\
+         for (i=0;i<4;i=i+1) m[i] = i+10;\n\
+         $display(\"A %0d\", m[byte'($urandom & 8'h03)]);\n\
+         $display(\"N %0d\", $urandom);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out, _c) = run(draw);
+    assert!(out.contains("A 12"), "index built from ONE draw\n{out}");
+    assert!(
+        out.contains("N 1055226000"),
+        "the stream must not advance twice\n{out}"
+    );
+
+    // An out-of-range array read inside the index: one logical site, one report.
+    let diag = "module top;\n\
+       reg [7:0] m [0:3];\n\
+       reg signed [7:0] ix [0:1];\n\
+       integer k;\n\
+       initial begin\n\
+         ix[0]=8'sd1; ix[1]=8'sd1; k=9;\n\
+         $display(\"A %0d\", m[ix[k]]);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (_o2, code2) = run(diag);
+    assert_eq!(code2, Some(1), "the out-of-range read is still loud");
+
+    // The packed element offset keeps its true value and drops, as iverilog does.
+    let packed = "module top;\n\
+       reg [3:0][7:0] p; reg [63:0] w;\n\
+       initial begin\n\
+         p = 32'h11223344; w = 64'h1_0000_0002;\n\
+         p[w] = 8'hA5;\n\
+         $display(\"P %h\", p);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out3, _c3) = run(packed);
+    assert!(
+        out3.contains("P 11223344"),
+        "a packed offset that does not fit must not wrap\n{out3}"
+    );
+}

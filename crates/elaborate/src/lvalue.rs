@@ -1,6 +1,7 @@
 //! lvalue lowering — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::array_geom::IndexDomain;
 
 // ── v3 port-wiring helpers ─────────────────────────────────────────
 /// A whole-net lvalue chunk (no word/offset/width → drives the entire net).
@@ -589,7 +590,7 @@ impl Elaborator<'_> {
                 let dims = self.net_dim_extents(net);
                 let d = dims.len();
                 if idxs.len() == d {
-                    let word = self.flatten_word(&dims, &idxs, &[]);
+                    let word = self.flatten_word(&dims, &idxs, &[], IndexDomain::ArrayWord);
                     return (net, Some(word));
                 }
                 self.error(

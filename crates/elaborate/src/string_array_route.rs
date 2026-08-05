@@ -27,6 +27,7 @@
 //! routing then would have been a trade of one silent-wrong for another.)
 
 use super::*;
+use crate::array_geom::IndexDomain;
 
 /// T1: the declared GEOMETRY of a routed fixed string array — everything the flat
 /// container needs to speak the DECLARED index space rather than its own `0..n-1`.
@@ -566,7 +567,7 @@ impl Elaborator<'_> {
         // such convention — any bijection is a legal storage order — so every dim
         // normalizes as `idx - lo` and the declaration's direction is carried by
         // `desc`, which drives the `foreach` walk alone.
-        Some(self.flatten_word(&extents, &idxs, &[]))
+        Some(self.flatten_word(&extents, &idxs, &[], IndexDomain::ArrayWord))
     }
 
     /// T1: the WRITE twin of `routed_string_elem`. Same walk over the `Lvalue` spelling

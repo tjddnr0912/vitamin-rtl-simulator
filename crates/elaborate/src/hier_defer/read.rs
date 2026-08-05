@@ -37,9 +37,12 @@ impl Elaborator<'_> {
             return None;
         }
         match self.fixed_string_dyn_geom(net).map(|g| g.extents.clone()) {
-            Some(ext) if ext.len() == idx_eids.len() => {
-                Some(self.flatten_word_eids(&ext, idx_eids, &[]))
-            }
+            Some(ext) if ext.len() == idx_eids.len() => Some(self.flatten_word_eids(
+                &ext,
+                idx_eids,
+                &[],
+                crate::array_geom::IndexDomain::ArrayWord,
+            )),
             Some(_) => None,
             None => (idx_eids.len() == 1).then(|| idx_eids[0]),
         }

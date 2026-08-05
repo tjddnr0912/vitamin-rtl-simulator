@@ -1,6 +1,7 @@
 //! hierarchical references — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::array_geom::IndexDomain;
 
 /// A hierarchical part-select spec, deferred until the target net's range is known
 /// (the offset is normalized against the net's LSB at resolution time).
@@ -162,7 +163,7 @@ impl Elaborator<'_> {
                 );
                 return None;
             }
-            Some(self.flatten_word_eids(&dims, idx_eids, &[]))
+            Some(self.flatten_word_eids(&dims, idx_eids, &[], IndexDomain::ArrayWord))
         } else if self.packed_dims.contains_key(&net) {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -241,7 +242,7 @@ impl Elaborator<'_> {
             );
             return None;
         }
-        let word = self.flatten_word_eids(&dims, &idx_eids[..d], &[]);
+        let word = self.flatten_word_eids(&dims, &idx_eids[..d], &[], IndexDomain::ArrayWord);
         let val = self.push_expr(ir::Expr::Signal {
             net,
             word: Some(word),
@@ -284,7 +285,7 @@ impl Elaborator<'_> {
             return None;
         }
         let (ext, dirs) = Self::packed_split(&dims);
-        let offset = self.flatten_word_eids(&ext, idx_eids, &dirs);
+        let offset = self.flatten_word_eids(&ext, idx_eids, &dirs, IndexDomain::PackedElem);
         let elem_w: u64 = dims[idx_eids.len()..]
             .iter()
             .map(|&(_, w, _)| w as u64)
@@ -346,7 +347,7 @@ impl Elaborator<'_> {
                     );
                     return poison_chunk();
                 }
-                Some(self.flatten_word_eids(&dims, idx_eids, &[]))
+                Some(self.flatten_word_eids(&dims, idx_eids, &[], IndexDomain::ArrayWord))
             } else if self.packed_dims.contains_key(&net) {
                 // a part-select on a bare multi-dim PACKED net selects whole outer
                 // elements (N3.4) — a deferred follow-on for the hierarchical lane.
@@ -390,7 +391,7 @@ impl Elaborator<'_> {
                 );
                 return poison_chunk();
             }
-            let word = self.flatten_word_eids(&dims, &idx_eids[..d], &[]);
+            let word = self.flatten_word_eids(&dims, &idx_eids[..d], &[], IndexDomain::ArrayWord);
             let trailing = &idx_eids[d..];
             // Array-of-packed: trailing indices → an indexed part-select on the element.
             if !trailing.is_empty() {
@@ -406,7 +407,8 @@ impl Elaborator<'_> {
                         return poison_chunk();
                     }
                     let (ext, dirs) = Self::packed_split(&pdims);
-                    let offset = self.flatten_word_eids(&ext, trailing, &dirs);
+                    let offset =
+                        self.flatten_word_eids(&ext, trailing, &dirs, IndexDomain::PackedElem);
                     let elem_w: u64 = pdims[trailing.len()..]
                         .iter()
                         .map(|&(_, w, _)| w as u64)
@@ -462,7 +464,7 @@ impl Elaborator<'_> {
                 return poison_chunk();
             }
             let (ext, dirs) = Self::packed_split(&dims);
-            let offset = self.flatten_word_eids(&ext, idx_eids, &dirs);
+            let offset = self.flatten_word_eids(&ext, idx_eids, &dirs, IndexDomain::PackedElem);
             let elem_w: u64 = dims[idx_eids.len()..]
                 .iter()
                 .map(|&(_, w, _)| w as u64)
