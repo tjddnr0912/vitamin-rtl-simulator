@@ -40,17 +40,21 @@
 //!
 //! ## Which EVALUATIONS reach this module — narrower than "the walk"
 //!
-//! Two entry points route here: `k_eval_for_lvalue` (the rhs of a blocking
-//! assign, an NBA sample, a `force`, and a cont-assign settle) and `k_truthy`
-//! (branch conditions and the `wait(e)` predicate). Everything else still
-//! evaluates generically — in particular a comparison inside a SYSTEM TASK
-//! argument (`$display("%b", a < b)`) goes through `eval_task_arg`, and the
-//! lvalue's own offsets go through `resolve_offsets`. The differential review
-//! of S2 slice 2 found this the hard way: its first wide-comparison design
-//! measured ZERO compiled programs because every comparison in it was a
-//! `$display` argument. "Comparisons are specialized" means assignment
-//! right-hand sides and conditions, and a coverage claim that does not name
-//! the entry point is not a coverage claim.
+//! THREE callers compile programs: `k_eval_for_lvalue` (the rhs of a blocking
+//! assign, an NBA sample, a `force`, and a cont-assign settle), `k_truthy`
+//! (branch conditions and the `wait(e)` predicate), and — since S2 slice 3 —
+//! `index_of`, which resolves an lvalue's own index expressions so
+//! `fast_offsets` can answer without the generic evaluator. Everything else
+//! still evaluates generically: a comparison inside a SYSTEM TASK argument
+//! (`$display("%b", a < b)`) goes through `eval_task_arg`, and any lvalue the
+//! fast path declines goes through `eval::resolve_offsets` whole.
+//!
+//! The count is stated because the previous version of this paragraph said
+//! "two entry points … and the lvalue's own offsets go through
+//! `resolve_offsets`", which slice 3 made false in the same commit that added
+//! the third caller. A coverage claim that does not name its entry points is
+//! not a coverage claim — and one that names the wrong number understates the
+//! blast radius.
 //!
 //! ## Representation
 //!

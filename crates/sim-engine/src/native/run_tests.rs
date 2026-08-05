@@ -1990,6 +1990,64 @@ endmodule
     );
 }
 
+/// The X/Z INDEX rule, pinned to iverilog 13's values.
+///
+/// `offset_of_index_value` is shared by both backends (S2 slice 3 extracted it
+/// so the specialized resolver could not restate it), which is exactly the
+/// shape a VM-vs-native differential cannot see: deleting its `has_xz` drop
+/// moves both sides together. Measured against iverilog: an x or z index makes
+/// a WRITE vanish entirely and a READ all-x, while a NEGATIVE index still
+/// partial-writes the in-range bits (`bus[-3 +: 4]` sets bit 0).
+#[test]
+fn s2_xz_index_is_dropped_matching_the_oracle() {
+    let src = r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [15:0] bus;
+  reg [7:0] i;
+  reg [63:0] big;
+  integer k;
+  initial begin
+    mem[0]=8'd10; mem[1]=8'd11; mem[2]=8'd12; mem[3]=8'd13;
+    bus = 16'h1234;
+    i = 8'bxxxxxxxx;
+    mem[i] = 8'd99;
+    $display("t=%0t A %0d %0d %0d %0d", $time, mem[0], mem[1], mem[2], mem[3]);
+    $display("t=%0t B %b", $time, mem[i]);
+    bus[i +: 4] = 4'hF;
+    $display("t=%0t C %h", $time, bus);
+    i = 8'bzzzzzzzz;
+    mem[i] = 8'd88;
+    $display("t=%0t D %0d %b", $time, mem[3], mem[i]);
+    k = -3;
+    bus[k +: 4] = 4'hF;
+    $display("t=%0t E %h", $time, bus);
+    big = 64'h1_0000_0000;
+    mem[big] = 8'd99;
+    $display("t=%0t F %0d %b", $time, mem[0], mem[big]);
+    $finish;
+  end
+endmodule
+"#;
+    // Rows A-E are iverilog 13's. Row F is NOT: measured, iverilog truncates a
+    // beyond-i32 index to 32 bits and writes `mem[0] = 99`, because its index
+    // lane is 32 bits wide. IEEE 1364 §5.2.1 has no truncation step — an
+    // out-of-range index is ignored on a write and x on a read — so vita is
+    // ahead here and the row is a HAND-IEEE pin. It is also the only thing
+    // with teeth on the domain check: widening the accepted range to accept
+    // any i128 survives everything else, and turns this drop into a write to
+    // the wrong element at exit 0.
+    const WANT: &[&str] = &[
+        "out|t=0 A 10 11 12 13\n",
+        "out|t=0 B xxxxxxxx\n",
+        "out|t=0 C 1234\n",
+        "out|t=0 D 13 xxxxxxxx\n",
+        "out|t=0 E 1235\n",
+        "out|t=0 F 10 xxxxxxxx\n",
+    ];
+    both_backends_print(src, WANT, "x/z index rule");
+}
+
 /// Run `src` on both backends and assert the printed lines EXACTLY match
 /// `want` — an absolute anchor, not a differential.
 fn both_backends_print(src: &str, want: &[&str], what: &str) {

@@ -189,6 +189,16 @@ pub(crate) struct WCacheSlot {
     pub(crate) prog: Option<std::rc::Rc<crate::native::wprog::WProg>>,
 }
 
+/// How one lvalue index expression resolves. See `NativeKernel::icache`.
+pub(crate) enum IdxKind {
+    /// A compile-time constant index: the offset itself.
+    Const(u32),
+    /// A width-specialized program; its result goes through the shared rule.
+    Prog(std::rc::Rc<crate::native::wprog::WProg>),
+    /// Not admitted — the whole lvalue falls back to the generic resolver.
+    Generic,
+}
+
 pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) ir: &'i SimIr,
     pub(crate) arena: NetArena,
@@ -296,6 +306,18 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// `&self`; the scratch stack is reused across calls for the same reason.
     /// Pure function of the static IR ⇒ no invalidation exists.
     pub(crate) wcache: std::cell::RefCell<WCache>,
+    /// S2 slice 3: the INDEX cache — one slot per ExprId for the offset an
+    /// lvalue index expression names. `k_resolve_lvalue_offsets` runs once per
+    /// assignment (71.9k times on the tier-3 hot design, measured, every one of
+    /// them through the generic evaluator including CONSTANT indices), and its
+    /// index expressions are tiny, so the win is skipping the evaluator rather
+    /// than the arithmetic.
+    ///
+    /// The offset RULE is not restated: `Const` resolves at compile time
+    /// through the same `offset_of_index_value`, and a `Prog` runs the
+    /// width-specialized program and hands the resulting value to that same
+    /// function. Anything else falls back to `eval::resolve_offsets` whole.
+    pub(crate) icache: std::cell::RefCell<Vec<Option<IdxKind>>>,
     pub(crate) wscratch: std::cell::RefCell<Vec<crate::native::wprog::W>>,
 }
 
@@ -446,6 +468,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
             wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
+            icache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             wscratch: std::cell::RefCell::new(Vec::new()),
         }
     }
@@ -479,6 +502,115 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             });
         }
         compiled
+    }
+
+    /// The specialized offset resolver — `None` means "not this shape", and
+    /// the caller runs the generic `eval::resolve_offsets` unchanged.
+    ///
+    /// Admission mirrors the generic function's own structure rather than
+    /// approximating it: at most two chunks (its inline case), integral net
+    /// kinds only, and every index expression resolvable by `index_of`. Any
+    /// miss declines the WHOLE lvalue, so a partially-specialized resolution
+    /// cannot exist — which is also what keeps the E4002 machinery intact, since
+    /// an ADMITTED index tree can only load whole nets and in-bounds constant
+    /// elements and therefore cannot reach `warn_run_range`.
+    ///
+    /// ⚠️ The kind test is FORWARD DEFENCE, not the complement of anything the
+    /// canonical function evaluates here, and review measured both halves of
+    /// that: on `NetArena` the assoc side-channel is unreachable for EVERY kind
+    /// (`is_assoc`/`is_assoc_str` are the `NetReader` defaults, constant
+    /// `false`), and `NetArena::buildable` refuses a design on its FIRST
+    /// non-integral net, so an arena existing already implies every net is
+    /// integral. Deleting the test leaves the suite green and cannot be forced.
+    /// It is kept as a safe superset for the day either of those changes.
+    fn fast_offsets(&self, lhs: &Lvalue) -> Option<Offsets> {
+        if lhs.chunks.len() > 2 || lhs.chunks.is_empty() {
+            return None;
+        }
+        let mut buf = [(0u32, 0u32); 2];
+        for (i, c) in lhs.chunks.iter().enumerate() {
+            if !matches!(
+                self.ir.nets.get(c.net as usize)?.kind,
+                sim_ir::NetKind::Wire
+                    | sim_ir::NetKind::Reg
+                    | sim_ir::NetKind::Logic
+                    | sim_ir::NetKind::Integer
+            ) {
+                return None; // assoc/dyn/queue/real/string: generic resolver
+            }
+            let off = match c.offset {
+                None => 0,
+                Some(e) => self.index_of(e)?,
+            };
+            let word = match c.word {
+                None => 0,
+                Some(e) => self.index_of(e)?,
+            };
+            buf[i] = (off, word);
+        }
+        Some(Offsets::Inline {
+            buf,
+            len: lhs.chunks.len() as u8,
+        })
+    }
+
+    /// One index expression's bit position, cached per ExprId.
+    fn index_of(&self, eid: u32) -> Option<u32> {
+        loop {
+            if let Some(slot) = self.icache.borrow().get(eid as usize) {
+                match slot {
+                    Some(IdxKind::Const(o)) => return Some(*o),
+                    Some(IdxKind::Prog(p)) => {
+                        let v = self.run_wprog(p);
+                        return Some(crate::eval::offset_of_index_value(&v));
+                    }
+                    Some(IdxKind::Generic) => return None,
+                    None => {}
+                }
+            } else {
+                return None; // eid outside `ir.exprs`: generic (defensive)
+            }
+            let sw = self.sched.st.wt.get(eid);
+            let kind = match self.ir.exprs.get(eid as usize) {
+                Some(sim_ir::Expr::Const { .. }) => {
+                    // Fold through the SAME rule the runtime path uses, so a
+                    // constant index and a computed one that lands on the same
+                    // value cannot disagree.
+                    let v = self.ctx().eval(eid);
+                    IdxKind::Const(crate::eval::offset_of_index_value(&v))
+                }
+                _ => match crate::native::wprog::compile(
+                    self.ir,
+                    &self.sched.st.wt,
+                    &self.arena,
+                    eid,
+                    sw.width,
+                    sw.signed,
+                ) {
+                    Some(p) => IdxKind::Prog(std::rc::Rc::new(p)),
+                    None => IdxKind::Generic,
+                },
+            };
+            self.icache.borrow_mut()[eid as usize] = Some(kind);
+        }
+    }
+
+    /// Test seam for the specialized resolver — the gate compares it against
+    /// `eval::resolve_offsets` directly rather than only through a run.
+    #[cfg(test)]
+    pub(crate) fn fast_offsets_for_test(&self, lhs: &Lvalue) -> Option<Offsets> {
+        self.fast_offsets(lhs)
+    }
+
+    /// Mutate the arena while the kernel — and therefore its caches — stays
+    /// ALIVE. The first version of the offset gate rebuilt the kernel for each
+    /// mirrored state, so the `icache` was only ever consulted against the
+    /// state that filled it, and a mutation that froze a `Prog` result into a
+    /// `Const` (pure staleness) passed both of this slice's tests. A cache test
+    /// that never re-reads across a state change is not a cache test.
+    #[cfg(test)]
+    pub(crate) fn arena_mut_for_test(&mut self) -> &mut NetArena {
+        &mut self.arena
     }
 
     /// Run a compiled program and stamp its result as a `Value`.
@@ -671,6 +803,9 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
 
     fn k_resolve_lvalue_offsets(&self, lhs: &Lvalue) -> Offsets {
+        if let Some(fast) = self.fast_offsets(lhs) {
+            return fast;
+        }
         crate::eval::resolve_offsets(&self.ctx(), lhs)
     }
 

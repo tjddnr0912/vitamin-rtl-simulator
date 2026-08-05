@@ -2600,3 +2600,137 @@ fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
         );
     }
 }
+
+/// S2 slice 3: the SPECIALIZED offset resolver against the canonical one.
+///
+/// `k_resolve_lvalue_offsets` runs once per assignment — 71.9k times on the
+/// tier-3 hot design, measured, every one of them through the generic
+/// evaluator — so it got a fast path. This is the anchor that keeps the two
+/// answering the same question: every write site of every corpus design, over
+/// several random 4-state states, `fast_offsets` (when it admits) must equal
+/// `eval::resolve_offsets` exactly.
+///
+/// The dedicated designs below the corpus carry the shapes the corpus has no
+/// instance of and that the rule is most easily got wrong on: an X/Z index, a
+/// negative index, an index far past any net, and a two-chunk concat lvalue.
+#[test]
+fn s2_specialized_offsets_match_the_canonical_resolver() {
+    let sink = NullSink;
+    let extra: Vec<(&str, String)> = vec![
+        (
+            "idx_edge_cases",
+            "module top;\n\
+               reg [7:0] mem [0:3];\n\
+               reg [15:0] bus;\n\
+               reg [7:0] i;\n\
+               reg [31:0] big;\n\
+               integer neg;\n\
+               initial begin\n\
+                 i = 8'bxxxx_xxxx; neg = -3; big = 32'hFFFF_FFFF;\n\
+                 mem[i] = 8'd1;\n\
+                 mem[2] = 8'd2;\n\
+                 bus[neg +: 4] = 4'hF;\n\
+                 bus[big +: 4] = 4'h3;\n\
+                 {bus[3:0], bus[7:4]} = 8'hAB;\n\
+                 mem[i[1:0]] = 8'd5;\n\
+               end\n\
+             endmodule\n"
+                .to_string(),
+        ),
+        (
+            "idx_const_and_three_chunk",
+            "module top;\n\
+               reg [7:0] mem [0:3];\n\
+               reg [15:0] bus;\n\
+               reg [7:0] a, b, c;\n\
+               initial begin\n\
+                 mem[2'bx1] = 8'd1;\n\
+                 mem[64'h1_0000_0000] = 8'd2;\n\
+                 bus[2'bz0 +: 2] = 2'b11;\n\
+                 {a, b, c} = 24'h123456;\n\
+               end\n\
+             endmodule\n"
+                .to_string(),
+        ),
+        (
+            "idx_zed_and_wide",
+            "module top;\n\
+               reg [7:0] mem [0:7];\n\
+               reg [3:0] z4;\n\
+               reg [95:0] wide;\n\
+               initial begin\n\
+                 z4 = 4'bzzzz; wide = 96'd9;\n\
+                 mem[z4] = 8'd7;\n\
+                 mem[wide] = 8'd8;\n\
+               end\n\
+             endmodule\n"
+                .to_string(),
+        ),
+    ];
+    let designs: Vec<(String, String)> = corpus(0x5EED_F00D, 72)
+        .into_iter()
+        .map(|d| (d.name.to_string(), d.src))
+        .chain(extra.into_iter().map(|(n, s)| (n.to_string(), s)))
+        .collect();
+    let mut fast = 0usize;
+    let mut declined = 0usize;
+    for (name, src) in &designs {
+        let (ir, opts) = build_with_opts(src);
+        let Ok(arena) = NetArena::build(&ir, &opts) else {
+            continue; // not a flat design — the native path never sees it
+        };
+        let empty: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut st = fresh_state(&ir, &sink);
+        let mut st_n = fresh_state(&ir, &sink);
+        let sites = super::tests::write_sites(&ir);
+        let mut rng = Rng::new(0x0FF5_E750 ^ sites.len() as u64);
+        // ONE kernel across every state, so the per-ExprId index cache is
+        // consulted against states it was NOT populated from. Rebuilding the
+        // kernel per state — which this test did first — makes every cache
+        // hit trivially fresh and hides staleness entirely (measured: freezing
+        // a `Prog` result into a `Const` passed both of this slice's tests).
+        let mut sched_n = Scheduler::new(&mut st_n, 10_000, 10_000, None, Default::default());
+        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
+        for state_i in 0..4 {
+            {
+                let arena = nk.arena_mut_for_test();
+                for n in 0..ir.nets.len() as u32 {
+                    for e in 0..arena.slots[n as usize].elems {
+                        super::tests::mirror_random_elem(
+                            &mut st,
+                            arena,
+                            &mut rng,
+                            n,
+                            e,
+                            state_i == 0,
+                        );
+                    }
+                }
+            }
+            for (lhs, _) in &sites {
+                let canonical = crate::eval::resolve_offsets(&nk.ctx(), lhs);
+                match nk.fast_offsets_for_test(lhs) {
+                    Some(f) => {
+                        assert_eq!(
+                            f.as_slice(),
+                            canonical.as_slice(),
+                            "{name}: state {state_i}: specialized offsets differ"
+                        );
+                        fast += 1;
+                    }
+                    None => declined += 1,
+                }
+            }
+        }
+    }
+    // Pinned: a DROP means the fast path narrowed (or the corpus shrank), and a
+    // fast count of zero would make every assertion above vacuous.
+    assert_eq!(
+        (fast, declined),
+        (2156, 12),
+        "specialized-offset coverage moved — the DECLINES are load-bearing too \
+         (a >64-bit index, a part-select index and a THREE-chunk concat lvalue, \
+         three per state), so a drop to zero there means the decline arm \
+         stopped being exercised"
+    );
+}

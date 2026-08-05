@@ -107,15 +107,67 @@ pub(crate) fn delay_ticks_of(v: &crate::value::Value, mult: u64, prec_mult: u64)
     v.to_u64().unwrap_or(u64::MAX).saturating_mul(mult)
 }
 
+/// The bit position a resolved index VALUE names — the second half of
+/// `resolve_offsets`'s `ev`, split out so a specialized evaluator can reuse the
+/// rule instead of restating it. `resolve_offsets` itself is the only reason
+/// this is a separate function: the rule (X/Z drops, the signed i32 domain, the
+/// `OOR_DROP` sentinel) is exactly the kind that must have one spelling, and
+/// the tier-3 kernel now reaches it from a second evaluator.
+pub(crate) fn offset_of_index_value(v: &crate::value::Value) -> u32 {
+    // Resolve a runtime select index to a bit-position offset. The valid
+    // domain is the SIGNED i32 range: a small negative (`a[-1+:4]`) is a
+    // legitimate underflow that partial-writes the in-range bits (P0-IPU),
+    // and a small/large positive writes (or lands OOB-high and drops). An
+    // index OUTSIDE that domain is dropped entirely (iverilog parity):
+    //   - X/Z          → the bit position is UNKNOWN
+    //   - huge positive / UNSIGNED > i31 / clean beyond-u32 / > 64-bit
+    //                  → out of any net's range
+    // `OOR_DROP` (2^30) sits far above any net width (≤2^20) so every
+    // selected bit lands out of range for bit/part/indexed-part and
+    // array-word chunks alike. Signed-aware: an unsigned 0xFFFFFFFF is the
+    // huge 4294967295 (drop), NOT a wrapped −1 (which would partial-write).
+    //
+    // ⚠️ The "(iverilog parity)" above is TRUE for x/z and for the negative
+    // and huge-but-i32 cases, and FALSE beyond i32 — measured, S2 slice 3:
+    // `mem[64'h1_0000_0000]` on a `[0:3]` array is DROPPED here and TRUNCATED
+    // to `mem[0]` by iverilog 13 (its index lane is 32 bits). IEEE 1364 §5.2.1
+    // says an out-of-range index is ignored on a write and x on a read, with
+    // no truncation step, so this is a vita-ahead divergence rather than a gap
+    // — pinned by a vita-internal anchor because the oracle is the wrong one
+    // here (`s2_xz_index_is_dropped_matching_the_oracle`, row F). Independently
+    // re-measured by review: iverilog truncates a beyond-i32 ARRAY-WORD index
+    // (`mem[64'h1_0000_0002]` lands on `mem[2]`) but does NOT truncate a
+    // beyond-i32 BIT offset, so "its index lane is 32 bits" scopes to the array
+    // word.
+    //
+    // The `has_xz` early return is a FAST PATH, not a semantic guard:
+    // `to_i128_signed` goes through `to_u64`/`to_u128`, which already return
+    // `None` for any x/z bit, so the `_ => OOR_DROP` arm answers identically.
+    // Measured as an equivalent mutation rather than assumed.
+    const OOR_DROP: u32 = 1 << 30;
+    if v.has_xz() {
+        return OOR_DROP;
+    }
+    match v.to_i128_signed() {
+        Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => i as i32 as u32,
+        _ => OOR_DROP,
+    }
+}
+
 /// Evaluate each LHS chunk's bit-offset expression NOW, returning one offset per
 /// chunk (0 for a whole-net `None` chunk). The `&mut self` write path has no
 /// `EvalCtx`, so dynamic indices like `a[i]` are resolved here at the correct
 /// sampling moment (statement time for blocking, SAMPLE time for NBA, settle
 /// time for a cont-assign).
 ///
-/// This is THE offset resolver: it lives here, generic over the reader, so the
-/// engine (`Scheduler::resolve_lvalue_offsets`) and the tier-3 arena write funnel
-/// resolve an index with the SAME rule. Two spellings of "what bit position does
+/// This WAS the only offset resolver. Since S2 slice 3 the tier-3 kernel has a
+/// specialized one (`NativeKernel::fast_offsets`) that answers the shapes it
+/// admits — measured at 2156 of 2168 corpus write sites — and falls back here
+/// for the rest. What the two still share is the per-index RULE
+/// (`offset_of_index_value`, just above), which is the part that must not
+/// drift; this function remains generic over the reader so the engine
+/// (`Scheduler::resolve_lvalue_offsets`) and the tier-3 fallback resolve an
+/// index the same way. Two spellings of "what bit position does
 /// this index name" would drift exactly where it hurts most — an X/Z index that
 /// one side drops and the other writes is a silent wrong value.
 pub(crate) fn resolve_offsets<N: NetReader + ?Sized>(
@@ -139,29 +191,7 @@ pub(crate) fn resolve_offsets<N: NetReader + ?Sized>(
             }
         }
     }
-    let ev = |eid: u32| {
-        let v = ctx.eval(eid);
-        // Resolve a runtime select index to a bit-position offset. The valid
-        // domain is the SIGNED i32 range: a small negative (`a[-1+:4]`) is a
-        // legitimate underflow that partial-writes the in-range bits (P0-IPU),
-        // and a small/large positive writes (or lands OOB-high and drops). An
-        // index OUTSIDE that domain is dropped entirely (iverilog parity):
-        //   - X/Z          → the bit position is UNKNOWN
-        //   - huge positive / UNSIGNED > i31 / clean beyond-u32 / > 64-bit
-        //                  → out of any net's range
-        // `OOR_DROP` (2^30) sits far above any net width (≤2^20) so every
-        // selected bit lands out of range for bit/part/indexed-part and
-        // array-word chunks alike. Signed-aware: an unsigned 0xFFFFFFFF is the
-        // huge 4294967295 (drop), NOT a wrapped −1 (which would partial-write).
-        const OOR_DROP: u32 = 1 << 30;
-        if v.has_xz() {
-            return OOR_DROP;
-        }
-        match v.to_i128_signed() {
-            Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => i as i32 as u32,
-            _ => OOR_DROP,
-        }
-    };
+    let ev = |eid: u32| offset_of_index_value(&ctx.eval(eid));
     let pair = |c: &sim_ir::LvalChunk| {
         let off = c.offset.map(ev).unwrap_or(0);
         // `word` is an ExprId array index (`mem[k] = …`); resolve NOW.

@@ -85,7 +85,7 @@ pub(super) fn set_bit(bp: &mut sim_ir::BitPacked, i: u32, v: u64, u: u64) {
 /// Mirror ONE random 4-state value into element `e` of net `n` in BOTH stores.
 /// `defined_only` forces `unk = 0` (the arithmetic-heavy profile); otherwise
 /// ~25% of bits are X/Z.
-fn mirror_random_elem(
+pub(super) fn mirror_random_elem(
     st: &mut SimState,
     arena: &mut NetArena,
     rng: &mut Rng,
@@ -411,7 +411,7 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
 /// plus continuous assigns. Taking them from the arenas (rather than walking
 /// process bodies) reaches every body — a subroutine's statements live in the
 /// same `ir.stmts`.
-fn write_sites(ir: &SimIr) -> Vec<(sim_ir::Lvalue, u32)> {
+pub(super) fn write_sites(ir: &SimIr) -> Vec<(sim_ir::Lvalue, u32)> {
     let mut v: Vec<(sim_ir::Lvalue, u32)> = ir
         .stmts
         .iter()

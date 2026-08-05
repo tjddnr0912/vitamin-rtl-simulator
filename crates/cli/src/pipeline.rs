@@ -258,8 +258,9 @@ pub(crate) fn print_help(applet: &str) {
                        'backend_requested', and 'native.refused' names the row).\n                        \
                        Output is byte-identical whichever you pick -- this only moves\n                        \
                        wall-clock (measured\n                        \
-                       1.4x on a real design, up to 2.8x on expression-heavy RTL, ~1.0x\n                        \
-                       when the run is clock/scheduler-bound).\n  \
+                       1.4x on expression-heavy RTL; 0.8x -- i.e. SLOWER -- when the\n                        \
+                       run is clock/scheduler-bound, which is where the remaining\n                        \
+                       tier-3 work is).\n  \
          --timeout <TICKS>     stop cleanly after TICKS sim time (CI killswitch)\n  \
          --upstream <FILE>     (vrun) verify the .velab's recorded upstream digest\n  \
          --work <NAME[=DIR]>   (vcmp) record units into a work library (default dir ./NAME)\n  \
