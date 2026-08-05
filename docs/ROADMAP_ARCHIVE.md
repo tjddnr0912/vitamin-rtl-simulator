@@ -347,6 +347,22 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.305 ③층 S2 슬라이스 1 — 폭별 특수화 W-평가기: native 1.61×, 그리고 admission 을 건너뛴 arm 하나가 loud→silent 를 만들 뻔했다 (2026-08-05, branch feat-tier3-s2-width, format 26 불변) ✅
+
+**측정이 계획을 확정하고 시작했다.** `/usr/bin/sample` 프로파일(keccak_f_flat·release): 네이티브 워크의 ~60% 가 `Value` 조작(mask_top 16%·resize 12%·has_xz/from_packed/to_u64 ~12%)+제네릭 재귀 평가기(eval_ctx 16%·eval_binary 12%)+read_net 박싱 6.5% — doc-21 §2 의 "표현 비용" 진단 그대로. 핫 코드 실측: 상수 인덱스 배열 원소(322회)·xor/and/or/not·상수 시프트·**전부 균일 64비트**.
+
+**형태 = `native/wprog.rs`.** (rhs·ctx폭·부호) 별로 컴파일·캐시되는 스택 머신 `WProg` — `W=(val,unk)` 두 평면 u64, Load 는 컴파일 시점 확정 버퍼 인덱스 두 개. **admission 이 정확성 논증이다**: 균일 폭 ≤64·unsigned·{Numeric Const·whole/상수-인덱스 Signal·Not·And/Or/Xor/Add/Sub·상수량 Shl/Shr/AShr} 만 admit → **넓힘·부호확장·절단이 트리 안에 존재하지 않아 문맥 폭 규칙을 재진술하지 않는다**(classifier-must-match 함정 회피). 나머지는 전부 제네릭 경로(= 기존 경로 그대로). 남는 것은 4-state 비트 테이블뿐이고 그것은 **측정으로** 핀: 폭-4 소진 배터리(256×256×11 형·전 4-state 조합) + 코퍼스 admitted 스윕(**2255건 핀**) — 둘 다 제네릭 평가기와 0 발산.
+
+**성능**: native **4.49 → 2.79s**(keccak_f_flat·N=5000·release) = **1.61×**, vm(2.55s)과 10% 이내. **중단 판정**: And arm 실측 = 로드 2 + **분기·호출·할당 0 + ALU 9**(Xor 8) — 문자 그대로의 "2 op" 는 2-state 전용이며 two_state 슬롯 컴파일 특수화(슬라이스 2)가 그 표적. 재설계 사유 없음 — 통과.
+
+**⭐⭐ soundness 가 잡은 것: admission 을 건너뛴 arm.** `k>=w` 상수 시프트 지름길이 lhs 서브트리를 **방문하지 않고** `Const{0,0}` 을 내놓아, 거절돼야 할 트리가 admit 됐다 — ① 동적 OOB 인덱스가 lhs 에 있으면 **E4002 와 exit class 가 사라지고**(loud→silent) ② `$urandom` 이 lhs 에 있으면 draw 하나가 사라져 **이후 RNG 스트림 전체가 밀렸다**(exit 0 값 발산·실측 native z=e220a839 vs vm z=6e789e6a). ③ 그 arm 의 주석 *"exhaustive tests 로 측정했다"* 는 **거짓**이었다 — 배터리 시프트가 전부 k<w 라 Const{1,0} 뮤턴트가 58 테스트 전부를 통과했다. 수정 = **lhs 를 무조건 먼저 컴파일**(decline 전파 복원) 후 `Const{0,0}`+`And` 로 소멸(4-state 전 입력에서 definite-0 — w=64·k=64 의 u64 시프트 오버플로 엣지도 회피). 라운드 2 재검 4/4 CONFIRMED-FIXED · 배터리 k≥w 행 2 추가 · 판별 설계 2 영구화(적대 59) · 원 철자·상수 뮤턴트 **둘 다 kill**(각각 단일 앵커 — 분업 실측).
+
+**적대 렌즈 ① differential(25설계 ×4실행·8축) — 발산 0·폴백 0.** admitted 고문(폭 1/5/32/63/64·12-op 체인·all-x/z·경계 캐리)·decline 경계 7설계·혼합(admitted↔declined 피딩·CA/blocking/NBA/**delayed NBA·delayed CA** 위치)·VCD 바이트·진단 인터리브·examples 4 — 전부 3-way 동일. **비공허 증명이 타이밍**: x/z-heavy 50k 사이클서 PRE-native 0.197→POST-native 0.112s(1.76×·바이트 동일) = W 경로가 실제로 그 형태를 돌린다. ⭐ 부수 하나는 **리뷰어의 프레이밍이 틀렸고 실측이 정정했다**: *"keccak 핸드셰이크가 vita 에서 1클럭 늦게 깬다"* 로 보고됐으나(퍼뮤테이션당 +1주기·값 무영향), 계측해 보니 **vita 결함이 아니라 TB 레이스**다 — 설계 계측(START/DONE 시각)에서 iverilog 는 t=25000 에, vita 는 t=35000 에 `start` 를 샘플한다. 원인은 TB 가 `start = 1'b1` 을 **설계가 `start` 를 샘플하는 바로 그 posedge 에서** 세우는 것: 같은 Active 리전에 깨어난 두 프로세스의 순서는 IEEE 1364 §11 이 **미정의**로 둔 것이고 두 시뮬레이터가 다른(둘 다 적법한) 선택을 한다. 레이스를 없앤 재현(`wait`/`@`·NBA·blocking 3형 + 핸드셰이크 최소형)은 **전부 정확히 일치**. 함의는 정확성이 아니라 **측정 비교가능성**(§7.3 이 keccak 위에 선다) — bench TB 를 레이스-프리로 고치는 것은 숫자를 다시 재는 슬라이스가 소유한다.
+
+**적대 렌즈 ② soundness — CLEARED 측**: 균일 폭 admission 이 넓힘 전부를 배제(캐리 케이스 실측 decline)·Load 레이아웃=아레나 stride·signed 리터럴 decline(비공허 쌍 실측)·AShr=unsigned 서 논리 시프트(3-way)·캐시 수명=런 1회·RefCell 재진입 불가·깊이 계산은 용량 힌트일 뿐·하네스 슬롯 기하 72설계 동일. 뮤테이션 7 중 **6 kill·1 등가**(캐시 키에서 w 탈락 — 현 lowering 은 대입마다 새 eid 라 판별 설계 구성 불가·잠재 조건을 키 주석에 기록). ⭐ 리뷰어가 **수정 서술의 거짓도 잡았다** — 캐시 키 주석이 "넣었다" 고 서술됐으나 파일에 없었다(파이썬 다중 편집 스크립트가 마지막 write 전에 끝남 — 기록된 함정의 재발) → 확인 후 실제 기록.
+
+**게이트.** **5155 green** · clippy 0(과복잡 타입 → `WCache` alias) · fmt · format 26 · 배터리 256×256×11 + 코퍼스 2255 핀 · 적대 59 · 뮤테이션 원 6/6 + kgew 2/2 kill.
+
 #### 4.5.304 ③층 S1d-5 — `$value$plusargs` 배선: keccak_f_flat 네이티브 + ③층 기준선 실측, 그리고 변환기의 침묵 셋 (2026-08-05, branch feat-tier3-plusargs, format 26 불변) ✅
 
 `stmt_effect` 가족의 첫 구성원이 배선됐다 — `k_value_plusargs` 가 공유 `exec::plusargs::effect`(파싱·매칭·변환)를 지나고 **쓰기만** 자기 스토어로, 게이트 행은 정본 술어 `value_plusargs_rhs` 로 정확히 그 구성원만 carve-out(분류 `rhs_is_stmt_effect` 는 불변 — tier-2 컴파일 게이트는 한 가족을 그대로 본다).

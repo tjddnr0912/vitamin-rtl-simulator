@@ -1275,6 +1275,46 @@ endmodule
 "#
             .to_string(),
         ),
+        // S2's k>=w SHIFT ARM, both hazards the soundness review measured.
+        // (a) A dynamic OOB index UNDER a k>=w shift: the first spelling
+        // admitted the tree without visiting the lhs, so the E4002 the generic
+        // path emits (and the exit class it sets) vanished — loud to silent.
+        (
+            "s2_kgew_shift_keeps_the_oob_diagnostic",
+            r#"
+module top;
+  reg [3:0] mem [0:3];
+  reg [3:0] i, y;
+  initial begin
+    mem[0] = 4'd1; i = 4'd5;
+    y = mem[i] >> 4;
+    $display("y=%b", y);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // (b) An impure operand under a k>=w shift: the generic path draws
+        // from the RNG for the shifted-out operand (operands are evaluated),
+        // so skipping it shifted the whole subsequent `$urandom` stream — a
+        // value divergence at exit 0. Declining the tree (SysFunc never
+        // admits, and the lhs is now always visited) keeps one stream.
+        (
+            "s2_kgew_shift_keeps_the_rng_draw",
+            r#"
+module top;
+  reg [31:0] y, z;
+  initial begin
+    y = $urandom >> 32;
+    z = $urandom;
+    $display("y=%h z=%h", y, z);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // TWO IMPURE DRIVERS in one group: the fold is commutative, so the
         // driver evaluation ORDER is invisible to every value-only design —
         // reversing the group loop's iteration survived the whole suite
@@ -1300,7 +1340,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 57, "adversarial set shrank");
+    assert_eq!(designs.len(), 59, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

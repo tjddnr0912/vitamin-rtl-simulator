@@ -157,9 +157,14 @@ macro_rules! not_built {
 /// Borrows the IR-derived tables rather than owning them — they are the SAME
 /// tables the engine reads, so a width or plusarg can never differ between the
 /// two backends by construction.
-#[allow(dead_code)] // S1d-4b's body walk is the production constructor; today
-                    // only the shared-executor differential builds one. Saying that is more
-                    // honest than a fake call site or a widened visibility.
+#[allow(dead_code)]
+// S1d-4b's body walk is the production constructor; today
+// only the shared-executor differential builds one. Saying that is more
+// honest than a fake call site or a widened visibility.
+/// See `NativeKernel::wcache`.
+pub(crate) type WCache =
+    BTreeMap<(u32, u32, bool), Option<std::rc::Rc<crate::native::wprog::WProg>>>;
+
 pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) ir: &'i SimIr,
     pub(crate) arena: NetArena,
@@ -262,6 +267,18 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// Level waiter fires on any change to a watched net, while an in-body one
     /// fires only when the net differs from what it was AT SUSPEND TIME.
     pub(crate) waiters: Vec<NativeWaiter>,
+    /// S2 slice 1: width-specialized program cache for `k_eval_for_lvalue`.
+    /// Key = `(rhs, ctx width, ctx signed)` — the same rhs can appear under
+    /// different lvalues. Measured: today's lowering mints a fresh eid per
+    /// assignment site (0 shared rhs across the corpus), so `w` in the key is
+    /// not yet load-bearing — but an IR-injection pass that aliases one rhs
+    /// under two lvalue widths would make it so; the key already carries it.
+    /// `None` caches a DECLINE so an inadmissible tree is
+    /// walked once, not per evaluation. `RefCell` because the eval funnel is
+    /// `&self`; the scratch stack is reused across calls for the same reason.
+    /// Pure function of the static IR ⇒ no invalidation exists.
+    pub(crate) wcache: std::cell::RefCell<WCache>,
+    pub(crate) wscratch: std::cell::RefCell<Vec<crate::native::wprog::W>>,
 }
 
 /// One in-body waiter: what it waits for, where it resumes, and — for an
@@ -410,7 +427,28 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             inactive: Vec::new(),
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
+            wcache: std::cell::RefCell::new(BTreeMap::new()),
+            wscratch: std::cell::RefCell::new(Vec::new()),
         }
+    }
+
+    /// The cached width-specialized program for `(rhs, w, signed)`, compiling
+    /// (or caching the decline) on first sight.
+    fn wprog_for(
+        &self,
+        rhs: u32,
+        w: u32,
+        signed: bool,
+    ) -> Option<std::rc::Rc<crate::native::wprog::WProg>> {
+        let key = (rhs, w, signed);
+        if let Some(hit) = self.wcache.borrow().get(&key) {
+            return hit.clone();
+        }
+        let compiled =
+            crate::native::wprog::compile(self.ir, &self.sched.st.wt, &self.arena, rhs, w, signed)
+                .map(std::rc::Rc::new);
+        self.wcache.borrow_mut().insert(key, compiled.clone());
+        compiled
     }
 
     /// Move the transport updates due at `now` into this tick's NBA batch.
@@ -541,9 +579,12 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// The read context: `SimState::mk_eval_ctx` with exactly ONE field changed.
     ///
     /// Every other field is read from `self.st`, not copied at construction, so
-    /// `nets` is the only place the two backends can differ — which is the whole
-    /// claim this file rests on, now true by construction rather than by
-    /// discipline.
+    /// on THIS path `nets` is the only place the two backends can differ.
+    /// Since S2 it is no longer the only evaluator: `k_eval_for_lvalue` runs
+    /// the width-specialized `wprog` spelling for admitted trees, whose parity
+    /// is measured (the exhaustive width-4 battery and the pinned corpus
+    /// sweep), not structural — the admission plus those anchors are what
+    /// stand where "by construction" stood.
     pub(crate) fn ctx(&self) -> crate::eval::EvalCtx<'_, NetArena> {
         crate::eval::EvalCtx {
             ir: self.ir,
@@ -570,7 +611,19 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // assignment rule is width = max(lhs, self(rhs)), sign = rhs self-sign.
         let lw = self.arena.lvalue_width(self.ir, lhs);
         let sw = self.sched.st.wt.get(rhs);
-        self.ctx().eval_ctx(rhs, lw.max(sw.width), sw.signed)
+        let w = lw.max(sw.width);
+        // S2 slice 1: the width-specialized fast path. Admission (uniform
+        // width ≤64, unsigned, const indices/shift amounts — see `wprog`) is
+        // what makes it byte-identical; a decline is cached and falls through
+        // to the generic evaluator, which IS the previous path.
+        if let Some(prog) = self.wprog_for(rhs, w, sw.signed) {
+            let r = prog.run(&self.arena.buf, &mut self.wscratch.borrow_mut());
+            let mut v = Value::zeros(prog.width(), sw.signed);
+            v.val[0] = r.val;
+            v.unk[0] = r.unk;
+            return v;
+        }
+        self.ctx().eval_ctx(rhs, w, sw.signed)
     }
 
     fn k_eval_native(&self, prog: &crate::native_eval::NativeProg) -> Value {

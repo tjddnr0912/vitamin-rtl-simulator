@@ -348,7 +348,10 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
 /// `E4002` on every re-read, so the visit it replaces is NOT observationally a
 /// no-op — picorv32 went from 6 errors to 9. The worklist is reproduced here
 /// (from the scheduler's own `ca_of_net`/`ca_always`) for correctness of the
-/// diagnostic stream, not for speed.
+/// diagnostic stream, not for speed. (The S2 fast path cannot disturb this:
+/// `wprog` admission declines every tree that could reach the OOB machinery,
+/// so an E4002-earning RHS always evaluates on the generic path — the k>=w
+/// shift arm learned that the hard way, see `wprog.rs`.)
 ///
 /// The delta counter is the RUN LOOP's, passed by reference, because the engine
 /// shares `self.delta_count` between the settle and the region cascade: a design

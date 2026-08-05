@@ -1553,3 +1553,153 @@ fn compare_wake(
     sched.reset_edge_seen_marks();
     wake.reset_edge_seen();
 }
+
+// ── S2 slice 1: the width-specialized programs ───────────────────────────────
+
+/// EXHAUSTIVE per-op differential: every admitted op over EVERY 4-state value
+/// pair at width 4 — 256×256 plane combinations × 9 expression shapes, WProg
+/// vs the generic evaluator over the SAME arena. Width 4 makes exhaustion
+/// affordable while still exercising cross-bit carry (`+`/`-`) and shift
+/// boundary bits; the per-bit tables (and/or/xor/not) are fully enumerated
+/// many times over. This is the anchor the §4.5.302 rule demands for the
+/// specialized spellings of the 4-state tables — measured equal against the
+/// canonical evaluator, not derived equal.
+#[test]
+fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
+    let src = "module top;\n\
+       reg [3:0] a, b;\n\
+       wire [3:0] x1; assign x1 = a ^ b;\n\
+       wire [3:0] x2; assign x2 = a & b;\n\
+       wire [3:0] x3; assign x3 = a | b;\n\
+       wire [3:0] x4; assign x4 = ~a;\n\
+       wire [3:0] x5; assign x5 = a + b;\n\
+       wire [3:0] x6; assign x6 = a - b;\n\
+       wire [3:0] x7; assign x7 = a << 1;\n\
+       wire [3:0] x8; assign x8 = a >> 1;\n\
+       wire [3:0] x9; assign x9 = (a << 3) | (a >> 1);\n\
+       wire [3:0] xa; assign xa = a >> 4;\n\
+       wire [3:0] xb; assign xb = a << 5;\n\
+       initial begin a = 4'd0; b = 4'd0; end\n\
+       endmodule\n";
+    let ir = build(src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+    // `a` and `b` by SHAPE, not name (names are a sidecar): the first cont
+    // assign is `x1 = a ^ b`, so its two Signal operands ARE the two regs.
+    let (na, nb) = match ir.exprs.get(ir.cont_assigns[0].rhs as usize) {
+        Some(sim_ir::Expr::Binary { lhs, rhs, .. }) => {
+            let sig = |eid: u32| match ir.exprs.get(eid as usize) {
+                Some(sim_ir::Expr::Signal { net, .. }) => *net,
+                other => panic!("op battery shape moved: {other:?}"),
+            };
+            (sig(*lhs), sig(*rhs))
+        }
+        other => panic!("op battery shape moved: {other:?}"),
+    };
+    let progs: Vec<crate::native::wprog::WProg> = ir
+        .cont_assigns
+        .iter()
+        .map(|ca| {
+            crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, 4, false)
+                .expect("every op battery expr must be ADMITTED — the set shrank")
+        })
+        .collect();
+    assert_eq!(progs.len(), 11, "op battery coverage moved");
+    let rng = crate::state::RngCells::default();
+    let mut scratch = Vec::new();
+    let set = |arena: &mut NetArena, net: u32, val: u64, unk: u64| {
+        let s = arena.slots[net as usize];
+        arena.buf[s.off as usize] = val;
+        arena.buf[s.off as usize + 1] = unk;
+    };
+    let mut compared = 0usize;
+    // all 4-state values of a 4-bit net: (val,unk) pairs where val ⊆ mask.
+    for pa in 0u64..256 {
+        let (av, au) = (pa & 0xF, pa >> 4);
+        for pb in 0u64..256 {
+            let (bv, bu) = (pb & 0xF, pb >> 4);
+            set(&mut arena, na, av, au);
+            set(&mut arena, nb, bv, bu);
+            for (i, ca) in ir.cont_assigns.iter().enumerate() {
+                let w = progs[i].run(&arena.buf, &mut scratch);
+                let generic = eval_with(&ir, &wt, &rng, &arena, ca.rhs, 4, false);
+                assert_eq!(
+                    (w.val, w.unk),
+                    (generic.val[0], generic.unk[0]),
+                    "op {i}: a=({av:#x},{au:#x}) b=({bv:#x},{bu:#x})"
+                );
+                compared += 1;
+            }
+        }
+    }
+    assert_eq!(compared, 256 * 256 * 11);
+}
+
+/// The corpus + a keccak-shaped design, swept: every pure expression that the
+/// W-compiler ADMITS must evaluate identically to the generic path over five
+/// random 4-state states. The admitted count is pinned — a silent shrink of
+/// the admission (or of the corpus) reads as coverage that no longer exists.
+#[test]
+fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
+    let sink = NullSink;
+    let mut admitted_total = 0usize;
+    let mut designs: Vec<(String, String)> = corpus(0x5EED_F00D, 72)
+        .into_iter()
+        .map(|d| (d.name.to_string(), d.src))
+        .collect();
+    // keccak's shape, miniaturised: const-index array elements, rot idiom,
+    // chi's and-not, uniform 64-bit — the exact hot set of the real design.
+    designs.push((
+        "keccak_shaped".to_string(),
+        "module top;\n\
+           reg [63:0] st [0:4];\n\
+           wire [63:0] c0; assign c0 = st[0] ^ st[1] ^ st[2] ^ st[3] ^ st[4];\n\
+           wire [63:0] d0; assign d0 = st[4] ^ ((st[1] << 1) | (st[1] >> 63));\n\
+           wire [63:0] b0; assign b0 = st[0] ^ (~st[1] & st[2]);\n\
+           wire [63:0] i0; assign i0 = st[0] ^ 64'h8000000080008008;\n\
+           initial begin st[0]=64'd1; st[1]=64'd2; st[2]=64'd3; st[3]=64'd4; st[4]=64'd5; end\n\
+         endmodule\n"
+            .to_string(),
+    ));
+    for (name, src) in &designs {
+        let ir = build(src);
+        let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+        let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+        let mut st = fresh_state(&ir, &sink);
+        let mut memo = vec![None; ir.exprs.len()];
+        let pure: Vec<u32> = (0..ir.exprs.len() as u32)
+            .filter(|&eid| pure_expr(&ir, &mut memo, eid))
+            .collect();
+        let mut rng = Rng::new(0x57A7_0000 ^ pure.len() as u64);
+        let mut scratch = Vec::new();
+        let rng_cells = crate::state::RngCells::default();
+        for state_i in 0..5 {
+            for n in 0..ir.nets.len() as u32 {
+                for e in 0..arena.slots[n as usize].elems {
+                    mirror_random_elem(&mut st, &mut arena, &mut rng, n, e, state_i == 0);
+                }
+            }
+            for &eid in &pure {
+                let sw = wt.get(eid);
+                let Some(prog) =
+                    crate::native::wprog::compile(&ir, &wt, &arena, eid, sw.width, sw.signed)
+                else {
+                    continue;
+                };
+                let w = prog.run(&arena.buf, &mut scratch);
+                let generic = eval_with(&ir, &wt, &rng_cells, &arena, eid, sw.width, sw.signed);
+                assert_eq!(
+                    (w.val, w.unk),
+                    (generic.val[0], generic.unk[0]),
+                    "{name}: eid {eid} state {state_i}"
+                );
+                admitted_total += 1;
+            }
+        }
+    }
+    assert_eq!(
+        admitted_total, 2255,
+        "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
+         the admission or the corpus silently shrank)"
+    );
+}

@@ -249,16 +249,20 @@ impl NetArena {
 
 /// S1b: the arena read path under the EXISTING evaluator. Evaluation semantics
 /// are shared with the engine (`EvalCtx` is generic over `NetReader`), so eval
-/// parity is by construction; what this impl must get right — and what the
-/// mirror differential pins — is exactly the read: element indexing, the
-/// out-of-range all-X, and top-word masking, mirroring `SimState::read_net`'s
-/// flat arm byte-for-byte at the `Value` level.
+/// parity on THIS path is by construction; what this impl must get right — and
+/// what the mirror differential pins — is exactly the read: element indexing,
+/// the out-of-range all-X, and top-word masking, mirroring
+/// `SimState::read_net`'s flat arm byte-for-byte at the `Value` level.
+///
+/// Since S2, admitted expression trees bypass this impl entirely: `wprog`
+/// loads the two plane words at compile-time-resolved indices. Its admission
+/// (in-bounds const indices only) is what keeps the OOB machinery below out of
+/// its reach, and its parity is measured (exhaustive battery + pinned corpus
+/// sweep) rather than structural.
 ///
 /// The engine's `warn_run_range` diagnostic on an OOB read is recorded here
 /// (`pending_range`) and emitted by the run loop — see that field's doc for why
-/// it cannot be emitted at the access. Still deliberately NOT here: the
-/// `read_scalar_words` fast path (an
-/// S2 concern; the default `None` keeps every read on the mirrored main path).
+/// it cannot be emitted at the access.
 /// Every other `NetReader` method keeps its default: in an ELIGIBLE design
 /// there are no heap kinds, no class handles, and no frame calls, so the
 /// defaults (`None`/X-poison) are unreachable by construction.
