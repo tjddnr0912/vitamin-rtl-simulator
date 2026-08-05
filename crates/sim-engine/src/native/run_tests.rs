@@ -1275,6 +1275,31 @@ endmodule
 "#
             .to_string(),
         ),
+        // S2 CONST-INDEX ADMISSION BOUNDARY. A constant array index is
+        // admitted only when it is in bounds and 2-state; both halves of that
+        // guard were unfalsifiable until this design (the differential review
+        // measured that an off-by-one in the bound, and dropping the x-plane
+        // check, survived the whole suite). Admitting either reads the NEXT
+        // net's storage — a wrong value — and drops the E4002 the generic path
+        // emits, so the merged stream comparison is what has the teeth.
+        (
+            "s2_const_index_out_of_bounds_and_xz_decline",
+            r#"
+module top;
+  reg [3:0] mem [0:3];
+  reg [3:0] y, z, w;
+  initial begin
+    mem[0] = 4'd1; mem[1] = 4'd2; mem[2] = 4'd3; mem[3] = 4'd4;
+    y = mem[3];
+    z = mem[4];
+    w = mem[1'bx];
+    $display("y=%b z=%b w=%b", y, z, w);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // S2's k>=w SHIFT ARM, both hazards the soundness review measured.
         // (a) A dynamic OOB index UNDER a k>=w shift: the first spelling
         // admitted the tree without visiting the lhs, so the E4002 the generic
@@ -1340,7 +1365,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 59, "adversarial set shrank");
+    assert_eq!(designs.len(), 60, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

@@ -161,9 +161,33 @@ macro_rules! not_built {
 // S1d-4b's body walk is the production constructor; today
 // only the shared-executor differential builds one. Saying that is more
 // honest than a fake call site or a widened visibility.
-/// See `NativeKernel::wcache`.
-pub(crate) type WCache =
-    BTreeMap<(u32, u32, bool), Option<std::rc::Rc<crate::native::wprog::WProg>>>;
+/// See `NativeKernel::wcache`. One slot per ExprId — a direct-indexed vector,
+/// not a map: profiling S2 slice 2 found the `BTreeMap` LOOKUP had become the
+/// single hottest frame in the native walk (792 samples to the programs' own
+/// 367), which is the specialization paying for itself twice over.
+pub(crate) type WCache = Vec<Option<WCacheSlot>>;
+
+/// A cached compile for one ExprId: the context it was compiled for, and the
+/// program (`None` = a cached DECLINE). A slot holds ONE context; an eid asked
+/// under a second `(width, signed)` overwrites it and recompiles. That is a
+/// performance choice with no correctness weight — `compile` reads only the IR
+/// and the arena's build-time layout, both immutable for a run.
+///
+/// ⚠️ **Both key fields are unfalsifiable today, measured rather than assumed.**
+/// Dropping the `signed` comparison, and never overwriting on a context
+/// mismatch, each survive the whole suite: instrumenting `wprog_for` counted
+/// ZERO context mismatches across the corpus, the four `examples/`, and the
+/// review designs, because elaborate interns nothing (one fresh eid per site)
+/// and both callers derive `signed` from the same `wt.get(eid)`. Kept as
+/// defence for the day an IR-injection pass shares an eid — and stated here as
+/// "unproven", because the earlier version of this note cited a count over
+/// ASSIGNMENT sites while S2 slice 2 had already added a second caller
+/// (`k_truthy`) with a different width rule.
+pub(crate) struct WCacheSlot {
+    pub(crate) width: u32,
+    pub(crate) signed: bool,
+    pub(crate) prog: Option<std::rc::Rc<crate::native::wprog::WProg>>,
+}
 
 pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) ir: &'i SimIr,
@@ -267,14 +291,8 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// Level waiter fires on any change to a watched net, while an in-body one
     /// fires only when the net differs from what it was AT SUSPEND TIME.
     pub(crate) waiters: Vec<NativeWaiter>,
-    /// S2 slice 1: width-specialized program cache for `k_eval_for_lvalue`.
-    /// Key = `(rhs, ctx width, ctx signed)` — the same rhs can appear under
-    /// different lvalues. Measured: today's lowering mints a fresh eid per
-    /// assignment site (0 shared rhs across the corpus), so `w` in the key is
-    /// not yet load-bearing — but an IR-injection pass that aliases one rhs
-    /// under two lvalue widths would make it so; the key already carries it.
-    /// `None` caches a DECLINE so an inadmissible tree is
-    /// walked once, not per evaluation. `RefCell` because the eval funnel is
+    /// S2 slice 1: width-specialized program cache for the eval funnels,
+    /// indexed by ExprId (see `WCache`). `RefCell` because those funnels are
     /// `&self`; the scratch stack is reused across calls for the same reason.
     /// Pure function of the static IR ⇒ no invalidation exists.
     pub(crate) wcache: std::cell::RefCell<WCache>,
@@ -427,28 +445,49 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             inactive: Vec::new(),
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
-            wcache: std::cell::RefCell::new(BTreeMap::new()),
+            wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             wscratch: std::cell::RefCell::new(Vec::new()),
         }
     }
 
-    /// The cached width-specialized program for `(rhs, w, signed)`, compiling
+    /// The cached width-specialized program for `(eid, w, signed)`, compiling
     /// (or caching the decline) on first sight.
+    #[inline]
     fn wprog_for(
         &self,
-        rhs: u32,
+        eid: u32,
         w: u32,
         signed: bool,
     ) -> Option<std::rc::Rc<crate::native::wprog::WProg>> {
-        let key = (rhs, w, signed);
-        if let Some(hit) = self.wcache.borrow().get(&key) {
-            return hit.clone();
+        {
+            let c = self.wcache.borrow();
+            if let Some(Some(slot)) = c.get(eid as usize) {
+                if slot.width == w && slot.signed == signed {
+                    return slot.prog.clone();
+                }
+            }
         }
         let compiled =
-            crate::native::wprog::compile(self.ir, &self.sched.st.wt, &self.arena, rhs, w, signed)
+            crate::native::wprog::compile(self.ir, &self.sched.st.wt, &self.arena, eid, w, signed)
                 .map(std::rc::Rc::new);
-        self.wcache.borrow_mut().insert(key, compiled.clone());
+        let mut c = self.wcache.borrow_mut();
+        if let Some(slot) = c.get_mut(eid as usize) {
+            *slot = Some(WCacheSlot {
+                width: w,
+                signed,
+                prog: compiled.clone(),
+            });
+        }
         compiled
+    }
+
+    /// Run a compiled program and stamp its result as a `Value`.
+    fn run_wprog(&self, prog: &crate::native::wprog::WProg) -> Value {
+        let r = prog.run(&self.arena.buf, &mut self.wscratch.borrow_mut());
+        let mut v = Value::zeros(prog.width(), prog.signed());
+        v.val[0] = r.val;
+        v.unk[0] = r.unk;
+        v
     }
 
     /// Move the transport updates due at `now` into this tick's NBA batch.
@@ -612,16 +651,12 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         let lw = self.arena.lvalue_width(self.ir, lhs);
         let sw = self.sched.st.wt.get(rhs);
         let w = lw.max(sw.width);
-        // S2 slice 1: the width-specialized fast path. Admission (uniform
-        // width ≤64, unsigned, const indices/shift amounts — see `wprog`) is
-        // what makes it byte-identical; a decline is cached and falls through
-        // to the generic evaluator, which IS the previous path.
+        // S2: the width-specialized fast path. Admission (uniform width AND
+        // sign, ≤64 bits, const indices/shift amounts — see `wprog`) is what
+        // makes it byte-identical; a decline is cached and falls through to
+        // the generic evaluator, which IS the previous path.
         if let Some(prog) = self.wprog_for(rhs, w, sw.signed) {
-            let r = prog.run(&self.arena.buf, &mut self.wscratch.borrow_mut());
-            let mut v = Value::zeros(prog.width(), sw.signed);
-            v.val[0] = r.val;
-            v.unk[0] = r.unk;
-            return v;
+            return self.run_wprog(&prog);
         }
         self.ctx().eval_ctx(rhs, w, sw.signed)
     }
@@ -650,6 +685,18 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
 
     fn k_truthy(&self, eid: u32) -> bool {
+        // Conditions are the OTHER half of the walk's evaluation: measured on
+        // the tier-3 hot design, `k_truthy` ran 21.7k times to
+        // `k_eval_for_lvalue`'s 71.9k, and every one of them took the generic
+        // path because a comparison's shape (wide operands, one-bit result)
+        // was outside slice 1's admission. The specialization is the
+        // EVALUATION only — the verdict comes from the same `truthiness` the
+        // generic path uses, over the same `Value`.
+        let sw = self.sched.st.wt.get(eid);
+        if let Some(prog) = self.wprog_for(eid, sw.width, sw.signed) {
+            let v = self.run_wprog(&prog);
+            return matches!(self.ctx().truthiness(&v), crate::eval::Tri::True);
+        }
         self.ctx().truthy(eid)
     }
 

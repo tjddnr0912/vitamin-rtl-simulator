@@ -1566,8 +1566,19 @@ fn compare_wake(
 /// canonical evaluator, not derived equal.
 #[test]
 fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
+    // Each continuous assign is one shape; every one is compiled at its OWN
+    // (self width, self signedness) so unsigned, SIGNED and one-bit comparison
+    // results can share a single design. `sa`/`sb` mirror `a`/`b` bit for bit,
+    // so one (a,b) sweep drives the signed rows too.
+    //
+    // ⚠️ Rows are added here whenever an admission BRANCH is added — S2 slice
+    // 1's `k >= w` shift arm shipped with a comment claiming this battery
+    // covered it while every shift here had `k < w`, and a constant mutant
+    // passed the whole suite. "Exhaustive" is a property of the input set, not
+    // of the word.
     let src = "module top;\n\
        reg [3:0] a, b;\n\
+       reg signed [3:0] sa, sb;\n\
        wire [3:0] x1; assign x1 = a ^ b;\n\
        wire [3:0] x2; assign x2 = a & b;\n\
        wire [3:0] x3; assign x3 = a | b;\n\
@@ -1579,32 +1590,76 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
        wire [3:0] x9; assign x9 = (a << 3) | (a >> 1);\n\
        wire [3:0] xa; assign xa = a >> 4;\n\
        wire [3:0] xb; assign xb = a << 5;\n\
-       initial begin a = 4'd0; b = 4'd0; end\n\
+       wire signed [3:0] y1; assign y1 = sa ^ sb;\n\
+       wire signed [3:0] y2; assign y2 = sa & sb;\n\
+       wire signed [3:0] y3; assign y3 = ~sa;\n\
+       wire signed [3:0] y4; assign y4 = sa + sb;\n\
+       wire signed [3:0] y5; assign y5 = sa - sb;\n\
+       wire signed [3:0] y6; assign y6 = sa << 1;\n\
+       wire signed [3:0] y7; assign y7 = sa >> 1;\n\
+       wire signed [3:0] y8; assign y8 = sa >>> 1;\n\
+       wire c1; assign c1 = a < b;\n\
+       wire c2; assign c2 = a <= b;\n\
+       wire c3; assign c3 = a > b;\n\
+       wire c4; assign c4 = a >= b;\n\
+       wire c5; assign c5 = a == b;\n\
+       wire c6; assign c6 = a != b;\n\
+       wire d1; assign d1 = sa < sb;\n\
+       wire d2; assign d2 = sa <= sb;\n\
+       wire d3; assign d3 = sa > sb;\n\
+       wire d4; assign d4 = sa >= sb;\n\
+       wire d5; assign d5 = sa == sb;\n\
+       wire d6; assign d6 = sa != sb;\n\
+       wire e1; assign e1 = (a + b) < (a ^ b);\n\
+       wire e2; assign e2 = (a & b) <= (a | b);\n\
+       wire e3; assign e3 = (~a) > (b >> 1);\n\
+       wire e4; assign e4 = (a << 1) == (b << 1);\n\
+       wire e5; assign e5 = (sa + sb) < (sa - sb);\n\
+       wire e6; assign e6 = (sa ^ sb) != (~sa);\n\
+       initial begin a = 4'd0; b = 4'd0; sa = 4'sd0; sb = 4'sd0; end\n\
        endmodule\n";
     let ir = build(src);
     let wt = WidthTable::build(&ir, &crate::FuncTable::new());
     let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
-    // `a` and `b` by SHAPE, not name (names are a sidecar): the first cont
-    // assign is `x1 = a ^ b`, so its two Signal operands ARE the two regs.
-    let (na, nb) = match ir.exprs.get(ir.cont_assigns[0].rhs as usize) {
-        Some(sim_ir::Expr::Binary { lhs, rhs, .. }) => {
-            let sig = |eid: u32| match ir.exprs.get(eid as usize) {
-                Some(sim_ir::Expr::Signal { net, .. }) => *net,
-                other => panic!("op battery shape moved: {other:?}"),
-            };
-            (sig(*lhs), sig(*rhs))
-        }
+    // The four stimulus regs by SHAPE: the first assign is `a ^ b`, the first
+    // signed one is `sa ^ sb` (names are a sidecar, shapes are the IR).
+    let sig = |eid: u32| match ir.exprs.get(eid as usize) {
+        Some(sim_ir::Expr::Signal { net, .. }) => *net,
         other => panic!("op battery shape moved: {other:?}"),
     };
-    let progs: Vec<crate::native::wprog::WProg> = ir
-        .cont_assigns
-        .iter()
-        .map(|ca| {
-            crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, 4, false)
-                .expect("every op battery expr must be ADMITTED — the set shrank")
-        })
-        .collect();
-    assert_eq!(progs.len(), 11, "op battery coverage moved");
+    let ops2 = |ca: &sim_ir::ContAssign| match ir.exprs.get(ca.rhs as usize) {
+        Some(sim_ir::Expr::Binary { lhs, rhs, .. }) => (sig(*lhs), sig(*rhs)),
+        other => panic!("op battery shape moved: {other:?}"),
+    };
+    let (na, nb) = ops2(&ir.cont_assigns[0]);
+    let (nsa, nsb) = ops2(&ir.cont_assigns[11]);
+    let mut progs = Vec::new();
+    let mut declined = 0usize;
+    for ca in &ir.cont_assigns {
+        let sw = wt.get(ca.rhs);
+        match crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, sw.width, sw.signed) {
+            Some(p) => progs.push((ca.rhs, sw, p)),
+            None => declined += 1,
+        }
+    }
+    assert_eq!(progs.len(), 36, "op battery coverage moved");
+    // COMPOUND comparison operands specifically: the per-op masks this slice
+    // introduced exist because a program can hold two widths at once, and the
+    // soundness review measured that EVERY comparison operand in the whole
+    // sim-engine suite was a single `Load`/`Const` — so rewriting the operand
+    // masks back to slice 1's single program mask survived the entire suite.
+    // A comparison whose operands are computed is the only shape that can see
+    // the difference; these rows are that shape.
+    assert!(
+        progs.iter().filter(|(_, _, p)| p.op_count() > 3).count() >= 6,
+        "no compound-operand comparison left — the per-op masks lose their teeth"
+    );
+    assert_eq!(
+        declined, 1,
+        "exactly one row must DECLINE — `sa >>> 1` is the one shift whose bits \
+         depend on the sign (arithmetic fill), and a battery where everything \
+         admits cannot show that the decline still happens"
+    );
     let rng = crate::state::RngCells::default();
     let mut scratch = Vec::new();
     let set = |arena: &mut NetArena, net: u32, val: u64, unk: u64| {
@@ -1620,19 +1675,23 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             let (bv, bu) = (pb & 0xF, pb >> 4);
             set(&mut arena, na, av, au);
             set(&mut arena, nb, bv, bu);
-            for (i, ca) in ir.cont_assigns.iter().enumerate() {
-                let w = progs[i].run(&arena.buf, &mut scratch);
-                let generic = eval_with(&ir, &wt, &rng, &arena, ca.rhs, 4, false);
+            set(&mut arena, nsa, av, au);
+            set(&mut arena, nsb, bv, bu);
+            for (rhs, sw, prog) in &progs {
+                let w = prog.run(&arena.buf, &mut scratch);
+                let generic = eval_with(&ir, &wt, &rng, &arena, *rhs, sw.width, sw.signed);
                 assert_eq!(
                     (w.val, w.unk),
                     (generic.val[0], generic.unk[0]),
-                    "op {i}: a=({av:#x},{au:#x}) b=({bv:#x},{bu:#x})"
+                    "rhs {rhs} ({}b signed={}): a=({av:#x},{au:#x}) b=({bv:#x},{bu:#x})",
+                    sw.width,
+                    sw.signed
                 );
                 compared += 1;
             }
         }
     }
-    assert_eq!(compared, 256 * 256 * 11);
+    assert_eq!(compared, 256 * 256 * 36);
 }
 
 /// The corpus + a keccak-shaped design, swept: every pure expression that the
@@ -1698,8 +1757,79 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
         }
     }
     assert_eq!(
-        admitted_total, 2255,
+        admitted_total, 7575,
         "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
          the admission or the corpus silently shrank)"
+    );
+}
+
+/// CENSUS: which assignment right-hand sides the W-compiler admits, and what
+/// the declined ones are, for the tier-3 hot design. A profile says where time
+/// goes; this says which shapes are still on the generic path and why.
+///
+/// The numbers are ASSERTED, not printed. The first version only printed them
+/// with `assert!(admitted > 0)` under a doc claiming to be "a measurement
+/// pinned as a test" — the soundness review's word for that is the right one:
+/// it was not a pin, and any admission change was invisible to it. It also
+/// carried a "bench/ may be absent" skip, which is false for this path —
+/// `.gitignore` un-ignores `/bench/keccak/` and the file is tracked.
+#[test]
+fn s2_admission_census_on_the_hot_design() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../bench/keccak/keccak_f_flat.sv"
+    ))
+    .expect("bench/keccak is the committed first-party bench (see .gitignore)");
+    let ir = build(&src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+    let mut admitted = 0usize;
+    let mut declined: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    let mut visit = |lhs: &sim_ir::Lvalue, rhs: u32| {
+        let lw = arena.lvalue_width(&ir, lhs);
+        let sw = wt.get(rhs);
+        let w = lw.max(sw.width);
+        if crate::native::wprog::compile(&ir, &wt, &arena, rhs, w, sw.signed).is_some() {
+            admitted += 1;
+        } else {
+            let kind = match ir.exprs.get(rhs as usize) {
+                Some(sim_ir::Expr::Signal { word: Some(_), .. }) => "signal[dynamic-or-wide]",
+                Some(sim_ir::Expr::Signal { .. }) => "signal[whole]",
+                Some(sim_ir::Expr::Const { .. }) => "const",
+                Some(sim_ir::Expr::Binary { .. }) => "binary",
+                Some(sim_ir::Expr::Unary { .. }) => "unary",
+                Some(sim_ir::Expr::Select { .. }) => "select",
+                Some(sim_ir::Expr::Concat { .. }) => "concat",
+                Some(sim_ir::Expr::Ternary { .. }) => "ternary",
+                _ => "other",
+            };
+            *declined.entry(kind).or_default() += 1;
+        }
+    };
+    // `blocks[..].stmts` holds STATEMENT IDS into the flat `ir.stmts` arena.
+    for st in &ir.stmts {
+        match st {
+            sim_ir::Stmt::BlockingAssign { lhs, rhs, .. }
+            | sim_ir::Stmt::NonblockingAssign { lhs, rhs, .. } => visit(lhs, *rhs),
+            _ => {}
+        }
+    }
+    // Pinned. A DROP in `admitted` means the admission narrowed; a rise means
+    // it widened — either is a deliberate act that re-pins this line.
+    let declined_total: usize = declined.values().sum();
+    assert_eq!(
+        (admitted, declined_total),
+        (129, 3),
+        "admission census moved: {declined:?}"
+    );
+    assert_eq!(
+        declined
+            .get("signal[dynamic-or-wide]")
+            .copied()
+            .unwrap_or(0),
+        2,
+        "the two dynamic-index array reads are the hot shapes still on the \
+         generic path — the next slice's target: {declined:?}"
     );
 }

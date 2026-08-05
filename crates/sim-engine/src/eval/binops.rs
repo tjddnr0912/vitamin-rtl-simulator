@@ -221,79 +221,94 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     }
 
     pub(crate) fn relational(&self, op: BinOp, l: &Value, r: &Value) -> Value {
-        if l.is_real || r.is_real {
-            let a = l.to_f64().unwrap_or(0.0);
-            let b = r.to_f64().unwrap_or(0.0);
-            let bit = match (op, a.partial_cmp(&b)) {
-                // partial_cmp is None on NaN → all ordered comparisons false (IEEE).
-                (_, None) => false,
-                (BinOp::Lt, Some(o)) => o == std::cmp::Ordering::Less,
-                (BinOp::Le, Some(o)) => o != std::cmp::Ordering::Greater,
-                (BinOp::Gt, Some(o)) => o == std::cmp::Ordering::Greater,
-                (BinOp::Ge, Some(o)) => o != std::cmp::Ordering::Less,
-                _ => unreachable!("relational only handles Lt/Le/Gt/Ge"),
-            };
-            return Value::logic(bit);
-        }
-        if l.has_xz() || r.has_xz() {
-            return Value::x1();
-        }
-        // Exact word-wise compare at ANY width (no 64/128-bit lane): extend both
-        // operands to the common width (§4.5: sign-extend only when BOTH signed),
-        // then compare. For equal-width same-sign two's-complement values the
-        // plain lexicographic word order IS the numeric order; differing sign
-        // bits decide directly. Fixes the silent low-word truncation (P0-1).
-        use std::cmp::Ordering::*;
-        let w = l.width.max(r.width).max(1);
-        let both_signed = l.signed && r.signed;
-        let le = l.clone().resize_keep_sign(w, both_signed);
-        let re = r.clone().resize_keep_sign(w, both_signed);
-        let cmp_words = |a: &Value, b: &Value| {
-            let n = a.val.len().max(b.val.len());
-            for k in (0..n).rev() {
-                let av = a.val.get(k).copied().unwrap_or(0);
-                let bv = b.val.get(k).copied().unwrap_or(0);
-                match av.cmp(&bv) {
-                    Equal => continue,
-                    o => return o,
-                }
-            }
-            Equal
-        };
-        let ord = if both_signed {
-            match (le.get_vu(w - 1).0, re.get_vu(w - 1).0) {
-                (1, 0) => Less,
-                (0, 1) => Greater,
-                _ => cmp_words(&le, &re),
-            }
-        } else {
-            cmp_words(&le, &re)
-        };
-        let b = matches!(
-            (op, ord),
-            (BinOp::Lt, Less)
-                | (BinOp::Le, Less)
-                | (BinOp::Le, Equal)
-                | (BinOp::Gt, Greater)
-                | (BinOp::Ge, Greater)
-                | (BinOp::Ge, Equal)
-        );
-        Value::logic(b)
+        relational(op, l, r)
     }
 
-    /// `==` / `!=`: a bit pair that is BOTH known and differing decides the
-    /// comparison (definite inequality → `==`=0 / `!=`=1) even when OTHER bits
-    /// are x/z; only an AMBIGUOUS compare (some x/z, no definite mismatch) is X
-    /// (IEEE §11.4.5 "if the relation is ambiguous" — iverilog-pinned:
-    /// `4'b1x00 == 4'b0000` is 0, not x).
-    ///
-    /// Width unification follows IEEE 1364-2001 §4.5: the comparison is signed
-    /// ONLY when BOTH operands are signed; if either is unsigned both operands
-    /// zero-extend. Using `resize` (which honors each operand's *own* sign) would
-    /// sign-extend a lone signed operand in an unsigned context and report a false
-    /// match (e.g. `4'sb1111 == 8'hFF` → wrong `1`). `resize_keep_sign` clears the
-    /// sign when the context is unsigned, so we zero-extend correctly.
     pub(crate) fn log_eq(&self, op: BinOp, l: &Value, r: &Value) -> Value {
+        log_eq(op, l, r)
+    }
+}
+
+/// The ordered comparisons, as a FREE function so the tier-3 width-specialized
+/// evaluator calls the same spelling the generic evaluator does (§4.5.302's
+/// rule read forwards: specialize the EVALUATION, never the semantics). It
+/// never used `self`; the method above delegates, so every prior call site is
+/// byte-identical.
+pub(crate) fn relational(op: BinOp, l: &Value, r: &Value) -> Value {
+    if l.is_real || r.is_real {
+        let a = l.to_f64().unwrap_or(0.0);
+        let b = r.to_f64().unwrap_or(0.0);
+        let bit = match (op, a.partial_cmp(&b)) {
+            // partial_cmp is None on NaN → all ordered comparisons false (IEEE).
+            (_, None) => false,
+            (BinOp::Lt, Some(o)) => o == std::cmp::Ordering::Less,
+            (BinOp::Le, Some(o)) => o != std::cmp::Ordering::Greater,
+            (BinOp::Gt, Some(o)) => o == std::cmp::Ordering::Greater,
+            (BinOp::Ge, Some(o)) => o != std::cmp::Ordering::Less,
+            _ => unreachable!("relational only handles Lt/Le/Gt/Ge"),
+        };
+        return Value::logic(bit);
+    }
+    if l.has_xz() || r.has_xz() {
+        return Value::x1();
+    }
+    // Exact word-wise compare at ANY width (no 64/128-bit lane): extend both
+    // operands to the common width (§4.5: sign-extend only when BOTH signed),
+    // then compare. For equal-width same-sign two's-complement values the
+    // plain lexicographic word order IS the numeric order; differing sign
+    // bits decide directly. Fixes the silent low-word truncation (P0-1).
+    use std::cmp::Ordering::*;
+    let w = l.width.max(r.width).max(1);
+    let both_signed = l.signed && r.signed;
+    let le = l.clone().resize_keep_sign(w, both_signed);
+    let re = r.clone().resize_keep_sign(w, both_signed);
+    let cmp_words = |a: &Value, b: &Value| {
+        let n = a.val.len().max(b.val.len());
+        for k in (0..n).rev() {
+            let av = a.val.get(k).copied().unwrap_or(0);
+            let bv = b.val.get(k).copied().unwrap_or(0);
+            match av.cmp(&bv) {
+                Equal => continue,
+                o => return o,
+            }
+        }
+        Equal
+    };
+    let ord = if both_signed {
+        match (le.get_vu(w - 1).0, re.get_vu(w - 1).0) {
+            (1, 0) => Less,
+            (0, 1) => Greater,
+            _ => cmp_words(&le, &re),
+        }
+    } else {
+        cmp_words(&le, &re)
+    };
+    let b = matches!(
+        (op, ord),
+        (BinOp::Lt, Less)
+            | (BinOp::Le, Less)
+            | (BinOp::Le, Equal)
+            | (BinOp::Gt, Greater)
+            | (BinOp::Ge, Greater)
+            | (BinOp::Ge, Equal)
+    );
+    Value::logic(b)
+}
+
+/// `==` / `!=`: a bit pair that is BOTH known and differing decides the
+/// comparison (definite inequality → `==`=0 / `!=`=1) even when OTHER bits
+/// are x/z; only an AMBIGUOUS compare (some x/z, no definite mismatch) is X
+/// (IEEE §11.4.5 "if the relation is ambiguous" — iverilog-pinned:
+/// `4'b1x00 == 4'b0000` is 0, not x).
+///
+/// Width unification follows IEEE 1364-2001 §4.5: the comparison is signed
+/// ONLY when BOTH operands are signed; if either is unsigned both operands
+/// zero-extend. Using `resize` (which honors each operand's *own* sign) would
+/// sign-extend a lone signed operand in an unsigned context and report a false
+/// match (e.g. `4'sb1111 == 8'hFF` → wrong `1`). `resize_keep_sign` clears the
+/// sign when the context is unsigned, so we zero-extend correctly.
+pub(crate) fn log_eq(op: BinOp, l: &Value, r: &Value) -> Value {
+    {
         if l.is_real || r.is_real {
             let a = l.to_f64().unwrap_or(0.0);
             let b = r.to_f64().unwrap_or(0.0);
@@ -330,7 +345,9 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         }
         Value::logic(op == BinOp::Eq)
     }
+}
 
+impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     /// `===` / `!==`: exact 4-state per-bit compare, never X. Width unification
     /// uses the same context-signedness rule as `==` (zero-extend unless BOTH
     /// signed) so a mixed-sign `===` matches IEEE numeric extension.

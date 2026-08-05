@@ -13,7 +13,7 @@ use sim_ir::{BinOp, ConstRepr, Expr, SelKind, SimIr, SysFuncId, UnOp};
 use crate::value::{and_w, low_mask, not1, not_w, nwords, or_w, xnor_w, xor_w, Value};
 
 // ---- split parts (mechanical refactor) ----
-mod binops;
+pub(crate) mod binops;
 mod eval_core;
 mod mw_tail;
 mod sysfunc;

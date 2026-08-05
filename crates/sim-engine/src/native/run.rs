@@ -637,7 +637,15 @@ fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNe
                 n == *net && crate::sched::edge_fires_slot(mask, *kind) && wr != w.proc
             }),
             // `wait(e)`: re-check the predicate against the POST-change values.
-            (sim_ir::WaitCause::Expr { expr }, _) => k.ctx().truthy(*expr),
+            //
+            // Through `k_truthy`, NOT `ctx().truthy` — one `wait(e)` predicate,
+            // one spelling. The body walk's already-true entry check
+            // (`body.rs`) has always used `k_truthy`, and when S2 slice 2 gave
+            // that method a width-specialized fast path this line became the
+            // SECOND way to answer the same question. They agree today (the
+            // differential measured six wait predicates, comparisons included),
+            // which is exactly when a divergence surface is cheapest to close.
+            (sim_ir::WaitCause::Expr { expr }, _) => crate::exec::Kernel::k_truthy(k, *expr),
             // A static `Level` (arm=None) cannot be here — those live in the
             // wake table — and `Named`/`Fork` are refused by `body_is_walkable`.
             _ => false,
