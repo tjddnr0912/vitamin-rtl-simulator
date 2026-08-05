@@ -864,7 +864,7 @@ fn s1d4a_control_and_vm_surface_agrees_over_corpus() {
     // let half the walk disappear silently.
     assert_eq!(
         (expr, spec),
-        (5382, 1386),
+        (5466, 1386),
         "control-surface coverage moved — re-pin deliberately"
     );
 }
@@ -2727,8 +2727,14 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
     // fast count of zero would make every assertion above vacuous.
     assert_eq!(
         (fast, declined),
-        (2156, 12),
-        "specialized-offset coverage moved — the DECLINES are load-bearing too \
+        (2112, 56),
+        "specialized-offset coverage moved. ⚠️ 4304 → (2112, 56) at §4.5.308: \
+         the declared-range fix seals index expressions in a `Concat`, which the \
+         W compiler does not admit, so 44 more lvalues per state take the generic \
+         resolver. Correctness is unaffected and the hot benchmarks are all \
+         zero-LSB descending (untouched fast path, keccak byte-identical and \
+         within noise) — but a `Concat` arm in `wprog` would win them back. \
+         The DECLINES are load-bearing too \
          (a >64-bit index, a part-select index and a THREE-chunk concat lvalue, \
          three per state), so a drop to zero there means the decline arm \
          stopped being exercised"

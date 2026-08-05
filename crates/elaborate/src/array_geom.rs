@@ -6,9 +6,12 @@ impl Elaborator<'_> {
     /// Per-dim bounds-guard conjunct for `idx ∈ [lo, lo+size-1]`, shared by both
     /// `flatten_word` twins so the rule exists once.
     ///
-    /// For `lo >= 0` this is the long-standing form verbatim — `idx >= lo && idx <= hi`
-    /// on the RAW index with UNSIGNED 32-bit constants — so every existing design's
-    /// golden IR is byte-for-byte unchanged.
+    /// For `lo >= 0` this is the long-standing form — `idx >= lo && idx <= hi`
+    /// with UNSIGNED 32-bit constants. ⚠️ It is no longer on the RAW index and
+    /// no longer byte-identical: §4.5.308 seals the index at its own width
+    /// before this sees it (a `Concat`), because widening it into these 32-bit
+    /// bounds re-evaluated a context-determined operator inside it. 14 of 144
+    /// corpus designs changed IR bytes as a result; none changed output.
     ///
     /// For `lo < 0` that form would be wrong twice over: an unsigned `hi`/`lo` constant
     /// mis-reads the bound, and making the constants signed instead would make the
@@ -109,6 +112,12 @@ impl Elaborator<'_> {
         let mut acc: Option<u32> = None;
         for (k, &i_eid) in idx_eids.iter().enumerate() {
             let (lo, size) = extents[k];
+            // SEAL — see `seal_index_unsigned`. This funnel serves the
+            // HIERARCHICAL sites (`u.mem[~i]`); the AST twin below serves the
+            // local ones. A patch that reached only the twin left the two
+            // spellings of one geometry disagreeing about `mem[~i]` — local
+            // right, hierarchical wrong — which the soundness review measured.
+            let i_eid = self.seal_index_unsigned(i_eid);
             let asc = ascending.get(k).copied().unwrap_or(false);
             // A negative-`lo` dim guards on the coordinate, so it must be built first;
             // for every other dim the guard comes first, exactly as before (push order
@@ -476,6 +485,10 @@ impl Elaborator<'_> {
             // element index both funnel here. Gating only the flat-vector
             // bit-select left `p[0][R]` reading the wrong nibble at exit 0.
             let i_eid = self.lower_index_expr(idx);
+            // SEAL — the AST twin of the eid-taking `flatten_word_eids` above;
+            // see the note there. Both funnels must do it or the two spellings
+            // of one geometry disagree about `mem[~i]`.
+            let i_eid = self.seal_index_unsigned(i_eid);
             let asc = ascending.get(k).copied().unwrap_or(false);
             // `idx >= lo && idx <= hi` on the RAW index. A negative or wrapped index
             // always fails one side in either signedness reading (bounds < 2^24 «

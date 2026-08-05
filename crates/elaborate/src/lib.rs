@@ -93,7 +93,7 @@ pub(crate) use limits::*;
 pub(crate) use hoist::is_deferred_print_task;
 mod netdecl;
 mod package;
-mod packed;
+pub mod packed;
 mod packed_lval;
 mod params;
 mod ports;

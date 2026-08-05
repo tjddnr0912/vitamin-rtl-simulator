@@ -499,8 +499,10 @@ fn probe_b_xz_oob_overflow_index_reads() {
         pure.len(),
         states.len()
     );
-    // 2 fills × 27 states × (14 pure exprs × 2 ctxs + 5 direct reads) = 1782.
-    assert_eq!(compared, 1782, "probe B coverage moved");
+    // 2 fills × 27 states × (24 pure exprs × 2 ctxs + 5 direct reads) = 2862.
+    // (The `14` here was stale: the count was re-pinned at §4.5.308 without
+    // re-deriving it, and 2·27·(14·2+5) is 1782, not 2862. Measured 24.)
+    assert_eq!(compared, 2862, "probe B coverage moved");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -321,7 +321,7 @@ fn arena_reader_matches_engine_reader_under_shared_eval() {
         }
     }
     assert_eq!(
-        compared, 17940,
+        compared, 18220,
         "the differential's coverage moved — re-pin deliberately (a DROP means \
          the purity filter or the corpus silently shrank)"
     );
@@ -1757,7 +1757,7 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
         }
     }
     assert_eq!(
-        admitted_total, 7575,
+        admitted_total, 7645,
         "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
          the admission or the corpus silently shrank)"
     );
@@ -1831,5 +1831,101 @@ fn s2_admission_census_on_the_hot_design() {
         2,
         "the two dynamic-index array reads are the hot shapes still on the \
          generic path — the next slice's target: {declined:?}"
+    );
+}
+
+/// The declared-range normalization's UNSIGNED PROOF is a subset of the
+/// canonical self-signedness (§4.5.308).
+///
+/// `elaborate::packed::expr_provably_unsigned` decides whether an index
+/// expression may be sealed into a signed domain. A wrong `true` there is a
+/// silent-wrong: a genuinely signed index would be reinterpreted as a large
+/// positive and write the wrong bit. The canonical rule is `WidthTable`'s
+/// self-signedness, which lives in this crate.
+///
+/// ⚠️ The test's REACH is the claim. The first version built the table without
+/// `patch_class_fields` and swept a corpus containing no `**`, no `class`, no
+/// `real` and no narrow signed types — so it could not have failed on any of
+/// the three arms that were actually wrong. It now applies the class-field
+/// patch and carries designs for every one of them, and the free function is
+/// the WHOLE predicate (the class map is a parameter), so what is asserted
+/// here is what the seal actually calls.
+#[test]
+fn s2_provably_unsigned_is_a_subset_of_the_canonical_self_sign() {
+    let mut checked = 0usize;
+    let mut proved = 0usize;
+    let extra = "module top;\n\
+       reg [4:0] u5; reg signed [4:0] s5; integer k; reg [31:0] v;\n\
+       reg [33:2] nz; reg [0:31] asc; byte bb; shortint sh; real rr;\n\
+       reg signed [31:0] s32; reg [31:0] u32;\n\
+       initial begin\n\
+         u5 = 5'd3; s5 = -3; k = -1; v = 0; bb = -8'sd5; sh = -16'sd5; rr = 2.0;\n\
+         s32 = -32'sd2; u32 = 32'd3;\n\
+         v[u5] = 1'b1; v[~u5] = 1'b1; v[u5 + 5'd2] = 1'b1; v[u5[2:0]] = 1'b1;\n\
+         v[s5] = 1'b1; v[~s5] = 1'b1; v[s5 - 5'sd1] = 1'b1; v[$signed(u5)] = 1'b1;\n\
+         v[$unsigned(s5)] = 1'b1; v[k] = 1'b1; v[u5 < s5] = 1'b1; v[|u5] = 1'b1;\n\
+         v[u5 ? u5 : s5] = 1'b1; v[{1'b0, u5}] = 1'b1; v[u5 >> 1] = 1'b1;\n\
+         v[s5 >>> 1] = 1'b1; v[$clog2(u5)] = 1'b1; v[-1] = 1'b1; v[3] = 1'b1;\n\
+         v[s32 ** u32] = 1'b1; v[u32 ** u32] = 1'b1; v[bb] = 1'b1; v[sh] = 1'b1;\n\
+         v[$rtoi(rr)] = 1'b1;\n\
+         nz[u5 +: 2] = 2'b11; nz[s5 +: 2] = 2'b11;\n\
+         asc[~u5] = 1'b1; asc[k] = 1'b1;\n\
+       end\n\
+     endmodule\n";
+    let cls = "class C; int si; bit [7:0] bu; endclass\n\
+       module top;\n\
+         C c; reg [-2:-33] dn;\n\
+         initial begin\n\
+           c = new(); c.si = -5; c.bu = 8'd5; dn = 0;\n\
+           dn[c.si] = 1'b1; dn[~c.si] = 1'b1; dn[c.si + 32'sd0] = 1'b1;\n\
+           dn[c.bu] = 1'b1; dn[~c.bu] = 1'b1;\n\
+         end\n\
+       endmodule\n";
+    let mut srcs: Vec<String> = corpus(0x5EED_F00D, 72).into_iter().map(|d| d.src).collect();
+    srcs.push(extra.to_string());
+    srcs.push(cls.to_string());
+    for src in &srcs {
+        let (ir, opts) = build_with_opts(src);
+        // The REAL function table, not an empty one: `Expr::Call`'s canonical
+        // width and sign come from it, so an empty table would call every call
+        // `{1, unsigned}` and a future `Call` arm in the predicate would be
+        // compared against the wrong canon. Vacuous today (there is no `Call`
+        // arm) and cheap to get right now.
+        let mut wt = WidthTable::build(&ir, &opts.func_table);
+        // The canonical table is only canonical AFTER this patch — a class
+        // field's width and sign come from the sidecar, not from its handle
+        // net, and omitting it is what made this test blind to the class arm.
+        wt.patch_class_fields(&opts.class_field_widths);
+        for eid in 0..ir.exprs.len() as u32 {
+            checked += 1;
+            if elaborate::packed::expr_provably_unsigned(
+                &ir.exprs,
+                &ir.consts,
+                &ir.nets,
+                &opts.class_field_widths,
+                eid,
+            ) {
+                proved += 1;
+                assert!(
+                    !wt.get(eid).signed,
+                    "expr {eid} proved unsigned but the canonical table says signed: {:?}",
+                    ir.exprs[eid as usize]
+                );
+            }
+        }
+    }
+    // Anti-vacuity: the predicate must actually fire, and must NOT fire on
+    // everything (a constant `true` would pass the assertion above while
+    // making the seal unsound for every signed index).
+    assert!(
+        proved > 0 && proved < checked,
+        "proved {proved} of {checked}"
+    );
+    assert_eq!(
+        (checked, proved),
+        (2019, 951),
+        "the proof's coverage moved — re-pin deliberately (a DROP means the \
+         predicate narrowed; a RISE means it widened, which is the direction \
+         that can be unsound)"
     );
 }

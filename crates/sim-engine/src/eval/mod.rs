@@ -127,18 +127,24 @@ pub(crate) fn offset_of_index_value(v: &crate::value::Value) -> u32 {
     // array-word chunks alike. Signed-aware: an unsigned 0xFFFFFFFF is the
     // huge 4294967295 (drop), NOT a wrapped −1 (which would partial-write).
     //
-    // ⚠️ The "(iverilog parity)" above is TRUE for x/z and for the negative
-    // and huge-but-i32 cases, and FALSE beyond i32 — measured, S2 slice 3:
-    // `mem[64'h1_0000_0000]` on a `[0:3]` array is DROPPED here and TRUNCATED
-    // to `mem[0]` by iverilog 13 (its index lane is 32 bits). IEEE 1364 §5.2.1
-    // says an out-of-range index is ignored on a write and x on a read, with
-    // no truncation step, so this is a vita-ahead divergence rather than a gap
-    // — pinned by a vita-internal anchor because the oracle is the wrong one
-    // here (`s2_xz_index_is_dropped_matching_the_oracle`, row F). Independently
-    // re-measured by review: iverilog truncates a beyond-i32 ARRAY-WORD index
-    // (`mem[64'h1_0000_0002]` lands on `mem[2]`) but does NOT truncate a
-    // beyond-i32 BIT offset, so "its index lane is 32 bits" scopes to the array
-    // word.
+    // ⚠️ The "(iverilog parity)" above is TRUE for x/z and for the negative and
+    // huge-but-i32 cases, and FALSE beyond i32. iverilog 13 has ONE rule with
+    // three paths, all measured: a RUNTIME array-word index is its low 32 bits
+    // read as `i32` (`reg [63:0] big = 64'h1_0000_0002; mem[big]` writes
+    // `mem[2]`, and `0xFFFF_FFFD` writes `mem[-3]` on a `[-3:2]` array); a
+    // CONSTANT array-word index keeps its true value and therefore drops; and a
+    // packed BIT offset keeps its true value too. IEEE 1364 §5.2.1 has no
+    // truncation or reinterpretation step — an out-of-range index is ignored on
+    // a write and x on a read — so vita answers by VALUE on all three paths.
+    // That MATCHES iverilog on the constant and packed paths and diverges only
+    // in the runtime array-word cell, where vita is ahead of the oracle.
+    //
+    // Both halves are pinned as decisions rather than parity:
+    // `native/run_tests.rs::s2_xz_index_is_dropped_matching_the_oracle` row F
+    // (zero-based array, 64-bit runtime index — the truncation cell) and
+    // `cli/tests/decl_range_norm.rs::one_bit_pattern_three_oracle_answers_…`
+    // (negative-base array, 32-bit unsigned runtime index, plus the packed and
+    // constant cells), which carries the full measured table.
     //
     // The `has_xz` early return is a FAST PATH, not a semantic guard:
     // `to_i128_signed` goes through `to_u64`/`to_u128`, which already return
