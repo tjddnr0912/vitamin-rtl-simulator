@@ -632,11 +632,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         // fall-back the new rows caused — a G2 rail whose entire job is to
         // explain `backend != backend_requested`, answering "nothing refused
         // this". Both adversarial reviews found it independently.
-        // The multi-driver predicate is the SCHEDULER's, asked through the same
-        // free function `Scheduler::new` uses — this verdict has to be taken
-        // while `opts` is whole, which is before any scheduler exists.
-        let md = crate::sched::multi_driver_groups(ir).len();
-        native_eligibility.refused = native::run::executor_rows(ir, &opts, md).err();
+        native_eligibility.refused = native::run::executor_rows(ir, &opts).err();
     }
     let native_refusal = native_eligibility.refused;
     let effective_backend = match opts.backend {

@@ -398,6 +398,39 @@ pub(crate) fn multi_driver_groups(
     whole
 }
 
+/// 4-state resolution of ONE multi-driven group from its drivers' already-
+/// evaluated values: the accumulator starts at all-Z (the identity for all
+/// three resolutions — a driver at z yields) and each driver folds in through
+/// the kind's table. kind 0=WIRE (equal keeps, conflict→x), 1=WAND, 2=WOR.
+///
+/// A free function shared by BOTH settle loops (engine and tier-3), extracted
+/// under §4.5.302's rule: the identity, the fold order, and the kind dispatch
+/// are exactly the semantics two spellings would quietly disagree on, while the
+/// halves that touch a store (evaluating each driver's RHS, resolving the LHS
+/// offsets, the write) stay with their backend. The fold emits no diagnostics,
+/// so evaluating all drivers BEFORE folding — which sharing requires — is
+/// observationally the order the engine always had.
+pub(crate) fn resolve_md_group(
+    kind: u8,
+    net_w: u32,
+    drivers: impl IntoIterator<Item = Value>,
+) -> Value {
+    let mut acc = Value::zeros(net_w, false);
+    for w in 0..acc.val.len() {
+        acc.val[w] = u64::MAX;
+        acc.unk[w] = u64::MAX;
+    }
+    acc.mask_top();
+    for v in drivers {
+        match kind {
+            1 => resolve_wand_into(&mut acc, &v),
+            2 => resolve_wor_into(&mut acc, &v),
+            _ => resolve_wire_into(&mut acc, &v),
+        }
+    }
+    acc
+}
+
 impl<'a, 'ir> Scheduler<'a, 'ir> {
     pub fn new(
         st: &'a mut SimState<'ir>,
@@ -661,25 +694,18 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             for mi in 0..self.md_nets.len() {
                 let net = self.md_nets[mi].0;
                 let net_w = self.st.nets[net as usize].width;
-                // Accumulator starts at all-Z (the wire-resolution identity).
-                let mut acc = Value::zeros(net_w, false);
-                for w in 0..acc.val.len() {
-                    acc.val[w] = u64::MAX;
-                    acc.unk[w] = u64::MAX;
-                }
-                acc.mask_top();
                 let cis = self.md_nets[mi].1.clone();
                 let kind = self.md_nets[mi].2;
+                // Evaluate every driver first, fold second — the fold is the
+                // shared `resolve_md_group` and emits nothing, so the
+                // diagnostic stream is the interleaved loop's.
+                let mut vals = Vec::with_capacity(cis.len());
                 for ci in cis {
                     let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                     let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-                    let v = self.eval_cont_assign(ci, &lhs, ca_rhs);
-                    match kind {
-                        1 => resolve_wand_into(&mut acc, &v),
-                        2 => resolve_wor_into(&mut acc, &v),
-                        _ => resolve_wire_into(&mut acc, &v),
-                    }
+                    vals.push(self.eval_cont_assign(ci, &lhs, ca_rhs));
                 }
+                let acc = resolve_md_group(kind, net_w, vals);
                 let lhs = self.st.ir.cont_assigns[self.md_nets[mi].1[0]].lhs.clone();
                 let offs = self.resolve_lvalue_offsets(&lhs);
                 changed |= self.st.write_lvalue(&lhs, acc, &offs);
@@ -970,6 +996,23 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// Read by the tier-3 settle so the two visit the same set.
     pub(crate) fn ca_always(&self) -> &[u32] {
         &self.ca_always
+    }
+
+    /// The multi-driven groups `(net, driver cont-assign indices, kind)` this
+    /// scheduler resolves. Read by the tier-3 settle so both loops resolve the
+    /// SAME groups with the same member order — the table is built once in
+    /// `Scheduler::new` from `multi_driver_groups` plus the wired-kind sidecars,
+    /// and a second derivation could classify a design differently.
+    pub(crate) fn md_groups(&self) -> &[(u32, Vec<usize>, u8)] {
+        &self.md_nets
+    }
+
+    /// Whether cont-assign `ci` is a member of a multi-driven group — such a
+    /// driver is written ONCE by the group resolution, never individually.
+    /// Read by the tier-3 settle's per-driver loop for the same skip the
+    /// engine's loop takes.
+    pub(crate) fn ca_is_md(&self, ci: usize) -> bool {
+        self.ca_md[ci]
     }
 
     /// Every pending activation, as `(tick, inactive, proc, block)`.

@@ -72,7 +72,7 @@ impl diag::LogSink for MergedSink {
 /// those rather than letting them pass silently as agreements.
 fn agree(src: &str, name: &str) -> Result<(), &'static str> {
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())?;
+    crate::native::run::runnable(&ir, &opts)?;
 
     // Per-design VCD targets. A design with no `$dumpvars` writes neither file,
     // which the comparison below treats as agreement — the `$dump*` designs are
@@ -1130,13 +1130,177 @@ endmodule
 "#
             .to_string(),
         ),
+        // MULTI-DRIVER (S1d-4d-4). The corpus has ZERO multi-driven or wired
+        // nets (measured), so every group-resolution behaviour needs its own
+        // design. The fold itself is shared code guarded by the oracle anchors
+        // below; these exercise the BACKEND halves — the per-driver skip, the
+        // group write, and everything downstream of it.
+        //
+        // Drivers move at DIFFERENT times, so a resolution that runs only at t0
+        // (or only when a group member is dirty vs. every pass) diverges. The
+        // tri-state enable idiom is the common real-RTL shape.
+        (
+            "md_tristate_drivers_move_over_time",
+            r#"
+module top;
+  wire y;
+  reg en_a, en_b, va, vb;
+  assign y = en_a ? va : 1'bz;
+  assign y = en_b ? vb : 1'bz;
+  always @(y) $display("t=%0t y=%b", $time, y);
+  initial begin
+    en_a = 0; en_b = 0; va = 1; vb = 0;
+    #2 en_a = 1;
+    #2 en_a = 0; en_b = 1;
+    #2 en_b = 0;
+    #2 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The resolved net FEEDS another cont-assign — the group resolution
+        // must be part of the same fixpoint, or `n` lags a delta behind `m`.
+        (
+            "md_net_feeds_a_downstream_assign",
+            r#"
+module top;
+  wire [1:0] m;
+  wire [1:0] n;
+  reg [1:0] a, b;
+  assign m = a;
+  assign m = b;
+  assign n = m ^ 2'b11;
+  initial begin
+    a = 2'b1z; b = 2'bz0;
+    #1 $display("m=%b n=%b", m, n);
+    a = 2'b0z;
+    #1 $display("m=%b n=%b", m, n);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A group driver whose RHS reads OUT OF RANGE: the drivers are
+        // re-evaluated EVERY settle pass (the engine never worklists the group
+        // loop), so the E4002 COUNT is a direct probe of pass-for-pass
+        // equality — a worklisted or once-per-timestep resolution changes the
+        // diagnostic stream even where values agree.
+        (
+            "md_driver_rhs_reads_out_of_range",
+            r#"
+module top;
+  wire [7:0] y;
+  reg [7:0] mem [0:1];
+  reg [7:0] i, b;
+  assign y = mem[i];
+  assign y = b;
+  initial begin
+    mem[0] = 8'hzz; i = 8'd7; b = 8'hzz;
+    #1 $display("y=%h", y);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // An edge on a RESOLVED net must reach an in-body waiter: the group
+        // write lands through the same funnel (dirty + edge accumulation), or
+        // the `@(posedge y)` never fires even though `y`'s value is right.
+        (
+            "md_net_wakes_an_in_body_waiter",
+            r#"
+module top;
+  wire y;
+  reg a, b;
+  assign y = a;
+  assign y = b;
+  initial begin a = 1'bz; b = 1'b0; #2 a = 1'b1; b = 1'bz; #5 $finish; end
+  initial begin
+    @(posedge y) $display("edge at t=%0t", $time);
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // MULTI-WORD (96-bit): the all-Z identity and `mask_top` must hold per
+        // word, not just in word 0.
+        (
+            "md_wide_net_resolves_per_word",
+            r#"
+module top;
+  wire [95:0] y;
+  reg [95:0] a, b;
+  assign y = a;
+  assign y = b;
+  initial begin
+    a = {32'hFFFF0000, 32'hz, 32'h12345678};
+    b = {32'hFFFFzzzz, 32'h0, 32'h12345678};
+    #1 $display("y=%h", y);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // THREE drivers of one net plus a `wand` and `wor` under `$dumpvars`:
+        // the resolved value must land in the VCD from the store point like any
+        // other write (byte-compared by `agree`).
+        (
+            "md_and_wired_nets_under_dumpvars",
+            r#"
+module top;
+  wire [1:0] y;
+  wand w;
+  wor o;
+  reg [1:0] a, b, c;
+  reg p, q;
+  assign y = a;
+  assign y = b;
+  assign y = c;
+  assign w = p;
+  assign w = q;
+  assign o = p;
+  assign o = q;
+  initial begin
+    $dumpfile("md.vcd"); $dumpvars(0, top);
+    a = 2'b1z; b = 2'bz0; c = 2'b1z; p = 1'b1; q = 1'b0;
+    #1 $display("y=%b w=%b o=%b", y, w, o);
+    p = 1'b0;
+    #1 $display("y=%b w=%b o=%b", y, w, o);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // TWO IMPURE DRIVERS in one group: the fold is commutative, so the
+        // driver evaluation ORDER is invisible to every value-only design —
+        // reversing the group loop's iteration survived the whole suite
+        // (soundness-review mutation). `$random` is admitted (pure-eval side
+        // of the RNG, no seed write-back), and with two draws in one group the
+        // order the drivers are evaluated IS the order the draws come out: the
+        // backends agree only if both walk ascending ci.
+        (
+            "md_two_impure_drivers_pin_eval_order",
+            r#"
+module top;
+  wire [3:0] y;
+  assign y = $random;
+  assign y = ~$random;
+  initial begin #1 $display("t=%0t y=%b", $time, y); $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
     ]
 }
 
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 50, "adversarial set shrank");
+    assert_eq!(designs.len(), 57, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -1152,33 +1316,10 @@ fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
 /// wrong run if its row is deleted.
 #[test]
 fn s1d4c2c_each_refusal_row_has_a_design() {
+    // The multi-driven and `wand`/`wor` rows lived here until S1d-4d-4 wired
+    // the group resolution into the settle — those shapes run now, and their
+    // designs moved to the adversarial set and the oracle anchors.
     let cases: Vec<(&str, &str, &str)> = vec![
-        (
-            "multi-driven net",
-            "a multi-driven net (wire resolution)",
-            r#"
-module top;
-  wire [7:0] w;
-  reg [7:0] a, b;
-  assign w = a;
-  assign w = b;
-  initial begin a = 8'hFF; b = 8'h0F; #1 $display("w=%0h", w); $finish; end
-endmodule
-"#,
-        ),
-        (
-            "wired-and net",
-            "a `wand`/`wor` net (wired resolution)",
-            r#"
-module top;
-  wand w;
-  reg a, b;
-  assign w = a;
-  assign w = b;
-  initial begin a = 1'b1; b = 1'b0; #1 $display("w=%0b", w); $finish; end
-endmodule
-"#,
-        ),
         (
             "final block",
             "`final` blocks (the post-loop drain is not restated)",
@@ -1230,7 +1371,7 @@ endmodule
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
         assert_eq!(
-            crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len()),
+            crate::native::run::runnable(&ir, &opts),
             Err(*row),
             "{what}: wrong refusal row"
         );
@@ -1244,7 +1385,7 @@ endmodule
             e.refused
         );
     }
-    assert_eq!(cases.len(), 6, "refusal-row coverage moved");
+    assert_eq!(cases.len(), 4, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit
@@ -1377,8 +1518,7 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
-        .expect("runnable");
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
     let dir = std::env::temp_dir();
     let mut paths = Vec::new();
     for (backend, tag) in [(Backend::Bytecode, "vm"), (Backend::Native, "nat")] {
@@ -1572,12 +1712,161 @@ endmodule
     both_backends_print(src, WANT, "delayed rhs context");
 }
 
+/// The wire-resolution TABLES, pinned to iverilog 13's values (S1d-4d-4).
+///
+/// `resolve_md_group` and the three `resolve_*_into` folds are SHARED between
+/// the two settle loops — the extraction that keeps the backends from
+/// disagreeing also blinds the VM-vs-native differential to the whole fold
+/// (§4.5.302's rule: name the anchor that guards what you share). One design
+/// per kind, each chosen so every distinguishing row of its table appears:
+/// WIRE needs z-yields + equal-keeps + conflict→x, WAND and WOR need the row
+/// where they differ from plain AND/OR (x vs the dominating value) and the row
+/// where 0/1 dominates x.
+#[test]
+fn s1d4d4_wire_resolution_matches_the_oracle() {
+    let src = r#"
+module top;
+  wire [3:0] y;
+  reg [3:0] a, b;
+  assign y = a;
+  assign y = b;
+  initial begin
+    a = 4'bz01z; b = 4'b10zz;
+    #1 $display("t=%0t y=%b", $time, y);
+    a = 4'b0xz1; b = 4'b0z1x;
+    #1 $display("t=%0t y=%b", $time, y);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &["out|t=1 y=101z\n", "out|t=2 y=0x1x\n"];
+    both_backends_print(src, WANT, "wire resolution");
+}
+
+#[test]
+fn s1d4d4_wand_resolution_matches_the_oracle() {
+    let src = r#"
+module top;
+  wand [3:0] y;
+  reg [3:0] a, b;
+  assign y = a;
+  assign y = b;
+  initial begin
+    a = 4'b1100; b = 4'b1010;
+    #1 $display("t=%0t y=%b", $time, y);
+    a = 4'bz1x0; b = 4'b11xz;
+    #1 $display("t=%0t y=%b", $time, y);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &["out|t=1 y=1000\n", "out|t=2 y=11x0\n"];
+    both_backends_print(src, WANT, "wand resolution");
+}
+
+#[test]
+fn s1d4d4_wor_resolution_matches_the_oracle() {
+    let src = r#"
+module top;
+  wor [3:0] y;
+  reg [3:0] a, b;
+  assign y = a;
+  assign y = b;
+  initial begin
+    a = 4'b1100; b = 4'b1010;
+    #1 $display("t=%0t y=%b", $time, y);
+    a = 4'bz1x0; b = 4'b00xz;
+    #1 $display("t=%0t y=%b", $time, y);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &["out|t=1 y=1110\n", "out|t=2 y=01x0\n"];
+    both_backends_print(src, WANT, "wor resolution");
+}
+
+/// THREE drivers through the shared fold: associativity over the group, and
+/// the accumulator identity being all-Z rather than all-0 (an all-0 identity
+/// makes bit 1 come out 0 instead of z here). iverilog 13: `10`.
+#[test]
+fn s1d4d4_three_driver_fold_matches_the_oracle() {
+    let src = r#"
+module top;
+  wire [1:0] y;
+  assign y = 2'b1z;
+  assign y = 2'bz0;
+  assign y = 2'b1z;
+  initial begin #1 $display("t=%0t y=%b", $time, y); $finish; end
+endmodule
+"#;
+    const WANT: &[&str] = &["out|t=1 y=10\n"];
+    both_backends_print(src, WANT, "three-driver fold");
+}
+
+/// The md loop's POSITION in the settle pass — after the per-driver writes,
+/// inside the same fixpoint — pinned through the DELTA BUDGET.
+///
+/// Moving the group loop before the per-driver loop survived the whole suite
+/// (soundness-review mutation): every value eventually converges either way,
+/// so no stream moves. What does move is HOW MANY passes convergence takes
+/// when a plain cont-assign FEEDS a group driver — the mutant needs an extra
+/// pass to see the plain assign's write, and at a budget of exactly 2 the
+/// backends part (one delta-limits, the other finishes). Sweeping the budget
+/// crosses both regimes, with anti-vacuity asserting each was seen.
+#[test]
+fn s1d4d4_group_loop_position_pinned_by_delta_budget() {
+    let src = r#"
+module top;
+  wire c;
+  wire y;
+  reg r;
+  reg [7:0] n;
+  assign c = r;
+  assign y = c;
+  assign y = 1'bz;
+  always @(y) begin n = n + 8'd1; $display("t=%0t y=%b n=%0d", $time, y, n); end
+  always #1 r = ~r;
+  initial begin r = 1'b0; n = 8'd0; #6 $finish; end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    let mut regimes = std::collections::BTreeSet::new();
+    for budget in 1..=24u64 {
+        let mut streams = Vec::new();
+        for backend in [Backend::Bytecode, Backend::Native] {
+            let sink = MergedSink::default();
+            let r = simulate(
+                &ir,
+                &sink,
+                SimOpts {
+                    backend,
+                    max_deltas: budget,
+                    ..opts.clone()
+                },
+            );
+            if backend == Backend::Native {
+                assert_eq!(r.backend, Backend::Native, "budget={budget}: fell back");
+            }
+            streams.push((sink.events.into_inner(), r.finish_reason, r.exit_class));
+        }
+        assert_eq!(
+            streams[0], streams[1],
+            "budget={budget}: stream/finish/exit differ between backends"
+        );
+        regimes.insert(format!("{:?}", streams[0].1));
+    }
+    assert!(
+        regimes.len() >= 2,
+        "the sweep never crossed a regime boundary — every budget gave {regimes:?},          so the position pin is vacuous"
+    );
+}
+
 /// Run `src` on both backends and assert the printed lines EXACTLY match
 /// `want` — an absolute anchor, not a differential.
 fn both_backends_print(src: &str, want: &[&str], what: &str) {
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
-        .expect("runnable");
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
     for backend in [Backend::Bytecode, Backend::Native] {
         let sink = MergedSink::default();
         let r = simulate(
@@ -1625,8 +1914,7 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
-        .expect("runnable");
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
     let mk = |backend| SimOpts {
         backend,
         max_deltas: 64,
@@ -1669,8 +1957,7 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
-        .expect("runnable");
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
     let mk = |backend| SimOpts {
         backend,
         max_deltas: 12,
@@ -1726,8 +2013,7 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
-        .expect("runnable");
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
     let mk = |backend| SimOpts {
         backend,
         max_body_steps: 500,
@@ -1761,8 +2047,7 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    crate::native::run::runnable(&ir, &opts, crate::sched::multi_driver_groups(&ir).len())
-        .expect("runnable");
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
     let mk = |b| SimOpts {
         backend: b,
         time_limit: Some(5),

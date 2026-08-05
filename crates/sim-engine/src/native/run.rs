@@ -25,14 +25,14 @@
 //! it the other way (loop first, suspension later) would have produced a gate
 //! that could not run a single corpus design.
 //!
-//! ⚠️ **What the accepted class covers, re-measured after S1d-4d-2.** All four
-//! of this repo's `examples/*.sv` now RUN natively and match the VM byte for
-//! byte, stdout and VCD alike — they were refused by the system-task row until
-//! `$dumpfile`/`$dumpvars` were wired, which is what this paragraph used to
-//! say and no longer should. `bench/picorv32` likewise. Still refused: a
-//! delayed/multi-driven/wired continuous assign, `$monitor`/`$strobe`,
-//! `$dumpall`/`$dumpon`, `final`, `fork`, and frame-local storage (which is
-//! what keeps `bench/keccak`'s subroutine variants out).
+//! ⚠️ **What the accepted class covers, re-measured after S1d-4d-4.** All four
+//! of this repo's `examples/*.sv` and `bench/picorv32` RUN natively and match
+//! the VM byte for byte, stdout and VCD alike, and every continuous-assign
+//! family runs: zero-delay (4d-1), delayed/inertial (4d-3), multi-driven and
+//! `wand`/`wor` (4d-4 — the scheduler's `md_groups` with the shared
+//! `resolve_md_group` fold). Still refused: `$monitor`/`$strobe`,
+//! `$dumpall`/`$dumpon`, `final`, `fork`/`wait fork`, and frame-local storage
+//! (which is what keeps `bench/keccak`'s subroutine variants out).
 
 use sim_ir::SimIr;
 
@@ -56,51 +56,22 @@ use crate::sched::FinishReason;
 /// storage) `.or_else(executor_rows)`. This is the two-call convenience, so the
 /// gates verify exactly what `simulate` decides rather than a parallel one.
 #[cfg(test)]
-pub(crate) fn runnable(
-    ir: &SimIr,
-    opts: &crate::SimOpts,
-    md_nets: usize,
-) -> Result<(), &'static str> {
+pub(crate) fn runnable(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'static str> {
     crate::native::runtime_gate(ir, opts)?;
-    executor_rows(ir, opts, md_nets)
+    executor_rows(ir, opts)
 }
 
 /// The rows `runnable` adds on TOP of the runtime gate — split out because
 /// `simulate` has already computed the gate's half and recomputing it there
 /// would let the published verdict and the executed decision come from two
 /// evaluations of the same predicate.
-pub(crate) fn executor_rows(
-    ir: &SimIr,
-    opts: &crate::SimOpts,
-    md_nets: usize,
-) -> Result<(), &'static str> {
-    // CONTINUOUS ASSIGNS (S1d-4d-1): the ZERO-DELAY fixpoint is built; the three
-    // families around it are not, and each would be a different wrong answer
-    // rather than a slower one.
-    // WIRED BEFORE MULTI-DRIVER, and the order is load-bearing rather than
-    // cosmetic: a `wand`/`wor` net is multi-driven BY CONSTRUCTION, so with the
-    // rows the other way round the wired row could never be the answer and its
-    // message would name a family no design ever sees.
-    if !opts.wired_and_nets.is_empty() || !opts.wired_or_nets.is_empty() {
-        return Err("a `wand`/`wor` net (wired resolution)");
-    }
-    // MULTI-DRIVER: a net resolved from several whole-net drivers by 4-state
-    // wire resolution, which a plain fixpoint would silently turn into
-    // last-write-wins. Asked through the SCHEDULER's own `md_nets`, computed
-    // once in `Scheduler::new`, rather than re-derived here.
-    //
-    // ⚠️ The first version of this row counted net occurrences across every
-    // cont-assign lvalue and refused at two. That over-approximated badly: the
-    // per-bit generate idiom (`for (g…) assign y[g] = ~x[g];`), a part-select
-    // pair (`y[7:4]` / `y[3:0]`), and even a single assign whose LHS concat
-    // names one net twice all read as multi-driven — and every one of them is a
-    // single logical driver the settle already handles by last-write-wins in
-    // the same ascending order the engine uses. That is the most common way
-    // real RTL drives a bus, so the proxy capped exactly the coverage this
-    // slice exists to unlock.
-    if md_nets > 0 {
-        return Err("a multi-driven net (wire resolution)");
-    }
+pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'static str> {
+    // CONTINUOUS ASSIGNS: the settle runs the zero-delay fixpoint, the delayed
+    // wheel (S1d-4d-3), and the multi-driver/wired group resolution (S1d-4d-4
+    // — the scheduler's `md_groups` with the shared `resolve_md_group` fold, so
+    // `wire`/`wand`/`wor` multi-driven nets no longer refuse). What ELABORATE
+    // rejects is still rejected for both backends alike (E3001 for partial/
+    // dynamic/delayed overlaps): that never reaches this gate.
     if !opts.final_procs.is_empty() {
         return Err("`final` blocks (the post-loop drain is not restated)");
     }
@@ -425,9 +396,40 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
                 }
                 continue;
             }
+            if k.sched.ca_is_md(ci) {
+                continue; // MULTI-DRIVER member: written once by resolution below
+            }
             let v = k.k_eval_for_lvalue(&lhs, rhs);
             let offs = k.k_resolve_lvalue_offsets(&lhs);
             changed |= k.arena.write_lvalue(ir, &lhs, v, &offs);
+        }
+        // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
+        // drivers and write the net once — the engine's own loop, run EVERY
+        // pass exactly as the engine runs it (part of the same fixpoint: a
+        // driver's RHS can depend on another resolved net). The groups are the
+        // SCHEDULER's `md_groups` (one classification) and the fold is the
+        // shared `resolve_md_group` (one spelling of identity + kind table);
+        // only the store reads and the write are this backend's. Re-evaluating
+        // every driver each pass also re-emits any E4002 the driver's RHS earns
+        // — that matches the engine, which never worklists this loop.
+        for mi in 0..k.sched.md_groups().len() {
+            let (net, kind) = {
+                let g = &k.sched.md_groups()[mi];
+                (g.0, g.2)
+            };
+            let cis = k.sched.md_groups()[mi].1.clone();
+            let first = cis[0];
+            let net_w = ir.nets[net as usize].width;
+            let mut vals = Vec::with_capacity(cis.len());
+            for ci in cis {
+                let lhs = ir.cont_assigns[ci].lhs.clone();
+                let rhs = ir.cont_assigns[ci].rhs;
+                vals.push(k.k_eval_for_lvalue(&lhs, rhs));
+            }
+            let acc = crate::sched::resolve_md_group(kind, net_w, vals);
+            let lhs = ir.cont_assigns[first].lhs.clone();
+            let offs = k.k_resolve_lvalue_offsets(&lhs);
+            changed |= k.arena.write_lvalue(ir, &lhs, acc, &offs);
         }
         // A cont-assign RHS can read an out-of-range array element, and the
         // arena can only COUNT that — same third-producer problem the waiter

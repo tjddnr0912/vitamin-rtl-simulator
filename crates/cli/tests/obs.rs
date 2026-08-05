@@ -789,27 +789,26 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
 ///
 /// `--backend native` may not be silently ignored, and it may not be silently
 /// honored either: run.json has to carry both what was asked and what ran. A
-/// A MULTI-DRIVEN net is the refusal used here because it is one the run gate
-/// adds on top of design eligibility — wire resolution, not last-write-wins.
+/// `$monitor` is the refusal used here because it is one the run gate adds on
+/// top of design eligibility (the kernel's systask refusal, S1d-4b).
 /// Note `native.eligible` stays TRUE, which is the whole point of the layering:
 /// the design is within v1's scope, today's executor just cannot run it.
 ///
-/// The design here has changed twice as the executor grew: a plain `assign`
-/// until S1d-4d-1, then `assign #2` until S1d-4d-3 wired the inertial wheel.
+/// The design here has changed three times as the executor grew: a plain
+/// `assign` until S1d-4d-1, `assign #2` until S1d-4d-3 wired the inertial
+/// wheel, then a multi-driven net until S1d-4d-4 wired the group resolution.
 #[test]
 fn run_json_reports_native_fallback_on_a_refused_design() {
-    const CA_SV: &str = "module top; wire [7:0] w; reg [7:0] a, b;\n\
-         assign w = a;\n\
-         assign w = b;\n\
-         initial begin a = 8'hF0; b = 8'h0F; #1 $display(\"w=%0h\", w); $finish; end endmodule\n";
-    let (_, code, obs) = run(CA_SV, &["--backend", "native"]);
+    const MON_SV: &str = "module top; reg [7:0] n;\n\
+         initial begin n = 8'd0; $monitor(\"n=%0d\", n); #1 n = 8'd1; #1 $finish; end endmodule\n";
+    let (_, code, obs) = run(MON_SV, &["--backend", "native"]);
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));
     assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
     assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
     assert!(
         field(&m, "native").contains("\"eligible\": true"),
-        "a cont-assign design is within v1's SCOPE — the refusal is the \
+        "a `$monitor` design is within v1's SCOPE — the refusal is the \
          executor's, not the gate's:\n{m}"
     );
 }

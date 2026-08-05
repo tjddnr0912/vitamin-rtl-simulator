@@ -347,6 +347,21 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.303 ③층 S1d-4d-4 — multi-driver·wired 해상: S1 거부 행에서 cont-assign 이 사라졌다 (2026-08-05, branch feat-tier3-wired, format 26 불변) ✅
+
+`wire`/`wand`/`wor` 다중 구동 넷의 4-state 해상을 ③층이 실행한다 → **S1 거부 행에서 continuous-assign 계열이 전부 사라졌다**(남은 행 = `final`·fork/`wait fork`·서브루틴/frame·`$monitor` 계열). 코퍼스 커버리지 **0**(실측 — multidriver·wired 둘 다)이라 검증 전부가 전용 설계다.
+
+**형태.** §4.5.302 룰의 직접 적용 — 해상 **fold**(항등원 all-Z·kind 테이블 디스패치·`resolve_{wire,wand,wor}_into`)를 `resolve_md_group` 자유 함수로 **추출**해 두 settle 루프가 공유하고, 스토어를 만지는 반쪽(드라이버 RHS 평가·LHS 오프셋·쓰기)만 백엔드별로 남겼다. 그룹 분류도 한 철자 — 네이티브는 스케줄러의 `md_groups()`/`ca_is_md()` 를 읽는다(두 번째 유도 없음). 엔진 루프는 평가-후-fold 로 재배열됐지만 fold 는 진단 무발화라 스트림 불변(PRE/POST 44설계 0 diff 로 증명). 게이트에서 두 행과 `md_nets` 파라미터가 사라졌고, `lib.rs` 는 더 이상 `multi_driver_groups` 를 게이트에서 세지 않는다.
+
+**게이트.** **5149 green** · clippy · fmt · format 26 불변 · 적대 설계 57(md 7 신규) · **오라클 앵커 4**(wire z/conflict·wand·wor·3-driver 항등원 — 전부 iverilog 13 절대값·양 백엔드) · 델타 예산 스윕 테스트 1 · 뮤테이션 **비등가 11/11 kill·등가 1 논증**.
+
+**적대 렌즈 ① differential(45설계 3-way + PRE 4-way) — seam 발산 0.** 값 행렬 16셀×3종·시변 핸드오프·다운스트림 체인/웨이터/NBA·폭 64/65/96/128(워드 경계 straddle)·부호·E4002 스트림·혼합 가족·경계(E3001 4형태 동일 loud)·VCD 바이트·t0 — 전부 CLEAN, **폴백 0**(41설계 전부 run.json `backend:"native"`). ⭐ **pre-existing 발산 둘**을 냈다(양 백엔드+PRE 동일 = 이 슬라이스 무관·§2 기록): ⓐ **keeper 사이클이 t0 x-창을 영구 래치** — `assign p=q; assign p=a?1:z; assign q=p;` 에서 vita 의 구조 settle 이 initial 바디 **전에** 돌아 `a=x` 를 읽고, x 는 해상에서 흡수원이라 `a=1` 이 와도 회복 불가(iverilog `1/1` vs vita `x/x`·exit 0) ⓑ **CA 가 t0 에 z 로 settle 하면 `@(y)` 가 한 번 더 깬다**(vita 넷은 x 로 태어나 x→z 가 변화·iverilog 는 z 로 태어나 무이벤트) — §4.5.302 가 기록한 "초기값을 변화로 몰기" 가족의 세 번째 구성원.
+
+**적대 렌즈 ② soundness — 뮤테이션 생존 2 가 게이트의 축을 다시 쟀다.** ⭐⭐ **M2: 드라이버 평가 순서가 미핀** — fold 가 가환이라 값-전용 설계로는 순서가 절대 안 보이는데, **순서가 관측되는 채널이 이미 열려 있었다**: `$random` 은 admitted(순수-평가 쪽)라 **한 그룹에 impure 드라이버 둘**이면 평가 순서가 곧 draw 순서다(`assign y=$random; assign y=~$random;` — 역순 뮤턴트에서 vm `x11x` vs native `x00x`). ⭐⭐ **M5: md 루프의 패스 내 위치가 미핀** — 어느 위치든 값은 수렴하므로 스트림이 안 움직이고, 움직이는 것은 **수렴에 드는 패스 수**다. 평범한 CA 가 그룹 드라이버를 **먹이는** 형태에서 뮤턴트는 한 패스를 더 쓰고, 델타 예산 스윕(1..=24)이 예산 2 에서 두 백엔드를 가른다(regime 경계 교차를 anti-vacuity 로 단언). 둘 다 teeth 를 지어 kill. M4(그룹 쓰기 lhs 를 first→last)는 **등가 논증 기록** — `multi_driver_groups` 가 whole-net 만 admit 하므로 전 멤버의 `Lvalue` 가 구조 동일. ⭐ stale 주장 둘 수정: `--backend` 도움말이 이 슬라이스 이전의 거부 목록을 광고 · **이 슬라이스가 수정한 파일의 모듈 doc** 이 "Still refused: delayed/multi-driven/wired" 를 유지(§4.5.300 이 `arm_t0` 상대로 기록한 바로 그 실패 모드 — 슬라이스가 자기 전제 문장을 안 고친다). CLEARED: all-sites(t0/델타 settle 동일 함수·엔진 쌍둥이)·사이드카 전 경로(원샷/staged trailer/하네스 — staged 는 fresh bins 로 실측)·E3001 경계 4형태·quiescence 스윕 1..=30·제거된 행의 소비자 0.
+
+**경계(기록).** vita 는 부분/지연 겹침을 E3001 로 거부하지만 **iverilog 는 같은-범위 part-select 쌍·delayed+plain 겹침을 비트 단위로 해상**한다 — pre-existing loud-vs-support 갭, ROADMAP §3 1줄.
+
+
 #### 4.5.302 ③층 S1d-4d-3 — delayed CA: **코퍼스 72/72**, 그리고 공유 코드는 차분이 못 지킨다 — 앵커 셋 (2026-08-05, branch feat-tier3-delayed-ca, format 26 불변) ✅
 
 `assign #d` 를 ③층이 실행한다 → **코퍼스 72 설계 전부가 네이티브로 돌고 stdout·진단·VCD 바이트 동일**
