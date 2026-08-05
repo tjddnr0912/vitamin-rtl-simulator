@@ -186,13 +186,16 @@ fn effects_outside_the_write_funnel_reject() {
     assert_eq!(rs, vec![("stmt_effect", 1)]);
 
     // `$value$plusargs` — the shape a real testbench uses (bench/keccak's TB).
+    // WIRED (the first family member lifted): `k_value_plusargs` runs the
+    // shared `exec::plusargs::effect`, so this design is ACCEPTED now — and
+    // the row must not count it, or the verdict and the executor disagree.
     let (ok2, rs2) = reasons(
         "module t; integer n; reg ok;\n\
            initial begin ok = $value$plusargs(\"N=%d\", n); $display(\"%0d\", n); $finish; end\n\
          endmodule\n",
     );
-    assert!(!ok2);
-    assert_eq!(rs2, vec![("stmt_effect", 1)]);
+    assert!(ok2, "the wired member must be admitted, got {rs2:?}");
+    assert_eq!(rs2, vec![]);
 
     // SysTask form: `$readmem*` writes a memory net without a funnel write.
     let (ok3, rs3) = reasons(

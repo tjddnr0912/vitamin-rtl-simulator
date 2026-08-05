@@ -13,11 +13,13 @@
 //!
 //! 54 declarations (53 without the `jit` feature; S1d-4c-2b added `k_call_fatal`
 //! and `k_enter_body` for the body walk). They divide four ways, and three slices moved four of
-//! them: **18 store core** · **17 classification
-//! predicates** · **18 gate-refused workers** · **0 NOT BUILT**. 19+17+18 = 54
+//! them: **20 store core** · **17 classification
+//! predicates** · **17 gate-refused workers** · **0 NOT BUILT**. 20+17+17 = 54
 //! WITH the `jit` feature; the default build has 53, because `k_nets` is
 //! jit-gated and sits in store core — the arithmetic is the point, so the
-//! feature it depends on has to be stated too. S1d-4b-2
+//! feature it depends on has to be stated too. S1d-5 moved `k_value_plusargs`
+//! from gate-refused to store core (the first `stmt_effect` family member
+//! wired; the gate row carves it out). S1d-4b-2
 //! implemented `k_dispatch_systask` and `k_sformatf`, S1d-4c-1
 //! `k_schedule_nba_at`, and S1d-4c-2a `k_rearm` — the surface is complete, which
 //! is NOT the same as the backend being runnable — though as of S1d-4c-2d it
@@ -30,9 +32,10 @@
 //!
 //! - **Gate-refused (18)**: `native::design_eligibility` refuses every design
 //!   that can reach them — force/release, queue pop, assoc iteration, class
-//!   alloc, `disable fork`, and the eleven funnel-outside workers §4.5.291's
-//!   `stmt_effect` row covers (seeded `$random`/`$dist_*`, `$cast`,
-//!   `$value$plusargs`, the 8 file methods). `gate_refused!` names the row.
+//!   alloc, `disable fork`, and the ten funnel-outside workers §4.5.291's
+//!   `stmt_effect` row still covers (seeded `$random`/`$dist_*`, `$cast`,
+//!   the 8 file methods — `$value$plusargs` was the eleventh until S1d-5
+//!   wired it). `gate_refused!` names the row.
 //! - **NOT BUILT (0)** as of S1d-4c-2a. An ELIGIBLE design reaches every one of these; what keeps them
 //!   out of production is `native::runtime_gate` choosing the VM, one layer below
 //!   eligibility (§4.5.288's two-layer verdict). `not_built!` says so and names
@@ -117,7 +120,7 @@ use crate::value::Value;
 
 /// A method the S0 DESIGN gate makes unreachable. `row` names the eligibility
 /// row that refuses it, so a future widening of the gate reads as an instruction
-/// rather than a mystery. 18 methods qualify (counted, not estimated).
+/// rather than a mystery. 17 methods qualify (counted, not estimated).
 macro_rules! gate_refused {
     ($m:literal, $row:literal) => {
         panic!(
@@ -933,11 +936,19 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_cast(&mut self, _rhs: u32) -> Value {
         gate_refused!("k_cast", "`stmt_effect` row (§4.5.291)")
     }
-    fn k_value_plusargs(&mut self, _rhs: u32) -> Value {
-        gate_refused!(
-            "k_value_plusargs",
-            "`stmt_effect` row (§4.5.291) — the row both keccak variants lose to"
-        )
+    fn k_value_plusargs(&mut self, rhs: u32) -> Value {
+        // The first `stmt_effect` family member WIRED (S1d-5): parse/match/
+        // convert are the shared `exec::plusargs::effect` (one spelling with
+        // the engine — the wide-radix fix landed there for both at once); only
+        // the destination write is this store's. The gate row now admits
+        // exactly this member (`value_plusargs_rhs` carve-out in
+        // `design_eligibility`), so the design that reaches here RUNS.
+        let (status, write) = crate::exec::plusargs::effect(self.ir, &self.sched.st.plusargs, rhs);
+        if let Some((lv, v)) = write {
+            let off = self.k_resolve_lvalue_offsets(&lv);
+            self.k_write_lvalue(&lv, v, &off);
+        }
+        status
     }
     fn k_fopen(&mut self, _rhs: u32) -> Value {
         gate_refused!("k_fopen", "`stmt_effect` row (§4.5.291)")

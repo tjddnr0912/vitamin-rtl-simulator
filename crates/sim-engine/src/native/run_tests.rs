@@ -1862,10 +1862,70 @@ endmodule
     );
 }
 
+/// `$value$plusargs` ON THE NATIVE PATH, pinned to iverilog 13's values.
+///
+/// The soundness lens measured that no test anywhere ran `$value$plusargs`
+/// under the native backend: dropping the native write entirely (status still
+/// returned) and hardcoding the status to 1 both survived every suite — the
+/// shared conversion was anchored through the Scheduler consumer only, which
+/// is exactly the §4.5.302 violation. One design, five axes, every expected
+/// value measured against iverilog: hit, miss (var untouched AND status 0),
+/// negative `%h` into 32 bits (`-` applies to every radix and negates within
+/// the DESTINATION width — the `dest_w.max(..)` mutation's only observable),
+/// negative `%b`, and a 24-digit `%h` into 96 bits (the wide fix, on this
+/// consumer).
+#[test]
+fn s1d5_value_plusargs_native_matches_the_oracle() {
+    let src = r#"
+module top;
+  reg [31:0] n, ok, h, b;
+  reg [95:0] w;
+  initial begin
+    n = 32'd0; h = 32'hAA; b = 32'hBB; w = 96'hCC;
+    ok = $value$plusargs("N=%d", n);    $display("t=%0t hit ok=%0d n=%0d", $time, ok, n);
+    ok = $value$plusargs("MISS=%d", n); $display("t=%0t miss ok=%0d n=%0d", $time, ok, n);
+    ok = $value$plusargs("H=%h", h);    $display("t=%0t negh ok=%0d h=%h", $time, ok, h);
+    ok = $value$plusargs("B=%b", b);    $display("t=%0t negb ok=%0d b=%h", $time, ok, b);
+    ok = $value$plusargs("W=%h", w);    $display("t=%0t wide ok=%0d w=%h", $time, ok, w);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &[
+        "out|t=0 hit ok=1 n=42
+",
+        "out|t=0 miss ok=0 n=42
+",
+        "out|t=0 negh ok=1 h=fffffffb
+",
+        "out|t=0 negb ok=1 b=ffffffff
+",
+        "out|t=0 wide ok=1 w=123456789abcdef012345678
+",
+    ];
+    both_backends_print_with_plusargs(
+        src,
+        &["N=42", "H=-5", "B=-1", "W=123456789abcdef012345678"],
+        WANT,
+        "value_plusargs native",
+    );
+}
+
 /// Run `src` on both backends and assert the printed lines EXACTLY match
 /// `want` — an absolute anchor, not a differential.
 fn both_backends_print(src: &str, want: &[&str], what: &str) {
-    let (ir, opts) = build_with_opts(src);
+    both_backends_print_with_plusargs(src, &[], want, what)
+}
+
+/// `both_backends_print` with plusargs installed. A separate seam because the
+/// harness parses SOURCE only — plusargs arrive from the CLI in production
+/// (`simulate` copies `opts.plusargs` into the state), so any test of
+/// `$value$plusargs` must set them here or it measures the MISS path only
+/// (the recurring sidecar trap, this time confirmed LATENT by review before
+/// any test fell into it).
+fn both_backends_print_with_plusargs(src: &str, plusargs: &[&str], want: &[&str], what: &str) {
+    let (ir, mut opts) = build_with_opts(src);
+    opts.plusargs = plusargs.iter().map(|s| s.to_string()).collect();
     crate::native::run::runnable(&ir, &opts).expect("runnable");
     for backend in [Backend::Bytecode, Backend::Native] {
         let sink = MergedSink::default();

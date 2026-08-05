@@ -310,7 +310,18 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             // them and therefore has to exclude it. The tier-3 plan is to BE a
             // `Kernel` impl, so this exclusion is correct and conditional on it.
             sim_ir::Stmt::BlockingAssign { rhs, .. } => {
-                if sim_ir::rhs_is_stmt_effect(&ir.exprs, *rhs) {
+                // `$value$plusargs` is CARVED OUT (S1d-5): `k_value_plusargs`
+                // is wired through the shared `exec::plusargs::effect`, so the
+                // first member of this family runs instead of refusing. The
+                // carve-out is the canonical `value_plusargs_rhs` — the same
+                // predicate the walk dispatches on (process.rs), so the gate
+                // admits exactly the statements the executor answers. The
+                // CLASSIFICATION (`rhs_is_stmt_effect`) is untouched: tier-2's
+                // compile gate still sees one family, and this row only stops
+                // counting the wired member.
+                if sim_ir::rhs_is_stmt_effect(&ir.exprs, *rhs)
+                    && !crate::exec::kpred::value_plusargs_rhs(&ir.exprs, *rhs)
+                {
                     stmt_effect += 1;
                 }
             }

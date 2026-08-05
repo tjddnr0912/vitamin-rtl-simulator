@@ -39,11 +39,13 @@
 //!   gate** (`stmt_effect`, added when the `Kernel` trait made the question
 //!   structural): the `sim_ir::rhs_is_stmt_effect` family (a seeded
 //!   `$random`/`$dist_*` writes its seed back, `$cast(dst,src)`,
-//!   `$value$plusargs`, the file family) and `sim_ir::systask_writes_net`
+//!   the file family) and `sim_ir::systask_writes_net`
 //!   (`$readmem*`, `$sformat`, the `$cast` TASK form, the string/heap mutators).
-//!   `r = $random(seed)` is NO LONGER eligible. Plumbing them is what lifts the
-//!   reject; until then the refusal is what keeps an executor from repeating
-//!   every draw in silence.
+//!   `r = $random(seed)` is NO LONGER eligible. Plumbing a member is what lifts
+//!   its reject — `$value$plusargs` was the first (S1d-5, the shared
+//!   `exec::plusargs::effect` with a per-store write); until the rest are
+//!   plumbed the refusal is what keeps an executor from repeating every draw
+//!   in silence.
 
 use sim_ir::{LvalChunk, Lvalue, SelKind, SimIr};
 
