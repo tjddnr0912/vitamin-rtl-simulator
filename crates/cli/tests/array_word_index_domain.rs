@@ -41,6 +41,27 @@ fn run(src: &str) -> (String, Option<i32>) {
     )
 }
 
+/// How many diagnostics the run emitted. `run` returns stdout only, and the
+/// duplication guards below are about the DIAGNOSTIC channel — asserting the
+/// exit code instead cannot tell one report from two, which is exactly the
+/// difference those guards exist to prevent.
+fn error_count(src: &str) -> usize {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_awi_e{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    String::from_utf8_lossy(&out.stderr)
+        .lines()
+        .filter(|l| l.contains("error["))
+        .count()
+}
+
 /// Reads. Each row is a cell both oracles agree on; the `X`-suffixed rows are
 /// the controls — genuinely out of range in every reading, so a change that
 /// simply stops bounds-checking cannot pass this test.
@@ -689,5 +710,97 @@ fn the_packed_branchs_sign_extension_does_not_duplicate_the_index() {
         code2,
         Some(1),
         "the out-of-range element read stays loud\n{out2}"
+    );
+    // The exit code cannot tell one report from two — count them. Measured: 3
+    // with the guard, 6 without it.
+    assert_eq!(
+        error_count(diag),
+        3,
+        "one logical out-of-range read must not be reported twice"
+    );
+}
+
+/// A hierarchical index whose own subtree contains a resolved hierarchical
+/// select — the shape that walks a BACK-EDGE.
+///
+/// Deferred-hierarchy resolution clone-installs a resolve-built node into a low
+/// placeholder slot, so that node's children have ids ABOVE it. Three of the
+/// four subtree walks follow those edges, and a visit-stamp buffer sized to the
+/// index root turned meeting one into the fail-closed verdict: every seal
+/// declined and `u.p[~u.a[1]]` answered `xx` at exit 0 while its local twin, one
+/// line away in the same design, answered `bb`. Moving an unrelated addend
+/// across a `+` flipped it, which is the statement-order dependence this funnel
+/// is supposed to have stopped having.
+///
+/// Both oracles agree on every row.
+#[test]
+fn a_hierarchical_index_containing_a_hierarchical_select_keeps_its_seal() {
+    let src = "module sub;\n\
+       reg [3:0][7:0] p;\n\
+       reg [7:0] a [1:4];\n\
+       reg [33:2] vec;\n\
+       initial begin p = 32'hAABBCCDD; a[1] = 8'd253; vec = 32'h0000_0008; end\n\
+     endmodule\n\
+     module top;\n\
+       sub u();\n\
+       reg [3:0][7:0] lp;\n\
+       reg [7:0] la [1:4];\n\
+       reg [33:2] lvec;\n\
+       initial begin\n\
+         #1;\n\
+         lp = 32'hAABBCCDD; la[1] = 8'd253; lvec = 32'h0000_0008;\n\
+         $display(\"LP %h HP %h\", lp[~la[1]], u.p[~u.a[1]]);\n\
+         $display(\"LV %b HV %b\", lvec[~la[1]], u.vec[~u.a[1]]);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out, code) = run(src);
+    assert_eq!(code, Some(0), "{out}");
+    // `~253` is 2 at the index's own eight bits. The hierarchical spelling must
+    // answer what the local one does — that equality IS the assertion, so a
+    // regression that broke both would still fail the literal checks below.
+    // Values are the ORACLE's, measured — my hand answer for the vector row was
+    // wrong (bit 2 of `32'h0000_0008` is 0, not 1). What carries the test is the
+    // local/hierarchical EQUALITY; the literals only stop a regression that
+    // breaks both from passing.
+    assert!(out.contains("LP bb HP bb"), "packed element\n{out}");
+    assert!(out.contains("LV 0 HV 0"), "vector bit-select\n{out}");
+}
+
+/// The subtree walks deduplicate, and the cost model is why.
+///
+/// The arena is a DAG — the geometry names one index three times — so a walk
+/// without visit stamps costs O(paths). Seven levels of `m1[X][X]` is 1.6 kB of
+/// source that elaborates in under half a second and blew past a million nodes,
+/// which the walks answer fail-closed: the seal silently disappeared. The three
+/// depth tests that existed then were linear pad chains capped at 200, three
+/// orders of magnitude short.
+#[test]
+fn a_dag_shaped_index_does_not_exhaust_the_walks() {
+    let mut chain = String::from("1'b0");
+    for _ in 0..7 {
+        chain = format!("m1[{chain}][{chain}]");
+    }
+    let src = format!(
+        "module sub; reg [7:0] kk = 8'd7; endmodule\n\
+         module top;\n\
+           reg [0:31] a0; reg [4:0] r5;\n\
+           reg m1 [0:1][0:1];\n\
+           sub u();\n\
+           initial begin\n\
+             m1[0][0]=1'b0; m1[0][1]=1'b0; m1[1][0]=1'b0; m1[1][1]=1'b0;\n\
+             a0 = 32'b0; r5 = 5'd28;\n\
+             $display(\"HK %0d\", u.kk);\n\
+             a0[(~r5) - {{4'd0, {chain}}}] = 1'b1;\n\
+             $display(\"W %b\", a0);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    );
+    let (out, code) = run(&src);
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("W 00010000000000000000000000000000"),
+        "the seal must survive a DAG-shaped index\n{out}"
     );
 }

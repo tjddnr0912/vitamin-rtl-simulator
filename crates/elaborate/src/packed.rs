@@ -870,6 +870,19 @@ impl Elaborator<'_> {
     /// enough to exhaust a million-node budget and silently drop the seal.
     fn with_seen<R>(&mut self, upto: usize, f: impl FnOnce(&Self, &mut [u32], u32) -> R) -> R {
         let mut seen = std::mem::take(&mut self.selfw_seen);
+        // Sized to the WHOLE arena, not to the index root. Three of the four
+        // walks follow BACK-EDGES — a child id ABOVE its parent, which
+        // `resolve_deferred_hier_sel` creates when it clone-installs a
+        // resolve-built node into a low placeholder slot — and a buffer cut at
+        // the root turns that into `seen.get_mut(..) == None`, which is the
+        // fail-closed verdict, which declines every seal. Measured: `u.p[~u.a[1]]`
+        // answered `xx` at exit 0 where its local twin in the same design and both
+        // oracles answer `bb`, and moving one unrelated addend across a `+`
+        // flipped it. Filtering the edge instead would be WRONG — the clone's
+        // subtree can legitimately hold a placeholder, which is what these walks
+        // exist to find — and it cannot cycle, because the clone's children were
+        // built from ids below the slot it lands in.
+        let upto = upto.max(self.exprs.len().saturating_sub(1));
         if seen.len() <= upto {
             seen.resize(upto + 1, 0);
         }
