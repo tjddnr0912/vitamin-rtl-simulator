@@ -461,3 +461,76 @@ fn the_provisional_width_path_answers_what_the_cached_one_does() {
         assert_eq!(code, Some(1), "{tag}: an out-of-range access stays loud");
     }
 }
+
+/// The element's BIT axis is not a word axis, even inside a subroutine.
+///
+/// A subroutine-local or formal array's extent list is one entry per unpacked
+/// dim PLUS a trailing entry for the element's own bit axis, so choosing the
+/// domain per NET labelled a bit-select as an array word and truncated it:
+/// `lm[0][b]` with a 64-bit `b` wrote bit 2 while the module-level twin
+/// `gm[0][b]` in the same design dropped, at exit 0 — matching neither oracle
+/// (iverilog drops both, verilator writes both). The axis belongs to the
+/// position, not to the net.
+#[test]
+fn a_frame_array_elements_bit_axis_is_not_a_word_axis() {
+    let src = "module top;\n\
+       reg [63:0] bg;  int gm [0:3];\n\
+       function automatic int fw(input [63:0] b);\n\
+         int lm [0:3];\n\
+         lm[0]=32'h0; lm[0][b]=1'b1; fw=lm[0];\n\
+       endfunction\n\
+       initial begin\n\
+         bg = 64'h1_0000_0002;\n\
+         gm[0]=32'h0; gm[0][bg]=1'b1;\n\
+         $display(\"G %0d L %0d\", gm[0], fw(bg));\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out, code) = run(src);
+    assert_eq!(code, Some(0), "{out}");
+    // iverilog drops both; the two spellings must at least agree with each other.
+    assert!(
+        out.contains("G 0 L 0"),
+        "the frame spelling must answer like the module one\n{out}"
+    );
+}
+
+/// A depth cap on the walks is a cliff, and this is the design that falls off it.
+///
+/// `index_has_placeholder` runs on every seal in every design — no hierarchical
+/// reference needed — and failing closed at depth 64 made `index_self_width`
+/// return `None`, so BOTH seal funnels silently reverted to pre-§4.5.308
+/// behaviour. Measured exactly at the boundary: 63 pads correct, 64 wrong. The
+/// parser caps parentheses at 128, but a left-associative chain is unbounded and
+/// the elaborator's own seal nodes count toward the depth, so 31 nested array
+/// reads in one index reached it too.
+#[test]
+fn a_deeply_nested_index_still_gets_its_seal() {
+    let mk = |pads: usize| {
+        let idx = format!("(~r5){}", " - 5'd0".repeat(pads));
+        format!(
+            "module top;\n\
+               reg [0:31] a0; reg [4:0] r5;\n\
+               initial begin\n\
+                 a0 = 32'b0; r5 = 5'd28;\n\
+                 a0[{idx}] = 1'b1;  $display(\"W %b\", a0);\n\
+                 a0 = 32'h1000_0000;\n\
+                 $display(\"R %b\", a0[{idx}]);\n\
+                 $finish;\n\
+               end\n\
+             endmodule\n"
+        )
+    };
+    // `~r5` is 3 at the index's own five bits; `[0:31]` is ascending, so bit 3
+    // from the left. Both oracles agree, and the answer must not depend on how
+    // many `- 0` the user wrote.
+    for pads in [0usize, 63, 64, 200] {
+        let (out, code) = run(&mk(pads));
+        assert_eq!(code, Some(0), "pads={pads}\n{out}");
+        assert!(
+            out.contains("W 00010000000000000000000000000000"),
+            "pads={pads}: the seal was dropped\n{out}"
+        );
+        assert!(out.contains("R 1"), "pads={pads}\n{out}");
+    }
+}

@@ -14,10 +14,30 @@ use super::*;
 /// callers say which one they mean.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IndexDomain {
-    /// An unpacked array's word index.
+    /// Every index in the list is an unpacked array WORD index.
     ArrayWord,
-    /// A packed array's element index (and any other packed offset).
+    /// Every index in the list is a packed offset.
     PackedElem,
+    /// The first `n` are word axes and the rest are packed offsets.
+    ///
+    /// A subroutine-local or formal array's extent list is one entry per
+    /// unpacked dim PLUS a trailing entry for the ELEMENT'S OWN BIT AXIS
+    /// (`array_formal_ext_dims`), so a per-NET domain gets the bit-select wrong:
+    /// `lm[0][b]` with a 64-bit `b` took the word truncation and wrote bit 2
+    /// where the module-level twin `gm[0][b]` dropped, in one design, at exit 0.
+    /// The axis is a property of the POSITION, not of the net.
+    WordsThenElem(usize),
+}
+
+impl IndexDomain {
+    /// The domain of index position `k`.
+    fn at(self, k: usize) -> IndexDomain {
+        match self {
+            IndexDomain::WordsThenElem(n) if k < n => IndexDomain::ArrayWord,
+            IndexDomain::WordsThenElem(_) => IndexDomain::PackedElem,
+            other => other,
+        }
+    }
 }
 
 impl Elaborator<'_> {
@@ -136,7 +156,7 @@ impl Elaborator<'_> {
             // local ones. A patch that reached only the twin left the two
             // spellings of one geometry disagreeing about `mem[~i]` — local
             // right, hierarchical wrong — which the soundness review measured.
-            let i_eid = self.seal_index_unsigned(i_eid, domain);
+            let i_eid = self.seal_index_unsigned(i_eid, domain.at(k));
             let asc = ascending.get(k).copied().unwrap_or(false);
             // A negative-`lo` dim guards on the coordinate, so it must be built first;
             // for every other dim the guard comes first, exactly as before (push order
@@ -508,7 +528,7 @@ impl Elaborator<'_> {
             // SEAL — the AST twin of the eid-taking `flatten_word_eids` above;
             // see the note there. Both funnels must do it or the two spellings
             // of one geometry disagree about `mem[~i]`.
-            let i_eid = self.seal_index_unsigned(i_eid, domain);
+            let i_eid = self.seal_index_unsigned(i_eid, domain.at(k));
             let asc = ascending.get(k).copied().unwrap_or(false);
             // `idx >= lo && idx <= hi` on the RAW index. A negative or wrapped index
             // always fails one side in either signedness reading (bounds < 2^24 «

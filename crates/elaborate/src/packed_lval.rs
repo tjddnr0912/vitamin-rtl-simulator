@@ -225,8 +225,11 @@ impl Elaborator<'_> {
         // module-level twin `gm[bg]` read the right one, and it did so at exit 0
         // where the pre-§4.5.310 build had been loud. `frame_arr_formal_meta` is
         // the same key this function already consults a few lines up.
+        // Per POSITION, not per net: a frame array's extent list ends with the
+        // ELEMENT'S bit axis (`array_formal_ext_dims`), and that one is a packed
+        // offset even though every axis before it is an unpacked word index.
         let domain = if self.frame_arr_formal_meta.contains_key(&net) {
-            IndexDomain::ArrayWord
+            IndexDomain::WordsThenElem(dims.len().saturating_sub(1))
         } else {
             IndexDomain::PackedElem
         };

@@ -364,9 +364,6 @@ impl Elaborator<'_> {
         // loud while the same two lines swapped came out correct, because the
         // hierarchical read had not been pushed yet. The walk is the same
         // `_`-free shape as `index_is_repeatable`.
-        if self.index_has_placeholder(eid, 0) {
-            return None;
-        }
         // The MEMO is a different question and keeps the older, coarser guard.
         // It is a prefix `Vec`, so an entry is only sound once every id below it
         // is final; a placeholder anywhere in the prefix makes the whole tail
@@ -393,6 +390,17 @@ impl Elaborator<'_> {
         }
         if prefix_final {
             self.selfw_scan = i as u32;
+        }
+        // Only now ask about THIS index's subtree — and only when the prefix scan
+        // says there is a live placeholder at all. The subtree lies inside
+        // `0..=eid` (post-order; the only children above a parent are clone
+        // installs, which are never placeholders), so a clean prefix proves a
+        // clean subtree and the walk can be skipped entirely. That matters: the
+        // walk runs per indexed select, and paying it in every design — none of
+        // which has a hierarchical reference — measured +6% on a 12000-select
+        // elaboration.
+        if !prefix_final && self.index_has_placeholder(eid) {
+            return None;
         }
         // Past that scan the whole prefix is resolved, and a resolved expr is
         // never rewritten, so these entries are final and the cache makes a
@@ -791,10 +799,34 @@ impl Elaborator<'_> {
         true
     }
 
-    fn index_has_placeholder(&self, eid: u32, depth: u32) -> bool {
-        if depth > 64 {
-            return true;
+    fn index_has_placeholder(&self, eid: u32) -> bool {
+        // ITERATIVE, with no depth cap. A recursion cap here is not a guard, it
+        // is a CLIFF: this walk runs on every seal in every design, and failing
+        // closed at depth 64 silently dropped every seal §4.5.308/309/310 added
+        // — `a0[(~r5) - 5'd0 …×64]` wrote nothing at exit 0 where the oracle and
+        // the pre-slice build both write bit 3, and 63 pads was correct. Source
+        // nesting is not the bound either: the parser caps PARENTHESES at 128,
+        // left-associative chains and ternary chains are unbounded, and the
+        // elaborator's own seal nodes count toward the depth, so 31 nested array
+        // reads in one index already reached it.
+        let mut stack = vec![eid];
+        // A work ceiling remains, three orders of magnitude above any real index,
+        // so a malformed arena cannot spin. It fails closed like the rest.
+        let mut budget = 1_000_000u32;
+        while let Some(id) = stack.pop() {
+            if budget == 0 {
+                return true;
+            }
+            budget -= 1;
+            if self.index_has_placeholder_step(id, &mut stack) {
+                return true;
+            }
         }
+        false
+    }
+
+    /// One node of [`Self::index_has_placeholder`]: `true` = stop, it has one.
+    fn index_has_placeholder_step(&self, eid: u32, stack: &mut Vec<u32>) -> bool {
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
             Some(e) if is_expr_placeholder(e) => return true,
             Some(ir::Expr::Const { .. }) => vec![],
@@ -818,8 +850,8 @@ impl Elaborator<'_> {
             Some(ir::Expr::Call { args, .. }) => args.clone(),
             Some(ir::Expr::ArrayItem { .. }) | None => return true,
         };
-        kids.into_iter()
-            .any(|k| self.index_has_placeholder(k, depth + 1))
+        stack.extend(kids);
+        false
     }
 
     /// May this index expression be written into the tree TWICE?
@@ -1471,8 +1503,11 @@ impl Elaborator<'_> {
         // module-level twin `gm[bg]` read the right one, and it did so at exit 0
         // where the pre-§4.5.310 build had been loud. `frame_arr_formal_meta` is
         // the same key this function already consults a few lines up.
+        // Per POSITION, not per net: a frame array's extent list ends with the
+        // ELEMENT'S bit axis (`array_formal_ext_dims`), and that one is a packed
+        // offset even though every axis before it is an unpacked word index.
         let domain = if self.frame_arr_formal_meta.contains_key(&net) {
-            IndexDomain::ArrayWord
+            IndexDomain::WordsThenElem(dims.len().saturating_sub(1))
         } else {
             IndexDomain::PackedElem
         };
