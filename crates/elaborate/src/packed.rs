@@ -533,8 +533,12 @@ impl Elaborator<'_> {
                 return false;
             }
             budget -= 1;
-            // Dedup: the arena is a DAG (the geometry names one index
-            // up to three times), so without stamps this is O(paths).
+            // Dedup. ⚠️ DEFENSIVE here, unlike in the two walks that run
+            // AFTER the geometry has named the index three times: this one sees
+            // the user's index before any of that, and `push_expr` never dedups,
+            // so today its input is a tree and removing the stamps changes
+            // nothing measurable. I could not build a design that reaches it —
+            // recorded as an equivalence, not as tested behaviour.
             match seen.get_mut(id as usize) {
                 Some(slot) if *slot == gen => continue,
                 Some(slot) => *slot = gen,

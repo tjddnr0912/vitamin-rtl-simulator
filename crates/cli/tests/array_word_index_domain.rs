@@ -732,6 +732,13 @@ fn the_packed_branchs_sign_extension_does_not_duplicate_the_index() {
 /// across a `+` flipped it, which is the statement-order dependence this funnel
 /// is supposed to have stopped having.
 ///
+/// ⚠️ The whole-net read `u.k` is not decoration. `index_has_placeholder` runs
+/// ONLY when the arena prefix still holds a live placeholder, and a hierarchical
+/// SELECT is resolved by the very pass that then normalizes the outer index — so
+/// without a reference resolved by a LATER pass the prefix is already clean, the
+/// walk is skipped, and the back-edge is never taken. The first version of this
+/// test omitted that line and passed against a binary with the fix reverted.
+///
 /// Both oracles agree on every row.
 #[test]
 fn a_hierarchical_index_containing_a_hierarchical_select_keeps_its_seal() {
@@ -739,7 +746,8 @@ fn a_hierarchical_index_containing_a_hierarchical_select_keeps_its_seal() {
        reg [3:0][7:0] p;\n\
        reg [7:0] a [1:4];\n\
        reg [33:2] vec;\n\
-       initial begin p = 32'hAABBCCDD; a[1] = 8'd253; vec = 32'h0000_0008; end\n\
+       reg [7:0] k;\n\
+       initial begin p = 32'hAABBCCDD; a[1] = 8'd253; vec = 32'h0000_0008; k = 8'd7; end\n\
      endmodule\n\
      module top;\n\
        sub u();\n\
@@ -749,6 +757,7 @@ fn a_hierarchical_index_containing_a_hierarchical_select_keeps_its_seal() {
        initial begin\n\
          #1;\n\
          lp = 32'hAABBCCDD; la[1] = 8'd253; lvec = 32'h0000_0008;\n\
+         $display(\"K %0d\", u.k);\n\
          $display(\"LP %h HP %h\", lp[~la[1]], u.p[~u.a[1]]);\n\
          $display(\"LV %b HV %b\", lvec[~la[1]], u.vec[~u.a[1]]);\n\
          $finish;\n\
