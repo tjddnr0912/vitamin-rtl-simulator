@@ -447,8 +447,24 @@ impl Elaborator<'_> {
                 },
             );
         }
+        let mut seen = std::mem::take(&mut self.selfw_seen);
+        if seen.len() <= last {
+            seen.resize(last + 1, 0);
+        }
+        self.selfw_seen_gen = self.selfw_seen_gen.wrapping_add(1);
+        if self.selfw_seen_gen == 0 {
+            // Wrap: every stamp would alias generation 0, so clear once.
+            seen.iter_mut().for_each(|s| *s = 0);
+            self.selfw_seen_gen = 1;
+        }
+        let gen = self.selfw_seen_gen;
         let mut order = Vec::new();
-        self.collect_subtree_postorder(eid, &mut order, 0);
+        let ok = self.collect_subtree_postorder(eid, &mut order, &mut seen, gen, 0);
+        self.selfw_seen = seen;
+        if !ok {
+            self.selfw_scratch = scratch;
+            return None;
+        }
         let mut out = None;
         for id in order {
             out = Some(fill(&mut scratch, id));
@@ -699,17 +715,35 @@ impl Elaborator<'_> {
     /// closed for the same reason: an unrecognized variant must read as "might
     /// be a placeholder" so the seal declines, which is the pre-§4.5.309 answer
     /// and always safe.
-    /// This index's subtree ids, children before parents.
+    /// This index's subtree ids, children before parents — or `false` if the
+    /// walk could not finish.
     ///
-    /// Same `_`-free whitelist as the sibling walks. A node it does not know
-    /// contributes only itself — the width rule then reads whatever the scratch
-    /// holds for its children, which is exactly the pre-§4.5.310 behaviour for a
-    /// shape nobody has taught this file about; the walks that DECIDE things
-    /// fail closed, this one only orders work.
-    fn collect_subtree_postorder(&self, eid: u32, out: &mut Vec<u32>, depth: u32) {
-        if depth > 64 || out.len() > 4096 {
-            out.push(eid);
-            return;
+    /// It FAILS CLOSED like its two siblings, and it has to: the caller fills a
+    /// reused scratch buffer at exactly these ids and leaves every other slot
+    /// holding a stale value, so a truncated walk makes the width rule read a
+    /// leftover `{1, unsigned}` for a child it never visited. Measured: a
+    /// 4096-leaf condition over a signed index took the zero-extend arm instead
+    /// of the sign-extend one, so `-3` became 253 and a WRITE landed on a real
+    /// element at exit 0 — and only when an unrelated hierarchical read appeared
+    /// earlier in the file, since that is what puts this path in play at all.
+    /// An incomplete walk therefore declines the seal rather than guessing.
+    fn collect_subtree_postorder(
+        &self,
+        eid: u32,
+        out: &mut Vec<u32>,
+        seen: &mut [u32],
+        gen: u32,
+        depth: u32,
+    ) -> bool {
+        // Depth only — the node budget is gone, replaced by the visit stamps.
+        // The cap matches the two sibling walks, and like them it fails closed.
+        if depth > 64 {
+            return false;
+        }
+        match seen.get_mut(eid as usize) {
+            Some(slot) if *slot == gen => return true,
+            Some(slot) => *slot = gen,
+            None => return false,
         }
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
             Some(ir::Expr::Signal { word, .. }) => word.iter().copied().collect(),
@@ -734,11 +768,15 @@ impl Elaborator<'_> {
             Some(ir::Expr::Const { .. }) | Some(ir::Expr::ArrayItem { .. }) | None => vec![],
         };
         for k in kids {
-            if k < eid {
-                self.collect_subtree_postorder(k, out, depth + 1);
+            // A child id ABOVE the parent is a clone the deferred-hierarchy
+            // resolve installed into a lower slot; it is not part of this
+            // subtree's post-order and skipping it is not a truncation.
+            if k < eid && !self.collect_subtree_postorder(k, out, seen, gen, depth + 1) {
+                return false;
             }
         }
         out.push(eid);
+        true
     }
 
     fn index_has_placeholder(&self, eid: u32, depth: u32) -> bool {

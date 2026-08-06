@@ -354,3 +354,110 @@ fn the_funnel_does_not_duplicate_the_index_or_touch_the_packed_domain() {
         "a packed offset that does not fit must not wrap\n{out3}"
     );
 }
+
+/// A subroutine-LOCAL or FORMAL unpacked array is still an unpacked array.
+///
+/// Its slot is md-packed, so it is registered in `packed_dims` and its word
+/// index lowers through the packed read/write path — and taking the domain from
+/// where the array LIVES rather than from what it IS skipped the whole 32-bit
+/// reading for it. `lm[bg]` inside a function read a different element from the
+/// module-level twin `gm[bg]` in the same design, at exit 0 where the previous
+/// build had been loud.
+///
+/// Both oracles agree on all three rows. Without this test the entire fix is
+/// invisible: forcing the packed label back at those two call sites passed all
+/// 5183 tests (measured), because no other design in the suite indexes a
+/// subroutine-local or formal array with a value that needs the reading.
+#[test]
+fn a_subroutine_local_or_formal_array_is_indexed_like_a_module_one() {
+    let src = "module top;\n\
+       reg [7:0] gm [0:5]; reg [63:0] bg; integer q;\n\
+       function automatic integer f(input reg [63:0] ix);\n\
+         reg [7:0] lm [0:5]; integer k;\n\
+         begin for (k=0;k<=5;k=k+1) lm[k]=k+50; f = lm[ix]; end\n\
+       endfunction\n\
+       task automatic t(input reg [63:0] ix, output integer o);\n\
+         reg [7:0] tm [0:5]; integer k;\n\
+         begin for (k=0;k<=5;k=k+1) tm[k]=k+60; o = tm[ix]; end\n\
+       endtask\n\
+       integer r;\n\
+       initial begin\n\
+         for(q=0;q<=5;q=q+1) gm[q]=q+50; bg=64'h1_0000_0002;\n\
+         $display(\"G %0d\", gm[bg]);\n\
+         $display(\"F %0d\", f(bg));\n\
+         t(bg, r); $display(\"T %0d\", r);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out, code) = run(src);
+    assert_eq!(
+        code,
+        Some(0),
+        "every row is in range after truncation\n{out}"
+    );
+    for want in ["G 52", "F 52", "T 62"] {
+        assert!(
+            out.lines().any(|l| l == want),
+            "line `{want}` missing — the module twin and the frame one must agree\n{out}"
+        );
+    }
+}
+
+/// The provisional width path — the one taken once the arena holds a
+/// deferred-hierarchy placeholder — must answer what the cached path answers.
+///
+/// It fills a REUSED scratch buffer at only the queried subtree's ids and leaves
+/// every other slot stale, so an incomplete walk silently reads a leftover
+/// `{1, unsigned}`. It used to truncate at a 4096-node budget and do exactly
+/// that: a wide condition over a signed index took the zero-extend arm, `-3`
+/// became 253, and a WRITE landed on a real element at exit 0 — but only when an
+/// unrelated hierarchical read appeared earlier in the file.
+///
+/// The two designs differ in ONE line, which is the whole assertion. Reducing
+/// the walk to "the node itself" passed all 5183 tests before this existed.
+#[test]
+fn the_provisional_width_path_answers_what_the_cached_one_does() {
+    // A shared subexpression at every level: 2^depth paths, one node each — the
+    // shape the old node budget existed for, and the reason the walk stamps
+    // visits instead of counting.
+    let mut big = String::from("i8");
+    for _ in 0..12 {
+        big = format!("({big}+{big})");
+    }
+    let mk = |hier: bool| {
+        let line = if hier {
+            "$display(\"HK %0d\", u.kk);"
+        } else {
+            "$display(\"HK 7\");"
+        };
+        format!(
+            "module sub; reg [7:0] kk = 8'd7; endmodule\n\
+             module top;\n\
+               reg [7:0] ma [0:255];\n\
+               sub u();\n\
+               reg [7:0] i8; reg signed [7:0] s8; reg signed [7:0] z8; integer j;\n\
+               initial begin\n\
+                 for (j=0;j<256;j=j+1) ma[j] = j[7:0];\n\
+                 i8 = 8'd3; s8 = -8'sd3; z8 = 8'sd0;\n\
+                 {line}\n\
+                 $display(\"SIL %0d\", ma[ (({big}) != 32'd0) ? (s8+z8) : (s8+z8) ]);\n\
+                 ma[ (({big}) != 32'd0) ? (s8+z8) : (s8+z8) ] = 8'd99;\n\
+                 $display(\"W %0d %0d\", ma[253], ma[0]);\n\
+                 $finish;\n\
+               end\n\
+             endmodule\n"
+        )
+    };
+    let (a, ca) = run(&mk(true));
+    let (b, cb) = run(&mk(false));
+    // `-3` is out of `[0:255]` in both oracles, so the read is x and the write
+    // is dropped — and one unrelated `$display` must not change that.
+    for (tag, out, code) in [("hier", &a, ca), ("plain", &b, cb)] {
+        assert!(out.contains("SIL x"), "{tag}: expected `SIL x`\n{out}");
+        assert!(
+            out.contains("W 253 0"),
+            "{tag}: the write must not land\n{out}"
+        );
+        assert_eq!(code, Some(1), "{tag}: an out-of-range access stays loud");
+    }
+}

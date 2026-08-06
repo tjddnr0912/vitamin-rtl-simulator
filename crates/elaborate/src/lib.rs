@@ -706,6 +706,13 @@ struct Elaborator<'s> {
     /// and the scan is amortized across the whole elaboration instead of being
     /// re-run per indexed select. Measured: without it picorv32 paid 4.3%.
     selfw_scan: u32,
+    /// Visit stamps for `collect_subtree_postorder`, one per ExprId, bumped per
+    /// query. A shared subexpression (`x+x`, and every level above it) would
+    /// otherwise be walked once per path — exponential in the nesting depth,
+    /// which is why the walk used to carry a node budget instead. A budget is a
+    /// cliff; this is not.
+    selfw_seen: Vec<u32>,
+    selfw_seen_gen: u32,
     /// Scratch for `index_self_width`'s PROVISIONAL path (§4.5.310) — reused
     /// across calls so a design with a hierarchical reference does not allocate
     /// an arena-sized buffer per indexed select. Only the queried subtree's ids
