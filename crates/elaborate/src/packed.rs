@@ -399,7 +399,11 @@ impl Elaborator<'_> {
         // walk runs per indexed select, and paying it in every design — none of
         // which has a hierarchical reference — measured +6% on a 12000-select
         // elaboration.
-        if !prefix_final && self.index_has_placeholder(eid) {
+        if !prefix_final
+            && self.with_seen(eid as usize, |me, seen, gen| {
+                me.index_has_placeholder(eid, seen, gen)
+            })
+        {
             return None;
         }
         // Past that scan the whole prefix is resolved, and a resolved expr is
@@ -496,8 +500,10 @@ impl Elaborator<'_> {
     /// whether an out-of-range value should be diagnosed rather than wrapped?
     ///
     /// The walk is in `index_all_const`; this is its name at the call site.
-    fn index_is_compile_time_constant(&self, eid: u32) -> bool {
-        self.index_all_const(eid)
+    fn index_is_compile_time_constant(&mut self, eid: u32) -> bool {
+        self.with_seen(eid as usize, |me, seen, gen| {
+            me.index_all_const(eid, seen, gen)
+        })
     }
 
     /// Every leaf a `Const`, every interior node a pure operator.
@@ -513,7 +519,7 @@ impl Elaborator<'_> {
     /// `_`-free like [`Self::index_is_repeatable`], and fails closed for the same
     /// reason: a `Call` or `SysFunc` is not a constant, and a variant this does
     /// not know must be treated as runtime rather than assumed constant.
-    fn index_all_const(&self, eid: u32) -> bool {
+    fn index_all_const(&self, eid: u32, seen: &mut [u32], gen: u32) -> bool {
         // ITERATIVE, no depth cap — see `index_has_placeholder`. Folding "too
         // deep" into this function's `false` is not conservative, it is a LOSS:
         // `false` means "not a constant", and that discards the carve-out that
@@ -527,6 +533,13 @@ impl Elaborator<'_> {
                 return false;
             }
             budget -= 1;
+            // Dedup: the arena is a DAG (the geometry names one index
+            // up to three times), so without stamps this is O(paths).
+            match seen.get_mut(id as usize) {
+                Some(slot) if *slot == gen => continue,
+                Some(slot) => *slot = gen,
+                None => return false,
+            }
             if !self.index_all_const_step(id, &mut stack) {
                 return false;
             }
@@ -621,11 +634,21 @@ impl Elaborator<'_> {
         let Some(sw) = self.index_self_width(raw_off) else {
             return raw_off;
         };
-        // A PACKED element offset keeps the pre-§4.5.310 emission in full. The
-        // funnel serves both geometries (see `IndexDomain`), and the thirty-two-bit
-        // reading is an UNPACKED-array rule: `reg [3:0][7:0] p; p[64'h1_0000_0002]`
-        // is dropped by iverilog 13, and applying the truncation here wrote element
-        // 2 instead — silently, at exit 0, in twelve of twenty-four measured cells.
+        // A PACKED element offset keeps the pre-§4.5.310 emission for the
+        // TRUNCATION half. The funnel serves both geometries (see `IndexDomain`),
+        // and applying the thirty-two-bit reading here wrote element 2 where
+        // iverilog drops — silently, at exit 0, in twelve of twenty-four measured
+        // cells on the WRITE side, which is where the two oracles split.
+        //
+        // ⚠️ The read side is NOT settled and this branch is measurably wrong
+        // there: for a RUNTIME `reg [63:0] b = 64'h1_0000_0002`, iverilog and
+        // verilator both truncate and read the element, while vita answers `x` —
+        // in four spellings (`reg [0:31]`, packed word, packed bit, frame-local
+        // element bit). An earlier version of this comment cited
+        // `p[64'h1_0000_0002]` as iverilog dropping it; that is the LITERAL,
+        // which iverilog rejects at compile time, so it never supported the claim
+        // it was making. Recorded in ROADMAP §2; settling it means explaining the
+        // oracles' own read/write asymmetry first.
         //
         // Only the width PIN survives for packed, which is what §4.5.308 put here
         // and what `decl_range_norm::unpacked_dimension_index_is_sealed_too` holds.
@@ -638,7 +661,13 @@ impl Elaborator<'_> {
                 // eight bits) writing nothing where both oracles write bit 5 —
                 // while the plain-vector and module-array spellings of the same
                 // line in the same design wrote it.
-                Some(sw) if sw.signed && sw.width < 32 && self.index_is_repeatable(raw_off) => {
+                Some(sw)
+                    if sw.signed
+                        && sw.width < 32
+                        && self.with_seen(raw_off as usize, |me, seen, gen| {
+                            me.index_is_repeatable(raw_off, seen, gen)
+                        }) =>
+                {
                     self.extend_to(raw_off, sw.width, 32, true)
                 }
                 Some(sw) if !sw.signed && self.unsigned_seal_admitted(raw_off) => {
@@ -741,7 +770,11 @@ impl Elaborator<'_> {
         //   index with zeros instead of its sign is the same bug from the other
         //   side: `m[s8 >>> 1]` (−3) became 253 and went out of range, where it
         //   had been correct before this slice touched it.
-        if sw.signed && !self.index_is_repeatable(raw_off) {
+        if sw.signed
+            && !self.with_seen(raw_off as usize, |me, seen, gen| {
+                me.index_is_repeatable(raw_off, seen, gen)
+            })
+        {
             return raw_off;
         }
         self.extend_to(raw_off, sw.width, 32, sw.signed)
@@ -828,7 +861,30 @@ impl Elaborator<'_> {
         true
     }
 
-    fn index_has_placeholder(&self, eid: u32) -> bool {
+    /// Lend the visit-stamp buffer with a FRESH generation.
+    ///
+    /// Every subtree walk needs dedup, not just the one that collects an order:
+    /// the arena is a DAG (the geometry names one index up to three times), so a
+    /// walk without stamps costs `O(paths)`, not `O(nodes)` — seven levels of
+    /// `m1[X][X]` in a 1.6 kB source, elaborating in under half a second, was
+    /// enough to exhaust a million-node budget and silently drop the seal.
+    fn with_seen<R>(&mut self, upto: usize, f: impl FnOnce(&Self, &mut [u32], u32) -> R) -> R {
+        let mut seen = std::mem::take(&mut self.selfw_seen);
+        if seen.len() <= upto {
+            seen.resize(upto + 1, 0);
+        }
+        self.selfw_seen_gen = self.selfw_seen_gen.wrapping_add(1);
+        if self.selfw_seen_gen == 0 {
+            seen.iter_mut().for_each(|s| *s = 0);
+            self.selfw_seen_gen = 1;
+        }
+        let gen = self.selfw_seen_gen;
+        let out = f(self, &mut seen, gen);
+        self.selfw_seen = seen;
+        out
+    }
+
+    fn index_has_placeholder(&self, eid: u32, seen: &mut [u32], gen: u32) -> bool {
         // ITERATIVE, with no depth cap. A recursion cap here is not a guard, it
         // is a CLIFF: this walk runs on every seal in every design, and failing
         // closed at depth 64 silently dropped every seal §4.5.308/309/310 added
@@ -847,6 +903,13 @@ impl Elaborator<'_> {
                 return true;
             }
             budget -= 1;
+            // Dedup: the arena is a DAG (the geometry names one index
+            // up to three times), so without stamps this is O(paths).
+            match seen.get_mut(id as usize) {
+                Some(slot) if *slot == gen => continue,
+                Some(slot) => *slot = gen,
+                None => return true,
+            }
             if self.index_has_placeholder_step(id, &mut stack) {
                 return true;
             }
@@ -910,7 +973,7 @@ impl Elaborator<'_> {
     /// under-detects here writes silent-wrongs, so a variant this does not
     /// recognize must fail closed, and adding a variant to `sim_ir::Expr` should
     /// make this stop compiling.
-    fn index_is_repeatable(&self, eid: u32) -> bool {
+    fn index_is_repeatable(&self, eid: u32, seen: &mut [u32], gen: u32) -> bool {
         // ITERATIVE, no depth cap. "Too deep" is not the same answer as "not
         // repeatable" even though both spell `false`: the first silently drops
         // the seal, and 64 `- 8'sd0` pads were enough to make a narrow signed
@@ -922,6 +985,13 @@ impl Elaborator<'_> {
                 return false;
             }
             budget -= 1;
+            // Dedup: the arena is a DAG (the geometry names one index
+            // up to three times), so without stamps this is O(paths).
+            match seen.get_mut(id as usize) {
+                Some(slot) if *slot == gen => continue,
+                Some(slot) => *slot = gen,
+                None => return false,
+            }
             if !self.index_is_repeatable_step(id, &mut stack) {
                 return false;
             }

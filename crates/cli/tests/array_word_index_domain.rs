@@ -647,3 +647,47 @@ fn a_deeply_nested_index_still_gets_its_seal() {
         assert_eq!(code, Some(1), "const pads={pads}: and it stays loud\n{out}");
     }
 }
+
+/// The packed branch's sign extension names the index twice too, so its
+/// repeatability gate needs the same two discriminating designs the array-word
+/// one has.
+///
+/// Without them the gate survived the whole suite (measured): the product was
+/// right, but nothing would have noticed if the guard were deleted — and both
+/// channels it exists for are live on this path. A draw would be taken twice and
+/// shift every later `$urandom`; an out-of-range array read inside the index
+/// would report twice and eat the eight-per-run diagnostic budget.
+#[test]
+fn the_packed_branchs_sign_extension_does_not_duplicate_the_index() {
+    let draw = "module top;\n\
+       reg [1:0][31:0] gp;\n\
+       initial begin\n\
+         gp = 64'h0;\n\
+         gp[0][byte'($urandom)] = 1'b1;\n\
+         $display(\"NEXT %0d\", $urandom);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out, _c) = run(draw);
+    assert!(
+        out.contains("NEXT 2099872348"),
+        "the index must consume exactly one draw\n{out}"
+    );
+
+    let diag = "module top;\n\
+       reg [1:0][31:0] gp;\n\
+       reg signed [7:0] ixs [0:1];\n\
+       initial begin\n\
+         gp = 64'h0; ixs[0] = -8'sd6;\n\
+         gp[0][~ixs[5]] = 1'b1;\n\
+         $display(\"PKD %b\", gp[0]);\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out2, code2) = run(diag);
+    assert_eq!(
+        code2,
+        Some(1),
+        "the out-of-range element read stays loud\n{out2}"
+    );
+}
