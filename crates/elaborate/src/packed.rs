@@ -467,7 +467,7 @@ impl Elaborator<'_> {
         }
         let gen = self.selfw_seen_gen;
         let mut order = Vec::new();
-        let ok = self.collect_subtree_postorder(eid, &mut order, &mut seen, gen, 0);
+        let ok = self.collect_subtree_postorder(eid, &mut order, &mut seen, gen);
         self.selfw_seen = seen;
         if !ok {
             self.selfw_scratch = scratch;
@@ -497,7 +497,7 @@ impl Elaborator<'_> {
     ///
     /// The walk is in `index_all_const`; this is its name at the call site.
     fn index_is_compile_time_constant(&self, eid: u32) -> bool {
-        self.index_all_const(eid, 0)
+        self.index_all_const(eid)
     }
 
     /// Every leaf a `Const`, every interior node a pure operator.
@@ -513,10 +513,29 @@ impl Elaborator<'_> {
     /// `_`-free like [`Self::index_is_repeatable`], and fails closed for the same
     /// reason: a `Call` or `SysFunc` is not a constant, and a variant this does
     /// not know must be treated as runtime rather than assumed constant.
-    fn index_all_const(&self, eid: u32, depth: u32) -> bool {
-        if depth > 64 {
-            return false;
+    fn index_all_const(&self, eid: u32) -> bool {
+        // ITERATIVE, no depth cap — see `index_has_placeholder`. Folding "too
+        // deep" into this function's `false` is not conservative, it is a LOSS:
+        // `false` means "not a constant", and that discards the carve-out that
+        // keeps a statically out-of-range index loud. Measured: 65 `- 64'd0`
+        // pads turned `mz[64'h1_0000_0002 - …]` from a diagnosed drop into a
+        // landed write at exit 0, with no hierarchy involved.
+        let mut stack = vec![eid];
+        let mut budget = 1_000_000u32;
+        while let Some(id) = stack.pop() {
+            if budget == 0 {
+                return false;
+            }
+            budget -= 1;
+            if !self.index_all_const_step(id, &mut stack) {
+                return false;
+            }
         }
+        true
+    }
+
+    /// One node of [`Self::index_all_const`]: `false` = stop, not a constant.
+    fn index_all_const_step(&self, eid: u32, stack: &mut Vec<u32>) -> bool {
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
             Some(ir::Expr::Const { .. }) => return true,
             // The two sign casts preserve their argument's value and width.
@@ -549,7 +568,8 @@ impl Elaborator<'_> {
             | Some(ir::Expr::ArrayItem { .. })
             | None => return false,
         };
-        kids.into_iter().all(|k| self.index_all_const(k, depth + 1))
+        stack.extend(kids);
+        true
     }
 
     fn const_index_value(&self, eid: u32) -> Option<i64> {
@@ -611,6 +631,16 @@ impl Elaborator<'_> {
         // and what `decl_range_norm::unpacked_dimension_index_is_sealed_too` holds.
         if domain == IndexDomain::PackedElem {
             return match self.index_self_width(raw_off) {
+                // A SIGNED narrow index gets the self-determination half of the
+                // seal here too. Only the 32-bit TRUNCATION is an array-word
+                // rule; evaluating the index at the width the user wrote is not,
+                // and withholding it left `L[0][~v]` (a `byte` v, so `~v` is 5 at
+                // eight bits) writing nothing where both oracles write bit 5 —
+                // while the plain-vector and module-array spellings of the same
+                // line in the same design wrote it.
+                Some(sw) if sw.signed && sw.width < 32 && self.index_is_repeatable(raw_off) => {
+                    self.extend_to(raw_off, sw.width, 32, true)
+                }
                 Some(sw) if !sw.signed && self.unsigned_seal_admitted(raw_off) => {
                     let zero1 = self.const_u32_expr(0, 1);
                     self.push_expr(ir::Expr::Concat {
@@ -711,7 +741,7 @@ impl Elaborator<'_> {
         //   index with zeros instead of its sign is the same bug from the other
         //   side: `m[s8 >>> 1]` (−3) became 253 and went out of range, where it
         //   had been correct before this slice touched it.
-        if sw.signed && !self.index_is_repeatable(raw_off, 0) {
+        if sw.signed && !self.index_is_repeatable(raw_off) {
             return raw_off;
         }
         self.extend_to(raw_off, sw.width, 32, sw.signed)
@@ -741,61 +771,60 @@ impl Elaborator<'_> {
         out: &mut Vec<u32>,
         seen: &mut [u32],
         gen: u32,
-        depth: u32,
     ) -> bool {
-        // Depth only — the node budget is gone, replaced by the visit stamps.
-        // The cap matches the two sibling walks and, like them, fails closed.
-        //
-        // ⚠️ It is also UNREACHABLE, and that is an argument rather than an
-        // accident: `index_has_placeholder` runs first in the one caller, caps at
-        // the same depth, and recurses into a SUPERSET of these children (it does
-        // not skip `k >= eid`). So nothing can drive this walk past 64 without
-        // having already declined. Mutating this arm to `true` changes no test,
-        // measured — the equivalence is why, not a coverage hole.
-        if depth > 64 {
-            return false;
-        }
-        // The stamps are a PERFORMANCE property, not a correctness one: a node
-        // emitted once is filled once, and re-emitting it would only refill it
-        // with the same value. What they prevent is walking a shared
-        // subexpression once per path — `(x+x)` nested d deep is 2^d paths over
-        // d+1 nodes. That is why the budget this replaced existed.
-        match seen.get_mut(eid as usize) {
-            Some(slot) if *slot == gen => return true,
-            Some(slot) => *slot = gen,
-            None => return false,
-        }
-        let kids: Vec<u32> = match self.exprs.get(eid as usize) {
-            Some(ir::Expr::Signal { word, .. }) => word.iter().copied().collect(),
-            Some(ir::Expr::Select {
-                base,
-                offset,
-                width,
-                ..
-            }) => vec![*base, *offset, *width],
-            Some(ir::Expr::Concat { parts }) => parts.clone(),
-            Some(ir::Expr::Replicate { count, value }) => vec![*count, *value],
-            Some(ir::Expr::Unary { operand, .. }) => vec![*operand],
-            Some(ir::Expr::Binary { lhs, rhs, .. }) => vec![*lhs, *rhs],
-            Some(ir::Expr::Ternary {
-                cond,
-                then_e,
-                else_e,
-            }) => vec![*cond, *then_e, *else_e],
-            Some(ir::Expr::SysFunc { args, .. }) | Some(ir::Expr::Call { args, .. }) => {
-                args.clone()
+        // ITERATIVE post-order, no depth cap. The cap that used to sit here was
+        // justified as unreachable because `index_has_placeholder` capped at the
+        // same depth and declined first — and then that sibling cap was removed,
+        // which left this one live: with a hierarchical reference anywhere before
+        // the select, 64 `- 5'd0` pads silently dropped the seal at exit 0. An
+        // equivalence argument is only as good as the thing it points at.
+        let mut budget = 1_000_000u32;
+        // (node, children already pushed)
+        let mut stack = vec![(eid, false)];
+        while let Some((id, expanded)) = stack.pop() {
+            if budget == 0 {
+                return false;
             }
-            Some(ir::Expr::Const { .. }) | Some(ir::Expr::ArrayItem { .. }) | None => vec![],
-        };
-        for k in kids {
+            budget -= 1;
+            if expanded {
+                out.push(id);
+                continue;
+            }
+            match seen.get_mut(id as usize) {
+                Some(slot) if *slot == gen => continue,
+                Some(slot) => *slot = gen,
+                None => return false,
+            }
+            let kids: Vec<u32> = match self.exprs.get(id as usize) {
+                Some(ir::Expr::Signal { word, .. }) => word.iter().copied().collect(),
+                Some(ir::Expr::Select {
+                    base,
+                    offset,
+                    width,
+                    ..
+                }) => vec![*base, *offset, *width],
+                Some(ir::Expr::Concat { parts }) => parts.clone(),
+                Some(ir::Expr::Replicate { count, value }) => vec![*count, *value],
+                Some(ir::Expr::Unary { operand, .. }) => vec![*operand],
+                Some(ir::Expr::Binary { lhs, rhs, .. }) => vec![*lhs, *rhs],
+                Some(ir::Expr::Ternary {
+                    cond,
+                    then_e,
+                    else_e,
+                }) => vec![*cond, *then_e, *else_e],
+                Some(ir::Expr::SysFunc { args, .. }) | Some(ir::Expr::Call { args, .. }) => {
+                    args.clone()
+                }
+                Some(ir::Expr::Const { .. }) | Some(ir::Expr::ArrayItem { .. }) | None => vec![],
+            };
+            stack.push((id, true));
             // A child id ABOVE the parent is a clone the deferred-hierarchy
             // resolve installed into a lower slot; it is not part of this
             // subtree's post-order and skipping it is not a truncation.
-            if k < eid && !self.collect_subtree_postorder(k, out, seen, gen, depth + 1) {
-                return false;
+            for k in kids.into_iter().filter(|&k| k < id) {
+                stack.push((k, false));
             }
         }
-        out.push(eid);
         true
     }
 
@@ -881,12 +910,27 @@ impl Elaborator<'_> {
     /// under-detects here writes silent-wrongs, so a variant this does not
     /// recognize must fail closed, and adding a variant to `sim_ir::Expr` should
     /// make this stop compiling.
-    fn index_is_repeatable(&self, eid: u32, depth: u32) -> bool {
-        // Guard the recursion rather than trusting the arena's shape: a deep
-        // index tree is rare, and declining one is only a lost improvement.
-        if depth > 64 {
-            return false;
+    fn index_is_repeatable(&self, eid: u32) -> bool {
+        // ITERATIVE, no depth cap. "Too deep" is not the same answer as "not
+        // repeatable" even though both spell `false`: the first silently drops
+        // the seal, and 64 `- 8'sd0` pads were enough to make a narrow signed
+        // index read a live element at exit 0 where the oracle reads x.
+        let mut stack = vec![eid];
+        let mut budget = 1_000_000u32;
+        while let Some(id) = stack.pop() {
+            if budget == 0 {
+                return false;
+            }
+            budget -= 1;
+            if !self.index_is_repeatable_step(id, &mut stack) {
+                return false;
+            }
         }
+        true
+    }
+
+    /// One node of [`Self::index_is_repeatable`]: `false` = stop, not repeatable.
+    fn index_is_repeatable_step(&self, eid: u32, stack: &mut Vec<u32>) -> bool {
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
             Some(ir::Expr::Const { .. }) => vec![],
             // A scalar net read is pure and silent. An ARRAY-ELEMENT read is
@@ -940,8 +984,8 @@ impl Elaborator<'_> {
             | Some(ir::Expr::ArrayItem { .. })
             | None => return false,
         };
-        kids.into_iter()
-            .all(|k| self.index_is_repeatable(k, depth + 1))
+        stack.extend(kids);
+        true
     }
 
     /// The index expression, ready to be normalized: SEALED at its own

@@ -495,6 +495,40 @@ fn a_frame_array_elements_bit_axis_is_not_a_word_axis() {
     );
 }
 
+/// The four spellings of one bit-select must answer alike.
+///
+/// `~v` on a `byte` is 5 at the index's own eight bits. A plain vector and a
+/// module array got that; a multi-dim-packed net and a subroutine-local array
+/// did not, because the packed branch of the funnel sealed only UNSIGNED
+/// indices — so the self-determination half of the seal, which is not an
+/// array-word rule at all, was withheld from exactly the two spellings that
+/// reach it. Both oracles write bit 5 in all four.
+#[test]
+fn every_spelling_of_one_bit_select_answers_alike() {
+    let src = "module top;\n\
+       reg signed [7:0] s8;\n\
+       reg [31:0] gv; reg [31:0] gaa [0:1]; reg [1:0][31:0] gp;\n\
+       function automatic int Fb(input signed [7:0] v);\n\
+         reg [31:0] L [0:1];\n\
+         begin L[0]=32'h0; L[0][~v]=1'b1; Fb = L[0]; end\n\
+       endfunction\n\
+       initial begin\n\
+         s8 = -8'sd6;\n\
+         gv=32'h0; gv[~s8]=1'b1;\n\
+         gaa[0]=32'h0; gaa[0][~s8]=1'b1;\n\
+         gp=64'h0; gp[0][~s8]=1'b1;\n\
+         $display(\"VEC %0d ARR %0d PKD %0d FRM %0d\", gv, gaa[0], gp[0], Fb(s8));\n\
+         $finish;\n\
+       end\n\
+     endmodule\n";
+    let (out, code) = run(src);
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("VEC 32 ARR 32 PKD 32 FRM 32"),
+        "all four spellings write bit 5\n{out}"
+    );
+}
+
 /// A depth cap on the walks is a cliff, and this is the design that falls off it.
 ///
 /// `index_has_placeholder` runs on every seal in every design — no hierarchical
@@ -532,5 +566,84 @@ fn a_deeply_nested_index_still_gets_its_seal() {
             "pads={pads}: the seal was dropped\n{out}"
         );
         assert!(out.contains("R 1"), "pads={pads}\n{out}");
+    }
+    // …and with a HIERARCHICAL reference first, which routes the query through
+    // the provisional path and its own walk. Without this row the cap on that
+    // walk is invisible: it was the one that survived when its sibling's was
+    // removed, on the strength of a comment citing the removed sibling.
+    let hier = |pads: usize| {
+        let idx = format!("(~r5){}", " - 5'd0".repeat(pads));
+        format!(
+            "module sub; reg [7:0] kk = 8'd7; endmodule\n\
+             module top;\n\
+               reg [0:31] a0; reg [4:0] r5;\n\
+               sub u();\n\
+               initial begin\n\
+                 a0 = 32'b0; r5 = 5'd28;\n\
+                 $display(\"HK %0d\", u.kk);\n\
+                 a0[{idx}] = 1'b1;  $display(\"W %b\", a0);\n\
+                 $finish;\n\
+               end\n\
+             endmodule\n"
+        )
+    };
+    for pads in [63usize, 64, 200] {
+        let (out, code) = run(&hier(pads));
+        assert_eq!(code, Some(0), "hier pads={pads}\n{out}");
+        assert!(
+            out.contains("W 00010000000000000000000000000000"),
+            "hier pads={pads}: the seal was dropped on the provisional path\n{out}"
+        );
+    }
+    // A SIGNED index reaches a different walk than the unsigned one above.
+    let signed_deep = |pads: usize| {
+        format!(
+            "module top;\n\
+               reg [7:0] ma [0:255]; reg signed [7:0] s8; integer q;\n\
+               initial begin\n\
+                 for(q=0;q<=255;q=q+1) ma[q]=q[7:0];\n\
+                 s8 = 8'sd100;\n\
+                 $display(\"R %0d\", ma[(s8 + 8'sd100){}]);\n\
+                 $finish;\n\
+               end\n\
+             endmodule\n",
+            " - 8'sd0".repeat(pads)
+        )
+    };
+    for pads in [63usize, 64] {
+        let (out, code) = run(&signed_deep(pads));
+        assert!(
+            out.contains("R x"),
+            "signed pads={pads}: 200 is out of range\n{out}"
+        );
+        assert_eq!(
+            code,
+            Some(1),
+            "signed pads={pads}: and it stays loud\n{out}"
+        );
+    }
+    // A CONSTANT index must stay diagnosed at any depth — `false` from the
+    // constant walk means "runtime", which silently wraps instead.
+    let const_deep = |pads: usize| {
+        format!(
+            "module top;\n\
+               reg [7:0] mz [0:5]; integer q;\n\
+               initial begin\n\
+                 for(q=0;q<=5;q=q+1) mz[q]=q+50;\n\
+                 mz[64'h1_0000_0002{}] = 8'd99;\n\
+                 $write(\"K \"); for(q=0;q<=5;q=q+1) $write(\"%0d \", mz[q]); $display(\"\");\n\
+                 $finish;\n\
+               end\n\
+             endmodule\n",
+            " - 64'd0".repeat(pads)
+        )
+    };
+    for pads in [64usize, 65, 200] {
+        let (out, code) = run(&const_deep(pads));
+        assert!(
+            out.contains("K 50 51 52 53 54 55"),
+            "const pads={pads}: an out-of-range constant must not land\n{out}"
+        );
+        assert_eq!(code, Some(1), "const pads={pads}: and it stays loud\n{out}");
     }
 }
