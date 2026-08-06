@@ -732,7 +732,9 @@ fn the_packed_branchs_sign_extension_does_not_duplicate_the_index() {
 /// across a `+` flipped it, which is the statement-order dependence this funnel
 /// is supposed to have stopped having.
 ///
-/// ⚠️ The whole-net read `u.k` is not decoration. `index_has_placeholder` runs
+/// ⚠️ The whole-net read `u.k` must come BEFORE the selects, not merely exist.
+/// Moved after them the design passes against a binary with the fix reverted —
+/// measured. `index_has_placeholder` runs
 /// ONLY when the arena prefix still holds a live placeholder, and a hierarchical
 /// SELECT is resolved by the very pass that then normalizes the outer index — so
 /// without a reference resolved by a LATER pass the prefix is already clean, the
@@ -812,4 +814,42 @@ fn a_dag_shaped_index_does_not_exhaust_the_walks() {
         out.contains("W 00010000000000000000000000000000"),
         "the seal must survive a DAG-shaped index\n{out}"
     );
+}
+
+/// `index_is_repeatable`'s dedup is load-bearing, and this is the design that
+/// shows it.
+///
+/// The DAG it walks does NOT come from the geometry and has nothing to do with
+/// `push_expr` not deduping — an earlier round recorded both of those and both
+/// were wrong. It comes from the seal's own `extend_to`, which names its operand
+/// twice, re-entering the walk through nested packed-array element selects:
+/// about 6x per level, so seven levels in 750 bytes of source exhausts a
+/// million-node budget and the walk fails closed, dropping the seal. Elaboration
+/// stays at 0.00 s either way, so nothing else notices.
+///
+/// Both oracles read element `[-3]`.
+#[test]
+fn a_seal_built_dag_does_not_exhaust_the_repeatability_walk() {
+    let mut idx = String::from("(s8 + 8'sd9)");
+    for _ in 0..7 {
+        idx = format!("(s8 + 8'sd9 + $signed(pp[{idx}]))");
+    }
+    let final_idx = format!("(s8 + 8'sd3 + $signed(pp[{idx}]))");
+    let src = format!(
+        "module top;\n\
+           reg [7:0][7:0] pp; reg signed [7:0] s8;\n\
+           reg [7:0] mg [-3:2]; integer q;\n\
+           initial begin\n\
+             pp = 64'h0; s8 = -8'sd6;\n\
+             for (q=-3;q<=2;q=q+1) mg[q] = q+45;\n\
+             $display(\"A %0d\", mg[{final_idx}]);\n\
+             $display(\"C %0d\", {final_idx});\n\
+             $finish;\n\
+           end\n\
+         endmodule\n"
+    );
+    let (out, code) = run(&src);
+    assert_eq!(code, Some(0), "-3 is in range\n{out}");
+    assert!(out.contains("C -3"), "the index itself is -3\n{out}");
+    assert!(out.contains("A 42"), "so the read is mg[-3]\n{out}");
 }

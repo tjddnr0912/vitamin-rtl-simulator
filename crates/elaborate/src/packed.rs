@@ -748,7 +748,10 @@ impl Elaborator<'_> {
         // `extend_to` builds `Concat[Replicate(e[w-1]), e]`, so a SIGNED operand
         // appears TWICE and vita evaluates each occurrence: `m[byte'($urandom)]`
         // drew two different random numbers and built the index out of one
-        // draw's sign bit and another draw's low bits. Hence the
+        // draw's sign bit and another draw's low bits.
+        // ⚠️ `byte'(…)` also passes through `systask::coerce_two_state`, which
+        // names its operand once per result bit — so that example still draws
+        // eight times, from a funnel this guard does not reach (ROADMAP §2). Hence the
         // `index_is_repeatable` gate above — asking the CONTEXT to sign-extend
         // instead was tried and does NOT work (§5.5.1 decides signedness for the
         // whole expression and propagates it DOWN, so the enclosing unsigned
@@ -979,6 +982,10 @@ impl Elaborator<'_> {
     ///
     /// - VALUE. `m[byte'($urandom)]` built its index out of one draw's sign bit
     ///   and a different draw's low bits, and shifted every later draw.
+    ///   ⚠️ That example is NOT fully fixed by this guard: `byte'(…)` is
+    ///   lowered by `systask::coerce_two_state`, which names its operand once
+    ///   per RESULT BIT, so the cast alone draws eight times (ROADMAP §2).
+    ///   The guard stops THIS funnel from adding to that.
     /// - DIAGNOSTICS. An out-of-range array read inside the index calls
     ///   `warn_run_range`, which is an ERROR and rate-limited at eight per run,
     ///   so a duplicated `m[ix[k]]` reports twice and can exhaust the budget
