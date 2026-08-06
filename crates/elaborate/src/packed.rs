@@ -736,10 +736,22 @@ impl Elaborator<'_> {
         depth: u32,
     ) -> bool {
         // Depth only — the node budget is gone, replaced by the visit stamps.
-        // The cap matches the two sibling walks, and like them it fails closed.
+        // The cap matches the two sibling walks and, like them, fails closed.
+        //
+        // ⚠️ It is also UNREACHABLE, and that is an argument rather than an
+        // accident: `index_has_placeholder` runs first in the one caller, caps at
+        // the same depth, and recurses into a SUPERSET of these children (it does
+        // not skip `k >= eid`). So nothing can drive this walk past 64 without
+        // having already declined. Mutating this arm to `true` changes no test,
+        // measured — the equivalence is why, not a coverage hole.
         if depth > 64 {
             return false;
         }
+        // The stamps are a PERFORMANCE property, not a correctness one: a node
+        // emitted once is filled once, and re-emitting it would only refill it
+        // with the same value. What they prevent is walking a shared
+        // subexpression once per path — `(x+x)` nested d deep is 2^d paths over
+        // d+1 nodes. That is why the budget this replaced existed.
         match seen.get_mut(eid as usize) {
             Some(slot) if *slot == gen => return true,
             Some(slot) => *slot = gen,
