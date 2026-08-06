@@ -231,9 +231,12 @@ fn a_constant_index_out_of_range_stays_loud() {
 /// bit 31: `reg [63:0] b; b[31:0] = 3;` (high half never driven, so X) read AND
 /// WROTE element 3 where iverilog gives `x` and drops — loud → silent-wrong, and
 /// none of the value matrices covered it because none of them puts x in an
-/// index. The dropped half is added back as `high * 0`, which is 0 when high is
-/// known and all-X when it is not (arithmetic returns X for an X operand —
-/// measured identical in iverilog 13 and vita).
+/// index. So the value is multiplied by one BEFORE the bits are cut: arithmetic
+/// returns all-X for an X operand, so an unknown anywhere spreads across the
+/// whole width first, and a known value is unchanged (measured identical in
+/// iverilog 13 and vita at 33, 64 and 65 bits). An earlier shape added the
+/// dropped half back as `high * 0`, which has the same semantics but names the
+/// index twice — and that gate then refused a pure function call.
 ///
 /// Every row's expectation is iverilog's, measured.
 #[test]

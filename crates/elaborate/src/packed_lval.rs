@@ -217,8 +217,21 @@ impl Elaborator<'_> {
             });
             return;
         }
+        // The DOMAIN is the source geometry, not the storage. A subroutine-local
+        // or formal UNPACKED array is registered in `packed_dims` (its slot is
+        // md-packed), so its word index arrives here — and labelling it
+        // `PackedElem` because of where it lives skipped the array-word reading
+        // for it: `lm[bg]` inside a function read the wrong element where the
+        // module-level twin `gm[bg]` read the right one, and it did so at exit 0
+        // where the pre-§4.5.310 build had been loud. `frame_arr_formal_meta` is
+        // the same key this function already consults a few lines up.
+        let domain = if self.frame_arr_formal_meta.contains_key(&net) {
+            IndexDomain::ArrayWord
+        } else {
+            IndexDomain::PackedElem
+        };
         let (ext, dirs) = Self::packed_split(&dims);
-        let offset = self.flatten_word(&ext, idxs, &dirs, IndexDomain::PackedElem);
+        let offset = self.flatten_word(&ext, idxs, &dirs, domain);
         let elem_w: u64 = dims[idxs.len()..]
             .iter()
             .map(|&(_, w, _)| w as u64)

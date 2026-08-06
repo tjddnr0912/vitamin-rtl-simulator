@@ -405,27 +405,56 @@ impl Elaborator<'_> {
             consts: &self.consts,
             nets: &self.nets,
         };
-        let mut sw = if prefix_final {
-            std::mem::take(&mut self.selfw_cache)
-        } else {
-            Vec::with_capacity(last + 1)
-        };
-        for i in sw.len() as u32..=eid {
+        let fill = |sw: &mut Vec<sim_ir::selfwidth::SelfWidth>, i: u32| {
             let s = if let Some(&(w, sg)) = self.class_field_widths.get(&i) {
                 sim_ir::selfwidth::SelfWidth {
                     width: w.max(1),
                     signed: sg,
                 }
             } else {
-                sim_ir::selfwidth::self_width_of(ctx, &call_ret, &sw, i)
+                sim_ir::selfwidth::self_width_of(ctx, &call_ret, sw, i)
             };
-            sw.push(s);
-        }
-        let out = sw[eid as usize];
+            if (i as usize) < sw.len() {
+                sw[i as usize] = s;
+            } else {
+                sw.push(s);
+            }
+            s
+        };
         if prefix_final {
+            let mut sw = std::mem::take(&mut self.selfw_cache);
+            let mut out = sw.get(eid as usize).copied();
+            for i in sw.len() as u32..=eid {
+                out = Some(fill(&mut sw, i));
+            }
             self.selfw_cache = sw;
+            return out;
         }
-        Some(out)
+        // PROVISIONAL prefix: the cache cannot be kept, but recomputing the whole
+        // `0..=eid` range per index is quadratic — a design with one hierarchical
+        // read before 3000 indexed selects went 0.08 s to 0.40 s, and 12000 of
+        // them to 34 s. Only this index's own SUBTREE is needed, and it is clean
+        // (checked above), so the scratch buffer is filled at the subtree's ids
+        // in post-order and everything else is left alone. Same rule, same
+        // driver — just fewer entries.
+        let mut scratch = std::mem::take(&mut self.selfw_scratch);
+        if scratch.len() <= last {
+            scratch.resize(
+                last + 1,
+                sim_ir::selfwidth::SelfWidth {
+                    width: 1,
+                    signed: false,
+                },
+            );
+        }
+        let mut order = Vec::new();
+        self.collect_subtree_postorder(eid, &mut order, 0);
+        let mut out = None;
+        for id in order {
+            out = Some(fill(&mut scratch, id));
+        }
+        self.selfw_scratch = scratch;
+        out
     }
 
     /// A CONSTANT index's integer value, interpreted with its own signedness —
@@ -442,14 +471,7 @@ impl Elaborator<'_> {
     /// Is this index a COMPILE-TIME CONSTANT, for the purpose of deciding
     /// whether an out-of-range value should be diagnosed rather than wrapped?
     ///
-    /// `const_index_value` alone answers only for a folded `Const` node, and the
-    /// shape that actually reaches here unfolded is a sign cast over one
-    /// (`mg[$unsigned(-32'sd3)]`) — both `$signed` and `$unsigned` preserve their
-    /// argument's value and width, so seeing through them changes nothing but
-    /// the classification. Deliberately shallow: anything it fails to recognize
-    /// is treated as a runtime index and wraps, which costs a diagnostic on an
-    /// exotic constant expression but can never produce a value the oracles
-    /// reject (ROADMAP §2).
+    /// The walk is in `index_all_const`; this is its name at the call site.
     fn index_is_compile_time_constant(&self, eid: u32) -> bool {
         self.index_all_const(eid, 0)
     }
@@ -636,23 +658,17 @@ impl Elaborator<'_> {
         // A NARROWER index is EXTENDED to exactly thirty-two bits in its OWN
         // signedness — and the index expression must appear EXACTLY ONCE.
         //
-        // `extend_to` is the obvious tool and it is the wrong one here: it builds
-        // `Concat[Replicate(e[w-1]), e]`, so a SIGNED operand appears TWICE. vita
-        // evaluates each occurrence, so `m[byte'($urandom)]` drew two different
-        // random numbers and built the index out of one draw's sign bit and
-        // another draw's low bits — a wrong VALUE, not just a shifted stream
-        // (measured: the following `$urandom` also moved). The unsigned arm of
-        // `extend_to` is fine (its fill is a constant), but one arm being safe is
-        // not a reason to use a helper whose other arm is not.
-        //
-        // So the sign extension is asked of the CONTEXT instead, which needs no
-        // second occurrence: `$signed(e)` fixes the value's own width and sign
-        // (its argument is self-determined, which is the other half of what this
-        // funnel is for), and multiplying by a THIRTY-TWO-BIT SIGNED one makes
-        // the surrounding expression signed and thirty-two bits wide, so §5.5.1
-        // sign-extends `e` into it. `* 1` is the identity that carries the type;
-        // it is not dead code and removing it re-opens the `m[s8 >>> 1]` cell,
-        // where an unsigned context zero-extended -3 into 253.
+        // `extend_to` builds `Concat[Replicate(e[w-1]), e]`, so a SIGNED operand
+        // appears TWICE and vita evaluates each occurrence: `m[byte'($urandom)]`
+        // drew two different random numbers and built the index out of one
+        // draw's sign bit and another draw's low bits. Hence the
+        // `index_is_repeatable` gate above — asking the CONTEXT to sign-extend
+        // instead was tried and does NOT work (§5.5.1 decides signedness for the
+        // whole expression and propagates it DOWN, so the enclosing unsigned
+        // coordinate arithmetic re-determines the operand: `$signed(e) * 32'sd1
+        // + 32'd9` measured 262, not 6). A concat is the only self-determined
+        // construct Verilog has, and self-determination is exactly what needs a
+        // second occurrence.
         //
         // Both halves of that matter and each fixes a measured cell:
         //
@@ -677,39 +693,54 @@ impl Elaborator<'_> {
         self.extend_to(raw_off, sw.width, 32, sw.signed)
     }
 
-    /// May this index expression be written into the tree TWICE?
-    ///
-    /// Sign-extending without a cast means `Concat[Replicate(e[w-1]), e]`, and a
-    /// concat is the only self-determined construct Verilog has, so there is no
-    /// way to ask for the extension without naming `e` a second time. (Asking
-    /// the CONTEXT instead does not work: §5.5.1 signedness is decided by the
-    /// whole expression and propagates DOWN, so the enclosing unsigned
-    /// coordinate arithmetic re-determines any operand — measured, `$signed(e) *
-    /// 32'sd1 + 32'd9` gives 262, not 6.) The unsigned arm needs no second
-    /// occurrence, since its fill is a constant.
-    ///
-    /// So the question is whether evaluating `e` twice is OBSERVABLE, and there
-    /// are two channels, not one:
-    ///
-    /// - VALUE. `m[byte'($urandom)]` built its index out of one draw's sign bit
-    ///   and a different draw's low bits, and shifted every later draw.
-    /// - DIAGNOSTICS. An out-of-range array read inside the index calls
-    ///   `warn_run_range`, which is an ERROR and rate-limited at eight per run,
-    ///   so a duplicated `m[ix[k]]` reports twice and can exhaust the budget
-    ///   that a genuine unrelated site needed — loud → silent for THAT site.
-    ///   That is why an array-element read is refused below even though it is
-    ///   perfectly pure.
-    ///
-    /// Deliberately a whitelist over an `_`-free match — a walker that
-    /// under-detects here writes silent-wrongs, so a variant this does not
-    /// recognize must fail closed, and adding a variant to `sim_ir::Expr` should
-    /// make this stop compiling.
     /// Does this index's SUBTREE still contain a deferred-hierarchy placeholder?
     ///
     /// Same `_`-free whitelist shape as [`Self::index_is_repeatable`] and fails
     /// closed for the same reason: an unrecognized variant must read as "might
     /// be a placeholder" so the seal declines, which is the pre-§4.5.309 answer
     /// and always safe.
+    /// This index's subtree ids, children before parents.
+    ///
+    /// Same `_`-free whitelist as the sibling walks. A node it does not know
+    /// contributes only itself — the width rule then reads whatever the scratch
+    /// holds for its children, which is exactly the pre-§4.5.310 behaviour for a
+    /// shape nobody has taught this file about; the walks that DECIDE things
+    /// fail closed, this one only orders work.
+    fn collect_subtree_postorder(&self, eid: u32, out: &mut Vec<u32>, depth: u32) {
+        if depth > 64 || out.len() > 4096 {
+            out.push(eid);
+            return;
+        }
+        let kids: Vec<u32> = match self.exprs.get(eid as usize) {
+            Some(ir::Expr::Signal { word, .. }) => word.iter().copied().collect(),
+            Some(ir::Expr::Select {
+                base,
+                offset,
+                width,
+                ..
+            }) => vec![*base, *offset, *width],
+            Some(ir::Expr::Concat { parts }) => parts.clone(),
+            Some(ir::Expr::Replicate { count, value }) => vec![*count, *value],
+            Some(ir::Expr::Unary { operand, .. }) => vec![*operand],
+            Some(ir::Expr::Binary { lhs, rhs, .. }) => vec![*lhs, *rhs],
+            Some(ir::Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+            }) => vec![*cond, *then_e, *else_e],
+            Some(ir::Expr::SysFunc { args, .. }) | Some(ir::Expr::Call { args, .. }) => {
+                args.clone()
+            }
+            Some(ir::Expr::Const { .. }) | Some(ir::Expr::ArrayItem { .. }) | None => vec![],
+        };
+        for k in kids {
+            if k < eid {
+                self.collect_subtree_postorder(k, out, depth + 1);
+            }
+        }
+        out.push(eid);
+    }
+
     fn index_has_placeholder(&self, eid: u32, depth: u32) -> bool {
         if depth > 64 {
             return true;
@@ -741,6 +772,33 @@ impl Elaborator<'_> {
             .any(|k| self.index_has_placeholder(k, depth + 1))
     }
 
+    /// May this index expression be written into the tree TWICE?
+    ///
+    /// Sign-extending without a cast means `Concat[Replicate(e[w-1]), e]`, and a
+    /// concat is the only self-determined construct Verilog has, so there is no
+    /// way to ask for the extension without naming `e` a second time. (Asking
+    /// the CONTEXT instead does not work: §5.5.1 signedness is decided by the
+    /// whole expression and propagates DOWN, so the enclosing unsigned
+    /// coordinate arithmetic re-determines any operand — measured, `$signed(e) *
+    /// 32'sd1 + 32'd9` gives 262, not 6.) The unsigned arm needs no second
+    /// occurrence, since its fill is a constant.
+    ///
+    /// So the question is whether evaluating `e` twice is OBSERVABLE, and there
+    /// are two channels, not one:
+    ///
+    /// - VALUE. `m[byte'($urandom)]` built its index out of one draw's sign bit
+    ///   and a different draw's low bits, and shifted every later draw.
+    /// - DIAGNOSTICS. An out-of-range array read inside the index calls
+    ///   `warn_run_range`, which is an ERROR and rate-limited at eight per run,
+    ///   so a duplicated `m[ix[k]]` reports twice and can exhaust the budget
+    ///   that a genuine unrelated site needed — loud → silent for THAT site.
+    ///   That is why an array-element read is refused below even though it is
+    ///   perfectly pure.
+    ///
+    /// Deliberately a whitelist over an `_`-free match — a walker that
+    /// under-detects here writes silent-wrongs, so a variant this does not
+    /// recognize must fail closed, and adding a variant to `sim_ir::Expr` should
+    /// make this stop compiling.
     fn index_is_repeatable(&self, eid: u32, depth: u32) -> bool {
         // Guard the recursion rather than trusting the arena's shape: a deep
         // index tree is rare, and declining one is only a lost improvement.
@@ -1355,8 +1413,21 @@ impl Elaborator<'_> {
             );
             return self.placeholder_expr();
         }
+        // The DOMAIN is the source geometry, not the storage. A subroutine-local
+        // or formal UNPACKED array is registered in `packed_dims` (its slot is
+        // md-packed), so its word index arrives here — and labelling it
+        // `PackedElem` because of where it lives skipped the array-word reading
+        // for it: `lm[bg]` inside a function read the wrong element where the
+        // module-level twin `gm[bg]` read the right one, and it did so at exit 0
+        // where the pre-§4.5.310 build had been loud. `frame_arr_formal_meta` is
+        // the same key this function already consults a few lines up.
+        let domain = if self.frame_arr_formal_meta.contains_key(&net) {
+            IndexDomain::ArrayWord
+        } else {
+            IndexDomain::PackedElem
+        };
         let (ext, dirs) = Self::packed_split(&dims);
-        let offset = self.flatten_word(&ext, idxs, &dirs, IndexDomain::PackedElem);
+        let offset = self.flatten_word(&ext, idxs, &dirs, domain);
         let elem_w: u64 = dims[idxs.len()..]
             .iter()
             .map(|&(_, w, _)| w as u64)

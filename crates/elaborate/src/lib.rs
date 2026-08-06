@@ -706,6 +706,11 @@ struct Elaborator<'s> {
     /// and the scan is amortized across the whole elaboration instead of being
     /// re-run per indexed select. Measured: without it picorv32 paid 4.3%.
     selfw_scan: u32,
+    /// Scratch for `index_self_width`'s PROVISIONAL path (§4.5.310) — reused
+    /// across calls so a design with a hierarchical reference does not allocate
+    /// an arena-sized buffer per indexed select. Only the queried subtree's ids
+    /// are meaningful in it; every other slot is stale by design.
+    selfw_scratch: Vec<sim_ir::selfwidth::SelfWidth>,
     /// Memo for `index_self_signed` (§4.5.309) — one `SelfWidth` per ExprId,
     /// filled forward and never invalidated, because an expression's
     /// self-width cannot change once it is pushed.
