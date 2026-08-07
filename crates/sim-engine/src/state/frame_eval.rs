@@ -87,16 +87,23 @@ impl<'a> SimState<'a> {
         .eval(eid)
     }
 
-    /// N1: evaluate a frame-body `BlockingAssign` RHS. `$sformatf(fmt, …)` written to
-    /// a `string` target is rendered through the SHARED formatter (`format_args_str`) —
-    /// the generic `eval_sysfunc` arm cannot see the format string (it would dump the
-    /// raw args), so a `s = $sformatf(...)` in a subroutine body (an OUTPUT string
-    /// formal, a string return) needs this intercept. The frame window is active, so any
-    /// format arg that reads a frame-local formal resolves through `read_net`. The
-    /// intercept is GATED on a `NetKind::String` lhs: a `$sformatf` assigned to a
-    /// NUMERIC target is an illegal implicit string→int cast (iverilog rejects it), so
-    /// vita leaves it on the pre-existing generic path rather than changing its value.
-    /// Any other RHS evaluates normally in the assignment-width context.
+    /// N1: evaluate a frame-body `BlockingAssign` RHS. `$sformatf(fmt, …)` is rendered
+    /// through the SHARED formatter (`format_args_str`) — the generic `eval_sysfunc`
+    /// arm cannot see the format string (it would dump the raw args), so a
+    /// `s = $sformatf(...)` in a subroutine body needs this intercept. The frame
+    /// window is active, so any format arg that reads a frame-local formal resolves
+    /// through `read_net`. Any other RHS evaluates normally in the assignment-width
+    /// context.
+    ///
+    /// ⚠️ **This paragraph used to say the intercept was GATED on a `NetKind::String`
+    /// lhs**, on the grounds that a `$sformatf` into a NUMERIC target is an illegal
+    /// implicit cast iverilog rejects. The premise is true and the conclusion was
+    /// not: vita ACCEPTS that assignment at module scope and renders it correctly, so
+    /// the gate did not decline the shape — it gave the same statement two different
+    /// answers depending on which body it sat in, the numeric one silently holding
+    /// its own arguments' bytes instead of the rendered text. The gate is gone; the conversion to the destination's width lives at
+    /// the write funnel (`coerce_str_to_packed`), where the module path has always
+    /// had it.
     pub(crate) fn frame_rhs_value(&self, lhs: &Lvalue, rhs: u32) -> Value {
         // R19-X2 SILENT-WRONG (measured against iverilog 13, exit 0, no diagnostic):
         // the file-read family's real work is a statement-level effect that only the
@@ -110,26 +117,42 @@ impl<'a> SimState<'a> {
             self.fatal_frame_sysread(rhs);
             return Value::xs(self.lvalue_width(lhs).max(1), true);
         }
-        let lhs_is_string = lhs
-            .chunks
-            .first()
-            .and_then(|c| self.ir.nets.get(c.net as usize))
-            .map(|n| n.kind == NetKind::String)
-            .unwrap_or(false);
-        if lhs_is_string {
-            if let Some(sim_ir::Expr::SysFunc {
-                which: sim_ir::SysFuncId::Sformatf,
-                args,
-            }) = self.ir.exprs.get(rhs as usize)
-            {
-                let text = crate::builtins::format_args_str(
-                    self,
-                    args.first().copied(),
-                    args.get(1..).unwrap_or(&[]),
-                    None,
-                );
-                return Value::from_str_bytes(text.as_bytes());
-            }
+        // `$sformatf` renders here, for ANY destination — the intercept is keyed
+        // on the RHS, not on the lhs's net kind.
+        //
+        // ⚠️ It used to be gated on `lhs.kind == String`, and that gate was a
+        // silent-wrong: `reg [63:0] p; p = $sformatf("v=%0d", x);` inside a
+        // function body fell through to the plain `eval` path, whose arm for
+        // `Sformatf` drops the FORMAT STRING and concatenates the remaining args as
+        // packed chars — so the destination came back holding the raw argument
+        // bytes (printable and plausible: `$sformatf("v=%0d", 32'h41424344)` gave
+        // `ABCD`), not blank, at exit 0 — while the identical statement at module
+        // scope renders correctly
+        // (`compute_effect` → `k_sformatf`, which never asked about the lhs). Two
+        // paths for one statement, differing only in which body it sits in.
+        //
+        // What comes back is an `is_str` `Value` at the TEXT's width; the
+        // destination's width is applied at the write funnel
+        // (`coerce_str_to_packed`), which is where the module path applies it too.
+        //
+        // ⚠️ An earlier version of this comment said the packing was done here by
+        // `resize_keep_sign` "exactly as `apply_effect` packs `k_sformatf`'s", and
+        // BOTH halves were false: the module funnel resizes before storing, and
+        // `resize_keep_sign` returns an `is_str` value UNCHANGED. Rendering without
+        // converting left a `reg [63:0]` holding a 24-bit value — right text, wrong
+        // width — which is what the round-2 review of this very fix measured.
+        if let Some(sim_ir::Expr::SysFunc {
+            which: sim_ir::SysFuncId::Sformatf,
+            args,
+        }) = self.ir.exprs.get(rhs as usize)
+        {
+            let text = crate::builtins::format_args_str(
+                self,
+                args.first().copied(),
+                args.get(1..).unwrap_or(&[]),
+                None,
+            );
+            return Value::from_str_bytes(text.as_bytes());
         }
         let lw = self.lvalue_width(lhs);
         let sw = self.wt.get(rhs);
@@ -285,6 +308,27 @@ impl<'a> SimState<'a> {
     /// rejected at ELABORATE, so the engine only ever sees a whole-net chunk;
     /// the `debug_assert` is a release-stripped backstop.
     pub(crate) fn frame_write_lvalue(&self, lhs: &Lvalue, v: Value) {
+        // §6.16, HERE and not only in `frame_or_class_write` — this is the funnel
+        // every FRAME-SLOT destination passes through, and the other one is not.
+        //
+        // ⚠️ It was installed one level up first, and that missed a whole lane:
+        // `write_lvalue_general`'s frame-local branch (`init_diag.rs`) calls THIS
+        // function directly, and frame locals are excluded from the fast write path,
+        // so every frame-local write issued by `run_process` takes it. That is the
+        // lane a `task automatic` uses the moment its body leaves the `&self`
+        // subset — a single `$display` is enough. The variable is the LANE, not the
+        // executor: measured against the tree that had the intercept fixed and the
+        // coercion only in `frame_or_class_write`, the same task WITHOUT a
+        // `$display` was right and WITH one was wrong. (Against `main` BOTH are
+        // wrong, for the earlier reason — so re-measuring this sentence there reads
+        // as false unless the tree is stated, which is why it is stated.) The branch
+        // had briefly made function and task disagree about one statement, which is
+        // the defect class this slice exists to remove.
+        //
+        // Idempotent: `coerce_str_to_packed` returns immediately unless the value
+        // is still `is_str`, so the `frame_or_class_write` call (still needed — its
+        // class-FIELD arm returns before this function) costs nothing on arrival.
+        let v = self.coerce_str_to_packed(lhs, v);
         debug_assert_eq!(lhs.chunks.len(), 1, "frame lvalue is a single chunk");
         let c = &lhs.chunks[0];
         let net = c.net as usize;
@@ -431,6 +475,7 @@ impl<'a> SimState<'a> {
     /// other (whole frame-local net) write to `frame_write_lvalue`. `&self` —
     /// both targets are interior-mutable (the `RefCell` heap / the frame arena).
     pub(crate) fn frame_or_class_write(&self, lhs: &Lvalue, v: Value) {
+        let v = self.coerce_str_to_packed(lhs, v);
         if lhs.chunks.len() == 1 {
             let c = &lhs.chunks[0];
             if self.class_is_handle[c.net as usize] && c.word.is_some() {
@@ -443,6 +488,138 @@ impl<'a> SimState<'a> {
             }
         }
         self.frame_write_lvalue(lhs, v);
+    }
+
+    /// IEEE §6.16: a STRING VALUE written to a PACKED destination is right-aligned
+    /// in the destination's width — left-truncated when longer, zero-padded when
+    /// shorter.
+    ///
+    /// Called from TWO places, because the frame destinations do not share one
+    /// entry: `frame_write_lvalue` (every frame SLOT, including the
+    /// `write_lvalue_general` lane a lifted task takes) and `frame_or_class_write`
+    /// (whose class-FIELD arm returns before that function). An earlier version of
+    /// this doc claimed the second was "the one entry both their destinations pass
+    /// through"; it is not, and believing it left every lifted `task automatic`
+    /// unconverted.
+    ///
+    /// ⚠️ **The module funnel does it with `Value::resize`, and `resize_keep_sign`
+    /// is NOT a substitute.** `write_lvalue` resizes to the destination width
+    /// before storing (`init_diag.rs`) and then stores BITS, dropping the `Value`
+    /// wrapper; `resize_keep_sign` deliberately returns an `is_str` value
+    /// UNCHANGED — its
+    /// own doc says why ("a string's width is its DYNAMIC length … the write
+    /// funnel owns §6.16 conversion"). The frame funnel stores a whole `Value`
+    /// into a slot and only had the latter, so it performed no conversion at all:
+    /// a `reg [63:0]` frame local assigned `$sformatf("v=%0d", 7)` held a 24-BIT
+    /// value, and `~p` / `p >> 64` / a compare against a padded literal all read
+    /// wrong at exit 0, while the identical statement at module scope was right.
+    /// Both adversarial lenses of S3a round 2 converged on it; the `$sformatf`
+    /// intercept above had fixed the TEXT and left the WIDTH.
+    ///
+    /// The oracle is external after all, through the legal spelling of the same
+    /// rule: `reg [15:0] p = {"ab","cde"};` is `de` (25701) in iverilog 13 —
+    /// left-truncation, which is what `resize` does and what the module path
+    /// already produced.
+    ///
+    /// TWO destinations keep the byte string: a `string` net (whose slot holds a
+    /// heap string, not a bit vector) and a string ELEMENT of a dynamic array.
+    /// Resizing either would truncate the text to the handle's width.
+    ///
+    /// The two halves are NOT equal, and this note has been wrong about which three
+    /// times — so it now records only what a reachability probe measured.
+    ///
+    /// * `NetKind::String` is REACHABLE and load-bearing. It fires on a frame string
+    ///   local and on an `output string` formal, and `lvalue_width` of a String net
+    ///   is 1, so removing it would empty every one of them.
+    /// * `dyn_str_elem` is **DEAD CODE**. A `panic!` planted in that arm fired ZERO
+    ///   times across twelve designs on two backends — `string s[3]` with `foreach`,
+    ///   a `&self` function with `string s[2]`, a `&self` task with
+    ///   `string d[] = new[2]`, a runtime index — while the sibling arm fired on the
+    ///   same runs. It cannot fire because a string-element write never reaches this
+    ///   function: `write_lvalue_general`'s frame-local branch excludes dyn handles
+    ///   whose kind is not `String`, and its own `dyn_str_elem` branch hands the
+    ///   value to `write_chunk` first. Kept as the conservative answer for the day
+    ///   that routing changes; it is not covered, and no test can cover it.
+    ///
+    /// (The two earlier versions of this note claimed the opposite in each
+    ///   direction, and one credited a `string da[]` element the pre-slice binary
+    ///   was said to have truncated — re-measured, PRE renders that one intact; what
+    ///   PRE got wrong there was the `$sformatf` source, i.e. the intercept.)
+    ///
+    /// PRECONDITION worth stating: the carve-out reads `chunks.first()` while the
+    /// resize uses the whole lvalue's width. A MULTI-CHUNK (concat) lvalue would
+    /// make those two disagree — elaborate refuses one in a frame body (E3009
+    /// "concatenation-target assignment"), and `frame_write_lvalue` debug-asserts
+    /// a single chunk.
+    ///
+    /// ⚠️ **An earlier version of this note called `resize` → bare `is_str = false`
+    /// an EQUIVALENT mutation, "measured".** It was not equivalent and it was not
+    /// measured in the direction that mattered: that mutation additionally clears
+    /// the flag in the equal-width case, which is the case `resize` misses — so its
+    /// survival in the round-2 mutation run was evidence of the DEFECT, not of
+    /// redundancy. Both adversarial lenses of round 3 found it independently. Both
+    /// halves are done now: the resize states the width at one place with the
+    /// LVALUE's own width (the shape `write_lvalue_general` has), and the clear
+    /// makes that statement unconditional.
+    ///
+    /// Every downstream destination branch then resizes to the same width, so the
+    /// double resize is idempotent: `frame_write_lvalue`'s whole-net arm via
+    /// `resize_keep_sign` (NOT `frame_slot_write`, which only coerces 2-state —
+    /// an earlier version credited the wrong function), `class_field_write`
+    /// likewise on the FIELD's width (the chunk carries it, not the 32-bit
+    /// handle's), `coerce_dyn_elem` via `resize`, and the bit/part-select branch
+    /// which slices explicitly.
+    fn coerce_str_to_packed(&self, lhs: &Lvalue, v: Value) -> Value {
+        if !v.is_str {
+            return v;
+        }
+        let Some(c) = lhs.chunks.first() else {
+            return v;
+        };
+        let n = c.net as usize;
+        if self.ir.nets.get(n).map(|x| x.kind) == Some(NetKind::String)
+            || self.dyn_str_elem.get(n).copied().unwrap_or(false)
+        {
+            return v;
+        }
+        // `Value::resize` is the rule and it is stated ONCE, there: a resize is a
+        // conversion to a packed width, so it drops `is_str` on every path
+        // including its equal-width early return.
+        //
+        // ⚠️ That early return did NOT drop it until the round-5 review, and this
+        // function carried an explicit clear to compensate. Two spellings of one
+        // rule hid each other: with both present, neither could be killed by a
+        // mutation, and the module lanes that resize WITHOUT coming through here
+        // (`class_field_write`, `coerce_dyn_elem`, `assoc_write` store a whole
+        // `Value`) stayed broken. The compensating clear is gone; the primitive
+        // owns it.
+        v.resize(self.lvalue_width(lhs))
+    }
+
+    /// IEEE §13.4.3 + §6.16: size one ACTUAL to its FORMAL's type, for the three
+    /// frame-entry bindings (`run_frame_call`, `enter_task_frame`, `exit_arm_frame`).
+    ///
+    /// A `string` formal keeps the byte string: its slot is a 1-bit `Wire` that
+    /// holds a heap value, and the `str_params` mask is the only thing that says
+    /// so (width and kind cannot). Every OTHER formal is an ordinary packed
+    /// destination, so a string VALUE is right-aligned in the formal's width and
+    /// stops being a string — the same rule `coerce_str_to_packed` applies on the
+    /// write side.
+    ///
+    /// ⚠️ `resize_keep_sign` alone does NOT do it, and that is why this exists:
+    /// it returns an `is_str` value unchanged, so a `string` actual passed to a
+    /// packed formal arrived at its full byte width and unsigned. Measured, before
+    /// this: `string s = "abcde"; f(s)` with `input reg [15:0] p` gave the formal
+    /// `abcde` / 40 bits where the module twin `m = s` gives `de` / 16 bits. The
+    /// flag is cleared BEFORE the resize so the sign gets stamped too.
+    pub(crate) fn bind_formal(&self, callee: u32, slot: u32, base: u32, v: Value) -> Value {
+        if self.formal_is_string(callee, slot as usize) {
+            return Value::from_str_bytes(&v.to_str_bytes());
+        }
+        let nv = &self.ir.nets[(base + slot) as usize];
+        let mut src = v;
+        src.is_str = false;
+        src.resize_keep_sign(nv.width.max(1), nv.signed)
     }
 
     /// §4.5.175: is `rhs` an associative/dynamic/queue ITERATION method
@@ -987,11 +1164,15 @@ impl<'a> SimState<'a> {
         // ── BIND ARGS into the formal slots (resize to the formal's width). ──
         for i in 0..np {
             let nv = &self.ir.nets[(base + i) as usize];
-            let v = args
-                .get(i as usize)
-                .cloned()
-                .unwrap_or_else(|| Value::xs(nv.width.max(1), nv.signed))
-                .resize_keep_sign(nv.width.max(1), nv.signed);
+            // A MISSING actual keeps its old value (`Value::xs`) rather than going
+            // through `bind_formal`: for a `string` formal that helper would turn
+            // the X into `""`, and nothing proves a call can supply fewer actuals
+            // than formals (elaborate checks arity). An unreachable behaviour change
+            // is still a behaviour change no test names.
+            let v = match args.get(i as usize) {
+                Some(a) => self.bind_formal(func, i, base, a.clone()),
+                None => Value::xs(nv.width.max(1), nv.signed),
+            };
             self.frame_slot_write(func, self.frame_slot_auto[(base + i) as usize], i, v);
         }
 

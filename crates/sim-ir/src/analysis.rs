@@ -25,10 +25,16 @@
 /// executor agree on the same shapes — `stmt_effect_family_agrees` in sim-engine pins that.
 ///
 /// `Sformatf` is deliberately NOT in the set. It is a `StmtEffect` on the process path, but
-/// the frame executor has its own working intercept for it (`frame_rhs_value`'s
-/// `NetKind::String` arm renders through the shared formatter), so marking it would move
-/// working designs onto a path they do not need and could be loud-rejected on. Measured, not
-/// assumed: a `$sformatf`-only frame task is correct at HEAD in all five subroutine shapes.
+/// the frame executor has its own working intercept for it (`frame_rhs_value` renders
+/// through the shared formatter and the write funnel applies the destination's width), so
+/// marking it would move working designs onto a path they do not need and could be
+/// loud-rejected on. Measured, not assumed: a `$sformatf`-only frame task is correct at
+/// HEAD in all five subroutine shapes.
+///
+/// ⚠️ This paragraph used to describe the intercept as `frame_rhs_value`'s
+/// "`NetKind::String` arm" — the gate that made the intercept skip a PACKED destination,
+/// which was itself the silent-wrong. The intercept is keyed on the RHS now; the reason
+/// `Sformatf` stays out of this set is unchanged.
 pub fn sysfunc_is_stmt_effect(which: sim_ir::SysFuncId, args: &[u32]) -> bool {
     use sim_ir::SysFuncId as S;
     match which {

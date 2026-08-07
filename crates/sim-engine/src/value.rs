@@ -404,6 +404,18 @@ impl Value {
         }
         if new_width == self.width {
             self.mask_top();
+            // §6.16: a resize is a conversion to a PACKED width, so the result is
+            // bits — the two paths below already drop `is_str`, and this one has to
+            // drop it for the same reason rather than because the width happened to
+            // change. Keeping it here was a real divergence, not a nicety: three
+            // module write lanes store the whole `Value` (`class_field_write`,
+            // `coerce_dyn_elem`, `assoc_write`) instead of bits, and their own
+            // `resize_keep_sign` short-circuits on the flag — so a 4-byte string
+            // into a signed 32-bit class field read back UNSIGNED (4042388211 for
+            // -252579085) at module scope, at exit 0. Found by the S3a round-5
+            // soundness review, after the frame side had been fixed and made the
+            // two disagree.
+            self.is_str = false;
             return self;
         }
         // ONE-WORD FAST PATH. Both widths fit a single word, which is the overwhelmingly
