@@ -522,6 +522,9 @@ pub(crate) struct SimState<'a> {
     pub sink: &'a dyn LogSink,
     /// Rate-limit counter for E-RUN-RANGE (an OOR access in a loop would spam).
     pub run_range_count: Cell<u32>,
+    /// Companion budget for W4029 — see `warn_run_index`. Separate so a reset
+    /// window's unknown indexes cannot starve the out-of-range budget.
+    pub run_range_unk_count: Cell<u32>,
 
     // ── postponed region ($strobe FIFO + global $monitor singleton) ──
     pub postponed: Postponed,

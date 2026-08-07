@@ -255,6 +255,31 @@ pub(crate) fn is_ctx_node(e: &ast::Expr) -> bool {
     )
 }
 
+/// A parameter value too wide for the i64 constant domain, as a full `ConstVal`.
+///
+/// `Some` only when the DECLARED width exceeds 64 and the initializer is a literal
+/// that `fold_init` can size exactly. Everything else — a wide expression, an
+/// unsized name — stays `None` so the caller's ordinary fold (and its loud reject)
+/// still runs. Callers must reach it only AFTER the numeric fold has declined: the
+/// boundary is the VALUE, not the declared width, so `logic [255:0] K = 256'h1` keeps
+/// its integer identity and stays usable as a width or a bound.
+pub(crate) fn wide_param_const(e: &ast::Expr, width: u32, signed: bool) -> Option<ir::ConstVal> {
+    if width <= 64 {
+        return None;
+    }
+    Some(ir::ConstVal {
+        width,
+        // ⚠️ This was hard-coded `false` with the note "a wide packed parameter has no
+        // sign in this domain, and claiming one would flip a comparison". Measurement
+        // says the opposite: `localparam signed [127:0] K = 128'sh8000…0001` compared
+        // POSITIVE and `K >>> 4` shifted in zeros, where iverilog says NEG and sign-
+        // extends. The declaration is where the sign lives, so it is carried.
+        signed,
+        repr: ir::ConstRepr::Numeric,
+        bits: fold_init(e, width)?,
+    })
+}
+
 pub(crate) fn fold_init(e: &ast::Expr, width: u32) -> Option<ir::BitPacked> {
     match &e.kind {
         // A fill literal is context-determined: replicate the fill bit across the
@@ -365,9 +390,13 @@ impl Elaborator<'_> {
             ast::ExprKind::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
                 ast::CastTarget::Signing { signed } => *signed,
-                // `N'(e)` INHERITS the operand's signedness.
+                // `N'(e)` INHERITS the operand's signedness — and so does the
+                // `RPS'(e)` spelling of the same cast (see `cast_size_bits`); a
+                // `Named` that is NOT a constant is a type cast and stays unsigned.
                 ast::CastTarget::Size(_) => self.const_expr_signed(expr),
-                ast::CastTarget::Named(_) => false,
+                ast::CastTarget::Named(_) => {
+                    self.cast_size_bits(target).is_some() && self.const_expr_signed(expr)
+                }
             },
             _ => false, // Call / select / concat / unmodeled: conservatively unsigned
         }
@@ -603,12 +632,39 @@ impl Elaborator<'_> {
             );
             return;
         }
+        // A >64-bit parameter is deliberately kept out of `params` too (see
+        // `wide_param_bits`), so a bound reading one also folds to None — but calling
+        // it "undefined" sends the user looking for a typo in a name that is right
+        // there. Say what it actually is.
+        if let Some(n) = self.wide_param_name_in(e) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "`{n}` is wider than 64 bits, so it has no integral constant value \
+                     for a width / range bound (select the bits you need, or declare a \
+                     narrower localparam)"
+                ),
+            );
+            return;
+        }
         if let Some(reason) = self.nonconst_bound_reason(e) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!("{reason} is not allowed in a constant range bound"),
             );
         }
+    }
+
+    /// The first name in `e` bound to a >64-bit parameter, if any. Reuses the same
+    /// bare-identifier collector the implicit-net pass walks with, so the two agree
+    /// about what counts as a name.
+    fn wide_param_name_in(&self, e: &ast::Expr) -> Option<String> {
+        let mut names = Vec::new();
+        collect_bare_idents(e, &mut names);
+        names.into_iter().find(|n| {
+            self.walk_scopes_key(n, |k| self.wide_param_bits.contains_key(k))
+                .is_some()
+        })
     }
 
     /// First sub-expression that makes a range bound non-constant: a reference to a
@@ -835,6 +891,23 @@ impl Elaborator<'_> {
         match meta {
             Some((w, signed)) if (1..=64).contains(&w) => {
                 let cv = make_const_i64(v, w, signed);
+                let cid = self.intern_const(cv);
+                self.push_expr(ir::Expr::Const { val: cid })
+            }
+            // WIDER than 64 and still an i64 value — `localparam logic [95:0] K = 7`,
+            // and every wide parameter whose initializer folds. This used to fall
+            // through to the value-inferred width, so a 96-bit parameter read back as
+            // 32 bits: `%h` printed 8 digits where iverilog prints 24, and the same
+            // width fed concats and comparisons. Widen the i64 to the declared width
+            // through the shared `resize_bits`, which sign-extends across words.
+            Some((w, signed)) if w > 64 => {
+                let base = make_const_i64(v, 64, signed);
+                let cv = ir::ConstVal {
+                    width: w,
+                    signed,
+                    repr: ir::ConstRepr::Numeric,
+                    bits: resize_bits(&base.bits, 64, w, signed),
+                };
                 let cid = self.intern_const(cv);
                 self.push_expr(ir::Expr::Const { val: cid })
             }

@@ -19,6 +19,7 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut workdir: Option<String> = None;
     let mut libs: Vec<String> = Vec::new();
     let mut tops: Vec<String> = Vec::new();
+    let mut top_params: Vec<(String, String)> = Vec::new();
     let mut plusargs: Vec<String> = Vec::new();
     let mut obs_dir: Option<String> = None;
     let mut hier_tree: Option<String> = None;
@@ -186,6 +187,28 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                     return Err(EXIT_CLI_ERROR);
                 };
                 tops.push(v.clone());
+                i += 2;
+            }
+            "-G" | "--param" => {
+                let Some(v) = args.get(i + 1) else {
+                    eprintln!(
+                        "error[{}]: '{}' needs NAME=VALUE",
+                        MsgCode::CliBadFlag.code_num(),
+                        args[i]
+                    );
+                    return Err(EXIT_CLI_ERROR);
+                };
+                match v.split_once('=') {
+                    Some((n, val)) => top_params.push((n.to_string(), val.to_string())),
+                    None => {
+                        eprintln!(
+                            "error[{}]: '{} {v}' needs NAME=VALUE",
+                            MsgCode::CliBadFlag.code_num(),
+                            args[i]
+                        );
+                        return Err(EXIT_CLI_ERROR);
+                    }
+                }
                 i += 2;
             }
             "-D" | "--define" => {
@@ -368,6 +391,23 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 incdirs.push(s[2..].to_string());
                 i += 1;
             }
+            // `-GNAME=VALUE`, the attached-value spelling Verilator uses. Kept next to
+            // `-D`/`-I` because it is the same shape; `--param NAME=VALUE` is the
+            // separated spelling.
+            s if s.starts_with("-G") && s.len() > 2 => {
+                match s[2..].split_once('=') {
+                    Some((n, val)) => top_params.push((n.to_string(), val.to_string())),
+                    None => {
+                        eprintln!(
+                            "error[{}]: '-G{}' needs NAME=VALUE",
+                            MsgCode::CliBadFlag.code_num(),
+                            &s[2..]
+                        );
+                        return Err(EXIT_CLI_ERROR);
+                    }
+                }
+                i += 1;
+            }
             s if s.starts_with('-') && s.len() > 1 => {
                 // Diagnostic gate flags (`-Wno-<CODE>` / `-Werror[=<CODE>]`).
                 match gate.parse_arg(s) {
@@ -410,6 +450,7 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         workdir,
         libs,
         tops,
+        top_params,
         plusargs,
         obs_dir,
         hier_tree,

@@ -131,13 +131,18 @@ impl Elaborator<'_> {
             );
             return;
         }
-        let tname = name.segments[0].name.clone();
+        let bare = name.segments[0].name.clone();
+        // Inside a package routine's body a bare callee names that package's own
+        // sibling — the FUNCTION half of this was wired and the task half was not, so
+        // a package task calling a same-package task reported "undeclared task", and
+        // with a module-local task of the same name it called THAT one silently.
+        let tname = self.resolve_rtn_key(&bare);
         let task = match self.task_table.get(tname.as_str()) {
             Some(t) => t.clone(),
             None => {
                 self.error(
                     MsgCode::ElabUnresolvedName,
-                    &format!("call to undeclared task `{tname}`"),
+                    &format!("call to undeclared task `{bare}`"),
                 );
                 return;
             }

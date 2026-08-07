@@ -677,15 +677,23 @@ endmodule
 "#,
         ),
         (
-            // The module net is declared AFTER the function, so its NetId is
-            // ABOVE the frame window — this is what kills dropping the
-            // `n < base_net` half of the containment test.
-            "module net whose id is above the frame window",
+            // Kills dropping the `n < base_net` half of the containment test.
+            //
+            // ⚠️ This design used to declare `gg` AFTER the function, and said so:
+            // "its NetId is ABOVE the frame window". That was not legal
+            // SystemVerilog — a variable may not be used above its declaration
+            // (IEEE 1800 §6.10), and iverilog rejects it with "Check for
+            // declaration after use". vita accepted it silently until the aes_top
+            // report, so this design was riding a gap. Declaration order does not
+            // in fact move the NetId either: module nets are all created in pass 4,
+            // frame nets in pass 6.5, so a module net is ALWAYS below the window
+            // and the `n < base_net` half is killed by any out-of-frame read.
+            "module net read by a function declared before it",
             "a subroutine that names a net outside its own frame: S3b",
             r#"
 module top;
-  function automatic integer f(input integer x); begin f = x + gg; end endfunction
   integer gg;
+  function automatic integer f(input integer x); begin f = x + gg; end endfunction
   integer r;
   initial begin gg = 7; r = f(3); $display("r=%0d", r); $finish; end
 endmodule

@@ -49,6 +49,7 @@ impl Elaborator<'_> {
                         is_named: false,
                         had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
+                        str: Self::param_str_literal(e),
                     });
                 }
                 ast::ParamConn::Named { name, value, .. } => {
@@ -88,6 +89,7 @@ impl Elaborator<'_> {
                         fill: value
                             .as_ref()
                             .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string()))),
+                        str: value.as_ref().and_then(Self::param_str_literal),
                     });
                 }
             }

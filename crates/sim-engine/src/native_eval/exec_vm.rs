@@ -715,15 +715,18 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeS
     out
 }
 
-/// The oracle's array-word index conversion: `to_u64` (None on X/Z) then
-/// `u32::try_from`, both failures mapping to the `u32::MAX` OOR sentinel.
+/// The oracle's array-word index conversion — the SHARED rule, not a restatement.
+///
+/// ⚠️ This used to be its own copy (`iu != 0 || try_from fails ⇒ u32::MAX`), which
+/// read identically while the sentinel carried one meaning. It stopped reading
+/// identically the moment an UNKNOWN index and a KNOWN out-of-range one became
+/// different diagnostics: this copy still collapsed both onto `u32::MAX`, so the VM
+/// reported a known `32'hFFFF_FFFF` index as "unknown (x/z)" while the interpreter
+/// and the native tier called it out of range. Same values, different diagnostic,
+/// on the same design — which is exactly what one rule with two spellings buys.
 #[inline]
 pub(crate) fn word_index(iv: u64, iu: u64) -> u32 {
-    if iu != 0 {
-        u32::MAX
-    } else {
-        u32::try_from(iv).unwrap_or(u32::MAX)
-    }
+    crate::eval::word_index_of(if iu != 0 { None } else { Some(iv) })
 }
 
 // ── OP BODIES SHARED WITH THE JIT ────────────────────────────────────────────

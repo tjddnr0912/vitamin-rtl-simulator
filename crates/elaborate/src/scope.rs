@@ -350,6 +350,102 @@ impl Elaborator<'_> {
             .filter(|_| !self.dotted_hit_is_pkg_alias(&joined))
     }
 
+    /// IEEE 1364-2005 §3.5 / IEEE 1800 §6.10: a net or variable must be declared
+    /// BEFORE it is used. Only implicit NETS may appear undeclared, and only in the
+    /// listed contexts; a variable never may, and a name declared later in the
+    /// module is, at the point of use, not declared.
+    ///
+    /// vita lowers by pass — every declaration is created before any body is
+    /// lowered — so a textual use-before-declaration resolved like any other name
+    /// and the design ran at `errors=0`. That is the worst shape a gap can take:
+    /// the simulation is green and a synthesis tool either rejects the file or
+    /// silently gives the name a 1-bit implicit net, so "vita passed" means nothing
+    /// about the design. iverilog 13 rejects all six shapes measured (continuous
+    /// assign rhs and lhs, procedural rhs, module port connection, wire→wire,
+    /// `always_comb`), and this is the one funnel every one of them arrives at.
+    ///
+    /// Forward references that stay LEGAL are untouched, because they are not nets:
+    /// a call to a function or task declared later, an instance of a module defined
+    /// later, and a hierarchical reference into an instance declared later all
+    /// resolve through other tables. Generate-block locals and §3.5 implicit nets are
+    /// likewise absent from `gather_decl_positions`, and an absent entry is not
+    /// checked. A plain-static BLOCK-LOCAL is the exception that broke that reasoning
+    /// — the flatten model publishes it on the module key — so it is excluded
+    /// explicitly below.
+    ///
+    /// NOT a general funnel: `$size(arr)` before the declaration and `d = new[3]`
+    /// before `int d[];` are use-before-declaration shapes iverilog rejects and vita
+    /// still accepts, because they resolve through `resolve_intro_net` and the
+    /// dyn-array path rather than here.
+    fn check_decl_precedes_use(&mut self, name: &str, use_lo: u32) {
+        // A SYNTHESIZED path has no source position (`Span::default()`).
+        //
+        // ⚠️ This guard used to claim it "is what keeps `.*` from reporting every port
+        // of every instance". FALSE, and measured so: `.*` reuses the CHILD module's
+        // port identifiers, whose spans are real and non-zero, and it is the
+        // `decl_pos_range` test below that rejects them — removing THIS guard leaves
+        // the whole suite green, removing that one kills six `.*` tests. An
+        // instrumented build counted ZERO hits here across the suite, `examples/`,
+        // `bench/` and an ~80-design battery.
+        //
+        // Kept as measured-unreachable defence, not as load-bearing logic: the range
+        // test cannot cover a span-0 node inside the FIRST module of the buffer (whose
+        // own range starts at 0), and desugars do synthesize paths.
+        if use_lo == 0 {
+            return;
+        }
+        // …and it must come from THIS module's text (see `decl_pos_range`).
+        if use_lo < self.decl_pos_range.0 || use_lo > self.decl_pos_range.1 {
+            return;
+        }
+        let Some(&decl_lo) = self.decl_pos.get(name) else {
+            return; // not a module-scope declaration of this module
+        };
+        if use_lo >= decl_lo {
+            return;
+        }
+        // The hit must be THIS module's own binding. A function formal or a
+        // generate-block local with the same name is a different object that
+        // happens to share a spelling, and flagging it would be a false reject.
+        let own_key = if self.decl_pos_scope.is_empty() {
+            name.to_string()
+        } else {
+            format!("{}.{}", self.decl_pos_scope, name)
+        };
+        if self
+            .walk_scopes_key(name, |k| self.symbols.contains_key(k))
+            .as_deref()
+            != Some(own_key.as_str())
+        {
+            return;
+        }
+        // ⚠️ …and that test is VACUOUS for a plain-static BLOCK-LOCAL. vita's v1
+        // flatten model publishes such a local as a module net under its BARE name, so
+        // it lands on the very key this check just matched, and an ordinary
+        //     initial begin : blk integer i; … end   …   integer i;
+        // testbench was rejected five times over where PRE and iverilog both run it.
+        // The docstring's reasoning was wrong in exactly this direction: the entry is
+        // PRESENT — put there by the module-scope declaration — and the hoisted local
+        // sits on it. `hoisted_block_local` is FQ-keyed and filled in pass 4, before
+        // any body is lowered. Skipping under-detects a real use-before-declaration of
+        // a name that is ALSO a block-local; that is the safe direction, since the
+        // alternative rejects legal code.
+        if self.hoisted_block_local.contains(&own_key) || self.decl_block_locals.contains(name) {
+            return;
+        }
+        self.error(
+            MsgCode::ElabUnresolvedName,
+            &format!(
+                "`{name}` is used before it is declared. IEEE 1800 §6.10 allows an \
+                 implicit declaration only for a NET in a port connection or a \
+                 continuous-assignment target, so a name declared later in the module \
+                 is not declared at this point — move the declaration above its first \
+                 use. (Subroutines, module definitions and instance names may still be \
+                 referenced before they appear.)"
+            ),
+        );
+    }
+
     pub(crate) fn resolve_net(&mut self, path: &ast::HierPath) -> u32 {
         if path.segments.len() != 1 {
             if let Some(id) = self.lookup_dotted_net(path) {
@@ -394,6 +490,7 @@ impl Elaborator<'_> {
                     );
                     return POISON_NET;
                 }
+                self.check_decl_precedes_use(name, path.segments[0].span.lo);
                 id
             }
             None => {

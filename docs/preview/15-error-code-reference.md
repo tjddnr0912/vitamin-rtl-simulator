@@ -193,6 +193,26 @@ endmodule
 
 ## 2xxx · PARSE
 
+
+### VITA-W1018 · `W-PP-TIMESCALE-MIXED` (Warning)
+
+Some modules in the design carry a `` `timescale `` directive and others do not.
+IEEE 1800-2017 §3.14.2.2 requires all or none.
+
+```
+// rtl/leaf.sv  — no `timescale
+// tb/top.sv    — `timescale 1ns/1ps
+->  warning[VITA-W1018] W-PP-TIMESCALE-MIXED: some modules have a `timescale and these
+    do not: leaf — IEEE 1800 §3.14.2.2 requires all or none, …
+```
+
+vita and iverilog both RUN the mixed design (the ungoverned modules take the 1ns/1ns
+base), but xrun refuses to elaborate it (`*F,CUMSTS: Timescale directive missing on one
+or more modules`) and Verilator reports `Error-TIMESCALEMOD` — so a design that is green
+here fails at sign-off. A warning rather than an error because the simulation itself is
+correct; promote it with `-Werror=W-PP-TIMESCALE-MIXED` in CI. The message names the
+ungoverned modules (up to eight, then a count).
+
 ### VITA-E2001 · `E-DUP-UNIT` (Error)
 **설계 단위(module/package) 재정의.** 같은 단위 이름이 분석 소스에 두 번 이상 정의될 때(예
 filelist에 소스 파일 중복, 또는 두 파일이 같은 `module m` 선언). 논리 라이브러리는 한
@@ -540,6 +560,29 @@ module m(input i); endmodule  module t; m u1(); endmodule   // 포트 미연결
 
 ---
 
+
+### VITA-W3058 · `W-ELAB-STR-TERNARY` (Warning)
+
+`$display`/`$write` given ONE argument that is a ternary whose arms are both string
+LITERALS.
+
+```
+$display(n == 1 ? "[PASS] all vectors" : "[FAIL] mismatch");
+->  warning[VITA-W3058] W-ELAB-STR-TERNARY: … prints a decimal number, not text
+     474126782513561311909906896596181057
+```
+
+⚠️ **Not a value defect.** IEEE 1800 §5.9 makes a string literal a packed integral;
+the ternary puts both arms in an integral context, and a single non-format argument
+prints as decimal. iverilog prints the identical number — vita is not diverging from
+the oracle, and the value is deliberately unchanged.
+
+It is warned because the shape is always a mistake (nobody wants the number), it is the
+ordinary way people write a PASS/FAIL line, and it silently makes a test log
+unreadable. Use `if`/`else`, or `$display("%s", cond ? "a" : "b")`. Deliberately narrow
+— one argument, a ternary, a string literal on BOTH arms — so a `%s` format, a ternary
+of string VARIABLES, and a numeric ternary do not trip it.
+
 ### VITA-W3057 · `W-ELAB-AUTOTOP-AMBIGUOUS` (Warning)
 **auto-top이 인스턴스화되지 않은 root 후보 2개 이상 중에서 선택 — 명시 top 미지정.** `--top` 없이
 one-shot `vita <sources>`(또는 `-f`)에 여러 module을 넘겼을 때, 어디에도 인스턴스화되지 않은
@@ -814,6 +857,26 @@ plusarg 가 exit 0 으로 X 만 남기고 이유를 아무도 말하지 않는�
 - **원인**: plusarg 값의 오타(`+N=5x9`), 잘못된 radix(`%o` 에 `19`), 지원 안 되는 부호 표기(`+5`).
 - **해결**: 값 철자를 고친다. x/z 자리·밑줄 구분자는 **유효**하다(`+A=1x2z`, `+F=1_2` 는 경고 없이
   리터럴 관례로 파싱된다 — 단 밑줄이 앞에 올 수는 없다).
+
+### VITA-W4029 · `W-RUN-RANGE-UNKNOWN` (Warning)
+
+An array-word index or a select offset evaluated to an UNKNOWN value (x/z) at run
+time. The read answers all-X and the write is ignored — exactly what IEEE 1364
+§5.2.1 prescribes, so this is legal behaviour, not an error.
+
+```
+reg [7:0] mem [0:3];  reg [1:0] idx_q;   // X until the first clock edge
+assign o = mem[idx_q];
+->  warning[VITA-W4029] W-RUN-RANGE-UNKNOWN: array word index is unknown (x/z); read X / write ignored
+```
+
+Split out of `E-RUN-RANGE` because the two are different facts about a design: an
+x index before reset is ordinary RTL, while a KNOWN index past the end of an array
+is almost always a bug. Reporting both as errors made the reset window fill the log
+with errors and set exit 1 on a correct design. A known out-of-range index is still
+`VITA-E4002`. Suppress with `-Wno-W-RUN-RANGE-UNKNOWN`, or promote it back with
+`-Werror=W-RUN-RANGE-UNKNOWN`. Capped per run independently of E4002, so a flood of
+unknown-index warnings cannot starve the out-of-range budget.
 
 ## 8xxx · FILELIST
 

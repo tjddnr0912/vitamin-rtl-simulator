@@ -45,6 +45,8 @@ msgcodes! {
     PpMacroRedefined       => ("W-PP-MACRO-REDEFINED",     "VITA-W1007", Warning, "`define redefines a macro with different text"),
     PpUndefUndefined       => ("W-PP-UNDEF-UNDEFINED",     "VITA-W1008", Warning, "`undef of a macro that was never defined"),
     PpTimescaleDefault     => ("W-PP-TIMESCALE-DEFAULT",   "VITA-W1017", Warning, "no `timescale in the design; assuming the 1ns/1ns base"),
+    PpTimescaleMixed       => ("W-PP-TIMESCALE-MIXED",     "VITA-W1018", Warning, "some modules have a `timescale and others do not (IEEE 1800 §3.14.2.2)"),
+    ElabStrTernaryNumeric  => ("W-ELAB-STR-TERNARY",       "VITA-W3058", Warning, "a ternary of string literals is an integral value; $display prints it as a number"),
     // 2xxx PARSE
     DupUnit                => ("E-DUP-UNIT",                "VITA-E2001", Error,   "design unit redefined"),
     ParseUnexpectedToken   => ("E-PARSE-UNEXPECTED-TOKEN",  "VITA-E2002", Error,   "unexpected token"),
@@ -84,6 +86,7 @@ msgcodes! {
     RunVcdPkgVarSkip       => ("W-RUN-VCD-PKGVAR-SKIP",     "VITA-W4026", Warning, "package variable has no VCD surface (v1); excluded from the dump"),
     RunBodyStepLimit       => ("F-RUN-BODY-STEP-LIMIT",     "VITA-F4027", Fatal,   "one process ran past the body-step budget without suspending (unbounded loop, or a genuinely long computation)"),
     RunPlusargsInvalid     => ("W-RUN-PLUSARGS-INVALID",    "VITA-W4028", Warning, "invalid value in a matched plusarg; variable written all-X"),
+    RunRangeUnknown        => ("W-RUN-RANGE-UNKNOWN",       "VITA-W4029", Warning, "runtime index/select is unknown (x/z); read X / write ignored"),
     // 8xxx FILELIST
     FlistCycle             => ("E-FLIST-CYCLE",             "VITA-E8001", Error,   "filelist cycle"),
     FlistDepth             => ("E-FLIST-DEPTH",             "VITA-E8002", Error,   "filelist nesting exceeded depth cap"),

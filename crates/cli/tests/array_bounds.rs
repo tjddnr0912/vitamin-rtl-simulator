@@ -304,3 +304,71 @@ fn array_assign_slice_with_oob_row_index_is_noop() {
         "OOB slice copy must not land:\n{out}"
     );
 }
+
+/// An UNKNOWN (x/z) index and a KNOWN out-of-range index are different facts, and
+/// each must get its own diagnostic, severity and exit code.
+///
+/// Both were `E-RUN-RANGE` at Error severity until the aes_top report, so reading
+/// `mem[idx_q]` while `idx_q` was still X — the reset window of any design that
+/// indexes an array with a register — filled the log with errors and set exit 1 on
+/// correct RTL. IEEE 1364 §5.2.1 makes an unknown index read X and drop the write,
+/// which is exactly what vita already did; only the diagnostic was wrong about it.
+/// iverilog 13 is silent on both, so vita is still louder than the oracle either way.
+///
+/// The two halves are asserted TOGETHER because either alone is passable by a
+/// mistake: collapsing the split back to one code keeps the first half green if it
+/// only checks for "some diagnostic", and demoting BOTH keeps the second half green
+/// if it only checks the text.
+#[test]
+fn unknown_index_warns_while_known_out_of_range_errors() {
+    // idx is X for the whole run: legal X propagation, warning, exit 0.
+    let (out, err, code) = run("module t;\n\
+           reg [7:0] mem [0:3]; reg [1:0] idx; reg [7:0] o;\n\
+           initial begin mem[0]=8'h11; idx = 2'bxx; o = mem[idx];\n\
+             $display(\"o=%h\", o); $finish; end\n\
+         endmodule\n");
+    assert_eq!(code, Some(0), "an unknown index is not an error: {err}");
+    assert!(
+        err.contains("VITA-W4029") && err.contains("unknown"),
+        "an unknown index must say so: {err}"
+    );
+    assert!(!err.contains("VITA-E4002"), "…and must not be E4002: {err}");
+    assert!(out.contains("o=xx"), "the value is still all-X: {out}");
+
+    // A KNOWN index past the end: still an error, still exit 1.
+    let (out, err, code) = run("module t;\n\
+           reg [7:0] mem [0:3]; reg [7:0] o; integer i;\n\
+           initial begin mem[0]=8'h11; i = 9; o = mem[i];\n\
+             $display(\"o=%h\", o); $finish; end\n\
+         endmodule\n");
+    assert_eq!(
+        code,
+        Some(1),
+        "a known out-of-range index stays loud: {err}"
+    );
+    assert!(
+        err.contains("VITA-E4002") && err.contains("out of range"),
+        "a known out-of-range index keeps E4002: {err}"
+    );
+    assert!(
+        !err.contains("VITA-W4029"),
+        "…and is not the warning: {err}"
+    );
+    assert!(out.contains("o=xx"), "the value is still all-X: {out}");
+
+    // A KNOWN NEGATIVE index is the case a single `u32::MAX` sentinel could not tell
+    // from x/z — `-1` is the bit pattern `0xFFFF_FFFF`. It is known, so it is E4002.
+    let (_o, err, code) = run("module t;\n\
+           reg [7:0] mem [0:3]; reg [7:0] o; integer i;\n\
+           initial begin i = -1; o = mem[i]; $display(\"o=%h\", o); $finish; end\n\
+         endmodule\n");
+    assert_eq!(
+        code,
+        Some(1),
+        "a known negative index is not unknown: {err}"
+    );
+    assert!(
+        err.contains("VITA-E4002"),
+        "a known negative index keeps E4002: {err}"
+    );
+}

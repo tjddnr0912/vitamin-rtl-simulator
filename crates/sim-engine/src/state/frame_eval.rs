@@ -359,19 +359,15 @@ impl<'a> SimState<'a> {
             // `word`) is not a blocking-assign element write — keep it loud (handle copy /
             // `new[]` alloc is a separate mechanism, not reached here).
             if c.word.is_some() {
-                const OOR_DROP: u32 = 1 << 30;
+                // The SHARED rule, not a restatement. Two hand-written copies lived
+                // here and drifted the moment an UNKNOWN index became its own
+                // diagnostic: they still returned `OOR_DROP` for x/z where the shared
+                // rule returns `OFF_UNKNOWN`, so this would have been the fourth
+                // spelling of one decision.
                 let idx = |e: u32| -> u32 {
                     let sw = self.wt.get(e);
                     let ev = self.mk_eval_ctx().eval_ctx(e, sw.width, sw.signed);
-                    if ev.has_xz() {
-                        return OOR_DROP;
-                    }
-                    match ev.to_i128_signed() {
-                        Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => {
-                            i as i32 as u32
-                        }
-                        _ => OOR_DROP,
-                    }
+                    crate::eval::offset_of_index_value(&ev)
                 };
                 let raw_off = c.offset.map(idx).unwrap_or(0);
                 let raw_word = c.word.map(idx).unwrap_or(0);
@@ -422,28 +418,18 @@ impl<'a> SimState<'a> {
         // dynamic index) is evaluated FIRST with no frame borrow held; the (lsb,
         // width) computation mirrors `write_chunk` (the module-net path), and any bit
         // outside `[0, net_w)` is dropped (IEEE part-select OOB semantics).
-        // Resolve the (possibly dynamic) offset with the SAME OOR_DROP semantics as
-        // the module path (`resolve_lvalue_offsets`): an X/Z index or one outside the
-        // signed i32 range → a huge sentinel (2^30) so every selected bit lands out of
+        // Resolve the (possibly dynamic) offset through the SHARED rule the module
+        // path uses (`eval::offset_of_index_value`): an X/Z index or one outside the
+        // signed i32 range becomes a huge sentinel so every selected bit lands out of
         // range and the write is DROPPED (iverilog parity), NOT written at bit 0.
-        // Signed-aware: an unsigned 0xFFFFFFFF is the huge 4294967295 (drop), not a
-        // wrapped −1 (which would partial-write).
-        const OOR_DROP: u32 = 1 << 30;
+        // This was a hand-written COPY that claimed to have "the SAME OOR_DROP
+        // semantics"; it stopped being true when x/z got its own sentinel.
         let raw_off = c
             .offset
             .map(|e| {
                 let sw = self.wt.get(e);
                 let v = self.mk_eval_ctx().eval_ctx(e, sw.width, sw.signed);
-                if v.has_xz() {
-                    OOR_DROP
-                } else {
-                    match v.to_i128_signed() {
-                        Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => {
-                            i as i32 as u32
-                        }
-                        _ => OOR_DROP,
-                    }
-                }
+                crate::eval::offset_of_index_value(&v)
             })
             .unwrap_or(0);
         let off_i = raw_off as i32 as i64;

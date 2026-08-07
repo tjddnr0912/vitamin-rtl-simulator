@@ -324,6 +324,41 @@ impl Elaborator<'_> {
     /// literal, becomes `fmt`; the rest are value args. Non-print tasks
     /// ($finish/$dumpfile/...) carry `fmt: None`, every arg in `args`.
     pub(crate) fn lower_systask(&mut self, name: &ast::Ident, args: &[ast::Expr]) -> Option<u32> {
+        // ⚠️ NOT a value fix — vita and iverilog agree here, byte for byte.
+        // `$display(n == 1 ? "[PASS] …" : "[FAIL] …")` prints a large decimal number
+        // in BOTH, because IEEE 1800 §5.9 makes a string literal a packed integral,
+        // the ternary puts both arms in an integral context, and a single non-format
+        // argument prints as decimal. The user's expectation is what is wrong.
+        //
+        // It is still worth saying: this exact shape is always a mistake (nobody wants
+        // the number), it is the ordinary way to write a PASS/FAIL line, and it made a
+        // whole test log unreadable. Narrow on purpose — ONE argument, a ternary, a
+        // string LITERAL on both arms — so nothing else can trip it.
+        if matches!(name.name.as_str(), "$display" | "$write") {
+            if let [only] = args {
+                if let ast::ExprKind::Ternary { then_e, else_e, .. } = &only.kind {
+                    let lit = |e: &ast::Expr| {
+                        matches!(
+                            &e.kind,
+                            ast::ExprKind::StrLit { .. }
+                                | ast::ExprKind::Paren { .. } if Self::param_str_literal(e).is_some()
+                        )
+                    };
+                    if lit(then_e) && lit(else_e) {
+                        self.warn_code(
+                            MsgCode::ElabStrTernaryNumeric,
+                            &format!(
+                                "`{}` was given ONE argument that is a ternary of string \
+                             literals — IEEE 1800 §5.9 makes those packed integers, so \
+                             this prints a decimal number, not text (use `if`/`else`, \
+                             or `{}(\"%s\", cond ? \"a\" : \"b\")`)",
+                                name.name, name.name
+                            ),
+                        );
+                    }
+                }
+            }
+        }
         // SVA-REST `$assertoff`/`$asserton`/`$assertkill` (IEEE 1800 §20.11): runtime
         // assertion control. Lowered to a no-op `Display` (no fmt/args) whose StmtId is
         // recorded in `assert_ctl`; the engine flips the global assertion-enable when it

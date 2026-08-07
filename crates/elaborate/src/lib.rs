@@ -601,6 +601,56 @@ struct Elaborator<'s> {
     // instance scope alongside `func_table`.
     const_func_table: BTreeMap<String, ast::FunctionDef>,
     task_table: BTreeMap<String, ast::TaskDef>,
+    // The package a routine in `func_table`/`task_table` was DECLARED in, when it got
+    // there through an import. A routine's body must resolve in its own declaring
+    // scope (IEEE 1800 §26.3) but vita lowers every body with the caller module's flat
+    // tables live, so this side map is how a body recovers its package: it is what
+    // `lower_frame_func_body` consults to inject same-package constants for a routine
+    // whose frame key is a bare name (an explicit `import p::f;` — the `pkg::name`
+    // frame key of a `p::f()` call already carries it in the key). Saved/restored with
+    // `func_table`.
+    rtn_pkg: BTreeMap<String, String>,
+    // The declaring package of the routine whose BODY is being lowered right now
+    // (a stack — a package routine may call another). `resolve_rtn_key` consults it
+    // so a bare callee inside that body finds its own package's sibling (injected as
+    // `pkg::name`) before anything the importing module happens to call the same
+    // thing. Empty for ordinary module routines, so every other design is unaffected.
+    cur_rtn_pkg: Vec<String>,
+    // Earliest DECLARATION position (byte offset in the expanded buffer) of every
+    // bare net/variable name this module declares at module scope; ports and header
+    // params get 0 so they are never "later". IEEE 1364-2005 §3.5 / IEEE 1800 §6.10
+    // key implicit declaration on "has not been declared PREVIOUSLY in the scope",
+    // i.e. a variable used above its declaration is not declared at all — iverilog
+    // rejects every shape of it. vita lowers by pass (all nets, then all bodies), so
+    // the name resolved anyway and the design ran with no diagnostic at all. This map
+    // is the only ordering information elaboration keeps; `resolve_net` is where it
+    // is spent. Saved/restored per module, and swapped with the routine tables around
+    // `wire_ports` (a port connection is a PARENT expression).
+    decl_pos: BTreeMap<String, u32>,
+    // The instance prefix `decl_pos` describes. The check fires only when a name
+    // resolved to THAT scope's binding — a function formal or generate-block local
+    // that shadows a later module net is a different object and must not be flagged.
+    decl_pos_scope: String,
+    // Source range of the module `decl_pos` was gathered from. A use position is only
+    // comparable against it if it came from the SAME text: `.*` expands to paths that
+    // reuse the CHILD module's port identifiers, whose spans sit wherever that module
+    // was written — comparing those against this module's declaration positions
+    // reported every implicitly connected port. Gate on the range and the whole class
+    // of cross-module span leakage is closed at once.
+    decl_pos_range: (u32, u32),
+    /// Names this module declares inside a PROCEDURAL block — see
+    /// `gather_block_local_names`. Excluded from the use-before-declaration check
+    /// because the flatten model puts them on the module key.
+    decl_block_locals: std::collections::BTreeSet<String>,
+    // Parameters WIDER than the i64 constant domain, held as their full bit pattern.
+    // `const_eval_in_scope` is i64-only (`const_eval_i64_lit` refuses any literal with
+    // a set bit above word 0), so `localparam logic [255:0] K = 256'h00112233…;` was
+    // E3009 on a value that is perfectly known — the AES-256 key case from the aes_top
+    // report. The boundary is the VALUE, not the declared width: `256'h1` always
+    // folded. Deliberately NOT registered in `params`: a >64-bit name used as a width,
+    // a bound or a generate condition must stay LOUD rather than silently truncate to
+    // its low 64 bits, so only the expression reader consults this.
+    wide_param_bits: BTreeMap<String, ir::ConstVal>,
     // R19-X1: the scope prefix in force when `func_table`/`task_table` were collected —
     // i.e. the scope in which every function/task in them is DECLARED. Saved/restored
     // with those tables. Read only by `default_binding_matches_decl_scope`: a filled
@@ -882,6 +932,14 @@ struct Elaborator<'s> {
     // `--top` root override (worklib / multi-top selection): when `Some`, these
     // units are the roots — in the given order — instead of `pick_roots`.
     root_override: Option<Vec<String>>,
+    /// CLI parameter overrides for the TOP instance(s) — `-G NAME=VALUE`.
+    ///
+    /// A configuration sweep otherwise needs a hand-written wrapper module per
+    /// combination (`module tb_r1cf; tb #(.RPS(1),.IMPL_CF(1)) u(); endmodule` ×4, ×16
+    /// with two more parameters), and the same filelist then cannot be shared with a
+    /// tool that DOES support overrides. Every other simulator has this: xrun
+    /// `-defparam`, VCS `-pvalue+`, Verilator `-G`.
+    top_param_overrides: Vec<(String, String)>,
     /// Is `` `default_nettype none `` in effect for the module being elaborated?
     /// Saved/restored around each `elaborate_instance`, because the directive governs
     /// the module DECLARATION site, not the instantiation site — a `none` module may

@@ -108,17 +108,23 @@ fn no_import_header_unchanged() {
 }
 
 #[test]
-fn comma_import_form_is_loud() {
-    // `import p::*, q::*;` (multiple items in ONE declaration) is the existing
-    // v7 single-term-per-statement limit — loud in the header exactly as in the
-    // body (consistent, not a silent acceptance). Use separate statements.
-    let (_o, ok) = run("package p; localparam int W=8; endpackage\n\
+fn comma_import_form_works() {
+    // `import p::*, q2::*;` — IEEE 1800 §26.8's `package_import_declaration` is a
+    // COMMA LIST, and each term behaves exactly like its own statement. This was the
+    // v7 one-term-per-statement limit (loud); the aes_top report asked for it and
+    // iverilog 13 answers 13 for this design, so the assertion is the VALUE and not
+    // merely "it elaborates" — a comma list that dropped its second term would still
+    // be `ok` with `X` unresolved, and only the value separates those.
+    let (o, ok) = run("package p; localparam int W=8; endpackage\n\
          package q2; localparam int X=3; endpackage\n\
          module m import p::*, q2::*; (input logic [W-1:0] a, output logic [W-1:0] r);\n\
-         assign r=a+X; endmodule");
-    assert!(
-        !ok,
-        "comma-form header import must be loud (v7 single-term limit)"
+         assign r=a+X; endmodule\n\
+         module tb; logic [7:0] a, r; m u(.a(a), .r(r));\n\
+         initial begin a=8'd10; #1 $display(\"R:%0d\", r); $finish; end endmodule");
+    assert!(ok, "comma-form header import must elaborate");
+    assert_eq!(
+        o, "13",
+        "both header import terms must bind (W from p, X from q2); iverilog 13 says 13"
     );
 }
 

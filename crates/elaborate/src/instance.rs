@@ -168,6 +168,7 @@ impl Elaborator<'_> {
                         is_named: true,
                         had_value: true,
                         fill: None,
+                        str: None,
                     })
                     .collect()
             })
@@ -222,6 +223,15 @@ impl Elaborator<'_> {
         // body const-eval, so a local name that shadows a wildcard-imported array
         // is known regardless of decl order (catches forward refs and ports).
         let names = self.gather_local_decl_names(module);
+        // IEEE §6.10 ordering — see the `decl_pos` field doc. Same walk as `names`.
+        let dpos = self.gather_decl_positions(module);
+        let mut saved_decl_pos = std::mem::replace(&mut self.decl_pos, dpos);
+        let mut saved_dpos_scope =
+            std::mem::replace(&mut self.decl_pos_scope, self.cur_prefix.clone());
+        let mut saved_dpos_range =
+            std::mem::replace(&mut self.decl_pos_range, (module.span.lo, module.span.hi));
+        let dbl = self.gather_block_local_names(module);
+        let mut saved_dbl = std::mem::replace(&mut self.decl_block_locals, dbl);
         // DUP (round-5): decide which colliding `automatic` block-locals get their
         // own `$blk$<span>` scope (pure AST fn; excludes any name that also collides
         // with a module net via `names`). Computed here so both the hoist below and
@@ -247,7 +257,7 @@ impl Elaborator<'_> {
         // parameter fold below, so a `localparam W = f(N)` can interpret `f` at compile
         // time. (`func_table` is populated later, in pass 3.5.) Saved/restored with
         // `func_table` at the module-scope exit.
-        let saved_const_funcs = std::mem::take(&mut self.const_func_table);
+        let mut saved_const_funcs = std::mem::take(&mut self.const_func_table);
         for item in &module.body {
             if let ast::ModuleItem::Func(f) = item {
                 self.const_func_table.insert(f.name.name.clone(), f.clone());
@@ -280,18 +290,29 @@ impl Elaborator<'_> {
                         // bound to a wrong default poisons every downstream width with
                         // no trace (P0-5). 0 stays only as the post-error recovery value.
                         let meta = self.param_decl_width(p);
-                        let v = self
-                            .eval_param_init(&p.value, meta.map(|(w, _)| w))
-                            .unwrap_or_else(|| {
-                                self.error(
-                                    MsgCode::ElabUnsupported,
-                                    &format!(
+                        let folded = self.eval_param_init(&p.value, meta.map(|(w, _)| w));
+                        // Wider than the i64 domain — see `wide_param_bits`. Reached
+                        // only when the numeric fold DECLINED, so a wide declaration
+                        // whose value fits keeps its integer identity.
+                        if folded.is_none() {
+                            if let Some(cv) =
+                                meta.and_then(|(w, sg)| wide_param_const(&p.value, w, sg))
+                            {
+                                let key = self.fq(&p.name.name);
+                                self.wide_param_bits.insert(key, cv);
+                                continue;
+                            }
+                        }
+                        let v = folded.unwrap_or_else(|| {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
                                     "parameter `{}` value is not a foldable constant expression",
                                     p.name.name
                                 ),
-                                );
-                                0
-                            });
+                            );
+                            0
+                        });
                         let v = self.coerce_param_value(v, p);
                         let key = self.fq(&p.name.name);
                         // persistent copy for a hierarchical read (`dut.LP`) of a body
@@ -383,8 +404,9 @@ impl Elaborator<'_> {
         //       expansion at call sites (pass 7). Saved/restored so a sibling/parent
         //       instance of another module does not inherit them. Functions are not
         //       hierarchical in v1, so the bare name is the key.
-        let saved_funcs = std::mem::take(&mut self.func_table);
-        let saved_tasks = std::mem::take(&mut self.task_table);
+        let mut saved_funcs = std::mem::take(&mut self.func_table);
+        let mut saved_tasks = std::mem::take(&mut self.task_table);
+        let mut saved_rtn_pkg = std::mem::take(&mut self.rtn_pkg);
         // R19-X1: these two tables' contents are declared HERE, at this instance's own
         // prefix. Record it so a filled default-argument value can be checked against
         // the scope IEEE evaluates it in (see `default_binding_matches_decl_scope`).
@@ -398,7 +420,7 @@ impl Elaborator<'_> {
         // B1 frame-call: the frame-func name→id map is module-local (a sibling
         // module's call must never divert to this module's func). The global
         // `funcs`/`func_blocks`/`func_metas` arenas are NOT saved (they accumulate).
-        let saved_frame_idx = std::mem::take(&mut self.frame_idx);
+        let mut saved_frame_idx = std::mem::take(&mut self.frame_idx);
         let saved_task_frame_idx = std::mem::take(&mut self.task_frame_idx); // B2
                                                                              // Named SVA seq/prop decls collected in the SAME whole-body prescan, so an
                                                                              // `assert property(p)` BEFORE `property p; …` (forward reference) resolves —
@@ -491,9 +513,28 @@ impl Elaborator<'_> {
                     self.range_to_dims(kind, pd.range.as_ref(), pd.signed);
                 let dir = map_port_dir(pd.dir);
                 let init = default_init(kind, width);
-                for name in &pd.names {
+                for (ni, name) in pd.names.iter().enumerate() {
                     if self.symbols.contains_key(&self.fq(&name.name)) {
                         continue; // already created by a NetVarDecl
+                    }
+                    // UNPACKED dims, per name — the non-ANSI twin of the ANSI port
+                    // path. `pd.unpacked` is parallel to `pd.names`, so an empty (or
+                    // absent) entry is the scalar case and behaves as before.
+                    let dims = pd.unpacked.get(ni).map(Vec::as_slice).unwrap_or(&[]);
+                    let dim_extents = self.array_dim_extents(dims);
+                    let array_len = dim_extents
+                        .iter()
+                        .fold(1u32, |acc, &(_, n)| acc.saturating_mul(n.max(1)));
+                    if (array_len as u64) > MAX_ARRAY_LEN {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "unpacked array port `{}` has {array_len} elements \
+                                 (cap {MAX_ARRAY_LEN})",
+                                name.name
+                            ),
+                        );
+                        continue;
                     }
                     self.add_net(
                         &name.name,
@@ -503,11 +544,20 @@ impl Elaborator<'_> {
                             msb,
                             lsb,
                             signed,
-                            array_len: 1,
+                            array_len: array_len.max(1),
                             dir,
                             init: init.clone(),
                         },
                     );
+                    if !dims.is_empty() {
+                        if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
+                            self.record_dim_desc(id, kind, pd.range.as_ref(), &[], dims);
+                            if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0)
+                            {
+                                self.array_dims.insert(id, dim_extents.clone());
+                            }
+                        }
+                    }
                     // WAND/WOR: non-ANSI port net also needs its resolution sidecar.
                     if matches!(kind, ast::NetVarKind::Wand | ast::NetVarKind::Wor) {
                         if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
@@ -583,7 +633,36 @@ impl Elaborator<'_> {
         }
 
         // (6) port-connection cont-assigns (parent expr ↔ child port net).
+        //
+        // ⚠️ `wire_ports` runs inside the CHILD's `elaborate_instance`, but a port
+        // connection's actual is a PARENT expression — it is only the name scope
+        // that `wire_ports` swaps (`cur_prefix`), and by here every routine table
+        // holds the child's declarations. So `leaf u (.i_m(mk(2)))` looked `mk` up
+        // in the child and reported "call to undeclared function" for a function
+        // the parent declares — and, worse, if the CHILD happened to declare its own
+        // `mk`, the parent's connection silently bound the child's. Swap the
+        // parent's tables in for the call; they are still live in these locals.
+        // Everything else `wire_ports` touches (`symbols`, `nets`, the `.*` block)
+        // is child scope and is untouched by the swap.
+        std::mem::swap(&mut self.func_table, &mut saved_funcs);
+        std::mem::swap(&mut self.const_func_table, &mut saved_const_funcs);
+        std::mem::swap(&mut self.task_table, &mut saved_tasks);
+        std::mem::swap(&mut self.frame_idx, &mut saved_frame_idx);
+        std::mem::swap(&mut self.rtn_pkg, &mut saved_rtn_pkg);
+        std::mem::swap(&mut self.decl_pos, &mut saved_decl_pos);
+        std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
+        std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
+        std::mem::swap(&mut self.decl_block_locals, &mut saved_dbl);
         self.wire_ports(module, binding, &saved_prefix);
+        std::mem::swap(&mut self.func_table, &mut saved_funcs);
+        std::mem::swap(&mut self.const_func_table, &mut saved_const_funcs);
+        std::mem::swap(&mut self.task_table, &mut saved_tasks);
+        std::mem::swap(&mut self.frame_idx, &mut saved_frame_idx);
+        std::mem::swap(&mut self.rtn_pkg, &mut saved_rtn_pkg);
+        std::mem::swap(&mut self.decl_pos, &mut saved_decl_pos);
+        std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
+        std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
+        std::mem::swap(&mut self.decl_block_locals, &mut saved_dbl);
 
         // (6.5) B1 frame-call: RESERVE + LOWER every automatic/recursive function
         //       BEFORE the body lowering below, so a call site (step 7) can divert
@@ -791,6 +870,11 @@ impl Elaborator<'_> {
         self.tf_decl_scope = saved_decl_scope;
         self.const_func_table = saved_const_funcs;
         self.task_table = saved_tasks;
+        self.rtn_pkg = saved_rtn_pkg;
+        self.decl_pos = saved_decl_pos;
+        self.decl_pos_scope = saved_dpos_scope;
+        self.decl_pos_range = saved_dpos_range;
+        self.decl_block_locals = saved_dbl;
         self.inout_func_names = saved_inout_funcs; // R5-B
         self.dyn_formal_func_names = saved_dyn_formal_funcs; // §4.5.179
         self.frame_idx = saved_frame_idx;
@@ -881,6 +965,7 @@ impl Elaborator<'_> {
                         is_named: false,
                         had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
+                        str: Self::param_str_literal(e),
                     });
                 }
                 ast::ParamConn::Named { name, value, .. } => {
@@ -933,6 +1018,7 @@ impl Elaborator<'_> {
                         fill: value
                             .as_ref()
                             .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string()))),
+                        str: value.as_ref().and_then(Self::param_str_literal),
                     });
                 }
             }

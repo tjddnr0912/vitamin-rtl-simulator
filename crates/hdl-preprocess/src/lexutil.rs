@@ -36,6 +36,7 @@ pub fn resolve_module_timescales(
     let mut prec_exp = std::collections::BTreeMap::new();
     let mut precs: Vec<i8> = Vec::new();
     let mut default_used = false;
+    let mut ungoverned: Vec<String> = Vec::new();
     for &(name, lo) in modules {
         let gov = regions
             .iter()
@@ -46,6 +47,7 @@ pub fn resolve_module_timescales(
             Some(ts) => ts,
             None => {
                 default_used = true;
+                ungoverned.push(name.to_string());
                 TimeScale::DEFAULT
             }
         };
@@ -60,6 +62,7 @@ pub fn resolve_module_timescales(
     ResolvedTimescales {
         unit_exp,
         prec_exp,
+        ungoverned,
         global_prec_exp,
         default_used,
     }

@@ -29,7 +29,8 @@ The forward-looking ("Phase-2") side of each item lives in the project's
 
 | Limitation | User-visible effect | Loud or silent |
 |---|---|---|
-| Out-of-range array index | Read → `X`; write dropped | Loud (`E-RUN-RANGE` / `VITA-E4002`, rate-limited) |
+| Out-of-range array index (KNOWN index) | Read → `X`; write dropped | Loud (`E-RUN-RANGE` / `VITA-E4002`, rate-limited) |
+| UNKNOWN (x/z) array index | Read → `X`; write dropped | Warning (`W-RUN-RANGE-UNKNOWN` / `VITA-W4029`, rate-limited) |
 | Arithmetic lane = 128-bit unsigned / 64-bit signed | Wider arithmetic poisons to `X` | Fail-safe (`X`, never a wrong number) |
 | `$dumpvars(depth, scope)` args ignored | Always a full dump (a correct superset) | Silent |
 | `automatic` block-local that may be read before written | Rejected, not given a leftover value | Loud (`E3009`, with a `note:` at the construct that stopped the analysis) |
@@ -67,8 +68,11 @@ mem[i] = 8'hAA;// write → ignored; mem[0..3] unchanged
 
 An `x`/`z` index behaves the same way: read → `X`, write → no-op.
 
-**Loud or silent.** **Loud.** Out-of-range access emits the `E-RUN-RANGE`
-diagnostic (code `VITA-E4002`). The diagnostic is **rate-limited**, so a hot loop
+**Loud or silent.** **Loud.** An out-of-range access with a KNOWN index emits the
+`E-RUN-RANGE` diagnostic (code `VITA-E4002`, an error). An UNKNOWN (x/z) index emits
+`W-RUN-RANGE-UNKNOWN` (`VITA-W4029`, a warning) instead: reading `mem[idx_q]` while
+`idx_q` is still X is ordinary RTL during reset, and reporting it as an error set exit 1
+on correct designs. Both are **rate-limited** with independent budgets, so a hot loop
 that indexes out of range will not flood your transcript — you will see it, but
 not thousands of times.
 

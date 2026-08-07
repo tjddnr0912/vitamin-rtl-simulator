@@ -297,6 +297,23 @@ impl Elaborator<'_> {
             // width collapsed to 1, a replication count to 0).
             ast::ExprKind::Cast { target, expr } => self.const_eval_cast(target, expr),
             ast::ExprKind::Binary { op, lhs, rhs } => {
+                // A STRING comparison folds in the string domain, before the i64 one —
+                // `MODE == "Y"` on a `parameter string MODE` is the canonical way to
+                // switch an implementation in a generate-if, and neither operand has an
+                // i64 value, so the numeric fold below returned None and the generate-if
+                // was loud ("condition is not a constant"). IEEE 1800 §6.16 compares
+                // string VALUES, so equality is exact text equality.
+                if matches!(
+                    op,
+                    ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::CaseEq | ast::BinOp::CaseNe
+                ) {
+                    if let (Some(x), Some(y)) =
+                        (self.const_str_in_scope(lhs), self.const_str_in_scope(rhs))
+                    {
+                        let want_eq = matches!(op, ast::BinOp::Eq | ast::BinOp::CaseEq);
+                        return Some(i64::from((x == y) == want_eq));
+                    }
+                }
                 let a = self.const_eval_in_scope(lhs)?;
                 // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
                 // of the PATTERN (rhs) are don't-cares (§11.4.6). const_eval carries no
@@ -365,6 +382,36 @@ impl Elaborator<'_> {
     /// `const_eval_in_scope` arm). Correct-or-loud: only the forms whose value is
     /// exact without tracking an operand WIDTH fold; everything else is None ⇒ the
     /// caller stays loud rather than binding a reinterpreted value.
+    /// The STRING value of a constant expression, or None.
+    ///
+    /// Deliberately narrow: a string literal, a parenthesised one, a `pkg::NAME`, or a
+    /// bare name bound in `str_param_raw` — resolved through the SAME innermost-wins
+    /// `walk_scopes_key` over the SAME combined binding set that the lowering path
+    /// uses (`expr_main`'s Ident arm), so a local net or an integer param that shadows
+    /// a string param wins here exactly as it does there. Two spellings of that rule
+    /// is how a generate-if would decide one way and the body lower the other.
+    pub(crate) fn const_str_in_scope(&self, e: &ast::Expr) -> Option<String> {
+        match &e.kind {
+            ast::ExprKind::StrLit { raw } => Some(raw.clone()),
+            ast::ExprKind::Paren { inner } => self.const_str_in_scope(inner),
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                let seg = &p.segments[0].name;
+                let key = self.walk_scopes_key(seg, |k| {
+                    self.str_param_raw.contains_key(k)
+                        || self.real_param_val.contains_key(k)
+                        || self.params.contains_key(k)
+                        || self.symbols.contains_key(k)
+                })?;
+                self.str_param_raw.get(&key).cloned()
+            }
+            ast::ExprKind::PkgScoped { pkg, name } => self
+                .str_param_raw
+                .get(&format!("{}::{}", pkg.name, name.name))
+                .cloned(),
+            _ => None,
+        }
+    }
+
     fn const_eval_cast(&self, target: &ast::CastTarget, operand: &ast::Expr) -> Option<i64> {
         let v = self.const_eval_in_scope(operand)?;
         match target {
@@ -379,8 +426,8 @@ impl Elaborator<'_> {
             // domain does not track. Fold only where both interpretations agree: a
             // non-negative value that leaves the target's sign bit clear. (`4'(9)`
             // is 9 unsigned but −7 signed, so it stays loud.)
-            ast::CastTarget::Size(w_expr) => {
-                let n = self.const_eval_in_scope(w_expr)?;
+            ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
+                let n = self.cast_size_bits(target)?;
                 if !(1..=64).contains(&n) || v < 0 {
                     return None;
                 }
@@ -394,9 +441,34 @@ impl Elaborator<'_> {
                 (v < (1i64 << (n - 1))).then_some(v)
             }
             // `signed'`/`unsigned'` PRESERVE the operand's width, which this domain
-            // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), and a
-            // typedef/class NAME cast is not resolved here. Both stay loud.
-            ast::CastTarget::Signing { .. } | ast::CastTarget::Named(_) => None,
+            // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), so it
+            // stays loud.
+            ast::CastTarget::Signing { .. } => None,
+        }
+    }
+
+    /// The bit width a SIZE cast names, for both spellings of one construct.
+    ///
+    /// The parser makes `4'(e)` a `Size` and `RPS'(e)` a `Named` — a bare identifier
+    /// is always `Named`, whether it turns out to be a parameter, a typedef or a
+    /// class. Only the parameter reading is a size cast, and the RUNTIME lowering
+    /// (`expr_cast`'s `Named` arm) has always resolved it that way; the constant
+    /// domain did not, so `localparam logic [RPS-1:0] M = RPS'(1);` lowered fine and
+    /// then failed to FOLD — E3009 on a parameter whose value is perfectly known.
+    /// One function so the two domains cannot answer differently about the same text.
+    pub(crate) fn cast_size_bits(&self, target: &ast::CastTarget) -> Option<i64> {
+        match target {
+            ast::CastTarget::Size(w) => self.const_eval_in_scope(w),
+            ast::CastTarget::Named(path) if path.segments.len() == 1 => {
+                let id = ast::Expr {
+                    kind: ast::ExprKind::Ident(path.clone()),
+                    span: path.span,
+                };
+                // Folds ONLY for a genuine constant — a typedef, class or net name
+                // yields None, so a real type cast is still not mistaken for a size.
+                self.const_eval_in_scope(&id)
+            }
+            _ => None,
         }
     }
 

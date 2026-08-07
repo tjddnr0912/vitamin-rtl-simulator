@@ -363,6 +363,7 @@ fn ansi_port(dir: ast::PortDir, range: Option<(&str, &str)>, name: &str) -> ast:
         }),
         packed: Vec::new(),
         name: ident(name),
+        unpacked: Vec::new(),
         iface: None,
         default: None,
         span: SP,

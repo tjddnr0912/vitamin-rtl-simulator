@@ -268,6 +268,66 @@ pub(crate) fn scan_run(
                 }
                 (!bytes.is_empty()).then(|| scan_pack_str(&bytes))
             }
+            // `%[set]` / `%[^set]` — a SCANSET (C `sscanf`, which IEEE 1800 §21.3.4.2
+            // defers to). Neither vita nor iverilog implemented it; iverilog at least
+            // REFUSES it loudly ("invalid format code: %["), while vita matched
+            // nothing and returned 0 with no diagnostic — which is how an AES vector
+            // file's `#keylen=256` header silently fell back to defaults and left the
+            // 192/256-bit and decrypt paths untested behind a PASS.
+            //
+            // Rules, all C's: `^` first negates; a `]` immediately after `[` or `[^`
+            // is a literal `]`; `a-z` is a range; a `-` first or last is literal; NO
+            // leading-whitespace skip (unlike `%s`); read while the byte is in (or,
+            // negated, out of) the set, bounded by an explicit field width; matching
+            // ZERO bytes fails the conversion and stops the scan.
+            b'[' => {
+                let negate = fmt.get(fi) == Some(&b'^');
+                if negate {
+                    fi += 1;
+                }
+                let mut set = [false; 256];
+                let mut first = true;
+                let mut closed = false;
+                while fi < fmt.len() {
+                    let c = fmt[fi];
+                    if c == b']' && !first {
+                        fi += 1;
+                        closed = true;
+                        break;
+                    }
+                    first = false;
+                    // `a-z`: a `-` that is neither first nor last is a range.
+                    if fmt.get(fi + 1) == Some(&b'-') && fmt.get(fi + 2).is_some_and(|&e| e != b']')
+                    {
+                        let end = fmt[fi + 2];
+                        let (lo, hi) = if c <= end { (c, end) } else { (end, c) };
+                        for b in lo..=hi {
+                            set[b as usize] = true;
+                        }
+                        fi += 3;
+                        continue;
+                    }
+                    set[c as usize] = true;
+                    fi += 1;
+                }
+                if !closed {
+                    // An unterminated scanset is a malformed format, not an empty set:
+                    // stop rather than consume the rest of the input.
+                    break 'fmt;
+                }
+                let mut bytes = Vec::new();
+                while bytes.len() < width {
+                    match next!() {
+                        Some(b) if set[b as usize] != negate => bytes.push(b),
+                        Some(b) => {
+                            scan_unget(sched, fd, &mut pos, b);
+                            break;
+                        }
+                        None => break,
+                    }
+                }
+                (!bytes.is_empty()).then(|| scan_pack_str(&bytes))
+            }
             b's' | b'S' => {
                 // skip leading ws, then a ws-delimited run (up to width).
                 while let Some(b) = next!() {

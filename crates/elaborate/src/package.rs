@@ -2,17 +2,34 @@
 
 use super::*;
 
-/// IEEE §26.3 (round-7): is `func` a SELF-CONTAINED, straight-line function safe to
-/// FRAME-lower for a package-scoped call `pkg::f(args)`? True iff its body has no
-/// control flow and every bare identifier / call it references is one of its own
-/// formals or a body-local declaration (no free / package-internal reference that could
-/// mis-resolve or collide with a net in the caller's module scope, since the frame body
-/// is lowered in that scope). See `inline_pkg_function`. Multiple / non-final `return`s
-/// are fine — the frame path models the first-return exit faithfully (unlike the inline
-/// fold, which is why this feature routes through the frame path).
+/// IEEE §26.3: is `func` FREE-NAME CLOSED — safe to frame-lower for a package-scoped
+/// call `pkg::f(args)`? True iff every bare identifier it reads is one of its own
+/// formals or body-locals or a same-package CONSTANT, every name it writes is a formal
+/// or body-local, and every call it makes is to a same-package SUBROUTINE.
+///
+/// ⚠️ This used to say "SELF-CONTAINED, straight-line … its body has no control flow",
+/// and both halves are now false. The no-control-flow clause was never a
+/// name-resolution property — the frame path this routes through lowers arbitrary
+/// CFGs, exactly as it does for a bare-name imported function — and the nested-call
+/// clause fell once a package routine's body began resolving in its own package
+/// (`resolve_rtn_key`). What survives is the free-name closure, which is the whole
+/// reason the check exists: a free name would be resolved in the CALLER's module scope.
+///
+/// Applied to the ROOT is not enough — `inject_pkg_callees` walks the TRANSITIVE
+/// callee set, so it applies this to every callee it injects and refuses the ones that
+/// fail (a sibling with a free name bound that name to a caller net, silently).
+pub(crate) fn pkg_task_self_contained(
+    task: &ast::TaskDef,
+    pkg_const_names: &std::collections::BTreeSet<String>,
+    pkg_rtn_names: &std::collections::BTreeSet<String>,
+) -> bool {
+    Elaborator::task_self_contained_impl(task, pkg_const_names, pkg_rtn_names)
+}
+
 pub(crate) fn pkg_func_self_contained(
     func: &ast::FunctionDef,
     pkg_const_names: &std::collections::BTreeSet<String>,
+    pkg_rtn_names: &std::collections::BTreeSet<String>,
 ) -> bool {
     // WRITE set: names a statement may assign to — the function's own
     // formals / locals plus its return-by-name. A package const / enum label is
@@ -38,17 +55,77 @@ pub(crate) fn pkg_func_self_contained(
     // that shadows a same-name pkg const still wins (it is in `names`).
     let read_names: std::collections::BTreeSet<String> =
         names.union(pkg_const_names).cloned().collect();
-    pkg_stmt_pure(&func.body, &names, &read_names)
+    pkg_stmt_pure_with(&func.body, &names, &read_names, pkg_rtn_names)
 }
 
-/// Straight-line + free-name-closed check for one statement (see
-/// `pkg_func_self_contained`). `write` = assignable names; `read` = readable
-/// names (write set ∪ same-package consts).
-pub(crate) fn pkg_stmt_pure(
+/// Free-name-closed check for one statement (see `pkg_func_self_contained`).
+/// `write` = assignable names; `read` = readable names (write set ∪ same-package
+/// consts).
+/// Free-name-closed check over the FULL statement set, plus the same-package routines a
+/// nested call may target.
+///
+/// ⚠️ The straight-line restriction this replaces was never about name resolution.
+/// It read "no control flow", and the message told users to `import pkg::*` instead
+/// — but the frame path this routes through lowers arbitrary CFGs (it is the same
+/// path a bare-name imported function takes, `if`/`for` and all). What actually
+/// mattered was the FREE-NAME closure, and that is checked here as before.
+pub(crate) fn pkg_stmt_pure_with(
     s: &ast::Stmt,
     write: &std::collections::BTreeSet<String>,
     read: &std::collections::BTreeSet<String>,
+    rtns: &std::collections::BTreeSet<String>,
 ) -> bool {
+    let ep = |e: &ast::Expr| pkg_expr_pure_with(e, read, rtns);
+    let sp = |st: &ast::Stmt| pkg_stmt_pure_with(st, write, read, rtns);
+    use ast::Stmt as S;
+    match s {
+        S::If {
+            cond,
+            then_s,
+            else_s,
+            ..
+        } => ep(cond) && sp(then_s) && else_s.as_ref().is_none_or(|e| sp(e)),
+        S::Case {
+            scrutinee, items, ..
+        } => {
+            ep(scrutinee)
+                && items.iter().all(|it| match it {
+                    ast::CaseItem::Match { labels, body, .. } => labels.iter().all(&ep) && sp(body),
+                    ast::CaseItem::Default { body, .. } => sp(body),
+                })
+        }
+        S::For {
+            init,
+            cond,
+            step,
+            body,
+            ..
+        } => sp(init) && ep(cond) && sp(step) && sp(body),
+        S::While { cond, body, .. } => ep(cond) && sp(body),
+        S::Repeat { count, body, .. } => ep(count) && sp(body),
+        S::UserTaskCall { name, args, .. } => {
+            name.segments.len() == 1
+                && rtns.contains(&name.segments[0].name)
+                && args.iter().all(&ep)
+        }
+        // Everything else keeps the conservative original rule (a `Block`, a
+        // `Return`, a blocking `=`, and nothing more).
+        _ => pkg_stmt_pure_orig(s, write, read, rtns),
+    }
+}
+
+fn pkg_stmt_pure_orig(
+    s: &ast::Stmt,
+    write: &std::collections::BTreeSet<String>,
+    read: &std::collections::BTreeSet<String>,
+    rtns: &std::collections::BTreeSet<String>,
+) -> bool {
+    let pkg_expr_pure =
+        |e: &ast::Expr, n: &std::collections::BTreeSet<String>| pkg_expr_pure_with(e, n, rtns);
+    let pkg_stmt_pure =
+        |st: &ast::Stmt,
+         w: &std::collections::BTreeSet<String>,
+         r: &std::collections::BTreeSet<String>| { pkg_stmt_pure_with(st, w, r, rtns) };
     use ast::Stmt::*;
     match s {
         Block { stmts, .. } => stmts.iter().all(|st| pkg_stmt_pure(st, write, read)),
@@ -78,6 +155,34 @@ pub(crate) fn pkg_stmt_pure(
 /// Free-name-closed check for an expression (see `pkg_func_self_contained`). A bare
 /// name must be a formal / body-local; nested USER calls and exotic nodes are rejected.
 pub(crate) fn pkg_expr_pure(e: &ast::Expr, names: &std::collections::BTreeSet<String>) -> bool {
+    pkg_expr_pure_with(e, names, &std::collections::BTreeSet::new())
+}
+
+/// [`pkg_expr_pure`], plus a set of same-package ROUTINE names a nested call may
+/// target. A call used to be rejected outright because the callee would have been
+/// resolved in the CALLER's module scope; `resolve_rtn_key` now resolves it in the
+/// package, so a nested same-package call is as safe as a bare-name one.
+pub(crate) fn pkg_expr_pure_with(
+    e: &ast::Expr,
+    names: &std::collections::BTreeSet<String>,
+    rtns: &std::collections::BTreeSet<String>,
+) -> bool {
+    if let ast::ExprKind::Call { name, args } = &e.kind {
+        return name.segments.len() == 1
+            && rtns.contains(&name.segments[0].name)
+            && args.iter().all(|a| pkg_expr_pure_with(a, names, rtns));
+    }
+    pkg_expr_pure_inner(e, names, rtns)
+}
+
+fn pkg_expr_pure_inner(
+    e: &ast::Expr,
+    names: &std::collections::BTreeSet<String>,
+    rtns: &std::collections::BTreeSet<String>,
+) -> bool {
+    let pkg_expr_pure = |e: &ast::Expr, names: &std::collections::BTreeSet<String>| {
+        pkg_expr_pure_with(e, names, rtns)
+    };
     use ast::ExprKind::*;
     match &e.kind {
         IntLit { .. } | RealLit { .. } | StrLit { .. } => true,
@@ -158,6 +263,13 @@ pub(crate) fn pkg_lvalue_pure(
     }
 }
 
+/// What `push_pkg_consts_*` hands back for the unwind: the previous `params` and
+/// `param_meta` entries of every constant it injected, newest last.
+type SavedPkgConsts = (
+    Vec<(String, Option<i64>)>,
+    Vec<(String, Option<(u32, bool)>)>,
+);
+
 impl Elaborator<'_> {
     /// Round-9 PKG2: register a package's constants (enum labels + localparams)
     /// as params under the CURRENT scope so a frame-lowered `pkg::fn` body can
@@ -175,18 +287,9 @@ impl Elaborator<'_> {
         &mut self,
         pkg: &str,
         func: &ast::FunctionDef,
-    ) -> (
-        Vec<(String, Option<i64>)>,
-        Vec<(String, Option<(u32, bool)>)>,
-    ) {
-        let mut saved_p = Vec::new();
-        let mut saved_m = Vec::new();
-        let consts = match self.pkg_consts.get(pkg) {
-            Some(c) => c.clone(),
-            None => return (saved_p, saved_m),
-        };
-        // Skip-set = formals + body-local decls + the function's own name (same
-        // construction as `pkg_func_self_contained`).
+    ) -> SavedPkgConsts {
+        // Skip-set = formals + body-local decls + the function's own name (return by
+        // name), the same construction `pkg_func_self_contained` uses.
         let mut skip: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for p in &func.ports {
             skip.insert(p.name.name.clone());
@@ -199,6 +302,41 @@ impl Elaborator<'_> {
             }
         }
         skip.insert(func.name.name.clone());
+        self.push_pkg_consts_skipping(pkg, &skip)
+    }
+
+    /// [`Self::push_pkg_consts_scoped`] for a TASK — a task has no return-by-name, so
+    /// its own name is not in the skip set.
+    pub(crate) fn push_pkg_consts_task(
+        &mut self,
+        pkg: &str,
+        task: &ast::TaskDef,
+    ) -> SavedPkgConsts {
+        let mut skip: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for p in &task.ports {
+            skip.insert(p.name.name.clone());
+        }
+        let mut decls = task.body_decls.clone();
+        collect_block_local_decls(&task.body, &mut decls);
+        for d in &decls {
+            for n in &d.names {
+                skip.insert(n.name.name.clone());
+            }
+        }
+        self.push_pkg_consts_skipping(pkg, &skip)
+    }
+
+    fn push_pkg_consts_skipping(
+        &mut self,
+        pkg: &str,
+        skip: &std::collections::BTreeSet<String>,
+    ) -> SavedPkgConsts {
+        let mut saved_p = Vec::new();
+        let mut saved_m = Vec::new();
+        let consts = match self.pkg_consts.get(pkg) {
+            Some(c) => c.clone(),
+            None => return (saved_p, saved_m),
+        };
         let metas = self.pkg_const_meta.get(pkg).cloned().unwrap_or_default();
         for (cname, &v) in &consts {
             if skip.contains(cname) {
@@ -818,12 +956,143 @@ impl Elaborator<'_> {
 
     /// Bind one import's FUNCTION/TASK symbols (local definitions win —
     /// skip-if-present, called after the module's own (3.5) collection).
+    /// The `func_table`/`task_table` key a BARE callee name resolves to.
+    ///
+    /// Normally the name itself. Inside the body of a routine declared in package
+    /// `p`, `p::name` wins when it exists — that is the whole point of the scoped
+    /// injection in `apply_import_routines`: a package routine's body must see its
+    /// OWN siblings, not whatever the importing module gave the same name. Without
+    /// this, `import p::f2;` in a module that also declares its own `helper` made
+    /// `f2`'s body call the module's `helper` at exit 0 (measured: 1002 where
+    /// iverilog says 4 — an earlier note said 2002, which the design as written does
+    /// not produce).
+    pub(crate) fn resolve_rtn_key(&self, bare: &str) -> String {
+        if let Some(pkg) = self.cur_rtn_pkg.last() {
+            let scoped = format!("{pkg}::{bare}");
+            if self.func_table.contains_key(&scoped) || self.task_table.contains_key(&scoped) {
+                return scoped;
+            }
+        }
+        bare.to_string()
+    }
+
+    /// The package a routine KEY belongs to: `pkg::name` carries it in the key, an
+    /// explicitly imported bare name carries it in `rtn_pkg`, everything else is a
+    /// plain module routine.
+    pub(crate) fn rtn_key_pkg(&self, key: &str) -> Option<String> {
+        match key.split_once("::") {
+            Some((pkg, _)) => Some(pkg.to_string()),
+            None => self.rtn_pkg.get(key).cloned(),
+        }
+    }
+
+    /// Make every same-package routine that `root` transitively CALLS reachable
+    /// under its scoped key `pkg::name`.
+    ///
+    /// A routine's body resolves in its own declaring scope (IEEE 1800 §26.3), but
+    /// vita lowers every body with the caller module's flat tables live. Scoped keys
+    /// are how the body still finds its own siblings: `resolve_rtn_key` prefers
+    /// `pkg::n` while that body is being lowered, and nothing else can see the key,
+    /// so a module-local `n` is untouched and two packages can never collide.
+    ///
+    /// Shared by both entry points — an explicit `import pkg::f;` and a scoped
+    /// `pkg::f()` call — because they need exactly the same thing.
+    pub(crate) fn inject_pkg_callees(&mut self, pkg: &str, root: &str) -> Vec<String> {
+        let (funcs, tasks) = match (self.pkg_funcs.get(pkg), self.pkg_tasks.get(pkg)) {
+            (Some(f), Some(t)) => (f.clone(), t.clone()),
+            _ => return Vec::new(),
+        };
+        // ⚠️ Every injected callee must be FREE-NAME CLOSED, not just the root.
+        // The admission (`pkg_func_self_contained`) ran on the root only while this
+        // walk is TRANSITIVE, so a sibling whose body names something free was
+        // injected anyway and then lowered with the caller module's tables live —
+        // binding that free name to the CALLER's net, silently:
+        //   package p; function h(x); return x + zz; endfunction   // zz free
+        //              function g(m); return h(m);   endfunction
+        //   module t; int zz; … p::g(1) → 101, iverilog: "Unable to bind zz in p.h"
+        // A callee that fails the check is NOT injected and its name is returned, so
+        // the caller can say why instead of leaving a bare "undeclared function".
+        let const_names: std::collections::BTreeSet<String> = self
+            .pkg_consts
+            .get(pkg)
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default();
+        let rtn_names: std::collections::BTreeSet<String> =
+            funcs.keys().chain(tasks.keys()).cloned().collect();
+        let mut refused: Vec<String> = Vec::new();
+        let pkg = pkg.to_string();
+        let mut want: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        if let Some(f) = funcs.get(root) {
+            collect_callee_stmt(&f.body, &mut want);
+        }
+        if let Some(t) = tasks.get(root) {
+            collect_callee_stmt(&t.body, &mut want);
+        }
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        seen.insert(root.to_string());
+        while let Some(n) = want.iter().next().cloned() {
+            want.remove(&n);
+            if !seen.insert(n.clone()) {
+                continue;
+            }
+            let f = funcs.get(&n).cloned();
+            let t = tasks.get(&n).cloned();
+            if f.is_none() && t.is_none() {
+                continue; // not this package's — a local, or another import
+            }
+            let key = format!("{pkg}::{n}");
+            if let Some(f) = f {
+                collect_callee_stmt(&f.body, &mut want);
+                if pkg_func_self_contained(&f, &const_names, &rtn_names) {
+                    self.func_table.entry(key.clone()).or_insert(f);
+                } else {
+                    refused.push(n.clone());
+                }
+            }
+            if let Some(t) = t {
+                collect_callee_stmt(&t.body, &mut want);
+                if pkg_task_self_contained(&t, &const_names, &rtn_names) {
+                    self.task_table.entry(key).or_insert(t);
+                } else {
+                    refused.push(n.clone());
+                }
+            }
+        }
+        refused
+    }
+
+    /// [`pkg_func_self_contained`] for a TASK — same write/read sets, same walk.
+    /// A task has no return-by-name, so its own name is not writable.
+    fn task_self_contained_impl(
+        task: &ast::TaskDef,
+        pkg_const_names: &std::collections::BTreeSet<String>,
+        pkg_rtn_names: &std::collections::BTreeSet<String>,
+    ) -> bool {
+        let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for p in &task.ports {
+            names.insert(p.name.name.clone());
+        }
+        let mut decls = task.body_decls.clone();
+        collect_block_local_decls(&task.body, &mut decls);
+        for d in &decls {
+            for n in &d.names {
+                names.insert(n.name.name.clone());
+            }
+        }
+        let read_names: std::collections::BTreeSet<String> =
+            names.union(pkg_const_names).cloned().collect();
+        pkg_stmt_pure_with(&task.body, &names, &read_names, pkg_rtn_names)
+    }
+
     pub(crate) fn apply_import_routines(
         &mut self,
         imp: &ast::ImportDecl,
         wc_rtn: &mut BTreeMap<String, String>,
         explicit_rtn: &mut std::collections::BTreeSet<String>,
     ) {
+        // Same-package siblings a WILDCARD-imported routine needs; injected after the
+        // loop below (the borrow of `funcs` ends there).
+        let mut wildcard_roots: Vec<String> = Vec::new();
         let pkg = imp.pkg.name.to_string();
         let (funcs, tasks) = match (self.pkg_funcs.get(&pkg), self.pkg_tasks.get(&pkg)) {
             (Some(f), Some(t)) => (f.clone(), t.clone()),
@@ -850,6 +1119,15 @@ impl Elaborator<'_> {
                         Some(_) => {} // same package, idempotent
                         None => {
                             self.func_table.insert(n.clone(), f);
+                            self.rtn_pkg.insert(n.clone(), pkg.clone());
+                            // ★ The wildcard arm needs the SCOPED injection too. It
+                            // looked like it did not — a wildcard puts every sibling in
+                            // under its bare name — but a module-local routine of the
+                            // same name wins that bare slot, and the imported body then
+                            // called the MODULE's version: 1002 where iverilog says 4,
+                            // silently, on PRE and POST alike. Only the explicit-import
+                            // spelling of the same design was fixed.
+                            wildcard_roots.push(n.clone());
                             wc_rtn.insert(n, pkg.clone());
                         }
                     }
@@ -872,6 +1150,8 @@ impl Elaborator<'_> {
                         Some(_) => {}
                         None => {
                             self.task_table.insert(n.clone(), t);
+                            self.rtn_pkg.insert(n.clone(), pkg.clone());
+                            wildcard_roots.push(n.clone());
                             wc_rtn.insert(n, pkg.clone());
                         }
                     }
@@ -882,11 +1162,38 @@ impl Elaborator<'_> {
                 explicit_rtn.insert(sym.name.clone());
                 if let Some(f) = funcs.get(&sym.name) {
                     self.func_table.insert(sym.name.clone(), f.clone());
+                    self.rtn_pkg.insert(sym.name.clone(), pkg.clone());
                 }
                 if let Some(t) = tasks.get(&sym.name) {
                     self.task_table.insert(sym.name.clone(), t.clone());
+                    self.rtn_pkg.insert(sym.name.clone(), pkg.clone());
                 }
+                // ★ A routine's body resolves in ITS OWN declaring scope (IEEE 1800
+                // §26.3: an import controls what the IMPORTING scope may name, not how
+                // the imported item's already-declared body resolves). vita lowers every
+                // body with the caller module's flat `func_table` live, so
+                // `import p::f2;` used to leave `f2`'s own call to same-package `f1`
+                // unresolvable (E3010) while `import p::*` worked BY ACCIDENT — it
+                // happens to put every sibling in the table under its bare name.
+                //
+                // Pull in the same-package routines the imported one actually needs
+                // (transitive callees) under the SCOPED key `pkg::name` only. Scoped
+                // keys are an existing shape (`inline_pkg_function` builds them for
+                // `p::f()` calls), and keying this way is both simpler and MORE
+                // conformant than injecting bare names: the module still cannot call
+                // `f1` by its bare name, a module-local `f1` is untouched, and two
+                // packages can never collide — so no ambiguity bookkeeping is needed.
+                // `resolve_rtn_key` is the lookup half: while a package routine's body
+                // is being lowered, a bare callee tries `pkg::name` first.
+                // A sibling that is not free-name closed stays out (it would bind its
+                // free name to a caller net); the call site is then loud, which is the
+                // pre-existing behaviour for that shape. Not escalated here because an
+                // import is not a use — the module may never call it.
+                let _ = self.inject_pkg_callees(&pkg, &sym.name);
             }
+        }
+        for r in wildcard_roots {
+            let _ = self.inject_pkg_callees(&pkg, &r);
         }
     }
 }

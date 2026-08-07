@@ -448,6 +448,7 @@ fn native_select_concat_repl_equals_across_backends() {
       reg clk;\n\
       reg [15:0] s;\n\
       reg [3:0] idx;\n\
+      reg [3:0] idx2;\n\
       reg [7:0] p, q, r, m;\n\
       reg b0;\n\
       reg [15:0] cat, rep;\n\
@@ -460,7 +461,6 @@ fn native_select_concat_repl_equals_across_backends() {
         rep <= {2{p}};\n\
         m <= s[idx2 +: 8];\n\
       end\n\
-      reg [3:0] idx2;\n\
       initial begin\n\
         s = 16'hA5C3; idx = 4'd4; idx2 = 4'bxxxx; clk = 0;\n\
         #1 clk = 1; #1 clk = 0;\n\

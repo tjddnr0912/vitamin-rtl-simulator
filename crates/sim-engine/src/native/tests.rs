@@ -2047,12 +2047,12 @@ fn s2_wprog_runtime_element_load_matches_generic_eval() {
             arena.buf[s.off as usize + 1] = ku;
         }
         for (rhs, w, signed, prog) in &progs {
-            let _ = arena.take_deferred_range_reports(); // start from zero
+            let _ = arena.take_deferred_range_kinds().len(); // start from zero
             let got = prog.run(&arena, &mut scratch);
-            let got_reports = arena.take_deferred_range_reports();
+            let got_reports = arena.take_deferred_range_kinds().len();
 
             let want = eval_with(&ir, &wt, &rng, &arena, *rhs, *w, *signed);
-            let want_reports = arena.take_deferred_range_reports();
+            let want_reports = arena.take_deferred_range_kinds().len();
 
             assert_eq!(
                 (got.val, got.unk, got_reports),

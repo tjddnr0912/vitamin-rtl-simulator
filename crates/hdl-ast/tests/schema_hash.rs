@@ -208,9 +208,20 @@ use vita_schema::schema_hash;
 /// `PortConn.implicit_name` (the `.name` shorthand, which desugars to `.name(name)` but
 /// is NOT a §3.5 position — IEEE 1800 §23.3.2.2 requires a declared object). Front-end
 /// only; no sim-ir change, format_version stays 26. All `.vu` artifacts are stale.
+/// Re-pinned 2026-08-07 (aes_top report §3.2) UNPACKED ARRAY PORTS — two fields:
+/// `AnsiPort.unpacked: Vec<Dim>` and `PortDecl.unpacked: Vec<Vec<Dim>>` (per name,
+/// parallel to `names`, so the frozen `names` shape is untouched). A port written
+/// `output logic [7:0] o [4]` is legal IEEE 1800 §23.2.2.3 and iverilog accepts it;
+/// vita rejected it at the `[` in BOTH the ANSI header and the non-ANSI body form,
+/// so a design passing 15×128-bit round keys had to be rewritten to a flat packed
+/// bus. The dims ride the AST the same way `TfPort.unpacked` (round-6 UARR) does,
+/// elaborate sizes the port net from them, and a port connection wires ELEMENT BY
+/// ELEMENT (there is no whole-array value in this IR — one whole-net cont-assign
+/// would silently connect word 0 only). Front-end + elaborate; no sim-ir change,
+/// format_version stays 26. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    232, 197, 242, 26, 193, 127, 23, 186, 96, 240, 153, 25, 107, 39, 160, 86, 60, 216, 120, 173, 9,
-    9, 207, 107, 85, 103, 86, 136, 214, 28, 145, 114,
+    69, 253, 28, 85, 140, 191, 39, 126, 75, 139, 78, 174, 146, 113, 153, 224, 192, 44, 150, 241,
+    189, 52, 234, 54, 246, 119, 49, 74, 1, 227, 76, 238,
 ];
 
 #[test]

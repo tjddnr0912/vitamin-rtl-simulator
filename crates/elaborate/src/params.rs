@@ -129,8 +129,10 @@ impl Elaborator<'_> {
                                 }
                             }
                             // `N'(e)`: N bits, signedness inherited from the operand.
-                            ast::CastTarget::Size(n) => {
-                                if let Some(n) = self.const_eval_in_scope(n) {
+                            // `RPS'(e)` is the same cast under the other spelling —
+                            // `cast_size_bits` owns that rule for every consumer.
+                            ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
+                                if let Some(n) = self.cast_size_bits(target) {
                                     if let Ok(w) = u32::try_from(n) {
                                         return Some((w, self.const_expr_signed(expr)));
                                     }
@@ -138,7 +140,7 @@ impl Elaborator<'_> {
                             }
                             // Not folded by `const_eval_cast`, so unreachable with a
                             // Some value — fall through to value-inference anyway.
-                            ast::CastTarget::Signing { .. } | ast::CastTarget::Named(_) => {}
+                            ast::CastTarget::Signing { .. } => {}
                         }
                     }
                 }
@@ -230,6 +232,67 @@ impl Elaborator<'_> {
         self.const_eval_in_scope(e)
     }
 
+    /// Turn `-G NAME=VALUE` into overrides for one top module.
+    ///
+    /// A value is a decimal integer (`-G W=8`, `-G N=-1`), a Verilog sized literal
+    /// (`-G K=8'hFF`), or a quoted string (`-G MODE="lut"`). Anything else is loud —
+    /// a CLI override that silently did not apply would be the same failure mode as
+    /// the dropped `#(.W(sig))` this slice made loud.
+    pub(crate) fn cli_overrides_for(
+        &mut self,
+        module: &ast::ModuleDecl,
+        used: &mut std::collections::BTreeSet<String>,
+    ) -> Vec<ResolvedOverride> {
+        let mut out = Vec::new();
+        for (name, raw) in self.top_param_overrides.clone() {
+            let Some(p) = module.params.iter().find(|p| p.name.name == name) else {
+                continue; // another root may declare it; reported once by the caller
+            };
+            used.insert(name.clone());
+            if !matches!(p.kind, ast::ParamKind::Parameter) {
+                self.error(
+                    MsgCode::ElabPortMismatch,
+                    &format!("`-G {name}=…` targets a localparam, which cannot be overridden"),
+                );
+                continue;
+            }
+            let t = raw.trim();
+            let (value, text) = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
+                (None, Some(t[1..t.len() - 1].to_string()))
+            } else if let Ok(v) = t.parse::<i64>() {
+                (Some(v), None)
+            } else if let Some(cv) = crate::literal::parse_int_literal(t, ast::IntLitKind::Sized)
+                .and_then(|c| {
+                    // Same i64 domain the override channel uses everywhere else: a
+                    // value with bits above word 0 does not fit and is loud, not
+                    // silently truncated.
+                    (!c.bits.val.iter().skip(1).any(|&w| w != 0))
+                        .then(|| c.bits.val.first().copied().unwrap_or(0) as i64)
+                })
+            {
+                (Some(cv), None)
+            } else {
+                self.error(
+                    MsgCode::ElabPortMismatch,
+                    &format!(
+                        "`-G {name}={raw}`: the value must be a decimal integer, a sized \
+                         literal like 8'hFF, or a quoted string"
+                    ),
+                );
+                continue;
+            };
+            out.push(ResolvedOverride {
+                name: Some(name),
+                value,
+                is_named: true,
+                fill: None,
+                had_value: true,
+                str: text,
+            });
+        }
+        out
+    }
+
     pub(crate) fn bind_params(
         &mut self,
         module: &ast::ModuleDecl,
@@ -242,6 +305,7 @@ impl Elaborator<'_> {
         let mut ovr_by_name: BTreeMap<&str, Option<i64>> = BTreeMap::new();
         let mut ovr_fill: BTreeMap<&str, &(ast::IntLitKind, String)> = BTreeMap::new();
         let mut ovr_unfoldable: std::collections::BTreeSet<String> = Default::default();
+        let mut ovr_str: BTreeMap<&str, &str> = BTreeMap::new();
         let mut pos_i = 0usize;
         for ov in overrides {
             if ov.is_named {
@@ -263,6 +327,9 @@ impl Elaborator<'_> {
                         if let Some(f) = &ov.fill {
                             ovr_fill.insert(p.name.name.as_str(), f);
                         }
+                        if let Some(t) = &ov.str {
+                            ovr_str.insert(p.name.name.as_str(), t.as_str());
+                        }
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
                     None => {
@@ -279,6 +346,16 @@ impl Elaborator<'_> {
                         if let Some(f) = &ov.fill {
                             ovr_fill.insert(p.name.name.as_str(), f);
                         }
+                        if let Some(t) = &ov.str {
+                            ovr_str.insert(p.name.name.as_str(), t.as_str());
+                        }
+                        if ov.value.is_none()
+                            && ov.fill.is_none()
+                            && ov.str.is_none()
+                            && ov.had_value
+                        {
+                            ovr_unfoldable.insert(p.name.name.clone());
+                        }
                     }
                     None => {
                         self.error(
@@ -293,6 +370,85 @@ impl Elaborator<'_> {
 
         let mut saved = Vec::new();
         for p in &module.params {
+            // ★ ORDERING RULE — this block runs for EVERY parameter, before any
+            // side-map `continue` below.
+            //
+            // An override that was WRITTEN but did not fold used to be a warning
+            // ("default kept") and the child then ran with the wrong parameter at
+            // exit 0. Escalating it is the point of this slice — but the escalation
+            // was first placed after the string / wide / real routes, each of which
+            // `continue`s, so the very types most likely to carry an unfoldable
+            // override skipped it. Two adversarial lenses found that independently:
+            // `#(.MODE(sig))` on a `parameter string` kept its default silently, and
+            // a NAMED `#(.K(128'h…))` on a >64-bit parameter installed the declared
+            // default while the POSITIONAL spelling of the same override was loud.
+            //
+            // `ovr_by_name` only holds values that folded to i64, so "an override was
+            // written and did not fold" is `ovr_unfoldable` (numeric), `ovr_str`
+            // covers the string case, and `ovr_fill` the fill case. `.W()` with no
+            // expression is untouched: it legally means "keep the default" and never
+            // enters `ovr_unfoldable`.
+            let has_applied_override = ovr_by_name
+                .get(p.name.name.as_str())
+                .copied()
+                .flatten()
+                .is_some()
+                || ovr_fill.contains_key(p.name.name.as_str())
+                || ovr_str.contains_key(p.name.name.as_str());
+            if ovr_unfoldable.contains(&p.name.name) && !has_applied_override {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "the override of parameter `{}` is not a constant, so the \
+                         declared default would be used instead — that is a different \
+                         design, not a smaller one",
+                        p.name.name
+                    ),
+                );
+            }
+            // A `string` header parameter has no i64 value, so the numeric fold below
+            // reports E3009 on its own declared DEFAULT — measured with no override at
+            // all. The module-BODY parameter loop has always routed strings to
+            // `str_param_raw` before folding (`instance.rs`); the header path never
+            // did, which is why `#(parameter string MODE="X")` was unusable. Do the
+            // same here, and apply a string OVERRIDE while we are at it: it is carried
+            // in `ResolvedOverride::str` because `value` is i64-only and dropping it
+            // ran the child with its default at exit 0.
+            let str_val = match ovr_str.get(p.name.name.as_str()) {
+                Some(t) if matches!(p.kind, ast::ParamKind::Parameter) => Some(t.to_string()),
+                // fall through to the arms below
+                Some(_) => {
+                    self.error(
+                        MsgCode::ElabPortMismatch,
+                        &format!("cannot override localparam `{}`", p.name.name),
+                    );
+                    Self::param_str_literal(&p.value)
+                }
+                None => {
+                    // A `string` parameter overridden with a NUMBER: the override
+                    // folded, so `ovr_by_name` has it and the escalation above stays
+                    // quiet, and then this route installed the declared DEFAULT — a
+                    // silently different design. iverilog rejects the assignment.
+                    if Self::param_str_literal(&p.value).is_some()
+                        && ovr_by_name.contains_key(p.name.name.as_str())
+                    {
+                        self.error(
+                            MsgCode::ElabPortMismatch,
+                            &format!(
+                                "parameter `{}` is a string, so a numeric override \
+                                 cannot be applied to it",
+                                p.name.name
+                            ),
+                        );
+                    }
+                    Self::param_str_literal(&p.value)
+                }
+            };
+            if let Some(raw) = str_val {
+                let key = self.fq(&p.name.name);
+                self.str_param_raw.insert(key, raw);
+                continue;
+            }
             // r19: a REAL-valued header parameter (`#(parameter real R = 1.5)`) has no
             // i64 value — route it to the side map before the numeric fold, exactly as
             // the module-body path does.
@@ -370,6 +526,21 @@ impl Elaborator<'_> {
                 }
                 None => self.eval_param_init(&p.value, pw),
             };
+            // Wider than the i64 constant domain — see `wide_param_bits`. Reached
+            // ONLY when the numeric fold above already declined, so a wide DECLARATION
+            // whose value happens to fit (`localparam logic [255:0] K = 256'h1`) keeps
+            // its integer identity and stays usable as a width, a bound and a
+            // generate condition. Gating on the declared WIDTH instead took four
+            // declaration scopes from correct to loud — the field doc claimed the
+            // opposite ("the boundary is the VALUE, not the declared width") and the
+            // code was the counterexample.
+            if chosen_val.is_none() {
+                if let Some(cv) = meta.and_then(|(w, sg)| wide_param_const(&p.value, w, sg)) {
+                    let key = self.fq(&p.name.name);
+                    self.wide_param_bits.insert(key, cv);
+                    continue;
+                }
+            }
             // Unfoldable param value = LOUD error, never a silent 0 (P0-5);
             // 0 is only the post-error recovery value.
             let v = chosen_val.unwrap_or_else(|| {

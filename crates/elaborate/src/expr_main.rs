@@ -192,6 +192,7 @@ impl Elaborator<'_> {
                     let mut local_shadows_param = false;
                     if let Some(key) = self.walk_scopes_key(seg, |k| {
                         self.str_param_raw.contains_key(k)
+                            || self.wide_param_bits.contains_key(k)
                             || self.real_param_val.contains_key(k)
                             || self.params.contains_key(k)
                             || self.symbols.contains_key(k)
@@ -199,6 +200,13 @@ impl Elaborator<'_> {
                         if self.str_param_raw.contains_key(&key) {
                             let raw = self.str_param_raw[&key].clone();
                             let cid = self.intern_const(parse_str_literal(&raw));
+                            return self.push_expr(ir::Expr::Const { val: cid });
+                        }
+                        // A parameter wider than the i64 constant domain — same
+                        // side-map shape as the string and real cases, and it rides
+                        // the same innermost-wins key derivation.
+                        if let Some(cv) = self.wide_param_bits.get(&key).cloned() {
+                            let cid = self.intern_const(cv);
                             return self.push_expr(ir::Expr::Const { val: cid });
                         }
                         // r19: a REAL param folds to the SAME const its raw literal

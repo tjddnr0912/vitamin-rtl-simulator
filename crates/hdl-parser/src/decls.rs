@@ -168,6 +168,7 @@ impl Parser<'_, '_> {
                 range: None,
                 packed: Vec::new(),
                 name,
+                unpacked: Vec::new(),
                 default: None,
                 iface: Some(IfaceRef {
                     iface,
@@ -261,6 +262,16 @@ impl Parser<'_, '_> {
         if let Some(sn) = &port_struct_name {
             self.bind_tf_port_struct(&name.name, sn);
         }
+        // UNPACKED dims follow the NAME (`output logic [7:0] o [4]`) — the same
+        // five lines `parse_decl_name_list` uses, so a port and an ordinary
+        // declaration cannot disagree about what a dimension is.
+        let mut unpacked = Vec::new();
+        while self.at_dim_start() {
+            match self.parse_dim() {
+                Some(d) => unpacked.push(d),
+                None => break,
+            }
+        }
         let default = if self.eat(TokenKind::Eq) {
             Some(self.expr(0))
         } else {
@@ -273,6 +284,7 @@ impl Parser<'_, '_> {
             range,
             packed,
             name,
+            unpacked,
             default,
             iface: None,
             span: start.to(self.prev_span()),
@@ -319,6 +331,7 @@ impl Parser<'_, '_> {
             self.reject_packed_dims_on_nonvector(k, range.is_some());
         }
         let mut names = Vec::new();
+        let mut unpacked: Vec<Vec<Dim>> = Vec::new();
         loop {
             if let Some(id) = self.ident() {
                 // EXT2-E1: each name of a packed-struct non-ANSI port (`input
@@ -328,6 +341,17 @@ impl Parser<'_, '_> {
                     self.bind_tf_port_struct(&id.name, sn);
                 }
                 names.push(id);
+                // Per-name UNPACKED dims (`output logic [7:0] o [4];` in a
+                // non-ANSI body), the same five lines the ANSI path and
+                // `parse_decl_name_list` use.
+                let mut dims = Vec::new();
+                while self.at_dim_start() {
+                    match self.parse_dim() {
+                        Some(d) => dims.push(d),
+                        None => break,
+                    }
+                }
+                unpacked.push(dims);
             }
             if !self.eat(TokenKind::Comma) {
                 break;
@@ -340,6 +364,7 @@ impl Parser<'_, '_> {
             signed,
             range,
             names,
+            unpacked,
             span: start.to(self.prev_span()),
         })
     }

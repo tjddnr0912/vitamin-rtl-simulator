@@ -107,7 +107,9 @@ All of the following declaration keywords are accepted:
 documented):
 
 - **Out-of-range index:** read yields all-X; write is ignored (not clamped). A
-  rate-limited `E-RUN-RANGE` (`VITA-E4002`) runtime diagnostic is emitted.
+  rate-limited `E-RUN-RANGE` (`VITA-E4002`) runtime diagnostic is emitted — or
+  `W-RUN-RANGE-UNKNOWN` (`VITA-W4029`, a warning) when the index is UNKNOWN
+  (x/z) rather than a known value past the end, which is ordinary during reset.
 - **X/Z index:** read yields all-X; write is a no-op.
 - **Unpacked sub-dimension index** is aliased into the flat element space
   (per-dimension bounds are not separately checked; the low end is normalized).

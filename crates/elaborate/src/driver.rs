@@ -110,6 +110,13 @@ impl<'s> Elaborator<'s> {
             func_table: BTreeMap::new(),
             const_func_table: BTreeMap::new(),
             task_table: BTreeMap::new(),
+            rtn_pkg: BTreeMap::new(),
+            cur_rtn_pkg: Vec::new(),
+            decl_pos: BTreeMap::new(),
+            decl_pos_scope: String::new(),
+            decl_pos_range: (0, 0),
+            decl_block_locals: std::collections::BTreeSet::new(),
+            wide_param_bits: BTreeMap::new(),
             tf_decl_scope: String::new(),
             inout_func_names: std::collections::BTreeSet::new(),
             dyn_formal_func_names: std::collections::BTreeSet::new(),
@@ -191,6 +198,7 @@ impl<'s> Elaborator<'s> {
             mod_unit_exp: BTreeMap::new(),
             mod_prec_exp: BTreeMap::new(),
             root_override: None,
+            top_param_overrides: Vec::new(),
             cur_nettype_none: false,
             implicit_nets: Default::default(),
             global_prec_exp: -9, // 1ns base precision (no-timescale lock)
@@ -515,8 +523,12 @@ impl<'s> Elaborator<'s> {
         // func_table/task_table/inst_stack), so roots are independent and the flat
         // arenas stay contiguous per instance. The common single-top design has one
         // root → byte-identical to the old single-pick path.
+        // `-G NAME=VALUE` applies to EVERY root. A name that no root declares is loud
+        // once, after the loop, so `-G` on a two-root design does not report twice.
+        let mut cli_used: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for (idx, top) in roots.iter().enumerate() {
             let top_path = top.name.name.clone();
+            let cli_ovr = self.cli_overrides_for(top, &mut cli_used);
             // §4.5.261: a root's key is its POSITION IN THE ROOT LIST, not its source
             // offset. `--top zz --top aa` elaborates in the order given, and `-L` library
             // mode compiles each unit separately so offsets from different units are not
@@ -525,11 +537,22 @@ impl<'s> Elaborator<'s> {
                 top,
                 &top_path,
                 None,
-                &[],
+                &cli_ovr,
                 PortBinding::None,
                 &map,
                 (0, idx as u32, 0),
             );
+        }
+        for (n, _) in self.top_param_overrides.clone() {
+            if !cli_used.contains(&n) {
+                self.error(
+                    MsgCode::ElabPortMismatch,
+                    &format!(
+                        "`-G {n}=…` names no parameter of any top module — check the \
+                         spelling, or that it is a `parameter` and not a `localparam`"
+                    ),
+                );
+            }
         }
         // Any defparam still in the map targeted an instance that was never
         // elaborated — a typo'd or out-of-scope path, or an array `u.N` with no

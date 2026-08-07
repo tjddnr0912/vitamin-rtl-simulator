@@ -126,6 +126,7 @@ pub fn run(argv: &[String]) -> i32 {
                 // deterministic single top, instead of relying on auto-top. Empty =
                 // auto-top (unchanged default). Passed through to elaborate below.
                 tops: io.tops.clone(),
+                top_params: io.top_params.clone(),
                 plusargs: io.plusargs,
                 obs_dir: io.obs_dir,
                 hier_tree: io.hier_tree,
@@ -273,6 +274,7 @@ pub(crate) fn print_help(applet: &str) {
          --workdir <DIR>       (vcmp) work-library directory when --work has no =dir\n  \
          -L <NAME[=DIR]>       (velab) bind a compiled library; search order = -L order\n  \
          --top <UNIT>          (velab) explicit elaborate root(s); required with -L\n  \
+       -G, --param <N=V>     override a TOP-module parameter (8, 8'hFF, \"text\"); repeatable\n  \
          -Wno-<CODE>           suppress a Warning/Info diagnostic (mnemonic, doc-15)\n  \
          -Werror[=<CODE>]      promote warnings (all, or one code) to errors\n  \
          -q, --quiet           silence terminal $display/progress (diags + --log keep all)\n  \

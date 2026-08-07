@@ -137,6 +137,12 @@ pub struct ResolvedTimescales {
     /// kept sub-precision digits the module declared away (adversarial review,
     /// doc-08 §delay 2단계).
     pub prec_exp: std::collections::BTreeMap<String, i8>,
+    /// Modules with NO governing `` `timescale `` — empty when every module has one,
+    /// or when none does. IEEE 1800-2017 §3.14.2.2 makes the MIXED case an error:
+    /// if any module in the design has a timescale, all must. vita ran such a design
+    /// at `errors=0 warnings=0`, and the reporter shipped it to sign-off where xrun
+    /// refused to elaborate it (`*F,CUMSTS`); Verilator says `Error-TIMESCALEMOD`.
+    pub ungoverned: Vec<String>,
     /// design-wide FINEST precision exponent = the global tick base.
     pub global_prec_exp: i8,
     /// true if ANY module fell back to the `1ns/1ns` base (→ W-PP-TIMESCALE-DEFAULT).

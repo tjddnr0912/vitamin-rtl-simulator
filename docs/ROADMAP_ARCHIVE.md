@@ -347,6 +347,42 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.313 외부 리포트 aes_top — 16항목 + 자체 리뷰 17결함 (2026-08-07, branch feat-aes-report, format 26 불변 / **AST 스키마 re-pin**) ✅
+
+**한 줄** — AES IP 개발자의 2판 리포트(§3 구현요청 11 · §4 진단 5)를 **전부 해결**하고, 그 수정에 대한 적대 2렌즈가 낸 **결함 17건**(그중 다수가 이번 수정이 만든 것)까지 닫았다. 리포트가 못 본 silent-wrong 을 **7건 더** 찾았다.
+
+**리포트 진단 5건을 실측이 정정했다** — 착수 전 재현·그라운딩의 값:
+
+| 리포트 진단 | 실측 |
+|---|---|
+| §3.8 "256비트 localparam" | **폭 제한이 아니다** — `[255:0] B = 256'h1` 은 접힌다. 조건은 **접힌 값이 64비트 초과** |
+| §3.7 "override 가 안 접힌다" | **override 무관** — default `"Y"` 만으로도 E3009. 뿌리는 **string 파라미터 자체** |
+| §3.6 "generate-scope" | **generate 무관** — 모듈 스코프에서도 실패, 런타임에선 동작. 뿌리는 **크기가 이름인 캐스트** |
+| §3.5 "포트 연결 함수 호출" | `4'($clog2(8))` 는 **된다** — 안 되는 건 **사용자 함수** |
+| **§4.3 "$display ternary → 숫자"** | **결함이 아니다.** iverilog 가 **같은 숫자**를 낸다(IEEE §5.9: 문자열 리터럴 = packed integral). 값은 그대로 두고 **W3058 경고**만 신설 |
+
+**해결(값·오라클 일치)** — §3.2 unpacked 배열 포트(ANSI·비ANSI·다차원, **원소별 연결**) · §3.3 선택적 import(본문이 자기 패키지에서 해석) · §3.3b `pkg::f()` 제약 완화(제어흐름·중첩 호출 허용, **자유이름 폐쇄만** 유지) · §3.4 콤마 import · §3.5 포트 연결(부모 테이블 스왑) · §3.6 `RPS'()` 폴딩(세 술어 동기) · §3.7 string 파라미터+`==` 폴딩 · §3.8 64비트 초과 파라미터 · **§3.11 `-G`/`--param` 오버라이드**(4구성 스윕이 래퍼 없이) · §4.1 **E4002/W4029 분리** · §4.2 **`$sscanf` scanset 구현**(C 의미·7형태) · §4.4 선언 전 사용 loud · §4.5 **W1018** 부분 timescale(누락 모듈명 표시).
+
+**⭐⭐ 리포트에 없던 silent-wrong 7건** — ⓐ 모듈이 같은 이름 함수를 가지면 패키지 함수 본문이 그걸 부름(1002 vs 4) ⓑ 자식이 같은 이름 함수를 가지면 부모 포트 연결식이 **진단 없이 자식 함수**에 바인딩 ⓒ generate localparam 이 선언 폭을 잃음(`[1:0]` 이 32비트) ⓓ `collect_callee_stmt` 에 **`Return` 팔 없음**(재귀 탐지에도 쓰인다) ⓔ 인덱스 규칙 **네 번째 철자**(`native_eval::exec_vm::word_index` 가 알려진 `32'hFFFFFFFF` 를 unknown 으로) ⓕ 패키지 **태스크** 경로 전체 미배선(1001 vs 43, 999 vs 7) ⓖ `import p::*` + 모듈 동명 helper.
+
+**⭐⭐ 적대 2렌즈가 결함 17건 — 다수가 이번 수정이 만든 것**
+
+- ⭐⭐ **한 뿌리 셋**(차분 F1/F4/F5 + soundness 2/3): *side map 으로 보내는 모든 `continue` 가 같은 슬라이스가 넣은 검사를 건너뛴다.* `real` 경로만 escalation 을 `continue` **앞에** 둬서 유일하게 정상이었다. 증상은 correct→loud(96비트 값 3이 정수 정체성 상실·**내 필드 주석이 정반대를 주장**), loud→silent(string override 가 조용히 default), 값 회귀(`K=0` vs 7).
+- ⭐⭐ **admission 과 collection 이 다른 노드 집합**(차분 F3): `pkg_expr_pure_inner` 는 `Cast` 를 받는데 `collect_callee_expr` 엔 `Cast` 팔이 없어, 캐스트 안의 호출이 주입 안 되고 **호출자 모듈의 동명 함수가 조용히** 불렸다(1001 vs 2). 기록된 "accept-gate walker completeness" 규칙 그대로.
+- ⭐⭐ **순수성은 루트만, 주입은 전이적**(soundness 1): 자유 이름을 가진 형제가 주입돼 그 이름이 **호출자 넷**에 바인딩(101 vs iverilog 거부).
+- ⭐⭐ **선언 전 사용이 plain-static 블록 로컬을 오탐**(차분 F2 + soundness 4): flatten 모델이 **모듈 키에 publish** 해서 내 `own_key` 가드가 그 클래스엔 공허 — 평범한 TB 가 5번 거부됐다. 판별자를 AST 에서 직접 모아 해결.
+- ⭐⭐ **센티넬 충돌**(soundness 5): `OFF_UNKNOWN = (1<<30)+1` 이 i32 도메인 안이라 **알려진 1073741825** 가 unknown 으로 분류(exit 1 → 0). `word_index_of` 는 같은 remap 을 갖고 있었고 write 쪽 쌍둥이만 없었다.
+- ⭐⭐ **진단 순서**(soundness 7): 두 카운터는 **순서를 못 담는다** — native 만 E4002→W4029 로 역전. 순서 있는 채널로 교체.
+- ⭐ 배열 포트가 스칼라 경로의 검사 셋 누락 + ⭐⭐ **내가 만든 silent-wrong**: 자식 `[0:3]` ↔ 부모 `[3:0]` 이 vita 4 / iverilog 1 — IEEE §7.6 은 **위치 대응**이라 flat-index 연결이 원소를 뒤집는다 → 방향 불일치를 loud 로.
+- ⭐ **죽은 가드와 거짓 근거**(soundness 8): `use_lo == 0` 가 전 스위트+examples+bench+80설계에서 **0회 히트**이고, 그 주석이 주장한 *"`.*` 를 막는다"* 는 실제로 **range 가드**가 하는 일이었다.
+- ⭐ 거짓 주장 9건 전부 실측대로 정정(내가 쓴 *"boundary is the VALUE"* 가 코드와 반대 · *"straight-line"* 술어 doc · *"같은 walk"* · 2002 수치 등).
+
+**⭐⭐ 그리고 테스트가 0개였다** — 리뷰어가 만든 뮤테이션이 **전부 생존**했다(신규 기능 7종에 테스트 없음). `crates/cli/tests/aes_report.rs` **33 테스트** 신설, 전부 **iverilog 값에 핀**(elaborate 성공이 아니라 값 — 잘못된 원소를 연결하거나 두 번째 import 항을 버려도 "동작"하므로).
+
+**게이트** — 5245 tests green(+29) · clippy/fmt clean · MsgCode **61 → 64**(W4029·W1018·W3058) · **AST SchemaHash re-pin**(`AnsiPort.unpacked`·`PortDecl.unpacked` — 전 `.vu` stale, sim-ir format 26 불변) · `examples/` 4 + keccak 3 + picorv32 PRE↔POST 회귀 0(유일 차이 = picorv32 의 E4002 9건 → W4029, **stdout 바이트 동일**).
+
+**⚠️ 미해결 1건** — §3.1 DPI-C 는 설계상 영구 비목표.
+
 #### 4.5.312 ③층 S2 슬라이스 4 — `wprog` 가 런타임 배열 원소를 읽는다 (2026-08-07, branch feat-s2s4-runtime-array-index, format 26 불변) ✅
 
 **한 줄** — 폭별 특수화 평가기가 **런타임 인덱스의 배열 원소 읽기**를 admit 한다(`WOp::LoadIdx`) → 런타임 인덱스 마이크로벤치 **4.013 s → 0.64 s**(native/vm **0.27× → 1.70×**)이고 picorv32 가 **0.83× → 0.97×** 로 올라온다.

@@ -765,9 +765,8 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// silence out-of-range diagnostics on the whole backend rather than only
     /// reorder them. The blast radius grew with this slice; saying so is the point.
     pub(crate) fn drain_range_reports(&self) {
-        let n = crate::eval::NetReader::take_deferred_range_reports(self);
-        for _ in 0..n {
-            self.sched.st.warn_run_range("array word index");
+        for unknown in crate::eval::NetReader::take_deferred_range_kinds(self) {
+            self.sched.st.warn_run_index("array word index", unknown);
         }
     }
 
@@ -899,7 +898,7 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
         None
     }
 
-    fn take_deferred_range_reports(&self) -> u32 {
+    fn take_deferred_range_kinds(&self) -> Vec<bool> {
         // The ARENA's counter, not the engine's: `SimState` reports at the
         // access, so it has none, and draining a second source here would double
         // count nothing while silently dropping the arena's.
@@ -910,7 +909,7 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
         // counter and calls this method directly; see `drain_range_reports`. An
         // earlier version of this line said "every drain goes through
         // `drain_range_reports`", which that guard contradicts.)
-        self.arena.take_deferred_range_reports()
+        self.arena.take_deferred_range_kinds()
     }
 
     /// ⚠️ **The drain is not decoration — it is the ORDER.**

@@ -213,8 +213,11 @@ pub trait NetReader {
     /// emits, which is what puts an out-of-range read inside `$error("%0d",
     /// mem[i])` BEFORE the `$error` line, exactly where the engine puts it.
     /// Measured: without this the two diagnostics came out swapped on stderr.
-    fn take_deferred_range_reports(&self) -> u32 {
-        0
+    /// One entry per deferred out-of-range access, IN SOURCE ORDER, `true` when the
+    /// index was unknown (x/z). Order matters because the two kinds replay as
+    /// different diagnostics (E4002 / W4029) — a count per kind loses it.
+    fn take_deferred_range_kinds(&self) -> Vec<bool> {
+        Vec::new()
     }
     /// ⓑ-breadth (v15): element-value snapshot of a dyn handle in deterministic
     /// order, for the array reduction/ordering/locator methods. `None` for a

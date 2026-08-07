@@ -227,12 +227,15 @@ fn pkg_call_inside_class_method() {
 // ════════════════════════ PKG — loud ════════════════════════
 
 #[test]
-fn pkg_call_control_flow_is_loud() {
-    // A package function with control flow is not pure-inlinable → loud (workaround:
-    // import + bare). Correct-or-loud.
+fn pkg_call_control_flow_now_works() {
+    // ⚠️ This asserted the OPPOSITE — that a package function with CONTROL FLOW is
+    // loud for a `pkg::f()` call. The restriction was never about control flow: the
+    // frame path this routes through lowers arbitrary CFGs (it is the same path a
+    // bare-name imported function takes). What actually mattered was the free-NAME
+    // closure. iverilog 13 answers 1 for this design.
     let src = "package cp; function automatic logic [7:0] cf(input logic [7:0] m); if (m>10) return 8'd1; else return 8'd0; endfunction endpackage\n\
-        module m(output logic [7:0] o); assign o = cp::cf(8'd20); endmodule";
-    assert!(!ok(src), "control-flow package function must be loud");
+        module m; logic [7:0] o; initial begin #1 o = cp::cf(8'd20); $display(\"o=%0d\", o); $finish; end endmodule";
+    assert_eq!(run(src).0, "o=1");
 }
 
 #[test]
@@ -249,12 +252,20 @@ fn pkg_call_same_pkg_localparam_now_supported() {
 }
 
 #[test]
-fn pkg_call_nested_user_call_is_loud() {
-    // A body calling ANOTHER function is not self-contained → loud.
+fn pkg_call_nested_same_package_call_now_works() {
+    // ⚠️ Also asserted the opposite. A nested call was disqualifying because the
+    // callee would have resolved in the CALLER's module scope; the body is now
+    // lowered with its own package pushed (`resolve_rtn_key`), so a same-package
+    // sibling resolves to the sibling. iverilog 13 answers 11.
+    //
+    // The `return h(m)` spelling is deliberate: the callee-collection walk had no
+    // `Return` arm, so `h` was invisible to the injection and this exact design
+    // still reported "call to undeclared function `h`" after the scope fix — while
+    // the byte-identical `g = h(m)` worked.
     let src = "package p; function automatic logic [7:0] h(input logic [7:0] x); return x+1; endfunction\n\
         function automatic logic [7:0] g(input logic [7:0] m); return h(m); endfunction endpackage\n\
-        module m(output logic [7:0] o); assign o = p::g(8'd10); endmodule";
-    assert!(!ok(src), "nested user call must be loud");
+        module m; logic [7:0] o; initial begin #1 o = p::g(8'd10); $display(\"o=%0d\", o); $finish; end endmodule";
+    assert_eq!(run(src).0, "o=11");
 }
 
 #[test]

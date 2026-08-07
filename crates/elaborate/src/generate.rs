@@ -484,14 +484,44 @@ impl Elaborator<'_> {
                     }
                     return;
                 }
+                // A STRING-valued parameter has no i64 value either — same shape as
+                // the real case above, and without this a `localparam string S = "x";`
+                // inside a generate block is loud on its own declared default.
+                if let Some(raw) = Self::param_str_literal(&p.value) {
+                    let key = self.fq(&p.name.name);
+                    self.str_param_raw.insert(key, raw);
+                    return;
+                }
+                let meta = self.param_decl_width(p);
                 match self.const_eval_in_scope(&p.value) {
                     Some(v) => {
                         let v = self.coerce_param_value(v, p);
                         let key = self.fq(&p.name.name);
                         self.hier_params.insert(key.clone(), v);
+                        // ⚠️ The declared width/sign and range were NOT recorded here,
+                        // while both the module-body and header paths record them. So a
+                        // generate-scope `localparam logic [1:0] M = 2'b01;` read back
+                        // as 32 bits — `$display("%b", M)` printed thirty leading zeros
+                        // where iverilog prints `01`, and the same width feeds concats
+                        // and comparisons. Value right, width silently wrong.
+                        if let Some(m) = meta {
+                            self.param_meta.insert(key.clone(), m);
+                        }
+                        if let Some(r) = self.param_decl_range(p) {
+                            self.param_range.insert(key.clone(), r);
+                        }
                         self.params.insert(key, v);
                     }
                     None => {
+                        // Wider than the i64 domain — see `wide_param_bits`. Reached
+                        // only after the fold declined, so a wide declaration whose
+                        // value fits keeps its integer identity.
+                        if let Some(cv) = meta.and_then(|(w, sg)| wide_param_const(&p.value, w, sg))
+                        {
+                            let key = self.fq(&p.name.name);
+                            self.wide_param_bits.insert(key, cv);
+                            return;
+                        }
                         if phase == GenPhase::Nets {
                             self.error(
                             MsgCode::ElabUnsupported,

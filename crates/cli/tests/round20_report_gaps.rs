@@ -889,10 +889,11 @@ fn every_container_receiver_class_resolves_the_way_the_lowering_does() {
 #[test]
 fn a_package_scoped_call_left_of_the_output_formal_call_still_works() {
     // Round 6. Tightening the 2-segment arm to "container receivers only" also caught every
-    // `pk::h()`. That was needless: `inline_pkg_function` admits ONLY a self-contained,
-    // straight-line package function — a body that reads a module net, or has control flow, is
-    // already loud there (measured, PRE and POST) — which IS this predicate's obligation,
-    // discharged upstream.
+    // `pk::h()`. That was needless: `inline_pkg_function` admits only a package function whose
+    // body is FREE-NAME CLOSED — a body that reads a module net is loud there (measured, PRE
+    // and POST) — which IS this predicate's obligation, discharged upstream. (The "and has no
+    // control flow" half of that admission was removed by the aes_top report: it was never a
+    // name-resolution property, and the frame path lowers arbitrary CFGs.)
     let o = run_src(
         "package pk; function automatic int h (input int a); return a*2; endfunction endpackage\n\
          module t;\n\
@@ -916,7 +917,7 @@ fn a_package_scoped_call_left_of_the_output_formal_call_still_works() {
          endmodule\n",
     );
     assert!(
-        reads.contains("error[VITA-E3009]") && reads.contains("self-contained"),
+        reads.contains("error[VITA-E3009]") && reads.contains("only its own formals"),
         "a package body reading a module net must stay loud:\n{reads}"
     );
 }

@@ -2759,12 +2759,14 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
                 // produced — a duplicate report on decline, which then ate the
                 // 8-per-run cap and dropped genuine later ones — was invisible
                 // here until this comparison existed.
-                let _ = nk.arena.pending_range.replace(0);
+                let _ = crate::eval::NetReader::take_deferred_range_kinds(&nk.arena).len();
                 let canonical = crate::eval::resolve_offsets(&nk.ctx(), lhs);
-                let canon_reports = nk.arena.pending_range.replace(0);
+                let canon_reports =
+                    crate::eval::NetReader::take_deferred_range_kinds(&nk.arena).len();
                 match nk.fast_offsets_for_test(lhs) {
                     Some(f) => {
-                        let fast_reports = nk.arena.pending_range.replace(0);
+                        let fast_reports =
+                            crate::eval::NetReader::take_deferred_range_kinds(&nk.arena).len();
                         assert_eq!(
                             (f.as_slice(), fast_reports),
                             (canonical.as_slice(), canon_reports),
@@ -2777,7 +2779,7 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
                         // A DECLINE must be side-effect-free: the generic resolver
                         // runs afterwards in production and reports for itself.
                         assert_eq!(
-                            nk.arena.pending_range.replace(0),
+                            crate::eval::NetReader::take_deferred_range_kinds(&nk.arena).len(),
                             0,
                             "{name}: state {state_i}: a declined lvalue reported \
                              out-of-range anyway — the generic resolver will report \

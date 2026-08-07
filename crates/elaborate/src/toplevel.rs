@@ -35,6 +35,12 @@ pub(crate) struct ResolvedOverride {
     /// meant to apply but did not fold — a real-typed target must reject rather than
     /// silently run with its declared default.
     pub(crate) had_value: bool,
+    /// The override's STRING text, when the expression is a string literal. A
+    /// `parameter string` has no i64 value, so `value` is `None` for it and the
+    /// numeric machinery would drop the override and keep the declared default at
+    /// exit 0 — the silent risk the aes_top report named. `bind_params` applies
+    /// this alongside `fill`.
+    pub(crate) str: Option<String>,
 }
 
 /// Build the module-name map + the declaration-ordered list. First decl wins on a

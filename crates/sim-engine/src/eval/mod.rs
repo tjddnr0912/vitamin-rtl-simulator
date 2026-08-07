@@ -122,8 +122,28 @@ pub(crate) fn delay_ticks_of(v: &crate::value::Value, mult: u64, prec_mult: u64)
 /// sentinel: `read_net` then answers all-X and counts a report, rather than
 /// silently selecting element `v mod elems`.
 pub(crate) fn word_index_of(v: Option<u64>) -> u32 {
-    v.and_then(|x| u32::try_from(x).ok()).unwrap_or(u32::MAX)
+    match v {
+        // X/Z, or set bits above word 0 — the index has no known value.
+        None => WORD_UNKNOWN,
+        Some(x) => match u32::try_from(x) {
+            // A KNOWN index that happens to equal the unknown sentinel, and a known
+            // index beyond `u32`, both take the neighbouring sentinel. Every array is
+            // far shorter than either, so the READ still answers all-X and the WRITE
+            // is still dropped — what changes is only that "the index was unknown" is
+            // now recoverable at the diagnostic site. It was not: a known 32-bit `-1`
+            // is the bit pattern `0xFFFF_FFFF`, so `u32::MAX` alone could not tell an
+            // x/z index from a negative one, and the two deserve different words.
+            Ok(i) if i == WORD_UNKNOWN => WORD_OOR,
+            Ok(i) => i,
+            Err(_) => WORD_OOR,
+        },
+    }
 }
+
+/// Array-word index sentinel: the index was UNKNOWN (x/z).
+pub(crate) const WORD_UNKNOWN: u32 = u32::MAX;
+/// Array-word index sentinel: the index is KNOWN and out of every array's range.
+pub(crate) const WORD_OOR: u32 = u32::MAX - 1;
 
 /// The bit position a resolved index VALUE names — the second half of
 /// `resolve_offsets`'s `ev`, split out so a specialized evaluator can reuse the
@@ -170,13 +190,28 @@ pub(crate) fn offset_of_index_value(v: &crate::value::Value) -> u32 {
     // Measured as an equivalent mutation rather than assumed.
     const OOR_DROP: u32 = 1 << 30;
     if v.has_xz() {
-        return OOR_DROP;
+        return OFF_UNKNOWN;
     }
     match v.to_i128_signed() {
+        // ⚠️ A KNOWN index whose i32 bit pattern happens to BE the unknown sentinel
+        // must not be classified unknown. `OFF_UNKNOWN` is `(1<<30)+1`, comfortably
+        // inside the i32 domain, so `mem[1073741825]` — a perfectly known value —
+        // reported "index is unknown (x/z)" at exit 0 where it had been an E4002 at
+        // exit 1. `word_index_of` has carried exactly this remap since the split; its
+        // write-side twin did not, and the collision is the same collision.
+        Some(i) if (i as i32 as u32) == OFF_UNKNOWN => OOR_DROP,
         Some(i) if (i32::MIN as i128..=i32::MAX as i128).contains(&i) => i as i32 as u32,
         _ => OOR_DROP,
     }
 }
+
+/// Bit-offset / array-word sentinel for an UNKNOWN (x/z) index. One above
+/// `OOR_DROP` and, like it, far above any net width (≤2^20) or array length, so
+/// every downstream range test behaves identically — it exists only so the
+/// diagnostic can say "unknown" instead of "out of range", which are different
+/// facts about the design (an x index before reset is ordinary; a known index past
+/// the end is almost always a bug).
+pub(crate) const OFF_UNKNOWN: u32 = (1 << 30) + 1;
 
 /// Evaluate each LHS chunk's bit-offset expression NOW, returning one offset per
 /// chunk (0 for a whole-net `None` chunk). The `&mut self` write path has no

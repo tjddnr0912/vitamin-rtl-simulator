@@ -118,12 +118,39 @@ pub fn elaborate_located(
     roots: Option<&[String]>,
     resolver: Option<&dyn diag::SpanResolver>,
 ) -> (Option<ir::SimIr>, Sidecars) {
+    elaborate_located_params(
+        unit,
+        sink,
+        mod_unit_exp,
+        mod_prec_exp,
+        global_prec_exp,
+        roots,
+        resolver,
+        &[],
+    )
+}
+
+/// [`elaborate_located`] plus CLI parameter overrides for the TOP instance(s)
+/// (`-G NAME=VALUE`). `top_params` is `(name, raw value text)`; an unknown name, a
+/// `localparam` target, and a value that does not parse are all loud.
+#[allow(clippy::too_many_arguments)]
+pub fn elaborate_located_params(
+    unit: &ast::SourceUnit,
+    sink: &dyn LogSink,
+    mod_unit_exp: &std::collections::BTreeMap<String, i8>,
+    mod_prec_exp: &std::collections::BTreeMap<String, i8>,
+    global_prec_exp: i8,
+    roots: Option<&[String]>,
+    resolver: Option<&dyn diag::SpanResolver>,
+    top_params: &[(String, String)],
+) -> (Option<ir::SimIr>, Sidecars) {
     let mut el = Elaborator::new(sink);
     el.span_resolver = resolver;
     el.mod_unit_exp = mod_unit_exp.clone();
     el.mod_prec_exp = mod_prec_exp.clone();
     el.global_prec_exp = global_prec_exp;
     el.root_override = roots.map(<[String]>::to_vec);
+    el.top_param_overrides = top_params.to_vec();
     el.run(unit);
     el.assert_block_local_inits_drained();
     let class_rand = el.class_rand_table();

@@ -188,7 +188,10 @@ impl Elaborator<'_> {
             self.error(MsgCode::ElabUnsupported, "empty function call name");
             return self.placeholder_expr();
         }
-        let fname = name.segments[0].name.clone();
+        let bare = name.segments[0].name.clone();
+        // Inside a package routine's body a bare callee names that package's own
+        // sibling (`pkg::n`) when there is one — see `resolve_rtn_key`.
+        let fname = self.resolve_rtn_key(&bare);
 
         // Clone the def out of the table so we can mutate `self` while lowering.
         let func = match self.func_table.get(fname.as_str()) {
@@ -196,7 +199,7 @@ impl Elaborator<'_> {
             None => {
                 self.error(
                     MsgCode::ElabUnresolvedName,
-                    &format!("call to undeclared function `{fname}`"),
+                    &format!("call to undeclared function `{bare}`"),
                 );
                 return self.placeholder_expr();
             }
@@ -210,7 +213,7 @@ impl Elaborator<'_> {
             .iter()
             .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
         {
-            match self.resolve_named_args(&fname, &func.ports, args) {
+            match self.resolve_named_args(&bare, &func.ports, args) {
                 Some(v) => {
                     reordered_args = v;
                     &reordered_args
@@ -395,14 +398,51 @@ impl Elaborator<'_> {
             .get(pkg)
             .map(|m| m.keys().cloned().collect())
             .unwrap_or_default();
-        if !pkg_func_self_contained(&func, &pkg_const_names) {
+        // Same-package ROUTINES the body may call. The body is lowered with its own
+        // package pushed (`resolve_rtn_key`), so a nested call resolves to the
+        // package's sibling — which is why a call is no longer disqualifying.
+        let pkg_rtn_names: std::collections::BTreeSet<String> = self
+            .pkg_funcs
+            .get(pkg)
+            .map(|m| m.keys().cloned().collect::<std::collections::BTreeSet<_>>())
+            .unwrap_or_default()
+            .union(
+                &self
+                    .pkg_tasks
+                    .get(pkg)
+                    .map(|m| m.keys().cloned().collect::<std::collections::BTreeSet<_>>())
+                    .unwrap_or_default(),
+            )
+            .cloned()
+            .collect();
+        if !pkg_func_self_contained(&func, &pkg_const_names, &pkg_rtn_names) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
-                    "package-scoped call `{pkg}::{name}(...)` is supported only for a \
-                     self-contained, straight-line function (its body must reference only \
-                     its own formals/locals and same-package constants, and have no control \
-                     flow); `import {pkg}::*` and call `{name}` by its bare name instead",
+                    "package-scoped call `{pkg}::{name}(...)` needs a body that references \
+                     only its own formals/locals, same-package constants and same-package \
+                     subroutines — this one names something else (a package VARIABLE, or a \
+                     construct outside the subset); `import {pkg}::*` and call `{name}` by \
+                     its bare name instead",
+                ),
+            );
+            return self.placeholder_expr();
+        }
+        // The body may call same-package siblings, so those must be reachable under
+        // their scoped keys before it is lowered — the same injection an explicit
+        // `import pkg::f;` performs. A sibling that is not itself free-name closed is
+        // REFUSED there (it would bind its free name to a caller net); say so, rather
+        // than letting the call site report a bare "undeclared function".
+        let refused = self.inject_pkg_callees(pkg, name);
+        if let Some(bad) = refused.first() {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "package-scoped call `{pkg}::{name}(...)` reaches `{pkg}::{bad}`, whose \
+                     body names something outside its own formals/locals, same-package \
+                     constants and same-package subroutines — lowering it here would \
+                     resolve that name in the CALLING module; `import {pkg}::*` and call \
+                     `{name}` by its bare name instead"
                 ),
             );
             return self.placeholder_expr();

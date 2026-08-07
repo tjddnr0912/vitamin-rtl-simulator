@@ -371,6 +371,147 @@ impl Elaborator<'_> {
     /// assign); an OUTPUT/INOUT is allowed + warns. Ports are walked in HEADER
     /// declaration order, so the cont-assign sequence is deterministic regardless
     /// of connection source order.
+    /// Connect one UNPACKED ARRAY port, one element per cont-assign.
+    ///
+    /// The actual must be a plain name bound to an array of the SAME length. A
+    /// length mismatch, a non-array actual, or an expression that is not a bare name
+    /// is loud: connecting the elements that happen to line up and leaving the rest
+    /// floating would be a partial wiring with no diagnostic, and reading word 0 for
+    /// the whole array (what a single whole-net cont-assign does) is worse still.
+    fn wire_array_port(
+        &mut self,
+        child_id: u32,
+        child_len: u32,
+        dir: ir::PortDir,
+        pname: &str,
+        conn_expr: &ast::Expr,
+        parent_prefix: &str,
+    ) {
+        let saved = std::mem::replace(&mut self.cur_prefix, parent_prefix.to_string());
+        let actual = match &conn_expr.kind {
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                self.lookup_net_scoped(&p.segments[0].name)
+            }
+            _ => None,
+        };
+        let Some(actual_id) = actual else {
+            self.cur_prefix = saved;
+            self.error(
+                MsgCode::ElabPortMismatch,
+                &format!(
+                    "unpacked array port `{pname}` must be connected to a declared \
+                     array of the same length (an expression has no array value)"
+                ),
+            );
+            return;
+        };
+        let actual_len = self
+            .nets
+            .get(actual_id as usize)
+            .map(|n| n.array_len)
+            .unwrap_or(1);
+        let actual_w = self.nets.get(actual_id as usize).map(|n| n.width);
+        let child_w = self.nets.get(child_id as usize).map(|n| n.width);
+        let actual_dims = self.array_dims.get(&actual_id).cloned();
+        let child_dims = self.array_dims.get(&child_id).cloned();
+        let actual_desc = self.array_dim_desc.get(&actual_id).cloned();
+        let child_desc = self.array_dim_desc.get(&child_id).cloned();
+        self.cur_prefix = saved;
+        // IEEE 1800 §7.6 makes an unpacked array connection correspond by POSITION,
+        // not by index — for `[3:0]` the FIRST element is index 3. This wiring is
+        // flat-index to flat-index, which is the same thing only when both sides run
+        // the same way: measured, child `[0:3]` into parent `[3:0]` gave 4 where
+        // iverilog gives 1, silently. Refuse rather than reverse, because reversing
+        // is a second correspondence rule and this one has no test corpus yet.
+        if actual_desc != child_desc {
+            self.error(
+                MsgCode::ElabPortMismatch,
+                &format!(
+                    "unpacked array port `{pname}` and the connected signal have \
+                     opposite dimension directions (IEEE 1800 §7.6 pairs elements by \
+                     POSITION, so `[0:3]` into `[3:0]` reverses them — declare both \
+                     the same way)"
+                ),
+            );
+            return;
+        }
+        // The GEOMETRY must match, not just the flattened element count: `o [4]`
+        // connected to `b [2][2]` has eight elements on both sides and wired silently,
+        // where iverilog says "Unpacked dimensions are not compatible".
+        if actual_dims != child_dims {
+            self.error(
+                MsgCode::ElabPortMismatch,
+                &format!(
+                    "unpacked array port `{pname}` and the connected signal have \
+                     different unpacked dimensions (same element count is not enough — \
+                     the shapes must match)"
+                ),
+            );
+            return;
+        }
+        // …and so must the ELEMENT width. The scalar port path truncates silently
+        // here, but an array is a new shape and iverilog rejects it outright
+        // ("Element types are not compatible in array assignment"), so this one is
+        // loud rather than bug-compatible with the scalar path.
+        if actual_w != child_w {
+            self.error(
+                MsgCode::ElabPortMismatch,
+                &format!(
+                    "unpacked array port `{pname}` has {}-bit elements but the connected \
+                     signal has {}-bit elements",
+                    child_w.unwrap_or(0),
+                    actual_w.unwrap_or(0)
+                ),
+            );
+            return;
+        }
+        if actual_len != child_len {
+            self.error(
+                MsgCode::ElabPortMismatch,
+                &format!(
+                    "unpacked array port `{pname}` has {child_len} elements but the \
+                     connected signal has {actual_len}"
+                ),
+            );
+            return;
+        }
+        // An `inout` ARRAY port takes the input direction, exactly as the scalar path
+        // does — but the scalar path SAYS so (W3056 "approximated as one-directional")
+        // and this one took its `continue` before that arm, so a known approximation
+        // became silent on the new shape. iverilog refuses `inout` unpacked ports
+        // outright, so the warning is already more than the oracle offers.
+        if matches!(dir, ir::PortDir::Inout) {
+            self.warn(&format!(
+                "inout array port `{pname}` approximated as one-directional (parent→child)"
+            ));
+        }
+        for w in 0..child_len {
+            let (dst, src) = match dir {
+                ir::PortDir::Output => (actual_id, child_id),
+                _ => (child_id, actual_id),
+            };
+            let widx_r = self.const_u32_expr(w, 32);
+            let widx_l = self.const_u32_expr(w, 32);
+            let rhs = self.push_expr(ir::Expr::Signal {
+                net: src,
+                word: Some(widx_r),
+            });
+            self.cont_assigns.push(ir::ContAssign {
+                lhs: ir::Lvalue {
+                    chunks: vec![ir::LvalChunk {
+                        net: dst,
+                        word: Some(widx_l),
+                        offset: None,
+                        width: None,
+                        kind: ir::SelKind::Bit,
+                    }],
+                },
+                rhs,
+                delay: None,
+            });
+        }
+    }
+
     pub(crate) fn wire_ports(
         &mut self,
         module: &ast::ModuleDecl,
@@ -483,6 +624,21 @@ impl Elaborator<'_> {
             };
             let child_prefix = self.cur_prefix.clone();
 
+            // An UNPACKED ARRAY port connects ELEMENT BY ELEMENT. There is no
+            // whole-array value in this IR — a single `ContAssign` over the whole net
+            // would read (or write) word 0 only — so one cont-assign per element is
+            // what "connect the array" means here. Both sides must be arrays of the
+            // same length; anything else is loud, never a partial wiring.
+            let child_len = self
+                .nets
+                .get(child_id as usize)
+                .map(|n| n.array_len)
+                .unwrap_or(1);
+            if child_len > 1 {
+                self.wire_array_port(child_id, child_len, *dir, pname, conn_expr, parent_prefix);
+                self.cur_prefix = child_prefix;
+                continue;
+            }
             match dir {
                 // INPUT: child_port = parent_expr  (rhs lowered in PARENT scope).
                 ir::PortDir::Input | ir::PortDir::Inout => {
@@ -598,6 +754,23 @@ impl Elaborator<'_> {
                 }
                 let dir = map_port_dir(p.dir);
                 let init = default_init(kind, width);
+                // UNPACKED dims (`output logic [7:0] o [4]`, IEEE 1800 §23.2.2.3) —
+                // same computation and same cap as `elaborate_netvar_decl`, because
+                // a port array IS a net array; only the declaration site differs.
+                let dim_extents = self.array_dim_extents(&p.unpacked);
+                let array_len = dim_extents
+                    .iter()
+                    .fold(1u32, |acc, &(_, n)| acc.saturating_mul(n.max(1)));
+                if (array_len as u64) > MAX_ARRAY_LEN {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "unpacked array port `{}` has {} elements (cap {MAX_ARRAY_LEN})",
+                            p.name.name, array_len
+                        ),
+                    );
+                    continue;
+                }
                 self.add_net(
                     &p.name.name,
                     ir::NetVar {
@@ -606,7 +779,7 @@ impl Elaborator<'_> {
                         msb,
                         lsb,
                         signed,
-                        array_len: 1,
+                        array_len: array_len.max(1),
                         dir,
                         init,
                     },
@@ -616,11 +789,43 @@ impl Elaborator<'_> {
                         self.packed_dims.insert(id, packed_ext);
                     }
                 }
-                // SYS-INTRO descriptor for the port (packed dims; ANSI ports carry
-                // no unpacked dims). Without this a multi-dim packed port would fall
-                // back to a single derived dim (silent-wrong $size/$dimensions).
+                // MULTI-DIM (or non-zero-based) unpacked geometry, exactly as
+                // `elaborate_netvar_decl` registers it. `array_len` alone is the
+                // flattened count; without the per-dim extents a two-index write
+                // `o[i][0]` cannot compute its flat element and the port read all-X
+                // while the same array declared as an ordinary net worked.
+                if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0) {
+                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                        self.array_dims.insert(id, dim_extents.clone());
+                    }
+                }
+                // Declared per-dim DIRECTION, exactly as `elaborate_netvar_decl`
+                // records it. A port array needs it for the same reason an ordinary
+                // array does — and `wire_array_port` needs it to refuse a connection
+                // whose two sides run in opposite directions.
+                let pdesc: Vec<bool> = p
+                    .unpacked
+                    .iter()
+                    .map(|d| match d {
+                        ast::Dim::Range(r) => {
+                            let msb = self.const_eval_in_scope(&r.msb);
+                            let lsb = self.const_eval_in_scope(&r.lsb);
+                            matches!((msb, lsb), (Some(m), Some(l)) if m > l)
+                        }
+                        _ => false,
+                    })
+                    .collect();
+                if pdesc.iter().any(|&d| d) {
+                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                        self.array_dim_desc.insert(id, pdesc);
+                    }
+                }
+                // SYS-INTRO descriptor for the port. Without this a multi-dim packed
+                // port would fall back to a single derived dim (silent-wrong
+                // $size/$dimensions) — and the UNPACKED half was `&[]` because ports
+                // could not carry unpacked dims at all until they parsed.
                 if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
-                    self.record_dim_desc(id, kind, p.range.as_ref(), &p.packed, &[]);
+                    self.record_dim_desc(id, kind, p.range.as_ref(), &p.packed, &p.unpacked);
                 }
                 // WAND/WOR: a port net declared `output wand`/`wor` (etc.) also
                 // needs its resolution-kind sidecar — multi-driven INSIDE the

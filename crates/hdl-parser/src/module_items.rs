@@ -3,11 +3,34 @@
 use super::*;
 
 impl Parser<'_, '_> {
-    /// v7 P2-D: `import pkg::*;` / `import pkg::sym;` — ONE term per
-    /// statement (a comma list is a loud parse error; rare in practice).
-    pub(crate) fn parse_import_decl(&mut self) -> Option<ImportDecl> {
-        let start = self.cur_span();
+    /// v7 P2-D: `import pkg::*;` / `import pkg::sym;` — the whole statement,
+    /// INCLUDING a comma list (IEEE 1800 §26.8 `package_import_declaration` is
+    /// `import package_import_item { , package_import_item } ;`). Each term
+    /// becomes its own `ImportDecl`; every consumer is per-decl and
+    /// order-independent, so N terms behave exactly like N statements.
+    pub(crate) fn parse_import_decl_list(&mut self) -> Option<Vec<ImportDecl>> {
         self.bump(); // import
+        let mut out = Vec::new();
+        loop {
+            // A malformed term aborts the STATEMENT: the caller's recovery
+            // synchronises on the next item, and continuing the comma loop from
+            // an unknown cursor position would report the rest as garbage.
+            out.push(self.parse_import_term()?);
+            if self.peek() == Some(TokenKind::Comma) {
+                self.bump();
+                continue;
+            }
+            break;
+        }
+        if !self.expect(TokenKind::Semi, "';'") {
+            return None;
+        }
+        Some(out)
+    }
+
+    /// One `pkg::sym` / `pkg::*` term, no `import` keyword and no `;`.
+    fn parse_import_term(&mut self) -> Option<ImportDecl> {
+        let start = self.cur_span();
         let pkg = self.ident()?;
         if !self.expect(TokenKind::ColonColon, "'::'") {
             return None;
@@ -18,13 +41,6 @@ impl Parser<'_, '_> {
         } else {
             Some(self.ident()?)
         };
-        if self.peek() == Some(TokenKind::Comma) {
-            self.error("';' (one import term per statement in v7)");
-            return None;
-        }
-        if !self.expect(TokenKind::Semi, "';'") {
-            return None;
-        }
         // Bring the package's TYPE names into the current bare scope at parse time
         // (type names are parse-resolved). A package body's bare typedefs are now
         // unit-scoped (`restore_scope_unit` drops them, keeping only the `pkg::t`
@@ -177,8 +193,8 @@ impl Parser<'_, '_> {
                 self.restore_scope_unit(snap);
             } else if self.at_kw(Kw::Import) {
                 // v7 P2-D: compilation-unit-scope import.
-                match self.parse_import_decl() {
-                    Some(i) => items.push(TopItem::Import(i)),
+                match self.parse_import_decl_list() {
+                    Some(list) => items.extend(list.into_iter().map(TopItem::Import)),
                     None => {
                         items.push(TopItem::Error(self.prev_span()));
                         self.synchronize();
@@ -273,8 +289,8 @@ impl Parser<'_, '_> {
         // widths), so a header import and a body import register identically.
         let mut header_imports = Vec::new();
         while self.at_kw(Kw::Import) {
-            match self.parse_import_decl() {
-                Some(i) => header_imports.push(ModuleItem::Import(i)),
+            match self.parse_import_decl_list() {
+                Some(list) => header_imports.extend(list.into_iter().map(ModuleItem::Import)),
                 None => break, // diagnostic already emitted; stop the header loop
             }
         }
@@ -628,7 +644,14 @@ impl Parser<'_, '_> {
         }
         // v7 P2-D: module/package-scope `import pkg::…;`.
         if self.at_kw(Kw::Import) {
-            return self.parse_import_decl().map(ModuleItem::Import);
+            // A comma list emits its FIRST term inline and queues the rest in
+            // `pending_module_items` — the same mechanism the body-param comma
+            // list uses, because this function may return only one item.
+            let mut list = self.parse_import_decl_list()?.into_iter();
+            let first = list.next()?;
+            self.pending_module_items
+                .extend(list.map(ModuleItem::Import));
+            return Some(ModuleItem::Import(first));
         }
         // net/var declaration
         if self.net_var_kind().is_some() {

@@ -137,11 +137,13 @@ fn pkg2_write_to_pkg_const_still_loud() {
 }
 
 #[test]
-fn pkg2_control_flow_still_loud() {
-    // A control-flow package fn is still loud (workaround: import + bare call).
+fn pkg2_control_flow_now_works() {
+    // ⚠️ Asserted the opposite until the aes_top report — see
+    // `pkg_call_control_flow_now_works` for why the restriction was misdiagnosed.
+    // A body referencing ANOTHER package's symbol is still loud (the test below).
     let src = "package q; function automatic int f(input int x); if (x>0) f=1; else f=0; endfunction endpackage\n\
-        module m; int r; initial begin r=q::f(3); $display(\"o=%0d\", r); end endmodule";
-    assert!(!ok(src));
+        module m; int r; initial begin #1 r=q::f(3); $display(\"o=%0d\", r); $finish; end endmodule";
+    assert_eq!(run(src).0, "o=1");
 }
 
 #[test]

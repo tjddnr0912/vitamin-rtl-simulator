@@ -125,6 +125,99 @@ impl Elaborator<'_> {
     /// (`#(...)`) params, ports, and top-level body nets/params. A name in this
     /// set SHADOWS a same-named wildcard-imported package array, so a const
     /// element read of it must not fold the imported array. See `local_decl_names`.
+    /// Earliest declaration position of every module-scope net/variable name —
+    /// the ordering half of [`Self::gather_local_decl_names`].
+    ///
+    /// ⚠️ NOT the same walk: this one also visits `ModuleItem::PortDecl`, which the
+    /// name gatherer does not. The direction is benign (a non-ANSI body port maps to
+    /// 0, so it is never "later"), but the two sets are not identical and an earlier
+    /// note claimed they were.
+    ///
+    /// Ports and header params map to 0: they are declared in the header, ahead of
+    /// every body item, so no body use can precede them. Body nets and params map to
+    /// their own `span.lo`. A name declared twice keeps the EARLIEST position — the
+    /// duplicate is someone else's diagnostic, and taking the earliest is the
+    /// conservative choice for this one (it can only fail to flag).
+    /// Every name declared inside a PROCEDURAL block of this module.
+    ///
+    /// The use-before-declaration check needs it because vita's v1 flatten model
+    /// publishes a plain-static block-local as a module net under its BARE name: the
+    /// use then lands on the module-scope declaration's position and an ordinary
+    ///     initial begin : blk integer i; … end   …   integer i;
+    /// testbench is rejected. `hoisted_block_local` cannot answer this — the hoist
+    /// skips a name the module already declares, so the very collision that needs
+    /// excluding is the one it does not record. Taken from the AST instead, which is
+    /// order-free and cannot depend on which pass has run.
+    pub(crate) fn gather_block_local_names(
+        &self,
+        module: &ast::ModuleDecl,
+    ) -> std::collections::BTreeSet<String> {
+        let mut out = std::collections::BTreeSet::new();
+        for item in &module.body {
+            let ast::ModuleItem::Proc(p) = item else {
+                continue;
+            };
+            let mut decls = Vec::new();
+            collect_block_local_decls(&p.body, &mut decls);
+            for d in &decls {
+                for n in &d.names {
+                    out.insert(n.name.name.clone());
+                }
+            }
+        }
+        out
+    }
+
+    pub(crate) fn gather_decl_positions(&self, module: &ast::ModuleDecl) -> BTreeMap<String, u32> {
+        let mut pos: BTreeMap<String, u32> = BTreeMap::new();
+        let mut note = |n: &str, lo: u32| match pos.entry(n.to_string()) {
+            std::collections::btree_map::Entry::Vacant(v) => {
+                v.insert(lo);
+            }
+            std::collections::btree_map::Entry::Occupied(mut o) => {
+                if lo < *o.get() {
+                    o.insert(lo);
+                }
+            }
+        };
+        for p in &module.params {
+            note(&p.name.name, 0);
+        }
+        match &module.ports {
+            ast::PortList::Ansi(ports) => {
+                for pt in ports {
+                    note(&pt.name.name, 0);
+                }
+            }
+            ast::PortList::NonAnsi(idents) => {
+                for id in idents {
+                    note(&id.name, 0);
+                }
+            }
+            ast::PortList::None => {}
+        }
+        for item in &module.body {
+            match item {
+                ast::ModuleItem::NetVar(d) => {
+                    for n in &d.names {
+                        note(&n.name.name, n.name.span.lo);
+                    }
+                }
+                ast::ModuleItem::Param(p) => note(&p.name.name, p.name.span.lo),
+                // A NON-ANSI body port declaration (`input logic a;`) re-declares a
+                // header port name; the header already put it at 0, and a name that
+                // is ONLY here is still a port — so 0, not the decl position.
+                ast::ModuleItem::PortDecl(pd) => {
+                    for n in &pd.names {
+                        note(&n.name, 0);
+                    }
+                }
+                _ => {}
+            }
+        }
+        pos
+    }
+
     pub(crate) fn gather_local_decl_names(
         &self,
         module: &ast::ModuleDecl,

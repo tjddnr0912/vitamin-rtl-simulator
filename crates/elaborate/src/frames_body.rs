@@ -165,6 +165,13 @@ impl Elaborator<'_> {
         // take a different executor path and are unaffected.
         let saved_ffl = self.frame_fn_lowering;
         self.frame_fn_lowering = true;
+        // A package routine's body resolves its own package first — see
+        // `resolve_rtn_key`. Pushed for the whole body, so a nested call inside it
+        // inherits the right scope too.
+        let pushed_pkg = self.rtn_key_pkg(name);
+        if let Some(p) = pushed_pkg.clone() {
+            self.cur_rtn_pkg.push(p);
+        }
         let scope_seg = format!("$func${name}");
         // return-kw: a frame function's `return [expr]` assigns the func-named return
         // var (base_net + return_slot) and jumps to a single exit block; the body also
@@ -201,8 +208,13 @@ impl Elaborator<'_> {
             // wins). Gated on the frame key being `pkg::name` — module frame
             // keys are plain identifiers with no `::`, so ordinary frames inject
             // nothing and stay byte-identical.
-            let (saved_pkg_p, saved_pkg_m) = match name.split_once("::") {
-                Some((pkg, _)) => s.push_pkg_consts_scoped(pkg, func),
+            // A `pkg::name` frame key carries the package in the key; an EXPLICIT
+            // `import p::f;` gives a bare key instead, and `rtn_pkg` is where that
+            // one's package survives. Both must inject, or `import p::f;` leaves
+            // `f`'s body unable to read its own package's constants (measured:
+            // `undeclared net/variable tb.x.$func$f3.K`).
+            let (saved_pkg_p, saved_pkg_m) = match s.rtn_key_pkg(name) {
+                Some(pkg) => s.push_pkg_consts_scoped(&pkg, func),
                 None => (Vec::new(), Vec::new()),
             };
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
@@ -260,6 +272,9 @@ impl Elaborator<'_> {
         let m = self.func_metas[fid as usize];
         let entry_bb = self.funcs[fid as usize].entry;
         self.validate_frame_body(name, entry_bb, m.base_net, m.locals_len, false);
+        if pushed_pkg.is_some() {
+            self.cur_rtn_pkg.pop();
+        }
         self.frame_fn_lowering = saved_ffl;
     }
 
@@ -268,6 +283,14 @@ impl Elaborator<'_> {
     /// registers into `pending_task_calls` (keyed by the process-LOCAL block),
     /// which is rebased by `+base` into `task_calls_func` on append.
     pub(crate) fn lower_frame_task_body(&mut self, name: &str, task: &ast::TaskDef, fid: u32) {
+        // A package task's body resolves in its own package, exactly as a package
+        // function's does (`resolve_rtn_key`). This half was missing, so a package
+        // task could neither call its own siblings nor read its own package's
+        // constants — the same two defects that were fixed for functions.
+        let pushed_pkg = self.rtn_key_pkg(name);
+        if let Some(pk) = pushed_pkg.clone() {
+            self.cur_rtn_pkg.push(pk);
+        }
         let scope_seg = format!("$func${name}");
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
@@ -296,6 +319,13 @@ impl Elaborator<'_> {
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), mirroring `lower_frame_func_body` — so a task body enum's
             // labels resolve inside the body without leaking to the module.
+            // Same-package constants for a package TASK body — the function half has
+            // done this since round-9; without it a package task reading its own
+            // package's localparam was `undeclared net/variable t.$func$tk.K`.
+            let (saved_pkg_p, saved_pkg_m) = match s.rtn_key_pkg(name) {
+                Some(pkg) => s.push_pkg_consts_task(&pkg, task),
+                None => (Vec::new(), Vec::new()),
+            };
             let (saved_labels, saved_meta) = s.push_body_enum_labels(&task.body_enums, &task.body);
             let mut b = ProcessBuilder::new();
             // §13.4.4 / §4.5.189: TOP-LEVEL body_decls run at frame entry (once per
@@ -318,6 +348,13 @@ impl Elaborator<'_> {
             let out = b.finish();
             s.restore_params(saved_labels);
             s.restore_param_meta(saved_meta);
+            for (k, prev) in saved_pkg_m.into_iter().rev() {
+                match prev {
+                    Some(v) => s.param_meta.insert(k, v),
+                    None => s.param_meta.remove(&k),
+                };
+            }
+            s.restore_params(saved_pkg_p);
             out
         });
         self.cur_return = saved_ret;
@@ -326,6 +363,9 @@ impl Elaborator<'_> {
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
         let fork_modes_pending = std::mem::replace(&mut self.pending_fork_modes, saved_fork_modes);
         let hier_pending = std::mem::replace(&mut self.pending_hier_task_calls, saved_hier_pending);
+        if pushed_pkg.is_some() {
+            self.cur_rtn_pkg.pop();
+        }
         self.frame_task_lowering = saved_ftl;
         // Capture the block base AFTER the body closure (round-7): a `pkg::f()` inside
         // the task body reserves+lowers its frame on demand, appending blocks during the

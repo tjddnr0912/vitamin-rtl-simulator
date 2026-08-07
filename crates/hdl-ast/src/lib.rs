@@ -248,6 +248,10 @@ pub struct AnsiPort {
     pub range: Option<Range>, // packed [msb:lsb] (the FIRST/outer packed dim)
     pub packed: Vec<Range>,   // ADDITIONAL packed dims: `[3:0][7:0]` ⇒ range=[3:0], packed=[[7:0]]
     pub name: Ident,
+    /// UNPACKED dims, written AFTER the name: `output logic [7:0] o [4]`
+    /// (IEEE 1800 §23.2.2.3). Same type and role as `DeclName::unpacked` and
+    /// `TfPort::unpacked` — the port is an array of `array_dim_extents` elements.
+    pub unpacked: Vec<Dim>,
     pub default: Option<Expr>, // ANSI default value slot (rare)
     /// Interface-typed port `intf p` / `intf.mp p` (v5 ⑥). When set, `dir`
     /// is a placeholder (interface ports carry no direction) and elaborate
@@ -546,6 +550,10 @@ pub struct PortDecl {
     pub signed: bool,
     pub range: Option<Range>,
     pub names: Vec<Ident>, // `input [3:0] a, b;`
+    /// UNPACKED dims per name, parallel to `names` (empty vec = scalar). A
+    /// separate vector rather than a declarator type so the frozen `names`
+    /// shape is untouched; `parse_port_decl` always pushes one entry per name.
+    pub unpacked: Vec<Vec<Dim>>,
     pub span: Span,
 }
 

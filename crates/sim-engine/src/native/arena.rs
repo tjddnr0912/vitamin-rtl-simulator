@@ -85,7 +85,15 @@ pub struct NetArena {
     /// The 8-per-run cap and its "further suppressed" note are NOT duplicated
     /// here: draining calls the engine's own function, so the cap counter is the
     /// engine's one and the messages are byte-identical by construction.
-    pub pending_range: std::cell::Cell<u32>,
+    /// Deferred range diagnostics, IN SOURCE ORDER — one entry per out-of-range
+    /// access, `true` when the index was UNKNOWN (x/z).
+    ///
+    /// ⚠️ This was two counters, one per kind. Counters cannot carry ORDER, and the
+    /// split into E4002/W4029 made order observable: `$display("%h %h", mem[xi],
+    /// mem[oi])` with `xi` unknown and `oi` a known out-of-range emitted W4029 then
+    /// E4002 on interp and bytecode, and the reverse on native. The drain is not
+    /// decoration — it is the order — so the record has to be ordered too.
+    pub pending_range: std::cell::RefCell<Vec<bool>>,
 }
 
 impl NetArena {
@@ -126,7 +134,7 @@ impl NetArena {
             slots,
             ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
-            pending_range: std::cell::Cell::new(0),
+            pending_range: std::cell::RefCell::new(Vec::new()),
         };
         // t0 init: extract the width-wide element init once, broadcast per element.
         for (n, nv) in ir.nets.iter().enumerate() {
@@ -226,9 +234,9 @@ impl NetArena {
     /// same slice: it used to bump the cell inline, which is how the refactor
     /// managed to leave its own motivating example un-routed.
     #[inline]
-    pub(crate) fn note_oob_read(&self) {
-        self.pending_range
-            .set(self.pending_range.get().saturating_add(1));
+    /// Record one out-of-range access and WHICH KIND it was, in order.
+    pub(crate) fn note_bad_index(&self, unknown: bool) {
+        self.pending_range.borrow_mut().push(unknown);
     }
 
     /// The `(val, unk)` plane slices of element `elem` of net `net`.
@@ -282,7 +290,8 @@ impl NetArena {
 /// loads the two plane words directly. Until S2 slice 4 its admission (in-bounds
 /// CONSTANT indices only) also kept the OOB machinery below out of its reach;
 /// that slice admitted a RUNTIME index, so `wprog`'s `LoadIdx` reaches the same
-/// decision itself — all-X plus `note_oob_read`, the counter this arm bumps.
+/// decision itself — all-X plus `note_bad_index`, the ordered record this arm
+/// appends to.
 /// Parity is measured (exhaustive battery + pinned corpus sweep), not structural.
 ///
 /// The engine's `warn_run_range` diagnostic on an OOB read is recorded here
@@ -301,8 +310,8 @@ impl NetArena {
 /// eligible and this reader returns X where the engine returns the live flag.
 /// Whoever fixes the over-mark owes this an override.
 impl NetReader for NetArena {
-    fn take_deferred_range_reports(&self) -> u32 {
-        self.pending_range.replace(0)
+    fn take_deferred_range_kinds(&self) -> Vec<bool> {
+        std::mem::take(&mut *self.pending_range.borrow_mut())
     }
 
     /// S3a — **LOUD, not the `None` default.** A subroutine call is answered by
@@ -341,7 +350,7 @@ impl NetReader for NetArena {
         // real width class must carry an `is_real` slot flag through BOTH the
         // OOB and in-range arms, and add a Real leg to the mirror test.
         if w >= s.elems {
-            self.note_oob_read();
+            self.note_bad_index(w == crate::eval::WORD_UNKNOWN);
             let mut v = Value::xs(s.width.max(1), s.signed);
             v.width = s.width;
             return v;

@@ -452,18 +452,29 @@ fn empty_named_override_still_keeps_the_default() {
 }
 
 #[test]
-fn non_real_unfoldable_override_keeps_warn_and_default() {
-    // The escalation must not swallow the pre-existing warn-and-default behaviour for
-    // ordinary non-constant overrides of an integer param.
-    let out = run("module m #(parameter int W = 5) ();\n\
+fn non_real_unfoldable_override_is_loud() {
+    // ⚠️ This test used to assert the OPPOSITE — that a non-constant override of an
+    // integer param warns ("default kept") and the child runs on with its declared
+    // default at exit 0. The aes_top report named that as the silent risk it is: a
+    // parameter chosen by the instantiator decides port widths and generate branches,
+    // so quietly substituting a different one is a different design, not a smaller
+    // one. iverilog rejects this source too ("A reference to a net or variable (`sig')
+    // is not allowed in a constant expression"), so loud is also the oracle's answer.
+    let (_o, ok, err) = run_raw(
+        "module m #(parameter int W = 5) ();\n\
            initial $display(\"W=%0d\", W);\n\
          endmodule\n\
          module t;\n\
            logic [3:0] sig;\n\
            m #(.W(sig)) u();\n\
            initial begin sig = 1; #1 $finish; end\n\
-         endmodule\n");
-    assert_eq!(out, "W=5\n");
+         endmodule\n",
+    );
+    assert!(!ok, "a non-constant override must not be silently dropped");
+    assert!(
+        err.contains("VITA-E3009") && err.contains("declared default"),
+        "the diagnostic must say what was substituted: {err}"
+    );
 }
 
 #[test]

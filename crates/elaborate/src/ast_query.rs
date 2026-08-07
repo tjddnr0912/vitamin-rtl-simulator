@@ -193,6 +193,15 @@ pub(crate) fn collect_callee_stmt(s: &ast::Stmt, out: &mut std::collections::BTr
                 collect_callee_expr(a, out);
             }
         }
+        // ⚠️ `Return` had NO arm, so a call reachable only through `return f(x)` was
+        // invisible to every consumer of this walk. Two of them care: `build_frame_set`
+        // decides RECURSION from these edges (a function that recurses only by
+        // `return f(x)` was not framed — the inline path's own guard caught it loud,
+        // but for the wrong reason), and `inject_pkg_callees` decides which
+        // same-package siblings a package-scoped call needs (measured: `p::g` whose
+        // body is `return h(m)` reported "call to undeclared function `h`" while the
+        // byte-identical `g = h(m)` worked).
+        Return { value: Some(e), .. } => collect_callee_expr(e, out),
         _ => {}
     }
 }
@@ -259,6 +268,15 @@ pub(crate) fn collect_callee_expr(e: &ast::Expr, out: &mut std::collections::BTr
                 collect_callee_expr(a, out);
             }
         }
+        // ⚠️ `Cast` was MISSING while `pkg_expr_pure_inner` admits it. An admission
+        // walk and a collection walk that disagree about the node set is the recorded
+        // "accept-gate walker completeness" hazard, and it bit exactly that way:
+        // `return int'(h(x))` was admitted for a package-scoped call, `h` was never
+        // injected under its scoped key, and the CALLER module's same-named `h` was
+        // called silently (1001 where iverilog says 2, exit 0, where the same design
+        // without the cast was loud). The two walks must cover one node set —
+        // `Paren`/`MinTypMax` below were already here, `Cast` was the hole.
+        Cast { expr, .. } => collect_callee_expr(expr, out),
         Paren { inner } => collect_callee_expr(inner, out),
         MinTypMax { min, typ, max } => {
             collect_callee_expr(min, out);

@@ -335,6 +335,38 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             context: Vec::new(),
             sim_time: None,
         }));
+    } else if !rt.ungoverned.is_empty() {
+        // IEEE 1800-2017 §3.14.2.2: if ANY module in the design has a `timescale,
+        // every module must. vita ran the mixed case at `errors=0 warnings=0` — and
+        // so does iverilog — but xrun refuses to elaborate it (`*F,CUMSTS: Timescale
+        // directive missing on one or more modules`) and Verilator reports
+        // `Error-TIMESCALEMOD`. A user shipped a vita-green design to sign-off on
+        // that. A WARNING rather than an error because the design does run correctly
+        // here and iverilog accepts it; `-Werror=W-PP-TIMESCALE-MIXED` is there for
+        // CI. Naming the modules is the point — "somewhere in ten files" is not
+        // actionable.
+        let mut names: Vec<&str> = rt.ungoverned.iter().map(String::as_str).collect();
+        names.sort_unstable();
+        let shown: Vec<&str> = names.iter().copied().take(8).collect();
+        let more = names.len().saturating_sub(shown.len());
+        let tail = if more > 0 {
+            format!(" (and {more} more)")
+        } else {
+            String::new()
+        };
+        sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code: MsgCode::PpTimescaleMixed,
+            message: format!(
+                "some modules have a `timescale and these do not: {}{tail} — IEEE 1800 \
+                 §3.14.2.2 requires all or none, and other tools refuse to elaborate \
+                 the mixed form (they take the 1ns/1ns base here)",
+                shown.join(", ")
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: None,
+        }));
     }
     let includes: Vec<(String, [u8; 32])> = pp
         .map
@@ -491,7 +523,7 @@ pub(crate) fn run_vita_str_gated(
     // it, N identical E3009s in one run are indistinguishable and the declaration that
     // caused them cannot be found at all.
     let resolver = MapResolver(&smap);
-    let (ir, sc) = elaborate::elaborate_located(
+    let (ir, sc) = elaborate::elaborate_located_params(
         &unit,
         sink,
         &rt.unit_exp,
@@ -499,6 +531,7 @@ pub(crate) fn run_vita_str_gated(
         rt.global_prec_exp,
         root_sel,
         Some(&resolver),
+        &opts.top_params,
     );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;

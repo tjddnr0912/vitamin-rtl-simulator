@@ -182,6 +182,7 @@ Emitted by the simulation engine while running the design.
 | Code | Mnemonic | Sev | What triggers it | What to do |
 |------|----------|-----|------------------|------------|
 | `VITA-E4002` | `E-RUN-RANGE` | error | A runtime array index or bit/part-select is out of the declared range. Per IEEE, the read yields `x` and the write is ignored — the simulator does **not** crash — but the corruption is surfaced as this error. | Validate/clamp the index before the select, or size the array correctly. If the location reads `(source location unavailable)`, see `W-RUN-NO-LOCATIONS` below. |
+| `VITA-W4029` | `W-RUN-RANGE-UNKNOWN` | warning | The runtime index was UNKNOWN (x/z) rather than a known value past the end. Same recovery (read `x`, write dropped) — but IEEE 1364 §5.2.1 prescribes exactly that, so it is legal behaviour and not an error. Reading an array with a register that is still X before the first clock edge is the common case. | Nothing, if the reset window is expected. Promote it with `-Werror=W-RUN-RANGE-UNKNOWN`, or suppress with `-Wno-W-RUN-RANGE-UNKNOWN`. |
 
 ### Runtime severity tasks & assertions (reserved)
 

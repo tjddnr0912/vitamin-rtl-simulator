@@ -506,7 +506,7 @@ impl WProg {
                     let clean = if i.unk != 0 { None } else { Some(i.val) };
                     let idx = crate::eval::word_index_of(clean);
                     if idx >= elems {
-                        arena.note_oob_read();
+                        arena.note_bad_index(idx == crate::eval::WORD_UNKNOWN);
                         i.val = 0;
                         i.unk = m;
                     } else {

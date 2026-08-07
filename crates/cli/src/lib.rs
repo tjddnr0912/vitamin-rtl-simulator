@@ -121,6 +121,11 @@ pub struct VitaOpts {
     pub work: Option<(String, String)>,
     /// `--top <unit>` (P2-A): explicit elaborate roots (velab/lib mode).
     pub tops: Vec<String>,
+    /// `-G NAME=VALUE` / `--param NAME=VALUE`: parameter overrides for the TOP
+    /// module(s). Without this a configuration sweep needs one hand-written wrapper
+    /// module per combination, and the same filelist cannot be shared with a tool
+    /// that does support overrides (xrun `-defparam`, VCS `-pvalue+`, Verilator `-G`).
+    pub top_params: Vec<(String, String)>,
     /// Runtime plusargs (v7, `+name[=value]`, leading '+' stripped, CLI
     /// order). Searched first-match by `$test/$value$plusargs`. Pure runtime
     /// input — never hashed into artifacts.
@@ -594,6 +599,7 @@ struct IoArgs {
     libs: Vec<String>,
     /// `--top <unit>` (velab, P2-A): explicit root units (required with `-L`).
     tops: Vec<String>,
+    top_params: Vec<(String, String)>,
     /// Runtime plusargs (v7): every bare `+...` arg that is not a
     /// `+define+`/`+incdir+` directive, leading '+' stripped, command-line
     /// order preserved ($test/$value$plusargs search order). vita/vrun only —

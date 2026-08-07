@@ -153,6 +153,7 @@ impl<'a> SimState<'a> {
             max_class_objs: 1_000_000,
             sink,
             run_range_count: Cell::new(0),
+            run_range_unk_count: Cell::new(0),
             postponed: Postponed::default(),
             func_table: crate::FuncTable::new(),
             frame_local: vec![false; nnets],
@@ -334,16 +335,42 @@ impl<'a> SimState<'a> {
         Some(compiled)
     }
 
-    /// Emit a rate-limited `E-RUN-RANGE` (VITA-E4002) runtime diagnostic for an
-    /// out-of-range array word / select. The OOR is RECOVERED (read X / drop write),
-    /// so the run still finishes; this only surfaces it. Capped at `CAP` per run with
-    /// a final "further suppressed" note so a loop of OOR accesses can't spam.
-    pub fn warn_run_range(&self, what: &str) {
+    /// Emit a rate-limited runtime diagnostic for an index that fell outside an
+    /// array or select — `E-RUN-RANGE` (VITA-E4002, Error) for a KNOWN index past
+    /// the end, `W-RUN-RANGE-UNKNOWN` (VITA-W4029, Warning) for an UNKNOWN one. The
+    /// access is RECOVERED either way (read X / drop the write), so the run still
+    /// finishes; this only surfaces it.
+    ///
+    /// ⚠️ The two are different facts and used to share one Error-severity code, so
+    /// reading `mem[idx_q]` while `idx_q` is still X — every design's reset window —
+    /// filled the log with errors and set exit 1 on correct RTL. IEEE 1364 §5.2.1
+    /// says an unknown index reads X and drops the write; that is the behaviour vita
+    /// already had, and it is not an error. iverilog says nothing at all in either
+    /// case, so a warning here is still more than the oracle offers, while a KNOWN
+    /// index past the end stays an Error because it is almost always a bug (a slice
+    /// once measured that dropping it turned a walked-past-memory run from FAIL into
+    /// a clean PASS).
+    ///
+    /// The caps are SEPARATE. Sharing one budget would let a reset window's unknown
+    /// indexes eat all eight slots and suppress the genuine out-of-range report that
+    /// followed.
+    pub fn warn_run_index(&self, what: &str, unknown: bool) {
         const CAP: u32 = 8;
-        let n = self.run_range_count.get();
+        let cell = if unknown {
+            &self.run_range_unk_count
+        } else {
+            &self.run_range_count
+        };
+        let n = cell.get();
         let msg = match n.cmp(&CAP) {
+            std::cmp::Ordering::Less if unknown => {
+                Some(format!("{what} is unknown (x/z); read X / write ignored"))
+            }
             std::cmp::Ordering::Less => {
                 Some(format!("{what} (out of range; read X / write ignored)"))
+            }
+            std::cmp::Ordering::Equal if unknown => {
+                Some("further unknown-index diagnostics suppressed".to_string())
             }
             std::cmp::Ordering::Equal => {
                 Some("further out-of-range diagnostics suppressed".to_string())
@@ -352,15 +379,23 @@ impl<'a> SimState<'a> {
         };
         if let Some(message) = msg {
             self.sink.emit(LogEvent::Diagnostic(Diagnostic {
-                severity: Severity::Error,
-                code: MsgCode::RunRange,
+                severity: if unknown {
+                    Severity::Warning
+                } else {
+                    Severity::Error
+                },
+                code: if unknown {
+                    MsgCode::RunRangeUnknown
+                } else {
+                    MsgCode::RunRange
+                },
                 message,
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(diag::TimeStamp { ticks: self.now }),
             }));
         }
-        self.run_range_count.set(n.saturating_add(1));
+        cell.set(n.saturating_add(1));
     }
 
     /// Emit `VITA-W4028`: a matched plusarg's value cannot be converted by the
@@ -763,7 +798,7 @@ impl<'a> SimState<'a> {
         // silently corrupt a valid neighbor.
         let word = if c.word.is_some() {
             if raw_word >= self.nets[net].array_len {
-                self.warn_run_range("array word index");
+                self.warn_run_index("array word index", raw_word == crate::eval::OFF_UNKNOWN);
                 return false;
             }
             raw_word
