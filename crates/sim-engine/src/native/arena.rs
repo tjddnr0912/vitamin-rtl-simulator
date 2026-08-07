@@ -75,8 +75,9 @@ pub struct NetArena {
     /// now rides all five.)
     ///
     /// ⚠️ This is a real correctness surface, not bookkeeping. `warn_run_range`
-    /// emits `Severity::Error`, which latches `had_error` → `ExitClass::HadErrors`
-    /// → CLI exit 1. Without it a design whose write pointer walks past a memory
+    /// emits a `Severity::Error` diagnostic, which the CLI's own sink counts into
+    /// the process exit code — NOT via `had_error`, which only the `$error` family
+    /// sets. Without it a design whose write pointer walks past a memory
     /// runs `--backend native` to a PASS verdict and the default backend to a
     /// FAIL — measured on an ordinary FIFO, by both adversarial reviews of
     /// S1d-4c-2c independently.
@@ -210,6 +211,26 @@ impl NetArena {
         Ok(())
     }
 
+    /// Count one out-of-range element access, for the run loop to report.
+    ///
+    /// A FUNCTION rather than the `Cell` bump inline, because it is the whole
+    /// diagnostic: `warn_run_range` emits a `Severity::Error` diagnostic, which
+    /// the CLI's own sink counts into the process exit code — NOT via
+    /// `had_error`, which only the `$error` family sets (`run_tests.rs` records
+    /// that a gate was vacuous for exactly that confusion). Any second reader
+    /// that resolves its
+    /// own element index has to land here — `wprog`'s runtime element load is
+    /// that second reader, and a forgotten increment there would turn a design
+    /// whose index walks past a memory from FAIL into PASS while every value
+    /// stayed identical. The WRITE funnel is the third caller, routed here in the
+    /// same slice: it used to bump the cell inline, which is how the refactor
+    /// managed to leave its own motivating example un-routed.
+    #[inline]
+    pub(crate) fn note_oob_read(&self) {
+        self.pending_range
+            .set(self.pending_range.get().saturating_add(1));
+    }
+
     /// The `(val, unk)` plane slices of element `elem` of net `net`.
     #[inline]
     pub fn planes(&self, net: u32, elem: u32) -> (&[u64], &[u64]) {
@@ -258,10 +279,11 @@ impl NetArena {
 /// `SimState::read_net`'s flat arm byte-for-byte at the `Value` level.
 ///
 /// Since S2, admitted expression trees bypass this impl entirely: `wprog`
-/// loads the two plane words at compile-time-resolved indices. Its admission
-/// (in-bounds const indices only) is what keeps the OOB machinery below out of
-/// its reach, and its parity is measured (exhaustive battery + pinned corpus
-/// sweep) rather than structural.
+/// loads the two plane words directly. Until S2 slice 4 its admission (in-bounds
+/// CONSTANT indices only) also kept the OOB machinery below out of its reach;
+/// that slice admitted a RUNTIME index, so `wprog`'s `LoadIdx` reaches the same
+/// decision itself — all-X plus `note_oob_read`, the counter this arm bumps.
+/// Parity is measured (exhaustive battery + pinned corpus sweep), not structural.
 ///
 /// The engine's `warn_run_range` diagnostic on an OOB read is recorded here
 /// (`pending_range`) and emitted by the run loop — see that field's doc for why
@@ -319,8 +341,7 @@ impl NetReader for NetArena {
         // real width class must carry an `is_real` slot flag through BOTH the
         // OOB and in-range arms, and add a Real leg to the mirror test.
         if w >= s.elems {
-            self.pending_range
-                .set(self.pending_range.get().saturating_add(1));
+            self.note_oob_read();
             let mut v = Value::xs(s.width.max(1), s.signed);
             v.width = s.width;
             return v;

@@ -347,6 +347,39 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.312 ③층 S2 슬라이스 4 — `wprog` 가 런타임 배열 원소를 읽는다 (2026-08-07, branch feat-s2s4-runtime-array-index, format 26 불변) ✅
+
+**한 줄** — 폭별 특수화 평가기가 **런타임 인덱스의 배열 원소 읽기**를 admit 한다(`WOp::LoadIdx`) → 런타임 인덱스 마이크로벤치 **4.013 s → 0.64 s**(native/vm **0.27× → 1.70×**)이고 picorv32 가 **0.83× → 0.97×** 로 올라온다.
+
+**그라운딩이 표적을 정했다**
+
+- S2 슬라이스 3 이후 native 는 **상수** 인덱스에서 1.76× 인데 **런타임** 인덱스에서 0.27× = **VM 보다 3.7× 느렸다**. 원인은 `wprog.rs` 의 `Expr::Signal` 팔이 워드 인덱스를 `Expr::Const` 로만 admit 하고 아니면 **트리 전체를 거절**하는 것 — 그러면 tier-3 는 VM 이 아니라 **인터프리터의 제네릭 평가기**로 떨어진다. 실제 RTL 은 루프 변수로 배열을 인덱싱하므로 이게 picorv32 가 0.83× 이던 이유다.
+- **쓰기 쪽은 이미 받고 있었다**(S2 슬라이스 3 의 `IdxKind::Prog`, §4.5.307) — 빠진 것은 읽기 하나였다.
+
+**공유, 재진술 아님** — `Value → 워드 인덱스`(X/Z 이거나 u32 초과면 `u32::MAX` 센티넬) 단계를 `eval::word_index_of` 로 **추출**해 제네릭 평가기와 `LoadIdx` 가 한 철자를 쓴다. 이 규칙은 **진단을 소유한다**(범위 밖 → all-X + `pending_range` 증가 = 런 루프가 드레인하는 E4002)이므로 §4.5.302 규칙이 그대로 적용된다.
+
+**구현** — `WOp::LoadIdx { off, elems, m }` 가 스택 top 을 인덱스로 소비해 `off + idx*2` 의 두 평면 워드를 싣거나, 범위 밖이면 all-X + `arena.note_oob_read()`. 인덱스는 **자기 폭에서 인라인 컴파일**(per-op 마스크가 이미 있다 — §4.5.306 "한 프로그램이 두 폭을 갖는다"). ⚠️ 비교 피연산자가 인덱스 서브트리 안에 있으면 한 프로그램에 **세 폭**이 산다. `WProg::run` 은 `buf` 가 아니라 **아레나**를 받는다(진단 카운터에 닿아야 하므로). 유지되는 거절: multi-word 슬롯 · 비정수 net kind · 컴파일 안 되는 인덱스.
+
+**⭐⭐ 라운드 1 differential 이 내 수정 안에서 진단 중복을 잡았다**
+
+- `fast_offsets` 가 슬롯을 **하나씩 컴파일하며 즉시 실행**했다. 첫 슬롯이 admit + 범위 밖이면 **보고**하고, 두 번째 슬롯이 decline 하면 전체를 `None` 으로 되돌리는데 — 그 뒤 제네릭 resolver 가 **같은 접근을 다시 보고**한다. E4002 는 **런당 8개 cap** 이라 중복이 cap 을 먹고 뒤의 진짜 보고를 지운다.
+- 수정 = **결정과 실행의 분리**. 패스 1 이 모든 청크의 모든 인덱스를 `index_admits` 로 판정하고(컴파일+상수폴딩만, 실행 0), 패스 2 만 실행한다. **"decline 은 부작용이 없다"** 가 이제 코드의 성질이다.
+
+**⭐⭐ 게이트가 바로 그 축에 눈멀어 있었다**
+
+- `s2_specialized_offsets_match_the_canonical_resolver` 는 **오프셋만** 비교했다 — 같은 오프셋을 더 빨리 내면서 **보고 수가 다르면** 두 resolver 는 등가가 아니다. `Some` 팔에 보고 수 비교를, `None` 팔에 "decline 은 보고 0" 단언을 넣었다.
+- ⭐ 그런데 그 비교조차 **공허할 수 있었다**: corpus 72 설계에 admit 되면서 범위를 벗어나는 인덱스가 **0개**라 `Some` 팔이 늘 0-vs-0 이었다. 라운드 2 가 짚어 판별 3문장(① admit+OOB 뒤 decline ② 전 슬롯 admit + 보고 ③ 2청크 concat 의 두 번째 **offset** 만 decline)을 심었고, 뮤테이션 둘(`LoadIdx` 가 보고 안 함 · 패스 1 이 `c.offset` 미검사)이 **둘 다 kill**.
+
+**라운드 2: 제품 결함 0**
+
+- differential **960설계 0 발산**, soundness *"complete and correct — 새 silent-wrong 0, 사다리 하강 0"*. 남은 것은 **주장 8건 + 테스트 공허 2건**뿐이라 거기서 끊었다(라운드 예산 3 중 2 사용).
+- ⭐ 그중 하나는 내가 쓴 *"봉인이 모든 배열-워드 인덱스를 정확히 32비트로 만들므로 이 폭 가드는 도달 불가"* 인데 **측정이 반증**했다 — packed-element 도메인에서 **2비트 `Concat`** 이 도착하고, `packed.rs` 에 봉인을 우회하는 carve-out 이 셋 더 있다. 결과는 안 바뀐다(전부 `Concat` 에서 decline) — **철회되는 것은 가드가 아니라 그 이유**다.
+- ⭐ 그리고 `note_oob_read` 의 doc 이 **자기 예시로 든 쓰기 퍼널이 정작 그 함수를 안 거치고** 제자리에서 카운터를 올리고 있었다 → 배선(동작 동일).
+
+**게이트** — 5215 tests green(+32) · clippy/fmt clean · `examples/` 4 + keccak 3변종 + picorv32 **VM↔native stdout·VCD 바이트 동일**(keccak 셋 다 `backend: native`) · 소진 인덱스 differential(−4..=elems+4 + X/Z + u32 초과, **값·unk·보고 수** 3축) · admission census 재핀 `(131, 1)` · 특수화 오프셋 핀 `(2144,60) → (2160,64)`.
+
+**속도(final tree, best-of-3)** — const 인덱스 native 0.52 / vm 0.90 = **1.73×** · **var 인덱스 native 0.64 / vm 1.09 = 1.70×**(PRE 4.013 s 대비 **6.3×**) · picorv32 native 1.03 / vm 1.00 = **0.97×** · keccak_f 0.46 / 0.54. ⚠️ picorv32 가 여전히 1.0× 근처인 것은 표현식이 아니라 **스케줄러가 지배**하기 때문이고, 그것이 S3 이후의 표적이다.
+
 #### 4.5.311 ③층 S3a — 호출 흡수, 그리고 한 결함 클래스를 leaf 에서 primitive 까지 (2026-08-07, branch feat-s3a-frame-call-absorption, format 26 불변) ✅
 
 **한 줄** — `NetArena::buildable` 의 blanket `func_table` 거부를 **측정된 부분집합**으로 좁히고 `NativeKernel` 을 **복합 `NetReader`** 로 만들어 호출을 엔진 프레임 실행기에 **위임**했다(재진술 0) → `bench/keccak` **호출형·배열형이 네이티브로 실행되고 VM 과 바이트 동일**. ⭐⭐ 그리고 적대 리뷰 **6라운드**가 곁가지 pre-existing 결함 하나를 **leaf 에서 primitive 까지** 몰아냈다.

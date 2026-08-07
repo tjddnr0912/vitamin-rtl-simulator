@@ -472,12 +472,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // the `u32::MAX` out-of-range sentinel → `net_word_packed` returns
                 // all-X — NOT a silent read of a wrapped element. Symmetric with
                 // the write side (`resolve_lvalue_offsets`).
-                let widx = word.map(|weid| {
-                    self.eval(weid)
-                        .to_u64()
-                        .and_then(|v| u32::try_from(v).ok())
-                        .unwrap_or(u32::MAX)
-                });
+                let widx = word.map(|weid| crate::eval::word_index_of(self.eval(weid).to_u64()));
                 let base = self.nets.read_net(*net, widx);
                 base.resize_keep_sign(w, eff_signed)
             }

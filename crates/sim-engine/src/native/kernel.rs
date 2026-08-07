@@ -524,8 +524,9 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// kinds only, and every index expression resolvable by `index_of`. Any
     /// miss declines the WHOLE lvalue, so a partially-specialized resolution
     /// cannot exist — which is also what keeps the E4002 machinery intact, since
-    /// an ADMITTED index tree can only load whole nets and in-bounds constant
-    /// elements and therefore cannot reach `warn_run_range`.
+    /// a decline is SIDE-EFFECT-FREE. Before S2 slice 4 that held because an
+    /// admitted index tree could not reach `warn_run_range` at all; it now holds
+    /// because admissibility is decided for every slot before any program runs.
     ///
     /// ⚠️ The kind test is FORWARD DEFENCE, not the complement of anything the
     /// canonical function evaluates here, and review measured both halves of
@@ -539,8 +540,21 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         if lhs.chunks.len() > 2 || lhs.chunks.is_empty() {
             return None;
         }
-        let mut buf = [(0u32, 0u32); 2];
-        for (i, c) in lhs.chunks.iter().enumerate() {
+        // TWO PASSES, and the split is a correctness fix rather than a tidy-up.
+        //
+        // ⚠️ Running a program used to be free to speculate on: an admitted index
+        // tree could only load whole nets and in-bounds CONSTANT elements, so it
+        // had no side effect and a later decline could simply throw the work away.
+        // S2 slice 4 admitted a RUNTIME element load, and that load COUNTS an
+        // out-of-range report — so a decline after one had already run made the
+        // generic resolver re-evaluate the same index and report it a SECOND time.
+        // Both adversarial lenses measured it: `errors=2` on `--backend native`
+        // against `1` on the VM, and worse, the duplicate ate the 8-per-run cap so
+        // genuinely distinct LATER accesses were dropped. Deciding admissibility
+        // for every slot before running any of them makes the speculation
+        // side-effect-free by construction, which is the property the old comment
+        // claimed the admission gave for free.
+        for c in lhs.chunks.iter() {
             if !matches!(
                 self.ir.nets.get(c.net as usize)?.kind,
                 sim_ir::NetKind::Wire
@@ -550,6 +564,14 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             ) {
                 return None; // assoc/dyn/queue/real/string: generic resolver
             }
+            for e in [c.offset, c.word].into_iter().flatten() {
+                if !self.index_admits(e) {
+                    return None;
+                }
+            }
+        }
+        let mut buf = [(0u32, 0u32); 2];
+        for (i, c) in lhs.chunks.iter().enumerate() {
             let off = match c.offset {
                 None => 0,
                 Some(e) => self.index_of(e)?,
@@ -566,45 +588,65 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         })
     }
 
+    /// Would `index_of` answer for `eid` — WITHOUT running anything?
+    ///
+    /// Populates the same cache `index_of` reads, so pass 2 is a hit. It exists
+    /// because deciding and evaluating had to be separated: see `fast_offsets`.
+    fn index_admits(&self, eid: u32) -> bool {
+        self.ensure_index_kind(eid);
+        matches!(
+            self.icache.borrow().get(eid as usize),
+            Some(Some(IdxKind::Const(_))) | Some(Some(IdxKind::Prog(_)))
+        )
+    }
+
+    /// Fill `icache[eid]` if it is empty. Compiling and CONSTANT-folding only —
+    /// no program is run, which is what lets `index_admits` ask the question
+    /// without answering it.
+    fn ensure_index_kind(&self, eid: u32) {
+        if !matches!(self.icache.borrow().get(eid as usize), Some(None)) {
+            return; // already decided, or out of range (the caller sees `None`)
+        }
+        let sw = self.sched.st.wt.get(eid);
+        let kind = match self.ir.exprs.get(eid as usize) {
+            Some(sim_ir::Expr::Const { .. }) => {
+                // Fold through the SAME rule the runtime path uses, so a
+                // constant index and a computed one that lands on the same
+                // value cannot disagree. A `Const` reads no net, so this is not
+                // the speculation `fast_offsets` had to stop doing.
+                let v = self.ctx().eval(eid);
+                IdxKind::Const(crate::eval::offset_of_index_value(&v))
+            }
+            _ => match crate::native::wprog::compile(
+                self.ir,
+                &self.sched.st.wt,
+                &self.arena,
+                eid,
+                sw.width,
+                sw.signed,
+            ) {
+                Some(p) => IdxKind::Prog(std::rc::Rc::new(p)),
+                None => IdxKind::Generic,
+            },
+        };
+        self.icache.borrow_mut()[eid as usize] = Some(kind);
+    }
+
     /// One index expression's bit position, cached per ExprId.
     fn index_of(&self, eid: u32) -> Option<u32> {
-        loop {
-            if let Some(slot) = self.icache.borrow().get(eid as usize) {
-                match slot {
-                    Some(IdxKind::Const(o)) => return Some(*o),
-                    Some(IdxKind::Prog(p)) => {
-                        let v = self.run_wprog(p);
-                        return Some(crate::eval::offset_of_index_value(&v));
-                    }
-                    Some(IdxKind::Generic) => return None,
-                    None => {}
-                }
-            } else {
-                return None; // eid outside `ir.exprs`: generic (defensive)
-            }
-            let sw = self.sched.st.wt.get(eid);
-            let kind = match self.ir.exprs.get(eid as usize) {
-                Some(sim_ir::Expr::Const { .. }) => {
-                    // Fold through the SAME rule the runtime path uses, so a
-                    // constant index and a computed one that lands on the same
-                    // value cannot disagree.
-                    let v = self.ctx().eval(eid);
-                    IdxKind::Const(crate::eval::offset_of_index_value(&v))
-                }
-                _ => match crate::native::wprog::compile(
-                    self.ir,
-                    &self.sched.st.wt,
-                    &self.arena,
-                    eid,
-                    sw.width,
-                    sw.signed,
-                ) {
-                    Some(p) => IdxKind::Prog(std::rc::Rc::new(p)),
-                    None => IdxKind::Generic,
-                },
-            };
-            self.icache.borrow_mut()[eid as usize] = Some(kind);
-        }
+        self.ensure_index_kind(eid);
+        let prog = match self.icache.borrow().get(eid as usize) {
+            Some(Some(IdxKind::Const(o))) => return Some(*o),
+            // Cloned out of the borrow before running. `wscratch` is a different
+            // `RefCell`, so holding both would in fact be legal — measured — but a
+            // program that ever reached back into `icache` would deadlock, and the
+            // clone costs one refcount bump.
+            Some(Some(IdxKind::Prog(p))) => std::rc::Rc::clone(p),
+            // `Generic`, or an eid outside `ir.exprs` (defensive).
+            _ => return None,
+        };
+        let v = self.run_wprog(&prog);
+        Some(crate::eval::offset_of_index_value(&v))
     }
 
     /// Test seam for the specialized resolver — the gate compares it against
@@ -627,7 +669,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
 
     /// Run a compiled program and stamp its result as a `Value`.
     fn run_wprog(&self, prog: &crate::native::wprog::WProg) -> Value {
-        let r = prog.run(&self.arena.buf, &mut self.wscratch.borrow_mut());
+        let r = prog.run(&self.arena, &mut self.wscratch.borrow_mut());
         let mut v = Value::zeros(prog.width(), prog.signed());
         v.val[0] = r.val;
         v.unk[0] = r.unk;
@@ -936,7 +978,8 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         let sw = self.sched.st.wt.get(rhs);
         let w = lw.max(sw.width);
         // S2: the width-specialized fast path. Admission (uniform width AND
-        // sign, ≤64 bits, const indices/shift amounts — see `wprog`) is what
+        // sign, ≤64 bits, constant shift amounts, and array indices that are
+        // themselves admitted — see `wprog`) is what
         // makes it byte-identical; a decline is cached and falls through to
         // the generic evaluator, which IS the previous path.
         if let Some(prog) = self.wprog_for(rhs, w, sw.signed) {

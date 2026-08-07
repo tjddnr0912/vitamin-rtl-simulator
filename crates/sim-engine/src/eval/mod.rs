@@ -107,6 +107,24 @@ pub(crate) fn delay_ticks_of(v: &crate::value::Value, mult: u64, prec_mult: u64)
     v.to_u64().unwrap_or(u64::MAX).saturating_mul(mult)
 }
 
+/// The ARRAY-WORD index a resolved index VALUE names, as `read_net` wants it —
+/// the element number, or `u32::MAX` when there isn't one.
+///
+/// Split out for the same reason as `offset_of_index_value` below: the rule owns
+/// a DIAGNOSTIC (an out-of-range word is an E4002, not a wrapped neighbour), so
+/// it must have one spelling. `eval_core`'s `Expr::Signal` arm is the caller that
+/// defines it; `native::wprog`'s runtime element load is the second, and it
+/// reaches the decision from `(val, unk)` planes rather than a `Value` — which is
+/// exactly why the shared thing is the DECISION and not the representation.
+///
+/// `None` means the index could not be read as a clean integer at all (X/Z, or
+/// set bits above word 0). That and a value beyond `u32` both map to the
+/// sentinel: `read_net` then answers all-X and counts a report, rather than
+/// silently selecting element `v mod elems`.
+pub(crate) fn word_index_of(v: Option<u64>) -> u32 {
+    v.and_then(|x| u32::try_from(x).ok()).unwrap_or(u32::MAX)
+}
+
 /// The bit position a resolved index VALUE names — the second half of
 /// `resolve_offsets`'s `ev`, split out so a specialized evaluator can reuse the
 /// rule instead of restating it. `resolve_offsets` itself is the only reason

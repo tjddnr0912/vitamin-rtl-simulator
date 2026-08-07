@@ -223,8 +223,7 @@ impl NetArena {
                 // through the engine's own `warn_run_range` (see
                 // `NetArena::pending_range`). The engine emits here; dropping it
                 // turned an `ExitClass::HadErrors` run into a clean PASS.
-                self.pending_range
-                    .set(self.pending_range.get().saturating_add(1));
+                self.note_oob_read();
                 return false;
             }
             raw_word

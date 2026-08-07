@@ -2653,6 +2653,48 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
                 .to_string(),
         ),
         (
+            // S2 slice 4 — three statements, one per way the report count can
+            // separate the two resolvers. `m[k]` with k=99 is an ADMITTED index
+            // whose element read is out of range, which is what makes any of
+            // this reachable: before this slice an admitted index could not
+            // report at all.
+            //
+            //   1. `mem2[sel[3:0]][m[k]]` — first slot admits and reports,
+            //      second (a part-select) declines. `fast_offsets` walks
+            //      `offset` then `word`, so this is the order that made it run
+            //      one program and then give up, reporting the access twice
+            //      (once speculatively, once from the generic resolver that
+            //      follows a decline).
+            //   2. `mem2[0][m[k]]` — every slot admits, so this lands in the
+            //      `Some` arm WITH a report. Without it that arm's report
+            //      comparison is 0-vs-0 on every design and cannot fail.
+            //   3. the two-chunk concat — chunk 1 admits and reports, chunk 2's
+            //      OFFSET declines. Checking only `word` in the first pass
+            //      leaves this shape running chunk 1's program before it gives
+            //      up, so it is what holds the `offset` half of that check.
+            //
+            // No corpus design has any of the three — measured: removing the
+            // two-pass fix leaves the whole corpus green.
+            "idx_admitted_oob_then_decline",
+            "module top;\n\
+               reg [7:0] mem2 [0:3];\n\
+               reg [7:0] mem3 [0:3];\n\
+               reg [3:0] m [0:5];\n\
+               reg [7:0] sel;\n\
+               integer k, i;\n\
+               initial begin\n\
+                 for (i = 0; i < 4; i = i + 1) mem2[i] = 8'h00;\n\
+                 for (i = 0; i < 4; i = i + 1) mem3[i] = 8'h00;\n\
+                 for (i = 0; i < 6; i = i + 1) m[i] = i[3:0];\n\
+                 sel = 8'h01; k = 99;\n\
+                 mem2[ sel[3:0] ][ m[k] ] = 1'b1;\n\
+                 mem2[0][ m[k] ] = 1'b1;\n\
+                 { mem2[0][ m[k] ], mem3[0][ sel[3:0] ] } = 2'b11;\n\
+               end\n\
+             endmodule\n"
+                .to_string(),
+        ),
+        (
             "idx_zed_and_wide",
             "module top;\n\
                reg [7:0] mem [0:7];\n\
@@ -2708,17 +2750,41 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
                 }
             }
             for (lhs, _) in &sites {
+                // THE REPORT COUNT IS PART OF THE ANSWER, and this gate did not
+                // look at it. `fast_offsets` may only be a faster way to compute
+                // the same offsets — if it also emits a different number of
+                // out-of-range reports, the two resolvers are not equivalent even
+                // when every offset matches. S2 slice 4 made that reachable (an
+                // admitted index can now be out of range) and the defect it
+                // produced — a duplicate report on decline, which then ate the
+                // 8-per-run cap and dropped genuine later ones — was invisible
+                // here until this comparison existed.
+                let _ = nk.arena.pending_range.replace(0);
                 let canonical = crate::eval::resolve_offsets(&nk.ctx(), lhs);
+                let canon_reports = nk.arena.pending_range.replace(0);
                 match nk.fast_offsets_for_test(lhs) {
                     Some(f) => {
+                        let fast_reports = nk.arena.pending_range.replace(0);
                         assert_eq!(
-                            f.as_slice(),
-                            canonical.as_slice(),
-                            "{name}: state {state_i}: specialized offsets differ"
+                            (f.as_slice(), fast_reports),
+                            (canonical.as_slice(), canon_reports),
+                            "{name}: state {state_i}: specialized offsets or their \
+                             out-of-range reports differ"
                         );
                         fast += 1;
                     }
-                    None => declined += 1,
+                    None => {
+                        // A DECLINE must be side-effect-free: the generic resolver
+                        // runs afterwards in production and reports for itself.
+                        assert_eq!(
+                            nk.arena.pending_range.replace(0),
+                            0,
+                            "{name}: state {state_i}: a declined lvalue reported \
+                             out-of-range anyway — the generic resolver will report \
+                             the same access again"
+                        );
+                        declined += 1;
+                    }
                 }
             }
         }
@@ -2727,16 +2793,16 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
     // fast count of zero would make every assertion above vacuous.
     assert_eq!(
         (fast, declined),
-        (2112, 56),
-        "specialized-offset coverage moved. ⚠️ 4304 → (2112, 56) at §4.5.308: \
+        (2160, 64),
+        "specialized-offset coverage moved. ⚠️ 4304 → (2112, 56) at §4.5.308, → (2160, 64) at S2 slice 4 (one design added): \
          the declared-range fix seals index expressions in a `Concat`, which the \
          W compiler does not admit, so 44 more lvalues per state take the generic \
          resolver. Correctness is unaffected and the hot benchmarks are all \
          zero-LSB descending (untouched fast path, keccak byte-identical and \
          within noise) — but a `Concat` arm in `wprog` would win them back. \
-         The DECLINES are load-bearing too \
-         (a >64-bit index, a part-select index and a THREE-chunk concat lvalue, \
-         three per state), so a drop to zero there means the decline arm \
-         stopped being exercised"
+         The DECLINES are load-bearing too (a >64-bit index, a part-select \
+         index, a THREE-chunk concat lvalue and the two-chunk concat whose \
+         second offset declines — 16 per state), so a drop to zero there means \
+         the decline arm stopped being exercised"
     );
 }

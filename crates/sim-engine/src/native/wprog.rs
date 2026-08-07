@@ -12,9 +12,10 @@
 //! A `WProg` is compiled for an expression tree only when EVERY node is:
 //!
 //! - `Const` (Numeric) whose self width and sign equal the context's,
-//! - `Signal` reading a whole ≤64-bit integral net, or a CONSTANT in-bounds
-//!   element of a ≤64-bit-element array (bounds and 2-state-ness of the index
-//!   are checked at compile time, so no E4002 is reachable),
+//! - `Signal` reading a whole ≤64-bit integral net, a CONSTANT in-bounds element
+//!   of a ≤64-bit-element array (bounds and 2-state-ness checked at compile
+//!   time), or — since S2 slice 4 — a RUNTIME element whose index expression is
+//!   itself admitted,
 //! - `BitNot` / `BitAnd` / `BitOr` / `BitXor` / `Add` / `Sub`,
 //! - `Shl` / `Shr` / `AShr` by a 2-state constant amount — except a SIGNED
 //!   `AShr`, whose sign fill is the one shift whose bits depend on the sign,
@@ -22,8 +23,12 @@
 //!   a width and a signedness (the comparison node's own context is one
 //!   unsigned bit).
 //!
-//! Every node in a subtree carries the SAME width and the SAME signedness as
-//! its context, so **no widening, no sign extension and no truncation exists
+//! Every node carries the SAME width and the SAME signedness as its context,
+//! with TWO deliberate exceptions that introduce a FURTHER width rather than a
+//! conversion — a comparison's operands, and a runtime array index (a comparison
+//! inside an index subtree therefore gives three widths in one program) — and
+//! neither mixes: the comparison yields one bit and `LoadIdx` discards the index
+//! entirely. So **no widening, no sign extension and no truncation exists
 //! anywhere in an admitted tree** — the context-sizing rules the generic
 //! evaluator implements have nothing to do, and this module does not restate
 //! them (the classifier-must-match-lowering trap). Signedness is admitted
@@ -40,11 +45,13 @@
 //!
 //! ## Which EVALUATIONS reach this module — narrower than "the walk"
 //!
-//! THREE callers compile programs: `k_eval_for_lvalue` (the rhs of a blocking
+//! THREE call sites compile programs: `k_eval_for_lvalue` (the rhs of a blocking
 //! assign, an NBA sample, a `force`, and a cont-assign settle), `k_truthy`
 //! (branch conditions and the `wait(e)` predicate), and — since S2 slice 3 —
-//! `index_of`, which resolves an lvalue's own index expressions so
-//! `fast_offsets` can answer without the generic evaluator. Everything else
+//! `ensure_index_kind`, which resolves an lvalue's own index expressions so
+//! `fast_offsets` can answer without the generic evaluator. (That third one was
+//! `index_of` until S2 slice 4 split deciding from running; both `index_of` and
+//! `index_admits` reach it.) Everything else
 //! still evaluates generically: a comparison inside a SYSTEM TASK argument
 //! (`$display("%b", a < b)`) goes through `eval_task_arg`, and any lvalue the
 //! fast path declines goes through `eval::resolve_offsets` whole.
@@ -92,6 +99,19 @@ enum WOp {
     /// then unk plane word, resolved from the slot descriptor at compile time.
     Load {
         vi: u32,
+    },
+    /// S2 slice 4: push the ELEMENT the top of stack names. Pops the index
+    /// (already computed at ITS own self-width by the ops just emitted) and
+    /// pushes `[val, unk]` at `off + idx*2`, or all-X when the index is not a
+    /// clean in-range element — which also COUNTS a deferred out-of-range
+    /// report, because that is the arm `read_net` reports from.
+    ///
+    /// `words == 1` is an admission precondition, so the stride is 2.
+    LoadIdx {
+        off: u32,
+        elems: u32,
+        /// The ELEMENT width's mask — what an out-of-range read fills with x.
+        m: u64,
     },
     // Every op that can move bits out of its operand's range carries THAT
     // operand's mask, not the program's: since S2 slice 2 a program can hold
@@ -254,10 +274,10 @@ fn compile_node(
             if slot.width != w || slot.words != 1 {
                 return None;
             }
-            // `word` is the INDEX EXPRESSION's id, not an element number —
-            // admitted only when it is a 2-state Numeric constant in bounds
-            // (an out-of-bounds or dynamic index stays on the generic path,
-            // which is where the E4002 machinery lives).
+            // `word` is the INDEX EXPRESSION's id, not an element number. A
+            // 2-state Numeric constant in bounds folds at compile time; anything
+            // else is admitted as a RUNTIME index since S2 slice 4, which is why
+            // the E4002 machinery had to come with it (`LoadIdx` reports).
             let e = match word {
                 None => {
                     if slot.elems != 1 {
@@ -266,20 +286,64 @@ fn compile_node(
                     0u64
                 }
                 Some(weid) => {
-                    let idx = match ir.exprs.get(*weid as usize)? {
+                    match ir.exprs.get(*weid as usize)? {
                         sim_ir::Expr::Const { val } => {
                             let (iv, iu) = const_planes(ir, *val, 64)?;
                             if iu != 0 {
                                 return None;
                             }
+                            if iv >= u64::from(slot.elems) {
+                                return None;
+                            }
                             iv
                         }
-                        _ => return None,
-                    };
-                    if idx >= u64::from(slot.elems) {
-                        return None;
+                        // RUNTIME INDEX (S2 slice 4). Compiled INLINE at its OWN
+                        // self-determined width and sign — which is what the
+                        // generic path evaluates it at (`self.eval(weid)`), and
+                        // which a program is already allowed to hold alongside the
+                        // value's width (slice 2 put the mask on the op, not the
+                        // program). If the index will not compile, the whole tree
+                        // declines exactly as before.
+                        //
+                        // The reason the constant arm above still exists is not
+                        // symmetry: a constant in-bounds index proves at COMPILE
+                        // time that no E4002 is reachable, so it emits a plain
+                        // `Load` with no bounds test in the loop.
+                        _ => {
+                            // The width guard is NOT decoration: this is the one
+                            // place a NEW context width enters the recursion, so it
+                            // restates `compile`'s own entry precondition. Without
+                            // it `mask_of(0)` is 0 and a >64-bit index would be
+                            // truncated into the one-word `W` silently.
+                            //
+                            // ⚠️ An earlier version of this note claimed the seal
+                            // normalises every array-word index to exactly 32 bits,
+                            // so "no index of width != 32 arrives here". The round-2
+                            // soundness review MEASURED that false — a 2-bit
+                            // `Concat` arrives from the packed-element domain, and
+                            // `packed.rs` has three more carve-outs that return an
+                            // index unsealed. Those all decline at the `Concat`, so
+                            // there is no consequence today; what is retracted is
+                            // the reason, not the guard. Deleting this guard or
+                            // `slot.words != 1` survives the suite, which is a
+                            // statement about which widths reach here, not about
+                            // whether they may.
+                            let iw = wt.get(*weid);
+                            if iw.width == 0 || iw.width > 64 {
+                                return None;
+                            }
+                            compile_node(
+                                ir, wt, arena, *weid, iw.width, iw.signed, ops, depth, max_depth,
+                            )?;
+                            // net 0: pops the index, pushes the element.
+                            ops.push(WOp::LoadIdx {
+                                off: slot.off,
+                                elems: slot.elems,
+                                m: mask,
+                            });
+                            return Some(());
+                        }
                     }
-                    idx
                 }
             };
             let vi = slot.off + (e as u32) * 2; // words == 1: [val, unk] adjacent
@@ -311,8 +375,9 @@ fn compile_node(
                     Some(())
                 }
                 // ORDERED / EQUALITY comparisons (S2 slice 2). The result is
-                // ONE bit while the operands are `ow` bits, so this is the one
-                // node whose subtree width differs from its own — admitted only
+                // ONE bit while the operands are `ow` bits — one of the two nodes
+                // whose subtree width differs from its own (the other is a runtime
+                // array index, S2 slice 4) — admitted only
                 // when both operands already share a width AND a signedness, so
                 // no §11.8.1 mixed-sign or widening question arises here
                 // either. The comparison itself is the shared free function.
@@ -421,7 +486,8 @@ fn const_planes(ir: &SimIr, val_idx: u32, w: u32) -> Option<(u64, u64)> {
 impl WProg {
     /// Execute over the arena buffer. `scratch` is the caller's reusable
     /// stack; cleared here, capacity grown once to the compiled depth.
-    pub(crate) fn run(&self, buf: &[u64], scratch: &mut Vec<W>) -> W {
+    pub(crate) fn run(&self, arena: &NetArena, scratch: &mut Vec<W>) -> W {
+        let buf = &arena.buf;
         scratch.clear();
         scratch.reserve(self.depth);
         for op in &self.ops {
@@ -431,6 +497,24 @@ impl WProg {
                     val: buf[vi as usize],
                     unk: buf[vi as usize + 1],
                 }),
+                WOp::LoadIdx { off, elems, m } => {
+                    let i = scratch.last_mut().expect("wprog stack");
+                    // The index rule is the SHARED one — `word_index_of` is what
+                    // `eval_core`'s `Expr::Signal` arm calls, and it owns the
+                    // "x/z or beyond-u32 is not a wrap" decision. Reaching it from
+                    // planes rather than a `Value` is the whole point of this op.
+                    let clean = if i.unk != 0 { None } else { Some(i.val) };
+                    let idx = crate::eval::word_index_of(clean);
+                    if idx >= elems {
+                        arena.note_oob_read();
+                        i.val = 0;
+                        i.unk = m;
+                    } else {
+                        let vi = (off + idx * 2) as usize;
+                        i.val = buf[vi];
+                        i.unk = buf[vi + 1];
+                    }
+                }
                 WOp::Not { m } => {
                     let a = scratch.last_mut().expect("wprog stack");
                     // 0→1, 1→0, x/z→x: val flips only where definite.

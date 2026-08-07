@@ -1708,7 +1708,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             set(&mut arena, nsa, av, au);
             set(&mut arena, nsb, bv, bu);
             for (rhs, sw, prog) in &progs {
-                let w = prog.run(&arena.buf, &mut scratch);
+                let w = prog.run(&arena, &mut scratch);
                 let generic = eval_with(&ir, &wt, &rng, &arena, *rhs, sw.width, sw.signed);
                 assert_eq!(
                     (w.val, w.unk),
@@ -1775,7 +1775,7 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
                 else {
                     continue;
                 };
-                let w = prog.run(&arena.buf, &mut scratch);
+                let w = prog.run(&arena, &mut scratch);
                 let generic = eval_with(&ir, &wt, &rng_cells, &arena, eid, sw.width, sw.signed);
                 assert_eq!(
                     (w.val, w.unk),
@@ -1847,10 +1847,14 @@ fn s2_admission_census_on_the_hot_design() {
     }
     // Pinned. A DROP in `admitted` means the admission narrowed; a rise means
     // it widened — either is a deliberate act that re-pins this line.
+    //
+    // 129/3 → 131/1 in S2 slice 4: the two DYNAMIC-INDEX array reads this line
+    // used to call "the next slice's target" are now admitted, which is that
+    // slice. What is left is one `select` (a part-select), still generic.
     let declined_total: usize = declined.values().sum();
     assert_eq!(
         (admitted, declined_total),
-        (129, 3),
+        (131, 1),
         "admission census moved: {declined:?}"
     );
     assert_eq!(
@@ -1858,9 +1862,9 @@ fn s2_admission_census_on_the_hot_design() {
             .get("signal[dynamic-or-wide]")
             .copied()
             .unwrap_or(0),
-        2,
-        "the two dynamic-index array reads are the hot shapes still on the \
-         generic path — the next slice's target: {declined:?}"
+        0,
+        "a dynamic array index is admitted since S2 slice 4; a decline here means \
+         the runtime element load narrowed: {declined:?}"
     );
 }
 
@@ -1946,4 +1950,129 @@ fn s2_incremental_and_full_selfwidth_drivers_agree() {
     assert!(compared > 1_500, "too few exprs compared: {compared}");
     assert!(signed_seen > 0, "no signed expression compared");
     assert!(cf_seen > 0, "no class field compared");
+}
+
+/// S2 slice 4 — the RUNTIME element load, against the generic evaluator,
+/// **including the deferred out-of-range report count**.
+///
+/// The value is the easy half. The hard half is that this branch owns a
+/// DIAGNOSTIC: `read_net`'s out-of-range arm counts an E4002 (`Severity::Error`
+/// → exit 1), and a specialized load that returned the right all-X while
+/// forgetting to count would turn a design whose index walks past a memory from
+/// FAIL into PASS with every printed byte identical. So the comparison is
+/// `(val, unk, reports)`, not `(val, unk)` — which is why both sides drain the
+/// counter around each evaluation.
+///
+/// COVERAGE, stated precisely rather than called "exhaustive": the index net is
+/// 32-bit, so its 4-state space is 2^64 and no sweep is exhaustive over it. What
+/// is exhaustive is the LOW NIBBLE — all 256 `(val, unk)` pairs on bits 3:0 with
+/// the rest zero — which covers every in-range element (0..5), every clean
+/// out-of-range one (6..15), and every partial/complete unknown in the bits that
+/// decide the element. The classes the nibble cannot reach are then enumerated:
+/// bits set above the nibble, exactly `u32::MAX` (which is also what a negative
+/// `integer` index is in bits), `2^31`, an unknown confined to the HIGH bits, z,
+/// and x. Those cover every REACHABLE arm of `word_index_of` and of
+/// `idx >= elems` — `u32::try_from` FAILING is not among them, because the seal
+/// caps an admitted index at 32 bits.
+///
+/// The array has SIX elements on purpose — a power of two would let a masking
+/// bug read as correct.
+///
+/// ⚠️ The index is `integer` (32-bit) because a NARROWER one does not reach this
+/// branch at all: the §4.5.310 index seal wraps it in a `Concat` to widen it, and
+/// `wprog` has no `Concat` arm (a separate, already-queued S2 item). So this test
+/// covers the shape real RTL uses — a loop variable — and not every shape a user
+/// can write; the narrow ones decline to the generic path, which is correct.
+#[test]
+fn s2_wprog_runtime_element_load_matches_generic_eval() {
+    let src = "module top;\n\
+       reg [3:0] m [0:5];\n\
+       integer k;\n\
+       wire [3:0] e1; assign e1 = m[k];\n\
+       wire [3:0] e2; assign e2 = m[k] ^ m[k];\n\
+       wire [3:0] e3; assign e3 = m[k] & 4'hF;\n\
+       wire       c1; assign c1 = m[k] == 4'h3;\n\
+     endmodule\n";
+    let ir = build(src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+
+    let (mut arr, mut kn) = (u32::MAX, u32::MAX);
+    for (i, nv) in ir.nets.iter().enumerate() {
+        if nv.array_len == 6 && arr == u32::MAX {
+            arr = i as u32;
+        } else if nv.array_len <= 1 && nv.width == 32 && kn == u32::MAX {
+            kn = i as u32;
+        }
+    }
+    assert!(arr != u32::MAX && kn != u32::MAX, "design shape changed");
+    for e in 0..6u32 {
+        arena.set_elem(arr, e, &[u64::from(e) + 9], &[0]);
+    }
+
+    // Every rhs of the design, compiled. All four MUST admit, or the sweep is
+    // measuring the generic path against itself.
+    let mut progs = Vec::new();
+    for ca in &ir.cont_assigns {
+        let lw = arena.lvalue_width(&ir, &ca.lhs);
+        let sw = wt.get(ca.rhs);
+        let w = lw.max(sw.width);
+        let p = crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, w, sw.signed)
+            .expect("a runtime element load must be admitted since S2 slice 4");
+        progs.push((ca.rhs, w, sw.signed, p));
+    }
+    assert_eq!(progs.len(), 4, "design shape changed");
+
+    // The exhaustive nibble, then the classes it cannot reach.
+    let mut cases: Vec<(u64, u64)> = (0u64..256).map(|p| (p & 0xF, p >> 4)).collect();
+    cases.extend([
+        (0x10, 0), // clean, above the nibble
+        // u32::MAX — the sentinel's own value, and also what a NEGATIVE
+        // `integer` index is in bits. One case, not two: an earlier version
+        // listed the same pair twice and called the set "seven".
+        (0xFFFF_FFFF, 0),
+        (0x8000_0000, 0),           // 2^31
+        (0, 0xFFFF_FFF0),           // unknown confined to the HIGH bits
+        (0xFFFF_FFFF, 0xFFFF_FFFF), // all z
+        (0, 0xFFFF_FFFF),           // all x
+    ]);
+
+    let rng = crate::state::RngCells::default();
+    let mut scratch = Vec::new();
+    let (mut compared, mut saw_oob, mut saw_inrange) = (0usize, 0usize, 0usize);
+    for (kv, ku) in cases {
+        {
+            let s = arena.slots[kn as usize];
+            arena.buf[s.off as usize] = kv;
+            arena.buf[s.off as usize + 1] = ku;
+        }
+        for (rhs, w, signed, prog) in &progs {
+            let _ = arena.take_deferred_range_reports(); // start from zero
+            let got = prog.run(&arena, &mut scratch);
+            let got_reports = arena.take_deferred_range_reports();
+
+            let want = eval_with(&ir, &wt, &rng, &arena, *rhs, *w, *signed);
+            let want_reports = arena.take_deferred_range_reports();
+
+            assert_eq!(
+                (got.val, got.unk, got_reports),
+                (want.val[0], want.unk[0], want_reports),
+                "rhs {rhs}: k=({kv:#x},{ku:#x})"
+            );
+            compared += 1;
+            if want_reports > 0 {
+                saw_oob += 1;
+            } else {
+                saw_inrange += 1;
+            }
+        }
+    }
+    assert_eq!(compared, (256 + 6) * 4);
+    // ANTI-VACUITY on BOTH arms: a sweep that never went out of range would not
+    // test the report at all, and one that never stayed in range would not test
+    // the load.
+    assert!(
+        saw_oob > 0 && saw_inrange > 0,
+        "{saw_oob} oob / {saw_inrange} in"
+    );
 }
