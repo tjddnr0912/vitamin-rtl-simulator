@@ -347,6 +347,42 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.311 ③층 S3a — 호출 흡수, 그리고 한 결함 클래스를 leaf 에서 primitive 까지 (2026-08-07, branch feat-s3a-frame-call-absorption, format 26 불변) ✅
+
+**한 줄** — `NetArena::buildable` 의 blanket `func_table` 거부를 **측정된 부분집합**으로 좁히고 `NativeKernel` 을 **복합 `NetReader`** 로 만들어 호출을 엔진 프레임 실행기에 **위임**했다(재진술 0) → `bench/keccak` **호출형·배열형이 네이티브로 실행되고 VM 과 바이트 동일**. ⭐⭐ 그리고 적대 리뷰 **6라운드**가 곁가지 pre-existing 결함 하나를 **leaf 에서 primitive 까지** 몰아냈다.
+
+**본체(S3a)**
+
+- `native::frames::frames_admitted` = admission. byte-identity 논증은 **"본문이 자기 프레임 창 밖 넷을 안 부른다"** — 그러면 `run_frame_call` 이 모듈 스토어를 아예 안 만지므로 위임이 구조적으로 옳다. 거부 행마다 자기 이름(task·모듈 넷 참조·systask 인자 호출·delayed CA 호출·모듈 바디가 프레임 넷 참조·malformed 사이드카 3종).
+- `impl NetReader for NativeKernel` — 모듈 넷은 아레나, 프레임 슬롯은 `SimState`, `eval_call`/`formal_width`/`formal_is_string`/`resolve_virtual_call` 은 위임. `ctx()` 가 `self` 를 넘기므로 **호출부 변경 0**.
+- `NetArena::eval_call` 은 `None`(X) 대신 **panic** — seam 열거가 놓친 자리가 조용한 X 가 아니라 게이트에서 시끄럽게 죽도록. ~875 네이티브 런에서 한 번도 안 터졌다.
+- ⚠️ **속도는 안 샀다**: native/vm = 1.41×(flat)·1.14×(호출형)·1.06×(배열형)·**0.83×(picorv32)**. verilator 대비 54×(flat)~722×(호출형). 호출 본문이 여전히 인터프리터 프레임 실행기에서 돈다 → **flat↔호출형 13× 가 통째로 S3(바디 코드젠)의 표적**이고, 이제 세 변종 전부에서 잴 수 있다(그것이 이 슬라이스의 측정 가치).
+- ⚠️ 실측이 계획을 두 번 정정: **corpus 72 설계에 서브루틴이 0개**(전 검증이 전용 설계) · **비-`automatic` 모듈 함수도 본문에 제어 흐름이 있으면 프레임이 된다**(내 프로브가 직선 본문이라 "인라인된다" 고 오판 → static 슬랩 경로 커버리지 0 이었다).
+
+**⭐⭐ 곁가지: 문자열→packed 변환, 6라운드에 걸친 root cause 추적**
+
+라운드마다 **발견한 자리에서** 고쳤고, 그래서 라운드마다 다음 인스턴스가 나왔다:
+
+| 라운드 | 고친 자리 | 다음이 찾은 것 |
+|---|---|---|
+| 1 | (본체) `eval_call` 이 지연 범위보고를 안 비워 E4002 가 콜리 출력 뒤로 | — |
+| 2 | intercept(`frame_rhs_value`)가 목적지 net kind 로 게이트 | 폭이 안 맞음 |
+| 3 | write funnel(`frame_or_class_write`) | equal-width + **부호** |
+| 4 | 명시적 `is_str` clear | 두 번째 레인(lifted task) |
+| — | `frame_write_lvalue` | (자체 감사) 인자 바인딩 |
+| 5 | 공유 `bind_formal` | **모듈 레인**(class field·dyn·assoc) |
+| 6 | **`Value::resize` 의 equal-width early return** | 제품 결함 0 |
+
+- 뿌리: `Value::resize` 가 폭이 바뀌는 두 경로에서만 `is_str` 를 지우고 **early return 에서 안 지웠다**. 그 한 칸이 ⓐ bare `%s` 가 raw 바이트 ⓑ 하류 `resize_keep_sign` 이 같은 플래그에서 short-circuit 해 **부호 미각인** 을 만들었다(`integer p = s`, `s==32'hf0f1f2f3` → 프레임 4042388211 vs 모듈·iverilog −252579085).
+- ⭐⭐ **내가 "등가 뮤테이션"이라 문서화한 것이 사실은 수정이었다** — 라운드 2에서 그 뮤테이션이 생존한 건 중복이 아니라 **결함의 증거**였고 정확히 반대로 읽었다. 두 렌즈가 독립으로 잡았다.
+- ⭐ **보정 clear 를 소비자에 두면 서로를 가린다** — 셋 다 개별 뮤테이션으로 안 죽었다(실측). 규칙을 primitive 한 곳에 두고 소비자 보정을 제거하니 전부 kill.
+- 오라클: iverilog 는 packed `$sformatf` 목적지를 거부하지만 **같은 §6.16 규칙의 합법 철자**(`reg [15:0] p = {"ab","cde"}` → `de`/25701)는 받는다 → **외부 앵커 확보**("오라클 없음"이라던 내 헤더도 정정).
+- 부수 수정: `%c`·UTF-8, `loc[i:0]`, static 함수 로컬 E3010, 프레임 배열 OOB 무진단 → **ROADMAP §2/§3 기록**.
+
+**게이트** — 5214 tests green(+31) · clippy/fmt clean · staged==one-shot · PRE↔POST **172설계 ×2모드에서 차이 46 전부 문자열 설계**(문자열 없는 diff 0) · 뮤테이션 **누적 30+ 중 kill 24·생존 6 전부 도달불가/등가 사유 실측 기록** · 차분 렌즈 누적 **2000+ 설계 0 발산** · 모듈 레인 **124설계 ×3백엔드 0 변화**.
+
+**⚠️ 이번 반복의 진짜 교훈은 스코프다** — 본체는 라운드 1에 CLEAN 이었고 2~6은 곁가지였다. **pre-existing 이 서로 다른 경로에 2건 이상이면 인스턴스가 아니라 CLASS 이고, 그때는 공유 primitive 를 먼저 찾거나 슬라이스를 분리해야 한다**(LOOPROMPT §4·§8 에 반영). 리뷰 대기가 반복 시간의 ~30%(2.5h/9h)였다.
+
 #### 4.5.310 배열-워드 인덱스: 두 번째 오라클이 "vita 가 앞서 있다" 를 반증했다 (2026-08-06, branch feat-array-word-index, format 26 불변) ✅
 
 **한 줄** — unpacked 배열의 워드 인덱스를 **자기결정 식으로 평가한 뒤 32비트 정수로 읽도록** 고쳤다. 퍼널은 하나(`seal_index_unsigned`), 원인은 셋이었고, **verilator 5.050 을 두 번째 오라클로 들인 것이 결정을 뒤집었다**.

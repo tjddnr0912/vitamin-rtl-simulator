@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S1d-4 착수 (…S1d-2·S1d-3 ✅)** | 2 | 실측 | ⭐⭐ **S1d-3 완료(2026-08-03, §4.5.290)** — **wake 결정**(8규칙 teeth · 두 관측 granularity). 리뷰가 **조합 프로세스 전체 미등록**을 잡았고, **등록만 고치면 게이트가 깨지는**(t0 arm 상태가 짝) 구조였다. 다음 = **S1d-4 리전 큐·델타·NBA·in-body 웨이터**(⚠️ `busy` 는 적격 설계에서 실제로 참) → corpus **stdout+VCD 바이트 동일**. 정본 = **[preview/21 §5 S1 분해 + §7](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S3a ✅(2026-08-07), 다음 = S3 바디 코드젠** | 2 | 실측 | ⭐⭐ **S3a 완료(§4.5.311)** — 호출 흡수: `native::frames` admission + `NativeKernel` 복합 리더 위임. keccak 호출형·배열형 네이티브·바이트 동일. ⚠️ **속도는 안 샀다**(1.14×·picorv32 0.83×) — 본문이 인터프리터 프레임 실행기에서 도므로 **flat↔호출형 13× 가 S3 본체의 표적**. 정본 = **[preview/21 §5 S3 + §7.3](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -163,6 +163,8 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **CA 가 걸린 wire 에 `release` 하면 강제값이 남는다**(pre-existing·세 백엔드 동일·§4.5.307 soundness 부수): `assign w=a; force w=8'h22; release w;` 후 iverilog `11`(CA 값 복귀) / vita `22`. IEEE §9.3.2 는 release 후 wire 가 **드라이버 값으로 즉시 복귀**한다고 한다 → vita 가 틀리다. 네이티브는 `force_release` 행으로 거부 중이라 ③층 무관.
 - **`ua[u8]` 한 칸에서 두 오라클이 우연히 겹친다**(pre-existing·PRE==POST·§4.5.310 그라운딩 실측·**합의 없음**): `reg [7:0] ua[-2:-9]; reg [7:0] u8 = 250; ua[u8]` 를 iverilog 도 verilator 도 `ua[-6]` 에 놓는데(250 을 i8 로 읽은 자리) vita 는 드롭한다. 그러나 **판별 실험이 두 오라클을 갈랐다** — 같은 형태를 폭 4 로 주면(`reg [3:0] u4 = 13`, i4 로 −3 = 범위 안) **iverilog 는 드롭하고 verilator 는 착지**하며, 폭 16 에서는 둘 다 드롭한다. 즉 "인덱스를 자기 폭에서 부호로 읽는다" 는 iverilog 를 설명하지 못하고(폭 4 반증), vita 는 폭 4·16 에서 iverilog 와 일치한다. 네 측정을 전부 설명하는 규칙을 찾기 전에는 손대지 않는다.
 - **배열-워드 인덱스의 오라클 폭 규칙이 32 가 아니다**(§4.5.310 soundness 실측 · pre-existing · PRE==POST): `reg [7:0] a1[-2:-3]; reg [3:0] u4 = 4'd13; a1[u4]` 를 iverilog 도 verilator 도 `a1[-3]` 에 놓는데 vita 는 드롭한다. 14칸을 설명하는 규칙은 인덱스를 **`W = max(자기폭, F(lo))` 에서 2의 보수로 읽는다** 이고 `F` 는 선언 하한만의 함수다(실측: lo=−3 → 4, lo=−9 → 6, lo=−65 → ≥9 = `bits(|lo|)+2` 와 일치). §4.5.310 은 좁은 인덱스를 **32 로** 확장하므로 그 랩을 지운다 — 폭 4·13 이 드롭되는 이유가 `W`=6 이라는 것도 그 규칙이 설명한다. 채택하려면 `F` 를 세 번째 오라클로 확인해야 한다(verilator 의 폭 4·16 착지는 2의 거듭제곱 마스킹이라 근거가 못 된다).
+- **비상수 part-select 바운드를 조용히 1비트로 접는다**(pre-existing·PRE==POST·오라클 ✓·§4.5.311 soundness 발굴): `reg [31:0] loc; loc[i:0]` (i 는 런타임 정수)를 vita 는 폭을 못 접고 **1비트 select 로 떨어뜨려 답을 낸다**(`loc=255, i=3` → `r=1`, exit 0). iverilog 13 은 거부한다(*"Part select expressions must be constant integral values"*). IEEE §11.5.1 도 part-select 바운드를 상수로 요구하므로 **loud 가 정답**이다. ③층은 이 형태를 이미 거부한다(`native::frames` 가 `Select.width` 간선을 걷는다 — 그래서 이 결함의 존재가 그 워크의 teeth 이기도 하다).
+- **`%c` 가 바이트가 아니라 UTF-8 을 낸다**(pre-existing·세 백엔드 동일·오라클 ✓·§4.5.311 리뷰 부수): `$display("%c", 240)` 가 vita `c3 b0`(2바이트) / iverilog `f0`(1바이트). `$sformatf` 로 문자열을 지으면 **한 바이트씩 길어지고**, 그 문자열을 packed 목적지에 넣으면 값까지 달라진다(같은 뿌리로 `$sformatf("%s", <비-ASCII 바이트>)` 는 U+FFFD 를 낸다). 포맷 엔진이 `char` 가 아니라 **바이트**를 써야 한다 — 렌더 경로 전수 감사가 필요한 별도 슬라이스.
 - **동적/큐 원소 인덱스는 이 퍼널을 안 지난다**(§4.5.310 soundness 실측·pre-existing): `fx[bg]` 는 52 인데 `dq[bg]` 는 `x`+W4020(64비트 인덱스·두 오라클 모두 52). seal 지점은 `array_geom.rs` 두 곳뿐이고 dyn/queue 원소 접근은 그리로 안 온다.
 - **sized signed localparam 인덱스가 loud 다**(§4.5.310 soundness 실측·pre-existing·**두 오라클 일치**): `localparam signed [7:0] PN = -8'sd3; ma[PN]` 이 iverilog·verilator `37` / vita `x`+E4002. 리터럴 쌍둥이(`ma[-8'sd3]`)와 unsized `localparam PU = -3` 은 정상이고, `$unsigned(PN)` 이 vita 는 **253** iverilog 는 `-3` 이라 뿌리는 인덱스가 아니라 **sized signed param 의 부호**다. §4.5.310 의 상수 carve-out 이 이 자리를 동결한다.
 - **인덱스 위치의 함수 부작용이 사라진다**(§4.5.310 soundness 부수·pre-existing·PRE==POST): `ma[fn(0)]` 에서 `fn` 이 모듈 넷을 쓰면 vita 는 `calls 0` / iverilog `calls 1`, exit 0.
@@ -251,6 +253,8 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 - **양 끝이 음수인 ASCENDING 팩트 범위가 폭 1 로 클램프**(`reg [-33:-2]` → `$bits` vita 1 / iverilog 32 · **loud**: `W3056`). 하강 쌍둥이 `[-2:-33]` 와 혼합 `[3:-2]` 는 정상이라 갭은 그 한 조합뿐. §4.5.308 differential 이 잔차 308행의 원인으로 실측했고, 그 행들은 폭이 틀려서지 정규화 때문이 아니다(`array_geom.rs` 의 `allow_neg_lsb` opt-in 경로).
 - **`$value$plusargs` 의 `%0d` 등 폭-지정 스펙은 과잉거부**(§4.5.304 differential 기록): iverilog 는 `%0d` 를 받는다(값 5 기록), vita 는 E3009 loud. 스펙 파서가 폭 수식자를 벗기면 끝 — 단 `exec::plusargs::effect` 의 conv 문자 추출과 **한 철자**여야 한다(거부가 풀리면 `'0'` 이 %s 로 읽히는 함정이 정본 술어에 기록돼 있다).
+- **static 함수의 로컬을 정의-대입 前에 읽으면 E3010**(§4.5.311 그라운딩 발굴·오라클 ✓ iverilog 는 X 로 실행): `function integer f(input integer x); integer s; begin s = s + x; f = s; end` 이 `undeclared net/variable top.s` 로 거부된다. 뿌리는 블록-로컬 flatten 모델(definite-assignment 를 요구)이고, **본문에 제어 흐름이 하나라도 있으면 프레임이 되어 정상 동작한다** — 즉 갭은 "직선 본문 + 읽고-쓰는 static 로컬" 조합뿐. (③층 S3a 가 이 비대칭에 걸려 static 슬랩 경로를 "도달 불가" 로 오판했다.)
+- **프레임-로컬 배열의 범위 밖 읽기에 E4002 가 없다**(§4.5.311 differential 발굴·값은 iverilog 와 일치): 모듈 배열의 같은 접근은 E4002+exit 1 인데 프레임 로컬은 조용히 X 를 내고 exit 0. 프레임 로컬 배열은 **packed 슬롯**이라 array-word 개념이 없어서 진단이 구조적으로 안 붙는다 — elaborate 가 슬롯의 원래 기하를 남겨야 한다. vita 내부 비일관(모듈 vs 프레임)이 판정 근거다.
 - **겹침 CA 의 E3001 일부는 iverilog 가 해상하는 형태**(§4.5.303 경계 실측): 같은-범위 part-select 쌍(`assign z8[3:0]=…` ×2)·delayed+plain 겹침을 iverilog 는 비트 단위 wire 해상으로 받는다(`zzzz0xx1`). vita 는 E3001 loud — 정직하나 미지원. 비트 단위 드라이버 맵(§2 ⓑ 와 같은 인프라)이 선결.
 - **`specify … endspecify` 블록 수용** — `specparam` 은 §4.5.284 에서 모듈 레벨 상수로 받게 됐지만 **블록 자체는 아직 E2002** 다. 리포터의 우회는 이제 "블록을 지우되 `specparam` 은 키워드째 살린다"로 단순해졌으나, 벤더 모델(EFUSE·표준셀)이 `specify` 를 갖고 오는 것은 흔하므로 스크립트 없이 받는 것이 목표. **범위** = 블록 안의 `specparam` 을 모듈 아이템으로 hoist + 경로지연/타이밍체크는 버린다. ⚠️ **선행 결정 하나**: 버린다는 사실을 말할 창구가 없다 — 파서에 경고 채널이 없고(`hdl_parser::parse` 는 에러 채널만), 조용히 버리면 `$setup` 등이 **loud→silent 하강**이다. `ModuleItem` 에 마커 variant 를 두고 elaborate 가 `W3056` 을 내는 것이 현재 후보(`.vu` 해시 re-pin, format 불변).
 - **이벤트 컨트롤의 계층 참조 실지원** — `always @(`TOP.a_uVDC.RTRIM_I)`(파운드리 ADC 모델). **읽기는 이미 동작**하므로 sensitivity 등록만의 문제다. §4.5.284 는 진단만 정확하게 했다(EVENT CONTROL 이라고 말하고 동작하는 우회를 제시). **범위** = `deferred_hier` 와 같은 형태의 지연 해소가 필요한데, 패치 대상이 `ir::Expr::Signal` 의 net 슬롯이 아니라 **`Process.sensitivity.edges[i].net`** 이고 그 프로세스는 아직 push 되지 않았다 → (proc_idx, edge_idx) 를 예약해 두고 instance 확정 후 패치하는 새 lane.
@@ -364,7 +368,21 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 착수 (개정 4, 2026-08-03) — T0·S0·S1a~c·S1d-1~3·S1d-4a~4c(2d 포함) ✅ → **S1d-4d** … S6
+### 5.0 ★★ ③층 — T0·S0·S1(전부)·S2(3슬라이스)·**S3a** ✅ → **S3 바디 코드젠** … S6
+
+> **⭐⭐ S3a 완료 (2026-08-07 · §4.5.311) — 호출 흡수.** `NetArena::buildable` 의 blanket
+> `func_table` 거부가 **측정된 부분집합**(`native::frames`)이 되고 `NativeKernel` 이 **복합
+> `NetReader`** 로서 호출을 엔진 프레임 실행기에 위임한다(재진술 0). `bench/keccak` **호출형·
+> 배열형이 네이티브·바이트 동일** → ②→③ 재측정이 세 변종 전부에서 가능.
+>
+> **⚠️ 다음 단계가 진짜 코드 생성이고 아직 0%다.** 지금의 `--backend native` 는 기계어를 안
+> 만든다(전용 저장 + 폭 특수화 평가기 = 세 번째 인터프리터). 실측 native/vm =
+> **1.41×**(flat) · **1.14×**(호출형) · **0.83×**(picorv32 — 더 느리다) · verilator 대비
+> **54×~722×** 뒤짐. S3a 는 **행을 열었을 뿐 호출 비용은 안 샀다** — 본문이 여전히 인터프리터
+> 프레임 실행기에서 돌아 **flat↔호출형 13× 가 통째로 S3 의 표적**이다.
+>
+> **S3b(잔여)** = 프레임이 모듈 넷을 읽게 — `(st, nets)` 헬퍼에 split 리더 배선 →
+> `k_dispatch_systask` · delayed CA · task 프레임. 거부 사유는 `native::frames` 가 각자 이름으로 말한다.
 
 **판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
 
