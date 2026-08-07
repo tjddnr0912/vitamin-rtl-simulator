@@ -70,7 +70,7 @@ impl diag::LogSink for MergedSink {
 ///
 /// Returns `Err(reason)` when the third gate layer refuses — the caller counts
 /// those rather than letting them pass silently as agreements.
-fn agree(src: &str, name: &str) -> Result<(), &'static str> {
+pub(super) fn agree(src: &str, name: &str) -> Result<(), &'static str> {
     let (ir, opts) = build_with_opts(src);
     crate::native::run::runnable(&ir, &opts)?;
 
@@ -1423,7 +1423,7 @@ endmodule
         ),
         (
             "wait fork",
-            "a `wait fork`, or a `fork`/subroutine-call body whose sidecar was lost",
+            "a `wait fork`, or a subroutine CALL STATEMENT (task / output formals)",
             r#"
 module top;
   reg [7:0] n = 8'd0;

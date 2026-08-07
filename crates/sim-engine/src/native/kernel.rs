@@ -234,6 +234,16 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// and a runaway combinational body would have spun forever instead of
     /// reporting `F4027`. The gate caught it by comparing against the engine's.
     pub(crate) max_body_steps: u64,
+    /// S3a: does this design have subroutine FRAMES at all?
+    ///
+    /// The composite `NetReader` below has to ask "is this net frame-local"
+    /// before every read, and `SimState::frame_local` is a full-length `Vec`
+    /// that is all-false when there are none. Hoisting the ONE question that
+    /// answers a whole design keeps the leaf load off the hot path for the
+    /// designs that have no frames — which is every one tier-3 ran before this
+    /// slice. Derived from `func_table`, the same table
+    /// `frames_admitted`/`build_func_routing` read.
+    pub(crate) has_frames: bool,
     /// The NBA queue in engine shape. S1d-4c-1 gave it the drain; regions and
     /// the delta loop are 4c-2.
     pub(crate) nba: Vec<NbaUpdate>,
@@ -452,12 +462,14 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         arena
             .ch
             .install_ca_deps(&sched.st.ca_of_net, ir.cont_assigns.len());
+        let has_frames = !sched.st.func_table.is_empty();
         NativeKernel {
             ir,
             arena,
             sched,
             class_new_sites,
             max_body_steps,
+            has_frames,
             nba: Vec::new(),
             nba_seq: 0,
             delayed_nba: BTreeMap::new(),
@@ -689,11 +701,32 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// ends the run. `now` is unchanged across that span, so the timestamp is
     /// right either way.
     pub(crate) fn drain_range_diags(&mut self) {
-        let n = self.arena.pending_range.replace(0);
+        self.drain_range_reports();
+        self.drain_vcd();
+    }
+
+    /// The RANGE half of the drain, on `&self` — one spelling, TWO callers
+    /// (`drain_range_diags` and `eval_call`; the counted number, not an estimate —
+    /// an earlier version of this line said three).
+    ///
+    /// It is split out because the second caller is on the READ path: `eval_call`
+    /// has to report what the ARGUMENT reads earned before the callee starts
+    /// printing, and it only holds `&self`. Going through the `NetReader` method
+    /// rather than `arena.pending_range` directly is deliberate — that method IS
+    /// this store's answer, and routing every drain through it is what keeps the
+    /// override load-bearing instead of decorative.
+    ///
+    /// ⚠️ A third site drains the SAME counter without going through here:
+    /// `format_args_str_with`'s guard calls `NetReader::take_deferred_range_reports`
+    /// on whatever reader it was handed. That is why the override, not this
+    /// function, is the single channel — and why deleting the override would now
+    /// silence out-of-range diagnostics on the whole backend rather than only
+    /// reorder them. The blast radius grew with this slice; saying so is the point.
+    pub(crate) fn drain_range_reports(&self) {
+        let n = crate::eval::NetReader::take_deferred_range_reports(self);
         for _ in 0..n {
             self.sched.st.warn_run_range("array word index");
         }
-        self.drain_vcd();
     }
 
     /// Write out the VCD value-changes the arena recorded, through the ENGINE's
@@ -756,10 +789,10 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// is measured (the exhaustive width-4 battery and the pinned corpus
     /// sweep), not structural — the admission plus those anchors are what
     /// stand where "by construction" stood.
-    pub(crate) fn ctx(&self) -> crate::eval::EvalCtx<'_, NetArena> {
+    pub(crate) fn ctx(&self) -> crate::eval::EvalCtx<'_, Self> {
         crate::eval::EvalCtx {
             ir: self.ir,
-            nets: &self.arena,
+            nets: self,
             now: self.sched.st.now,
             wt: &self.sched.st.wt,
             time_mult: self.sched.st.cur_time_mult,
@@ -767,12 +800,131 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             plusargs: &self.sched.st.plusargs,
         }
     }
+
+    /// Is `net` a subroutine frame slot — i.e. does its value live in the
+    /// activation window rather than in an arena slot?
+    ///
+    /// `has_frames` short-circuits the whole question for a design with no
+    /// subroutines; `frame_local` is the ENGINE's table, built once by
+    /// `build_func_routing` from the same `func_table` the gate reads, so the
+    /// two backends cannot disagree about which nets are frame slots.
+    #[inline]
+    pub(crate) fn is_frame_local(&self, net: u32) -> bool {
+        self.has_frames
+            && self
+                .sched
+                .st
+                .frame_local
+                .get(net as usize)
+                .copied()
+                .unwrap_or(false)
+    }
+}
+
+/// S3a — **the tier-3 read path is a COMPOSITE, and the split is the store
+/// boundary.**
+///
+/// Module nets come from the arena; frame slots come from the engine's frame
+/// window/slab, which is not part of either net store. Calls delegate to the
+/// engine's frame executor (`SimState::run_frame_call`) rather than being
+/// restated — the whole S3a argument, and `native::frames::frames_admitted` is
+/// what makes it byte-identical: an admitted subroutine body names no net
+/// outside its own window, so nothing inside the call reaches the flat store
+/// this backend leaves untouched.
+///
+/// Everything not overridden keeps `NetReader`'s default, and the reason is the
+/// same one `NetArena`'s impl gives: an ELIGIBLE design has no heap kinds, no
+/// class handles and no `real`, so the defaults are unreachable by construction.
+///
+/// ⚠️ That argument does NOT cover `resolve_virtual_call`, and an earlier version
+/// of this sentence claimed "the three overrides are exactly the three questions a
+/// FRAME asks" while `eval_core` asks a FOURTH one on the same reader, one line
+/// earlier. It is forwarded below, and what actually keeps it unreachable is the
+/// S0 `class` row rather than anything about this store.
+impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
+    fn read_net(&self, net: u32, word: Option<u32>) -> Value {
+        if self.is_frame_local(net) {
+            return self.sched.st.read_net(net, word);
+        }
+        self.arena.read_net(net, word)
+    }
+
+    /// The leaf fast path is the ARENA's answer (today: the `NetReader` default
+    /// `None`, i.e. no fast path). A frame slot must not take it either —
+    /// `SimState`'s own implementation bails on `frame_local` for the same
+    /// reason — so the composite simply never offers one.
+    fn read_scalar_words(&self, _net: u32, _w: u32, _ctx_signed: bool) -> Option<(u64, u64)> {
+        None
+    }
+
+    fn take_deferred_range_reports(&self) -> u32 {
+        // The ARENA's counter, not the engine's: `SimState` reports at the
+        // access, so it has none, and draining a second source here would double
+        // count nothing while silently dropping the arena's.
+        //
+        // Both of THIS file's drains go through `drain_range_reports`, which calls
+        // this method — so the override is what ORDERS an out-of-range report, not
+        // bookkeeping. (`format_args_str_with`'s guard is a third drain of the same
+        // counter and calls this method directly; see `drain_range_reports`. An
+        // earlier version of this line said "every drain goes through
+        // `drain_range_reports`", which that guard contradicts.)
+        self.arena.take_deferred_range_reports()
+    }
+
+    /// ⚠️ **The drain is not decoration — it is the ORDER.**
+    ///
+    /// The engine reports an out-of-range read AT THE ACCESS
+    /// (`SimState::read_net` → `warn_run_range`); this store can only COUNT, and
+    /// somebody holding the sink reports for it. `eval_core`'s `Expr::Call` arm
+    /// evaluates every actual and THEN calls this, so an argument that read past
+    /// a memory leaves a pending count on the way in — and `run_frame_call`
+    /// prints through the sink. Without this drain the callee's `$display` comes
+    /// out BEFORE the E4002 its own argument earned, while the VM emits them the
+    /// other way round: same values, same exit class, a different stream.
+    ///
+    /// Measured on `function f(x); $display(...); endfunction  r = f(mem[9]);` —
+    /// the adversarial soundness review of S3a found it, and it is the same class
+    /// §4.5.298 closed for the module path (the format engine drains because it
+    /// is the one place holding both the reader and the sink). S3a opened a
+    /// SECOND order-visible seam; this is that seam's drain.
+    fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
+        self.drain_range_reports();
+        self.sched.st.eval_call(func, args)
+    }
+
+    /// N7 virtual dispatch, forwarded for the same reason `eval_call` is:
+    /// `eval_core` asks THIS reader for the target immediately before asking it
+    /// to run the call, so a composite that answers one and defaults the other
+    /// would dispatch a virtual method to its STATIC target — silently, unlike
+    /// the arena's loud `eval_call`.
+    ///
+    /// ⚠️ Unreachable today, and by a DIFFERENT gate than the one the impl doc
+    /// cites: `class_calls` is counted by the S0 `class` row, so a design with a
+    /// virtual call is refused before eligibility, not merely absent from the
+    /// arena. Forwarded anyway — a one-line correct answer beats a silent wrong
+    /// one the day that row moves. (Found by the S3a differential review.)
+    fn resolve_virtual_call(&self, call_eid: u32, static_fid: u32, args: &[Value]) -> u32 {
+        self.sched
+            .st
+            .resolve_virtual_call(call_eid, static_fid, args)
+    }
+
+    fn formal_width(&self, func: u32, i: usize) -> Option<(u32, bool)> {
+        self.sched.st.formal_width(func, i)
+    }
+
+    fn formal_is_string(&self, func: u32, i: usize) -> bool {
+        self.sched.st.formal_is_string(func, i)
+    }
 }
 
 impl Kernel for NativeKernel<'_, '_, '_> {
     #[cfg(feature = "jit")]
     fn k_nets(&self) -> &dyn crate::eval::NetReader {
-        &self.arena
+        // `self`, not `&self.arena` (S3a): whoever asks for "this kernel's
+        // reader" must get the composite, or a call it evaluates hits the
+        // arena's loud `eval_call` — the arena alone is half a store.
+        self
     }
 
     // ── READ: store-backed, shared rules ──
@@ -1224,11 +1376,15 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // funnel-outside write — its value stores through the ordinary lvalue
         // path once rendered; what it needed was the format engine.
         //
-        // Nothing reaches it yet: both this and the string CONCAT that elaborate
-        // desugars to the same node require a `string` destination, which
-        // `NetArena::build` refuses. It is wired rather than left panicking so the
-        // remaining blocker is described accurately — that blocker is STORAGE
-        // (S3), not the formatter.
+        // ⚠️ "Nothing reaches it yet: both this and the string CONCAT that
+        // elaborate desugars to the same node require a `string` destination,
+        // which `NetArena::build` refuses" — that is what this comment said, and
+        // it was already FALSE when it was written. A PACKED destination
+        // (`reg [63:0] p; p = $sformatf(...)`) takes the same node and no row
+        // refuses it; measured running natively on the pre-S3a binary as well as
+        // this one. Only the STRING destination is refused, and by the S0
+        // `string` net-kind row rather than by the arena. (Found by the S3a
+        // differential review.)
         // A non-`SysFunc` rhs is unreachable (`compute_effect` guards on
         // `k_sformatf_rhs`), and the ENGINE answers it with an empty string. This
         // returned `not_built!` — a panic — which made two `Kernel` implementors
@@ -1239,8 +1395,12 @@ impl Kernel for NativeKernel<'_, '_, '_> {
             return Value::from_str_bytes(&[]);
         };
         let (f, rest) = (args.first().copied(), args.get(1..).unwrap_or(&[]).to_vec());
-        let text =
-            crate::builtins::format_args_str_with(self.sched.st, &self.arena, f, &rest, None);
+        // The reader is `self`, not `&self.arena`: `$sformatf("%0d", f(x))` is a
+        // call in an argument, and only the composite answers one. Both are
+        // SHARED reborrows of `*self`, so this compiles where the sibling
+        // `k_dispatch_systask` (which needs `&mut Scheduler` for the sink and
+        // the file table) cannot — which is why that one keeps a gate row.
+        let text = crate::builtins::format_args_str_with(self.sched.st, self, f, &rest, None);
         Value::from_str_bytes(text.as_bytes())
     }
 }

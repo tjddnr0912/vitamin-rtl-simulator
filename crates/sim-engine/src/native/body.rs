@@ -17,8 +17,24 @@
 //! stack are the bulk of the engine's loop, and every one of them is refused:
 //! `fork_modes` non-empty is an S0 reject (so activities are 1:1 with processes,
 //! `is_child` is always false, and `Terminator::Fork` cannot appear), and
-//! `NetArena::build` refuses a non-empty `func_table` (so there is no frame and
-//! `Terminator::Call` cannot appear).
+//! `Terminator::Call` is refused by the scan below.
+//!
+//! ⚠️ **The `Call` half of that sentence changed in S3a and the reason matters.**
+//! It used to read "`NetArena::build` refuses a non-empty `func_table`, so there
+//! is no frame" — a DESIGN-level refusal, which made the `Call` arm unreachable
+//! for free. S3a admits subroutine designs (`native::frames`), so frames now
+//! exist on this path, and an `Expr::Call` is ANSWERED — through the kernel's
+//! composite reader, entirely inside a statement this loop never looks into.
+//! What is gone is the free part, not the property.
+//!
+//! **For a PROCESS body, `body_is_walkable` is the owner of the `Terminator::Call`
+//! refusal** — `native::frames` refuses one too, but only inside a FUNCTION body
+//! (its `func_body` walk), which is a different block space. A TASK is refused a
+//! layer earlier by the `is_task` row; a FUNCTION WITH OUTPUT FORMALS is not:
+//! it is not a task, its own body stays inside its frame, and the
+//! `Terminator::Call` lives in the PROCESS body — which `frames_admitted` never
+//! scans. `frames_tests::s3a_a_call_statement_is_refused_by_the_executor_layer`
+//! asserts exactly that (`buildable` says `None`; the executor layer refuses).
 //!
 //! The cost of that shortness is that both simplifications are LOAD-BEARING. If
 //! either family is ever admitted, this loop is wrong rather than incomplete —
@@ -74,9 +90,11 @@ use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 /// `is_codegen_able` walks the whole body for the same reason.
 ///
 /// Indexes `ir.processes[proc].body`, NOT the global `ir.blocks` — that arena
-/// holds TASK FRAME blocks, and using it here found `len 0` on every design,
-/// because the `func_table` rejection means an eligible design has no frames at
-/// all. Two different block spaces with the same index type.
+/// holds SUBROUTINE blocks, and using it here found `len 0` on every design back
+/// when the `func_table` rejection meant an eligible design had no frames at
+/// all. Two different block spaces with the same index type — and since S3a the
+/// other one is no longer empty, so the distinction is now load-bearing rather
+/// than merely correct.
 ///
 /// ⚠️ Takes the ENTRY to scan from, and that parameter is the whole point. It
 /// used to scan from `ir.processes[proc].entry` while `run_body` walks from the
@@ -197,22 +215,21 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
             // fatal happened rather than running the rest of its body on state
             // the fatal just declared invalid.
             //
-            // ⚠️ CANNOT FIRE for the class this walk admits, by the SAME argument
-            // that makes `Terminator::Call` unreachable: every site that latches
-            // `call_fatal` is frame machinery (`state/frame_eval.rs`,
-            // `state/task_frames.rs`), which needs a non-empty `func_table`, which
-            // `NetArena::build` refuses. Measured — a design that latches it
-            // reports `buildable: false, refused: "frame-local storage"`, and a
-            // module-level `$fatal` takes `apply_effect`'s `Ctl::Fatal` branch
-            // instead. It is kept, not deleted, because this loop is generic and
-            // the rule IS load-bearing for `K = Scheduler`: with the check
-            // removed, a body whose fatal came from a frame runs on to print past
-            // it (measured by routing the engine through this walk).
+            // ⚠️ **S3a MADE THIS LIVE.** It used to be unreachable for tier-3 by
+            // the same argument that made `Terminator::Call` unreachable: every
+            // site that latches `call_fatal` is frame machinery
+            // (`state/frame_eval.rs`, `state/task_frames.rs`), which needs a
+            // non-empty `func_table`, which `NetArena::build` refused outright.
+            // Admitting subroutines re-opens both producers this walk can reach:
+            // `$fatal` inside a function body, and a runaway recursion hitting
+            // `MAX_CALL_DEPTH`. The old note said "no test can pin it until S3
+            // gives the arena frame storage" — S3a is that slice, and the pins
+            // are in `frames_tests.rs`.
             //
-            // Unlike the `unreachable!` arms below, this stays a silent
-            // early-return — a `panic!` here would be wrong for the implementor
-            // that CAN reach it. No test can pin it until S3 gives the arena
-            // frame storage.
+            // It stays a silent early-return rather than a `panic!` (unlike the
+            // arms below) because the fatal has already been REPORTED by whoever
+            // latched it; what this does is stop the body, exactly as it does for
+            // `K = Scheduler`.
             if k.k_call_fatal() {
                 return Step::Fatal;
             }
@@ -257,9 +274,12 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
             // and it is written ONCE here rather than twice because the two
             // things it needs are kernel calls: `k_now` (the clock the resume
             // tick is measured from) and `k_schedule_resume` (whoever owns the
-            // region queues). The frame branch is absent for the same reason
-            // `Terminator::Call` is: `NetArena::build` refuses a non-empty
-            // `func_table`, so `in_frame` is structurally false here.
+            // region queues). The frame branch is absent because this walk never
+            // runs INSIDE a frame: an `Expr::Call` is answered whole, inside one
+            // statement, by the engine's frame executor, and an admitted
+            // subroutine body may not carry a suspending terminator at all (a
+            // `native::frames` row). So `in_frame` is still structurally false —
+            // for that reason since S3a, rather than because no frame can exist.
             //
             // The two rules that are NOT arithmetic:
             //  - `#0` AND a `#d` that evaluates to ZERO ticks both go INACTIVE.
@@ -315,8 +335,10 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                  reject, so this is a gate widening without a walk to match"
             ),
             Terminator::Call { .. } => unreachable!(
-                "tier-3 body walk reached `Call` — `NetArena::build` refuses a \
-                 non-empty `func_table`, so there is no frame to call into"
+                "tier-3 body walk reached `Call` — a subroutine CALL STATEMENT (a \
+                 task, or a function with output formals) is refused by \
+                 `body_is_walkable`, which `native::run::executor_rows` asks about \
+                 every process; an `Expr::Call` never reaches a terminator"
             ),
         }
         // The in-body step budget. NOT `max_deltas`: a long computation that never

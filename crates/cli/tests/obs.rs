@@ -17,6 +17,12 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 fn run(src: &str, args: &[&str]) -> (String, i32, std::path::PathBuf) {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let d = std::env::temp_dir().join(format!("vita_obs_{}_{n}", std::process::id()));
+    // START CLEAN. `n` restarts at 0 in every test PROCESS (nextest runs one per
+    // test) and the OS recycles PIDs, so two runs can land on the same directory —
+    // and nothing here removes it. Measured: `compile_error_writes_no_obs`, whose
+    // whole assertion is "no run.json exists", failed once in a full-suite run and
+    // passed in isolation, because a PREVIOUS process had left one there.
+    let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     let f = d.join("t.sv");
     std::fs::write(&f, src).unwrap();
@@ -729,13 +735,15 @@ fn run_json_codegen_pins_the_vm_claim_and_reasons() {
     );
     // S0: framed user calls are CORE (rev-4: S3 absorbs T1/T2), and #delay is
     // the v1 target's normal TB shape — so this design is within v1's SCOPE.
-    // It is NOT buildable, though: a subroutine's locals live in the
-    // activation's frame window, not a net slot. The two halves reported apart
-    // is the point — one flag would let the upper bound read as a capability.
+    // It is buildable too since S3a: `add1`'s body names only its own frame
+    // slots, which is the subset the tier-3 store can serve by delegating to the
+    // engine's frame executor. (This read `buildable: false, refused:
+    // "frame-local storage: S3 (subroutine frames)"` before that slice. The
+    // scope-vs-storage split is pinned on a still-refused shape in
+    // `backend_flag::the_native_verdict_reports_scope_and_storage_separately`.)
     assert_eq!(
         field(&manifest, "native"),
-        "{\"eligible\": true, \"buildable\": false, \
-         \"refused\": \"frame-local storage: S3 (subroutine frames)\", \"reject_reasons\": {}}",
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",
         "full manifest:\n{manifest}"
     );
     // The effective executor is recorded next to the census (soundness F1):

@@ -250,8 +250,14 @@ pub(crate) fn print_help(applet: &str) {
                        suspend-free bodies on the bytecode VM and interprets the rest;\n                        \
                        'interp' forces the reference semantics, for bisecting; 'native'\n                        \
                        selects the tier-3 backend, which runs a design when nothing in it\n                        \
-                       is outside today's tier-3 subset -- no fork, no subroutine call,\n                        \
-                       no `final`, no $monitor/VCD-task refusal -- and every\n                        \
+                       is outside today's tier-3 subset -- no fork, no `final`,\n                        \
+                       no class, no string net, no $monitor/$strobe, and of\n                        \
+                       subroutines only FUNCTIONS whose body stays inside its own\n                        \
+                       frame, called from an assignment or a condition (a task, a\n                        \
+                       function reading a module net, a call in a $display argument\n                        \
+                       or in a delayed CONTINUOUS assign all still fall back; a\n                        \
+                       delayed PROCEDURAL assign runs; $dumpfile and\n                        \
+                       $dumpvars DO run) -- and every\n                        \
                        continuous-assign family (zero-delay, delayed, multi-driven,\n                        \
                        wired) runs --\n                        \
                        and falls back to the VM otherwise (run.json reports 'backend' vs\n                        \

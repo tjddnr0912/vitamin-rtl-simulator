@@ -28,8 +28,8 @@
 //! 정지 + **호출** 포함"), and S3's stop-judgment is literally "호출을 삼키지
 //! 못하면 중단": a tier-3 that refuses calls has the same 0%-coverage failure
 //! mode tier-2 measured on `bench/keccak`. So calls are CORE here. A design
-//! that frames subroutines is eligible; making that true in the compiler is
-//! S3's whole job.
+//! that frames subroutines is eligible; making that true in the executor is
+//! S3's whole job, and S3a took the first bite (`native::frames`).
 
 use sim_ir::{NetKind, SimIr};
 
@@ -40,6 +40,9 @@ use crate::SimOpts;
 pub mod arena;
 pub mod body;
 pub mod dirty;
+pub(crate) mod frames;
+#[cfg(test)]
+mod frames_tests;
 pub mod kernel;
 #[cfg(test)]
 mod kernel_tests;
@@ -69,8 +72,10 @@ pub struct NativeEligibility {
     /// The STORAGE-level half: `NetArena::buildable` accepted this design.
     /// Reported next to `eligible` rather than folded into it because they
     /// answer different questions and the numbers differ — `eligible` is what
-    /// v1's SCOPE admits, `buildable` is what today's storage can actually
-    /// take (a design with subroutines is eligible and not buildable).
+    /// v1's SCOPE admits, `buildable` is what today's storage can actually take
+    /// (a design with a subroutine TASK, or with a function that reads a module
+    /// net, is eligible and not buildable; S3a admitted the store-independent
+    /// subset, so the gap narrowed rather than closed).
     pub buildable: bool,
     /// Why the RUNTIME gate — design ∧ storage — said no. `None` ⇒ nothing
     /// refuses this design; it runs natively the moment an executor exists.

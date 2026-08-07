@@ -179,11 +179,14 @@ impl NetArena {
         // this storage would happily give them slots — but their VALUES live in
         // the activation's frame window, not in a net slot, and both the read
         // path and the write funnel are frame-blind. User calls are CORE at S0
-        // (revision 4), so an eligible design CAN carry them; refusing makes the
-        // mitigation structural instead of a comment. S3 owns lifting it.
-        if !opts.func_table.is_empty() {
-            return Err("frame-local storage: S3 (subroutine frames)");
-        }
+        // (revision 4), so an eligible design CAN carry them.
+        //
+        // S3a lifted the blanket refusal to the SUBSET whose frames never need
+        // the module store (`native::frames`), which is what makes delegating
+        // `eval_call` to the engine's frame executor byte-identical rather than
+        // merely plausible. Everything outside that subset still refuses here,
+        // in its own words.
+        crate::native::frames::frames_admitted(ir, opts)?;
         let mut off: u64 = 0;
         for nv in &ir.nets {
             match nv.kind {
@@ -264,8 +267,11 @@ impl NetArena {
 /// (`pending_range`) and emitted by the run loop — see that field's doc for why
 /// it cannot be emitted at the access.
 /// Every other `NetReader` method keeps its default: in an ELIGIBLE design
-/// there are no heap kinds, no class handles, and no frame calls, so the
-/// defaults (`None`/X-poison) are unreachable by construction.
+/// there are no heap kinds and no class handles, so the defaults
+/// (`None`/X-poison) are unreachable by construction. **`eval_call` is the
+/// exception since S3a** — an eligible design CAN carry subroutine calls, the
+/// composite reader on `NativeKernel` is what answers them, and this impl makes
+/// reaching the bare store loud rather than defaulting to X.
 /// ⚠️ ONE defaulted `NetReader` method is NOT covered by the "no heap kinds, no
 /// class handles, no frame calls" argument below: `fd_eof`. It is closed only by
 /// `$feof` being OVER-marked as a statement effect (§4.5.291, ROADMAP §5.1) —
@@ -275,6 +281,28 @@ impl NetArena {
 impl NetReader for NetArena {
     fn take_deferred_range_reports(&self) -> u32 {
         self.pending_range.replace(0)
+    }
+
+    /// S3a — **LOUD, not the `None` default.** A subroutine call is answered by
+    /// the tier-3 KERNEL's composite reader, which routes it to the engine's
+    /// frame executor; the bare arena reaching a call means an evaluation seam
+    /// was handed this store instead of that composite, and the `None` default
+    /// would answer it with X: a wrong value at exit 0, in a design the gate
+    /// reports fully runnable.
+    ///
+    /// `native::frames::frames_admitted` refuses the two module positions whose
+    /// reader is this store (a system-task argument and a delayed continuous
+    /// assign). This panic is what makes a seam that enumeration MISSED loud
+    /// instead of silent — the same bargain the kernel's `gate_refused!` arms
+    /// make, and the reason the S3a gate can be trusted to be complete rather
+    /// than merely careful.
+    fn eval_call(&self, func: u32, _args: &[Value]) -> Option<Value> {
+        panic!(
+            "tier-3 arena: subroutine call (func {func}) evaluated through the bare net \
+             store — the frame executor is reached through `NativeKernel`'s composite \
+             reader, so this is an evaluation seam that was handed the arena alone. \
+             Route it through the kernel, or add a `native::frames` row refusing it."
+        )
     }
 
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {

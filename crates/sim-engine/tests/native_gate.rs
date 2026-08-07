@@ -293,13 +293,22 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     // Design gate refuses (heap kinds), storage would too.
     let design_refused = "module t; string s; int q[$];\n\
          initial begin s = \"a\"; q.push_back(1); $display(\"%s\", s); $finish; end endmodule\n";
-    // Design gate PASSES (calls are core), storage refuses (frame locals).
+    // Design gate PASSES (calls are core), storage refuses.
+    //
+    // ⚠️ The SHAPE here changed with S3a. It used to be a plain
+    // `function automatic integer inc(input integer x)` whose body touched only
+    // its own frame — which is precisely the subset S3a admits, so that design
+    // now BUILDS and this arm would have gone vacuous. The refusal that is left
+    // is a subroutine reading a MODULE net (`g`), which is the one thing the
+    // delegation to the engine's frame executor cannot serve: that read would
+    // come from the flat store a native run never writes.
     let storage_refused = "module t;\n\
-           function automatic integer inc(input integer x);\n\
-             integer loc; begin loc = x + 1; inc = loc; end\n\
+           integer g;\n\
+           function automatic integer addg(input integer x);\n\
+             begin addg = x + g; end\n\
            endfunction\n\
            integer r;\n\
-           initial begin r = inc(3); $display(\"r=%0d\", r); $finish; end\n\
+           initial begin g = 5; r = addg(3); $display(\"r=%0d\", r); $finish; end\n\
          endmodule\n";
 
     let mut saw_clean = 0;
@@ -311,7 +320,7 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
         (
             "storage",
             storage_refused,
-            Some("frame-local storage: S3 (subroutine frames)"),
+            Some("a subroutine that names a net outside its own frame: S3b"),
         ),
     ] {
         let ir = build(src);

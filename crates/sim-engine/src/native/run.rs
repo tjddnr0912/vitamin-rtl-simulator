@@ -30,9 +30,12 @@
 //! the VM byte for byte, stdout and VCD alike, and every continuous-assign
 //! family runs: zero-delay (4d-1), delayed/inertial (4d-3), multi-driven and
 //! `wand`/`wor` (4d-4 — the scheduler's `md_groups` with the shared
-//! `resolve_md_group` fold). Still refused: `$monitor`/`$strobe`,
-//! `$dumpall`/`$dumpon`, `final`, `fork`/`wait fork`, and frame-local storage
-//! (which is what keeps `bench/keccak`'s subroutine variants out).
+//! `resolve_md_group` fold). S3a added `bench/keccak`'s two SUBROUTINE variants
+//! (`keccak_f`, `keccak_f_arr`), whose functions are store-independent. Still
+//! refused: `$monitor`/`$strobe`, `$dumpall`/`$dumpon`, `final`, `fork`/`wait
+//! fork`, and the frames outside S3a's subset — tasks, a body that names a
+//! module net, a call in a system-task argument or in a delayed assign
+//! (`native::frames` names each in its own words).
 
 use sim_ir::SimIr;
 
@@ -77,18 +80,22 @@ pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'s
     }
     for pi in 0..ir.processes.len() as u32 {
         if !body_is_walkable(ir, pi, ir.processes[pi as usize].entry) {
-            // Names the REACHABLE cause first. The previous wording led with
-            // `fork`/subroutine — both normally refused an entire layer earlier
-            // (the S0 `fork` row, the arena's `func_table`) — and advertised a
-            // named-event wait, which elaborate never constructs. The one thing
-            // that actually arrives here in an eligible, buildable design is a
-            // bare `wait fork;`, which populates no `fork_modes` entry.
+            // Names the REACHABLE causes. The first wording led with
+            // `fork`/subroutine when both were refused an entire layer earlier,
+            // and advertised a named-event wait, which elaborate never
+            // constructs. Two shapes actually arrive here in an eligible,
+            // buildable design: a bare `wait fork;`, which populates no
+            // `fork_modes` entry, and — since S3a admitted subroutines — a
+            // `Terminator::Call`, i.e. a task enable or a call to a function
+            // with output formals. THIS layer owns the second one: a task is
+            // refused a layer earlier (`native::frames`' `is_task` row), but a
+            // function with output formals is not a task, its body stays inside
+            // its own frame, and the `Terminator::Call` is in the PROCESS body,
+            // which that predicate never scans.
             //
             // A plain non-`automatic` task containing `@(posedge clk)` is NOT
             // refused: elaborate inlines it, so there is no `Terminator::Call`.
-            // What the subroutine half really refuses is frame-local storage,
-            // and the arena says so in its own words.
-            return Err("a `wait fork`, or a `fork`/subroutine-call body whose sidecar was lost");
+            return Err("a `wait fork`, or a subroutine CALL STATEMENT (task / output formals)");
         }
         if !body_dispatch_ok(ir, pi) {
             return Err("a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)");

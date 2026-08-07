@@ -12,6 +12,12 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 fn tdir() -> std::path::PathBuf {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let d = std::env::temp_dir().join(format!("vita_work_{}_{n}", std::process::id()));
+    // START CLEAN — `n` restarts at 0 in every test PROCESS and the OS recycles
+    // PIDs, so two runs can land on the same directory and nothing removes it.
+    // This file's tests assert on which ARTIFACTS exist, so a leftover from an
+    // earlier process makes them fail in a full-suite run and pass in isolation
+    // (measured once each for this file and for `obs.rs`).
+    let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
 }

@@ -765,7 +765,11 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
         "{m}"
     );
 
-    // Subroutine design: eligible (scope) but NOT buildable (storage).
+    // Subroutine design, STORE-INDEPENDENT: S3a admits it, so both halves are
+    // true and the run.json verdict says so. This assertion used to read
+    // `buildable: false, refused: "frame-local storage: S3 (subroutine
+    // frames)"` — the value changed because the capability did, and the arm
+    // that keeps the two-half property under test moved to the design below.
     std::fs::write(
         dir.join("f.sv"),
         "module t;\n\
@@ -782,8 +786,35 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     let m = std::fs::read_to_string(dir.join("obs2/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",
+        "{m}"
+    );
+
+    // …and the scope-vs-storage SPLIT must still be reachable, or the update
+    // above retired the case this test is named for. A subroutine that reads a
+    // MODULE net is eligible (calls are core) and not buildable: the engine's
+    // frame executor would read it from the flat store, which a native run
+    // never writes.
+    std::fs::write(
+        dir.join("g.sv"),
+        "module t;\n\
+           integer g;\n\
+           function automatic integer addg(input integer x);\n\
+             begin addg = x + g; end\n\
+           endfunction\n\
+           integer r;\n\
+           initial begin g = 5; r = addg(3); $display(\"r=%0d\", r); #1 $finish; end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let (o, ok) = vita_in(&dir, &["--obs-dir", "obs2b", "-o", "b2.vcd", "g.sv"]);
+    assert!(ok && o.contains("r=8"), "{o}");
+    let m = std::fs::read_to_string(dir.join("obs2b/run.json")).unwrap();
+    assert_eq!(
+        manifest_field(&m, "native"),
         "{\"eligible\": true, \"buildable\": false, \
-         \"refused\": \"frame-local storage: S3 (subroutine frames)\", \"reject_reasons\": {}}",
+         \"refused\": \"a subroutine that names a net outside its own frame: S3b\", \
+         \"reject_reasons\": {}}",
         "{m}"
     );
 

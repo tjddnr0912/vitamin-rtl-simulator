@@ -864,17 +864,22 @@ fn s1c_out_of_range_and_x_index_writes_are_dropped() {
     }
 }
 
-/// The frame-local lane, pinned as a REFUSAL rather than left to a mirror that
-/// agrees only because the engine's routing was never installed.
+/// The frame-local lane, pinned as the SPLIT S3a drew rather than as the blanket
+/// refusal it replaced.
 ///
 /// User calls are CORE at S0 (revision 4: S3 absorbs them), so a subroutine
-/// design is `eligible: true` — but its locals live in the activation's frame
-/// window, and BOTH the arena's read path and its write funnel are frame-blind.
-/// `NetArena::build` therefore refuses, and this test states all three facts
-/// together so the next slice cannot mistake the gap for coverage.
+/// design is `eligible: true`. What changed is the storage half: a subroutine
+/// whose body names only its own frame slots is now buildable, because the
+/// tier-3 kernel answers `Expr::Call` by delegating to the engine's frame
+/// executor — and a frame window is not part of either net store. One that
+/// names a MODULE net is still refused, because THAT read would come from the
+/// flat store a native run never writes.
+///
+/// Both halves are asserted here, on the two designs that differ by one
+/// identifier, so neither can go vacuous alone.
 #[test]
-fn a_subroutine_design_is_eligible_but_the_arena_refuses_it() {
-    let src = "module t;\n\
+fn a_subroutine_design_builds_only_when_its_body_stays_in_its_frame() {
+    let contained = "module t;\n\
            function automatic integer f(input integer x);\n\
              integer loc;\n\
              begin loc = x + 1; f = loc; end\n\
@@ -882,23 +887,41 @@ fn a_subroutine_design_is_eligible_but_the_arena_refuses_it() {
            integer r;\n\
            initial begin r = f(3); $display(\"r=%0d\", r); $finish; end\n\
          endmodule\n";
-    let (ir, opts) = build_with_opts(src);
-    assert!(
-        !opts.func_table.is_empty(),
-        "the design must actually produce a frame table"
-    );
-    // S0 says yes — calls are core, and this is the documented design-level
-    // UPPER BOUND (`native.eligible` is not a promise the executor exists).
-    assert!(
-        crate::native::design_eligibility(&ir, &opts).eligible,
-        "calls are CORE at S0 (rev-4)"
-    );
-    // The storage says no, structurally.
-    assert_eq!(
-        NetArena::build(&ir, &opts).err(),
-        Some("frame-local storage: S3 (subroutine frames)"),
-        "the arena must refuse rather than give frame locals ordinary slots"
-    );
+    let reads_module = "module t;\n\
+           integer g;\n\
+           function automatic integer f(input integer x);\n\
+             integer loc;\n\
+             begin loc = x + g; f = loc; end\n\
+           endfunction\n\
+           integer r;\n\
+           initial begin g = 1; r = f(3); $display(\"r=%0d\", r); $finish; end\n\
+         endmodule\n";
+    for (label, src, want) in [
+        ("frame-contained", contained, None),
+        (
+            "reads a module net",
+            reads_module,
+            Some("a subroutine that names a net outside its own frame: S3b"),
+        ),
+    ] {
+        let (ir, opts) = build_with_opts(src);
+        assert!(
+            !opts.func_table.is_empty(),
+            "{label}: the design must actually produce a frame table"
+        );
+        // S0 says yes for both — calls are core, and this is the documented
+        // design-level UPPER BOUND (`native.eligible` is not a promise the
+        // executor exists).
+        assert!(
+            crate::native::design_eligibility(&ir, &opts).eligible,
+            "{label}: calls are CORE at S0 (rev-4)"
+        );
+        assert_eq!(
+            NetArena::build(&ir, &opts).err(),
+            want,
+            "{label}: storage verdict"
+        );
+    }
 }
 
 // ── S1d-2: the dirty/edge channel ─────────────────────────────────────────────
