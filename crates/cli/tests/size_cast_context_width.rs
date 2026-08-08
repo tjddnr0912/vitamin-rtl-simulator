@@ -13,23 +13,36 @@
 //! whose sign can't be resolved here (a param/call) keeps the old fill-only path (no
 //! regression). Self-determined operands (a bare leaf, select, concat, comparison) are
 //! byte-identical to before.
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
-fn run(src: &str) -> String {
+/// Like `run`, but hands back stderr and the exit code too — the refusal tests need
+/// to see that the design DID fail, not merely that stdout is empty.
+fn run_status(src: &str) -> (String, String, Option<i32>) {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let d = std::env::temp_dir().join(format!("vita_scw_{}_{n}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("vita_scws_{}_{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     let f = d.join("t.sv");
     std::fs::write(&f, src).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_vita"))
         .arg(f.to_str().unwrap())
         .current_dir(&d)
         .output()
         .expect("run vita");
-    String::from_utf8_lossy(&out.stdout)
+    let r = (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+        out.status.code(),
+    );
+    let _ = std::fs::remove_dir_all(&d);
+    r
+}
+
+fn run(src: &str) -> String {
+    run_status(src)
+        .0
         .lines()
         .filter(|l| !l.contains("simulation ended"))
         .collect::<Vec<_>>()
@@ -315,4 +328,168 @@ fn a_fill_inside_a_narrowed_cast_sizes_to_the_expression_width() {
         initial begin k=7; a=8'd200;\n\
         $display(\"%0d %0d %0d\", 2'(k / '1), 2'(k % '1), 4'(a / '1)); $finish; end endmodule");
     assert_eq!(o, "0 3 0");
+}
+
+/// §4.5.317: a REAL value is refused at every operand position the SIZE-CONTEXT
+/// LOWERING builds. It used to depend on which arm of the lowering the operand
+/// happened to take — `/`, `%` and `**` on a bare real were loud (they are in
+/// `expr_is_real`'s `Binary` arm, so the cast arm's own check saw them) while `*`,
+/// `+`, `-` and unary `-` were silently wrong: `4'(r*2)` with `r = 7.5` printed
+/// `0000` where the value is 15 = `1111`. Guarding only the LEAF fixed those four
+/// and left three more families quiet, which is why the refusal is a funnel:
+///
+/// * the shift AMOUNT (`4'(u << r)`) is lowered with a plain `lower_expr`, and the
+///   very same `u << r` OUTSIDE a cast was already loud;
+/// * the `/`|`%` NARROWING branch (`8'(u / r)`, §4.5.316) lowers its operands with
+///   `lower_ctx_or_plain`, which never reaches the leaf guard — it printed
+///   `00110011` (the f64 read as bits) at exit 0;
+/// * `$signed`/`$unsigned` are transparent to the value's domain, so
+///   `4'($signed(r)*2)` printed `0000` while the uncast `$signed(r)*2` printed the
+///   real-domain 15 — two answers to one expression inside one design.
+///
+/// ⚠️ NOT a claim of completeness. When `ast_ctx_signed` cannot resolve a leaf (a
+/// real param / literal / function return / `$realtime` / `$sqrt`) the cast never
+/// enters `lower_size_ctx` at all, and if the operator is also outside
+/// `expr_is_real`'s `Binary` arm the cast stays silent: `4'(RP ^ '0)` with
+/// `parameter real RP` runs at exit 0. Measured as 84 of 288 matrix cells, PRE ==
+/// POST, PRE-EXISTING → ROADMAP §2 (needs the tree-wide AST self-width pass).
+///
+/// iverilog rejects every row below (`Cast base expression must be a vector type`,
+/// or `<<(<) operator may not have REAL operands`), and it rejects a bare `4'(r)`
+/// too, so this is a silent wrong answer becoming the oracle's own refusal.
+#[test]
+fn a_real_is_refused_at_every_operand_the_size_context_lowering_builds() {
+    for expr in [
+        // `lower_size_leaf` — these four discriminate against PRE (`0000`/`0001`/`1111`)
+        "4'(r * 2)",
+        "4'(r + 1)",
+        "4'(r - 1)",
+        "4'(-r)",
+        // …at a width ABOVE the byte, so a guard narrowed to small N cannot pass
+        "32'(r * 2)",
+        "16'(r + 1)",
+        // the `/`|`%` NARROWING branch, rhs (`lower_ctx_or_plain`). `8'(u % r)` is
+        // the only prover of that site: `Mod` is the one operator missing from
+        // `expr_is_real`'s `Binary` arm, so the cast arm cannot catch it instead.
+        "8'(u / r)",
+        "8'(u % r)",
+        // …and its lhs, via a parent whose own arm never resizes the operand.
+        "8'((r / 2) & 8'hFF)",
+        "8'((r / 2) << 1)",
+        // the shift AMOUNT. `<<`/`<<<`/`**` take the `Pow|Shl|AShl` site; `>>`/`>>>`
+        // at w == n take the WIDENING site; the 32-bit `s` forces w > n, which is
+        // the only row that reaches the narrowing branch's shift amount.
+        "4'(u << r)",
+        "4'(u <<< r)",
+        "8'(u ** r)",
+        "8'(u >> r)",
+        "8'(u >>> r)",
+        "8'(s >> r)",
+        // `$signed`/`$unsigned` are transparent to the domain — in ANY argument
+        // slot, since vita still accepts the (illegal) two-argument spelling.
+        "4'($signed(r) * 2)",
+        "4'($unsigned(r) + 1)",
+        "8'(u / $signed(r))",
+        // …in ANY argument slot. vita still accepts the illegal two-argument
+        // spelling (pre-existing — iverilog: "takes exactly one(1) argument"), and
+        // the IR node keeps BOTH args, so a predicate keyed on `args[0]` refuses
+        // `$signed(r, u)` and lets `$signed(u, r)` through at exit 0. Both rows.
+        "4'($signed(r, u) * 2)",
+        "4'($signed(u, r) * 2)",
+        // …and two rows that were ALREADY loud with this same message before the
+        // slice (`Div`/`Pow` are in `expr_is_real`'s `Binary` arm). They pin the
+        // pre-existing half; they discriminate nothing and kill no mutation.
+        "8'(r / r2)",
+        "4'(r ** 2)",
+    ] {
+        let (o, e, c) = run_status(&format!(
+            "module t; real r, r2; logic [7:0] u; logic [31:0] s;\n\
+             initial begin r=7.5; r2=2.0; u=8'd9; s=32'd9;\n\
+             $display(\"%b\", {expr}); #1 $finish; end endmodule"
+        ));
+        assert!(
+            matches!(c, Some(n) if n != 0),
+            "{expr}: exit {c:?}, printed {o}"
+        );
+        // Pin the SIZE-CAST message, not just "real operand": the pre-existing
+        // generic real diagnostics say that too, so the loose spelling let a
+        // mutated message through.
+        assert!(
+            e.contains("size cast is not defined on a real operand"),
+            "{expr}: got {e}"
+        );
+    }
+    // …and the shapes that are LEGAL keep working: a comparison is one bit, an
+    // explicit conversion is an integer, and a ternary CONDITION may legally be real
+    // (it is tested for nonzero, never resized). `8'(a*b)` is the §4.5.212 carry case.
+    let (o, e, c) = run_status(
+        "module t; real r; logic [3:0] a, b; logic signed [7:0] s;\n\
+         initial begin r=7.5; a=4'd15; b=4'd3; s=-8'sd8;\n\
+         $display(\"%b %b %b %b %b %b\", 4'(r > 1.0), 4'($rtoi(r)), 4'(int'(r)),\n\
+                  8'(a*b), 4'(r ? a : b), 8'(s >>> 1));\n\
+         $finish; end endmodule",
+    );
+    assert_eq!(c, Some(0), "stderr: {e}");
+    assert_eq!(
+        o.lines().next().unwrap().trim(),
+        "0001 0111 1000 00101101 1111 11111100"
+    );
+    // The real ternary condition in BOTH directions, including the `-0.0`
+    // discriminator that separates "tested for nonzero" from "tested for nonzero
+    // BITS" — all three iverilog-pinned.
+    assert_eq!(
+        run("module t; real r; logic [3:0] a, b;\n\
+             initial begin a=4'd15; b=4'd5;\n\
+             r=-0.0; $display(\"%b\", 4'(r ? a : b));\n\
+             r= 0.0; $display(\"%b\", 4'(r ? a : b));\n\
+             r=1e-300; $display(\"%b\", 4'(r ? a : b)); #1 $finish; end endmodule"),
+        "0101\n0101\n1111"
+    );
+}
+
+/// The refusal is reported once per CAST, not once per real LEAF. iverilog reports
+/// one error for `8'((r*2)+(r+1)+(r-1)+(-r))`; reporting four burns the
+/// `MAX_ELAB_ERRORS` cap four times as fast, and with enough leaves in one cast an
+/// unrelated LATER diagnostic is pushed out and lost (measured: 250 leaves + an
+/// undeclared net → the `E3010` vanishes behind the cap). Every OTHER cast still
+/// gets its own report — including one NESTED inside the reporting cast, which is
+/// the direction the save/restore in `lower_size_ctx_entry` exists for. A sibling
+/// pair cannot test that: the entry resets the flag on the way IN, so siblings are
+/// immune whether or not the restore on the way OUT happens.
+#[test]
+fn the_real_size_cast_refusal_is_reported_once_per_cast() {
+    let count = |src: &str| {
+        let (_, e, _) = run_status(src);
+        e.lines()
+            .filter(|l| l.contains("size cast is not defined on a real operand"))
+            .count()
+    };
+    assert_eq!(
+        count(
+            "module t; real r, r2; initial begin r=7.5; r2=2.0;\n\
+             $display(\"%b\", 4'(r + r2 + r + r2 + r)); #1 $finish; end endmodule"
+        ),
+        1,
+        "five real leaves in ONE cast must report once"
+    );
+    assert_eq!(
+        count(
+            "module t; real r; logic [3:0] a; initial begin r=7.5; a=4'd3;\n\
+             $display(\"%b %b\", 4'(r * 2), 4'(a << r)); #1 $finish; end endmodule"
+        ),
+        2,
+        "two separate casts each report"
+    );
+    // NESTED: the inner cast reports, then the OUTER one must regain its own. The
+    // concat around the inner cast is load-bearing — `ast_ctx_signed` answers `None`
+    // for a bare `Cast` in a sign-determining slot, so `8'(4'(r2*2) + r)` never
+    // enters the size-context lowering at all. iverilog also reports both.
+    assert_eq!(
+        count(
+            "module t; real r, r2; initial begin r=7.5; r2=3.5;\n\
+             $display(\"%b\", 8'({4'(r2*2)} + r)); #1 $finish; end endmodule"
+        ),
+        2,
+        "a nested cast must not consume the outer cast's report"
+    );
 }

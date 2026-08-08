@@ -75,6 +75,7 @@ impl<'s> Elaborator<'s> {
             two_state_heap_handles: BTreeSet::new(),
             real_elem_dyn_nets: BTreeSet::new(),
             string_elem_dyn_nets: BTreeSet::new(),
+            size_cast_real_reported: false,
             unpacked_array_nets: BTreeSet::new(),
             packed_dims: BTreeMap::new(),
             dollar_subst: None,

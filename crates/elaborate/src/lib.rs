@@ -69,6 +69,7 @@ mod events;
 mod expr_cast;
 mod expr_ctx;
 mod expr_main;
+mod expr_size_ctx;
 mod expr_special;
 mod frames_body;
 mod frames_call;
@@ -132,6 +133,7 @@ pub(crate) use da::*;
 pub(crate) use dynarr::*;
 pub(crate) use expr_cast::*;
 pub(crate) use expr_ctx::*;
+pub(crate) use expr_size_ctx::*;
 pub(crate) use frames_classify::*;
 pub(crate) use frames_classify_fork::*;
 pub(crate) use generate::*;
@@ -419,6 +421,14 @@ struct Elaborator<'s> {
     // `new[]` default and the (non-bit-vector) element store. elaborate-LOCAL.
     real_elem_dyn_nets: std::collections::BTreeSet<u32>,
     string_elem_dyn_nets: std::collections::BTreeSet<u32>,
+    // §4.5.317: has the "real under a size cast" refusal already fired for the cast
+    // currently being lowered? The refusal funnel sits at every OPERAND position, so
+    // `8'((r*2)+(r+1))` would report once per leaf where iverilog reports once per
+    // cast — and with enough leaves the extra reports eat the `MAX_ELAB_ERRORS` cap
+    // and DROP an unrelated later diagnostic (measured). Saved/restored by
+    // `lower_size_ctx_entry`, so a nested cast still gets its own report.
+    // elaborate-LOCAL only.
+    size_cast_real_reported: bool,
     // Every net DECLARED with static unpacked dims — including 1-element
     // arrays (`reg x [0:0]`), which `array_len > 1` cannot distinguish from
     // scalars (adversarial find #5). elaborate-LOCAL only.
