@@ -312,8 +312,6 @@ impl Elaborator<'_> {
                     ast::BinOp::Add
                     | ast::BinOp::Sub
                     | ast::BinOp::Mul
-                    | ast::BinOp::Div
-                    | ast::BinOp::Mod
                     | ast::BinOp::BitAnd
                     | ast::BinOp::BitOr
                     | ast::BinOp::BitXor
@@ -327,11 +325,75 @@ impl Elaborator<'_> {
                             rhs: r,
                         })
                     }
-                    ast::BinOp::Pow
-                    | ast::BinOp::Shl
-                    | ast::BinOp::Shr
-                    | ast::BinOp::AShl
-                    | ast::BinOp::AShr => {
+                    // `/ % >> >>>` — the four whose value depends on bits ABOVE the
+                    // ones they produce. IEEE 1800 §11.8.1 evaluates a context-determined
+                    // operand at **max(self, n)**: the context can only WIDEN. For the
+                    // operators above that distinction is invisible (their low n bits are
+                    // decided by the operands' low n bits, so narrowing is the same
+                    // computation), which is why §4.5.212 could pass `n` straight down
+                    // and only the widening half was ever measured. Here it is visible in
+                    // both directions:
+                    //
+                    //   NARROW  `2'(k%4)` with `integer k` — at n=2 the divisor `4`
+                    //           becomes `0` and the answer is `xx`; both oracles say `11`.
+                    //   WIDEN   `8'(b>>1)` with `b = -4'sd8` — the context's sign bits are
+                    //           part of the result (`01111100`); at self width it is
+                    //           `00000100`. `8'(b/c)` with `c = -4'sd1` overflows at 4 bits
+                    //           and not at 8. A div-by-zero's `x` must fill all n bits.
+                    //
+                    // So neither `n` nor the self width is right on its own. Both are
+                    // lowered and the one §11.8.1 selects is kept; the other is a dead
+                    // eid — nothing references it, so no value is evaluated twice and no
+                    // `$random` draw is duplicated. (Widening PAST max(self, n) is wrong
+                    // too: a 32-bit context makes `5'(s4>>u3)` 30 instead of 6.)
+                    ast::BinOp::Div | ast::BinOp::Mod | ast::BinOp::Shr | ast::BinOp::AShr => {
+                        let plain = self.lower_ctx_or_plain(e, n);
+                        let w = self.ir_bits_of(plain).unwrap_or(n);
+                        if n >= w {
+                            // context WIDENS (or matches): operands at n, as before.
+                            let l = self.lower_size_ctx(lhs, n, ext);
+                            let r = if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) {
+                                self.lower_size_ctx(rhs, n, ext)
+                            } else {
+                                self.lower_expr(rhs) // shift amount is self-determined
+                            };
+                            self.push_expr(ir::Expr::Binary {
+                                op: irop,
+                                lhs: l,
+                                rhs: r,
+                            })
+                        } else {
+                            // context NARROWS: the node keeps its own WIDTH — but
+                            // §11.8.1 still coerces its operands to the EXPRESSION's
+                            // signedness, and for `>>>` that changes the operation
+                            // itself: an unsigned left operand shifts LOGICALLY
+                            // (§11.4.10). A self-determined lowering keeps the operand's
+                            // own sign, so `4'(u8 + (s8 >>> 9))` kept the arithmetic fill
+                            // and printed `0010` where both oracles say `0011`. `/ % >>`
+                            // do not show it because the plain path already applies the
+                            // context's unsignedness to them; `>>>` was the one left.
+                            let l = self.lower_ctx_or_plain(lhs, n);
+                            let l = self.coerce_sign(l, ext);
+                            let r = if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) {
+                                let r = self.lower_ctx_or_plain(rhs, n);
+                                self.coerce_sign(r, ext)
+                            } else {
+                                self.lower_expr(rhs) // shift amount is self-determined
+                            };
+                            let narrow_op = if matches!(op, ast::BinOp::AShr) && !ext {
+                                ir::BinOp::Shr
+                            } else {
+                                irop
+                            };
+                            let _ = plain; // the width probe; nothing references it
+                            self.push_expr(ir::Expr::Binary {
+                                op: narrow_op,
+                                lhs: l,
+                                rhs: r,
+                            })
+                        }
+                    }
+                    ast::BinOp::Pow | ast::BinOp::Shl | ast::BinOp::AShl => {
                         // base context-determined at n; exponent / shift amount SELF-determined.
                         let l = self.lower_size_ctx(lhs, n, ext);
                         let r = self.lower_expr(rhs);
@@ -379,6 +441,25 @@ impl Elaborator<'_> {
     /// leaf to the expression's signedness). Re-stamps `$signed`/`$unsigned` so signed
     /// division / arithmetic-shift / comparison in the enclosing op use the right
     /// semantics (a `Concat`/`Select` extension is otherwise always unsigned).
+    /// Coerce an already-lowered operand to the enclosing expression's signedness
+    /// WITHOUT changing its width — §11.8.1 propagates the sign to every operand even
+    /// when the context does not widen. The width-changing twin is `lower_size_leaf`.
+    fn coerce_sign(&mut self, x: u32, ext: bool) -> u32 {
+        let cur = self.expr_self_signed(x);
+        if ext == cur {
+            return x;
+        }
+        let which = if ext {
+            ir::SysFuncId::Signed
+        } else {
+            ir::SysFuncId::Unsigned
+        };
+        self.push_expr(ir::Expr::SysFunc {
+            which,
+            args: vec![x],
+        })
+    }
+
     fn lower_size_leaf(&mut self, e: &ast::Expr, n: u32, ext: bool) -> u32 {
         let x = self.lower_expr(e);
         let w = self.ir_bits_of(x).unwrap_or(32);
