@@ -119,23 +119,68 @@ impl Elaborator<'_> {
                 let saved_prefix = std::mem::replace(&mut self.cur_prefix, path.clone());
                 // params (header `#(...)` then body localparams) BEFORE nets
                 // so `[W-1:0]` folds — mirroring module passes (3)/(3b).
-                let mut saved_params = self.bind_params(&decl, &overrides);
+                let (mut saved_params, param_ovr) = self.bind_params(&decl, &overrides);
                 for it in &decl.body {
                     if let ast::ModuleItem::Param(pp) = it {
-                        let v = self.const_eval_in_scope(&pp.value).unwrap_or_else(|| {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
-                                    "parameter `{}` value is not a foldable constant expression",
-                                    pp.name.name
-                                ),
-                            );
-                            0
-                        });
-                        let v = self.coerce_param_value(v, pp);
-                        let key = self.fq(&pp.name.name);
-                        self.hier_params.insert(key.clone(), v);
-                        saved_params.push((key.clone(), self.params.insert(key, v)));
+                        // Same binder as the module body loop and the generate fold.
+                        // This loop used to be its own reduced copy — `const_eval` →
+                        // `coerce` → `hier_params`/`params`, and NOTHING else — so an
+                        // interface body parameter never recorded `param_meta` (its
+                        // declared width and sign) or `param_range`, and a `string` /
+                        // `real` / >64-bit one was not routed at all (`parameter S =
+                        // "abc"` in an interface was loud E3009 on its own default).
+                        // `generate.rs` carries a ⚠️ note about repairing exactly this
+                        // in the generate fold; the interface was the last REDUCED copy.
+                        //
+                        // THREE full copies remain — `instance.rs`'s module-body fold,
+                        // `generate.rs`'s, and `package.rs`'s — and they disagree with
+                        // this binder in more than one place, measured: `generate.rs`
+                        // and `package.rs` fold with `const_eval_in_scope` instead of
+                        // `eval_param_init`, so a fill DEFAULT is sized to 32 bits and
+                        // not to the declared width (`parameter [63:0] Q = '1` reads
+                        // `0000_0000_ffff_ffff` in both), and `package.rs` records no
+                        // `param_range` (a package `parameter [15:8] P` part-selects to
+                        // `x`) and routes neither `string` nor `real`. All of that is
+                        // pre-existing and identical in PRE — a separate slice, one
+                        // line in ROADMAP §3. Do NOT fix an instance of it here: this
+                        // is a class, and the funnel is this function.
+                        //
+                        // With no ANSI header these declarations ARE the overridable
+                        // parameters (`param_ports`), so binding them here also applies
+                        // an override that targets one. Binding ONLY those through the
+                        // shared path and leaving the rest on the reduced copy is what
+                        // the first cut did, and it made a parameter's registered WIDTH
+                        // depend on whether it happened to be overridden: two instances
+                        // of one interface then disagreed inside a single run at exit 0
+                        // (`ifc #(.P(8'hA5)) a(); ifc b();` — same value, `a.P[15:12]=a`
+                        // and `b.P[15:12]=0`). One spelling for every declaration.
+                        self.bind_one_param(pp, &param_ovr, &mut saved_params);
+                        // The i64 twin, republished so `i0.P` stays readable from
+                        // outside. This is PRE's behaviour and the measured reason to
+                        // keep it is arithmetic, not sentiment: over 13 consumers × 6
+                        // exact-integer values, the i64 view is CORRECT in 72 cells and
+                        // wrong in 6 — every wrong cell is `/` with a fractional
+                        // quotient (`P=5` → `i0.P/2` gives 2.0, iverilog 2.5). Dropping
+                        // it took `int'`, `$rtoi`, `$sqrt`, `*1.5`, `+0.5`, `>`, a real
+                        // assignment and the bare read from correct to loud — 72
+                        // correct→loud regressions to remove 6 silent-wrong ones. (An
+                        // earlier revision of this comment claimed the reverse and cited
+                        // `P = 4`; the discriminator is not the VALUE but the OPERATOR —
+                        // only division with a fractional quotient separates the two
+                        // domains, so `P = 8` is correct at `/2` as well.)
+                        //
+                        // ⚠️ It does leave one declaration answering two ways in a
+                        // single run: the BARE read now reaches `real_param_val` through
+                        // the binder above and is 2.5, while this hierarchical twin is
+                        // 2.0. That split is the honest state of the hierarchical-real
+                        // axis, not a property of this line — patching the deferred
+                        // placeholder with a real constant instead breaks strictly more
+                        // cells (every integral consumer reads the IEEE-754 bits).
+                        // ROADMAP §2 owns it.
+                        if let Some((_, Some(i))) = self.param_real_value(&pp.ty, &pp.value) {
+                            let key = self.fq(&pp.name.name);
+                            self.hier_params.insert(key, i);
+                        }
                     }
                 }
                 // ANSI header ports → nets (the iface body + `i.<port>` see them).

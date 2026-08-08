@@ -274,7 +274,9 @@ pub(crate) fn print_help(applet: &str) {
          --workdir <DIR>       (vcmp) work-library directory when --work has no =dir\n  \
          -L <NAME[=DIR]>       (velab) bind a compiled library; search order = -L order\n  \
          --top <UNIT>          (velab) explicit elaborate root(s); required with -L\n  \
-       -G, --param <N=V>     override a TOP-module parameter (8, 8'hFF, \"text\"); repeatable\n  \
+       -G, --param <N=V>     (vita/velab) override a TOP-module parameter (8, 8'hFF,\n                        \
+        \"text\"); repeatable. It is an ELABORATE-stage input, so vcmp and vrun\n                        \
+        reject it rather than accept and drop it\n  \
          -Wno-<CODE>           suppress a Warning/Info diagnostic (mnemonic, doc-15)\n  \
          -Werror[=<CODE>]      promote warnings (all, or one code) to errors\n  \
          -q, --quiet           silence terminal $display/progress (diags + --log keep all)\n  \
@@ -624,6 +626,13 @@ pub(crate) fn run_velab_gated(
     // RULE-V composite (recorded 2026-06-11): the `.velab` carries the digest
     // of the exact `.vu` bytes it consumed — provenance now, the
     // E-ART-STALE-UPSTREAM re-hash gate when a worklib exists (Phase-2).
+    // NOT the place for doc-14 RULE B's `-G` synthesis input, though it looks like it.
+    // This field is the RULE-V UPSTREAM digest: `vrun --upstream up.vu` re-hashes the
+    // live `.vu` and compares. Mixing the overrides into the preimage made that
+    // comparison unreproducible, so every `-G` build failed the gate with
+    // `E9003: up.vu: digest changed since the .velab snapshot` — a false stale report
+    // about a file that had not changed. RULE B needs its own header field (a
+    // `format_version` bump); recorded in ROADMAP §0 item 14, where `-G` lives.
     let vu_composite = *blake3::hash(&bytes).as_bytes();
 
     let (unit, unit_exp, prec_exp, global_prec_exp) = match decode_vu_unit(&bytes, sink) {
@@ -637,13 +646,18 @@ pub(crate) fn run_velab_gated(
     } else {
         Some(&opts.tops)
     };
-    let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
+    // doc-14 RULE B: `-G` is an ELABORATE-stage input. Dropping it here accepted the
+    // flag, reported `errors=0` and produced an artifact built from the declared
+    // defaults — the silent wrong-design the one-shot path is loud about.
+    let (ir, sc) = elaborate::elaborate_located_params(
         &unit,
         sink,
         &unit_exp,
         &prec_exp,
         global_prec_exp,
         roots,
+        None,
+        &opts.top_params,
     );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR; // elab error already emitted
@@ -891,7 +905,7 @@ pub fn run_velab_lib(
         // Library mode has no positional source — the `-L` set IS the input.
         echo::echo_effective_invocation(&sink, &[], Some(out), opts, &[("libs", l)]);
     }
-    let code = run_velab_lib_gated(libs, tops, out, &inner, &sink);
+    let code = run_velab_lib_gated(libs, tops, out, &opts.top_params, &inner, &sink);
     inner.epilogue();
     code
 }

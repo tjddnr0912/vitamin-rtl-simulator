@@ -11,7 +11,7 @@
 
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
-| **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · 남은 것 = T2 잔여(real 정수문맥·리터럴 절단·PART select) + **T2-14 `-G`/`-pvalue+` elaborate param override**(신규·오라클 有) + T3-13 `case inside` |
+| **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · **T2-14 `-G` override 도 완료**(§4.5.313 one-shot + §4.5.314 staged — 잔여 = `-pvalue+` 별칭 · `-P<path>=` · 합성-해시 헤더 필드[format bump]) · 남은 것 = T2 잔여(real 정수문맥·리터럴 절단·PART select) + T3-13 `case inside` |
 | **2** | §2 | Silent-wrong 잔여 | 41 | ✓ 8 | **폭 인식 상수 접기(3건 동근)** · package real · 구조적 지연 · inner-NET shadow(DEEP) |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
@@ -59,19 +59,18 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 10. ~~sized-literal enum label → enum-method~~ **RESOLVED**(§4.5.234) — 신규 `const_lit_based` 를 enum 라벨만 opt-in. **잔여**: 파서 폴드는 **절단이 필요한 리터럴을 거부**한다(unsized `'h1FFFFFFFF`·mis-sized `4'hFF`) — elaborate 의 `parse_int_literal` 과 폭 규칙이 달라 값이 갈릴 수 있는 입력을 아예 안 받는 설계이며, 근본 해소는 §4.5.233 의 안 ①(literal 파싱 공유 크레이트 분리)뿐.
 11. ~~음수 range bound~~ **RESOLVED**(§4.5.228) — plain net·multi-packed inner(**후자는 silent 였다**)·배열 원소·VCD `$var` 범위까지. 잔여 = **PART select**(`x[1:-2]`, 정직한 loud·바운드 접기가 unsigned) · **포트/formal**(warn+clamp 유지·의도적 opt-in 비대칭).
 
-14. **elaborate 단계 파라미터 override — `-G<name>=<val>` / `-pvalue+<name>=<val>`(+ 후속 `-P<path>=`).**
-    상용 3단계 흐름의 knob 은 compile=`+define+` · elaborate=**param override** · run=`+plusarg` 인데,
-    vita 는 **양 끝만 있다**(`-D`/`+define+` ✓ · `$test/$value$plusargs` ✓ · `velab -G` → `unknown flag '-G'` 실측
-    2026-07-29). 지금은 소스 안의 `#(.P())`/`defparam` 뿐이라 **"재컴파일 없이 top param 만 바꿔 재실행"이 불가**.
-    **스펙은 이미 있다** — doc-14 §RULE B 가 `-G`/`-pvalue+`/`-P<path>=` 를 velab 합성-해시 입력으로,
-    §596-597 이 의미 구분(`-G`=clean scoped override · `-P`=defparam 식)까지 규정했고 doc-15 E8007 설명도
-    `-G` 를 velab 소속으로 적는다 → **문서가 코드보다 앞선 상태**(플래그만 미배선).
-    **인프라 대부분 존재**: `ResolvedOverride` 경로 + §4.5.27 defparam 의 `defparams: BTreeMap<path,[(param,const)]>`
-    병합 지점 재사용. 남는 일 = argv 파싱 · `.velab` 합성 해시 입력 등록(**빠뜨리면 override 를 바꿔도 stale
-    재사용 = silent-wrong**) · vcmp/vrun wrong-stage loud 거부 · `.f` typed bucket 등록 · **매칭 안 된 `-G`
-    이름의 처리 판단**(defparam unmatched 는 iverilog parity 로 warn 이지만, 명령줄 오타는 loud 가 맞을 수 있다).
-    오라클 = iverilog `-P<path>=<value>` 차분. v1 범위 = **top-level 스코프 파라미터만**(계층 경로는 `-P` 후속,
-    defparam 이 아직 direct-child 한정이라 같은 제약을 물려받는다).
+14. ~~elaborate 단계 파라미터 override — `-G<name>=<val>`~~ **RESOLVED**(§4.5.313 one-shot · **§4.5.314 staged**
+    — 상세=ARCHIVE). `-G`/`--param` 이 `vita` 와 `velab`(`-L` compose 포함)에 적용되고, `vcmp`/`vrun` 은
+    wrong-stage loud 거부이며, `.f` typed bucket 과 `-v` effective echo 의 `params` 행도 있다.
+    **잔여 3건:**
+    - **`-pvalue+<name>=<val>`** — 미구현(`grep -rn pvalue crates/` = 0건). `-G` 의 별칭 철자이므로 argv 파싱만.
+    - **`-P<path>=<val>`**(계층 경로) — 미구현. defparam 이 아직 direct-child 한정이라 같은 제약을 물려받는다.
+    - **`.velab` 합성 해시 입력 등록**(doc-14 §RULE B). `-G` 는 지금 **RULE-V upstream 다이제스트에 안 들어간다** —
+      섞었더니 `vrun --upstream` 이 바뀌지 않은 `.vu` 를 두고 `E9003 digest changed` 를 내는 **거짓 stale** 이
+      됐다(그 필드는 업스트림 입력의 다이제스트지 합성 입력의 것이 아니다). RULE B 를 지키려면 **헤더에
+      자기 필드**가 필요하고 그것은 `format_version` bump 다. 지금 상태의 관측 가능한 결과 = 같은 `.vu` 에서
+      서로 다른 `-G` 로 만든 두 `.velab` 이 **헤더 128바이트가 동일**하고 어떤 게이트도 구분하지 못한다(본문은
+      다르므로 값은 맞다 — 위험은 provenance 뿐이고, `velab` 이 elaborate 를 건너뛰는 경로는 없다).
 
 **T3 — 전제조건 필요 (즉시 착수 대상 아님)**
 
@@ -243,9 +242,17 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **block-local 잔여 shadow 2형(§4.5.218·PRE==POST)**: block-local **scalar vector**의 이름을 block이 index-select(`logic [7:0] sa; sa[0]`)=vita 0 vs iverilog 1 · named-block array 1형. **이름 충돌만으로 gate하면 byte-correct 설계 11건이 false-reject**되므로(§4.5.218 실측) per-shape hazard 모델이 필요.
 - **scalar-string 같은-family 잔여(§4.5.217 differential 발굴)**: `expr_is_string_ast`에 **`Ternary` arm 부재**→`{(c?a:b),"!"}`가 바이트 drop(scalar·element 공통·**no-oracle**[iverilog assert]·hand-IEEE) · `{a, 8'h00}`/X-Z 바이트가 `0x20`으로 치환되고 길이에 계상. **정정**: 같이 기록됐던 "`always @(*)` string concat 조용히 drop"은 **오진**—vita가 `[abcd]`로 정확하고 iverilog가 빈 문자열이며, 명시 `@(a,b)`는 vita가 정직하게 loud.
 
+- **🔴 계층 read 가 REAL 을 나르지 못한다 — 축 전체가 DEEP**(pre-existing·PRE==POST·오라클 ✓·§4.5.314 적대 4라운드가 세 표현을 다 재봤다). `a.rv`(real **변수**)를 정수 문맥에 넣으면 `int'(a.rv)` = **0**, `longint'(a.rv)` = **4616752568008179712**(= 4.5 의 IEEE-754 워드), `integer'` 만 우연히 5 — iverilog 는 셋 다 5. 로컬 읽기(`int'(rv)`)는 전부 정답이라 **비대칭은 계층 경로에만 있다**. ⭐⭐ 뿌리 = **leaf 를 패치하는데 문맥은 이미 결정돼 있다**: 지연 계층 읽기는 lowering 시점에 `Signal{POISON_NET}` 이라 `lower_cast` 의 `expr_is_real` 이 false 를 보고 정수 경로를 굽고, `resolve_deferred_hier` 는 그 뒤에 leaf 만 바꾼다. **세 표현을 다 재서 현재 상태를 골랐다**: ⓐ **real Const 패치** = 실수 도메인은 맞고 캐스트·concat·인덱스·`repeat`·case 라벨이 전부 비트를 읽는다(최악) ⓑ **i64 twin** = 13소비자×6값 **72칸 정답 / 6칸 오답**, 오답은 전부 `/` 의 몫이 분수인 칸 ⓒ **loud** = 72칸을 correct→loud 로 되돌린다(사다리 위반). → **인터페이스 본문 real 은 ⓑ 유지**(PRE 동일·`iface_inst.rs` 가 이유를 싣는다), **모듈/ANSI 는 ⓒ 유지**(PRE 동일 — 애초에 twin 이 없었다). ⚠️ 그 결과 인터페이스에서는 **한 선언이 한 런에서 두 도메인**으로 읽힌다(bare `P/2`=2.5 는 이 슬라이스가 고친 것 · hier `i0.P/2`=2.0 은 PRE 그대로) — 각 반쪽이 PRE 이상이므로 하강은 아니지만 정직한 상태는 아니다. **선행조건** = 지연 읽기가 자기 타입을 **문맥 결정 前에** 알거나, 해소가 **enclosing 노드까지** 다시 내릴 수 있어야 한다. 이웃: `{a.rv, 1'b0}` 이 조용히 통과한다(iverilog: *"Concatenation operand can not be real"* · 로컬 `{lv,1'b0}` 은 양쪽 다 loud) — concat 가드가 계층 피연산자를 못 본다.
+- **불가능한 real override 가 진단을 셋 낸다**(pre-existing 확대·loud→loud·§4.5.314 발굴): `#(.P(1.5))` 를 real 파라미터에 주면 `overriding parameter … with a real value is unsupported` + `the override of parameter … is not a constant` + `the override of real parameter … is not a constant` 이 겹쳐 나온다(PRE 는 둘). 뿌리 하나에 메시지 셋 — 부모 쪽 거절과 바인더 쪽 escalation 이 서로를 모른다.
+- **🔴 계층 경로가 스코프 아닌 자식을 지나 바깥의 동명 인스턴스에 커밋한다**(pre-existing·오라클 ✓·§4.5.314 differential 발굴). `is_hier_scope` 는 `symbols`/`hier_params` 에 `base.` 프리픽스 키가 있는지로 스코프를 판정하므로, **아무 키도 안 내는 자식**(빈 모듈 · `string`/>64비트/비정수 `real` 파라미터만 가진 모듈)은 스코프가 아니고 그 경로는 바깥으로 걸어 나가 **무관한 동명 인스턴스**에 붙는다 — `module inner; ch u(); … u.n` 이 `top.u.n` 을 읽어 `99` 를 찍는다(iverilog: *"Unable to bind `u.n' in `top.i1'"*). 테이블을 하나씩 더 훑는 것은 fix 가 아니다(§4.5.314 가 `real_param_val` 을 넣어 봤고, 그 결과는 real 만 **loud→틀린 인스턴스**로 바뀐 것이었다 — 되돌렸다). 정직한 술어는 **"`base` 가 인스턴스 경로인가"** 이고 `instances_info.path` 가 이미 그것을 안다. 커밋 자체는 옳다(§N3 HIGH — 옛 whole-tail outward strip 이 조용히 바깥 넷을 잡던 것을 막으려고 만든 것).
+- **🔴 fill override 가 타깃 폭이 아니라 32비트로 접히는 자리 셋**(pre-existing·PRE==POST·오라클 ✓·§4.5.314 적대 2렌즈 발굴). §4.5.314 는 `'0`/`'1` 을 **선언 폭에서 다시 접도록** 퍼널을 세웠고 그 폭이 존재하는 곳은 전부 고쳤으나, `param_decl_width` 가 `None` 을 내는 세 형태는 여전히 부모 쪽 32비트 fold 로 떨어진다 — ⓐ **>64비트**(`parameter [127:0] K` + `'1` → 하위 64비트만 `0000…ffffffffffffffff`, iverilog 는 128비트 전부 1). 이것은 "wide 파라미터의 OVERRIDE 는 loud" 라는 아래 §3 불변식의 **구멍**이기도 하다(같은 선언에 명시 리터럴 `128'hFF…` 를 주면 loud 인데 `'1` 은 조용히 통과) ⓑ **`time`**(64비트 모델이 아니라 32비트 — `#(.T('1))` 이 4294967295, iverilog 18446744073709551615) ⓓ **`real`**(`#(.R('1))` 와 `-G R='1` 이 둘 다 `4294967295.0` 를 설치한다 — iverilog `1.0` · 두 채널은 서로 일치) ⓒ **untyped**(IEEE §12.2.2 는 파라미터가 override 의 폭·부호를 **받는다**고 한다 — `parameter K = 3` + `#(.K(64'hDEADBEEF))` 가 vita −559038737 / iverilog 3735928559, 그리고 `'1` 은 iverilog 가 1비트로 봐 `1`). 셋은 한 뿌리(**타깃 타입의 폭을 정하는 규칙**)이므로 한 슬라이스로 다뤄야 하고, 세 채널(`#()`·`defparam`·`-G`)이 지금은 **서로 일치**한다(§4.5.314 가 맞춘 것) — 고칠 때 그 일치를 깨지 마라.
+- **파라미터 선언 fold 가 네 벌**(pre-existing·PRE==POST·오라클 ✓·§4.5.314 적대 2렌즈 실측). 정본은 `params.rs::bind_one_param` 이고 나머지 셋이 각자 빠뜨린 것이 다르다 — `instance.rs` 의 모듈 본문 fold(override 처리 없음) · `generate.rs` · `package.rs`. 측정된 불일치: generate/package 는 `const_eval_in_scope` 로 접어 **fill 기본값을 선언 폭으로 안 접고**(`parameter [63:0] Q = '1` → `00000000ffffffff`), `package.rs` 는 **`param_range` 를 기록하지 않으며**(패키지 `parameter [15:8] P` 의 부분선택이 `x`) **`string`/`real` 을 라우팅하지 않는다**(자기 기본값만으로 E3009). §4.5.314 가 인터페이스 복사본(넷째)을 정본으로 흡수했으므로 남은 셋도 같은 방식이 가능하다 — **인스턴스가 아니라 CLASS 이므로 발견한 자리에서 고치지 말 것**(§4.5.311 교훈).
+- **`--obs-dir` 의 run.json 이 `-G` 를 안 싣는다**(pre-existing·§4.5.314 발굴). `plusargs` 와 `source.blake3` 는 있는데 파라미터 override 는 없어서, `-G W=9` 와 `-G W=100` 으로 돌린 두 런의 run.json 이 타임스탬프 말고는 **동일**하다 — 효과가 **다른 설계**인 유일한 플래그에 대해 G2 관찰 rail 이 눈멀어 있다. §4.5.314 는 같은 논거로 `-v` echo 에 행을 넣었고 rail 에는 적용하지 않았다(§6 OBS-1 잔여와 같이 다룰 것).
+
 **문서화된 divergence (수정 비대상·핀됨):**
 
 - 크로스스코프 t0 decl-init race(양쪽 §6.8 합법·self-consistent) · 런타임 구성 `-0.0` 표시 · iverilog 자인 결함들(expression-force "evaluated once" 등).
+- **`#(.S("str"))` 가 적용되기 전에 W3056 을 한 번 낸다**(pre-existing·값은 정답): 부모 쪽 숫자 fold 가 먼저 실패해 "override 는 상수가 아니다; 기본값 유지" 를 찍고, 그 다음 string 채널이 정상 적용한다. 경고가 사실과 반대라 거슬리지만 값은 iverilog 와 일치한다.
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
 
@@ -267,6 +274,10 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 >   기본값으로 가지 않도록 loud 로 만든 결과). 캐리려면 `ResolvedOverride` 에 wide 슬롯이
 >   필요하고, 자식의 선언 폭을 모르는 부모 스코프에서 접어야 하므로 `fill` 과 같은
 >   "원문을 넘겨 자식 폭에서 재폴딩" 형태가 된다.
+
+**§4.5.314 이 남긴 1건 (오라클 ✓ iverilog):**
+
+- **`defparam` 이 INTERFACE 인스턴스에 안 닿는다** — `interface ifc; parameter D = 8; … endinterface` + `ifc a(); defparam a.D = 255;` 가 `W3056 … matched no instance` 를 내고 **기본값을 유지**한다(iverilog `d=ff`, vita `d=8`). PRE·POST 동일한 pre-existing 이고, 경고가 있으므로 silent 는 아니다. 원인 = `defparams` 소비가 `elaborate_instance` 에만 있고 `iface_inst.rs` 는 자기 `overrides` 만 본다 — 인터페이스 바인딩 루프가 §4.5.314 에서 정본 바인더를 쓰게 됐으므로 `defparams.remove(path)` 를 같은 자리에서 병합하면 된다.
 
 **외부 round-28 이 남긴 4건 (§4.5.284 · 전부 실사용 ASIC 트리에서 실측된 사이트 · 오라클 ✓ iverilog):**
 

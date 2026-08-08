@@ -74,7 +74,12 @@ impl Elaborator<'_> {
             );
             return;
         }
-        let saved = self.bind_params(child, overrides);
+        // Pre-pass: header params only, to const-fold the child's PORT widths for the
+        // per-element slice plan. A module with no ANSI header binds its body
+        // parameters per element (`elaborate_instance`), so a port width that depends
+        // on one does not fold here — `widths_ok` catches that and is loud, which is
+        // where that shape already was.
+        let (saved, _) = self.bind_params(child, overrides);
         let mut port_widths: Vec<(String, u32)> = Vec::with_capacity(ports.len());
         let mut widths_ok = true;
         for p in ports {

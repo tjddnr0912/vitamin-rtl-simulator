@@ -12,6 +12,7 @@
 
 
 **§4.5.220–280**
+- `4.5.314` **IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 — 그리고 "어디까지 빼는지" 를 정한 것은 셈이었다.** ANSI 헤더 없는 모듈의 본문 파라미터에 네 override 채널이 전부 도달하게 하고(PRE 는 넷 다 loud), `-G` 를 staged 에 배선하고, `'x`/`'z` override 의 조용한 0/all-ones 를 닫았다. 적대 **4라운드가 결함 24건**을 냈고 **다섯은 내 앞 라운드 수정이 만든 하강**이며 거의 전부 한 모양이었다 — *i64 채널에 i64 아닌 것을 넣으면 이름은 풀리고 값은 틀린다*. 계층 real 읽기는 세 표현을 다 지어 재고 골랐다: real Const 패치는 모든 정수 소비자를 깨고, i64 twin 은 **72칸 정답/6칸 오답**(오답은 전부 분수 몫 나눗셈), loud 는 그 72칸을 되돌린다 → **인터페이스는 twin 유지·모듈/ANSI 는 loud**(둘 다 PRE 동일). ⭐⭐ 판별 못 하는 테스트 값(`4/2==2`)이 하강 하나를 라운드 3까지 숨겼고, 그 뒤 "판별자는 값" 이라는 내 일반화를 4라운드가 매트릭스로 반증했다 — **판별자는 연산자였다** …
 - `4.5.291` **③층 S1d-4a — 트레이트가 강제한 결정: 퍼널을 안 거치는 효과를 게이트가 답한다.** 먼저 계획을 고쳤다 — ③층 실행기는 두 번째 실행기가 아니라 **`Kernel` 의 두 번째 구현자**이고(이음매는 **가운데만** 제네릭: `run_process`·`builtins::dispatch` 는 `Scheduler` 고정), 52 메서드 중 **~27 이 그 선결 과제**라 *"나중에 배선"* 이 선택지에서 사라진다. → **`stmt_effect` 거부 행**을 tier-2 와 **같은 술어**로 추가. ⭐ **적격률이 처음 움직였다 79/79 → 77/79**(keccak 둘, 이유는 TB 의 `$value$plusargs` 하나) — 그리고 **②→③ 76× 와 성공 기준이 keccak 위에 서 있어서** 그 배선이 재측정의 선행조건이 됐다. 리뷰: **`$cast` TASK 형 누락**(내 SysTask 쪽만 `matches!` 암묵 catch-all — 주석은 여섯 줄 위에서 exhaustive 라고 주장 중이었다) → sim-ir 정본 `systask_net_write` **41 변종 `_`-free** 신설 + **`NetWrite{Flat,Heap}`** 로 double-booking 제거 …
 - `4.5.290` **③층 S1d-3 — wake 결정, 그리고 게이트가 수정을 거부하도록 굳어 있던 일.** 변경 집합 → **어느 프로세스가 ready 이고 어떤 순서인가**(값이 아니라 **결정**을 비교). 적격성이 사준 단순화 = fork 거부 ⇒ activity ≡ process·`Ready` 가 proc id 로 붕괴. 게이트가 갭을 두 번 잡았다: `always @(a)` = static Level(첫 실행에 발산) → 그리고 적대 리뷰가 **`Level|Comb|Latch` 셋 다 같은 웨이터**임을 짚어 **조합 프로세스 전체가 잠들어 있었음**을 발견. ⭐⭐ **등록만 고치면 게이트가 깨진다** — `arm_processes` 가 Comb/Latch 를 t0 에 arm 하지 않고 **큐잉**하므로 `level_armed` 초기값이 `kind == Level` 이어야 한다(두 줄이 짝). 관측 granularity 는 **축**이고, 리뷰가 dedup 리셋 주기·저자 분포·granularity 커플링 셋을 더 잡아 **8규칙 전부 teeth** …
 - `4.5.289` **③층 S1d-2 — dirty/edge 채널, 그리고 내 게이트의 teeth 를 세 번 재확인.** 스케줄링의 절반은 루프가 아니라 **쓰기**에 달린다 — `dirty`(멤버십 = 변경 집합이라 A→B→A 왕복도 관측)·`last_blocking_writer`·**`slot_edge`**(끝점이 잃은 엣지 **종류** 복원 · 값 비교로는 절대 안 보임). edge-target 스캔은 **한 철자로 추출**(두 번째 스캔이 func/task arena 를 빠뜨리면 증상은 틀린 값이 아니라 **안 뜨는 posedge**). ⭐ 게이트 첫 판은 7개 행동 중 **2개가 공허**했다(쓰기마다 take → dirty 길이 1 → 정렬 계약 무의미·같은 슬롯 재기록 없음 → glitch 누적 없음) → **배치**로 4/6, writer tag 구동 + edge-target `0→1→0→1` 퍼널 구동으로 **7/7 teeth**. 교훈 = *게이트를 짰다 ≠ 게이트가 검사한다*(공허함의 원인은 대개 **관측 시점**) …
@@ -346,6 +347,46 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.314 IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 — 그리고 답이 "고치기" 가 아니라 "빼기" 였던 축 (2026-08-08, branch feat-implicit-param-ports, format 26 불변) ✅
+
+**한 줄** — ANSI 헤더가 없는 모듈(`module m; parameter W = 8;`)의 본문 파라미터를 **네 override 채널 전부**가 도달하게 하고(PRE 는 넷 다 loud 거부 = 코어 Verilog-2005 의 거부), `-G` 를 staged 경로에 배선했으며, `'x`/`'z` override 의 조용한 0/all-ones 설치를 닫았다. **적대 4라운드가 결함 24건**을 냈고 그중 **넷은 내 앞 라운드 수정이 만든 하강**이었다 — 마지막 하나는 고치는 대신 **기능을 슬라이스에서 빼는 것**이 답이었다.
+
+**PRE 가 거부하던 것** — `sub #(.W(11), .D(12))` / `sub #(21, 22)` / `defparam u.W = 44` / `-G W=8` 이 각각 `override of unknown parameter` · `more positional parameter overrides than module parameters` · `names no parameter of any top module`. 즉 비-ANSI 모듈에는 **어떤 방법으로도 파라미터를 넘길 수 없었다.**
+
+**구조 = 한 철자로 모으기.** `param_ports(module)` = 헤더가 있으면 헤더, 없으면 **본문 top-level `parameter` 선언**(generate 안은 다른 스코프라 도달 불가 — iverilog 도 거부). 네 채널이 전부 이 목록으로 이름을 푼다. `localparam` 은 목록에 **있고**(그래야 "unknown parameter" 가 아니라 정확한 `cannot override localparam` 이 나온다) **positional 슬롯은 안 먹는다**(`positional_param_ports` — iverilog 핀: `parameter A; localparam L; parameter B;` + `#(10,30)` = A=10 B=30). `bind_params` 를 `resolve_param_overrides`(이름/위치 해석) + **`bind_one_param`**(선언 1개 바인딩)으로 갈라 호출자 셋이 공유 — ANSI 헤더 · 모듈 BODY · **인터페이스 BODY**. 마지막은 PRE 에서 **축소 복사본**이라 인터페이스 본문 파라미터가 `param_meta`/`param_range` 를 기록하지 않았고 string/real/>64비트를 아예 라우팅하지 않았다(`parameter S = "abc"` 가 자기 기본값만으로 E3009).
+
+⭐⭐ **첫 컷은 override 된 선언만 공유 경로로 보냈다** — 그러자 **파라미터의 등록 폭이 "override 됐는가" 에 달리게 됐다**: `ifc #(.P(8'hA5)) a(); ifc b();` 가 같은 값인데 `a.P[15:12]=a`, `b.P[15:12]=0`(exit 0). 선언 전부를 한 바인더로.
+
+**staged `-G`(doc-14 RULE B)** — `velab -G` 는 플래그를 파싱하고 `errors=0` 을 보고하면서 **선언 기본값으로 elaborate** 했다(silent wrong-design). `-L` compose 경로도 같았다. `vcmp`/`vrun` 은 받아서 버렸다 → 이제 wrong-stage loud. ⚠️ **`-G` 를 RULE-V 다이제스트에 섞으면 안 된다**(시도했다): 그 필드는 **업스트림** `.vu` 의 다이제스트라, 섞으면 모든 `-G` 빌드가 바뀌지도 않은 파일에 대해 `E9003 digest changed` 를 낸다. RULE B 는 **자기 헤더 필드**(format bump)가 필요 → ROADMAP §0-14 잔여.
+
+**⭐⭐ 라운드 1(soundness) — 결함 8, 하나는 이 슬라이스가 만든 하강**
+
+- **fill 은 자기 폭이 없고 타깃의 폭을 받는다.** `#()` 만 원문을 나르고 `defparam`·`-G` 는 **부모 쪽에서 32비트로 먼저 접었다** → 64비트 파라미터에서 `defparam u.K='1`·`-G K='1` 이 `0000_0000_ffff_ffff`, 같은 설계의 `#(.K('1))` 은 `ffff…ffff`. **한 설계 안에서 두 철자가 갈리고 exit 0.** 본문 파라미터가 override 가능해지면서 PRE 의 loud 가 이 자리로 내려왔다 = **내 하강**. 수정은 소비자 보정이 아니라 **퍼널** — `DefparamOverride` 3번째 성분과 `cli_overrides_for` 가 fill 을 원문으로 나르고, 선언 폭을 아는 유일한 자리가 다시 접는다.
+- **localparam 판정을 맨 위 한 자리로.** 아래 진단들은 전부 *override 가 무엇을 하는가*(안 접혔다·문자열이다·x/z 평면이 없다)를 말하는데 **localparam 이 거절하는 이유는 그중 어느 것도 아니다** — `#(.L(sig))` 가 "parameter `L` 은 상수가 아니다"(틀린 명사·틀린 이유)라 했고 fill-only override 는 **진단 없이** 도달했다. iverilog 는 `Cannot override localparam`.
+- **거짓 주석 둘** — `-G` 의 *"`'0`/`'1` 은 value 경로가 이미 타깃 폭으로 접는다"*(반증) · 인터페이스 주석이 **방향이 반대**였고 남은 복사본을 2개로 셌으나 실제 **3개**(`package.rs` 누락).
+- 위생 — `params.rs` 1025줄(→ 857 + `param_query.rs` 226) · `.f` 의 **분리형** `-G W=8` 이 `W=8` 을 경로로 해석(붙인 `-GW=8` 은 정상 = 한 플래그 두 철자 중 하나만 깨져 스윕을 통과했다) · `-v` echo 에 `-G` 행 없음.
+
+**⭐⭐ 라운드 2 — 결함 10, 둘이 내 라운드-1 수정이 만든 하강**
+
+- **`hier_params` 는 i64 테이블이다.** real 파라미터를 거기 등록했더니 **이름은 풀리고 값은 실수성을 잃었다** — `parameter real P = 4.5;` + `#(.P(9))` 가 안에서 `P/2 = 4.5`, 밖에서 `a.P/2 = 4.0`, exit 0.
+- **`-G` 의 fill 을 `value: None` 으로 보낸 것이 두 번째 하강.** *fill 이 cannot-apply 인지 결정하는 모든 가드가 `by_name` 을 읽는다* — `-G S='1`(string) · `-G R='1`(real) · `-G T='1`(폭 없는 `time`)이 **플래그를 안 준 것과 바이트 동일한 출력에 exit 0**(PRE 는 string 에 대해 loud). 수정 = `#()` 와 **같은 모양**을 내게 한다.
+- **`#()` 의 fill 이 나중 `defparam` 을 이겼다**(pre-existing·퍼널에 붙어 있다): 채널마다 독립 insert 라 나중 override 가 **다른 채널**의 stale 엔트리를 못 지웠다 → `clear_target`(채널 간 last-write-wins · `.W()` 는 override 가 아니므로 `had_value` 게이트). iverilog 6 / vita 0 이었다.
+- **좁은 `'x` 선언 기본값의 진단이 틀린 이유를 댔다** — `'x` 는 **접히는 상수다**(iverilog `xx`). 없는 것은 표현이다 → 세 폴드가 공유하는 `param_value_unfoldable` 이 도메인을 말한다.
+
+**⭐⭐ 라운드 3~4 — 답은 "빼기" 였고, 어디까지 빼는지는 셈이 정했다**
+
+- differential 이 **~9000 설계**를 재고 `correct→loud 0 · correct→wrong 0` 을 확인하면서, 라운드-2 의 real 수정이 **캐스트를 조용히 깨뜨린다**를 잡았다: `int'(a.P)` = **0**, `longint'(a.P)` = **4616752568008179712**(4.5 의 IEEE-754 워드), `integer'` 만 우연히 5. ⭐⭐ 뿌리 = **leaf 를 패치하는데 문맥은 이미 결정돼 있다** — 지연 계층 읽기는 lowering 시점에 `Signal{POISON_NET}` 이라 `lower_cast` 의 `expr_is_real` 이 false 를 보고 정수 경로를 굽고, 해소는 그 뒤에 leaf 만 바꾼다. 같은 브로큰이 real **변수**(`a.rv`)에 대해 **PRE 에도 있다**.
+- ⭐⭐ **그래서 어떤 부분 지원도 silent-wrong 을 다른 silent-wrong 과 맞바꾼다**(둘 다 지어서 측정했다): i64 로 실으면 `a.P/2` 가 정수 나눗셈(P=9 → 4, iverilog 4.5), real Const 로 패치하면 캐스트·concat 이 비트를 읽는다. **축 전체를 슬라이스에서 빼고** ROADMAP §2 에 기록했다 — 계층 real 읽기는 정직한 loud.
+- ⭐⭐ **그 다음이 이 반복에서 가장 값진 정정이다.** 되돌리면서 인터페이스의 exact-int real twin 까지 뺐고, 근거로 *"PRE 의 그 답은 조용히 틀린 값이고 `P = 4` 가 그것을 가린다"* 를 적었다. **4라운드가 그 문장을 셈으로 반증했다** — 13소비자 × 6값 매트릭스에서 PRE 는 **72칸 정답 · 6칸 오답**이고 오답은 전부 `/` 의 몫이 분수인 칸이었다. 즉 내가 한 것은 silent-wrong 6 을 없애려고 **정답 72칸을 loud 로 되돌린 회귀**였다. ⭐⭐ 그리고 **판별자는 값이 아니라 연산자**였다(`P = 8` 도 `/2` 에서 정답이다 — 내가 "유일한 값" 이라 부른 것은 애초에 값의 성질이 아니었다). twin 복원 · 남은 비대칭(bare 2.5 / hier 2.0)은 ROADMAP §2 에 실측치와 함께 기록.
+- ⭐ **되돌리기가 테스트 하나를 같이 지웠고 그 손실이 안 보였다** — `an_x_fill_as_a_declared_default_is_not_folded_to_zero` 가 사라진 동안 그 문구를 되돌리는 뮤테이션이 **전 스위트를 통과**했다(리뷰어가 생존자로 보고해 발각). 복원 + `-G` fill 커버리지 신설.
+- ⭐ 거짓 주석 4건(삭제된 함수를 가리키는 주석 · 삭제된 테스트를 인용하는 doc · 존재하지 않는 리더를 주장하는 주석 둘)과 ROADMAP 의 모순 중복 1건도 그 되돌리기가 만든 것.
+
+**교훈** — ⭐⭐ 네 하강이 전부 **한 모양**이었다: *i64 채널에 i64 아닌 것을 넣으면 이름은 풀리고 값은 틀린다*(fill 의 폭 · real 의 실수성 · fill 의 `value: None` · 인터페이스 republish). ⭐⭐ **판별하지 못하는 값으로 쓴 테스트는 기능을 증명하지 않는다** — `P = 4` 는 `4/2 == 2` 라 두 도메인을 못 가르고, 그 한 글자가 하강 하나를 라운드 3까지 숨겼다. ⚠️ **절차 실수 둘**: 리뷰가 도는 중에 트리를 두 번 고쳐(§4 가 §4.5.310 실측으로 금지한 것) 리뷰어의 뮤테이션 배치가 두 번 무효화됐다.
+
+**남긴 것(전부 pre-existing·PRE==POST·측정됨 → ROADMAP §2/§3)** — 계층 read 가 REAL 을 못 나른다(축 전체·real 변수 포함) · 계층 경로가 **스코프 아닌 자식**을 지나 바깥의 동명 인스턴스에 커밋한다 · fill 이 32비트로 접히는 네 형태(>64비트·`time`·untyped·`real`) · 파라미터 선언 fold **네 벌**(정본 + instance/generate/package) · `defparam` 이 인터페이스 인스턴스에 안 닿는다 · run.json 이 `-G` 를 안 싣는다.
+
+**게이트** — 5245 → **5280 tests green**(신규 35, 전부 오라클에 핀) · clippy/fmt clean · **format 26·MsgCode 64 불변** · `examples/` 4종 stdout+VCD · keccak 3변종 · picorv32 전부 **PRE↔POST 바이트 동일**.
 
 #### 4.5.313 외부 리포트 aes_top — 16항목 + 자체 리뷰 17결함 (2026-08-07, branch feat-aes-report, format 26 불변 / **AST 스키마 re-pin**) ✅
 

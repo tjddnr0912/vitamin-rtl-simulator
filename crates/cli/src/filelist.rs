@@ -50,6 +50,14 @@ pub(crate) fn takes_value(flag: &str) -> bool {
             | "--timeout"
             | "-D"
             | "--define"
+            // `-G NAME=VALUE` is separated exactly like `-D`, so a filelist carrying
+            // `-G W=8` path-resolved `W=8` into an absolute source path and the run
+            // died with "`-G /abs/…/W=8` names no parameter of any top module".
+            // (The attached `-GW=8` was unaffected — one flag, two spellings, one of
+            // them broken, which is how this survived the round-17 sweep that added
+            // every other value flag here.)
+            | "-G"
+            | "--param"
             | "-I"
             | "--incdir"
             | "-l"

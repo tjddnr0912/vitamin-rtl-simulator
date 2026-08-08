@@ -570,6 +570,26 @@ pub(crate) fn reject_backend(stage: &str, io: &IoArgs) -> Result<(), i32> {
     Ok(())
 }
 
+/// Loud wrong-stage rejection for `-G`/`--param`. doc-14 RULE B puts the parameter
+/// override on the ELABORATE stage: it changes the flattened `sim-ir`, so `vcmp`
+/// (which has not elaborated yet — it only writes a `.vu`) and `vrun` (which reads an
+/// already-elaborated artifact) cannot act on it. Both used to accept it and drop it
+/// silently: on `vrun` the design then ran with the declared default at `errors=0`, and
+/// on `vcmp` the flag simply vanished — either way the exact failure mode `-G` is made
+/// loud about everywhere else. The message names `-G` for whichever spelling was
+/// typed; `--param` is documented as its alias.
+pub(crate) fn reject_top_params(stage: &str, io: &IoArgs) -> Result<(), i32> {
+    if let Some((n, v)) = io.top_params.first() {
+        eprintln!(
+            "error[{}]: '-G {n}={v}' is an elaborate-stage argument — '{stage}' cannot \
+             apply a parameter override. Pass it to `velab` (or one-shot `vita`)",
+            MsgCode::CliBadFlag.code_num()
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
+    Ok(())
+}
+
 pub(crate) fn reject_obs_dir(stage: &str, io: &IoArgs) -> Result<(), i32> {
     if let Some(dir) = &io.obs_dir {
         eprintln!(
@@ -752,6 +772,9 @@ pub(crate) fn dispatch_vcmp(args: &[String], inv: Invocation) -> i32 {
     if let Err(c) = reject_backend("vcmp", &io) {
         return c;
     }
+    if let Err(c) = reject_top_params("vcmp", &io) {
+        return c;
+    }
     if io.pos.is_empty() {
         eprintln!(
             "error[{}]: vcmp: no source files",
@@ -859,6 +882,10 @@ pub(crate) fn dispatch_velab(args: &[String], inv: Invocation) -> i32 {
                 verbosity: io.verbosity,
                 log: io.log,
                 log_append: io.log_append,
+                // doc-14 RULE B: `-G` is a velab input. Dropping it HERE — at the
+                // argv→opts boundary — is what made the flag a silent no-op even
+                // though every stage below it was ready to apply it.
+                top_params: io.top_params.clone(),
                 overrides: io.overrides.clone(),
                 invocation: Some(inv),
                 ..VitaOpts::default()
@@ -885,6 +912,8 @@ pub(crate) fn dispatch_velab(args: &[String], inv: Invocation) -> i32 {
             log: io.log,
             log_append: io.log_append,
             tops: io.tops,
+            // doc-14 RULE B — twin of the `-L` branch above.
+            top_params: io.top_params,
             overrides: io.overrides.clone(),
             invocation: Some(inv),
             ..VitaOpts::default()
@@ -907,6 +936,9 @@ pub(crate) fn dispatch_vrun(args: &[String], inv: Invocation) -> i32 {
         return c;
     }
     if let Err(c) = reject_obs_dir("vrun", &io) {
+        return c;
+    }
+    if let Err(c) = reject_top_params("vrun", &io) {
         return c;
     }
     if io.pos.len() != 1 {

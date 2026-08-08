@@ -194,7 +194,16 @@ pub(crate) fn fill_literal_ast(e: &ast::Expr) -> Option<(&str, ast::IntLitKind)>
 /// Fold a fill literal `(kind, raw)` to its i64 value at `width` (low 64 bits;
 /// a >64-bit param is already outside the i64 param model). `'1`@64 → all ones
 /// (i64 `-1`), `'1`@48 → `0xFFFFFFFFFFFF`, `'0` → 0.
+/// A fill literal (`'0`/`'1`) as an i64 at `width`. **Declines an `'x`/`'z` fill**: the
+/// i64 domain has no unknown plane, and `fill_literal_const`'s packed VALUE word for
+/// one is a plausible 0 (`'x`) or all-ones (`'z`) with the mask discarded — a wrong
+/// number, not a missing one, and every caller here (both are parameter binding) then
+/// installed it silently. The 4-state callers of `fill_literal_const` keep the full
+/// `ConstVal` and are unaffected.
 pub(crate) fn fill_to_i64(kind: ast::IntLitKind, raw: &str, width: u32) -> Option<i64> {
+    if literal::fill_is_unknown(raw, kind) {
+        return None;
+    }
     literal::fill_literal_const(raw, kind, width)
         .map(|cv| cv.bits.val.first().copied().unwrap_or(0) as i64)
 }
@@ -402,6 +411,15 @@ impl Elaborator<'_> {
         }
     }
 
+    /// GAP-G: resolve the element-value table of a const array `base` used in a
+    /// constant-context element read (`base[i]`). Handles, in local-wins order:
+    /// (1) a module-local / generate-scope array by bare name (the same scope walk a
+    /// bare param Ident takes); (2) a package array named by its bare name made visible
+    /// via `import p::*` / `import p::ROT` — resolved through the var-alias the import
+    /// machinery bound (`pkg_var_aliases`) to its origin package; (3) an explicitly
+    /// package-qualified array `p::ROT`. Any other base shape (hierarchical,
+    /// multi-segment, a non-captured array) → None → the read stays loud at the binding
+    /// site (correct-or-loud).
     pub(crate) fn const_array_vals_of_base(&self, base: &ast::Expr) -> Option<&Vec<i64>> {
         match &base.kind {
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {

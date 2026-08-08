@@ -165,6 +165,17 @@ pub(crate) fn echo_effective_invocation(
     lines.extend(row("defines", &defines));
     let plusargs: Vec<String> = opts.plusargs.iter().map(|p| format!("+{p}")).collect();
     lines.extend(row("plusargs", &plusargs));
+    // The elaborate-stage knob, beside its compile-stage (`defines`) and run-stage
+    // (`plusargs`) siblings. `-G` is the one flag whose effect is a DIFFERENT design,
+    // so leaving it visible only inside the raw `invocation:` line — where a filelist
+    // or an attached `-GW=8` spelling hides it — is exactly backwards for a row whose
+    // job is to report effective values.
+    let params: Vec<String> = opts
+        .top_params
+        .iter()
+        .map(|(n, v)| format!("{n}={v}"))
+        .collect();
+    lines.extend(row("params", &params));
     lines.extend(row("tops", &opts.tops));
     if let Some(o) = out {
         lines.extend(row("output", std::slice::from_ref(&o.to_string())));

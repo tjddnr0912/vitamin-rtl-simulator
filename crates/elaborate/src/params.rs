@@ -2,6 +2,65 @@
 
 use super::*;
 
+/// One instance's parameter overrides, already resolved against the module's
+/// parameter port list by `resolve_param_overrides` — name-keyed, so the ANSI header
+/// loop and the module-BODY loop in `instance.rs` bind from the SAME decision about
+/// which override targets which declaration.
+///
+/// The four maps are not interchangeable and each answers a different question:
+/// `by_name` = the override folded to an i64 (`Some(None)` = written but did not
+/// fold); `fill` = a `'0`/`'1` literal re-folded at the target's declared width;
+/// `text` = a string override (`value` is i64-only, so dropping it ran the child with
+/// its default at exit 0); `unfoldable` = written and did not fold, which must be
+/// loud rather than a silent fallback to the declared default.
+#[derive(Default, Clone)]
+pub(crate) struct ParamOverrides {
+    pub(crate) by_name: BTreeMap<String, Option<i64>>,
+    pub(crate) fill: BTreeMap<String, (ast::IntLitKind, String)>,
+    pub(crate) text: BTreeMap<String, String>,
+    pub(crate) unfoldable: std::collections::BTreeSet<String>,
+}
+
+impl ParamOverrides {
+    /// Does any channel target this declaration? The module-body loop asks this to
+    /// decide whether a body parameter is bound by `bind_one_param` (override
+    /// applied, or a loud rejection owed) or folded by its own decl-order pass.
+    ///
+    /// All four terms are checked, but `text` can never decide it alone: a named string
+    /// override always sets `unfoldable` too (its `value` is None and `had_value` is
+    /// true), and the positional arm always sets `by_name`. `fill` IS sole — for a
+    /// NAMED `'x`/`'z`, which `bind_one_param` refuses. (Measured, both ways: dropping
+    /// `text` from this list changes no answer in the whole suite; dropping `fill`
+    /// used to change none either, until that refusal existed.)
+    pub(crate) fn targets(&self, name: &str) -> bool {
+        self.by_name.contains_key(name)
+            || self.fill.contains_key(name)
+            || self.text.contains_key(name)
+            || self.unfoldable.contains(name)
+    }
+
+    /// Drop every channel's entry for `name` before a later override writes its own.
+    ///
+    /// Last write wins ACROSS channels, not merely within one. The overrides arrive in
+    /// one list with `defparam` appended after the instance's `#()` (IEEE §23.10.1 —
+    /// a `defparam` supersedes the parameter assignment), and each channel used to
+    /// insert independently: `sub #(.K('0)) u(); defparam u.K = 6;` wrote `fill` then
+    /// `by_name`, and since `bind_one_param` prefers the declared-width fill re-fold,
+    /// the `'0` won and the `defparam` was silently ignored (iverilog: 6, vita: 0).
+    ///
+    /// `had_value` gates it because `.W()` with no expression is not an override at
+    /// all — it legally means "keep the default" and must not erase a real one.
+    fn clear_target(&mut self, name: &str, had_value: bool) {
+        if !had_value {
+            return;
+        }
+        self.by_name.remove(name);
+        self.fill.remove(name);
+        self.text.remove(name);
+        self.unfoldable.remove(name);
+    }
+}
+
 impl Elaborator<'_> {
     pub(crate) fn param_decl_width(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
@@ -232,6 +291,85 @@ impl Elaborator<'_> {
         self.const_eval_in_scope(e)
     }
 
+    /// The module's OVERRIDABLE parameter list — IEEE 1364-2005 §12.2 / IEEE
+    /// 1800-2017 §23.2.2.1.
+    ///
+    /// A module written with an ANSI header (`module m #(parameter W = 8);`) has an
+    /// explicit parameter port list, and that list is the whole of it: a `parameter`
+    /// declared in the BODY of such a module is not overridable (iverilog agrees —
+    /// "Parameter cannot be overridden in the scope it has been declared in"), so
+    /// the header list is returned verbatim.
+    ///
+    /// A module written without one (`module m; parameter W = 8;`, the Verilog-2005
+    /// spelling) has an IMPLICIT parameter port list instead: its top-level body
+    /// parameter declarations, in declaration order. A `parameter` declared inside a
+    /// `generate` block is in a different scope and is not overridable (iverilog:
+    /// "parameter `GP` not found") — only `module.body` top level is walked, so
+    /// those are never reached.
+    ///
+    /// `localparam`s are IN this list, so naming one is the precise "cannot override
+    /// localparam" and not a misleading "unknown parameter" (iverilog reports the
+    /// same). They are not POSITIONAL slots though — see `positional_param_ports`.
+    ///
+    /// Every override channel resolves names through THIS one list: `#()` named and
+    /// positional (`bind_params`), `defparam` (merged into `bind_params` as named
+    /// overrides), and `-G` (`cli_overrides_for`). A second spelling would let the
+    /// channels disagree about what a module's parameters are. (`defparam` does not
+    /// reach an INTERFACE instance at all — it warns and keeps the default, in PRE and
+    /// POST alike; that is a separate gap, recorded in ROADMAP §3, not a disagreement
+    /// about this list.)
+    pub(crate) fn param_ports(module: &ast::ModuleDecl) -> Vec<&ast::ParamDecl> {
+        if !module.params.is_empty() {
+            return module.params.iter().collect();
+        }
+        module
+            .body
+            .iter()
+            .filter_map(|it| match it {
+                ast::ModuleItem::Param(p) => Some(p),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The subset of `param_ports` that a POSITIONAL `#(v1, v2)` override binds to,
+    /// in order. A `localparam` is not overridable, so it does not occupy a slot —
+    /// `parameter A; localparam L; parameter B;` + `#(10, 30)` binds A=10 and B=30
+    /// (oracle: iverilog, for the body list AND for an SV header list that mixes the
+    /// two). Counting it made the second value land on the localparam and the design
+    /// went loud.
+    pub(crate) fn positional_param_ports(module: &ast::ModuleDecl) -> Vec<&ast::ParamDecl> {
+        Self::param_ports(module)
+            .into_iter()
+            .filter(|p| matches!(p.kind, ast::ParamKind::Parameter))
+            .collect()
+    }
+
+    /// The loud refusal for a parameter whose DECLARED value did not fold into the i64
+    /// parameter domain. One spelling for the three folds that reach it — the shared
+    /// binder here, `instance.rs`'s module-body copy, and `generate.rs`'s — because the
+    /// reason is a property of the domain, not of which copy happened to run.
+    ///
+    /// An `'x`/`'z` fill gets its own sentence: it IS a foldable constant (iverilog
+    /// folds `parameter [7:0] A = 'x;` to `xx`), so calling it unfoldable sends the
+    /// reader hunting a syntax problem that is not there. What it lacks is a
+    /// REPRESENTATION. A declaration wider than 64 bits takes the `wide_param_bits`
+    /// route instead and does carry the x's — which is why the narrow case is the only
+    /// one that has to say this.
+    pub(crate) fn param_value_unfoldable(&mut self, what: &str, name: &str, value: &ast::Expr) {
+        let unknown_fill = const_eval::fill_literal_ast(value)
+            .map(|(raw, kind)| (raw.to_string(), kind))
+            .filter(|(raw, kind)| literal::fill_is_unknown(raw, *kind));
+        let msg = match unknown_fill {
+            Some((raw, _)) => format!(
+                "{what} `{name}` is declared `{raw}`, which this parameter model cannot \
+                 hold — a parameter value has no x/z plane"
+            ),
+            None => format!("{what} `{name}` value is not a foldable constant expression"),
+        };
+        self.error(MsgCode::ElabUnsupported, &msg);
+    }
+
     /// Turn `-G NAME=VALUE` into overrides for one top module.
     ///
     /// A value is a decimal integer (`-G W=8`, `-G N=-1`), a Verilog sized literal
@@ -244,8 +382,9 @@ impl Elaborator<'_> {
         used: &mut std::collections::BTreeSet<String>,
     ) -> Vec<ResolvedOverride> {
         let mut out = Vec::new();
+        let ports = Self::param_ports(module);
         for (name, raw) in self.top_param_overrides.clone() {
-            let Some(p) = module.params.iter().find(|p| p.name.name == name) else {
+            let Some(p) = ports.iter().find(|p| p.name.name == name) else {
                 continue; // another root may declare it; reported once by the caller
             };
             used.insert(name.clone());
@@ -257,6 +396,40 @@ impl Elaborator<'_> {
                 continue;
             }
             let t = raw.trim();
+            // EVERY fill literal goes to the `fill` channel — the same one `#(.K('1))`
+            // uses — because a fill has no width of its own and takes the target's.
+            // `parse_int_literal` below would size it here instead, and it gets both
+            // halves wrong: it drops the unknown mask, so `-G K='x` ran the child with
+            // `K=0` (`'z`: all-ones) at exit 0; and it sizes `'1` to 32 bits, so
+            // `-G K='1` installed `0000_0000_ffff_ffff` in a 64-bit parameter while
+            // `#(.K('1))` on the same declaration installed all ones. `bind_one_param`
+            // is the only place the target's DECLARED width is known — it re-folds
+            // `'0`/`'1` there and refuses `'x`/`'z` outright.
+            if literal::is_fill_literal(t, ast::IntLitKind::UnsizedBased) {
+                let kind = ast::IntLitKind::UnsizedBased;
+                // `value` carries the SAME self-determined 32-bit fold that
+                // `const_eval_in_scope` gives the `#(.K('1))` spelling, so the two
+                // channels present one shape to `bind_one_param` and take the same
+                // arms. It is a fallback, not the answer — `fill` above wins wherever
+                // a declared width exists. Sending `None` here instead (as the first
+                // cut did) emptied `by_name`, and EVERY guard that decides a fill
+                // cannot apply reads `by_name`: `-G S='1` on a `parameter string`,
+                // `-G R='1` on a `real`, and `-G T='1` on a width-less `time` all
+                // became silent no-ops at exit 0 — output byte-identical to passing
+                // no flag at all, where PRE was loud about the string.
+                // An UNKNOWN fill deliberately keeps `value: None`: there is no i64 it
+                // could fall back to, and the refusal in `bind_one_param` owns it.
+                let value = (!literal::fill_is_unknown(t, kind)).then(|| fill_to_i64(kind, t, 32));
+                out.push(ResolvedOverride {
+                    name: Some(name),
+                    value: value.flatten(),
+                    is_named: true,
+                    fill: Some((kind, t.to_string())),
+                    had_value: true,
+                    str: None,
+                });
+                continue;
+            }
             let (value, text) = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
                 (None, Some(t[1..t.len() - 1].to_string()))
             } else if let Ok(v) = t.parse::<i64>() {
@@ -293,42 +466,50 @@ impl Elaborator<'_> {
         out
     }
 
-    pub(crate) fn bind_params(
+    /// Resolve `#()` / `defparam` / `-G` overrides against a module's parameter port
+    /// list (`param_ports`) — the name/position half of `bind_params`, split out so
+    /// the module-BODY parameter loop in `instance.rs` binds an overridden body
+    /// parameter through the SAME resolution and the same `bind_one_param` below.
+    /// A second spelling there would let `#(.W(8))` and `module m; parameter W;`
+    /// disagree about which override applies.
+    pub(crate) fn resolve_param_overrides(
         &mut self,
         module: &ast::ModuleDecl,
         overrides: &[ResolvedOverride],
-    ) -> Vec<(String, Option<i64>)> {
+    ) -> ParamOverrides {
         // Build name→value from the resolved overrides. Positional binds to the
-        // i-th declaration index (matches module.params order). A fill-literal
-        // override (`#(.P('1))`) is carried as `(kind, raw)` and re-folded at the
-        // CHILD param's declared width below.
-        let mut ovr_by_name: BTreeMap<&str, Option<i64>> = BTreeMap::new();
-        let mut ovr_fill: BTreeMap<&str, &(ast::IntLitKind, String)> = BTreeMap::new();
-        let mut ovr_unfoldable: std::collections::BTreeSet<String> = Default::default();
-        let mut ovr_str: BTreeMap<&str, &str> = BTreeMap::new();
+        // i-th overridable declaration. A fill-literal override (`#(.P('1))`) is
+        // carried as `(kind, raw)` and re-folded at the CHILD param's declared width.
+        let mut o = ParamOverrides::default();
         let mut pos_i = 0usize;
+        // IEEE 1364-2005 §12.2: the overridable list is the ANSI header when there is
+        // one, and the top-level body parameter declarations when there is not (see
+        // `param_ports`). Positional binding skips localparams (`positional_param_ports`).
+        let ports = Self::param_ports(module);
+        let pos_ports = Self::positional_param_ports(module);
         for ov in overrides {
             if ov.is_named {
                 let Some(n) = ov.name.as_deref() else {
                     continue;
                 };
                 // Fix 2 (mirror): a named override naming no real param is an error.
-                match module.params.iter().find(|p| p.name.name == n) {
+                match ports.iter().find(|p| p.name.name == n) {
                     Some(p) => {
+                        o.clear_target(&p.name.name, ov.had_value);
                         if let Some(v) = ov.value {
-                            ovr_by_name.insert(p.name.name.as_str(), Some(v));
+                            o.by_name.insert(p.name.name.clone(), Some(v));
                         } else if ov.fill.is_none() && ov.had_value {
                             // r19: the override was WRITTEN but did not fold (a real
-                            // expression, a signal, …). `ovr_by_name` only holds folded
+                            // expression, a signal, …). `by_name` only holds folded
                             // values, so record the attempt — a REAL-typed target must
                             // reject rather than silently run with its declared default.
-                            ovr_unfoldable.insert(p.name.name.clone());
+                            o.unfoldable.insert(p.name.name.clone());
                         }
                         if let Some(f) = &ov.fill {
-                            ovr_fill.insert(p.name.name.as_str(), f);
+                            o.fill.insert(p.name.name.clone(), f.clone());
                         }
                         if let Some(t) = &ov.str {
-                            ovr_str.insert(p.name.name.as_str(), t.as_str());
+                            o.text.insert(p.name.name.clone(), t.clone());
                         }
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
@@ -340,21 +521,22 @@ impl Elaborator<'_> {
                     }
                 }
             } else {
-                match module.params.get(pos_i) {
+                match pos_ports.get(pos_i) {
                     Some(p) => {
-                        ovr_by_name.insert(p.name.name.as_str(), ov.value);
+                        o.clear_target(&p.name.name, ov.had_value);
+                        o.by_name.insert(p.name.name.clone(), ov.value);
                         if let Some(f) = &ov.fill {
-                            ovr_fill.insert(p.name.name.as_str(), f);
+                            o.fill.insert(p.name.name.clone(), f.clone());
                         }
                         if let Some(t) = &ov.str {
-                            ovr_str.insert(p.name.name.as_str(), t.as_str());
+                            o.text.insert(p.name.name.clone(), t.clone());
                         }
                         if ov.value.is_none()
                             && ov.fill.is_none()
                             && ov.str.is_none()
                             && ov.had_value
                         {
-                            ovr_unfoldable.insert(p.name.name.clone());
+                            o.unfoldable.insert(p.name.name.clone());
                         }
                     }
                     None => {
@@ -367,11 +549,67 @@ impl Elaborator<'_> {
                 pos_i += 1;
             }
         }
+        o
+    }
 
+    pub(crate) fn bind_params(
+        &mut self,
+        module: &ast::ModuleDecl,
+        overrides: &[ResolvedOverride],
+    ) -> (Vec<(String, Option<i64>)>, ParamOverrides) {
+        let ovr = self.resolve_param_overrides(module, overrides);
         let mut saved = Vec::new();
         for p in &module.params {
+            self.bind_one_param(p, &ovr, &mut saved);
+        }
+        // A module with no ANSI header binds its body parameters in `instance.rs`
+        // (decl order, after imports and net prescan) and an interface binds its own
+        // in `iface_inst.rs`, so an override that targets one is applied THERE —
+        // through `bind_one_param`, with this same set.
+        (saved, ovr)
+    }
+
+    /// Bind ONE parameter declaration: apply an override if one targets it, else fold
+    /// its declared default, and register the result in every map a parameter lives in
+    /// (`params`, `hier_params`, `param_meta`, `param_range`, or the string / real /
+    /// wide side maps). Three callers: `bind_params` for each ANSI header parameter,
+    /// the module-body loop in `instance.rs` for an OVERRIDDEN body parameter, and the
+    /// interface body loop in `iface_inst.rs` for EVERY interface body parameter.
+    pub(crate) fn bind_one_param(
+        &mut self,
+        p: &ast::ParamDecl,
+        ovr: &ParamOverrides,
+        saved: &mut Vec<(String, Option<i64>)>,
+    ) {
+        // A `localparam` is IN `param_ports` on purpose — naming one must give the
+        // precise "cannot override localparam" and not a misleading "unknown
+        // parameter" (iverilog reports the same). It is not OVERRIDABLE, though, so
+        // answer that HERE, once, and bind the declared value with every channel
+        // ignored. Every diagnostic below describes what an override would DO (it did
+        // not fold; it is a string where a number is wanted; it has no x/z plane) and
+        // none of them is the reason a localparam refuses one. Deciding it lower, per
+        // channel, is what reported `#(.L(sig))` as "the override of parameter `L` is
+        // not a constant" — the wrong noun AND the wrong reason — while iverilog says
+        // "Cannot override localparam `L`".
+        let empty = ParamOverrides::default();
+        let ovr = if matches!(p.kind, ast::ParamKind::Parameter) {
+            ovr
+        } else {
+            if ovr.targets(&p.name.name) {
+                self.error(
+                    MsgCode::ElabPortMismatch,
+                    &format!("cannot override localparam `{}`", p.name.name),
+                );
+            }
+            &empty
+        };
+        let ovr_by_name = &ovr.by_name;
+        let ovr_fill = &ovr.fill;
+        let ovr_unfoldable = &ovr.unfoldable;
+        let ovr_str = &ovr.text;
+        {
             // ★ ORDERING RULE — this block runs for EVERY parameter, before any
-            // side-map `continue` below.
+            // side-map early `return` below.
             //
             // An override that was WRITTEN but did not fold used to be a warning
             // ("default kept") and the child then ran with the wrong parameter at
@@ -388,6 +626,30 @@ impl Elaborator<'_> {
             // covers the string case, and `ovr_fill` the fill case. `.W()` with no
             // expression is untouched: it legally means "keep the default" and never
             // enters `ovr_unfoldable`.
+            // An `'x`/`'z` FILL override cannot be carried at all: this channel is i64
+            // and has no unknown plane, so there is no width and no declaration type at
+            // which it becomes representable. That is why the test is the fill BIT and
+            // not `ovr_fill_v.is_none()` — the value-level test only fires on the arm
+            // the NAMED spelling happens to take, and the round-1 spelling of this
+            // check sat there. `#(.K('x))` was loud while the positional `#('x)` of the
+            // same override silently installed `K=0` and `#('z)` installed `K=255`
+            // (`fill_to_i64` used to drop the unknown mask; it now declines, so nothing
+            // downstream can fold one either). Placed HERE, above the string / real /
+            // wide returns, it also covers `#(.K('x))` on a `parameter real`.
+            if let Some((k, raw)) = ovr_fill.get(p.name.name.as_str()) {
+                if literal::fill_is_unknown(raw, *k) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "the `{raw}` override of parameter `{}` cannot be applied \
+                             — a parameter override carries an integer value and has \
+                             no x/z plane, so the declared default would be used \
+                             silently",
+                            p.name.name
+                        ),
+                    );
+                }
+            }
             let has_applied_override = ovr_by_name
                 .get(p.name.name.as_str())
                 .copied()
@@ -415,15 +677,7 @@ impl Elaborator<'_> {
             // in `ResolvedOverride::str` because `value` is i64-only and dropping it
             // ran the child with its default at exit 0.
             let str_val = match ovr_str.get(p.name.name.as_str()) {
-                Some(t) if matches!(p.kind, ast::ParamKind::Parameter) => Some(t.to_string()),
-                // fall through to the arms below
-                Some(_) => {
-                    self.error(
-                        MsgCode::ElabPortMismatch,
-                        &format!("cannot override localparam `{}`", p.name.name),
-                    );
-                    Self::param_str_literal(&p.value)
-                }
+                Some(t) => Some(t.to_string()),
                 None => {
                     // A `string` parameter overridden with a NUMBER: the override
                     // folded, so `ovr_by_name` has it and the escalation above stays
@@ -447,7 +701,7 @@ impl Elaborator<'_> {
             if let Some(raw) = str_val {
                 let key = self.fq(&p.name.name);
                 self.str_param_raw.insert(key, raw);
-                continue;
+                return;
             }
             // r19: a REAL-valued header parameter (`#(parameter real R = 1.5)`) has no
             // i64 value — route it to the side map before the numeric fold, exactly as
@@ -471,9 +725,26 @@ impl Elaborator<'_> {
                 // exit 0.
                 match ovr_by_name.get(p.name.name.as_str()).copied() {
                     Some(Some(ov)) => {
+                        // `real_param_val` is the real view; it serves the BARE read
+                        // (`lower_expr` prefers it over `params`). A hierarchical read
+                        // is not served at all — it is honestly loud, because neither
+                        // available representation survives the trip: publishing the
+                        // i64 to `hier_params` makes `a.P/2` divide in the INTEGER
+                        // domain, and patching the resolved placeholder with a real
+                        // constant lands after `lower_cast` has already committed
+                        // `int'(a.P)` to the integral path. Both were built and
+                        // measured; each swaps one silent-wrong for another. ROADMAP §2.
                         self.real_param_val.insert(key.clone(), ov as f64);
-                        self.params.insert(key, ov);
-                        continue;
+                        // The LOCAL i64 view. ⚠️ Its necessity is NOT established:
+                        // removing this insert entirely leaves every integral context
+                        // measured (packed range, unpacked dim, `$bits`, genvar bound,
+                        // `generate if`, case label, array index, `repeat`, delay, cast,
+                        // derived localparam) still correct — `real_param_val` serves
+                        // them — and no discriminator was found. It is kept because
+                        // "no discriminator" is not "dead"; do not cite it as the
+                        // mechanism that makes an exact-integer real usable as a width.
+                        saved.push((key.clone(), self.params.insert(key, ov)));
+                        return;
                     }
                     Some(None) => self.error(
                         MsgCode::ElabUnsupported,
@@ -500,9 +771,14 @@ impl Elaborator<'_> {
                 // "undeclared net/variable" at every downstream read.
                 self.real_param_val.insert(key.clone(), v);
                 if let Some(i) = exact {
-                    self.params.insert(key, i);
+                    // Twin of the override arm above: the LOCAL integer view, with the
+                    // same measured caveat. Nothing here is published for a hierarchical
+                    // read — a module/ANSI real parameter is not readable across an
+                    // instance boundary at all (the interface fold keeps its own i64
+                    // twin; see `iface_inst.rs` for the measured reason).
+                    saved.push((key.clone(), self.params.insert(key, i)));
                 }
-                continue;
+                return;
             }
             let meta = self.param_decl_width(p);
             let pw = meta.map(|(w, _)| w);
@@ -510,22 +786,16 @@ impl Elaborator<'_> {
             let ovr_fill_v = ovr_fill
                 .get(p.name.name.as_str())
                 .and_then(|(k, raw)| pw.and_then(|w| fill_to_i64(*k, raw, w)));
-            let chosen_val: Option<i64> = match ovr_by_name.get(p.name.name.as_str()) {
-                // override present + param is overridable → use it (None = fold-fail
-                // → fall back to the declared default). A fill override wins.
-                Some(ovr) if matches!(p.kind, ast::ParamKind::Parameter) => ovr_fill_v
-                    .or(*ovr)
-                    .or_else(|| self.eval_param_init(&p.value, pw)),
-                // override targeting a localparam → error, keep declared value.
-                Some(_) => {
-                    self.error(
-                        MsgCode::ElabPortMismatch,
-                        &format!("cannot override localparam `{}`", p.name.name),
-                    );
-                    self.eval_param_init(&p.value, pw)
-                }
-                None => self.eval_param_init(&p.value, pw),
-            };
+            // A fill override re-folded at THIS param's declared width wins over the
+            // same override's parent-side fold, and is consulted INDEPENDENTLY of
+            // `by_name`: the `-G` channel carries a fill with no i64 beside it, so
+            // keying the decision on `by_name` membership — as this did — dropped it
+            // and installed the declared default silently. `by_name` holding
+            // `Some(None)` (written, did not fold) also falls through to the declared
+            // default; the escalation above has already made that loud.
+            let chosen_val: Option<i64> = ovr_fill_v
+                .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
+                .or_else(|| self.eval_param_init(&p.value, pw));
             // Wider than the i64 constant domain — see `wide_param_bits`. Reached
             // ONLY when the numeric fold above already declined, so a wide DECLARATION
             // whose value happens to fit (`localparam logic [255:0] K = 256'h1`) keeps
@@ -538,19 +808,13 @@ impl Elaborator<'_> {
                 if let Some(cv) = meta.and_then(|(w, sg)| wide_param_const(&p.value, w, sg)) {
                     let key = self.fq(&p.name.name);
                     self.wide_param_bits.insert(key, cv);
-                    continue;
+                    return;
                 }
             }
             // Unfoldable param value = LOUD error, never a silent 0 (P0-5);
             // 0 is only the post-error recovery value.
             let v = chosen_val.unwrap_or_else(|| {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    &format!(
-                        "parameter `{}` value is not a foldable constant expression",
-                        p.name.name
-                    ),
-                );
+                self.param_value_unfoldable("parameter", &p.name.name, &p.value);
                 0
             });
             let v = self.coerce_param_value(v, p);
@@ -566,7 +830,6 @@ impl Elaborator<'_> {
             }
             saved.push((key.clone(), self.params.insert(key, v)));
         }
-        saved
     }
 
     /// Restore the param map to the snapshot taken before this instance bound its
@@ -597,232 +860,6 @@ impl Elaborator<'_> {
                     self.param_meta.remove(&k);
                 }
             }
-        }
-    }
-
-    /// GAP-G: resolve the element-value table of a const array `base` used in a
-    /// constant-context element read (`base[i]`). Handles, in local-wins order:
-    /// (1) a module-local / generate-scope array by bare name (the same scope
-    /// walk a bare param Ident takes); (2) a package array named by its bare name
-    /// made visible via `import p::*` / `import p::ROT` — resolved through the
-    /// var-alias the import machinery bound (`pkg_var_aliases`) to its origin
-    /// package; (3) an explicitly package-qualified array `p::ROT`. Any other
-    /// base shape (hierarchical, multi-segment, a non-captured array) → None →
-    /// the read stays loud at the binding site (correct-or-loud).
-    /// True if a (constant) replication-count expression reads a const-array
-    /// ELEMENT (`CNT[i]`) anywhere — directly or inside an arithmetic wrapper
-    /// (`CNT[0]+1`, `-CNT[0]`, `c ? CNT[0] : 1`). Such an element read is not a
-    /// runtime net the engine can fold, so a foldable count containing one must
-    /// be materialized as a literal (else it reads 0 → 0-width). Recurses only
-    /// the node kinds a constant count uses; `const_array_vals_of_base` gates the
-    /// `BitSelect` on a genuine const array (a packed-vector bit-select or a
-    /// runtime array read is NOT one → left to the ordinary lowering).
-    pub(crate) fn count_reads_const_array_elem(&self, e: &ast::Expr) -> bool {
-        match &e.kind {
-            ast::ExprKind::BitSelect { base, .. } => self.const_array_vals_of_base(base).is_some(),
-            ast::ExprKind::Paren { inner } => self.count_reads_const_array_elem(inner),
-            ast::ExprKind::Unary { operand, .. } => self.count_reads_const_array_elem(operand),
-            ast::ExprKind::Binary { lhs, rhs, .. } => {
-                self.count_reads_const_array_elem(lhs) || self.count_reads_const_array_elem(rhs)
-            }
-            ast::ExprKind::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => {
-                self.count_reads_const_array_elem(cond)
-                    || self.count_reads_const_array_elem(then_e)
-                    || self.count_reads_const_array_elem(else_e)
-            }
-            // `$clog2(CNT[i])` etc. — the element read hides inside a system-call
-            // arg (`const_eval_in_scope` folds `$clog2`/`$bits`).
-            ast::ExprKind::SysCall { args, .. } => {
-                args.iter().any(|a| self.count_reads_const_array_elem(a))
-            }
-            _ => false,
-        }
-    }
-
-    /// r19: is `name` a REAL parameter with NO exact integer twin? A real param whose
-    /// initializer const-folded to an i64 is registered in BOTH `real_param_val` and
-    /// `params` — both representations are exact and agree — so it keeps every integral
-    /// capability it had before this slice (`logic [R-1:0]`, `generate if (R > 2)`, …)
-    /// while `R/2` still divides in the real domain. Only a param with no i64 twin
-    /// (`= 1.5`) is non-integral and must go loud in an integral context.
-    ///
-    /// Resolves over the COMBINED binding set — an independent walk of `real_param_val` alone
-    /// would match an OUTER real param even when an inner net / numeric param shadows
-    /// it, resolving one name two different ways.
-    pub(crate) fn real_param_is_non_integral(&self, name: &str) -> bool {
-        let Some(key) = self.walk_scopes_key(name, |k| {
-            self.real_param_val.contains_key(k)
-                || self.params.contains_key(k)
-                || self.symbols.contains_key(k)
-        }) else {
-            return false;
-        };
-        self.real_param_val.contains_key(&key) && !self.params.contains_key(&key)
-    }
-
-    /// r19: does `e` read a REAL-valued parameter? A real param is deliberately kept
-    /// out of `params` (it has no i64 value), so `const_eval_in_scope` returns None
-    /// for it and a constant-required context that lacks its own loud gate silently
-    /// folded to 0 — `{int'(R){1'b1}}` printed `0` instead of `11`. The loud twin of
-    /// the array-element / runtime-net count detectors, same recursive shape.
-    /// r19/B2: does `name` lower to a REAL value? `lower_expr`'s Ident arm prefers
-    /// `real_param_val` over `params`, so a real param WITH an exact i64 twin still
-    /// lowers to a real `Const`. A consumer that goes through `lower_expr` must ask
-    /// this, not `real_param_is_non_integral` — that one models the const-FOLD
-    /// resolver (`params`), and a `parameter real R = 4;` answers the two questions
-    /// differently. Asking the wrong one let a real count reach `ir::Expr::Replicate`
-    /// and emit 2^24 bits at exit 0. Same predicate, two resolvers: pick by consumer.
-    pub(crate) fn real_param_lowers_real(&self, name: &str) -> bool {
-        self.walk_scopes_key(name, |k| {
-            self.real_param_val.contains_key(k)
-                || self.params.contains_key(k)
-                || self.symbols.contains_key(k)
-        })
-        .is_some_and(|k| self.real_param_val.contains_key(&k))
-    }
-
-    /// r19: the `lower_expr`-resolver twin of [`Self::count_reads_real_param`], for
-    /// consumers that lower their operand rather than const-folding it.
-    pub(crate) fn count_lowers_real_param(&self, e: &ast::Expr) -> bool {
-        match &e.kind {
-            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                self.real_param_lowers_real(&p.segments[0].name)
-            }
-            ast::ExprKind::Call { args, .. } => {
-                args.iter().any(|a| self.count_lowers_real_param(a))
-            }
-            ast::ExprKind::Paren { inner } => self.count_lowers_real_param(inner),
-            ast::ExprKind::Unary { operand, .. } => self.count_lowers_real_param(operand),
-            ast::ExprKind::Cast { expr, .. } => self.count_lowers_real_param(expr),
-            ast::ExprKind::Binary { lhs, rhs, .. } => {
-                self.count_lowers_real_param(lhs) || self.count_lowers_real_param(rhs)
-            }
-            // These two MUST be mirrored rather than delegated: the `_` fallback below
-            // reaches `count_reads_real_param`, i.e. back to the const-FOLD resolver,
-            // which answers `false` for a real param that has an exact i64 twin. That
-            // is how `{$clog2(R){1'b1}}` with `parameter real R = 4;` still folded to a
-            // silent 0 — one syntactic layer was enough to re-enter the wrong resolver.
-            ast::ExprKind::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => {
-                self.count_lowers_real_param(cond)
-                    || self.count_lowers_real_param(then_e)
-                    || self.count_lowers_real_param(else_e)
-            }
-            ast::ExprKind::SysCall { args, .. } => {
-                args.iter().any(|a| self.count_lowers_real_param(a))
-            }
-            _ => self.count_reads_real_param(e),
-        }
-    }
-
-    pub(crate) fn count_reads_real_param(&self, e: &ast::Expr) -> bool {
-        match &e.kind {
-            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                self.real_param_is_non_integral(&p.segments[0].name)
-            }
-            // A const-FUNCTION call is the hole the bound guard was meant to be the only
-            // net for: neither this walk nor `nonconst_bound_reason` descended into call
-            // args, so `logic [f(R)-1:0]` folded to None and `clamp_bound_u32` silently
-            // gave width 1 on a design iverilog answers.
-            ast::ExprKind::Call { args, .. } => args.iter().any(|a| self.count_reads_real_param(a)),
-            ast::ExprKind::Paren { inner } => self.count_reads_real_param(inner),
-            ast::ExprKind::Unary { operand, .. } => self.count_reads_real_param(operand),
-            ast::ExprKind::Cast { expr, .. } => self.count_reads_real_param(expr),
-            ast::ExprKind::Binary { lhs, rhs, .. } => {
-                self.count_reads_real_param(lhs) || self.count_reads_real_param(rhs)
-            }
-            ast::ExprKind::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => {
-                self.count_reads_real_param(cond)
-                    || self.count_reads_real_param(then_e)
-                    || self.count_reads_real_param(else_e)
-            }
-            ast::ExprKind::SysCall { args, .. } => {
-                args.iter().any(|a| self.count_reads_real_param(a))
-            }
-            _ => false,
-        }
-    }
-
-    /// True if a replication-count expression reads an UNPACKED-ARRAY element of
-    /// ANY shape — including shapes `const_array_vals_of_base` cannot fold
-    /// (descending, non-zero-based, multi-dimensional) and a RUNTIME array. Uses
-    /// the array net directly (`net_is_static_array`), so it is the loud-gate
-    /// twin of [`Self::count_reads_const_array_elem`]: a count that reads such an
-    /// element but does NOT const-fold is an invalid/unsupported constant count
-    /// and must be LOUD (the engine would otherwise read 0 → silent 0-width),
-    /// mirroring the loud `localparam R = ROT[i]` binding site. A scalar
-    /// (packed-vector) net has `array_len == 1` → NOT flagged, so a packed
-    /// bit/part-select count is left to the ordinary lowering (byte-identical).
-    pub(crate) fn count_reads_array_param_elem(&self, e: &ast::Expr) -> bool {
-        match &e.kind {
-            ast::ExprKind::BitSelect { base, .. } => {
-                self.base_is_array_net(base) || self.count_reads_array_param_elem(base)
-            }
-            ast::ExprKind::Paren { inner } => self.count_reads_array_param_elem(inner),
-            ast::ExprKind::Unary { operand, .. } => self.count_reads_array_param_elem(operand),
-            ast::ExprKind::Binary { lhs, rhs, .. } => {
-                self.count_reads_array_param_elem(lhs) || self.count_reads_array_param_elem(rhs)
-            }
-            ast::ExprKind::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => {
-                self.count_reads_array_param_elem(cond)
-                    || self.count_reads_array_param_elem(then_e)
-                    || self.count_reads_array_param_elem(else_e)
-            }
-            ast::ExprKind::SysCall { args, .. } => {
-                args.iter().any(|a| self.count_reads_array_param_elem(a))
-            }
-            _ => false,
-        }
-    }
-
-    /// Overwrite the deferred placeholder at `eid` (a `Signal`) with a `Const`
-    /// folding the i64 hierarchical-param value `v` — same width/sign as
-    /// [`Self::const_param_expr`] (byte-identical to how a bare param folds), but
-    /// written IN PLACE so the existing arena edge keeps pointing at it.
-    pub(crate) fn patch_expr_param_const(&mut self, eid: u32, v: i64) {
-        let cv = if let Ok(u) = u32::try_from(v) {
-            make_const_u32(u, 32)
-        } else if i32::try_from(v).is_ok() {
-            make_const_i64(v, 32, true)
-        } else {
-            make_const_i64(v, 64, v < 0)
-        };
-        let cid = self.intern_const(cv);
-        if let Some(slot) = self.exprs.get_mut(eid as usize) {
-            *slot = ir::Expr::Const { val: cid };
-        }
-    }
-
-    /// Width-aware [`Self::patch_expr_param_const`]: a hierarchical read of a TYPED
-    /// param (`dut.W` where `W` is `logic [63:0]`) materializes at its DECLARED
-    /// width, mirroring the bare-param [`Self::const_param_expr_w`]. `None` meta
-    /// (untyped param / no recorded width) falls back to value-inference.
-    pub(crate) fn patch_expr_param_const_w(&mut self, eid: u32, v: i64, meta: Option<(u32, bool)>) {
-        let cv = match meta {
-            Some((w, signed)) if (1..=64).contains(&w) => make_const_i64(v, w, signed),
-            _ => {
-                self.patch_expr_param_const(eid, v);
-                return;
-            }
-        };
-        let cid = self.intern_const(cv);
-        if let Some(slot) = self.exprs.get_mut(eid as usize) {
-            *slot = ir::Expr::Const { val: cid };
         }
     }
 }

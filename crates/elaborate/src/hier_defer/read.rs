@@ -176,6 +176,15 @@ impl Elaborator<'_> {
                 // which folds to a const in this runtime/expression context (a
                 // const-context hierarchical param is loud — the sibling instance
                 // is not yet elaborated when the const-eval needs the value).
+                // ⚠️ A `parameter real` is NOT served here. Patching this placeholder
+                // with a real constant makes the REAL-domain reads right (`a.P/2`) and
+                // the INTEGRAL consumers silently wrong: `lower_cast` already decided
+                // `int'(a.P)` was integral when the operand was still a placeholder, so
+                // the patched const is read as bits (`int'` → 0, `longint'` → the IEEE-754
+                // word, while `integer'` happens to survive). That is the leaf-vs-context
+                // conversion trap, it is pre-existing for a hierarchical real VARIABLE
+                // (`a.rv`, identical in PRE), and trading the loud below for it would
+                // swap one silent-wrong for another. ROADMAP §2 owns the axis.
                 if let Some(v) = self.hier_lookup_param(&d.prefix, &d.path) {
                     let meta = self.hier_lookup_param_meta(&d.prefix, &d.path);
                     self.patch_expr_param_const_w(d.eid, v, meta);

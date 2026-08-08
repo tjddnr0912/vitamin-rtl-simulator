@@ -260,6 +260,14 @@ pub fn is_fill_literal(raw: &str, kind: IntLitKind) -> bool {
     fill_bit(raw, kind).is_some()
 }
 
+/// Is `raw`/`kind` a fill literal whose bit is UNKNOWN (`'x`/`'z`/`'?`)? Callers that
+/// can only carry a two-state integer ask this so they refuse rather than fold: the
+/// packed value word of an x/z fill is a plausible-looking 0 or all-ones with the
+/// unknown mask thrown away, which is a wrong number and not a missing one.
+pub fn fill_is_unknown(raw: &str, kind: IntLitKind) -> bool {
+    matches!(fill_bit(raw, kind), Some(b) if b.u)
+}
+
 /// Build the `ConstVal` of a fill literal at the CONTEXT width `width` (the fill
 /// bit replicated across all `width` bits). `None` if `raw`/`kind` is not a fill
 /// literal. Fills are UNSIGNED (iverilog parity: `'1 > 0` is true); the engine

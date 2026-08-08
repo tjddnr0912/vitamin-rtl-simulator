@@ -162,18 +162,22 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(|(param, v)| ResolvedOverride {
+                    .map(|(param, v, fill)| ResolvedOverride {
                         name: Some(param),
                         value: Some(v),
                         is_named: true,
                         had_value: true,
-                        fill: None,
+                        // Carried verbatim so `bind_one_param` re-folds it at the
+                        // TARGET's declared width — the same channel `#(.K('1))`
+                        // uses. `v` above is the parent-side 32-bit fold and is the
+                        // fallback for everything that is not a fill.
+                        fill,
                         str: None,
                     })
                     .collect()
             })
             .unwrap_or_default();
-        let mut saved_params = if dp_overrides.is_empty() {
+        let (mut saved_params, param_ovr) = if dp_overrides.is_empty() {
             self.bind_params(module, param_overrides)
         } else {
             let mut merged = param_overrides.to_vec();
@@ -266,6 +270,28 @@ impl Elaborator<'_> {
         for item in &module.body {
             match item {
                 ast::ModuleItem::Param(p) => {
+                    // IEEE 1364-2005 §12.2: in a module with no ANSI `#(...)` header
+                    // these body declarations ARE the parameter port list, so an
+                    // override may target one (`#(.W(8))`, `#(8)`, `defparam u.W=8`,
+                    // `-G W=8` — all four resolve through `param_ports`). Binding it
+                    // HERE, in the same decl-order walk, is what lets a later
+                    // `parameter C = W*2` see the overridden value; and routing it
+                    // through the shared `bind_one_param` is what keeps the string /
+                    // real / wide / fill / localparam-reject routes to ONE spelling
+                    // instead of a second copy that would drift.
+                    //
+                    // A module that HAS a header list already bound every overridable
+                    // name above, and its body parameters are not overridable at all
+                    // (iverilog: "Parameter cannot be overridden in the scope it has
+                    // been declared in"), so `param_ports` returns the header there.
+                    // `targets` is then false for every body name EXCEPT one that
+                    // repeats a header name — which iverilog rejects outright ("`W`
+                    // has already been declared in this scope") and vita has always
+                    // accepted, so the branch decides an illegal design either way.
+                    if param_ovr.targets(&p.name.name) {
+                        self.bind_one_param(p, &param_ovr, &mut saved_params);
+                        continue;
+                    }
                     // N5: a string-valued parameter/localparam (`localparam string S =
                     // "abc"`, or the untyped `localparam S = "abc"`). It has no i64
                     // value, so record its raw literal (FQ-keyed, persistent — walk_scopes
@@ -283,7 +309,15 @@ impl Elaborator<'_> {
                         let key = self.fq(&p.name.name);
                         self.real_param_val.insert(key.clone(), v);
                         if let Some(i) = exact {
-                            self.params.insert(key, i);
+                            // The LOCAL integer view only — an exact-integer real stays
+                            // usable as a width and a bound inside this scope. It is
+                            // deliberately NOT published to `hier_params`: doing so made
+                            // `a.P` resolvable while answering in the wrong domain, and
+                            // it also split the answer by whether the declaration
+                            // happened to be OVERRIDDEN (only an override or an exact
+                            // default ever produced an i64). Hierarchical reads of a
+                            // real parameter are loud — ROADMAP §2 owns the axis.
+                            saved_params.push((key.clone(), self.params.insert(key, i)));
                         }
                     } else {
                         // Unfoldable value = LOUD error (never a silent 0): a parameter
@@ -304,13 +338,7 @@ impl Elaborator<'_> {
                             }
                         }
                         let v = folded.unwrap_or_else(|| {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
-                                    "parameter `{}` value is not a foldable constant expression",
-                                    p.name.name
-                                ),
-                            );
+                            self.param_value_unfoldable("parameter", &p.name.name, &p.value);
                             0
                         });
                         let v = self.coerce_param_value(v, p);
@@ -794,10 +822,15 @@ impl Elaborator<'_> {
                         };
                         let fq = format!("{}.{}", self.cur_prefix, path.segments[0].name);
                         let param = path.segments[1].name.clone();
+                        // A fill literal is carried verbatim ALONGSIDE the fold above:
+                        // its width is the TARGET's declared width, which is not known
+                        // here, so `v` is only the 32-bit self-determined fold and is
+                        // wrong for any target wider than that.
+                        let fill = expr_as_fill(value).map(|(k, r)| (k, r.to_string()));
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _)| p != &param);
-                        entry.push((param, v));
+                        entry.retain(|(p, _, _)| p != &param);
+                        entry.push((param, v, fill));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit

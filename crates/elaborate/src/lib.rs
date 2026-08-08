@@ -95,6 +95,7 @@ mod netdecl;
 mod package;
 pub mod packed;
 mod packed_lval;
+mod param_query;
 mod params;
 mod ports;
 mod proc_builder;
@@ -158,6 +159,13 @@ pub(crate) use toplevel::*;
 pub(crate) type PresizeEntry = (Vec<u32>, ast::Lvalue, ast::Expr);
 /// A recorded block-local initializer: `(declaration offset, owner rank path, lvalue, rhs)`.
 pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
+/// One collected `defparam` override: `(target parameter name, parent-side fold of the
+/// value, the value VERBATIM when it is a fill literal)`. The third component exists
+/// because a fill (`'1`/`'0`/`'x`) has no width of its own — it takes the TARGET's —
+/// so the fold in the second is only the 32-bit self-determined default and is wrong
+/// for any parameter wider than that. `bind_one_param` re-folds it at the declared
+/// width, which is the only place that width is known.
+pub(crate) type DefparamOverride = (String, i64, Option<(ast::IntLitKind, String)>);
 
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,
@@ -572,11 +580,16 @@ struct Elaborator<'s> {
     // direction is unknown at the call site (the callee instance isn't elaborated yet).
     hier_task_port_dirs: BTreeMap<u32, Vec<ast::PortDir>>,
     // `defparam top.u.N = 7;` overrides, keyed by the FULLY-QUALIFIED target
-    // instance path → [(param-name, const value)]. Collected in pass 7 (when the
-    // parent's FQ prefix is current) and consumed by the child's `bind_params` in
+    // instance path → [(param-name, const value, fill)]. Collected in pass 7 (when
+    // the parent's FQ prefix is current) and consumed by the child's `bind_params` in
     // pass 8 — so the override is registered before the child binds. v1 supports a
     // DIRECT-child `inst.param` only (deeper paths / non-const values are loud).
-    defparams: BTreeMap<String, Vec<(String, i64)>>,
+    //
+    // See `DefparamOverride` for why the entry carries a fill literal verbatim beside
+    // its fold: `defparam u.K = '1` installed `0000_0000_ffff_ffff` in a 64-bit
+    // parameter while `#(.K('1))` on the same declaration installed all ones —
+    // silently, in one design.
+    defparams: BTreeMap<String, Vec<DefparamOverride>>,
     // module names on the active instantiation path — the recursion cycle guard.
     inst_stack: Vec<String>,
     // Instance id of the instance whose body is currently being lowered. Set in

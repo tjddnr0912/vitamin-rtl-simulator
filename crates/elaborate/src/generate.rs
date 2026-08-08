@@ -523,13 +523,11 @@ impl Elaborator<'_> {
                             return;
                         }
                         if phase == GenPhase::Nets {
-                            self.error(
-                            MsgCode::ElabUnsupported,
-                            &format!(
-                                "generate-scope parameter `{}` value is not a foldable constant expression",
-                                p.name.name
-                            ),
-                        );
+                            self.param_value_unfoldable(
+                                "generate-scope parameter",
+                                &p.name.name,
+                                &p.value,
+                            );
                         }
                     }
                 }

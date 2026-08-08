@@ -6,6 +6,7 @@ pub(crate) fn run_velab_lib_gated(
     libs: &[(String, String)],
     tops: &[String],
     out: &str,
+    top_params: &[(String, String)],
     inner: &StderrSink,
     sink: &vita_log::GatedSink,
 ) -> i32 {
@@ -208,13 +209,18 @@ pub(crate) fn run_velab_lib_gated(
     }
 
     // ── 5. elaborate with the EXPLICIT roots ──
-    let (ir, sc) = elaborate::elaborate_with_timescale_prec_roots(
+    // doc-14 RULE B: `-G` is an elaborate-stage input, and the `-L` compose path is
+    // still `velab`. Twin of the plain `velab` call in `pipeline.rs` — dropping it
+    // silently elaborated the declared defaults at `errors=0`.
+    let (ir, sc) = elaborate::elaborate_located_params(
         &merged,
         sink,
         &merged_exp,
         &merged_prec,
         prec,
         Some(tops),
+        None,
+        top_params,
     );
     let Some(ir) = ir else {
         return EXIT_USER_ERROR;

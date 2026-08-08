@@ -626,6 +626,14 @@ impl Elaborator<'_> {
     /// `base.<…>`. Used by `hier_resolve` to commit the leading path segment to a
     /// scope (instance/genblock); the `hier_params` arm lets a param-only child
     /// module (no nets) still register as a scope.
+    ///
+    /// ⚠️ A child that contributes NO key to either table — an empty module, or one
+    /// whose only declaration is a `string`, a >64-bit, or a non-integral `real`
+    /// parameter — is not a scope, so a path through it walks OUTWARD and can commit
+    /// to an unrelated same-named instance in an enclosing scope (measured: an inner
+    /// `u.P` answered the OUTER `u`'s `P`). Widening this by table is not the fix —
+    /// the honest predicate is "is `base` an instance path", which `instances_info`
+    /// already knows. Recorded in ROADMAP §2 with the measured cases.
     pub(crate) fn is_hier_scope(&self, base: &str) -> bool {
         let probe = format!("{base}.");
         let hit = |k: &String| k.starts_with(&probe);
