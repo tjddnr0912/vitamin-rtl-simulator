@@ -304,3 +304,15 @@ fn an_unsigned_context_makes_a_narrowed_arithmetic_shift_logical() {
     // arithmetic, which is what makes the other five mean something.
     assert_eq!(o, "0011 00110 0001 0001 0000 1010");
 }
+
+/// An unsized fill inside a narrowed cast operand sizes to the EXPRESSION's width
+/// (§11.6), which in the narrowing branch is `max(self, N)` — never `N`. Passing `N`
+/// there built `'1` as two ones instead of thirty-two, so `2'(k / '1)` printed `2`
+/// where both oracles print `0`. iverilog + verilator: `0 3 0`.
+#[test]
+fn a_fill_inside_a_narrowed_cast_sizes_to_the_expression_width() {
+    let o = run("module t; integer k; logic [7:0] a;\n\
+        initial begin k=7; a=8'd200;\n\
+        $display(\"%0d %0d %0d\", 2'(k / '1), 2'(k % '1), 4'(a / '1)); $finish; end endmodule");
+    assert_eq!(o, "0 3 0");
+}

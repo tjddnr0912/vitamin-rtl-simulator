@@ -341,11 +341,19 @@ impl Elaborator<'_> {
                     //           `00000100`. `8'(b/c)` with `c = -4'sd1` overflows at 4 bits
                     //           and not at 8. A div-by-zero's `x` must fill all n bits.
                     //
-                    // So neither `n` nor the self width is right on its own. Both are
-                    // lowered and the one §11.8.1 selects is kept; the other is a dead
-                    // eid — nothing references it, so no value is evaluated twice and no
-                    // `$random` draw is duplicated. (Widening PAST max(self, n) is wrong
-                    // too: a 32-bit context makes `5'(s4>>u3)` 30 instead of 6.)
+                    // So neither `n` nor the self width is right on its own. `plain`
+                    // is lowered as a WIDTH PROBE — `w` is the only thing read out of
+                    // it, on both paths — and then the branch builds the lowering the
+                    // standard selects. The probe's nodes are dead: nothing references
+                    // them, so no value is evaluated twice and no `$random` draw is
+                    // duplicated (measured). ⚠️ They are not free either: the probe
+                    // still emits DIAGNOSTICS, so an error inside a cast operand is
+                    // reported twice, and its dead nodes are serialized into the
+                    // artifact (a depth-32 nest grows the `.velab` 5.7×). Recorded in
+                    // ROADMAP §2 — the standing fix is an AST self-width pass that
+                    // answers `w` without lowering at all.
+                    // (Widening PAST max(self, n) is wrong too: a 32-bit context makes
+                    // `5'(s4>>u3)` 30 instead of 6.)
                     ast::BinOp::Div | ast::BinOp::Mod | ast::BinOp::Shr | ast::BinOp::AShr => {
                         let plain = self.lower_ctx_or_plain(e, n);
                         let w = self.ir_bits_of(plain).unwrap_or(n);
@@ -372,10 +380,15 @@ impl Elaborator<'_> {
                             // and printed `0010` where both oracles say `0011`. `/ % >>`
                             // do not show it because the plain path already applies the
                             // context's unsignedness to them; `>>>` was the one left.
-                            let l = self.lower_ctx_or_plain(lhs, n);
+                            // The fill context is `w`, NOT `n`. §11.6 sizes an
+                            // unsized fill to the EXPRESSION's width, and this branch
+                            // runs only when `w > n`, so `n` is always too narrow here:
+                            // `2'(k / '1)` built the divisor as 2 ones instead of 32 and
+                            // printed 2 where both oracles print 0.
+                            let l = self.lower_ctx_or_plain(lhs, w);
                             let l = self.coerce_sign(l, ext);
                             let r = if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) {
-                                let r = self.lower_ctx_or_plain(rhs, n);
+                                let r = self.lower_ctx_or_plain(rhs, w);
                                 self.coerce_sign(r, ext)
                             } else {
                                 self.lower_expr(rhs) // shift amount is self-determined
@@ -436,14 +449,10 @@ impl Elaborator<'_> {
         }
     }
 
-    /// §4.5.212: resize a self-determined leaf to the cast width `n`, extending with the
-    /// operand's overall sign `ext` (NOT the leaf's own sign — §11.8.1 coerces every
-    /// leaf to the expression's signedness). Re-stamps `$signed`/`$unsigned` so signed
-    /// division / arithmetic-shift / comparison in the enclosing op use the right
-    /// semantics (a `Concat`/`Select` extension is otherwise always unsigned).
     /// Coerce an already-lowered operand to the enclosing expression's signedness
     /// WITHOUT changing its width — §11.8.1 propagates the sign to every operand even
-    /// when the context does not widen. The width-changing twin is `lower_size_leaf`.
+    /// when the context does not widen, and for `>>>` that decides whether the shift
+    /// is arithmetic or logical (§11.4.10). The width-changing twin is `lower_size_leaf`.
     fn coerce_sign(&mut self, x: u32, ext: bool) -> u32 {
         let cur = self.expr_self_signed(x);
         if ext == cur {
@@ -460,6 +469,14 @@ impl Elaborator<'_> {
         })
     }
 
+    /// §4.5.212: resize a self-determined leaf to the cast width `n`, extending with the
+    /// operand's overall sign `ext` (NOT the leaf's own sign — §11.8.1 coerces every
+    /// leaf to the expression's signedness). Re-stamps `$signed`/`$unsigned` so signed
+    /// division / arithmetic-shift / comparison in the enclosing op use the right
+    /// semantics (a `Concat`/`Select` extension is otherwise always unsigned).
+    /// Coerce an already-lowered operand to the enclosing expression's signedness
+    /// WITHOUT changing its width — §11.8.1 propagates the sign to every operand even
+    /// when the context does not widen. The width-changing twin is `lower_size_leaf`.
     fn lower_size_leaf(&mut self, e: &ast::Expr, n: u32, ext: bool) -> u32 {
         let x = self.lower_expr(e);
         let w = self.ir_bits_of(x).unwrap_or(32);
