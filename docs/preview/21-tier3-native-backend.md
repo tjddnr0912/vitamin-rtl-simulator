@@ -430,6 +430,59 @@ Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단
 > 결정 6건(ROADMAP §2)은 전부 **vita-vs-iverilog** 차이라 이 게이트(vita-vs-vita)를 막지 않는다.
 > | **S1d-4d-3 ✅ (2026-08-05)** | **delayed CA**(§4.5.302) — 엔진 로직을 `schedule_delayed_cas`/`take_due_delayed_ca` 로 **추출**해 양쪽이 공유 | ✅ **코퍼스 72/72 바이트 동일** · differential 175 native 0 diff · PRE/POST 엔진 경로 0 diff · 뮤테이션 9/9. ⭐⭐ LHS 오프셋만 엔진 스토어라 동적 인덱스 쓰기가 **조용히 사라졌다** · 공유 부분은 **차분이 못 지켜** iverilog 절대값 앵커 2개 신설 |
 > | **S1d-4d-4 ✅ (2026-08-05)** | **multi-driver·wired 해상**(§4.5.303) — fold 를 `resolve_md_group` 로 추출해 공유·그룹 분류는 스케줄러의 `md_groups` 한 철자 | ✅ **S1 거부 행에서 cont-assign 계열 소멸**(잔여 = `final`·fork·서브루틴·`$monitor` 계열). differential 45설계 3-way 0 diff·폴백 0 · 앵커 4(iverilog 절대값) · 뮤테이션 비등가 11/11 kill. ⭐ 평가 **순서**는 impure 드라이버 쌍으로, 루프 **위치**는 델타 예산 스윕으로 핀 — 값-전용 설계로는 못 보는 두 축 |
+
+> **⭐⭐ S3 착수 전 그라운딩 실측 (2026-08-08) — 큐가 적어 둔 전제가 반대였다.**
+> 이 문서와 ROADMAP 은 *"picorv32 native/vm = 0.97× 이고 남은 병목은 표현식이 아니라
+> **스케줄러**"* 라고 적고 있었다. 셋 다 정정한다.
+>
+> **① 0.97× 는 stale 이다 — 현재 0.81×.** 세 커밋을 인터리브 best-of-4 로 재측정(release ·
+> `bench/picorv32` CYCLES=40000):
+>
+> | 커밋 | vm | native | native/vm |
+> |---|---:|---:|---:|
+> | `e5d3136` (§4.5.312) | 1.035 s | 1.066 s | **0.972×** ← 기록된 값 |
+> | `7cc8c85` (§4.5.313 aes_top) | 0.878 s | 1.082 s | 0.811× |
+> | `bb5d287` (§4.5.314) | 0.871 s | 1.072 s | **0.813×** |
+>
+> **② 그런데 이것은 native 의 회귀가 아니다.** native 의 절대시간은 세 슬라이스 내내
+> **평평하다**(1.066 → 1.072). 움직인 것은 **VM 으로, aes_top 슬라이스에서 1.18× 빨라졌다**
+> (1.035 → 0.878). 원인은 귀속하지 않았다 — 그 슬라이스가 인덱스 규칙과 E4002/W4029 경로를
+> 손댔고 picorv32 는 `mem[0:255]` 를 매 사이클 인덱싱한다는 정황뿐이다. **비율만 보면 native 가
+> 나빠진 것처럼 읽히므로, 이 축의 기록은 항상 절대시간과 함께 남긴다.**
+>
+> **③ 그리고 native 의 병목은 스케줄러가 아니라 표현식이다.** unstripped release +
+> `/usr/bin/sample`(top-of-stack, vita 프레임만):
+>
+> | picorv32 · **native** | | picorv32 · **vm** | |
+> |---|---:|---|---:|
+> | `eval::eval_core::eval_ctx` | **15.8%** | `sched::propagate::propagate_changes` | **40.1%** |
+> | `value::Value::mask_top` | 11.2% | `native_eval::exec_vm::run` | 14.8% |
+> | `value::Value::resize` | 10.4% | `sched::scan_arm::settle_cont_assigns` | 6.4% |
+> | `eval::sysfunc::truthiness` | 6.7% | `sched::scan_arm::run_body` | 6.4% |
+> | `native::arena::…::read_net` | 6.0% | `…SimState::read_scalar_words` | 5.6% |
+> | `eval::eval_core::eval_binary_ctx` | 5.4% | `state::init_diag::store_words` | 4.4% |
+> | `native::kernel::…::run_wprog` | **4.0%** | | |
+>
+> **제네릭 트리워커(`EvalCtx` + `Value`)가 native 시간의 ~50%** 이고, S2 가 지은 폭-특수화
+> 평가기 `run_wprog` 은 **4.0%** 다. 즉 picorv32 의 식은 대부분 **admit 되지 않는다**.
+> **스케줄러 지배는 VM 쪽 성질**이다(`propagate_changes` 40.1%).
+>
+> **④ 대조군은 커밋된 벤치로 재현된다.** 같은 프로파일러로 `bench/keccak/keccak_f_flat`(균일
+> 64비트 레인 · admission 성공)을 재면 순서가 뒤집힌다 — `run_wprog` **18.4%**(1위) ·
+> `write_chunk` 11.2% · `write_lvalue` 6.8% 이고 **`eval_ctx` 는 상위 8위 밖**이다.
+> 두 설계의 차이는 규모가 아니라 **폭의 균일성**이다.
+>
+> **⑤ 표적.** `wprog::compile_node` 의 진입 조건이 *"한 노드의 서브트리 안에서 폭과 부호가
+> 균일"* 이고, 어긋나면 **트리 전체**를 거절한다. 32비트 데이터패스에 5비트 select·1비트 flag·
+> concat 이 섞인 실 CPU 는 이 조건을 거의 못 맞춘다. 그러므로 **picorv32 에서 S3(바디 코드젠)를
+> 먼저 하는 것은 순서가 틀렸다** — 바디를 코드로 만들어도 그 안의 식이 여전히 제네릭으로
+> 떨어진다. 순서는 **admission 확대(S2 본체) → S3** 다. keccak 은 이미 균일하므로 S3 의
+> 이득을 그쪽에서 먼저 재는 것은 여전히 유효하다.
+>
+> ⚠️ `bench/picorv32` 는 gitignore 라 이 숫자는 로컬 재현이다. **커밋된 재현 가능한 절반은
+> ④의 keccak 대조**이며, 두 프로파일의 정성적 결론(균일 폭 = `run_wprog` 지배 / 혼합 폭 =
+> `eval_ctx` 지배)은 그것만으로 선다.
+
 > | **S1d-5 ✅ (2026-08-05)** | **`$value$plusargs` 배선**(§4.5.304) — `stmt_effect` 가족 첫 구성원. 공유 `exec::plusargs::effect` + 게이트 carve-out(`value_plusargs_rhs` 한 철자) | ✅ **keccak_f_flat 네이티브·바이트 동일**. ③층 기준선 실측(N=5000·release): interp 5.22 / vm 2.53 / **native 4.49** / iverilog 7.05 — ②보다 1.8× 느림 = S2/S3 이 지울 표현 비용의 시작점. ⚠️ stmt_effect 가 가리던 다음 행이 드러났다: 호출형·배열형 keccak = **frame-local(S3)** |
 >
 > **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
