@@ -493,3 +493,37 @@ fn the_real_size_cast_refusal_is_reported_once_per_cast() {
         "a nested cast must not consume the outer cast's report"
     );
 }
+
+/// §4.5.318: an unsized fill is a leaf whose VALUE depends on the width it is sized
+/// to, so `lower_size_leaf`'s bare `lower_expr` built it at ONE bit and then extended
+/// that — `4'(a+'1)` with `a=4'hD` printed `1110` (it added 1) where both oracles
+/// print `1100` (it must add 15). The 40/64-bit rows are not decoration: below 32
+/// bits `select_low` hides a wrong fill width, so a mutation that sizes the fill to a
+/// constant 32 survives every narrower row. iverilog: `00 1100 00001100 12 12`.
+#[test]
+fn an_unsized_fill_leaf_is_sized_to_the_cast_width() {
+    let o = run("module t; logic [3:0] a;\n\
+        initial begin a = 4'hD;\n\
+        $display(\"%b %b %b %0d %0d\", 2'(a+'1), 4'(a+'1), 8'(a+'1),\n\
+                 64'(a+'1), 40'(a+'1)); #1 $finish; end endmodule");
+    assert_eq!(o, "00 1100 00001100 12 12");
+}
+
+/// §4.5.318: §11.8.1 coerces EVERY operand in the cast region to the expression's
+/// signedness, not just the outermost one. The §4.5.316 NARROW branch (`/ % >> >>>`)
+/// lowered its operand self-determined and then stamped the sign on the RESULT, so a
+/// signed sub-expression under an unsigned outer operator sign-extended and nothing
+/// undid it: `4'(a + ((i13 | s4) >> 2))` printed 12 where iverilog and verilator both
+/// print 0. Only the recursion reaches an inner operand. A 1,620-cell sweep over this
+/// shape counted 207 fixed and 0 regressed.
+#[test]
+fn a_signed_subexpression_under_an_unsigned_cast_is_zero_extended() {
+    let o = run(
+        "module t; logic [3:0] a; logic signed [3:0] s4; integer i13;\n\
+        initial begin a = 4'hD; s4 = -4'sd3; i13 = 13;\n\
+        $display(\"%0d %0d %0d\", 4'(a + ((i13 | s4) >> 2)),\n\
+                 4'(a + ((i13 | s4) / 3)), 4'(a & ((i13 | s4) % 5)));\n\
+        #1 $finish; end endmodule",
+    );
+    assert_eq!(o, "0 1 1");
+}

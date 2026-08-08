@@ -166,6 +166,16 @@ impl Elaborator<'_> {
                     // answers `w` without lowering at all.
                     // (Widening PAST max(self, n) is wrong too: a 32-bit context makes
                     // `5'(s4>>u3)` 30 instead of 6.)
+                    // ⚠️ `**` belongs here on the standard's terms — a NEGATIVE
+                    // exponent asks whether the base is ±1, a question about the WHOLE
+                    // base, so §4.5.316's low-bit-closure argument (which needs b ≥ 0)
+                    // does not cover it. §4.5.318 tried the move and MEASURED it as a
+                    // net loss: 138 cells fixed, 20 turned silently wrong, because the
+                    // engine takes the exponent's signedness from the BASE. The root is
+                    // upstream — `lower_expr_ctx`'s "right operand self-determined" list
+                    // has `Shl|Shr|AShl|AShr` and is MISSING `Pow`, which is a
+                    // silent-wrong with no cast in sight (`s3 ** 4'd11` = 0 vs both
+                    // oracles' 11). Fix that first; then this move is free. ROADMAP §2.
                     ast::BinOp::Div | ast::BinOp::Mod | ast::BinOp::Shr | ast::BinOp::AShr => {
                         let plain = self.lower_ctx_or_plain(e, n);
                         let w = self.ir_bits_of(plain).unwrap_or(n);
@@ -207,11 +217,19 @@ impl Elaborator<'_> {
                             // does, so swapping them is now provably a no-op (a
                             // reviewer's swap mutation passes every gate). Do not
                             // read this order as a constraint.
-                            let l = self.lower_ctx_or_plain(lhs, w);
+                            // §4.5.318: RECURSE at `w` instead of lowering the operand
+                            // self-determined. `lower_ctx_or_plain` keeps every INNER
+                            // leaf's own sign, so a signed leaf under an unsigned
+                            // expression sign-extended and `coerce_sign` — which only
+                            // stamps the RESULT — could not undo it:
+                            // `4'(P + ((i13 | s4) >> 2))` printed 12 where both oracles
+                            // print 0. §11.8.1 coerces EVERY operand in the region, and
+                            // the recursion is the only thing that reaches inner ones.
+                            let l = self.lower_size_ctx(lhs, w, ext);
                             let l = self.refuse_real_size_operand(l);
                             let l = self.coerce_sign(l, ext);
                             let r = if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) {
-                                let r = self.lower_ctx_or_plain(rhs, w);
+                                let r = self.lower_size_ctx(rhs, w, ext);
                                 let r = self.refuse_real_size_operand(r);
                                 self.coerce_sign(r, ext)
                             } else {
@@ -360,7 +378,18 @@ impl Elaborator<'_> {
     /// WITHOUT changing its width — §11.8.1 propagates the sign to every operand even
     /// when the context does not widen. The width-changing twin is `lower_size_leaf`.
     fn lower_size_leaf(&mut self, e: &ast::Expr, n: u32, ext: bool) -> u32 {
-        let x = self.lower_expr(e);
+        // §4.5.318: an unsized fill is a leaf whose VALUE depends on the width it is
+        // sized to, so a bare `lower_expr` builds it at ONE bit and the resize below
+        // then extends that — `2'(P + '1)` added 1 instead of 3 and printed `10`
+        // where both oracles print `00`. `lower_ctx_or_plain` is the same call for
+        // every non-fill leaf (`expr_contains_fill` is false ⇒ literally
+        // `lower_expr`), so this is byte-identical off the fill axis.
+        //
+        // Sizing to `n` rather than to the whole expression's `max(self, n)` is
+        // sound BECAUSE a fill is all-ones/all-zeros: its low `n` bits are the same
+        // at every width ≥ n, and §4.5.316 already routes the four operators whose
+        // answer depends on bits above `n` through the width probe.
+        let x = self.lower_ctx_or_plain(e, n);
         let x = self.refuse_real_size_operand(x);
         let w = self.ir_bits_of(x).unwrap_or(32);
         let resized = match n.cmp(&w) {

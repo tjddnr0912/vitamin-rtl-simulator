@@ -900,14 +900,37 @@ impl Elaborator<'_> {
         self.push_expr(ir::Expr::Const { val: cid })
     }
 
+    /// The SIGNEDNESS a parameter read materializes with — the ONE spelling, used by
+    /// the lowering ([`Self::const_param_expr_w`], which builds the const) and by the
+    /// size-cast classifier (`ast_ctx_signed`, which decides how every leaf of the
+    /// cast operand is extended). Two spellings would let the classifier extend a leaf
+    /// one way while the lowering builds it the other.
+    ///
+    /// ⚠️ It has to be USED by both, not merely documented as shared: §4.5.318 first
+    /// added it as a second copy of the rule and a reviewer's `always false` mutation
+    /// passed the ENTIRE 5,291-test workspace gate — the sign rule had no teeth
+    /// anywhere. `const_param_expr_w` now derives its `signed` from here, so a
+    /// mutation moves the lowering too.
+    ///
+    /// Declared meta wins; without it the value decides, exactly as
+    /// [`Self::const_param_expr`] does (`v >= 0` lands in the unsigned 32/64-bit
+    /// arms, `v < 0` in the signed ones).
+    pub(crate) fn param_const_signed(v: i64, meta: Option<(u32, bool)>) -> bool {
+        match meta {
+            Some((w, signed)) if w >= 1 => signed,
+            _ => v < 0,
+        }
+    }
+
     /// Materialize a param read at its DECLARED `(width, signed)` when known
     /// (`param_meta`), else fall back to the value-inferred width
     /// ([`Self::const_param_expr`]). A typed param's const therefore carries its
     /// real width: `localparam logic [63:0] P = '1` reads as a 64-bit all-ones
     /// const, and `logic [3:0] x = 5` reads as a 4-bit const, matching iverilog.
     pub(crate) fn const_param_expr_w(&mut self, v: i64, meta: Option<(u32, bool)>) -> u32 {
+        let signed = Self::param_const_signed(v, meta);
         match meta {
-            Some((w, signed)) if (1..=64).contains(&w) => {
+            Some((w, _)) if (1..=64).contains(&w) => {
                 let cv = make_const_i64(v, w, signed);
                 let cid = self.intern_const(cv);
                 self.push_expr(ir::Expr::Const { val: cid })
@@ -918,7 +941,7 @@ impl Elaborator<'_> {
             // 32 bits: `%h` printed 8 digits where iverilog prints 24, and the same
             // width fed concats and comparisons. Widen the i64 to the declared width
             // through the shared `resize_bits`, which sign-extends across words.
-            Some((w, signed)) if w > 64 => {
+            Some((w, _)) if w > 64 => {
                 let base = make_const_i64(v, 64, signed);
                 let cv = ir::ConstVal {
                     width: w,

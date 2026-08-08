@@ -40,6 +40,24 @@ impl IndexDomain {
     }
 }
 
+/// The SIGNEDNESS half of [`Elaborator::range_to_dims`] — decided entirely by the
+/// KIND and the declared qualifier, never by the range. That is not an assumption:
+/// every arm of `range_to_dims_opt` returns either the passed `signed` or a
+/// kind-fixed constant, and this function is now the only place those constants
+/// live, so the two cannot drift.
+///
+/// §4.5.318 extracted it because the size-cast classifier needs a function's return
+/// SIGN and was getting it by calling `range_to_dims`, which folds the range and
+/// therefore EMITS DIAGNOSTICS — classification reported a non-constant return bound
+/// a second time (`function [n:0] f` under a cast: errors 1 → 2).
+pub(crate) fn kind_signedness(kind: ast::NetVarKind, signed: bool) -> bool {
+    match kind {
+        ast::NetVarKind::Real | ast::NetVarKind::Realtime => true,
+        ast::NetVarKind::Time | ast::NetVarKind::Event | ast::NetVarKind::ClassHandle => false,
+        _ => signed,
+    }
+}
+
 impl Elaborator<'_> {
     /// Per-dim bounds-guard conjunct for `idx ∈ [lo, lo+size-1]`, shared by both
     /// `flatten_word` twins so the rule exists once.
@@ -331,10 +349,11 @@ impl Elaborator<'_> {
         signed: bool,
         allow_neg_lsb: bool,
     ) -> (u32, u32, u32, bool) {
+        let sgn = kind_signedness(kind, signed);
         if matches!(kind, ast::NetVarKind::Integer) {
             // `integer` defaults signed; honor an explicit `unsigned` (the parser
             // resolves the default + qualifier into `signed`).
-            return (32, 31, 0, signed);
+            return (32, 31, 0, sgn);
         }
         // 2-state integer atom types (fixed width, IEEE §6.11.1): signed by default,
         // but `int unsigned` / `byte unsigned` / … must stay UNSIGNED. The parser
@@ -342,30 +361,30 @@ impl Elaborator<'_> {
         // here rather than hardcoding signed=true (which silently mis-signed every
         // `… unsigned` atom in comparisons / `%0d`).
         match kind {
-            ast::NetVarKind::Byte => return (8, 7, 0, signed),
-            ast::NetVarKind::Shortint => return (16, 15, 0, signed),
-            ast::NetVarKind::Int => return (32, 31, 0, signed),
-            ast::NetVarKind::Longint => return (64, 63, 0, signed),
+            ast::NetVarKind::Byte => return (8, 7, 0, sgn),
+            ast::NetVarKind::Shortint => return (16, 15, 0, sgn),
+            ast::NetVarKind::Int => return (32, 31, 0, sgn),
+            ast::NetVarKind::Longint => return (64, 63, 0, sgn),
             _ => {}
         }
         // `real`/`realtime` are dimensionless 64-bit signed (no [msb:lsb] range).
         if matches!(kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime) {
-            return (64, 63, 0, true);
+            return (64, 63, 0, sgn);
         }
         // `time` is a dimensionless 64-bit UNSIGNED 4-state variable (IEEE §6.11).
         if matches!(kind, ast::NetVarKind::Time) {
-            return (64, 63, 0, false);
+            return (64, 63, 0, sgn);
         }
         // a named event is dimensionless; its counter desugar is 64-bit unsigned.
         if matches!(kind, ast::NetVarKind::Event) {
-            return (64, 63, 0, false);
+            return (64, 63, 0, sgn);
         }
         // N7: a class handle is a dimensionless 32-bit unsigned object-id.
         if matches!(kind, ast::NetVarKind::ClassHandle) {
-            return (32, 31, 0, false);
+            return (32, 31, 0, sgn);
         }
         match range {
-            None => (1, 0, 0, signed),
+            None => (1, 0, 0, sgn),
             Some(r) => {
                 // v3: fold through the param-aware evaluator so `[W-1:0]` resolves
                 // `W` to the bound parameter value in the current instance scope.
@@ -398,20 +417,20 @@ impl Elaborator<'_> {
                         if let (Some(m), Some(l)) = (msb_v, lsb_v) {
                             if m >= l {
                                 let w = ((m - l) as u64 + 1).min(MAX_NET_WIDTH) as u32;
-                                return (w, w.saturating_sub(1), 0, signed);
+                                return (w, w.saturating_sub(1), 0, sgn);
                             }
                         }
                     }
                     self.warn(
                         "negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width 1",
                     );
-                    return (1, 0, 0, signed);
+                    return (1, 0, 0, sgn);
                 }
                 if msb_v.is_some_and(|v| v < 0) {
                     self.warn(
                         "parameterized range underflowed (param value 0?); net clamped to width 1",
                     );
-                    return (1, 0, 0, signed);
+                    return (1, 0, 0, sgn);
                 }
                 let clamp =
                     |v: Option<i64>| v.map_or(0u32, |v| u32::try_from(v).unwrap_or(u32::MAX));
@@ -425,9 +444,9 @@ impl Elaborator<'_> {
                             "declared net width {width64} exceeds the v1 cap ({MAX_NET_WIDTH})"
                         ),
                     );
-                    return (1, 0, 0, signed);
+                    return (1, 0, 0, sgn);
                 }
-                (width64 as u32, msb, lsb, signed)
+                (width64 as u32, msb, lsb, sgn)
             }
         }
     }
