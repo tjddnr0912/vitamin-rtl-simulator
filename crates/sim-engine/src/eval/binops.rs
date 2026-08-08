@@ -352,30 +352,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     /// uses the same context-signedness rule as `==` (zero-extend unless BOTH
     /// signed) so a mixed-sign `===` matches IEEE numeric extension.
     pub(crate) fn case_eq(&self, op: BinOp, l: &Value, r: &Value) -> Value {
-        if l.is_real || r.is_real {
-            // MVP: === on real == VALUE equality. A real is 2-state, so === and ==
-            // coincide; +0.0 === -0.0 is TRUE (value equal), NaN !== NaN.
-            let a = l.to_f64().unwrap_or(0.0);
-            let b = r.to_f64().unwrap_or(0.0);
-            let eq = a == b;
-            return Value::logic(if op == BinOp::CaseEq { eq } else { !eq });
-        }
-        let w = l.width.max(r.width);
-        let ctx_signed = l.signed && r.signed;
-        let le = l.clone().resize_keep_sign(w, ctx_signed);
-        let re = r.clone().resize_keep_sign(w, ctx_signed);
-        // Word-parallel exact 4-state compare (both planes), canonical after
-        // `resize_keep_sign`; was a per-bit `get_vu` loop.
-        let mut neq = 0u64;
-        for k in 0..nwords(w) {
-            let lv = le.val.get(k).copied().unwrap_or(0);
-            let rv = re.val.get(k).copied().unwrap_or(0);
-            let lu = le.unk.get(k).copied().unwrap_or(0);
-            let ru = re.unk.get(k).copied().unwrap_or(0);
-            neq |= (lv ^ rv) | (lu ^ ru);
-        }
-        let eq = neq == 0;
-        Value::logic(if op == BinOp::CaseEq { eq } else { !eq })
+        case_eq(op, l, r)
     }
 
     /// v7 casez/casex per-label match (IEEE 1364 §9.5.1, live-pinned against
@@ -406,19 +383,11 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     }
 
     pub(crate) fn log_and(&self, l: &Value, r: &Value) -> Value {
-        match (self.truthiness(l), self.truthiness(r)) {
-            (Tri::False, _) | (_, Tri::False) => Value::zeros(1, false),
-            (Tri::True, Tri::True) => Value::one1(),
-            _ => Value::x1(),
-        }
+        log_and(l, r)
     }
 
     pub(crate) fn log_or(&self, l: &Value, r: &Value) -> Value {
-        match (self.truthiness(l), self.truthiness(r)) {
-            (Tri::True, _) | (_, Tri::True) => Value::one1(),
-            (Tri::False, Tri::False) => Value::zeros(1, false),
-            _ => Value::x1(),
-        }
+        log_or(l, r)
     }
 
     pub(crate) fn shift_left(&self, l: &Value, r: &Value) -> Value {
@@ -560,5 +529,58 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         }
         out.mask_top();
         out
+    }
+}
+
+/// `===`/`!==`, `&&`, `||` as FREE functions so the tier-3 width-specialized evaluator
+/// calls the same spelling the generic evaluator does (§4.5.302's rule: specialize the
+/// EVALUATION, never the semantics). None used `self`; the methods above delegate, so
+/// every prior call site is byte-identical.
+pub(crate) fn case_eq(op: BinOp, l: &Value, r: &Value) -> Value {
+    if l.is_real || r.is_real {
+        // MVP: === on real == VALUE equality. A real is 2-state, so === and ==
+        // coincide; +0.0 === -0.0 is TRUE (value equal), NaN !== NaN.
+        let a = l.to_f64().unwrap_or(0.0);
+        let b = r.to_f64().unwrap_or(0.0);
+        let eq = a == b;
+        return Value::logic(if op == BinOp::CaseEq { eq } else { !eq });
+    }
+    let w = l.width.max(r.width);
+    let ctx_signed = l.signed && r.signed;
+    let le = l.clone().resize_keep_sign(w, ctx_signed);
+    let re = r.clone().resize_keep_sign(w, ctx_signed);
+    // Word-parallel exact 4-state compare (both planes), canonical after
+    // `resize_keep_sign`; was a per-bit `get_vu` loop.
+    let mut neq = 0u64;
+    for k in 0..nwords(w) {
+        let lv = le.val.get(k).copied().unwrap_or(0);
+        let rv = re.val.get(k).copied().unwrap_or(0);
+        let lu = le.unk.get(k).copied().unwrap_or(0);
+        let ru = re.unk.get(k).copied().unwrap_or(0);
+        neq |= (lv ^ rv) | (lu ^ ru);
+    }
+    let eq = neq == 0;
+    Value::logic(if op == BinOp::CaseEq { eq } else { !eq })
+}
+
+pub(crate) fn log_and(l: &Value, r: &Value) -> Value {
+    match (
+        crate::eval::sysfunc::truthiness(l),
+        crate::eval::sysfunc::truthiness(r),
+    ) {
+        (Tri::False, _) | (_, Tri::False) => Value::zeros(1, false),
+        (Tri::True, Tri::True) => Value::one1(),
+        _ => Value::x1(),
+    }
+}
+
+pub(crate) fn log_or(l: &Value, r: &Value) -> Value {
+    match (
+        crate::eval::sysfunc::truthiness(l),
+        crate::eval::sysfunc::truthiness(r),
+    ) {
+        (Tri::True, _) | (_, Tri::True) => Value::one1(),
+        (Tri::False, Tri::False) => Value::zeros(1, false),
+        _ => Value::x1(),
     }
 }

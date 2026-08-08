@@ -1646,6 +1646,25 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
        wire e4; assign e4 = (a << 1) == (b << 1);\n\
        wire e5; assign e5 = (sa + sb) < (sa - sb);\n\
        wire e6; assign e6 = (sa ^ sb) != (~sa);\n\
+       wire f1; assign f1 = a && b;\n\
+       wire f2; assign f2 = a || b;\n\
+       wire f3; assign f3 = !a;\n\
+       wire f4; assign f4 = &a;\n\
+       wire f5; assign f5 = |a;\n\
+       wire f6; assign f6 = ^a;\n\
+       wire f7; assign f7 = ~&a;\n\
+       wire f8; assign f8 = ~|a;\n\
+       wire f9; assign f9 = ~^a;\n\
+       wire g1; assign g1 = a === b;\n\
+       wire g2; assign g2 = a !== b;\n\
+       wire g3; assign g3 = sa === sb;\n\
+       wire g4; assign g4 = (a + b) && (a ^ b);\n\
+       wire g5; assign g5 = (a & b) === (a | b);\n\
+       wire g6; assign g6 = !(a ^ b);\n\
+       wire g7; assign g7 = a && (a < b);\n\
+       wire g8; assign g8 = (a > b) || !sa;\n\
+       wire g9; assign g9 = (a < b) && b;\n\
+       wire ga; assign ga = !a || b;\n\
        initial begin a = 4'd0; b = 4'd0; sa = 4'sd0; sb = 4'sd0; end\n\
        endmodule\n";
     let ir = build(src);
@@ -1672,7 +1691,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             None => declined += 1,
         }
     }
-    assert_eq!(progs.len(), 36, "op battery coverage moved");
+    assert_eq!(progs.len(), 55, "op battery coverage moved");
     // COMPOUND comparison operands specifically: the per-op masks this slice
     // introduced exist because a program can hold two widths at once, and the
     // soundness review measured that EVERY comparison operand in the whole
@@ -1721,7 +1740,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             }
         }
     }
-    assert_eq!(compared, 256 * 256 * 36);
+    assert_eq!(compared, 256 * 256 * 55);
 }
 
 /// The corpus + a keccak-shaped design, swept: every pure expression that the

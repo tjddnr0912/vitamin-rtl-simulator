@@ -1359,13 +1359,70 @@ endmodule
 "#
             .to_string(),
         ),
+        // S2 one-bit ops — the EAGER-EVALUATION property their admission rests
+        // on. `&&`/`||` are compiled to a `WProg` that evaluates BOTH operands,
+        // which is only correct because the generic evaluator does not
+        // short-circuit either. The observable is not a value: an admitted
+        // subtree can COUNT an out-of-range element read, so a short-circuit
+        // that skipped the rhs would drop an E4002 and flip the exit class from
+        // 1 to 0 — loud to SILENT — while every value in the design stayed
+        // right. (Measured: a constant-lhs short-circuit in the compile arm
+        // survives the whole workspace suite without this design.)
+        (
+            "s2_logical_ops_evaluate_both_operands",
+            r#"
+module top;
+  reg [7:0] m [0:3];
+  integer oob;
+  reg c1, c2, c3;
+  initial begin
+    m[0] = 8'd0; m[1] = 8'd1; m[2] = 8'd2; m[3] = 8'd3;
+    oob = 9;
+    c1 = m[0] && m[oob];   // lhs definitely FALSE  — rhs must still be read
+    c2 = m[1] || m[oob];   // lhs definitely TRUE   — rhs must still be read
+    c3 = 1'b0 && m[oob];   // constant-false lhs    — rhs must still be read
+    $display("c=%b%b%b", c1, c2, c3);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // S2 one-bit ops at widths the width-4 battery cannot reach: a 1-bit
+        // operand that is a NET (not a comparison result), 63/64-bit operands,
+        // and a `&&` whose two operands differ in width in BOTH directions.
+        (
+            "s2_one_bit_ops_at_width_boundaries",
+            r#"
+module top;
+  reg [63:0] w64;
+  reg [62:0] w63;
+  reg        b1;
+  reg        r1, r2, r3, r4, r5, r6;
+  initial begin
+    w64 = 64'hDEAD_BEEF_0000_0000; w63 = 63'h1; b1 = 1'b0;
+    r1 = b1 && w64;        // lw=1  < rw=64
+    r2 = w64 && b1;        // lw=64 > rw=1
+    r3 = w63 && w64;       // 63 vs 64
+    r4 = |w64;
+    r5 = &w63;
+    r6 = (w64 === w64);
+    $display("r=%b%b%b%b%b%b", r1, r2, r3, r4, r5, r6);
+    w64 = 64'bx; b1 = 1'bx;
+    $display("x=%b%b%b", b1 && w64, |w64, ^w64);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
     ]
 }
 
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 60, "adversarial set shrank");
+    assert_eq!(designs.len(), 62, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

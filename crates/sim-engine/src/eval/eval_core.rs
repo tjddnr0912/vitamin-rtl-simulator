@@ -627,71 +627,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
 
     /// 1-bit reduction/lognot result for a self-determined operand.
     pub(crate) fn eval_unary_self(&self, op: UnOp, operand: u32) -> Value {
-        let a = self.eval(operand); // OWN self width
-        match op {
-            UnOp::LogNot => match self.truthiness(&a) {
-                Tri::True => Value::zeros(1, false),
-                Tri::False => Value::one1(),
-                Tri::Unknown => Value::x1(),
-            },
-            UnOp::RedAnd => self.reduce_bit(&a, RedKind::And, false),
-            UnOp::RedNand => self.reduce_bit(&a, RedKind::And, true),
-            UnOp::RedOr => self.reduce_bit(&a, RedKind::Or, false),
-            UnOp::RedNor => self.reduce_bit(&a, RedKind::Or, true),
-            UnOp::RedXor => self.reduce_bit(&a, RedKind::Xor, false),
-            UnOp::RedXnor => self.reduce_bit(&a, RedKind::Xor, true),
-            _ => unreachable!("eval_unary_self only for reductions/lognot"),
-        }
-    }
-
-    /// Word-parallel 4-state reduction → the single result bit `(v, u)`. Scans the
-    /// val/unk plane words (the last masked to valid bits — a masked-out high bit
-    /// must NOT read as a definite-0 and force AND→0), accumulating the three facts
-    /// every reduction needs: any definite-0, any definite-1, any unknown, plus the
-    /// definite-1 popcount for XOR parity. Semantics match the old per-bit fold:
-    /// AND→0 if any 0 else x if any unknown else 1; OR dual; XOR→x if any unknown
-    /// else parity.
-    pub(crate) fn reduce_word(&self, a: &Value, kind: RedKind) -> (u64, u64) {
-        if a.width == 0 {
-            return (0, 0); // degenerate; matches the old zeros(1) seed
-        }
-        let mut any_unknown = false;
-        let mut any_known1 = false;
-        let mut any_known0 = false;
-        let mut ones: u32 = 0;
-        for k in 0..nwords(a.width) {
-            let m = low_mask(a.width - 64 * k as u32);
-            let av = a.val[k] & m;
-            let au = a.unk[k] & m;
-            let known1 = !au & av; // definite-1 bits (already within m)
-            let known0 = !au & !av & m; // !av sets high bits → re-mask
-            any_unknown |= au != 0;
-            any_known0 |= known0 != 0;
-            if known1 != 0 {
-                any_known1 = true;
-                ones += known1.count_ones();
-            }
-        }
-        match kind {
-            RedKind::And if any_known0 => (0, 0),
-            RedKind::And if any_unknown => (0, 1),
-            RedKind::And => (1, 0),
-            RedKind::Or if any_known1 => (1, 0),
-            RedKind::Or if any_unknown => (0, 1),
-            RedKind::Or => (0, 0),
-            RedKind::Xor if any_unknown => (0, 1),
-            RedKind::Xor => ((ones & 1) as u64, 0),
-        }
-    }
-
-    /// `reduce_word` wrapped into a 1-bit `Value`, optionally inverted (the N-forms
-    /// RedNand/RedNor/RedXnor).
-    pub(crate) fn reduce_bit(&self, a: &Value, kind: RedKind, neg: bool) -> Value {
-        let (v, u) = self.reduce_word(a, kind);
-        let (v, u) = if neg { not1((v, u)) } else { (v, u) };
-        let mut r = Value::zeros(1, false);
-        r.set_vu(0, v, u);
-        r
+        unary_self_of(op, &self.eval(operand)) // OWN self width
     }
 
     pub(crate) fn negate(&self, a: &Value) -> Value {
@@ -881,5 +817,77 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             out.unk[k] = ru & m;
         }
         out
+    }
+}
+
+/// The reduction fold, as a FREE function so the tier-3 width-specialized evaluator
+/// calls the same spelling the generic one does. Neither used `self`; the methods
+/// above delegate, so every prior call site is byte-identical.
+/// Word-parallel 4-state reduction → the single result bit `(v, u)`. Scans the
+/// val/unk plane words (the last masked to valid bits — a masked-out high bit must NOT
+/// read as a definite-0 and force AND→0), accumulating the three facts every reduction
+/// needs: any definite-0, any definite-1, any unknown, plus the definite-1 popcount for
+/// XOR parity. AND→0 if any 0 else x if any unknown else 1; OR dual; XOR→x if any
+/// unknown else parity.
+pub(crate) fn reduce_word(a: &Value, kind: RedKind) -> (u64, u64) {
+    if a.width == 0 {
+        return (0, 0); // degenerate; matches the old zeros(1) seed
+    }
+    let mut any_unknown = false;
+    let mut any_known1 = false;
+    let mut any_known0 = false;
+    let mut ones: u32 = 0;
+    for k in 0..nwords(a.width) {
+        let m = low_mask(a.width - 64 * k as u32);
+        let av = a.val[k] & m;
+        let au = a.unk[k] & m;
+        let known1 = !au & av; // definite-1 bits (already within m)
+        let known0 = !au & !av & m; // !av sets high bits → re-mask
+        any_unknown |= au != 0;
+        any_known0 |= known0 != 0;
+        if known1 != 0 {
+            any_known1 = true;
+            ones += known1.count_ones();
+        }
+    }
+    match kind {
+        RedKind::And if any_known0 => (0, 0),
+        RedKind::And if any_unknown => (0, 1),
+        RedKind::And => (1, 0),
+        RedKind::Or if any_known1 => (1, 0),
+        RedKind::Or if any_unknown => (0, 1),
+        RedKind::Or => (0, 0),
+        RedKind::Xor if any_unknown => (0, 1),
+        RedKind::Xor => ((ones & 1) as u64, 0),
+    }
+}
+
+/// `reduce_word` wrapped into a 1-bit `Value`, optionally inverted — the free twin.
+pub(crate) fn reduce_bit(a: &Value, kind: RedKind, neg: bool) -> Value {
+    let (v, u) = reduce_word(a, kind);
+    let (v, u) = if neg { not1((v, u)) } else { (v, u) };
+    let mut r = Value::zeros(1, false);
+    r.set_vu(0, v, u);
+    r
+}
+
+/// The one-bit unary family (`!`, and the six reductions) over an ALREADY-evaluated
+/// self-width operand, as a FREE function so the tier-3 width-specialized evaluator
+/// gets the identical mapping instead of restating six reduction kinds and the
+/// truthiness inversion. `eval_unary_self` above is this plus the operand evaluation.
+pub(crate) fn unary_self_of(op: UnOp, a: &Value) -> Value {
+    match op {
+        UnOp::LogNot => match crate::eval::sysfunc::truthiness(a) {
+            Tri::True => Value::zeros(1, false),
+            Tri::False => Value::one1(),
+            Tri::Unknown => Value::x1(),
+        },
+        UnOp::RedAnd => reduce_bit(a, RedKind::And, false),
+        UnOp::RedNand => reduce_bit(a, RedKind::And, true),
+        UnOp::RedOr => reduce_bit(a, RedKind::Or, false),
+        UnOp::RedNor => reduce_bit(a, RedKind::Or, true),
+        UnOp::RedXor => reduce_bit(a, RedKind::Xor, false),
+        UnOp::RedXnor => reduce_bit(a, RedKind::Xor, true),
+        _ => unreachable!("unary_self_of only for reductions/lognot"),
     }
 }

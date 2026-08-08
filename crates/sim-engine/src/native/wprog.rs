@@ -19,16 +19,21 @@
 //! - `BitNot` / `BitAnd` / `BitOr` / `BitXor` / `Add` / `Sub`,
 //! - `Shl` / `Shr` / `AShr` by a 2-state constant amount — except a SIGNED
 //!   `AShr`, whose sign fill is the one shift whose bits depend on the sign,
-//! - `Lt` / `Le` / `Gt` / `Ge` / `Eq` / `Ne`, when both operands already share
-//!   a width and a signedness (the comparison node's own context is one
-//!   unsigned bit).
+//! - `Lt` / `Le` / `Gt` / `Ge` / `Eq` / `Ne` / `CaseEq` / `CaseNe`, when both
+//!   operands already share a width and a signedness (the comparison node's
+//!   own context is one unsigned bit),
+//! - `LogAnd` / `LogOr`, whose operands are SELF-determined and need not share
+//!   a width with each other or with the result,
+//! - `LogNot` and the six reductions, over a self-determined operand.
 //!
 //! Every node carries the SAME width and the SAME signedness as its context,
-//! with TWO deliberate exceptions that introduce a FURTHER width rather than a
-//! conversion — a comparison's operands, and a runtime array index (a comparison
-//! inside an index subtree therefore gives three widths in one program) — and
-//! neither mixes: the comparison yields one bit and `LoadIdx` discards the index
-//! entirely. So **no widening, no sign extension and no truncation exists
+//! with FOUR deliberate exceptions that introduce a FURTHER width rather than a
+//! conversion — a comparison's operands, a runtime array index, and the operands
+//! of `&&`/`||` and of the one-bit unaries. Four widths in ONE program is an
+//! ordinary shape, not a corner: `(sa < sb) && m[idx]` gives 1 / 8 / 8 / 4.
+//! None of them mixes — every one of those nodes yields a single bit and
+//! `LoadIdx` discards the index entirely, so the further width dies where it is
+//! introduced and no value is ever widened, sign-extended or truncated. So **no widening, no sign extension and no truncation exists
 //! anywhere in an admitted tree** — the context-sizing rules the generic
 //! evaluator implements have nothing to do, and this module does not restate
 //! them (the classifier-must-match-lowering trap). Signedness is admitted
@@ -40,8 +45,12 @@
 //! What remains is the per-op 4-state BIT SEMANTICS, and those are pinned by an
 //! exhaustive per-bit-state differential against the generic evaluator plus the
 //! corpus mirror sweep (`s2_wprog_*` tests) — measured equal, not argued equal.
-//! The comparisons are not even restated: they call the shared
-//! `eval::binops::relational` / `log_eq`.
+//! Nothing here is restated: the comparisons call the shared
+//! `eval::binops::{relational, log_eq, case_eq}`, `&&`/`||` call
+//! `eval::binops::{log_and, log_or}`, and `!` plus the six reductions call
+//! `eval::unary_self_of` — the same function the generic `eval_unary_self`
+//! reaches. Those are free functions extracted for this; the pre-existing
+//! `EvalCtx` methods delegate, so the generic path is unchanged.
 //!
 //! ## Which EVALUATIONS reach this module — narrower than "the walk"
 //!
@@ -138,6 +147,24 @@ enum WOp {
     },
     Sub {
         m: u64,
+    },
+    /// One-bit-result LOGICAL binary (`&&`, `||`). Unlike a comparison, the two
+    /// operands are SELF-determined and need not share a width, so each carries
+    /// its own — the value on the stack was masked to it when it was compiled.
+    LogBin {
+        op: sim_ir::BinOp,
+        lw: u32,
+        ls: bool,
+        rw: u32,
+        rs: bool,
+    },
+    /// One-bit-result unary over a SELF-determined operand: `!` or one of the six
+    /// reductions. The mapping is not restated here — `unary_self_of` is the same
+    /// function the generic evaluator reaches through `eval_unary_self`.
+    Unary1 {
+        op: sim_ir::UnOp,
+        ow: u32,
+        os: bool,
     },
     /// The ordered / equality comparisons. Pops two operand-width values,
     /// pushes a 1-bit result computed by the SHARED `eval::binops` free
@@ -351,6 +378,46 @@ fn compile_node(
             Some(())
         }
         sim_ir::Expr::Unary { op, operand } => {
+            // `!` and the six reductions: SELF-determined operand, one unsigned
+            // result bit. Same shape as the `&&`/`||` arm BELOW — the operand is
+            // compiled at its own width so the shared mapping sees the bits it
+            // expects, and the result discards it.
+            if matches!(
+                op,
+                sim_ir::UnOp::LogNot
+                    | sim_ir::UnOp::RedAnd
+                    | sim_ir::UnOp::RedNand
+                    | sim_ir::UnOp::RedOr
+                    | sim_ir::UnOp::RedNor
+                    | sim_ir::UnOp::RedXor
+                    | sim_ir::UnOp::RedXnor
+            ) {
+                // Insurance, not a live check: `compile_node`'s own entry
+                // precondition already requires the node's self width and sign to
+                // equal the context's, and `sim_ir::selfwidth` gives every op in
+                // this list `{width: 1, signed: false}` — so an unreachable
+                // combination. Measured: replacing this `return` with a `panic!`
+                // is never hit across the suite or the real designs. It stays
+                // because the width the op RECORDS must be one bit whatever a
+                // future width rule says, and that is cheaper to keep than to
+                // re-derive.
+                if w != 1 || signed {
+                    return None; // the result IS one unsigned bit
+                }
+                let ow = wt.get(*operand);
+                if ow.width == 0 || ow.width > 64 {
+                    return None;
+                }
+                compile_node(
+                    ir, wt, arena, *operand, ow.width, ow.signed, ops, depth, max_depth,
+                )?;
+                ops.push(WOp::Unary1 {
+                    op: *op,
+                    ow: ow.width,
+                    os: ow.signed,
+                });
+                return Some(());
+            }
             if !matches!(op, sim_ir::UnOp::BitNot) {
                 return None;
             }
@@ -381,7 +448,7 @@ fn compile_node(
                 // when both operands already share a width AND a signedness, so
                 // no §11.8.1 mixed-sign or widening question arises here
                 // either. The comparison itself is the shared free function.
-                B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne => {
+                B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne | B::CaseEq | B::CaseNe => {
                     if w != 1 || signed {
                         return None; // a comparison's own self-width IS 1, unsigned
                     }
@@ -404,6 +471,52 @@ fn compile_node(
                         op: *op,
                         ow: lw.width,
                         osigned: lw.signed,
+                    });
+                    Some(())
+                }
+                // `&&` / `||` — SELF-determined operands, each reduced to a
+                // truth value independently, one unsigned result bit. Two facts
+                // make this admissible without restating anything:
+                //
+                // (1) the generic evaluator does NOT short-circuit — it writes
+                //     `let l = self.eval(lhs); let r = self.eval(rhs);` and only
+                //     then folds. So evaluating both eagerly here is not a
+                //     behavioural choice; it is the same order, which matters
+                //     because an admitted subtree can still COUNT an
+                //     out-of-range element read (`LoadIdx`).
+                // (2) each operand is compiled at ITS OWN width and sign, so the
+                //     stack value is already masked to that width and the
+                //     truthiness scan sees exactly the bits the generic one sees.
+                //
+                // The operands may differ in width from each other and from this
+                // node — that is why the op carries both, and why this does not
+                // violate the module's uniform-width admission: like a comparison,
+                // it introduces a further width rather than a conversion, and the
+                // result discards the operands entirely.
+                B::LogAnd | B::LogOr => {
+                    // Insurance, not a live check — see the identical note on the
+                    // unary arm above.
+                    if w != 1 || signed {
+                        return None; // the result IS one unsigned bit
+                    }
+                    let lw = wt.get(*lhs);
+                    let rw = wt.get(*rhs);
+                    if lw.width == 0 || lw.width > 64 || rw.width == 0 || rw.width > 64 {
+                        return None;
+                    }
+                    compile_node(
+                        ir, wt, arena, *lhs, lw.width, lw.signed, ops, depth, max_depth,
+                    )?;
+                    compile_node(
+                        ir, wt, arena, *rhs, rw.width, rw.signed, ops, depth, max_depth,
+                    )?;
+                    *depth -= 1;
+                    ops.push(WOp::LogBin {
+                        op: *op,
+                        lw: lw.width,
+                        ls: lw.signed,
+                        rw: rw.width,
+                        rs: rw.signed,
                     });
                     Some(())
                 }
@@ -574,6 +687,27 @@ impl WProg {
                         a.val = a.val.wrapping_sub(b.val) & m;
                     }
                 }
+                WOp::LogBin { op, lw, ls, rw, rs } => {
+                    let b = scratch.pop().expect("wprog stack");
+                    let a = scratch.last_mut().expect("wprog stack");
+                    // Each operand at ITS OWN width — see the compile-side note.
+                    let av = one_word_value(a.val, a.unk, lw, ls);
+                    let bv = one_word_value(b.val, b.unk, rw, rs);
+                    let r = if matches!(op, sim_ir::BinOp::LogAnd) {
+                        crate::eval::binops::log_and(&av, &bv)
+                    } else {
+                        crate::eval::binops::log_or(&av, &bv)
+                    };
+                    a.val = r.val.first().copied().unwrap_or(0);
+                    a.unk = r.unk.first().copied().unwrap_or(0);
+                }
+                WOp::Unary1 { op, ow, os } => {
+                    let a = scratch.last_mut().expect("wprog stack");
+                    let av = one_word_value(a.val, a.unk, ow, os);
+                    let r = crate::eval::unary_self_of(op, &av);
+                    a.val = r.val.first().copied().unwrap_or(0);
+                    a.unk = r.unk.first().copied().unwrap_or(0);
+                }
                 WOp::Cmp { op, ow, osigned } => {
                     let b = scratch.pop().expect("wprog stack");
                     let a = scratch.last_mut().expect("wprog stack");
@@ -583,10 +717,14 @@ impl WProg {
                     // not what happens at it.
                     let av = one_word_value(a.val, a.unk, ow, osigned);
                     let bv = one_word_value(b.val, b.unk, ow, osigned);
-                    let r = if matches!(op, sim_ir::BinOp::Eq | sim_ir::BinOp::Ne) {
-                        crate::eval::binops::log_eq(op, &av, &bv)
-                    } else {
-                        crate::eval::binops::relational(op, &av, &bv)
+                    let r = match op {
+                        sim_ir::BinOp::CaseEq | sim_ir::BinOp::CaseNe => {
+                            crate::eval::binops::case_eq(op, &av, &bv)
+                        }
+                        sim_ir::BinOp::Eq | sim_ir::BinOp::Ne => {
+                            crate::eval::binops::log_eq(op, &av, &bv)
+                        }
+                        _ => crate::eval::binops::relational(op, &av, &bv),
                     };
                     a.val = r.val.first().copied().unwrap_or(0);
                     a.unk = r.unk.first().copied().unwrap_or(0);

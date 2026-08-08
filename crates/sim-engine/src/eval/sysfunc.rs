@@ -691,34 +691,42 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     // ── helpers ────────────────────────────────────────────────────────────
 
     pub(crate) fn truthiness(&self, a: &Value) -> Tri {
-        // A real is logically true iff it is != 0.0 (IEEE 1364: `-0.0 == 0.0`,
-        // so both signed zeros are FALSE; NaN != 0.0 → truthy). Reinterpreting a
-        // real's f64 bits as a 4-state vector would wrongly read `-0.0`
-        // (sign bit set, value zero) as true in `if`/`!`/ternary/`&&`/`||`.
-        if a.is_real {
-            return if a.to_f64().unwrap_or(0.0) != 0.0 {
-                Tri::True
-            } else {
-                Tri::False
-            };
-        }
-        let mut any_unknown = false;
-        for i in 0..a.width {
-            let (v, u) = a.get_vu(i);
-            if u == 0 && v == 1 {
-                return Tri::True;
-            }
-            if u != 0 {
-                any_unknown = true;
-            }
-        }
-        if any_unknown {
-            Tri::Unknown
-        } else {
-            Tri::False
-        }
+        truthiness(a)
     }
 }
+/// IEEE truthiness of a value, as a FREE function so the tier-3 width-specialized
+/// evaluator asks the same question the generic one does (`&&`, `||`, `!`, a branch
+/// condition). It never used `self`; the method above delegates, so every prior call
+/// site is byte-identical.
+pub(crate) fn truthiness(a: &Value) -> Tri {
+    // A real is logically true iff it is != 0.0 (IEEE 1364: `-0.0 == 0.0`,
+    // so both signed zeros are FALSE; NaN != 0.0 → truthy). Reinterpreting a
+    // real's f64 bits as a 4-state vector would wrongly read `-0.0`
+    // (sign bit set, value zero) as true in `if`/`!`/ternary/`&&`/`||`.
+    if a.is_real {
+        return if a.to_f64().unwrap_or(0.0) != 0.0 {
+            Tri::True
+        } else {
+            Tri::False
+        };
+    }
+    let mut any_unknown = false;
+    for i in 0..a.width {
+        let (v, u) = a.get_vu(i);
+        if u == 0 && v == 1 {
+            return Tri::True;
+        }
+        if u != 0 {
+            any_unknown = true;
+        }
+    }
+    if any_unknown {
+        Tri::Unknown
+    } else {
+        Tri::False
+    }
+}
+
 pub(crate) fn ipow_signed(base: i128, exp: i128) -> u128 {
     if exp < 0 {
         // negative exponent on integers → 0 (except base==1 → 1, base==-1 → ±1)
