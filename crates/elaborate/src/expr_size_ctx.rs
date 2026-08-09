@@ -166,17 +166,18 @@ impl Elaborator<'_> {
                     // answers `w` without lowering at all.
                     // (Widening PAST max(self, n) is wrong too: a 32-bit context makes
                     // `5'(s4>>u3)` 30 instead of 6.)
-                    // ⚠️ `**` belongs here on the standard's terms — a NEGATIVE
-                    // exponent asks whether the base is ±1, a question about the WHOLE
-                    // base, so §4.5.316's low-bit-closure argument (which needs b ≥ 0)
-                    // does not cover it. §4.5.318 tried the move and MEASURED it as a
-                    // net loss: 138 cells fixed, 20 turned silently wrong, because the
-                    // engine takes the exponent's signedness from the BASE. The root is
-                    // upstream — `lower_expr_ctx`'s "right operand self-determined" list
-                    // has `Shl|Shr|AShl|AShr` and is MISSING `Pow`, which is a
-                    // silent-wrong with no cast in sight (`s3 ** 4'd11` = 0 vs both
-                    // oracles' 11). Fix that first; then this move is free. ROADMAP §2.
-                    ast::BinOp::Div | ast::BinOp::Mod | ast::BinOp::Shr | ast::BinOp::AShr => {
+                    // `**` belongs here on the standard's terms — a NEGATIVE exponent
+                    // asks whether the base is ±1, a question about the WHOLE base, so
+                    // §4.5.316's low-bit-closure argument (which needs b ≥ 0) does not
+                    // cover it. §4.5.318 tried the move and measured it as a net loss
+                    // (138 fixed, 20 turned silently wrong) because the engine read the
+                    // exponent's sign off the BASE; with that root fixed the move is a
+                    // pure gain and `**` now sits where the standard puts it.
+                    ast::BinOp::Div
+                    | ast::BinOp::Mod
+                    | ast::BinOp::Shr
+                    | ast::BinOp::AShr
+                    | ast::BinOp::Pow => {
                         let plain = self.lower_ctx_or_plain(e, n);
                         let w = self.ir_bits_of(plain).unwrap_or(n);
                         if n >= w {
@@ -249,8 +250,8 @@ impl Elaborator<'_> {
                             })
                         }
                     }
-                    ast::BinOp::Pow | ast::BinOp::Shl | ast::BinOp::AShl => {
-                        // base context-determined at n; exponent / shift amount SELF-determined.
+                    ast::BinOp::Shl | ast::BinOp::AShl => {
+                        // base context-determined at n; shift amount SELF-determined.
                         let l = self.lower_size_ctx(lhs, n, ext);
                         let r = self.lower_expr(rhs);
                         let r = self.refuse_real_size_operand(r);

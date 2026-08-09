@@ -2,6 +2,46 @@
 
 use super::*;
 
+/// The three sign questions one arithmetic operation answers.
+///
+/// §11.8.1 gives a context-determined region ONE collective sign, and every
+/// operator obeys it — except `**`, whose exponent IEEE Table 11-21 makes
+/// self-determined and therefore independent of the base. So the single
+/// `l.signed && r.signed` boolean was standing in for three separate answers.
+/// For every operator but `**` all three are that same boolean, which is why
+/// splitting them is mechanically identity everywhere else.
+#[derive(Clone, Copy)]
+pub(crate) struct ArithSigns {
+    /// How to read the LEFT operand.
+    lhs: bool,
+    /// How to read the RIGHT one.
+    rhs: bool,
+    /// The RESULT's sign (§11.4.10: `**` is signed iff the BASE is).
+    res: bool,
+}
+
+/// One operand of the narrow arithmetic lane as an `i128`, read under `sgn`.
+///
+/// `sgn` is the sign the OPERAND is to be read with, not the region's: a signed
+/// value sign-extends from `w`, an unsigned one keeps its non-negative value and
+/// is never reinterpreted through bit `w-1`. Callers reach this lane only when
+/// `w <= 64`, so the unsigned arm always fits.
+///
+/// Identical to the old inline `resize_keep_sign(w, true).to_i128_signed()`
+/// whenever `sgn` is true — which is every operand of every operator except a
+/// `**` whose two sides disagree.
+#[inline]
+fn read_i128(v: &Value, w: u32, sgn: bool) -> i128 {
+    if sgn {
+        v.clone()
+            .resize_keep_sign(w, true)
+            .to_i128_signed()
+            .unwrap()
+    } else {
+        v.clone().resize_keep_sign(w, false).to_u128().unwrap() as i128
+    }
+}
+
 impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     pub(crate) fn arith(&self, op: BinOp, l: &Value, r: &Value) -> Value {
         if l.is_real || r.is_real {
@@ -25,9 +65,42 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             return Value::from_f64(res);
         }
         let w = l.width.max(r.width).max(1);
+        // §11.8.1 gives a context-determined region ONE collective sign, and every
+        // operator here obeys it — except `**`. IEEE Table 11-21 makes the exponent
+        // SELF-determined, so its sign is independent of the base's, and one boolean
+        // cannot answer the three questions it was standing in for: how to read the
+        // LEFT operand, how to read the RIGHT one, and what the RESULT's sign is.
+        // For every other op the three coincide, so splitting them is mechanically
+        // identity (`is_pow` is `false` and all three collapse to `both_signed`).
+        let is_pow = matches!(op, BinOp::Pow);
         let both_signed = l.signed && r.signed;
+        let sg = if is_pow {
+            ArithSigns {
+                lhs: l.signed,
+                rhs: r.signed,
+                res: l.signed,
+            }
+        } else {
+            ArithSigns {
+                lhs: both_signed,
+                rhs: both_signed,
+                res: both_signed,
+            }
+        };
+        // Which KERNEL runs. The signed one owns Table 11-6's negative-exponent
+        // rows, which the unsigned square-multiply cannot express — so `**` needs
+        // it when the base is signed (for the +/-1 rows) or the exponent actually
+        // IS negative. A non-negative exponent reads the same either way (two's
+        // complement multiplication is sign-agnostic mod 2^w), so an unsigned base
+        // with a non-negative signed exponent stays on the lane it always used.
+        let exp_is_neg = is_pow && r.signed && r.width > 0 && r.get_vu(r.width - 1).0 == 1;
+        let use_signed = if is_pow {
+            l.signed || exp_is_neg
+        } else {
+            both_signed
+        };
         if l.has_xz() || r.has_xz() {
-            return Value::xs(w, both_signed);
+            return Value::xs(w, sg.res);
         }
         // Arithmetic lane: 128 bits. SIGNED stays a 64-bit lane — sign
         // reconstruction (`to_i128_signed`) gates on width≤64, and a >64-bit signed
@@ -38,20 +111,12 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         // Phase-1.x ⑥: beyond the native lanes (signed >64 / unsigned >128)
         // arithmetic computes EXACTLY on the word grid (iverilog-differential)
         // — these used to X-poison as an honest "unsupported".
-        if (both_signed && w > 64) || (!both_signed && w > 128) {
-            return self.arith_wide(op, l, r, w, both_signed);
+        if (use_signed && w > 64) || (!use_signed && w > 128) {
+            return self.arith_wide(op, l, r, w, sg);
         }
-        let res: u128 = if both_signed {
-            let a = l
-                .clone()
-                .resize_keep_sign(w, true)
-                .to_i128_signed()
-                .unwrap();
-            let b = r
-                .clone()
-                .resize_keep_sign(w, true)
-                .to_i128_signed()
-                .unwrap();
+        let res: u128 = if use_signed {
+            let a = read_i128(l, w, sg.lhs);
+            let b = read_i128(r, w, sg.rhs);
             match op {
                 BinOp::Add => a.wrapping_add(b) as u128,
                 BinOp::Sub => a.wrapping_sub(b) as u128,
@@ -115,7 +180,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         };
         // Store the low 128 bits across word 0 (and word 1 for w>64); `mask_top`
         // clears bits above `w`.
-        let mut out = Value::zeros(w, both_signed);
+        let mut out = Value::zeros(w, sg.res);
         out.val[0] = res as u64;
         if nwords(w) > 1 {
             if out.val.len() < 2 {
@@ -128,8 +193,9 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     }
 
     /// Multi-word arithmetic (Phase-1.x ⑥) for widths beyond the native
-    /// lanes. Operands are X-free (gated by the caller); both extend to the
-    /// w-bit grid (sign-extending only when BOTH are signed, §4.5) and every
+    /// lanes. Operands are X-free (gated by the caller); each extends to the
+    /// w-bit grid under ITS OWN sign (`sg.lhs`/`sg.rhs`, which the caller sets
+    /// equal to the collective sign for every operator but `**`) and every
     /// op computes mod 2^w in two's complement — school multiplication,
     /// short (one-word divisor) or restoring long division, square-multiply
     /// power. Division signs per IEEE: quotient truncates toward zero, the
@@ -140,7 +206,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         l: &Value,
         r: &Value,
         w: u32,
-        both_signed: bool,
+        sg: ArithSigns,
     ) -> Value {
         // WIDE-ARITH-CAP: the super-linear kernels would stall for tens of seconds
         // once a replication concat pushes an operand past the cap. Poison to X
@@ -148,26 +214,26 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         // exact at any width. The matching loud warning is emitted once in
         // `simulate` (W-RUN-WIDE-ARITH) so the degradation is never silent.
         if w > WIDE_ARITH_CAP && matches!(op, BinOp::Mul | BinOp::Div | BinOp::Mod | BinOp::Pow) {
-            return Value::xs(w, both_signed);
+            return Value::xs(w, sg.res);
         }
         let n = nwords(w).max(1);
-        let le = l.clone().resize_keep_sign(w, both_signed);
-        let re = r.clone().resize_keep_sign(w, both_signed);
+        let le = l.clone().resize_keep_sign(w, sg.lhs);
+        let re = r.clone().resize_keep_sign(w, sg.rhs);
         let a: Vec<u64> = (0..n)
             .map(|k| le.val.get(k).copied().unwrap_or(0))
             .collect();
         let b: Vec<u64> = (0..n)
             .map(|k| re.val.get(k).copied().unwrap_or(0))
             .collect();
-        let sa = both_signed && le.get_vu(w - 1).0 == 1;
-        let sb = both_signed && re.get_vu(w - 1).0 == 1;
+        let sa = sg.lhs && le.get_vu(w - 1).0 == 1;
+        let sb = sg.rhs && re.get_vu(w - 1).0 == 1;
         let words = match op {
             BinOp::Add => mw_mask(mw_add(&a, &b), w),
             BinOp::Sub => mw_mask(mw_add(&a, &mw_neg(&b)), w),
             BinOp::Mul => mw_mask(mw_mul(&a, &b, n), w),
             BinOp::Div | BinOp::Mod => {
                 if mw_is_zero(&b) {
-                    return Value::xs(w, both_signed);
+                    return Value::xs(w, sg.res);
                 }
                 let ma = if sa {
                     mw_mask(mw_neg(&a), w)
@@ -195,14 +261,14 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                     let minus_one = mw_mask(mw_neg(&one), w);
                     if a == one {
                         one
-                    } else if a == minus_one {
+                    } else if sg.lhs && a == minus_one {
                         if b[0] & 1 == 0 {
                             one
                         } else {
                             minus_one
                         }
                     } else if mw_is_zero(&a) {
-                        return Value::xs(w, both_signed);
+                        return Value::xs(w, sg.res);
                     } else {
                         vec![0; n]
                     }
@@ -212,7 +278,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             }
             _ => unreachable!(),
         };
-        let mut out = Value::zeros(w, both_signed);
+        let mut out = Value::zeros(w, sg.res);
         for (k, &wd) in words.iter().enumerate().take(n) {
             out.val[k] = wd;
         }

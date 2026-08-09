@@ -679,30 +679,40 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             // POWER — base is context-determined; EXPONENT is SELF-DETERMINED.
             // `**` is signed iff the BASE is signed. The incoming `eff_signed`
             // (= base.self_signed AND ctx_signed) is already the base's effective
-            // sign — the exponent never entered it. Evaluate the base in context;
-            // the exponent is self-determined and its sign is restamped to the
-            // base's so `arith`'s both-signed reduction follows the base.
+            // sign — the exponent never entered it. `arith` owns the rest: it
+            // reads each `**` operand under its OWN sign and stamps the result
+            // with the BASE's, because IEEE Table 11-21 makes the exponent
+            // self-determined and therefore INDEPENDENT of the base.
             Pow => {
                 let base = self.eval_ctx(lhs, w, eff_signed);
                 // The exponent is SELF-determined: its value is read with its OWN
                 // signedness. A narrow UNSIGNED exponent (`1'b1` = +1, `2'd2` = +2)
-                // must NOT be reinterpreted as signed — widen it to `w` using its
-                // own sign FIRST (so `1'b1` zero-extends to +1, a genuine `-1`
-                // sign-extends to -1), THEN restamp to the base's sign so `arith`'s
-                // both-signed reduction follows the base. (Restamping before the
-                // widen turned `1'b1` into a 1-bit signed -1 ⇒ `2 ** 1'b1` = 0.)
+                // must NOT be reinterpreted as signed. This used to end with
+                // `exp.signed = base.signed`, a RESTAMP that steered `arith`'s
+                // collective-sign reduction by reinterpreting the exponent's bits:
+                // `4'sd3 ** 4'd11` read 11 as -5 and Table 11-6 answered 0 (both
+                // oracles say 11), and `4'd13 ** -4'sd2` read -2 as 14 (both say
+                // 0) — 336 wrong cells in a 3,584-cell sweep. `arith` splitting
+                // the one sign into three (read L / read R / result) removed the
+                // need for it; nothing here restamps anything now.
                 // Widen-ONLY: a bare `resize(w)` also TRUNCATED an exponent wider
                 // than the result (`logic [3:0] r = a ** 18` read the exponent as
                 // 18 mod 16 = 2 ⇒ 2**2 = 4, not 2**18 mod 16 = 0 — adversarial
                 // review). The exponent's VALUE must survive intact; it is the
                 // RESULT that wraps to the base's width, so widen to
-                // max(w, own width) and truncate only after `arith`.
+                // max(w, own width) and truncate only after `arith`. Widening to
+                // `w` is also what keeps the arithmetic at the CONTEXT width when
+                // the base cannot be resized to it — `resize_keep_sign` returns a
+                // `string`/`real` base at its own width, so dropping this widen
+                // computed `"ab" ** 3` at 32 bits instead of 64 (soundness review).
                 let exp_raw = self.eval(rhs);
                 let ew = exp_raw.width.max(w);
-                let mut exp = exp_raw.resize(ew);
-                exp.signed = base.signed;
+                let exp = exp_raw.resize(ew);
                 // IEEE Table 11-6: a 0 base with a NEGATIVE exponent is x (it is a
-                // 0^(-k) division-by-zero). `2 ** -1` (|base| > 1) stays 0.
+                // 0^(-k) division-by-zero). `2 ** -1` (|base| > 1) stays 0. Read
+                // the exponent under its own sign — the restamp above used to
+                // decide this clause by the BASE's sign, so `4'd0 ** -4'sd2` was
+                // silently 0 where iverilog and IEEE both say x.
                 if !base.has_xz()
                     && !exp.has_xz()
                     && base.to_u128() == Some(0)

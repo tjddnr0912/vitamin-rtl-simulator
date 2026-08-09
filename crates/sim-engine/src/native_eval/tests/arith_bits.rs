@@ -83,8 +83,10 @@ fn pow_const_small_exponent_matches_oracle() {
 }
 
 // POW-LANE bail boundary: exponent 0 / over POW_MAX / w*n>128 / non-const must
-// NOT compile natively (they stay oracle-bound), or values would diverge from
-// the oracle's u128-`checked_pow().unwrap_or(0)` overflow quirk.
+// NOT compile natively (they stay oracle-bound). Above w*n == 128 the oracle's
+// u128 square-and-multiply wraps mod 2^128, which a per-step mod-2^w Mul chain
+// cannot reproduce. (This note used to cite a `checked_pow().unwrap_or(0)`
+// overflow quirk — the kernel has not worked that way for some time.)
 #[test]
 fn pow_uncompilable_cases_bail_to_oracle() {
     let wt_none = crate::FuncTable::new();

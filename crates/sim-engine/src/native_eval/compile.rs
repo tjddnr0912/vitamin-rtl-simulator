@@ -123,8 +123,19 @@ pub(crate) fn const_pow_exponent(ir: &SimIr, eid: u32) -> Option<u32> {
     if v.has_xz() {
         return None;
     }
-    let n = v.to_u128()?; // a negative signed const reads huge here → rejected below
-    if (2..=POW_MAX).contains(&n) {
+    // Read the constant under ITS OWN sign. `to_u128` masks to the constant's own
+    // WIDTH, so it does not read a narrow negative one as "huge" — it reads it as
+    // that width's unsigned value: `4'sb1110` (-2) came back as 14 and compiled a
+    // 14-step Mul chain, so the DEFAULT backend answered `1001` where both oracles
+    // and the other two backends answer `0000` (IEEE Table 11-6: a negative
+    // exponent with |base| > 1 is 0). Every signed constant of width <= 4 was
+    // affected. An unsigned exponent is never negative, so it keeps its value.
+    let n: i128 = if v.signed {
+        v.to_i128_signed()?
+    } else {
+        v.to_u128()? as i128 // >= 2^127 wraps negative and falls out of range below
+    };
+    if (2..=POW_MAX as i128).contains(&n) {
         Some(n as u32)
     } else {
         None
@@ -537,10 +548,15 @@ pub(crate) fn lower(
                 // exactly (any X bit → all-X, identical to repeated Mul's arith
                 // X-guard; n==1 is excluded above because it would skip the Mul).
                 // Two guards keep VALUES byte-identical to the oracle:
-                //  - bail when eff_signed (signed uses ipow_signed, a different path),
-                //  - require w*n <= 128 so a^n < 2^128 — the oracle computes a^n in a
-                //    u128 and returns 0 on u128 OVERFLOW (`checked_pow().unwrap_or(0)`)
-                //    rather than wrapping, a quirk a per-step mod-2^w chain can't mimic.
+                //  - bail when eff_signed (signed uses ipow_signed, a different path
+                //    that owns Table 11-6's +/-1 and negative-exponent rows),
+                //  - require w*n <= 128 so a^n < 2^128, i.e. the oracle's u128
+                //    square-and-multiply never wraps. Once it CAN wrap it wraps mod
+                //    2^128, not mod 2^w, and a per-step mod-2^w Mul chain diverges.
+                //    (An older note here said the oracle returned 0 on overflow via
+                //    `checked_pow().unwrap_or(0)`; that stopped being true when the
+                //    kernel became wrapping square-and-multiply. The GUARD is still
+                //    right — only the reason was stale.)
                 B::Pow => {
                     let n = const_pow_exponent(ir, *rhs)?;
                     if eff_signed || (w as u128) * (n as u128) > 128 {

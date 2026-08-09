@@ -505,8 +505,14 @@ impl Elaborator<'_> {
                         rhs: r,
                     });
                 }
-                // shifts: LEFT operand context-determined, RIGHT self-determined.
-                if matches!(op, Shl | Shr | AShl | AShr) {
+                // shifts and `**`: LEFT operand context-determined, RIGHT
+                // self-determined (IEEE Table 11-21 puts a power's exponent in the
+                // same row as a shift's amount). `Pow` was missing here, so a
+                // context width leaked into the exponent: `logic [7:0] r = a ** '1`
+                // sized the fill to 8 bits and computed 2**255 instead of 2**1
+                // (vita 0, both oracles 2), and a narrow signed literal exponent in
+                // a continuous assign widened into a positive number.
+                if matches!(op, Shl | Shr | AShl | AShr | Pow) {
                     let l = self.lower_ctx_or_plain(lhs, ctx);
                     let r = self.lower_expr(rhs);
                     return self.push_expr(ir::Expr::Binary {
