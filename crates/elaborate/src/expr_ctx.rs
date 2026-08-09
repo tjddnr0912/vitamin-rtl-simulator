@@ -392,9 +392,26 @@ impl Elaborator<'_> {
     /// `function logic[7:0] f; f=4'hF` returned `f` not `0f`; a signed return read
     /// in a wider signed context did not sign-extend. Apply §10.7 here: truncate
     /// to / extend (by the RHS's OWN sign) to the declared width, then stamp the
-    /// TARGET sign so a readback in a wider context extends correctly. A genuine
-    /// no-op when the rhs already matches the declared width and sign — every such
-    /// inline function (the common case) stays byte-identical.
+    /// TARGET sign so a readback in a wider context extends correctly.
+    ///
+    /// The `$signed`/`$unsigned` tail is also the SEAL, for the reason
+    /// `lower_size_cast` documents: the declared width is a self-determined
+    /// boundary, but a bare `Binary`/`Unary`/`Ternary` node is CONTEXT-determined
+    /// to the engine, so an enclosing width propagates through it and re-runs the
+    /// whole body expression wider. The stamp used to be CONDITIONAL — skipped
+    /// when the target's sign already matched the rhs's — and that is exactly the
+    /// case where nothing sealed: `function [7:0] fm(input [7:0] x); fm = x*x;`
+    /// read into a 64-bit destination printed `fe01` where iverilog prints `0001`.
+    /// A 1,440-cell sweep put **48 wrong cells** all in that one hole (declared
+    /// width == rhs self width AND unsigned target — a SIGNED target was sealed by
+    /// accident, because an unsigned rhs made the stamp differ and appear).
+    ///
+    /// ⚠️ Sealing needs a TRUSTWORTHY rhs width: `ir_bits_of` answers `None` for a
+    /// placeholder / string-producing / array-reduction rhs (and `rw` is then the
+    /// declared `w`, forcing the same-width arm), and answers a FABRICATED `Some`
+    /// for a class field (the 32-bit handle net). Sealing on either is a rung down
+    /// — measured both directions in §4.5.320 — so the pre-slice tail is kept
+    /// verbatim there.
     pub(crate) fn resize_inline_assign(&mut self, e: u32, w: u32, target_signed: bool) -> u32 {
         // real values are not bit-resizable — leave them untouched.
         if self.expr_is_real(e) {
@@ -405,7 +422,20 @@ impl Elaborator<'_> {
         if self.ir_expr_is_string(e) {
             return e;
         }
-        let rw = self.ir_bits_of(e).unwrap_or(w);
+        let known_rw = self.ir_bits_of(e);
+        let canon_w = self.canonical_self_width(e).map(|s| s.width);
+        let rw = known_rw.unwrap_or(w);
+        let trusted_w = known_rw.is_some() && canon_w.is_none_or(|c| c == rw);
+        // The extension direction still comes from the old mirror — deliberately,
+        // and NOT because the canonical rule is unreachable here. Two shapes reach
+        // the widening arm with a canonical-vs-mirror sign disagreement, and they
+        // want opposite things: a frame `Expr::Call` is impure, so `extend_to`'s
+        // sign fill (a SECOND mention of the operand) would evaluate it twice;
+        // a signed CLASS FIELD is a pure repeatable net read and would simply be
+        // fixed (`function signed [63:0] fw; fw = c.sf;` with `sf = 8'hAB` is
+        // `00…ab` for hand-IEEE's `ff…ab`). Adopting the canonical sign is
+        // therefore a real fix gated on a repeatability predicate, i.e. its own
+        // slice — ROADMAP §2 carries both shapes.
         let rhs_signed = self.expr_self_signed(e);
         let resized = match w.cmp(&rw) {
             std::cmp::Ordering::Equal => e,
@@ -414,28 +444,36 @@ impl Elaborator<'_> {
             // Truncate to the low W bits (Select is unsigned).
             std::cmp::Ordering::Less => self.select_low(e, w),
         };
-        // extend_to / select_low yield UNSIGNED results; the Equal case keeps `e`'s
-        // own sign. Stamp the target sign ONLY when it differs from what `resized`
-        // already carries — so an unsigned target with an unsigned rhs, or a signed
-        // target with an already-signed rhs, adds no node (byte-identical).
-        let resized_signed = if matches!(w.cmp(&rw), std::cmp::Ordering::Equal) {
-            rhs_signed
-        } else {
-            false
-        };
-        if target_signed && !resized_signed {
-            self.push_expr(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Signed,
-                args: vec![resized],
-            })
-        } else if !target_signed && resized_signed {
-            self.push_expr(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Unsigned,
-                args: vec![resized],
-            })
-        } else {
-            resized
+        if !trusted_w {
+            // Width fabricated ⇒ no seal; the conditional stamp below is the
+            // pre-slice tail verbatim.
+            let resized_signed = if w == rw { rhs_signed } else { false };
+            return if target_signed && !resized_signed {
+                self.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::Signed,
+                    args: vec![resized],
+                })
+            } else if !target_signed && resized_signed {
+                self.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::Unsigned,
+                    args: vec![resized],
+                })
+            } else {
+                resized
+            };
         }
+        // `extend_to`/`select_low` are unsigned and the same-width arm keeps `e`'s
+        // own sign, so the stamp is what makes the value carry the TARGET's sign —
+        // and, unconditionally, what makes it self-determined.
+        let which = if target_signed {
+            ir::SysFuncId::Signed
+        } else {
+            ir::SysFuncId::Unsigned
+        };
+        self.push_expr(ir::Expr::SysFunc {
+            which,
+            args: vec![resized],
+        })
     }
 
     // ── const + expr helpers (single arena append points) ──────────
