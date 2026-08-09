@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S3a ✅(2026-08-07), 다음 = S3 바디 코드젠** | 2 | 실측 | ⭐⭐ **S3a 완료(§4.5.311)** — 호출 흡수: `native::frames` admission + `NativeKernel` 복합 리더 위임. keccak 호출형·배열형 네이티브·바이트 동일. ⚠️ **속도는 안 샀다**(1.14×·picorv32 0.83×) — 본문이 인터프리터 프레임 실행기에서 도므로 **flat↔호출형 13× 가 S3 본체의 표적**. 정본 = **[preview/21 §5 S3 + §7.3](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S2 는 닫혔다(2026-08-10 실측). 다음 = S3 바디 코드젠** | 1 | 실측 | ⭐⭐ **admission 잔여는 레버가 아니다** — 폭 균일 게이트를 떼도 5설계 전부 **0 변화**(picorv32 1.70→1.70). native 가 지는 곳은 스케줄러(400 proc 동률)도 식(균일폭 1.67× 우세)도 아니고 **배열 원소 읽기 0.80×**(거기서 native≈interp<vm). 잔여 비용은 rhs 평가가 아니라 **문장당 디스패치**이고 그것을 지우는 것이 S3 다. 정본 = **[preview/21 §0.1 + §5 S3](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
