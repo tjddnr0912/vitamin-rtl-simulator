@@ -334,7 +334,7 @@ impl Elaborator<'_> {
         let n_dyn = dyn_binds.len();
         self.dyn_subst.extend(dyn_binds);
         self.inline_stack.push(fname);
-        let result = self.reduce_function_body(func, &inputs, &actual_ids);
+        let result = self.reduce_function_body(func, &inputs, &actual_ids, &eff_args);
         self.inline_stack.pop();
         self.dyn_subst.truncate(self.dyn_subst.len() - n_dyn);
         // R2 / §6.11.3: a 2-state return (`int`/`byte`/`bit`/…) must coerce X/Z→0. The
@@ -472,11 +472,137 @@ impl Elaborator<'_> {
         self.emit_frame_call(fid, &func, args)
     }
 
+    /// Bind ONE inline (SSA-fold) actual to its formal.
+    ///
+    /// The inline path substitutes the actual's ExprId for the formal's NAME, so
+    /// nothing about the formal's declared type reaches the body unless it is
+    /// applied here. But §13.4.3 makes the formal a VARIABLE OF ITS DECLARED TYPE
+    /// and §13.5.3 makes the call an ASSIGNMENT to it, and that assignment carries
+    /// three properties at once: the declared WIDTH (§11.6.2 — a wide actual
+    /// truncates, a narrow one extends by the ACTUAL's own sign, §11.6.1), the
+    /// declared SIGNEDNESS (which the body's arithmetic then reads — it is what
+    /// makes `x/3` a signed divide), and 2-state-ness (§6.11.1 — x/z store as 0).
+    /// The frame path receives all three for free because its formal IS a net.
+    ///
+    /// ⚠️ The three are each other's preconditions, and applying a SUBSET is worse
+    /// than applying none — §4.5.323 measured that three separate ways (the sign
+    /// alone lets the body read un-truncated high bits under the new sign; the
+    /// width alone leaves the body reading a truncated value with the actual's
+    /// sign). So this is one gate for all three: a TRUSTWORTHY actual width. Every
+    /// shape without one keeps the pre-slice tail verbatim rather than guess.
+    fn bind_formal_actual(
+        &mut self,
+        eid: u32,
+        ast_actual: Option<&ast::Expr>,
+        kind: ast::NetVarKind,
+        w: u32,
+        formal_signed: bool,
+    ) -> u32 {
+        // A heap-handle (`string`/class/`event`) or `real` formal is not a bit
+        // vector: a bit-resize would corrupt the handle or the IEEE-754 payload, so
+        // the kind discriminator must precede any width-based work. A width-0 type
+        // has nothing to resize.
+        if w == 0 || !ast_kind_is_bit_vector(kind) {
+            return eid;
+        }
+        // ⚠️ And the same question on the ACTUAL side, HERE rather than inside
+        // `resize_inline_assign`: step (3) below is OUTSIDE that function, so its
+        // real/string guards do not cover the coercion. Leaving it there shredded a
+        // `real` actual bound to a 2-state formal — `fint(9.0)` printed 0, and a
+        // `longint` formal printed the raw IEEE-754 bits — which is §4.5.323 round
+        // 2's exact symptom arriving through a different door.
+        //
+        // `expr_is_real` alone is not enough: it reads the IR value shape, and a
+        // frame `Expr::Call` is opaque to it (the frame's return var is a 64-bit
+        // `Reg` net holding the f64 payload, not a `NetKind::Real`). `cast_operand_
+        // is_real` is the spelling the sibling bind two hundred lines below already
+        // uses for exactly this. ⚠️ Its AST half resolves a BARE single-segment name
+        // in `func_table` — so `p::f(0)` and `c.cm()` still reach the coercion while
+        // the same callee called bare does not, which is the "recognized by spelling,
+        // not by value" shape §4.5.310 named. Widening it touches eight call sites
+        // and is its own slice (ROADMAP §2). Converting a real actual to the formal's
+        // integer type is a separate gap too — this only refuses to make it a
+        // DIFFERENT wrong answer.
+        let is_real = match ast_actual {
+            Some(a) => self.cast_operand_is_real(a, eid),
+            None => self.expr_is_real(eid),
+        };
+        if is_real || self.ir_expr_is_string(eid) {
+            return eid;
+        }
+        // ⚠️ A SIGNED result is safe to build and unsafe to CONSUME: it tells every
+        // downstream widening resize to sign-FILL, and `extend_to` builds that fill
+        // as `Select{Bit, base: e}` — a SECOND mention of the operand (§4.5.320 S1).
+        // The 2-state coercion is the same hazard w-fold: it names its operand once
+        // per bit. So an actual that cannot be repeated may not become either one.
+        // Measured: `function [31:0] sgn(input signed [7:0] x); sgn = x;` called with
+        // `$random` drew TWICE (the value came from the second draw and the stream
+        // ran one ahead of iverilog's) — the widening happened at the RETURN resize,
+        // not at the bind, so gating `extend_to` here would not have caught it.
+        let duplicated_downstream = formal_signed || net_kind_is_two_state(kind);
+        if self.trusted_self_width(eid).is_none()
+            || (duplicated_downstream && !self.expr_is_repeatable(eid))
+        {
+            // ㊀ pre-slice tail, verbatim: without a trustworthy actual width — or
+            // with an actual that may only be named once — the assignment cannot be
+            // applied at all, so only the NARROW-actual extension survives (its high
+            // bits were X before that fix), and by the actual's own sign.
+            // `resize_inline_assign` re-derives the same width internally and takes
+            // its own un-sealed branch when it is untrustworthy.
+            let rw = self.ir_bits_of(eid).unwrap_or(w);
+            if rw >= w {
+                return eid;
+            }
+            let actual_signed = self.expr_self_signed(eid);
+            return self.resize_inline_assign(eid, w, actual_signed);
+        }
+        // (1) WIDTH and (2) SIGN, in ONE primitive. Using a separate primitive per
+        // direction is what let §4.5.323 round 2 truncate a `real` actual's f64 bits:
+        // `resize_inline_assign` owns the real/string guards, both resize directions
+        // and the `$signed`/`$unsigned` tail, and that tail is also the SEAL — a bare
+        // `Binary`/`Unary`/`Ternary` actual is context-determined to the engine, so
+        // without it the body's own width would propagate back out into the actual.
+        let sized = self.resize_inline_assign(eid, w, formal_signed);
+        // (3) 2-STATE (§6.11.1). Nothing else on this path drops x/z: the frame
+        // path's formal net does it on the store.
+        if !net_kind_is_two_state(kind) {
+            return sized;
+        }
+        // ⚠️ `coerce_two_state` names its operand ONCE PER DECLARED BIT. The arena is
+        // a DAG so elaborate stays O(w), but the engine walks it as a TREE and
+        // re-evaluates the whole actual per bit: measured 15.7x on an `int` formal,
+        // 42.7x on a `longint` one, 23x `.velab` growth, and nesting multiplies it
+        // (four levels of `longint` calls went from 0.06 s to past a 120 s cap). So
+        // build it only where the actual can actually CARRY an x or z. The predicate
+        // is conservative in the safe direction — an unproven shape is coerced — and
+        // its `CaseEq` arm is what stops a NESTED coercion from being coerced again.
+        if !self.expr_may_be_unknown(eid) {
+            return sized;
+        }
+        let coerced = self.coerce_two_state(sized, w);
+        // A `Concat` is self-determined and unsigned, so it re-seals itself but drops
+        // the sign — re-stamp a signed formal. (An unsigned one needs no `$unsigned`:
+        // the Concat already is one.)
+        if formal_signed {
+            self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::Signed,
+                args: vec![coerced],
+            })
+        } else {
+            coerced
+        }
+    }
+
     pub(crate) fn reduce_function_body(
         &mut self,
         func: &ast::FunctionDef,
         inputs: &[ast::TfPort],
         actual_ids: &[u32],
+        // The AST actuals, index-aligned with `actual_ids` (the caller builds both
+        // from `eff_args`, after named-argument reordering and default fill). Needed
+        // ONLY so the bind can ask `cast_operand_is_real`, whose AST half sees a
+        // real-returning user function that the IR half cannot.
+        ast_actuals: &[&ast::Expr],
     ) -> u32 {
         // A multi-dim packed local element-select (`p[k]`) folds as a BIT-select on
         // the inline subst value (which carries no packed dims) — silently wrong.
@@ -496,19 +622,21 @@ impl Elaborator<'_> {
             );
             return self.placeholder_expr();
         }
+        // ⚠️ Three index-parallel slices, and a short or misaligned `ast_actuals`
+        // does not fail — `.get(i)` yields `None` and the bind silently falls back
+        // to the weaker IR-only real test, which is a silent-wrong (a `real` actual
+        // then reaches the 2-state coercion). The caller builds all three from
+        // `eff_args`, so they are equal by construction; say so out loud.
+        debug_assert_eq!(
+            ast_actuals.len(),
+            actual_ids.len(),
+            "inline bind: AST actuals must be index-parallel with lowered actuals"
+        );
         let frame_base = self.subst.len();
         let fs_base = self.formal_str.len();
-        // (a) bind each input formal NAME → actual ExprId. §13.5.3/§11.6.2: an actual
-        // is ASSIGNED to its formal, so resize it to the formal's WIDTH — a narrow
-        // actual zero/sign-extends to the port width (not left with X in the high bits),
-        // a wide actual truncates. The extension direction is the ACTUAL's own sign
-        // (§11.6.1), and the formal's declared SIGNEDNESS is deliberately NOT re-stamped
-        // onto the value here: stamping it is IEEE-correct in isolation, but combined
-        // with the inline path's pre-existing SELF-width (not context-width) evaluation
-        // of body sub-expressions it can flip a signed-context overflow to the wrong
-        // sign (silent-wrong). Applying the formal signedness to body arithmetic is a
-        // separate deferred gap (needs context-width propagation into the inline SSA).
-        for (p, &eid) in inputs.iter().zip(actual_ids) {
+        // (a) bind each input formal NAME → actual ExprId, as the ASSIGNMENT it is
+        // (§13.5.3/§11.6.2) — see `bind_formal_actual`.
+        for (i, (p, &eid)) in inputs.iter().zip(actual_ids).enumerate() {
             // R2: a dyn-array formal is aliased via `dyn_subst` (read paths), NOT bound
             // in `subst` — so a stray WHOLE-array read of `b` misses `subst` and falls
             // to its normal (loud) resolution instead of the placeholder ExprId.
@@ -516,30 +644,9 @@ impl Elaborator<'_> {
                 continue;
             }
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-            let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
-            // A heap-HANDLE formal (string/class/event) or any width-0 type is NOT a
-            // bit-vector — bind it verbatim; a bit-resize would corrupt the handle (the
-            // NetKind discriminator must precede the width-based resize). `resize_inline_
-            // assign` already guards real internally.
-            let is_handle = matches!(
-                kind,
-                ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
-            );
-            // Only EXTEND a NARROW actual (the ㊀ bug: its high bits were X). A wide or
-            // exact actual is bound VERBATIM — TRUNCATING it here would, combined with
-            // the inline path's deferred self-width body evaluation, flip a wider-context
-            // shift (`f = c >> 1` with a wide actual) to the wrong value vs the pre-change
-            // baseline; the IEEE assignment truncation is instead left to the body's own
-            // context (a part-select / the return assignment re-truncates). This keeps
-            // the change strictly additive over the prior behavior for wide/exact actuals.
-            let rw = self.ir_bits_of(eid).unwrap_or(w);
-            let bound = if is_handle || w == 0 || rw >= w {
-                eid
-            } else {
-                // Extend by the actual's OWN sign (§11.6.1); no formal-sign re-stamp.
-                let actual_signed = self.expr_self_signed(eid);
-                self.resize_inline_assign(eid, w, actual_signed)
-            };
+            let (w, _, _, formal_signed) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let bound =
+                self.bind_formal_actual(eid, ast_actuals.get(i).copied(), kind, w, formal_signed);
             self.subst.push((p.name.name.clone(), bound));
             self.formal_str
                 .push((p.name.name.clone(), matches!(kind, ast::NetVarKind::String)));

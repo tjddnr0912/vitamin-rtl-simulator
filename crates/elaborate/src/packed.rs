@@ -1100,6 +1100,122 @@ impl Elaborator<'_> {
     /// index seal was the first caller, and the size/primitive cast now asks the
     /// same question about the operand `extend_to` is about to name a second time
     /// in its sign fill (`cast_extend_signed`).
+    /// Can this already-lowered expression produce an x or z bit? Conservative:
+    /// `true` unless the shape PROVES otherwise, so a caller that skips work on
+    /// `false` is skipping it only where the work was a no-op.
+    ///
+    /// The `CaseEq` family is known by construction (its own IR doc says the
+    /// result is always 1'b0/1'b1), which matters because a 2-state coercion IS a
+    /// concat of `CaseEq`s — without that arm a nested coercion would be coerced
+    /// again at every level.
+    pub(crate) fn expr_may_be_unknown(&self, e: u32) -> bool {
+        let Some(x) = self.exprs.get(e as usize) else {
+            return true;
+        };
+        match x {
+            ir::Expr::Const { val } => self
+                .consts
+                .get(*val as usize)
+                .is_none_or(|c| c.bits.unk.iter().any(|&u| u != 0)),
+            // A 2-state net's storage is coerced on every store, so a WHOLE read of
+            // one cannot be unknown. An element read (`word: Some`) can be out of
+            // range, which reads X.
+            ir::Expr::Signal { net, word } => {
+                word.is_some()
+                    || !self
+                        .intro_kind
+                        .get(net)
+                        .copied()
+                        .is_some_and(crate::net_util::net_kind_is_two_state)
+            }
+            ir::Expr::Concat { parts } => parts.iter().any(|&p| self.expr_may_be_unknown(p)),
+            ir::Expr::Unary { op, operand } => match op {
+                ir::UnOp::Plus
+                | ir::UnOp::Minus
+                | ir::UnOp::LogNot
+                | ir::UnOp::BitNot
+                | ir::UnOp::RedAnd
+                | ir::UnOp::RedNand
+                | ir::UnOp::RedOr
+                | ir::UnOp::RedNor
+                | ir::UnOp::RedXor
+                | ir::UnOp::RedXnor => self.expr_may_be_unknown(*operand),
+            },
+            ir::Expr::Binary { op, lhs, rhs } => match op {
+                // Known by construction, whatever the operands are.
+                ir::BinOp::CaseEq | ir::BinOp::CaseNe | ir::BinOp::CasezEq | ir::BinOp::CasexEq => {
+                    false
+                }
+                // X out of KNOWN operands: a zero divisor, and `0**negative`.
+                ir::BinOp::Div | ir::BinOp::Mod | ir::BinOp::Pow => true,
+                ir::BinOp::Add
+                | ir::BinOp::Sub
+                | ir::BinOp::Mul
+                | ir::BinOp::BitAnd
+                | ir::BinOp::BitOr
+                | ir::BinOp::BitXor
+                | ir::BinOp::BitXnor
+                | ir::BinOp::LogAnd
+                | ir::BinOp::LogOr
+                | ir::BinOp::Lt
+                | ir::BinOp::Le
+                | ir::BinOp::Gt
+                | ir::BinOp::Ge
+                | ir::BinOp::Eq
+                | ir::BinOp::Ne
+                | ir::BinOp::Shl
+                | ir::BinOp::Shr
+                | ir::BinOp::AShl
+                | ir::BinOp::AShr => {
+                    self.expr_may_be_unknown(*lhs) || self.expr_may_be_unknown(*rhs)
+                }
+            },
+            // An unknown CONDITION merges the arms bitwise and yields x where they
+            // differ, so all three have to be known.
+            ir::Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.expr_may_be_unknown(*cond)
+                    || self.expr_may_be_unknown(*then_e)
+                    || self.expr_may_be_unknown(*else_e)
+            }
+            // The seal is a re-interpretation, not a value change.
+            ir::Expr::SysFunc { which, args } => {
+                !matches!(which, ir::SysFuncId::Signed | ir::SysFuncId::Unsigned)
+                    || args.len() != 1
+                    || self.expr_may_be_unknown(args[0])
+            }
+            // A select is proven only when it is STATICALLY IN RANGE over a proven
+            // base: an out-of-range read is X, and an indexed part-select
+            // (`[i +: n]`) has a runtime offset, so neither is proven.
+            ir::Expr::Select {
+                base,
+                offset,
+                width,
+                kind,
+            } => {
+                if !matches!(kind, ir::SelKind::Bit | ir::SelKind::PartConst) {
+                    return true;
+                }
+                let (Some(bw), Some(off)) =
+                    (self.ir_bits_of(*base), self.const_of_expr_u32(*offset))
+                else {
+                    return true;
+                };
+                let sw = match kind {
+                    ir::SelKind::Bit => Some(1),
+                    _ => self.width_edge_u32(*width),
+                };
+                let Some(sw) = sw else { return true };
+                off.checked_add(sw).is_none_or(|hi| hi > bw) || self.expr_may_be_unknown(*base)
+            }
+            // Everything else — a call, a heap read — is not proven.
+            _ => true,
+        }
+    }
+
     pub(crate) fn expr_is_repeatable(&mut self, e: u32) -> bool {
         self.with_seen(e as usize, |me, seen, gen| {
             me.index_is_repeatable(e, seen, gen)

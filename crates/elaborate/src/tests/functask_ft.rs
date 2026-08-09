@@ -36,8 +36,11 @@ fn ft_e1_function_inlines_to_return_expr() {
             lhs,
             rhs,
         } => {
+            // `peel_resize` strips the `$unsigned` the formal bind stamps onto the
+            // actual (§4.5.325: the bind IS an assignment to the formal's declared
+            // type, and the stamp is what seals it) — the operand under it is `a`.
             assert!(matches!(
-                s.exprs[*lhs as usize],
+                s.exprs[peel_resize(&s, *lhs) as usize],
                 ir::Expr::Signal { net: 0, word: None } // the actual arg `a`
             ));
             match &s.exprs[*rhs as usize] {
@@ -96,7 +99,8 @@ fn ft_e2_function_local_var_folds() {
             lhs: l2,
             ..
         } => assert!(matches!(
-            s.exprs[*l2 as usize],
+            // under the `$unsigned` the formal bind stamps on the actual (§4.5.325)
+            s.exprs[peel_resize(&s, *l2) as usize],
             ir::Expr::Signal { net: 0, .. }
         )),
         other => panic!("expected inner Add, got {other:?}"),
@@ -149,7 +153,8 @@ fn ft_e3_nested_function_calls() {
             lhs: l2,
             ..
         } => assert!(matches!(
-            s.exprs[*l2 as usize],
+            // under the `$unsigned` the formal bind stamps on the actual (§4.5.325)
+            s.exprs[peel_resize(&s, *l2) as usize],
             ir::Expr::Signal { net: 0, .. }
         )),
         other => panic!("expected inner g() Add, got {other:?}"),

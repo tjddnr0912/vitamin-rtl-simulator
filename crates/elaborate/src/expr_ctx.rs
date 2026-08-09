@@ -422,10 +422,9 @@ impl Elaborator<'_> {
         if self.ir_expr_is_string(e) {
             return e;
         }
-        let known_rw = self.ir_bits_of(e);
-        let canon_w = self.canonical_self_width(e).map(|s| s.width);
-        let rw = known_rw.unwrap_or(w);
-        let trusted_w = known_rw.is_some() && canon_w.is_none_or(|c| c == rw);
+        let trusted = self.trusted_self_width(e);
+        let rw = trusted.or_else(|| self.ir_bits_of(e)).unwrap_or(w);
+        let trusted_w = trusted.is_some();
         // The extension direction still comes from the old mirror — deliberately,
         // and NOT because the canonical rule is unreachable here. Two shapes reach
         // the widening arm with a canonical-vs-mirror sign disagreement, and they
@@ -474,6 +473,21 @@ impl Elaborator<'_> {
             which,
             args: vec![resized],
         })
+    }
+
+    /// `e`'s self width, but only when it can be TRUSTED — the one spelling of the
+    /// §4.5.320/321 guard. Elaborate's own mirror (`ir_bits_of`) is the answer, and
+    /// the canonical rule is the check on it: `None` from the mirror means the width
+    /// is unknown here (a placeholder / string-producing / array-reduction rhs), and
+    /// a canonical answer that DISAGREES means the mirror fabricated one (a class
+    /// field lowers to a 32-bit handle net whose real width lives only in a sidecar).
+    /// Resizing or sealing on either is a rung down the ladder — measured in both
+    /// directions in §4.5.320 — so a caller that gets `None` must keep its pre-slice
+    /// behavior rather than guess.
+    pub(crate) fn trusted_self_width(&mut self, e: u32) -> Option<u32> {
+        let known = self.ir_bits_of(e)?;
+        let canon = self.canonical_self_width(e).map(|s| s.width);
+        canon.is_none_or(|c| c == known).then_some(known)
     }
 
     // ── const + expr helpers (single arena append points) ──────────
