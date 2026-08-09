@@ -519,6 +519,28 @@ impl Elaborator<'_> {
     /// whether an out-of-range value should be diagnosed rather than wrapped?
     ///
     /// The walk is in `index_all_const`; this is its name at the call site.
+    /// The sign-extended 32-bit value of a BARE `Const` index of width `w`, or
+    /// `None` when `eid` is not a bare const or carries X/Z. Folding here keeps a
+    /// constant index a single `Const` node — the shape every downstream constant
+    /// recognizer and the tier-3 word-index fast path look for.
+    fn const_index_sign_extended(&self, eid: u32, w: u32) -> Option<u32> {
+        let ir::Expr::Const { val } = self.exprs.get(eid as usize)? else {
+            return None;
+        };
+        let c = self.consts.get(*val as usize)?;
+        // X/Z must stay X/Z: an unknown index is a different verdict (W4029) from
+        // an out-of-range one (E4002), and folding would erase it.
+        if c.bits.unk.iter().any(|&u| u != 0) || c.bits.val.iter().skip(1).any(|&v| v != 0) {
+            return None;
+        }
+        if w == 0 || w > 64 {
+            return None;
+        }
+        let raw = c.bits.val.first().copied().unwrap_or(0);
+        let sh = 64 - w;
+        Some((((raw << sh) as i64) >> sh) as u32)
+    }
+
     fn index_is_compile_time_constant(&mut self, eid: u32) -> bool {
         self.with_seen(eid as usize, |me, seen, gen| {
             me.index_all_const(eid, seen, gen)
@@ -713,12 +735,43 @@ impl Elaborator<'_> {
         // about it, and a statically known index outside a statically known
         // range is exactly the thing a tool should say out loud, so silence is
         // not an option here even though one oracle would allow it.
+        //
+        // ⚠️ "TRUE value" includes the SIGN. A signed constant narrower than the
+        // 32-bit index domain used to be handed over RAW, and the engine reads an
+        // index with `to_u64`, so the negative-ness was lost at exactly the width
+        // the user wrote: `logic [7:0] arr[0:255]; arr[-8'sd1]` read element 255
+        // (`a5`) where iverilog returns `xx`, and so did `arr[8'sd255]` and
+        // `sm[-3'sd1]` — the same bits, read unsigned. It looked correct only when
+        // the UNSIGNED reading happened to be out of range too (`sm[-4'sd1]` on an
+        // 8-element array is 15, already out), which is why a NET index — sealed
+        // sign-extended since §4.5.309 — was right all along and only the constant
+        // carve-out was not. Sign-extending here keeps the carve-out's own promise:
+        // a negative constant becomes an index no array can hold, so it stays out
+        // of range and stays DIAGNOSED, and a positive one is unchanged.
         if self.index_is_compile_time_constant(raw_off) {
             if !sw.signed && self.unsigned_seal_admitted(raw_off) {
                 let zero1 = self.const_u32_expr(0, 1);
                 return self.push_expr(ir::Expr::Concat {
                     parts: vec![zero1, raw_off],
                 });
+            }
+            // The two arms are disjoint on `sw.signed`, so their order carries no
+            // meaning. `sw.width < 32` is load-bearing in a second way: `extend_to`
+            // computes `n - w`, so calling it with a width above the 32-bit index
+            // domain underflows — a `>= 32` constant needs no extension anyway and
+            // a `> 32` one is truncated by the branch below.
+            if sw.signed && sw.width < 32 {
+                // A BARE literal folds to one fresh `Const` rather than the four
+                // nodes `extend_to` builds. That is not only size (4,000 such
+                // indices grew a `.velab` by 116%): the tier-3 word-index fast path
+                // and `index_all_const`'s own recognizer both read a constant index
+                // as a `Const`, and a `Concat` would quietly move it to the runtime
+                // path. X/Z bits are NOT folded — they have to keep reaching
+                // `word_index_of`'s unknown-index arm (W4029), not become a number.
+                if let Some(v) = self.const_index_sign_extended(raw_off, sw.width) {
+                    return self.const_u32_expr(v, 32);
+                }
+                return self.extend_to(raw_off, sw.width, 32, true);
             }
             return raw_off;
         }
