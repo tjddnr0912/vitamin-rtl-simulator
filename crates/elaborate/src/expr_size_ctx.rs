@@ -85,12 +85,33 @@ impl Elaborator<'_> {
             ast::ExprKind::Ternary { then_e, else_e, .. } => {
                 Some(self.ast_ctx_signed(then_e)? && self.ast_ctx_signed(else_e)?)
             }
-            // bit/part-select, concat, replicate are ALWAYS unsigned (§5.4.1).
-            ast::ExprKind::Concat { .. }
-            | ast::ExprKind::Replicate { .. }
-            | ast::ExprKind::BitSelect { .. }
+            // concat / replicate are ALWAYS unsigned (§5.4.1).
+            ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. } => Some(false),
+            // A select of a PACKED vector is unsigned too (§5.4.1) — but the very
+            // same AST spelling is an UNPACKED ARRAY ELEMENT read, and an element
+            // is not a select at all: it carries the ELEMENT's declared sign.
+            // Calling those unsigned built the whole cast operand unsigned, so
+            // `40'(sm[0]*1)` on `logic signed [7:0] sm[0:3]` printed `…00fd`
+            // where iverilog prints `…fffd`. It stayed invisible until the cast
+            // started sealing, because an unsealed node let the destination
+            // context re-run the operation wider and land back on the oracle by
+            // accident (`1'(-sm[0])`, and `40'(sm[1]*1)` on an uninitialised
+            // element — the t=0 state of ordinary RTL).
+            //
+            // ⚠️ The answer is the element's SIGN, not `None`. `None` means "I
+            // cannot resolve this leaf", which routes the whole cast to the
+            // fill-only path — and that path drops §4.5.212's context width, so
+            // `7'(sm[0] + 4'h3)` fell from the oracles' `10` to `00`: **170 cells
+            // regressed** in a 1,560-cell element matrix before this was measured.
+            // Most element operands sit next to an unsigned sibling, where
+            // §11.8.1 makes the whole expression unsigned anyway and the old
+            // blanket `false` was accidentally right; only an all-signed
+            // expression discriminates.
+            ast::ExprKind::BitSelect { .. }
             | ast::ExprKind::PartSelect { .. }
-            | ast::ExprKind::IndexedPart { .. } => Some(false),
+            | ast::ExprKind::IndexedPart { .. } => {
+                Some(self.unpacked_elem_signed(e).unwrap_or(false))
+            }
             ast::ExprKind::IntLit { kind, raw } => {
                 if literal::is_fill_literal(raw, *kind) {
                     return Some(false);
@@ -104,6 +125,48 @@ impl Elaborator<'_> {
             // params / calls / sysfuncs / package refs / patterns → indeterminate here.
             _ => None,
         }
+    }
+
+    /// `Some(signed)` when `e` is an UNPACKED ARRAY ELEMENT read — a `[i]` whose
+    /// base is DIRECTLY a single-segment ident naming a declared unpacked array.
+    /// `None` for every ordinary packed select, including a select taken OF an
+    /// element (`am[0][3:1]`, whose base is the element read, not the ident) —
+    /// that one really is §5.4.1-unsigned.
+    ///
+    /// Element-ness is `net_is_static_array` — the same PREDICATE `arrays.rs`
+    /// uses to route `m[i]` (`array_len > 1` misses a one-element `reg x[0:0]`,
+    /// and `array_dims` is the wrong map: it is sparse, plain 0-based 1-D arrays
+    /// are absent from it). ⚠️ It is NOT the same RESOLVER: `expr_array_chain`
+    /// joins every segment with `"."` and has package-alias and `PkgScoped` arms,
+    /// so `pk::pm[0]`, `u1.sarr[0]`, a frame-local array and a dyn/queue element
+    /// are all UNDER-claimed here and keep the pre-slice unsigned answer
+    /// (measured: no over-claim is reachable, and a formal shadowing a module
+    /// array still answers correctly). That under-claim splits one array's value
+    /// across two spellings in one design — ROADMAP §2, and the reason to widen
+    /// this to the real resolver rather than add cases.
+    ///
+    /// A MULTI-dimensional element (`g[i][j]`) is likewise not claimed: it is
+    /// AST-identical to `am[0][3]`, a bit-select OF an element, which really is
+    /// §5.4.1-unsigned — separating them needs unpacked-DIM COUNTING, not shape.
+    fn unpacked_elem_signed(&self, e: &ast::Expr) -> Option<bool> {
+        let ast::ExprKind::BitSelect { base, .. } = &e.kind else {
+            return None;
+        };
+        let mut b = base.as_ref();
+        while let ast::ExprKind::Paren { inner } = &b.kind {
+            b = inner;
+        }
+        let ast::ExprKind::Ident(p) = &b.kind else {
+            return None;
+        };
+        let [seg] = p.segments.as_slice() else {
+            return None;
+        };
+        let net = self.lookup_net_scoped(&seg.name)?;
+        if !self.net_is_static_array(net) {
+            return None;
+        }
+        Some(self.nets.get(net as usize)?.signed)
     }
 
     /// §4.5.212: lower a size-cast operand in CONTEXT WIDTH `n`, recursing the

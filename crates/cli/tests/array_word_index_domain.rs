@@ -553,7 +553,7 @@ fn every_spelling_of_one_bit_select_answers_alike() {
 /// A depth cap on the walks is a cliff, and this is the design that falls off it.
 ///
 /// `index_has_placeholder` runs on every seal in every design — no hierarchical
-/// reference needed — and failing closed at depth 64 made `index_self_width`
+/// reference needed — and failing closed at depth 64 made `canonical_self_width`
 /// return `None`, so BOTH seal funnels silently reverted to pre-§4.5.308
 /// behaviour. Measured exactly at the boundary: 63 pads correct, 64 wrong. The
 /// parser caps parentheses at 128, but a left-associative chain is unbounded and

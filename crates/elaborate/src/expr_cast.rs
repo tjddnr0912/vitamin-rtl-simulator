@@ -174,29 +174,170 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The signedness a cast INHERITS from its operand (§6.24.1) — the
+    /// CANONICAL §5.4.1/§5.5 rule, i.e. the same answer the engine's width
+    /// table will give the very node being wrapped. `None` = NOT YET KNOWABLE.
+    ///
+    /// It cannot be `expr_self_signed`: that is elaborate's own hand-written
+    /// mirror, and it disagrees with the canonical rule at every leaf whose sign
+    /// is a SIDECAR rather than a net flag. It reads UNSIGNED where the rule says
+    /// signed at a user function's declared return, a class field, and the whole
+    /// int-returning system-function family it simply does not list (`$clog2`,
+    /// `$countones`, `$random`, `$fopen`, the file-read family, `$dist_*`, the
+    /// string→int methods). The cast then extended by the wrong sign, silently:
+    /// `16'(f()+4'sd0)` with `function signed [3:0] f` printed `000d` where both
+    /// oracles print `fffd`, `int'(f())` printed `0000000d` for `fffffffd`, and
+    /// `4'($clog2(300))` printed `0009` for `fff9`.
+    ///
+    /// It reads SIGNED where the rule says unsigned at exactly one id, `$stime`
+    /// (enumerated over every `SysFuncId`) — see `lower_size_cast` for why the
+    /// rule wins there. `$urandom` is NOT in either list: both call it unsigned.
+    /// An element-typed `pop` cannot reach a cast (`8'(q.pop_front())` is E3009)
+    /// but an array REDUCTION can: `8'(q.sum())` on a `byte signed q[$]` goes
+    /// `000000fd` → `fffffffd`.
+    fn cast_operand_signed(&mut self, e: u32) -> Option<bool> {
+        self.canonical_self_width(e).map(|sw| sw.signed)
+    }
+
+    /// The sign to EXTEND a cast operand by, and the sign the cast INHERITS.
+    /// `widening` says whether `extend_to` is about to build the sign-fill.
+    ///
+    /// ⚠️ `extend_to`'s sign fill is `Select{Bit, base: e}` — it names the operand
+    /// a SECOND time, and the zero fill does not. So adopting a canonical "signed"
+    /// that the mirror called unsigned would, for an IMPURE operand, evaluate it
+    /// twice: `16'(fp(0))` called `fp` twice, and `16'(fur(0))` (a `$urandom`
+    /// wrapper) assembled its value from the sign bit of one draw and the low bits
+    /// of the NEXT, shifting the whole stream. PRE could not reach that because the
+    /// mirror called every `Call`-rooted operand unsigned. The repeatability
+    /// predicate is the one the index seal already uses for this exact hazard
+    /// (its doc even names `byte'($urandom)`), and where it says no we keep the
+    /// mirror's answer — the pre-slice behaviour, so nothing moves down a rung.
+    /// ⚠️ The fallback must be the MIRROR and not `false`: `16'($signed(f()))` is
+    /// signed to the mirror too, and hard-wiring `false` there takes it BELOW PRE
+    /// (`fffffffffffffffd` → `000000000000000d`).
+    /// An operand the mirror ALREADY called signed was duplicated before this
+    /// slice too and this guard deliberately does not change that —
+    /// `16'($signed(f()))` calls `f` twice in PRE and in POST. (`16'(sa ** f())`
+    /// is NOT such a witness: it routes through `lower_size_ctx_entry` to the
+    /// same-width arm and calls `f` once in PRE, POST and iverilog alike.)
+    fn cast_extend_signed(&mut self, e: u32, widening: bool) -> bool {
+        match self.cast_operand_signed(e) {
+            Some(true) if widening && !self.expr_is_repeatable(e) => self.expr_self_signed(e),
+            Some(s) => s,
+            // NOT YET KNOWABLE (a deferred hierarchical reference is still a
+            // placeholder): fall back to the mirror, which is what those
+            // operands got before this slice.
+            None => self.expr_self_signed(e),
+        }
+    }
+
     /// `N'(e)` — width N, INHERITING the operand's signedness (§6.24.1).
+    ///
+    /// The `$signed`/`$unsigned` tail is not decoration: it is the SEAL. A cast
+    /// is a self-determined boundary (§11.8.1) — `8'(a*a)` multiplies two 8-bit
+    /// operands no matter how wide the expression around it is — but a bare
+    /// `Binary`/`Unary`/`Ternary` node is CONTEXT-determined to the engine, so
+    /// an enclosing width propagates straight through it and re-runs the whole
+    /// operation wider. The `Equal` arm used to return that node raw and every
+    /// consumer wider than N then read a different computation:
+    /// `logic [15:0] r; r = 8'(a*a)` with `a = 8'hff` printed `fe01` where
+    /// iverilog prints `0001` (measured: 634 of 4032 cells, every one of them
+    /// with the destination wider than N — assignment, NBA, continuous assign,
+    /// port connection, `case` scrutinee, comparison, wider binary operand and
+    /// function argument all leak; a concat part or a `$display` argument does
+    /// not, because those positions are self-determined already).
+    ///
+    /// `$signed`/`$unsigned` is the repo's seal primitive (the index seal in
+    /// `packed.rs` uses it for the same reason): the engine evaluates its
+    /// operand SELF-determined and only then resizes to the context. The other
+    /// two arms were already sealed — `extend_to` builds a `Concat` and
+    /// `select_low` a `Select`, both self-determined — so ADDING the tail to them
+    /// is a no-op (measured: dropping the added `$unsigned` again moves 0 of
+    /// 23,667 cells across the three backends). ⚠️ That is not the same claim as
+    /// "the tail does nothing there": dropping it ENTIRELY, `$signed` included,
+    /// moves 442 of those cells, because `extend_to`/`select_low` are unsigned and
+    /// the `$signed` restamp is what the cast inherits.
+    ///
+    /// ⚠️ THE SEAL NEEDS THE OPERAND'S OWN WIDTH, AND IT IS NOT ALWAYS KNOWN.
+    /// `ir_bits_of` answers `None` for a deferred hierarchical placeholder, a
+    /// `string` net, the string-producing system functions, and the element-typed
+    /// `pop`/array-reduction family — and the caller then FABRICATES 32. Sealing
+    /// on that is a rung DOWN, both directions measured:
+    ///   - `32'(u1.s)` with `logic signed [15:0] s` — `w` defaults to 32, so
+    ///     only `N == 32` reaches the `Equal` arm, and there the old `return e`
+    ///     was LOAD-BEARING: the engine's post-resolve width table sign-extended
+    ///     it. Sealing stamped the mirror's `$unsigned` → `0000fffd` for the
+    ///     oracles' `fffffffd` (28 cells of a 792-cell hierarchical matrix).
+    ///   - `40'(s)` with `string s = "abcd"` — a string net's table width is 0,
+    ///     so the `Concat` the widening arm builds has a CANONICAL self-width of
+    ///     `N−31`, and `$unsigned` evaluates its operand at exactly that width:
+    ///     `"abcd"` became `164` at `N = 40`, banded over `33 ≤ N ≤ 61` (the
+    ///     mechanism caps the damage at `N ≤ 62` for any string). The bare
+    ///     `Concat` escaped it because `eval_concat` reads the parts' real values.
+    ///
+    /// So the seal is DECLINED exactly when `ir_bits_of` declines, reproducing
+    /// the pre-slice shape. Those operands keep the pre-existing leak (ROADMAP
+    /// §2 — the same `ir_bits_of` gap the width probe has). The SIGN being
+    /// unknown is NOT a reason to decline: `cast_extend_signed` already falls
+    /// back to the mirror there, which is the sign the pre-slice code stamped,
+    /// so the seal only materializes a decision that was already being made —
+    /// and declining on it as well cost `8'(ua ** u1.k)` (a placeholder EXPONENT
+    /// with a known 4-bit base) its fix, `02d9` for iverilog's `00d9`.
+    ///
+    /// With the width known, this function returns a self-determined N-bit node;
+    /// with it fabricated it returns exactly what it returned before the seal.
     pub(crate) fn lower_size_cast(&mut self, e: u32, n: u32) -> u32 {
-        let w = self.ir_bits_of(e).unwrap_or(32);
-        let signed_op = self.expr_self_signed(e);
+        let known_w = self.ir_bits_of(e);
+        let canon_w = self.canonical_self_width(e).map(|s| s.width);
+        let w = known_w.unwrap_or(32);
+        // The width is TRUSTWORTHY when `ir_bits_of` answered and the canonical
+        // rule does not contradict it. Both halves are load-bearing: `None` is a
+        // fabricated 32 (below), and a `Some` can be fabricated too — a class
+        // field lowers to `Signal{net: 32-bit HANDLE net}` with its real width in
+        // the `class_field_widths` sidecar, so `ir_bits_of` reads the handle's 32
+        // and `32'(c.u8 + ua)` landed on the same-width arm and sealed there:
+        // `0000` for the oracles' `0100`, and `32'(c.s8 + sp)` even flipped sign.
+        // `is_none_or` keeps the case where only the canonical rule declines:
+        // `ir_bits_of` answers without recursing into the whole tree wherever
+        // IEEE gives the width from one side — `**` and the four shifts (Table
+        // 11-21: the LEFT operand) and every comparison / logical op / reduction
+        // (a fixed 1) — so a placeholder in the OTHER operand stops the canonical
+        // walk while the width stays sound. `8'(ua ** u1.k)` is the measured
+        // witness; declining on the sign as well cost that cell its fix once.
+        let trusted_w = known_w.is_some() && canon_w.is_none_or(|c| c == w);
+        let signed_op = self.cast_extend_signed(e, n > w);
         let resized = match n.cmp(&w) {
-            // Same width: `e` already carries its own (inherited) sign — return it.
-            std::cmp::Ordering::Equal => return e,
+            // Same width: no resize node — the seal below is the whole job.
+            std::cmp::Ordering::Equal => e,
             // Extend: sign-extend iff the operand is signed (§6.24.1), 4-state-
             // preserving (a bitwise `| 0` would corrupt Z→X).
             std::cmp::Ordering::Greater => self.extend_to(e, w, n, signed_op),
             // Truncate to the low N bits (Select is unsigned).
             std::cmp::Ordering::Less => self.select_low(e, n),
         };
-        // A size cast INHERITS the operand's signedness; Concat/Select are
-        // unsigned, so re-stamp $signed when the operand was signed.
-        if signed_op {
-            self.push_expr(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Signed,
-                args: vec![resized],
-            })
-        } else {
-            resized
+        if !trusted_w {
+            // Width fabricated ⇒ no seal. The tail SHAPE is the pre-slice one (the
+            // `Equal` arm returned `e` with no stamp at all); the sign INPUT is
+            // still the canonical one, which is a fix in its own right here —
+            // `8'(q.sum())` on a `byte signed q[$]` goes `000000fd` → `fffffffd`.
+            return if signed_op && n != w {
+                self.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::Signed,
+                    args: vec![resized],
+                })
+            } else {
+                resized
+            };
         }
+        let which = if signed_op {
+            ir::SysFuncId::Signed
+        } else {
+            ir::SysFuncId::Unsigned
+        };
+        self.push_expr(ir::Expr::SysFunc {
+            which,
+            args: vec![resized],
+        })
     }
 
     /// `keyword'(e)` — a primitive-type cast. Width/sign/state come from the named
@@ -234,8 +375,13 @@ impl Elaborator<'_> {
             // Sign-extend iff the operand is signed (§6.24/§11.6.1); 4-state-
             // preserving Concat (a `| 0` would zero-extend a signed operand AND
             // corrupt Z→X — the two extend-path silent-wrongs the hunt found).
+            // The OPERAND's sign comes from the canonical rule for the same
+            // reason the size cast's does (`cast_extend_signed`, which also owns
+            // the operand-repeat guard) — the mirror called a signed function
+            // return unsigned and `int'(f())` then zero-extended −3 to
+            // `0000000d`. This arm always widens, hence the literal `true`.
             std::cmp::Ordering::Greater => {
-                let signed_op = self.expr_self_signed(e);
+                let signed_op = self.cast_extend_signed(e, true);
                 self.extend_to(e, w, tw, signed_op)
             }
             std::cmp::Ordering::Less => self.select_low(e, tw),

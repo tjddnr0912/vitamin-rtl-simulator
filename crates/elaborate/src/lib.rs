@@ -772,7 +772,7 @@ struct Elaborator<'s> {
     class_vtable: Vec<Vec<u32>>,
     class_calls: std::collections::BTreeMap<u32, (Option<u32>, u32)>,
     class_field_widths: std::collections::BTreeMap<u32, (u32, bool)>,
-    /// How far `index_self_width`'s placeholder scan has got. Everything below
+    /// How far `canonical_self_width`'s placeholder scan has got. Everything below
     /// it is known placeholder-free FOREVER: a resolved node is never turned
     /// back into a `POISON_*` placeholder (the deferred-hierarchy passes only
     /// ever patch a placeholder INTO a resolved node), so "clean" is permanent
@@ -786,7 +786,7 @@ struct Elaborator<'s> {
     /// cliff; this is not.
     selfw_seen: Vec<u32>,
     selfw_seen_gen: u32,
-    /// Scratch for `index_self_width`'s PROVISIONAL path (§4.5.310) — reused
+    /// Scratch for `canonical_self_width`'s PROVISIONAL path (§4.5.310) — reused
     /// across calls so a design with a hierarchical reference does not allocate
     /// an arena-sized buffer per indexed select. Only the queried subtree's ids
     /// are meaningful in it; every other slot is stale by design.

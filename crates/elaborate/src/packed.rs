@@ -29,7 +29,7 @@ use crate::array_geom::IndexDomain;
 /// this predicate is its definition, not an independent claim about IEEE. The
 /// three arms review measured as WRONG about signedness (`**`, class fields, real
 /// literals) no longer decide anything: `sealed_signed_index` asks
-/// `index_self_width` first, and only an index that rule calls UNSIGNED ever
+/// `canonical_self_width` first, and only an index that rule calls UNSIGNED ever
 /// reaches this function.
 pub fn expr_provably_unsigned(
     exprs: &[ir::Expr],
@@ -345,7 +345,26 @@ impl Elaborator<'_> {
         )
     }
 
-    fn index_self_width(&mut self, eid: u32) -> Option<sim_ir::selfwidth::SelfWidth> {
+    /// THE canonical §5.4.1/§5.5 self-width/self-signedness of an
+    /// already-lowered ExprId — the very answer `sim-engine`'s `WidthTable`
+    /// will compute for it, class-field sidecar and declared function return
+    /// included. `None` = NOT YET KNOWABLE (see below), which every caller must
+    /// keep distinct from "unsigned". The index seal was the first caller; the
+    /// size/primitive cast asks the same question about its operand
+    /// (`cast_operand_signed`), which is why the name is no longer index-shaped.
+    ///
+    /// ⚠️ `self_width_of` asserts a POST-ORDER arena (`child < parent`), and this
+    /// DOES run over slots holding a clone-installed back-edge — measured, six
+    /// times in one design, from inside `resolve_deferred_hier_sel`. It survives
+    /// only because every node the hierarchical read builders install is a
+    /// `Signal` or a `Select`, and the rule treats both as LEAVES (it never asks
+    /// for the child width of a `Signal`'s word or of a `Select`'s base/offset).
+    /// The safety is incidental, not structural: a builder that ever installs a
+    /// `Concat`/`Binary`/`$signed` top node turns that assert into a panic.
+    pub(crate) fn canonical_self_width(
+        &mut self,
+        eid: u32,
+    ) -> Option<sim_ir::selfwidth::SelfWidth> {
         // NOT YET KNOWABLE is not the same answer as UNSIGNED, and conflating
         // them is a silent-wrong. A hierarchical reference lowers to a
         // PLACEHOLDER — `Signal{net: POISON_NET}` / `Call{func: POISON_FID}` —
@@ -635,7 +654,7 @@ impl Elaborator<'_> {
     pub(crate) fn seal_index_unsigned(&mut self, raw_off: u32, domain: IndexDomain) -> u32 {
         // `None` — an unresolved hierarchical reference below this index — declines,
         // because the width rule would answer from a fabricated 1-bit net (§4.5.309).
-        let Some(sw) = self.index_self_width(raw_off) else {
+        let Some(sw) = self.canonical_self_width(raw_off) else {
             return raw_off;
         };
         // A PACKED element offset keeps the pre-§4.5.310 emission for the
@@ -657,7 +676,7 @@ impl Elaborator<'_> {
         // Only the width PIN survives for packed, which is what §4.5.308 put here
         // and what `decl_range_norm::unpacked_dimension_index_is_sealed_too` holds.
         if domain == IndexDomain::PackedElem {
-            return match self.index_self_width(raw_off) {
+            return match self.canonical_self_width(raw_off) {
                 // A SIGNED narrow index gets the self-determination half of the
                 // seal here too. Only the 32-bit TRUNCATION is an array-word
                 // rule; evaluating the index at the width the user wrote is not,
@@ -1023,6 +1042,17 @@ impl Elaborator<'_> {
         true
     }
 
+    /// [`Self::index_is_repeatable`] with the visit-stamp buffer lent — the entry
+    /// point for callers outside this module. The inner name is historical: the
+    /// index seal was the first caller, and the size/primitive cast now asks the
+    /// same question about the operand `extend_to` is about to name a second time
+    /// in its sign fill (`cast_extend_signed`).
+    pub(crate) fn expr_is_repeatable(&mut self, e: u32) -> bool {
+        self.with_seen(e as usize, |me, seen, gen| {
+            me.index_is_repeatable(e, seen, gen)
+        })
+    }
+
     /// One node of [`Self::index_is_repeatable`]: `false` = stop, not repeatable.
     fn index_is_repeatable_step(&self, eid: u32, stack: &mut Vec<u32>) -> bool {
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
@@ -1128,7 +1158,7 @@ impl Elaborator<'_> {
         //   first version of this shipped, and the reason the seal used to
         //   DECLINE signed indices outright. Declining was honest but left four
         //   classes wrong; asking the canonical rule closes them.
-        let sw = self.index_self_width(raw_off)?;
+        let sw = self.canonical_self_width(raw_off)?;
         let signed = sw.signed;
         if !signed && !self.unsigned_seal_admitted(raw_off) {
             return None;
