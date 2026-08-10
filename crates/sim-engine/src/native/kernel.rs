@@ -110,7 +110,7 @@
 
 use std::collections::BTreeMap;
 
-use sim_ir::{Lvalue, SimIr, SysTaskId};
+use sim_ir::{LvalChunk, Lvalue, SimIr, SysTaskId};
 
 use crate::builtins::Ctl;
 use crate::exec::{Kernel, Offsets};
@@ -187,6 +187,23 @@ pub(crate) struct WCacheSlot {
     pub(crate) width: u32,
     pub(crate) signed: bool,
     pub(crate) prog: Option<std::rc::Rc<crate::native::wprog::WProg>>,
+}
+
+impl WCacheSlot {
+    /// Does this slot answer a request for `(w, signed)`?
+    ///
+    /// ONE spelling, because two readers now consult the cache (`wprog_for` and
+    /// `run_cached_wprog`) and the SIGN half of the key is the part no design
+    /// can check: an ExprId is a single source occurrence, so it is always asked
+    /// for at one width and one signedness, and dropping `signed` here leaves
+    /// the whole suite green (measured). The key still carries it because
+    /// `wprog` bakes the operand sign into its comparison ops — a program
+    /// compiled signed answers a different question — so the guard is right even
+    /// though nothing can currently reach past it. Sharing the predicate is what
+    /// keeps the two readers from disagreeing about that.
+    fn hits(&self, w: u32, signed: bool) -> bool {
+        self.width == w && self.signed == signed
+    }
 }
 
 /// How one lvalue index expression resolves. See `NativeKernel::icache`.
@@ -610,6 +627,103 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         Some(compiled)
     }
 
+    /// Run the cached width-specialised program for `(eid, w, signed)` and hand
+    /// back its PLANES, without handing out an `Rc`.
+    ///
+    /// `wprog_for` is the same cache lookup, but its signature forces a
+    /// `Rc::clone` on every hit so the caller can run the program outside the
+    /// borrow. That refcount pair is paid 6.3 million times on picorv32
+    /// (measured) for programs that are, 47% of the time, a single net read.
+    /// Running INSIDE the borrow removes it. The two share the miss path — the
+    /// compile still goes through `wprog_for`, so there is one compiler and one
+    /// cache-fill, not two.
+    ///
+    /// `None` means "no admitted program" and is the SAME answer `wprog_for`
+    /// gives, including for a cached decline (`slot.prog == None`): the caller
+    /// falls back to the generic evaluator, which is the previous path.
+    fn run_cached_wprog(&self, eid: u32, w: u32, signed: bool) -> Option<crate::native::wprog::W> {
+        {
+            let c = self.wcache.borrow();
+            if let Some(Some(slot)) = c.get(eid as usize) {
+                if slot.hits(w, signed) {
+                    let prog = slot.prog.as_ref()?;
+                    return Some(prog.run(&self.arena, &mut self.wscratch.borrow_mut()));
+                }
+            }
+        }
+        let prog = self.wprog_for(eid, w, signed)?;
+        Some(prog.run(&self.arena, &mut self.wscratch.borrow_mut()))
+    }
+
+    /// The whole of `lhs = rhs` for a plain whole-net scalar destination that
+    /// fits ONE arena word, done entirely in planes.
+    ///
+    /// `Some(())` means it was done; `None` means "not this shape" and the
+    /// caller runs the split path, which IS the previous behaviour.
+    ///
+    /// What each precondition buys — every one of them is a fact the split path
+    /// re-establishes at run time and this one is handed:
+    ///
+    ///  - `plain_scalar_dest` (the COMPILER's proof, carried in the op) already
+    ///    excludes real, frame-local, handle, string, two-state and array
+    ///    destinations, so the real→int arm, the X/Z coercion arm and the
+    ///    element index all drop out. `force`/`release` is refused by the tier-3
+    ///    design gate, so the funnel's `forced` test has nothing to test.
+    ///  - `s.words == 1 && s.width <= 64` puts the destination in one word, which
+    ///    is what lets the store be `write_chunk_word` — the same plane entry
+    ///    §4.5.332 gave the funnel, so this is not a second store.
+    ///  - an ADMITTED `WProg` cannot produce a real value (`wprog::compile`
+    ///    admits only integral leaves and integral ops), which is the one thing
+    ///    the funnel's coercion would still have had to ask.
+    ///
+    /// The destination width is `s.width`, not a `chunk_width` sum: a proven
+    /// plain scalar is one whole net. The context width is the IEEE assignment
+    /// rule `max(lhs, self(rhs))`, spelled exactly as `k_eval_for_lvalue`
+    /// spells it — with `lvalue_width` replaced by the slot width it is equal to
+    /// for this shape.
+    fn eval_store_word(&mut self, lhs: &Lvalue, c: &LvalChunk, net: u32, rhs: u32) -> Option<()> {
+        let s = self.arena.slots[net as usize];
+        // ONE word, and non-empty. `words == nwords(width).max(1)`, so
+        // `words == 1` already MEANS `width <= 64` — a separate `width > 64` row
+        // was written here first and measured redundant (deleting it leaves the
+        // suite green because it can never be the deciding test). What `words`
+        // does NOT catch is width 0, whose `nwords` is 0 and whose `.max(1)`
+        // makes it look like one word.
+        if s.words != 1 || s.width == 0 {
+            return None;
+        }
+        let sw = self.sched.st.wt.get(rhs);
+        // The destination width, taken from the SLOT instead of walked. Checked
+        // rather than argued: `Slot::width` is seeded from `ir.nets[n].width` and
+        // never mutated, and for a proven plain scalar `lvalue_width`'s sum is
+        // that one chunk — but "the two are equal" is the whole reason this
+        // function may skip the walk, so the suite (which runs debug) asks on
+        // every execution, the way `k_schedule_nba_scalar` asks about its
+        // offsets.
+        debug_assert_eq!(
+            self.arena.lvalue_width(self.ir, lhs),
+            s.width,
+            "plain-scalar destination width disagrees with its slot"
+        );
+        let w = s.width.max(sw.width);
+        let r = self.run_cached_wprog(rhs, w, sw.signed)?;
+        // `w >= s.width` by construction, so this resize is always a TRUNCATION
+        // and the `signed` argument cannot reach `resize_word`'s sign-fill arm.
+        // It is spelled anyway, and spelled as the canonical funnel spells it
+        // (`Value::resize` takes the value's own signedness, which `run_wprog`
+        // sets from this same request), because a shortcut that drops an
+        // argument its canonical form carries is a shortcut nobody can check
+        // against the canonical form. Measured: passing `false` here leaves the
+        // suite green, and that is the proof of deadness, not a hole.
+        let (pv, pu) = crate::value::resize_word(r.val, r.unk, w, s.width, sw.signed);
+        // `cw` is the DESTINATION width. `write_chunk_word` clamps the window to
+        // the net, so passing `w` instead would land the same bits — the
+        // difference is only that this spelling states what is being written
+        // rather than relying on the clamp to discover it.
+        self.arena.write_chunk_word(c, 0, 0, pv, pu, s.width);
+        Some(())
+    }
+
     /// The cached width-specialized program for `(eid, w, signed)`, compiling
     /// (or caching the decline) on first sight.
     #[inline]
@@ -622,7 +736,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         {
             let c = self.wcache.borrow();
             if let Some(Some(slot)) = c.get(eid as usize) {
-                if slot.width == w && slot.signed == signed {
+                if slot.hits(w, signed) {
                     return slot.prog.clone();
                 }
             }
@@ -1147,14 +1261,18 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // EVALUATION only — the verdict comes from the same `truthiness` the
         // generic path uses, over the same `Value`.
         let sw = self.sched.st.wt.get(eid);
-        if let Some(prog) = self.wprog_for(eid, sw.width, sw.signed) {
+        if let Some(r) = self.run_cached_wprog(eid, sw.width, sw.signed) {
             // The planes go straight to the rule. Wrapping them in a `Value`
             // first was measured at 11.6% of a picorv32 run (`one_word_value`),
             // and the verdict is the same function either way —
             // `truthiness_word` is the plane-level entry point of the very
             // `truthiness` this used to call, not a second answer.
-            let r = prog.run(&self.arena, &mut self.wscratch.borrow_mut());
-            let m = crate::value::low_mask(prog.width());
+            //
+            // The program is run INSIDE the cache borrow (`run_cached_wprog`)
+            // rather than through an `Rc` handed out of it: the width asked for
+            // is `sw.width`, so `prog.width()` was the same number, and it is
+            // now read from the request instead of from the program.
+            let m = crate::value::low_mask(sw.width);
             return matches!(
                 crate::eval::truthiness_word(r.val, r.unk, m),
                 crate::eval::Tri::True
@@ -1298,6 +1416,51 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
         let ir = self.ir;
         self.arena.write_lvalue(ir, lhs, value, offsets);
+    }
+
+    fn k_eval_write_scalar(&mut self, lhs: &Lvalue, net: u32, rhs: u32) {
+        // The whole assignment in planes when the destination is one word —
+        // see `eval_store_word`. `None` falls through to the trait default's
+        // two calls, spelled here because a `Kernel` method cannot call its own
+        // default once it is overridden.
+        if let [c0] = lhs.chunks.as_slice() {
+            if self.eval_store_word(lhs, c0, net, rhs).is_some() {
+                return;
+            }
+        }
+        let value = self.k_eval_for_lvalue(lhs, rhs);
+        self.k_write_scalar(lhs, net, value);
+    }
+
+    fn k_eval_nba_scalar(&mut self, lhs: &Lvalue, rhs: u32) {
+        // The NBA twin. It cannot store — the update is QUEUED, and
+        // `NbaUpdate::sampled` is a `Value` — so what this saves is the two
+        // things that surround the sample rather than the sample itself: the
+        // `lvalue_width` walk of the IR (the destination is a proven whole net,
+        // so its width is the slot's) and the `Rc` clone `wprog_for` forces.
+        // The queue entry it builds is the one `k_schedule_nba_scalar` builds,
+        // and that method is still the only spelling of it.
+        if let [c0] = lhs.chunks.as_slice() {
+            let s = self.arena.slots[c0.net as usize];
+            if s.words == 1 && s.width > 0 {
+                let sw = self.sched.st.wt.get(rhs);
+                debug_assert_eq!(
+                    self.arena.lvalue_width(self.ir, lhs),
+                    s.width,
+                    "plain-scalar NBA destination width disagrees with its slot"
+                );
+                let w = s.width.max(sw.width);
+                if let Some(r) = self.run_cached_wprog(rhs, w, sw.signed) {
+                    let mut v = Value::zeros(w, sw.signed);
+                    v.val[0] = r.val;
+                    v.unk[0] = r.unk;
+                    self.k_schedule_nba_scalar(lhs, v);
+                    return;
+                }
+            }
+        }
+        let value = self.k_eval_for_lvalue(lhs, rhs);
+        self.k_schedule_nba_scalar(lhs, value);
     }
 
     fn k_write_scalar(&mut self, lhs: &Lvalue, _net: u32, value: Value) {

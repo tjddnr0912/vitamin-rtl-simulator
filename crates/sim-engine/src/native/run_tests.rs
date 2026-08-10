@@ -2762,6 +2762,50 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── THE FUSED ASSIGNMENT'S CONTEXT RULE ──
+        //
+        // `k_eval_write_scalar`/`k_eval_nba_scalar` take the plane shortcut, and
+        // the one rule they restate is the assignment context width,
+        // `max(lhs, self(rhs))`, with the lhs half read from the arena slot
+        // instead of walked. Every shape where the two halves DIFFER is here:
+        // lhs wider than a signed rhs (sign extension), lhs wider than an
+        // unsigned rhs (zero fill), lhs narrower (truncation), and equal.
+        //
+        // A mutation that drops the `max` is value-equivalent (the fallback and
+        // the shortcut reach the same extension by different routes), so this
+        // row is coverage of the shape rather than a killer — and saying which
+        // it is beats implying the other.
+        (
+            "fused_assignment_context_widths",
+            r#"
+module top;
+  reg signed [7:0]  sb;
+  reg        [7:0]  ub;
+  reg signed [15:0] sw16;
+  reg        [15:0] uw16;
+  reg        [3:0]  n4;
+  reg        [15:0] q;
+  // STRAIGHT-LINE, so this block is codegen-able and takes the fused path. A
+  // `#1` anywhere in it would put a `Delay` in the body and send the WHOLE
+  // process back to the walk — which is how the first draft of this row ended
+  // up comparing the walk with itself (caught by the per-row `acts > 0`).
+  initial begin
+    sb = -8'sd3; ub = 8'hF1;
+    sw16 = sb;          // narrower SIGNED rhs -> sign extend
+    uw16 = sb;          // same rhs, unsigned destination
+    n4   = ub;          // wider rhs -> truncate
+    q    = ub;          // narrower UNSIGNED rhs -> zero fill
+    $display("%0d %h %h %h", sw16, uw16, n4, q);
+    q <= sb;            // the NBA twin of the same rule
+  end
+  initial begin
+    #1 $display("q=%h", q);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // ── THE PER-PROCESS PROLOGUE (`k_enter_body`) ──
         //
         // The walk calls it inside itself; `vm_exec` leaves it to the caller, so

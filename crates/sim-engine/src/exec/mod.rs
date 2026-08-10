@@ -69,6 +69,32 @@ pub(crate) trait Kernel {
     /// WRITE: the compile-time-specialised twin of `k_write_lvalue` for the same shape.
     /// `net` is the destination net id the compiler resolved.
     fn k_write_scalar(&mut self, lhs: &Lvalue, net: u32, value: Value);
+
+    /// WHOLE ASSIGNMENT: evaluate `rhs` in `lhs`'s context and write it into the
+    /// plain whole-net scalar `net`. `Op::EvalWriteScalar`'s meaning.
+    ///
+    /// The DEFAULT is exactly the two calls it replaces, so an implementor that
+    /// does not override is byte-identical by construction — this is a seam, not
+    /// a new rule, and `K = Scheduler` takes the default.
+    ///
+    /// It exists because for `K = NativeKernel` the two halves cost more than the
+    /// work between them. Measured on picorv32: **47.2% of all expression
+    /// evaluations are a ONE-OP program** (a single net read, or a constant), and
+    /// around those two memory reads the split path pays a `wcache` borrow plus
+    /// an `Rc` clone, an `lvalue_width` walk of the IR, a 72-byte `Value`
+    /// construction, a `resize`, and then the write funnel re-deriving the chunk
+    /// width it was already told. Every one of those is a compile-time constant
+    /// for the op. The override collapses them; the default keeps the meaning.
+    fn k_eval_write_scalar(&mut self, lhs: &Lvalue, net: u32, rhs: u32) {
+        let value = self.k_eval_for_lvalue(lhs, rhs);
+        self.k_write_scalar(lhs, net, value);
+    }
+    /// WHOLE ASSIGNMENT: the nonblocking twin — `Op::EvalNbaScalar`'s meaning.
+    /// Same contract, same default.
+    fn k_eval_nba_scalar(&mut self, lhs: &Lvalue, rhs: u32) {
+        let value = self.k_eval_for_lvalue(lhs, rhs);
+        self.k_schedule_nba_scalar(lhs, value);
+    }
     /// READ: evaluate a delay ExprId into global-precision ticks (module-mult
     /// scaled; X/Z → 0 — the shared `Terminator::Delay` rule).
     fn k_delay_ticks(&self, eid: u32) -> u64;

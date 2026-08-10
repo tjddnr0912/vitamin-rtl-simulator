@@ -910,14 +910,10 @@ pub(crate) fn vm_exec(
                     k.k_write_scalar(&body.lvalues[lhs as usize], net, value);
                 }
                 Op::EvalWriteScalar { lhs, net, rhs } => {
-                    let l = &body.lvalues[lhs as usize];
-                    let value = k.k_eval_for_lvalue(l, rhs);
-                    k.k_write_scalar(l, net, value);
+                    k.k_eval_write_scalar(&body.lvalues[lhs as usize], net, rhs);
                 }
                 Op::EvalNbaScalar { lhs, rhs } => {
-                    let l = &body.lvalues[lhs as usize];
-                    let value = k.k_eval_for_lvalue(l, rhs);
-                    k.k_schedule_nba_scalar(l, value);
+                    k.k_eval_nba_scalar(&body.lvalues[lhs as usize], rhs);
                 }
                 Op::SysTask {
                     which,

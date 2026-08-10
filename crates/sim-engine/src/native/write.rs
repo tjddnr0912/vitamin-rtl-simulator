@@ -397,7 +397,7 @@ impl NetArena {
     /// spelling; what differs is only how the bits get there.
     ///
     /// `cw` is the chunk's width, already folded by the caller.
-    fn write_chunk_word(
+    pub(crate) fn write_chunk_word(
         &mut self,
         c: &LvalChunk,
         raw_off: u32,
