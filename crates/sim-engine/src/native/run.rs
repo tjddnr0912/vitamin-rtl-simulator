@@ -414,6 +414,9 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
     }
     let max_deltas = k.k_delta_budget();
     let mut any = false;
+    // Hoisted out of the fixpoint: both are scratch, and a fixpoint runs this
+    // body once per delta.
+    let mut md_members: Vec<usize> = Vec::new();
     loop {
         let mut changed = false;
         // The engine's visit set, not a superset of it: the assigns whose
@@ -432,7 +435,13 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             v
         };
         for ci in pass.into_iter().map(|c| c as usize) {
-            let lhs = ir.cont_assigns[ci].lhs.clone();
+            // BORROWED from `ir`, not cloned out of it. This used to be
+            // `.lhs.clone()` — an `Lvalue` owns a `Vec<LvalChunk>`, so that was
+            // a heap allocation per continuous assign per fixpoint pass, on the
+            // hottest loop this backend has. Nothing forced it: `ir` is a
+            // parameter of this function and is borrowed independently of `k`,
+            // so the immutable read survives across the `&mut k` write below.
+            let lhs = &ir.cont_assigns[ci].lhs;
             let rhs = ir.cont_assigns[ci].rhs;
             if ir.cont_assigns[ci].delay.is_some() {
                 // A DELAYED driver's output holds x until its first delayed
@@ -442,20 +451,20 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
                 // (see `delayed_owes_initial_x`). The value itself is scheduled
                 // after the fixpoint, not here.
                 if k.sched.delayed_owes_initial_x(ci) {
-                    let w = k.k_eval_for_lvalue(&lhs, rhs).width;
-                    let offs = k.k_resolve_lvalue_offsets(&lhs);
+                    let w = k.k_eval_for_lvalue(lhs, rhs).width;
+                    let offs = k.k_resolve_lvalue_offsets(lhs);
                     changed |=
                         k.arena
-                            .write_lvalue(ir, &lhs, crate::value::Value::xs(w, false), &offs);
+                            .write_lvalue(ir, lhs, crate::value::Value::xs(w, false), &offs);
                 }
                 continue;
             }
             if k.sched.ca_is_md(ci) {
                 continue; // MULTI-DRIVER member: written once by resolution below
             }
-            let v = k.k_eval_for_lvalue(&lhs, rhs);
-            let offs = k.k_resolve_lvalue_offsets(&lhs);
-            changed |= k.arena.write_lvalue(ir, &lhs, v, &offs);
+            let v = k.k_eval_for_lvalue(lhs, rhs);
+            let offs = k.k_resolve_lvalue_offsets(lhs);
+            changed |= k.arena.write_lvalue(ir, lhs, v, &offs);
         }
         // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
         // drivers and write the net once — the engine's own loop, run EVERY
@@ -471,19 +480,25 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
                 let g = &k.sched.md_groups()[mi];
                 (g.0, g.2)
             };
-            let cis = k.sched.md_groups()[mi].1.clone();
-            let first = cis[0];
+            // The member list is READ, not cloned: `md_groups` is scheduler
+            // state that this loop never writes, and the `&mut k` it needs is
+            // only for the eval/write below — so the ids are copied into a
+            // reusable buffer instead of a fresh `Vec` per group per pass.
+            md_members.clear();
+            md_members.extend_from_slice(&k.sched.md_groups()[mi].1);
+            let first = md_members[0];
             let net_w = ir.nets[net as usize].width;
-            let mut vals = Vec::with_capacity(cis.len());
-            for ci in cis {
-                let lhs = ir.cont_assigns[ci].lhs.clone();
+            let mut vals = Vec::with_capacity(md_members.len());
+            for &ci in &md_members {
+                // Borrowed, for the same reason as the ordinary arm above.
+                let lhs = &ir.cont_assigns[ci].lhs;
                 let rhs = ir.cont_assigns[ci].rhs;
-                vals.push(k.k_eval_for_lvalue(&lhs, rhs));
+                vals.push(k.k_eval_for_lvalue(lhs, rhs));
             }
             let acc = crate::sched::resolve_md_group(kind, net_w, vals);
-            let lhs = ir.cont_assigns[first].lhs.clone();
-            let offs = k.k_resolve_lvalue_offsets(&lhs);
-            changed |= k.arena.write_lvalue(ir, &lhs, acc, &offs);
+            let lhs = &ir.cont_assigns[first].lhs;
+            let offs = k.k_resolve_lvalue_offsets(lhs);
+            changed |= k.arena.write_lvalue(ir, lhs, acc, &offs);
         }
         // A cont-assign RHS can read an out-of-range array element, and the
         // arena can only COUNT that — same third-producer problem the waiter
