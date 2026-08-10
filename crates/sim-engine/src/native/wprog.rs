@@ -25,18 +25,28 @@
 //! - `LogAnd` / `LogOr`, whose operands are SELF-determined and need not share
 //!   a width with each other or with the result,
 //! - `LogNot` and the six reductions, over a self-determined operand.
+//! - `Concat` and `Replicate`, whose parts are self-determined and TILE the
+//!   result exactly (S2 slice 5).
 //!
 //! Every node carries the SAME width and the SAME signedness as its context,
-//! with FOUR deliberate exceptions that introduce a FURTHER width rather than a
-//! conversion — a comparison's operands, a runtime array index, and the operands
-//! of `&&`/`||` and of the one-bit unaries. Four widths in ONE program is an
+//! with FIVE deliberate exceptions that introduce a FURTHER width rather than a
+//! conversion — a comparison's operands, a runtime array index, the operands
+//! of `&&`/`||` and of the one-bit unaries, and a concat/replicate part.
+//! Four widths in ONE program is an
 //! ordinary shape, not a corner: `(sa < sb) && m[idx]` gives 1 / 8 / 8 / 4.
-//! None of them mixes — every one of those nodes yields a single bit and
-//! `LoadIdx` discards the index entirely, so the further width dies where it is
-//! introduced and no value is ever widened, sign-extended or truncated. So **no widening, no sign extension and no truncation exists
-//! anywhere in an admitted tree** — the context-sizing rules the generic
-//! evaluator implements have nothing to do, and this module does not restate
-//! them (the classifier-must-match-lowering trap). Signedness is admitted
+//! The first four DISCARD their operand — every one of those nodes yields a
+//! single bit and `LoadIdx` discards the index entirely — so the further width
+//! dies where it is introduced. The fifth does not: a concat part's bits SURVIVE
+//! into a wider result, and the sentence that used to stand here ("no value is
+//! ever moved between widths") stopped being true when slice 5 admitted it.
+//! What is still true, and is the whole correctness argument, is the narrower
+//! claim: **no widening, no sign extension and no truncation exists
+//! anywhere in an admitted tree.** A part contributes EXACTLY its own bits at a
+//! compile-time offset, the offsets tile the result (`Σ pw == w`, checked), and
+//! the accumulator they merge into is definite zero — so there is no room for a
+//! fill and no bit is written twice. The context-sizing rules the generic
+//! evaluator implements therefore still have nothing to do, and this module does
+//! not restate them (the classifier-must-match-lowering trap). Signedness is admitted
 //! because at uniform width two's complement makes every op above produce the
 //! same BITS either way; that is measured by the battery, not assumed, and the
 //! two places it is NOT true are handled explicitly (the signed `AShr`
@@ -175,6 +185,21 @@ enum WOp {
         op: sim_ir::BinOp,
         ow: u32,
         osigned: bool,
+    },
+    /// S2 slice 5: merge the popped value into the accumulator BENEATH it —
+    /// `count` copies of its `stride`-spaced bits starting at bit `off`, masked
+    /// to the result width. One op serves both a concatenation part
+    /// (`count: 1`) and a replication (`count: n, stride: operand width`).
+    ///
+    /// The merge is a plane-wise OR rather than a 4-state one because the
+    /// destination range is definite ZERO on entry — the accumulator is a
+    /// `Const{0,0}` and the ranges tile without overlap. That is the identical
+    /// contract `eval::eval_core::copy_bits` states for its own destination.
+    Splice {
+        off: u32,
+        stride: u32,
+        count: u32,
+        m: u64,
     },
 }
 
@@ -575,6 +600,105 @@ fn compile_node(
                 _ => None,
             }
         }
+        // ── CONCATENATION / REPLICATION (S2 slice 5) ───────────────────────
+        //
+        // The first nodes this module admits whose operands live at a DIFFERENT
+        // width from the result and whose bits SURVIVE into it. The four earlier
+        // exceptions (comparison operands, a runtime array index, `&&`/`||` and
+        // the one-bit unaries) all discard their operand, so the module doc could
+        // say no value is ever moved between widths. That sentence is no longer
+        // true and has been corrected there; what is still true — and is the
+        // whole correctness argument — is that no value is ever WIDENED,
+        // SIGN-EXTENDED or TRUNCATED:
+        //
+        // - IEEE §11.8.1: a concatenation's operands are SELF-DETERMINED. Each
+        //   part is compiled at its own `(width, signed)`, which is exactly what
+        //   `eval_concat`'s `self.eval(p)` does.
+        // - Every part contributes EXACTLY its own `pw` bits at a compile-time
+        //   offset. A part's signedness never causes a fill, because there is no
+        //   room to fill: the offsets are laid end to end and `Σ pw == w` is
+        //   checked below, so the ranges tile the result exactly.
+        // - The accumulator starts as definite ZERO and each splice writes a
+        //   DISJOINT range, so merging is a plane-wise OR — the same contract
+        //   `eval::eval_core::copy_bits` documents for its zeroed destination.
+        //   That is why this is not a 4-state `Or` (which would have to decide
+        //   `1|x`): no bit is ever written twice.
+        //
+        // ORDER, not just value: an admitted subtree can COUNT an out-of-range
+        // element read (`LoadIdx`), and those reports are ORDERED (the arena's
+        // `pending_range` is a Vec precisely because two counters could not carry
+        // order). `eval_concat` evaluates `parts` in SOURCE order — parts[0], the
+        // MSB-most, first — so the parts are emitted in source order here too and
+        // each carries its own precomputed offset. Emitting LSB-first would have
+        // produced identical bits and reversed two diagnostics.
+        sim_ir::Expr::Concat { parts } => {
+            // `Σ pw == w` is the tiling proof AND the agreement check between
+            // this module's two sources of width (the table, and `eval_concat`'s
+            // sum over evaluated part widths). If they disagree — a clamp, a
+            // saturating add, an empty concat's `.max(1)` — decline rather than
+            // guess which one the generic path will use.
+            let mut total: u64 = 0;
+            for &p in parts.iter() {
+                let pw = wt.get(p).width;
+                // A ZERO-width part is legal (`{0{x}}`, IEEE §11.4.12.1) and is
+                // declined rather than skipped: `eval_concat` still EVALUATES it,
+                // so skipping could drop an E4002 the generic path reports.
+                if pw == 0 {
+                    return None;
+                }
+                total += u64::from(pw);
+            }
+            if total != u64::from(w) {
+                return None;
+            }
+            push(ops, depth, max_depth, WOp::Const { val: 0, unk: 0 });
+            let mut pos = w;
+            for &p in parts.iter() {
+                let ps = wt.get(p);
+                pos -= ps.width; // parts[0] is MSB-most (`eval_concat`'s `pos -= v.width`)
+                compile_node(ir, wt, arena, p, ps.width, ps.signed, ops, depth, max_depth)?;
+                ops.push(WOp::Splice {
+                    off: pos,
+                    stride: 0,
+                    count: 1,
+                    m: mask,
+                });
+                *depth -= 1; // splice: two on the stack, one left
+            }
+            Some(())
+        }
+        sim_ir::Expr::Replicate { count, value } => {
+            // `count` is a const-expr EDGE, not a literal — folded by the same
+            // function `eval_replicate` and the self-width table both use.
+            let n = crate::width::const_u32_of_expr(ir, *count)?;
+            let vs = wt.get(*value);
+            // `{0{x}}` has width 0 and would make this node's own width 0, which
+            // `compile`'s entry already refuses at the root; declining here too
+            // keeps a NESTED one from reaching `mask_of(0)`, and matches the
+            // zero-width concat part above (the operand is still evaluated by
+            // `eval_replicate`, so skipping is not equivalent).
+            if n == 0 || vs.width == 0 {
+                return None;
+            }
+            if u64::from(n) * u64::from(vs.width) != u64::from(w) {
+                return None;
+            }
+            push(ops, depth, max_depth, WOp::Const { val: 0, unk: 0 });
+            // ONE compile, `count` splices — `eval_replicate` evaluates the
+            // operand ONCE and copies it, so compiling it `count` times would
+            // multiply any `LoadIdx` report by `count`.
+            compile_node(
+                ir, wt, arena, *value, vs.width, vs.signed, ops, depth, max_depth,
+            )?;
+            ops.push(WOp::Splice {
+                off: 0,
+                stride: vs.width,
+                count: n,
+                m: mask,
+            });
+            *depth -= 1;
+            Some(())
+        }
         _ => None,
     }
 }
@@ -728,6 +852,23 @@ impl WProg {
                     };
                     a.val = r.val.first().copied().unwrap_or(0);
                     a.unk = r.unk.first().copied().unwrap_or(0);
+                }
+                WOp::Splice {
+                    off,
+                    stride,
+                    count,
+                    m,
+                } => {
+                    let p = scratch.pop().expect("wprog stack");
+                    let acc = scratch.last_mut().expect("wprog stack");
+                    // `off + i*stride < w <= 64` holds by construction (the
+                    // compiler checked that the ranges tile a ≤64-bit result and
+                    // refused a zero-width part), so no shift here can reach 64.
+                    for i in 0..count {
+                        let sh = off + i * stride;
+                        acc.val |= (p.val << sh) & m;
+                        acc.unk |= (p.unk << sh) & m;
+                    }
                 }
             }
         }

@@ -1665,6 +1665,25 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
        wire g8; assign g8 = (a > b) || !sa;\n\
        wire g9; assign g9 = (a < b) && b;\n\
        wire ga; assign ga = !a || b;\n\
+       wire [7:0] h1; assign h1 = {a, b};\n\
+       wire [7:0] h2; assign h2 = {sa, b};\n\
+       wire [7:0] h3; assign h3 = {4'b0, a};\n\
+       wire [7:0] h4; assign h4 = {2{a}};\n\
+       wire [11:0] h5; assign h5 = {{2{a}}, b};\n\
+       wire [15:0] h6; assign h6 = {{a,b},{b,a}};\n\
+       wire [7:0] h7; assign h7 = {a,b} + {b,a};\n\
+       wire h8; assign h8 = {a,b} < {b,a};\n\
+       wire [7:0] h9; assign h9 = ~{a,b};\n\
+       wire i1; assign i1 = &{a,b};\n\
+       wire [7:0] i2; assign i2 = {a,b} >> 2;\n\
+       wire [11:0] i4; assign i4 = {a,sa,b};\n\
+       /* ⚠️ i4's signed part is in the MIDDLE on purpose. `{sa, b}` (h2) is
+          structurally immune to a sign-extension bug: the fill lands ABOVE the
+          result width and the mask deletes it. MEASURED — a mutant that
+          sign-extends a signed part before splicing survives the whole battery
+          without i4 and dies with it. */\n\
+       wire [8:0]  i5; assign i5 = {a,1'b1,b};\n\
+       wire [7:0] i3; assign i3 = {4'ha, {0{a}}, b};\n\
        initial begin a = 4'd0; b = 4'd0; sa = 4'sd0; sb = 4'sd0; end\n\
        endmodule\n";
     let ir = build(src);
@@ -1691,7 +1710,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             None => declined += 1,
         }
     }
-    assert_eq!(progs.len(), 55, "op battery coverage moved");
+    assert_eq!(progs.len(), 68, "op battery coverage moved");
     // COMPOUND comparison operands specifically: the per-op masks this slice
     // introduced exist because a program can hold two widths at once, and the
     // soundness review measured that EVERY comparison operand in the whole
@@ -1704,10 +1723,13 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
         "no compound-operand comparison left — the per-op masks lose their teeth"
     );
     assert_eq!(
-        declined, 1,
-        "exactly one row must DECLINE — `sa >>> 1` is the one shift whose bits \
-         depend on the sign (arithmetic fill), and a battery where everything \
-         admits cannot show that the decline still happens"
+        declined, 2,
+        "exactly two rows must DECLINE — `sa >>> 1` is the one shift whose bits \
+         depend on the sign (arithmetic fill), and the zero-replicate row \
+         carries a \
+         ZERO-WIDTH part, which slice 5 refuses rather than skips (the generic \
+         path still EVALUATES that part, so skipping it could drop a diagnostic). \
+         A battery where everything admits cannot show that the declines happen"
     );
     let rng = crate::state::RngCells::default();
     let mut scratch = Vec::new();
@@ -1740,7 +1762,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             }
         }
     }
-    assert_eq!(compared, 256 * 256 * 55);
+    assert_eq!(compared, 256 * 256 * 68);
 }
 
 /// The corpus + a keccak-shaped design, swept: every pure expression that the
@@ -1806,9 +1828,10 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
         }
     }
     assert_eq!(
-        admitted_total, 7715,
+        admitted_total, 7890,
         "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
-         the admission or the corpus silently shrank)"
+         the admission or the corpus silently shrank). 7715 → 7890 at S2 slice 5 \
+         (`Concat`/`Replicate`)"
     );
 }
 

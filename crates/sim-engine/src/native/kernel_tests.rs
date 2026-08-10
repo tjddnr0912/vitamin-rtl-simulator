@@ -2795,16 +2795,16 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
     // fast count of zero would make every assertion above vacuous.
     assert_eq!(
         (fast, declined),
-        (2160, 64),
-        "specialized-offset coverage moved. ⚠️ 4304 → (2112, 56) at §4.5.308, → (2160, 64) at S2 slice 4 (one design added): \
-         the declared-range fix seals index expressions in a `Concat`, which the \
-         W compiler does not admit, so 44 more lvalues per state take the generic \
-         resolver. Correctness is unaffected and the hot benchmarks are all \
-         zero-LSB descending (untouched fast path, keccak byte-identical and \
-         within noise) — but a `Concat` arm in `wprog` would win them back. \
-         The DECLINES are load-bearing too (a >64-bit index, a part-select \
+        (2200, 24),
+        "specialized-offset coverage moved. ⚠️ 4304 → (2112, 56) at §4.5.308, → (2160, 64) at S2 slice 4 (one design added), \
+         → (2200, 24) at S2 slice 5. The §4.5.308 declared-range fix seals index \
+         expressions in a `Concat`, and this pin's own note predicted the fix: \
+         \"a `Concat` arm in `wprog` would win them back\". Slice 5 added that arm \
+         and 40 of the 44 came back — the four that did not are the >64-bit index \
+         and the part-select index, which decline for their own reasons. \
+         The DECLINES are still load-bearing (a >64-bit index, a part-select \
          index, a THREE-chunk concat lvalue and the two-chunk concat whose \
-         second offset declines — 16 per state), so a drop to zero there means \
+         second offset declines), so a drop to zero there means \
          the decline arm stopped being exercised"
     );
 }

@@ -2325,3 +2325,94 @@ endmodule
     assert_eq!(r_nat.finish_reason, FinishReason::Quiescent);
     assert_eq!(r_vm.sim_time, r_nat.sim_time);
 }
+
+/// S2 slice 5 — a concatenation's parts are evaluated in SOURCE order, and the
+/// out-of-range accesses they COUNT come out in that order too.
+///
+/// The bits alone cannot show this: `{mem[xi], mem[oi]}` reads all-X either way,
+/// so a compiler that emitted its parts LSB-first would produce an identical
+/// value and reverse two diagnostics. The discriminator is that the two reports
+/// have DIFFERENT CODES — an unknown index is `W4029`, a known out-of-range one
+/// is `E4002` — which is the same distinction that forced the arena's deferred
+/// record to be an ordered `Vec` instead of two counters.
+#[test]
+fn s2_concat_parts_report_out_of_range_in_source_order() {
+    let src = r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [7:0] xi, oi;
+  reg [15:0] r;
+  initial begin
+    mem[0]=8'd10; mem[1]=8'd11; mem[2]=8'd12; mem[3]=8'd13;
+    xi = 8'bxxxxxxxx;
+    oi = 8'd9;
+    r = {mem[xi], mem[oi]};
+    $display("A %b", r);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &[
+        "diag|Warning|VITA-W4029|array word index is unknown (x/z); read X / write ignored",
+        "diag|Error|VITA-E4002|array word index (out of range; read X / write ignored)",
+        "out|A xxxxxxxxxxxxxxxx\n",
+    ];
+    both_backends_stream(src, WANT, "concat part order");
+}
+
+/// S2 slice 5 — a replication evaluates its operand ONCE.
+///
+/// `eval_replicate` evaluates `value` once and copies the bits `count` times, so
+/// `{2{mem[oi]}}` must report ONE out-of-range access. A compiler that got the
+/// bits right by compiling the operand `count` times would report twice; the
+/// value is identical in both, which is why this row counts diagnostics and not
+/// bits.
+#[test]
+fn s2_replicate_evaluates_its_operand_once() {
+    let src = r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [7:0] oi;
+  reg [15:0] r;
+  initial begin
+    mem[0]=8'd10; mem[1]=8'd11; mem[2]=8'd12; mem[3]=8'd13;
+    oi = 8'd9;
+    r = {2{mem[oi]}};
+    $display("B %b", r);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &[
+        "diag|Error|VITA-E4002|array word index (out of range; read X / write ignored)",
+        "out|B xxxxxxxxxxxxxxxx\n",
+    ];
+    both_backends_stream(src, WANT, "replicate single evaluation");
+}
+
+/// `both_backends_print` with NOTHING filtered out.
+///
+/// ⚠️ `both_backends_print` keeps only `out|t=` lines (plus the one W4028
+/// anchor), so it is structurally blind to diagnostics — which is exactly the
+/// axis the two rows above are about. Reusing it would have made them vacuous,
+/// and it did: both first passed against an empty stream.
+fn both_backends_stream(src: &str, want: &[&str], what: &str) {
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts).expect("runnable");
+    for backend in [Backend::Bytecode, Backend::Native] {
+        let sink = MergedSink::default();
+        let r = simulate(
+            &ir,
+            &sink,
+            SimOpts {
+                backend,
+                ..opts.clone()
+            },
+        );
+        if backend == Backend::Native {
+            assert_eq!(r.backend, Backend::Native, "fell back");
+        }
+        let lines: Vec<String> = sink.events.into_inner();
+        assert_eq!(lines, want, "{backend:?}: {what} moved");
+    }
+}
