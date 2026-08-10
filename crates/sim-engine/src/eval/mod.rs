@@ -62,6 +62,7 @@ pub struct EvalCtx<'a, N: NetReader + ?Sized> {
     pub plusargs: &'a [String],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tri {
     True,
     False,

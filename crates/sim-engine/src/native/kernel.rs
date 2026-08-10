@@ -1023,8 +1023,17 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // generic path uses, over the same `Value`.
         let sw = self.sched.st.wt.get(eid);
         if let Some(prog) = self.wprog_for(eid, sw.width, sw.signed) {
-            let v = self.run_wprog(&prog);
-            return matches!(self.ctx().truthiness(&v), crate::eval::Tri::True);
+            // The planes go straight to the rule. Wrapping them in a `Value`
+            // first was measured at 11.6% of a picorv32 run (`one_word_value`),
+            // and the verdict is the same function either way —
+            // `truthiness_word` is the plane-level entry point of the very
+            // `truthiness` this used to call, not a second answer.
+            let r = prog.run(&self.arena, &mut self.wscratch.borrow_mut());
+            let m = crate::value::low_mask(prog.width());
+            return matches!(
+                crate::eval::truthiness_word(r.val, r.unk, m),
+                crate::eval::Tri::True
+            );
         }
         self.ctx().truthy(eid)
     }

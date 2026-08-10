@@ -1018,8 +1018,8 @@ impl WProg {
                     // The condition is SELF-determined and asked with the same
                     // free function every other truth question in this module
                     // uses (`&&`, `||`, `!`, a branch condition).
-                    let cv = one_word_value(c.val, c.unk, cw, cs);
-                    *c = match crate::eval::truthiness(&cv) {
+                    let _ = cs; // the condition is a TRUTH question, not a signed one
+                    *c = match crate::eval::truthiness_word(c.val, c.unk, mask_of(cw)) {
                         crate::eval::Tri::True => t,
                         crate::eval::Tri::False => e,
                         crate::eval::Tri::Unknown => {

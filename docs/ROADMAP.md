@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S2 슬라이스 7 ✅(§4.5.328): picorv32 1.12× · admission 93.8%. 다음 = 폭·부호 불일치 축** | 1 | 실측 | ⭐⭐ `Ternary` admission — **게으름은 값이 아니라 진단의 문제**(제네릭은 취한 가지만 평가하고 `LoadIdx` 만 보고한다) → 컴파일된 op 열에 대고 정확히 검사. picorv32 1.03→**1.12×**, 4중 중첩 삼항 0.89→**1.21×**(즉시평가가 느릴 거라는 내 우려는 실측이 반증). ⭐⭐ **그 앵커가 기본 백엔드(vm)의 exit-code 결함을 찾았다** — 삼항의 안 취한 가지가 `E4002` 를 내 `--backend vm` 만 exit 1(같은 슬라이스에서 수정). **전수 census: 845 admit / 56 decline = 93.8%**; 잔여는 대부분 **폭·부호 불일치**와 `SysFunc` 3. 정본 = **[preview/21 §0.-2](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S2 닫힘(§4.5.329, 프로파일 근거). 다음 = `Value` 마샬링 제거 → S3** | 1 | 실측 | ⭐⭐ **남은 admission 축을 구현하기 전에 프로파일로 사망 확인** — 제네릭 트리워커 `eval_ctx` 가 **50% → 2.2%** 이고 유일 루트 admission 93.8%, 즉 잔여 축을 전부 열어도 상한이 2.2%다. 남은 비용은 **`Value` 마샬링 15.7%**(`one_word_value`·`resize`·`mask_top`) + **쓰기 퍼널 8.7%** — doc-21 §2 의 R2 목표가 절반만 끝나 있었다. 이번 슬라이스가 그중 truthiness 를 평면 레벨로 내려 native **3.1%**(picorv32 1.16×). ⚠️ 기대한 층간 파급은 **실측 안 됨**(interp·vm 둘 다 노이즈). 정본 = **[preview/21 §0.-3](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -355,7 +355,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 — T0·S0·S1(전부)·S2(**7슬라이스**)·**S3a** ✅ → 폭·부호 불일치 축 → **S3 바디 코드젠** … S6
+### 5.0 ★★ ③층 — T0·S0·S1(전부)·**S2 닫힘(8슬라이스)**·**S3a** ✅ → `Value` 마샬링 제거 → **S3 바디 코드젠** … S6
 
 > **⭐⭐ S2 슬라이스 4 완료 (2026-08-07 · §4.5.312) — 런타임 배열 원소 읽기.** `wprog` 의
 > `Expr::Signal` 팔이 워드 인덱스를 상수로만 받던 것을 **런타임 인덱스**까지 admit 한다

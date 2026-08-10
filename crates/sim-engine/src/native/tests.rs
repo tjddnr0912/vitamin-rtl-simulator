@@ -2147,3 +2147,55 @@ fn s2_wprog_runtime_element_load_matches_generic_eval() {
         "{saw_oob} oob / {saw_inrange} in"
     );
 }
+
+/// S2 slice 8 — the ≤64-bit truthiness fast path is the loop, exhaustively.
+///
+/// `truthiness` answers in three mask tests for a value that fits one word and
+/// falls back to a per-bit loop above that. Those two are the SAME rule and this
+/// row proves it rather than asserting it — and it does so WITHOUT a restatement
+/// of the loop in the test: the same bit pattern is asked twice, once as a 4-bit
+/// value (fast path) and once as a 128-bit value whose upper bits are zero (loop
+/// path), so the loop itself is the reference.
+///
+/// Exhaustive over the 4-bit 4-state space: all 256 `(val, unk)` pairs, which
+/// covers every combination of definite-1, definite-0, x and z — including the
+/// three that decide the answer (a definite 1 anywhere wins; otherwise any x or
+/// z at all is unknown; `z` is `val=1, unk=1` and must NOT count as a definite
+/// 1).
+#[test]
+fn s2_truthiness_word_and_loop_agree_exhaustively() {
+    let mut seen_true = 0usize;
+    let mut seen_false = 0usize;
+    let mut seen_unknown = 0usize;
+    for p in 0u64..256 {
+        let (v, u) = (p & 0xF, p >> 4);
+        let mut narrow = crate::value::Value::zeros(4, false);
+        narrow.val[0] = v;
+        narrow.unk[0] = u;
+        // The SAME bits at a width the fast path declines, so `truthiness`
+        // takes the per-bit loop and is the oracle for this row.
+        let mut wide = crate::value::Value::zeros(128, false);
+        wide.val[0] = v;
+        wide.unk[0] = u;
+        let fast = crate::eval::truthiness(&narrow);
+        let loopy = crate::eval::truthiness(&wide);
+        let word = crate::eval::truthiness_word(v, u, crate::value::low_mask(4));
+        assert_eq!(fast, loopy, "val={v:#x} unk={u:#x}: fast path vs loop");
+        assert_eq!(word, loopy, "val={v:#x} unk={u:#x}: word entry vs loop");
+        match loopy {
+            crate::eval::Tri::True => seen_true += 1,
+            crate::eval::Tri::False => seen_false += 1,
+            crate::eval::Tri::Unknown => seen_unknown += 1,
+        }
+    }
+    // Non-vacuity: all three verdicts must actually occur, or the row would
+    // pass against an implementation that always returned one of them.
+    assert!(
+        seen_true > 0 && seen_false > 0 && seen_unknown > 0,
+        "one verdict never occurred: true={seen_true} false={seen_false} unknown={seen_unknown}"
+    );
+    // Derived, not recorded: each of the four bits is one of 0/1/x/z, so
+    // TRUE = "at least one bit is a definite 1" = 256 - 3^4 = 175, FALSE = "all
+    // four are definite 0" = 1, and UNKNOWN is the rest = 80.
+    assert_eq!((seen_true, seen_false, seen_unknown), (175, 1, 80));
+}

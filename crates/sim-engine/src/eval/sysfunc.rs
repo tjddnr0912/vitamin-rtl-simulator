@@ -710,6 +710,21 @@ pub(crate) fn truthiness(a: &Value) -> Tri {
             Tri::False
         };
     }
+    // ≤64 bits is the overwhelming majority and answers in three mask tests
+    // instead of a per-bit loop with a `get_vu` call per bit. It is not a second
+    // rule: `truthiness_word` asks the SAME three questions in the same order,
+    // and the loop below stays the definition for wider values.
+    //
+    // Measured on picorv32 (tier-3, release, `/usr/bin/sample`): this function
+    // was 9.3% of the run before the fast path, because a 32-bit condition cost
+    // 32 iterations.
+    if a.width <= 64 {
+        return truthiness_word(
+            a.val.first().copied().unwrap_or(0),
+            a.unk.first().copied().unwrap_or(0),
+            crate::value::low_mask(a.width),
+        );
+    }
     let mut any_unknown = false;
     for i in 0..a.width {
         let (v, u) = a.get_vu(i);
@@ -721,6 +736,29 @@ pub(crate) fn truthiness(a: &Value) -> Tri {
         }
     }
     if any_unknown {
+        Tri::Unknown
+    } else {
+        Tri::False
+    }
+}
+
+/// IEEE truthiness of ONE ≤64-bit `(val, unk)` word pair, `m` masking the bits
+/// that belong to the value.
+///
+/// The plane-level entry point of the rule above, so a caller that already holds
+/// planes (the tier-3 W evaluator) asks the question without materialising a
+/// 72-byte `Value` first — measured as 11.6% of a picorv32 run spent in
+/// `one_word_value` alone.
+///
+/// The three questions are the loop's, in the loop's order: a DEFINITE 1
+/// anywhere is true; otherwise any x or z at all is unknown; otherwise false.
+/// (`z` is `val=1, unk=1`, which `val & !unk` correctly excludes from the first
+/// test and `unk` correctly includes in the second.)
+#[inline]
+pub(crate) fn truthiness_word(val: u64, unk: u64, m: u64) -> Tri {
+    if (val & !unk & m) != 0 {
+        Tri::True
+    } else if (unk & m) != 0 {
         Tri::Unknown
     } else {
         Tri::False
