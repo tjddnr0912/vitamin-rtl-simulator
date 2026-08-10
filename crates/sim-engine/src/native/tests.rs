@@ -2199,3 +2199,192 @@ fn s2_truthiness_word_and_loop_agree_exhaustively() {
     // four are definite 0" = 1, and UNKNOWN is the rest = 80.
     assert_eq!((seen_true, seen_false, seen_unknown), (175, 1, 80));
 }
+
+/// A full snapshot of everything a write can move: the store, the dirty/edge
+/// channel, the deferred VCD records and the deferred range diagnostics.
+///
+/// Comparing only `buf` is what made the S1d-2 gate blind to the edge KIND, and
+/// comparing only the returned `changed` flag is what made an earlier offset
+/// gate blind to a duplicated report. The word entry touches all four, so all
+/// four are compared.
+#[cfg(test)]
+fn arena_snapshot(a: &NetArena) -> String {
+    format!(
+        "buf={:?} dirty={:?} flag={:?} edge={:?} lbw={:?} vcd={:?} range={:?}",
+        a.buf,
+        a.ch.dirty,
+        a.ch.dirty_flag,
+        a.ch.slot_edge,
+        a.ch.last_blocking_writer,
+        a.ch.vcd_pending,
+        a.pending_range.borrow(),
+    )
+}
+
+/// §4.5.332 — the ONE-WORD write entry against the general funnel, over every
+/// lvalue shape a single-word destination can take, swept across offsets that
+/// reach outside the net on both ends, array words that are in range / out of
+/// range / unknown, and source values that are narrower, equal and wider than
+/// the destination in both sign domains.
+///
+/// The two sides are the SAME function with the entry turned off, so what is
+/// compared is exactly the delegation — and the comparison is the full snapshot
+/// (store + dirty + edge + VCD + deferred diagnostics), because the entry is a
+/// store point and a store point owns all four.
+#[test]
+fn s2_word_write_entry_matches_the_general_funnel() {
+    // The `always @(posedge a)` is LOAD-BEARING, not decoration: `is_edge_target`
+    // is derived from Edge sensitivities, so without one in the design every net
+    // has `track_edge == false` and the glitch capture plus `accumulate_edge` —
+    // half of what this store point owns — is never entered. Reviewing my own
+    // sweep is what found that; the first version of this design had only
+    // `initial` blocks.
+    let src = "module t;\n\
+                 reg [7:0] a; reg [0:0] b; reg [63:0] w; reg signed [7:0] sg;\n\
+                 bit [7:0] tw; reg [70:0] wide;\n\
+                 reg [7:0] m [0:3]; integer k; reg [7:0] v;\n\
+                 always @(posedge a) begin end\n\
+                 initial begin\n\
+                   a = v; b = v[0]; w = v; sg = v; tw = v; wide = v;\n\
+                   a[3] = v[0]; a[5:2] = v[3:0]; a[k+:3] = v[2:0]; a[k-:3] = v[2:0];\n\
+                   m[k] = v; m[k][3] = v[0]; m[k][5:2] = v[3:0];\n\
+                   {a, b} = v;\n\
+                 end\n\
+               endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let sites = write_sites(&ir);
+    assert_eq!(sites.len(), 14, "one site per assignment in the design");
+
+    // Offsets that land inside, straddle the top, straddle bit 0 (a NEGATIVE
+    // offset arrives as a 32-bit two's complement) and miss entirely.
+    let offs: [u32; 8] = [0, 1, 5, 7, 8, 63, (-1i32) as u32, (-9i32) as u32];
+    // In range, out of range, and the unknown-index sentinel.
+    let words: [u32; 4] = [0, 3, 9, crate::eval::OFF_UNKNOWN];
+    // (val, unk) plane pairs: defined, all-X, all-Z, and mixed.
+    let planes: [(u64, u64); 5] = [
+        (0x0000_0000_0000_0000, 0),
+        (0xA5A5_A5A5_A5A5_A5A5, 0),
+        (0, u64::MAX),
+        (u64::MAX, u64::MAX),
+        (0x0F0F_0F0F_0F0F_0F0F, 0x00FF_00FF_00FF_00FF),
+    ];
+    // Source widths that resize DOWN, exactly and UP (the last exercises the
+    // sign-extension branch, which is why `signed` is swept with them), plus the
+    // two FLAG domains the entry's admission reasons about but a plain
+    // `Value::zeros` never sets: a REAL value (which the coercion above the entry
+    // must have turned into an int — this row is what tests that claim rather
+    // than asserting it) and a STRING value (whose flag `resize` drops, so the
+    // entry is right to ignore it). `flag`: 0 = plain, 1 = real, 2 = string.
+    let src_shapes: [(u32, bool, u8); 9] = [
+        (1, false, 0),
+        (4, true, 0),
+        (8, false, 0),
+        (8, true, 0),
+        (32, true, 0),
+        (64, false, 0),
+        (64, false, 1),
+        (64, true, 1),
+        (24, false, 2),
+    ];
+
+    let mut compared = 0usize;
+    let mut entered = 0usize;
+    let mut landed = 0usize;
+    for (si, (lhs, _rhs)) in sites.iter().enumerate() {
+        for &off in &offs {
+            for &word in &words {
+                for &(pv, pu) in &planes {
+                    for &(sw, ss, flag) in &src_shapes {
+                        let mut fast = NetArena::build(&ir, &opts).expect("arena");
+                        let mut slow = NetArena::build(&ir, &opts).expect("arena");
+                        // The VCD capture inside `note_change` is a store-point
+                        // effect too; with `vcd_on` false the snapshot would be
+                        // blind to it.
+                        fast.ch.vcd_on = true;
+                        slow.ch.vcd_on = true;
+                        fast.ch.blocking_writer = Some(7);
+                        slow.ch.blocking_writer = Some(7);
+                        let mut value = crate::value::Value::zeros(sw, ss);
+                        value.val[0] = pv & crate::value::low_mask(sw);
+                        value.unk[0] = pu & crate::value::low_mask(sw);
+                        if flag == 1 {
+                            // A real carries its f64 in `val[0]`; the planes above
+                            // would be a nonsense payload, so give it a real one.
+                            value.is_real = true;
+                            value.unk[0] = 0;
+                            value.val[0] = f64::to_bits(if pv == 0 { -3.25 } else { 7.5 });
+                        } else if flag == 2 {
+                            value.is_str = true;
+                        }
+                        let o = crate::exec::Offsets::Heap(
+                            lhs.chunks.iter().map(|_| (off, word)).collect(),
+                        );
+                        let cf = fast.write_lvalue(&ir, lhs, value.clone(), &o);
+                        let cs = slow.write_lvalue_general_for_test(&ir, lhs, value, &o);
+                        let ctx = format!(
+                            "site{si} off={off:#x} word={word:#x} \
+                             planes=({pv:#x},{pu:#x}) src=({sw},{ss},flag={flag})"
+                        );
+                        assert_eq!(cf, cs, "{ctx}: `changed` verdict diverged");
+                        assert_eq!(
+                            arena_snapshot(&fast),
+                            arena_snapshot(&slow),
+                            "{ctx}: arena state diverged"
+                        );
+                        if lhs.chunks.len() == 1
+                            && fast.slots[lhs.chunks[0].net as usize].words == 1
+                        {
+                            entered += 1;
+                        }
+                        if cf {
+                            landed += 1;
+                        }
+                        compared += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(compared, 14 * 8 * 4 * 5 * 9, "sweep size");
+    // Non-vacuity, three ways: the entry has to be TAKEN for most rows (otherwise
+    // the sweep proves nothing about it), some row has to declare a real change
+    // (otherwise every comparison is "nothing happened"), and at least one WRITTEN
+    // net has to be an edge target (otherwise the glitch/edge half of the store
+    // point is never entered — the gap that reviewing this test found).
+    assert_eq!(entered, 12 * 8 * 4 * 5 * 9, "the word entry's row count");
+    assert!(landed > 500, "too few rows actually stored: {landed}");
+    let arena = NetArena::build(&ir, &opts).expect("arena");
+    let edge_targets = arena.ch.is_edge_target.iter().filter(|&&b| b).count();
+    assert!(
+        edge_targets > 0,
+        "no edge target: the glitch path is dead code"
+    );
+}
+
+/// `resize_word`'s width-0 guard, against the ONLY oracle that can still answer:
+/// `Value::resize`'s general (>64-bit) path, which the fast path no longer reaches.
+///
+/// A width-0 source copies `nwords(min(from,to)) == 0` words there, so the result is
+/// zero no matter what the source words hold. The guard is what reproduces that.
+/// PRODUCTION cannot tell the two apart — every constructor masks to `top_mask(0) == 0`,
+/// so a width-0 `Value` has no set bits to leak — which is exactly why the row is here:
+/// it is the only thing that distinguishes them, and without it a mutation removing the
+/// guard survives the whole suite (measured).
+#[test]
+fn resize_word_zero_width_source_matches_the_general_path() {
+    for &(v, u) in &[(0xFFu64, 0xFFu64), (u64::MAX, 0), (0, u64::MAX)] {
+        for &signed in &[false, true] {
+            // The general path: > 64 bits, so `resize` cannot delegate to the word form.
+            let mut src = crate::value::Value::zeros(0, signed);
+            src.val[0] = v;
+            src.unk[0] = u;
+            let general = src.resize(65);
+            let (wv, wu) = crate::value::resize_word(v, u, 0, 64, signed);
+            assert_eq!(
+                (wv, wu),
+                (general.val[0], general.unk[0]),
+                "v={v:#x} u={u:#x} signed={signed}: word form vs general path"
+            );
+        }
+    }
+}

@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — W 평가기에서 `Value` 소멸 ✅(§4.5.331) picorv32 1.43×. 다음 = 결과 경로 + 쓰기 퍼널** | 1 | 실측 | ⭐ 한 비트 단항(`!`+6 리덕션)과 `&&`/`||` 까지 평면으로 → `WProg::run` 이 **어떤 팔에서도 `Value` 를 안 만든다**. picorv32 0.712→**0.633(11.1%)**, keccak 은 **0**(형태가 다르면 같은 수정이 다른 값을 낸다). 추출 넷 전부 **정본이 위임**(`RedFacts::absorb`·`reduce_verdict`·`unary1_word`·`log_bin_tri`). ⚠️ 공유의 대가로 차분이 눈멀어져 뮤테이션 넷을 **오라클 핀**으로 확인. 남은 표적 = **결과 경로**(`run_wprog`→`write_lvalue` 의 재 `resize`) + **쓰기 퍼널 10.3%**. 정본 = **[preview/21 §0.-5](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — 쓰기 퍼널의 한 워드 진입점 ✅(§4.5.332) picorv32 1.53×. 다음 = 대입당 디스패치, 그다음 S3** | 1 | 실측 | ⭐ 정본 `write_lvalue` 가 자기 정규화를 마친 뒤 **목적지가 아레나 워드 하나면** 평면 진입점으로 위임. picorv32 0.633→**0.594(6.2%)**, 퍼널+`resize` **20.6→12.5%**(`write_chunk` 는 상위 22 에서 사라졌다). ⭐⭐ **표적은 census 가 정했고 그것이 내 계획의 절반을 버렸다** — 비트 직렬은 **1.4%**, 통짜 저장이 **98.6%** 였다. 추출 셋 전부 정본이 위임(`resize_word`·`chunk_lsb`·`chunk_elem`). ⭐⭐ **내 스윕을 리뷰해 구멍 둘**(엣지 감도 0개 → 글리치/엣지 미도달 · `is_real`/`is_str` 미설정 = admission 논거 그 자체)을 찾아 막았고, 그 뒤 뮤테이션 **12/12 사망**. 정본 = **[preview/21 §0.-6](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -355,7 +355,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 — T0·S0·S1(전부)·**S2 닫힘**·**S3a** ✅ → `Value` 마샬링(평가기 ✅, 결과 경로 ⬜) + 쓰기 퍼널 → **S3 바디 코드젠** … S6
+### 5.0 ★★ ③층 — T0·S0·S1(전부)·**S2 닫힘**·**S3a**·**쓰기 퍼널 ✅** → 대입당 디스패치 → **S3 바디 코드젠** … S6
 
 > **⭐⭐ S2 슬라이스 4 완료 (2026-08-07 · §4.5.312) — 런타임 배열 원소 읽기.** `wprog` 의
 > `Expr::Signal` 팔이 워드 인덱스를 상수로만 받던 것을 **런타임 인덱스**까지 admit 한다

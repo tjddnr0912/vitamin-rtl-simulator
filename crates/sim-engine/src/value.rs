@@ -29,6 +29,40 @@ pub(crate) fn top_mask(width: u32) -> u64 {
     }
 }
 
+/// The ≤64-bit resize rule on the RAW PLANES — `Value::resize`'s one-word case with
+/// the `Value` taken away, so a caller that already holds two `u64`s can enter the rule
+/// a level lower instead of building a `Value` to be allowed to ask.
+///
+/// Ordering is the general path's, verbatim: read the low word (nothing when the source
+/// width is 0), sign-fill `[from_w, to_w)` only when EXTENDING a signed value whose sign
+/// bit is 1 or x, then mask to `top_mask(to_w)`.
+///
+/// `from_w == to_w` is not a special case here and does not need to be: no branch fires
+/// and the result is `(v, u) & top_mask(w)` — which is exactly what `Value::resize`'s
+/// equal-width early return does through `mask_top` on a one-word value. That is what
+/// lets the tier-3 write funnel call this for every width relation it sees.
+#[inline]
+pub(crate) fn resize_word(v: u64, u: u64, from_w: u32, to_w: u32, signed: bool) -> (u64, u64) {
+    let (mut v, mut u) = if from_w == 0 { (0, 0) } else { (v, u) };
+    if to_w > from_w && signed && from_w > 0 {
+        let bit = from_w - 1;
+        let fv = (v >> bit) & 1;
+        let fu = (u >> bit) & 1;
+        if fv != 0 || fu != 0 {
+            let bits = to_w - from_w;
+            let mask = if bits >= 64 {
+                u64::MAX
+            } else {
+                ((1u64 << bits) - 1) << from_w
+            };
+            v = (v & !mask) | (if fv != 0 { u64::MAX } else { 0 } & mask);
+            u = (u & !mask) | (if fu != 0 { u64::MAX } else { 0 } & mask);
+        }
+    }
+    let m = top_mask(to_w);
+    (v & m, u & m)
+}
+
 /// [C3] Bit-plane word store for a [`Value`]: **inline** for the ≤128-bit case (two
 /// `u64` words, NO heap allocation — the overwhelmingly common RTL width), spilling to a
 /// `Vec` only for >128 bits. Once the bit-serial net I/O + shift paths were word-ized,
@@ -435,34 +469,17 @@ impl Value {
         // 1 or x, then mask to `top_mask(new_width)`. `is_str` is dropped, as it is
         // there. Locked by `resize_fast_path_matches_general`.
         if self.width <= 64 && new_width <= 64 {
-            let (mut v, mut u) = if self.width == 0 {
-                (0, 0)
-            } else {
-                (
-                    self.val.first().copied().unwrap_or(0),
-                    self.unk.first().copied().unwrap_or(0),
-                )
-            };
-            if new_width > self.width && self.signed && self.width > 0 {
-                let bit = self.width - 1;
-                let fv = (v >> bit) & 1;
-                let fu = (u >> bit) & 1;
-                if fv != 0 || fu != 0 {
-                    let bits = new_width - self.width;
-                    let mask = if bits >= 64 {
-                        u64::MAX
-                    } else {
-                        ((1u64 << bits) - 1) << self.width
-                    };
-                    v = (v & !mask) | (if fv != 0 { u64::MAX } else { 0 } & mask);
-                    u = (u & !mask) | (if fu != 0 { u64::MAX } else { 0 } & mask);
-                }
-            }
-            let m = top_mask(new_width);
+            let (v, u) = resize_word(
+                self.val.first().copied().unwrap_or(0),
+                self.unk.first().copied().unwrap_or(0),
+                self.width,
+                new_width,
+                self.signed,
+            );
             let mut val = Words::zeros(1);
             let mut unk = Words::zeros(1);
-            val[0] = v & m;
-            unk[0] = u & m;
+            val[0] = v;
+            unk[0] = u;
             return Value {
                 val,
                 unk,

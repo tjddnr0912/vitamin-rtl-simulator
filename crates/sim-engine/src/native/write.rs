@@ -79,6 +79,35 @@ impl NetArena {
         value: Value,
         offsets: &Offsets,
     ) -> bool {
+        self.write_lvalue_inner(ir, lhs, value, offsets, true)
+    }
+
+    /// The general funnel with the one-word entry TURNED OFF — the differential's
+    /// other side, and the reason it is not vacuous.
+    ///
+    /// `word_entry` is a literal at both call sites, so the production one folds
+    /// the branch away; the alternative (comparing the delegating funnel against
+    /// itself) is a test that cannot fail.
+    #[cfg(test)]
+    pub(crate) fn write_lvalue_general_for_test(
+        &mut self,
+        ir: &SimIr,
+        lhs: &Lvalue,
+        value: Value,
+        offsets: &Offsets,
+    ) -> bool {
+        self.write_lvalue_inner(ir, lhs, value, offsets, false)
+    }
+
+    #[inline]
+    fn write_lvalue_inner(
+        &mut self,
+        ir: &SimIr,
+        lhs: &Lvalue,
+        value: Value,
+        offsets: &Offsets,
+        word_entry: bool,
+    ) -> bool {
         // The assoc key variants carry their key OUT of band and `as_slice()`
         // yields `&[]` for them — a shape this funnel has no arm for. Heap kinds
         // are S0-rejected so they cannot arrive, but resting on a `NetReader`
@@ -125,6 +154,38 @@ impl NetArena {
         };
         // Total destination bit width = sum of chunk widths.
         let total: u32 = lhs.chunks.iter().map(|c| self.chunk_width(ir, c)).sum();
+
+        // ── ONE-WORD ENTRY (§4.5.332) ──
+        //
+        // The canonical rule, entered a level lower. Everything above this point
+        // has already run — the real→int coercion and the destination width — so
+        // what is delegated is the tail: resize the source to `total`, then store
+        // it. The measured shape of a real design is that this tail is nearly all
+        // of it: on picorv32, 4.01 M of 4.06 M chunk writes are a whole net, 99.1%
+        // of them ≤ 64 bits, and the funnel plus its `resize` was 18.9% of the run.
+        //
+        // Admission is one question — does the DESTINATION fit a single arena word
+        // — and the source follows from it: `total <= 64` makes `resize_word`'s
+        // extension branch unreachable for a source wider than a word, so only the
+        // low word can matter, exactly as the general `resize` copies only
+        // `nwords(min(from,to))` words. `is_real` is already false here (the
+        // coercion above is what makes it so), and `is_str` is irrelevant once the
+        // value is bits — `resize` drops the flag rather than reading it.
+        if let [c0] = lhs.chunks.as_slice() {
+            let s = self.slots[c0.net as usize];
+            if word_entry && s.words == 1 && total <= 64 {
+                let (raw_off, raw_word) = offsets.first().copied().unwrap_or((0, 0));
+                let (pv, pu) = crate::value::resize_word(
+                    value.val.first().copied().unwrap_or(0),
+                    value.unk.first().copied().unwrap_or(0),
+                    value.width,
+                    total.max(1),
+                    value.signed,
+                );
+                return self.write_chunk_word(c0, raw_off, raw_word, pv, pu, total);
+            }
+        }
+
         let src = value.resize(total.max(1));
 
         // Single-chunk LHS — the dominant case (a whole net, or one bit-/part-
@@ -164,6 +225,52 @@ impl NetArena {
             .map(|c| self.chunk_width(ir, c))
             .sum::<u32>()
             .max(1)
+    }
+
+    /// The LOW (LSB) net-bit position this chunk writes at, given its already-known
+    /// width. SIGNED: an indexed part-select can extend below bit 0 (`v[-2+:4]`,
+    /// `v[1-:3]`), and only the in-range bits are stored.
+    ///
+    /// Extracted so the word funnel below and the general `write_chunk` cannot
+    /// disagree about WHICH BITS a chunk names — the `- cw + 1` of the descending
+    /// form is one character, and two copies of it silently pick a different window.
+    /// `cw` is passed rather than refolded because the caller already holds it
+    /// (`write_lvalue` folded it to size the source), and refolding is what would
+    /// let the two answers drift apart.
+    fn chunk_lsb(&self, c: &LvalChunk, raw_off: u32, cw: u32) -> i64 {
+        // `raw_off` arrives as the offset's 32-bit 2's-complement; sign-extend it
+        // (bit positions never exceed i32 range).
+        let off_i = raw_off as i32 as i64;
+        match c.kind {
+            SelKind::Bit => {
+                if c.offset.is_none() && c.width.is_none() {
+                    0 // whole net
+                } else {
+                    off_i
+                }
+            }
+            SelKind::PartConst | SelKind::PartIdxUp => off_i,
+            SelKind::PartIdxDown => off_i - (cw as i64) + 1,
+        }
+    }
+
+    /// The array element this chunk writes, or `None` when the write must be
+    /// DROPPED because the index is out of range (never clamped — clamping would
+    /// silently corrupt a valid neighbour). Counting the drop is a side effect, so
+    /// this is also the one place that decides an E4002/W4029 is owed.
+    fn chunk_elem(&self, c: &LvalChunk, raw_word: u32, elems: u32) -> Option<u32> {
+        if c.word.is_none() {
+            return Some(0);
+        }
+        if raw_word >= elems {
+            // Counted, not clamped and not silent — the run loop reports it
+            // through the engine's own `warn_run_range` (see
+            // `NetArena::pending_range`). The engine emits here; dropping it
+            // turned an `ExitClass::HadErrors` run into a clean PASS.
+            self.note_bad_index(raw_word == crate::eval::OFF_UNKNOWN);
+            return None;
+        }
+        Some(raw_word)
     }
 
     /// Width (in bits) a single lvalue chunk writes — the engine's `chunk_width`.
@@ -213,53 +320,14 @@ impl NetArena {
             piece
         };
         // `raw_word` is the caller-evaluated array index (the runtime `k` of
-        // `mem[k] = …`). None ⇒ index 0. An out-of-range word write is IGNORED
-        // (E-RUN-RANGE) — clamping to the last element would silently corrupt a
-        // valid neighbour. This is also where an X/Z index lands: the shared
-        // resolver maps it to the far-out-of-range sentinel.
-        let word = if c.word.is_some() {
-            if raw_word >= s.elems {
-                // Counted, not clamped and not silent — the run loop reports it
-                // through the engine's own `warn_run_range` (see
-                // `NetArena::pending_range`). The engine emits here; dropping it
-                // turned an `ExitClass::HadErrors` run into a clean PASS.
-                self.note_bad_index(raw_word == crate::eval::OFF_UNKNOWN);
-                return false;
-            }
-            raw_word
-        } else {
-            0
+        // `mem[k] = …`). None ⇒ index 0. This is also where an X/Z index lands:
+        // the shared resolver maps it to the far-out-of-range sentinel.
+        let Some(word) = self.chunk_elem(c, raw_word, s.elems) else {
+            return false;
         };
         let net_w = s.width;
-
-        // The low (LSB) net-bit position is SIGNED — an underflowing indexed
-        // part-select (`v[-2+:4]`, `v[1-:3]`) extends below bit 0, and only the
-        // in-range bits are written (the low OOB bits are dropped, NOT shifted up
-        // or wrapped). `raw_off` arrives as the offset's 32-bit 2's-complement;
-        // sign-extend it (bit positions never exceed i32 range).
-        let off_i = raw_off as i32 as i64;
-        let (lsb, width) = match c.kind {
-            SelKind::Bit => {
-                if c.offset.is_none() && c.width.is_none() {
-                    (0i64, net_w) // whole net
-                } else {
-                    (off_i, 1)
-                }
-            }
-            SelKind::PartConst | SelKind::PartIdxUp => (
-                off_i,
-                c.width
-                    .and_then(|eid| crate::width::const_u32_of_expr(ir, eid))
-                    .unwrap_or(net_w),
-            ),
-            SelKind::PartIdxDown => {
-                let w = c
-                    .width
-                    .and_then(|eid| crate::width::const_u32_of_expr(ir, eid))
-                    .unwrap_or(net_w);
-                (off_i - (w as i64) + 1, w)
-            }
-        };
+        let width = self.chunk_width(ir, c);
+        let lsb = self.chunk_lsb(c, raw_off, width);
 
         // WORD-PARALLEL store: a whole-element write. The engine needs three more
         // conditions here (`base % 64 == 0`, and the element occupying whole store
@@ -316,6 +384,82 @@ impl NetArena {
             }
         }
         changed
+    }
+
+    /// One chunk's store on the RAW PLANES, for a destination that occupies a
+    /// single arena word (`s.words == 1`, so `net_w <= 64`).
+    ///
+    /// This is `write_chunk` with the `Value` taken away and the two store shapes
+    /// — whole element and in-word window — collapsed into the one they always
+    /// were at this size: a masked read-modify-write of two adjacent words. It
+    /// asks the SAME two questions through the SAME two helpers (`chunk_elem`,
+    /// `chunk_lsb`), so which element and which bits a chunk names has exactly one
+    /// spelling; what differs is only how the bits get there.
+    ///
+    /// `cw` is the chunk's width, already folded by the caller.
+    fn write_chunk_word(
+        &mut self,
+        c: &LvalChunk,
+        raw_off: u32,
+        raw_word: u32,
+        mut pv: u64,
+        mut pu: u64,
+        cw: u32,
+    ) -> bool {
+        let s = self.slots[c.net as usize];
+        // SVPART: a 2-state variable can never hold X/Z (IEEE §6.11.3) — coerce
+        // every unknown bit of the incoming value to 0 before it lands. The
+        // general path clones and loops; at one word it is two instructions, and
+        // doing it unconditionally is the same result as doing it only when some
+        // unknown bit is set.
+        if s.two_state {
+            pv &= !pu; // X (val0/unk1) & Z (val1/unk1) → 0
+            pu = 0;
+        }
+        let Some(word) = self.chunk_elem(c, raw_word, s.elems) else {
+            return false;
+        };
+        let net_w = s.width;
+        let lsb = self.chunk_lsb(c, raw_off, cw);
+
+        // The destination window, clipped to the net on BOTH ends: an indexed
+        // part-select may hang off either edge and only the in-range bits are
+        // written (the out-of-range ones are dropped, never shifted or wrapped).
+        let hi = (lsb + cw as i64).clamp(0, net_w as i64) as u32;
+        let lo = lsb.clamp(0, net_w as i64) as u32;
+        if hi <= lo {
+            return false; // the window missed the net entirely
+        }
+        // `drop` is how many LOW source bits fell off the bottom; `hi > lo` is what
+        // bounds it below `cw <= 64`, so neither shift can be undefined.
+        let drop = (lo as i64 - lsb) as u32;
+        let m = top_mask(hi) & !top_mask(lo);
+        let nv = ((pv >> drop) << lo) & m;
+        let nu = ((pu >> drop) << lo) & m;
+
+        let base = s.off as usize + (word as usize) * 2;
+        let (ov, ou) = (self.buf[base], self.buf[base + 1]);
+        let (wv, wu) = ((ov & !m) | nv, (ou & !m) | nu);
+        if wv == ov && wu == ou {
+            return false;
+        }
+        // GLITCH: capture bit 0 BEFORE the mutation so a same-slot re-write
+        // (A→B→A) records its real B→A transition — the endpoint compare would
+        // see only A==A. Gated on `is_edge_target`, so non-clock nets pay a
+        // bounds check.
+        let track_edge = self.ch.is_edge_target[c.net as usize];
+        let old_b0 = if track_edge {
+            self.scalar_bit0(c.net)
+        } else {
+            sim_ir::FourState::Zero
+        };
+        self.buf[base] = wv;
+        self.buf[base + 1] = wu;
+        self.note_change(c.net, word);
+        if track_edge {
+            self.accumulate_edge(c.net, old_b0);
+        }
+        true
     }
 
     /// The word-parallel whole-element store — the one place a whole element's
