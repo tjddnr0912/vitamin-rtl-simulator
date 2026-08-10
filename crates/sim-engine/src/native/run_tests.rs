@@ -2416,3 +2416,47 @@ fn both_backends_stream(src: &str, want: &[&str], what: &str) {
         assert_eq!(lines, want, "{backend:?}: {what} moved");
     }
 }
+
+/// S2 slice 6 — the select windows the W compiler REFUSES, pinned to iverilog 13.
+///
+/// Slice 6 admits only a constant offset whose window lies wholly inside the
+/// base, because the generic path's other two outcomes (a per-bit X-filled
+/// overhang, and all-X for an unknown or oversized offset) have no counterpart
+/// in a shift and a mask. Every row here is one of those outcomes, so the whole
+/// row set exercises the DECLINE — and the battery's admitted rows cannot,
+/// because an admitted row is by construction one that stays in range.
+///
+/// The values are iverilog's, not a vm/native differential: a mistake shared by
+/// both backends is exactly what a differential cannot see, and the `-:` rule in
+/// particular now lives in ONE function that both the generic evaluator and the
+/// W compiler call.
+#[test]
+fn s2_out_of_range_selects_decline_and_match_the_oracle() {
+    let src = r#"
+module top;
+  reg [3:0] a; integer i; reg [3:0] xi;
+  initial begin
+    a = 4'b1011; i = 1; xi = 4'bxx01;
+    $display("A %b", a[4:1]);
+    $display("B %b", a[9:6]);
+    $display("C %b", a[i +: 2]);
+    i = 3;
+    $display("D %b", a[i +: 2]);
+    $display("E %b", a[xi]);
+    $display("F %b", a[3 -: 2]);
+    $display("G %b", a[1 +: 2]);
+    $finish;
+  end
+endmodule
+"#;
+    const WANT: &[&str] = &[
+        "out|A x101\n", // overhang by one bit → per-bit X fill
+        "out|B xxxx\n", // wholly outside
+        "out|C 01\n",   // runtime offset, in range
+        "out|D x1\n",   // runtime offset, overhanging
+        "out|E x\n",    // x/z offset
+        "out|F 10\n",   // `-:` at a constant offset — ADMITTED, and the one row
+        "out|G 01\n",   // `+:` at a constant offset — ADMITTED
+    ];
+    both_backends_stream(src, WANT, "out-of-range select");
+}

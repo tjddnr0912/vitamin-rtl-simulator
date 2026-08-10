@@ -26,12 +26,15 @@
 //!   a width with each other or with the result,
 //! - `LogNot` and the six reductions, over a self-determined operand.
 //! - `Concat` and `Replicate`, whose parts are self-determined and TILE the
-//!   result exactly (S2 slice 5).
+//!   result exactly (S2 slice 5),
+//! - `Select` over a self-determined base at a CONSTANT, provably in-range
+//!   offset (S2 slice 6) — one shift and one mask.
 //!
 //! Every node carries the SAME width and the SAME signedness as its context,
-//! with FIVE deliberate exceptions that introduce a FURTHER width rather than a
+//! with SIX deliberate exceptions that introduce a FURTHER width rather than a
 //! conversion — a comparison's operands, a runtime array index, the operands
-//! of `&&`/`||` and of the one-bit unaries, and a concat/replicate part.
+//! of `&&`/`||` and of the one-bit unaries, a concat/replicate part, and a
+//! select's base.
 //! Four widths in ONE program is an
 //! ordinary shape, not a corner: `(sa < sb) && m[idx]` gives 1 / 8 / 8 / 4.
 //! The first four DISCARD their operand — every one of those nodes yields a
@@ -44,7 +47,11 @@
 //! anywhere in an admitted tree.** A part contributes EXACTLY its own bits at a
 //! compile-time offset, the offsets tile the result (`Σ pw == w`, checked), and
 //! the accumulator they merge into is definite zero — so there is no room for a
-//! fill and no bit is written twice. The context-sizing rules the generic
+//! fill and no bit is written twice. A select is the mirror image and the same
+//! claim holds for the same reason: it takes a proven-in-range window of its
+//! base's bits and discards the rest, so nothing is extended and nothing is
+//! silently cut (a cut the SOURCE did not authorise is what `bits != w` and the
+//! range test refuse). The context-sizing rules the generic
 //! evaluator implements therefore still have nothing to do, and this module does
 //! not restate them (the classifier-must-match-lowering trap). Signedness is admitted
 //! because at uniform width two's complement makes every op above produce the
@@ -185,6 +192,15 @@ enum WOp {
         op: sim_ir::BinOp,
         ow: u32,
         osigned: bool,
+    },
+    /// S2 slice 6: the top of stack's bits `[k +: w]`, i.e. one shift and one
+    /// mask on both planes. `copy_bits(out, 0, src, k, w)` into a zeroed `w`-bit
+    /// destination is exactly this, and the compiler only emits it after proving
+    /// the range lies wholly inside the source — so the generic path's X-filling
+    /// arms have no counterpart here because they are unreachable.
+    Slice {
+        k: u32,
+        m: u64,
     },
     /// S2 slice 5: merge the popped value into the accumulator BENEATH it —
     /// `count` copies of its `stride`-spaced bits starting at bit `off`, masked
@@ -631,6 +647,81 @@ fn compile_node(
         // MSB-most, first — so the parts are emitted in source order here too and
         // each carries its own precomputed offset. Emitting LSB-first would have
         // produced identical bits and reversed two diagnostics.
+        // ── BIT / PART SELECT (S2 slice 6) ─────────────────────────────────
+        //
+        // ADMISSION: a 2-state CONSTANT offset whose range lies WHOLLY inside
+        // the base. That is not convenience, it is the correctness argument.
+        // `eval_select` has THREE outcomes — all-X when the offset is unknown or
+        // outside the i64 lane, one `copy_bits` when the range is fully inside
+        // the source, and a per-bit loop that X-fills the overhang otherwise —
+        // and proving the range at COMPILE time means only the middle one is
+        // reachable. `copy_bits(out, 0, src, lsb, w)` into a zeroed `w`-bit
+        // destination IS a shift and a mask, which is the whole `Slice` op.
+        //
+        // The base is SELF-determined (`eval_select` calls `self.eval(base)`),
+        // and the select's own result is UNSIGNED — the entry gate above already
+        // required the context to agree, so nothing here re-decides either.
+        //
+        // What this does NOT admit is an indexed select with a RUNTIME offset
+        // (`x[i +: 4]`), which is most of what `+:`/`-:` exist for. That needs a
+        // runtime bounds test and the X-fill arm; the constant forms are the
+        // ones a `[15:0]` costs, and those are the 73 declines measured on
+        // picorv32.
+        sim_ir::Expr::Select {
+            base,
+            offset,
+            width,
+            kind,
+        } => {
+            // `width` is a const-expr EDGE (`Add(Sub(msb,lsb),1)`), folded by
+            // the same helper `eval_select` and the self-width table both use.
+            let sel_w = crate::width::const_u32_of_expr(ir, *width).unwrap_or(1);
+            let os = wt.get(*offset);
+            let off = match ir.exprs.get(*offset as usize)? {
+                sim_ir::Expr::Const { val } => {
+                    if os.width == 0 || os.width > 64 {
+                        return None;
+                    }
+                    let (ov, ou) = const_planes(ir, *val, os.width)?;
+                    // An x/z offset is the generic path's all-X arm.
+                    if ou != 0 {
+                        return None;
+                    }
+                    // The SAME two calls the generic makes, over the same value —
+                    // `to_u64` deliberately ignores signedness, so a negative
+                    // constant reads as a large positive one and then fails the
+                    // in-range test below, exactly as it does there.
+                    one_word_value(ov, ou, os.width, os.signed)
+                        .to_u64()
+                        .and_then(|o| i64::try_from(o).ok())?
+                }
+                _ => return None,
+            };
+            let (lsb, bits) = crate::eval::binops::select_lsb_width(*kind, off, sel_w);
+            // The folded width and the width table must agree; they are two
+            // readings of the same const-expr edge and this module must not pick
+            // one when they differ.
+            if bits != w {
+                return None;
+            }
+            let bs = wt.get(*base);
+            if bs.width == 0 || bs.width > 64 {
+                return None;
+            }
+            // `eval_select`'s own fully-in-range condition, verbatim.
+            if !(lsb >= 0 && (lsb as u64) + (w as u64) <= bs.width as u64) {
+                return None;
+            }
+            compile_node(
+                ir, wt, arena, *base, bs.width, bs.signed, ops, depth, max_depth,
+            )?;
+            // `lsb + w <= bs.width <= 64` and `w >= 1`, so the shift is ≤ 63.
+            ops.push(WOp::Slice {
+                k: lsb as u32,
+                m: mask,
+            });
+            Some(())
+        }
         sim_ir::Expr::Concat { parts } => {
             // `Σ pw == w` is the tiling proof AND the agreement check between
             // this module's two sources of width (the table, and `eval_concat`'s
@@ -852,6 +943,11 @@ impl WProg {
                     };
                     a.val = r.val.first().copied().unwrap_or(0);
                     a.unk = r.unk.first().copied().unwrap_or(0);
+                }
+                WOp::Slice { k, m } => {
+                    let a = scratch.last_mut().expect("wprog stack");
+                    a.val = (a.val >> k) & m;
+                    a.unk = (a.unk >> k) & m;
                 }
                 WOp::Splice {
                     off,

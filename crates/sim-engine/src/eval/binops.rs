@@ -42,6 +42,27 @@ fn read_i128(v: &Value, w: u32, sgn: bool) -> i128 {
     }
 }
 
+/// Where a select's bits START and how many there are — the ONE spelling of
+/// IEEE §11.5.1's three forms, shared by the generic `eval_select` and the
+/// tier-3 W compiler's admission.
+///
+/// `off` is the offset ALREADY read as an i64 (`to_u64` then `i64::try_from`,
+/// which is why an unknown or oversized offset never reaches here) and `width`
+/// is the FOLDED constant bit count, not the const-expr edge. The result may be
+/// negative or run past the source: deciding what to do about that belongs to
+/// the caller (the generic path X-fills; the W compiler declines).
+///
+/// It is a free function rather than three lines inlined twice because the
+/// difference between the forms is exactly one `- width + 1`, and a second copy
+/// that dropped it would select the wrong four bits and never say so.
+pub(crate) fn select_lsb_width(kind: SelKind, off: i64, width: u32) -> (i64, u32) {
+    match kind {
+        SelKind::Bit => (off, 1u32),
+        SelKind::PartConst | SelKind::PartIdxUp => (off, width),
+        SelKind::PartIdxDown => (off - (width as i64) + 1, width),
+    }
+}
+
 impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     pub(crate) fn arith(&self, op: BinOp, l: &Value, r: &Value) -> Value {
         if l.is_real || r.is_real {
@@ -569,11 +590,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             // X/Z offset or one beyond the i64 lane: the select is out of range.
             None => return Value::xs(width.max(1), false),
         };
-        let (lsb, w) = match kind {
-            SelKind::Bit => (off, 1u32),
-            SelKind::PartConst | SelKind::PartIdxUp => (off, width),
-            SelKind::PartIdxDown => (off - (width as i64) + 1, width),
-        };
+        let (lsb, w) = select_lsb_width(kind, off, width);
         let mut out = Value::zeros(w.max(1), false);
         out.width = w;
         // Fully in-range select: ONE word-parallel copy (§A word化,

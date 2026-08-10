@@ -2795,15 +2795,14 @@ fn s2_specialized_offsets_match_the_canonical_resolver() {
     // fast count of zero would make every assertion above vacuous.
     assert_eq!(
         (fast, declined),
-        (2200, 24),
+        (2212, 12),
         "specialized-offset coverage moved. ⚠️ 4304 → (2112, 56) at §4.5.308, → (2160, 64) at S2 slice 4 (one design added), \
-         → (2200, 24) at S2 slice 5. The §4.5.308 declared-range fix seals index \
-         expressions in a `Concat`, and this pin's own note predicted the fix: \
-         \"a `Concat` arm in `wprog` would win them back\". Slice 5 added that arm \
-         and 40 of the 44 came back — the four that did not are the >64-bit index \
-         and the part-select index, which decline for their own reasons. \
-         The DECLINES are still load-bearing (a >64-bit index, a part-select \
-         index, a THREE-chunk concat lvalue and the two-chunk concat whose \
+         → (2200, 24) at S2 slice 5 (`Concat`/`Replicate`), → (2212, 12) at S2 slice 6 (`Select` at a \
+         constant, provably in-range offset). Slice 5's note recorded that the four it could not \
+         win back were the >64-bit index and the part-select index; slice 6 took the part-select \
+         ones. \
+         The DECLINES are still load-bearing (a >64-bit index, a RUNTIME part-select offset, a \
+         THREE-chunk concat lvalue and the two-chunk concat whose \
          second offset declines), so a drop to zero there means \
          the decline arm stopped being exercised"
     );

@@ -1677,6 +1677,20 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
        wire i1; assign i1 = &{a,b};\n\
        wire [7:0] i2; assign i2 = {a,b} >> 2;\n\
        wire [11:0] i4; assign i4 = {a,sa,b};\n\
+       wire       j1; assign j1 = a[2];\n\
+       wire [1:0] j2; assign j2 = a[3:2];\n\
+       wire [3:0] j3; assign j3 = {a,b}[5:2];\n\
+       wire [3:0] j4; assign j4 = {a,b}[7:4];\n\
+       wire       j5; assign j5 = sa[3];\n\
+       wire [2:0] j6; assign j6 = a[2:0] ^ b[2:0];\n\
+       wire [3:0] j7; assign j7 = {a[1:0],b[3:2]};\n\
+       wire       j8; assign j8 = a[0] & b[3];\n\
+       wire [1:0] j9; assign j9 = {2{a[1]}};\n\
+       wire [3:0] ja; assign ja = a[3:0];\n\
+       wire [1:0] jc; assign jc = a[1 +: 2];\n\
+       wire [1:0] jd; assign jd = a[3 -: 2];\n\
+       wire [2:0] je; assign je = {a,b}[5 -: 3];\n\
+       wire [3:0] jb; assign jb = a[4:1];\n\
        /* ⚠️ i4's signed part is in the MIDDLE on purpose. `{sa, b}` (h2) is
           structurally immune to a sign-extension bug: the fill lands ABOVE the
           result width and the mask deletes it. MEASURED — a mutant that
@@ -1710,7 +1724,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             None => declined += 1,
         }
     }
-    assert_eq!(progs.len(), 68, "op battery coverage moved");
+    assert_eq!(progs.len(), 81, "op battery coverage moved");
     // COMPOUND comparison operands specifically: the per-op masks this slice
     // introduced exist because a program can hold two widths at once, and the
     // soundness review measured that EVERY comparison operand in the whole
@@ -1723,12 +1737,16 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
         "no compound-operand comparison left — the per-op masks lose their teeth"
     );
     assert_eq!(
-        declined, 2,
-        "exactly two rows must DECLINE — `sa >>> 1` is the one shift whose bits \
-         depend on the sign (arithmetic fill), and the zero-replicate row \
+        declined, 3,
+        "exactly three rows must DECLINE — `sa >>> 1` is the one shift whose bits \
+         depend on the sign (arithmetic fill), the zero-replicate row \
          carries a \
          ZERO-WIDTH part, which slice 5 refuses rather than skips (the generic \
-         path still EVALUATES that part, so skipping it could drop a diagnostic). \
+         path still EVALUATES that part, so skipping it could drop a diagnostic), \
+         and `a[4:1]` runs one bit PAST a 4-bit source — slice 6 admits only a \
+         window it can prove lies wholly inside the base, because the overhang \
+         is the generic path's per-bit X-filling arm and this module has no \
+         counterpart for it. \
          A battery where everything admits cannot show that the declines happen"
     );
     let rng = crate::state::RngCells::default();
@@ -1762,7 +1780,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             }
         }
     }
-    assert_eq!(compared, 256 * 256 * 68);
+    assert_eq!(compared, 256 * 256 * 81);
 }
 
 /// The corpus + a keccak-shaped design, swept: every pure expression that the
@@ -1828,10 +1846,10 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
         }
     }
     assert_eq!(
-        admitted_total, 7890,
+        admitted_total, 7960,
         "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
          the admission or the corpus silently shrank). 7715 → 7890 at S2 slice 5 \
-         (`Concat`/`Replicate`)"
+         (`Concat`/`Replicate`) → 7960 at S2 slice 6 (`Select`)"
     );
 }
 

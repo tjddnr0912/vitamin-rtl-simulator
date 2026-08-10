@@ -16,7 +16,7 @@
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
-| **★** | §5 | **③층 — S2 슬라이스 5 ✅(§4.5.326). 다음 = `Select`/`Ternary` admission 의 값 측정 → S3** | 1 | 실측 | ⭐⭐ **2026-08-10 개정 6 의 "S2 는 레버가 아니다" 는 철회됐다 — 틀린 축의 ablation 이었다.** 폭 균일 게이트를 떼는 실험은 **arm 이 없는 노드**를 원리적으로 못 본다. 거절 census 를 재니 배열 읽기의 거절이 **정확히 1건 `Concat`**(§4.5.308 의 인덱스 봉인)이었고, arm 하나로 **배열 읽기 0.94→1.26× · 메모리 0.92→1.85× · 배열 쓰기 1.27→1.44× · picorv32 0.88→0.91×**. 잔여 거절 = `Select` 73 · `Ternary` 39(**값 미측정 — 그렇게 적는다**). 정본 = **[preview/21 §0.0](preview/21-tier3-native-backend.md)** |
+| **★** | §5 | **③층 — S2 슬라이스 6 ✅(§4.5.327): 네이티브가 실물 설계에서 처음 VM 을 앞섰다(1.03×). 다음 = `Ternary`** | 1 | 실측 | ⭐⭐ `Select` admission(상수·범위내 창 = **시프트+마스크**)로 picorv32 **0.90→1.03×** · 부분선택 산술 0.81→**1.26×**(선택 없는 기준선에 정확히 착지). 착수 순서를 **두 후보의 천장을 먼저 재서** 정했다(Select 0.83× vs Ternary 0.98×/중첩 0.89×). 남은 거절 census 60건 = **`Ternary` 41(68%)** · `SysFunc` 3 · 폭·부호 불일치 16 — `Select` 73→**0** · `Concat` 32→**0**. ⚠️ `Ternary` 는 제네릭이 **취한 가지만 평가**하므로 즉시평가는 없던 E4002 를 낸다 → 게으름(제어흐름)이 선행조건. 정본 = **[preview/21 §0.-1](preview/21-tier3-native-backend.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
 | — | §8 | 비계획 | 1 | — | 영구 비목표(DEFPARAM·IMPLICIT-NET·OOS) |
 
@@ -355,7 +355,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
-### 5.0 ★★ ③층 — T0·S0·S1(전부)·S2(**5슬라이스**)·**S3a** ✅ → `Select`/`Ternary` admission → **S3 바디 코드젠** … S6
+### 5.0 ★★ ③층 — T0·S0·S1(전부)·S2(**6슬라이스**)·**S3a** ✅ → `Ternary` admission → **S3 바디 코드젠** … S6
 
 > **⭐⭐ S2 슬라이스 4 완료 (2026-08-07 · §4.5.312) — 런타임 배열 원소 읽기.** `wprog` 의
 > `Expr::Signal` 팔이 워드 인덱스를 상수로만 받던 것을 **런타임 인덱스**까지 admit 한다
