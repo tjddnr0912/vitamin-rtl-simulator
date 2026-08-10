@@ -364,6 +364,26 @@ pub(crate) fn relational(op: BinOp, l: &Value, r: &Value) -> Value {
     let both_signed = l.signed && r.signed;
     let le = l.clone().resize_keep_sign(w, both_signed);
     let re = r.clone().resize_keep_sign(w, both_signed);
+    // ONE word is the overwhelming majority, and it is the shape the tier-3 W
+    // evaluator hands over directly. Delegating means the two paths cannot
+    // disagree about the ordering or the verdict table — which matters here more
+    // than anywhere else in this file, because `relational_word` is reached from
+    // a caller whose operands never pass through the canonicalisation above.
+    if crate::value::nwords(w) <= 1 {
+        let (v, u) = relational_word(
+            op,
+            le.val.first().copied().unwrap_or(0),
+            le.unk.first().copied().unwrap_or(0),
+            re.val.first().copied().unwrap_or(0),
+            re.unk.first().copied().unwrap_or(0),
+            w,
+            both_signed,
+        );
+        let mut out = Value::zeros(1, false);
+        out.val[0] = v;
+        out.unk[0] = u;
+        return out;
+    }
     let cmp_words = |a: &Value, b: &Value| {
         let n = a.val.len().max(b.val.len());
         for k in (0..n).rev() {
@@ -385,7 +405,16 @@ pub(crate) fn relational(op: BinOp, l: &Value, r: &Value) -> Value {
     } else {
         cmp_words(&le, &re)
     };
-    let b = matches!(
+    Value::logic(relational_verdict(op, ord))
+}
+
+/// Which `(operator, ordering)` pairs are TRUE — the ordered comparisons' truth
+/// table, as a free function so the word form below and the general path above
+/// cannot disagree about, say, whether `Le` accepts `Equal`.
+#[inline]
+pub(crate) fn relational_verdict(op: BinOp, ord: std::cmp::Ordering) -> bool {
+    use std::cmp::Ordering::*;
+    matches!(
         (op, ord),
         (BinOp::Lt, Less)
             | (BinOp::Le, Less)
@@ -393,8 +422,76 @@ pub(crate) fn relational(op: BinOp, l: &Value, r: &Value) -> Value {
             | (BinOp::Gt, Greater)
             | (BinOp::Ge, Greater)
             | (BinOp::Ge, Equal)
-    );
-    Value::logic(b)
+    )
+}
+
+/// `<` / `<=` / `>` / `>=` over ONE ≤64-bit word pair of two CANONICAL operands:
+/// equal width `w`, the SAME signedness, planes masked past `w`. Returns the
+/// one-bit result's `(val, unk)`.
+///
+/// The plane-level entry point of `relational` above, for callers that already
+/// hold planes — the tier-3 W evaluator, whose admission is exactly "both
+/// operands share a width and a signedness", so its values are canonical by
+/// construction and the clone-and-resize the general path performs would be a
+/// no-op. Measured: `one_word_value` was 7.3% of a picorv32 run and `resize`
+/// called from the comparisons another ~2%.
+///
+/// It is the same three steps in the same order: any x/z anywhere is X; then
+/// the ordering (differing sign bits decide directly when signed, otherwise the
+/// plain word order IS the numeric order at equal width); then the shared
+/// verdict table.
+#[inline]
+pub(crate) fn relational_word(
+    op: BinOp,
+    lv: u64,
+    lu: u64,
+    rv: u64,
+    ru: u64,
+    w: u32,
+    signed: bool,
+) -> (u64, u64) {
+    use std::cmp::Ordering::*;
+    if (lu | ru) != 0 {
+        return (0, 1); // X — `Value::x1()`'s planes
+    }
+    let ord = if signed && w > 0 {
+        let sb = 1u64 << (w - 1);
+        match ((lv & sb) != 0, (rv & sb) != 0) {
+            (true, false) => Less,
+            (false, true) => Greater,
+            _ => lv.cmp(&rv),
+        }
+    } else {
+        lv.cmp(&rv)
+    };
+    (u64::from(relational_verdict(op, ord)), 0)
+}
+
+/// `==` / `!=` over ONE ≤64-bit word pair of two CANONICAL operands — the
+/// plane-level entry point of `log_eq`, and the one spelling of its verdict.
+///
+/// A bit pair that is BOTH known and differing decides the comparison even when
+/// other bits are x/z; only an ambiguous compare is X. `z` encodes `val=1`, so
+/// masking the mismatch with `!u` is required rather than cosmetic.
+#[inline]
+pub(crate) fn log_eq_word(op: BinOp, lv: u64, lu: u64, rv: u64, ru: u64) -> (u64, u64) {
+    let u = lu | ru;
+    let definite = (lv ^ rv) & !u;
+    if definite != 0 {
+        (u64::from(op == BinOp::Ne), 0)
+    } else if u != 0 {
+        (0, 1)
+    } else {
+        (u64::from(op == BinOp::Eq), 0)
+    }
+}
+
+/// `===` / `!==` over ONE ≤64-bit word pair of two CANONICAL operands — exact
+/// 4-state compare on BOTH planes, never X.
+#[inline]
+pub(crate) fn case_eq_word(op: BinOp, lv: u64, lu: u64, rv: u64, ru: u64) -> (u64, u64) {
+    let eq = ((lv ^ rv) | (lu ^ ru)) == 0;
+    (u64::from(if op == BinOp::CaseEq { eq } else { !eq }), 0)
 }
 
 /// `==` / `!=`: a bit pair that is BOTH known and differing decides the
@@ -426,6 +523,19 @@ pub(crate) fn log_eq(op: BinOp, l: &Value, r: &Value) -> Value {
         // (`unk`) poisons the result to X; otherwise compare the val planes.
         // `resize_keep_sign` canonicalizes both operands (planes masked past
         // `width`), so a word-wise scan is bit-exact for the live width.
+        if nwords(w) <= 1 {
+            let (v, u) = log_eq_word(
+                op,
+                le.val.first().copied().unwrap_or(0),
+                le.unk.first().copied().unwrap_or(0),
+                re.val.first().copied().unwrap_or(0),
+                re.unk.first().copied().unwrap_or(0),
+            );
+            let mut out = Value::zeros(1, false);
+            out.val[0] = v;
+            out.unk[0] = u;
+            return out;
+        }
         let mut unk = 0u64;
         let mut definite = 0u64;
         for k in 0..nwords(w) {
@@ -649,6 +759,19 @@ pub(crate) fn case_eq(op: BinOp, l: &Value, r: &Value) -> Value {
     let re = r.clone().resize_keep_sign(w, ctx_signed);
     // Word-parallel exact 4-state compare (both planes), canonical after
     // `resize_keep_sign`; was a per-bit `get_vu` loop.
+    if nwords(w) <= 1 {
+        let (v, u) = case_eq_word(
+            op,
+            le.val.first().copied().unwrap_or(0),
+            le.unk.first().copied().unwrap_or(0),
+            re.val.first().copied().unwrap_or(0),
+            re.unk.first().copied().unwrap_or(0),
+        );
+        let mut out = Value::zeros(1, false);
+        out.val[0] = v;
+        out.unk[0] = u;
+        return out;
+    }
     let mut neq = 0u64;
     for k in 0..nwords(w) {
         let lv = le.val.get(k).copied().unwrap_or(0);

@@ -997,19 +997,26 @@ impl WProg {
                     // ordinary values (≤64 bits ⇒ `Words::Inline`, no
                     // allocation). What is specialized is reaching this point,
                     // not what happens at it.
-                    let av = one_word_value(a.val, a.unk, ow, osigned);
-                    let bv = one_word_value(b.val, b.unk, ow, osigned);
-                    let r = match op {
+                    // The planes go straight to the rule. Admission already
+                    // guarantees what the general path's clone-and-resize
+                    // establishes — both operands share a width and a
+                    // signedness, and every stack value is masked to its own
+                    // width — so these are the SAME functions, entered one
+                    // level lower. Building two 72-byte `Value`s to say so was
+                    // measured at 7.3% of a picorv32 run.
+                    let (rv, ru) = match op {
                         sim_ir::BinOp::CaseEq | sim_ir::BinOp::CaseNe => {
-                            crate::eval::binops::case_eq(op, &av, &bv)
+                            crate::eval::binops::case_eq_word(op, a.val, a.unk, b.val, b.unk)
                         }
                         sim_ir::BinOp::Eq | sim_ir::BinOp::Ne => {
-                            crate::eval::binops::log_eq(op, &av, &bv)
+                            crate::eval::binops::log_eq_word(op, a.val, a.unk, b.val, b.unk)
                         }
-                        _ => crate::eval::binops::relational(op, &av, &bv),
+                        _ => crate::eval::binops::relational_word(
+                            op, a.val, a.unk, b.val, b.unk, ow, osigned,
+                        ),
                     };
-                    a.val = r.val.first().copied().unwrap_or(0);
-                    a.unk = r.unk.first().copied().unwrap_or(0);
+                    a.val = rv;
+                    a.unk = ru;
                 }
                 WOp::Tern { cw, cs, m } => {
                     let e = scratch.pop().expect("wprog stack");
