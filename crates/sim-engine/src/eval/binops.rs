@@ -42,6 +42,21 @@ fn read_i128(v: &Value, w: u32, sgn: bool) -> i128 {
     }
 }
 
+/// ONE word of the ternary's unknown-condition merge: bits where the two
+/// branches agree (in BOTH planes) pass through, bits where they differ become
+/// X. A free function so the tier-3 W evaluator asks the same question instead
+/// of restating a rule whose whole content is which of the two planes carries
+/// the disagreement.
+///
+/// The X bits are set everywhere the planes differ, INCLUDING above the caller's
+/// width — a `w`-bit caller masks. `merge_x` below does that with `top_mask`;
+/// the W evaluator does it with the op's own mask.
+#[inline]
+pub(crate) fn merge_x_word(tv: u64, tu: u64, ev: u64, eu: u64) -> (u64, u64) {
+    let eq = !((tv ^ ev) | (tu ^ eu));
+    (tv & eq, (tu & eq) | !eq)
+}
+
 /// Where a select's bits START and how many there are — the ONE spelling of
 /// IEEE §11.5.1's three forms, shared by the generic `eval_select` and the
 /// tier-3 W compiler's admission.
@@ -530,9 +545,9 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             let tu = t.unk.get(k).copied().unwrap_or(0);
             let ev = e.val.get(k).copied().unwrap_or(0);
             let eu = e.unk.get(k).copied().unwrap_or(0);
-            let eq = !((tv ^ ev) | (tu ^ eu));
-            out.val[k] = tv & eq;
-            out.unk[k] = (tu & eq) | !eq;
+            let (v, u) = merge_x_word(tv, tu, ev, eu);
+            out.val[k] = v;
+            out.unk[k] = u;
         }
         let m = crate::value::top_mask(w);
         out.val[n - 1] &= m;

@@ -28,7 +28,9 @@
 //! - `Concat` and `Replicate`, whose parts are self-determined and TILE the
 //!   result exactly (S2 slice 5),
 //! - `Select` over a self-determined base at a CONSTANT, provably in-range
-//!   offset (S2 slice 6) — one shift and one mask.
+//!   offset (S2 slice 6) — one shift and one mask,
+//! - `Ternary` whose branches CANNOT REPORT (S2 slice 7) — the one admission in
+//!   this module that is about evaluation order rather than width.
 //!
 //! Every node carries the SAME width and the SAME signedness as its context,
 //! with SIX deliberate exceptions that introduce a FURTHER width rather than a
@@ -192,6 +194,21 @@ enum WOp {
         op: sim_ir::BinOp,
         ow: u32,
         osigned: bool,
+    },
+    /// S2 slice 7: `?:`. Pops the ELSE value, the THEN value and the COND
+    /// (pushed in that order) and pushes the branch the condition selects, or
+    /// the bitwise X-merge when the condition is unknown — the same three
+    /// outcomes `eval_ctx`'s `Ternary` arm has, through the same two shared
+    /// functions (`truthiness`, `merge_x_word`).
+    ///
+    /// ⚠️ Both branches have ALREADY been evaluated when this runs. That is the
+    /// one place this module departs from the generic path's SHAPE, and the
+    /// compiler pays for it with an admission check rather than an argument —
+    /// see the compile arm.
+    Tern {
+        cw: u32,
+        cs: bool,
+        m: u64,
     },
     /// S2 slice 6: the top of stack's bits `[k +: w]`, i.e. one shift and one
     /// mask on both planes. `copy_bits(out, 0, src, k, w)` into a zeroed `w`-bit
@@ -647,6 +664,56 @@ fn compile_node(
         // MSB-most, first — so the parts are emitted in source order here too and
         // each carries its own precomputed offset. Emitting LSB-first would have
         // produced identical bits and reversed two diagnostics.
+        // ── CONDITIONAL (S2 slice 7) ───────────────────────────────────────
+        //
+        // ⚠️ THE ADMISSION IS ABOUT LAZINESS, NOT WIDTH. `eval_ctx`'s `Ternary`
+        // arm evaluates the condition and then ONLY THE TAKEN BRANCH; it
+        // evaluates both solely when the condition is unknown. This module has
+        // no control flow, so it evaluates both always — which produces the same
+        // VALUE (every admitted op is pure) but not necessarily the same
+        // DIAGNOSTICS, because `LoadIdx` COUNTS an out-of-range element read.
+        // An untaken branch carrying one would report an access the generic path
+        // never performs: a diagnostic APPEARING is a divergence exactly as much
+        // as one going missing.
+        //
+        // So the check is not syntactic and not conservative-by-shape — it asks
+        // the compiled OPS whether either branch can report, which is the one
+        // question that matters and is exact. `LoadIdx` is the only op in this
+        // module that touches `note_bad_index`.
+        //
+        // The branches are CONTEXT-determined at `(w, signed)` — the same
+        // (w, eff_signed) the generic passes down — so uniform admission applies
+        // to them unchanged, and a branch narrower than the context declines
+        // rather than being silently widened here.
+        sim_ir::Expr::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            let cw = wt.get(*cond);
+            if cw.width == 0 || cw.width > 64 {
+                return None;
+            }
+            compile_node(
+                ir, wt, arena, *cond, cw.width, cw.signed, ops, depth, max_depth,
+            )?;
+            let branches_at = ops.len();
+            compile_node(ir, wt, arena, *then_e, w, signed, ops, depth, max_depth)?;
+            compile_node(ir, wt, arena, *else_e, w, signed, ops, depth, max_depth)?;
+            if ops[branches_at..]
+                .iter()
+                .any(|o| matches!(o, WOp::LoadIdx { .. }))
+            {
+                return None;
+            }
+            *depth -= 2; // three on the stack, one left
+            ops.push(WOp::Tern {
+                cw: cw.width,
+                cs: cw.signed,
+                m: mask,
+            });
+            Some(())
+        }
         // ── BIT / PART SELECT (S2 slice 6) ─────────────────────────────────
         //
         // ADMISSION: a 2-state CONSTANT offset whose range lies WHOLLY inside
@@ -943,6 +1010,30 @@ impl WProg {
                     };
                     a.val = r.val.first().copied().unwrap_or(0);
                     a.unk = r.unk.first().copied().unwrap_or(0);
+                }
+                WOp::Tern { cw, cs, m } => {
+                    let e = scratch.pop().expect("wprog stack");
+                    let t = scratch.pop().expect("wprog stack");
+                    let c = scratch.last_mut().expect("wprog stack");
+                    // The condition is SELF-determined and asked with the same
+                    // free function every other truth question in this module
+                    // uses (`&&`, `||`, `!`, a branch condition).
+                    let cv = one_word_value(c.val, c.unk, cw, cs);
+                    *c = match crate::eval::truthiness(&cv) {
+                        crate::eval::Tri::True => t,
+                        crate::eval::Tri::False => e,
+                        crate::eval::Tri::Unknown => {
+                            let (v, u) =
+                                crate::eval::binops::merge_x_word(t.val, t.unk, e.val, e.unk);
+                            // `merge_x_word` X-poisons every DIFFERING bit,
+                            // including above `w`; the generic path masks with
+                            // `top_mask`, this one with the op's own mask.
+                            W {
+                                val: v & m,
+                                unk: u & m,
+                            }
+                        }
+                    };
                 }
                 WOp::Slice { k, m } => {
                     let a = scratch.last_mut().expect("wprog stack");

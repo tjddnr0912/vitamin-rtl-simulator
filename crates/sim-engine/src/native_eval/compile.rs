@@ -612,8 +612,33 @@ pub(crate) fn lower(
                 return None;
             }
             lower(ir, wt, nonint, *cond, 0, true, ops)?;
+            let branches_at = ops.len();
             lower(ir, wt, nonint, *then_e, w, eff_signed, ops)?;
             lower(ir, wt, nonint, *else_e, w, eff_signed, ops)?;
+            // ⚠️ LAZINESS. `eval_ctx`'s `Ternary` arm runs the condition and then
+            // ONLY THE TAKEN BRANCH — both only when the condition is unknown.
+            // This VM has no control flow and evaluates both always, which is the
+            // same VALUE (every op below is pure) but not the same DIAGNOSTICS:
+            // `LoadIndexed` reads an element through `read_net`, and that is where
+            // an out-of-range or unknown index is REPORTED.
+            //
+            // Measured before the guard existed: `r = c ? 8'hAA : mem[9];` with a
+            // 4-element `mem` printed the right value and an `E4002` the
+            // interpreter, the tier-3 backend and iverilog all agree never
+            // happens — and since `E4002` is a `Severity::Error` the CLI counts
+            // into the exit code, `--backend vm` (the DEFAULT) exited 1 where
+            // every other backend exited 0. A diagnostic APPEARING is a
+            // divergence exactly as much as one going missing.
+            //
+            // The check asks the compiled OPS rather than the expression shape,
+            // so it is exact rather than conservative, and it is the same
+            // question tier-3's `wprog` asks for the same reason.
+            if ops[branches_at..]
+                .iter()
+                .any(|o| matches!(o, NOp::LoadIndexed { .. } | NOp::WLoadIndexed { .. }))
+            {
+                return None;
+            }
             ops.push(if wide {
                 NOp::WTernary {
                     w,

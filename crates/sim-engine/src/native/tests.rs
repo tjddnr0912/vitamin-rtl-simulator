@@ -1687,6 +1687,17 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
        wire       j8; assign j8 = a[0] & b[3];\n\
        wire [1:0] j9; assign j9 = {2{a[1]}};\n\
        wire [3:0] ja; assign ja = a[3:0];\n\
+       wire [3:0] k1; assign k1 = a[0] ? a : b;\n\
+       wire signed [3:0] k2; assign k2 = sa[3] ? sa : sb;\n\
+       wire [3:0] k3; assign k3 = a ? a : b;\n\
+       wire [3:0] k4; assign k4 = (a < b) ? (a + b) : (a - b);\n\
+       wire [3:0] k5; assign k5 = a[0] ? (a[1] ? a : b) : (a[2] ? b : a);\n\
+       /* There is deliberately NO row dedicated to the unknown-condition X
+          merge. Two were tried (identical arms; arms agreeing on half their
+          bits) and MEASURED redundant - over 65,536 states the rows above
+          already reach every agreement pattern, so both a give-up-whole-value
+          mutant and an always-X one die without them. A row that decides
+          nothing is worse than no row: it reads as coverage. */\n\
        wire [1:0] jc; assign jc = a[1 +: 2];\n\
        wire [1:0] jd; assign jd = a[3 -: 2];\n\
        wire [2:0] je; assign je = {a,b}[5 -: 3];\n\
@@ -1724,7 +1735,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             None => declined += 1,
         }
     }
-    assert_eq!(progs.len(), 81, "op battery coverage moved");
+    assert_eq!(progs.len(), 86, "op battery coverage moved");
     // COMPOUND comparison operands specifically: the per-op masks this slice
     // introduced exist because a program can hold two widths at once, and the
     // soundness review measured that EVERY comparison operand in the whole
@@ -1780,7 +1791,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
             }
         }
     }
-    assert_eq!(compared, 256 * 256 * 81);
+    assert_eq!(compared, 256 * 256 * 86);
 }
 
 /// The corpus + a keccak-shaped design, swept: every pure expression that the

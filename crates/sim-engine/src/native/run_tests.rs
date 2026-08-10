@@ -2460,3 +2460,47 @@ endmodule
     ];
     both_backends_stream(src, WANT, "out-of-range select");
 }
+
+/// S2 slice 7 — a ternary's UNTAKEN branch must not report.
+///
+/// The W compiler has no control flow, so it evaluates both branches and then
+/// selects; `eval_ctx` runs only the taken one. Every admitted op is pure with
+/// exactly one exception — `LoadIdx` COUNTS an out-of-range element read — so
+/// admission asks the compiled ops whether either branch can report and declines
+/// if so. The values here are identical either way; what this row measures is
+/// that no diagnostic appears, which is why it compares the whole stream.
+///
+/// ⚠️ Writing this row found the same defect in the tier-2 VM, which had the
+/// same eager design and no guard: `--backend vm` (the DEFAULT) emitted an
+/// `E4002` for the untaken branch and exited 1 where the interpreter, this
+/// backend and iverilog all exited 0. Fixed in `native_eval::compile`'s
+/// `Ternary` arm in the same slice, which is why this row runs on both backends
+/// rather than pinning the native one alone.
+#[test]
+fn s2_ternary_untaken_branch_does_not_report() {
+    let src = r#"
+module top;
+  reg [7:0] mem [0:3]; reg [7:0] oi, r; reg c;
+  initial begin
+    mem[0]=8'd10; mem[1]=8'd11; mem[2]=8'd12; mem[3]=8'd13;
+    oi = 8'd9; c = 1'b1;
+    r = c ? 8'hAA : mem[oi];
+    $display("A %h", r);
+    c = 1'b0;
+    r = c ? mem[oi] : 8'hBB;
+    $display("B %h", r);
+    c = 1'bx;
+    r = c ? 8'hAA : 8'hAA;
+    $display("C %h", r);
+    r = c ? 8'hA0 : 8'hB0;
+    $display("D %h", r);
+    $finish;
+  end
+endmodule
+"#;
+    // iverilog 13's, and NO diagnostic on any row. `C` is the one that separates
+    // the unknown-condition MERGE from an unconditional X: both branches are
+    // `8'hAA`, so every bit agrees and the result is `aa`, not `xx`.
+    const WANT: &[&str] = &["out|A aa\n", "out|B bb\n", "out|C aa\n", "out|D X0\n"];
+    both_backends_stream(src, WANT, "ternary laziness");
+}
