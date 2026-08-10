@@ -785,23 +785,50 @@ pub(crate) fn case_eq(op: BinOp, l: &Value, r: &Value) -> Value {
 }
 
 pub(crate) fn log_and(l: &Value, r: &Value) -> Value {
-    match (
+    tri_bit(log_bin_tri(
+        BinOp::LogAnd,
         crate::eval::sysfunc::truthiness(l),
         crate::eval::sysfunc::truthiness(r),
-    ) {
-        (Tri::False, _) | (_, Tri::False) => Value::zeros(1, false),
-        (Tri::True, Tri::True) => Value::one1(),
-        _ => Value::x1(),
-    }
+    ))
 }
 
 pub(crate) fn log_or(l: &Value, r: &Value) -> Value {
-    match (
+    tri_bit(log_bin_tri(
+        BinOp::LogOr,
         crate::eval::sysfunc::truthiness(l),
         crate::eval::sysfunc::truthiness(r),
-    ) {
-        (Tri::True, _) | (_, Tri::True) => Value::one1(),
-        (Tri::False, Tri::False) => Value::zeros(1, false),
-        _ => Value::x1(),
+    ))
+}
+
+/// `&&` / `||` over the two operands' TRUTH VALUES — the one spelling of the
+/// tri-valued table, taking `Tri` rather than `Value` so a caller that already
+/// has planes (the tier-3 W evaluator, via `truthiness_word`) reaches it without
+/// building two 72-byte values first.
+///
+/// Neither operator short-circuits here and neither does the generic evaluator:
+/// both operands are evaluated before the table is consulted, which is what
+/// makes an eager W program the same order rather than a different one.
+#[inline]
+pub(crate) fn log_bin_tri(op: BinOp, l: Tri, r: Tri) -> (u64, u64) {
+    match op {
+        BinOp::LogAnd => match (l, r) {
+            (Tri::False, _) | (_, Tri::False) => (0, 0),
+            (Tri::True, Tri::True) => (1, 0),
+            _ => (0, 1),
+        },
+        _ => match (l, r) {
+            (Tri::True, _) | (_, Tri::True) => (1, 0),
+            (Tri::False, Tri::False) => (0, 0),
+            _ => (0, 1),
+        },
     }
+}
+
+/// A one-bit `(val, unk)` pair as a `Value`.
+#[inline]
+fn tri_bit((v, u): (u64, u64)) -> Value {
+    let mut out = Value::zeros(1, false);
+    out.val[0] = v;
+    out.unk[0] = u;
+    out
 }

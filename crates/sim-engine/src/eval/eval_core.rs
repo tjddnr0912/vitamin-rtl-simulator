@@ -843,32 +843,90 @@ pub(crate) fn reduce_word(a: &Value, kind: RedKind) -> (u64, u64) {
     if a.width == 0 {
         return (0, 0); // degenerate; matches the old zeros(1) seed
     }
-    let mut any_unknown = false;
-    let mut any_known1 = false;
-    let mut any_known0 = false;
-    let mut ones: u32 = 0;
+    let mut f = RedFacts::default();
     for k in 0..nwords(a.width) {
         let m = low_mask(a.width - 64 * k as u32);
-        let av = a.val[k] & m;
-        let au = a.unk[k] & m;
+        f.absorb(a.val[k], a.unk[k], m);
+    }
+    reduce_verdict(kind, &f)
+}
+
+/// What a reduction needs to know about the bits it has seen so far, and nothing
+/// else: whether any bit is x/z, whether any is a definite 0, and how many are
+/// definite 1s. Split out so the multi-word loop above and the single-word entry
+/// point below accumulate through ONE spelling — the masking of `known0` in
+/// particular (`!av` sets every bit above the width, so it must be re-masked) is
+/// the kind of line a second copy drops.
+#[derive(Default)]
+pub(crate) struct RedFacts {
+    any_unknown: bool,
+    any_known0: bool,
+    ones: u32,
+}
+
+impl RedFacts {
+    #[inline]
+    pub(crate) fn absorb(&mut self, val: u64, unk: u64, m: u64) {
+        let av = val & m;
+        let au = unk & m;
         let known1 = !au & av; // definite-1 bits (already within m)
         let known0 = !au & !av & m; // !av sets high bits → re-mask
-        any_unknown |= au != 0;
-        any_known0 |= known0 != 0;
-        if known1 != 0 {
-            any_known1 = true;
-            ones += known1.count_ones();
-        }
+        self.any_unknown |= au != 0;
+        self.any_known0 |= known0 != 0;
+        self.ones += known1.count_ones();
     }
+}
+
+/// IEEE's reduction truth table over the accumulated facts — the one spelling,
+/// shared by the multi-word loop and the plane-level entry point.
+#[inline]
+pub(crate) fn reduce_verdict(kind: RedKind, f: &RedFacts) -> (u64, u64) {
     match kind {
-        RedKind::And if any_known0 => (0, 0),
-        RedKind::And if any_unknown => (0, 1),
+        RedKind::And if f.any_known0 => (0, 0),
+        RedKind::And if f.any_unknown => (0, 1),
         RedKind::And => (1, 0),
-        RedKind::Or if any_known1 => (1, 0),
-        RedKind::Or if any_unknown => (0, 1),
+        RedKind::Or if f.ones > 0 => (1, 0),
+        RedKind::Or if f.any_unknown => (0, 1),
         RedKind::Or => (0, 0),
-        RedKind::Xor if any_unknown => (0, 1),
-        RedKind::Xor => ((ones & 1) as u64, 0),
+        RedKind::Xor if f.any_unknown => (0, 1),
+        RedKind::Xor => ((f.ones & 1) as u64, 0),
+    }
+}
+
+/// A reduction over ONE ≤64-bit word — `reduce_word` for `nwords == 1`, entered
+/// with planes instead of a `Value`.
+#[inline]
+pub(crate) fn reduce_planes(val: u64, unk: u64, m: u64, kind: RedKind) -> (u64, u64) {
+    let mut f = RedFacts::default();
+    f.absorb(val, unk, m);
+    reduce_verdict(kind, &f)
+}
+
+/// The one-bit unary family (`!` and the six reductions) over ONE ≤64-bit word.
+///
+/// The plane-level entry point of `unary_self_of`, for the tier-3 W evaluator,
+/// which already holds planes — building a 72-byte `Value` to ask was measured
+/// at 6.7% of a picorv32 run (`one_word_value`). `unary_self_of` delegates here
+/// whenever its operand is a non-real value of width 1..=64, so the mapping from
+/// operator to reduction kind and the truthiness inversion are spelled once.
+///
+/// CALLER OBLIGATION: `w >= 1` (a zero-width reduction is `(0, 0)` by
+/// `reduce_word`'s own degenerate guard, which this does not repeat).
+#[inline]
+pub(crate) fn unary1_word(op: UnOp, val: u64, unk: u64, m: u64) -> (u64, u64) {
+    match op {
+        UnOp::LogNot => match crate::eval::sysfunc::truthiness_word(val, unk, m) {
+            Tri::True => (0, 0),
+            Tri::False => (1, 0),
+            Tri::Unknown => (0, 1),
+        },
+        UnOp::RedAnd => reduce_planes(val, unk, m, RedKind::And),
+        UnOp::RedNand => not1(reduce_planes(val, unk, m, RedKind::And)),
+        UnOp::RedOr => reduce_planes(val, unk, m, RedKind::Or),
+        UnOp::RedNor => not1(reduce_planes(val, unk, m, RedKind::Or)),
+        UnOp::RedXor => reduce_planes(val, unk, m, RedKind::Xor),
+        UnOp::RedXnor => not1(reduce_planes(val, unk, m, RedKind::Xor)),
+        _ => unreachable!("unary1_word only for reductions/lognot"),
     }
 }
 
@@ -886,6 +944,21 @@ pub(crate) fn reduce_bit(a: &Value, kind: RedKind, neg: bool) -> Value {
 /// gets the identical mapping instead of restating six reduction kinds and the
 /// truthiness inversion. `eval_unary_self` above is this plus the operand evaluation.
 pub(crate) fn unary_self_of(op: UnOp, a: &Value) -> Value {
+    // One word and not a real: the plane-level form answers, so there is exactly
+    // one mapping from operator to reduction kind. A real only reaches `LogNot`
+    // (the reductions are integral) and `truthiness` reads it as an f64, which
+    // the plane form deliberately cannot do — hence the guard.
+    if !a.is_real && a.width >= 1 && a.width <= 64 {
+        let (v, u) = unary1_word(
+            op,
+            a.val.first().copied().unwrap_or(0),
+            a.unk.first().copied().unwrap_or(0),
+            low_mask(a.width),
+        );
+        let mut r = Value::zeros(1, false);
+        r.set_vu(0, v, u);
+        return r;
+    }
     match op {
         UnOp::LogNot => match crate::eval::sysfunc::truthiness(a) {
             Tri::True => Value::zeros(1, false),

@@ -973,22 +973,27 @@ impl WProg {
                     let b = scratch.pop().expect("wprog stack");
                     let a = scratch.last_mut().expect("wprog stack");
                     // Each operand at ITS OWN width — see the compile-side note.
-                    let av = one_word_value(a.val, a.unk, lw, ls);
-                    let bv = one_word_value(b.val, b.unk, rw, rs);
-                    let r = if matches!(op, sim_ir::BinOp::LogAnd) {
-                        crate::eval::binops::log_and(&av, &bv)
-                    } else {
-                        crate::eval::binops::log_or(&av, &bv)
-                    };
-                    a.val = r.val.first().copied().unwrap_or(0);
-                    a.unk = r.unk.first().copied().unwrap_or(0);
+                    // Signedness plays no part in a TRUTH question, which is why
+                    // the plane form does not take it.
+                    let _ = (ls, rs);
+                    let (v, u) = crate::eval::binops::log_bin_tri(
+                        op,
+                        crate::eval::truthiness_word(a.val, a.unk, mask_of(lw)),
+                        crate::eval::truthiness_word(b.val, b.unk, mask_of(rw)),
+                    );
+                    a.val = v;
+                    a.unk = u;
                 }
                 WOp::Unary1 { op, ow, os } => {
                     let a = scratch.last_mut().expect("wprog stack");
-                    let av = one_word_value(a.val, a.unk, ow, os);
-                    let r = crate::eval::unary_self_of(op, &av);
-                    a.val = r.val.first().copied().unwrap_or(0);
-                    a.unk = r.unk.first().copied().unwrap_or(0);
+                    // `!` and the six reductions are all one-bit results over a
+                    // self-determined operand, and none of them consults its
+                    // sign — `unary1_word` is the plane-level entry point of the
+                    // very `unary_self_of` this used to call.
+                    let _ = os;
+                    let (v, u) = crate::eval::unary1_word(op, a.val, a.unk, mask_of(ow));
+                    a.val = v;
+                    a.unk = u;
                 }
                 WOp::Cmp { op, ow, osigned } => {
                     let b = scratch.pop().expect("wprog stack");
