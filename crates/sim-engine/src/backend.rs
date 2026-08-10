@@ -433,6 +433,31 @@ pub(crate) enum Op {
     /// and the incoming value's `is_real` (which selects the real→int rounding arm).
     /// Either one falls back to the general funnel.
     WriteScalar { lhs: u32, net: u32, val: u32 },
+    /// FUSED `EvalForLval` + `WriteScalar`: one op for a whole blocking assign
+    /// whose destination `plain_scalar_dest` proved, and whose RHS goes through
+    /// the kernel (no `Op::EvalNative`).
+    ///
+    /// The register file is an ABI, and for these two ops it is a pure cost: the
+    /// produced `Value` is written into `regs[dst]` by one op and `take`n back out
+    /// by the very next one. A `Value` is 72 bytes, so that is a round trip
+    /// through memory per assignment — and it is why simply running a
+    /// `CompiledBody` on tier-3 was measured a WASH against the tier-3 walk,
+    /// whose `compute_effect` hands its result straight to `apply_effect`.
+    /// Fusing removes the round trip and one dispatch, and changes nothing else:
+    /// the same two kernel methods are called with the same arguments in the same
+    /// order.
+    EvalWriteScalar { lhs: u32, net: u32, rhs: u32 },
+    /// FUSED `EvalForLval` + `ScheduleNbaScalar`, same proof and same reason.
+    ///
+    /// ⚠️ Routing this to `k_schedule_nba` instead is an EQUIVALENT mutation and
+    /// no test kills it, which is the honest reading rather than a hole:
+    /// `NbaLhs::of` returns `One(c.clone())` for a single-chunk lvalue — the same
+    /// thing the specialised method builds — and `k_resolve_lvalue_offsets` on a
+    /// destination `plain_scalar_dest` accepted yields exactly the `(0, 0)` pair
+    /// it bakes, with no index to report out of range. The two differ in COST,
+    /// not in what they queue, so the pin that protects the specialisation is the
+    /// op-mix census, not a value differential.
+    EvalNbaScalar { lhs: u32, rhs: u32 },
     /// `k_dispatch_systask(which, fmt, &arglists[args], sid)`. `sid` is the source
     /// StmtId — it keys the severity side table (`$fatal`/`$error`/…, P1-1).
     SysTask {
@@ -441,6 +466,76 @@ pub(crate) enum Op {
         args: u32,
         sid: u32,
     },
+}
+
+impl CompiledBody {
+    /// The op MIX of this body, for census pins.
+    ///
+    /// `compile_body`'s specialisations are silent by construction — a
+    /// `plain_scalar_dest` that quietly stopped matching would leave every other
+    /// test green and only show up as a lost few percent. Counting the ops is how
+    /// that becomes an assertion.
+    #[cfg(test)]
+    pub(crate) fn op_census(&self) -> std::collections::BTreeMap<&'static str, usize> {
+        let mut m = std::collections::BTreeMap::new();
+        for b in &self.blocks {
+            for o in &b.ops {
+                let k = match o {
+                    Op::EvalForLval { .. } => "EvalForLval",
+                    Op::EvalNative { .. } => "EvalNative",
+                    Op::ResolveOff { .. } => "ResolveOff",
+                    Op::WriteLval { .. } => "WriteLval",
+                    Op::ScheduleNba { .. } => "ScheduleNba",
+                    Op::ScheduleNbaScalar { .. } => "ScheduleNbaScalar",
+                    Op::WriteScalar { .. } => "WriteScalar",
+                    Op::EvalWriteScalar { .. } => "EvalWriteScalar",
+                    Op::EvalNbaScalar { .. } => "EvalNbaScalar",
+                    Op::SysTask { .. } => "SysTask",
+                };
+                *m.entry(k).or_insert(0usize) += 1;
+            }
+        }
+        m
+    }
+}
+
+impl Op {
+    /// Is this op the LAST one of the statement it was lowered from — i.e. does a
+    /// STATEMENT BOUNDARY fall immediately after it?
+    ///
+    /// The op stream does not record statement boundaries, and two of the
+    /// interpreter's per-statement obligations (`k_call_fatal`, `k_drain_diags`)
+    /// are defined AT one, so `vm_exec` has to recover them. It can, exactly:
+    /// `compile_body` lowers every statement to a run of ops whose final member is
+    /// one of the five below — a blocking assign ends in `WriteLval`/`WriteScalar`,
+    /// a nonblocking one in `ScheduleNba`/`ScheduleNbaScalar`, a system task in
+    /// `SysTask`. The three that answer `false` (`EvalForLval`, `EvalNative`,
+    /// `ResolveOff`) only ever appear BEFORE one of the five.
+    ///
+    /// ⚠️ Recovering the boundary is not decoration, and "check after every op"
+    /// is not an acceptable approximation of it. `run_body` consumes `call_fatal`
+    /// AFTER the write, so a fatal latched while resolving a dynamic index
+    /// (`mem[f(i)] = 1`, the one call position `is_codegen_able` does not exclude)
+    /// still performs its write and stops after it. Checking per-op would return
+    /// between `ResolveOff` and `WriteLval` and silently drop that write — and
+    /// with it the `E4002` that write owes. `fatal_in_an_lvalue_index_call`
+    /// separates the two (measured: making `ResolveOff` a boundary loses the
+    /// diagnostic).
+    ///
+    /// `_`-free on purpose (accept-gate rule): a new `Op` must be a forced
+    /// decision here, not default onto the "mid-statement" side.
+    fn ends_statement(&self) -> bool {
+        match self {
+            Op::EvalForLval { .. } | Op::EvalNative { .. } | Op::ResolveOff { .. } => false,
+            Op::WriteLval { .. }
+            | Op::ScheduleNba { .. }
+            | Op::ScheduleNbaScalar { .. }
+            | Op::WriteScalar { .. }
+            | Op::EvalWriteScalar { .. }
+            | Op::EvalNbaScalar { .. }
+            | Op::SysTask { .. } => true,
+        }
+    }
 }
 
 /// Lower one codegen-able `body` (statements resolved through `stmts`) to a
@@ -492,11 +587,8 @@ fn chunk_width_of(ir: &SimIr, c: &LvalChunk) -> u32 {
 ///
 /// The two conditions that are NOT immutable — `forced`, and whether the incoming value
 /// is real — are deliberately excluded and stay live tests inside the ops.
-fn plain_scalar_dest(
-    native: Option<(&SimIr, &WidthTable, &[bool], &[bool])>,
-    lhs: &Lvalue,
-) -> Option<u32> {
-    let (_, _, _, plain) = native?;
+fn plain_scalar_dest(ctx: Option<&CompileCtx>, lhs: &Lvalue) -> Option<u32> {
+    let plain = ctx?.plain;
     match lhs.chunks.as_slice() {
         [c] if matches!(c.kind, sim_ir::SelKind::Bit)
             && c.word.is_none()
@@ -510,15 +602,41 @@ fn plain_scalar_dest(
     }
 }
 
+/// What `compile_body` is allowed to specialise with. `None` ⇒ the portable form:
+/// every RHS through `Op::EvalForLval`, every write through the general funnel.
+///
+/// This replaced a four-tuple because the two specialisations are INDEPENDENT and
+/// tier-3 wants exactly one of them:
+///
+///   - `plain` drives `Op::WriteScalar`/`Op::ScheduleNbaScalar`. It describes net
+///     STORAGE, so it is true for whichever kernel executes the body.
+///   - `natives` drives `Op::EvalNative`, the tier-2 expression VM. **Tier-3 must
+///     not take it.** `NativeKernel::k_eval_native` builds a fresh `NativeScratch`
+///     per call and runs the tier-2 program, whereas `k_eval_for_lvalue` routes to
+///     `wprog` — the width-specialised evaluator S2 built, which is where tier-3's
+///     speed lives. Emitting natives there would swap the faster path for the
+///     slower one on every RHS both accept.
+///
+/// The table `try_compile` needs (`nonint`) lives INSIDE the option rather than
+/// beside a `bool`, so "no natives" cannot carry a stale or wrong-tier table.
+pub(crate) struct CompileCtx<'a> {
+    pub(crate) ir: &'a SimIr,
+    pub(crate) wt: &'a WidthTable,
+    pub(crate) plain: &'a [bool],
+    /// `Some(nonint)` ⇒ emit `Op::EvalNative` wherever `try_compile` accepts.
+    pub(crate) natives: Option<&'a [bool]>,
+}
+
 fn eval_rhs_op(
-    native: Option<(&SimIr, &WidthTable, &[bool], &[bool])>,
+    ctx: Option<&CompileCtx>,
     lhs: &Lvalue,
     rhs: u32,
     dst: u32,
     li: u32,
     natives: &mut Vec<NativeProg>,
 ) -> Op {
-    if let Some((ir, wt, nonint, _plain)) = native {
+    if let Some((c, nonint)) = ctx.and_then(|c| c.natives.map(|n| (c, n))) {
+        let (ir, wt) = (c.ir, c.wt);
         let ctx_w = lvalue_width_of(ir, lhs).max(wt.width(rhs));
         let ctx_signed = wt.signed(rhs);
         if let Some(prog) = crate::native_eval::try_compile(ir, wt, nonint, rhs, ctx_w, ctx_signed)
@@ -534,7 +652,7 @@ fn eval_rhs_op(
 pub(crate) fn compile_body(
     stmts: &[Stmt],
     body: &[BasicBlock],
-    native: Option<(&SimIr, &WidthTable, &[bool], &[bool])>,
+    ctx: Option<&CompileCtx>,
 ) -> CompiledBody {
     let mut lvalues: Vec<Lvalue> = Vec::new();
     let mut arglists: Vec<Vec<u32>> = Vec::new();
@@ -567,19 +685,38 @@ pub(crate) fn compile_body(
                     // `compiled_bodies_write_every_register_before_reading_it` pins the
                     // liveness property this rests on.
                     let v = 0;
-                    nregs = 1;
-                    ops.push(eval_rhs_op(native, lhs, *rhs, v, li, &mut natives));
                     // COMPILE-TIME SPECIALISATION: a destination the compiler can prove
                     // is a plain whole-net scalar has no dynamic index to sample, so the
                     // `ResolveOff` op and the `Offsets` value it produces both vanish —
                     // one fewer op in the stream and one fewer kernel call per assign.
-                    match plain_scalar_dest(native, lhs) {
-                        Some(net) => ops.push(Op::WriteScalar {
+                    //
+                    // And when the eval half is the KERNEL call (no `EvalNative`), the
+                    // pair fuses into a single op, which is what removes the register
+                    // round trip — see `Op::EvalWriteScalar`. Asked in this order because
+                    // the fused form must not be emitted for a natively-compiled RHS:
+                    // that value comes from `k_eval_native`, a different kernel method.
+                    let eval = eval_rhs_op(ctx, lhs, *rhs, v, li, &mut natives);
+                    match (
+                        plain_scalar_dest(ctx, lhs),
+                        matches!(eval, Op::EvalForLval { .. }),
+                    ) {
+                        (Some(net), true) => ops.push(Op::EvalWriteScalar {
                             lhs: li,
                             net,
-                            val: v,
+                            rhs: *rhs,
                         }),
-                        None => {
+                        (Some(net), false) => {
+                            nregs = 1;
+                            ops.push(eval);
+                            ops.push(Op::WriteScalar {
+                                lhs: li,
+                                net,
+                                val: v,
+                            })
+                        }
+                        (None, _) => {
+                            nregs = 1;
+                            ops.push(eval);
                             let o = 0;
                             noffs = 1;
                             ops.push(Op::ResolveOff { dst: o, lhs: li });
@@ -599,12 +736,24 @@ pub(crate) fn compile_body(
                     // REGISTER REUSE — see the blocking-assign arm. Written here, taken
                     // by the very next op.
                     let v = 0;
-                    nregs = 1;
-                    ops.push(eval_rhs_op(native, lhs, *rhs, v, li, &mut natives));
-                    ops.push(match plain_scalar_dest(native, lhs) {
-                        Some(_) => Op::ScheduleNbaScalar { lhs: li, val: v },
-                        None => Op::ScheduleNba { lhs: li, val: v },
-                    });
+                    let eval = eval_rhs_op(ctx, lhs, *rhs, v, li, &mut natives);
+                    match (
+                        plain_scalar_dest(ctx, lhs),
+                        matches!(eval, Op::EvalForLval { .. }),
+                    ) {
+                        // FUSED — see the blocking arm.
+                        (Some(_), true) => ops.push(Op::EvalNbaScalar { lhs: li, rhs: *rhs }),
+                        (Some(_), false) => {
+                            nregs = 1;
+                            ops.push(eval);
+                            ops.push(Op::ScheduleNbaScalar { lhs: li, val: v });
+                        }
+                        (None, _) => {
+                            nregs = 1;
+                            ops.push(eval);
+                            ops.push(Op::ScheduleNba { lhs: li, val: v });
+                        }
+                    }
                 }
                 Stmt::SysTask { which, fmt, args } => {
                     let ai = arglists.len() as u32;
@@ -632,16 +781,18 @@ pub(crate) fn compile_body(
                 // Self-width context: a condition is self-determined (§11.6.1 does not
                 // propagate a context width into it), which is exactly what the
                 // interpreter's `eval(cond)` produces before `truthiness`.
-                let native = native.and_then(|(ir, wt, nonint, _plain)| {
-                    let w = wt.width(*cond).max(1);
-                    crate::native_eval::try_compile(ir, wt, nonint, *cond, w, wt.signed(*cond)).map(
-                        |p| {
-                            let ni = natives.len() as u32;
-                            natives.push(p);
-                            ni
-                        },
-                    )
-                });
+                let native = ctx
+                    .and_then(|c| c.natives.map(|n| (c, n)))
+                    .and_then(|(c, nonint)| {
+                        let (ir, wt) = (c.ir, c.wt);
+                        let w = wt.width(*cond).max(1);
+                        crate::native_eval::try_compile(ir, wt, nonint, *cond, w, wt.signed(*cond))
+                            .map(|p| {
+                                let ni = natives.len() as u32;
+                                natives.push(p);
+                                ni
+                            })
+                    });
                 CompiledTerm::Branch {
                     cond: *cond,
                     native,
@@ -758,6 +909,16 @@ pub(crate) fn vm_exec(
                         .expect("WriteScalar before EvalForLval");
                     k.k_write_scalar(&body.lvalues[lhs as usize], net, value);
                 }
+                Op::EvalWriteScalar { lhs, net, rhs } => {
+                    let l = &body.lvalues[lhs as usize];
+                    let value = k.k_eval_for_lvalue(l, rhs);
+                    k.k_write_scalar(l, net, value);
+                }
+                Op::EvalNbaScalar { lhs, rhs } => {
+                    let l = &body.lvalues[lhs as usize];
+                    let value = k.k_eval_for_lvalue(l, rhs);
+                    k.k_schedule_nba_scalar(l, value);
+                }
                 Op::SysTask {
                     which,
                     fmt,
@@ -769,6 +930,40 @@ pub(crate) fn vm_exec(
                     Ctl::Fatal => return Step::Fatal,
                     Ctl::Continue => {}
                 },
+            }
+            // THE STATEMENT BOUNDARY — `run_body`'s two per-statement obligations,
+            // in its order (consume the fatal FIRST, then drain; a fatal returns
+            // without draining, and whoever owns the run loop drains after the
+            // body).
+            //
+            // Both were absent until S3-1, and the two have very different
+            // standing, which is worth stating because an earlier version of this
+            // comment claimed the same weight for both:
+            //
+            //  - `k_call_fatal` is REAL and OBSERVABLE. `call_fatal` is latched by
+            //    frame machinery, which `is_codegen_able` excludes from every
+            //    expression position it scans — but it does NOT scan an lvalue's
+            //    INDEX expression, so `mem[f(i)] = 1` with a `$fatal` inside `f`
+            //    reaches a compiled body. Without this line the body runs on past
+            //    the fatal. That was a live VM-vs-interpreter divergence before
+            //    this slice and is pinned by
+            //    `fatal_in_an_lvalue_index_call_stops_the_body`.
+            //  - `k_drain_diags` is a BACKSTOP and is NOT observable today, and
+            //    saying otherwise would be repeating a claim the tier-3 walk
+            //    already measured false (`body.rs`: deleting its copy leaves the
+            //    suite green and 25 out-of-range designs byte-identical). The
+            //    reason is that `format_args_str_with` drains before every
+            //    `$display`/`$error` line and the run loop drains after every
+            //    body, so no design has been found where the boundary drain is
+            //    the one that decides the order. It is here because the walk has
+            //    it and the two executors should not differ in what they promise;
+            //    treat it as unproven. (For `K = Scheduler` it is a documented
+            //    no-op outright.)
+            if op.ends_statement() {
+                if k.k_call_fatal() {
+                    return Step::Fatal;
+                }
+                k.k_drain_diags();
             }
         }
         match block.term {
@@ -1252,7 +1447,16 @@ mod tests {
             stmts: vec![0, 1, 2, 3, 4],
             term: Terminator::Return,
         }];
-        let cb = compile_body(&stmts, &body, Some((&ir, &wt, &nonint, &plain)));
+        let cb = compile_body(
+            &stmts,
+            &body,
+            Some(&CompileCtx {
+                ir: &ir,
+                wt: &wt,
+                plain: &plain,
+                natives: Some(&nonint),
+            }),
+        );
         let ops = &cb.blocks[0].ops;
         let n = |f: &dyn Fn(&Op) -> bool| ops.iter().filter(|o| f(o)).count();
 
@@ -1279,6 +1483,46 @@ mod tests {
         // A specialised blocking assign drops its `ResolveOff` — two general blocking
         // assigns remain, so two `ResolveOff` remain.
         assert_eq!(n(&|o: &Op| matches!(o, Op::ResolveOff { .. })), 2);
+
+        // ── S3-1: the TIER-3 context — same `plain`, no natives. ──
+        //
+        // The eval half is then the kernel call, so the two specialised pairs
+        // FUSE. This is the only place the fused arms are chosen, and pinning
+        // the whole op mix is how a `plain_scalar_dest` that quietly stopped
+        // matching (or a fusion that quietly stopped firing) becomes a failure
+        // instead of a few lost percent.
+        let cb3 = compile_body(
+            &stmts,
+            &body,
+            Some(&CompileCtx {
+                ir: &ir,
+                wt: &wt,
+                plain: &plain,
+                natives: None,
+            }),
+        );
+        let census = cb3.op_census();
+        assert_eq!(
+            census,
+            [
+                ("EvalForLval", 3),
+                ("EvalNbaScalar", 1),
+                ("EvalWriteScalar", 1),
+                ("ResolveOff", 2),
+                ("ScheduleNba", 1),
+                ("WriteLval", 2),
+            ]
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>(),
+            "tier-3 op mix moved: {:?}",
+            cb3.blocks[0].ops
+        );
+        // The register file is what the fusion is FOR: five statements, three of
+        // which still round-trip a `Value` through `regs`, and two of which no
+        // longer do. `nregs` stays 1 because the general ops still need it — the
+        // saving is per EXECUTION, not per compile, so this asserts the op mix
+        // above rather than a smaller `nregs`.
+        assert_eq!((cb3.nregs, cb3.noffs), (1, 1));
 
         // Without a native context NOTHING specialises: the fallback is the general form,
         // never a guess.
@@ -1385,6 +1629,13 @@ mod tests {
                         );
                         seen += 1;
                     }
+                    // The FUSED ops carry their value in a temporary that never
+                    // reaches the register file, so they have no register to
+                    // check — and that IS the property this test is about: a
+                    // fused op is one whose value never round-trips through
+                    // `regs`. Counted separately so the `seen` floor below
+                    // cannot be met by them.
+                    Op::EvalWriteScalar { .. } | Op::EvalNbaScalar { .. } => {}
                     Op::SysTask { .. } => {}
                 }
             }

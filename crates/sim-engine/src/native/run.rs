@@ -44,6 +44,50 @@ use crate::native::body::{body_is_walkable, run_body};
 use crate::native::kernel::{push_sorted_native, NativeKernel, NativeReady};
 use crate::sched::FinishReason;
 
+/// Run one process body — the ONE place tier-3 chooses between its two executors.
+///
+/// **S3 slice 1.** `run_body` walks `SimIr` and re-decides, on every execution,
+/// what each statement is (`compute_effect`), what its lvalue's offsets are, and
+/// which `wprog` its RHS wants. `crate::backend::vm_exec` runs a `CompiledBody`,
+/// where all three are decided once per template — and it is also cranelift's
+/// input (`jit::compile_body` takes a `&CompiledBody`), which is why this is S3's
+/// first step and not a detour around it.
+///
+/// The two executors are not two SEMANTICS: `vm_exec` calls the same `Kernel`
+/// methods in the same order that `compute_effect`/`apply_effect` do, and
+/// `compile_body`'s doc pins that correspondence. What this slice had to add to
+/// `vm_exec` was the STATEMENT BOUNDARY — `k_call_fatal` and `k_drain_diags`,
+/// which the walk performs and the op stream had no marker for (see
+/// `Op::ends_statement`).
+///
+/// Both call sites go through here so the choice cannot differ between the t0
+/// initializers and the region loop.
+fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, proc: u32, block: u32) -> Step {
+    if let Some(body) = k.compiled_for(proc as usize) {
+        // The per-process prologue (`$time`'s multiplier, `%m`'s scope). The walk
+        // does it inside itself; `vm_exec` leaves it to the caller, exactly as
+        // `Scheduler::vm_run_body` does.
+        k.k_enter_body(proc);
+        // Lease the register files. `mem::take` yields OWNED buffers, so they no
+        // longer borrow `k` and cannot alias the `&mut` kernel `vm_exec` needs.
+        let mut regs = std::mem::take(&mut k.vm_regs);
+        regs.clear();
+        regs.resize(body.nregs as usize, None);
+        let mut offs = std::mem::take(&mut k.vm_offs);
+        offs.clear();
+        offs.resize(body.noffs as usize, None);
+        #[cfg(test)]
+        crate::native::kernel::COMPILED_ACTIVATIONS.with(|c| c.set(c.get() + 1));
+        let step = crate::backend::vm_exec(k, &body, proc, block, &mut regs, &mut offs);
+        regs.clear();
+        k.vm_regs = regs;
+        offs.clear();
+        k.vm_offs = offs;
+        return step;
+    }
+    run_body(k, ir, proc, block)
+}
+
 /// The THIRD gate layer: can the executor that exists TODAY run this design?
 ///
 /// `design_eligibility` answers v1's scope and `NetArena::buildable` answers
@@ -206,7 +250,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     // (= re-fire normally), which is what makes `q <= d` wake
                     // `always @(q)`.
                     k.arena.ch.blocking_writer = Some(r.proc);
-                    let step = run_body(k, ir, r.proc, r.block);
+                    let step = dispatch_body(k, ir, r.proc, r.block);
                     k.arena.ch.blocking_writer = None;
                     // The walk drains at every statement boundary; this catches
                     // what happens AFTER the last one — an out-of-range read in a
@@ -495,7 +539,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // `finished` between initializers is likewise the engine's behaviour;
         // an earlier version of this loop returned early, which was a
         // difference with no rule behind it.
-        let _ = run_body(k, ir, pid, entry);
+        let _ = dispatch_body(k, ir, pid, entry);
         // REDUNDANT TODAY, and said so rather than left looking load-bearing:
         // `run_body` drains at every statement boundary and an initializer body
         // is straight-line assignments, so an out-of-range read in one is

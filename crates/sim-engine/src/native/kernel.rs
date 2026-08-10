@@ -329,6 +329,63 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// function. Anything else falls back to `eval::resolve_offsets` whole.
     pub(crate) icache: std::cell::RefCell<Vec<Option<IdxKind>>>,
     pub(crate) wscratch: std::cell::RefCell<Vec<crate::native::wprog::W>>,
+    /// **S3 slice 1 — the compiled body, one slot per process template.**
+    ///
+    /// The tier-3 walk decided per EXECUTION what each statement is
+    /// (`compute_effect`), re-resolved every lvalue's offsets and re-asked the
+    /// `wprog` cache on every assignment. A `CompiledBody` decides all of that
+    /// ONCE per template, and it is also the input cranelift takes
+    /// (`jit::compile_body`) — so this is S3's first step rather than a detour
+    /// around it.
+    ///
+    /// Same `VmSlot` type and same decide-once protocol as `SimState::vm_cache`,
+    /// deliberately: the compiled form is shared, not re-spelled. What differs is
+    /// the `CompileCtx` — tier-3 asks for the plain-scalar specialisation and
+    /// REFUSES `Op::EvalNative` (see `CompileCtx`).
+    pub(crate) bodies: Vec<crate::backend::VmSlot>,
+    /// Pooled register/offset files for `vm_exec`, leased per activation by
+    /// `std::mem::take` (an OWNED buffer cannot alias the `&mut self` the kernel
+    /// calls need). `nregs`/`noffs` are 1 and ≤1, so this is about not calling
+    /// malloc twice per process activation, not about size.
+    pub(crate) vm_regs: crate::backend::RegFile,
+    pub(crate) vm_offs: crate::backend::OffFile,
+    /// Run the compiled body when one exists?
+    ///
+    /// What this slice must prove is not byte-identity of one function against
+    /// itself — it is that two whole EXECUTORS agree over a whole run, and a
+    /// funnel that delegates cannot be its own oracle. So both halves have to be
+    /// reachable in one binary. In a NON-test build the initialiser is the
+    /// literal `true` and this is read once per activation; the switch that can
+    /// say otherwise exists only under `cfg(test)`.
+    pub(crate) use_compiled: bool,
+}
+
+// TEST-ONLY switches for the S3-1 differential.
+//
+// `USE_COMPILED` forces tier-3 back onto the `run_body` walk.
+// `COMPILED_ACTIVATIONS` counts activations that actually ran a compiled body —
+// the differential's ANTI-VACUITY reading: without it, a `compiled_for` that
+// silently returned `None` everywhere would compare the walk against the walk
+// and pass.
+//
+// Thread-local because `cargo test` runs test functions in parallel and two of
+// them walk the same corpus; a process-global would let one test's setting
+// decide another test's executor.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static USE_COMPILED: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    pub(crate) static COMPILED_ACTIVATIONS: std::cell::Cell<u64> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+fn use_compiled_default() -> bool {
+    USE_COMPILED.with(|c| c.get())
+}
+#[cfg(not(test))]
+fn use_compiled_default() -> bool {
+    true
 }
 
 /// One in-body waiter: what it waits for, where it resumes, and — for an
@@ -482,7 +539,75 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             icache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             wscratch: std::cell::RefCell::new(Vec::new()),
+            bodies: (0..ir.processes.len())
+                .map(|_| crate::backend::VmSlot::Unchecked)
+                .collect(),
+            vm_regs: Vec::new(),
+            vm_offs: Vec::new(),
+            use_compiled: use_compiled_default(),
         }
+    }
+
+    /// The compiled body for process template `proc`, compiling and caching on
+    /// first sight; `None` ⇒ this template stays on the tier-3 walk.
+    ///
+    /// `SimState::vm_compiled`'s protocol, over this kernel's own cache: the
+    /// codegen-ability question is asked ONCE per template and its answer
+    /// remembered on BOTH sides, and the returned `Rc` is an owned handle taken
+    /// out of the cache before any `&mut self` kernel call.
+    ///
+    /// `use_compiled == false` returns `None` BEFORE the cache is consulted, and
+    /// without writing to it. Not because the differential would otherwise break
+    /// (it builds a fresh kernel per run, so nothing carries over — an earlier
+    /// version of this note claimed it did), but because `use_compiled` is not a
+    /// property of the TEMPLATE: writing `NotCodegenable` would record an answer
+    /// to a different question in the slot that answers "is this body
+    /// codegen-able".
+    pub(crate) fn compiled_for(
+        &mut self,
+        proc: usize,
+    ) -> Option<std::rc::Rc<crate::backend::CompiledBody>> {
+        use crate::backend::VmSlot;
+        if !self.use_compiled {
+            return None;
+        }
+        match &self.bodies[proc] {
+            VmSlot::Compiled(rc) => return Some(std::rc::Rc::clone(rc)),
+            VmSlot::NotCodegenable => return None,
+            VmSlot::Unchecked => {}
+        }
+        // Copy the IR reference out so the immutable read does not borrow `self`
+        // across the cache write below (the same dance `vm_compiled` documents).
+        let ir: &SimIr = self.ir;
+        if !crate::backend::is_codegen_able(
+            &ir.stmts,
+            &ir.exprs,
+            &ir.processes[proc].body,
+            self.class_new_sites,
+        ) {
+            self.bodies[proc] = VmSlot::NotCodegenable;
+            return None;
+        }
+        // `plain_scalar` is a full-length `Vec<bool>` on `SimState`; take it for
+        // the duration of the compile and put it back, exactly as `vm_compiled`
+        // does, because `compile_body` borrows it while `self` is also borrowed.
+        let plain = std::mem::take(&mut self.sched.st.plain_scalar);
+        let compiled = std::rc::Rc::new(crate::backend::compile_body(
+            &ir.stmts,
+            &ir.processes[proc].body,
+            Some(&crate::backend::CompileCtx {
+                ir,
+                wt: &self.sched.st.wt,
+                plain: &plain,
+                // NOT `Some(..)`: tier-3's RHS path is `wprog`, and `EvalNative`
+                // would route around it into the tier-2 expression VM. See
+                // `CompileCtx`.
+                natives: None,
+            }),
+        ));
+        self.sched.st.plain_scalar = plain;
+        self.bodies[proc] = VmSlot::Compiled(std::rc::Rc::clone(&compiled));
+        Some(compiled)
     }
 
     /// The cached width-specialized program for `(eid, w, signed)`, compiling

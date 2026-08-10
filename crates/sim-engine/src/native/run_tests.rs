@@ -2504,3 +2504,409 @@ endmodule
     const WANT: &[&str] = &["out|A aa\n", "out|B bb\n", "out|C aa\n", "out|D X0\n"];
     both_backends_stream(src, WANT, "ternary laziness");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S3 slice 1 — THE COMPILED BODY.
+//
+// Tier-3 gained a second executor: `backend::vm_exec` over a `CompiledBody`,
+// chosen per template by `NativeKernel::compiled_for`. It is not a second
+// SEMANTICS — `vm_exec` calls the same `Kernel` methods `compute_effect`/
+// `apply_effect` call, in the same order — but "not a second semantics" is a
+// claim, and the two are different code. So the gate is the same shape every
+// earlier tier-3 slice used: run the SAME design twice on the SAME backend with
+// only the executor switched, and compare everything the user can see.
+//
+// The switch has to survive to run time (`USE_COMPILED`) because a funnel that
+// delegates cannot be its own oracle, and because what is compared here is two
+// whole RUNS, not two calls.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Run `src` natively twice — compiled bodies on, then off — and assert the two
+/// executors agree on everything observable.
+///
+/// Returns `Err` when the gate refuses the design, so the caller can count
+/// refusals instead of silently passing them.
+fn compiled_agrees_with_walk(src: &str, name: &str) -> Result<u64, &'static str> {
+    use crate::native::kernel::{COMPILED_ACTIVATIONS, USE_COMPILED};
+    let (ir, opts) = build_with_opts(src);
+    crate::native::run::runnable(&ir, &opts)?;
+
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = std::env::temp_dir();
+    let tag = format!(
+        "vita_s3_{}_{}_{}",
+        name.chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect::<String>(),
+        std::process::id(),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    let vcd_c = dir.join(format!("{tag}_c.vcd"));
+    let vcd_w = dir.join(format!("{tag}_w.vcd"));
+    let _ = std::fs::remove_file(&vcd_c);
+    let _ = std::fs::remove_file(&vcd_w);
+
+    let run = |use_compiled: bool, vcd: &std::path::Path| {
+        USE_COMPILED.with(|c| c.set(use_compiled));
+        COMPILED_ACTIVATIONS.with(|c| c.set(0));
+        let sink = MergedSink::default();
+        let res = simulate(
+            &ir,
+            &sink,
+            SimOpts {
+                backend: Backend::Native,
+                vcd_path_override: Some(vcd.to_string_lossy().into_owned()),
+                ..opts.clone()
+            },
+        );
+        USE_COMPILED.with(|c| c.set(true));
+        let acts = COMPILED_ACTIVATIONS.with(|c| c.get());
+        (res, sink.events.into_inner(), acts)
+    };
+    let (r_c, out_c, acts_c) = run(true, &vcd_c);
+    let (r_w, out_w, acts_w) = run(false, &vcd_w);
+
+    // ANTI-VACUITY, in three parts, all of them measured failures of an earlier
+    // draft of this gate:
+    //  1. `Backend::Native` FALLS BACK to the VM when a gate refuses, and then
+    //     both runs are the same run.
+    //  2. `USE_COMPILED = false` must actually reach the walk, or the "walk" run
+    //     is a second compiled run.
+    //  3. The compiled run must actually have COMPILED something, or both runs
+    //     are the walk. (This is the one that bites: `compiled_for` returning
+    //     `None` for every template — a narrowed `is_codegen_able`, a poisoned
+    //     cache — leaves every assertion below trivially true.)
+    assert_eq!(
+        r_c.backend,
+        Backend::Native,
+        "{name}: fell back to {:?} (refused {:?})",
+        r_c.backend,
+        r_c.native.refused
+    );
+    assert_eq!(acts_w, 0, "{name}: the walk run executed a compiled body");
+
+    assert_eq!(
+        out_c, out_w,
+        "{name}: the interleaved stdout+diagnostic stream differs between the \
+         compiled executor and the walk"
+    );
+    assert_eq!(
+        r_c.finish_reason, r_w.finish_reason,
+        "{name}: finish reason differs"
+    );
+    assert_eq!(r_c.sim_time, r_w.sim_time, "{name}: end time differs");
+    assert_eq!(r_c.exit_class, r_w.exit_class, "{name}: exit class differs");
+    let b_c = std::fs::read(&vcd_c).ok();
+    let b_w = std::fs::read(&vcd_w).ok();
+    if src.contains("$dumpvars") {
+        assert!(
+            b_c.is_some() && b_w.is_some(),
+            "{name}: the design dumps but a run produced no VCD"
+        );
+    }
+    assert_eq!(b_c, b_w, "{name}: VCD bytes differ");
+    let _ = std::fs::remove_file(&vcd_c);
+    let _ = std::fs::remove_file(&vcd_w);
+    Ok(acts_c)
+}
+
+/// THE S3-1 GATE: every corpus design, compiled executor vs walk.
+#[test]
+fn s3_compiled_body_matches_the_walk_over_corpus() {
+    let mut ran = 0usize;
+    let mut compiled = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in corpus_designs() {
+        match compiled_agrees_with_walk(&src, &name) {
+            Ok(acts) => {
+                ran += 1;
+                if acts > 0 {
+                    compiled += 1;
+                }
+            }
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    // EXACT, matching the sibling corpus gate — and `compiled` is pinned APART
+    // from `ran` because the two are very different numbers.
+    //
+    // ⚠️ **42 of the 72 comparisons are vacuous, and the count says so rather
+    // than hiding it.** A corpus design is generated as `initial begin … #d … end`
+    // more often than not, and a body with a `Delay` is not codegen-able, so on
+    // 42 designs NOTHING compiles and this test compares the walk with itself.
+    // That is why `s3_compiled_body_matches_the_walk_on_discriminating_designs`
+    // exists and why its rows assert `acts > 0` individually: the corpus proves
+    // the executor does not BREAK the designs it does not compile, and the
+    // dedicated designs are what actually exercise the compiled arms.
+    assert_eq!(
+        (ran, refused.len(), compiled),
+        (72, 0, 30),
+        "corpus coverage moved — re-pin deliberately. ran={ran} compiled={compiled} \
+         refused={refused:?}"
+    );
+}
+
+/// The corpus's `$dumpvars` designs, compiled, waveform for waveform.
+#[test]
+fn s3_compiled_body_waveforms_match_the_walk() {
+    let mut with_dump = 0usize;
+    let mut ran = 0usize;
+    for (name, src) in corpus_designs() {
+        if !src.contains("$dumpvars") {
+            continue;
+        }
+        with_dump += 1;
+        if compiled_agrees_with_walk(&src, &name).is_ok() {
+            ran += 1;
+        }
+    }
+    assert_eq!((with_dump, ran), (44, 44), "corpus VCD population moved");
+}
+
+/// The shapes the corpus does not separate, each named for the rule it covers.
+#[test]
+fn s3_compiled_body_matches_the_walk_on_discriminating_designs() {
+    for (name, src) in super::run_tests::s3_discriminating_designs() {
+        let acts = compiled_agrees_with_walk(&src, name)
+            .unwrap_or_else(|r| panic!("{name}: the gate refused a design built for it: {r}"));
+        assert!(
+            acts > 0,
+            "{name}: nothing compiled — this row compared the walk with itself"
+        );
+    }
+}
+
+/// Designs that separate a rule the corpus leaves untested.
+pub(super) fn s3_discriminating_designs() -> Vec<(&'static str, String)> {
+    vec![
+        // ── THE STATEMENT BOUNDARY ──
+        //
+        // `vm_exec` had no notion of one until this slice, and for tier-3
+        // `k_drain_diags` is NOT a no-op: the arena RECORDS an out-of-range
+        // access and reports it at the boundary. Without `Op::ends_statement`
+        // every E4002 in a compiled body would come out AFTER the body instead
+        // of interleaved with its `$display` lines — same bytes on stdout, same
+        // exit code, different ORDER in the merged stream. That is what this row
+        // reads.
+        (
+            "range_diag_interleaves_with_display",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  reg [7:0] r; integer i;
+  initial begin
+    mem[0]=8'd10; mem[1]=8'd11; mem[2]=8'd12; mem[3]=8'd13;
+    $display("before");
+    i = 9; r = mem[i];
+    $display("mid r=%0d", r);
+    i = 12; r = mem[i];
+    $display("after r=%0d", r);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The same rule with the out-of-range access in the LVALUE, so the
+        // diagnostic is produced by the write half rather than the read half.
+        (
+            "range_diag_on_lvalue_interleaves",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  integer i;
+  initial begin
+    $display("before");
+    i = 7; mem[i] = 8'd1;
+    $display("mid");
+    i = 2; mem[i] = 8'd2;
+    $display("after mem2=%0d", mem[2]);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ── THE FUSED OPS ──
+        //
+        // `EvalWriteScalar`/`EvalNbaScalar` are emitted only when the
+        // destination is a compile-time-proven plain scalar. A design with BOTH
+        // kinds of destination in one body separates the fused arm from the
+        // general one; without the array half, a `plain_scalar_dest` that
+        // wrongly said `Some` for everything would still pass.
+        (
+            "fused_and_general_destinations_in_one_body",
+            r#"
+module top;
+  reg [7:0] s, t;      // plain scalars -> fused
+  reg [7:0] mem [0:3]; // array         -> general
+  reg [7:0] w;
+  reg clk;
+  initial clk = 1'b0;
+  always #5 clk = ~clk;
+  always @(posedge clk) begin
+    s <= s + 8'd1;          // EvalNbaScalar
+    mem[s[1:0]] <= s;       // ScheduleNba (general)
+    t = s ^ 8'h5a;          // EvalWriteScalar
+    w[3:0] = t[7:4];        // WriteLval (part-select -> general)
+  end
+  initial begin
+    s = 8'd0; t = 8'd0; w = 8'd0;
+    mem[0]=0; mem[1]=0; mem[2]=0; mem[3]=0;
+    #100;
+    $display("s=%0d t=%0d w=%h m=%0d %0d %0d %0d", s, t, w, mem[0], mem[1], mem[2], mem[3]);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ── THE PER-PROCESS PROLOGUE (`k_enter_body`) ──
+        //
+        // The walk calls it inside itself; `vm_exec` leaves it to the caller, so
+        // `dispatch_body` has to. It installs THREE per-process facts —
+        // `cur_time_mult` and `cur_prec_mult` (the `timescale` `$time` is scaled
+        // by) and `cur_scope` (`%m`) — and none of them is visible unless two
+        // processes with DIFFERENT ones interleave. Omitting the call then
+        // leaves whatever the previous process installed, so every line reads as
+        // if it came from that other module.
+        //
+        // Separated by `%m` rather than by `timescale`: this harness parses the
+        // token stream directly and never runs the preprocessor, so a
+        // `` `timescale `` directive is a parse error here. `%m` needs no
+        // directive — two INSTANCES of one module already have two scopes — and
+        // it is carried by the same `enter_body` call, so the row covers the
+        // prologue even though it separates only one of its three facts.
+        // Measured: deleting `k_enter_body` from `dispatch_body` survived the
+        // whole suite until this row existed.
+        (
+            "enter_body_installs_the_scope_per_process",
+            r#"
+module leaf(input wire clk);
+  reg [7:0] n;
+  initial n = 8'd0;
+  always @(posedge clk) begin
+    n = n + 8'd1;
+    $display("%m n=%0d", n);
+  end
+endmodule
+
+module top;
+  reg clk;
+  leaf a(clk);
+  leaf b(clk);
+  initial begin
+    clk = 1'b0;
+    #1 clk = 1'b1;
+    #1 clk = 1'b0;
+    #1 clk = 1'b1;
+    #1 $display("%m done");
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ── `k_call_fatal` AT THE STATEMENT BOUNDARY ──
+        //
+        // `is_codegen_able` excludes a user call from every expression position
+        // it scans — and its own comment says "any expr position that can REACH
+        // a frame Call excludes the body" — but the walk it performs covers
+        // `rhs`, `delay`, `fmt` and `args`, NOT an lvalue's INDEX expression. So
+        // `mem[idx(i)] = …` compiles, `idx` runs in a frame, and a `$fatal`
+        // inside it latches `call_fatal` during `ResolveOff`.
+        //
+        // Two rules meet here and the row separates both: the fatal must STOP
+        // the body (or `$display("survived")` prints), and it must stop it AFTER
+        // the write (or the `E4002` that out-of-range write owes is lost). That
+        // is why the boundary is the end of the STATEMENT and not the end of
+        // every op.
+        (
+            "fatal_in_an_lvalue_index_call_stops_the_body",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  integer i;
+  function integer idx(input integer x);
+    begin
+      if (x > 100) $fatal(1, "idx too big");
+      idx = x;
+    end
+  endfunction
+  initial begin
+    i = 200;
+    mem[idx(i)] = 8'd7;
+    $display("survived i=%0d", i);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A REAL VALUE into a plain-scalar destination — the arm
+        // `write_lvalue`'s real→int coercion owns, reached through the FUSED op.
+        //
+        // Spelled without a real NET on purpose, and that is not a stylistic
+        // choice: a `real` declaration makes the whole design tier-3-INELIGIBLE
+        // (an S0 row), so the only way this arm is reachable at all is the one
+        // `write.rs` names — "`x = $itor(n)/2.0` needs no real NET anywhere".
+        // A first draft used `real x;` and the gate refused the design, which is
+        // the cheapest possible demonstration that the two facts are linked.
+        (
+            "real_value_into_a_fused_scalar_destination",
+            r#"
+module top;
+  reg [15:0] r; integer n;
+  initial begin
+    n = 15; r = $itor(n) / 2.0;   // 7.5 -> rounds
+    $display("r=%0d", r);
+    n = -5; r = $itor(n) / 2.0;   // -2.5 -> rounds
+    $display("r=%0d", r);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A branch whose condition is evaluated by `k_truthy` on both executors,
+        // plus a `Goto` back-edge, so the compiled control flow is exercised
+        // rather than a straight line.
+        (
+            "loop_and_branch_control_flow",
+            r#"
+module top;
+  reg [7:0] acc; integer i;
+  initial begin
+    acc = 8'd0;
+    for (i = 0; i < 10; i = i + 1) begin
+      if (i[0]) acc = acc + i[7:0];
+      else      acc = acc - i[7:0];
+    end
+    $display("acc=%0d", acc);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // `$finish` from inside a compiled body — `Op::SysTask`'s `Ctl::Finish`
+        // arm, which returns out of `vm_exec` mid-block.
+        (
+            "finish_mid_block_from_a_compiled_body",
+            r#"
+module top;
+  reg [7:0] a;
+  initial begin
+    a = 8'd1;
+    $display("one a=%0d", a);
+    $finish;
+    a = 8'd2;
+    $display("two a=%0d", a);
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+    ]
+}
