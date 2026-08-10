@@ -174,6 +174,21 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // below — counting them again would double-book the same net.
         real_elem_dyn_nets: _,
         string_elem_dyn_nets: _,
+        // CORE since V1 slice 1. SVA is not a runtime mechanism at all: elaborate
+        // DESUGARS `assert property(@(clk) a |-> b)` into `always @(clk) if (a &&
+        // !b) $error(…)`, so what reaches the engine is ordinary IR plus these two
+        // StmtId tables — and BOTH are read inside the SHARED `builtins::dispatch`
+        // (`assert_ctl` flips `st.assert_disabled`, `assert_fire` is the set that
+        // flip suppresses), which tier-3 already routes through. Refusing here
+        // bought nothing and cost 760 of the 2,834 measured fall-backs (§4.5.336).
+        //
+        // The shapes that genuinely need machinery are refused ELSEWHERE, by their
+        // own names: SVA liveness and `cover property` register a `final_procs`
+        // entry, so `native::run::executor_rows` refuses them as `final` blocks,
+        // and §16.4 deferred assertions are the separate `deferred_assert` row
+        // (their maturation hooks are not in tier-3's region cascade).
+        assert_fire: _,
+        assert_ctl: _,
         // ── v1-reject sidecars (§4.3) — each non-empty table disqualifies ───
         fork_modes,
         handle_copy_stmts,
@@ -199,8 +214,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         class_vtable,
         class_calls,
         class_field_widths,
-        assert_fire,
-        assert_ctl,
         file_directed_stmts,
     } = opts;
 
@@ -246,7 +259,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             + class_calls.len()
             + class_field_widths.len(),
     );
-    flag(&mut out, "sva", assert_fire.len() + assert_ctl.len());
     flag(&mut out, "file_directed", file_directed_stmts.len());
 
     // ── statement-level families with no v1 machinery ──────────────────────

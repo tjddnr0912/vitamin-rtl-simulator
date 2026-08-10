@@ -409,6 +409,24 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // width and sign. Found by an anti-vacuity counter, not by a failure:
         // the omission made a comparison agree because BOTH sides were blind.
         class_field_widths: sc.class_field_widths,
+        // …and the four ASSERTION side tables (V1 slice 1). Same failure mode as
+        // every entry above, and it bit this file the day the tables became
+        // reachable: SVA desugars to ordinary IR plus StmtId tables, so WITHOUT
+        // them a `$assertoff` is a plain `Display` that PRINTS instead of
+        // flipping `st.assert_disabled`, and the `assert_fire` suppression path
+        // is never entered — an assertion-control row in the differential corpus
+        // would then compare two backends on a design neither was executing as
+        // written, and agree.
+        //
+        // `defer_marks`/`defer_acts` for the mirror-image reason: they are what
+        // makes an `assert #0 (…)` design a DEFERRED assertion, and therefore what
+        // makes tier-3's `deferred_assert` refusal row reachable from any test at
+        // all. Without them that row is unreachable and a test asserting it fires
+        // reads `Ok(())` — which is exactly how this omission was found.
+        assert_fire: sc.assert_fire,
+        assert_ctl: sc.assert_ctl,
+        defer_marks: sc.defer_marks,
+        defer_acts: sc.defer_acts,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

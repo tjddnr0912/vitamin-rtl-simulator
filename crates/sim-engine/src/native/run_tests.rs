@@ -1416,13 +1416,128 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── V1 slice 1: SVA (§4.5.337) ─────────────────────────────────────
+        // These are here rather than in a file of their own because
+        // `adversarial_designs` is the set `agree` proves BOTH halves on: it
+        // calls `runnable()` first, so a row that silently started falling back
+        // fails LOUDLY instead of comparing the VM against itself. That matters
+        // more for this slice than for any before it — the change is the REMOVAL
+        // of a gate row, and a removal's only failure mode is a design that now
+        // runs where it did not.
+        //
+        // OVERLAPPING implication: the desugar is `always @(clk) if (a && !b)
+        // $error(…)`, and the `$error` sid is in `assert_fire`. The row fires at
+        // t=25, so exit class and the diagnostic stream both discriminate.
+        (
+            "sva_overlapping_implication_fires",
+            r#"
+module top;
+  reg clk = 0, a = 0, b = 0;
+  always #5 clk = ~clk;
+  initial assert property(@(posedge clk) a |-> b);
+  initial begin
+    #10 a = 1; b = 1;
+    #10 a = 1; b = 0;
+    #10 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // NON-OVERLAPPING (`|=>`) — the antecedent is delayed one clock through a
+        // synthesized pending reg, so this exercises a WRITE the overlapping form
+        // does not have (and the reg is 0-init, not X-init: `fresh_sva_reg0`).
+        (
+            "sva_non_overlapping_implication",
+            r#"
+module top;
+  reg clk = 0, a = 0, b = 0;
+  always #5 clk = ~clk;
+  initial assert property(@(posedge clk) a |=> b);
+  initial begin
+    #10 a = 1;
+    #10 a = 0; b = 0;
+    #10 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ASSERTION CONTROL is the half the implication rows cannot reach: a
+        // `$assertoff` site is a no-op `Display` whose sid is in `assert_ctl`, and
+        // dispatching it MUTATES `st.assert_disabled`, which then suppresses an
+        // `assert_fire` sid. Both windows are exercised — a violation while
+        // disabled (silent) and one after `$asserton` (fires) — so a backend that
+        // dropped either half changes the exit class.
+        (
+            "sva_assert_control_off_then_on",
+            r#"
+module top;
+  reg clk = 0, a = 0, b = 0;
+  always #5 clk = ~clk;
+  initial assert property(@(posedge clk) a |-> b);
+  initial begin
+    #7  $assertoff;   // t=7   assertions off
+    #3  a = 1; b = 0; // t=10  -> posedge 15 VIOLATES, suppressed
+    #6  a = 0;        // t=16  clear the window BEFORE re-enabling, or the
+                      //       still-high `a` violates again at posedge 25
+    #4  $asserton;    // t=20  -> posedge 25: a=0, implication holds
+    #10 a = 1; b = 0; // t=30  -> posedge 35 VIOLATES, fires
+    #10 $finish;      // t=40
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // SAMPLED-VALUE functions. `$past` needs its own history reg; `$rose`/
+        // `$fell`/`$stable` compare against it. They are legal ONLY inside a
+        // property (a bare `$past(d)` in an `always` is E3009), which is why the
+        // first probe of this slice measured nothing until it was moved inside.
+        (
+            "sva_sampled_value_functions",
+            r#"
+module top;
+  reg clk = 0, a = 0, b = 0;
+  always #5 clk = ~clk;
+  initial assert property(@(posedge clk) $past(a) |-> b);
+  initial assert property(@(posedge clk) $rose(a) |-> b);
+  initial assert property(@(posedge clk) $fell(a) |-> !b);
+  initial assert property(@(posedge clk) $stable(b) |-> 1'b1);
+  initial assert property(@(posedge clk) $sampled(a) |-> b);
+  initial begin
+    #10 a = 1; b = 1;
+    #10 a = 0; b = 0;
+    #10 $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A property over a COUNTER, so the checker reads a net the design is
+        // still driving through NBA — the shape where a backend that sampled at
+        // the wrong point in the region cascade would diverge without any
+        // assertion machinery being wrong.
+        (
+            "sva_property_over_nba_counter",
+            r#"
+module top;
+  reg clk = 0;
+  reg [3:0] c = 0;
+  always #5 clk = ~clk;
+  always @(posedge clk) c <= c + 1;
+  initial assert property(@(posedge clk) (c > 4'd2) |-> ($past(c) < c));
+  initial begin #100 $finish; end
+endmodule
+"#
+            .to_string(),
+        ),
     ]
 }
 
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 62, "adversarial set shrank");
+    assert_eq!(designs.len(), 67, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -1529,6 +1644,133 @@ endmodule
     // verdict came back "frame-local storage: S3"), and `fork_modes` non-empty
     // is an S0 reject. Both halves of that row are defence in depth against a
     // lost `.velab` trailer, not reachable paths.
+}
+
+/// The ABSOLUTE anchor for V1 slice 1 — what the assertion-control design MEANS,
+/// not merely that two backends agree about it.
+///
+/// ⚠️ Written because the mutation battery proved the corpus row alone is not
+/// enough. Dropping `assert_ctl` (or `assert_fire`) from `build_with_opts` left
+/// `sva_assert_control_off_then_on` GREEN: without the tables, `$assertoff`
+/// degrades into a plain `Display` and the suppression set is empty, so BOTH
+/// violations fire — identically on both backends. A native-vs-VM differential
+/// is structurally blind to that, because it is not a backend difference.
+///
+/// The same battery showed where the real protection for the SHARED dispatch
+/// lives: mutating the `assert_fire` early-return or the `assert_ctl` flip left
+/// every engine gate green and was killed only by `cli::sva_rest`'s absolute
+/// pins. Value-agreement between two backends cannot see a rule both of them
+/// read from one place — this test is the engine-side answer to that.
+///
+/// The design violates `a |-> b` TWICE: once at t=10 while assertions are off,
+/// once at t=25 after `$asserton`. Exactly ONE report is the whole claim.
+#[test]
+fn sva_assert_control_actually_suppresses_exactly_one_violation() {
+    let (ir, opts) = build_with_opts(
+        r#"
+module top;
+  reg clk = 0, a = 0, b = 0;
+  always #5 clk = ~clk;
+  initial assert property(@(posedge clk) a |-> b);
+  initial begin
+    #7  $assertoff;   // t=7   assertions off
+    #3  a = 1; b = 0; // t=10  -> posedge 15 VIOLATES, suppressed
+    #6  a = 0;        // t=16  clear the window BEFORE re-enabling, or the
+                      //       still-high `a` violates again at posedge 25
+    #4  $asserton;    // t=20  -> posedge 25: a=0, implication holds
+    #10 a = 1; b = 0; // t=30  -> posedge 35 VIOLATES, fires
+    #10 $finish;      // t=40
+  end
+endmodule
+"#,
+    );
+    crate::native::run::runnable(&ir, &opts).expect("must run natively, or this proves nothing");
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "fell back: {:?}",
+        r.native.refused
+    );
+    let rows = sink.events.into_inner();
+    let fires = rows.iter().filter(|r| r.contains("Assertion")).count();
+    assert_eq!(
+        fires, 1,
+        "exactly one violation must survive: the t=10 one is suppressed by \
+         `$assertoff`, the t=25 one fires after `$asserton`.\n{rows:#?}"
+    );
+    // …and the control statements themselves must be SWALLOWED, not printed: a
+    // `$assertoff` whose sid is missing from `assert_ctl` renders as an ordinary
+    // (empty) `Display` line, which is the other half of the same omission.
+    assert_eq!(
+        rows.iter().filter(|r| r.starts_with("out|")).count(),
+        0,
+        "assertion-control statements must not reach stdout\n{rows:#?}"
+    );
+    assert_eq!(r.exit_class, crate::ExitClass::HadErrors);
+}
+
+/// V1 slice 1's OTHER half: opening the `sva` row must not have opened the SVA
+/// shapes that genuinely need machinery tier-3 does not have.
+///
+/// Removing a gate row is the one change whose failure mode is a design that now
+/// RUNS, so the slice owes a pin on each neighbour that must still refuse — and
+/// on the REASON, because "refused" by the wrong row is how a maintainer later
+/// deletes the row that was actually load-bearing.
+///
+/// Both of these are real machinery gaps, not conservatism:
+///   * `cover property` (and SVA liveness) synthesize an end-of-sim obligation
+///     check registered in `final_procs`; tier-3's run loop has no post-loop
+///     drain, so `executor_rows` refuses them as `final` blocks.
+///   * a §16.4 DEFERRED assertion matures in the Observed/Reactive regions via
+///     `Scheduler::mature_deferred`, and tier-3's region cascade calls it
+///     nowhere — that is the separate `deferred_assert` row (14 of the 2,834
+///     measured fall-backs, against this slice's 760).
+#[test]
+fn sva_shapes_that_need_machinery_still_refuse_by_their_own_name() {
+    let cases: Vec<(&str, &str, &str)> = vec![
+        (
+            "cover property",
+            "`final` blocks (the post-loop drain is not restated)",
+            r#"
+module top;
+  reg clk = 0, a = 0, b = 0;
+  always #5 clk = ~clk;
+  initial cover property(@(posedge clk) a ##1 b);
+  initial begin #10 a = 1; #10 b = 1; #20 $finish; end
+endmodule
+"#,
+        ),
+        (
+            "deferred immediate assertion",
+            "deferred_assert",
+            r#"
+module top;
+  reg clk = 0, a = 0;
+  always #5 clk = ~clk;
+  always @(posedge clk) assert #0 (a) else $error("deferred");
+  initial begin #10 a = 1; #10 $finish; end
+endmodule
+"#,
+        ),
+    ];
+    for (what, row, src) in &cases {
+        let (ir, opts) = build_with_opts(src);
+        assert_eq!(
+            crate::native::run::runnable(&ir, &opts),
+            Err(*row),
+            "{what}: wrong refusal row"
+        );
+    }
+    assert_eq!(cases.len(), 2);
 }
 
 /// An out-of-range NBA whose timestep has NOTHING after it. The per-statement

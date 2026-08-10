@@ -93,7 +93,6 @@ fn sidecar_families_reject_from_opts() {
     o.fork_modes.insert((0, 0), sim_engine::JoinMode::All);
     o.probed_nets.push(0);
     o.class_new_sites.insert(0, 0);
-    o.assert_ctl.insert(0, 1);
     o.file_directed_stmts.insert(0);
     o.clocking_inputs.insert(0);
     let e = design_eligibility(&ir, &o);
@@ -106,9 +105,36 @@ fn sidecar_families_reject_from_opts() {
             ("file_directed", 1),
             ("fork", 1),
             ("probe", 1),
-            ("sva", 1),
         ]
     );
+}
+
+/// V1 slice 1: the SVA sidecars are CORE, and populating them disqualifies
+/// NOTHING.
+///
+/// The companion of the test above, and written as its own case rather than as a
+/// deletion from it: `assert_fire`/`assert_ctl` used to be listed there, so a
+/// reader diffing that vector sees only that a row left. What has to be asserted
+/// is the positive — these two tables can be non-empty on an ELIGIBLE design,
+/// because both are consumed inside the shared `builtins::dispatch` that tier-3
+/// already routes through, not by any machinery tier-3 lacks.
+///
+/// Populated ALONE (not alongside the reject families above): a verdict that
+/// already has five reasons cannot show that a sixth stopped firing.
+#[test]
+fn sva_sidecars_are_core_and_reject_nothing() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.assert_fire.insert(0);
+    o.assert_ctl.insert(0, 1);
+    let e = design_eligibility(&ir, &o);
+    assert!(
+        e.eligible,
+        "SVA sidecars must not disqualify: {:?}",
+        e.reject_reasons
+    );
+    assert_eq!(e.reject_reasons.len(), 0);
+    assert_eq!(e.refused, None, "and nothing downstream may refuse either");
 }
 
 /// Statement-level families: `force`/`release` and `disable` are ordinary `Stmt`
