@@ -424,7 +424,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 |---|---|---|---|
 | — | (현재) | — | 3,417 / 54.7% |
 | 1 | ✅ **SVA** — `sva` 행 완료(§4.5.337, +760 → **66.8%**) · `deferred_assert`(+14)는 별개 | +774 | **67.0%** |
-| 2 | **heap 저장 + 네 종류** (`heap-slot`+`string`·`queue`·`queue_ops`·`dyn_array`·`assoc`·`handle_copy`) | +560 | **76.0%** |
+| 2 | **heap 저장 + 네 종류** (`heap-slot`+`string`·`queue`·`queue_ops`·`dyn_array`·`assoc`·`handle_copy`) — **넷으로 갈린다, §5.1-c** | +560 | **76.0%** |
 | 3 | **서브루틴 프레임** (`task-frame`·`call-stmt`·`call-in-systask-arg`·`frame-reads-module-net`·`frame-stmt` …) | +712 | **87.4%** |
 | 4 | `stmt_effect` | +241 | 91.2% |
 | 5 | **class / OOP / CRV** | +163 | 93.9% |
@@ -445,6 +445,37 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ⭐ **상위 셋이 87.4% 를 산다.** 그리고 그 셋은 vita 의 Phase-2/3+ 자산 그 자체다 —
 SVA·힙 자료구조·서브루틴 프레임.
+
+#### 5.1-c 슬라이스 2(heap) 그라운딩 — **넷으로 갈리고, 슬라이스 1과 달리 진짜 작업이다** (2026-08-11)
+
+**⭐ 값은 넷 슬롯이 아니라 `dyn_heap[net]` 에 있다** — 핸들이 아니라 **넷 id 로 키잉된 별도 힙**
+이고, `NativeKernel` 은 이미 그 `SimState` 를 빌린다. 그래서 이것은 "새 저장소를 짓는 일" 이
+아니라 **라우팅**이다. 엔진 `read_net` 이 이미 그 모양이다 — 넷마다 비트맵으로
+`frame_local` → 프레임 · `dyn_is_handle` → `dyn_read`(힙) · 그 외 → 평면.
+
+**측정된 sub-slice (각각 독립 · 합 560):**
+
+| sub | 닫을 것 | +호출 |
+|---|---|---|
+| **2a** | `dyn_array` + `heap-slot` | **+187** |
+| **2b** | `string` + `heap-slot` | **+164** |
+| **2c** | `queue` + `heap-slot` | **+96** |
+| **2d** | `assoc` + `heap-slot` | **+32** |
+| — | `queue_ops` · `handle_copy` | **단독 +0** — 항상 자기 종류와 함께 발화하므로 딸려 온다 |
+
+**⭐⭐ 그리고 그라운딩이 비대칭 하나를 찾았다 — 이것이 슬라이스의 크기를 정한다.**
+`is_frame_local` 라우터는 **`kernel.rs` 에만 있고 `write.rs` 에는 없다**: S3a 가 프레임 호출을
+**통째로 엔진 실행기에 위임**했으므로 프레임 쓰기가 tier-3 의 쓰기 퍼널에 **도달하지 않기**
+때문이다. 그런데 heap 쓰기(`q.push_back(x)` · `s = "hi"` · `arr[i] = v`)는 **도달한다** — census
+가 그것을 확인한다(heap-only 설계 560건의 blocker 집합에 **`stmt_effect` 가 0건**이므로 그 쓰기는
+특수 효과가 아니라 평범한 퍼널을 탄다).
+
+**⇒ 슬라이스 2 는 슬라이스 1처럼 "리더에 arm 하나" 가 아니다.** 필요한 것은 ⓐ
+`NetArena::buildable` 이 그 종류를 받고 평면 슬롯을 **안 만드는 것**, ⓑ 복합 리더의 **세 번째
+arm**, ⓒ **쓰기 쪽 라우터**(새 기계장치 — 오늘 대응물이 없다), ⓓ VCD·dirty·엣지 채널이 그
+넷들을 어떻게 다루는지(엔진은 힙 넷을 파형에 어떻게 내는가). ⓒ 가 이 슬라이스의 본체다.
+
+⚠️ **2a 부터.** 가장 크고(+187) 자기완결적이며, 나머지 셋이 재사용할 라우팅 패턴을 세운다.
 
 ⚠️ **V1 이 이 계획의 전부다.** V2·V3 은 정리 작업이고, V1 은 tier-3 이 Phase-2/3+(OOP·CRV·SVA·
 coverage·string·queue·real math·program·vif)를 따라잡는 일이라 **길다**. V0 이 그 길이를 숫자로
