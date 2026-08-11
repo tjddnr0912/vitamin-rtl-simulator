@@ -819,12 +819,16 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     );
 
     // Design-gate refusal: `refused` names the family, the map keeps the detail.
+    //
+    // ⚠️ `real`, not the `string s; int q[$]` this used to use — V1 slice 2
+    // admitted every heap kind, and a refusal pin whose shape became eligible
+    // asserts nothing.
     std::fs::write(
         dir.join("q.sv"),
         "module t;\n\
-           string s; int q[$];\n\
-           initial begin s = \"a\"; q.push_back(1);\n\
-             $display(\"%s %0d\", s, q[0]); #1 $finish; end\n\
+           real r;\n\
+           initial begin r = 1.5;\n\
+             $display(\"%f\", r); #1 $finish; end\n\
          endmodule\n",
     )
     .unwrap();
@@ -833,8 +837,8 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     let m = std::fs::read_to_string(dir.join("obs3/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
-        "{\"eligible\": false, \"buildable\": false, \"refused\": \"queue\", \
-         \"reject_reasons\": {\"queue\": 1}}",
+        "{\"eligible\": false, \"buildable\": false, \"refused\": \"real\", \
+         \"reject_reasons\": {\"real\": 1}}",
         "{m}"
     );
     let _ = std::fs::remove_dir_all(&dir);

@@ -1754,7 +1754,18 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         gate_refused!("k_release", "statement scan rejects `force`/`release`")
     }
     fn k_queue_pop(&mut self, _lhs: &Lvalue, _rhs: u32) -> Value {
-        gate_refused!("k_queue_pop", "NetKind scan rejects queue storage")
+        // ⚠️ The row named here CHANGED in V1 slice 2c. It used to be the
+        // `NetKind` scan ("rejects queue storage"); that scan now ADMITS
+        // `Queue`, and what keeps this unreachable is a different row: a pop is
+        // `x = q.pop_front()`, a `BlockingAssign` whose rhs `rhs_is_stmt_effect`
+        // counts, so `stmt_effect` refuses the design. Measured, not assumed —
+        // a queue design without a pop runs natively today.
+        gate_refused!(
+            "k_queue_pop",
+            "the `stmt_effect` row: a pop is a `BlockingAssign` rhs that \
+             `rhs_is_stmt_effect` counts (the `NetKind` scan admits `Queue` \
+             since slice 2c)"
+        )
     }
     fn k_assoc_iter(&mut self, _lhs: &Lvalue, _rhs: u32) -> Value {
         gate_refused!("k_assoc_iter", "the assoc NetKind row; the `foreach`-over-dyn-array form is caught by the `dyn_array`/`stmt_effect` rows instead")

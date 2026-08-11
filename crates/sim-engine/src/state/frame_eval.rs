@@ -111,6 +111,36 @@ impl<'a> SimState<'a> {
         .eval(eid)
     }
 
+    /// The CONTEXT-WIDTH twin of [`Self::eval_expr_with`] — same routing, same
+    /// single instantiation, `eval_ctx` instead of `eval`.
+    ///
+    /// It exists because the queue/dyn element mutators (`push_back`, `insert`)
+    /// size their argument to the ELEMENT's width before storing it, and they
+    /// reached the store through `Scheduler::eval_ctx_top`, which is hard-wired
+    /// to the engine's own nets. On a tier-3 run `q.push_back(a)` then pushed
+    /// whatever `SimState.nets` held for `a` — X, since tier-3 never writes
+    /// there — while the literal `q.push_back(8'd99)` beside it was right.
+    /// Measured, not reasoned: `q: 49 99 42 7` on the VM, `q: x 99 X X` native.
+    ///
+    /// A separate function rather than a flag on `eval_expr_with` because the
+    /// two size their result differently, and a caller that reached for the
+    /// wrong one would be silently narrow rather than loud.
+    pub(crate) fn eval_ctx_with_reader<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: &N,
+        eid: u32,
+        ctx_width: u32,
+        ctx_signed: bool,
+    ) -> Value {
+        if nets.routes_heap_to_state() {
+            return self
+                .mk_eval_ctx_with(&crate::state::HeapRouted { st: self, nets })
+                .eval_ctx(eid, ctx_width, ctx_signed);
+        }
+        self.mk_eval_ctx_with(nets)
+            .eval_ctx(eid, ctx_width, ctx_signed)
+    }
+
     /// N1: evaluate a frame-body `BlockingAssign` RHS. `$sformatf(fmt, …)` is rendered
     /// through the SHARED formatter (`format_args_str`) — the generic `eval_sysfunc`
     /// arm cannot see the format string (it would dump the raw args), so a

@@ -192,8 +192,19 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // ── v1-reject sidecars (§4.3) — each non-empty table disqualifies ───
         fork_modes,
         handle_copy_stmts,
-        queue_slice_stmts,
-        queue_bounds,
+        // CORE since V1 slice 2c. Both queue-OPERATION tables live in `SimState`
+        // and are read by code tier-3 already shares: `queue_slice_stmts` is
+        // consulted inside `builtins::dispatch`, and `queue_bounds` by
+        // `SimState::enforce_queue_bound` — an `&self` method over the heap that
+        // touches no net store at all.
+        //
+        // What DID need work is the slice's BOUND expressions: `run_queue_slice`
+        // read them through `Scheduler::eval`, which is hard-wired to the
+        // engine's own nets, so a native `q2 = q[a:b]` clamped against X and
+        // yielded the empty queue. This row could only open together with
+        // threading the reader into that helper (see `run_queue_slice`'s doc).
+        queue_slice_stmts: _,
+        queue_bounds: _,
         coverage_manifest,
         probed_nets,
         stage_stmts,
@@ -219,12 +230,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
 
     flag(&mut out, "fork", fork_modes.len());
     flag(&mut out, "handle_copy", handle_copy_stmts.len());
-    // Queue OPERATIONS (slices, bounds) — queue STORAGE is counted by kind below.
-    flag(
-        &mut out,
-        "queue_ops",
-        queue_slice_stmts.len() + queue_bounds.len(),
-    );
     flag(&mut out, "coverage", coverage_manifest.len());
     // The G2 probe/stage rails ride the interpreter's change hooks; tier-3 v1
     // does not reproduce them (doc-21 §4.3), so an instrumented run stays on
@@ -344,9 +349,21 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
                 }
             }
             sim_ir::Stmt::SysTask { which, .. } => {
-                // FLAT only: a heap mutator writes too, but its design is
-                // already refused by the storage-kind row above, and counting it
-                // here would double-book the same statement.
+                // FLAT only. The original reason — "a heap mutator writes too,
+                // but its design is already refused by the storage-kind row
+                // above" — DIED with V1 slice 2, which admits `DynArray`,
+                // `String` and `Queue`. The split is still right, for a reason
+                // that is now direct rather than inherited: a heap mutator does
+                // not write a NET, it mutates `dyn_heap`, which lives in
+                // `SimState` and is the SAME object for both backends. Tier-3
+                // reaches it through the shared `builtins::dispatch`, so there
+                // is nothing for an executor to reproduce. Verified: a design
+                // whose only statements are `q.push_back(a)` / `d = new[n]` /
+                // `s.itoa(v)` runs natively and matches the VM byte for byte.
+                //
+                // ⚠️ It matched only after the mutators' ARGUMENTS were threaded
+                // through the reader (`eval_task_arg`/`eval_task_arg_ctx`) —
+                // they read `Scheduler::eval`, i.e. the engine's own nets.
                 if sim_ir::systask_net_write(*which) == sim_ir::NetWrite::Flat {
                     stmt_effect += 1;
                 }
@@ -362,7 +379,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // a PLAIN `int q[$]` has no sidecar entry at all, so the only complete
     // detector is the net table itself. The match is `_`-free: a new NetKind
     // is a format bump AND a forced classification here.
-    let mut queue_n = 0usize;
     let mut assoc_n = 0usize;
     let mut real_n = 0usize;
     for net in &ir.nets {
@@ -375,7 +391,7 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             // cannot take (differential-review find: the two gates disagreed).
             NetKind::Real => real_n += 1,
             NetKind::DynArray => {}
-            NetKind::Queue => queue_n += 1,
+            NetKind::Queue => {}
             NetKind::Assoc | NetKind::AssocStr => assoc_n += 1,
             NetKind::String => {}
         }
@@ -383,7 +399,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     flag(&mut out, "real", real_n);
     flag(&mut out, "dyn_elem_real", real_elem_dyn_nets.len());
     flag(&mut out, "dyn_elem_string", string_elem_dyn_nets.len());
-    flag(&mut out, "queue", queue_n);
     flag(&mut out, "assoc", assoc_n);
 
     // The storage-level half. `buildable` is allocation-free, so asking on every

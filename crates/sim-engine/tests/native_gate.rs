@@ -70,15 +70,55 @@ fn heap_storage_kinds_reject_by_net_kind() {
          endmodule\n",
     );
     assert!(!ok);
-    // V1 slice 2a admitted `dyn_array` and 2b admitted `string`: their values
+    // V1 slice 2a admitted `dyn_array`, 2b `string` and 2c `queue`: their values
     // live in `SimState::dyn_heap`, and tier-3 reaches them through the
     // composite reader, `write_routed`, and `HeapRouted` on the format path — so
-    // the container is no longer a disqualifier. The two kinds with no
-    // differential behind them yet stay, each under its own key (2c/2d).
+    // the container is no longer a disqualifier. `assoc` is the one kind with no
+    // differential behind it yet (2d), and it keeps its own key.
     assert_eq!(
         rs,
-        vec![("assoc", 1), ("queue", 1)],
+        vec![("assoc", 1)],
         "each storage family must be counted under its own key"
+    );
+}
+
+/// V1 slice 2c: a QUEUE alone no longer disqualifies, and neither do the two
+/// queue-OPERATION tables that used to ride the `queue_ops` row.
+///
+/// The positive assertion, for the same reason as the dyn-array case below it:
+/// a deletion from the vector above proves the key is gone, not that the shape
+/// runs. And this one carries a second claim the dyn-array case does not — that
+/// `q[a:b]` (`queue_slice_stmts`) and `int bq[$:2]` (`queue_bounds`) are core
+/// too, which is only true because both tables are read by code tier-3 already
+/// shares and the slice's BOUND expressions were threaded through the reader.
+#[test]
+fn a_queue_with_its_operations_is_core() {
+    let (ok, rs) = reasons(
+        "module t;\n\
+           int q[$];\n\
+           int r[$];\n\
+           int bq[$:2];\n\
+           reg [7:0] a;\n\
+           initial begin a = 8'd1;\n\
+             q.push_back(a); q.push_back(2); q.push_back(3);\n\
+             r = q[a:2]; bq.push_back(9);\n\
+             $display(\"%0d %0d %0d\", q.size(), r.size(), bq.size()); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "a queue design must be design-eligible, got {rs:?}");
+    assert!(rs.is_empty(), "no reject family may fire, got {rs:?}");
+
+    // The opts half, populated ALONE on an otherwise-clean design: a verdict
+    // that already has a reason cannot show that another stopped firing.
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.queue_slice_stmts.insert(0);
+    o.queue_bounds.insert(0, 2);
+    let e = design_eligibility(&ir, &o);
+    assert!(
+        e.eligible,
+        "the queue-op tables must disqualify nothing: {:?}",
+        e.reject_reasons
     );
 }
 
@@ -355,9 +395,16 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
 
     let clean = "module t; reg [7:0] q = 0;\n\
          initial begin #1 q = 1; $display(\"q=%0d\", q); $finish; end endmodule\n";
-    // Design gate refuses (heap kinds), storage would too.
-    let design_refused = "module t; string s; int q[$];\n\
-         initial begin s = \"a\"; q.push_back(1); $display(\"%s\", s); $finish; end endmodule\n";
+    // Design gate refuses, storage would too.
+    //
+    // ⚠️ The SHAPE here changed with V1 slice 2. It used to be `string s; int
+    // q[$]`, and slices 2a/2b/2c admitted all three of those kinds — this arm
+    // would have gone vacuous exactly as the storage arm nearly did at S3a.
+    // `real` is the kind left that BOTH halves refuse under their own names
+    // (design: the `real` row; storage: "real: S2 width class"), which is what
+    // this arm needs — a kind only one half refused would not test the AND.
+    let design_refused = "module t; real r;\n\
+         initial begin r = 1.5; $display(\"%f\", r); $finish; end endmodule\n";
     // Design gate PASSES (calls are core), storage refuses.
     //
     // ⚠️ The SHAPE here changed with S3a. It used to be a plain
@@ -381,7 +428,7 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     let mut saw_storage_refused = 0;
     for (name, src, want) in [
         ("clean", clean, None),
-        ("design", design_refused, Some("queue")),
+        ("design", design_refused, Some("real")),
         (
             "storage",
             storage_refused,

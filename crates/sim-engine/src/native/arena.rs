@@ -244,9 +244,8 @@ impl NetArena {
                 // materializes 8xlen) live in `dyn_read`/`dyn_write`, which the
                 // routes above reach.
                 NetKind::String => {}
-                NetKind::Queue | NetKind::Assoc | NetKind::AssocStr => {
-                    return Err("heap kind: outside R1 storage")
-                }
+                NetKind::Queue => {}
+                NetKind::Assoc | NetKind::AssocStr => return Err("heap kind: outside R1 storage"),
             }
             let words = nwords(nv.width.max(1)).max(1) as u64;
             off += words * 2 * u64::from(nv.array_len.max(1));

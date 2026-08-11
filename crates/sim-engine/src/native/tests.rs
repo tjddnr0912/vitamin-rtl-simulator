@@ -427,6 +427,23 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         assert_ctl: sc.assert_ctl,
         defer_marks: sc.defer_marks,
         defer_acts: sc.defer_acts,
+        // …and the two QUEUE-OPERATION tables (V1 slice 2c). Same failure mode
+        // as every entry above, and it made a row of this file's own corpus
+        // vacuous ON THE DAY IT WAS WRITTEN: `r = q[a:b]` lowers to an ordinary
+        // marker plus a `queue_slice_stmts` entry and `int bq[$:2]` to an
+        // ordinary queue plus a `queue_bounds` entry, so WITHOUT the tables the
+        // slice is not a slice and the bound is not a bound — and the row meant
+        // to test them compares two backends on a design neither is executing
+        // as written.
+        //
+        // ⚠️ How it was found is the part worth keeping: the mutation that
+        // reverts `run_queue_slice`'s reader threading was killed ONLY by the
+        // source-scan pin, never by the corpus row written for exactly that
+        // defect. A source scan is a CHANGE DETECTOR; it cannot stand in for a
+        // behaviour test, and a mutation battery that reports "killed" without
+        // saying BY WHAT will hide the difference.
+        queue_slice_stmts: sc.queue_slice_stmts,
+        queue_bounds: sc.queue_bounds,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

@@ -457,9 +457,9 @@ SVA·힙 자료구조·서브루틴 프레임.
 
 | sub | 닫을 것 | +호출 |
 |---|---|---|
-| **2a** | `dyn_array` + `heap-slot` | **+187** |
-| **2b** | `string` + `heap-slot` | **+164** |
-| **2c** | `queue` + `heap-slot` | **+96** |
+| **2a** | `dyn_array` + `heap-slot` | **+187** ✅ |
+| **2b** | `string` + `heap-slot` | **+164** ✅ |
+| **2c** | `queue` + `heap-slot` | **+96** ✅ (`queue_ops` 동반) |
 | **2d** | `assoc` + `heap-slot` | **+32** |
 | — | `queue_ops` · `handle_copy` | **단독 +0** — 항상 자기 종류와 함께 발화하므로 딸려 온다 |
 
@@ -539,6 +539,65 @@ tier-3 은 그것을 **말없이 상속**하고 있었다: 21 메서드 중 오�
 
 ⚠️ 그 assert 는 **이 슬라이스가 지은 것이 아니라 원래 있던 불변식**이다 — 2a 의 `assert_owns`
 와 함께, 아레나가 자기 계약을 말하게 해 둔 것이 두 번 연속으로 표적을 지목했다.
+
+##### 2c (`queue` + `queue_ops`, +96) 완료 (2026-08-11) — **그리고 2a·2b 가 틀린 채 배송돼 있었다**
+
+**⭐⭐ 이 슬라이스의 산출은 queue 가 아니라 발견이다.** 착수 전 차분이 **2a·2b 가 만든 라이브
+silent-wrong** 을 잡았다 — `builtins::dispatch` 는 대체 store 를 **파라미터로 받지만 포맷터를
+거치는 arm 만** 그것을 쓰고, 나머지는 `Scheduler::eval` / `eval_ctx_top` / `assoc_key_of` 로
+**`SimState` 자기 넷** 위에 `EvalCtx` 를 짓는다. 그것이 네이티브 런이 **한 번도 안 쓰는** store 다.
+힙 종류가 전부 거부되던 동안엔 그 arm 들이 도달 불가였고, 2a/2b/2c 가 넷을 도달 가능하게 만들었다:
+
+| 철자 | native | VM |
+|---|---|---|
+| `d = new[n]` (n = 넷) | `size=0` | `size=3` |
+| `s.itoa(v)` (v = 넷) | `s=0` | `s=200` |
+| `q.push_back(a)` (a = 넷) | `q[0]=x` | `q[0]=42` |
+| `r = q[a:b]` (a·b = 넷) | 빈 큐 | `size=2` |
+
+⭐ **판별자는 인자가 넷이라는 것 하나뿐이다** — 바로 옆의 `q.insert(i, 32'd99)` 는 리터럴이라
+맞았고, 2a·2b 의 차분 행이 **전부 리터럴 인자**라 두 스위트가 초록이었다. **슬라이스가 태스크를
+admit 하면 그 태스크의 인자는 두 번째 store 읽기이고 자기 행이 필요하다.**
+
+**고친 것**: `eval_task_arg`(§4.5.294 가 이미 지어 둔 것)로 넷을 라우팅하고, 원소 폭으로
+context-size 하는 두 mutator 를 위해 **폭 쌍둥이** `eval_task_arg_ctx` +
+`SimState::eval_ctx_with_reader` 를 지었다. 둘 다 `None` 팔이 **예전 그 호출 자체**라 엔진 경로는
+기계적 불변(§4.5.314 opt-in 규칙). `run_queue_slice` 는 리더를 파라미터로 받는다.
+
+**구조 핀** `every_untreaded_store_read_in_builtins_sits_behind_a_reject_row` — 남은 raw 읽기
+13개를 **파일별 개수 + 각각을 막는 행 이름**으로 고정한다. 행을 여는 슬라이스는 **여기서 먼저**
+깨진다. (남은 것: `dispatch.rs` 4 = file_directed·**assoc key(2d 소관)**·`$dumplimit`·`$fclose` ·
+`crv_draw.rs` 6 = class 행 · `render.rs` 2 = stage 행 · `queues_io.rs` 1 = seam 자신.)
+
+**queue 자체는 행 둘**: `buildable` 의 `NetKind::Queue` 와 `queue_ops`(= `queue_slice_stmts` +
+`queue_bounds`). 후자가 열린 이유는 **두 테이블 다 `SimState` 에 살고 tier-3 이 이미 공유하는
+코드가 읽기 때문**이다(`enforce_queue_bound` 는 넷 store 를 아예 안 만지는 `&self` 힙 메서드).
+
+⚠️ **`k_queue_pop` 을 막는 행이 바뀌었다** — 예전 이유(*"NetKind 스캔이 queue 저장을 거부"*)는
+이제 거짓이고, 실제로 막는 것은 `stmt_effect` 다(`x = q.pop_front()` 는 `rhs_is_stmt_effect` 가
+세는 `BlockingAssign`). 측정으로 확인: pop 없는 queue 설계는 오늘 네이티브로 돈다.
+
+⚠️ **거부 핀 셋이 공허해질 뻔했다** — `native_gate.rs`·`cli/obs.rs`·`cli/backend_flag.rs` 가
+전부 `string s; int q[$]` 를 "거부되는 설계" 로 쓰고 있었다. 전부 `real` 로 옮겼다(§5.1-b 슬라이스
+10 이라 한동안 안전하고, **양쪽 게이트 절반이 자기 이름으로 거부**하는 유일한 남은 종류다).
+
+**뮤테이션 11/11 사망** — 그런데 ⭐⭐ **배터리가 처음엔 셋을 "핀이 잡았다" 로 보고했고 그것이
+발견이었다.** 두 원인이 겹쳐 있었다:
+
+1. ⚠️ **`cargo nextest` 는 기본이 fail-fast** 라 첫 실패에서 나머지를 취소한다 — 기록된 killer 는
+   **가장 먼저 도는 테스트 하나**였다. `--no-fail-fast` 로 다시 물으니 셋 중 둘은 **코퍼스가 이미
+   잡고 있었다**.
+2. ⭐⭐ 남은 하나(`run_queue_slice` 의 리더 되돌리기)는 **진짜로 코퍼스가 눈멀어 있었다** —
+   `build_with_opts` 가 `queue_slice_stmts`/`queue_bounds` 를 **설치하지 않아서** `r = q[a:b]` 는
+   슬라이스가 아니었고 `int bq[$:2]` 는 bound 가 아니었다. **§4.5.337 이 SVA 로 겪은 함정의 재발**
+   (그때는 `assert_ctl`). 설치하자 코퍼스가 죽인다.
+
+⇒ **소스 스캔 핀은 변경 탐지기이지 동작 테스트가 아니다.** 핀만 잡는 뮤테이션이 남으면 그것은
+게이트가 강하다는 신호가 아니라 **그 행이 공허하다는 신호**다.
+
+⭐ **파형 축도 이번에 닫았다** — 그라운딩이 열어 둔 질문 ⓓ(*"VCD·dirty·엣지 채널이 힙 넷을 어떻게
+다루는가"*)의 답은 **양쪽 백엔드에서 셋 다 밖**이고(넷 dirty 채널 없음 = dyn 선례), 옆의 평면
+넷은 그대로 변화를 낸다. `$dumpvars` 를 든 queue+string 행으로 **VCD 바이트 비교**까지 영구화.
 
 <!-- 해결됨: 아래는 당시의 후보 목록 -->
 

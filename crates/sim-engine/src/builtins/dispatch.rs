@@ -131,7 +131,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     // form). The subrange is cloned BEFORE the dst slot is written, so a
     // self-slice `q = q[a:b]` is safe.
     if sched.st.queue_slice_stmts.contains(&sid) {
-        return run_queue_slice(sched, args);
+        return run_queue_slice(sched, nets, args);
     }
     // P1-5: the b/o/h variants change the default radix of unformatted args.
     let radix = sched.st.radixes.get(&sid).copied();
@@ -155,7 +155,9 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             // n: X/Z degrades to EMPTY + warn-once; an explicit 0 is
             // legal-silent (IEEE §7.5.1). Cap at the static array cap class —
             // a huge n is a t-runtime OOM hazard exactly like P2-6.
-            let nv = args.get(1).map(|&a| sched.eval(a));
+            let nv = args
+                .get(1)
+                .map(|&a| crate::builtins::eval_task_arg(sched, nets, a));
             let n = match nv {
                 Some(v) if v.has_xz() => {
                     dyn_warn_once(sched, net, "new[] size is X/Z; array degraded to empty");
@@ -267,7 +269,13 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             let v = match args.get(1) {
                 Some(&a) => {
                     let sw = sched.st.wt.get(a);
-                    let raw = sched.eval_ctx_top(a, w.max(sw.width), sw.signed);
+                    let raw = crate::builtins::eval_task_arg_ctx(
+                        sched,
+                        nets,
+                        a,
+                        w.max(sw.width),
+                        sw.signed,
+                    );
                     sched.st.coerce_dyn_elem(net, &raw, w)
                 }
                 None => Value::xs(w, false),
@@ -337,7 +345,9 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             // The index: X/Z (or beyond-u64 wide) → invalid; a NEGATIVE int
             // evaluates to a huge unsigned here and lands in the same OOB arm
             // (warn + no-op) — identical surface either way.
-            let idx = args.get(1).and_then(|&a| sched.eval(a).to_u64());
+            let idx = args
+                .get(1)
+                .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
             let len = sched
                 .st
                 .dyn_heap
@@ -369,7 +379,13 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
                 let v = match args.get(2) {
                     Some(&a) => {
                         let sw = sched.st.wt.get(a);
-                        let raw = sched.eval_ctx_top(a, w.max(sw.width), sw.signed);
+                        let raw = crate::builtins::eval_task_arg_ctx(
+                            sched,
+                            nets,
+                            a,
+                            w.max(sw.width),
+                            sw.signed,
+                        );
                         sched.st.coerce_dyn_elem(net, &raw, w)
                     }
                     None => Value::xs(w, false),
@@ -642,8 +658,12 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
                     Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
                     _ => None,
                 });
-            let i = args.get(1).and_then(|&a| sched.eval(a).to_u64());
-            let c = args.get(2).and_then(|&a| sched.eval(a).to_u64());
+            let i = args
+                .get(1)
+                .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
+            let c = args
+                .get(2)
+                .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
             if let (Some(net), Some(i), Some(c)) = (net, i, c) {
                 // R23: `str_putc` routes by where this string's bytes live. Writing
                 // `dyn_heap[net]` here unconditionally missed a FRAME-LOCAL `string`,
@@ -667,7 +687,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             if let Some(net) = net {
                 let v = args
                     .get(1)
-                    .map(|&a| sched.eval(a))
+                    .map(|&a| crate::builtins::eval_task_arg(sched, nets, a))
                     .unwrap_or(Value::xs(32, true));
                 let text = match which {
                     SysTaskId::StrItoa => {

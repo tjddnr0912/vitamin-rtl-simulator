@@ -1416,7 +1416,7 @@ endmodule
 "#
             .to_string(),
         ),
-        // ── V1 slice 2a: dynamic arrays (§4.5.339) ─────────────────────────
+        // ── V1 slice 2a: dynamic arrays (ROADMAP §5.1-c) ───────────────────
         // A DynArray net gets a DEAD slot in the arena and its elements live in
         // `SimState::dyn_heap`; `agree` proves both halves, since it asserts the
         // design is `runnable` before comparing — a row that silently started
@@ -1479,7 +1479,7 @@ endmodule
 "#
             .to_string(),
         ),
-        // ── V1 slice 2b: strings (§4.5.339) ────────────────────────────────
+        // ── V1 slice 2b: strings (ROADMAP §5.1-c) ──────────────────────────
         // A `string` net is the heap kind whose SHAPES differ most from a dyn
         // array: a whole-handle read materializes 8xlen with `is_str`, a
         // whole-handle assign strips leading NULs (§6.16), and a byte select is
@@ -1541,6 +1541,156 @@ module top;
     $display("%s %0h %0d", s, r, n);
     s = "cd"; r = 8'h5A; n = 7;
     $display("%s %0h %0d", s, r, n);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ── V1 slice 2c: queues (ROADMAP §5.1-c) ───────────────────────────
+        // The row that MEASURED the slice's real defect. Every argument here is
+        // a NET, not a literal: `push_back(a)`, `push_front(a+b)`, and the
+        // net-valued INDEX of `insert`/`delete`. Those reached the store through
+        // `Scheduler::eval`/`eval_ctx_top`, which are hard-wired to the ENGINE's
+        // nets — the store tier-3 never writes — so before the fix this printed
+        // `q=x 99 X X` against the VM's `q=49 99 42 7`. The literal `32'd99`
+        // beside them stayed right, which is exactly what makes the shape worth
+        // pinning: a design of literals is blind to it.
+        (
+            "queue_net_args",
+            r#"
+module top;
+  int q[$];
+  reg [7:0] a, b, i;
+  initial begin
+    a = 8'd42; b = 8'd7; i = 8'd1;
+    q.push_back(a); q.push_back(b); q.push_front(a + b);
+    q.insert(i, 32'd99);
+    $display("q=%0d %0d %0d %0d size=%0d", q[0], q[1], q[2], q[3], q.size());
+    q.delete(i);
+    $display("del=%0d %0d %0d size=%0d", q[0], q[1], q[2], q.size());
+    q.delete();
+    $display("all=%0d", q.size());
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The `queue_ops` row's two tables, which slice 2c opened alongside the
+        // storage kind: `queue_slice_stmts` (`r = q[a:b]`, with NET bounds — the
+        // same wrong-store read as above, in a helper the reader had to be
+        // threaded into) and `queue_bounds` (`int bq[$:2]`, whose post-op drop
+        // and W4020 come from `SimState::enforce_queue_bound`). Reversed and
+        // out-of-range bounds are here because their answer is the EMPTY queue,
+        // which is also what a wrong-store read degrades to — so the in-range
+        // row is what tells the two apart.
+        (
+            "queue_slice_and_bound",
+            r#"
+module top;
+  int q[$];
+  int r[$];
+  int bq[$:2];
+  reg [7:0] a, b;
+  initial begin
+    a = 8'd1; b = 8'd2;
+    q.push_back(10); q.push_back(20); q.push_back(30); q.push_back(40);
+    r = q[a:b];  $display("s1=%0d %0d %0d", r.size(), r[0], r[1]);
+    r = q[b:a];  $display("s2=%0d", r.size());
+    r = q[0:99]; $display("s3=%0d %0d", r.size(), r[3]);
+    bq.push_back(1); bq.push_back(2); bq.push_back(3); bq.push_back(4);
+    $display("bnd=%0d %0d", bq.size(), bq[2]);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // All THREE admitted heap kinds plus flat nets in one design, so the
+        // funnel has to send four destinations to three different stores from a
+        // single call site. A per-kind routing bug produces correct output for
+        // part of this and only part.
+        //
+        // `q.push_back(d[0])` is the row's second job and the only one in the
+        // corpus: a task argument that reads a HEAP net. That is what makes the
+        // `HeapRouted` wrapper inside `eval_ctx_with_reader` observable — the
+        // reader tier-3 hands `dispatch` is the ARENA, which does not own `d`,
+        // so without the wrapper this read reaches `assert_owns` instead of the
+        // heap. Every other argument here is a flat net, which only exercises
+        // the threading, not the routing.
+        (
+            "queue_beside_string_and_flat",
+            r#"
+module top;
+  int q[$];
+  string s;
+  reg [7:0] r;
+  int d[];
+  reg [7:0] n;
+  initial begin
+    n = 8'd2; s = "hi"; r = 8'hA5;
+    q.push_back(n); d = new[n];
+    d[0] = 77; d[1] = 88;
+    $display("%0d %s %0h %0d", q[0], s, r, d.size());
+    q.push_back(r); s = "bye"; r = 8'h5A;
+    q.push_back(d[0]);
+    $display("%0d %s %0h %0d %0d", q[1], s, r, d.size(), q[2]);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The WAVEFORM axis for the heap kinds, which `agree` only compares on a
+        // design that dumps. The grounding note for slice 2 listed "how do the
+        // VCD/dirty/edge channels treat these nets" as an open question; the
+        // answer is that a heap net is outside all three on BOTH backends (no
+        // net dirty channel, by the dyn precedent), and the flat nets beside it
+        // still produce their value changes. This row is what makes that an
+        // assertion rather than a claim — a routing bug that mirrored a heap
+        // write into the arena would show up here as an extra VCD record.
+        (
+            "queue_and_string_with_dumpvars",
+            r#"
+module top;
+  int q[$];
+  reg [7:0] r;
+  reg clk;
+  string s;
+  initial begin
+    $dumpfile("out.vcd"); $dumpvars(0, top);
+    clk = 0; r = 8'h11; s = "a";
+    #1 q.push_back(r); r = 8'h22; s = "bb"; clk = 1;
+    #1 q.push_back(r); r = 8'h33; clk = 0;
+    #1 $display("%0d %0d %0h %s", q.size(), q[0], r, s);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // ⚠️ Slices 2a and 2b shipped WITHOUT this row and were wrong for it.
+        // `new[n]`, `s.putc(i,c)` and `s.itoa(v)` read their arguments through
+        // the same un-threaded evaluator; with net-valued arguments 2a printed
+        // `size=0` for `new[3]` and 2b printed `s=0` for `itoa(200)`. Both
+        // slices' own rows used literals, so both suites were green. The lesson
+        // is not about queues: when a slice admits a task, its ARGUMENTS are a
+        // second store read and need their own row.
+        (
+            "heap_task_args_are_nets",
+            r#"
+module top;
+  int d[];
+  string s, t;
+  reg [7:0] n, v, i, c;
+  initial begin
+    n = 8'd3; v = 8'd200; i = 8'd1; c = 8'd90;
+    d = new[n];
+    s = "abc"; s.putc(i, c);
+    t.itoa(v);
+    $display("%0d %s %s", d.size(), s, t);
+    t.hextoa(v); $display("%s", t);
     $finish;
   end
 endmodule
@@ -1668,7 +1818,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 73, "adversarial set shrank");
+    assert_eq!(designs.len(), 78, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -1875,6 +2025,85 @@ fn every_tier3_store_goes_through_the_one_write_funnel() {
          `NativeKernel::write_routed`. Found: {sites:?}"
     );
     assert_eq!(sites[0].0, "kernel.rs");
+}
+
+/// The READ twin of the funnel pin: every store read a system task makes must go
+/// through the THREADED reader, or be behind a row that refuses the design.
+///
+/// ⚠️ This is the pin V1 slice 2 needed and did not have. `builtins::dispatch`
+/// takes the alternate store as a parameter, but only the arms that render
+/// through the formatter use it — the others call `Scheduler::eval` /
+/// `eval_ctx_top` / `assoc_key_of`, which build an `EvalCtx` over `SimState`'s
+/// own nets. That is the store a native run NEVER writes. While every heap kind
+/// was refused those arms were unreachable; slices 2a/2b/2c made four of them
+/// reachable and each one silently read X:
+///
+/// * `d = new[n]`            → `size=0`   (VM: 3)
+/// * `s.itoa(v)`             → `s=0`      (VM: 200)
+/// * `q.push_back(a)`        → `q[0]=x`   (VM: 42)
+/// * `r = q[a:b]`            → the empty queue
+///
+/// All four now go through `eval_task_arg` / `eval_task_arg_ctx`, whose `None`
+/// arm is literally the call they made before — so the engine is unchanged by
+/// construction (§4.5.314's opt-in rule).
+///
+/// This test pins what is LEFT. Each remaining site is listed with the row that
+/// makes it unreachable; opening any of those rows must fail here first, which
+/// is the whole point — the next slice cannot repeat slice 2's mistake by
+/// accident. The count is per file rather than per line so that moving code
+/// inside a file does not churn it.
+#[test]
+fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
+    // (file, expected raw-read sites, why each is unreachable)
+    let files: [(&str, usize, &str); 4] = [
+        (
+            "dispatch.rs",
+            4,
+            "`split_file_directed`'s fd (the `file_directed` row, and \
+             `$monitor`/`$strobe` are in `systask_refusal` too), the assoc key \
+             (the `assoc` NetKind row — slice 2d owns it), `$dumplimit`'s size \
+             and `$fclose`'s fd (both in `systask_refusal`)",
+        ),
+        (
+            "crv_draw.rs",
+            6,
+            "the whole class/CRV surface is the `class` row",
+        ),
+        ("render.rs", 2, "`$vita_stage` is the `stage` row"),
+        (
+            "queues_io.rs",
+            2,
+            "the `None` arms of `eval_task_arg` and `eval_task_arg_ctx` — the \
+             seams themselves, which is where a raw read is SUPPOSED to be",
+        ),
+    ];
+    let raw = [
+        "sched.eval(",
+        "sched.eval_ctx_top(",
+        "sched.assoc_key_of(",
+        "sched.st.read_net(",
+    ];
+    let srcs = [
+        ("dispatch.rs", include_str!("../builtins/dispatch.rs")),
+        ("crv_draw.rs", include_str!("../builtins/crv_draw.rs")),
+        ("render.rs", include_str!("../builtins/render.rs")),
+        ("queues_io.rs", include_str!("../builtins/queues_io.rs")),
+    ];
+    for (name, want, why) in files {
+        let src = srcs.iter().find(|(n, _)| *n == name).unwrap().1;
+        let got = src
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .filter(|l| raw.iter().any(|r| l.contains(r)))
+            .count();
+        assert_eq!(
+            got, want,
+            "{name}: raw store reads moved. Every one of them must stay behind \
+             a reject row — today: {why}. If a row was OPENED, thread the read \
+             through `eval_task_arg`/`eval_task_arg_ctx` instead of updating \
+             this number."
+        );
+    }
 }
 
 /// The ABSOLUTE anchor for V1 slice 1 — what the assertion-control design MEANS,

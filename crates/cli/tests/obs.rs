@@ -821,19 +821,23 @@ fn run_json_reports_native_fallback_on_a_refused_design() {
     );
 }
 
-/// S0: the `native` object pins the ③층 design-level verdict. Fork + queue +
-/// string in one design — three distinct reject families, three rows, and the
-/// units are per-family counts (a net for storage kinds, a table entry for
-/// fork), so each is exactly 1 here.
+/// S0: the `native` object pins the ③층 design-level verdict. Fork + real in
+/// one design — two distinct reject families whose SOURCES differ (a sidecar
+/// table entry for `fork`, a net-table kind for `real`), which is the claim
+/// worth pinning; the units are per-family counts, so each is exactly 1.
+///
+/// ⚠️ This used to be fork + queue + string, and V1 slice 2 admitted all three
+/// heap kinds out from under it. `real` is picked to be the kind BOTH gate
+/// halves still refuse under their own name (§5.1-b slice 10).
 #[test]
 fn run_json_native_pins_the_reject_families() {
     let (_, code, obs) = run(
         "module top;\n\
-           string s;\n\
-           int q[$];\n\
+           real r;\n\
+           integer n;\n\
            initial begin\n\
-             fork begin s = \"a\"; end begin q.push_back(1); end join\n\
-             $display(\"%s %0d\", s, q[0]);\n\
+             fork begin r = 1.5; end begin n = 2; end join\n\
+             $display(\"%0d\", n);\n\
              $finish;\n\
            end\n\
          endmodule\n",
@@ -844,7 +848,7 @@ fn run_json_native_pins_the_reject_families() {
     assert_eq!(
         field(&manifest, "native"),
         "{\"eligible\": false, \"buildable\": false, \"refused\": \"fork\", \
-         \"reject_reasons\": {\"fork\": 1, \"queue\": 1}}",
+         \"reject_reasons\": {\"fork\": 1, \"real\": 1}}",
         "full manifest:\n{manifest}"
     );
 }

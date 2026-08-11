@@ -8,7 +8,11 @@ use super::*;
 /// or an x/z bound ⇒ the empty queue (x/z also warns once, the dyn pattern).
 /// The result replaces dst wholesale (value semantics) and then the bounded-
 /// queue post-op runs (mirrors the whole-copy path).
-pub(crate) fn run_queue_slice(sched: &mut Scheduler, args: &[u32]) -> Ctl {
+pub(crate) fn run_queue_slice<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    args: &[u32],
+) -> Ctl {
     let (Some(dst), Some(src)) = (
         dyn_handle_net(sched, args.first()),
         dyn_handle_net(sched, args.get(1)),
@@ -16,7 +20,11 @@ pub(crate) fn run_queue_slice(sched: &mut Scheduler, args: &[u32]) -> Ctl {
         return Ctl::Continue; // elaborate never emits a malformed marker
     };
     let bound = |sched: &mut Scheduler, i: usize| -> Option<i64> {
-        let v = sched.eval(*args.get(i)?);
+        // Through the THREADED reader, not `sched.eval`: on a tier-3 run the
+        // bound expression's nets live in the arena, and reading the engine's
+        // untouched store here would silently clamp `q[a:b]` to the empty
+        // queue. `None` forwards to `sched.eval`, so the engine is unchanged.
+        let v = crate::builtins::eval_task_arg(sched, nets, *args.get(i)?);
         if v.has_xz() {
             return None;
         }
@@ -835,6 +843,23 @@ pub(crate) fn eval_task_arg<N: crate::eval::NetReader + ?Sized>(
     match nets {
         Some(n) => sched.st.eval_expr_with(n, eid),
         None => sched.eval(eid),
+    }
+}
+
+/// [`eval_task_arg`] for the arms that CONTEXT-size their argument before
+/// storing it — the queue/dyn element mutators, which resize to the element
+/// width. `None` forwards to `Scheduler::eval_ctx_top`, the exact call these
+/// sites made before, so the engine path is unchanged by construction.
+pub(crate) fn eval_task_arg_ctx<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    eid: u32,
+    ctx_width: u32,
+    ctx_signed: bool,
+) -> crate::value::Value {
+    match nets {
+        Some(n) => sched.st.eval_ctx_with_reader(n, eid, ctx_width, ctx_signed),
+        None => sched.eval_ctx_top(eid, ctx_width, ctx_signed),
     }
 }
 
