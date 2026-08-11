@@ -357,7 +357,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         if !due.is_empty() {
             let mut moved = false;
             for (lhs, v, offs) in due {
-                moved |= k.arena.write_lvalue(ir, &lhs, v, &offs);
+                moved |= k.write_routed(&lhs, v, &offs);
             }
             k.drain_range_diags();
             if moved {
@@ -464,7 +464,7 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             }
             let v = k.k_eval_for_lvalue(lhs, rhs);
             let offs = k.k_resolve_lvalue_offsets(lhs);
-            changed |= k.arena.write_lvalue(ir, lhs, v, &offs);
+            changed |= k.write_routed(lhs, v, &offs);
         }
         // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
         // drivers and write the net once — the engine's own loop, run EVERY
@@ -498,7 +498,7 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             let acc = crate::sched::resolve_md_group(kind, net_w, vals);
             let lhs = &ir.cont_assigns[first].lhs;
             let offs = k.k_resolve_lvalue_offsets(lhs);
-            changed |= k.arena.write_lvalue(ir, lhs, acc, &offs);
+            changed |= k.write_routed(lhs, acc, &offs);
         }
         // A cont-assign RHS can read an out-of-range array element, and the
         // arena can only COUNT that — same third-producer problem the waiter

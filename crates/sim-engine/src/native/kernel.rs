@@ -941,16 +941,15 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         batch.sort_by_key(|u| u.seq);
         let mut scratch =
             std::mem::replace(&mut self.nba_scratch_lhs, Lvalue { chunks: Vec::new() });
-        let ir = self.ir;
         for u in batch.drain(..) {
             match u.lhs {
                 NbaLhs::One(c) => {
                     scratch.chunks.clear();
                     scratch.chunks.push(c);
-                    self.arena.write_lvalue(ir, &scratch, u.sampled, &u.offsets);
+                    self.write_routed(&scratch, u.sampled, &u.offsets);
                 }
                 NbaLhs::Many(lv) => {
-                    self.arena.write_lvalue(ir, &lv, u.sampled, &u.offsets);
+                    self.write_routed(&lv, u.sampled, &u.offsets);
                 }
             }
         }
@@ -1089,6 +1088,30 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// `build_func_routing` from the same `func_table` the gate reads, so the
     /// two backends cannot disagree about which nets are frame slots.
     #[inline]
+    /// **THE tier-3 write funnel.** Every store this backend performs goes
+    /// through here, and it exists because the alternative was seven call sites
+    /// (`k_write_lvalue`, `k_write_scalar`, the NBA apply's two arms, and the
+    /// settle's three) each spelling the same routing question.
+    ///
+    /// Today it answers that question one way — the arena owns the store — so
+    /// this is mechanically the seven `arena.write_lvalue` calls it replaced.
+    /// The reason to have it anyway is V1 slice 2 (ROADMAP §5.1-c): a heap-kind
+    /// net's value does not live in a net slot at all, it lives in
+    /// `SimState::dyn_heap` keyed by net id, so admitting `string`/`queue`/
+    /// `dyn_array`/`assoc` means a WRITE-SIDE ROUTER — and the READ side already
+    /// has one (`read_net` below, and `SimState::read_net`'s own bitmap
+    /// dispatch), while the write side had no counterpart.
+    ///
+    /// ⚠️ It has to live on the KERNEL, not on `NetArena`: the destination for a
+    /// heap net is `self.sched.st`, and the arena does not hold the scheduler.
+    /// That is also why the arena's own `write_lvalue` stays exactly as it is —
+    /// it remains the flat store's funnel, and this is the layer above it that
+    /// chooses a store.
+    pub(crate) fn write_routed(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) -> bool {
+        let ir = self.ir;
+        self.arena.write_lvalue(ir, lhs, value, offsets)
+    }
+
     pub(crate) fn is_frame_local(&self, net: u32) -> bool {
         self.has_frames
             && self
@@ -1414,8 +1437,7 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     // ── WRITE: store-backed ──
 
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
-        let ir = self.ir;
-        self.arena.write_lvalue(ir, lhs, value, offsets);
+        self.write_routed(lhs, value, offsets);
     }
 
     fn k_eval_write_scalar(&mut self, lhs: &Lvalue, net: u32, rhs: u32) {
@@ -1469,12 +1491,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // resolved. The engine's twin takes the same shortcut; `_net` is the id
         // it already knows, and the funnel re-reads it from the chunk — keeping
         // ONE resolution path is worth more here than skipping one index.
-        let ir = self.ir;
         let off = Offsets::Inline {
             buf: [(0, 0); 2],
             len: 1,
         };
-        self.arena.write_lvalue(ir, lhs, value, &off);
+        self.write_routed(lhs, value, &off);
     }
 
     fn k_schedule_nba(&mut self, lhs: &Lvalue, value: Value) {

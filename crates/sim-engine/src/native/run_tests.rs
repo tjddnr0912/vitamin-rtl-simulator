@@ -1646,6 +1646,49 @@ endmodule
     // lost `.velab` trailer, not reachable paths.
 }
 
+/// The write funnel must STAY a funnel (V1 slice 2, ROADMAP §5.1-c).
+///
+/// `NativeKernel::write_routed` exists so that "which store owns this net" is
+/// asked in ONE place; slice 2 makes that question have two answers (the flat
+/// arena, and `SimState::dyn_heap` for a heap-kind net). A new
+/// `arena.write_lvalue` call added anywhere else would be a second spelling of
+/// the routing decision, and the failure mode is not a compile error — it is a
+/// heap net silently written into a dead flat slot while every read takes the
+/// other path, i.e. a write that vanishes.
+///
+/// A SOURCE scan, deliberately: no runtime test can see a call site that the
+/// design under test never reaches, and this file's own history is a list of
+/// gates that were green because nothing exercised the row.
+#[test]
+fn every_tier3_store_goes_through_the_one_write_funnel() {
+    let files = [
+        ("kernel.rs", include_str!("kernel.rs")),
+        ("run.rs", include_str!("run.rs")),
+        ("body.rs", include_str!("body.rs")),
+        ("frames.rs", include_str!("frames.rs")),
+    ];
+    let mut sites: Vec<(&str, usize)> = Vec::new();
+    for (name, src) in files {
+        for (i, line) in src.lines().enumerate() {
+            // Skip doc/comment lines: the funnel's own doc names the call it
+            // replaced, and a comment is not a call.
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if line.contains("arena.write_lvalue(") {
+                sites.push((name, i + 1));
+            }
+        }
+    }
+    assert_eq!(
+        sites.len(),
+        1,
+        "exactly one store site is allowed, and it is the body of \
+         `NativeKernel::write_routed`. Found: {sites:?}"
+    );
+    assert_eq!(sites[0].0, "kernel.rs");
+}
+
 /// The ABSOLUTE anchor for V1 slice 1 — what the assertion-control design MEANS,
 /// not merely that two backends agree about it.
 ///
