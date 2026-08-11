@@ -415,35 +415,15 @@ impl Scheduler<'_, '_> {
         ctx.eval_ctx(eid, ctx_width, ctx_signed)
     }
 
-    /// v5 ⑤: READ-phase assoc-key resolution (the scheduler-side mirror of
-    /// `EvalCtx::assoc_key` — one recipe, two entry points: lvalue offsets
-    /// here, rvalue reads in the eval arm).
-    pub(crate) fn assoc_key_of(&self, eid: u32) -> Option<i64> {
-        let ctx = EvalCtx {
-            ir: self.st.ir,
-            nets: self.st,
-            now: self.st.now,
-            wt: &self.st.wt,
-            time_mult: self.st.cur_time_mult,
-            rng: &self.st.rng,
-            plusargs: &self.st.plusargs,
-        };
-        ctx.assoc_key(eid)
-    }
-
-    /// v6: the byte-string twin of `assoc_key_of` (string-keyed assoc).
-    pub(crate) fn assoc_str_key_of(&self, eid: u32) -> Option<Vec<u8>> {
-        let ctx = EvalCtx {
-            ir: self.st.ir,
-            nets: self.st,
-            now: self.st.now,
-            wt: &self.st.wt,
-            time_mult: self.st.cur_time_mult,
-            rng: &self.st.rng,
-            plusargs: &self.st.plusargs,
-        };
-        ctx.assoc_str_key(eid)
-    }
+    // ⚠️ `assoc_key_of` / `assoc_str_key_of` USED to live here — a `Scheduler`
+    // method building an `EvalCtx` over its own `st`. V1 slice 2d removed them
+    // rather than adding threaded twins beside them: their only callers were the
+    // two assoc-delete arms in `builtins::dispatch`, which now go through
+    // `assoc_key_arg`/`assoc_str_key_arg`. Those reduce, on the engine's `None`
+    // arm, to `eval_ctx_top` plus the same shared key rules — the same
+    // `EvalCtx`, the same context, the same domain conversion, assembled at the
+    // call site instead of here. Keeping both would have left a second spelling
+    // one edit away from disagreeing with the lane that claims assoc WRITES.
 
     /// v6: one assoc-iteration step (`first`/`next`/`last`/`prev`) — the
     /// WRITE-phase body behind `k_assoc_iter`. Returns the int status

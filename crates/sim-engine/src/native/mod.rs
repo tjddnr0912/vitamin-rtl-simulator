@@ -379,7 +379,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // a PLAIN `int q[$]` has no sidecar entry at all, so the only complete
     // detector is the net table itself. The match is `_`-free: a new NetKind
     // is a format bump AND a forced classification here.
-    let mut assoc_n = 0usize;
     let mut real_n = 0usize;
     for net in &ir.nets {
         match net.kind {
@@ -390,16 +389,23 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             // published eligibility number from counting designs the storage
             // cannot take (differential-review find: the two gates disagreed).
             NetKind::Real => real_n += 1,
-            NetKind::DynArray => {}
-            NetKind::Queue => {}
-            NetKind::Assoc | NetKind::AssocStr => assoc_n += 1,
-            NetKind::String => {}
+            // V1 slice 2: every heap-storage kind is CORE. Their values live in
+            // `SimState::dyn_heap`, keyed by NET ID rather than by a handle, and
+            // `NativeKernel` already borrows that `SimState` — so admitting them
+            // was routing (a write funnel, a total reader, `HeapRouted`), never
+            // a second store. 2a `DynArray` · 2b `String` · 2c `Queue` ·
+            // 2d `Assoc`/`AssocStr`.
+            //
+            // ⚠️ What is NOT core is the SHAPES that mutate them from inside a
+            // call — `q.pop_front()`, `aa.first(i)`, `foreach` — and those are
+            // refused by `stmt_effect` under their own name, not by these rows.
+            NetKind::DynArray | NetKind::Queue | NetKind::String => {}
+            NetKind::Assoc | NetKind::AssocStr => {}
         }
     }
     flag(&mut out, "real", real_n);
     flag(&mut out, "dyn_elem_real", real_elem_dyn_nets.len());
     flag(&mut out, "dyn_elem_string", string_elem_dyn_nets.len());
-    flag(&mut out, "assoc", assoc_n);
 
     // The storage-level half. `buildable` is allocation-free, so asking on every
     // run costs one scan — worth it: run.json then carries BOTH numbers and the

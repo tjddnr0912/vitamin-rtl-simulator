@@ -863,6 +863,37 @@ pub(crate) fn eval_task_arg_ctx<N: crate::eval::NetReader + ?Sized>(
     }
 }
 
+/// An assoc DELETE key, read through the threaded reader (V1 slice 2d).
+///
+/// Built on [`eval_task_arg_ctx`] plus the SHARED key rules rather than on
+/// `Scheduler::assoc_key_of`: the context and the domain conversion are the very
+/// things `resolve_offsets` uses when it claims the write lane, so a second
+/// spelling here would let `aa[k] = v` and `aa.delete(k)` name different
+/// entries. `None` reduces to exactly what `assoc_key_of` does.
+pub(crate) fn assoc_key_arg<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    eid: u32,
+) -> Option<i64> {
+    let (w, s) = crate::eval::assoc_key_eval_ctx(sched.st.wt.get(eid));
+    crate::eval::assoc_key_of_value(&eval_task_arg_ctx(sched, nets, eid, w, s))
+}
+
+/// The string-keyed twin.
+///
+/// ⚠️ It agreed with the VM BEFORE it was threaded, and that was luck, not
+/// safety: a `string` key is itself a heap net, so the engine's own store
+/// happened to hold it. A packed key (`reg [15:0] k = "hi"`) reads the flat
+/// store and is wrong there — which is why this is threaded on the same day as
+/// its integer sibling rather than "when a test fails".
+pub(crate) fn assoc_str_key_arg<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    eid: u32,
+) -> Option<Vec<u8>> {
+    crate::eval::assoc_str_key_of_value(&eval_task_arg(sched, nets, eid))
+}
+
 /// The `$display` format engine, rendering against THIS state's nets.
 ///
 /// A literal forward to [`format_args_str_with`] passing `st` as the reader, so

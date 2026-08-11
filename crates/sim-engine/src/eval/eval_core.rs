@@ -105,6 +105,36 @@ pub(crate) fn packed_byte_at(v: &Value, i: usize) -> Option<u8> {
     Some(packed_byte(v, idx as u32))
 }
 
+/// The context an assoc KEY expression is evaluated in: its OWN signedness, at
+/// least 64 bits wide so the i64 key domain is not truncated on the way in.
+///
+/// Extracted (with the two below) because V1 slice 2d gave the key rule a SECOND
+/// caller — a system task reading its delete key through tier-3's net reader —
+/// and two spellings of "which entry does this key name" silently address
+/// different entries. `EvalCtx::assoc_key` is now one line over these.
+pub(crate) fn assoc_key_eval_ctx(sw: crate::width::SelfWidth) -> (u32, bool) {
+    (sw.width.max(64), sw.signed)
+}
+
+/// The key DOMAIN rule for an integer-keyed assoc: an evaluated key value
+/// becomes the engine's signed i64 key, and any X/Z (or a real) is not a key at
+/// all but an invalid index (§7.8.6).
+pub(crate) fn assoc_key_of_value(v: &Value) -> Option<i64> {
+    if v.is_real || v.has_xz() {
+        return None;
+    }
+    Some(v.val.first().copied().unwrap_or(0) as i64)
+}
+
+/// The string-keyed twin: packed bits become bytes MSB-first with leading 0x00
+/// STRIPPED, so the same text at any padded width is the same key.
+pub(crate) fn assoc_str_key_of_value(v: &Value) -> Option<Vec<u8>> {
+    if v.is_real || v.has_xz() {
+        return None;
+    }
+    Some(value_str_bytes(v))
+}
+
 /// ⓑ-breadth (v18): parse the leading integer prefix of `bytes` in `radix`
 /// (IEEE §6.16.9-12 `atoi`/`atohex`/`atooct`/`atobin`).
 ///
@@ -422,12 +452,8 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     /// §5.5; ⑥ elaborate casts the declared key type before the IR). Any X/Z
     /// (or a real) in the evaluated key → `None` = invalid index (§7.8.6).
     pub(crate) fn assoc_key(&self, eid: u32) -> Option<i64> {
-        let sw = self.wt.get(eid);
-        let v = self.eval_ctx(eid, sw.width.max(64), sw.signed);
-        if v.is_real || v.has_xz() {
-            return None;
-        }
-        Some(v.val.first().copied().unwrap_or(0) as i64)
+        let (w, s) = assoc_key_eval_ctx(self.wt.get(eid));
+        assoc_key_of_value(&self.eval_ctx(eid, w, s))
     }
 
     /// v6: evaluate a STRING-assoc key expression into the byte-string key
@@ -436,11 +462,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     /// §6.16 conversion family), so the same text at any padded width is the
     /// same key. X/Z anywhere (or a real) → `None` = invalid index.
     pub(crate) fn assoc_str_key(&self, eid: u32) -> Option<Vec<u8>> {
-        let v = self.eval(eid);
-        if v.is_real || v.has_xz() {
-            return None;
-        }
-        Some(value_str_bytes(&v))
+        assoc_str_key_of_value(&self.eval(eid))
     }
 
     /// Evaluate `eid` in a context of at least `ctx_width` bits with context

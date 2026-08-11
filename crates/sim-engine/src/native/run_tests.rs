@@ -1697,6 +1697,101 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── V1 slice 2d: associative arrays (ROADMAP §5.1-c) ───────────────
+        // The kind whose WRITE does not fit the shared `dyn_write`: a key is an
+        // i64 that cannot ride the `(offset, word)` u32 pairs, so it travels out
+        // of band and `write_routed` needs its own arm. Before that arm existed
+        // this design stored nothing and read back `x x 0 0` against the VM's
+        // `7 11 2 1` — the key silently became 0 and `dyn_write` refused the
+        // shape. Net-valued and NEGATIVE keys are here because the key domain is
+        // signed i64 and the pairs are u32: a route that truncated would put
+        // `-3` and `4294967293` in the same bucket.
+        (
+            "assoc_int_keys_and_delete",
+            r#"
+module top;
+  int aa[int];
+  reg [7:0] k;
+  reg signed [7:0] n;
+  initial begin
+    k = 8'd5; n = -8'sd3;
+    aa[3] = 7; aa[9] = 11; aa[k] = 42; aa[n] = 99;
+    $display("%0d %0d %0d %0d", aa[3], aa[9], aa[k], aa[n]);
+    $display("size=%0d ex3=%0d ex77=%0d miss=%0d", aa.num(), aa.exists(3), aa.exists(77), aa[77]);
+    // A 32-bit signed LITERAL naming the same entry an 8-bit signed NET wrote.
+    // The two agree only because a key is evaluated at >= 64 bits before it
+    // becomes an i64.
+    //
+    // ⚠️ The first version of this comment claimed the line MAKES the key-width
+    // rule observable here. The mutation battery refuted that: dropping the
+    // `.max(64)` leaves this row green and is killed by the engine's own
+    // `dyn_storage_b::assoc_{first_next,last_prev}_*` tests. The reason is the
+    // one this file keeps rediscovering — the rule lives in ONE shared function,
+    // so both backends move together and a native-vs-VM differential is blind to
+    // it by construction. The line stays because it says what the design means;
+    // the teeth for that rule are, correctly, elsewhere.
+    $display("neg=%0d", aa[-3]);
+    aa.delete(k);
+    $display("after size=%0d exk=%0d", aa.num(), aa.exists(5));
+    aa.delete();
+    $display("all size=%0d", aa.num());
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The string-keyed twin, with a PACKED key rather than a `string` one.
+        //
+        // ⚠️ That choice IS the row. `sa.delete(k)` with `string k` agreed with
+        // the VM before the reader was threaded — but by luck: a `string` is
+        // itself a heap net, so the engine's own store happened to hold it. A
+        // `reg [15:0] k = "hi"` reads the FLAT store, which a native run never
+        // writes, and that is the case that discriminates.
+        (
+            "assoc_string_keys_packed",
+            r#"
+module top;
+  int sa[string];
+  reg [15:0] k;
+  initial begin
+    k = "hi";
+    sa[k] = 4; sa["yo"] = 9;
+    $display("%0d %0d %0d %0d", sa[k], sa["yo"], sa.num(), sa.exists("no"));
+    sa.delete(k);
+    $display("after %0d %0d", sa.num(), sa.exists("yo"));
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // All FOUR heap kinds and a flat net in one design — the widest the
+        // funnel gets. One call site, four destinations, three stores, and the
+        // assoc lane splitting off before the other two.
+        (
+            "all_four_heap_kinds_together",
+            r#"
+module top;
+  int aa[int];
+  int sa[string];
+  int q[$];
+  int d[];
+  string s;
+  reg [7:0] r;
+  initial begin
+    r = 8'd9;
+    aa[r] = 1; sa["k"] = 2; q.push_back(r); d = new[2]; d[0] = 3; s = "z";
+    $display("%0d %0d %0d %0d %s %0h", aa[r], sa["k"], q[0], d[0], s, r);
+    r = 8'd4;
+    aa[r] = 5; q.push_back(aa[9]); s = "zz";
+    $display("%0d %0d %0d %s %0h", aa[4], q[1], q.size(), s, r);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // ── V1 slice 1: SVA (§4.5.337) ─────────────────────────────────────
         // These are here rather than in a file of their own because
         // `adversarial_designs` is the set `agree` proves BOTH halves on: it
@@ -1818,7 +1913,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 78, "adversarial set shrank");
+    assert_eq!(designs.len(), 81, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2058,11 +2153,10 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
     let files: [(&str, usize, &str); 4] = [
         (
             "dispatch.rs",
-            4,
+            3,
             "`split_file_directed`'s fd (the `file_directed` row, and \
-             `$monitor`/`$strobe` are in `systask_refusal` too), the assoc key \
-             (the `assoc` NetKind row — slice 2d owns it), `$dumplimit`'s size \
-             and `$fclose`'s fd (both in `systask_refusal`)",
+             `$monitor`/`$strobe` are in `systask_refusal` too), `$dumplimit`'s \
+             size and `$fclose`'s fd (both in `systask_refusal`)",
         ),
         (
             "crv_draw.rs",
@@ -2077,10 +2171,16 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
              seams themselves, which is where a raw read is SUPPOSED to be",
         ),
     ];
+    // ⚠️ `sched.assoc_` on purpose, not `sched.assoc_key_of(`. The narrow
+    // spelling missed `assoc_str_key_of`, the string-keyed twin sitting twenty
+    // lines above it — the pin was one arm short of the surface it claims to
+    // cover, and the design that would have found it is exactly the one slice 2d
+    // is about to admit. A pattern that names one member of a family is a
+    // whitelist pretending to be a scan.
     let raw = [
         "sched.eval(",
         "sched.eval_ctx_top(",
-        "sched.assoc_key_of(",
+        "sched.assoc_",
         "sched.st.read_net(",
     ];
     let srcs = [

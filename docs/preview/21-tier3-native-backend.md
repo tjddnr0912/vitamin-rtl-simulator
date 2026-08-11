@@ -34,14 +34,21 @@
 
 ---
 
-## 0.-12 ⭐⭐ 개정 19 — **V1 슬라이스 2(heap): 라우팅은 세 줄이고, 진짜 일은 태스크 인자였다** — 66.8% → **≈74.0%(census 투영)** (2026-08-11, ROADMAP §5.1-c)
+## 0.-12 ⭐⭐ 개정 19 — **V1 슬라이스 2(heap) 완료** — 재측정 **54.66% → 72.75%** · 발산 0 (2026-08-11, ROADMAP §5.1-c)
 
-V0 이 정한 순서의 2번. 넷으로 갈라 셋을 닫았다 — **2a `dyn_array` +187 · 2b `string` +164 ·
-2c `queue`(+`queue_ops`) +96**. 남은 것은 2d `assoc` +32.
+V0 이 정한 순서의 2번. 넷으로 갈라 **넷 다 닫았다** — 2a `dyn_array` · 2b `string` ·
+2c `queue`(+`queue_ops`) · 2d `assoc`+`AssocStr`.
 
-⚠️ **+호출 수와 %는 V0 census 의 투영이지 재측정이 아니다.** census 는 실측(각 설계의 blocker
-집합)이고 그 위의 누적은 산술이다. **재측정은 2d 로 슬라이스 2 가 닫힐 때 한 번** 한다 — V0 의
-계기(기본 백엔드 flip + 층별 독립 census)를 다시 세우는 비용을 슬라이스마다 내지 않기 위해서다.
+**재측정(투영 아님)**: V0 의 계기를 다시 세워 전 스위트를 돌렸다.
+
+| | V0 (2026-08-10) | 슬라이스 1+2 후 |
+|---|---|---|
+| `simulate()` 호출 | 6,251 | **6,290** |
+| 네이티브 | 3,417 (**54.66%**) | **4,576 (72.75%)** |
+| 발산 | 0 | **0**(기본 백엔드 flip: 5385 중 5382 통과 · 실패 3건은 전부 *"기본 백엔드가 vm"* 핀) |
+
+⚠️ **슬라이스마다 적어 둔 투영은 ≈74.0% 였고 실측은 72.75%다.** census 는 실측이지만 그 위의
+greedy 누적은 산술이고, 슬라이스가 **자기 거부 행을 새로 만들면**(아래 concat lvalue) 어긋난다.
 
 ### 값은 넷 슬롯이 아니라 `dyn_heap[net]` 에 있다
 
@@ -114,6 +121,53 @@ context-size 하는 mutator 용). 둘 다 `None` 팔이 **예전 그 호출 자�
 *"VCD·dirty·엣지 채널이 힙 넷을 어떻게 다루는가"* 의 답은 **양쪽 백엔드에서 셋 다 밖**(넷 dirty
 채널 없음 = dyn 선례)이고, 옆의 평면 넷은 그대로 변화를 낸다. `$dumpvars` 를 든 queue+string 행이
 `agree` 의 **VCD 바이트 비교**를 타므로 영구화됐다.
+
+### 2d: assoc — 유일하게 새 arm 이 필요했던 종류, 그리고 flip 이 찾은 2a 의 구멍
+
+dyn/string/queue 는 전부 공유 `dyn_write` 로 갔다. **assoc 키는 i64(또는 바이트열)라
+`(offset, word)` u32 쌍을 못 탄다** — `resolve_offsets` 가 키를 `Offsets::AssocKey`/`AssocStrKey`
+로 **대역 밖**에 싣고 `as_slice()` 는 `&[]` 를 낸다. 그래서 `unwrap_or((0,0))` 이 **모든 키를
+조용히 0 으로** 만들었다: `aa[3]=7; aa[9]=11` 이 `x x 0 0`(VM `7 11 2 1`). 수정 = `write_routed`
+가 `SimState::write_lvalue` 와 **같은 지점에서 같은 두 메서드로** 분기.
+
+키 읽기 둘도 배선하면서 **키 규칙을 추출**했다(`assoc_key_eval_ctx`·`assoc_key_of_value`·
+`assoc_str_key_of_value`) — `EvalCtx::assoc_key` 는 이제 그 위의 한 줄이고, 옛 진입점
+`Scheduler::assoc_key_of`/`assoc_str_key_of` 는 **지웠다**(두 번째 철자는 한 편집만큼 떨어져
+있으면 언젠가 **쓰기 lane 과 다른 엔트리**를 가리킨다).
+
+⚠️ **string 키는 배선 전에도 일치했고 그것은 운이었다** — `string` 키 자체가 힙 넷이라 엔진 store
+가 마침 들고 있었다. **packed 키**(`reg [15:0] k = "hi"`)가 판별자다.
+
+⚠️ **구조 핀에 패턴 구멍**: `sched.assoc_key_of(` 가 `assoc_str_key_of` 를 안 셌다 —
+**한 식구의 이름 하나를 적은 패턴은 스캔이 아니라 화이트리스트다.**
+
+#### ⭐⭐ flip 런이 2a 이래의 결함을 찾았다 — 그리고 코퍼스는 그것을 원리적으로 못 본다
+
+`write_routed` 는 lvalue **전체가 한 청크**일 때만 라우팅하고, 엔진은 **청크마다** 라우팅한다
+(`write_chunk` 의 첫 질문이 `dyn_is_handle[net]`). `{d[0], x} = 8'hAB` 이 두 청크를 다 아레나로
+보냈고 힙 청크가 `assert_owns` 에 닿았다. **그 두 테스트는 기본 백엔드로 도니 아레나에 아예 도달
+하지 않는다** — 신호는 **전 스위트 백엔드 flip** 뿐이었다.
+
+**거부했다**(storage 게이트·자기 이름). 라우팅은 소스를 청크별로 쪼개 서로 다른 store 로 보내는
+일이고 **그 분할 규칙은 이미 `NetArena::write_lvalue` 안에 있다** — 라우터의 두 번째 철자가
+§4.5.279 클래스다. 비용은 고르기 전에 쟀다(설계 3건). correct-support 는 퍼널에 **청크별 탈출구**
+를 주는 별도 슬라이스.
+
+⚠️ `string` 은 이 행에 없다: `{s, x} = …` 는 **어느 게이트에도 도달 안 한다**(elaborate 가 이미
+거부) — 넣었으면 공허한 행이었다.
+
+### 다음 표적 (census · 첫 blocker 기준이라 과소평가)
+
+| 잔여 blocker | 건수 |
+|---|---|
+| `task frames (Terminator::Call)`: S3b | **391** |
+| `dyn_elem_string` | **206** |
+| `a call in a system-task argument`: S3b | **203** |
+| `stmt_effect` | **200** |
+| `class` 164 · `fork` 94 · `handle_copy` 87 · `real` 69 · `coverage` 64 | |
+
+⭐ 상위 셋 중 **둘이 같은 것**(서브루틴 프레임 = 슬라이스 3)이고, **`dyn_elem_string` 206** 은
+슬라이스 2 가 일부러 남긴 원소 정제라 heap 가족의 자연스러운 다음 조각이다.
 
 ---
 

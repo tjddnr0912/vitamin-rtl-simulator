@@ -54,32 +54,109 @@ fn frame_calls_are_core_not_reject() {
     assert!(ok, "framed user calls must stay eligible: {rs:?}");
 }
 
-/// Heap-storage kinds disqualify via the NET TABLE, not a sidecar — a plain
-/// `int q[$]` has no sidecar entry at all, so the net-kind scan is the only
-/// complete detector (the reason this gate reads the IR and not just opts).
+/// V1 slice 2d: EVERY heap-storage kind is core, and the net-kind scan that
+/// used to refuse them refuses nothing.
+///
+/// ⚠️ This test used to assert the opposite, under the name
+/// `heap_storage_kinds_reject_by_net_kind`. Keeping it as a shrinking vector of
+/// expected keys would have made it a bookkeeping exercise; the claim worth
+/// pinning now is the POSITIVE one, and it is stronger than the four rows it
+/// replaces: all four kinds in ONE design, so the funnel has to send four
+/// destinations to three stores from a single call site.
+///
+/// The net-kind scan is still the right place to ask — a plain `int q[$]` has no
+/// sidecar entry at all, which is why the gate reads the IR and not just opts.
+/// What changed is the answer.
 #[test]
-fn heap_storage_kinds_reject_by_net_kind() {
+fn every_heap_storage_kind_is_core() {
     let (ok, rs) = reasons(
         "module t;\n\
            string s;\n\
            int q[$];\n\
            int d[];\n\
            int aa[int];\n\
-           initial begin s = \"x\"; q.push_back(1); d = new[2]; aa[3] = 4;\n\
-             $display(\"%s %0d %0d %0d\", s, q[0], d[0], aa[3]); $finish; end\n\
+           int sa[string];\n\
+           initial begin s = \"x\"; q.push_back(1); d = new[2]; aa[3] = 4; sa[\"k\"] = 5;\n\
+             $display(\"%s %0d %0d %0d %0d\", s, q[0], d[0], aa[3], sa[\"k\"]); $finish; end\n\
          endmodule\n",
     );
-    assert!(!ok);
-    // V1 slice 2a admitted `dyn_array`, 2b `string` and 2c `queue`: their values
-    // live in `SimState::dyn_heap`, and tier-3 reaches them through the
-    // composite reader, `write_routed`, and `HeapRouted` on the format path — so
-    // the container is no longer a disqualifier. `assoc` is the one kind with no
-    // differential behind it yet (2d), and it keeps its own key.
-    assert_eq!(
-        rs,
-        vec![("assoc", 1)],
-        "each storage family must be counted under its own key"
+    assert!(ok, "no heap kind may disqualify a design now: {rs:?}");
+    assert!(rs.is_empty(), "no reject family may fire, got {rs:?}");
+
+    // …and the storage half says the same thing, in its own words. Asked
+    // separately because the two gates are independent and V0 measured that they
+    // name the same feature twice — a design row opening while the storage row
+    // still refuses buys exactly nothing.
+    let ir = build(
+        "module t; int aa[int]; initial begin aa[1] = 2; $display(\"%0d\", aa[1]); $finish; end endmodule\n",
     );
+    assert_eq!(
+        sim_engine::native::arena::NetArena::buildable(&ir, &SimOpts::default()).err(),
+        None,
+        "the storage gate must admit an assoc net too"
+    );
+}
+
+/// V1 slice 2d's REJECT neighbour: a heap-kind chunk inside a CONCAT lvalue is
+/// refused, by the STORAGE gate, in its own words.
+///
+/// ⚠️ This pin exists because nothing else can hold the line. The shape was
+/// silently wrong from slice 2a onward — `write_routed` routes on a single-chunk
+/// lvalue while the engine routes per CHUNK — and the only thing that surfaced
+/// it was flipping the default backend and running the whole suite. Under the
+/// normal default those two tests run on the VM, so a corpus differential never
+/// reaches the arena at all, and the `assert_owns` instrument has nothing to
+/// name. A refusal pin is what makes the row survive an edit.
+///
+/// A dyn element and an assoc element, because the router's bug was about the
+/// CHUNK COUNT, not about which kinds are present.
+///
+/// ⚠️ NOT `string` — measured: `{s, x} = …` never reaches any gate, because
+/// elaborate already refuses it ("a string / real value … inside a
+/// concatenation lvalue is outside the v7 scope"). Listing it here would have
+/// been a vacuous row asserting the storage gate does something a phase above
+/// it already did.
+#[test]
+fn a_heap_chunk_inside_a_concat_lvalue_is_refused_by_storage() {
+    use sim_engine::native::arena::NetArena;
+    for src in [
+        "module t; int d[]; logic [3:0] x;\n\
+           initial begin d = new[2]; {d[0], x} = 8'hAB; $display(\"%0d %h\", d[0], x); end\n\
+         endmodule\n",
+        "module t; int aa[int]; logic [3:0] x;\n\
+           initial begin {aa[5], x} = 8'hAB; $display(\"%0d %h\", aa[5], x); end\n\
+         endmodule\n",
+    ] {
+        let ir = build(src);
+        // The DESIGN gate says yes — heap kinds are core since slice 2. The
+        // refusal is the storage gate's, which is the honest owner: the store
+        // cannot represent a write it would have to split across two stores.
+        assert!(
+            design_eligibility(&ir, &SimOpts::default()).eligible,
+            "the design gate has no quarrel with these: {src}"
+        );
+        assert_eq!(
+            NetArena::buildable(&ir, &SimOpts::default()).err(),
+            Some(
+                "a heap-kind chunk inside a concat lvalue: the split would have to route per chunk"
+            ),
+            "storage must refuse: {src}"
+        );
+    }
+
+    // The NEIGHBOUR that must keep running: one chunk is the supported shape,
+    // and a multi-chunk lvalue of purely FLAT nets has nothing to route.
+    for src in [
+        "module t; int d[]; initial begin d = new[2]; d[0] = 7; $display(\"%0d\", d[0]); end endmodule\n",
+        "module t; logic [3:0] a, b; initial begin {a, b} = 8'hAB; $display(\"%h%h\", a, b); end endmodule\n",
+    ] {
+        let ir = build(src);
+        assert_eq!(
+            NetArena::buildable(&ir, &SimOpts::default()).err(),
+            None,
+            "must still build: {src}"
+        );
+    }
 }
 
 /// V1 slice 2c: a QUEUE alone no longer disqualifies, and neither do the two

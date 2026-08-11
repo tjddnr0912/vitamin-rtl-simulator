@@ -1112,6 +1112,28 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // this write belongs to `SimState::dyn_heap`. Mirrors the engine's own
         // `write_chunk`, whose FIRST check is the same one.
         if let [c] = lhs.chunks.as_slice() {
+            // V1 slice 2d: the ASSOC lanes first. An assoc key is an i64 (or a
+            // byte string) and cannot ride the `(offset, word)` u32 pairs, so
+            // `resolve_offsets` carries it out of band and `as_slice()` yields
+            // `&[]` — which means the `unwrap_or((0, 0))` below would have
+            // silently turned every key into 0 before handing it to `dyn_write`,
+            // whose own arm for that shape is a loud "unsupported lvalue shape"
+            // + IGNORE. Measured before this arm existed: `aa[3] = 7; aa[9] = 11`
+            // stored nothing and read back `x x 0 0` against the VM's `7 11 2 1`.
+            //
+            // The split is the same one `SimState::write_lvalue` makes, at the
+            // same point (after the real→int coercion the value already carries),
+            // and it delegates to the same two methods — the key resolution has
+            // already happened, in the SHARED `resolve_offsets`, through THIS
+            // kernel's reader.
+            if let Offsets::AssocKey(key) = offsets {
+                self.sched.st.assoc_write(c.net, *key, &value);
+                return false; // heap content never enters the dirty channel
+            }
+            if let Offsets::AssocStrKey(key) = offsets {
+                self.sched.st.assoc_str_write(c.net, key, &value);
+                return false;
+            }
             if self.is_heap_net(c.net) {
                 let (off, word) = offsets.as_slice().first().copied().unwrap_or((0, 0));
                 // `&self` — the heap is interior-mutable (§4.5.194), which is
@@ -1768,7 +1790,18 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         )
     }
     fn k_assoc_iter(&mut self, _lhs: &Lvalue, _rhs: u32) -> Value {
-        gate_refused!("k_assoc_iter", "the assoc NetKind row; the `foreach`-over-dyn-array form is caught by the `dyn_array`/`stmt_effect` rows instead")
+        // ⚠️ The row named here CHANGED in V1 slice 2d, exactly as
+        // `k_queue_pop`'s did in 2c: the `NetKind` scan now ADMITS `Assoc` and
+        // `AssocStr`. What keeps this unreachable is `stmt_effect` —
+        // `st = aa.first(i)` is a `BlockingAssign` whose rhs `rhs_is_stmt_effect`
+        // counts, and so is the `foreach` desugar. Measured: an assoc design
+        // WITHOUT an iteration method runs natively today.
+        gate_refused!(
+            "k_assoc_iter",
+            "the `stmt_effect` row: an iteration method is a `BlockingAssign` \
+             rhs that `rhs_is_stmt_effect` counts, and the `foreach` desugar is \
+             the same shape (the `NetKind` scan admits assoc since slice 2d)"
+        )
     }
     fn k_disable_fork(&mut self) {
         gate_refused!("k_disable_fork", "statement scan rejects `disable fork`")

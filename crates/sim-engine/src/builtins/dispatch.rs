@@ -429,7 +429,10 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
                 // v6: the string-keyed twin shares the SysTask — dispatch on
                 // the handle's key domain.
                 if kind == Some(sim_ir::NetKind::AssocStr) {
-                    match args.get(1).and_then(|&k| sched.assoc_str_key_of(k)) {
+                    match args
+                        .get(1)
+                        .and_then(|&k| crate::builtins::assoc_str_key_arg(sched, nets, k))
+                    {
                         None => dyn_warn_once(sched, net, "assoc delete key is X/Z (ignored)"),
                         Some(k) => {
                             if let Some(crate::state::DynObj::AssocStr { map }) = sched
@@ -449,7 +452,10 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
                     dyn_warn_once(sched, net, "assoc delete on a non-assoc handle (ignored)");
                     return Ctl::Continue;
                 }
-                match args.get(1).and_then(|&k| sched.assoc_key_of(k)) {
+                match args
+                    .get(1)
+                    .and_then(|&k| crate::builtins::assoc_key_arg(sched, nets, k))
+                {
                     None => dyn_warn_once(sched, net, "assoc delete key is X/Z (ignored)"),
                     Some(k) => {
                         if let Some(crate::state::DynObj::Assoc { map }) = sched

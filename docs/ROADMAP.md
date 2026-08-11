@@ -460,7 +460,7 @@ SVA·힙 자료구조·서브루틴 프레임.
 | **2a** | `dyn_array` + `heap-slot` | **+187** ✅ |
 | **2b** | `string` + `heap-slot` | **+164** ✅ |
 | **2c** | `queue` + `heap-slot` | **+96** ✅ (`queue_ops` 동반) |
-| **2d** | `assoc` + `heap-slot` | **+32** |
+| **2d** | `assoc` + `heap-slot` | **+32** ✅ |
 | — | `queue_ops` · `handle_copy` | **단독 +0** — 항상 자기 종류와 함께 발화하므로 딸려 온다 |
 
 **⭐⭐ 그리고 그라운딩이 비대칭 하나를 찾았다 — 이것이 슬라이스의 크기를 정한다.**
@@ -606,6 +606,74 @@ context-size 하는 두 mutator 를 위해 **폭 쌍둥이** `eval_task_arg_ctx`
 보다 먼저 `sched.st` 로 보낸다(리더 호출이 `eval` 깊숙이 있어 진입점이 애매) · ⓒ 포맷 경로 전용
 복합 리더를 `&NetArena + &SimState` 로 만든다(`sched` 의 가변 대여와 겹치지 않게).
 **게이트는 그 결정 전까지 닫아 둔다.**
+
+
+##### 2d (`assoc` + `AssocStr`) 완료 — **슬라이스 2 닫힘 · 커버리지 재측정 54.66% → 72.75%** (2026-08-11)
+
+**⭐ 유일하게 새 arm 이 필요했던 종류.** dyn/string/queue 는 전부 공유 `dyn_write` 로 갔지만
+**assoc 키는 i64(또는 바이트열)라 `(offset, word)` u32 쌍을 못 탄다** — `resolve_offsets` 가
+키를 `Offsets::AssocKey`/`AssocStrKey` 로 **대역 밖**에 실어 보내고 `as_slice()` 는 `&[]` 를 낸다.
+그래서 내 `unwrap_or((0,0))` 이 **모든 키를 조용히 0 으로** 만든 뒤 `dyn_write` 의 loud-ignore arm
+에 넘기고 있었다: `aa[3]=7; aa[9]=11` 이 아무것도 저장 못 하고 `x x 0 0`(VM `7 11 2 1`).
+수정 = `write_routed` 가 `SimState::write_lvalue` 와 **같은 지점에서 같은 두 메서드로** 분기.
+
+**키 읽기 둘도 배선했다**(`assoc_key_arg`/`assoc_str_key_arg`). ⭐ 재진술을 피하려고 키 규칙을
+**추출**했다 — `assoc_key_eval_ctx`(≥64비트 평가 문맥)·`assoc_key_of_value`·`assoc_str_key_of_value`
+가 정본이고 `EvalCtx::assoc_key` 는 이제 그 위의 한 줄이다. 그리고 옛 진입점
+`Scheduler::assoc_key_of`/`assoc_str_key_of` 는 **남기지 않고 지웠다**(두 번째 철자가 하나의 편집
+만큼 떨어져 있으면 언젠가 **쓰기 lane 과 다른 엔트리를 가리킨다**).
+
+⚠️ **string 키는 배선 전에도 VM 과 일치했는데 그건 운이었다** — `string` 키 자체가 힙 넷이라
+엔진 store 가 마침 그것을 들고 있었다. **packed 키**(`reg [15:0] k = "hi"`)는 평면 store 를 읽어
+틀린다. 그래서 차분 행을 packed 키로 지었다.
+
+⚠️ **내 구조 핀에 패턴 구멍이 있었다** — `sched.assoc_key_of(` 가 스무 줄 위의 `assoc_str_key_of`
+를 안 셌다. **한 식구의 이름 하나를 적은 패턴은 스캔이 아니라 화이트리스트다.**
+
+##### ⭐⭐ 그리고 flip 런이 **2a 이래 계속 틀려 있던 것**을 찾았다 — concat lvalue
+
+`write_routed` 는 `if let [c] = lhs.chunks.as_slice()` 로 **lvalue 전체가 한 청크일 때만** 라우팅
+하는데, 엔진은 **청크마다**(`write_chunk` 의 첫 질문이 `dyn_is_handle[net]`) 라우팅한다. 그래서
+`{d[0], x} = 8'hAB` 이 두 청크를 다 아레나로 보냈고 힙 청크가 `assert_owns` 에 닿았다.
+
+⚠️ **코퍼스는 이것을 원리적으로 못 본다** — 그 두 테스트는 기본 백엔드(vm)로 돌기 때문에
+아레나에 아예 도달하지 않는다. **전 스위트 백엔드 flip 만이 신호였다.**
+
+**라우팅하지 않고 거부했다**(storage 게이트, 자기 이름으로). 라우팅하려면 소스를 청크별로 쪼개
+서로 다른 store 로 보내야 하는데 **그 분할 규칙은 이미 `NetArena::write_lvalue` 안에 있고**,
+라우터에 두 번째 철자를 두는 것이 §4.5.279 클래스다. **correct-support 는 퍼널에 청크별 탈출구를
+주는 별도 슬라이스** (아래 §5.1-d). 비용은 고르기 전에 쟀다 — 전 스위트에서 **설계 3건**.
+
+⚠️ `string` 은 여기 안 넣었다: `{s, x} = …` 는 **어느 게이트에도 도달 안 한다**(elaborate 가 이미
+거부). 넣었으면 위 단계가 한 일을 아래 단계가 한다고 주장하는 **공허한 행**이었다.
+
+##### ⭐⭐ 슬라이스 2 종료 — 재측정 (2026-08-11)
+
+**투영이 아니라 실측이다.** V0 의 계기를 다시 세워(`simulate()` 마다 세 층 판정을 한 줄 `write_all`
+로 기록) 전 스위트를 돌렸다:
+
+| | V0 (2026-08-10) | 슬라이스 1+2 후 |
+|---|---|---|
+| `simulate()` 호출 | 6,251 | **6,290** |
+| 네이티브 | 3,417 (**54.66%**) | **4,576 (72.75%)** |
+| 발산 | 0 | **0** (기본 백엔드 flip: 5385 중 5382 통과, 실패 3건은 **전부** *"기본 백엔드가 vm"* 핀) |
+
+⚠️ **투영은 ≈74.0% 였고 실측은 72.75% 다** — census 는 실측이지만 그 위의 greedy 누적은 산술이고,
+슬라이스가 자기 거부 행을 새로 만들면(concat lvalue −3) 어긋난다. **슬라이스마다 투영을 적되
+슬라이스 묶음이 닫힐 때 재측정한다.**
+
+**다음 표적은 census 가 정한다**(첫 blocker 기준이라 과소평가임에 주의):
+
+| 잔여 blocker | 건수 |
+|---|---|
+| `task frames (Terminator::Call)`: S3b | **391** |
+| `dyn_elem_string` | **206** |
+| `a call in a system-task argument`: S3b | **203** |
+| `stmt_effect` | **200** |
+| `class` | 164 · `fork` 94 · `handle_copy` 87 · `real` 69 · `coverage` 64 |
+
+⭐ **상위 셋 중 둘이 같은 것**(서브루틴 프레임 = V1 슬라이스 3) 이고, **`dyn_elem_string` 206 은
+슬라이스 2 가 일부러 남긴 원소 정제**라 heap 가족의 자연스러운 다음 조각이다.
 
 ⚠️ **V1 이 이 계획의 전부다.** V2·V3 은 정리 작업이고, V1 은 tier-3 이 Phase-2/3+(OOP·CRV·SVA·
 coverage·string·queue·real math·program·vif)를 따라잡는 일이라 **길다**. V0 이 그 길이를 숫자로

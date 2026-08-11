@@ -28,6 +28,24 @@ use sim_ir::{NetKind, SimIr};
 use crate::eval::NetReader;
 use crate::value::{nwords, top_mask, Value, Words};
 
+/// Is this net's value in `SimState::dyn_heap` rather than in an arena slot?
+///
+/// ONE spelling, three readers: the `heap` map this store carries, the gate row
+/// that refuses a heap chunk inside a concat lvalue, and — through the map —
+/// `NativeKernel::is_heap_net`. It is `_`-free on purpose: a new `NetKind` is a
+/// format bump AND a forced answer here, because "which store owns it" is the
+/// question every route in slice 2 turns on.
+pub(crate) fn kind_is_heap(kind: NetKind) -> bool {
+    match kind {
+        NetKind::DynArray
+        | NetKind::Queue
+        | NetKind::Assoc
+        | NetKind::AssocStr
+        | NetKind::String => true,
+        NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer | NetKind::Real => false,
+    }
+}
+
 /// One net's slot descriptor, fully resolved at build time. This ONE dense
 /// record replaces the per-access `NetSlot` metadata questions and the three
 /// routing bitmaps — in an eligible design there is nothing else a net can be.
@@ -144,20 +162,7 @@ impl NetArena {
         let total = usize::try_from(off).map_err(|_| "arena exceeds usize")?;
         let mut arena = NetArena {
             slots,
-            heap: ir
-                .nets
-                .iter()
-                .map(|nv| {
-                    matches!(
-                        nv.kind,
-                        NetKind::DynArray
-                            | NetKind::Queue
-                            | NetKind::Assoc
-                            | NetKind::AssocStr
-                            | NetKind::String
-                    )
-                })
-                .collect(),
+            heap: ir.nets.iter().map(|nv| kind_is_heap(nv.kind)).collect(),
             ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
             pending_range: std::cell::RefCell::new(Vec::new()),
@@ -244,8 +249,16 @@ impl NetArena {
                 // materializes 8xlen) live in `dyn_read`/`dyn_write`, which the
                 // routes above reach.
                 NetKind::String => {}
+                // V1 slice 2c. Its OPERATIONS ride along: both queue-op tables
+                // live in `SimState` and are read by code tier-3 shares.
                 NetKind::Queue => {}
-                NetKind::Assoc | NetKind::AssocStr => return Err("heap kind: outside R1 storage"),
+                // V1 slice 2d — the last heap kind, and the only one whose
+                // WRITE needed a new arm rather than the shared `dyn_write`: an
+                // assoc key is an i64 (or a byte string) and cannot ride the
+                // `(offset, word)` u32 pairs, so it travels out of band in
+                // `Offsets::AssocKey`/`AssocStrKey` and `write_routed` splits on
+                // it exactly where `SimState::write_lvalue` does.
+                NetKind::Assoc | NetKind::AssocStr => {}
             }
             let words = nwords(nv.width.max(1)).max(1) as u64;
             off += words * 2 * u64::from(nv.array_len.max(1));
@@ -255,6 +268,44 @@ impl NetArena {
         }
         if usize::try_from(off).is_err() {
             return Err("arena exceeds usize");
+        }
+        // ── V1 slice 2d: a heap chunk inside a CONCAT lvalue ──
+        //
+        // ⚠️ Found by the whole-suite backend flip, not by the corpus — and it
+        // had been wrong since slice 2a. `NativeKernel::write_routed` routes on
+        // `if let [c] = lhs.chunks.as_slice()`, i.e. only when the WHOLE lvalue
+        // is one chunk; the engine instead routes PER CHUNK, inside
+        // `write_chunk`, whose first question is `dyn_is_handle[net]`. So
+        // `{d[0], x} = 8'hAB` sent both chunks to the arena, and the heap one
+        // reached `assert_owns` — the instrument named it exactly.
+        //
+        // Refused rather than routed, deliberately. Routing it means splitting
+        // the source across chunks and sending each half to a different store,
+        // and that split rule already lives in `NetArena::write_lvalue`; a
+        // second spelling of it in the router is the §4.5.279 class of defect.
+        // Correct-support for this shape is a follow-on that gives the funnel a
+        // per-chunk escape, not a line in this slice (ROADMAP §5.1-c).
+        //
+        // Costed before choosing: the census counts 2 designs in the whole
+        // workspace suite, both of them tests OF this shape.
+        for s in &ir.stmts {
+            let lhs = match s {
+                sim_ir::Stmt::BlockingAssign { lhs, .. }
+                | sim_ir::Stmt::NonblockingAssign { lhs, .. } => lhs,
+                _ => continue,
+            };
+            if lhs.chunks.len() > 1
+                && lhs.chunks.iter().any(|c| {
+                    ir.nets
+                        .get(c.net as usize)
+                        .is_some_and(|nv| kind_is_heap(nv.kind))
+                })
+            {
+                return Err(
+                    "a heap-kind chunk inside a concat lvalue: the split would have to \
+                            route per chunk",
+                );
+            }
         }
         Ok(())
     }
