@@ -844,7 +844,7 @@ fn run_json_native_pins_the_reject_families() {
     assert_eq!(
         field(&manifest, "native"),
         "{\"eligible\": false, \"buildable\": false, \"refused\": \"fork\", \
-         \"reject_reasons\": {\"fork\": 1, \"queue\": 1, \"string\": 1}}",
+         \"reject_reasons\": {\"fork\": 1, \"queue\": 1}}",
         "full manifest:\n{manifest}"
     );
 }

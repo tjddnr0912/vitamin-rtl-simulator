@@ -1479,6 +1479,74 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── V1 slice 2b: strings (§4.5.339) ────────────────────────────────
+        // A `string` net is the heap kind whose SHAPES differ most from a dyn
+        // array: a whole-handle read materializes 8xlen with `is_str`, a
+        // whole-handle assign strips leading NULs (§6.16), and a byte select is
+        // an element read. All three in one design.
+        (
+            "string_assign_concat_select_len",
+            r#"
+module top;
+  string s, t;
+  integer i;
+  initial begin
+    s = "hello";
+    t = {s, " world"};
+    $display("s=%s t=%s len=%0d", s, t, t.len());
+    $display("b0=%0d b4=%0d", s[0], s[4]);
+    for (i = 0; i < 5; i = i + 1) $write("%c", s[i]);
+    $write("\n");
+    $display("eq=%0d sub=%s", s == "hello", t.substr(6, 10));
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The EMPTY string and the never-assigned handle: the arena skips a heap
+        // net's t0 slot init entirely (its declared init is the packed literal,
+        // not a slot value), so "what is a string before anything writes it" is
+        // answered by the heap alone. `len()` of each is the discriminator.
+        (
+            "string_empty_and_unassigned",
+            r#"
+module top;
+  string a;
+  string b;
+  initial begin
+    b = "";
+    $display("alen=%0d blen=%0d", a.len(), b.len());
+    $display("a=[%s] b=[%s]", a, b);
+    a = "x";
+    $display("after alen=%0d a=%s", a.len(), a);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A string ALONGSIDE flat nets in the same design, so the router has to
+        // send each write to a different store from one funnel — the shape a
+        // per-net routing bug produces correct output for only half of.
+        (
+            "string_beside_flat_nets",
+            r#"
+module top;
+  string s;
+  reg [7:0] r;
+  integer n;
+  initial begin
+    s = "ab"; r = 8'hA5; n = 42;
+    $display("%s %0h %0d", s, r, n);
+    s = "cd"; r = 8'h5A; n = 7;
+    $display("%s %0h %0d", s, r, n);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // ── V1 slice 1: SVA (§4.5.337) ─────────────────────────────────────
         // These are here rather than in a file of their own because
         // `adversarial_designs` is the set `agree` proves BOTH halves on: it
@@ -1600,7 +1668,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 70, "adversarial set shrank");
+    assert_eq!(designs.len(), 73, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

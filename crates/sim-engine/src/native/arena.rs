@@ -164,6 +164,16 @@ impl NetArena {
         };
         // t0 init: extract the width-wide element init once, broadcast per element.
         for (n, nv) in ir.nets.iter().enumerate() {
+            // V1 slice 2: a heap-kind net's slot is DEAD, and its declared init
+            // is not for that slot — a `string`'s init is the packed literal,
+            // whose bits run far above the element width the slot was sized to.
+            // Its real t0 value is the heap's (IEEE §7.5.2: "" / empty), which
+            // `SimState` establishes. Initialising the dead slot from an init
+            // that does not describe it is how this loop's own invariant
+            // assertion first fired.
+            if arena.heap[n] {
+                continue;
+            }
             let s = arena.slots[n];
             // The arena keeps bits above `width` ZERO; the engine's scalar init
             // path word-RESIZES without masking, so if elaborate ever emitted an
@@ -229,7 +239,12 @@ impl NetArena {
                 NetKind::Real => return Err("real: S2 width class"),
                 // V1 slice 2a: admitted. Its slot is dead (see `NetArena::heap`).
                 NetKind::DynArray => {}
-                NetKind::Queue | NetKind::Assoc | NetKind::AssocStr | NetKind::String => {
+                // V1 slice 2b: `string` joins it — same routing, and its own
+                // shapes (whole-handle assign strips leading NULs, a whole read
+                // materializes 8xlen) live in `dyn_read`/`dyn_write`, which the
+                // routes above reach.
+                NetKind::String => {}
+                NetKind::Queue | NetKind::Assoc | NetKind::AssocStr => {
                     return Err("heap kind: outside R1 storage")
                 }
             }

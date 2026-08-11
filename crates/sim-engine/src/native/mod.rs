@@ -364,7 +364,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // is a format bump AND a forced classification here.
     let mut queue_n = 0usize;
     let mut assoc_n = 0usize;
-    let mut string_n = 0usize;
     let mut real_n = 0usize;
     for net in &ir.nets {
         match net.kind {
@@ -378,7 +377,7 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             NetKind::DynArray => {}
             NetKind::Queue => queue_n += 1,
             NetKind::Assoc | NetKind::AssocStr => assoc_n += 1,
-            NetKind::String => string_n += 1,
+            NetKind::String => {}
         }
     }
     flag(&mut out, "real", real_n);
@@ -386,7 +385,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     flag(&mut out, "dyn_elem_string", string_elem_dyn_nets.len());
     flag(&mut out, "queue", queue_n);
     flag(&mut out, "assoc", assoc_n);
-    flag(&mut out, "string", string_n);
 
     // The storage-level half. `buildable` is allocation-free, so asking on every
     // run costs one scan — worth it: run.json then carries BOTH numbers and the

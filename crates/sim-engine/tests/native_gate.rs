@@ -70,13 +70,14 @@ fn heap_storage_kinds_reject_by_net_kind() {
          endmodule\n",
     );
     assert!(!ok);
-    // V1 slice 2a admitted `dyn_array`: its elements live in `SimState::dyn_heap`
-    // and tier-3 reaches them through the composite reader and `write_routed`,
-    // so the container is no longer a disqualifier. The three kinds that still
-    // have no route stay, each under its own key — 2b/2c/2d.
+    // V1 slice 2a admitted `dyn_array` and 2b admitted `string`: their values
+    // live in `SimState::dyn_heap`, and tier-3 reaches them through the
+    // composite reader, `write_routed`, and `HeapRouted` on the format path — so
+    // the container is no longer a disqualifier. The two kinds with no
+    // differential behind them yet stay, each under its own key (2c/2d).
     assert_eq!(
         rs,
-        vec![("assoc", 1), ("queue", 1), ("string", 1)],
+        vec![("assoc", 1), ("queue", 1)],
         "each storage family must be counted under its own key"
     );
 }

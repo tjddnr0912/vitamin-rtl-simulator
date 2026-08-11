@@ -834,7 +834,7 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     assert_eq!(
         manifest_field(&m, "native"),
         "{\"eligible\": false, \"buildable\": false, \"refused\": \"queue\", \
-         \"reject_reasons\": {\"queue\": 1, \"string\": 1}}",
+         \"reject_reasons\": {\"queue\": 1}}",
         "{m}"
     );
     let _ = std::fs::remove_dir_all(&dir);
