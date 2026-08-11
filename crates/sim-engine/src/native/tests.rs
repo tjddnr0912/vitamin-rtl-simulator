@@ -444,6 +444,21 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // saying BY WHAT will hide the difference.
         queue_slice_stmts: sc.queue_slice_stmts,
         queue_bounds: sc.queue_bounds,
+        // …and the two heap ELEMENT refinements (V1 slice 3b). THIRD time this
+        // file has been caught by the same omission (`assert_ctl` in slice 1,
+        // `queue_slice_stmts` in 2c), and this one showed both failure modes at
+        // once: without `string_elem_dyn_nets` a `string s[]` element is not a
+        // byte string, so BOTH backends printed `[ ][\u{1}][ ] len=0` — agreeing
+        // about a design neither executes as written — and without
+        // `real_elem_dyn_nets` the two backends actually DIVERGED (1.5 vs 2.0),
+        // because the handle is not `is_real` and the element coercion falls to a
+        // bit resize the two paths reach differently.
+        //
+        // ⭐ The general rule this file keeps paying for: a sidecar is not
+        // optional context, it is part of what the SOURCE MEANS. Anything the
+        // corpus can spell must have its table here.
+        real_elem_dyn_nets: sc.real_elem_dyn_nets,
+        string_elem_dyn_nets: sc.string_elem_dyn_nets,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

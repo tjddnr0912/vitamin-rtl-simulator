@@ -1697,6 +1697,66 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── V1 slice 3b: heap ELEMENT refinements (ROADMAP §5.1-d) ─────────
+        // Slice 2a admitted the dyn-array CONTAINER and deliberately left both
+        // element refinements refused: a `string s[]` element is a byte string
+        // and a `real r[]` element is an f64, neither of which is the bit-vector
+        // element the container row was measured on. Measured since: both lanes
+        // live entirely in `SimState`'s heap methods (`coerce_dyn_elem`,
+        // `alloc_dyn_array`, `dyn_read`/`dyn_write`), which slice 2 already routes
+        // every heap access to — the refinements were as conservative as the
+        // container had been.
+        //
+        // `new[]`'s per-kind DEFAULT is the sharpest part: IEEE §7.5.2 says "" for
+        // a string element and 0.0 for a real one, and `alloc_dyn_array` picks
+        // that from the same two flags. An element never written is what tells a
+        // correct default from a plausible one.
+        (
+            "string_and_real_dyn_elements",
+            r#"
+module top;
+  string sd[];
+  real rd[];
+  int d[];
+  reg [7:0] i;
+  initial begin
+    i = 8'd1;
+    sd = new[3]; rd = new[3]; d = new[2];
+    sd[0] = "ab"; sd[i] = "cde";
+    rd[0] = 1.5; rd[i] = -2.25;
+    d[0] = 7;
+    $display("[%s][%s][%s] len=%0d", sd[0], sd[i], sd[2], sd[0].len());
+    $display("%0f %0f %0f", rd[0], rd[i], rd[2]);
+    $display("%0d %0d %0d %0d", d[0], sd.size(), rd.size(), sd[0][0]);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The QUEUE twin of the same refinement — `string q[$]` is the shape whose
+        // element write once read back EMPTY (the push did its own `.resize(w)`
+        // while the dyn-array write took the byte-string branch), which is why
+        // `coerce_dyn_elem` exists at all. A row of dyn-array-only string elements
+        // would not reach that push.
+        (
+            "string_queue_elements",
+            r#"
+module top;
+  string q[$];
+  reg [7:0] i;
+  initial begin
+    i = 8'd1;
+    q.push_back("hi"); q.push_back("yo"); q.push_front("za");
+    $display("[%s][%s][%s] %0d", q[0], q[i], q[2], q.size());
+    q[i] = "mid";
+    $display("[%s] %0d", q[i], q[i].len());
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // ── V1 slice 3a: a CALL in a system-task argument (ROADMAP §5.1-c) ──
         // `native::frames` refused this with a reason that was true when it was
         // written: `k_dispatch_systask` holds `&mut Scheduler`, so it hands
@@ -2017,7 +2077,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 84, "adversarial set shrank");
+    assert_eq!(designs.len(), 86, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2224,6 +2284,69 @@ fn every_tier3_store_goes_through_the_one_write_funnel() {
          `NativeKernel::write_routed`. Found: {sites:?}"
     );
     assert_eq!(sites[0].0, "kernel.rs");
+}
+
+/// The ABSOLUTE anchor for V1 slice 3b — what a heap ELEMENT of each refined
+/// kind actually IS, not merely that two backends agree about it.
+///
+/// ⚠️ Written because the differential cannot hold this line, and that was
+/// measured rather than reasoned. `build_with_opts` did not install
+/// `string_elem_dyn_nets`, and the corpus row for string elements then printed
+/// `[ ][\u{1}][ ] len=0` on BOTH backends — perfect agreement about a design
+/// neither was executing as written. (The `real` half diverged, which is what
+/// surfaced the omission at all; a string-only slice would have shipped green.)
+///
+/// So the sidecars are installed now, and this pins the VALUES so that removing
+/// them again fails here instead of going quiet.
+///
+/// ⭐ Confirmed by the battery rather than argued: of five mutations, the one
+/// that drops `string_elem_dyn_nets` from the harness and the one that makes the
+/// SHARED `coerce_dyn_elem` ignore its string branch are killed by THIS test and
+/// by nothing else. Both are invisible to a native-vs-VM differential for the
+/// same reason — they move both backends together.
+#[test]
+fn heap_element_refinements_have_their_ieee_defaults_and_values() {
+    let src = r#"
+module top;
+  string sd[];
+  real rd[];
+  initial begin
+    sd = new[3]; rd = new[3];
+    sd[0] = "ab";
+    rd[0] = 1.5;
+    $display("[%s][%s] len=%0d", sd[0], sd[2], sd[0].len());
+    $display("%0f %0f", rd[0], rd[2]);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            // A written element is its own text; an UNWRITTEN one is the IEEE
+            // §7.5.2 default for its element type — "" for a string, 0.0 for a
+            // real — which is what `alloc_dyn_array` picks from these two flags.
+            "out|[ab][] len=2\n".to_string(),
+            "out|1.500000 0.000000\n".to_string(),
+        ],
+        "heap element refinement values"
+    );
 }
 
 /// The READ twin of the funnel pin: every store read a system task makes must go

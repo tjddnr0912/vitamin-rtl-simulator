@@ -199,25 +199,34 @@ fn a_queue_with_its_operations_is_core() {
     );
 }
 
-/// V1 slice 2a: a DYNAMIC ARRAY alone no longer disqualifies, and its two
-/// ELEMENT refinements still do.
+/// V1 slice 3b: a DYNAMIC ARRAY and BOTH of its element refinements are core.
 ///
-/// Written as its own case rather than as a deletion from the vector above: what
-/// has to be asserted is the positive. And the refinements matter more than the
-/// container did — while `dyn_array` refused every such net they were "subsumed"
-/// and bound to `_`, so opening one row would have opened three. A `real r[]`
-/// element store is an f64 lane and a `string s[]` element store routes through
-/// the string heap; tier-3 has run neither.
+/// ⚠️ This asserted the opposite until slice 3b. Slice 2a deliberately left
+/// `real r[]` and `string s[]` refused — an f64 element lane and a byte-string
+/// element store are not the same thing as a bit-vector element, and neither had
+/// run. Measured since: both lanes live entirely in `SimState`'s heap methods
+/// (`coerce_dyn_elem`, `alloc_dyn_array`, `dyn_read`/`dyn_write`), which slice 2
+/// already routes every heap access to — so the refinements were as conservative
+/// as the container had been.
+///
+/// The positive is asserted on SOURCE (all three shapes in one design) and on
+/// OPTS (the two tables populated alone), because the tables are what the engine
+/// consumes and a source-only case would not notice a row keyed on them.
 #[test]
-fn a_plain_dynamic_array_is_core_and_its_element_refinements_are_not() {
+fn a_dynamic_array_and_both_element_refinements_are_core() {
     let (ok, rs) = reasons(
         "module t;\n\
            int d[];\n\
-           initial begin d = new[2]; d[0] = 7;\n\
-             $display(\"%0d %0d\", d[0], d.size()); $finish; end\n\
+           string sd[];\n\
+           real rd[];\n\
+           initial begin d = new[2]; d[0] = 7; sd = new[2]; sd[0] = \"ab\"; rd = new[2]; rd[0] = 1.5;\n\
+             $display(\"%0d %s %0f %0d\", d[0], sd[0], rd[0], d.size()); $finish; end\n\
          endmodule\n",
     );
-    assert!(ok, "a plain `int d[]` must be eligible now: {rs:?}");
+    assert!(
+        ok,
+        "a dyn array with string/real elements must be eligible: {rs:?}"
+    );
     assert_eq!(rs, vec![]);
 
     let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
@@ -225,11 +234,10 @@ fn a_plain_dynamic_array_is_core_and_its_element_refinements_are_not() {
     o.real_elem_dyn_nets.insert(0);
     o.string_elem_dyn_nets.insert(0);
     let e = design_eligibility(&ir, &o);
-    assert!(!e.eligible);
-    assert_eq!(
-        e.reject_reasons.into_iter().collect::<Vec<_>>(),
-        vec![("dyn_elem_real", 1), ("dyn_elem_string", 1)],
-        "the element refinements must refuse in their own words"
+    assert!(
+        e.eligible,
+        "the element refinements must disqualify nothing: {:?}",
+        e.reject_reasons
     );
 }
 

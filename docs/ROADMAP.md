@@ -667,7 +667,7 @@ context-size 하는 두 mutator 를 위해 **폭 쌍둥이** `eval_task_arg_ctx`
 | 잔여 blocker | 건수 |
 |---|---|
 | `task frames (Terminator::Call)`: S3b | **391** |
-| `dyn_elem_string` | **206** |
+| ~~`dyn_elem_string`~~ **✅ 슬라이스 3b 에서 해소(+179, `dyn_elem_real` 동반)** | ~~206~~ |
 | ~~`a call in a system-task argument`: S3b~~ **✅ 슬라이스 3a 에서 해소(+205)** | ~~203~~ |
 | `stmt_effect` | **200** |
 | `class` | 164 · `fork` 94 · `handle_copy` 87 · `real` 69 · `coverage` 64 |
@@ -712,6 +712,45 @@ B·C 를 함께 적용했을 때 `formal_is_string=false` 가 `formal_width` 의
 정정했다(**남은 것은 `schedule_delayed_cas` 하나** — 그 경로는 `eval_expr_with` 를 안 지난다).
 
 **발산 0** — 기본 백엔드 flip 에서 5387 중 5384 통과, 실패 3건은 전부 *"기본 백엔드가 vm"* 핀.
+
+
+##### 슬라이스 3b — **heap 원소 정제 둘**: 슬라이스 2a 가 남긴 보수성 (2026-08-12)
+
+**커버리지 75.99% → 78.73%(+179 호출) · 커널 코드 0줄** · 지운 것은 `design_eligibility` 의 행 둘
+(`dyn_elem_string`·`dyn_elem_real`).
+
+슬라이스 2a 는 **컨테이너**만 열고 원소 정제 둘을 일부러 남겼다 — *"`string s[]` 원소는 바이트열,
+`real r[]` 원소는 f64 이고 둘 다 컨테이너 행이 측정된 비트벡터 원소가 아니다"*. 재보니 **두 lane 이
+전부 `SimState` 자기 힙 메서드 안에 산다**(`coerce_dyn_elem`·`alloc_dyn_array`·`dyn_read`/`dyn_write`)
+— 슬라이스 2 가 이미 모든 힙 접근을 그리로 라우팅하므로, **정제는 컨테이너만큼이나 보수적이었다.**
+
+##### ⚠️⚠️ 그리고 하네스가 **세 번째로** 같은 함정을 밟았다 — 이번엔 두 실패 모드가 동시에
+
+`build_with_opts` 가 `string_elem_dyn_nets`/`real_elem_dyn_nets` 를 설치하지 않았다:
+
+* **string 반쪽은 조용히 공허** — 두 백엔드가 **똑같이** `[ ][\u{1}][ ] len=0` 을 찍었다.
+  설계가 말하는 것과 다른 것을 재면서 **완벽히 일치**한다.
+* **real 반쪽은 실제로 발산** — VM `2.000000` / native `1.500000`. 핸들이 `is_real` 이 아니라
+  원소 강제가 비트 resize 로 떨어지고 두 경로가 그 지점에 다르게 도달한다.
+
+⇒ **string 만 있는 슬라이스였다면 초록으로 배송됐다.** 그래서 사이드카를 설치하고, 값 자체를
+고정하는 **절대 앵커**(`heap_element_refinements_have_their_ieee_defaults_and_values`)를 지었다 —
+`new[]` 의 IEEE §7.5.2 원소 기본값(`""` / `0.0`)까지 포함해서. **차분은 이 선을 원리적으로 못 지킨다.**
+
+⭐ **일반 규칙**: 사이드카는 선택적 문맥이 아니라 **소스의 의미의 일부**다. 코퍼스가 철자할 수 있는
+것은 전부 자기 테이블을 하네스에 가져야 한다.
+
+##### 그리고 task frames 는 **재보고 미뤘다** (391 중 143 만 subset)
+
+`Terminator::Call` 은 tier-3 워크에 arm 이 아예 없다. 엔진의 그 팔은 **두 갈래** —
+suspendable 태스크(콜스택 push·park/resume·dyn stash·재귀 깊이)와 **subset 태스크의 동기 실행**
+(입력 평가 → `run_task_call` → **호출자 lvalue 로 copy-out**). 후자만이면 슬라이스 3a 와 같은
+라우팅 문제(copy-out 이 `sched.st.write_lvalue` = 엔진 store → `write_routed` 필요)다.
+
+**착수 전에 쟀다**: 이 행에 걸린 **391 중 143(36.6%) 만 suspendable 태스크가 0개**다
+(`tasks=1 susp=1` 이 196 · `tasks=1 susp=0` 이 133). ⇒ **subset 만 지어도 상한이 +143** 이고,
+그것도 프로세스 바디에 `Terminator::Call` arm 과 `Kernel` seam 을 새로 지어야 한다.
+**`stmt_effect`(205)·`class`(164) 보다 크지 않으므로 순서를 뒤로 미룬다.**
 
 ⚠️ **V1 이 이 계획의 전부다.** V2·V3 은 정리 작업이고, V1 은 tier-3 이 Phase-2/3+(OOP·CRV·SVA·
 coverage·string·queue·real math·program·vif)를 따라잡는 일이라 **길다**. V0 이 그 길이를 숫자로

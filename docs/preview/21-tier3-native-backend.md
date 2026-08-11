@@ -34,6 +34,46 @@
 
 ---
 
+## 0.-14 ⭐⭐ 개정 21 — **슬라이스 3b: 원소 정제, 그리고 하네스가 세 번째로 같은 함정을 밟았다** — 75.99% → **78.73%** (2026-08-12, ROADMAP §5.1-d)
+
+**커널 코드 0줄.** 지운 것은 `design_eligibility` 의 행 둘(`dyn_elem_string`·`dyn_elem_real`).
+
+슬라이스 2a 는 **컨테이너**만 열고 정제 둘을 일부러 남겼다 — *"string 원소는 바이트열, real 원소는
+f64 이고 둘 다 컨테이너 행이 측정된 비트벡터 원소가 아니다"*. 재보니 **두 lane 이 전부 `SimState`
+자기 힙 메서드 안에 산다**(`coerce_dyn_elem`·`alloc_dyn_array`·`dyn_read`/`dyn_write`) — 슬라이스 2
+가 이미 모든 힙 접근을 그리로 라우팅하므로 **정제는 컨테이너만큼이나 보수적이었다.**
+
+### ⚠️⚠️ 하네스 갭, 세 번째 — 그리고 이번엔 두 실패 모드가 동시에 보였다
+
+`build_with_opts` 가 `string_elem_dyn_nets`/`real_elem_dyn_nets` 를 설치하지 않았다:
+
+| 반쪽 | 증상 |
+|---|---|
+| **string** | 두 백엔드가 **똑같이** `[ ][\u{1}][ ] len=0` — 설계가 말하는 것과 다른 것을 재면서 **완벽히 일치** |
+| **real** | 실제로 **발산**(VM `2.000000` / native `1.500000`) — 핸들이 `is_real` 이 아니라 원소 강제가 비트 resize 로 떨어진다 |
+
+⇒ **string 만 있는 슬라이스였다면 초록으로 배송됐다.** 사이드카를 설치하고 값 자체를 고정하는
+**절대 앵커**를 지었다(`new[]` 의 IEEE §7.5.2 원소 기본값 `""`/`0.0` 포함) — **차분은 이 선을
+원리적으로 못 지킨다.**
+
+⭐ **일반 규칙**: 사이드카는 선택적 문맥이 아니라 **소스의 의미의 일부**다. 코퍼스가 철자할 수 있는
+것은 전부 자기 테이블을 하네스에 가져야 한다. (§4.5.337 `assert_ctl` · 2c `queue_slice_stmts` ·
+3b 여기 — **세 번 다 같은 함수**.)
+
+### task frames 는 재보고 미뤘다
+
+`Terminator::Call` 은 tier-3 워크에 arm 이 없다. 엔진의 그 팔은 **두 갈래**다 — suspendable
+태스크(콜스택 push·park/resume·dyn stash·재귀 깊이)와 **subset 태스크의 동기 실행**(입력 평가 →
+`run_task_call` → 호출자 lvalue 로 copy-out). 후자만이면 3a 와 같은 라우팅 문제다
+(copy-out 이 `sched.st.write_lvalue` = 엔진 store → `write_routed` 필요).
+
+**착수 전에 쟀다**: 이 행에 걸린 **391 중 143(36.6%) 만 suspendable 태스크가 0개**
+(`tasks=1 susp=1` 196 · `tasks=1 susp=0` 133) ⇒ **subset 만 지어도 상한이 +143**, 그것도 프로세스
+바디에 새 terminator arm 과 `Kernel` seam 을 지어야 한다. **`stmt_effect`(205)·`class`(164) 보다
+크지 않으므로 순서를 뒤로 미룬다.**
+
+---
+
 ## 0.-13 ⭐⭐ 개정 20 — **슬라이스 3a: 다른 목적으로 지은 seam 이 거부 행을 무효화했다** — 72.75% → **75.99%** (2026-08-12, ROADMAP §5.1-d)
 
 **커널 코드 0줄.** 지운 것은 `native::frames` 의 행 하나(`a call in a system-task argument: S3b`).

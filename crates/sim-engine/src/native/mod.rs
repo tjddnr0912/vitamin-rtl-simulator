@@ -172,8 +172,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // Subsumed reject refinements: every member of these two sets is a
         // DynArray/Queue-kind handle net, already counted by the net-kind scan
         // below — counting them again would double-book the same net.
-        real_elem_dyn_nets,
-        string_elem_dyn_nets,
+        real_elem_dyn_nets: _,
+        string_elem_dyn_nets: _,
         // CORE since V1 slice 1. SVA is not a runtime mechanism at all: elaborate
         // DESUGARS `assert property(@(clk) a |-> b)` into `always @(clk) if (a &&
         // !b) $error(…)`, so what reaches the engine is ordinary IR plus these two
@@ -404,8 +404,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         }
     }
     flag(&mut out, "real", real_n);
-    flag(&mut out, "dyn_elem_real", real_elem_dyn_nets.len());
-    flag(&mut out, "dyn_elem_string", string_elem_dyn_nets.len());
 
     // The storage-level half. `buildable` is allocation-free, so asking on every
     // run costs one scan — worth it: run.json then carries BOTH numbers and the
