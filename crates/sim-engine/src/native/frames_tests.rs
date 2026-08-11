@@ -587,12 +587,49 @@ fn s3a_every_design_actually_frames_a_subroutine() {
     }
 }
 
+/// V1 slice 3a: a CALL in a system-task argument is admitted, and the three
+/// shapes that used to prove its refusal row now prove the opposite.
+///
+/// Written as its own case rather than as a deletion from the table below, for
+/// the reason this repository keeps restating: a shrinking vector shows that a
+/// key left, not that the shape RUNS. The differential rows in `run_tests.rs`
+/// prove the values; this proves the gate, which is the half that decides
+/// whether those rows are vacuous.
+#[test]
+fn a_call_in_a_system_task_argument_is_admitted() {
+    for (name, src) in [
+        (
+            "bare",
+            "module top;\n  function automatic integer f(input integer x); begin f = x + 1; end endfunction\n  initial begin $display(\"f=%0d\", f(4)); $finish; end\nendmodule\n",
+        ),
+        (
+            "under an operator",
+            "module top;\n  function automatic integer f(input integer x); begin f = x + 1; end endfunction\n  initial begin $display(\"v=%0d\", f(1) + 1); $finish; end\nendmodule\n",
+        ),
+        (
+            "under a ternary inside a concat",
+            "module top;\n  function automatic [3:0] f(input [3:0] x); begin f = x + 4'd1; end endfunction\n  reg [3:0] a = 4'd5;\n  initial begin $display(\"v=%h\", {a, (a[0] ? f(a) : 4'd0)}); $finish; end\nendmodule\n",
+        ),
+    ] {
+        let (ir, opts) = build_with_opts(src);
+        assert!(
+            !opts.func_table.is_empty(),
+            "{name}: no frame table — this design proves nothing"
+        );
+        assert_eq!(
+            crate::native::frames::frames_admitted(&ir, &opts).err(),
+            None,
+            "{name}: the frames gate must admit a call in a system-task argument"
+        );
+    }
+}
+
 /// Every REFUSAL ROW of `frames_admitted` must be reached by a design, and the
 /// design must be one the delegation would MIS-handle if the row were removed.
 ///
-/// The two `S3b` position rows are the sharpest: without them the evaluation
-/// reaches `NetArena::eval_call`, which panics — so deleting either turns this
-/// gate red loudly rather than quietly.
+/// The remaining `S3b` position row is the sharpest: without it the evaluation
+/// reaches `NetArena::eval_call`, which panics — so deleting it turns this gate
+/// red loudly rather than quietly.
 #[test]
 fn s3a_each_frame_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
@@ -616,16 +653,6 @@ module top;
   function automatic integer addg(input integer x); begin addg = x + g; end endfunction
   integer r;
   initial begin g = 5; r = addg(3); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
-        (
-            "call in a system-task argument",
-            "a call in a system-task argument: S3b",
-            r#"
-module top;
-  function automatic integer f(input integer x); begin f = x + 1; end endfunction
-  initial begin $display("f=%0d", f(4)); $finish; end
 endmodule
 "#,
         ),
@@ -700,27 +727,6 @@ endmodule
 "#,
         ),
         (
-            "call nested under an operator in a system-task argument",
-            "a call in a system-task argument: S3b",
-            r#"
-module top;
-  function automatic integer f(input integer x); begin f = x + 1; end endfunction
-  initial begin $display("v=%0d", f(1) + 1); $finish; end
-endmodule
-"#,
-        ),
-        (
-            "call under a ternary inside a concat in a system-task argument",
-            "a call in a system-task argument: S3b",
-            r#"
-module top;
-  function automatic [3:0] f(input [3:0] x); begin f = x + 4'd1; end endfunction
-  reg [3:0] a = 4'd5;
-  initial begin $display("v=%h", {a, (a[0] ? f(a) : 4'd0)}); $finish; end
-endmodule
-"#,
-        ),
-        (
             // The call is in the delayed assign's LVALUE INDEX, not its rhs.
             "call in a delayed continuous assign's lvalue index",
             "a call in a delayed continuous assign: S3b",
@@ -755,7 +761,9 @@ endmodule
             "{what}: refused by the S0 design gate, so this row is untested"
         );
     }
-    assert_eq!(cases.len(), 10, "frame refusal-row coverage moved");
+    // 10 -> 7: V1 slice 3a admitted the three system-task-argument shapes, and
+    // their positive twin is `a_call_in_a_system_task_argument_is_admitted`.
+    assert_eq!(cases.len(), 7, "frame refusal-row coverage moved");
     // ⚠️ The WRITE twin of the "reads a module net" row has no design, and not
     // by omission: elaborate refuses a frame body that assigns to a net outside
     // the function (E3009), so the row can only ever be reached by a READ.

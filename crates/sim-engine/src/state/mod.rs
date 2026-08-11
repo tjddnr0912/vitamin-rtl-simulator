@@ -889,17 +889,41 @@ impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'
     fn take_deferred_range_kinds(&self) -> Vec<bool> {
         self.nets.take_deferred_range_kinds()
     }
+    // ── the CALL family goes to `st`, exactly as `NativeKernel`'s does ──
+    //
+    // V1 slice 3. These forwarded to `nets` when this wrapper was written for
+    // slice 2, and for the heap kinds that was harmless — every design carrying
+    // a call in a system-task argument was refused by `native::frames`, whose
+    // comment says why: `k_dispatch_systask` holds `&mut Scheduler`, so it hands
+    // `dispatch` the arena ALONE and cannot also lend `&SimState` to a
+    // composite. The arena's `eval_call` is a loud panic for exactly that.
+    //
+    // ⭐ But this wrapper IS that composite. It was built for a different reason
+    // — routing heap nets — and it holds both stores, so the seam that row was
+    // waiting for already exists. Answering the call family from `st` is what
+    // makes `$display("%0d", f(x))` run natively, and it is the same answer the
+    // kernel gives one level up: `SimState::run_frame_call`, the same window and
+    // slab, on the frame class `frames_admitted` proved never reads a module net.
     fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
-        self.nets.eval_call(func, args)
+        self.st.eval_call(func, args)
     }
     fn resolve_virtual_call(&self, call_eid: u32, static_fid: u32, args: &[Value]) -> u32 {
-        self.nets.resolve_virtual_call(call_eid, static_fid, args)
+        self.st.resolve_virtual_call(call_eid, static_fid, args)
     }
+    // ⚠️ These two and `resolve_virtual_call` are EQUIVALENT to forwarding them
+    // to `nets` today, and that was proved rather than assumed: a hostile
+    // `formal_width` answering `Some((1, false))` for every formal leaves narrow,
+    // widening-signed and string-formal calls byte-identical. `eval_core`'s
+    // coercion is a PRE-sizing, and `run_frame_call` re-binds each actual into
+    // the frame slot from its own metadata. They forward to `st` for the reason
+    // `NativeKernel::resolve_virtual_call` already carries — the same answer the
+    // kernel gives one level up, and a one-line correct answer beats a silent
+    // wrong one the day this path becomes load-bearing.
     fn formal_width(&self, func: u32, i: usize) -> Option<(u32, bool)> {
-        self.nets.formal_width(func, i)
+        self.st.formal_width(func, i)
     }
     fn formal_is_string(&self, func: u32, i: usize) -> bool {
-        self.nets.formal_is_string(func, i)
+        self.st.formal_is_string(func, i)
     }
 
     // ── capabilities only `SimState` owns ─────────────────────────────────

@@ -668,12 +668,50 @@ context-size 하는 두 mutator 를 위해 **폭 쌍둥이** `eval_task_arg_ctx`
 |---|---|
 | `task frames (Terminator::Call)`: S3b | **391** |
 | `dyn_elem_string` | **206** |
-| `a call in a system-task argument`: S3b | **203** |
+| ~~`a call in a system-task argument`: S3b~~ **✅ 슬라이스 3a 에서 해소(+205)** | ~~203~~ |
 | `stmt_effect` | **200** |
 | `class` | 164 · `fork` 94 · `handle_copy` 87 · `real` 69 · `coverage` 64 |
 
 ⭐ **상위 셋 중 둘이 같은 것**(서브루틴 프레임 = V1 슬라이스 3) 이고, **`dyn_elem_string` 206 은
 슬라이스 2 가 일부러 남긴 원소 정제**라 heap 가족의 자연스러운 다음 조각이다.
+
+
+#### 5.1-d 슬라이스 3a — **시스템태스크 인자 속의 호출**: 슬라이스 2 가 이미 지어 둔 seam (2026-08-12)
+
+**커버리지 72.75% → 75.99%(+205 호출) · 커널 코드 0줄 · 지운 것은 `native::frames` 의 행 하나.**
+
+⭐⭐ **그 행의 거부 이유는 자기 주석에 정확히 적혀 있었고, 그 이유가 이미 거짓이었다.**
+*"`k_dispatch_systask` 는 `&mut Scheduler` 를 들고 있어서 `dispatch` 에 아레나를 **혼자** 넘기고
+`&SimState` 를 composite 로 함께 빌려줄 수 없다"* — 그래서 `$display("%0d", f(x))` 의 호출이
+`NetArena::eval_call`(**loud panic**)에 닿았다. 그런데 **V1 슬라이스 2 가 한 층 아래에 composite 를
+지어 뒀다**: `SimState::eval_expr_with` 가 힙 넷을 라우팅하려고 리더를 `HeapRouted` 로 감싸는데,
+**그 래퍼가 두 store 를 다 든다.** 그 `st` 쪽에서 호출 가족을 답하면 끝이다 —
+`NativeKernel` 이 한 층 위에서 주는 답과 **같은 답**(`SimState::run_frame_call`).
+
+⇒ **다른 목적으로 지은 seam 이 이 행을 무효화했고, 행은 그것을 몰랐다.**
+
+**호출 가족은 넷이다** — `eval_call` 하나가 아니라 `resolve_virtual_call`·`formal_width`·
+`formal_is_string` 도 같이 간다. 전부 `st` 로 보냈다.
+
+⚠️⚠️ **그리고 내가 그 셋에 대해 쓴 주장을 뮤테이션이 반증했다.** 나는 *"아레나의 답이 패닉이
+아니라 트레이트 기본값이라 조용히 틀린다 — `narrow(8'hFE)` 가 15 인 것은 formal 의 선언 4비트가
+적용될 때뿐"* 이라 적고 전용 차분 행까지 지었는데, **뮤테이션 셋이 전부 생존했다.** 실측:
+셋을 아레나로 되돌려도 narrow·widening-signed·string formal 이 **바이트 동일**하고, 결정적으로
+**적대적인 `formal_width`(모든 formal 에 `Some((1,false))`)를 줘도 출력이 안 변한다.**
+`eval_core` 의 강제는 **pre-sizing** 이고 `run_frame_call` 이 자기 메타데이터로 다시 바인딩한다 —
+**리더의 답은 덮어써진다.**
+
+⇒ **셋은 오늘 동치 뮤테이션이다.** 그래도 `st` 로 보낸다 — 커널이 한 층 위에서 주는 것과 **같은
+답**이고, `NativeKernel::resolve_virtual_call` 이 이미 적어 둔 이유(*"그 행이 움직이는 날 한 줄짜리
+정답이 조용한 오답보다 낫다"*)가 그대로 적용된다. ⚠️ **뮤테이션 둘을 동시에 걸면 서로를 가린다** —
+B·C 를 함께 적용했을 때 `formal_is_string=false` 가 `formal_width` 의 1비트 답을 우회시켰다.
+
+**게이트 쪽 정리**: 그 행을 증명하던 refusal 설계 3개를 지우는 대신 **positive 테스트로 뒤집었다**
+(`a_call_in_a_system_task_argument_is_admitted`) — 줄어드는 벡터는 *"키가 사라졌다"* 를 보일 뿐
+*"그 형태가 돈다"* 를 안 보인다. 그리고 `frames.rs` 모듈 doc 의 *"둘 다 S3b"* 문장을 실제 상태로
+정정했다(**남은 것은 `schedule_delayed_cas` 하나** — 그 경로는 `eval_expr_with` 를 안 지난다).
+
+**발산 0** — 기본 백엔드 flip 에서 5387 중 5384 통과, 실패 3건은 전부 *"기본 백엔드가 vm"* 핀.
 
 ⚠️ **V1 이 이 계획의 전부다.** V2·V3 은 정리 작업이고, V1 은 tier-3 이 Phase-2/3+(OOP·CRV·SVA·
 coverage·string·queue·real math·program·vif)를 따라잡는 일이라 **길다**. V0 이 그 길이를 숫자로

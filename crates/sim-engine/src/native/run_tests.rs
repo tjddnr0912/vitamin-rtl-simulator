@@ -1697,6 +1697,110 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── V1 slice 3a: a CALL in a system-task argument (ROADMAP §5.1-c) ──
+        // `native::frames` refused this with a reason that was true when it was
+        // written: `k_dispatch_systask` holds `&mut Scheduler`, so it hands
+        // `dispatch` the ARENA alone and cannot also lend `&SimState` to a
+        // composite — and the arena's `eval_call` is a loud panic for exactly
+        // that. What changed is that slice 2 built a composite one level down
+        // for an unrelated reason (`HeapRouted`, to route heap nets), and it
+        // holds both stores. The row is gone; these rows are what hold the line.
+        //
+        // Net-valued and nested arguments, and a `$sformatf` — the FUNCTION form
+        // whose render is the same seam — because the failure mode was a panic
+        // in one specific reader, not a wrong value in a class of them.
+        (
+            "call_in_system_task_argument",
+            r#"
+module top;
+  function automatic int sq(input int x);
+    return x * x;
+  endfunction
+  function automatic int inc(input int x);
+    return x + 1;
+  endfunction
+  string s;
+  reg [7:0] a;
+  initial begin
+    a = 8'd5;
+    $display("%0d %0d", sq(a), sq(3));
+    $display("%0d", inc(inc(a)));
+    $write("%0d\n", inc(a));
+    s = $sformatf("v=%0d", sq(a));
+    $display("%s", s);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The ORDERING neighbour: an out-of-range element read beside a call in
+        // the same argument list. The arena counts that access and defers the
+        // report; the kernel drains it at seams, and a call is one of them. If
+        // the two ever crossed, the diagnostic would move relative to the line
+        // it belongs to — which `agree` compares as one interleaved stream.
+        (
+            "call_beside_an_out_of_range_read",
+            r#"
+module top;
+  function automatic int id(input int x);
+    return x;
+  endfunction
+  reg [7:0] mem [0:3];
+  reg [7:0] i;
+  initial begin
+    i = 8'd9;
+    mem[0] = 8'd1;
+    $display("%0d %0d", id(3), mem[i]);
+    $display("%0d %0d", mem[i], id(4));
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The FORMAL half of the same seam — and the row whose OWN claim the
+        // mutation battery refuted, which is why it is written out here.
+        //
+        // The claim was: `formal_width`/`formal_is_string` decide how each ACTUAL
+        // is coerced before the frame sees it (§4.5.325), the arena answers both
+        // with the trait DEFAULT (a plausible value, not a loud one), so a row of
+        // int-formal calls is blind to a router that forwards them wrongly.
+        //
+        // ⚠️ MEASURED FALSE on this path. Routing both to the arena leaves narrow,
+        // widening-signed and string formals byte-identical — and so does a
+        // HOSTILE `formal_width` that answers `Some((1, false))` for every formal.
+        // `eval_core`'s coercion is a PRE-sizing; `run_frame_call` then binds each
+        // actual into the frame slot from its own metadata, and that binding is
+        // what decides the value. The reader's answer is overwritten.
+        //
+        // The forwarding stays `st` anyway, for the reason `resolve_virtual_call`
+        // already carries: it is the same answer the kernel gives one level up,
+        // and a one-line correct answer beats a silent wrong one the day this
+        // path becomes load-bearing. The row stays because these shapes DO
+        // exercise `eval_call` through the new seam — just not the formal half.
+        (
+            "call_formals_in_a_system_task_argument",
+            r#"
+module top;
+  function automatic [3:0] narrow(input [3:0] x);
+    return x + 4'd1;
+  endfunction
+  function automatic int strlen_of(input string s);
+    return s.len();
+  endfunction
+  reg [7:0] a;
+  string t;
+  initial begin
+    a = 8'hFE; t = "hello";
+    $display("%0d %0d", narrow(a), strlen_of(t));
+    $display("%0d", strlen_of("ab"));
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // ── V1 slice 2d: associative arrays (ROADMAP §5.1-c) ───────────────
         // The kind whose WRITE does not fit the shared `dyn_write`: a key is an
         // i64 that cannot ride the `(offset, word)` u32 pairs, so it travels out
@@ -1913,7 +2017,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 81, "adversarial set shrank");
+    assert_eq!(designs.len(), 84, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

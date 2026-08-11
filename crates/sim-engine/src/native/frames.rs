@@ -163,27 +163,23 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
     // `k_delay_ticks`), and a zero-delay continuous assign — including the
     // multi-driver fold, which evaluates every driver through the same funnel.
     //
-    // The two that are NOT: `k_dispatch_systask` hands `dispatch` the arena
-    // alone (it holds `&mut Scheduler`, so it cannot also lend `&SimState` to a
-    // composite), and `schedule_delayed_cas` evaluates a DELAYED assign's rhs
-    // and lvalue offsets through the reader it is given. Both are S3b, when the
-    // split reader is threaded through the `(st, nets)` helpers.
+    // ⭐ ONE is left, and the other was closed by a slice that was not about
+    // calls at all. `k_dispatch_systask` does hand `dispatch` the arena alone —
+    // it holds `&mut Scheduler`, so it cannot also lend `&SimState` to a
+    // composite — but V1 slice 2 put a composite one level DOWN for a different
+    // reason: `SimState::eval_expr_with` wraps the reader in `HeapRouted` to
+    // route heap nets, and that wrapper holds BOTH stores. Answering the call
+    // family from its `st` half is what makes `$display("%0d", f(x))` native, so
+    // the row that used to sit here is gone.
+    //
+    // Still refused: `schedule_delayed_cas` evaluates a DELAYED assign's rhs and
+    // lvalue offsets through the reader it is given, and that path does not go
+    // through `eval_expr_with`.
     //
     // `NetArena::eval_call` panics rather than X-poisoning, so a seam this
     // enumeration MISSED is loud in the gate rather than a wrong value in a
     // run; these rows are what keep the two known ones from reaching it.
     let mut c = Walk::new(ir);
-    for p in &ir.processes {
-        for blk in &p.body {
-            for &sid in &blk.stmts {
-                if let sim_ir::Stmt::SysTask { fmt, args, .. } = &ir.stmts[sid as usize] {
-                    if fmt.iter().chain(args.iter()).any(|&e| c.has_call(e)) {
-                        return Err("a call in a system-task argument: S3b");
-                    }
-                }
-            }
-        }
-    }
     for ca in &ir.cont_assigns {
         if ca.delay.is_none() {
             continue; // the zero-delay settle evaluates through `k_eval_for_lvalue`

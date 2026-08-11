@@ -34,6 +34,52 @@
 
 ---
 
+## 0.-13 ⭐⭐ 개정 20 — **슬라이스 3a: 다른 목적으로 지은 seam 이 거부 행을 무효화했다** — 72.75% → **75.99%** (2026-08-12, ROADMAP §5.1-d)
+
+**커널 코드 0줄.** 지운 것은 `native::frames` 의 행 하나(`a call in a system-task argument: S3b`).
+
+### 그 행의 이유는 자기 주석에 정확히 적혀 있었고, 이미 거짓이었다
+
+> *"`k_dispatch_systask` 는 `&mut Scheduler` 를 들고 있어서 `dispatch` 에 아레나를 **혼자** 넘기고
+> `&SimState` 를 composite 로 함께 빌려줄 수 없다"*
+
+그래서 `$display("%0d", f(x))` 의 호출이 `NetArena::eval_call`(**loud panic**)에 닿았다. 그런데
+**V1 슬라이스 2 가 한 층 아래에 composite 를 지어 뒀다** — `SimState::eval_expr_with` 가 힙 넷을
+라우팅하려고 리더를 `HeapRouted` 로 감싸고, **그 래퍼가 두 store 를 다 든다.** 그 `st` 쪽에서
+호출 가족을 답하면 끝이고, 답은 `NativeKernel` 이 한 층 위에서 주는 것과 **같다**
+(`SimState::run_frame_call` · 같은 window/slab · `frames_admitted` 가 *"모듈 넷을 안 읽는다"* 를
+증명한 프레임 클래스).
+
+⭐⭐ **교훈: 거부 행은 자기 이유가 언제 거짓이 되는지 모른다.** 슬라이스 2 는 힙 이야기였고 이
+행은 호출 이야기였는데, **필요한 물건이 같았다**(두 store 를 함께 든 프레임). 행의 이유가
+*"…할 수 없다"* 형태면, **다음 슬라이스마다 그 문장을 다시 읽어라.**
+
+### ⚠️⚠️ 호출 가족은 넷이고, 뒤의 셋에 대한 내 주장을 뮤테이션이 반증했다
+
+`eval_call` 만이 아니라 `resolve_virtual_call`·`formal_width`·`formal_is_string` 도 같이 간다.
+나는 *"아레나의 `eval_call` 은 패닉이지만 `formal_*` 는 **트레이트 기본값**이라 조용히 틀린다"* 라
+적고 전용 차분 행까지 지었다. **셋 다 생존했다.**
+
+실측: 셋을 아레나로 되돌려도 narrow·widening-signed·string formal 이 **바이트 동일**하고,
+결정적으로 **적대적인 `formal_width`(모든 formal 에 `Some((1,false))`)를 줘도 출력이 안 변한다.**
+`eval_core` 의 강제는 **pre-sizing** 이고 `run_frame_call` 이 자기 메타데이터로 다시 바인딩한다 —
+**리더의 답은 덮어써진다.**
+
+⇒ **셋은 오늘 동치 뮤테이션이다.** 그래도 `st` 로 보낸다(커널과 같은 답 · `resolve_virtual_call`
+이 이미 적어 둔 이유). ⚠️ **뮤테이션 둘을 동시에 걸면 서로를 가린다** — B·C 를 함께 적용했을 때
+`formal_is_string=false` 가 `formal_width` 의 1비트 답을 우회시켰다.
+
+### 게이트 쪽
+
+그 행을 증명하던 refusal 설계 3개는 **positive 테스트로 뒤집었다**
+(`a_call_in_a_system_task_argument_is_admitted`) — 줄어드는 벡터는 *"키가 사라졌다"* 를 보일 뿐
+*"그 형태가 돈다"* 를 안 보인다. `frames.rs` 모듈 doc 의 *"둘 다 S3b"* 도 실제 상태로 정정
+(**남은 것은 `schedule_delayed_cas` 하나** — 그 경로는 `eval_expr_with` 를 안 지난다).
+
+**발산 0** — flip 런 5387 중 5384 통과, 실패 3건은 전부 백엔드 이름 핀.
+
+---
+
 ## 0.-12 ⭐⭐ 개정 19 — **V1 슬라이스 2(heap) 완료** — 재측정 **54.66% → 72.75%** · 발산 0 (2026-08-11, ROADMAP §5.1-c)
 
 V0 이 정한 순서의 2번. 넷으로 갈라 **넷 다 닫았다** — 2a `dyn_array` · 2b `string` ·
@@ -162,7 +208,7 @@ dyn/string/queue 는 전부 공유 `dyn_write` 로 갔다. **assoc 키는 i64(�
 |---|---|
 | `task frames (Terminator::Call)`: S3b | **391** |
 | `dyn_elem_string` | **206** |
-| `a call in a system-task argument`: S3b | **203** |
+| ~~`a call in a system-task argument`: S3b~~ **✅ 3a 해소(+205)** | ~~203~~ |
 | `stmt_effect` | **200** |
 | `class` 164 · `fork` 94 · `handle_copy` 87 · `real` 69 · `coverage` 64 | |
 
