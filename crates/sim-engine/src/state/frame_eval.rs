@@ -75,6 +75,30 @@ impl<'a> SimState<'a> {
         nets: &N,
         eid: u32,
     ) -> Value {
+        // V1 slice 2: the ONE place that holds both the heap owner and the
+        // caller's store, so it is where a heap-kind net gets routed. Reached
+        // only when the reader ASKS (`NetArena` does; `SimState` does not), and
+        // `HeapRouted` answers `false` in turn, so this recurses exactly once
+        // and the engine's path is an `if false` — mechanically unchanged.
+        //
+        // All four callers of this function are the builtins' argument paths
+        // (`render`'s two, `queues_io`'s two), which is why fixing it here also
+        // covers `eval_task_arg` — the seam §4.5.294 had to split out when only
+        // the formatter was threaded.
+        if nets.routes_heap_to_state() {
+            return self.eval_expr_inner(&crate::state::HeapRouted { st: self, nets }, eid);
+        }
+        self.eval_expr_inner(nets, eid)
+    }
+
+    /// The body, with the routing decision already made.
+    ///
+    /// Split out rather than recursing: `eval_expr_with` calling itself with
+    /// `HeapRouted<N>` is a TYPE-level recursion, and monomorphization cannot
+    /// see that the runtime `false` stops it — it instantiates
+    /// `HeapRouted<HeapRouted<…>>` until the recursion limit. Two instantiations
+    /// per `N`, no recursion.
+    fn eval_expr_inner<N: crate::eval::NetReader + ?Sized>(&self, nets: &N, eid: u32) -> Value {
         crate::eval::EvalCtx {
             ir: self.ir,
             nets,

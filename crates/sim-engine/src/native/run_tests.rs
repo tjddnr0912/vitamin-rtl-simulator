@@ -1416,6 +1416,69 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── V1 slice 2a: dynamic arrays (§4.5.339) ─────────────────────────
+        // A DynArray net gets a DEAD slot in the arena and its elements live in
+        // `SimState::dyn_heap`; `agree` proves both halves, since it asserts the
+        // design is `runnable` before comparing — a row that silently started
+        // falling back would fail loudly rather than compare the VM to itself.
+        (
+            "dyn_array_alloc_write_read_size",
+            r#"
+module top;
+  int q[];
+  integer i;
+  initial begin
+    q = new[4];
+    for (i = 0; i < 4; i = i + 1) q[i] = i * 3;
+    for (i = 0; i < 4; i = i + 1) $display("q[%0d]=%0d", i, q[i]);
+    $display("size=%0d", q.size());
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // The OUT-OF-RANGE read is the row that discriminates the two stores:
+        // the arena counts a bad index and the heap warns once, so a design that
+        // reached the dead slot would differ in the diagnostic stream and the
+        // exit class even where the printed value agreed on `x`.
+        (
+            "dyn_array_out_of_range_and_empty",
+            r#"
+module top;
+  int q[];
+  int e[];
+  initial begin
+    q = new[2];
+    q[0] = 5; q[1] = 6;
+    $display("oob=%0d empty=%0d esize=%0d", q[9], e[0], e.size());
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
+        // A RUNTIME index on both sides of the assignment, so the element index
+        // travels through `Offsets` rather than being folded — the path
+        // `write_routed` hands to `dyn_write` as `(off, word)`.
+        (
+            "dyn_array_runtime_index_copy",
+            r#"
+module top;
+  int a[];
+  int b[];
+  integer i;
+  initial begin
+    a = new[3]; b = new[3];
+    for (i = 0; i < 3; i = i + 1) a[i] = (i + 1) * 7;
+    for (i = 0; i < 3; i = i + 1) b[2 - i] = a[i];
+    $display("%0d %0d %0d", b[0], b[1], b[2]);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // ── V1 slice 1: SVA (§4.5.337) ─────────────────────────────────────
         // These are here rather than in a file of their own because
         // `adversarial_designs` is the set `agree` proves BOTH halves on: it
@@ -1537,7 +1600,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 67, "adversarial set shrank");
+    assert_eq!(designs.len(), 70, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }

@@ -227,11 +227,11 @@ impl NetArena {
             match nv.kind {
                 NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
                 NetKind::Real => return Err("real: S2 width class"),
-                NetKind::DynArray
-                | NetKind::Queue
-                | NetKind::Assoc
-                | NetKind::AssocStr
-                | NetKind::String => return Err("heap kind: outside R1 storage"),
+                // V1 slice 2a: admitted. Its slot is dead (see `NetArena::heap`).
+                NetKind::DynArray => {}
+                NetKind::Queue | NetKind::Assoc | NetKind::AssocStr | NetKind::String => {
+                    return Err("heap kind: outside R1 storage")
+                }
             }
             let words = nwords(nv.width.max(1)).max(1) as u64;
             off += words * 2 * u64::from(nv.array_len.max(1));
@@ -374,6 +374,13 @@ impl NetReader for NetArena {
              reader, so this is an evaluation seam that was handed the arena alone. \
              Route it through the kernel, or add a `native::frames` row refusing it."
         )
+    }
+
+    /// V1 slice 2: this store owns flat slots only, so a heap-kind net must be
+    /// routed to `SimState` before it reaches here — which is what
+    /// `assert_owns` below checks, and what this asks for.
+    fn routes_heap_to_state(&self) -> bool {
+        true
     }
 
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {

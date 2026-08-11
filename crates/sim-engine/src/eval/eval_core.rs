@@ -172,6 +172,21 @@ pub(crate) fn parse_real_prefix(bytes: &[u8]) -> f64 {
 
 /// Read-only net access the evaluator needs. The engine state implements it.
 pub trait NetReader {
+    /// Does this reader want HEAP-kind nets routed to `SimState` before it sees
+    /// them? (V1 slice 2.)
+    ///
+    /// A store that owns only flat net slots — tier-3's `NetArena` — cannot
+    /// answer for a `string`/`queue`/`dyn_array`/`assoc` net, whose value lives
+    /// in `SimState::dyn_heap`. `SimState::eval_expr_with` is the ONE place that
+    /// holds both the heap owner (`&self`) and the passed reader, so the routing
+    /// belongs there — and this is how the reader asks for it.
+    ///
+    /// OPT-IN by design (§4.5.314): the default is `false`, so the engine's own
+    /// path takes an `if false` and is mechanically unchanged. Only `NetArena`
+    /// answers `true`.
+    fn routes_heap_to_state(&self) -> bool {
+        false
+    }
     /// Current 4-state value of net `net`, optional array word index.
     fn read_net(&self, net: u32, word: Option<u32>) -> Value;
     /// LEAF FAST PATH: the `(val, unk)` word pair of a PLAIN SCALAR net, already

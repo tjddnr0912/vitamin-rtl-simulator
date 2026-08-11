@@ -70,10 +70,48 @@ fn heap_storage_kinds_reject_by_net_kind() {
          endmodule\n",
     );
     assert!(!ok);
+    // V1 slice 2a admitted `dyn_array`: its elements live in `SimState::dyn_heap`
+    // and tier-3 reaches them through the composite reader and `write_routed`,
+    // so the container is no longer a disqualifier. The three kinds that still
+    // have no route stay, each under its own key — 2b/2c/2d.
     assert_eq!(
         rs,
-        vec![("assoc", 1), ("dyn_array", 1), ("queue", 1), ("string", 1)],
+        vec![("assoc", 1), ("queue", 1), ("string", 1)],
         "each storage family must be counted under its own key"
+    );
+}
+
+/// V1 slice 2a: a DYNAMIC ARRAY alone no longer disqualifies, and its two
+/// ELEMENT refinements still do.
+///
+/// Written as its own case rather than as a deletion from the vector above: what
+/// has to be asserted is the positive. And the refinements matter more than the
+/// container did — while `dyn_array` refused every such net they were "subsumed"
+/// and bound to `_`, so opening one row would have opened three. A `real r[]`
+/// element store is an f64 lane and a `string s[]` element store routes through
+/// the string heap; tier-3 has run neither.
+#[test]
+fn a_plain_dynamic_array_is_core_and_its_element_refinements_are_not() {
+    let (ok, rs) = reasons(
+        "module t;\n\
+           int d[];\n\
+           initial begin d = new[2]; d[0] = 7;\n\
+             $display(\"%0d %0d\", d[0], d.size()); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "a plain `int d[]` must be eligible now: {rs:?}");
+    assert_eq!(rs, vec![]);
+
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.real_elem_dyn_nets.insert(0);
+    o.string_elem_dyn_nets.insert(0);
+    let e = design_eligibility(&ir, &o);
+    assert!(!e.eligible);
+    assert_eq!(
+        e.reject_reasons.into_iter().collect::<Vec<_>>(),
+        vec![("dyn_elem_real", 1), ("dyn_elem_string", 1)],
+        "the element refinements must refuse in their own words"
     );
 }
 

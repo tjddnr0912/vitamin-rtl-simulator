@@ -172,8 +172,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // Subsumed reject refinements: every member of these two sets is a
         // DynArray/Queue-kind handle net, already counted by the net-kind scan
         // below — counting them again would double-book the same net.
-        real_elem_dyn_nets: _,
-        string_elem_dyn_nets: _,
+        real_elem_dyn_nets,
+        string_elem_dyn_nets,
         // CORE since V1 slice 1. SVA is not a runtime mechanism at all: elaborate
         // DESUGARS `assert property(@(clk) a |-> b)` into `always @(clk) if (a &&
         // !b) $error(…)`, so what reaches the engine is ordinary IR plus these two
@@ -362,7 +362,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // a PLAIN `int q[$]` has no sidecar entry at all, so the only complete
     // detector is the net table itself. The match is `_`-free: a new NetKind
     // is a format bump AND a forced classification here.
-    let mut dyn_n = 0usize;
     let mut queue_n = 0usize;
     let mut assoc_n = 0usize;
     let mut string_n = 0usize;
@@ -376,14 +375,15 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             // published eligibility number from counting designs the storage
             // cannot take (differential-review find: the two gates disagreed).
             NetKind::Real => real_n += 1,
-            NetKind::DynArray => dyn_n += 1,
+            NetKind::DynArray => {}
             NetKind::Queue => queue_n += 1,
             NetKind::Assoc | NetKind::AssocStr => assoc_n += 1,
             NetKind::String => string_n += 1,
         }
     }
     flag(&mut out, "real", real_n);
-    flag(&mut out, "dyn_array", dyn_n);
+    flag(&mut out, "dyn_elem_real", real_elem_dyn_nets.len());
+    flag(&mut out, "dyn_elem_string", string_elem_dyn_nets.len());
     flag(&mut out, "queue", queue_n);
     flag(&mut out, "assoc", assoc_n);
     flag(&mut out, "string", string_n);

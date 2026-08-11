@@ -830,3 +830,119 @@ pub(crate) struct RngCells {
     /// `$urandom` splitmix64 state (vitamin-pinned sequence).
     pub urandom: std::cell::Cell<u64>,
 }
+
+/// V1 slice 2: a reader that answers HEAP-kind nets from `SimState` and
+/// everything else from the store it wraps.
+///
+/// Built by `SimState::eval_expr_with` — the only frame that holds both — and
+/// only when the wrapped reader asks (`routes_heap_to_state`). It exists because
+/// the seam §4.5.293/294 built hands the FORMAT engine tier-3's `NetArena`
+/// directly, so `$display`'s argument evaluation never passes through the
+/// composite that routes; the backtrace of the slice-2a divergence names exactly
+/// this path.
+///
+/// The split is by OWNERSHIP, not by taste: `st` owns the dyn/assoc/string
+/// heaps, the `foreach` iteration context and the file table, and `nets` owns
+/// the flat slots. A capability answered by the wrong half is the divergence
+/// this type exists to prevent.
+pub(crate) struct HeapRouted<'x, 'a, N: crate::eval::NetReader + ?Sized> {
+    pub(crate) st: &'x SimState<'a>,
+    pub(crate) nets: &'x N,
+}
+
+impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'_, '_, N> {
+    /// `false` — this IS the routing, so asking for it again would recurse.
+    fn routes_heap_to_state(&self) -> bool {
+        false
+    }
+
+    fn read_net(&self, net: u32, word: Option<u32>) -> Value {
+        if self
+            .st
+            .dyn_is_handle
+            .get(net as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            return self.st.read_net(net, word);
+        }
+        self.nets.read_net(net, word)
+    }
+
+    /// The leaf fast path must not fire for a heap net; `SimState`'s own
+    /// implementation already bails on `dyn_is_handle`, and the wrapped store
+    /// would answer from a dead slot. Ask the same question first.
+    fn read_scalar_words(&self, net: u32, w: u32, ctx_signed: bool) -> Option<(u64, u64)> {
+        if self
+            .st
+            .dyn_is_handle
+            .get(net as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            return None;
+        }
+        self.nets.read_scalar_words(net, w, ctx_signed)
+    }
+
+    // ── the wrapped store's own bookkeeping ───────────────────────────────
+    fn take_deferred_range_kinds(&self) -> Vec<bool> {
+        self.nets.take_deferred_range_kinds()
+    }
+    fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
+        self.nets.eval_call(func, args)
+    }
+    fn resolve_virtual_call(&self, call_eid: u32, static_fid: u32, args: &[Value]) -> u32 {
+        self.nets.resolve_virtual_call(call_eid, static_fid, args)
+    }
+    fn formal_width(&self, func: u32, i: usize) -> Option<(u32, bool)> {
+        self.nets.formal_width(func, i)
+    }
+    fn formal_is_string(&self, func: u32, i: usize) -> bool {
+        self.nets.formal_is_string(func, i)
+    }
+
+    // ── capabilities only `SimState` owns ─────────────────────────────────
+    fn dyn_size(&self, net: u32) -> Option<u64> {
+        self.st.dyn_size(net)
+    }
+    fn dyn_values(&self, net: u32) -> Option<Vec<Value>> {
+        self.st.dyn_values(net)
+    }
+    fn dyn_warn(&self, net: u32, msg: &str) {
+        self.st.dyn_warn(net, msg)
+    }
+    fn array_item(&self, index: bool) -> Value {
+        self.st.array_item(index)
+    }
+    fn swap_array_item(&self, v: Option<(Value, u64)>) -> Option<(Value, u64)> {
+        self.st.swap_array_item(v)
+    }
+    fn str_bytes(&self, net: u32) -> Option<Vec<u8>> {
+        self.st.str_bytes(net)
+    }
+    fn str_byte_at(&self, net: u32, i: usize) -> Option<u8> {
+        self.st.str_byte_at(net, i)
+    }
+    fn is_assoc(&self, net: u32) -> bool {
+        self.st.is_assoc(net)
+    }
+    fn assoc_read(&self, net: u32, key: Option<i64>) -> Value {
+        self.st.assoc_read(net, key)
+    }
+    fn assoc_exists(&self, net: u32, key: Option<i64>) -> Option<bool> {
+        self.st.assoc_exists(net, key)
+    }
+    fn is_assoc_str(&self, net: u32) -> bool {
+        self.st.is_assoc_str(net)
+    }
+    fn assoc_str_read(&self, net: u32, key: &Option<Vec<u8>>) -> Value {
+        self.st.assoc_str_read(net, key)
+    }
+    fn assoc_str_exists(&self, net: u32, key: &Option<Vec<u8>>) -> Option<bool> {
+        self.st.assoc_str_exists(net, key)
+    }
+    fn fd_eof(&self, fd: u32) -> Value {
+        self.st.fd_eof(fd)
+    }
+}

@@ -1206,6 +1206,13 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
     // it that way — a new trait method with a default must be answered here on
     // purpose rather than inherited by accident.
 
+    /// `false` — this composite IS the routing (`read_net` above asks
+    /// `is_heap_net`), so asking `SimState::eval_expr_with` to wrap it again
+    /// would be a second decision on the same question.
+    fn routes_heap_to_state(&self) -> bool {
+        false
+    }
+
     fn dyn_size(&self, net: u32) -> Option<u64> {
         self.sched.st.dyn_size(net)
     }

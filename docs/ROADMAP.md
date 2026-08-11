@@ -424,7 +424,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 |---|---|---|---|
 | — | (현재) | — | 3,417 / 54.7% |
 | 1 | ✅ **SVA** — `sva` 행 완료(§4.5.337, +760 → **66.8%**) · `deferred_assert`(+14)는 별개 | +774 | **67.0%** |
-| 2 | **heap 저장 + 네 종류** (`heap-slot`+`string`·`queue`·`queue_ops`·`dyn_array`·`assoc`·`handle_copy`) — **넷으로 갈린다, §5.1-c** | +560 | **76.0%** |
+| 2 | **heap 저장 + 네 종류** — **넷으로 갈린다(§5.1-c)** · ✅ **2a(`dyn_array`, +187) 완료** · 2b/2c/2d 남음 | +560 | **76.0%** |
 | 3 | **서브루틴 프레임** (`task-frame`·`call-stmt`·`call-in-systask-arg`·`frame-reads-module-net`·`frame-stmt` …) | +712 | **87.4%** |
 | 4 | `stmt_effect` | +241 | 91.2% |
 | 5 | **class / OOP / CRV** | +163 | 93.9% |
@@ -517,28 +517,21 @@ tier-3 은 그것을 **말없이 상속**하고 있었다: 21 메서드 중 오�
 `Wire|Reg|Logic|Integer` 화이트리스트를 arm 진입부에 갖고 있다** — 상수 인덱스와 런타임 인덱스가
 같은 가드 아래 있다. 그러므로 `wprog` 는 우회 경로가 **아니다**. 우회 지점은 아직 **미확정**이다.
 
-##### 2a 진행 3 (2026-08-11) — **계기를 지었고, 그것이 첫 실행에서 우회 경로를 이름 지었다**
+**해결(2026-08-11) — 후보 ⓑ**: 라우팅을 **`SimState::eval_expr_with`** 에 뒀다. 그 함수가
+`&self`(= 힙 소유자)와 `nets`(= 호출자의 store)를 **이미 함께 들고 있는 유일한 프레임**이라
+대여 충돌이 아예 없다(ⓒ 는 `&sched.st` 와 `&mut sched` 가 겹쳐 **컴파일되지 않고**, ⓐ 는
+아레나에 수명을 오염시킨다). 리더가 `routes_heap_to_state()` 로 **요청할 때만** 켜지므로 엔진
+경로는 `if false` = 기계적 불변(§4.5.314 의 opt-in 규칙). ⚠️ 재귀로 쓰면 monomorphization 이
+`HeapRouted<HeapRouted<…>>` 를 무한 전개하므로 본문을 `eval_expr_inner` 로 분리했다.
+⭐ 그 함수의 호출자가 **넷뿐이고 전부 builtins 의 인자 경로**라, §4.5.294 가 따로 빼야 했던
+`eval_task_arg` 까지 **한 자리로 덮인다**.
 
-**지은 것**: `NetArena::heap`(빌드 시점 `Vec<bool>`, `ir.nets` kind 에서) + `assert_owns` +
-진입점 넷(`read_net`·`planes`·`set_elem`·`write_lvalue`)과 `wprog::compile` 의
-`debug_assert`. 16곳을 눈으로 감사하는 대신 **아레나가 스스로 거부**한다. 릴리스 경로 불변.
+**⇒ 슬라이스 2a 완료.** `dyn_array` 는 CORE, 원소 정제 둘(`dyn_elem_real`/`dyn_elem_string`)은
+자기 이름으로 거부. 전 스위트에서 **`assert_owns` 패닉 0건** = 남은 우회 경로 없음.
 
-⭐ **효과는 즉시였다.** 게이트를 열고 한 번 돌리자 쓰기 우회를 지목했고(그것은 내가 앞서
-`git checkout` 으로 **되돌려 잃어버린** `write_routed` 의 dyn arm 이었다 — 뮤테이션 배터리 사고와
-같은 클래스), 복구하자 이번엔 **읽기**를 지목했다. 백트레이스가 정확히:
+<!-- 해결됨: 아래는 당시의 후보 목록 -->
 
-```
-k_dispatch_systask → dispatch_with → format_args_str_with → render_template
-  → next_arg_with → eval_expr_with → EvalCtx::eval
-  → <NetArena as NetReader>::read_net        ← 복합 커널이 아니라 아레나 직접
-```
-
-⭐⭐ **§4.5.293/294 가 지은 그 배선이 슬라이스 2의 벽이다.** 포맷 엔진은 아레나를 **제네릭
-리더로** 받는다(`k_dispatch_systask` 가 `Some(arena)` 를 넘긴다) — 그래서 `$display` 인자 평가가
-라우팅을 **통과하지 않는다**. 그 선택에는 이유가 있었다: `dispatch_with(sched: &mut Scheduler,
-nets: Option<&N>)` 라서 커널 자신을 넘기면 `&mut sched` 와 `&self` 가 동시에 필요하다.
-
-**⇒ 2a 의 다음 결정은 그 이음매의 형태다**(구현이 아니라 설계 선택):
+**당시의 세 후보**(구현이 아니라 설계 선택):
 ⓐ 아레나가 힙을 빌려 스스로 라우팅하게 한다(수명 문제) · ⓑ `dispatch_with` 가 힙 넷을 `nets`
 보다 먼저 `sched.st` 로 보낸다(리더 호출이 `eval` 깊숙이 있어 진입점이 애매) · ⓒ 포맷 경로 전용
 복합 리더를 `&NetArena + &SimState` 로 만든다(`sched` 의 가변 대여와 겹치지 않게).
