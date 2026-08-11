@@ -51,6 +51,18 @@ pub struct Slot {
 /// The tier-3 net store: every net of the design, in slot form.
 pub struct NetArena {
     pub slots: Vec<Slot>,
+    /// V1 slice 2: per net, "this net's value is NOT in this store".
+    ///
+    /// A heap-kind net (`string`/`queue`/`dyn_array`/`assoc`) gets a slot like
+    /// any other so `slots[net]` keeps meaning net `net`, and that slot is DEAD:
+    /// the value lives in `SimState::dyn_heap`, reached through
+    /// `NativeKernel::read_net` / `write_routed`. This vector exists so the
+    /// arena can SAY SO — every entry point below `debug_assert`s on it, which
+    /// turns "audit sixteen call sites that index `slots` by net id" into "run
+    /// the suite once with the gate open and read the panics". Named after
+    /// §4.5.334's `panic!` probe, and a debug assert for the same reason: the
+    /// release path must stay byte-identical.
+    pub heap: Vec<bool>,
     /// S1d-2: the dirty/edge channel, driven by the write funnel's two store
     /// points. It lives HERE, as it does on `SimState`, because those points are
     /// inside the funnel — a channel the funnel could not reach would have to be
@@ -132,6 +144,20 @@ impl NetArena {
         let total = usize::try_from(off).map_err(|_| "arena exceeds usize")?;
         let mut arena = NetArena {
             slots,
+            heap: ir
+                .nets
+                .iter()
+                .map(|nv| {
+                    matches!(
+                        nv.kind,
+                        NetKind::DynArray
+                            | NetKind::Queue
+                            | NetKind::Assoc
+                            | NetKind::AssocStr
+                            | NetKind::String
+                    )
+                })
+                .collect(),
             ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
             pending_range: std::cell::RefCell::new(Vec::new()),
@@ -235,6 +261,18 @@ impl NetArena {
     /// managed to leave its own motivating example un-routed.
     #[inline]
     /// Record one out-of-range access and WHICH KIND it was, in order.
+    /// "This store does not own net `net`" — the arena's own statement of the
+    /// routing contract, checked at every entry point.
+    pub(crate) fn assert_owns(&self, net: u32, site: &str) {
+        debug_assert!(
+            !self.heap.get(net as usize).copied().unwrap_or(false),
+            "net {net} is a heap kind and its value is not in this store, but \
+             `{site}` reached the arena with it. Some path indexes `slots` by \
+             net id without asking `NativeKernel::is_heap_net` first — that is \
+             the bypass, and this assert is how it names itself."
+        );
+    }
+
     pub(crate) fn note_bad_index(&self, unknown: bool) {
         self.pending_range.borrow_mut().push(unknown);
     }
@@ -242,6 +280,7 @@ impl NetArena {
     /// The `(val, unk)` plane slices of element `elem` of net `net`.
     #[inline]
     pub fn planes(&self, net: u32, elem: u32) -> (&[u64], &[u64]) {
+        self.assert_owns(net, "NetArena::planes");
         let s = self.slots[net as usize];
         debug_assert!(elem < s.elems);
         let base = s.off as usize + (elem as usize) * 2 * s.words as usize;
@@ -263,6 +302,7 @@ impl NetArena {
     /// to keep the buffer invariant.
     #[cfg(test)]
     pub(crate) fn set_elem(&mut self, net: u32, elem: u32, val: &[u64], unk: &[u64]) {
+        self.assert_owns(net, "NetArena::set_elem");
         let s = self.slots[net as usize];
         debug_assert!(elem < s.elems);
         let m = top_mask(s.width.max(1));
@@ -337,6 +377,7 @@ impl NetReader for NetArena {
     }
 
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
+        self.assert_owns(net, "NetArena::read_net");
         let s = self.slots[net as usize];
         let w = word.unwrap_or(0);
         // Out-of-range array word reads all-X — NOT a clamp (mirrors the engine:

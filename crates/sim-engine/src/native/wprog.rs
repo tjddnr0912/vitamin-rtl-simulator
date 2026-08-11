@@ -355,6 +355,7 @@ fn compile_node(
             ) {
                 return None;
             }
+            arena.assert_owns(*net, "wprog::compile Expr::Signal");
             let slot = arena.slots.get(*net as usize)?;
             if slot.width != w || slot.words != 1 {
                 return None;

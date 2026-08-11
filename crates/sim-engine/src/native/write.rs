@@ -108,6 +108,9 @@ impl NetArena {
         offsets: &Offsets,
         word_entry: bool,
     ) -> bool {
+        for c in &lhs.chunks {
+            self.assert_owns(c.net, "NetArena::write_lvalue");
+        }
         // The assoc key variants carry their key OUT of band and `as_slice()`
         // yields `&[]` for them — a shape this funnel has no arm for. Heap kinds
         // are S0-rejected so they cannot arrive, but resting on a `NetReader`

@@ -517,12 +517,32 @@ tier-3 은 그것을 **말없이 상속**하고 있었다: 21 메서드 중 오�
 `Wire|Reg|Logic|Integer` 화이트리스트를 arm 진입부에 갖고 있다** — 상수 인덱스와 런타임 인덱스가
 같은 가드 아래 있다. 그러므로 `wprog` 는 우회 경로가 **아니다**. 우회 지점은 아직 **미확정**이다.
 
-**⇒ 2a 의 남은 일 — 지점을 추측하지 말고 아레나가 스스로 말하게 하라.** census 는 프로덕션에서
-슬롯을 넷 id 로 직접 인덱스하는 자리를 **16곳**으로 셌다(`arena` 4 · `write` 7 · `dirty` 2 ·
-`wprog` 1 · `kernel` 2). 16곳을 눈으로 감사하는 대신 **`NetArena` 에 빌드 시점 `heap: Vec<bool>`
-을 두고 진입점마다 `debug_assert!(!heap[net])`** 를 걸면, 게이트를 연 채 스위트를 한 번 돌리는
-것으로 **모든 우회 경로가 이름과 함께 즉시 나온다**(§4.5.334 의 `panic!` 프로브와 같은 방법 ·
-`debug_assert` 라 릴리스 경로는 불변). 게이트는 그때까지 **닫아 둔다**.
+##### 2a 진행 3 (2026-08-11) — **계기를 지었고, 그것이 첫 실행에서 우회 경로를 이름 지었다**
+
+**지은 것**: `NetArena::heap`(빌드 시점 `Vec<bool>`, `ir.nets` kind 에서) + `assert_owns` +
+진입점 넷(`read_net`·`planes`·`set_elem`·`write_lvalue`)과 `wprog::compile` 의
+`debug_assert`. 16곳을 눈으로 감사하는 대신 **아레나가 스스로 거부**한다. 릴리스 경로 불변.
+
+⭐ **효과는 즉시였다.** 게이트를 열고 한 번 돌리자 쓰기 우회를 지목했고(그것은 내가 앞서
+`git checkout` 으로 **되돌려 잃어버린** `write_routed` 의 dyn arm 이었다 — 뮤테이션 배터리 사고와
+같은 클래스), 복구하자 이번엔 **읽기**를 지목했다. 백트레이스가 정확히:
+
+```
+k_dispatch_systask → dispatch_with → format_args_str_with → render_template
+  → next_arg_with → eval_expr_with → EvalCtx::eval
+  → <NetArena as NetReader>::read_net        ← 복합 커널이 아니라 아레나 직접
+```
+
+⭐⭐ **§4.5.293/294 가 지은 그 배선이 슬라이스 2의 벽이다.** 포맷 엔진은 아레나를 **제네릭
+리더로** 받는다(`k_dispatch_systask` 가 `Some(arena)` 를 넘긴다) — 그래서 `$display` 인자 평가가
+라우팅을 **통과하지 않는다**. 그 선택에는 이유가 있었다: `dispatch_with(sched: &mut Scheduler,
+nets: Option<&N>)` 라서 커널 자신을 넘기면 `&mut sched` 와 `&self` 가 동시에 필요하다.
+
+**⇒ 2a 의 다음 결정은 그 이음매의 형태다**(구현이 아니라 설계 선택):
+ⓐ 아레나가 힙을 빌려 스스로 라우팅하게 한다(수명 문제) · ⓑ `dispatch_with` 가 힙 넷을 `nets`
+보다 먼저 `sched.st` 로 보낸다(리더 호출이 `eval` 깊숙이 있어 진입점이 애매) · ⓒ 포맷 경로 전용
+복합 리더를 `&NetArena + &SimState` 로 만든다(`sched` 의 가변 대여와 겹치지 않게).
+**게이트는 그 결정 전까지 닫아 둔다.**
 
 ⚠️ **V1 이 이 계획의 전부다.** V2·V3 은 정리 작업이고, V1 은 tier-3 이 Phase-2/3+(OOP·CRV·SVA·
 coverage·string·queue·real math·program·vif)를 따라잡는 일이라 **길다**. V0 이 그 길이를 숫자로

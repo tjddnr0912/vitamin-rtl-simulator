@@ -1108,8 +1108,31 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// it remains the flat store's funnel, and this is the layer above it that
     /// chooses a store.
     pub(crate) fn write_routed(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) -> bool {
+        // V1 slice 2: a heap-kind net's elements are not in the flat store, so
+        // this write belongs to `SimState::dyn_heap`. Mirrors the engine's own
+        // `write_chunk`, whose FIRST check is the same one.
+        if let [c] = lhs.chunks.as_slice() {
+            if self.is_heap_net(c.net) {
+                let (off, word) = offsets.as_slice().first().copied().unwrap_or((0, 0));
+                // `&self` — the heap is interior-mutable (§4.5.194), which is
+                // what lets this run without disturbing the `&mut arena` borrow.
+                return self.sched.st.dyn_write(c, off, word, &value);
+            }
+        }
         let ir = self.ir;
         self.arena.write_lvalue(ir, lhs, value, offsets)
+    }
+
+    /// Is this net's value in the ENGINE's heap rather than in a slot of THIS
+    /// store?
+    ///
+    /// Sourced from the ARENA's own `heap` map, not from `SimState`'s
+    /// `dyn_is_handle`. Both are derived from the same `ir.nets` kinds, so this
+    /// is one rule with one derivation rather than two spellings — and the
+    /// arena's is the one that is guaranteed to exist here: it is built with the
+    /// store it describes, in `NetArena::build`.
+    pub(crate) fn is_heap_net(&self, net: u32) -> bool {
+        self.arena.heap.get(net as usize).copied().unwrap_or(false)
     }
 
     pub(crate) fn is_frame_local(&self, net: u32) -> bool {
@@ -1146,7 +1169,11 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
 /// S0 `class` row rather than anything about this store.
 impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
-        if self.is_frame_local(net) {
+        // Two nets this store does not own: a frame-local (S3a) and — since V1
+        // slice 2 — a heap kind, whose elements live in `SimState::dyn_heap`.
+        // Both delegate to the ENGINE's `read_net`, which routes on its own
+        // bitmaps; restating either rule here is how two stores diverge.
+        if self.is_frame_local(net) || self.is_heap_net(net) {
             return self.sched.st.read_net(net, word);
         }
         self.arena.read_net(net, word)
