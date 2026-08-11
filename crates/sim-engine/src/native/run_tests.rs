@@ -1646,6 +1646,63 @@ endmodule
     // lost `.velab` trailer, not reachable paths.
 }
 
+/// The composite reader must answer EVERY `NetReader` method (V1 slice 2).
+///
+/// `NetReader` has one required method and twenty with defaults, and every one
+/// of those defaults returns a value that LOOKS like an answer — a `None` the
+/// caller turns into X, a `false` meaning "not an associative array", an `xs`.
+/// A backend that inherits one is not loud about it; it is quietly wrong the
+/// moment a gate row lets a design reach that capability.
+///
+/// Measured, not feared: opening the `dyn_array` row for slice 2a made
+/// `q.size()` read `x` on the line after `q = new[4]`, because `dyn_size`'s
+/// default is `None` and tier-3 had never overridden it (ROADMAP §5.1-c).
+///
+/// So the rule is totality, and it is checked structurally because the failure
+/// is an ABSENT method — there is no call site to put a runtime assertion on,
+/// and the trait compiles happily without it.
+#[test]
+fn the_composite_reader_overrides_every_netreader_method() {
+    let trait_src = include_str!("../eval/eval_core.rs");
+    let body = trait_src
+        .split_once("pub trait NetReader {")
+        .expect("trait moved")
+        .1;
+    let body = &body[..body.find("\n}").expect("trait end")];
+    let declared: std::collections::BTreeSet<&str> = body
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("fn "))
+        .filter_map(|l| l.split('(').next())
+        .collect();
+
+    let kernel_src = include_str!("kernel.rs");
+    let imp = kernel_src
+        .split_once("impl crate::eval::NetReader for NativeKernel")
+        .expect("impl moved")
+        .1;
+    let imp = &imp[..imp.find("\n}").expect("impl end")];
+    let overridden: std::collections::BTreeSet<&str> = imp
+        .lines()
+        .filter_map(|l| l.strip_prefix("    fn "))
+        .filter_map(|l| l.split('(').next())
+        .collect();
+
+    assert!(
+        declared.len() >= 20,
+        "the trait scan found only {} methods — it stopped matching the source",
+        declared.len()
+    );
+    let missing: Vec<&&str> = declared.difference(&overridden).collect();
+    assert!(
+        missing.is_empty(),
+        "tier-3 would inherit `NetReader`'s default for {missing:?}. \
+         Each default returns a plausible value rather than failing, so the \
+         result is a silently wrong answer as soon as a gate row admits a \
+         design that reaches it. Delegate to `self.sched.st` (the state that \
+         owns the capability) or answer from the arena — on purpose."
+    );
+}
+
 /// The write funnel must STAY a funnel (V1 slice 2, ROADMAP §5.1-c).
 ///
 /// `NativeKernel::write_routed` exists so that "which store owns this net" is

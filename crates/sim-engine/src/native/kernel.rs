@@ -1160,6 +1160,68 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
         None
     }
 
+    // ── V1 slice 2: the capabilities this store does NOT own ──────────────
+    //
+    // Every method below reads state that lives ONLY on `SimState` — the dyn/
+    // assoc/string heaps, the `foreach` iteration context, the file table — so
+    // the arena has no counterpart and delegation is unconditionally right,
+    // independent of which gate rows are open.
+    //
+    // ⚠️ They are here because the census in ROADMAP §5.1-c found tier-3 was
+    // SILENTLY taking `NetReader`'s defaults for fourteen of them, and every one
+    // of those defaults returns a PLAUSIBLE value — `None` that the caller
+    // X-poisons, `false` meaning "not an assoc", an `xs`. That is harmless only
+    // while the gate refuses every design that can reach them, and it stops
+    // being harmless the moment a row opens: opening `dyn_array` for slice 2a
+    // made `q.size()` read `x` on the line after `q = new[4]`, because
+    // `dyn_size`'s default is `None`. The composite is now TOTAL over the
+    // trait, and `the_composite_reader_overrides_every_netreader_method` keeps
+    // it that way — a new trait method with a default must be answered here on
+    // purpose rather than inherited by accident.
+
+    fn dyn_size(&self, net: u32) -> Option<u64> {
+        self.sched.st.dyn_size(net)
+    }
+    fn dyn_values(&self, net: u32) -> Option<Vec<Value>> {
+        self.sched.st.dyn_values(net)
+    }
+    fn dyn_warn(&self, net: u32, msg: &str) {
+        self.sched.st.dyn_warn(net, msg)
+    }
+    fn array_item(&self, index: bool) -> Value {
+        self.sched.st.array_item(index)
+    }
+    fn swap_array_item(&self, v: Option<(Value, u64)>) -> Option<(Value, u64)> {
+        self.sched.st.swap_array_item(v)
+    }
+    fn str_bytes(&self, net: u32) -> Option<Vec<u8>> {
+        self.sched.st.str_bytes(net)
+    }
+    fn str_byte_at(&self, net: u32, i: usize) -> Option<u8> {
+        self.sched.st.str_byte_at(net, i)
+    }
+    fn is_assoc(&self, net: u32) -> bool {
+        self.sched.st.is_assoc(net)
+    }
+    fn assoc_read(&self, net: u32, key: Option<i64>) -> Value {
+        self.sched.st.assoc_read(net, key)
+    }
+    fn assoc_exists(&self, net: u32, key: Option<i64>) -> Option<bool> {
+        self.sched.st.assoc_exists(net, key)
+    }
+    fn is_assoc_str(&self, net: u32) -> bool {
+        self.sched.st.is_assoc_str(net)
+    }
+    fn assoc_str_read(&self, net: u32, key: &Option<Vec<u8>>) -> Value {
+        self.sched.st.assoc_str_read(net, key)
+    }
+    fn assoc_str_exists(&self, net: u32, key: &Option<Vec<u8>>) -> Option<bool> {
+        self.sched.st.assoc_str_exists(net, key)
+    }
+    fn fd_eof(&self, fd: u32) -> Value {
+        self.sched.st.fd_eof(fd)
+    }
+
     fn take_deferred_range_kinds(&self) -> Vec<bool> {
         // The ARENA's counter, not the engine's: `SimState` reports at the
         // access, so it has none, and draining a second source here would double
