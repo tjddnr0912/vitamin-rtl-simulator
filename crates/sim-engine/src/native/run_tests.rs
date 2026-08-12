@@ -2835,11 +2835,10 @@ endmodule
 ///   from the wrong store yields X, whose `has_xz` early-out returns −1 too — but
 ///   silently, so the warning is the discriminator, not the value.
 ///
-/// ⚠️ `$fclose` is deliberately absent: it is still in `systask_refusal` (its fd
-/// goes through `int_arg`, which no seam threads), so adding it here would send
-/// the whole design back to the VM and make the anchor vacuous. That is the
-/// immediate head of A5, and it means a REAL file testbench does not run
-/// natively yet even though its file calls all do.
+/// ⚠️ `$fclose` was deliberately absent when this was written — it was still in
+/// `systask_refusal`, so adding it would have sent the whole design back to the
+/// VM and made the anchor vacuous. A5-a wired it; the shape it unblocked (a file
+/// opened, read AND closed) is `a_file_testbench_closes_its_file`.
 #[test]
 fn fd_family_has_its_iverilog_values() {
     let dir = std::env::temp_dir().join(format!("vita-a1ivb-{}-{}", std::process::id(), line!()));
@@ -2930,6 +2929,79 @@ endmodule
             "out|M eof_bad2=-1\n".to_string(),
         ],
         "fd family values"
+    );
+}
+
+/// A5-a ABSOLUTE ANCHOR — a file testbench that CLOSES its file.
+///
+/// This is the shape wiring `$fclose` bought: open, read, close, and keep
+/// running natively. Before A5-a the `$fclose` alone sent the whole design to
+/// the VM even though every one of its file calls was already wired, which is
+/// why the A1-iv-b anchor had to leave it out.
+///
+/// The fd is a NET at every call, which is the half that was store-dependent:
+/// `$fclose` read it with a bare `sched.eval`.
+///
+/// ⚠️ ONE known divergence, deliberately visible here: iverilog warns on the
+/// SECOND `$fclose` of the same descriptor and vita does not, because
+/// `bad_fd_warn` is once-per-fd (vita's anti-spam policy, and `$fgetc` already
+/// spent the latch on this fd at B). Both vita backends agree, so it is
+/// pre-existing rather than this slice's — but it is stated so a future reader
+/// does not read the single W4022 as iverilog parity.
+#[test]
+fn a_file_testbench_closes_its_file() {
+    let dir = std::env::temp_dir().join(format!("vita-a5a-{}-{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let txt = dir.join("f.txt");
+    std::fs::write(&txt, "alpha 11\nbeta 22\n").expect("input file");
+    let src = format!(
+        r#"
+module top;
+  integer fd, n, c;
+  string s, path;
+  initial begin
+    path = "{}";
+    fd = $fopen(path, "r");
+    n = $fgets(s, fd);   $display("A n=%0d", n);
+    $fclose(fd);
+    c = $fgetc(fd);      $display("B after_close=%0d", c);
+    $fclose(fd);
+    $display("C done");
+    $finish;
+  end
+endmodule
+"#,
+        txt.display()
+    );
+    let (ir, opts) = build_with_opts(&src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    let ev = sink.events.into_inner();
+    assert_eq!(
+        ev,
+        vec![
+            "out|A n=9\n".to_string(),
+            // the close TOOK: the descriptor is gone, so the read fails loudly.
+            "diag|Warning|VITA-W4022|file operation on invalid/closed descriptor 0x80000003 ignored"
+                .to_string(),
+            "out|B after_close=-1\n".to_string(),
+            "out|C done\n".to_string(),
+        ],
+        "file testbench with $fclose"
     );
 }
 
@@ -3055,10 +3127,9 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
     let files: [(&str, usize, &str); 4] = [
         (
             "dispatch.rs",
-            3,
+            1,
             "`split_file_directed`'s fd (the `file_directed` row, and \
-             `$monitor`/`$strobe` are in `systask_refusal` too), `$dumplimit`'s \
-             size and `$fclose`'s fd (both in `systask_refusal`)",
+             `$monitor`/`$strobe` are in `systask_refusal` too)",
         ),
         (
             "crv_draw.rs",

@@ -1674,16 +1674,18 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         let Stmt::SysTask { which, fmt, args } = stmt else {
             continue;
         };
-        // ⚠️ `$dumpvars` and `$dumpfile` LEFT this list in S1d-4d-2 — the first
-        // because `full_snapshot_with` takes the arena as its reader, the second
-        // because its argument is a string constant and never reaches the store
-        // at all. What remains genuinely reads somewhere this seam does not go.
+        // ⚠️ This list SHRINKS as seams land, and each departure had its own
+        // reason. `$dumpvars`/`$dumpfile` left in S1d-4d-2 (the snapshot takes
+        // the arena as its reader; the filename is a constant).
+        // `$dumplimit`/`$fclose` left in A5-a — and their row's stated reason
+        // was stale twice over: it blamed `int_arg`, which is threaded, and
+        // neither of them ever called it. Each read its own argument with a bare
+        // `sched.eval`; threading those two lines was the whole fix.
+        // What remains genuinely reads somewhere this seam does not go.
         let expect_refusal = matches!(
             which,
             sim_ir::SysTaskId::DumpAll
                 | sim_ir::SysTaskId::DumpOn
-                | sim_ir::SysTaskId::DumpLimit
-                | sim_ir::SysTaskId::Fclose
                 | sim_ir::SysTaskId::WritememB
                 | sim_ir::SysTaskId::WritememH
                 // …and the two whose RENDER happens outside dispatch entirely.
@@ -1717,8 +1719,8 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         refused += 1;
     }
     assert_eq!(
-        refused, 8,
-        "expected all eight refused tasks to refuse — got {refused}"
+        refused, 6,
+        "expected all six refused tasks to refuse — got {refused}"
     );
 }
 

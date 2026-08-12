@@ -633,7 +633,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             // X/Z or missing size → no-op (no budget installed).
             let size = args
                 .first()
-                .and_then(|&a| sched.eval(a).to_u64())
+                .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64())
                 .unwrap_or(0);
             if size > 0 {
                 if let Some(w) = sched.st.vcd.as_mut() {
@@ -669,7 +669,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         SysTaskId::Fclose => {
             let fd = args
                 .first()
-                .map(|&a| sched.eval(a))
+                .map(|&a| crate::builtins::eval_task_arg(sched, nets, a))
                 .filter(|v| !v.has_xz())
                 .and_then(|v| v.to_u64())
                 .map(|v| v as u32);

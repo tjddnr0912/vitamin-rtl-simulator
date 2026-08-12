@@ -478,12 +478,13 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
         // `dispatch_with` now threads the reader into `arg_string_with`.
         // `$dumplimit`/`$fclose` still take INT arguments through `int_arg`,
         // which is not threaded.
-        SysTaskId::DumpLimit | SysTaskId::Fclose => (
-            "k_dispatch_systask($dumplimit/$fclose)",
-            "S1d-4b-3",
-            "the ARGUMENT is read through `int_arg`, not the formatter — a \
-             store read this seam does not cover",
-        ),
+        // ⚠️ `$dumplimit`/`$fclose` are WIRED (A5-a). The row that stood here
+        // said "the ARGUMENT is read through `int_arg`, not the formatter", and
+        // that reason was STALE in two ways: `int_arg` is threaded (it calls
+        // `eval_task_arg`) and neither of these two ever used it — each read its
+        // own argument with a bare `sched.eval`. Threading those two call sites
+        // is the whole fix. §4.5.338's lesson again: a refusal does not know
+        // when its own reason stopped being true.
         SysTaskId::WritememB | SysTaskId::WritememH => (
             "k_dispatch_systask($writememb/$writememh)",
             "S1d-4b-3",
