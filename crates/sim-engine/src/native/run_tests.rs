@@ -1746,6 +1746,34 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── A1-iv-b: the fd family's argument reads ─────────────────────────
+        // Every fd here is a NET, which is the half that was store-dependent:
+        // `$feof`/`$fgetc`/`$ungetc` read it with `Scheduler::eval` before A1-iv-b,
+        // so a native run saw X, took the `has_xz` early-out, and returned the
+        // failure code WITHOUT the bad-fd warning the VM emits. No file is
+        // opened on purpose — this row is in-process, and the real-file half
+        // lives in `fd_family_has_its_iverilog_values`.
+        (
+            "fd_family_net_arguments",
+            r#"
+module top;
+  integer bad, r, c, u;
+  string path, mode;
+  integer fd;
+  initial begin
+    bad = 32'd12345;
+    r = $feof(bad);    $display("A eof=%0d", r);
+    c = $fgetc(bad);   $display("B getc=%0d", c);
+    u = $ungetc(c, bad); $display("C ung=%0d", u);
+    path = "/definitely/not/here.txt"; mode = "r";
+    fd = $fopen(path, mode);
+    $display("D open=%0d", fd);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // All THREE admitted heap kinds plus flat nets in one design, so the
         // funnel has to send four destinations to three different stores from a
         // single call site. A per-kind routing bug produces correct output for
@@ -2216,7 +2244,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 90, "adversarial set shrank");
+    assert_eq!(designs.len(), 91, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2786,6 +2814,122 @@ endmodule
             "out|C n=-1\n".to_string(),
         ],
         "sscanf values"
+    );
+}
+
+/// A1-iv-b ABSOLUTE ANCHOR — the fd family over a real file, iverilog-pinned.
+///
+/// Every line below was cross-checked against live iverilog 13.0. The shapes
+/// that matter:
+///
+/// * **A** — `$fopen` with the path AND mode as string NETS, the argument form
+///   that reads the store (a literal would not).
+/// * **B** — `$fgets` into a `string` dest returns the line length INCLUDING the
+///   retained newline (9 for `"alpha 11\n"`).
+/// * **C/D** — one byte read, then pushed back: the `$fscanf` at **E** must then
+///   see it again, which is what proves the pushback landed in the shared file
+///   table rather than in a copy.
+/// * **G/H** — EOF is LATCHED by a read that hits it, not predicted: `$feof` is
+///   still 0 after the last full line, and only the following short read sets it.
+/// * **I** — a bad descriptor gives −1 from both, plus ONE W4022. Reading the fd
+///   from the wrong store yields X, whose `has_xz` early-out returns −1 too — but
+///   silently, so the warning is the discriminator, not the value.
+///
+/// ⚠️ `$fclose` is deliberately absent: it is still in `systask_refusal` (its fd
+/// goes through `int_arg`, which no seam threads), so adding it here would send
+/// the whole design back to the VM and make the anchor vacuous. That is the
+/// immediate head of A5, and it means a REAL file testbench does not run
+/// natively yet even though its file calls all do.
+#[test]
+fn fd_family_has_its_iverilog_values() {
+    let dir = std::env::temp_dir().join(format!("vita-a1ivb-{}-{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let txt = dir.join("f.txt");
+    std::fs::write(&txt, "alpha 11\nbeta 22\ngamma\n").expect("input file");
+    let out = dir.join("w.txt");
+    let src = format!(
+        r#"
+module top;
+  integer fd, c, n, st, wfd;
+  reg [8*16:1] line;
+  string s;
+  string path, mode;
+  int a;
+  initial begin
+    path = "{}"; mode = "r";
+    fd = $fopen(path, mode);
+    $display("A open=%0d", fd != 0);
+    n = $fgets(s, fd);       $display("B n=%0d s=%0s", n, s);
+    c = $fgetc(fd);          $display("C c=%0d", c);
+    st = $ungetc(c, fd);     $display("D ung=%0d", st);
+    n = $fscanf(fd, "%s %d", line, a);
+    $display("E n=%0d a=%0d", n, a);
+    n = $fgets(s, fd);       $display("F n=%0d", n);
+    $display("G eof=%0d", $feof(fd));
+    n = $fgets(s, fd);       $display("H n=%0d eof=%0d", n, $feof(fd));
+    st = $feof(32'd12345); c = $fgetc(32'd12345);
+    $display("I badeof=%0d badgetc=%0d", st, c);
+    wfd = $fopen("{}", "w");
+    $display("J wopen=%0d", wfd != 0);
+    st = $ungetc(65, wfd);   $display("K ung_wo=%0d", st);
+    st = $feof(wfd);         $display("L eof_wo=%0d", st);
+    st = $feof(32'd999);     $display("M eof_bad2=%0d", st);
+    $finish;
+  end
+endmodule
+"#,
+        txt.display(),
+        out.display()
+    );
+    let (ir, opts) = build_with_opts(&src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A open=1\n".to_string(),
+            "out|B n=9 s=alpha 11\n\n".to_string(),
+            "out|C c=98\n".to_string(),
+            "out|D ung=0\n".to_string(),
+            "out|E n=2 a=22\n".to_string(),
+            "out|F n=1\n".to_string(),
+            "out|G eof=0\n".to_string(),
+            "out|H n=6 eof=0\n".to_string(),
+            "diag|Warning|VITA-W4022|file operation on invalid/closed descriptor 0x00003039 ignored"
+                .to_string(),
+            "out|I badeof=-1 badgetc=-1\n".to_string(),
+            // J..M were added because two mutations SURVIVED the lines above,
+            // and both survivals were this test's blind spots rather than
+            // equivalences:
+            //   * `$feof`'s bad-fd warning could be deleted, because `$fgetc` on
+            //     the SAME bad fd at I warns too and `bad_fd_warn` is once-per-fd
+            //     — so M uses a descriptor nothing else touches.
+            //   * `$ungetc`'s read-capability check could be deleted, because
+            //     every pushback above targets a readable fd — so K pushes onto
+            //     a WRITE-ONLY one, where the answer is −1 and, pointedly, NO
+            //     warning (iverilog: a write stream is not pushable, silently).
+            "out|J wopen=1\n".to_string(),
+            "out|K ung_wo=-1\n".to_string(),
+            "out|L eof_wo=0\n".to_string(),
+            "diag|Warning|VITA-W4022|file operation on invalid/closed descriptor 0x000003e7 ignored"
+                .to_string(),
+            "out|M eof_bad2=-1\n".to_string(),
+        ],
+        "fd family values"
     );
 }
 

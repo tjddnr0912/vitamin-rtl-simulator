@@ -93,6 +93,17 @@ pub(crate) trait Kernel {
     fn k_file_read_byte(&mut self, fd: u32) -> Option<u8>;
     /// Push one over-read byte back onto `fd`'s pushback stack.
     fn k_file_unget(&mut self, fd: u32, b: u8);
+    /// `$fopen`'s table work: open `name` in `mode` (`None` = the MCD form) and
+    /// return the descriptor, 0 on failure. A1-iv-b.
+    fn k_file_open(&mut self, name: &str, mode: Option<&str>) -> u32;
+    /// `$feof`'s table work: `Some(eof)` for an open descriptor, `None` for a
+    /// bad or closed one (which also emits the bad-fd warning).
+    fn k_file_eof(&mut self, fd: u32) -> Option<bool>;
+    /// `$ungetc`'s table work: push `byte` back onto a READ-CAPABLE open `fd`
+    /// and clear its EOF latch. `false` when the descriptor is bad or closed
+    /// (which also warns) or is write-only (which does not — a write stream is
+    /// not pushable, and iverilog says so silently).
+    fn k_file_ungetc(&mut self, fd: u32, byte: u8) -> bool;
     /// READ: locate one assoc iteration step against the SHARED heap, given the
     /// current key the caller just read. Returns `(key write, status)`; the caller
     /// performs the write through `k_write_lvalue`.

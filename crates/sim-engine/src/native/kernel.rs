@@ -1400,6 +1400,17 @@ impl Kernel for NativeKernel<'_, '_, '_> {
             .pushback
             .push(b);
     }
+    fn k_file_open(&mut self, name: &str, mode: Option<&str>) -> u32 {
+        // The file TABLE lives in `SimState`, which this kernel borrows — one
+        // object, both backends, exactly like `dyn_heap`. Nothing to route.
+        Kernel::k_file_open(self.sched, name, mode)
+    }
+    fn k_file_eof(&mut self, fd: u32) -> Option<bool> {
+        Kernel::k_file_eof(self.sched, fd)
+    }
+    fn k_file_ungetc(&mut self, fd: u32, byte: u8) -> bool {
+        Kernel::k_file_ungetc(self.sched, fd, byte)
+    }
     fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
         self.sched.st.assoc_iter_cur_key(rhs)
     }
@@ -1911,29 +1922,26 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         }
         status
     }
-    fn k_fopen(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_fopen", "`stmt_effect` row (§4.5.291)")
+    fn k_fopen(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::fopen(self, rhs)
     }
-    fn k_fgetc(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_fgetc", "`stmt_effect` row (§4.5.291)")
+    fn k_fgetc(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::fgetc(self, rhs)
     }
-    fn k_feof(&mut self, _rhs: u32) -> Value {
-        gate_refused!(
-            "k_feof",
-            "`stmt_effect` row (§4.5.291) — over-marked, ROADMAP §5.1"
-        )
+    fn k_feof(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::feof(self, rhs)
     }
-    fn k_ungetc(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_ungetc", "`stmt_effect` row (§4.5.291)")
+    fn k_ungetc(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::ungetc(self, rhs)
     }
-    fn k_fgets(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_fgets", "`stmt_effect` row (§4.5.291)")
+    fn k_fgets(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::fgets(self, rhs)
     }
     fn k_fread(&mut self, _rhs: u32) -> Value {
         gate_refused!("k_fread", "`stmt_effect` row (§4.5.291)")
     }
-    fn k_fscanf(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_fscanf", "`stmt_effect` row (§4.5.291)")
+    fn k_fscanf(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::fscanf(self, rhs)
     }
     fn k_sscanf(&mut self, rhs: u32) -> Value {
         // WIRED (A1-iv-a). `$sscanf` scans a STRING, so the whole body is

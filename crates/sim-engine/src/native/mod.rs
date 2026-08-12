@@ -132,6 +132,18 @@ fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
         // destinations through `k_write_lvalue`, and `scan_run` is generic over
         // `Kernel` now. The fd family stays refused until A1-iv-b.
         || kpred::sscanf_rhs(exprs, rhs)
+        // A1-iv-b: six of the seven fd members. Their bodies moved to
+        // `exec::stmt_effect` beside the others; the FILE TABLE needed no
+        // routing at all (it lives in `SimState`, one object both backends see,
+        // exactly like `dyn_heap`), only three narrow table seams.
+        // ⚠️ `$fread` is NOT here — it reads the DESTINATION's prior value and
+        // an array base, which are seams this slice does not build (A1-iv-c).
+        || kpred::fopen_rhs(exprs, rhs)
+        || kpred::fgetc_rhs(exprs, rhs)
+        || kpred::feof_rhs(exprs, rhs)
+        || kpred::ungetc_rhs(exprs, rhs)
+        || kpred::fgets_rhs(exprs, rhs)
+        || kpred::fscanf_rhs(exprs, rhs)
 }
 
 /// Record `n` offending items under `family` (no-op when `n == 0`, so a clean

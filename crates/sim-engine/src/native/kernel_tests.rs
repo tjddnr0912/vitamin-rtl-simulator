@@ -473,14 +473,15 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
              initial begin a = 0; b = 1; force a = b; end\n\
              endmodule\n",
         ),
-        // A1-ii wired `k_random_seeded`, which used to stand here. The
-        // backstop still needs a `stmt_effect` member that REFUSES, and
-        // `$fopen` is the one A1-iv will take.
+        // This slot has moved twice as A1 wired its way down the family:
+        // `k_random_seeded` (A1-ii took it), then `k_fopen` (A1-iv-b took it).
+        // `$fread` is what is left — it reads the DESTINATION's prior value and
+        // an array base, seams A1-iv-b did not build.
         (
-            "fopen",
-            "k_fopen",
-            "module t; integer fd;\n\
-             initial begin fd = $fopen(\"x.txt\", \"r\"); end\n\
+            "fread",
+            "k_fread",
+            "module t; integer fd, n; reg [7:0] m [0:3];\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); n = $fread(m, fd); end\n\
              endmodule\n",
         ),
     ];
@@ -504,7 +505,7 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
         let sid = (0..ir.stmts.len() as u32)
             .find(|&s| match &ir.stmts[s as usize] {
                 Stmt::Force { .. } => name == "force",
-                Stmt::BlockingAssign { rhs, .. } => name == "fopen" && nk.k_fopen_rhs(*rhs),
+                Stmt::BlockingAssign { rhs, .. } => name == "fread" && nk.k_fread_rhs(*rhs),
                 _ => false,
             })
             .unwrap_or_else(|| panic!("{name}: no statement of the expected shape"));

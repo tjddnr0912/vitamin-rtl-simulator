@@ -377,16 +377,36 @@ fn effects_outside_the_write_funnel_reject() {
     assert!(oks, "`$sscanf` is wired and must be admitted: {rss:?}");
     assert_eq!(rss, vec![]);
 
-    // rhs form: the descriptor advance happens in the call. This used to be
-    // `r = $random(seed)`, which A1-ii WIRED — the negative half of this test
-    // has to name a member that is still refused, or it stops testing the row.
+    // A1-iv-b: six of the seven fd members are WIRED. All six, because the
+    // carve-out is a list and a missing entry leaves that member refusing while
+    // its `k_*` runs.
+    for (what, body) in [
+        ("$fopen/$fgetc", "integer fd, c;\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); c = $fgetc(fd); $display(\"%0d\", c); $finish; end"),
+        ("$feof", "integer fd, e;\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); e = $feof(fd); $display(\"%0d\", e); $finish; end"),
+        ("$ungetc", "integer fd, u;\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); u = $ungetc(65, fd); $display(\"%0d\", u); $finish; end"),
+        ("$fgets", "integer fd, n; string s;\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); n = $fgets(s, fd); $display(\"%0d\", n); $finish; end"),
+        ("$fscanf", "integer fd, n; int a;\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); n = $fscanf(fd, \"%d\", a); $display(\"%0d\", n); $finish; end"),
+    ] {
+        let (okf, rsf) = reasons(&format!("module t; {body}\nendmodule\n"));
+        assert!(okf, "`{what}` is wired and must be admitted: {rsf:?}");
+        assert_eq!(rsf, vec![], "{what}");
+    }
+
+    // The NEGATIVE half has to name a member that is STILL refused, or it stops
+    // testing the row. `$fread` is the last one (A1-iv-c): it reads the
+    // destination's prior value and an array base, seams A1-iv-b did not build.
     let (ok, rs) = reasons(
-        "module t; integer fd; integer c;\n\
-           initial begin fd = $fopen(\"x.txt\", \"r\"); c = $fgetc(fd); $display(\"%0d\", c); $finish; end\n\
+        "module t; integer fd, n; reg [7:0] m [0:3];\n\
+           initial begin fd = $fopen(\"x.txt\", \"r\"); n = $fread(m, fd); $display(\"%0d\", n); $finish; end\n\
          endmodule\n",
     );
-    assert!(!ok);
-    assert_eq!(rs, vec![("stmt_effect", 2)]);
+    assert!(!ok, "`$fread` is the remaining refusal: {rs:?}");
+    assert_eq!(rs, vec![("stmt_effect", 1)]);
 
     // `$value$plusargs` — the shape a real testbench uses (bench/keccak's TB).
     // WIRED (the first family member lifted): `k_value_plusargs` runs the

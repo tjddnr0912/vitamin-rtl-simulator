@@ -139,6 +139,76 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_file_unget(&mut self, fd: u32, b: u8) {
         self.st.read_state.entry(fd).or_default().pushback.push(b);
     }
+    fn k_file_open(&mut self, name: &str, mode: Option<&str>) -> u32 {
+        let open = |mode: &str| -> std::io::Result<std::fs::File> {
+            let mut o = std::fs::OpenOptions::new();
+            // a '+' mode (r+/w+/a+) is read-AND-write; plain w/a are write-only.
+            let plus = mode.contains('+');
+            match mode.trim_end_matches('b') {
+                "r" | "r+" => o.read(true).write(plus),
+                "a" | "a+" => o.create(true).append(true).read(plus),
+                // "w"/"w+" and anything unrecognized: truncate-write (the
+                // overwhelmingly common TB mode; unknown modes behave as "w").
+                _ => o.create(true).write(true).truncate(true).read(plus),
+            };
+            o.open(name)
+        };
+        match mode {
+            Some(m) => match open(m) {
+                Ok(f) => {
+                    let n = self.st.next_fd;
+                    self.st.next_fd = self.st.next_fd.saturating_add(1); // FD-RECLAIM: no wrap
+                    let fd = 0x8000_0000 | n;
+                    self.st.files.insert(fd, f);
+                    // v9 SYS-READ: a mode with 'r' or '+' is read-capable
+                    // (r/r+/w+/a+); plain "w"/"a" stays write-only and absent.
+                    if m.contains('r') || m.contains('+') {
+                        self.st.readable_fds.insert(fd);
+                    }
+                    fd
+                }
+                Err(_) => 0, // IEEE: $fopen failure returns 0
+            },
+            None => match open("w") {
+                Ok(f) => {
+                    // MCD-RECLAIM: hand out the LOWEST channel bit not currently
+                    // open (bit 0 = stdout, reserved), so a $fclose'd bit is
+                    // reused (iverilog reclaims). Byte-identical to the old
+                    // monotonic counter when nothing has been freed.
+                    match (1..31u32).find(|b| !self.st.mcd_files.contains_key(b)) {
+                        Some(bit) => {
+                            self.st.mcd_files.insert(bit, f);
+                            1u32 << bit
+                        }
+                        None => 0, // space full
+                    }
+                }
+                Err(_) => 0,
+            },
+        }
+    }
+    fn k_file_eof(&mut self, fd: u32) -> Option<bool> {
+        if fd & 0x8000_0000 == 0 || !self.st.files.contains_key(&fd) {
+            crate::builtins::bad_fd_warn(self, fd);
+            return None;
+        }
+        Some(self.st.read_state.get(&fd).map(|s| s.eof).unwrap_or(false))
+    }
+    fn k_file_ungetc(&mut self, fd: u32, byte: u8) -> bool {
+        if fd & 0x8000_0000 == 0 || !self.st.files.contains_key(&fd) {
+            crate::builtins::bad_fd_warn(self, fd);
+            return false;
+        }
+        if !self.st.readable_fds.contains(&fd) {
+            return false;
+        }
+        // LIFO push (iverilog retains every pushed byte); pushing clears EOF
+        // (there is data to read again).
+        let st = self.st.read_state.entry(fd).or_default();
+        st.pushback.push(byte);
+        st.eof = false;
+        true
+    }
     fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
         self.st.assoc_iter_cur_key(rhs)
     }
@@ -182,293 +252,32 @@ impl Kernel for Scheduler<'_, '_> {
         crate::exec::kpred::fopen_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fopen(&mut self, rhs: u32) -> Value {
-        // args = [name (, mode)] — each is a string LITERAL, a runtime `string`
-        // value, or a packed reg holding ASCII (elaborate's relaxed contract).
-        let args = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) => args.clone(),
-            _ => return Value::from_i128(0, 32, true),
-        };
-        // Resolve a name/mode arg to text: a Const{StrUtf8} literal decodes
-        // directly; a runtime STRING value (`is_str`) renders its exact bytes;
-        // any other packed value is treated as ASCII in a reg (NUL-stripped) —
-        // all three are valid $fopen argument forms (§21.3, iverilog parity).
-        let resolve = |st: &SimState<'_>, a: u32| -> String {
-            if let Some(sim_ir::Expr::Const { val }) = st.ir.exprs.get(a as usize) {
-                crate::builtins::const_string(st.ir, *val)
-            } else {
-                let v = st.eval_expr(a);
-                if v.is_str {
-                    String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
-                } else {
-                    crate::builtins::fmt_packed_chars_min(&v)
-                }
-            }
-        };
-        let name = match args.first() {
-            Some(&a) => resolve(self.st, a),
-            None => return Value::from_i128(0, 32, true),
-        };
-        let mode = args.get(1).map(|&a| resolve(self.st, a));
-        let open = |mode: &str| -> std::io::Result<std::fs::File> {
-            let mut o = std::fs::OpenOptions::new();
-            // a '+' mode (r+/w+/a+) is read-AND-write; plain w/a are write-only.
-            let plus = mode.contains('+');
-            match mode.trim_end_matches('b') {
-                "r" | "r+" => o.read(true).write(plus),
-                "a" | "a+" => o.create(true).append(true).read(plus),
-                // "w"/"w+" and anything unrecognized: truncate-write (the
-                // overwhelmingly common TB mode; unknown modes behave as "w").
-                _ => o.create(true).write(true).truncate(true).read(plus),
-            };
-            o.open(&name)
-        };
-        let fd = match mode {
-            Some(m) => match open(&m) {
-                Ok(f) => {
-                    let n = self.st.next_fd;
-                    self.st.next_fd = self.st.next_fd.saturating_add(1); // FD-RECLAIM: no wrap
-                    let fd = 0x8000_0000 | n;
-                    self.st.files.insert(fd, f);
-                    // v9 SYS-READ: a mode with 'r' or '+' is read-capable
-                    // (r/r+/w+/a+); plain "w"/"a" stays write-only and absent.
-                    if m.contains('r') || m.contains('+') {
-                        self.st.readable_fds.insert(fd);
-                    }
-                    fd
-                }
-                Err(_) => 0, // IEEE: $fopen failure returns 0
-            },
-            None => match open("w") {
-                Ok(f) => {
-                    // MCD-RECLAIM: hand out the LOWEST channel bit not currently
-                    // open (bit 0 = stdout, reserved), so a $fclose'd bit is
-                    // reused (iverilog reclaims). Byte-identical to the old
-                    // monotonic counter when nothing has been freed.
-                    match (1..31u32).find(|b| !self.st.mcd_files.contains_key(b)) {
-                        Some(bit) => {
-                            self.st.mcd_files.insert(bit, f);
-                            1u32 << bit
-                        }
-                        None => return Value::from_i128(0, 32, true), // space full
-                    }
-                }
-                Err(_) => 0,
-            },
-        };
-        let mut v = Value::zeros(32, true);
-        v.val[0] = fd as u64;
-        v
+        crate::exec::stmt_effect::fopen(self, rhs)
     }
     // ── v9 SYS-READ: file-read int functions ($fgetc/$feof/$ungetc) ──
     fn k_fgetc_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::fgetc_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fgetc(&mut self, rhs: u32) -> Value {
-        let fd_arg = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if !args.is_empty() => args[0],
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let fdv = self.eval(fd_arg);
-        if fdv.has_xz() {
-            return Value::from_i128(-1, 32, true);
-        }
-        let fd = fdv.to_u64().unwrap_or(0) as u32;
-        match crate::builtins::file_read_byte(self, fd) {
-            Some(b) => Value::from_i128(b as i128, 32, true),
-            None => Value::from_i128(-1, 32, true),
-        }
+        crate::exec::stmt_effect::fgetc(self, rhs)
     }
     fn k_feof_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::feof_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_feof(&mut self, rhs: u32) -> Value {
-        let fd_arg = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if !args.is_empty() => args[0],
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let fdv = self.eval(fd_arg);
-        if fdv.has_xz() {
-            return Value::from_i128(-1, 32, true);
-        }
-        let fd = fdv.to_u64().unwrap_or(0) as u32;
-        // §21.3.4: the pre-opened descriptors are always-valid, never-EOF fds
-        // (iverilog-pinned: `$feof(STDOUT)` = 0, no warning — mirroring the
-        // write-only-fd rule, whose failed `$fgetc` never latches EOF).
-        if (0x8000_0000..=0x8000_0002).contains(&fd) {
-            return Value::from_i128(0, 32, true);
-        }
-        // a bad/closed fd → −1 (iverilog parity, NOT 0); an open fd that has
-        // not yet hit EOF → 0.
-        if fd & 0x8000_0000 == 0 || !self.st.files.contains_key(&fd) {
-            crate::builtins::bad_fd_warn(self, fd);
-            return Value::from_i128(-1, 32, true);
-        }
-        let eof = self.st.read_state.get(&fd).map(|s| s.eof).unwrap_or(false);
-        Value::from_i128(if eof { 1 } else { 0 }, 32, true)
+        crate::exec::stmt_effect::feof(self, rhs)
     }
     fn k_ungetc_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::ungetc_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_ungetc(&mut self, rhs: u32) -> Value {
-        let (c_arg, fd_arg) = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => (args[0], args[1]),
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let cv = self.eval(c_arg);
-        let fdv = self.eval(fd_arg);
-        if fdv.has_xz() {
-            return Value::from_i128(-1, 32, true);
-        }
-        let fd = fdv.to_u64().unwrap_or(0) as u32;
-        // The EOF sentinel is ONLY the exact int −1 (0xffff_ffff, fully known).
-        // iverilog treats every other c — INCLUDING a value with x/z bits — as
-        // a normal char and pushes its low byte (x/z bits coerced to 0).
-        if !cv.has_xz() && (cv.to_u64().unwrap_or(0) as u32) == 0xffff_ffff {
-            return Value::from_i128(-1, 32, true);
-        }
-        // §21.3.4: the pre-opened STDOUT/STDERR follow the write-only rule —
-        // −1, no warning. STDIN pushback is part of the deferred stdin-read
-        // feature → −1 quietly too (nothing to push back into).
-        if (0x8000_0000..=0x8000_0002).contains(&fd) {
-            return Value::from_i128(-1, 32, true);
-        }
-        // a bad/closed fd warns + returns −1; a valid but write-only ("w"/"a")
-        // fd returns −1 WITHOUT a warning (iverilog: a write stream is not
-        // pushable and never becomes readable). Only a read-capable fd accepts
-        // a pushback.
-        if fd & 0x8000_0000 == 0 || !self.st.files.contains_key(&fd) {
-            crate::builtins::bad_fd_warn(self, fd);
-            return Value::from_i128(-1, 32, true);
-        }
-        if !self.st.readable_fds.contains(&fd) {
-            return Value::from_i128(-1, 32, true);
-        }
-        // the pushed byte = the low 8 bits with x/z bits coerced to 0.
-        let mut byte = 0u8;
-        for i in 0..8 {
-            let (v, u) = cv.get_vu(i);
-            if u == 0 && v != 0 {
-                byte |= 1 << i;
-            }
-        }
-        // LIFO push (iverilog retains every pushed byte); pushing clears EOF
-        // (there is data to read again).
-        let st = self.st.read_state.entry(fd).or_default();
-        st.pushback.push(byte);
-        st.eof = false;
-        Value::from_i128(0, 32, true)
+        crate::exec::stmt_effect::ungetc(self, rhs)
     }
     fn k_fgets_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::fgets_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fgets(&mut self, rhs: u32) -> Value {
-        // args = [str-dest whole-net Signal, fd] — elaborate's contract.
-        let (dest_net, fd_arg) = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => {
-                let net = match self.st.ir.exprs.get(args[0] as usize) {
-                    Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                    _ => None,
-                };
-                (net, args[1])
-            }
-            _ => (None, u32::MAX),
-        };
-        let Some(net) = dest_net else {
-            return Value::from_i128(0, 32, true);
-        };
-        let fdv = self.eval(fd_arg);
-        if fdv.has_xz() {
-            return Value::from_i128(0, 32, true);
-        }
-        let fd = fdv.to_u64().unwrap_or(0) as u32;
-        let whole_net = |net: u32| Lvalue {
-            chunks: vec![sim_ir::LvalChunk {
-                net,
-                word: None,
-                offset: None,
-                width: None,
-                kind: sim_ir::SelKind::Bit,
-            }],
-        };
-        // v7: a SystemVerilog `string` dest is a dynamic HANDLE (NetKind::String,
-        // net width 0). It has NO byte capacity, so it must NOT fall into the
-        // sub-byte (width < 8) reg branch below, which would clear the dest and
-        // return 0 (the silent-wrong this fixes). Read the WHOLE line uncapped
-        // (through a retained newline, else to EOF), pack it MSB-first, and write
-        // it via the same string lvalue path as `s = "..."` (§6.16 byte-strip).
-        if self.st.ir.nets[net as usize].kind == sim_ir::NetKind::String {
-            let mut raw: Vec<u8> = Vec::new();
-            while let Some(b) = crate::builtins::file_read_byte(self, fd) {
-                raw.push(b);
-                if b == b'\n' {
-                    break;
-                }
-            }
-            if raw.is_empty() {
-                // genuine EOF / bad-fd / write-only: dest UNCHANGED, count 0.
-                return Value::from_i128(0, 32, true);
-            }
-            // C-string semantics (iverilog parity, same as the reg path below):
-            // the STORED string and the returned count stop at the first NUL,
-            // even though the whole line was already consumed from the stream.
-            // (n == raw.len() when there is no embedded NUL.) A leading NUL gives
-            // n = 0 → the dest is set to the empty string (distinct from the EOF
-            // arm above, which leaves it UNCHANGED).
-            let n = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
-            let lv = whole_net(net);
-            let off = self.resolve_lvalue_offsets(&lv);
-            self.k_write_lvalue(&lv, Value::from_str_bytes(&raw[..n]), &off);
-            return Value::from_i128(n as i128, 32, true);
-        }
-        // capacity = the dest in whole bytes (iverilog reads the FULL width N,
-        // not C's N-1 — no NUL is reserved).
-        let width = self.st.ir.nets[net as usize].width.max(1);
-        let max_bytes = (width / 8) as usize;
-        if max_bytes == 0 {
-            // sub-byte dest (width < 8): iverilog reads NO stream byte but
-            // CLEARS the dest to 0 (C fgets into a too-small buffer => empty
-            // string written), returning 0.
-            let lv = whole_net(net);
-            let off = self.resolve_lvalue_offsets(&lv);
-            self.k_write_lvalue(&lv, Value::zeros(width, false), &off);
-            return Value::from_i128(0, 32, true);
-        }
-        // read the line: up to max_bytes OR through a newline (retained).
-        let mut raw: Vec<u8> = Vec::new();
-        let mut any_read = false;
-        while raw.len() < max_bytes {
-            match crate::builtins::file_read_byte(self, fd) {
-                Some(b) => {
-                    any_read = true;
-                    raw.push(b);
-                    if b == b'\n' {
-                        break;
-                    }
-                }
-                None => break,
-            }
-        }
-        if !any_read {
-            // genuine EOF / bad-fd / write-only: dest UNCHANGED, count 0.
-            return Value::from_i128(0, 32, true);
-        }
-        // the RETURNED string stops at the first NUL (C string semantics); the
-        // bytes after it were still consumed from the stream above, so the file
-        // position matches iverilog.
-        let n = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
-        // pack the first n bytes right-justified MSB-first (first byte = most
-        // significant) into a width-wide value; n == 0 (leading NUL) leaves it
-        // all-zero, which CLEARS the dest — iverilog writes 0, not the prior
-        // value. n*8 <= width because n <= max_bytes = width / 8.
-        let mut v = Value::zeros(width, false);
-        for (i, &by) in raw[..n].iter().rev().enumerate() {
-            let bit = i * 8;
-            v.val[bit / 64] |= (by as u64) << (bit % 64);
-        }
-        let lv = whole_net(net);
-        let off = self.resolve_lvalue_offsets(&lv);
-        self.k_write_lvalue(&lv, v, &off);
-        Value::from_i128(n as i128, 32, true)
+        crate::exec::stmt_effect::fgets(self, rhs)
     }
     fn k_fread_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::fread_rhs(self.st.ir.exprs.as_slice(), rhs)
@@ -640,30 +449,7 @@ impl Kernel for Scheduler<'_, '_> {
         crate::exec::kpred::fscanf_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fscanf(&mut self, rhs: u32) -> Value {
-        // args = [fd, fmt strconst, dst0, dst1, ...] — elaborate's contract.
-        let args: Vec<u32> = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => args.clone(),
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let fdv = self.eval(args[0]);
-        if fdv.has_xz() {
-            return Value::from_i128(-1, 32, true);
-        }
-        let fd = fdv.to_u64().unwrap_or(0) as u32;
-        let fmt: Vec<u8> = match self.st.ir.exprs.get(args[1] as usize) {
-            Some(sim_ir::Expr::Const { val }) => {
-                crate::builtins::const_string(self.st.ir, *val).into_bytes()
-            }
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let dsts: Vec<u32> = args[2..]
-            .iter()
-            .filter_map(|&a| match self.st.ir.exprs.get(a as usize) {
-                Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                _ => None,
-            })
-            .collect();
-        scan_run(self, Some(fd), &[], &fmt, &dsts)
+        crate::exec::stmt_effect::fscanf(self, rhs)
     }
     fn k_sscanf_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::sscanf_rhs(self.st.ir.exprs.as_slice(), rhs)

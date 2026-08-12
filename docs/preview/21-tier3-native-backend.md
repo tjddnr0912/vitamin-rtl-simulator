@@ -34,7 +34,7 @@
 
 ---
 
-## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i~-iv-a 완료** — 78.73% → **80.72%** (2026-08-12, ROADMAP §5.1-f~-j)
+## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i~-iv-b 완료** — 78.73% → **81.13%** (2026-08-12, ROADMAP §5.1-f~-k)
 
 **오너가 실행 순서를 확정했다(2026-08-12)**: **A** 커버리지 완주 → **B** V2 = **빌드 분리**
 (제품 = native 하나 · 개발/테스트 = 둘 · **제품 빌드에서 게이트 거부가 loud**) → **C** interp 강등 +
@@ -63,6 +63,17 @@ A8 +53 · A4 fork **0**. **A3 가 단독으로도 greedy 로도 1위이고 A1 �
 ⚠️⚠️ **`$sformat`/`$readmem*`/`$cast`(태스크형)는 `systask_refusal` 에 없다** — dispatch 는
 통과시키는데 dest 는 `sched.st.write_lvalue`(**엔진 스토어**)로 쓴다. **지금 그것을 막는 유일한
 것이 `stmt_effect` 행이다.**
+
+### A1-iv-b — fd 가족 여섯 (+28 → **81.13%**)
+
+`$fopen`·`$fgetc`·`$feof`·`$ungetc`·`$fgets`·`$fscanf`(`$fread` 만 남음 = A1-iv-c). ⭐ **파일 테이블은
+라우팅이 필요 없다** — `SimState` 에 있고 두 백엔드가 같은 객체를 본다(`dyn_heap` 과 동일) ⇒ 필요한
+것은 **좁은 테이블 seam 셋**뿐. ⚠️⚠️ **뮤테이션 2 생존이 등가가 아니라 내 테스트의 눈먼 축이었다** →
+판별자를 지어 **6/6**: `$feof` 의 bad-fd 경고는 **같은 fd 를 `$fgetc` 도 만지고 `bad_fd_warn` 이 fd 당
+한 번**이라 안 죽었고(→ 아무도 안 만지는 두 번째 bad fd), `$ungetc` 의 read-capability 검사는 모든
+pushback 이 **읽기 가능한 fd** 를 향해서 안 죽었다(→ **write-only fd** · 답은 −1 이고 요점은 **경고가
+없다**는 것). ⇒ **"경고가 나온다" 는 그 생산자가 하나일 때만 판별자다.** ⚠️⚠️ **`$fclose` 가 실사용
+파일 TB 를 아직 VM 에 묶는다**(`systask_refusal` · fd 를 `int_arg` 로 읽는다) → **A5 즉시 착수 지점**.
 
 ### A1-iv-a — `$sscanf` (+23 → **80.72%**)
 

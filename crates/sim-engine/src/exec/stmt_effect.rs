@@ -213,3 +213,260 @@ pub(crate) fn sscanf<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
         .collect();
     crate::sched::scan_run(k, None, &src, &fmt, &dsts)
 }
+
+// ── A1-iv-b: the fd family ─────────────────────────────────────────────────
+// Six of the seven; `$fread` follows in A1-iv-c (it is the only one that reads
+// the DESTINATION's prior value and needs an array base, i.e. seams these do
+// not). What was store-dependent in all of them is the same two things every
+// earlier A1 slice found: the argument reads, and the ref-arg writes. The FILE
+// TABLE is not — it lives in `SimState`, one object both backends see, exactly
+// as `dyn_heap` does, so this is routing and not a second store.
+
+/// The fd operand of a file function: `None` when the shape is malformed or the
+/// value carries x/z, which every member below answers with its own failure code.
+fn fd_of<K: Kernel + ?Sized>(k: &K, eid: u32) -> Option<u32> {
+    let v = k.k_eval(eid);
+    if v.has_xz() {
+        return None;
+    }
+    Some(v.to_u64().unwrap_or(0) as u32)
+}
+
+/// The pre-opened descriptors (§21.3.4): always valid, never EOF, never pushable.
+fn is_preopened(fd: u32) -> bool {
+    (0x8000_0000..=0x8000_0002).contains(&fd)
+}
+
+/// `fd = $fopen(name [, mode])`.
+///
+/// The name/mode arguments are the only store-dependent part: each is a string
+/// LITERAL, a runtime `string` value, or a packed reg holding ASCII (elaborate's
+/// relaxed contract), and the latter two are net reads.
+pub(crate) fn fopen<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let fail = Value::from_i128(0, 32, true);
+    let args: Vec<u32> = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) => args.clone(),
+        _ => return fail,
+    };
+    // Resolve a name/mode arg to text: a `Const{StrUtf8}` literal decodes
+    // directly; a runtime STRING value (`is_str`) renders its exact bytes; any
+    // other packed value is treated as ASCII in a reg (NUL-stripped) — all three
+    // are valid `$fopen` argument forms (§21.3, iverilog parity).
+    fn resolve<K: Kernel + ?Sized>(k: &K, a: u32) -> String {
+        if let Some(sim_ir::Expr::Const { val }) = k.k_ir().exprs.get(a as usize) {
+            return crate::builtins::const_string(k.k_ir(), *val);
+        }
+        let v = k.k_eval(a);
+        if v.is_str {
+            String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
+        } else {
+            crate::builtins::fmt_packed_chars_min(&v)
+        }
+    }
+    let Some(&a0) = args.first() else {
+        return fail;
+    };
+    let name = resolve(k, a0);
+    let mode = args.get(1).map(|&a| resolve(k, a));
+    let fd = k.k_file_open(&name, mode.as_deref());
+    let mut v = Value::zeros(32, true);
+    v.val[0] = fd as u64;
+    v
+}
+
+/// `c = $fgetc(fd)` — one byte, or −1 at EOF / on a bad or write-only fd.
+pub(crate) fn fgetc<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let eof = Value::from_i128(-1, 32, true);
+    let fd_arg = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if !args.is_empty() => args[0],
+        _ => return eof,
+    };
+    let Some(fd) = fd_of(k, fd_arg) else {
+        return eof;
+    };
+    match k.k_file_read_byte(fd) {
+        Some(b) => Value::from_i128(b as i128, 32, true),
+        None => eof,
+    }
+}
+
+/// `$feof(fd)` — 1 at EOF, 0 while readable, −1 for a bad or closed fd.
+pub(crate) fn feof<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let bad = Value::from_i128(-1, 32, true);
+    let fd_arg = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if !args.is_empty() => args[0],
+        _ => return bad,
+    };
+    let Some(fd) = fd_of(k, fd_arg) else {
+        return bad;
+    };
+    // §21.3.4: the pre-opened descriptors are always-valid, never-EOF fds
+    // (iverilog-pinned: `$feof(STDOUT)` = 0, no warning — mirroring the
+    // write-only-fd rule, whose failed `$fgetc` never latches EOF).
+    if is_preopened(fd) {
+        return Value::from_i128(0, 32, true);
+    }
+    // a bad/closed fd → −1 (iverilog parity, NOT 0); an open fd that has not yet
+    // hit EOF → 0.
+    match k.k_file_eof(fd) {
+        Some(eof) => Value::from_i128(if eof { 1 } else { 0 }, 32, true),
+        None => bad,
+    }
+}
+
+/// `$ungetc(c, fd)` — push one byte back; 0 on success, −1 otherwise.
+pub(crate) fn ungetc<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let bad = Value::from_i128(-1, 32, true);
+    let (c_arg, fd_arg) = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => (args[0], args[1]),
+        _ => return bad,
+    };
+    let cv = k.k_eval(c_arg);
+    let Some(fd) = fd_of(k, fd_arg) else {
+        return bad;
+    };
+    // The EOF sentinel is ONLY the exact int −1 (0xffff_ffff, fully known).
+    // iverilog treats every other c — INCLUDING a value with x/z bits — as a
+    // normal char and pushes its low byte (x/z bits coerced to 0).
+    if !cv.has_xz() && (cv.to_u64().unwrap_or(0) as u32) == 0xffff_ffff {
+        return bad;
+    }
+    // §21.3.4: the pre-opened STDOUT/STDERR follow the write-only rule — −1, no
+    // warning. STDIN pushback is part of the deferred stdin-read feature → −1
+    // quietly too (nothing to push back into).
+    if is_preopened(fd) {
+        return bad;
+    }
+    // the pushed byte = the low 8 bits with x/z bits coerced to 0.
+    let mut byte = 0u8;
+    for i in 0..8 {
+        let (v, u) = cv.get_vu(i);
+        if u == 0 && v != 0 {
+            byte |= 1 << i;
+        }
+    }
+    if k.k_file_ungetc(fd, byte) {
+        Value::from_i128(0, 32, true)
+    } else {
+        bad
+    }
+}
+
+/// `n = $fgets(dest, fd)` — read one line into `dest`, return its length.
+pub(crate) fn fgets<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let none = Value::from_i128(0, 32, true);
+    // args = [str-dest whole-net Signal, fd] — elaborate's contract.
+    let (dest_net, fd_arg) = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => {
+            (whole_net_of(k, args[0]), args[1])
+        }
+        _ => (None, u32::MAX),
+    };
+    let Some(net) = dest_net else {
+        return none;
+    };
+    let Some(fd) = fd_of(k, fd_arg) else {
+        return none;
+    };
+    // v7: a SystemVerilog `string` dest is a dynamic HANDLE (`NetKind::String`,
+    // net width 0). It has NO byte capacity, so it must NOT fall into the
+    // sub-byte (width < 8) reg branch below, which would clear the dest and
+    // return 0 (the silent-wrong that fix addressed). Read the WHOLE line
+    // uncapped (through a retained newline, else to EOF), pack it MSB-first, and
+    // write it via the same string lvalue path as `s = "..."` (§6.16 byte-strip).
+    if k.k_ir().nets[net as usize].kind == sim_ir::NetKind::String {
+        let mut raw: Vec<u8> = Vec::new();
+        while let Some(b) = k.k_file_read_byte(fd) {
+            raw.push(b);
+            if b == b'\n' {
+                break;
+            }
+        }
+        if raw.is_empty() {
+            // genuine EOF / bad-fd / write-only: dest UNCHANGED, count 0.
+            return none;
+        }
+        // C-string semantics (iverilog parity, same as the reg path below): the
+        // STORED string and the returned count stop at the first NUL, even though
+        // the whole line was already consumed from the stream. A leading NUL
+        // gives n = 0 → the dest is set to the empty string (distinct from the
+        // EOF arm above, which leaves it UNCHANGED).
+        let n = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+        let lv = whole_net_lvalue(net);
+        let off = k.k_resolve_lvalue_offsets(&lv);
+        k.k_write_lvalue(&lv, Value::from_str_bytes(&raw[..n]), &off);
+        return Value::from_i128(n as i128, 32, true);
+    }
+    // capacity = the dest in whole bytes (iverilog reads the FULL width N, not
+    // C's N-1 — no NUL is reserved).
+    let width = k.k_ir().nets[net as usize].width.max(1);
+    let max_bytes = (width / 8) as usize;
+    if max_bytes == 0 {
+        // sub-byte dest (width < 8): iverilog reads NO stream byte but CLEARS
+        // the dest to 0 (C fgets into a too-small buffer => empty string
+        // written), returning 0.
+        let lv = whole_net_lvalue(net);
+        let off = k.k_resolve_lvalue_offsets(&lv);
+        k.k_write_lvalue(&lv, Value::zeros(width, false), &off);
+        return none;
+    }
+    // read the line: up to max_bytes OR through a newline (retained).
+    let mut raw: Vec<u8> = Vec::new();
+    let mut any_read = false;
+    while raw.len() < max_bytes {
+        match k.k_file_read_byte(fd) {
+            Some(b) => {
+                any_read = true;
+                raw.push(b);
+                if b == b'\n' {
+                    break;
+                }
+            }
+            None => break,
+        }
+    }
+    if !any_read {
+        // genuine EOF / bad-fd / write-only: dest UNCHANGED, count 0.
+        return none;
+    }
+    // the RETURNED string stops at the first NUL (C string semantics); the bytes
+    // after it were still consumed from the stream above, so the file position
+    // matches iverilog.
+    let n = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+    // pack the first n bytes right-justified MSB-first (first byte = most
+    // significant) into a width-wide value; n == 0 (leading NUL) leaves it
+    // all-zero, which CLEARS the dest — iverilog writes 0, not the prior value.
+    // n*8 <= width because n <= max_bytes = width / 8.
+    let mut v = Value::zeros(width, false);
+    for (i, &by) in raw[..n].iter().rev().enumerate() {
+        let bit = i * 8;
+        v.val[bit / 64] |= (by as u64) << (bit % 64);
+    }
+    let lv = whole_net_lvalue(net);
+    let off = k.k_resolve_lvalue_offsets(&lv);
+    k.k_write_lvalue(&lv, v, &off);
+    Value::from_i128(n as i128, 32, true)
+}
+
+/// `n = $fscanf(fd, fmt, dsts…)` — the descriptor twin of [`sscanf`].
+pub(crate) fn fscanf<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let bad = Value::from_i128(-1, 32, true);
+    let args: Vec<u32> = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => args.clone(),
+        _ => return bad,
+    };
+    let Some(fd) = fd_of(k, args[0]) else {
+        return bad;
+    };
+    let fmt: Vec<u8> = match k.k_ir().exprs.get(args[1] as usize) {
+        Some(sim_ir::Expr::Const { val }) => {
+            crate::builtins::const_string(k.k_ir(), *val).into_bytes()
+        }
+        _ => return bad,
+    };
+    let dsts: Vec<u32> = args[2..]
+        .iter()
+        .filter_map(|&a| whole_net_of(k, a))
+        .collect();
+    crate::sched::scan_run(k, Some(fd), &[], &fmt, &dsts)
+}
