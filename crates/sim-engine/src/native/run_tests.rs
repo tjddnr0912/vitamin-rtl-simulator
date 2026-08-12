@@ -1645,6 +1645,46 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── A1-ii: the REF-ARG writers ──────────────────────────────────────
+        // `$random(seed)`, `$dist_*(seed, …)`, `ok = $cast(dst, src)` and the
+        // assoc iteration step all write a net that is NOT the enclosing
+        // assignment's destination, from inside the call. The write already went
+        // out through `Kernel::k_write_lvalue`; what was engine-only was the
+        // READS — the seed variable, the dist parameters, the current key — and
+        // they are what this row exercises, by FEEDING each result back in.
+        //
+        // Feeding back matters: a seed read from the wrong store returns X, the
+        // Annex-N zero-substitution turns that into 0, and a single draw off
+        // seed 0 still looks like a plausible random number. Only the SECOND
+        // draw, and the `$display` of the seed itself, tell the two apart.
+        (
+            "stmt_effect_ref_arg_writers",
+            r#"
+module top;
+  integer seed, r1, r2, d1;
+  int aa[int];
+  int k, st;
+  byte dst;
+  int src;
+  initial begin
+    seed = 32'd7;
+    r1 = $random(seed);  $display("A r1=%0d seed=%0d", r1, seed);
+    r2 = $random(seed);  $display("B r2=%0d seed=%0d", r2, seed);
+    d1 = $dist_uniform(seed, 10, 20); $display("C d=%0d seed=%0d", d1, seed);
+    src = -3; st = $cast(dst, src); $display("D cast=%0d dst=%0d", st, dst);
+    aa[7] = 70; aa[11] = 110; aa[2] = 20;
+    st = aa.first(k); $display("E st=%0d k=%0d", st, k);
+    st = aa.next(k);  $display("F st=%0d k=%0d", st, k);
+    st = aa.next(k);  $display("G st=%0d k=%0d", st, k);
+    st = aa.next(k);  $display("H st=%0d k=%0d", st, k);
+    st = aa.last(k);  $display("I st=%0d k=%0d", st, k);
+    st = aa.prev(k);  $display("J st=%0d k=%0d", st, k);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // All THREE admitted heap kinds plus flat nets in one design, so the
         // funnel has to send four destinations to three different stores from a
         // single call site. A per-kind routing bug produces correct output for
@@ -2115,7 +2155,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 87, "adversarial set shrank");
+    assert_eq!(designs.len(), 88, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2478,6 +2518,89 @@ endmodule
             "out|I zext=13\n".to_string(),
         ],
         "queue pop IEEE values"
+    );
+}
+
+/// A1-ii ABSOLUTE ANCHOR — the ref-arg writers, half of it iverilog-pinned.
+///
+/// The differential is blind here for the A1-i reason (both backends now run the
+/// SAME `exec::stmt_effect` body), so these are contract values:
+///
+/// * **A/B/C** — pinned to LIVE iverilog 13.0. `$random(seed)` is the IEEE
+///   1364-2005 Annex-N LCG and iverilog is its reference implementation, so the
+///   draws AND the seed write-back are cross-checked, not recorded. Two draws,
+///   because one draw off a wrongly-read (X → 0) seed still looks plausible; it
+///   is the SECOND draw and the printed seed that separate them.
+/// * **D** — `$cast` has no oracle (iverilog 13 rejects it): hand-IEEE §6.24.2,
+///   an integral assignment always succeeds, so the status is 1 and the −3 is
+///   truncated to the `byte` destination by the ordinary write funnel.
+/// * **E..J** — iverilog cannot parse `int aa[int]`, so hand-IEEE §7.9.4: the
+///   iteration visits keys in ASCENDING order regardless of insertion order
+///   (2, 7, 11 for pushes 7, 11, 2), `next` past the last returns status 0 and
+///   LEAVES THE KEY UNCHANGED, and `last`/`prev` walk back down.
+///
+/// ⚠️ `$dist_normal` is deliberately absent: vita and iverilog differ by one
+/// (53 vs 54) on the same seed, a pre-existing rounding difference in
+/// `rng::dist_normal` that both vita backends share. Pinning it here would put a
+/// known divergence inside an anchor, which is how an anchor stops being one.
+#[test]
+fn stmt_effect_ref_arg_writers_have_their_values() {
+    let src = r#"
+module top;
+  integer seed, r1, r2, d1;
+  int aa[int];
+  int k, st;
+  byte dst;
+  int src;
+  initial begin
+    seed = 32'd7;
+    r1 = $random(seed);  $display("A r1=%0d seed=%0d", r1, seed);
+    r2 = $random(seed);  $display("B r2=%0d seed=%0d", r2, seed);
+    d1 = $dist_uniform(seed, 10, 20); $display("C d=%0d seed=%0d", d1, seed);
+    src = -3; st = $cast(dst, src); $display("D cast=%0d dst=%0d", st, dst);
+    aa[7] = 70; aa[11] = 110; aa[2] = 20;
+    st = aa.first(k); $display("E st=%0d k=%0d", st, k);
+    st = aa.next(k);  $display("F st=%0d k=%0d", st, k);
+    st = aa.next(k);  $display("G st=%0d k=%0d", st, k);
+    st = aa.next(k);  $display("H st=%0d k=%0d", st, k);
+    st = aa.last(k);  $display("I st=%0d k=%0d", st, k);
+    st = aa.prev(k);  $display("J st=%0d k=%0d", st, k);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A r1=-2146999808 seed=483484\n".to_string(),
+            "out|B r2=1181502348 seed=-965981971\n".to_string(),
+            "out|C d=17 seed=-1386778934\n".to_string(),
+            "out|D cast=1 dst=-3\n".to_string(),
+            "out|E st=1 k=2\n".to_string(),
+            "out|F st=1 k=7\n".to_string(),
+            "out|G st=1 k=11\n".to_string(),
+            // past the last key: status 0 and the key is LEFT WHERE IT WAS.
+            "out|H st=0 k=11\n".to_string(),
+            "out|I st=1 k=11\n".to_string(),
+            "out|J st=1 k=7\n".to_string(),
+        ],
+        "stmt_effect ref-arg writer values"
     );
 }
 

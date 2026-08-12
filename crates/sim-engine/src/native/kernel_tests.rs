@@ -473,11 +473,14 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
              initial begin a = 0; b = 1; force a = b; end\n\
              endmodule\n",
         ),
+        // A1-ii wired `k_random_seeded`, which used to stand here. The
+        // backstop still needs a `stmt_effect` member that REFUSES, and
+        // `$fopen` is the one A1-iv will take.
         (
-            "seeded_random",
-            "k_random_seeded",
-            "module t; integer s; integer r;\n\
-             initial begin s = 7; r = $random(s); end\n\
+            "fopen",
+            "k_fopen",
+            "module t; integer fd;\n\
+             initial begin fd = $fopen(\"x.txt\", \"r\"); end\n\
              endmodule\n",
         ),
     ];
@@ -501,9 +504,7 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
         let sid = (0..ir.stmts.len() as u32)
             .find(|&s| match &ir.stmts[s as usize] {
                 Stmt::Force { .. } => name == "force",
-                Stmt::BlockingAssign { rhs, .. } => {
-                    name == "seeded_random" && nk.k_random_seeded_rhs(*rhs)
-                }
+                Stmt::BlockingAssign { rhs, .. } => name == "fopen" && nk.k_fopen_rhs(*rhs),
                 _ => false,
             })
             .unwrap_or_else(|| panic!("{name}: no statement of the expected shape"));

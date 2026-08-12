@@ -665,7 +665,7 @@ impl<'a> SimState<'a> {
     /// §4.5.175: is `rhs` an associative/dynamic/queue ITERATION method
     /// (`a.first/next/last/prev(k)`) — the lowered `foreach` walk over a dynamic
     /// array / queue / associative array? Such a step WRITES the iteration key as a
-    /// side effect. The process executor does that via `Scheduler::assoc_iter_step`
+    /// side effect. The process executor does that via `exec::stmt_effect::assoc_iter`
     /// (`&mut write_lvalue`); the synchronous frame executors (`run_frame_call` /
     /// `run_task`, `&self`) route it through [`Self::frame_assoc_iter`] instead
     /// (§4.5.176), which writes a FRAME-LOCAL key via the interior-mutable window.
@@ -682,6 +682,36 @@ impl<'a> SimState<'a> {
         )
     }
 
+    /// A1-ii: the ExprId of the CURRENT-key argument of an iteration step, or
+    /// `None` when this step does not read one (`first`/`last` position from the
+    /// map alone) or the IR is malformed.
+    ///
+    /// Split out so the caller can read that key through ITS OWN store —
+    /// `assoc_iter_compute` used to read it as `self.read_net(knet, None)`, which
+    /// is always the engine's nets and therefore wrong for a native run.
+    pub(crate) fn assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
+        use sim_ir::SysFuncId as F;
+        let Some(sim_ir::Expr::SysFunc { which, args }) = self.ir.exprs.get(rhs as usize) else {
+            return None;
+        };
+        if !matches!(which, F::AssocNext | F::AssocPrev) {
+            return None;
+        }
+        args.get(1).copied()
+    }
+
+    /// The engine-store answer to [`Self::assoc_iter_cur_key`] — literally the read
+    /// `assoc_iter_compute` used to perform inline, kept for the `&self` frame path
+    /// whose key is a FRAME-LOCAL and which `read_net` already routes through the
+    /// frame window.
+    pub(crate) fn assoc_iter_cur_key_value(&self, rhs: u32) -> Option<Value> {
+        let eid = self.assoc_iter_cur_key(rhs)?;
+        match self.ir.exprs.get(eid as usize) {
+            Some(sim_ir::Expr::Signal { net, word: None }) => Some(self.read_net(*net, None)),
+            _ => None,
+        }
+    }
+
     /// §4.5.176: the PURE-COMPUTE half of one assoc/dyn/queue iteration step
     /// (`a.first/next/last/prev(k)`). Reads only (`&self`) — the handle heap and the
     /// current key — and returns `(Some((key net, located-key value)) | None, status)`
@@ -689,8 +719,16 @@ impl<'a> SimState<'a> {
     /// truncated, hand-IEEE §7.9.4). The CALLER performs the actual key write, so the
     /// SAME compute drives both the `&mut` process path (`write_lvalue`) and the `&self`
     /// frame path (`frame_write_lvalue`). A `None` key write leaves the key var
-    /// unchanged (§7.9.4). Mirrors the read/compute of `Scheduler::assoc_iter_step`.
-    pub(crate) fn assoc_iter_compute(&self, rhs: u32) -> (Option<(u32, Value)>, i32) {
+    /// unchanged (§7.9.4). Mirrors the read/compute of `exec::stmt_effect::assoc_iter`.
+    /// A1-ii: `cur` is the CURRENT key value, read by the caller through ITS OWN
+    /// store — [`Self::assoc_iter_cur_key`] says when one is needed. It used to be
+    /// read here as `self.read_net(knet, None)`, i.e. always the engine's nets,
+    /// which is the one store a native run never writes.
+    pub(crate) fn assoc_iter_compute(
+        &self,
+        rhs: u32,
+        cur: Option<Value>,
+    ) -> (Option<(u32, Value)>, i32) {
         use std::ops::Bound;
         let Some(sim_ir::Expr::SysFunc { which, args }) = self.ir.exprs.get(rhs as usize) else {
             return (None, 0); // defensive: hand-built IR only (the rhs probe matched)
@@ -714,7 +752,9 @@ impl<'a> SimState<'a> {
         use sim_ir::SysFuncId as F;
         let needs_cur = matches!(which, F::AssocNext | F::AssocPrev);
         let cur_val = if needs_cur {
-            let v = self.read_net(knet, None);
+            // The caller read it; a missing value is a hand-built IR or a caller
+            // that did not consult `assoc_iter_cur_key`, and degrades to X.
+            let v = cur.unwrap_or_else(|| Value::xs(kw, ks));
             if v.has_xz() {
                 self.dyn_warn_once_at(hnet, "assoc iteration key variable is X/Z (status 0)");
                 return (None, 0);
@@ -855,7 +895,8 @@ impl<'a> SimState<'a> {
     /// frame-local; a direct `st = aa.first(module_net)` in a function would need a `&mut`
     /// module-net write we cannot do here → those fall back to the fatal (correct-or-loud).
     pub(crate) fn frame_assoc_iter(&self, lhs: &Lvalue, rhs: u32) {
-        let (key_write, status) = self.assoc_iter_compute(rhs);
+        let cur = self.assoc_iter_cur_key_value(rhs);
+        let (key_write, status) = self.assoc_iter_compute(rhs, cur);
         if let Some((knet, kval)) = key_write {
             // The key write must land in the frame window (this executor is `&self`); a
             // module-net key can only be written by the `&mut` process path.

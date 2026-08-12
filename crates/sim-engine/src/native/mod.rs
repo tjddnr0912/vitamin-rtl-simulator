@@ -119,6 +119,14 @@ fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
         // net value, so tier-3 DELEGATES to the engine's own impl and the
         // destination rides `apply_effect`'s `k_write_lvalue`.
         || kpred::queue_pop_rhs(exprs, rhs)
+        // A1-ii: the REF-ARG writers. Their bodies moved to
+        // `exec::stmt_effect`, generic over `Kernel`, so the operand reads
+        // (`k_eval`) and the ref-arg write (`k_write_lvalue`) both land in the
+        // calling kernel's store instead of `Scheduler::eval`'s.
+        || kpred::random_seeded_rhs(exprs, rhs)
+        || kpred::dist_seeded_rhs(exprs, rhs)
+        || kpred::cast_rhs(exprs, rhs)
+        || kpred::assoc_iter_rhs(exprs, rhs)
 }
 
 /// Record `n` offending items under `family` (no-op when `n == 0`, so a clean

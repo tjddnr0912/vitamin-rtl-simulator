@@ -19,6 +19,7 @@ mod frame_window;
 pub(crate) mod kpred;
 pub(crate) mod plusargs;
 mod process;
+pub(crate) mod stmt_effect;
 
 /// Outcome of one process activation.
 #[derive(Debug)]
@@ -52,6 +53,37 @@ pub(crate) trait Kernel {
     fn k_nets(&self) -> &dyn crate::eval::NetReader;
     /// READ: evaluate `rhs` context-sized to `lhs`'s width (IEEE assignment rule).
     fn k_eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value;
+    /// READ: SELF-DETERMINED evaluation of `eid` through THIS kernel's store.
+    ///
+    /// A1-ii. The `stmt_effect` family reads operands that are not the rhs of the
+    /// enclosing assignment — a `$random(seed)` seed variable, a `$dist_*`
+    /// parameter, the key of an assoc iteration step — and until this seam those
+    /// bodies reached `Scheduler::eval`, i.e. the ENGINE's nets, which is the one
+    /// store a native run never writes. Threading them through here is what lets
+    /// the bodies be shared verbatim instead of restated per backend.
+    ///
+    /// A whole-net `Signal` evaluated here equals `read_net(net, None)`: the
+    /// self-determined context width and sign ARE the net's own, so the
+    /// `resize_keep_sign` at the end of the `Signal` arm is a no-op.
+    fn k_eval(&self, eid: u32) -> Value;
+    /// READ: the frozen IR. Both implementors hold one; a shared `stmt_effect`
+    /// body needs `ir.exprs` to unpack its own argument shape.
+    fn k_ir(&self) -> &sim_ir::SimIr;
+    /// READ: total destination bit-width of `lhs` (Σ chunk widths), the seed of the
+    /// rhs context width. Store-INDEPENDENT — every term is a declared width or a
+    /// const-folded part-select width — but each implementor already computes it
+    /// over its own net table, so the seam keeps that single spelling.
+    fn k_lvalue_width(&self, lhs: &Lvalue) -> u32;
+    /// READ: `(self-width, self-signed)` of `eid` from the width table.
+    fn k_self_width(&self, eid: u32) -> (u32, bool);
+    /// READ: the ExprId of an assoc iteration step's CURRENT-key argument, or
+    /// `None` when the step reads none. The caller evaluates it through `k_eval`,
+    /// i.e. through its own store.
+    fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32>;
+    /// READ: locate one assoc iteration step against the SHARED heap, given the
+    /// current key the caller just read. Returns `(key write, status)`; the caller
+    /// performs the write through `k_write_lvalue`.
+    fn k_assoc_iter_compute(&self, rhs: u32, cur: Option<Value>) -> (Option<(u32, Value)>, i32);
     /// READ: evaluate a pre-compiled native expression program (VM-only fast path,
     /// [C4-lite]). Byte-identical to `k_eval_for_lvalue` for the bounded subset
     /// `native_eval::try_compile` accepts; the compiler only emits this where it does.

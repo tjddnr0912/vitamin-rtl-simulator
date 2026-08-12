@@ -366,14 +366,16 @@ fn statement_level_families_reject() {
 /// about one statement.
 #[test]
 fn effects_outside_the_write_funnel_reject() {
-    // rhs form: the seed write-back happens in the call.
+    // rhs form: the descriptor advance happens in the call. This used to be
+    // `r = $random(seed)`, which A1-ii WIRED — the negative half of this test
+    // has to name a member that is still refused, or it stops testing the row.
     let (ok, rs) = reasons(
-        "module t; reg [31:0] r; integer seed;\n\
-           initial begin seed = 1; r = $random(seed); $display(\"%0d\", r); $finish; end\n\
+        "module t; integer fd; integer c;\n\
+           initial begin fd = $fopen(\"x.txt\", \"r\"); c = $fgetc(fd); $display(\"%0d\", c); $finish; end\n\
          endmodule\n",
     );
     assert!(!ok);
-    assert_eq!(rs, vec![("stmt_effect", 1)]);
+    assert_eq!(rs, vec![("stmt_effect", 2)]);
 
     // `$value$plusargs` — the shape a real testbench uses (bench/keccak's TB).
     // WIRED (the first family member lifted): `k_value_plusargs` runs the
@@ -400,6 +402,37 @@ fn effects_outside_the_write_funnel_reject() {
         ));
         assert!(okp, "`q.{pop}()` is wired and must be admitted: {rsp:?}");
         assert_eq!(rsp, vec![]);
+    }
+
+    // A1-ii: the REF-ARG writers. Their bodies moved to `exec::stmt_effect`,
+    // generic over `Kernel`, so the operand reads and the ref-arg write both
+    // land in the calling kernel's store. All four, because the carve-out is a
+    // list and a missing entry leaves that member refusing while its `k_*` runs.
+    for (what, body) in [
+        (
+            "$random(seed)",
+            "integer seed, r;\n\
+               initial begin seed = 1; r = $random(seed); $display(\"%0d %0d\", r, seed); $finish; end",
+        ),
+        (
+            "$dist_uniform(seed,..)",
+            "integer seed, r;\n\
+               initial begin seed = 1; r = $dist_uniform(seed, 0, 9); $display(\"%0d %0d\", r, seed); $finish; end",
+        ),
+        (
+            "ok = $cast(dst, src)",
+            "byte d; int s; int ok;\n\
+               initial begin s = 5; ok = $cast(d, s); $display(\"%0d %0d\", ok, d); $finish; end",
+        ),
+        (
+            "aa.first(k)",
+            "int aa[int]; int k, st;\n\
+               initial begin aa[3] = 1; st = aa.first(k); $display(\"%0d %0d\", st, k); $finish; end",
+        ),
+    ] {
+        let (okw, rsw) = reasons(&format!("module t; {body}\nendmodule\n"));
+        assert!(okw, "`{what}` is wired and must be admitted: {rsw:?}");
+        assert_eq!(rsw, vec![], "{what}");
     }
 
     // SysTask form: `$readmem*` writes a memory net without a funnel write.

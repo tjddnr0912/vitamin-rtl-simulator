@@ -425,40 +425,11 @@ impl Scheduler<'_, '_> {
     // call site instead of here. Keeping both would have left a second spelling
     // one edit away from disagreeing with the lane that claims assoc WRITES.
 
-    /// v6: one assoc-iteration step (`first`/`next`/`last`/`prev`) — the
-    /// WRITE-phase body behind `k_assoc_iter`. Returns the int status
-    /// (1 found / 0 none / −1 found-but-truncated, hand-IEEE §7.9.4). On a
-    /// hit the ref key variable is written through the NORMAL lvalue funnel
-    /// (so `@(k)` sensitivity and VCD see it like any blocking assign). On
-    /// dyn/queue handles the walk is the DENSE 0..size-1 order (the internal
-    /// `foreach` desugar target).
-    pub(crate) fn assoc_iter_step(&mut self, rhs: u32) -> i32 {
-        // §4.5.176: the read/compute half is shared with the `&self` frame executors
-        // (`SimState::assoc_iter_compute`) so both paths locate the key identically; the
-        // process path writes the key through the normal `&mut` lvalue funnel (dirty
-        // channel included, so `@(k)` sensitivity + VCD see it like any blocking assign).
-        let (key_write, status) = self.st.assoc_iter_compute(rhs);
-        if let Some((knet, kval)) = key_write {
-            let klv = sim_ir::Lvalue {
-                chunks: vec![sim_ir::LvalChunk {
-                    net: knet,
-                    word: None,
-                    offset: None,
-                    width: None,
-                    kind: sim_ir::SelKind::Bit,
-                }],
-            };
-            self.st.write_lvalue(
-                &klv,
-                kval,
-                &Offsets::Inline {
-                    buf: [(0, 0); 2],
-                    len: 1,
-                },
-            );
-        }
-        status
-    }
+    // A1-ii REMOVED `Scheduler::assoc_iter_step`. It was the PROCESS-path half
+    // of an iteration step, and it read the current key as `self.st.read_net` —
+    // the engine's nets, the one store a native run never writes. The body now
+    // lives in `exec::stmt_effect::assoc_iter`, generic over `Kernel`, so both
+    // backends run one spelling and each reads and writes its own store.
 
     pub(crate) fn now(&self) -> u64 {
         self.st.now

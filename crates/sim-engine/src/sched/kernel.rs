@@ -120,151 +120,39 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_random_seeded_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::random_seeded_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
+    fn k_eval(&self, eid: u32) -> Value {
+        self.eval(eid)
+    }
+    fn k_ir(&self) -> &sim_ir::SimIr {
+        self.st.ir
+    }
+    fn k_lvalue_width(&self, lhs: &Lvalue) -> u32 {
+        self.st.lvalue_width(lhs)
+    }
+    fn k_self_width(&self, eid: u32) -> (u32, bool) {
+        let sw = self.st.wt.get(eid);
+        (sw.width, sw.signed)
+    }
+    fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
+        self.st.assoc_iter_cur_key(rhs)
+    }
+    fn k_assoc_iter_compute(&self, rhs: u32, cur: Option<Value>) -> (Option<(u32, Value)>, i32) {
+        self.st.assoc_iter_compute(rhs, cur)
+    }
     fn k_random_seeded(&mut self, rhs: u32) -> Value {
-        // shape guaranteed by `k_random_seeded_rhs` + elaborate's whole-net
-        // seed contract; everything below defends a hand-built IR.
-        let seed_net = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) => {
-                args.first()
-                    .and_then(|&a| match self.st.ir.exprs.get(a as usize) {
-                        Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                        _ => None,
-                    })
-            }
-            _ => None,
-        };
-        let Some(net) = seed_net else {
-            return Value::xs(32, true);
-        };
-        // seed in: low 32 bits of the variable; X/Z reads as 0 (then the
-        // Annex zero-substitution applies, like an uninitialized iverilog reg).
-        let cur = self.st.read_net(net, None);
-        let mut s = if cur.has_xz() {
-            0
-        } else {
-            (cur.to_u64().unwrap_or(0) & 0xffff_ffff) as u32
-        };
-        let r = crate::rng::annex_n_random(&mut s);
-        // write the updated seed back through the normal lvalue funnel
-        // (resizes to the variable's width like any blocking assign).
-        let lv = Lvalue {
-            chunks: vec![sim_ir::LvalChunk {
-                net,
-                word: None,
-                offset: None,
-                width: None,
-                kind: sim_ir::SelKind::Bit,
-            }],
-        };
-        let sv = Value::from_i128(s as i32 as i128, 32, true);
-        let off = self.resolve_lvalue_offsets(&lv);
-        self.k_write_lvalue(&lv, sv, &off);
-        Value::from_i128(r as i128, 32, true)
+        crate::exec::stmt_effect::random_seeded(self, rhs)
     }
     fn k_dist_seeded_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::dist_seeded_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_dist_seeded(&mut self, rhs: u32) -> Value {
-        // shape guaranteed by `k_dist_seeded_rhs` + elaborate's whole-net seed
-        // contract; everything below defends a hand-built IR.
-        let (which, seed_net, params) = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { which, args }) if !args.is_empty() => {
-                let net = match self.st.ir.exprs.get(args[0] as usize) {
-                    Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                    _ => None,
-                };
-                (*which, net, args[1..].to_vec())
-            }
-            _ => return Value::xs(32, true),
-        };
-        let Some(net) = seed_net else {
-            return Value::xs(32, true);
-        };
-        // dist params are `integer` (signed 32-bit); X/Z reads as 0.
-        let p: Vec<i32> = params
-            .iter()
-            .map(|&a| self.eval(a).to_u64().unwrap_or(0) as u32 as i32)
-            .collect();
-        // seed in: low 32 bits; X/Z → 0 (uninitialized-reg parity). The dist
-        // kernels advance it via the Annex `69069*s+1` integer LCG.
-        let cur = self.st.read_net(net, None);
-        let mut s = if cur.has_xz() {
-            0
-        } else {
-            (cur.to_u64().unwrap_or(0) & 0xffff_ffff) as u32
-        };
-        let r = match which {
-            sim_ir::SysFuncId::DistUniform => {
-                crate::rng::dist_uniform(&mut s, *p.first().unwrap_or(&0), *p.get(1).unwrap_or(&0))
-            }
-            sim_ir::SysFuncId::DistNormal => {
-                crate::rng::dist_normal(&mut s, *p.first().unwrap_or(&0), *p.get(1).unwrap_or(&0))
-            }
-            sim_ir::SysFuncId::DistExponential => {
-                crate::rng::dist_exponential(&mut s, *p.first().unwrap_or(&0))
-            }
-            sim_ir::SysFuncId::DistPoisson => {
-                crate::rng::dist_poisson(&mut s, *p.first().unwrap_or(&0))
-            }
-            sim_ir::SysFuncId::DistChiSquare => {
-                crate::rng::dist_chi_square(&mut s, *p.first().unwrap_or(&0))
-            }
-            sim_ir::SysFuncId::DistT => crate::rng::dist_t(&mut s, *p.first().unwrap_or(&0)),
-            sim_ir::SysFuncId::DistErlang => {
-                crate::rng::dist_erlang(&mut s, *p.first().unwrap_or(&0), *p.get(1).unwrap_or(&0))
-            }
-            _ => 0,
-        };
-        let lv = Lvalue {
-            chunks: vec![sim_ir::LvalChunk {
-                net,
-                word: None,
-                offset: None,
-                width: None,
-                kind: sim_ir::SelKind::Bit,
-            }],
-        };
-        let sv = Value::from_i128(s as i32 as i128, 32, true);
-        let off = self.resolve_lvalue_offsets(&lv);
-        self.k_write_lvalue(&lv, sv, &off);
-        Value::from_i128(r as i128, 32, true)
+        crate::exec::stmt_effect::dist_seeded(self, rhs)
     }
     fn k_cast_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::cast_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_cast(&mut self, rhs: u32) -> Value {
-        // func-form `ok = $cast(dst, src)`: write the resized `src` into the `dst`
-        // ref arg and return 1. iverilog 13.0 does NOT support $cast (no oracle):
-        // hand-IEEE §6.24.2 — an integral assignment always succeeds in this
-        // class-free subset, so the status is always 1 (failure=0 needs class /
-        // strict-enum range checks vita does not model).
-        let (dst_net, src_arg) = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() == 2 => {
-                let net = match self.st.ir.exprs.get(args[0] as usize) {
-                    Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                    _ => None,
-                };
-                (net, args[1])
-            }
-            _ => return Value::from_i128(0, 32, true),
-        };
-        let Some(net) = dst_net else {
-            return Value::from_i128(0, 32, true);
-        };
-        let lv = Lvalue {
-            chunks: vec![sim_ir::LvalChunk {
-                net,
-                word: None,
-                offset: None,
-                width: None,
-                kind: sim_ir::SelKind::Bit,
-            }],
-        };
-        // context-size `src` to the dst width, then write through the funnel.
-        let v = self.eval_for_lvalue(&lv, src_arg);
-        let off = self.resolve_lvalue_offsets(&lv);
-        self.k_write_lvalue(&lv, v, &off);
-        Value::from_i128(1, 32, true)
+        crate::exec::stmt_effect::cast(self, rhs)
     }
     fn k_value_plusargs_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::value_plusargs_rhs(self.st.ir.exprs.as_slice(), rhs)
@@ -923,14 +811,7 @@ impl Kernel for Scheduler<'_, '_> {
         crate::exec::kpred::assoc_iter_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_assoc_iter(&mut self, lhs: &Lvalue, rhs: u32) -> Value {
-        let status = self.assoc_iter_step(rhs);
-        // Context-size the int status exactly as `k_queue_pop` sizes its
-        // result (self-width of the rhs = 32 signed via the width table).
-        let mut v = Value::zeros(32, true);
-        v.val[0] = (status as u32) as u64;
-        let lw = self.st.lvalue_width(lhs);
-        let sw = self.st.wt.get(rhs);
-        v.resize_keep_sign(lw.max(sw.width), sw.signed)
+        crate::exec::stmt_effect::assoc_iter(self, lhs, rhs)
     }
 
     // ── terminator / control surface (C1) — pure forwarders ──

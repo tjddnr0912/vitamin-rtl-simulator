@@ -549,6 +549,43 @@ loud 일 수밖에 없다** = 정확도 사다리 상승이고, 삭제만으로�
 서로를 살아 있다고 보고 교착했다(메모리에 이미 있는 함정의 재발) → **PID 로 기다려라**.
 그리고 `cargo nextest` 를 빌드 중에 죽이면 **잠금이 남아 다음 런이 0% CPU 로 21분 블록**된다.
 
+#### 5.1-h ✅ A1-ii — ref-arg 쓰기 넷: **바디를 `Kernel` 제네릭으로 옮겼다** · 79.03% → **79.94%** (2026-08-12)
+
+`$random(seed)` · `$dist_*(seed,…)` · `ok = $cast(dst,src)` · assoc 반복(`first`/`next`/`last`/`prev`).
+
+⭐⭐ **쓰기는 처음부터 옳았다 — 틀린 것은 읽기였다.** 넷 다 이미 `Kernel::k_write_lvalue` 로
+ref-arg 를 썼으므로 목적지는 **부르는 커널의 스토어**로 갔다. 그런데 피연산자 읽기는
+`Scheduler::eval` / `SimState::read_net` 라 **엔진의 넷**을 봤다 — 네이티브 런이 한 번도 안 쓰는
+그 스토어. ⇒ 수정은 **바디를 `exec::stmt_effect` 로 옮기고 `&mut impl Kernel` 을 받게 한 것**이고,
+엔진 경로는 **기계적으로 바이트 동일**하다(그 seam 들이 원래 부르던 바로 그 함수다).
+
+**새 `Kernel` seam 여섯** — `k_eval`(자기결정 평가) · `k_ir` · `k_lvalue_width` · `k_self_width` ·
+`k_assoc_iter_cur_key` · `k_assoc_iter_compute`. 전부 읽기 전용이고, 네이티브의 `k_eval` 은
+**힙 라우팅**(`SimState::eval_expr_with`)으로 간다 — 슬라이스 2의 `HeapRouted` 가 있는 유일한 프레임.
+
+⭐ **두 번째 철자를 하나 지웠다** — `Scheduler::assoc_iter_step` 삭제. 그것이 프로세스 경로의
+반쪽이었고 현재 키를 `self.st.read_net` 로 읽고 있었다. 이제 두 백엔드가 한 바디를 돈다.
+
+**측정**: **4,982 → 5,042 / 6,307 = 79.94%**(예측 +58, 실측 +60) · `stmt_effect` 발화 257 → **120** ·
+단독 차단 137 → **80** · 전 스위트 **5390 green** · **flip 런 5387/5390**(실패 3 = 백엔드 이름 핀) ·
+**발산 0**.
+
+⭐⭐ **앵커의 절반이 iverilog 핀이다** — `$random(seed)` 는 IEEE 1364-2005 Annex-N LCG 이고
+iverilog 가 그 레퍼런스 구현이라 **드로우와 seed 되쓰기 둘 다** 교차검증된다(`$dist_uniform` 도).
+⚠️ **`$dist_normal` 은 일부러 앵커에서 뺐다** — 같은 seed 에서 vita 53 / iverilog 54 로 **1 차이**가
+나고(seed 는 일치) 이는 `rng::dist_normal` 의 pre-existing 반올림 차이다. **알려진 발산을 앵커에
+넣으면 앵커가 앵커이길 그만둔다**(§4.5.302 의 교훈).
+⚠️ `$cast` 는 iverilog 13 이 거부 ⇒ hand-IEEE §6.24.2 · assoc 는 iverilog 가 `int aa[int]` 를 못 파싱
+⇒ hand-IEEE §7.9.4(**오름차순 방문 · 마지막 뒤 `next` 는 status 0 이고 키를 그대로 둔다**).
+
+⭐ **프론트엔드가 또 범위를 좁혀 놨다** — **string 키 assoc 의 반복은 loud reject**
+(*"the iteration key must be an integral VARIABLE"*)라 `k_eval` 의 힙 라우팅이 이 멤버에서는
+도달 불가다(그래도 남긴다 — A1-iv 의 `$fgets` dest 가 `string` 이다).
+
+⚠️ **거부 핀 둘이 공허해질 뻔했다** — `effects_outside_the_write_funnel_reject` 의 첫 케이스와
+`s1d4a_refused_workers_are_loud_not_silent` 의 둘째가 **`$random(seed)` 를 쓰고 있었다**. 둘 다
+**아직 거부되는 멤버**(`$fopen`/`$fgetc`)로 옮겼다 — 안 옮겼으면 행이 살아 있는데 테스트가 사라진다.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

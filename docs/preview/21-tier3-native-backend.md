@@ -34,7 +34,7 @@
 
 ---
 
-## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i(queue pop) 완료** — 78.73% → **79.03%** (2026-08-12, ROADMAP §5.1-f/-g)
+## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i/-ii 완료** — 78.73% → **79.94%** (2026-08-12, ROADMAP §5.1-f/-g/-h)
 
 **오너가 실행 순서를 확정했다(2026-08-12)**: **A** 커버리지 완주 → **B** V2 = **빌드 분리**
 (제품 = native 하나 · 개발/테스트 = 둘 · **제품 빌드에서 게이트 거부가 loud**) → **C** interp 강등 +
@@ -63,6 +63,19 @@ A8 +53 · A4 fork **0**. **A3 가 단독으로도 greedy 로도 1위이고 A1 �
 ⚠️⚠️ **`$sformat`/`$readmem*`/`$cast`(태스크형)는 `systask_refusal` 에 없다** — dispatch 는
 통과시키는데 dest 는 `sched.st.write_lvalue`(**엔진 스토어**)로 쓴다. **지금 그것을 막는 유일한
 것이 `stmt_effect` 행이다.**
+
+### A1-ii — ref-arg 쓰기 넷 (+60 → **79.94%**)
+
+`$random(seed)` · `$dist_*` · `ok = $cast(dst,src)` · assoc 반복. ⭐⭐ **쓰기는 처음부터 옳았고
+틀린 것은 읽기였다** — 넷 다 이미 `k_write_lvalue` 로 ref-arg 를 썼는데(부르는 커널의 스토어)
+피연산자는 `Scheduler::eval` 로 **엔진의 넷**을 읽었다. 수정 = **바디를 `exec::stmt_effect` 로 옮기고
+`&mut impl Kernel` 을 받게 한 것**(엔진 경로는 기계적으로 바이트 동일). 새 seam 여섯(`k_eval` ·
+`k_ir` · `k_lvalue_width` · `k_self_width` · `k_assoc_iter_cur_key` · `k_assoc_iter_compute`), 전부
+읽기 전용, 네이티브 `k_eval` 은 **힙 라우팅**. ⭐ **두 번째 철자 하나 삭제**(`Scheduler::assoc_iter_step`).
+⭐⭐ **앵커 절반이 iverilog 핀** — `$random` 은 Annex-N LCG 이고 iverilog 가 레퍼런스라 **드로우+seed
+되쓰기**가 교차검증된다. ⚠️ **`$dist_normal` 은 일부러 뺐다**(vita 53 / iverilog 54 — pre-existing
+반올림 차이 · **알려진 발산을 앵커에 넣으면 앵커가 아니게 된다**). ⚠️ **거부 핀 둘이 `$random` 을
+쓰고 있어 공허해질 뻔했다** → 아직 거부되는 `$fopen`/`$fgetc` 로 옮겼다.
 
 ### A1-i — queue pop (+21 → **79.03%**)
 

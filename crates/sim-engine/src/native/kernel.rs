@@ -1367,6 +1367,34 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         self.ctx().eval_ctx(rhs, w, sw.signed)
     }
 
+    fn k_eval(&self, eid: u32) -> Value {
+        // HEAP-ROUTED, deliberately: `SimState::eval_expr_with` is the one frame
+        // that holds both the heap owner and this reader (V1 slice 2), so a
+        // `string` key or a heap-backed operand answers from `dyn_heap` instead
+        // of reaching `assert_owns` on an arena that owns no slot for it.
+        self.sched.st.eval_expr_with(&self.arena, eid)
+    }
+    fn k_ir(&self) -> &SimIr {
+        self.ir
+    }
+    fn k_lvalue_width(&self, lhs: &Lvalue) -> u32 {
+        self.arena.lvalue_width(self.ir, lhs)
+    }
+    fn k_self_width(&self, eid: u32) -> (u32, bool) {
+        // The width table is IR-derived and shared; both kernels read the one
+        // `SimState` carries.
+        let sw = self.sched.st.wt.get(eid);
+        (sw.width, sw.signed)
+    }
+    fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
+        self.sched.st.assoc_iter_cur_key(rhs)
+    }
+    fn k_assoc_iter_compute(&self, rhs: u32, cur: Option<Value>) -> (Option<(u32, Value)>, i32) {
+        // The LOCATE half walks `dyn_heap`, one object both backends share; the
+        // current key came in through `k_eval`, i.e. through THIS store.
+        self.sched.st.assoc_iter_compute(rhs, cur)
+    }
+
     fn k_eval_native(&self, prog: &crate::native_eval::NativeProg) -> Value {
         // `native_eval::run` already takes `&dyn NetReader`, so the tier-2
         // compiled-expression VM runs over the arena with no second copy. The
@@ -1797,19 +1825,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // out by `stmt_effect_wired`, so this arm RUNS.
         Kernel::k_queue_pop(self.sched, lhs, rhs)
     }
-    fn k_assoc_iter(&mut self, _lhs: &Lvalue, _rhs: u32) -> Value {
-        // ⚠️ The row named here CHANGED in V1 slice 2d, exactly as
-        // `k_queue_pop`'s did in 2c: the `NetKind` scan now ADMITS `Assoc` and
-        // `AssocStr`. What keeps this unreachable is `stmt_effect` —
-        // `st = aa.first(i)` is a `BlockingAssign` whose rhs `rhs_is_stmt_effect`
-        // counts, and so is the `foreach` desugar. Measured: an assoc design
-        // WITHOUT an iteration method runs natively today.
-        gate_refused!(
-            "k_assoc_iter",
-            "the `stmt_effect` row: an iteration method is a `BlockingAssign` \
-             rhs that `rhs_is_stmt_effect` counts, and the `foreach` desugar is \
-             the same shape (the `NetKind` scan admits assoc since slice 2d)"
-        )
+    fn k_assoc_iter(&mut self, lhs: &Lvalue, rhs: u32) -> Value {
+        // WIRED (A1-ii). The whole body is `exec::stmt_effect::assoc_iter`,
+        // generic over `Kernel`, so the current-key read and the key write both
+        // land in this store while the locate half walks the shared heap.
+        crate::exec::stmt_effect::assoc_iter(self, lhs, rhs)
     }
     fn k_disable_fork(&mut self) {
         gate_refused!("k_disable_fork", "statement scan rejects `disable fork`")
@@ -1822,14 +1842,14 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     // its own dispatch instead of `write_lvalue`, and the `stmt_effect` reject
     // row refuses any design containing one. Wiring them is what LIFTS that row.
 
-    fn k_random_seeded(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_random_seeded", "`stmt_effect` row (§4.5.291)")
+    fn k_random_seeded(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::random_seeded(self, rhs)
     }
-    fn k_dist_seeded(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_dist_seeded", "`stmt_effect` row (§4.5.291)")
+    fn k_dist_seeded(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::dist_seeded(self, rhs)
     }
-    fn k_cast(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_cast", "`stmt_effect` row (§4.5.291)")
+    fn k_cast(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::cast(self, rhs)
     }
     fn k_value_plusargs(&mut self, rhs: u32) -> Value {
         // The first `stmt_effect` family member WIRED (S1d-5): parse/match/
