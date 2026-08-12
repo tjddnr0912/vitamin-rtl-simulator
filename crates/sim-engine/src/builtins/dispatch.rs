@@ -30,6 +30,51 @@ fn split_file_directed<'a>(
     (Some(fd.unwrap_or(u32::MAX)), args.get(1..).unwrap_or(&[]))
 }
 
+/// Where a FUNNEL-OUTSIDE task write goes (A1-iii).
+///
+/// Three task ids write a net from inside their own dispatch rather than through
+/// the statement's lvalue: `$sformat` renders into its destination, `$readmem*`
+/// fills a memory element by element, and the `$cast` TASK form writes `dst`.
+/// Every one of them called `sched.st.write_lvalue` — the ENGINE's nets, the one
+/// store a native run never writes — and the only thing that kept that from being
+/// a live silent-wrong was the `stmt_effect` reject row, since `systask_refusal`
+/// lets all three through.
+///
+/// The split is OPT-IN in the §4.5.314 sense: [`TaskWrites::Direct`] is literally
+/// the call these sites made before, so the engine path is unchanged by
+/// construction, and only tier-3 asks to collect.
+///
+/// ⚠️ A HEAP destination needs none of this — `write_lvalue` routes a heap-kind
+/// net to `dyn_heap` by net id, and that object is shared. `$s.itoa(v)` and a
+/// `string`-destination `$sformat` were therefore already correct; what was wrong
+/// is a FLAT destination, which is where the arena and `SimState` differ.
+pub(crate) enum TaskWrites<'a> {
+    /// The engine: straight through `SimState`, exactly as before.
+    Direct,
+    /// Tier-3: collect, because only the caller holds the funnel that reaches the
+    /// store it owns. Drained by `NativeKernel::k_dispatch_systask`.
+    Collect(&'a mut Vec<(sim_ir::Lvalue, Value, crate::exec::Offsets)>),
+}
+
+impl TaskWrites<'_> {
+    /// The ONE place a funnel-outside task write is spelled.
+    pub(crate) fn put(
+        &mut self,
+        sched: &mut Scheduler,
+        lv: sim_ir::Lvalue,
+        v: Value,
+        off: crate::exec::Offsets,
+    ) {
+        match self {
+            // `write_lvalue` returns "changed"; no site here consulted it.
+            TaskWrites::Direct => {
+                sched.st.write_lvalue(&lv, v, &off);
+            }
+            TaskWrites::Collect(buf) => buf.push((lv, v, off)),
+        }
+    }
+}
+
 pub(crate) fn dispatch(
     sched: &mut Scheduler,
     which: SysTaskId,
@@ -37,7 +82,15 @@ pub(crate) fn dispatch(
     args: &[u32],
     sid: u32,
 ) -> Ctl {
-    dispatch_with(sched, None::<&crate::SimState>, which, fmt, args, sid)
+    dispatch_with(
+        sched,
+        None::<&crate::SimState>,
+        &mut TaskWrites::Direct,
+        which,
+        fmt,
+        args,
+        sid,
+    )
 }
 
 /// `dispatch` against an ALTERNATE net store (tier-3, S1d-4b-2).
@@ -60,6 +113,7 @@ pub(crate) fn dispatch(
 pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     sched: &mut Scheduler,
     nets: Option<&N>,
+    out: &mut TaskWrites<'_>,
     which: SysTaskId,
     fmt: Option<u32>,
     args: &[u32],
@@ -652,7 +706,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             Ctl::Continue
         }
         SysTaskId::ReadmemB | SysTaskId::ReadmemH => {
-            readmem(sched, args, matches!(which, SysTaskId::ReadmemH));
+            readmem(sched, nets, out, args, matches!(which, SysTaskId::ReadmemH));
             Ctl::Continue
         }
         // v7 P2-C `s.putc(i, c)` — the one string MUTATOR (in-place byte
@@ -752,7 +806,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
                     }],
                 };
                 let off = sched.resolve_lvalue_offsets(&lv);
-                sched.st.write_lvalue(&lv, v, &off);
+                out.put(sched, lv, v, off);
             }
             Ctl::Continue
         }
@@ -792,7 +846,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         // intercept (k_cast). Hand-IEEE §6.24.2 (iverilog 13.0 rejects $cast):
         // an integral cast always succeeds in this class-free subset.
         SysTaskId::Cast => {
-            cast_task(sched, args);
+            cast_task(sched, nets, out, args);
             Ctl::Continue
         }
     }

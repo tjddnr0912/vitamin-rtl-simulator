@@ -366,7 +366,12 @@ pub(crate) fn random_full_width(seed: &mut u32, width: u32, signed: bool) -> Val
     )
 }
 
-pub(crate) fn cast_task(sched: &mut Scheduler, args: &[u32]) {
+pub(crate) fn cast_task<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    out: &mut crate::builtins::TaskWrites<'_>,
+    args: &[u32],
+) {
     if args.len() != 2 {
         return;
     }
@@ -384,9 +389,17 @@ pub(crate) fn cast_task(sched: &mut Scheduler, args: &[u32]) {
                 kind: sim_ir::SelKind::Bit,
             }],
         };
-        let v = sched.eval_for_lvalue(&lv, args[1]); // context-size src to dst width
+        // Context-size `src` to the dst width — `Scheduler::eval_for_lvalue`'s
+        // rule, spelled through the THREADED reader. A1-iii MEASURED what the
+        // untreaded call cost: on a native run `sc = 8'd200; $cast(dc, sc);`
+        // printed `dc=x`, because `sc` had been written to the arena while
+        // `eval_for_lvalue` read `SimState`.
+        let lw = sched.st.lvalue_width(&lv);
+        let sw = sched.st.wt.get(args[1]);
+        let v =
+            crate::builtins::eval_task_arg_ctx(sched, nets, args[1], lw.max(sw.width), sw.signed);
         let off = sched.resolve_lvalue_offsets(&lv);
-        sched.st.write_lvalue(&lv, v, &off);
+        out.put(sched, lv, v, off);
     }
 }
 
@@ -395,7 +408,13 @@ pub(crate) fn cast_task(sched: &mut Scheduler, args: &[u32]) {
 /// in BOTH variants and lives in the DECLARED index domain, unwritten
 /// elements keep their value, token shortfall warns only for directive-free
 /// files, and every problem is W4023 + continue (exit parity with iverilog).
-pub(crate) fn readmem(sched: &mut Scheduler, args: &[u32], hex: bool) {
+pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    out: &mut crate::builtins::TaskWrites<'_>,
+    args: &[u32],
+    hex: bool,
+) {
     let warn = |sched: &mut Scheduler, msg: String| {
         sched
             .st
@@ -473,8 +492,17 @@ pub(crate) fn readmem(sched: &mut Scheduler, args: &[u32], hex: bool) {
         }
     }
     // range window (declared-index domain). Default: full array ascending.
-    let r_start = args.get(2).and_then(|&a| sched.eval(a).to_u64());
-    let r_finish = args.get(3).and_then(|&a| sched.eval(a).to_u64());
+    // Threaded: the optional window bounds are ordinary expressions and may name
+    // nets (`$readmemh(f, m, lo, hi)`), so they are a second store read exactly
+    // as the slice-2c task arguments were. (`writemem`'s twin below is NOT
+    // threaded and does not need to be: `$writemem*` reads the memory itself,
+    // which is why `systask_refusal` refuses it outright.)
+    let r_start = args
+        .get(2)
+        .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
+    let r_finish = args
+        .get(3)
+        .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
     let (start, finish) = match (r_start, r_finish) {
         (Some(s), Some(f)) => (s, f),
         (Some(s), None) => (s, base + alen - 1),
@@ -521,7 +549,7 @@ pub(crate) fn readmem(sched: &mut Scheduler, args: &[u32], hex: bool) {
             buf: [(0, word), (0, 0)],
             len: 1,
         };
-        sched.st.write_lvalue(&lv, val, &off);
+        out.put(sched, lv, val, off);
         wrote += 1;
         addr += step;
     }

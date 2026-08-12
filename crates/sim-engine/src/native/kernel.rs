@@ -1786,8 +1786,33 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // then turns on the store-point capture. Everything else about it — the
         // header, the scope/var declarations, the filter — reads IR and
         // metadata, so it needs nothing from this seam.
+        // A1-iii: the three funnel-outside task writes (`$sformat`'s destination,
+        // `$readmem*`'s memory fill, the `$cast` TASK form's `dst`) are COLLECTED
+        // rather than written, because only this kernel holds the funnel that
+        // reaches the store it owns. `TaskWrites::Direct` — what the engine
+        // passes — is literally the `sched.st.write_lvalue` those sites made
+        // before, so its path is unchanged by construction.
+        let mut pending: Vec<(Lvalue, Value, Offsets)> = Vec::new();
         let (sched, arena) = (&mut *self.sched, &self.arena);
-        let ctl = crate::builtins::dispatch_with(sched, Some(arena), which, fmt, args, sid);
+        let ctl = crate::builtins::dispatch_with(
+            sched,
+            Some(arena),
+            &mut crate::builtins::TaskWrites::Collect(&mut pending),
+            which,
+            fmt,
+            args,
+            sid,
+        );
+        // Applied AFTER the dispatch returns rather than inside it: the borrow of
+        // `self.sched`/`self.arena` above is what makes the collect necessary in
+        // the first place. Nothing inside these three arms reads back what it
+        // just wrote (`$readmem` parses tokens and fills; `$sformat` renders its
+        // arguments before touching the destination), so the deferral is not
+        // observable — and every one of them lands through `write_routed`, which
+        // is the single place that answers "which store owns this net".
+        for (lv, v, off) in pending {
+            self.k_write_lvalue(&lv, v, &off);
+        }
         // `$dumpoff` turns dumping off; keep the arena's capture flag in step so
         // a long post-`$dumpoff` run stops buffering values the drain would only
         // discard. Correctness does not depend on this — `vcd_id_for` already

@@ -1685,6 +1685,38 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── A1-iii: the SysTask destination writers ─────────────────────────
+        // `$sformat` and the `$cast` TASK form write a net from inside their own
+        // dispatch. `$readmem*` is in the ANCHOR instead, because it needs a real
+        // file on disk and this row runs in-process.
+        //
+        // Both halves are net-fed on purpose. The write side is what
+        // `TaskWrites::Collect` routes; the READ side is what the first cut of
+        // this slice got wrong — `cast_task` still called
+        // `sched.eval_for_lvalue`, so `sc = 8'd200; $cast(dc, sc);` printed
+        // `dc=x` on a native run while the VM printed 200. A literal source
+        // operand cannot see that.
+        (
+            "systask_dest_writers",
+            r#"
+module top;
+  reg [63:0] p;
+  string s;
+  reg [7:0] dc;
+  reg [7:0] sc;
+  reg [7:0] n;
+  initial begin
+    n = 8'd42;
+    $sformat(p, "n=%0d h=%h", n, 8'hAB);  $display("A p=%0s", p);
+    s = "";
+    $sformat(s, "x=%0d", n);              $display("B s=%0s", s);
+    sc = 8'd200; $cast(dc, sc);           $display("C dc=%0d", dc);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // All THREE admitted heap kinds plus flat nets in one design, so the
         // funnel has to send four destinations to three different stores from a
         // single call site. A per-kind routing bug produces correct output for
@@ -2155,7 +2187,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 88, "adversarial set shrank");
+    assert_eq!(designs.len(), 89, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2604,6 +2636,68 @@ endmodule
     );
 }
 
+/// A1-iii ABSOLUTE ANCHOR — the SysTask destination writers, iverilog-pinned.
+///
+/// `$readmem*` lives here rather than in the corpus row because it needs a real
+/// file, and the file is what makes the WINDOW BOUNDS observable: `lo`/`hi` are
+/// NETS, and before A1-iii `readmem` read them with `sched.eval` — the engine's
+/// store — so a native run saw X, `to_u64()` gave `None`, and the load silently
+/// covered the WHOLE array instead of `[3:5]`. Values cross-checked against live
+/// iverilog 13.0, which supports `$readmemh` with bounds.
+///
+/// The hex file has NO `@addr` directive on purpose: with one, the directive
+/// picks the addresses and the bounds stop discriminating — which is exactly how
+/// the first probe of this slice passed while the bug was still there.
+#[test]
+fn readmem_window_bounds_come_from_this_store() {
+    let dir = std::env::temp_dir().join(format!("vita-a1iii-{}-{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let hex = dir.join("m.hex");
+    std::fs::write(&hex, "1A\n2B\n3C\n").expect("hex file");
+    let src = format!(
+        r#"
+module top;
+  reg [15:0] m [0:7];
+  integer i, lo, hi;
+  initial begin
+    for (i = 0; i < 8; i = i + 1) m[i] = 16'hFFFF;
+    lo = 3; hi = 5;
+    $readmemh("{}", m, lo, hi);
+    $display("W %h %h %h %h %h %h %h %h", m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7]);
+    $finish;
+  end
+endmodule
+"#,
+        hex.display()
+    );
+    let (ir, opts) = build_with_opts(&src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            // Exactly [3:5] loaded, everything else keeps its pre-load value.
+            // Untreaded bounds gave `ffff ffff 001a 002b 003c ffff ffff ffff`.
+            "out|W ffff ffff ffff 001a 002b 003c ffff ffff\n".to_string(),
+        ],
+        "readmem window"
+    );
+}
+
 /// The READ twin of the funnel pin: every store read a system task makes must go
 /// through the THREADED reader, or be behind a row that refuses the design.
 ///
@@ -2642,8 +2736,13 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         ),
         (
             "crv_draw.rs",
-            6,
-            "the whole class/CRV surface is the `class` row",
+            4,
+            "the class/CRV surface is the `class` row, and `writemem`'s window \
+             bounds are `$writemem*`, which `systask_refusal` refuses (it reads \
+             the MEMORY itself, not a formatted argument). A1-iii took this from \
+             6 to 4 by threading `readmem`'s two window bounds — measured, not \
+             assumed: `$readmemh(f, m, lo, hi)` with NET bounds loaded the whole \
+             array on a native run",
         ),
         ("render.rs", 2, "`$vita_stage` is the `stage` row"),
         (

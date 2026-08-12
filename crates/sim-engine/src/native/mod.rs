@@ -393,7 +393,23 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
                 // ⚠️ It matched only after the mutators' ARGUMENTS were threaded
                 // through the reader (`eval_task_arg`/`eval_task_arg_ctx`) —
                 // they read `Scheduler::eval`, i.e. the engine's own nets.
-                if sim_ir::systask_net_write(*which) == sim_ir::NetWrite::Flat {
+                // A1-iii: all three FLAT-writing task ids are wired. Their
+                // destination writes are COLLECTED by `TaskWrites::Collect` and
+                // applied through the calling kernel's funnel, so `$sformat`,
+                // `$readmemb/h` and the `$cast` TASK form no longer refuse.
+                //
+                // ⚠️ `NetWrite::Heap` was never counted here and never needed to
+                // be: `write_lvalue` routes a heap-kind net to `dyn_heap` by net
+                // id, and that object is shared by both backends.
+                if sim_ir::systask_net_write(*which) == sim_ir::NetWrite::Flat
+                    && !matches!(
+                        which,
+                        sim_ir::SysTaskId::Sformat
+                            | sim_ir::SysTaskId::ReadmemB
+                            | sim_ir::SysTaskId::ReadmemH
+                            | sim_ir::SysTaskId::Cast
+                    )
+                {
                     stmt_effect += 1;
                 }
             }

@@ -435,47 +435,37 @@ fn effects_outside_the_write_funnel_reject() {
         assert_eq!(rsw, vec![], "{what}");
     }
 
-    // SysTask form: `$readmem*` writes a memory net without a funnel write.
-    let (ok3, rs3) = reasons(
-        "module t; reg [7:0] m [0:3];\n\
-           initial begin $readmemh(\"x.hex\", m); $display(\"%0d\", m[0]); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(!ok3);
-    assert_eq!(rs3, vec![("stmt_effect", 1)]);
-
-    // `$sformat` and `$readmemb` — the other two net-writing task ids. Named by
-    // this test's own doc but previously unreached (only `$readmemh` fired), so
-    // two of the three were riding on the third.
-    let (ok3b, rs3b) = reasons(
-        "module t; reg [63:0] d;\n\
-           initial begin $sformat(d, \"%0d\", 7); $display(\"%0d\", d); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(!ok3b);
-    assert_eq!(rs3b, vec![("stmt_effect", 1)]);
-    let (ok3c, rs3c) = reasons(
-        "module t; reg [7:0] m [0:3];\n\
-           initial begin $readmemb(\"x.bin\", m); $display(\"%0d\", m[0]); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(!ok3c);
-    assert_eq!(rs3c, vec![("stmt_effect", 1)]);
-
-    // The `$cast` TASK form: it writes its destination exactly as `$sformat`
-    // does. A three-id `matches!` with an implicit catch-all accepted it —
-    // measured eligible with an EMPTY reject map — which is why the predicate
-    // now lives in sim-ir as an `_`-free match.
-    let (ok3d, rs3d) = reasons(
-        "module t; reg [7:0] d; reg [7:0] s;\n\
-           initial begin s = 7; $cast(d, s); $display(\"%0d\", d); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(
-        !ok3d,
-        "the $cast TASK form writes its destination: {rs3d:?}"
-    );
-    assert_eq!(rs3d, vec![("stmt_effect", 1)]);
+    // A1-iii: the three FLAT-writing task ids are WIRED. `$sformat`,
+    // `$readmemb/h` and the `$cast` TASK form collect their destination writes
+    // through `TaskWrites::Collect` and the calling kernel applies them, so the
+    // row must stop counting them. All four spellings, because the carve-out is
+    // a `matches!` list and a missing arm leaves that id refusing.
+    for (what, body) in [
+        (
+            "$readmemh",
+            "reg [7:0] m [0:3];\n\
+               initial begin $readmemh(\"x.hex\", m); $display(\"%0d\", m[0]); $finish; end",
+        ),
+        (
+            "$readmemb",
+            "reg [7:0] m [0:3];\n\
+               initial begin $readmemb(\"x.bin\", m); $display(\"%0d\", m[0]); $finish; end",
+        ),
+        (
+            "$sformat",
+            "reg [63:0] d;\n\
+               initial begin $sformat(d, \"%0d\", 7); $display(\"%0d\", d); $finish; end",
+        ),
+        (
+            "$cast task form",
+            "reg [7:0] d; reg [7:0] s;\n\
+               initial begin s = 7; $cast(d, s); $display(\"%0d\", d); $finish; end",
+        ),
+    ] {
+        let (okw, rsw) = reasons(&format!("module t; {body}\nendmodule\n"));
+        assert!(okw, "`{what}` is wired and must be admitted: {rsw:?}");
+        assert_eq!(rsw, vec![], "{what}");
+    }
 
     // NEGATIVE, and it must be a SysFunc rhs — not a constant. A `q = 1` negative
     // cannot tell "the predicate says false for a PURE SysFunc" apart from "the

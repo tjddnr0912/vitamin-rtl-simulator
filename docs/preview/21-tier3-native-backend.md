@@ -34,7 +34,7 @@
 
 ---
 
-## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i/-ii 완료** — 78.73% → **79.94%** (2026-08-12, ROADMAP §5.1-f/-g/-h)
+## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i/-ii/-iii 완료** — 78.73% → **80.40%** (2026-08-12, ROADMAP §5.1-f~-i)
 
 **오너가 실행 순서를 확정했다(2026-08-12)**: **A** 커버리지 완주 → **B** V2 = **빌드 분리**
 (제품 = native 하나 · 개발/테스트 = 둘 · **제품 빌드에서 게이트 거부가 loud**) → **C** interp 강등 +
@@ -63,6 +63,17 @@ A8 +53 · A4 fork **0**. **A3 가 단독으로도 greedy 로도 1위이고 A1 �
 ⚠️⚠️ **`$sformat`/`$readmem*`/`$cast`(태스크형)는 `systask_refusal` 에 없다** — dispatch 는
 통과시키는데 dest 는 `sched.st.write_lvalue`(**엔진 스토어**)로 쓴다. **지금 그것을 막는 유일한
 것이 `stmt_effect` 행이다.**
+
+### A1-iii — SysTask 목적지 쓰기 셋 (+31 → **80.40%**)
+
+`$sformat` · `$readmem*` · `$cast` 태스크형. 셋 다 `k_dispatch_systask` 를 통과하면서 dest 를
+**엔진 스토어**로 썼고 막던 것은 `stmt_effect` 행뿐이었다. 지은 것 = **`TaskWrites` 싱크 하나**
+(`Direct` = 원래 호출 = 기계적 불변 · `Collect` = tier-3 가 dispatch 후 `k_write_lvalue` 로 드레인).
+⭐ **힙 목적지는 필요 없었다** — `write_lvalue` 가 넷 id 로 `dyn_heap` 라우팅(공유) ⇒ `$s.itoa` 와
+`string` `$sformat` 은 원래 맞았고 **flat 목적지만** 틀렸다. ⭐⭐ **차분이 첫 수정의 발산을 즉시
+잡았다 — 쓰기만 라우팅하고 읽기를 안 했다**(`sc=8'd200; $cast(dc,sc)` → native `dc=x`), 그리고 같은
+클래스가 하나 더(`readmem` 의 윈도 인자). ⚠️ **첫 프로브가 그것을 놓쳤다**: hex 에 `@addr` 지시자가
+있으면 윈도가 판별력을 잃는다 → 지시자 없는 파일 + 넷 경계로 앵커 재작성. **뮤테이션 6/6 사망.**
 
 ### A1-ii — ref-arg 쓰기 넷 (+60 → **79.94%**)
 
