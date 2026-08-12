@@ -182,3 +182,34 @@ pub(crate) fn assoc_iter<K: Kernel + ?Sized>(k: &mut K, lhs: &Lvalue, rhs: u32) 
     let (sw, ssigned) = k.k_self_width(rhs);
     v.resize_keep_sign(lw.max(sw), ssigned)
 }
+
+/// `n = $sscanf(src, fmt, dsts…)` — scan a STRING (no file descriptor) and write
+/// each matched destination.
+///
+/// A1-iv-a. Two things were store-dependent and both are routed now: the SOURCE
+/// (`args[0]`, an ordinary expression that usually names a `string` net) and the
+/// destination writes, which `scan_write_dst` performs through
+/// `Kernel::k_write_lvalue`. The scan itself never touches a store — with
+/// `fd = None` the byte source is the `src` slice — which is why this member
+/// needs no file-table plumbing at all and ships ahead of its seven siblings.
+pub(crate) fn sscanf<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let args: Vec<u32> = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => args.clone(),
+        _ => return Value::from_i128(-1, 32, true),
+    };
+    let src: Vec<u8> = k.k_eval(args[0]).to_str_bytes();
+    let fmt: Vec<u8> = match k.k_ir().exprs.get(args[1] as usize) {
+        Some(sim_ir::Expr::Const { val }) => {
+            crate::builtins::const_string(k.k_ir(), *val).into_bytes()
+        }
+        _ => return Value::from_i128(-1, 32, true),
+    };
+    let dsts: Vec<u32> = args[2..]
+        .iter()
+        .filter_map(|&a| match k.k_ir().exprs.get(a as usize) {
+            Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
+            _ => None,
+        })
+        .collect();
+    crate::sched::scan_run(k, None, &src, &fmt, &dsts)
+}

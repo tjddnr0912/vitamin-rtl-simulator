@@ -1717,6 +1717,35 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── A1-iv-a: `$sscanf` ──────────────────────────────────────────────
+        // The source is a `string` NET, not a literal, which is the half a
+        // literal-only design cannot see: before A1-iv-a `k_sscanf` read it with
+        // `Scheduler::eval`. Four destinations of three shapes (two ints, a
+        // packed hex, a string) because `scan_write_dst` is what routes them.
+        (
+            "sscanf_from_a_string_net",
+            r#"
+module top;
+  string s;
+  int a, b, n;
+  reg [31:0] h;
+  string w;
+  initial begin
+    s = "12 -34 ff hello";
+    n = $sscanf(s, "%d %d %h %s", a, b, h, w);
+    $display("A n=%0d a=%0d b=%0d h=%0h w=%0s", n, a, b, h, w);
+    s = "nope";
+    n = $sscanf(s, "%d", a);
+    $display("B n=%0d a=%0d", n, a);
+    s = "";
+    n = $sscanf(s, "%d", a);
+    $display("C n=%0d", n);
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // All THREE admitted heap kinds plus flat nets in one design, so the
         // funnel has to send four destinations to three different stores from a
         // single call site. A per-kind routing bug produces correct output for
@@ -2187,7 +2216,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 89, "adversarial set shrank");
+    assert_eq!(designs.len(), 90, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2695,6 +2724,68 @@ endmodule
             "out|W ffff ffff ffff 001a 002b 003c ffff ffff\n".to_string(),
         ],
         "readmem window"
+    );
+}
+
+/// A1-iv-a ABSOLUTE ANCHOR — `$sscanf`, pinned to live iverilog 13.0.
+///
+/// iverilog implements `$sscanf`, so unlike most of this file's anchors these
+/// are cross-checked values rather than hand-IEEE ones. Three returns that a
+/// wrong-store read cannot all reproduce:
+///
+/// * **A** — four conversions off a string NET; every destination written.
+/// * **B** — no match: the return is **0** and `a` KEEPS its previous value
+///   (12), which is what separates "matched nothing" from "wrote a zero".
+/// * **C** — an EMPTY source: the return is **−1** (EOF), not 0. Reading the
+///   source from the wrong store yields an empty string too, so B and C
+///   together are what tell a routed read from an unrouted one — B would become
+///   −1 as well.
+#[test]
+fn sscanf_has_its_iverilog_values() {
+    let src = r#"
+module top;
+  string s;
+  int a, b, n;
+  reg [31:0] h;
+  string w;
+  initial begin
+    s = "12 -34 ff hello";
+    n = $sscanf(s, "%d %d %h %s", a, b, h, w);
+    $display("A n=%0d a=%0d b=%0d h=%0h w=%0s", n, a, b, h, w);
+    s = "nope";
+    n = $sscanf(s, "%d", a);
+    $display("B n=%0d a=%0d", n, a);
+    s = "";
+    n = $sscanf(s, "%d", a);
+    $display("C n=%0d", n);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A n=4 a=12 b=-34 h=ff w=hello\n".to_string(),
+            "out|B n=0 a=12\n".to_string(),
+            "out|C n=-1\n".to_string(),
+        ],
+        "sscanf values"
     );
 }
 

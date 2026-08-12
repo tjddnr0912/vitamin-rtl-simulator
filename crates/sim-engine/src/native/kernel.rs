@@ -1386,6 +1386,20 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         let sw = self.sched.st.wt.get(eid);
         (sw.width, sw.signed)
     }
+    fn k_file_read_byte(&mut self, fd: u32) -> Option<u8> {
+        // The file table lives in `SimState`, which this kernel borrows — one
+        // object, both backends, exactly like `dyn_heap`.
+        crate::builtins::file_read_byte(self.sched, fd)
+    }
+    fn k_file_unget(&mut self, fd: u32, b: u8) {
+        self.sched
+            .st
+            .read_state
+            .entry(fd)
+            .or_default()
+            .pushback
+            .push(b);
+    }
     fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
         self.sched.st.assoc_iter_cur_key(rhs)
     }
@@ -1921,8 +1935,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_fscanf(&mut self, _rhs: u32) -> Value {
         gate_refused!("k_fscanf", "`stmt_effect` row (§4.5.291)")
     }
-    fn k_sscanf(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_sscanf", "`stmt_effect` row (§4.5.291)")
+    fn k_sscanf(&mut self, rhs: u32) -> Value {
+        // WIRED (A1-iv-a). `$sscanf` scans a STRING, so the whole body is
+        // store-routed and file-table-free: the source comes through `k_eval`
+        // and every destination through `k_write_lvalue`.
+        crate::exec::stmt_effect::sscanf(self, rhs)
     }
     fn k_sformatf(&mut self, rhs: u32) -> Value {
         // WIRED (S1d-4b-2) through the same seam. `$sformatf` never needed a

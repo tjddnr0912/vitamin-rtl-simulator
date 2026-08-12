@@ -31,14 +31,14 @@ pub(crate) fn scan_is_ws(b: u8) -> bool {
 /// Next source byte. For `$fscanf` (fd = Some) it comes from the file stream
 /// (honoring the `$ungetc`/scanf pushback); for `$sscanf` (fd = None) from the
 /// `src` buffer at `*pos` (advanced). Returns None at end of input.
-pub(crate) fn scan_next(
-    sched: &mut Scheduler,
+pub(crate) fn scan_next<K: crate::exec::Kernel + ?Sized>(
+    k: &mut K,
     fd: Option<u32>,
     src: &[u8],
     pos: &mut usize,
 ) -> Option<u8> {
     match fd {
-        Some(fd) => crate::builtins::file_read_byte(sched, fd),
+        Some(fd) => k.k_file_read_byte(fd),
         None => {
             let b = src.get(*pos).copied();
             if b.is_some() {
@@ -52,9 +52,14 @@ pub(crate) fn scan_next(
 /// Put one over-read byte back. For `$fscanf` it pushes onto the fd pushback
 /// stack (so it survives to the next directive AND the next call); for
 /// `$sscanf` it rewinds the cursor.
-pub(crate) fn scan_unget(sched: &mut Scheduler, fd: Option<u32>, pos: &mut usize, b: u8) {
+pub(crate) fn scan_unget<K: crate::exec::Kernel + ?Sized>(
+    k: &mut K,
+    fd: Option<u32>,
+    pos: &mut usize,
+    b: u8,
+) {
     match fd {
-        Some(fd) => sched.st.read_state.entry(fd).or_default().pushback.push(b),
+        Some(fd) => k.k_file_unget(fd, b),
         None => *pos = pos.saturating_sub(1),
     }
 }
@@ -71,7 +76,7 @@ pub(crate) fn scan_pack_str(bytes: &[u8]) -> Value {
     v
 }
 
-pub(crate) fn scan_write_dst(sched: &mut Scheduler, net: u32, v: Value) {
+pub(crate) fn scan_write_dst<K: crate::exec::Kernel + ?Sized>(k: &mut K, net: u32, v: Value) {
     let lv = Lvalue {
         chunks: vec![sim_ir::LvalChunk {
             net,
@@ -81,8 +86,8 @@ pub(crate) fn scan_write_dst(sched: &mut Scheduler, net: u32, v: Value) {
             kind: sim_ir::SelKind::Bit,
         }],
     };
-    let off = sched.resolve_lvalue_offsets(&lv);
-    sched.k_write_lvalue(&lv, v, &off);
+    let off = k.k_resolve_lvalue_offsets(&lv);
+    k.k_write_lvalue(&lv, v, &off);
 }
 
 /// Build a numeric scanf value sized to `dst_w` from the collected digit
@@ -163,8 +168,8 @@ pub(crate) fn scan_build_numeric(chars: &[u8], radix: u32, dst_w: u32) -> Value 
 /// non-suppressed successful conversion writes `dsts[di]` and counts. Returns
 /// the conversion count, or −1 when NO source byte was ever available
 /// (genuine EOF; whitespace-only input that converts nothing returns 0).
-pub(crate) fn scan_run(
-    sched: &mut Scheduler,
+pub(crate) fn scan_run<K: crate::exec::Kernel + ?Sized>(
+    k: &mut K,
     fd: Option<u32>,
     src: &[u8],
     fmt: &[u8],
@@ -179,9 +184,9 @@ pub(crate) fn scan_run(
     // source byte is AVAILABLE at entry — not on whether the scan read one
     // (an empty format / an unsupported first conversion still returns 0 on a
     // non-empty source). Peek one byte and put it back.
-    let at_eof = match scan_next(sched, fd, src, &mut pos) {
+    let at_eof = match scan_next(k, fd, src, &mut pos) {
         Some(b) => {
-            scan_unget(sched, fd, &mut pos, b);
+            scan_unget(k, fd, &mut pos, b);
             false
         }
         None => true,
@@ -189,7 +194,7 @@ pub(crate) fn scan_run(
 
     macro_rules! next {
         () => {
-            scan_next(sched, fd, src, &mut pos)
+            scan_next(k, fd, src, &mut pos)
         };
     }
 
@@ -199,7 +204,7 @@ pub(crate) fn scan_run(
             fi += 1;
             while let Some(b) = next!() {
                 if !scan_is_ws(b) {
-                    scan_unget(sched, fd, &mut pos, b);
+                    scan_unget(k, fd, &mut pos, b);
                     break;
                 }
             }
@@ -211,7 +216,7 @@ pub(crate) fn scan_run(
             match next!() {
                 Some(b) if b == fc => {}
                 Some(b) => {
-                    scan_unget(sched, fd, &mut pos, b);
+                    scan_unget(k, fd, &mut pos, b);
                     break 'fmt;
                 }
                 None => break 'fmt,
@@ -225,7 +230,7 @@ pub(crate) fn scan_run(
             match next!() {
                 Some(b'%') => {}
                 Some(b) => {
-                    scan_unget(sched, fd, &mut pos, b);
+                    scan_unget(k, fd, &mut pos, b);
                     break 'fmt;
                 }
                 None => break 'fmt,
@@ -320,7 +325,7 @@ pub(crate) fn scan_run(
                     match next!() {
                         Some(b) if set[b as usize] != negate => bytes.push(b),
                         Some(b) => {
-                            scan_unget(sched, fd, &mut pos, b);
+                            scan_unget(k, fd, &mut pos, b);
                             break;
                         }
                         None => break,
@@ -332,7 +337,7 @@ pub(crate) fn scan_run(
                 // skip leading ws, then a ws-delimited run (up to width).
                 while let Some(b) = next!() {
                     if !scan_is_ws(b) {
-                        scan_unget(sched, fd, &mut pos, b);
+                        scan_unget(k, fd, &mut pos, b);
                         break;
                     }
                 }
@@ -340,7 +345,7 @@ pub(crate) fn scan_run(
                 while bytes.len() < width {
                     match next!() {
                         Some(b) if scan_is_ws(b) => {
-                            scan_unget(sched, fd, &mut pos, b);
+                            scan_unget(k, fd, &mut pos, b);
                             break;
                         }
                         Some(b) => bytes.push(b),
@@ -360,7 +365,7 @@ pub(crate) fn scan_run(
                 // skip leading ws.
                 while let Some(b) = next!() {
                     if !scan_is_ws(b) {
-                        scan_unget(sched, fd, &mut pos, b);
+                        scan_unget(k, fd, &mut pos, b);
                         break;
                     }
                 }
@@ -378,7 +383,7 @@ pub(crate) fn scan_run(
                             if ok {
                                 chars.push(b);
                             } else {
-                                scan_unget(sched, fd, &mut pos, b);
+                                scan_unget(k, fd, &mut pos, b);
                                 break;
                             }
                         }
@@ -394,7 +399,7 @@ pub(crate) fn scan_run(
                 } else {
                     let dst_w = dsts
                         .get(di)
-                        .and_then(|&n| sched.st.ir.nets.get(n as usize))
+                        .and_then(|&n| k.k_ir().nets.get(n as usize))
                         .map(|nv| nv.width.max(1))
                         .unwrap_or(64);
                     Some(scan_build_numeric(&chars, radix, dst_w))
@@ -407,7 +412,7 @@ pub(crate) fn scan_run(
             Some(v) => {
                 if !suppress {
                     if let Some(&net) = dsts.get(di) {
-                        scan_write_dst(sched, net, v);
+                        scan_write_dst(k, net, v);
                     }
                     di += 1;
                     count += 1;

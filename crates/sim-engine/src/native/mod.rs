@@ -127,6 +127,11 @@ fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
         || kpred::dist_seeded_rhs(exprs, rhs)
         || kpred::cast_rhs(exprs, rhs)
         || kpred::assoc_iter_rhs(exprs, rhs)
+        // A1-iv-a: `$sscanf` only. It scans a STRING, so unlike its seven file
+        // siblings it needs no file-table plumbing — source through `k_eval`,
+        // destinations through `k_write_lvalue`, and `scan_run` is generic over
+        // `Kernel` now. The fd family stays refused until A1-iv-b.
+        || kpred::sscanf_rhs(exprs, rhs)
 }
 
 /// Record `n` offending items under `family` (no-op when `n == 0`, so a clean

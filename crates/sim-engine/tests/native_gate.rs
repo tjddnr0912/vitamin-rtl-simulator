@@ -366,6 +366,17 @@ fn statement_level_families_reject() {
 /// about one statement.
 #[test]
 fn effects_outside_the_write_funnel_reject() {
+    // A1-iv-a: `$sscanf` is WIRED (it scans a string, so it needs no file
+    // table); its seven fd siblings are not, which is what the negative below
+    // still holds.
+    let (oks, rss) = reasons(
+        "module t; string s; int a, n;\n\
+           initial begin s = \"7\"; n = $sscanf(s, \"%d\", a); $display(\"%0d %0d\", n, a); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(oks, "`$sscanf` is wired and must be admitted: {rss:?}");
+    assert_eq!(rss, vec![]);
+
     // rhs form: the descriptor advance happens in the call. This used to be
     // `r = $random(seed)`, which A1-ii WIRED — the negative half of this test
     // has to name a member that is still refused, or it stops testing the row.

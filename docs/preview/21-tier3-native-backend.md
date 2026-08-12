@@ -34,7 +34,7 @@
 
 ---
 
-## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i/-ii/-iii 완료** — 78.73% → **80.40%** (2026-08-12, ROADMAP §5.1-f~-i)
+## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i~-iv-a 완료** — 78.73% → **80.72%** (2026-08-12, ROADMAP §5.1-f~-j)
 
 **오너가 실행 순서를 확정했다(2026-08-12)**: **A** 커버리지 완주 → **B** V2 = **빌드 분리**
 (제품 = native 하나 · 개발/테스트 = 둘 · **제품 빌드에서 게이트 거부가 loud**) → **C** interp 강등 +
@@ -63,6 +63,17 @@ A8 +53 · A4 fork **0**. **A3 가 단독으로도 greedy 로도 1위이고 A1 �
 ⚠️⚠️ **`$sformat`/`$readmem*`/`$cast`(태스크형)는 `systask_refusal` 에 없다** — dispatch 는
 통과시키는데 dest 는 `sched.st.write_lvalue`(**엔진 스토어**)로 쓴다. **지금 그것을 막는 유일한
 것이 `stmt_effect` 행이다.**
+
+### A1-iv-a — `$sscanf` (+23 → **80.72%**)
+
+⭐ **census 가 file 가족(52)을 다시 쪼갰다** — `$sscanf` 혼자 **20**이고 **fd 를 안 쓴다**(문자열 스캔)
+⇒ file-table 배관 없이 먼저 배송. 남은 fd 가족 32 = A1-iv-b. 지은 것 = `scan_run`/`scan_next`/
+`scan_unget`/`scan_write_dst` 를 **`K: Kernel` 제네릭**으로 + 좁은 seam 둘(`k_file_read_byte`/
+`k_file_unget`). ⚠️ **`k_sched(&mut self) -> &mut Scheduler` 는 컴파일이 거부했다**(`Scheduler<'a,'ir>`
+가 `'a` 에 불변) — 결과적으로 더 나은 설계다: 메서드 둘은 공유 바디에 엔진의 넷을 **줄 수가 없다**.
+**구조체를 노출하지 말고 연산을 노출하라.** ⭐ 파일 테이블은 `dyn_heap` 과 같다(공유 객체) ⇒ 라우팅
+문제이지 저장소 문제가 아니다. **뮤테이션 4/4 사망 · 셋을 새 앵커만 잡았고 그 앵커는 iverilog 핀**
+(판별자는 **B/C 쌍** — 매치 실패는 0 이고 목적지 보존, 빈 소스는 −1 · 틀린 스토어면 B 가 −1 로 무너진다).
 
 ### A1-iii — SysTask 목적지 쓰기 셋 (+31 → **80.40%**)
 

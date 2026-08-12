@@ -80,6 +80,19 @@ pub(crate) trait Kernel {
     /// `None` when the step reads none. The caller evaluates it through `k_eval`,
     /// i.e. through its own store.
     fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32>;
+    /// The FILE TABLE, as two operations rather than as the struct that holds
+    /// it (A1-iv). Both implementors reach the same `SimState` — the table is a
+    /// shared object exactly as `dyn_heap` is — so the file family needs no new
+    /// storage, only a way to say "read a byte" from a shared body.
+    ///
+    /// Narrow on purpose. Returning `&mut Scheduler` instead was tried and does
+    /// not compile (`Scheduler<'a, 'ir>` is invariant in `'a`), and it would
+    /// hand a shared body `sched.st.read_net` / `sched.eval` /
+    /// `sched.st.write_lvalue` — the ENGINE's nets, which is the exact defect
+    /// A1-ii and A1-iii each measured. Two methods cannot be misused that way.
+    fn k_file_read_byte(&mut self, fd: u32) -> Option<u8>;
+    /// Push one over-read byte back onto `fd`'s pushback stack.
+    fn k_file_unget(&mut self, fd: u32, b: u8);
     /// READ: locate one assoc iteration step against the SHARED heap, given the
     /// current key the caller just read. Returns `(key write, status)`; the caller
     /// performs the write through `k_write_lvalue`.

@@ -133,6 +133,12 @@ impl Kernel for Scheduler<'_, '_> {
         let sw = self.st.wt.get(eid);
         (sw.width, sw.signed)
     }
+    fn k_file_read_byte(&mut self, fd: u32) -> Option<u8> {
+        crate::builtins::file_read_byte(self, fd)
+    }
+    fn k_file_unget(&mut self, fd: u32, b: u8) {
+        self.st.read_state.entry(fd).or_default().pushback.push(b);
+    }
     fn k_assoc_iter_cur_key(&self, rhs: u32) -> Option<u32> {
         self.st.assoc_iter_cur_key(rhs)
     }
@@ -663,26 +669,7 @@ impl Kernel for Scheduler<'_, '_> {
         crate::exec::kpred::sscanf_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_sscanf(&mut self, rhs: u32) -> Value {
-        // args = [source string-VALUE, fmt strconst, dst0, ...].
-        let args: Vec<u32> = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => args.clone(),
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let src: Vec<u8> = self.eval(args[0]).to_str_bytes();
-        let fmt: Vec<u8> = match self.st.ir.exprs.get(args[1] as usize) {
-            Some(sim_ir::Expr::Const { val }) => {
-                crate::builtins::const_string(self.st.ir, *val).into_bytes()
-            }
-            _ => return Value::from_i128(-1, 32, true),
-        };
-        let dsts: Vec<u32> = args[2..]
-            .iter()
-            .filter_map(|&a| match self.st.ir.exprs.get(a as usize) {
-                Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                _ => None,
-            })
-            .collect();
-        scan_run(self, None, &src, &fmt, &dsts)
+        crate::exec::stmt_effect::sscanf(self, rhs)
     }
     fn k_sformatf_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::sformatf_rhs(self.st.ir.exprs.as_slice(), rhs)
