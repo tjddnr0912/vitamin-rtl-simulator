@@ -397,16 +397,17 @@ fn effects_outside_the_write_funnel_reject() {
         assert_eq!(rsf, vec![], "{what}");
     }
 
-    // The NEGATIVE half has to name a member that is STILL refused, or it stops
-    // testing the row. `$fread` is the last one (A1-iv-c): it reads the
-    // destination's prior value and an array base, seams A1-iv-b did not build.
-    let (ok, rs) = reasons(
+    // A1-iv-c wired `$fread`, the last member — so this test has NO negative
+    // half left, and that is the point rather than an omission. The row is not
+    // dead code: it still fires for any effectful id added later, which is
+    // exactly what `every_stmt_effect_family_member_is_wired` pins.
+    let (okr, rsr) = reasons(
         "module t; integer fd, n; reg [7:0] m [0:3];\n\
            initial begin fd = $fopen(\"x.txt\", \"r\"); n = $fread(m, fd); $display(\"%0d\", n); $finish; end\n\
          endmodule\n",
     );
-    assert!(!ok, "`$fread` is the remaining refusal: {rs:?}");
-    assert_eq!(rs, vec![("stmt_effect", 1)]);
+    assert!(okr, "`$fread` is wired and must be admitted: {rsr:?}");
+    assert_eq!(rsr, vec![]);
 
     // `$value$plusargs` — the shape a real testbench uses (bench/keccak's TB).
     // WIRED (the first family member lifted): `k_value_plusargs` runs the
@@ -672,5 +673,51 @@ fn sidecar_opts(src: &str) -> SimOpts {
         two_state_nets: sc.two_state_nets,
         func_table: sc.func_table,
         ..SimOpts::default()
+    }
+}
+
+/// A1 CLOSED: every member of the `stmt_effect` family is wired, so the row can
+/// no longer fire on today's ids.
+///
+/// ⚠️ The row is NOT deleted, and that is deliberate. A new effectful
+/// `SysFuncId`/`SysTaskId` added later would land in `sysfunc_is_stmt_effect` /
+/// `systask_net_write` (both `_`-free, so it must be classified) and immediately
+/// start refusing designs again — which is correct, because its `k_*` would not
+/// be written yet. What this test pins is that the row is currently EMPTY, so a
+/// future reader can tell "nothing left to wire" from "somebody deleted the
+/// carve-out".
+///
+/// Driven from the ids themselves rather than from a hand list: `SysFuncId` has
+/// no iterator, so the family is reached through DESIGNS, one per member, and a
+/// member that stops being admitted names itself in the failure.
+#[test]
+fn every_stmt_effect_family_member_is_wired() {
+    let cases: [(&str, &str); 15] = [
+        ("$random(seed)", "integer s, r; initial begin s = 1; r = $random(s); end"),
+        ("$dist_uniform", "integer s, r; initial begin s = 1; r = $dist_uniform(s, 0, 9); end"),
+        ("$cast func", "byte d; int s; int ok; initial begin s = 5; ok = $cast(d, s); end"),
+        ("$cast task", "reg [7:0] d, s; initial begin s = 7; $cast(d, s); end"),
+        ("$value$plusargs", "integer n; reg ok; initial ok = $value$plusargs(\"N=%d\", n);"),
+        ("q.pop_front", "int q[$]; int r; initial begin q.push_back(1); r = q.pop_front(); end"),
+        ("q.pop_back", "int q[$]; int r; initial begin q.push_back(1); r = q.pop_back(); end"),
+        ("aa.first", "int aa[int]; int k, st; initial begin aa[1] = 2; st = aa.first(k); end"),
+        ("aa.next", "int aa[int]; int k, st; initial begin aa[1] = 2; st = aa.next(k); end"),
+        ("$sformat", "reg [63:0] d; initial $sformat(d, \"%0d\", 7);"),
+        ("$readmemh", "reg [7:0] m [0:3]; initial $readmemh(\"x.hex\", m);"),
+        ("$fopen/$fgetc", "integer fd, c; initial begin fd = $fopen(\"x\", \"r\"); c = $fgetc(fd); end"),
+        ("$feof/$ungetc", "integer fd, e, u; initial begin fd = $fopen(\"x\", \"r\"); e = $feof(fd); u = $ungetc(65, fd); end"),
+        ("$fgets/$fscanf", "integer fd, n; string s; int a; initial begin fd = $fopen(\"x\", \"r\"); n = $fgets(s, fd); n = $fscanf(fd, \"%d\", a); end"),
+        ("$fread", "integer fd, n; reg [7:0] m [0:3]; initial begin fd = $fopen(\"x\", \"r\"); n = $fread(m, fd); end"),
+    ];
+    for (what, body) in cases {
+        let (ok, rs) = reasons(&format!("module t; {body}\nendmodule\n"));
+        assert!(
+            ok,
+            "`{what}` must be admitted — the family is closed: {rs:?}"
+        );
+        assert!(
+            !rs.iter().any(|(k, _)| *k == "stmt_effect"),
+            "`{what}` still counts against the `stmt_effect` row: {rs:?}"
+        );
     }
 }

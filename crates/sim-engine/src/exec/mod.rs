@@ -99,6 +99,17 @@ pub(crate) trait Kernel {
     /// `$feof`'s table work: `Some(eof)` for an open descriptor, `None` for a
     /// bad or closed one (which also emits the bad-fd warning).
     fn k_file_eof(&mut self, fd: u32) -> Option<bool>;
+    /// READ: net `net` (optional array word) through THIS kernel's store.
+    /// A1-iv-c: `$fread` merges each element with its PRIOR value, so it is the
+    /// one member of the family that reads its own destination.
+    fn k_read_net(&self, net: u32, word: Option<u32>) -> Value;
+    /// The declared LOW index of unpacked array `net`, or `None` for a negative
+    /// base (which `$fread` refuses loudly).
+    fn k_array_base(&self, net: u32) -> Option<u64>;
+    /// Emit one `RunReadmem` warning at the current simulation time. The sink and
+    /// the clock live on the scheduler for both backends, so this is a forward,
+    /// not a second spelling.
+    fn k_warn_readmem(&mut self, msg: String);
     /// `$ungetc`'s table work: push `byte` back onto a READ-CAPABLE open `fd`
     /// and clear its EOF latch. `false` when the descriptor is bad or closed
     /// (which also warns) or is write-only (which does not — a write stream is

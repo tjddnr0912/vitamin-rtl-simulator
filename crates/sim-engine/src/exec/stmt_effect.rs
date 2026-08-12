@@ -470,3 +470,136 @@ pub(crate) fn fscanf<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
         .collect();
     crate::sched::scan_run(k, Some(fd), &[], &fmt, &dsts)
 }
+
+/// `n = $fread(target, fd [, start [, count]])` — the last member of the family
+/// (A1-iv-c), and the only one that reads its own DESTINATION: each element is
+/// merged with its prior value (`fill_reg_slots`), so reading that from the wrong
+/// store would merge against nets a native run never wrote.
+///
+/// It also carried the family's last raw engine write — the memory path used
+/// `SimState::write_lvalue` directly, inside a `Kernel` method — which is now
+/// `k_write_lvalue` like every other destination here.
+pub(crate) fn fread<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
+    let none = Value::from_i128(0, 32, true);
+    // args = [target whole-net Signal, fd, start?, count?] — elaborate's contract
+    // (a single reg OR a whole memory; element-select is loud).
+    let (net, fd_arg, start_arg, count_arg) = match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => (
+            whole_net_of(k, args[0]),
+            args[1],
+            args.get(2).copied(),
+            args.get(3).copied(),
+        ),
+        _ => (None, u32::MAX, None, None),
+    };
+    let Some(net) = net else {
+        return none;
+    };
+    let Some(fd) = fd_of(k, fd_arg) else {
+        return none;
+    };
+    let (w, alen) = {
+        let nv = &k.k_ir().nets[net as usize];
+        (nv.width.max(1), nv.array_len.max(1) as u64)
+    };
+    let cap_per = w.div_ceil(8) as usize; // bytes per element/reg
+    let lv = whole_net_lvalue(net);
+    if alen <= 1 {
+        // ── single reg/vector: read ceil(w/8) bytes, MSB-slot fill ──
+        let mut got: Vec<u8> = Vec::new();
+        for _ in 0..cap_per {
+            match k.k_file_read_byte(fd) {
+                Some(b) => got.push(b),
+                None => break,
+            }
+        }
+        if got.is_empty() {
+            return none; // EOF: dest UNCHANGED
+        }
+        let prior = k.k_read_net(net, None);
+        let v = crate::sched::fill_reg_slots(&prior, w, &got);
+        let off = k.k_resolve_lvalue_offsets(&lv);
+        k.k_write_lvalue(&lv, v, &off);
+        return Value::from_i128(got.len() as i128, 32, true);
+    }
+    // ── memory: fill elements ascending from `start` (declared index) ──
+    let Some(base) = k.k_array_base(net) else {
+        k.k_warn_readmem(
+            "$fread into a memory with a NEGATIVE declared base \
+             (e.g. `reg m[-1:1]`) is not supported; no elements read"
+                .to_string(),
+        );
+        return none;
+    };
+    let last = base + alen - 1;
+    // iverilog evaluates the start/count operands by coercing each x/z bit to 0
+    // (NOT by treating an x/z operand as absent), so a present operand always
+    // counts — `4'b001x` => 2, `3'bxxx` => 0 (an explicit count 0).
+    let coerce_xz0 = |v: &Value| -> u64 {
+        v.val.first().copied().unwrap_or(0) & !v.unk.first().copied().unwrap_or(0)
+    };
+    let start = match start_arg {
+        Some(a) => coerce_xz0(&k.k_eval(a)),
+        None => base,
+    };
+    let count = count_arg.map(|a| coerce_xz0(&k.k_eval(a)));
+    if start < base || start > last {
+        k.k_warn_readmem(format!(
+            "$fread start argument ({start}) is outside the memory range [{base}:{last}]"
+        ));
+        return none;
+    }
+    let avail = last - start + 1;
+    let n_elems = match count {
+        Some(c) if c > avail => {
+            k.k_warn_readmem(format!(
+                "$fread count argument ({c}) is too large for start ({start}) and the memory \
+                 range [{base}:{last}]; clamped"
+            ));
+            avail
+        }
+        Some(c) => c,
+        None => avail,
+    };
+    // The dummy `word: Some(0)` ExprId is never evaluated — the write funnel takes
+    // the resolved word from the offsets pair.
+    let elem_lv = Lvalue {
+        chunks: vec![sim_ir::LvalChunk {
+            net,
+            word: Some(0),
+            offset: None,
+            width: None,
+            kind: sim_ir::SelKind::Bit,
+        }],
+    };
+    let mut rc: u64 = 0;
+    for e in 0..n_elems {
+        let word = (start + e - base) as u32;
+        let mut got: Vec<u8> = Vec::new();
+        let mut hit_eof = false;
+        for _ in 0..cap_per {
+            match k.k_file_read_byte(fd) {
+                Some(b) => got.push(b),
+                None => {
+                    hit_eof = true;
+                    break;
+                }
+            }
+        }
+        if got.is_empty() {
+            break; // no more data — leave this and later elements untouched
+        }
+        rc += got.len() as u64;
+        let prior = k.k_read_net(net, Some(word));
+        let v = crate::sched::fill_reg_slots(&prior, w, &got);
+        let off = crate::exec::Offsets::Inline {
+            buf: [(0, word), (0, 0)],
+            len: 1,
+        };
+        k.k_write_lvalue(&elem_lv, v, &off);
+        if hit_eof {
+            break;
+        }
+    }
+    Value::from_i128(rc as i128, 32, true)
+}

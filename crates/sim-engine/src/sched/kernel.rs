@@ -139,6 +139,24 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_file_unget(&mut self, fd: u32, b: u8) {
         self.st.read_state.entry(fd).or_default().pushback.push(b);
     }
+    fn k_read_net(&self, net: u32, word: Option<u32>) -> Value {
+        self.st.read_net(net, word)
+    }
+    fn k_array_base(&self, net: u32) -> Option<u64> {
+        crate::builtins::declared_array_base(&self.st.net_dims, net)
+    }
+    fn k_warn_readmem(&mut self, msg: String) {
+        self.st
+            .sink
+            .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
+                severity: diag::Severity::Warning,
+                code: diag::MsgCode::RunReadmem,
+                message: msg,
+                location: None,
+                context: Vec::new(),
+                sim_time: Some(diag::TimeStamp { ticks: self.st.now }),
+            }));
+    }
     fn k_file_open(&mut self, name: &str, mode: Option<&str>) -> u32 {
         let open = |mode: &str| -> std::io::Result<std::fs::File> {
             let mut o = std::fs::OpenOptions::new();
@@ -283,167 +301,7 @@ impl Kernel for Scheduler<'_, '_> {
         crate::exec::kpred::fread_rhs(self.st.ir.exprs.as_slice(), rhs)
     }
     fn k_fread(&mut self, rhs: u32) -> Value {
-        // args = [target whole-net Signal, fd, start?, count?] — elaborate's
-        // contract (a single reg OR a whole memory; element-select is loud).
-        let (net, fd_arg, start_arg, count_arg) = match self.st.ir.exprs.get(rhs as usize) {
-            Some(sim_ir::Expr::SysFunc { args, .. }) if args.len() >= 2 => {
-                let net = match self.st.ir.exprs.get(args[0] as usize) {
-                    Some(sim_ir::Expr::Signal { net, word: None }) => Some(*net),
-                    _ => None,
-                };
-                (net, args[1], args.get(2).copied(), args.get(3).copied())
-            }
-            _ => (None, u32::MAX, None, None),
-        };
-        let Some(net) = net else {
-            return Value::from_i128(0, 32, true);
-        };
-        let fdv = self.eval(fd_arg);
-        if fdv.has_xz() {
-            return Value::from_i128(0, 32, true);
-        }
-        let fd = fdv.to_u64().unwrap_or(0) as u32;
-        let (w, alen) = {
-            let nv = &self.st.ir.nets[net as usize];
-            (nv.width.max(1), nv.array_len.max(1) as u64)
-        };
-        let cap_per = ((w + 7) / 8) as usize; // bytes per element/reg
-        if alen <= 1 {
-            // ── single reg/vector: read ceil(w/8) bytes, MSB-slot fill ──
-            let mut got: Vec<u8> = Vec::new();
-            for _ in 0..cap_per {
-                match crate::builtins::file_read_byte(self, fd) {
-                    Some(b) => got.push(b),
-                    None => break,
-                }
-            }
-            if got.is_empty() {
-                return Value::from_i128(0, 32, true); // EOF: dest UNCHANGED
-            }
-            let prior = self.st.read_net(net, None);
-            let v = fill_reg_slots(&prior, w, &got);
-            let lv = Lvalue {
-                chunks: vec![sim_ir::LvalChunk {
-                    net,
-                    word: None,
-                    offset: None,
-                    width: None,
-                    kind: sim_ir::SelKind::Bit,
-                }],
-            };
-            let off = self.resolve_lvalue_offsets(&lv);
-            self.k_write_lvalue(&lv, v, &off);
-            return Value::from_i128(got.len() as i128, 32, true);
-        }
-        // ── memory: fill elements ascending from `start` (declared index) ──
-        let Some(base) = crate::builtins::declared_array_base(&self.st.net_dims, net) else {
-            self.st
-                .sink
-                .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
-                    severity: diag::Severity::Warning,
-                    code: diag::MsgCode::RunReadmem,
-                    message: "$fread into a memory with a NEGATIVE declared base \
-                              (e.g. `reg m[-1:1]`) is not supported; no elements read"
-                        .to_string(),
-                    location: None,
-                    context: Vec::new(),
-                    sim_time: Some(diag::TimeStamp { ticks: self.st.now }),
-                }));
-            return Value::from_i128(0, 32, true);
-        };
-        let last = base + alen - 1;
-        // iverilog evaluates the start/count operands by coercing each x/z bit
-        // to 0 (NOT by treating an x/z operand as absent), so a present operand
-        // always counts — `4'b001x` => 2, `3'bxxx` => 0 (an explicit count 0).
-        let coerce_xz0 = |v: &Value| -> u64 {
-            v.val.first().copied().unwrap_or(0) & !v.unk.first().copied().unwrap_or(0)
-        };
-        let start = match start_arg {
-            Some(a) => {
-                let v = self.eval(a);
-                coerce_xz0(&v)
-            }
-            None => base,
-        };
-        let count = count_arg.map(|a| {
-            let v = self.eval(a);
-            coerce_xz0(&v)
-        });
-        let warn = |sched: &mut Scheduler, msg: String| {
-            sched
-                .st
-                .sink
-                .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
-                    severity: diag::Severity::Warning,
-                    code: diag::MsgCode::RunReadmem,
-                    message: msg,
-                    location: None,
-                    context: Vec::new(),
-                    sim_time: Some(diag::TimeStamp {
-                        ticks: sched.st.now,
-                    }),
-                }));
-        };
-        if start < base || start > last {
-            warn(
-                self,
-                format!(
-                    "$fread start argument ({start}) is outside the memory range [{base}:{last}]"
-                ),
-            );
-            return Value::from_i128(0, 32, true);
-        }
-        let avail = last - start + 1;
-        let n_elems = match count {
-            Some(c) if c > avail => {
-                warn(
-                    self,
-                    format!("$fread count argument ({c}) is too large for start ({start}) and the memory range [{base}:{last}]; clamped"),
-                );
-                avail
-            }
-            Some(c) => c,
-            None => avail,
-        };
-        let mut rc: u64 = 0;
-        for e in 0..n_elems {
-            let word = (start + e - base) as u32;
-            let mut got: Vec<u8> = Vec::new();
-            let mut hit_eof = false;
-            for _ in 0..cap_per {
-                match crate::builtins::file_read_byte(self, fd) {
-                    Some(b) => got.push(b),
-                    None => {
-                        hit_eof = true;
-                        break;
-                    }
-                }
-            }
-            if got.is_empty() {
-                break; // no more data — leave this and later elements untouched
-            }
-            rc += got.len() as u64;
-            let prior = self.st.read_net(net, Some(word));
-            let v = fill_reg_slots(&prior, w, &got);
-            let lv = Lvalue {
-                chunks: vec![sim_ir::LvalChunk {
-                    net,
-                    word: Some(0),
-                    offset: None,
-                    width: None,
-                    kind: sim_ir::SelKind::Bit,
-                }],
-            };
-            let off = crate::exec::Offsets::Inline {
-                buf: [(0, word), (0, 0)],
-                len: 1,
-            };
-            self.st.write_lvalue(&lv, v, &off);
-            if hit_eof {
-                break;
-            }
-        }
-        Value::from_i128(rc as i128, 32, true)
+        crate::exec::stmt_effect::fread(self, rhs)
     }
     fn k_fscanf_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::fscanf_rhs(self.st.ir.exprs.as_slice(), rhs)

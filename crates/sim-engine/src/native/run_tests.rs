@@ -2933,6 +2933,97 @@ endmodule
     );
 }
 
+/// A1-iv-c ABSOLUTE ANCHOR — `$fread`, iverilog-pinned.
+///
+/// `$fread` is the only family member that reads its own DESTINATION: each
+/// element is merged with its prior value, so the untouched slots are what prove
+/// the read went to the right store. Every `ffff` below is a prior value that
+/// survived, and every `4142`-style pair is one that did not.
+///
+/// * **A** — a single reg: two bytes, MSB-slot filled.
+/// * **B** — a memory with NET-valued `start`/`count` (1 and 2): elements 1..2
+///   are written, **m[0] and m[3] keep `ffff`**. Untreaded operands would read X,
+///   the x/z-to-0 coercion would make start = 0, and the fill would land in the
+///   wrong elements.
+/// * **C** — no `start`/`count`: fills from the base until the data runs out, so
+///   the last element keeps its prior value and the return counts BYTES (6), not
+///   elements.
+/// * **D** — at EOF: 0, and nothing is touched.
+#[test]
+fn fread_has_its_iverilog_values() {
+    let dir = std::env::temp_dir().join(format!("vita-a1ivc-{}-{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let bin = dir.join("bin.dat");
+    std::fs::write(&bin, "ABCDEFGHIJKL").expect("input file");
+    let six = dir.join("six.dat");
+    std::fs::write(&six, "ABCDEF").expect("partial-read file");
+    let src = format!(
+        r#"
+module top;
+  integer fd, n;
+  reg [15:0] r16;
+  reg [15:0] m [0:3];
+  reg [31:0] w32 [0:1];
+  integer i, st, ct, fd2;
+  initial begin
+    for (i = 0; i < 4; i = i + 1) m[i] = 16'hFFFF;
+    r16 = 16'hFFFF;
+    fd = $fopen("{}", "r");
+    n = $fread(r16, fd);  $display("A n=%0d r=%h", n, r16);
+    st = 1; ct = 2;
+    n = $fread(m, fd, st, ct);
+    $display("B n=%0d m=%h %h %h %h", n, m[0], m[1], m[2], m[3]);
+    n = $fread(m, fd);
+    $display("C n=%0d m=%h %h %h %h", n, m[0], m[1], m[2], m[3]);
+    n = $fread(m, fd);
+    $display("D n=%0d", n);
+    for (i = 0; i < 2; i = i + 1) w32[i] = 32'hDEADBEEF;
+    fd2 = $fopen("{}", "r");
+    n = $fread(w32, fd2);
+    $display("P n=%0d m0=%h m1=%h", n, w32[0], w32[1]);
+    $finish;
+  end
+endmodule
+"#,
+        bin.display(),
+        six.display()
+    );
+    let (ir, opts) = build_with_opts(&src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A n=2 r=4142\n".to_string(),
+            "out|B n=4 m=ffff 4344 4546 ffff\n".to_string(),
+            "out|C n=6 m=4748 494a 4b4c ffff\n".to_string(),
+            "out|D n=0\n".to_string(),
+            // P was added because a mutation SURVIVED A..D: reading each
+            // element's PRIOR value from the engine's store instead of this
+            // kernel's changed nothing, because every element above is filled
+            // COMPLETELY and the prior is overwritten. The merge is only
+            // observable on a PARTIAL read — six bytes into two 4-byte
+            // elements — where the second element keeps its low half (`beef`).
+            "out|P n=6 m0=41424344 m1=4546beef\n".to_string(),
+        ],
+        "fread values"
+    );
+}
+
 /// The READ twin of the funnel pin: every store read a system task makes must go
 /// through the THREADED reader, or be behind a row that refuses the design.
 ///

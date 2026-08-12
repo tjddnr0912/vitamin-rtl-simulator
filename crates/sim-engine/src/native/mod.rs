@@ -109,7 +109,7 @@ pub struct NativeEligibility {
 /// compile error — the design runs natively and its effect lands in the engine's
 /// store. That is why each addition ships with a differential AND an absolute
 /// anchor (ROADMAP §5.1-e: as tier-3 delegates, the differential goes blind).
-fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
+pub fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
     use crate::exec::kpred;
     // S1d-5 (§4.5.304): parse/match/convert are the shared
     // `exec::plusargs::effect`; only the destination write is the store's.
@@ -136,14 +136,17 @@ fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
         // `exec::stmt_effect` beside the others; the FILE TABLE needed no
         // routing at all (it lives in `SimState`, one object both backends see,
         // exactly like `dyn_heap`), only three narrow table seams.
-        // ⚠️ `$fread` is NOT here — it reads the DESTINATION's prior value and
-        // an array base, which are seams this slice does not build (A1-iv-c).
         || kpred::fopen_rhs(exprs, rhs)
         || kpred::fgetc_rhs(exprs, rhs)
         || kpred::feof_rhs(exprs, rhs)
         || kpred::ungetc_rhs(exprs, rhs)
         || kpred::fgets_rhs(exprs, rhs)
         || kpred::fscanf_rhs(exprs, rhs)
+        // A1-iv-c: the last member. `$fread` merges each element with its PRIOR
+        // value, so it is the only one that reads its own destination — three
+        // more seams (`k_read_net`, `k_array_base`, `k_warn_readmem`) and the
+        // family's last raw engine write is gone.
+        || kpred::fread_rhs(exprs, rhs)
 }
 
 /// Record `n` offending items under `family` (no-op when `n == 0`, so a clean

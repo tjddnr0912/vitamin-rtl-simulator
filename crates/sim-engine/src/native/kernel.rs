@@ -1400,6 +1400,26 @@ impl Kernel for NativeKernel<'_, '_, '_> {
             .pushback
             .push(b);
     }
+    fn k_read_net(&self, net: u32, word: Option<u32>) -> Value {
+        // THIS kernel's `NetReader`, not `self.arena` directly. ⚠️ The first
+        // version of this method WAS `self.arena.read_net(...)`, and that is a
+        // second spelling of a routing decision the `NetReader` impl below
+        // already owns: a frame-local (S3a) and a heap kind (V1 slice 2) are
+        // NOT the arena's, and reaching past the router to the store would send
+        // `$fread`'s prior-value read into `assert_owns` for either.
+        //
+        // The route through here is what a mutation swapping the receiver for
+        // `self.sched.st` proves: the anchor's partial read then prints
+        // `4546xxxx` instead of `4546beef`, because the engine's copy of that
+        // memory never saw the native run's writes.
+        crate::eval::NetReader::read_net(self, net, word)
+    }
+    fn k_array_base(&self, net: u32) -> Option<u64> {
+        crate::builtins::declared_array_base(&self.sched.st.net_dims, net)
+    }
+    fn k_warn_readmem(&mut self, msg: String) {
+        Kernel::k_warn_readmem(self.sched, msg)
+    }
     fn k_file_open(&mut self, name: &str, mode: Option<&str>) -> u32 {
         // The file TABLE lives in `SimState`, which this kernel borrows — one
         // object, both backends, exactly like `dyn_heap`. Nothing to route.
@@ -1937,8 +1957,8 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_fgets(&mut self, rhs: u32) -> Value {
         crate::exec::stmt_effect::fgets(self, rhs)
     }
-    fn k_fread(&mut self, _rhs: u32) -> Value {
-        gate_refused!("k_fread", "`stmt_effect` row (§4.5.291)")
+    fn k_fread(&mut self, rhs: u32) -> Value {
+        crate::exec::stmt_effect::fread(self, rhs)
     }
     fn k_fscanf(&mut self, rhs: u32) -> Value {
         crate::exec::stmt_effect::fscanf(self, rhs)
