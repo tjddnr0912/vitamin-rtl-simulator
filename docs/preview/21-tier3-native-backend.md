@@ -34,6 +34,48 @@
 
 ---
 
+## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 census 가 순서를 정정 · A1-i(queue pop) 완료** — 78.73% → **79.03%** (2026-08-12, ROADMAP §5.1-f/-g)
+
+**오너가 실행 순서를 확정했다(2026-08-12)**: **A** 커버리지 완주 → **B** V2 = **빌드 분리**
+(제품 = native 하나 · 개발/테스트 = 둘 · **제품 빌드에서 게이트 거부가 loud**) → **C** interp 강등 +
+오라클 정책 갱신 → **D** 기계어 코드젠(D1 벤치 확장 · **D2 2-state 좁히기 = 본체** · D3
+dirty-driven settle · D4 cranelift). 정본 = ROADMAP §5.1.
+
+⭐⭐ **§4.5.334 census 의 범위를 정정한다.** 그것이 반증한 것은 *"오늘의 IR + `Value` 모델 위에
+cranelift 를 얹으면 이긴다"* 이지 *"코드젠이 진다"* 가 아니다 — 그 census 의 **인라인 불가 30.8%**
+(`LogBin` 17.4 + `Unary1` 7.9 + `Cmp` 5.5)가 비싼 이유는 **호출이라서가 아니라 4-state 라서**다
+(`log_bin_tri` 는 `Tri` 둘, `RedFacts::absorb` 는 `known0` 재마스크, `unary1_word` 는 real 가드).
+**2-state 로 좁혀지면 셋 다 기계어 한 명령이다.** ⇒ **P1(2-state)이 본체이고 cranelift 는 마지막.**
+⚠️ **S4 중단 판정(≈6%)도 철회** — picorv32 한 설계의 숫자이고, `levelize.rs` 가 반례를 이미 표로
+갖고 있다(cont-assign 체인 깊이 1→24 에서 **7.8 ms → 814.4 ms = 104×**).
+
+### A1 census (전 스위트 6,304 호출) — **두 숫자를 정정했다**
+
+⭐⭐ **①: §5.1-b 의 greedy 표는 stale 하다.** 지금 상태의 가족 단독 이득: **A3 서브루틴 프레임
++506(86.76%)** · A2 class+CRV +182 · **A1 `stmt_effect` +155** · A5 +56 · A6 +69 · A7 +64 ·
+A8 +53 · A4 fork **0**. **A3 가 단독으로도 greedy 로도 1위이고 A1 의 3.3배다.**
+⚠️ **행 단위로 재면 A3 가 사라진다**(`X:CALL STATEMENT` 단독 +71 · `S:task frames` 단독 **+1**) —
+네 행이 겹쳐 발화하므로 **가족 단위로만** 의미가 있다.
+
+⭐⭐ **②: A1 은 겹침이 정확히 0 인 7개 sub-slice 다** — 155 설계의 멤버 집합이
+52(file)+28(assoc-iter)+26(seeded-rng)+19(`$sformat`)+18(queue pop)+8(`$readmem*`)+4(`$cast`) = **155**.
+
+⚠️⚠️ **`$sformat`/`$readmem*`/`$cast`(태스크형)는 `systask_refusal` 에 없다** — dispatch 는
+통과시키는데 dest 는 `sched.st.write_lvalue`(**엔진 스토어**)로 쓴다. **지금 그것을 막는 유일한
+것이 `stmt_effect` 행이다.**
+
+### A1-i — queue pop (+21 → **79.03%**)
+
+**커널 코드 한 줄.** `NativeKernel::k_queue_pop` 의 **위임**과 `stmt_effect_wired` **carve-out**.
+⭐ 위임이 정당한 이유는 읽어서 확인했다 — `Scheduler::k_queue_pop` 은 IR · **공유 `dyn_heap`** ·
+IR 유래 폭 · 공유 warn latch 만 읽고 **넷 값을 하나도 안 읽는다**.
+
+**뮤테이션 8 중 7 사망 · 1 생존.** ⭐⭐ **B(공유 코드 front/back swap)가 §5.1-e 의 깨끗한 실증** —
+**차분은 killer 목록에 없었고** 앵커 10개가 잡았다. ⚠️ 그 10 중 9는 **기존** iverilog-pinned
+테스트다(G 도 마찬가지) ⇒ **앵커 의무는 유효하되 먼저 기존 앵커를 세어라.**
+⭐ **H 생존은 등가**(`lw.max(sw.width)` 의 `lw` 는 잉여 — `write_lvalue` 가 목적지 폭·부호를 다시
+적용한다. concat·part-select·wide dest 셋 다 바이트 동일 실측 · §4.5.338 `formal_width` 와 같은 클래스).
+
 ## 0.-14 ⭐⭐ 개정 21 — **슬라이스 3b: 원소 정제, 그리고 하네스가 세 번째로 같은 함정을 밟았다** — 75.99% → **78.73%** (2026-08-12, ROADMAP §5.1-d)
 
 **커널 코드 0줄.** 지운 것은 `design_eligibility` 의 행 둘(`dyn_elem_string`·`dyn_elem_real`).

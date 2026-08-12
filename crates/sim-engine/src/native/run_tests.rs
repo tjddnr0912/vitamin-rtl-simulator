@@ -1607,6 +1607,44 @@ endmodule
 "#
             .to_string(),
         ),
+        // ── A1-i: queue POP (the first `stmt_effect` carve-out after
+        // `$value$plusargs`) ───────────────────────────────────────────────────
+        // What this row can and cannot see. `k_queue_pop` is DELEGATED to the
+        // engine's own impl, so a native-vs-VM comparison is structurally blind
+        // to the pop's SEMANTICS (both backends call the same function —
+        // ROADMAP §5.1-e). The hand-IEEE values live in the absolute anchor
+        // `queue_pop_has_its_ieee_values`; what THIS row tests is the half the
+        // anchor cannot isolate — that the pop sits correctly among native
+        // statements: its destination rides `apply_effect`'s `k_write_lvalue`
+        // (so it must land in the ARENA, not `SimState`), the queue it drains is
+        // the same object the surrounding net-argument pushes filled, and the
+        // reads that follow see the drained queue.
+        //
+        // Every push argument is a NET for the slice-2c reason: a literal-only
+        // design cannot tell a wrong-store read from a right one.
+        (
+            "queue_pop_among_native_statements",
+            r#"
+module top;
+  int q[$];
+  int r;
+  reg [7:0] a, b;
+  initial begin
+    a = 8'd42; b = 8'd7;
+    q.push_back(a); q.push_back(b); q.push_front(a + b);
+    r = q.pop_front();
+    $display("pf=%0d size=%0d head=%0d", r, q.size(), q[0]);
+    q.push_back(r);
+    r = q.pop_back();
+    $display("pb=%0d size=%0d", r, q.size());
+    while (q.size() > 0) r = q.pop_front();
+    $display("drained=%0d size=%0d", r, q.size());
+    $finish;
+  end
+endmodule
+"#
+            .to_string(),
+        ),
         // All THREE admitted heap kinds plus flat nets in one design, so the
         // funnel has to send four destinations to three different stores from a
         // single call site. A per-kind routing bug produces correct output for
@@ -2077,7 +2115,7 @@ endmodule
 #[test]
 fn s1d4c2c_native_run_matches_the_vm_on_adversarial_shapes() {
     let designs = adversarial_designs();
-    assert_eq!(designs.len(), 86, "adversarial set shrank");
+    assert_eq!(designs.len(), 87, "adversarial set shrank");
     for (name, src) in designs {
         agree(&src, name).unwrap_or_else(|r| panic!("{name}: must be runnable, refused: {r}"));
     }
@@ -2346,6 +2384,100 @@ endmodule
             "out|1.500000 0.000000\n".to_string(),
         ],
         "heap element refinement values"
+    );
+}
+
+/// A1-i ABSOLUTE ANCHOR — the hand-IEEE values of `q.pop_front()`/`pop_back()`.
+///
+/// ⚠️ This test exists because the differential CANNOT defend this slice.
+/// `NativeKernel::k_queue_pop` delegates to `Scheduler::k_queue_pop`, so a
+/// native-vs-VM comparison runs the same function twice and would agree on any
+/// answer, right or wrong (ROADMAP §5.1-e — the differential goes blind exactly
+/// where tier-3 delegates). The values below are the contract, not a recording:
+///
+/// * **A/B/C** — IEEE 1800 §7.10.2.2/§7.10.2.3: `pop_front` takes the FIRST
+///   element, `pop_back` the LAST, and each shortens the queue by one. Swapping
+///   the two ids gives `30/10/20` here, which is why the queue is asymmetric.
+/// * **D/E** — a pop on an EMPTY queue yields X. `int` is 2-state (§6.8: it
+///   cannot hold X), so the X result coerces to 0 on the way into `r`. iverilog
+///   13 prints `x` for D/E — it does not enforce 2-state on `int` — so this line
+///   is hand-IEEE, deliberately NOT iverilog-pinned.
+/// * **only ONE `diag|` between D and E** — the empty-pop warning is warn-ONCE
+///   per net (`dyn_warn_once_at`), vita's established anti-spam policy; iverilog
+///   warns per call. Pinned so a future "fix" that makes it per-call is a
+///   failure and not a silent change.
+/// * **F** — the returned value is sized to the DESTINATION and sign-extended by
+///   the ELEMENT's signedness (`resize_keep_sign(lw.max(sw.width), sw.signed)`),
+///   so a signed −3 popped into a `byte` stays −3 rather than becoming 253.
+/// * **G** — the same empty pop into a 4-state destination keeps its X, which is
+///   what proves D/E is the 2-state coercion and not a lost X. iverilog agrees
+///   on F and G.
+/// * **H/I** — F cannot see the SIGN half: a 16-bit −3 into a `byte` truncates to
+///   −3 whether the widening extended or zero-filled. So the element is narrower
+///   than the destination here, where signed −3 must reach `int` as −3 and the
+///   unsigned twin as 13. Both iverilog-agreeing; without this pair, flipping
+///   `sw.signed` to a constant is an equivalent mutation.
+#[test]
+fn queue_pop_has_its_ieee_values() {
+    let src = r#"
+module top;
+  int q[$];
+  logic signed [15:0] w[$];
+  logic signed [3:0] sn[$];
+  logic [3:0] un[$];
+  int r;
+  byte nb;
+  logic signed [15:0] rw;
+  initial begin
+    q.push_back(10); q.push_back(20); q.push_back(30);
+    r = q.pop_front(); $display("A pf=%0d size=%0d", r, q.size());
+    r = q.pop_back();  $display("B pb=%0d size=%0d", r, q.size());
+    r = q.pop_front(); $display("C pf=%0d size=%0d", r, q.size());
+    r = q.pop_front(); $display("D empty2state=%0d", r);
+    r = q.pop_back();  $display("E empty_again=%0d", r);
+    w.push_back(-3);
+    nb = w.pop_front(); $display("F narrow=%0d", nb);
+    rw = w.pop_back();  $display("G empty4state=%0h", rw);
+    sn.push_back(-3); un.push_back(4'd13);
+    r = sn.pop_front(); $display("H sext=%0d", r);
+    r = un.pop_front(); $display("I zext=%0d", r);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A pf=10 size=2\n".to_string(),
+            "out|B pb=30 size=1\n".to_string(),
+            "out|C pf=20 size=0\n".to_string(),
+            "diag|Warning|VITA-W4020|pop on an empty queue (X)".to_string(),
+            "out|D empty2state=0\n".to_string(),
+            // no second 4020: warn-ONCE per net.
+            "out|E empty_again=0\n".to_string(),
+            "out|F narrow=-3\n".to_string(),
+            "diag|Warning|VITA-W4020|pop on an empty queue (X)".to_string(),
+            "out|G empty4state=xxxx\n".to_string(),
+            "out|H sext=-3\n".to_string(),
+            "out|I zext=13\n".to_string(),
+        ],
+        "queue pop IEEE values"
     );
 }
 

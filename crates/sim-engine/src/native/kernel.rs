@@ -1775,19 +1775,27 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_release(&mut self, _lhs: &Lvalue, _sid: u32) {
         gate_refused!("k_release", "statement scan rejects `force`/`release`")
     }
-    fn k_queue_pop(&mut self, _lhs: &Lvalue, _rhs: u32) -> Value {
-        // ⚠️ The row named here CHANGED in V1 slice 2c. It used to be the
-        // `NetKind` scan ("rejects queue storage"); that scan now ADMITS
-        // `Queue`, and what keeps this unreachable is a different row: a pop is
-        // `x = q.pop_front()`, a `BlockingAssign` whose rhs `rhs_is_stmt_effect`
-        // counts, so `stmt_effect` refuses the design. Measured, not assumed —
-        // a queue design without a pop runs natively today.
-        gate_refused!(
-            "k_queue_pop",
-            "the `stmt_effect` row: a pop is a `BlockingAssign` rhs that \
-             `rhs_is_stmt_effect` counts (the `NetKind` scan admits `Queue` \
-             since slice 2c)"
-        )
+    fn k_queue_pop(&mut self, lhs: &Lvalue, rhs: u32) -> Value {
+        // WIRED (A1-i). DELEGATED, not restated: `Scheduler::k_queue_pop` is
+        // store-INDEPENDENT, so asking it produces the answer this kernel would
+        // produce. Every input it reads is one of
+        //   * `ir.exprs` / `ir.nets`      — the frozen IR,
+        //   * `SimState::dyn_heap`        — the heap, keyed by NET ID and the
+        //                                   SAME object for both backends
+        //                                   (V1 slice 2's whole point),
+        //   * `st.lvalue_width` / `st.wt` — widths folded from the IR
+        //                                   (`chunk_width` reads declared
+        //                                   widths and const-folds a part-select
+        //                                   width expr; no slot VALUE),
+        //   * `dyn_warn_once_at`          — the shared warn-once latch.
+        // and it reads NO net value. The pop's own destination is not written
+        // here at all: `apply_effect` writes the returned value through
+        // `k_write_lvalue`, which is THIS kernel's funnel.
+        //
+        // ⚠️ The row that used to keep this unreachable moved twice — the
+        // `NetKind` scan until slice 2c, then `stmt_effect`. It is now carved
+        // out by `stmt_effect_wired`, so this arm RUNS.
+        Kernel::k_queue_pop(self.sched, lhs, rhs)
     }
     fn k_assoc_iter(&mut self, _lhs: &Lvalue, _rhs: u32) -> Value {
         // ⚠️ The row named here CHANGED in V1 slice 2d, exactly as

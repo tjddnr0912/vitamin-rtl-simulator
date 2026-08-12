@@ -387,6 +387,21 @@ fn effects_outside_the_write_funnel_reject() {
     assert!(ok2, "the wired member must be admitted, got {rs2:?}");
     assert_eq!(rs2, vec![]);
 
+    // A1-i: the SECOND wired member. `q.pop_front()`/`pop_back()` are
+    // store-INDEPENDENT — the pop mutates `SimState::dyn_heap`, which is one
+    // object shared by both backends, and it reads no net value — so tier-3
+    // delegates and the row must stop counting them. Both ids, because a
+    // carve-out written for one leaves the other refusing while its `k_*` runs.
+    for pop in ["pop_front", "pop_back"] {
+        let (okp, rsp) = reasons(&format!(
+            "module t; int q[$]; int r;\n\
+               initial begin q.push_back(3); r = q.{pop}(); $display(\"%0d\", r); $finish; end\n\
+             endmodule\n"
+        ));
+        assert!(okp, "`q.{pop}()` is wired and must be admitted: {rsp:?}");
+        assert_eq!(rsp, vec![]);
+    }
+
     // SysTask form: `$readmem*` writes a memory net without a funnel write.
     let (ok3, rs3) = reasons(
         "module t; reg [7:0] m [0:3];\n\

@@ -95,6 +95,32 @@ pub struct NativeEligibility {
     pub reject_reasons: std::collections::BTreeMap<&'static str, u32>,
 }
 
+/// The `stmt_effect` family members tier-3 HAS wired — the carve-out the gate
+/// row subtracts (§4.5.304's `$value$plusargs` pattern, generalized once A1
+/// made the list grow).
+///
+/// Every entry is the CANONICAL predicate the walk itself dispatches on
+/// (`exec::kpred`), never a second spelling, so the gate admits exactly the
+/// statements the executor answers. The CLASSIFICATION
+/// (`sim_ir::rhs_is_stmt_effect`) is untouched: tier-2's compile gate still
+/// sees one family, and this only stops counting the wired members.
+///
+/// ⚠️ Naming a member here whose `k_*` still refuses is a SILENT-WRONG, not a
+/// compile error — the design runs natively and its effect lands in the engine's
+/// store. That is why each addition ships with a differential AND an absolute
+/// anchor (ROADMAP §5.1-e: as tier-3 delegates, the differential goes blind).
+fn stmt_effect_wired(exprs: &[sim_ir::Expr], rhs: u32) -> bool {
+    use crate::exec::kpred;
+    // S1d-5 (§4.5.304): parse/match/convert are the shared
+    // `exec::plusargs::effect`; only the destination write is the store's.
+    kpred::value_plusargs_rhs(exprs, rhs)
+        // A1-i: `q.pop_front()` / `q.pop_back()`. Store-INDEPENDENT — the pop
+        // mutates `SimState::dyn_heap` (one object, both backends) and reads no
+        // net value, so tier-3 DELEGATES to the engine's own impl and the
+        // destination rides `apply_effect`'s `k_write_lvalue`.
+        || kpred::queue_pop_rhs(exprs, rhs)
+}
+
 /// Record `n` offending items under `family` (no-op when `n == 0`, so a clean
 /// family never fabricates a zero row).
 fn flag(out: &mut std::collections::BTreeMap<&'static str, u32>, family: &'static str, n: usize) {
@@ -333,17 +359,12 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             // them and therefore has to exclude it. The tier-3 plan is to BE a
             // `Kernel` impl, so this exclusion is correct and conditional on it.
             sim_ir::Stmt::BlockingAssign { rhs, .. } => {
-                // `$value$plusargs` is CARVED OUT (S1d-5): `k_value_plusargs`
-                // is wired through the shared `exec::plusargs::effect`, so the
-                // first member of this family runs instead of refusing. The
-                // carve-out is the canonical `value_plusargs_rhs` — the same
-                // predicate the walk dispatches on (process.rs), so the gate
-                // admits exactly the statements the executor answers. The
-                // CLASSIFICATION (`rhs_is_stmt_effect`) is untouched: tier-2's
-                // compile gate still sees one family, and this row only stops
-                // counting the wired member.
+                // The WIRED members are carved out by `stmt_effect_wired` (see
+                // its doc for why the list, not the classification, is what
+                // moves). What remains counted is the family tier-3 has not
+                // answered yet.
                 if sim_ir::rhs_is_stmt_effect(&ir.exprs, *rhs)
-                    && !crate::exec::kpred::value_plusargs_rhs(&ir.exprs, *rhs)
+                    && !stmt_effect_wired(&ir.exprs, *rhs)
                 {
                     stmt_effect += 1;
                 }
