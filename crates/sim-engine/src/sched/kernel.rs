@@ -133,6 +133,32 @@ impl Kernel for Scheduler<'_, '_> {
         let sw = self.st.wt.get(eid);
         (sw.width, sw.signed)
     }
+    fn k_eval_ctx(&self, eid: u32, ctx_width: u32, ctx_signed: bool) -> Value {
+        // The call `split_frame_in_binds` made before A3-i lifted its body out.
+        self.eval_ctx_top(eid, ctx_width, ctx_signed)
+    }
+    fn k_frame_base(&self, func: u32) -> u32 {
+        self.st.func_table[func as usize].base_net
+    }
+    fn k_task_call_site(&self, proc: u32, bb: u32) -> Option<crate::TaskCallInfo> {
+        self.st.task_calls_proc.get(&(proc, bb)).cloned()
+    }
+    fn k_call_site_runnable(&self, proc: u32, bb: u32) -> bool {
+        match self.st.task_calls_proc.get(&(proc, bb)) {
+            Some(info) => !self.st.suspendable_tasks.contains(&info.callee),
+            None => false,
+        }
+    }
+    fn k_run_subset_task(
+        &mut self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(Lvalue, Value)> {
+        self.st
+            .run_subset_task(callee, in_vals, dyn_snaps, out_binds)
+    }
     fn k_file_read_byte(&mut self, fd: u32) -> Option<u8> {
         crate::builtins::file_read_byte(self, fd)
     }

@@ -2302,12 +2302,34 @@ endmodule
         ),
         (
             "wait fork",
-            "a `wait fork`, or a subroutine CALL STATEMENT (task / output formals)",
+            "a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b",
             r#"
 module top;
   reg [7:0] n = 8'd0;
   initial begin wait fork; n = 8'd7; $display("after n=%0d", n); end
   initial #2 $finish;
+endmodule
+"#,
+        ),
+        // A3-i split this row's population in two, so the SECOND half needs its
+        // own design or the row's remaining meaning is untested: a call statement
+        // is refused now only when its CALLEE suspends.
+        //
+        // ⚠️ The callee must be a FUNCTION with an output formal, not a task —
+        // first try was `task automatic t(...); n = a + 1;` and it reported the
+        // STORAGE row instead, because a suspendable task is refused a layer
+        // earlier. A function is never refused there, so this is the only shape
+        // that reaches this row through the call arm.
+        (
+            "a call statement whose callee suspends",
+            "a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b",
+            r#"
+module top;
+  function automatic integer f(input integer x, output integer o);
+    begin o = x * 2; $display("in f o=%0d", o); f = x + 1; end
+  endfunction
+  integer r, o;
+  initial begin r = f(4, o); $display("r=%0d o=%0d", r, o); $finish; end
 endmodule
 "#,
         ),
@@ -2329,7 +2351,10 @@ endmodule
             e.refused
         );
     }
-    assert_eq!(cases.len(), 4, "refusal-row coverage moved");
+    // 4 -> 5: A3-i split the call-statement half of the `wait fork` row off from
+    // the terminator and onto the CALLEE, so the row now has two populations and
+    // one design cannot show both are reachable.
+    assert_eq!(cases.len(), 5, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit
@@ -3093,6 +3118,273 @@ endmodule
             "out|P n=6 m0=41424344 m1=4546beef\n".to_string(),
         ],
         "fread values"
+    );
+}
+
+/// A3-i ABSOLUTE ANCHOR — a subroutine CALL STATEMENT, natively.
+///
+/// The shape A3-i bought: a task enable and a function-with-output-formal call
+/// running on tier-3 instead of sending the whole design to the VM. Every line
+/// below is one of the two halves that was store-dependent, chosen so that the
+/// engine's store answering instead of tier-3's changes the printed value:
+///
+/// * **A** — net-valued actuals into a subset TASK, copied out to ARRAY ELEMENTS.
+///   `200+57` wraps to 1 in 8 bits and `200-57` is 143. A copy-in that read the
+///   engine's nets would evaluate both actuals as X (tier-3 never writes there),
+///   so both would print `x`.
+/// * **B** — a FUNCTION with an output formal: one call statement copies out the
+///   formal AND the return slot. `twice = 200*2 = 400` in a 32-bit `integer`, and
+///   the return is `201`.
+/// * **C** — a NARROWING formal (`input [3:0]` taking an 8-bit actual) whose
+///   destination is indexed by a NET. `200 = 8'hC8`, low nibble `8`. A copy-in
+///   sized self-determined rather than to the formal would print `200`; a
+///   destination resolved against the wrong store would miss `mem[2]`.
+/// * **D** — a SIGNED formal taking a negative actual: `-(-5) = 5`. Unsigned
+///   copy-in prints `251`.
+/// * **E** — the same task again, with the RESULTS of A as its actuals, proving
+///   the copy-out landed where the next copy-in reads: `1+143 = 144` and
+///   `1-143 = -142` → `114` in 8 bits.
+/// * **F** — BOTH output formals aliased onto ONE destination. The copy-outs run
+///   in `out_binds` order and the last wins, so `q = 143`. This is the only line
+///   that can see the ORDER at all — every destination above is distinct, so a
+///   reversed copy-out loop prints the same thing for A through E.
+/// * **G** — the destinations ARE the input actuals. IEEE §13.4.1 evaluates the
+///   copy-in before the body runs, so `a` and `b` still read 200 and 57 inside
+///   and the results land afterwards: `a = 1`, `b = 143`. A copy-in deferred to
+///   after the call would read the already-overwritten nets.
+/// * **H, I** — a formal WIDER than the actual expression, whose value overflows
+///   the actual's own self-width. §13.4.3 makes the formal a variable of its
+///   declared type, so the actual is an assignment context of the formal's width:
+///   `200 + 57` is 257 in a 16-bit formal, not 1. And signed: `-3 - 126` is −129
+///   in a signed 16-bit formal, not 127.
+///
+///   ⚠️ **These two exist because the first battery could not kill the copy-in
+///   width and sign.** Every other line above is invariant to them, because
+///   `run_task`'s `bind_formal` RE-BINDS each actual to the formal's declared type
+///   on frame entry — so the context passed to `k_eval_ctx` only matters when
+///   evaluating at the narrower width would have already destroyed the value. That
+///   is exactly this shape, and nothing else in the anchor had it.
+///
+/// ⭐ **Absolute, not differential, and this slice is exactly why** (ROADMAP
+/// §5.1-e): A3-i delegates the callee body to `SimState::run_task_call` — the
+/// same function the engine runs — so a native-vs-VM comparison is blind to
+/// everything inside it. A/C/D/E are iverilog-pinned; **B is hand-IEEE**, because
+/// iverilog rejects an output formal on a FUNCTION (`port twice is not an input
+/// port`) while IEEE §13.4.1 allows it and vita supports it.
+#[test]
+fn a_subset_task_call_has_its_iverilog_values() {
+    let src = r#"
+module top;
+  reg [7:0] a, b, q;
+  reg [7:0] mem [0:3];
+  integer   idx;
+  integer   r, o1;
+  reg signed [7:0] sv;
+  integer   sout;
+  reg [15:0] r16;
+  reg signed [7:0] sm;
+  integer   sw;
+
+  task automatic addsub(input [7:0] x, input [7:0] y,
+                        output [7:0] s, output [7:0] d);
+    begin s = x + y; d = x - y; end
+  endtask
+
+  function automatic integer scale(input integer v, output integer twice);
+    begin twice = v * 2; scale = v + 1; end
+  endfunction
+
+  task automatic lownib(input [3:0] n, output [7:0] z);
+    begin z = {4'h0, n}; end
+  endtask
+
+  task automatic negate(input signed [7:0] s, output integer o);
+    begin o = -s; end
+  endtask
+
+  // A formal WIDER than the actual expression's own self-width.
+  task automatic wide(input [15:0] x, output [15:0] o); begin o = x; end endtask
+  task automatic widesig(input signed [15:0] x, output integer o); begin o = x; end endtask
+
+  initial begin
+    a = 8'd200; b = 8'd57; idx = 2; sv = -8'sd5;
+    addsub(a, b, mem[0], mem[1]);
+    $display("A mem0=%0d mem1=%0d", mem[0], mem[1]);
+    r = scale(a, o1);
+    $display("B r=%0d o1=%0d", r, o1);
+    lownib(a, mem[idx]);
+    $display("C mem2=%0d", mem[2]);
+    negate(sv, sout);
+    $display("D sout=%0d", sout);
+    addsub(mem[0], mem[1], mem[2], mem[3]);
+    $display("E mem2=%0d mem3=%0d", mem[2], mem[3]);
+    addsub(a, b, q, q);
+    $display("F q=%0d", q);
+    addsub(a, b, a, b);
+    $display("G a=%0d b=%0d", a, b);
+    a = 8'd200; b = 8'd57;
+    wide(a + b, r16);
+    $display("H r16=%0d", r16);
+    sm = -8'sd3;
+    widesig(sm - 8'sd126, sw);
+    $display("I sw=%0d", sw);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A mem0=1 mem1=143\n".to_string(),
+            "out|B r=201 o1=400\n".to_string(),
+            "out|C mem2=8\n".to_string(),
+            "out|D sout=5\n".to_string(),
+            "out|E mem2=144 mem3=114\n".to_string(),
+            "out|F q=143\n".to_string(),
+            "out|G a=1 b=143\n".to_string(),
+            "out|H r16=257\n".to_string(),
+            "out|I sw=-129\n".to_string(),
+        ],
+        "subset call-statement values"
+    );
+}
+
+/// A3-i DIFFERENTIAL — call-statement shapes, native vs the VM.
+///
+/// The second lens beside `a_subset_task_call_has_its_iverilog_values`. It is
+/// deliberately the WEAKER of the two here (ROADMAP §5.1-e): the callee body runs
+/// in `SimState::run_task_call` on both backends, so this pass is blind to
+/// anything inside it and can only see the copy-in, the copy-out and the site's
+/// control flow. Those are exactly the three pieces A3-i wrote, which is what
+/// makes it worth running.
+///
+/// Each design isolates one axis of the copy-in/copy-out that a wrong store
+/// would answer differently.
+#[test]
+fn a3i_call_statement_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A call inside a LOOP: the frame is fresh per activation and the actual
+        // changes every iteration, so a copy-in reading a stale store prints a
+        // constant.
+        (
+            "call in a loop",
+            r#"
+module top;
+  integer i, acc, dbl;
+  task automatic twice(input integer v, output integer o); begin o = v + v; end endtask
+  initial begin
+    acc = 0;
+    for (i = 1; i <= 5; i = i + 1) begin twice(i, dbl); acc = acc + dbl; end
+    $display("acc=%0d dbl=%0d", acc, dbl);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A call whose actual is the DESTINATION of the previous call — the
+        // copy-out must be visible to the next copy-in through the same store.
+        (
+            "chained call",
+            r#"
+module top;
+  reg [15:0] a, t1, t2;
+  task automatic shl(input [15:0] v, output [15:0] o); begin o = v << 1; end endtask
+  initial begin
+    a = 16'h00A5;
+    shl(a, t1); shl(t1, t2);
+    $display("t1=%h t2=%h", t1, t2);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A call under a BRANCH, so the walk's `ret_bb` has to be the block the
+        // rest of the body continues from rather than the next index.
+        (
+            "call under a branch",
+            r#"
+module top;
+  reg [7:0] sel, out;
+  task automatic pick(input [7:0] v, output [7:0] o); begin o = v ^ 8'hFF; end endtask
+  initial begin
+    sel = 8'd3; out = 8'd0;
+    if (sel > 8'd1) pick(sel, out); else out = 8'd9;
+    $display("out=%0d", out);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A call in a CLOCKED process, so it runs once per edge and the copy-out
+        // feeds the dirty channel that wakes the next process.
+        (
+            "call in an always block",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] n = 8'd0, m;
+  task automatic inc(input [7:0] v, output [7:0] o); begin o = v + 8'd1; end endtask
+  always #1 clk = ~clk;
+  always @(posedge clk) begin inc(n, m); n <= m; end
+  initial begin #9 $display("n=%0d m=%0d", n, m); $finish; end
+endmodule
+"#,
+        ),
+        // NO output formal at all — the call is pure input, so the copy-out list
+        // is empty and the only observable is that the frame ran and the walk
+        // continued. (`$display` inside would make it suspendable, so the proof
+        // is that the design still RUNS and the following statement executes.)
+        (
+            "input-only task",
+            r#"
+module top;
+  integer sink;
+  task automatic ignore(input integer v); begin sink = v; end endtask
+  initial begin sink = 0; ignore(7); $display("sink=%0d", sink); $finish; end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    // ⚠️ The LAST design is refused on purpose and the count says so: `ignore`
+    // writes the module net `sink`, which is outside its frame window, so
+    // `compute_suspendable_tasks` marks it suspendable and A3-i does not admit
+    // it. Asserting the split rather than "all ran" is what stops this test from
+    // going quiet if the gate ever widens or narrows underneath it.
+    assert_eq!(ran, 4, "A3-i differential: runnable count moved");
+    assert_eq!(
+        refused,
+        [(
+            "a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b",
+            1
+        )]
+        .into_iter()
+        .collect(),
+        "A3-i differential: refusal breakdown moved"
     );
 }
 

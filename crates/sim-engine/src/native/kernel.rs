@@ -1387,6 +1387,47 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         let sw = self.sched.st.wt.get(eid);
         (sw.width, sw.signed)
     }
+    fn k_eval_ctx(&self, eid: u32, ctx_width: u32, ctx_signed: bool) -> Value {
+        // Through THIS COMPOSITE, not through `&self.arena`: a subroutine
+        // actual is an ordinary caller expression, so it can name a heap net
+        // (`t.run(q[0])`) as well as a flat one, and the composite is the reader
+        // that routes both. `eval_ctx_with_reader` is `eval_expr_with`'s
+        // context-sized twin (V1 slice 2c) — same routing decision, `eval_ctx`
+        // instead of `eval`, so a formal narrower than its actual truncates here
+        // rather than after the fact.
+        self.sched
+            .st
+            .eval_ctx_with_reader(self, eid, ctx_width, ctx_signed)
+    }
+    fn k_frame_base(&self, func: u32) -> u32 {
+        self.sched.st.func_table[func as usize].base_net
+    }
+    fn k_task_call_site(&self, proc: u32, bb: u32) -> Option<crate::TaskCallInfo> {
+        self.sched.st.task_calls_proc.get(&(proc, bb)).cloned()
+    }
+    fn k_call_site_runnable(&self, proc: u32, bb: u32) -> bool {
+        match self.sched.st.task_calls_proc.get(&(proc, bb)) {
+            Some(info) => !self.sched.st.suspendable_tasks.contains(&info.callee),
+            None => false,
+        }
+    }
+    fn k_run_subset_task(
+        &mut self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(Lvalue, Value)> {
+        // DELEGATION, and the justification is the S3a one one level up: every
+        // store this touches is `SimState`'s own frame/heap state, which this
+        // kernel BORROWS rather than mirrors. The nets — the one thing the two
+        // backends do keep apart — are not touched here at all: the inputs were
+        // evaluated by `k_eval_ctx` above and the scalar outputs are written by
+        // `k_write_lvalue` after this returns.
+        self.sched
+            .st
+            .run_subset_task(callee, in_vals, dyn_snaps, out_binds)
+    }
     fn k_file_read_byte(&mut self, fd: u32) -> Option<u8> {
         // The file table lives in `SimState`, which this kernel borrows — one
         // object, both backends, exactly like `dyn_heap`.

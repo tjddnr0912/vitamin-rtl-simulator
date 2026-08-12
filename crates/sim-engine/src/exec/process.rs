@@ -499,34 +499,25 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
                             });
                         continue; // re-fetch from the new frame next iteration
                     }
-                    let out_s: Vec<u32> = info.out_binds.iter().map(|&(s, _)| s).collect();
-                    // V2A-dyn (§4.5.194): a subset task's dyn-array INPUT formal is
-                    // deep-copied into its per-activation heap slot right before the
-                    // synchronous run_task_call (dyn_heap is interior-mutable now) and freed
-                    // after — the sync executor READS the formal from the heap, exactly like
-                    // the suspendable frame-entry snapshot (§4.5.173).
-                    // V2A/V2B (§4.5.194): snapshot a dyn INPUT formal IN before the call;
-                    // deep-copy an OUTPUT/INOUT dyn formal OUT after. All three self-gate on
-                    // the callee's dyn state → call unconditionally.
-                    // T1-9: straight-line synchronous call → the stash is a local.
-                    // CAPTURE before the stash (a recursive call may pass the formal).
-                    let captured = sched.st.frame_dyn_capture_formals(info.callee, &dyn_snaps);
-                    let dyn_stash = sched.st.frame_dyn_enter(info.callee);
-                    sched.st.frame_dyn_install_formals(captured);
-                    let mut outs_dyn = Vec::new();
-                    if let Some(outs) = sched.st.run_task_call(info.callee, &in_v, &out_s) {
-                        // T1-9: capture before the restore, install after.
-                        outs_dyn = sched.st.frame_dyn_capture_out(info.callee, &info.out_binds);
-                        for ((s, lval), val) in info.out_binds.iter().zip(outs) {
-                            if sched.st.frame_dyn_out_bind(info.callee, *s, lval) {
-                                continue; // dyn formal → heap deep-copy, not the scalar value
-                            }
-                            let offs = sched.resolve_lvalue_offsets(lval);
-                            sched.st.write_lvalue(lval, val, &offs);
-                        }
+                    // SUBSET callee — the synchronous half. A3-i moved these nine
+                    // calls into `SimState::run_subset_task` so the tier-3 walk's
+                    // own `Terminator::Call` arm performs the SAME sequence
+                    // instead of a second spelling of it; what stayed here is the
+                    // copy-out WRITE, because that is the one step whose store
+                    // differs between the two backends.
+                    //
+                    // (The dyn book-keeping the moved lines carry is documented at
+                    // `run_subset_task`: the actuals are captured before
+                    // `frame_dyn_enter` takes the callee's slots, and the dyn
+                    // out/inout results before `frame_dyn_exit` restores them.)
+                    let writes =
+                        sched
+                            .st
+                            .run_subset_task(info.callee, &in_v, &dyn_snaps, &info.out_binds);
+                    for (lval, val) in writes {
+                        let offs = sched.resolve_lvalue_offsets(&lval);
+                        sched.st.write_lvalue(&lval, val, &offs);
                     }
-                    sched.st.frame_dyn_exit(dyn_stash);
-                    sched.st.frame_dyn_install_formals(outs_dyn);
                 }
                 bb = *ret_bb;
             }

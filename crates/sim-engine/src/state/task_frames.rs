@@ -324,6 +324,51 @@ impl SimState<'_> {
         self.run_task(callee, in_vals, out_slots)
     }
 
+    /// A3-i: the whole engine-side of a SUBSET task call — the dyn book-keeping,
+    /// the synchronous run, and the dyn half of the copy-out — returning the
+    /// SCALAR copy-outs for the caller's own write funnel.
+    ///
+    /// ⭐ ONE implementation, and that is the point. `run_process`'s subset arm
+    /// and the tier-3 walk's `Terminator::Call` arm used to be destined to be two
+    /// spellings of these nine calls; instead both kernels' `k_run_subset_task`
+    /// delegate here in a line. It can be `&self` on `SimState` — rather than a
+    /// method of either executor — because none of it touches a NET: the inputs
+    /// arrive already evaluated in the caller's context, and the scalar outputs
+    /// leave unwritten, precisely so the two callers can write them through their
+    /// own stores.
+    ///
+    /// The call ORDER is `run_process`'s, unchanged, including the two subtleties
+    /// its comments record: the actuals are CAPTURED before `frame_dyn_enter`
+    /// takes the callee's slots (a recursive call can pass the formal as its own
+    /// actual), and the dyn out/inout results are captured before `frame_dyn_exit`
+    /// restores them but installed after.
+    pub(crate) fn run_subset_task(
+        &self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(Lvalue, Value)> {
+        let out_s: Vec<u32> = out_binds.iter().map(|&(s, _)| s).collect();
+        let captured = self.frame_dyn_capture_formals(callee, dyn_snaps);
+        let dyn_stash = self.frame_dyn_enter(callee);
+        self.frame_dyn_install_formals(captured);
+        let mut scalar_writes = Vec::new();
+        let mut outs_dyn = Vec::new();
+        if let Some(outs) = self.run_task_call(callee, in_vals, &out_s) {
+            outs_dyn = self.frame_dyn_capture_out(callee, out_binds);
+            for ((s, lval), val) in out_binds.iter().zip(outs) {
+                if self.frame_dyn_out_bind(callee, *s, lval) {
+                    continue; // dyn formal → heap deep-copy, not the scalar value
+                }
+                scalar_writes.push((lval.clone(), val));
+            }
+        }
+        self.frame_dyn_exit(dyn_stash);
+        self.frame_dyn_install_formals(outs_dyn);
+        scalar_writes
+    }
+
     /// Stage-2/3 fork-in-frame: allocate a Case-B shared-window arena slot pre-filled with
     /// `init`, reusing a freed handle when available (the `dyn_heap`/`class_heap` free-list
     /// pattern). Returns the handle a `WindowSlot::Shared` carries. Stage 3: seed the slot's

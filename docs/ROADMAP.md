@@ -418,7 +418,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 |---|---|---|---|
 | **A1** ✅ | **`stmt_effect`** — 전원 배선, 행이 비었다(§5.1-g~-l) | 205 | **완료 · 78.73% → 81.24%** |
 | **A2** | `class` / OOP / CRV | 164 | |
-| **A3** | 서브루틴 프레임 — ⚠️ **둘로 쪼갠다**: subset 동기(143) → suspendable(248) | 391 | |
+| **A3** 진행중 | 서브루틴 프레임 — ✅ **A3-i subset 동기 호출**(§5.1-n) · 잔여 **A3-ii = suspendable 프레임**(+283) | **532** | **A3-i 완료 · 81.66% → 84.91%** |
 | **A4** | fork + `disable_fork` | ~104 | |
 | **A5** 진행중 | 거부 시스템태스크 — ✅ **A5-a `$fclose`/`$dumplimit`**(§5.1-m) · 잔여 = `$monitor`/`$strobe`·`$dumpall`/`$dumpon`·`$writemem*` | ~83 | |
 | **A6** | `real` + `real-slot` | ~72 | |
@@ -717,6 +717,80 @@ vita 는 안 한다(`bad_fd_warn` 이 fd 당 한 번이고 앞선 `$fgetc` 가 l
 
 ⚠️ 절차: 뮤테이션 둘 다 첫 시도에서 **치환 패턴이 4곳에 맞아** 적용되지 않았고, 그대로였다면
 SURVIVED 로 기록됐을 것이다(§5.1-l 의 규칙이 바로 다음 슬라이스에서 재발) → **줄 번호로 지정**.
+
+#### 5.1-n ✅ A3-i — subset 호출: **가족의 크기를 census 가 정정했고, 하네스가 네 번째로 같은 함정을 밟았다** · 81.66% → **84.91%** (2026-08-13)
+
+**측정 먼저.** A3 착수 전 census 를 다시 떴고 **내가 인용해 오던 두 숫자가 둘 다 틀렸다**:
+
+| | 인용해 온 값 | 실측 |
+|---|---|---|
+| A3 가족 단독 이득 | +506 (→ 86.76%) | **+532 (→ 90.08%)** |
+| subset 만의 상한 | 143 (§4.5.338) | **+205** |
+
+⭐ **그리고 가족의 구성이 예상과 달랐다** — 프로세스 바디에 `Terminator::Call` 을 가진 **578** 설계 중
+**461 이 태스크를 아예 안 쓴다**(= **output formal 을 가진 함수**). 그쪽은 저장소 행(`is_task`)에
+애초에 안 걸리므로 **실행기 arm 하나만** 있으면 된다. 실행기 행 644 회 중 `Terminator::Call` 만이
+**577**, `wait fork` 는 **6** 뿐이다.
+
+지은 것:
+
+* **저장소 행을 좁혔다** — `is_task` 전체 거부 → **`is_task ∧ suspendable`**. 판정은
+  `sim_ir::compute_suspendable_tasks`, 즉 **엔진이 `simulate` 에서 설치하는 바로 그 집합**을 같은
+  입력으로 다시 물은 것(`frames::suspendable_set` 이 유일한 철자)이라 게이트와 `run_process` 가
+  같은 태스크를 두고 갈릴 수 없다.
+* **실행기 행을 쪼갰다** — `body_is_walkable` 이 `Terminator::Call` 을 `call_ok(bb)` 로 묻는다.
+* **`exec::frame_call`** — `run_process` 의 subset arm 을 들어내 `Kernel` 제네릭으로. 새 seam 다섯
+  (`k_eval_ctx`·`k_frame_base`·`k_task_call_site`·`k_call_site_runnable`·`k_run_subset_task`).
+
+⭐⭐ **store-dependent 인 것이 거의 없었다 — 프레임 창은 `dyn_heap`·파일 테이블과 같다.**
+`frame_stack`/`static_store` 는 `SimState` 에 있고 **두 커널이 같은 객체를 빌린다**. 실제로 갈리는
+것은 **① 카피-인**(`split_frame_in_binds` 가 `eval_ctx_top` = 엔진의 넷으로 읽는다 = A1-ii 결함
+그대로)과 **② 카피-아웃**(`sched.st.write_lvalue`) 둘뿐이고, 나머지 아홉 호출은
+**`SimState::run_subset_task` 하나로 옮겨 양쪽이 위임**한다.
+
+⚠️⚠️ **하네스 갭 네 번째, 그리고 이번 것이 가장 노골적이다** — `build_with_opts` 가
+**`task_calls_proc`/`task_calls_func` 를 안 심고 있었다.** `Terminator::Call` 은 `{target, ret_bb}`
+만 들고 인자↔formal 매핑이 **통째로 그 사이드카**이므로, 없으면 `run_process` 도 tier-3 도
+**`bb = ret_bb` 로 그냥 지나간다** — `r = f(4, o)` 가 `o` 를 안 건드리고 **두 백엔드가 사이좋게 일치**한다.
+발견 경로가 요점이다: A3-i 게이트가 호출을 "실행 불가" 로 판정했고 그 이유가 callee 와 무관한
+**빈 사이드카**였다(§4.5.337 `assert_ctl` · 2c `queue_slice_stmts` · 3b 원소 둘에 이은 네 번째).
+⇒ **사이드카는 선택적 문맥이 아니라 소스의 의미의 일부다** 를 이 파일이 네 번째로 지불했다.
+
+⚠️ **거부 행의 문구를 또 고쳤다**(§4.5.338 클래스) — *"a `wait fork`, or a subroutine CALL
+STATEMENT"* 는 walk 이 arm 을 가진 순간 거짓이 됐다. 새 문구는 **터미네이터가 아니라 판정
+술어의 말로** 적는다: *"a `wait fork`, a `fork`, or a call statement whose callee suspends"*.
+
+⚠️ **suspendable 검사를 `is_task` 로 스코프한 것은 취향이 아니라 사다리 문제다** — `$display` 가 든
+**함수**도 같은 술어로 suspendable 이고, 그런 설계는 **오늘 이미 동작한다**(`Expr::Call` →
+`run_frame_call` 경로). 모든 func 에 물었으면 correct → loud **회귀**였다.
+
+**앵커는 절대값이고 iverilog 가 반만 답한다** — iverilog 는 **함수의 output formal 을 거부**한다
+(`port twice is not an input port`). A/C/D/E/F/G 는 iverilog 핀이고 **B 는 hand-IEEE**(§13.4.1).
+⭐ 판별자를 둘 더 지었다: **F = 두 output formal 을 한 목적지에 앨리어싱**(카피-아웃 **순서**를 볼 수
+있는 유일한 행 — 나머지 행은 목적지가 전부 다르므로 순서를 뒤집어도 같은 값이 나온다) ·
+**G = 목적지가 곧 입력 actual**(카피-인이 바디 전에 평가된다는 §13.4.1).
+
+**측정**: **5,372 / 6,327 = 84.91%**(자기 테스트 제외 순증 **+208** · 예측 +205) · 전 스위트
+**5398 green** · **flip 런 5395/5398**(실패 3 = 백엔드 이름 핀) · **발산 0** · **뮤테이션 9/11 사망**.
+
+⭐⭐ **뮤테이션 넷이 앵커의 구멍 넷을 찾았고, 하나는 "왜 안 죽지" 가 곧 설명이었다** — 카피-인의
+**폭**(B)과 **부호**(C), `k_frame_base`(L)를 되돌려도 첫 배터리가 전부 통과했다. 이유는 하나다:
+`run_task` 의 **`bind_formal` 이 프레임 진입에서 각 actual 을 formal 의 선언 타입으로 다시
+바인딩**하므로, `k_eval_ctx` 에 준 문맥은 **더 좁은 폭에서 평가했다면 값이 이미 파괴됐을 때만**
+관측된다. ⇒ 판별자는 **formal 이 actual 보다 넓고 actual 이 자기 self-width 를 넘치는 행**뿐이고
+(H·I), 그 둘을 지으니 B·C·L 셋이 동시에 죽는다. 카피-아웃 **순서**(I)도 같은 종류의 구멍이었다 —
+목적지가 전부 다르면 순서를 뒤집어도 같은 값이라 **한 목적지에 앨리어싱한 행**(F)이 유일한 판별자다.
+
+⚠️ **생존 둘은 등가가 아니라 도달 불가이고, 그것을 쟀다** — ⓐ `call_site_runnable` 의
+`None => false`(사이드카 없는 사이트): 계층 enable 로 지어 봐도 **엔진 시점에는 항목이 있다**
+(`missing_sidecar=0` — elaborate 시점에만 없다는 엔진 주석과 일치) · ⓑ `frame_dyn_out_bind` 분기:
+**dyn out formal 을 가진 태스크는 전부 suspendable** 이다(`o = new[n]` 은 `SysTask` 이고 `o = i` 는
+**handle-copy 마커**라 둘 다 suspend 신호) ⇒ subset arm 에서 도달 불가. **이 코드는 옮겨온 것이지
+이 슬라이스가 만든 것이 아니므로**, 죽지 않는 것을 kill 로 위장하는 대신 사실로 기록한다.
+
+⭐ **곁가지로 두 번째 철자 하나를 지웠다** — 지어 놓고 보니 `Scheduler::split_frame_in_binds` 와
+`exec::frame_call::split_in_binds` 가 §13.4.3 사이징 규칙을 **두 번** 적고 있었다(clippy 가
+`type_complexity` 로 먼저 걸렸고, 고치려다 발견). 엔진 쪽을 **위임 한 줄**로 만들어 철자를 하나로.
 
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 

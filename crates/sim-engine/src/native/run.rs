@@ -122,24 +122,39 @@ pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'s
     if !opts.final_procs.is_empty() {
         return Err("`final` blocks (the post-loop drain is not restated)");
     }
+    // A3-i: the callee classification the `Terminator::Call` row consults. Built
+    // ONCE for the whole gate rather than per process — it is a pure function of
+    // the IR and the frame sidecars, and it is the same one `frames_admitted`
+    // asked a layer earlier and the same one `simulate` installs for the engine.
+    let susp = crate::native::frames::suspendable_set(ir, opts);
     for pi in 0..ir.processes.len() as u32 {
-        if !body_is_walkable(ir, pi, ir.processes[pi as usize].entry) {
-            // Names the REACHABLE causes. The first wording led with
-            // `fork`/subroutine when both were refused an entire layer earlier,
-            // and advertised a named-event wait, which elaborate never
-            // constructs. Two shapes actually arrive here in an eligible,
-            // buildable design: a bare `wait fork;`, which populates no
-            // `fork_modes` entry, and — since S3a admitted subroutines — a
-            // `Terminator::Call`, i.e. a task enable or a call to a function
-            // with output formals. THIS layer owns the second one: a task is
-            // refused a layer earlier (`native::frames`' `is_task` row), but a
-            // function with output formals is not a task, its body stays inside
-            // its own frame, and the `Terminator::Call` is in the PROCESS body,
-            // which that predicate never scans.
+        if !body_is_walkable(ir, pi, ir.processes[pi as usize].entry, &|bb| {
+            crate::native::frames::call_site_runnable(opts, &susp, pi, bb)
+        }) {
+            // Names the REACHABLE causes, and A3-i moved one of them out.
+            //
+            // ⚠️ This row has now been re-worded TWICE for the same reason
+            // (§4.5.338): the wording it replaced said a CALL STATEMENT is
+            // refused, full stop, which stopped being true the moment the walk
+            // grew an arm for the subset half. A refusal row does not know when
+            // its own reason goes stale, so this one names what it refuses in
+            // terms of the predicate that decides — `call_site_runnable` — rather
+            // than in terms of the terminator.
+            //
+            // Three shapes arrive here in an eligible, buildable design:
+            //  * a bare `wait fork;`, which populates no `fork_modes` entry and so
+            //    is invisible to the S0 fork row;
+            //  * a `Terminator::Fork` in a design whose `fork_modes` trailer was
+            //    lost (the gate's own argument leans on that sidecar, so the scan
+            //    is the guard);
+            //  * a `Terminator::Call` whose callee is SUSPENDABLE — it suspends,
+            //    forks, prints, or writes outside its frame — or whose site has no
+            //    `task_calls_proc` entry (a deferred hierarchical enable). The
+            //    SUBSET half is walkable now and no longer reaches this line.
             //
             // A plain non-`automatic` task containing `@(posedge clk)` is NOT
             // refused: elaborate inlines it, so there is no `Terminator::Call`.
-            return Err("a `wait fork`, or a subroutine CALL STATEMENT (task / output formals)");
+            return Err("a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b");
         }
         if !body_dispatch_ok(ir, pi) {
             return Err("a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)");
@@ -173,8 +188,11 @@ fn body_dispatch_ok(ir: &SimIr, proc: u32) -> bool {
 /// carrying `$dumpfile`. A second spelling in the test would have been a gate
 /// that admits designs production refuses, or the reverse.
 #[cfg(test)]
-pub(crate) fn body_admissible(ir: &SimIr, proc: u32) -> bool {
-    body_is_walkable(ir, proc, ir.processes[proc as usize].entry) && body_dispatch_ok(ir, proc)
+pub(crate) fn body_admissible(ir: &SimIr, opts: &crate::SimOpts, proc: u32) -> bool {
+    let susp = crate::native::frames::suspendable_set(ir, opts);
+    body_is_walkable(ir, proc, ir.processes[proc as usize].entry, &|bb| {
+        crate::native::frames::call_site_runnable(opts, &susp, proc, bb)
+    }) && body_dispatch_ok(ir, proc)
 }
 
 /// Run one eligible design to completion over the arena.

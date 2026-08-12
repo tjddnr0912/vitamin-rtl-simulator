@@ -94,6 +94,7 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
     if opts.func_table.len() != ir.funcs.len() {
         return Err("malformed frame sidecar (func_table length)");
     }
+    let susp = suspendable_set(ir, opts);
     let mut w = Walk::new(ir);
     for (fi, m) in opts.func_table.iter().enumerate() {
         let fd = ir.funcs[fi];
@@ -107,24 +108,45 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         if !fd.is_task && m.locals_len > 0 && m.return_slot >= m.locals_len {
             return Err("malformed frame sidecar (return slot out of range)");
         }
-        if fd.is_task {
-            return Err("task frames (entered by `Terminator::Call`): S3b");
+        // A3-i NARROWED THIS ROW. It used to refuse EVERY task, because a task is
+        // entered through `Terminator::Call` and the tier-3 walk had no arm for
+        // one. It has one now — for the SUBSET half only, the callees
+        // `sim_ir::compute_suspendable_tasks` leaves out — so what is refused here
+        // is the other half: a task that suspends, forks, prints, or writes
+        // outside its own frame window needs the engine's call-stack machinery
+        // (`enter_task_frame`, a `FrameRec` per activation, park/resume), which
+        // tier-3 does not model at all.
+        //
+        // The set is computed from the SAME inputs the engine uses (`suspendable_set`
+        // is the one spelling), so the gate and `run_process` cannot disagree about
+        // which half a task is in.
+        //
+        // ⚠️ Scoped to `is_task` ON PURPOSE, and that is a ladder question rather
+        // than a taste one. A FUNCTION with a `$display` in its body is
+        // "suspendable" by the same predicate, and such a design is admitted TODAY
+        // (it is reached through `Expr::Call` → `run_frame_call`, never through a
+        // `Terminator::Call`). Asking the suspendable question of every func would
+        // therefore turn working designs loud — a regression, not a tightening.
+        if fd.is_task && susp.contains(&(fi as u32)) {
+            return Err("a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b");
         }
-        // DEAD today — subsumed by the `is_task` row above (see the module doc).
+        // Both were DEAD rows while the `is_task` row above refused every task,
+        // and BOTH ARE STILL DEAD — for a new reason worth writing down rather
+        // than leaving as an inherited claim. `has_hier_call` is fed verbatim into
+        // `compute_suspendable_tasks`' `force_suspend`, and `contains_shared_fork`
+        // means the body has a `fork` terminator, which is a suspend signal; so a
+        // func reaching here with either flag set is already in `susp`, and only a
+        // task can carry them at all (elaborate writes both only in its frame-TASK
+        // lowering). They stay as their own rows because they are their own
+        // reasons: if either flag ever ceases to imply suspendable, the row is
+        // what refuses instead of the design going quiet.
         if m.has_hier_call {
             return Err("a subroutine with a hierarchical call (forced suspendable)");
         }
         if m.contains_shared_fork {
             return Err("a subroutine with a shared fork window");
         }
-        w.restart();
-        w.func_body(fd.entry)?;
-        if w.nets
-            .iter()
-            .any(|&n| n < m.base_net || n >= m.base_net + m.locals_len)
-        {
-            return Err("a subroutine that names a net outside its own frame: S3b");
-        }
+        body_stays_in_its_window(&mut w, fd.entry, m.base_net, m.locals_len)?;
     }
     // The frame-blindness of the tier-3 store, stated rather than assumed…
     w.restart();
@@ -195,6 +217,96 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         if std::iter::once(ca.rhs).chain(idx).any(|e| c.has_call(e)) {
             return Err("a call in a delayed continuous assign: S3b");
         }
+    }
+    Ok(())
+}
+
+/// Which subroutines does the engine drive through its CALL-STACK path rather
+/// than the synchronous `&self` frame executor?
+///
+/// ⭐ **One spelling, reassembled from the same fields `simulate` uses.** The
+/// engine builds this set in `lib.rs` right before the run, from `func_table`'s
+/// `base_net` / `has_hier_call` and the `task_calls_func` copy-out nets. Asking
+/// the same pure function over the same inputs is what makes "tier-3 admits
+/// exactly the callees `run_process` will run synchronously" true by
+/// construction; a predicate of our own here would be a second classifier, and
+/// the two disagreeing means the walk delegates a body the engine parks.
+///
+/// Called once per gate evaluation. `Ok`-path cost is one pass over the func
+/// arena, which the caller is already making.
+pub(crate) fn suspendable_set(ir: &SimIr, opts: &SimOpts) -> std::collections::BTreeSet<u32> {
+    let base_nets: Vec<u32> = opts.func_table.iter().map(|m| m.base_net).collect();
+    let force_suspend: Vec<bool> = opts.func_table.iter().map(|m| m.has_hier_call).collect();
+    let call_out_nets = sim_ir::call_out_nets(
+        opts.task_calls_func
+            .iter()
+            .map(|(b, info)| (*b, info.out_binds.as_slice())),
+    );
+    sim_ir::compute_suspendable_tasks(
+        &ir.funcs,
+        &ir.blocks,
+        &ir.stmts,
+        &ir.exprs,
+        &base_nets,
+        &force_suspend,
+        &call_out_nets,
+    )
+}
+
+/// Can the tier-3 walk run the `Terminator::Call` at process-local block `bb` of
+/// process `proc`?
+///
+/// ONE spelling for two callers — `body_is_walkable` (the gate) and the walk's
+/// own `Call` arm (the `debug_assert`) — because the gate saying yes and the arm
+/// assuming something else is exactly how a refused shape reaches an executor
+/// that cannot run it.
+///
+/// Two conditions, and neither is redundant:
+///  * the call SITE must be in `task_calls_proc`. A missing entry is a deferred
+///    hierarchical enable whose actuals elaborate could not resolve; the engine
+///    treats it as "advance past the call", which would silently skip the call
+///    rather than perform it.
+///  * the CALLEE must be synchronous. `run_process` routes a suspendable callee
+///    to `enter_task_frame` + a `FrameRec`; delegating one to `run_task_call`
+///    instead would run a body that expects to be able to park.
+///
+/// What is NOT asked here is whether the callee's BODY stays inside its own frame
+/// window — `frames_admitted` already refused the design otherwise, for every
+/// func in the table, and it runs first (`runtime_gate` = design ∧ storage, then
+/// this layer). Stated rather than assumed: an unstated closure is how a later
+/// widening loses it.
+pub(crate) fn call_site_runnable(
+    opts: &SimOpts,
+    susp: &std::collections::BTreeSet<u32>,
+    proc: u32,
+    bb: u32,
+) -> bool {
+    match opts.task_calls_proc.get(&(proc, bb)) {
+        Some(info) => !susp.contains(&info.callee),
+        None => false,
+    }
+}
+
+/// The delegation precondition for ONE subroutine, as its own function: does its
+/// body use only what the engine's `&self` frame executor runs, and does it name
+/// only nets inside its own window `[base, base+len)`?
+///
+/// Named rather than inlined because the two questions are ONE precondition and
+/// a caller that asked only the first would delegate a body that reads the module
+/// store. `Err` is the row.
+fn body_stays_in_its_window(
+    w: &mut Walk<'_>,
+    entry: u32,
+    base_net: u32,
+    locals_len: u32,
+) -> Result<(), &'static str> {
+    w.restart();
+    w.func_body(entry)?;
+    if w.nets
+        .iter()
+        .any(|&n| n < base_net || n >= base_net + locals_len)
+    {
+        return Err("a subroutine that names a net outside its own frame: S3b");
     }
     Ok(())
 }

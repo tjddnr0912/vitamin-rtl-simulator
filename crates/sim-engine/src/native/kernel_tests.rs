@@ -2160,7 +2160,7 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
     // alone panicked. Both halves are the SAME predicate the production run gate
     // asks (`native::run::body_admissible`) rather than a local restatement.
     let runnable: Vec<u32> = (0..ir.processes.len() as u32)
-        .filter(|&i| crate::native::run::body_admissible(&ir, i))
+        .filter(|&i| crate::native::run::body_admissible(&ir, &opts, i))
         .collect();
     if runnable.is_empty() {
         return 0;
@@ -2344,7 +2344,7 @@ fn s1d4c2b_body_walk_agrees_on_context_and_the_step_guard() {
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
     let scopes: std::collections::BTreeSet<&String> = (0..ir.processes.len())
-        .filter(|&pi| crate::native::run::body_admissible(&ir, pi as u32))
+        .filter(|&pi| crate::native::run::body_admissible(&ir, &opts, pi as u32))
         .filter_map(|pi| opts.proc_scopes.get(pi))
         .collect();
     assert!(
@@ -2373,7 +2373,8 @@ fn s1d4c2b_body_walk_agrees_on_context_and_the_step_guard() {
     let empty: BTreeMap<u32, u32> = BTreeMap::new();
     let pi = (0..ir2.processes.len() as u32)
         .find(|&p| {
-            crate::native::run::body_admissible(&ir2, p) && ir2.processes[p as usize].body.len() > 1
+            crate::native::run::body_admissible(&ir2, &opts2, p)
+                && ir2.processes[p as usize].body.len() > 1
         })
         .expect("a multi-block runnable body");
     // Budget of 20 against 40 iterations: the guard MUST fire on both sides. The
@@ -2486,11 +2487,10 @@ fn s1d4c2b_body_walk_agrees_on_multi_block_bodies() {
     for (i, (name, src)) in designs.iter().enumerate() {
         // The design must actually have a MULTI-BLOCK runnable body, or it is
         // testing the single-block path under a name that says otherwise.
-        let (ir, _) = build_with_opts(src);
-        let multi =
-            ir.processes.iter().enumerate().any(|(pi, p)| {
-                p.body.len() > 1 && crate::native::run::body_admissible(&ir, pi as u32)
-            });
+        let (ir, opts) = build_with_opts(src);
+        let multi = ir.processes.iter().enumerate().any(|(pi, p)| {
+            p.body.len() > 1 && crate::native::run::body_admissible(&ir, &opts, pi as u32)
+        });
         assert!(multi, "{name}: no multi-block suspend-free body");
         let n = s1d4c2b_body_walk(src, name, 0x4C2B_0000 + i as u64);
         assert!(n > 0, "{name}: produced no comparisons");
@@ -2592,7 +2592,7 @@ fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
 
     // From the declared entry the body IS suspend-free …
     assert!(
-        crate::native::body::body_is_walkable(&ir, proc, entry),
+        crate::native::body::body_is_walkable(&ir, proc, entry, &|_| false),
         "scanning from the declared entry should find no refused terminator"
     );
     // … and from the resume point it is NOT. A predicate that ignored its entry
@@ -2600,7 +2600,7 @@ fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
     // had asked and been told yes.
     for b in suspending_unreachable {
         assert!(
-            !crate::native::body::body_is_walkable(&ir, proc, b),
+            !crate::native::body::body_is_walkable(&ir, proc, b, &|_| false),
             "block {b} ends in a refused terminator, but the scan called it \
              walkable — it is answering about the process entry rather than the \
              given one"

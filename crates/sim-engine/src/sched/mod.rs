@@ -250,7 +250,7 @@ type DelayedWrite = (u32, u64, Lvalue, Value, Offsets);
 /// V2A-frame (§4.5.173): a frame task call's copy-ins, split by kind — scalar
 /// `(formal slot, evaluated value)` pairs and dynamic-array snapshot `(formal slot,
 /// caller source net)` pairs. See [`Scheduler::split_frame_in_binds`].
-type FrameInBinds = (Vec<(u32, Value)>, Vec<(u32, u32)>);
+pub(crate) type FrameInBinds = (Vec<(u32, Value)>, Vec<(u32, u32)>);
 
 pub(crate) struct Scheduler<'a, 'ir> {
     pub st: &'a mut SimState<'ir>,

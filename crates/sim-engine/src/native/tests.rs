@@ -459,6 +459,20 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // corpus can spell must have its table here.
         real_elem_dyn_nets: sc.real_elem_dyn_nets,
         string_elem_dyn_nets: sc.string_elem_dyn_nets,
+        // …and the two CALL-SITE binding tables (A3-i). FOURTH time this file has
+        // been caught by the same omission, and this one is the starkest: a
+        // `Terminator::Call` carries only `{target, ret_bb}`, so the argument↔formal
+        // mapping IS this sidecar. Without it every call statement in every design
+        // built here binds nothing — `run_process` falls straight through to
+        // `bb = ret_bb` and so would the tier-3 arm, so `r = f(4, o)` leaves `o`
+        // untouched and BOTH backends agree about a design neither performs.
+        //
+        // Measured, not reasoned: `s3a_a_call_statement_is_refused_by_the_executor_layer`
+        // built exactly that design and its `task_calls_proc` came out EMPTY, which
+        // is why the A3-i gate reported the call unrunnable for a reason that had
+        // nothing to do with the callee.
+        task_calls_proc: sc.task_calls_proc,
+        task_calls_func: sc.task_calls_func,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

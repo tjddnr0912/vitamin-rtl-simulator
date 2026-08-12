@@ -106,10 +106,25 @@ use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 /// Measured: such a design has a `Delay` in a block unreachable from entry, so
 /// the old predicate answered "suspend-free" and the walk then panicked blaming
 /// the caller for a check it had passed.
+///
+/// ⚠️ `call_ok(bb)` is a PARAMETER rather than a lookup because the two askers
+/// hold the same fact in two places and neither can reach the other's. The GATE
+/// runs before `simulate` installs `SimState::suspendable_tasks`, so it computes
+/// the set itself (`frames::suspendable_set`); the WALK runs after, so its
+/// kernel reads the installed one. Both derive from `sim_ir::
+/// compute_suspendable_tasks` over the same inputs — the same
+/// agree-by-construction argument elaborate and the engine already rely on for
+/// this exact set — and passing the answer in is what keeps the SCAN itself a
+/// single spelling rather than forking it per caller.
 #[allow(dead_code)] // The production consumer is S1d-4c-2c's region loop; today
                     // only the body differential calls this. Saying so beats a fake call
                     // site or a widened visibility.
-pub(crate) fn body_is_walkable(ir: &SimIr, proc: u32, entry: u32) -> bool {
+pub(crate) fn body_is_walkable(
+    ir: &SimIr,
+    proc: u32,
+    entry: u32,
+    call_ok: &dyn Fn(u32) -> bool,
+) -> bool {
     let body = &ir.processes[proc as usize].body;
     // A body with no blocks answers "nothing to suspend on" rather than indexing
     // out of range. Not constructible from elaborate today; a `pub(crate)`
@@ -170,8 +185,19 @@ pub(crate) fn body_is_walkable(ir: &SimIr, proc: u32, entry: u32) -> bool {
                 // `Level` wait, and never builds this variant.
                 sim_ir::WaitCause::Named { .. } | sim_ir::WaitCause::Fork => return false,
             },
-            // No arm in the walk: `Fork`/`Call` are gate-refused.
-            Terminator::Fork { .. } | Terminator::Call { .. } => return false,
+            // No arm in the walk: `Fork` is gate-refused.
+            Terminator::Fork { .. } => return false,
+            // A3-i: a SUBSET call is walkable — the arm below delegates it to the
+            // engine's synchronous frame executor, exactly as `Expr::Call` has
+            // been delegated since S3a. A suspendable callee, or a site with no
+            // sidecar entry, is not: `call_site_runnable` owns both reasons, and
+            // it is the SAME call the walk's own arm asserts on.
+            Terminator::Call { ret_bb, .. } => {
+                if !call_ok(bb) {
+                    return false;
+                }
+                stack.push(*ret_bb);
+            }
         }
     }
     true
@@ -190,9 +216,9 @@ pub(crate) fn body_is_walkable(ir: &SimIr, proc: u32, entry: u32) -> bool {
 #[allow(dead_code)] // ditto — nothing SCHEDULES a tier-3 process yet.
 pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) -> Step {
     debug_assert!(
-        body_is_walkable(ir, proc, entry),
+        body_is_walkable(ir, proc, entry, &|bb| k.k_call_site_runnable(proc, bb)),
         "run_body entered for a body reaching a terminator the walk has no arm \
-         for (`Wait`, `Fork` or `Call`)"
+         for (`Wait`, `Fork`, or a `Call` whose callee suspends)"
     );
     let mut bb = entry;
     let mut guard: u64 = 0;
@@ -334,12 +360,19 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 "tier-3 body walk reached `Fork` — `fork_modes` non-empty is an S0 \
                  reject, so this is a gate widening without a walk to match"
             ),
-            Terminator::Call { .. } => unreachable!(
-                "tier-3 body walk reached `Call` — a subroutine CALL STATEMENT (a \
-                 task, or a function with output formals) is refused by \
-                 `body_is_walkable`, which `native::run::executor_rows` asks about \
-                 every process; an `Expr::Call` never reaches a terminator"
-            ),
+            // A3-i: a SUBSET subroutine CALL STATEMENT — a task enable, or a call
+            // to a function with output formals. Delegated to the engine's
+            // synchronous frame executor through `exec::frame_call`, which is the
+            // same body `run_process`'s subset arm runs; only the copy-in read and
+            // the copy-out write are this kernel's.
+            //
+            // No `Step` comes back because a subset callee cannot suspend — that
+            // is the definition of the half `call_site_runnable` admits, and the
+            // other half is refused a layer up rather than parked here.
+            Terminator::Call { ret_bb, .. } => {
+                crate::exec::frame_call::subset_task_call(k, proc, bb);
+                bb = *ret_bb;
+            }
         }
         // The in-body step budget. NOT `max_deltas`: a long computation that never
         // suspends is not the same failure as a delta loop that never settles, and

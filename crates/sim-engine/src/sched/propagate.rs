@@ -381,24 +381,15 @@ impl Scheduler<'_, '_> {
     /// we recover the source net; the caller applies `frame_dyn_snapshot_formals` right
     /// after `enter_task_frame`. Every non-dyn formal evaluates to a scalar in the caller
     /// context (unchanged). No dyn formals ⇒ `dyn_snaps` empty, `in_v` == the old vector.
+    ///
+    /// ⚠️ **A3-i moved the body to `exec::frame_call::split_in_binds` and left this
+    /// as the delegation.** Tier-3 needs the same split, and a second spelling of
+    /// the §13.4.3 sizing rule is how the two backends end up passing arguments of
+    /// different widths — the class §4.5.279 names. `Scheduler` implements
+    /// `Kernel`, so this reduces to the calls it already made (`k_eval_ctx` IS
+    /// `eval_ctx_top` here).
     pub(crate) fn split_frame_in_binds(&self, info: &crate::TaskCallInfo) -> FrameInBinds {
-        let cm = self.st.func_table[info.callee as usize];
-        let mut in_v: Vec<(u32, Value)> = Vec::with_capacity(info.in_binds.len());
-        let mut dyn_snaps: Vec<(u32, u32)> = Vec::new();
-        for &(slot, e) in &info.in_binds {
-            let fnet = (cm.base_net + slot) as usize;
-            if self.st.ir.nets[fnet].kind == sim_ir::NetKind::DynArray {
-                if let sim_ir::Expr::Signal { net, .. } = &self.st.ir.exprs[e as usize] {
-                    dyn_snaps.push((slot, *net));
-                }
-            } else {
-                let nv = &self.st.ir.nets[fnet];
-                let sw = self.st.wt.get(e);
-                let v = self.eval_ctx_top(e, nv.width.max(1).max(sw.width), nv.signed);
-                in_v.push((slot, v));
-            }
-        }
-        (in_v, dyn_snaps)
+        crate::exec::frame_call::split_in_binds(self, info)
     }
 
     /// Build an EvalCtx and run eval_ctx (mirror of the `eval` façade).

@@ -633,14 +633,38 @@ fn a_call_in_a_system_task_argument_is_admitted() {
 #[test]
 fn s3a_each_frame_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
+        // A3-i NARROWED this row and the design had to move with it. The old one —
+        // `task automatic add(input integer a, output integer b); b = a + 1;` — is
+        // exactly the SUBSET half the walk runs now, and its positive twin is
+        // `a_subset_task_call_has_its_iverilog_values`. What still refuses is a task
+        // the engine drives through its call stack, and the cheapest honest way to
+        // be one is to PRINT: `compute_suspendable_tasks` counts any `SysTask` as a
+        // suspend signal, because the synchronous `&self` executor is not where a
+        // `$display` inside a frame is rendered from.
         (
-            "task frame",
-            "task frames (entered by `Terminator::Call`): S3b",
+            "a suspendable task frame",
+            "a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b",
             r#"
 module top;
-  task automatic add(input integer a, output integer b); begin b = a + 1; end endtask
+  task automatic add(input integer a, output integer b);
+    begin b = a + 1; $display("in add b=%0d", b); end
+  endtask
   integer r;
   initial begin add(4, r); $display("r=%0d", r); $finish; end
+endmodule
+"#,
+        ),
+        // …and the OTHER way to be suspendable, because the two reach the row
+        // through different arms of `stmt_signal` and a single design cannot show
+        // both are load-bearing: a body that writes a net outside its own window.
+        (
+            "a task that writes a module net",
+            "a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b",
+            r#"
+module top;
+  integer g;
+  task automatic bump(input integer a); begin g = a + 1; end endtask
+  initial begin bump(4); $display("g=%0d", g); $finish; end
 endmodule
 "#,
         ),
@@ -763,22 +787,31 @@ endmodule
     }
     // 10 -> 7: V1 slice 3a admitted the three system-task-argument shapes, and
     // their positive twin is `a_call_in_a_system_task_argument_is_admitted`.
-    assert_eq!(cases.len(), 7, "frame refusal-row coverage moved");
+    // 7 -> 8: A3-i split the task row in two — the subset half runs natively now
+    // (`a_subset_task_call_has_its_iverilog_values`) and the suspendable half is
+    // covered by TWO designs, one per arm of `stmt_signal` that can reach it.
+    assert_eq!(cases.len(), 8, "frame refusal-row coverage moved");
     // ⚠️ The WRITE twin of the "reads a module net" row has no design, and not
     // by omission: elaborate refuses a frame body that assigns to a net outside
     // the function (E3009), so the row can only ever be reached by a READ.
 }
 
-/// A subroutine CALL STATEMENT — a function with an output formal — is refused
-/// by the THIRD gate layer rather than by `frames_admitted`, and the two layers
-/// must not both claim it.
+/// A subroutine CALL STATEMENT is decided by the THIRD gate layer rather than by
+/// `frames_admitted`, and the two layers must not both claim it.
 ///
-/// Kept apart from the row table above because the point is the split: the
-/// function is not a task, its body stays in its own frame, and it is the
-/// PROCESS that carries `Terminator::Call`.
+/// Kept apart from the row table above because the point is the SPLIT: a function
+/// with an output formal is not a task, its body stays in its own frame, so the
+/// storage gate has nothing to say — and it is the PROCESS that carries the
+/// `Terminator::Call`, which `frames_admitted` never scans.
+///
+/// ⚠️ **This test used to assert the executor REFUSED it.** A3-i gave the walk an
+/// arm, so the same two layers now answer accept/accept; the split is still the
+/// subject, only the verdict moved. What keeps the assertion from being empty is
+/// the pair: the subset shape is admitted here and the suspendable one is refused
+/// three lines down, and both go through the same two calls.
 #[test]
-fn s3a_a_call_statement_is_refused_by_the_executor_layer() {
-    let src = r#"
+fn s3a_a_call_statement_is_decided_by_the_executor_layer() {
+    let subset = r#"
 module top;
   function automatic integer f(input integer x, output integer o);
     begin o = x * 2; f = x + 1; end
@@ -787,7 +820,7 @@ module top;
   initial begin r = f(4, o); $display("r=%0d o=%0d", r, o); $finish; end
 endmodule
 "#;
-    let (ir, opts) = build_with_opts(src);
+    let (ir, opts) = build_with_opts(subset);
     assert!(!opts.func_table.is_empty());
     assert_eq!(
         NetArena::buildable(&ir, &opts).err(),
@@ -796,7 +829,31 @@ endmodule
     );
     assert_eq!(
         crate::native::run::runnable(&ir, &opts),
-        Err("a `wait fork`, or a subroutine CALL STATEMENT (task / output formals)"),
+        Ok(()),
+        "a subset call statement is walkable since A3-i"
+    );
+    // The SAME function, made suspendable by one added statement. Storage still
+    // says nothing (it is not a task and its body still stays in its window);
+    // the executor layer is the only one that changes its answer, which is what
+    // "this layer owns the decision" means.
+    let suspends = r#"
+module top;
+  function automatic integer f(input integer x, output integer o);
+    begin o = x * 2; $display("in f o=%0d", o); f = x + 1; end
+  endfunction
+  integer r, o;
+  initial begin r = f(4, o); $display("r=%0d o=%0d", r, o); $finish; end
+endmodule
+"#;
+    let (ir2, opts2) = build_with_opts(suspends);
+    assert_eq!(
+        NetArena::buildable(&ir2, &opts2).err(),
+        None,
+        "still no storage row — the function is not a task"
+    );
+    assert_eq!(
+        crate::native::run::runnable(&ir2, &opts2),
+        Err("a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b"),
     );
 }
 

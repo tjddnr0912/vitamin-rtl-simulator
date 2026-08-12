@@ -15,6 +15,7 @@ use crate::value::Value;
 // ---- split parts (mechanical refactor) ----
 pub(crate) use frame_window::*;
 pub(crate) use process::*;
+pub(crate) mod frame_call;
 mod frame_window;
 pub(crate) mod kpred;
 pub(crate) mod plusargs;
@@ -76,6 +77,58 @@ pub(crate) trait Kernel {
     fn k_lvalue_width(&self, lhs: &Lvalue) -> u32;
     /// READ: `(self-width, self-signed)` of `eid` from the width table.
     fn k_self_width(&self, eid: u32) -> (u32, bool);
+    /// READ: CONTEXT-sized evaluation of `eid` through THIS kernel's store.
+    ///
+    /// A3-i. The self-determined `k_eval` above is not enough for a subroutine
+    /// copy-in: IEEE §13.4.3 makes a formal a variable of its DECLARED type, so
+    /// the actual is evaluated in the formal's width and signedness. The engine
+    /// spells this `Scheduler::eval_ctx_top`, which reads its own nets — the one
+    /// store a native run never writes.
+    fn k_eval_ctx(&self, eid: u32, ctx_width: u32, ctx_signed: bool) -> Value;
+    /// READ: the base net of subroutine `func`'s frame window, i.e. the net id of
+    /// its slot 0. IR-derived (it is `func_table[func].base_net`, threaded
+    /// verbatim from elaborate), so both implementors answer identically — the
+    /// seam exists because only they hold the table.
+    fn k_frame_base(&self, func: u32) -> u32;
+    /// READ: the call-site binding for the `Terminator::Call` at process-local
+    /// block `bb` of process `proc`, or `None` when the sidecar has no entry
+    /// (a deferred hierarchical enable elaborate could not resolve).
+    ///
+    /// CLONED rather than borrowed, as the engine's own arm clones it: the
+    /// caller goes on to take `&mut self`, and a borrow of the sidecar would
+    /// keep the kernel immutably borrowed across the call it is describing.
+    fn k_task_call_site(&self, proc: u32, bb: u32) -> Option<crate::TaskCallInfo>;
+    /// READ: is the `Terminator::Call` at process-local block `bb` of process
+    /// `proc` one the SUBSET path can run — a resolved site with a synchronous
+    /// callee?
+    ///
+    /// The runtime twin of the gate's `native::frames::call_site_runnable`, and
+    /// it exists so the walk asserts its own precondition instead of trusting a
+    /// check made three layers away. Both ask the same two questions of the same
+    /// two tables; the gate must compute the suspendable set itself because it
+    /// runs before `simulate` installs `SimState::suspendable_tasks`, which is
+    /// what this reads.
+    fn k_call_site_runnable(&self, proc: u32, bb: u32) -> bool;
+    /// Run subroutine `callee` SYNCHRONOUSLY against a fresh frame, and return
+    /// the caller copy-outs that still need writing.
+    ///
+    /// The operation, not the struct (A1-iv-a): everything it touches — the frame
+    /// window, the dyn heap, the static slab, the depth guard, the `%m` scope
+    /// stack — is `SimState` state that both kernels borrow, so there is one
+    /// implementation and both impls delegate to it in a line. What does NOT
+    /// happen inside is any read or write of a NET, which is why this can be a
+    /// single seam at all: the inputs arrive already evaluated and the scalar
+    /// outputs leave unwritten.
+    ///
+    /// DYN out-formals are copied out INSIDE (they land in the shared heap);
+    /// scalar ones come back in `out_binds` order for `k_write_lvalue`.
+    fn k_run_subset_task(
+        &mut self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(Lvalue, Value)>;
     /// READ: the ExprId of an assoc iteration step's CURRENT-key argument, or
     /// `None` when the step reads none. The caller evaluates it through `k_eval`,
     /// i.e. through its own store.
