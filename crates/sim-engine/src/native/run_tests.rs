@@ -3706,6 +3706,144 @@ endmodule
     );
 }
 
+/// A8-a ABSOLUTE ANCHOR — a whole-handle COPY (IEEE §7.10), iverilog-pinned.
+///
+/// ⭐ **Zero kernel code, like V1 slice 1 and A1-i.** The `handle_copy` design
+/// row refused 81 designs for a feature whose entire implementation is a
+/// deep-clone inside `SimState::dyn_heap` — one object both kernels borrow,
+/// keyed by NET ID — with the two net ids arriving from a sidecar rather than
+/// from an evaluation. Nothing reads a net value, so there was nothing to route.
+///
+/// The lines are chosen so a SHALLOW copy (an alias rather than a clone) prints
+/// something else at every one:
+///
+/// * **A** — dynamic array. `d1[1] = 99` after the copy must not show through.
+/// * **B** — queue, and the SIZE as well as the elements: `q1.push_back(4)`
+///   after the copy leaves `q2` at 3.
+/// * **D** — a `string[]`, whose elements are themselves heap objects, so a
+///   clone that copied the handle list without cloning the elements passes A
+///   and fails here.
+/// * **E** — copying OVER an existing object (`d2 = new[0]` first), which is
+///   the arm that overwrites rather than fills an empty slot.
+///
+/// ⚠️ The ASSOC case is deliberately absent: `iverilog 13` cannot parse `int
+/// a1[int]` at all ("Type names are not valid expressions here"), so it is
+/// covered by the differential below instead of by this anchor. Splitting on
+/// what the oracle can answer, rather than weakening the anchor to fit, is the
+/// §4.5.302 rule.
+#[test]
+fn a_whole_handle_copy_has_its_iverilog_values() {
+    let src = r#"
+module top;
+  int  d1[], d2[];
+  int  q1[$], q2[$];
+  string s1[], s2[];
+  initial begin
+    d1 = new[3]; d1[0]=7; d1[1]=8; d1[2]=9;
+    d2 = d1;
+    d1[1] = 99;
+    $display("A d2=%0d,%0d,%0d size=%0d", d2[0], d2[1], d2[2], d2.size());
+    q1.push_back(1); q1.push_back(2); q1.push_back(3);
+    q2 = q1;
+    q1.push_back(4);
+    $display("B q2size=%0d q2=%0d,%0d,%0d q1size=%0d", q2.size(), q2[0], q2[1], q2[2], q1.size());
+    s1 = new[2]; s1[0] = "ab"; s1[1] = "cd";
+    s2 = s1; s1[0] = "zz";
+    $display("D s2=%s,%s s1_0=%s", s2[0], s2[1], s1[0]);
+    d2 = new[0]; d2 = d1;
+    $display("E d2_1=%0d size=%0d", d2[1], d2.size());
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A d2=7,8,9 size=3\n".to_string(),
+            "out|B q2size=3 q2=1,2,3 q1size=4\n".to_string(),
+            "out|D s2=ab,cd s1_0=zz\n".to_string(),
+            "out|E d2_1=99 size=3\n".to_string(),
+        ],
+        "whole-handle copy (iverilog 13 pinned)"
+    );
+}
+
+/// A8-a: the ASSOC half, which the anchor above cannot carry because
+/// `iverilog 13` will not parse an associative array.
+///
+/// Hand-IEEE §7.10: an assoc-to-assoc assignment copies the whole map by value,
+/// so a later write to either side is invisible to the other. Bounded queues are
+/// here too — `enforce_queue_bound` runs after the clone, and a copy INTO a
+/// `[$:1]` destination truncates with a warning.
+#[test]
+fn a_handle_copy_of_an_assoc_and_a_bounded_queue() {
+    let src = r#"
+module top;
+  int a1[int], a2[int];
+  int q1[$], bq[$:1];
+  initial begin
+    a1[5] = 50; a1[9] = 90;
+    a2 = a1;
+    a1[5] = 500;
+    $display("C a2_5=%0d a2_9=%0d a1_5=%0d n=%0d", a2[5], a2[9], a1[5], a2.num());
+    q1.push_back(1); q1.push_back(2); q1.push_back(3);
+    bq = q1;
+    $display("F bqsize=%0d bq=%0d,%0d", bq.size(), bq[0], bq[1]);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    let ev = sink.events.into_inner();
+    assert_eq!(
+        ev.iter()
+            .filter(|e| e.starts_with("out|"))
+            .collect::<Vec<_>>(),
+        vec![
+            "out|C a2_5=50 a2_9=90 a1_5=500 n=2\n",
+            "out|F bqsize=2 bq=1,2\n",
+        ],
+        "assoc + bounded-queue copy (hand-IEEE §7.10/§7.10.2)"
+    );
+    // …and the truncation is LOUD, which is the half a value comparison misses.
+    assert!(
+        ev.iter()
+            .any(|e| e.contains("bounded queue exceeded its bound")),
+        "the bound truncation must warn: {ev:?}"
+    );
+}
+
 /// A2-i: VIRTUAL dispatch runs on tier-3, and this test is why the gate has no
 /// row for it.
 ///

@@ -245,7 +245,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         assert_ctl: _,
         // ── v1-reject sidecars (§4.3) — each non-empty table disqualifies ───
         fork_modes,
-        handle_copy_stmts,
+        // A8-a: see the deleted `handle_copy` row below — store-independent.
+        handle_copy_stmts: _,
         // CORE since V1 slice 2c. Both queue-OPERATION tables live in `SimState`
         // and are read by code tier-3 already shares: `queue_slice_stmts` is
         // consulted inside `builtins::dispatch`, and `queue_bounds` by
@@ -291,7 +292,20 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     } = opts;
 
     flag(&mut out, "fork", fork_modes.len());
-    flag(&mut out, "handle_copy", handle_copy_stmts.len());
+    // ⭐⭐ **A8-a: `handle_copy` was PURELY CONSERVATIVE — zero kernel code.**
+    // A whole-handle copy (`d2 = d1`, IEEE §7.10) lowers to a no-op `Display`
+    // plus a StmtId → `(dst_net, src_net)` marker, and `builtins::dispatch`
+    // answers it BEFORE anything renders: it deep-clones `dyn_heap[src]` into
+    // `dyn_heap[dst]` and re-applies the queue bound. Every one of those is
+    // `SimState` — one object both kernels borrow, keyed by NET ID — and the
+    // two net ids come from the sidecar rather than from an evaluation. **No
+    // net value is read on any path**, so there was nothing to route.
+    //
+    // Measured, not argued: `dyn_heap` (V1 slice 2), `handle_copy_stmts`,
+    // `queue_bounds` and `dyn_warn_once_at`'s latch are the whole surface, and
+    // tier-3 has routed through `dispatch_with` since S1d-4b. The same shape as
+    // V1 slice 1 (SVA) and A1-i (`k_queue_pop`): the refusal named a feature,
+    // not a mechanism this backend lacked.
     flag(&mut out, "coverage", coverage_manifest.len());
     // The G2 probe/stage rails ride the interpreter's change hooks; tier-3 v1
     // does not reproduce them (doc-21 §4.3), so an instrumented run stays on

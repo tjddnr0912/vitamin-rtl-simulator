@@ -444,6 +444,13 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // saying BY WHAT will hide the difference.
         queue_slice_stmts: sc.queue_slice_stmts,
         queue_bounds: sc.queue_bounds,
+        // …and the WHOLE-HANDLE COPY markers (A8-a). Sixth entry in this list,
+        // and it would have made this slice's test measure nothing: `d2 = d1`
+        // between two handles lowers to a no-op `Display` PLUS this table, so
+        // without it the statement prints nothing and copies nothing — on both
+        // backends. The design would then agree about a deep copy neither
+        // performed, which is the exact shape of the four notes above.
+        handle_copy_stmts: sc.handle_copy_stmts,
         // …and the two heap ELEMENT refinements (V1 slice 3b). THIRD time this
         // file has been caught by the same omission (`assert_ctl` in slice 1,
         // `queue_slice_stmts` in 2c), and this one showed both failure modes at

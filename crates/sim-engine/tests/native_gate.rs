@@ -281,6 +281,43 @@ fn sidecar_families_reject_from_opts() {
 /// 160 class designs carry `class_rand`/`class_vtable` (they are per-CLASS and
 /// exist the moment a `rand` field or a method is declared), so a rule keyed on
 /// the TABLE rather than on the SITE would refuse all of them.
+/// A8-a: a WHOLE-HANDLE COPY (`d2 = d1`, IEEE §7.10) is core.
+///
+/// The positive assertion, for the same reason the heap-kind test above is one:
+/// a deleted key proves the row is gone, not that the shape runs. What makes it
+/// core is that the whole feature lives in `SimState::dyn_heap` — one object
+/// both kernels borrow, keyed by net id — and the two net ids come from the
+/// sidecar rather than from an evaluation, so no net value is read on any path.
+///
+/// ⚠️ Asserted through `SimOpts` AND through source, because the two reach the
+/// row differently: the table is what the gate counted, and the source is what
+/// proves elaborate still emits it (a lowering change that stopped emitting the
+/// marker would leave this row green while `d2 = d1` silently did nothing).
+#[test]
+fn a_whole_handle_copy_is_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.handle_copy_stmts.insert(0, (0, 0));
+    assert_eq!(
+        design_eligibility(&ir, &o)
+            .reject_reasons
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec![],
+        "a handle-copy marker must disqualify nothing"
+    );
+
+    let (ok, rs) = reasons(
+        "module t;\n\
+           int d1[], d2[];\n\
+           initial begin d1 = new[2]; d1[0] = 7; d2 = d1; d1[0] = 9;\n\
+             $display(\"%0d %0d\", d2[0], d1[0]); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "a design doing a handle copy must be eligible: {rs:?}");
+    assert!(rs.is_empty(), "no reject family may fire, got {rs:?}");
+}
+
 #[test]
 fn plain_oop_sidecars_are_core() {
     let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
