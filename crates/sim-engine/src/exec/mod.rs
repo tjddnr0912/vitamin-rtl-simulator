@@ -98,6 +98,48 @@ pub(crate) trait Kernel {
     /// caller goes on to take `&mut self`, and a borrow of the sidecar would
     /// keep the kernel immutably borrowed across the call it is describing.
     fn k_task_call_site(&self, proc: u32, bb: u32) -> Option<crate::TaskCallInfo>;
+    /// READ: the call-site binding for a NESTED `Terminator::Call` — one inside a
+    /// frame body, keyed by its GLOBAL `ir.blocks` id. The other table
+    /// (`k_task_call_site`) is keyed by `(template, process-local block)`; asking
+    /// the wrong one does not fail loudly, it MISSES, and a miss means the call
+    /// silently does not happen.
+    fn k_nested_call_site(&self, global_bb: u32) -> Option<crate::TaskCallInfo>;
+    /// READ: must this callee be DRIVEN by the walk (A3-ii-a) rather than run
+    /// whole inside the engine's synchronous frame executor (A3-i)?
+    ///
+    /// It is `suspendable_tasks` membership and nothing else — the same question
+    /// `run_process` asks to choose between pushing a `FrameRec` and calling
+    /// `run_task_call`. Whether such a frame may also PARK is the GATE's question,
+    /// not this one: by the time the walk is standing on the call, a parking
+    /// callee has already been refused.
+    fn k_callee_is_driven(&self, callee: u32) -> bool;
+    /// Open a driven frame: allocate the activation window, copy the inputs in,
+    /// and take this callee's frame-local dyn slots. Returns the stash the
+    /// matching exit puts back.
+    ///
+    /// The ORDER inside is `run_process`'s and is not re-derivable from the
+    /// signature — the actuals are captured before the stash takes the callee's
+    /// slots, because a recursive call can pass the formal as its own actual — so
+    /// it lives in ONE place (`SimState::enter_driven_frame`) that both this seam
+    /// and the engine reach.
+    fn k_enter_driven_frame(
+        &mut self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+    ) -> Vec<(u32, Option<crate::state::DynObj>)>;
+    /// Close a driven frame: read its output/inout slots, release the window and
+    /// the dyn stash, and return the SCALAR copy-outs for the caller's own write
+    /// funnel (the dyn ones are applied inside, to the shared heap).
+    ///
+    /// Same collect-then-write split, and the same disjointness argument, as
+    /// `k_run_subset_task`.
+    fn k_exit_driven_frame(
+        &mut self,
+        callee: u32,
+        out_binds: &[(u32, Lvalue)],
+        dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
+    ) -> Vec<(Lvalue, Value)>;
     /// READ: is the `Terminator::Call` at process-local block `bb` of process
     /// `proc` one the SUBSET path can run — a resolved site with a synchronous
     /// callee?

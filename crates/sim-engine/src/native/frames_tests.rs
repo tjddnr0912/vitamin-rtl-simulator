@@ -633,38 +633,60 @@ fn a_call_in_a_system_task_argument_is_admitted() {
 #[test]
 fn s3a_each_frame_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
-        // A3-i NARROWED this row and the design had to move with it. The old one —
-        // `task automatic add(input integer a, output integer b); b = a + 1;` — is
-        // exactly the SUBSET half the walk runs now, and its positive twin is
-        // `a_subset_task_call_has_its_iverilog_values`. What still refuses is a task
-        // the engine drives through its call stack, and the cheapest honest way to
-        // be one is to PRINT: `compute_suspendable_tasks` counts any `SysTask` as a
-        // suspend signal, because the synchronous `&self` executor is not where a
-        // `$display` inside a frame is rendered from.
+        // ⚠️ This row has moved TWICE, and both times because the walk grew an arm
+        // rather than because anything about the row was wrong.
+        //   * before A3-i it refused EVERY task;
+        //   * A3-i left it refusing every SUSPENDABLE task — and the designs here
+        //     were `$display`-in-a-task and write-a-module-net-from-a-task;
+        //   * A3-ii-a runs both of those, because "suspendable" names the engine's
+        //     EXECUTOR CHOICE and neither of them PARKS.
+        // What is left is the actual suspension, and it needs its own designs.
         (
-            "a suspendable task frame",
-            "a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b",
+            "a task frame that delays",
+            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
             r#"
 module top;
-  task automatic add(input integer a, output integer b);
-    begin b = a + 1; $display("in add b=%0d", b); end
+  task automatic wait_then(input integer a, output integer b);
+    begin #1 b = a + 1; end
   endtask
   integer r;
-  initial begin add(4, r); $display("r=%0d", r); $finish; end
+  initial begin wait_then(4, r); $display("r=%0d", r); $finish; end
 endmodule
 "#,
         ),
-        // …and the OTHER way to be suspendable, because the two reach the row
-        // through different arms of `stmt_signal` and a single design cannot show
-        // both are load-bearing: a body that writes a net outside its own window.
+        // …and the TRANSITIVE half, because a body whose own terminators are all
+        // `Goto`/`Branch`/`Return` still parks if it CALLS something that parks —
+        // and a single design cannot show `frame_suspends`' recursion is doing work.
         (
-            "a task that writes a module net",
-            "a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b",
+            "a task frame whose CALLEE delays",
+            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
             r#"
 module top;
-  integer g;
-  task automatic bump(input integer a); begin g = a + 1; end endtask
-  initial begin bump(4); $display("g=%0d", g); $finish; end
+  task automatic inner(input integer a, output integer b);
+    begin #1 b = a + 1; end
+  endtask
+  task automatic outer(input integer a, output integer b);
+    begin inner(a, b); end
+  endtask
+  integer r;
+  initial begin outer(4, r); $display("r=%0d", r); $finish; end
+endmodule
+"#,
+        ),
+        // …and an `@(posedge)` inside a task, which is a `Wait` rather than a
+        // `Delay` and reaches the same row through a different arm.
+        (
+            "a task frame that waits on an edge",
+            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
+            r#"
+module top;
+  reg clk = 1'b0;
+  always #1 clk = ~clk;
+  task automatic sync(output integer b);
+    begin @(posedge clk); b = 7; end
+  endtask
+  integer r;
+  initial begin sync(r); $display("r=%0d", r); $finish; end
 endmodule
 "#,
         ),
@@ -788,9 +810,11 @@ endmodule
     // 10 -> 7: V1 slice 3a admitted the three system-task-argument shapes, and
     // their positive twin is `a_call_in_a_system_task_argument_is_admitted`.
     // 7 -> 8: A3-i split the task row in two — the subset half runs natively now
-    // (`a_subset_task_call_has_its_iverilog_values`) and the suspendable half is
-    // covered by TWO designs, one per arm of `stmt_signal` that can reach it.
-    assert_eq!(cases.len(), 8, "frame refusal-row coverage moved");
+    // (`a_subset_task_call_has_its_iverilog_values`).
+    // 8 -> 9: A3-ii-a moved the remaining half from "suspendable" to "SUSPENDS",
+    // and it needs THREE designs: a `Delay`, a `Wait`, and a callee that parks
+    // behind a caller that does not (the transitive arm of `frame_suspends`).
+    assert_eq!(cases.len(), 9, "frame refusal-row coverage moved");
     // ⚠️ The WRITE twin of the "reads a module net" row has no design, and not
     // by omission: elaborate refuses a frame body that assigns to a net outside
     // the function (E3009), so the row can only ever be reached by a READ.
@@ -832,29 +856,75 @@ endmodule
         Ok(()),
         "a subset call statement is walkable since A3-i"
     );
-    // The SAME function, made suspendable by one added statement. Storage still
-    // says nothing (it is not a task and its body still stays in its window);
-    // the executor layer is the only one that changes its answer, which is what
-    // "this layer owns the decision" means.
-    let suspends = r#"
+    // The SAME shape as a TASK that prints — "suspendable" by the engine's
+    // executor test, but it does not park, so A3-ii-a DRIVES it. Both layers say
+    // yes, and the storage layer is the one that changed its mind.
+    let driven = r#"
 module top;
-  function automatic integer f(input integer x, output integer o);
-    begin o = x * 2; $display("in f o=%0d", o); f = x + 1; end
-  endfunction
-  integer r, o;
-  initial begin r = f(4, o); $display("r=%0d o=%0d", r, o); $finish; end
+  integer g;
+  task automatic t(input integer x, output integer o);
+    begin o = x * 2; $display("in t o=%0d", o); g = x; end
+  endtask
+  integer r;
+  initial begin t(4, r); $display("r=%0d g=%0d", r, g); $finish; end
 endmodule
 "#;
-    let (ir2, opts2) = build_with_opts(suspends);
+    let (ir2, opts2) = build_with_opts(driven);
     assert_eq!(
         NetArena::buildable(&ir2, &opts2).err(),
         None,
-        "still no storage row — the function is not a task"
+        "a suspendable task that never parks is admitted since A3-ii-a"
     );
+    assert_eq!(crate::native::run::runnable(&ir2, &opts2), Ok(()));
+}
+
+/// ⚠️ **Where the refusal of a PARKING callee lives — the storage layer, and
+/// only there.**
+///
+/// A3-i put that refusal on the executor row and A3-ii-a made it unreachable
+/// from there: a parking callee is always a TASK (elaborate refuses a timing
+/// control inside a function, E3009, and a function cannot enable a task), and
+/// `frames_admitted` refuses a parking task a whole layer earlier.
+///
+/// Pinned as its own test because the row-coverage table can no longer carry it,
+/// and an unpinned "some other layer gets there first" is exactly the kind of
+/// unstated closure a later widening loses.
+#[test]
+fn a_parking_callee_is_refused_by_the_storage_layer() {
+    let src = r#"
+module top;
+  task automatic wait_then(input integer a, output integer b);
+    begin #1 b = a + 1; end
+  endtask
+  integer r;
+  initial begin wait_then(4, r); $display("r=%0d", r); $finish; end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
     assert_eq!(
-        crate::native::run::runnable(&ir2, &opts2),
-        Err("a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b"),
+        NetArena::buildable(&ir, &opts).err(),
+        Some("a task frame that SUSPENDS (delay, wait or fork inside the body): S3b"),
     );
+    // …and the DESIGN gate accepts it, so this row is what does the work.
+    assert!(crate::native::design_eligibility(&ir, &opts)
+        .reject_reasons
+        .is_empty());
+    // The executor layer would refuse it too — asked on its own, which is how the
+    // census asks it. Both answers are kept because a layer that stopped refusing
+    // a shape on the grounds that another layer gets there first is a widening
+    // waiting to happen.
+    assert!(!crate::native::body::body_is_walkable(
+        &ir,
+        0,
+        ir.processes[0].entry,
+        &|bb| crate::native::frames::call_site_runnable(
+            &ir,
+            &opts,
+            &crate::native::frames::suspendable_set(&ir, &opts),
+            0,
+            bb
+        )
+    ));
 }
 
 /// The row that protects the frame-BLIND consumers — `wprog`'s compile-time slot

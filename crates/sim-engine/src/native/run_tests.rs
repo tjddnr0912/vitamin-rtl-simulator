@@ -2311,29 +2311,23 @@ module top;
 endmodule
 "#,
         ),
-        // A3-i split this row's population in two, so the SECOND half needs its
-        // own design or the row's remaining meaning is untested: a call statement
-        // is refused now only when its CALLEE suspends.
-        //
-        // ⚠️ The callee must be a FUNCTION with an output formal, not a task —
-        // first try was `task automatic t(...); n = a + 1;` and it reported the
-        // STORAGE row instead, because a suspendable task is refused a layer
-        // earlier. A function is never refused there, so this is the only shape
-        // that reaches this row through the call arm.
-        (
-            "a call statement whose callee suspends",
-            "a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b",
-            r#"
-module top;
-  function automatic integer f(input integer x, output integer o);
-    begin o = x * 2; $display("in f o=%0d", o); f = x + 1; end
-  endfunction
-  integer r, o;
-  initial begin r = f(4, o); $display("r=%0d o=%0d", r, o); $finish; end
-endmodule
-"#,
-        ),
     ];
+    // ⚠️⚠️ **The call-statement half of the `wait fork` row has NO DESIGN, and
+    // that is a measurement rather than an omission.** After A3-ii-a a call
+    // statement is refused only when its callee PARKS, and a parking callee is
+    // always a TASK: elaborate refuses a timing control inside a FUNCTION outright
+    // (E3009, "functions cannot have delay statements" — iverilog says the same),
+    // and a function cannot enable a task. A parking task is refused a layer
+    // earlier, by `frames_admitted`'s own row, so nothing reaches this one through
+    // the call arm.
+    //
+    // The row keeps the clause anyway, and `call_site_runnable` keeps answering
+    // `false`: the two gate layers are asked INDEPENDENTLY by the census and by
+    // `runnable`, and a layer that stopped refusing a shape because some other
+    // layer happens to get there first is how a widening loses it. What is
+    // recorded here is that today the clause is defensive — pinned by
+    // `a_parking_callee_is_refused_by_the_storage_layer` rather than by a row in
+    // this table.
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
         assert_eq!(
@@ -2351,10 +2345,9 @@ endmodule
             e.refused
         );
     }
-    // 4 -> 5: A3-i split the call-statement half of the `wait fork` row off from
-    // the terminator and onto the CALLEE, so the row now has two populations and
-    // one design cannot show both are reachable.
-    assert_eq!(cases.len(), 5, "refusal-row coverage moved");
+    // 4 -> 5 (A3-i: the call-statement half became its own population) -> 4 again
+    // (A3-ii-a: that population is now unreachable — see the note above).
+    assert_eq!(cases.len(), 4, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit
@@ -3370,21 +3363,119 @@ endmodule
             Err(r) => *refused.entry(r).or_default() += 1,
         }
     }
-    // ⚠️ The LAST design is refused on purpose and the count says so: `ignore`
-    // writes the module net `sink`, which is outside its frame window, so
-    // `compute_suspendable_tasks` marks it suspendable and A3-i does not admit
-    // it. Asserting the split rather than "all ran" is what stops this test from
-    // going quiet if the gate ever widens or narrows underneath it.
-    assert_eq!(ran, 4, "A3-i differential: runnable count moved");
+    // ⚠️ The LAST design was refused when this test was written and RUNS now:
+    // `ignore` writes the module net `sink`, which made it "suspendable", and
+    // A3-ii-a drives exactly that shape. The assertion moved with the gate rather
+    // than being deleted — asserting the split is what stops this test from going
+    // quiet if the gate ever widens or narrows underneath it again.
+    assert_eq!(ran, 5, "A3-i differential: runnable count moved");
     assert_eq!(
         refused,
-        [(
-            "a suspendable task frame (it suspends, forks, prints, or writes outside its frame): S3b",
-            1
-        )]
-        .into_iter()
-        .collect(),
+        Default::default(),
         "A3-i differential: refusal breakdown moved"
+    );
+}
+
+/// A3-ii-a ABSOLUTE ANCHOR — a DRIVEN task frame, iverilog-pinned.
+///
+/// A3-i delegated a subset call to the engine's `&self` executor. This is the
+/// other half: a task the engine would drive from a `FrameRec` — it prints, it
+/// writes a module net — but which reaches no `Delay`/`Wait`/`Fork`, so the tier-3
+/// walk runs its CFG itself and the whole activation nests inside one `run_body`.
+///
+/// Every line is a piece of that walk, chosen so a frame-blind path prints
+/// something else:
+///
+/// * **A** — a `$display` INSIDE the frame reading its own formals, and a write to
+///   a MODULE net from inside the frame. The two go to different stores, and the
+///   first three drafts of this slice got exactly one of them right at a time.
+/// * **B** — a NESTED driven frame, whose caller has a frame-local (`t = 99`) that
+///   the callee must not alias: `outer` sees 21, not 99, and not the caller's.
+/// * **C** — RECURSION, four deep, with a frame-local accumulator per activation.
+///   `10` is `1+2+3+4`; `hits=4` counts the activations that recursed.
+/// * **D** — control flow inside the frame: a `for` and an `if`. `18` is
+///   `1+2+4+5+6` (3 skipped), so a branch taken the wrong way is visible.
+/// * **E** — the copy-out destination is an ARRAY ELEMENT and the actual is a net.
+///
+/// ⭐ **Absolute, not differential** (ROADMAP §5.1-e). The frame window, the dyn
+/// heap and the diagnostic sink are all `SimState` objects both backends share, so
+/// a native-vs-VM comparison cannot see most of what this slice wrote. It is
+/// iverilog-pinned end to end — every value below is `vvp`'s.
+#[test]
+fn a_driven_task_frame_has_its_iverilog_values() {
+    let src = r#"
+module top;
+  reg [7:0] a, b, c;
+  integer g, hits;
+  reg [7:0] mem [0:3];
+
+  task automatic show(input [7:0] x, output [7:0] y);
+    begin y = x + 8'd1; $display("  show x=%0d y=%0d", x, y); g = g + x; end
+  endtask
+
+  task automatic outer(input [7:0] x, output [7:0] y);
+    reg [7:0] t;
+    begin t = 8'd99; show(x, t); $display("  outer t=%0d", t); y = t + 8'd10; end
+  endtask
+
+  task automatic down(input integer n, output integer acc);
+    integer inner;
+    begin
+      if (n <= 0) acc = 0;
+      else begin down(n - 1, inner); acc = inner + n; hits = hits + 1; end
+    end
+  endtask
+
+  task automatic sum_to(input integer n, output integer s);
+    integer i;
+    begin
+      s = 0;
+      for (i = 1; i <= n; i = i + 1) if (i != 3) s = s + i;
+    end
+  endtask
+
+  integer r1, r2;
+  initial begin
+    g = 0; hits = 0;
+    show(8'd5, b);            $display("A b=%0d g=%0d", b, g);
+    outer(8'd20, c);          $display("B c=%0d g=%0d", c, g);
+    down(4, r1);              $display("C r1=%0d hits=%0d", r1, hits);
+    sum_to(6, r2);            $display("D r2=%0d", r2);
+    a = 8'd7; show(a, mem[2]); $display("E mem2=%0d g=%0d", mem[2], g);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|  show x=5 y=6\n".to_string(),
+            "out|A b=6 g=5\n".to_string(),
+            "out|  show x=20 y=21\n".to_string(),
+            "out|  outer t=21\n".to_string(),
+            "out|B c=31 g=25\n".to_string(),
+            "out|C r1=10 hits=4\n".to_string(),
+            "out|D r2=18\n".to_string(),
+            "out|  show x=7 y=8\n".to_string(),
+            "out|E mem2=8 g=32\n".to_string(),
+        ],
+        "driven task-frame values"
     );
 }
 

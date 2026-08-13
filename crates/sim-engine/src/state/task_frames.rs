@@ -369,6 +369,61 @@ impl SimState<'_> {
         scalar_writes
     }
 
+    /// A3-ii-a: OPEN a driven frame — the entry half of `run_process`'s
+    /// suspendable arm, minus the `FrameRec` (whose fields all serve a suspension
+    /// this class does not have).
+    ///
+    /// ⭐ ONE implementation, for the same reason `run_subset_task` is one: none
+    /// of it touches a NET. The inputs arrive already evaluated in the caller's
+    /// context, and everything below is frame/heap state that both kernels borrow.
+    ///
+    /// The order is `run_process`'s and each step depends on the one before:
+    /// CAPTURE the caller's dyn actuals first (a recursive call can pass the
+    /// formal as its own actual, and the stash is about to take it), then take the
+    /// callee's slots, then enter, then install the captured actuals into the
+    /// fresh formal slots (pass-by-value, IEEE §13.5.1).
+    pub(crate) fn enter_driven_frame(
+        &self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+    ) -> Vec<(u32, Option<DynObj>)> {
+        let captured = self.frame_dyn_capture_formals(callee, dyn_snaps);
+        let dyn_stash = self.frame_dyn_enter(callee);
+        self.enter_task_frame(callee, in_vals);
+        self.frame_dyn_install_formals(captured);
+        dyn_stash
+    }
+
+    /// A3-ii-a: CLOSE a driven frame — `run_process`'s `Return` arm for the same
+    /// class, returning the scalar copy-outs instead of writing them.
+    ///
+    /// Two orderings here are load-bearing and both are `run_process`'s: the dyn
+    /// out/inout results are CAPTURED before `frame_dyn_exit` restores the outer
+    /// activation's slots and INSTALLED after (under recursion the caller's array
+    /// net IS the callee's formal net, so an in-place copy-out would be
+    /// discarded), and `exit_task_frame` reads the slots before the window goes.
+    pub(crate) fn exit_driven_frame(
+        &self,
+        callee: u32,
+        out_binds: &[(u32, Lvalue)],
+        dyn_stash: Vec<(u32, Option<DynObj>)>,
+    ) -> Vec<(Lvalue, Value)> {
+        let out_s: Vec<u32> = out_binds.iter().map(|&(s, _)| s).collect();
+        let outs = self.exit_task_frame(callee, &out_s);
+        let outs_dyn = self.frame_dyn_capture_out(callee, out_binds);
+        let mut scalar_writes = Vec::new();
+        for ((s, lval), val) in out_binds.iter().zip(outs) {
+            if self.frame_dyn_out_bind(callee, *s, lval) {
+                continue; // dyn formal → heap deep-copy, not the scalar slot value
+            }
+            scalar_writes.push((lval.clone(), val));
+        }
+        self.frame_dyn_exit(dyn_stash);
+        self.frame_dyn_install_formals(outs_dyn);
+        scalar_writes
+    }
+
     /// Stage-2/3 fork-in-frame: allocate a Case-B shared-window arena slot pre-filled with
     /// `init`, reusing a freed handle when available (the `dyn_heap`/`class_heap` free-list
     /// pattern). Returns the handle a `WindowSlot::Shared` carries. Stage 3: seed the slot's

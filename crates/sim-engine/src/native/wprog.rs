@@ -355,6 +355,16 @@ fn compile_node(
             ) {
                 return None;
             }
+            // A3-ii-a: DECLINE a frame slot. This arm resolves the net to an
+            // arena slot at COMPILE time, and a frame-local net's slot is dead —
+            // its value is in the activation window. The generic evaluator below
+            // reads through the composite `NetReader`, which routes; the
+            // specialised one cannot, so the only correct answer here is to fall
+            // through. (Measured: without this, every formal read `x` while the
+            // module net beside it was right.)
+            if arena.frame.get(*net as usize).copied().unwrap_or(false) {
+                return None;
+            }
             arena.assert_owns(*net, "wprog::compile Expr::Signal");
             let slot = arena.slots.get(*net as usize)?;
             if slot.width != w || slot.words != 1 {

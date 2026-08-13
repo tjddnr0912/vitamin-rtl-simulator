@@ -143,11 +143,34 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_task_call_site(&self, proc: u32, bb: u32) -> Option<crate::TaskCallInfo> {
         self.st.task_calls_proc.get(&(proc, bb)).cloned()
     }
+    fn k_nested_call_site(&self, global_bb: u32) -> Option<crate::TaskCallInfo> {
+        self.st.task_calls_func.get(&global_bb).cloned()
+    }
+    fn k_callee_is_driven(&self, callee: u32) -> bool {
+        self.st.suspendable_tasks.contains(&callee)
+    }
+    fn k_enter_driven_frame(
+        &mut self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+    ) -> Vec<(u32, Option<crate::state::DynObj>)> {
+        self.st.enter_driven_frame(callee, in_vals, dyn_snaps)
+    }
+    fn k_exit_driven_frame(
+        &mut self,
+        callee: u32,
+        out_binds: &[(u32, Lvalue)],
+        dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
+    ) -> Vec<(Lvalue, Value)> {
+        self.st.exit_driven_frame(callee, out_binds, dyn_stash)
+    }
     fn k_call_site_runnable(&self, proc: u32, bb: u32) -> bool {
-        match self.st.task_calls_proc.get(&(proc, bb)) {
-            Some(info) => !self.st.suspendable_tasks.contains(&info.callee),
-            None => false,
-        }
+        crate::exec::frame_call::site_runnable(
+            self.st.ir,
+            &self.st.suspendable_tasks,
+            self.st.task_calls_proc.get(&(proc, bb)),
+        )
     }
     fn k_run_subset_task(
         &mut self,

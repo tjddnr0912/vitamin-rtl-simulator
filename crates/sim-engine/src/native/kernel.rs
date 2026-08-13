@@ -1135,6 +1135,31 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 self.sched.st.assoc_str_write(c.net, key, &value);
                 return false;
             }
+            // A3-ii-a: the FRAME lane, and it is the exact mirror of the read
+            // path's — `NetReader::read_net` above has routed a frame-local net to
+            // `SimState` since S3a, and this side had no counterpart. Harmless
+            // while tier-3 never executed a frame body (no statement could name a
+            // frame slot: `frames_admitted`'s module-body row forbids it); the
+            // moment the walk drives one, a body's `s = x + y` would otherwise
+            // land in the arena's DEAD slot for that net while every read came
+            // from the window.
+            //
+            // The split is `SimState::write_lvalue_general`'s own, delegating to
+            // the same method: single chunk, `frame_local`, and NOT a non-string
+            // dyn handle (a frame-local dyn array keeps its elements in the heap,
+            // so it belongs to the lane above; a frame-local `string` is
+            // `dyn_is_handle` too but is slab-stored and belongs here).
+            //
+            // `false` — a frame slot is not a flat-store net, so it never enters
+            // the dirty channel. Same as the engine's lane, and it is what stops
+            // a frame-local write from waking a process.
+            if self.is_frame_local(c.net)
+                && (!self.is_heap_net(c.net)
+                    || self.ir.nets[c.net as usize].kind == sim_ir::NetKind::String)
+            {
+                self.sched.st.frame_write_lvalue(lhs, value);
+                return false;
+            }
             if self.is_heap_net(c.net) {
                 let (off, word) = offsets.as_slice().first().copied().unwrap_or((0, 0));
                 // `&self` — the heap is interior-mutable (§4.5.194), which is
@@ -1405,11 +1430,36 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_task_call_site(&self, proc: u32, bb: u32) -> Option<crate::TaskCallInfo> {
         self.sched.st.task_calls_proc.get(&(proc, bb)).cloned()
     }
+    fn k_nested_call_site(&self, global_bb: u32) -> Option<crate::TaskCallInfo> {
+        self.sched.st.task_calls_func.get(&global_bb).cloned()
+    }
+    fn k_callee_is_driven(&self, callee: u32) -> bool {
+        self.sched.st.suspendable_tasks.contains(&callee)
+    }
+    fn k_enter_driven_frame(
+        &mut self,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+    ) -> Vec<(u32, Option<crate::state::DynObj>)> {
+        self.sched.st.enter_driven_frame(callee, in_vals, dyn_snaps)
+    }
+    fn k_exit_driven_frame(
+        &mut self,
+        callee: u32,
+        out_binds: &[(u32, Lvalue)],
+        dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
+    ) -> Vec<(Lvalue, Value)> {
+        self.sched
+            .st
+            .exit_driven_frame(callee, out_binds, dyn_stash)
+    }
     fn k_call_site_runnable(&self, proc: u32, bb: u32) -> bool {
-        match self.sched.st.task_calls_proc.get(&(proc, bb)) {
-            Some(info) => !self.sched.st.suspendable_tasks.contains(&info.callee),
-            None => false,
-        }
+        crate::exec::frame_call::site_runnable(
+            self.sched.st.ir,
+            &self.sched.st.suspendable_tasks,
+            self.sched.st.task_calls_proc.get(&(proc, bb)),
+        )
     }
     fn k_run_subset_task(
         &mut self,

@@ -81,6 +81,24 @@ pub struct NetArena {
     /// §4.5.334's `panic!` probe, and a debug assert for the same reason: the
     /// release path must stay byte-identical.
     pub heap: Vec<bool>,
+    /// A3-ii-a: per net, "this net is a subroutine FRAME SLOT".
+    ///
+    /// The exact twin of `heap` above, for the other store this arena does not
+    /// own: a frame-local net's value lives in `SimState`'s activation window or
+    /// static slab, reached through `NativeKernel::read_net` / `write_routed`.
+    /// Its arena slot exists (so `slots[net]` keeps meaning net `net`) and is
+    /// DEAD.
+    ///
+    /// ⚠️ It has to be HERE, beside `heap`, rather than only on `SimState`,
+    /// because the consumer that needed it most does not hold the kernel:
+    /// `wprog::compile` resolves a `Signal` to an arena SLOT at compile time, and
+    /// a frame-local net passed every shape check it makes. Measured — the first
+    /// end-to-end run of a driven frame printed `x` for every formal while the
+    /// module net beside it was right, because `k_eval_for_lvalue` took the
+    /// specialised path and read the dead slot. `frames_admitted`'s module-body
+    /// row is why this was harmless until the walk started executing frame
+    /// bodies.
+    pub frame: Vec<bool>,
     /// S1d-2: the dirty/edge channel, driven by the write funnel's two store
     /// points. It lives HERE, as it does on `SimState`, because those points are
     /// inside the funnel — a channel the funnel could not reach would have to be
@@ -163,6 +181,20 @@ impl NetArena {
         let mut arena = NetArena {
             slots,
             heap: ir.nets.iter().map(|nv| kind_is_heap(nv.kind)).collect(),
+            // Every net inside some func's window `[base, base+len)`. Built from
+            // the SAME sidecar `SimState::build_func_routing` uses, so the two
+            // tables cannot disagree about which nets are frame slots.
+            frame: {
+                let mut f = vec![false; ir.nets.len()];
+                for m in opts.func_table.iter() {
+                    let lo = m.base_net as usize;
+                    let hi = lo.saturating_add(m.locals_len as usize).min(f.len());
+                    for slot in f.iter_mut().take(hi).skip(lo) {
+                        *slot = true;
+                    }
+                }
+                f
+            },
             ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
             pending_range: std::cell::RefCell::new(Vec::new()),

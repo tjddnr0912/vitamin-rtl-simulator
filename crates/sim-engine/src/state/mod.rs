@@ -850,6 +850,27 @@ pub(crate) struct HeapRouted<'x, 'a, N: crate::eval::NetReader + ?Sized> {
     pub(crate) nets: &'x N,
 }
 
+impl<N: crate::eval::NetReader + ?Sized> HeapRouted<'_, '_, N> {
+    /// Is this net's value in `SimState` rather than in the wrapped store?
+    ///
+    /// TWO bitmaps, and the second is A3-ii-a's. The wrapper was built for the
+    /// HEAP (`dyn_is_handle`) — a net whose elements live in `dyn_heap` — and a
+    /// subroutine FRAME slot is the same situation for a different store: its
+    /// value is in the activation window, and the wrapped store's slot is dead.
+    ///
+    /// It was harmless to omit while nothing executed a frame body through this
+    /// wrapper. The moment the tier-3 walk did, `$display("%0d", x)` INSIDE a
+    /// task rendered `x` for every formal — the formatter reaches the arena
+    /// through exactly this path, so a frame-blind wrapper is a frame-blind
+    /// formatter. Measured, not reasoned: the copy-out beside it was already
+    /// correct, which is what made the split visible.
+    fn in_state(&self, net: u32) -> bool {
+        let i = net as usize;
+        self.st.dyn_is_handle.get(i).copied().unwrap_or(false)
+            || self.st.frame_local.get(i).copied().unwrap_or(false)
+    }
+}
+
 impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'_, '_, N> {
     /// `false` — this IS the routing, so asking for it again would recurse.
     fn routes_heap_to_state(&self) -> bool {
@@ -857,29 +878,17 @@ impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'
     }
 
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
-        if self
-            .st
-            .dyn_is_handle
-            .get(net as usize)
-            .copied()
-            .unwrap_or(false)
-        {
+        if self.in_state(net) {
             return self.st.read_net(net, word);
         }
         self.nets.read_net(net, word)
     }
 
-    /// The leaf fast path must not fire for a heap net; `SimState`'s own
-    /// implementation already bails on `dyn_is_handle`, and the wrapped store
-    /// would answer from a dead slot. Ask the same question first.
+    /// The leaf fast path must not fire for a net this wrapper routes;
+    /// `SimState`'s own implementation already bails on both bitmaps, and the
+    /// wrapped store would answer from a dead slot. Ask the same question first.
     fn read_scalar_words(&self, net: u32, w: u32, ctx_signed: bool) -> Option<(u64, u64)> {
-        if self
-            .st
-            .dyn_is_handle
-            .get(net as usize)
-            .copied()
-            .unwrap_or(false)
-        {
+        if self.in_state(net) {
             return None;
         }
         self.nets.read_scalar_words(net, w, ctx_signed)

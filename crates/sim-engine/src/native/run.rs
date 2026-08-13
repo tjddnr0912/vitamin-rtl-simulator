@@ -129,7 +129,7 @@ pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'s
     let susp = crate::native::frames::suspendable_set(ir, opts);
     for pi in 0..ir.processes.len() as u32 {
         if !body_is_walkable(ir, pi, ir.processes[pi as usize].entry, &|bb| {
-            crate::native::frames::call_site_runnable(opts, &susp, pi, bb)
+            crate::native::frames::call_site_runnable(ir, opts, &susp, pi, bb)
         }) {
             // Names the REACHABLE causes, and A3-i moved one of them out.
             //
@@ -191,7 +191,7 @@ fn body_dispatch_ok(ir: &SimIr, proc: u32) -> bool {
 pub(crate) fn body_admissible(ir: &SimIr, opts: &crate::SimOpts, proc: u32) -> bool {
     let susp = crate::native::frames::suspendable_set(ir, opts);
     body_is_walkable(ir, proc, ir.processes[proc as usize].entry, &|bb| {
-        crate::native::frames::call_site_runnable(opts, &susp, proc, bb)
+        crate::native::frames::call_site_runnable(ir, opts, &susp, proc, bb)
     }) && body_dispatch_ok(ir, proc)
 }
 

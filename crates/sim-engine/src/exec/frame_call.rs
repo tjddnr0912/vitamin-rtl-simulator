@@ -46,25 +46,196 @@ use sim_ir::NetKind;
 use crate::exec::Kernel;
 use crate::value::Value;
 
-/// Perform the `Terminator::Call` at process-local block `bb` of process `proc`.
+/// Does this subroutine body actually PARK — reach a terminator that ends the
+/// activation before `Return`?
 ///
-/// PRECONDITION: `native::frames::call_site_runnable` (tier-3) or the engine's
-/// own `suspendable_tasks` test (tier-2) said this callee is synchronous. The
-/// caller advances to `ret_bb`; this returns nothing because a subset call cannot
-/// suspend — that is what makes it the subset.
-pub(crate) fn subset_task_call<K: Kernel>(k: &mut K, proc: u32, bb: u32) {
-    let Some(info) = k.k_task_call_site(proc, bb) else {
+/// The question `suspendable_set` does NOT answer. That set names the executor
+/// the engine picks (the `&self` synchronous one cannot print, write out of
+/// frame, or schedule an NBA); this names the property tier-3's walk turns on,
+/// because a frame that never parks has an activation that begins and ends
+/// inside one `run_body` call.
+///
+/// TRANSITIVE through nested calls: a body whose own terminators are all
+/// `Goto`/`Branch`/`Return` still parks if it CALLS something that parks. The
+/// callee is reached through `Terminator::Call.target`, which is the callee's
+/// entry block — the same mapping `compute_suspendable_tasks` builds.
+///
+/// ⚠️ **The transitive arm is REDUNDANT TODAY, and that was measured rather than
+/// argued.** A mutation that drops it survives the whole suite, and the reason is
+/// structural: `frames_admitted` asks this question of EVERY func in the table,
+/// so a design whose only parking task is a nested callee is refused by that
+/// callee's own row — the caller's answer never decides anything. It is kept
+/// because it is the fail-closed direction and because the redundancy is a
+/// property of the CALLER (`frames_admitted` visiting everything), not of this
+/// function: a future gate that asks only about called funcs would need it back.
+/// Recorded as redundant instead of presented as load-bearing.
+///
+/// Reachability from `entry` only, like every other walk in this file: a block
+/// the CFG cannot reach cannot park.
+///
+/// ⚠️ ONE block-visited set across the WHOLE transitive walk, not one per callee,
+/// and it is what terminates on a RECURSIVE task. A first draft recursed per
+/// callee with a fresh set; `task automatic t(...); … t(n-1); … endtask` would
+/// have re-entered `t`'s entry block forever. The blocks of every func live in
+/// one arena, so one set is both correct and sufficient.
+pub(crate) fn frame_suspends(
+    ir: &sim_ir::SimIr,
+    susp: &std::collections::BTreeSet<u32>,
+    entry: u32,
+) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut stack = vec![entry];
+    while let Some(b) = stack.pop() {
+        if !seen.insert(b) {
+            continue;
+        }
+        let Some(blk) = ir.blocks.get(b as usize) else {
+            // An out-of-range block id can only come from a malformed sidecar,
+            // which the caller's window checks already refuse. Answering "it
+            // suspends" is the fail-CLOSED direction for an ACCEPT gate.
+            return true;
+        };
+        match &blk.term {
+            sim_ir::Terminator::Goto { target } => stack.push(*target),
+            sim_ir::Terminator::Branch {
+                then_bb, else_bb, ..
+            } => {
+                stack.push(*then_bb);
+                stack.push(*else_bb);
+            }
+            sim_ir::Terminator::Call { target, ret_bb } => {
+                // A nested callee that is itself suspendable-and-parking makes
+                // THIS body park too. A nested SUBSET callee does not — it runs
+                // synchronously inside the frame, exactly as A3-i's does. Either
+                // way its blocks join THIS walk, which is what makes the answer
+                // transitive.
+                match ir.funcs.iter().position(|f| f.entry == *target) {
+                    Some(cf) if susp.contains(&(cf as u32)) => stack.push(*target),
+                    // An unresolvable target is a placeholder (a deferred hier
+                    // enable). Fail closed, for the same reason as above.
+                    None => return true,
+                    Some(_) => {}
+                }
+                stack.push(*ret_bb);
+            }
+            sim_ir::Terminator::Delay { .. }
+            | sim_ir::Terminator::Wait { .. }
+            | sim_ir::Terminator::Fork { .. } => return true,
+            sim_ir::Terminator::Return => {}
+        }
+    }
+    false
+}
+
+/// Can the walk run the call described by `site`? ONE spelling for the GATE
+/// (`native::frames::callee_mode`) and the walk's own `debug_assert`.
+///
+/// ⚠️ It exists because the two got out of step the moment A3-ii-a widened the
+/// gate: the runtime twin still asked A3-i's question (`is the callee
+/// synchronous`), so a driven frame the gate had just admitted tripped
+/// `run_body`'s precondition assert. A predicate with two spellings does not stay
+/// in agreement across a widening — it only looks like it does until one moves.
+pub(crate) fn site_runnable(
+    ir: &sim_ir::SimIr,
+    susp: &std::collections::BTreeSet<u32>,
+    site: Option<&crate::TaskCallInfo>,
+) -> bool {
+    let Some(info) = site else {
+        return false;
+    };
+    if !susp.contains(&info.callee) {
+        return true; // A3-i: synchronous, delegated whole
+    }
+    match ir.funcs.get(info.callee as usize) {
+        // A3-ii-a: driven, provided it never parks.
+        Some(fd) => !frame_suspends(ir, susp, fd.entry),
+        None => false,
+    }
+}
+
+/// One OPEN driven frame — A3-ii-a's per-activation record.
+///
+/// The three fields `run_process` keeps in a `FrameRec` and nothing more: this
+/// walk's frames never park, so there is no `window`, no `dyn_parked`, no
+/// `forked`, no `is_arm`. Saying which fields are ABSENT is the point — each one
+/// exists in the engine for a suspension this gate refuses.
+pub(crate) struct OpenFrame {
+    pub callee: u32,
+    /// This frame's PC in the GLOBAL `ir.blocks` arena.
+    pub bb: u32,
+    /// Where the PARENT resumes: a global block id when the parent is another
+    /// frame, a process-local one when this is the outermost. Read by whether the
+    /// stack is empty after the pop — `FrameRec::ret_bb`'s own convention.
+    pub ret_bb: u32,
+    pub out_binds: Vec<(u32, sim_ir::Lvalue)>,
+    /// The heap objects the OUTER activation held in this callee's frame-local
+    /// dyn slots, taken at entry and put back at `Return`.
+    pub dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
+}
+
+/// What the walk should do with the `Terminator::Call` it is standing on.
+pub(crate) enum Taken {
+    /// The call is finished; advance to `ret_bb`.
+    Done,
+    /// A frame was opened; drive it, and its `Return` will land the parent.
+    Opened(OpenFrame),
+}
+
+/// Perform — or OPEN — the call at the position the walk is standing on.
+///
+/// `in_frame` is the caller's own frame PC when the walk is inside one, and it
+/// selects the SIDE TABLE: a call site in a process body is keyed by
+/// `(template, process-local block)` in `task_calls_proc`, a nested one by its
+/// GLOBAL block id in `task_calls_func`. Reading the wrong table does not fail
+/// loudly — it misses, and a miss means "advance past the call", i.e. the call
+/// silently does not happen.
+pub(crate) fn call_here<K: Kernel>(k: &mut K, proc: u32, bb: u32, in_frame: Option<u32>) -> Taken {
+    let site = match in_frame {
+        Some(gbb) => k.k_nested_call_site(gbb),
+        None => k.k_task_call_site(proc, bb),
+    };
+    let Some(info) = site else {
         // A site with no sidecar entry is a deferred hierarchical enable whose
         // actuals elaborate could not resolve. The engine advances past it; so do
-        // we. Tier-3 never gets here (`call_site_runnable` refuses the site), and
-        // saying so is the point — this arm exists for `K = Scheduler`.
-        return;
+        // we. The tier-3 gate refuses such a site, and saying so is the point.
+        return Taken::Done;
     };
     let (in_vals, dyn_snaps) = split_in_binds(k, &info);
+    if k.k_callee_is_driven(info.callee) {
+        // A3-ii-a: DRIVEN. Enter the frame here — the window has to be live
+        // before the walk fetches the callee's first block — and hand the walk
+        // the record that closes it.
+        let dyn_stash = k.k_enter_driven_frame(info.callee, &in_vals, &dyn_snaps);
+        return Taken::Opened(OpenFrame {
+            callee: info.callee,
+            bb: k.k_ir().funcs[info.callee as usize].entry,
+            ret_bb: bb_after(k, proc, bb, in_frame),
+            out_binds: info.out_binds,
+            dyn_stash,
+        });
+    }
+    // A3-i: SYNCHRONOUS — the whole call happens inside the engine's `&self`
+    // frame executor and only the copy-out is ours.
     let writes = k.k_run_subset_task(info.callee, &in_vals, &dyn_snaps, &info.out_binds);
     for (lval, val) in writes {
         let offs = k.k_resolve_lvalue_offsets(&lval);
         k.k_write_lvalue(&lval, val, &offs);
+    }
+    Taken::Done
+}
+
+/// The `ret_bb` of the `Terminator::Call` the walk is standing on, read from
+/// whichever block space that position lives in.
+fn bb_after<K: Kernel>(k: &K, proc: u32, bb: u32, in_frame: Option<u32>) -> u32 {
+    let ir = k.k_ir();
+    let term = match in_frame {
+        Some(gbb) => &ir.blocks[gbb as usize].term,
+        None => &ir.processes[proc as usize].body[bb as usize].term,
+    };
+    match term {
+        sim_ir::Terminator::Call { ret_bb, .. } => *ret_bb,
+        // Unreachable: the caller only asks while standing on a `Call`.
+        _ => bb,
     }
 }
 

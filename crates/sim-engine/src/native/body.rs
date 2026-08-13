@@ -73,6 +73,7 @@
 
 use sim_ir::{SimIr, Terminator};
 
+use crate::exec::frame_call::OpenFrame;
 use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 
 /// Can this process body be executed by the walk below — i.e. does it reach no
@@ -222,15 +223,32 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
     );
     let mut bb = entry;
     let mut guard: u64 = 0;
+    // A3-ii-a: this activation's OPEN task frames, innermost last.
+    //
+    // ⭐ It is a LOCAL, not scheduler state, and that is the whole reason this
+    // half could be split off. `run_process` keeps its frames in
+    // `activities[pi].call_stack` because a frame there can PARK: the activation
+    // ends, the window is stashed, and some later delta resumes it. The gate
+    // admits only frames that reach no `Delay`/`Wait`/`Fork`, so every frame this
+    // walk opens is closed by a `Return` before `run_body` returns — its lifetime
+    // is exactly this Rust call. Nothing to stash, nothing to restore, no
+    // `Activity` for tier-3 to seed.
+    //
+    // Empty for a design with no frame calls, which is every design before A3-i.
+    let mut frames: Vec<OpenFrame> = Vec::new();
     // Per-process context (`$time`'s multiplier, `%m`'s scope) — the engine
     // installs it on every block activation, and a walk that skipped it would
     // render from whatever process ran last.
     k.k_enter_body(proc);
     loop {
-        // PROCESS-LOCAL indexing: a process body is `ir.processes[t].body`, not
-        // the global `ir.blocks` arena (that one is for task frames, which the
-        // `func_table` rejection makes unreachable here).
-        let block = &ir.processes[proc as usize].body[bb as usize];
+        // TWO BLOCK SPACES, exactly as `run_process`'s frame-aware fetch has: a
+        // task frame's PC indexes the GLOBAL `ir.blocks` arena, a process body's
+        // indexes `ir.processes[t].body`. Using one for the other is not a subtle
+        // bug — it reads a different design's statements.
+        let block = match frames.last() {
+            Some(f) => &ir.blocks[f.bb as usize],
+            None => &ir.processes[proc as usize].body[bb as usize],
+        };
         for &sid in &block.stmts {
             let effect = compute_effect(&*k, &ir.stmts[sid as usize], sid);
             if let Some(step) = apply_effect(k, effect) {
@@ -272,29 +290,73 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
             // backstop, not as a covered behaviour; treat it as unproven.
             k.k_drain_diags();
         }
+        // `run_process`'s `set_pos!`, and it exists for the same reason: every
+        // non-suspending terminator has to write the TOP FRAME's PC when one is
+        // open and the process's otherwise.
+        macro_rules! set_pos {
+            ($t:expr) => {
+                match frames.last_mut() {
+                    Some(f) => f.bb = $t,
+                    None => bb = $t,
+                }
+            };
+        }
         match &block.term {
-            Terminator::Goto { target } => bb = *target,
+            Terminator::Goto { target } => {
+                let t = *target;
+                set_pos!(t);
+            }
             Terminator::Branch {
                 cond,
                 then_bb,
                 else_bb,
             } => {
-                bb = if k.k_truthy(*cond) {
+                let t = if k.k_truthy(*cond) {
                     *then_bb
                 } else {
                     *else_bb
                 };
+                set_pos!(t);
             }
             Terminator::Return => {
-                // `proc` is a TEMPLATE id here and `Scheduler::rearm` indexes
-                // ACTIVITIES. They are the same number only because the S0 gate
-                // refuses forks, so base activities stay 1:1 with processes and
-                // `tie == template == declaration index`. `run_process` keeps the
-                // two apart (`pi` for re-arm, `activity_template(pi)` for the
-                // body); this walk collapses them, and that is safe exactly as
-                // long as the fork row holds.
-                k.k_rearm(proc);
-                return Step::Done;
+                // A3-ii-a: a `Return` INSIDE a driven frame pops it and resumes
+                // the parent — it is not the end of the process. `run_process`'s
+                // pop, with the two things that must not be reordered kept in
+                // order by the seam itself (`k_exit_driven_frame` captures the dyn
+                // out/inout results before the restore and installs them after).
+                if let Some(f) = frames.pop() {
+                    let writes = k.k_exit_driven_frame(f.callee, &f.out_binds, f.dyn_stash);
+                    for (lval, val) in writes {
+                        let offs = k.k_resolve_lvalue_offsets(&lval);
+                        k.k_write_lvalue(&lval, val, &offs);
+                    }
+                    // The parent's PC. `ret_bb` is a GLOBAL block id when the
+                    // parent is another frame and a process-local one when the
+                    // stack is now empty — the same overload `FrameRec::ret_bb`
+                    // carries, read the same way (by whether anything is left).
+                    set_pos!(f.ret_bb);
+                    // …and fall through to the loop tail, which charges the step
+                    // budget. A `continue` here would let a recursive task that
+                    // returns immediately spin without ever being counted.
+                    //
+                    // ⚠️ The `else` below is LOAD-BEARING and was missing in the
+                    // first draft: without it a frame's `Return` popped correctly
+                    // and then ran straight into `k_rearm` + `Step::Done`, ending
+                    // the whole process at the first task return. `rustc` found it
+                    // as "value assigned to `bb` is never read" — the dead store
+                    // WAS the bug.
+                } else {
+                    // `proc` is a TEMPLATE id here and `Scheduler::rearm` indexes
+                    // ACTIVITIES. They are the same number only because the S0
+                    // gate refuses forks, so base activities stay 1:1 with
+                    // processes and `tie == template == declaration index`.
+                    // `run_process` keeps the two apart (`pi` for re-arm,
+                    // `activity_template(pi)` for the body); this walk collapses
+                    // them, and that is safe exactly as long as the fork row
+                    // holds.
+                    k.k_rearm(proc);
+                    return Step::Done;
+                }
             }
             // SUSPEND (S1d-4c-2c). `run_process`'s non-frame branch, verbatim —
             // and it is written ONCE here rather than twice because the two
@@ -370,8 +432,21 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
             // is the definition of the half `call_site_runnable` admits, and the
             // other half is refused a layer up rather than parked here.
             Terminator::Call { ret_bb, .. } => {
-                crate::exec::frame_call::subset_task_call(k, proc, bb);
-                bb = *ret_bb;
+                // ⚠️ A call site is keyed by (template, PROCESS-LOCAL block), so a
+                // nested call — one whose `Terminator::Call` sits in the GLOBAL
+                // arena, inside a frame body — is a different table
+                // (`task_calls_func`). The mode split therefore has to be asked of
+                // the position we are actually at.
+                let in_frame = frames.last().map(|f| f.bb);
+                match crate::exec::frame_call::call_here(k, proc, bb, in_frame) {
+                    // A3-i: the callee runs synchronously, whole, in the engine's
+                    // `&self` frame executor. Nothing is opened.
+                    crate::exec::frame_call::Taken::Done => set_pos!(*ret_bb),
+                    // A3-ii-a: the callee is DRIVEN by this walk. Push it and let
+                    // the loop fetch from `ir.blocks` next iteration; its `Return`
+                    // pops and lands the parent on `ret_bb`.
+                    crate::exec::frame_call::Taken::Opened(f) => frames.push(f),
+                }
             }
         }
         // The in-body step budget. NOT `max_deltas`: a long computation that never
