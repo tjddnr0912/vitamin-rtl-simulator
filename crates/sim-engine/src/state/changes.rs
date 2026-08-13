@@ -416,10 +416,29 @@ impl SimState<'_> {
     }
 
     /// The object-id a handle net currently points to, or `None` if it is
-    /// `null` (id 0) or holds X/Z. Reads the handle's own integer value from the
-    /// flat store (word-less read falls through the class branch in `read_net`).
-    pub(crate) fn read_handle_id(&self, net: u32) -> Option<u32> {
-        let v = self.read_net(net, None);
+    /// `null` (id 0) or holds X/Z. The handle's own integer value is read from
+    /// `nets` (a word-less read, which falls through the class branch in
+    /// `read_net` to the flat store or the frame window).
+    ///
+    /// ⭐⭐ **A2-i made the STORE a parameter, and that is the whole slice on the
+    /// read side.** This used to be `read_handle_id(&self, net)`, reading
+    /// `self.read_net` — the engine's flat store — which is exactly right when
+    /// the engine is running and silently wrong when tier-3 is: a native run
+    /// leaves that store at its t0 value, so every `obj.f` would dereference
+    /// handle `0` and read `null`. Not loud, because `null` has a defined
+    /// meaning and the warn that comes with it is a plausible one.
+    ///
+    /// It is the A1-ii shape verbatim — *the write was already right; the READ
+    /// was wrong* — and the fix is A1-ii's: the OPERATION stays here in one
+    /// spelling and the STORE arrives as a parameter. `SimState`'s own callers
+    /// pass `self`, so the engine path is mechanically byte-identical rather
+    /// than merely equivalent.
+    pub(crate) fn handle_id_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: &N,
+        net: u32,
+    ) -> Option<u32> {
+        let v = nets.read_net(net, None);
         if v.unk.iter().any(|&u| u != 0) {
             return None; // X/Z handle ⇒ null-like
         }
@@ -451,7 +470,20 @@ impl SimState<'_> {
     /// a stale object, or a field-id past the layout ⇒ warn-once + X (never a
     /// panic). Returned at the field's natural width; `eval_ctx` resizes to ctx.
     pub(crate) fn class_field_read(&self, net: u32, field: u32) -> Value {
-        match self.read_handle_id(net) {
+        self.class_field_read_with(self, net, field)
+    }
+
+    /// A2-i: [`class_field_read`] against the CALLER's store — see
+    /// [`SimState::handle_id_with`] for why the handle read is the part that
+    /// had to move. Everything below the handle is `class_heap` and
+    /// `class_layouts`, which both kernels borrow, so nothing else routes.
+    pub(crate) fn class_field_read_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: &N,
+        net: u32,
+        field: u32,
+    ) -> Value {
+        match self.handle_id_with(nets, net) {
             Some(id) => {
                 let heap = self.class_heap.borrow();
                 match heap.get(&id) {
@@ -486,12 +518,40 @@ impl SimState<'_> {
         field: u32,
         piece: &Value,
     ) -> bool {
+        self.class_field_write_with(self, c, field, piece)
+    }
+
+    /// A2-i: [`class_field_write`] against the CALLER's store. Only the HANDLE
+    /// read routes (see [`SimState::handle_id_with`]); the resize, the 2-state
+    /// coercion and the heap store below are store-independent.
+    pub(crate) fn class_field_write_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: &N,
+        c: &sim_ir::LvalChunk,
+        field: u32,
+        piece: &Value,
+    ) -> bool {
         let net = c.net;
-        let Some(id) = self.read_handle_id(net) else {
+        let Some(id) = self.handle_id_with(nets, net) else {
             self.class_warn_null(net, "null/X class handle dereference (write ignored)");
             return false;
         };
         let fw = self.class_field_width(id, field);
+        // ⚠️ **EQUIVALENT TODAY, and A2-i measured it rather than assuming.** A
+        // mutation that drops this resize survives the whole suite INCLUDING an
+        // anchor line written to kill it (`p.x = 64'h1234_5678_9ABC_DEF0` really
+        // does arrive 64 bits wide against a 32-bit field — instrumented). The
+        // reason is on the READ side: `class_field_read` hands back the stored
+        // `Value` verbatim and `eval_ctx` then sizes it to the context width,
+        // which `patch_class_fields` has already set to the FIELD's own width
+        // and sign. So an over-wide store is re-narrowed at every use.
+        //
+        // Kept because it is the fail-closed direction and because the store
+        // then means what the layout says. Fourth time this repo has measured
+        // this exact shape — `bind_formal` re-binds a frame formal (§5.1-n),
+        // `write_lvalue` re-applies the destination width (A1-i's `H`),
+        // `eval_core` pre-sizes a call's actuals (§4.5.338's `formal_width`) —
+        // so it is recorded as equivalent, not presented as covered.
         let mut resized = piece.clone().resize_keep_sign(fw.0.max(1), fw.1);
         // A 2-state field (`bit`/`byte`/…) can never hold X/Z — coerce it to 0 (§6.11.3),
         // mirroring the frame-slot (`coerce_two_state_frame`) and module-net 2-state paths.

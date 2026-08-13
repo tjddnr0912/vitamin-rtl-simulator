@@ -473,6 +473,37 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // nothing to do with the callee.
         task_calls_proc: sc.task_calls_proc,
         task_calls_func: sc.task_calls_func,
+        // …and the CLASS/OOP tables (A2-i). ⚠️ **FIFTH time**, and this one was
+        // caught by reading the four notes above rather than by a failure — which
+        // is the only reason it is not a sixth entry in that list. `class_field_widths`
+        // was already here (§4.5.309 threaded it alone), so the file looked
+        // covered while `class_handle_nets` — the table that drives BOTH
+        // `SimState::class_is_handle` and the arena's `class` bitmap — was
+        // missing. Without it a `class C; int f; endclass … o.f = 7` is not a
+        // field access at all: `write_chunk`'s class lane never fires, the write
+        // lands in the handle net's own slot, and BOTH backends do the same
+        // wrong thing and agree.
+        //
+        // `class_layouts` carries the field widths AND the `new` defaults, so
+        // `class_alloc` without it mints an object with ZERO fields and every
+        // read is the stale/short warn; `class_new_sites` is what makes a
+        // `BlockingAssign` a `ClassNew` effect rather than an ordinary const-0
+        // assignment (so `k_class_alloc` is never entered); `class_vtable` /
+        // `class_calls` are method dispatch.
+        class_handle_nets: sc.class_handle_nets,
+        class_new_sites: sc.class_new_sites,
+        class_layouts: sc.class_layouts,
+        class_field_inits: sc.class_field_inits,
+        class_vtable: sc.class_vtable,
+        class_calls: sc.class_calls,
+        // The CRV half too. `class_crv`/`class_virtual` are refusal rows now, and
+        // a row whose table is not installed is a row no test can reach — the
+        // `defer_marks` lesson three entries up, applied before it bites.
+        class_rand: sc.class_rand,
+        class_constraints: sc.class_constraints,
+        class_dist: sc.class_dist,
+        class_randc: sc.class_randc,
+        randomize_with: sc.randomize_with,
         ..SimOpts::default()
     };
     (ir.expect("elaborate"), opts)

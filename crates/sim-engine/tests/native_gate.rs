@@ -256,7 +256,6 @@ fn sidecar_families_reject_from_opts() {
     let mut o = SimOpts::default();
     o.fork_modes.insert((0, 0), sim_engine::JoinMode::All);
     o.probed_nets.push(0);
-    o.class_new_sites.insert(0, 0);
     o.file_directed_stmts.insert(0);
     o.clocking_inputs.insert(0);
     let e = design_eligibility(&ir, &o);
@@ -264,12 +263,83 @@ fn sidecar_families_reject_from_opts() {
     assert_eq!(
         e.reject_reasons.into_iter().collect::<Vec<_>>(),
         vec![
-            ("class", 1),
             ("clocking", 1),
             ("file_directed", 1),
             ("fork", 1),
             ("probe", 1),
         ]
+    );
+}
+
+/// A2-i: the plain-OOP sidecars are CORE — a class handle net is an ordinary
+/// slot holding an object id and the fields live in `class_heap`, which both
+/// kernels borrow.
+///
+/// ⚠️ Written as an EXACT empty-reasons assertion rather than `eligible`,
+/// because the failure this guards against is the row coming back under a new
+/// name. And every one of these tables is populated: the census found that all
+/// 160 class designs carry `class_rand`/`class_vtable` (they are per-CLASS and
+/// exist the moment a `rand` field or a method is declared), so a rule keyed on
+/// the TABLE rather than on the SITE would refuse all of them.
+#[test]
+fn plain_oop_sidecars_are_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.class_handle_nets.insert(0);
+    o.class_new_sites.insert(0, 0);
+    o.class_layouts.push(Default::default());
+    o.class_field_inits.insert(0, Vec::new());
+    o.class_rand.push(Vec::new());
+    o.class_constraints.push(Vec::new());
+    o.class_dist.push(Vec::new());
+    o.class_randc.push(Vec::new());
+    o.class_vtable.push(Vec::new());
+    o.class_field_widths.insert(0, (8, false));
+    // Both call-site shapes. A NON-virtual one dispatches statically; a VIRTUAL
+    // one (`Some(vslot)`) is answered by `resolve_virtual_call`, which reads the
+    // receiver handle's already-evaluated VALUE plus two shared tables and no
+    // net at all — measured, not assumed, by
+    // `a_virtual_call_dispatches_dynamically_on_tier_3`.
+    o.class_calls.insert(0, (None, 3));
+    o.class_calls.insert(1, (Some(0), 4));
+    let e = design_eligibility(&ir, &o);
+    assert_eq!(
+        e.reject_reasons.into_iter().collect::<Vec<_>>(),
+        vec![],
+        "plain OOP must disqualify nothing"
+    );
+}
+
+/// A2-i: `randomize()` is the OTHER half, and it is refused by the STATEMENT
+/// rather than by the `class_rand` table — the table is per-class and present
+/// in a design that never randomizes anything.
+#[test]
+fn a_randomize_call_is_refused_and_a_rand_field_alone_is_not() {
+    let (ok, rs) = reasons(
+        "module t;\n\
+           class C; rand int unsigned v; constraint c { v < 10; } endclass\n\
+           C o; int r;\n\
+           initial begin o = new(); r = o.randomize(); $display(\"%0d\", o.v); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(!ok, "a randomize() call must be refused");
+    assert!(
+        rs.iter().any(|&(k, _)| k == "class_crv"),
+        "the refusal must name the CRV row: {rs:?}"
+    );
+
+    // …while the same class WITHOUT the call disqualifies nothing, even though
+    // elaborate still emits `class_rand`/`class_constraints` for it.
+    let (ok2, rs2) = reasons(
+        "module t;\n\
+           class C; rand int unsigned v; constraint c { v < 10; } endclass\n\
+           C o;\n\
+           initial begin o = new(); o.v = 4; $display(\"%0d\", o.v); $finish; end\n\
+         endmodule\n",
+    );
+    assert!(
+        ok2,
+        "a rand field with no randomize() must stay core: {rs2:?}"
     );
 }
 

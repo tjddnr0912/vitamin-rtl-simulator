@@ -365,6 +365,18 @@ fn compile_node(
             if arena.frame.get(*net as usize).copied().unwrap_or(false) {
                 return None;
             }
+            // A2-i: DECLINE a class handle, and unconditionally rather than only
+            // for a field select. A field read (`word = Some(field_id)`) has to
+            // go to `class_heap`, which this compiled form cannot reach; a BARE
+            // handle read is in the slot and would be answered correctly — but
+            // the `word` here is an INDEX EXPRESSION, and telling a field id
+            // from an array index by inspecting it is a second spelling of the
+            // routing rule. Declining the net is the same answer with one
+            // spelling. (Measured cost: a design that only copies handles loses
+            // the fast path, which is not a correctness surface.)
+            if arena.class.get(*net as usize).copied().unwrap_or(false) {
+                return None;
+            }
             arena.assert_owns(*net, "wprog::compile Expr::Signal");
             let slot = arena.slots.get(*net as usize)?;
             if slot.width != w || slot.words != 1 {

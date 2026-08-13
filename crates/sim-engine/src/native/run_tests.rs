@@ -3376,6 +3376,106 @@ endmodule
     );
 }
 
+/// A2-i DIFFERENTIAL — plain-OOP shapes, native vs the VM.
+///
+/// ⚠️ Weaker than the anchor above BY CONSTRUCTION and kept for what it does
+/// see: `class_heap`, `class_layouts` and the warn latch are all `SimState`
+/// objects both backends borrow, so everything below the HANDLE is shared and
+/// this comparison is blind to it (ROADMAP §5.1-e). What it can distinguish is
+/// exactly what this slice routes — where the handle id is read from and where
+/// a field write lands — plus the interaction of a class net with the dirty
+/// channel, which the anchor's single `initial` block cannot reach.
+#[test]
+fn a2i_class_field_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A field read in a CLOCKED process. The handle net is written at t0 and
+        // the field every edge, so a store-blind read shows up as a frozen value
+        // rather than as X.
+        (
+            "field in an always block",
+            r#"
+module top;
+  class C; int v; endclass
+  C c;
+  reg clk = 1'b0;
+  reg [7:0] seen = 8'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) begin c.v = c.v + 1; seen <= c.v; end
+  initial begin c = new(); #9 $display("v=%0d seen=%0d", c.v, seen); $finish; end
+endmodule
+"#,
+        ),
+        // A handle net inside an ARRAY-INDEX expression: the field value picks
+        // the element, so a wrong handle picks a wrong element rather than X.
+        (
+            "field as an array index",
+            r#"
+module top;
+  class C; int i; endclass
+  C c;
+  reg [7:0] mem [0:3];
+  reg [7:0] got;
+  integer k;
+  initial begin
+    for (k = 0; k < 4; k = k + 1) mem[k] = 8'd10 + k;
+    c = new(); c.i = 2;
+    got = mem[c.i];
+    $display("got=%0d", got);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // TWO objects alive at once, so an implementation that kept one field
+        // set per handle NET (rather than per OBJECT) crosses them.
+        (
+            "two live objects",
+            r#"
+module top;
+  class C; int v; endclass
+  C a, b;
+  initial begin
+    a = new(); b = new();
+    a.v = 3; b.v = 9;
+    $display("a=%0d b=%0d sum=%0d", a.v, b.v, a.v + b.v);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A field written from inside a METHOD — the delegated `&self` frame
+        // executor, whose `this` is a frame-local net holding the handle.
+        (
+            "field written by a method",
+            r#"
+module top;
+  class C;
+    int v;
+    function int add(input int d); v = v + d; return v; endfunction
+  endclass
+  C c; int r;
+  initial begin c = new(); c.v = 4; r = c.add(6); $display("r=%0d v=%0d", r, c.v); $finish; end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 4, "A2-i differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "A2-i differential: refusal breakdown moved"
+    );
+}
+
 /// A3-ii-a ABSOLUTE ANCHOR — a DRIVEN task frame, iverilog-pinned.
 ///
 /// A3-i delegated a subset call to the engine's `&self` executor. This is the
@@ -3479,6 +3579,251 @@ endmodule
     );
 }
 
+/// A2-i ABSOLUTE ANCHOR — plain OOP, **iverilog-pinned**.
+///
+/// ⭐ And iverilog really is the oracle here, which was not the expectation:
+/// this repo has treated the class surface as no-oracle territory since N7.
+/// `iverilog 13` compiles and runs SystemVerilog classes, so every value below
+/// is `vvp`'s rather than hand-IEEE — a stronger anchor than the slice planned
+/// for. (Its ONE gap is measured and excluded: a null-handle dereference
+/// SEGFAULTS `ivl` at compile time, so `nul.x` is pinned in its own test
+/// against the LRM instead. Putting a known divergence in an anchor's expected
+/// output is what stops it being an anchor — §4.5.302.)
+///
+/// Each line is a routing site this slice had to open, chosen so a store-blind
+/// path prints something else:
+///
+/// * **A/B** — a field WRITE then READ on a freshly `new`ed object. The three
+///   ways to get this wrong are all distinct: the write landing in the handle
+///   net's own slot (the `write_routed` lane), the read taking the arena's
+///   array-word path (the `read_net` lane), and the HANDLE being read from the
+///   engine's store, which a native run leaves at t0 `null` (`handle_id_with`).
+/// * **C** — the field in ARITHMETIC and into an ARRAY ELEMENT. The first is
+///   what `wprog` must decline (it resolves a `Signal` to a slot at compile
+///   time and cannot route); the second proves the ordinary funnel still works
+///   beside the class lane.
+/// * **D** — the field's own WIDTH and SIGN, not the handle's 32/unsigned:
+///   `8'sd200` into a `byte` is `-56`, `4'd15` into a `bit [3:0]` is `15`.
+/// * **E/H** — REFERENCE semantics. Two handles name one object (`q.x = 11`
+///   moves `p.x`), and a second `new` leaves the old handle on the old object.
+///   A design that stored fields in the handle's slot passes every line above
+///   and fails these two.
+/// * **F** — a METHOD, reading and writing `this` fields, INCLUDING one called
+///   from inside a `$display` argument — the path that reaches the formatter's
+///   `HeapRouted` wrapper rather than the kernel's own reader.
+/// * **I** — the field driven in a LOOP, so its value moves well after t0.
+/// * **J/K** — ⚠️ **added because the first battery left two mutations alive**,
+///   and both were test-design gaps rather than equivalences (§5.1-e again).
+///   **J** writes a 4-state value into a 2-STATE field beside a 4-state one, so
+///   the §6.11.3 coercion is the only difference (`4'bx1z0` → `0100` in `bit
+///   [3:0]`, unchanged in `logic [3:0]`); nothing above it ever put an X in a
+///   field. **K** writes a 64-bit value into an `int` and a `byte`, so the
+///   RESIZE to the field's own width and sign is observable — every line above
+///   assigns a value the width table has already sized to the field, which makes
+///   the resize a no-op there.
+#[test]
+fn a_plain_oop_design_has_its_iverilog_values() {
+    let src = r#"
+module top;
+  class Pt;
+    int      x;
+    byte     b;
+    bit [3:0] n;
+    logic [3:0] l;
+    function int bump(input int d); x = x + d; return x; endfunction
+    function int get(); return x; endfunction
+  endclass
+
+  Pt p, q;
+  int  r, s;
+  reg [7:0] arr [0:3];
+  reg [3:0] xs;
+  reg [63:0] big;
+  integer i;
+
+  initial begin
+    p = new();
+    $display("A x=%0d b=%0d n=%0d", p.x, p.b, p.n);
+    p.x = 7; p.b = -3; p.n = 4'hD;
+    $display("B x=%0d b=%0d n=%0d", p.x, p.b, p.n);
+    r = p.x + 1;
+    arr[2] = p.x + 2;
+    $display("C r=%0d arr2=%0d", r, arr[2]);
+    p.b = 8'sd200;
+    p.n = 4'd15;
+    $display("D b=%0d n=%0d", p.b, p.n);
+    q = p;
+    q.x = 11;
+    $display("E px=%0d qx=%0d", p.x, q.x);
+    s = p.bump(5);
+    $display("F s=%0d px=%0d get=%0d", s, p.x, p.get());
+    p = new();
+    p.x = 1;
+    $display("H px=%0d qx=%0d", p.x, q.x);
+    for (i = 0; i < 4; i = i + 1) q.x = q.x + i;
+    $display("I qx=%0d", q.x);
+    xs = 4'bx1z0;
+    p.n = xs; p.l = xs;
+    $display("J n=%b l=%b", p.n, p.l);
+    big = 64'h1234_5678_9ABC_DEF0;
+    p.x = big; p.b = big;
+    $display("K x=%0d xh=%h b=%0d", p.x, p.x, p.b);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "must run natively or this anchor proves nothing (refused: {:?})",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A x=0 b=0 n=0\n".to_string(),
+            "out|B x=7 b=-3 n=13\n".to_string(),
+            "out|C r=8 arr2=9\n".to_string(),
+            "out|D b=-56 n=15\n".to_string(),
+            "out|E px=11 qx=11\n".to_string(),
+            "out|F s=16 px=16 get=16\n".to_string(),
+            "out|H px=1 qx=16\n".to_string(),
+            "out|I qx=22\n".to_string(),
+            "out|J n=0100 l=x1z0\n".to_string(),
+            "out|K x=-1698898192 xh=9abcdef0 b=-16\n".to_string(),
+        ],
+        "plain-OOP values (iverilog 13 pinned)"
+    );
+}
+
+/// A2-i: VIRTUAL dispatch runs on tier-3, and this test is why the gate has no
+/// row for it.
+///
+/// ⚠️⚠️ **Hand-IEEE on purpose — iverilog 13 gets this WRONG.** For a base
+/// handle pointing at a derived object it calls the BASE method, where IEEE 1800
+/// §8.20 requires the dynamic type's override. All three vita backends agree
+/// with the LRM, so `vvp` is not the oracle here; the values below are §8.20's.
+/// (One of the few places this repo is ahead of its own oracle rather than
+/// behind it — recorded so a future reader does not "fix" vita to match.)
+///
+/// The design is built to fail under a STATIC dispatch: three levels with an
+/// override at each, plus an INHERITED method, plus the same handle re-pointed
+/// at two different objects. `a` is the base object, `b` the derived, `c` the
+/// grand-derived; `d` takes `E`'s override of `twice` and `e` the `B` version
+/// `D` inherits — so a run that resolved everything statically prints
+/// `11 12 13 10 10`.
+#[test]
+fn a_virtual_call_dispatches_dynamically_on_tier_3() {
+    let src = r#"
+module top;
+  class B;
+    int v;
+    virtual function int who(); return 10 + v; endfunction
+    virtual function int twice(input int d); return d * 2; endfunction
+  endclass
+  class D extends B;
+    virtual function int who(); return 20 + v; endfunction
+  endclass
+  class E extends D;
+    virtual function int who(); return 30 + v; endfunction
+    virtual function int twice(input int d); return d * 3; endfunction
+  endclass
+  B h; D dd; E ee; int a, b2, c, d2, e2;
+  initial begin
+    h = new(); h.v = 1; a = h.who();
+    dd = new(); dd.v = 2; h = dd; b2 = h.who();
+    ee = new(); ee.v = 3; h = ee; c = h.who();
+    d2 = h.twice(5);
+    h = dd; e2 = h.twice(5);
+    $display("a=%0d b=%0d c=%0d d=%0d e=%0d", a, b2, c, d2, e2);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec!["out|a=11 b=22 c=33 d=15 e=10\n".to_string()],
+        "virtual dispatch (IEEE 1800 §8.20; iverilog 13 disagrees)"
+    );
+}
+
+/// The one shape iverilog cannot be asked about: dereferencing a NULL handle.
+///
+/// ⚠️ `ivl` SEGFAULTS at compile time on `$display("%0d", nul.x)` (measured,
+/// iverilog 13.0), so this is hand-IEEE: §8.4 says an uninitialised class
+/// variable is `null`, and vita's policy for a null dereference is warn-once +
+/// X rather than a fatal. Pinned separately so the anchor above stays free of a
+/// known divergence.
+///
+/// It is also the one line that proves the handle READ routes and not just the
+/// field read: a never-assigned handle is `0` in BOTH stores, so it can only
+/// distinguish the warn path — which is exactly why it is not in the anchor.
+#[test]
+fn a_null_handle_dereference_is_x_and_warns() {
+    let src = r#"
+module top;
+  class Pt; int x; endclass
+  Pt nul;
+  initial begin
+    $display("N=%0d", nul.x);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    // The whole stream, in order: the warning is emitted at the READ, i.e.
+    // before the line that read it renders. `%0d` of an all-X value is `X`.
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "diag|Warning|VITA-W4020|null/X class handle dereference (read X)".to_string(),
+            "out|N=X\n".to_string(),
+        ],
+        "null-handle dereference"
+    );
+}
+
 /// The READ twin of the funnel pin: every store read a system task makes must go
 /// through the THREADED reader, or be behind a row that refuses the design.
 ///
@@ -3517,7 +3862,13 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         (
             "crv_draw.rs",
             4,
-            "the class/CRV surface is the `class` row, and `writemem`'s window \
+            "the CRV surface is the `class_crv` row — ⚠️ NOT `class`, which A2-i \
+             split in three and which no longer exists. That is the §4.5.338 \
+             failure mode inside a TEST: this reason named a row while plain OOP \
+             was still refused by it, and admitting plain OOP left the sentence \
+             true only by accident (the raw read is `class_randomize_run`'s \
+             receiver, which really is behind the narrower row). Re-read a \
+             `behind row X` claim whenever X moves. And `writemem`'s window \
              bounds are `$writemem*`, which `systask_refusal` refuses (it reads \
              the MEMORY itself, not a formatted argument). A1-iii took this from \
              6 to 4 by threading `readmem`'s two window bounds — measured, not \

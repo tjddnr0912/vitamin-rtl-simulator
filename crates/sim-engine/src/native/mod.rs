@@ -267,18 +267,26 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         clocking_outputs,
         defer_marks,
         defer_acts,
-        class_handle_nets,
-        class_new_sites,
-        class_layouts,
-        class_field_inits,
-        class_rand,
-        class_constraints,
-        class_dist,
-        class_randc,
-        randomize_with,
-        class_vtable,
-        class_calls,
-        class_field_widths,
+        // ── A2-i: the plain-OOP sidecars are no longer a refusal ────────────
+        // A class handle net is an ordinary `Logic` slot holding an object id;
+        // the object's FIELDS live in `SimState::class_heap`, which both kernels
+        // borrow. So these tables describe storage tier-3 routes to rather than
+        // machinery it lacks — the two rows below (`class_crv`, `class_virtual`)
+        // are what is genuinely missing. `_` here rather than deleted from the
+        // pattern: an exhaustive destructure is what forces the next sidecar
+        // added to `SimOpts` to be classified here on purpose.
+        class_handle_nets: _,
+        class_new_sites: _,
+        class_layouts: _,
+        class_field_inits: _,
+        class_rand: _,
+        class_constraints: _,
+        class_dist: _,
+        class_randc: _,
+        randomize_with: _,
+        class_vtable: _,
+        class_calls: _,
+        class_field_widths: _,
         file_directed_stmts,
     } = opts;
 
@@ -300,24 +308,57 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         "deferred_assert",
         defer_marks.len() + defer_acts.len(),
     );
-    // One family for the whole class/OOP/CRV surface — twelve sidecars, one
-    // verdict. The count is the sum of their entries (a rough "how much OOP").
-    flag(
-        &mut out,
-        "class",
-        class_handle_nets.len()
-            + class_new_sites.len()
-            + class_layouts.len()
-            + class_field_inits.len()
-            + class_rand.len()
-            + class_constraints.len()
-            + class_dist.len()
-            + class_randc.len()
-            + randomize_with.len()
-            + class_vtable.len()
-            + class_calls.len()
-            + class_field_widths.len(),
-    );
+    // ⭐⭐ **A2-i SPLIT THIS ROW IN THREE, and the census is why.** It used to be
+    // one family over twelve sidecars — "how much OOP" — which meant a design
+    // declaring `class C; int f; endclass` and one solving a constraint were
+    // refused by the same word. Measured over the whole suite: of the 160
+    // designs this row alone was blocking, **121 never execute `randomize()`
+    // and have no virtual call site**. For those, class support is ROUTING and
+    // nothing else — a class handle net is an ordinary `Logic` slot holding an
+    // object id, and the object's fields live in `SimState::class_heap`, which
+    // both kernels borrow (exactly `dyn_heap`'s situation, V1 slice 2).
+    //
+    // So the three rows are cut by what the design DOES, not by which sidecar
+    // elaborate happened to emit — every one of the 160 carries `class_rand`
+    // and `class_vtable` tables, because those are per-CLASS and exist the
+    // moment a `rand` field or a method is declared. A table nobody reads
+    // refuses nothing.
+    //
+    // ⚠️⚠️ **VIRTUAL DISPATCH WAS ALMOST THE SECOND ROW, and measuring killed
+    // it.** The plan had one: `resolve_virtual_call` is answered on whichever
+    // reader `eval_core` holds, and `NativeKernel`'s own doc names it as the
+    // question its "no class handles exist" argument does NOT cover. But the
+    // function reads `args[0]` — the receiver handle's VALUE, already evaluated
+    // by the caller in the caller's store — plus `class_heap` and
+    // `class_vtable`, and BOTH composites forward it to `st`. Nothing in it
+    // touches a net.
+    //
+    // Measured before deleting the row rather than after: a three-level
+    // hierarchy with an override at each level, an inherited method, and a base
+    // handle re-pointed at a derived object runs natively and agrees with both
+    // other backends (`a_virtual_call_dispatches_dynamically_on_tier_3`). A row
+    // that refuses designs the executor gets right is a rung DOWN the ladder,
+    // which costs more than the row buys.
+    //
+    // ⭐ It also turned up an oracle limit worth recording: **iverilog 13 gets
+    // this wrong.** For `B h = d; h.who()` it calls `B::who` (static), where
+    // IEEE §8.20 requires `D::who`. vita's three backends agree with the LRM, so
+    // this is one of the few places the repo is ahead of its own oracle — and
+    // the reason the virtual test is pinned by hand rather than by `vvp`.
+    let crv_sites = ir
+        .stmts
+        .iter()
+        .filter(|s| {
+            matches!(
+                s,
+                sim_ir::Stmt::SysTask {
+                    which: sim_ir::SysTaskId::ClassRandomize,
+                    ..
+                }
+            )
+        })
+        .count();
+    flag(&mut out, "class_crv", crv_sites);
     flag(&mut out, "file_directed", file_directed_stmts.len());
 
     // ── statement-level families with no v1 machinery ──────────────────────

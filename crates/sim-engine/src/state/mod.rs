@@ -878,6 +878,18 @@ impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'
     }
 
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
+        // A2-i: a class FIELD select, checked first for the same reason
+        // `SimState::read_net` checks it first (a method's `this` is both a
+        // handle and a frame-local net). It is NOT part of `in_state`: routing
+        // the whole net would send a BARE handle read — the object id, which
+        // lives in the wrapped store — to a heap that has nothing to answer
+        // with. The handle read inside comes back through `self`, so it lands
+        // in whichever store this wrapper is in front of.
+        if self.st.class_is_handle.get(net as usize).copied() == Some(true) {
+            if let Some(field) = word {
+                return self.st.class_field_read_with(self, net, field);
+            }
+        }
         if self.in_state(net) {
             return self.st.read_net(net, word);
         }

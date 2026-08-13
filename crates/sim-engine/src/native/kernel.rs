@@ -1166,6 +1166,23 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 // what lets this run without disturbing the `&mut arena` borrow.
                 return self.sched.st.dyn_write(c, off, word, &value);
             }
+            // A2-i: the CLASS FIELD lane, the exact mirror of the read path's —
+            // and the pair `class ∧ word.is_some()` is `SimState::write_chunk`'s
+            // own, delegating to the same method. A bare word-less write is the
+            // HANDLE ID itself (`h = new`, `h = null`, a ref copy); that value
+            // belongs in this store's slot and falls through.
+            //
+            // `false` — a heap field is not a flat-store net, so it never enters
+            // the dirty channel (`class_field_write` returns `false` for the
+            // engine too, and it is what stops `obj.f = 1` from waking a process
+            // sensitive to the handle).
+            if self.is_class_handle(c.net) && c.word.is_some() {
+                let (_, word) = offsets.as_slice().first().copied().unwrap_or((0, 0));
+                return self
+                    .sched
+                    .st
+                    .class_field_write_with(&*self, c, word, &value);
+            }
         }
         let ir = self.ir;
         self.arena.write_lvalue(ir, lhs, value, offsets)
@@ -1181,6 +1198,12 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// store it describes, in `NetArena::build`.
     pub(crate) fn is_heap_net(&self, net: u32) -> bool {
         self.arena.heap.get(net as usize).copied().unwrap_or(false)
+    }
+
+    /// A2-i. Reads the ARENA's bitmap, not `SimState`'s, so the one consumer
+    /// that holds no kernel (`wprog::compile`) asks the same question.
+    pub(crate) fn is_class_handle(&self, net: u32) -> bool {
+        self.arena.class.get(net as usize).copied().unwrap_or(false)
     }
 
     pub(crate) fn is_frame_local(&self, net: u32) -> bool {
@@ -1217,6 +1240,21 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
 /// S0 `class` row rather than anything about this store.
 impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
     fn read_net(&self, net: u32, word: Option<u32>) -> Value {
+        // ⭐ A2-i: a class FIELD select, and it is checked FIRST for the reason
+        // `SimState::read_net` checks it first — a method's `this` is BOTH a
+        // class handle and a frame-local net, and the field must win or the read
+        // lands on the window slot holding the object id.
+        //
+        // ⚠️ It cannot delegate whole, unlike the two lanes below: the field
+        // lives in the shared `class_heap`, but the HANDLE that names it is in
+        // THIS store. `class_field_read_with` takes the reader for exactly that
+        // — passing `self` here is what makes `obj.f` read the object this run
+        // allocated rather than the engine's t0 `null`.
+        if self.is_class_handle(net) {
+            if let Some(field) = word {
+                return self.sched.st.class_field_read_with(self, net, field);
+            }
+        }
         // Two nets this store does not own: a frame-local (S3a) and — since V1
         // slice 2 — a heap kind, whose elements live in `SimState::dyn_heap`.
         // Both delegate to the ENGINE's `read_net`, which routes on its own
@@ -1996,8 +2034,18 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_disable_fork(&mut self) {
         gate_refused!("k_disable_fork", "statement scan rejects `disable fork`")
     }
-    fn k_class_alloc(&mut self, _class_id: u32) -> Value {
-        gate_refused!("k_class_alloc", "the `class` sidecar row — `class_new_sites`, the very table `k_class_new_site` reads; `NetKind` has no class variant")
+    fn k_class_alloc(&mut self, class_id: u32) -> Value {
+        // WIRED (A2-i), and it is a DELEGATION for the same reason A1-i's
+        // `k_queue_pop` is one: nothing in it reads a net. `class_alloc` mints an
+        // id from a `Cell`, default-inits the fields from `class_layouts`, and
+        // inserts into `class_heap` — all `SimState`, one object both kernels
+        // borrow. The allocation CAP is part of the same chokepoint and must not
+        // be restated here, so the whole arm is the engine's.
+        //
+        // The handle VALUE it returns is written by `apply_effect` through
+        // `k_write_lvalue`, i.e. into THIS store's slot — which is exactly the
+        // half that is not shared.
+        Kernel::k_class_alloc(self.sched, class_id)
     }
 
     // The funnel-outside family (§4.5.291): every one of these writes through

@@ -99,6 +99,25 @@ pub struct NetArena {
     /// row is why this was harmless until the walk started executing frame
     /// bodies.
     pub frame: Vec<bool>,
+    /// A2-i: per net, "this net is a CLASS HANDLE".
+    ///
+    /// The third twin, and the one whose slot is only PARTLY dead — which is
+    /// what makes it different from the two above and why it could not simply
+    /// join them. A class handle's own value IS in this store: it is an ordinary
+    /// `Logic`/`Integer` slot holding the object id (`0` = null), written by
+    /// `h = new` / `h = null` / a ref copy. What is NOT here is the OBJECT's
+    /// fields, which live in `SimState::class_heap` and are reached with the
+    /// SAME net id plus a field id in the `word` position.
+    ///
+    /// So every consumer must ask the question as `class[net] && word.is_some()`
+    /// — routing on the bitmap alone would send a bare handle read to the heap,
+    /// where there is nothing to read. `SimState::write_chunk` spells the pair
+    /// the same way and says so in the same words.
+    ///
+    /// It is on the arena rather than only on `SimState` for `wprog::compile`'s
+    /// sake, exactly as `frame` is: that function resolves a `Signal` to a slot
+    /// at compile time and a field select passes every shape check it makes.
+    pub class: Vec<bool>,
     /// S1d-2: the dirty/edge channel, driven by the write funnel's two store
     /// points. It lives HERE, as it does on `SimState`, because those points are
     /// inside the funnel — a channel the funnel could not reach would have to be
@@ -194,6 +213,19 @@ impl NetArena {
                     }
                 }
                 f
+            },
+            // A2-i: from the SAME sidecar `simulate` fills `SimState::
+            // class_is_handle` from, for the same reason `frame` shares
+            // `func_table` — two tables built from two sources cannot be shown
+            // to agree about which nets are handles.
+            class: {
+                let mut c = vec![false; ir.nets.len()];
+                for &n in opts.class_handle_nets.iter() {
+                    if let Some(slot) = c.get_mut(n as usize) {
+                        *slot = true;
+                    }
+                }
+                c
             },
             ch: crate::native::dirty::DirtyChannel::new(ir),
             buf: vec![0u64; total],
