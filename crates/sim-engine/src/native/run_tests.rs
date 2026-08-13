@@ -3713,6 +3713,121 @@ endmodule
     );
 }
 
+/// A3-iv ABSOLUTE ANCHOR — a frame task with a HIERARCHICAL enable,
+/// iverilog-pinned.
+///
+/// ⚠️⚠️ The row this replaces refused every such design for a reason about the
+/// WRONG PHASE. `has_hier_call` says a deferred hierarchical enable's
+/// `Call.target` is a placeholder until the finish-phase resolve, so
+/// `frame_suspends` cannot see through it — true inside ELABORATE, where
+/// `force_suspend` exists precisely because its `compute_suspendable_tasks`
+/// runs before the patch. This gate runs in `simulate`, after it. Instrumented
+/// over every design that reached the row: **zero** unresolvable targets.
+///
+/// Each line needs the resolution to be real and per-instance:
+///
+/// * **A** — TWO instances of the same module, each accumulating its own total
+///   through the same task. A resolution that collapsed them prints one number
+///   twice; `6` and `12` come apart only if `u1.add` and `u2.add` reach
+///   different windows.
+/// * **B** — a hier enable with an OUTPUT formal, so the copy-out crosses the
+///   instance boundary in the other direction, from two different instances.
+/// * **C** — the callee's own module net is CHANGED between two identical
+///   calls (`u1.base = 7`), which is what makes this non-vacuous: a run reading
+///   a stale store returns `101` again, and `101` is a value the design really
+///   had a moment earlier.
+#[test]
+fn a_hierarchical_enable_from_a_frame_task_has_its_iverilog_values() {
+    let src = r#"
+module sub;
+  integer acc;
+  integer base;
+  task automatic add(input integer x); acc = acc + x; endtask
+  task automatic get(input integer x, output integer y); y = base + x; endtask
+  initial begin acc = 0; base = 100; end
+endmodule
+module top;
+  sub u1(); sub u2();
+  integer a, b;
+  task automatic drive(input integer n);
+    integer i;
+    begin for (i = 0; i < n; i = i + 1) begin u1.add(i); u2.add(2 * i); end end
+  endtask
+  task automatic two(output integer p, output integer q);
+    begin u1.get(1, p); u2.get(2, q); end
+  endtask
+  initial begin
+    #1 drive(4);
+    $display("A acc1=%0d acc2=%0d", u1.acc, u2.acc);
+    two(a, b);
+    $display("B a=%0d b=%0d", a, b);
+    u1.base = 7;
+    two(a, b);
+    $display("C a=%0d b=%0d", a, b);
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A acc1=6 acc2=12\n".to_string(),
+            "out|B a=101 b=102\n".to_string(),
+            "out|C a=8 b=102\n".to_string(),
+        ],
+        "hierarchical enable from a frame task (iverilog 13 pinned)"
+    );
+}
+
+/// A3-iv's REJECT neighbour, and the whole argument for deleting the row: a hier
+/// callee that PARKS is still refused — by `frame_suspends`, which sees through
+/// the resolved target and says so in its own words.
+///
+/// This is what makes the deletion a narrowing rather than a hole. The `None`
+/// arm of that walk still fails CLOSED if a target ever does arrive
+/// unresolved; what changed is that today none do.
+#[test]
+fn a_hierarchical_enable_whose_callee_parks_is_still_refused() {
+    use sim_engine::native::arena::NetArena;
+    let src = r#"
+module sub;
+  integer acc;
+  task automatic addd(input integer x); begin #1 acc = acc + x; end endtask
+  initial acc = 0;
+endmodule
+module top;
+  sub u1();
+  task automatic drive(input integer n);
+    integer i;
+    begin for (i = 0; i < n; i = i + 1) u1.addd(i); end
+  endtask
+  initial begin drive(3); $display("acc=%0d", u1.acc); end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    assert_eq!(
+        NetArena::buildable(&ir, &opts).err(),
+        Some("a task frame that SUSPENDS (delay, wait or fork inside the body): S3b"),
+        "a PARKING hier callee must still be refused, and by the row that owns \
+         the question rather than by a stand-in"
+    );
+}
+
 /// A3-iii ABSOLUTE ANCHOR — a DELEGATED function body that READS module nets,
 /// iverilog-pinned.
 ///

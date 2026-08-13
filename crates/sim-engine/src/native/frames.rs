@@ -47,12 +47,14 @@
 //!   `fast_offsets` and to `write_lvalue` — all four are frame-blind by design.
 //!   Measured zero on every design that reaches here, and stated as a row so it
 //!   stays zero;
-//! * **`has_hier_call` and `contains_shared_fork` are DEAD rows today.** Both
-//!   flags are written only inside elaborate's frame-TASK lowering
-//!   (`frames_body.rs`, `frames_classify.rs`), so they are always false for the
-//!   functions this predicate reaches — the `is_task` row above gets there first.
-//!   They stay because S3b admits tasks, and on that day they are the two shapes
-//!   that must NOT come with them.
+//! * **`contains_shared_fork` is the last of the two flag rows.** Its twin
+//!   `has_hier_call` was called DEAD here, then LIVE by A3-ii-a (19 designs hit
+//!   only it), and is now GONE — A3-iv measured that its reason was about
+//!   elaborate's phase order, not the engine's, and that `frame_suspends`
+//!   already answers the question it stood in for. `contains_shared_fork` means
+//!   the body has a `fork`, which `frame_suspends` reports as a park one row up;
+//!   it is kept as its own row so that if that ever stops being true, this
+//!   refuses instead of the design going quiet.
 //!
 //! ## What this file does NOT close, and who does
 //!
@@ -165,9 +167,26 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         // `fork`, which `frame_suspends` reports as a park one row up. Kept as its
         // own row for the reason it always was — if that ever stops being true,
         // this refuses instead of the design going quiet.
-        if m.has_hier_call {
-            return Err("a subroutine with a hierarchical call (forced suspendable)");
-        }
+        // ⚠️⚠️ **`has_hier_call` IS GONE (A3-iv), and its reason was about a phase
+        // that has already ended.** The row said `frame_suspends` cannot see
+        // through a deferred hierarchical enable, because `Call.target` is a
+        // PLACEHOLDER until the finish-phase resolve — and that is true where
+        // `force_suspend` needs it, inside ELABORATE, whose
+        // `compute_suspendable_tasks` runs before the patch. This predicate runs
+        // in `simulate`, after it. Measured rather than reasoned: instrumenting
+        // the walk over every design that reaches this row counts **zero**
+        // unresolvable `Call.target`s.
+        //
+        // So the question the row was standing in for is answerable, and the row
+        // above already asks it — `frame_suspends` refuses a hier callee that
+        // parks (measured: a `#1` inside the callee's body is refused as "a task
+        // frame that SUSPENDS"), and its `None` arm still fails CLOSED if a
+        // target ever does arrive unresolved. Refusing here as well was
+        // over-refusal, which is a rung DOWN the ladder.
+        //
+        // §4.5.338 for the third time in this file: a refusal does not know when
+        // its own reason stops being true — and "the target is a placeholder" is
+        // a claim about WHEN, which the next phase invalidates.
         if m.contains_shared_fork {
             return Err("a subroutine with a shared fork window");
         }
