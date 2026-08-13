@@ -281,6 +281,42 @@ fn sidecar_families_reject_from_opts() {
 /// 160 class designs carry `class_rand`/`class_vtable` (they are per-CLASS and
 /// exist the moment a `rand` field or a method is declared), so a rule keyed on
 /// the TABLE rather than on the SITE would refuse all of them.
+/// A7: functional COVERAGE is core — a covergroup is desugared, not executed.
+///
+/// ⚠️ The positive assertion is not the whole claim, and the neighbour below is
+/// the half that matters: the summary is only correct because `simulate`
+/// harvests the hit bitmaps from the store that RAN. Without that a native run
+/// publishes `coverage_pct: 0.0` — a legal value, at exit 0 — so this row could
+/// not be lifted on the desugaring argument alone.
+#[test]
+fn functional_coverage_is_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.coverage_manifest.push(sim_engine::CovgInstMeta {
+        inst: "t.c".to_string(),
+        items: Vec::new(),
+    });
+    assert_eq!(
+        design_eligibility(&ir, &o)
+            .reject_reasons
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec![],
+        "a coverage manifest must disqualify nothing"
+    );
+
+    let (ok, rs) = reasons(
+        "module t;\n\
+           reg [1:0] x;\n\
+           covergroup cg; cp: coverpoint x; endgroup\n\
+           cg c = new;\n\
+           initial begin x=0; c.sample(); x=3; c.sample(); $display(\"d\"); end\n\
+         endmodule\n",
+    );
+    assert!(ok, "a covergroup design must be eligible: {rs:?}");
+    assert!(rs.is_empty(), "no reject family may fire, got {rs:?}");
+}
+
 /// A8-a: a WHOLE-HANDLE COPY (`d2 = d1`, IEEE §7.10) is core.
 ///
 /// The positive assertion, for the same reason the heap-kind test above is one:

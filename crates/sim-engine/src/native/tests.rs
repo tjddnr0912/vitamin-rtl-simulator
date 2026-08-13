@@ -451,6 +451,13 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // backends. The design would then agree about a deep copy neither
         // performed, which is the exact shape of the four notes above.
         handle_copy_stmts: sc.handle_copy_stmts,
+        // …and the COVERAGE manifest (A7). Seventh, and the failure mode is the
+        // one that makes this list worth keeping: a covergroup's SAMPLING is
+        // ordinary IR either way, so a design without this table still runs and
+        // still sets its bitmap bits — it just produces `SimResult.coverage ==
+        // None`. A test asserting the summary would then compare `None` with
+        // `None` and pass while the store-routing it exists to check never ran.
+        coverage_manifest: sc.coverage_manifest,
         // …and the two heap ELEMENT refinements (V1 slice 3b). THIRD time this
         // file has been caught by the same omission (`assert_ctl` in slice 1,
         // `queue_slice_stmts` in 2c), and this one showed both failure modes at

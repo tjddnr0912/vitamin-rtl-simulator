@@ -260,7 +260,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // threading the reader into that helper (see `run_queue_slice`'s doc).
         queue_slice_stmts: _,
         queue_bounds: _,
-        coverage_manifest,
+        // A7: see the deleted `coverage` row below — desugared to ordinary IR.
+        coverage_manifest: _,
         probed_nets,
         stage_stmts,
         clocking_inputs,
@@ -306,7 +307,20 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // tier-3 has routed through `dispatch_with` since S1d-4b. The same shape as
     // V1 slice 1 (SVA) and A1-i (`k_queue_pop`): the refusal named a feature,
     // not a mechanism this backend lacked.
-    flag(&mut out, "coverage", coverage_manifest.len());
+    // ⭐⭐ **A7: `coverage` was CONSERVATIVE too — the same discovery V1 slice 1
+    // made about SVA.** A covergroup is not a runtime mechanism: elaborate
+    // DESUGARS `cg.sample()` into ordinary bit-set assignments on a bitmap net
+    // (`1 << (v & 63)`, or the explicit-bin equivalent) and `get_coverage()`
+    // into ordinary arithmetic over that net, so what reaches the engine is
+    // plain IR the tier-3 walk has always executed correctly.
+    //
+    // ⚠️ ONE thing genuinely was store-dependent and it is not in the walk at
+    // all: the end-of-run `coverage.json` summary read
+    // `st.nets[it.bitmap_net].cur`, the ENGINE's flat store, which a native run
+    // never writes — so lifting this row without that fix would have reported
+    // 0.00% coverage at exit 0. The bits are now harvested from whichever store
+    // ran, before the arena is dropped (`simulate`'s `cover_bits`).
+
     // The G2 probe/stage rails ride the interpreter's change hooks; tier-3 v1
     // does not reproduce them (doc-21 §4.3), so an instrumented run stays on
     // the existing engine rather than silently losing its trace.

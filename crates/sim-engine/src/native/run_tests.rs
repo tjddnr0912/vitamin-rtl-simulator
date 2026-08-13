@@ -3706,6 +3706,201 @@ endmodule
     );
 }
 
+/// A7 ABSOLUTE ANCHOR — functional COVERAGE, hand-IEEE.
+///
+/// ⭐ **Another conservative row, and the same discovery V1 slice 1 made about
+/// SVA**: a covergroup is not a runtime mechanism. Elaborate DESUGARS
+/// `cg.sample()` into ordinary bit-set assignments on a 64-bit bitmap net
+/// (`1 << (v & 63)`, or the explicit-bin equivalent) and `get_coverage()` into
+/// ordinary arithmetic over it, so the tier-3 walk has been executing
+/// covergroups correctly since it could execute a body at all.
+///
+/// ⚠️⚠️ **What it could not do was REPORT them, and that is what this test is
+/// really for.** The end-of-run summary read `st.nets[it.bitmap_net].cur` — the
+/// engine's flat store — which a native run never writes, so lifting the gate
+/// row without `simulate`'s `cover_bits` harvest would have published
+/// **0.00% at exit 0**: a silent-wrong in a G2 deliverable (`coverage.json`),
+/// not a crash.
+///
+/// Hand-IEEE because `iverilog 13` rejects `covergroup` outright (the header of
+/// `cli/tests/coverage_n5.rs` says so). Every number below is derived:
+/// six samples with `x = 0..5` hit the `lo` ({0:3}) and `mid` ({4:7}) bins but
+/// not `hi` ⇒ 2/3; `y = i[1:0]` cycles 0,1,2,3,0,1 ⇒ 4/4; the cross has
+/// 3×4 = 12 bins and six distinct (x-bin, y) pairs ⇒ 6/12. The instance average
+/// is unweighted over the three items: (200/3 + 100 + 50)/3 = 72.222222.
+#[test]
+fn functional_coverage_is_reported_from_the_store_that_ran() {
+    let src = r#"
+module t;
+  reg [3:0] x;
+  reg [1:0] y;
+  covergroup cg;
+    cp_x: coverpoint x { bins lo = {[0:3]}; bins mid = {[4:7]}; bins hi = {[8:15]}; }
+    cp_y: coverpoint y;
+    cr:   cross cp_x, cp_y;
+  endgroup
+  cg c = new;
+  integer i;
+  initial begin
+    for (i = 0; i < 6; i = i + 1) begin x = i[3:0]; y = i[1:0]; c.sample(); end
+    $display("done x=%0d y=%0d", x, y);
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    let cov = r
+        .coverage
+        .expect("a covergroup design must report coverage");
+    assert_eq!(cov.groups.len(), 1, "one instance");
+    let g = &cov.groups[0];
+    assert_eq!(g.instance, "t.c");
+    let items: Vec<(&str, bool, u32, u32)> = g
+        .items
+        .iter()
+        .map(|i| (i.name.as_str(), i.is_cross, i.num_bins, i.covered_bins))
+        .collect();
+    assert_eq!(
+        items,
+        vec![
+            ("cp_x", false, 3, 2),
+            ("cp_y", false, 4, 4),
+            ("cross_0", true, 12, 6),
+        ],
+        "per-item bins (hand-IEEE; iverilog rejects covergroup)"
+    );
+    // The weighted average, to the same six decimals `coverage.json` publishes.
+    assert!(
+        (g.coverage_pct - 72.222222).abs() < 1e-5,
+        "instance average: {}",
+        g.coverage_pct
+    );
+    // ⚠️ The line that makes the whole test non-vacuous: 0.0 is exactly what an
+    // unharvested native run publishes, and it is a legal value.
+    assert!(g.coverage_pct > 0.0, "a native run must not report 0%");
+}
+
+/// A7 DIFFERENTIAL — the coverage SUMMARY, native against the VM.
+///
+/// The anchor above pins the numbers; this pins that the two backends agree
+/// about them, over shapes the anchor does not carry: a covergroup that is
+/// never sampled (every bin 0, and the average must still be 0.0 rather than
+/// NaN), one sampled under a clocked process rather than in an `initial`, and
+/// two INSTANCES of the same covergroup — which is the shape the flat
+/// `cover_bits` index would get wrong if it were reset per instance.
+#[test]
+fn a7_coverage_summary_matches_the_vm() {
+    for (name, src) in [
+        (
+            "never sampled",
+            r#"
+module t;
+  reg [1:0] x;
+  covergroup cg; cp: coverpoint x; endgroup
+  cg c = new;
+  initial begin x = 2'd1; $display("n"); end
+endmodule
+"#,
+        ),
+        (
+            "sampled on a clock edge",
+            r#"
+module t;
+  reg clk = 1'b0;
+  reg [1:0] x = 2'd0;
+  covergroup cg; cp: coverpoint x; endgroup
+  cg c = new;
+  always #1 clk = ~clk;
+  always @(posedge clk) begin x <= x + 2'd1; c.sample(); end
+  initial begin #9 $display("x=%0d", x); $finish; end
+endmodule
+"#,
+        ),
+        // TWO instances, so the flat `cover_bits` index has to keep walking
+        // across the instance boundary. A per-instance index would report the
+        // first group's bins under the second's name — and, because both are
+        // 4-bin coverpoints here, would still produce plausible numbers.
+        // (Two covergroups rather than one parameterized one: `covergroup
+        // cg(input …)` is a pre-existing elaborate gap, E3010.)
+        (
+            "two instances",
+            r#"
+module t;
+  reg [1:0] x;
+  reg [2:0] y;
+  covergroup cga; cpx: coverpoint x; endgroup
+  covergroup cgb; cpy: coverpoint y; endgroup
+  cga ca = new;
+  cgb cb = new;
+  initial begin
+    x = 2'd0; y = 3'd7; ca.sample(); cb.sample();
+    x = 2'd1;           ca.sample();
+    x = 2'd2;           ca.sample();
+    $display("done");
+  end
+endmodule
+"#,
+        ),
+    ] {
+        let (ir, opts) = build_with_opts(src);
+        let vm = simulate(
+            &ir,
+            &MergedSink::default(),
+            SimOpts {
+                backend: Backend::Bytecode,
+                ..opts.clone()
+            },
+        );
+        let nat = simulate(
+            &ir,
+            &MergedSink::default(),
+            SimOpts {
+                backend: Backend::Native,
+                ..opts
+            },
+        );
+        assert_eq!(
+            nat.backend,
+            Backend::Native,
+            "{name}: refused {:?}",
+            nat.native.refused
+        );
+        let fmt = |r: &sim_engine::SimResult| {
+            r.coverage.as_ref().map(|c| {
+                c.groups
+                    .iter()
+                    .map(|g| {
+                        (
+                            g.instance.clone(),
+                            format!("{:.6}", g.coverage_pct),
+                            g.items
+                                .iter()
+                                .map(|i| (i.name.clone(), i.num_bins, i.covered_bins))
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+        };
+        assert_eq!(fmt(&vm), fmt(&nat), "{name}: coverage summary diverged");
+        assert!(fmt(&nat).is_some(), "{name}: no summary was produced");
+    }
+}
+
 /// A8-a ABSOLUTE ANCHOR — a whole-handle COPY (IEEE §7.10), iverilog-pinned.
 ///
 /// ⭐ **Zero kernel code, like V1 slice 1 and A1-i.** The `handle_copy` design

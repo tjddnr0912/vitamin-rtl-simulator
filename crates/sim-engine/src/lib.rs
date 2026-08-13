@@ -807,6 +807,22 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         &call_out_nets,
     );
 
+    // A7: the FINAL hit-bitmap of every coverage item, harvested from whichever
+    // store actually ran.
+    //
+    // ⚠️ This exists because the coverage summary below reads
+    // `st.nets[it.bitmap_net].cur` — the ENGINE's flat store — which a native run
+    // never writes. Coverage itself needed no work at all: elaborate DESUGARS
+    // `cg.sample()` into ordinary bit-set assignments on a bitmap net and
+    // `get_coverage()` into ordinary arithmetic over it, so the tier-3 walk has
+    // been executing covergroups correctly all along (the same discovery V1
+    // slice 1 made about SVA). What it could not do is REPORT them: the arena is
+    // dropped at the end of the native arm, so the bits had to be taken before
+    // it goes.
+    //
+    // `None` on the engine path, and that is what keeps it byte-identical: the
+    // summary falls through to exactly the read it always made.
+    let mut cover_bits: Option<Vec<value::Value>> = None;
     let reason = if effective_backend == Backend::Native {
         // ③층 (S1d-4c-2c): the design passed all three gate layers, so the tier-3
         // run loop owns the whole simulation — there is no body-level fallback
@@ -835,7 +851,25 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             &class_new_sites,
             opts.max_body_steps,
         );
-        native::run::run(&mut nk, ir)
+        let reason = native::run::run(&mut nk, ir);
+        // …before `nk` (and the arena inside it) is dropped. Read through
+        // `NetReader::read_net`, the composite — not `arena.read_net` — so a
+        // bitmap net that is heap-kind or frame-local would still be answered
+        // by whoever owns it rather than from a dead slot. Neither is
+        // constructible from `cover.rs` today (a bitmap is a packed `logic`
+        // declared at module scope); asking through the funnel costs nothing
+        // and is the answer that stays right if that changes.
+        if !opts.coverage_manifest.is_empty() {
+            use crate::eval::NetReader as _;
+            cover_bits = Some(
+                opts.coverage_manifest
+                    .iter()
+                    .flat_map(|inst| inst.items.iter())
+                    .map(|it| nk.read_net(it.bitmap_net, None))
+                    .collect(),
+            );
+        }
+        reason
     } else {
         let mut sched = Scheduler::new(
             &mut st,
@@ -917,6 +951,11 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // coverpoint-then-cross accumulation ORDER, same `sum/max(total_weight,1)` weighted
     // average) so `coverage.json` can never disagree with `c.get_coverage()`.
     let coverage = (!opts.coverage_manifest.is_empty()).then(|| {
+        // A7: ONE flat index across every instance's items, walked in the same
+        // nested order `cover_bits` was collected in. A per-instance index would
+        // be a second spelling of that order, and getting it wrong reports one
+        // covergroup's bins under another's name.
+        let mut flat = 0usize;
         let groups = opts
             .coverage_manifest
             .iter()
@@ -927,10 +966,21 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
                     .items
                     .iter()
                     .map(|it| {
-                        let bp = &st.nets[it.bitmap_net as usize].cur;
+                        let i = flat;
+                        flat += 1;
+                        // The store that RAN. `None` (the engine path) is the
+                        // read this always made; `Some` is the tier-3 arena's
+                        // harvest, taken before the arena was dropped.
+                        let (val, unk): (&[u64], &[u64]) = match &cover_bits {
+                            Some(bits) => (&bits[i].val, &bits[i].unk),
+                            None => {
+                                let bp = &st.nets[it.bitmap_net as usize].cur;
+                                (&bp.val, &bp.unk)
+                            }
+                        };
                         let mut covered: u32 = 0;
-                        for (k, &v) in bp.val.iter().enumerate() {
-                            covered += (v & !bp.unk.get(k).copied().unwrap_or(0)).count_ones();
+                        for (k, &v) in val.iter().enumerate() {
+                            covered += (v & !unk.get(k).copied().unwrap_or(0)).count_ones();
                         }
                         let pct = if it.num_bins == 0 {
                             0.0
