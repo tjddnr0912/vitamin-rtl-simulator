@@ -802,21 +802,29 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
 /// Note `native.eligible` stays TRUE, which is the whole point of the layering:
 /// the design is within v1's scope, today's executor just cannot run it.
 ///
-/// The design here has changed three times as the executor grew: a plain
+/// The design here has changed FIVE times as the executor grew: a plain
 /// `assign` until S1d-4d-1, `assign #2` until S1d-4d-3 wired the inertial
-/// wheel, then a multi-driven net until S1d-4d-4 wired the group resolution.
+/// wheel, a multi-driven net until S1d-4d-4 wired the group resolution, then a
+/// `$monitor` until A5-b gave tier-3 a postponed region. It is now
+/// `$writememh`, which reads the MEMORY itself rather than a formatted
+/// argument.
+///
+/// ⚠️ That churn IS the test working. Its claim is about the SHAPE of the
+/// report — an executor-layer refusal must publish `eligible: true` beside
+/// `backend: "vm"` — so every time the executor grows, the design has to be
+/// re-picked or the test starts asserting that shape about a design that runs.
 #[test]
 fn run_json_reports_native_fallback_on_a_refused_design() {
-    const MON_SV: &str = "module top; reg [7:0] n;\n\
-         initial begin n = 8'd0; $monitor(\"n=%0d\", n); #1 n = 8'd1; #1 $finish; end endmodule\n";
-    let (_, code, obs) = run(MON_SV, &["--backend", "native"]);
+    const WMEM_SV: &str = "module top; reg [7:0] m [0:1];\n\
+         initial begin m[0] = 8'd0; m[1] = 8'd1; $writememh(\"nfb.hex\", m); #1 $finish; end endmodule\n";
+    let (_, code, obs) = run(WMEM_SV, &["--backend", "native"]);
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));
     assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
     assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
     assert!(
         field(&m, "native").contains("\"eligible\": true"),
-        "a `$monitor` design is within v1's SCOPE — the refusal is the \
+        "a `$writemem*` design is within v1's SCOPE — the refusal is the \
          executor's, not the gate's:\n{m}"
     );
 }

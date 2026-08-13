@@ -1001,6 +1001,48 @@ tier-3 워크는 **바디를 실행할 수 있게 된 이래 커버그룹을 옳
 **측정**: **5,898 / 6,350 = 92.88%**(+64 · 예측 +64) · 전 스위트 **5412 green** · **flip 런
 5409/5412**(실패 3 = 백엔드 이름 핀) · **발산 0** · **뮤테이션 5/5 사망**.
 
+#### 5.1-s ✅ A5-b — postponed 리전: **거부 하나가 세 가족을 덮고 있었고 셋의 크기가 48:6:0 이었다** · 92.88% → **93.64%** (2026-08-13)
+
+⭐ **`a system task the tier-3 kernel refuses` 행(+54)의 내부 분포를 먼저 쟀다** — `$monitor`/`$strobe`
+**48** · `$writemem*` **6** · `$dumpall`/`$dumpon` **0**. ⇒ 슬라이스는 앞의 하나이고, **`$dumpall`/
+`$dumpon` 은 고쳐도 코퍼스에서 0 이므로 안 건드린다**(그 사실을 기록한다 — 조용히 자르지 않는다).
+
+⭐⭐ **둘이 함께 거부돼 있던 이유가 곧 수정의 모양이다** — `dispatch` 의 `$monitor`/`$strobe` arm 은
+**ExprId 와 메타데이터만 캡처하고 넷을 하나도 안 읽는다**(등록은 늘 store-독립이었다). store 에 묶인
+것은 ⓐ 캡처된 인자의 **렌더**와 ⓑ `$monitor` 의 **변경 비교**뿐이고, 둘 다 `flush_postponed` 안에서
+엔진의 store 를 읽었다. 네이티브 런에서 그 store 는 안 움직이므로 **`$monitor` 는 t0 establishment 줄을
+찍고 그 뒤로 영원히 침묵**한다 — 진단도 크래시도 없이 출력만 사라진다.
+
+두 부분이 필요했고 그래서 한 번에 열린다:
+
+- **`flush_postponed_with<N>(nets)`** — 네 자리만 스레드했다(strobe 렌더 · monitor 렌더 · establishment
+  seed · 변경 비교). `None` = 엔진의 store 이고 각 arm 이 원래 부르던 호출로 되돌아가므로 엔진 경로는
+  **기계적 바이트 동일**(`dispatch_with`·`format_args_str_with`·`full_snapshot_with` 와 같은 모양).
+- **tier-3 런 루프의 POSTPONED 리전** — 안정점(모든 리전 큐가 비고 cont-assign 이 fixpoint, **시간이
+  아직 안 움직인** 자리)과 **세 종료 arm**(`$finish`/`$stop`/fatal)에서 부른다. 엔진 루프가 부르는 바로
+  그 자리들이다. 인자 렌더가 범위 밖을 읽을 수 있으므로 **`drain_range_diags` 가 붙는다**(`propagate`
+  와 같은 제3 생산자 문제).
+- 빌림 분할은 `k_dispatch_systask` 의 것 — **커널이 아니라 아레나**를 넘긴다(커널은 `&mut Scheduler` 를
+  들고 있어 둘을 동시에 못 빌려준다). 힙 넷과 호출은 한 층 아래 `HeapRouted` 가 답한다.
+
+⭐ 앵커는 **iverilog 핀**이고 각 줄이 리전의 다른 부분이다 — establishment(무조건 출력) · 변경 재출력
+**셋**(store-blind 비교가 잃는 바로 그 줄들: 엔진 store 에서는 값이 영원히 같아 `changed` 가 거짓) ·
+`$strobe` 가 **정착값**을 본다는 것(`q=2 s=4`, 같은 줄의 `$display` 라면 `q=1 s=2`) · `$monitoroff`/
+`$monitoron` 구간 · **`$display` 가 두 monitor 줄 사이에 오는 순서**(Active vs Postponed).
+
+⚠️ **앵커가 `#2 $finish` 를 자기 슬롯에 따로 뒀다** — `$strobe` 와 **같은 슬롯의** `$finish` 는
+pre-existing iverilog 발산이 있다(vvp 는 그 슬롯의 NBA 를 postponed 드레인 전에 적용, vita 는 안 한다).
+**두 vita 백엔드가 동일**하므로 이 슬라이스 것이 아니고, 알려진 발산을 앵커 기대 출력에 넣으면 앵커가
+앵커이길 그만둔다(§4.5.302).
+
+⚠️⚠️ **거부 행을 핀하던 테스트 셋이 초록으로 공허해질 뻔했다** — 셋 다 `$monitor` 로 그 행을 재고
+있었는데 그 형태가 이제 **돈다**. `$writemem*` 로 다시 철자했다(`run_json_reports_native_fallback_
+on_a_refused_design` 은 이것이 **다섯 번째** 재선택이고, 그 churn 이 바로 그 테스트가 작동한다는
+증거다). 그리고 `s1d4b2_…_refused_not_dispatched` 의 개수 단언 **6 → 4**.
+
+**측정**: **5,956 / 6,361 = 93.63%**(+48 · 예측 +48) · 전 스위트 **5414 green** · **flip 런
+5411/5414**(실패 3 = 백엔드 이름 핀) · **발산 0** · **뮤테이션 7/7 사망**.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

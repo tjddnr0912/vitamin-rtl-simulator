@@ -459,15 +459,15 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
             "they re-snapshot through `full_snapshot`, and only the `$dumpvars` \
              call site threads the arena reader so far",
         ),
-        SysTaskId::Monitor | SysTaskId::Strobe => (
-            "k_dispatch_systask($monitor/$strobe)",
-            "S1d-4d",
-            "dispatch only REGISTERS them — it captures ExprIds, and the render \
-             happens later in `sched/run_loop.rs::flush_postponed`, which the \
-             tier-3 run loop does not restate. A `$monitor` would print its t0 \
-             line and then never re-fire, because the store its change detection \
-             compares against is the engine's and never moves",
-        ),
+        // ⚠️ `$monitor`/`$strobe` are WIRED (A5-b). The row that stood here was
+        // right about the mechanism and it took two things to lift, not one:
+        // the tier-3 run loop now HAS a postponed region (`native::run::
+        // flush_postponed`, called at the settled point and at the three
+        // terminating arms, as the engine's loop does), and
+        // `flush_postponed_with` threads the store into the two places that
+        // read nets — the render and, for `$monitor`, the change compare.
+        // Registering was never store-bound: `dispatch`'s arms capture ExprIds
+        // and metadata and touch no net.
         // `$dumpfile` is WIRED (S1d-4d-2) — but NOT for the reason the first
         // version of this comment gave. It claimed `arg_string` returns early
         // for anything that is not `Expr::Const`, so the task never reads a net.

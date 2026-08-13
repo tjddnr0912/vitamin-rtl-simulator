@@ -2275,13 +2275,18 @@ module top;
 endmodule
 "#,
         ),
+        // ⚠️ These two used `$monitor` until A5-b, which WIRED it — so the row
+        // they pin had to be re-spelled with a task that is still refused
+        // (`$writemem*`, which reads the MEMORY itself rather than a formatted
+        // argument). A refusal-row test whose shape stops being refused turns
+        // green by measuring nothing.
         (
             "refused system task",
             "a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)",
             r#"
 module top;
-  reg [7:0] n;
-  initial begin n = 8'd0; $monitor("n=%0d", n); #1 n = 8'd1; #1 $finish; end
+  reg [7:0] m [0:1];
+  initial begin m[0] = 8'd0; m[1] = 8'd1; $writememh("out.hex", m); #1 $finish; end
 endmodule
 "#,
         ),
@@ -2291,10 +2296,12 @@ endmodule
             r#"
 module top;
   reg [7:0] n;
+  reg [7:0] m [0:1];
   initial begin
     n = 8'd0;
+    m[0] = 8'd0; m[1] = 8'd1;
     #1 n = 8'd1;
-    if (n == 8'd1) $monitor("n=%0d", n);
+    if (n == 8'd1) $writememb("out2.hex", m);
     #1 $finish;
   end
 endmodule
@@ -3706,6 +3713,208 @@ endmodule
     );
 }
 
+/// A5-b ABSOLUTE ANCHOR — the POSTPONED region, iverilog-pinned.
+///
+/// The last region tier-3 did not have. `$monitor` and `$strobe` were refused
+/// TOGETHER because they fail together: `dispatch` only REGISTERS them (it
+/// captures ExprIds and touches no net), and the render — plus, for `$monitor`,
+/// the change compare that decides whether to render at all — happened in
+/// `flush_postponed`, reading the engine's store. On a native run that store
+/// never moves, so a `$monitor` printed its establishment line and then went
+/// silent for the rest of the simulation: no diagnostic, no crash, just missing
+/// output.
+///
+/// Every line is a distinct part of the region:
+///
+/// * **the `MON t=0` line** — ESTABLISHMENT, which prints unconditionally.
+/// * **`MON t=1`, `t=3`, `t=5`** — change-triggered reprints. These are the
+///   ones a store-blind compare loses: the values are identical every time in
+///   the engine's untouched store, so `changed` is false forever.
+/// * **`STB1` at t=3** — `$strobe` renders at the SETTLED point, so it shows
+///   `q=2 s=4` (the NBA of that slot has applied) rather than the `q=1 s=2` a
+///   `$display` on the same line would have shown.
+/// * **the gap from t=5 to t=9** — `$monitoroff` at t=7 suppresses the
+///   change-reprints, and `$monitoron` re-enables them.
+/// * **`DISP q=6` between `MON t=11` and `MON t=13`** — the ORDER. `$display`
+///   prints in the Active region and the monitor in Postponed, so a region that
+///   fired at the wrong point in the loop interleaves differently.
+///
+/// ⚠️ The design deliberately ends `#2 $finish` in a slot of its own. A
+/// `$finish` in the SAME slot as a `$strobe` has a pre-existing iverilog
+/// divergence (vvp applies that slot's NBA before the postponed drain, vita does
+/// not) — identical on BOTH vita backends, so it is not this slice's, and
+/// putting it in an anchor's expected output is what stops the anchor being one
+/// (§4.5.302).
+#[test]
+fn the_postponed_region_has_its_iverilog_values() {
+    let src = r#"
+module t;
+  reg clk = 1'b0;
+  reg [3:0] q = 4'd0;
+  reg [7:0] s = 8'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) begin q <= q + 4'd1; s <= s + 8'd2; end
+  initial begin
+    $monitor("MON t=%0t q=%0d s=%0d", $time, q, s);
+    #3 $strobe("STB1 q=%0d s=%0d", q, s);
+    #4 $monitoroff;
+    #2 $monitoron;
+    #3 $display("DISP q=%0d", q);
+    #2 $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|MON t=0 q=0 s=0\n".to_string(),
+            "out|MON t=1 q=1 s=2\n".to_string(),
+            "out|STB1 q=2 s=4\n".to_string(),
+            "out|MON t=3 q=2 s=4\n".to_string(),
+            "out|MON t=5 q=3 s=6\n".to_string(),
+            "out|MON t=9 q=5 s=10\n".to_string(),
+            "out|MON t=11 q=6 s=12\n".to_string(),
+            "out|DISP q=6\n".to_string(),
+            "out|MON t=13 q=7 s=14\n".to_string(),
+        ],
+        "postponed region (iverilog 13 pinned)"
+    );
+}
+
+/// A5-b DIFFERENTIAL — postponed shapes, native against the VM.
+///
+/// The anchor pins the ordinary case; these are the ones it does not carry.
+#[test]
+fn a5b_postponed_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A `$monitor` whose args are a MEMORY element and a wide net — the
+        // change compare walks bit planes, so a store-blind read is X-vs-X and
+        // never differs.
+        (
+            "monitor on a memory element",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [15:0] mem [0:3];
+  reg [1:0] i = 2'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) begin mem[i] <= {14'd0, i}; i <= i + 2'd1; end
+  initial begin
+    mem[0]=16'd0; mem[1]=16'd0; mem[2]=16'd0; mem[3]=16'd0;
+    $monitor("m0=%0d m1=%0d i=%0d", mem[0], mem[1], i);
+    #9 $finish;
+  end
+endmodule
+"#,
+        ),
+        // A `$strobe` registered MORE THAN ONCE in the same slot: the FIFO must
+        // drain in call order.
+        (
+            "two strobes in one slot",
+            r#"
+module top;
+  reg [7:0] a = 8'd1, b = 8'd2;
+  initial begin
+    #1;
+    $strobe("S1 a=%0d", a);
+    $strobe("S2 b=%0d", b);
+    a = 8'd9;
+    #1 $finish;
+  end
+endmodule
+"#,
+        ),
+        // A monitor whose ONLY changing argument is `$time` — IEEE §17.1.3 says
+        // a direct `$time` does not participate in change detection, so this
+        // must print ONCE.
+        (
+            "monitor on time alone",
+            r#"
+module top;
+  reg [3:0] q = 4'd5;
+  initial begin
+    $monitor("t=%0t q=%0d", $time, q);
+    #1; #1; #1;
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // ⚠️ A `$strobe` in the SAME SLOT as the `$finish`, which the anchor
+        // deliberately cannot carry (that shape has a pre-existing iverilog
+        // divergence about whether the slot's NBA lands first). Both vita
+        // backends agree about it, so a DIFFERENTIAL can hold the line the
+        // anchor cannot — and it is the only thing that reaches the drain at
+        // the terminating arm rather than at the stable point. Measured: a
+        // mutation deleting that drain survives every other design here.
+        (
+            "strobe in the finish slot",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] a = 8'd1;
+  always #1 clk = ~clk;
+  always @(posedge clk) a <= a + 8'd1;
+  initial begin
+    #3 $strobe("SF a=%0d", a);
+    $display("D a=%0d", a);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A `$monitor` re-established mid-run REPLACES the previous one and
+        // prints a fresh establishment line.
+        (
+            "monitor replaced mid-run",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [3:0] q = 4'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) q <= q + 4'd1;
+  initial begin
+    $monitor("A q=%0d", q);
+    #4 $monitor("B q=%0d", q);
+    #4 $finish;
+  end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 5, "A5-b differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "A5-b differential: refusal breakdown moved"
+    );
+}
+
 /// A7 ABSOLUTE ANCHOR — functional COVERAGE, hand-IEEE.
 ///
 /// ⭐ **Another conservative row, and the same discovery V1 slice 1 made about
@@ -4189,8 +4398,10 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         (
             "dispatch.rs",
             1,
-            "`split_file_directed`'s fd (the `file_directed` row, and \
-             `$monitor`/`$strobe` are in `systask_refusal` too)",
+            "`split_file_directed`'s fd — the `file_directed` row. ⚠️ The other \
+             half of this reason (`and $monitor/$strobe are in systask_refusal \
+             too`) EXPIRED with A5-b, which wired both; the site is now held by \
+             the `file_directed` row alone. §4.5.338 again, inside a test",
         ),
         (
             "crv_draw.rs",

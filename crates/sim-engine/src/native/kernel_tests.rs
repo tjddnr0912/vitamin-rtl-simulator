@@ -1687,10 +1687,12 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
             sim_ir::SysTaskId::DumpAll
                 | sim_ir::SysTaskId::DumpOn
                 | sim_ir::SysTaskId::WritememB
-                | sim_ir::SysTaskId::WritememH
-                // …and the two whose RENDER happens outside dispatch entirely.
-                | sim_ir::SysTaskId::Monitor
-                | sim_ir::SysTaskId::Strobe
+                | sim_ir::SysTaskId::WritememH // ⚠️ `$monitor`/`$strobe` LEFT this set in A5-b. Their row was
+                                               // right that the render happens outside `dispatch` — but that
+                                               // made it a two-part fix rather than an impossible one: the
+                                               // tier-3 run loop grew a postponed region and
+                                               // `flush_postponed_with` threads the store into the render and
+                                               // the change compare. Registering never read a net.
         );
         if !expect_refusal {
             continue;
@@ -1718,9 +1720,12 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         );
         refused += 1;
     }
+    // FOUR, not six: A5-b wired `$monitor` and `$strobe`. The count is asserted
+    // exactly rather than as `> 0` so that wiring or refusing another member
+    // moves a number a human has to re-justify — which is what just happened.
     assert_eq!(
-        refused, 6,
-        "expected all six refused tasks to refuse — got {refused}"
+        refused, 4,
+        "expected all four remaining refused tasks to refuse — got {refused}"
     );
 }
 

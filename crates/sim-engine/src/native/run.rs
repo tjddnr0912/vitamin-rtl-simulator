@@ -279,15 +279,26 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     match step {
                         Step::Finish => {
                             k.sched.st.finished = true;
+                            // IEEE §5.4 / §17: drain THIS timestep's postponed
+                            // region before terminating — the engine does it at
+                            // the same three arms, so a `$strobe` in the same
+                            // slot as a `$finish` still prints.
+                            flush_postponed(k);
                             return done(k, FinishReason::Finish);
                         }
                         Step::Stop => {
                             k.sched.st.finished = true;
+                            // IEEE §5.4 / §17: drain THIS timestep's postponed
+                            // region before terminating — the engine does it at
+                            // the same three arms, so a `$strobe` in the same
+                            // slot as a `$finish` still prints.
+                            flush_postponed(k);
                             return done(k, FinishReason::Stop);
                         }
                         Step::Fatal => {
                             k.sched.st.finished = true;
                             k.sched.st.had_fatal = true;
+                            flush_postponed(k);
                             return done(k, FinishReason::Error);
                         }
                         // `busy` suppresses a static-sensitivity wake for a
@@ -338,6 +349,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             }
             break; // time-step stable
         }
+
+        // POSTPONED (IEEE 1364-2005 §5.4): `now` is the settled time, every
+        // region bucket is empty, the cont-assigns are at fixpoint and time has
+        // NOT advanced. Exactly where the engine's loop calls it.
+        flush_postponed(k);
 
         // ── advance time ──────────────────────────────────────────────────
         // The minimum over BOTH pending sources. `delayed_nba` is in it because
@@ -771,6 +787,26 @@ fn done(k: &mut NativeKernel, r: FinishReason) -> FinishReason {
         "tier-3 run left VCD records unwritten"
     );
     r
+}
+
+/// A5-b: the POSTPONED region (IEEE 1364-2005 §5.4), through this store.
+///
+/// `$strobe` renders at the settled point and `$monitor` re-renders when a
+/// monitored VALUE changed — both of which read nets, and both of which read
+/// the ENGINE's nets until the seam below. The captures themselves live in
+/// `SimState::postponed`, one object both kernels borrow, so nothing needed a
+/// second home; what needed threading was the render and the change compare.
+///
+/// The borrow split is `k_dispatch_systask`'s: the ARENA is handed over, not the
+/// kernel, because the kernel holds `&mut Scheduler` and cannot lend both at
+/// once. The arena is wrapped in `HeapRouted` one level down (by
+/// `eval_expr_with`), which is what answers heap nets and calls.
+fn flush_postponed(k: &mut NativeKernel) {
+    let (sched, arena) = (&mut *k.sched, &k.arena);
+    sched.flush_postponed_with(Some(arena));
+    // A render can read out of range (`$monitor("%0d", mem[i])`), and the arena
+    // can only COUNT that — the same third-producer problem `propagate` has.
+    k.drain_range_diags();
 }
 
 fn finish_kind(k: &NativeKernel) -> FinishReason {

@@ -437,6 +437,29 @@ impl Scheduler<'_, '_> {
     /// implementation-defined; vita freezes strobes-then-monitor for byte-stable
     /// 3-OS golden output.
     pub(crate) fn flush_postponed(&mut self) {
+        self.flush_postponed_with::<crate::state::SimState>(None)
+    }
+
+    /// A5-b: [`Scheduler::flush_postponed`] against an ALTERNATE net store.
+    ///
+    /// The POSTPONED region is the last thing tier-3 could not do, and the
+    /// reason was never the region — it was the READ. `dispatch`'s `$monitor`
+    /// and `$strobe` arms capture ExprIds and metadata and touch no net at all,
+    /// so REGISTERING one has always been store-independent; what is store-bound
+    /// is rendering the captured args and, for `$monitor`, evaluating them to
+    /// decide whether anything changed. On a native run both read `SimState`'s
+    /// flat store, which never moves — so a `$monitor` printed its establishment
+    /// line and then went silent forever. That is why the two are refused
+    /// together rather than one at a time.
+    ///
+    /// `None` is the engine's own store and every arm then reduces to the call
+    /// it made before, so that path is mechanically byte-identical rather than
+    /// merely equivalent — the same shape as `dispatch_with`,
+    /// `format_args_str_with` and `full_snapshot_with`.
+    pub(crate) fn flush_postponed_with<N: crate::eval::NetReader + ?Sized>(
+        &mut self,
+        nets: Option<&N>,
+    ) {
         // `$time`/`$realtime` inside a postponed render must scale by the
         // REGISTERING module's multiplier, not the scheduler's live
         // `cur_time_mult` (which now holds the LAST-run process's `M` — a
@@ -455,7 +478,12 @@ impl Scheduler<'_, '_> {
             for cap in &batch {
                 self.st.cur_time_mult = cap.time_mult; // registering module's M
                 self.st.cur_scope = cap.scope.clone(); // registering module's %m
-                let mut line = format_args_str(&*self.st, cap.fmt, &cap.args, cap.radix);
+                let mut line = match nets {
+                    Some(n) => crate::builtins::format_args_str_with(
+                        &*self.st, n, cap.fmt, &cap.args, cap.radix,
+                    ),
+                    None => format_args_str(&*self.st, cap.fmt, &cap.args, cap.radix),
+                };
                 line.push('\n');
                 // `$fstrobe` routes to its descriptor; `$strobe` to stdout.
                 match cap.fd {
@@ -486,7 +514,7 @@ impl Scheduler<'_, '_> {
         let mut keys: Vec<Option<u32>> = vec![None];
         keys.extend(self.st.postponed.file_monitors.keys().map(|&d| Some(d)));
         for mkey in keys {
-            self.flush_one_monitor(mkey);
+            self.flush_one_monitor(mkey, nets);
         }
         // Restore the entering multiplier (see the save at the top of this fn).
         self.st.cur_time_mult = saved_mult;
@@ -495,7 +523,11 @@ impl Scheduler<'_, '_> {
     /// Render + print ONE monitor destination (`None` = stdout, `Some(fd)` = `$fmonitor`).
     /// Body unchanged from the single-monitor version; only the slot it reads and re-seeds
     /// is now selected by `mkey`.
-    fn flush_one_monitor(&mut self, mkey: Option<u32>) {
+    fn flush_one_monitor<N: crate::eval::NetReader + ?Sized>(
+        &mut self,
+        mkey: Option<u32>,
+        nets: Option<&N>,
+    ) {
         let mon = match monitor_slot_mut(self.st, mkey) {
             Some(m) => {
                 let fmt = m.cap.fmt;
@@ -563,14 +595,14 @@ impl Scheduler<'_, '_> {
                         true, // establishment / replace → print
                         args.iter()
                             .filter(|&&eid| !is_direct_time(eid))
-                            .map(|&eid| self.eval(eid))
+                            .map(|&eid| crate::builtins::eval_task_arg(self, nets, eid))
                             .collect::<Vec<Value>>(),
                     ),
                     Some(mut old) => {
                         let mut changed = false;
                         let mut i = 0usize;
                         for &eid in args.iter().filter(|&&eid| !is_direct_time(eid)) {
-                            let v = self.eval(eid);
+                            let v = crate::builtins::eval_task_arg(self, nets, eid);
                             match old.get_mut(i) {
                                 Some(slot) => {
                                     if !(slot.width == v.width
@@ -599,7 +631,12 @@ impl Scheduler<'_, '_> {
                 // change-reprint prints only while the monitor is enabled.
                 let do_print = was_establishment || (changed && !monitor_disabled);
                 if do_print {
-                    let mut line = format_args_str(&*self.st, fmt, &args, radix);
+                    let mut line = match nets {
+                        Some(n) => {
+                            crate::builtins::format_args_str_with(&*self.st, n, fmt, &args, radix)
+                        }
+                        None => format_args_str(&*self.st, fmt, &args, radix),
+                    };
                     line.push('\n');
                     // `$fmonitor` routes to its descriptor; `$monitor` to stdout.
                     match fd {
