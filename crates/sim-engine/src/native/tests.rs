@@ -1005,12 +1005,26 @@ fn a_subroutine_design_builds_only_when_its_body_stays_in_its_frame() {
            integer r;\n\
            initial begin g = 1; r = f(3); $display(\"r=%0d\", r); $finish; end\n\
          endmodule\n";
+    let writes_module = "module t;\n\
+           class C; int v; endclass\n\
+           C c;\n\
+           function automatic integer f(input integer x);\n\
+             begin c.v = x; f = x; end\n\
+           endfunction\n\
+           integer r;\n\
+           initial begin c = new(); r = f(3); $display(\"r=%0d\", r); $finish; end\n\
+         endmodule\n";
     for (label, src, want) in [
         ("frame-contained", contained, None),
+        // ⚠️ A3-iii: a READ no longer refuses — the delegated executor takes the
+        // caller's store. The row narrowed to WRITES, and the only out-of-window
+        // destination a subroutine body may have is a class field (a plain
+        // module net is E3009 a phase earlier).
+        ("reads a module net", reads_module, None),
         (
-            "reads a module net",
-            reads_module,
-            Some("a subroutine that names a net outside its own frame: S3b"),
+            "writes a module-scope class field",
+            writes_module,
+            Some("a subroutine that WRITES a net outside its own frame: S3b"),
         ),
     ] {
         let (ir, opts) = build_with_opts(src);

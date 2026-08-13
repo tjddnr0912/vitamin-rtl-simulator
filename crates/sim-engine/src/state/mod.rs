@@ -926,7 +926,10 @@ impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'
     // kernel gives one level up: `SimState::run_frame_call`, the same window and
     // slab, on the frame class `frames_admitted` proved never reads a module net.
     fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
-        self.st.eval_call(func, args)
+        // A3-iii: hand the WRAPPED store down, not `st`'s own. This wrapper is
+        // what the formatter reaches the arena through, so a subroutine called
+        // from a system-task argument must see the same nets the argument does.
+        self.st.run_frame_call_with(Some(self.nets), func, args)
     }
     fn resolve_virtual_call(&self, call_eid: u32, static_fid: u32, args: &[Value]) -> u32 {
         self.st.resolve_virtual_call(call_eid, static_fid, args)

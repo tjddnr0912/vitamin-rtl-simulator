@@ -690,15 +690,22 @@ module top;
 endmodule
 "#,
         ),
+        // ⚠️ A3-iii turned this from a READ into a WRITE, because a read is no
+        // longer refused: the delegated executor takes the caller's store now.
+        // A class-field write is the shape that still reaches this row — a plain
+        // `g = …` on a module net is refused a phase EARLIER (elaborate E3009),
+        // so building it the obvious way would give a test that passes because
+        // elaborate refused it.
         (
-            "subroutine reads a module net",
-            "a subroutine that names a net outside its own frame: S3b",
+            "subroutine writes a module-scope class field",
+            "a subroutine that WRITES a net outside its own frame: S3b",
             r#"
 module top;
-  integer g;
-  function automatic integer addg(input integer x); begin addg = x + g; end endfunction
+  class C; int v; endclass
+  C c;
+  function automatic integer addg(input integer x); begin c.v = x; addg = x; end endfunction
   integer r;
-  initial begin g = 5; r = addg(3); $display("r=%0d", r); $finish; end
+  initial begin c = new(); r = addg(3); $display("r=%0d", r); $finish; end
 endmodule
 "#,
         ),
@@ -721,31 +728,33 @@ endmodule
         // any interior expression node, or into all but the first frame window,
         // and every test still passed. (Shapes from the S3a differential review.)
         (
-            "module net read only in the ELSE arm",
-            "a subroutine that names a net outside its own frame: S3b",
+            "module-scope write only in the ELSE arm",
+            "a subroutine that WRITES a net outside its own frame: S3b",
             r#"
 module top;
-  integer g;
+  class C; int v; endclass
+  C c;
   function automatic integer f(input integer x);
-    begin if (x > 100) f = x; else f = x + g; end
+    begin if (x > 100) f = x; else begin c.v = x; f = x; end end
   endfunction
   integer r;
-  initial begin g = 7; r = f(3); $display("r=%0d", r); $finish; end
+  initial begin c = new(); r = f(3); $display("r=%0d", r); $finish; end
 endmodule
 "#,
         ),
         (
-            "module net read only inside a loop body",
-            "a subroutine that names a net outside its own frame: S3b",
+            "module-scope write only inside a loop body",
+            "a subroutine that WRITES a net outside its own frame: S3b",
             r#"
 module top;
-  integer g;
+  class C; int v; endclass
+  C c;
   function automatic integer f(input integer n);
     integer i, s;
-    begin s = 0; for (i = 0; i < n; i = i + 1) s = s + g; f = s; end
+    begin s = 0; for (i = 0; i < n; i = i + 1) c.v = i; f = s; end
   endfunction
   integer r;
-  initial begin g = 5; r = f(3); $display("r=%0d", r); $finish; end
+  initial begin c = new(); r = f(3); $display("r=%0d", r); $finish; end
 endmodule
 "#,
         ),
@@ -761,14 +770,15 @@ endmodule
             // in fact move the NetId either: module nets are all created in pass 4,
             // frame nets in pass 6.5, so a module net is ALWAYS below the window
             // and the `n < base_net` half is killed by any out-of-frame read.
-            "module net read by a function declared before it",
-            "a subroutine that names a net outside its own frame: S3b",
+            "module-scope write by a function declared before it",
+            "a subroutine that WRITES a net outside its own frame: S3b",
             r#"
 module top;
-  integer gg;
-  function automatic integer f(input integer x); begin f = x + gg; end endfunction
+  class C; int v; endclass
+  C cc;
+  function automatic integer f(input integer x); begin cc.v = x; f = x; end endfunction
   integer r;
-  initial begin gg = 7; r = f(3); $display("r=%0d", r); $finish; end
+  initial begin cc = new(); r = f(3); $display("r=%0d", r); $finish; end
 endmodule
 "#,
         ),
@@ -1262,51 +1272,59 @@ endmodule
     );
 }
 
-/// `Expr::Select`'s `width` edge is an ExprId, and this is the design that proves
-/// walking it is load-bearing rather than tidy.
+/// A3-iii RETIRED-AND-REPLACED: the `LvalChunk::width` edge is no longer
+/// reachable for the containment row, and that is recorded rather than worked
+/// around.
 ///
-/// A DESCENDING part-select `loc[i:0]` puts the msb `i` **only** in the width
-/// subtree: elaborate lowers the offset to `lsb` and the width to
-/// `Add(Sub(msb, lsb), 1)`. So a frame body reading a module net through the msb of
-/// a descending part-select is invisible to a walk that skips `width` — it would be
-/// admitted, and its `i` would come from the flat store a native run never writes.
+/// The old test built `f = loc[i:0]` — a non-constant part-select whose msb
+/// READS a module net — to prove `Walk::lvalue` descends into the `width` edge.
+/// A3-iii narrowed the row from `names` to `WRITES`, so a read through that edge
+/// refuses nothing, and the write side cannot be spelled: the only out-of-window
+/// destination elaborate permits from a subroutine body is a CLASS FIELD (a
+/// plain module net is E3009 a phase earlier), and `c.v[i:0] = …` is itself a
+/// pre-existing elaborate gap (E3010, a bit-select on a class field).
 ///
-/// ⚠️ The shape is illegal SystemVerilog (iverilog: *"Part select expressions must
-/// be constant integral values"*) and vita accepts it silently as a 1-bit select —
-/// a pre-existing correct-or-loud gap, recorded in ROADMAP §2 (a silent answer,
-/// not a loud refusal — the twin of this sentence in `frames.rs` was corrected and
-/// this one was not, which is how a retraction half-lands). It is used here
-/// anyway because the claim this replaces was "no design can be written that kills
-/// it", and the quantifier was over designs ELABORATE PRODUCES, not over legal ones.
+/// ⚠️ So the edge keeps its `self.expr(e)` call and LOSES its test. Saying so is
+/// the point: the walk still feeds `w.nets` for the module-body row, but no
+/// design reaches that row through an lvalue index either. Recorded as
+/// unreachable rather than quietly deleted — if either gap closes, this comment
+/// is what says a test is owed.
+///
+/// What IS pinned here is the row's live discriminator, in the two directions
+/// the old test had: the out-of-window WRITE refuses, and the same body with the
+/// write removed builds.
 #[test]
-fn s3a_a_non_constant_part_select_msb_is_seen_through_the_width_edge() {
+fn s3a_an_out_of_window_write_refuses_and_its_read_only_twin_builds() {
     let refused = r#"
 module top;
-  integer i;
+  class C; int v; endclass
+  C c;
   function automatic integer f(input integer x);
     reg [31:0] loc;
-    begin loc = x; f = loc[i:0]; end
+    begin loc = x; c.v = loc[3:0]; f = loc[3:0]; end
   endfunction
   integer r;
-  initial begin i = 3; r = f(255); $display("r=%0d", r); $finish; end
+  initial begin c = new(); r = f(255); $display("r=%0d", r); $finish; end
 endmodule
 "#;
-    // CONTROL: the same body with a constant part-select must still be admitted, or
-    // the refusal above says nothing about the `width` edge in particular.
+    // CONTROL: the same body READING the field instead of writing it must be
+    // admitted, or the refusal above says nothing about the WRITE in particular.
     let admitted = r#"
 module top;
+  class C; int v; endclass
+  C c;
   function automatic integer f(input integer x);
     reg [31:0] loc;
-    begin loc = x; f = loc[3:0]; end
+    begin loc = x + c.v; f = loc[3:0]; end
   endfunction
   integer r;
-  initial begin r = f(255); $display("r=%0d", r); $finish; end
+  initial begin c = new(); r = f(255); $display("r=%0d", r); $finish; end
 endmodule
 "#;
     let (ir, opts) = build_with_opts(refused);
     assert_eq!(
         NetArena::buildable(&ir, &opts).err(),
-        Some("a subroutine that names a net outside its own frame: S3b"),
+        Some("a subroutine that WRITES a net outside its own frame: S3b"),
     );
     let (ir, opts) = build_with_opts(admitted);
     assert_eq!(NetArena::buildable(&ir, &opts).err(), None);

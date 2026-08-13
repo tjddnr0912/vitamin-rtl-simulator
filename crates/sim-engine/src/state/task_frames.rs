@@ -11,8 +11,26 @@ impl SimState<'_> {
     /// a NESTED task call (`Terminator::Call` in the task body) recurses and writes
     /// its outputs to the CALLING task's frame-local lvalues. `None` ⇒ empty
     /// sidecar (no frame tasks).
-    pub(crate) fn run_task(
+    /// A3-iii: [`SimState::run_task`] against an ALTERNATE net store — the SECOND
+    /// delegated executor, and the one that made this slice's gate narrowing a
+    /// silent-wrong until it was threaded too.
+    ///
+    /// ⚠️⚠️ **This is exactly the trap `removing-a-loud-gate-exposes-what-it-masked`
+    /// names, and only the FLIP RUN found it.** S3a's row refused any subroutine
+    /// body naming a net outside its window, which covered BOTH delegated
+    /// executors at once — `run_frame_call` (an `Expr::Call`) and this one (the
+    /// A3-i subset path, a `Terminator::Call` to a function with output formals).
+    /// Threading only the first and lifting the row left the second reading the
+    /// engine's untouched store: `while (getnext(i, v) == 1)` over a module array
+    /// returned 0 on the first test, so the loop body never ran and the design
+    /// printed its `PASS` line and nothing else. Exit 0, no diagnostic.
+    ///
+    /// The whole suite is green on that design, because its tests run on the
+    /// default backend. Flipping the default is what surfaced it — the third
+    /// time this repository has measured that (V1 slice 2d, A2-i, here).
+    pub(crate) fn run_task_with<N: crate::eval::NetReader + ?Sized>(
         &self,
+        nets: Option<&N>,
         callee: u32,
         in_vals: &[(u32, Value)],
         out_slots: &[u32],
@@ -148,8 +166,8 @@ impl SimState<'_> {
                             continue;
                         }
                         // N1: `$sformatf` renders through the shared formatter here.
-                        let v = self.frame_rhs_value(lhs, *rhs);
-                        self.frame_or_class_write(lhs, v);
+                        let v = self.frame_rhs_value_with(nets, lhs, *rhs);
+                        self.frame_or_class_write_with(nets, lhs, v);
                     }
                     // V5 (§4.5.194): a frame-local dyn `new[]` / `delete()` — parity with
                     // run_frame_call (the classifier now admits DynNew in a subset body, so
@@ -202,7 +220,12 @@ impl SimState<'_> {
                         ) =>
                     {
                         let radix = self.radixes.get(&sid).copied();
-                        let mut s = crate::builtins::format_args_str(self, *fmt, args, radix);
+                        let mut s = match nets {
+                            Some(n) => {
+                                crate::builtins::format_args_str_with(self, n, *fmt, args, radix)
+                            }
+                            None => crate::builtins::format_args_str(self, *fmt, args, radix),
+                        };
                         if matches!(which, sim_ir::SysTaskId::Display) {
                             s.push('\n');
                         }
@@ -221,7 +244,7 @@ impl SimState<'_> {
                     then_bb,
                     else_bb,
                 } => {
-                    cur = if self.mk_eval_ctx().truthy(*cond) {
+                    cur = if self.truthy_with_opt(nets, *cond) {
                         *then_bb
                     } else {
                         *else_bb
@@ -251,7 +274,8 @@ impl SimState<'_> {
                         } else {
                             let nv = &self.ir.nets[fnet];
                             let sw = self.wt.get(e);
-                            let v = self.mk_eval_ctx().eval_ctx(
+                            let v = self.eval_ctx_with_opt(
+                                nets,
                                 e,
                                 nv.width.max(1).max(sw.width),
                                 nv.signed,
@@ -269,8 +293,11 @@ impl SimState<'_> {
                     let captured = self.frame_dyn_capture_formals(info.callee, &dyn_snaps);
                     let nested_stash = self.frame_dyn_enter(info.callee);
                     self.frame_dyn_install_formals(captured);
+                    // A3-iii: FORWARD the store to the nested callee. A nested
+                    // subset call is the same executor one level down, so a body
+                    // that reads a module net has the same answer to give.
                     let outs = self
-                        .run_task(info.callee, &in_v, &out_s)
+                        .run_task_with(nets, info.callee, &in_v, &out_s)
                         .unwrap_or_default();
                     // callee popped → top frame is the calling task again; write its
                     // frame-local output lvalues (a dyn out-formal deep-copies to the heap).
@@ -321,7 +348,19 @@ impl SimState<'_> {
         in_vals: &[(u32, Value)],
         out_slots: &[u32],
     ) -> Option<Vec<Value>> {
-        self.run_task(callee, in_vals, out_slots)
+        self.run_task_call_with::<crate::state::SimState>(None, callee, in_vals, out_slots)
+    }
+
+    /// A3-iii: [`SimState::run_task_call`] with the caller's store. See
+    /// [`SimState::run_task_with`] — this is the entry `run_subset_task` uses.
+    pub(crate) fn run_task_call_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        out_slots: &[u32],
+    ) -> Option<Vec<Value>> {
+        self.run_task_with(nets, callee, in_vals, out_slots)
     }
 
     /// A3-i: the whole engine-side of a SUBSET task call — the dyn book-keeping,
@@ -349,13 +388,29 @@ impl SimState<'_> {
         dyn_snaps: &[(u32, u32)],
         out_binds: &[(u32, Lvalue)],
     ) -> Vec<(Lvalue, Value)> {
+        self.run_subset_task_with::<crate::state::SimState>(
+            None, callee, in_vals, dyn_snaps, out_binds,
+        )
+    }
+
+    /// A3-iii: [`SimState::run_subset_task`] with the caller's store, threaded
+    /// through to [`SimState::run_task_with`] — see there for why this was a
+    /// silent-wrong the moment the S3a row narrowed.
+    pub(crate) fn run_subset_task_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        dyn_snaps: &[(u32, u32)],
+        out_binds: &[(u32, Lvalue)],
+    ) -> Vec<(Lvalue, Value)> {
         let out_s: Vec<u32> = out_binds.iter().map(|&(s, _)| s).collect();
         let captured = self.frame_dyn_capture_formals(callee, dyn_snaps);
         let dyn_stash = self.frame_dyn_enter(callee);
         self.frame_dyn_install_formals(captured);
         let mut scalar_writes = Vec::new();
         let mut outs_dyn = Vec::new();
-        if let Some(outs) = self.run_task_call(callee, in_vals, &out_s) {
+        if let Some(outs) = self.run_task_call_with(nets, callee, in_vals, &out_s) {
             outs_dyn = self.frame_dyn_capture_out(callee, out_binds);
             for ((s, lval), val) in out_binds.iter().zip(outs) {
                 if self.frame_dyn_out_bind(callee, *s, lval) {

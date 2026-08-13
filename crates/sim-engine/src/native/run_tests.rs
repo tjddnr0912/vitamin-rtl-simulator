@@ -3713,6 +3713,226 @@ endmodule
     );
 }
 
+/// A3-iii ABSOLUTE ANCHOR — a DELEGATED function body that READS module nets,
+/// iverilog-pinned.
+///
+/// S3a's precondition was "an admitted subroutine body names NO net outside its
+/// own frame window", and its argument was exact for the executor it had: a
+/// plain function reached through `Expr::Call` runs in `SimState`'s own `&self`
+/// frame executor, which reads module nets from the store a native run never
+/// writes — so such a body would read the t0 value at exit 0.
+///
+/// A3-ii-a already showed the DRIVEN half of this is fine (a task the walk runs
+/// itself reads through the kernel). This is the DELEGATED half, and the fix is
+/// to hand that executor the caller's store: `HeapRouted` then splits it, a
+/// frame slot coming back from the activation window and a module net from the
+/// arena.
+///
+/// Each line is a different read position, because they reach different sites:
+///
+/// * **`add_g`** — a module net in an ARITHMETIC rhs (`frame_rhs_value`).
+/// * **`pick`** — a module MEMORY element, so the read carries an index.
+/// * **`branchy`** — a module net in the BRANCH CONDITION, which is a separate
+///   site (`truthy`) and the one a rhs-only threading would miss.
+/// * **`A` vs `B`** — the module net CHANGES between the two calls. This is what
+///   makes the anchor non-vacuous: a body reading the engine's untouched store
+///   returns the same answer both times, and `g = 5` at t0 is a value the design
+///   really has, so the first line alone would look right.
+/// * **`C`** — the call is a `$display` ARGUMENT, which reaches the executor
+///   through the formatter's `HeapRouted` rather than through the kernel.
+#[test]
+fn a_delegated_body_reads_module_nets_through_the_callers_store() {
+    let src = r#"
+module t;
+  reg [7:0] g;
+  reg [7:0] mem [0:3];
+  reg [7:0] r1, r2, r3;
+  integer i;
+  function automatic [7:0] add_g(input [7:0] x);
+    add_g = x + g;
+  endfunction
+  function automatic [7:0] pick(input [1:0] k);
+    pick = mem[k];
+  endfunction
+  function automatic [7:0] branchy(input [7:0] x);
+    if (g > 8'd10) branchy = x + 8'd1; else branchy = x + 8'd100;
+  endfunction
+  initial begin
+    g = 8'd5;
+    for (i = 0; i < 4; i = i + 1) mem[i] = 8'd10 + i[7:0];
+    r1 = add_g(8'd7);
+    r2 = pick(2'd2);
+    r3 = branchy(8'd1);
+    $display("A r1=%0d r2=%0d r3=%0d", r1, r2, r3);
+    g = 8'd50;
+    r1 = add_g(8'd7);
+    r3 = branchy(8'd1);
+    $display("B r1=%0d r3=%0d", r1, r3);
+    $display("C in-arg=%0d", add_g(8'd0));
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A r1=12 r2=12 r3=101\n".to_string(),
+            "out|B r1=57 r3=2\n".to_string(),
+            "out|C in-arg=50\n".to_string(),
+        ],
+        "delegated body reading module nets (iverilog 13 pinned)"
+    );
+}
+
+/// A3-iii's SECOND executor — a function with an OUTPUT FORMAL, reached through
+/// `Terminator::Call` rather than `Expr::Call`, iverilog-unpinnable and so
+/// hand-traced.
+///
+/// ⚠️⚠️ **This test exists because narrowing the gate exposed a pre-existing
+/// silent-wrong, and only the FLIP RUN found it.** S3a's row refused any
+/// subroutine body naming an out-of-window net, which covered BOTH delegated
+/// executors at once: `run_frame_call` (an expression call) and `run_task` (the
+/// A3-i subset path). Threading the first and lifting the row left the second
+/// reading the engine's untouched store, so `getnext` returned 0 on its first
+/// call, the `while` never entered its body, and the design printed its final
+/// line and nothing else — exit 0, no diagnostic.
+///
+/// The whole suite was green on that design, because its own test runs on the
+/// default backend. Flipping the default is what surfaced it; that is the third
+/// time this repository has measured that (V1 slice 2d, A2-i, here).
+///
+/// ORACLE: `iverilog 13` rejects a function with an output port outright, so
+/// the values are hand-traced from `src = '{10,20,30,0}` — three iterations,
+/// then `src[3] == 0` ends the loop.
+#[test]
+fn a_subset_task_call_reads_module_nets_through_the_callers_store() {
+    let src = r#"
+module t;
+  int src[4] = '{10,20,30,0};
+  int sel;
+  function automatic int getnext (input int fd, output int val);
+    int loc[4];
+    begin
+      // A frame-local ARRAY at a MODULE-NET index, and a BRANCH on a module
+      // net. Both were added because the first battery left them alive, and
+      // both then found REAL divergences rather than just killing a mutation:
+      // the write-side index resolved against the engine's store in TWO more
+      // places (`frame_or_class_write`, and the element read-modify-write
+      // inside `frame_write_lvalue`), so `loc[sel] = src[fd]` landed in
+      // `loc[0]` and read back 0 — `v=0 v=0 v=0` at exit 0.
+      loc[sel] = src[fd];
+      if (src[fd] != 0) val = loc[sel]; else val = -1;
+      getnext = (src[fd] != 0);
+    end
+  endfunction
+  initial begin
+    int i = 0, v;
+    sel = 2;
+    while (getnext(i, v) == 1) begin $display("v=%0d", v); i++; end
+    $display("PASS v=%0d", v);
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|v=10\n".to_string(),
+            "out|v=20\n".to_string(),
+            "out|v=30\n".to_string(),
+            "out|PASS v=-1\n".to_string(),
+        ],
+        "a subset task call reading a module array (hand-IEEE; iverilog rejects output ports)"
+    );
+}
+
+/// A3-iii's REJECT neighbour: a body that WRITES a module net is still refused,
+/// and by the STORAGE gate in its own words.
+///
+/// ⚠️ This is what stops the narrowing from being a silent-wrong. Threading a
+/// READER lifts the read half; the write half cannot be lifted the same way,
+/// because every destination in that executor goes through
+/// `SimState::frame_write_lvalue`, which is `&self` on the engine's state and
+/// has no way to reach the caller's arena. Admitting one would put the write in
+/// a dead store at exit 0.
+///
+/// Measured before narrowing: 22 of the 26 designs the old row blocked only
+/// read out of window; 4 also write.
+///
+/// ⚠️ Finding a design that reaches this row took a probe, and the answer is
+/// worth writing down: a plain `g = g + 1` on a module net is refused a phase
+/// EARLIER (elaborate E3009 — "an assignment to a net outside the function …
+/// is outside the frame-call subset"), so the row is unreachable that way. What
+/// does reach it is a CLASS FIELD write, `c.v = …`, whose lvalue chunk names the
+/// module-scope HANDLE net. Building the reject case from the obvious source
+/// shape would have produced a test that passes because elaborate refused it.
+#[test]
+fn a_delegated_body_that_writes_a_module_net_is_refused() {
+    use sim_engine::native::arena::NetArena;
+    let src = "module t;\n\
+         class C; int v; endclass\n\
+         C c;\n\
+         function automatic int bump(input int x);\n\
+           begin c.v = c.v + x; bump = c.v; end\n\
+         endfunction\n\
+         int r;\n\
+         initial begin c = new(); c.v = 1; r = bump(2); $display(\"%0d\", r); end\n\
+       endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    assert_eq!(
+        NetArena::buildable(&ir, &opts).err(),
+        Some("a subroutine that WRITES a net outside its own frame: S3b"),
+        "an out-of-window WRITE from a delegated body must stay refused"
+    );
+    // …and the READ-only neighbour must build, or the row is refusing the wrong
+    // thing. The same design with the field write removed.
+    let src2 = "module t;\n\
+         class C; int v; endclass\n\
+         C c;\n\
+         function automatic int peek(input int x);\n\
+           peek = c.v + x;\n\
+         endfunction\n\
+         int r;\n\
+         initial begin c = new(); c.v = 1; r = peek(2); $display(\"%0d\", r); end\n\
+       endmodule\n";
+    let (ir2, opts2) = build_with_opts(src2);
+    assert_eq!(
+        NetArena::buildable(&ir2, &opts2).err(),
+        None,
+        "the read-only neighbour must build"
+    );
+}
+
 /// A2-ii ABSOLUTE ANCHOR — CRV (`randomize()`), hand-IEEE + a PROPERTY.
 ///
 /// ⭐ The whole CRV surface's store dependence was ONE line — measured rather

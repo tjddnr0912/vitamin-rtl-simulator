@@ -500,11 +500,27 @@ fn body_stays_in_its_window(
 ) -> Result<(), &'static str> {
     w.restart();
     w.func_body(entry)?;
-    if w.nets
+    // ⭐⭐ **A3-iii NARROWED THIS FROM `names` TO `writes`.** S3a's argument was
+    // that this `&self` executor reads module nets from `SimState`, which a
+    // native run never writes — so an admitted body naming one would read the t0
+    // value at exit 0. That is now false for READS: `run_frame_call_with` takes
+    // the caller's store and `HeapRouted` splits it, sending a frame slot back to
+    // the activation window and a module net to the arena.
+    //
+    // ⚠️ It stays true for WRITES, and not for want of threading: every
+    // destination in that body goes through `SimState::frame_write_lvalue`, which
+    // is `&self` on this state and has no way to reach a caller's arena. A body
+    // that assigns a module net would land in the dead store, silently.
+    //
+    // Measured before narrowing rather than after: of the 26 designs this row
+    // blocked, **22 only READ out of window and 4 also write**. So the row keeps
+    // its place and loses most of its population — and it is re-worded in terms
+    // of what it actually refuses, which is the §4.5.338 discipline.
+    if w.wnets
         .iter()
         .any(|&n| n < base_net || n >= base_net + locals_len)
     {
-        return Err("a subroutine that names a net outside its own frame: S3b");
+        return Err("a subroutine that WRITES a net outside its own frame: S3b");
     }
     Ok(())
 }
@@ -525,6 +541,11 @@ struct Walk<'i> {
     nstamp: Vec<u32>,
     /// The nets this walk named, deduplicated by `nstamp`.
     nets: Vec<u32>,
+    /// A3-iii: the subset of `nets` that appear as an lvalue's DESTINATION —
+    /// `chunk.net`, not its index expressions. Kept apart because reads and
+    /// writes now have different answers: a read routes through the caller's
+    /// store, a write cannot.
+    wnets: Vec<u32>,
     /// Did this walk descend through an `Expr::Call`? Reset by `restart`.
     saw_call: bool,
     /// Block-id worklist (`func_body`) and expression worklist (`expr`), kept
@@ -543,6 +564,7 @@ impl<'i> Walk<'i> {
             bstamp: vec![0; ir.blocks.len()],
             nstamp: vec![0; ir.nets.len()],
             nets: Vec::new(),
+            wnets: Vec::new(),
             saw_call: false,
             stack: Vec::new(),
             estack: Vec::new(),
@@ -552,6 +574,7 @@ impl<'i> Walk<'i> {
     fn restart(&mut self) {
         self.gen += 1;
         self.nets.clear();
+        self.wnets.clear();
         self.saw_call = false;
         self.stack.clear();
         self.estack.clear();
@@ -710,6 +733,9 @@ impl<'i> Walk<'i> {
     fn lvalue(&mut self, lhs: &sim_ir::Lvalue) {
         for c in &lhs.chunks {
             self.add(c.net);
+            // A3-iii: the DESTINATION is also a write. Its index expressions are
+            // not — `local[i]` reads `i`, and a read routes.
+            self.wnets.push(c.net);
             for e in [c.word, c.offset, c.width].into_iter().flatten() {
                 self.expr(e);
             }

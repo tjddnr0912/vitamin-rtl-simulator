@@ -125,6 +125,41 @@ impl<'a> SimState<'a> {
     /// A separate function rather than a flag on `eval_expr_with` because the
     /// two size their result differently, and a caller that reached for the
     /// wrong one would be silently narrow rather than loud.
+    /// A3-iii: `eval_ctx` against an OPTIONAL alternate store. `None` is this
+    /// state's own nets — literally `mk_eval_ctx`, the call every site below
+    /// made before the parameter existed — so the engine path stays byte-identical
+    /// rather than merely equivalent. ONE spelling of that choice, because a
+    /// per-site `match nets` is how two of them end up disagreeing.
+    pub(crate) fn eval_ctx_with_opt<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        eid: u32,
+        ctx_width: u32,
+        ctx_signed: bool,
+    ) -> Value {
+        match nets {
+            Some(n) => self.eval_ctx_with_reader(n, eid, ctx_width, ctx_signed),
+            None => self.mk_eval_ctx().eval_ctx(eid, ctx_width, ctx_signed),
+        }
+    }
+
+    /// A3-iii: `truthy` against an OPTIONAL alternate store, spelled beside
+    /// [`SimState::eval_ctx_with_opt`] for the same reason — `None` is the
+    /// `mk_eval_ctx().truthy(..)` the branch arm made before.
+    pub(crate) fn truthy_with_opt<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        eid: u32,
+    ) -> bool {
+        match nets {
+            Some(n) if n.routes_heap_to_state() => self
+                .mk_eval_ctx_with(&crate::state::HeapRouted { st: self, nets: n })
+                .truthy(eid),
+            Some(n) => self.mk_eval_ctx_with(n).truthy(eid),
+            None => self.mk_eval_ctx().truthy(eid),
+        }
+    }
+
     pub(crate) fn eval_ctx_with_reader<N: crate::eval::NetReader + ?Sized>(
         &self,
         nets: &N,
@@ -158,7 +193,24 @@ impl<'a> SimState<'a> {
     /// its own arguments' bytes instead of the rendered text. The gate is gone; the conversion to the destination's width lives at
     /// the write funnel (`coerce_str_to_packed`), where the module path has always
     /// had it.
-    pub(crate) fn frame_rhs_value(&self, lhs: &Lvalue, rhs: u32) -> Value {
+    /// A3-iii: [`SimState::frame_rhs_value`] against an ALTERNATE net store.
+    ///
+    /// S3a's precondition was that an admitted subroutine body names NO net
+    /// outside its own window, and the argument was exact: this `&self` executor
+    /// reads module nets from `SimState`, which a native run never writes, so
+    /// such a body would read the t0 value at exit 0. Threading the store is
+    /// what lifts it — for READS. A body that WRITES a module net still cannot
+    /// be delegated, because the write funnel below is `&self` on this state and
+    /// has no way to reach the caller's arena; that half keeps its own row.
+    ///
+    /// `None` is this state's own nets and every site then reduces to the call
+    /// it made before, so the engine path is byte-identical by construction.
+    pub(crate) fn frame_rhs_value_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        lhs: &Lvalue,
+        rhs: u32,
+    ) -> Value {
         // R19-X2 SILENT-WRONG (measured against iverilog 13, exit 0, no diagnostic):
         // the file-read family's real work is a statement-level effect that only the
         // PROCESS executor performs (`StmtEffect::Fgets` / `Fread` / `Scanf` / …). Here
@@ -200,18 +252,16 @@ impl<'a> SimState<'a> {
             args,
         }) = self.ir.exprs.get(rhs as usize)
         {
-            let text = crate::builtins::format_args_str(
-                self,
-                args.first().copied(),
-                args.get(1..).unwrap_or(&[]),
-                None,
-            );
+            let (f0, rest) = (args.first().copied(), args.get(1..).unwrap_or(&[]));
+            let text = match nets {
+                Some(n) => crate::builtins::format_args_str_with(self, n, f0, rest, None),
+                None => crate::builtins::format_args_str(self, f0, rest, None),
+            };
             return Value::from_str_bytes(text.as_bytes());
         }
         let lw = self.lvalue_width(lhs);
         let sw = self.wt.get(rhs);
-        self.mk_eval_ctx()
-            .eval_ctx(rhs, lw.max(sw.width), sw.signed)
+        self.eval_ctx_with_opt(nets, rhs, lw.max(sw.width), sw.signed)
     }
 
     /// Read frame slot `slot` of function `func`: the top AUTOMATIC window, or
@@ -362,6 +412,19 @@ impl<'a> SimState<'a> {
     /// rejected at ELABORATE, so the engine only ever sees a whole-net chunk;
     /// the `debug_assert` is a release-stripped backstop.
     pub(crate) fn frame_write_lvalue(&self, lhs: &Lvalue, v: Value) {
+        self.frame_write_lvalue_with::<crate::state::SimState>(None, lhs, v)
+    }
+
+    /// A3-iii: [`SimState::frame_write_lvalue`] with the caller's store for the
+    /// INDEX expressions. The destination is a frame slot either way — that is
+    /// what this funnel is for — but `local[i]` reads `i` from wherever the
+    /// caller's nets live.
+    pub(crate) fn frame_write_lvalue_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        lhs: &Lvalue,
+        v: Value,
+    ) {
         // §6.16, HERE and not only in `frame_or_class_write` — this is the funnel
         // every FRAME-SLOT destination passes through, and the other one is not.
         //
@@ -420,7 +483,7 @@ impl<'a> SimState<'a> {
                 // spelling of one decision.
                 let idx = |e: u32| -> u32 {
                     let sw = self.wt.get(e);
-                    let ev = self.mk_eval_ctx().eval_ctx(e, sw.width, sw.signed);
+                    let ev = self.eval_ctx_with_opt(nets, e, sw.width, sw.signed);
                     crate::eval::offset_of_index_value(&ev)
                 };
                 let raw_off = c.offset.map(idx).unwrap_or(0);
@@ -482,7 +545,7 @@ impl<'a> SimState<'a> {
             .offset
             .map(|e| {
                 let sw = self.wt.get(e);
-                let v = self.mk_eval_ctx().eval_ctx(e, sw.width, sw.signed);
+                let v = self.eval_ctx_with_opt(nets, e, sw.width, sw.signed);
                 crate::eval::offset_of_index_value(&v)
             })
             .unwrap_or(0);
@@ -515,6 +578,26 @@ impl<'a> SimState<'a> {
     /// other (whole frame-local net) write to `frame_write_lvalue`. `&self` —
     /// both targets are interior-mutable (the `RefCell` heap / the frame arena).
     pub(crate) fn frame_or_class_write(&self, lhs: &Lvalue, v: Value) {
+        self.frame_or_class_write_with::<crate::state::SimState>(None, lhs, v)
+    }
+
+    /// A3-iii: [`SimState::frame_or_class_write`] with the caller's store.
+    ///
+    /// ⚠️ THIRD write-side site, and the one a discriminator found rather than a
+    /// reading of the code. `loc[sel] = …` inside a delegated body — a
+    /// frame-local ARRAY at a MODULE-net index — reaches `frame_write_lvalue`
+    /// through here, and threading only the two obvious sites left this one
+    /// resolving `sel` against the engine's store: the write landed in
+    /// `loc[0]` and the read came back 0, at exit 0.
+    ///
+    /// The DESTINATION is still a frame slot (that is what the narrowed gate
+    /// guarantees); it is the INDEX that comes from the caller's nets.
+    pub(crate) fn frame_or_class_write_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        lhs: &Lvalue,
+        v: Value,
+    ) {
         let v = self.coerce_str_to_packed(lhs, v);
         if lhs.chunks.len() == 1 {
             let c = &lhs.chunks[0];
@@ -527,7 +610,7 @@ impl<'a> SimState<'a> {
                 return;
             }
         }
-        self.frame_write_lvalue(lhs, v);
+        self.frame_write_lvalue_with(nets, lhs, v);
     }
 
     /// IEEE §6.16: a STRING VALUE written to a PACKED destination is right-aligned
@@ -1153,6 +1236,30 @@ impl<'a> SimState<'a> {
     /// X-poisons) — but `build_func_routing` validates the table, so a populated
     /// table reaching here is well-formed.
     pub(crate) fn run_frame_call(&self, func: u32, args: &[Value]) -> Option<Value> {
+        self.run_frame_call_with::<crate::state::SimState>(None, func, args)
+    }
+
+    /// A3-iii: [`SimState::run_frame_call`] against an ALTERNATE net store —
+    /// the lift of S3a's "names no net outside its own frame" precondition, for
+    /// the READ half.
+    ///
+    /// ⭐ The composite does the work, not this function: `nets` arrives as the
+    /// caller's flat store and `eval_ctx_with_reader` wraps it in `HeapRouted`,
+    /// which sends a FRAME-LOCAL net back to `self` (the activation window) and
+    /// a module net to `nets`. That is exactly the split a frame body needs, and
+    /// it is the same wrapper V1 slice 2 built for the heap.
+    ///
+    /// ⚠️ The WRITE half is NOT lifted and cannot be by threading: every
+    /// destination here goes through `frame_write_lvalue`, which is `&self` on
+    /// this state and has no way to reach a caller's arena. Measured: of the 26
+    /// designs the S3a row blocks, 22 only READ out of window and 4 also write,
+    /// so the row narrows rather than disappears.
+    pub(crate) fn run_frame_call_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        func: u32,
+        args: &[Value],
+    ) -> Option<Value> {
         use sim_ir::{Stmt, Terminator};
         if self.func_table.is_empty() {
             return None; // non-frame Call → the eval arm X-poisons
@@ -1288,10 +1395,10 @@ impl<'a> SimState<'a> {
                         // OWNED Value FIRST — its nested Calls may recurse into
                         // run_frame_call, fine: THIS frame holds NO live borrow now.
                         // N1: `$sformatf` renders through the shared formatter here.
-                        let v = self.frame_rhs_value(lhs, *rhs);
+                        let v = self.frame_rhs_value_with(nets, lhs, *rhs);
                         // THEN store (borrow scoped to the index-store only). N7: a
                         // class field write routes to the heap, not a frame slot.
-                        self.frame_or_class_write(lhs, v);
+                        self.frame_or_class_write_with(nets, lhs, v);
                     }
                     // V5 (§4.5.194): a frame-local dyn `new[]` / `delete()` — heap ops that
                     // the interior-mutable `dyn_heap` now lets this `&self` executor perform.
@@ -1354,7 +1461,12 @@ impl<'a> SimState<'a> {
                         ) =>
                     {
                         let radix = self.radixes.get(&sid).copied();
-                        let mut s = crate::builtins::format_args_str(self, *fmt, args, radix);
+                        let mut s = match nets {
+                            Some(n) => {
+                                crate::builtins::format_args_str_with(self, n, *fmt, args, radix)
+                            }
+                            None => crate::builtins::format_args_str(self, *fmt, args, radix),
+                        };
                         if matches!(which, sim_ir::SysTaskId::Display) {
                             s.push('\n');
                         }
@@ -1375,7 +1487,9 @@ impl<'a> SimState<'a> {
                     then_bb,
                     else_bb,
                 } => {
-                    let taken = self.mk_eval_ctx().truthy(*cond); // X/Z cond → else
+                    // X/Z cond → else. Through the caller's store: a branch on a
+                    // module net is exactly the read this slice lifts.
+                    let taken = self.truthy_with_opt(nets, *cond);
                     cur = if taken { *then_bb } else { *else_bb };
                 }
                 Terminator::Return => break,

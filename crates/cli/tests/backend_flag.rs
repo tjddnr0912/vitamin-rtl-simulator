@@ -795,15 +795,22 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     // MODULE net is eligible (calls are core) and not buildable: the engine's
     // frame executor would read it from the flat store, which a native run
     // never writes.
+    //
+    // ⚠️ A3-iii re-picked this design, for the reason the paragraph above now
+    // half-states: a subroutine READING a module net is delegated with the
+    // caller's store and builds. What is left is a WRITE to a module-scope
+    // class field — the only out-of-window destination elaborate permits from a
+    // subroutine body (a plain `g = …` is E3009 a phase earlier).
     std::fs::write(
         dir.join("g.sv"),
         "module t;\n\
-           integer g;\n\
+           class C; int v; endclass\n\
+           C c;\n\
            function automatic integer addg(input integer x);\n\
-             begin addg = x + g; end\n\
+             begin c.v = x; addg = x + 5; end\n\
            endfunction\n\
            integer r;\n\
-           initial begin g = 5; r = addg(3); $display(\"r=%0d\", r); #1 $finish; end\n\
+           initial begin c = new(); r = addg(3); $display(\"r=%0d\", r); #1 $finish; end\n\
          endmodule\n",
     )
     .unwrap();
@@ -813,7 +820,7 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     assert_eq!(
         manifest_field(&m, "native"),
         "{\"eligible\": true, \"buildable\": false, \
-         \"refused\": \"a subroutine that names a net outside its own frame: S3b\", \
+         \"refused\": \"a subroutine that WRITES a net outside its own frame: S3b\", \
          \"reject_reasons\": {}}",
         "{m}"
     );

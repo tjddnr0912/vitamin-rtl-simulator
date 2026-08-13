@@ -1374,7 +1374,16 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
     /// SECOND order-visible seam; this is that seam's drain.
     fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
         self.drain_range_reports();
-        self.sched.st.eval_call(func, args)
+        // A3-iii: the ARENA, not `self` — the kernel holds `&mut Scheduler` and
+        // cannot lend both at once, which is `k_dispatch_systask`'s split. One
+        // level down `eval_ctx_with_reader` wraps it in `HeapRouted`, so a
+        // FRAME-LOCAL net still comes back from the activation window while a
+        // module net comes from this store. Passing `None` here is what made an
+        // admitted body's module read return the engine's t0 value, which is
+        // exactly the S3a row this narrows.
+        self.sched
+            .st
+            .run_frame_call_with(Some(&self.arena), func, args)
     }
 
     /// N7 virtual dispatch, forwarded for the same reason `eval_call` is:
@@ -1506,15 +1515,25 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         dyn_snaps: &[(u32, u32)],
         out_binds: &[(u32, Lvalue)],
     ) -> Vec<(Lvalue, Value)> {
-        // DELEGATION, and the justification is the S3a one one level up: every
-        // store this touches is `SimState`'s own frame/heap state, which this
-        // kernel BORROWS rather than mirrors. The nets — the one thing the two
-        // backends do keep apart — are not touched here at all: the inputs were
-        // evaluated by `k_eval_ctx` above and the scalar outputs are written by
-        // `k_write_lvalue` after this returns.
+        // DELEGATION, and every store this touches is `SimState`'s own
+        // frame/heap state, which this kernel BORROWS rather than mirrors.
+        //
+        // ⚠️⚠️ **This comment used to end "the nets … are not touched here at
+        // all", and A3-iii measured that FALSE.** It was true of the CALL
+        // PROTOCOL — the inputs are evaluated by `k_eval_ctx` above and the
+        // scalar outputs written by `k_write_lvalue` after this returns — and
+        // said nothing about the callee's BODY, which reads whatever module nets
+        // it names. S3a's row made that unreachable; narrowing that row to WRITES
+        // made it reachable, and the arena has to go with it. Measured at exit 0
+        // with no diagnostic: `while (getnext(i, v) == 1)` over a module array
+        // returned 0 on the first call, so the loop body never ran and the design
+        // printed its `PASS` line and nothing else.
+        //
+        // §4.5.338 inside a delegation's justification: a comment saying "this
+        // does not touch X" does not know when it starts to.
         self.sched
             .st
-            .run_subset_task(callee, in_vals, dyn_snaps, out_binds)
+            .run_subset_task_with(Some(&self.arena), callee, in_vals, dyn_snaps, out_binds)
     }
     fn k_file_read_byte(&mut self, fd: u32) -> Option<u8> {
         // The file table lives in `SimState`, which this kernel borrows — one

@@ -721,13 +721,17 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     // is a subroutine reading a MODULE net (`g`), which is the one thing the
     // delegation to the engine's frame executor cannot serve: that read would
     // come from the flat store a native run never writes.
+    // ⚠️ A3-iii turned this from a module-net READ into a class-field WRITE.
+    // The read is delegated with the caller's store now; the write cannot be,
+    // because the frame executor's destination funnel is `&self` on `SimState`.
     let storage_refused = "module t;\n\
-           integer g;\n\
+           class C; int v; endclass\n\
+           C c;\n\
            function automatic integer addg(input integer x);\n\
-             begin addg = x + g; end\n\
+             begin c.v = x; addg = x; end\n\
            endfunction\n\
            integer r;\n\
-           initial begin g = 5; r = addg(3); $display(\"r=%0d\", r); $finish; end\n\
+           initial begin c = new(); r = addg(3); $display(\"r=%0d\", r); $finish; end\n\
          endmodule\n";
 
     let mut saw_clean = 0;
@@ -739,7 +743,7 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
         (
             "storage",
             storage_refused,
-            Some("a subroutine that names a net outside its own frame: S3b"),
+            Some("a subroutine that WRITES a net outside its own frame: S3b"),
         ),
     ] {
         let ir = build(src);
