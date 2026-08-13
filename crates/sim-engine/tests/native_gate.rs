@@ -383,37 +383,46 @@ fn plain_oop_sidecars_are_core() {
     );
 }
 
-/// A2-i: `randomize()` is the OTHER half, and it is refused by the STATEMENT
-/// rather than by the `class_rand` table — the table is per-class and present
-/// in a design that never randomizes anything.
+/// A2-ii: `randomize()` is CORE too — the `class_crv` row A2-i cut is gone.
+///
+/// ⚠️ This test asserted the OPPOSITE one slice ago, and the shape of the claim
+/// changed with it. A2-i split the one-word `class` row into plain OOP (lifted)
+/// and CRV (refused); A2-ii then found the CRV half's store dependence was a
+/// single line — `class_randomize_run`'s receiver, read through the engine's
+/// nets — plus the status write, which rides A1-iii's funnel-outside sink.
+/// Everything else about a draw lives on `SimState` and is shared by both
+/// kernels.
+///
+/// Both spellings are asserted because they reach the gate differently: a class
+/// that DECLARES `rand`/`constraint` (what elaborate's per-class tables record)
+/// and one that actually CALLS `randomize()` (what the deleted row counted).
 #[test]
-fn a_randomize_call_is_refused_and_a_rand_field_alone_is_not() {
-    let (ok, rs) = reasons(
-        "module t;\n\
-           class C; rand int unsigned v; constraint c { v < 10; } endclass\n\
-           C o; int r;\n\
-           initial begin o = new(); r = o.randomize(); $display(\"%0d\", o.v); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(!ok, "a randomize() call must be refused");
-    assert!(
-        rs.iter().any(|&(k, _)| k == "class_crv"),
-        "the refusal must name the CRV row: {rs:?}"
-    );
-
-    // …while the same class WITHOUT the call disqualifies nothing, even though
-    // elaborate still emits `class_rand`/`class_constraints` for it.
-    let (ok2, rs2) = reasons(
-        "module t;\n\
-           class C; rand int unsigned v; constraint c { v < 10; } endclass\n\
-           C o;\n\
-           initial begin o = new(); o.v = 4; $display(\"%0d\", o.v); $finish; end\n\
-         endmodule\n",
-    );
-    assert!(
-        ok2,
-        "a rand field with no randomize() must stay core: {rs2:?}"
-    );
+fn randomize_is_core_and_so_is_a_rand_field_alone() {
+    for (label, src) in [
+        (
+            "with the call",
+            "module t;\n\
+               class C; rand int unsigned v; constraint c { v < 10; } endclass\n\
+               C o; int r;\n\
+               initial begin o = new(); r = o.randomize(); $display(\"%0d\", o.v); $finish; end\n\
+             endmodule\n",
+        ),
+        (
+            "declaration only",
+            "module t;\n\
+               class C; rand int unsigned v; constraint c { v < 10; } endclass\n\
+               C o;\n\
+               initial begin o = new(); o.v = 4; $display(\"%0d\", o.v); $finish; end\n\
+             endmodule\n",
+        ),
+    ] {
+        let (ok, rs) = reasons(src);
+        assert!(ok, "{label}: must be eligible, got {rs:?}");
+        assert!(
+            rs.is_empty(),
+            "{label}: no reject family may fire, got {rs:?}"
+        );
+    }
 }
 
 /// V1 slice 1: the SVA sidecars are CORE, and populating them disqualifies

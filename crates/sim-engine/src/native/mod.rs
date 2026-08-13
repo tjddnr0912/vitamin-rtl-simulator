@@ -373,20 +373,19 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // IEEE §8.20 requires `D::who`. vita's three backends agree with the LRM, so
     // this is one of the few places the repo is ahead of its own oracle — and
     // the reason the virtual test is pinned by hand rather than by `vvp`.
-    let crv_sites = ir
-        .stmts
-        .iter()
-        .filter(|s| {
-            matches!(
-                s,
-                sim_ir::Stmt::SysTask {
-                    which: sim_ir::SysTaskId::ClassRandomize,
-                    ..
-                }
-            )
-        })
-        .count();
-    flag(&mut out, "class_crv", crv_sites);
+    // ⚠️ **A2-ii WIRED IT, and the row's own reason was the map.** It said
+    // `class_randomize_run` reads its receiver through `Scheduler::eval_ctx_top`
+    // — the engine's nets — and that was exactly right and exactly one line.
+    // Everything below the handle is `class_heap`, the four per-class sidecar
+    // tables (`class_rand`/`class_constraints`/`class_dist`/`class_randc`), the
+    // inline-`with` overrides and the RNG: all `SimState`, all borrowed by both
+    // kernels, so the draw, the constraint solve and the field writes needed no
+    // routing at all. The status write is the second half — a funnel-OUTSIDE
+    // write, through A1-iii's `TaskWrites` sink.
+    //
+    // Measured before deleting: the raw-read pin counts four untreaded reads in
+    // `crv_draw.rs` and the other three are `$writemem*`'s, which is a different
+    // family with its own row.
     flag(&mut out, "file_directed", file_directed_stmts.len());
 
     // ── statement-level families with no v1 machinery ──────────────────────

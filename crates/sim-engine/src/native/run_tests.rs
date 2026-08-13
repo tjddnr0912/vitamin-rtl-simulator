@@ -3713,6 +3713,227 @@ endmodule
     );
 }
 
+/// A2-ii ABSOLUTE ANCHOR — CRV (`randomize()`), hand-IEEE + a PROPERTY.
+///
+/// ⭐ The whole CRV surface's store dependence was ONE line — measured rather
+/// than assumed: `every_untreaded_store_read_in_builtins_sits_behind_a_reject_row`
+/// counts four untreaded reads in `crv_draw.rs` and the other three belong to
+/// `$writemem*`. That one line was `class_randomize_run`'s RECEIVER, read
+/// through `eval_ctx_top` — the engine's nets — so on a native run the handle
+/// came back `0`, `randomize()` took the null arm, returned 0, and touched no
+/// field. Everything below the handle (`class_heap`, the four per-class tables,
+/// the inline-`with` overrides, the RNG) is `SimState` and needed nothing.
+///
+/// ⚠️ Hand-IEEE: `iverilog 13` rejects constraint declarations outright
+/// ("sorry: Constraint declarations not supported"), so the values below are
+/// §18's, and the assertion is deliberately a PROPERTY rather than a literal
+/// draw sequence — pinning `a = 14` would pin this repo's LCG rather than the
+/// language. What is pinned:
+///
+/// * **`ok=1` every time** — with a satisfiable constraint set the solver must
+///   succeed. A store-blind receiver read returns 0 here, which is what makes
+///   this line the primary discriminator.
+/// * **`inA`/`inB`** — every draw lands inside its declared `inside {[lo:hi]}`
+///   range. Two SEPARATE ranges, so a solve that ignored one constraint and
+///   satisfied the other still shows.
+/// * **`randc` is a PERMUTATION** — the four draws of a 2-bit `randc` field must
+///   visit 0..3 once each before repeating (§18.6). A plain uniform draw passes
+///   `ok` and `inA`/`inB` and fails this.
+/// * **the status lands in the destination NET** — `r = p.randomize()` writes
+///   through the funnel-outside sink, which is the second half of the slice.
+#[test]
+fn randomize_draws_within_its_constraints_on_tier_3() {
+    let src = r#"
+module t;
+  class P;
+    rand int unsigned a;
+    rand int unsigned b;
+    randc bit [1:0]  c;
+    constraint ca { a inside {[10:19]}; }
+    constraint cb { b inside {[100:109]}; }
+  endclass
+  P p;
+  int r;
+  integer i;
+  initial begin
+    p = new();
+    for (i = 0; i < 4; i = i + 1) begin
+      r = p.randomize();
+      $display("R%0d ok=%0d c=%0d inA=%0d inB=%0d",
+               i, r, p.c, (p.a>=10)&&(p.a<=19), (p.b>=100)&&(p.b<=109));
+    end
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    let ev = sink.events.into_inner();
+    assert_eq!(ev.len(), 4, "four draws: {ev:?}");
+    let mut seen_c: Vec<u32> = Vec::new();
+    for (i, line) in ev.iter().enumerate() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        assert_eq!(f[0], format!("out|R{i}"), "line {i}: {line}");
+        assert_eq!(f[1], "ok=1", "draw {i} must succeed: {line}");
+        assert_eq!(f[3], "inA=1", "draw {i} outside constraint ca: {line}");
+        assert_eq!(f[4], "inB=1", "draw {i} outside constraint cb: {line}");
+        seen_c.push(f[2].trim_start_matches("c=").parse().unwrap());
+    }
+    // §18.6: a `randc` field visits every value of its range once per cycle.
+    let mut sorted = seen_c.clone();
+    sorted.sort_unstable();
+    assert_eq!(
+        sorted,
+        vec![0, 1, 2, 3],
+        "a 2-bit randc must be a permutation over four draws, got {seen_c:?}"
+    );
+
+    // ⚠️ …and the OTHER verdict, which nothing above can hold. §18.11 says a
+    // failed randomize returns 0, and every design so far succeeds — so a
+    // mutation that hardcodes `success = true` passes all of it. The
+    // differential cannot see it either: `class_randomize_run` is shared, so
+    // both backends report the same wrong 1 and agree (§5.1-e, again).
+    //
+    // Made infeasible at RUNTIME rather than statically: a contradictory
+    // `constraint { v > 2'd3; }` is refused by elaborate (E3009, "empty
+    // solution set") and never reaches a backend. An inline `with` whose domain
+    // does not INTERSECT the class range fails inside the solve.
+    let src2 = r#"
+module t;
+  class C; rand int unsigned v; constraint cv { v inside {[0:9]}; } endclass
+  C c; int r;
+  initial begin
+    c = new();
+    r = c.randomize() with { v inside {[50:59]}; };
+    $display("U ok=%0d", r);
+  end
+endmodule
+"#;
+    let (ir2, opts2) = build_with_opts(src2);
+    let sink2 = MergedSink::default();
+    let r2 = simulate(
+        &ir2,
+        &sink2,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts2
+        },
+    );
+    assert_eq!(
+        r2.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r2.native.refused
+    );
+    assert_eq!(
+        sink2.events.into_inner(),
+        vec!["out|U ok=0\n".to_string()],
+        "an infeasible randomize must report 0 (IEEE 1800 §18.11)"
+    );
+}
+
+/// A2-ii DIFFERENTIAL — CRV shapes, native against the VM.
+///
+/// Weaker than the anchor by construction (the RNG and the solver both live on
+/// `SimState`), and kept for the one thing it can see: whether the receiver and
+/// the status destination are read and written through the same store. It also
+/// carries the shapes the anchor does not — an inline `randomize() with`, a
+/// `dist` weighted field, a failed solve, and a null receiver.
+#[test]
+fn a2ii_crv_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        (
+            "randomize with inline constraints",
+            r#"
+module top;
+  class C; rand int unsigned v; constraint cv { v inside {[0:99]}; } endclass
+  C c; int r; integer i;
+  initial begin
+    c = new();
+    for (i = 0; i < 3; i = i + 1) begin
+      r = c.randomize() with { v inside {[40:49]}; };
+      $display("W%0d ok=%0d in=%0d", i, r, (c.v>=40)&&(c.v<=49));
+    end
+  end
+endmodule
+"#,
+        ),
+        (
+            "dist weighted field",
+            r#"
+module top;
+  class C; rand bit [1:0] v; constraint cd { v dist { 0 := 1, 3 := 9 }; } endclass
+  C c; int r; integer i, hi;
+  initial begin
+    c = new(); hi = 0;
+    for (i = 0; i < 8; i = i + 1) begin r = c.randomize(); if (c.v == 2'd3) hi = hi + 1; end
+    $display("D hi_ge_1=%0d ok=%0d", (hi >= 1), r);
+  end
+endmodule
+"#,
+        ),
+        // ⚠️ The infeasible case has to be made infeasible AT RUNTIME: a
+        // statically contradictory `constraint cx { v > 2'd3; }` is refused by
+        // elaborate (E3009, "empty solution set") and never reaches a backend.
+        // An inline `with` whose domain does not INTERSECT the class range is
+        // the shape that fails inside `class_randomize_run` — and `ok=0` is
+        // exactly what a store-blind receiver read also produces, which is why
+        // it is here as a differential rather than in the anchor.
+        (
+            "infeasible inline-with fails at runtime",
+            r#"
+module top;
+  class C; rand int unsigned v; constraint cv { v inside {[0:9]}; } endclass
+  C c; int r;
+  initial begin
+    c = new();
+    r = c.randomize() with { v inside {[50:59]}; };
+    $display("U ok=%0d", r);
+  end
+endmodule
+"#,
+        ),
+        (
+            "randomize on a null handle",
+            r#"
+module top;
+  class C; rand int v; endclass
+  C c; int r;
+  initial begin r = c.randomize(); $display("N ok=%0d", r); end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 4, "A2-ii differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "A2-ii differential: refusal breakdown moved"
+    );
+}
+
 /// A5-b ABSOLUTE ANCHOR — the POSTPONED region, iverilog-pinned.
 ///
 /// The last region tier-3 did not have. `$monitor` and `$strobe` were refused
@@ -4405,19 +4626,18 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         ),
         (
             "crv_draw.rs",
-            4,
-            "the CRV surface is the `class_crv` row — ⚠️ NOT `class`, which A2-i \
-             split in three and which no longer exists. That is the §4.5.338 \
-             failure mode inside a TEST: this reason named a row while plain OOP \
-             was still refused by it, and admitting plain OOP left the sentence \
-             true only by accident (the raw read is `class_randomize_run`'s \
-             receiver, which really is behind the narrower row). Re-read a \
-             `behind row X` claim whenever X moves. And `writemem`'s window \
-             bounds are `$writemem*`, which `systask_refusal` refuses (it reads \
-             the MEMORY itself, not a formatted argument). A1-iii took this from \
-             6 to 4 by threading `readmem`'s two window bounds — measured, not \
-             assumed: `$readmemh(f, m, lo, hi)` with NET bounds loaded the whole \
-             array on a native run",
+            3,
+            "⚠️ THREE now, not four — A2-ii threaded `class_randomize_run`'s \
+             receiver, which was the CRV surface's whole store dependence. The \
+             three that remain are `$writemem*`'s: its two window bounds and its \
+             per-element memory read, all behind the `systask_refusal` row \
+             (`$writemem*` reads the MEMORY itself, not a formatted argument). \
+             A1-iii took this from 6 to 4 by threading `readmem`'s two window \
+             bounds — measured, not assumed: `$readmemh(f, m, lo, hi)` with NET \
+             bounds loaded the whole array on a native run. ⚠️ This entry has now \
+             been re-worded TWICE for the same reason (§4.5.338): each time a \
+             row it names is split or lifted, the sentence stops being true \
+             while the NUMBER still passes",
         ),
         ("render.rs", 2, "`$vita_stage` is the `stage` row"),
         (

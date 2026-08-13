@@ -6,11 +6,29 @@ use super::*;
 /// handle fails (0); a class with no rand fields succeeds trivially (1); the
 /// rejection sampler succeeds when it finds a satisfying assignment within the
 /// cap, else fails (fields left unchanged).
-pub(crate) fn class_randomize_run(sched: &mut Scheduler, args: &[u32]) -> bool {
+pub(crate) fn class_randomize_run<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    args: &[u32],
+) -> bool {
     let Some(&handle_e) = args.first() else {
         return false;
     };
-    let hv = sched.eval_ctx_top(handle_e, 32, false);
+    // A2-ii: the RECEIVER, through the calling kernel's store.
+    //
+    // ⭐ This ONE line was the whole CRV surface's store dependence — measured,
+    // not assumed: `every_untreaded_store_read_in_builtins_sits_behind_a_reject_row`
+    // counts four raw reads in this file and the other three are `writemem`'s.
+    // Everything below it is `class_heap`, the four per-class sidecar tables and
+    // the RNG, all of which live on `SimState` and are borrowed by both kernels
+    // — so the draw, the constraint solve and the field writes needed nothing.
+    //
+    // It read `eval_ctx_top`, i.e. the ENGINE's nets, which a native run leaves
+    // at t0: the handle came back `0`, `randomize()` took the null arm and
+    // returned 0 without touching a field. The A1-ii defect verbatim, and the
+    // same fix — `eval_task_arg`'s `None` arm IS `eval_ctx_top`, so the engine
+    // path is byte-identical by construction.
+    let hv = super::eval_task_arg_ctx(sched, nets, handle_e, 32, false);
     if hv.unk.iter().any(|&u| u != 0) {
         return false; // X/Z handle → fail
     }

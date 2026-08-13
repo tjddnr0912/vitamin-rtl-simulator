@@ -293,7 +293,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         // constraint bounds and write them into the heap object. Deterministic
         // (seeded `dist_uniform`); a null/X handle is a no-op.
         SysTaskId::ClassRandomize => {
-            class_randomize(sched, args);
+            class_randomize(sched, nets, out, args);
             Ctl::Continue
         }
         // v5 (C)-④: queue pushes. args = [handle, value]; the value is CAST
@@ -858,8 +858,13 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
 /// its folded `[lo, hi]` bound (`dist_uniform` when `ranged`, else a full-width
 /// seeded draw), and write the values back into the heap object. A null/X handle is
 /// a no-op (IEEE §18.6 — randomize on a null handle is illegal; here it is benign).
-pub(crate) fn class_randomize(sched: &mut Scheduler, args: &[u32]) {
-    let success = class_randomize_run(sched, args);
+pub(crate) fn class_randomize<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    out: &mut TaskWrites<'_>,
+    args: &[u32],
+) {
+    let success = class_randomize_run(sched, nets, args);
     // IEEE 1800 §18.11: randomize() returns 1 on success, 0 on failure. When the
     // call captured a result (`r = obj.randomize()`), elaborate passes the result
     // status net as args[1]; write the verdict there (was hardcoded to 1, so a
@@ -887,8 +892,28 @@ pub(crate) fn class_randomize(sched: &mut Scheduler, args: &[u32]) {
                 32,
                 false,
             );
-            let off = sched.resolve_lvalue_offsets(&lv);
-            sched.st.write_lvalue(&lv, v, &off);
+            // A2-ii: the STATUS write is a funnel-OUTSIDE write, exactly like
+            // `$sformat`'s destination — only the caller holds the funnel that
+            // reaches the store it owns, so it goes through the same sink A1-iii
+            // built. `TaskWrites::Direct` is literally the two calls that stood
+            // here, so the engine path is unchanged by construction.
+            //
+            // The OFFSETS resolve through the reader too, and that half is
+            // EQUIVALENT today — measured, not hoped. `lv` is built three lines
+            // up from a `Signal { net, word: None }` (the match above accepts
+            // nothing else), so it carries no index expression and both
+            // resolvers return the same `(0, 0)`; a mutation that sends it to
+            // the engine's resolver survives the whole suite.
+            //
+            // Kept because resolving ONE store's lvalue against ANOTHER store's
+            // reader is the shape that goes wrong the moment elaborate lets that
+            // destination be `r[i]`, and because it costs nothing. Recorded as
+            // equivalent rather than presented as covered.
+            let off = match nets {
+                Some(n) => crate::eval::resolve_offsets(&sched.st.mk_eval_ctx_with(n), &lv),
+                None => sched.resolve_lvalue_offsets(&lv),
+            };
+            out.put(sched, lv, v, off);
         }
     }
 }
