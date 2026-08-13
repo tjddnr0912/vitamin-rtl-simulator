@@ -1161,6 +1161,31 @@ callee** · **output formal** 이 인스턴스 경계를 넘는 copy-out · **�
 **도달 불가**다(계측: 미해결 타깃 0) · ⓒ `Delay` 를 park 으로 보고하는 줄은 **A3-ii-a 배터리의 케이스
 D 가 이미 죽였다**(`Fork => return false`). 셋 다 **"덮였다" 가 아니라 각각의 이유로** 기록한다.
 
+#### 5.1-w ✅ A8-b — deferred assertion: **기계장치는 이미 공유였고 없던 것은 두 리전이었다** · 94.78% → **95.03%** (2026-08-14)
+
+⭐ **A5-b 와 같은 모양이고, 이번엔 더 극단적이다.** §16.4.3 은 deferred action 의 텍스트를 **REACH 시점에**
+렌더한다 — 큐에 들어가는 것은 이미 `String` 이다. 따라서 **`mature_deferred` 는 넷을 하나도 안 읽고**,
+store 에 묶인 줄은 `try_defer` 안의 렌더 **하나**인데 그것은 `dispatch_with` 가 S1d-4b 이래 스레드해 왔다.
+
+⇒ tier-3 에 없던 것은 **OBSERVED·REACTIVE 두 리전의 자리**뿐이다. 엔진 cascade 가 부르는 곳에 넣었다:
+timestep 의 Active/Inactive/NBA 가 비고 **postponed 드레인 전에**, Observed 먼저 Reactive 다음 · 성숙한
+리포트가 프로세스를 깨울 수 있으므로 각각 뒤에 **propagate + cascade 재진입**(엔진이 `continue` 하는
+이유) · 세 종료 arm 에 `drain_deferred_on_finish`.
+
+⚠️ hand-IEEE 다 — `iverilog 13` 이 deferred assertion 을 통째로 거부한다(*"sorry: Deferred assertions
+are not supported"*).
+
+**측정**: **6,064 / 6,381 = 95.03%**(+16 · 예측 +16) · 전 스위트 **5424 green** · **flip 런**(실패 3 =
+백엔드 이름 핀) · **발산 0** · **뮤테이션 5/5 사망**.
+
+⚠️⚠️ **첫 배터리의 생존 하나가 앵커의 눈먼 축이었다 — `assert final` 이 한 번도 실패하지 않았다.**
+`q < 4'd3` 은 참이라 Reactive 큐가 늘 비어 있었고, **Reactive 성숙을 통째로 지우는 뮤테이션이 전 스위트를
+통과**했다. `q < 4'd1` 로 바꾸자 두 엣지에서 리포트가 나고 **순서**(`R q=1` → `O q=2` → `R q=2`)가 두
+큐가 각자의 리전에서 드레인된다는 것을 보인다. **"두 큐가 있다" 는 둘 다 뭔가를 낼 때만 판별자다.**
+
+⚠️ 그리고 이 슬라이스는 **SVA 거부 테이블의 케이스 하나를 통째로 지웠다** — `sva_shapes_that_need_
+machinery_still_refuse_by_their_own_name` 의 두 케이스 중 deferred 쪽이 이제 돈다(개수 단언 **2 → 1**).
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

@@ -319,8 +319,22 @@ impl Scheduler<'_, '_> {
     /// activation, never a recycled-slot predecessor (§16.4). An ACTION renders
     /// its text NOW (reach-time arg values, §16.4.3) and enqueues/REPLACES it for
     /// region maturation.
-    pub(crate) fn try_defer(
+    /// A8-b: [`Scheduler::try_defer`] against an ALTERNATE net store.
+    ///
+    /// ⭐ ONE line of this function is store-bound and it is the RENDER — §16.4.3
+    /// says a deferred action's text is produced at REACH, with the argument
+    /// values it sees there, so the message is a `String` by the time it is
+    /// enqueued. Maturation (`mature_deferred`) therefore reads no net at all:
+    /// it emits text that was already rendered.
+    ///
+    /// That split is why this row was conservative rather than deep. What tier-3
+    /// lacked was the two REGIONS, not the machinery.
+    ///
+    /// `None` is the engine's own store and the render reduces to the call it
+    /// made before, so that path is byte-identical by construction.
+    pub(crate) fn try_defer_with<N: crate::eval::NetReader + ?Sized>(
         &mut self,
+        nets: Option<&N>,
         which: sim_ir::SysTaskId,
         fmt: Option<u32>,
         args: &[u32],
@@ -348,7 +362,10 @@ impl Scheduler<'_, '_> {
             } else {
                 self.st.radixes.get(&sid).copied()
             };
-            let message = crate::builtins::format_args_str(&*self.st, fmt, args, radix);
+            let message = match nets {
+                Some(n) => crate::builtins::format_args_str_with(&*self.st, n, fmt, args, radix),
+                None => crate::builtins::format_args_str(&*self.st, fmt, args, radix),
+            };
             let report = crate::state::DeferredReport {
                 action_sid: sid,
                 which,

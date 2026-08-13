@@ -3713,6 +3713,147 @@ endmodule
     );
 }
 
+/// A8-b ABSOLUTE ANCHOR — DEFERRED assertions (§16.4), hand-IEEE.
+///
+/// ⭐ Another conservative row. §16.4.3 renders a deferred action's text at
+/// REACH, so what is enqueued is a `String` and `mature_deferred` reads no net;
+/// the one store-bound line is the render inside `try_defer`, which
+/// `dispatch_with` has threaded since S1d-4b. What tier-3 lacked was the two
+/// REGIONS — Observed and Reactive, in that order, after the timestep's buckets
+/// empty and before the postponed drain — plus the termination drain.
+///
+/// ⚠️ Hand-IEEE: `iverilog 13` refuses deferred assertions outright ("sorry:
+/// Deferred assertions are not supported").
+///
+/// What the values pin:
+///
+/// * the report carries the values it saw at REACH (`tag=20` beside `q=2`),
+///   not the ones the net holds when the region matures — §16.4.3's whole
+///   point, and the half that goes wrong if the message were rendered late.
+/// * the FLUSH-ON-RE-REACH: the assertion is re-reached at every posedge and
+///   passes until `q` reaches 2, so exactly ONE report survives rather than one
+///   per edge.
+/// * an `assert final` (Reactive) beside an `assert #0` (Observed) in the same
+///   block, and — ⚠️ **this is the half the first battery caught** — the
+///   Reactive one must actually FAIL. With `q < 4'd3` it never did, so a
+///   mutation that matures Observed and drops Reactive survived the whole
+///   suite; `q < 4'd1` makes it report at two different edges, and the ORDER
+///   (`R q=1` before `O q=2` before `R q=2`) is what shows both queues drain in
+///   their own regions rather than one draining twice.
+/// * the `$display` at `#7` lands AFTER the matured report — Active before
+///   Observed.
+#[test]
+fn deferred_assertions_mature_in_their_regions_on_tier_3() {
+    let src = r#"
+module t;
+  reg clk = 1'b0;
+  reg [3:0] q = 4'd0;
+  reg [7:0] tag = 8'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) begin q <= q + 4'd1; tag <= tag + 8'd10; end
+  always @(posedge clk) begin
+    assert #0 (q < 4'd2) else $error("O q=%0d tag=%0d", q, tag);
+    assert final (q < 4'd1) else $error("R q=%0d tag=%0d", q, tag);
+  end
+  initial begin #7 $display("done q=%0d", q); $finish; end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "diag|Error|VITA-E4003|R q=1 tag=10".to_string(),
+            "diag|Error|VITA-E4003|O q=2 tag=20".to_string(),
+            "diag|Error|VITA-E4003|R q=2 tag=20".to_string(),
+            "out|done q=3\n".to_string(),
+        ],
+        "deferred assertions (hand-IEEE §16.4; iverilog refuses them)"
+    );
+}
+
+/// A8-b DIFFERENTIAL — deferred shapes, native against the VM.
+#[test]
+fn a8b_deferred_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A deferred action in the SAME SLOT as the `$finish`, which reaches the
+        // termination drain rather than the region cascade.
+        (
+            "deferred report in the finish slot",
+            r#"
+module top;
+  reg [7:0] a = 8'd9;
+  initial begin
+    #1;
+    assert #0 (a < 8'd5) else $error("F a=%0d", a);
+    $display("D a=%0d", a);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A deferred report that MATURES INTO A TERMINATION (`$fatal`), so the
+        // region's own `Some(step)` path runs rather than the body's.
+        (
+            "deferred fatal",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [3:0] q = 4'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) q <= q + 4'd1;
+  always @(posedge clk) assert #0 (q < 4'd2) else $fatal(1, "FT q=%0d", q);
+  initial #20 $finish;
+endmodule
+"#,
+        ),
+        // A plain `$display` deferred action (no severity) — the other arm of
+        // `mature_deferred`, which writes stdout rather than a diagnostic.
+        (
+            "deferred display action",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [3:0] q = 4'd0;
+  always #1 clk = ~clk;
+  always @(posedge clk) q <= q + 4'd1;
+  always @(posedge clk) assert #0 (q < 4'd2) else $display("P q=%0d", q);
+  initial #7 $finish;
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 3, "A8-b differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "A8-b differential: refusal breakdown moved"
+    );
+}
+
 /// A3-iv ABSOLUTE ANCHOR — a frame task with a HIERARCHICAL enable,
 /// iverilog-pinned.
 ///
@@ -5101,17 +5242,17 @@ endmodule
 ///   * `cover property` (and SVA liveness) synthesize an end-of-sim obligation
 ///     check registered in `final_procs`; tier-3's run loop has no post-loop
 ///     drain, so `executor_rows` refuses them as `final` blocks.
-///   * a §16.4 DEFERRED assertion matures in the Observed/Reactive regions via
-///     `Scheduler::mature_deferred`, and tier-3's region cascade calls it
-///     nowhere — that is the separate `deferred_assert` row (14 of the 2,834
-///     measured fall-backs, against this slice's 760).
+///   * ⚠️ a §16.4 DEFERRED assertion USED to be the second case here, and A8-b
+///     removed it: tier-3's cascade now calls `mature_deferred` at the Observed
+///     and Reactive positions, so that row is gone. What is left is the one
+///     above — which is the point of this test, since the claim is that each
+///     shape needing machinery refuses BY ITS OWN NAME rather than by SVA's.
 #[test]
 fn sva_shapes_that_need_machinery_still_refuse_by_their_own_name() {
-    let cases: Vec<(&str, &str, &str)> = vec![
-        (
-            "cover property",
-            "`final` blocks (the post-loop drain is not restated)",
-            r#"
+    let cases: Vec<(&str, &str, &str)> = vec![(
+        "cover property",
+        "`final` blocks (the post-loop drain is not restated)",
+        r#"
 module top;
   reg clk = 0, a = 0, b = 0;
   always #5 clk = ~clk;
@@ -5119,20 +5260,7 @@ module top;
   initial begin #10 a = 1; #10 b = 1; #20 $finish; end
 endmodule
 "#,
-        ),
-        (
-            "deferred immediate assertion",
-            "deferred_assert",
-            r#"
-module top;
-  reg clk = 0, a = 0;
-  always #5 clk = ~clk;
-  always @(posedge clk) assert #0 (a) else $error("deferred");
-  initial begin #10 a = 1; #10 $finish; end
-endmodule
-"#,
-        ),
-    ];
+    )];
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
         assert_eq!(
@@ -5141,7 +5269,11 @@ endmodule
             "{what}: wrong refusal row"
         );
     }
-    assert_eq!(cases.len(), 2);
+    // ONE now, not two — A8-b wired deferred assertions, so that case moved out
+    // of this test entirely. The count is asserted exactly rather than as `> 0`
+    // so that admitting or refusing another SVA shape moves a number a human has
+    // to re-justify, which is what just happened.
+    assert_eq!(cases.len(), 1);
 }
 
 /// An out-of-range NBA whose timestep has NOTHING after it. The per-statement

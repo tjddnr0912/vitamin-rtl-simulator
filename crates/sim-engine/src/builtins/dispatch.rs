@@ -136,7 +136,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     // report) or a deferred ACTION (enqueue for Observed/Reactive maturation) is
     // intercepted here and does NOT fire inline. Bypassed while the engine is
     // maturing a captured action (then it re-dispatches for real, below).
-    if sched.try_defer(which, fmt, args, sid) {
+    if sched.try_defer_with(nets, which, fmt, args, sid) {
         return Ctl::Continue;
     }
     // P1-1: `$fatal`/`$error`/`$warning`/`$info` lower as `Display` plus an

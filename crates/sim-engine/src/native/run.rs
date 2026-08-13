@@ -279,25 +279,32 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     match step {
                         Step::Finish => {
                             k.sched.st.finished = true;
-                            // IEEE §5.4 / §17: drain THIS timestep's postponed
-                            // region before terminating — the engine does it at
-                            // the same three arms, so a `$strobe` in the same
-                            // slot as a `$finish` still prints.
+                            // IEEE §5.4 / §16.4 / §17: drain THIS timestep's
+                            // deferred queues and then its postponed region
+                            // before terminating — the engine does both at the
+                            // same three arms, so a `$strobe` or a matured
+                            // `assert #0` in the same slot as a `$finish` is not
+                            // lost.
+                            k.sched.drain_deferred_on_finish();
                             flush_postponed(k);
                             return done(k, FinishReason::Finish);
                         }
                         Step::Stop => {
                             k.sched.st.finished = true;
-                            // IEEE §5.4 / §17: drain THIS timestep's postponed
-                            // region before terminating — the engine does it at
-                            // the same three arms, so a `$strobe` in the same
-                            // slot as a `$finish` still prints.
+                            // IEEE §5.4 / §16.4 / §17: drain THIS timestep's
+                            // deferred queues and then its postponed region
+                            // before terminating — the engine does both at the
+                            // same three arms, so a `$strobe` or a matured
+                            // `assert #0` in the same slot as a `$finish` is not
+                            // lost.
+                            k.sched.drain_deferred_on_finish();
                             flush_postponed(k);
                             return done(k, FinishReason::Stop);
                         }
                         Step::Fatal => {
                             k.sched.st.finished = true;
                             k.sched.st.had_fatal = true;
+                            k.sched.drain_deferred_on_finish();
                             flush_postponed(k);
                             return done(k, FinishReason::Error);
                         }
@@ -348,6 +355,41 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 continue;
             }
             break; // time-step stable
+        }
+
+        // OBSERVED then REACTIVE (IEEE 1800 §4.4 / §16.4), in that order and
+        // BEFORE the postponed drain — the engine's cascade position. A matured
+        // report can re-activate a process, so each is followed by change
+        // propagation and a re-entry into the region cascade rather than falling
+        // straight through to the time advance.
+        for region in [crate::DeferRegion::Observed, crate::DeferRegion::Reactive] {
+            if let Some(step) = mature_deferred(k, region) {
+                k.sched.st.finished = true;
+                if let Step::Fatal = step {
+                    k.sched.st.had_fatal = true;
+                }
+                flush_postponed(k);
+                return done(
+                    k,
+                    match step {
+                        Step::Stop => FinishReason::Stop,
+                        Step::Fatal => FinishReason::Error,
+                        _ => FinishReason::Finish,
+                    },
+                );
+            }
+        }
+        propagate(k);
+        if !k.active.is_empty() || !k.inactive.is_empty() || !k.nba.is_empty() {
+            // A matured action woke something; drain this time step again rather
+            // than advancing. The engine `continue`s its cascade for the same
+            // reason.
+            delta_count += 1;
+            if delta_count > max_deltas {
+                k.sched.fatal_delta_limit();
+                return done(k, FinishReason::DeltaLimit);
+            }
+            continue;
         }
 
         // POSTPONED (IEEE 1364-2005 §5.4): `now` is the settled time, every
@@ -787,6 +829,30 @@ fn done(k: &mut NativeKernel, r: FinishReason) -> FinishReason {
         "tier-3 run left VCD records unwritten"
     );
     r
+}
+
+/// A8-b: the OBSERVED and REACTIVE regions (IEEE 1800 §4.4 / §16.4).
+///
+/// ⭐ Deferred assertions needed no machinery from this backend, only the two
+/// REGIONS. §16.4.3 renders a deferred action's text at REACH — the message is
+/// already a `String` when it is enqueued — so `mature_deferred` reads no net,
+/// and the only store-bound line is the render inside `try_defer`, which
+/// `dispatch_with` already threads.
+///
+/// Returns `Some(step)` when a matured deferred `$fatal`/`$finish`/`$stop`
+/// terminates the run. Called where the engine's cascade calls it: after the
+/// timestep's Active/Inactive/NBA buckets are empty and BEFORE the postponed
+/// drain, Observed first, then Reactive.
+fn mature_deferred(k: &mut NativeKernel, region: crate::DeferRegion) -> Option<Step> {
+    if match region {
+        crate::DeferRegion::Observed => k.sched.st.postponed.deferred_observed.is_empty(),
+        crate::DeferRegion::Reactive => k.sched.st.postponed.deferred_reactive.is_empty(),
+    } {
+        return None;
+    }
+    let step = k.sched.mature_deferred(region);
+    k.drain_range_diags();
+    step
 }
 
 /// A5-b: the POSTPONED region (IEEE 1364-2005 §5.4), through this store.

@@ -267,8 +267,10 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         clocking_inputs,
         clocking_commit,
         clocking_outputs,
-        defer_marks,
-        defer_acts,
+        // A8-b: see the deleted `deferred_assert` row below — the maturation
+        // reads no net; what was missing were the two regions.
+        defer_marks: _,
+        defer_acts: _,
         // ── A2-i: the plain-OOP sidecars are no longer a refusal ────────────
         // A class handle net is an ordinary `Logic` slot holding an object id;
         // the object's FIELDS live in `SimState::class_heap`, which both kernels
@@ -331,11 +333,16 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         "clocking",
         clocking_inputs.len() + clocking_commit.len() + clocking_outputs.len(),
     );
-    flag(
-        &mut out,
-        "deferred_assert",
-        defer_marks.len() + defer_acts.len(),
-    );
+    // ⭐ **A8-b: `deferred_assert` was CONSERVATIVE — the machinery was already
+    // shared, only the two REGIONS were missing.** §16.4.3 renders a deferred
+    // action's text at REACH, so what is enqueued is a `String`; maturation reads
+    // no net at all. The one store-bound line is the render inside `try_defer`,
+    // and `dispatch_with` has threaded that since S1d-4b.
+    //
+    // What tier-3 lacked was the OBSERVED and REACTIVE positions in its region
+    // cascade — the same shape as A5-b's postponed region, and added the same
+    // way (`native::run::mature_deferred`, called where the engine calls it,
+    // plus `drain_deferred_on_finish` at the three terminating arms).
     // ⭐⭐ **A2-i SPLIT THIS ROW IN THREE, and the census is why.** It used to be
     // one family over twelve sidecars — "how much OOP" — which meant a design
     // declaring `class C; int f; endclass` and one solving a constraint were

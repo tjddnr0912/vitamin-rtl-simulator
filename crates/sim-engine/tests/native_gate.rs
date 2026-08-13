@@ -281,6 +281,44 @@ fn sidecar_families_reject_from_opts() {
 /// 160 class designs carry `class_rand`/`class_vtable` (they are per-CLASS and
 /// exist the moment a `rand` field or a method is declared), so a rule keyed on
 /// the TABLE rather than on the SITE would refuse all of them.
+/// A8-b: DEFERRED assertions (§16.4) are core.
+///
+/// The row was conservative: §16.4.3 renders the action's text at REACH, so
+/// maturation reads no net, and what tier-3 lacked was the Observed/Reactive
+/// positions in its region cascade rather than any machinery.
+///
+/// ⚠️ Asserted through `SimOpts` AND through source, for the reason the coverage
+/// test gives: the table is what the row counted, and the source is what proves
+/// elaborate still emits it.
+#[test]
+fn deferred_assertions_are_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.defer_marks.insert(0, sim_engine::DeferRegion::Observed);
+    o.defer_acts
+        .insert(1, (0, sim_engine::DeferRegion::Observed));
+    assert_eq!(
+        design_eligibility(&ir, &o)
+            .reject_reasons
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec![],
+        "a deferred-assert sidecar must disqualify nothing"
+    );
+
+    let (ok, rs) = reasons(
+        "module t;\n\
+           reg clk = 1'b0; reg [3:0] q = 4'd0;\n\
+           always #1 clk = ~clk;\n\
+           always @(posedge clk) q <= q + 4'd1;\n\
+           always @(posedge clk) assert #0 (q < 4'd2) else $error(\"q=%0d\", q);\n\
+           initial #7 $finish;\n\
+         endmodule\n",
+    );
+    assert!(ok, "a deferred-assert design must be eligible: {rs:?}");
+    assert!(rs.is_empty(), "no reject family may fire, got {rs:?}");
+}
+
 /// A7: functional COVERAGE is core — a covergroup is desugared, not executed.
 ///
 /// ⚠️ The positive assertion is not the whole claim, and the neighbour below is
