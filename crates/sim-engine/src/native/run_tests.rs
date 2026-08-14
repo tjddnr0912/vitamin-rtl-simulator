@@ -2456,19 +2456,39 @@ fn every_tier3_store_goes_through_the_one_write_funnel() {
         ("body.rs", include_str!("body.rs")),
         ("frames.rs", include_str!("frames.rs")),
     ];
+    // ⚠️ **PER-LINE MATCHING HID A SITE FOR THREE SLICES.** This scan used to
+    // ask whether one LINE contains `arena.write_lvalue(`, and rustfmt had
+    // split `k.arena` from `.write_lvalue(` at the one call site that was not
+    // the funnel — so the pin read "exactly one" while there were two. Slice #2
+    // re-joined the line by adding an argument, which is the only reason it
+    // surfaced. The scan now strips comments and collapses whitespace before
+    // matching, so a formatter cannot decide whether this test has teeth.
     let mut sites: Vec<(&str, usize)> = Vec::new();
     for (name, src) in files {
-        for (i, line) in src.lines().enumerate() {
+        let lines: Vec<&str> = src.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
             // Skip doc/comment lines: the funnel's own doc names the call it
             // replaced, and a comment is not a call.
             if line.trim_start().starts_with("//") {
                 continue;
             }
-            if line.contains("arena.write_lvalue(") {
+            // Join with the following non-comment lines so a receiver split
+            // from its method by the formatter still matches.
+            let mut joined = String::new();
+            for l in lines.iter().skip(i).take(3) {
+                if l.trim_start().starts_with("//") {
+                    continue;
+                }
+                joined.push_str(l.trim());
+            }
+            if joined.contains("arena.write_lvalue(") && !line.contains("fn write_lvalue") {
                 sites.push((name, i + 1));
             }
         }
     }
+    // A joined match can report the same call from up to three starting lines;
+    // keep only the first of each run.
+    sites.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1 + 1);
     assert_eq!(
         sites.len(),
         1,
@@ -6921,5 +6941,349 @@ endmodule
         refused,
         Default::default(),
         "slice #1 differential: refusal breakdown moved"
+    );
+}
+
+/// Slice #2 ABSOLUTE ANCHOR — force/release on tier-3, **iverilog-pinned**.
+///
+/// This half of the family HAS an oracle and every value below is `vvp`'s.
+/// Each line is a different piece of the machinery:
+///
+/// * **B** — the pin itself lands, on a WIRE (`w`, driven by a continuous
+///   assign) and on a VARIABLE (`v`). Both go through this store's funnel.
+/// * **B → y=ff** — the pin PROPAGATES: `assign y = w ^ 8'h0F` re-settles off
+///   the forced value, so the force write has to enter the dirty channel like
+///   any other. A pin written into the wrong store leaves `y` at `c`.
+/// * **C** — a normal driver is SUPPRESSED while forced, on both target kinds:
+///   `a = 5` moves `w`'s continuous assign and `v = 77` is an ordinary
+///   procedural write, and NEITHER lands. That is the `forced` gate inside the
+///   arena's `write_chunk`, threaded from `SimState` rather than mirrored.
+/// * **D** — `release` on the WIRE snaps back **in this timestep** (`w=7`,
+///   recomputed from `a=5`) while `release` on the VARIABLE keeps the forced
+///   value (`v=5a`, §9.3.1 — a variable has no driver to snap back to).
+///   ⚠️⚠️ The wire half is a PRE-EXISTING silent-wrong this slice fixed: before
+///   it, all three vita backends reported `w=240` here because clearing the
+///   flag moves no net and nothing re-dirtied the driving assign. iverilog and
+///   verilator both say 7.
+/// * **E** — after release the variable takes ordinary writes again.
+#[test]
+fn force_and_release_have_their_iverilog_values_on_tier_3() {
+    let src = r#"
+module top;
+  reg  [7:0] a = 8'd1;
+  reg  [7:0] b = 8'd2;
+  wire [7:0] w;
+  reg  [7:0] v = 8'd9;
+  wire [7:0] y;
+  assign w = a + b;
+  assign y = w ^ 8'h0F;
+  initial begin
+    #1 $display("A w=%0d v=%0h y=%0h", w, v, y);
+    force w = 8'hF0;
+    force v = 8'h5A;
+    #1 $display("B w=%0d v=%0h y=%0h", w, v, y);
+    a = 8'd5;
+    v = 8'd77;
+    #1 $display("C w=%0d v=%0h y=%0h", w, v, y);
+    release w;
+    release v;
+    #1 $display("D w=%0d v=%0h y=%0h", w, v, y);
+    v = 8'd33;
+    #1 $display("E w=%0d v=%0h y=%0h", w, v, y);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A w=3 v=9 y=c\n".to_string(),
+            "out|B w=240 v=5a y=ff\n".to_string(),
+            "out|C w=240 v=5a y=ff\n".to_string(),
+            "out|D w=7 v=5a y=8\n".to_string(),
+            "out|E w=7 v=21 y=8\n".to_string(),
+        ],
+        "force/release (iverilog-pinned)"
+    );
+}
+
+/// Slice #2 ABSOLUTE ANCHOR — the CONTINUOUS half, **hand-IEEE**.
+///
+/// ⚠️ **iverilog is not an oracle for this half and says so**: it prints
+/// *"sorry: procedural continuous assignments are not yet fully supported. The
+/// RHS of this assignment will only be evaluated once"* and then reports `101`
+/// where §9.3.2 requires `105`. vita re-evaluates, so these are vita's own
+/// values with the LRM as the authority — one of the few places the repo is
+/// ahead of its oracle (`a_virtual_call_dispatches_dynamically_on_tier_3` is
+/// the other).
+///
+/// * **A/B** — a `force` with an EXPRESSION RHS re-evaluates when its input
+///   moves (§9.3.2). This is the fixpoint in `propagate`, and it is the only
+///   line that shows it: a wired-but-never-re-evaluated force prints `101`
+///   forever, which is exactly iverilog's answer and therefore a plausible one.
+/// * **C** — a real `force` DISPLACES an active procedural `assign`, which is
+///   parked latent rather than dropped.
+/// * **G/H** — and the MIRROR direction, which the first version of this test
+///   did not have: an `assign` issued while a force is already live is parked
+///   IMMEDIATELY and writes nothing (`u` stays `aa`, not `65`), then takes
+///   control at `release` (`105`). ⚠️ The mutation that made `force_prologue`
+///   return "write anyway" SURVIVED until this pair existed, and a differential
+///   cannot see it — `force_prologue` is shared code (ROADMAP §5.1-e).
+/// * **D** — `release` hands control BACK to the parked assign, re-evaluated at
+///   that moment (`a` is 5 by then, so `105` rather than the parked `101`).
+/// * **E** — `deassign` drops it; the variable HOLDS (§9.3.1).
+/// * **F** — and then takes ordinary writes.
+#[test]
+fn a_procedural_assign_and_an_expression_force_re_evaluate_on_tier_3() {
+    let src = r#"
+module top;
+  reg [7:0] v = 8'd9;
+  reg [7:0] a = 8'd1;
+  reg [7:0] u = 8'd9;
+  initial begin
+    #1 assign v = a + 8'd100;
+    #1 $display("A v=%0d", v);
+    a = 8'd5;
+    #1 $display("B v=%0d", v);
+    force v = 8'hAA;
+    #1 $display("C v=%0d", v);
+    release v;
+    #1 $display("D v=%0d", v);
+    deassign v;
+    #1 $display("E v=%0d", v);
+    v = 8'd3;
+    #1 $display("F v=%0d", v);
+    force u = 8'hAA;
+    #1 assign u = a + 8'd100;
+    #1 $display("G u=%0h", u);
+    release u;
+    #1 $display("H u=%0d", u);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A v=101\n".to_string(),
+            "out|B v=105\n".to_string(),
+            "out|C v=170\n".to_string(),
+            "out|D v=105\n".to_string(),
+            "out|E v=105\n".to_string(),
+            "out|F v=3\n".to_string(),
+            "out|G u=aa\n".to_string(),
+            "out|H u=105\n".to_string(),
+        ],
+        "procedural assign/deassign + expression force (hand-IEEE §9.3.1/§9.3.2; \
+         iverilog evaluates the RHS once and reports 101)"
+    );
+}
+
+/// Slice #2 DIFFERENTIAL — force/release shapes, native against the VM.
+#[test]
+fn force_release_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A force whose RHS is VOLATILE (`$time`): it has no net inputs, so it
+        // rides `force_always_reeval` rather than the net→forces sidecar — the
+        // one selection path a net-sensitivity skip would silently freeze.
+        (
+            "volatile force rhs",
+            r#"
+module top;
+  reg [7:0] v = 8'd0;
+  reg clk = 1'b0;
+  always #1 clk = ~clk;
+  initial begin
+    force v = $time;
+    #1 $display("V %0d", v);
+    #2 $display("V %0d", v);
+    #2 $display("V %0d", v);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A force CHAIN: one force's target feeds another force's RHS, so the
+        // fixpoint has to converge WITHIN one propagate rather than across
+        // deltas.
+        (
+            "force feeds force",
+            r#"
+module top;
+  reg [7:0] s = 8'd1;
+  reg [7:0] m = 8'd0;
+  reg [7:0] t = 8'd0;
+  initial begin
+    force m = s + 8'd1;
+    force t = m + 8'd1;
+    #1 $display("F m=%0d t=%0d", m, t);
+    s = 8'd10;
+    #1 $display("F m=%0d t=%0d", m, t);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A forced net that is an EDGE TARGET: the pin must feed `slot_edge`
+        // through the normal funnel, so `always @(posedge f)` still fires.
+        (
+            "force on an edge target",
+            r#"
+module top;
+  reg f = 1'b0;
+  reg [7:0] n = 8'd0;
+  always @(posedge f) n = n + 8'd1;
+  initial begin
+    #1 force f = 1'b1;
+    #1 force f = 1'b0;
+    #1 force f = 1'b1;
+    #1 $display("E n=%0d", n);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A re-force while already forced: the pin write must go THROUGH the
+        // flag it maintains (`force_lift`/`force_pin`), or the second force is
+        // suppressed by the first.
+        (
+            "re-force while forced",
+            r#"
+module top;
+  reg [7:0] v = 8'd0;
+  initial begin
+    force v = 8'd11;
+    #1 force v = 8'd22;
+    #1 $display("R v=%0d", v);
+    release v;
+    #1 $display("R v=%0d", v);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // Normal drivers SUPPRESSED, observed in the SAME delta as the writes.
+        //
+        // ⚠️⚠️ This row exists because the mutations that delete the arena's
+        // force gate SURVIVED without it, and the reason is worth keeping: with
+        // continuous re-evaluation live, a leaked write is REPAIRED by the next
+        // re-pin, so any observation after a `#` delay sees the right value
+        // anyway. What cannot be repaired is what happened in between — the
+        // `$display` before the delay, and the posedge on `f` that an
+        // edge-sensitive process already counted. Both funnels are covered:
+        // `v` is a one-word destination (the `write_chunk_word` entry) and
+        // `wide` is 96 bits (the general `write_chunk`).
+        (
+            "forced nets suppress their normal drivers",
+            r#"
+module top;
+  reg [7:0]  v = 8'd0;
+  reg [95:0] wide = 96'd0;
+  reg        f = 1'b0;
+  reg [7:0]  n = 8'd0;
+  always @(posedge f) n = n + 8'd1;
+  initial begin
+    force v = 8'h5A;
+    force wide = 96'h1;
+    force f = 1'b0;
+    #1;
+    v = 8'd77;
+    wide = {96{1'b1}};
+    f = 1'b1;
+    $display("S v=%0h wide=%0h n=%0d", v, wide, n);
+    #1 $display("T v=%0h wide=%0h n=%0d", v, wide, n);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // `release` on a driven WIRE, which must snap back in this timestep.
+        //
+        // ⚠️ The mutation that reverts the ENGINE half of that fix survived
+        // until this row existed: every other force row here releases a
+        // variable, which has no driver to snap back to.
+        (
+            "release on a driven wire snaps back",
+            r#"
+module top;
+  reg [7:0] a = 8'd1;
+  wire [7:0] w;
+  assign w = a + 8'd2;
+  initial begin
+    #1 force w = 8'hE0;
+    #1 $display("W w=%0d", w);
+    release w;
+    #1 $display("W w=%0d", w);
+    a = 8'd5;
+    #1 $display("W w=%0d", w);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A forced net inside a CONCAT lvalue: only the forced chunk is
+        // dropped, which is why the gate is per-chunk rather than per-lvalue.
+        (
+            "concat lvalue with one forced chunk",
+            r#"
+module top;
+  reg [3:0] hi = 4'd0;
+  reg [3:0] lo = 4'd0;
+  initial begin
+    force hi = 4'hA;
+    #1 {hi, lo} = 8'h5C;
+    #1 $display("K hi=%0h lo=%0h", hi, lo);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 7, "slice #2 differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "slice #2 differential: refusal breakdown moved"
     );
 }

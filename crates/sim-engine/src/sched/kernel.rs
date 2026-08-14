@@ -23,69 +23,27 @@ impl Kernel for Scheduler<'_, '_> {
         self.resolve_lvalue_offsets(lhs)
     }
     fn k_force(&mut self, lhs: &Lvalue, value: Value, rhs: u32, sid: u32) {
-        // The multiplier is snapshot at registration so a `$time` in the RHS
-        // keeps rendering with the right scale on later re-evals (C7 lesson).
-        let net = lhs.chunks[0].net;
-        let mult = self.st.cur_time_mult;
-        let weak = self.st.assign_ranks.contains(&sid);
-        if weak {
-            // §9.3.1 proc-assign: an active FORCE keeps priority — park the
-            // assign as latent (it takes control at release). Otherwise (re)pin
-            // at assign rank (a second assign overrides the first).
-            if matches!(self.st.active_forces.get(&net), Some((.., false))) {
-                self.st.latent_assigns.insert(net, (lhs.clone(), rhs, mult));
-                return;
-            }
-            self.st.latent_assigns.remove(&net);
-        } else if let Some((plv, prhs, pmult, true)) = self.st.active_forces.get(&net).cloned() {
-            // real force displacing an active assign: park it for release.
-            self.st.latent_assigns.insert(net, (plv, prhs, pmult));
-        }
-        self.st.force_write(lhs, value);
-        // Register for continuous re-evaluation (IEEE §9.3.2 / §9.3.1).
-        self.st
-            .active_forces
-            .insert(net, (lhs.clone(), rhs, mult, weak));
-        // C-FORCE-REEVAL-p2: refresh this force's net→forces sensitivity (or
-        // mark it always-reeval if volatile / zero-net) so the per-delta reeval
-        // can skip forces whose inputs are unchanged.
-        self.st.register_force_sensitivity(net, rhs);
-    }
-    fn k_release(&mut self, lhs: &Lvalue, sid: u32) {
-        let net = lhs.chunks[0].net;
-        if self.st.assign_ranks.contains(&sid) {
-            // `deassign`: drop the assign wherever it lives. An active STRONG
-            // force is untouched; an active assign unpins (the variable HOLDS
-            // its value, §9.3.1); a latent assign is just forgotten.
-            self.st.latent_assigns.remove(&net);
-            if matches!(self.st.active_forces.get(&net), Some((.., true))) {
-                self.st.active_forces.remove(&net);
-                self.st.unregister_force_sensitivity(net);
-                self.st.release(lhs);
-            }
+        // The registry rule is `SimState`'s (slice #2 split it out so tier-3 can
+        // run the SAME rule against its own store). The multiplier is snapshot
+        // at registration so a `$time` in the RHS keeps rendering with the right
+        // scale on later re-evals (C7 lesson) — `force_epilogue` reads it.
+        if !self.st.force_prologue(lhs, rhs, sid) {
             return;
         }
-        // `release`: removes the FORCE. A parked proc-assign resumes control
-        // (re-pin + re-evaluate NOW, §9.3.1); an active assign is NOT a force
-        // and keeps control; otherwise plain unpin.
-        match self.st.active_forces.get(&net) {
-            Some((.., true)) => {} // assign active, no force: release is a no-op
-            _ => {
-                self.st.active_forces.remove(&net);
-                self.st.unregister_force_sensitivity(net);
-                self.st.release(lhs);
-                if let Some((alv, arhs, amult)) = self.st.latent_assigns.remove(&net) {
-                    let saved = self.st.cur_time_mult;
-                    self.st.cur_time_mult = amult;
-                    let v = self.eval_for_lvalue(&alv, arhs);
-                    self.st.force_write(&alv, v);
-                    self.st.cur_time_mult = saved;
-                    self.st.active_forces.insert(net, (alv, arhs, amult, true));
-                    // Re-register the resumed latent assign's sensitivity.
-                    self.st.register_force_sensitivity(net, arhs);
-                }
-            }
+        self.st.force_write(lhs, value);
+        self.st.force_epilogue(lhs, rhs, sid);
+    }
+    fn k_release(&mut self, lhs: &Lvalue, sid: u32) {
+        let resumed = self.st.release_prologue(lhs, sid);
+        if let Some((alv, arhs, amult)) = resumed {
+            let saved = self.st.cur_time_mult;
+            self.st.cur_time_mult = amult;
+            let v = self.eval_for_lvalue(&alv, arhs);
+            self.st.force_write(&alv, v);
+            self.st.cur_time_mult = saved;
+            self.st.release_epilogue(&alv, arhs, amult);
         }
+        self.redirty_drivers_of(lhs.chunks[0].net);
     }
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
         self.st.write_lvalue(lhs, value, offsets);
@@ -550,5 +508,21 @@ impl Kernel for Scheduler<'_, '_> {
         }
         // The handle holds the object-id as a 32-bit unsigned integer (0 = null).
         Value::from_i128(id as i128, 32, false)
+    }
+}
+
+impl Scheduler<'_, '_> {
+    /// Mark every continuous assign that DRIVES `net` dirty, so the next settle
+    /// re-evaluates it. The `release` half of the fix documented at
+    /// `SimState::drivers_of_net`; tier-3 has the same two lines against its own
+    /// worklist.
+    pub(crate) fn redirty_drivers_of(&mut self, net: u32) {
+        for ci in self.st.drivers_of_net(net) {
+            let i = ci as usize;
+            if i < self.st.ca_dirty_flag.len() && !self.st.ca_dirty_flag[i] {
+                self.st.ca_dirty_flag[i] = true;
+                self.st.ca_dirty.push(ci);
+            }
+        }
     }
 }

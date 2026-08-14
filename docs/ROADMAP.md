@@ -1255,6 +1255,62 @@ disjoint-net 성질 때문에 관측 불가 — **이 생존이 plan/apply 분�
 없어 **posedge 가 한 번도 안 일어났고**, 아무것도 커밋되지 않는 행이 t0 seed 를 지우는 뮤테이션을
 통과시켰다. **엣지를 만들지 않는 클로킹 행은 아무것도 재지 않는다.**
 
+#### 5.1-y ✅ #2 force/release — **세 조각 중 하나만 진짜로 없었다** · 95.29% → **95.53%** (2026-08-14)
+
+행이 댄 이유는 *"v1 에 force 기계장치가 통째로 없다 — 넷마다의 force 플래그·연속 재평가·assign/
+deassign 약순위"* 였다. 세 조각을 각각 재니 **둘은 이미 공유**였다:
+
+| 조각 | 실측 |
+|---|---|
+| 넷마다의 force 플래그 | `SimState::forced` — **한 테이블**. 미러링이 아니라 아레나 퍼널에 **스레드**했다(`&[bool]`) |
+| §9.3.1/§9.3.2 레지스트리 | `active_forces`·`latent_assigns`·감도 사이드카·`assign_ranks` — 전부 `SimState` |
+| **연속 재평가 fixpoint** | **이것만 없었다** |
+
+⭐ **결정과 쓰기를 갈랐다**(슬라이스 #1 과 같은 모양). `force_prologue`/`force_epilogue` ·
+`release_prologue`/`release_epilogue` · `force_keys_for`/`force_entry` 가 전부 **레지스트리만** 읽고
+쓴다 — 넷 값을 하나도 안 만지므로 두 번째 커널에 넘겨도 엔진 store 가 샐 수 없다(A1-ii 가 좁은 seam 을
+고집한 이유의 반대편 증명). 엔진의 `k_force`/`k_release`/`reeval_active_forces` 를 **그 helper 로 다시
+쓰고**, tier-3 이 같은 fixpoint 를 자기 store 에 대해 돈다 — 갈리는 것은 **eval·write·dirty seed** 셋뿐.
+
+⚠️ 플래그는 **퍼널 안에서 chunk 마다** 본다(엔진의 자리 그대로) — `{a, b} = x` 에서 `a` 만 forced 면
+청크 하나만 떨어진다. 빠른 경로(`write_chunk_word`)에도 같은 게이트가 필요하다(`eval_store_word` 가
+그 메서드에 직행한다).
+
+⚠️⚠️ **pre-existing silent-wrong 하나를 두 오라클이 부른다 — 고쳤다.** `release w` (구동되는 wire)가
+드라이버로 **복귀하지 않았다**: 플래그를 끄는 것은 넷을 안 움직이므로 dirty-driven settle(§4.5.335)이
+그 cont-assign 을 다시 안 돌린다 ⇒ forced 값이 **그 assign 의 입력이 우연히 움직일 때까지 살아남는다**
+(iverilog·verilator `3` / vita 세 백엔드 전부 `240`). 수정 = `release` 가 목적지를 구동하는 assign 을
+**다시 dirty 로** 찍는다(`drivers_of_net`, 두 store 각자의 worklist).
+
+⚠️⚠️ **소스 스캔 핀 하나가 줄바꿈에 눈멀어 있었다.** `every_tier3_store_goes_through_the_one_write_
+funnel` 은 "`arena.write_lvalue(` 를 포함한 줄" 을 세는데, rustfmt 가 퍼널이 **아닌** 유일한 사이트에서
+`k.arena` 와 `.write_lvalue(` 를 두 줄로 갈라 놨다 ⇒ **핀은 "정확히 하나" 라고 읽으면서 둘이었다.**
+슬라이스 #2 가 인자를 하나 더해 줄이 붙는 바람에 드러났다. 그 사이트는 퍼널로 돌리고, 스캔은
+**주석 제거 + 3줄 조인 후** 매칭한다 — 포매터가 테스트의 이빨을 정할 수 없게.
+
+⚠️ **`gate_refused!` 사이트가 하나 남았다** — `k_disable_fork`. `s1d4a_refused_workers_are_loud_not_
+silent` 는 두 슬롯이었고 둘째는 A1 을 따라 세 번 옮겨 다녔으며 첫째가 `force` 였다. A4 가 `disable
+fork` 를 가져가면 이 테스트는 **주제가 없어진다** — 그때는 설계를 지어내지 말고 이유를 적고 은퇴시킨다.
+
+**측정**: **6,118 / 6,404 = 95.53%**(+15 · 예측 +15) · 전 스위트 **5431 green** · **flip 런**(실패 3 =
+백엔드 이름 핀) · **발산 0** · **뮤테이션 11/11 사망**.
+
+⚠️⚠️ **첫 배터리 생존 넷이 전부 내 설계의 눈먼 축이었고, 그중 둘의 이유가 이 슬라이스 고유하다** —
+**연속 재평가가 켜져 있으면 새어 나간 쓰기를 다음 re-pin 이 고쳐 준다**. `#` 뒤에서 관측하면 아레나의
+force 게이트를 통째로 지워도 값이 맞는다. 고칠 수 없는 것은 **그 사이에 일어난 일**이다: 지연 없는
+`$display`, 그리고 엣지 프로세스가 이미 센 posedge. 나머지 둘은 단순한 커버리지 구멍이었다 —
+release 를 **구동되는 wire** 에 거는 행이 하나도 없었고(엔진 절반 미측정), **force 가 먼저이고 assign 이
+나중**인 순서가 없었다(공유 코드라 차분은 원리적으로 못 본다 → 절대 앵커).
+
+⚠️ 앵커가 **둘로 쪼개진다** — 상수 force·release 스냅백·구동 억제는 **iverilog 핀**이고, 연속 재평가와
+assign/deassign 순위는 **hand-IEEE** 다(iverilog 가 *"sorry: procedural continuous assignments are not
+yet fully supported. The RHS … will only be evaluated once"* 라고 자인하고 `101` 을 낸다 — vita 가 앞선
+두 번째 항목).
+
+⚠️ **하네스 갭 아홉 번째** — `build_with_opts` 에 `assign_ranks` 가 없었다. `force`/`assign` 과
+`release`/`deassign` 은 **같은 두 IR 문장**이고 그 사이드카가 유일한 판별자다 ⇒ 없으면 절차적 `assign`
+이 **강한 force 로 실행**되고 두 백엔드가 사이좋게 일치한다.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

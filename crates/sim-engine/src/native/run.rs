@@ -542,9 +542,14 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
                 if k.sched.delayed_owes_initial_x(ci) {
                     let w = k.k_eval_for_lvalue(lhs, rhs).width;
                     let offs = k.k_resolve_lvalue_offsets(lhs);
-                    changed |=
-                        k.arena
-                            .write_lvalue(ir, lhs, crate::value::Value::xs(w, false), &offs);
+                    // Through the FUNNEL, not the arena directly. ⚠️ This line
+                    // was `k.arena.write_lvalue(…)` — a second spelling of the
+                    // routing decision — and the source scan that forbids
+                    // exactly that MISSED it, because rustfmt had split
+                    // `k.arena` and `.write_lvalue(` across two lines and the
+                    // scan matches per line. Found when slice #2's extra
+                    // argument re-joined them.
+                    changed |= k.write_routed(lhs, crate::value::Value::xs(w, false), &offs);
                 }
                 continue;
             }
@@ -721,6 +726,17 @@ fn snapshot_preponed(k: &mut NativeKernel) {
 }
 
 fn propagate(k: &mut NativeKernel) {
+    // IEEE §9.3.2 continuous force: while a force with an expression RHS is
+    // live, re-evaluate it whenever ANYTHING changed this delta and re-pin the
+    // target through the force funnel. Over-sensitivity is harmless (a
+    // same-value re-pin is dropped by the write funnel) and the re-force lands
+    // in the SAME sweep below via the dirty list. Designs without a live force
+    // never enter (empty registry). The engine's `propagate_changes` opens with
+    // exactly this, and the position matters: the re-pin must be in this
+    // delta's changed set, not the next one.
+    if !k.sched.st.active_forces.is_empty() && !k.arena.ch.dirty.is_empty() {
+        k.reeval_active_forces();
+    }
     let mut changed = Vec::new();
     k.arena.take_changed(&mut changed);
     if changed.is_empty() {

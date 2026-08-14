@@ -72,14 +72,22 @@ impl NetArena {
     /// (`c.width` is an ExprId, not a literal). Folding it per write mirrors the
     /// engine exactly; hoisting the fold to build time is a legitimate S2/S3
     /// move, but only once a profile asks for it (doc-18's rule).
+    /// `forced` is `SimState::forced` — the per-net force flag, threaded rather
+    /// than mirrored. It is ONE table (a `force` target is a property of the
+    /// design, not of a store), and the arena consults it at exactly the point
+    /// the engine's funnel does: per CHUNK, so `{a, b} = x` with only `a` forced
+    /// drops one chunk. An EMPTY slice means "nothing is forced", which is what
+    /// every caller in a force-free design passes and what the mirror
+    /// differential passes.
     pub(crate) fn write_lvalue(
         &mut self,
         ir: &SimIr,
         lhs: &Lvalue,
         value: Value,
         offsets: &Offsets,
+        forced: &[bool],
     ) -> bool {
-        self.write_lvalue_inner(ir, lhs, value, offsets, true)
+        self.write_lvalue_inner(ir, lhs, value, offsets, forced, true)
     }
 
     /// The general funnel with the one-word entry TURNED OFF — the differential's
@@ -96,7 +104,7 @@ impl NetArena {
         value: Value,
         offsets: &Offsets,
     ) -> bool {
-        self.write_lvalue_inner(ir, lhs, value, offsets, false)
+        self.write_lvalue_inner(ir, lhs, value, offsets, &[], false)
     }
 
     #[inline]
@@ -106,6 +114,7 @@ impl NetArena {
         lhs: &Lvalue,
         value: Value,
         offsets: &Offsets,
+        forced: &[bool],
         word_entry: bool,
     ) -> bool {
         for c in &lhs.chunks {
@@ -185,7 +194,7 @@ impl NetArena {
                     total.max(1),
                     value.signed,
                 );
-                return self.write_chunk_word(c0, raw_off, raw_word, pv, pu, total);
+                return self.write_chunk_word(c0, raw_off, raw_word, pv, pu, total, forced);
             }
         }
 
@@ -195,7 +204,7 @@ impl NetArena {
         // select). With one chunk the sliced "piece" IS `src` exactly.
         if lhs.chunks.len() == 1 {
             let (raw_off, raw_word) = offsets.first().copied().unwrap_or((0, 0));
-            return self.write_chunk(ir, &lhs.chunks[0], raw_off, raw_word, &src);
+            return self.write_chunk(ir, &lhs.chunks[0], raw_off, raw_word, &src, forced);
         }
 
         let mut changed = false;
@@ -212,7 +221,7 @@ impl NetArena {
             }
             src_hi = take_lo;
             let (raw_off, raw_word) = offsets.get(idx).copied().unwrap_or((0, 0));
-            changed |= self.write_chunk(ir, chunk, raw_off, raw_word, &piece);
+            changed |= self.write_chunk(ir, chunk, raw_off, raw_word, &piece, forced);
         }
         changed
     }
@@ -306,7 +315,16 @@ impl NetArena {
         raw_off: u32,
         raw_word: u32,
         piece: &Value,
+        forced: &[bool],
     ) -> bool {
+        // A forced net ignores every normal driver until release (IEEE §9.3.2).
+        // The engine's `write_chunk` gates here, before anything else this
+        // function does — including the 2-state coercion and the OOB index
+        // count — so an out-of-range write to a forced net does NOT earn its
+        // E4002 on either backend.
+        if forced.get(c.net as usize).copied().unwrap_or(false) {
+            return false;
+        }
         let s = self.slots[c.net as usize];
         // SVPART: a 2-state variable can never hold X/Z (IEEE §6.11.3) — coerce
         // every unknown bit of the incoming value to 0 before it lands.
@@ -400,6 +418,12 @@ impl NetArena {
     /// spelling; what differs is only how the bits get there.
     ///
     /// `cw` is the chunk's width, already folded by the caller.
+    // Eight arguments, one over clippy's default: every one is a distinct
+    // already-computed input the caller holds, and bundling them into a struct
+    // would move the fields' construction to the call site without removing a
+    // single value — the point of this entry point is that NOTHING is
+    // recomputed here.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn write_chunk_word(
         &mut self,
         c: &LvalChunk,
@@ -408,7 +432,14 @@ impl NetArena {
         mut pv: u64,
         mut pu: u64,
         cw: u32,
+        forced: &[bool],
     ) -> bool {
+        // The one-word entry's copy of `write_chunk`'s force gate — same net,
+        // same answer, and it must be here rather than only at the general
+        // funnel because `eval_store_word` reaches this method directly.
+        if forced.get(c.net as usize).copied().unwrap_or(false) {
+            return false;
+        }
         let s = self.slots[c.net as usize];
         // SVPART: a 2-state variable can never hold X/Z (IEEE §6.11.3) — coerce
         // every unknown bit of the incoming value to 0 before it lands. The

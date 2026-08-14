@@ -274,6 +274,24 @@ fn sidecar_families_reject_from_opts() {
     );
 }
 
+/// Slice #2: `force`/`release` is CORE.
+///
+/// A design carrying both must be eligible, and the statement scan must still
+/// SEE them — the arm is explicit rather than folded into the catch-all so a new
+/// statement kind cannot be swallowed silently.
+#[test]
+fn force_release_is_core() {
+    let (ok, rs) = reasons(
+        "module t;\n\
+           reg a = 0; wire b; reg c = 1;\n\
+           assign b = a;\n\
+           initial begin force b = c; #1 release b; #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(ok, "force/release must not disqualify: {rs:?}");
+    assert!(rs.is_empty(), "and nothing else may fire either: {rs:?}");
+}
+
 /// Slice #1: the three CLOCKING tables are CORE.
 ///
 /// A clocking block lowers to a holding net per item plus a marked
@@ -516,23 +534,18 @@ fn sva_sidecars_are_core_and_reject_nothing() {
     assert_eq!(e.refused, None, "and nothing downstream may refuse either");
 }
 
-/// Statement-level families: `force`/`release` and `disable` are ordinary `Stmt`
-/// variants, so ONLY a scan of the statement arena finds them — no sidecar
-/// reports them (a plain `force b = c;` leaves `assign_ranks` empty). v1 has no
-/// force machinery at all, so a design carrying one must go to the existing
-/// engine rather than run with every `force` silently doing nothing.
+/// Statement-level families: `disable fork` is an ordinary `Stmt` variant, so
+/// ONLY a scan of the statement arena finds it — no sidecar reports it.
+///
+/// ⚠️ `force`/`release` USED to be the first row here and is CORE since slice
+/// #2. The row said "v1 has no force machinery at all", and the three pieces it
+/// meant turned out to be: the per-net flag (`SimState::forced`, ONE table,
+/// threaded into the arena funnel), the §9.3.1/§9.3.2 registry (`SimState` too,
+/// borrowed by both kernels) and the continuous-re-evaluation fixpoint — only
+/// the last was genuinely absent. The `force_release_is_core` test below is what
+/// replaced this assertion.
 #[test]
 fn statement_level_families_reject() {
-    let (ok, rs) = reasons(
-        "module t;\n\
-           reg a = 0; wire b; reg c = 1;\n\
-           assign b = a;\n\
-           initial begin force b = c; #1 release b; #1 $finish; end\n\
-         endmodule\n",
-    );
-    assert!(!ok);
-    assert_eq!(rs, vec![("force_release", 2)], "one force + one release");
-
     // ⭐ `disable` splits, and the split is the whole point: a plain
     // `disable <named block>` is the break/continue idiom, which elaborate
     // lowers as a diagnostic-shaped marker plus a sibling `Goto` that does the

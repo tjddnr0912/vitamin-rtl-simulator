@@ -176,15 +176,63 @@ impl SimState<'_> {
     /// an already-forced net must land), then pin the net. `lhs` is a single
     /// whole-net chunk (elaborate-validated).
     pub fn force_write(&mut self, lhs: &Lvalue, value: Value) -> bool {
-        let net = lhs.chunks[0].net as usize;
-        self.forced[net] = false;
-        let offs = crate::exec::Offsets::Inline {
-            buf: [(0, 0); 2],
-            len: 1,
-        };
-        let changed = self.write_lvalue(lhs, value, &offs);
-        self.forced[net] = true;
+        let net = lhs.chunks[0].net;
+        self.force_lift(net);
+        let changed = self.write_lvalue(lhs, value, &Self::FORCE_OFFSETS);
+        self.force_pin(net);
         changed
+    }
+
+    /// The `Offsets` a force pin uses: one whole-net chunk at `(0, 0)`. Named
+    /// because both force write points build it and it must be the same.
+    pub(crate) const FORCE_OFFSETS: crate::exec::Offsets = crate::exec::Offsets::Inline {
+        buf: [(0, 0); 2],
+        len: 1,
+    };
+
+    /// Lift the target's force flag so a re-force (or the resumed latent assign)
+    /// can LAND — a pin write must go through the very flag it maintains.
+    /// Paired with `force_pin`; the pair is what tier-3's own pin write also
+    /// calls, so the order is stated once even though the funnel between them
+    /// is per-store.
+    pub(crate) fn force_lift(&mut self, net: u32) {
+        self.forced[net as usize] = false;
+    }
+
+    /// Re-pin after a force write. See `force_lift`.
+    pub(crate) fn force_pin(&mut self, net: u32) {
+        self.forced[net as usize] = true;
+    }
+
+    /// Which force keys the nets in `nets` feed, ascending and de-duplicated —
+    /// optionally plus every ALWAYS-REEVAL force (a volatile `$time`/`$random`
+    /// RHS, or a zero-net constant RHS: both yield a fresh value with frozen
+    /// inputs, so a net-sensitivity skip would silently FREEZE them).
+    ///
+    /// Ascending order is load-bearing, not tidiness: a force's re-pin can write
+    /// a net feeding another force, so the executed subset must re-evaluate in
+    /// the `BTreeMap` order the old all-forces loop used.
+    pub(crate) fn force_keys_for(&self, nets: &[u32], include_always: bool) -> Vec<u32> {
+        let mut keys: Vec<u32> = Vec::new();
+        for &n in nets {
+            if let Some(set) = self.force_net_to_forces.get(&n) {
+                keys.extend(set.iter().copied());
+            }
+        }
+        if include_always {
+            keys.extend(self.force_always_reeval.iter().copied());
+        }
+        keys.sort_unstable();
+        keys.dedup();
+        keys
+    }
+
+    /// The live registry entry for a force key, or `None` if an earlier re-pin's
+    /// side effects removed it.
+    pub(crate) fn force_entry(&self, key: u32) -> Option<(Lvalue, u32, u64)> {
+        self.active_forces
+            .get(&key)
+            .map(|(lv, rhs, mult, _weak)| (lv.clone(), *rhs, *mult))
     }
 
     /// `release lhs`: unpin. A NET target snaps back to its driver at the next
@@ -193,6 +241,124 @@ impl SimState<'_> {
     /// (no settle entry exists for it) — both fall out of just clearing the flag.
     pub fn release(&mut self, lhs: &Lvalue) {
         self.forced[lhs.chunks[0].net as usize] = false;
+    }
+
+    // ── the DECISION half of force/release, split from the WRITE ─────────────
+    //
+    // Slice #2 threads tier-3 through these. Everything below reads and mutates
+    // only the REGISTRY (`active_forces`, `latent_assigns`, the sensitivity
+    // sidecars, `forced`) — never a net value — so handing it to a second kernel
+    // cannot leak the engine's store. The store operations (evaluate an RHS,
+    // write the target) stay with the caller, which is what lets ONE rule drive
+    // two funnels. Same shape as slice #1's `clocking_commit_plan` and A1-iii's
+    // `TaskWrites`.
+
+    /// `force`/`assign` prologue: settle the registry's priority question and
+    /// say whether the caller must now perform the pin write.
+    ///
+    /// `false` ⇒ a procedural `assign` displaced by a live FORCE: it is parked
+    /// as latent (§9.3.1 gives the force priority) and nothing is written.
+    pub(crate) fn force_prologue(&mut self, lhs: &Lvalue, rhs: u32, sid: u32) -> bool {
+        let net = lhs.chunks[0].net;
+        let mult = self.cur_time_mult;
+        if self.assign_ranks.contains(&sid) {
+            // §9.3.1 proc-assign: an active FORCE keeps priority — park the
+            // assign as latent (it takes control at release). Otherwise (re)pin
+            // at assign rank (a second assign overrides the first).
+            if matches!(self.active_forces.get(&net), Some((.., false))) {
+                self.latent_assigns.insert(net, (lhs.clone(), rhs, mult));
+                return false;
+            }
+            self.latent_assigns.remove(&net);
+        } else if let Some((plv, prhs, pmult, true)) = self.active_forces.get(&net).cloned() {
+            // real force displacing an active assign: park it for release.
+            self.latent_assigns.insert(net, (plv, prhs, pmult));
+        }
+        true
+    }
+
+    /// `force`/`assign` epilogue: register for continuous re-evaluation
+    /// (IEEE §9.3.2 / §9.3.1) and refresh the RHS net-sensitivity sidecar.
+    pub(crate) fn force_epilogue(&mut self, lhs: &Lvalue, rhs: u32, sid: u32) {
+        let net = lhs.chunks[0].net;
+        let mult = self.cur_time_mult;
+        let weak = self.assign_ranks.contains(&sid);
+        self.active_forces
+            .insert(net, (lhs.clone(), rhs, mult, weak));
+        self.register_force_sensitivity(net, rhs);
+    }
+
+    /// `release`/`deassign` prologue: update the registry and return the LATENT
+    /// procedural assign whose control resumes (§9.3.1) — the caller evaluates
+    /// and writes it, then calls `release_epilogue`.
+    ///
+    /// Also reports whether the target should snap back to its continuous
+    /// driver, which is the caller's cue to re-dirty that driver — see
+    /// `release_epilogue`'s doc for why that is not automatic.
+    pub(crate) fn release_prologue(
+        &mut self,
+        lhs: &Lvalue,
+        sid: u32,
+    ) -> Option<(Lvalue, u32, u64)> {
+        let net = lhs.chunks[0].net;
+        if self.assign_ranks.contains(&sid) {
+            // `deassign`: drop the assign wherever it lives. An active STRONG
+            // force is untouched; an active assign unpins (the variable HOLDS
+            // its value, §9.3.1); a latent assign is just forgotten.
+            self.latent_assigns.remove(&net);
+            if matches!(self.active_forces.get(&net), Some((.., true))) {
+                self.active_forces.remove(&net);
+                self.unregister_force_sensitivity(net);
+                self.release(lhs);
+            }
+            return None;
+        }
+        // `release`: removes the FORCE. A parked proc-assign resumes control
+        // (re-pin + re-evaluate NOW, §9.3.1); an active assign is NOT a force
+        // and keeps control; otherwise plain unpin.
+        match self.active_forces.get(&net) {
+            Some((.., true)) => None, // assign active, no force: release is a no-op
+            _ => {
+                self.active_forces.remove(&net);
+                self.unregister_force_sensitivity(net);
+                self.release(lhs);
+                self.latent_assigns.remove(&net)
+            }
+        }
+    }
+
+    /// Which continuous assigns DRIVE `net` — the cue a `release` owes.
+    ///
+    /// ⚠️ **This closes a pre-existing silent-wrong that both oracles call.**
+    /// `release` on a wire is documented to "snap back to its driver at the next
+    /// cont-assign settle", and that was true when the settle re-evaluated every
+    /// assign every pass. The dirty-driven settle (§4.5.335) made it false:
+    /// clearing `forced` moves no net, so nothing marks the driving assign dirty
+    /// and the forced value SURVIVES until some input of that assign happens to
+    /// change. Measured on `assign w = a + 2; force w = 8'hF0; release w;` —
+    /// iverilog and verilator both report 3, all three vita backends reported
+    /// 240 until the next write to `a`.
+    ///
+    /// Answered from `ir.cont_assigns` rather than from a new LHS→assign map:
+    /// a release is a rare event, and a map is state that can go stale. Which
+    /// worklist gets marked is the CALLER's — the engine's `st.ca_dirty` and
+    /// tier-3's `arena.ch.ca_dirty` are per-store.
+    pub(crate) fn drivers_of_net(&self, net: u32) -> Vec<u32> {
+        self.ir
+            .cont_assigns
+            .iter()
+            .enumerate()
+            .filter(|(_, ca)| ca.lhs.chunks.iter().any(|c| c.net == net))
+            .map(|(i, _)| i as u32)
+            .collect()
+    }
+
+    /// `release` epilogue: re-register the resumed latent assign.
+    pub(crate) fn release_epilogue(&mut self, alv: &Lvalue, arhs: u32, amult: u64) {
+        let net = alv.chunks[0].net;
+        self.active_forces
+            .insert(net, (alv.clone(), arhs, amult, true));
+        self.register_force_sensitivity(net, arhs);
     }
 
     // ── C-FORCE-REEVAL-p2: force-RHS net-sensitivity sidecar ─────────────────

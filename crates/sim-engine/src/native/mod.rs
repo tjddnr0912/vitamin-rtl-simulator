@@ -429,13 +429,29 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // available and the gate answers instead. Wiring them later is what LIFTS
     // the reject, not what was needed to add it.
     //
-    // - `force`/`release`: a whole machine v1 does not have (the per-net force
-    //   flag that suppresses every normal driver, the continuous re-evaluation,
-    //   the assign/deassign weak rank). The write funnel deliberately does NOT
-    //   carry the flag — honoring it without the machinery would read as support
-    //   while every `force` silently did nothing. Note procedural
-    //   `assign`/`deassign` ALSO lower to Force/Release, so this row is the only
-    //   thing that catches them (`assign_ranks` is a core sidecar).
+    // - ⭐ **`force`/`release` is WIRED (slice #2)** and this row is gone. The
+    //   machinery it named turned out to be three pieces, and only the last was
+    //   really missing: the per-net force flag is `SimState::forced` — ONE table
+    //   for both stores, now THREADED into the arena funnel rather than mirrored
+    //   — the §9.3.1/§9.3.2 registry (`active_forces`, `latent_assigns`, the RHS
+    //   sensitivity sidecars, the assign/deassign weak rank) is `SimState` too
+    //   and both kernels borrow it, and what tier-3 lacked was the continuous
+    //   RE-EVALUATION fixpoint, which is now the engine's shape expressed
+    //   through the same `SimState` helpers (`force_keys_for`/`force_entry`)
+    //   with only the eval, the write and the dirty SEED per-store.
+    //
+    //   ⚠️ The old row said the write funnel "deliberately does NOT carry the
+    //   flag — honoring it without the machinery would read as support while
+    //   every `force` silently did nothing". That was the right call while the
+    //   row stood; the funnel carries it now, at the same per-CHUNK point the
+    //   engine gates, so `{a, b} = x` with only `a` forced drops one chunk.
+    //
+    //   ⚠️⚠️ Admitting the family also uncovered a PRE-EXISTING silent-wrong
+    //   that both oracles call — see `SimState::drivers_of_net`. `release` on a
+    //   wire cleared the flag and nothing re-dirtied the driving continuous
+    //   assign, so the forced value survived until some input of that assign
+    //   happened to move (iverilog/verilator 3, all three vita backends 240).
+    //   Fixed for both stores, in the family this row was gating.
     // - `disable fork` only. A plain `disable <named block>` is the
     //   break/continue idiom and needs NOTHING here: elaborate lowers it as a
     //   diagnostic-shaped marker plus a sibling `Goto` that does the actual
@@ -444,12 +460,15 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     //   rejected whole designs for a statement with no runtime effect —
     //   costlier here than for the VM, which loses one body while tier-3 has no
     //   body-level fallback at all.
-    let mut force_release = 0usize;
     let mut disable_fork = 0usize;
     let mut stmt_effect = 0usize;
     for s in &ir.stmts {
         match s {
-            sim_ir::Stmt::Force { .. } | sim_ir::Stmt::Release { .. } => force_release += 1,
+            // CORE since slice #2 — kept as an explicit arm rather than folded
+            // into the catch-all, because an exhaustive-looking `match` that
+            // silently swallows a family is how this gate would stop noticing a
+            // NEW statement kind. Their machinery is `k_force`/`k_release`.
+            sim_ir::Stmt::Force { .. } | sim_ir::Stmt::Release { .. } => {}
             sim_ir::Stmt::Disable { scope_kind, .. } => {
                 if matches!(scope_kind, sim_ir::DisableKind::Fork) {
                     disable_fork += 1;
@@ -534,7 +553,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             sim_ir::Stmt::NonblockingAssign { .. } => {}
         }
     }
-    flag(&mut out, "force_release", force_release);
     flag(&mut out, "disable_fork", disable_fork);
     flag(&mut out, "stmt_effect", stmt_effect);
 

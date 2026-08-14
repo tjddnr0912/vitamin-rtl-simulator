@@ -724,7 +724,8 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // the net, so passing `w` instead would land the same bits — the
         // difference is only that this spelling states what is being written
         // rather than relying on the clamp to discover it.
-        self.arena.write_chunk_word(c, 0, 0, pv, pu, s.width);
+        let (arena, forced) = (&mut self.arena, &self.sched.st.forced);
+        arena.write_chunk_word(c, 0, 0, pv, pu, s.width, forced);
         Some(())
     }
 
@@ -1188,7 +1189,72 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             }
         }
         let ir = self.ir;
-        self.arena.write_lvalue(ir, lhs, value, offsets)
+        // The force flags are `SimState`'s — ONE table, threaded rather than
+        // mirrored. The split borrow is field-disjoint (`arena` mutable,
+        // `sched.st.forced` shared).
+        let (arena, forced) = (&mut self.arena, &self.sched.st.forced);
+        arena.write_lvalue(ir, lhs, value, offsets, forced)
+    }
+
+    /// The tier-3 pin write: through THIS store's funnel, with the target's
+    /// force flag lifted so a re-force (or a resumed latent assign) can land.
+    ///
+    /// The lift/pin pair is `SimState`'s (`force_lift`/`force_pin`) — one table,
+    /// one order, two funnels. `SimState::force_write` is the engine's twin and
+    /// differs only in which funnel sits between them.
+    pub(crate) fn force_write(&mut self, lhs: &Lvalue, value: Value) -> bool {
+        let net = lhs.chunks[0].net;
+        self.sched.st.force_lift(net);
+        let changed = self.write_routed(lhs, value, &crate::state::SimState::FORCE_OFFSETS);
+        self.sched.st.force_pin(net);
+        changed
+    }
+
+    /// Mark every continuous assign that DRIVES `net` dirty in THIS store's
+    /// worklist. The `release` half of the fix at `SimState::drivers_of_net`;
+    /// the engine has the same two lines against `st.ca_dirty`.
+    pub(crate) fn redirty_drivers_of(&mut self, net: u32) {
+        for ci in self.sched.st.drivers_of_net(net) {
+            let i = ci as usize;
+            if i < self.arena.ch.ca_dirty_flag.len() && !self.arena.ch.ca_dirty_flag[i] {
+                self.arena.ch.ca_dirty_flag[i] = true;
+                self.arena.ch.ca_dirty.push(ci);
+            }
+        }
+    }
+
+    /// The tier-3 twin of `Scheduler::reeval_active_forces` (IEEE §9.3.2 /
+    /// §9.3.1 continuous re-evaluation), against the arena.
+    ///
+    /// The fixpoint's SHAPE — seed from this delta's changed nets plus every
+    /// always-reeval force, re-pin in ascending key order, re-select from the
+    /// nets that actually moved, budget over the live-force count — is the
+    /// engine's, expressed through the same `SimState` helpers
+    /// (`force_keys_for`/`force_entry`). What differs is the two store
+    /// operations and the SEED: the engine reads `st.dirty`, tier-3 the arena's.
+    pub(crate) fn reeval_active_forces(&mut self) {
+        let dirty = std::mem::take(&mut self.arena.ch.dirty);
+        let mut keys = self.sched.st.force_keys_for(&dirty, true);
+        self.arena.ch.dirty = dirty;
+
+        let saved = self.sched.st.cur_time_mult;
+        let mut budget = self.sched.st.active_forces.len().saturating_add(2);
+        while !keys.is_empty() && budget > 0 {
+            budget -= 1;
+            let mut next_changed: Vec<u32> = Vec::new();
+            for &k in &keys {
+                let Some((lv, rhs, mult)) = self.sched.st.force_entry(k) else {
+                    continue;
+                };
+                self.sched.st.cur_time_mult = mult;
+                let v = self.k_eval_for_lvalue(&lv, rhs);
+                if self.force_write(&lv, v) {
+                    next_changed.push(k);
+                }
+            }
+            keys = self.sched.st.force_keys_for(&next_changed, false);
+        }
+        self.sched.st.cur_time_mult = saved;
     }
 
     /// Is this net's value in the ENGINE's heap rather than in a slot of THIS
@@ -2019,11 +2085,34 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         ctl
     }
 
-    fn k_force(&mut self, _lhs: &Lvalue, _value: Value, _rhs: u32, _sid: u32) {
-        gate_refused!("k_force", "statement scan rejects `force`/`release`")
+    /// WIRED (slice #2). The REGISTRY rule is `SimState`'s and is the engine's —
+    /// `force_prologue` settles the §9.3.1 priority question (a procedural
+    /// `assign` displaced by a live force is parked latent and writes nothing)
+    /// and `force_epilogue` registers the RHS for continuous re-evaluation. What
+    /// this kernel supplies is the WRITE, through its own funnel.
+    fn k_force(&mut self, lhs: &Lvalue, value: Value, rhs: u32, sid: u32) {
+        if !self.sched.st.force_prologue(lhs, rhs, sid) {
+            return;
+        }
+        self.force_write(lhs, value);
+        self.sched.st.force_epilogue(lhs, rhs, sid);
     }
-    fn k_release(&mut self, _lhs: &Lvalue, _sid: u32) {
-        gate_refused!("k_release", "statement scan rejects `force`/`release`")
+    /// WIRED (slice #2). `release_prologue` owns the four §9.3.1/§9.3.2 arms and
+    /// hands back the latent procedural assign whose control resumes, if any;
+    /// this kernel evaluates and pins it, then re-dirties the target's
+    /// continuous drivers so a released WIRE snaps back in this settle rather
+    /// than at the next input change (see `SimState::drivers_of_net`).
+    fn k_release(&mut self, lhs: &Lvalue, sid: u32) {
+        let resumed = self.sched.st.release_prologue(lhs, sid);
+        if let Some((alv, arhs, amult)) = resumed {
+            let saved = self.sched.st.cur_time_mult;
+            self.sched.st.cur_time_mult = amult;
+            let v = self.k_eval_for_lvalue(&alv, arhs);
+            self.force_write(&alv, v);
+            self.sched.st.cur_time_mult = saved;
+            self.sched.st.release_epilogue(&alv, arhs, amult);
+        }
+        self.redirty_drivers_of(lhs.chunks[0].net);
     }
     fn k_queue_pop(&mut self, lhs: &Lvalue, rhs: u32) -> Value {
         // WIRED (A1-i). DELEGATED, not restated: `Scheduler::k_queue_pop` is

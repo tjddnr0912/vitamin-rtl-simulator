@@ -398,10 +398,6 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// O(#procs). Empty/untouched for single-edge designs ⇒ byte-identical.
     scratch_edge_seen: Vec<bool>,
     scratch_edge_marked: Vec<u32>,
-    /// C-FORCE-REEVAL-p2: reused buffer of the force KEYS (target nets) selected
-    /// for re-eval this delta (changed-net-triggered ∪ always-reeval), kept
-    /// sorted to preserve the BTreeMap re-eval order contract.
-    scratch_force_keys: Vec<u32>,
     /// WAITER-POOL: reused `expr_now`/`level_fire` precompute buffers in
     /// `propagate_changes` (was two fresh `Vec<bool>` per non-idle delta).
     scratch_expr_now: Vec<bool>,

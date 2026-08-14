@@ -520,6 +520,14 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // nothing and `cb.sig` sits at its X init forever — on BOTH backends,
         // agreeing about a sample neither takes. Found by reading this list
         // before writing the slice's tests, as `class_handle_nets` was.
+        // …and the ASSIGN RANK table (slice #2). ⚠️ **NINTH entry**, and it has
+        // this list's signature failure mode: `force`/`assign` and
+        // `release`/`deassign` lower to the SAME two IR statements, and this
+        // sidecar is the ONLY thing that says which. Without it a procedural
+        // `assign v = e;` is executed as a strong FORCE and `deassign` as a
+        // `release` — by BOTH backends, so a differential row about §9.3.1
+        // priority would agree about a design neither performs as written.
+        assign_ranks: sc.assign_ranks,
         clocking_inputs: sc.clocking_inputs,
         clocking_commit: sc.clocking_commit,
         clocking_outputs: sc.clocking_outputs,
@@ -678,7 +686,7 @@ fn s1c_walk(src: &str, name: &str, seed: u64) -> usize {
                 "{name}/pass{pass}/site{i}: rhs value diverged"
             );
             let ch_e = st.write_lvalue(lhs, val_e, &off_e);
-            let ch_n = arena.write_lvalue(&ir, lhs, val_n, &off_n);
+            let ch_n = arena.write_lvalue(&ir, lhs, val_n, &off_n, &[]);
             assert_eq!(
                 ch_e, ch_n,
                 "{name}/pass{pass}/site{i}: `changed` verdict diverged"
@@ -953,7 +961,7 @@ fn s1c_out_of_range_and_x_index_writes_are_dropped() {
         let off_n = crate::eval::resolve_offsets(&ctx_n, lhs);
         let val_n = ctx_n.eval_ctx(*rhs, ctx_w, sw.signed);
         let ch_e = st.write_lvalue(lhs, val_e, &off_e);
-        let ch_n = arena.write_lvalue(&ir, lhs, val_n, &off_n);
+        let ch_n = arena.write_lvalue(&ir, lhs, val_n, &off_n, &[]);
 
         assert_eq!(ch_e, ch_n, "{label}: `changed` verdict");
         for e in 0..4 {
@@ -1104,7 +1112,7 @@ fn write_both_stores(
     let off_n = crate::eval::resolve_offsets(&ctx_n, lhs);
     let val_n = ctx_n.eval_ctx(rhs, ctx_w, sw.signed);
     let ch_e = st.write_lvalue(lhs, val_e, &off_e);
-    let ch_n = arena.write_lvalue(ir, lhs, val_n, &off_n);
+    let ch_n = arena.write_lvalue(ir, lhs, val_n, &off_n, &[]);
     (ch_e, ch_n)
 }
 
@@ -1313,7 +1321,7 @@ fn s1d2_dirty_and_edge_channel_matches_engine() {
                         v.set_vu(0, 1, 0);
                     }
                     let ce = st.write_lvalue(&lhs, v.clone(), &offs);
-                    let cn = arena.write_lvalue(&ir, &lhs, v, &offs);
+                    let cn = arena.write_lvalue(&ir, &lhs, v, &offs, &[]);
                     assert_eq!(ce, cn, "{name}/pass{pass}/net{net}: clock changed verdict");
                     let e2 = engine_take(&mut st);
                     let mut n2 = Vec::new();
@@ -1563,7 +1571,7 @@ fn s1d3_wake_decision_matches_engine() {
                 let off_n = crate::eval::resolve_offsets(&ctx_n, lhs);
                 let val_n = ctx_n.eval_ctx(*rhs, ctx_w, sw.signed);
                 arena.ch.blocking_writer = author;
-                arena.write_lvalue(&ir, lhs, val_n, &off_n);
+                arena.write_lvalue(&ir, lhs, val_n, &off_n, &[]);
                 arena.ch.blocking_writer = None;
                 compared += 1;
                 if !batched {
@@ -2461,7 +2469,7 @@ fn s2_word_write_entry_matches_the_general_funnel() {
                         let o = crate::exec::Offsets::Heap(
                             lhs.chunks.iter().map(|_| (off, word)).collect(),
                         );
-                        let cf = fast.write_lvalue(&ir, lhs, value.clone(), &o);
+                        let cf = fast.write_lvalue(&ir, lhs, value.clone(), &o, &[]);
                         let cs = slow.write_lvalue_general_for_test(&ir, lhs, value, &o);
                         let ctx = format!(
                             "site{si} off={off:#x} word={word:#x} \

@@ -675,7 +675,6 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             scratch_edges: Vec::new(),
             scratch_edge_seen: Vec::new(),
             scratch_edge_marked: Vec::new(),
-            scratch_force_keys: Vec::new(),
             scratch_expr_now: Vec::new(),
             scratch_level_fire: Vec::new(),
             vm_regs_pool: Vec::new(),

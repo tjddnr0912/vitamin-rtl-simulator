@@ -459,33 +459,24 @@ fn s1d4a_shared_executor_agrees_on_adversarial_assigns() {
 /// "unreachable by the gate" is precisely the condition that makes it look dead.
 ///
 /// Rather than assert on 20 methods by name (a list that rots), this drives the
-/// two that a legal, gate-REFUSED design reaches through the shared executor:
-/// a `force` statement and a seeded-`$random` rhs. Both are refused by
-/// `design_eligibility`, so reaching either in production is the bug the panic
-/// is there to report.
+/// ones that a legal, gate-REFUSED design reaches through the shared executor.
+///
+/// ⚠️⚠️ **THERE IS EXACTLY ONE LEFT, and that is the news.** This started as two
+/// slots. The second moved THREE times as A1 wired its way down the
+/// `stmt_effect` family (`k_random_seeded` → `k_fopen` → `k_fread`) and ended on
+/// `disable fork`; the FIRST was `force`, and slice #2 wired it. A grep of
+/// `kernel.rs` now finds a single `gate_refused!` site. When A4 takes
+/// `disable fork` this test has no subject at all, and the honest move then is
+/// to retire it with a note rather than invent a design for it.
 #[test]
 fn s1d4a_refused_workers_are_loud_not_silent() {
-    let cases: [(&str, &str, &str); 2] = [
-        (
-            "force",
-            "k_force",
-            "module t; reg a; reg b;\n\
-             initial begin a = 0; b = 1; force a = b; end\n\
-             endmodule\n",
-        ),
-        // ⚠️ This slot moved THREE times as A1 wired its way down the family —
-        // `k_random_seeded` (A1-ii), `k_fopen` (A1-iv-b), `k_fread` (A1-iv-c) —
-        // and there is no `stmt_effect` member left to hold it: A1 closed the
-        // family (`every_stmt_effect_family_member_is_wired`). It is a
-        // `disable fork` now, whose row is A4's.
-        (
-            "disable_fork",
-            "k_disable_fork",
-            "module t;\n\
+    let cases: [(&str, &str, &str); 1] = [(
+        "disable_fork",
+        "k_disable_fork",
+        "module t;\n\
              initial begin fork #1; join_none disable fork; end\n\
              endmodule\n",
-        ),
-    ];
+    )];
     for (name, expect, src) in cases {
         let (ir, opts) = build_with_opts(src);
         // The design gate must refuse it — otherwise the panic below would be a
@@ -505,7 +496,6 @@ fn s1d4a_refused_workers_are_loud_not_silent() {
         nk.nba_seq = 0;
         let sid = (0..ir.stmts.len() as u32)
             .find(|&s| match &ir.stmts[s as usize] {
-                Stmt::Force { .. } => name == "force",
                 Stmt::Disable { scope_kind, .. } => {
                     name == "disable_fork" && matches!(scope_kind, sim_ir::DisableKind::Fork)
                 }

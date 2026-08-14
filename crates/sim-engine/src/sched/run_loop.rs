@@ -761,54 +761,28 @@ impl Scheduler<'_, '_> {
     /// and re-pin its target. The forcing module's time multiplier is restored
     /// around each eval so `$time` in a force RHS renders with the right scale.
     pub(crate) fn reeval_active_forces(&mut self) {
-        // ACTIVE pins only — both force (§9.3.2) and proc-assign (§9.3.1)
-        // re-evaluate continuously; a latent (force-displaced) assign does not
-        // run until release re-pins it.
-        // C-FORCE-REEVAL-p2: select only the forces whose inputs changed this
-        // delta (via the net→forces sidecar) PLUS every always-reeval force
-        // (volatile $time/$random RHS, or zero-net const RHS — these yield a
-        // fresh value with frozen inputs, so a net-sensitivity skip would
-        // silently FREEZE them). The selected keys are SORTED, so the executed
-        // subset re-evaluates in the exact BTreeMap (ascending-key) order the
-        // old all-forces loop used for that subset — a force's re-pin can write
-        // a net feeding another force, so order is load-bearing for output.
+        // The engine's half of the shared fixpoint. `st.dirty` is STILL
+        // unconsumed at this point in `propagate_changes` — it is the same
+        // changed-net set that gates this call, and using it raw (not the
+        // cur!=prev-filtered set) is a safe superset that never skips a force
+        // the old unconditional loop ran.
         //
-        // p2 FIX (force-feeds-force CHAIN): `reeval_active_forces` runs ONCE per
-        // `propagate_changes`, and the dirty list it triggers off is then CONSUMED
-        // by the sweep below. So a force re-pin that writes a net feeding ANOTHER
-        // force must re-trigger that downstream force WITHIN THIS CALL — there is
-        // no later sweep that re-runs it (the new dirtiness is transient, gone by
-        // the next delta). We therefore iterate to a FIXPOINT: each pass re-pins a
-        // worklist of forces, records which design nets actually changed value,
-        // then re-selects the forces those nets feed and repeats until quiescent.
-        // The old all-reeval code converged the whole DAG across successive
-        // sweeps; here we converge it in one call (input nets are frozen — only
-        // force-target nets move — so the fixpoint always settles, bounded by the
-        // number of live forces; a guard caps pathological cyclic forces).
-        let mut keys = std::mem::take(&mut self.scratch_force_keys);
-        keys.clear();
-        // Seed the worklist from the externally-changed nets. `self.st.dirty`
-        // (still unconsumed at this point in `propagate_changes`) is the same
-        // changed-net set that gates this call; using it raw (not the
-        // cur!=prev–filtered set) is a safe superset — it never skips a force the
-        // old unconditional loop ran. Always-reeval forces (volatile / zero-net)
-        // join the FIRST pass unconditionally.
-        for &n in &self.st.dirty {
-            if let Some(set) = self.st.force_net_to_forces.get(&n) {
-                keys.extend(set.iter().copied());
-            }
-        }
-        keys.extend(self.st.force_always_reeval.iter().copied());
-        keys.sort_unstable();
-        keys.dedup();
+        // Everything below the seed is `SimState`'s (slice #2 split it out so
+        // tier-3 runs the SAME fixpoint against its own store): the key
+        // selection, the ordering and the registry lookups are
+        // `force_keys_for`/`force_entry`, and only the EVAL and the WRITE are
+        // per-store.
+        let dirty = std::mem::take(&mut self.st.dirty);
+        let mut keys = self.st.force_keys_for(&dirty, true);
+        self.st.dirty = dirty;
 
         let saved = self.st.cur_time_mult;
         // Fixpoint bound: each force can re-pin its target at most once per pass,
         // and a pass only re-runs forces fed by a net that CHANGED VALUE in the
-        // previous pass. A non-cyclic force DAG settles in ≤ (#live forces) passes;
-        // the cap defends against a pathological cyclic force chain (which would
-        // also oscillate under the old per-sweep convergence — IEEE leaves such a
-        // zero-delay loop unstable). +2 slack over the live-force count.
+        // previous pass. A non-cyclic force DAG settles in <= (#live forces)
+        // passes; the cap defends against a pathological cyclic force chain
+        // (which would also oscillate under the old per-sweep convergence — IEEE
+        // leaves such a zero-delay loop unstable). +2 slack over the live count.
         let mut budget = self.st.active_forces.len().saturating_add(2);
         while !keys.is_empty() && budget > 0 {
             budget -= 1;
@@ -816,35 +790,26 @@ impl Scheduler<'_, '_> {
             // from a force re-pin in THIS pass — the trigger set for the next.
             let mut next_changed: Vec<u32> = Vec::new();
             for &k in &keys {
-                // Look up live registry data by key. A key could have been removed
-                // by an earlier force's re-pin side effects; skip a vanished entry.
-                let Some((lv, rhs, mult, _weak)) = self.st.active_forces.get(&k).cloned() else {
+                // A key could have been removed by an earlier force's re-pin
+                // side effects; skip a vanished entry.
+                let Some((lv, rhs, mult)) = self.st.force_entry(k) else {
                     continue;
                 };
                 self.st.cur_time_mult = mult;
                 let v = self.eval_for_lvalue(&lv, rhs);
-                // `force_write` returns whether the target net's value moved. Only
-                // a real change can re-trigger a downstream force; an unchanged
-                // re-pin is a no-op (preserves the old same-value-drop behavior).
+                // `force_write` returns whether the target net's value moved.
+                // Only a real change can re-trigger a downstream force; an
+                // unchanged re-pin is a no-op (preserves the same-value drop).
                 if self.st.force_write(&lv, v) {
                     next_changed.push(k);
                 }
             }
             // Re-select the forces fed by the nets that just changed value. A
-            // force whose source net did not move is NOT re-run (byte-identical to
-            // a steady chain). De-dup + sort to keep the ascending-key order.
-            keys.clear();
-            for &n in &next_changed {
-                if let Some(set) = self.st.force_net_to_forces.get(&n) {
-                    keys.extend(set.iter().copied());
-                }
-            }
-            keys.sort_unstable();
-            keys.dedup();
+            // force whose source net did not move is NOT re-run (byte-identical
+            // to a steady chain).
+            keys = self.st.force_keys_for(&next_changed, false);
         }
         self.st.cur_time_mult = saved;
-        keys.clear();
-        self.scratch_force_keys = keys;
     }
 
     /// GATED-CLOCK: clear the per-process "edge-woken this CLUSTER" markers. An
