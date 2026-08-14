@@ -119,9 +119,10 @@ pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'s
     // `wire`/`wand`/`wor` multi-driven nets no longer refuse). What ELABORATE
     // rejects is still rejected for both backends alike (E3001 for partial/
     // dynamic/delayed overlaps): that never reaches this gate.
-    if !opts.final_procs.is_empty() {
-        return Err("`final` blocks (the post-loop drain is not restated)");
-    }
+    // ⭐ `final` blocks are CORE since slice #5 — see `run_finals`. The row said
+    // "the post-loop drain is not restated", and restating it was three lines:
+    // the body through `dispatch_body` and the flush through `flush_postponed`,
+    // both of which already existed.
     // A3-i: the callee classification the `Terminator::Call` row consults. Built
     // ONCE for the whole gate rather than per process — it is a pure function of
     // the IR and the frame sidecars, and it is the same one `frames_admitted`
@@ -679,6 +680,13 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         if init_set.contains(&pi) {
             continue;
         }
+        // Slice #5: a `final` block is Initial-shaped in the IR and would be
+        // queued by the arm below — `final_procs` is the only thing that says
+        // otherwise, and `run_finals` executes it after the loop instead. The
+        // engine's `arm_processes` skips it at exactly this point.
+        if k.sched.st.final_procs.contains(&pi) {
+            continue;
+        }
         match ir.processes[pi as usize].sensitivity.kind {
             // initial + combinational/latch blocks RUN at t0…
             sim_ir::SensKind::Initial | sim_ir::SensKind::Comb | sim_ir::SensKind::Latch => {
@@ -702,9 +710,11 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
 /// The engine's `propagate_changes`, for the class the gate admits: take the
 /// changed set, ask the wake table who that wakes, queue them.
 ///
-/// What has no analogue, each provably empty rather than skipped: force re-eval
-/// (`force_release` is an S0 reject) and the clocking commit (`clocking` is an
-/// S0 reject).
+/// ⚠️ This doc used to say force re-eval and the clocking commit "have no
+/// analogue, each provably empty rather than skipped" because both families
+/// were S0 rejects. Slices #1 and #2 admitted them and built both: the clocking
+/// commit is the `clocked` diversion below, and the force fixpoint opens this
+/// function. Neither is empty any more.
 ///
 /// The engine's waiter pass is NOT absent — it is split in two here, and both
 /// halves run: its STATIC `Level` arm (`arm = None`) is the second loop of
@@ -881,12 +891,49 @@ fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNe
 /// drain, and anything left behind would be a silently truncated waveform at
 /// exit 0.
 fn done(k: &mut NativeKernel, r: FinishReason) -> FinishReason {
+    run_finals(k);
     k.drain_range_diags();
     debug_assert!(
         k.arena.ch.vcd_pending.is_empty(),
         "tier-3 run left VCD records unwritten"
     );
     r
+}
+
+/// Slice #5: the end-of-simulation `final` blocks (IEEE 1800 §9.2.3).
+///
+/// ⭐ The row this replaces said "the post-loop drain is not restated", and that
+/// was the whole of it: `Scheduler::run_finals` runs each `final_procs` body
+/// and flushes the postponed region after it, and tier-3 has both — the body
+/// through `dispatch_body` (the same executor choice the region loop makes) and
+/// the flush through `flush_postponed`, threaded since A5-b. No new machinery.
+///
+/// POSITION: the engine calls this AFTER `Scheduler::run` returns, for every
+/// finish reason that run produced — including the delta limit — and NOT when
+/// the t0 settle itself failed. `done` is the funnel every `run` exit but that
+/// one goes through, so calling it here reproduces both halves.
+///
+/// ⚠️ The body's `Step` is DISCARDED, as it is in the engine: a `$finish` inside
+/// a `final` block cannot change a finish reason that has already been decided,
+/// and a second `final` still runs. That is the engine's shape (`let _ =
+/// self.run_body(...)`), not an oversight.
+fn run_finals(k: &mut NativeKernel) {
+    if k.sched.st.final_procs.is_empty() {
+        return;
+    }
+    let finals: Vec<u32> = k.sched.st.final_procs.iter().copied().collect();
+    let ir = k.ir;
+    for pid in finals {
+        if (pid as usize) >= ir.processes.len() {
+            continue; // defensive: stale side table, as in the engine
+        }
+        let entry = ir.processes[pid as usize].entry;
+        let _ = dispatch_body(k, ir, pid, entry);
+        k.drain_range_diags();
+        // …and flush whatever `$strobe`/`$monitor` the final body queued: the
+        // postponed machinery is per-timestep and end-of-sim is the last one.
+        flush_postponed(k);
+    }
 }
 
 /// A8-b: the OBSERVED and REACTIVE regions (IEEE 1800 §4.4 / §16.4).

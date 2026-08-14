@@ -1383,6 +1383,43 @@ test(monitor)'` 로 돌렸는데, **그것을 죽이는 테스트의 이름이
 raw read 가 생기는 것을 알아채는 것**이고, 지금 하나도 없는 파일이야말로 하나가 몰래 들어가기 가장 쉬운
 자리다.
 
+#### 5.1-ab ✅ #5 `final` blocks — **"restate the post-loop drain" 이 세 줄이었다** · 95.90% → **96.04%** (2026-08-14)
+
+행의 문구가 곧 할 일이었다: `Scheduler::run_finals` 는 `final_procs` 의 바디를 하나씩 돌리고 그 뒤에
+postponed 를 flush 하는 것이 전부이고, tier-3 은 **둘 다 갖고 있었다** — 바디는 `dispatch_body`(리전
+루프가 쓰는 그 실행기 선택)이고 flush 는 A5-b 가 스레드한 `flush_postponed`. 새 기계장치 0.
+
+빠져 있던 **두 번째 반쪽이 요점**이다: **`arm_t0` 에 `final_procs` skip 이 없었다.** `final` 은 IR 에서
+Initial 모양이므로 그 행이 없으면 **t0 에 평범한 initial 로 큐잉**된다 — 앵커의 첫 줄이 그것을 잡는다.
+
+⭐ **position 은 `done`** — 엔진은 `Scheduler::run` 이 리턴한 **뒤에**, 그것이 낸 모든 finish reason 에
+대해(델타 리밋 포함) 부르고, **t0 settle 이 실패했을 때만** 안 부른다. `done` 이 그 하나를 뺀 모든 exit 의
+퍼널이라 양쪽이 한 번에 재현된다.
+
+⭐⭐ **곁가지로 SVA 두 형태가 함께 열렸다** — `cover property` 와 liveness 는 end-of-sim 의무 검사를
+`final_procs` 에 등록하므로 이 행 하나가 유일한 거부자였다. **지우기 전에 쟀다**(A2-i 의 `class_virtual`
+규칙): covered 런에서 `hits: 2`, uncovered 에서 `hits: 0`, 세 백엔드 동일 ⇒ 두 거부 핀을 **positive
+테스트로 뒤집었다**(슬라이스 3a 의 패턴).
+
+⚠️⚠️ **그 결과 `sva_shapes_that_need_machinery_still_refuse_by_their_own_name` 의 케이스가 0 이 됐다.**
+V1 슬라이스 1 이 둘로 시작했고 A8-b 가 하나(deferred)를, 이것이 마지막 하나를 가져갔다. **지우지 않고
+개수 단언 `== 0` 으로 남긴다** — 다음에 행을 여는 슬라이스가 이웃 핀을 새로 짓거나 없는 이유를 적게 하는
+표시다. `s1d4c2c_each_refusal_row_has_a_design` 도 4 → 3.
+
+**측정**: **6,177 / 6,432 = 96.04%**(+8 · 예측 +8 · SVA 두 형태는 덤) · 전 스위트 **5438 green** ·
+**flip 런**(실패 3 = 백엔드 이름 핀) · **발산 0** · **뮤테이션 4/5 사망**.
+
+⚠️ **생존 1 은 등가이고 쟀다** — `done` 안에서 `run_finals` 와 `drain_range_diags` 의 순서를 뒤집어도
+같다: `run_finals` 는 바디마다 `flush_postponed` 로 끝나고 그것이 `drain_range_diags`(= VCD drain)를
+부른다. finals 가 없으면 즉시 리턴하므로 순서가 무의미하고, 있으면 안에서 이미 드레인된다. **VCD 를 여는
+차분 행을 지어 확인한 뒤** 등가로 기록.
+
+⚠️ **앵커에 알려진 발산 하나를 명시했다** — `final` 안의 `$strobe`(`F2S`)를 vita 는 찍고 iverilog 는 안
+찍는다. 엔진의 기존 선택(*"end-of-sim 은 마지막 timestep"*)이고 세 백엔드가 공유한다. ⚠️ `$finish` 를
+클럭 엣지에서 **일부러 비켜 놨다** — Active 리전 `$finish` 가 대기 중인 엣지 프로세스를 드레인하지 않는
+것은 `run_finals` 가 이미 적어 둔 pre-existing 한계이고, 엣지에 맞추면 **이 슬라이스가 아니라 그 한계를
+핀하게 된다**.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

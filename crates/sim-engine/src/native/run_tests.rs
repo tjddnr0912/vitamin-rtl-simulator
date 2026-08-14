@@ -2264,17 +2264,11 @@ fn s1d4c2c_each_refusal_row_has_a_design() {
     // the group resolution into the settle — those shapes run now, and their
     // designs moved to the adversarial set and the oracle anchors.
     let cases: Vec<(&str, &str, &str)> = vec![
-        (
-            "final block",
-            "`final` blocks (the post-loop drain is not restated)",
-            r#"
-module top;
-  reg [7:0] n;
-  initial begin n = 8'd3; #1 $finish; end
-  final $display("final n=%0d", n);
-endmodule
-"#,
-        ),
+        // ⚠️ A `final` block was the FIRST case here and is CORE since slice
+        // #5 — the row it pinned ("the post-loop drain is not restated") was
+        // three lines of restating, both of which already existed. Removed
+        // rather than re-spelled: the remaining cases below already cover the
+        // "a row with no design behind it is a comment" claim.
         // ⚠️ These two used `$monitor` until A5-b, which WIRED it — so the row
         // they pin had to be re-spelled with a task that is still refused
         // (`$writemem*`, which reads the MEMORY itself rather than a formatted
@@ -2354,7 +2348,7 @@ endmodule
     }
     // 4 -> 5 (A3-i: the call-statement half became its own population) -> 4 again
     // (A3-ii-a: that population is now unreachable — see the note above).
-    assert_eq!(cases.len(), 4, "refusal-row coverage moved");
+    assert_eq!(cases.len(), 3, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit
@@ -5253,29 +5247,26 @@ endmodule
     assert_eq!(r.exit_class, crate::ExitClass::HadErrors);
 }
 
-/// V1 slice 1's OTHER half: opening the `sva` row must not have opened the SVA
-/// shapes that genuinely need machinery tier-3 does not have.
+/// ⚠️⚠️ **THIS TEST RAN OUT OF SUBJECTS, and that is the record.**
 ///
-/// Removing a gate row is the one change whose failure mode is a design that now
-/// RUNS, so the slice owes a pin on each neighbour that must still refuse — and
-/// on the REASON, because "refused" by the wrong row is how a maintainer later
-/// deletes the row that was actually load-bearing.
+/// It was V1 slice 1's other half: opening the `sva` row must not have opened
+/// the SVA shapes that genuinely need machinery, so each of those was pinned to
+/// refuse BY ITS OWN NAME. There were two. A8-b took the §16.4 deferred
+/// assertion (the Observed/Reactive regions were the only thing missing), and
+/// slice #5 took the last one — `cover property` and SVA liveness synthesize an
+/// end-of-sim obligation check registered in `final_procs`, and that row's whole
+/// machinery was three lines of post-loop drain.
 ///
-/// Both of these are real machinery gaps, not conservatism:
-///   * `cover property` (and SVA liveness) synthesize an end-of-sim obligation
-///     check registered in `final_procs`; tier-3's run loop has no post-loop
-///     drain, so `executor_rows` refuses them as `final` blocks.
-///   * ⚠️ a §16.4 DEFERRED assertion USED to be the second case here, and A8-b
-///     removed it: tier-3's cascade now calls `mature_deferred` at the Observed
-///     and Reactive positions, so that row is gone. What is left is the one
-///     above — which is the point of this test, since the claim is that each
-///     shape needing machinery refuses BY ITS OWN NAME rather than by SVA's.
+/// So it is INVERTED rather than deleted: the same two designs, asserted to RUN
+/// natively and to produce the same answer as the VM. Measured before rewriting
+/// (the `class_virtual` rule): `cover property` reports `hits: 2` on a covered
+/// run and `hits: 0` on an uncovered one, identically on all three backends.
 #[test]
-fn sva_shapes_that_need_machinery_still_refuse_by_their_own_name() {
-    let cases: Vec<(&str, &str, &str)> = vec![(
-        "cover property",
-        "`final` blocks (the post-loop drain is not restated)",
-        r#"
+fn sva_shapes_that_needed_machinery_now_run_natively() {
+    let cases: Vec<(&str, &str)> = vec![
+        (
+            "cover property",
+            r#"
 module top;
   reg clk = 0, a = 0, b = 0;
   always #5 clk = ~clk;
@@ -5283,7 +5274,32 @@ module top;
   initial begin #10 a = 1; #10 b = 1; #20 $finish; end
 endmodule
 "#,
-    )];
+        ),
+        (
+            "SVA liveness",
+            r#"
+module top;
+  reg clk = 0, req = 0, ack = 0;
+  always #5 clk = ~clk;
+  assert property(@(posedge clk) req |-> s_eventually ack);
+  initial begin #10 req = 1; #20 ack = 1; #20 $finish; end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    for (name, src) in &cases {
+        agree(src, name).unwrap_or_else(|r| panic!("{name}: refused by `{r}`"));
+        ran += 1;
+    }
+    assert_eq!(ran, 2, "both SVA end-of-sim shapes must run natively");
+}
+
+/// The old body, kept as a NO-SUBJECT marker so the next slice that opens a row
+/// re-reads the rule above rather than rediscovering it.
+#[test]
+fn sva_shapes_that_need_machinery_still_refuse_by_their_own_name() {
+    let cases: Vec<(&str, &str, &str)> = vec![];
     for (what, row, src) in &cases {
         let (ir, opts) = build_with_opts(src);
         assert_eq!(
@@ -5292,11 +5308,13 @@ endmodule
             "{what}: wrong refusal row"
         );
     }
-    // ONE now, not two — A8-b wired deferred assertions, so that case moved out
-    // of this test entirely. The count is asserted exactly rather than as `> 0`
-    // so that admitting or refusing another SVA shape moves a number a human has
-    // to re-justify, which is what just happened.
-    assert_eq!(cases.len(), 1);
+    // ⚠️⚠️ **ZERO now.** Two → one (A8-b, deferred assertions) → none (slice #5,
+    // `final` blocks). The count is asserted exactly rather than as `> 0`
+    // because the interesting failure is a case QUIETLY disappearing, and a
+    // list that has run empty is the strongest form of that signal: the next
+    // slice to open a row must add its own neighbour pin here or record why
+    // there is none.
+    assert_eq!(cases.len(), 0, "a refusal pin reappeared without a note");
 }
 
 /// An out-of-range NBA whose timestep has NOTHING after it. The per-statement
@@ -7366,5 +7384,172 @@ endmodule
             "out|C 37 30\n".to_string(),
         ],
         "frame-local new[] sized from a module net + disable (iverilog-pinned)"
+    );
+}
+
+/// Slice #5 ABSOLUTE ANCHOR — `final` blocks on tier-3, **iverilog-pinned**.
+///
+/// The row said "`final` blocks (the post-loop drain is not restated)", and
+/// restating it was three lines: run each `final_procs` body through
+/// `dispatch_body` — the same executor choice the region loop makes — and flush
+/// the postponed region after it. Both existed.
+///
+/// * **MID** — the design still runs normally; a `final` block must NOT be armed
+///   at t0. `arm_t0` had no `final_procs` skip and would have queued it as the
+///   Initial-shaped process it looks like in the IR, so this line would have
+///   printed `F1 c=0 t=0` first.
+/// * **F1/F2** — both finals run, in `final_procs` order, at the finish time
+///   with the settled value.
+/// * **`$finish` is OFFSET from the clock edge on purpose.** vita's `$finish`
+///   in the Active region terminates the timestep without draining its pending
+///   edge-triggered processes (a documented pre-existing limitation, recorded at
+///   `Scheduler::run_finals`), so a finish landing exactly on a posedge reports
+///   one count fewer than iverilog. Pinning that would pin the limitation
+///   instead of this slice.
+///
+/// ⚠️ **ONE KNOWN DIVERGENCE, stated rather than hidden**: vita prints `F2S`
+/// (a `$strobe` inside a `final` block, flushed by the postponed drain after
+/// each final body) and iverilog prints nothing for it. That is the engine's
+/// existing choice — "end-of-sim is the last timestep" — shared by all three
+/// vita backends and untouched here; the other three lines are `vvp`'s.
+#[test]
+fn final_blocks_run_on_tier_3() {
+    let src = r#"
+module top;
+  reg [7:0] c = 8'd0;
+  reg clk = 1'b0;
+  always #2 clk = ~clk;
+  always @(posedge clk) c = c + 8'd1;
+  final $display("F1 c=%0d t=%0t", c, $time);
+  final begin
+    $display("F2 c=%0d", c);
+    $strobe("F2S c=%0d", c);
+  end
+  initial begin
+    #5 $display("MID c=%0d", c);
+    #4 $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|MID c=1\n".to_string(),
+            "out|F1 c=2 t=9\n".to_string(),
+            "out|F2 c=2\n".to_string(),
+            "out|F2S c=2\n".to_string(),
+        ],
+        "final blocks (iverilog-pinned but for F2S — see the doc)"
+    );
+}
+
+/// Slice #5 DIFFERENTIAL — `final` shapes, native against the VM.
+#[test]
+fn final_block_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A `final` reached through the QUIESCENT exit rather than `$finish` —
+        // a different `done` arm, and the one that shows the call is at the
+        // funnel rather than at the finish arm alone.
+        (
+            "final after quiescence",
+            r#"
+module top;
+  reg [7:0] c = 8'd0;
+  initial begin #1 c = 8'd7; end
+  final $display("Q c=%0d t=%0t", c, $time);
+endmodule
+"#,
+        ),
+        // A `final` that reads a net the run loop left mid-flight, plus one
+        // that prints nothing — order and count both matter.
+        (
+            "two finals, one silent",
+            r#"
+module top;
+  reg [7:0] a = 8'd0;
+  reg [7:0] b = 8'd0;
+  final b = a + 8'd1;
+  final $display("T a=%0d b=%0d", a, b);
+  initial begin #1 a = 8'd5; #1 $finish; end
+endmodule
+"#,
+        ),
+        // A `final` whose body ends in `$finish` — the discarded `Step`, and
+        // the following final must still run.
+        (
+            "final that calls finish",
+            r#"
+module top;
+  reg [7:0] a = 8'd3;
+  final begin $display("A a=%0d", a); $finish; end
+  final $display("B a=%0d", a);
+  initial #1 $finish;
+endmodule
+"#,
+        ),
+        // A final that WRITES A NET while the VCD is open. ⚠️ This row exists
+        // because the mutation that moves `run_finals` after `done`'s VCD drain
+        // SURVIVED without it: every other row here either has no `$dumpvars`
+        // or has a final that only prints, so the record the reordering loses
+        // does not exist to be lost. `agree` compares VCD bytes.
+        (
+            "final writes a net with the VCD open",
+            r#"
+module top;
+  reg [7:0] a = 8'd0;
+  reg [7:0] b = 8'd0;
+  final b = a + 8'd9;
+  initial begin
+    $dumpfile("w.vcd");
+    $dumpvars(0, top);
+    #1 a = 8'd5;
+    #1 $finish;
+  end
+endmodule
+"#,
+        ),
+        // A DELTA-LIMIT exit: the engine runs finals for that reason too.
+        (
+            "final after a delta limit",
+            r#"
+module top;
+  reg a = 1'b0;
+  always @(a) a = ~a;
+  final $display("D done");
+  initial #100 $finish;
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 5, "slice #5 differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "slice #5 differential: refusal breakdown moved"
     );
 }
