@@ -874,22 +874,29 @@ fn run_json_reports_native_fallback_on_a_refused_design() {
     );
 }
 
-/// S0: the `native` object pins the ③층 design-level verdict. Fork + real in
-/// one design — two distinct reject families whose SOURCES differ (a sidecar
-/// table entry for `fork`, a net-table kind for `real`), which is the claim
-/// worth pinning; the units are per-family counts, so each is exactly 1.
+/// S0: the `native` object pins the ③층 design-level verdict. TWO distinct
+/// reject families in one design, whose SOURCES differ — a sidecar table entry
+/// (`fork`, from `fork_modes`) and a statement scan (`disable_fork`) — which is
+/// the claim worth pinning; the units are per-family counts, so each is exactly
+/// 1, and `refused` reports the first in the map's byte order.
 ///
-/// ⚠️ This used to be fork + queue + string, and V1 slice 2 admitted all three
-/// heap kinds out from under it. `real` is picked to be the kind BOTH gate
-/// halves still refuse under their own name (§5.1-b slice 10).
+/// ⚠️ THIRD shape. It was fork + queue + string until V1 slice 2 admitted every
+/// heap kind, then fork + `real` until A6 admitted that.
+///
+/// ⚠️⚠️ A6 also retired the SOURCE this pin used to contrast with: the design
+/// gate's net-KIND loop now has no rejecting arm at all — every `NetKind` is
+/// core or admitted — so "a net-table kind" is no longer a family any design can
+/// produce. The remaining families are all sidecar- or statement-sourced, and
+/// this pair is picked to still span two of those sources rather than two
+/// spellings of one.
 #[test]
 fn run_json_native_pins_the_reject_families() {
     let (_, code, obs) = run(
         "module top;\n\
-           real r;\n\
            integer n;\n\
            initial begin\n\
-             fork begin r = 1.5; end begin n = 2; end join\n\
+             fork begin n = 1; end begin n = 2; end join\n\
+             disable fork;\n\
              $display(\"%0d\", n);\n\
              $finish;\n\
            end\n\
@@ -900,8 +907,8 @@ fn run_json_native_pins_the_reject_families() {
     let manifest = read(&obs.join("run.json"));
     assert_eq!(
         field(&manifest, "native"),
-        "{\"eligible\": false, \"buildable\": false, \"refused\": \"fork\", \
-         \"reject_reasons\": {\"fork\": 1, \"real\": 1}}",
+        "{\"eligible\": false, \"buildable\": true, \"refused\": \"disable_fork\", \
+         \"reject_reasons\": {\"disable_fork\": 1, \"fork\": 1}}",
         "full manifest:\n{manifest}"
     );
 }

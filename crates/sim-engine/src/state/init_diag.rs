@@ -591,32 +591,33 @@ impl<'a> SimState<'a> {
         // real destination: a real is dimensionless and never bit/part-selected
         // (§6.2 makes r[i]/r[hi:lo] illegal at elaborate). Detect the whole-net
         // case and consult NetSlot.is_real.
-        let dest_is_real = lhs.chunks.len() == 1
-            && matches!(lhs.chunks[0].kind, SelKind::Bit)
-            && lhs.chunks[0].offset.is_none()
-            && lhs.chunks[0].width.is_none()
-            && self.nets[lhs.chunks[0].net as usize].is_real;
-
-        let value = match (dest_is_real, value.is_real) {
-            // real net ← real value: store verbatim (already 64 IEEE bits).
-            (true, true) => value,
-            // real net ← integer value (int→real CONVERT): exact for ≤53-bit.
-            (true, false) => Value::from_f64(value.to_f64().unwrap_or(0.0)),
-            // integer net ← real value (real→int ASSIGNMENT: ROUND half-away).
-            // A real RHS only legally targets a whole scalar int net (concat-LHS
-            // of a real is illegal §6.2). Round to that net's width; for the rare
-            // multi-chunk case round to the total LHS width.
-            (false, true) => {
-                let w = if lhs.chunks.len() == 1 {
-                    self.nets[lhs.chunks[0].net as usize].width
-                } else {
-                    lhs.chunks.iter().map(|c| self.chunk_width(c)).sum()
-                };
-                let signed = lhs.chunks.len() == 1 && self.nets[lhs.chunks[0].net as usize].signed;
-                crate::value::real_to_int_round(value.to_f64().unwrap_or(0.0), w.max(1), signed)
-            }
-            // integer net ← integer value: unchanged legacy path.
-            (false, false) => value,
+        // A6 EXTRACTION: the shape test and the 2×2 matrix are now
+        // `value::whole_net_dest` / `value::coerce_assign`, called by this
+        // funnel and by tier-3's. What stays here is the store-dependent part —
+        // "is THIS net real" and the integer destination's width/signedness —
+        // which is the only thing the two stores can legitimately answer
+        // differently. Byte-identical by construction: the arms moved verbatim.
+        let dest_is_real =
+            crate::value::whole_net_dest(lhs).is_some_and(|n| self.nets[n as usize].is_real);
+        // A real RHS only legally targets a whole scalar int net (concat-LHS of
+        // a real is illegal §6.2). Round to that net's width; for the rare
+        // multi-chunk case round to the total LHS width.
+        //
+        // ⚠️ The widths stay LAZY. This is the hot write funnel (§4.5.332
+        // measured it at 18.9% of a run), and the multi-chunk arm walks every
+        // chunk — the original computed it inside the round arm alone, so
+        // hoisting it unconditionally would put an IR walk on every concat
+        // write that has nothing to do with reals.
+        let value = if dest_is_real || value.is_real {
+            let (int_w, int_signed) = if lhs.chunks.len() == 1 {
+                let n = lhs.chunks[0].net as usize;
+                (self.nets[n].width, self.nets[n].signed)
+            } else {
+                (lhs.chunks.iter().map(|c| self.chunk_width(c)).sum(), false)
+            };
+            crate::value::coerce_assign(dest_is_real, value, int_w, int_signed)
+        } else {
+            value
         };
 
         // ── Round-14 V3/V4: frame-local write lane ──

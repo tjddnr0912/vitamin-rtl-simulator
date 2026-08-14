@@ -134,21 +134,25 @@ impl NetArena {
             lhs.chunks.len(),
             "one (offset,word) per chunk"
         );
-        // ── real→int assignment coercion (IEEE 1364 §6.2) ──
+        // ── real↔int assignment coercion (IEEE 1364 §6.2) ──
         //
-        // The DESTINATION can never be real here (a `NetKind::Real` net cannot
-        // build an arena), but the VALUE can: `x = $itor(n)/2.0` needs no real
-        // NET anywhere, and neither does `$bitstoreal(…)` or a real literal that
-        // survives to runtime. Both engine arms with a real destination are
-        // therefore unreachable; this one is not, and omitting it stored the raw
-        // IEEE-754 bits where the engine rounds — a silent wrong value in a
-        // design the gate calls eligible. (Found by the S1c differential, which
-        // is why the shape is now one of its pinned designs.)
+        // A6: all four arms are reachable now and there is ONE spelling of them
+        // (`value::coerce_assign`); this side supplies only what its own store
+        // knows. Until A6 the destination could never be real (a `NetKind::Real`
+        // net could not build an arena) while the VALUE could — `x =
+        // $itor(n)/2.0` needs no real NET anywhere — so only the round arm was
+        // mirrored here, by hand. Admitting reals is exactly what makes the
+        // other two arms reachable on this side, and a second spelling of "what
+        // does `real r; r = 5;` store" is the shape that goes silently wrong:
+        // the integer arm puts the bit pattern 5 where 5.0 belongs.
         //
-        // Verbatim from the engine, including the detail that a single-chunk LHS
+        // The integer width keeps the engine's detail that a single-chunk LHS
         // rounds to the NET's width and signedness — NOT the chunk's, so
-        // `x[3] = 1.5` rounds at 32 bits and the resize below takes bit 0.
-        let value = if value.is_real {
+        // `x[3] = 1.5` rounds at 32 bits and the resize below takes bit 0 — and
+        // it stays LAZY for the reason the engine's twin states.
+        let dest_is_real =
+            crate::value::whole_net_dest(lhs).is_some_and(|n| self.slots[n as usize].is_real);
+        let value = if dest_is_real || value.is_real {
             // `chunks[0]` is indexed only INSIDE the single-chunk arm — the
             // engine is empty-safe by construction (a guarded `if` plus a
             // short-circuiting `&&`), and a mirror that panics where the
@@ -160,7 +164,7 @@ impl NetArena {
             };
             let signed =
                 matches!(lhs.chunks.as_slice(), [c0] if self.slots[c0.net as usize].signed);
-            crate::value::real_to_int_round(value.to_f64().unwrap_or(0.0), w.max(1), signed)
+            crate::value::coerce_assign(dest_is_real, value, w, signed)
         } else {
             value
         };
@@ -180,12 +184,27 @@ impl NetArena {
         // — and the source follows from it: `total <= 64` makes `resize_word`'s
         // extension branch unreachable for a source wider than a word, so only the
         // low word can matter, exactly as the general `resize` copies only
-        // `nwords(min(from,to))` words. `is_real` is already false here (the
-        // coercion above is what makes it so), and `is_str` is irrelevant once the
-        // value is bits — `resize` drops the flag rather than reading it.
+        // `nwords(min(from,to))` words. `is_str` is irrelevant once the value is
+        // bits — `resize` drops the flag rather than reading it.
+        //
+        // ⚠️ A6 changed one clause of that argument. `is_real` used to be
+        // provably false here because the coercion above rounded every real
+        // value away and no destination could be real; now a real destination
+        // keeps `is_real` set. It is still sound, and for a sharper reason: a
+        // real net is 64 bits wide, so `total == 64 == value.width` and
+        // `resize_word` is the identity — the IEEE bits land verbatim, which is
+        // exactly what `(true, true)`/`(true, false)` mean. `debug_assert`ed
+        // below rather than argued, because "the width is 64" is the whole of it.
         if let [c0] = lhs.chunks.as_slice() {
             let s = self.slots[c0.net as usize];
             if word_entry && s.words == 1 && total <= 64 {
+                debug_assert!(
+                    !value.is_real || (total == 64 && value.width == 64),
+                    "a real value reached the one-word entry at width {} into {} bits — \
+                     `resize_word` is only the identity at 64",
+                    value.width,
+                    total
+                );
                 let (raw_off, raw_word) = offsets.first().copied().unwrap_or((0, 0));
                 let (pv, pu) = crate::value::resize_word(
                     value.val.first().copied().unwrap_or(0),

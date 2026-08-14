@@ -827,15 +827,20 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
 
     // Design-gate refusal: `refused` names the family, the map keeps the detail.
     //
-    // ⚠️ `real`, not the `string s; int q[$]` this used to use — V1 slice 2
-    // admitted every heap kind, and a refusal pin whose shape became eligible
-    // asserts nothing.
+    // ⚠️ THIRD shape for this pin. `string s; int q[$]` until V1 slice 2 admitted
+    // every heap kind; `real r` until A6 admitted that; now `fork`. A refusal pin
+    // whose shape became eligible asserts nothing, and this one has now been
+    // re-picked often enough that the churn IS the test working — every time the
+    // gate grows, somebody has to come back here and find a family that is still
+    // refused. The remaining design-gate families are `fork`, `disable_fork`,
+    // `probe` and `stmt_effect`; `fork` is the one a plain design reaches.
     std::fs::write(
         dir.join("q.sv"),
         "module t;\n\
-           real r;\n\
-           initial begin r = 1.5;\n\
-             $display(\"%f\", r); #1 $finish; end\n\
+           reg [7:0] n;\n\
+           initial begin n = 8'd0;\n\
+             fork n = 8'd1; n = 8'd2; join\n\
+             $display(\"n=%0d\", n); #1 $finish; end\n\
          endmodule\n",
     )
     .unwrap();
@@ -844,9 +849,13 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     let m = std::fs::read_to_string(dir.join("obs3/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
-        "{\"eligible\": false, \"buildable\": false, \"refused\": \"real\", \
-         \"reject_reasons\": {\"real\": 1}}",
+        "{\"eligible\": false, \"buildable\": true, \"refused\": \"fork\", \
+         \"reject_reasons\": {\"fork\": 1}}",
         "{m}"
     );
+    // ⭐ And this shape reports the split more sharply than `real` did: SCOPE
+    // says no while STORAGE says yes. The old design had both halves false, so
+    // it could not have caught the two being folded into one flag — which is
+    // the property this test is named for.
     let _ = std::fs::remove_dir_all(&dir);
 }

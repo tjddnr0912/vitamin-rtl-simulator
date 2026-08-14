@@ -441,10 +441,10 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | **A7** ✅ | functional coverage(§5.1-r) | 0 | **완료** |
 | **A5** ✅ | 거부 시스템태스크 — `$fclose`(§5.1-m) · postponed(§5.1-s) · file_directed(§5.1-aa) · **`$writemem*`(§5.1-ae)** | **1** | **완료** — 남은 `$dumpall`/`$dumpon` 은 **코퍼스 인구 0**(그 1 은 손으로 적은 테스트 설계) |
 | **A8** ✅ | 꼬리 — handle_copy · deferred assert · clocking · force/release · final · stage | — | **완료**(§5.1-q·-w·-x·-y·-ab·-ac) |
-| **A6** ★ 다음 | **`real` + `real-slot`(D+S 짝)** | **73** | 잔여 중 **최대**. 두 행이 한 몸이라 함께 닫아야 한다 |
-| **A3-ii-b** | 실제로 **park 하는** 프레임 — `S:frame-suspends` + `X:call-suspends` 짝(fork 행 **없이**) | **42** | A3-i/-ii-a/-iii/-iv 완료(§5.1-n·-o·-u·-v) |
-| **A4** | fork + `disable_fork` | (106 발화 · **단독 이득 0**) | ⚠️ 전부 A3-ii-b 와 얽혀 있다 — 그것을 먼저 닫아야 수확된다 |
-| 꼬리 | `probe` 5 · out-of-window write 5 · concat heap chunk 3 | 13 | 각각 단독 이득 |
+| **A6** ✅ | `real` + `real-slot`(D+S 짝) — **행의 이름이 틀렸다**(§5.1-af) | 0 | **완료 · 96.35% → 97.47%** |
+| **A3-ii-b** ★ 다음 | 실제로 **park 하는** 프레임 — `S:frame-suspends` + `X:call-suspends` 짝(fork 행 **없이**) | **42** | A3-i/-ii-a/-iii/-iv 완료(§5.1-n·-o·-u·-v) |
+| **A4** | fork + `disable_fork` | **107**(⚠️ **단독 이득 0**) | 107 이 전부 A3-ii-b 의 행을 함께 이고 있다 — 그것을 먼저 닫아야 수확된다 |
+| 꼬리 | `probe` 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 | 14 | 각각 단독 이득 |
 
 ### Phase B — V2 = **빌드 분리** (오너 제안 채택 · 옛 "VM 삭제" 를 대체)
 
@@ -1547,6 +1547,59 @@ nextest.toml`(`terminate-after = 4 × 60 s`)을 신설했다(⚠️ CI 는 `carg
 
 ⚠️ 이 행에 남은 인구는 **`$dumpall`/`$dumpon` 1 설계**뿐이고 그것은 **이 슬라이스가 손으로 적은 것**이다
 (코퍼스 인구 0 — 거부-행 테스트 셋을 `$writemem*` 에서 다시 철자해야 했다. 다섯 번째 재철자다).
+
+#### 5.1-af ✅ A6 `real` — **"S2 width class" 였던 적이 없다 · 없던 것은 플래그 하나와 계수 두 팔** · 96.35% → **97.47%** (2026-08-15)
+
+§5.1-b 가 말한 **D+S 짝**의 마지막이자 가장 큰 것(잔여 235 중 **73**). 두 행이 같은 기능을 두 번 이름
+불렀다 — design 게이트의 `real`, storage 게이트의 `real: S2 width class`.
+
+⭐⭐ **행의 이름이 틀렸다.** f64 의 64 비트는 **평범한 워드 저장**이고 엔진도 정확히 거기에 둔다
+(`NetSlot::is_real` 은 플래그일 뿐, 값은 같은 비트 평면에 있다). 필요한 것은 새 저장소가 아니라 ⓐ
+**플래그**(`Slot::is_real`, 모든 읽기에 스탬프)와 ⓑ **real↔int 대입 계수의 나머지 두 팔**이었다.
+
+⭐ **거부 행 둘이 자기가 요구하는 것을 이미 적어 뒀고, 하나는 이미 지어져 있었다** — `arena.rs` 의
+*"S2 OBLIGATION … must carry an `is_real` slot flag through BOTH the OOB and in-range arms"* 가 그대로 할
+일 목록이었고, `wprog.rs` 의 *"Whoever lifts that arena row would otherwise silently hand `-0.0` to the
+integer path"* 는 **가드가 이미 있었다**(kind 검사) ⇒ 이 슬라이스의 `wprog` 코드 **0 줄**.
+
+⭐ **재진술이 아니라 추출.** 엔진은 2×2 네 팔을 다 갖고 tier-3 은 **하나만** 갖고 있었다(S1c 가 손으로
+미러 — real VALUE 는 real NET 없이도 도달한다). `value::coerce_assign` + `value::whole_net_dest` 로 뽑아
+둘 다 같은 규칙을 부르고, store 에 남는 것은 *"이 넷이 real 인가"* 와 정수 목적지의 폭·부호뿐이다.
+
+⚠️ **`whole_net_dest` 에서 `word` 를 빼는 것이 핵심** — `real m[0:3]` 의 **원소도 real** 이라
+`word.is_none()` 을 넣으면 `m[2] = m[1] + m[3]` 이 (false,true) ROUND 로 가서 6.0 이 정수 6 이 된다
+(뮤테이션 F 가 정확히 그것이고 앵커가 잡는다).
+
+⚠️⚠️ **내가 적은 이유가 틀렸고 뮤테이션이 반증했다** — OOB arm 의 스탬프를 *"`%f` 렌더를 가른다"* 고
+적었는데 **안 가른다**(all-X real 도 all-X integer 도 `0.000000`). 진짜 판별자는 **`truthiness`** 다:
+real 은 "0 이 아닌가", integer 는 "X 면 UNKNOWN" ⇒ `m[9] ? 1 : 0` 이 `0` 대 **`X`**(iverilog `0`).
+주석은 실측대로 다시 썼다.
+
+⚠️ **생존 1 은 등가가 아니라 도달 불가이고 이유를 쟀다** — `eval_store_word` 의 real 거절은 융합 op 를
+고르는 `plain_scalar_dest` 가 엔진의 `plain_scalar`(첫 절 `!is_real`)를 보기 때문에 발화하지 않는다
+(`panic!` 프로브 **0 히트**). **fail-closed 로 남겼다** — `build_plain_scalar` 한 줄이면 여기 실패가
+조용해진다.
+
+⚠️⚠️ **거부 핀 셋이 전부 `real` 을 이름으로 부르고 있었고, 그중 하나가 하네스 갭을 드러냈다** —
+`native_gate.rs` 의 `sidecar_opts` 에 **`fork_modes` 가 없어서** fork 설계가 그 파일 안에서는 `eligible`
+로 보였다(**열두 번째**). 셋 다 `fork`/`disable_fork` 로 재철자했고 `backend_flag` 쪽은 오히려 **더
+날카로워졌다**: `real` 은 scope·storage 둘 다 false 라 "두 반쪽이 하나로 접히는 것" 을 원리적으로 못
+잡는데 `fork` 는 **scope=false ∧ storage=true** 다.
+
+⚠️ **design 게이트의 net-KIND 루프에 이제 거부 arm 이 하나도 없다** — 모든 `NetKind` 가 core 아니면
+admitted 다. 루프는 `_`-free 문서로 남긴다(새 kind 는 강제 결정).
+
+⚠️ **`$bits(real)` 은 앵커에서 뺐다** — vita·**verilator 64** / iverilog **1**(iverilog 가 outlier ·
+vita 가 spec-correct). 알려진 발산이 앵커에 들어가면 앵커가 아니다.
+
+**측정**: **6,279 / 6,442 = 97.47%**(+73 · 예측 +73) · 전 스위트 **5446 green** · **flip 런 5443/5446**
+(실패 3 = 백엔드 이름 핀) · **발산 0** · differential **10 설계 3-way 0 diff**(int→real·real→int 반올림
+양방향·real 산술·real 배열 원소·프레임 formal/반환·concat 목적지·비트선택 목적지·NBA+변화감지·
+`$realtobits`/`$bitstoreal`/N6 math·OOB 원소) · 뮤테이션 **5/6 사망 · 생존 1 = 도달 불가(실측)**.
+
+⚠️ **다음 표적**(같은 census, 집합 단위): **A3-ii-b(`frame-suspends`+`call-suspends` 짝) +42** →
+**A4 fork +107**(단, fork 는 **단독 이득 0** — 107 이 전부 A3-ii-b 의 행을 함께 이고 있다) → 꼬리
+(probe 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1).
 
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 

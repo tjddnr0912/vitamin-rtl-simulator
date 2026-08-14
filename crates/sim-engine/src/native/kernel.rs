@@ -697,6 +697,25 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         if s.words != 1 || s.width == 0 {
             return None;
         }
+        // A6: a REAL destination goes the long way — fail-closed, and MEASURED
+        // unreachable today rather than assumed so.
+        //
+        // What it would prevent: `real r; r = 5;` has an integer RHS that
+        // compiles fine, so a real destination here would store the raw integer
+        // bits and skip `coerce_assign`'s int→real arm — `5` reinterpreted as an
+        // f64 is 2.5e-323, which prints as 0.000000.
+        //
+        // Why it cannot fire: the op that calls this is only EMITTED for a
+        // destination `plain_scalar_dest` accepts, and that predicate reads
+        // `SimState::plain_scalar`, whose first clause is `!nets[i].is_real`.
+        // One table, both tiers. Deleting this row therefore survives the
+        // battery — a `panic!` in its place was never hit by any real design —
+        // and it stays anyway: `build_plain_scalar` is one edit away from
+        // admitting reals for a real-aware fast path, and the failure that edit
+        // would cause here is silent.
+        if s.is_real {
+            return None;
+        }
         let sw = self.sched.st.wt.get(rhs);
         // The destination width, taken from the SLOT instead of walked. Checked
         // rather than argued: `Slot::width` is seeded from `ir.nets[n].width` and
@@ -1872,6 +1891,15 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // so its width is the slot's) and the `Rc` clone `wprog_for` forces.
         // The queue entry it builds is the one `k_schedule_nba_scalar` builds,
         // and that method is still the only spelling of it.
+        //
+        // ⚠️ A6 asymmetry, deliberate: this twin does NOT need the `is_real`
+        // decline its STORE twin (`eval_store_word`) grew. It cannot store — it
+        // queues a `Value`, and the coercion happens where the update lands, in
+        // the write funnel, which is the same place the engine's NBA reaches it.
+        // The sampling width is the same too (`max(slot, self(rhs))` is what
+        // `k_eval_for_lvalue` computes from `lvalue_width`, and for a real net
+        // that IS the slot width). `r <= r + 0.5` takes the generic path anyway,
+        // because `wprog` declines the real net read.
         if let [c0] = lhs.chunks.as_slice() {
             let s = self.arena.slots[c0.net as usize];
             if s.words == 1 && s.width > 0 {

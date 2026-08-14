@@ -765,6 +765,61 @@ pub(crate) fn real_to_int_round(x: f64, width: u32, signed: bool) -> Value {
     Value::from_i128(i, width, signed)
 }
 
+/// The net a WHOLE-NET lvalue names, or `None` when the destination is a
+/// bit/part-select or a concatenation.
+///
+/// This is the shape question the real↔int coercion asks, and it is a rule
+/// about the LVALUE, not about either store — which is why it lives here and
+/// both write funnels call it. IEEE 1364 §6.2 makes `r[i]`/`r[hi:lo]` illegal
+/// at elaborate, so a real destination can only ever be this shape.
+///
+/// ⚠️ `word` is deliberately NOT part of the test: an ELEMENT of `real m[0:3]`
+/// is itself a real, and excluding `word.is_some()` would send `m[2] = 5` down
+/// the integer arm. (The plain-scalar FAST paths do exclude it, for their own
+/// reason — they bake a single offset.)
+pub(crate) fn whole_net_dest(lhs: &sim_ir::Lvalue) -> Option<u32> {
+    match lhs.chunks.as_slice() {
+        [c] if matches!(c.kind, sim_ir::SelKind::Bit)
+            && c.offset.is_none()
+            && c.width.is_none() =>
+        {
+            Some(c.net)
+        }
+        _ => None,
+    }
+}
+
+/// real↔int ASSIGNMENT coercion (IEEE 1364 §6.2) — the whole 2×2 matrix, in
+/// one spelling.
+///
+/// `int_w`/`int_signed` describe the INTEGER destination and are consulted by
+/// the round arm alone; the caller computes them from its own store, which is
+/// the only store-dependent part of this rule.
+///
+/// A6 extracted this. The engine had all four arms and tier-3 had one (the
+/// real→int round, mirrored by hand in S1c because a real VALUE can reach an
+/// integer destination with no real NET anywhere). Admitting `NetKind::Real`
+/// makes the other two reachable on both sides at once, and two spellings of
+/// "what does `real r; r = 5;` store" is exactly the shape that goes silently
+/// wrong: the integer arm would put the bit pattern 5 where 5.0 belongs.
+pub(crate) fn coerce_assign(
+    dest_is_real: bool,
+    value: Value,
+    int_w: u32,
+    int_signed: bool,
+) -> Value {
+    match (dest_is_real, value.is_real) {
+        // real net ← real value: store verbatim (already 64 IEEE bits).
+        (true, true) => value,
+        // real net ← integer value (int→real CONVERT): exact for ≤53-bit.
+        (true, false) => Value::from_f64(value.to_f64().unwrap_or(0.0)),
+        // integer net ← real value (real→int ASSIGNMENT: ROUND half-away).
+        (false, true) => real_to_int_round(value.to_f64().unwrap_or(0.0), int_w.max(1), int_signed),
+        // integer net ← integer value: unchanged legacy path.
+        (false, false) => value,
+    }
+}
+
 /// Set bits `[lo, hi)` of the plane pair to the constant 4-state bit `(fv,fu)`,
 /// word-parallel (used for sign-extension fill in `resize`/`shr_fill`). `fv`/`fu` are
 /// 0/1 flags; each is broadcast across the affected lanes.

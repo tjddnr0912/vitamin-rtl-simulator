@@ -72,3 +72,112 @@ endmodule
         "wide unsigned → real:\n{out}"
     );
 }
+
+/// A6 ABSOLUTE ANCHOR — the `real` domain on TIER-3, iverilog-pinned.
+///
+/// `real` was refused by TWO gate rows that named it the same way (the design
+/// gate's `real` and the storage gate's `real: S2 width class`), and the width
+/// was never the problem: an f64's 64 bits are ordinary word storage and the
+/// engine keeps them in exactly that. What tier-3 lacked was the FLAG — a
+/// `Slot::is_real` stamped onto every read — and two of the four arms of the
+/// real↔int assignment coercion, which are now one shared `value::coerce_assign`
+/// that both write funnels call.
+///
+/// Every line below is a discriminator for one of those pieces:
+///   * `r = 5` / `r = b` — the int→real CONVERT arm, unreachable on tier-3 until
+///     a real DESTINATION could exist. Without it the integer bit pattern lands
+///     in the slot and `%f` prints 0.000000 (5 reinterpreted as an f64 is
+///     2.5e-323). `r = b` makes the source a NET, so it also rides the store.
+///   * `i = s` and `i = -s` — the real→int ROUND arm (half-AWAY-from-zero, not
+///     to-even: 3.5 → 4 and -3.5 → -4), which S1c mirrored by hand.
+///   * `s = r / 2.0` and `m[1] + m[3]` — arithmetic that only happens if the
+///     READ stamped `is_real`; without the stamp these are integer ops on IEEE
+///     bit patterns.
+///   * `{a, b} = 3.7` — the multi-chunk round (the width is the SUM of the
+///     chunks, not one net's).
+///   * `x[3] = 1.5` — a real VALUE into a bit-select: rounds at the NET's width
+///     (32) and the resize then takes bit 0, so `x` stays 0. This is the arm
+///     that must NOT see a real destination.
+///   * `m[9] ? 1 : 0` — the out-of-range element, and the ONLY shape that
+///     discriminates the OOB arm's stamp: rendering does not (an all-X real and
+///     an all-X integer both print 0.000000), but `truthiness` does — a real
+///     asks "nonzero?" and answers 0, an integer sees X and answers X. Measured
+///     by mutation, not assumed.
+///
+/// ⚠️ ANTI-VACUITY: run.json must say the design actually ran natively. A refused
+/// design falls back to the VM, where every one of these lines already passed.
+///
+/// ⚠️ `$bits(r)` is deliberately absent: vita and verilator both say 64,
+/// iverilog says 1, and a known divergence in an anchor stops it being an anchor.
+#[test]
+fn real_domain_on_tier_3_matches_iverilog() {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_real_nat_{}_{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(
+        &f,
+        "module top;\n\
+           real r, s;\n\
+           real m [0:3];\n\
+           integer i;\n\
+           reg [7:0] b, aa, bb;\n\
+           reg [31:0] x;\n\
+           initial begin\n\
+             r = 5;                          // int -> real CONVERT\n\
+             $display(\"a %0f\", r);\n\
+             b = 8'd7; r = b;                // net int -> real\n\
+             $display(\"b %0f\", r);\n\
+             s = r / 2.0;                    // real arithmetic (needs the read stamp)\n\
+             $display(\"c %0f\", s);\n\
+             i = s;  $display(\"d %0d\", i);   // real -> int ROUND, half away\n\
+             i = -s; $display(\"e %0d\", i);\n\
+             m[0] = 0.0; m[1] = 1.5; m[2] = 3.0; m[3] = 4.5;\n\
+             m[2] = m[1] + m[3];\n\
+             $display(\"f %0f %0f\", m[2], m[0]);\n\
+             {aa, bb} = 3.7;                 // multi-chunk round\n\
+             $display(\"g %0d %0d\", aa, bb);\n\
+             x = 0; x[3] = 1.5;              // real into a bit-select\n\
+             $display(\"h %0d\", x);\n\
+             i = 9;\n\
+             $display(\"i %0d\", m[i] ? 1 : 0);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg("--backend")
+        .arg("native")
+        .arg("--obs-dir")
+        .arg("obs")
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let txt = String::from_utf8_lossy(&out.stdout).into_owned();
+    let rj = std::fs::read_to_string(d.join("obs").join("run.json")).unwrap_or_default();
+    assert!(
+        rj.contains("\"backend\": \"native\""),
+        "the design did not run natively:\n{rj}\n{txt}"
+    );
+    let mut body = String::new();
+    for l in txt.lines().filter(|l| !l.starts_with("simulation ended")) {
+        body.push_str(l);
+        body.push('\n');
+    }
+    assert_eq!(
+        body,
+        "a 5.000000\n\
+         b 7.000000\n\
+         c 3.500000\n\
+         d 4\n\
+         e -4\n\
+         f 6.000000 0.000000\n\
+         g 0 4\n\
+         h 0\n\
+         i 0\n",
+        "iverilog-pinned real behaviour on tier-3"
+    );
+}

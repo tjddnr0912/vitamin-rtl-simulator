@@ -64,6 +64,15 @@ pub struct Slot {
     /// every X/Z bit to 0 before it lands (IEEE §6.11.3). Resolved at build from
     /// the `two_state_nets` sidecar, so the write path never asks a side table.
     pub two_state: bool,
+    /// A6: `NetKind::Real` — the 64 stored bits are an IEEE-754 double, not an
+    /// integer. The STORAGE is the ordinary word plane (that is why admitting
+    /// reals needed no new store); what the flag carries is that every read must
+    /// stamp `Value::is_real` and every write must go through the real↔int
+    /// coercion instead of the integer path.
+    ///
+    /// Seeded exactly as the engine seeds `NetSlot::is_real` — from the net's
+    /// KIND, which cannot change during a run.
+    pub is_real: bool,
 }
 
 /// The tier-3 net store: every net of the design, in slot form.
@@ -192,6 +201,7 @@ impl NetArena {
                 elems,
                 signed: nv.signed,
                 two_state: opts.two_state_nets.contains(&(n as u32)),
+                is_real: nv.kind == NetKind::Real,
             };
             slots.push(slot);
             off += u64::from(words) * 2 * u64::from(elems);
@@ -305,7 +315,12 @@ impl NetArena {
         for nv in &ir.nets {
             match nv.kind {
                 NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
-                NetKind::Real => return Err("real: S2 width class"),
+                // A6: admitted. It was never a width class — the 64 bits of an
+                // f64 fit the ordinary word plane, and the engine stores them
+                // there too. What was missing was the FLAG (`Slot::is_real`,
+                // stamped onto every read) and the other two arms of the real↔int
+                // assignment coercion, now shared as `value::coerce_assign`.
+                NetKind::Real => {}
                 // V1 slice 2a: admitted. Its slot is dead (see `NetArena::heap`).
                 NetKind::DynArray => {}
                 // V1 slice 2b: `string` joins it — same routing, and its own
@@ -519,17 +534,25 @@ impl NetReader for NetArena {
         // Out-of-range array word reads all-X — NOT a clamp (mirrors the engine:
         // a clamp would silently return a neighbour's value).
         //
-        // S2 OBLIGATION (soundness-review F1): the engine's OOB arm also stamps
-        // `v.is_real = slot.is_real` (netread.rs). This arm omits it, which is
-        // sound TODAY solely because `build` rejects `NetKind::Real` — the
-        // differential structurally cannot catch the omission before Real is
-        // admitted (a Real design cannot build an arena). Whoever adds the S2
-        // real width class must carry an `is_real` slot flag through BOTH the
-        // OOB and in-range arms, and add a Real leg to the mirror test.
+        // ✅ S2 OBLIGATION (soundness-review F1) DISCHARGED by A6. The note here
+        // said the OOB arm omitted the engine's `v.is_real = slot.is_real`
+        // (netread.rs) and was sound only while `build` rejected `NetKind::Real`
+        // — which is exactly the row A6 removed, so both arms stamp it now.
+        //
+        // ⚠️ The obligation was right and the FIRST reason written for it here
+        // was wrong, so it is recorded as measured. Rendering does NOT
+        // discriminate: `$display("%f", m[9])` prints `0.000000` either way,
+        // because an all-X real reads back bits 0 and an all-X integer converts
+        // to 0.0. What discriminates is `truthiness` — a real is "nonzero?",
+        // an integer is "any X ⇒ UNKNOWN" — so `m[9] ? 1 : 0` answers `0` with
+        // the stamp and `X` without it. Dropping this one line was run as a
+        // mutation: every other real design in the suite stayed green and that
+        // ternary is the whole of what caught it (iverilog agrees: `0`).
         if w >= s.elems {
             self.note_bad_index(w == crate::eval::WORD_UNKNOWN);
             let mut v = Value::xs(s.width.max(1), s.signed);
             v.width = s.width;
+            v.is_real = s.is_real;
             return v;
         }
         let n = s.words as usize;
@@ -548,7 +571,11 @@ impl NetReader for NetArena {
             unk,
             width: s.width,
             signed: s.signed,
-            is_real: false,
+            // A6: the in-range half of the discharged obligation above. The bits
+            // are already the f64; this flag is what stops every consumer of the
+            // read (`truthiness`, the arithmetic, the `%f` formatter) from
+            // treating them as an integer.
+            is_real: s.is_real,
             is_str: false,
         }
     }

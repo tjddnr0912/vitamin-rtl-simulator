@@ -582,16 +582,17 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // a PLAIN `int q[$]` has no sidecar entry at all, so the only complete
     // detector is the net table itself. The match is `_`-free: a new NetKind
     // is a format bump AND a forced classification here.
-    let mut real_n = 0usize;
     for net in &ir.nets {
         match net.kind {
             // Flat 4-state storage — the S1 arena's own ground (R1).
             NetKind::Wire | NetKind::Reg | NetKind::Logic | NetKind::Integer => {}
-            // `real` is an f64 slot = an S2 WIDTH CLASS, not v1 core, and
-            // `NetArena::build` already refuses it. Saying so here keeps the
-            // published eligibility number from counting designs the storage
-            // cannot take (differential-review find: the two gates disagreed).
-            NetKind::Real => real_n += 1,
+            // A6: `real` joined the flat kinds. Its 64 bits ARE ordinary word
+            // storage — what it needed was `Slot::is_real` (stamped onto every
+            // read) and the two missing arms of the real<->int assignment
+            // coercion, now one shared `value::coerce_assign`. The row above
+            // this one used to say it was "an S2 WIDTH CLASS"; the width was
+            // never the problem.
+            NetKind::Real => {}
             // V1 slice 2: every heap-storage kind is CORE. Their values live in
             // `SimState::dyn_heap`, keyed by NET ID rather than by a handle, and
             // `NativeKernel` already borrows that `SimState` — so admitting them
@@ -606,7 +607,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             NetKind::Assoc | NetKind::AssocStr => {}
         }
     }
-    flag(&mut out, "real", real_n);
 
     // The storage-level half. `buildable` is allocation-free, so asking on every
     // run costs one scan — worth it: run.json then carries BOTH numbers and the

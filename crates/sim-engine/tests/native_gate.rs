@@ -824,16 +824,24 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
 
     let clean = "module t; reg [7:0] q = 0;\n\
          initial begin #1 q = 1; $display(\"q=%0d\", q); $finish; end endmodule\n";
-    // Design gate refuses, storage would too.
+    // Design gate refuses.
     //
-    // ⚠️ The SHAPE here changed with V1 slice 2. It used to be `string s; int
-    // q[$]`, and slices 2a/2b/2c admitted all three of those kinds — this arm
-    // would have gone vacuous exactly as the storage arm nearly did at S3a.
-    // `real` is the kind left that BOTH halves refuse under their own names
-    // (design: the `real` row; storage: "real: S2 width class"), which is what
-    // this arm needs — a kind only one half refused would not test the AND.
-    let design_refused = "module t; real r;\n\
-         initial begin r = 1.5; $display(\"%f\", r); $finish; end endmodule\n";
+    // ⚠️ THIRD shape for this arm. `string s; int q[$]` until V1 slice 2
+    // admitted every heap kind; `real r` until A6 admitted that; now `fork`.
+    //
+    // ⚠️⚠️ And the sentence that used to be here — "`real` is the kind left that
+    // BOTH halves refuse under their own names" — cannot be written about
+    // anything any more: after A6 the design gate's net-KIND loop has no
+    // rejecting arm at all (every `NetKind` is core or admitted), so the
+    // design-refused families left are sidecar- and statement-sourced (`fork`,
+    // `disable_fork`, `probe`). That does not weaken the arm. What it must
+    // exercise is `eligible == false`, and the AND is still under test from both
+    // directions — this shape is design=false ∧ storage=Ok, the one below is
+    // design=true ∧ storage=Err, so a gate that dropped either half fails one of
+    // them.
+    let design_refused = "module t; reg [7:0] n;\n\
+         initial begin n = 8'd0; fork n = 8'd1; n = 8'd2; join\n\
+           $display(\"n=%0d\", n); $finish; end endmodule\n";
     // Design gate PASSES (calls are core), storage refuses.
     //
     // ⚠️ The SHAPE here changed with S3a. It used to be a plain
@@ -861,7 +869,7 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     let mut saw_storage_refused = 0;
     for (name, src, want) in [
         ("clean", clean, None),
-        ("design", design_refused, Some("real")),
+        ("design", design_refused, Some("fork")),
         (
             "storage",
             storage_refused,
@@ -950,6 +958,13 @@ fn sidecar_opts(src: &str) -> SimOpts {
     SimOpts {
         two_state_nets: sc.two_state_nets,
         func_table: sc.func_table,
+        // ⚠️ A6 added this, and it is the eleventh-plus instance of the same
+        // harness gap: the `fork` reject family is counted from `fork_modes`, so
+        // without the sidecar a design with a `fork` in it looks ELIGIBLE here.
+        // The gap only became visible when A6 admitted `real` and this file's
+        // design-refused arm had to be re-picked — it had been comparing against
+        // a family whose evidence it never installed.
+        fork_modes: sc.fork_modes,
         ..SimOpts::default()
     }
 }
