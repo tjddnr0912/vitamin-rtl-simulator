@@ -1329,3 +1329,79 @@ endmodule
     let (ir, opts) = build_with_opts(admitted);
     assert_eq!(NetArena::buildable(&ir, &opts).err(), None);
 }
+
+/// Slice #3 DIFFERENTIAL — frame-local heap statements, native against the VM.
+#[test]
+fn frame_local_heap_statements_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // `new[]` with a COPY source (`new[n](old)`), whose element copy is the
+        // heap half the size read sits next to.
+        (
+            "frame-local new with a copy source",
+            r#"
+module top;
+  int n = 4;
+  function automatic int f();
+    int a[];
+    int b[];
+    int i;
+    a = new[n];
+    for (i = 0; i < n; i = i + 1) a[i] = i + 1;
+    b = new[n + 2](a);
+    f = b.size() * 100 + b[n - 1];
+  endfunction
+  initial begin $display("N %0d", f()); n = 6; $display("N %0d", f()); $finish; end
+endmodule
+"#,
+        ),
+        // `delete()` on a frame-local dyn array — the sibling arm, admitted with
+        // `new[]` because it is the same family. (Zero corpus designs spell it,
+        // which is why it needs a row of its own here.)
+        (
+            "frame-local dyn delete",
+            r#"
+module top;
+  int n = 3;
+  function automatic int f();
+    int a[];
+    a = new[n];
+    a[0] = 9;
+    a.delete();
+    f = a.size();
+  endfunction
+  initial begin $display("D %0d", f()); $finish; end
+endmodule
+"#,
+        ),
+        // An X/Z size, which takes the warn-once path rather than the alloc.
+        (
+            "frame-local new with an x size",
+            r#"
+module top;
+  reg [7:0] n;
+  function automatic int f();
+    int a[];
+    a = new[n];
+    f = a.size();
+  endfunction
+  initial begin $display("X %0d", f()); $finish; end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 3, "slice #3 differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "slice #3 differential: refusal breakdown moved"
+    );
+}

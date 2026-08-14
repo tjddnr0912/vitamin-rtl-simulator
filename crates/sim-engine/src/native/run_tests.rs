@@ -7287,3 +7287,81 @@ endmodule
         "slice #2 differential: refusal breakdown moved"
     );
 }
+
+/// Slice #3 ABSOLUTE ANCHOR — a frame-local `new[]` and a `disable`,
+/// **iverilog-pinned**.
+///
+/// The row this opens said "a subroutine statement the frame executor drops",
+/// and the census says what actually reached it: **13 designs are `new[]`, 2 are
+/// `disable`, nothing else**. Both are arms `run_frame_call` already executes,
+/// so the row was conservative — with one thing genuinely wrong underneath, and
+/// **line B is the only line that shows it**.
+///
+/// * **A/B** — `d = new[n]` sizes from a MODULE net. `frame_dyn_new` read that
+///   size through `mk_eval_ctx` (the ENGINE's nets), which a native run never
+///   writes. `A` cannot see it (`n`'s declaration initializer is in the engine's
+///   slot too, so both stores happen to say 5); `B` re-runs after `n = 8` and the
+///   unthreaded read still says 5 → `508` where the design says `821`. Exactly V1
+///   slice 2c's `d = new[n]` defect, reached through the `&self` executor
+///   instead of the module process.
+/// * **C** — `disable blk` inside a function body. Elaborate lowers it as a
+///   marker plus a sibling `Goto`, so the executor's default arm IS its correct
+///   execution: `g(0)` leaves `d[0]` at its `new[]` default (0 → `30`) while
+///   `g(1)` reaches the assignment (`37`).
+#[test]
+fn a_frame_local_new_and_disable_have_their_iverilog_values() {
+    let src = r#"
+module top;
+  int n = 5;
+  int m = 3;
+  function automatic int f(input int k);
+    int d[];
+    int i;
+    d = new[n];
+    for (i = 0; i < d.size(); i = i + 1) d[i] = i * k;
+    f = d.size() * 100 + d[d.size()-1];
+  endfunction
+  function automatic int g(input int k);
+    int d[];
+    d = new[m];
+    begin : blk
+      if (k == 0) disable blk;
+      d[0] = 7;
+    end
+    g = d.size() * 10 + d[0];
+  endfunction
+  initial begin
+    $display("A %0d", f(2));
+    n = 8;
+    $display("B %0d", f(3));
+    $display("C %0d %0d", g(1), g(0));
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|A 508\n".to_string(),
+            "out|B 821\n".to_string(),
+            "out|C 37 30\n".to_string(),
+        ],
+        "frame-local new[] sized from a module net + disable (iverilog-pinned)"
+    );
+}

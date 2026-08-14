@@ -654,6 +654,34 @@ impl<'i> Walk<'i> {
                         which: sim_ir::SysTaskId::Display | sim_ir::SysTaskId::Write,
                         ..
                     } => {}
+                    // Slice #3, and the census is why these three are here and
+                    // nothing else is. Instrumented over every design this row
+                    // was blocking: **13 are `new[]`** and **2 are `disable`**;
+                    // no other statement kind reaches it at all. All three are
+                    // arms `run_frame_call` ALREADY EXECUTES, so the row was
+                    // conservative about them — with one thing genuinely wrong
+                    // underneath, see `frame_dyn_new_with`.
+                    //
+                    // ⚠️ `DynDelete` has ZERO corpus designs. It is admitted
+                    // anyway because it is the same executor arm and the same
+                    // family as `DynNew` — refusing half a pair would leave a
+                    // row whose stated reason is false — and that is recorded
+                    // rather than counted as a gain.
+                    sim_ir::Stmt::SysTask {
+                        which: sim_ir::SysTaskId::DynNew | sim_ir::SysTaskId::DynDelete,
+                        ..
+                    } => {}
+                    // A plain `disable <named block>` is the break/continue
+                    // idiom: elaborate lowers it as a diagnostic-shaped marker
+                    // plus a sibling `Goto` that does the control flow, so the
+                    // executor's `_ => {}` is the CORRECT execution of the
+                    // marker, not a drop. `DisableKind::Fork` stays refused —
+                    // a function body cannot fork (elaborate's B1 cut), so this
+                    // arm is belt and braces rather than a live distinction.
+                    sim_ir::Stmt::Disable {
+                        scope_kind: sim_ir::DisableKind::Scope,
+                        ..
+                    } => {}
                     _ => return Err("a subroutine statement the frame executor drops"),
                 }
                 self.stmt(sid);

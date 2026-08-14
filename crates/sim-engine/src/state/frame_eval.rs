@@ -1406,7 +1406,7 @@ impl<'a> SimState<'a> {
                         which: sim_ir::SysTaskId::DynNew,
                         args,
                         ..
-                    } => self.frame_dyn_new(args),
+                    } => self.frame_dyn_new_with(nets, args),
                     Stmt::SysTask {
                         which: sim_ir::SysTaskId::DynDelete,
                         args,

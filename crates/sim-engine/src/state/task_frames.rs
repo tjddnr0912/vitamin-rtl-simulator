@@ -903,6 +903,25 @@ impl SimState<'_> {
     /// Mirrors the `&mut` builtin's size handling (X/Z → empty + warn, cap) then defers to
     /// the shared `alloc_dyn_array` core. A non-dyn / malformed handle is a defensive no-op.
     pub(crate) fn frame_dyn_new(&self, args: &[u32]) {
+        self.frame_dyn_new_with(None::<&Self>, args)
+    }
+
+    /// `frame_dyn_new` reading the SIZE argument through `nets` (tier-3 hands its
+    /// arena; `None` = this state's own store = mechanically byte-identical).
+    ///
+    /// The heap side needs no routing — `dyn_heap` and the warn latch are
+    /// `SimState`, one object both kernels borrow. What is store-bound is the one
+    /// read: an unthreaded `mk_eval_ctx` evaluates `new[n]`'s size against the
+    /// ENGINE's nets, which a native run never writes, so a frame-local
+    /// `d = new[n]` with `n` a module net allocates ZERO elements. That is
+    /// exactly the defect V1 slice 2c measured on the module path (`d = new[n]`
+    /// size=0 against the VM's 3); this is the same statement reached through
+    /// the `&self` frame executor.
+    pub(crate) fn frame_dyn_new_with<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        args: &[u32],
+    ) {
         let Some(&a0) = args.first() else {
             return;
         };
@@ -916,7 +935,10 @@ impl SimState<'_> {
         }
         let n = match args.get(1) {
             Some(&a) => {
-                let v = self.mk_eval_ctx().eval(a);
+                let v = match nets {
+                    Some(n) => self.eval_expr_with(n, a),
+                    None => self.mk_eval_ctx().eval(a),
+                };
                 if v.has_xz() {
                     self.dyn_warn_once_at(net, "new[] size is X/Z; array degraded to empty");
                     0
