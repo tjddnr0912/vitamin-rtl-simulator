@@ -293,7 +293,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         class_vtable: _,
         class_calls: _,
         class_field_widths: _,
-        file_directed_stmts,
+        // Slice #4: see the deleted `file_directed` row below — one fd read.
+        file_directed_stmts: _,
     } = opts;
 
     flag(&mut out, "fork", fork_modes.len());
@@ -416,7 +417,18 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // Measured before deleting: the raw-read pin counts four untreaded reads in
     // `crv_draw.rs` and the other three are `$writemem*`'s, which is a different
     // family with its own row.
-    flag(&mut out, "file_directed", file_directed_stmts.len());
+    // ⭐ **Slice #4: `file_directed` was ONE READ.** `$fmonitor`/`$fstrobe` share
+    // the frozen `Monitor`/`Strobe` task ids — the only thing that marks
+    // `args[0]` as a descriptor is this table — and `split_file_directed`
+    // evaluated that descriptor with a bare `sched.eval`, the engine's nets.
+    // Everything else was already shared: the capture goes into
+    // `SimState::postponed` (A5-b's region), the file table is `SimState` too
+    // (A1-iv-b), and the render is `flush_postponed_with`, threaded since A5-b.
+    //
+    // Same shape as A5-a, down to the wording of the reason: an unthreaded fd
+    // read on a native run returns whatever the engine's slot holds, so the
+    // monitor would write to a descriptor the design never opened. §4.5.338
+    // again — the family was named for a feature, not for missing machinery.
 
     // ── statement-level families with no v1 machinery ──────────────────────
     // THREE families, none of them sidecar-borne — only a scan of `ir.stmts`,

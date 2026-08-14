@@ -256,7 +256,11 @@ fn sidecar_families_reject_from_opts() {
     let mut o = SimOpts::default();
     o.fork_modes.insert((0, 0), sim_engine::JoinMode::All);
     o.probed_nets.push(0);
-    o.file_directed_stmts.insert(0);
+    // ⚠️ `file_directed_stmts` was a row here and is CORE since slice #4 (its
+    // whole machinery was one fd read through the wrong store). Re-spelled as a
+    // second `probed_nets` entry so this test keeps measuring that several rows
+    // report TOGETHER rather than short-circuiting.
+    o.probed_nets.push(1);
     // ⚠️ `clocking_inputs` was the fourth row here and is now CORE (slice #1) —
     // re-spelled as a `stage_stmts` entry rather than deleted, so this test keeps
     // measuring that several rows report TOGETHER rather than short-circuiting.
@@ -265,12 +269,7 @@ fn sidecar_families_reject_from_opts() {
     assert!(!e.eligible);
     assert_eq!(
         e.reject_reasons.into_iter().collect::<Vec<_>>(),
-        vec![
-            ("file_directed", 1),
-            ("fork", 1),
-            ("probe", 1),
-            ("stage", 1),
-        ]
+        vec![("fork", 1), ("probe", 2), ("stage", 1)]
     );
 }
 
@@ -290,6 +289,25 @@ fn force_release_is_core() {
     );
     assert!(ok, "force/release must not disqualify: {rs:?}");
     assert!(rs.is_empty(), "and nothing else may fire either: {rs:?}");
+}
+
+/// Slice #4: the FILE-DIRECTED marker set is CORE.
+///
+/// `$fmonitor`/`$fstrobe` reuse the frozen `Monitor`/`Strobe` ids; the table
+/// only says that `args[0]` is a descriptor. Everything the pair needs was
+/// already shared (the postponed region, the file table, the threaded render) —
+/// what was store-bound was evaluating that one descriptor.
+#[test]
+fn file_directed_markers_are_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.file_directed_stmts.insert(0);
+    let e = design_eligibility(&ir, &o);
+    assert!(
+        e.eligible,
+        "file-directed markers must not disqualify: {:?}",
+        e.reject_reasons
+    );
 }
 
 /// Slice #1: the three CLOCKING tables are CORE.

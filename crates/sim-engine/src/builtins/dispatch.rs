@@ -11,17 +11,24 @@ use super::*;
 /// the fd variable may have been reassigned or the file closed.
 ///
 /// Returns `(None, args)` unchanged for every plain `$monitor`/`$strobe`.
-fn split_file_directed<'a>(
+fn split_file_directed<'a, N: crate::eval::NetReader + ?Sized>(
     sched: &Scheduler,
+    nets: Option<&N>,
     sid: u32,
     args: &'a [u32],
 ) -> (Option<u32>, &'a [u32]) {
     if !sched.st.file_directed_stmts.contains(&sid) {
         return (None, args);
     }
+    // Slice #4: THROUGH the threaded reader. It used to be a bare `sched.eval`
+    // — the engine's nets — which is why the `file_directed` design row existed
+    // and is the same shape A5-a found in `$fclose`/`$dumplimit`. On a native
+    // run an unthreaded fd read returns whatever the engine's slot holds
+    // (typically 0), so `$fmonitor(fd, …)` would silently write to a descriptor
+    // the design never opened rather than to its file.
     let fd = args
         .first()
-        .map(|&a| sched.eval(a))
+        .map(|&a| crate::builtins::eval_task_arg(sched, nets, a))
         .filter(|v| !v.has_xz())
         .and_then(|v| v.to_u64())
         .map(|v| v as u32);
@@ -545,7 +552,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             let time_mult = sched.st.cur_time_mult;
             // `$fstrobe`: `args[0]` is the descriptor (see `file_directed_stmts`), so it
             // is consumed here and the remaining args are the value list.
-            let (fd, args) = split_file_directed(sched, sid, args);
+            let (fd, args) = split_file_directed(sched, nets, sid, args);
             sched.st.postponed.strobes.push(FmtCapture {
                 fmt,
                 args: args.to_vec(),
@@ -562,7 +569,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         // baseline value list.
         SysTaskId::Monitor => {
             let time_mult = sched.st.cur_time_mult;
-            let (fd, args) = split_file_directed(sched, sid, args);
+            let (fd, args) = split_file_directed(sched, nets, sid, args);
             let ms = MonitorState {
                 cap: FmtCapture {
                     fmt,

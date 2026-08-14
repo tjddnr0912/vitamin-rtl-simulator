@@ -5114,11 +5114,14 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
     let files: [(&str, usize, &str); 4] = [
         (
             "dispatch.rs",
-            1,
-            "`split_file_directed`'s fd — the `file_directed` row. ⚠️ The other \
-             half of this reason (`and $monitor/$strobe are in systask_refusal \
-             too`) EXPIRED with A5-b, which wired both; the site is now held by \
-             the `file_directed` row alone. §4.5.338 again, inside a test",
+            0,
+            "⚠️⚠️ **ZERO — this file has no raw store read left.** The number \
+             went 2 → 1 → 0 as its reasons expired one at a time: A5-b wired \
+             `$monitor`/`$strobe`, and slice #4 threaded the last site \
+             (`split_file_directed`'s fd, which was the `file_directed` row's \
+             entire machinery). Kept at 0 rather than deleted: this pin's job \
+             is to notice a NEW raw read appearing, and a file that currently \
+             has none is exactly where one would be easiest to add unnoticed",
         ),
         (
             "crv_draw.rs",

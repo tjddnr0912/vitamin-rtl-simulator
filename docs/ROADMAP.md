@@ -1347,6 +1347,42 @@ store 가 우연히 같은 답을 낸다(`A 508`). `n = 8` 뒤의 **두 번째 �
 행의 이유가 거짓이 된다) 그것을 이득으로 세지 않고 기록한다 — `$dumpall`/`$dumpon` 선례의 반대 방향
 판단이며, 차이는 **여기서는 거부를 유지하는 데도 코드가 든다**는 것.
 
+#### 5.1-aa ✅ #4 file_directed — **행 하나의 기계장치가 fd 읽기 하나였다** · 95.78% → **95.90%** (2026-08-14)
+
+`$fmonitor`/`$fstrobe` 는 **동결된 `Monitor`/`Strobe` 태스크 id 를 재사용**한다 — `args[0]` 이 디스크립터
+라는 것을 말해 주는 것은 `file_directed_stmts` 사이드카 하나뿐이다. 나머지는 **전부 이미 공유**였다:
+캡처는 `SimState::postponed`(A5-b 의 리전) · 파일 테이블은 `SimState`(A1-iv-b) · 렌더는 A5-b 가 스레드한
+`flush_postponed_with`.
+
+⇒ store 에 묶여 있던 것은 **`split_file_directed` 의 fd 평가 한 줄**(맨손 `sched.eval`)이다. **A5-a 와
+같은 모양이고 이유의 문구까지 같다** — 미스레드 fd 읽기는 네이티브에서 엔진 슬롯의 값을 돌려주므로,
+모니터가 **설계가 연 적 없는 디스크립터**를 향하게 된다.
+
+⭐ **앵커의 판별자는 fd 가 넷이라는 것뿐이다** — 리터럴 디스크립터는 상수라 두 store 가 같은 답을 낸다.
+앵커는 `$fopen` 의 반환을 `integer fd` 에 담고 **파일 내용**을 iverilog 값으로 핀한다(+ `run.json` 이
+`native` 라는 anti-vacuity — 거부되면 VM 으로 떨어져 위의 기존 테스트들과 같은 것을 재게 된다).
+
+**측정**: **6,154 / 6,417 = 95.90%**(+10 · 예측 +8) · 전 스위트 **5435 green** · **flip 런**(실패 3 =
+백엔드 이름 핀) · **발산 0** · **뮤테이션 3/3 사망**.
+
+⚠️⚠️ **배터리가 SURVIVED 를 거짓으로 보고했고, 원인은 테스트 필터였다.** 케이스 C(무효 디스크립터가
+`args[0]` 를 소비하지 않게)는 `-E 'test(fmonitor) or test(fstrobe) or test(file_directed) or
+test(monitor)'` 로 돌렸는데, **그것을 죽이는 테스트의 이름이
+`an_invalid_descriptor_is_loud_and_writes_nothing`** 이라 넷 중 어느 패턴에도 안 걸렸다. 손으로 걸어
+확인하니 즉시 갈린다(`W4022` vs stdout 폴백) ⇒ **배터리의 필터가 킬러보다 좁으면 SURVIVED 는 정보가
+아니라 잡음이다.** 필터를 바이너리 단위(`binary(file_monitor_strobe)`)로 넓혀 재실행.
+
+⚠️ 그 케이스는 이 슬라이스의 것이 아니라 **`split_file_directed` 의 pre-existing 절**이었고, 그것을
+지키는 테스트도 반쪽이었다 — 기존 행이 쓰던 `32'hdead_beef` 는 **읽을 수 있는 수**라
+`unwrap_or(u32::MAX)` 에 도달조차 안 한다. X/Z 디스크립터 행을 지어 덮었다.
+
+⚠️ **하네스 갭 열 번째** — `build_with_opts` 에 `file_directed_stmts` 가 없었다(없으면 `$fmonitor(fd, …)`
+가 **fd 를 값으로 찍는 평범한 `$monitor`** 이고 두 백엔드가 일치한다).
+
+⚠️ `dispatch.rs` 의 raw-read 핀이 **1 → 0** 이 됐다. 지우지 않고 0 으로 유지한다 — 이 핀의 일은 **새
+raw read 가 생기는 것을 알아채는 것**이고, 지금 하나도 없는 파일이야말로 하나가 몰래 들어가기 가장 쉬운
+자리다.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

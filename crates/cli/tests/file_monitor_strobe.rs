@@ -146,6 +146,23 @@ fn an_invalid_descriptor_is_loud_and_writes_nothing() {
     );
     assert!(o.contains("W4022"), "bad fd must warn:\n{o}");
     assert!(!o.contains("X c="), "must not fall back to stdout:\n{o}");
+
+    // …and the X/Z descriptor, which is a DIFFERENT arm: `split_file_directed`
+    // cannot turn it into a number at all, so what stops it falling back to
+    // stdout is the `unwrap_or(u32::MAX)` — "an unusable descriptor still
+    // consumes `args[0]`". ⚠️ Without this half the mutation that returns a
+    // bare `None` there SURVIVES: the value above is a perfectly readable
+    // 32'hdeadbeef and never reaches the `unwrap_or`.
+    let (o2, _d2) = run_in_dir(
+        "module t; reg [7:0] c = 0; reg [31:0] bad;\n\
+         initial begin $fmonitor(bad, \"Z c=%0d\", c);\n\
+           #1 c = 1; #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(
+        !o2.contains("Z c="),
+        "an X/Z descriptor must not fall back to stdout:\n{o2}"
+    );
 }
 
 // ── PINNED DIVERGENCE. iverilog ACCUMULATES `$fmonitor`s on ONE descriptor: two calls
@@ -165,4 +182,68 @@ fn a_second_fmonitor_on_the_same_descriptor_replaces_the_first() {
     );
     // A's establishment line, then B replaces it: no second `A` line.
     assert_eq!(file_of(&d, "o.txt"), "A c=0\nB c=0\nB c=1\n");
+}
+
+/// Slice #4 ABSOLUTE ANCHOR — the same file content on the TIER-3 backend,
+/// iverilog-pinned.
+///
+/// `$fmonitor`/`$fstrobe` reuse the frozen `Monitor`/`Strobe` ids, so the only
+/// thing that makes `args[0]` a descriptor is `file_directed_stmts` — and
+/// `split_file_directed` evaluated that descriptor with a bare `sched.eval`,
+/// the ENGINE's nets. On a native run that store is never written, so `fd`
+/// read as whatever the engine's slot held instead of the value `$fopen`
+/// returned: the monitor would address a descriptor the design never opened.
+///
+/// The `fd` here is a MODULE NET rather than a literal, which is the whole
+/// discriminator — a literal descriptor is a constant and would agree either
+/// way. Values are iverilog's.
+#[test]
+fn fmonitor_and_fstrobe_on_tier_3_write_the_same_file() {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_fms_nat_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let f = d.join("t.sv");
+    std::fs::write(
+        &f,
+        "module top;\n\
+           integer fd; reg [7:0] a = 8'd0; reg clk = 1'b0;\n\
+           always #1 clk = ~clk;\n\
+           always @(posedge clk) a = a + 8'd1;\n\
+           initial begin\n\
+             fd = $fopen(\"fm.txt\", \"w\");\n\
+             $fmonitor(fd, \"M t=%0t a=%0d\", $time, a);\n\
+             #3 $fstrobe(fd, \"S t=%0t a=%0d\", $time, a);\n\
+             #4 $fclose(fd);\n\
+             $display(\"done\");\n\
+             $finish;\n\
+           end\n\
+         endmodule\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg("--backend")
+        .arg("native")
+        .arg("--obs-dir")
+        .arg("obs")
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let txt = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // ANTI-VACUITY: a refused design falls back to the VM and this test would
+    // then compare the VM against iverilog, which the tests above already do.
+    let run = std::fs::read_to_string(d.join("obs").join("run.json")).unwrap_or_default();
+    assert!(
+        run.contains("\"backend\": \"native\""),
+        "the design did not run natively:\n{run}\n{txt}"
+    );
+    assert_eq!(
+        file_of(&d, "fm.txt"),
+        "M t=0 a=0\nM t=1 a=1\nS t=3 a=2\nM t=3 a=2\nM t=5 a=3\n",
+        "tier-3 $fmonitor/$fstrobe (iverilog-pinned); stdout was:\n{txt}"
+    );
 }

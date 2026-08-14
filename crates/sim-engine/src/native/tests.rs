@@ -527,6 +527,13 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // `assign v = e;` is executed as a strong FORCE and `deassign` as a
         // `release` — by BOTH backends, so a differential row about §9.3.1
         // priority would agree about a design neither performs as written.
+        // …and the FILE-DIRECTED marker set (slice #4). ⚠️ **TENTH entry.**
+        // `$fmonitor`/`$fstrobe` REUSE the frozen `Monitor`/`Strobe` task ids —
+        // this sidecar is the only thing that makes `args[0]` a descriptor —
+        // so without it a `$fmonitor(fd, …)` is a plain `$monitor` that PRINTS
+        // the fd as a value to stdout, on both backends, agreeing about a
+        // design neither performs.
+        file_directed_stmts: sc.file_directed_stmts,
         assign_ranks: sc.assign_ranks,
         clocking_inputs: sc.clocking_inputs,
         clocking_commit: sc.clocking_commit,
