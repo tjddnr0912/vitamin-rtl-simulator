@@ -846,6 +846,39 @@ pub(crate) fn eval_task_arg<N: crate::eval::NetReader + ?Sized>(
     }
 }
 
+/// [`eval_task_arg`]'s twin for a WHOLE-NET read rather than an expression —
+/// `$writemem*`'s per-element memory read is the only caller (slice #8).
+///
+/// It lives here, beside the other two seams, for a reason the raw-read pin
+/// makes concrete: that pin counts `sched.st.read_net(` per file and expects the
+/// count to be ZERO everywhere except this one, where a raw read is what a seam
+/// IS. Writing the same two-arm match inline at the call site would have moved a
+/// raw read into `crv_draw.rs` and made its entry non-zero for a threaded read —
+/// a number that reads as "still behind a reject row" when it is not.
+///
+/// ⚠️ The `Some` arm reads the BARE store, where [`eval_task_arg`] routes through
+/// `eval_expr_with` (i.e. `HeapRouted`). That asymmetry is deliberate and it is
+/// MEASURED, not assumed: this takes a net id straight from the IR, and the only
+/// caller's net is a `$writemem*` target, which elaborate refuses to be anything
+/// but a flat memory — a dynamic array is `E3009` ("no whole-value surface") and
+/// a whole unpacked-array frame local is `E3009` ("no value here"). Both
+/// refusals are pinned by `cli::sysread_writemem::
+/// writemem_targets_the_seam_cannot_own_are_refused_before_the_backend`, because
+/// `NetArena::read_net`'s ownership guard is a `debug_assert!` — if either gate
+/// were opened, a release build would silently read a slot that is not the
+/// value, and the pin is what makes that fail loudly here first.
+pub(crate) fn read_task_net<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    net: u32,
+    word: Option<u32>,
+) -> crate::value::Value {
+    match nets {
+        Some(n) => n.read_net(net, word),
+        None => sched.st.read_net(net, word),
+    }
+}
+
 /// [`eval_task_arg`] for the arms that CONTEXT-size their argument before
 /// storing it — the queue/dyn element mutators, which resize to the element
 /// width. `None` forwards to `Scheduler::eval_ctx_top`, the exact call these

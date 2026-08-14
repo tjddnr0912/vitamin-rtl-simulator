@@ -823,7 +823,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         // dead. A defensive no-op keeps the bump provably inert.
         // v9 (Medium-bundle rank 5): the write-side mirror of $readmem*.
         SysTaskId::WritememB | SysTaskId::WritememH => {
-            writemem(sched, args, matches!(which, SysTaskId::WritememH));
+            writemem(sched, nets, args, matches!(which, SysTaskId::WritememH));
             Ctl::Continue
         }
         // v9 rank 6: $monitoroff disables change-triggered reprints. The flag is

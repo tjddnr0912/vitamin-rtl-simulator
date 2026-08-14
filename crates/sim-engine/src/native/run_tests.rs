@@ -2274,13 +2274,19 @@ fn s1d4c2c_each_refusal_row_has_a_design() {
         // (`$writemem*`, which reads the MEMORY itself rather than a formatted
         // argument). A refusal-row test whose shape stops being refused turns
         // green by measuring nothing.
+        // ⚠️ **FIFTH re-spelling of this row's design.** It used `$monitor`
+        // until A5-b wired it, then `$writemem*` until slice #8 did — and slice
+        // #8's census says `$writemem*` were the last members ANY design in the
+        // suite reached, so what is left (`$dumpall`/`$dumpon`) has zero corpus
+        // population and has to be written by hand. A refusal-row test whose
+        // shape stops being refused turns green by measuring nothing.
         (
             "refused system task",
             "a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)",
             r#"
 module top;
-  reg [7:0] m [0:1];
-  initial begin m[0] = 8'd0; m[1] = 8'd1; $writememh("out.hex", m); #1 $finish; end
+  reg [7:0] n = 8'd0;
+  initial begin $dumpfile("d.vcd"); $dumpvars(0, top); #1 $dumpall; #1 $finish; end
 endmodule
 "#,
         ),
@@ -2290,12 +2296,12 @@ endmodule
             r#"
 module top;
   reg [7:0] n;
-  reg [7:0] m [0:1];
   initial begin
+    $dumpfile("d2.vcd");
+    $dumpvars(0, top);
     n = 8'd0;
-    m[0] = 8'd0; m[1] = 8'd1;
     #1 n = 8'd1;
-    if (n == 8'd1) $writememb("out2.hex", m);
+    if (n == 8'd1) $dumpon;
     #1 $finish;
   end
 endmodule
@@ -5119,18 +5125,12 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         ),
         (
             "crv_draw.rs",
-            3,
-            "⚠️ THREE now, not four — A2-ii threaded `class_randomize_run`'s \
-             receiver, which was the CRV surface's whole store dependence. The \
-             three that remain are `$writemem*`'s: its two window bounds and its \
-             per-element memory read, all behind the `systask_refusal` row \
-             (`$writemem*` reads the MEMORY itself, not a formatted argument). \
-             A1-iii took this from 6 to 4 by threading `readmem`'s two window \
-             bounds — measured, not assumed: `$readmemh(f, m, lo, hi)` with NET \
-             bounds loaded the whole array on a native run. ⚠️ This entry has now \
-             been re-worded TWICE for the same reason (§4.5.338): each time a \
-             row it names is split or lifted, the sentence stops being true \
-             while the NUMBER still passes",
+            0,
+            "⚠️⚠️ **ZERO — the third file to run out.** It was four until A2-ii \
+             threaded `class_randomize_run`'s receiver, then three (`$writemem*`'s \
+             two window bounds and its per-element memory read, behind the \
+             `systask_refusal` row), and slice #8 threaded those. Kept at 0 for \
+             the reason `dispatch.rs`'s entry gives",
         ),
         (
             "render.rs",
@@ -5144,9 +5144,12 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         ),
         (
             "queues_io.rs",
-            2,
-            "the `None` arms of `eval_task_arg` and `eval_task_arg_ctx` — the \
-             seams themselves, which is where a raw read is SUPPOSED to be",
+            3,
+            "the `None` arms of `eval_task_arg`, `eval_task_arg_ctx` and \
+             `read_task_net` — the seams themselves, which is where a raw read \
+             is SUPPOSED to be. THREE since slice #8: `$writemem*` needed a \
+             whole-NET read rather than an expression, and putting its two-arm \
+             match here rather than inline is what keeps `crv_draw.rs` at zero",
         ),
     ];
     // ⚠️ `sched.assoc_` on purpose, not `sched.assoc_key_of(`. The narrow

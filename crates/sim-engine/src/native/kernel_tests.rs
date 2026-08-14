@@ -1672,17 +1672,21 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         // neither of them ever called it. Each read its own argument with a bare
         // `sched.eval`; threading those two lines was the whole fix.
         // What remains genuinely reads somewhere this seam does not go.
+        // ⚠️ `$writememb`/`$writememh` LEFT this set in slice #8, and they were
+        // the last members a real design could reach: the census found all 7
+        // blocked designs were theirs and `$dumpall`/`$dumpon` were ZERO. Their
+        // row's reason ("it reads the MEMORY itself, not a formatted argument")
+        // was right and was exactly three reads — the two window bounds and the
+        // per-element value — all threaded now.
+        //
+        // ⚠️ `$monitor`/`$strobe` left in A5-b. Their row was right that the
+        // render happens outside `dispatch` — which made it a two-part fix
+        // rather than an impossible one: the tier-3 run loop grew a postponed
+        // region and `flush_postponed_with` threads the store into the render
+        // and the change compare. Registering never read a net.
         let expect_refusal = matches!(
             which,
-            sim_ir::SysTaskId::DumpAll
-                | sim_ir::SysTaskId::DumpOn
-                | sim_ir::SysTaskId::WritememB
-                | sim_ir::SysTaskId::WritememH // ⚠️ `$monitor`/`$strobe` LEFT this set in A5-b. Their row was
-                                               // right that the render happens outside `dispatch` — but that
-                                               // made it a two-part fix rather than an impossible one: the
-                                               // tier-3 run loop grew a postponed region and
-                                               // `flush_postponed_with` threads the store into the render and
-                                               // the change compare. Registering never read a net.
+            sim_ir::SysTaskId::DumpAll | sim_ir::SysTaskId::DumpOn
         );
         if !expect_refusal {
             continue;
@@ -1710,11 +1714,16 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         );
         refused += 1;
     }
-    // FOUR, not six: A5-b wired `$monitor` and `$strobe`. The count is asserted
-    // exactly rather than as `> 0` so that wiring or refusing another member
-    // moves a number a human has to re-justify — which is what just happened.
+    // TWO now — the sequence is 6 (A5-b wired `$monitor`/`$strobe`) → 4 → 2
+    // (slice #8 wired `$writememb`/`$writememh`). The count is asserted exactly
+    // rather than as `> 0` so that wiring or refusing another member moves a
+    // number a human has to re-justify, which is what just happened twice.
+    //
+    // ⚠️ The two that remain (`$dumpall`/`$dumpon`) have ZERO corpus designs —
+    // slice #8's census measured that directly — so this test is the only place
+    // they are exercised at all, and the design above has to spell them by hand.
     assert_eq!(
-        refused, 4,
+        refused, 2,
         "expected all four remaining refused tasks to refuse — got {refused}"
     );
 }

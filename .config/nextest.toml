@@ -1,0 +1,20 @@
+# cargo-nextest runner config (pinned runner = 0.9.100, see LOOPROMPT §0).
+#
+# ⚠️ WHY THIS FILE EXISTS. A mutation that made `$writemem*`'s element loop
+# non-terminating was run through the full suite twice (2026-08-14 and
+# 2026-08-15). Each time two `vita` test subprocesses grew to ~33 GB on a 32 GB
+# machine; jetsam killed WindowServer and the kernel panicked on the userspace
+# watchdog (`panic-full-2026-08-15-055710`). With NO per-test timeout, "the
+# suite is still running" and "the machine is dying" are indistinguishable —
+# the run has to be killed by hand, and whatever the tree was mutated to is
+# still there afterwards.
+#
+# The cap is far above every real test: the whole workspace is ~31 s of wall
+# clock and the slowest single test measured is ~18 s
+# (`sim-engine::backend_equiv runaway_codegenable_loop_equal_and_fatal`). A test
+# that reaches 4 minutes is hung, not slow.
+#
+# ⚠️ CI still runs `cargo test` (ci.yml, 4 jobs), which does NOT read this file.
+# This protects local runs — which is where the mutation battery runs.
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 4 }

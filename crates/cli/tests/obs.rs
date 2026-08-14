@@ -843,29 +843,33 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
 /// Note `native.eligible` stays TRUE, which is the whole point of the layering:
 /// the design is within v1's scope, today's executor just cannot run it.
 ///
-/// The design here has changed FIVE times as the executor grew: a plain
-/// `assign` until S1d-4d-1, `assign #2` until S1d-4d-3 wired the inertial
-/// wheel, a multi-driven net until S1d-4d-4 wired the group resolution, then a
-/// `$monitor` until A5-b gave tier-3 a postponed region. It is now
-/// `$writememh`, which reads the MEMORY itself rather than a formatted
-/// argument.
+/// The design here has changed SIX times as the executor grew: a plain `assign`
+/// until S1d-4d-1, `assign #2` until S1d-4d-3 wired the inertial wheel, a
+/// multi-driven net until S1d-4d-4 wired the group resolution, a `$monitor`
+/// until A5-b gave tier-3 a postponed region, `$writememh` until slice #8
+/// threaded its three reads. It is now `$dumpall`.
 ///
 /// ⚠️ That churn IS the test working. Its claim is about the SHAPE of the
 /// report — an executor-layer refusal must publish `eligible: true` beside
 /// `backend: "vm"` — so every time the executor grows, the design has to be
 /// re-picked or the test starts asserting that shape about a design that runs.
+///
+/// ⚠️⚠️ And the well is nearly dry: slice #8's census measured that
+/// `$writemem*` were the last refused system tasks ANY design in the suite
+/// reached, so `$dumpall`/`$dumpon` is the whole remaining population of this
+/// executor row and it has to be spelled by hand.
 #[test]
 fn run_json_reports_native_fallback_on_a_refused_design() {
-    const WMEM_SV: &str = "module top; reg [7:0] m [0:1];\n\
-         initial begin m[0] = 8'd0; m[1] = 8'd1; $writememh(\"nfb.hex\", m); #1 $finish; end endmodule\n";
-    let (_, code, obs) = run(WMEM_SV, &["--backend", "native"]);
+    const DUMPALL_SV: &str = "module top; reg [7:0] n = 8'd0;\n\
+         initial begin $dumpfile(\"nfb.vcd\"); $dumpvars(0, top); #1 $dumpall; #1 $finish; end endmodule\n";
+    let (_, code, obs) = run(DUMPALL_SV, &["--backend", "native"]);
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));
     assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
     assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
     assert!(
         field(&m, "native").contains("\"eligible\": true"),
-        "a `$writemem*` design is within v1's SCOPE — the refusal is the \
+        "a `$dumpall` design is within v1's SCOPE — the refusal is the \
          executor's, not the gate's:\n{m}"
     );
 }

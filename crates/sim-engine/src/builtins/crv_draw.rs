@@ -588,9 +588,24 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
 /// one line (every line incl the last ends '\n'); the optional (start[,finish])
 /// is an inclusive declared-index window, descending when finish < start; an
 /// out-of-range start/finish is non-fatal (a warning, the file is NOT created,
-/// the sim continues). Element values come from the engine word-read path; hex
-/// uses per-nibble X/Z compression, bin is per-bit uncompressed.
-pub(crate) fn writemem(sched: &mut Scheduler, args: &[u32], hex: bool) {
+/// the sim continues); hex uses per-nibble X/Z compression, bin is per-bit
+/// uncompressed.
+///
+/// Slice #8 threads the reader, and this task is the one member of the family
+/// where the memory ITSELF is the store-bound read rather than an argument —
+/// which is what the refusal row said ("it reads the MEMORY itself, not a
+/// formatted argument") and what made it the last one left. Three reads cross
+/// the seam: the two WINDOW bounds (`start`/`finish`, which A1-iii's own note
+/// recorded as still raw) and the per-element value. Unthreaded on a native run
+/// all three see the engine's untouched slots, so `$writememh` writes a file
+/// full of the declaration initializers — a file that EXISTS and is wrong,
+/// which no exit code reports.
+pub(crate) fn writemem<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    args: &[u32],
+    hex: bool,
+) {
     let warn = |sched: &mut Scheduler, msg: String| {
         sched
             .st
@@ -634,8 +649,12 @@ pub(crate) fn writemem(sched: &mut Scheduler, args: &[u32], hex: bool) {
     };
     let last = base + alen - 1;
     // range window (declared-index domain). Default: full array ascending.
-    let r_start = args.get(2).and_then(|&a| sched.eval(a).to_u64());
-    let r_finish = args.get(3).and_then(|&a| sched.eval(a).to_u64());
+    let r_start = args
+        .get(2)
+        .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
+    let r_finish = args
+        .get(3)
+        .and_then(|&a| crate::builtins::eval_task_arg(sched, nets, a).to_u64());
     let (start, finish) = match (r_start, r_finish) {
         (Some(s), Some(f)) => (s, f),
         (Some(s), None) => (s, last),
@@ -656,20 +675,31 @@ pub(crate) fn writemem(sched: &mut Scheduler, args: &[u32], hex: bool) {
         }
     }
     let step: i64 = if start <= finish { 1 } else { -1 };
+    // COUNT-bounded, not sentinel-bounded. Both ends are already proven in range
+    // above and the window is inclusive, so this is exactly the element count;
+    // the iterations, their order and the bytes are unchanged for every window
+    // that can actually arrive here.
+    //
+    // ⚠️ What changes is the FAILURE mode. The old `loop { … if addr == finish
+    // break }` was one wrong `step` sign away from never terminating, and that
+    // is not hypothetical: the mutation that pins the line above ran twice
+    // through the suite appending to `body` forever, took two test processes to
+    // ~33 GB on a 32 GB machine, and ended in a userspace-watchdog kernel panic.
+    // A count cannot outlive itself — a wrong step now writes a wrong FILE,
+    // which `writemem_on_tier_3_matches_iverilog`'s descending row catches in
+    // milliseconds.
+    let count = start.abs_diff(finish) + 1;
     let mut body = String::from("// 0x00000000\n");
     let mut addr = start as i64;
-    loop {
+    for _ in 0..count {
         let word = (addr as u64 - base) as u32;
-        let v = sched.st.read_net(net, Some(word));
+        let v = super::queues_io::read_task_net(sched, nets, net, Some(word));
         if hex {
             fmt_writemem_hex(&v, w, &mut body);
         } else {
             fmt_writemem_bin(&v, w, &mut body);
         }
         body.push('\n');
-        if addr as u64 == finish {
-            break;
-        }
         addr += step;
     }
     if let Err(e) = std::fs::write(&name, body) {

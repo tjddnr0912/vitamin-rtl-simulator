@@ -485,11 +485,12 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
         // own argument with a bare `sched.eval`. Threading those two call sites
         // is the whole fix. §4.5.338's lesson again: a refusal does not know
         // when its own reason stopped being true.
-        SysTaskId::WritememB | SysTaskId::WritememH => (
-            "k_dispatch_systask($writememb/$writememh)",
-            "S1d-4b-3",
-            "it reads the MEMORY itself, not a formatted argument",
-        ),
+        // ⚠️ `$writememb`/`$writememh` are WIRED (slice #8), and their row was
+        // the last entry in this match that a corpus design reached. It said
+        // "it reads the MEMORY itself, not a formatted argument", which was
+        // exactly right and exactly three reads: the two window bounds (which
+        // A1-iii's own note left recorded as still raw) and the per-element
+        // value. All three take the threaded reader now.
         // ⚠️ `$dumpoff`/`$dumpflush`/`$monitoron`/`$monitoroff` are deliberately
         // NOT here — and the reason they used to carry ("nothing opens `st.vcd`
         // because `$dumpfile` is refused") DIED when S1d-4d-2 wired the dump

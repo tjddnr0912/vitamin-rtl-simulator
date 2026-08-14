@@ -236,6 +236,10 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 - **`defparam` 이 INTERFACE 인스턴스에 안 닿는다** — `interface ifc; parameter D = 8; … endinterface` + `ifc a(); defparam a.D = 255;` 가 `W3056 … matched no instance` 를 내고 **기본값을 유지**한다(iverilog `d=ff`, vita `d=8`). PRE·POST 동일한 pre-existing 이고, 경고가 있으므로 silent 는 아니다. 원인 = `defparams` 소비가 `elaborate_instance` 에만 있고 `iface_inst.rs` 는 자기 `overrides` 만 본다 — 인터페이스 바인딩 루프가 §4.5.314 에서 정본 바인더를 쓰게 됐으므로 `defparams.remove(path)` 를 같은 자리에서 병합하면 된다.
 
+**슬라이스 #8(§5.1-ae)이 남긴 1건 (오라클 ✓ iverilog):**
+
+- **`$writemem*` 의 타깃이 서브루틴의 whole unpacked-array 로컬이면 E3009** — `task automatic t; reg [7:0] loc[0:1]; … $writememh("x.txt", loc);` 가 *"a whole unpacked-array formal has no value here"* 로 거부된다(iverilog 는 실행하고 파일을 쓴다). 두 백엔드 동일한 pre-existing honest-loud. ⚠️ **여는 슬라이스는 seam 도 함께 지어야 한다** — #8 의 `read_task_net` 은 이 거부를 **도달 불가 논거**로 삼아 아레나를 맨손으로 읽고(프레임·힙 넷은 그 store 가 소유하지 않으며 `assert_owns` 는 `debug_assert!` 다), 그 논거의 핀이 `writemem_targets_the_seam_cannot_own_are_refused_before_the_backend` 다.
+
 **외부 round-28 이 남긴 4건 (§4.5.284 · 전부 실사용 ASIC 트리에서 실측된 사이트 · 오라클 ✓ iverilog):**
 
 - **양 끝이 음수인 ASCENDING 팩트 범위가 폭 1 로 클램프**(`reg [-33:-2]` → `$bits` vita 1 / iverilog 32 · **loud**: `W3056`). 하강 쌍둥이 `[-2:-33]` 와 혼합 `[3:-2]` 는 정상이라 갭은 그 한 조합뿐. §4.5.308 differential 이 잔차 308행의 원인으로 실측했고, 그 행들은 폭이 틀려서지 정규화 때문이 아니다(`array_geom.rs` 의 `allow_neg_lsb` opt-in 경로).
@@ -355,6 +359,16 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
 
+**⚠️ 하드닝 1건 — 프로세스 수준 메모리 가드가 없다 (슬라이스 #8 실측 · 오너 승인 2026-08-15).** 폭주한
+`vita` 하나가 **33 GB × 2** 를 잡아 32 GB 머신을 jetsam → WindowServer 크래시 → **userspace watchdog
+커널 패닉**까지 몰고 갔다(2026-08-14). 기존 가드(`max_deltas`·`max_body_steps`·`time_limit`)는 **델타도
+문장도 진행하지 않는 루프**(시스템태스크 내부)를 구조적으로 못 본다. 이번 슬라이스는 **그 루프를
+카운트 기반으로** 바꿔 실측된 형태를 닫았고(`$writemem*`), **일반 가드는 남는다**. 설계 제약 둘을 먼저
+정해야 한다: ⓐ **할당 카운팅 전역 allocator** 는 매 할당에 원자연산 둘을 더한다 — 성능 축이 몇 주에 걸쳐
+지운 바로 그 비용이라 기본 ON 은 회귀다 · ⓑ **RSS 샘플링 워치독 스레드**(초당 1회)는 핫패스 비용이 0
+이지만 macOS 에서 `mach_task_basic_info` = **unsafe FFI** 라 unsafe 정책의 지정 모듈 확대가 선결이다
+(Linux 는 `/proc/self/statm` 로 safe). ⇒ ⓑ + 기본 상한(물리 RAM 의 1/4 등) + `--max-mem` 이 현재 후보.
+
 ### 5.0 ★★ ③층 — 성능 축 **수확 체감 도달** · 다음은 **커버리지**(§5.1)
 
 | 단계 | 상태 |
@@ -416,14 +430,21 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 | # | 슬라이스 | census | 상태 |
 |---|---|---|---|
-| **A1** ✅ | **`stmt_effect`** — 전원 배선, 행이 비었다(§5.1-g~-l) | 205 | **완료 · 78.73% → 81.24%** |
-| **A2** | `class` / OOP / CRV | 164 | |
-| **A3** 진행중 | 서브루틴 프레임 — ✅ **A3-i subset 동기**(§5.1-n) ✅ **A3-ii-a 구동 프레임**(§5.1-o) · 잔여 **A3-ii-b = 실제로 park 하는 프레임**(+81) | **532** | **81.66% → 88.55%** |
-| **A4** | fork + `disable_fork` | ~104 | |
-| **A5** 진행중 | 거부 시스템태스크 — ✅ **A5-a `$fclose`/`$dumplimit`**(§5.1-m) · 잔여 = `$monitor`/`$strobe`·`$dumpall`/`$dumpon`·`$writemem*` | ~83 | |
-| **A6** | `real` + `real-slot` | ~72 | |
-| **A7** | functional coverage | ~64 | |
-| **A8** | 꼬리 — force/release · clocking · probe/stage · final · file_directed | ~61 | 한 슬라이스로 묶음 |
+⚠️ **census 는 슬라이스마다 움직인다 — 아래 숫자는 #8 직후(2026-08-15) 실측이고, 착수 전에 다시 돌린다**
+(§5.1-p 규칙). 그리고 **행이 아니라 집합으로** 센다: 한 설계를 얻으려면 그 설계를 막는 행을 **전부**
+닫아야 한다.
+
+| # | 슬라이스 | 잔여 census(집합) | 상태 |
+|---|---|---|---|
+| **A1** ✅ | `stmt_effect` — 전원 배선, 행이 비었다(§5.1-g~-l) | 0 | **완료 · 78.73% → 81.24%** |
+| **A2** ✅ | `class`/OOP(§5.1-p) · CRV(§5.1-t) | 0 | **완료 · 88.55% → 94.15%** |
+| **A7** ✅ | functional coverage(§5.1-r) | 0 | **완료** |
+| **A5** ✅ | 거부 시스템태스크 — `$fclose`(§5.1-m) · postponed(§5.1-s) · file_directed(§5.1-aa) · **`$writemem*`(§5.1-ae)** | **1** | **완료** — 남은 `$dumpall`/`$dumpon` 은 **코퍼스 인구 0**(그 1 은 손으로 적은 테스트 설계) |
+| **A8** ✅ | 꼬리 — handle_copy · deferred assert · clocking · force/release · final · stage | — | **완료**(§5.1-q·-w·-x·-y·-ab·-ac) |
+| **A6** ★ 다음 | **`real` + `real-slot`(D+S 짝)** | **73** | 잔여 중 **최대**. 두 행이 한 몸이라 함께 닫아야 한다 |
+| **A3-ii-b** | 실제로 **park 하는** 프레임 — `S:frame-suspends` + `X:call-suspends` 짝(fork 행 **없이**) | **42** | A3-i/-ii-a/-iii/-iv 완료(§5.1-n·-o·-u·-v) |
+| **A4** | fork + `disable_fork` | (106 발화 · **단독 이득 0**) | ⚠️ 전부 A3-ii-b 와 얽혀 있다 — 그것을 먼저 닫아야 수확된다 |
+| 꼬리 | `probe` 5 · out-of-window write 5 · concat heap chunk 3 | 13 | 각각 단독 이득 |
 
 ### Phase B — V2 = **빌드 분리** (오너 제안 채택 · 옛 "VM 삭제" 를 대체)
 
@@ -1476,6 +1497,56 @@ arm 은 fail-closed 로 남기되 **IR 뮤테이션으로만 물을 수 있으�
 
 ⚠️ 절차: 케이스 D 의 첫 치환이 **의미 없는 no-op**(`if false` 팔을 원본 앞에 끼워 넣어 원본이 그대로
 실행)이었다 — SURVIVED 로 세지 않고 `break` 로 다시 걸었다. §5.1-s 에서 같은 실수를 한 적이 있다.
+
+#### 5.1-ae ✅ #8 거부 시스템태스크 `$writemem*` — **행의 이유가 옳았고, 그 문장이 곧 세 읽기였다** · 96.26% → **96.35%** (2026-08-15)
+
+`systask_refusal` 에서 **실사용 설계가 닿는 마지막 행**이었다. 이유는 *"it reads the MEMORY itself, not a
+formatted argument"* — 이 파일이 §4.5.338 이래 반복해 온 *"거부 행은 자기 이유가 언제 거짓이 되는지
+모른다"* 의 **반례**다: 이 이유는 참이었고, 참인 채로 **할 일의 목록**이었다. store 에 묶인 읽기는 셋:
+
+| 읽기 | 자리 |
+|---|---|
+| 윈도 `start` · `finish` | `eval_task_arg` 로 스레드 — ⚠️ **A1-iii 가 `readmem` 쪽만 하고 자기 주석에 "여긴 아직 raw" 라고 적어 뒀다** |
+| 원소 값 | `sched.st.read_net` → 신규 seam **`read_task_net`** |
+
+나머지는 전부 IR/사이드카다(파일 이름 = `Const` · 타깃 넷 id = `Expr::Signal{word:None}` · `array_len`/
+`width` · `declared_array_base`) ⇒ 라우팅 불필요. 미스레드면 네이티브 런이 **선언 초기값으로 가득 찬
+파일**을 쓴다 — **존재하고 틀린 파일**이라 exit code 가 아무 말도 하지 않는다.
+
+⭐ **seam 을 `queues_io` 에 둔 이유는 raw-read 핀이다** — 그 핀은 파일당 raw 읽기 수를 세는데, 두 팔짜리
+match 를 호출 사이트에 인라인했으면 `crv_draw.rs` 가 **스레드된 읽기 때문에 0 이 아니게** 된다(= "아직
+거부 행 뒤" 로 읽히는 숫자). 이제 `crv_draw.rs` **4 → 0**(세 번째 0 파일) · `queues_io.rs` **2 → 3**.
+
+⭐ **도달 불가 논거를 쟀고 테스트로 핀했다.** `read_task_net` 의 `Some` 팔은 **맨 아레나**를 읽는다
+(`eval_task_arg` 는 `HeapRouted` 를 지난다). 그것이 안전한 이유는 `$writemem*` 타깃이 힙·프레임 넷일 수
+없기 때문이고, 그건 주장이 아니라 측정이다 — **dyn array = E3009**(iverilog 도 거부) · **whole
+unpacked-array 프레임 로컬 = E3009**(⚠️ **iverilog 는 실행한다** = honest-loud 갭, §3 에 1줄). `NetArena`
+의 소유권 가드가 `debug_assert!` 라 **릴리스에선 조용하므로**, 그 두 거부를 여는 슬라이스가 이 seam 을
+먼저 깨뜨리도록 핀을 세웠다.
+
+⚠️⚠️ **뮤테이션 C 가 머신을 두 번 내렸고, 그것이 제품을 바꿨다.** 내림차순 윈도에서 `step` 을 +1 로
+고정하면 `loop { … if addr == finish break }` 의 **유일한 탈출 조건에 도달할 수 없다** → `body` 에 무한
+append. 전 스위트 배터리로 걸린 결과: `vita` 두 프로세스가 각각 **33 GB**(32 GB 머신) → jetsam →
+WindowServer 크래시 → **userspace watchdog 커널 패닉**(2026-08-14 · `panic-full-2026-08-15-055710`).
+두 세션이 그렇게 죽었고 **그때마다 뮤테이션이 트리에 남았다**. ⇒ 루프를 **센티널이 아니라 카운트**로
+바꿨다(`start.abs_diff(finish) + 1`) — 도달 가능한 모든 윈도에서 반복·순서·바이트가 동일하고, 바뀌는
+것은 **실패 모드**다: 틀린 step 이 이제 **행이 아니라 틀린 파일**을 낸다. 재채점하니 **0.856 초에 사망**
+하고, **기존 테스트 `writememh_range_inclusive_and_descending` 도 함께 잡는다** — 그 행은 원래 보호되고
+있었고 뮤테이션이 행을 걸어서 채점이 안 됐을 뿐이다. 저장소에 per-test 타임아웃이 없어 `.config/
+nextest.toml`(`terminate-after = 4 × 60 s`)을 신설했다(⚠️ CI 는 `cargo test` 라 이 파일을 안 읽는다).
+
+**측정**: **6,206 / 6,441 = 96.35%**(+7 · 예측 +7) · 전 스위트 **5445 green** · **flip 런 5442/5445**
+(실패 3 = 백엔드 이름 핀) · **발산 0** · differential **9 설계 3-way 0 diff**(non-zero base · 하강 선언
+범위 · 넷 bound 범위밖 · x/z + 폭 6 · 태스크 formal bound · 단일 원소 · **연속대입 wire bound**) ·
+뮤테이션 **4/4 사망**.
+
+⚠️ **census 가 다음 표적 순서를 정정했다**(§5.1-p 규칙대로 매 슬라이스 착수 전 재측정): 잔여 235 를
+**행이 아니라 집합**으로 세면 `real`(D+S 짝) **73** · `frame-suspends + call-suspends`(A3-ii-b, fork 행
+**없이**) **42** · `probe` 5 · out-of-window write 5 · concat heap chunk 3 이고, **fork 행 106 은 그 둘과
+얽혀 있다**(단독으로 닫아도 설계를 못 얻는다). ⇒ 다음은 **real 이 가장 크다.**
+
+⚠️ 이 행에 남은 인구는 **`$dumpall`/`$dumpon` 1 설계**뿐이고 그것은 **이 슬라이스가 손으로 적은 것**이다
+(코퍼스 인구 0 — 거부-행 테스트 셋을 `$writemem*` 에서 다시 철자해야 했다. 다섯 번째 재철자다).
 
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
