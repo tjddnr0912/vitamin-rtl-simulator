@@ -17,10 +17,11 @@
 //! A ready entry collapses to the process id, and `push_sorted`'s tie ordering
 //! collapses to ascending process id.
 //!
-//! Clocking is rejected too, so the engine's `commit_clocking` intercept — which
-//! consumes an edge and returns before the process is queued — has no analogue
-//! here. If either family is ever admitted, both simplifications are load-
-//! bearing and must come back.
+//! ⚠️ Clocking USED to be rejected too, and this file said the engine's
+//! `commit_clocking` intercept — which consumes an edge and returns before the
+//! process is queued — "has no analogue here". Slice #1 admitted the family and
+//! built the analogue: `is_clock_handler` diverts at that exact position. The
+//! `fork_modes` simplification above is still load-bearing.
 //!
 //! ## The three rules that are NOT simplifications
 //!
@@ -36,17 +37,21 @@
 //!    suppresses a wake for it. S1d-4 owes the maintainer, and those same
 //!    designs owe the in-body waiter model this table has no analogue for.
 //!
-//! One GATE DEPENDENCY worth naming, because it is invisible here: the engine
-//! reads `last_blocking_writer` LIVE at propagate time while this reads the
-//! value snapshotted into the changed tuple. The only two things that could
-//! rewrite it between snapshot and read are a clocking commit and a force
-//! re-eval — and both families are S0 rejects, which is the whole reason the two
-//! reads are the same value.
 //! 3. **Self-write suppression + timestep dedup.** A process does not fire on a
 //!    net it itself blocking-wrote (it saw the value before re-arming), and a
 //!    process woken once in a timestep is not re-woken by a later delta's edge
 //!    of the same sensitivity (the gated-clock rule) — which is why `seen` is
 //!    reset at time advance and at each new event cluster, NOT per delta.
+//!
+//! ⚠️ A "GATE DEPENDENCY" used to be named here — that the engine reads
+//! `last_blocking_writer` LIVE at propagate time while this reads the value
+//! snapshotted into the changed tuple, so admitting clocking or force would
+//! break the equivalence. Slice #1 had to answer it and MEASURED IT FALSE: the
+//! engine snapshots too, in `propagate_changes`'s `edges.extend(…)` prologue,
+//! at the same point `take_changed` snapshots here. There is no live read to
+//! diverge from, and a clocking commit performed inside the pass lands in the
+//! NEXT changed set on both sides. §4.5.338 again — a stated reason does not
+//! know when it stopped being true, and this one was never true.
 
 use sim_ir::{EdgeKind, SensKind, SimIr};
 
@@ -89,10 +94,20 @@ pub struct WakeTable {
     /// O(#woken) rather than O(#processes).
     seen: Vec<bool>,
     marked: Vec<u32>,
+    /// Is this process a marked CLOCKING-COMMIT handler (`always @(clk);` with a
+    /// Null body, minted by elaborate for a `clocking` block)?
+    ///
+    /// It is answered HERE rather than by the caller because the engine answers
+    /// it here — inside pass (a), after the fire/busy/self-write tests and
+    /// BEFORE the multi-net dedup, then `continue`s. Both halves of that
+    /// position matter: a handler must not be queued to Active (its body is a
+    /// no-op), and it must not enter `seen`/`marked` either, because the engine's
+    /// `continue` runs before the marker is set.
+    is_clock_handler: Vec<bool>,
 }
 
 impl WakeTable {
-    pub fn new(ir: &SimIr) -> WakeTable {
+    pub(crate) fn new(ir: &SimIr, st: &crate::state::SimState) -> WakeTable {
         let mut net_to_edge = vec![Vec::new(); ir.nets.len()];
         for (pi, p) in ir.processes.iter().enumerate() {
             if p.sensitivity.kind == SensKind::Edge {
@@ -141,6 +156,20 @@ impl WakeTable {
             busy: vec![false; ir.processes.len()],
             seen: vec![false; ir.processes.len()],
             marked: Vec::new(),
+            is_clock_handler: {
+                // Derived from the SAME two tables `clocking_commit_plan` reads,
+                // so "which procs are handlers" has one spelling: a second one
+                // that drifted would divert a proc the plan then declines (a
+                // process silently never run) or fail to divert one it accepts
+                // (its no-op body queued, and worse, marked `seen`).
+                let mut v = vec![false; ir.processes.len()];
+                for &p in st.clocking_commit.keys().chain(st.clocking_outputs.keys()) {
+                    if (p as usize) < v.len() {
+                        v[p as usize] = true;
+                    }
+                }
+                v
+            },
         }
     }
 
@@ -161,8 +190,9 @@ impl WakeTable {
     /// sort makes the input order irrelevant. (An earlier version of this
     /// comment claimed the two orders "agree by construction"; a mutation that
     /// reversed the input and still passed showed that was not the reason.)
-    pub fn wake(&mut self, changed: &[ChangedNet], out: &mut Vec<u32>) {
+    pub fn wake(&mut self, changed: &[ChangedNet], out: &mut Vec<u32>, clocked: &mut Vec<u32>) {
         out.clear();
+        clocked.clear();
         for &(net, mask, writer) in changed {
             for k in 0..self.net_to_edge[net as usize].len() {
                 let (kind, proc) = self.net_to_edge[net as usize][k];
@@ -170,6 +200,17 @@ impl WakeTable {
                     continue;
                 }
                 if self.busy[proc as usize] || writer == proc {
+                    continue;
+                }
+                // N4 clocking: a marked commit handler fired on its clocking
+                // edge. Diverted to `clocked` — the caller performs the commit —
+                // and NOT queued, exactly where the engine's `commit_clocking`
+                // intercept sits. Deliberately BEFORE the `seen` test, so a
+                // handler registered on two nets that both fire in one delta
+                // commits twice here as it does there; the engine's `continue`
+                // is likewise reached before its marker is set.
+                if self.is_clock_handler[proc as usize] {
+                    clocked.push(proc);
                     continue;
                 }
                 if self.seen[proc as usize] {

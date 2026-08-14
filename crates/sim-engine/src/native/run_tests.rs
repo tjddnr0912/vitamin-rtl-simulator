@@ -6699,3 +6699,227 @@ endmodule
         ),
     ]
 }
+
+/// Slice #1 ABSOLUTE ANCHOR — a clocking block on tier-3, hand-IEEE.
+///
+/// ⚠️ **Neither oracle pins this one, and for two different reasons.** iverilog
+/// 13 does not parse `clocking` at all (`syntax error` on the block header), so
+/// the family is invisible to it. verilator 5.050 DOES support clocking blocks
+/// and disagrees with vita on purpose: it samples in the Observed region, so an
+/// Active-region `always @(posedge clk)` reads the PREVIOUS edge's sample
+/// (`cb.d` = 0,1,2 for `d` = 1,2,3), where vita commits at edge DETECTION and
+/// reads THIS edge's (`cb.d` = 1,2,3). That is the engine's documented hand-IEEE
+/// simplification (`clocking_commit_plan`), predates this slice, and is shared by
+/// all three vita backends — pinning verilator's numbers here would pin a model
+/// vita does not implement. So the expectation is vita's own model, stated.
+///
+/// Every line is a different part of the machinery:
+///
+/// * `P t=5 … cb.d=9` — the PREPONED snapshot is taken through the store that
+///   RAN. An unthreaded snapshot reads the engine's `d` slot, which a native run
+///   never writes, so it would report the declaration initializer (7) forever.
+/// * `drv=a5` / `drv=5a` — the OUTPUT phase: `cb.drv = …` writes the holding net
+///   and the commit drives the real net at the next clocking edge. Its read of
+///   the holding net is the second threaded read, and its write is the sample
+///   write; both must land in the arena.
+/// * `LVL` — a LEVEL-sensitive process on a holding net, and the ONLY line that
+///   can see the shared `store_sample_words` change verdict. The t=25 commit
+///   re-samples the same value (11), so a verdict stuck at "changed" prints a
+///   third `LVL`. A native/VM differential is blind to that by construction
+///   (§5.1-e: the function is shared), which is why this line is here and not
+///   in the differential.
+/// * `HOLD-EDGE` — a holding net that is ITSELF an edge target
+///   (`always @(posedge cg.g)`). This is the `accumulate_edge` obligation: with
+///   only `note_change` the mask is RESET and the posedge is silently lost.
+/// * two clocking blocks on OPPOSITE edges — the handler diversion is per-proc,
+///   and `cg` has inputs only while `cb` has both, so the `inputs.is_none() &&
+///   outputs.is_none()` split is exercised in both directions.
+/// * `d` moving between the edge and the display — `cb.d` must be the PREPONED
+///   value, not the live one, which is what makes the buffer observable at all.
+#[test]
+fn a_clocking_design_runs_on_tier_3() {
+    let src = r#"
+module t;
+  logic clk = 1'b0;
+  logic [7:0] d = 8'd7;
+  logic [7:0] drv;
+  logic       g = 1'b0;
+  clocking cb @(posedge clk);
+    input  d;
+    output drv;
+  endclocking
+  clocking cg @(negedge clk);
+    input  g;
+  endclocking
+  always #5 clk = ~clk;
+  always @(posedge cg.g) $display("HOLD-EDGE t=%0t", $time);
+  always @(cb.d) $display("LVL t=%0t cb.d=%0d", $time, cb.d);
+  initial begin
+    #1 d = 8'd9; g = 1'b1;
+    #6 d = 8'd11;
+    cb.drv = 8'hA5;
+    #10 cb.drv = 8'h5A;
+    #12 $display("END drv=%0h", drv);
+    $finish;
+  end
+  always @(posedge clk) $display("P t=%0t d=%0d cb.d=%0d drv=%0h", $time, d, cb.d, drv);
+  always @(negedge clk) $display("N t=%0t g=%0b cg.g=%0b", $time, g, cg.g);
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec![
+            "out|P t=5 d=9 cb.d=9 drv=xx\n".to_string(),
+            "out|LVL t=5 cb.d=9\n".to_string(),
+            "out|N t=10 g=1 cg.g=1\n".to_string(),
+            "out|HOLD-EDGE t=10\n".to_string(),
+            "out|P t=15 d=11 cb.d=11 drv=a5\n".to_string(),
+            "out|LVL t=15 cb.d=11\n".to_string(),
+            "out|N t=20 g=1 cg.g=1\n".to_string(),
+            "out|P t=25 d=11 cb.d=11 drv=5a\n".to_string(),
+            "out|END drv=5a\n".to_string(),
+        ],
+        "clocking on tier-3 (hand-IEEE: vita commits at edge detection)"
+    );
+}
+
+/// Slice #1 DIFFERENTIAL — clocking shapes, native against the VM.
+#[test]
+fn clocking_shapes_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // A clocking edge in the t=0 slot itself. The seed snapshot taken
+        // before the loop is the only thing that makes this sample non-X, and
+        // `a` is moved in the SAME slot so the printed 3 can only be the
+        // preponed value.
+        //
+        // ⚠️ The first version of this row wrote `reg clk = 1'b1;` and no
+        // driver, so the posedge NEVER HAPPENED and nothing was ever committed —
+        // the row passed while the seed did nothing. The battery found it: the
+        // mutation that deletes the t0 seed survived. A clocking row that does
+        // not produce an edge measures nothing.
+        (
+            "clocking input sampled at a t0 edge",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] a = 8'd3;
+  clocking cb @(posedge clk);
+    input a;
+  endclocking
+  initial begin
+    clk = 1'b1;
+    a = 8'd200;
+    #1 $display("A cb.a=%0d a=%0d", cb.a, a);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // An input whose SOURCE moves inside the very slot the edge lands in:
+        // the commit must use the preponed value, not the settled one.
+        (
+            "source moves within the sampling slot",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] a = 8'd1;
+  clocking cb @(posedge clk);
+    input a;
+  endclocking
+  always #5 clk = ~clk;
+  always @(posedge clk) begin a = a + 8'd1; $display("S a=%0d cb.a=%0d", a, cb.a); end
+  initial #26 $finish;
+endmodule
+"#,
+        ),
+        // An OUTPUT clockvar only — the handler has `clocking_outputs` and no
+        // `clocking_commit`, so the plan's input half is empty.
+        (
+            "output clockvar only",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] o;
+  clocking cb @(posedge clk);
+    output o;
+  endclocking
+  always #5 clk = ~clk;
+  initial begin
+    cb.o = 8'h11;
+    #12 cb.o = 8'h22;
+    #12 $display("O o=%0h", o);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+        // A holding net that drives a CONTINUOUS ASSIGN, so the commit's
+        // `note_change` has to reach the cont-assign worklist too.
+        (
+            "holding net feeds a continuous assign",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] a = 8'd4;
+  wire [7:0] y;
+  clocking cb @(posedge clk);
+    input a;
+  endclocking
+  assign y = cb.a + 8'd1;
+  always #5 clk = ~clk;
+  initial begin #1 a = 8'd6; #10 $display("Y y=%0d", y); #10 $display("Y y=%0d", y); $finish; end
+endmodule
+"#,
+        ),
+        // A clocking edge whose slot ALSO wakes an ordinary process on the same
+        // net — the diversion must not consume that process's wake.
+        (
+            "handler shares its clock with an always block",
+            r#"
+module top;
+  reg clk = 1'b0;
+  reg [7:0] a = 8'd2;
+  reg [7:0] c = 8'd0;
+  clocking cb @(posedge clk);
+    input a;
+  endclocking
+  always #5 clk = ~clk;
+  always @(posedge clk) c <= c + 8'd1;
+  always @(posedge clk) $display("C c=%0d cb.a=%0d", c, cb.a);
+  initial #26 $finish;
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 5, "slice #1 differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "slice #1 differential: refusal breakdown moved"
+    );
+}

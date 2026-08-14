@@ -967,24 +967,18 @@ impl<'a> SimState<'a> {
             sim_ir::FourState::Zero
         };
         let slot = &mut self.nets[i];
-        let mut changed = false;
-        for k in 0..nw {
-            let mut nv = v.val.get(k).copied().unwrap_or(0);
-            let mut nu = v.unk.get(k).copied().unwrap_or(0);
-            if k == nw - 1 {
-                nv &= m;
-                nu &= m;
-            }
-            if slot.cur.val.len() <= k {
-                slot.cur.val.resize(k + 1, 0);
-                slot.cur.unk.resize(k + 1, 0);
-            }
-            if slot.cur.val[k] != nv || slot.cur.unk[k] != nu {
-                slot.cur.val[k] = nv;
-                slot.cur.unk[k] = nu;
-                changed = true;
-            }
+        if slot.cur.val.len() < nw {
+            slot.cur.val.resize(nw, 0);
+            slot.cur.unk.resize(nw, 0);
         }
+        // The masked store + change verdict is `value::store_sample_words`, shared
+        // with the arena's sample point so the two cannot drift.
+        let changed = crate::value::store_sample_words(
+            &mut slot.cur.val[..nw],
+            &mut slot.cur.unk[..nw],
+            m,
+            v,
+        );
         if changed {
             self.note_change(net, 0);
             if track_edge {
@@ -999,12 +993,31 @@ impl<'a> SimState<'a> {
     /// slot activity — so each source holds the value it had ENTERING the slot, the
     /// true preponed value). EMPTY `clocking_inputs` ⇒ no-op ⇒ byte-identical.
     pub(crate) fn snapshot_preponed(&mut self) {
+        self.snapshot_preponed_with(None::<&Self>);
+    }
+
+    /// `snapshot_preponed` reading the SOURCE nets through `nets` (tier-3 hands
+    /// its arena; `None` = this state's own store = mechanically byte-identical).
+    ///
+    /// The buffer itself needs no routing: `preponed_buf` is a `SimState` field
+    /// and both kernels borrow this state, exactly like `dyn_heap` and the file
+    /// table. What is store-bound is the READ — an unthreaded one snapshots the
+    /// engine's nets, which a native run never writes, so every `cb.sig` would
+    /// commit whatever the engine's store happened to hold (0/X) rather than the
+    /// value the design drove. Same shape as A1-ii: the write was already right.
+    pub(crate) fn snapshot_preponed_with<N: crate::eval::NetReader + ?Sized>(
+        &mut self,
+        nets: Option<&N>,
+    ) {
         if self.clocking_inputs.is_empty() {
             return;
         }
         for idx in 0..self.clocking_inputs.len() {
             let src = self.clocking_inputs[idx];
-            let v = self.read_net(src, None);
+            let v = match nets {
+                Some(n) => n.read_net(src, None),
+                None => self.read_net(src, None),
+            };
             self.preponed_buf.insert(src, v);
         }
     }
@@ -1015,29 +1028,56 @@ impl<'a> SimState<'a> {
     /// Returns `true` iff this proc was a clocking handler (so the scheduler
     /// skips the no-op body dispatch).
     pub(crate) fn commit_clocking(&mut self, proc: u32) -> bool {
-        let is_input_handler = self.clocking_commit.contains_key(&proc);
-        let is_output_handler = self.clocking_outputs.contains_key(&proc);
-        if !is_input_handler && !is_output_handler {
+        let Some(writes) = self.clocking_commit_plan(None::<&Self>, proc) else {
             return false;
+        };
+        for (net, v) in writes {
+            self.commit_clocking_sample(net, &v);
         }
+        true
+    }
+
+    /// The DECISION half of `commit_clocking`: which nets this handler samples,
+    /// in order, and with what value — reading through `nets` (tier-3's arena;
+    /// `None` = this state's own store). `None` return ⇒ `proc` is not a handler.
+    ///
+    /// Split out because the two backends' WRITE points differ (`SimState`'s
+    /// `commit_clocking_sample` vs the arena's) while the order and the values do
+    /// not. Deferring the writes past the reads is observationally identical, and
+    /// that is a property of the tables rather than an assumption: the INPUT
+    /// phase writes only HOLDING nets, the OUTPUT phase reads only holding nets,
+    /// and elaborate mints a FRESH holding net per clocking ITEM whose direction
+    /// is input XOR output (`ClockingDir::Inout` is a loud reject). So no planned
+    /// write can be seen by a later read in the same plan — the same argument
+    /// A1-iii's `TaskWrites::Collect` rests on.
+    pub(crate) fn clocking_commit_plan<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        proc: u32,
+    ) -> Option<Vec<(u32, Value)>> {
+        let inputs = self.clocking_commit.get(&proc);
+        let outputs = self.clocking_outputs.get(&proc);
+        if inputs.is_none() && outputs.is_none() {
+            return None;
+        }
+        let mut out = Vec::new();
         // INPUT phase: preponed_buf[source] → holding_net (existing).
-        if let Some(pairs) = self.clocking_commit.get(&proc).cloned() {
-            for (hold, src) in pairs {
-                if let Some(v) = self.preponed_buf.get(&src).cloned() {
-                    self.commit_clocking_sample(hold, &v);
-                }
+        for &(hold, src) in inputs.into_iter().flatten() {
+            if let Some(v) = self.preponed_buf.get(&src) {
+                out.push((hold, v.clone()));
             }
         }
         // OUTPUT phase: current_value(holding_net) → source_net (new).
         // Simplified synchronous model: drive in Active region at edge detection,
         // after INPUT commits. Hand-IEEE (no Reactive region; covers typical TB use).
         // NOTE: tuple is (source_net, holding_net) — REVERSED from clocking_commit.
-        if let Some(out_pairs) = self.clocking_outputs.get(&proc).cloned() {
-            for (src, hold) in out_pairs {
-                let v = self.read_net(hold, None);
-                self.commit_clocking_sample(src, &v);
-            }
+        for &(src, hold) in outputs.into_iter().flatten() {
+            let v = match nets {
+                Some(n) => n.read_net(hold, None),
+                None => self.read_net(hold, None),
+            };
+            out.push((src, v));
         }
-        true
+        Some(out)
     }
 }

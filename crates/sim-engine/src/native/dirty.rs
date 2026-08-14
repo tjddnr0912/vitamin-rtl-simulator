@@ -234,6 +234,43 @@ impl NetArena {
         self.ch.slot_edge[net as usize] |= m;
     }
 
+    /// The arena's twin of `SimState::commit_clocking_sample` — commit a
+    /// whole-net value into a clocking holding net (or, for an output clockvar,
+    /// into the driven source net), blocking + same-slot, marking it changed.
+    ///
+    /// The masked store and the change verdict are the SHARED
+    /// `value::store_sample_words`; what is per-store is reaching the planes (a
+    /// window into `buf`, no resize — a slot's word count is fixed at build) and
+    /// the edge bookkeeping below, which is this module's mirrored pair.
+    ///
+    /// CALLER OBLIGATION discharged here, not deferred: a holding net can itself
+    /// be an edge target (`@(posedge cb.sig)`), so `note_change` is PAIRED with
+    /// `accumulate_edge` — alone it resets the mask and records nothing in its
+    /// place, which is the exact hazard `note_change`'s doc names and which the
+    /// engine hit at this same store point.
+    pub(crate) fn commit_clocking_sample(&mut self, net: u32, v: &crate::value::Value) -> bool {
+        self.assert_owns(net, "NetArena::commit_clocking_sample");
+        let s = self.slots[net as usize];
+        let nw = s.words as usize;
+        let m = crate::value::top_mask(s.width.max(1));
+        let track_edge = self.ch.is_edge_target[net as usize];
+        let old_b0 = if track_edge {
+            self.scalar_bit0(net)
+        } else {
+            FourState::Zero
+        };
+        let base = s.off as usize;
+        let (lo, hi) = self.buf[base..base + 2 * nw].split_at_mut(nw);
+        let changed = crate::value::store_sample_words(lo, hi, m, v);
+        if changed {
+            self.note_change(net, 0);
+            if track_edge {
+                self.accumulate_edge(net, old_b0);
+            }
+        }
+        changed
+    }
+
     /// Take this delta's changed set, ASCENDING, with each net's edge mask and
     /// authoring writer — the engine's `propagate_changes` prologue.
     ///

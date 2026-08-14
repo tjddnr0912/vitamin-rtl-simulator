@@ -257,17 +257,42 @@ fn sidecar_families_reject_from_opts() {
     o.fork_modes.insert((0, 0), sim_engine::JoinMode::All);
     o.probed_nets.push(0);
     o.file_directed_stmts.insert(0);
-    o.clocking_inputs.insert(0);
+    // ⚠️ `clocking_inputs` was the fourth row here and is now CORE (slice #1) —
+    // re-spelled as a `stage_stmts` entry rather than deleted, so this test keeps
+    // measuring that several rows report TOGETHER rather than short-circuiting.
+    o.stage_stmts.insert(0);
     let e = design_eligibility(&ir, &o);
     assert!(!e.eligible);
     assert_eq!(
         e.reject_reasons.into_iter().collect::<Vec<_>>(),
         vec![
-            ("clocking", 1),
             ("file_directed", 1),
             ("fork", 1),
             ("probe", 1),
+            ("stage", 1),
         ]
+    );
+}
+
+/// Slice #1: the three CLOCKING tables are CORE.
+///
+/// A clocking block lowers to a holding net per item plus a marked
+/// `always @(clk);` handler with a NULL body — ordinary IR. The tables live in
+/// `SimState`, which both kernels borrow; what needed building was the routing
+/// of the two ends (the preponed READ and the sample WRITE) and the handler
+/// diversion's position in the wake pass.
+#[test]
+fn clocking_tables_are_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.clocking_inputs.insert(0);
+    o.clocking_commit.insert(0, vec![(0, 0)]);
+    o.clocking_outputs.insert(0, vec![(0, 0)]);
+    let e = design_eligibility(&ir, &o);
+    assert!(
+        e.eligible,
+        "clocking must not disqualify: {:?}",
+        e.reject_reasons
     );
 }
 

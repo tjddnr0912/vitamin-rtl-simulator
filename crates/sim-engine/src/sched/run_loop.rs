@@ -200,6 +200,34 @@ impl Scheduler<'_, '_> {
                     }
                     continue;
                 }
+                // ⚠️ **A CHANGE THAT NOTHING HAS PROPAGATED YET.** Every ordinary
+                // writer is followed by a `propagate_changes`, so `st.dirty` is
+                // normally empty here — with ONE producer that is not: the
+                // clocking commit runs INSIDE `propagate_changes` pass (a), after
+                // that pass has already taken its changed set, so `cb.sig`'s
+                // change is left for "the next propagate". Without this line
+                // there is no next propagate in this timestep: the loop breaks,
+                // POSTPONED runs, time advances, and the change is finally swept
+                // in a LATER slot — carrying `slot_edge` from the slot it
+                // happened in. Measured: `@(posedge cb.d)` armed at t=8 fired
+                // immediately off the t=5 mask, and an `always @(cb.d)` woke a
+                // timestep late.
+                //
+                // Found by the tier-3 flip run (slice #1). The tier-3 loop has
+                // always had a `propagate` at its stable point — it needs one for
+                // the deferred-region cascade — so it was already correct here,
+                // and the two backends disagreed the moment clocking was
+                // admitted. Guarded on `dirty` so every design without a
+                // late producer is byte-identical.
+                if !self.st.dirty.is_empty() {
+                    self.propagate_changes();
+                    self.delta_count += 1;
+                    if self.delta_count > self.max_deltas {
+                        self.fatal_delta_limit();
+                        return FinishReason::DeltaLimit;
+                    }
+                    continue;
+                }
                 break; // time-step stable
             }
 

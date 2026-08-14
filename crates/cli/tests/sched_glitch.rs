@@ -198,16 +198,30 @@ fn clocking_holding_net_edge_still_fires() {
     // must ALSO feed `slot_edge` (note_change resets it; the matching
     // accumulate_edge must follow), else the posedge is silently dropped and the
     // wait hangs. A #20 watchdog distinguishes "fired" from "hung".
+    //
+    // ⚠️ **THE FIRST VERSION OF THIS DESIGN PASSED FOR THE WRONG REASON.** It
+    // set `d = 1` at t=0 and armed the wait at t=8, so the only posedge on
+    // `cb.d` happened at t=5 — BEFORE the wait existed. It "fired" because the
+    // commit's change was not swept until a later timestep and arrived carrying
+    // t=5's `slot_edge`. Slice #1's tier-3 flip run exposed that (native swept
+    // it promptly and correctly HUNG); the engine now propagates a late
+    // producer at its stable point, and the design is re-shaped so the posedge
+    // on `cb.d` happens at t=15, AFTER the wait arms. A plain-net equivalent
+    // (`#5 x = 1;` then arm at t=8) hangs on iverilog too, which is what says
+    // the old expectation was the wrong one.
     let (out, code) = run("module t;\n\
          logic clk = 0, d = 0;\n\
          always #5 clk = ~clk;\n\
          clocking cb @(posedge clk); input d; endclocking\n\
-         initial begin d = 1; #8; @(posedge cb.d); $display(\"FIRED\"); $finish; end\n\
-         initial begin #20; $display(\"HUNG\"); $finish; end\n\
+         initial begin #6 d = 1; end\n\
+         initial begin #8; @(posedge cb.d); $display(\"FIRED t=%0t\", $time); $finish; end\n\
+         initial begin #30; $display(\"HUNG\"); $finish; end\n\
          endmodule\n");
     assert_eq!(code, Some(0));
     assert!(
-        out.contains("FIRED") && !out.contains("HUNG"),
-        "@(posedge cb.d) must wake (commit path must feed slot_edge); got:\n{out}"
+        out.contains("FIRED t=15") && !out.contains("HUNG"),
+        "@(posedge cb.d) must wake at the NEXT clocking edge (commit path must \
+         feed slot_edge, and the sweep must happen in the slot it happened in); \
+         got:\n{out}"
     );
 }

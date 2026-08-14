@@ -1186,6 +1186,75 @@ are not supported"*).
 ⚠️ 그리고 이 슬라이스는 **SVA 거부 테이블의 케이스 하나를 통째로 지웠다** — `sva_shapes_that_need_
 machinery_still_refuse_by_their_own_name` 의 두 케이스 중 deferred 쪽이 이제 돈다(개수 단언 **2 → 1**).
 
+#### 5.1-x ✅ #1 clocking — **테이블은 이미 공유였고, 없던 것은 두 끝과 한 자리였다** · 95.03% → **95.29%** (2026-08-14)
+
+⭐ **또 하나의 보수적 거부, 그리고 이번엔 "기계장치가 없다" 가 세 조각으로 갈렸다.** 클로킹 블록은
+런타임 기계장치가 아니다 — elaborate 가 아이템마다 **홀딩 넷**(`__clk_*` / `__clkout_*`)을 만들어
+`cb.sig` 를 거기 alias 하고, **Null 바디의 마크된 `always @(clk);` 핸들러**를 낸다. 엔진에 도착하는
+것은 평범한 IR + 세 사이드카(`clocking_inputs`/`clocking_commit`/`clocking_outputs`)이고, 그 셋과
+`preponed_buf` 는 **전부 `SimState`** = 두 커널이 빌리는 같은 객체(`dyn_heap` 과 정확히 같은 상황).
+
+store 에 묶여 있던 것은 **두 끝**이다:
+
+| 자리 | 무엇을 읽고/쓰나 | 미스레드일 때 |
+|---|---|---|
+| `snapshot_preponed` | 소스 넷을 **읽는다** | 네이티브에선 엔진 슬롯(선언 초기값)을 영원히 샘플 |
+| `clocking_commit_plan` OUTPUT | 홀딩 넷을 **읽는다** | 같은 이유로 X |
+| `commit_clocking_sample` | 홀딩/소스 넷에 **쓴다** | 네이티브가 안 읽는 store 로 커밋 = `cb.sig` 가 영원히 X |
+
+⭐ **plan / apply 로 쪼갠 이유가 정확성 논거다.** 두 store 의 쓰기 지점이 다르므로 **결정**(어떤 넷을
+어떤 값으로, 어떤 순서로)만 공유하고 쓰기는 각자 한다. 쓰기를 읽기 뒤로 미루는 것이 관측 불가인 것은
+가정이 아니라 **테이블의 성질**이다 — INPUT 은 홀딩 넷만 쓰고 OUTPUT 은 홀딩 넷만 읽는데, elaborate 는
+**아이템마다 새 홀딩 넷**을 만들고 한 아이템의 방향은 input XOR output 이다(`ClockingDir::Inout` 은
+loud reject). A1-iii 의 `TaskWrites::Collect` 가 기대는 논거와 같은 모양이고, **뮤테이션 K(두 페이즈
+순서 뒤집기)의 생존이 그 성질의 증명**이다.
+
+⭐ **세 번째 조각은 테이블이 아니라 자리다.** 엔진은 커밋을 `propagate_changes` 패스 (a) **안에서**,
+fire/busy/self-write 검사 뒤 **멀티넷 dedup 앞에서** 하고 `continue` 한다. tier-3 의 `WakeTable::wake`
+가 정확히 그 지점에서 핸들러를 `clocked` 로 우회시킨다(dedup 앞이라 두 넷에서 발화하면 엔진처럼
+두 번 커밋한다 · `seen` 에도 안 들어간다).
+
+⚠️⚠️ **flip 런이 진짜 발산을 잡았고, 그것은 엔진의 pre-existing 결함이었다.** `@(posedge cb.d)` 를
+t=8 에 arm 한 설계가 VM 에선 **즉시 발화**(t=8)하고 native 에선 정지했다. 원인: **커밋은
+`propagate_changes` 가 자기 changed set 을 이미 가져간 뒤에 일어나므로 그 변경은 "다음 propagate"
+몫인데, 엔진의 timestep 에는 다음 propagate 가 없다** — 루프가 break 하고 POSTPONED 가 돌고 시간이
+넘어간 **다음 슬롯**에서야 쓸리면서, **자기가 일어난 슬롯의 `slot_edge` 를 들고 도착한다**. tier-3 의
+루프는 deferred 리전 cascade 때문에 안정점에 propagate 를 이미 갖고 있어서 처음부터 옳았다. 수정 =
+엔진 안정점에 **`dirty` 가 비지 않았으면 한 번 더 propagate**(늦은 생산자가 하나뿐이므로 나머지
+코퍼스는 바이트 동일). ⇒ **native 가 옳았고 사다리가 올라갔다.**
+
+⚠️ **그 결함을 핀하던 테스트가 자기가 지키려던 것을 반대로 적고 있었다** —
+`clocking_holding_net_edge_still_fires` 는 `d = 1` 을 t=0 에 두고 t=8 에 arm 했으므로 **유일한 posedge
+가 wait 이 생기기 전(t=5)에** 있었다. 통과한 이유가 곧 결함이었다. 설계를 t=15 에 진짜 엣지가 오도록
+고쳤고, **평범한 넷으로 같은 모양을 지으면 iverilog 도 정지한다**는 것이 옛 기대가 틀렸다는 근거다.
+
+⚠️ **오라클 둘 다 앵커가 못 된다.** `iverilog 13` 은 `clocking` 을 **파싱조차 못 한다**(*syntax
+error*). `verilator 5.050` 은 지원하지만 **Observed 리전에서 샘플**하므로 Active 리전의
+`always @(posedge clk)` 가 **직전 엣지의** 샘플을 읽는다(`cb.d` = 0,1,2 vs vita 1,2,3). vita 는 엣지
+**감지 시점**에 커밋하는 단순화 모델(엔진의 documented hand-IEEE)이고 세 백엔드가 그것을 공유하므로,
+verilator 의 숫자를 핀하면 **vita 가 구현하지 않는 모델을 핀**하게 된다 ⇒ 앵커는 hand-IEEE.
+
+⚠️⚠️ **하네스 갭 여덟 번째** — `build_with_opts` 에 세 테이블이 없었다. 없으면 핸들러는 **아무것도
+안 하는 Null 바디 프로세스**이고 `cb.sig` 는 X 로 앉아 있어 **두 백엔드가 아무도 안 한 샘플에
+일치**한다. 이번에도 실패가 아니라 **그 파일의 앞선 일곱 주석을 읽어서** 찾았다.
+
+⚠️ **`wake.rs` 가 적어 둔 "GATE DEPENDENCY" 를 실측이 반증했다** — *"엔진은 `last_blocking_writer` 를
+propagate 시점에 LIVE 로 읽고 여기는 changed 튜플의 스냅샷을 읽으므로, 클로킹이나 force 를 받아들이면
+등가성이 깨진다"*. 엔진도 스냅샷한다(`edges.extend(…)` 프롤로그 = `take_changed` 와 같은 지점).
+**§4.5.338 재발이고, 이 이유는 애초에 참인 적이 없었다.**
+
+**측정**: **6,091 / 6,392 = 95.29%**(+16 · 예측 +16) · 전 스위트 **5427 green** · **flip 런**(실패
+3 = 백엔드 이름 핀) · **발산 0** · **뮤테이션 9/11 사망**.
+
+⚠️ **생존 둘은 등가이고 둘 다 쟀다** — ⓐ `store_sample_words` 의 **최상위 워드 마스크**는 도달
+불가다(홀딩 넷의 폭은 elaborate 가 소스에서 그대로 복사하므로, 들어오는 `Value` 는 목적지 폭으로 이미
+마스크돼 있다 · §4.5.332 의 `resize_word` 폭-0 가드와 같은 클래스) · ⓑ **두 페이즈의 순서**는 위의
+disjoint-net 성질 때문에 관측 불가 — **이 생존이 plan/apply 분리의 정당성 증명**이다.
+
+⚠️ **첫 배터리의 생존 하나는 등가가 아니라 내 차분 설계의 구멍이었다** — `reg clk = 1'b1;` 에 드라이버가
+없어 **posedge 가 한 번도 안 일어났고**, 아무것도 커밋되지 않는 행이 t0 seed 를 지우는 뮤테이션을
+통과시켰다. **엣지를 만들지 않는 클로킹 행은 아무것도 재지 않는다.**
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

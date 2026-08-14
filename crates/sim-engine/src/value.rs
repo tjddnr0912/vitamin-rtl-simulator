@@ -29,6 +29,40 @@ pub(crate) fn top_mask(width: u32) -> u64 {
     }
 }
 
+/// The masked word-by-word store a CLOCKING SAMPLE performs, on the raw planes:
+/// copy `v`'s words into `val`/`unk` (missing source words read as 0), mask the
+/// most-significant word to `m`, and report whether any stored bit moved.
+///
+/// Extracted because both stores sample — `SimState::commit_clocking_sample` and
+/// `NetArena::commit_clocking_sample` — and the two differ only in HOW they reach
+/// their planes (a resizable `Vec` pair vs a window into the flat buffer). The
+/// masking and the change verdict are the part that must not be spelled twice:
+/// a sample whose `changed` verdict differs between backends is a wake the two
+/// disagree about, which is invisible to a value compare.
+///
+/// `val.len() == unk.len()` is the caller's obligation and is the net's word
+/// count; the caller also owns the edge bookkeeping (`note_change` +
+/// `accumulate_edge`), which is per-store.
+#[inline]
+pub(crate) fn store_sample_words(val: &mut [u64], unk: &mut [u64], m: u64, v: &Value) -> bool {
+    let nw = val.len();
+    let mut changed = false;
+    for k in 0..nw {
+        let mut nv = v.val.get(k).copied().unwrap_or(0);
+        let mut nu = v.unk.get(k).copied().unwrap_or(0);
+        if k == nw - 1 {
+            nv &= m;
+            nu &= m;
+        }
+        if val[k] != nv || unk[k] != nu {
+            val[k] = nv;
+            unk[k] = nu;
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// The ≤64-bit resize rule on the RAW PLANES — `Value::resize`'s one-word case with
 /// the `Value` taken away, so a caller that already holds two `u64`s can enter the rule
 /// a level lower instead of building a `Value` to be allowed to ask.

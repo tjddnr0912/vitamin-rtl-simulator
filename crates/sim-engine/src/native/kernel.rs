@@ -538,6 +538,9 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             .ch
             .install_ca_deps(&sched.st.ca_of_net, ir.cont_assigns.len());
         let has_frames = !sched.st.func_table.is_empty();
+        // Built BEFORE the struct literal moves `sched`: the wake table's clocking
+        // diversion is keyed on the state's own two tables (see its field doc).
+        let wake = crate::native::wake::WakeTable::new(ir, &*sched.st);
         NativeKernel {
             ir,
             arena,
@@ -549,7 +552,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             nba_seq: 0,
             delayed_nba: BTreeMap::new(),
             nba_scratch_lhs: Lvalue { chunks: Vec::new() },
-            wake: crate::native::wake::WakeTable::new(ir),
+            wake,
             active: Vec::new(),
             inactive: Vec::new(),
             wheel: BTreeMap::new(),

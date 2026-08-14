@@ -221,6 +221,14 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         // said the opposite; review measured it.)
         return done(k, finish_kind(k));
     }
+    // N4 clocking: seed the preponed snapshot for the FIRST time slot, so a
+    // clocking edge at t=0 samples the init values. POSITION IS THE ENGINE'S,
+    // and it is not obvious from this file: `Scheduler::run` opens with this
+    // call, and everything above it here — the structural settle and `arm_t0` —
+    // is what `simulate` does for the engine BEFORE calling `run`. So the t=0
+    // preponed values include the declaration initializers, as they do there.
+    // No-op without clocking blocks ⇒ byte-identical.
+    snapshot_preponed(k);
     let max_deltas = k.k_delta_budget();
     let time_limit = k.k_time_limit();
     loop {
@@ -425,6 +433,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         }
         k.sched.st.now = next;
         k.wake.reset_edge_seen();
+        // N4 clocking: the PREPONED snapshot of every clocking input, taken at
+        // the start of the new slot — before any slot activity, so each source
+        // holds the value it had ENTERING the slot. Immediately after the
+        // edge-cluster reset, as in the engine's loop.
+        snapshot_preponed(k);
         // Delayed cont-assign writes due at this tick, generation-filtered by
         // the shared `take_due_delayed_ca`. These are NET writes, not process
         // resumes, so the loop-top settle would not see them — propagate here
@@ -697,6 +710,16 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
 /// ⚠️ And there is no "prev-refresh" here to be the arena's `take_changed`:
 /// this store has no `prev` at all — the changed set IS `dirty` membership, and
 /// the edge mask resets on a net's first dirtying of the next slot.
+/// N4 clocking: take the preponed snapshot through the ARENA.
+///
+/// The borrow split is `k_dispatch_systask`'s, not the kernel's: `preponed_buf`
+/// and the input list live in `SimState`, which both kernels borrow, so only the
+/// READ needs routing.
+fn snapshot_preponed(k: &mut NativeKernel) {
+    let (sched, arena) = (&mut *k.sched, &k.arena);
+    sched.st.snapshot_preponed_with(Some(arena));
+}
+
 fn propagate(k: &mut NativeKernel) {
     let mut changed = Vec::new();
     k.arena.take_changed(&mut changed);
@@ -704,7 +727,26 @@ fn propagate(k: &mut NativeKernel) {
         return;
     }
     let mut woken = Vec::new();
-    k.wake.wake(&changed, &mut woken);
+    let mut clocked = Vec::new();
+    k.wake.wake(&changed, &mut woken, &mut clocked);
+    // N4 clocking: apply each fired handler's commit HERE — at edge detection,
+    // before the Active batch drains — so every same-slot reader of `cb.sig` sees
+    // the committed sample independent of process order. The engine does it at
+    // the same point, inside its pass (a); interleaving with the queueing below
+    // is unobservable because the commit's writes land in the NEXT changed set
+    // either way (`take_changed` has already run).
+    //
+    // The plan is decided against the ARENA and applied to the arena. Both
+    // halves are the slice: an unthreaded plan reads the engine's holding nets
+    // (which a native run never writes) and an unthreaded apply writes them.
+    for p in clocked {
+        let Some(writes) = k.sched.st.clocking_commit_plan(Some(&k.arena), p) else {
+            continue;
+        };
+        for (net, v) in writes {
+            k.arena.commit_clocking_sample(net, &v);
+        }
+    }
     for p in woken {
         push_sorted_native(
             &mut k.active,

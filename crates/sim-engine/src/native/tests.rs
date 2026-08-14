@@ -513,6 +513,16 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // The CRV half too. `class_crv`/`class_virtual` are refusal rows now, and
         // a row whose table is not installed is a row no test can reach — the
         // `defer_marks` lesson three entries up, applied before it bites.
+        // …and the three CLOCKING tables (slice #1). ⚠️ **EIGHTH entry**, and it
+        // has the list's worst failure mode: a `clocking` block lowers to an
+        // ordinary holding net plus a marked `always @(clk);` handler whose body
+        // is NULL, so WITHOUT these tables the handler is a process that does
+        // nothing and `cb.sig` sits at its X init forever — on BOTH backends,
+        // agreeing about a sample neither takes. Found by reading this list
+        // before writing the slice's tests, as `class_handle_nets` was.
+        clocking_inputs: sc.clocking_inputs,
+        clocking_commit: sc.clocking_commit,
+        clocking_outputs: sc.clocking_outputs,
         class_rand: sc.class_rand,
         class_constraints: sc.class_constraints,
         class_dist: sc.class_dist,
@@ -1454,8 +1464,8 @@ fn s1d3_wake_decision_matches_engine() {
         let Ok(mut arena) = NetArena::build(&ir, &opts) else {
             continue;
         };
-        let mut wake = crate::native::wake::WakeTable::new(&ir);
         let mut st = fresh_state(&ir, &sink);
+        let mut wake = crate::native::wake::WakeTable::new(&ir, &st);
         for &n in &opts.two_state_nets {
             if (n as usize) < st.two_state.len() {
                 st.two_state[n as usize] = true;
@@ -1677,7 +1687,16 @@ fn compare_wake(
     let mut changed = Vec::new();
     arena.take_changed(&mut changed);
     let mut native_woken = Vec::new();
-    wake.wake(&changed, &mut native_woken);
+    // The clocking diversion list. Empty for every design in this corpus (no
+    // `clocking` block spells one), which is why it is asserted rather than
+    // dropped: a diversion that started firing here would silently REMOVE
+    // processes from the compared list and the comparison would still pass.
+    let mut native_clocked = Vec::new();
+    wake.wake(&changed, &mut native_woken, &mut native_clocked);
+    assert!(
+        native_clocked.is_empty(),
+        "{name}/pass{pass}: a clocking handler was diverted in a corpus with no clocking block"
+    );
     assert_eq!(
         engine_woken, native_woken,
         "{name}/pass{pass}: wake decision diverged (changed={changed:?})"

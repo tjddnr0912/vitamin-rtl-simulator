@@ -264,9 +264,11 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         coverage_manifest: _,
         probed_nets,
         stage_stmts,
-        clocking_inputs,
-        clocking_commit,
-        clocking_outputs,
+        // Slice #1: see the deleted `clocking` row below — three tables in
+        // `SimState`, which both kernels borrow; what was missing was routing.
+        clocking_inputs: _,
+        clocking_commit: _,
+        clocking_outputs: _,
         // A8-b: see the deleted `deferred_assert` row below — the maturation
         // reads no net; what was missing were the two regions.
         defer_marks: _,
@@ -328,11 +330,32 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // the existing engine rather than silently losing its trace.
     flag(&mut out, "probe", probed_nets.len());
     flag(&mut out, "stage", stage_stmts.len());
-    flag(
-        &mut out,
-        "clocking",
-        clocking_inputs.len() + clocking_commit.len() + clocking_outputs.len(),
-    );
+    // ⭐ **Slice #1: `clocking` was ROUTING plus one position.** A clocking block
+    // is not a runtime mechanism either: elaborate mints a HOLDING net per item,
+    // aliases `cb.sig` to it, and emits a marked `always @(clk);` handler with a
+    // NULL body. What reaches the engine is ordinary IR plus three `SimState`
+    // tables (`clocking_inputs`/`clocking_commit`/`clocking_outputs`) and the
+    // `preponed_buf` — all borrowed by both kernels, exactly `dyn_heap`'s
+    // situation.
+    //
+    // Store-bound were the two ENDS: `snapshot_preponed` read the SOURCE nets and
+    // the commit read/wrote the HOLDING nets, both through the engine's store. On
+    // a native run that means every `cb.sig` commits whatever the engine's slot
+    // happens to hold — and X is a defined value, so this would have been silent
+    // (the A1-ii shape). Both are threaded now; the plan/apply split is what lets
+    // one decision drive two write points (`clocking_commit_plan`).
+    //
+    // The POSITION is the third piece and it is not a table: the engine performs
+    // the commit inside `propagate_changes` pass (a), after the fire/busy/
+    // self-write tests and before the multi-net dedup, then `continue`s. Tier-3's
+    // `WakeTable::wake` diverts a handler at that exact point.
+    //
+    // ⚠️ Recorded because it is NOT this row's business to fix: vita's clocking
+    // model commits at edge DETECTION rather than in the Observed region, so an
+    // Active-region `always @(posedge clk)` reads THIS edge's sample where
+    // verilator (which does support clocking blocks) reads the PREVIOUS one. That
+    // is a deliberate hand-IEEE simplification of the engine's, documented at
+    // `clocking_commit_plan`, and both vita backends now share it.
     // ⭐ **A8-b: `deferred_assert` was CONSERVATIVE — the machinery was already
     // shared, only the two REGIONS were missing.** §16.4.3 renders a deferred
     // action's text at REACH, so what is enqueued is a `String`; maturation reads
