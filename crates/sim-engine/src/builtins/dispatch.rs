@@ -163,7 +163,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     // in `stage_stmts` — NEVER print; instead (under `+STAGE_TRACE`) append a
     // `stage.jsonl` line. Args are evaluated HERE at execution time.
     if sched.st.stage_stmts.contains(&sid) {
-        return run_vita_stage(sched, args);
+        return run_vita_stage(sched, nets, args);
     }
     // §7.10 whole-handle copy `dst = src`: a no-op Display whose StmtId maps to
     // (dst, src) — DEEP-clone the src heap object (VALUE semantics: later

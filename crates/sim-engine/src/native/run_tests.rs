@@ -5132,7 +5132,16 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
              row it names is split or lifted, the sentence stops being true \
              while the NUMBER still passes",
         ),
-        ("render.rs", 2, "`$vita_stage` is the `stage` row"),
+        (
+            "render.rs",
+            0,
+            "⚠️⚠️ **ZERO — this file has no raw store read left either.** It was \
+             2 (`$vita_stage`'s label and its value list, held by the `stage` \
+             row) until slice #6 threaded both. Kept at 0 for the reason \
+             `dispatch.rs`'s entry gives: this pin's job is to notice a NEW raw \
+             read appearing, and a file that currently has none is exactly \
+             where one is easiest to add unnoticed",
+        ),
         (
             "queues_io.rs",
             2,

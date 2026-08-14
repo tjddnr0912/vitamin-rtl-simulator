@@ -263,7 +263,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // A7: see the deleted `coverage` row below — desugared to ordinary IR.
         coverage_manifest: _,
         probed_nets,
-        stage_stmts,
+        // Slice #6: see the deleted `stage` row below — two argument reads.
+        stage_stmts: _,
         // Slice #1: see the deleted `clocking` row below — three tables in
         // `SimState`, which both kernels borrow; what was missing was routing.
         clocking_inputs: _,
@@ -326,11 +327,20 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // 0.00% coverage at exit 0. The bits are now harvested from whichever store
     // ran, before the arena is dropped (`simulate`'s `cover_bits`).
 
-    // The G2 probe/stage rails ride the interpreter's change hooks; tier-3 v1
-    // does not reproduce them (doc-21 §4.3), so an instrumented run stays on
-    // the existing engine rather than silently losing its trace.
+    // The G2 PROBE rail rides the interpreter's change hooks (`emit_probe_change`
+    // is called from `note_change`); tier-3 v1 does not reproduce them (doc-21
+    // §4.3), so an instrumented run stays on the existing engine rather than
+    // silently losing its trace.
     flag(&mut out, "probe", probed_nets.len());
-    flag(&mut out, "stage", stage_stmts.len());
+    // ⭐ **Slice #6: `stage` was TWO READS.** ⚠️ It was in the same sentence as
+    // `probe` and that grouping was wrong: `$vita_stage` is not a change hook at
+    // all, it is an explicit call site that elaborate lowers to a no-op
+    // `Display` plus this StmtId set. The rail's state (`stage_lines`,
+    // `stage_idx`, `stage_enabled`) is `SimState`, borrowed by both kernels.
+    // What was store-bound was `run_vita_stage`'s label and value reads, which
+    // used a bare `sched.eval` — so a native run would have written a
+    // `stage.jsonl` describing the ENGINE's untouched slots. Silently wrong
+    // rather than absent, exactly like A7's `coverage.json`.
     // ⭐ **Slice #1: `clocking` was ROUTING plus one position.** A clocking block
     // is not a runtime mechanism either: elaborate mints a HOLDING net per item,
     // aliases `cb.sig` to it, and emits a marked `always @(clk);` handler with a

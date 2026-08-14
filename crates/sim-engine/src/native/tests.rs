@@ -533,6 +533,11 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // so without it a `$fmonitor(fd, …)` is a plain `$monitor` that PRINTS
         // the fd as a value to stdout, on both backends, agreeing about a
         // design neither performs.
+        // …and the STAGE marker set (slice #6). ELEVENTH entry: `$vita_stage`
+        // lowers to a no-op `Display` plus this StmtId set, so without it the
+        // call PRINTS its label and values to stdout instead of recording a
+        // `stage.jsonl` line — on both backends.
+        stage_stmts: sc.stage_stmts,
         file_directed_stmts: sc.file_directed_stmts,
         assign_ranks: sc.assign_ranks,
         clocking_inputs: sc.clocking_inputs,

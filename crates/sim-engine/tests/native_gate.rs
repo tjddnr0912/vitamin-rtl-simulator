@@ -264,12 +264,15 @@ fn sidecar_families_reject_from_opts() {
     // ⚠️ `clocking_inputs` was the fourth row here and is now CORE (slice #1) —
     // re-spelled as a `stage_stmts` entry rather than deleted, so this test keeps
     // measuring that several rows report TOGETHER rather than short-circuiting.
-    o.stage_stmts.insert(0);
+    // ⚠️ `stage_stmts` was the fourth row here and is CORE since slice #6 (its
+    // machinery was two argument reads). A third `probed_nets` entry keeps this
+    // test measuring that several rows report TOGETHER.
+    o.probed_nets.push(2);
     let e = design_eligibility(&ir, &o);
     assert!(!e.eligible);
     assert_eq!(
         e.reject_reasons.into_iter().collect::<Vec<_>>(),
-        vec![("fork", 1), ("probe", 2), ("stage", 1)]
+        vec![("fork", 1), ("probe", 3)]
     );
 }
 
@@ -289,6 +292,31 @@ fn force_release_is_core() {
     );
     assert!(ok, "force/release must not disqualify: {rs:?}");
     assert!(rs.is_empty(), "and nothing else may fire either: {rs:?}");
+}
+
+/// Slice #6: the STAGE marker set is CORE.
+///
+/// ⚠️ It shared a comment with `probe` and the grouping was wrong: `--probe`
+/// rides `note_change`, but `$vita_stage` is an explicit call site lowered to a
+/// no-op `Display` plus this StmtId set. `probe` is still a row.
+#[test]
+fn stage_markers_are_core() {
+    let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
+    let mut o = SimOpts::default();
+    o.stage_stmts.insert(0);
+    let e = design_eligibility(&ir, &o);
+    assert!(
+        e.eligible,
+        "stage markers must not disqualify: {:?}",
+        e.reject_reasons
+    );
+    // …and `probe` must NOT have moved with it.
+    let mut o2 = SimOpts::default();
+    o2.probed_nets.push(0);
+    assert!(
+        !design_eligibility(&ir, &o2).eligible,
+        "probe is still a row"
+    );
 }
 
 /// Slice #4: the FILE-DIRECTED marker set is CORE.

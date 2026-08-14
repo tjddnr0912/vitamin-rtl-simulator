@@ -645,21 +645,34 @@ pub(crate) fn time_digits_shift(digits: &str, shift: i64, prec: usize) -> String
 /// `stage.jsonl` line `{v,t,kind:"stage",label,idx,vals[]}` — arg[0] is the label
 /// (string), args[1..] are the values (each formatted like `$display %0d`, as JSON
 /// strings so x/z is representable). NEVER prints (a stage is a structured record).
-pub(crate) fn run_vita_stage(sched: &mut Scheduler, args: &[u32]) -> Ctl {
+///
+/// Slice #6 threads the reader. The RAIL needs no routing — `stage_lines`,
+/// `stage_idx` and `stage_enabled` are `SimState`, one object both kernels
+/// borrow, and `$vita_stage` is an explicit CALL SITE rather than a change hook
+/// (unlike `--probe`, which rides `note_change`). What was store-bound was the
+/// two argument reads: an unthreaded label and value list record whatever the
+/// ENGINE's slots hold, so a native run's `stage.jsonl` would be a trace of a
+/// store the design never wrote — a G2 artifact that is silently wrong rather
+/// than absent, the same failure mode A7's `coverage.json` had.
+pub(crate) fn run_vita_stage<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    args: &[u32],
+) -> Ctl {
     if !sched.st.stage_enabled {
         return Ctl::Continue; // no capture without +STAGE_TRACE
     }
     let label = args
         .first()
         .map(|&a| {
-            let v = sched.eval(a);
+            let v = crate::builtins::eval_task_arg(sched, nets, a);
             String::from_utf8_lossy(&crate::eval::value_str_bytes(&v)).into_owned()
         })
         .unwrap_or_default();
     let vals: Vec<String> = args
         .iter()
         .skip(1)
-        .map(|&a| fmt_dec(&sched.eval(a)))
+        .map(|&a| fmt_dec(&crate::builtins::eval_task_arg(sched, nets, a)))
         .collect();
     let now = sched.st.now;
     let idx = sched.st.stage_idx;

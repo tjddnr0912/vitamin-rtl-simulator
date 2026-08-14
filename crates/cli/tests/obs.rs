@@ -645,6 +645,47 @@ fn stage_3way_matches_display() {
     assert_eq!(vals, disp, "stage vals must equal $display %0d\n{sj}");
 }
 
+/// Slice #6 ABSOLUTE ANCHOR — the stage rail on TIER-3.
+///
+/// The `stage` design row said the G2 rails "ride the interpreter's change
+/// hooks", and for `--probe` that is true. `$vita_stage` is not a change hook at
+/// all: elaborate lowers it to a no-op `Display` plus a StmtId, and the rail's
+/// state lives in `SimState`, which both kernels borrow. What was store-bound
+/// was `run_vita_stage`'s two argument reads (a bare `sched.eval`).
+///
+/// Every part of this design is the discriminator: the LABEL comes from a net
+/// (a literal label is a constant and would agree either way), so does each
+/// VALUE, and both move between the two calls. An unthreaded read records the
+/// ENGINE's untouched slots — a `stage.jsonl` that is silently wrong rather
+/// than absent, which is the failure mode A7's `coverage.json` had.
+#[test]
+fn stage_jsonl_on_tier_3() {
+    let src = "module top;\n\
+         reg [7:0] a = 8'd0; reg [15:0] w = 16'd0; reg [63:0] lbl = \"phaseA\";\n\
+         initial begin a = 8'd5; w = 16'd300;\n\
+           $vita_stage(\"start\", a, w);\n\
+           #1 a = 8'd9; w = 16'hBEEF;\n\
+           $vita_stage(lbl, a, w);\n\
+           #1 $vita_stage(\"end\"); $finish; end\n\
+         endmodule\n";
+    let (out, code, obs) = run(src, &["+STAGE_TRACE", "--backend", "native"]);
+    assert_eq!(code, 0, "{out}");
+    // ANTI-VACUITY: a refused design falls back to the VM, and this test would
+    // then be a second copy of `stage_jsonl_capture`.
+    let rj = read(&obs.join("run.json"));
+    assert!(
+        rj.contains("\"backend\": \"native\""),
+        "the design did not run natively:\n{rj}"
+    );
+    assert_eq!(
+        read(&obs.join("stage.jsonl")),
+        "{\"v\":1,\"t\":0,\"kind\":\"stage\",\"label\":\"start\",\"idx\":0,\"vals\":[\"5\",\"300\"]}\n\
+         {\"v\":1,\"t\":1,\"kind\":\"stage\",\"label\":\"phaseA\",\"idx\":1,\"vals\":[\"9\",\"48879\"]}\n\
+         {\"v\":1,\"t\":2,\"kind\":\"stage\",\"label\":\"end\",\"idx\":2,\"vals\":[]}\n",
+        "tier-3 stage.jsonl"
+    );
+}
+
 #[test]
 fn stage_no_plusarg_is_noop() {
     // Without +STAGE_TRACE: no stage.jsonl AND no stdout leak ($vita_stage suppressed).
