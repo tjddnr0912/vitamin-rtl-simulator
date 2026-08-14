@@ -1247,6 +1247,24 @@ endmodule
         Some("a subroutine body that suspends, forks or calls a task"),
     );
 
+    // (a2) slice #7: a `Terminator::Call` in a FUNCTION body must STILL refuse.
+    // Synthesized rather than written in SystemVerilog on purpose — elaborate
+    // refuses the only source shape that produces one (a nested call to a
+    // subroutine with an output formal, E3009, pinned by
+    // `a_nested_call_in_a_function_body_is_refused_by_elaborate`), so this arm
+    // is fail-closed over an empty set and an IR mutation is the only way to
+    // ask it anything. `run_frame_call` has no `Call` arm and would `break`.
+    let mut ir = base.clone();
+    ir.blocks[entry].term = sim_ir::Terminator::Call {
+        target: 0,
+        ret_bb: entry as u32,
+    };
+    assert_eq!(
+        NetArena::buildable(&ir, &opts).err(),
+        Some("a subroutine body that suspends, forks or calls a task"),
+        "a nested call in a FUNCTION body (not a task) must still refuse"
+    );
+
     // (b) a STATEMENT the executor's `_ => {}` would drop. The lvalue is the
     // function's own return slot, so the body stays inside its frame and the
     // containment row cannot be the one refusing.
@@ -1403,5 +1421,89 @@ endmodule
         refused,
         Default::default(),
         "slice #3 differential: refusal breakdown moved"
+    );
+}
+
+/// Slice #7 DIFFERENTIAL — nested task calls, native against the VM.
+#[test]
+fn nested_task_calls_match_the_vm() {
+    let designs: Vec<(&str, &str)> = vec![
+        // Three levels deep, so the recursion is not a single step, with a
+        // module net read at the BOTTOM.
+        (
+            "three-level nested task call",
+            r#"
+module top;
+  reg [7:0] g = 8'd2;
+  task automatic lvl3(input [7:0] x, output [7:0] y); y = x * g; endtask
+  task automatic lvl2(input [7:0] x, output [7:0] y);
+    reg [7:0] t; lvl3(x, t); y = t + 8'd1;
+  endtask
+  task automatic lvl1(input [7:0] x, output [7:0] y);
+    reg [7:0] t; lvl2(x, t); y = t + 8'd10;
+  endtask
+  reg [7:0] r;
+  initial begin lvl1(8'd3, r); $display("D r=%0d", r); g = 8'd5; lvl1(8'd3, r); $display("D r=%0d", r); $finish; end
+endmodule
+"#,
+        ),
+        // A nested call whose callee has TWO output formals and whose actuals
+        // are the caller's frame locals — the copy-out order matters.
+        (
+            "nested call with two output formals",
+            r#"
+module top;
+  task automatic two(input [7:0] x, output [7:0] a, output [7:0] b);
+    a = x + 8'd1;
+    b = x + 8'd2;
+  endtask
+  task automatic caller(input [7:0] x, output [7:0] r);
+    reg [7:0] p; reg [7:0] q;
+    two(x, p, q);
+    r = p * 8'd10 + q;
+  endtask
+  reg [7:0] r;
+  initial begin caller(8'd3, r); $display("T r=%0d", r); $finish; end
+endmodule
+"#,
+        ),
+        // A nested call inside a LOOP in the caller's body, so the recursion
+        // runs several times against one activation window.
+        (
+            "nested call inside a loop",
+            r#"
+module top;
+  reg [7:0] mem [0:3];
+  task automatic get(input [7:0] i, output [7:0] v); v = mem[i]; endtask
+  task automatic sum(output [7:0] s);
+    integer i; reg [7:0] v;
+    s = 8'd0;
+    for (i = 0; i < 4; i = i + 1) begin get(i[7:0], v); s = s + v; end
+  endtask
+  reg [7:0] s;
+  initial begin
+    mem[0] = 8'd1; mem[1] = 8'd2; mem[2] = 8'd3; mem[3] = 8'd4;
+    sum(s); $display("S s=%0d", s);
+    mem[2] = 8'd30; sum(s); $display("S s=%0d", s);
+    $finish;
+  end
+endmodule
+"#,
+        ),
+    ];
+    let mut ran = 0usize;
+    let mut refused: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    for (name, src) in &designs {
+        match agree(src, name) {
+            Ok(()) => ran += 1,
+            Err(r) => *refused.entry(r).or_default() += 1,
+        }
+    }
+    assert_eq!(ran, 3, "slice #7 differential: runnable count moved");
+    assert_eq!(
+        refused,
+        Default::default(),
+        "slice #7 differential: refusal breakdown moved"
     );
 }

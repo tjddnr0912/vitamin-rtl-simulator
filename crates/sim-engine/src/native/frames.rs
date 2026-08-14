@@ -217,6 +217,7 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         if fd.is_task && susp.contains(&(fi as u32)) {
             driven_body_is_runnable(ir, opts, &susp, fd.entry, m.base_net, m.locals_len)?;
         } else {
+            w.body_is_task = fd.is_task;
             body_stays_in_its_window(&mut w, fd.entry, m.base_net, m.locals_len)?;
         }
     }
@@ -567,6 +568,12 @@ struct Walk<'i> {
     wnets: Vec<u32>,
     /// Did this walk descend through an `Expr::Call`? Reset by `restart`.
     saw_call: bool,
+    /// Is the body currently being walked a TASK's?
+    ///
+    /// Set by the caller, because the answer decides which of the two delegated
+    /// executors runs it — and they differ on exactly one terminator. See the
+    /// `Call` arm in `func_body`.
+    body_is_task: bool,
     /// Block-id worklist (`func_body`) and expression worklist (`expr`), kept
     /// apart because the two interleave: a `Branch` walks its condition while
     /// block ids are still pending.
@@ -585,6 +592,7 @@ impl<'i> Walk<'i> {
             nets: Vec::new(),
             wnets: Vec::new(),
             saw_call: false,
+            body_is_task: false,
             stack: Vec::new(),
             estack: Vec::new(),
         }
@@ -703,6 +711,43 @@ impl<'i> Walk<'i> {
                 // B1 cut rejects them in a function body), which would SILENTLY
                 // end the call there. Refusing keeps the arena out of any design
                 // where that defensive break could run.
+                // ⭐ **Slice #7 SPLIT THIS ARM, and the census is the whole
+                // argument.** Instrumented over every design the row blocked:
+                // **all 7 are a nested `Terminator::Call`, and all 7 are in a
+                // TASK body**; `Delay`/`Wait`/`Fork` are zero, because
+                // elaborate's B1 cut rejects timing control in a subroutine
+                // (measured directly — both spellings of `disable fork` in a
+                // function body are E3009).
+                //
+                // The two delegated executors answer `Call` differently, and
+                // only ONE of them is what this walk was written for:
+                //
+                //  * `run_frame_call` (a plain function through `Expr::Call`)
+                //    has no `Call` arm and `break`s — the nested call would be
+                //    silently skipped and the function would return early.
+                //  * `run_task_with` (a synchronous task, and A3-i's subset
+                //    path) RECURSES into it, binds the formals and copies the
+                //    outputs back — and A3-iii threaded the caller's store
+                //    through it.
+                //
+                // So the refusal is kept for a function and lifted for a task.
+                //
+                // ⚠️ And the kept half is UNREACHABLE, measured rather than
+                // assumed: the only way a function body acquires a
+                // `Terminator::Call` is a nested call to a subroutine with an
+                // output formal, and elaborate refuses exactly that — its E3009
+                // names this case in so many words ("any position inside a
+                // FUNCTION body lowered as a call frame … has no call statement
+                // of its own to carry the copy-out — the same call in a TASK
+                // body, or in a module process, does work"). iverilog rejects
+                // the same source. The arm stays because it is fail-closed and
+                // because the reason it encodes is about `run_frame_call`, not
+                // about elaborate — if that executor ever grows a `Call` arm,
+                // this is the line that has to move.
+                // A nested callee that SUSPENDS is not this row's problem: it is
+                // refused by its OWN frame's `frame_suspends` row, which
+                // `frames_admitted` asks of every subroutine.
+                sim_ir::Terminator::Call { .. } if self.body_is_task => {}
                 sim_ir::Terminator::Delay { .. }
                 | sim_ir::Terminator::Wait { .. }
                 | sim_ir::Terminator::Fork { .. }

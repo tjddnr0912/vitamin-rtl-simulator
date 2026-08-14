@@ -7562,3 +7562,111 @@ endmodule
         "slice #5 differential: refusal breakdown moved"
     );
 }
+
+/// Slice #7 ABSOLUTE ANCHOR — a NESTED task call in a delegated body,
+/// **iverilog-pinned**.
+///
+/// The row said "a subroutine body that suspends, forks or calls a task".
+/// Instrumented over every design it blocked: **all 7 are a nested
+/// `Terminator::Call`, all 7 in a TASK body**, and `Delay`/`Wait`/`Fork` are
+/// zero — elaborate's B1 cut rejects timing control in a subroutine, so those
+/// three clauses describe shapes that cannot arrive.
+///
+/// The two delegated executors answer `Call` differently and only one of them is
+/// what the walk was written for: `run_frame_call` has no `Call` arm and breaks,
+/// while `run_task_with` recurses, binds the formals and copies the outputs back.
+/// So the row is kept for a function and lifted for a task.
+///
+/// `g` is a MODULE net read inside the INNER callee, and it moves between the two
+/// calls — that is A3-iii's threading discriminator reached one frame deeper, and
+/// the only thing in this design that a wrong store would change.
+#[test]
+fn a_nested_task_call_has_its_iverilog_values_on_tier_3() {
+    let src = r#"
+module top;
+  reg [7:0] g = 8'd0;
+  task automatic inner(input [7:0] x, output [7:0] y);
+    y = x + g;
+  endtask
+  task automatic outer(input [7:0] a, output [7:0] r);
+    reg [7:0] t;
+    inner(a, t);
+    inner(t, r);
+  endtask
+  reg [7:0] res;
+  initial begin
+    g = 8'd3;
+    outer(8'd10, res);
+    $display("A res=%0d", res);
+    g = 8'd100;
+    outer(8'd1, res);
+    $display("B res=%0d", res);
+    $finish;
+  end
+endmodule
+"#;
+    let (ir, opts) = build_with_opts(src);
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    assert_eq!(
+        sink.events.into_inner(),
+        vec!["out|A res=16\n".to_string(), "out|B res=201\n".to_string(),],
+        "nested task call reading a module net (iverilog-pinned)"
+    );
+}
+
+/// Slice #7's OTHER half: a `Terminator::Call` in a FUNCTION body is
+/// UNREACHABLE, and this pins the reason rather than the row.
+///
+/// The only source shape that would produce one is a nested call to a subroutine
+/// with an output formal, and elaborate refuses it — naming this exact position.
+/// iverilog rejects the same source. So the kept arm is fail-closed over an
+/// empty set, which is worth stating: the day `run_frame_call` grows a `Call`
+/// arm, this test is what says the arm had no population to begin with.
+#[test]
+fn a_nested_call_in_a_function_body_is_refused_by_elaborate() {
+    let src = r#"
+module top;
+  reg [7:0] g = 8'd0;
+  function automatic [7:0] mid(input [7:0] x, output [7:0] dbg);
+    dbg = x + g;
+    mid = dbg + 8'd1;
+  endfunction
+  function automatic [7:0] hi(input [7:0] x);
+    reg [7:0] t;
+    hi = mid(x, t) + t;
+  endfunction
+  reg [7:0] r;
+  initial begin g = 8'd3; r = hi(8'd10); $display("F r=%0d", r); $finish; end
+endmodule
+"#;
+    let (toks, le) = hdl_lexer::lex(src);
+    assert!(le.is_empty(), "lex: {le:?}");
+    let (su, pe) = hdl_parser::parse(&toks, src);
+    assert!(pe.is_empty(), "parse: {pe:?}");
+    let sink = MergedSink::default();
+    let _ = elaborate::elaborate_with_timescale(
+        &su.expect("source unit"),
+        &sink,
+        &std::collections::BTreeMap::new(),
+        -9,
+    );
+    let events = sink.events.into_inner();
+    assert!(
+        events.iter().any(|e| e.contains("VITA-E3009")),
+        "a nested output-formal call inside a FUNCTION body must be loud: {events:?}"
+    );
+}

@@ -1442,6 +1442,41 @@ V1 슬라이스 1 이 둘로 시작했고 A8-b 가 하나(deferred)를, 이것�
 이유로 지우지 않고 0 을 유지한다. ⚠️ **하네스 갭 열한 번째** — `build_with_opts` 에 `stage_stmts` 가
 없었다(없으면 `$vita_stage` 가 레이블과 값을 **stdout 에 찍는 평범한 `$display`**).
 
+#### 5.1-ad ✅ #7 frame body suspends — **네 절 중 셋은 도달 불가였고, 남은 하나는 실행기 둘 중 하나만의 이야기였다** · 96.14% → **96.26%** (2026-08-14)
+
+행의 문구는 *"a subroutine body that suspends, forks or calls a task"* — **네 개의 절**이다. 계측:
+
+| 터미네이터 | 설계 수 |
+|---|---|
+| `Terminator::Call`(중첩 호출) | **7** |
+| `Delay` · `Wait` · `Fork` | **0** |
+
+셋이 0 인 이유는 우연이 아니다 — **elaborate 의 B1 컷이 서브루틴 안의 타이밍 제어를 거부**한다(슬라이스 #3
+에서 `disable fork` 두 철자로 직접 쟀다). 즉 그 세 절은 **도착할 수 없는 모양**을 적고 있었다.
+
+⭐⭐ **남은 하나는 두 위임 실행기 중 하나만의 이야기다.** 같은 walk 가 두 종류의 바디에 적용되는데 `Call`
+에 대한 답이 다르다:
+
+| 실행기 | 도달 경로 | `Terminator::Call` |
+|---|---|---|
+| `run_frame_call` | 평범한 함수, `Expr::Call` | **arm 이 없다 → `break`**(중첩 호출이 조용히 건너뛰어지고 함수가 조기 반환) |
+| `run_task_with` | 동기 태스크, A3-i 의 subset 경로 | **재귀**해서 formal 을 바인딩하고 output 을 복사해 돌려준다(A3-iii 가 호출자 store 를 스레드했다) |
+
+그리고 **7 이 전부 태스크**다 ⇒ 함수에 대해서는 유지하고 태스크에 대해서만 들어 올린다. 중첩 callee 가
+정지하는 경우는 이 행의 문제가 아니다 — **자기 프레임의 `frame_suspends` 행**이 잡는다.
+
+⚠️ **유지한 절반은 도달 불가이고 그것도 쟀다** — 함수 바디가 `Terminator::Call` 을 얻는 유일한 소스
+모양은 output formal 을 가진 서브루틴에 대한 중첩 호출인데, **elaborate 가 정확히 그것을 거부**하고
+진단문이 이 자리를 말 그대로 지목한다(*"any position inside a FUNCTION body lowered as a call frame …
+the same call in a TASK body, or in a module process, does work"*). iverilog 도 같은 소스를 거부한다.
+arm 은 fail-closed 로 남기되 **IR 뮤테이션으로만 물을 수 있으므로** 합성 케이스를 지어 핀했다.
+
+**측정**: **6,199 / 6,440 = 96.26%**(+7 · 예측 +7) · 전 스위트 **5443 green** · **flip 런**(실패 3 =
+백엔드 이름 핀) · **발산 0** · **뮤테이션 4/4 사망**.
+
+⚠️ 절차: 케이스 D 의 첫 치환이 **의미 없는 no-op**(`if false` 팔을 원본 앞에 끼워 넣어 원본이 그대로
+실행)이었다 — SURVIVED 로 세지 않고 `break` 로 다시 걸었다. §5.1-s 에서 같은 실수를 한 적이 있다.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의
