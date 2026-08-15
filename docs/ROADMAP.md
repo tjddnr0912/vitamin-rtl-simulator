@@ -1984,6 +1984,62 @@ IEEE §10.4.2 를 인용하며 거부). **관측 가능한 형태가 아니라 �
 
 전 스위트 **5462 green** · flip 발산 **0**(실패 3 은 전부 *"기본 백엔드가 vm"* 핀).
 
+#### 5.1-ao ✅ A4-c `wait fork` — **행의 이유가 옳았고 그래서 그것은 waiter 가 아니었다** · 99.80% → **99.89%** (2026-08-16)
+
+**+10 설계.** ⭐⭐ **실행기 게이트 층이 census 에서 통째로 사라졌다** — 남은 거부는 **7 개이고 전부
+`D:disable_fork`** = A4-d 하나뿐이다.
+
+⭐ **착수 census 가 행의 세 절을 갈랐고 답이 하나였다** — 행은 *"a `wait fork`, a `fork`, or a call
+statement whose callee forks"* 인데 계측하니 **8 개 전부가 bare `wait fork;`** 이고 나머지 둘
+(`WaitCause::Named` · 사이드카 없는 `Terminator::Call`)은 **코퍼스 인구 0** 이다.
+
+⭐⭐ **거부 이유는 참이었고, 참인 채로 설계를 지시했다.** 행은 *"nothing in `fire_waiters` can ever
+satisfy the cause, so admitting it would park the process forever"* 라고 적었다 — **맞다. `wait fork` 는
+waiter 가 아니기 때문이다.** 걸어 둘 넷이 없고, 그것을 깨우는 것은 **자식 완료 부기**다
+(`exec_wait_fork` 가 살아 있는 자식을 세어 park 하고 `on_child_complete_into` 가 카운트다운한다).
+그리고 그 부기는 A4-a 이래 tier-3 에 있다 ⇒ 워크는 **아무도 못 발화시키는 waiter 를 거는 대신 위임
+호출로 답한다**. **재개 경로는 코드가 0줄이다** — `on_child_complete_into` 가 부모를 join barrier 와
+**같은 `ready` 벡터**에 넣고 `k_body_done` 이 이미 그것을 드레인한다.
+
+**지은 것 = seam 하나(`k_exec_wait_fork`) + arm 하나.** `Scheduler` 도 오버라이드한다(바디 차분이
+`K = Scheduler` 로 같은 워크를 돌릴 수 있도록 · `k_exec_fork` 와 같은 이유).
+
+⚠️ **프레임 안 `wait fork` 는 여전히 거부이고 게이트 행이 아니라 FATAL 이다** — 엔진의
+`run_process` arm 이 그렇게 한다(`mark_fatal` + `Step::Fatal` · Phase-4 follow-on). 게이트로 거부하면
+tier-3 이 VM 으로 떨어진 뒤 거기서 fatal 나는데, 그것은 **다른 모든 것이 같을 때만** 같은 답이다.
+
+⚠️⚠️ **표가 비었다 — 두 번째로.** `s1d4c2c_each_refusal_row_has_a_design` 의 케이스 수가
+4 → 5 → 4 → 3 → 1 → **0** 이 됐다(A5-dumpall 이 시스템태스크 둘을, 이것이 마지막 하나를 뺐다).
+§5.1-ab 선례대로 **지우지 않고 `is_empty()` 단언으로 남기고** 남은 세 절이 왜 소스에서 도달 불가인지를
+적었다. ⚠️ **CLI 폴백 핀은 여덟 번째 재철자**이고 이번엔 **종류가 바뀐다** — 남은 유일한 거부가
+design 게이트의 `disable fork` 라 `eligible: false` 이다(앞의 일곱은 전부 *"scope 는 통과, 실행기가
+거부"* 였다) · **A4-d 가 그것을 배선하면 아홉 번째는 없다**(게이트에 거부할 것이 남지 않는다) ⇒ 그
+테스트를 **positive claim 으로 바꾸라고** 적어 뒀다.
+
+⭐ **앵커 셋의 각 줄이 다른 것을 판별한다**(iverilog 핀) — `join_none` 뒤 `wait fork`(`after fork a=0
+b=0 t=0` = 부모가 안 막혔다 · `after wait … t=4` = **마지막** 자식을 기다렸다) · **자식 없는
+`wait fork` 는 같은 시각에 통과**(틀리면 hang 이다 — 깨울 자식이 없다) · **`join_any` 잉여 arm**
+(그 barrier 는 이미 발화했으므로 *"내 최근 barrier 가 아직인가"* 로 구현하면 그냥 통과한다 =
+카운트가 **누적**이어야 하는 이유이고 곧 이 seam 이 위임인 이유).
+
+**뮤테이션 7 · 앵커가 죽인 것 2 · 손으로 확인한 kill 1 · 등가 4 — 각각 쟀다.**
+
+⚠️⚠️ **배터리가 진짜 결함 하나를 SURVIVED 로 보고했고, 원인은 결과 파서였다.** 케이스 D(`k_exec_wait_fork` 가 `resume_bb` 대신 0 을 넘긴다)는 부모를 **프로세스 엔트리**에서 재개시키므로 fork 를
+다시 돌린다 — 손으로 걸자 출력이 t=2672 까지 끝없이 늘었다. **nextest 는 그것을 `TIMEOUT` 으로
+보고하는데 러너는 `FAIL` 로 시작하는 줄만 킬러로 세고 있었다.** §5.1-aa 의 두 번째 형태(그때는 테스트
+필터, 이번엔 결과 파서)이고 `ENGINEERING_RULES` 에 병합했다. ⚠️ **그리고 hang 을 만드는 케이스는
+배터리에서 빼고 손으로 한 번만 재는 것이 맞다** — 4분 동안 자식이 파이프로 계속 찍는다.
+
+⚠️ **등가 넷의 이유가 전부 다르다.** **C**(`k_suspend_on` 을 추가로 건다)는 `fire_waiters` 의
+`_ => false` 가 `Fork` 원인을 절대 발화 안 시켜 **엔트리가 무해**하다 — 이 행이 원래 적어 둔 문장 그대로다.
+**E**(in-frame fatal 삭제)는 **elaborate 가 먼저 막는다**(태스크 바디 안 `fork` 는 E3009 · 양 백엔드
+동일)라 소스에서 도달 불가. **F**(fall-through 가드 삭제)는 `continue` 가 바닥 증가를 건너뛰지만
+**`wait fork` 를 담을 수 있는 모든 루프가 바닥에 닿는 `Branch` 블록을 갖는다**(그 fall-through 만으로
+된 자기 루프는 구성 불가). **G**(게이트 스캔이 `wait fork` 뒤 resume 엣지를 안 따라간다)는 그 뒤에
+놓을 수 있는 **거부 대상이 없다**(`Named` 는 미구성 · 사이드카 없는 `Call` 은 코퍼스 0).
+
+전 스위트 **5465 green** · flip 발산 **0**.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

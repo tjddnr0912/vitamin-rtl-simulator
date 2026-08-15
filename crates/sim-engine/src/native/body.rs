@@ -91,9 +91,17 @@ use crate::exec::{apply_effect, compute_effect, Kernel, Step};
 /// ⚠️ **`Delay` was in this set until S1d-4c-2c and no longer is.** The name
 /// changed with the meaning (it used to be called `body_is_suspend_free`)
 /// deliberately: a predicate whose truth set moves while its name stays put is
-/// how a caller ends up relying on the OLD property. What it refuses now is
-/// `Fork`, `Call`, and a `Wait` on a cause nothing can satisfy (`wait fork`, a
-/// named event). `Wait{Edge|Level|Expr}` became walkable in S1d-4c-2d.
+/// how a caller ends up relying on the OLD property. `Wait{Edge|Level|Expr}`
+/// became walkable in S1d-4c-2d, `Terminator::Fork` in A4-a, and `wait fork` in
+/// A4-c.
+///
+/// What it refuses TODAY is exactly two things, and both are unconstructible
+/// from source: a `Wait` on `WaitCause::Named` (elaborate lowers a named event
+/// to a counter net and never builds the variant) and a `Terminator::Call` whose
+/// site `call_ok` rejects (no `task_calls_proc` entry, or an unresolved callee —
+/// both malformed-sidecar shapes). Measured at A4-c: the executor gate layer has
+/// no reachable refusal left, which is what
+/// `run_tests::s1d4c2c_each_refusal_row_has_a_design`'s now-empty table pins.
 ///
 /// A WHOLE-BODY scan, not a first-block one: a `Delay` behind two `Goto`s
 /// suspends just as much as one in the entry block. The engine's own
@@ -180,20 +188,26 @@ pub(crate) fn body_is_walkable(
                 sim_ir::WaitCause::Edge { .. }
                 | sim_ir::WaitCause::Level { .. }
                 | sim_ir::WaitCause::Expr { .. } => stack.push(*resume),
-                // ⚠️ The `Fork` half is REACHABLE and this arm is the ONLY
-                // thing refusing it — an earlier version of this comment said
-                // the S0 `fork` row got there first, and that was measured
-                // false. A bare `wait fork;` lowers to `WaitCause::Fork` and
-                // populates NO `fork_modes` entry, so such a design is
-                // `eligible: true, buildable: true`. Nothing in `fire_waiters`
-                // can ever satisfy the cause, so admitting it would park the
-                // process forever — a hang and a lost `$display`, not a wrong
-                // value. Covered by `s1d4c2c_each_refusal_row_has_a_design`.
+                // ⚠️⚠️ A4-c MOVED `Fork` OUT OF THIS REFUSAL, and the sentence it
+                // replaced was correct about the hazard and wrong about the
+                // remedy. It read: "nothing in `fire_waiters` can ever satisfy
+                // the cause, so admitting it would park the process forever — a
+                // hang and a lost `$display`, not a wrong value". The first half
+                // is still true and is the whole point: `wait fork` is not a
+                // WAITER. What resumes it is the child-completion bookkeeping
+                // (`exec_wait_fork` parks it, `on_child_complete_into` counts it
+                // down), which tier-3 has had since A4-a — so the walk answers it
+                // with a delegated call instead of filing a waiter nothing fires.
+                // Census at the time: every one of the 8 designs this row still
+                // refused was a bare `wait fork;`.
                 //
                 // `Named` really is unconstructible: elaborate lowers a named
                 // event to a 64-bit counter net and `@(ev)` to an ordinary
-                // `Level` wait, and never builds this variant.
-                sim_ir::WaitCause::Named { .. } | sim_ir::WaitCause::Fork => return false,
+                // `Level` wait, and never builds this variant. It stays refused
+                // as the fail-closed half, and it is why this arm did not become
+                // a catch-all.
+                sim_ir::WaitCause::Named { .. } => return false,
+                sim_ir::WaitCause::Fork => stack.push(*resume),
             },
             // A4: the walk HAS a `Fork` arm now. Its children are process-body
             // blocks, so they join this scan — an arm that reaches a shape this
@@ -558,12 +572,69 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, en
                         continue;
                     }
                 }
+                // A4-c: `wait fork;` (IEEE §9.6.1). Not a waiter at all — there
+                // is no net to file it under and `fire_waiters` could never
+                // satisfy it, which is exactly why `body_is_walkable` used to
+                // refuse it. What resumes it is the CHILD barrier bookkeeping,
+                // so the whole arm is one delegated question and the resume path
+                // needs no code: `on_child_complete_into` pushes the parent into
+                // the same `ready` vector the join uses, and `k_body_done`
+                // already drains that.
+                if matches!(cond, sim_ir::WaitCause::Fork) {
+                    // ⚠️ IN-FRAME IS STILL REFUSED, and as a FATAL rather than a
+                    // gate row — because that is what the engine does
+                    // (`run_process`'s own arm calls `mark_fatal` and returns
+                    // `Step::Fatal`, calling it a Phase-4 follow-on). Matching it
+                    // here keeps the two backends byte-identical on a shape
+                    // neither supports.
+                    //
+                    // ⚠️ UNREACHABLE FROM SOURCE, measured: deleting this guard
+                    // survives the whole suite, because ELABORATE refuses a
+                    // `fork` inside a suspendable task body outright (E3009,
+                    // "outside the supported suspendable-task subset"), so a
+                    // `wait fork` can never be standing in a frame here. Kept
+                    // fail-closed, and kept as a fatal rather than a gate row so
+                    // that if elaborate ever admits the shape the two backends
+                    // still answer identically.
+                    if !frames.is_empty() {
+                        k.k_mark_fatal();
+                        return Step::Fatal;
+                    }
+                    if k.k_exec_wait_fork(act, *resume) {
+                        // No live children — fall through immediately.
+                        //
+                        // ⚠️ The guard increment is the `Expr` fall-through's,
+                        // written for consistency rather than for teeth:
+                        // measured, removing it survives, because `continue`
+                        // skips the bottom-of-loop increment but every loop that
+                        // can carry a `wait fork` also has a `Branch` block that
+                        // reaches it. A tight self-loop whose ONLY block is this
+                        // fall-through is not constructible.
+                        set_pos!(*resume);
+                        guard += 1;
+                        if guard > k.k_max_deltas() {
+                            k.k_mark_fatal();
+                            return Step::Fatal;
+                        }
+                        continue;
+                    }
+                    // Parked by `exec_wait_fork`. No `k_suspend_on`: it holds no
+                    // wake entry of its own, exactly like the parent of a `join`.
+                    //
+                    // ⚠️ Adding one anyway survives the suite, and the reason is
+                    // the sentence the old refusal row gave: `fire_waiters`
+                    // answers `_ => false` for every cause it does not name, and
+                    // `Fork` is not named. The entry would be inert — a leak,
+                    // never a double wake — which is exactly why filing one is
+                    // not how this is implemented.
+                    return Step::Suspended;
+                }
                 // `Named` cannot appear: elaborate lowers a named event to a
                 // 64-bit counter net and `@(ev)` to an ordinary `Level` wait on
                 // it (`stmt_main.rs` says the variant stays "reserved-unused").
-                // `Fork` needs `fork_modes`, an S0 reject. Both would suspend on
-                // a cause nothing here can satisfy — a hang, not a wrong value —
-                // so they are refused by `body_is_walkable` rather than parked.
+                // It would suspend on a cause nothing here can satisfy — a hang,
+                // not a wrong value — so it is refused by `body_is_walkable`
+                // rather than parked.
                 set_pos!(*resume);
                 k.k_suspend_on(act, bb, cond);
                 park_frames(k, act, &mut frames);

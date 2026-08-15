@@ -86,6 +86,13 @@ impl Kernel for Scheduler<'_, '_> {
         // reaching the trait's `unreachable!`.
         self.exec_fork(act, children, join, resume_bb)
     }
+
+    fn k_exec_wait_fork(&mut self, act: u32, resume_bb: u32) -> bool {
+        // Same reason as `k_exec_fork` above: `run_process` has its own arm, and
+        // this exists so the body differential can drive the shared walk with
+        // `K = Scheduler` without reaching the trait's `unreachable!`.
+        self.exec_wait_fork(act, resume_bb)
+    }
     fn k_queue_pop_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::queue_pop_rhs(self.st.ir.exprs.as_slice(), rhs)
     }

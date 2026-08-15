@@ -167,6 +167,24 @@ pub(crate) trait Kernel {
         unreachable!("this kernel has no fork execution")
     }
 
+    /// A4-c: execute `wait fork;` (IEEE §9.6.1). `true` ⇒ there are no live
+    /// children and this activation continues at `resume_bb` immediately;
+    /// `false` ⇒ it is parked, and the barrier bookkeeping re-enqueues it.
+    ///
+    /// The count is CUMULATIVE over every child this process ever detached —
+    /// prior `join_none` forks and surplus `join_any` arms included — which is
+    /// why it is a scan of the activity arena rather than a barrier lookup, and
+    /// why it cannot have a second spelling: an under-count resumes the parent
+    /// while a child is still running, and that is a wrong ORDER at exit 0.
+    ///
+    /// No default, for the same reason `k_exec_fork` has none: an executor that
+    /// reaches a `wait fork` and has no answer must not invent one. Falling
+    /// through when children are live and parking when none are, are both
+    /// silently wrong rather than loud.
+    fn k_exec_wait_fork(&mut self, _act: u32, _resume_bb: u32) -> bool {
+        unreachable!("this kernel has no wait-fork execution")
+    }
+
     /// A4-b: a fork ARM frame has reached its join. Tear its window down.
     ///
     /// Separate from [`Kernel::k_body_done`] because the two answer different

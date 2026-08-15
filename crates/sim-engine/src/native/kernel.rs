@@ -2016,6 +2016,14 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         cont
     }
 
+    fn k_exec_wait_fork(&mut self, act: u32, resume_bb: u32) -> bool {
+        // Delegation, and the resume half needs no code at all: when the last
+        // child reports, `on_child_complete_into` pushes the parent into the
+        // SAME `ready` vector the join barrier uses, and `k_body_done` already
+        // drains that into this kernel's `active` queue.
+        self.sched.exec_wait_fork(act, resume_bb)
+    }
+
     fn k_exit_arm_frame(&mut self, act: u32, callee: u32) {
         // The pop-and-release is the engine's own function; only the arena's
         // copy of the stack is cleared here, and it is already empty (the walk

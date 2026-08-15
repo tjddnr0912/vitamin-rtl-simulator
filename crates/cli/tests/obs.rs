@@ -860,26 +860,37 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
 /// executor row and it has to be spelled by hand.
 #[test]
 fn run_json_reports_native_fallback_on_a_refused_design() {
-    // ⚠️⚠️ SEVENTH shape, and the well the note above predicted has now run dry:
-    // A5-dumpall wired `$dumpall`/`$dumpon`, so `systask_refusal` is EMPTY and
-    // that executor row can no longer refuse anything at all.
+    // ⚠️⚠️ EIGHTH shape, and the EXECUTOR layer has now run dry too. The seventh
+    // was a bare `wait fork;`, described here as "the one shape that reaches the
+    // executor layer while staying ELIGIBLE"; A4-c wired it, and a census taken
+    // at that point measured every remaining executor-row refusal in the corpus
+    // as that same shape. What the row still carries (`WaitCause::Named`, a call
+    // site with no sidecar) is unconstructible from source.
     //
-    // What is left on the executor layer is the `wait fork` row — and it is the
-    // one shape that reaches it while staying ELIGIBLE, because a bare
-    // `wait fork;` populates no `fork_modes` entry and so is invisible to the S0
-    // `fork` row. That is stated in `native::run::executor_rows` itself, and it
-    // is why this test still has a subject.
-    const WAITFORK_SV: &str = "module top; reg [7:0] n = 8'd0;\n\
-         initial begin n = 8'd1; wait fork; $display(\"n=%0d\", n); #1 $finish; end endmodule\n";
-    let (_, code, obs) = run(WAITFORK_SV, &["--backend", "native"]);
+    // So the fallback this test is about is now a DESIGN-gate one, and there is
+    // exactly one family left that a design can reach: `disable fork`. Which
+    // makes the assertion below different in kind from the previous seven — this
+    // design is refused as OUT OF SCOPE (`eligible: false`), not accepted-then-
+    // refused-by-the-executor. Both are fallbacks and the run.json shape is the
+    // same, but the claim has to be spelled for what it is rather than carried
+    // over.
+    //
+    // ⚠️ When A4-d wires `disable fork` there is no ninth shape: the gate will
+    // have nothing left to refuse, and this test's subject disappears. Turn it
+    // into the positive claim (`backend == "native"` for every corpus design)
+    // rather than hunting for a source that still falls back.
+    const DISABLE_FORK_SV: &str = "module top; reg [7:0] n = 8'd0;\n\
+         initial begin fork #1 n = 8'd1; join_none disable fork; $display(\"n=%0d\", n);\n\
+         #2 $finish; end endmodule\n";
+    let (_, code, obs) = run(DISABLE_FORK_SV, &["--backend", "native"]);
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));
     assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
     assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
     assert!(
-        field(&m, "native").contains("\"eligible\": true"),
-        "a bare `wait fork` design is within v1's SCOPE — the refusal is the \
-         executor's, not the gate's:\n{m}"
+        field(&m, "native").contains("\"eligible\": false"),
+        "`disable fork` is refused by the DESIGN gate, so the fallback is a \
+         scope verdict rather than an executor one:\n{m}"
     );
 }
 

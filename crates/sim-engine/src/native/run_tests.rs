@@ -2264,17 +2264,6 @@ fn s1d4c2c_each_refusal_row_has_a_design() {
     // the group resolution into the settle — those shapes run now, and their
     // designs moved to the adversarial set and the oracle anchors.
     let cases: Vec<(&str, &str, &str)> = vec![
-        (
-            "wait fork",
-            "a `wait fork`, a `fork`, or a call statement whose callee forks: S3b",
-            r#"
-module top;
-  reg [7:0] n = 8'd0;
-  initial begin wait fork; n = 8'd7; $display("after n=%0d", n); end
-  initial #2 $finish;
-endmodule
-"#,
-        ),
         // ⚠️⚠️ A5-dumpall REMOVED both "refused system task" cases, and the row
         // they pinned can no longer fire at all: `systask_refusal` is EMPTY, so
         // `body_dispatch_ok` returns true for every design. The note that stood
@@ -2286,7 +2275,25 @@ endmodule
         // keeps its function — a new id that reads an unthreaded store must be
         // refused rather than dispatched — and `s1d4b2_store_reading_tasks_are_
         // refused_not_dispatched` is what pins the set being empty today.
+        //
+        // ⚠️⚠️ **A4-c REMOVED THE LAST ONE, so this table is now EMPTY** — and it
+        // is kept, empty, rather than deleted. The case was a bare `wait fork;`,
+        // which was the only shape left that could reach the executor row: the
+        // census measured all 8 remaining refusals as that, the `Named` cause is
+        // unconstructible (elaborate lowers a named event to a counter net), and
+        // the call-statement clause is defensive, as the paragraph below has
+        // recorded since A3-ii-a.
+        //
+        // Keeping the empty table with the assertion under it is the same choice
+        // §5.1-ab made for `sva_shapes_that_need_machinery_still_refuse…`: the
+        // next slice that adds a row to `executor_rows` has to either build a
+        // design for it here or write down why there cannot be one.
     ];
+    assert_eq!(
+        cases.len(),
+        0,
+        "the executor row has no reachable refusal today; see the note above"
+    );
     // ⚠️⚠️ **The call-statement half of the `wait fork` row has NO DESIGN, and
     // that is a measurement rather than an omission.** After A3-ii-a a call
     // statement is refused only when its callee PARKS, and a parking callee is
@@ -2320,33 +2327,30 @@ endmodule
             e.refused
         );
     }
-    // 4 -> 5 (A3-i: the call-statement half became its own population) -> 4 again
-    // (A3-ii-a: that population is now unreachable — see the note above).
-    // 3 -> 1: A5-dumpall removed both "refused system task" designs (see the
-    // note above). What is left is the `wait fork` case, which is the only shape
-    // that reaches an executor row while staying ELIGIBLE.
-    assert_eq!(cases.len(), 1, "refusal-row coverage moved");
-    // The LAST case exists for a property the others do not have: its refused
-    // task is behind a `#1` and an `if`, so it lives in neither the entry block
-    // nor block 0. `body_dispatch_ok` scanning only the first block would admit
-    // it — and a design admitted with a refused task in it does not produce a
-    // wrong answer, it panics mid-run inside `k_dispatch_systask`.
+    // ⚠️⚠️ **THE TABLE IS EMPTY AND THAT IS THE NEWS.** The count went
+    // 4 -> 5 (A3-i: the call-statement half became its own population) -> 4
+    // again (A3-ii-a: that population became unreachable) -> 3 -> 1
+    // (A5-dumpall removed both "refused system task" designs) -> **0** (A4-c
+    // wired `wait fork`).
     //
-    // ⚠️ The `wait fork` case is here because the claim that replaced it was
-    // WRONG. S1d-4c-2d deleted the two in-body-waiter cases (correctly — those
-    // shapes run now) and asserted the remaining members of that row were each
-    // refused by an earlier layer. Measured false: a bare `wait fork;` lowers to
-    // `WaitCause::Fork` and populates NO `fork_modes` entry, so the design is
-    // `eligible: true, buildable: true` and this row is the only thing keeping
-    // it out — of a walk that would park it forever. `Call` is genuinely
-    // earlier-refused (`func_table` → the arena), and `WaitCause::Named` is
-    // never constructed at all.
-    // ⚠️ The `fork` and subroutine-CALL halves of the waiter row have no case,
-    // and cannot: a `Terminator::Call` needs a non-empty `func_table`, which
-    // `NetArena::build` refuses first (measured — the case was written and the
-    // verdict came back "frame-local storage: S3"), and `fork_modes` non-empty
-    // is an S0 reject. Both halves of that row are defence in depth against a
-    // lost `.velab` trailer, not reachable paths.
+    // What `executor_rows` still carries and why none of it can be reached from
+    // source today:
+    //
+    //  * `WaitCause::Named` — elaborate lowers a named event to a 64-bit counter
+    //    net and `@(ev)` to an ordinary `Level` wait, so the variant is never
+    //    constructed;
+    //  * a `Terminator::Call` whose callee parks — a parking callee is always a
+    //    TASK (a timing control inside a FUNCTION is E3009, and iverilog agrees),
+    //    and a parking task is refused a layer earlier by `frames_admitted`;
+    //  * a call site with no `task_calls_proc` entry, or a `fork_modes` trailer
+    //    lost from the `.velab` — both are defence against a truncated artifact
+    //    rather than a shape a compiler emits.
+    //
+    // The assertion is `0` rather than the table being deleted, for the reason
+    // §5.1-ab gave when the SVA refusal table emptied: the next slice that adds
+    // a row to `executor_rows` has to either put a design here or write down
+    // why there cannot be one.
+    assert!(cases.is_empty(), "refusal-row coverage moved");
 }
 
 /// The composite reader must answer EVERY `NetReader` method (V1 slice 2).
