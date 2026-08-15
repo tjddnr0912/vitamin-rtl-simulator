@@ -442,9 +442,9 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | **A5** ✅ | 거부 시스템태스크 — `$fclose`(§5.1-m) · postponed(§5.1-s) · file_directed(§5.1-aa) · **`$writemem*`(§5.1-ae)** | **1** | **완료** — 남은 `$dumpall`/`$dumpon` 은 **코퍼스 인구 0**(그 1 은 손으로 적은 테스트 설계) |
 | **A8** ✅ | 꼬리 — handle_copy · deferred assert · clocking · force/release · final · stage | — | **완료**(§5.1-q·-w·-x·-y·-ab·-ac) |
 | **A6** ✅ | `real` + `real-slot`(D+S 짝) — **행의 이름이 틀렸다**(§5.1-af) | 0 | **완료 · 96.35% → 97.47%** |
-| **A3-ii-b** ★ 다음 | 실제로 **park 하는** 프레임 — `S:frame-suspends` + `X:call-suspends` 짝(fork 행 **없이**) | **42** | A3-i/-ii-a/-iii/-iv 완료(§5.1-n·-o·-u·-v) |
-| **A4** | fork + `disable_fork` | **107**(⚠️ **단독 이득 0**) | 107 이 전부 A3-ii-b 의 행을 함께 이고 있다 — 그것을 먼저 닫아야 수확된다 |
-| 꼬리 | `probe` 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 | 14 | 각각 단독 이득 |
+| **A3-ii-b** ✅ | 실제로 **park 하는** 프레임 — 없던 것은 실행기가 아니라 **스택의 수명**이었다(§5.1-ag) | 0 | **완료 · 97.47% → 98.09%** |
+| **A4** ★ 다음 | fork + `disable_fork` | **107** | 잔여의 **87%**. A3-ii-b 가 앞의 두 행을 닫았으므로 이제 단독으로 수확된다 |
+| 꼬리 | `probe` 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 · X 단독 2 | 16 | 각각 단독 이득 |
 
 ### Phase B — V2 = **빌드 분리** (오너 제안 채택 · 옛 "VM 삭제" 를 대체)
 
@@ -1600,6 +1600,50 @@ vita 가 spec-correct). 알려진 발산이 앵커에 들어가면 앵커가 아
 ⚠️ **다음 표적**(같은 census, 집합 단위): **A3-ii-b(`frame-suspends`+`call-suspends` 짝) +42** →
 **A4 fork +107**(단, fork 는 **단독 이득 0** — 107 이 전부 A3-ii-b 의 행을 함께 이고 있다) → 꼬리
 (probe 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1).
+
+#### 5.1-ag ✅ A3-ii-b 정지하는 프레임 — **없던 것은 실행기가 아니라 스택의 수명이었다** · 97.47% → **98.09%** (2026-08-15)
+
+두 행(storage *"a task frame that SUSPENDS"* · executor *"a call statement whose callee suspends"*)이
+거부한 것은 **워크가 못 하는 모양이 아니었다** — A3-ii-a 가 이미 프레임 CFG 를 돌린다. 거부한 것은
+**수명**이다: 워크가 열린 프레임을 지역 `Vec` 에 들고 있어서 프레임 안의 `Delay`/`Wait` 가
+`Step::Suspended` 를 반환하는 순간 스택이 통째로 버려졌다. `body.rs` 가 그 전제를 자기 주석에 적어 뒀다 —
+*"그 게이트는 `Delay`/`Wait`/`Fork` 에 닿지 않는 프레임만 admit 하므로 stash 할 것도 복원할 것도 없다."*
+
+⭐ **착수 전 census 가 절을 갈랐다** — 정지하는 프레임의 원인은 **`wait_edge` 65 · `delay` 19 · `fork` 13**
+이고 중첩은 5. fork 를 가진 설계는 **전부 `D:fork` 도 켠다** ⇒ 이 슬라이스는 앞의 둘을 열고 fork 는 A4 에
+남긴다. 행이 *"정지한다"* 에서 **"fork 에 닿는다"** 로 좁아졌고, `frame_suspends` 는 `frame_park_kinds`
+(timed/fork)로 갈라져 **한 walk 이 두 술어를 먹인다**.
+
+⭐ **재진술이 아니라 추출 + 타입 통합.** 윈도 stash 는 엔진의 것이고(`stash_frame_windows`) 그 안에서
+`SimState::frame_stack` 을 pop 하는 **순서가 틀리면 조용히 남의 프레임을 읽는다** ⇒
+`frame_window::{stash,restore}_windows_in(st, &mut [FrameRec])` 로 뽑고 **엔진이 위임**한다. 그리고
+tier-3 의 `OpenFrame` 은 A3-ii-a 가 *"park 하지 않으므로 `window`·`dyn_parked`·`forked`·`is_arm` 이 없다"*
+고 정의한 **축소판**이었다 — 그 전제가 끝났으므로 **`FrameRec` 로 합쳤다**(없던 필드가 곧 할 일이었다).
+
+⚠️ **Scheduler::activities 는 쓰지 않았다** — S0 게이트가 fork 를 거부하므로 tier-3 의 activity 는 곧
+프로세스이고, 커널이 **프로세스 id 로 키잉된 맵** 하나면 된다. 엔진이 activity 아레나를 필요로 하는
+이유(fork 자식)가 여기엔 없다.
+
+⚠️⚠️ **잠복 결함 하나를 함께 고쳤다** — `wait(e)` 가 **이미 참일 때의 폴스루**가 `bb = *resume`(프로세스
+철자)로 적혀 있었다. 프레임이 `Wait` 에 닿을 수 없던 동안은 무해했고, 이 슬라이스가 도달 가능하게
+만들었다: 그대로면 워크가 같은 블록을 계속 다시 가져와 step guard 로 죽는다.
+
+⚠️⚠️ **뮤테이션 첫 라운드에서 그 수정과 walk 의 전이 절이 **둘 다 생존**했다** — 앵커에 `wait(e)`-참
+형태가 없었고, 코퍼스의 forking frame 은 전부 **정지 없이** fork 에 닿아 `Delay` 의 resume 엣지를 따라가는
+절에 설계가 0개였다. 판별자 둘을 지어 **5/6 사망** · 생존 1(빈 스택 저장)은 **실측 등가**.
+
+⚠️ **행이 좁아지며 핀 5개가 걸렸고 둘은 positive 로 뒤집혔다** — `a_parking_callee_is_refused_by_the_storage_layer`
+→ `..._is_admitted_by_both_layers`, `a_hierarchical_enable_whose_callee_parks_is_still_refused` →
+`..._now_runs_natively`(계층 enable 로 들어간 프레임이 park 하고 resume 한다 = A3-iv 가 "도달 불가" 로
+남겨 둔 바로 그 축). 프레임 행-커버리지 표는 **9 → 6**: 옮겨간 셋을 대체할 fork 설계를 지을 수 없다
+(DESIGN 게이트가 먼저 거부한다) ⇒ 그 사실을 기록하고 행은 fail-closed 로 남겼다.
+
+**측정**: **6,321 / 6,444 = 98.09%**(+40 · 예측 +42) · 전 스위트 **5448 green** · **flip 런 5445/5448**
+(실패 3 = 백엔드 이름 핀) · **발산 0** · 3-way probe 6종(에지 park · delay park · **동시 park 되는
+automatic 프레임 둘** · 중첩 park · 계층 enable park · `wait` 참-폴스루) · 뮤테이션 **5/6 사망**.
+
+⚠️ **다음은 A4(fork) 하나다** — 잔여 123 중 **107 이 fork 가족**(78 + 24 + 5)이고 나머지는 꼬리
+(probe 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 · X 단독 2).
 
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 

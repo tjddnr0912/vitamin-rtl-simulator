@@ -207,10 +207,12 @@ pub(crate) fn body_is_walkable(
 /// Hand this activation's open frames to the kernel so they survive the
 /// suspension, or do nothing when the walk is not inside one.
 ///
-/// The empty case is the ONLY case before A3-ii-b, and it must stay a no-op
-/// rather than an empty save: `k_take_frames` is asked on every entry, and a
-/// stored empty vector would be indistinguishable from "this process was parked
-/// inside a frame" for any future reader of that map.
+/// ⚠️ The empty guard is EQUIVALENT today and that was measured, not assumed:
+/// removing it stores an empty vector, `k_take_frames` removes and returns it,
+/// and the restore over zero frames is a no-op — the mutation survives the whole
+/// suite. It stays for hygiene, not for behaviour: `k_take_frames` is asked on
+/// every entry, and a stored empty vector is indistinguishable from "this
+/// process is parked inside a frame" to any future reader of that map.
 fn park_frames<K: Kernel>(k: &mut K, proc: u32, frames: &mut Vec<OpenFrame>) {
     if frames.is_empty() {
         return;

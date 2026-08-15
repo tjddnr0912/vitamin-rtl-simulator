@@ -857,6 +857,34 @@ endmodule
     assert_eq!(crate::native::run::runnable(&ir2, &opts2), Ok(()));
 }
 
+/// A3-ii-b: the park walk must FOLLOW a `Delay`/`Wait` resume edge, not stop at
+/// it — or a `fork` sitting behind one is invisible to the row that refuses it.
+///
+/// Written because the mutation battery found nothing else asking. Dropping the
+/// `stack.push(*resume)` from the `Delay` arm left the whole suite green: every
+/// forking frame in the corpus reaches its `fork` without passing a suspension
+/// first, so the transitive half of the walk had no design. The consequence of
+/// missing it is not a wrong value — `frames_admitted` would admit the frame and
+/// the walk would hit `Terminator::Fork`, whose arm is `unreachable!`.
+#[test]
+fn the_park_walk_sees_a_fork_behind_a_delay() {
+    let src = "module t;\n\
+                 task automatic df(); begin #1; fork #1; join end endtask\n\
+                 initial begin df(); end\n\
+               endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let susp = crate::native::frames::suspendable_set(&ir, &opts);
+    let entry = ir.funcs[0].entry;
+    let kinds = crate::exec::frame_call::frame_park_kinds(&ir, &susp, entry);
+    assert!(kinds.timed, "the `#1` is a timed park");
+    assert!(
+        kinds.fork,
+        "the `fork` is behind the `#1`, and the walk has to follow the resume \
+         edge to reach it"
+    );
+    assert!(crate::exec::frame_call::frame_forks(&ir, &susp, entry));
+}
+
 /// ⚠️⚠️ **A3-ii-b INVERTED this test.** It used to be
 /// `a_parking_callee_is_refused_by_the_storage_layer`, and it pinned "where the
 /// refusal of a PARKING callee lives — the storage layer, and only there".

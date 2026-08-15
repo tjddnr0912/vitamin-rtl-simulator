@@ -26,7 +26,14 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 ///     too (`out_binds` lives in the parked frame, not on the Rust stack).
 ///   * `outer` calls `inner`, and BOTH park — a nested parking frame, i.e. the
 ///     stack has to be saved at depth 2 and resumed innermost-first.
-///   * the three prints are at DIFFERENT times (t=3, t=4, t=7), deliberately:
+///   * `wq` parks on `#1` and then hits a `wait (flag)` that is ALREADY TRUE, so
+///     it falls THROUGH rather than suspending — and that fall-through has to
+///     move the FRAME's pc, not the process's. It was written as `bb = *resume`
+///     because a frame could not reach a `Wait` at all before this slice; left
+///     that way the walk keeps re-fetching the same block and the design dies on
+///     the step guard. Added because the mutation battery found no other design
+///     in the suite exercising it.
+///   * the four prints are at DIFFERENT times (t=1, t=3, t=4, t=7), deliberately:
 ///     two `initial` blocks that finish at the same instant have no
 ///     IEEE-defined order, and iverilog and vita legitimately differ there. A
 ///     known divergence in an anchor stops it being an anchor.
@@ -45,7 +52,8 @@ fn parking_frames_on_tier_3_match_iverilog() {
         &f,
         "module top;\n\
            reg clk = 0;\n\
-           reg [7:0] a, b, c;\n\
+           reg [7:0] a, b, c, d;\n\
+           reg flag = 0;\n\
            always #1 clk = ~clk;\n\
            task automatic acc(input [7:0] seed, input integer edges, output [7:0] res);\n\
              reg [7:0] loc;\n\
@@ -71,6 +79,14 @@ fn parking_frames_on_tier_3_match_iverilog() {
                y = mid + 8'd1;\n\
              end\n\
            endtask\n\
+           task automatic wq(input [7:0] x, output [7:0] y);\n\
+             begin\n\
+               #1;\n\
+               wait (flag);\n\
+               y = x + 8'd2;\n\
+             end\n\
+           endtask\n\
+           initial begin flag = 1'b1; wq(8'd20, d); $display(\"D d=%0d t=%0t\", d, $time); end\n\
            initial begin acc(8'd10,  2, a); $display(\"A a=%0d t=%0t\", a, $time); end\n\
            initial begin acc(8'd100, 4, b); $display(\"B b=%0d t=%0t\", b, $time); end\n\
            initial begin outer(8'd5, c);    $display(\"C c=%0d t=%0t\", c, $time); end\n\
@@ -100,7 +116,8 @@ fn parking_frames_on_tier_3_match_iverilog() {
     }
     assert_eq!(
         body,
-        "A a=12 t=3\n\
+        "D d=22 t=1\n\
+         A a=12 t=3\n\
          C c=13 t=4\n\
          B b=104 t=7\n",
         "iverilog-pinned parking-frame behaviour on tier-3"
