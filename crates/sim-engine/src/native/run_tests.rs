@@ -2264,49 +2264,6 @@ fn s1d4c2c_each_refusal_row_has_a_design() {
     // the group resolution into the settle — those shapes run now, and their
     // designs moved to the adversarial set and the oracle anchors.
     let cases: Vec<(&str, &str, &str)> = vec![
-        // ⚠️ A `final` block was the FIRST case here and is CORE since slice
-        // #5 — the row it pinned ("the post-loop drain is not restated") was
-        // three lines of restating, both of which already existed. Removed
-        // rather than re-spelled: the remaining cases below already cover the
-        // "a row with no design behind it is a comment" claim.
-        // ⚠️ These two used `$monitor` until A5-b, which WIRED it — so the row
-        // they pin had to be re-spelled with a task that is still refused
-        // (`$writemem*`, which reads the MEMORY itself rather than a formatted
-        // argument). A refusal-row test whose shape stops being refused turns
-        // green by measuring nothing.
-        // ⚠️ **FIFTH re-spelling of this row's design.** It used `$monitor`
-        // until A5-b wired it, then `$writemem*` until slice #8 did — and slice
-        // #8's census says `$writemem*` were the last members ANY design in the
-        // suite reached, so what is left (`$dumpall`/`$dumpon`) has zero corpus
-        // population and has to be written by hand. A refusal-row test whose
-        // shape stops being refused turns green by measuring nothing.
-        (
-            "refused system task",
-            "a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)",
-            r#"
-module top;
-  reg [7:0] n = 8'd0;
-  initial begin $dumpfile("d.vcd"); $dumpvars(0, top); #1 $dumpall; #1 $finish; end
-endmodule
-"#,
-        ),
-        (
-            "refused system task in a LATER block",
-            "a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)",
-            r#"
-module top;
-  reg [7:0] n;
-  initial begin
-    $dumpfile("d2.vcd");
-    $dumpvars(0, top);
-    n = 8'd0;
-    #1 n = 8'd1;
-    if (n == 8'd1) $dumpon;
-    #1 $finish;
-  end
-endmodule
-"#,
-        ),
         (
             "wait fork",
             "a `wait fork`, a `fork`, or a call statement whose callee forks: S3b",
@@ -2318,6 +2275,17 @@ module top;
 endmodule
 "#,
         ),
+        // ⚠️⚠️ A5-dumpall REMOVED both "refused system task" cases, and the row
+        // they pinned can no longer fire at all: `systask_refusal` is EMPTY, so
+        // `body_dispatch_ok` returns true for every design. The note that stood
+        // here tracked five re-spellings of that design (`assign` → `assign #2`
+        // → multi-driver → `$monitor` → `$writemem*` → `$dumpall`); the sixth
+        // does not exist, because there is nothing left to refuse.
+        //
+        // The ROW stays in `executor_rows` for the reason `systask_refusal`
+        // keeps its function — a new id that reads an unthreaded store must be
+        // refused rather than dispatched — and `s1d4b2_store_reading_tasks_are_
+        // refused_not_dispatched` is what pins the set being empty today.
     ];
     // ⚠️⚠️ **The call-statement half of the `wait fork` row has NO DESIGN, and
     // that is a measurement rather than an omission.** After A3-ii-a a call
@@ -2354,7 +2322,10 @@ endmodule
     }
     // 4 -> 5 (A3-i: the call-statement half became its own population) -> 4 again
     // (A3-ii-a: that population is now unreachable — see the note above).
-    assert_eq!(cases.len(), 3, "refusal-row coverage moved");
+    // 3 -> 1: A5-dumpall removed both "refused system task" designs (see the
+    // note above). What is left is the `wait fork` case, which is the only shape
+    // that reaches an executor row while staying ELIGIBLE.
+    assert_eq!(cases.len(), 1, "refusal-row coverage moved");
     // The LAST case exists for a property the others do not have: its refused
     // task is behind a `#1` and an `if`, so it lives in neither the entry block
     // nor block 0. `body_dispatch_ok` scanning only the first block would admit

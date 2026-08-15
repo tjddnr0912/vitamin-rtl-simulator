@@ -1684,10 +1684,11 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         // rather than an impossible one: the tier-3 run loop grew a postponed
         // region and `flush_postponed_with` threads the store into the render
         // and the change compare. Registering never read a net.
-        let expect_refusal = matches!(
-            which,
-            sim_ir::SysTaskId::DumpAll | sim_ir::SysTaskId::DumpOn
-        );
+        // ⭐⭐ NOTHING is refused any more — `expect_refusal` is the constant
+        // `false`, and that is what this test now pins. A5-dumpall wired
+        // `$dumpall`/`$dumpon` by threading the reader into their two snapshot
+        // call sites, which was the whole of their row.
+        let expect_refusal = false;
         if !expect_refusal {
             continue;
         }
@@ -1714,17 +1715,22 @@ fn s1d4b2_store_reading_tasks_are_refused_not_dispatched() {
         );
         refused += 1;
     }
-    // TWO now — the sequence is 6 (A5-b wired `$monitor`/`$strobe`) → 4 → 2
-    // (slice #8 wired `$writememb`/`$writememh`). The count is asserted exactly
-    // rather than as `> 0` so that wiring or refusing another member moves a
-    // number a human has to re-justify, which is what just happened twice.
+    // ⭐⭐ ZERO — the sequence is 6 (A5-b wired `$monitor`/`$strobe`) → 4 → 2
+    // (slice #8 wired `$writememb`/`$writememh`) → 0 (A5-dumpall wired
+    // `$dumpall`/`$dumpon`). The count is asserted exactly rather than as `> 0`
+    // so that wiring or refusing another member moves a number a human has to
+    // re-justify — which is what happened three times, and this is the last of
+    // them.
     //
-    // ⚠️ The two that remain (`$dumpall`/`$dumpon`) have ZERO corpus designs —
-    // slice #8's census measured that directly — so this test is the only place
-    // they are exercised at all, and the design above has to spell them by hand.
+    // ⚠️ The test is NOT deleted, and the reason is the same one
+    // `systask_refusal` gives for keeping its function: a new `SysTaskId` that
+    // reads a store the seam does not thread must be REFUSED rather than
+    // dispatched, and this is what fails the moment one is added without a row.
+    // The loop above still walks every id; what it asserts today is that none of
+    // them refuses.
     assert_eq!(
-        refused, 2,
-        "expected all four remaining refused tasks to refuse — got {refused}"
+        refused, 0,
+        "the refusal set is empty since A5-dumpall — got {refused}"
     );
 }
 

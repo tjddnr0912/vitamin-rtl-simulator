@@ -462,61 +462,30 @@ pub(crate) struct SysTaskRefusal {
 /// and the symptom would be a mid-run panic on a design the gate called runnable.
 /// That is precisely the twin-predicate hazard, so the twin is not written.
 pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
-    let (label, slice, why) = match which {
-        // `$dumpvars` is WIRED (S1d-4d-2) — `full_snapshot_with` takes the arena
-        // as its reader. `$dumpall`/`$dumpon` still are not: they re-snapshot
-        // through the same function but from `dispatch`'s own call sites, which
-        // this seam does not thread. One more slice, not a subsystem.
-        SysTaskId::DumpAll | SysTaskId::DumpOn => (
-            "k_dispatch_systask($dumpall/$dumpon)",
-            "S1d-4d-3",
-            "they re-snapshot through `full_snapshot`, and only the `$dumpvars` \
-             call site threads the arena reader so far",
-        ),
-        // ⚠️ `$monitor`/`$strobe` are WIRED (A5-b). The row that stood here was
-        // right about the mechanism and it took two things to lift, not one:
-        // the tier-3 run loop now HAS a postponed region (`native::run::
-        // flush_postponed`, called at the settled point and at the three
-        // terminating arms, as the engine's loop does), and
-        // `flush_postponed_with` threads the store into the two places that
-        // read nets — the render and, for `$monitor`, the change compare.
-        // Registering was never store-bound: `dispatch`'s arms capture ExprIds
-        // and metadata and touch no net.
-        // `$dumpfile` is WIRED (S1d-4d-2) — but NOT for the reason the first
-        // version of this comment gave. It claimed `arg_string` returns early
-        // for anything that is not `Expr::Const`, so the task never reads a net.
-        // Measured false: it falls through to a VALUE RENDER, and on a native
-        // run that read the engine's untouched store — `$dumpfile(nm)` with
-        // `nm = 42` wrote a file named `x` instead of `42`, with identical
-        // stdout and identical VCD content. What actually makes it safe is that
-        // `dispatch_with` now threads the reader into `arg_string_with`.
-        // `$dumplimit`/`$fclose` still take INT arguments through `int_arg`,
-        // which is not threaded.
-        // ⚠️ `$dumplimit`/`$fclose` are WIRED (A5-a). The row that stood here
-        // said "the ARGUMENT is read through `int_arg`, not the formatter", and
-        // that reason was STALE in two ways: `int_arg` is threaded (it calls
-        // `eval_task_arg`) and neither of these two ever used it — each read its
-        // own argument with a bare `sched.eval`. Threading those two call sites
-        // is the whole fix. §4.5.338's lesson again: a refusal does not know
-        // when its own reason stopped being true.
-        // ⚠️ `$writememb`/`$writememh` are WIRED (slice #8), and their row was
-        // the last entry in this match that a corpus design reached. It said
-        // "it reads the MEMORY itself, not a formatted argument", which was
-        // exactly right and exactly three reads: the two window bounds (which
-        // A1-iii's own note left recorded as still raw) and the per-element
-        // value. All three take the threaded reader now.
-        // ⚠️ `$dumpoff`/`$dumpflush`/`$monitoron`/`$monitoroff` are deliberately
-        // NOT here — and the reason they used to carry ("nothing opens `st.vcd`
-        // because `$dumpfile` is refused") DIED when S1d-4d-2 wired the dump
-        // tasks. What makes them correct now is direct rather than inherited:
-        // `$dumpoff` sets `dumping = false`, and `vcd_id_for` returns `None`
-        // while it is false, so the arena's captures are discarded at the drain
-        // exactly as the engine's emits are skipped. `$dumpflush` only flushes.
-        // Measured: `$dumpoff` standalone, mid-slot and before `$dumpvars` all
-        // match the VM byte for byte.
-        _ => return None,
-    };
-    Some(SysTaskRefusal { label, slice, why })
+    // ⭐⭐ **THE SET IS EMPTY, and that is the news.** `$dumpall`/`$dumpon` were
+    // the last two members, and their row was right and one function wide: "they
+    // re-snapshot through `full_snapshot`, and only the `$dumpvars` call site
+    // threads the arena reader so far". A5-dumpall threaded the other two call
+    // sites (`dump_on_with` / `dump_all_with`), which is all it ever was —
+    // everything else about those tasks (`dumping`, the id tables, the writer) is
+    // `SimState`'s and shared. The sequence was 6 → 4 (A5-b wired
+    // `$monitor`/`$strobe`) → 2 (slice #8 wired `$writemem*`) → 0.
+    //
+    // ⚠️ The FUNCTION stays, and so do both consumers — `k_dispatch_systask`'s
+    // panic and `native::run`'s gate row. A new `SysTaskId` that reads a store
+    // this seam does not thread has to land here, and those two are what make
+    // that a refusal rather than a silent wrong answer. Add an arm as:
+    //
+    //     SysTaskId::Foo => return Some(SysTaskRefusal {
+    //         label: "k_dispatch_systask($foo)",
+    //         slice: "<the slice that will build it>",
+    //         why: "<what it reads that this seam does not thread>",
+    //     }),
+    //
+    // What is pinned today is that the set is EMPTY
+    // (`native::run_tests::s1d4b2_store_reading_tasks_are_refused_not_dispatched`).
+    let _ = which;
+    None
 }
 
 /// `sched::push_sorted` over the collapsed ready: insert keeping `proc`

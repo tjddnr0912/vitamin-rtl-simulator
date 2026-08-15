@@ -860,16 +860,25 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
 /// executor row and it has to be spelled by hand.
 #[test]
 fn run_json_reports_native_fallback_on_a_refused_design() {
-    const DUMPALL_SV: &str = "module top; reg [7:0] n = 8'd0;\n\
-         initial begin $dumpfile(\"nfb.vcd\"); $dumpvars(0, top); #1 $dumpall; #1 $finish; end endmodule\n";
-    let (_, code, obs) = run(DUMPALL_SV, &["--backend", "native"]);
+    // ⚠️⚠️ SEVENTH shape, and the well the note above predicted has now run dry:
+    // A5-dumpall wired `$dumpall`/`$dumpon`, so `systask_refusal` is EMPTY and
+    // that executor row can no longer refuse anything at all.
+    //
+    // What is left on the executor layer is the `wait fork` row — and it is the
+    // one shape that reaches it while staying ELIGIBLE, because a bare
+    // `wait fork;` populates no `fork_modes` entry and so is invisible to the S0
+    // `fork` row. That is stated in `native::run::executor_rows` itself, and it
+    // is why this test still has a subject.
+    const WAITFORK_SV: &str = "module top; reg [7:0] n = 8'd0;\n\
+         initial begin n = 8'd1; wait fork; $display(\"n=%0d\", n); #1 $finish; end endmodule\n";
+    let (_, code, obs) = run(WAITFORK_SV, &["--backend", "native"]);
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));
     assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
     assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
     assert!(
         field(&m, "native").contains("\"eligible\": true"),
-        "a `$dumpall` design is within v1's SCOPE — the refusal is the \
+        "a bare `wait fork` design is within v1's SCOPE — the refusal is the \
          executor's, not the gate's:\n{m}"
     );
 }

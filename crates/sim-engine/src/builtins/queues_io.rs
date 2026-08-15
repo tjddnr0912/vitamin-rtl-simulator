@@ -523,9 +523,28 @@ pub(crate) fn dumpvars_with<N: crate::eval::NetReader + ?Sized>(
     st.vcd_path = Some(path);
 }
 
-pub(crate) fn dump_on(st: &mut SimState) {
+/// `$dumpon` against the CALLING kernel's store (A5-dumpall).
+///
+/// ⚠️ There is no un-suffixed `dump_on`/`dump_all`/`full_snapshot` any more.
+/// Once both call sites thread the reader, the `None` wrapper has no caller —
+/// and a seam with no caller is the same thing as a row with no design (the
+/// rule A1-iv-a wrote when it built and then deleted `k_read_net`). The engine
+/// path is unchanged: `dispatch` passes `None`, which is exactly what the
+/// wrapper used to pass.
+///
+/// The refusal row these two carried was exact and small — "they re-snapshot
+/// through `full_snapshot`, and only the `$dumpvars` call site threads the arena
+/// reader so far" — so this is that one call site, twice. Everything else about
+/// the task is already shared: `dumping`, the id tables and the writer are all
+/// `SimState`'s, and `$dumpvars` proved the snapshot itself needs nothing but
+/// the reader (S1d-4d-2). `None` is `full_snapshot`, i.e. the call this
+/// replaced, so the engine path is unchanged by construction.
+pub(crate) fn dump_on_with<N: crate::eval::NetReader + ?Sized>(
+    st: &mut SimState,
+    nets: Option<&N>,
+) {
     st.dumping = true;
-    let snap = full_snapshot(st);
+    let snap = full_snapshot_with(st, nets);
     let now = st.now;
     if let Some(w) = st.vcd.as_mut() {
         let _ = w.set_time(now);
@@ -533,8 +552,13 @@ pub(crate) fn dump_on(st: &mut SimState) {
     }
 }
 
-pub(crate) fn dump_all(st: &mut SimState) {
-    let snap = full_snapshot(st);
+/// [`dump_on_with`]'s twin for `$dumpall` — same seam, and the only difference
+/// from `$dumpon` is that this one does not turn dumping back on.
+pub(crate) fn dump_all_with<N: crate::eval::NetReader + ?Sized>(
+    st: &mut SimState,
+    nets: Option<&N>,
+) {
+    let snap = full_snapshot_with(st, nets);
     let now = st.now;
     if let Some(w) = st.vcd.as_mut() {
         let _ = w.set_time(now);
@@ -610,10 +634,6 @@ pub(crate) fn dump_filter_from_args(
         return None;
     }
     Some(set)
-}
-
-pub(crate) fn full_snapshot(st: &SimState) -> Vec<(IdCode, sim_ir::BitPacked, u32)> {
-    full_snapshot_with::<crate::state::SimState>(st, None)
 }
 
 /// `full_snapshot` against an ALTERNATE net store (tier-3 seam, S1d-4d-2).

@@ -619,11 +619,11 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
             Ctl::Continue
         }
         SysTaskId::DumpOn => {
-            dump_on(sched.st);
+            dump_on_with(sched.st, nets);
             Ctl::Continue
         }
         SysTaskId::DumpAll => {
-            dump_all(sched.st);
+            dump_all_with(sched.st, nets);
             Ctl::Continue
         }
         SysTaskId::DumpFlush => {
