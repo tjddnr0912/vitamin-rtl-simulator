@@ -883,11 +883,18 @@ fn run_json_reports_native_fallback_on_a_refused_design() {
     );
 }
 
-/// S0: the `native` object pins the ③층 design-level verdict. TWO distinct
-/// reject families in one design, whose SOURCES differ — a sidecar table entry
-/// (`fork`, from `fork_modes`) and a statement scan (`disable_fork`) — which is
-/// the claim worth pinning; the units are per-family counts, so each is exactly
-/// 1, and `refused` reports the first in the map's byte order.
+/// S0: the `native` object pins the ③층 design-level verdict — the family name,
+/// the per-family COUNT, and the fact that `refused` reports the first key in
+/// the map's byte order.
+///
+/// ⚠️⚠️ It can no longer pin TWO families, and that is the news rather than a
+/// weakening. The claim used to be that families whose SOURCES differ report
+/// together — a sidecar table entry (`fork`) beside a statement scan
+/// (`disable_fork`) — and A4-a wired the sidecar half. The design gate now has
+/// exactly one family a design can reach (`stmt_effect` has been empty since
+/// A1), so the design below carries two `disable fork` statements instead: the
+/// COUNT is what is left to test, and it is a real unit (statements, not
+/// designs).
 ///
 /// ⚠️ THIRD shape. It was fork + queue + string until V1 slice 2 admitted every
 /// heap kind, then fork + `real` until A6 admitted that.
@@ -904,7 +911,9 @@ fn run_json_native_pins_the_reject_families() {
         "module top;\n\
            integer n;\n\
            initial begin\n\
-             fork begin n = 1; end begin n = 2; end join\n\
+             fork begin n = 1; end join_none\n\
+             disable fork;\n\
+             fork begin n = 2; end join_none\n\
              disable fork;\n\
              $display(\"%0d\", n);\n\
              $finish;\n\
@@ -917,7 +926,7 @@ fn run_json_native_pins_the_reject_families() {
     assert_eq!(
         field(&manifest, "native"),
         "{\"eligible\": false, \"buildable\": true, \"refused\": \"disable_fork\", \
-         \"reject_reasons\": {\"disable_fork\": 1, \"fork\": 1}}",
+         \"reject_reasons\": {\"disable_fork\": 2}}",
         "full manifest:\n{manifest}"
     );
 }

@@ -72,6 +72,20 @@ impl Kernel for Scheduler<'_, '_> {
     ) -> crate::builtins::Ctl {
         crate::builtins::dispatch(self, which, fmt, args, sid)
     }
+
+    fn k_exec_fork(
+        &mut self,
+        act: u32,
+        children: &[u32],
+        join: u32,
+        resume_bb: u32,
+    ) -> Option<u32> {
+        // The engine's own queue. `run_process` has its own `Fork` arm and does
+        // not go through the shared walk — this exists so the body DIFFERENTIAL
+        // can drive that walk with `K = Scheduler` on a forking design without
+        // reaching the trait's `unreachable!`.
+        self.exec_fork(act, children, join, resume_bb)
+    }
     fn k_queue_pop_rhs(&self, rhs: u32) -> bool {
         crate::exec::kpred::queue_pop_rhs(self.st.ir.exprs.as_slice(), rhs)
     }

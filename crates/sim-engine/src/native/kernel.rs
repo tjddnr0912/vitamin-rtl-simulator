@@ -442,6 +442,19 @@ pub(crate) struct NativeWaiter {
 /// the two could differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct NativeReady {
+    /// ⚠️ A4 BROUGHT THIS FIELD BACK, and its own doc predicted that: the field
+    /// was absent because "`fork_modes` non-empty is an S0 reject, so here
+    /// `tie == proc` and the field would be a second name for the same number".
+    /// A fork ends that — a child activity's tie is COMPOSED from its parent's
+    /// and its arm index, and it is the tie, not the activity id, that orders
+    /// siblings. Activity ids are recycled (`free_activities`), so sorting by
+    /// them would put arms in allocation order rather than declaration order.
+    ///
+    /// For a base activity it is still the process id, so every pre-existing
+    /// design's ordering is unchanged.
+    pub(crate) tie: u32,
+    /// The ACTIVITY to run — its own PC, its own parked frames, its own resume
+    /// identity. `act_template` maps it to the body.
     pub(crate) proc: u32,
     pub(crate) block: u32,
 }
@@ -501,12 +514,45 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
 /// claim no design can back. It stays `<=` because the collapse is a property
 /// of today's gate, not of the ordering rule.
 pub(crate) fn push_sorted_native(q: &mut Vec<NativeReady>, r: NativeReady) {
-    let pos = q.partition_point(|x| x.proc <= r.proc);
+    let pos = q.partition_point(|x| x.tie <= r.tie);
     q.insert(pos, r);
 }
 
 #[allow(dead_code)] // ditto — `new`/`ctx` have exactly one caller, the gate.
 impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
+    /// A4: the ORDERING key of an activity. `tie == template` for a base
+    /// activity and a composed `(parent_tie + 1) << 16 | arm_idx` for a fork
+    /// child — `exec_fork_into` owns that composition, and this only reads it.
+    ///
+    /// It is the tie, not the activity id, that orders siblings: activity ids
+    /// come off a free list (`free_activities`), so sorting by them would put
+    /// arms in ALLOCATION order rather than declaration order — a wrong order at
+    /// exit 0, and only in designs that fork twice.
+    pub(crate) fn act_tie(&self, act: u32) -> u32 {
+        match self.sched.activities.get(act as usize) {
+            Some(a) => a.tie,
+            None => act,
+        }
+    }
+
+    /// A4: the TEMPLATE an activity runs — `ir.processes[t]`, the call-site side
+    /// tables and the per-process context are all keyed by it.
+    ///
+    /// ⚠️ THIS SLICE FALSIFIED THE REASON THIS FUNCTION USED TO GIVE. It said
+    /// "today every tier-3 activity is its own process, so this is the
+    /// identity", and it existed so that the id split would have a single owner
+    /// "rather than thirty call sites deciding for themselves". A4-a is what it
+    /// was waiting for: a fork child is a SEPARATE activity running its PARENT's
+    /// body, so `act != tmpl` is now an ordinary state and the identity claim is
+    /// gone. The prediction held — the `Fork` arm changed this one function's
+    /// callers, not thirty.
+    pub(crate) fn act_template(&self, act: u32) -> u32 {
+        match self.sched.activities.get(act as usize) {
+            Some(a) => a.template,
+            None => act,
+        }
+    }
+
     pub(crate) fn new(
         ir: &'i SimIr,
         arena: NetArena,
@@ -1837,7 +1883,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // zero ticks) into THIS timestep's Inactive region rather than onto the
         // wheel — the wheel is keyed by time, so a same-time entry there would be
         // drained only after the timestep it belongs to had already ended.
-        let r = NativeReady { proc, block };
+        let r = NativeReady {
+            tie: self.act_tie(proc),
+            proc,
+            block,
+        };
         if tick == self.sched.st.now {
             if inactive {
                 push_sorted_native(&mut self.inactive, r);
@@ -1906,6 +1956,92 @@ impl Kernel for NativeKernel<'_, '_, '_> {
 
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
         self.write_routed(lhs, value, offsets);
+    }
+
+    fn k_child_join_bb(&self, act: u32) -> Option<u32> {
+        // `.get()`, like `act_template`/`act_tie` beside it: the body
+        // DIFFERENTIAL builds a kernel directly and never runs `arm_t0`, so the
+        // activity arena can legitimately be empty here. "No activity" means
+        // "not a child", which is the same answer the arena would give.
+        let a = self.sched.activities.get(act as usize)?;
+        // ⚠️ REDUNDANT WITH THE `?` BELOW, AND THAT WAS MEASURED. Deleting this
+        // early return survived the whole suite, and a `panic!` probe on
+        // `!is_child && join_ref.is_some()` then took 0 hits across all 5457
+        // tests. `Activity` is constructed at exactly TWO sites and they set the
+        // pair together — `seed_base_activities` (`join_ref: None, is_child:
+        // false`) and `exec_fork_into`'s child (`Some`, `true`) — so
+        // `is_child ⟺ join_ref.is_some()` and `a.join_ref?` already answers.
+        // Kept as the fail-closed half: a third construction site is what would
+        // make the two fields disagree, and this is the reader that would notice.
+        if !a.is_child {
+            return None;
+        }
+        Some(self.sched.barrier_join_bb(a.join_ref?))
+    }
+
+    fn k_exec_fork(
+        &mut self,
+        act: u32,
+        children: &[u32],
+        join: u32,
+        resume_bb: u32,
+    ) -> Option<u32> {
+        // The bookkeeping is the ENGINE's, and deliberately so: barrier
+        // registration, tie composition and its overflow guard, the window
+        // sharing for a fork-in-frame and the `JoinMode` continuation are all
+        // queue-independent, and a second spelling of the tie order would make
+        // sibling arms nondeterministic in one backend only.
+        let mut ready = Vec::new();
+        let cont = self
+            .sched
+            .exec_fork_into(act, children, join, resume_bb, &mut ready);
+        // …and the queue is ours. The children land in the FRESH `active` the
+        // run loop's `mem::take` just left behind, which is where the engine's
+        // `cur.active` puts them too — so an arm runs in the next delta of this
+        // same instant, not in the middle of the batch that forked it.
+        for r in ready {
+            push_sorted_native(
+                &mut self.active,
+                NativeReady {
+                    tie: r.tie,
+                    proc: r.proc,
+                    block: r.block,
+                },
+            );
+        }
+        cont
+    }
+
+    fn k_body_done(&mut self, act: u32, tmpl: u32) {
+        // `.get()` for the same reason `k_child_join_bb` has it: a kernel built
+        // by the body differential has no activity arena, and "no activity" is
+        // "not a child".
+        let Some(jr) = self
+            .sched
+            .activities
+            .get(act as usize)
+            .and_then(|a| a.join_ref)
+        else {
+            // A base activity: an `always` re-arms, an `initial` does not — the
+            // distinction `k_rearm` already owns.
+            self.k_rearm(tmpl);
+            return;
+        };
+        // A fork child. It never re-arms; it reports, and the barrier decides
+        // whether the PARENT becomes runnable — again through the engine's own
+        // bookkeeping, with only the queue supplied here.
+        let mut ready = Vec::new();
+        self.sched.on_child_complete_into(jr, act, &mut ready);
+        for r in ready {
+            push_sorted_native(
+                &mut self.active,
+                NativeReady {
+                    tie: r.tie,
+                    proc: r.proc,
+                    block: r.block,
+                },
+            );
+        }
     }
 
     fn k_park_frames(&mut self, proc: u32, mut frames: Vec<crate::sched::FrameRec>) {

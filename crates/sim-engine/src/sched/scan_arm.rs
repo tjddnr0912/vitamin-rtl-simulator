@@ -914,6 +914,20 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         //
         self.free_activities.clear();
         self.free_barriers.clear();
+        self.seed_base_activities();
+        self.arm_processes_after_seed();
+    }
+
+    /// The base activities, 1:1 with process declarations — `tie == template ==
+    /// declaration index`, which is what keeps single-process ordering identical
+    /// to before the activity-id refactor.
+    ///
+    /// A4 split this out of `arm_processes`: tier-3 has its own arming
+    /// (`native::run::arm_t0`) and does not call that function, but a fork needs
+    /// the same arena to hang children off. One spelling, because "which
+    /// activity is which process" is the assumption both executors' ready
+    /// ordering rests on.
+    pub(crate) fn seed_base_activities(&mut self) {
         self.activities = (0..self.st.ir.processes.len() as u32)
             .map(|pi| Activity {
                 call_stack: Vec::new(),
@@ -928,7 +942,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 gen: 0,
             })
             .collect();
+    }
 
+    /// The rest of t0 arming, after the activity arena exists.
+    pub(crate) fn arm_processes_after_seed(&mut self) {
         // TOTAL-OR-FATAL mode gate: every `Terminator::Fork` in every body MUST
         // have a matching `(template, join_bb)` entry in `fork_modes`. A miss means
         // a keying mismatch / lost sidecar (the trailer rides outside the schema

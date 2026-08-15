@@ -2221,7 +2221,7 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
             let before_e = sched_e.pending_resumes_for_test();
             let before_n = nk.pending_resumes_for_test();
             let step_e = crate::exec::run_process(&mut sched_e, pi, entry);
-            let step_n = crate::native::body::run_body(&mut nk, &ir, pi, entry);
+            let step_n = crate::native::body::run_body(&mut nk, &ir, pi, pi, entry);
             assert_eq!(
                 format!("{step_e:?}"),
                 format!("{step_n:?}"),
@@ -2397,7 +2397,7 @@ fn s1d4c2b_body_walk_agrees_on_context_and_the_step_guard() {
     let mut nk = NativeKernel::new(&ir2, arena, &mut sched_n, &empty, 20);
     let entry = ir2.processes[pi as usize].entry;
     let step_e = crate::exec::run_process(&mut sched_e, pi, entry);
-    let step_n = crate::native::body::run_body(&mut nk, &ir2, pi, entry);
+    let step_n = crate::native::body::run_body(&mut nk, &ir2, pi, pi, entry);
     assert_eq!(
         format!("{step_e:?}"),
         format!("{step_n:?}"),

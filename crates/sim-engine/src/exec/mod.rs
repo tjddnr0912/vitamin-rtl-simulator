@@ -140,6 +140,44 @@ pub(crate) trait Kernel {
         out_binds: &[(u32, Lvalue)],
         dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
     ) -> Vec<(Lvalue, Value)>;
+    /// A4: if this activity is a live fork CHILD, the block id that means it is
+    /// finished — its barrier's `join_bb`, a sentinel that is never executed.
+    ///
+    /// The completion test has to be here, at the fetch, rather than on a
+    /// terminator: `run_process`'s own intercept says why in one line — a child
+    /// reaches its join by `Goto`, by `Branch`, or by resuming from a
+    /// `Delay`/`Wait`, and only the fetch sees all three.
+    fn k_child_join_bb(&self, _act: u32) -> Option<u32> {
+        None
+    }
+
+    /// A4: execute a `Terminator::Fork`. `Some(bb)` ⇒ the parent continues at
+    /// `bb` in THIS activation; `None` ⇒ it parks on the join barrier.
+    ///
+    /// No default: an executor that reaches a `Fork` and has no answer must not
+    /// pick one silently — the choices differ by a whole `JoinMode` and the
+    /// wrong one is a wrong ORDER, not a crash.
+    fn k_exec_fork(
+        &mut self,
+        _act: u32,
+        _children: &[u32],
+        _join: u32,
+        _resume_bb: u32,
+    ) -> Option<u32> {
+        unreachable!("this kernel has no fork execution")
+    }
+
+    /// A4: this activation's body has ENDED. Re-arm the process, or report to a
+    /// join barrier if the activity is a fork child.
+    ///
+    /// One seam rather than a `k_is_child` predicate plus two call sites,
+    /// because the two answers are the same decision made once by whoever owns
+    /// the activity arena — and a caller that asked the predicate and then
+    /// re-armed anyway would end an `always` on its first arm completion.
+    fn k_body_done(&mut self, _act: u32, tmpl: u32) {
+        self.k_rearm(tmpl);
+    }
+
     /// A3-ii-b: PARK this activation's open task frames across a suspension,
     /// and take them back on resume.
     ///

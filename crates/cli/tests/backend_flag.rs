@@ -842,20 +842,19 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
 
     // Design-gate refusal: `refused` names the family, the map keeps the detail.
     //
-    // ⚠️ THIRD shape for this pin. `string s; int q[$]` until V1 slice 2 admitted
-    // every heap kind; `real r` until A6 admitted that; now `fork`. A refusal pin
-    // whose shape became eligible asserts nothing, and this one has now been
-    // re-picked often enough that the churn IS the test working — every time the
-    // gate grows, somebody has to come back here and find a family that is still
-    // refused. The remaining design-gate families are `fork`, `disable_fork`,
-    // `probe` and `stmt_effect`; `fork` is the one a plain design reaches.
+    // ⚠️ FOURTH shape for this pin. `string s; int q[$]` until V1 slice 2
+    // admitted every heap kind; `real r` until A6; `fork` until A4-a; now
+    // `disable fork`. A refusal pin whose shape became eligible asserts nothing,
+    // and the churn IS the test working — every time the gate grows somebody has
+    // to come back here and find a family that is still refused.
+    //
+    // ⚠️⚠️ This is the LAST one available: after A4-a the design gate has exactly
+    // two families left, and `stmt_effect` has been empty since A1. When
+    // `disable fork` is wired, this arm has no design at all.
     std::fs::write(
         dir.join("q.sv"),
         "module t;\n\
-           reg [7:0] n;\n\
-           initial begin n = 8'd0;\n\
-             fork n = 8'd1; n = 8'd2; join\n\
-             $display(\"n=%0d\", n); #1 $finish; end\n\
+           initial begin fork #1; join_none disable fork; #1 $finish; end\n\
          endmodule\n",
     )
     .unwrap();
@@ -864,8 +863,8 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     let m = std::fs::read_to_string(dir.join("obs3/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
-        "{\"eligible\": false, \"buildable\": true, \"refused\": \"fork\", \
-         \"reject_reasons\": {\"fork\": 1}}",
+        "{\"eligible\": false, \"buildable\": true, \"refused\": \"disable_fork\", \
+         \"reject_reasons\": {\"disable_fork\": 1}}",
         "{m}"
     );
     // ⭐ And this shape reports the split more sharply than `real` did: SCOPE

@@ -62,30 +62,51 @@ use crate::sched::FinishReason;
 ///
 /// Both call sites go through here so the choice cannot differ between the t0
 /// initializers and the region loop.
-fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, proc: u32, block: u32) -> Step {
-    if let Some(body) = k.compiled_for(proc as usize) {
-        // The per-process prologue (`$time`'s multiplier, `%m`'s scope). The walk
-        // does it inside itself; `vm_exec` leaves it to the caller, exactly as
-        // `Scheduler::vm_run_body` does.
-        k.k_enter_body(proc);
-        // Lease the register files. `mem::take` yields OWNED buffers, so they no
-        // longer borrow `k` and cannot alias the `&mut` kernel `vm_exec` needs.
-        let mut regs = std::mem::take(&mut k.vm_regs);
-        regs.clear();
-        regs.resize(body.nregs as usize, None);
-        let mut offs = std::mem::take(&mut k.vm_offs);
-        offs.clear();
-        offs.resize(body.noffs as usize, None);
-        #[cfg(test)]
-        crate::native::kernel::COMPILED_ACTIVATIONS.with(|c| c.set(c.get() + 1));
-        let step = crate::backend::vm_exec(k, &body, proc, block, &mut regs, &mut offs);
-        regs.clear();
-        k.vm_regs = regs;
-        offs.clear();
-        k.vm_offs = offs;
-        return step;
+fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u32) -> Step {
+    // ⚠️ A4: a CHILD activity always takes the walk. `vm_exec` carries one `proc`
+    // and uses it for both roles the walk now keeps apart — the body it indexes
+    // and the identity it schedules under — so a child running its parent's
+    // compiled body would schedule as its parent. Compiled bodies are
+    // suspend-free (`is_codegen_able`), so the only thing this costs a child is
+    // the specialised evaluator, and the only thing it buys is that the id split
+    // has ONE owner until `vm_exec` grows the same parameter.
+    //
+    // ⚠️ THE GUARD IS UNREACHABLE TODAY AND THAT WAS MEASURED, not argued. A
+    // mutation to `if true` survived the whole suite; a `panic!` probe on
+    // `act != tmpl && compiled_for(tmpl).is_some()` then took 0 hits across all
+    // 5457 tests. The structural reason is `is_codegen_able`'s `_`-free
+    // terminator match: the only two terminators that can make `act != tmpl` are
+    // `Fork` (a child directly) and `Call` (a child inside a frame), and BOTH are
+    // in its refusal set — so a body that can create a child activity is by
+    // construction not compiled. It stays because that is a property of today's
+    // codegen coverage, not of the id split, and because the failure mode if it
+    // ever changes is silent: a child scheduling under its parent's identity.
+    if act == tmpl {
+        if let Some(body) = k.compiled_for(tmpl as usize) {
+            // The per-process prologue (`$time`'s multiplier, `%m`'s scope). The walk
+            // does it inside itself; `vm_exec` leaves it to the caller, exactly as
+            // `Scheduler::vm_run_body` does.
+            k.k_enter_body(tmpl);
+            // Lease the register files. `mem::take` yields OWNED buffers, so they
+            // no longer borrow `k` and cannot alias the `&mut` kernel `vm_exec`
+            // needs.
+            let mut regs = std::mem::take(&mut k.vm_regs);
+            regs.clear();
+            regs.resize(body.nregs as usize, None);
+            let mut offs = std::mem::take(&mut k.vm_offs);
+            offs.clear();
+            offs.resize(body.noffs as usize, None);
+            #[cfg(test)]
+            crate::native::kernel::COMPILED_ACTIVATIONS.with(|c| c.set(c.get() + 1));
+            let step = crate::backend::vm_exec(k, &body, tmpl, block, &mut regs, &mut offs);
+            regs.clear();
+            k.vm_regs = regs;
+            offs.clear();
+            k.vm_offs = offs;
+            return step;
+        }
     }
-    run_body(k, ir, proc, block)
+    run_body(k, ir, act, tmpl, block)
 }
 
 /// The THIRD gate layer: can the executor that exists TODAY run this design?
@@ -279,7 +300,8 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     // (= re-fire normally), which is what makes `q <= d` wake
                     // `always @(q)`.
                     k.arena.ch.blocking_writer = Some(r.proc);
-                    let step = dispatch_body(k, ir, r.proc, r.block);
+                    let tmpl = k.act_template(r.proc);
+                    let step = dispatch_body(k, ir, r.proc, tmpl, r.block);
                     k.arena.ch.blocking_writer = None;
                     // The walk drains at every statement boundary; this catches
                     // what happens AFTER the last one — an out-of-range read in a
@@ -324,8 +346,23 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                         // but IEEE does not re-enter an `always` until it
                         // completes. S1d-3 stated this rule and had no maintainer
                         // for it; this is the maintainer.
-                        Step::Suspended => k.wake.busy[r.proc as usize] = true,
-                        Step::Done => k.wake.busy[r.proc as usize] = false,
+                        // ⚠️ A4: `busy` belongs to the BASE activity only, and
+                        // `r.proc == tmpl` is what identifies one — a fork child
+                        // has its parent's template and an id of its own. A child
+                        // has no static sensitivity to suppress, and indexing
+                        // this process-sized table with its activity id is an
+                        // out-of-bounds panic (measured, on the first fork that
+                        // completed an arm).
+                        Step::Suspended => {
+                            if r.proc == tmpl {
+                                k.wake.busy[r.proc as usize] = true;
+                            }
+                        }
+                        Step::Done => {
+                            if r.proc == tmpl {
+                                k.wake.busy[r.proc as usize] = false;
+                            }
+                        }
                     }
                 }
                 propagate(k);
@@ -628,6 +665,16 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
 /// measurement says that is literal — `reg clk = 0;` must not hand
 /// `always @clk` an x→0 edge. Keeping the dirt would hand it exactly that.
 fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
+    // A4: the activity arena, seeded exactly as `arm_processes` seeds it — one
+    // base activity per process declaration, `tie == template == index`. Tier-3
+    // does not call `arm_processes` (it has this function instead), so before
+    // this line `Scheduler::activities` was EMPTY on a native run and every
+    // `Scheduler` method that indexes it would have panicked; `scan_arm.rs` says
+    // so in the comment that explains why `run_body`'s `Native` arm is dead.
+    //
+    // Nothing consumes it yet — `act_template` reads it and returns the identity
+    // either way — so this is inert until the `Fork` arm hangs a child off it.
+    k.sched.seed_base_activities();
     let inits: Vec<u32> = k.sched.st.init_procs.to_vec();
     // THE MARK. Everything already on the dirty list belongs to the t0
     // cont-assign settle and must SURVIVE; only what the initializer bodies add
@@ -651,7 +698,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // `finished` between initializers is likewise the engine's behaviour;
         // an earlier version of this loop returned early, which was a
         // difference with no rule behind it.
-        let _ = dispatch_body(k, ir, pid, entry);
+        let _ = dispatch_body(k, ir, pid, pid, entry);
         // REDUNDANT TODAY, and said so rather than left looking load-bearing:
         // `run_body` drains at every statement boundary and an initializer body
         // is straight-line assignments, so an out-of-range read in one is
@@ -695,6 +742,10 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
                 push_sorted_native(
                     &mut k.active,
                     NativeReady {
+                        // A base activity's tie IS its process id (the seeding
+                        // sets `tie == template == index`), so this is the value
+                        // the collapsed field carried before A4 restored it.
+                        tie: pi,
                         proc: pi,
                         block: ir.processes[pi as usize].entry,
                     },
@@ -779,6 +830,7 @@ fn propagate(k: &mut NativeKernel) {
         push_sorted_native(
             &mut k.active,
             NativeReady {
+                tie: p,
                 proc: p,
                 block: k.ir.processes[p as usize].entry,
             },
@@ -873,6 +925,10 @@ fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNe
         idx += 1;
         if fired {
             woken.push(NativeReady {
+                // The wake table's waiters are per PROCESS — a child activity has
+                // no static sensitivity — so the woken activity is always the
+                // base one and its tie is its process id.
+                tie: w.proc,
                 proc: w.proc,
                 block: w.block,
             });
@@ -930,7 +986,7 @@ fn run_finals(k: &mut NativeKernel) {
             continue; // defensive: stale side table, as in the engine
         }
         let entry = ir.processes[pid as usize].entry;
-        let _ = dispatch_body(k, ir, pid, entry);
+        let _ = dispatch_body(k, ir, pid, pid, entry);
         k.drain_range_diags();
         // …and flush whatever `$strobe`/`$monitor` the final body queued: the
         // postponed machinery is per-timestep and end-of-sim is the last one.

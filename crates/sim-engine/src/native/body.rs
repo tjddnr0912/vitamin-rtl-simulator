@@ -186,8 +186,24 @@ pub(crate) fn body_is_walkable(
                 // `Level` wait, and never builds this variant.
                 sim_ir::WaitCause::Named { .. } | sim_ir::WaitCause::Fork => return false,
             },
-            // No arm in the walk: `Fork` is gate-refused.
-            Terminator::Fork { .. } => return false,
+            // A4: the walk HAS a `Fork` arm now. Its children are process-body
+            // blocks, so they join this scan — an arm that reaches a shape this
+            // walk cannot run is still a refusal, just not because it is an arm.
+            //
+            // ⚠️ `resume_bb` is pushed too: the parent continues there for
+            // `join_none` and after the barrier otherwise, and a `wait fork`
+            // sitting past the join is exactly the shape this scan must still
+            // see.
+            Terminator::Fork {
+                children,
+                resume_bb,
+                ..
+            } => {
+                for &c in children {
+                    stack.push(c);
+                }
+                stack.push(*resume_bb);
+            }
             // A3-i: a SUBSET call is walkable — the arm below delegates it to the
             // engine's synchronous frame executor, exactly as `Expr::Call` has
             // been delegated since S3a. A suspendable callee, or a site with no
@@ -232,9 +248,17 @@ fn park_frames<K: Kernel>(k: &mut K, proc: u32, frames: &mut Vec<OpenFrame>) {
 /// the module doc above, and having the corrected and uncorrected versions of
 /// one sentence in one file is its own defect.
 #[allow(dead_code)] // ditto — nothing SCHEDULES a tier-3 process yet.
-pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) -> Step {
+///
+/// ⚠️ A4 SPLIT THE ID IN TWO. `proc` used to be both, and it could be while
+/// activities were 1:1 with processes — a fork gives a child activity its own
+/// PC, its own parked frames and its own resume identity while it runs its
+/// PARENT's body. `tmpl` is what indexes `ir.processes`, the call-site side
+/// tables and the per-process context; `act` is what the scheduler and the frame
+/// park are keyed by. Every caller passes `(proc, proc)` until the `Fork` arm
+/// creates the first activity that is not its own template.
+pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, entry: u32) -> Step {
     debug_assert!(
-        body_is_walkable(ir, proc, entry, &|bb| k.k_call_site_runnable(proc, bb)),
+        body_is_walkable(ir, tmpl, entry, &|bb| k.k_call_site_runnable(tmpl, bb)),
         "run_body entered for a body reaching a terminator the walk has no arm \
          for (`Wait`, `Fork`, or a `Call` whose callee suspends)"
     );
@@ -258,19 +282,45 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
     //
     // Empty for a design with no frame calls, which is every design before A3-i,
     // and empty on a fresh (non-resume) entry.
-    let mut frames: Vec<OpenFrame> = k.k_take_frames(proc);
+    let mut frames: Vec<OpenFrame> = k.k_take_frames(act);
     // Per-process context (`$time`'s multiplier, `%m`'s scope) — the engine
     // installs it on every block activation, and a walk that skipped it would
     // render from whatever process ran last.
-    k.k_enter_body(proc);
+    k.k_enter_body(tmpl);
     loop {
         // TWO BLOCK SPACES, exactly as `run_process`'s frame-aware fetch has: a
         // task frame's PC indexes the GLOBAL `ir.blocks` arena, a process body's
         // indexes `ir.processes[t].body`. Using one for the other is not a subtle
         // bug — it reads a different design's statements.
+        // ── CHILD-COMPLETION INTERCEPT (A4) ──
+        //
+        // `run_process`'s, in the same position and for the reason it gives:
+        // terminator-agnostic, because a fork arm reaches its join by `Goto`, by
+        // `Branch` or by resuming from a `Delay`/`Wait`, and the FETCH is the one
+        // place all three pass through. `join_bb` is a sentinel block that is
+        // never executed; reaching it IS the arm's end.
+        //
+        // ⚠️ Measured the hard way: without it a child fell through the join
+        // block and ran the PARENT'S CONTINUATION — `fork a=1; b=2; join` printed
+        // `a=1 b=0 c=1` because the first arm ran the code after the join before
+        // the second arm ever started. Not a hang, not a panic: a wrong order at
+        // exit 0.
+        //
+        // Only when the walk is not inside a frame, exactly as the engine gates
+        // it: an in-frame child's `bb` and the sentinel live in different block
+        // spaces, and comparing them across spaces kills the child on a numeric
+        // collision.
+        if frames.is_empty() {
+            if let Some(jbb) = k.k_child_join_bb(act) {
+                if bb == jbb {
+                    k.k_body_done(act, tmpl);
+                    return Step::Done;
+                }
+            }
+        }
         let block = match frames.last() {
             Some(f) => &ir.blocks[f.bb as usize],
-            None => &ir.processes[proc as usize].body[bb as usize],
+            None => &ir.processes[tmpl as usize].body[bb as usize],
         };
         for &sid in &block.stmts {
             let effect = compute_effect(&*k, &ir.stmts[sid as usize], sid);
@@ -369,15 +419,14 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                     // as "value assigned to `bb` is never read" — the dead store
                     // WAS the bug.
                 } else {
-                    // `proc` is a TEMPLATE id here and `Scheduler::rearm` indexes
-                    // ACTIVITIES. They are the same number only because the S0
-                    // gate refuses forks, so base activities stay 1:1 with
-                    // processes and `tie == template == declaration index`.
-                    // `run_process` keeps the two apart (`pi` for re-arm,
-                    // `activity_template(pi)` for the body); this walk collapses
-                    // them, and that is safe exactly as long as the fork row
-                    // holds.
-                    k.k_rearm(proc);
+                    // ⚠️ A4 SPLIT THIS. The note that stood here said re-arming
+                    // with the template was safe "exactly as long as the fork row
+                    // holds", because base activities were 1:1 with processes.
+                    // A fork child runs its parent's body and must NOT re-arm it
+                    // — it reports to the join barrier instead, and the barrier
+                    // decides whether the parent runs again. `k_body_done` is
+                    // that decision, made by whoever owns the activity arena.
+                    k.k_body_done(act, tmpl);
                     return Step::Done;
                 }
             }
@@ -418,8 +467,8 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 // table ever learning about frames. With no frames open, `bb`
                 // is `*resume` and this is byte-identical to what it replaced.
                 set_pos!(*resume);
-                k.k_schedule_resume(proc, bb, tick, inactive);
-                park_frames(k, proc, &mut frames);
+                k.k_schedule_resume(act, bb, tick, inactive);
+                park_frames(k, act, &mut frames);
                 return Step::Suspended;
             }
             // IN-BODY WAIT (S1d-4c-2d). `run_process`'s non-frame branch again,
@@ -454,14 +503,24 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 // a cause nothing here can satisfy — a hang, not a wrong value —
                 // so they are refused by `body_is_walkable` rather than parked.
                 set_pos!(*resume);
-                k.k_suspend_on(proc, bb, cond);
-                park_frames(k, proc, &mut frames);
+                k.k_suspend_on(act, bb, cond);
+                park_frames(k, act, &mut frames);
                 return Step::Suspended;
             }
-            Terminator::Fork { .. } => unreachable!(
-                "tier-3 body walk reached `Fork` — `fork_modes` non-empty is an S0 \
-                 reject, so this is a gate widening without a walk to match"
-            ),
+            // A4: FORK. The bookkeeping is the engine's (`exec_fork_into` —
+            // barrier, tie composition, window sharing, `JoinMode`); what the
+            // kernel adds is the queue the children go on. `Some(bb)` ⇒ this
+            // activation continues there (`join_none`, or zero children); `None`
+            // ⇒ the parent parks on the barrier and is re-enqueued by the child
+            // that fires it, so it holds no wake entry of its own.
+            Terminator::Fork {
+                children,
+                join,
+                resume_bb,
+            } => match k.k_exec_fork(act, children, *join, *resume_bb) {
+                Some(rb) => set_pos!(rb),
+                None => return Step::Suspended,
+            },
             // A3-i: a SUBSET subroutine CALL STATEMENT — a task enable, or a call
             // to a function with output formals. Delegated to the engine's
             // synchronous frame executor through `exec::frame_call`, which is the
@@ -478,7 +537,7 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 // (`task_calls_func`). The mode split therefore has to be asked of
                 // the position we are actually at.
                 let in_frame = frames.last().map(|f| f.bb);
-                match crate::exec::frame_call::call_here(k, proc, bb, in_frame) {
+                match crate::exec::frame_call::call_here(k, tmpl, bb, in_frame) {
                     // A3-i: the callee runs synchronously, whole, in the engine's
                     // `&self` frame executor. Nothing is opened.
                     crate::exec::frame_call::Taken::Done => set_pos!(*ret_bb),

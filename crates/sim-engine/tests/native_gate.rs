@@ -257,54 +257,43 @@ fn a_dynamic_array_and_both_element_refinements_are_core() {
 /// consumes are the single source — no re-derivation from source text).
 #[test]
 fn sidecar_families_reject_from_opts() {
+    // ⚠️⚠️ THE SUBJECT IS GONE, and the test is kept to say so. It existed to
+    // show that several SIDECAR-BORNE reject families report together instead of
+    // short-circuiting, and they have gone core one at a time: `clocking_inputs`
+    // (slice #1), `file_directed_stmts` (#4), `stage_stmts` (#6), `probed_nets`
+    // (A8-probe) and now `fork_modes` (A4-a). There is no sidecar-borne family
+    // left at all.
+    //
+    // What it asserts instead is exactly that: a design gate handed EVERY
+    // v1-reject sidecar populated must still be eligible. That is a stronger
+    // claim than the old one and it fails the moment a new sidecar is added to
+    // `SimOpts` and classified as a rejection without a note here.
     let ir = build("module t; reg a = 0; initial begin a = 1; $finish; end endmodule\n");
-    let base = design_eligibility(&ir, &SimOpts::default());
-    assert!(
-        base.eligible,
-        "baseline must be clean: {:?}",
-        base.reject_reasons
-    );
-
     let mut o = SimOpts::default();
     o.fork_modes.insert((0, 0), sim_engine::JoinMode::All);
-    o.fork_modes.insert((0, 1), sim_engine::JoinMode::Any);
+    o.probed_nets.push(0);
+    o.stage_stmts.insert(0);
+    o.file_directed_stmts.insert(0);
+    o.clocking_inputs.insert(0);
     let e = design_eligibility(&ir, &o);
-    assert!(!e.eligible);
-    assert_eq!(
-        e.reject_reasons.into_iter().collect::<Vec<_>>(),
-        vec![("fork", 2)]
+    assert!(
+        e.eligible,
+        "no sidecar-borne family rejects any more: {:?}",
+        e.reject_reasons
     );
 
-    // ⚠️⚠️ THE SUBJECT OF THIS TEST HAS RUN OUT, and that is the news rather
-    // than a reason to delete it. It was written to show that several
-    // sidecar-borne families report TOGETHER instead of short-circuiting, and
-    // its partners have gone core one at a time: `clocking_inputs` (slice #1),
-    // `file_directed_stmts` (slice #4), `stage_stmts` (slice #6), and now
-    // `probed_nets` (A8-probe). `fork` is the ONLY sidecar-borne family left, so
-    // "several rows" can no longer be spelled from `SimOpts` alone.
-    //
-    // What is kept is the COUNTING half — a family's unit is its table entries,
-    // so two fork sites report `("fork", 2)` — and the together-ness moves to
-    // the one pairing still available: a sidecar family beside a
-    // STATEMENT-scanned one.
+    // The families that DO remain are statement-scanned, not sidecar-borne, and
+    // `disable_fork` is the only one a design can reach (`stmt_effect` has been
+    // empty since A1). It is asserted here so this test still names a live row.
     let ir2 = build(
         "module t;\n\
            initial begin fork #1; join_none disable fork; #1 $finish; end\n\
          endmodule\n",
     );
-    let e2 = design_eligibility(
-        &ir2,
-        &sidecar_opts(
-            "module t;\n\
-           initial begin fork #1; join_none disable fork; #1 $finish; end\n\
-         endmodule\n",
-        ),
-    );
-    assert!(!e2.eligible);
-    let rs: Vec<_> = e2.reject_reasons.into_iter().collect();
-    assert!(
-        rs.iter().any(|&(k, _)| k == "fork") && rs.iter().any(|&(k, _)| k == "disable_fork"),
-        "a sidecar family and a statement-scanned one must report together: {rs:?}"
+    let e2 = design_eligibility(&ir2, &SimOpts::default());
+    assert_eq!(
+        e2.reject_reasons.into_iter().collect::<Vec<_>>(),
+        vec![("disable_fork", 1)]
     );
 }
 
@@ -877,9 +866,10 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     // directions — this shape is design=false ∧ storage=Ok, the one below is
     // design=true ∧ storage=Err, so a gate that dropped either half fails one of
     // them.
-    let design_refused = "module t; reg [7:0] n;\n\
-         initial begin n = 8'd0; fork n = 8'd1; n = 8'd2; join\n\
-           $display(\"n=%0d\", n); $finish; end endmodule\n";
+    // ⚠️ FOURTH shape. `fork` joined the core with A4-a, so the design-refused
+    // arm is now `disable fork` — the only family a design can still reach.
+    let design_refused = "module t;\n\
+         initial begin fork #1; join_none disable fork; #1 $finish; end endmodule\n";
     // Design gate PASSES (calls are core), storage refuses.
     //
     // ⚠️ The SHAPE here changed with S3a. It used to be a plain
@@ -916,7 +906,7 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     // `s3a_a_module_body_naming_a_frame_slot_is_refused` already uses.
     for (name, src, want, corrupt) in [
         ("clean", clean, None, false),
-        ("design", design_refused, Some("fork"), false),
+        ("design", design_refused, Some("disable_fork"), false),
         (
             "storage",
             storage_refused,

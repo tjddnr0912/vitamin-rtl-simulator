@@ -244,7 +244,13 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         assert_fire: _,
         assert_ctl: _,
         // ── v1-reject sidecars (§4.3) — each non-empty table disqualifies ───
-        fork_modes,
+        // A4-a: WIRED for a PROCESS-LEVEL fork. `exec_fork_into` is the engine's
+        // own bookkeeping and the walk supplies only the queue, so what is left
+        // to refuse is the two shapes tier-3 still has no answer for — a fork
+        // INSIDE a frame (`native::frames`'s "a task frame that FORKS" row) and
+        // a bare `wait fork` (the executor row). Both are counted elsewhere,
+        // under their own names.
+        fork_modes: _,
         // A8-a: see the deleted `handle_copy` row below — store-independent.
         handle_copy_stmts: _,
         // CORE since V1 slice 2c. Both queue-OPERATION tables live in `SimState`
@@ -299,7 +305,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         file_directed_stmts: _,
     } = opts;
 
-    flag(&mut out, "fork", fork_modes.len());
     // ⭐⭐ **A8-a: `handle_copy` was PURELY CONSERVATIVE — zero kernel code.**
     // A whole-handle copy (`d2 = d1`, IEEE §7.10) lowers to a no-op `Display`
     // plus a StmtId → `(dst_net, src_net)` marker, and `builtins::dispatch`
