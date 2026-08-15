@@ -635,44 +635,6 @@ fn s3a_each_frame_refusal_row_has_a_design() {
     let cases: Vec<(&str, &str, &str)> = vec![
         // ⚠️ This row has moved TWICE, and both times because the walk grew an arm
         // rather than because anything about the row was wrong.
-        //   * before A3-i it refused EVERY task;
-        //   * A3-i left it refusing every SUSPENDABLE task — and the designs here
-        //     were `$display`-in-a-task and write-a-module-net-from-a-task;
-        //   * A3-ii-a runs both of those, because "suspendable" names the engine's
-        //     EXECUTOR CHOICE and neither of them PARKS.
-        // What is left is the actual suspension, and it needs its own designs.
-        // ⚠️⚠️ A3-ii-b REMOVED three cases from here — "a task frame that
-        // delays", "a task frame whose CALLEE delays" and "a task frame that
-        // waits on an edge" — because all three RUN now. The row they pinned
-        // narrowed from "delay, wait or fork" to fork alone.
-        //
-        // And the fork half cannot replace them: a design with a `fork` in a
-        // task trips the DESIGN gate's `fork` row, which this table's second
-        // assertion explicitly forbids ("the DESIGN gate must accept it, or an
-        // earlier layer is doing the work"). So the storage row's remaining
-        // population is not reachable in isolation — measured, not assumed, and
-        // the same shape §5.1-v found for `has_hier_call`. The row stays
-        // fail-closed; what those three designs now assert lives in
-        // `cli::frame_park` as positive, iverilog-pinned coverage.
-        // ⚠️ A3-iii turned this from a READ into a WRITE, because a read is no
-        // longer refused: the delegated executor takes the caller's store now.
-        // A class-field write is the shape that still reaches this row — a plain
-        // `g = …` on a module net is refused a phase EARLIER (elaborate E3009),
-        // so building it the obvious way would give a test that passes because
-        // elaborate refused it.
-        (
-            "subroutine writes a module-scope class field",
-            "a subroutine that WRITES a net outside its own frame: S3b",
-            r#"
-module top;
-  class C; int v; endclass
-  C c;
-  function automatic integer addg(input integer x); begin c.v = x; addg = x; end endfunction
-  integer r;
-  initial begin c = new(); r = addg(3); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
         (
             "call in a delayed continuous assign",
             "a call in a delayed continuous assign: S3b",
@@ -686,66 +648,13 @@ module top;
 endmodule
 "#,
         ),
-        // ── the six below discriminate the WALK, not the row. Each was a
-        // surviving mutation until it existed: with only the designs above, the
-        // walk could stop descending into an `else` arm, into a loop body, into
-        // any interior expression node, or into all but the first frame window,
-        // and every test still passed. (Shapes from the S3a differential review.)
-        (
-            "module-scope write only in the ELSE arm",
-            "a subroutine that WRITES a net outside its own frame: S3b",
-            r#"
-module top;
-  class C; int v; endclass
-  C c;
-  function automatic integer f(input integer x);
-    begin if (x > 100) f = x; else begin c.v = x; f = x; end end
-  endfunction
-  integer r;
-  initial begin c = new(); r = f(3); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
-        (
-            "module-scope write only inside a loop body",
-            "a subroutine that WRITES a net outside its own frame: S3b",
-            r#"
-module top;
-  class C; int v; endclass
-  C c;
-  function automatic integer f(input integer n);
-    integer i, s;
-    begin s = 0; for (i = 0; i < n; i = i + 1) c.v = i; f = s; end
-  endfunction
-  integer r;
-  initial begin c = new(); r = f(3); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
-        (
-            // Kills dropping the `n < base_net` half of the containment test.
-            //
-            // ⚠️ This design used to declare `gg` AFTER the function, and said so:
-            // "its NetId is ABOVE the frame window". That was not legal
-            // SystemVerilog — a variable may not be used above its declaration
-            // (IEEE 1800 §6.10), and iverilog rejects it with "Check for
-            // declaration after use". vita accepted it silently until the aes_top
-            // report, so this design was riding a gap. Declaration order does not
-            // in fact move the NetId either: module nets are all created in pass 4,
-            // frame nets in pass 6.5, so a module net is ALWAYS below the window
-            // and the `n < base_net` half is killed by any out-of-frame read.
-            "module-scope write by a function declared before it",
-            "a subroutine that WRITES a net outside its own frame: S3b",
-            r#"
-module top;
-  class C; int v; endclass
-  C cc;
-  function automatic integer f(input integer x); begin cc.v = x; f = x; end endfunction
-  integer r;
-  initial begin cc = new(); r = f(3); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
+        // ⚠️⚠️ A3-iii-b REMOVED four cases here — every one wrote a module-scope
+        // CLASS FIELD, which is admitted now: that destination is
+        // `SimState::class_heap`, borrowed by both kernels, so it never needed
+        // routing (only the HANDLE READ did). With them went the note that
+        // introduced them ("the six below discriminate the WALK, not the row"),
+        // because the walk-discriminating designs WERE those four plus the two
+        // that remain.
         (
             // The call is in the delayed assign's LVALUE INDEX, not its rhs.
             "call in a delayed continuous assign's lvalue index",
@@ -793,7 +702,16 @@ endmodule
     // down by exactly the three that moved, and no case replaced them. The count
     // is asserted exactly, rather than as a floor, so that a row losing its last
     // design has to be justified by a human instead of quietly passing.
-    assert_eq!(cases.len(), 6, "frame refusal-row coverage moved");
+    // ⚠️⚠️ 6 -> 2: A3-iii-b removed the FOUR class-field-write designs. Every one
+    // of them wrote a module-scope class field, which is admitted now — that
+    // destination is `SimState::class_heap`, borrowed by both kernels, so it
+    // never needed routing (only the HANDLE READ did). The row narrowed to a
+    // FLAT out-of-window write and has no design for it: elaborate rejects a
+    // function assigning a module net (E3009, three spellings measured) and a
+    // non-`automatic` task is inlined, so it never has a frame at all. The row
+    // stays fail-closed; what those four designs now assert lives in
+    // `cli::frame_class_write` as positive, iverilog-pinned values.
+    assert_eq!(cases.len(), 2, "frame refusal-row coverage moved");
     // ⚠️ The WRITE twin of the "reads a module net" row has no design, and not
     // by omission: elaborate refuses a frame body that assigns to a net outside
     // the function (E3009), so the row can only ever be reached by a READ.
@@ -1316,7 +1234,7 @@ endmodule
 /// the old test had: the out-of-window WRITE refuses, and the same body with the
 /// write removed builds.
 #[test]
-fn s3a_an_out_of_window_write_refuses_and_its_read_only_twin_builds() {
+fn s3a_an_out_of_window_class_field_write_builds_like_its_read_only_twin() {
     let refused = r#"
 module top;
   class C; int v; endclass
@@ -1344,10 +1262,14 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(refused);
-    assert_eq!(
-        NetArena::buildable(&ir, &opts).err(),
-        Some("a subroutine that WRITES a net outside its own frame: S3b"),
-    );
+    // ⚠️⚠️ A3-iii-b INVERTED this. A class FIELD write is admitted now: its
+    // destination is `SimState::class_heap`, which both kernels borrow, so it
+    // never needed routing — only the HANDLE READ did, and that is threaded.
+    // What the row still refuses is a FLAT out-of-window write, and THAT has no
+    // reachable design: elaborate rejects a function assigning a module net
+    // (E3009, measured on three spellings — direct, via a local, and `c = new()`
+    // — and a non-`automatic` task is inlined so it has no frame at all).
+    assert_eq!(NetArena::buildable(&ir, &opts).err(), None,);
     let (ir, opts) = build_with_opts(admitted);
     assert_eq!(NetArena::buildable(&ir, &opts).err(), None);
 }

@@ -1054,7 +1054,20 @@ fn a_subroutine_design_builds_only_when_its_body_stays_in_its_frame() {
         (
             "writes a module-scope class field",
             writes_module,
-            Some("a subroutine that WRITES a net outside its own frame: S3b"),
+            // ⚠️⚠️ A3-iii-b INVERTED this row. A class FIELD write is admitted
+            // now: its destination is `SimState::class_heap`, which both kernels
+            // borrow, so it never needed routing — only the HANDLE READ did, and
+            // that is threaded through `HeapRouted` (the caller's store BARE was
+            // measured wrong: a `this` in a frame slot read back as null).
+            //
+            // The row still refuses a FLAT out-of-window write and has no
+            // reachable design for it: elaborate rejects a function assigning a
+            // module net (E3009 — measured on three spellings: direct, via a
+            // local, and `c = new()`), and a non-`automatic` task is inlined, so
+            // it has no frame at all. `writes_module` is kept under its name as
+            // the POSITIVE case, because the shape it names is the one this
+            // slice made work.
+            None,
         ),
     ] {
         let (ir, opts) = build_with_opts(src);

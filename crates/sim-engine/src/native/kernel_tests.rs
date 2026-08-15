@@ -2560,7 +2560,20 @@ fn s1d4c2b_suspend_free_scan_answers_about_the_given_entry() {
                    slow();\n\
                  end\n\
                endmodule\n";
-    let (ir, opts) = build_with_opts(src);
+    let (ir, mut opts) = build_with_opts(src);
+    // ⚠️⚠️ A3-iii-b took the last SOURCE-level way to be eligible-and-not-buildable
+    // away. The design used to earn it with a function writing a class field;
+    // that is admitted now (the field lives in the shared `class_heap`), and the
+    // FLAT out-of-window write the row still refuses has no design at all —
+    // elaborate rejects it (E3009) and a non-`automatic` task is inlined.
+    //
+    // So the not-buildable half comes from a CORRUPT SIDECAR instead, which is
+    // the same technique `s3a_a_module_body_naming_a_frame_slot_is_refused` uses
+    // and is honest for the same reason: `frames_admitted` refuses a frame window
+    // that runs past the net table, and the DESIGN gate has no opinion about it.
+    if let Some(m) = opts.func_table.first_mut() {
+        m.locals_len = u32::MAX;
+    }
     let el = crate::native::design_eligibility(&ir, &opts);
     assert!(
         el.eligible,

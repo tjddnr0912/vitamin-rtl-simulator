@@ -905,19 +905,34 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     let mut saw_clean = 0;
     let mut saw_design_refused = 0;
     let mut saw_storage_refused = 0;
-    for (name, src, want) in [
-        ("clean", clean, None),
-        ("design", design_refused, Some("fork")),
+    // ⚠️⚠️ A3-iii-b: the STORAGE arm now corrupts its own sidecar, and that is not
+    // a shortcut — it is the last storage refusal a test can produce. The design
+    // below earned one by writing a module-scope class field; that write goes to
+    // the shared `class_heap` and is admitted now, and the FLAT out-of-window
+    // write the row still refuses cannot be elaborated at all (E3009, three
+    // spellings measured). `frames_admitted`'s window-range check is a real
+    // storage refusal the DESIGN gate has no opinion about, which is exactly
+    // what this arm needs — and the same technique
+    // `s3a_a_module_body_naming_a_frame_slot_is_refused` already uses.
+    for (name, src, want, corrupt) in [
+        ("clean", clean, None, false),
+        ("design", design_refused, Some("fork"), false),
         (
             "storage",
             storage_refused,
-            Some("a subroutine that WRITES a net outside its own frame: S3b"),
+            Some("malformed frame sidecar (frame window out of range)"),
+            true,
         ),
     ] {
         let ir = build(src);
         // The storage-refused shape needs the REAL sidecars: with an empty
         // `func_table` the engine has no frame table and the design looks flat.
-        let opts = sidecar_opts(src);
+        let mut opts = sidecar_opts(src);
+        if corrupt {
+            let n = opts.func_table.len();
+            assert!(n > 0, "{name}: no frame table to corrupt");
+            opts.func_table[0].locals_len = u32::MAX;
+        }
         let e = design_eligibility(&ir, &opts);
         let storage = NetArena::buildable(&ir, &opts);
         let gate = sim_engine::native::runtime_gate(&ir, &opts);
@@ -1003,6 +1018,13 @@ fn sidecar_opts(src: &str) -> SimOpts {
         // design-refused arm had to be re-picked — it had been comparing against
         // a family whose evidence it never installed.
         fork_modes: sc.fork_modes,
+        // ⚠️ A3-iii-b added this, and it is the SAME gap one slice later: the
+        // out-of-window write row now asks whether a destination is a class
+        // FIELD, and without `class_handle_nets` the walk cannot tell — so a
+        // class-field write still looked like a flat one and this file kept
+        // passing for a reason that had stopped being true. Measured by asking
+        // what the CLI installs (`frontend.rs`) rather than by reading this list.
+        class_handle_nets: sc.class_handle_nets,
         ..SimOpts::default()
     }
 }

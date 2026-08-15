@@ -817,11 +817,26 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     let (o, ok) = vita_in(&dir, &["--obs-dir", "obs2b", "-o", "b2.vcd", "g.sv"]);
     assert!(ok && o.contains("r=8"), "{o}");
     let m = std::fs::read_to_string(dir.join("obs2b/run.json")).unwrap();
+    // ⚠️⚠️ A3-iii-b INVERTED this arm, and with it the LAST CLI-reachable way to
+    // be eligible-and-not-buildable. This design earned that verdict by writing a
+    // module-scope class field from a subroutine; the field lives in the shared
+    // `class_heap`, so it never needed routing and is admitted now. The row that
+    // remains refuses a FLAT out-of-window write, which elaborate rejects a phase
+    // earlier (E3009, three spellings measured) — and a corrupt sidecar, the only
+    // other storage refusal, cannot be produced through the CLI at all.
+    //
+    // The property this test is named for is NOT lost with it: the design-gate
+    // arm below is `eligible: false, buildable: true`, i.e. the two halves
+    // disagreeing in the other direction, which is exactly what a folded flag
+    // could not express. The engine-side test
+    // `sim-engine::native_gate::the_runtime_gate_is_exactly_design_and_storage`
+    // still covers the storage-refused direction, by corrupting the sidecar —
+    // and that file needed a fix of its own first: its `sidecar_opts` did not
+    // install `class_handle_nets`, so a class-field write still looked flat there
+    // and the test was passing for a reason that had stopped being true.
     assert_eq!(
         manifest_field(&m, "native"),
-        "{\"eligible\": true, \"buildable\": false, \
-         \"refused\": \"a subroutine that WRITES a net outside its own frame: S3b\", \
-         \"reject_reasons\": {}}",
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",
         "{m}"
     );
 

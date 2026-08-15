@@ -606,7 +606,36 @@ impl<'a> SimState<'a> {
                     .word
                     .and_then(|w| crate::width::const_u32_of_expr(self.ir, w))
                     .unwrap_or(0);
-                self.class_field_write(c, field, &v);
+                // A3-iii-b: the HANDLE READ routes. The heap store below does
+                // not — `class_heap` is on `SimState` and both kernels borrow the
+                // same one — but the object id it is keyed by lives in a NET, and
+                // reading that from this state on a native run yields the
+                // untouched slot: 0, i.e. null, i.e. the field write is dropped
+                // with a warning that looks plausible. A2-i measured this exact
+                // shape on the read side and A2-ii on CRV's receiver; this is the
+                // delegated frame executor's copy of it, and it is the reason the
+                // gate row above could not simply stop counting class fields.
+                //
+                // `None` is `class_field_write`, i.e. the call this replaced, so
+                // the engine path is unchanged by construction.
+                match nets {
+                    // ⚠️ `HeapRouted`, not the caller's store bare — measured.
+                    // The handle may be a FRAME slot (a method's `this`, a local
+                    // holding an object), which the caller's arena does not have
+                    // at all: reading it there yields 0, i.e. null, i.e. the
+                    // field write is dropped with a plausible warning. That is
+                    // the composite `eval_expr_with` builds for every READ in
+                    // this executor, and the handle read is one — routing it any
+                    // other way makes the two disagree about which store owns a
+                    // net, which is the defect this whole layer exists to avoid.
+                    Some(n) => self.class_field_write_with(
+                        &crate::state::HeapRouted { st: self, nets: n },
+                        c,
+                        field,
+                        &v,
+                    ),
+                    None => self.class_field_write(c, field, &v),
+                };
                 return;
             }
         }

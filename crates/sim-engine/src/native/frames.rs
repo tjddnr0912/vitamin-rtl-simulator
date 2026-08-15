@@ -98,6 +98,11 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
     }
     let susp = suspendable_set(ir, opts);
     let mut w = Walk::new(ir);
+    // A3-iii-b: the walk needs the class-handle set to answer "is this
+    // destination a class FIELD" — the one out-of-window write that needs no
+    // routing, because its storage is `SimState::class_heap` and both kernels
+    // borrow the same one.
+    w.class_handles = opts.class_handle_nets.clone();
     for (fi, m) in opts.func_table.iter().enumerate() {
         let fd = ir.funcs[fi];
         if (m.base_net as usize) + (m.locals_len as usize) > ir.nets.len() {
@@ -538,10 +543,15 @@ fn body_stays_in_its_window(
     // the caller's store and `HeapRouted` splits it, sending a frame slot back to
     // the activation window and a module net to the arena.
     //
-    // ⚠️ It stays true for WRITES, and not for want of threading: every
-    // destination in that body goes through `SimState::frame_write_lvalue`, which
-    // is `&self` on this state and has no way to reach a caller's arena. A body
-    // that assigns a module net would land in the dead store, silently.
+    // ⚠️ It stays true for a FLAT out-of-window write, and not for want of
+    // threading: that destination goes through `SimState::frame_write_lvalue`,
+    // which is `&self` on this state and has no way to reach a caller's arena —
+    // it `debug_assert`s its destination is frame-local, so the ENGINE cannot
+    // perform one either. A body that assigns a module net is refused here.
+    //
+    // ⭐ A3-iii-b removed the CLASS-FIELD half from this count. That write goes
+    // to `class_heap`, which both kernels borrow, so it never needed routing;
+    // measured, 21 of the 23 sites the suite reaches are class fields.
     //
     // Measured before narrowing rather than after: of the 26 designs this row
     // blocked, **22 only READ out of window and 4 also write**. So the row keeps
@@ -577,6 +587,9 @@ struct Walk<'i> {
     /// writes now have different answers: a read routes through the caller's
     /// store, a write cannot.
     wnets: Vec<u32>,
+    /// A3-iii-b: the class-handle net ids, so `lvalue` can tell a class FIELD
+    /// write (shared heap) from a write to the handle itself (this store's slot).
+    class_handles: std::collections::BTreeSet<u32>,
     /// Did this walk descend through an `Expr::Call`? Reset by `restart`.
     saw_call: bool,
     /// Is the body currently being walked a TASK's?
@@ -602,6 +615,7 @@ impl<'i> Walk<'i> {
             nstamp: vec![0; ir.nets.len()],
             nets: Vec::new(),
             wnets: Vec::new(),
+            class_handles: std::collections::BTreeSet::new(),
             saw_call: false,
             body_is_task: false,
             stack: Vec::new(),
@@ -838,7 +852,30 @@ impl<'i> Walk<'i> {
             self.add(c.net);
             // A3-iii: the DESTINATION is also a write. Its index expressions are
             // not — `local[i]` reads `i`, and a read routes.
-            self.wnets.push(c.net);
+            //
+            // ⭐ A3-iii-b: a class FIELD write is NOT counted. Its destination is
+            // `SimState::class_heap`, keyed by net id and borrowed by BOTH
+            // kernels, so it needs no routing at all — the same discovery A2-i
+            // made about class storage and A8-a made about `handle_copy`. The
+            // pair `class_is_handle ∧ word.is_some()` is `frame_or_class_write`'s
+            // own test, spelled the same way: a WORD-LESS write to a handle is
+            // the handle ID itself, which does live in this store's slot and must
+            // still be counted.
+            //
+            // Measured before narrowing, not after: of the 23 out-of-window write
+            // sites the suite reaches, **21 are class fields and 4 are flat module
+            // nets** — so the row keeps its place and loses most of its
+            // population, exactly as A3-iii's own narrowing did.
+            //
+            // ⚠️ The `word.is_some()` half SURVIVES the battery and is kept
+            // anyway, measured rather than guessed: dropping it would also let a
+            // write to the HANDLE ITSELF escape, and that value does live in this
+            // store's slot — but no design can tell, because `c = new()` inside a
+            // function is `E3009` a phase earlier (probed directly). It states the
+            // rule `frame_or_class_write` routes by, so the two cannot drift.
+            if !(self.class_handles.contains(&c.net) && c.word.is_some()) {
+                self.wnets.push(c.net);
+            }
             for e in [c.word, c.offset, c.width].into_iter().flatten() {
                 self.expr(e);
             }

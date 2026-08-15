@@ -4196,7 +4196,7 @@ endmodule
 /// module-scope HANDLE net. Building the reject case from the obvious source
 /// shape would have produced a test that passes because elaborate refused it.
 #[test]
-fn a_delegated_body_that_writes_a_module_net_is_refused() {
+fn a_delegated_body_that_writes_a_class_field_now_runs() {
     use sim_engine::native::arena::NetArena;
     let src = "module t;\n\
          class C; int v; endclass\n\
@@ -4208,9 +4208,16 @@ fn a_delegated_body_that_writes_a_module_net_is_refused() {
          initial begin c = new(); c.v = 1; r = bump(2); $display(\"%0d\", r); end\n\
        endmodule\n";
     let (ir, opts) = build_with_opts(src);
+    // ⚠️⚠️ A3-iii-b INVERTED this. A class FIELD write is admitted now: its
+    // destination is `SimState::class_heap`, which both kernels borrow, so it
+    // never needed routing — only the HANDLE READ did, and that is threaded.
+    // What the row still refuses is a FLAT out-of-window write, and THAT has no
+    // reachable design: elaborate rejects a function assigning a module net
+    // (E3009, measured on three spellings — direct, via a local, and `c = new()`
+    // — and a non-`automatic` task is inlined so it has no frame at all).
     assert_eq!(
         NetArena::buildable(&ir, &opts).err(),
-        Some("a subroutine that WRITES a net outside its own frame: S3b"),
+        None,
         "an out-of-window WRITE from a delegated body must stay refused"
     );
     // …and the READ-only neighbour must build, or the row is refusing the wrong
