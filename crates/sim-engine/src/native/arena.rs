@@ -237,7 +237,23 @@ impl NetArena {
                 }
                 c
             },
-            ch: crate::native::dirty::DirtyChannel::new(ir),
+            ch: {
+                let mut ch = crate::native::dirty::DirtyChannel::new(ir);
+                // G2 PROBE: the per-net mirror of `--probe`. Installed HERE
+                // rather than looked up per store, exactly as `two_state` is
+                // resolved into the slot: `probed_nets` is a config vector and
+                // the funnel must not ask a side table on every write.
+                if !opts.probed_nets.is_empty() {
+                    let mut v = vec![false; ir.nets.len()];
+                    for &n in opts.probed_nets.iter() {
+                        if let Some(slot) = v.get_mut(n as usize) {
+                            *slot = true;
+                        }
+                    }
+                    ch.probed = v;
+                }
+                ch
+            },
             buf: vec![0u64; total],
             pending_range: std::cell::RefCell::new(Vec::new()),
         };

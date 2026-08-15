@@ -255,24 +255,44 @@ fn sidecar_families_reject_from_opts() {
 
     let mut o = SimOpts::default();
     o.fork_modes.insert((0, 0), sim_engine::JoinMode::All);
-    o.probed_nets.push(0);
-    // ⚠️ `file_directed_stmts` was a row here and is CORE since slice #4 (its
-    // whole machinery was one fd read through the wrong store). Re-spelled as a
-    // second `probed_nets` entry so this test keeps measuring that several rows
-    // report TOGETHER rather than short-circuiting.
-    o.probed_nets.push(1);
-    // ⚠️ `clocking_inputs` was the fourth row here and is now CORE (slice #1) —
-    // re-spelled as a `stage_stmts` entry rather than deleted, so this test keeps
-    // measuring that several rows report TOGETHER rather than short-circuiting.
-    // ⚠️ `stage_stmts` was the fourth row here and is CORE since slice #6 (its
-    // machinery was two argument reads). A third `probed_nets` entry keeps this
-    // test measuring that several rows report TOGETHER.
-    o.probed_nets.push(2);
+    o.fork_modes.insert((0, 1), sim_engine::JoinMode::Any);
     let e = design_eligibility(&ir, &o);
     assert!(!e.eligible);
     assert_eq!(
         e.reject_reasons.into_iter().collect::<Vec<_>>(),
-        vec![("fork", 1), ("probe", 3)]
+        vec![("fork", 2)]
+    );
+
+    // ⚠️⚠️ THE SUBJECT OF THIS TEST HAS RUN OUT, and that is the news rather
+    // than a reason to delete it. It was written to show that several
+    // sidecar-borne families report TOGETHER instead of short-circuiting, and
+    // its partners have gone core one at a time: `clocking_inputs` (slice #1),
+    // `file_directed_stmts` (slice #4), `stage_stmts` (slice #6), and now
+    // `probed_nets` (A8-probe). `fork` is the ONLY sidecar-borne family left, so
+    // "several rows" can no longer be spelled from `SimOpts` alone.
+    //
+    // What is kept is the COUNTING half — a family's unit is its table entries,
+    // so two fork sites report `("fork", 2)` — and the together-ness moves to
+    // the one pairing still available: a sidecar family beside a
+    // STATEMENT-scanned one.
+    let ir2 = build(
+        "module t;\n\
+           initial begin fork #1; join_none disable fork; #1 $finish; end\n\
+         endmodule\n",
+    );
+    let e2 = design_eligibility(
+        &ir2,
+        &sidecar_opts(
+            "module t;\n\
+           initial begin fork #1; join_none disable fork; #1 $finish; end\n\
+         endmodule\n",
+        ),
+    );
+    assert!(!e2.eligible);
+    let rs: Vec<_> = e2.reject_reasons.into_iter().collect();
+    assert!(
+        rs.iter().any(|&(k, _)| k == "fork") && rs.iter().any(|&(k, _)| k == "disable_fork"),
+        "a sidecar family and a statement-scanned one must report together: {rs:?}"
     );
 }
 
@@ -310,12 +330,18 @@ fn stage_markers_are_core() {
         "stage markers must not disqualify: {:?}",
         e.reject_reasons
     );
-    // …and `probe` must NOT have moved with it.
+    // ⚠️ This used to end with "…and `probe` must NOT have moved with it",
+    // which was the point: slice #6 found the two sharing a comment and split
+    // them because the shared reason ("the G2 rail rides `note_change`") was
+    // true of `probe` and false of `stage`. A8-probe then wired `probe` too —
+    // by capturing at tier-3's own store point — so the pair is core for two
+    // DIFFERENT reasons, and asserting the old inequality would now assert a
+    // refusal that no longer exists.
     let mut o2 = SimOpts::default();
     o2.probed_nets.push(0);
     assert!(
-        !design_eligibility(&ir, &o2).eligible,
-        "probe is still a row"
+        design_eligibility(&ir, &o2).eligible,
+        "probe is core since A8-probe"
     );
 }
 

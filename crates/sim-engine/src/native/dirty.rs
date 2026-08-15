@@ -116,6 +116,28 @@ pub struct DirtyChannel {
     /// Is a dump open? Mirrors `SimState::dumping` so the funnel can skip the
     /// capture entirely on the overwhelmingly common no-waveform run.
     pub vcd_on: bool,
+    /// G2 PROBE rail: per net, "`--probe` names this one". Empty when no net is
+    /// probed, which is every run without `--probe`, so the capture below costs
+    /// one `is_empty` on the hot path.
+    ///
+    /// The rail's STATE — `probed`, `probe_prev`, `trace_lines`, `net_names` —
+    /// all lives on `SimState` and is shared. This mirror exists for the same
+    /// reason `vcd_on` does: the funnel is on the arena and cannot reach the
+    /// scheduler from inside a store.
+    pub probed: Vec<bool>,
+    /// Probe value-changes RECORDED but not yet emitted, as `(net, value)`.
+    ///
+    /// Captured at the store point for the same reason the VCD queue is: the
+    /// engine's `emit_probe_change` runs INSIDE `note_change`, so an A→B→A
+    /// round-trip inside one slot emits three records there — measured — and a
+    /// value re-read at drain time would emit the last one three times.
+    ///
+    /// ⚠️ Element ZERO regardless of `word`, matching what the engine formats
+    /// (`fmt_probe_value` reads the low `width` bits of `cur`). That is not an
+    /// array simplification: `--probe` REFUSES an unpacked array at the CLI
+    /// (E0001, "v1 can trace only a scalar/vector/packed net"), so no probed net
+    /// has a second element on either side.
+    pub probe_pending: Vec<(u32, sim_ir::BitPacked)>,
 }
 
 impl DirtyChannel {
@@ -133,6 +155,8 @@ impl DirtyChannel {
             ca_dirty_flag: Vec::new(),
             vcd_pending: Vec::new(),
             vcd_on: false,
+            probed: Vec::new(),
+            probe_pending: Vec::new(),
         }
     }
 
@@ -211,6 +235,27 @@ impl NetArena {
             self.ch
                 .vcd_pending
                 .push((net, word, crate::native::dirty::packed_of(&v)));
+        }
+        // G2 PROBE: the same store-point capture, for the same reason. The
+        // engine emits from inside its own `note_change`; this side cannot
+        // reach the sink from here, so it records and the kernel drains.
+        //
+        // ⚠️ Element ZERO regardless of `word`, because that is what the engine
+        // formats — not a simplification, a mirror. The dedup that turns this
+        // into "one record per real change" is `probe_prev`, on the shared
+        // state, so both backends dedup with one spelling.
+        if self.ch.probed.get(i).copied() == Some(true) {
+            // ⚠️ `Some(0)`, and passing `Some(word)` instead SURVIVES the
+            // battery — measured. `word` is the ELEMENT index, and `--probe`
+            // refuses an unpacked array at the CLI (E0001), so every probed net
+            // has `elems == 1` and the two spellings cannot differ. `0` is kept
+            // because it states the property the engine's formatter relies on
+            // (`fmt_probe_value` reads the low `width` bits of `cur`) rather
+            // than relying on a CLI check three layers away to make `word` zero.
+            let v = self.read_net(net, Some(0));
+            self.ch
+                .probe_pending
+                .push((net, crate::native::dirty::packed_of(&v)));
         }
     }
 

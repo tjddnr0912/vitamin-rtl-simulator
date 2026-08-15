@@ -444,7 +444,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | **A6** ✅ | `real` + `real-slot`(D+S 짝) — **행의 이름이 틀렸다**(§5.1-af) | 0 | **완료 · 96.35% → 97.47%** |
 | **A3-ii-b** ✅ | 실제로 **park 하는** 프레임 — 없던 것은 실행기가 아니라 **스택의 수명**이었다(§5.1-ag) | 0 | **완료 · 97.47% → 98.09%** |
 | **A4** ★ 다음 | fork + `disable_fork` | **107** | 잔여의 **87%**. A3-ii-b 가 앞의 두 행을 닫았으므로 이제 단독으로 수확된다 |
-| 꼬리 | `probe` 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 · X 단독 2 | 16 | 각각 단독 이득 |
+| 꼬리 | ✅ ~~`probe`~~(§5.1-ah) · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 · X 단독 2 | 11 | 각각 단독 이득 |
 
 ### Phase B — V2 = **빌드 분리** (오너 제안 채택 · 옛 "VM 삭제" 를 대체)
 
@@ -1644,6 +1644,39 @@ automatic 프레임 둘** · 중첩 park · 계층 enable park · `wait` 참-폴
 
 ⚠️ **다음은 A4(fork) 하나다** — 잔여 123 중 **107 이 fork 가족**(78 + 24 + 5)이고 나머지는 꼬리
 (probe 5 · out-of-window write 5 · concat heap chunk 3 · `$dumpall` 1 · X 단독 2).
+
+#### 5.1-ah ✅ A8-probe — **행의 이유는 참이었고, 그래서 값 하나만 옮기면 됐다** · 98.09% → **98.17%** (2026-08-15)
+
+`--probe`(G2 trace.jsonl)를 거부하던 design 행. 이유는 *"이 레일은 인터프리터의 change hook 을 탄다
+(`emit_probe_change` 가 `note_change` 안에서 불린다)"* 였고 **참이었다** — 슬라이스 #6 이 `stage` 와
+한 주석을 공유하던 이 문장을 갈랐을 때 *"`probe` 엔 참이고 `stage` 엔 거짓"* 이라고 측정해 뒀다.
+
+⭐ **그런데 레일의 상태는 전부 공유였다** — `probed`·`probe_prev`·`trace_lines`·`net_names` 가 모두
+`SimState` 에 있다. store 에 묶인 것은 **값 하나**(`self.nets[i].cur`)뿐이고, tier-3 에는 **VCD 용
+store-point 캡처가 S1d-4d-2 이래 있다** ⇒ 그 쌍둥이를 하나 더 놓고(`probe_pending`) 커널이
+`drain_probe` 로 공유 emitter 에 넘기면 끝. `emit_probe_change` 는 값을 받는 `..._from` 으로 쪼개고
+엔진 팔은 **읽기를 밖으로 뺀 자기 본체**라 경로가 구조적으로 불변이다.
+
+⭐ **캡처 자리가 곧 정확성 논거다** — 한 슬롯 안의 `v = 1; v = 2; v = 1;` 이 **세 레코드**로 남아야
+한다(drain 시점 재읽기면 마지막 값 하나가 세 번 나온다). 같은 값 재기록은 **레코드 0**(공유
+`probe_prev` dedup). 앵커가 그 둘을 정확한 JSON 줄로 핀한다 — iverilog 오라클이 없는 vita 고유
+포맷이므로 **절대 핀**이 맞다.
+
+⚠️ 미배선의 실패 모드는 크래시가 아니다 — `trace.jsonl` 에 **t0 줄만 있고 그 뒤가 비어 있는 채 exit 0**
+이다(A7 의 `coverage.json` 과 같은 모양: 있는데 틀린 G2 산출물).
+
+⚠️ **생존 1 은 도달 불가이고 이유를 쟀다** — 캡처를 `Some(word)` 로 바꿔도 안 죽는다. `word` 는 **원소**
+인덱스이고 `--probe` 는 unpacked 배열을 **CLI 에서 E0001 로 거부**하므로 probe 대상은 언제나
+`elems == 1` 이다. `Some(0)` 을 유지한 이유를 주석에 적었다.
+
+⚠️ **테스트 둘이 걸렸고 하나는 주제가 소진됐다** — `sidecar_families_reject_from_opts` 는 "여러 사이드카
+family 가 **함께** 보고된다" 를 재는데, 그 짝들이 `clocking`(#1) → `file_directed`(#4) → `stage`(#6) →
+`probe`(여기) 순으로 전부 core 가 되어 **`fork` 하나만 남았다**. 세는 절반(한 family 의 단위 = 테이블
+엔트리 수)은 유지하고 together-ness 는 **사이드카 + 문장 스캔** 짝으로 옮겼다.
+
+**측정**: **6,327 / 6,445 = 98.17%**(+6 · 예측 +5) · 전 스위트 **5449 green** · flip **5446/5449** ·
+**발산 0** · vm/native `trace.jsonl` **바이트 동일**(글리치·dedup 포함) · 뮤테이션 **3/4 사망 · 생존 1 =
+도달 불가(실측)**.
 
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 

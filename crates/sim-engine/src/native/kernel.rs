@@ -1023,6 +1023,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     pub(crate) fn drain_range_diags(&mut self) {
         self.drain_range_reports();
         self.drain_vcd();
+        self.drain_probe();
     }
 
     /// The RANGE half of the drain, on `&self` — one spelling, TWO callers
@@ -1062,6 +1063,27 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// drains at EVERY statement boundary, so no buffered record can outlive the
     /// statement before a `$dump*` statement runs. `now` does not move across a
     /// drain span, so stamping at drain equals stamping at store.
+    /// The PROBE twin of [`NativeKernel::drain_vcd`], drained at the same seams
+    /// and for the same reason: the store point that records is on the arena and
+    /// the sink is on the scheduler.
+    ///
+    /// `now` is not captured on the arena side — every drain seam is a span
+    /// across which it does not move, so stamping at drain equals stamping at
+    /// store. That is the VCD queue's argument verbatim, and it matters more
+    /// here because the probe record carries `"t"` in its JSON.
+    pub(crate) fn drain_probe(&mut self) {
+        if self.arena.ch.probe_pending.is_empty() {
+            return;
+        }
+        let pending = std::mem::take(&mut self.arena.ch.probe_pending);
+        for (net, bits) in &pending {
+            self.sched.st.emit_probe_change_from(*net, bits);
+        }
+        let mut p = pending;
+        p.clear();
+        self.arena.ch.probe_pending = p;
+    }
+
     pub(crate) fn drain_vcd(&mut self) {
         if self.arena.ch.vcd_pending.is_empty() {
             return;

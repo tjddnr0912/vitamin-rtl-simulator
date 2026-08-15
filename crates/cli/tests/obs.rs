@@ -912,3 +912,71 @@ fn run_json_native_pins_the_reject_families() {
         "full manifest:\n{manifest}"
     );
 }
+
+/// A8-probe ABSOLUTE ANCHOR — the G2 probe rail on TIER-3.
+///
+/// The design row that refused `--probe` said something true and kept being
+/// true: `emit_probe_change` is called from the engine's `note_change`, i.e. the
+/// rail rides a hook tier-3 does not have. (Slice #6 measured that this is
+/// exactly what separated it from `stage`, which shared the row's comment and
+/// rode no hook at all.) What made it cheap anyway is that everything ELSE is on
+/// `SimState` — `probed`, `probe_prev`, `trace_lines`, `net_names` — so only the
+/// VALUE was store-bound, and tier-3 already had a store-point capture for VCD.
+///
+/// Every line here is a discriminator:
+///   * `v` is written 1 → 2 → 1 inside ONE time slot, so a capture that re-read
+///     the value at drain time would emit `1,1,1` instead of `1,2,1`. This is
+///     the whole reason the emitter cannot live at sweep time, and the VCD
+///     queue's argument verbatim.
+///   * `same` is rewritten with the value it already holds, which must emit
+///     NOTHING — the dedup lives in shared `probe_prev`, so this pins that the
+///     native path reaches it rather than keeping a second one.
+///   * both nets emit a t=0 record for their declaration initialiser, and `v`
+///     emits again at t=1, so the `"t"` stamp is exercised across a time move.
+///
+/// ⚠️ ANTI-VACUITY: run.json must say the run was native. An unwired probe rail
+/// does not crash — it writes the t0 lines and nothing after, at exit 0, which
+/// is a G2 artifact that is present and wrong.
+///
+/// ⚠️ No iverilog oracle: `trace.jsonl` is vita's own G2 format. The pin is
+/// absolute (the exact lines), which is what the format contract deserves.
+#[test]
+fn trace_probe_on_tier_3_captures_at_the_store_point() {
+    let src = "module top;\n\
+                 reg [7:0] v = 0;\n\
+                 reg [7:0] same = 8'd3;\n\
+                 initial begin\n\
+                   v = 8'd1;\n\
+                   v = 8'd2;\n\
+                   v = 8'd1;\n\
+                   same = 8'd3;\n\
+                   #1 v = 8'd9;\n\
+                   #1 $finish;\n\
+                 end\n\
+               endmodule\n";
+    let (_o, code, obs) = run(
+        src,
+        &[
+            "--backend",
+            "native",
+            "--probe",
+            "top.v",
+            "--probe",
+            "top.same",
+        ],
+    );
+    assert_eq!(code, 0);
+    let m = read(&obs.join("run.json"));
+    assert_eq!(field(&m, "backend"), "\"native\"", "{m}");
+    let trace = read(&obs.join("trace.jsonl"));
+    assert_eq!(
+        trace,
+        "{\"v\":1,\"t\":0,\"kind\":\"chg\",\"path\":\"top.v\",\"old\":\"xxxxxxxx\",\"new\":\"00000000\"}\n\
+         {\"v\":1,\"t\":0,\"kind\":\"chg\",\"path\":\"top.same\",\"old\":\"xxxxxxxx\",\"new\":\"00000011\"}\n\
+         {\"v\":1,\"t\":0,\"kind\":\"chg\",\"path\":\"top.v\",\"old\":\"00000000\",\"new\":\"00000001\"}\n\
+         {\"v\":1,\"t\":0,\"kind\":\"chg\",\"path\":\"top.v\",\"old\":\"00000001\",\"new\":\"00000010\"}\n\
+         {\"v\":1,\"t\":0,\"kind\":\"chg\",\"path\":\"top.v\",\"old\":\"00000010\",\"new\":\"00000001\"}\n\
+         {\"v\":1,\"t\":1,\"kind\":\"chg\",\"path\":\"top.v\",\"old\":\"00000001\",\"new\":\"00001001\"}\n",
+        "the glitch must survive as three records and the same-value write as none"
+    );
+}

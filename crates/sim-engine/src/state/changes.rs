@@ -140,8 +140,25 @@ impl SimState<'_> {
         if self.probed.get(i).copied() != Some(true) {
             return;
         }
+        let bits = self.nets[i].cur.clone();
+        self.emit_probe_change_from(net, &bits);
+    }
+
+    /// The body of [`SimState::emit_probe_change`], over a value the caller
+    /// supplies rather than one read from this store.
+    ///
+    /// A8-probe split it. Tier-3's store point is on the arena, which cannot
+    /// reach the sink, so it captures `(net, value)` and the kernel drains here
+    /// — and the dedup, the `old` field, the path lookup and the JSON shape stay
+    /// in ONE place. The engine's arm above is literally its previous body with
+    /// the read hoisted, so its path is unchanged by construction.
+    pub(crate) fn emit_probe_change_from(&mut self, net: u32, bits: &sim_ir::BitPacked) {
+        let i = net as usize;
+        if self.probed.get(i).copied() != Some(true) {
+            return;
+        }
         let width = self.nets[i].width;
-        let newv = crate::fmt_probe_value(&self.nets[i].cur, width);
+        let newv = crate::fmt_probe_value(bits, width);
         if self.probe_prev[i].as_deref() == Some(newv.as_str()) {
             return; // no actual value change (same-value write / other-word glitch)
         }

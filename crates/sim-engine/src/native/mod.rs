@@ -262,7 +262,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         queue_bounds: _,
         // A7: see the deleted `coverage` row below — desugared to ordinary IR.
         coverage_manifest: _,
-        probed_nets,
+        // A8-probe: WIRED, so it disqualifies nothing (see the note below).
+        probed_nets: _,
         // Slice #6: see the deleted `stage` row below — two argument reads.
         stage_stmts: _,
         // Slice #1: see the deleted `clocking` row below — three tables in
@@ -327,11 +328,20 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     // 0.00% coverage at exit 0. The bits are now harvested from whichever store
     // ran, before the arena is dropped (`simulate`'s `cover_bits`).
 
-    // The G2 PROBE rail rides the interpreter's change hooks (`emit_probe_change`
-    // is called from `note_change`); tier-3 v1 does not reproduce them (doc-21
-    // §4.3), so an instrumented run stays on the existing engine rather than
-    // silently losing its trace.
-    flag(&mut out, "probe", probed_nets.len());
+    // ⭐ The G2 PROBE rail is WIRED (A8-probe). The row's reason was true and
+    // stayed true — `emit_probe_change` really is called from the engine's
+    // `note_change` — and slice #6 measured that this is exactly what separated
+    // it from `stage`, which shared the row's comment while riding no hook at
+    // all. What made it cheap anyway is that the rail's STATE is all on
+    // `SimState` (`probed`, `probe_prev`, `trace_lines`, `net_names`): the only
+    // store-bound part was the VALUE, so the arena captures it at its own store
+    // point and `NativeKernel::drain_probe` hands it to the one shared emitter,
+    // exactly as the VCD queue has done since S1d-4d-2.
+    //
+    // ⚠️ The failure mode the row protected against was NOT a crash: an
+    // unwired probe run produces `trace.jsonl` with the t0 lines and nothing
+    // after, at exit 0 — a G2 artifact that is present and wrong, which is the
+    // same shape A7's `coverage.json` had.
     // ⭐ **Slice #6: `stage` was TWO READS.** ⚠️ It was in the same sentence as
     // `probe` and that grouping was wrong: `$vita_stage` is not a change hook at
     // all, it is an explicit call site that elaborate lowers to a no-op
