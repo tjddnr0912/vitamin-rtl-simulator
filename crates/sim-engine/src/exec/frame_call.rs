@@ -78,11 +78,39 @@ use crate::value::Value;
 /// callee with a fresh set; `task automatic t(...); … t(n-1); … endtask` would
 /// have re-entered `t`'s entry block forever. The blocks of every func live in
 /// one arena, so one set is both correct and sufficient.
-pub(crate) fn frame_suspends(
+/// A3-ii-b: does this frame reach a `Fork`? The half of [`frame_suspends`] the
+/// gate still refuses.
+///
+/// The split is what the census measured: of the parking frames the suite
+/// reaches, 65 park on a `Wait` edge and 19 on a `Delay` — those are what this
+/// slice runs — while 13 reach a `Fork`, and every design carrying one also
+/// trips the `fork` DESIGN row, so refusing them here costs nothing today and
+/// is A4's business.
+pub(crate) fn frame_forks(
     ir: &sim_ir::SimIr,
     susp: &std::collections::BTreeSet<u32>,
     entry: u32,
 ) -> bool {
+    frame_park_kinds(ir, susp, entry).fork
+}
+
+/// What a frame's reachable terminators say about HOW it parks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ParkKinds {
+    /// A `Delay` or a `Wait` — the shapes tier-3 parks and resumes (A3-ii-b).
+    pub timed: bool,
+    /// A `Fork` — still refused.
+    pub fork: bool,
+}
+
+/// ONE walk behind both predicates, so a change to reachability cannot move one
+/// answer without the other.
+pub(crate) fn frame_park_kinds(
+    ir: &sim_ir::SimIr,
+    susp: &std::collections::BTreeSet<u32>,
+    entry: u32,
+) -> ParkKinds {
+    let mut out = ParkKinds::default();
     let mut seen = std::collections::BTreeSet::new();
     let mut stack = vec![entry];
     while let Some(b) = stack.pop() {
@@ -92,8 +120,12 @@ pub(crate) fn frame_suspends(
         let Some(blk) = ir.blocks.get(b as usize) else {
             // An out-of-range block id can only come from a malformed sidecar,
             // which the caller's window checks already refuse. Answering "it
-            // suspends" is the fail-CLOSED direction for an ACCEPT gate.
-            return true;
+            // suspends, in the way that is still refused" is the fail-CLOSED
+            // direction for an ACCEPT gate.
+            return ParkKinds {
+                timed: true,
+                fork: true,
+            };
         };
         match &blk.term {
             sim_ir::Terminator::Goto { target } => stack.push(*target),
@@ -113,18 +145,31 @@ pub(crate) fn frame_suspends(
                     Some(cf) if susp.contains(&(cf as u32)) => stack.push(*target),
                     // An unresolvable target is a placeholder (a deferred hier
                     // enable). Fail closed, for the same reason as above.
-                    None => return true,
+                    None => {
+                        return ParkKinds {
+                            timed: true,
+                            fork: true,
+                        }
+                    }
                     Some(_) => {}
                 }
                 stack.push(*ret_bb);
             }
-            sim_ir::Terminator::Delay { .. }
-            | sim_ir::Terminator::Wait { .. }
-            | sim_ir::Terminator::Fork { .. } => return true,
+            // NOT an early return any more: a body can reach both kinds, and
+            // the gate asks about them separately.
+            sim_ir::Terminator::Delay { resume, .. } => {
+                out.timed = true;
+                stack.push(*resume);
+            }
+            sim_ir::Terminator::Wait { resume, .. } => {
+                out.timed = true;
+                stack.push(*resume);
+            }
+            sim_ir::Terminator::Fork { .. } => out.fork = true,
             sim_ir::Terminator::Return => {}
         }
     }
-    false
+    out
 }
 
 /// Can the walk run the call described by `site`? ONE spelling for the GATE
@@ -147,31 +192,24 @@ pub(crate) fn site_runnable(
         return true; // A3-i: synchronous, delegated whole
     }
     match ir.funcs.get(info.callee as usize) {
-        // A3-ii-a: driven, provided it never parks.
-        Some(fd) => !frame_suspends(ir, susp, fd.entry),
+        // A3-ii-a drove it "provided it never parks"; A3-ii-b drives it even
+        // when it does, so what is left to refuse is the FORK half.
+        Some(fd) => !frame_forks(ir, susp, fd.entry),
         None => false,
     }
 }
 
-/// One OPEN driven frame — A3-ii-a's per-activation record.
+/// One OPEN driven frame.
 ///
-/// The three fields `run_process` keeps in a `FrameRec` and nothing more: this
-/// walk's frames never park, so there is no `window`, no `dyn_parked`, no
-/// `forked`, no `is_arm`. Saying which fields are ABSENT is the point — each one
-/// exists in the engine for a suspension this gate refuses.
-pub(crate) struct OpenFrame {
-    pub callee: u32,
-    /// This frame's PC in the GLOBAL `ir.blocks` arena.
-    pub bb: u32,
-    /// Where the PARENT resumes: a global block id when the parent is another
-    /// frame, a process-local one when this is the outermost. Read by whether the
-    /// stack is empty after the pop — `FrameRec::ret_bb`'s own convention.
-    pub ret_bb: u32,
-    pub out_binds: Vec<(u32, sim_ir::Lvalue)>,
-    /// The heap objects the OUTER activation held in this callee's frame-local
-    /// dyn slots, taken at entry and put back at `Return`.
-    pub dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
-}
+/// ⚠️ A3-ii-b DELETED the reduced twin this used to be. A3-ii-a defined an
+/// `OpenFrame` as "the three fields `run_process` keeps in a `FrameRec` and
+/// nothing more — this walk's frames never park, so there is no `window`, no
+/// `dyn_parked`, no `forked`, no `is_arm`", and said the ABSENCE was the point:
+/// each missing field existed in the engine for a suspension the gate refused.
+/// This slice admits that suspension, so the absent fields are exactly what is
+/// now needed and the two types have collapsed into one — which is also what
+/// lets both executors share `frame_window`'s stash rather than spell it twice.
+pub(crate) type OpenFrame = crate::sched::FrameRec;
 
 /// What the walk should do with the `Terminator::Call` it is standing on.
 pub(crate) enum Taken {
@@ -212,6 +250,15 @@ pub(crate) fn call_here<K: Kernel>(k: &mut K, proc: u32, bb: u32, in_frame: Opti
             ret_bb: bb_after(k, proc, bb, in_frame),
             out_binds: info.out_binds,
             dyn_stash,
+            // The three park fields, at their engine defaults. `forked`/`is_arm`
+            // stay false for the life of the frame — the S0 gate refuses forks,
+            // so tier-3 has neither a forking frame nor an arm frame — and
+            // `window`/`dyn_parked` are filled by `stash_windows_in` at the
+            // moment the frame parks, exactly as `run_process`'s are.
+            window: None,
+            dyn_parked: Vec::new(),
+            forked: false,
+            is_arm: false,
         });
     }
     // A3-i: SYNCHRONOUS — the whole call happens inside the engine's `&self`

@@ -137,15 +137,24 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         // perform those — not because the body parks. Measured over the whole
         // suite: of 357 designs whose process-body callee is "suspendable",
         // **250 contain no `Delay`/`Wait`/`Fork` at all**. For those the whole
-        // activation nests inside one `run_body` call, so tier-3 needs a frame
-        // stack and a CFG loop but NO park/resume, no window stash and no
-        // scheduler state. That is the half admitted here; `frame_suspends`
-        // is the discriminator and the row below is the other half.
+        // ⚠️ A3-ii-b NARROWED THIS ROW, and the sentence it replaced said the
+        // quiet part: "tier-3 needs a frame stack and a CFG loop but NO
+        // park/resume, no window stash and no scheduler state. That is the half
+        // admitted here." This slice built the other half — the walk hands its
+        // stack to the kernel at a `Delay`/`Wait` and takes it back on resume,
+        // and the window stash is the ENGINE's (`frame_window::stash_windows_in`,
+        // extracted so there is one spelling). What is left is `fork` inside a
+        // frame, which needs the activity arena tier-3 does not have.
+        //
+        // Measured before narrowing: of the parking frames the suite reaches,
+        // 65 park on a `Wait` edge, 19 on a `Delay`, 13 on a `fork` — and every
+        // design in that last group also trips the `fork` DESIGN row, so this
+        // row's remaining population is zero-cost today.
         if fd.is_task
             && susp.contains(&(fi as u32))
-            && crate::exec::frame_call::frame_suspends(ir, &susp, fd.entry)
+            && crate::exec::frame_call::frame_forks(ir, &susp, fd.entry)
         {
-            return Err("a task frame that SUSPENDS (delay, wait or fork inside the body): S3b");
+            return Err("a task frame that FORKS (a `fork` inside the body): S3b");
         }
         // ⚠️⚠️ **`has_hier_call` IS LIVE NOW, and the claim that it was not is one
         // this file made twice.** S3a called both rows dead because the `is_task`
@@ -377,11 +386,9 @@ fn driven_body_is_runnable(
                 // kinds rather than a parking frame.
                 if let Some(cf) = ir.funcs.iter().position(|f| f.entry == *target) {
                     if susp.contains(&(cf as u32))
-                        && crate::exec::frame_call::frame_suspends(ir, susp, *target)
+                        && crate::exec::frame_call::frame_forks(ir, susp, *target)
                     {
-                        return Err(
-                            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
-                        );
+                        return Err("a task frame that FORKS (a `fork` inside the body): S3b");
                     }
                 } else {
                     return Err("a nested call to an unresolved target: S3b");
@@ -389,13 +396,17 @@ fn driven_body_is_runnable(
                 stack.push(*ret_bb);
             }
             sim_ir::Terminator::Return => {}
-            // `frame_suspends` already refused these with its own row; reaching
-            // one here means the two walks disagree, which is worth a row of its
-            // own rather than a silent skip.
-            sim_ir::Terminator::Delay { .. }
-            | sim_ir::Terminator::Wait { .. }
-            | sim_ir::Terminator::Fork { .. } => {
-                return Err("a task frame that SUSPENDS (delay, wait or fork inside the body): S3b")
+            // A3-ii-b: the walk PARKS on these two, so the body reaching one is
+            // no longer a disagreement — follow the resume edge and keep
+            // checking, exactly as the `frame_park_kinds` walk does.
+            sim_ir::Terminator::Delay { resume, .. } | sim_ir::Terminator::Wait { resume, .. } => {
+                stack.push(*resume)
+            }
+            // `frame_forks` already refused this with its own row; reaching one
+            // here means the two walks disagree, which is worth a row of its own
+            // rather than a silent skip.
+            sim_ir::Terminator::Fork { .. } => {
+                return Err("a task frame that FORKS (a `fork` inside the body): S3b")
             }
         }
     }

@@ -148,14 +148,16 @@ pub(crate) fn executor_rows(ir: &SimIr, opts: &crate::SimOpts) -> Result<(), &'s
             //  * a `Terminator::Fork` in a design whose `fork_modes` trailer was
             //    lost (the gate's own argument leans on that sidecar, so the scan
             //    is the guard);
-            //  * a `Terminator::Call` whose callee is SUSPENDABLE — it suspends,
-            //    forks, prints, or writes outside its frame — or whose site has no
-            //    `task_calls_proc` entry (a deferred hierarchical enable). The
-            //    SUBSET half is walkable now and no longer reaches this line.
+            //  * a `Terminator::Call` whose callee reaches a `fork`, or whose
+            //    site has no `task_calls_proc` entry (a deferred hierarchical
+            //    enable). ⚠️ A3-ii-b narrowed this clause too: it used to refuse
+            //    a callee that merely SUSPENDS, and the walk parks those now —
+            //    what is left is the fork half, for the same reason the storage
+            //    row keeps.
             //
             // A plain non-`automatic` task containing `@(posedge clk)` is NOT
             // refused: elaborate inlines it, so there is no `Terminator::Call`.
-            return Err("a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b");
+            return Err("a `wait fork`, a `fork`, or a call statement whose callee forks: S3b");
         }
         if !body_dispatch_ok(ir, pi) {
             return Err("a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)");

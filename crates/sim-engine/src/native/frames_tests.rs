@@ -641,55 +641,19 @@ fn s3a_each_frame_refusal_row_has_a_design() {
         //   * A3-ii-a runs both of those, because "suspendable" names the engine's
         //     EXECUTOR CHOICE and neither of them PARKS.
         // What is left is the actual suspension, and it needs its own designs.
-        (
-            "a task frame that delays",
-            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
-            r#"
-module top;
-  task automatic wait_then(input integer a, output integer b);
-    begin #1 b = a + 1; end
-  endtask
-  integer r;
-  initial begin wait_then(4, r); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
-        // …and the TRANSITIVE half, because a body whose own terminators are all
-        // `Goto`/`Branch`/`Return` still parks if it CALLS something that parks —
-        // and a single design cannot show `frame_suspends`' recursion is doing work.
-        (
-            "a task frame whose CALLEE delays",
-            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
-            r#"
-module top;
-  task automatic inner(input integer a, output integer b);
-    begin #1 b = a + 1; end
-  endtask
-  task automatic outer(input integer a, output integer b);
-    begin inner(a, b); end
-  endtask
-  integer r;
-  initial begin outer(4, r); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
-        // …and an `@(posedge)` inside a task, which is a `Wait` rather than a
-        // `Delay` and reaches the same row through a different arm.
-        (
-            "a task frame that waits on an edge",
-            "a task frame that SUSPENDS (delay, wait or fork inside the body): S3b",
-            r#"
-module top;
-  reg clk = 1'b0;
-  always #1 clk = ~clk;
-  task automatic sync(output integer b);
-    begin @(posedge clk); b = 7; end
-  endtask
-  integer r;
-  initial begin sync(r); $display("r=%0d", r); $finish; end
-endmodule
-"#,
-        ),
+        // ⚠️⚠️ A3-ii-b REMOVED three cases from here — "a task frame that
+        // delays", "a task frame whose CALLEE delays" and "a task frame that
+        // waits on an edge" — because all three RUN now. The row they pinned
+        // narrowed from "delay, wait or fork" to fork alone.
+        //
+        // And the fork half cannot replace them: a design with a `fork` in a
+        // task trips the DESIGN gate's `fork` row, which this table's second
+        // assertion explicitly forbids ("the DESIGN gate must accept it, or an
+        // earlier layer is doing the work"). So the storage row's remaining
+        // population is not reachable in isolation — measured, not assumed, and
+        // the same shape §5.1-v found for `has_hier_call`. The row stays
+        // fail-closed; what those three designs now assert lives in
+        // `cli::frame_park` as positive, iverilog-pinned coverage.
         // ⚠️ A3-iii turned this from a READ into a WRITE, because a read is no
         // longer refused: the delegated executor takes the caller's store now.
         // A class-field write is the shape that still reaches this row — a plain
@@ -823,8 +787,13 @@ endmodule
     // (`a_subset_task_call_has_its_iverilog_values`).
     // 8 -> 9: A3-ii-a moved the remaining half from "suspendable" to "SUSPENDS",
     // and it needs THREE designs: a `Delay`, a `Wait`, and a callee that parks
-    // behind a caller that does not (the transitive arm of `frame_suspends`).
-    assert_eq!(cases.len(), 9, "frame refusal-row coverage moved");
+    // behind a caller that does not (the transitive arm of the park walk).
+    // 9 -> 6: A3-ii-b RUNS all three of those, and the row they pinned narrowed
+    // to `fork`, whose designs the DESIGN gate refuses first — so the count went
+    // down by exactly the three that moved, and no case replaced them. The count
+    // is asserted exactly, rather than as a floor, so that a row losing its last
+    // design has to be justified by a human instead of quietly passing.
+    assert_eq!(cases.len(), 6, "frame refusal-row coverage moved");
     // ⚠️ The WRITE twin of the "reads a module net" row has no design, and not
     // by omission: elaborate refuses a frame body that assigns to a net outside
     // the function (E3009), so the row can only ever be reached by a READ.
@@ -888,19 +857,20 @@ endmodule
     assert_eq!(crate::native::run::runnable(&ir2, &opts2), Ok(()));
 }
 
-/// ⚠️ **Where the refusal of a PARKING callee lives — the storage layer, and
-/// only there.**
+/// ⚠️⚠️ **A3-ii-b INVERTED this test.** It used to be
+/// `a_parking_callee_is_refused_by_the_storage_layer`, and it pinned "where the
+/// refusal of a PARKING callee lives — the storage layer, and only there".
+/// Nothing lives there any more: the walk parks and resumes such a frame, so
+/// BOTH layers must now admit it, and asserting the old closure would assert it
+/// about a capability.
 ///
-/// A3-i put that refusal on the executor row and A3-ii-a made it unreachable
-/// from there: a parking callee is always a TASK (elaborate refuses a timing
-/// control inside a function, E3009, and a function cannot enable a task), and
-/// `frames_admitted` refuses a parking task a whole layer earlier.
-///
-/// Pinned as its own test because the row-coverage table can no longer carry it,
-/// and an unpinned "some other layer gets there first" is exactly the kind of
-/// unstated closure a later widening loses.
+/// It is inverted rather than deleted for the reason it was written: the claim
+/// worth keeping is that the two layers AGREE about this shape. They disagreed
+/// once (A3-i put the refusal on the executor row while the storage row also
+/// carried it), and a widening that moves one and not the other is exactly what
+/// this catches — in whichever direction the agreement points.
 #[test]
-fn a_parking_callee_is_refused_by_the_storage_layer() {
+fn a_parking_callee_is_admitted_by_both_layers() {
     let src = r#"
 module top;
   task automatic wait_then(input integer a, output integer b);
@@ -911,19 +881,15 @@ module top;
 endmodule
 "#;
     let (ir, opts) = build_with_opts(src);
-    assert_eq!(
-        NetArena::buildable(&ir, &opts).err(),
-        Some("a task frame that SUSPENDS (delay, wait or fork inside the body): S3b"),
-    );
-    // …and the DESIGN gate accepts it, so this row is what does the work.
+    assert_eq!(NetArena::buildable(&ir, &opts).err(), None);
+    // …and the DESIGN gate accepts it, as it always did.
     assert!(crate::native::design_eligibility(&ir, &opts)
         .reject_reasons
         .is_empty());
-    // The executor layer would refuse it too — asked on its own, which is how the
-    // census asks it. Both answers are kept because a layer that stopped refusing
-    // a shape on the grounds that another layer gets there first is a widening
-    // waiting to happen.
-    assert!(!crate::native::body::body_is_walkable(
+    // The executor layer, asked on its own — which is how the census asks it.
+    // Both answers are kept because a layer that changed its mind on the grounds
+    // that another layer gets there first is a widening waiting to happen.
+    assert!(crate::native::body::body_is_walkable(
         &ir,
         0,
         ir.processes[0].entry,
@@ -935,6 +901,16 @@ endmodule
             bb
         )
     ));
+    // …and the FORK half, which is what the row narrowed to, still refuses at the
+    // storage layer. Asked through the predicate rather than through a design,
+    // because a design carrying a `fork` trips the DESIGN gate first — that is
+    // why the row-coverage table can no longer carry a case for it either.
+    let susp = crate::native::frames::suspendable_set(&ir, &opts);
+    let entry = ir.funcs[0].entry;
+    assert!(
+        !crate::exec::frame_call::frame_forks(&ir, &susp, entry),
+        "this callee parks on a delay, it does not fork"
+    );
 }
 
 /// The row that protects the frame-BLIND consumers — `wprog`'s compile-time slot

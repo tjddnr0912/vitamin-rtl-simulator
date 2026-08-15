@@ -261,6 +261,20 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// slice. Derived from `func_table`, the same table
     /// `frames_admitted`/`build_func_routing` read.
     pub(crate) has_frames: bool,
+    /// A3-ii-b: the open task frames of every process that is SUSPENDED inside
+    /// one, keyed by process id.
+    ///
+    /// The engine's twin is `Scheduler::activities[pi].call_stack`, and the
+    /// reason this is a map on the kernel rather than that arena is the S0 gate:
+    /// forks are refused, so a tier-3 activity IS its process and there is
+    /// nothing for an activity arena to disambiguate. What the two DO share is
+    /// the window stash — `frame_window::{stash,restore}_windows_in`, which this
+    /// slice extracted so the pop order has one spelling.
+    ///
+    /// A `BTreeMap` rather than a `Vec` indexed by process: it is empty for every
+    /// design that has no parking frame, which is nearly all of them, and its
+    /// iteration order is deterministic if a future reader ever needs it.
+    pub(crate) parked_frames: BTreeMap<u32, Vec<crate::sched::FrameRec>>,
     /// The NBA queue in engine shape. S1d-4c-1 gave it the drain; regions and
     /// the delta loop are 4c-2.
     pub(crate) nba: Vec<NbaUpdate>,
@@ -545,6 +559,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         NativeKernel {
             ir,
             arena,
+            parked_frames: BTreeMap::new(),
             sched,
             class_new_sites,
             max_body_steps,
@@ -1867,6 +1882,24 @@ impl Kernel for NativeKernel<'_, '_, '_> {
 
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
         self.write_routed(lhs, value, offsets);
+    }
+
+    fn k_park_frames(&mut self, proc: u32, mut frames: Vec<crate::sched::FrameRec>) {
+        // The WINDOW half first, and it is the engine's own function: an
+        // automatic frame's window is live on the SHARED `SimState::frame_stack`
+        // while its activation runs, so parking without popping it would leave
+        // another process's `frame_slot_read` looking at this frame's locals.
+        // Popped top-first, which is why the order lives in one place.
+        crate::exec::frame_window::stash_windows_in(self.sched.st, &mut frames);
+        self.parked_frames.insert(proc, frames);
+    }
+
+    fn k_take_frames(&mut self, proc: u32) -> Vec<crate::sched::FrameRec> {
+        let Some(mut frames) = self.parked_frames.remove(&proc) else {
+            return Vec::new();
+        };
+        crate::exec::frame_window::restore_windows_in(self.sched.st, &mut frames);
+        frames
     }
 
     fn k_eval_write_scalar(&mut self, lhs: &Lvalue, net: u32, rhs: u32) {

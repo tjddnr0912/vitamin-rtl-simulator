@@ -204,6 +204,21 @@ pub(crate) fn body_is_walkable(
     true
 }
 
+/// Hand this activation's open frames to the kernel so they survive the
+/// suspension, or do nothing when the walk is not inside one.
+///
+/// The empty case is the ONLY case before A3-ii-b, and it must stay a no-op
+/// rather than an empty save: `k_take_frames` is asked on every entry, and a
+/// stored empty vector would be indistinguishable from "this process was parked
+/// inside a frame" for any future reader of that map.
+fn park_frames<K: Kernel>(k: &mut K, proc: u32, frames: &mut Vec<OpenFrame>) {
+    if frames.is_empty() {
+        return;
+    }
+    let taken = std::mem::take(frames);
+    k.k_park_frames(proc, taken);
+}
+
 /// Run one process body to completion. `Scheduler::run_process` for the class the
 /// S0 gate admits, restated over a `Kernel`.
 ///
@@ -223,19 +238,25 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
     );
     let mut bb = entry;
     let mut guard: u64 = 0;
-    // A3-ii-a: this activation's OPEN task frames, innermost last.
+    // This activation's OPEN task frames, innermost last.
     //
-    // ⭐ It is a LOCAL, not scheduler state, and that is the whole reason this
-    // half could be split off. `run_process` keeps its frames in
-    // `activities[pi].call_stack` because a frame there can PARK: the activation
-    // ends, the window is stashed, and some later delta resumes it. The gate
-    // admits only frames that reach no `Delay`/`Wait`/`Fork`, so every frame this
-    // walk opens is closed by a `Return` before `run_body` returns — its lifetime
-    // is exactly this Rust call. Nothing to stash, nothing to restore, no
-    // `Activity` for tier-3 to seed.
+    // ⚠️ A3-ii-b ENDED the argument that used to be written here — "it is a
+    // LOCAL, not scheduler state, and that is the whole reason this half could
+    // be split off … the gate admits only frames that reach no
+    // `Delay`/`Wait`/`Fork`, so every frame this walk opens is closed by a
+    // `Return` before `run_body` returns. Nothing to stash, nothing to restore."
+    // A frame can park now, so the stack has to outlive this Rust call: the two
+    // suspend arms hand it to the kernel and this line takes it back.
     //
-    // Empty for a design with no frame calls, which is every design before A3-i.
-    let mut frames: Vec<OpenFrame> = Vec::new();
+    // It is still not `Scheduler::activities`. The S0 gate refuses forks, so a
+    // tier-3 activity IS its process and the kernel can key the stack by process
+    // id — what the engine needs an activity arena for is fork children, which
+    // cannot be here. The WINDOW half is not restated at all: both executors call
+    // `frame_window::{stash,restore}_windows_in`.
+    //
+    // Empty for a design with no frame calls, which is every design before A3-i,
+    // and empty on a fresh (non-resume) entry.
+    let mut frames: Vec<OpenFrame> = k.k_take_frames(proc);
     // Per-process context (`$time`'s multiplier, `%m`'s scope) — the engine
     // installs it on every block activation, and a walk that skipped it would
     // render from whatever process ran last.
@@ -387,7 +408,16 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 let ticks = k.k_delay_ticks(*amount);
                 let inactive = matches!(region, sim_ir::DelayRegion::Inactive) || ticks == 0;
                 let tick = k.k_now().saturating_add(ticks);
-                k.k_schedule_resume(proc, *resume, tick, inactive);
+                // A3-ii-b: record WHERE this position resumes before parking.
+                // `set_pos!` writes the frame's PC when the walk is inside one
+                // and the process's when it is not — the same two-space
+                // distinction the fetch at the top of the loop makes, and the
+                // reason the resume can be a global block id without the wake
+                // table ever learning about frames. With no frames open, `bb`
+                // is `*resume` and this is byte-identical to what it replaced.
+                set_pos!(*resume);
+                k.k_schedule_resume(proc, bb, tick, inactive);
+                park_frames(k, proc, &mut frames);
                 return Step::Suspended;
             }
             // IN-BODY WAIT (S1d-4c-2d). `run_process`'s non-frame branch again,
@@ -400,7 +430,13 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
             Terminator::Wait { cond, resume } => {
                 if let sim_ir::WaitCause::Expr { expr } = cond {
                     if k.k_truthy(*expr) {
-                        bb = *resume;
+                        // ⚠️ `set_pos!`, not `bb = …`. This fall-through was
+                        // written for a process body because a frame could not
+                        // reach a `Wait` at all; A3-ii-b makes it reachable, and
+                        // the process spelling would have moved the PROCESS's PC
+                        // while the walk kept fetching from the frame — the
+                        // wrong design's statements, silently.
+                        set_pos!(*resume);
                         guard += 1;
                         if guard > k.k_max_deltas() {
                             k.k_mark_fatal();
@@ -415,7 +451,9 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, proc: u32, entry: u32) 
                 // `Fork` needs `fork_modes`, an S0 reject. Both would suspend on
                 // a cause nothing here can satisfy — a hang, not a wrong value —
                 // so they are refused by `body_is_walkable` rather than parked.
-                k.k_suspend_on(proc, *resume, cond);
+                set_pos!(*resume);
+                k.k_suspend_on(proc, bb, cond);
+                park_frames(k, proc, &mut frames);
                 return Step::Suspended;
             }
             Terminator::Fork { .. } => unreachable!(

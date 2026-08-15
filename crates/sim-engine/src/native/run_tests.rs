@@ -2309,7 +2309,7 @@ endmodule
         ),
         (
             "wait fork",
-            "a `wait fork`, a `fork`, or a call statement whose callee suspends: S3b",
+            "a `wait fork`, a `fork`, or a call statement whose callee forks: S3b",
             r#"
 module top;
   reg [7:0] n = 8'd0;
@@ -3955,15 +3955,18 @@ endmodule
     );
 }
 
-/// A3-iv's REJECT neighbour, and the whole argument for deleting the row: a hier
-/// callee that PARKS is still refused — by `frame_suspends`, which sees through
-/// the resolved target and says so in its own words.
+/// ⚠️⚠️ **A3-ii-b INVERTED this test too.** It was A3-iv's REJECT neighbour —
+/// "a hier callee that PARKS is still refused, by the walk that sees through the
+/// resolved target" — and that refusal is gone: the walk parks and resumes such a
+/// frame now, ACROSS an instance boundary, which is the axis worth keeping.
 ///
-/// This is what makes the deletion a narrowing rather than a hole. The `None`
-/// arm of that walk still fails CLOSED if a target ever does arrive
-/// unresolved; what changed is that today none do.
+/// So it is an anchor rather than a refusal pin. The `#1` inside `addd` parks a
+/// frame that was entered through a DEFERRED hierarchical enable, i.e. the resume
+/// has to land back in a frame whose target was patched after elaborate — the one
+/// shape A3-iv left standing on the grounds that nothing could reach it while
+/// parking was refused.
 #[test]
-fn a_hierarchical_enable_whose_callee_parks_is_still_refused() {
+fn a_hierarchical_enable_whose_callee_parks_now_runs_natively() {
     use sim_engine::native::arena::NetArena;
     let src = r#"
 module sub;
@@ -3983,9 +3986,29 @@ endmodule
     let (ir, opts) = build_with_opts(src);
     assert_eq!(
         NetArena::buildable(&ir, &opts).err(),
-        Some("a task frame that SUSPENDS (delay, wait or fork inside the body): S3b"),
-        "a PARKING hier callee must still be refused, and by the row that owns \
-         the question rather than by a stand-in"
+        None,
+        "a PARKING hier callee is admitted since A3-ii-b"
+    );
+    let sink = MergedSink::default();
+    let r = simulate(
+        &ir,
+        &sink,
+        SimOpts {
+            backend: Backend::Native,
+            ..opts
+        },
+    );
+    assert_eq!(
+        r.backend,
+        Backend::Native,
+        "refused: {:?}",
+        r.native.refused
+    );
+    // iverilog 13 pinned: three enables at #1 apart, 0+1+2.
+    assert_eq!(
+        sink.events.into_inner(),
+        vec!["out|acc=3\n".to_string()],
+        "hierarchical enable whose callee parks (iverilog 13 pinned)"
     );
 }
 

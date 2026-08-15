@@ -16,7 +16,7 @@ use crate::value::Value;
 pub(crate) use frame_window::*;
 pub(crate) use process::*;
 pub(crate) mod frame_call;
-mod frame_window;
+pub(crate) mod frame_window;
 pub(crate) mod kpred;
 pub(crate) mod plusargs;
 mod process;
@@ -140,6 +140,25 @@ pub(crate) trait Kernel {
         out_binds: &[(u32, Lvalue)],
         dyn_stash: Vec<(u32, Option<crate::state::DynObj>)>,
     ) -> Vec<(Lvalue, Value)>;
+    /// A3-ii-b: PARK this activation's open task frames across a suspension,
+    /// and take them back on resume.
+    ///
+    /// The default pair is what every executor did before parking frames
+    /// existed: drop them and start with none. That keeps the ENGINE unchanged
+    /// by construction — `Scheduler` keeps its frames in
+    /// `activities[pi].call_stack` and never runs this walk — and it keeps a
+    /// `Kernel` implementor that has no frames from having to say so.
+    ///
+    /// The implementor is responsible for the WINDOW half at the same two
+    /// points (`frame_window::stash_windows_in` / `restore_windows_in`),
+    /// because a parked frame's automatic window must come off the SHARED
+    /// `frame_stack` or an interleaving activity reads it.
+    fn k_park_frames(&mut self, _proc: u32, _frames: Vec<crate::sched::FrameRec>) {}
+    /// Inverse of [`Kernel::k_park_frames`]. Empty ⇒ this entry is not a resume
+    /// into a frame.
+    fn k_take_frames(&mut self, _proc: u32) -> Vec<crate::sched::FrameRec> {
+        Vec::new()
+    }
     /// READ: is the `Terminator::Call` at process-local block `bb` of process
     /// `proc` one the SUBSET path can run — a resolved site with a synchronous
     /// callee?

@@ -4,6 +4,8 @@
 
 use super::*;
 
+use crate::sched::FrameRec;
+
 /// Execute activity `pi` starting at body block `start`. `pi` is a runtime
 /// ACTIVITY id (index into `Scheduler::activities`), NOT a declaration index —
 /// the body/sensitivity are resolved through `activities[pi].template`.
@@ -13,35 +15,49 @@ use super::*;
 /// reads `frame_stack.last()`, which must be THIS activity's window only while it runs).
 /// Popped TOP-first (reverse call order), matching `enter_task_frame`'s push order.
 pub(crate) fn stash_frame_windows(sched: &mut Scheduler, pi: u32) {
-    let n = sched.activities[pi as usize].call_stack.len();
-    for i in (0..n).rev() {
-        let callee = sched.activities[pi as usize].call_stack[i].callee;
-        if sched.st.func_has_auto[callee as usize] {
-            let w = sched
-                .st
+    stash_windows_in(sched.st, &mut sched.activities[pi as usize].call_stack);
+}
+
+/// A3-ii-b EXTRACTION — the same operation over a call stack the CALLER owns.
+///
+/// Tier-3 parks frames now, and it has no `Scheduler::activities`: the S0 gate
+/// refuses forks, so its activities are 1:1 with processes and its run loop
+/// keeps the stack itself. Threading the stack rather than the activity id is
+/// what lets both executors share ONE spelling of the stash — and this is the
+/// operation that must not have two, because a wrong pop order does not fail
+/// loudly. It leaves the interleaving activity reading another frame's window,
+/// i.e. a wrong value at exit 0.
+pub(crate) fn stash_windows_in(st: &crate::SimState<'_>, frames: &mut [FrameRec]) {
+    for i in (0..frames.len()).rev() {
+        if st.func_has_auto[frames[i].callee as usize] {
+            let w = st
                 .frame_stack
                 .borrow_mut()
                 .pop()
                 .expect("frame window to stash");
-            sched.activities[pi as usize].call_stack[i].window = Some(w);
+            frames[i].window = Some(w);
         }
     }
-    park_frame_dyn(sched, pi);
+    park_dyn_in(st, frames);
 }
 
 /// The inverse of [`stash_frame_windows`]: push the stashed windows back onto
 /// `frame_stack` in call order (bottom `FrameRec` first) so this activity's live frame
 /// context is on top again before it resumes executing the frame CFG.
 pub(crate) fn restore_frame_windows(sched: &mut Scheduler, pi: u32) {
-    let n = sched.activities[pi as usize].call_stack.len();
-    for i in 0..n {
+    restore_windows_in(sched.st, &mut sched.activities[pi as usize].call_stack);
+}
+
+/// [`stash_windows_in`]'s inverse, on the same borrowed stack.
+pub(crate) fn restore_windows_in(st: &crate::SimState<'_>, frames: &mut [FrameRec]) {
+    for f in frames.iter_mut() {
         // Tolerant: only a STASHED (`Some`) window is pushed back; a live/None frame is
         // skipped, so a spurious call during normal in-frame execution is a no-op.
-        if let Some(w) = sched.activities[pi as usize].call_stack[i].window.take() {
-            sched.st.frame_stack.borrow_mut().push(w);
+        if let Some(w) = f.window.take() {
+            st.frame_stack.borrow_mut().push(w);
         }
     }
-    unpark_frame_dyn(sched, pi);
+    unpark_dyn_in(st, frames);
 }
 
 /// Give a frame-local dynamic array the same per-activation lifetime the AUTOMATIC
@@ -75,34 +91,30 @@ pub(crate) fn restore_frame_windows(sched: &mut Scheduler, pi: u32) {
 ///   a fork child overflows the tie encoding, F4004), so it cannot reach the unisolated
 ///   path; if that cap is ever raised, the fail-closed entry guard below is what keeps it
 ///   loud rather than wrong.
-fn park_frame_dyn(sched: &mut Scheduler, pi: u32) {
-    let Some(top) = sched.activities[pi as usize].call_stack.last() else {
+fn park_dyn_in(st: &crate::SimState<'_>, frames: &mut [FrameRec]) {
+    let Some(top) = frames.last() else {
         return;
     };
     if top.is_arm || top.forked {
         return;
     }
-    let parked = sched.st.frame_dyn_enter(top.callee);
+    let parked = st.frame_dyn_enter(top.callee);
     if !parked.is_empty() {
-        sched.activities[pi as usize]
-            .call_stack
-            .last_mut()
-            .unwrap()
-            .dyn_parked = parked;
+        frames.last_mut().unwrap().dyn_parked = parked;
     }
 }
 
 /// Inverse of [`park_frame_dyn`]. Tolerant: an empty park list is a no-op, so a call
 /// during normal in-frame execution costs nothing.
-fn unpark_frame_dyn(sched: &mut Scheduler, pi: u32) {
-    let Some(top) = sched.activities[pi as usize].call_stack.last_mut() else {
+fn unpark_dyn_in(st: &crate::SimState<'_>, frames: &mut [FrameRec]) {
+    let Some(top) = frames.last_mut() else {
         return;
     };
     if top.dyn_parked.is_empty() {
         return;
     }
     let parked = std::mem::take(&mut top.dyn_parked);
-    sched.st.frame_dyn_exit(parked);
+    st.frame_dyn_exit(parked);
 }
 
 /// T1-9: may this SUSPENDABLE frame entry proceed on the per-activation dyn stash?
