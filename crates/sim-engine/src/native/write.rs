@@ -59,6 +59,41 @@ use crate::value::{top_mask, Value};
 // it — the surface stays `pub(crate)`, which is all any caller will ever need
 // (the `Offsets` it takes is crate-private by construction).
 #[allow(dead_code)]
+/// Which chunks of a concat lvalue belong to a DIFFERENT store, and where their
+/// pieces go.
+///
+/// V1 slice 2 refused a heap-kind chunk inside a concat rather than routing it,
+/// and said why: the split rule lives in `NetArena::write_lvalue` and a second
+/// spelling of it in the router would be the §4.5.279 class of defect. This is
+/// the escape that lets the router reuse the one spelling — the arena still
+/// slices, and hands over the pieces it must not store.
+///
+/// `Escape::none()` is what every pre-existing caller passes, so their path is
+/// unchanged by construction.
+pub(crate) struct Escape<'a> {
+    /// Per chunk index: does this piece belong to another store?
+    pub mask: &'a [bool],
+    /// The pieces taken, in slicing order (MSB chunk first).
+    pub taken: Vec<(usize, Value)>,
+}
+
+impl Escape<'_> {
+    pub(crate) fn none() -> Escape<'static> {
+        Escape {
+            mask: &[],
+            taken: Vec::new(),
+        }
+    }
+    #[inline]
+    fn escaping(&self, idx: usize) -> bool {
+        self.mask.get(idx).copied().unwrap_or(false)
+    }
+    #[inline]
+    fn take(&mut self, idx: usize, piece: Value) {
+        self.taken.push((idx, piece));
+    }
+}
+
 impl NetArena {
     /// Write `value` into the LHS chunks of `lhs`, MSB-first source consumption
     /// (Verilog concat-LHS). Returns true if ANY stored bit changed.
@@ -87,7 +122,34 @@ impl NetArena {
         offsets: &Offsets,
         forced: &[bool],
     ) -> bool {
-        self.write_lvalue_inner(ir, lhs, value, offsets, forced, true)
+        self.write_lvalue_inner(ir, lhs, value, offsets, forced, true, &mut Escape::none())
+    }
+
+    /// [`NetArena::write_lvalue`] with a PER-CHUNK ESCAPE — the follow-on V1
+    /// slice 2 named when it refused a heap-kind chunk inside a concat lvalue
+    /// ("the split would have to route per chunk … that split rule already lives
+    /// in `NetArena::write_lvalue`; a second spelling of it in the router is the
+    /// §4.5.279 class of defect").
+    ///
+    /// This is that escape rather than that second spelling. The slicing — MSB
+    /// first, one low-aligned piece per chunk — stays here and runs once; the
+    /// escape is asked, per chunk, whether the piece belongs to a different
+    /// store. `true` ⇒ this arena skips the chunk entirely (no store, no dirty,
+    /// no VCD), which is exactly what it does for a heap net today at the
+    /// single-chunk lane one layer up.
+    ///
+    /// `write_lvalue` passes a closure that is always `false`, so its path is
+    /// unchanged by construction.
+    pub(crate) fn write_lvalue_escaping(
+        &mut self,
+        ir: &SimIr,
+        lhs: &Lvalue,
+        value: Value,
+        offsets: &Offsets,
+        forced: &[bool],
+        esc: &mut Escape<'_>,
+    ) -> bool {
+        self.write_lvalue_inner(ir, lhs, value, offsets, forced, true, esc)
     }
 
     /// The general funnel with the one-word entry TURNED OFF — the differential's
@@ -104,10 +166,15 @@ impl NetArena {
         value: Value,
         offsets: &Offsets,
     ) -> bool {
-        self.write_lvalue_inner(ir, lhs, value, offsets, &[], false)
+        self.write_lvalue_inner(ir, lhs, value, offsets, &[], false, &mut Escape::none())
     }
 
     #[inline]
+    // Eight, and the eighth is the `Escape` A8-concat added. Bundling them into
+    // a request struct would put a name on the pairing (`offsets` with `forced`,
+    // `word_entry` with `esc`) that does not exist — each is a separate axis of
+    // the same one call — so the lint is answered rather than obeyed.
+    #[allow(clippy::too_many_arguments)]
     fn write_lvalue_inner(
         &mut self,
         ir: &SimIr,
@@ -116,9 +183,16 @@ impl NetArena {
         offsets: &Offsets,
         forced: &[bool],
         word_entry: bool,
+        esc: &mut Escape<'_>,
     ) -> bool {
-        for c in &lhs.chunks {
-            self.assert_owns(c.net, "NetArena::write_lvalue");
+        for (i, c) in lhs.chunks.iter().enumerate() {
+            // ⚠️ Asked only about the chunks this store will actually write. A
+            // heap net's slot is DEAD here by design, so asserting over an
+            // ESCAPING chunk would fire on exactly the shape the escape exists
+            // to serve.
+            if !esc.escaping(i) {
+                self.assert_owns(c.net, "NetArena::write_lvalue");
+            }
         }
         // The assoc key variants carry their key OUT of band and `as_slice()`
         // yields `&[]` for them — a shape this funnel has no arm for. Heap kinds
@@ -239,6 +313,23 @@ impl NetArena {
                 piece.set_vu(i, v, u);
             }
             src_hi = take_lo;
+            if esc.escaping(idx) {
+                // Not this store's chunk. Hand the caller the piece the split
+                // just produced and skip the store, the dirty channel and the
+                // VCD capture — the same three things the single-chunk heap lane
+                // one layer up skips.
+                //
+                // ⚠️ The `continue` SURVIVES the battery, measured, and the
+                // reason is worth keeping rather than the line being deleted:
+                // a heap net's arena slot is DEAD, `write_chunk` does not
+                // `assert_owns`, and nothing consumes a heap net's dirty bit or
+                // VCD id — so writing it as well is invisible TODAY. It is not
+                // invisible in principle (that is a store this funnel does not
+                // own being written, and a dirty mark for a net whose value is
+                // elsewhere), and the cost of the line is one branch.
+                esc.take(idx, piece);
+                continue;
+            }
             let (raw_off, raw_word) = offsets.get(idx).copied().unwrap_or((0, 0));
             changed |= self.write_chunk(ir, chunk, raw_off, raw_word, &piece, forced);
         }

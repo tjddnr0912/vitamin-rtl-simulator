@@ -111,13 +111,22 @@ fn every_heap_storage_kind_is_core() {
 /// A dyn element and an assoc element, because the router's bug was about the
 /// CHUNK COUNT, not about which kinds are present.
 ///
+/// ⚠️ The two behave DIFFERENTLY once admitted, and both behaviours are the
+/// engine's: the dyn chunk is written (values pinned by hand-IEEE in
+/// `cli::concat_heap`, because iverilog aborts on this shape — an internal
+/// `ivl_stmt_lvals(net) == 1` assert), while the assoc chunk is honest-LOUD on
+/// both backends (`W4020`, "assoc element write in an unsupported lvalue shape
+/// (ignored)") because an assoc key cannot ride the `(offset, word)` pairs. This
+/// test asserts only what it is named for — that STORAGE no longer refuses —
+/// and the value halves live where their oracles do.
+///
 /// ⚠️ NOT `string` — measured: `{s, x} = …` never reaches any gate, because
 /// elaborate already refuses it ("a string / real value … inside a
 /// concatenation lvalue is outside the v7 scope"). Listing it here would have
 /// been a vacuous row asserting the storage gate does something a phase above
 /// it already did.
 #[test]
-fn a_heap_chunk_inside_a_concat_lvalue_is_refused_by_storage() {
+fn a_heap_chunk_inside_a_concat_lvalue_is_admitted_by_storage() {
     use sim_engine::native::arena::NetArena;
     for src in [
         "module t; int d[]; logic [3:0] x;\n\
@@ -135,12 +144,15 @@ fn a_heap_chunk_inside_a_concat_lvalue_is_refused_by_storage() {
             design_eligibility(&ir, &SimOpts::default()).eligible,
             "the design gate has no quarrel with these: {src}"
         );
+        // ⚠️⚠️ A8-concat INVERTED this: storage ADMITS the shape now. The row it
+        // pinned named its own follow-on — "give the funnel a per-chunk escape"
+        // — and that is what was built, so the split still happens once, in
+        // `NetArena::write_lvalue`, and the router only says which pieces are
+        // not its own.
         assert_eq!(
             NetArena::buildable(&ir, &SimOpts::default()).err(),
-            Some(
-                "a heap-kind chunk inside a concat lvalue: the split would have to route per chunk"
-            ),
-            "storage must refuse: {src}"
+            None,
+            "storage must admit: {src}"
         );
     }
 

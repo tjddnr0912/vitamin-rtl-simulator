@@ -1246,6 +1246,39 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             }
         }
         let ir = self.ir;
+        // ── CONCAT with a chunk this store does not own (A8-concat) ──────────
+        //
+        // V1 slice 2 refused this shape and named the follow-on exactly: give
+        // the funnel a per-chunk escape rather than spell the split twice. The
+        // decision is made HERE because only the kernel knows which store owns a
+        // net; the SLICING stays in `write_lvalue_escaping`, which is the one
+        // spelling of it.
+        //
+        // ⚠️ The escaped pieces are applied AFTER the arena's chunks, and that
+        // is not observable: the chunks of one concat lvalue are disjoint
+        // destinations and nothing reads between them — the same argument
+        // A1-iii's `TaskWrites::Collect` makes, for the same reason (the borrow
+        // that makes the collect necessary).
+        if lhs.chunks.len() > 1 {
+            let mask: Vec<bool> = lhs.chunks.iter().map(|c| self.is_heap_net(c.net)).collect();
+            if mask.iter().any(|&b| b) {
+                let mut esc = crate::native::write::Escape {
+                    mask: &mask,
+                    taken: Vec::new(),
+                };
+                let changed = {
+                    let (arena, forced) = (&mut self.arena, &self.sched.st.forced);
+                    arena.write_lvalue_escaping(ir, lhs, value, offsets, forced, &mut esc)
+                };
+                let mut any = changed;
+                for (idx, piece) in esc.taken.into_iter() {
+                    let c = &lhs.chunks[idx];
+                    let (off, word) = offsets.as_slice().get(idx).copied().unwrap_or((0, 0));
+                    any |= self.sched.st.dyn_write(c, off, word, &piece);
+                }
+                return any;
+            }
+        }
         // The force flags are `SimState`'s — ONE table, threaded rather than
         // mirrored. The split borrow is field-disjoint (`arena` mutable,
         // `sched.st.forced` shared).

@@ -374,34 +374,16 @@ impl NetArena {
         // `{d[0], x} = 8'hAB` sent both chunks to the arena, and the heap one
         // reached `assert_owns` — the instrument named it exactly.
         //
-        // Refused rather than routed, deliberately. Routing it means splitting
-        // the source across chunks and sending each half to a different store,
-        // and that split rule already lives in `NetArena::write_lvalue`; a
-        // second spelling of it in the router is the §4.5.279 class of defect.
-        // Correct-support for this shape is a follow-on that gives the funnel a
-        // per-chunk escape, not a line in this slice (ROADMAP §5.1-c).
+        // ⭐ A8-concat ROUTED it, and it built the follow-on this row named
+        // rather than the second spelling it warned about: `write_lvalue` grew a
+        // per-chunk `Escape`, so the SPLIT still happens once, here, and the
+        // router only says which pieces are not this store's.
         //
-        // Costed before choosing: the census counts 2 designs in the whole
-        // workspace suite, both of them tests OF this shape.
-        for s in &ir.stmts {
-            let lhs = match s {
-                sim_ir::Stmt::BlockingAssign { lhs, .. }
-                | sim_ir::Stmt::NonblockingAssign { lhs, .. } => lhs,
-                _ => continue,
-            };
-            if lhs.chunks.len() > 1
-                && lhs.chunks.iter().any(|c| {
-                    ir.nets
-                        .get(c.net as usize)
-                        .is_some_and(|nv| kind_is_heap(nv.kind))
-                })
-            {
-                return Err(
-                    "a heap-kind chunk inside a concat lvalue: the split would have to \
-                            route per chunk",
-                );
-            }
-        }
+        // The old row read: "Refused rather than routed, deliberately. Routing
+        // it means splitting the source across chunks and sending each half to a
+        // different store, and that split rule already lives in
+        // `NetArena::write_lvalue`; a second spelling of it in the router is the
+        // §4.5.279 class of defect."
         Ok(())
     }
 
