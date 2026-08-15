@@ -708,6 +708,32 @@ impl Scheduler<'_, '_> {
         join: u32,
         resume_bb: u32,
     ) -> Option<u32> {
+        let mut ready = Vec::new();
+        let r = self.exec_fork_into(parent_aid, children, join, resume_bb, &mut ready);
+        for e in ready {
+            crate::sched::push_sorted(&mut self.cur.active, e);
+        }
+        r
+    }
+
+    /// A4: [`Scheduler::exec_fork`] with the spawned children handed back
+    /// instead of pushed.
+    ///
+    /// Same split, and the same reason, as `on_child_complete_into`: the barrier
+    /// registration, the tie composition and its overflow guard, the window
+    /// sharing for a fork-in-frame and the `JoinMode` continuation decision are
+    /// all queue-independent — and the tie ORDER is the part a second spelling
+    /// would get subtly wrong, because it is what makes sibling arms
+    /// deterministic. Only "where does a runnable child go" belongs to the
+    /// caller's queue.
+    pub(crate) fn exec_fork_into(
+        &mut self,
+        parent_aid: u32,
+        children: &[u32],
+        join: u32,
+        resume_bb: u32,
+        ready: &mut Vec<Ready>,
+    ) -> Option<u32> {
         let parent_tmpl = self.activities[parent_aid as usize].template;
         // Stage-1 fork-in-frame: is the parent forking from INSIDE a suspendable task
         // frame? Then each child runs one fork ARM as its own in-frame activity, and the
@@ -871,14 +897,11 @@ impl Scheduler<'_, '_> {
             };
             // Make the child runnable NOW (same instant, Active region); push_sorted
             // by the composed tie keeps siblings in declaration order.
-            push_sorted(
-                &mut self.cur.active,
-                Ready {
-                    tie: child_tie,
-                    proc: child_aid,
-                    block: child_entry,
-                },
-            );
+            ready.push(Ready {
+                tie: child_tie,
+                proc: child_aid,
+                block: child_entry,
+            });
         }
 
         match mode {

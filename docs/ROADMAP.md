@@ -1778,6 +1778,36 @@ A3-iii 가 행을 *"names"* 에서 *"WRITES"* 로 좁히며 이유를 적어 뒀
 ⚠️ **잔여 110 은 전부 fork 가족이다**(78 + 24 + 5 + `wait fork` 3) — Phase A 의 꼬리가 끝났고 남은 것은
 **A4 하나**다.
 
+#### 5.1-al ⏳ A4 착수 — **fork 부기를 큐에서 떼어냈다**(전제조건) · 커버리지 불변 (2026-08-15)
+
+Phase A 에 남은 유일한 슬라이스이고 **잔여 110 = 100% fork 가족**이다(fork 78 · frame-forks 24 ·
+disable_fork 5 · `wait fork` 3). 착수 census 가 이미 정한 사실: **arm 이 전부 직선인 설계는 13%(14/108)
+뿐**이고 87% 는 실제로 park 하므로, "직선 arm 만 인라인" 같은 부분 구현은 **진짜 슬라이스가 다시
+걷어내야 하는 버리는 작업**이다 ⇒ 짓지 않는다.
+
+⭐ **설계 = 재구현이 아니라 위임.** 엔진의 fork 기계장치는 전부 `Scheduler` 에 있고 `NativeKernel` 은
+이미 `&mut Scheduler` 를 든다. 재사용 못 할 유일한 조각은 **큐 push** 다(엔진은 `self.cur.active`, tier-3
+은 `native::wake`). 그래서 이 단계가 한 것: `exec_fork` 와 `on_child_complete` 에서 **push 만 떼어내
+`_into(…, ready: &mut Vec<Ready>)` 로** 만들고 엔진은 이전 본체를 그대로 감싸 호출한다(구조적 불변).
+
+⚠️ **떼어낸 것이 push 뿐인 이유가 곧 정확성 논거다** — barrier 등록·tie 합성과 그 오버플로 가드·
+fork-in-frame 의 윈도 공유·`JoinMode` 결정·`wait fork` 카운트다운은 전부 큐 독립이고, **두 철자가 되면
+조용히 틀린다**: under-decrement 는 All-barrier 를 **조기 발화**시킨다(크래시가 아니라 오답). tie 순서도
+같은 부류다 — 형제 arm 의 결정성이 거기 걸려 있다.
+
+**남은 A4 의 단계**(다음 슬라이스가 이어받는다):
+
+| # | 무엇 | 크기 |
+|---|---|---|
+| 1 | tier-3 의 `NativeReady{proc,…}` 를 **activity id** 로(기본 활동은 1:1 이라 값은 같다) | ~30 사이트, 기계적 |
+| 2 | tier-3 이 `Scheduler::activities` 를 **실제로 시드**(오늘 `arm_t0` 는 안 만든다) | 작음 |
+| 3 | 워크의 `Terminator::Fork` arm → `k_exec_fork` seam → `exec_fork_into` | 작음 |
+| 4 | 자식 완료(`Step::Done` ∧ `join_ref`) → `on_child_complete_into` → tier-3 큐에 부모 재적재 | 작음 |
+| 5 | 게이트 행 넷(`fork`·`disable_fork`·frame-FORKS·실행기 행의 fork 절) | 작음 |
+
+⚠️ 순서 주의: **`join_none` 은 인라인 실행과 관측이 다르다**(부모가 먼저 계속되고 자식은 같은 델타에서
+뒤에 돈다) — 그래서 arm 을 순차 인라인하는 지름길이 `join` 에만 성립하고, 그 지름길을 안 쓰는 이유다.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의

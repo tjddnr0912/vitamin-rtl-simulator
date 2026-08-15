@@ -35,6 +35,32 @@ impl Scheduler<'_, '_> {
     /// A fork child has reached its barrier's join_bb. Decrement and, on the firing
     /// condition for the mode, re-enqueue the parent at `resume_bb` exactly once.
     pub(crate) fn on_child_complete(&mut self, join_ref: u32, child_aid: u32) {
+        let mut ready = Vec::new();
+        self.on_child_complete_into(join_ref, child_aid, &mut ready);
+        for r in ready {
+            push_sorted(&mut self.cur.active, r);
+        }
+    }
+
+    /// A4: [`Scheduler::on_child_complete`] with the READY entries handed back
+    /// instead of pushed.
+    ///
+    /// The bookkeeping — the fire-once mark, the activity recycle, the barrier
+    /// decrement, the `JoinMode` decision, the fork-in-frame PC and the
+    /// `wait fork` countdown — is store- and queue-independent, and it is the
+    /// part that must not have two spellings: an under-decrement fires an
+    /// All-barrier EARLY, which is a wrong answer rather than a crash. What IS
+    /// queue-dependent is where the woken parent goes, and tier-3 has its own
+    /// queue (`native::wake`), so that is the only thing the caller supplies.
+    ///
+    /// The wrapper above is the engine's previous body, so its path is unchanged
+    /// by construction.
+    pub(crate) fn on_child_complete_into(
+        &mut self,
+        join_ref: u32,
+        child_aid: u32,
+        ready: &mut Vec<Ready>,
+    ) {
         // Per-child fire-once: a child may reach its join at most once. A second
         // report would under-decrement `outstanding` and fire an All-barrier EARLY.
         debug_assert!(
@@ -82,14 +108,11 @@ impl Scheduler<'_, '_> {
             // Re-enqueue the parent at resume_bb THIS instant (Active region).
             // Surplus children (join_any) stay live and run to completion; their
             // later on_child_complete sees `fired == true` → no-op.
-            push_sorted(
-                &mut self.cur.active,
-                Ready {
-                    tie,
-                    proc: parent,
-                    block: resume_bb,
-                },
-            );
+            ready.push(Ready {
+                tie,
+                proc: parent,
+                block: resume_bb,
+            });
         }
 
         // v8 `wait fork`: this completion also counts against the parent's
@@ -112,14 +135,11 @@ impl Scheduler<'_, '_> {
         if let Some(resume_bb) = wf_resume {
             self.activities[parent_aid as usize].wait_fork = None;
             let tie = self.activities[parent_aid as usize].tie;
-            push_sorted(
-                &mut self.cur.active,
-                Ready {
-                    tie,
-                    proc: parent_aid,
-                    block: resume_bb,
-                },
-            );
+            ready.push(Ready {
+                tie,
+                proc: parent_aid,
+                block: resume_bb,
+            });
         }
     }
 }
