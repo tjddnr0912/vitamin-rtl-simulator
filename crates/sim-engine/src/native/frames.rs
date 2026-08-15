@@ -148,19 +148,29 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         // admitted here." This slice built the other half — the walk hands its
         // stack to the kernel at a `Delay`/`Wait` and takes it back on resume,
         // and the window stash is the ENGINE's (`frame_window::stash_windows_in`,
-        // extracted so there is one spelling). What is left is `fork` inside a
-        // frame, which needs the activity arena tier-3 does not have.
+        // extracted so there is one spelling).
+        //
+        // ⚠️⚠️ **A4-b DELETED THE ROW THAT USED TO BE HERE, and BOTH sentences it
+        // carried had expired.** It refused "`fork` inside a frame, which needs
+        // the activity arena tier-3 does not have" — A4-a built that arena — and
+        // it claimed "every design in that group also trips the `fork` DESIGN
+        // row, so this row's remaining population is zero-cost today", which
+        // A4-a also ended by deleting the design row. Re-measured at that point:
+        // **24 designs**, and this row plus the executor's `site_runnable` fork
+        // clause were the only two things refusing them — the same predicate
+        // (`frame_call::frame_forks`) read in two places, which is why the two
+        // always fired together and had to be closed as a pair.
+        //
+        // Closing them needed no new fork machinery. `exec_fork_into` already
+        // does the whole in-frame case — `parent_in_frame` off the call stack,
+        // `FRAME_FORK_KEY` for the mode, `arm_callee` for the arm's CFG, and the
+        // Case A / Case B window split — because the ENGINE has forked from
+        // inside a frame since §4.5.214. What tier-3 was missing was that its
+        // parked frames lived in a kernel-side map the scheduler could not see;
+        // they live in `activities[act].call_stack` now, like the engine's.
         //
         // Measured before narrowing: of the parking frames the suite reaches,
-        // 65 park on a `Wait` edge, 19 on a `Delay`, 13 on a `fork` — and every
-        // design in that last group also trips the `fork` DESIGN row, so this
-        // row's remaining population is zero-cost today.
-        if fd.is_task
-            && susp.contains(&(fi as u32))
-            && crate::exec::frame_call::frame_forks(ir, &susp, fd.entry)
-        {
-            return Err("a task frame that FORKS (a `fork` inside the body): S3b");
-        }
+        // 65 park on a `Wait` edge, 19 on a `Delay`, 13 on a `fork`.
         // ⚠️⚠️ **`has_hier_call` IS LIVE NOW, and the claim that it was not is one
         // this file made twice.** S3a called both rows dead because the `is_task`
         // row got there first; A3-i repeated it with a new argument — "both flags
@@ -177,10 +187,27 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         // the fail-closed answer, and lifting it is A3-ii's business, not a
         // comment's.
         //
-        // `contains_shared_fork` really is still dead: it means the body has a
-        // `fork`, which `frame_suspends` reports as a park one row up. Kept as its
-        // own row for the reason it always was — if that ever stops being true,
-        // this refuses instead of the design going quiet.
+        // ⚠️⚠️ **`contains_shared_fork` IS GONE TOO (A4-b), and it is the clearest
+        // case in this file of a backstop doing its job.** A3-ii-b wrote it down
+        // as "really still dead: it means the body has a `fork`, which
+        // `frame_suspends` reports as a park one row up. Kept as its own row for
+        // the reason it always was — if that ever stops being true, this refuses
+        // instead of the design going quiet."
+        //
+        // A4-b deleted the row one up, and this one caught the fallout
+        // IMMEDIATELY: the first Case-B probe (`fork` arms writing the enclosing
+        // automatic task's locals) still reported `buildable: false` with this
+        // row's message, so the slice's own census had UNDERCOUNTED — the gate
+        // returns the first `Err`, so this row was masked behind the one being
+        // removed. Fourteen of the twenty-four designs are Case B; closing only
+        // the pair would have shipped ten.
+        //
+        // It closes for the same reason as the other two: nothing here is
+        // tier-3's to build. A Case-B task's window is an interior-mutable ARENA
+        // window (`enter_task_frame`'s `(has_auto, _, shared)` arm allocates a
+        // `WindowSlot::Shared`), the arms alias it by handle with a refcount, and
+        // all of that is `SimState`'s and therefore shared — tier-3 enters frames
+        // through the same `enter_task_frame`.
         // ⚠️⚠️ **`has_hier_call` IS GONE (A3-iv), and its reason was about a phase
         // that has already ended.** The row said `frame_suspends` cannot see
         // through a deferred hierarchical enable, because `Call.target` is a
@@ -201,9 +228,6 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         // §4.5.338 for the third time in this file: a refusal does not know when
         // its own reason stops being true — and "the target is a placeholder" is
         // a claim about WHEN, which the next phase invalidates.
-        if m.contains_shared_fork {
-            return Err("a subroutine with a shared fork window");
-        }
         // ⭐⭐ **TWO PRECONDITIONS, because there are two executors.** Which one a
         // body must satisfy is decided by WHO RUNS IT, and getting this wrong in
         // either direction is a defect rather than a preference:
@@ -229,7 +253,7 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
         // delegated precondition, because an expression call to it would take the
         // `run_frame_call` path this walk never sees.
         if fd.is_task && susp.contains(&(fi as u32)) {
-            driven_body_is_runnable(ir, opts, &susp, fd.entry, m.base_net, m.locals_len)?;
+            driven_body_is_runnable(ir, opts, fd.entry, m.base_net, m.locals_len)?;
         } else {
             w.body_is_task = fd.is_task;
             body_stays_in_its_window(&mut w, fd.entry, m.base_net, m.locals_len)?;
@@ -340,7 +364,6 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
 fn driven_body_is_runnable(
     ir: &SimIr,
     opts: &SimOpts,
-    susp: &std::collections::BTreeSet<u32>,
     entry: u32,
     base_net: u32,
     locals_len: u32,
@@ -387,15 +410,10 @@ fn driven_body_is_runnable(
                 }
                 // Its callee's own body is checked by this loop's caller (every
                 // func in the table is visited), so only reachability is added
-                // here — and the callee must itself be one of the two admitted
-                // kinds rather than a parking frame.
-                if let Some(cf) = ir.funcs.iter().position(|f| f.entry == *target) {
-                    if susp.contains(&(cf as u32))
-                        && crate::exec::frame_call::frame_forks(ir, susp, *target)
-                    {
-                        return Err("a task frame that FORKS (a `fork` inside the body): S3b");
-                    }
-                } else {
+                // here. A4-b removed the extra clause that refused a nested
+                // callee which FORKS — the walk drives that now, and the callee's
+                // own visit checks its body.
+                if !ir.funcs.iter().any(|f| f.entry == *target) {
                     return Err("a nested call to an unresolved target: S3b");
                 }
                 stack.push(*ret_bb);
@@ -407,11 +425,28 @@ fn driven_body_is_runnable(
             sim_ir::Terminator::Delay { resume, .. } | sim_ir::Terminator::Wait { resume, .. } => {
                 stack.push(*resume)
             }
-            // `frame_forks` already refused this with its own row; reaching one
-            // here means the two walks disagree, which is worth a row of its own
-            // rather than a silent skip.
-            sim_ir::Terminator::Fork { .. } => {
-                return Err("a task frame that FORKS (a `fork` inside the body): S3b")
+            // A4-b: FOLLOW the arms. They are blocks of THIS task's CFG and they
+            // run against THIS frame's window, so every check above — the refused
+            // system tasks, the frame-local NBA, the `[lo, hi)` containment — has
+            // to reach them. Skipping them would admit a design on the strength
+            // of the code outside its fork.
+            //
+            // ⚠️ EQUIVALENT TODAY, measured: stopping here instead survives the
+            // whole suite. Both refusals this traversal can reach are currently
+            // unreachable — the `systask_refusal` set has been empty since
+            // A5-dumpall, and an NBA to a frame-local net is an elaborate E3009
+            // (iverilog rejects it too, quoting IEEE §10.4.2). So there is no
+            // statement that can be put inside an arm to make the traversal
+            // observable. It is written the correct way rather than the
+            // observable way, because the first `SysTaskId` that lands back in
+            // that set makes it live with no other edit.
+            sim_ir::Terminator::Fork {
+                children,
+                resume_bb,
+                ..
+            } => {
+                stack.extend(children.iter().copied());
+                stack.push(*resume_bb);
             }
         }
     }

@@ -30,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **★★ ③층 S1d-4c-2d — in-body 웨이터** (…4c-2c ✅ §4.5.285~298 — 런 루프가 돌고 코퍼스 65/72 가 바이트 동일). ⚠️ 코퍼스 커버리지 **0**(정지 터미네이터 138 이 전부 `Delay`)이라 전용 설계로 · 판별 설계는 **순서를 뒤집는 것**이어야 한다 · 게이트에 **진단 스트림**을 반드시 넣어라. 다음 = **4d** settle·wired·VCD → corpus **stdout+VCD 바이트 동일** | 엔진 오라클 in-crate 차분 |
+| **0** | **★★ ③층 Phase A(V1 커버리지) — 거의 끝났다: 99.80%** (2026-08-16 재측정 · 이 행은 그 전까지 S1d-4c-2d 를 가리키고 있었고 20 슬라이스 stale 이었다). 코퍼스 6,461 중 **거부 13** 이고 전부 fork 가족의 마지막 둘 = **A4-c `wait fork`/callee-forks 7** → **A4-d `disable fork` 6** ⇒ **V1 완주 = 100%.** 그 다음은 정본 순서대로 **B(빌드 분리) → C(interp 강등) → D(기계어 코드젠, 본체는 2-state 좁히기)**. 상세·슬라이스 이력 = ROADMAP §5.1-g~-an | 엔진 오라클 in-crate 차분 + **절대 앵커 의무**(§5.1-e) |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 

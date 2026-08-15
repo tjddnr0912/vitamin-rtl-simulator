@@ -78,100 +78,19 @@ use crate::value::Value;
 /// callee with a fresh set; `task automatic t(...); … t(n-1); … endtask` would
 /// have re-entered `t`'s entry block forever. The blocks of every func live in
 /// one arena, so one set is both correct and sufficient.
-/// A3-ii-b: does this frame reach a `Fork`? The half of [`frame_suspends`] the
-/// gate still refuses.
+/// ⚠️⚠️ **A4-b DELETED `frame_park_kinds`, `ParkKinds` and `frame_forks`, and the
+/// deletion is the record of a family closing.** A3-ii-b built the walk to split
+/// one refusal in two — "does this frame park on a `Delay`/`Wait`" (which it then
+/// admitted) versus "does it reach a `Fork`" (which it kept refusing) — and its
+/// own doc measured the split: 65 frames park on a `Wait` edge, 19 on a `Delay`,
+/// 13 reach a `Fork`. A4-b admits the third, so nothing asks the question and
+/// both fields were write-only.
 ///
-/// The split is what the census measured: of the parking frames the suite
-/// reaches, 65 park on a `Wait` edge and 19 on a `Delay` — those are what this
-/// slice runs — while 13 reach a `Fork`, and every design carrying one also
-/// trips the `fork` DESIGN row, so refusing them here costs nothing today and
-/// is A4's business.
-pub(crate) fn frame_forks(
-    ir: &sim_ir::SimIr,
-    susp: &std::collections::BTreeSet<u32>,
-    entry: u32,
-) -> bool {
-    frame_park_kinds(ir, susp, entry).fork
-}
-
-/// What a frame's reachable terminators say about HOW it parks.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct ParkKinds {
-    /// A `Delay` or a `Wait` — the shapes tier-3 parks and resumes (A3-ii-b).
-    pub timed: bool,
-    /// A `Fork` — still refused.
-    pub fork: bool,
-}
-
-/// ONE walk behind both predicates, so a change to reachability cannot move one
-/// answer without the other.
-pub(crate) fn frame_park_kinds(
-    ir: &sim_ir::SimIr,
-    susp: &std::collections::BTreeSet<u32>,
-    entry: u32,
-) -> ParkKinds {
-    let mut out = ParkKinds::default();
-    let mut seen = std::collections::BTreeSet::new();
-    let mut stack = vec![entry];
-    while let Some(b) = stack.pop() {
-        if !seen.insert(b) {
-            continue;
-        }
-        let Some(blk) = ir.blocks.get(b as usize) else {
-            // An out-of-range block id can only come from a malformed sidecar,
-            // which the caller's window checks already refuse. Answering "it
-            // suspends, in the way that is still refused" is the fail-CLOSED
-            // direction for an ACCEPT gate.
-            return ParkKinds {
-                timed: true,
-                fork: true,
-            };
-        };
-        match &blk.term {
-            sim_ir::Terminator::Goto { target } => stack.push(*target),
-            sim_ir::Terminator::Branch {
-                then_bb, else_bb, ..
-            } => {
-                stack.push(*then_bb);
-                stack.push(*else_bb);
-            }
-            sim_ir::Terminator::Call { target, ret_bb } => {
-                // A nested callee that is itself suspendable-and-parking makes
-                // THIS body park too. A nested SUBSET callee does not — it runs
-                // synchronously inside the frame, exactly as A3-i's does. Either
-                // way its blocks join THIS walk, which is what makes the answer
-                // transitive.
-                match ir.funcs.iter().position(|f| f.entry == *target) {
-                    Some(cf) if susp.contains(&(cf as u32)) => stack.push(*target),
-                    // An unresolvable target is a placeholder (a deferred hier
-                    // enable). Fail closed, for the same reason as above.
-                    None => {
-                        return ParkKinds {
-                            timed: true,
-                            fork: true,
-                        }
-                    }
-                    Some(_) => {}
-                }
-                stack.push(*ret_bb);
-            }
-            // NOT an early return any more: a body can reach both kinds, and
-            // the gate asks about them separately.
-            sim_ir::Terminator::Delay { resume, .. } => {
-                out.timed = true;
-                stack.push(*resume);
-            }
-            sim_ir::Terminator::Wait { resume, .. } => {
-                out.timed = true;
-                stack.push(*resume);
-            }
-            sim_ir::Terminator::Fork { .. } => out.fork = true,
-            sim_ir::Terminator::Return => {}
-        }
-    }
-    out
-}
-
+/// Its two fail-closed early returns are NOT lost. Both — an out-of-range block
+/// id and an unresolvable nested `Call` target, each a malformed sidecar —
+/// are refused by `native::frames::driven_body_is_runnable`, which runs under
+/// exactly the condition this walk's caller used (`fd.is_task && susp`).
+///
 /// Can the walk run the call described by `site`? ONE spelling for the GATE
 /// (`native::frames::callee_mode`) and the walk's own `debug_assert`.
 ///
@@ -191,12 +110,11 @@ pub(crate) fn site_runnable(
     if !susp.contains(&info.callee) {
         return true; // A3-i: synchronous, delegated whole
     }
-    match ir.funcs.get(info.callee as usize) {
-        // A3-ii-a drove it "provided it never parks"; A3-ii-b drives it even
-        // when it does, so what is left to refuse is the FORK half.
-        Some(fd) => !frame_forks(ir, susp, fd.entry),
-        None => false,
-    }
+    // A3-ii-a drove it "provided it never parks"; A3-ii-b drove it even when it
+    // does; A4-b drives it when it FORKS, which was the last clause. A callee
+    // with no `ir.funcs` entry is still refused — that is a malformed sidecar,
+    // and fail-closed is the direction for an accept gate.
+    ir.funcs.get(info.callee as usize).is_some()
 }
 
 /// One OPEN driven frame.

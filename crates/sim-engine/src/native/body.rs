@@ -13,11 +13,20 @@
 //! is not cleverness — it is the S0 gate. (An earlier version of this line said
 //! 498, which no counting convention produced even before this slice added four
 //! lines to it — a line count in a comment is stale the moment anything edits
-//! the function it counts.) Fork children, join barriers and the call
-//! stack are the bulk of the engine's loop, and every one of them is refused:
-//! `fork_modes` non-empty is an S0 reject (so activities are 1:1 with processes,
-//! `is_child` is always false, and `Terminator::Fork` cannot appear), and
-//! `Terminator::Call` is refused by the scan below.
+//! the function it counts.)
+//!
+//! ⚠️⚠️ **THE FORK HALF OF THAT SENTENCE IS GONE (A4-a, A4-b).** It read: "fork
+//! children, join barriers and the call stack are the bulk of the engine's loop,
+//! and every one of them is refused: `fork_modes` non-empty is an S0 reject (so
+//! activities are 1:1 with processes, `is_child` is always false, and
+//! `Terminator::Fork` cannot appear)". All four clauses are now false. A4-a
+//! deleted the design row and gave tier-3 real activities; A4-b runs a fork
+//! INSIDE a task frame. What keeps this file short is no longer that the shapes
+//! cannot arrive — it is that the bookkeeping for them lives in `Scheduler`
+//! (`exec_fork_into`, `on_child_complete_into`) and this walk supplies only the
+//! queue the children go on and the two intercepts that decide where a child
+//! ENDS. `Terminator::Call` is still refused by the scan below for its
+//! non-subset half.
 //!
 //! ⚠️ **The `Call` half of that sentence changed in S3a and the reason matters.**
 //! It used to read "`NetArena::build` refuses a non-empty `func_table`, so there
@@ -317,6 +326,59 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, en
                     return Step::Done;
                 }
             }
+        } else if frames.len() == 1 && frames[0].is_arm {
+            // A4-b: the IN-FRAME twin. An arm of a fork that was executed from
+            // inside a task frame is itself a frame — a synthetic one built by
+            // `exec_fork_into`, whose `bb` walks the ENCLOSING task's CFG — so its
+            // end is the same sentinel read from the other block space.
+            //
+            // `is_arm` is what makes the comparison MEAN anything, and the
+            // mutation battery confirmed it: a top-level fork child that merely
+            // calls a suspendable task also has one frame, but there the frame's
+            // `bb` is a global `ir.blocks` id while `join_bb` is process-local,
+            // and comparing across the two spaces kills the child on a numeric
+            // collision. (That child completes through the `frames.is_empty()`
+            // branch above, once its callee frame has returned — which is the
+            // shape `fork_join::a_fork_arm_may_call_a_parking_task` pins, and it
+            // is the only test in the suite that catches dropping this guard.)
+            //
+            // ⚠️ `len() == 1` is a FAIL-CLOSED guard, not a load-bearing one, and
+            // that was measured rather than assumed: dropping it survives the
+            // whole suite. The engine's twin IS load-bearing, and the difference
+            // is one index — `run_process` reads `call_stack.last()`, so without
+            // the depth check it would compare a deeper CALLEE frame's `bb`
+            // (a global id, like `join_bb`) and mis-fire on a collision. This
+            // walk reads `frames[0]`, which is always the arm, and an arm's PC
+            // while a callee runs sits at the call site rather than the join. It
+            // stays because the property it rests on is this function's index
+            // choice, which a later edit could change without noticing.
+            if let Some(jbb) = k.k_child_join_bb(act) {
+                if frames[0].bb == jbb {
+                    let callee = frames[0].callee;
+                    frames.clear();
+                    // Tear the arm's window DOWN rather than letting it be
+                    // restored: under `join_any`/`join_none` a surviving arm can
+                    // outlive its parent's `Return`, and the release balances the
+                    // reference `exec_fork_into` took when it aliased the
+                    // parent's window into this arm.
+                    //
+                    // ⚠️ Deleting this call survives the suite, and the reason is
+                    // worth writing down rather than filing as equivalent. It IS
+                    // reached — probed: once per arm, `func_has_auto` true, with
+                    // `frame_stack.len() == 1`, so it pops the arm's own window
+                    // and leaves the stack empty. What the deletion costs is not
+                    // a value but a LEAK: one stale `frame_stack` entry and one
+                    // unreleased arena window per arm. Reads stay correct because
+                    // the parent restores its own window on top of the leftovers
+                    // and every `frame_slot_read` takes the top (a `Shared` arm
+                    // reads by handle, so the stack identity does not even
+                    // matter). No design in the corpus reads through a stale
+                    // entry, so no test can see it today.
+                    k.k_exit_arm_frame(act, callee);
+                    k.k_body_done(act, tmpl);
+                    return Step::Done;
+                }
+            }
         }
         let block = match frames.last() {
             Some(f) => &ir.blocks[f.bb as usize],
@@ -517,10 +579,40 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, en
                 children,
                 join,
                 resume_bb,
-            } => match k.k_exec_fork(act, children, *join, *resume_bb) {
-                Some(rb) => set_pos!(rb),
-                None => return Step::Suspended,
-            },
+            } => {
+                // A4-b: the IN-FRAME prologue, in the engine's order and for its
+                // reasons. `forked` is marked BEFORE the stash because the arms
+                // about to be spawned RIDE this frame, and unlike the automatic
+                // window (which they share through a `WindowSlot::Shared` handle)
+                // a parked dyn array is simply ABSENT from the heap — an arm
+                // reading the parent's `a[0]` would get X.
+                if let Some(top) = frames.last_mut() {
+                    top.forked = true;
+                }
+                // Then hand the stack to the ARENA, and that is what makes a
+                // fork-in-frame possible at all: `exec_fork_into` decides
+                // `parent_in_frame`, the enclosing task's `arm_callee` and each
+                // arm's window kind by reading `activities[act].call_stack`, and
+                // it writes every arm's `FrameRec` into its child's. Parking also
+                // stashes the window, which is exactly the `stash_frame_windows`
+                // the engine calls at this point — the concurrent arms take turns
+                // on the shared `frame_stack` and must not see the parent's.
+                park_frames(k, act, &mut frames);
+                match k.k_exec_fork(act, children, *join, *resume_bb) {
+                    // `join_none`, or zero children: this activation continues.
+                    // Take the stack back — the restore of the window we just
+                    // stashed is the no-op round trip the engine describes — and
+                    // continue at the FRAME's PC when there is one.
+                    Some(rb) => {
+                        frames = k.k_take_frames(act);
+                        set_pos!(rb);
+                    }
+                    // The parent parks on the barrier. Its stack is already in the
+                    // arena, which is where `on_child_complete_into` sets the
+                    // resume PC and where this walk takes it back from.
+                    None => return Step::Suspended,
+                }
+            }
             // A3-i: a SUBSET subroutine CALL STATEMENT — a task enable, or a call
             // to a function with output formals. Delegated to the engine's
             // synchronous frame executor through `exec::frame_call`, which is the

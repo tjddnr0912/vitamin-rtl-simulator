@@ -261,20 +261,25 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// slice. Derived from `func_table`, the same table
     /// `frames_admitted`/`build_func_routing` read.
     pub(crate) has_frames: bool,
-    /// A3-ii-b: the open task frames of every process that is SUSPENDED inside
-    /// one, keyed by process id.
-    ///
-    /// The engine's twin is `Scheduler::activities[pi].call_stack`, and the
-    /// reason this is a map on the kernel rather than that arena is the S0 gate:
-    /// forks are refused, so a tier-3 activity IS its process and there is
-    /// nothing for an activity arena to disambiguate. What the two DO share is
-    /// the window stash — `frame_window::{stash,restore}_windows_in`, which this
-    /// slice extracted so the pop order has one spelling.
-    ///
-    /// A `BTreeMap` rather than a `Vec` indexed by process: it is empty for every
-    /// design that has no parking frame, which is nearly all of them, and its
-    /// iteration order is deterministic if a future reader ever needs it.
-    pub(crate) parked_frames: BTreeMap<u32, Vec<crate::sched::FrameRec>>,
+    // ⚠️⚠️ A4-b DELETED `parked_frames`, and the field's own doc said what would
+    // delete it. A3-ii-b kept tier-3's parked task frames in a kernel-owned
+    // `BTreeMap<u32, Vec<FrameRec>>` and justified it like this: "the engine's
+    // twin is `Scheduler::activities[pi].call_stack`, and the reason this is a
+    // map on the kernel rather than that arena is the S0 gate: forks are
+    // refused, so a tier-3 activity IS its process and there is nothing for an
+    // activity arena to disambiguate."
+    //
+    // A4-a ended that clause, and A4-b is where the second storage stops being
+    // merely redundant and starts being WRONG: `exec_fork_into` decides
+    // `parent_in_frame`, the enclosing task's `arm_callee` and the arm window's
+    // kind by READING `activities[aid].call_stack`, and it builds each arm's
+    // `FrameRec` INTO the child's. A kernel-side map is invisible to all of
+    // that, so a fork-in-frame would have been spawned as if it were top level —
+    // arms with no window, sharing none of the parent's automatic locals.
+    //
+    // So `k_park_frames`/`k_take_frames` now move the stack in and out of the
+    // arena itself. One storage, and the window half was already one spelling
+    // (`frame_window::{stash,restore}_windows_in`).
     /// The NBA queue in engine shape. S1d-4c-1 gave it the drain; regions and
     /// the delta loop are 4c-2.
     pub(crate) nba: Vec<NbaUpdate>,
@@ -574,7 +579,6 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         NativeKernel {
             ir,
             arena,
-            parked_frames: BTreeMap::new(),
             sched,
             class_new_sites,
             max_body_steps,
@@ -2012,6 +2016,16 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         cont
     }
 
+    fn k_exit_arm_frame(&mut self, act: u32, callee: u32) {
+        // The pop-and-release is the engine's own function; only the arena's
+        // copy of the stack is cleared here, and it is already empty (the walk
+        // took it at entry) except on the path where the arm never suspended.
+        self.sched.st.exit_arm_frame(callee);
+        if let Some(a) = self.sched.activities.get_mut(act as usize) {
+            a.call_stack.clear();
+        }
+    }
+
     fn k_body_done(&mut self, act: u32, tmpl: u32) {
         // `.get()` for the same reason `k_child_join_bb` has it: a kernel built
         // by the body differential has no activity arena, and "no activity" is
@@ -2051,13 +2065,27 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // another process's `frame_slot_read` looking at this frame's locals.
         // Popped top-first, which is why the order lives in one place.
         crate::exec::frame_window::stash_windows_in(self.sched.st, &mut frames);
-        self.parked_frames.insert(proc, frames);
+        // A4-b: into the ARENA, which is where the engine keeps it and where
+        // `exec_fork_into` looks. `proc` is an ACTIVITY id (A4-a), so a fork
+        // child parks its own arm frame without colliding with its parent's.
+        let Some(a) = self.sched.activities.get_mut(proc as usize) else {
+            // The body differential builds a kernel with no activity arena. It
+            // also never suspends, so this is the "nothing to park" answer
+            // rather than a lost stack.
+            debug_assert!(frames.is_empty(), "parking frames with no activity arena");
+            return;
+        };
+        a.call_stack = frames;
     }
 
     fn k_take_frames(&mut self, proc: u32) -> Vec<crate::sched::FrameRec> {
-        let Some(mut frames) = self.parked_frames.remove(&proc) else {
+        let Some(a) = self.sched.activities.get_mut(proc as usize) else {
             return Vec::new();
         };
+        let mut frames = std::mem::take(&mut a.call_stack);
+        if frames.is_empty() {
+            return frames;
+        }
         crate::exec::frame_window::restore_windows_in(self.sched.st, &mut frames);
         frames
     }

@@ -775,32 +775,39 @@ endmodule
     assert_eq!(crate::native::run::runnable(&ir2, &opts2), Ok(()));
 }
 
-/// A3-ii-b: the park walk must FOLLOW a `Delay`/`Wait` resume edge, not stop at
-/// it — or a `fork` sitting behind one is invisible to the row that refuses it.
+/// ⚠️⚠️ **A4-b INVERTED this test, and its subject no longer exists.** It was
+/// `the_park_walk_sees_a_fork_behind_a_delay`, and it pinned that
+/// `frame_park_kinds` FOLLOWS a `Delay`/`Wait` resume edge so a `fork` sitting
+/// behind one is visible to the row that refused it. A3-ii-b wrote it because
+/// its mutation battery found nothing else asking — every forking frame in the
+/// corpus reaches its `fork` without passing a suspension first.
 ///
-/// Written because the mutation battery found nothing else asking. Dropping the
-/// `stack.push(*resume)` from the `Delay` arm left the whole suite green: every
-/// forking frame in the corpus reaches its `fork` without passing a suspension
-/// first, so the transitive half of the walk had no design. The consequence of
-/// missing it is not a wrong value — `frames_admitted` would admit the frame and
-/// the walk would hit `Terminator::Fork`, whose arm is `unreachable!`.
+/// Both the row and the walk are gone: A4-b runs a fork inside a frame, so
+/// `frame_park_kinds`/`ParkKinds`/`frame_forks` became write-only and were
+/// deleted. The design is kept and the assertion inverted, because the shape is
+/// exactly the one the old test says the corpus does NOT have — a fork behind a
+/// suspension — and it is now a capability rather than a refusal.
+///
+/// ⚠️ The surviving walk (`driven_body_is_runnable`) still has to follow both
+/// edges, and this test cannot show it: its two refusals — a system task the
+/// tier-3 kernel rejects, and an NBA to a frame-local net — are BOTH unreachable
+/// today (the refusal set is empty since A5-dumpall; the NBA is an elaborate
+/// E3009, and iverilog rejects it too quoting IEEE §10.4.2). So there is no
+/// statement that can be put behind the resume edge or inside an arm to make the
+/// traversal observable. Recorded as a backstop rather than counted as covered.
 #[test]
-fn the_park_walk_sees_a_fork_behind_a_delay() {
+fn a_fork_behind_a_delay_inside_a_frame_is_admitted() {
     let src = "module t;\n\
                  task automatic df(); begin #1; fork #1; join end endtask\n\
                  initial begin df(); end\n\
                endmodule\n";
     let (ir, opts) = build_with_opts(src);
-    let susp = crate::native::frames::suspendable_set(&ir, &opts);
-    let entry = ir.funcs[0].entry;
-    let kinds = crate::exec::frame_call::frame_park_kinds(&ir, &susp, entry);
-    assert!(kinds.timed, "the `#1` is a timed park");
-    assert!(
-        kinds.fork,
-        "the `fork` is behind the `#1`, and the walk has to follow the resume \
-         edge to reach it"
+    assert_eq!(
+        NetArena::buildable(&ir, &opts).err(),
+        None,
+        "a frame that parks and then forks is admitted since A4-b"
     );
-    assert!(crate::exec::frame_call::frame_forks(&ir, &susp, entry));
+    assert_eq!(crate::native::run::runnable(&ir, &opts), Ok(()));
 }
 
 /// ⚠️⚠️ **A3-ii-b INVERTED this test.** It used to be
@@ -847,16 +854,38 @@ endmodule
             bb
         )
     ));
-    // …and the FORK half, which is what the row narrowed to, still refuses at the
-    // storage layer. Asked through the predicate rather than through a design,
-    // because a design carrying a `fork` trips the DESIGN gate first — that is
-    // why the row-coverage table can no longer carry a case for it either.
-    let susp = crate::native::frames::suspendable_set(&ir, &opts);
-    let entry = ir.funcs[0].entry;
-    assert!(
-        !crate::exec::frame_call::frame_forks(&ir, &susp, entry),
-        "this callee parks on a delay, it does not fork"
-    );
+    // ⚠️⚠️ A4-b REPLACED the tail of this test. It used to assert that the FORK
+    // half "still refuses at the storage layer", asked through `frame_forks`
+    // rather than through a design "because a design carrying a `fork` trips the
+    // DESIGN gate first". Both halves of that sentence expired: A4-a deleted the
+    // design row and A4-b deleted the storage one, along with the predicate.
+    //
+    // What replaces it is the same claim in the direction the agreement now
+    // points — a callee that FORKS is admitted by both layers too, asked through
+    // a real design because one can finally be built.
+    let forking = r#"
+module top;
+  integer r;
+  task automatic two(output integer o);
+    integer a, b;
+    begin
+      a = 0; b = 0;
+      fork
+        begin #2; a = 6; end
+        begin #1; b = 7; end
+      join
+      o = a + b;
+    end
+  endtask
+  initial begin two(r); $display("r=%0d", r); $finish; end
+endmodule
+"#;
+    let (ir2, opts2) = build_with_opts(forking);
+    assert_eq!(NetArena::buildable(&ir2, &opts2).err(), None);
+    assert!(crate::native::design_eligibility(&ir2, &opts2)
+        .reject_reasons
+        .is_empty());
+    assert_eq!(crate::native::run::runnable(&ir2, &opts2), Ok(()));
 }
 
 /// The row that protects the frame-BLIND consumers — `wprog`'s compile-time slot

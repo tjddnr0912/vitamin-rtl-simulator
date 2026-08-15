@@ -167,6 +167,18 @@ pub(crate) trait Kernel {
         unreachable!("this kernel has no fork execution")
     }
 
+    /// A4-b: a fork ARM frame has reached its join. Tear its window down.
+    ///
+    /// Separate from [`Kernel::k_body_done`] because the two answer different
+    /// questions at the same instant and only one of them is about frames: the
+    /// barrier report is the activity's, and this is the arm FRAME's. It also
+    /// has to run BEFORE the report, because the report can make the parent
+    /// runnable and the parent's own window restore expects this one gone.
+    ///
+    /// No-op by default: an executor whose `k_child_join_bb` never answers
+    /// cannot reach an arm frame, so a kernel without forks says nothing.
+    fn k_exit_arm_frame(&mut self, _act: u32, _callee: u32) {}
+
     /// A4: this activation's body has ENDED. Re-arm the process, or report to a
     /// join barrier if the activity is a fork child.
     ///
@@ -186,6 +198,13 @@ pub(crate) trait Kernel {
     /// by construction — `Scheduler` keeps its frames in
     /// `activities[pi].call_stack` and never runs this walk — and it keeps a
     /// `Kernel` implementor that has no frames from having to say so.
+    ///
+    /// ⚠️ A4-b: `proc` is an ACTIVITY id, and tier-3's implementation now moves
+    /// the stack into `activities[act].call_stack` — the SAME storage the engine
+    /// uses. That is not tidiness: `exec_fork_into` decides whether a fork is
+    /// in-frame, which task's CFG its arms belong to, and whether they share the
+    /// parent's window, all by reading that field. A kernel-side copy is
+    /// invisible to it, and a fork-in-frame would be spawned as if top level.
     ///
     /// The implementor is responsible for the WINDOW half at the same two
     /// points (`frame_window::stash_windows_in` / `restore_windows_in`),

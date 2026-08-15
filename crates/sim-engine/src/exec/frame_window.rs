@@ -20,13 +20,21 @@ pub(crate) fn stash_frame_windows(sched: &mut Scheduler, pi: u32) {
 
 /// A3-ii-b EXTRACTION — the same operation over a call stack the CALLER owns.
 ///
-/// Tier-3 parks frames now, and it has no `Scheduler::activities`: the S0 gate
-/// refuses forks, so its activities are 1:1 with processes and its run loop
-/// keeps the stack itself. Threading the stack rather than the activity id is
-/// what lets both executors share ONE spelling of the stash — and this is the
-/// operation that must not have two, because a wrong pop order does not fail
-/// loudly. It leaves the interleaving activity reading another frame's window,
-/// i.e. a wrong value at exit 0.
+/// Threading the stack rather than the activity id is what lets both executors
+/// share ONE spelling of the stash — and this is the operation that must not
+/// have two, because a wrong pop order does not fail loudly. It leaves the
+/// interleaving activity reading another frame's window, i.e. a wrong value at
+/// exit 0.
+///
+/// ⚠️ A3-ii-b's stated REASON for the parameter has expired, and only the
+/// parameter survived it. It said tier-3 "has no `Scheduler::activities`: the S0
+/// gate refuses forks, so its activities are 1:1 with processes and its run loop
+/// keeps the stack itself". A4-a gave tier-3 activities and A4-b moved its
+/// parked stacks into `activities[act].call_stack` — the same place the engine
+/// keeps them, because `exec_fork_into` reads it to spawn a fork-in-frame's
+/// arms. The borrowed-slice form is still the right one: tier-3's walk holds its
+/// stack in a LOCAL while it runs and only hands it over at a suspension, so
+/// there is a window in which the arena's copy is legitimately empty.
 pub(crate) fn stash_windows_in(st: &crate::SimState<'_>, frames: &mut [FrameRec]) {
     for i in (0..frames.len()).rev() {
         if st.func_has_auto[frames[i].callee as usize] {

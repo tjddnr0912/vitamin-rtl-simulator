@@ -1897,6 +1897,93 @@ zero-delay arm 을 **역순**(`B3 B2 B1`)으로 돈다 ⇒ 앵커는 **절대값
 
 전 스위트 **5458 green** · flip 5453/5456 · **발산 0**(실패 3 은 전부 *"기본 백엔드가 vm"* 핀).
 
+#### 5.1-an ✅ A4-b fork-in-frame — **행 하나가 아니라 셋이었고, 셋째는 첫 프로브가 찾았다** · 99.43% → **99.80%** (2026-08-16)
+
+**+33 설계**(예측 +24 · 차이는 이 슬라이스가 더한 앵커와 복원된 테스트가 분모에 들어간 것). 코퍼스
+6,461 중 **거부는 13 개**이고 전부 fork 가족의 마지막 둘이다 — **A4-c `wait fork`/callee-forks 7** ·
+**A4-d `disable fork` 6**.
+
+⭐⭐ **닫아야 할 것은 행이 아니라 셋이었다.** 착수 census 는 24 설계가 `S:a task frame that FORKS` 와
+실행기 행에 **항상 함께** 걸린다고 말했고, 이유는 **둘이 같은 술어(`frame_call::frame_forks`)를 두 군데서
+읽기** 때문이다. 그 짝을 빼자 **세 번째 행이 드러났다** — `contains_shared_fork` 이고,
+`frames_admitted` 가 **첫 `Err` 만 돌려주므로** census 조차 그것을 못 봤다. 발견은 추론이 아니라
+**첫 Case-B 프로브**였다: 짝을 지운 뒤에도 `buildable: false`, 메시지는 *"a subroutine with a shared fork
+window"*. ⭐ **그리고 그 행은 A3-ii-b 가 일부러 남긴 백스톱이고 자기 doc 에 이유를 적어 뒀다** —
+*"`frame_suspends` 가 한 행 위에서 park 로 보고하므로 dead 이지만, 그게 참이 아니게 되면 설계가 조용해지는
+대신 이 행이 거부하도록 남긴다."* 정확히 그렇게 동작했다. ⚠️ **14/24 가 Case B 이므로 짝만 닫았으면
+10 개만 배송됐다.**
+
+⭐⭐ **없던 것은 fork 기계장치가 아니라 tier-3 의 프레임이 사는 자리였다.** `exec_fork_into` 는
+§4.5.214 이래 in-frame 을 전부 한다 — `parent_in_frame`(콜스택에서) · `FRAME_FORK_KEY` 모드 조회 ·
+`arm_callee`(arm 블록이 사는 CFG) · Case A(빈 `Owned`) / Case B(`Shared(h)` + refcount) 분기 · 그리고
+arm 의 `FrameRec` 를 **자식의 `call_stack` 에 직접 쓴다**. 그런데 A3-ii-b 는 tier-3 의 파킹 프레임을
+**커널 소유 `BTreeMap`** 에 뒀고 그 이유를 이렇게 적었다: *"엔진의 쌍둥이는
+`activities[pi].call_stack` 이고, 이것이 아레나가 아니라 커널의 맵인 이유는 S0 게이트다 — fork 가
+거부되므로 tier-3 활동은 곧 자기 프로세스이고 아레나가 구분할 것이 없다."* A4-a 가 그 절을 끝냈고,
+**A4-b 에서 그 두 번째 저장소는 잉여가 아니라 틀린 것이 된다**: 스케줄러가 못 보는 자리에 있으면
+fork-in-frame 이 **최상위 fork 처럼 spawn** 된다(윈도 없는 arm · 부모의 automatic 로컬을 아무도 공유
+안 함). ⇒ `k_park_frames`/`k_take_frames` 가 **아레나 자체**를 쓰게 했고 `parked_frames` 를 지웠다.
+윈도 반쪽은 이미 한 철자였다(`frame_window::{stash,restore}_windows_in`).
+
+⭐ **워크에 더한 것은 셋뿐이고 전부 엔진의 것을 그 순서대로다** — ⓐ `Fork` 의 in-frame 프롤로그
+(`forked = true` **먼저**, 그 다음 park = stash) · ⓑ `Some(rb)`(= `join_none`·자식 0)이면 스택을 되받고
+**프레임의 PC** 를 세팅(엔진이 *"방금 stash 한 윈도를 다음 반복이 복원하는 no-op 왕복"* 이라 부르는 그것)
+· ⓒ **in-frame 자식 완료 인터셉트**. ⚠️ ⓒ의 두 가드가 둘 다 load-bearing 이다 — `len() == 1` 은
+**arm 이 부른 태스크의 프레임**이 같은 값의 블록 id 로 오발화하는 것을 막고(24 중 11 이 그 모양),
+`is_arm` 은 비교를 **의미 있게** 만든다(최상위 fork 자식이 suspendable 태스크를 부르면 그것도 프레임이
+하나인데, 거기선 `bb` 가 전역이고 `join_bb` 는 프로세스-로컬이라 숫자 충돌로 자식이 죽는다).
+
+⚠️ **죽은 기계장치 삭제** — `frame_park_kinds`/`ParkKinds`/`frame_forks` 가 전부 write-only 가 됐다
+(A3-ii-b 가 `timed` 를 열고 A4-b 가 `fork` 를 열었으므로 아무도 안 묻는다). 그 walk 의 fail-closed
+early-return 둘(범위 밖 블록 id · 미해결 nested `Call` 타깃)은 **`driven_body_is_runnable` 이 같은
+조건에서 이미 갖고 있다**(`fd.is_task && susp`) — 지우기 전에 확인했다. ⚠️ 그 walk 의 `Fork` arm 은
+**children 과 `resume_bb` 를 따라가야** 한다(arm 블록은 이 태스크 CFG 의 일부이고 같은 윈도로 돈다).
+
+⚠️ **거부 핀 둘을 positive 로 뒤집었다** — `the_park_walk_sees_a_fork_behind_a_delay` 는 주제가
+사라져 `a_fork_behind_a_delay_inside_a_frame_is_admitted` 가 됐고,
+`a_parking_callee_is_admitted_by_both_layers` 의 꼬리(*"FORK 절은 아직 저장소 층에서 거부한다 · 설계로는
+못 물으니 술어로 묻는다"*)는 **실제 설계로** 물을 수 있게 되어 그렇게 바꿨다.
+
+⚠️⚠️ **절차 사고 — 앵커를 쓰다가 기존 테스트 파일을 덮어썼다.** `crates/cli/tests/fork_in_frame.rs`
+는 §4.5.214 의 24-테스트 스위트인데 새 파일이라 가정하고 `Write` 했다(514줄 → 177줄). 증상은
+**측정의 테스트 수가 5458 → 5437 로 준 것**뿐이었고 나머지는 전부 초록이었다. 복원하고 앵커를
+`fork_in_frame_native.rs` 로 옮긴 뒤 **flip 측정을 다시 돌렸다**(위 숫자가 그것이다). ⭐ 복원이
+중요한 이유는 별개다 — 그 24 테스트는 **기본 백엔드로** fork-in-frame 설계를 돌리므로 flip 아래에서
+**네이티브로** 돌고, 이 슬라이스의 가장 강한 이빨이다.
+
+⚠️ **iverilog 는 반쪽 오라클이다** — Case A·Case B 는 iverilog 13 이 답하지만 frame 안 `join_none` 은
+**내부 assert 로 abort** 한다(`of_JOIN_DETACH`, vthread.cc:3793 · 기존 `fork_in_frame.rs` 가 같은 크래시를
+이미 기록해 뒀다) ⇒ 그 행은 **hand-IEEE §9.3.1/§9.3.2 + 세 백엔드 일치**로 지었다.
+
+**뮤테이션 7 · 사망 3 · 생존 4 는 전부 이유가 다르고 각각 쟀다.**
+
+⚠️ **생존 E 는 눈먼 축이었고 소비자의 doc 이 판별 설계를 이미 적어 뒀다.** `forked = true` 를 지우면
+`park_dyn_in` 이 부모의 **프레임 로컬 dyn 배열**을 fork 시점에 힙에서 빼가므로 arm 이 X 를 읽는다 —
+그 함수의 doc 이 *"a `fork begin … a[0] … end join` inside a task printed `a0=x`"* 라고 엔진 쪽에서 이미
+측정해 뒀다. 앵커에 dyn 배열이 없어서 아무도 안 잡았다 ⇒ 지었고(**`arm a0=x a1=x` + `W4020`**, 그런데
+**바로 다음 줄 `after a0=11` 은 맞는다** — 부모가 재개하며 배열을 돌려받는다) 즉시 사망.
+
+⚠️ **생존 C 는 등가이고 이유가 인덱스 하나다.** 깊이 가드(`frames.len() == 1`)를 빼도 전 스위트가
+통과한다 — **엔진의 쌍둥이는 load-bearing 인데**(`run_process` 는 `call_stack.last()` 를 읽으므로 가드가
+없으면 더 깊은 **callee** 프레임의 `bb`(전역 id, `join_bb` 와 같은 공간)를 비교해 충돌로 오발화한다)
+**이 워크는 `frames[0]` 을 읽고 그것은 항상 arm 이며, callee 가 도는 동안 arm 의 PC 는 join 이 아니라
+호출 자리에 있다.** fail-closed 로 남기고 그 이유(= 이 함수의 인덱스 선택)를 코드에 적었다.
+⭐ 반면 **`is_arm` 가드는 실제로 load-bearing 이고 킬러가 하나뿐**이다 —
+`fork_join::a_fork_arm_may_call_a_parking_task`(A4-a 의 다섯 번째 앵커).
+
+⚠️ **생존 F 는 값이 아니라 누수다 — 프로브로 쟀다.** `k_exit_arm_frame` 을 지워도 출력이 안 변하는데,
+호출은 **도달한다**(arm 마다 한 번 · `func_has_auto` 참 · `frame_stack.len() == 1` 에서 자기 윈도를
+pop). 빼면 **arm 당 stale 스택 항목 하나 + 해제 안 된 아레나 윈도 하나**가 남지만, 부모가 자기 윈도를
+그 **위에** 복원하고 모든 `frame_slot_read` 가 top 을 읽으므로(`Shared` arm 은 아예 핸들로 읽는다)
+오늘의 코퍼스로는 관측 불가다.
+
+⚠️ **생존 G 도 등가이고 이유가 A5-dumpall 이다.** 게이트 walk 의 `Fork` arm 이 children/`resume_bb` 를
+안 따라가도 통과한다 — 그 traversal 이 닿을 수 있는 거부 둘이 **둘 다 오늘 도달 불가**이기 때문이다
+(`systask_refusal` 집합이 A5-dumpall 이래 비었고, 프레임 로컬 NBA 는 elaborate E3009 · iverilog 도
+IEEE §10.4.2 를 인용하며 거부). **관측 가능한 형태가 아니라 옳은 형태로** 써 두었다.
+
+전 스위트 **5462 green** · flip 발산 **0**(실패 3 은 전부 *"기본 백엔드가 vm"* 핀).
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의
