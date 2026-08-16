@@ -610,12 +610,25 @@ fn plain_scalar_dest(ctx: Option<&CompileCtx>, lhs: &Lvalue) -> Option<u32> {
 ///
 ///   - `plain` drives `Op::WriteScalar`/`Op::ScheduleNbaScalar`. It describes net
 ///     STORAGE, so it is true for whichever kernel executes the body.
-///   - `natives` drives `Op::EvalNative`, the tier-2 expression VM. **Tier-3 must
-///     not take it.** `NativeKernel::k_eval_native` builds a fresh `NativeScratch`
-///     per call and runs the tier-2 program, whereas `k_eval_for_lvalue` routes to
-///     `wprog` — the width-specialised evaluator S2 built, which is where tier-3's
-///     speed lives. Emitting natives there would swap the faster path for the
-///     slower one on every RHS both accept.
+///   - `natives` drives `Op::EvalNative`, the tier-2 expression VM.
+///     `NativeKernel::k_eval_native` builds a fresh `NativeScratch` per call and
+///     runs the tier-2 program, whereas `k_eval_for_lvalue` routes to `wprog` —
+///     the width-specialised evaluator S2 built, which is where tier-3's speed
+///     lives. Emitting natives there would swap the faster path for the slower one
+///     **on every RHS both accept**.
+///
+/// ⚠️⚠️ **THAT QUALIFIER WAS LOAD-BEARING AND THE CODE IGNORED IT (D1.5).** The
+/// rule used to be "tier-3 must not take natives", full stop, and it was correct
+/// about the RHSs both evaluators accept and silent about a third category: the
+/// ones `wprog` REFUSES. `wprog` admits uniform width ≤ 64 bits only, so every
+/// wide (>64-bit) expression fell to the generic `eval_ctx` tree walk while tier-2
+/// ran it on `native_eval`. Measured: tier-3 was **1.71× slower than the VM** on
+/// 100-bit arithmetic and **2.52×** on wide select/concat (ROADMAP §5.1-av).
+///
+/// ⭐ And the old rule was right that turning natives on unconditionally is worse
+/// — measured too: expr-heavy 123 → 478 ms, mem-heavy 86 → 237 ms. So the two
+/// evaluators must PARTITION the space rather than compete for it, which is what
+/// `natives_when` expresses.
 ///
 /// The table `try_compile` needs (`nonint`) lives INSIDE the option rather than
 /// beside a `bool`, so "no natives" cannot carry a stale or wrong-tier table.
@@ -623,8 +636,30 @@ pub(crate) struct CompileCtx<'a> {
     pub(crate) ir: &'a SimIr,
     pub(crate) wt: &'a WidthTable,
     pub(crate) plain: &'a [bool],
-    /// `Some(nonint)` ⇒ emit `Op::EvalNative` wherever `try_compile` accepts.
+    /// `Some(nonint)` ⇒ emit `Op::EvalNative` where `try_compile` accepts AND
+    /// `natives_when` allows.
     pub(crate) natives: Option<&'a [bool]>,
+    /// WHICH accepted RHSs actually get `Op::EvalNative`.
+    pub(crate) natives_when: NativesWhen,
+}
+
+/// Which RHSs a kernel wants routed to the tier-2 expression VM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NativesWhen {
+    /// Tier-2: every RHS `try_compile` accepts. It has no second evaluator to
+    /// lose to.
+    ///
+    /// ⚠️ Gated because tier-2 is gated: with the `oracle` feature off there is no
+    /// VM, so nothing constructs this — and the no-oracle CI axis is what caught
+    /// that (a dead variant is a `-D warnings` error there). This is the axis
+    /// working: an enum arm that only one executor uses should disappear with it.
+    #[cfg(feature = "oracle")]
+    Always,
+    /// Tier-3: only the RHSs its OWN evaluator refuses. `wprog` is faster on
+    /// everything it takes, and `native_eval` is faster than the generic tree
+    /// walk on everything `wprog` leaves — so the two partition by width and
+    /// neither is ever displaced by the other.
+    OnlyWhereWprogDeclines,
 }
 
 fn eval_rhs_op(
@@ -639,6 +674,17 @@ fn eval_rhs_op(
         let (ir, wt) = (c.ir, c.wt);
         let ctx_w = lvalue_width_of(ir, lhs).max(wt.width(rhs));
         let ctx_signed = wt.signed(rhs);
+        // The partition. `width_admits` is `wprog::compile`'s own first line, asked
+        // rather than restated — a second copy would drift silently, and the
+        // symptom would be a slower path taken rather than a wrong answer.
+        let wanted = match c.natives_when {
+            #[cfg(feature = "oracle")]
+            NativesWhen::Always => true,
+            NativesWhen::OnlyWhereWprogDeclines => !crate::native::wprog::width_admits(ctx_w),
+        };
+        if !wanted {
+            return Op::EvalForLval { dst, lhs: li, rhs };
+        }
         if let Some(prog) = crate::native_eval::try_compile(ir, wt, nonint, rhs, ctx_w, ctx_signed)
         {
             let ni = natives.len() as u32;
@@ -1079,7 +1125,11 @@ pub fn native_eval_coverage_split(ir: &SimIr) -> ((usize, usize), (usize, usize)
     ((ok, total), (bok, btotal))
 }
 
-#[cfg(test)]
+// ⚠️ `oracle` as well as `test`: this module's subject is the tier-2 compile
+// path (`Op::EvalNative`, `NativesWhen::Always`, the VM's op census), and in a
+// product-shape build there is no tier-2 to compile for. The no-oracle CI axis
+// is what surfaced it — a dead enum arm there is a `-D warnings` error.
+#[cfg(all(test, feature = "oracle"))]
 mod tests {
     use super::*;
     use sim_ir::{DelayRegion, DisableKind, EdgeKind, Lvalue, WaitCause};
@@ -1451,6 +1501,7 @@ mod tests {
                 wt: &wt,
                 plain: &plain,
                 natives: Some(&nonint),
+                natives_when: NativesWhen::Always,
             }),
         );
         let ops = &cb.blocks[0].ops;
@@ -1495,6 +1546,7 @@ mod tests {
                 wt: &wt,
                 plain: &plain,
                 natives: None,
+                natives_when: NativesWhen::Always,
             }),
         );
         let census = cb3.op_census();

@@ -821,6 +821,61 @@ B2′ 가 폴백 arm 을 feature 뒤로 보내면서 **이 빌드에서 게이�
 온다**(다음 슬라이스의 census 표적). 2-state 좁히기는 여전히 본체이되, **먼저 이미 잃고 있는 것을
 되찾는다.**
 
+#### 5.1-aw ✅ D1.5 — **거부의 한정어가 load-bearing 이었고 코드가 그것을 무시했다** · wide 축 회복 (2026-08-17)
+
+D1 이 잰 *"native 가 wide/struct 에서 vm 보다 느리다"* 의 원인은 **census 가 아니라 주석 한 줄**에
+있었다. `CompileCtx` 의 `natives` 가 tier-3 에서 `None` 이었고 이유가 이렇게 적혀 있었다:
+
+> *"Tier-3 must not take it … Emitting natives there would swap the faster path for the slower one
+> **on every RHS both accept**."*
+
+⭐⭐ **그 한정어가 전부다.** 문장은 **양쪽이 받는 식**에 대해 참이고, **셋째 부류 — `wprog` 가
+거부하는 식 — 에 대해 침묵한다.** `wprog` 는 **균일 폭 ≤64bit** 만 받으므로 모든 wide 식이 일반
+`eval_ctx` 트리 워크까지 떨어졌고, 그동안 tier-2 는 `native_eval` 로 돌리고 있었다.
+
+⭐ **두 극단을 다 실측했고 doc 은 자기 주장에 대해 옳았다:**
+
+| tier-3 의 natives | expr-heavy | mem-heavy | wide-heavy | wide-struct |
+|---|---:|---:|---:|---:|
+| `None`(기존) | 157 | 105 | **373** | **399** |
+| **무조건 켬** | **478** | **237** | 250 | 179 |
+| **`wprog` 가 거부할 때만**(채택) | **153** | **98** | **229** | **165** |
+
+⇒ **스위치가 아니라 분할(partition)이 답이다** — `wprog` 는 자기가 받는 것을 전부 지키고,
+`native_eval` 은 나머지를 받는다. 두 평가기가 **경쟁이 아니라 폭으로 공간을 나눈다.**
+
+**같은 세션 A/B(PRE/POST · release · best-of-5) — 정확히 두 형태만 움직였다:**
+
+| 형태 | PRE | POST | |
+|---|---:|---:|---|
+| **wide-heavy(100-bit)** | 372.6 | **228.9** | **1.63× 빨라짐** · vs vm **1.70 → 1.06** |
+| **wide-struct-heavy(>64-bit)** | 398.8 | **165.0** | **2.42× 빨라짐** · vs vm **2.62 → 1.11** |
+| 나머지 여섯 | — | — | 노이즈 내 불변 |
+
+⭐ **판정 술어는 추출했지 다시 쓰지 않았다** — `wprog::width_admits` 가 `compile` 의 **첫 줄 그
+자체**이고 게이트가 그것을 **묻는다**. 두 번째 사본은 admitted 폭이 움직이는 순간 갈리고, **증상이
+느린 경로를 타는 것뿐이라 어떤 테스트도 못 본다.**
+
+⚠️ **`natives_when` 은 `bool` 이 아니라 enum 이다** — *"natives 를 켠다/끈다"* 가 아니라
+*"어느 RHS 를 넘긴다"* 가 질문이기 때문이고, tier-2 는 `Always`(잃을 두 번째 평가기가 없다) ·
+tier-3 은 `OnlyWhereWprogDeclines`.
+
+⚠️ **no-oracle CI 축이 즉시 값을 냈다** — `NativesWhen::Always` 는 tier-2 전용이라 그 빌드에
+생성자가 없고 **`-D warnings` 에서 dead variant 로 잡혔다**. feature 로 갈랐다. **한 실행기만 쓰는
+enum arm 은 그 실행기와 함께 사라져야 한다**는 것을 그 축이 강제한다.
+
+⭐ **앵커 둘**(iverilog 핀) — ⓐ **>64bit 가족 한 설계**(워드 경계를 넘는 `+`/`-` · 64 배수가 아닌
+시프트 · 하강 part-select 를 포함한 3-파트 concat · 워드 미정렬 replicate · **틀린 상위 워드가 하위
+64bit 에 안 보이는** `*`) ⓑ **wide 와 narrow 를 한 설계에**(= 두 극단 중 어느 쪽으로도 만족시킬 수
+없는 유일한 모양 · narrow 쪽이 wide 결과를 읽게 지어 분리 최적화를 막았다).
+
+**검증**: 전 스위트 **5472 green** · 제품 형태 lib green · `examples/` 4종 **vm↔native stdout+VCD
+바이트 동일** · clippy 양쪽 0.
+
+⚠️ **남은 것: `struct-heavy` 가 여전히 1.25× 느리다**(≤64bit 이라 `wprog` 가 받는다) — **이 슬라이스의
+표적이 아니고 별도 census 가 필요하다.** wide 축과 달리 원인이 *"경로가 없다"* 가 아니라 *"있는
+경로가 느리다"* 이다.
+
 ### Phase D — 기계어 코드젠
 
 ⚠️ **D1 을 먼저 하지 않으면 D3/D4 의 판정이 또 편향된다.**
@@ -828,7 +883,8 @@ B2′ 가 폴백 arm 을 feature 뒤로 보내면서 **이 빌드에서 게이�
 | # | 무엇 | 상태 / 왜 이 자리 |
 |---|---|---|
 | **D1** ✅ | **벤치를 제품 백엔드로 확장**(§5.1-av) | **완료 2026-08-17.** ⚠️ 형태 커버리지는 이미 있었고 **백엔드 커버리지가 없었다** — `report()` 와 깊이 표가 **native 를 한 번도 안 쟀다** |
-| **D1.5** ★★ **신설 · 다음** | **wide/struct 축에서 native 가 지는 이유** — census 후 표적 | ⚠️⚠️ D1 실측: 8 형태 중 **셋에서 native 가 vm 보다 느리다**(struct 1.16× · wide **1.71×** · wide-struct **2.52×**). `WProg` 가 균일 폭 ≤64bit 만 받는 것이 유력하나 **census 로 확인 후 착수**. **이미 잃고 있는 것을 먼저 되찾는다** |
+| **D1.5** ✅ | **wide 축 회복**(§5.1-aw) | **완료 2026-08-17** — 원인은 `CompileCtx` 주석의 **한정어**였다(*"on every RHS **both accept**"*): `wprog` 가 **거부하는** 셋째 부류에 침묵 ⇒ **분할**(`OnlyWhereWprogDeclines`)로 wide **1.63×·2.42× 빨라짐**(vs vm 1.70→1.06 · 2.62→1.11) · 나머지 여섯 불변 |
+| **D1.6** ★ **다음** | **`struct-heavy` 가 왜 1.25× 느린가** | ≤64bit 이라 `wprog` 가 **받는데도** 진다 ⇒ 원인이 *"경로가 없다"* 가 아니라 *"있는 경로가 느리다"* · **census 먼저** |
 | **D2** | **P1 = 2-state 좁히기** ← **본체.** 증명 실패 넷은 4-state 유지 + 생성 코드에 **X 진입 트랩** ⇒ correct-or-loud 보존 | 30.8% 를 싸게 만드는 유일한 수단 |
 | ~~**D3**~~ ✅ | **P4 = dirty-driven settle** | ⚠️⚠️ **이미 끝나 있었다(2026-08-01 · `✅ COMB-DEPTH 해결`)** — `ca_deps` + dirty worklist 가 트리에 있고, D1 재측정에서 세 백엔드 모두 **깊이에 선형**(24× 깊이에 8~14×). 내가 §5 에 인용했던 *"104×"* 는 그 수정의 **before 열**이었다(§5.1-av 에서 정정) |
 | **D4** | **코드젠 본체** — 오라클(interp)이 지키는 상태에서 cranelift 재착수. §4.5.334 census 를 **다시** 측정 | D1.5·D2 뒤라야 census 가 다른 답을 낸다 |

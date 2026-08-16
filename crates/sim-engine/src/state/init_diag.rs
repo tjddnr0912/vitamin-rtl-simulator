@@ -342,6 +342,8 @@ impl<'a> SimState<'a> {
                 wt: &self.wt,
                 plain: &plain,
                 natives: Some(&nonint),
+                // Tier-2 has no second evaluator to lose to.
+                natives_when: crate::backend::NativesWhen::Always,
             }),
         ));
         self.plain_scalar = plain;

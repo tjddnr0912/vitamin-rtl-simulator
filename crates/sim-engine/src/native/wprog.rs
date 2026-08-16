@@ -249,6 +249,22 @@ pub(crate) struct WProg {
 /// Compile `eid` for context `(w, signed)` — `None` when any node falls
 /// outside the admitted set. Pure function of the IR: programs never need
 /// invalidation.
+/// Can a context of width `w` reach this evaluator AT ALL?
+///
+/// The width refusal is `compile`'s first line and the only one that can be
+/// answered without walking the expression — which is exactly what a COMPILE-TIME
+/// caller needs. `backend::eval_rhs_op` asks it to decide whether tier-3 should
+/// emit `Op::EvalNative` for an RHS: yes precisely when this says no, so the two
+/// evaluators partition the RHS space instead of competing for it.
+///
+/// ⚠️ ONE SPELLING, and it is the reason this is a function rather than a `> 64`
+/// in the caller. A second copy would drift the moment the admitted width moves,
+/// and the failure would be silent — a slower path taken, never a wrong answer,
+/// which is the kind of defect no test notices.
+pub(crate) fn width_admits(w: u32) -> bool {
+    w != 0 && w <= 64
+}
+
 pub(crate) fn compile(
     ir: &SimIr,
     wt: &WidthTable,
@@ -257,7 +273,7 @@ pub(crate) fn compile(
     w: u32,
     signed: bool,
 ) -> Option<WProg> {
-    if w == 0 || w > 64 {
+    if !width_admits(w) {
         return None;
     }
     let mut ops = Vec::new();

@@ -654,6 +654,15 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // the duration of the compile and put it back, exactly as `vm_compiled`
         // does, because `compile_body` borrows it while `self` is also borrowed.
         let plain = std::mem::take(&mut self.sched.st.plain_scalar);
+        // ⚠️ D1.5: this used to be `natives: None` with the reason "tier-3's RHS
+        // path is `wprog`, and `EvalNative` would route around it". True for every
+        // RHS `wprog` ACCEPTS, and silent about the ones it refuses — `wprog` takes
+        // uniform width ≤ 64 bits only, so wide expressions were falling all the
+        // way to the generic tree walk and tier-3 was measurably SLOWER than the
+        // backend it replaced (1.71× on 100-bit arithmetic, 2.52× on wide
+        // select/concat). `OnlyWhereWprogDeclines` partitions instead: `wprog`
+        // keeps every RHS it wants, `native_eval` gets the rest.
+        let nonint = self.sched.st.native_ineligible();
         let compiled = std::rc::Rc::new(crate::backend::compile_body(
             &ir.stmts,
             &ir.processes[proc].body,
@@ -661,10 +670,8 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 ir,
                 wt: &self.sched.st.wt,
                 plain: &plain,
-                // NOT `Some(..)`: tier-3's RHS path is `wprog`, and `EvalNative`
-                // would route around it into the tier-2 expression VM. See
-                // `CompileCtx`.
-                natives: None,
+                natives: Some(&nonint),
+                natives_when: crate::backend::NativesWhen::OnlyWhereWprogDeclines,
             }),
         ));
         self.sched.st.plain_scalar = plain;
