@@ -790,7 +790,14 @@ fn run_json_codegen_pins_the_vm_claim_and_reasons() {
     // The effective executor is recorded next to the census (soundness F1):
     // `codegen` is a STATIC capability claim, and without this field an
     // `--backend interp` run's `able` rows read as "the VM ran this".
-    assert_eq!(field(&manifest, "backend"), "\"vm\"", "{manifest}");
+    //
+    // ⚠️ B1 changed this value from `"vm"` to `"native"` — no flag is passed, so
+    // it reports the DEFAULT, and the default moved. Keeping the assertion (as
+    // opposed to dropping it because "it is the default anyway") is the point:
+    // this and `backend_equiv::the_default_backend_is_native` are the only two
+    // places a default flip is visible, and everything else names its backend
+    // explicitly so it cannot notice.
+    assert_eq!(field(&manifest, "backend"), "\"native\"", "{manifest}");
 }
 
 /// The `codegen` object is a static property of the DESIGN — selecting the
@@ -799,33 +806,40 @@ fn run_json_codegen_pins_the_vm_claim_and_reasons() {
 /// keeps the census from being misread on an interp-forced run.
 #[test]
 fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
+    // ⚠️⚠️ B1 RESTRUCTURED THIS TEST, and the reason is that the flip made half
+    // of it tautological. `m1` is the no-flag run, so before B1 it was the VM
+    // and comparing it against the explicit `--backend native` run (`m3`) was a
+    // real cross-executor check. Now the default IS native, so `m1 == m3` proves
+    // nothing. The VM run is therefore requested EXPLICITLY (`m4`), and the
+    // byte-comparison moved onto it.
     let (_, c1, obs1) = run(PASS_SV, &[]);
     let (_, c2, obs2) = run(PASS_SV, &["--backend", "interp"]);
     let (_, c3, obs3) = run(PASS_SV, &["--backend", "native"]);
-    assert_eq!((c1, c2, c3), (0, 0, 0));
+    let (_, c4, obs4) = run(PASS_SV, &["--backend", "vm"]);
+    assert_eq!((c1, c2, c3, c4), (0, 0, 0, 0));
     let m1 = read(&obs1.join("run.json"));
     let m2 = read(&obs2.join("run.json"));
     let m3 = read(&obs3.join("run.json"));
-    assert_eq!(field(&m1, "backend"), "\"vm\"");
+    let m4 = read(&obs4.join("run.json"));
+    // The no-flag run reports the default, and the default is native since B1.
+    assert_eq!(field(&m1, "backend"), "\"native\"", "{m1}");
+    assert_eq!(field(&m1, "backend_requested"), "\"native\"", "{m1}");
     assert_eq!(field(&m2, "backend"), "\"interp\"");
+    assert_eq!(field(&m4, "backend"), "\"vm\"", "{m4}");
     // ③층 (S1d-4c-2c): requested AND honored. This assertion used to read
-    // `"vm"`, and the change is the slice: `PASS_SV` has no continuous assign,
+    // `"vm"`, and the change was that slice: `PASS_SV` has no continuous assign,
     // no in-body waiter and no refused system task, so all three gate layers
-    // pass and the tier-3 run loop executes it. Updated rather than deleted —
-    // the old value encoded "there is no native executor yet", which is exactly
-    // what stopped being true. The fall-back PAIR is still asserted, on a design
-    // that is genuinely refused, in `run_json_reports_native_fallback` below.
+    // pass and the tier-3 run loop executes it.
     assert_eq!(field(&m3, "backend"), "\"native\"", "{m3}");
     assert_eq!(field(&m3, "backend_requested"), "\"native\"", "{m3}");
-    // …and running it natively must not change one byte of what it printed.
+    // …and the two executors must not differ by one byte of what they printed.
     assert_eq!(
-        std::fs::read_to_string(obs1.join("results.jsonl")).unwrap_or_default(),
+        std::fs::read_to_string(obs4.join("results.jsonl")).unwrap_or_default(),
         std::fs::read_to_string(obs3.join("results.jsonl")).unwrap_or_default(),
         "the native run's ledger differs from the VM's"
     );
-    assert_eq!(field(&m1, "backend_requested"), "\"vm\"");
-    assert_eq!(field(&m3, "native"), field(&m1, "native"), "verdict moved");
-    assert_eq!(field(&m3, "codegen"), field(&m1, "codegen"), "census moved");
+    assert_eq!(field(&m3, "native"), field(&m4, "native"), "verdict moved");
+    assert_eq!(field(&m3, "codegen"), field(&m4, "codegen"), "census moved");
     assert_eq!(
         field(&m1, "codegen"),
         field(&m2, "codegen"),

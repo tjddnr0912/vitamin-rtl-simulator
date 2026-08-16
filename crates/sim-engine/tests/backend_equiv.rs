@@ -1035,17 +1035,56 @@ fn hand_written_shapes_agree_across_backends() {
     }
 }
 
-/// The default backend IS the VM.
+/// ⭐⭐ **B1: the suite is byte-identical under EITHER default, and exactly three
+/// tests notice which one is set.**
+///
+/// This is the claim the flip is actually defensible on, and it is a property of
+/// the TEST SUITE rather than of the product — so it is written down here rather
+/// than only measured once and forgotten.
+///
+/// Measured 2026-08-16, both directions, whole workspace:
+///
+/// | default | result |
+/// |---|---|
+/// | `Native` (shipped) | 5,469 pass |
+/// | `Bytecode` (reverse flip) | 5,466 pass, 3 fail |
+///
+/// and the three are the same three either way — this test,
+/// `cli::obs::run_json_codegen_pins_the_vm_claim_and_reasons` and
+/// `cli::obs::run_json_codegen_is_backend_invariant_and_backend_is_recorded`.
+///
+/// ⚠️ **The reverse direction is the one that matters now.** Before B1 the flip
+/// run asked "does native agree with the default?"; after it, the default IS
+/// native, so the same question has to be asked the other way or the suite
+/// quietly becomes native-only and the oracle stops being exercised. That
+/// obligation is recorded on `Backend::Bytecode` and is why the VM's own
+/// differentials must keep naming their backend explicitly.
+///
+/// This function cannot run the flip itself (the default is a compile-time
+/// constant), so what it pins is the INVARIANT the flip rests on: the two
+/// spellings agree, and every other test in the workspace names its backend.
+///
+/// ---
+///
+/// The default backend IS tier-3 native (Phase B1, 2026-08-16).
 ///
 /// Pinned as a VALUE, not inferred from behaviour: every differential in this file and
 /// in `cli/tests/backend_flag.rs` names both backends explicitly precisely so it cannot
 /// notice the default moving. Something has to, and this is it.
 ///
-/// The flip is defensible because the whole workspace suite — not merely the corpus
-/// differential above — passes with `Bytecode` in this slot. The corpus was green
-/// through 39 failures across 18 targets (§4.5.279); the suite was not.
+/// ⚠️ **BOTH spellings, and that is the whole point of the second assertion.**
+/// §4.5.336 measured that `SimOpts::default()` hardcoded a backend instead of
+/// deriving it, so flipping the enum's `#[default]` alone moved only the CLI half
+/// of the suite and the census came out wrong. They can silently disagree again.
+///
+/// The flip is defensible on two measurements. Coverage: Phase A closed every
+/// reachable gate row, so the census is 6,470/6,470 with zero refusals — this
+/// default routes nobody silently elsewhere. Equivalence: the whole workspace
+/// suite passes with `Native` in this slot, which is the gate that has
+/// historically found what the corpus differential could not (the corpus was
+/// green through 39 failures across 18 targets in §4.5.279; the suite was not).
 #[test]
-fn the_default_backend_is_the_vm() {
-    assert_eq!(SimOpts::default().backend, Backend::Bytecode);
-    assert_eq!(Backend::default(), Backend::Bytecode);
+fn the_default_backend_is_native() {
+    assert_eq!(SimOpts::default().backend, Backend::Native);
+    assert_eq!(Backend::default(), Backend::Native);
 }

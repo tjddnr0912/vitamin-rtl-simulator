@@ -101,10 +101,10 @@ pub enum Backend {
     /// so a suspected VM defect can be bisected against the reference in one flag, and
     /// because the VM falls back to it body-by-body anyway.
     Interpreter,
-    /// Bytecode VM (P0a) — the DEFAULT. Codegen-able bodies (the P9 suspend-free
-    /// allow-list, `backend::is_codegen_able`) are compiled once per process template
-    /// and run on the VM (`sched::scan_arm::vm_run_body`); every other body falls back
-    /// to the interpreter, so a design mixing both is normal and is the common case.
+    /// Bytecode VM (P0a) — **no longer the default (Phase B1).** Codegen-able bodies
+    /// (the P9 suspend-free allow-list, `backend::is_codegen_able`) are compiled once
+    /// per process template and run on the VM (`sched::scan_arm::vm_run_body`); every
+    /// other body falls back to the interpreter, so a design mixing both is normal.
     ///
     /// Measured (release, best-of-5, `tests/perf_baseline.rs`): expression-bound ~2.2x,
     /// structure-bound ~2.8x, wide 100-bit ~1.7x, clock/scheduler-bound ~1.0x (eval is
@@ -117,21 +117,38 @@ pub enum Backend {
     /// the P5 differential (`tests/backend_equiv.rs`) over the deterministic corpus PLUS
     /// hand-written shapes the generator cannot emit, and — the one that actually found
     /// the four defects that were hiding behind a green P5 — running the entire
-    /// workspace suite with this default in place. Do that again before trusting a
-    /// change to the VM: a corpus differential is far weaker than 5000 real tests.
-    #[default]
+    /// workspace suite with this default in place. That obligation now belongs to
+    /// [`Backend::Native`]; keep doing it in BOTH directions while two executors exist,
+    /// because a corpus differential is far weaker than 5000 real tests.
     Bytecode,
-    /// ③층 native backend (doc-21) — **executable since S1d-4c-2c**, for the
-    /// subset three gate layers admit: v1 SCOPE (`native::design_eligibility`),
-    /// today's STORAGE (`NetArena::buildable`), and today's EXECUTOR
-    /// (`native::run::executor_rows` — no continuous assign, no in-body waiter,
-    /// no `final`, no system task the tier-3 kernel will not dispatch).
+    /// ③층 native backend (doc-21) — **THE DEFAULT since Phase B1 (2026-08-16).**
     ///
-    /// Anything else falls back to [`Backend::Bytecode`], and the fall-back is
-    /// OBSERVABLE rather than silent: run.json carries `backend_requested`
-    /// beside the effective `backend`, and `native.refused` names the layer that
-    /// said no (all three layers — an earlier version published only the first
-    /// two, so an executor refusal read as `null`).
+    /// It became the default on two measurements, not on preference:
+    ///
+    /// * **Coverage.** Phase A closed every gate row a design can reach. The
+    ///   corpus census is **6,470 / 6,470 = 100.00%** with zero refusals, so
+    ///   choosing this default does not silently route anyone to another
+    ///   executor (ROADMAP §5.1-ap · study/02).
+    /// * **Equivalence, then speed.** The flip run — the whole workspace suite
+    ///   with this default in place — is byte-identical, and it is the gate that
+    ///   has historically found what the corpus differential could not. Only
+    ///   after that does speed matter: picorv32, release, interleaved best-of-5,
+    ///   **interp 1.319 s / vm 0.838 s / native 0.513 s** (iverilog 13: 0.585 s).
+    ///
+    /// The three gate layers still exist and still answer: v1 SCOPE
+    /// (`native::design_eligibility`), STORAGE (`NetArena::buildable`) and
+    /// EXECUTOR (`native::run::executor_rows`). What changed is that none of
+    /// them has a row a compiler can produce input for; a malformed sidecar can
+    /// still make STORAGE refuse.
+    ///
+    /// ⚠️ A refusal falls back to [`Backend::Bytecode`] and **says nothing** —
+    /// run.json carries `backend_requested` beside the effective `backend` and
+    /// `native.refused` names the layer, but there is no diagnostic and the exit
+    /// code is 0. That is an honesty gap rather than a correctness one (the VM's
+    /// answer is right), and closing it is Phase B4a. Until then, an anchor test
+    /// that does not assert `"backend": "native"` cannot tell a native run from
+    /// a fallback — which is a mistake this project has actually made.
+    #[default]
     Native,
 }
 
@@ -396,7 +413,11 @@ impl Default for SimOpts {
             net_names: Vec::new(),
             proc_multipliers: Vec::new(),
             proc_prec_mults: Vec::new(),
-            backend: Backend::Bytecode,
+            // ⚠️ TWO SPELLINGS OF ONE DEFAULT, and they have disagreed before.
+            // §4.5.336 measured that this literal did NOT track the enum's
+            // `#[default]`, so flipping the derive alone moved only the CLI half
+            // of the suite. Keep them together, and flip both when flipping.
+            backend: Backend::Native,
             severities: SeverityTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),

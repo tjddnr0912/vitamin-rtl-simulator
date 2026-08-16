@@ -471,11 +471,49 @@ loud 일 수밖에 없다** = 정확도 사다리 상승이고, 삭제만으로�
 
 | # | 무엇 | 게이트 |
 |---|---|---|
-| **B1** | 전 스위트 `--backend native` 초록 + **기본값 전환** | 실패 0(백엔드 이름 핀 제외) · 발산 0 — ⭐ **§5.1-ap 의 flip 런이 이미 이 게이트를 통과했다**(6,470/6,470 · 발산 0 · 실패 3 = 전부 이름 핀). 남은 일은 **영구화**(기본값 뒤집기 + 핀 3개 반전) |
+| **B1** ✅ | 전 스위트 `--backend native` 초록 + **기본값 전환**(§5.1-aq) | **완료 2026-08-16** — 두 철자 전환 · 핀 3개 처리(둘 반전 · 하나 **재구조화**: 기본값이 native 면 옛 비교가 항진명제) · **양방향 flip**(native 5,469 통과 / vm 5,466+실패 3 · 갈리는 것은 정확히 같은 셋) |
 | **B2** | ~~VM 삭제 — `native_eval/`+`backend.rs` **5,430줄**~~ → **Bytecode 디스패치 경로 삭제** | ⚠️⚠️ **원래 표적이 틀렸다**: tier-3 이 **양쪽에 의존**한다 — `compiled_for` 가 `backend.rs` 의 `is_codegen_able`/`compile_body`/`CompiledBody`/`VmSlot`/`RegFile`/`OffFile` 를, `k_eval_native` 가 `native_eval::run` 을 쓴다(§4.5.333 이후). **실제 VM 전용 표면은 넷**: `Scheduler::vm_run_body` · `SimState::vm_compiled` · `scan_arm.rs` 의 `Backend::Bytecode` arm · enum 변형 + CLI 철자 4곳. ⇒ **B2 의 첫 작업은 삭제가 아니라 측정**(`backend.rs` 의 pub 항목 38개 중 어느 것이 마지막 호출자를 잃는지) |
 | **B3** | `oracle` feature (기본 ON) 도입 — `exec/`(~~2,131~~ → **3,246줄**, A 단계 추출로 커졌다) + `Backend::Interpreter` 를 감쌈 | 기본 빌드 바이트 동일 |
 | **B4** | **게이트 거부를 loud 로** | ⚠️ **둘로 갈라야 한다**(아래 §5.1-b1 참조): **B4a 경고**(요청한 백엔드가 조용히 바뀌는 것 = 정직성 갭 · 오늘 **진단 0 · exit 0** 이고 `native_refusal` 의 소비자는 `effective_backend` 와 run.json 뿐) · **B4b 에러**(`--no-default-features` 에서만 · 거부 설계가 exit≠0 · 새 MsgCode) |
 | **B5** | CI 축 추가: `--no-default-features` 빌드 + 스모크 | 3-OS · **B3 와 쌍**(feature unification) |
+
+#### 5.1-aq ✅ B1 — **기본 백엔드가 native 다** (2026-08-16)
+
+⭐ **Phase B 의 첫 슬라이스이고 제품이 실제로 바뀌는 유일한 지점이다** — 이제 플래그 없이
+`vita design.sv` 를 돌리면 ③층이 돈다.
+
+**두 철자를 함께 뒤집었다** — enum 의 `#[default]` 와 `SimOpts::default()` 의 하드코딩된 리터럴.
+⚠️ 그 둘이 **갈린 적이 있다**(§4.5.336: derive 만 뒤집었더니 CLI 절반만 움직여 census 가 틀렸다) ⇒
+같은 자리에 주석으로 묶어 뒀고, `the_default_backend_is_native` 가 **둘 다** 단언한다.
+
+⭐⭐ **근거는 두 측정이고 순서가 있다.** ⓐ **커버리지** — Phase A 가 도달 가능한 게이트 행을 전부
+닫아 census 가 **6,470/6,470 · 거부 0** 이다. 즉 이 기본값이 **아무도 조용히 다른 실행기로 보내지
+않는다**(거부가 남아 있었다면 그 설계들은 말없이 VM 으로 떨어졌을 것이다). ⓑ **등가, 그 다음에야
+속도** — 전 스위트가 이 기본값으로 초록이고, 그것이 코퍼스 차분이 못 잡던 것을 잡아 온 게이트다
+(§4.5.279 에서 코퍼스는 **18 타깃 39건**을 통과시켰고 스위트는 아니었다). 속도는 마지막 —
+picorv32 release 번갈아 best-of-5: **interp 1.319 s / vm 0.838 s / native 0.513 s**(iverilog 13
+0.585 s).
+
+⭐⭐ **양방향 flip 을 돌렸고, 그것이 이 슬라이스의 진짜 주장이다.**
+
+| 기본값 | 결과 |
+|---|---|
+| `Native`(배송) | **5,469 통과** |
+| `Bytecode`(역flip) | 5,466 통과 · **실패 3** |
+
+**두 방향에서 갈리는 것이 정확히 같은 세 테스트**다 — `the_default_backend_is_native` ·
+`run_json_codegen_pins_the_vm_claim_and_reasons` ·
+`run_json_codegen_is_backend_invariant_and_backend_is_recorded`. 나머지 5,466 은 **어느 쪽이든
+바이트 동일**이고, 그것이 *"스위트가 native 전용이 되지 않았다"* 의 증명이다.
+
+⚠️⚠️ **flip 런의 의미가 뒤집혔다.** B1 이전엔 *"native 가 기본값과 일치하는가"* 를 물었고, 이제
+기본값이 native 이므로 **반대 방향으로 물어야** 한다 — 안 그러면 스위트가 조용히 native 전용이 되고
+오라클이 더 이상 시험되지 않는다. 그 의무를 `Backend::Bytecode` 의 doc 에 적었다.
+
+⚠️ **핀 하나는 반전이 아니라 재구조화였다** —
+`run_json_codegen_is_backend_invariant_and_backend_is_recorded` 는 *"플래그 없는 실행(m1)"* 과
+*"명시적 `--backend native`(m3)"* 를 비교하고 있었는데, 기본값이 native 가 되면 **그 비교가
+항진명제**가 된다. VM 을 **명시적으로** 요청하는 실행을 넷째로 추가하고 바이트 비교를 그리로 옮겼다.
 
 #### 5.1-b1 ⚠️ B4 를 통째로 loud 로 만들면 **사다리 하강**이다 (2026-08-16 측정)
 
