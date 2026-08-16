@@ -41,7 +41,9 @@ pub mod arena;
 pub mod body;
 pub mod dirty;
 pub(crate) mod frames;
-#[cfg(test)]
+// Differential too — it drives `run_tests::agree` (tier-3 vs the engine), so it
+// belongs to the same feature for the same reason.
+#[cfg(all(test, feature = "oracle"))]
 mod frames_tests;
 pub mod kernel;
 #[cfg(test)]
@@ -49,7 +51,13 @@ mod kernel_tests;
 #[cfg(test)]
 mod probe_tests;
 pub mod run;
-#[cfg(test)]
+// ⚠️ B2': `oracle` as well as `test`. Every differential in this module compares
+// tier-3 against the interpreter or the VM, which is exactly what the oracle
+// feature carries — so in a product-shape build there is nothing for them to
+// compare against and the `Backend::{Interpreter,Bytecode}` spellings they use
+// do not exist. Gated as a MODULE rather than per-test: the ten sites are all
+// the same fact, and a `#[cfg]` per assertion would rot.
+#[cfg(all(test, feature = "oracle"))]
 mod run_tests;
 pub mod wake;
 pub(crate) mod wprog;

@@ -2563,3 +2563,82 @@ fn resize_word_zero_width_source_matches_the_general_path() {
         }
     }
 }
+
+/// ⭐⭐ **B4b TEETH — in a product-shape build a gate refusal is FATAL, and this
+/// test only exists there.**
+///
+/// ⚠️⚠️ It pins a hole that B2' opened. Gating the fall-back arm removed the only
+/// consumer of the gate's verdict in this build, and `simulate` then ran the
+/// design on tier-3 anyway: measured with a forced refusal in a
+/// `--no-default-features` binary, the design RAN, exit 0, no diagnostic. The
+/// gate said "out of scope" and nothing listened.
+///
+/// Fatal rather than a warning is the same ladder argument B4a used, read the
+/// other way: with the VM compiled out there is no correct-support option, so
+/// the choice is loud-or-wrong instead of loud-or-correct. In the default build
+/// the same refusal is `W4030` plus a VM fall-back — both are pinned, in the two
+/// builds where each is the right answer.
+///
+/// The refusal is a corrupted sidecar for the reason every B-phase test uses
+/// one: Phase A closed every row a compiler can produce input for, so no `.sv`
+/// reaches this.
+#[cfg(not(feature = "oracle"))]
+#[test]
+fn b4b_a_refused_design_is_fatal_when_there_is_no_fallback() {
+    use diag::{LogEvent, MsgCode};
+    use std::cell::RefCell;
+
+    #[derive(Default)]
+    struct DiagSink {
+        diags: RefCell<Vec<(MsgCode, String)>>,
+    }
+    impl diag::LogSink for DiagSink {
+        fn emit(&self, event: LogEvent) {
+            if let LogEvent::Diagnostic(d) = event {
+                self.diags.borrow_mut().push((d.code, d.message));
+            }
+        }
+    }
+
+    let src = "module t;\n\
+                 function automatic integer inc(input integer x);\n\
+                   integer loc; begin loc = x + 1; inc = loc; end\n\
+                 endfunction\n\
+                 integer r;\n\
+                 initial begin r = inc(3); #1 $finish; end\n\
+               endmodule\n";
+    let (ir, base) = build_with_opts(src);
+
+    // CONTROL: nothing refuses it, so it runs and says nothing.
+    let sink = DiagSink::default();
+    let res = crate::simulate(&ir, &sink, base.clone());
+    assert_eq!(
+        res.exit_class,
+        crate::ExitClass::Ok,
+        "the control design must run: {:?}",
+        sink.diags.borrow()
+    );
+
+    // …and the same design with a frame window that cannot exist.
+    let mut broken = base;
+    assert!(!broken.func_table.is_empty(), "no frame table to corrupt");
+    broken.func_table[0].locals_len = u32::MAX;
+    let sink = DiagSink::default();
+    let res = crate::simulate(&ir, &sink, broken);
+    assert_ne!(
+        res.exit_class,
+        crate::ExitClass::Ok,
+        "a refused design must NOT run silently: {:?}",
+        sink.diags.borrow()
+    );
+    let diags = sink.diags.borrow();
+    let hit = diags
+        .iter()
+        .find(|(c, _)| *c == MsgCode::RunFatal)
+        .unwrap_or_else(|| panic!("the refusal was silent: {diags:?}"));
+    assert!(
+        hit.1.contains("frame window out of range") && hit.1.contains("oracle"),
+        "the message must name the refusing row AND why there is no fall-back: {}",
+        hit.1
+    );
+}

@@ -682,6 +682,29 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         Backend::Native if native_refusal.is_some() => Backend::Bytecode,
         b => b,
     };
+    // ── B4b: WITH NO FALLBACK TARGET, A REFUSAL IS FATAL ──
+    //
+    // ⚠️⚠️ **This is a HOLE B2' opened, not an enhancement.** Gating the
+    // fall-back arm above removed the only consumer of the gate's verdict in
+    // this build — and `simulate` then ran the design on tier-3 ANYWAY.
+    // Measured with a forced refusal in a `--no-default-features` binary: the
+    // design ran, exit 0, no diagnostic. The gate said "out of scope" and
+    // nothing listened, which is precisely the class this project refuses.
+    //
+    // Fatal rather than a warning, and the reason is the same ladder argument
+    // that made B4a a warning, read the other way: with the VM compiled out
+    // there is no correct-support option left, so the choice is loud-or-wrong
+    // rather than loud-or-correct. `fatal_run` is the graceful form — it latches
+    // `had_fatal`/`finished`, so the run ends with a non-zero exit class instead
+    // of panicking in `NetArena::build`'s `expect` (which is what a STORAGE
+    // refusal would otherwise reach).
+    #[cfg(not(feature = "oracle"))]
+    if let Some(row) = native_refusal {
+        st.fatal_run(&format!(
+            "backend `native` cannot run this design ({row}), and this build \
+             carries no other executor — the `oracle` backends are compiled out"
+        ));
+    }
     // ── B4a: THE SWAP IS NO LONGER SILENT ──
     //
     // The verdict has always been PUBLISHED — run.json carries
@@ -907,7 +930,13 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // `None` on the engine path, and that is what keeps it byte-identical: the
     // summary falls through to exactly the read it always made.
     let mut cover_bits: Option<Vec<value::Value>> = None;
-    let reason = if effective_backend == Backend::Native {
+    // ⚠️ B4b: `fatal_run` above latched `had_fatal`/`finished`, but latching is
+    // not skipping — measured, the run still walked into `NetArena::build`'s
+    // `expect` and PANICKED. A graceful fatal has to also decline to execute, so
+    // the executor selection asks whether the design is still runnable at all.
+    let reason = if st.finished {
+        crate::sched::FinishReason::Finish
+    } else if effective_backend == Backend::Native {
         // ③층 (S1d-4c-2c): the design passed all three gate layers, so the tier-3
         // run loop owns the whole simulation — there is no body-level fallback
         // (doc-21 §4.1: a native backend owns net storage, so the interpreter

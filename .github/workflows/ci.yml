@@ -63,6 +63,12 @@ jobs:
         run: cargo build -p cli -p sim-engine --locked --no-default-features
       - name: clippy
         run: cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings
+      # B4b: the product shape has its OWN tests, and one of them only exists
+      # here — a gate refusal must be FATAL when there is no executor to fall
+      # back to. `--lib` because the integration targets pull dev-dependencies
+      # that re-enable `oracle`.
+      - name: test (lib)
+        run: cargo test -p sim-engine --locked --no-default-features --lib
       - name: smoke — a design runs, and the absent executors are LOUD
         run: |
           set -euo pipefail
