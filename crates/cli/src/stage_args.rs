@@ -103,13 +103,13 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 };
                 let Some(b) = parsed else {
                     eprintln!(
-                        "error[{}]: '--backend' takes 'vm' (default, the bytecode VM), \
-                         'interp' (the reference tree-walking semantics, for bisecting), \
-                         or 'native' (the tier-3 backend — it runs a design only when \
-                         nothing in it is outside the tier-3 subset, and falls back to \
-                         the VM otherwise; --obs-dir run.json reports which executor \
-                         actually ran plus this design's native verdict and refusal) \
-                         — same output whichever you pick, this only moves wall-clock",
+                        "error[{}]: '--backend' takes 'native' (the DEFAULT — it runs \
+                         every design), or, to bisect a suspected defect against a \
+                         second implementation, 'interp' (the readable reference \
+                         semantics) or 'vm' (the bytecode VM). Same output whichever \
+                         you pick — that equivalence is the gate, so this only moves \
+                         wall-clock. --obs-dir run.json records which executor actually \
+                         ran beside the one requested",
                         MsgCode::CliBadFlag.code_num()
                     );
                     return Err(EXIT_CLI_ERROR);

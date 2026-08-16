@@ -162,6 +162,8 @@ required-features = ["separate-bins"]
 | 게이트 거부 | `warning[VITA-W4030]` + VM 폴백 · exit 0 | **`fatal[VITA-F4004]` · exit 1** |
 | 용도 | 개발·검증(차분 오라클이 살아 있다) | **제품 형태** |
 
+⭐ **`--backend` 는 디버그 노브다(Phase C).** `native` 가 기본이고 모든 설계를 돌린다 — 나머지 둘은 *같은 의미의 두 번째 구현으로 이분(bisect)하기 위한 것*이고, `interp` 는 **성능 최적화 대상에서 영구 제외**다(레퍼런스를 빠르게 만드는 것이 곧 레퍼런스가 읽을 수 없게 되는 길이다).
+
 ⭐ **`oracle` 이 가리는 것은 코드가 아니라 선택지다.** `Backend::{Interpreter,Bytecode}` 열거 변형과
 그 **디스패치**만 `#[cfg]` 뒤에 있다 — `backend.rs` 의 컴파일 기계장치와 `exec/` 의 문장 의미는
 tier-3 이 그대로 쓰므로 어느 쪽 빌드에도 남는다(설계 근거 = [04 §실행 백엔드 아키텍처](04-architecture.md)).

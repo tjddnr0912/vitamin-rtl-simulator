@@ -247,27 +247,19 @@ pub(crate) fn print_help(applet: &str) {
          --threads, -j <N>     waveform-writer thread budget; N>=2 moves VCD writing off\n                        \
                        the sim thread. Simulation itself is single-threaded, so\n                        \
                        this does NOT speed up a run with no waveform dump.\n  \
-         --backend <interp|vm|native> (vita/vrun) process-body executor. 'vm' (default) runs\n                        \
-                       suspend-free bodies on the bytecode VM and interprets the rest;\n                        \
-                       'interp' forces the reference semantics, for bisecting; 'native'\n                        \
-                       selects the tier-3 backend, which runs a design when nothing in it\n                        \
-                       is outside today's tier-3 subset -- no fork, no `final`,\n                        \
-                       no class, no string net, no $monitor/$strobe, and of\n                        \
-                       subroutines only FUNCTIONS whose body stays inside its own\n                        \
-                       frame, called from an assignment or a condition (a task, a\n                        \
-                       function reading a module net, a call in a $display argument\n                        \
-                       or in a delayed CONTINUOUS assign all still fall back; a\n                        \
-                       delayed PROCEDURAL assign runs; $dumpfile and\n                        \
-                       $dumpvars DO run) -- and every\n                        \
-                       continuous-assign family (zero-delay, delayed, multi-driven,\n                        \
-                       wired) runs --\n                        \
-                       and falls back to the VM otherwise (run.json reports 'backend' vs\n                        \
-                       'backend_requested', and 'native.refused' names the row).\n                        \
-                       Output is byte-identical whichever you pick -- this only moves\n                        \
-                       wall-clock (measured\n                        \
-                       1.4x on expression-heavy RTL; 0.8x -- i.e. SLOWER -- when the\n                        \
-                       run is clock/scheduler-bound, which is where the remaining\n                        \
-                       tier-3 work is).\n  \
+         --backend <interp|vm|native> (vita/vrun) process-body executor. DEBUG KNOB --\n                        \
+                       you do not need it. 'native' is the DEFAULT and runs every\n                        \
+                       design; the other two exist to bisect a suspected defect\n                        \
+                       against a second implementation of the same semantics, and\n                        \
+                       are absent from a build made without the 'oracle' feature.\n                        \
+                       'interp' walks the IR directly and is the readable reference\n                        \
+                       for what a statement MEANS; 'vm' compiles suspend-free bodies\n                        \
+                       to bytecode and interprets the rest. All three must print the\n                        \
+                       same bytes -- that equivalence is the gate, so this only\n                        \
+                       moves wall-clock (picorv32, release, best-of-5: interp 1.32s,\n                        \
+                       vm 0.84s, native 0.51s). If the gate ever refuses a design,\n                        \
+                       native falls back and says so (W-RUN-BACKEND-FALLBACK); today\n                        \
+                       nothing in the corpus is refused.\n  \
          --timeout <TICKS>     stop cleanly after TICKS sim time (CI killswitch)\n  \
          --upstream <FILE>     (vrun) verify the .velab's recorded upstream digest\n  \
          --work <NAME[=DIR]>   (vcmp) record units into a work library (default dir ./NAME)\n  \

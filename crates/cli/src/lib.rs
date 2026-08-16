@@ -159,8 +159,10 @@ pub struct VitaOpts {
     /// facts it can state without inventing an argv.
     pub invocation: Option<Invocation>,
     /// `--backend <interp|vm|native>`: which executor runs process bodies. `None` ⇒
-    /// [`Backend::Bytecode`], the VM (the default since it was measured equivalent
-    /// across the whole test suite, not merely across the differential corpus).
+    /// [`Backend::Native`], the tier-3 backend (the default since Phase B1 — it runs
+    /// every design in the corpus, and the flip run measured the whole suite
+    /// byte-identical under it, which is a far stronger gate than the differential
+    /// corpus alone).
     ///
     /// Neither value may change a single output byte — that equivalence is what
     /// `sim-engine/tests/backend_equiv.rs` locks — so this is a wall-clock knob only,
@@ -616,8 +618,9 @@ struct IoArgs {
     probes: Vec<String>,
     /// `--probe-file <F>` (OBS-2): file of probe paths, one per line.
     probe_file: Option<String>,
-    /// `--backend <interp|vm|native>`: process-body executor. `None` ⇒ the VM, which is the
-    /// default; `interp` selects the reference semantics for bisecting. Simulate-side
+    /// `--backend <interp|vm|native>`: process-body executor. `None` ⇒ `native`, the
+    /// default since Phase B1; `interp`/`vm` are DEBUG knobs for bisecting against a
+    /// second implementation, and are absent without the `oracle` feature. Simulate-side
     /// only (`vita`/`vrun`) — it changes nothing an artifact records, so `vcmp`/`velab`
     /// reject it.
     backend: Option<Backend>,

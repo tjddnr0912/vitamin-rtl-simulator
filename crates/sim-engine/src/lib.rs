@@ -95,11 +95,27 @@ pub enum ExitClass {
 /// VCD/stdout bytes cannot diverge in a backend-specific way (enforced by the P5 gate).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Backend {
-    /// Tree-walking interpreter (`exec.rs::run_process`) — the REFERENCE semantics.
+    /// Tree-walking interpreter (`exec::run_process`) — the REFERENCE semantics.
     ///
-    /// No longer the default, and it is not meant to be selected for speed: it is here
-    /// so a suspected VM defect can be bisected against the reference in one flag, and
-    /// because the VM falls back to it body-by-body anyway.
+    /// ⭐⭐ **PHASE C: this is a TEST INSTRUMENT, not a product surface.** Its job is
+    /// to be the readable, obviously-correct statement of what a statement MEANS —
+    /// it walks `SimIr` directly, with no compiled form and no second storage — so
+    /// that when `vm` and `native` disagree there is something to arbitrate with.
+    /// The `oracle` feature is that role made structural: a product build does not
+    /// contain this variant at all.
+    ///
+    /// ⚠️⚠️ **PERMANENTLY EXCLUDED FROM PERFORMANCE WORK, and that is a rule rather
+    /// than an observation.** Making the reference faster is how a reference stops
+    /// being readable: every specialisation is a second spelling of a rule, and the
+    /// second spelling is this repository's defect class (§4.5.279 — the VM drifted
+    /// from the interpreter in four independent, silent ways). If a profile ever
+    /// names `run_process`, the answer is that the design should not be running here.
+    /// Measured for scale, not as a target: picorv32 1.319 s against native's 0.513 s.
+    ///
+    /// ⚠️ It is still LOAD-BEARING in the oracle build — the VM falls back to it
+    /// body-by-body for anything `is_codegen_able` refuses, and tier-3 delegates
+    /// frame bodies to it. "Not a product surface" is about the `--backend` FLAG, not
+    /// about `run_process` being dead code.
     #[cfg(feature = "oracle")]
     Interpreter,
     /// Bytecode VM (P0a) — **no longer the default (Phase B1).** Codegen-able bodies

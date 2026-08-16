@@ -250,16 +250,45 @@ fn a_filelist_does_not_rewrite_the_backend_value_as_a_path() {
 /// The help text must state the property a user needs to decide: same output, only
 /// wall-clock. Advertising a speedup without that is how a correctness-critical tool
 /// gets used in a mode nobody verified.
+///
+/// ⚠️⚠️ **PHASE C STRENGTHENED THIS, because the help had gone materially FALSE.**
+/// It still said "'vm' (default)" after B1 moved the default, and it described
+/// `native` as refusing "no fork, no `final`, no class, no string net, no
+/// $monitor/$strobe … and of subroutines only FUNCTIONS" — every one of which
+/// Phase A closed. A help text that lists capabilities is a help text that rots;
+/// the version it was replaced with states the ROLE of each value instead, which
+/// is what a user actually needs and what does not go stale every slice.
+///
+/// So three properties now, not one: the equivalence (unchanged), that `native`
+/// is the DEFAULT, and that the other two are a debug knob. The last is Phase C's
+/// whole content on the CLI surface — `interp` is a test instrument, and a user
+/// who reads the help should not come away thinking they must choose.
 #[test]
-fn the_help_states_that_output_is_identical() {
+fn the_help_states_the_backend_contract() {
     let dir = scratch("help");
     let (o, ok) = vita_in(&dir, &["--help"]);
     assert!(ok, "--help failed:\n{o}");
     assert!(o.contains("--backend"), "--backend is undocumented:\n{o}");
     assert!(
-        o.contains("byte-identical"),
+        o.contains("same bytes"),
         "help does not state that output is unchanged:\n{o}"
     );
+    assert!(
+        o.contains("DEFAULT"),
+        "help does not say which backend is the default — after B1 a reader who \
+         guesses will guess wrong:\n{o}"
+    );
+    assert!(
+        o.contains("DEBUG KNOB"),
+        "help does not say the other backends are a debug knob (Phase C):\n{o}"
+    );
+    // …and it must NOT still be advertising capabilities Phase A closed.
+    for stale in ["no fork", "no `final`", "no class", "only FUNCTIONS"] {
+        assert!(
+            !o.contains(stale),
+            "help still lists a tier-3 limitation that no longer exists ({stale}):\n{o}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
