@@ -30,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **★★ ③층 Phase A(V1 커버리지) — 거의 끝났다: 99.80%** (2026-08-16 재측정 · 이 행은 그 전까지 S1d-4c-2d 를 가리키고 있었고 20 슬라이스 stale 이었다). 코퍼스 6,461 중 **거부 13** 이고 전부 fork 가족의 마지막 둘 = **A4-c `wait fork`/callee-forks 7** → **A4-d `disable fork` 6** ⇒ **V1 완주 = 100%.** 그 다음은 정본 순서대로 **B(빌드 분리) → C(interp 강등) → D(기계어 코드젠, 본체는 2-state 좁히기)**. 상세·슬라이스 이력 = ROADMAP §5.1-g~-an | 엔진 오라클 in-crate 차분 + **절대 앵커 의무**(§5.1-e) |
+| **0** | **✅✅ ③층 Phase A(V1 커버리지) 완주 — 100.00% (2026-08-16 · ROADMAP §5.1-ap)**. 코퍼스 **6,470 중 거부 0** · flip 발산 0 · 게이트 세 층이 전부 비었다. **⇒ 다음 트랙은 Phase B(빌드 분리)**: B1 전 스위트 native 초록 · B2 VM 삭제(5,430줄) · B3 `oracle` feature · **B4 제품 빌드에서 게이트 거부를 loud 로**(삭제만으론 안 생기는 사다리 상승) · B5 `--no-default-features` CI 축. 그 뒤 **C**(interp 강등) → **D**(기계어 코드젠 · 본체는 2-state 좁히기). 해설·용어 = [study/02](study/02-v1-native-coverage.md) | Phase B 게이트 = 삭제 전후 **바이트 동일** + 거부 설계가 **exit≠0** |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 

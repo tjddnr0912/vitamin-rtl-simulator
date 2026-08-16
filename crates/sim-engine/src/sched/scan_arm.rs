@@ -1217,8 +1217,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // N4 clocking: commit handlers are applied at EDGE DETECTION in
         // `propagate_changes` (before the Active batch), never run here — so no
         // hot-path check is needed in `run_body`.
-        self.cur_aid = proc;
-        self.cur_gen = self.activities[proc as usize].gen;
+        self.set_cur_activity(proc);
         // SELF-RETRIG: tag blocking writes made by THIS body to their author, so
         // it is not re-triggered by its own write. Cleared on return — NBA apply,
         // cont-assign settle and clocking commit (all outside `run_body`) then

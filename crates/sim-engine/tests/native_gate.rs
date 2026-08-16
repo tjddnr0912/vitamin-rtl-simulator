@@ -282,18 +282,23 @@ fn sidecar_families_reject_from_opts() {
         e.reject_reasons
     );
 
-    // The families that DO remain are statement-scanned, not sidecar-borne, and
-    // `disable_fork` is the only one a design can reach (`stmt_effect` has been
-    // empty since A1). It is asserted here so this test still names a live row.
+    // ⚠️⚠️ **AND THE STATEMENT-SCANNED HALF IS GONE TOO (A4-d).** This block used
+    // to add "`disable_fork` is the only family a design can reach, asserted here
+    // so this test still names a live row". It was the last one; wiring it made
+    // the design gate's reject map EMPTY for every design.
+    //
+    // So the claim is now the strongest form available: the one design that used
+    // to be rejected by the statement scan is eligible, and the map is empty.
     let ir2 = build(
         "module t;\n\
            initial begin fork #1; join_none disable fork; #1 $finish; end\n\
          endmodule\n",
     );
     let e2 = design_eligibility(&ir2, &SimOpts::default());
-    assert_eq!(
-        e2.reject_reasons.into_iter().collect::<Vec<_>>(),
-        vec![("disable_fork", 1)]
+    assert!(
+        e2.reject_reasons.is_empty() && e2.eligible,
+        "the design gate has no reachable family left: {:?}",
+        e2.reject_reasons
     );
 }
 
@@ -643,15 +648,27 @@ fn statement_level_families_reject() {
         "the break/continue idiom needs no tier-3 machinery: {rs2:?}"
     );
 
-    // `disable fork` DOES kill descendants — that one stays a reject, and it can
-    // appear with no `fork` in the design, so the sidecars never report it.
+    // ⚠️⚠️ A4-d INVERTED the second half. It read: "`disable fork` DOES kill
+    // descendants — that one stays a reject, and it can appear with no `fork` in
+    // the design, so the sidecars never report it." Both facts still hold; what
+    // changed is that killing descendants turned out to need no tier-3 machinery
+    // either. `Scheduler::k_disable_fork` reads no net value — a transitive walk
+    // over `activities`/`barriers` plus a §16.4 cancellation in `st.postponed` —
+    // so the method is one delegated line, and what was actually missing was
+    // `set_cur_activity` at the dispatch choke (the root of that kill set).
+    //
+    // The design is kept and the assertion flipped, because it is still the one
+    // shape that reaches this scan with no `fork` anywhere in the source.
     let (ok3, rs3) = reasons(
         "module t;\n\
            initial begin #1 disable fork; #1 $finish; end\n\
          endmodule\n",
     );
-    assert!(!ok3);
-    assert_eq!(rs3, vec![("disable_fork", 1)]);
+    assert!(ok3, "`disable fork` is core since A4-d: {rs3:?}");
+    assert!(
+        rs3.is_empty(),
+        "the statement scan rejects nothing: {rs3:?}"
+    );
 }
 
 /// EFFECTS THAT NEVER PASS THROUGH THE WRITE FUNNEL — the prerequisite the
@@ -856,19 +873,20 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     // ⚠️ THIRD shape for this arm. `string s; int q[$]` until V1 slice 2
     // admitted every heap kind; `real r` until A6 admitted that; now `fork`.
     //
-    // ⚠️⚠️ And the sentence that used to be here — "`real` is the kind left that
-    // BOTH halves refuse under their own names" — cannot be written about
-    // anything any more: after A6 the design gate's net-KIND loop has no
-    // rejecting arm at all (every `NetKind` is core or admitted), so the
-    // design-refused families left are sidecar- and statement-sourced (`fork`,
-    // `disable_fork`, `probe`). That does not weaken the arm. What it must
-    // exercise is `eligible == false`, and the AND is still under test from both
-    // directions — this shape is design=false ∧ storage=Ok, the one below is
-    // design=true ∧ storage=Err, so a gate that dropped either half fails one of
-    // them.
-    // ⚠️ FOURTH shape. `fork` joined the core with A4-a, so the design-refused
-    // arm is now `disable fork` — the only family a design can still reach.
-    let design_refused = "module t;\n\
+    // ⚠️⚠️ **THE DESIGN-REFUSED ARM NO LONGER HAS A SHAPE (A4-d), and that is the
+    // milestone rather than a gap in this test.** It went `string`/`queue` -> `real`
+    // -> `fork` -> `disable fork` -> nothing: `design_eligibility`'s reject map
+    // has exactly one family left (`stmt_effect`), it has been empty since A1,
+    // and no source construct populates it.
+    //
+    // The design below is the shape that USED to fill the arm. It is kept and
+    // asserted eligible, so this test still names what became core; the arm
+    // counter below is asserted to be zero with the reason. The AND is therefore
+    // exercised from one direction only (design=true ∧ storage=Err) — stated
+    // rather than papered over, because a synthetic design refusal would have to
+    // hand-build IR that no front end emits, and a test that can only fail on
+    // impossible input is worse than an honest zero.
+    let was_design_refused = "module t;\n\
          initial begin fork #1; join_none disable fork; #1 $finish; end endmodule\n";
     // Design gate PASSES (calls are core), storage refuses.
     //
@@ -906,7 +924,7 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
     // `s3a_a_module_body_naming_a_frame_slot_is_refused` already uses.
     for (name, src, want, corrupt) in [
         ("clean", clean, None, false),
-        ("design", design_refused, Some("disable_fork"), false),
+        ("was-design-refused", was_design_refused, None, false),
         (
             "storage",
             storage_refused,
@@ -949,11 +967,14 @@ fn the_runtime_gate_is_exactly_design_and_storage() {
             (true, false) => saw_storage_refused += 1,
         }
     }
-    // Non-vacuity: every arm was actually reached.
+    // Non-vacuity, and the zero is asserted rather than assumed: two clean
+    // shapes (one of which was design-refused until A4-d) and one storage
+    // refusal. If `saw_design_refused` ever becomes non-zero, a new design-gate
+    // family arrived and this note is the place to name it.
     assert_eq!(
         (saw_clean, saw_design_refused, saw_storage_refused),
-        (1, 1, 1),
-        "the three arms must each be exercised"
+        (2, 0, 1),
+        "the design gate has no reachable refusal left"
     );
 
     // And the property holds across the whole corpus (all clean, measured).

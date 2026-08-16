@@ -834,51 +834,39 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
     assert_eq!(field(&m1, "native"), field(&m2, "native"));
 }
 
-/// The FALL-BACK half of the pair above, on a design that is genuinely refused.
+/// ⭐⭐ **The other half of the pair above — and it is a POSITIVE claim now.**
 ///
 /// `--backend native` may not be silently ignored, and it may not be silently
-/// honored either: run.json has to carry both what was asked and what ran. A
-/// `$monitor` is the refusal used here because it is one the run gate adds on
-/// top of design eligibility (the kernel's systask refusal, S1d-4b).
-/// Note `native.eligible` stays TRUE, which is the whole point of the layering:
-/// the design is within v1's scope, today's executor just cannot run it.
-///
-/// The design here has changed SIX times as the executor grew: a plain `assign`
+/// honored either: run.json has to carry both what was asked and what ran. For
+/// most of this backend's life the interesting case was the FALL-BACK, and the
+/// design used here changed EIGHT times as the executor grew — a plain `assign`
 /// until S1d-4d-1, `assign #2` until S1d-4d-3 wired the inertial wheel, a
-/// multi-driven net until S1d-4d-4 wired the group resolution, a `$monitor`
-/// until A5-b gave tier-3 a postponed region, `$writememh` until slice #8
-/// threaded its three reads. It is now `$dumpall`.
+/// multi-driven net until S1d-4d-4, a `$monitor` until A5-b gave tier-3 a
+/// postponed region, `$writememh` until slice #8, `$dumpall` until A5-dumpall,
+/// a bare `wait fork` until A4-c, and `disable fork` until A4-d.
 ///
-/// ⚠️ That churn IS the test working. Its claim is about the SHAPE of the
-/// report — an executor-layer refusal must publish `eligible: true` beside
-/// `backend: "vm"` — so every time the executor grows, the design has to be
-/// re-picked or the test starts asserting that shape about a design that runs.
-///
-/// ⚠️⚠️ And the well is nearly dry: slice #8's census measured that
-/// `$writemem*` were the last refused system tasks ANY design in the suite
-/// reached, so `$dumpall`/`$dumpon` is the whole remaining population of this
-/// executor row and it has to be spelled by hand.
+/// ⚠️ That churn WAS the test working: its claim is about the SHAPE of the
+/// report, so every time the executor grew, the design had to be re-picked or
+/// the test would start asserting a fallback about a design that runs. The
+/// eighth re-pick is where the well ran dry — there is no ninth source, because
+/// all three gate layers are out of reachable refusals — so the claim is
+/// inverted rather than the design hunted for. Same pair of fields, opposite
+/// expectation.
 #[test]
-fn run_json_reports_native_fallback_on_a_refused_design() {
-    // ⚠️⚠️ EIGHTH shape, and the EXECUTOR layer has now run dry too. The seventh
-    // was a bare `wait fork;`, described here as "the one shape that reaches the
-    // executor layer while staying ELIGIBLE"; A4-c wired it, and a census taken
-    // at that point measured every remaining executor-row refusal in the corpus
-    // as that same shape. What the row still carries (`WaitCause::Named`, a call
-    // site with no sidecar) is unconstructible from source.
+fn run_json_asks_for_native_and_gets_it() {
+    // ⚠️⚠️ **RENAMED AND INVERTED (A4-d), on the instruction the previous version
+    // left here.** It was `run_json_reports_native_fallback_on_a_refused_design`,
+    // and it tracked the fallback through EIGHT re-spellings as one family after
+    // another went core: `assign` -> `assign #2` -> multi-driver -> `$monitor` ->
+    // `$writemem*` -> `$dumpall` -> `wait fork` -> `disable fork`. Its own note
+    // said: "when A4-d wires `disable fork` there is no ninth shape — the gate
+    // will have nothing left to refuse. Turn it into the positive claim rather
+    // than hunting for a source that still falls back."
     //
-    // So the fallback this test is about is now a DESIGN-gate one, and there is
-    // exactly one family left that a design can reach: `disable fork`. Which
-    // makes the assertion below different in kind from the previous seven — this
-    // design is refused as OUT OF SCOPE (`eligible: false`), not accepted-then-
-    // refused-by-the-executor. Both are fallbacks and the run.json shape is the
-    // same, but the claim has to be spelled for what it is rather than carried
-    // over.
-    //
-    // ⚠️ When A4-d wires `disable fork` there is no ninth shape: the gate will
-    // have nothing left to refuse, and this test's subject disappears. Turn it
-    // into the positive claim (`backend == "native"` for every corpus design)
-    // rather than hunting for a source that still falls back.
+    // So: the same design that produced the eighth spelling, asked for `native`,
+    // now GETS native. The `backend_requested`/`backend` pair is still what is
+    // asserted — a fallback shows up as the two disagreeing, which is the failure
+    // this test has always been about.
     const DISABLE_FORK_SV: &str = "module top; reg [7:0] n = 8'd0;\n\
          initial begin fork #1 n = 8'd1; join_none disable fork; $display(\"n=%0d\", n);\n\
          #2 $finish; end endmodule\n";
@@ -886,11 +874,15 @@ fn run_json_reports_native_fallback_on_a_refused_design() {
     assert_eq!(code, 0);
     let m = read(&obs.join("run.json"));
     assert_eq!(field(&m, "backend_requested"), "\"native\"", "{m}");
-    assert_eq!(field(&m, "backend"), "\"vm\"", "{m}");
+    assert_eq!(
+        field(&m, "backend"),
+        "\"native\"",
+        "asked for native and fell back — some gate row is refusing this \
+         design:\n{m}"
+    );
     assert!(
-        field(&m, "native").contains("\"eligible\": false"),
-        "`disable fork` is refused by the DESIGN gate, so the fallback is a \
-         scope verdict rather than an executor one:\n{m}"
+        field(&m, "native").contains("\"refused\": null"),
+        "the verdict must report no refusal:\n{m}"
     );
 }
 
@@ -934,10 +926,22 @@ fn run_json_native_pins_the_reject_families() {
     );
     assert_eq!(code, 0);
     let manifest = read(&obs.join("run.json"));
+    // ⚠️⚠️ A4-d INVERTED THIS. The pin used to be
+    //   {"eligible": false, "buildable": true, "refused": "disable_fork",
+    //    "reject_reasons": {"disable_fork": 2}}
+    // and its subject was the per-family COUNT — two `disable fork` statements
+    // reported as 2, a real unit (statements, not designs). `disable fork` went
+    // core, and with it the design gate lost its last reachable family, so what
+    // this design pins now is the SHAPE of a verdict with nothing to report.
+    //
+    // Keeping the two-statement design rather than simplifying it is deliberate:
+    // it is the exact source that produced the old non-empty map, so if a family
+    // ever comes back this line shows the count again instead of quietly
+    // agreeing with a simpler design that never had one.
     assert_eq!(
         field(&manifest, "native"),
-        "{\"eligible\": false, \"buildable\": true, \"refused\": \"disable_fork\", \
-         \"reject_reasons\": {\"disable_fork\": 2}}",
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \
+         \"reject_reasons\": {}}",
         "full manifest:\n{manifest}"
     );
 }

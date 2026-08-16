@@ -47,7 +47,7 @@
 | `3xxx` | ELABORATE | 파라미터 해소·계층·연결성·elaboration severity |
 | `4xxx` | RUNTIME | 시뮬레이션·RTL severity 태스크·assert |
 | `5xxx` | ASSERTION / SVA | 동시 assert·assume·cover·unique 위반 (예약 — SVA **기능**은 Phase-3 구현됐으나 실패는 합성 체커의 E4003로 방출, 5xxx enum 등재는 미발화 예약. assume/cover/SVA 전용 코드는 부록 A 인벤토리 보유) |
-| `6xxx` | SV-TYPE | enum·const·$cast·class 등 SV 데이터타입 (예약 — 부록 A. 단 enum/typedef/packed struct·dynamic array/queue/assoc·string은 이미 **구현됨**(별도 6xxx 코드 미발화); class/OOP·$cast는 미구현 N7) |
+| `6xxx` | SV-TYPE | enum·const·$cast·class 등 SV 데이터타입 (밴드 자체는 예약 — 부록 A · 별도 6xxx 코드는 아직 미발화). ⚠️ **기능은 전부 구현됐다**: enum/typedef/packed struct · dynamic array/queue/assoc · string 에 더해 **class/OOP(상속+가상 디스패치)·CRV·`$cast` 도 구현**이다(이 줄의 옛 판본은 *"class/OOP·$cast는 미구현 N7"* 이라 적고 있었다 — 실측 2026-08-16). 미발화인 것은 **코드**이지 기능이 아니다 |
 | `7xxx` | VHDL | VHDL 진단 (예약, Phase 3 — 부록 A) |
 | `8xxx` | FILELIST | `.f` 전개(`-f`/`-F`) |
 | `9xxx` | ARTIFACT | 산출물 staleness·버전 게이트 |

@@ -489,15 +489,24 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
     //   assign, so the forced value survived until some input of that assign
     //   happened to move (iverilog/verilator 3, all three vita backends 240).
     //   Fixed for both stores, in the family this row was gating.
-    // - `disable fork` only. A plain `disable <named block>` is the
-    //   break/continue idiom and needs NOTHING here: elaborate lowers it as a
-    //   diagnostic-shaped marker plus a sibling `Goto` that does the actual
-    //   control flow (and rejects every non-lexically-enclosing target loudly),
-    //   so the engine executes it as `StmtEffect::Nop`. Counting all `Disable`
-    //   rejected whole designs for a statement with no runtime effect —
-    //   costlier here than for the VM, which loses one body while tier-3 has no
-    //   body-level fallback at all.
-    let mut disable_fork = 0usize;
+    // - ⭐⭐ **`disable fork` IS CORE SINCE A4-d, and this is the row that used to
+    //   stand here.** It counted only `DisableKind::Fork`, because a plain
+    //   `disable <named block>` is the break/continue idiom and needs nothing at
+    //   runtime (elaborate lowers it as a diagnostic-shaped marker plus a sibling
+    //   `Goto`, so the engine executes it as `StmtEffect::Nop`).
+    //
+    //   What the fork spelling needed was not machinery either. IEEE §9.6.3's
+    //   kill reads no net value — `Scheduler::k_disable_fork` walks `activities`
+    //   and `barriers` transitively and cancels §16.4 reports in `st.postponed`,
+    //   all of it shared — so the tier-3 method is one delegated line. The two
+    //   things that were genuinely missing were at the DISPATCH choke, not here:
+    //   `cur_aid` (the root of the kill set) and the drop of an already-dead
+    //   activity (how the resume entries filed before the kill get discarded).
+    //
+    //   ⚠️ With this gone the design gate has no family left that a design can
+    //   reach. The loop below is kept, `_`-free, so a NEW `Stmt` kind has to be
+    //   classified rather than silently swallowed; what is pinned today is that
+    //   the map comes back empty.
     let mut stmt_effect = 0usize;
     for s in &ir.stmts {
         match s {
@@ -506,11 +515,7 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             // silently swallows a family is how this gate would stop noticing a
             // NEW statement kind. Their machinery is `k_force`/`k_release`.
             sim_ir::Stmt::Force { .. } | sim_ir::Stmt::Release { .. } => {}
-            sim_ir::Stmt::Disable { scope_kind, .. } => {
-                if matches!(scope_kind, sim_ir::DisableKind::Fork) {
-                    disable_fork += 1;
-                }
-            }
+            sim_ir::Stmt::Disable { .. } => {}
             // EFFECTS THAT NEVER PASS THROUGH THE WRITE FUNNEL. A seeded
             // `$random`/`$dist_*` writes its seed back, `$cast` writes its
             // destination, `$value$plusargs` writes its output, and the whole
@@ -590,7 +595,6 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
             sim_ir::Stmt::NonblockingAssign { .. } => {}
         }
     }
-    flag(&mut out, "disable_fork", disable_fork);
     flag(&mut out, "stmt_effect", stmt_effect);
 
     // ── heap-storage net kinds — the doc's `*_dyn_nets` intent, done right:

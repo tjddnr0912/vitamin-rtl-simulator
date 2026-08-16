@@ -840,17 +840,24 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
         "{m}"
     );
 
-    // Design-gate refusal: `refused` names the family, the map keeps the detail.
+    // ⚠️⚠️ **THE DESIGN-GATE ARM RAN OUT, exactly where the previous version said
+    // it would.** It read: "FOURTH shape for this pin — `string s; int q[$]`
+    // until V1 slice 2, `real r` until A6, `fork` until A4-a, now `disable fork`
+    // … this is the LAST one available: when `disable fork` is wired, this arm
+    // has no design at all." A4-d wired it.
     //
-    // ⚠️ FOURTH shape for this pin. `string s; int q[$]` until V1 slice 2
-    // admitted every heap kind; `real r` until A6; `fork` until A4-a; now
-    // `disable fork`. A refusal pin whose shape became eligible asserts nothing,
-    // and the churn IS the test working — every time the gate grows somebody has
-    // to come back here and find a family that is still refused.
+    // What the arm proved was that SCOPE and STORAGE are reported separately —
+    // `eligible: false` beside `buildable: true` is a shape a single folded flag
+    // could not express. That property is not abandoned: it is still under test
+    // engine-side, in the other direction, by
+    // `sim-engine::native_gate::the_runtime_gate_is_exactly_design_and_storage`,
+    // which reaches `eligible: true ∧ buildable: false` by corrupting a sidecar.
+    // Neither direction is reachable from the CLI any more, and saying so here is
+    // the point — the next person to look for a refused design should read this
+    // instead of concluding the field is untested.
     //
-    // ⚠️⚠️ This is the LAST one available: after A4-a the design gate has exactly
-    // two families left, and `stmt_effect` has been empty since A1. When
-    // `disable fork` is wired, this arm has no design at all.
+    // The design is kept and its verdict inverted, because it is the exact source
+    // that produced the last non-empty reject map.
     std::fs::write(
         dir.join("q.sv"),
         "module t;\n\
@@ -863,13 +870,8 @@ fn the_native_verdict_reports_scope_and_storage_separately() {
     let m = std::fs::read_to_string(dir.join("obs3/run.json")).unwrap();
     assert_eq!(
         manifest_field(&m, "native"),
-        "{\"eligible\": false, \"buildable\": true, \"refused\": \"disable_fork\", \
-         \"reject_reasons\": {\"disable_fork\": 1}}",
+        "{\"eligible\": true, \"buildable\": true, \"refused\": null, \"reject_reasons\": {}}",
         "{m}"
     );
-    // ⭐ And this shape reports the split more sharply than `real` did: SCOPE
-    // says no while STORAGE says yes. The old design had both halves false, so
-    // it could not have caught the two being folded into one flag — which is
-    // the property this test is named for.
     let _ = std::fs::remove_dir_all(&dir);
 }

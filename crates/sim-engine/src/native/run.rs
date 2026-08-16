@@ -63,6 +63,29 @@ use crate::sched::FinishReason;
 /// Both call sites go through here so the choice cannot differ between the t0
 /// initializers and the region loop.
 fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u32) -> Step {
+    // ── A4-d: THE CHOKE, and it is `Scheduler::run_body`'s, line for line ──
+    //
+    // `disable fork` (IEEE §9.6.3) does not unschedule anything. It marks every
+    // active descendant of the calling process DEAD and lets their already-filed
+    // resume entries — slot queues, waiters, the delay wheel — arrive and be
+    // dropped HERE. That is why the kill needs no queue surgery, and why this
+    // one test is the whole of the runtime cost.
+    if k.sched.activities.get(act as usize).is_some_and(|a| a.dead) {
+        return Step::Done;
+    }
+    // ⚠️ AND THE TWO LINES UNDER IT ARE NOT ABOUT `disable fork` AT ALL — they
+    // are what makes `k_disable_fork` able to name the CALLER (`cur_aid` is the
+    // root of its kill set), and tier-3 has been running without them.
+    //
+    // `cur_gen` travels with it because the pair keys §16.4 deferred reports
+    // (`(marker_sid, cur_aid, cur_gen)`). Leaving both at 0 meant every deferred
+    // report on this backend was filed under activity 0 — see
+    // `cli::disable_fork_native::deferred_reports_are_keyed_by_the_running_activity`,
+    // which measures the divergence that produced: two processes reaching the SAME
+    // `assert #0` shared one key and one of the two `$error`s vanished at exit 0.
+    if (act as usize) < k.sched.activities.len() {
+        k.sched.set_cur_activity(act);
+    }
     // ⚠️ A4: a CHILD activity always takes the walk. `vm_exec` carries one `proc`
     // and uses it for both roles the walk now keeps apart — the body it indexes
     // and the identity it schedules under — so a child running its parent's

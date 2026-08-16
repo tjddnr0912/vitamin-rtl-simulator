@@ -443,8 +443,20 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | **A8** ✅ | 꼬리 — handle_copy · deferred assert · clocking · force/release · final · stage | — | **완료**(§5.1-q·-w·-x·-y·-ab·-ac) |
 | **A6** ✅ | `real` + `real-slot`(D+S 짝) — **행의 이름이 틀렸다**(§5.1-af) | 0 | **완료 · 96.35% → 97.47%** |
 | **A3-ii-b** ✅ | 실제로 **park 하는** 프레임 — 없던 것은 실행기가 아니라 **스택의 수명**이었다(§5.1-ag) | 0 | **완료 · 97.47% → 98.09%** |
-| **A4** ★★ 유일 잔여 | fork + `disable_fork` + `wait fork` | **110** | **잔여의 100%.** 꼬리가 전부 닫혔으므로 Phase A 에 남은 것은 이것뿐이다 |
-| 꼬리 ✅ | ~~`probe`~~ · ~~concat heap chunk~~ · ~~out-of-window write~~ · ~~`$dumpall`~~(§5.1-ah·-ai·-aj·-ak) | 0 | **완료** — 남은 `wait fork` 3 은 fork 가족이라 A4 몫 |
+| **A4** ✅ | fork 가족 넷 — 프로세스 fork(§5.1-am) · fork-in-frame(§5.1-an) · `wait fork`(§5.1-ao) · `disable fork`(§5.1-ap) | 0 | **완료 · 98.29% → 100.00%** |
+| 꼬리 ✅ | ~~`probe`~~ · ~~concat heap chunk~~ · ~~out-of-window write~~ · ~~`$dumpall`~~(§5.1-ah·-ai·-aj·-ak) | 0 | **완료** |
+
+> ## ✅✅ **Phase A 완료 (2026-08-16 · §5.1-ap)**
+>
+> **코퍼스 6,470 / 6,470 = 100.00% native · 거부 0 · flip 발산 0 · 전 스위트 5,468 green.**
+>
+> 게이트의 세 층이 전부 비었다 — `gate_refused!` 매크로 사이트 **17 → 0**(매크로 삭제) ·
+> `systask_refusal` 집합 **6→4→2→0** · 실행기 거부 표 **4→5→4→3→1→0** · design 행 도달 가능한 것 **0**.
+> ⚠️ **검사를 지운 것이 아니다** — 세 함수와 소비자는 남아 있고 `_`-free match 가 새 종류를
+> 강제한다. 핀하는 것은 *"지금 비어 있다"* 이고 `is_empty()` 단언으로 박혀 있다.
+>
+> **해설·용어·전체 서사(초보자용) = [study/02](study/02-v1-native-coverage.md).**
+> 슬라이스별 상세 = §5.1-g ~ §5.1-ap.
 
 ### Phase B — V2 = **빌드 분리** (오너 제안 채택 · 옛 "VM 삭제" 를 대체)
 
@@ -2040,6 +2052,58 @@ b=0 t=0` = 부모가 안 막혔다 · `after wait … t=4` = **마지막** 자�
 
 전 스위트 **5465 green** · flip 발산 **0**.
 
+#### 5.1-ap ✅✅ A4-d `disable fork` = **Phase A(V1) 완주** — 99.89% → **100.00%** (2026-08-16)
+
+**+7 설계. 코퍼스 6,470 중 거부 0.** `simulate()` 호출 전부가 ③층 native 로 돈다.
+
+⭐ **마지막 행도 위임이었다.** IEEE §9.6.3 의 kill 은 **넷 값을 하나도 안 읽는다** —
+`Scheduler::k_disable_fork` 는 `activities`/`barriers` 를 전이적으로 걷고 §16.4 리포트를
+`st.postponed` 에서 취소하는 것이 전부이고 둘 다 커널이 이미 빌리는 것이다 ⇒ tier-3 메서드는
+**위임 한 줄**.
+
+⭐⭐ **진짜로 없던 것은 이 함수가 아니라 dispatch choke 의 두 줄이었다** — `Scheduler::run_body` 가
+하는 ⓐ **죽은 활동 드롭**(`disable fork` 는 아무것도 unschedule 하지 않는다 · 이미 큐·waiter·delay
+wheel 에 들어간 재개 항목이 **도착해서 버려지는** 것이 설계다 ⇒ 큐 수술이 필요 없고 런타임 비용이
+이 검사 하나다) ⓑ **`cur_aid`/`cur_gen` 세팅**(= kill set 의 **뿌리**). tier-3 은 둘 다 없었다.
+
+⚠️⚠️ **그리고 ⓑ가 pre-existing silent-wrong 을 드러냈다 — 이 슬라이스와 무관한 것이다.**
+§16.4 deferred 리포트는 `(marker_sid, cur_aid, cur_gen)` 로 키잉되는데 tier-3 이 그 쌍을 한 번도
+세팅한 적이 없어 **모든 deferred 리포트가 활동 0 으로 파일**되고 있었다. 두 프로세스가 **같은
+`assert #0` 문장**에 닿는 최소 설계에서 **`$error` 둘 중 하나가 사라진다**(실측 `errors=1` vs 2 ·
+exit 0). A8-b 가 deferred assertion 을 배선한 이래 있던 결함이고, **A4-d 가 같은 두 줄을 자기
+이유로 필요로 했기 때문에** 지금 드러났다. 앵커로 핀했다.
+
+⚠️ **거부 핀 일곱이 걸렸고 전부 마지막 design 행을 이름으로 부르고 있었다.** 처리:
+
+| 테스트 | 처리 |
+|---|---|
+| `native_gate::statement_level_families_reject` | 두 번째 절을 **positive 로 반전** |
+| `native_gate::sidecar_families_reject_from_opts` | 통계 절을 `is_empty()` 로 |
+| `native_gate::the_runtime_gate_is_exactly_design_and_storage` | **design-refused arm 이 소멸** → `(2,0,1)` 로 재핀 + 이유 기록 |
+| `kernel_tests::s1d4a_refused_workers_are_loud_not_silent` | **자기 doc 이 예고한 대로 은퇴** → 이빨을 `gate_refused!` **소스 스캔**으로 이전 |
+| `cli::obs::run_json_native_pins_the_reject_families` | 빈 map 으로 반전(설계는 유지 — 마지막 non-empty 를 만든 그 소스다) |
+| `cli::obs::run_json_reports_native_fallback_on_a_refused_design` | **개명 + 반전** = `run_json_asks_for_native_and_gets_it`(A4-c 가 적어 둔 지시 그대로) |
+| `cli::backend_flag::the_native_verdict_reports_scope_and_storage_separately` | design-refused arm 반전 + **scope/storage 분리 성질이 어디서 계속 시험되는지** 기록 |
+
+⭐⭐⭐ **게이트의 세 층이 전부 비었다.** `gate_refused!` **매크로에 사이트 0**(17 → 0 · 매크로 삭제) ·
+`systask_refusal` **집합 비었음**(6→4→2→0) · 실행기 거부 표 **비었음**(4→5→4→3→1→0) · design 행
+**도달 가능한 것 0**. ⚠️ **"검사를 지웠다"가 아니다** — 세 함수와 소비자는 남아 있고 `_`-free match
+가 새 종류를 강제하며, 오늘 핀하는 것은 **"지금 비어 있다"** 다.
+
+**뮤테이션 4 · 사망 4.** ⚠️ **생존 하나가 있었고 그것도 눈먼 축이었다** — `set_cur_activity` 에서
+**`cur_gen` 만** 떼면 앵커 셋을 통과한다. 판별에는 **활동 슬롯 재활용**이 필요하다: 끝난 fork 자식의
+슬롯이 `free_activities` 로 돌아가 다음 fork 가 **같은 `aid` 를 gen+1 로** 받는데, deferred 리포트가
+`(sid, aid, gen)` 로 키잉되는 것은 정확히 그 재활용 때문이다. 한 슬롯 안에서 `fork…join` 을 **두 번**
+하고 두 arm 이 **같은 `assert #0`** 에 닿게 하자 즉시 사망(`errors=1` · `who=1` 소실). ⚠️⚠️ **이 축을
+재는 테스트가 저장소에 하나도 없었다 — 엔진 쪽에도** (공유 스케줄러 코드라 **양 백엔드가 똑같이**
+틀린다) ⇒ 앵커를 지어 넣었고, 그것이 `set_cur_activity` 를 한 철자로 유지하게 만드는 장치다.
+
+전 스위트 **5469 green** · flip **6470/6470 = 100.00% · 발산 0**.
+
+> **⇒ Phase A 종료. 다음은 Phase B(빌드 분리) — B1 전 스위트 native 초록 · B2 VM 삭제 · B3 `oracle`
+> feature · **B4 제품 빌드에서 게이트 거부를 loud 로**(삭제만으론 안 생기는 사다리 상승) · B5 CI 축.**
+> 해설·용어·전체 서사 = **[study/02](study/02-v1-native-coverage.md)**.
+
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
 §5.1 의 원래 근거(*"인터프리터를 영구 오라클로 남긴다"*)는 **V1 자신이 반증하는 중**이다. V1 의
@@ -2069,7 +2133,7 @@ b=0 t=0` = 부모가 안 막혔다 · `after wait … t=4` = **마지막** 자�
 | 단계 | 무엇 | 게이트 / 중단 판정 |
 |---|---|---|
 | **V0** ✅ | **커버리지 격차 측정 (2026-08-10 · §4.5.336).** 기본 백엔드를 `Native` 로 flip 하고 전 스위트를 돌렸다. **결과 = 아래 두 표.** 스캐폴드는 되돌렸다(트리 변경 0) | — (계기). **이 숫자가 V1 의 슬라이스 목록이다** |
-| **V1** 진행중 | **커버리지 확장 = Phase A.** 아래 §5.1-b 의 **측정된 순서**대로 닫는다. 슬라이스 1(SVA)·2(heap)·3a/3b 완료 — 54.7% → **78.73%** | 슬라이스마다 **VM 과 바이트 동일 + 절대 앵커** |
+| **V1** ✅ **완료 (2026-08-16)** | **커버리지 확장 = Phase A.** §5.1-b 의 측정된 순서대로 30여 슬라이스 — **54.7% → 100.00%**(코퍼스 6,470 중 거부 0 · flip 발산 0). 슬라이스별 상세 = §5.1-g~-ap · 해설 = [study/02](study/02-v1-native-coverage.md) | 슬라이스마다 **VM 과 바이트 동일 + 절대 앵커**(§5.1-e) |
 | **V2** | **= Phase B(빌드 분리).** 옛 형태(*"VM 을 지운다"*)는 B2 로 흡수되고, 제품 표면은 feature 로 가른다 | **전 스위트가 `--backend native` 로 초록**이 선행조건. 못 덮으면 Phase A 로 되돌아간다 |
 | **V3** | **= Phase C.** `--backend interp` 를 제품 표면에서 빼고 테스트 전용으로. `Kernel` 제네릭은 **유지** | 차분 게이트가 interp↔native 로 남는지 확인 · 성능 최적화 대상에서 제외 |
 

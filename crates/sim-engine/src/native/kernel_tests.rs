@@ -454,77 +454,40 @@ fn s1d4a_shared_executor_agrees_on_adversarial_assigns() {
     );
 }
 
-/// TEETH for the refused workers: each one must actually be reached and must
-/// actually be loud. A `panic!` body is worthless if the method is dead — and
-/// "unreachable by the gate" is precisely the condition that makes it look dead.
+/// ⚠️⚠️ **THE REFUSED-WORKER TEST RETIRED ITSELF (A4-d), exactly as it said it
+/// would.** It read: "when A4 takes `disable fork` this test has no subject at
+/// all, and the honest move then is to retire it with a note rather than invent
+/// a design for it."
 ///
-/// Rather than assert on 20 methods by name (a list that rots), this drives the
-/// ones that a legal, gate-REFUSED design reaches through the shared executor.
+/// What it did: drove each `gate_refused!` worker through the shared executor on
+/// a legal, gate-REFUSED design and asserted the panic MESSAGE (not merely that
+/// something panicked — an index-out-of-bounds would otherwise read as success).
+/// The slot count went 2 -> 1 as A1 wired its way down `stmt_effect`
+/// (`k_random_seeded` -> `k_fopen` -> `k_fread`) and slice #2 wired `force`, and
+/// the last one was `k_disable_fork`.
 ///
-/// ⚠️⚠️ **THERE IS EXACTLY ONE LEFT, and that is the news.** This started as two
-/// slots. The second moved THREE times as A1 wired its way down the
-/// `stmt_effect` family (`k_random_seeded` → `k_fopen` → `k_fread`) and ended on
-/// `disable fork`; the FIRST was `force`, and slice #2 wired it. A grep of
-/// `kernel.rs` now finds a single `gate_refused!` site. When A4 takes
-/// `disable fork` this test has no subject at all, and the honest move then is
-/// to retire it with a note rather than invent a design for it.
+/// The teeth are kept, moved to where they still bite: `gate_refused!` itself is
+/// GONE from `kernel.rs`, and this asserts that. Re-adding a worker whose body
+/// is a gate-refusal panic — without a design proving the gate really refuses it
+/// — is the mistake the old test existed to catch, and the assertion below is
+/// what makes that mistake fail loudly instead of shipping a dead panic.
 #[test]
-fn s1d4a_refused_workers_are_loud_not_silent() {
-    let cases: [(&str, &str, &str); 1] = [(
-        "disable_fork",
-        "k_disable_fork",
-        "module t;\n\
-             initial begin fork #1; join_none disable fork; end\n\
-             endmodule\n",
-    )];
-    for (name, expect, src) in cases {
-        let (ir, opts) = build_with_opts(src);
-        // The design gate must refuse it — otherwise the panic below would be a
-        // production path, not a backstop.
-        let el = crate::native::design_eligibility(&ir, &opts);
-        assert!(
-            !el.eligible,
-            "{name}: expected the S0 gate to refuse this design"
-        );
-        let arena = NetArena::build(&ir, &opts).expect("arena builds");
-        let empty: BTreeMap<u32, u32> = BTreeMap::new();
-        let sink = NullSink;
-        let mut st_n = fresh_state(&ir, &sink);
-        let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
-        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
-        nk.nba.clear();
-        nk.nba_seq = 0;
-        let sid = (0..ir.stmts.len() as u32)
-            .find(|&s| match &ir.stmts[s as usize] {
-                Stmt::Disable { scope_kind, .. } => {
-                    name == "disable_fork" && matches!(scope_kind, sim_ir::DisableKind::Fork)
-                }
-                _ => false,
-            })
-            .unwrap_or_else(|| panic!("{name}: no statement of the expected shape"));
-        let hit = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let eff = compute_effect(&nk, &ir.stmts[sid as usize], sid);
-            apply_effect(&mut nk, eff);
-        }));
-        // The MESSAGE, not merely "something panicked": an index-out-of-bounds or
-        // a `debug_assert` would otherwise read as success, which is the failure
-        // mode a test whose whole subject is a panic can least afford.
-        let payload = hit.expect_err(&format!("{name}: the refused worker did NOT panic"));
-        let msg = match payload.downcast::<String>() {
-            Ok(b) => *b,
-            Err(p) => match p.downcast::<&'static str>() {
-                Ok(b) => (*b).to_string(),
-                Err(_) => String::from("<non-string panic payload>"),
-            },
-        };
-        assert!(
-            msg.contains("tier-3 native kernel")
-                && msg.contains("design_eligibility")
-                && msg.contains(expect),
-            "{name}: panicked, but not with the gate-refused message naming \
-             `{expect}` — got: {msg}"
-        );
-    }
+fn no_worker_is_gate_refused_any_more() {
+    let src = include_str!("kernel.rs");
+    // Strip comments so the explanatory block that describes the deleted macro
+    // does not match itself.
+    let code: String = src
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !code.contains("gate_refused!"),
+        "a `gate_refused!` worker is back. The design gate has had no reachable \
+         family since A4-d, so either the gate grew a row — in which case restore \
+         `s1d4a_refused_workers_are_loud_not_silent` with a design that reaches it \
+         — or the panic is dead code."
+    );
 }
 
 /// The predicates must be answered for real, not stubbed `false`. A stub would

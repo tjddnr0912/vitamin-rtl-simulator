@@ -118,19 +118,25 @@ use crate::native::arena::NetArena;
 use crate::sched::{NbaLhs, NbaUpdate};
 use crate::value::Value;
 
-/// A method the S0 DESIGN gate makes unreachable. `row` names the eligibility
-/// row that refuses it, so a future widening of the gate reads as an instruction
-/// rather than a mystery. 17 methods qualify (counted, not estimated).
-macro_rules! gate_refused {
-    ($m:literal, $row:literal) => {
-        panic!(
-            "tier-3 native kernel: {} is unreachable — `native::design_eligibility` \
-             refuses every design that can call it ({}). Reaching this means the gate \
-             widened without wiring the method; wire it or restore the row.",
-            $m, $row
-        )
-    };
-}
+// ⭐⭐ **`gate_refused!` IS GONE (A4-d), AND ITS ABSENCE IS THE MILESTONE.**
+//
+// The macro read: "a method the S0 DESIGN gate makes unreachable. `row` names
+// the eligibility row that refuses it, so a future widening of the gate reads as
+// an instruction rather than a mystery. 17 methods qualify (counted, not
+// estimated)." It expanded to a `panic!` naming the method and the row.
+//
+// The count went 17 -> ... -> 1 (`k_disable_fork`, from #2 force/release
+// onward) -> 0. There is no method left that an eligible design cannot reach,
+// because there is no design-gate family left that refuses one: `disable fork`
+// was the last, and wiring it was one delegated line plus two at the dispatch
+// choke.
+//
+// It is DELETED rather than kept for a future row, deliberately. A macro with no
+// call sites is dead code by this repository's own rule, and re-adding it costs
+// nothing; what would be expensive is a reader believing the gate still has
+// teeth it does not have. `design_eligibility`'s `_`-free statement loop is what
+// forces a NEW `Stmt` kind to be classified, and `native::run::runnable` is what
+// turns a classification into a refusal.
 
 /// A method that is NOT gate-refused — an ELIGIBLE design reaches it — and is
 /// simply not built yet. What keeps it out of production is `native::runtime_gate`
@@ -2401,7 +2407,19 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         crate::exec::stmt_effect::assoc_iter(self, lhs, rhs)
     }
     fn k_disable_fork(&mut self) {
-        gate_refused!("k_disable_fork", "statement scan rejects `disable fork`")
+        // ⭐ WIRED (A4-d) — and it is the LAST `gate_refused!` site in this file,
+        // which is the same as saying Phase A's design gate has nothing left to
+        // refuse. One delegated line, because IEEE §9.6.3's kill reads no net
+        // value at all: the transitive walk is over `activities` and `barriers`,
+        // the §16.4 cancellation is over `st.postponed`, and both live on the
+        // `Scheduler` this kernel already borrows.
+        //
+        // What tier-3 had to supply is not in this function. It is the two lines
+        // at `native::run::dispatch_body` — `cur_aid`, which is the ROOT of the
+        // kill set below, and the drop of an already-dead activity, which is how
+        // the resume entries filed before the kill get discarded instead of
+        // running a process the caller just terminated.
+        Kernel::k_disable_fork(self.sched)
     }
     fn k_class_alloc(&mut self, class_id: u32) -> Value {
         // WIRED (A2-i), and it is a DELEGATION for the same reason A1-i's

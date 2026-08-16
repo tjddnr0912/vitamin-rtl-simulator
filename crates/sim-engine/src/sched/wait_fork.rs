@@ -3,6 +3,18 @@
 use super::*;
 
 impl Scheduler<'_, '_> {
+    /// A4-d: the activity whose body is about to run. ONE spelling, because the
+    /// two fields are one fact and splitting them is how a `cur_gen` goes stale
+    /// under a recycled `cur_aid` — §16.4 deferred reports are keyed by the pair,
+    /// and a stale half flushes a completed predecessor's pending action.
+    ///
+    /// Both executors call it at their own dispatch choke: the engine's
+    /// `run_body`, tier-3's `dispatch_body`.
+    pub(crate) fn set_cur_activity(&mut self, aid: u32) {
+        self.cur_aid = aid;
+        self.cur_gen = self.activities[aid as usize].gen;
+    }
+
     /// Execute `wait fork;` (IEEE §9.6.1). Counts this process's outstanding
     /// immediate children — every live (non-dead, non-reported) child activity
     /// whose join barrier names this parent (covers the CUMULATIVE set across

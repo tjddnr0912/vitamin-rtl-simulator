@@ -161,7 +161,7 @@ IR의 `builtin-call` 노드(시스템 태스크/함수 호출)를 만나면 `hdl
 | 덤프 | `$dumpfile`, `$dumpvars`, `$dumpflush` | vcd-writer로 라우팅 (07-vcd-format 참조) |
 | 제어 | `$finish`, `$stop` | 시뮬레이션 종료/정지 |
 | 난수 | `$random`(IEEE Annex N), `$urandom`, `$urandom_range` | PRNG 호출 (v7 ✅) |
-| 파일 | `$fopen`, `$fclose`, `$fdisplay`, `$fwrite`(+MCD) | 파일 핸들 관리 (write 패밀리 v7 ✅; read 패밀리 $fread/$fscanf 미구현) |
+| 파일 | `$fopen`, `$fclose`, `$fdisplay`, `$fwrite`(+MCD), `$fgetc`, `$ungetc`, `$feof`, `$fgets`, `$fscanf`, `$sscanf`, `$fread` | 파일 핸들 관리 — **write·read 패밀리 모두 구현**(⚠️ 이 줄의 옛 판본은 *"read 패밀리 $fread/$fscanf 미구현"* 이라 적고 있었다: A1-iv-a/-b/-c 가 전부 배선했고 `$fclose`/`$dumplimit` 은 §5.1-m 이 배선했다 · 실측 2026-08-16) |
 
 `$strobe`는 Active region이 아닌 Monitor region에서 실행되어야 하므로, 이벤트를 즉시 처리하지 않고 현재 time-step의 Monitor queue에 예약한다(one-shot).
 

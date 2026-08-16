@@ -1412,6 +1412,10 @@ VITA_JIT=1 cargo test -p cli --features jit                     # JIT 을 켠 �
 
 ## 부록 C · 관련 문서
 
+- ⭐ [study/02 — ③층 커버리지를 0%에서 100%로](02-v1-native-coverage.md) — **이 문서의 후속편.**
+  이 문서가 *"③층을 왜 짓는가(속도)"* 를 다뤘다면 그것은 *"③층이 받을 수 있는 설계를 어떻게
+  100% 로 만들었는가"* 를 다룬다. 용어(census·커버리지·뮤테이션·게이트 세 층)를 초보자 기준으로
+  설명하고, 2026-08-10~16 의 30여 슬라이스 전체를 다섯 가지 모양으로 정리한다.
 - [preview/18 가속 분석](../preview/18-acceleration-analysis.md) — 모든 실측의 정본
 - [preview/20 사이클 모드 타당성](../preview/20-cycle-mode-feasibility.md) — 3b 설계
 - [ROADMAP §5·§7](../ROADMAP.md) — 융합 revert 기록 · BACKEND 축
