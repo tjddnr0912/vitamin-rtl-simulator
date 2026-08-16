@@ -37,6 +37,43 @@ jobs:
       - name: test
         run: cargo test --workspace --locked
 
+  # ⚠️ Phase B5 — a SEPARATE AXIS, not an extra step on the jobs above, and that
+  # is feature unification rather than tidiness: if any crate in a workspace
+  # build enables `oracle`, every crate gets it. The product shape (one executor,
+  # a gate refusal that is loud because it has nowhere to fall back to) therefore
+  # only exists in a build that never enables it anywhere.
+  #
+  # ⚠️ `-p cli` rather than `--workspace`: the workspace's dev-dependencies pull
+  # `sim-engine` with default features for the test targets, which re-enables
+  # `oracle` and would make this axis test nothing. Measured — the first version
+  # of this feature went green while doing exactly that, because `cli`'s plain
+  # `sim-engine` dependency was missing `default-features = false`.
+  build-no-oracle:
+    name: build (product shape — no oracle backends)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: no-oracle
+      - name: build
+        run: cargo build -p cli -p sim-engine --locked --no-default-features
+      - name: clippy
+        run: cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings
+      - name: smoke — a design runs, and the absent executors are LOUD
+        run: |
+          set -euo pipefail
+          printf 'module t;\n  reg [7:0] q = 0;\n  initial begin #1 q = 8'"'"'d7; $display("q=%%0d", q); $finish; end\nendmodule\n' > smoke.sv
+          ./target/debug/vita smoke.sv | tee out.txt
+          grep -q 'q=7' out.txt
+          # the oracle spellings must be REJECTED, not silently ignored
+          if ./target/debug/vita --backend vm smoke.sv; then
+            echo "FAIL: --backend vm was accepted in a build without the VM"; exit 1
+          fi
+
   build-rhel:
     name: build & test (RHEL9/UBI)
     runs-on: ubuntu-latest

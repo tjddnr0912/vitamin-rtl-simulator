@@ -472,11 +472,11 @@ loud 일 수밖에 없다** = 정확도 사다리 상승이고, 삭제만으로�
 | # | 무엇 | 게이트 |
 |---|---|---|
 | **B1** ✅ | 전 스위트 `--backend native` 초록 + **기본값 전환**(§5.1-aq) | **완료 2026-08-16** — 두 철자 전환 · 핀 3개 처리(둘 반전 · 하나 **재구조화**: 기본값이 native 면 옛 비교가 항진명제) · **양방향 flip**(native 5,469 통과 / vm 5,466+실패 3 · 갈리는 것은 정확히 같은 셋) |
-| **B2** | ~~VM 삭제 — `native_eval/`+`backend.rs` **5,430줄**~~ → **Bytecode 디스패치 경로 삭제** | ⚠️⚠️ **원래 표적이 틀렸다**: tier-3 이 **양쪽에 의존**한다 — `compiled_for` 가 `backend.rs` 의 `is_codegen_able`/`compile_body`/`CompiledBody`/`VmSlot`/`RegFile`/`OffFile` 를, `k_eval_native` 가 `native_eval::run` 을 쓴다(§4.5.333 이후). **실제 VM 전용 표면은 넷**: `Scheduler::vm_run_body` · `SimState::vm_compiled` · `scan_arm.rs` 의 `Backend::Bytecode` arm · enum 변형 + CLI 철자 4곳. ⇒ **B2 의 첫 작업은 삭제가 아니라 측정**(`backend.rs` 의 pub 항목 38개 중 어느 것이 마지막 호출자를 잃는지) |
-| **B3** | `oracle` feature (기본 ON) 도입 — `exec/`(~~2,131~~ → **3,246줄**, A 단계 추출로 커졌다) + `Backend::Interpreter` 를 감쌈 | 기본 빌드 바이트 동일 |
+| **B2′** ✅ | ⚠️⚠️ **표적이 틀렸다 — §5.1-b2 가 착수 전 측정으로 뒤집었다.** 삭제 가능량은 5,430줄이 아니라 **≈95줄**이고 대가는 **오라클+테스트 13파일**이다. 재정의: `Backend::{Interpreter,Bytecode}` 와 그 **디스패치**를 `oracle` feature 뒤로(삭제 0) | 게이트 대상 ≈150–250줄 |
+| **B3′** ✅ | ⚠️⚠️ **`exec/` 는 인터프리터가 아니라 공유 의미 층이다**(§5.1-b2) — tier-3 이 49군데 쓰고 `exec/process.rs` 안에 **`compute_effect`/`apply_effect`** 가 있다. 모듈 단위로 감쌀 수 없고 **함수 단위 `#[cfg]`**(`run_process` 만). 재정의: CLI 의 `--backend interp\|vm` 철자를 같은 feature 뒤로 | 소수 |
 | **B4a** ✅ | **교체를 경고로**(§5.1-ar) | **완료 2026-08-16** — `W4030 · W-RUN-BACKEND-FALLBACK` 신설(MsgCode 64→65) · 메시지가 **요청·실제·거부한 행**을 이름으로 부른다 · ⚠️ 발화 인구 0(fail-closed · 이빨은 손상 사이드카) |
 | **B4b** | **`--no-default-features` 에서 에러로** | 거부 설계가 exit≠0 · **B3·B5 가 선행조건** |
-| **B5** | CI 축 추가: `--no-default-features` 빌드 + 스모크 | 3-OS · **B3 와 쌍**(feature unification) |
+| **B5** ✅ | CI 축 `build-no-oracle`(§5.1-as) | **완료 2026-08-16** — `-p cli -p sim-engine`(워크스페이스면 dev-dep 이 oracle 을 되살린다) · 스모크가 **설계 실행 + 없는 실행기 거부** 둘을 본다 |
 
 #### 5.1-aq ✅ B1 — **기본 백엔드가 native 다** (2026-08-16)
 
@@ -548,6 +548,90 @@ picorv32 release 번갈아 best-of-5: **interp 1.319 s / vm 0.838 s / native 0.5
 핀돼 있어(**64 → 65**), 코드를 더하면 문서 항목이 **함께** 들어간다. 좋은 강제다.
 
 전 스위트 **5470 green**.
+
+#### 5.1-b2 ⚠️⚠️ **Phase B 의 B2·B3 는 표적이 틀렸다 — 삭제할 것도, 감쌀 모듈도 없다** (2026-08-16 착수 전 측정)
+
+**B2 착수 그라운딩이 계획을 뒤집었다.** 두 표적 모두 Phase A **이전에** 정해졌고, A 단계가 tier-3 을
+공유 코드 위로 올리는 동안 그 전제가 통째로 무효가 됐다. **코드를 쓰기 전에 잰 것이 이 항목이다.**
+
+**① B2("VM 삭제 5,430줄")** — `backend.rs` 의 pub 항목 **18개 중 죽는 것이 0개**다. tier-3 이
+`is_codegen_able`·`compile_body`·`vm_exec`·`CompiledBody`·`CompiledBlock`·`CompiledTerm`·`Op`·
+`CompileCtx`·`VmSlot`·`RegFile`·`OffFile` 를 `compiled_for`/`dispatch_body` 에서 쓰고(§4.5.333),
+`codegen_coverage`/`codegen_report`/`native_eval_coverage*` 는 run.json 의 `codegen` 객체가 쓴다.
+`native_eval/` 도 tier-3 의 `k_eval_native` 가 쓴다.
+
+**실제 VM 전용 표면은 넷이고 합계 ≈ 95줄**이다 — `Scheduler::vm_run_body`(49) ·
+`SimState::vm_compiled`(35) · `scan_arm` 의 `Backend::Bytecode` arm(7) · `vm_cache` 필드(4).
+그 대가는 **오라클 하나와 테스트 13파일**이다(`Backend::Bytecode` 참조 45 · `"vm"` 28 —
+`backend_equiv`·`dyn_storage`·`run_diagnostics`·`severity_tasks`·`end_to_end_b`·`perf_baseline` 등이
+VM 을 **차분 상대**로 쓴다). ⇒ **비용/이득이 역전됐다.**
+
+**② B3("`oracle` feature 로 `exec/`(3,246줄)를 감싼다")** — `exec/` 는 **인터프리터가 아니라 공유
+의미 층**이다. tier-3 생산 코드가 `exec/` 를 **49군데** 쓴다(`kpred` 17 · `stmt_effect` 12 ·
+`frame_call` 6 · `frame_window` 2 · `plusargs` 1 …). 그리고 결정적으로 **`exec/process.rs` 안에
+`compute_effect` 와 `apply_effect` 가 있다** — tier-3 의 문장 의미 전부다. 그 파일에서 인터프리터
+고유인 것은 `run_process` **함수 하나**뿐이다.
+
+⇒ **Phase B 는 "모듈을 지우거나 감싸는 일" 이 아니다.** Phase A 가 끝난 뒤 tier-3 은 사실상 전부를
+공유하며, 그것은 결함이 아니라 *"의미의 두 번째 철자를 만들지 마라"* 가 겨눈 바로 그 수렴이다.
+
+**재정의된 Phase B — 제품 표면에서 없앨 것은 코드가 아니라 *선택지*다:**
+
+| # | 무엇 | 크기(실측) |
+|---|---|---|
+| **B2′** | `Backend::{Interpreter,Bytecode}` 변형과 그 **디스패치**를 `oracle` feature 뒤로 — `scan_arm` 의 match arm · `vm_run_body` · `vm_compiled` · `vm_cache` · `run_process`(그 파일의 나머지 셋은 **남는다**) | 게이트 대상 **≈150–250줄** (삭제 0) |
+| **B3′** | CLI 의 `--backend interp\|vm` 철자를 같은 feature 뒤로 | `stage_args.rs`·`frontend.rs` 소수 |
+| **B4b** | 그 빌드에서 게이트 거부를 **에러**로(W4030 → E) | 한 자리 |
+| **B5** | `--no-default-features` CI 축 | 3-OS |
+
+⚠️ **`#[cfg]` 팬아웃이 진짜 비용이다** — `Backend` 는 public enum 이고 참조가 **73곳**(45+28)이며
+대부분이 테스트다. feature 를 켠 개발 빌드에서는 전부 그대로 컴파일되어야 하므로 **테스트는 손댈 필요가
+없고**, 손대야 하는 것은 제품 코드의 match arm 들뿐이다. 그것이 이 재정의가 옛 계획보다 싼 이유다.
+
+⚠️ **`exec/process.rs` 는 통째로 감쌀 수 없다.** `enter_body`·`compute_effect`·`apply_effect` 는
+tier-3 것이고 `run_process` 만 인터프리터 것이다 ⇒ **함수 단위 `#[cfg]`**, 모듈 단위가 아니다.
+
+#### 5.1-as ✅ B2′+B3′+B5 — **`oracle` feature: 제품 표면에서 없앤 것은 코드가 아니라 선택지다** (2026-08-16)
+
+§5.1-b2 가 착수 전 측정으로 계획을 뒤집은 직후, **재정의된 형태를 그대로 지었다.**
+`sim-engine`·`cli` 에 **`oracle` feature(기본 ON)** 를 넣고 `Backend::{Interpreter,Bytecode}` 와 그
+**디스패치**를 그 뒤로 보냈다. **삭제한 줄은 0 이다.**
+
+**제품 형태(`--no-default-features`)의 실측 동작:**
+
+| 명령 | 결과 |
+|---|---|
+| `vita design.sv` | 정상 실행(native) · exit 0 |
+| `vita --backend native design.sv` | 정상 실행 · exit 0 |
+| `vita --backend vm design.sv` | **`error[VITA-E0001]` · exit 3** |
+
+⭐ **거부 문구가 "모르는 값" 이 아니라 "이 빌드에 없는 실행기" 다.** 두 철자를 match 에서 그냥 빼면
+`_ => None` 으로 떨어져 *"unknown value"* 라고 말하는데, 그것은 **다르고 더 나쁜 메시지**다 — 값은
+알려진 값이고, 없는 것은 이 **빌드**다. 조용히 받아들이는 것은 더 나쁘다(사용자가 native 를 받고
+아무 말도 못 듣는다).
+
+⚠️⚠️ **feature unification 함정을 그대로 밟았고, 빌드는 초록이었다.** `cli` 의
+`[dependencies] sim-engine` 에 `default-features = false` 가 없어서 sim-engine 자신의
+`default = ["oracle"]` 이 그 평범한 의존을 타고 들어왔다 — `cargo build -p cli --no-default-features`
+가 **성공했고 feature 는 아무것도 안 했다**(`cargo tree -e features` 로 확인: `sim-engine feature
+"default"` 가 그대로 켜져 있었다). 고친 뒤에야 진짜 팬아웃이 드러났다: **sim-engine 3곳 + cli 7곳.**
+계획이 경고한 바로 그것이고, **경고를 읽고도 밟았다** — 그래서 `Cargo.toml` 그 줄에 이유를 적었다.
+
+⭐ **팬아웃이 측정대로 작았다** — sim-engine 은 `scan_arm` 의 디스패치 arm · `init_diag` 의 시작값 ·
+그리고 dead-code 가 된 VM 멤버 넷(`vm_run_body`·`vm_compiled`·`vm_cache`·풀 둘). cli 는 파싱·이름
+짓기 세 자리. **테스트는 한 줄도 안 고쳤다** — 개발 빌드는 feature 가 켜져 있어 세 백엔드가 전부
+그대로 컴파일되고, 그것이 이 재정의가 옛 "삭제" 계획보다 싼 이유다.
+
+**B5 = 별도 CI 축**(`build-no-oracle`). ⚠️ `--workspace` 가 아니라 **`-p cli -p sim-engine`** 이다 —
+워크스페이스의 dev-dependencies 가 테스트 타깃을 위해 `sim-engine` 을 기본 feature 로 끌어와서
+`oracle` 을 되살리고, 그러면 이 축이 아무것도 시험하지 않는다. 스모크는 두 가지를 본다: 설계가
+**돌고**, 없는 실행기 철자가 **거부된다**.
+
+⚠️ 절차: 로컬 검증에서 `target/debug/vita` 가 **두 feature 구성이 공유하는 경로**라 stale 바이너리가
+*"`--backend vm` 이 받아들여졌다"* 는 거짓 신호를 냈다(기존 staged-bins 함정과 같은 부류). CI 는 새
+체크아웃이라 무관하지만, 로컬에서는 **재빌드 후 재측정**해야 한다.
+
+전 스위트 **5470 green**(기본) · clippy **양쪽 구성 0** · fmt 0.
 
 #### 5.1-b1 ⚠️ B4 를 통째로 loud 로 만들면 **사다리 하강**이다 (2026-08-16 측정)
 

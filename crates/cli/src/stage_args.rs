@@ -71,9 +71,33 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
             // (locked by the P5 gate, `sim-engine/tests/backend_equiv.rs`); the
             // value only moves wall-clock, like `--threads`.
             "--backend" => {
+                // ⚠️ B2': WITHOUT the `oracle` feature the two spellings do not
+                // vanish — they become a LOUD rejection. Dropping them from the
+                // match would make `--backend vm` fall into the `_ => None` arm
+                // and report "unknown value", which is a different and worse
+                // message: the value is known, it is this BUILD that does not
+                // carry that executor. Silently accepting it would be worse
+                // still — the user would get native and be told nothing.
                 let parsed = match args.get(i + 1).map(String::as_str) {
+                    #[cfg(feature = "oracle")]
                     Some("interp") | Some("interpreter") => Some(sim_engine::Backend::Interpreter),
+                    #[cfg(feature = "oracle")]
                     Some("vm") | Some("bytecode") => Some(sim_engine::Backend::Bytecode),
+                    #[cfg(not(feature = "oracle"))]
+                    Some("interp") | Some("interpreter") | Some("vm") | Some("bytecode") => {
+                        // The existing `--backend` flag code, not a new one: this
+                        // is a bad VALUE for this build, which is what
+                        // `CliBadFlag` already means. Inventing a code here would
+                        // also break the MsgCode↔doc bijection gate, since a raw
+                        // `eprintln!` never reaches the enum.
+                        eprintln!(
+                            "error[{}]: '--backend' takes only 'native' in this build — \
+                             the oracle executors ('vm', 'interp') are compiled out. \
+                             Rebuild with the `oracle` feature to select them.",
+                            MsgCode::CliBadFlag.code_num()
+                        );
+                        return Err(EXIT_CLI_ERROR);
+                    }
                     Some("native") => Some(sim_engine::Backend::Native),
                     _ => None,
                 };
@@ -465,7 +489,9 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
 /// The spelling `--backend` accepts, for override records and the `-v` echo.
 pub(crate) fn backend_name(b: sim_engine::Backend) -> &'static str {
     match b {
+        #[cfg(feature = "oracle")]
         sim_engine::Backend::Interpreter => "interp",
+        #[cfg(feature = "oracle")]
         sim_engine::Backend::Bytecode => "vm",
         sim_engine::Backend::Native => "native",
     }

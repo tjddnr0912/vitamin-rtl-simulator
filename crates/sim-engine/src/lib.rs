@@ -100,6 +100,7 @@ pub enum Backend {
     /// No longer the default, and it is not meant to be selected for speed: it is here
     /// so a suspected VM defect can be bisected against the reference in one flag, and
     /// because the VM falls back to it body-by-body anyway.
+    #[cfg(feature = "oracle")]
     Interpreter,
     /// Bytecode VM (P0a) — **no longer the default (Phase B1).** Codegen-able bodies
     /// (the P9 suspend-free allow-list, `backend::is_codegen_able`) are compiled once
@@ -120,6 +121,7 @@ pub enum Backend {
     /// workspace suite with this default in place. That obligation now belongs to
     /// [`Backend::Native`]; keep doing it in BOTH directions while two executors exist,
     /// because a corpus differential is far weaker than 5000 real tests.
+    #[cfg(feature = "oracle")]
     Bytecode,
     /// ③층 native backend (doc-21) — **THE DEFAULT since Phase B1 (2026-08-16).**
     ///
@@ -158,7 +160,9 @@ pub enum Backend {
 /// are the same report.
 fn backend_name(b: Backend) -> &'static str {
     match b {
+        #[cfg(feature = "oracle")]
         Backend::Interpreter => "interp",
+        #[cfg(feature = "oracle")]
         Backend::Bytecode => "vm",
         Backend::Native => "native",
     }
@@ -669,6 +673,12 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     }
     let native_refusal = native_eligibility.refused;
     let effective_backend = match opts.backend {
+        // ⚠️ B2': the FALL-BACK TARGET is what the `oracle` feature gates, and
+        // that is the whole mechanism. With the oracle backends compiled out
+        // there is nothing to fall back TO, so a gate refusal has to be reported
+        // rather than routed around — which is the ladder rise Phase B is for
+        // (B4b turns the W4030 warning below into an error there).
+        #[cfg(feature = "oracle")]
         Backend::Native if native_refusal.is_some() => Backend::Bytecode,
         b => b,
     };

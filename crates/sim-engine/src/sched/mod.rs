@@ -4,6 +4,7 @@
 //! edge detection.
 
 use std::collections::BTreeMap;
+#[cfg(feature = "oracle")]
 use std::rc::Rc;
 
 use sim_ir::{BitPacked, EdgeKind, EdgeTerm, Lvalue, RegionTag, SensKind, Terminator, WaitCause};
@@ -404,7 +405,9 @@ pub(crate) struct Scheduler<'a, 'ir> {
     scratch_level_fire: Vec<bool>,
     /// VM-REGPOOL: recycled bytecode-VM register/offset files (was a fresh
     /// `vec![None; n]` pair per `vm_exec` activation). Leased in `vm_run_body`.
+    #[cfg(feature = "oracle")]
     vm_regs_pool: Vec<crate::backend::RegFile>,
+    #[cfg(feature = "oracle")]
     vm_offs_pool: Vec<crate::backend::OffFile>,
     /// Recycled wheel-bucket Vecs: `wheel.remove` would otherwise drop one
     /// bucket allocation per distinct simulation time (O(timesteps) churn).

@@ -6,6 +6,26 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
+# ORACLE BACKENDS (Phase B2', default ON). The interpreter and the bytecode VM
+# exist so a suspected tier-3 defect can be bisected against a second and a third
+# implementation of the same semantics; the product needs exactly one executor,
+# and that one is `native` (the default since Phase B1).
+#
+# ⚠️ What this gates is the CHOICE, not the code — and that distinction was
+# measured before it was written (ROADMAP §5.1-b2). After Phase A, tier-3 shares
+# essentially everything: `backend.rs`'s compiled-body machinery is tier-3's own
+# fast path, and `exec/process.rs` holds `compute_effect`/`apply_effect`, which
+# ARE the statement semantics. The recorded plan said to delete 5,430 lines and
+# wrap `exec/` (3,246); measured, the VM-only surface is ~95 lines and `exec/`
+# has one interpreter-only function in it. So this feature gates the two
+# `Backend` variants and their dispatch, and deletes nothing.
+#
+# Turning it OFF is what makes a gate refusal LOUD rather than a silent fall-back
+# (Phase B4b): with no fallback target compiled, the choice is loud-or-wrong
+# instead of loud-or-correct.
+default = ["oracle"]
+oracle = []
+
 # NATIVE CODEGEN (option A, experimental). OFF by default and deliberately so: it
 # adds ~29 crates to a workspace of 80, needs `unsafe` at the call boundary (this
 # workspace has exactly one `unsafe`, a `signal(2)` call), and introduces a THIRD

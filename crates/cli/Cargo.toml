@@ -17,6 +17,11 @@ path = "src/main.rs"
 separate-bins = [] # dev 전용 — 기본 빌드는 vita 단일 multicall 바이너리만 산출 (doc-03)
 # Forward the sim-engine native-codegen experiment (option A). OFF by default.
 jit = ["sim-engine/jit"]
+# Phase B2': forward the oracle-backend feature. ON by default, exactly as in
+# `sim-engine` — a `--no-default-features` build of the CLI is the product shape
+# (native only; a gate refusal has nowhere to fall back to and is therefore loud).
+default = ["oracle"]
+oracle = ["sim-engine/oracle"]
 
 [[bin]]
 name = "vcmp"
@@ -40,7 +45,12 @@ hdl-parser = { path = "../hdl-parser" }
 hdl-ast = { path = "../hdl-ast" }
 elaborate = { path = "../elaborate" }
 sim-ir = { path = "../sim-ir" }
-sim-engine = { path = "../sim-engine" }
+# ⚠️ `default-features = false` IS LOAD-BEARING (Phase B2'). Without it,
+# sim-engine's own `default = ["oracle"]` comes in through this plain
+# dependency and `cargo build -p cli --no-default-features` compiles the
+# oracle backends anyway — measured: the build went green and the feature
+# did nothing. That is the feature-unification trap, and it is silent.
+sim-engine = { path = "../sim-engine", default-features = false }
 diag = { path = "../diag" }
 vita-log = { path = "../vita-log" }
 vita-artifact = { path = "../vita-artifact" }

@@ -140,7 +140,15 @@ impl<'a> SimState<'a> {
             frame_scope: std::cell::RefCell::new(Vec::new()),
             func_names: Vec::new(),
             threads: 1,
+            // ⚠️ B2': `SimState`'s own starting value, overwritten by `simulate`
+            // before anything runs. It names the INTERPRETER when the oracle
+            // backends exist because that is the semantics reference; with them
+            // compiled out there is one executor and it is the only spelling.
+            #[cfg(feature = "oracle")]
             backend: crate::Backend::Interpreter,
+            #[cfg(not(feature = "oracle"))]
+            backend: crate::Backend::Native,
+            #[cfg(feature = "oracle")]
             vm_cache: (0..ir.processes.len())
                 .map(|_| crate::backend::VmSlot::Unchecked)
                 .collect(),
@@ -304,6 +312,7 @@ impl<'a> SimState<'a> {
     /// removed). The returned `Rc` is an OWNED handle (cloned out of the cache) so the
     /// caller can pass `&mut self` as the `Kernel` to `vm_exec` without aliasing the
     /// cache — the §2.3 borrow protocol.
+    #[cfg(feature = "oracle")]
     pub(crate) fn vm_compiled(&mut self, tmpl: usize) -> Option<Rc<crate::backend::CompiledBody>> {
         use crate::backend::VmSlot;
         match &self.vm_cache[tmpl] {

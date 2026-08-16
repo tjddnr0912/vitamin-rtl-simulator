@@ -677,7 +677,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             scratch_edge_marked: Vec::new(),
             scratch_expr_now: Vec::new(),
             scratch_level_fire: Vec::new(),
+            #[cfg(feature = "oracle")]
             vm_regs_pool: Vec::new(),
+            #[cfg(feature = "oracle")]
             vm_offs_pool: Vec::new(),
             bucket_pool: Vec::new(),
             cur_gen: 0,
@@ -1237,7 +1239,14 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // this match is reached. Any new `Scheduler` call site on the native
             // path inherits that; the arm is kept because the interpreter and
             // the VM still need it.
-            crate::Backend::Interpreter | crate::Backend::Native => run_process(self, proc, block),
+            // ⚠️ B2': the `Native` arm is here for the reason the note above
+            // gives — it is unreachable, because `simulate` drives tier-3 through
+            // `native::run::run` and never calls this. It stays so the match is
+            // total in BOTH builds; with `oracle` off it is the only arm left.
+            crate::Backend::Native => run_process(self, proc, block),
+            #[cfg(feature = "oracle")]
+            crate::Backend::Interpreter => run_process(self, proc, block),
+            #[cfg(feature = "oracle")]
             crate::Backend::Bytecode => {
                 let tmpl = self.activity_template(proc) as usize;
                 match self.st.vm_compiled(tmpl) {
@@ -1260,6 +1269,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// `%m` scope were missing, so a submodule `$display("%m")` printed whatever scope
     /// another process had left behind. The per-activation termination guard lives inside
     /// `vm_exec` (mirror of exec.rs:176-180).
+    #[cfg(feature = "oracle")]
     pub(crate) fn vm_run_body(
         &mut self,
         proc: u32,

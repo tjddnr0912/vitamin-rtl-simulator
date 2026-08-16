@@ -667,7 +667,9 @@ pub(crate) fn run_vita_str_gated(
         // to the VM (there is no native executor yet), and a manifest that
         // echoed the request would report an executor that never ran.
         let name = |b| match b {
+            #[cfg(feature = "oracle")]
             sim_engine::Backend::Interpreter => "interp",
+            #[cfg(feature = "oracle")]
             sim_engine::Backend::Bytecode => "vm",
             sim_engine::Backend::Native => "native",
         };

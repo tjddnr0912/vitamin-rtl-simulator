@@ -3,6 +3,7 @@
 
 use std::cell::Cell;
 use std::io::Write;
+#[cfg(feature = "oracle")]
 use std::rc::Rc;
 
 use diag::{Diagnostic, LogEvent, LogSink, MsgCode, Severity, TimeStamp};
@@ -490,6 +491,7 @@ pub(crate) struct SimState<'a> {
     /// (`ir.processes`). Decides codegen-ability ONCE and memoizes the `CompiledBody`;
     /// fork children sharing a template share its compile. NEVER enters the frozen
     /// `SimIr`. Used only on the `Bytecode` backend (`Unchecked` is a no-cost default).
+    #[cfg(feature = "oracle")]
     pub vm_cache: Vec<crate::backend::VmSlot>,
     /// Multiplier of the process CURRENTLY executing — set per `run_process`, read by
     /// `$time`/`$realtime`. 1 outside any process (the 1ns/1ns base).
