@@ -474,7 +474,8 @@ loud 일 수밖에 없다** = 정확도 사다리 상승이고, 삭제만으로�
 | **B1** ✅ | 전 스위트 `--backend native` 초록 + **기본값 전환**(§5.1-aq) | **완료 2026-08-16** — 두 철자 전환 · 핀 3개 처리(둘 반전 · 하나 **재구조화**: 기본값이 native 면 옛 비교가 항진명제) · **양방향 flip**(native 5,469 통과 / vm 5,466+실패 3 · 갈리는 것은 정확히 같은 셋) |
 | **B2** | ~~VM 삭제 — `native_eval/`+`backend.rs` **5,430줄**~~ → **Bytecode 디스패치 경로 삭제** | ⚠️⚠️ **원래 표적이 틀렸다**: tier-3 이 **양쪽에 의존**한다 — `compiled_for` 가 `backend.rs` 의 `is_codegen_able`/`compile_body`/`CompiledBody`/`VmSlot`/`RegFile`/`OffFile` 를, `k_eval_native` 가 `native_eval::run` 을 쓴다(§4.5.333 이후). **실제 VM 전용 표면은 넷**: `Scheduler::vm_run_body` · `SimState::vm_compiled` · `scan_arm.rs` 의 `Backend::Bytecode` arm · enum 변형 + CLI 철자 4곳. ⇒ **B2 의 첫 작업은 삭제가 아니라 측정**(`backend.rs` 의 pub 항목 38개 중 어느 것이 마지막 호출자를 잃는지) |
 | **B3** | `oracle` feature (기본 ON) 도입 — `exec/`(~~2,131~~ → **3,246줄**, A 단계 추출로 커졌다) + `Backend::Interpreter` 를 감쌈 | 기본 빌드 바이트 동일 |
-| **B4** | **게이트 거부를 loud 로** | ⚠️ **둘로 갈라야 한다**(아래 §5.1-b1 참조): **B4a 경고**(요청한 백엔드가 조용히 바뀌는 것 = 정직성 갭 · 오늘 **진단 0 · exit 0** 이고 `native_refusal` 의 소비자는 `effective_backend` 와 run.json 뿐) · **B4b 에러**(`--no-default-features` 에서만 · 거부 설계가 exit≠0 · 새 MsgCode) |
+| **B4a** ✅ | **교체를 경고로**(§5.1-ar) | **완료 2026-08-16** — `W4030 · W-RUN-BACKEND-FALLBACK` 신설(MsgCode 64→65) · 메시지가 **요청·실제·거부한 행**을 이름으로 부른다 · ⚠️ 발화 인구 0(fail-closed · 이빨은 손상 사이드카) |
+| **B4b** | **`--no-default-features` 에서 에러로** | 거부 설계가 exit≠0 · **B3·B5 가 선행조건** |
 | **B5** | CI 축 추가: `--no-default-features` 빌드 + 스모크 | 3-OS · **B3 와 쌍**(feature unification) |
 
 #### 5.1-aq ✅ B1 — **기본 백엔드가 native 다** (2026-08-16)
@@ -514,6 +515,39 @@ picorv32 release 번갈아 best-of-5: **interp 1.319 s / vm 0.838 s / native 0.5
 `run_json_codegen_is_backend_invariant_and_backend_is_recorded` 는 *"플래그 없는 실행(m1)"* 과
 *"명시적 `--backend native`(m3)"* 를 비교하고 있었는데, 기본값이 native 가 되면 **그 비교가
 항진명제**가 된다. VM 을 **명시적으로** 요청하는 실행을 넷째로 추가하고 바이트 비교를 그리로 옮겼다.
+
+#### 5.1-ar ✅ B4a — **백엔드 교체가 조용하지 않다** (2026-08-16)
+
+⭐ **판정은 늘 발행돼 있었지만 말해 주지는 않았다.** `run.json` 은 `backend_requested` 와 `backend`
+를 나란히 싣고 `native.refused` 가 거부한 층을 지목한다 — 그런데 **찾아봐야 보이는 것은 아무도 안
+찾는다.** §5.1-o 가 그 사고다: `--backend native` 로 돌린 설계가 사실 폴백돼 있었고 출력이 iverilog 와
+정확히 일치해서 *"tier-3 이 동의한다"* 로 읽혔으며, `run.json` 을 열지 않았으면 그대로 배송됐다.
+
+**지은 것 = 새 코드 `W4030 · W-RUN-BACKEND-FALLBACK` + `simulate` 의 스왑 지점 한 자리.**
+메시지가 **요청·실제·거부한 행**을 전부 이름으로 부른다.
+
+⚠️ **Warning 이지 Error 가 아니고, 이유는 정확도 사다리다**(§5.1-b1). 폴백은 **틀린 답이 아니라 느린
+답**이다 — 백엔드 간 바이트 동일이 게이트이므로 VM 의 답이 곧 native 의 답이다. 기본 빌드에서
+`exit≠0` 으로 만들면 **correct-support → loud** 로 내려간다. 승격은 폴백 대상이 **컴파일되지 않은**
+빌드에서만(`--no-default-features` · **B4b**), 거기선 선택지가 loud 아니면 wrong 뿐이다.
+
+⚠️⚠️ **오늘 발화 인구는 0 이고 그것을 숨기지 않았다.** Phase A 가 게이트 세 층의 도달 가능한 행을
+전부 닫았으므로 **소스로는 이 경고를 만들 수 없다.** ⇒ **fail-closed 로 짓고 이빨은 손상된
+사이드카**로 세웠다(`the_runtime_gate_is_exactly_design_and_storage` 가 STORAGE 층을 같은 이유로 같은
+기법으로 건드린다). 새 게이트 행이 생기는 날 **아무도 기억하지 않아도** 이 경고가 그것을 말한다.
+
+⭐ **테스트가 세 가지를 단언하고 셋째가 게으른 구현을 잡는다** — ⓐ 경고가 난다 ⓑ **거부한 행을
+이름으로 부른다**(*"폴백했다"* 만 말하면 독자를 다시 `run.json` 으로 보내는 것이고, 그것이 이 경고가
+없애려는 바로 그 문제다) ⓒ **깨끗한 대조군은 침묵한다**(안 그러면 모든 평범한 시뮬레이션이 이걸
+달고 다닌다).
+
+⚠️ **`simulate_capture` 로는 이 테스트를 쓸 수 없다** — 그 sink 는 `RtlOutput` 만 남겨 **모든 진단에
+구조적으로 눈멀어 있다**(§4.5.298 이 기록한 축). 전용 sink 를 썼다.
+
+⚠️ **bijection 게이트가 doc 을 강제했다** — MsgCode enum ↔ `preview/15` §0–9 가 1:1 이고 개수가
+핀돼 있어(**64 → 65**), 코드를 더하면 문서 항목이 **함께** 들어간다. 좋은 강제다.
+
+전 스위트 **5470 green**.
 
 #### 5.1-b1 ⚠️ B4 를 통째로 loud 로 만들면 **사다리 하강**이다 (2026-08-16 측정)
 

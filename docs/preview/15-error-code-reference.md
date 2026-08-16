@@ -878,6 +878,34 @@ with errors and set exit 1 on a correct design. A known out-of-range index is st
 `-Werror=W-RUN-RANGE-UNKNOWN`. Capped per run independently of E4002, so a flood of
 unknown-index warnings cannot starve the out-of-range budget.
 
+### VITA-W4030 · `W-RUN-BACKEND-FALLBACK` (Warning)
+
+**요청한 실행 백엔드가 이 설계를 못 돌려서 다른 백엔드가 돌렸다.** 답은 영향받지 않고
+(세 실행기는 바이트 동일이 게이트다) **속도만 달라진다** — 그래서 Error 가 아니라 Warning 이다.
+
+```
+$ vita --backend native design.sv
+->  warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this
+    design (a task frame that FORKS (a `fork` inside the body): S3b); ran on `vm` instead
+```
+
+⭐ **왜 있는가 — 조용한 폴백이 실제로 이 프로젝트를 물었다.** `--backend native` 로 돌린 설계가
+사실은 VM 으로 떨어져 있었는데 출력이 같아서 *"native 와 iverilog 가 완벽히 일치한다"* 로 읽혔고,
+`run.json` 을 보지 않았으면 그대로 배송될 뻔했다(ROADMAP §5.1-o). 판정은 `run.json` 의
+`backend_requested` / `backend` / `native.refused` 에 **늘 실려 있었지만**, 그것은 **찾아봐야
+보이는** 것이지 말해 주는 것이 아니었다.
+
+⚠️ **Error 가 아닌 이유는 정확도 사다리다.** 폴백은 **틀린 답이 아니라 느린 답**이다
+(correct-support). 기본 빌드에서 `exit≠0` 으로 만들면 correct-support → loud 로 **내려간다**.
+폴백 대상이 **컴파일되지 않은** 빌드(`--no-default-features`)에서는 선택지가 loud 아니면 wrong
+뿐이므로 거기서만 Error 로 승격한다(Phase B4b · ROADMAP §5.1-b1).
+
+⚠️ **오늘 이 경고는 발화 인구가 0 이다.** Phase A 가 게이트 세 층의 도달 가능한 행을 전부 닫았으므로
+(코퍼스 6,470 중 거부 0) 소스로 이 경고를 만들 수 없다. **fail-closed 로 지었고**, 이빨은 손상된
+사이드카로 STORAGE 층을 거부시켜 세운다 — 새 게이트 행이 생기는 날 이 경고가 자동으로 그것을 말한다.
+
+`-Wno-W-RUN-BACKEND-FALLBACK` 으로 억제, `-Werror=W-RUN-BACKEND-FALLBACK` 으로 승격.
+
 ## 8xxx · FILELIST
 
 ### VITA-E8001 · `E-FLIST-CYCLE` (Error)

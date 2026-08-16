@@ -1085,3 +1085,100 @@ fn every_stmt_effect_family_member_is_wired() {
         );
     }
 }
+
+/// ⭐ **B4a TEETH — the backend swap says so out loud.**
+///
+/// The verdict was always PUBLISHED (`run.json` carries `backend_requested`
+/// beside `backend`, and `native.refused` names the layer). What it never did
+/// was SAY anything, and a fall-back you have to go looking for is one nobody
+/// looks for: §5.1-o is the incident, where a `--backend native` run had
+/// actually fallen back, matched iverilog exactly, and read as "tier-3 agrees"
+/// until run.json was opened.
+///
+/// ⚠️ **POPULATION ZERO from source, so the teeth are a corrupted sidecar.**
+/// Phase A closed every gate row a compiler can produce input for, which is why
+/// there is no `.sv` that triggers this. `the_runtime_gate_is_exactly_design_and_storage`
+/// above reaches the STORAGE layer the same way and for the same reason; this
+/// reuses that technique rather than inventing one.
+///
+/// Three things are asserted, and the third is the one a lazy implementation
+/// fails: the warning fires, it NAMES the refusing row (a message that says only
+/// "fell back" sends the reader straight back to run.json), and the clean
+/// control run is SILENT — otherwise every ordinary simulation would carry it.
+#[test]
+fn b4a_a_backend_fall_back_emits_a_warning_naming_the_row() {
+    use diag::{LogEvent, MsgCode};
+    use std::cell::RefCell;
+
+    #[derive(Default)]
+    struct DiagSink {
+        diags: RefCell<Vec<(MsgCode, String)>>,
+    }
+    impl diag::LogSink for DiagSink {
+        fn emit(&self, event: LogEvent) {
+            if let LogEvent::Diagnostic(d) = event {
+                self.diags.borrow_mut().push((d.code, d.message));
+            }
+        }
+    }
+
+    let src = "module t;\n\
+                 function automatic integer inc(input integer x);\n\
+                   integer loc; begin loc = x + 1; inc = loc; end\n\
+                 endfunction\n\
+                 integer r;\n\
+                 initial begin r = inc(3); #1 $finish; end\n\
+               endmodule\n";
+    let ir = build(src);
+
+    // (a) CONTROL — nothing refuses this design, so nothing is said.
+    let mut clean = sidecar_opts(src);
+    clean.backend = sim_engine::Backend::Native;
+    let sink = DiagSink::default();
+    let res = sim_engine::simulate(&ir, &sink, clean);
+    assert_eq!(
+        res.backend,
+        sim_engine::Backend::Native,
+        "control fell back"
+    );
+    assert!(
+        !sink
+            .diags
+            .borrow()
+            .iter()
+            .any(|(c, _)| *c == MsgCode::RunBackendFallback),
+        "a design that RAN natively must not warn: {:?}",
+        sink.diags.borrow()
+    );
+
+    // (b) The same design with a frame window that cannot exist. STORAGE
+    // refuses, the run falls back to the VM, and the answer is still right —
+    // which is exactly why this is a warning and not an error.
+    let mut broken = sidecar_opts(src);
+    broken.backend = sim_engine::Backend::Native;
+    assert!(!broken.func_table.is_empty(), "no frame table to corrupt");
+    broken.func_table[0].locals_len = u32::MAX;
+    let sink = DiagSink::default();
+    let res = sim_engine::simulate(&ir, &sink, broken);
+    assert_eq!(
+        res.backend,
+        sim_engine::Backend::Bytecode,
+        "expected a fall-back"
+    );
+    let diags = sink.diags.borrow();
+    let hit = diags
+        .iter()
+        .find(|(c, _)| *c == MsgCode::RunBackendFallback)
+        .unwrap_or_else(|| panic!("the fall-back was silent: {diags:?}"));
+    assert!(
+        hit.1.contains("native") && hit.1.contains("vm"),
+        "the message must name both the request and what ran: {}",
+        hit.1
+    );
+    assert!(
+        hit.1.contains("frame window out of range"),
+        "the message must name the REFUSING ROW, or the reader is sent back to \
+         run.json — which is the problem this warning exists to fix: {}",
+        hit.1
+    );
+}

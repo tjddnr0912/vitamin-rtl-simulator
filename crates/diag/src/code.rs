@@ -87,6 +87,7 @@ msgcodes! {
     RunBodyStepLimit       => ("F-RUN-BODY-STEP-LIMIT",     "VITA-F4027", Fatal,   "one process ran past the body-step budget without suspending (unbounded loop, or a genuinely long computation)"),
     RunPlusargsInvalid     => ("W-RUN-PLUSARGS-INVALID",    "VITA-W4028", Warning, "invalid value in a matched plusarg; variable written all-X"),
     RunRangeUnknown        => ("W-RUN-RANGE-UNKNOWN",       "VITA-W4029", Warning, "runtime index/select is unknown (x/z); read X / write ignored"),
+    RunBackendFallback     => ("W-RUN-BACKEND-FALLBACK",   "VITA-W4030", Warning, "the requested execution backend could not run this design; a different one ran it (the answer is unaffected, the speed is)"),
     // 8xxx FILELIST
     FlistCycle             => ("E-FLIST-CYCLE",             "VITA-E8001", Error,   "filelist cycle"),
     FlistDepth             => ("E-FLIST-DEPTH",             "VITA-E8002", Error,   "filelist nesting exceeded depth cap"),

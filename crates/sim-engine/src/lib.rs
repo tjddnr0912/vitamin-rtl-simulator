@@ -152,6 +152,18 @@ pub enum Backend {
     Native,
 }
 
+/// The CLI spelling of a backend, for diagnostics. ONE spelling with the
+/// front end's (`cli::frontend`) so a message and `run.json` cannot disagree
+/// about what ran — the whole point of B4a's warning is that the two reports
+/// are the same report.
+fn backend_name(b: Backend) -> &'static str {
+    match b {
+        Backend::Interpreter => "interp",
+        Backend::Bytecode => "vm",
+        Backend::Native => "native",
+    }
+}
+
 /// N7-REST: one rand field's draw spec — `(field_id, width, signed, lo, hi, constrained)`.
 /// `constrained` ⇒ draw within [lo, hi]; else full-width.
 pub type RandBound = (u32, u32, bool, i64, i64, bool);
@@ -660,6 +672,47 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         Backend::Native if native_refusal.is_some() => Backend::Bytecode,
         b => b,
     };
+    // ── B4a: THE SWAP IS NO LONGER SILENT ──
+    //
+    // The verdict has always been PUBLISHED — run.json carries
+    // `backend_requested` beside `backend` and `native.refused` names the layer.
+    // But published is not the same as said: a fall-back you have to go looking
+    // for is one nobody looks for. §5.1-o is the incident — a design run with
+    // `--backend native` had actually fallen back, the outputs matched iverilog
+    // exactly, and it read as "tier-3 agrees" until run.json was opened.
+    //
+    // ⚠️ A WARNING, NOT AN ERROR, and the reason is the accuracy ladder rather
+    // than politeness. The fall-back is not a wrong answer, it is a slow one:
+    // byte-identity across the executors is a gate, so the VM's answer is the
+    // native one. Making this `exit != 0` in the default build would trade
+    // correct-support for loud, which is a rung DOWN. It is promoted to an error
+    // only in the build where the fall-back target is not compiled at all
+    // (`--no-default-features`, Phase B4b), because there the choice is
+    // loud-or-wrong rather than loud-or-correct.
+    //
+    // ⚠️ POPULATION ZERO TODAY, and that is stated rather than hidden. Phase A
+    // closed every gate row a compiler can produce input for, so no source
+    // reaches this. It is written fail-closed so that the day a new row is added
+    // this reports it without anyone remembering to; its teeth are a corrupted
+    // sidecar, which is the same technique
+    // `native_gate::the_runtime_gate_is_exactly_design_and_storage` uses.
+    if effective_backend != opts.backend {
+        use diag::{Diagnostic, LogEvent, MsgCode, Severity};
+        sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code: MsgCode::RunBackendFallback,
+            message: format!(
+                "requested backend `{}` cannot run this design ({}); ran on `{}` instead \
+                 — the result is unaffected, the speed is",
+                backend_name(opts.backend),
+                native_refusal.unwrap_or("no reason recorded"),
+                backend_name(effective_backend),
+            ),
+            location: None,
+            context: Vec::new(),
+            sim_time: None,
+        }));
+    }
     st.backend = effective_backend;
     st.severities = opts.severities.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
