@@ -247,16 +247,39 @@ const MEM_HEAVY: &str = "module top;\n\
   end\n\
 endmodule";
 
+/// ⚠️⚠️ **D1: THIS FUNCTION DID NOT MEASURE THE PRODUCT BACKEND.**
+///
+/// It reported `interpreter` and `bytecode VM` and stopped there — for the whole
+/// life of tier-3, including after Phase B1 made `native` the DEFAULT. Every
+/// stopping verdict taken from this harness was therefore a statement about
+/// tier-2, and the shapes below (eight of them, chosen precisely because the
+/// answer differs by shape) were never once asked about the executor that ships.
+///
+/// That is D1's whole content: the shape coverage already existed, the backend
+/// coverage did not.
+///
+/// ⚠️ `native` is timed LAST and its ratio is printed against BOTH others,
+/// because the two comparisons answer different questions — against the VM it is
+/// "what did the product gain", against the interpreter it is "how far is the
+/// reference from the product", which is the number Phase C's
+/// permanent-exclusion rule is calibrated on.
 fn report(name: &str, src: &str, reps: u32) {
     let ir = build(src);
     let interp = time_backend(&ir, Backend::Interpreter, reps);
     let vm = time_backend(&ir, Backend::Bytecode, reps);
-    println!("\n[C3 perf] {name} (best-of-{reps}):");
+    let native = time_backend(&ir, Backend::Native, reps);
+    println!("\n[perf] {name} (best-of-{reps}):");
     println!("  interpreter : {:>8.3} ms", interp as f64 / 1e6);
     println!(
-        "  bytecode VM : {:>8.3} ms   ({:.2}x interpreter)",
+        "  bytecode VM : {:>8.3} ms   ({:.2}x interp)",
         vm as f64 / 1e6,
         vm as f64 / interp as f64
+    );
+    println!(
+        "  native      : {:>8.3} ms   ({:.2}x interp, {:.2}x vm)",
+        native as f64 / 1e6,
+        native as f64 / interp as f64,
+        native as f64 / vm as f64
     );
 }
 
@@ -970,10 +993,22 @@ fn inst_chain_src(d: usize, cycles: usize) -> String {
 #[test]
 #[ignore = "perf probe (DATA); run with --ignored --nocapture"]
 fn perf_depth_cost_shape() {
-    println!("\n[D] depth cost, total cycles held fixed:\n");
+    // ⚠️⚠️ **D1 WIDENED THIS TABLE, and the reason is the sharper half of D1's
+    // finding.** It timed `Backend::Interpreter` and nothing else — so the
+    // depth-cost numbers that RETIRED the S4 stopping verdict (a cont-assign
+    // chain going quadratic where a pure `always_comb` chain stays linear) were
+    // measured on the one backend Phase C has now permanently excluded from
+    // performance work. The counterexample that justifies Phase D3 had never been
+    // asked of the executor that ships.
+    //
+    // Both shapes, all three backends. The `always_comb` column is the CONTROL and
+    // is what makes the instance column readable: "deep chains are slow" is the
+    // obvious reading and it is false — the quadratic belongs to the settle, not
+    // to depth.
+    println!("\n[D] depth cost, total cycles held fixed (ms; i=interp v=vm n=native):\n");
     println!(
-        "  {:>6} {:>8} {:>10} {:>10}",
-        "depth", "maxrank", "chain ms", "instances ms"
+        "  {:>5} {:>7} {:>26} {:>26}",
+        "depth", "maxrank", "always_comb chain", "instance chain (settle)"
     );
     for d in [1usize, 2, 3, 6, 12, 24] {
         let one = |src: String| {
@@ -983,11 +1018,14 @@ fn perf_depth_cost_shape() {
                 .copied()
                 .max()
                 .unwrap_or(0);
-            (time_backend(&ir, Backend::Interpreter, 3) as f64 / 1e6, mr)
+            let i = time_backend(&ir, Backend::Interpreter, 3) as f64 / 1e6;
+            let v = time_backend(&ir, Backend::Bytecode, 3) as f64 / 1e6;
+            let n = time_backend(&ir, Backend::Native, 3) as f64 / 1e6;
+            (i, v, n, mr)
         };
-        let (chain, mr) = one(comb_chain_src(d, 2000));
-        let (inst, _) = one(inst_chain_src(d, 2000));
-        println!("  {d:>6} {mr:>8} {chain:>10.1} {inst:>12.1}");
+        let (ci, cv, cn, mr) = one(comb_chain_src(d, 2000));
+        let (ii, iv, in_, _) = one(inst_chain_src(d, 2000));
+        println!("  {d:>5} {mr:>7} {ci:>8.1}{cv:>9.1}{cn:>9.1} {ii:>8.1}{iv:>9.1}{in_:>9.1}");
     }
 }
 
