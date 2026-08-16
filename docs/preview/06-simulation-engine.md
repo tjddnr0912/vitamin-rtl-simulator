@@ -186,7 +186,15 @@ IR의 `builtin-call` 노드(시스템 태스크/함수 호출)를 만나면 `hdl
 
 **이벤트 큐 구조**: 우선순위 큐(skip list 또는 binary heap)로 "다음 이벤트 시각"을 O(log n) 검색. Icarus vvp는 skip list 사용. 현재 시각 내 이벤트(delta)는 별도 FIFO로 O(1) 처리.
 
-**후속 컴파일드/JIT 백엔드의 분기점**: Phase 1에서는 인터프리터로 정확성을 확보하고, IR 노드 타입과 인터페이스를 안정화한다. Phase 3+에서 동일 IR을 입력받는 컴파일드 백엔드(예: LLVM IR 생성)나 JIT 백엔드를 추가할 수 있도록 `Simulator` trait(또는 enum 기반 dispatch)로 추상화한다.
+**후속 컴파일드/JIT 백엔드의 분기점**: Phase 1에서는 인터프리터로 정확성을 확보하고, IR 노드 타입과 인터페이스를 안정화한다. Phase 3+에서 동일 IR을 입력받는 컴파일드 백엔드나 JIT 백엔드를 추가할 수 있도록 추상화한다.
+
+> ⭐ **2026-08-16 현재 — 이 계획은 착지했고, 추상화의 자리가 예상과 달랐다.** 실행기는 셋이고
+> (`interp` · `vm` · **`native`**(기본)), 갈라지는 지점은 `Simulator` trait 이 아니라 **`Kernel`
+> 트레이트**다 — 문장 의미(`exec::{compute_effect, apply_effect}`)는 `Kernel` 에 대해 제네릭한
+> **한 벌**이고, 실행기는 그 구현이 다를 뿐이다. 그래서 "백엔드 추가"가 "IEEE 규칙 재구현"이 아니고,
+> 동시에 **공유 코드가 틀리면 셋이 똑같이 틀린다**(→ 절대 앵커가 의무).
+> 기계어 생성은 아직 없다(Phase D · 본체는 cranelift 가 아니라 **2-state 좁히기**).
+> 구조·그림 = [04 §실행 백엔드 아키텍처](04-architecture.md) · 해설 = [study/02](../study/02-v1-native-coverage.md).
 
 ---
 

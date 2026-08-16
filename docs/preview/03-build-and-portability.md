@@ -134,6 +134,8 @@ path = "src/main.rs"          # multicall main: argv[0] 베이스네임 디스�
 
 [features]
 separate-bins = []            # dev 전용 — 기본 빌드는 vita 단일 바이너리만 산출
+default = ["oracle"]          # ⭐ Phase B — 아래 §feature 참조
+oracle  = ["sim-engine/oracle"]
 
 [[bin]]
 name = "vcmp"
@@ -144,6 +146,49 @@ required-features = ["separate-bins"]
 
 각 `src/bin/<stage>.rs`는 `cli::run_<stage>()`를 호출하는 3줄 shim이며, 실제 로직은 cli
 라이브러리에 있어 multicall `main()`과 dev shim이 동일 코드 경로를 공유한다(분기 없음).
+
+---
+
+## feature — `oracle` 과 두 빌드 형태 (Phase B · 2026-08-16)
+
+이 워크스페이스는 **두 가지 형태로 빌드된다.** 둘은 다른 제품이 아니라 **같은 코드에서 선택지를
+빼고 더한 것**이며, 삭제된 줄은 없다.
+
+| | `cargo build` (기본) | `cargo build --no-default-features` |
+|---|---|---|
+| feature | `oracle` **ON** | `oracle` OFF |
+| 실행기 | `interp` · `vm` · **`native`**(기본) | **`native` 하나** |
+| `--backend vm\|interp` | 동작 | **`error[VITA-E0001]` · exit 3** |
+| 게이트 거부 | `warning[VITA-W4030]` + VM 폴백 · exit 0 | **`fatal[VITA-F4004]` · exit 1** |
+| 용도 | 개발·검증(차분 오라클이 살아 있다) | **제품 형태** |
+
+⭐ **`oracle` 이 가리는 것은 코드가 아니라 선택지다.** `Backend::{Interpreter,Bytecode}` 열거 변형과
+그 **디스패치**만 `#[cfg]` 뒤에 있다 — `backend.rs` 의 컴파일 기계장치와 `exec/` 의 문장 의미는
+tier-3 이 그대로 쓰므로 어느 쪽 빌드에도 남는다(설계 근거 = [04 §실행 백엔드 아키텍처](04-architecture.md)).
+
+### 제품 형태를 게이트하는 법
+
+```bash
+cargo build  -p cli -p sim-engine --locked --no-default-features
+cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings
+cargo test   -p sim-engine        --locked --no-default-features --lib
+```
+
+⚠️ **함정 셋 — 셋 다 실사고이고, 셋 다 "빌드가 초록인데 아무것도 시험 안 함" 으로 나타난다:**
+
+1. **feature unification.** 의존 크레이트를 `default-features = false` 없이 참조하면 상위의
+   `--no-default-features` 가 **무력화된다**(하위의 `default` 가 그대로 들어온다). 실제로
+   `cli → sim-engine` 이 그랬고 빌드는 성공했으며 feature 는 아무것도 안 했다.
+   **확인법 = `cargo tree -p cli --no-default-features -e features`.**
+2. **`--lib` 필수.** 통합 테스트 타깃이 dev-dependency 로 `sim-engine` 을 기본 feature 로 끌어와
+   `oracle` 을 되살린다. 그래서 CI 축도 `--workspace` 가 아니라 `-p cli -p sim-engine` 이다.
+3. **바이너리 경로 공유.** `target/debug/vita` 를 두 구성이 함께 쓴다 — 구성을 바꿨으면 **재빌드 후
+   재측정**해야 한다(stale 바이너리가 *"`--backend vm` 이 받아들여졌다"* 는 거짓 신호를 낸다).
+
+### `jit`(기본 OFF)와의 관계
+
+`jit` 는 실험적 네이티브 코드젠(cranelift)이고 **여전히 기본 OFF** 다. `oracle` 과 직교한다 —
+전자는 *"세 번째 표현 구현을 추가할 것인가"*, 후자는 *"오라클 실행기를 제품에 포함할 것인가"* 다.
 
 ---
 
@@ -294,7 +339,21 @@ cargo test --workspace
 
 ## CI 매트릭스
 
-GitHub Actions 기준. Ubuntu/macOS 네이티브 잡과 RHEL UBI 컨테이너 잡을 분리한다. 두 잡(`build-native`, `build-rhel`)은 병렬 실행된다 — `container:` 필드에 빈 문자열을 넣으면 Actions가 이미지 이름으로 해석해 오류가 발생하므로, 컨테이너가 필요 없는 러너와 필요한 러너는 별도 잡으로 구분한다.
+GitHub Actions 기준. **잡은 셋이다**(2026-08-16 · Phase B5 로 하나 늘었다):
+
+| 잡 | 무엇을 지킨다 |
+|---|---|
+| `build-native` (ubuntu·macos) | fmt · clippy · build · test — 기본 형태(`oracle` ON) |
+| `build-rhel` (UBI9 컨테이너) | 같은 게이트를 glibc/RHEL 축에서 |
+| ⭐ **`build-no-oracle`** | **제품 형태**(`--no-default-features`) — build · clippy · `-p sim-engine --lib` 테스트 · 스모크 |
+
+⭐⭐ **`build-no-oracle` 이 별도 잡인 것은 편의가 아니라 feature unification 때문이다** — 워크스페이스
+안 한 크레이트라도 `oracle` 을 켜면 전부 켜지므로, **그 feature 가 꺼진 빌드는 아무것도 켜지 않는
+별도 축에서만 존재한다.** 스모크는 두 가지를 본다: 설계가 **돌고**, 없는 실행기 철자가 **거부된다**.
+⚠️ `--workspace` 가 아니라 `-p cli -p sim-engine` 인 이유는 dev-dependency 가 `oracle` 을 되살리기
+때문이다(§feature 함정 2).
+
+Ubuntu/macOS 네이티브 잡과 RHEL UBI 컨테이너 잡을 분리한다. 두 잡(`build-native`, `build-rhel`)은 병렬 실행된다 — `container:` 필드에 빈 문자열을 넣으면 Actions가 이미지 이름으로 해석해 오류가 발생하므로, 컨테이너가 필요 없는 러너와 필요한 러너는 별도 잡으로 구분한다.
 
 ```yaml
 # .github/workflows/ci.yml

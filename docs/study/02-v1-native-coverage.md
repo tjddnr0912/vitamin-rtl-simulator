@@ -552,9 +552,15 @@ flip 런    발산 0 (실패 3건은 전부 "어느 백엔드가 기본인가" �
 정본 순서(Phase A~D · ROADMAP §5.1):
 
 * **A ✅ 완료** — 이 문서
-* **B1 ✅ 완료 (2026-08-16 · §5.1-aq)** — **기본 백엔드가 native 다.** 플래그 없이
-  `vita design.sv` 를 돌리면 ③층이 돈다
-* **B(진행 중)** — 빌드 분리. ⚠️ **2026-08-16 재측정으로 계획이 셋 정정됐다**(ROADMAP §5.1 Phase B 표):
+* **B ✅ 완료 (2026-08-16 · §5.1-aq·-ar·-as·-at)** — **빌드가 둘이다.**
+  기본(`oracle` ON)은 실행기 셋에 기본이 native, 제품 형태(`--no-default-features`)는 **native 하나**.
+  같은 게이트 거부가 기본 빌드에선 **경고 + VM 폴백**(폴백은 느린 답이지 틀린 답이 아니다),
+  제품 빌드에선 **치명 · exit 1**(폴백 대상이 없어 loud 아니면 wrong)이다.
+  ⚠️ **계획의 B2·B3 표적은 틀렸고 착수 전 측정이 뒤집었다** — *"5,430줄 삭제 + `exec/` 감싸기"* 였는데
+  Phase A 를 지나며 tier-3 이 사실상 전부를 공유하게 됐다(`exec/process.rs` 안에
+  `compute_effect`/`apply_effect` 가 있다) ⇒ **없앤 것은 코드가 아니라 선택지이고 삭제는 0 이다.**
+  구조·그림 = [preview/04 §실행 백엔드 아키텍처](../preview/04-architecture.md)
+* **B ✅(위 참조)** — 빌드 분리. ⚠️ **2026-08-16 재측정으로 계획이 셋 정정됐다**(ROADMAP §5.1 Phase B 표):
   ① *"VM 삭제 5,430줄"* 은 **틀린 표적**이다 — §4.5.333 이후 tier-3 이 `backend.rs`(`vm_exec`·
   `is_codegen_able`·`CompiledBody`)와 `native_eval` 을 **재사용**하므로 실제 VM 전용 표면은 **넷**뿐이다
   (`vm_run_body` · `vm_compiled` · `Backend::Bytecode` arm · enum+CLI 철자).

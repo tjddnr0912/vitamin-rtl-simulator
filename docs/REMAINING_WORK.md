@@ -2,7 +2,7 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-08-08)**: format_version **26** · **5280 tests green** · 3-OS CI green · MsgCode **64** · **MSRV 1.85**.
+> - **기준(2026-08-16)**: format_version **26** · **5,470 tests green**(+ 제품 형태 lib **147**) · CI **3-OS + `build-no-oracle`** green · MsgCode **65** · **MSRV 1.85** · **기본 백엔드 = `native`**.
 > - **최신 완료**: **§4.5.314**(IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 + staged `-G` + `'x`/`'z` override 차단 — 적대 3라운드 결함 20건, 넷은 내 앞 라운드 수정이 만든 하강). 직전 = §4.5.313(외부 리포트 aes_top 16항목 + 자체 리뷰 17결함) · §4.5.311/312(③층 S3a·S2 슬라이스 4). **완료 슬라이스 전체 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
@@ -30,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **✅✅ ③층 Phase A(V1 커버리지) 완주 — 100.00% (2026-08-16 · ROADMAP §5.1-ap)**. 코퍼스 **6,470 중 거부 0** · flip 발산 0 · 게이트 세 층이 전부 비었다. **⇒ 다음 트랙은 Phase B(빌드 분리)**: B1 전 스위트 native 초록 · B2 VM 삭제(5,430줄) · B3 `oracle` feature · **B4 제품 빌드에서 게이트 거부를 loud 로**(삭제만으론 안 생기는 사다리 상승) · B5 `--no-default-features` CI 축. 그 뒤 **C**(interp 강등) → **D**(기계어 코드젠 · 본체는 2-state 좁히기). 해설·용어 = [study/02](study/02-v1-native-coverage.md) | Phase B 게이트 = 삭제 전후 **바이트 동일** + 거부 설계가 **exit≠0** |
+| **0** | **✅✅ Phase A + Phase B 완료 (2026-08-16 · ROADMAP §5.1-ap·-at)**. **A** = 커버리지 **100.00%**(코퍼스 6,470 중 거부 0 · 게이트 세 층이 전부 비었다). **B** = **기본 백엔드 native** · 교체 경고 `W4030` · **`oracle` feature**(기본 ON)로 제품 표면을 native 하나로(**삭제 0** — 착수 전 측정이 옛 표적을 뒤집었다 §5.1-b2) · 제품 빌드에서 거부가 **치명** `F4004` · CI 축 `build-no-oracle`. **⇒ 다음 트랙 = Phase C(interp 강등 + 오라클 정책)** — ⭐ 절반은 끝났다(`oracle` feature 가 곧 그 경계), 남은 것은 **코드가 아니라 정책·문서**다. 그 뒤 **D**(기계어 코드젠 · 본체는 2-state 좁히기). 구조 = [preview/04](preview/04-architecture.md) · 해설 = [study/02](study/02-v1-native-coverage.md) | 기본 5,470 green · **제품 형태 lib 147 green** · clippy 양쪽 0 |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 
