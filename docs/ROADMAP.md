@@ -466,13 +466,31 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 `lib.rs` 의 `effective_backend` 를 볼 것). **폴백 대상이 컴파일되지 않은 빌드에서는 거부가
 loud 일 수밖에 없다** = 정확도 사다리 상승이고, 삭제만으로는 안 생긴다(interp 로 떨어진다).
 
+⚠️⚠️ **아래 표는 2026-08-16 에 재측정해 세 곳을 정정했다 — 원래 판은 Phase A 이전에 쓴 것이라
+§4.5.333(S3, tier-3 이 `backend::vm_exec` 를 재사용)을 반영하지 못했다.**
+
 | # | 무엇 | 게이트 |
 |---|---|---|
-| **B1** | 전 스위트 `--backend native` 초록 | 실패 0(백엔드 이름 핀 제외) · 발산 0 |
-| **B2** | VM 삭제 — `native_eval/`+`backend.rs` **5,430줄** · `CompileCtx.natives` · tier-2 `jit.rs` | 삭제 전후 바이트 동일 |
-| **B3** | `oracle` feature (기본 ON) 도입 — `exec/`(2,131줄) + `Backend::Interpreter` 를 감쌈. `#[cfg]` 사이트 ≈4파일(`lib.rs`·`sched/scan_arm.rs`·`state/init_diag.rs`·`native/kernel.rs`) | 기본 빌드 바이트 동일 |
-| **B4** | **제품 빌드(`--no-default-features`)에서 게이트 거부를 loud 로** | 거부 설계가 exit≠0 · 새 MsgCode |
-| **B5** | CI 축 추가: `--no-default-features` 빌드 + 스모크 | 3-OS |
+| **B1** | 전 스위트 `--backend native` 초록 + **기본값 전환** | 실패 0(백엔드 이름 핀 제외) · 발산 0 — ⭐ **§5.1-ap 의 flip 런이 이미 이 게이트를 통과했다**(6,470/6,470 · 발산 0 · 실패 3 = 전부 이름 핀). 남은 일은 **영구화**(기본값 뒤집기 + 핀 3개 반전) |
+| **B2** | ~~VM 삭제 — `native_eval/`+`backend.rs` **5,430줄**~~ → **Bytecode 디스패치 경로 삭제** | ⚠️⚠️ **원래 표적이 틀렸다**: tier-3 이 **양쪽에 의존**한다 — `compiled_for` 가 `backend.rs` 의 `is_codegen_able`/`compile_body`/`CompiledBody`/`VmSlot`/`RegFile`/`OffFile` 를, `k_eval_native` 가 `native_eval::run` 을 쓴다(§4.5.333 이후). **실제 VM 전용 표면은 넷**: `Scheduler::vm_run_body` · `SimState::vm_compiled` · `scan_arm.rs` 의 `Backend::Bytecode` arm · enum 변형 + CLI 철자 4곳. ⇒ **B2 의 첫 작업은 삭제가 아니라 측정**(`backend.rs` 의 pub 항목 38개 중 어느 것이 마지막 호출자를 잃는지) |
+| **B3** | `oracle` feature (기본 ON) 도입 — `exec/`(~~2,131~~ → **3,246줄**, A 단계 추출로 커졌다) + `Backend::Interpreter` 를 감쌈 | 기본 빌드 바이트 동일 |
+| **B4** | **게이트 거부를 loud 로** | ⚠️ **둘로 갈라야 한다**(아래 §5.1-b1 참조): **B4a 경고**(요청한 백엔드가 조용히 바뀌는 것 = 정직성 갭 · 오늘 **진단 0 · exit 0** 이고 `native_refusal` 의 소비자는 `effective_backend` 와 run.json 뿐) · **B4b 에러**(`--no-default-features` 에서만 · 거부 설계가 exit≠0 · 새 MsgCode) |
+| **B5** | CI 축 추가: `--no-default-features` 빌드 + 스모크 | 3-OS · **B3 와 쌍**(feature unification) |
+
+#### 5.1-b1 ⚠️ B4 를 통째로 loud 로 만들면 **사다리 하강**이다 (2026-08-16 측정)
+
+폴백은 **틀린 답이 아니라 느린 답**이다(VM 이 내는 값은 correct-support). 따라서 기본 빌드에서
+거부를 `exit≠0` 으로 만드는 것은 **correct-support → loud** = **사다리 하강**이고, 이 저장소가
+금지하는 것이다.
+
+⇒ **B4 는 둘로 갈린다.**
+
+* **B4a(경고 · 기본 빌드)** — 값은 그대로 두고 *"native 를 요청했는데 vm 으로 돌았다"* 를 **말한다.**
+  하강이 아니고, 실제로 이 프로젝트를 물었던 갭이다(§5.1-o: `run.json` 을 안 봤으면 그대로 배송할
+  뻔했다). ⚠️ **오늘은 공허하다**(거부 0) — fail-closed 로 짓고 합성 테스트로 핀해야 한다.
+* **B4b(에러 · `--no-default-features`)** — 폴백 대상이 **컴파일되지 않은** 빌드에서는 선택지가
+  `loud` 아니면 `wrong` 뿐이므로 하강이 아니다. 이것이 원래 계획이 노린 사다리 상승이고, **B3·B5 가
+  선행조건**이다.
 
 ⚠️ **"정확히 하나" 는 불가** — 개발 빌드는 in-process 차분이 필요하다(`Backend::` 를 참조하는
 테스트 파일 8개). 형태는 **제품=native 하나 · 개발/테스트=둘**.
