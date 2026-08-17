@@ -371,6 +371,21 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// function. Anything else falls back to `eval::resolve_offsets` whole.
     pub(crate) icache: std::cell::RefCell<Vec<Option<IdxKind>>>,
     pub(crate) wscratch: std::cell::RefCell<crate::native::wprog::WScratch>,
+    /// The tier-2 expression VM's stacks, LEASED rather than built per call.
+    ///
+    /// ⚠️ `k_eval_native` used to write `NativeScratch::default()` on every
+    /// execution, and its own comment already said what that was ("the engine
+    /// reuses one behind a RefCell — an allocation choice, not a semantic
+    /// one"). The choice stopped being free when D1.5/D1.6 routed every
+    /// `wprog`-declined RHS through this method: `NativeScratch` is two FIXED
+    /// arrays (64 × 16 B + 8 × 32 B = 1,280 B), so `default()` is a memset, and
+    /// a profile caught `_platform_memset` at **4.5% of struct-heavy** — 300,000
+    /// native evals × 1,280 B (ROADMAP §5.1-bc).
+    ///
+    /// Reuse is safe for the reason the engine's copy is: `native_eval::run`
+    /// drives a stack pointer from 0 and every read is of something this same
+    /// call pushed, so a stale entry is unreachable rather than merely unlikely.
+    pub(crate) nscratch: std::cell::RefCell<crate::native_eval::NativeScratch>,
     /// **S3 slice 1 — the compiled body, one slot per process template.**
     ///
     /// The tier-3 walk decided per EXECUTION what each statement is
@@ -601,6 +616,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             icache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             wscratch: std::cell::RefCell::new(Default::default()),
+            nscratch: std::cell::RefCell::new(Default::default()),
             bodies: (0..ir.processes.len())
                 .map(|_| crate::backend::VmSlot::Unchecked)
                 .collect(),
@@ -1863,10 +1879,9 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_eval_native(&self, prog: &crate::native_eval::NativeProg) -> Value {
         // `native_eval::run` already takes `&dyn NetReader`, so the tier-2
         // compiled-expression VM runs over the arena with no second copy. The
-        // scratch is per-call here (the engine reuses one behind a RefCell —
-        // an allocation choice, not a semantic one).
-        let mut scratch = crate::native_eval::NativeScratch::default();
-        crate::native_eval::run(prog, &self.arena, &mut scratch)
+        // scratch is LEASED — see `NativeKernel::nscratch` for why building it
+        // per call stopped being free.
+        crate::native_eval::run(prog, &self.arena, &mut self.nscratch.borrow_mut())
     }
 
     fn k_resolve_lvalue_offsets(&self, lhs: &Lvalue) -> Offsets {
