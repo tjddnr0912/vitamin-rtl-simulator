@@ -143,3 +143,50 @@ fn a_design_mixing_wide_and_narrow_expressions_is_correct() {
         assert_eq!(other, WANT, "backend {b} disagrees");
     }
 }
+
+/// D1.6: an RHS `wprog` declines for a reason that is NOT its width.
+///
+/// ⚠️⚠️ This is the shape D1.5's boundary got wrong. That version routed to
+/// `native_eval` when the context width exceeded 64 — the first line of
+/// `wprog::compile` — which is necessary and not sufficient: `compile` also
+/// declines on node kinds. `s[idx +: 4]` is the common one (a part-select whose
+/// offset is a RUNTIME value; `wprog` admits constant offsets only, §4.5.327), and
+/// at 16 bits the width test waves it through. It then reached NEITHER evaluator
+/// and fell to the generic tree walk, which is why `struct-heavy` stayed 1.30×
+/// slower than the VM until the boundary asked `compile` itself (127 → 86 ms,
+/// ROADMAP §5.1-ax).
+///
+/// The design keeps the narrow constant-offset work beside it (`s[11:4]`,
+/// `s[19 -: 4]`, `{2{s[7:0]}}`) so both sides of the partition run in one body —
+/// and `idx` MOVES each iteration, so a routing decision that silently froze the
+/// offset would land on a different bit field. iverilog-pinned.
+#[test]
+fn a_runtime_offset_part_select_is_correct_on_every_backend() {
+    const SRC: &str = "module top;\n\
+           reg [31:0] s;\n\
+           reg [15:0] acc;\n\
+           reg [3:0] idx;\n\
+           integer i;\n\
+           initial begin\n\
+             s = 32'hA5C31234; acc = 16'd0; idx = 4'd6;\n\
+             for (i = 0; i < 6; i = i + 1) begin\n\
+               acc = acc + {s[11:4], s[3:0], s[19 -: 4]} + {2{s[7:0]}};\n\
+               acc = acc ^ {12'd0, s[idx +: 4]};\n\
+               idx = idx + 4'd3;\n\
+               s   = {s[30:0], s[31]};\n\
+             end\n\
+             $display(\"acc=%h s=%h idx=%h\", acc, s, idx);\n\
+             $finish;\n\
+           end\n\
+         endmodule\n";
+    // iverilog 13.0, verbatim.
+    const WANT: &str = "acc=a439 s=70c48d29 idx=8\n";
+
+    let (native, rj) = run_on("native", SRC);
+    assert!(rj.contains("\"backend\": \"native\""), "not native:\n{rj}");
+    assert_eq!(native, WANT, "a wprog-declined narrow RHS disagrees");
+    for b in ["vm", "interp"] {
+        let (other, _) = run_on(b, SRC);
+        assert_eq!(other, WANT, "backend {b} disagrees");
+    }
+}

@@ -663,15 +663,26 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // select/concat). `OnlyWhereWprogDeclines` partitions instead: `wprog`
         // keeps every RHS it wants, `native_eval` gets the rest.
         let nonint = self.sched.st.native_ineligible();
+        // ⚠️ D1.6: the boundary asks `wprog::compile` ITSELF, not a re-derivation
+        // of what it accepts. The first version asked only the width refusal, and
+        // a census found 75 RHSs at ≤64 bits that `wprog` declines for OTHER
+        // reasons (a runtime-offset part-select is the common one) — each of them
+        // routed to neither evaluator. Compiling here costs one extra `wprog`
+        // build per RHS per template; the runtime cache builds its own anyway.
+        let wt = &self.sched.st.wt;
+        let arena = &self.arena;
+        let declines = |rhs: u32, w: u32, signed: bool| {
+            crate::native::wprog::compile(ir, wt, arena, rhs, w, signed).is_none()
+        };
         let compiled = std::rc::Rc::new(crate::backend::compile_body(
             &ir.stmts,
             &ir.processes[proc].body,
             Some(&crate::backend::CompileCtx {
                 ir,
-                wt: &self.sched.st.wt,
+                wt,
                 plain: &plain,
                 natives: Some(&nonint),
-                natives_when: crate::backend::NativesWhen::OnlyWhereWprogDeclines,
+                natives_when: crate::backend::NativesWhen::OnlyWhereWprogDeclines(&declines),
             }),
         ));
         self.sched.st.plain_scalar = plain;

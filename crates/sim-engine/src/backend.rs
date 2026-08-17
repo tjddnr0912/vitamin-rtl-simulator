@@ -640,12 +640,12 @@ pub(crate) struct CompileCtx<'a> {
     /// `natives_when` allows.
     pub(crate) natives: Option<&'a [bool]>,
     /// WHICH accepted RHSs actually get `Op::EvalNative`.
-    pub(crate) natives_when: NativesWhen,
+    pub(crate) natives_when: NativesWhen<'a>,
 }
 
 /// Which RHSs a kernel wants routed to the tier-2 expression VM.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum NativesWhen {
+#[derive(Clone, Copy)]
+pub(crate) enum NativesWhen<'a> {
     /// Tier-2: every RHS `try_compile` accepts. It has no second evaluator to
     /// lose to.
     ///
@@ -657,9 +657,23 @@ pub(crate) enum NativesWhen {
     Always,
     /// Tier-3: only the RHSs its OWN evaluator refuses. `wprog` is faster on
     /// everything it takes, and `native_eval` is faster than the generic tree
-    /// walk on everything `wprog` leaves — so the two partition by width and
+    /// walk on everything `wprog` leaves — so the two partition the RHS space and
     /// neither is ever displaced by the other.
-    OnlyWhereWprogDeclines,
+    ///
+    /// ⚠️⚠️ **THE PREDICATE IS PASSED IN, and D1.6 is why.** The first version of
+    /// this partition asked `wprog::width_admits` — the width refusal, which is
+    /// `compile`'s FIRST line. That is necessary and not sufficient: `wprog` also
+    /// declines on node kinds (a runtime-offset part-select, a `SysFunc`, …), and
+    /// a census counted **75 such RHSs at ≤64 bits** across the perf shapes. Every
+    /// one went to NEITHER evaluator — the generic tree walk — while tier-2 ran it
+    /// on `native_eval`.
+    ///
+    /// So the caller answers the real question `(rhs, w, signed) -> declines?` by
+    /// running `wprog::compile`. That needs the arena, which is tier-3's and has
+    /// no business in this struct; a closure keeps the layering intact and keeps
+    /// the answer a single spelling — `compile` itself, not a re-derivation of
+    /// what it accepts.
+    OnlyWhereWprogDeclines(&'a dyn Fn(u32, u32, bool) -> bool),
 }
 
 fn eval_rhs_op(
@@ -675,12 +689,13 @@ fn eval_rhs_op(
         let ctx_w = lvalue_width_of(ir, lhs).max(wt.width(rhs));
         let ctx_signed = wt.signed(rhs);
         // The partition. `width_admits` is `wprog::compile`'s own first line, asked
-        // rather than restated — a second copy would drift silently, and the
-        // symptom would be a slower path taken rather than a wrong answer.
+        // The partition. The predicate is the caller's because only tier-3 can
+        // answer it — `wprog::compile` needs the arena — and asking `compile`
+        // itself is what keeps this a single spelling.
         let wanted = match c.natives_when {
             #[cfg(feature = "oracle")]
             NativesWhen::Always => true,
-            NativesWhen::OnlyWhereWprogDeclines => !crate::native::wprog::width_admits(ctx_w),
+            NativesWhen::OnlyWhereWprogDeclines(declines) => declines(rhs, ctx_w, ctx_signed),
         };
         if !wanted {
             return Op::EvalForLval { dst, lhs: li, rhs };

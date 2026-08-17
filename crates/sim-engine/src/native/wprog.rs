@@ -251,16 +251,20 @@ pub(crate) struct WProg {
 /// invalidation.
 /// Can a context of width `w` reach this evaluator AT ALL?
 ///
-/// The width refusal is `compile`'s first line and the only one that can be
-/// answered without walking the expression — which is exactly what a COMPILE-TIME
-/// caller needs. `backend::eval_rhs_op` asks it to decide whether tier-3 should
-/// emit `Op::EvalNative` for an RHS: yes precisely when this says no, so the two
-/// evaluators partition the RHS space instead of competing for it.
+/// `compile`'s first line, named so the admitted width has one spelling.
 ///
-/// ⚠️ ONE SPELLING, and it is the reason this is a function rather than a `> 64`
-/// in the caller. A second copy would drift the moment the admitted width moves,
-/// and the failure would be silent — a slower path taken, never a wrong answer,
-/// which is the kind of defect no test notices.
+/// ⚠️⚠️ **IT IS NECESSARY AND NOT SUFFICIENT, and D1.5→D1.6 paid for learning
+/// that.** D1.5 used exactly this as the boundary that decides whether tier-3
+/// hands an RHS to `native_eval` — attractive because it answers without walking
+/// the expression. But `compile` also declines on NODE KINDS (a runtime-offset
+/// part-select, a `SysFunc`, an operand mix it has no arm for), and a census
+/// counted **75 RHSs at ≤64 bits** that this predicate waves through and
+/// `compile` then refuses. Each went to neither evaluator, and `struct-heavy`
+/// stayed 1.30× slower than the VM until the boundary asked `compile` itself
+/// (127 → 86 ms · ROADMAP §5.1-ax).
+///
+/// So: use this to explain the width rule, never to predict an admission. The
+/// only honest answer to "will `wprog` take this?" is to run `compile`.
 pub(crate) fn width_admits(w: u32) -> bool {
     w != 0 && w <= 64
 }
