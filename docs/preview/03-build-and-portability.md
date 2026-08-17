@@ -187,10 +187,28 @@ cargo test   -p sim-engine        --locked --no-default-features --lib
 3. **바이너리 경로 공유.** `target/debug/vita` 를 두 구성이 함께 쓴다 — 구성을 바꿨으면 **재빌드 후
    재측정**해야 한다(stale 바이너리가 *"`--backend vm` 이 받아들여졌다"* 는 거짓 신호를 낸다).
 
-### `jit`(기본 OFF)와의 관계
+### `jit`(기본 OFF)와의 관계 — **측정으로 기각됨** (Phase D · 2026-08-17)
 
-`jit` 는 실험적 네이티브 코드젠(cranelift)이고 **여전히 기본 OFF** 다. `oracle` 과 직교한다 —
+`jit` 는 네이티브 코드젠(cranelift)이고 **기본 OFF 이며 그렇게 남는다**. `oracle` 과 직교한다 —
 전자는 *"세 번째 표현 구현을 추가할 것인가"*, 후자는 *"오라클 실행기를 제품에 포함할 것인가"* 다.
+
+**Phase D 가 이것을 tier-3 에 배선해서 재고 기각했다**(ROADMAP §5.1-be): 켜면 **14~47% 느리다**.
+런의 **~38% 가 shim**(`s_load` = leaf 마다 Rust 로 되돌아오는 호출 · `jit::mk` = 쓰기마다
+72 바이트 `Value` 재생성)인데, 그것이 없앨 수 있는 op 디스패치는 **8.9~11.3%** 뿐이다.
+
+⚠️⚠️ **그래도 배선한 것이 값을 냈다.** 그 과정에서 ⓐ 이 feature 가 **컴파일조차 안 되고 있었고**
+(융합 op 둘이 추가된 이래 — `_`-free match 가 빌드를 세워 잡았다) ⓑ 컴파일된 바디가 **문장마다의
+`k_call_fatal` 을 안 물어** 폭주 설계가 `Error` 대신 `Quiescent` 로 끝나는 **silent-wrong** 이 있었다.
+둘 다 고쳤다. ⇒ ⭐ **"feature 뒤에 있다는 것은 검증 면제가 아니다"**(ENGINEERING_RULES).
+
+**빌드·검증 방법**(CI 축은 아니지만 손으로 돌릴 때):
+
+```bash
+cargo build  -p sim-engine --features jit --locked
+cargo clippy -p sim-engine --features jit --all-targets --locked -- -D warnings
+VITA_JIT=1 cargo nextest run --workspace --features sim-engine/jit --locked   # 전 스위트 green
+VITA_JIT=1 VITA_JIT_STATS=1 vita --backend native design.sv                   # 커버리지 확인
+```
 
 ---
 

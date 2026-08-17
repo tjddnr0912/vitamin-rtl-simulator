@@ -116,7 +116,7 @@ simulation 단계만 수행하며, 뒤 단계는 앞 단계의 산출물을 입�
 
 **sim-ir** — 언어 비의존 시뮬레이션 IR(Intermediate Representation).
 elaboration 단계의 출력이자 시뮬레이션 엔진의 입력.
-Verilog / SystemVerilog 의미론을 IR 수준에서 추상화하여, 향후 컴파일드/JIT
+Verilog / SystemVerilog 의미론을 IR 수준에서 추상화하여, 컴파일드/JIT
 백엔드를 재작성 없이 추가할 수 있는 경계를 제공한다.
 
 **hdl-builtins** — `$`로 시작하는 system tasks/functions를 구현하는 크레이트.

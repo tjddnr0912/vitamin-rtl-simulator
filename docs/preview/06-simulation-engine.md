@@ -193,7 +193,7 @@ IR의 `builtin-call` 노드(시스템 태스크/함수 호출)를 만나면 `hdl
 > 트레이트**다 — 문장 의미(`exec::{compute_effect, apply_effect}`)는 `Kernel` 에 대해 제네릭한
 > **한 벌**이고, 실행기는 그 구현이 다를 뿐이다. 그래서 "백엔드 추가"가 "IEEE 규칙 재구현"이 아니고,
 > 동시에 **공유 코드가 틀리면 셋이 똑같이 틀린다**(→ 절대 앵커가 의무).
-> 기계어 생성은 아직 없다(Phase D · 본체는 cranelift 가 아니라 **2-state 좁히기**).
+> 기계어 생성은 **기본 OFF 이고 기각됐다**(Phase D 완료 · `jit` feature 는 빌드·배선·측정까지 갖춘 채 남아 있다 — 런의 ~38% 가 shim 이라 tier-3 의 인라인된 루프를 못 이긴다 · ROADMAP §5.1-be). ⭐ ③층의 속도는 **평면 아레나 + 폭 특수화 평가기 + 2-state 레인**에서 나온다.
 > 구조·그림 = [04 §실행 백엔드 아키텍처](04-architecture.md) · 해설 = [study/02](../study/02-v1-native-coverage.md).
 
 ---

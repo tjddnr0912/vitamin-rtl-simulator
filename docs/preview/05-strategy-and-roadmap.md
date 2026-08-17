@@ -110,7 +110,7 @@ VHDL(IEEE 1076)은 다른 언어이므로 별도 프론트엔드(lexer/parser/el
 
 현재는 비목표이나 IR 경계를 열어두고 후속 단계에서 검토한다:
 
-- **컴파일드/JIT 백엔드** — `sim-ir` 경계를 재사용해 Verilator 계열 성능 확보
+- ~~**컴파일드/JIT 백엔드**~~ — ⛔ **2026-08-17 기각.** 지어서(`jit` feature) tier-3 에 배선하고 쟀더니 **14~47% 느리다**: 런의 **~38% 가 shim** 이고, 없앨 수 있는 op 디스패치는 **8.9~11.3%** 뿐이다(ROADMAP §5.1-be). 성능은 대신 **평면 아레나 + 폭 특수화 평가기 + 2-state 레인**으로 얻었다 — 벤치 8형태 **전부 native < vm**
 - ~~**FST 파형** — LZ4 압축 기반, 대용량 설계 대응~~ → ✅ **구현됨(2026-07-17)**: `$dumpfile("x.fst")`/`-o x.fst`(`.fst` 확장자 디스패치) — VCD→FST 트랜스코드(`vcd-writer/src/fst.rs`), 순수-Rust `fst-writer` 위임
 - **SV assertion 영역 확장** — Preponed / Observed / Reactive / Postponed (program block용)
 - **확장 VCD** — `$dumpports*` 지원

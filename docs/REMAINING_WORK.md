@@ -2,7 +2,7 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-08-16)**: format_version **26** · **5,470 tests green**(+ 제품 형태 lib **147**) · CI **3-OS + `build-no-oracle`** green · MsgCode **65** · **MSRV 1.85** · **기본 백엔드 = `native`**.
+> - **기준(2026-08-17)**: format_version **26** · **5,477 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **65** · **MSRV 1.85** · **기본 백엔드 = `native`**.
 > - **최신 완료**: **§4.5.314**(IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 + staged `-G` + `'x`/`'z` override 차단 — 적대 3라운드 결함 20건, 넷은 내 앞 라운드 수정이 만든 하강). 직전 = §4.5.313(외부 리포트 aes_top 16항목 + 자체 리뷰 17결함) · §4.5.311/312(③층 S3a·S2 슬라이스 4). **완료 슬라이스 전체 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
@@ -11,7 +11,7 @@
 
 ## A. 현재 상태 한 줄 요약
 
-> **★★ 2026-08-08 최우선 = ③층 S3 — 바디 코드 생성(진짜 코드젠·아직 0%)** (정본 = [ROADMAP §5.0](ROADMAP.md) / [preview/21 §5 S3+§7](preview/21-tier3-native-backend.md)). T0·S0·S1 전부·S2 4슬라이스·**S3a(호출 흡수)** 완료(§4.5.285~312). ⚠️ 지금의 `--backend native` 는 기계어를 안 만든다(전용 저장 + 폭 특수화 평가기 = 세 번째 인터프리터): native/vm = 1.41×(flat)·1.14×(호출형)·**0.97×(picorv32)**, verilator 대비 54~722×. **flat↔호출형 13× 가 S3 본체의 표적**이고, picorv32 가 1.0× 근처라는 것은 **스케줄러 몫을 먼저 프로파일로 재라**는 뜻이다. 아래 정확성 큐는 사라지지 않고 **그 뒤로 밀린다**.
+> **★★★ 2026-08-17 — Phase A~D 가 전부 끝났다. 다음에 무엇을 할지는 [ROADMAP §5.2 재개 지점](ROADMAP.md) 이 정본이다.** 요약: **A** 커버리지 100.00% · **B** 제품 표면 native 하나 · **C** interp = 테스트 도구 · **D** 성능(벤치 **8/8 에서 native < vm** · 착수 때 최악 2.52×). ⭐⭐ **코드젠은 지어서·배선해서·재서 기각**(런의 ~38% 가 shim · 천장 8.9~11.3% · §5.1-be) ⇒ **성능 축은 수확 체감**이고 **다음 우선순위는 정확성 큐(§2) → loud 승격(§3) → OBS(§6)** 다. ⚠️ 성능을 다시 본다면 **미측정 축은 스케줄러**다(picorv32 비율이 안 움직인 이유는 아직 안 쟀다).
 >
 > **직전 = §4.5.283 (외부 round-27, 최고 심각도)** — `@(*)` 가 attribute instance 로 렉싱되어 **주석이 실행 코드로 승격**되고 `errors=0` 으로 틀린 값이 나왔다. 원문 정규식 스캔이 주석·문자열을 뚫고, 짝을 못 찾으면 조용히 폴백해 발현이 **컴파일 단위 전체의 `(*`/`*)` 개수**에 달렸다(파일 경계도 넘었다). attribute 인식을 **토큰 스트림**으로 옮기고, `@` 직후는 event control 로 두고, 안 닫힌 opener 를 loud 로 만들어 닫았다 — 3-way 16형 **회귀 0 · 수정 8**.
 
@@ -30,7 +30,7 @@
 | 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
 | 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **✅✅ Phase A + Phase B 완료 (2026-08-16 · ROADMAP §5.1-ap·-at)**. **A** = 커버리지 **100.00%**(코퍼스 6,470 중 거부 0 · 게이트 세 층이 전부 비었다). **B** = **기본 백엔드 native** · 교체 경고 `W4030` · **`oracle` feature**(기본 ON)로 제품 표면을 native 하나로(**삭제 0** — 착수 전 측정이 옛 표적을 뒤집었다 §5.1-b2) · 제품 빌드에서 거부가 **치명** `F4004` · CI 축 `build-no-oracle`. **⇒ 다음 트랙 = Phase C(interp 강등 + 오라클 정책)** — ⭐ 절반은 끝났다(`oracle` feature 가 곧 그 경계), 남은 것은 **코드가 아니라 정책·문서**다. 그 뒤 **D**(기계어 코드젠 · 본체는 2-state 좁히기). 구조 = [preview/04](preview/04-architecture.md) · 해설 = [study/02](study/02-v1-native-coverage.md) | 기본 5,470 green · **제품 형태 lib 147 green** · clippy 양쪽 0 |
+| **0** | **✅✅✅ Phase A~D 전부 완료 (2026-08-17 · ROADMAP §5.1-ap·-at·-au·-be)**. **A** 커버리지 **100.00%**(거부 0) · **B** 제품 표면이 **native 하나**(`oracle` feature · 삭제 0) · **C** interp = **테스트 도구**(성능 최적화 **영구 제외**) · **D** 성능: 벤치 **8/8 에서 native < vm**(착수 때 셋에서 졌고 최악 **2.52×**) + **코드젠 기각**(런의 ~38% 가 shim · 천장 8.9~11.3%). ⇒ **다음 = [ROADMAP §5.2 재개 지점](ROADMAP.md)** — 정확성 큐(§2) → loud 승격(§3) → OBS(§6) 순이고, 성능을 다시 본다면 **미측정 축 = 스케줄러**. 구조 = [preview/04](preview/04-architecture.md) · 해설 = [study/02](study/02-v1-native-coverage.md) | **5,477 green** · `VITA_JIT=1` 로도 green · clippy 3 구성 0 |
 
 > **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 

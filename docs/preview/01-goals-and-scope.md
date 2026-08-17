@@ -30,7 +30,7 @@
 현 설계 단계에서 명시적으로 범위 밖으로 지정한 항목들이다.
 
 - **합성(synthesis) 툴 자체 구현** — 단, 참조 문서에는 각 구문의 합성 가능 여부를 명기한다.
-- **컴파일드(네이티브/JIT) 시뮬레이션 백엔드** — IR 경계만 열어두고 후속 단계로 미룬다. (`sim-ir` 설계는 이 확장을 고려해 언어 중립으로 유지된다.) *(2026-06: Stage C 바이트코드 VM=C1·C2 가동 + native-eval C4-lite 착수해 식-바운드 VM ~0.42x 달성 — P5 차분 게이트가 인터프리터와 byte동일 강제; signed>64·>128bit·sysfunc·real native lane은 잔여 저-ROI)*
+- **컴파일드(네이티브/JIT) 시뮬레이션 백엔드** — IR 경계만 열어두고 후속 단계로 미룬다. (`sim-ir` 설계는 이 확장을 고려해 언어 중립으로 유지된다.) *(2026-06: Stage C 바이트코드 VM=C1·C2 가동 + native-eval C4-lite 착수해 식-바운드 VM ~0.42x 달성 — P5 차분 게이트가 인터프리터와 byte동일 강제; signed>64·>128bit·sysfunc·real native lane은 잔여 저-ROI)* *(2026-08-17 종결: **③층 `native` 가 기본 백엔드이고 코퍼스 100% 를 바이트 정확하게 돈다** — 다만 그것은 **네이티브 저장**이지 기계어 생성이 아니다. **기계어 생성(cranelift)은 지어서 재고 기각했다** — ROADMAP §5.1-be.)*
 - **커버리지/UVM** (N5+ — 단, functional coverage 코어는 ✅ 구현됨, N5/N5-G) · **`program`·`union`** 및 **class 잔여(N7-REST: parameterized class·static/local 멤버 등)**(*`class` 코어+단일 상속+virtual 동적 디스패치는 ✅ 구현됨, N7; CRV — rand/constraint/`randomize() with`/dist/randc — 도 ✅ 구현됨*). *(이전 판에 있던 math transcendentals — `$ln`/`$log10`/`$exp`/`$sqrt`/삼각 — 는 ✅ 구현됨: N6 21종, vendored pure-Rust libm으로 3-OS 결정성 확보 — 비목표 아님)*
 - **파형 GUI 뷰어** — VCD 출력을 GTKWave · Surfer 등 외부 뷰어로 확인한다.
 - **VCD·FST 외 파형 포맷(FSDB 등)** — 비목표. *(FST는 ✅ 2026-07-17 구현됨 — `$dumpfile("x.fst")`/`-o x.fst`, VCD→FST 트랜스코드; 07-vcd-format 참조)*
