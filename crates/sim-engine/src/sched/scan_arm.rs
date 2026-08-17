@@ -1259,6 +1259,36 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         step
     }
 
+    /// Get-or-compile the machine code for a process TEMPLATE.
+    ///
+    /// One spelling for two callers. Tier-2 reaches it from `vm_run_body` and
+    /// tier-3 from `native::run::dispatch_body`; a `None` entry means "tried and
+    /// refused" and must be remembered, which is the part a second copy of this
+    /// lookup would be most likely to drop (ROADMAP §5.1-be).
+    ///
+    /// The cache is keyed by template and not by kernel because a `BodyFn` is a
+    /// function of the `CompiledBody` alone — everything store-dependent that it
+    /// does leaves through a shim taking the `&mut dyn Kernel` the CALLER
+    /// supplies.
+    #[cfg(feature = "jit")]
+    pub(crate) fn jit_body_for(
+        &self,
+        tmpl: usize,
+        body: &crate::backend::CompiledBody,
+    ) -> Option<crate::jit::BodyFn> {
+        self.jit.borrow().as_ref()?;
+        if let Some(f) = self.jit_bodies.borrow().get(&tmpl) {
+            return *f;
+        }
+        let f = self
+            .jit
+            .borrow_mut()
+            .as_mut()
+            .and_then(|e| e.compile_body(body));
+        self.jit_bodies.borrow_mut().insert(tmpl, f);
+        f
+    }
+
     /// Bytecode-VM body entry (Stage C / C2). The P9 predicate (via `vm_compiled`) has
     /// confirmed this body is suspend-free; `body` is its compiled form, handed in as an
     /// owned `Rc` so this `&mut self` kernel call cannot alias the cache (§2.3).
@@ -1283,20 +1313,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // BODY-LEVEL CODEGEN: one boundary crossing per activation instead of one per
             // expression. Compiled once per TEMPLATE (a `None` entry means "tried and
             // refused" and must be remembered).
-            if self.jit.borrow().is_some() {
-                let cached = self.jit_bodies.borrow().get(&tmpl).copied();
-                let f = match cached {
-                    Some(f) => f,
-                    None => {
-                        let f = self
-                            .jit
-                            .borrow_mut()
-                            .as_mut()
-                            .and_then(|e| e.compile_body(&body));
-                        self.jit_bodies.borrow_mut().insert(tmpl, f);
-                        f
-                    }
-                };
+            {
+                let f = self.jit_body_for(tmpl, &body);
                 if let Some(f) = f {
                     let b = std::rc::Rc::clone(&body);
                     return crate::jit::run_body_jit(f, self, &b, proc);

@@ -981,6 +981,14 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             opts.max_body_steps,
         );
         let reason = native::run::run(&mut nk, ir);
+        // D4: the same coverage dump the engine path has. It lived only in the
+        // `else` arm below, so `VITA_JIT_STATS` printed nothing on the backend
+        // that is now the default — a coverage instrument that answers for one
+        // executor only is how a codegen experiment reads as "not firing".
+        #[cfg(feature = "jit")]
+        if std::env::var_os("VITA_JIT_STATS").is_some() {
+            crate::jit::jit_stats();
+        }
         // …before `nk` (and the arena inside it) is dropped. Read through
         // `NetReader::read_net`, the composite — not `arena.read_net` — so a
         // bitmap net that is heap-kind or frame-local would still be answered

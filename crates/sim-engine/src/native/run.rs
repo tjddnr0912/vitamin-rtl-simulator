@@ -62,6 +62,14 @@ use crate::sched::FinishReason;
 ///
 /// Both call sites go through here so the choice cannot differ between the t0
 /// initializers and the region loop.
+/// The entry block of a `CompiledBody` is index 0 — `compile_body` emits blocks
+/// in body order and `vm_exec` starts at whatever `bb` its caller passes, which
+/// for a fresh activation is the process body's first block.
+#[cfg(feature = "jit")]
+fn bb_is_entry(bb: u32) -> bool {
+    bb == 0
+}
+
 fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u32) -> Step {
     // ── A4-d: THE CHOKE, and it is `Scheduler::run_body`'s, line for line ──
     //
@@ -110,6 +118,39 @@ fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u
             // does it inside itself; `vm_exec` leaves it to the caller, exactly as
             // `Scheduler::vm_run_body` does.
             k.k_enter_body(tmpl);
+            // ⚠️ COUNTED HERE, BEFORE the executor is chosen. The anti-vacuity
+            // assertion in `s3_compiled_body_matches_the_walk_*` reads this to
+            // say "a compiled body actually ran"; leaving the bump below the JIT
+            // arm made those rows fail under `VITA_JIT=1` with "nothing compiled
+            // — this row compared the walk with itself", which is the counter
+            // being right about a question it was now being asked in the wrong
+            // place. What it means is "this activation did NOT take the walk",
+            // and that is true of both compiled executors.
+            #[cfg(test)]
+            crate::native::kernel::COMPILED_ACTIVATIONS.with(|c| c.set(c.get() + 1));
+            // ⭐ D4: BODY-LEVEL MACHINE CODE, one boundary crossing per
+            // activation instead of one per expression.
+            //
+            // The compiler and the per-template cache are the SCHEDULER's — the
+            // same ones tier-2 uses — because a compiled body is a function of
+            // the `CompiledBody` and nothing else, and `run_body_jit` takes
+            // `&mut dyn Kernel`, so it runs over THIS kernel's methods (the flat
+            // store, the leased scratch, the arena) rather than the engine's.
+            // That genericity was already in the module; what was missing was a
+            // second caller (ROADMAP §5.1-be).
+            //
+            // ⚠️ Entry block only. `run_body_jit` has no `block` parameter — a
+            // compiled body is suspend-free by `is_codegen_able`, so it runs
+            // from its entry to completion and is never re-entered in the
+            // middle. Tier-2's caller relies on the same fact without saying so;
+            // this one says it and refuses rather than relying on it.
+            #[cfg(feature = "jit")]
+            if bb_is_entry(block) {
+                if let Some(f) = k.sched.jit_body_for(tmpl as usize, &body) {
+                    let b = std::rc::Rc::clone(&body);
+                    return crate::jit::run_body_jit(f, k, &b, tmpl);
+                }
+            }
             // Lease the register files. `mem::take` yields OWNED buffers, so they
             // no longer borrow `k` and cannot alias the `&mut` kernel `vm_exec`
             // needs.
@@ -119,8 +160,6 @@ fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u
             let mut offs = std::mem::take(&mut k.vm_offs);
             offs.clear();
             offs.resize(body.noffs as usize, None);
-            #[cfg(test)]
-            crate::native::kernel::COMPILED_ACTIVATIONS.with(|c| c.set(c.get() + 1));
             let step = crate::backend::vm_exec(k, &body, tmpl, block, &mut regs, &mut offs);
             regs.clear();
             k.vm_regs = regs;

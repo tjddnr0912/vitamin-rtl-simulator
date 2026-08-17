@@ -524,7 +524,7 @@ impl Op {
     ///
     /// `_`-free on purpose (accept-gate rule): a new `Op` must be a forced
     /// decision here, not default onto the "mid-statement" side.
-    fn ends_statement(&self) -> bool {
+    pub(crate) fn ends_statement(&self) -> bool {
         match self {
             Op::EvalForLval { .. } | Op::EvalNative { .. } | Op::ResolveOff { .. } => false,
             Op::WriteLval { .. }

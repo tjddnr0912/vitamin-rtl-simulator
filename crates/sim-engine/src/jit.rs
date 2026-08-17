@@ -146,6 +146,8 @@ impl JitEngine {
         b.symbol("s_resolve_off", s_resolve_off as *const u8);
         b.symbol("s_write_lval", s_write_lval as *const u8);
         b.symbol("s_eval_for_lval", s_eval_for_lval as *const u8);
+        b.symbol("s_eval_write_scalar", s_eval_write_scalar as *const u8);
+        b.symbol("s_eval_nba_scalar", s_eval_nba_scalar as *const u8);
         b.symbol("s_write_lval_pending", s_write_lval_pending as *const u8);
         b.symbol(
             "s_write_scalar_pending",
@@ -156,6 +158,7 @@ impl JitEngine {
         b.symbol("s_truthy", s_truthy as *const u8);
         b.symbol("s_truthy_expr", s_truthy_expr as *const u8);
         b.symbol("s_rearm", s_rearm as *const u8);
+        b.symbol("s_call_fatal", s_call_fatal as *const u8);
         b.symbol("s_max_deltas", s_max_deltas as *const u8);
         b.symbol("s_mark_fatal", s_mark_fatal as *const u8);
         b.symbol("s_op_select", s_op_select as *const u8);
@@ -693,6 +696,31 @@ extern "C" fn s_eval_for_lval(p: *mut BodyCtx, lhs: u32, rhs: u32) {
     c.pending = Some(c.k.k_eval_for_lvalue(lv, rhs));
 }
 
+/// The FUSED store, called as one shim rather than emitted as two.
+///
+/// ⚠️ `Op::EvalWriteScalar` and `Op::EvalNbaScalar` arrived with §4.5.333, AFTER
+/// this module was written, and because the `jit` feature is off by default
+/// nobody compiled it again — `cargo build --features jit` had been broken ever
+/// since. What caught it is the `_`-free match this file uses on `Op`: a new op
+/// kind cannot be silently ignored, it stops the build until someone classifies
+/// it (ROADMAP §5.1-be).
+///
+/// It calls `Kernel::k_eval_write_scalar` rather than emitting the unfused pair,
+/// because on tier-3 that method is not a convenience — it is the flat one-word
+/// store (`eval_store_word`), and going through `k_eval_for_lvalue` +
+/// `k_write_scalar` instead would hand the JIT a slower body than the VM runs.
+extern "C" fn s_eval_write_scalar(p: *mut BodyCtx, lhs: u32, net: u32, rhs: u32) {
+    let c = ctx!(p);
+    let lv = c.body.lvalue(lhs);
+    c.k.k_eval_write_scalar(lv, net, rhs);
+}
+
+extern "C" fn s_eval_nba_scalar(p: *mut BodyCtx, lhs: u32, rhs: u32) {
+    let c = ctx!(p);
+    let lv = c.body.lvalue(lhs);
+    c.k.k_eval_nba_scalar(lv, rhs);
+}
+
 extern "C" fn s_write_lval_pending(p: *mut BodyCtx, lhs: u32) {
     let c = ctx!(p);
     let v = c.pending.take().expect("WriteLval before EvalForLval");
@@ -759,6 +787,28 @@ extern "C" fn s_rearm(p: *mut BodyCtx) {
     c.k.k_rearm(proc);
 }
 
+/// The per-statement obligation `vm_exec` keeps and this module did NOT.
+///
+/// ⚠️⚠️ Its absence was a SILENT-WRONG, found by wiring the compiled path to
+/// tier-3 and running the whole suite with `VITA_JIT=1`: an infinite recursion
+/// reached from a continuous assign latches `call_fatal` inside the evaluation,
+/// `vm_exec` sees it at the next statement boundary and returns `Step::Fatal`,
+/// and the compiled body ran straight past it — `cont_assign_originated_runaway_
+/// terminates` got `Quiescent` where every other executor gets `Error`.
+///
+/// tier-2 never ran the suite through this module, so nothing had ever asked.
+/// That is the argument for wiring an experiment to a real executor even when
+/// the experiment is going to lose on speed (ROADMAP §5.1-be).
+///
+/// `k_drain_diags` is deliberately NOT mirrored here: `vm_exec`'s own comment
+/// records that it is a backstop measured unobservable, and adding an unproven
+/// call per statement to a path already losing on call overhead would be paying
+/// for a promise nobody has shown is load-bearing.
+extern "C" fn s_call_fatal(p: *mut BodyCtx) -> i32 {
+    let c = ctx!(p);
+    i32::from(c.k.k_call_fatal())
+}
+
 extern "C" fn s_max_deltas(p: *mut BodyCtx) -> u64 {
     let c = ctx!(p);
     c.k.k_max_deltas()
@@ -786,6 +836,8 @@ fn body_supported(body: &CompiledBody) -> bool {
             | Op::WriteScalar { .. }
             | Op::ScheduleNba { .. }
             | Op::ScheduleNbaScalar { .. }
+            | Op::EvalWriteScalar { .. }
+            | Op::EvalNbaScalar { .. }
             | Op::SysTask { .. } => true,
         });
         // A branch condition is ALSO a native program, emitted inline exactly like an
@@ -868,6 +920,18 @@ impl JitEngine {
             &[],
         )?;
         let f_ev = decl(&mut self.module, "s_eval_for_lval", &[ptr, i32t, i32t], &[])?;
+        let f_ews = decl(
+            &mut self.module,
+            "s_eval_write_scalar",
+            &[ptr, i32t, i32t, i32t],
+            &[],
+        )?;
+        let f_ens = decl(
+            &mut self.module,
+            "s_eval_nba_scalar",
+            &[ptr, i32t, i32t],
+            &[],
+        )?;
         let f_wp = decl(&mut self.module, "s_write_lval_pending", &[ptr, i32t], &[])?;
         let f_wsp = decl(
             &mut self.module,
@@ -885,6 +949,7 @@ impl JitEngine {
         )?;
         let f_te = decl(&mut self.module, "s_truthy_expr", &[ptr, i32t], &[i32t])?;
         let f_ra = decl(&mut self.module, "s_rearm", &[ptr], &[])?;
+        let f_cf = decl(&mut self.module, "s_call_fatal", &[ptr], &[i32t])?;
         let f_md = decl(&mut self.module, "s_max_deltas", &[ptr], &[i64t])?;
         let f_mf = decl(&mut self.module, "s_mark_fatal", &[ptr], &[])?;
         let f_sel = decl(
@@ -934,6 +999,8 @@ impl JitEngine {
             let rro = m.declare_func_in_func(f_ro, fb.func);
             let rwl = m.declare_func_in_func(f_wl, fb.func);
             let rev = m.declare_func_in_func(f_ev, fb.func);
+            let rews = m.declare_func_in_func(f_ews, fb.func);
+            let rens = m.declare_func_in_func(f_ens, fb.func);
             let rwp = m.declare_func_in_func(f_wp, fb.func);
             let rwsp = m.declare_func_in_func(f_wsp, fb.func);
             let rnp = m.declare_func_in_func(f_np, fb.func);
@@ -941,6 +1008,7 @@ impl JitEngine {
             let rtv = m.declare_func_in_func(f_tv, fb.func);
             let rte = m.declare_func_in_func(f_te, fb.func);
             let rra = m.declare_func_in_func(f_ra, fb.func);
+            let rcf = m.declare_func_in_func(f_cf, fb.func);
             let rmd = m.declare_func_in_func(f_md, fb.func);
             let rmf = m.declare_func_in_func(f_mf, fb.func);
             let shims = Shims {
@@ -1042,6 +1110,17 @@ impl JitEngine {
                                 }
                             }
                         }
+                        Op::EvalWriteScalar { lhs, net, rhs } => {
+                            let a = fb.ins().iconst(i32t, lhs as i64);
+                            let n = fb.ins().iconst(i32t, net as i64);
+                            let r = fb.ins().iconst(i32t, rhs as i64);
+                            fb.ins().call(rews, &[ctxv, a, n, r]);
+                        }
+                        Op::EvalNbaScalar { lhs, rhs } => {
+                            let a = fb.ins().iconst(i32t, lhs as i64);
+                            let r = fb.ins().iconst(i32t, rhs as i64);
+                            fb.ins().call(rens, &[ctxv, a, r]);
+                        }
                         Op::SysTask { .. } => {
                             let b = fb.ins().iconst(i32t, bi as i64);
                             let o = fb.ins().iconst(i32t, oi as i64);
@@ -1058,6 +1137,21 @@ impl JitEngine {
                             fb.switch_to_block(cont);
                             fb.seal_block(cont);
                         }
+                    }
+                    // ⚠️ THE PER-STATEMENT OBLIGATION, mirroring `vm_exec`'s.
+                    // Its absence made a latched `call_fatal` invisible to a
+                    // compiled body — see `s_call_fatal`.
+                    if op.ends_statement() {
+                        let c = fb.ins().call(rcf, &[ctxv]);
+                        let flag = fb.inst_results(c)[0];
+                        let fatal_bb = fb.create_block();
+                        let cont_bb = fb.create_block();
+                        fb.ins().brif(flag, fatal_bb, &[], cont_bb, &[]);
+                        fb.switch_to_block(fatal_bb);
+                        fb.seal_block(fatal_bb);
+                        ret(&mut fb, STEP_FATAL);
+                        fb.switch_to_block(cont_bb);
+                        fb.seal_block(cont_bb);
                     }
                 }
                 // terminator + the delta guard `vm_exec` applies after every block
