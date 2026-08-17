@@ -236,6 +236,18 @@ enum WOp {
     },
 }
 
+/// The two evaluation stacks, held together so a caller takes ONE borrow.
+///
+/// `u` is the 2-state lane's (D2): eight bytes per entry instead of sixteen,
+/// which is the larger half of what that lane buys on the shapes the census
+/// found to be pure data movement (`struct-heavy` is 45% `Splice` + 28% `Load`
+/// + 17% `Const`).
+#[derive(Default)]
+pub(crate) struct WScratch {
+    pub(crate) w: Vec<W>,
+    pub(crate) u: Vec<u64>,
+}
+
 pub(crate) struct WProg {
     ops: Vec<WOp>,
     /// The RESULT's width and signedness — what the caller stamps on the
@@ -244,6 +256,14 @@ pub(crate) struct WProg {
     signed: bool,
     /// Maximum stack depth, so the executor can reserve once.
     depth: usize,
+    /// D2: may this program ever attempt the 2-state lane?
+    ///
+    /// FALSE when a `Const` carries x/z, because that leaf is unknown on every
+    /// evaluation and the lane would bail on every run — the flag turns a
+    /// per-run bail into a compile-time one. Nothing else is decided here: the
+    /// other two leaves (`Load`, `LoadIdx`) are runtime facts and the lane
+    /// checks them itself.
+    two_state: bool,
 }
 
 /// Compile `eid` for context `(w, signed)` — `None` when any node falls
@@ -294,11 +314,15 @@ pub(crate) fn compile(
         &mut depth,
         &mut max_depth,
     )?;
+    let two_state = !ops
+        .iter()
+        .any(|o| matches!(*o, WOp::Const { unk, .. } if unk != 0));
     Some(WProg {
         ops,
         width: w,
         signed,
         depth: max_depth,
+        two_state,
     })
 }
 
@@ -924,7 +948,217 @@ fn const_planes(ir: &SimIr, val_idx: u32, w: u32) -> Option<(u64, u64)> {
 impl WProg {
     /// Execute over the arena buffer. `scratch` is the caller's reusable
     /// stack; cleared here, capacity grown once to the compiled depth.
-    pub(crate) fn run(&self, arena: &NetArena, scratch: &mut Vec<W>) -> W {
+    /// Evaluate — 2-state lane first, canonical lane always behind it.
+    ///
+    /// ## D2: what the fast lane is, and why it costs no correctness
+    ///
+    /// A census over the eight benchmark shapes and picorv32 measured how often
+    /// an evaluation touches x/z at all: **every one of the eight shapes is
+    /// 100% definite, and picorv32 is 90.1% of runs / 91.1% of ops.** The
+    /// 4-state machinery in the canonical loop below therefore does work that
+    /// nine evaluations in ten cannot use — two planes pushed and popped for
+    /// every value, a definite-1/definite-0 dance in `And`/`Or`, a branch in
+    /// `Add`/`Sub`, and a shared call handed a plane that is provably zero.
+    ///
+    /// `run_2s` is the same op sequence over ONE plane. It returns `None` the
+    /// moment a leaf brings an unknown — and then this function runs the
+    /// canonical loop, from the start, on the same inputs.
+    ///
+    /// ⚠️ **The fallback IS the canonical implementation, not an approximation
+    /// of it.** That is the whole correctness argument and it is worth stating
+    /// as such: this slice adds no semantics, no static per-net proof, and no
+    /// X-entry trap (ROADMAP §5.1 sketched D2 with all three). A 2-state answer
+    /// is returned only when every leaf was definite, and on definite leaves
+    /// every admitted op is definite-preserving — which the battery measures
+    /// against this very loop rather than assuming.
+    ///
+    /// ⚠️ Re-running is safe because the fast lane has NO side effects: the one
+    /// arm that can report (`LoadIdx` out of range, which counts a deferred
+    /// diagnostic) bails BEFORE reporting, so the canonical loop files it
+    /// exactly once. Nothing else in either loop touches the arena.
+    ///
+    /// ⚠️⚠️ And note the shape of this against §5.1-ax, which is the slice
+    /// before it: a cheap test in front of an expensive one is safe EXACTLY
+    /// WHEN the real thing is still behind it. D1.5 put an approximation at a
+    /// boundary with nothing behind it and quietly reached neither evaluator.
+    /// Here the approximation is "no unknown so far", and being wrong about it
+    /// costs a re-run, not an answer.
+    pub(crate) fn run(&self, arena: &NetArena, sc: &mut WScratch) -> W {
+        if self.two_state {
+            if let Some(val) = self.run_2s(arena, &mut sc.u) {
+                return W { val, unk: 0 };
+            }
+        }
+        self.run_4s(arena, &mut sc.w)
+    }
+
+    /// The 2-state lane — one plane, `None` on the first unknown.
+    ///
+    /// Every arm is the canonical arm below with `unk` fixed to zero, and the
+    /// three that consult a shared rule STILL CALL IT (`truthiness_word`,
+    /// `unary1_word`, the `binops` comparisons), handing it the zero plane. That
+    /// is deliberate: a respelling of those rules is the defect class this
+    /// module's header names, and the constant plane is something the optimiser
+    /// can fold but a second copy of the semantics is not something a reviewer
+    /// can.
+    fn run_2s(&self, arena: &NetArena, scratch: &mut Vec<u64>) -> Option<u64> {
+        let buf = &arena.buf;
+        scratch.clear();
+        scratch.reserve(self.depth);
+        for op in &self.ops {
+            match *op {
+                WOp::Const { val, .. } => scratch.push(val),
+                WOp::Load { vi } => {
+                    if buf[vi as usize + 1] != 0 {
+                        return None;
+                    }
+                    scratch.push(buf[vi as usize]);
+                }
+                // ⚠️ TWO checks, not one: the INDEX being definite (it came
+                // from definite ops) does not make the ELEMENT definite. A
+                // mutation deleting the element check survived the whole suite
+                // — no design here held x in an array element and read it
+                // through a runtime index on this backend — and is killed by
+                // the `g*` rows of `cli/tests/two_state_lane.rs`.
+                WOp::LoadIdx { off, elems, .. } => {
+                    let i = scratch.last_mut()?;
+                    let idx = crate::eval::word_index_of(Some(*i));
+                    if idx >= elems {
+                        // ⚠️ BAIL BEFORE REPORTING — `note_bad_index` is the one
+                        // side effect in either loop, and the canonical lane is
+                        // about to run the same op.
+                        return None;
+                    }
+                    let vi = (off + idx * 2) as usize;
+                    if buf[vi + 1] != 0 {
+                        return None;
+                    }
+                    *i = buf[vi];
+                }
+                WOp::Not { m } => {
+                    let a = scratch.last_mut()?;
+                    *a = !*a & m;
+                }
+                WOp::And { .. } => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    *a &= b;
+                }
+                WOp::Or { .. } => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    *a |= b;
+                }
+                WOp::Xor => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    *a ^= b;
+                }
+                WOp::Shl { k, m } => {
+                    let a = scratch.last_mut()?;
+                    *a = (*a << k) & m;
+                }
+                WOp::Shr { k } => {
+                    let a = scratch.last_mut()?;
+                    *a >>= k;
+                }
+                WOp::Add { m } => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    *a = a.wrapping_add(b) & m;
+                }
+                WOp::Sub { m } => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    *a = a.wrapping_sub(b) & m;
+                }
+                WOp::LogBin { op, lw, rw, .. } => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    let (v, u) = crate::eval::binops::log_bin_tri(
+                        op,
+                        crate::eval::truthiness_word(*a, 0, mask_of(lw)),
+                        crate::eval::truthiness_word(b, 0, mask_of(rw)),
+                    );
+                    if u != 0 {
+                        return None;
+                    }
+                    *a = v;
+                }
+                WOp::Unary1 { op, ow, .. } => {
+                    let a = scratch.last_mut()?;
+                    let (v, u) = crate::eval::unary1_word(op, *a, 0, mask_of(ow));
+                    if u != 0 {
+                        return None;
+                    }
+                    *a = v;
+                }
+                WOp::Cmp { op, ow, osigned } => {
+                    let b = scratch.pop()?;
+                    let a = scratch.last_mut()?;
+                    let (v, u) = match op {
+                        sim_ir::BinOp::CaseEq | sim_ir::BinOp::CaseNe => {
+                            crate::eval::binops::case_eq_word(op, *a, 0, b, 0)
+                        }
+                        sim_ir::BinOp::Eq | sim_ir::BinOp::Ne => {
+                            crate::eval::binops::log_eq_word(op, *a, 0, b, 0)
+                        }
+                        _ => crate::eval::binops::relational_word(op, *a, 0, b, 0, ow, osigned),
+                    };
+                    if u != 0 {
+                        return None;
+                    }
+                    *a = v;
+                }
+                WOp::Tern { cw, .. } => {
+                    let e = scratch.pop()?;
+                    let t = scratch.pop()?;
+                    let c = scratch.last_mut()?;
+                    // ⚠️ NO `& m` on the taken branch — the canonical arm has
+                    // none either, because a branch value is already masked to
+                    // the result width. Masking here would be a SECOND SPELLING
+                    // of that invariant: it is a no-op today, and the day the
+                    // invariant breaks it would hide the break in this lane
+                    // while the canonical lane showed it.
+                    *c = match crate::eval::truthiness_word(*c, 0, mask_of(cw)) {
+                        crate::eval::Tri::True => t,
+                        crate::eval::Tri::False => e,
+                        // A definite condition cannot be Unknown; fail closed
+                        // rather than argue, since the cost is one re-run.
+                        crate::eval::Tri::Unknown => return None,
+                    };
+                }
+                WOp::Slice { k, m } => {
+                    let a = scratch.last_mut()?;
+                    *a = (*a >> k) & m;
+                }
+                WOp::Splice {
+                    off,
+                    stride,
+                    count,
+                    m,
+                } => {
+                    let p = scratch.pop()?;
+                    let acc = scratch.last_mut()?;
+                    for i in 0..count {
+                        // ⚠️ `& m` is MEASURED REDUNDANT and kept anyway. The
+                        // compiler checks that the parts tile the result
+                        // (`Σ pw == w`) and every part is masked to its own
+                        // width, so `p << sh` cannot reach past `w`; an
+                        // `assert_eq!((p << sh) & !m, 0)` probe ran the whole
+                        // 5,476-test suite without firing. It stays because it
+                        // is what the canonical arm does — a lane that drops a
+                        // guard its twin keeps is a divergence waiting for the
+                        // invariant to move.
+                        *acc |= (p << (off + i * stride)) & m;
+                    }
+                }
+            }
+        }
+        scratch.pop()
+    }
+
+    fn run_4s(&self, arena: &NetArena, scratch: &mut Vec<W>) -> W {
         let buf = &arena.buf;
         scratch.clear();
         scratch.reserve(self.depth);
@@ -1123,6 +1357,22 @@ impl WProg {
 
     pub(crate) fn signed(&self) -> bool {
         self.signed
+    }
+
+    /// D2 teeth: the three questions the lane's correctness rests on, asked
+    /// directly rather than through `run`'s dispatch — because a lane that
+    /// silently never fires passes every differential in the repository.
+    #[cfg(test)]
+    pub(crate) fn two_state_flag(&self) -> bool {
+        self.two_state
+    }
+    #[cfg(test)]
+    pub(crate) fn run_2s_for_test(&self, a: &NetArena, s: &mut Vec<u64>) -> Option<u64> {
+        self.run_2s(a, s)
+    }
+    #[cfg(test)]
+    pub(crate) fn run_4s_for_test(&self, a: &NetArena, s: &mut Vec<W>) -> W {
+        self.run_4s(a, s)
     }
 
     /// Instruction count — read by the battery to assert that COMPOUND

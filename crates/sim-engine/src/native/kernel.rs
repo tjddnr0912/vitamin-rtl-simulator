@@ -370,7 +370,7 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// width-specialized program and hands the resulting value to that same
     /// function. Anything else falls back to `eval::resolve_offsets` whole.
     pub(crate) icache: std::cell::RefCell<Vec<Option<IdxKind>>>,
-    pub(crate) wscratch: std::cell::RefCell<Vec<crate::native::wprog::W>>,
+    pub(crate) wscratch: std::cell::RefCell<crate::native::wprog::WScratch>,
     /// **S3 slice 1 — the compiled body, one slot per process template.**
     ///
     /// The tier-3 walk decided per EXECUTION what each statement is
@@ -600,7 +600,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             waiters: Vec::new(),
             wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             icache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
-            wscratch: std::cell::RefCell::new(Vec::new()),
+            wscratch: std::cell::RefCell::new(Default::default()),
             bodies: (0..ir.processes.len())
                 .map(|_| crate::backend::VmSlot::Unchecked)
                 .collect(),

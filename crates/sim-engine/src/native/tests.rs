@@ -1769,6 +1769,158 @@ fn compare_wake(
 /// many times over. This is the anchor the §4.5.302 rule demands for the
 /// specialized spellings of the 4-state tables — measured equal against the
 /// canonical evaluator, not derived equal.
+/// D2 TEETH — the 2-state lane, asked directly.
+///
+/// ⚠️⚠️ The exhaustive battery below ALREADY compares the lane against the
+/// generic evaluator for every definite input, because `run` dispatches into
+/// it. What that battery cannot see is the lane NOT FIRING: make `two_state`
+/// always false and every differential in this repository still passes, because
+/// the canonical loop is the fallback and the fallback is correct. A speedup
+/// that silently stops happening is exactly the failure this slice can have,
+/// so the first assertion here is a vacuity assertion.
+///
+/// The three rows are the three claims the design rests on:
+///   1. on definite leaves the lane FIRES and agrees with the canonical loop,
+///   2. on an unknown leaf it DECLINES (so the canonical loop answers), and
+///   3. an x-carrying `Const` is refused at COMPILE time, because that leaf is
+///      unknown on every evaluation and a per-run bail would never clear.
+#[test]
+fn d2_two_state_lane_fires_and_agrees_with_the_canonical_loop() {
+    let src = "module top;\n\
+       reg [3:0] a, b;\n\
+       reg signed [3:0] sa, sb;\n\
+       wire [3:0] o1; assign o1 = (a ^ b) + (a & ~b) - (a | b);\n\
+       wire [3:0] o2; assign o2 = {a[1:0], b[3:2]};\n\
+       wire [3:0] o3; assign o3 = (a < b) ? (a << 1) : (b >> 1);\n\
+       wire       o4; assign o4 = (|a) && (&b) || (^a);\n\
+       wire       o5; assign o5 = (sa >= sb) == (a != b);\n\
+       wire [3:0] o6; assign o6 = a ^ 4'bxx01;\n\
+       initial begin a = 4'd0; b = 4'd0; sa = 4'sd0; sb = 4'sd0; end\n\
+       endmodule\n";
+    let ir = build(src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+    let sig = |eid: u32| match ir.exprs.get(eid as usize) {
+        Some(sim_ir::Expr::Signal { net, .. }) => *net,
+        other => panic!("shape moved: {other:?}"),
+    };
+    // `o1`'s rhs is `((a^b) + (a&~b)) - (a|b)`; walk to the leftmost leaves.
+    let (na, nb) = {
+        let mut e = ir.cont_assigns[0].rhs;
+        loop {
+            match ir.exprs.get(e as usize) {
+                Some(sim_ir::Expr::Binary { lhs, rhs, .. }) => {
+                    if let Some(sim_ir::Expr::Binary {
+                        lhs: l2, rhs: r2, ..
+                    }) = ir.exprs.get(*lhs as usize)
+                    {
+                        if matches!(
+                            ir.exprs.get(*l2 as usize),
+                            Some(sim_ir::Expr::Signal { .. })
+                        ) && matches!(
+                            ir.exprs.get(*r2 as usize),
+                            Some(sim_ir::Expr::Signal { .. })
+                        ) {
+                            break (sig(*l2), sig(*r2));
+                        }
+                    }
+                    let _ = rhs;
+                    e = *lhs;
+                }
+                other => panic!("shape moved: {other:?}"),
+            }
+        }
+    };
+    let mut progs = Vec::new();
+    for ca in &ir.cont_assigns {
+        let sw = wt.get(ca.rhs);
+        if let Some(p) =
+            crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, sw.width, sw.signed)
+        {
+            progs.push((ca.rhs, sw, p));
+        }
+    }
+    assert!(progs.len() >= 6, "lane battery lost its programs");
+
+    let set = |arena: &mut NetArena, net: u32, val: u64, unk: u64| {
+        let s = arena.slots[net as usize];
+        arena.buf[s.off as usize] = val;
+        arena.buf[s.off as usize + 1] = unk;
+    };
+    // ⚠️ Every net starts at its CONSTRUCTION value, which is all-x — so a
+    // program reading a net this sweep does not drive (`sa`, `sb`) would bail
+    // for a reason that has nothing to do with what is being tested. Zeroing
+    // the unknown plane once is what puts the whole design in the definite
+    // world the first row is about.
+    for i in 0..arena.slots.len() {
+        let sl = arena.slots[i];
+        assert_eq!(sl.words, 1, "this battery assumes one-word slots");
+        arena.buf[sl.off as usize + 1] = 0;
+    }
+    let mut s2 = Vec::new();
+    let mut s4 = crate::native::wprog::WScratch::default();
+
+    // ROW 3 first: the x-carrying constant must be refused at COMPILE time.
+    let x_const = progs.iter().filter(|(_, _, p)| !p.two_state_flag()).count();
+    assert_eq!(
+        x_const, 1,
+        "exactly one row ({{a ^ 4'bxx01}}) carries an x constant; if this is 0 the \
+         compile-time refusal stopped working, if it is >1 a row changed shape"
+    );
+
+    // ROW 1: definite leaves — the lane fires, and its answer IS the canonical
+    // one. Swept over all 256 definite (a,b) pairs so no single value can
+    // happen to agree.
+    let mut fired = 0usize;
+    for av in 0u64..16 {
+        for bv in 0u64..16 {
+            set(&mut arena, na, av, 0);
+            set(&mut arena, nb, bv, 0);
+            for (_, _, p) in &progs {
+                let two = p.run_2s_for_test(&arena, &mut s2);
+                let four = p.run_4s_for_test(&arena, &mut s4.w);
+                if p.two_state_flag() {
+                    let got = two.expect("definite leaves must not bail");
+                    assert_eq!(
+                        (got, 0u64),
+                        (four.val, four.unk),
+                        "2-state lane disagrees with the canonical loop at a={av} b={bv}"
+                    );
+                    fired += 1;
+                }
+            }
+        }
+    }
+    assert!(
+        fired >= 256 * 5,
+        "the 2-state lane fired {fired} times — a lane that does not run is not a lane"
+    );
+
+    // ROW 2: one unknown leaf and the lane must DECLINE, so the canonical loop
+    // (which `run` falls back to) is what answers.
+    set(&mut arena, na, 0b0101, 0b0010);
+    set(&mut arena, nb, 0b0011, 0);
+    let mut declined = 0usize;
+    for (_, _, p) in &progs {
+        if p.two_state_flag() && p.run_2s_for_test(&arena, &mut s2).is_none() {
+            declined += 1;
+        }
+        // `run` is still right either way, and that is the point of the design:
+        // the fallback is the canonical implementation, not an approximation.
+        let via_run = p.run(&arena, &mut s4);
+        let direct = p.run_4s_for_test(&arena, &mut s4.w);
+        assert_eq!(
+            (via_run.val, via_run.unk),
+            (direct.val, direct.unk),
+            "dispatch changed the answer on an unknown input"
+        );
+    }
+    assert!(
+        declined >= 4,
+        "only {declined} rows declined on an unknown leaf — the bail is not working"
+    );
+}
+
 #[test]
 fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
     // Each continuous assign is one shape; every one is compiled at its OWN
@@ -1936,7 +2088,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
          A battery where everything admits cannot show that the declines happen"
     );
     let rng = crate::state::RngCells::default();
-    let mut scratch = Vec::new();
+    let mut scratch = crate::native::wprog::WScratch::default();
     let set = |arena: &mut NetArena, net: u32, val: u64, unk: u64| {
         let s = arena.slots[net as usize];
         arena.buf[s.off as usize] = val;
@@ -2005,7 +2157,7 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
             .filter(|&eid| pure_expr(&ir, &mut memo, eid))
             .collect();
         let mut rng = Rng::new(0x57A7_0000 ^ pure.len() as u64);
-        let mut scratch = Vec::new();
+        let mut scratch = crate::native::wprog::WScratch::default();
         let rng_cells = crate::state::RngCells::default();
         for state_i in 0..5 {
             for n in 0..ir.nets.len() as u32 {
@@ -2284,7 +2436,7 @@ fn s2_wprog_runtime_element_load_matches_generic_eval() {
     ]);
 
     let rng = crate::state::RngCells::default();
-    let mut scratch = Vec::new();
+    let mut scratch = crate::native::wprog::WScratch::default();
     let (mut compared, mut saw_oob, mut saw_inrange) = (0usize, 0usize, 0usize);
     for (kv, ku) in cases {
         {
