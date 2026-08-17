@@ -297,8 +297,21 @@ impl StderrSink {
             Severity::Warning => self.warnings.set(self.warnings.get() + 1),
             _ => self.notes.set(self.notes.get() + 1),
         }
+        // A runtime diagnostic has no file:line (the engine works on IR, not
+        // spans) but it DOES know when it fired, and every runtime emitter
+        // already stamps `sim_time` — the renderer was dropping it. Without it
+        // a design with many `unique case` sites or many indexed arrays reports
+        // N identical lines that cannot be told apart; the time alone separates
+        // "during reset" from "in steady state", which is the question a reader
+        // actually asks. Same wording and same clock as the `simulation ended
+        // (…) at time N` epilogue. Elaborate/parse diagnostics carry `None` and
+        // are unchanged.
+        let when = match &d.sim_time {
+            Some(t) => format!(" [at time {}]", t.ticks),
+            None => String::new(),
+        };
         let head = format!(
-            "{}[{}]: {}",
+            "{}[{}]: {}{when}",
             d.severity.token(),
             d.code.code_num(),
             d.message

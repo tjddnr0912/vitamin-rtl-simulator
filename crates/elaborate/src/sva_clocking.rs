@@ -548,12 +548,21 @@ impl Elaborator<'_> {
                 if let Some(skew) = &it.skew_raw {
                     let s = skew.trim();
                     if s != "#1step" {
+                        // Name the SIGNAL: a clocking block has many items and a
+                        // block-wide `default` puts one written skew on several
+                        // of them, so "which one" is not recoverable from the
+                        // source by reading. And name the accepted spelling as
+                        // PER-SIGNAL — saying "the explicit default" next to a
+                        // rejected `default …;` item reads as an instruction to
+                        // write the thing that was just refused.
                         self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
-                                "clocking skew `{s}` is unsupported in this subset \
-                                 (`#1step` is accepted as the explicit default; \
-                                 `#0`/`#N`/`##N` need a different sampling region — follow-on slice)"
+                                "clocking skew `{s}` on `{}` is unsupported in this subset \
+                                 (`#1step` is the only accepted skew, written per signal or \
+                                 in a `default input #1step;` item; `#0`/`#N`/`##N` need a \
+                                 different sampling region — follow-on slice)",
+                                it.name.name
                             ),
                         );
                         continue;

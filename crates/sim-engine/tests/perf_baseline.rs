@@ -222,6 +222,84 @@ const REAL_HEAVY: &str = "module top;\n\
   end\n\
 endmodule";
 
+/// ⚠️⚠️ **[round-29] CONT-ASSIGN-bound: the axis the other eight do not have.**
+///
+/// Every other shape here puts its work in a PROCEDURAL body — an `always
+/// @(posedge clk)` doing arithmetic — which is precisely the half a body-side
+/// backend accelerates. So "native beats the VM on 8/8" was a statement about
+/// eight samples of ONE regime, and an external report (round-29, an AES/hash
+/// tree) measured the other regime and got the opposite sign: `native` was
+/// **~5% SLOWER** than `vm` on their Keccak-dominated testbench while being
+/// 1.09–1.76× faster on their SHA-2-dominated ones. Their diagnosis — the cost
+/// is outside the body executor, so tier-3 contributes only its overhead —
+/// is the same axis §5.2's own profile put at **29% scheduler self time**.
+///
+/// This shape is that regime: a Keccak-style combinational round (theta/chi:
+/// rotate, xor, and-not) written as CONTINUOUS ASSIGNS between two clocked
+/// endpoints, so the body is five trivial NBAs and the work is in
+/// `settle_cont_assigns` + propagate. Wide (64-bit) and net-dominated on
+/// purpose.
+///
+/// Measures, does not gate — like its eight neighbours.
+const CONT_ASSIGN_HEAVY: &str = "module top;\n\
+  reg clk;\n\
+  reg [63:0] s0, s1, s2, s3, s4;\n\
+  wire [63:0] t0, t1, t2, t3, t4;\n\
+  assign t0 = s0 ^ {s1[62:0], s1[63]}    ^ (s4 & ~s3);\n\
+  assign t1 = s1 ^ {s2[58:0], s2[63:59]} ^ (s0 & ~s4);\n\
+  assign t2 = s2 ^ {s3[54:0], s3[63:55]} ^ (s1 & ~s0);\n\
+  assign t3 = s3 ^ {s4[50:0], s4[63:51]} ^ (s2 & ~s1);\n\
+  assign t4 = s4 ^ {s0[46:0], s0[63:47]} ^ (s3 & ~s2);\n\
+  always @(posedge clk) begin\n\
+    s0 <= t0; s1 <= t1; s2 <= t2; s3 <= t3; s4 <= t4;\n\
+  end\n\
+  integer j;\n\
+  initial begin\n\
+    clk = 0;\n\
+    s0 = 64'h0123456789ABCDEF; s1 = 64'hFEDCBA9876543210;\n\
+    s2 = 64'hA5A5A5A55A5A5A5A; s3 = 64'hDEADBEEFCAFEBABE; s4 = 64'h0F1E2D3C4B5A6978;\n\
+    for (j = 0; j < 20000; j = j + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+    $finish;\n\
+  end\n\
+endmodule";
+
+/// ⚠️ **[round-29] HEAP-bound: the second axis the other eight do not have.**
+///
+/// String / queue / dynamic-array churn — the regime a real testbench spends its
+/// time in when it parses vectors (the round-29 reporter's slow workload feeds
+/// 0.87 MB of CAVP records through `$sscanf`-style processing, which is nothing
+/// like any shape above). Tier-3 reaches this storage through the `HeapRouted`
+/// composite reader rather than the arena, so it is the one regime where its
+/// routing is on the hot path instead of its arena.
+///
+/// Measures, does not gate.
+const HEAP_HEAVY: &str = "module top;\n\
+  reg clk;\n\
+  string s;\n\
+  string parts [$];\n\
+  int q [$];\n\
+  int total;\n\
+  integer i;\n\
+  integer j;\n\
+  always @(posedge clk) begin\n\
+    for (i = 0; i < 400; i = i + 1) begin\n\
+      s = {\"rec\", \"_\", \"0123456789\"};\n\
+      parts.push_back(s);\n\
+      q.push_back(s.len() + i);\n\
+      total = total + q[q.size() - 1] + parts[parts.size() - 1].len();\n\
+      if (q.size() > 8) begin\n\
+        void'(q.pop_front());\n\
+        void'(parts.pop_front());\n\
+      end\n\
+    end\n\
+  end\n\
+  initial begin\n\
+    clk = 0; total = 0;\n\
+    for (j = 0; j < 100; j = j + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+    $finish;\n\
+  end\n\
+endmodule";
+
 /// [C6] MEMORY-bound expressions: dynamic `mem[i]` reads inside every statement
 /// (the LoadIndexed lane). Before C6 an array-indexed Signal bailed the whole
 /// expression to `eval_ctx`.
@@ -316,6 +394,16 @@ fn perf_baseline_codegen_heavy() {
     report(
         "real-heavy (f64 arithmetic; native-lane measure-retire probe)",
         REAL_HEAVY,
+        5,
+    );
+    report(
+        "cont-assign-heavy (Keccak-style combinational nets; round-29 counterexample)",
+        CONT_ASSIGN_HEAVY,
+        5,
+    );
+    report(
+        "heap-heavy (string/queue churn; round-29 testbench regime)",
+        HEAP_HEAVY,
         5,
     );
 }

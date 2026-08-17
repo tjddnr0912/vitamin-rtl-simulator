@@ -8,11 +8,17 @@ impl Parser<'_, '_> {
     /// endgroup` — a functional-coverage model. The header tail (args / sampling event)
     /// and any per-coverpoint bins/iff are SKIPPED to `;` in this slice (auto-bins,
     /// explicit `sample()`); only the coverpoint EXPR is captured.
-    /// N4: `[default] clocking [NAME] @(event); { [default] input/output [skew]
-    /// sig [= expr] {, …}; } endclocking [: NAME]` (IEEE 1800 §14). v1 scope =
-    /// default-skew INPUT/OUTPUT + `@(cb)`; an explicit skew (`#…`) is captured in
-    /// `skew_raw` so elaborate can honest-loud it. A clocking-wide `default
-    /// input/output …;` skew setter is loud here (out of v1 scope).
+    /// N4: `[default] clocking [NAME] @(event); { clocking_item }
+    /// endclocking [: NAME]` (IEEE 1800 §14.3). Two item forms:
+    ///
+    /// - `default default_skew ;` where `default_skew ::= input SKEW
+    ///   | output SKEW | input SKEW output SKEW` — a block-wide default.
+    /// - `DIR [SKEW] sig [= expr] {, …} ;` — a per-signal declaration.
+    ///
+    /// The default is not a second skew mechanism: it is STAMPED onto every
+    /// item of that direction which declared no skew of its own, so exactly one
+    /// predicate (elaborate's) decides which skews this subset can honour, and
+    /// it names the skew that was actually written either way.
     pub(crate) fn parse_clocking(&mut self) -> Option<ModuleItem> {
         let start = self.cur_span();
         let is_default = self.eat_kw(Kw::Default);
@@ -29,17 +35,49 @@ impl Parser<'_, '_> {
         };
         self.expect(TokenKind::Semi, "';' after clocking header");
         let mut items = Vec::new();
+        // Block-wide `default default_skew;` (IEEE §14.3), stamped onto the
+        // skew-less items after the loop. `seen_default` exists because two
+        // `default` items have no unambiguous reading — the LRM grammar admits
+        // one per block, so a second is loud rather than last-wins.
+        let mut default_in: Option<String> = None;
+        let mut default_out: Option<String> = None;
+        let mut seen_default = false;
         loop {
             if self.at_kw(Kw::Endclocking) || self.peek().is_none() {
                 break;
             }
-            // Clocking-wide skew setter `default input/output [skew];` — out of v1
-            // scope (skews unsupported). Loud, then skip to its `;`.
             if self.at_kw(Kw::Default) {
-                self.error(
-                    "a clocking-wide `default input/output` skew is unsupported in \
-                     this subset (default skew only)",
-                );
+                // Report BEFORE consuming, so the offending token in the message
+                // is the second `default` itself and not whatever follows it.
+                if seen_default {
+                    self.error("at most one `default` item in a clocking block (IEEE 1800 §14.3)");
+                } else {
+                    seen_default = true;
+                    self.bump(); // `default`
+                                 // `input SKEW [output SKEW]` | `output SKEW` — the direction
+                                 // keyword is not optional, so a bare `default #1step;` is a
+                                 // syntax error in the LANGUAGE, not a subset cut. Say so
+                                 // instead of naming a road the subset does not have.
+                    let has_in = self.eat_kw(Kw::Input);
+                    if has_in {
+                        default_in = self.parse_clocking_skew();
+                        if default_in.is_none() {
+                            self.error("a skew (`#…`) after `default input`");
+                        }
+                    }
+                    if self.eat_kw(Kw::Output) {
+                        default_out = self.parse_clocking_skew();
+                        if default_out.is_none() {
+                            self.error("a skew (`#…`) after `default output`");
+                        }
+                    } else if !has_in {
+                        self.error(
+                            "`input` or `output` after `default` in a clocking block \
+                             (IEEE 1800 §14.3: `default input SKEW [output SKEW];` \
+                             or `default output SKEW;`)",
+                        );
+                    }
+                }
                 while !matches!(self.peek(), Some(TokenKind::Semi) | None) {
                     self.bump();
                 }
@@ -60,29 +98,7 @@ impl Parser<'_, '_> {
                 self.eat(TokenKind::Semi);
                 continue;
             };
-            // Optional skew `#delay` / `#1step` — captured raw so elaborate can
-            // accept `#1step` (the explicit default) or honest-loud others.
-            // `#1step` is TWO tokens after `#`: IntDecimal("1") + Word(Ident("step")).
-            let skew_raw = if self.peek() == Some(TokenKind::Hash) {
-                self.bump(); // consume `#`
-                             // Special-case `#1step`: IntDecimal "1" followed immediately by
-                             // Word(Ident "step"). Maximal-munch does NOT merge them.
-                let is_1step = matches!(self.peek(), Some(TokenKind::IntDecimal))
-                    && self.cur_text() == "1"
-                    && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
-                    && self.text_at(1) == "step";
-                if is_1step {
-                    self.bump(); // consume `1`
-                    self.bump(); // consume `step`
-                    Some("#1step".to_string())
-                } else {
-                    let txt = self.cur_text().to_string();
-                    self.bump();
-                    Some(txt)
-                }
-            } else {
-                None
-            };
+            let skew_raw = self.parse_clocking_skew();
             // Signal list: `sig [= expr] {, sig [= expr]}` ;
             loop {
                 let isp = self.cur_span();
@@ -108,6 +124,22 @@ impl Parser<'_, '_> {
             }
             self.expect(TokenKind::Semi, "';' after a clocking item");
         }
+        // Stamp the block-wide default onto every item that declared no skew of
+        // its own. A `default` is a property of the BLOCK, not of the items that
+        // follow it textually, so this runs over the whole list. `inout` has no
+        // `default_skew` production and is left alone.
+        if seen_default {
+            for it in &mut items {
+                if it.skew_raw.is_some() {
+                    continue;
+                }
+                it.skew_raw = match it.dir {
+                    ClockingDir::Input => default_in.clone(),
+                    ClockingDir::Output => default_out.clone(),
+                    ClockingDir::Inout => None,
+                };
+            }
+        }
         if !self.eat_kw(Kw::Endclocking) {
             self.error("'endclocking'");
         }
@@ -122,6 +154,34 @@ impl Parser<'_, '_> {
             items,
             span: start,
         }))
+    }
+
+    /// One clocking skew: `#delay` / `#1step`, captured RAW so exactly one
+    /// predicate (elaborate's) decides which skews this subset can honour.
+    /// `None` ⇒ no `#` here, which for a per-signal item means "the block
+    /// default" and for a `default_skew` production is a syntax error.
+    ///
+    /// `#1step` is TWO tokens after the `#`: `IntDecimal("1")` immediately
+    /// followed by `Word(Ident("step"))` — maximal munch does not merge them.
+    fn parse_clocking_skew(&mut self) -> Option<String> {
+        if self.peek() != Some(TokenKind::Hash) {
+            return None;
+        }
+        self.bump(); // `#`
+        let is_1step = matches!(self.peek(), Some(TokenKind::IntDecimal))
+            && self.cur_text() == "1"
+            && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+            && self.text_at(1) == "step";
+        if is_1step {
+            self.bump(); // `1`
+            self.bump(); // `step`
+            return Some("#1step".to_string());
+        }
+        // Keep the `#` so the honest-loud downstream quotes the skew the way the
+        // user wrote it (`#0`, not `0`).
+        let txt = format!("#{}", self.cur_text());
+        self.bump();
+        Some(txt)
     }
 
     /// N3: a synthetic `[W-1:0]` range (decimal literals) for a record-array element net.

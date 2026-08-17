@@ -364,6 +364,27 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - EXT2-NAP: named assignment pattern `'{k:v}`(외부 0회).
 - EXT2-DOC: 문서 stale(CLI-ref·lang-ref·system-tasks·explain — 외부 2회 보고).
 
+**진단 품질 잔여 (외부 round-29 · 2026-08-18 — 넷 중 셋 해소, 아래가 잔여):**
+
+- **런타임 진단에 위치가 없다 — 시각만 있다.** R29-4 의 절반은 닫혔다(`[at time N]` — `sim_time` 은
+  **모든 런타임 emitter 가 이미 찍고 있었고 렌더러가 버리고 있었다**). 잔여 = **인스턴스 경로**와
+  **file:line**. 리포터 설계는 한 번 실행에 `W4029` 8건 + `W4007` 1건이 뜨는데 트리의 `unique case`
+  사이트가 **11 파일 22 곳**이라 시각만으로는 좁혀지지 않는다. ⚠️ **round-28 의 "E3009 file:line 비일관"
+  과 다른 항목이다** — 그쪽은 elaborate 진단의 앵커 누락이고 이건 **런타임 진단에 앵커 개념이 없는 것**
+  (엔진은 span 이 아니라 IR 위에서 돈다). 재사용 지점 = §4.5.249 `diag::SpanResolver` + StmtId→span
+  사이드카. doc-15 의 W4007 예시(`… at tb.dut.u_fifo time=620ns`)가 목표 형태다.
+- **`unique`/`priority` 위반이 RTL `$warning` 과 코드를 공유한다**(R29-3). 파서가 위반 arm 을
+  **문자 그대로 `$warning` 문장으로 desugar** 하므로 `W-RUN-USER-WARNING` 하나에 둘이 앉는다 ⇒
+  benign 한 unique-case 하나를 죽이려면 `-Wno-` 가 **RTL 의 `$warning` 을 전부** 죽이고, doc-15 가
+  CI 게이트로 명시한 `-Werror=W-RUN-USER-WARNING` 은 **`$warning` 이 한 줄도 없는 설계에서도** CI 를
+  깨뜨린다(실측 `errors=2`). IEEE §12.5.3 의 violation report 는 §20.10 severity task 와 **별개 개념**
+  이고 doc-15 도 W4007 을 `$warning` 으로만 설명한다. 수리 = 전용 MsgCode 를 severity 사이드카로
+  나르기 ⇒ `SeverityKind` 에 variant 추가 = **`.velab` 트레일러 wire 변경(format_version bump)**.
+- **`error_at` 진단은 앵커와 `found` 가 다른 토큰을 가리킬 수 있다.** `error_at` 은 **더 이른 노드**에
+  보고하는데 `found` 는 커서 토큰이라(`g[w].u.q` → 앵커는 `w`, 메시지는 `found '.'`) 둘이 갈린다.
+  R29-1 이 이 둘을 **별개 필드로 분리**했으므로(자기 토큰만 인용 = 절대 틀리지 않는다) 오늘은
+  correct-but-confusing 이다. 사이트 10곳.
+
 **deep 잔여(저우선):**
 
 - t0 race 그라운딩(계단식 CA 체인) · `@(*)` decl-init wake · runtime `==?` pattern.
@@ -381,7 +402,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - N2c full sequence local var(중첩 attempt 각자 데이터=L급; 단일-capture ✅).
 - later-antecedent read · outer-`|=>` prop-ref skew 고급형(2-cycle·중첩·cross-clock).
 - SVA-QUAD collapse default-flip(`VITA_SVA_COLLAPSE` opt-in 상태 — full-VCD 골든 audit 선행).
-- N4 clocking 잔여: non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)`.
+- N4 clocking 잔여: non-`#1step` skew·INOUT·multi-event-list clock·non-net bind·hier input drive·cross-hier `@(inst.cb)`. **(2026-08-18 · round-29 R29-2 로 절반 해소)** — 블록 전역 `default input SKEW [output SKEW];`/`default output SKEW;`(IEEE §14.3)는 **파싱·적용된다**(스킵 없이 각 아이템에 스탬프 ⇒ 판정은 여전히 elaborate 한 술자리). 잔여 = **skew 값 자체**. ⭐ **그중 `output #0` 은 다른 종류의 잔여다** — vita 의 무-skew output 모델이 *"엣지에 Active 리전에서 `source = holding`"* = **자기 나름의 `#0` 근사**이므로, 같은 구성이 **암시 철자는 돌고 명시 철자는 loud** 다. 승격하려면 IEEE 의 Re-NBA 리전 드라이브와의 차이를 오라클로 확인해야 하는데 **iverilog 는 `clocking` 을 파싱 못 하고 verilator 는 Observed 리전 샘플**이라 앵커가 없다 ⇒ 별도 슬라이스(hand-IEEE §14.11/§14.16). `input #0`/`#N`/`##N` 은 **진짜로 다른 샘플링 리전**이라 그대로 loud.
 - class: down-cast `Derived'(base)`($cast 런타임 타입가드 선행) · real→longint cast · base-shadow 명시 접근 `Base'(d).v` · cast-as-receiver `(B'(d)).foo()`.
 
 ## 5. perf / 하드닝 — ★ **T0~T4 가 최우선 (2026-08-03 오너 지시)**, 나머지는 보류 판정
@@ -443,7 +464,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 |---|---|
 | 기본 백엔드 | **`native`**(③층) · 코퍼스 **100.00%** 실행 · 발산 0 |
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
-| 성능 | 벤치 **8/8 에서 native < vm** · picorv32 native/vm **0.60** |
+| 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
 | 게이트 | **5,477 tests green** · no-oracle lib green · clippy **3 구성** 0 · fmt 0 · format_version **26** · MsgCode **65** |
 
@@ -481,6 +502,39 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 첫 자리는 **D6 과 정확히 같은 모양**이다 — `native/run.rs::propagate` 가 **호출(=델타)마다**
 `Vec::new()` 를 셋(`changed`·`woken`·`clocked`) 만든다. ⚠️ 다만 **크기는 아직 안 쟀다**: 이 3.3% 는
 할당·해제 자체의 비용이지, 재사용으로 얼마가 회수되는지는 A/B 로 재야 한다(§5.2 착수 의례 3번).
+
+### ⚠️ 외부 round-29 §5 — "Keccak 지배 워크로드에서 native 가 vm 보다 느리다" · **재현 실패, 그리고 벤치 갭은 진짜였다** (2026-08-18)
+
+리포터가 자기 AES/hash 트리에서 잰 값: **SHA-2 지배 워크로드는 native 가 1.09~1.76× 빠른데
+Keccak 지배(`+CAVP_KMAC_RUN`)는 native 가 ~5% 느리다**(4쌍 전부 vm 이 빨랐다). 진단은
+*"native 가 못 건드리는 비용이 body 실행기 밖에 있고 거기선 tier-3 오버헤드만 남는다"*.
+
+⭐ **지적 자체는 옳았다 — 벤치 8 형태가 전부 절차 바디 지배였다.** `always @(posedge clk)` 안에
+산술을 넣은 여덟 샘플은 **한 레짐의 여덟 표본**이지 여덟 레짐이 아니다. 그래서 **두 형태를 더했다**
+(`perf_baseline.rs` · 8 → **10**):
+
+| 새 형태 | 무엇 | interp | vm | native | native/vm |
+|---|---|---:|---:|---:|---|
+| `cont-assign-heavy` | Keccak 스타일 조합 라운드(theta/chi)를 **연속대입**으로 · 바디는 NBA 다섯 | 45.6 | 45.1 | 34.1 | **0.76** |
+| `heap-heavy` | string/queue 처닝(레코드 파싱 TB 의 레짐) | 54.9 | 53.3 | 45.6 | **0.86** |
+
+⚠️⚠️ **그런데 부호가 반대다 — 두 형태 다 native 가 이긴다.** 그리고 **왜 이기는지가 리포트의 진단을
+반증한다**: 두 형태 모두 **vm/interp ≈ 0.97** = 바이트코드 VM 이 사실상 아무 기여도 안 하는데
+(컴파일할 바디가 없다) **native 는 여전히 15~24% 빠르다** ⇒ tier-3 의 이득이 바디 컴파일에서만
+오는 게 아니라 **넷/settle 경로(아레나)에서도** 온다. *"바디 밖이면 오버헤드만 남는다"* 는 참이 아니다.
+
+⚠️ **이 저장소의 실물 Keccak 도 같은 답을 준다**(`bench/keccak` · Keccak-f[1600] · `+N=400`):
+`keccak_f` **1.97/2.31 = 0.85** · `keccak_f_arr` **4.48/4.81 = 0.93** · `keccak_f_flat`
+**0.152/0.242 = 0.63**. 셋 다 native 가 빠르다.
+
+⇒ **리포터의 숫자는 그들의 설계에 대한 측정으로 남기고, 그 메커니즘은 확인되지 않은 것으로 기록한다.**
+가를 수 있는 것 = 그들의 설계, 또는 더 가까운 프록시. ⭐ **다음에 볼 자리**: 그 워크로드는 199 초
+동안 **0.87 MB 의 CAVP 레코드**를 처리한다 — Keccak 산술이 아니라 **레코드 파싱**(`$sscanf`·파일·
+string·queue)이 지배일 수 있다. `heap-heavy` 가 그 레짐의 첫 근사인데 **합성이라 작다**(설계당 큐
+하나·문자열 하나). 실물 규모의 파일 구동 TB 형태가 다음 프록시다.
+
+⭐ 부수 소득: **`native/vm < 1.00` 이 8/8 → 10/10** 이 됐고, 이제 그 문장은 **두 레짐**에 대한
+진술이다.
 
 ### 착수 전 의례 (어느 트랙이든)
 

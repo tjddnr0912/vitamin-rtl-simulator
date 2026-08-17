@@ -123,9 +123,59 @@ pub(crate) use expr::*;
 pub(crate) use monomorph::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
-    pub span: Span,               // offending token's span (u32)
+    pub span: Span,               // where to ANCHOR the report (u32)
     pub expected: &'static str,   // "expression", "';'", "identifier", …
     pub found: Option<TokenKind>, // None ⇒ EOF
+    /// Span of the token in [`Self::found`]. Usually equal to [`Self::span`],
+    /// but `error_at` anchors the report at an EARLIER node while `found` stays
+    /// the current token — so the two are separate fields and only this one may
+    /// be sliced to recover the offending spelling.
+    pub found_span: Span,
+}
+
+impl ParseError {
+    /// The offending token as the user SPELLED it, for the `…, found X` tail.
+    /// `src` is the same expanded text the parse ran on.
+    ///
+    /// The `found` field is an internal token enum; rendering it with `Debug`
+    /// puts vita's own type names in a user-facing message (`found
+    /// Word(Keyword(End))` for `end`), which the reader has to translate back
+    /// to source and a log consumer has to know vita's lexer to parse. The
+    /// spelling is recoverable from the span, so quote that instead, and name
+    /// the word class for the one token shape where the bare spelling is
+    /// ambiguous about why it is wrong (a keyword where a name was expected).
+    ///
+    /// `None` ⇒ say nothing rather than guess: the caller drops the tail. That
+    /// arm is unreachable for a real token (`found` is `Some` only when the
+    /// cursor is on one, and every token has a non-empty span), but the slice
+    /// is fallible and a wrong `found` is worse than no `found`.
+    pub fn found_desc(&self, src: &str) -> Option<String> {
+        let Some(kind) = self.found else {
+            return Some("end of file".to_string());
+        };
+        let text = src.get(self.found_span.lo as usize..self.found_span.hi as usize)?;
+        if text.is_empty() {
+            return None;
+        }
+        // One line, bounded: a string literal may carry newlines and a token
+        // has no length limit, and either would break the one-diagnostic-per-line
+        // contract the whole stage renders under.
+        let mut shown: String = text
+            .chars()
+            .take(32)
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .collect();
+        if text.chars().nth(32).is_some() {
+            shown.push('…');
+        }
+        Some(match kind {
+            TokenKind::Word(WordKind::Keyword(_)) => format!("keyword '{shown}'"),
+            TokenKind::Word(WordKind::Ident) | TokenKind::EscapedIdent => {
+                format!("identifier '{shown}'")
+            }
+            _ => format!("'{shown}'"),
+        })
+    }
 }
 
 // ───────────────────────────── cursor ─────────────────────────────
@@ -559,10 +609,12 @@ impl<'t, 's> Parser<'t, 's> {
             return;
         } // lexer already emitted a LexError here
         if self.errors.len() < self.error_limit {
+            let at = self.cur_span();
             self.errors.push(ParseError {
-                span: self.cur_span(),
+                span: at,
                 expected,
                 found: self.peek(),
+                found_span: at,
             });
         }
     }
@@ -574,6 +626,7 @@ impl<'t, 's> Parser<'t, 's> {
                 span,
                 expected,
                 found: self.peek(),
+                found_span: self.cur_span(),
             });
         }
     }

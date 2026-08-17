@@ -281,11 +281,14 @@ pub(crate) fn frontend_pp_to_unit_mapped(
     let (unit, parse_errors) = hdl_parser::parse(&tokens, expanded);
     if !parse_errors.is_empty() {
         for e in &parse_errors {
-            let found = match e.found {
-                Some(k) => format!("{k:?}"),
-                None => "end of file".to_string(),
+            // The spelling comes from the token's own span, never `{found:?}` —
+            // that is vita's lexer enum and belongs to vita, not to the reader
+            // of a syntax error. `found_desc` returns `None` only when it cannot
+            // recover the text, and then the tail is dropped rather than guessed.
+            let msg = match e.found_desc(expanded) {
+                Some(found) => format!("expected {}, found {found}", e.expected),
+                None => format!("expected {}", e.expected),
             };
-            let msg = format!("expected {}, found {found}", e.expected);
             emit_frontend_error(sink, &pp.map, e.span.lo as usize, e.span.hi as usize, msg);
         }
         return None;
