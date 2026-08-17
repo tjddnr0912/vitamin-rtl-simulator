@@ -797,14 +797,42 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // argument its canonical form carries is a shortcut nobody can check
         // against the canonical form. Measured: passing `false` here leaves the
         // suite green, and that is the proof of deadness, not a hole.
-        let (pv, pu) = crate::value::resize_word(r.val, r.unk, w, s.width, sw.signed);
-        // `cw` is the DESTINATION width. `write_chunk_word` clamps the window to
-        // the net, so passing `w` instead would land the same bits — the
-        // difference is only that this spelling states what is being written
-        // rather than relying on the clamp to discover it.
-        let (arena, forced) = (&mut self.arena, &self.sched.st.forced);
-        arena.write_chunk_word(c, 0, 0, pv, pu, s.width, forced);
+        self.store_plain_word(c, r.val, r.unk, w, sw.signed, s.width);
         Some(())
+    }
+
+    /// The flat one-word store: resize to the destination width and land it.
+    ///
+    /// Extracted because TWO paths end this way — `eval_store_word` (the fused
+    /// `EvalWriteScalar`) and `k_write_scalar` (the unfused `Op::WriteScalar`,
+    /// which the compiler emits when the RHS went to `native_eval` instead).
+    /// A second spelling of a resize-then-store is how one of them comes to
+    /// truncate differently from the other.
+    ///
+    /// `cw` is the DESTINATION width. `write_chunk_word` clamps the window to
+    /// the net, so passing the source width instead would land the same bits —
+    /// the difference is only that this spelling states what is being written
+    /// rather than relying on the clamp to discover it.
+    ///
+    /// ⚠️ `inline(always)` is LOAD-BEARING and was measured. Extracting these two
+    /// lines out of `eval_store_word` — which runs on every plain-scalar write,
+    /// 1.8M times in `eval-heavy` and 2M in `mem-heavy` — cost **+12.5% on
+    /// eval-heavy in two consecutive A/B runs** before the attribute went on.
+    /// The control was built in: neither of those shapes calls the other caller
+    /// (`k_write_scalar`) even once, so a change there could only be layout.
+    #[inline(always)]
+    fn store_plain_word(
+        &mut self,
+        c: &LvalChunk,
+        val: u64,
+        unk: u64,
+        from_w: u32,
+        from_signed: bool,
+        to_w: u32,
+    ) {
+        let (pv, pu) = crate::value::resize_word(val, unk, from_w, to_w, from_signed);
+        let (arena, forced) = (&mut self.arena, &self.sched.st.forced);
+        arena.write_chunk_word(c, 0, 0, pv, pu, to_w, forced);
     }
 
     /// The cached width-specialized program for `(eid, w, signed)`, compiling
@@ -2193,12 +2221,57 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         self.k_schedule_nba_scalar(lhs, value);
     }
 
-    fn k_write_scalar(&mut self, lhs: &Lvalue, _net: u32, value: Value) {
+    fn k_write_scalar(&mut self, lhs: &Lvalue, net: u32, value: Value) {
+        // ⭐ THE FLAT STORE, for the op the fused one leaves behind.
+        //
+        // `Op::WriteScalar` is emitted when the destination IS a proven plain
+        // scalar but the eval half went to `native_eval` — the arm D1.6's
+        // partition made common. A census counted it at **300,000 of
+        // struct-heavy's 1.2M assignments and 102,911 on picorv32**, and every
+        // one of them was walking `write_routed`'s heap/assoc/frame/class
+        // routing to reach a store that `plain_scalar_dest` had already proved
+        // takes none of those lanes.
+        //
+        // ⚠️ ONE live condition survives, not the canonical's two. The engine's
+        // `SimState::write_scalar` drops to the general funnel for `forced` as
+        // well as for `is_real`, and copying both looked right — but a mutation
+        // deleting the force check SURVIVED the whole suite, and reading the
+        // callee says why: `write_chunk_word` holds the force gate itself, and
+        // its comment states the reason ("it must be here rather than only at
+        // the general funnel because `eval_store_word` reaches this method
+        // directly"). So the sibling flat path has never had a force check, and
+        // adding one here would make the twins disagree about WHERE force is
+        // answered — the second-spelling hazard, bought for nothing.
+        //
+        // `is_real` stays and is load-bearing: a mutation deleting it dies in
+        // `cli::real_domain`. It selects the round-to-int arm, which lives in
+        // the general funnel and nowhere below.
+        //
+        // ⚠️ `value.width > 64` is FAIL-CLOSED, not required — a mutation
+        // removing it also survived, and `resize_word` explains that: its
+        // sign-extend arm needs `to_w > from_w`, impossible when the source is
+        // wider than a one-word slot, so it falls through to the mask and takes
+        // exactly the low word. It stays because "the low word is the right
+        // answer" is a proof by reading rather than by test.
+        if !value.is_real && value.width <= 64 {
+            let s = self.arena.slots[net as usize];
+            if s.words == 1 && s.width > 0 && !s.is_real {
+                if let [c0] = lhs.chunks.as_slice() {
+                    self.store_plain_word(
+                        c0,
+                        value.val.first().copied().unwrap_or(0),
+                        value.unk.first().copied().unwrap_or(0),
+                        value.width,
+                        value.signed,
+                        s.width,
+                    );
+                    return;
+                }
+            }
+        }
         // The compiler proved this destination is a plain whole-net scalar, so
         // the general funnel's offset argument is the constant it would have
-        // resolved. The engine's twin takes the same shortcut; `_net` is the id
-        // it already knows, and the funnel re-reads it from the chunk — keeping
-        // ONE resolution path is worth more here than skipping one index.
+        // resolved. The engine's twin takes the same shortcut.
         let off = Offsets::Inline {
             buf: [(0, 0); 2],
             len: 1,

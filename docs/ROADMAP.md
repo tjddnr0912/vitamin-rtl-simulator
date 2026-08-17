@@ -1064,6 +1064,54 @@ real 은 워드가 같고 다른 것은 `is_real` 스탬프이며 반환형 `(u6
 ⇒ **D4(cranelift)는 여전히 마지막이다.** 프로파일이 대는 표적이 아직 **평가기 안**에 있고
 (`native_eval` 은 이번에 반쯤 열었을 뿐이다), `dispatch_body` 는 6~10% 다.
 
+#### 5.1-ba ✅ D5 — 융합이 남긴 op: 목적지를 이미 증명해 놓고 라우팅을 다시 걸었다 (2026-08-17)
+
+§5.1-az 의 프로파일이 남긴 다음 표적. **재측정부터** 했더니 그림이 움직여 있었다 —
+`Value::{mask_top,resize}` 가 상위에서 **완전히 사라졌고**(직전 슬라이스가 걷어냈다) 대신
+**쓰기 퍼널이 struct-heavy 에서 `WProg::run` 보다 커졌다**(31.1% vs 27.2%).
+
+⚠️⚠️ **가설을 두 번 세웠고 두 번 census 가 반증했다.** ⓐ *"`eval_store_word` 가 소스까지 `wprog` 에
+요구해서 거부된다"* → 벤치 형태에서 **거부 0**(picorv32 만 6.6%). ⓑ *"목적지가 안 평평해서 일반
+퍼널로 간다"* → `compile_body` 는 이미 `(Some(net), false)` 를 `Op::WriteScalar` 로 보낸다.
+**세 번째는 추측 대신 계측**했다:
+
+| | `eval_store_word`(평평) | `k_write_scalar`(퍼널) | `k_write_lvalue` |
+|---|---:|---:|---:|
+| struct-heavy | 900,100 | **300,000** | 305 |
+| picorv32 | 691,597 | **102,911** | 120,521 |
+
+⭐⭐ **struct 의 300,000 은 정확히 `acc = acc ^ {12'd0, s[idx +: 4]}`** — **D1.6 의 분할이
+`native_eval` 로 보낸 그 문장**이다. 목적지는 `plain_scalar_dest` 가 **컴파일 시점에 평평하다고
+증명**했는데, eval 반쪽이 융합되지 않는 순간 저장 반쪽이 `write_routed` 의
+heap/assoc/frame/class 라우팅을 **매번 다시 걷는다.**
+
+**수정 = 추출 + 미러링.** `eval_store_word` 의 꼬리(리사이즈→`write_chunk_word`)를
+`store_plain_word` 로 뽑아 둘이 공유하고, `k_write_scalar` 가 **정본이 남기는 두 조건만** 본다
+(`SimState::write_scalar` 와 같은 둘: `forced` 와 들어온 값의 `is_real` — **둘 다 런타임 성질**이라
+컴파일 시점에 답할 수 없다) + `value.width > 64` 는 일반 리사이즈로 떨어뜨린다.
+
+⚠️⚠️ **그리고 이 슬라이스가 성능 회귀를 스스로 만들었다가 대조군으로 잡았다** — 추출만 하고
+`#[inline(always)]` 를 안 붙이자 **eval-heavy 가 두 런 연속 +12.5%**(mem +5%) 였다. ⭐ 판별은
+**내장 대조군**이 했다: eval/expr/mem/wide 는 `k_write_scalar` 를 **한 번도 안 부르므로** 거기서
+움직인 것은 **레이아웃일 수밖에 없다**. 속성을 붙이자 **둘 다 0.4% / 0.2% 로 사라졌다.**
+
+**A/B(정본 하네스 · 세 런)**: **struct-heavy −6.5% / −6.0% / −5.2%**(vs vm 0.63 → **0.58**) ·
+나머지 일곱은 이 세션의 노이즈 안(⚠️ load average 6.4 · 대조군이 ±5% 를 보였다).
+**이득은 한 형태에 ~6% 이고 그것을 그대로 적는다.**
+
+**뮤테이션 4 · 사망 1 · 생존 3 — 그리고 생존 셋이 전부 값을 냈다.** ⭐⭐ **L(force 검사 제거)이
+생존한 것은 그 검사가 애초에 필요 없었다는 뜻이었다** — 읽어 보니 `write_chunk_word` 가 **force
+게이트를 자기가 갖고 있고 그 주석이 이유를 적어 뒀다**(*"it must be here rather than only at the
+general funnel because `eval_store_word` reaches this method directly"*) ⇒ 쌍둥이 평평 경로는
+force 검사를 **한 번도 가진 적이 없고**, 여기에만 넣으면 **두 쌍둥이가 force 를 어디서 답하는지에
+대해 어긋난다** = 아무 대가도 없이 산 두 번째 철자 → **지웠다.** **M(is_real 제거)은 사망**
+(`cli::real_domain` · 라운드-투-int 팔은 일반 퍼널에만 있다). **N(>64bit 가드 제거)·O(리사이즈
+출처 폭)은 등가이고 각각 논거가 있다** — `resize_word` 의 부호확장 팔은 `to_w > from_w` 를 요구하는데
+소스가 한 워드 슬롯보다 넓으면 불가능하므로 마스크로 떨어져 **저 워드를 정확히 취한다**(N) ·
+`ctx_w = lvalue_width.max(rhs_w)` 이고 평평한 스칼라의 `lvalue_width` 는 곧 슬롯 폭이라
+**`value.width >= s.width` 가 항상 참** ⇒ 넓힘이 원리적으로 불가능하고 두 철자가 같은 마스크로
+끝난다(O). N 은 **fail-closed 로 남긴다**(그 논거는 테스트가 아니라 읽기다).
+
 ### Phase D — 기계어 코드젠
 
 ⚠️ **D1 을 먼저 하지 않으면 D3/D4 의 판정이 또 편향된다.**
