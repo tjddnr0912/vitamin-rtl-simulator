@@ -1481,6 +1481,139 @@ fn wake_designs() -> Vec<(String, String)> {
     v
 }
 
+/// THE LEAF FAST-PATH LOCK — for BOTH stores that now offer one.
+///
+/// ⚠️⚠️ `state/netread.rs` said this test existed ("Locked by
+/// `leaf_fast_path_matches_read_net`") and it did not. The engine's fast path
+/// had been unlocked since it was written, and the D4 pre-census then gave
+/// tier-3's arena the same fast path — the shortcut that took `struct-heavy`
+/// from 0.88× the VM to 0.60× (ROADMAP §5.1-az). Two unlocked copies of a
+/// sign-extension rule is precisely how two backends come to disagree about one
+/// net, so this asserts the property both claim.
+///
+/// The property: whenever `read_scalar_words` answers `Some`, that answer is
+/// bit-identical to what the slow path produces —
+/// `read_net(net, None).resize_keep_sign(w, ctx_signed)` truncated to one word.
+/// Swept over every net shape in the design × every 4-state value of a 4-bit
+/// stimulus × both context signednesses × narrowing, equal and WIDENING context
+/// widths, because sign extension only happens when widening and only for a
+/// signed value whose sign bit is 1 or x.
+///
+/// The DECLINES are asserted too and each names a different reason: an array
+/// (the offset arithmetic this path does not do), a `real` (whose stored bits
+/// are an IEEE-754 double and must arrive as a stamped `Value`), and a >64-bit
+/// net (two words).
+#[test]
+fn the_leaf_fast_path_matches_the_slow_path_on_both_stores() {
+    let src = "module top;\n\
+       reg [3:0] u4;\n\
+       reg signed [3:0] s4;\n\
+       reg u1;\n\
+       reg signed [7:0] s8;\n\
+       reg [63:0] u64n;\n\
+       reg [99:0] wide;\n\
+       real r;\n\
+       reg [3:0] arr [0:3];\n\
+       wire [3:0] keep; assign keep = u4 ^ s4;\n\
+       initial begin u4 = 4'd0; s4 = 4'sd0; u1 = 1'b0; s8 = 8'sd0;\n\
+                     u64n = 64'd0; wide = 100'd0; r = 0.0; arr[0] = 4'd0; end\n\
+       endmodule\n";
+    let ir = build(src);
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+    let sink = NullSink;
+    let mut st = fresh_state(&ir, &sink);
+
+    // Nets by SHAPE, not by name: every net the arena gave a slot to.
+    let mut checked = 0usize;
+    let mut declined = 0usize;
+    let mut widened_signed = 0usize;
+
+    for net in 0..arena.slots.len() as u32 {
+        let sl = arena.slots[net as usize];
+        if sl.width == 0 {
+            continue;
+        }
+        // Sweep the low four bits through all 16 definite values and all 16
+        // unknown patterns; wider nets get the same bits in their low word,
+        // which is where the sign bit of the narrow shapes lives.
+        for pv in 0u64..16 {
+            for pu in 0u64..16 {
+                let i = sl.off as usize;
+                arena.buf[i] = pv;
+                arena.buf[i + 1] = pu;
+                if let Some(ns) = st.nets.get_mut(net as usize) {
+                    if !ns.cur.val.is_empty() {
+                        ns.cur.val[0] = pv;
+                        ns.cur.unk[0] = pu;
+                    }
+                }
+                for &w in &[1u32, 3, 4, 5, 8, 16, 33, 64] {
+                    for &cs in &[false, true] {
+                        // ── store 1: tier-3's arena ──
+                        let fast = crate::eval::NetReader::read_scalar_words(&arena, net, w, cs);
+                        let slow = crate::eval::NetReader::read_net(&arena, net, None)
+                            .resize_keep_sign(w, cs);
+                        match fast {
+                            None => declined += 1,
+                            Some((fv, fu)) => {
+                                let m = crate::value::top_mask(w);
+                                assert_eq!(
+                                    (fv, fu),
+                                    (
+                                        slow.val.first().copied().unwrap_or(0) & m,
+                                        slow.unk.first().copied().unwrap_or(0) & m
+                                    ),
+                                    "arena leaf fast path diverged: net={net} w={w} \
+                                     ctx_signed={cs} val={pv:#x} unk={pu:#x}"
+                                );
+                                checked += 1;
+                                if w > sl.width && sl.signed {
+                                    widened_signed += 1;
+                                }
+                            }
+                        }
+                        // ── store 2: the engine, whose doc claimed this lock ──
+                        let efast = crate::eval::NetReader::read_scalar_words(&st, net, w, cs);
+                        if let Some((fv, fu)) = efast {
+                            let eslow = crate::eval::NetReader::read_net(&st, net, None)
+                                .resize_keep_sign(w, cs);
+                            let m = crate::value::top_mask(w);
+                            assert_eq!(
+                                (fv, fu),
+                                (
+                                    eslow.val.first().copied().unwrap_or(0) & m,
+                                    eslow.unk.first().copied().unwrap_or(0) & m
+                                ),
+                                "ENGINE leaf fast path diverged: net={net} w={w} \
+                                 ctx_signed={cs} val={pv:#x} unk={pu:#x}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        checked > 5_000,
+        "only {checked} comparisons — the fast path is declining almost everything \
+         and this test would pass while locking nothing"
+    );
+    assert!(
+        declined > 0,
+        "nothing declined — the array/real/wide rows stopped being present"
+    );
+    // ⚠️ ANTI-VACUITY on the one arm that can be wrong in a way narrowing hides:
+    // sign extension happens ONLY when widening a signed net. Without rows in
+    // that quadrant the whole extension block is untested and a mutant that
+    // deletes it survives.
+    assert!(
+        widened_signed > 500,
+        "only {widened_signed} widening-signed comparisons — the sign-extension \
+         arm is the one this test exists for"
+    );
+}
+
 #[test]
 fn s1d3_wake_decision_matches_engine() {
     let sink = NullSink;

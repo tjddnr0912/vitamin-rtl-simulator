@@ -1241,3 +1241,49 @@ mod resize_parity_tests {
         );
     }
 }
+
+/// The LEAF FAST PATH's resize rule, spelled once.
+///
+/// A one-word 4-state net read into a context of width `w` and signedness
+/// `ctx_signed`: mask to the net's own width, narrow the value's signedness by
+/// the context's, sign-extend only when EXTENDING a signed value whose sign bit
+/// is 1 or x, then mask to `w`. That is `Value::resize_keep_sign` for the case
+/// where everything fits one word, without building the 72-byte `Value`.
+///
+/// ⚠️ It is a free function because there are now TWO stores answering
+/// `NetReader::read_scalar_words` — the engine's `SimState` and tier-3's
+/// `NetArena` — and a second copy of a sign-extension rule is how two backends
+/// come to disagree about one net. `SimState`'s copy is what this was extracted
+/// FROM; both call it, and `leaf_fast_path_matches_read_net` still locks the
+/// result against `read_net`.
+#[inline]
+pub(crate) fn scalar_words_resized(
+    val: u64,
+    unk: u64,
+    net_w: u32,
+    net_signed: bool,
+    w: u32,
+    ctx_signed: bool,
+) -> (u64, u64) {
+    let nm = top_mask(net_w);
+    let mut v = val & nm;
+    let mut u = unk & nm;
+    let eff_signed = net_signed && ctx_signed;
+    if w > net_w && eff_signed {
+        let bit = net_w - 1;
+        let fv = (v >> bit) & 1;
+        let fu = (u >> bit) & 1;
+        if fv != 0 || fu != 0 {
+            let bits = w - net_w;
+            let mask = if bits >= 64 {
+                u64::MAX
+            } else {
+                ((1u64 << bits) - 1) << net_w
+            };
+            v = (v & !mask) | (if fv != 0 { u64::MAX } else { 0 } & mask);
+            u = (u & !mask) | (if fu != 0 { u64::MAX } else { 0 } & mask);
+        }
+    }
+    let m = top_mask(w);
+    (v & m, u & m)
+}

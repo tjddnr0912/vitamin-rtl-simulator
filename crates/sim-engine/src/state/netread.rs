@@ -10,7 +10,13 @@ impl NetReader for SimState<'_> {
     /// signed value whose sign bit is 1 or x, then mask to `w`.
     ///
     /// Bails to `None` — and therefore to the original path — for every case that is not
-    /// a plain single-word scalar. Locked by `leaf_fast_path_matches_read_net`.
+    /// a plain single-word scalar.
+    ///
+    /// ⚠️ This line used to name a test (`leaf_fast_path_matches_read_net`) that
+    /// DID NOT EXIST, so the claim was the only lock there was. The real one is
+    /// `native::tests::the_leaf_fast_path_matches_the_slow_path_on_both_stores`,
+    /// built when tier-3's arena grew the same fast path — it sweeps both stores
+    /// against their own `read_net`.
     fn read_scalar_words(&self, net: u32, w: u32, ctx_signed: bool) -> Option<(u64, u64)> {
         let i = net as usize;
         if self.class_is_handle[i] || self.frame_local[i] || self.dyn_is_handle[i] {
@@ -21,30 +27,17 @@ impl NetReader for SimState<'_> {
         if slot.is_real || slot.array_len != 1 || slot.width == 0 || slot.width > 64 || w > 64 {
             return None;
         }
-        let nw = slot.width;
-        let nm = crate::value::top_mask(nw);
-        let mut v = slot.cur.val.first().copied().unwrap_or(0) & nm;
-        let mut u = slot.cur.unk.first().copied().unwrap_or(0) & nm;
-        // `resize_keep_sign`: the value's own signedness is narrowed by the context's
-        // before the resize decides whether to sign-extend.
-        let eff_signed = slot.signed && ctx_signed;
-        if w > nw && eff_signed {
-            let bit = nw - 1;
-            let fv = (v >> bit) & 1;
-            let fu = (u >> bit) & 1;
-            if fv != 0 || fu != 0 {
-                let bits = w - nw;
-                let mask = if bits >= 64 {
-                    u64::MAX
-                } else {
-                    ((1u64 << bits) - 1) << nw
-                };
-                v = (v & !mask) | (if fv != 0 { u64::MAX } else { 0 } & mask);
-                u = (u & !mask) | (if fu != 0 { u64::MAX } else { 0 } & mask);
-            }
-        }
-        let m = crate::value::top_mask(w);
-        Some((v & m, u & m))
+        // The resize rule itself is `value::scalar_words_resized` — extracted
+        // when tier-3's arena grew the same fast path, because two stores
+        // spelling one sign-extension rule is how two backends disagree.
+        Some(crate::value::scalar_words_resized(
+            slot.cur.val.first().copied().unwrap_or(0),
+            slot.cur.unk.first().copied().unwrap_or(0),
+            slot.width,
+            slot.signed,
+            w,
+            ctx_signed,
+        ))
     }
 
     fn dyn_size(&self, net: u32) -> Option<u64> {

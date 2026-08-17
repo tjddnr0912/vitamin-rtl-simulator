@@ -492,6 +492,52 @@ impl NetArena {
 /// eligible and this reader returns X where the engine returns the live flag.
 /// Whoever fixes the over-mark owes this an override.
 impl NetReader for NetArena {
+    /// The LEAF FAST PATH — two word reads and the shared resize rule.
+    ///
+    /// ⚠️⚠️ This store had NO fast path until the D4 pre-census, and the reason
+    /// it was acceptable stopped being true one slice earlier. `native_eval` is
+    /// the only caller, and until D1.5 tier-3 never handed it anything (its
+    /// `CompileCtx` refused the expression VM outright); D1.5/D1.6 then routed
+    /// every RHS `wprog` declines here, and a profile measured that path at
+    /// **19.3% of `struct-heavy`** with `Value::{resize,mask_top}` a further
+    /// 10.2% — the 72-byte marshalling §4.5.329–332 removed from `wprog`, still
+    /// fully present on the lane that had just become hot (ROADMAP §5.1-az).
+    ///
+    /// The declines mirror `read_net`'s own routing rather than restating it in
+    /// new words: an array (`elems != 1`), a wide or zero-width net, and a
+    /// `real` — whose stored bits are an IEEE-754 double and must be read as a
+    /// stamped `Value`, not as an integer. The two nets this store does not own
+    /// (frame-local, heap) never reach here: the composite reader in
+    /// `NativeKernel` answers `read_scalar_words` and asks that question first.
+    /// ⚠️ The `is_real` decline is MEASURED UNREACHABLE and kept anyway. A
+    /// `panic!` probe there fired in no product path across the whole suite,
+    /// because `native_eval::compile`'s NATIVE-TYPE GUARD refuses a real net one
+    /// layer up — for the same reason spelled out there, that a `(u64, u64)`
+    /// pair structurally cannot carry `is_real`, and with the same measured
+    /// consequence (`assign w = r;` printing the raw IEEE pattern
+    /// 4613374868287651840 instead of 3).
+    ///
+    /// ⚠️⚠️ A mutation deleting it therefore SURVIVED, and the fast-path lock
+    /// cannot kill it either: that test compares WORDS, and for a real the words
+    /// are identical — what differs is the `is_real` stamp this return type has
+    /// no room for. So the guard stays as the store-level half of a rule whose
+    /// other half already exists, not because a test demands it.
+    fn read_scalar_words(&self, net: u32, w: u32, ctx_signed: bool) -> Option<(u64, u64)> {
+        let s = *self.slots.get(net as usize)?;
+        if s.is_real || s.elems != 1 || s.words != 1 || s.width == 0 || s.width > 64 || w > 64 {
+            return None;
+        }
+        let i = s.off as usize;
+        Some(crate::value::scalar_words_resized(
+            self.buf[i],
+            self.buf[i + 1],
+            s.width,
+            s.signed,
+            w,
+            ctx_signed,
+        ))
+    }
+
     fn take_deferred_range_kinds(&self) -> Vec<bool> {
         std::mem::take(&mut *self.pending_range.borrow_mut())
     }

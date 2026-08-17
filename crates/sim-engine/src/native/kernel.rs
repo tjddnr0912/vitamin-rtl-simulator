@@ -1467,12 +1467,29 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
         self.arena.read_net(net, word)
     }
 
-    /// The leaf fast path is the ARENA's answer (today: the `NetReader` default
-    /// `None`, i.e. no fast path). A frame slot must not take it either —
-    /// `SimState`'s own implementation bails on `frame_local` for the same
-    /// reason — so the composite simply never offers one.
-    fn read_scalar_words(&self, _net: u32, _w: u32, _ctx_signed: bool) -> Option<(u64, u64)> {
-        None
+    /// The leaf fast path is the ARENA's answer — and the two nets this store
+    /// does not own must not take it, exactly as in `read_net` one method up.
+    /// `SimState`'s own implementation bails on the same bitmaps for the same
+    /// reason: the wrapped store would answer from a dead slot.
+    ///
+    /// ⚠️ This used to return `None` unconditionally, and its comment said so
+    /// ("today: no fast path"). That was harmless while nothing hot called it —
+    /// `native_eval` is the only caller and tier-3 handed it nothing until D1.5
+    /// opened the partition. It stopped being harmless in that slice, which is
+    /// the same shape as §4.5.338: a default does not know when the reason for
+    /// it stopped being true.
+    ///
+    /// ⚠️ Like the arena's `is_real` arm, this check is MEASURED UNREACHABLE
+    /// today — a `panic!` probe here fired zero times across the suite, because
+    /// `native_eval::compile` already refuses a heap or frame-local net. It is
+    /// fail-closed for the same reason `read_net` asks the same question one
+    /// method up: the day a caller arrives, answering from a dead slot is a
+    /// wrong value at exit 0, not a crash.
+    fn read_scalar_words(&self, net: u32, w: u32, ctx_signed: bool) -> Option<(u64, u64)> {
+        if self.is_frame_local(net) || self.is_heap_net(net) {
+            return None;
+        }
+        crate::eval::NetReader::read_scalar_words(&self.arena, net, w, ctx_signed)
     }
 
     // ── V1 slice 2: the capabilities this store does NOT own ──────────────
