@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 280건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 281건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.339` **elaborate 상수접기의 `**` 지수 자기결정 — 그리고 거부가 답이 아니라는 실측**: `localparam signed [15:0] P = 4'sd3 ** -4'sd8` 이 vita **6561** / iverilog·**vita 런타임** **0**(= 같은 소스가 param 과 런타임에서 다른 값) · 수정은 새 평가기가 아니라 **§4.5.186 폭 모델의 재사용**(헬퍼 하나를 세 fold 사이트가 공유) + `Concat`·Named-cast 폭/부호 arm + module-scope 위임 · 97칸 3-way **FIXED 10 · LOUD→CORR 2 · WRONG→LOUD 2 · 회귀 0** · ⚠️⚠️ **첫 설계(폭-미상 거부)를 적대 라운드가 반증했다 — 거부는 caller 만큼만 loud 다**(range bound 의 decline 경로가 **조용한 1비트 기본값**이라 correct→**silent-wrong**) ⇒ 거부를 걷고 **폭을 알 수 있게** 만들자 loud 였던 칸이 **정답 fold**(19683)로 올라갔다 · ⚠️ **깊이 청구도 과했다** — 인자는 유한 AST 하강이라 사이클이 없는데 청구하면 **65단 인자 중첩이 correct→LOUD** ⇒ **사이클이 있는 default 만** 청구하고 위임 게이트는 `depth==0` **∨ call-free` · ⚠️⚠️ **뮤테이션이 "등가" 를 반증** — Named 캐스트의 **부호** arm 이 스윕 밖 두 칸을 silent-wrong 에서 건져낸다(`RPS'(2)-4'sd9` 가 signed 면 −7→0 · unsigned 면 9→19683) · ⚠️ genvar 는 `param_meta` 가 없어 무부호로 읽혀 `2 ** (g-1)` 이 correct→LOUD 였고 **(32,true) 시딩으로 함께 닫았다**(IEEE §27.4) · 뮤테이션 **10/10 사망** · 발굴 11건 §2 등재
 - `4.5.337` ③층 **V1 슬라이스 1 — SVA: 거부가 순전히 보수적이었다**(커널 코드 0줄 추가 · 지운 것은 `design_eligibility` 의 `sva` 행 하나): 네이티브 커버리지 **54.7% → 66.8%**(+760 호출) · ⭐ **SVA 는 런타임 기계장치가 아니다** — elaborate 가 `assert property(@(clk) a |-> b)` 를 `always @(clk) if (a && !b) $error(…)` 로 desugar 하므로 도착하는 것은 평범한 IR + StmtId 테이블 둘이고, 그 둘은 **공유 `builtins::dispatch` 안**에서 읽힌다(tier-3 은 §4.5.293 이래 배선돼 있다) · ⭐ **진짜 기계장치가 필요한 형태는 이미 자기 이름으로 거부 중** — `cover property`/liveness 는 `final_procs` → `final` 행, deferred assertion 은 `mature_deferred` 훅이 없어 별도 `deferred_assert` 행(census: **`sva` 혼자 760 · `deferred_assert` 혼자 14 · 겹침 0**) · ⭐⭐ **게이트가 세 번 자기를 반증했다** — ⓐ **하네스가 `assert_fire`/`assert_ctl`/`defer_*` 를 설치 안 해서** `$assertoff` 가 플래그 대신 출력되는 설계로 두 백엔드를 비교하고 있었다(발견은 거부 이웃 핀이 `Ok(())` 를 낸 것) · ⓑ **차분은 공유 코드에 구조적으로 눈멀었다(실측)** — 공유 dispatch 뮤테이션 둘이 엔진 게이트를 전부 통과하고 `cli::sva_rest` 절대 핀에서만 죽어서, **절대 앵커**를 짓자 엔진에서도 죽고 하네스 뮤테이션 둘도 함께 죽었다(그 전엔 생존) · ⓒ 앵커를 짓다 **내 기대가 틀린 것**을 쟀다(`$asserton` 시점에 위반 조건이 남아 있어 다음 posedge 에서도 발화) · **뮤테이션 6/6 사망** · ⚠️ 절차 사고: 뮤테이션 복원에 `git checkout --` 을 써서 **커밋 안 된 편집 둘이 HEAD 로 되돌아가 지워졌다**(가짜 kill 2건 유발) → 복원은 **바이트 스냅샷**
 - `4.5.336` ③층 **V0 — 커버리지를 처음 쟀다**(구현 아님·트리 변경 0): 기본 백엔드를 `Native` 로 flip → `simulate()` **6,251 중 3,417(54.7%)이 네이티브** · **발산 0**(5377 중 5374 통과, 실패 3건은 전부 *"기본 백엔드가 vm 이다"* 를 단언하는 테스트) = **오늘의 ③층은 자기가 받는 절반에 대해 이미 바이트 정확하고 남은 것은 전부 커버리지다** · ⚠️ 계기가 두 번 틀렸고 두 번 다 측정 자신이 잡았다 — **`SimOpts::default()` 가 enum default 를 안 쓰고 `Bytecode` 를 하드코딩**(flip 이 CLI 절반만 움직였다)하고, **`writeln!` 이 unbuffered `File` 에 조각마다 `write(2)`** 를 내 프로세스별 nextest 에서 행이 찢어져 **1.85× 부풀었다**(11,563 vs 6,251 · 판별자는 레이아웃을 아는 파서) · ⭐⭐ **첫 census 는 V1 을 정렬하지 못했다 — 게이트가 단락하기 때문**(design 에서 걸린 설계의 storage/executor 는 미측정) → 세 층을 **독립으로** 물으니 구조가 나왔다: **design 게이트와 storage 게이트가 같은 기능을 두 번 이름 부른다**(`D:string` 369회 발화·단독 원인 **0회** = `S:heap-slot` 과 짝 · `D:real`/`S:real-slot` 도) ⇒ **슬라이스의 단위는 행이 아니라 한 기능이 걸린 게이트 전부의 집합** · V1 순서(greedy 누적) = **SVA +774 → 67.0% · heap 저장+네 종류 +560 → 76.0% · 서브루틴 프레임 +712 → 87.4%** · `stmt_effect` 91.2 · class 93.9 · fork 95.5 · 시스템태스크 96.8 · `real` 98.0 · coverage 99.0 · 나머지 다섯 100% — **상위 셋이 87.4% 를 산다** · ⚠️ `fork`·`file_directed` 는 **단독 이득 0** · ⚠️ fallback 2,834 중 **2,656(93.7%)이 CLI 서브프로세스**라 테스트 단위 귀속은 못 쓴다(단위 = `simulate()` 호출)
 - `4.5.335` ③층 **S4 — 중단 판정 발동**: `settle_cont_assigns` 가 **연속 대입 평가마다 `Lvalue` clone**(= 힙 할당)하던 것을 borrow 로(강제한 것 없음 — `ir` 은 `k` 와 독립 파라미터) + md 그룹 멤버 Vec clone 제거 → picorv32 0.517→**0.504**(+2.5%) · ⭐⭐ **나머지는 짓기 전에 프로파일이 결론냈다** — S4 가 겨냥하는 것(`propagate` 2.1+`wake` 1.4+`pass` 구성 ~2)은 **≈6% = 1.06×** 로 자기 중단 판정(<1.3%) 아래이고 `settle` 의 9.1% 는 대부분 **스케줄이 아니라 실제 평가**다 → **정적 깨우기 마스크는 짓지 않는다** · ⭐⭐ 고정 비용 실측 **19 ms · 3.7% → 상한 26.8×**(doc-21 §6.3 의 *"~85 ms · 14% · 7×"* 정정) · **성능 축 수확 체감 도달 → 다음은 커버리지**(ROADMAP §5.1: interp=오라클 + native=제품, VM 은퇴)
@@ -369,6 +370,111 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.339 elaborate 상수접기의 `**` 지수 자기결정 (2026-08-18, branch feat-constfold-pow-exp-selfdet, format 26 불변) ✅
+
+**표적.** ROADMAP §2 의 *"elaborate 상수접기가 `**` 지수를 자기결정하지 않는다"* — §4.5.319 가
+다섯 철자(엔진 `arith`·`lower_expr_ctx`·`expr_size_ctx`·연속대입 하강·bytecode
+`const_pow_exponent`)를 닫으며 **마지막 하나**로 남겨 둔 것. IEEE 1800-2017 §11.6.1 Table 11-21
+은 `**` 의 지수를 **자기결정 위치**로 정하는데 상수 도메인의 i64 walk 는 폭이 없어
+`-4'sd8`(4비트 패턴 `1000` = −8)을 **+8 로 넓혔다**:
+`localparam signed [15:0] P = 4'sd3 ** -4'sd8` 이 **6561** / iverilog·**vita 자신의 런타임** **0**
+(Table 11-6: 음수 지수 ∧ |base| > 1 → 0) ⇒ **같은 소스가 param 과 런타임에서 다른 값**.
+
+**수정 = 새 평가기가 아니라 재사용.** §4.5.186 이 이미 폭-인지 상수 평가기를 갖고 있다
+(`eval_const_env_self` = 자기결정 위치 전용 진입점 · 시프트 카운트·삼항 조건·시스템함수 인자가
+쓰던 것). 지은 것은 **헬퍼 하나** `const_pow_exponent_selfdet` 이고 **세 fold 사이트가 그것을
+공유**한다(`const_eval_in_scope` Binary arm · `eval_const_env` Binary arm · `eval_const_env_at`
+Pow arm) — 지수 규칙이 module-scope fold 와 상수함수 인터프리터 사이에서 갈리지 않게. 곁들여
+필요한 것 셋:
+
+- `const_self_width` 의 **`Concat` arm**(파트 자기폭의 **합** · §11.8.1).
+- `const_self_width`/`const_signed_env` 의 **Named 캐스트 arm** — `RPS'(e)` 는 `4'(e)` 와
+  **한 구문의 두 철자**이고 `cast_size_bits` 가 둘 다 답한다(부호는 정본 `const_expr_signed` 규칙).
+- `eval_const_env` 의 **module-scope 위임** — 그 env 쌍둥이는 `pkg::X`·concat·`$bits`·캐스트를
+  모델하지 않아 leaf 지수가 통째로 loud 였다.
+
+**⚠️⚠️ 첫 설계를 적대 라운드가 반증했다 — 거부는 caller 만큼만 loud 다.**
+초판 헬퍼는 *"wrap 가능한 모양인데 자기폭을 모르면 **거부**"* 였다(무제한 도메인으로 degrade
+하는 것이 지수에 대해서는 곧 결함이므로). differential 렌즈가 **두 방향으로** 반증했다:
+
+- **range-bound 위치에서 그 거부는 조용하다** — `logic [f3():0] v;` 의 fold 가 decline 하면
+  바운드 소비자가 **기본값을 넣는다**(pre-existing) ⇒ PRE·iverilog 가 10비트인 넷이
+  **1비트 · exit 0 · 진단 0** 으로 지어졌다 = **correct→silent-wrong**(사다리 하강).
+- **값이 정확한 셀을 강등했다** — `3 ** (m + 0)`(다중 packed 로컬)은 폭이 미상이어도 랩이 없어
+  값이 정확한데 localparam 위치에서 correct→**loud**.
+
+⇒ **거부를 걷고 폭 모델을 완성**했다. 그러자 거부되던 칸이 **정답으로 접힌다** —
+`4'sd3 ** (RPS'(2) - 4'd9)` = **19683** = iverilog(PRE 는 **조용한 0**). ⭐ **loud 로 사는 대신
+접어서 사는 쪽이 사다리 위**이고, 그 선택지는 폭을 **알 수 있게** 만들었을 때만 생긴다.
+
+**⚠️ 깊이 청구도 과했고 자체 측정이 잡았다.** 위임 대상 `const_eval_in_scope` 는
+`eval_const_call` 을 **depth 0 으로 재시작**하므로, 인자·default 를 `depth` 그대로 접던 기존
+코드와 합쳐지면 self-referential default 가 **상수 깊이로 재귀**한다(`input int k = 8'(f())` 가
+PRE 의 E3009 → **스택 오버플로 exit 134**). 첫 처방은 *"인자·default 둘 다 `depth + 1`"* +
+*"위임은 `depth == 0` 에서만"* 이었고 **둘 다 과했다**:
+
+- **인자는 유한 AST 하강이라 사이클을 못 만든다**(`g(g(g(0)))` 은 서로 다른 세 노드)인데
+  청구하면 예산이 반이 된다: **65단 인자 중첩이 PRE·iverilog 는 65 로 접히고 청구 판은 E3009**
+  = correct→loud ⇒ **사이클은 default 위치에만 있다**(default 식은 **callee 자신의 선언**에
+  속해 같은 노드로 재진입한다) ⇒ **default 만 청구한다.**
+- **`depth == 0` 만으로 걸면 접힐 default 를 못 접는다** — `input int k = 8'(3)` 은 call 이 없어
+  깊이를 되돌릴 것이 없는데 loud 였다 ⇒ 게이트는 **`depth == 0` ∨ call-free 서브트리**(서로소인
+  두 안전 이유). ⭐ **call-free 단독으로 걸어도 안 된다** — module-scope 정상 셀
+  (`2 ** (8'(cf(2)) + 1)` = 64)이 correct→loud 가 된다(적용 전 자체 재검토가 잡았다).
+
+부수 이득: **pre-existing 이던 bare 철자**(`input int k = f()`)도 이제 loud 다(크래시→loud).
+⚠️⚠️ 그리고 soundness 가 **내가 그 게이트에 쓴 주석이 거짓**임을 실측으로 잡았다 —
+*"depth 0 이면 call 이 안 떠 있다"* 는 **틀렸다**(body-local init 과 `eval_const_env` 의 `Call`
+arm 이 평범한 caller depth 로 접는다 · 프로브가 **기존 스위트 세 테스트에서 발화**). 실제로
+종료를 보장하는 것은 **`envw` 가 init fold 보다 먼저 채워진다**는 것과 **default 만 청구**라는
+두 사실이고, 주석을 그렇게 다시 썼다(`env.is_empty()` 는 lockstep 쌍둥이 · 뮤테이션이 등가로
+측정됐고 그 이유를 doc 에 남겼다).
+
+**⚠️⚠️ 뮤테이션이 "등가" 를 반증했다 — Named 캐스트의 부호는 값을 바꾼다.**
+`const_signed_env` 의 Named arm 을 `false` 로 되돌리는 뮤테이션이 **28 + 이웃 157 테스트를
+통과**했고, 판별자를 지어 재니 등가가 아니었다: `RPS'(2) - 4'sd9` 는 4비트에서 9(`1001`)인데
+문맥이 **signed 면 −7**(Table 11-6 → **0**) · **unsigned 면 9**(3^9 = **19683**). iverilog·정본
+= `0 0 27` / 뮤턴트·**PRE** = `19683 21459 27` ⇒ 그 arm 은 폭만이 아니라 **스윕 밖 두 칸을
+silent-wrong 에서 건져낸다**. soundness 가 준 두 번째 판별자는 **비교 arm**을 탄다
+(`3 ** ((RPS'(4'sd2) > (4'sd7 + 4'sd7)) ? 2 : 5)` → 정본 **9** = iverilog · PRE **243**) —
+Pow 문맥 핀이 못 닿는 축이라 둘 다 앵커로 남겼다.
+
+**⚠️ genvar 부호를 함께 닫았다.** `2 ** (g - 1)`(g=0)이 PRE·iverilog **0** / 초판 **E3009**
+= 이 슬라이스가 만든 correct→loud 였다(마스킹을 시작한 것이 원인). genvar 는 `params` 에만
+들어가고 `param_meta` 가 없어 부호 모델이 **무부호**로 읽어 −1 이 4294967295 가 되고
+`checked_pow` 가 넘쳤다. **IEEE 1800 §27.4 = genvar 는 signed 32비트 정수**이므로 값과
+**lockstep** 으로 `(32, true)` 를 시딩한다(예측 아닌 실측: 비-음수 32비트 값은 두 부호 읽기가
+같은 비트라 **중간값이 음수로 가는 식만** 움직인다 · 전 스위트 파급 0).
+
+**측정(97칸 3-way · iverilog/PRE/POST).** FIXED **10** · LOUD→CORRECT **2** ·
+WRONG→LOUD **2**(`0 ** 음수` = Table 11-6 의 `x` 인데 i64 도메인이 x 를 못 실으므로 **정직한
+거부**) · **회귀 0**(초판의 genvar CORR→LOUD 도 닫혔다). 보너스 FIXED: **range bound**(PRE 는
+`[3 ** -4'sd8 : 0]` 로 **6562비트 넷을 조용히 생성**) · `#()` override · **generate-if arm
+선택**(틀린 지수가 **틀린 가지를 elaborate** 했다) · `$clog2` 지수(81→1) · `~4'd0` 패턴 지수
+(−1 이 아니라 15) · Named-cast 폭·부호 칸 셋. `examples/` 4종 + keccak + picorv32
+**PRE↔POST 바이트 동일**.
+
+**게이트.** 전 스위트 **5496 green**(신규 앵커 19 = 파일 **33 tests**) · clippy 3 구성 0 ·
+fmt 0 · no-oracle lib **135 green** · **format_version 26 불변**. 공유 코드 수정이라 백엔드
+차분은 구조적으로 눈멀고(§5.1-e) **절대 앵커가 유일한 이빨**이다. **뮤테이션 10/10 사망** —
+축: 인자 깊이 청구 · default 깊이 미청구 · 게이트 `depth==0` 단독 · 게이트 call-free 단독 ·
+게이트 삭제 · Named 폭 arm → None · Named 부호 arm → false · Concat 합→max · 두 Pow arm 각각
+→ 평문 walk. (`eval_const_env_at` 의 Pow arm 을 헬퍼 대신 `eval_const_env_self` 로 직접 부르는
+것은 헬퍼가 **얇은 위임**이 된 지금 **구성상 등가** — 그래도 한 철자로 남긴 이유는 지수 규칙이
+시프트 카운트와 갈리는 날 **한 자리만 고치면 되게** 하기 위해서다.) ⚠️ 절차 둘: M9 는 치환
+패턴이 **두 사이트에 맞아** 미적용됐다(줄 번호로 재지정) · M7 복원 후 **바이너리 재빌드를
+빠뜨려** 정본이 뮤턴트 값을 내는 것을 한 번 봤다(§4ⓕ 재발).
+
+**발굴(전부 pre-existing·PRE==POST → §2 등재).** real 도메인 Pow 지수 · module-scope `$clog2`
+인자 무제한 fold(인터프리터와 **같은 소스 두 답**) · replication/part-select 폭 lane 이 `**`
+미fold · 캐스트 SIZE 식 무제한 fold · u64 패턴 지수 · 인터프리터의 폭-0 타깃 마스킹 ·
+body-local init 조용한 0 · body-decl `int t = f();` 스택 오버플로 · self-referential 반환 range
+크래시 · `coverpoint_domain` 미러 어긋남 · 그리고 **§2 의 fill-context 항목(ⓒ)은 HEAD 에서
+재현 불가**(72칸 0 diff — 중간 슬라이스가 닫았다).
+
+**잔여(일부러).** 폭-미상 leaf 위의 **wrapping** 지수는 무제한 fold 유지(거부가 더 나쁘다 —
+위 실측) · `0 ** 음수` 는 loud(x 를 이 도메인이 못 실음).
 
 #### 4.5.337 ③층 V1 슬라이스 1 — SVA (2026-08-11, format 26 불변) ✅
 

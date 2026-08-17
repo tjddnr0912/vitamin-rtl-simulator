@@ -100,13 +100,27 @@ impl Elaborator<'_> {
                 self.const_self_width(then_e, envw)?
                     .max(self.const_self_width(else_e, envw)?),
             ),
+            // A concatenation is SELF-determined: the sum of its operands' self
+            // widths (§11.8.1), unsigned (`const_signed_env`'s fallthrough already
+            // answers false). Without this arm a `**` exponent like
+            // `({2'b10,2'b01} - 4'd8)` had no self width, and the Pow helper's
+            // width-unknown refusal turned a correctly-folding cell LOUD.
+            K::Concat { parts } => parts.iter().try_fold(0u32, |acc, p| {
+                acc.checked_add(self.const_self_width(p, envw)?)
+            }),
             // `$clog2`/`$bits` are 32-bit integers.
             K::SysCall { .. } => Some(32),
             K::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).map(|(w, _, _)| w),
-                ast::CastTarget::Size(n) => u32::try_from(self.const_eval_in_scope(n)?).ok(),
+                // `4'(e)` and `RPS'(e)` are two spellings of ONE construct —
+                // `cast_size_bits` resolves both (a typedef/class Named still
+                // yields None). Leaving `Named` unanswered made the Pow helper's
+                // walk degrade on `3 ** (RPS'(2) - 4'd9)` where the width is
+                // perfectly knowable.
+                ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
+                    u32::try_from(self.cast_size_bits(target)?).ok()
+                }
                 ast::CastTarget::Signing { .. } => self.const_self_width(expr, envw),
-                ast::CastTarget::Named(_) => None,
             },
             // A call is as wide as its declared return type.
             K::Call { name, .. } if name.segments.len() == 1 => self
@@ -119,8 +133,14 @@ impl Elaborator<'_> {
     }
 
     /// Does `e` contain a function call anywhere? Used to keep a declared-range
-    /// fold out of the constant-function interpreter's own recursion.
-    fn ast_contains_call(e: &ast::Expr) -> bool {
+    /// fold out of the constant-function interpreter's own recursion, and to let
+    /// the env twin delegate a call-free subtree from inside a call (the
+    /// delegation target restarts the call depth, so only a call-free subtree is
+    /// safe there). Conservative by construction: `const_fold_children` descends
+    /// exactly the kinds `const_eval_in_scope` folds, and a kind it does not list
+    /// cannot reach a call in the delegation target either (a `Concat` part folds
+    /// through the literal-only `const_eval_sized`).
+    pub(crate) fn ast_contains_call(e: &ast::Expr) -> bool {
         matches!(&e.kind, ast::ExprKind::Call { .. })
             || Self::const_fold_children(e)
                 .iter()
@@ -174,7 +194,13 @@ impl Elaborator<'_> {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
                 ast::CastTarget::Signing { signed } => *signed,
                 ast::CastTarget::Size(_) => self.const_signed_env(expr, envw),
-                ast::CastTarget::Named(_) => false,
+                // `RPS'(e)` — the Named spelling of a size cast inherits the
+                // operand's sign exactly like `Size` when the name IS a constant
+                // (`const_expr_signed`'s canonical rule; the two sign models must
+                // not drift). A typedef/class Named stays unsigned.
+                ast::CastTarget::Named(_) => {
+                    self.cast_size_bits(target).is_some() && self.const_signed_env(expr, envw)
+                }
             },
             K::Call { name, .. } if name.segments.len() == 1 => self
                 .const_func_table
@@ -258,7 +284,16 @@ impl Elaborator<'_> {
                     // 75 at 32 — the count itself is 2 either way).
                     B::Shl | B::Shr | B::AShl | B::AShr | B::Pow => {
                         let a = self.eval_const_env_at(lhs, env, envw, depth, ctx_w, ctx_signed)?;
-                        let b = self.eval_const_env_self(rhs, env, envw, depth)?;
+                        // Pow goes through the one shared exponent helper —
+                        // today that is the same self-determined walk a shift
+                        // count takes, but a rule change to the exponent (its
+                        // §11.4.10-vs-Table-11-21 story differs from a shift
+                        // count's) must happen in ONE place.
+                        let b = if matches!(op, B::Pow) {
+                            self.const_pow_exponent_selfdet(rhs, env, envw, depth)?
+                        } else {
+                            self.eval_const_env_self(rhs, env, envw, depth)?
+                        };
                         // With a KNOWN context width a shift is exact on the bit
                         // pattern, so it no longer has to decline. `const_binop`
                         // refuses a logical `>>` of a negative value because the

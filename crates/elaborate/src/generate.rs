@@ -171,6 +171,17 @@ impl Elaborator<'_> {
                 // Save any prior binding of this name (an outer param/genvar of the
                 // same identifier) and seed the genvar.
                 let saved = self.params.insert(gv_key.clone(), start);
+                // A genvar IS a signed 32-bit integer (IEEE 1800 §27.4), and the
+                // const domain's sign model reads `param_meta` — with no entry it
+                // answered UNSIGNED, so `2 ** (g - 1)` at g = 0 masked −1 into
+                // 4294967295 and the fold overflowed to a LOUD reject where every
+                // oracle says 0. Seeding the shape here (saved/restored in lockstep
+                // with the value) keeps ONE spelling of "what is a genvar" instead
+                // of a special case in each predicate. Narrow by construction: for a
+                // NON-negative 32-bit value the signed and unsigned readings are the
+                // same bits, so only an expression whose intermediate goes negative
+                // can move at all.
+                let saved_meta = self.param_meta.insert(gv_key.clone(), (32, true));
 
                 let mut idx_count: u32 = 0;
                 loop {
@@ -245,10 +256,18 @@ impl Elaborator<'_> {
                 // restore the prior binding (siblings/ancestors unaffected).
                 match saved {
                     Some(v) => {
-                        self.params.insert(gv_key, v);
+                        self.params.insert(gv_key.clone(), v);
                     }
                     None => {
                         self.params.remove(&gv_key);
+                    }
+                }
+                match saved_meta {
+                    Some(m) => {
+                        self.param_meta.insert(gv_key, m);
+                    }
+                    None => {
+                        self.param_meta.remove(&gv_key);
                     }
                 }
             }

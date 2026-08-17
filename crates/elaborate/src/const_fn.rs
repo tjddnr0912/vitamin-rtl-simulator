@@ -360,7 +360,19 @@ impl Elaborator<'_> {
                         }
                     }
                 }
-                let b = self.const_eval_in_scope(rhs)?;
+                let b = if matches!(op, ast::BinOp::Pow) {
+                    // `**`'s EXPONENT is self-determined (§11.6.1 Table 11-21) —
+                    // the plain unlimited fold below widens it instead, which is
+                    // exactly the §4.5.319 defect this domain still had.
+                    self.const_pow_exponent_selfdet(
+                        rhs,
+                        &std::collections::BTreeMap::new(),
+                        &ConstWidths::new(),
+                        0,
+                    )?
+                } else {
+                    self.const_eval_in_scope(rhs)?
+                };
                 const_binop(*op, a, b)
             }
             // §4.5.186: a call to a CONSTANT FUNCTION in a const context
@@ -376,6 +388,41 @@ impl Elaborator<'_> {
             ),
             _ => None,
         }
+    }
+
+    /// The `**` EXPONENT is a SELF-DETERMINED position (IEEE 1800-2017 §11.6.1
+    /// Table 11-21): it is sized and signed by itself, never by the surrounding
+    /// context. The plain width-unlimited i64 walk widens it instead — `-4'sd8`
+    /// (the 4-bit pattern `1000` = −8) reads back as +8, so
+    /// `localparam signed [15:0] P = 4'sd3 ** -4'sd8;` folded 6561 where IEEE
+    /// Table 11-6 (negative exponent, |base| > 1) and iverilog answer 0 — while
+    /// the RUNTIME lowering of the very same text already answers 0 (§4.5.319
+    /// closed the five other spellings; this was the last).
+    ///
+    /// The self-determined walk (`eval_const_env_self`) DEGRADES to the same
+    /// unlimited domain when it cannot size the expression (ctx 0 = no masking)
+    /// — deliberately. An earlier draft REFUSED width-unknown wrap-capable
+    /// shapes instead, and the adversarial round measured the refusal both ways:
+    /// it is only as loud as its CALLER (a range bound's decline path silently
+    /// substitutes a default, so a previously-folding `logic [f():0]` became a
+    /// 1-bit net at exit 0 = correct→silent-wrong), and it demoted value-exact
+    /// cells (`3 ** (m + 0)` over a multi-packed local) from correct to loud.
+    /// Degrading keeps every width-unknown cell EXACTLY at its pre-slice
+    /// behavior; the shapes that stay imprecise there (a WRAPPING exponent over
+    /// a width-unknown leaf — a multi-packed local, a const-array element) are
+    /// the interpreter's already-recorded width residual (ROADMAP §2).
+    ///
+    /// One helper shared by every Pow fold in this domain (`const_eval_in_scope`,
+    /// `eval_const_env`, `eval_const_env_at`), so the rule cannot drift between
+    /// the module-scope fold and the constant-function interpreter.
+    pub(crate) fn const_pow_exponent_selfdet(
+        &self,
+        rhs: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &ConstWidths,
+        depth: u32,
+    ) -> Option<i64> {
+        self.eval_const_env_self(rhs, env, envw, depth)
     }
 
     /// A static cast `casting_type'(e)` in the INTEGER const domain (the
@@ -504,7 +551,17 @@ impl Elaborator<'_> {
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
                 let a = self.eval_const_env(lhs, env, envw, depth)?;
-                let b = self.eval_const_env(rhs, env, envw, depth)?;
+                // `**`'s exponent is SELF-determined — same rule as the
+                // width-aware twin's Pow arm (`eval_const_env_at`); this plain
+                // walk otherwise widens it. Reachable on its own only through
+                // the shape-unknown-target path (`eval_const_assign` with no
+                // target), but a second spelling of the rule diverging there
+                // would be silent, so it goes through the one shared helper.
+                let b = if matches!(op, ast::BinOp::Pow) {
+                    self.const_pow_exponent_selfdet(rhs, env, envw, depth)?
+                } else {
+                    self.eval_const_env(rhs, env, envw, depth)?
+                };
                 const_binop(*op, a, b)
             }
             ast::ExprKind::Ternary {
@@ -535,6 +592,43 @@ impl Elaborator<'_> {
             // −18, while the same expression written inline was correct.
             ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
                 self.eval_const_call(&name.segments[0].name, args, env, envw, depth)
+            }
+            // A form this env twin does not model itself (`pkg::X`, a concat, a
+            // const-array element read, `$bits`, a cast, …). With NO local
+            // bindings there is nothing a module-scope resolution could shadow,
+            // so the module-scope fold may answer. Inside a function body this
+            // arm can never fire: `eval_const_call` always seeds the
+            // function-name return variable, so `env` is never empty there.
+            // ⚠️ `depth == 0` does NOT mean "no call is in flight" — a body-local
+            // init and `eval_const_env`'s own `Call` arm both fold at the plain
+            // caller depth, so depth 0 does occur inside a call (adversarially
+            // measured: a probe here fired on three existing suite tests). What
+            // makes the delegation terminate is narrower and provable:
+            //
+            //   * `const_eval_in_scope` RESTARTS the call depth at 0, which
+            //     UN-CHARGES a default — and a DEFAULT is the only position that
+            //     can re-enter the SAME ast node (it belongs to the callee's own
+            //     declaration). So a delegation must never reach a call from
+            //     INSIDE one: at depth >= 1 only a CALL-FREE subtree passes.
+            //   * At depth 0 a call-bearing subtree is safe because every
+            //     recursion from there descends a strictly SMALLER subtree, and
+            //     the first default it reaches is charged `depth + 1` — after
+            //     which the call-free rule takes over. This is what keeps
+            //     `2 ** (8'(cf(2)) + 1)` folding as it always did.
+            //   * The call-free half is what lets a plain default like
+            //     `input int k = 8'(3)` fold instead of being rejected for the
+            //     crash's sake.
+            //
+            // ⚠️ `envw` is the conjunct with teeth: a formal/local is recorded
+            // there BEFORE its init folds, so a body expression never sees an
+            // empty map. `env` is its lockstep twin (measured: a probe found no
+            // state where the two disagree, 0 hits in 247 tests) and is asserted
+            // with it so a future path that populates only one cannot pass.
+            _ if env.is_empty()
+                && envw.is_empty()
+                && (depth == 0 || !Self::ast_contains_call(e)) =>
+            {
+                self.const_eval_in_scope(e)
             }
             _ => None,
         }
@@ -590,10 +684,22 @@ impl Elaborator<'_> {
                 &[],
                 p.signed,
             );
+            // An explicit ARGUMENT folds at the CALLER's depth: it descends a
+            // finite AST (`g(g(g(0)))` is three distinct nodes), so charging it
+            // a level only shrinks how deep a legitimate design may nest —
+            // measured: 65-deep argument nesting folds on the pre-slice binary
+            // and on iverilog, and went LOUD when args were charged.
+            //
+            // A DEFAULT is the cyclic one: it belongs to the CALLEE's own
+            // declaration, so folding `input int k = f()` re-enters the SAME
+            // node and recursed at constant depth until the stack overflowed
+            // (pre-existing; the `8'(f())` spelling reached it through the
+            // module-scope delegation below). One level per default makes the
+            // depth cap bound it — E3009, not a crash. iverilog aborts on both.
             let av = if let Some(a) = args.get(i) {
                 self.eval_const_assign(a, caller_env, caller_w, depth, tw)?
             } else if let Some(d) = &p.default {
-                self.eval_const_assign(d, &env, &envw, depth, tw)?
+                self.eval_const_assign(d, &env, &envw, depth + 1, tw)?
             } else {
                 return None; // too few args, no default
             };
