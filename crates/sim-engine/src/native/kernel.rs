@@ -1092,7 +1092,31 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// ends the run. `now` is unchanged across that span, so the timestamp is
     /// right either way.
     pub(crate) fn drain_range_diags(&mut self) {
-        self.drain_range_reports();
+        // ⚠️ EARLY-OUT, and it asks the CANONICAL cell rather than a second
+        // predicate. The two twins below have had one since they were written
+        // (`vcd_pending.is_empty()`, `probe_pending.is_empty()`); this one did
+        // not, and a profile measured `drain_range_diags` at 3.1–4.8% of three
+        // shapes that file no range reports at all — the cost is a `RefCell`
+        // borrow plus a `Vec` move and drop, per STATEMENT (ROADMAP §5.1-bb).
+        //
+        // Asking `self.arena.pending_range` directly is deliberate: it is the
+        // very cell the `take_deferred_range_kinds` override reads (its own doc
+        // says the engine has no counterpart, because `SimState` reports at the
+        // access). A separate "is there anything?" predicate would be a second
+        // answer to one question, and the direction it fails in is LOST
+        // DIAGNOSTICS.
+        //
+        // ⚠️⚠️ AND IT BOUGHT NOTHING MEASURABLE — recorded because the profile
+        // line that motivated it is still there. A same-session A/B moved all
+        // eight shapes inside ±2%, so the 3.1–4.8% attributed to this function
+        // is the per-statement CALL and the three emptiness tests it performs,
+        // not the drain that had none. It ships as a consistency fix (the twins
+        // have had this guard since they were written) and not as a speedup;
+        // the cost it names is still on the table and belongs to whoever makes
+        // `dispatch_body` stop asking three questions per statement.
+        if !self.arena.pending_range.borrow().is_empty() {
+            self.drain_range_reports();
+        }
         self.drain_vcd();
         self.drain_probe();
     }
