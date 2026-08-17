@@ -12,6 +12,37 @@
   - 코드의 **논리적 오류**를 검증.
 - 리뷰 관점 4축: **Architecture & System Integration** · **Performance & Efficiency** · **Maintainability & Readability** · **Robustness & Testability**.
 
+## 적대 리뷰 실행 (브리핑·배터리 — LOOPROMPT §4 에서 이관)
+
+**브리핑에 항상 넣을 것 (라운드 시간을 정하는 것은 브리핑이다).**
+
+- PRE 바이너리를 **미리 빌드해 경로로** 준다 + **작업 트리 수정 금지**.
+- **이미 죽인 뮤테이션·문서화된 생존자 목록**을 주고 "이 목록 밖"을 요구한다.
+- **직전 라운드 수치**를 재측정 대상으로 명시한다.
+- *"clean 을 그대로 말하는 것이 좋은 결과다 — 발견을 지어내지 마라."*
+- soundness 에겐 **별도 `CARGO_TARGET_DIR` 뮤턴트**를 허용한다.
+- 라운드 2 이후는 **바뀐 것만** 겨냥한다.
+- staged 를 만질 거면 **먼저 `--features separate-bins`** 로 빌드하라고 적는다.
+
+**브리핑 전에 스냅샷 커밋.** PRE 를 `git archive <branch>` 로 주고, 그 커밋이 **복원의 정본**이 된다
+(`git checkout --`). /tmp 스냅샷은 사라진다 — 실측.
+
+**뮤테이션 배터리 운용.**
+
+- 복원은 **소스와 바이너리 둘 다**. 소스만 되돌리고 재빌드를 빠뜨리면 정본이 뮤턴트 값을 낸다 — 실측 2회.
+- 치환은 **줄 번호로 지정**하라. 같은 패턴이 두 사이트에 맞으면 조용히 미적용되고 SURVIVED 로 오기록된다.
+- 스코프는 **`--workspace`**. 좁은 필터가 아끼는 것은 케이스당 ~30초뿐이고 대신 **가짜 SURVIVED** 를 산다
+  (킬러가 필터 밖에 있을 수 있다). `-p A -p B --test X` 는 cargo 가 `--test` 를 모든 패키지에 걸어 A 의 유닛을 통째로 뺀다.
+- 결과 파서는 **FAIL 외에 TIMEOUT·SIGABRT·SIGSEGV 도** 세라. hang 을 FAIL 로만 세면 진짜 결함이 SURVIVED 로 보고된다.
+- ⚠️⚠️ **루프 탈출 조건을 건드리는 뮤테이션은 bounded runner 로만 채점하라 — 전 스위트에 걸지 마라.**
+  무한 시뮬레이션이 머신을 내린다(실측 2회: 프로세스가 수십 GB → jetsam → 커널 패닉, 그때마다 세션이 죽어
+  **뮤테이션이 트리에 남았다**). 배터리는 **포그라운드**로 — 백그라운드는 teardown 에 죽는다.
+- **생존 = 등가가 아니다.** 판별자를 지어 실측하고, 등가면 그 논거를 코드에 적어라. 도달 불가는 `panic!` 프로브로 재라.
+
+**PRE 3-way 측정.** iverilog 대조만으로는 *"PRE 에서 되던 것이 POST 에서 loud"* 가 안 보인다(둘 다 "vita loud").
+`git archive main | tar -x -C <scratch>/presrc` 후 **별도 빌드**(worktree 금지). 기존 바인딩·분류를 바꾸는
+슬라이스는 필수. 스윕은 **3분류**(loud→정답 / silent→loud / 문구만)로 센다.
+
 ## 작성 원칙
 
 > 누적 슬라이스의 적대 리뷰에서 실제로 silent-wrong을 한 번씩 막았던 규칙들. 일화·§번호는 [ROADMAP_ARCHIVE](docs/ROADMAP_ARCHIVE.md)에 있고 여기엔 **규칙만** 둔다. 새 교훈은 이 절에 1줄로 병합.
