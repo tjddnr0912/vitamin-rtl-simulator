@@ -333,17 +333,25 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   ⚠️ **곁가지 발굴**: 태스크 지역 `localparam`(`task automatic t; localparam int K = 3;`)은 **파서가
   거부**한다(E2002 · PRE==POST = pre-existing · iverilog 는 받는다). 별건으로 아래 §3 소형 큐에 등재.
 
-- **§3.6 `default clocking` / `default disable iff` 미지원** — ⭐⭐ **2026-08-18 재측정: 둘이 같은 상태가 아니다.**
-  **`default clocking … endclocking` 은 파싱되고 `errors=0` 으로 통과한다** — `hdl-parser` 가 `is_default`
-  플래그까지 만드는데(`hdl-ast/src/lib.rs:349`) **elaborate 에 그 플래그의 소비자가 0개**다(= 죽은 계약 ·
-  §4.5.341 의 `Diagnostic::context` 와 같은 모양). 그래서 그것에 기대는 `assert property (a)` 가
-  **`E3009 unknown property \`a\``** 로 죽고 **문구가 진짜 원인(기본 클럭이 안 붙었다)을 안 가리킨다**.
-  ⇒ **필요한 것은 클로킹 기계가 아니라 플래그 배선 하나**(클로킹 블록 자체는 §5.1-x 가 이미 지었다).
-  반면 **`default disable iff` 는 파싱조차 안 된다** — `E2002`. ⚠️ 부수 효과가 하나 있다:
-  `default clocking`이 없으면 그 뒤의 clocking 없는 concurrent assertion도 `E2002`로 죽어
-  **원인이 하나인지 둘인지 안 보인다**. 우회(property마다 `@(posedge clk) disable iff`)가 쉽고
-  xrun 이식성도 그쪽이 나아서 리포터도 우선순위를 낮게 뒀다. **`bind`는 잘 동작한다**(그 덕에
-  SVA를 `rtl/` 밖에 두고 합성 소스를 무변경으로 유지한다 — 리포터가 명시적으로 중요하다고 적었다).
+- **✅ §3.6-① RESOLVED (2026-08-18 · 클리어 순서 2번)** — `default clocking` 이 이 스코프의 무클럭
+  concurrent assertion에 **실제로 클럭을 준다**(IEEE 1800 §14.12). ⭐⭐ **센티넬은 이미 있었다** —
+  `assert property(NAME)` 이 예전부터 **빈 sensitivity 리스트**로 파싱되고 코드가 그것을 *"the empty
+  sentinel"* 이라 부르고 있었으므로, 파서는 **거부를 걷어내고 같은 센티넬을 남기고**(`sva_prop.rs`)
+  **`sva_check.rs` 의 드레인 한 자리**가 해석한다(모듈 단위라 형제 모듈로 샐 수 없다 — `lower_clocking_blocks`
+  가 `clocking_events` 와 함께 지우고, 유일한 소비자가 **같은 `elaborate_instance` 안**에서 늦게 돈다).
+  ⚠️⚠️ **오라클은 verilator 5.050 이다** — **iverilog 13 은 `default clocking` 을 파싱조차 못 한다**.
+  **6형태 전부 verilator 와 일치**: 무클럭 `a |-> b`(FAIL t=1,3,5) · 명시 클럭 우선(t=3,9) · **bare
+  `assert property (a)` = 클럭된 불리언**(§16.12 · 명시 철자 `@(clk) a` 는 원래 돌고 있었다) · named
+  property 무클럭 · 그리고 **default 가 없으면 여전히 거부**(verilator 도 거부 — 파서 에러를 지우는 것이
+  거부를 *없애는* 게 아니라 *옮기는* 것임을 그 사실이 고정한다). ⚠️ bare-이름 재해석은 **`default
+  clocking` 이 있을 때만**(없으면 *"unknown property"* 문구 그대로 = 진짜 오타를 안 삼킨다 · 대조군 핀).
+  ⚠️ **지원 안 되는 클럭 이벤트는 보이지 않는 default 가 되지 않는다**(edge-list 검사 **뒤**에 기록 —
+  ⭐ 뮤테이션이 그 순서를 **오늘은 등가**라고 실측했다: 그 거부가 Error 라 런 자체가 없다. 그래도
+  fail-closed 로 남기고 논거를 코드에 적었다 — 그 거부가 경고로 내려가는 날 정확히 그것이 silent-wrong 이 된다).
+  **뮤테이션 7/7**(생존 1 = 위 등가) · 앵커 = `cli/tests/default_clocking.rs` **8건**(⚠️ 그중 **모듈 간
+  누수 판별자**는 배터리가 요구해서 지었다 — 나머지 일곱이 전부 단일 모듈이라 눈먼 축이었다).
+  ⚠️ **잔여 = `default disable iff`**(파싱조차 안 된다 · `E2002` · **클리어 순서 7번** · verilator 오라클
+  확보: `default disable iff (rst)` 는 FAIL t=5,7,9).
 
 - **§3.7 `string` formal이 static task에서 불가** — `E3009 … (declare the task automatic)`.
   진단이 해결책까지 말해서 즉시 우회 가능하고, 리포터도 "문구는 아주 좋다"고 적었다. 기능만 없다.
@@ -385,7 +393,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | # | 슬라이스 | 여는 것 | 선행조건 | 사이트(실측) |
 |---|---|---|---|---|
 | ~~1~~ | ✅ **§3.5-① 완료(2026-08-18)** | `4*16`·`LP`·`LP/2`·`$clog2(LP)`·⭐`'1` — **FIXED 5 · 회귀 0** | — | 답은 arm 이 아니라 **한 철자**(`repeat_unroll_count` 를 lowering·분류기가 공유) · 뮤테이션 **8/8** |
-| **2** | **§3.6-① `default clocking` 배선** | `default clocking` 이 **실제로 기본 클럭이 된다** | **없음** | `is_default` 소비자 0(죽은 계약) + ⭐ **소비자 쪽은 파서가 막는다**(`sva_prop.rs:41` 무클럭 assertion 거부) ⇒ 파서는 **빈 sensitivity 센티넬**(이미 `assert property(NAME)` 이 쓰는 것)을 남기고 `sva_check.rs:59` **한 자리**가 해석. ⚠️ **오라클은 verilator**(iverilog 는 `default clocking` 을 파싱 못 한다) |
+| ~~2~~ | ✅ **§3.6-① 완료(2026-08-18)** | verilator 6/6 일치 · bare-이름 = 클럭된 불리언까지 | — | 센티넬은 이미 있었다(`assert property(NAME)`) · 드레인 한 자리 · 뮤테이션 7/7 |
 | **3** | **§3.3 wide fold arm** | `{8'he1,120'h0}` · `128'(…)<<120` | **없음** | `const_eval.rs::fold_init` arm 셋뿐 — `Concat`/`Replicate`/시프트/`Ident` 없음. 도메인은 `params.rs:799` 에 이미 섬 |
 | **4** | **§3.1 이식성 경고** | select 축 **4형태**(리포트는 2형태만 봤다) | **없음** | `hdl-parser/expr.rs` postfix 루프 **한 사이트** + IEEE §11.5.1 술어 · ⚠️ **거부가 아니라 경고**(오라클이 갈린다) |
 | **5** | **§3.7 static task 의 `string` formal** | `task t(input string s)` | **없음**(설계가 주석에 적혀 있다) | `inline_task.rs:263` — **String-kind snapshot local** |

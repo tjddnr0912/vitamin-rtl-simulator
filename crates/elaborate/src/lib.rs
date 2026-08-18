@@ -817,6 +817,11 @@ struct Elaborator<'s> {
     /// turnoff). Populated only when the folded values are not all equal.
     ca_delays: std::collections::BTreeMap<u32, (u32, u32, u32)>,
     clocking_events: std::collections::BTreeMap<String, ast::Sensitivity>,
+    /// This module's `default clocking` event (IEEE 1800 §14.12), or `None`.
+    /// MODULE-LOCAL: `lower_clocking_blocks` clears it alongside `clocking_events`,
+    /// and the only reader (`materialize_sva_checkers`) runs later in the SAME
+    /// `elaborate_instance`, so it can never leak a sibling module's clock.
+    default_clocking: Option<ast::Sensitivity>,
     /// Holding NetIds of clocking INPUTs (`cb.sig`) — read-only; an lvalue write
     /// to one is loud (you cannot drive a clocking input, §14.3).
     clocking_hold_nets: std::collections::BTreeSet<u32>,

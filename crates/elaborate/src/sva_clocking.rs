@@ -506,6 +506,7 @@ impl Elaborator<'_> {
     pub(crate) fn lower_clocking_blocks(&mut self, body: &[ast::ModuleItem]) {
         // `@(cb)` resolution is module-local: clear the previous module's map.
         self.clocking_events.clear();
+        self.default_clocking = None;
         for item in body {
             let ast::ModuleItem::Clocking(cb) = item else {
                 continue;
@@ -525,6 +526,21 @@ impl Elaborator<'_> {
                      (`@(posedge c1 [or posedge c2 …])`; `@*` / level events are unsupported)",
                 );
                 continue;
+            }
+            // IEEE 1800 §14.12: `default clocking` supplies the clocking event to any
+            // concurrent assertion in this scope that gives none. Recorded only AFTER the
+            // edge-list check above, so an unsupported clocking event cannot become an
+            // invisible default.
+            //
+            // ⚠️ MEASURED EQUIVALENT TODAY, KEPT FAIL-CLOSED. Moving this above the check
+            // changes nothing observable, because the rejection there is an ERROR: the
+            // design does not simulate, so no assertion armed with the bad clock can run
+            // (mutation battery, measured — `default clocking cb @(clk);` gives errors=1
+            // and no output either way). The ordering is what stays correct if that
+            // rejection is ever downgraded to a warning, which is exactly when an
+            // invisible default would become a silent wrong answer.
+            if cb.is_default {
+                self.default_clocking = Some(cb.clock.clone());
             }
             let cb_name = match cb.name.as_ref().map(|n| n.name.clone()) {
                 Some(n) => n,

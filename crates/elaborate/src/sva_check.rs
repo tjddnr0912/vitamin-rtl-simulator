@@ -65,6 +65,26 @@ impl Elaborator<'_> {
         let saved_synth = self.in_assert_synth;
         self.in_assert_synth = true;
         for mut sva in pending {
+            // A concurrent assertion with NO clocking event of its own inherits the
+            // scope's `default clocking` (IEEE 1800 §14.12). The empty sensitivity list
+            // is the sentinel the parser leaves; this is the ONLY place that resolves it,
+            // so the multi-clock gate below never sees it. `self.default_clocking` is the
+            // CURRENT module's — `lower_clocking_blocks` set it at step (6.5) and this
+            // drain runs later in the same `elaborate_instance`.
+            if matches!(&sva.clock, ast::Sensitivity::List(evs) if evs.is_empty()) {
+                match self.default_clocking.clone() {
+                    Some(c) => sva.clock = c,
+                    None => {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a concurrent assertion needs a clocking event: write one \
+                             (`assert property (@(posedge clk) …)`) or declare a \
+                             `default clocking cb @(posedge clk); endclocking` in this scope",
+                        );
+                        continue;
+                    }
+                }
+            }
             let sp = sva.span;
             // A concurrent assertion must have a SINGLE clocking event (slice
             // S15). An OR-of-clocks event `@(posedge c1 or posedge c2)` (a

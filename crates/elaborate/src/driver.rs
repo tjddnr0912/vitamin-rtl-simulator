@@ -46,6 +46,7 @@ impl<'s> Elaborator<'s> {
             clocking_outputs: std::collections::BTreeMap::new(),
             ca_delays: std::collections::BTreeMap::new(),
             clocking_events: std::collections::BTreeMap::new(),
+            default_clocking: None,
             clocking_hold_nets: std::collections::BTreeSet::new(),
             automatic_local_nets: std::collections::BTreeSet::new(),
             const_param_nets: std::collections::BTreeMap::new(),

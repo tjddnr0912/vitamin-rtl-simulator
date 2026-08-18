@@ -35,10 +35,19 @@ impl Parser<'_, '_> {
             }
         }
         // Clocking event `@(...)`. `parse_sensitivity` consumes the leading `@`.
+        //
+        // A MISSING one is not an error here: IEEE 1800 §14.12 lets a concurrent
+        // assertion inherit the enclosing scope's `default clocking`, and whether one
+        // exists is a module-level fact this parse cannot see (the `default clocking`
+        // item may come later in the body). So leave the ESTABLISHED empty-list
+        // sentinel — `assert property(NAME)` already parses to exactly that, and
+        // `materialize_sva_checkers` is the one place that resolves it: it substitutes
+        // the default clocking, or reports that there is none. Erroring here instead
+        // reported the wrong cause (the assertion is fine; the scope may lack a clock)
+        // and made `default clocking` unusable even though the block itself parsed.
         let clock = if self.peek() == Some(TokenKind::At) {
             self.parse_sensitivity()
         } else {
-            self.error("'@(...)' clocking event in concurrent assertion");
             Sensitivity::List(Vec::new())
         };
         // Optional `disable iff (expr)` reset (slice S12), between the clocking

@@ -1396,6 +1396,53 @@ impl Elaborator<'_> {
                                 span: *span,
                             });
                         }
+                        None if self.default_clocking.is_some() && args.is_empty() => {
+                            // IEEE 1800 §14.12 + §16.12: with a `default clocking` in
+                            // scope, `assert property (a)` on a name that is NOT a
+                            // declared property is a CLOCKED BOOLEAN — verilator 5.050
+                            // reads it that way, and this elaborator already runs the
+                            // explicit spelling `assert property (@(posedge clk) a)`.
+                            // The parser cannot tell the two apart (a bare name is a
+                            // property instance until the property table says otherwise),
+                            // so the re-interpretation belongs exactly here, in the arm
+                            // that has just learned there is no such property.
+                            //
+                            // Gated on a default clocking EXISTING so the "unknown
+                            // property" message below is unchanged for every design that
+                            // has no clock to fall back to — that message is still the
+                            // right answer there, and it names the two ways out.
+                            // Built in the PARSER's own shape for a bare clocked
+                            // boolean: it desugars `property(@(clk) e)` to `1'b1 |-> e`,
+                            // so this must too — a second shape here would take a
+                            // different path through `materialize_sva_checkers`.
+                            let true_lit = ast::Expr {
+                                kind: ast::ExprKind::IntLit {
+                                    kind: ast::IntLitKind::Decimal,
+                                    raw: "1".to_string(),
+                                },
+                                span: name.span,
+                            };
+                            self.pending_sva.push(PendingSva {
+                                clock: ast::Sensitivity::List(Vec::new()),
+                                disable_iff: None,
+                                ante: ast::Sequence::Boolean(true_lit),
+                                kind: ast::ImplicationKind::Overlap,
+                                cons: ast::Sequence::Boolean(ast::Expr {
+                                    kind: ast::ExprKind::Ident(ast::HierPath {
+                                        segments: vec![name.clone()],
+                                        span: name.span,
+                                    }),
+                                    span: name.span,
+                                }),
+                                pass: pass.clone(),
+                                fail: fail.clone(),
+                                cons_clock: None,
+                                prop_expr: None,
+                                prop_self_name: None,
+                                local_vars: Vec::new(),
+                                span: *span,
+                            });
+                        }
                         None => {
                             // Distinguish a declared-but-wrong-kind name from a
                             // genuinely unknown one (review 2026-06-16: a net or a
