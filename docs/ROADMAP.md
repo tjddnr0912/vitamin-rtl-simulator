@@ -368,8 +368,13 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   fail-closed 로 남기고 논거를 코드에 적었다 — 그 거부가 경고로 내려가는 날 정확히 그것이 silent-wrong 이 된다).
   **뮤테이션 7/7**(생존 1 = 위 등가) · 앵커 = `cli/tests/default_clocking.rs` **8건**(⚠️ 그중 **모듈 간
   누수 판별자**는 배터리가 요구해서 지었다 — 나머지 일곱이 전부 단일 모듈이라 눈먼 축이었다).
-  ⚠️ **잔여 = `default disable iff`**(파싱조차 안 된다 · `E2002` · **클리어 순서 7번** · verilator 오라클
-  확보: `default disable iff (rst)` 는 FAIL t=5,7,9).
+  ✅ **§3.6-② 도 닫혔다(2026-08-19 · 클리어 순서 7번)** — `ModuleItem::DefaultDisableIff` + 모듈 단위
+  기록 + 드레인이 빈 `disable_iff` 를 채운다(⚠️ **multi-clock 게이트보다 먼저** — early `continue` 가
+  기본 리셋을 조용히 떨어뜨리지 않도록). **verilator 3/3 일치**(억제 · 명시 `disable iff` 가 이김 ·
+  대조군). ⭐ 곁가지로 **한 스코프에 둘이면 loud**(IEEE §16.15 · verilator 도 명시 거부) — 그리고 그
+  거부가 *"첫 것이냐 마지막이냐"* 를 **증명 가능하게 무의미**하게 만든다(⭐ 뮤테이션이 그 결론을 거꾸로
+  냈다: 생존 → 판별 설계를 찾다 그것이 불법임을 알았다). ⚠️ AST 변종 하나라 **`.vu` SchemaHash 재핀**
+  (sim-ir·format_version 불변 · 순수 IR-0).
 
 - **✅ §3.7 RESOLVED — INPUT 방향 (2026-08-18 · 클리어 순서 5번) · ⚠️ output/inout 은 좁혀서 잔여.**
   ⭐ **수정은 넷 종류 하나다** — 인라인(static-lifetime) 경로가 formal-local 을 `map_net_kind_or_wire`
@@ -434,7 +439,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~5~~ | ✅ **§3.7 INPUT 완료(2026-08-18)** | 6형태 iverilog 일치 + `StrCmp` 라우팅 | — | 수정은 **넷 종류 하나**(`frame_local_net_kind`) · 뮤테이션 5/5 · ⚠️ **output/inout 은 좁혀서 잔여** |
 | ~~P1~~ | ✅ **완료(2026-08-18)** — ⚠️ **census 가 범위를 셋에서 하나로 줄였다**(나머지 둘은 이미 열려 있었다) | inner-NET shadow · 6형태 iverilog 일치 · **generate 바디 삭제 재발 없음** | — | ⭐ 필요했던 것은 이름 집합이 아니라 **선언 블록의 SPAN**(`hoist_block_local_nets` 가 이미 들고 있었다 · span 은 order-independent AST 사실) · 뮤테이션 6/6 |
 | ~~6~~ | ✅ **§3.5-③ 완료(2026-08-19)** | `repeat` 가족 **전부** 프레임에서 돈다 + 동시 활성화 판별자 | — | 카운터를 **예약 패스**에서 프레임 창 안에 · 핸드오프는 **span 키** · ⭐ 곁가지로 **§2 self-width 절단 silent-wrong** 동반 수정 |
-| **7** | **§3.6-② `default disable iff`** | 파싱조차 안 됨 | 파서 + property lowering | `E2002` |
+| ~~7~~ | ✅ **§3.6-② 완료(2026-08-19)** | verilator 3/3 일치 + ⭐ **중복 선언 loud** 신설 | — | AST 변종 1(**`.vu` 재핀** · sim-ir·format_version 불변) · `default clocking` 과 **같은 자리·같은 리셋** · 적용은 **multi-clock 게이트보다 먼저** · 뮤테이션 4/5 + **증명된 등가 1** |
 | **8** | **§3.11 `function automatic` 인라인** | 암호 RTL 의 기본형 | 적격 술어 — ⚠️ `compute_suspendable_tasks` 와 **같은 축**(두 번째 철자 금지) | `user_call_in_expr` 거부 87% |
 | **9** | **staged `file:line`** | `velab` 진단에 위치 | **아티팩트 형상 변경**(`.vu` 에 줄테이블/SourceMap) = **format bump** | one-shot 만 `SourceMap` 을 든다 |
 | **10** | **§3.10 런타임 `file:line`** | 엔진 진단에 위치 | 엔진이 IR 위에서 돌아 span 이 없다 | §4.5.249 `SpanResolver` 가 재사용 지점 |
