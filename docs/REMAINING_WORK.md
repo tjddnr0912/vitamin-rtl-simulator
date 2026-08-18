@@ -28,7 +28,7 @@
 | # | 항목 | 근거/오라클 |
 |---|---|---|
 | **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말: ① module-scope `$clog2` 무제한 fold ② 캐스트 SIZE 식 ③ real `**` 지수 — **셋이 한 뿌리** | iverilog 라이브 차분 |
-| **2** | **§3 loud→supported** — 오라클이 답하는 행부터. ⭐ 외부 aes_top 3판 잔여 5건이 여기 있고 **§3.1 은 "안전한 loud" 가 아니다**(세 오라클 전부 거부하는데 vita 만 받는다 = sign-off 에서만 터진다) | iverilog·verilator·xrun 3-way ✓ |
+| **2** | **§3 loud→supported** — ⭐ **클리어 순서가 확정됐다**(ROADMAP §3 「3판 잔여 5건의 클리어 순서」 · 코드 사이트까지 실측): **1** §3.5-① `repeat` fold arm+문구 → **2** §3.6-① `default clocking` 배선 → **3** §3.3 wide fold arm → **4** §3.1 이식성 경고 → **5** §3.7 string formal. **다섯 다 선행조건 0.** 그 뒤는 P1(아래 3번 행)에 묶인다 | iverilog·verilator 실측 ✓ |
 | **2b** | **§0 승격 큐 T2 잔여 2건** — `real` const-fold(= `int'(<real param>)` 바운드의 선행) · sized-literal enum label | iverilog ✓ 2/2 |
 | 3 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) ⚠️ **이 선행조건은 §3.5 `repeat (LP)` 도 막고 있다**(같은 `walk_scopes_key_shadowed` 계약) | iverilog ✓ |
 | 4 | **§6 OBS** — OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |

@@ -285,8 +285,29 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   ⚠️ **착수 시 주의**: (a)/(b)는 파서 층(비-식별자 primary에 붙는 select), (c)는 elaborate 층
   (`always_comb` 타깃 ∩ 선언 초기화자를 가진 변수 — 감도 리스트 합성이 이미 그 집합을 안다).
   둘은 다른 층이므로 한 슬라이스에 묶지 마라.
+  ⭐⭐ **2026-08-18 재측정 — select 축은 넷이고 오라클이 둘로 갈린다**(위 표의 (a)/(b)를 대체·확장).
+  사이트는 **하나**다(`hdl-parser/src/expr.rs` 의 postfix 루프 `LBracket => parse_select(e)` — base 의
+  종류를 **안 본다**). IEEE 1800 §11.5.1 은 select 를 **net/variable** 에만 허용한다:
+  | base | vita | iverilog 13 | verilator 5.050 |
+  |---|---|---|---|
+  | `a[7:0]`(넷)·`m[1][7:0]`(원소) | 통과 | **통과** | 통과 |
+  | (a) `((a^b)>>8)[7:0]` | 통과 `12` | REJECT | **REJECT** |
+  | `16'hABCD[7:0]`(리터럴) ⭐신규 | 통과 `cd` | REJECT | **REJECT** |
+  | (b) `f(a)[7:0]` | 통과 `35` | REJECT | **통과 `35`** |
+  | `{a,b}[7:0]`(concat) ⭐신규 | 통과 `ff` | REJECT | **통과 `ff`** |
+  ⚠️⚠️ **그래서 넷을 같은 처분으로 다루면 안 된다** — (a)·리터럴은 **세 오라클 전부 거부**(vita 가 지어낸
+  확장 ⇒ loud 가 안전)지만 **(b)·concat 은 verilator 가 받고 값도 같다**(⇒ 거부하면 verilator-호환
+  코드에 대해 **사다리 하강**). ⭐ **답은 §3.2 의 `\r` 과 같은 모양이다: 값은 그대로 두고 이식성 경고**
+  (경고는 하강이 아니다 · 리포터의 요청도 error 가 아니라 warning 이었다). ⚠️ 넷 다 xrun 재측정 필요
+  (리포터는 (a)/(b)만 쟀다).
 
-- **§3.3 넓은 `localparam`의 연결/시프트가 안 접힌다** — `localparam logic [127:0] B = {8'he1, 120'h0};`
+- **§3.3 넓은 `localparam`의 연결/시프트가 안 접힌다** ⭐ **원인 특정(2026-08-18): `const_eval.rs::fold_init`
+  에 arm 이 셋뿐이다**(`IntLit` · fill 리터럴 · `Paren`) — **`Concat`·`Replicate`·시프트·`Ident` arm 이 없다.**
+  >64bit 도메인(`ir::BitPacked`·`resize_bits`·`wide_param_bits`)은 **선언 경로에 이미 서 있고**
+  (`params.rs:799-810`) 진입 조건도 맞다(i64 fold 가 declined 일 때). ⇒ **선행조건 0 · 새 도메인 불필요 ·
+  빠진 것은 arm 이다**(§3.5-①과 **같은 결함 클래스**: 폴더에 arm 이 없다 · 다만 도메인이 달라 별 슬라이스).
+  ⚠️ 2판 잔여 *"wide 파라미터 OVERRIDE 는 loud"* 와는 **다른 축**이다(그쪽은 `ResolvedOverride` 채널).
+ — `localparam logic [127:0] B = {8'he1, 120'h0};`
   와 `= 128'(8'he1) << 120;` 이 둘 다 `E3009 … not a foldable constant expression`(값 리터럴
   `128'he1000…`은 통과). 암호 IP는 넓은 상수를 이 형태로 쓴다. 폭>64는 `wide_param_bits`가
   값을 지키므로 필요한 것은 **그 도메인 위의 `Concat`/시프트 fold**이지 i64 채널이 아니다.
@@ -307,7 +328,13 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   **③ `repeat (m_n)`(모듈 넷)은 진짜 런타임**이라 프레임 subset 에 카운터를 줘야 한다.
   ⇒ **①과 문구는 지금 당장 가능**하고, ②는 그 패스 슬라이스에 묶이며, ③만 독립적으로 크다.
 
-- **§3.6 `default clocking` / `default disable iff` 미지원** — `E2002`. ⚠️ 부수 효과가 하나 있다:
+- **§3.6 `default clocking` / `default disable iff` 미지원** — ⭐⭐ **2026-08-18 재측정: 둘이 같은 상태가 아니다.**
+  **`default clocking … endclocking` 은 파싱되고 `errors=0` 으로 통과한다** — `hdl-parser` 가 `is_default`
+  플래그까지 만드는데(`hdl-ast/src/lib.rs:349`) **elaborate 에 그 플래그의 소비자가 0개**다(= 죽은 계약 ·
+  §4.5.341 의 `Diagnostic::context` 와 같은 모양). 그래서 그것에 기대는 `assert property (a)` 가
+  **`E3009 unknown property \`a\``** 로 죽고 **문구가 진짜 원인(기본 클럭이 안 붙었다)을 안 가리킨다**.
+  ⇒ **필요한 것은 클로킹 기계가 아니라 플래그 배선 하나**(클로킹 블록 자체는 §5.1-x 가 이미 지었다).
+  반면 **`default disable iff` 는 파싱조차 안 된다** — `E2002`. ⚠️ 부수 효과가 하나 있다:
   `default clocking`이 없으면 그 뒤의 clocking 없는 concurrent assertion도 `E2002`로 죽어
   **원인이 하나인지 둘인지 안 보인다**. 우회(property마다 `@(posedge clk) disable iff`)가 쉽고
   xrun 이식성도 그쪽이 나아서 리포터도 우선순위를 낮게 뒀다. **`bind`는 잘 동작한다**(그 덕에
@@ -344,6 +371,30 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **§3.10 잔여 — 런타임 진단의 인스턴스 경로와 file:line.** §4.5.341이 시각(round-29) + **배열
   이름**을 붙였고, elaborate 쪽은 `file:line:col` + 인스턴스 경로를 갖는다. 런타임 쪽에 남은 것은
   **소스 위치**다(엔진은 IR 위에서 돌아 span이 없다 — §4.5.249 `SpanResolver`가 재사용 지점).
+
+### ⭐⭐ 3판 잔여 5건의 클리어 순서 (2026-08-18 · **전부 코드 사이트까지 실측**)
+
+> 순서의 근거는 **선행조건 그래프**이지 리포트의 번호가 아니다. ⚠️ **§2 가 §3 보다 위**라는 원칙(§1)은
+> 유지되는데, 아래 **P1 이 마침 §2 항목**이라 사다리와 이 순서가 충돌하지 않는다.
+
+| # | 슬라이스 | 여는 것 | 선행조건 | 사이트(실측) |
+|---|---|---|---|---|
+| **1** | **§3.5-① `repeat` fold arm + 문구** | `repeat (4*16)` · **오진단 문구** | **없음** | `const_fn.rs::const_eval_u32`(`IntLit`/`Paren`/`Unary` 뿐 — **`Binary` arm 이 없다**) + E3009 문구 |
+| **2** | **§3.6-① `default clocking` 배선** | `default clocking` 이 **실제로 기본 클럭이 된다** | **없음** | `hdl-ast:349 is_default` 가 **소비자 0** = 죽은 계약 · 클로킹 기계는 §5.1-x 가 이미 지음 |
+| **3** | **§3.3 wide fold arm** | `{8'he1,120'h0}` · `128'(…)<<120` | **없음** | `const_eval.rs::fold_init` arm 셋뿐 — `Concat`/`Replicate`/시프트/`Ident` 없음. 도메인은 `params.rs:799` 에 이미 섬 |
+| **4** | **§3.1 이식성 경고** | select 축 **4형태**(리포트는 2형태만 봤다) | **없음** | `hdl-parser/expr.rs` postfix 루프 **한 사이트** + IEEE §11.5.1 술어 · ⚠️ **거부가 아니라 경고**(오라클이 갈린다) |
+| **5** | **§3.7 static task 의 `string` formal** | `task t(input string s)` | **없음**(설계가 주석에 적혀 있다) | `inline_task.rs:263` — **String-kind snapshot local** |
+| **P1** | ⭐⭐ **order-INDEPENDENT AST-gathered per-scope name set** | **셋을 한꺼번에** | 이것이 **유일한 큰 선행조건** | §2 DEEP(inner-NET shadow) + §4.5.276 후속①(`for` trip-count) + **§3.5-② `repeat (LP)`** |
+| **6** | **§3.5-③ `repeat (m_n)`** | 모듈 넷 카운트 | 프레임 subset 에 **런타임 카운터** | `lower_repeat` 의 다운카운터가 프레임 지역이라 subset 이 거부 |
+| **7** | **§3.6-② `default disable iff`** | 파싱조차 안 됨 | 파서 + property lowering | `E2002` |
+| **8** | **§3.11 `function automatic` 인라인** | 암호 RTL 의 기본형 | 적격 술어 — ⚠️ `compute_suspendable_tasks` 와 **같은 축**(두 번째 철자 금지) | `user_call_in_expr` 거부 87% |
+| **9** | **staged `file:line`** | `velab` 진단에 위치 | **아티팩트 형상 변경**(`.vu` 에 줄테이블/SourceMap) = **format bump** | one-shot 만 `SourceMap` 을 든다 |
+| **10** | **§3.10 런타임 `file:line`** | 엔진 진단에 위치 | 엔진이 IR 위에서 돌아 span 이 없다 | §4.5.249 `SpanResolver` 가 재사용 지점 |
+
+⭐ **1~5 는 서로 독립이고 선행조건이 없다** — 순서는 *"리포터가 실제로 막힌 정도 × 크기"* 로 정했다
+(1 은 리포터가 **문구 때문에 두 번 헛수정**했고, 2 는 **한 플래그 배선**, 4 는 **sign-off 에서만 터지는
+유일한 부류**). ⚠️ **1·3 은 같은 결함 클래스**(폴더에 arm 이 없다)지만 **도메인이 달라**(u32 vs
+`BitPacked`) 한 슬라이스에 묶지 마라 — 묶으면 한쪽 오라클이 다른 쪽을 못 지킨다.
 
 **§4.5.314 이 남긴 1건 (오라클 ✓ iverilog):**
 
