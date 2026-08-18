@@ -176,6 +176,12 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 > ⚠️ 상태 확인 필요: §4.5.246 이 *"inner NET shadow — 마지막 ①-급 해소"* 로 기록돼 있어(문서 머리 §5)
 > 남은 것이 어느 형태인지 **착수 전 오라클로 재현**해야 한다.
 
+- **🔴 파라미터의 PART-SELECT 를 폭 바운드로 쓰면 조용히 1비트가 된다**(pre-existing · PRE==POST ·
+  오라클 ✓ iverilog · §3.3 슬라이스가 발굴). `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;`
+  가 vita `$bits(v)=1` / iverilog **239**. 전체 파라미터(`logic [W-1:0]`)는 정상이므로 갈리는 것은
+  **part-select 가 상수 바운드 도메인에 안 닿는 것**이다 — §2 「다음 착수 순서」 4번(replication count·
+  part-select 폭 lane)과 같은 뿌리로 보인다. **silent** 이므로 §2 정본 우선순위 ①.
+
 - 🟡 **`%h` 가 1비트 미지 EXPRESSION 결과를 `x` 로, iverilog 는 `X` 로 찍는다** (§4.5.326 차분에서 발견·PRE==POST·이 슬라이스와 무관) — `$display("%h", ^a)` 에서 `a` 에 x 가 있으면 vita `x` / iverilog `X`. **같은 값의 1비트 NET 은 양쪽 다 `x`**(`reg [0:0] a = 1'bx`) 이므로 iverilog 자신이 일관되지 않고, IEEE §21.2.1.3(*"모든 비트가 같은 미지값이면 그 미지값(소문자), 섞이면 대문자"*)은 vita 편이다. 값이 아니라 **렌더링**이며 `%b`·`%0d` 는 일치한다. 승격 조건 = 제2 오라클이나 LRM 재독으로 판정을 굳힐 때. 215설계 중 17칸.
 
 - ~~**🔴 사이즈 캐스트 `N'(expr)` 의 문맥 규칙**~~ **RESOLVED**(§4.5.316·상세=ARCHIVE) — IEEE §11.8.1 의 `max(self, N)` + 부호 무조건 전파. **잔여 6건**(전부 적대 리뷰 실측):
@@ -301,16 +307,26 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   (경고는 하강이 아니다 · 리포터의 요청도 error 가 아니라 warning 이었다). ⚠️ 넷 다 xrun 재측정 필요
   (리포터는 (a)/(b)만 쟀다).
 
-- **§3.3 넓은 `localparam`의 연결/시프트가 안 접힌다** ⭐ **원인 특정(2026-08-18): `const_eval.rs::fold_init`
-  에 arm 이 셋뿐이다**(`IntLit` · fill 리터럴 · `Paren`) — **`Concat`·`Replicate`·시프트·`Ident` arm 이 없다.**
-  >64bit 도메인(`ir::BitPacked`·`resize_bits`·`wide_param_bits`)은 **선언 경로에 이미 서 있고**
-  (`params.rs:799-810`) 진입 조건도 맞다(i64 fold 가 declined 일 때). ⇒ **선행조건 0 · 새 도메인 불필요 ·
-  빠진 것은 arm 이다**(§3.5-①과 **같은 결함 클래스**: 폴더에 arm 이 없다 · 다만 도메인이 달라 별 슬라이스).
-  ⚠️ 2판 잔여 *"wide 파라미터 OVERRIDE 는 loud"* 와는 **다른 축**이다(그쪽은 `ResolvedOverride` 채널).
- — `localparam logic [127:0] B = {8'he1, 120'h0};`
-  와 `= 128'(8'he1) << 120;` 이 둘 다 `E3009 … not a foldable constant expression`(값 리터럴
-  `128'he1000…`은 통과). 암호 IP는 넓은 상수를 이 형태로 쓴다. 폭>64는 `wide_param_bits`가
-  값을 지키므로 필요한 것은 **그 도메인 위의 `Concat`/시프트 fold**이지 i64 채널이 아니다.
+- **✅ §3.3 RESOLVED (2026-08-18 · 클리어 순서 3번)** — 넓은(>64bit) `localparam` 이 **캐리 없는**
+  연산으로 접힌다. ⭐ **원인은 도메인이 아니라 arm 이었다** — `>64bit` 도메인(`wide_param_bits`·
+  `ir::BitPacked`·`resize_bits`)은 **선언 경로에 이미 서 있었고**(`params.rs:799`) `fold_init` 에 arm 이
+  셋뿐이었다(리터럴·fill·`Paren`). **9 형태가 iverilog 와 바이트 일치**: `{8'he1,120'h0}` · `128'(8'he1)<<120`
+  (둘 다 리포트가 든 것) · `{16{8'hAB}}` · `~A` · `A>>8` · `A<<4` · `A|lit` · `A&lit` · `A^{2{…}}`.
+  ⚠️⚠️ **admission 이 "캐리 없음" 이고 그것이 규칙이다** — concat·replicate·size cast·상수 **논리** 시프트·
+  `&`/`|`/`^`·`~` 는 각 결과 비트를 **알려진 위치의 피연산자 비트**로 정한다. `+`/`-`/`*` 는 128비트 캐리
+  체인이 필요하고 `>>>` 는 부호비트를 읽는다 ⇒ 여기서 구현하면 **엔진 산술의 두 번째 철자**이고 미묘하게
+  틀리면 **조용히 틀린 파라미터**(P0-5) ⇒ **거부 유지**(테스트로 핀). ⚠️ x/z 도 같은 원칙으로 갈랐다 —
+  **배치 arm**(concat/replicate/shift/cast 는 비트를 **옮기지 읽지 않는다**)은 통과, **값을 읽는 arm** 은 거부.
+  ⭐ 이름 해석은 **`walk_scopes_key` 를 그대로 쓴다**(`lower_expr` 과 한 철자 · 두 번째 스코프 워크가
+  §4.5.218 의 모양이다) · `wide_param_bits` **만** 본다(비트·폭·부호를 함께 들고 있는 유일한 테이블 —
+  좁은 파라미터는 fail-closed 로 거부). **뮤테이션 10 중 9 사망 · 1 도달 불가(실측)** — ⚠️ **넷이 눈먼
+  축이었다**(`&|^` 의 x 절반 · **좁은 lhs** 가 있어야 갈리는 비트별 폭 규칙 · **두 번째 wide param** 이
+  있어야 드러나는 이름 해석 · concat 안 fill) · ⚠️ 한 치환은 **의미 없는 no-op** 이었다(`get` 성공 시
+  `or_else` 미실행 → SURVIVED 로 세지 않고 다시 걸었다) · ⚠️ 계층 이름 arm 은 **`panic!` 프로브 0 히트**
+  (vita·iverilog 둘 다 계층 참조를 localparam 초기화자에서 먼저 거부한다) ⇒ fail-closed 유지.
+  앵커 = `cli/tests/wide_param_fold.rs` **10건**. ⚠️ **잔여 = part-select**(`{A[127:64], 64'h0}` 은 아직
+  거부 · iverilog 는 접는다) — 인덱스 fold 가 필요한 별개 arm 이라 이 슬라이스에 안 넣었다.
+  ⚠️ **2판 잔여 "wide 파라미터 OVERRIDE 는 loud"** 는 **여전히 열려 있다**(그쪽은 `ResolvedOverride` 채널).
 
 - **✅ §3.5-① RESOLVED (2026-08-18 · 클리어 순서 1번)** — `repeat` 의 count 가 **`const_bound_u32`**
   (모든 select bound·replication count 가 쓰는 그 퍼널)로 접힌다. ⭐⭐ **수정의 본체는 arm 이 아니라
@@ -394,7 +410,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 |---|---|---|---|---|
 | ~~1~~ | ✅ **§3.5-① 완료(2026-08-18)** | `4*16`·`LP`·`LP/2`·`$clog2(LP)`·⭐`'1` — **FIXED 5 · 회귀 0** | — | 답은 arm 이 아니라 **한 철자**(`repeat_unroll_count` 를 lowering·분류기가 공유) · 뮤테이션 **8/8** |
 | ~~2~~ | ✅ **§3.6-① 완료(2026-08-18)** | verilator 6/6 일치 · bare-이름 = 클럭된 불리언까지 | — | 센티넬은 이미 있었다(`assert property(NAME)`) · 드레인 한 자리 · 뮤테이션 7/7 |
-| **3** | **§3.3 wide fold arm** | `{8'he1,120'h0}` · `128'(…)<<120` | **없음** | `const_eval.rs::fold_init` arm 셋뿐 — `Concat`/`Replicate`/시프트/`Ident` 없음. 도메인은 `params.rs:799` 에 이미 섬 |
+| ~~3~~ | ✅ **§3.3 완료(2026-08-18)** | 9 형태가 iverilog 바이트 일치 | — | admission = **캐리 없음** · 이름은 `walk_scopes_key` 한 철자 · 뮤테이션 9/10 + 도달불가 1 |
 | **4** | **§3.1 이식성 경고** | select 축 **4형태**(리포트는 2형태만 봤다) | **없음** | `hdl-parser/expr.rs` postfix 루프 **한 사이트** + IEEE §11.5.1 술어 · ⚠️ **거부가 아니라 경고**(오라클이 갈린다) |
 | **5** | **§3.7 static task 의 `string` formal** | `task t(input string s)` | **없음**(설계가 주석에 적혀 있다) | `inline_task.rs:263` — **String-kind snapshot local** |
 | **P1** | ⭐⭐ **order-INDEPENDENT AST-gathered per-scope name set** | **셋을 한꺼번에** | 이것이 **유일한 큰 선행조건** | §2 DEEP(inner-NET shadow) + §4.5.276 후속①(`for` trip-count) + **§3.5-② `repeat (LP)`** |

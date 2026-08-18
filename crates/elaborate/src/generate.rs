@@ -535,8 +535,9 @@ impl Elaborator<'_> {
                         // Wider than the i64 domain — see `wide_param_bits`. Reached
                         // only after the fold declined, so a wide declaration whose
                         // value fits keeps its integer identity.
-                        if let Some(cv) = meta.and_then(|(w, sg)| wide_param_const(&p.value, w, sg))
-                        {
+                        let wide = meta
+                            .and_then(|(w, sg)| self.wide_param_const_in_scope(&p.value, w, sg));
+                        if let Some(cv) = wide {
                             let key = self.fq(&p.name.name);
                             self.wide_param_bits.insert(key, cv);
                             return;

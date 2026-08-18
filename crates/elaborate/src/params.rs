@@ -805,7 +805,8 @@ impl Elaborator<'_> {
             // opposite ("the boundary is the VALUE, not the declared width") and the
             // code was the counterexample.
             if chosen_val.is_none() {
-                if let Some(cv) = meta.and_then(|(w, sg)| wide_param_const(&p.value, w, sg)) {
+                let wide = meta.and_then(|(w, sg)| self.wide_param_const_in_scope(&p.value, w, sg));
+                if let Some(cv) = wide {
                     let key = self.fq(&p.name.name);
                     self.wide_param_bits.insert(key, cv);
                     return;
