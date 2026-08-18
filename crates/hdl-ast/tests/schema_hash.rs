@@ -12,6 +12,11 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-08-19 §16.15 `default disable iff (expr);`
+/// (`ModuleItem::DefaultDisableIff(Expr)` — the scope-level reset every concurrent
+/// assertion inherits unless it writes its own; all `.vu` artifacts are stale, no
+/// sim-ir/format_version change, pure IR-0: elaborate records it per module and the
+/// assertion drain fills an absent `disable_iff` from it).
 /// Re-pinned 2026-06-19 N7 `return` statement (`Stmt::Return{value: Option<Expr>}`
 /// — SV `return [expr];`, used pervasively by class methods; all `.vu` artifacts
 /// stale, no sim-ir/format_version change, pure IR-0: lowers to a return-var
@@ -220,8 +225,8 @@ use vita_schema::schema_hash;
 /// would silently connect word 0 only). Front-end + elaborate; no sim-ir change,
 /// format_version stays 26. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    69, 253, 28, 85, 140, 191, 39, 126, 75, 139, 78, 174, 146, 113, 153, 224, 192, 44, 150, 241,
-    189, 52, 234, 54, 246, 119, 49, 74, 1, 227, 76, 238,
+    147, 157, 14, 169, 48, 236, 88, 160, 21, 6, 47, 140, 4, 249, 214, 14, 209, 238, 205, 144, 37,
+    15, 237, 35, 215, 42, 211, 116, 90, 0, 22, 219,
 ];
 
 #[test]

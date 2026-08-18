@@ -71,6 +71,13 @@ impl Elaborator<'_> {
             // so the multi-clock gate below never sees it. `self.default_clocking` is the
             // CURRENT module's — `lower_clocking_blocks` set it at step (6.5) and this
             // drain runs later in the same `elaborate_instance`.
+            // §16.15: an assertion with no `disable iff` of its own inherits the
+            // scope's. Applied beside the clock default because it is the same shape of
+            // rule and the same drain — and BEFORE the multi-clock gate, so a default
+            // reset can never be silently dropped by an early `continue`.
+            if sva.disable_iff.is_none() {
+                sva.disable_iff = self.default_disable_iff.clone();
+            }
             if matches!(&sva.clock, ast::Sensitivity::List(evs) if evs.is_empty()) {
                 match self.default_clocking.clone() {
                     Some(c) => sva.clock = c,

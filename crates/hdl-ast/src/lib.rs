@@ -329,6 +329,11 @@ pub enum ModuleItem {
     /// expression macro. Substituted at each use site by elaborate (a use is a plain
     /// `Ident` / `Call` that resolves against the let table); pure IR-0.
     LetDecl(LetDecl),
+    /// `default disable iff (expr);` (IEEE 1800-2017 §16.15) — the reset condition
+    /// every concurrent assertion in this scope inherits unless it writes its own
+    /// `disable iff`. A scope-level DECLARATION, not a statement: it contributes no
+    /// IR of its own, only a default the assertion drain reads.
+    DefaultDisableIff(Expr),
     /// `clocking NAME @(event); input/output sig; endclocking` (N4, IEEE 1800 §14).
     /// Elaborate synthesizes preponed-sampled holding nets for the inputs + a marked
     /// clocking-commit handler; `cb.sig` resolves to the holding net, `@(cb)` to the

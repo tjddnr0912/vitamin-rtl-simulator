@@ -798,6 +798,30 @@ impl Parser<'_, '_> {
         if self.at_kw(Kw::Covergroup) {
             return self.parse_covergroup();
         }
+        // §16.15 `default disable iff (expr);`. Checked BEFORE the `default clocking`
+        // arm below so the two `default`-led items do not have to share a lookahead.
+        if self.at_kw(Kw::Default)
+            && matches!(
+                self.peek_at(1),
+                Some(TokenKind::Word(WordKind::Keyword(Kw::Disable)))
+            )
+        {
+            self.bump(); // `default`
+            self.bump(); // `disable`
+            if self.at_ident_kw("iff") {
+                self.bump();
+            } else {
+                self.error("`iff` after `default disable`");
+            }
+            self.expect(TokenKind::LParen, "'(' after `default disable iff`");
+            let e = self.expr(0);
+            self.expect(
+                TokenKind::RParen,
+                "')' after `default disable iff` condition",
+            );
+            self.expect(TokenKind::Semi, "';' after `default disable iff`");
+            return Some(ModuleItem::DefaultDisableIff(e));
+        }
         // N4: `clocking …` / `default clocking …` block (IEEE 1800 §14).
         if self.at_kw(Kw::Clocking)
             || (self.at_kw(Kw::Default)

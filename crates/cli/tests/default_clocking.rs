@@ -196,3 +196,80 @@ fn the_default_does_not_leak_into_a_sibling_module() {
         "the parent's default clocking must NOT reach the child:\n{out}"
     );
 }
+
+// ── §16.15 `default disable iff` — the second scope-level default ──────────────
+
+#[test]
+fn default_disable_iff_suppresses_until_the_condition_clears() {
+    // The scope's reset gates every assertion that does not write its own. `rst` drops
+    // at t=4, so the property is only checked from t=5 on (verilator: FAIL t=5, 7, 9).
+    let out = run(
+        "module tb;\n  logic clk = 0, rst = 1; logic a = 1, b = 0;\n         \x20 always #1 clk = ~clk;\n         \x20 default clocking cb @(posedge clk); endclocking\n         \x20 default disable iff (rst);\n         \x20 assert property (a |-> b) else $display(\"FAIL t=%0t\", $time);\n         \x20 initial begin #4 rst = 0; #6 $finish; end\nendmodule\n",
+    );
+    for t in ["FAIL t=5", "FAIL t=7", "FAIL t=9"] {
+        assert!(out.contains(t), "expected {t}:\n{out}");
+    }
+    // ANTI-VACUITY, and the whole point: the early edges must be SUPPRESSED. Without
+    // this the test passes against an implementation that ignores the default entirely.
+    assert!(
+        !out.contains("FAIL t=1") && !out.contains("FAIL t=3"),
+        "edges before the reset cleared must be suppressed:\n{out}"
+    );
+}
+
+#[test]
+fn an_explicit_disable_iff_wins_over_the_default() {
+    // §16.15: the default applies only where the assertion gives none. Here the
+    // explicit condition is 0 throughout, so nothing is suppressed even though the
+    // scope default (`rst`) is high for the first four ticks. verilator agrees.
+    let out = run(
+        "module tb;\n  logic clk = 0, rst = 1, other = 0; logic a = 1, b = 0;\n         \x20 always #1 clk = ~clk;\n         \x20 default clocking cb @(posedge clk); endclocking\n         \x20 default disable iff (rst);\n         \x20 assert property (disable iff (other) a |-> b) else $display(\"FAIL t=%0t\", $time);\n         \x20 initial begin #4 rst = 0; #6 $finish; end\nendmodule\n",
+    );
+    for t in ["FAIL t=1", "FAIL t=3", "FAIL t=5"] {
+        assert!(
+            out.contains(t),
+            "the explicit condition governs — expected {t}:\n{out}"
+        );
+    }
+}
+
+#[test]
+fn without_a_default_disable_iff_nothing_is_suppressed() {
+    // CONTROL: the same design minus the default must fire on every edge, so the test
+    // above is measuring the default and not the clock.
+    let out = run(
+        "module tb;\n  logic clk = 0; logic a = 1, b = 0;\n         \x20 always #1 clk = ~clk;\n         \x20 default clocking cb @(posedge clk); endclocking\n         \x20 assert property (a |-> b) else $display(\"FAIL t=%0t\", $time);\n         \x20 initial begin #10 $finish; end\nendmodule\n",
+    );
+    for t in ["FAIL t=1", "FAIL t=3", "FAIL t=5"] {
+        assert!(out.contains(t), "expected {t}:\n{out}");
+    }
+}
+
+#[test]
+fn the_default_reset_does_not_leak_into_a_sibling_module() {
+    // Same module-locality property as `default clocking`, and the same reason it needs
+    // its own test: every other case here has one module. The child has no default of
+    // its own, so its assertion must fire from t=1 — if the parent's `rst` leaked, the
+    // first two edges would be missing.
+    let out = run(
+        "module child(input logic clk);\n  logic a = 1, b = 0;\n         \x20 assert property (@(posedge clk) a |-> b) else $display(\"CHILD t=%0t\", $time);\n         endmodule\n         module tb;\n  logic clk = 0, rst = 1; logic a = 1, b = 0;\n         \x20 always #1 clk = ~clk;\n         \x20 default clocking cb @(posedge clk); endclocking\n         \x20 default disable iff (rst);\n         \x20 child u(clk);\n         \x20 initial begin #4 rst = 0; #4 $finish; end\nendmodule\n",
+    );
+    assert!(
+        out.contains("CHILD t=1"),
+        "the parent's default reset must NOT reach the child:\n{out}"
+    );
+}
+
+#[test]
+fn a_second_default_disable_iff_in_one_scope_is_loud() {
+    // §16.15 allows exactly one per scope; verilator says so explicitly ("Only one
+    // 'default disable iff' allowed per module"). vita used to accept two and keep
+    // the last, which makes WHICH reset applies depend on declaration order — and is
+    // the only design where the "first or last?" question is observable at all, so it
+    // is also the discriminator the mutation battery asked for.
+    let out = run(
+        "module tb;\n  logic clk = 0, r1 = 1, r2 = 0; logic a = 1, b = 0;\n         \x20 always #1 clk = ~clk;\n         \x20 default clocking cb @(posedge clk); endclocking\n         \x20 default disable iff (r1);\n         \x20 default disable iff (r2);\n         \x20 assert property (a |-> b) else $display(\"FAIL t=%0t\", $time);\n         \x20 initial begin #4 r1 = 0; #6 $finish; end\nendmodule\n",
+    );
+    assert!(out.contains("E3009"), "a second one must be loud:\n{out}");
+    assert!(!out.contains("FAIL t="), "…and nothing may run:\n{out}");
+}

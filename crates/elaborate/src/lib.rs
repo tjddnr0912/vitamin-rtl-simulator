@@ -840,6 +840,9 @@ struct Elaborator<'s> {
     /// and the only reader (`materialize_sva_checkers`) runs later in the SAME
     /// `elaborate_instance`, so it can never leak a sibling module's clock.
     default_clocking: Option<ast::Sensitivity>,
+    /// This module's `default disable iff (expr)` (IEEE 1800-2017 §16.15), or `None`.
+    /// MODULE-LOCAL for the same reason as `default_clocking` and cleared beside it.
+    default_disable_iff: Option<ast::Expr>,
     /// Holding NetIds of clocking INPUTs (`cb.sig`) — read-only; an lvalue write
     /// to one is loud (you cannot drive a clocking input, §14.3).
     clocking_hold_nets: std::collections::BTreeSet<u32>,

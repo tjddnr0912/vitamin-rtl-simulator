@@ -507,6 +507,32 @@ impl Elaborator<'_> {
         // `@(cb)` resolution is module-local: clear the previous module's map.
         self.clocking_events.clear();
         self.default_clocking = None;
+        self.default_disable_iff = None;
+        // §16.15: scope-level default reset. Recorded in the same pass and cleared with
+        // the same reset, so the two scope defaults can never disagree about which
+        // module they belong to.
+        for item in body {
+            if let ast::ModuleItem::DefaultDisableIff(e) = item {
+                // §16.15 allows exactly ONE per scope, and verilator says so out loud
+                // ("Only one 'default disable iff' allowed per module"). Silently
+                // keeping one of two would make which reset applies depend on
+                // declaration order, and neither choice is defensible.
+                if self.default_disable_iff.is_some() {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a scope may declare only one `default disable iff` \
+                         (IEEE 1800-2017 §16.15); this module declares a second",
+                    );
+                    continue;
+                }
+                // ⚠️ With that guard above, "first wins" and "last wins" are now
+                // PROVABLY the same rule — this line is reachable only while the slot
+                // is None. The mutation battery reached that conclusion the other way
+                // round: swapping to `get_or_insert` survived, and the only design that
+                // could tell them apart is the duplicate this scope now refuses.
+                self.default_disable_iff = Some(e.clone());
+            }
+        }
         for item in body {
             let ast::ModuleItem::Clocking(cb) = item else {
                 continue;
