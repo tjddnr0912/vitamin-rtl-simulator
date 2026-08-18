@@ -396,22 +396,32 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   `inout` 에 "output" 이라고 쓰면 독자를 틀린 포트로 보낸다 = §3.4 가 이미 값을 치른 결함).
   ⚠️ **static FUNCTION 의 `string` formal 은 원래 됐다**(PRE 실측) — §3.7 은 task 전용이었다.
 
-- **⭐⭐ §3.11 `function automatic`이 codegen에서 빠진다 — 원인이 특정됐고 판별자는 키워드 하나다.**
+- **⚠️⚠️ §3.11 `function automatic` 인라인 — 지어서 재고 되돌렸다(2026-08-19 · 클리어 순서 8번).**
+  **이 저장소가 이 계획에 대해 적어 둔 전제가 측정으로 반증됐다.**
   리포터 실측 codegen `able/total` = **12.3%(core) / 16.0%(top)**, 거부 사유의 **87%가
-  `user_call_in_expr`**. 이쪽에서 재측정해 갈랐다:
-  | 형태 | elaborate 인라인 | 결과 |
-  |---|---|---|
-  | `function f(…)` (모듈·패키지 무관) | **된다** | `Expr::Call`이 안 남는다 |
-  | `function automatic f(…)` | **안 된다** | 프레임 바디로 내려가고 호출 프로세스가 `user_call_in_expr`로 거부 |
-  ⇒ **비용은 `automatic`이고, 그것이 스타일 가이드가 요구하는 철자다.** 암호 RTL의 기본형
-  (S-box·`xtime`·GF 곱을 `function automatic`으로 두고 식에서 부른다)이 통째로 여기 걸린다.
-  ⭐ **비-재귀 automatic 함수는 인라인이 의미상 동일하다** — SSA-fold 인라인은 호출마다 새 지역을
-  주므로 그것이 곧 `automatic`의 정의다. 필요한 판정 = 재귀 없음 ∧ static 상태 없음 ∧ 타이밍 제어
-  없음 ∧ output/ref formal 없음. ⚠️ 그 술어는 **`compute_suspendable_tasks`가 이미 쓰는 것과
-  같은 축**이라 두 번째 철자를 쓰지 마라. ⚠️ picorv32는 어느 형태도 안 써서 65/68이다 —
-  **이 축은 벤치가 대표하지 않는다**(§4.5.341이 CHANGELOG의 "costs nothing"을 정정한 이유).
-  ⚠️ 리포터의 "backend를 바꿔도 5% 이내" 는 **아직 미해명**이다: §4.5.341이 `run.json`에
-  `elab_s`/`sim_s`를 넣었으므로 다음 판에서 그들이 앞단/시뮬 중 어느 쪽인지 먼저 보고할 수 있다.
+  `user_call_in_expr`**. 이쪽 census 도 같다(`always @(posedge clk) r <= fa(a)` 한 설계에서
+  `able 1/4` · `frame_bodies 1` · `user_call_in_expr 1`). 판별자는 키워드 하나다 — `function f`
+  는 인라인되고 `function automatic f` 는 프레임으로 내려가 호출 프로세스가 codegen 에서 거부된다.
+  ⭐ **지은 것**: `build_frame_set` 의 `f.automatic` 이 **단독으로** 프레임을 강제하지 않게 하고,
+  나머지 절(2-state 반환 · 비직선 바디 · unpacked formal · string 반환 · 재귀 폐포)은 그대로 두었다.
+  ⚠️ **첫 판정을 실측이 좁혔다** — `automatic` 함수가 **지역을 대입 전에 읽으면** 두 경로가 갈린다
+  (프레임 = 매 호출 fresh `x` / 인라인 = 호출 사이트당 저장이라 두 번째 호출이 이전 값). iverilog 는
+  `x x` 인데 인라인으로 보내면 vita 가 **E3010** = correct→loud 하강 ⇒ **지역을 선언하지 않는**
+  automatic 함수만 열었다(리포트가 말한 S-box·`xtime`·GF 곱이 정확히 그 모양).
+  ⚠️⚠️ **그래도 안 된다 — 전 스위트가 15건 실패했고 기제 교체가 아니라 진짜 동작 변화였다.**
+  가장 선명한 둘: `inline_formal_bind::a_frame_call_actual_is_evaluated_once` 가 `$random` 인자를
+  **두 번 뽑았고**(`val=01/03` → `04/09`), `size_cast_seal::a_widening_cast_never_evaluates_an_impure_operand_twice`
+  가 걸렸다 — 그 테스트의 doc 이 이유를 이미 적어 뒀다: **인라인 확장이 피연산자를 두 번째로 이름 부른다**
+  (`Select{Bit, base: e}`), 그래서 불순한 actual 이 두 번 돈다. 나머지 열셋도 대부분
+  *"…is_a_documented_gap"* / *"…matches_bare"* = **인라인 경로의 핀된 결함들**이다.
+  ⇒ ⭐⭐ **결론: `automatic` 은 "프레임 경로" 를 뜻하고, 그것이 이 저장소가 인라인 경로의 알려진
+  결함으로부터 코드를 지키는 방법이다.** *"비-재귀 automatic 은 인라인이 의미상 동일하다"* 는 **거짓**이다.
+  ⇒ **진짜 선행조건 둘 중 하나**(둘 다 §2/§5 에 이미 있다):
+  ⓐ **인라인 확장이 피연산자를 한 번만 이름 부르게** 한다(또는 callee-purity 술어) — 그러면 그 열다섯 중
+  다수가 사라지고 그때 `automatic` 을 보낼 수 있다 · ⓑ ⭐ **더 곧은 길: 인라인이 아니라 codegen 을 고친다**
+  — `is_codegen_able` 이 `Terminator::Call` 을 가진 프로세스를 통째로 거부하는 것이 원인이고(§5 T1/T2),
+  그쪽을 열면 **프레임 경로를 유지한 채** 리포터의 지표가 오른다. ⓑ 가 사다리를 안 건드린다.
+  ⚠️ picorv32 는 어느 형태도 안 써서 65/68 이다 — **이 축은 벤치가 대표하지 않는다.**
 
 - **⚠️ staged 흐름은 `file:line:col` 이 없다(pre-existing · §4.5.341 이 실측).** `vita`(one-shot)는
   전처리기의 `SourceMap` 을 아직 들고 있어 §4.5.341 의 위치가 전부 나오지만, `velab` 은 `.vu`(파싱된
@@ -440,7 +450,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~P1~~ | ✅ **완료(2026-08-18)** — ⚠️ **census 가 범위를 셋에서 하나로 줄였다**(나머지 둘은 이미 열려 있었다) | inner-NET shadow · 6형태 iverilog 일치 · **generate 바디 삭제 재발 없음** | — | ⭐ 필요했던 것은 이름 집합이 아니라 **선언 블록의 SPAN**(`hoist_block_local_nets` 가 이미 들고 있었다 · span 은 order-independent AST 사실) · 뮤테이션 6/6 |
 | ~~6~~ | ✅ **§3.5-③ 완료(2026-08-19)** | `repeat` 가족 **전부** 프레임에서 돈다 + 동시 활성화 판별자 | — | 카운터를 **예약 패스**에서 프레임 창 안에 · 핸드오프는 **span 키** · ⭐ 곁가지로 **§2 self-width 절단 silent-wrong** 동반 수정 |
 | ~~7~~ | ✅ **§3.6-② 완료(2026-08-19)** | verilator 3/3 일치 + ⭐ **중복 선언 loud** 신설 | — | AST 변종 1(**`.vu` 재핀** · sim-ir·format_version 불변) · `default clocking` 과 **같은 자리·같은 리셋** · 적용은 **multi-clock 게이트보다 먼저** · 뮤테이션 4/5 + **증명된 등가 1** |
-| **8** | **§3.11 `function automatic` 인라인** | 암호 RTL 의 기본형 | 적격 술어 — ⚠️ `compute_suspendable_tasks` 와 **같은 축**(두 번째 철자 금지) | `user_call_in_expr` 거부 87% |
+| ⚠️ ~~8~~ | **§3.11 — 지어서 재고 되돌렸다(2026-08-19)** | — | ⇒ 선행조건이 **바뀌었다**: ⓐ 인라인이 피연산자를 **한 번만** 이름 부르게 하거나 ⓑ **codegen 쪽**(`is_codegen_able` 의 `Terminator::Call` 거부)을 연다 | 전 스위트 **15 실패** · `$random` 이 **두 번** 뽑혔다 = 인라인 경로의 **핀된 사다리 위반**을 상속한다 |
 | **9** | **staged `file:line`** | `velab` 진단에 위치 | **아티팩트 형상 변경**(`.vu` 에 줄테이블/SourceMap) = **format bump** | one-shot 만 `SourceMap` 을 든다 |
 | **10** | **§3.10 런타임 `file:line`** | 엔진 진단에 위치 | 엔진이 IR 위에서 돌아 span 이 없다 | §4.5.249 `SpanResolver` 가 재사용 지점 |
 
