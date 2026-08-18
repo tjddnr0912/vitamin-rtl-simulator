@@ -8,6 +8,8 @@
 > **다루지 않는 것**: 성능 축의 전사(前史)와 ②층 코드젠 실험(= [study/01](01-interpreted-vs-compiled.md)) ·
 > SystemVerilog 언어 자체.
 > **상태**: V1 완주 시점(2026-08-16 · 커버리지 100.00% · 코퍼스 6,470 중 거부 0).
+> **원자료**: 여기서 인용하는 슬라이스(`ROADMAP §5.1-<x>`)의 원문은 2026-08-18 부터
+> **[ROADMAP_ARCHIVE_PHASE_A-D.md](../ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(§번호 보존 · `#### 5.1-` 로 검색).
 
 ---
 

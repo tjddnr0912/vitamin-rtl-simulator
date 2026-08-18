@@ -3,7 +3,7 @@
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
 > - **기준(2026-08-18)**: format_version **27** · **5,533 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **67** · **MSRV 1.85** · **기본 백엔드 = `native`**.
-> - **최신 완료**: **§4.5.314**(IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 + staged `-G` + `'x`/`'z` override 차단 — 적대 3라운드 결함 20건, 넷은 내 앞 라운드 수정이 만든 하강). 직전 = §4.5.313(외부 리포트 aes_top 16항목 + 자체 리뷰 17결함) · §4.5.311/312(③층 S3a·S2 슬라이스 4). **완료 슬라이스 전체 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
+> - **최신 완료**: **§4.5.341**(외부 aes_top 3판 — 리포트 11항목 중 6 수정·5 로드맵 · ⭐⭐ IEEE Table 5-1 이 **정의하는** escape 다섯이 조용히 틀려 있었다[`\ddd`·`\xhh`·`\v`·`\f`·`\a`] · `\r` 은 오라클이 갈려 **W3059** 로 loud · 진단이 `file:line:col`+인스턴스 경로를 얻었다[picorv32 elaborate 0 → 58/58] · `run.json` 에 `elab_s`/`sim_s`). 직전 = **§4.5.340**(외부 round-29 · format 27) · **§4.5.314**(IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 + staged `-G` + `'x`/`'z` override 차단 — 적대 3라운드 결함 20건, 넷은 내 앞 라운드 수정이 만든 하강). 직전 = §4.5.313(외부 리포트 aes_top 16항목 + 자체 리뷰 17결함) · §4.5.311/312(③층 S3a·S2 슬라이스 4). **완료 슬라이스 전체 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
@@ -19,20 +19,25 @@
 - 외부 리포트 1·2차(EXT2)·round 3~19 = **사실상 완결**(잔여 3건=A2c·NAP·DOC, 전부 no-oracle/docs).
 - 나머지 잔여는 **honest-loud=안전**(ROADMAP §3~§5) + **G2 OBS 트랙**(ROADMAP §6).
 
-## B. 다음 착수 후보 (현재 큐 — 정본 순서·상세=ROADMAP §1)
+## B. 다음 착수 후보 (⚠️ **정본은 [ROADMAP §5.2 재개 지점](ROADMAP.md)** — 아래는 그 요약이다)
+
+> ⚠️⚠️ **2026-08-18 정정**: 이 표는 예전에 *"정본 순서·상세 = ROADMAP §1"* 이라고 적혀 있었는데
+> **§A 는 §5.2 를 정본이라 적고 있었다** — 포인터가 둘이고 §1 쪽이 썩어 있었다(그 NEXT 0번은
+> 2026-08-03 에 완료된 `③층 S1d-4a` 였다). **§1 은 이제 시간 불변 원칙만 갖고, 현재 큐는 §5.2 하나다.**
 
 | # | 항목 | 근거/오라클 |
 |---|---|---|
-| 1 | **§0 승격 큐 T2 잔여 2건** — `real` const-fold · sized-literal enum label | iverilog ✓ 2/2 |
-| 1b | ~~**§0 T2-14 elaborate 단계 파라미터 override**~~ **완료** — `-G`/`--param` 이 `vita`(§4.5.313)와 `velab`(§4.5.314·`-L` 포함)에 적용되고 `vcmp`/`vrun` 은 wrong-stage loud. **잔여 3건** = `-pvalue+` 별칭 · `-P<path>=` 계층 · `.velab` 합성-해시 헤더 필드(format bump) — 상세 = ROADMAP §0-14 | iverilog `-P` 차분 ✓ |
-| 2 | ~~fork arm의 suspendable task 재개~~ **완료**(§4.5.228) — 동시 활성화 dyn 배열까지 같이 열렸다 | — |
-| 3 | **§2 오라클-有 silent-wrong** — part-select 바운드 silent-0 + replication count silent-0(동근: `const_eval_in_scope` `Cast`/`Call` arm) · package-scope real · 구조적 지연 · real→`input int` formal | iverilog 라이브 차분 |
-| 4 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) | iverilog ✓ |
-| 5 | OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
+| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말: ① module-scope `$clog2` 무제한 fold ② 캐스트 SIZE 식 ③ real `**` 지수 — **셋이 한 뿌리** | iverilog 라이브 차분 |
+| **2** | **§3 loud→supported** — 오라클이 답하는 행부터. ⭐ 외부 aes_top 3판 잔여 5건이 여기 있고 **§3.1 은 "안전한 loud" 가 아니다**(세 오라클 전부 거부하는데 vita 만 받는다 = sign-off 에서만 터진다) | iverilog·verilator·xrun 3-way ✓ |
+| **2b** | **§0 승격 큐 T2 잔여 2건** — `real` const-fold(= `int'(<real param>)` 바운드의 선행) · sized-literal enum label | iverilog ✓ 2/2 |
+| 3 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) ⚠️ **이 선행조건은 §3.5 `repeat (LP)` 도 막고 있다**(같은 `walk_scopes_key_shadowed` 계약) | iverilog ✓ |
+| 4 | **§6 OBS** — OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
+| 5 | **성능 — 스케줄러 축**(사다리 아래) — 측정 완료: 스케줄러 **29.0%** self + 그 축의 할당 5.8% ≈ **35%** 미최적화 · 첫 표적은 `propagate` 의 델타마다 `Vec` 셋 | 프로파일 실측 2026-08-18 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **✅✅✅ Phase A~D 전부 완료 (2026-08-17 · ROADMAP §5.1-ap·-at·-au·-be)**. **A** 커버리지 **100.00%**(거부 0) · **B** 제품 표면이 **native 하나**(`oracle` feature · 삭제 0) · **C** interp = **테스트 도구**(성능 최적화 **영구 제외**) · **D** 성능: 벤치 **8/8 에서 native < vm**(착수 때 셋에서 졌고 최악 **2.52×**) + **코드젠 기각**(런의 ~38% 가 shim · 천장 8.9~11.3%). ⇒ **다음 = [ROADMAP §5.2 재개 지점](ROADMAP.md)** — 정확성 큐(§2) → loud 승격(§3) → OBS(§6) 순이고, 성능을 다시 본다면 **미측정 축 = 스케줄러**. 구조 = [preview/04](preview/04-architecture.md) · 해설 = [study/02](study/02-v1-native-coverage.md) | **5,477 green** · `VITA_JIT=1` 로도 green · clippy 3 구성 0 |
+| **0** | **✅✅✅ Phase A~D 전부 완료 (2026-08-17)** — **A** 커버리지 **100.00%**(거부 0) · **B** 제품 표면이 **native 하나**(`oracle` feature · 삭제 0) · **C** interp = 테스트 도구(성능 최적화 **영구 제외**) · **D** 벤치 **10/10 에서 native < vm** + **코드젠 기각**. **실행 기록 = [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** · 해설 = [study/02](study/02-v1-native-coverage.md) | **5,533 green** · clippy 3 구성 0 |
 
-> **순서 주의**: 정본 우선순위는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데 1·2위(§0=②)가 3위(§2=①) 앞에 있다 — **오너 지시**. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
+> **순서 주의**: 원칙은 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported > ③ 전제조건 충족 honest-loud > ④ OBS`([ROADMAP §1](ROADMAP.md)).
+> **성능은 이 사다리 위에 올라오지 않는다**(2026-08-17 이후 · Phase D 종료로 옛 "T 단계 최우선" 오너 지시는 소멸).
 
 ## C. 잔여 분류 (요약 — 상세=ROADMAP 해당 §)
 

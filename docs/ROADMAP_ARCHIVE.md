@@ -4,6 +4,7 @@
 >
 > - **살아있는 전방 문서**: 잔여 과제 = [ROADMAP.md](ROADMAP.md) · 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md) · 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta).
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
+> - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
 ## 인덱스 — 완료 슬라이스 283건 (최신순·⚠️ = 미머지)
