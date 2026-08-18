@@ -200,6 +200,7 @@ impl<'s> Elaborator<'s> {
             mod_prec_exp: BTreeMap::new(),
             root_override: None,
             top_param_overrides: Vec::new(),
+            escape_warned: BTreeSet::new(),
             cur_nettype_none: false,
             implicit_nets: Default::default(),
             global_prec_exp: -9, // 1ns base precision (no-timescale lock)
@@ -253,12 +254,13 @@ impl<'s> Elaborator<'s> {
             return;
         }
         let location = self.cur_location();
+        let context = self.cur_context();
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Error,
             code,
             message: msg.to_string(),
             location,
-            context: Vec::new(),
+            context,
             sim_time: None,
         }));
     }
@@ -281,14 +283,36 @@ impl<'s> Elaborator<'s> {
             return;
         }
         let location = self.span_resolver.map(|r| r.resolve(span.lo, span.hi));
+        let context = self.cur_context();
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Note,
             code,
             message: msg.to_string(),
             location,
-            context: Vec::new(),
+            context,
             sim_time: None,
         }));
+    }
+
+    /// The INSTANCE path this diagnostic is being elaborated under, as a
+    /// single `Frame`. Empty at the top level (and during any pre-pass that runs
+    /// before instantiation), which renders as nothing at all.
+    ///
+    /// ⚠️ `file:line:col` is NOT a key on its own here. A module instantiated N
+    /// times elaborates N times, so one unconnected port in a leaf becomes N
+    /// identical warnings; an external report received four of them from three
+    /// different instances and could only count them. `cur_prefix` is the
+    /// scope-resolution prefix — the same string `fq()` builds symbol keys from
+    /// — so it is the instance path by construction rather than a second
+    /// spelling of one.
+    pub(crate) fn cur_context(&self) -> Vec<diag::Frame> {
+        if self.cur_prefix.is_empty() {
+            return Vec::new();
+        }
+        vec![diag::Frame {
+            label: self.cur_prefix.clone(),
+            location: None,
+        }]
     }
 
     /// The `SourceLoc` for `cur_span`, when both a span and a resolver are present.
@@ -311,16 +335,100 @@ impl<'s> Elaborator<'s> {
         self.warn_code(MsgCode::ElabFeatureLimit, msg);
     }
 
-    /// Emit a Warning with a SPECIFIC code (the generic [`Self::warn`] uses
-    /// `W-ELAB-FEATURE-LIMIT`).
-    pub(crate) fn warn_code(&mut self, code: MsgCode, msg: &str) {
-        let location = self.cur_location();
+    /// Intern a SOURCE string literal, reporting any escape IEEE 1800-2017
+    /// Table 5-1 does not define (`W-ELAB-STR-ESCAPE`).
+    ///
+    /// The diagnostic exists because this class is invisible from inside one
+    /// tool: `"\r"` compiles everywhere, evaluates to 0x0D here and in
+    /// Verilator and to the letter `r` in iverilog and Xcelium, and nothing in
+    /// a passing run says so. An external report spent two sign-off round trips
+    /// on exactly that, with the symptom looking like a DUT bug.
+    ///
+    /// Only literals written in the SOURCE go through here. A synthesized
+    /// string (`$typename`) must use `str_const_from_bytes`, or it would be
+    /// re-escaped and could report a warning about text no one wrote.
+    ///
+    /// Anchored at the LITERAL's own span, not `cur_span`: `$display("\r", "\q")`
+    /// is two facts on one statement, and two lines that print the same
+    /// `file:line:col` are the problem this whole diagnostic class is about.
+    pub(crate) fn intern_str_literal(&mut self, raw: &str, span: ast::Span) -> u32 {
+        let (bytes, odd) = crate::literal::unescape_str_literal_reporting(raw);
+        // ONE line per (literal, escape) FOR THE WHOLE RUN — which answers two
+        // questions with one latch:
+        //
+        //   - `"\r\r\r"` is one fact, not three; and
+        //   - `lower_expr` runs again for every instance, so a leaf
+        //     instantiated four times reported the same source `"\r"` four
+        //     times (measured). The unconnected-port warning genuinely IS per
+        //     instance — a dangling output exists once per instantiation — but
+        //     an escape is a property of the TEXT, and repeating it scales a
+        //     portability note with the design's instance count.
+        //
+        // ⚠️ A separate intra-literal `said` vector was written first and a
+        // mutation SURVIVED deleting it: the span key already covers repeats
+        // inside one literal, because they share a span. Two mechanisms for one
+        // question is the thing that drifts, so the vector is gone.
+        for e in &odd {
+            let w = e.written();
+            if !self.escape_warned.insert((span.lo, span.hi, w.clone())) {
+                continue;
+            }
+            let detail = match e {
+                crate::literal::NonStdEscape::CExtension { byte, .. } => format!(
+                    "vita and Verilator read it as 0x{byte:02X}, iverilog and Xcelium read it \
+                     as the character `{}`",
+                    w.trim_start_matches('\\')
+                ),
+                crate::literal::NonStdEscape::Unknown { ch } => format!(
+                    "vita keeps both characters (`\\` then `{ch}`, so the string is one byte \
+                     WIDER), iverilog and Xcelium drop the backslash"
+                ),
+            };
+            self.warn_code_at(
+                MsgCode::ElabStrEscape,
+                span,
+                &format!(
+                    "`{w}` is not a string escape in IEEE 1800-2017 Table 5-1 — {detail}. \
+                     Write the byte explicitly (`\\015` octal or `\\x0D` hex) to mean the \
+                     same thing everywhere"
+                ),
+            );
+        }
+        self.intern_const(crate::literal::str_const_from_bytes(&bytes))
+    }
+
+    /// [`Self::warn_code`] anchored at an EXPLICIT span rather than `cur_span`
+    /// — the warning twin of [`Self::note_at`]. `cur_span` is the enclosing
+    /// STATEMENT, which is the right anchor for "this construct is simplified"
+    /// and the wrong one for a warning about one sub-expression: two of them on
+    /// one statement print the same `file:line:col` and cannot be told apart.
+    pub(crate) fn warn_code_at(&mut self, code: MsgCode, span: ast::Span, msg: &str) {
+        let location = self
+            .span_resolver
+            .map(|r| r.resolve(span.lo, span.hi))
+            .or_else(|| self.cur_location());
+        let context = self.cur_context();
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Warning,
             code,
             message: msg.to_string(),
             location,
-            context: Vec::new(),
+            context,
+            sim_time: None,
+        }));
+    }
+
+    /// Emit a Warning with a SPECIFIC code (the generic [`Self::warn`] uses
+    /// `W-ELAB-FEATURE-LIMIT`).
+    pub(crate) fn warn_code(&mut self, code: MsgCode, msg: &str) {
+        let location = self.cur_location();
+        let context = self.cur_context();
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code,
+            message: msg.to_string(),
+            location,
+            context,
             sim_time: None,
         }));
     }
@@ -542,6 +650,8 @@ impl<'s> Elaborator<'s> {
                 PortBinding::None,
                 &map,
                 (0, idx as u32, 0),
+                // A ROOT has no instantiation site — nothing instantiated it.
+                None,
             );
         }
         for (n, _) in self.top_param_overrides.clone() {

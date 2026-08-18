@@ -291,6 +291,7 @@ impl Elaborator<'_> {
                 // variables have DIFFERENT rank vectors, so equal keys made the sort group
                 // by slot ACROSS elements and interleave their subtrees.
                 (self.rank_band, item.name.span.lo, idx as u32),
+                Some(item.span),
             );
         }
     }

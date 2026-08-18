@@ -967,6 +967,11 @@ struct Elaborator<'s> {
     /// Saved/restored around each `elaborate_instance`, because the directive governs
     /// the module DECLARATION site, not the instantiation site — a `none` module may
     /// instantiate a `wire` one and vice versa.
+    /// Literal spans that already reported a `W-ELAB-STR-ESCAPE`, keyed by
+    /// `(lo, hi, escape)`. A string literal is SOURCE text, but `lower_expr`
+    /// runs once per instance elaboration — without this the same `"\r"` in a
+    /// leaf instantiated N times is N warnings about one piece of source.
+    pub(crate) escape_warned: std::collections::BTreeSet<(u32, u32, String)>,
     pub(crate) cur_nettype_none: bool,
     /// FQ names of nets created by [`Elaborator::declare_implicit_net`]. Only these get
     /// the width-truncation warning — an explicitly declared 1-bit net driven by a wider

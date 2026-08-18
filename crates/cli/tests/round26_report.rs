@@ -142,8 +142,15 @@ fn a_reason_with_no_detail_still_ends_cleanly() {
         .lines()
         .find(|l| l.contains("VITA-E3009"))
         .expect("the diagnostic line");
+    // The renderer appends its own bracketed suffixes (`[in <inst>]`,
+    // `[at time N]`), so the invariant — "the REASON ends at the subset clause,
+    // with no dangling separator for the absent detail" — is about the message,
+    // not about the end of the line.
+    let msg = line.trim_end();
+    let msg = msg.split(" [in ").next().unwrap_or(msg);
+    let msg = msg.split(" [at time ").next().unwrap_or(msg);
     assert!(
-        line.trim_end().ends_with("are supported)"),
+        msg.trim_end().ends_with("are supported)"),
         "a detail-free reason must end at the subset clause: {line:?}"
     );
 }

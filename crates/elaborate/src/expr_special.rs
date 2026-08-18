@@ -518,7 +518,12 @@ impl Elaborator<'_> {
         if name == "$typename" && args.len() == 1 {
             let net = self.resolve_intro_net(&args[0])?;
             let s = self.typename_string(net);
-            let cid = self.intern_const(parse_str_literal(&format!("\"{s}\"")));
+            // A SYNTHESIZED string, not source text: build it from bytes rather
+            // than re-quoting and re-escaping it. A type spelling that ever
+            // contained a backslash would otherwise be re-interpreted here, and
+            // with the Table 5-1 escapes in place it would also report an escape
+            // warning about text no user wrote.
+            let cid = self.intern_const(crate::literal::str_const_from_bytes(s.as_bytes()));
             return Some(self.push_expr(ir::Expr::Const { val: cid }));
         }
         let with_dim = matches!(

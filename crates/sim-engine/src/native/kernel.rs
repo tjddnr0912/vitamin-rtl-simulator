@@ -1155,8 +1155,10 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// silence out-of-range diagnostics on the whole backend rather than only
     /// reorder them. The blast radius grew with this slice; saying so is the point.
     pub(crate) fn drain_range_reports(&self) {
-        for unknown in crate::eval::NetReader::take_deferred_range_kinds(self) {
-            self.sched.st.warn_run_index("array word index", unknown);
+        for (net, unknown) in crate::eval::NetReader::take_deferred_range_kinds(self) {
+            self.sched
+                .st
+                .warn_run_index(net, "array word index", unknown);
         }
     }
 
@@ -1629,7 +1631,7 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
         self.sched.st.fd_eof(fd)
     }
 
-    fn take_deferred_range_kinds(&self) -> Vec<bool> {
+    fn take_deferred_range_kinds(&self) -> Vec<(u32, bool)> {
         // The ARENA's counter, not the engine's: `SimState` reports at the
         // access, so it has none, and draining a second source here would double
         // count nothing while silently dropping the arena's.

@@ -428,23 +428,57 @@ pub fn parse_int_literal(raw: &str, kind: IntLitKind) -> Option<ConstVal> {
 /// escapes unprocessed by the parser) into a `StrUtf8` `ConstVal`.
 ///
 /// The surrounding double-quotes are stripped (recovery-safe if one is missing),
-/// C-style escapes (`\n \t \r \\ \" \0`) are processed, and the resulting UTF-8
+/// IEEE 1800-2017 Table 5-1 escapes are processed, and the resulting UTF-8
 /// bytes are packed in IEEE §5.9 order: the FIRST character is the MOST
 /// significant byte (byte `k` of `n` occupies bits `[(n-1-k)*8 .. (n-k)*8)`),
 /// so `"ab"` evaluates numerically to 16'h6162 (iverilog live: 24930).
 /// `width = nbytes*8`. Strings are 2-state, so the `unk` plane is all zero.
-/// (`\ddd` octal / `\xhh` hex are deferred — recovered by literal copy.)
 /// (v6 fix: the pre-v6 packing was LSB-first — a latent numeric-surface
 /// divergence that string-keyed assoc arrays were the first to expose.)
-/// Unescape a raw string-literal lexeme (quotes stripped, C escapes processed)
+/// Unescape a raw string-literal lexeme (quotes stripped, escapes processed)
 /// into its byte vector. Shared by `parse_str_literal` and the elaborate-time
 /// format-specifier scan (§4.1a).
 pub fn unescape_str_literal_bytes(raw: &str) -> Vec<u8> {
+    unescape_str_literal_reporting(raw).0
+}
+
+/// An escape that IEEE 1800-2017 Table 5-1 does not define, as the source wrote
+/// it. vita still assigns it a value (see the variants) — the point of carrying
+/// it out of the unescaper is that only the caller has a diagnostic sink, and a
+/// non-standard escape is exactly the kind of difference that compiles on every
+/// tool and evaluates differently on each one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NonStdEscape {
+    /// A C escape vita honours that Table 5-1 omits — today only `\r` → 0x0D.
+    /// Verilator agrees with vita here; iverilog and Xcelium read the letter.
+    CExtension { ch: char, byte: u8 },
+    /// Any other `\X`. vita keeps the backslash AND the character (two bytes);
+    /// iverilog and Xcelium drop the backslash (one byte), so the string's
+    /// WIDTH differs too.
+    Unknown { ch: char },
+}
+
+impl NonStdEscape {
+    /// The escape as written, e.g. `\r`.
+    pub fn written(&self) -> String {
+        match self {
+            Self::CExtension { ch, .. } | Self::Unknown { ch } => format!("\\{ch}"),
+        }
+    }
+}
+
+/// [`unescape_str_literal_bytes`] plus the non-standard escapes it met, in
+/// source order. This is the ONE escape table; the reporting form exists so the
+/// table does not get a second spelling in a linter.
+pub fn unescape_str_literal_reporting(raw: &str) -> (Vec<u8>, Vec<NonStdEscape>) {
     let inner = raw.strip_prefix('"').unwrap_or(raw);
     let inner = inner.strip_suffix('"').unwrap_or(inner);
 
     let mut bytes: Vec<u8> = Vec::with_capacity(inner.len());
-    let mut cs = inner.chars();
+    let mut odd: Vec<NonStdEscape> = Vec::new();
+    // `chars()` cannot look ahead without consuming, and `\ddd`/`\xhh` need to
+    // stop at the first non-digit — so walk a peekable iterator.
+    let mut cs = inner.chars().peekable();
     while let Some(c) = cs.next() {
         if c != '\\' {
             let mut buf = [0u8; 4];
@@ -454,19 +488,74 @@ pub fn unescape_str_literal_bytes(raw: &str) -> Vec<u8> {
         match cs.next() {
             Some('n') => bytes.push(b'\n'),
             Some('t') => bytes.push(b'\t'),
-            Some('r') => bytes.push(b'\r'),
+            // Table 5-1's three "C" control escapes. Their absence was not a
+            // deferral: `"\v"` produced the LETTER `v` (and a retained
+            // backslash, so also the wrong WIDTH) on every tool comparison.
+            Some('v') => bytes.push(0x0b),
+            Some('f') => bytes.push(0x0c),
+            Some('a') => bytes.push(0x07),
             Some('\\') => bytes.push(b'\\'),
             Some('"') => bytes.push(b'"'),
-            Some('0') => bytes.push(0),
+            // `\ddd` — ONE to THREE octal digits (Table 5-1), stopping at the
+            // first character that is not one. `\0` is this rule with a single
+            // digit, which is why it needs no arm of its own. The old `\0` arm
+            // WAS the whole rule, so `"\015"` — the portable spelling of CR,
+            // and the one an external report recommended — evaluated to NUL
+            // followed by the text `15`: three bytes instead of one.
+            Some(d @ '0'..='7') => {
+                let mut v: u32 = d as u32 - '0' as u32;
+                for _ in 0..2 {
+                    match cs.peek() {
+                        Some(&n @ '0'..='7') => {
+                            v = v * 8 + (n as u32 - '0' as u32);
+                            cs.next();
+                        }
+                        _ => break,
+                    }
+                }
+                // `\377` is the maximum Table 5-1 allows; a wider value cannot
+                // be a byte. Truncating matches iverilog and keeps the string
+                // one byte per escape.
+                bytes.push(v as u8);
+            }
+            // `\xhh` — ONE or TWO hex digits (Table 5-1). iverilog accepts one;
+            // Verilator demands two. Accepting one is the LRM reading and the
+            // permissive side of the split.
+            Some('x') if cs.peek().is_some_and(|n| n.is_ascii_hexdigit()) => {
+                let mut v: u32 = 0;
+                for _ in 0..2 {
+                    match cs.peek() {
+                        Some(&n) if n.is_ascii_hexdigit() => {
+                            v = v * 16 + n.to_digit(16).expect("checked hex digit");
+                            cs.next();
+                        }
+                        _ => break,
+                    }
+                }
+                bytes.push(v as u8);
+            }
+            // Not in Table 5-1. vita keeps its established readings (changing a
+            // VALUE that no standard defines would break designs that rely on
+            // it, in exchange for agreeing with one of two disagreeing oracles)
+            // and reports instead, which is the part the reader cannot get any
+            // other way: the divergence compiles everywhere and is silent.
+            Some('r') => {
+                bytes.push(b'\r');
+                odd.push(NonStdEscape::CExtension {
+                    ch: 'r',
+                    byte: b'\r',
+                });
+            }
             Some(other) => {
                 bytes.push(b'\\');
                 let mut buf = [0u8; 4];
                 bytes.extend_from_slice(other.encode_utf8(&mut buf).as_bytes());
+                odd.push(NonStdEscape::Unknown { ch: other });
             }
             None => bytes.push(b'\\'),
         }
     }
-    bytes
+    (bytes, odd)
 }
 
 /// The unescaped UTF-8 text of a string literal (lossy for any non-UTF-8 bytes,

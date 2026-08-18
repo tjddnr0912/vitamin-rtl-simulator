@@ -310,10 +310,26 @@ impl StderrSink {
             Some(t) => format!(" [at time {}]", t.ticks),
             None => String::new(),
         };
+        // The INSTANCE path, when the emitter knew one. `file:line:col` alone
+        // does not identify an elaborate diagnostic: a module instantiated N
+        // times produces N of them at ONE source line, and until this was
+        // rendered the only way to tell them apart was to not have to.
+        let whose = match d.context.first() {
+            Some(f) => format!(" [in {}]", f.label),
+            None => String::new(),
+        };
+        // The MNEMONIC next to the number. doc-15 is the reference a reader is
+        // sent to and 42 of its 55 worked examples print this form; the product
+        // printed none of them. It is also the only string that works in
+        // `-Wno-`/`-Werror=` unambiguously — the number can be shared by
+        // unrelated diagnostics (`VITA-W3056` is the generic simplification
+        // channel), and seeing the mnemonic is how a reader learns that
+        // suppressing it is wider than the line they are looking at.
         let head = format!(
-            "{}[{}]: {}{when}",
+            "{}[{}] {}: {}{whose}{when}",
             d.severity.token(),
             d.code.code_num(),
+            d.code.mnemonic(),
             d.message
         );
         let line = match &d.location {

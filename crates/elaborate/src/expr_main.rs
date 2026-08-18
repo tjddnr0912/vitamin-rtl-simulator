@@ -1156,7 +1156,7 @@ impl Elaborator<'_> {
             // processed by `parse_str_literal`; the const pool dedups StrUtf8 vs
             // Numeric via the repr tag (intern_const ConstKey).
             ast::ExprKind::StrLit { raw } => {
-                let cid = self.intern_const(parse_str_literal(raw));
+                let cid = self.intern_str_literal(raw, e.span);
                 self.push_expr(ir::Expr::Const { val: cid })
             }
             ast::ExprKind::RealLit { raw, .. } => {

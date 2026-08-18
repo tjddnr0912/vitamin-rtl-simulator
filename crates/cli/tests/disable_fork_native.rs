@@ -163,8 +163,8 @@ fn a_recycled_activity_slot_does_not_flush_its_predecessors_report() {
     // `[at time N]` is the runtime-diagnostic timestamp (round-29 R29-4). Here it
     // is not decoration: both reports must mature at t=0, which is what makes
     // "the older one was not flushed by the recycled slot" the only reading.
-    const WANT: &str = "error[VITA-E4003]: def who=1 t=0 [at time 0]\n\
-                        error[VITA-E4003]: def who=2 t=0 [at time 0]\n";
+    const WANT: &str = "error[VITA-E4003] E-RUN-USER-ERROR: def who=1 t=0 [at time 0]\n\
+                        error[VITA-E4003] E-RUN-USER-ERROR: def who=2 t=0 [at time 0]\n";
 
     let (native, rj, _) = run_native(SRC);
     assert!(rj.contains("\"backend\": \"native\""), "not native:\n{rj}");
@@ -209,8 +209,8 @@ fn deferred_reports_are_keyed_by_the_running_activity() {
     // `[at time N]` = the runtime-diagnostic timestamp (round-29 R29-4). Both
     // reports mature in the SAME slot (t=1), which is the whole point: two
     // processes reaching the same `assert #0` must file two reports there.
-    const WANT: &str = "error[VITA-E4003]: bad who=1 v=0 [at time 1]\n\
-                        error[VITA-E4003]: bad who=2 v=0 [at time 1]\n";
+    const WANT: &str = "error[VITA-E4003] E-RUN-USER-ERROR: bad who=1 v=0 [at time 1]\n\
+                        error[VITA-E4003] E-RUN-USER-ERROR: bad who=2 v=0 [at time 1]\n";
 
     let (native, rj, _) = run_native(SRC);
     assert!(rj.contains("\"backend\": \"native\""), "not native:\n{rj}");

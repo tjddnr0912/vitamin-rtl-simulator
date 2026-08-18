@@ -17,6 +17,17 @@ impl Elaborator<'_> {
             match ov {
                 ast::ParamConn::Positional(e) => {
                     let value = self.const_eval_in_scope(e);
+                    // Build the record BEFORE deciding what to say about it: the
+                    // other two channels are computed from the same `e`, and the
+                    // warning below is a statement about the record.
+                    let ovr = ResolvedOverride {
+                        name: None,
+                        value,
+                        is_named: false,
+                        had_value: true,
+                        fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
+                        str: Self::param_str_literal(e),
+                    };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
                             self.error(
@@ -37,22 +48,22 @@ impl Elaborator<'_> {
                                 "a parameter override that reads a real parameter is unsupported \
                          (a real has no integral constant value)",
                             );
-                        } else {
+                        } else if ovr.keeps_default() {
                             self.warn(
                                 "parameter override expression is not a constant; default kept",
                             );
                         }
                     }
-                    overrides.push(ResolvedOverride {
-                        name: None,
-                        value,
-                        is_named: false,
-                        had_value: true,
-                        fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
-                        str: Self::param_str_literal(e),
-                    });
+                    overrides.push(ovr);
                 }
                 ast::ParamConn::Named { name, value, .. } => {
+                    // Same shape as the positional arm: the two non-i64
+                    // channels are decided from `value` alone, so compute them
+                    // first and let the warning ask the record.
+                    let fill = value
+                        .as_ref()
+                        .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string())));
+                    let text = value.as_ref().and_then(Self::param_str_literal);
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
                         if r.is_none() {
@@ -72,7 +83,11 @@ impl Elaborator<'_> {
                                         name.name
                                     ),
                                 );
-                            } else {
+                            } else if ResolvedOverride::keeps_default_of(
+                                None,
+                                fill.as_ref(),
+                                text.as_ref(),
+                            ) {
                                 self.warn(&format!(
                                     "override of parameter `{}` is not a constant; default kept",
                                     name.name
@@ -86,10 +101,8 @@ impl Elaborator<'_> {
                         value: v,
                         is_named: true,
                         had_value: value.is_some(),
-                        fill: value
-                            .as_ref()
-                            .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string()))),
-                        str: value.as_ref().and_then(Self::param_str_literal),
+                        fill,
+                        str: text,
                     });
                 }
             }

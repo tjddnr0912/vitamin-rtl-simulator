@@ -189,6 +189,30 @@ fn arena_init_matches_engine_state_over_corpus() {
         let arena = NetArena::build(&ir, &SimOpts::default())
             .unwrap_or_else(|e| panic!("{}: corpus design must build an arena: {e}", d.name));
         let st = fresh_state(&ir, &sink);
+        // `net_at_off` inverts the layout by SCANNING for a matching `off`,
+        // which is exact only because `build` advances the cursor by
+        // `words*2*elems` with both factors >= 1 — so offsets are STRICTLY
+        // increasing and therefore unique. That is the whole proof, and it is
+        // one `+= 0` away from being false, at which point an out-of-range
+        // diagnostic would name the WRONG array with no other symptom.
+        for w in arena.slots.windows(2) {
+            assert!(
+                w[1].off > w[0].off,
+                "{}: slot offsets must strictly increase for `net_at_off` to be \
+                 a bijection (got {} then {})",
+                d.name,
+                w[0].off,
+                w[1].off
+            );
+        }
+        for (n, s) in arena.slots.iter().enumerate() {
+            assert_eq!(
+                arena.net_at_off(s.off),
+                n as u32,
+                "{}: net_at_off must invert the layout",
+                d.name
+            );
+        }
         // Layout partition sanity: the slots tile the buffer exactly.
         let total: usize = arena
             .slots

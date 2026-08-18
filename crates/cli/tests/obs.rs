@@ -102,7 +102,14 @@ fn two_runs_byte_identical_bar_wallclock() {
         s.lines()
             .filter(|l| {
                 let t = l.trim();
-                !t.starts_with("\"utc_unix_s\"") && !t.starts_with("\"wall_s\"")
+                // `elab_s`/`sim_s` are the same KIND of field as `wall_s` — a
+                // measured duration — so they join the isolated set. This test
+                // is what made that a decision instead of an oversight: adding
+                // them without declaring them non-deterministic failed here.
+                !t.starts_with("\"utc_unix_s\"")
+                    && !t.starts_with("\"wall_s\"")
+                    && !t.starts_with("\"elab_s\"")
+                    && !t.starts_with("\"sim_s\"")
             })
             .collect::<Vec<_>>()
             .join("\n")
@@ -115,6 +122,8 @@ fn two_runs_byte_identical_bar_wallclock() {
     // And the isolated fields ARE present (so the exclusion rule is meaningful).
     assert!(read(&a.join("run.json")).contains("\"utc_unix_s\":"));
     assert!(read(&a.join("run.json")).contains("\"wall_s\":"));
+    assert!(read(&a.join("run.json")).contains("\"elab_s\":"));
+    assert!(read(&a.join("run.json")).contains("\"sim_s\":"));
 }
 
 #[test]

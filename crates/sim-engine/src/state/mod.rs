@@ -909,7 +909,7 @@ impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'
     }
 
     // ── the wrapped store's own bookkeeping ───────────────────────────────
-    fn take_deferred_range_kinds(&self) -> Vec<bool> {
+    fn take_deferred_range_kinds(&self) -> Vec<(u32, bool)> {
         self.nets.take_deferred_range_kinds()
     }
     // ── the CALL family goes to `st`, exactly as `NativeKernel`'s does ──

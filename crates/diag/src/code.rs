@@ -31,6 +31,42 @@ macro_rules! msgcodes {
     };
 }
 
+impl MsgCode {
+    /// Resolve whatever the user typed to a code. Accepts, case-insensitively:
+    ///
+    /// - the mnemonic — `W-ELAB-FEATURE-LIMIT` (doc-15's 1st-class stable key)
+    /// - the printed number — `VITA-W3056`
+    /// - the number without the vendor prefix — `W3056`
+    ///
+    /// ⚠️ All three are accepted because the string a user actually HAS is the
+    /// one the diagnostic printed, and until this existed that string worked in
+    /// `explain` (which matched mnemonic OR number) and failed in `-Wno-`/
+    /// `-Werror=` (which matched the mnemonic only). Two spellings of "resolve a
+    /// code" that answered differently is the whole defect; this is the one
+    /// spelling, and every consumer calls it.
+    pub fn resolve(query: &str) -> Option<MsgCode> {
+        let q = query.trim();
+        // Three documented forms, one arm each. A fourth arm that strips
+        // `VITA-` from the QUERY as well was written first and is fully
+        // subsumed by the second — a second spelling of the same match, which
+        // is the class of thing this function exists to remove.
+        Self::ALL.iter().copied().find(|c| {
+            c.mnemonic().eq_ignore_ascii_case(q)
+                || c.code_num().eq_ignore_ascii_case(q)
+                || c.code_num()
+                    .strip_prefix("VITA-")
+                    .is_some_and(|n| n.eq_ignore_ascii_case(q))
+        })
+    }
+
+    /// The one-line "how to spell a code" hint appended to every rejection, so
+    /// the reader is not sent to a doc to find out what form is accepted.
+    pub const ACCEPTED_FORMS: &'static str =
+        "a code is its mnemonic (`W-ELAB-FEATURE-LIMIT`), its printed number \
+         (`VITA-W3056`), or that number bare (`W3056`); `vita explain <CODE>` \
+         describes one";
+}
+
 msgcodes! {
     // 0xxx GENERAL / SYSTEM
     CliBadFlag             => ("E-CLI-BAD-FLAG",            "VITA-E0001", Error,   "unknown or invalid command-line flag"),
@@ -47,6 +83,7 @@ msgcodes! {
     PpTimescaleDefault     => ("W-PP-TIMESCALE-DEFAULT",   "VITA-W1017", Warning, "no `timescale in the design; assuming the 1ns/1ns base"),
     PpTimescaleMixed       => ("W-PP-TIMESCALE-MIXED",     "VITA-W1018", Warning, "some modules have a `timescale and others do not (IEEE 1800 §3.14.2.2)"),
     ElabStrTernaryNumeric  => ("W-ELAB-STR-TERNARY",       "VITA-W3058", Warning, "a ternary of string literals is an integral value; $display prints it as a number"),
+    ElabStrEscape          => ("W-ELAB-STR-ESCAPE",        "VITA-W3059", Warning, "string literal uses an escape IEEE 1800 Table 5-1 does not define; tools read it differently"),
     // 2xxx PARSE
     DupUnit                => ("E-DUP-UNIT",                "VITA-E2001", Error,   "design unit redefined"),
     ParseUnexpectedToken   => ("E-PARSE-UNEXPECTED-TOKEN",  "VITA-E2002", Error,   "unexpected token"),

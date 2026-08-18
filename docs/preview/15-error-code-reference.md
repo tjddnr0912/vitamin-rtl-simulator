@@ -583,6 +583,39 @@ unreadable. Use `if`/`else`, or `$display("%s", cond ? "a" : "b")`. Deliberately
 — one argument, a ternary, a string literal on BOTH arms — so a `%s` format, a ternary
 of string VARIABLES, and a numeric ternary do not trip it.
 
+### VITA-W3059 · `W-ELAB-STR-ESCAPE` (Warning)
+
+A string literal contains a backslash escape that IEEE 1800-2017 Table 5-1 does not
+define. vita still gives it a value; the warning is that other tools give it a
+different one.
+
+```
+if (c == "\r") ...
+->  warning[VITA-W3059] W-ELAB-STR-ESCAPE: `\r` is not a string escape in IEEE
+     1800-2017 Table 5-1 — vita and Verilator read it as 0x0D, iverilog and Xcelium
+     read it as the character `r`. …
+```
+
+⚠️ **Not a value defect, and that is what makes it expensive.** The design compiles
+on every tool and evaluates differently on each. An external report lost two
+sign-off round trips to exactly this line: their `.vec` parser trimmed line ends
+with `== "\r"`, Xcelium read the letter `r`, real `r` characters were cut off
+mid-record, and 807 CMAC vectors reported "MAC mismatch" — a symptom that looks
+like a DUT bug and is reachable from no single-simulator experiment.
+
+Table 5-1 defines `\n \t \\ \" \v \f \a \ddd \xhh` and nothing else. Two shapes trip
+this warning:
+
+- **`\r`** — vita and Verilator read 0x0D (the C meaning); iverilog and Xcelium
+  drop the backslash and read the letter. The oracles genuinely split, so there is
+  no majority to follow and the value is deliberately unchanged.
+- **any other `\X`** — vita keeps BOTH characters, so the string is also one byte
+  wider; iverilog and Xcelium keep just the character.
+
+Write the byte you mean: `"\015"` (octal) or `"\x0D"` (hex) are Table 5-1 escapes and
+read the same everywhere. One line per distinct escape per literal, anchored at the
+literal — not at the statement, so two escapes on one line are two locations.
+
 ### VITA-W3057 · `W-ELAB-AUTOTOP-AMBIGUOUS` (Warning)
 **auto-top이 인스턴스화되지 않은 root 후보 2개 이상 중에서 선택 — 명시 top 미지정.** `--top` 없이
 one-shot `vita <sources>`(또는 `-f`)에 여러 module을 넘겼을 때, 어디에도 인스턴스화되지 않은

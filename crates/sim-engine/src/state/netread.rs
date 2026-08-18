@@ -423,7 +423,7 @@ impl NetReader for SimState<'_> {
         // Out-of-range array word reads all-X (spec E-RUN-RANGE) — NOT a clamp to the
         // last element (which would silently return a neighbour's value).
         if w >= slot.array_len {
-            self.warn_run_index("array word index", w == crate::eval::WORD_UNKNOWN);
+            self.warn_run_index(net, "array word index", w == crate::eval::WORD_UNKNOWN);
             let mut v = Value::xs(width.max(1), slot.signed);
             v.width = width;
             v.is_real = slot.is_real;

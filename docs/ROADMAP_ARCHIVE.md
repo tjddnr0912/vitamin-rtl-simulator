@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 282건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 283건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.341` **외부 aes_top 3판 — 로그를 데이터로 쓸 수 있게, 그리고 그 과정에서 찾은 escape 다섯**(리포트에 값 결함 또 0 · 11 항목이 전부 **로그가 무엇을 말하는가**): ⭐⭐ **§3.2 요청은 `"\r"` 하나에 "고쳐 달라가 아니라 경고해 달라"였는데, escape 축 전체를 iverilog+verilator 로 재자 IEEE Table 5-1 이 **정의하는** `\ddd`·`\xhh`·`\v`·`\f`·`\a` **다섯이 조용히 틀려 있었다**(값도 폭도 — 백슬래시가 남았다) · ⚠️⚠️ **리포터가 제안한 우회 `"\015"`·`"\x0D"` 가 그 다섯 중 둘**이라 요청대로만 했으면 **동작하지 않는 해결책을 권했을 것** · `\r` 은 **값을 안 바꾸고**(IEEE 미정의 ∧ **오라클이 갈린다** — verilator 는 vita 와 같은 0x0D) **W3059 신설**로 silent→loud · ⭐⭐ **119 형태 sweep 이 정책의 증명**: 40 일치(전부 Table 5-1) · 79 발산(전부 미정의) · **조용한 발산 0 · 과잉경고 0 = 발산 집합 ≡ 경고 집합** · ⭐ **§3.4** `W3056 … default kept` 가 **적용된** string 오버라이드에 발화(오버라이드는 **세 채널**인데 경고가 `value` 하나만 물었다 · escalation 은 **이미 셋을 다 묻고 있었다**) → 레코드를 먼저 짓고 경고가 그것을 읽는다 · ⭐⭐ **§3.8** 화면의 유일한 문자열(`VITA-W3056`)로 `-Wno-`/`-Werror=` 가 안 됐다(`explain` 은 됐다 = **한 질문의 두 철자**) → `MsgCode::resolve` 하나를 **세 소비자가 공유** · `-Werror=all` 신설 · **렌더러가 mnemonic 을 함께 찍는다**(doc-15 worked example **55 중 42 가 그 형태**인데 제품은 0) · ⭐⭐ **§3.10** picorv32 진단 **71 건 중 위치를 가진 것이 0** — 모델은 `location`·`context`·`sim_time` 셋을 이미 들고 있었고(35 생성 사이트 중 33 이 `location: None` · `context` 는 **채우는 곳도 읽는 곳도 0** = 죽은 계약) ⇒ 인스턴스 경로 + 인스턴스화 지점 ambient span + **런타임 진단이 배열을 이름으로** → elaborate **58/58 이 위치를 얻었다** · ⚠️ `WOp::LoadIdx` 에 넷 필드를 **안 붙였다**(payload 16B → 모든 op 24→32B · 그 레인이 런의 ~20%) → **cold path 의 `off→net` 역인덱스**(offset 이 엄격 증가 = 유일, 코퍼스가 단언) · ⭐ **§3.9** `--obs-dir`/`--probe`/`--hier-tree`/`--inst-paths` 가 `--help` 에 없어 리포터가 6일 만에 **무관한 에러 메시지 안에서** 찾았다 · ⭐⭐ **§3.11** CHANGELOG 의 *"function 은 공짜"* 를 실측이 갈랐다 — **`function` 은 인라인되고 `function automatic` 은 안 된다**(그것이 스타일 가이드가 요구하는 철자다) · `run.json` 에 **`elab_s`/`sim_s`**(`wall_s` 하나로는 귀속 불가) · ⚠️⚠️ **절차 사고: 배터리 앞의 패턴 검증 루프에 `git checkout -- .` 를 써서 커밋 안 된 22 파일이 HEAD 로 되돌아갔다**(스냅샷의 10 개만 생존) → 복구 후 규칙을 두 방향으로 강화 · 전 스위트 **5,533 green** · MsgCode **66 → 67**
 - `4.5.340` **외부 round-29 — correct-or-loud 의 loud 쪽을 읽을 수 있게**(값 결함 0 인 리포트 · 리포터는 코퍼스 전량을 새 기본 백엔드로 돌려 **틀린 값 0**·3-way 219 시나리오 바이트 동일을 확인했고, 찾은 것은 전부 **진단 품질**이다): **R29-1** 모든 구문 오류가 `{found:?}` 로 **vita 의 렉서 enum 을 유출**(`found Word(Keyword(End))`) — 철자는 span 에서 복구 가능했는데 **에러에 이미 있던 span 으로는 안 된다**(`error_at` 은 **더 이른 노드**에 보고하고 `found` 는 커서 토큰이라 둘을 **별개 필드**로 갈랐다) · **R29-2** clocking `default input/output` skew 아이템(실제 clocking 블록의 첫 줄)이 **문장 하나를 `expected {X}` 슬롯에 넣은** 메시지로 거부되고 그 메시지가 **없는 길**(`default skew only`)을 가리켰다 → IEEE §14.3 `default_skew` 를 **파싱하고 skew 없는 아이템에 스탬프**(두 번째 메커니즘이 아니라 = 판정은 여전히 elaborate 한 술자리) · 거부는 **skew 를 쓴 대로**(`#0`, `0` 아님)와 **신호 이름**을 부른다 · **R29-4** 런타임 진단에 위치가 **전혀** 없었다(같은 실행의 parse 진단은 `file:line:col`) — ⭐ **시각은 빠진 적이 없다**: `sim_time` 은 **모든 런타임 emitter 가 이미 찍고 있었고**(34 중 29 · 나머지 5 는 `RtlOutput` 둘 + 실행 밖 진단 둘) **렌더러가 버렸다** ⇒ ` [at time N]` · 5,496 테스트 중 **정확히 둘**이 움직였고 둘 다 **강화**됐다 · **R29-3** `unique`/`priority` 위반이 RTL `$warning` 과 **한 코드**였다(파서가 위반 arm 을 **문자 그대로 `$warning` 문장으로 desugar**) ⇒ benign 하나를 끄면 **`$warning` 전부**가 꺼지고 doc-15 가 CI 게이트로 명시한 `-Werror=W-RUN-USER-WARNING` 이 **`$warning` 없는 설계를 깨뜨렸다**(실측 errors=2 → 0) → **W4031 `W-RUN-UNIQUE-VIOLATION`** 신설 · `SeverityKind` 가 **클래스**가 되고(`diag_class` 한 철자를 두 emitter 가 공유 — 그 전엔 **두 번째 철자**였다) · **format_version 27** · ⭐ 곁가지로 **`$__vita_` 예약 네임스페이스** — desugar 의 채널이 **이름뿐**이라 소스가 그 이름을 쓰면 **위반하지 않은 violation 을 파일할 수 있었다**(규칙이지 목록이 아니라 다음 desugar 도 덮인다) · **§5 성능**: 리포트의 *"Keccak 지배에서 native 가 vm 보다 ~5% 느리다"* 는 **재현 안 됐지만 지적한 벤치 갭은 진짜였다** — 8 형태가 **전부 절차 바디 지배**(한 레짐의 여덟 표본)라 두 형태를 더했고(`cont-assign-heavy` 0.76 · `heap-heavy` 0.86) **둘 다 native 가 이긴다** · ⭐⭐ **이기는 이유가 리포트의 메커니즘을 반증한다** — 두 형태 다 **vm/interp 0.97**(컴파일할 바디가 없다)인데 native 는 **15~24% 빠르다** ⇒ tier-3 의 이득은 **아레나에서도** 온다 · 실물 `bench/keccak` 도 0.85/0.93/0.63 · **8/8 → 10/10** · ⚠️ **stale staged bin 함정 재발**(`vcmp`/`velab`/`vrun` 은 `separate-bins` required-features 라 `--workspace` 빌드에 안 들어간다 — 12일 된 바이너리가 *"staged 가 옛 코드를 쓴다"* 는 **거짓 신호**를 냈다) · 전 스위트 **5,517 green** · MsgCode **66**
 - `4.5.339` **elaborate 상수접기의 `**` 지수 자기결정 — 그리고 거부가 답이 아니라는 실측**: `localparam signed [15:0] P = 4'sd3 ** -4'sd8` 이 vita **6561** / iverilog·**vita 런타임** **0**(= 같은 소스가 param 과 런타임에서 다른 값) · 수정은 새 평가기가 아니라 **§4.5.186 폭 모델의 재사용**(헬퍼 하나를 세 fold 사이트가 공유) + `Concat`·Named-cast 폭/부호 arm + module-scope 위임 · 97칸 3-way **FIXED 10 · LOUD→CORR 2 · WRONG→LOUD 2 · 회귀 0** · ⚠️⚠️ **첫 설계(폭-미상 거부)를 적대 라운드가 반증했다 — 거부는 caller 만큼만 loud 다**(range bound 의 decline 경로가 **조용한 1비트 기본값**이라 correct→**silent-wrong**) ⇒ 거부를 걷고 **폭을 알 수 있게** 만들자 loud 였던 칸이 **정답 fold**(19683)로 올라갔다 · ⚠️ **깊이 청구도 과했다** — 인자는 유한 AST 하강이라 사이클이 없는데 청구하면 **65단 인자 중첩이 correct→LOUD** ⇒ **사이클이 있는 default 만** 청구하고 위임 게이트는 `depth==0` **∨ call-free` · ⚠️⚠️ **뮤테이션이 "등가" 를 반증** — Named 캐스트의 **부호** arm 이 스윕 밖 두 칸을 silent-wrong 에서 건져낸다(`RPS'(2)-4'sd9` 가 signed 면 −7→0 · unsigned 면 9→19683) · ⚠️ genvar 는 `param_meta` 가 없어 무부호로 읽혀 `2 ** (g-1)` 이 correct→LOUD 였고 **(32,true) 시딩으로 함께 닫았다**(IEEE §27.4) · 뮤테이션 **10/10 사망** · 발굴 11건 §2 등재
 - `4.5.337` ③층 **V1 슬라이스 1 — SVA: 거부가 순전히 보수적이었다**(커널 코드 0줄 추가 · 지운 것은 `design_eligibility` 의 `sva` 행 하나): 네이티브 커버리지 **54.7% → 66.8%**(+760 호출) · ⭐ **SVA 는 런타임 기계장치가 아니다** — elaborate 가 `assert property(@(clk) a |-> b)` 를 `always @(clk) if (a && !b) $error(…)` 로 desugar 하므로 도착하는 것은 평범한 IR + StmtId 테이블 둘이고, 그 둘은 **공유 `builtins::dispatch` 안**에서 읽힌다(tier-3 은 §4.5.293 이래 배선돼 있다) · ⭐ **진짜 기계장치가 필요한 형태는 이미 자기 이름으로 거부 중** — `cover property`/liveness 는 `final_procs` → `final` 행, deferred assertion 은 `mature_deferred` 훅이 없어 별도 `deferred_assert` 행(census: **`sva` 혼자 760 · `deferred_assert` 혼자 14 · 겹침 0**) · ⭐⭐ **게이트가 세 번 자기를 반증했다** — ⓐ **하네스가 `assert_fire`/`assert_ctl`/`defer_*` 를 설치 안 해서** `$assertoff` 가 플래그 대신 출력되는 설계로 두 백엔드를 비교하고 있었다(발견은 거부 이웃 핀이 `Ok(())` 를 낸 것) · ⓑ **차분은 공유 코드에 구조적으로 눈멀었다(실측)** — 공유 dispatch 뮤테이션 둘이 엔진 게이트를 전부 통과하고 `cli::sva_rest` 절대 핀에서만 죽어서, **절대 앵커**를 짓자 엔진에서도 죽고 하네스 뮤테이션 둘도 함께 죽었다(그 전엔 생존) · ⓒ 앵커를 짓다 **내 기대가 틀린 것**을 쟀다(`$asserton` 시점에 위반 조건이 남아 있어 다음 posedge 에서도 발화) · **뮤테이션 6/6 사망** · ⚠️ 절차 사고: 뮤테이션 복원에 `git checkout --` 을 써서 **커밋 안 된 편집 둘이 HEAD 로 되돌아가 지워졌다**(가짜 kill 2건 유발) → 복원은 **바이트 스냅샷**
@@ -371,6 +372,86 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.341 외부 aes_top 3판 — 로그를 데이터로 쓸 수 있게, 그리고 그 과정에서 찾은 escape 다섯 (2026-08-18 · MsgCode 67)
+
+**리포트에 값 결함은 또 0이었다**(14 타깃 회귀 전량 PASS · GCM/XTS/CMAC/CCM · P7 통합 · 세
+백엔드 byte-identical). 11 항목이 전부 **로그가 무엇을 말하는가**에 관한 것이고, 그중 하나를
+그라운딩하다 **리포터가 볼 수 없었던 값 결함 다섯**이 나왔다.
+
+⭐⭐ **§3.2 — 요청은 "경고해 달라"였고, 재니 표준 escape 다섯이 조용히 틀려 있었다.**
+리포터는 `"\r"`이 vita에서 CR·xrun에서 문자 `r`이라 `.vec` 파서의 줄끝 정리가 깨져 **CMAC
+위조 807건이 "MAC 불일치"로 찍혔고 sign-off를 2회 왕복**했다고 적었다(증상이 DUT 버그로 보였다).
+그들은 자기 코드를 고쳤고 요청은 경고뿐이었다. **iverilog + verilator로 그라운딩하자 더 큰 것이
+나왔다** — IEEE 1800-2017 **Table 5-1이 정의하는** `\ddd`·`\xhh`·`\v`·`\f`·`\a` **다섯이
+전부 문자 그대로 읽히고 백슬래시까지 남아** 값도 폭도 틀렸다(`"\v"` = 118·16bit / 오라클 11·8bit).
+⚠️⚠️ **리포터가 제안한 우회 `"\015"`·`"\x0D"`가 바로 그 다섯 중 둘이다** — 그대로 썼으면
+NUL+"15"(24bit)가 됐다. 정본 unescape 한 함수에 Table 5-1을 채웠다(octal 1~3자리·hex 1~2자리
+경계 포함, 전부 iverilog 핀). ⭐ **`\r`은 값을 안 바꾼다** — IEEE가 정의하지 않고 **오라클이
+갈린다**(verilator는 vita와 같은 0x0D · iverilog/xrun은 문자 `r`)이므로 따를 다수가 없고,
+바꾸면 지금 그것에 기대는 설계를 조용히 깨뜨린다 ⇒ **W3059 신설**로 silent→loud만 올렸다.
+⭐⭐ **119 형태 sweep의 결과가 그 정책의 증명이다** — **40 일치(전부 Table 5-1) · 79 발산(전부
+미정의 escape) · 조용한 발산 0 · 과잉경고 0.** 즉 **발산 집합 = 경고 집합**이다.
+⚠️ 그 sweep을 처음 돌렸을 때 "0 발산"이 나왔는데 **BSD `join` 문법 오류로 0행을 비교**하고 있었고,
+두 번째 판에서는 `64'(...)` 캐스트를 써서 **escape가 아니라 캐스트를 재고** 있었다(iverilog가
+그 캐스트에 0을 답한다) — 둘 다 잡아서 다시 쟀다. ⚠️ 세 번째로 "`\``가 안 warned"가 나온 것은
+**내 정규식이 백틱 안의 백틱을 못 잡은 계측 오류**였다.
+
+⭐ **§3.4 — 경고가 일어난 일의 반대를 말하고 있었다.** `#(.MODE("Y"))`가 `parameter string`에
+**적용되는데도** `W3056 … default kept`를 냈다. 원인은 오버라이드가 **세 채널**(i64 `value` ·
+`fill` · `str`)로 가는데 경고가 **`value` 하나만** 물은 것 — 그리고 `params.rs`의 escalation은
+**이미 셋을 다 묻고 있었다**(`has_applied_override`). ⇒ 레코드를 **먼저 짓고 경고가 그 레코드를
+읽게** 바꾸고, 접합을 `ResolvedOverride::keeps_default_of` **한 철자**로 공유했다(네 사이트).
+⚠️ **틀린 진단은 없는 진단보다 나쁘다** — 사용자는 불필요한 워크어라운드를 짜거나 **맞는 결과를
+의심**한다.
+
+⭐⭐ **§3.8 — 화면에 찍힌 유일한 문자열로 아무것도 못 했다.** 진단은 `VITA-W3056`만 찍는데
+`-Wno-`/`-Werror=`는 **mnemonic만** 받았다(`explain`은 둘 다 받았다 = **한 질문의 두 철자**).
+⇒ `MsgCode::resolve` **하나**를 만들어 mnemonic·`VITA-W3056`·`W3056`을 대소문자 무시로 받고
+**세 소비자가 전부 그것을 부른다**. `-Werror=all`도 신설(`--help`가 늘 "all, or one code"라고
+적어 뒀는데 그 절반이 없었다). ⭐⭐ **그리고 렌더러가 mnemonic을 함께 찍는다** — doc-15의
+**worked example 55개 중 42개가 이 형태**인데 제품은 하나도 안 찍고 있었다. 그것이 필요한 이유는
+편의가 아니다: `VITA-W3056`은 **범용 simplification 채널**이라 그 번호로 끄면 무관한 진단까지
+꺼지는데, mnemonic이 보여야 독자가 그 사실을 안다.
+
+⭐⭐ **§3.10 — picorv32 진단 71건 중 `file:line:col`을 가진 것이 0이었다.** 모델은 이미
+`location`·`context`(계층 프레임)·`sim_time` 셋을 들고 있었고 렌더러도 `location`을 찍는데,
+**emitter가 안 채웠고 `context`는 아무도 채우지도 찍지도 않았다**(35 생성 사이트 중 33이
+`location: None`, `context` 채우는 곳 **0**). 셋을 지었다 — ⓐ **인스턴스 경로**(`cur_prefix`가
+곧 그것이다 · 렌더러가 `[in tb.u_m1.u_a]`) ⓑ **인스턴스화 지점을 subtree의 ambient span으로**
+(포트 배선·파라미터 바인딩은 어떤 문장보다 먼저 도므로 `cur_span`이 비어 있었다 · 루트는
+자기 선언으로 폴백) ⓒ **런타임 진단이 배열을 이름으로 부른다**. **결과: 그 71건 중 elaborate
+58건이 전부 위치를 얻었다**(0 → 58). ⭐ 리포터의 최소 재현 4줄이 이제 **pairwise distinct**이고,
+그중 둘은 **같은 소스 줄**이라 `file:line:col`만으로는 원리적으로 못 가른다 = 인스턴스 경로가
+장식이 아닌 이유. ⚠️⚠️ **배열 이름은 채널이 bool 하나였다** — 지연 보고 큐 `pending_range:
+Vec<bool>`이 넷을 잃는다. ⭐ **`WOp::LoadIdx`에 넷 필드를 붙이지 않았다**: `WOp`의 최대 payload가
+16바이트라 네 번째 워드는 **모든 op을 24→32바이트**로 키우고 그 레인은 §5.1-ay가 런의 ~20%로
+쟀다 ⇒ **cold path에서 `off → net` 역인덱스**(offset은 `words*2*elems ≥ 2`씩 증가하므로 **엄격
+증가 = 유일**하고, 그 성질을 코퍼스 테스트가 `net_at_off`가 항등 역함수임과 함께 단언한다).
+
+⭐ **§3.9 — `--help`에 없는 플래그는 없는 것이다.** `--obs-dir`/`--probe`/`--hier-tree`/
+`--inst-paths`가 전부 빠져 있었고, 리포터는 `--obs-dir`을 **6일 만에 무관한 에러 메시지 안의
+한 문장에서** 찾았다. observability 절을 신설했다(⚠️ 앵커가 **각 플래그가 실제로 동작하는지도**
+확인한다 — 없는 플래그를 적는 것이 안 적는 것보다 나쁘다).
+
+⭐⭐ **§3.11 — CHANGELOG가 틀렸고, 판별자는 키워드 하나였다.** *"Writing transforms as
+`function` costs nothing: vitamin inlines them during elaborate"* 에 대해 리포터는 codegen
+**12–16%**·거부의 **87%가 `user_call_in_expr`**를 실측했다. 재측정: **`function`은 인라인되고
+`function automatic`은 안 된다**(모듈/패키지 무관). `automatic`이 비용이고 그것이 스타일 가이드가
+요구하는 철자다 ⇒ CHANGELOG를 정정하고 확장은 ROADMAP §3으로. ⚠️ **picorv32는 어느 형태도 안
+써서 65/68이다 — 이 축은 벤치가 대표하지 않는다.** 그리고 보고 절반을 지었다: **`run.json`이
+`elab_s`/`sim_s`로 앞단과 시뮬을 가른다**(`wall_s` 하나로는 귀속이 불가능하고, `--backend` 비교는
+앞단이 동일한 런들의 비교라 **앞단 지배 설계는 무조건 "backend가 안 듣는다"로 읽힌다** — 리포터가
+정확히 그 결론을 냈다). ⚠️ **determinism golden이 내 실수를 잡았다** — 새 필드가 비결정적인데
+isolated 목록에 없어 `two_runs_byte_identical_bar_wallclock`이 빨갛게 됐다.
+
+⚠️ **기존 핀 4개가 걸렸고 하나는 갱신이 아니라 재조준이었다** — `count(&err, "R")`가 **단일 문자
+"R"**을 세고 있었다(우연히 3이었고 mnemonic이 붙자 18). 나머지 셋은 mnemonic/`[in …]` 추가분 반영.
+
+**게이트**: 전 스위트 **5532 green**(신규 앵커 15 + 코퍼스 성질 2) · clippy 3구성 0 · fmt ·
+no-oracle lib green · MsgCode **66 → 67**(bijection이 doc-15 항목을 강제) · escape 119형
+3-오라클 sweep 발산=경고 · `examples/` stdout+VCD byte-identical · keccak·picorv32 3-way
+byte-identical · 뮤테이션 17건.
 
 #### 4.5.340 외부 round-29 — correct-or-loud 의 loud 쪽을 읽을 수 있게 (2026-08-18, branch feat-round29-diagnostic-quality, **format 27**) ✅
 

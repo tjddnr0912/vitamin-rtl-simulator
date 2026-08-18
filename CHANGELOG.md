@@ -11,21 +11,33 @@ changed for a user of the simulator.
 
 ### Added
 
-- **`--backend <interp|vm>`** on `vita` and `vrun` — selects which executor runs process
-  bodies. `interp` (the default) is the reference semantics; `vm` runs suspend-free bodies
-  on the bytecode VM. **Output is byte-identical either way**, enforced over the whole
-  corpus by `sim-engine/tests/backend_equiv.rs`, so this is a wall-clock knob like
-  `--threads`. `vcmp`/`velab` reject it: nothing in the artifact they write depends on the
-  backend, and accepting it would suggest otherwise.
+- **`--backend <interp|vm|native>`** on `vita` and `vrun` — selects which executor runs
+  process bodies. **`native` is the default** and runs every design; `interp` is the
+  readable reference semantics and `vm` the bytecode compiler, and both exist to bisect a
+  suspected defect against a second implementation. **Output is byte-identical across all
+  three**, enforced over the whole corpus by `sim-engine/tests/backend_equiv.rs`, so this
+  is a wall-clock knob like `--threads`. `vcmp`/`velab` reject it: nothing in the artifact
+  they write depends on the backend, and accepting it would suggest otherwise. A build
+  made without the `oracle` feature has only `native`.
+- **`sim_engine::codegen_coverage`** (also `run.json`'s `codegen` under `--obs-dir`)
+  reports how many of a design's process templates get the compiled op-stream path — the
+  rest walk the IR, on `native` as well.
 
-  The VM had been implemented and measured since Stage C, but `SimOpts::backend` was
-  library-only — no user could select it. Measured on release builds: expression-heavy
-  1.9×, structure-heavy 2.0×, a SHA-256 compression round 1.5×, clock-bound ~1.1×.
-- **`sim_engine::codegen_coverage`** reports how many of a design's process templates the
-  VM can claim — the number that decides whether the flag is worth setting, since a body
-  outside the allow-list runs on the interpreter either way. Real designs measure 50–67%,
-  the remainder being the `#delay`-bearing stimulus half. Writing transforms as `function`
-  costs nothing: vitamin inlines them during elaborate.
+  ⚠️ **Corrected 2026-08-18.** This entry used to say "Real designs measure 50–67%, the
+  remainder being the `#delay`-bearing stimulus half. Writing transforms as `function`
+  costs nothing: vitamin inlines them during elaborate." An external report measured
+  **12–16%** on a function-heavy AES design, with **`user_call_in_expr` 87% of the
+  rejections** and `delay` a rounding error — and they were right. Re-measured here, the
+  discriminator is one keyword, not package-vs-module:
+
+  | function form | inlined during elaborate? |
+  |---|---|
+  | `function f(…)` (module- or package-scope) | **yes** — no `Expr::Call` survives |
+  | `function automatic f(…)` | **no** — lowered to a frame body; the caller's process is rejected with `user_call_in_expr` |
+
+  `automatic` is what costs, and it is also what a style guide asks for. picorv32, which
+  uses neither form, still measures 65/68. Widening the inliner to non-recursive
+  `automatic` functions is filed in ROADMAP §3.
 
 ### Fixed
 

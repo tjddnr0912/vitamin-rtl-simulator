@@ -169,7 +169,7 @@ pub struct NetArena {
     /// mem[oi])` with `xi` unknown and `oi` a known out-of-range emitted W4029 then
     /// E4002 on interp and bytecode, and the reverse on native. The drain is not
     /// decoration — it is the order — so the record has to be ordered too.
-    pub pending_range: std::cell::RefCell<Vec<bool>>,
+    pub pending_range: std::cell::RefCell<Vec<(u32, bool)>>,
 }
 
 impl NetArena {
@@ -415,8 +415,25 @@ impl NetArena {
         );
     }
 
-    pub(crate) fn note_bad_index(&self, unknown: bool) {
-        self.pending_range.borrow_mut().push(unknown);
+    pub(crate) fn note_bad_index(&self, net: u32, unknown: bool) {
+        self.pending_range.borrow_mut().push((net, unknown));
+    }
+
+    /// The net whose element block starts at buffer offset `off`, or `u32::MAX`.
+    ///
+    /// ⚠️ A LINEAR SCAN, and deliberately so: the only caller is the
+    /// out-of-range arm of `WOp::LoadIdx`, which is (a) already the cold path
+    /// and (b) capped at eight reports per run. The alternative was a `net`
+    /// field on the op — but `WOp`'s largest payload is 16 bytes, so a fourth
+    /// word would grow EVERY op in the array from 24 to 32 bytes, in the lane
+    /// §5.1-ay measured at ~20% of the run, to name an array in a message. The
+    /// index is compile-time-unique per net (`off` is a slot's base), so the
+    /// scan is exact, not a guess.
+    pub(crate) fn net_at_off(&self, off: u32) -> u32 {
+        self.slots
+            .iter()
+            .position(|s| s.off == off)
+            .map_or(u32::MAX, |i| i as u32)
     }
 
     /// The `(val, unk)` plane slices of element `elem` of net `net`.
@@ -538,7 +555,7 @@ impl NetReader for NetArena {
         ))
     }
 
-    fn take_deferred_range_kinds(&self) -> Vec<bool> {
+    fn take_deferred_range_kinds(&self) -> Vec<(u32, bool)> {
         std::mem::take(&mut *self.pending_range.borrow_mut())
     }
 
@@ -593,7 +610,7 @@ impl NetReader for NetArena {
         // mutation: every other real design in the suite stayed green and that
         // ternary is the whole of what caught it (iverilog agrees: `0`).
         if w >= s.elems {
-            self.note_bad_index(w == crate::eval::WORD_UNKNOWN);
+            self.note_bad_index(net, w == crate::eval::WORD_UNKNOWN);
             let mut v = Value::xs(s.width.max(1), s.signed);
             v.width = s.width;
             v.is_real = s.is_real;

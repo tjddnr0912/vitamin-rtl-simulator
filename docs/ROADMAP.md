@@ -259,6 +259,76 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 >   필요하고, 자식의 선언 폭을 모르는 부모 스코프에서 접어야 하므로 `fill` 과 같은
 >   "원문을 넘겨 자식 폭에서 재폴딩" 형태가 된다.
 
+**⭐ 외부 리포트 aes_top 3판(2026-08-18 · §4.5.341)이 남긴 것 — 전부 "하류가 거부할 것을 미리 거부한다" 부류:**
+
+> 3판은 §3.2(문자열 escape) · §3.4(거짓 W3056) · §3.8(코드 키) · §3.9(`--help`) · §3.10(위치) ·
+> §3.11의 보고 절반을 §4.5.341이 닫았다. 아래는 **다른 클래스**라 분리한 잔여다.
+
+- **⭐ §3.1 vita가 받는데 xrun이 거부하는 세 형태 — 세 오라클로 재현 완료(2026-08-18).**
+  리포터가 "가장 비싸다"고 한 부류다: vita로 전부 green → sign-off에서만 터진다. **요청은 error가
+  아니라 warning** — 지금 도는 설계를 깨지 않으면서 silent→loud로 올리는 유일한 형태다.
+  | 형태 | vita | iverilog 13 | verilator 5.050 | xrun 24.03 |
+  |---|---|---|---|---|
+  | (a) 괄호식에 part-select `((a^b)>>8)[7:0]` | **통과** `o=12` errors=0 | **syntax error** | **syntax error** | `*E,EXPRPA` |
+  | (b) 함수 결과에 part-select `f(a)[3:0]` | **통과** `o=5` errors=0 | **syntax error** | 통과 | `*E,EXPRPA`/`*E,LTBDE3` |
+  | (c) `always_comb` 구동 변수의 선언 초기화자 | **통과** `rdy=1` errors=0 | 통과 | **`MULTIDRIVEN` error**(IEEE 1800-2023 §9.2.2.2 인용) | `*E,MULAXX` |
+  ⭐ **(a)는 셋 다 거부하고 vita만 받는다** — IEEE 1800 §11.5.1의 select는 net/variable에 붙지
+  임의의 식에 붙지 않으므로, vita가 도는 것은 **자기가 지어낸 확장**이다(옳은 값이 없으므로
+  loud화는 사다리 하강이 아니다). (b)·(c)는 2:1이라 근거가 표준 인용 쪽에 있다.
+  ⚠️ **착수 시 주의**: (a)/(b)는 파서 층(비-식별자 primary에 붙는 select), (c)는 elaborate 층
+  (`always_comb` 타깃 ∩ 선언 초기화자를 가진 변수 — 감도 리스트 합성이 이미 그 집합을 안다).
+  둘은 다른 층이므로 한 슬라이스에 묶지 마라.
+
+- **§3.3 넓은 `localparam`의 연결/시프트가 안 접힌다** — `localparam logic [127:0] B = {8'he1, 120'h0};`
+  와 `= 128'(8'he1) << 120;` 이 둘 다 `E3009 … not a foldable constant expression`(값 리터럴
+  `128'he1000…`은 통과). 암호 IP는 넓은 상수를 이 형태로 쓴다. 폭>64는 `wide_param_bits`가
+  값을 지키므로 필요한 것은 **그 도메인 위의 `Concat`/시프트 fold**이지 i64 채널이 아니다.
+
+- **§3.5 suspendable task 안의 `repeat`가 정수 리터럴만 받는다** — `repeat (64)` 통과 /
+  `repeat (4*16)`·`repeat (LP)`(localparam)·`repeat (m_n)`(모듈 넷) 전부 `E3009`. 같은
+  `repeat (4*(14+2))`가 `initial`에서는 통과한다. ⚠️⚠️ **그리고 진단 문구가 이 경우를 안 가리킨다** —
+  원인 셋(`fork`·frame-local unpacked ARRAY·frame-local을 읽는 `wait`/`repeat`)을 나열하는데
+  `localparam`도 모듈 넷도 **프레임 지역이 아니다**. 리포터는 그 문구 때문에 두 번 헛수정했다.
+  ⇒ **접기 가능한 식을 허용**하거나, 최소한 **문구가 실제 원인을 말해야** 한다(후자만으로도 값이 있다).
+
+- **§3.6 `default clocking` / `default disable iff` 미지원** — `E2002`. ⚠️ 부수 효과가 하나 있다:
+  `default clocking`이 없으면 그 뒤의 clocking 없는 concurrent assertion도 `E2002`로 죽어
+  **원인이 하나인지 둘인지 안 보인다**. 우회(property마다 `@(posedge clk) disable iff`)가 쉽고
+  xrun 이식성도 그쪽이 나아서 리포터도 우선순위를 낮게 뒀다. **`bind`는 잘 동작한다**(그 덕에
+  SVA를 `rtl/` 밖에 두고 합성 소스를 무변경으로 유지한다 — 리포터가 명시적으로 중요하다고 적었다).
+
+- **§3.7 `string` formal이 static task에서 불가** — `E3009 … (declare the task automatic)`.
+  진단이 해결책까지 말해서 즉시 우회 가능하고, 리포터도 "문구는 아주 좋다"고 적었다. 기능만 없다.
+
+- **⭐⭐ §3.11 `function automatic`이 codegen에서 빠진다 — 원인이 특정됐고 판별자는 키워드 하나다.**
+  리포터 실측 codegen `able/total` = **12.3%(core) / 16.0%(top)**, 거부 사유의 **87%가
+  `user_call_in_expr`**. 이쪽에서 재측정해 갈랐다:
+  | 형태 | elaborate 인라인 | 결과 |
+  |---|---|---|
+  | `function f(…)` (모듈·패키지 무관) | **된다** | `Expr::Call`이 안 남는다 |
+  | `function automatic f(…)` | **안 된다** | 프레임 바디로 내려가고 호출 프로세스가 `user_call_in_expr`로 거부 |
+  ⇒ **비용은 `automatic`이고, 그것이 스타일 가이드가 요구하는 철자다.** 암호 RTL의 기본형
+  (S-box·`xtime`·GF 곱을 `function automatic`으로 두고 식에서 부른다)이 통째로 여기 걸린다.
+  ⭐ **비-재귀 automatic 함수는 인라인이 의미상 동일하다** — SSA-fold 인라인은 호출마다 새 지역을
+  주므로 그것이 곧 `automatic`의 정의다. 필요한 판정 = 재귀 없음 ∧ static 상태 없음 ∧ 타이밍 제어
+  없음 ∧ output/ref formal 없음. ⚠️ 그 술어는 **`compute_suspendable_tasks`가 이미 쓰는 것과
+  같은 축**이라 두 번째 철자를 쓰지 마라. ⚠️ picorv32는 어느 형태도 안 써서 65/68이다 —
+  **이 축은 벤치가 대표하지 않는다**(§4.5.341이 CHANGELOG의 "costs nothing"을 정정한 이유).
+  ⚠️ 리포터의 "backend를 바꿔도 5% 이내" 는 **아직 미해명**이다: §4.5.341이 `run.json`에
+  `elab_s`/`sim_s`를 넣었으므로 다음 판에서 그들이 앞단/시뮬 중 어느 쪽인지 먼저 보고할 수 있다.
+
+- **⚠️ staged 흐름은 `file:line:col` 이 없다(pre-existing · §4.5.341 이 실측).** `vita`(one-shot)는
+  전처리기의 `SourceMap` 을 아직 들고 있어 §4.5.341 의 위치가 전부 나오지만, `velab` 은 `.vu`(파싱된
+  AST)에서 시작하므로 **`SpanResolver` 가 설치되지 않는다** — 같은 설계가 one-shot 에선
+  `d.sv:3:49: warning…[in tb.u_m1.u_a]`, staged 에선 `warning…[in tb.u_m1.u_a]` 다.
+  ⭐ **인스턴스 경로는 두 흐름 모두에서 나온다**(`cur_prefix` 에서 오지 resolver 에서 오지 않는다)
+  = 아티팩트 경계를 넘는 유일한 키. 닫으려면 `.vu` 가 **줄 테이블 또는 SourceMap 을 실어야** 하고,
+  그것은 아티팩트 형상 변경(format bump)이라 별도 슬라이스다.
+
+- **§3.10 잔여 — 런타임 진단의 인스턴스 경로와 file:line.** §4.5.341이 시각(round-29) + **배열
+  이름**을 붙였고, elaborate 쪽은 `file:line:col` + 인스턴스 경로를 갖는다. 런타임 쪽에 남은 것은
+  **소스 위치**다(엔진은 IR 위에서 돌아 span이 없다 — §4.5.249 `SpanResolver`가 재사용 지점).
+
 **§4.5.314 이 남긴 1건 (오라클 ✓ iverilog):**
 
 - **`defparam` 이 INTERFACE 인스턴스에 안 닿는다** — `interface ifc; parameter D = 8; … endinterface` + `ifc a(); defparam a.D = 255;` 가 `W3056 … matched no instance` 를 내고 **기본값을 유지**한다(iverilog `d=ff`, vita `d=8`). PRE·POST 동일한 pre-existing 이고, 경고가 있으므로 silent 는 아니다. 원인 = `defparams` 소비가 `elaborate_instance` 에만 있고 `iface_inst.rs` 는 자기 `overrides` 만 본다 — 인터페이스 바인딩 루프가 §4.5.314 에서 정본 바인더를 쓰게 됐으므로 `defparams.remove(path)` 를 같은 자리에서 병합하면 된다.

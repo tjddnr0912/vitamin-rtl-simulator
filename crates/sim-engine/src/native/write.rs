@@ -389,7 +389,7 @@ impl NetArena {
             // through the engine's own `warn_run_range` (see
             // `NetArena::pending_range`). The engine emits here; dropping it
             // turned an `ExitClass::HadErrors` run into a clean PASS.
-            self.note_bad_index(raw_word == crate::eval::OFF_UNKNOWN);
+            self.note_bad_index(c.net, raw_word == crate::eval::OFF_UNKNOWN);
             return None;
         }
         Some(raw_word)

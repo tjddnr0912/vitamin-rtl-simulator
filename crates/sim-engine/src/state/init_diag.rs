@@ -370,7 +370,7 @@ impl<'a> SimState<'a> {
     /// The caps are SEPARATE. Sharing one budget would let a reset window's unknown
     /// indexes eat all eight slots and suppress the genuine out-of-range report that
     /// followed.
-    pub fn warn_run_index(&self, what: &str, unknown: bool) {
+    pub fn warn_run_index(&self, net: u32, what: &str, unknown: bool) {
         const CAP: u32 = 8;
         let cell = if unknown {
             &self.run_range_unk_count
@@ -378,13 +378,33 @@ impl<'a> SimState<'a> {
             &self.run_range_count
         };
         let n = cell.get();
+        // NAME THE ARRAY. `net_names` is the elaborated hierarchical path table
+        // and the CLI installs it on every run, so this costs a lookup on a path
+        // that is capped at eight reports. Without it a design with dozens of
+        // memories emits N identical lines and the reader has to find the array
+        // by eye — an external report did exactly that for four of them.
+        // `u32::MAX` (the wprog lane could not identify a net) and a table that
+        // is absent or the wrong length both degrade to the old wording rather
+        // than to a wrong name.
+        // ⚠️ A CLOSURE, not a value: this function is still CALLED for every
+        // out-of-range access past the cap (that is what the cap suppresses —
+        // the message, not the call), so building the name eagerly would
+        // allocate a String on exactly the path the cap exists to make cheap.
+        let of = || match self.net_names.get(net as usize) {
+            Some(p) if self.net_names.len() == self.ir.nets.len() && !p.is_empty() => {
+                format!(" of `{p}`")
+            }
+            _ => String::new(),
+        };
         let msg = match n.cmp(&CAP) {
-            std::cmp::Ordering::Less if unknown => {
-                Some(format!("{what} is unknown (x/z); read X / write ignored"))
-            }
-            std::cmp::Ordering::Less => {
-                Some(format!("{what} (out of range; read X / write ignored)"))
-            }
+            std::cmp::Ordering::Less if unknown => Some(format!(
+                "{what}{} is unknown (x/z); read X / write ignored",
+                of()
+            )),
+            std::cmp::Ordering::Less => Some(format!(
+                "{what}{} (out of range; read X / write ignored)",
+                of()
+            )),
             std::cmp::Ordering::Equal if unknown => {
                 Some("further unknown-index diagnostics suppressed".to_string())
             }
@@ -815,7 +835,11 @@ impl<'a> SimState<'a> {
         // silently corrupt a valid neighbor.
         let word = if c.word.is_some() {
             if raw_word >= self.nets[net].array_len {
-                self.warn_run_index("array word index", raw_word == crate::eval::OFF_UNKNOWN);
+                self.warn_run_index(
+                    net as u32,
+                    "array word index",
+                    raw_word == crate::eval::OFF_UNKNOWN,
+                );
                 return false;
             }
             raw_word

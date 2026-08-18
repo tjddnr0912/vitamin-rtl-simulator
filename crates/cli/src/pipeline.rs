@@ -162,14 +162,11 @@ pub(crate) fn run_explain(args: &[String]) -> i32 {
         );
         return EXIT_CLI_ERROR;
     };
-    let Some(code) = MsgCode::ALL
-        .iter()
-        .copied()
-        .find(|c| c.mnemonic() == query || c.code_num() == query)
-    else {
+    let Some(code) = MsgCode::resolve(query) else {
         eprintln!(
-            "error[{}]: unknown diagnostic code '{query}'",
-            MsgCode::CliBadFlag.code_num()
+            "error[{}]: unknown diagnostic code '{query}' — {}",
+            MsgCode::CliBadFlag.code_num(),
+            MsgCode::ACCEPTED_FORMS
         );
         return EXIT_CLI_ERROR;
     };
@@ -269,14 +266,37 @@ pub(crate) fn print_help(applet: &str) {
        -G, --param <N=V>     (vita/velab) override a TOP-module parameter (8, 8'hFF,\n                        \
         \"text\"); repeatable. It is an ELABORATE-stage input, so vcmp and vrun\n                        \
         reject it rather than accept and drop it\n  \
-         -Wno-<CODE>           suppress a Warning/Info diagnostic (mnemonic, doc-15)\n  \
-         -Werror[=<CODE>]      promote warnings (all, or one code) to errors\n  \
+         -Wno-<CODE>           suppress a Warning/Info diagnostic. <CODE> is the mnemonic\n                        \
+                       (W-ELAB-FEATURE-LIMIT), the printed number (VITA-W3056),\n                        \
+                       or that number bare (W3056) -- every diagnostic prints the\n                        \
+                       first two, and `vita explain <CODE>` describes one\n  \
+         -Werror[=<CODE>]      promote warnings to errors: no argument or '=all' for every\n                        \
+                       warning, '=<CODE>' for one (same forms as -Wno-)\n  \
          -q, --quiet           silence terminal $display/progress (diags + --log keep all)\n  \
          -v / -vv              verbose: echo effective files/defines/incdirs (-vv reserved)\n  \
          --verbosity <0..3>    numeric form of -q/-v/-vv\n  \
          -l, --log <FILE>      tee the full transcript (RTL+diags+progress) to FILE ('-'=stderr)\n  \
          --log-append          accumulate into --log instead of overwriting\n  \
          -h, --help            print help\n  -V, --version         print version"
+    );
+    // OBSERVABILITY — listed here because a flag absent from `--help` does not
+    // exist. An external report asked for exactly what `--obs-dir` already
+    // emits, then spent six days not finding it; they got there through a
+    // sentence inside an unrelated ERROR message (`--backend bogus`), not
+    // through the help. The feature was documented only in an internal design
+    // note, which is the same as not documented.
+    println!(
+        "\nObservability (machine-readable run facts -- doc-19):\n  \
+         --obs-dir <DIR>       write run.json (backend actually used, codegen coverage and\n                        \
+                       the top reject reasons, sim_time, wall_s, PASS/FAIL) plus\n                        \
+                       results.jsonl, and coverage.json when the design has\n                        \
+                       covergroups. This is where 'why is it slow' and 'which\n                        \
+                       executor really ran' are answered\n  \
+         --probe <NET>         record every value change of a hierarchical net path to\n                        \
+                       trace.jsonl (repeatable; requires --obs-dir). Same data a\n                        \
+                       $display probe would give, with no edit to the RTL or TB\n  \
+         --hier-tree <FILE>    write the instance tree (module + instance name per line)\n  \
+         --inst-paths <FILE>   write one full dotted instance path per line"
     );
 }
 

@@ -1003,8 +1003,8 @@ pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
     struct DrainRange<'a, N: crate::eval::NetReader + ?Sized>(&'a SimState<'a>, &'a N);
     impl<N: crate::eval::NetReader + ?Sized> Drop for DrainRange<'_, N> {
         fn drop(&mut self) {
-            for unknown in self.1.take_deferred_range_kinds() {
-                self.0.warn_run_index("array word index", unknown);
+            for (net, unknown) in self.1.take_deferred_range_kinds() {
+                self.0.warn_run_index(net, "array word index", unknown);
             }
         }
     }

@@ -43,6 +43,37 @@ pub(crate) struct ResolvedOverride {
     pub(crate) str: Option<String>,
 }
 
+impl ResolvedOverride {
+    /// True when NO channel carries this override — the only case in which the
+    /// child really does keep its declared default.
+    ///
+    /// ⚠️ An override travels on THREE channels (`value` i64, `fill` unsized
+    /// literal, `str` string text) and `bind_params` applies all three. The
+    /// "not a constant; default kept" warning used to ask about `value` alone,
+    /// so `#(.MODE("Y"))` on a `parameter string` — which has no i64 value by
+    /// construction — warned that the default was kept while the override was
+    /// being applied through `str`. A diagnostic that states the opposite of
+    /// what happened is worse than none: the reader either writes a workaround
+    /// for a problem that does not exist, or distrusts a correct result.
+    /// `params.rs` asks exactly this conjunction before recording `unfoldable`;
+    /// one spelling means the warning and the escalation cannot disagree.
+    pub(crate) fn keeps_default(&self) -> bool {
+        Self::keeps_default_of(self.value, self.fill.as_ref(), self.str.as_ref())
+    }
+
+    /// [`Self::keeps_default`] on the three channels before the record exists —
+    /// the named-connection arm decides inside a closure that PRODUCES `value`,
+    /// so it cannot ask the record. Sharing the conjunction is the point: split
+    /// across two `if`s in two files it is four places to forget a channel.
+    pub(crate) fn keeps_default_of(
+        value: Option<i64>,
+        fill: Option<&(ast::IntLitKind, String)>,
+        text: Option<&String>,
+    ) -> bool {
+        value.is_none() && fill.is_none() && text.is_none()
+    }
+}
+
 /// Build the module-name map + the declaration-ordered list. First decl wins on a
 /// duplicate name (caller warns). Deterministic: single pass over `unit.items`.
 pub(crate) fn build_module_map(unit: &ast::SourceUnit) -> (ModuleMap<'_>, Vec<&ast::ModuleDecl>) {

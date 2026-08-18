@@ -642,7 +642,15 @@ pub(crate) fn run_vita_str_gated(
         timescale_unit: timescale_unit_string(rt.global_prec_exp),
         ..opts.sim_opts()
     };
+    // PHASE SPLIT. `wall_s` alone cannot answer "why is this run slow": an
+    // external report measured 16 s on a 19-file design, saw all three backends
+    // land within 5%, and concluded the executor was not helping — when the
+    // front end may have been most of the 16 s and no backend can touch it.
+    // The tool knows the boundary; it just never said where it was.
+    let elab_s = obs_start.elapsed().as_secs_f64();
+    let sim_start = std::time::Instant::now();
     let result = sim_engine::simulate(&ir, sink, sim_opts);
+    let sim_s = sim_start.elapsed().as_secs_f64();
     let code = sim_exit_code(&result);
     // A `-Werror`-promoted warning is a real Error in the post-gate stream:
     // doc-13 class 1 ("승격-warning 실패") — flip an otherwise-clean exit.
@@ -689,6 +697,8 @@ pub(crate) fn run_vita_str_gated(
             inner,
             final_code,
             obs_start,
+            elab_s,
+            sim_s,
         );
     }
     final_code
@@ -710,6 +720,8 @@ pub(crate) fn emit_obs(
     inner: &StderrSink,
     final_code: i32,
     start: std::time::Instant,
+    elab_s: f64,
+    sim_s: f64,
 ) {
     let utc_unix_s = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -759,6 +771,8 @@ pub(crate) fn emit_obs(
         native: &result.native,
         utc_unix_s,
         wall_s: start.elapsed().as_secs_f64(),
+        elab_s,
+        sim_s,
     };
     if let Err(e) = obs::write_run_dir(dir, &run) {
         eprintln!(

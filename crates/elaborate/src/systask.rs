@@ -584,10 +584,13 @@ impl Elaborator<'_> {
         ) || is_file_monitor_strobe(&name.name);
         let mut file_args_buf: Vec<ast::Expr> = Vec::new();
         let (fmt, value_args): (Option<u32>, &[ast::Expr]) = if file_fmt {
-            match args.get(1).map(|e| &e.kind) {
-                Some(ast::ExprKind::StrLit { raw }) => {
+            match args.get(1) {
+                Some(ast::Expr {
+                    kind: ast::ExprKind::StrLit { raw },
+                    span,
+                }) => {
                     fmt_raw = Some(parse_str_literal_text(raw));
-                    let cid = self.intern_const(parse_str_literal(raw));
+                    let cid = self.intern_str_literal(raw, *span);
                     let fmt_expr = self.push_expr(ir::Expr::Const { val: cid });
                     file_args_buf.push(args[0].clone());
                     file_args_buf.extend(args.iter().skip(2).cloned());
@@ -596,10 +599,13 @@ impl Elaborator<'_> {
                 _ => (None, args),
             }
         } else if takes_fmt {
-            match args.first().map(|e| &e.kind) {
-                Some(ast::ExprKind::StrLit { raw }) => {
+            match args.first() {
+                Some(ast::Expr {
+                    kind: ast::ExprKind::StrLit { raw },
+                    span,
+                }) => {
                     fmt_raw = Some(parse_str_literal_text(raw));
-                    let cid = self.intern_const(parse_str_literal(raw));
+                    let cid = self.intern_str_literal(raw, *span);
                     let fmt_expr = self.push_expr(ir::Expr::Const { val: cid });
                     (Some(fmt_expr), &args[1..])
                 }
@@ -736,10 +742,13 @@ impl Elaborator<'_> {
             args
         };
         let mut fmt_raw: Option<String> = None;
-        let (fmt, value_args): (Option<u32>, &[ast::Expr]) = match args.first().map(|e| &e.kind) {
-            Some(ast::ExprKind::StrLit { raw }) => {
+        let (fmt, value_args): (Option<u32>, &[ast::Expr]) = match args.first() {
+            Some(ast::Expr {
+                kind: ast::ExprKind::StrLit { raw },
+                span,
+            }) => {
                 fmt_raw = Some(parse_str_literal_text(raw));
-                let cid = self.intern_const(parse_str_literal(raw));
+                let cid = self.intern_str_literal(raw, *span);
                 let fmt_expr = self.push_expr(ir::Expr::Const { val: cid });
                 (Some(fmt_expr), &args[1..])
             }

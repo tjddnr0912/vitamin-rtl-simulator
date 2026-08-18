@@ -76,6 +76,7 @@ impl Elaborator<'_> {
         binding: PortBinding<'_>,
         map: &ModuleMap<'_>,
         rank_key: crate::var_init::RankKey,
+        inst_span: Option<ast::Span>,
     ) {
         // (1) CYCLE GUARD — recursive instantiation is illegal (LRM). Bail this
         //     subtree WITHOUT creating any net/Instance so the arena stays valid.
@@ -116,6 +117,20 @@ impl Elaborator<'_> {
 
         // Enter this instance's scope (restored before returning).
         let saved_prefix = std::mem::replace(&mut self.cur_prefix, inst_path.to_string());
+        // AMBIENT source anchor for this subtree: the instantiation site. Port
+        // wiring, parameter binding and every structural check happen before any
+        // statement sets `cur_span`, so without this they report no location at
+        // all — measured on picorv32: 71 diagnostics, 0 with a `file:line:col`.
+        // A statement still overrides it and restores it, so the more specific
+        // anchor always wins; this only fills the gap where nothing else can,
+        // and there is no `return` between here and the restore, so it cannot
+        // leak into the parent's scope. A ROOT has no instantiation site and
+        // falls back to its own declaration — the only source location that
+        // exists for it, and better than being the one class with no anchor.
+        let saved_span = std::mem::replace(
+            &mut self.cur_span,
+            Some(inst_span.unwrap_or(module.name.span)),
+        );
         // A module body is never "inside a generate", however it was reached. Without this
         // a child instantiated inside a generate elaborated its WHOLE body with the flag
         // stuck on, so its own module-scope block-locals were tagged as generate-owned and
@@ -916,6 +931,7 @@ impl Elaborator<'_> {
         self.prop_table = saved_props;
         self.let_table = saved_lets;
         self.cur_prefix = saved_prefix;
+        self.cur_span = saved_span;
         self.in_generate_body = saved_in_gen;
         self.rank_band = saved_band;
         self.rank_seq = saved_rank_seq;
@@ -963,6 +979,17 @@ impl Elaborator<'_> {
             match ov {
                 ast::ParamConn::Positional(e) => {
                     let value = self.const_eval_in_scope(e);
+                    // Build the record BEFORE deciding what to say about it: the
+                    // other two channels are computed from the same `e`, and the
+                    // warning below is a statement about the record.
+                    let ovr = ResolvedOverride {
+                        name: None,
+                        value,
+                        is_named: false,
+                        had_value: true,
+                        fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
+                        str: Self::param_str_literal(e),
+                    };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
                             // r19: mirror the NAMED-connection rule — a real-literal
@@ -986,23 +1013,23 @@ impl Elaborator<'_> {
                                 "a parameter override that reads a real parameter is unsupported \
                          (a real has no integral constant value)",
                             );
-                        } else {
+                        } else if ovr.keeps_default() {
                             self.warn(
-                            "parameter override expression is not a constant; child default kept",
-                        );
+                                "parameter override expression is not a constant; child default kept",
+                            );
                         }
                     }
-                    overrides.push(ResolvedOverride {
-                        name: None,
-                        value,
-                        is_named: false,
-                        had_value: true,
-                        fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
-                        str: Self::param_str_literal(e),
-                    });
+                    overrides.push(ovr);
                 }
                 ast::ParamConn::Named { name, value, .. } => {
                     // `.W()` (value None) means "keep default" → record is_named with value None.
+                    // Same shape as the positional arm: the two non-i64
+                    // channels are decided from `value` alone, so compute them
+                    // first and let the warning ask the record.
+                    let fill = value
+                        .as_ref()
+                        .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string())));
+                    let text = value.as_ref().and_then(Self::param_str_literal);
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
                         if r.is_none() {
@@ -1034,7 +1061,11 @@ impl Elaborator<'_> {
                                     "a parameter override that reads a real parameter is unsupported \
                              (a real has no integral constant value)",
                                 );
-                            } else {
+                            } else if ResolvedOverride::keeps_default_of(
+                                None,
+                                fill.as_ref(),
+                                text.as_ref(),
+                            ) {
                                 self.warn(&format!(
                                     "override of parameter `{}` is not a constant; default kept",
                                     name.name
@@ -1048,10 +1079,8 @@ impl Elaborator<'_> {
                         value: v,
                         is_named: true,
                         had_value: value.is_some(),
-                        fill: value
-                            .as_ref()
-                            .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string()))),
-                        str: value.as_ref().and_then(Self::param_str_literal),
+                        fill,
+                        str: text,
                     });
                 }
             }
@@ -1077,6 +1106,7 @@ impl Elaborator<'_> {
                 binding,
                 map,
                 (self.rank_band, item.name.span.lo, 0),
+                Some(item.span),
             );
         }
     }

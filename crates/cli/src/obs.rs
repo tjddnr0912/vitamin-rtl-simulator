@@ -9,8 +9,8 @@
 //! §2/§4. Everything here is derived from the SAME `SimResult` + diagnostic
 //! counts that drive the exit code and `$display`, so the JSON can never
 //! disagree with them (doc-19 §3: a wrong log is a silent-wrong). All fields
-//! are DETERMINISTIC except the two isolated wall-clock fields (`utc_unix_s`,
-//! `wall_s`), which a determinism golden excludes.
+//! are DETERMINISTIC except the four isolated timing fields (`utc_unix_s`,
+//! `wall_s`, `elab_s`, `sim_s`), which a determinism golden excludes.
 //!
 //! Not here (follow-ons): `sva.jsonl` (OBS-2 잔여), staged/vrun obs, a
 //! compile-fail manifest, a `--seed` flag, and a per-testcase `results`
@@ -77,6 +77,18 @@ pub struct ObsRun<'a> {
     pub utc_unix_s: u64,
     /// Isolated non-deterministic field (excluded from the determinism golden).
     pub wall_s: f64,
+    /// Wall-clock spent BEFORE `simulate` — preprocess, lex, parse, elaborate.
+    /// Isolated non-deterministic field (excluded from the determinism golden).
+    ///
+    /// ⚠️ `wall_s` alone attributes nothing. A reader comparing `--backend`
+    /// values is comparing runs whose front end is identical, so a front-end
+    /// dominated design shows every backend within noise and reads as "the
+    /// backend does not help" — which is the conclusion an external report drew
+    /// from 16 s over 593 cycles. These two fields say which half to look at.
+    pub elab_s: f64,
+    /// Wall-clock inside `simulate` — the only part `--backend` can move.
+    /// Isolated non-deterministic field (excluded from the determinism golden).
+    pub sim_s: f64,
 }
 
 /// Append `s` as a JSON string literal (quotes + minimal RFC-8259 escaping).
@@ -220,6 +232,10 @@ impl ObsRun<'_> {
         s.push_str(&self.utc_unix_s.to_string());
         s.push_str(",\n  \"wall_s\": ");
         s.push_str(&fmt_wall(self.wall_s));
+        s.push_str(",\n  \"elab_s\": ");
+        s.push_str(&fmt_wall(self.elab_s));
+        s.push_str(",\n  \"sim_s\": ");
+        s.push_str(&fmt_wall(self.sim_s));
         s.push_str("\n}\n");
         s
     }

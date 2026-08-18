@@ -27,13 +27,12 @@ pub struct GatePolicy {
     promote: BTreeSet<&'static str>,
 }
 
-/// Resolve a user-supplied mnemonic to the interned `&'static str` key of a
-/// real `MsgCode` (the exhaustive enum is the source of truth).
+/// Resolve whatever the user typed to the interned `&'static str` mnemonic of a
+/// real `MsgCode`. The ACCEPTED FORMS are `MsgCode::resolve`'s (mnemonic, or the
+/// number in either spelling) — this only projects the answer back onto the
+/// mnemonic, which stays the policy key so the sets below are unchanged.
 fn intern_mnemonic(name: &str) -> Option<&'static str> {
-    MsgCode::ALL
-        .iter()
-        .map(|c| c.mnemonic())
-        .find(|m| *m == name)
+    MsgCode::resolve(name).map(|c| c.mnemonic())
 }
 
 impl GatePolicy {
@@ -51,7 +50,10 @@ impl GatePolicy {
                     self.suppress.insert(m);
                     Ok(())
                 }
-                None => Err(format!("unknown diagnostic code '{code}' in '-Wno-'")),
+                None => Err(format!(
+                    "unknown diagnostic code '{code}' in '-Wno-' — {}",
+                    MsgCode::ACCEPTED_FORMS
+                )),
             });
         }
         if arg == "-Werror" {
@@ -59,12 +61,22 @@ impl GatePolicy {
             return Some(Ok(()));
         }
         if let Some(code) = arg.strip_prefix("-Werror=") {
+            // `--help` has always documented `-Werror[=<CODE>]` as "all, or one
+            // code", and `=all` was the one spelling of that sentence which did
+            // not work. Same meaning as the bare flag.
+            if code.eq_ignore_ascii_case("all") {
+                self.promote_all = true;
+                return Some(Ok(()));
+            }
             return Some(match intern_mnemonic(code) {
                 Some(m) => {
                     self.promote.insert(m);
                     Ok(())
                 }
-                None => Err(format!("unknown diagnostic code '{code}' in '-Werror='")),
+                None => Err(format!(
+                    "unknown diagnostic code '{code}' in '-Werror=' — {}",
+                    MsgCode::ACCEPTED_FORMS
+                )),
             });
         }
         None
