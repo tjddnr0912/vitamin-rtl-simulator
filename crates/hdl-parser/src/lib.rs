@@ -133,6 +133,25 @@ pub struct ParseError {
     pub found_span: Span,
 }
 
+/// A NON-FATAL parse observation: the construct is accepted and its value is
+/// unchanged here, but other tools read it differently — so the log has to say so.
+///
+/// Separate from [`ParseError`] on purpose: a warning must not abort the run, and a
+/// severity field on the error type would put "did this stop the parse?" and "how bad
+/// is it?" in one place, which is how a gate ends up suppressing something it should
+/// not (Error/Fatal are unsuppressible; these are `-Wno-`-able).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseWarn {
+    pub span: Span,
+    pub kind: ParseWarnKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseWarnKind {
+    /// A bit/part select whose BASE is not a variable reference (IEEE 1800 §11.5.1).
+    NonStandardSelectBase,
+}
+
 impl ParseError {
     /// The offending token as the user SPELLED it, for the `…, found X` tail.
     /// `src` is the same expanded text the parse ran on.
@@ -345,6 +364,8 @@ pub struct Parser<'t, 's> {
     pos: usize,
     src_end: u32,
     pub errors: Vec<ParseError>,
+    /// Non-fatal observations — see [`ParseWarn`]. Never gates the parse.
+    pub warnings: Vec<ParseWarn>,
     error_limit: usize,
     /// P2-5: live expression-recursion depth; capped so a pathological
     /// `((((…))))` yields a parse error instead of a stack overflow.
@@ -460,6 +481,7 @@ impl<'t, 's> Parser<'t, 's> {
             pos: 0,
             src_end: src.len() as u32,
             errors: Vec::new(),
+            warnings: Vec::new(),
             error_limit: 50,
             expr_depth: 0,
             stmt_depth: 0,
@@ -617,6 +639,29 @@ impl<'t, 's> Parser<'t, 's> {
                 found_span: at,
             });
         }
+    }
+
+    /// Record a non-fatal [`ParseWarn`]. Deduplicated by span so one source site is
+    /// reported once no matter how many times the parse revisits it.
+    ///
+    /// ⚠️ The dedup is UNREACHABLE today and measured so (`panic!` probe, 0 hits across
+    /// the suite). It is kept because this parser DOES backtrack — `expr_primary`
+    /// restores `self.pos` after a speculative `$bits(<type>)` read, and `functask`
+    /// does the same for `const ref` — and today neither speculative path reaches
+    /// `expr_postfix` before it gives up. The day one does, this latch is the only
+    /// thing between a re-parse and the same source line reported twice.
+    fn warn_select_base(&mut self, span: Span) {
+        if self
+            .warnings
+            .iter()
+            .any(|w| w.span == span && w.kind == ParseWarnKind::NonStandardSelectBase)
+        {
+            return;
+        }
+        self.warnings.push(ParseWarn {
+            span,
+            kind: ParseWarnKind::NonStandardSelectBase,
+        });
     }
 
     /// Like [`error`] but reports at an explicit `span` (e.g. a node parsed earlier).

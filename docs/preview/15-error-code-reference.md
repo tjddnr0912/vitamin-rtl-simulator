@@ -240,6 +240,32 @@ error[VITA-E2002]: unexpected token 'endmodule', expected expression  --> m.sv:3
 **해결:** 해당 위치 문법을 고친다. `--std`/`-g<year>`/`-sv` dialect가 파일과 맞는지 확인(2005↔SV
 불일치가 valid SV 토큰을 예기치 못하게 만들 수 있음). 억제 불가.
 
+### VITA-W2004 · `W-PARSE-SELECT-BASE` (Warning)
+**비트/부분 선택이 net·variable 이 아닌 것에 붙었다.** IEEE 1800-2017 §11.5.1 은 select 를
+**variable reference**(이름 · 인덱싱·멤버 선택으로 좁혀진 것 포함)에만 허용한다. vita 는 아무 primary
+에나 붙여 주므로 아래가 전부 **동작하고**, 그것이 vita 확장이다. **값은 바꾸지 않는다** — 이 경고만
+낸다(§3.2 의 `\r` 과 같은 정책: 오라클이 갈리는 곳에서 값을 바꾸면 지금 도는 설계가 조용히 깨진다).
+
+| 형태 | vita | iverilog 13 | Verilator 5.050 |
+|---|---|---|---|
+| `((a^b)>>8)[7:0]` | 동작 | 거부 | **거부** |
+| `16'hABCD[7:0]` | 동작 | 거부 | **거부** |
+| `f(a)[7:0]` | 동작 | 거부 | **동작**(같은 값) |
+| `{a,b}[7:0]` | 동작 | 거부 | **동작**(같은 값) |
+
+```
+o = ((a ^ b) >> 8)[7:0];
+warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an
+expression, not to a net or variable — …  --> m.sv:3:23
+```
+**해결:** 값을 변수에 먼저 대입하고 그 변수에서 선택한다(`logic [15:0] t = (a^b)>>8; o = t[7:0];`).
+`-Wno-W-PARSE-SELECT-BASE` 로 억제, `-Werror=` 로 승격.
+
+⚠️ **경고하지 않는 것**(전부 두 오라클 모두 동작): `a[7:0]` · `p.hi[3:0]`(packed struct 멤버 —
+파서가 part-select 로 desugar 하므로 **AST 로는 못 가른다. 판별자는 provenance**: 체인이 이름에서
+시작했는가) · `m[1][3:0]`(배열 원소). ⚠️ **아직 경고하지 않는 것 1건**: `a[7:0][3:0]`(slice-of-slice)
+는 이름에서 시작하므로 이 검사를 통과하는데 **iverilog 는 거부한다** — 별개 판별자가 필요해 남겼다.
+
 ### VITA-W2003 · `W-PARSE-IMPLICIT-NET` (Warning)
 **`default_nettype wire` 하에서 암시적 net 추론.** 미선언 식별자를 net 문맥에 써서 1-bit net으로
 암시 선언될 때(IEEE 1364 §19.2 / 1800 §22.8). `default_nettype none`이면 같은 코드가 hard error.

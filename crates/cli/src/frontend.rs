@@ -278,7 +278,33 @@ pub(crate) fn frontend_pp_to_unit_mapped(
     }
 
     // ── parse ─────────────────────────────────────────────────────────────
-    let (unit, parse_errors) = hdl_parser::parse(&tokens, expanded);
+    let (unit, parse_errors, parse_warns) = hdl_parser::parse_with_warnings(&tokens, expanded);
+    // Emitted BEFORE the error gate below: a portability warning is about a construct
+    // that parsed fine, so a syntax error elsewhere in the file must not swallow it.
+    for w in &parse_warns {
+        let msg = match w.kind {
+            hdl_parser::ParseWarnKind::NonStandardSelectBase => {
+                "a bit/part select here applies to an expression, not to a net or \
+                 variable — IEEE 1800-2017 §11.5.1 allows one only on a variable \
+                 reference (a name, possibly indexed or member-selected). vita accepts \
+                 it; iverilog rejects every form of it and Verilator rejects a select \
+                 on a parenthesised expression or on a literal. Assign the value to a \
+                 variable first, then select from that"
+            }
+        };
+        sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code: MsgCode::ParseSelectBase,
+            message: msg.to_string(),
+            location: Some(loc_from_span(
+                &pp.map,
+                w.span.lo as usize,
+                w.span.hi as usize,
+            )),
+            context: Vec::new(),
+            sim_time: None,
+        }));
+    }
     if !parse_errors.is_empty() {
         for e in &parse_errors {
             // The spelling comes from the token's own span, never `{found:?}` —

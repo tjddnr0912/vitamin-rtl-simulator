@@ -277,35 +277,30 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 > 3판은 §3.2(문자열 escape) · §3.4(거짓 W3056) · §3.8(코드 키) · §3.9(`--help`) · §3.10(위치) ·
 > §3.11의 보고 절반을 §4.5.341이 닫았다. 아래는 **다른 클래스**라 분리한 잔여다.
 
-- **⭐ §3.1 vita가 받는데 xrun이 거부하는 세 형태 — 세 오라클로 재현 완료(2026-08-18).**
-  리포터가 "가장 비싸다"고 한 부류다: vita로 전부 green → sign-off에서만 터진다. **요청은 error가
-  아니라 warning** — 지금 도는 설계를 깨지 않으면서 silent→loud로 올리는 유일한 형태다.
-  | 형태 | vita | iverilog 13 | verilator 5.050 | xrun 24.03 |
+- **✅ §3.1 (a)(b) RESOLVED — 이식성 경고 `W2004` (2026-08-18 · 클리어 순서 4번) · ⚠️ (c) 는 잔여.**
+  ⭐⭐ **재측정이 리포트를 넓히고 갈랐다** — select 축은 **네 형태**이고 사이트는 **하나**다
+  (`hdl-parser/expr.rs` 의 postfix 루프가 base 의 종류를 안 본다 · IEEE 1800 §11.5.1 은 select 를
+  **variable reference** 에만 허용).
+  | 형태 | vita | iverilog 13 | verilator 5.050 | 처분 |
   |---|---|---|---|---|
-  | (a) 괄호식에 part-select `((a^b)>>8)[7:0]` | **통과** `o=12` errors=0 | **syntax error** | **syntax error** | `*E,EXPRPA` |
-  | (b) 함수 결과에 part-select `f(a)[3:0]` | **통과** `o=5` errors=0 | **syntax error** | 통과 | `*E,EXPRPA`/`*E,LTBDE3` |
-  | (c) `always_comb` 구동 변수의 선언 초기화자 | **통과** `rdy=1` errors=0 | 통과 | **`MULTIDRIVEN` error**(IEEE 1800-2023 §9.2.2.2 인용) | `*E,MULAXX` |
-  ⭐ **(a)는 셋 다 거부하고 vita만 받는다** — IEEE 1800 §11.5.1의 select는 net/variable에 붙지
-  임의의 식에 붙지 않으므로, vita가 도는 것은 **자기가 지어낸 확장**이다(옳은 값이 없으므로
-  loud화는 사다리 하강이 아니다). (b)·(c)는 2:1이라 근거가 표준 인용 쪽에 있다.
-  ⚠️ **착수 시 주의**: (a)/(b)는 파서 층(비-식별자 primary에 붙는 select), (c)는 elaborate 층
-  (`always_comb` 타깃 ∩ 선언 초기화자를 가진 변수 — 감도 리스트 합성이 이미 그 집합을 안다).
-  둘은 다른 층이므로 한 슬라이스에 묶지 마라.
-  ⭐⭐ **2026-08-18 재측정 — select 축은 넷이고 오라클이 둘로 갈린다**(위 표의 (a)/(b)를 대체·확장).
-  사이트는 **하나**다(`hdl-parser/src/expr.rs` 의 postfix 루프 `LBracket => parse_select(e)` — base 의
-  종류를 **안 본다**). IEEE 1800 §11.5.1 은 select 를 **net/variable** 에만 허용한다:
-  | base | vita | iverilog 13 | verilator 5.050 |
-  |---|---|---|---|
-  | `a[7:0]`(넷)·`m[1][7:0]`(원소) | 통과 | **통과** | 통과 |
-  | (a) `((a^b)>>8)[7:0]` | 통과 `12` | REJECT | **REJECT** |
-  | `16'hABCD[7:0]`(리터럴) ⭐신규 | 통과 `cd` | REJECT | **REJECT** |
-  | (b) `f(a)[7:0]` | 통과 `35` | REJECT | **통과 `35`** |
-  | `{a,b}[7:0]`(concat) ⭐신규 | 통과 `ff` | REJECT | **통과 `ff`** |
-  ⚠️⚠️ **그래서 넷을 같은 처분으로 다루면 안 된다** — (a)·리터럴은 **세 오라클 전부 거부**(vita 가 지어낸
-  확장 ⇒ loud 가 안전)지만 **(b)·concat 은 verilator 가 받고 값도 같다**(⇒ 거부하면 verilator-호환
-  코드에 대해 **사다리 하강**). ⭐ **답은 §3.2 의 `\r` 과 같은 모양이다: 값은 그대로 두고 이식성 경고**
-  (경고는 하강이 아니다 · 리포터의 요청도 error 가 아니라 warning 이었다). ⚠️ 넷 다 xrun 재측정 필요
-  (리포터는 (a)/(b)만 쟀다).
+  | `((a^b)>>8)[7:0]` · `16'hABCD[7:0]` | 동작 | 거부 | **거부** | **W2004** |
+  | `f(a)[7:0]` · `{a,b}[7:0]` | 동작 | 거부 | **동작(같은 값)** | **W2004** |
+  ⚠️⚠️ **넷을 같은 처분으로 다루면 안 된다** — 뒤의 둘은 verilator 가 **같은 값으로 받으므로** 거부하면
+  오늘 이식 가능한 코드에 **사다리 하강**이다 ⇒ **값은 그대로 두고 경고**(§3.2 의 `\r` 과 같은 정책 ·
+  리포터 요청도 error 가 아니라 warning 이었다). ⭐⭐ **판별자가 AST 가 아니라 provenance 인 이유를
+  실측이 강제했다** — packed struct 멤버 `p.hi` 를 **바로 그 파서 루프가 part-select 로 desugar** 하므로
+  AST 가 생기고 나면 `p.hi[3:0]`(모든 툴이 받음)과 `a[7:0][3:0]` 이 **같은 모양**이다. *"체인이 이름에서
+  시작했는가"* 는 파서 안에서만 알 수 있다. ⚠️ 파서에 경고 채널이 없어 **`ParseWarn` 신설**(에러와 별개
+  채널 — 경고가 파스를 중단시키면 안 되고, 에러 타입에 severity 를 얹으면 *"파스를 멈췄나"* 와 *"얼마나
+  나쁜가"* 가 한 자리에 섞인다) · **에러 게이트보다 먼저 발행**(다른 곳의 구문 오류가 이식성 경고를 삼키면
+  안 된다) · ⚠️ **`parse()` 의 arity 는 안 바꿨다** — 넓혔더니 **테스트 44곳**이 걸렸다(한 소비자를 위해
+  44곳을 `_` 로 고치는 것은 잘못된 거래) ⇒ **`parse_with_warnings()`** 를 별도 진입점으로.
+  **MsgCode 67 → 68** · doc-15 항목 · 앵커 = `cli/tests/select_base_portability.rs` **4건**(억제·승격
+  **3 철자** 확인 포함) · **뮤테이션 4 중 3 사망 · 1 도달 불가(프로브 0 히트)**. ⚠️ **아직 경고하지
+  않는 것 1건**: `a[7:0][3:0]`(slice-of-slice)은 이름에서 시작해 통과하는데 **iverilog 는 거부한다** —
+  별개 판별자가 필요해 남겼다(doc-15 에 기록).
+  ⚠️⚠️ **잔여 = (c) `always_comb` 구동 변수의 선언 초기화자**(verilator `MULTIDRIVEN` error · xrun
+  `*E,MULAXX` · iverilog 는 실행 = **2:1**). elaborate 층이고 감도 리스트 합성이 그 집합을 이미 안다.
 
 - **✅ §3.3 RESOLVED (2026-08-18 · 클리어 순서 3번)** — 넓은(>64bit) `localparam` 이 **캐리 없는**
   연산으로 접힌다. ⭐ **원인은 도메인이 아니라 arm 이었다** — `>64bit` 도메인(`wide_param_bits`·
@@ -411,7 +406,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~1~~ | ✅ **§3.5-① 완료(2026-08-18)** | `4*16`·`LP`·`LP/2`·`$clog2(LP)`·⭐`'1` — **FIXED 5 · 회귀 0** | — | 답은 arm 이 아니라 **한 철자**(`repeat_unroll_count` 를 lowering·분류기가 공유) · 뮤테이션 **8/8** |
 | ~~2~~ | ✅ **§3.6-① 완료(2026-08-18)** | verilator 6/6 일치 · bare-이름 = 클럭된 불리언까지 | — | 센티넬은 이미 있었다(`assert property(NAME)`) · 드레인 한 자리 · 뮤테이션 7/7 |
 | ~~3~~ | ✅ **§3.3 완료(2026-08-18)** | 9 형태가 iverilog 바이트 일치 | — | admission = **캐리 없음** · 이름은 `walk_scopes_key` 한 철자 · 뮤테이션 9/10 + 도달불가 1 |
-| **4** | **§3.1 이식성 경고** | select 축 **4형태**(리포트는 2형태만 봤다) | **없음** | `hdl-parser/expr.rs` postfix 루프 **한 사이트** + IEEE §11.5.1 술어 · ⚠️ **거부가 아니라 경고**(오라클이 갈린다) |
+| ~~4~~ | ✅ **§3.1 (a)(b) 완료(2026-08-18)** | 4형태 경고 · 값 불변 · 정당한 3형태 경고 0 | — | 판별자는 AST 가 아니라 **provenance**(멤버가 part-select 로 desugar 된다) · `W2004` · 뮤테이션 3/4 + 도달불가 1 · ⚠️ **(c) 는 잔여** |
 | **5** | **§3.7 static task 의 `string` formal** | `task t(input string s)` | **없음**(설계가 주석에 적혀 있다) | `inline_task.rs:263` — **String-kind snapshot local** |
 | **P1** | ⭐⭐ **order-INDEPENDENT AST-gathered per-scope name set** | **셋을 한꺼번에** | 이것이 **유일한 큰 선행조건** | §2 DEEP(inner-NET shadow) + §4.5.276 후속①(`for` trip-count) + **§3.5-② `repeat (LP)`** |
 | **6** | **§3.5-③ `repeat (m_n)`** | 모듈 넷 카운트 | 프레임 subset 에 **런타임 카운터** | `lower_repeat` 의 다운카운터가 프레임 지역이라 subset 이 거부 |

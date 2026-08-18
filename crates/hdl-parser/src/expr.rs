@@ -293,9 +293,30 @@ impl Parser<'_, '_> {
     /// primary, then postfix loop: [idx]/[m:l]/[b+:w]; call(args) handled in primary.
     pub(crate) fn expr_postfix(&mut self) -> Expr {
         let mut e = self.expr_primary();
+        // IEEE 1800-2017 §11.5.1: a bit/part select applies to a NET or VARIABLE, i.e.
+        // to a name — possibly narrowed further by array indexing or member access,
+        // which keeps it one. This parser attaches a select to ANY primary, so
+        // `((a^b)>>8)[7:0]`, `f(a)[7:0]`, `{a,b}[7:0]` and `16'hABCD[7:0]` all run here
+        // and are a vita extension. Measured: iverilog 13 rejects all four; verilator
+        // 5.050 rejects the first and last and ACCEPTS the middle two with vita's value.
+        // So the answer is the one §3.2 reached for `\r` — keep the value, say that the
+        // spelling is not portable — and NOT a refusal, which would descend the ladder
+        // for the two forms that are portable to verilator today.
+        //
+        // ⚠️ The test is PROVENANCE, and it has to be: a packed-struct member access
+        // (`p.hi`) is desugared to a part-select by THIS loop, so by the time the AST
+        // exists `p.hi[3:0]` (which every tool accepts) and `a[7:0][3:0]` are the same
+        // shape. Only here is it still known that the chain began at a name.
+        let from_name = matches!(e.kind, ExprKind::Ident(_));
         loop {
             match self.peek() {
-                Some(TokenKind::LBracket) => e = self.parse_select(e),
+                Some(TokenKind::LBracket) => {
+                    if !from_name {
+                        let span = e.span;
+                        self.warn_select_base(span);
+                    }
+                    e = self.parse_select(e)
+                }
                 // N6B: a METHOD call on an indexed array ELEMENT (`files[i].len()`,
                 // `arr[k].substr(a,b)`). A `name[idx]` select followed by `.ident(` is a
                 // method on the element, NOT a hierarchical generate-array reference
