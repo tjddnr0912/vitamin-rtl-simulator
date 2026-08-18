@@ -506,12 +506,25 @@ struct Elaborator<'s> {
     /// silently turns into 0.0.
     real_param_val: BTreeMap<String, f64>,
     /// FQ keys of nets created by the v1 procedural block-local FLATTEN
-    /// (`hoist_block_local_nets`). Such a net is one process's private variable
-    /// published under the enclosing prefix's bare name, so it must NOT count as a
-    /// scope shadow of an outer constant — inside a generate block its key differs
-    /// from the module constant's, which would otherwise make every other reader in
-    /// that scope resolve to it.
-    hoisted_block_local: BTreeSet<String>,
+    /// (`hoist_block_local_nets`) → the SOURCE SPAN of each declaring block.
+    ///
+    /// Such a net is one process's private variable published under the enclosing
+    /// prefix's bare name, so it must not count as a scope shadow of an outer constant
+    /// for readers OUTSIDE its block — inside a generate block its key differs from the
+    /// module constant's, and treating it as a shadow made every other reader in that
+    /// scope (a sibling `initial`, a continuous assign, an inner generate) resolve to
+    /// one process's private variable.
+    ///
+    /// ⚠️ It DOES shadow for readers inside the block, which is what the plain set
+    /// could not express: `localparam N = 7; initial begin : blk int N; N = 3;
+    /// $display(N); end` printed 7 where iverilog prints 3, while a sibling `initial`
+    /// reading `N` must still print 7 (both measured). The span range is the
+    /// discriminator, and it is an ORDER-INDEPENDENT AST fact — the property ROADMAP §2
+    /// asked for — so nothing here depends on how far elaboration has got.
+    ///
+    /// A `Vec` per key because same-named locals in DISJOINT blocks coalesce onto one
+    /// flattened net (v1 flatten model): each range is one block that declares it.
+    hoisted_block_local: BTreeMap<String, Vec<(u32, u32)>>,
     /// §4.5.248: the per-entry (`automatic`) block-local NAMES currently in scope
     /// during the Nets-phase hoist walk, so a NESTED block's STATIC initializer can be
     /// checked against an OUTER block's automatic (see

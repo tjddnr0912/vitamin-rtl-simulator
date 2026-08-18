@@ -94,7 +94,7 @@ impl<'s> Elaborator<'s> {
             param_range: BTreeMap::new(),
             str_param_raw: BTreeMap::new(),
             real_param_val: BTreeMap::new(),
-            hoisted_block_local: BTreeSet::new(),
+            hoisted_block_local: BTreeMap::new(),
             per_entry_in_scope: BTreeSet::new(),
             frame_fn_lowering: false,
             sformatf_expr_ok: false,

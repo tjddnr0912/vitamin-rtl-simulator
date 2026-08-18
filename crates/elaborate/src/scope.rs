@@ -40,6 +40,39 @@ impl Elaborator<'_> {
     /// for the visibility rule, so key-level consumers (the modport
     /// read-only check, the iface-instance lookup) can never drift from the
     /// value-level lookups.
+    /// Does a HOISTED procedural block-local at `key` cover a reader at `at`? — i.e.
+    /// is the reader lexically inside a block that declares it?
+    ///
+    /// `false` for a key that is not a hoisted block-local at all. Distinct from
+    /// [`Self::block_local_covers`], which answers the wider "may this net shadow?"
+    /// and says yes for an ordinary net; this one is the positive fact, and it is what
+    /// lets a block-local win against a constant sitting on the SAME key.
+    pub(crate) fn block_local_declared_at(&self, key: &str, at: ast::Span) -> bool {
+        self.hoisted_block_local
+            .get(key)
+            .is_some_and(|rs| rs.iter().any(|(lo, hi)| at.lo >= *lo && at.hi <= *hi))
+    }
+
+    /// May a net bound at `key` shadow an outer constant for a reader at `at`?
+    ///
+    /// `true` for an ordinary net — the answer is just "yes, an inner net wins"
+    /// (§23.9). For one the v1 flatten HOISTED out of a procedural block it depends on
+    /// where the reader is: the net is published under the enclosing prefix's bare
+    /// name, so the binding it appears to make is wider than the block that declared
+    /// it. A reader inside that block sees the local; one outside must still see the
+    /// constant.
+    ///
+    /// The test is a SOURCE SPAN containment, which makes it independent of how far
+    /// elaboration has progressed — the property ROADMAP §2 required of this fix, and
+    /// the reason the alternative (probing `symbols`, populated DURING elaboration)
+    /// once deleted a whole generate body silently.
+    pub(crate) fn block_local_covers(&self, key: &str, at: ast::Span) -> bool {
+        match self.hoisted_block_local.get(key) {
+            None => true,
+            Some(ranges) => ranges.iter().any(|(lo, hi)| at.lo >= *lo && at.hi <= *hi),
+        }
+    }
+
     pub(crate) fn walk_scopes_key(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String> {
         self.walk_scopes_key_inner(name, hit, false)
     }
@@ -430,7 +463,8 @@ impl Elaborator<'_> {
         // any body is lowered. Skipping under-detects a real use-before-declaration of
         // a name that is ALSO a block-local; that is the safe direction, since the
         // alternative rejects legal code.
-        if self.hoisted_block_local.contains(&own_key) || self.decl_block_locals.contains(name) {
+        if self.hoisted_block_local.contains_key(&own_key) || self.decl_block_locals.contains(name)
+        {
             return;
         }
         self.error(

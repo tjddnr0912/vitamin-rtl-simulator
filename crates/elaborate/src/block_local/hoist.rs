@@ -610,7 +610,13 @@ impl Elaborator<'_> {
         // up one process's private variable instead of the constant.
         for n in &d.names {
             let k = self.fq(&n.name.name);
-            self.hoisted_block_local.insert(k);
+            // `span` is the DECLARING BLOCK's, not the declaration's: a reader inside
+            // that range sees this local, one outside sees whatever the enclosing scope
+            // binds. Recorded here because this is the only place that knows both.
+            self.hoisted_block_local
+                .entry(k)
+                .or_default()
+                .push((span.lo, span.hi));
         }
         // Review S2: if THIS BLOCK has a `$blk$` scope, every one of its declaration
         // initializers goes into that group — not just the scoped names. Splitting them

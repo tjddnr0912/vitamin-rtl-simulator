@@ -176,6 +176,13 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 > ⚠️ 상태 확인 필요: §4.5.246 이 *"inner NET shadow — 마지막 ①-급 해소"* 로 기록돼 있어(문서 머리 §5)
 > 남은 것이 어느 형태인지 **착수 전 오라클로 재현**해야 한다.
 
+- **파라미터와 넷을 같은 이름으로 선언하면 vita 만 받는다**(pre-existing · PRE==POST · **두 오라클 모두 거부** ·
+  P1 슬라이스가 발굴). `localparam N = 7; logic [3:0] N;` 를 iverilog 는 *"'N' has already been declared
+  in this scope"*, verilator 는 *"Duplicate declaration of signal"* 로 거부하는데 vita 는 받고 이름을
+  **파라미터로** 해석한다(`r=7`). §3.1 과 같은 부류(**vita 가 지어낸 확장**)이므로 loud 화는 사다리
+  하강이 아니다. ⚠️ 그 답이 shadow 규칙의 `!params` 절이 유일하게 관측되는 자리라, 지금은 **불변임을
+  핀**해 뒀다(`block_local_shadows_param.rs`).
+
 - **🔴 파라미터의 PART-SELECT 를 폭 바운드로 쓰면 조용히 1비트가 된다**(pre-existing · PRE==POST ·
   오라클 ✓ iverilog · §3.3 슬라이스가 발굴). `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;`
   가 vita `$bits(v)=1` / iverilog **239**. 전체 파라미터(`logic [W-1:0]`)는 정상이므로 갈리는 것은
@@ -425,7 +432,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~3~~ | ✅ **§3.3 완료(2026-08-18)** | 9 형태가 iverilog 바이트 일치 | — | admission = **캐리 없음** · 이름은 `walk_scopes_key` 한 철자 · 뮤테이션 9/10 + 도달불가 1 |
 | ~~4~~ | ✅ **§3.1 (a)(b) 완료(2026-08-18)** | 4형태 경고 · 값 불변 · 정당한 3형태 경고 0 | — | 판별자는 AST 가 아니라 **provenance**(멤버가 part-select 로 desugar 된다) · `W2004` · 뮤테이션 3/4 + 도달불가 1 · ⚠️ **(c) 는 잔여** |
 | ~~5~~ | ✅ **§3.7 INPUT 완료(2026-08-18)** | 6형태 iverilog 일치 + `StrCmp` 라우팅 | — | 수정은 **넷 종류 하나**(`frame_local_net_kind`) · 뮤테이션 5/5 · ⚠️ **output/inout 은 좁혀서 잔여** |
-| **P1** | ⭐⭐ **order-INDEPENDENT AST-gathered per-scope name set** | **셋을 한꺼번에** | 이것이 **유일한 큰 선행조건** | §2 DEEP(inner-NET shadow) + §4.5.276 후속①(`for` trip-count) + **§3.5-② `repeat (LP)`** |
+| ~~P1~~ | ✅ **완료(2026-08-18)** — ⚠️ **census 가 범위를 셋에서 하나로 줄였다**(나머지 둘은 이미 열려 있었다) | inner-NET shadow · 6형태 iverilog 일치 · **generate 바디 삭제 재발 없음** | — | ⭐ 필요했던 것은 이름 집합이 아니라 **선언 블록의 SPAN**(`hoist_block_local_nets` 가 이미 들고 있었다 · span 은 order-independent AST 사실) · 뮤테이션 6/6 |
 | **6** | **§3.5-③ `repeat (m_n)`** | 모듈 넷 카운트 | 프레임 subset 에 **런타임 카운터** | `lower_repeat` 의 다운카운터가 프레임 지역이라 subset 이 거부 |
 | **7** | **§3.6-② `default disable iff`** | 파싱조차 안 됨 | 파서 + property lowering | `E2002` |
 | **8** | **§3.11 `function automatic` 인라인** | 암호 RTL 의 기본형 | 적격 술어 — ⚠️ `compute_suspendable_tasks` 와 **같은 축**(두 번째 철자 금지) | `user_call_in_expr` 거부 87% |

@@ -229,9 +229,17 @@ impl Elaborator<'_> {
                         // binding is a net that is NOT itself a parameter; resolution
                         // then falls to `resolve_net`, which is what the comment above
                         // always intended.
+                        // ⚠️ The `!params` clause alone is not the question, because the
+                        // v1 flatten publishes a module-level block-local under the BARE
+                        // name — landing on the very key the constant already occupies,
+                        // so `symbols` AND `params` both hold it and the net (which the
+                        // VCD shows, and which the block's own `N = 3` writes to) could
+                        // never win. A reader INSIDE the declaring block must resolve to
+                        // that net even then; one outside must still see the constant.
                         if self.symbols.contains_key(&key)
-                            && !self.params.contains_key(&key)
-                            && !self.hoisted_block_local.contains(&key)
+                            && (self.block_local_declared_at(&key, e.span)
+                                || (!self.params.contains_key(&key)
+                                    && self.block_local_covers(&key, e.span)))
                         {
                             local_shadows_param = true;
                         }
