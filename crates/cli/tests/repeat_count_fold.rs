@@ -91,44 +91,50 @@ fn a_fill_literal_count_is_one_iteration_and_the_classifier_agrees() {
 }
 
 #[test]
-fn a_count_sv_truncates_is_never_folded_by_the_unlimited_domain() {
-    // `4'd15 + 4'd1` is ZERO at four bits (iverilog runs the body zero times); the
-    // width-unlimited i64 domain would say 16. Folding it would be a WRONG NON-ZERO
-    // count — worse than the refusal. `const_bound_u32`'s width-exactness guard
-    // declines, which leaves it on the runtime-counter path: loud here, not wrong.
+fn a_count_sv_truncates_runs_the_truncated_number_of_times() {
+    // INVERTED 2026-08-19, and STRONGER. This used to assert the refusal plus "and
+    // never the unlimited-domain value 16". The count now reaches the runtime counter,
+    // which evaluates it at its SELF width (§11.6) — so `4'd15 + 4'd1` is 0 at four
+    // bits, exactly iverilog's answer. The old negative assertion is kept: 16 is what
+    // the width-unlimited fold would say, and it must still never appear.
     let out = run(&design("4'd15+4'd1"));
     assert!(
-        out.contains("E3009"),
-        "a width-truncating count must stay OUT of the strong domain:\n{out}"
+        out.contains("c=0"),
+        "SV truncates to 0 at four bits:\n{out}"
     );
     assert!(
         !out.contains("c=16"),
-        "…and must never produce the unlimited-domain value 16:\n{out}"
+        "…never the unlimited-domain value:\n{out}"
     );
+    // The wider spelling of the same rule (ROADMAP §2, fixed by this slice): 300 at
+    // eight bits is 44.
+    let w = run(&design("8'd200+8'd100"));
+    assert!(w.contains("c=44"), "8-bit wrap, iverilog's answer:\n{w}");
+    assert!(!w.contains("c=300"), "…not the unwrapped 300:\n{w}");
 }
 
 #[test]
-fn a_variable_count_stays_loud_and_the_message_names_the_repeat() {
-    // A module net read at run time genuinely needs the shared `$repeat_cnt$` counter,
-    // which concurrent activations would corrupt. Still loud — but the diagnostic must
-    // say WHICH construct, because "a frame-local unpacked ARRAY / a `wait`/`repeat`
-    // reading a frame-local" describes neither a localparam nor a module net, and that
-    // is what sent the reporter after the wrong fix twice.
+fn a_variable_count_runs_with_a_per_activation_counter() {
+    // INVERTED 2026-08-19. A runtime count needed a counter net, and that net was
+    // MODULE-scope — which concurrent activations of a suspendable task would share,
+    // so the task was refused. The reservation pass now puts a FRAME-LOCAL counter
+    // aside for each such `repeat`, which removes the hazard instead of diagnosing it.
     let out = run(&design("m_n"));
-    assert!(out.contains("E3009"), "variable count stays loud:\n{out}");
-    assert!(
-        out.contains("`repeat`"),
-        "the message must name the `repeat` as the cause:\n{out}"
+    assert!(out.contains("c=64"), "a module-net count now runs:\n{out}");
+    assert!(!out.contains("E3009"), "no longer loud:\n{out}");
+}
+
+#[test]
+fn two_concurrent_activations_do_not_share_the_counter() {
+    // THE discriminator for "frame-local", and the only one: with a module-scope
+    // counter both activations decrement the same net, so the counts cross. Two forked
+    // calls with different counts must each finish their own (iverilog: 3 and 5).
+    let out = run(
+        "module tb;\n         \x20 logic clk = 0; int n1 = 3, n2 = 5; int a, b;\n         \x20 always #1 clk = ~clk;\n         \x20 task automatic t(input int n, output int o);\n         \x20   begin o = 0; repeat (n) begin @(posedge clk); o = o + 1; end end\n         \x20 endtask\n         \x20 initial fork t(n1, a); t(n2, b); join_none\n         \x20 initial begin #20; $display(\"c=%0d %0d\", a, b); $finish; end\n         endmodule\n",
     );
     assert!(
-        out.contains("repeat (LP)"),
-        "…and must say a folded constant count IS supported, so the reader stops \
-         rewriting correct constants:\n{out}"
-    );
-    // The count must NOT be silently folded to the net's declaration-time value.
-    assert!(
-        !out.contains("c="),
-        "no value may be produced at all:\n{out}"
+        out.contains("c=3 5"),
+        "each activation must count its own (iverilog: 3 5):\n{out}"
     );
 }
 
@@ -164,22 +170,21 @@ fn a_variable_count_outside_a_frame_still_runs_the_runtime_counter() {
 }
 
 #[test]
-fn a_constant_count_above_the_unroll_cap_stays_on_the_runtime_path() {
-    // DISCRIMINATOR for the unroll cap (`REPEAT_UNROLL_CAP` = 1024). A folded count
-    // is only unrolled while the cap allows it; above it the desugar falls back to the
-    // shared counter net, which this subset cannot host — so the task stays loud.
-    // iverilog runs it (c=2048), so this is an honest-loud boundary, not a value gap:
-    // without the cap the elaborator would emit 2048 copies of the body.
+fn a_constant_count_above_the_unroll_cap_runs_on_the_runtime_counter() {
+    // INVERTED 2026-08-19. The unroll cap (1024) still applies — a count above it is
+    // NOT unrolled — but the runtime counter it falls back to is now a per-activation
+    // FRAME-LOCAL, so the suspendable task hosts it instead of refusing. iverilog runs
+    // 2048 and so does this.
     let out = run(&design("LP*32")); // 2048
     assert!(
-        out.contains("E3009"),
-        "a count over the unroll cap must not be unrolled:\n{out}"
+        out.contains("c=2048"),
+        "must run the iverilog count:\n{out}"
     );
-    assert!(!out.contains("c=2048"), "…and must not run:\n{out}");
-    // Directly under the cap it DOES fold and run — so the assertion above is about the
-    // cap, not about `LP*32` being unfoldable.
-    let ok = run(&design("LP*16")); // 1024, exactly at the cap
-    assert!(ok.contains("c=1024"), "at the cap it still unrolls:\n{ok}");
+    assert!(!out.contains("E3009"), "no longer loud:\n{out}");
+    // At the cap it is UNROLLED instead — a different mechanism reaching the same
+    // number, which is what keeps the cap itself under test.
+    let ok = run(&design("LP*16")); // 1024
+    assert!(ok.contains("c=1024"), "at the cap it unrolls:\n{ok}");
 }
 
 #[test]
@@ -204,4 +209,39 @@ fn the_general_backstop_names_its_own_class_not_the_repeat() {
         !cause.contains("`repeat`") && !cause.contains("local to this task"),
         "…and must not borrow another predicate's noun:\n{cause}"
     );
+}
+
+#[test]
+fn a_narrow_signed_count_keeps_its_sign() {
+    // DISCRIMINATOR for the self-width seal's `!signed` guard. The seal ZERO-extends,
+    // which is right for an unsigned count and would turn `-4'sd1` (4'b1111) into 15.
+    // A negative count runs the body zero times (§12.7.3) and iverilog agrees, so the
+    // signed case must be left alone and let the signed 32-bit counter's `> 0` test
+    // answer. `4'sd3` in the same shape proves the arm is not simply skipped.
+    for (expr, want) in [("-4'sd1", "c=0"), ("-3'sd2", "c=0"), ("4'sd3", "c=3")] {
+        let out = run(&format!(
+            "module tb; int c;\n             \x20 initial begin c=0; repeat ({expr}) c=c+1; $display(\"c=%0d\", c); end\n             endmodule\n"
+        ));
+        assert!(
+            out.contains(want),
+            "`repeat ({expr})` must give {want}:\n{out}"
+        );
+    }
+}
+
+#[test]
+fn a_nested_runtime_repeat_gets_its_own_counter() {
+    // DISCRIMINATOR for the reservation walking INTO a `repeat`'s body: the inner one
+    // needs its own frame-local counter, and if the walk stops at the outer `repeat`
+    // the inner falls to the module net — which the lowering-site backstop then
+    // refuses, so the failure is loud rather than wrong. Either way this design must
+    // run and count 2 x 2 (iverilog: 4).
+    let out = run(
+        "module tb; logic clk = 0; int n = 2, c; always #1 clk = ~clk;\n         \x20 task automatic t;\n         \x20   begin c = 0; repeat (n) repeat (n) begin @(posedge clk); c = c + 1; end end\n         \x20 endtask\n         \x20 initial begin t(); $display(\"c=%0d\", c); $finish; end\n         endmodule\n",
+    );
+    assert!(
+        out.contains("c=4"),
+        "nested runtime repeats each count (iverilog: 4):\n{out}"
+    );
+    assert!(!out.contains("E3009"), "…and neither is refused:\n{out}");
 }

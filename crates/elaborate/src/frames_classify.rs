@@ -542,13 +542,20 @@ impl Elaborator<'_> {
     pub(crate) fn ast_has_repeat_with_timing(&self, stmt: &ast::Stmt) -> bool {
         use ast::Stmt as S;
         match stmt {
-            S::Repeat { count, body, .. } => {
+            S::Repeat { count, body, span } => {
                 // r18 (C1): a const-small `repeat(N)` is straight-UNROLLED by `lower_repeat`
                 // (no runtime counter), so its timing is safe across suspends — only a
                 // NON-const / large count desugars to the shared `$repeat_cnt$` net whose
                 // value would corrupt across concurrent activations. So flag the timing only
                 // when the count is NOT a const the unroller would consume.
-                let unrolled = self.repeat_unroll_count(count).is_some();
+                // A non-unrolled count now gets a FRAME-LOCAL counter
+                // (`reserve_frame_repeat_counters`), which is per activation — so the
+                // cross-activation hazard this flag existed for is gone and the only
+                // remaining question is whether the counter net is frame-local at all.
+                // It is, for every `repeat` the reservation pass saw, which is every
+                // one in this body.
+                let unrolled = self.repeat_unroll_count(count).is_some()
+                    || self.frame_repeat_cnt.contains_key(&(span.lo, span.hi));
                 (!unrolled && Self::ast_stmt_has_timing(body))
                     || self.ast_has_repeat_with_timing(body)
             }

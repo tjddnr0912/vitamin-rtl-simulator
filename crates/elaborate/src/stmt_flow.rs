@@ -637,6 +637,7 @@ impl Elaborator<'_> {
         b: &mut ProcessBuilder,
         count: &ast::Expr,
         body: &ast::Stmt,
+        span: ast::Span,
     ) {
         // The unroll decision lives in `repeat_unroll_count` because the CLASSIFIER
         // (`ast_has_repeat_with_timing`) has to reach the same answer — see that
@@ -655,7 +656,37 @@ impl Elaborator<'_> {
                 // negative/zero count runs the body zero times. (Previously this
                 // warned and OMITTED the body — `repeat(n)` with a variable `n`
                 // silently ran zero times.)
-                let cnt_net = {
+                // A FRAME-LOCAL counter when the reservation pass put one aside for
+                // this exact `repeat` (span-keyed — see `reserve_frame_repeat_counters`
+                // for why the key is the span and not the visitation order). Per
+                // activation, so concurrent activations of a suspendable task no longer
+                // share it. Outside a frame body the map is empty and this is the module
+                // net it always was — byte-identical for every design that worked.
+                // ⚠️⚠️ FAIL-CLOSED AT THE LOWERING SITE, not in a second walk. The
+                // reservation pass and the suspendable-task classifier walk the same
+                // tree with the same statement arms, so a `repeat` under a kind BOTH
+                // miss would be neither reserved nor refused — and would then quietly
+                // take the module counter inside a frame, which concurrent activations
+                // share. Asking here, where the desugar actually happens, has no blind
+                // spot: if this body is a frame body and no counter was put aside for
+                // this exact span, the reservation did not see it and the honest answer
+                // is loud.
+                //
+                // ⚠️ UNREACHABLE today and measured so (`panic!` probe, 0 hits across the
+                // suite) — the two walks do agree right now. It is kept because the day
+                // they stop agreeing is the day a shared counter starts corrupting
+                // concurrent activations SILENTLY, and this is the only place that can
+                // see it happen.
+                if self.in_frame_body && !self.frame_repeat_cnt.contains_key(&(span.lo, span.hi)) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a `repeat` with a runtime count in this position was not seen by                          the frame reservation pass, so it has no per-activation counter                          — concurrent activations would share one. Hoist the count into a                          local first, or make the count a constant",
+                    );
+                    return;
+                }
+                let cnt_net = if let Some(&n) = self.frame_repeat_cnt.get(&(span.lo, span.hi)) {
+                    n
+                } else {
                     let name = format!("$repeat_cnt${}", self.nets.len());
                     let nv = ir::NetVar {
                         kind: ir::NetKind::Integer, // signed 32-bit
@@ -670,7 +701,24 @@ impl Elaborator<'_> {
                     self.add_net(&name, nv);
                     (self.nets.len() - 1) as u32
                 };
-                let count_id = self.lower_expr(count);
+                // §11.6/§12.7.3: the count is SELF-DETERMINED, so evaluate it at the
+                // width the user wrote. Without this the 32-bit counter net widened it
+                // and `repeat (8'd200 + 8'd100)` ran 300 times where SV wraps to 44
+                // (iverilog agrees) — a silent wrong iteration count, ROADMAP §2, and
+                // one that the suspendable-task refusal used to hide inside a frame.
+                // Sealing it here rather than at the assignment keeps the truncation on
+                // the COUNT and off the counter, which must stay signed 32-bit so a
+                // negative count still runs the body zero times.
+                let raw_count = self.lower_expr(count);
+                let count_id = match self.canonical_self_width(raw_count) {
+                    Some(sw) if sw.width < 32 && !sw.signed => {
+                        let pad = self.const_u32_expr(0, 32 - sw.width);
+                        self.push_expr(ir::Expr::Concat {
+                            parts: vec![pad, raw_count],
+                        })
+                    }
+                    _ => raw_count,
+                };
                 let init = self.push_stmt(ir::Stmt::BlockingAssign {
                     lhs: whole_net_lvalue(cnt_net),
                     rhs: count_id,

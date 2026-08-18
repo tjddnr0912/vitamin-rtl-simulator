@@ -106,14 +106,21 @@ fn nba_frame_local_task_loud() {
 }
 
 #[test]
-fn repeat_timing_task_loud() {
-    // `repeat(<non-const>) @(edge)`: the hidden loop counter is a SHARED net, corrupted by
-    // concurrent activations. Stays loud until the counter is per-activation.
+fn repeat_timing_task_runs() {
+    // INVERTED 2026-08-19 (was `..._loud`), on the condition this test itself named:
+    // "stays loud UNTIL the counter is per-activation". It is — the frame reservation
+    // pass allocates one inside the frame window for every `repeat` whose count the
+    // unroller does not consume. Three posedges of a #5 clock ⇒ $time 25, which is
+    // iverilog's answer.
     let src = "module t; logic c=0; always #5 c=~c;\n\
         task automatic w(input int dly, output int r); repeat(dly) @(posedge c); r=$time; endtask\n\
         initial begin int x; w(3, x); $display(\"o=%0d\", x); $finish; end endmodule";
     let (out, ok) = run(src);
-    assert!(!ok, "repeat-with-timing task must stay loud, got:\n{out}");
+    assert!(ok, "repeat-with-timing task now runs, got:\n{out}");
+    assert!(
+        out.contains("o=25"),
+        "…and counts three edges (iverilog: 25):\n{out}"
+    );
 }
 
 #[test]

@@ -89,13 +89,18 @@ fn const_repeat_three() {
 // ── correct-or-loud: a NON-const (runtime) `repeat(n) @(edge)` in a suspendable
 //    task stays loud (the shared `$repeat_cnt$` net corrupts across activations) ──
 #[test]
-fn runtime_repeat_stays_loud() {
+fn runtime_repeat_now_runs() {
+    // INVERTED 2026-08-19 (was `..._stays_loud`). The refusal existed because the
+    // desugar's counter was a MODULE net, shared by concurrent activations. The frame
+    // reservation pass now puts a per-activation counter aside for each such `repeat`,
+    // so a runtime count is an ordinary supported shape. iverilog prints `done`.
     let o = run("module t;\n\
         logic clk = 0; always #5 clk = ~clk;\n\
         task automatic waitn (input int n); repeat (n) @(posedge clk); endtask\n\
         initial begin waitn(2); $display(\"done\"); $finish; end\n\
         endmodule\n");
-    assert!(is_loud(&o), "runtime repeat count must stay loud:\n{o}");
+    assert!(!is_loud(&o), "a runtime repeat count now runs:\n{o}");
+    assert!(o.contains("done"), "…and reaches the end:\n{o}");
 }
 
 // ── Stage-1 fork-in-frame: `fork <self-contained arms> join` inside a suspendable

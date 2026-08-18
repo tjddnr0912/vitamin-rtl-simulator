@@ -525,6 +525,11 @@ struct Elaborator<'s> {
     /// A `Vec` per key because same-named locals in DISJOINT blocks coalesce onto one
     /// flattened net (v1 flatten model): each range is one block that declares it.
     hoisted_block_local: BTreeMap<String, Vec<(u32, u32)>>,
+    /// `repeat` SOURCE SPAN → the frame-local counter net reserved for it. See
+    /// `reserve_frame_repeat_counters`; `lower_repeat` consumes it so a runtime count
+    /// inside a suspendable task gets a per-activation counter instead of a shared
+    /// module net.
+    frame_repeat_cnt: BTreeMap<(u32, u32), u32>,
     /// §4.5.248: the per-entry (`automatic`) block-local NAMES currently in scope
     /// during the Nets-phase hoist walk, so a NESTED block's STATIC initializer can be
     /// checked against an OUTER block's automatic (see

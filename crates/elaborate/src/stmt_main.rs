@@ -838,7 +838,7 @@ impl Elaborator<'_> {
             // ── LOOPS (SECONDARY) ───────────────────────────────────
             ast::Stmt::Forever { body, .. } => self.lower_forever(b, body),
             ast::Stmt::While { cond, body, .. } => self.lower_while(b, cond, body),
-            ast::Stmt::Repeat { count, body, .. } => self.lower_repeat(b, count, body),
+            ast::Stmt::Repeat { count, body, span } => self.lower_repeat(b, count, body, *span),
             ast::Stmt::For {
                 init,
                 cond,

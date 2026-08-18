@@ -331,6 +331,85 @@ impl Elaborator<'_> {
         net
     }
 
+    /// Reserve one FRAME-LOCAL counter per `repeat` in this body whose count the
+    /// unroller will not consume.
+    ///
+    /// `lower_repeat` desugars such a count to `cnt = <count>; while (cnt > 0) { … }`,
+    /// and its counter was a MODULE net — which concurrent activations of a suspendable
+    /// task would share, so `ast_has_repeat_with_timing` had to refuse the whole task.
+    /// A frame-local counter is per-activation, which removes the hazard rather than
+    /// diagnosing it.
+    ///
+    /// ⚠️ It has to be reserved HERE, not where the desugar runs: a frame's locals are
+    /// the contiguous net-id range `[base_net, base_net + locals_len)`, closed at the
+    /// end of this pass, so a net added later would land outside the window and the
+    /// engine would read a module slot.
+    ///
+    /// ⚠️ The handoff is keyed by the `repeat`'s SOURCE SPAN, not by visitation order.
+    /// This walk and `lower_repeat` are two walks of the same tree, and "the Nth repeat
+    /// in each" is precisely the kind of agreement that drifts silently — the defect
+    /// slice 1 of this round fixed between the unroll classifier and the lowering. The
+    /// unroll question itself is asked with that same single spelling.
+    pub(crate) fn reserve_frame_repeat_counters(&mut self, body: &ast::Stmt) {
+        let mut spans = Vec::new();
+        Self::collect_runtime_repeat_spans(self, body, &mut spans);
+        for sp in spans {
+            let name = format!("$repeat_cnt${}", self.nets.len());
+            let nv = ir::NetVar {
+                kind: ir::NetKind::Integer,
+                width: 32,
+                msb: 31,
+                lsb: 0,
+                signed: true,
+                array_len: 1,
+                dir: ir::PortDir::Internal,
+                init: default_init(ast::NetVarKind::Integer, 32),
+            };
+            self.add_net(&name, nv);
+            let net = (self.nets.len() - 1) as u32;
+            self.frame_repeat_cnt.insert(sp, net);
+        }
+    }
+
+    /// Spans of every `repeat` in `s` that will need a runtime counter, innermost-first
+    /// order irrelevant (the map is span-keyed).
+    fn collect_runtime_repeat_spans(&self, s: &ast::Stmt, out: &mut Vec<(u32, u32)>) {
+        use ast::Stmt as S;
+        match s {
+            S::Repeat { count, body, span } => {
+                if self.repeat_unroll_count(count).is_none() {
+                    out.push((span.lo, span.hi));
+                }
+                self.collect_runtime_repeat_spans(body, out);
+            }
+            S::Block { stmts, .. } | S::Fork { stmts, .. } => {
+                for st in stmts {
+                    self.collect_runtime_repeat_spans(st, out);
+                }
+            }
+            S::If { then_s, else_s, .. } => {
+                self.collect_runtime_repeat_spans(then_s, out);
+                if let Some(e) = else_s.as_deref() {
+                    self.collect_runtime_repeat_spans(e, out);
+                }
+            }
+            S::For { body, .. } | S::While { body, .. } | S::Forever { body, .. } => {
+                self.collect_runtime_repeat_spans(body, out)
+            }
+            S::DelayCtrl { body, .. } | S::EventCtrl { body, .. } | S::Wait { body, .. } => {
+                if let Some(b) = body.as_deref() {
+                    self.collect_runtime_repeat_spans(b, out);
+                }
+            }
+            S::Case { items, .. } => {
+                for it in items {
+                    self.collect_runtime_repeat_spans(case_item_body(it), out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn reserve_frame_block_locals(&mut self, body: &ast::Stmt, base_net: u32) -> u64 {
         let mut decls = Vec::new();
         collect_block_local_decls(body, &mut decls);
@@ -605,6 +684,7 @@ impl Elaborator<'_> {
             // Block-locals declared inside a `begin … end` in the body (after the
             // top-level body_decls in the flat slot order).
             auto_override |= s.reserve_frame_block_locals(&func.body, base_net);
+            s.reserve_frame_repeat_counters(&func.body);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
@@ -822,6 +902,7 @@ impl Elaborator<'_> {
             }
             // Block-locals declared inside a `begin … end` in the body.
             auto_override |= s.reserve_frame_block_locals(&task.body, base_net);
+            s.reserve_frame_repeat_counters(&task.body);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
