@@ -364,8 +364,25 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   ⚠️ **잔여 = `default disable iff`**(파싱조차 안 된다 · `E2002` · **클리어 순서 7번** · verilator 오라클
   확보: `default disable iff (rst)` 는 FAIL t=5,7,9).
 
-- **§3.7 `string` formal이 static task에서 불가** — `E3009 … (declare the task automatic)`.
-  진단이 해결책까지 말해서 즉시 우회 가능하고, 리포터도 "문구는 아주 좋다"고 적었다. 기능만 없다.
+- **✅ §3.7 RESOLVED — INPUT 방향 (2026-08-18 · 클리어 순서 5번) · ⚠️ output/inout 은 좁혀서 잔여.**
+  ⭐ **수정은 넷 종류 하나다** — 인라인(static-lifetime) 경로가 formal-local 을 `map_net_kind_or_wire`
+  로 잡아 `string` → **1비트 `Wire`** 였고 copy-in 이 잘렸다. **프레임 경로는 1비트로 둬도 되는데**
+  `FuncMeta` 가 있고 엔진이 **`str_params` 마스크**로 *"이 슬롯은 힙 핸들"* 을 알기 때문이다 —
+  인라인된 태스크엔 `FuncMeta` 가 없어 그 사실을 나를 것이 없다 ⇒ **`frame_local_net_kind`**(프레임 지역
+  `string` 이 이미 쓰는 그 함수). 6 형태가 iverilog 와 일치(리터럴 · string 변수 · 정수 formal 병행 ·
+  본문 `s.len()` · 길이 다른 연속 호출 · `automatic` 불변). ⚠️⚠️ **행을 지웠다가 되돌려 좁혔다** —
+  통째로 지우니 output/inout 이 *"output/inout arg must be a simple net (v1)"* + **허위 E3010 캐스케이드**
+  로 떨어졌는데(formal 이 안 묶여 본문 읽기가 미해결), **실측상 `automatic` 은 output/inout 도 고친다**
+  ⇒ 옛 문구의 조언이 그 방향엔 **옳았다**. 그래서 output/inout 전용 한 메시지를 남기고 *"INPUT 은 이제
+  지원된다"* 까지 말하게 했다(독자가 input 까지 다시 쓰지 않도록) · 캐스케이드 **0**.
+  ⚠️⚠️ **기존 핀이 이 슬라이스의 가장 중요한 검증이었다** — `static_task_string_formal_loud_rejects` 의
+  주석이 관심사를 **둘**로 적어 뒀다(*"자르고, **`StrCmp` 라우팅도 건너뛴다** — 둘 다 조용하다"*).
+  내 수정은 첫째만 겨냥했으므로 둘째를 즉시 쟀고 **함께 열렸다**(`r=1`/`r=1`/`r=0` 전부 iverilog 일치)
+  ⇒ 핀을 positive 로 뒤집되 ⚠️ **불일치 행을 넣었다**(일치 케이스만이면 *"항상 1을 반환하는 비교"* 도
+  통과하는데 그게 바로 그 테스트가 잡으려던 결함이다). **뮤테이션 5/5** · 앵커 =
+  `cli/tests/static_task_string_formal.rs` **4건**(⚠️ 방향 이름 판별자는 배터리가 요구해서 더했다 —
+  `inout` 에 "output" 이라고 쓰면 독자를 틀린 포트로 보낸다 = §3.4 가 이미 값을 치른 결함).
+  ⚠️ **static FUNCTION 의 `string` formal 은 원래 됐다**(PRE 실측) — §3.7 은 task 전용이었다.
 
 - **⭐⭐ §3.11 `function automatic`이 codegen에서 빠진다 — 원인이 특정됐고 판별자는 키워드 하나다.**
   리포터 실측 codegen `able/total` = **12.3%(core) / 16.0%(top)**, 거부 사유의 **87%가
@@ -407,7 +424,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~2~~ | ✅ **§3.6-① 완료(2026-08-18)** | verilator 6/6 일치 · bare-이름 = 클럭된 불리언까지 | — | 센티넬은 이미 있었다(`assert property(NAME)`) · 드레인 한 자리 · 뮤테이션 7/7 |
 | ~~3~~ | ✅ **§3.3 완료(2026-08-18)** | 9 형태가 iverilog 바이트 일치 | — | admission = **캐리 없음** · 이름은 `walk_scopes_key` 한 철자 · 뮤테이션 9/10 + 도달불가 1 |
 | ~~4~~ | ✅ **§3.1 (a)(b) 완료(2026-08-18)** | 4형태 경고 · 값 불변 · 정당한 3형태 경고 0 | — | 판별자는 AST 가 아니라 **provenance**(멤버가 part-select 로 desugar 된다) · `W2004` · 뮤테이션 3/4 + 도달불가 1 · ⚠️ **(c) 는 잔여** |
-| **5** | **§3.7 static task 의 `string` formal** | `task t(input string s)` | **없음**(설계가 주석에 적혀 있다) | `inline_task.rs:263` — **String-kind snapshot local** |
+| ~~5~~ | ✅ **§3.7 INPUT 완료(2026-08-18)** | 6형태 iverilog 일치 + `StrCmp` 라우팅 | — | 수정은 **넷 종류 하나**(`frame_local_net_kind`) · 뮤테이션 5/5 · ⚠️ **output/inout 은 좁혀서 잔여** |
 | **P1** | ⭐⭐ **order-INDEPENDENT AST-gathered per-scope name set** | **셋을 한꺼번에** | 이것이 **유일한 큰 선행조건** | §2 DEEP(inner-NET shadow) + §4.5.276 후속①(`for` trip-count) + **§3.5-② `repeat (LP)`** |
 | **6** | **§3.5-③ `repeat (m_n)`** | 모듈 넷 카운트 | 프레임 subset 에 **런타임 카운터** | `lower_repeat` 의 다운카운터가 프레임 지역이라 subset 이 거부 |
 | **7** | **§3.6-② `default disable iff`** | 파싱조차 안 됨 | 파서 + property lowering | `E2002` |

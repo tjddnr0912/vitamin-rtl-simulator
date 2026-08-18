@@ -198,14 +198,19 @@ fn task_string_formal_beyond_index_63_loud_rejects() {
 }
 
 #[test]
-fn static_task_string_formal_loud_rejects() {
-    // Only `automatic`/recursive tasks take the (fixed) frame path. A plain STATIC
-    // task takes `inline_task`, whose 1-bit-slot copy-in would truncate a string
-    // formal AND skip StrCmp routing — both silent. Rather than diverge from the
-    // now-correct automatic path, the static path loud-rejects a `string` formal
-    // (declare it `automatic`). Both a LITERAL and a VAR actual must be loud, never
-    // a silent r=0.
-    for actual in ["\"zoo\"", "v"] {
+fn static_task_string_formal_now_runs_and_compares() {
+    // INVERTED 2026-08-18 (was `..._loud_rejects`). This used to assert the reject,
+    // because the inline path allocated the formal-local with `map_net_kind_or_wire`
+    // — which sends `string` to a 1-bit Wire — so the copy-in truncated the actual AND
+    // the comparison lost its StrCmp routing, both silently. The local is now a real
+    // `NetKind::String` slot (`frame_local_net_kind`), so a STATIC task takes a
+    // `string` input like the automatic one does.
+    //
+    // ⚠️ The MISMATCH row is what keeps this test honest. Asserting only the two
+    // matching actuals would pass just as well against a comparison that always
+    // returns 1 — which is precisely the "skipped StrCmp routing" this test was
+    // written to catch. Every expected value is iverilog 13.0's.
+    for (actual, want) in [("\"zoo\"", "r=1"), ("v", "r=1"), ("\"cat\"", "r=0")] {
         let src = format!(
             "module m;\n\
              task t(input string s, output int e); e = (s == \"zoo\"); endtask\n\
@@ -213,8 +218,8 @@ fn static_task_string_formal_loud_rejects() {
              initial begin v=\"zoo\"; t({actual}, e); $display(\"r=%0d\", e); #1 $finish; end endmodule\n"
         );
         let (out, code) = run(&src);
-        assert_eq!(code, Some(1), "expected loud reject for {actual}\n{out}");
-        assert!(!out.contains("r="), "must not print a silent result\n{out}");
+        assert_eq!(code, Some(0), "must run now for {actual}\n{out}");
+        assert!(out.contains(want), "expected {want} for {actual}\n{out}");
     }
 }
 

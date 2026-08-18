@@ -251,16 +251,31 @@ impl Elaborator<'_> {
         // input/output aliasing — direct subst would reintroduce that), so until then
         // loud-reject rather than silently truncate (correct-or-loud). Declaring the
         // task `automatic` diverts to the working frame path.
-        if task
-            .ports
-            .iter()
-            .any(|p| matches!(p.net_or_var, Some(ast::NetVarKind::String)))
-        {
+        // v7 (NARROWED 2026-08-18): an INPUT `string` formal now works — the
+        // formal-local below is allocated as a real `NetKind::String` slot, so the
+        // copy-in stores a heap string instead of truncating it to one bit. An
+        // OUTPUT/INOUT one still cannot: the copy-OUT resolver takes a "simple net"
+        // caller lvalue and a `string` actual is not one, so removing this arm entirely
+        // traded ONE actionable message for a less specific rejection plus a spurious
+        // E3010 cascade (the formal never gets bound, so the body's reads go
+        // unresolved). Declaring the task `automatic` diverts to the frame path, which
+        // handles every direction — measured, which is why that advice is kept.
+        if let Some(p) = task.ports.iter().find(|p| {
+            matches!(p.net_or_var, Some(ast::NetVarKind::String))
+                && !matches!(p.dir, ast::PortDir::Input)
+        }) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
-                    "a `string` formal in the static task `{tname}` is unsupported \
-                     (declare the task `automatic`)"
+                    "a `string` {} formal (`{}`) in the static task `{tname}` is \
+                     unsupported — its copy-out target must be a simple net. An INPUT \
+                     `string` formal is supported; declaring the task `automatic` \
+                     supports every direction",
+                    match p.dir {
+                        ast::PortDir::Output => "output",
+                        _ => "inout",
+                    },
+                    p.name.name
                 ),
             );
             return;
@@ -305,7 +320,16 @@ impl Elaborator<'_> {
                     self.add_net(
                         &lname,
                         ir::NetVar {
-                            kind: map_net_kind_or_wire(kind),
+                            // `frame_local_net_kind`, not `map_net_kind_or_wire`: a
+                            // `string` formal needs a real heap-backed `NetKind::String`
+                            // slot here. The FRAME path can leave it a 1-bit Wire because
+                            // it has a `FuncMeta` and the engine reads the `str_params`
+                            // mask to know the slot holds a handle — an inlined task has
+                            // no `FuncMeta`, so nothing would carry that fact and the
+                            // copy-in truncated the actual to one bit. Which is why this
+                            // used to loud-reject and tell the reader to write
+                            // `automatic`. Every non-string kind maps identically.
+                            kind: frame_local_net_kind(kind),
                             width: w,
                             msb,
                             lsb,
