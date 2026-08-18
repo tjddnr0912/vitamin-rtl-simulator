@@ -38,6 +38,46 @@ impl Elaborator<'_> {
         u32::try_from(self.const_eval_in_scope(e)?).ok()
     }
 
+    /// How many times `lower_repeat` UNROLLS this count — `None` when it does not
+    /// (a runtime, unfoldable or large count, which desugars to the shared
+    /// `$repeat_cnt$` net instead).
+    ///
+    /// ⚠️⚠️ ONE SPELLING, and that is the whole point. Two callers ask this: the
+    /// LOWERING (`lower_repeat`, which builds the code) and the CLASSIFIER
+    /// (`ast_has_repeat_with_timing`, which decides whether a suspendable task may
+    /// contain the `repeat` at all — a runtime counter is a module net, so it would
+    /// corrupt across concurrent activations, but an unrolled count carries no
+    /// counter and is safe). A second spelling makes the classifier reject a shape
+    /// the lowering would have unrolled. That was live: the classifier had no
+    /// fill-literal arm, so `repeat('1) @(posedge clk)` in a `task automatic` was
+    /// E3009 here and ran ONE iteration in iverilog.
+    ///
+    /// The count goes through [`Self::const_bound_u32`], the same funnel every
+    /// select bound and replication count uses — so `repeat (4*16)`, `repeat (LP)`,
+    /// `repeat (LP/2)` and `repeat ($clog2(LP))` fold, while its width-exactness
+    /// guard keeps `repeat (4'd15 + 4'd1)` OUT of the strong domain: SV wraps that
+    /// to 0 at four bits (iverilog runs the body zero times) and the unlimited i64
+    /// fold would say 16. Declining leaves it on the runtime-counter path, which is
+    /// loud inside a frame — loud, not wrong.
+    pub(crate) fn repeat_unroll_count(&self, count: &ast::Expr) -> Option<u32> {
+        // §11.6: a fill literal count is self-determined to ONE bit, so `repeat('1)`
+        // is one iteration (the generic const-eval would read a 32-bit all-ones value
+        // and skip the loop); `'0`/`'x`/`'z` ⇒ zero iterations.
+        if let Some((raw, kind)) = fill_literal_ast(count) {
+            let once = literal::fill_literal_const(raw, kind, 1)
+                .map(|cv| {
+                    cv.bits.unk.iter().all(|&u| u == 0)
+                        && (cv.bits.val.first().copied().unwrap_or(0) & 1) == 1
+                })
+                .unwrap_or(false);
+            return Some(u32::from(once));
+        }
+        match self.const_bound_u32(count) {
+            Some(n) if n <= REPEAT_UNROLL_CAP => Some(n),
+            _ => None,
+        }
+    }
+
     /// Lower a constant WIDTH / COUNT expression (an indexed part-select's `w` in
     /// `[c +: w]` / `[c -: w]`, a replication count) so the downstream consumer
     /// actually receives a constant.

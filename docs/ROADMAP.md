@@ -312,21 +312,26 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   `128'he1000…`은 통과). 암호 IP는 넓은 상수를 이 형태로 쓴다. 폭>64는 `wide_param_bits`가
   값을 지키므로 필요한 것은 **그 도메인 위의 `Concat`/시프트 fold**이지 i64 채널이 아니다.
 
-- **§3.5 suspendable task 안의 `repeat`가 정수 리터럴만 받는다** — `repeat (64)` 통과 /
-  `repeat (4*16)`·`repeat (LP)`(localparam)·`repeat (m_n)`(모듈 넷) 전부 `E3009`. 같은
-  `repeat (4*(14+2))`가 `initial`에서는 통과한다. ⚠️⚠️ **그리고 진단 문구가 이 경우를 안 가리킨다** —
-  원인 셋(`fork`·frame-local unpacked ARRAY·frame-local을 읽는 `wait`/`repeat`)을 나열하는데
-  `localparam`도 모듈 넷도 **프레임 지역이 아니다**. 리포터는 그 문구 때문에 두 번 헛수정했다.
-  ⇒ **접기 가능한 식을 허용**하거나, 최소한 **문구가 실제 원인을 말해야** 한다(후자만으로도 값이 있다).
-  ⭐⭐ **기전을 쟀다(2026-08-18) — 셋이 한 원인이 아니고 슬라이스가 셋으로 갈린다.** `lower_repeat` 는
-  ⓐ 상수면 **언롤**(카운터 없음) ⓑ 아니면 **런타임 다운카운터 while 루프**로 desugar 하는데, 그 카운터가
-  **프레임 지역**이라 suspendable 태스크에서 subset 이 거부한다 ⇒ **`repeat` 의 문제가 아니라 카운터의 문제다.**
-  갈라 보면: **① `repeat (4*16)` = 선행조건 0** — `const_fn.rs::const_eval_u32` 에 `IntLit`/`Paren`/`Unary`
-  arm 만 있고 **`Binary` arm 이 아예 없다**(그래서 `4*16` 조차 상수로 안 보인다) · **② `repeat (LP)` 는
-  선행조건이 있다** — 식별자를 풀려면 `const_eval_in_scope` 가 필요하고 그것은 **order-INDEPENDENT
-  AST-gathered per-scope name set**(= §2 DEEP 의 선행조건 · 머리말 §4.5.276 후속 ①과 같은 것)에 막혀 있다 ·
-  **③ `repeat (m_n)`(모듈 넷)은 진짜 런타임**이라 프레임 subset 에 카운터를 줘야 한다.
-  ⇒ **①과 문구는 지금 당장 가능**하고, ②는 그 패스 슬라이스에 묶이며, ③만 독립적으로 크다.
+- **✅ §3.5-① RESOLVED (2026-08-18 · 클리어 순서 1번)** — `repeat` 의 count 가 **`const_bound_u32`**
+  (모든 select bound·replication count 가 쓰는 그 퍼널)로 접힌다. ⭐⭐ **수정의 본체는 arm 이 아니라
+  "한 철자"** 다 — 언롤 판정을 `repeat_unroll_count` 하나로 만들어 **lowering(`lower_repeat`)과
+  분류기(`ast_has_repeat_with_timing`)가 같은 답**을 내게 했다(분류기는 `&self` 가 됐고 그것만 읽는다).
+  **3-way(PRE/POST/iverilog) — FIXED 5 · 회귀 0**: `4*16`·`LP`·`LP/2`·`$clog2(LP)` 가 전부 iverilog
+  값과 일치. ⭐ **다섯 번째는 리포트에 없던 pre-existing false-loud** — **`repeat ('1)`** 이 E3009 였다
+  (iverilog `c=1`): `lower_repeat` 는 fill 리터럴 arm 을 늘 갖고 있었는데 **분류기의 사본에는 없어서**
+  *"언롤러가 안 먹는 count"* 로 읽고 거부했다 = **두 철자 문제의 실증**. ⚠️ **일부러 loud 로 남긴 둘**:
+  `repeat (4'd15+4'd1)` 은 SV 가 4비트에서 **0** 으로 자르는데(iverilog `c=0`) 무제한 i64 도메인은 16 을
+  내므로 `const_bound_u32` 의 **width-exact 가드가 거절하는 것이 옳다**(loud 는 wrong 이 아니다) ·
+  **언롤 상한(1024) 초과**도 런타임 카운터로 떨어져 loud. ⚠️ 잔여 = **`repeat (m_n)`(모듈 넷) = 클리어
+  순서 6번**(프레임 subset 의 런타임 카운터) · **`repeat (LP)` 는 이미 되므로 P1 선행조건에서 빠졌다**
+  (`const_bound_u32` 가 `const_eval_in_scope` 를 이미 쓴다 — 옛 기록이 §2 DEEP 과 묶어 둔 것은 정정).
+  ⭐ **문구도 원인을 이름으로 부른다** — 세 거부 술어(`!leaf` / `unsafe_repeat` / `unsafe_ctor`)를 결정
+  **전에** 이름으로 평가하고, `frame_task_has_unsafe_construct` 는 `bool` 이 아니라 **어느 구문인지**를
+  돌려준다(다섯 사이트). ⚠️ **`!leaf` 분기는 도달 가능하다**(`panic!` 프로브 실측 3건 · 전부
+  `cli::fork_in_frame` 의 fork-arm `return`) — 뮤테이션이 그 문구를 뭉갤 때 처음엔 생존했고 판별자를 지어
+  사살했다. **뮤테이션 8/8 사망** · 앵커 = `cli/tests/repeat_count_fold.rs`(8건 · iverilog 핀).
+  ⚠️ **곁가지 발굴**: 태스크 지역 `localparam`(`task automatic t; localparam int K = 3;`)은 **파서가
+  거부**한다(E2002 · PRE==POST = pre-existing · iverilog 는 받는다). 별건으로 아래 §3 소형 큐에 등재.
 
 - **§3.6 `default clocking` / `default disable iff` 미지원** — ⭐⭐ **2026-08-18 재측정: 둘이 같은 상태가 아니다.**
   **`default clocking … endclocking` 은 파싱되고 `errors=0` 으로 통과한다** — `hdl-parser` 가 `is_default`
@@ -379,8 +384,8 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 | # | 슬라이스 | 여는 것 | 선행조건 | 사이트(실측) |
 |---|---|---|---|---|
-| **1** | **§3.5-① `repeat` fold arm + 문구** | `repeat (4*16)` · **오진단 문구** | **없음** | `const_fn.rs::const_eval_u32`(`IntLit`/`Paren`/`Unary` 뿐 — **`Binary` arm 이 없다**) + E3009 문구 |
-| **2** | **§3.6-① `default clocking` 배선** | `default clocking` 이 **실제로 기본 클럭이 된다** | **없음** | `hdl-ast:349 is_default` 가 **소비자 0** = 죽은 계약 · 클로킹 기계는 §5.1-x 가 이미 지음 |
+| ~~1~~ | ✅ **§3.5-① 완료(2026-08-18)** | `4*16`·`LP`·`LP/2`·`$clog2(LP)`·⭐`'1` — **FIXED 5 · 회귀 0** | — | 답은 arm 이 아니라 **한 철자**(`repeat_unroll_count` 를 lowering·분류기가 공유) · 뮤테이션 **8/8** |
+| **2** | **§3.6-① `default clocking` 배선** | `default clocking` 이 **실제로 기본 클럭이 된다** | **없음** | `is_default` 소비자 0(죽은 계약) + ⭐ **소비자 쪽은 파서가 막는다**(`sva_prop.rs:41` 무클럭 assertion 거부) ⇒ 파서는 **빈 sensitivity 센티넬**(이미 `assert property(NAME)` 이 쓰는 것)을 남기고 `sva_check.rs:59` **한 자리**가 해석. ⚠️ **오라클은 verilator**(iverilog 는 `default clocking` 을 파싱 못 한다) |
 | **3** | **§3.3 wide fold arm** | `{8'he1,120'h0}` · `128'(…)<<120` | **없음** | `const_eval.rs::fold_init` arm 셋뿐 — `Concat`/`Replicate`/시프트/`Ident` 없음. 도메인은 `params.rs:799` 에 이미 섬 |
 | **4** | **§3.1 이식성 경고** | select 축 **4형태**(리포트는 2형태만 봤다) | **없음** | `hdl-parser/expr.rs` postfix 루프 **한 사이트** + IEEE §11.5.1 술어 · ⚠️ **거부가 아니라 경고**(오라클이 갈린다) |
 | **5** | **§3.7 static task 의 `string` formal** | `task t(input string s)` | **없음**(설계가 주석에 적혀 있다) | `inline_task.rs:263` — **String-kind snapshot local** |
@@ -463,6 +468,9 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **잔여 follow-on (전부 loud·correct-or-loud)**: **function이 자기 dyn-formal 재전달**(`return sum(c)`·framed callee·risky: mutual-recursion soundness hole→frame-route 시 신중 guard 필요·`nested_in_frame_body_loud` 유지) · **block-local automatic lifetime**(loop-body `automatic int j=k*10` 등·per-activation storage 필요=deep block-local-flatten 인프라·iverilog도 "Overriding default variable lifetime" 거부) · **chained-method** `q.min()[0]`(vague·iverilog syntax-error·no-oracle). **이미 동작(vita>iverilog)**: output-fn-in-`while`(D4)·task OUTPUT array(D5b·§4.5.193).
 
 **소형 큐:**
+
+- **태스크/함수 지역 `localparam` 이 파서에서 거부된다**(pre-existing · PRE==POST · 오라클 ✓ iverilog · §3.5-① 슬라이스가 발굴): `task automatic t; localparam int K = 3; …` 가 `E2002 expected statement, found keyword 'localparam'`. IEEE 1800 §6.20 은 서브루틴 본문의 상수 선언을 허용한다. 우회는 모듈 스코프로 올리는 것이고, 그 우회가 가능하므로 소형.
+
 
 - **`$typename` 의 enum / packed struct 렌더**(§4.5.239 발굴·무오라클): base 타입으로 나온다(`logic[1:0]`·`logic[3:0]`; IEEE §20.6.1 은 `enum{...}`·`struct packed{...}`). 타입 이름 렌더링 한정이라 값 영향 없음 — 현행은 `typename_pins.rs` 가 핀.
 

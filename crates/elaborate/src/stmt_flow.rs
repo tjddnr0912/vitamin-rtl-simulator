@@ -638,29 +638,17 @@ impl Elaborator<'_> {
         count: &ast::Expr,
         body: &ast::Stmt,
     ) {
-        // §11.6: a fill literal count is self-determined to 1 bit, so `repeat('1)`
-        // is ONE iteration (the generic const-eval would read a 32-bit all-ones
-        // value and skip the loop); `'0`/`'x`/`'z` ⇒ zero iterations.
-        if let Some((raw, kind)) = fill_literal_ast(count) {
-            let once = literal::fill_literal_const(raw, kind, 1)
-                .map(|cv| {
-                    cv.bits.unk.iter().all(|&u| u == 0)
-                        && (cv.bits.val.first().copied().unwrap_or(0) & 1) == 1
-                })
-                .unwrap_or(false);
-            if once {
-                self.lower_stmt(b, body);
-            }
-            return;
-        }
-        match const_eval_u32(count) {
-            Some(n) if n <= REPEAT_UNROLL_CAP => {
-                // small constant ⇒ straight unroll (byte-identical to before).
+        // The unroll decision lives in `repeat_unroll_count` because the CLASSIFIER
+        // (`ast_has_repeat_with_timing`) has to reach the same answer — see that
+        // helper's doc for why a second spelling here was a false-loud.
+        match self.repeat_unroll_count(count) {
+            Some(n) => {
+                // constant the unroller consumes ⇒ straight unroll (no runtime counter).
                 for _ in 0..n {
                     self.lower_stmt(b, body);
                 }
             }
-            _ => {
+            None => {
                 // A RUNTIME (or large-constant) count: desugar to a signed
                 // down-counter while-loop — `cnt = count; while (cnt > 0) { body;
                 // cnt = cnt - 1; }`. The count is evaluated ONCE (IEEE §12.7.3); a

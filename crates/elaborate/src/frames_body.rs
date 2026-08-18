@@ -405,7 +405,7 @@ impl Elaborator<'_> {
         // (run after every task is lowered) — a leaf non-suspending task is lifted for the
         // engine's suspendable-frame path, so its reject can only be decided once the full
         // transitive suspendable set is known.
-        let unsafe_repeat = Self::ast_has_repeat_with_timing(&task.body);
+        let unsafe_repeat = self.ast_has_repeat_with_timing(&task.body);
         self.frame_task_pending.push((
             fid,
             name.to_string(),

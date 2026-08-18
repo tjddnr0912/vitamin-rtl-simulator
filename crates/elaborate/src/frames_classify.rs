@@ -330,10 +330,16 @@ impl Elaborator<'_> {
         let pending = std::mem::take(&mut self.frame_task_pending);
         for (fid, name, base_net, locals_len, unsafe_repeat) in pending {
             if full.contains(&fid) {
-                if self.frame_body_is_leaf_nonsuspending(fid, base_net, base_net + locals_len)
-                    && !unsafe_repeat
-                    && !self.frame_task_has_unsafe_construct(fid, base_net, locals_len)
-                {
+                // ⚠️ The three rejecting predicates are evaluated INTO NAMES before the
+                // decision, so the diagnostic can say WHICH one fired. It used to list
+                // all of them and let the reader guess — and the guess was wrong for the
+                // commonest case: a `repeat` with a non-constant count is neither a
+                // `fork` nor anything frame-LOCAL, so an external reporter re-wrote a
+                // correct `localparam` twice chasing a cause the message had invented.
+                let unsafe_ctor = self.frame_task_has_unsafe_construct(fid, base_net, locals_len);
+                let leaf =
+                    self.frame_body_is_leaf_nonsuspending(fid, base_net, base_net + locals_len);
+                if leaf && !unsafe_repeat && unsafe_ctor.is_none() {
                     // lifted — the engine's suspendable-frame path runs it.
                     // Stage-2 fork-in-frame: if the body has an admitted Case-B `join` fork
                     // (an arm touches this task's frame-local range), flag the task so the
@@ -351,14 +357,27 @@ impl Elaborator<'_> {
                         self.func_metas[fid as usize].contains_shared_fork = true;
                     }
                 } else {
+                    // Most specific first: `unsafe_repeat` and `unsafe_ctor` name an exact
+                    // construct, while `!leaf` is the general backstop and can only describe
+                    // the class.
+                    let why = if unsafe_repeat {
+                        "a `repeat` around timing control whose count is not a constant this \
+                         elaborator folds — such a count desugars to a module-scope counter net \
+                         that concurrent activations would share. A CONSTANT count is unrolled \
+                         and IS supported, including a folded one (`repeat (64)`, `repeat (4*16)`, \
+                         `repeat (LP)`, `repeat ($clog2(LP))`); a count read from a variable is not"
+                    } else {
+                        unsafe_ctor.unwrap_or(
+                            "a construct outside the supported subset (the body is not a leaf \
+                             non-suspending frame body — it forks, or calls something that does)",
+                        )
+                    };
                     self.error(
                         MsgCode::ElabUnsupported,
                         &format!(
-                            "frame task `{name}` body uses a construct outside the supported \
-                             suspendable-task subset (a `fork`, a frame-local unpacked ARRAY, \
-                             a `wait`/`repeat` reading a frame-local, or a nonblocking assign \
-                             to a frame-local) — $display/NBA-to-module-net/@/#/wait-on-a-net \
-                             and nested task calls ARE supported"
+                            "frame task `{name}` body uses {why}. Supported here: `$display`, \
+                             a nonblocking assign to a MODULE net, `@`/`#`/`wait` on a module \
+                             net, and nested task calls"
                         ),
                     );
                 }
@@ -398,12 +417,12 @@ impl Elaborator<'_> {
         fid: u32,
         base_net: u32,
         locals_len: u32,
-    ) -> bool {
+    ) -> Option<&'static str> {
         let (lo, hi) = (base_net, base_net + locals_len);
         let is_frame_local = |n: u32| n >= lo && n < hi;
         // (1) a frame-local unpacked array declared by this task.
         if (lo..hi).any(|n| self.frame_array_local.contains(&n)) {
-            return true;
+            return Some("an unpacked ARRAY declared local to this task");
         }
         let mut seen = std::collections::BTreeSet::new();
         let mut stack = vec![self.funcs[fid as usize].entry];
@@ -419,7 +438,9 @@ impl Elaborator<'_> {
                     // (2) a nonblocking assign to a frame-local LHS.
                     ir::Stmt::NonblockingAssign { lhs, .. } => {
                         if lhs.chunks.iter().any(|c| is_frame_local(c.net)) {
-                            return true;
+                            return Some(
+                                "a nonblocking assign (`<=`) to a variable local to this task",
+                            );
                         }
                     }
                     // (4) `disable fork` — a fork-family construct the engine's in-frame
@@ -429,7 +450,7 @@ impl Elaborator<'_> {
                     ir::Stmt::Disable {
                         scope_kind: ir::DisableKind::Fork,
                         ..
-                    } => return true,
+                    } => return Some("a `disable fork`"),
                     _ => {}
                 }
             }
@@ -437,13 +458,15 @@ impl Elaborator<'_> {
                 // (3) a `wait`/`@` whose condition expr reads a frame-local net.
                 ir::Terminator::Wait { cond, resume } => {
                     if self.wait_cond_reads_frame_local(cond, &is_frame_local) {
-                        return true;
+                        return Some(
+                            "a `wait`/`@` whose condition reads a variable local to this task",
+                        );
                     }
                     // (5) `wait fork` — see the doc comment above; no in-frame child-
                     // barrier support, so reject at compile time rather than let the
                     // engine's runtime `mark_fatal` backstop fire.
                     if matches!(cond, ir::WaitCause::Fork) {
-                        return true;
+                        return Some("a `wait fork`");
                     }
                     stack.push(*resume);
                 }
@@ -481,7 +504,7 @@ impl Elaborator<'_> {
                 ir::Terminator::Return => {}
             }
         }
-        false
+        None
     }
 
     /// Does a `Wait` condition read a frame-local net? (`@`/`wait` re-evaluates its
@@ -513,7 +536,10 @@ impl Elaborator<'_> {
     /// across a suspend (differential-review silent-wrong). Keep such a task loud.
     /// Conservative (a const `repeat` is unrolled and safe, but rejecting it too is
     /// correct-or-loud — and the KAT-driver pattern uses no `repeat`).
-    pub(crate) fn ast_has_repeat_with_timing(stmt: &ast::Stmt) -> bool {
+    ///
+    /// ⚠️ Takes `&self` ONLY so the unroll question is asked with the lowering's own
+    /// spelling (`repeat_unroll_count`); it reads no other elaborator state.
+    pub(crate) fn ast_has_repeat_with_timing(&self, stmt: &ast::Stmt) -> bool {
         use ast::Stmt as S;
         match stmt {
             S::Repeat { count, body, .. } => {
@@ -522,28 +548,28 @@ impl Elaborator<'_> {
                 // NON-const / large count desugars to the shared `$repeat_cnt$` net whose
                 // value would corrupt across concurrent activations. So flag the timing only
                 // when the count is NOT a const the unroller would consume.
-                let unrolled = matches!(const_eval_u32(count), Some(n) if n <= REPEAT_UNROLL_CAP);
+                let unrolled = self.repeat_unroll_count(count).is_some();
                 (!unrolled && Self::ast_stmt_has_timing(body))
-                    || Self::ast_has_repeat_with_timing(body)
+                    || self.ast_has_repeat_with_timing(body)
             }
             S::Block { stmts, .. } | S::Fork { stmts, .. } => {
-                stmts.iter().any(Self::ast_has_repeat_with_timing)
+                stmts.iter().any(|x| self.ast_has_repeat_with_timing(x))
             }
             S::If { then_s, else_s, .. } => {
-                Self::ast_has_repeat_with_timing(then_s)
+                self.ast_has_repeat_with_timing(then_s)
                     || else_s
                         .as_deref()
-                        .is_some_and(Self::ast_has_repeat_with_timing)
+                        .is_some_and(|x| self.ast_has_repeat_with_timing(x))
             }
             S::For { body, .. } | S::While { body, .. } | S::Forever { body, .. } => {
-                Self::ast_has_repeat_with_timing(body)
+                self.ast_has_repeat_with_timing(body)
             }
             S::DelayCtrl { body, .. } | S::EventCtrl { body, .. } | S::Wait { body, .. } => body
                 .as_deref()
-                .is_some_and(Self::ast_has_repeat_with_timing),
+                .is_some_and(|x| self.ast_has_repeat_with_timing(x)),
             S::Case { items, .. } => items
                 .iter()
-                .any(|it| Self::ast_has_repeat_with_timing(case_item_body(it))),
+                .any(|it| self.ast_has_repeat_with_timing(case_item_body(it))),
             _ => false,
         }
     }
