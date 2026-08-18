@@ -24,20 +24,25 @@
 //!   design raises 8 `W4029` + 1 `W4007` across 11 files and 22 `unique case` sites; the
 //!   time alone separates "X before reset" from "X in steady state".
 //!
-//! R29-3 (unique/priority violations sharing `W-RUN-USER-WARNING` with RTL `$warning`,
-//! so neither can be suppressed without the other) is a separate slice — it needs a
-//! distinct MsgCode carried through the severity sidecar, which is a wire change.
+//! - **R29-3** a `unique`/`priority` violation and an RTL `$warning` were one diagnostic
+//!   code, because the parser desugars the violation arm into a literal `$warning`
+//!   statement. So `-Wno-W-RUN-USER-WARNING` could not silence one known-benign
+//!   unique-case without silencing every `$warning` in the tree, and the CI gate this
+//!   repo's own doc-15 prescribes (`-Werror=W-RUN-USER-WARNING`) failed builds that
+//!   contain no `$warning` at all. IEEE puts the two in different clauses — §12.5.3 is a
+//!   report the SIMULATOR produces, §20.10 is a task the DESIGN called.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
-fn run(src: &str) -> (String, Option<i32>) {
+fn run_args(src: &str, args: &[&str]) -> (String, Option<i32>) {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let d = std::env::temp_dir().join(format!("vita_r29_{}_{n}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
     std::fs::write(d.join("t.sv"), src).unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .args(args)
         .arg("t.sv")
         .current_dir(&d)
         .output()
@@ -49,6 +54,10 @@ fn run(src: &str) -> (String, Option<i32>) {
     );
     let _ = std::fs::remove_dir_all(&d);
     (text, out.status.code())
+}
+
+fn run(src: &str) -> (String, Option<i32>) {
+    run_args(src, &[])
 }
 
 // ─────────────────────────── R29-1 · token spelling ───────────────────────────
@@ -339,15 +348,18 @@ fn a_runtime_diagnostic_says_when_it_fired() {
              #1 $finish;\n\
            end\n\
          endmodule\n");
+    // Two DIFFERENT runtime emitters — the severity path (W4031, via the
+    // violation desugar) and the range path (W4029) — so this also pins that the
+    // stamp is not a property of one call site.
     assert!(
-        o.contains("warning[VITA-W4007]") && o.contains("warning[VITA-W4029]"),
+        o.contains("warning[VITA-W4031]") && o.contains("warning[VITA-W4029]"),
         "both runtime warnings must fire:\n{o}"
     );
     // t=7, not 0 — a timestamp that is always 0 would pass a weaker assertion
     // while carrying no information.
     assert!(
         o.lines()
-            .filter(|l| l.contains("VITA-W4007") || l.contains("VITA-W4029"))
+            .filter(|l| l.contains("VITA-W4031") || l.contains("VITA-W4029"))
             .all(|l| l.contains("[at time 7]")),
         "every runtime diagnostic must carry the time it fired:\n{o}"
     );
@@ -385,4 +397,128 @@ fn an_elaborate_diagnostic_carries_no_time() {
         "a compile-time diagnostic has no simulation time to report:\n{o}"
     );
     assert_ne!(ok, Some(0), "{o}");
+}
+
+// ───────────── R29-3 · the violation report is not an RTL `$warning` ──────────
+
+/// A design with BOTH: the reporter's exact shape. Two diagnostics, two codes.
+#[test]
+fn a_unique_violation_and_an_rtl_warning_have_different_codes() {
+    const SRC: &str = "module m;\n\
+           logic [1:0] s; int depth = 14;\n\
+           initial begin\n\
+             s = 2'b11;\n\
+             unique case (s) 2'b00: ; 2'b01: ; endcase\n\
+             $warning(\"rtl warning: depth=%0d\", depth);\n\
+             #1 $finish;\n\
+           end\n\
+         endmodule\n";
+    let (o, ok) = run(SRC);
+    assert!(
+        o.contains("warning[VITA-W4031]"),
+        "the violation report:\n{o}"
+    );
+    assert!(o.contains("warning[VITA-W4007]"), "the RTL $warning:\n{o}");
+    assert_eq!(ok, Some(0), "{o}");
+
+    // …and each `-Wno-` reaches exactly one of them. PRE: either flag took both.
+    let (a, _) = run_args(SRC, &["-Wno-W-RUN-USER-WARNING"]);
+    assert!(
+        a.contains("VITA-W4031") && !a.contains("VITA-W4007"),
+        "-Wno- on the user warning must leave the violation report:\n{a}"
+    );
+    let (b, _) = run_args(SRC, &["-Wno-W-RUN-UNIQUE-VIOLATION"]);
+    assert!(
+        b.contains("VITA-W4007") && !b.contains("VITA-W4031"),
+        "-Wno- on the violation must leave the RTL $warning:\n{b}"
+    );
+}
+
+/// The other direction, and the one that broke a real CI: `-Werror` on the RTL
+/// `$warning` code failed a design containing NO `$warning`. The report measured
+/// `errors=2` on exactly this shape.
+#[test]
+fn werror_on_user_warning_does_not_fail_a_design_with_no_user_warning() {
+    const SRC: &str = "module m;\n\
+           logic [1:0] s;\n\
+           initial begin\n\
+             s = 2'b11;\n\
+             unique case (s) 2'b00: ; 2'b01: ; endcase\n\
+             #1 $finish;\n\
+           end\n\
+         endmodule\n";
+    let (o, ok) = run_args(SRC, &["-Werror=W-RUN-USER-WARNING"]);
+    assert_eq!(ok, Some(0), "no `$warning` in this design:\n{o}");
+    assert!(o.contains("warning[VITA-W4031]"), "{o}");
+
+    // …while the violation's own promotion still works — otherwise the fix would
+    // just be "the gate never fires", which is a different bug.
+    let (p, pok) = run_args(SRC, &["-Werror=W-RUN-UNIQUE-VIOLATION"]);
+    assert_ne!(pok, Some(0), "promotion must still bite:\n{p}");
+    assert!(p.contains("error[VITA-W4031]"), "{p}");
+}
+
+/// `unique0`/`priority0` suppress the no-match check by design (IEEE §12.4.2), so
+/// the new code must not fire for them. Control against "always report".
+#[test]
+fn the_zero_variants_report_no_violation() {
+    let (o, ok) = run("module m;\n\
+           logic [1:0] s;\n\
+           initial begin\n\
+             s = 2'b11;\n\
+             unique0 case (s) 2'b00: ; 2'b01: ; endcase\n\
+             priority0 case (s) 2'b00: ; endcase\n\
+             #1 $finish;\n\
+           end\n\
+         endmodule\n");
+    assert!(!o.contains("VITA-W4031"), "{o}");
+    assert_eq!(ok, Some(0), "{o}");
+}
+
+/// The FRAME emitter is a second site that maps a severity class to a code, and
+/// a `unique case` inside a function body is the only shape that reaches it.
+/// Without this row, one of the two spellings could keep answering W4007.
+#[test]
+fn a_violation_inside_a_function_body_uses_the_same_code() {
+    let (o, ok) = run("module m;\n\
+           function automatic int f(input logic [1:0] s);\n\
+             f = 0;\n\
+             unique case (s) 2'b00: f = 1; 2'b01: f = 2; endcase\n\
+           endfunction\n\
+           initial begin $display(\"f=%0d\", f(2'b11)); #1 $finish; end\n\
+         endmodule\n");
+    assert!(o.contains("warning[VITA-W4031]"), "{o}");
+    assert!(o.contains("f=0"), "{o}");
+    assert_eq!(ok, Some(0), "{o}");
+}
+
+/// The desugar's channel to elaborate is the task NAME, so source that can write
+/// that name can file a violation the design never violated. The whole
+/// `$__vita_` namespace is reserved — a rule, not a list, so the next desugar is
+/// covered without anyone remembering. Both entries (statement and expression)
+/// must refuse it, or the channel is only half private.
+#[test]
+fn the_internal_desugar_namespace_cannot_be_written_in_source() {
+    let (a, aok) = run("module m;\n\
+           initial begin $__vita_unique_violation(\"hi\"); #1 $finish; end\n\
+         endmodule\n");
+    assert!(a.contains("error[VITA-E2002]"), "{a}");
+    assert!(a.contains("reserved `$__vita_` namespace"), "{a}");
+    assert!(
+        !a.contains("VITA-W4031"),
+        "source must not be able to file a violation report:\n{a}"
+    );
+    assert_ne!(aok, Some(0), "{a}");
+
+    let (b, bok) = run("module m;\n\
+           int x;\n\
+           initial begin x = $__vita_secret(1); #1 $finish; end\n\
+         endmodule\n");
+    assert!(b.contains("reserved `$__vita_` namespace"), "{b}");
+    assert_ne!(bok, Some(0), "{b}");
+
+    // An ordinary `$`-name is untouched — the rule is a prefix, not "unknown".
+    let (c, cok) = run("module m; initial begin $display(\"ok\"); #1 $finish; end endmodule\n");
+    assert!(c.contains("ok") && !c.contains("reserved"), "{c}");
+    assert_eq!(cok, Some(0), "{c}");
 }

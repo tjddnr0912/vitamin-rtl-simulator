@@ -116,6 +116,16 @@ impl Parser<'_, '_> {
             }
             // system function call: $time, $signed(x). name retains the `$`.
             Some(T::SystemTask) => {
+                // Reserved namespace — same rule and same reason as the statement
+                // form in `parse_systask_call`; both entries must refuse it or the
+                // channel is only half private.
+                if self.cur_text().starts_with("$__vita_") {
+                    self.error(
+                        "a system function name outside vita's reserved `$__vita_` \
+                         namespace (those names are synthesized by the compiler and \
+                         cannot be written)",
+                    );
+                }
                 let t = self.bump().unwrap();
                 let name = Ident {
                     name: self.src[t.span.clone()].to_string(),

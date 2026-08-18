@@ -906,6 +906,33 @@ $ vita --backend native design.sv
 
 `-Wno-W-RUN-BACKEND-FALLBACK` 으로 억제, `-Werror=W-RUN-BACKEND-FALLBACK` 으로 승격.
 
+### VITA-W4031 · `W-RUN-UNIQUE-VIOLATION` (Warning)
+
+**`unique`/`priority` 로 한정된 `case`/`if` 가 어떤 가지에도 안 맞았다**(IEEE 1800-2017
+§12.4.2/§12.5.3 violation report). `unique0`/`priority0` 은 이 검사를 **일부러 억제**하므로
+발화하지 않는다. `else`/`default` 를 가진 문장은 **못 놓치므로** 역시 발화하지 않는다.
+
+```
+logic [1:0] s = 2'b11;
+unique case (s) 2'b00: ; 2'b01: ; endcase
+->  warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique
+    case statement [at time 0]
+```
+
+⭐ **왜 `W-RUN-USER-WARNING`(W4007) 이 아닌가 — 그건 RTL 의 `$warning` 이고 이건 시뮬레이터의
+보고다.** IEEE 는 둘을 다른 절에 둔다(§12.5.3 violation report vs §20.10 severity task): 하나는
+**설계가 부른 태스크**이고 하나는 **도구가 만든 사실**이다. vita 는 위반 arm 을 파서에서
+`$warning` 문장으로 desugar 하므로 **한동안 실제로 같은 코드였고**, 그 결과 외부 라운드 29 가
+잰 두 가지가 전부 참이었다 — ⓐ 알려진 benign 위반 하나를 죽이려고 `-Wno-W-RUN-USER-WARNING` 을
+켜면 **RTL 의 `$warning` 이 전부** 사라지고, ⓑ 이 문서가 CI 게이트로 명시한
+`-Werror=W-RUN-USER-WARNING` 이 **`$warning` 이 한 줄도 없는 설계에서도** CI 를 깨뜨렸다.
+
+⚠️ 텍스트(`value is unhandled for priority or unique case statement`)는 **iverilog 핀**이라
+그대로 둔다 — 차분 오라클이 그 문자열로 답한다. 바뀐 것은 **코드**뿐이다.
+
+`-Wno-W-RUN-UNIQUE-VIOLATION` 으로 억제, `-Werror=W-RUN-UNIQUE-VIOLATION` 으로 승격 —
+이제 **양쪽 다 `$warning` 과 독립**이다.
+
 ## 8xxx · FILELIST
 
 ### VITA-E8001 · `E-FLIST-CYCLE` (Error)

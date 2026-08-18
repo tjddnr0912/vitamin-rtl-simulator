@@ -1230,12 +1230,8 @@ impl<'a> SimState<'a> {
         args: &[u32],
     ) {
         use crate::SeverityKind as K;
-        let (severity, code) = match sev {
-            K::Fatal => (Severity::Fatal, MsgCode::RunFatal),
-            K::Error => (Severity::Error, MsgCode::RunUserError),
-            K::Warning => (Severity::Warning, MsgCode::RunUserWarning),
-            K::Info => (Severity::Info, MsgCode::RunUserInfo),
-        };
+        // One spelling, shared with the statement-path emitter — see `SeverityKind`.
+        let (severity, code) = sev.diag_class();
         let mut message = crate::builtins::format_args_str(self, fmt, args, None);
         if message.is_empty() {
             message = code.title().to_string();
@@ -1251,7 +1247,7 @@ impl<'a> SimState<'a> {
         match sev {
             K::Fatal => self.call_fatal.set(true),
             K::Error => self.had_error.set(true),
-            K::Warning | K::Info => {}
+            K::Warning | K::Info | K::UniqueViolation => {}
         }
     }
 

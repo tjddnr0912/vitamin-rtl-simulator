@@ -171,13 +171,9 @@ pub(crate) fn emit_severity_message(
     mut message: String,
 ) -> Ctl {
     use crate::SeverityKind as K;
-    use diag::{Diagnostic, LogEvent, MsgCode, Severity, TimeStamp};
-    let (severity, code) = match sev {
-        K::Fatal => (Severity::Fatal, MsgCode::RunFatal),
-        K::Error => (Severity::Error, MsgCode::RunUserError),
-        K::Warning => (Severity::Warning, MsgCode::RunUserWarning),
-        K::Info => (Severity::Info, MsgCode::RunUserInfo),
-    };
+    use diag::{Diagnostic, LogEvent, TimeStamp};
+    // One spelling, shared with the frame-path emitter — see `SeverityKind`.
+    let (severity, code) = sev.diag_class();
     if message.is_empty() {
         message = code.title().to_string();
     }
@@ -197,7 +193,9 @@ pub(crate) fn emit_severity_message(
             sched.st.had_error.set(true);
             Ctl::Continue
         }
-        K::Warning | K::Info => Ctl::Continue,
+        // A violation report is diagnostic-only, like `$warning`: IEEE §12.5.3
+        // does not make a missed `unique` arm an error.
+        K::Warning | K::Info | K::UniqueViolation => Ctl::Continue,
     }
 }
 

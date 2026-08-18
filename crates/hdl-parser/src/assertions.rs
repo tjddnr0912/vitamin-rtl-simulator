@@ -431,11 +431,20 @@ impl Parser<'_, '_> {
 
     /// P2-E: `unique`/`priority` qualified if/case. The qualified statement
     /// parses normally; the VIOLATION surface (IEEE §12.4.2/§12.5.3 — no
-    /// branch/arm taken) desugars to a synthesized `$warning` else/default
+    /// branch/arm taken) desugars to a synthesized severity-task else/default
     /// arm (iverilog-pinned text class: "value is unhandled..."). A statement
     /// that already HAS an else/default cannot miss — left untouched. The
     /// multi-match uniqueness check is a documented cut (the lowered cascade
     /// is first-match-wins, so overlap is unobservable).
+    ///
+    /// ⚠️ The task is [`UNIQUE_VIOLATION_TASK`], not `$warning`. A §12.5.3
+    /// violation report is a fact the SIMULATOR produces; a `$warning` is a task
+    /// the DESIGN called, and IEEE puts them in different clauses. While the
+    /// desugar named `$warning` they were literally one diagnostic code, so
+    /// `-Wno-`/`-Werror` could not address one without the other — external
+    /// round-29 measured both directions. The name is the only channel the AST
+    /// offers (a marker field would change the frozen AST shape), and it maps
+    /// straight to `SeverityKind::UniqueViolation` in elaborate.
     pub(crate) fn parse_unique_priority(&mut self) -> Stmt {
         let qspan = self.cur_span();
         // §12.4.2: the `0` variants keep the multi-match intent but SUPPRESS
@@ -451,7 +460,7 @@ impl Parser<'_, '_> {
         self.bump(); // unique / priority / unique0 / priority0
         let warn_stmt = |span: Span| Stmt::SysTaskCall {
             name: Ident {
-                name: "$warning".to_string(),
+                name: UNIQUE_VIOLATION_TASK.to_string(),
                 span,
             },
             args: vec![Expr {

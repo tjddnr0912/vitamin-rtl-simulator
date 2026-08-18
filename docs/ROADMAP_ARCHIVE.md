@@ -6,12 +6,13 @@
 > - **이력 내러티브**(탄 단위) = [DEVLOG.md](DEVLOG.md). SPEC 정본 = `docs/preview/`.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 281건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 282건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.340` **외부 round-29 — correct-or-loud 의 loud 쪽을 읽을 수 있게**(값 결함 0 인 리포트 · 리포터는 코퍼스 전량을 새 기본 백엔드로 돌려 **틀린 값 0**·3-way 219 시나리오 바이트 동일을 확인했고, 찾은 것은 전부 **진단 품질**이다): **R29-1** 모든 구문 오류가 `{found:?}` 로 **vita 의 렉서 enum 을 유출**(`found Word(Keyword(End))`) — 철자는 span 에서 복구 가능했는데 **에러에 이미 있던 span 으로는 안 된다**(`error_at` 은 **더 이른 노드**에 보고하고 `found` 는 커서 토큰이라 둘을 **별개 필드**로 갈랐다) · **R29-2** clocking `default input/output` skew 아이템(실제 clocking 블록의 첫 줄)이 **문장 하나를 `expected {X}` 슬롯에 넣은** 메시지로 거부되고 그 메시지가 **없는 길**(`default skew only`)을 가리켰다 → IEEE §14.3 `default_skew` 를 **파싱하고 skew 없는 아이템에 스탬프**(두 번째 메커니즘이 아니라 = 판정은 여전히 elaborate 한 술자리) · 거부는 **skew 를 쓴 대로**(`#0`, `0` 아님)와 **신호 이름**을 부른다 · **R29-4** 런타임 진단에 위치가 **전혀** 없었다(같은 실행의 parse 진단은 `file:line:col`) — ⭐ **시각은 빠진 적이 없다**: `sim_time` 은 **모든 런타임 emitter 가 이미 찍고 있었고**(34 중 29 · 나머지 5 는 `RtlOutput` 둘 + 실행 밖 진단 둘) **렌더러가 버렸다** ⇒ ` [at time N]` · 5,496 테스트 중 **정확히 둘**이 움직였고 둘 다 **강화**됐다 · **R29-3** `unique`/`priority` 위반이 RTL `$warning` 과 **한 코드**였다(파서가 위반 arm 을 **문자 그대로 `$warning` 문장으로 desugar**) ⇒ benign 하나를 끄면 **`$warning` 전부**가 꺼지고 doc-15 가 CI 게이트로 명시한 `-Werror=W-RUN-USER-WARNING` 이 **`$warning` 없는 설계를 깨뜨렸다**(실측 errors=2 → 0) → **W4031 `W-RUN-UNIQUE-VIOLATION`** 신설 · `SeverityKind` 가 **클래스**가 되고(`diag_class` 한 철자를 두 emitter 가 공유 — 그 전엔 **두 번째 철자**였다) · **format_version 27** · ⭐ 곁가지로 **`$__vita_` 예약 네임스페이스** — desugar 의 채널이 **이름뿐**이라 소스가 그 이름을 쓰면 **위반하지 않은 violation 을 파일할 수 있었다**(규칙이지 목록이 아니라 다음 desugar 도 덮인다) · **§5 성능**: 리포트의 *"Keccak 지배에서 native 가 vm 보다 ~5% 느리다"* 는 **재현 안 됐지만 지적한 벤치 갭은 진짜였다** — 8 형태가 **전부 절차 바디 지배**(한 레짐의 여덟 표본)라 두 형태를 더했고(`cont-assign-heavy` 0.76 · `heap-heavy` 0.86) **둘 다 native 가 이긴다** · ⭐⭐ **이기는 이유가 리포트의 메커니즘을 반증한다** — 두 형태 다 **vm/interp 0.97**(컴파일할 바디가 없다)인데 native 는 **15~24% 빠르다** ⇒ tier-3 의 이득은 **아레나에서도** 온다 · 실물 `bench/keccak` 도 0.85/0.93/0.63 · **8/8 → 10/10** · ⚠️ **stale staged bin 함정 재발**(`vcmp`/`velab`/`vrun` 은 `separate-bins` required-features 라 `--workspace` 빌드에 안 들어간다 — 12일 된 바이너리가 *"staged 가 옛 코드를 쓴다"* 는 **거짓 신호**를 냈다) · 전 스위트 **5,517 green** · MsgCode **66**
 - `4.5.339` **elaborate 상수접기의 `**` 지수 자기결정 — 그리고 거부가 답이 아니라는 실측**: `localparam signed [15:0] P = 4'sd3 ** -4'sd8` 이 vita **6561** / iverilog·**vita 런타임** **0**(= 같은 소스가 param 과 런타임에서 다른 값) · 수정은 새 평가기가 아니라 **§4.5.186 폭 모델의 재사용**(헬퍼 하나를 세 fold 사이트가 공유) + `Concat`·Named-cast 폭/부호 arm + module-scope 위임 · 97칸 3-way **FIXED 10 · LOUD→CORR 2 · WRONG→LOUD 2 · 회귀 0** · ⚠️⚠️ **첫 설계(폭-미상 거부)를 적대 라운드가 반증했다 — 거부는 caller 만큼만 loud 다**(range bound 의 decline 경로가 **조용한 1비트 기본값**이라 correct→**silent-wrong**) ⇒ 거부를 걷고 **폭을 알 수 있게** 만들자 loud 였던 칸이 **정답 fold**(19683)로 올라갔다 · ⚠️ **깊이 청구도 과했다** — 인자는 유한 AST 하강이라 사이클이 없는데 청구하면 **65단 인자 중첩이 correct→LOUD** ⇒ **사이클이 있는 default 만** 청구하고 위임 게이트는 `depth==0` **∨ call-free` · ⚠️⚠️ **뮤테이션이 "등가" 를 반증** — Named 캐스트의 **부호** arm 이 스윕 밖 두 칸을 silent-wrong 에서 건져낸다(`RPS'(2)-4'sd9` 가 signed 면 −7→0 · unsigned 면 9→19683) · ⚠️ genvar 는 `param_meta` 가 없어 무부호로 읽혀 `2 ** (g-1)` 이 correct→LOUD 였고 **(32,true) 시딩으로 함께 닫았다**(IEEE §27.4) · 뮤테이션 **10/10 사망** · 발굴 11건 §2 등재
 - `4.5.337` ③층 **V1 슬라이스 1 — SVA: 거부가 순전히 보수적이었다**(커널 코드 0줄 추가 · 지운 것은 `design_eligibility` 의 `sva` 행 하나): 네이티브 커버리지 **54.7% → 66.8%**(+760 호출) · ⭐ **SVA 는 런타임 기계장치가 아니다** — elaborate 가 `assert property(@(clk) a |-> b)` 를 `always @(clk) if (a && !b) $error(…)` 로 desugar 하므로 도착하는 것은 평범한 IR + StmtId 테이블 둘이고, 그 둘은 **공유 `builtins::dispatch` 안**에서 읽힌다(tier-3 은 §4.5.293 이래 배선돼 있다) · ⭐ **진짜 기계장치가 필요한 형태는 이미 자기 이름으로 거부 중** — `cover property`/liveness 는 `final_procs` → `final` 행, deferred assertion 은 `mature_deferred` 훅이 없어 별도 `deferred_assert` 행(census: **`sva` 혼자 760 · `deferred_assert` 혼자 14 · 겹침 0**) · ⭐⭐ **게이트가 세 번 자기를 반증했다** — ⓐ **하네스가 `assert_fire`/`assert_ctl`/`defer_*` 를 설치 안 해서** `$assertoff` 가 플래그 대신 출력되는 설계로 두 백엔드를 비교하고 있었다(발견은 거부 이웃 핀이 `Ok(())` 를 낸 것) · ⓑ **차분은 공유 코드에 구조적으로 눈멀었다(실측)** — 공유 dispatch 뮤테이션 둘이 엔진 게이트를 전부 통과하고 `cli::sva_rest` 절대 핀에서만 죽어서, **절대 앵커**를 짓자 엔진에서도 죽고 하네스 뮤테이션 둘도 함께 죽었다(그 전엔 생존) · ⓒ 앵커를 짓다 **내 기대가 틀린 것**을 쟀다(`$asserton` 시점에 위반 조건이 남아 있어 다음 posedge 에서도 발화) · **뮤테이션 6/6 사망** · ⚠️ 절차 사고: 뮤테이션 복원에 `git checkout --` 을 써서 **커밋 안 된 편집 둘이 HEAD 로 되돌아가 지워졌다**(가짜 kill 2건 유발) → 복원은 **바이트 스냅샷**
 - `4.5.336` ③층 **V0 — 커버리지를 처음 쟀다**(구현 아님·트리 변경 0): 기본 백엔드를 `Native` 로 flip → `simulate()` **6,251 중 3,417(54.7%)이 네이티브** · **발산 0**(5377 중 5374 통과, 실패 3건은 전부 *"기본 백엔드가 vm 이다"* 를 단언하는 테스트) = **오늘의 ③층은 자기가 받는 절반에 대해 이미 바이트 정확하고 남은 것은 전부 커버리지다** · ⚠️ 계기가 두 번 틀렸고 두 번 다 측정 자신이 잡았다 — **`SimOpts::default()` 가 enum default 를 안 쓰고 `Bytecode` 를 하드코딩**(flip 이 CLI 절반만 움직였다)하고, **`writeln!` 이 unbuffered `File` 에 조각마다 `write(2)`** 를 내 프로세스별 nextest 에서 행이 찢어져 **1.85× 부풀었다**(11,563 vs 6,251 · 판별자는 레이아웃을 아는 파서) · ⭐⭐ **첫 census 는 V1 을 정렬하지 못했다 — 게이트가 단락하기 때문**(design 에서 걸린 설계의 storage/executor 는 미측정) → 세 층을 **독립으로** 물으니 구조가 나왔다: **design 게이트와 storage 게이트가 같은 기능을 두 번 이름 부른다**(`D:string` 369회 발화·단독 원인 **0회** = `S:heap-slot` 과 짝 · `D:real`/`S:real-slot` 도) ⇒ **슬라이스의 단위는 행이 아니라 한 기능이 걸린 게이트 전부의 집합** · V1 순서(greedy 누적) = **SVA +774 → 67.0% · heap 저장+네 종류 +560 → 76.0% · 서브루틴 프레임 +712 → 87.4%** · `stmt_effect` 91.2 · class 93.9 · fork 95.5 · 시스템태스크 96.8 · `real` 98.0 · coverage 99.0 · 나머지 다섯 100% — **상위 셋이 87.4% 를 산다** · ⚠️ `fork`·`file_directed` 는 **단독 이득 0** · ⚠️ fallback 2,834 중 **2,656(93.7%)이 CLI 서브프로세스**라 테스트 단위 귀속은 못 쓴다(단위 = `simulate()` 호출)
@@ -370,6 +371,109 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.340 외부 round-29 — correct-or-loud 의 loud 쪽을 읽을 수 있게 (2026-08-18, branch feat-round29-diagnostic-quality, **format 27**) ✅
+
+**입력.** 값 결함 **0** 인 리포트. 리포터는 코퍼스 전량을 새 기본 백엔드(`native`)로 돌려
+4 TB · 가드 105 · KAT ×3 · 무제한 스윕 **793 PASS/0 FAIL** · `+CAVP_PARTIAL_RUN` 652 ·
+**3-way(native/vm/interp) 219 시나리오 stdout 바이트 동일**을 확인했고, Phase A 가 tier-3 로 옮긴
+표면 중 자기 TB 가 안 쓰는 것 **14 종**을 따로 probe 로 지어 돌렸다(12 PASS · 2 는 loud).
+⇒ **찾은 것은 전부 진단 품질이다**: `correct-or-loud` 는 loud 쪽이 **쓸 만한지**에 대해 아무 말도
+하지 않는다.
+
+**R29-1 — 모든 구문 오류가 Rust 토큰을 유출했다.** 한 사이트가 `{found:?}` 로 렌더해서
+사용자 메시지가 vita 의 렉서 enum 을 실었다(`expected '(' after 'if', found Word(Keyword(End))`).
+앞 절은 사용자의 언어이고 뒤 절은 우리 것이다 — 독자는 소스로 역번역해야 하고 로그 소비자(G2 OBS)는
+vita 의 토큰 타입을 알아야 한다.
+
+⭐ **철자는 span 에서 복구 가능했다 — 다만 에러가 이미 들고 있던 span 으로는 안 된다.**
+`error_at` 은 **더 이른 노드**에 보고하는데 `found` 는 커서 토큰이라(`g[w].u.q` 에서 앵커는 `w`,
+커서는 `.`) 보고 앵커를 슬라이스하면 **`found` 에 든 것이 아닌 토큰**을 인용하게 된다. `ParseError`
+가 둘을 **별개 필드**로 들고 `found_span` 만 슬라이스한다. 키워드와 식별자는 **이름을 붙인다**
+(그 둘은 맨 철자가 *왜* 틀렸는지를 말하지 않는다 — `end` 만 보면 이름처럼 읽힌다), 나머지는 그냥 인용.
+텍스트를 복구 못 하면 **`found` 절을 버린다**(실토큰에는 도달 불가지만, 틀린 `found` 는 없는 것보다 나쁘다).
+
+**R29-2 — clocking `default` 아이템: 깨진 템플릿이 없는 길을 가리켰다.**
+`default input #1step output #0;` 는 실제 clocking 블록 대부분의 첫 줄인데, 리포터가 시도한 **5/5** 가
+`expected {X}` 슬롯에 **문장 하나가 통째로** 들어간 메시지로 거부됐고, 그 메시지가 `default skew only`
+= *"수식어 없는 `default #1step;` 은 된다"* 로 읽히는데 **그것도 같은 메시지로 거부**된다. 반대쪽
+진단(per-signal `#0`)의 *"`#1step` is accepted as the explicit default"* 는 첫 메시지 옆에서 읽으면
+**방금 거부된 것을 쓰라는 지시**다.
+
+이제 IEEE 1800-2017 §14.3 `default_skew` 를 **파싱하고**, skew 를 자기가 선언하지 않은 아이템에
+**스탬프**한다. 그것이 설계의 전부다 — **두 번째 skew 메커니즘이 아니므로** 어느 skew 를 이 서브셋이
+받는지는 **여전히 elaborate 의 술어 하나**가 정하고, 그 거부가 이제 **쓴 대로의 skew**(`#0`, `0` 아님)와
+**착지한 신호**를 부른다(블록 전역 default 는 한 번 쓴 skew 를 여러 아이템에 놓으므로 "어느 신호" 는
+소스를 읽어서 복구되지 않는다). 맨몸 `default #1step;` 은 **언어의 문법 오류**이므로(방향 키워드가
+optional 이 아니다) 그대로 loud 이고 메시지가 **그 사실**을 말한다. 두 번째 `default` 는 자기 키워드에서
+loud(둘에는 정의된 읽기가 없다).
+
+**R29-4 — 런타임 진단이 언제인지 말하지 않았다.** 한 실행이 `file:line:col` 을 붙이는 진단(parse)과
+아무것도 안 붙이는 진단(runtime)을 섞었다. 리포터의 설계는 **11 파일 22 곳**의 `unique case` 와 여러
+인덱스 배열에 대해 `W4029` 8건 + `W4007` 1건을 내는데 출력만으로는 하나도 안 좁혀진다.
+
+엔진은 span 이 아니라 IR 위에서 도니 위치는 없다 — ⭐ **그런데 시각은 빠진 적이 없다**: `sim_time` 은
+Diagnostic 에 이미 있고 **모든 런타임 emitter 가 찍는다**(34 사이트 중 29 · 나머지 5 는 `RtlOutput`
+둘과 **실행 밖에서 나는 진단 둘**[백엔드 폴백·wide-arith 요약]이라 `None` 이 맞다). **렌더러가 버리고
+있었다.** 이제 ` [at time N]` 을 붙인다 — `simulation ended (…) at time N` 과 **같은 시계·같은 문구**.
+컴파일 시점 진단은 `None` 이라 그대로다(거기에 0 을 찍으면 **아무것도 아닌 것에 대한 사실**이 된다).
+⭐ 5,496 테스트 중 **정확히 둘**이 움직였고 **둘 다 강화됐다**(이제 두 deferred 리포트가 **같은 슬롯**에서
+성숙한다는 것을 핀한다 — 그 테스트들의 주제가 바로 그것이다).
+
+**R29-3 — 위반 보고가 RTL `$warning` 과 한 코드였다.** 파서가 위반 arm 을 **문자 그대로 `$warning`
+문장으로 desugar** 하므로 `W-RUN-USER-WARNING` 하나에 둘이 앉았고, 리포터가 잰 두 방향이 **전부 참**이다 —
+ⓐ 알려진 benign unique-case 하나를 죽이려고 `-Wno-` 를 켜면 **트리의 `$warning` 이 전부** 사라지고
+ⓑ 이 저장소의 doc-15 가 CI 게이트로 명시한 `-Werror=W-RUN-USER-WARNING` 이 **`$warning` 이 한 줄도
+없는 설계를 깨뜨렸다**(실측 `errors=2`). IEEE 는 둘을 다른 절에 둔다 — §12.5.3 은 **시뮬레이터가
+만드는 보고**, §20.10 은 **설계가 부른 태스크**.
+
+지은 것: **`W4031 · W-RUN-UNIQUE-VIOLATION`** · `SeverityKind` 가 **severity 가 아니라 클래스**가 되고
+(`UniqueViolation` 은 Warning 으로 렌더되지만 코드가 다르다) 그 매핑이 **`diag_class` 한 철자**가 된다 —
+⭐ 엔진에는 emitter 가 **둘**(문장 경로·프레임 경로)이고 **그 전엔 두 번째 철자였다**(둘 다 `_`-free 라
+새 variant 가 둘 다를 세우기는 했지만, 한 철자면 애초에 갈릴 자리가 없다). 파서 desugar 는 이제
+`$__vita_unique_violation` 을 낸다.
+
+⭐ **곁가지로 `$__vita_` 를 예약 네임스페이스로 만들었다.** desugar 가 elaborate 에게 말하는 채널은
+**이름뿐**이고(마커 필드는 frozen AST 형상을 바꾼다) 그 이름을 소스가 쓸 수 있으면 **위반하지도 않은
+§12.5.3 violation 을 소스가 파일할 수 있다**. 규칙이지 목록이 아니라서 **다음 desugar 도 자동으로 덮인다**.
+진입점 **둘 다**(문장·표현식) 거부해야 채널이 반만 사적이지 않다.
+
+⚠️ **format_version 26 → 27, 그리고 그 이유가 하위호환인데도 bump 다.** `UniqueViolation` 은 기존
+`SeverityTable` 트레일러에 **마지막으로** 붙으므로 postcard discriminant 상 **v26 값은 전부 그대로
+디코드된다** — 구 아티팩트는 mis-decode 하지 않는다. 깨지는 것은 **새 아티팩트 × 구 바이너리** 하나이고
+그것도 loud 이긴 하다(`undecodable .velab severity trailer`). **bump 하는 이유는 그 loud 가 고치는 법을
+말하지 않기 때문**이다 — 헤더 게이트의 `E-ART-FORMAT-MISMATCH` 는 말한다. **더 정확한 loud 를 사는 것**이
+이 bump 의 내용이고, ENGINEERING_RULES 의 bump 사유가 2종 → **3종**이 됐다.
+
+**§5 성능 — 재현 실패, 그러나 지적한 벤치 갭은 진짜였다.** 리포터는 자기 트리에서 native 가
+Keccak 지배 워크로드에서 **~5% 느리고** SHA-2 지배에서는 1.09~1.76× 빠르다고 쟀고, *"비용이 body 실행기
+밖에 있어서 tier-3 오버헤드만 남는다"* 로 진단했다. ⭐ **구조적 지적은 옳고 고칠 값이 있었다** —
+`perf_baseline.rs` 의 여덟 형태가 **전부 절차 `always @(posedge clk)` 바디**에 일을 둔다 = 바디 사이드
+백엔드가 가속하는 바로 그 절반 = **한 레짐의 여덟 표본**. 그래서 두 형태를 더했다:
+`cont-assign-heavy`(Keccak 스타일 조합 라운드를 **연속대입**으로 · 바디는 NBA 다섯)와
+`heap-heavy`(string/queue 처닝 = 벡터 파싱 TB 의 레짐).
+
+⚠️⚠️ **둘 다 반대로 갔다** — native/vm **0.76** · **0.86**. ⭐⭐ **그리고 왜 그런지가 메커니즘을
+반증한다**: 두 형태 모두 **vm/interp 0.97** = 바이트코드 VM 이 사실상 기여 0 인데(컴파일할 바디가 없다)
+native 는 **15~24% 빠르다** ⇒ tier-3 의 이득이 바디 컴파일에서만 오는 게 아니라 **넷/settle 경로
+(아레나)에서도** 온다. 이 저장소의 실물 Keccak-f[1600] 도 같은 답이다(`keccak_f` 0.85 ·
+`keccak_f_arr` 0.93 · `keccak_f_flat` 0.63). ⇒ **그들의 숫자는 그들의 설계에 대한 측정으로 남기고
+메커니즘은 미확인으로 기록한다** · 다음 프록시는 ROADMAP §5.2 에 이름을 적었다(그 워크로드는 199 초 동안
+**0.87 MB 의 CAVP 레코드**를 처리한다 ⇒ Keccak 산술이 아니라 **레코드 파싱**이 지배일 수 있다) ·
+**8/8 → 10/10** 이고 이제 그 문장은 **두 레짐**에 대한 진술이다.
+
+⚠️ **절차 사고 — stale staged bin 이 거짓 신호를 냈다.** `vcmp`/`velab`/`vrun` 은
+`required-features = ["separate-bins"]` 라 `cargo build --workspace` 에 **안 들어간다**. 12일 된
+바이너리가 *"staged 경로가 옛 코드를 쓴다"*(W4007 + 타임스탬프 없음)로 보였고, 제대로 빌드하니
+staged 도 W4031 + `[at time 0]` 이다. ⚠️ 그리고 **`-p cli` 를 no-oracle lib 게이트에 더하지 마라** —
+그 조합은 **pre-existing 로 E0004** 다(lib **테스트** 타깃이 dev-dep 으로 sim-engine 의 `oracle` 만
+되살려 `Backend` 는 세 variant 인데 cli 의 `#[cfg]` arm 둘이 잘린다). CI 는 `-p sim-engine` 만
+테스트하므로 그 축은 초록이고 **135 green** 이 맞다 → ROADMAP §3 등재.
+
+**게이트.** 전 스위트 **5,517 green**(신규 앵커 26) · clippy **3 구성** 0(workspace/no-oracle/separate-bins) ·
+fmt 0 · no-oracle lib **135 green** · MsgCode **65 → 66**(bijection 게이트가 doc-15 항목을 강제) ·
+`examples/` 4종 stdout·VCD **바이트 동일** · keccak·picorv32 **3-way 바이트 동일** · staged
+`vcmp→velab→vrun` 이 새 클래스를 나른다.
 
 #### 4.5.339 elaborate 상수접기의 `**` 지수 자기결정 (2026-08-18, branch feat-constfold-pow-exp-selfdet, format 26 불변) ✅
 

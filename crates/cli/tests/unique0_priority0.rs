@@ -4,8 +4,9 @@
 //! if/case with no synthetic `$warning` default/else injected. (Icarus is
 //! not an oracle here: it rejects `unique0 if` outright and its runtime
 //! reports "unique/unique0 qualities are ignored" on case — it cannot
-//! distinguish the two.) Plain `unique`/`priority` keep the W4007 no-match
-//! warning, pinned as a regression.
+//! distinguish the two.) Plain `unique`/`priority` keep the no-match warning,
+//! pinned as a regression — under `W-RUN-UNIQUE-VIOLATION` (W4031) since
+//! round-29 R29-3, NOT the `$warning` code it used to share.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -50,8 +51,8 @@ fn unique0_suppresses_no_match_warning() {
     assert!(out.contains("if y=0"), "unique0 if no-match silent:\n{out}");
     assert!(out.contains("p0 y=0"), "priority0 no-match silent:\n{out}");
     assert!(
-        !err.contains("W4007"),
-        "no W4007 from the 0-variants:\n{err}"
+        !err.contains("W4031"),
+        "no violation report from the 0-variants:\n{err}"
     );
 }
 
@@ -71,8 +72,11 @@ fn unique0_matching_behaves_like_plain() {
 
 #[test]
 fn plain_unique_priority_still_warn_regression() {
-    // The non-0 qualifiers keep their W4007 no-match warning — exactly one
-    // per unhandled statement here (the two 0-variants add none).
+    // The non-0 qualifiers keep their no-match warning — exactly one per
+    // unhandled statement here (the two 0-variants add none). The code is
+    // `W-RUN-UNIQUE-VIOLATION`, not the RTL-`$warning` code it used to share
+    // (round-29 R29-3): a §12.5.3 violation report is the simulator's, not the
+    // design's, and the two must be separately suppressible.
     let (out, err, code) = run("module t; logic [3:0] op; logic [7:0] y; initial begin\n\
            op = 4'hF;\n\
            unique case (op) 4'hA: y=1; endcase\n\
@@ -84,7 +88,7 @@ fn plain_unique_priority_still_warn_regression() {
     assert_eq!(code, 0);
     assert!(out.contains("done"), "{out}");
     assert_eq!(
-        err.matches("W4007").count(),
+        err.matches("W4031").count(),
         2,
         "exactly unique+priority warn (not the 0-variants):\n{err}"
     );
@@ -103,7 +107,7 @@ fn explicit_default_and_else_are_untouched() {
     assert_eq!(code, 0);
     assert!(out.contains("d=9"), "unique0 explicit default runs:\n{out}");
     assert!(out.contains("u=8"), "unique explicit default runs:\n{out}");
-    assert!(!err.contains("W4007"), "explicit default = handled:\n{err}");
+    assert!(!err.contains("W4031"), "explicit default = handled:\n{err}");
 }
 
 #[test]

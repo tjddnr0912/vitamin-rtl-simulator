@@ -103,6 +103,10 @@ pub(crate) fn map_severity(dollar_name: &str) -> Option<SeverityKind> {
         "$error" => Some(SeverityKind::Error),
         "$warning" => Some(SeverityKind::Warning),
         "$info" => Some(SeverityKind::Info),
+        // Parser-synthesized `unique`/`priority` violation report — same
+        // machinery as the severity tasks, its own diagnostic code. The name is
+        // shared with the producer as a constant so the two cannot drift.
+        ast::UNIQUE_VIOLATION_TASK => Some(SeverityKind::UniqueViolation),
         _ => None,
     }
 }

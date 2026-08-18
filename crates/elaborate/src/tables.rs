@@ -35,13 +35,21 @@ pub const FRAME_FORK_KEY: u32 = u32::MAX;
 /// hierarchical `$scope`/`$var` instead of a flat `top` + synthetic `n0..nN`.
 pub type NetNameTable = Vec<String>;
 
-/// Severity class of a lowered `$fatal`/`$error`/`$warning`/`$info` statement.
-/// NOT part of `SimIr` (the frozen `SysTaskId` has no severity variants): a
-/// severity task lowers to a plain `SysTaskId::Display` stmt, and this kind rides
+/// DIAGNOSTIC CLASS of a lowered statement that prints to the diagnostic stream
+/// instead of stdout — the four `$fatal`/`$error`/`$warning`/`$info` severity
+/// tasks, plus the simulator-generated reports that share their machinery.
+/// NOT part of `SimIr` (the frozen `SysTaskId` has no severity variants): such a
+/// statement lowers to a plain `SysTaskId::Display` stmt, and this kind rides
 /// out-of-band in the [`SeverityTable`] so the golden root stays byte-identical.
 /// The engine consults it per-StmtId to route the text to the DIAGNOSTIC stream
 /// (doc-13 tokens `fatal[VITA-F4004]`/`error[VITA-E4003]`/…) instead of stdout,
 /// and to abort (`$fatal`) or flag the exit class (`$error`).
+///
+/// ⚠️ It is a class, not only a severity: [`Self::UniqueViolation`] renders at
+/// Warning but must NOT share a code with `$warning`, so the mapping to
+/// `(Severity, MsgCode)` is [`Self::diag_class`] and lives here — the engine has
+/// two emitters (statement path and frame path) and a second spelling would let
+/// them disagree about what a statement reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SeverityKind {
     /// `$info` — diagnostic only; exit class untouched.
@@ -52,6 +60,29 @@ pub enum SeverityKind {
     Error,
     /// `$fatal` — diagnostic + implicit `$finish` with `ExitClass::Fatal`.
     Fatal,
+    /// A `unique`/`priority` `case`/`if` that matched no branch (IEEE 1800
+    /// §12.4.2/§12.5.3). The parser desugars the violation into the same
+    /// `$warning`-shaped statement, so without this variant the report and an
+    /// RTL `$warning` are literally one code and `-Wno-`/`-Werror` cannot
+    /// separate them. Diagnostic only; exit class untouched.
+    ///
+    /// ⚠️ Declared LAST on purpose: postcard encodes the discriminant, so
+    /// appending leaves every existing `.velab` decoding to the same values.
+    UniqueViolation,
+}
+
+impl SeverityKind {
+    /// The one spelling of "what does a statement of this class report".
+    pub fn diag_class(self) -> (diag::Severity, diag::MsgCode) {
+        use diag::{MsgCode as M, Severity as S};
+        match self {
+            Self::Fatal => (S::Fatal, M::RunFatal),
+            Self::Error => (S::Error, M::RunUserError),
+            Self::Warning => (S::Warning, M::RunUserWarning),
+            Self::Info => (S::Info, M::RunUserInfo),
+            Self::UniqueViolation => (S::Warning, M::RunUniqueViolation),
+        }
+    }
 }
 
 /// Severity side table: StmtId → [`SeverityKind`]. A deterministic `BTreeMap`

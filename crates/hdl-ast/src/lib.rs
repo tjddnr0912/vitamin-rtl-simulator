@@ -21,6 +21,21 @@
 use serde::{Deserialize, Serialize};
 use vita_artifact_derive::SchemaHash;
 
+/// System-task name the parser synthesizes for a `unique`/`priority` violation
+/// report (IEEE 1800-2017 §12.4.2/§12.5.3). NOT user-writable in spirit — it
+/// lives here only because the name is the one channel a synthesized
+/// `Stmt::SysTaskCall` has, and the producer (`hdl-parser`) and the consumer
+/// (`elaborate::map_severity`) must agree on exactly one spelling.
+///
+/// It exists because a violation report is a fact the SIMULATOR produces while
+/// `$warning` is a task the DESIGN called. Desugaring the report to a literal
+/// `$warning` made the two one diagnostic code, so neither could be suppressed
+/// or promoted without the other.
+///
+/// A `const`, not a type: `SchemaHash` hashes type SHAPES, so this does not
+/// touch the `.vu` root.
+pub const UNIQUE_VIOLATION_TASK: &str = "$__vita_unique_violation";
+
 // ───────────────────────────── Span ─────────────────────────────
 /// Half-open byte range `[lo, hi)` into the preprocessed source. `u32` (not the
 /// lexer's `Range<usize>`) so the serialized shape is deterministic across OSes.

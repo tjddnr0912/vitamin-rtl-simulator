@@ -445,6 +445,20 @@ impl Parser<'_, '_> {
     }
     pub(crate) fn parse_systask_call(&mut self) -> Stmt {
         let start = self.cur_span();
+        // `$__vita_*` is vita's own namespace: a desugar that needs to say
+        // something to elaborate has only the NAME to say it with (a marker
+        // field would change the frozen AST shape), so those names are a private
+        // channel. Source that writes one is injecting into that channel — e.g.
+        // `$__vita_unique_violation` would file an IEEE §12.5.3 violation report
+        // the design never violated. Loud, and general: it covers every future
+        // desugar without anyone remembering to add a case. Reported BEFORE the
+        // bump so the offending token in the message is the name itself.
+        if self.cur_text().starts_with("$__vita_") {
+            self.error(
+                "a system task name outside vita's reserved `$__vita_` namespace \
+                 (those names are synthesized by the compiler and cannot be written)",
+            );
+        }
         let t = self.bump().unwrap(); // SystemTask; lexeme retains `$`
         let name = Ident {
             name: self.src[t.span.clone()].to_string(),

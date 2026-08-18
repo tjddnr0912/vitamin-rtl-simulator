@@ -373,13 +373,24 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   과 다른 항목이다** — 그쪽은 elaborate 진단의 앵커 누락이고 이건 **런타임 진단에 앵커 개념이 없는 것**
   (엔진은 span 이 아니라 IR 위에서 돈다). 재사용 지점 = §4.5.249 `diag::SpanResolver` + StmtId→span
   사이드카. doc-15 의 W4007 예시(`… at tb.dut.u_fifo time=620ns`)가 목표 형태다.
-- **`unique`/`priority` 위반이 RTL `$warning` 과 코드를 공유한다**(R29-3). 파서가 위반 arm 을
-  **문자 그대로 `$warning` 문장으로 desugar** 하므로 `W-RUN-USER-WARNING` 하나에 둘이 앉는다 ⇒
-  benign 한 unique-case 하나를 죽이려면 `-Wno-` 가 **RTL 의 `$warning` 을 전부** 죽이고, doc-15 가
-  CI 게이트로 명시한 `-Werror=W-RUN-USER-WARNING` 은 **`$warning` 이 한 줄도 없는 설계에서도** CI 를
-  깨뜨린다(실측 `errors=2`). IEEE §12.5.3 의 violation report 는 §20.10 severity task 와 **별개 개념**
-  이고 doc-15 도 W4007 을 `$warning` 으로만 설명한다. 수리 = 전용 MsgCode 를 severity 사이드카로
-  나르기 ⇒ `SeverityKind` 에 variant 추가 = **`.velab` 트레일러 wire 변경(format_version bump)**.
+- ~~**`unique`/`priority` 위반이 RTL `$warning` 과 코드를 공유한다**(R29-3)~~ **RESOLVED
+  (2026-08-18)** — `W-RUN-UNIQUE-VIOLATION`(**W4031**) 신설 · `SeverityKind::UniqueViolation`
+  (기존 `SeverityTable` 트레일러에 **마지막으로** 추가 ⇒ v26 값은 그대로 디코드 · **format_version
+  27**) · 파서 desugar 가 `$warning` 대신 `$__vita_unique_violation` 을 낸다. 양방향 실측:
+  `-Wno-` 가 각각 하나만 끄고, `-Werror=W-RUN-USER-WARNING` 이 **`$warning` 없는 설계를 더 이상
+  안 깨뜨린다**(errors=2 → 0). ⭐ 곁가지로 **`$__vita_` 를 예약 네임스페이스로** 만들었다 —
+  desugar 가 elaborate 에게 말하는 채널이 **이름뿐**이라(마커 필드는 frozen AST 형상을 바꾼다)
+  소스가 그 이름을 쓸 수 있으면 **위반하지도 않은 violation 을 소스가 파일할 수 있다**. 규칙이지
+  목록이 아니라서 다음 desugar 도 자동으로 덮인다.
+- ⚠️ **`cli` 의 lib 테스트 타깃은 제품 형태에서 컴파일되지 않는다**(pre-existing · 2026-08-18 발견 ·
+  `7de9364` 에서도 동일). `cargo test -p cli --no-default-features --lib` 이 **E0004** 로 죽는다 —
+  lib **테스트** 타깃이 dev-dep 을 링크하면서 **sim-engine 의 `oracle` 만 되살아나고** cli 자신의
+  feature 는 꺼진 채라, `Backend` 는 세 variant 인데 `backend_name` 의 `#[cfg(feature="oracle")]`
+  arm 둘이 잘려 나간다(§5.1-as feature-unification 함정의 **비대칭 형태**). ⚠️ **CI 는 못 본다** —
+  `build-no-oracle` 축은 `-p sim-engine` 만 테스트한다(그래서 그 축은 초록이고 **135 green** 이 맞다).
+  ⚠️ **그러므로 `-p cli` 를 그 명령에 더하지 마라** — 오늘은 실패가 곧 이 항목이지 회귀가 아니다.
+  수리 = cli 의 dev-dep 이 sim-engine 을 `default-features = false` 로 잡거나, 두 crate 의 `oracle`
+  을 하나로 묶는 것.
 - **`error_at` 진단은 앵커와 `found` 가 다른 토큰을 가리킬 수 있다.** `error_at` 은 **더 이른 노드**에
   보고하는데 `found` 는 커서 토큰이라(`g[w].u.q` → 앵커는 `w`, 메시지는 `found '.'`) 둘이 갈린다.
   R29-1 이 이 둘을 **별개 필드로 분리**했으므로(자기 토큰만 인용 = 절대 틀리지 않는다) 오늘은
@@ -466,7 +477,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,477 tests green** · no-oracle lib green · clippy **3 구성** 0 · fmt 0 · format_version **26** · MsgCode **65** |
+| 게이트 | **5,517 tests green** · no-oracle lib green · clippy **3 구성** 0 · fmt 0 · format_version **27** · MsgCode **66** |
 
 ### 다음 후보 — 우선순위 순
 
