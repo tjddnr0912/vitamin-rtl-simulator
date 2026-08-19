@@ -97,7 +97,7 @@
 - **최저위험 순서**: 순수 파서 desugar(기존 AST 재사용) > 기존 메커니즘 라우팅(grep 등가 기구) > 단일-속성 primitive COMPOSE(신규 결합 primitive=골든 영향) > 신규 인프라.
 - **loud→supported 후보를 그라운딩할 때 형제 경로와 capability-parity 매트릭스를 비교하라** — 같은 문맥 집합(concat·compare·method·arg·display)을 두 경로에 모두 돌리면 **양쪽 공통 silent-wrong**이 드러난다(이번 반복의 ① 발굴 경로).
 - **거부/미지원 판단 전 기존 부분지원 grep · STORAGE 갭 의심 → ENGINEERING_RULES**.
-- **아티팩트 불변식**: **format_version 27**. bump 사유 3종=①frozen sim-ir 형상 변경(골든 재생성·드묾) ②staged trailer 사이드카 **추가**(v20/21/22 선례·SimIr 골든 불변·wire-pin+`obs.rs` pin 재생성·구 `.velab` loud-reject) ③**기존 사이드카의 enum 이 variant 를 얻을 때**(v27 선례). ⚠️ ③ 은 **하위호환인데도 bump 한다** — postcard 는 discriminant 를 쓰므로 **마지막에 추가하면** 구 아티팩트는 그대로 디코드되고 **새 아티팩트 × 구 바이너리**만 깨진다. bump 하지 않아도 loud 이긴 하지만(`undecodable … trailer`) 그 메시지는 **고치는 법을 말하지 않는다** ⇒ 헤더 게이트의 `E-ART-FORMAT-MISMATCH` 로 받게 하려고 bump 한다. **더 정확한 loud 를 사는 것이 bump 의 이유**이고, variant 를 중간에 끼우면 ③ 이 아니라 ①(구 아티팩트 mis-decode)이다. 그 외 전부 **IR-0**(엔진/elaborate-local·SimOpts 사이드카). **3-OS byte-identical**이 perf보다 우선. AST 필드 추가=`.vu` 해시만 re-pin(`hdl-ast/tests/schema_hash.rs`)·format 불변·VALUE만 변경=둘 다 불변. **`block_body` 재귀 경로(파서) 수정=2 MiB 스택 depth_guard 확인 필수**(`RUST_MIN_STACK=2097152`·프레임 비대→`#[inline(never)]` cold-helper 추출/Box화).
+- **아티팩트 불변식**: **format_version 29**. bump 사유 3종=①frozen sim-ir 형상 변경(골든 재생성·드묾) ②staged trailer 사이드카 **추가**(v20/21/22/28/29 선례 — v28 은 `.vu` 쪽 tail·SimIr 골든 불변·wire-pin+`obs.rs` pin 재생성·구 `.velab` loud-reject) ③**기존 사이드카의 enum 이 variant 를 얻을 때**(v27 선례). ⚠️ ③ 은 **하위호환인데도 bump 한다** — postcard 는 discriminant 를 쓰므로 **마지막에 추가하면** 구 아티팩트는 그대로 디코드되고 **새 아티팩트 × 구 바이너리**만 깨진다. bump 하지 않아도 loud 이긴 하지만(`undecodable … trailer`) 그 메시지는 **고치는 법을 말하지 않는다** ⇒ 헤더 게이트의 `E-ART-FORMAT-MISMATCH` 로 받게 하려고 bump 한다. **더 정확한 loud 를 사는 것이 bump 의 이유**이고, variant 를 중간에 끼우면 ③ 이 아니라 ①(구 아티팩트 mis-decode)이다. 그 외 전부 **IR-0**(엔진/elaborate-local·SimOpts 사이드카). **3-OS byte-identical**이 perf보다 우선. AST 필드 추가=`.vu` 해시만 re-pin(`hdl-ast/tests/schema_hash.rs`)·format 불변·VALUE만 변경=둘 다 불변. **`block_body` 재귀 경로(파서) 수정=2 MiB 스택 depth_guard 확인 필수**(`RUST_MIN_STACK=2097152`·프레임 비대→`#[inline(never)]` cold-helper 추출/Box화).
 - **READ 경로를 넓히면 WRITE twin을 같은 반복에 전수하라** — read 하나를 고치면 대개 write 쪽에 같은-클래스 silent가 여러 형태로 잠복해 있다(select 3형·concat). twin 판정 기준=**scalar/fixed 쌍둥이가 loud인데 이 경로만 조용하면 그 경로가 이상한 것**.
 - **guard는 문서화된 단일 퍼널에 두고 全 site가 술어 하나를 공유하라** — 별도 site에 두면 형제 축(concat 등)이 열린 채 남고, 술어를 둘로 나누면 (string/real처럼) 축마다 커버리지가 갈린다. 술어 이름은 **금지 사유**(bit-addressable 아님)로 짓고 타입 열거로 짓지 마라.
 - **공유 기구(walk·분류기·퍼널)에 semantics를 추가할 땐 default가 아니라 OPT-IN 파라미터로** — consumer마다 순서 의존성·안전 전제가 다르다(한 곳을 위해 14개 전부에 리스크를 지우지 마라). opt-in 함수 doc에 **양성 전제조건**(언제 켜도 되는지)을 반드시 적어라(금지 조건만 적으면 다음 사람이 같은 함정에 빠진다).
@@ -843,6 +843,12 @@ Phase B 가 `oracle` feature(기본 ON)로 제품 표면을 native 하나로 좁
   파일명↔경로 매핑을 손으로 재구성하지 마라 — `_`↔`/` 치환은 `vita-log` 같은 이름에서 깨진다),
   ⓑ **스냅샷은 뮤테이션 대상이 아니라 `git status`의 수정 파일 전체**여야 한다. 치환 패턴을
   미리 검증하고 싶으면 **트리를 건드리지 말고 문자열 count만** 세라.
+  ⓒ **복원 루프는 bash 로 돌려라 — zsh 는 미인용 `$VAR` 를 word-split 하지 않는다**(#10 실사고):
+  `for f in $RESTORE; do cp …` 가 zsh 에서 목록 전체를 **한 인자**로 만들어 cp 가 조용히 실패했고,
+  뮤테이션 7개가 **스택**된 채 다음 케이스의 killer 가 돌았다(첫 케이스 이후의 kill 은 전부 귀속
+  불가 = 라운드 폐기). 재실행 스크립트는 ⓐ `#!/bin/bash` 명시 ⓑ 케이스 진입 전 **스냅샷과
+  diff 하는 격리 가드**(pre-dirty 면 즉시 중단)를 갖춰라 — 가드가 있으면 이 실패 모드는 첫
+  케이스에서 loud 다.
 
 ## 문서 구조 (2026-08-18 · ROADMAP 재편에서 실측)
 

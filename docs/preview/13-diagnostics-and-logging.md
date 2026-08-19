@@ -41,7 +41,7 @@ struct Diagnostic {
   severity: Severity,          // Note | Info | Warning | Error | Fatal
   code: MsgCode,               // 안정 enum, 예: E_ELAB_MULTIDRIVER
   message: String,
-  location: Option<SourceLoc>, // compile은 span 직접; runtime은 §7 side-table로 복원
+  location: Option<SourceLoc>, // compile은 span 직접; runtime은 §7 side-table로 복원(severity 가족 = v29 severity_locs, 2026-08-19 구현)
   context: Vec<Frame>,         // include/macro/-f 확장 스택, instance/hierarchy 경로
   sim_time: Option<TimeStamp>, // runtime severity 이벤트에만 (IEEE 요구)
 }

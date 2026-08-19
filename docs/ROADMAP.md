@@ -12,9 +12,9 @@
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
 | **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · **T2-14 `-G` override 도 완료**(§4.5.313 one-shot + §4.5.314 staged — 잔여 = `-pvalue+` 별칭 · `-P<path>=` · 합성-해시 헤더 필드[format bump]) · 남은 것 = T2 잔여(real 정수문맥·리터럴 절단·PART select) + T3-13 `case inside` |
-| **2** | §2 | Silent-wrong 잔여 | 41 | ✓ 8 | **폭 인식 상수 접기(3건 동근)** · package real · 구조적 지연 · inner-NET shadow(DEEP) |
+| **2** | §2 | Silent-wrong 잔여 | 40 | ✓ 8 | **폭 인식 상수 접기(3건 동근)** · package real · 구조적 지연 · ~~inner-NET shadow~~(P1 해소 · ARCHIVE §4.5.342) |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
-| **4** | §3 | Loud→supported 후보 | 35 | ✓ 대부분 | string/heap · 함수/formal · 소형 큐 · VCD fidelity · deep 저우선 |
+| **4** | §3 | Loud→supported 후보 | 30 | ✓ 대부분 | ✅ **3판 클리어 라운드 완료**(1~10+P1 · ARCHIVE §4.5.342) · string/heap · 함수/formal · 소형 큐 · VCD fidelity |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
 | **★** | §5 | **✅✅ Phase A~D 전부 완료 — 다음은 [§5.2 재개 지점](#★★★★-52-재개-지점--세션이-끊겼다면-여기부터-2026-08-17)** | — | 실측 | ⭐⭐⭐ **A** 커버리지 **100.00%**(거부 0) · **B** 제품 표면이 **native 하나**(`oracle` feature) · **C** interp = 테스트 도구(성능 최적화 영구 제외) · **D** 성능: 벤치 **10/10 에서 native < vm**(착수 때 셋에서 졌고 최악 **2.52×**). ⭐⭐ **코드젠(cranelift)은 지어서·배선해서·재서 기각** — 런의 **~38% 가 shim** 이고 천장은 op 디스패치 **8.9~11.3%**(§5.1-be). ✅ **스케줄러 축은 측정됐다**(2026-08-18: 스케줄러 29.0% + 그 축의 할당 5.8% ≈ 35% 미최적화 · §5.2). **실행 기록 전문 = [ARCHIVE_PHASE_A-D](ROADMAP_ARCHIVE_PHASE_A-D.md)** |
 | — | §7 | 조건부 / 장기 | 4 | — | BACKEND · VHDL · VCD-EXT · MVP-CUT (정확성과 직교) |
@@ -168,13 +168,12 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 > - **구조적 지연**(오라클 ✓) — **§4.5.221 이 도달성을 넓혀 우선순위 상향 후보**로 적혀 있었다.
 > - **`real` → `input int` formal**(오라클 ✓).
 >
-> **DEEP 쪽 1건도 같은 자리에 있었다** — **inner NET vs outer PARAM shadow**: **선행 = order-INDEPENDENT
-> AST-gathered per-scope name set**(없이 켜면 §4.5.218 S1 재발 = generate body 조용한 삭제) + 형제 항목
-> (package 변수 clobber · block-local 잔여 2형). ⚠️ **이 선행조건은 §3 의 두 항목도 막고 있다** —
-> 위 머리말 §4.5.276 후속 ①(`for (int j=0;j<NN;j++)` 의 trip-count) 과 **외부 aes_top 3판 §3.5 의
-> `repeat (LP)`** 가 같은 `walk_scopes_key_shadowed` 계약에 걸린다. ⇒ 그 패스를 짓는 슬라이스는 **셋을 함께 연다.**
-> ⚠️ 상태 확인 필요: §4.5.246 이 *"inner NET shadow — 마지막 ①-급 해소"* 로 기록돼 있어(문서 머리 §5)
-> 남은 것이 어느 형태인지 **착수 전 오라클로 재현**해야 한다.
+> ✅ **DEEP 쪽 1건(inner NET vs outer PARAM shadow)은 P1 로 해소됐다(2026-08-18 · ARCHIVE §4.5.342).**
+> 예언됐던 선행조건(*order-independent name set*)은 필요 없었다 — 필요했던 것은 **선언 블록의 SPAN**
+> (`hoist_block_local_nets` 가 이미 들고 있었다 · span 은 order-independent AST 사실이라 §4.5.218 재발
+> 없음). census 가 *"셋을 함께 연다"* 도 정정했다: `repeat (LP)` 는 **이미 열려 있었고**
+> (`const_bound_u32` 가 `const_eval_in_scope` 를 쓴다) 남은 것은 §4.5.276 후속 ①(`for` trip-count
+> 식별자) 하나뿐이다. 형제 항목(package 변수 clobber · block-local 잔여 2형)은 §2 에 그대로 남아 있다.
 
 - **파라미터와 넷을 같은 이름으로 선언하면 vita 만 받는다**(pre-existing · PRE==POST · **두 오라클 모두 거부** ·
   P1 슬라이스가 발굴). `localparam N = 7; logic [3:0] N;` 를 iverilog 는 *"'N' has already been declared
@@ -284,198 +283,37 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 > 3판은 §3.2(문자열 escape) · §3.4(거짓 W3056) · §3.8(코드 키) · §3.9(`--help`) · §3.10(위치) ·
 > §3.11의 보고 절반을 §4.5.341이 닫았다. 아래는 **다른 클래스**라 분리한 잔여다.
 
-- **✅ §3.1 (a)(b) RESOLVED — 이식성 경고 `W2004` (2026-08-18 · 클리어 순서 4번) · ⚠️ (c) 는 잔여.**
-  ⭐⭐ **재측정이 리포트를 넓히고 갈랐다** — select 축은 **네 형태**이고 사이트는 **하나**다
-  (`hdl-parser/expr.rs` 의 postfix 루프가 base 의 종류를 안 본다 · IEEE 1800 §11.5.1 은 select 를
-  **variable reference** 에만 허용).
-  | 형태 | vita | iverilog 13 | verilator 5.050 | 처분 |
-  |---|---|---|---|---|
-  | `((a^b)>>8)[7:0]` · `16'hABCD[7:0]` | 동작 | 거부 | **거부** | **W2004** |
-  | `f(a)[7:0]` · `{a,b}[7:0]` | 동작 | 거부 | **동작(같은 값)** | **W2004** |
-  ⚠️⚠️ **넷을 같은 처분으로 다루면 안 된다** — 뒤의 둘은 verilator 가 **같은 값으로 받으므로** 거부하면
-  오늘 이식 가능한 코드에 **사다리 하강**이다 ⇒ **값은 그대로 두고 경고**(§3.2 의 `\r` 과 같은 정책 ·
-  리포터 요청도 error 가 아니라 warning 이었다). ⭐⭐ **판별자가 AST 가 아니라 provenance 인 이유를
-  실측이 강제했다** — packed struct 멤버 `p.hi` 를 **바로 그 파서 루프가 part-select 로 desugar** 하므로
-  AST 가 생기고 나면 `p.hi[3:0]`(모든 툴이 받음)과 `a[7:0][3:0]` 이 **같은 모양**이다. *"체인이 이름에서
-  시작했는가"* 는 파서 안에서만 알 수 있다. ⚠️ 파서에 경고 채널이 없어 **`ParseWarn` 신설**(에러와 별개
-  채널 — 경고가 파스를 중단시키면 안 되고, 에러 타입에 severity 를 얹으면 *"파스를 멈췄나"* 와 *"얼마나
-  나쁜가"* 가 한 자리에 섞인다) · **에러 게이트보다 먼저 발행**(다른 곳의 구문 오류가 이식성 경고를 삼키면
-  안 된다) · ⚠️ **`parse()` 의 arity 는 안 바꿨다** — 넓혔더니 **테스트 44곳**이 걸렸다(한 소비자를 위해
-  44곳을 `_` 로 고치는 것은 잘못된 거래) ⇒ **`parse_with_warnings()`** 를 별도 진입점으로.
-  **MsgCode 67 → 68** · doc-15 항목 · 앵커 = `cli/tests/select_base_portability.rs` **4건**(억제·승격
-  **3 철자** 확인 포함) · **뮤테이션 4 중 3 사망 · 1 도달 불가(프로브 0 히트)**. ⚠️ **아직 경고하지
-  않는 것 1건**: `a[7:0][3:0]`(slice-of-slice)은 이름에서 시작해 통과하는데 **iverilog 는 거부한다** —
-  별개 판별자가 필요해 남겼다(doc-15 에 기록).
-  ⚠️⚠️ **잔여 = (c) `always_comb` 구동 변수의 선언 초기화자**(verilator `MULTIDRIVEN` error · xrun
-  `*E,MULAXX` · iverilog 는 실행 = **2:1**). elaborate 층이고 감도 리스트 합성이 그 집합을 이미 안다.
+- ✅✅ **3판 클리어 라운드 완료 (2026-08-18 ~ 08-19 · 순서 1~10 + P1 · 11 슬라이스).** 상세
+  전문(클리어 표 + 항목별 기록)은 **[ROADMAP_ARCHIVE §4.5.342](ROADMAP_ARCHIVE.md)** 로 이관.
+  결과 한 줄: §3.1(a)(b) `W2004` · §3.3 wide fold · §3.5-①③ `repeat` 가족 · §3.6-①② default
+  clocking/disable iff · §3.7 INPUT string formal · P1 inner-NET shadow · **#9 staged `file:line`
+  (format v28)** · **#10 런타임 severity `file:line`+인스턴스 (format v29)** — §3.11 만 **지어서
+  재고 되돌렸다**(아래 잔여). 게이트 5,533 → **5,596 green** · 커밋 `b472b67`…`b868ff3`.
 
-- **✅ §3.3 RESOLVED (2026-08-18 · 클리어 순서 3번)** — 넓은(>64bit) `localparam` 이 **캐리 없는**
-  연산으로 접힌다. ⭐ **원인은 도메인이 아니라 arm 이었다** — `>64bit` 도메인(`wide_param_bits`·
-  `ir::BitPacked`·`resize_bits`)은 **선언 경로에 이미 서 있었고**(`params.rs:799`) `fold_init` 에 arm 이
-  셋뿐이었다(리터럴·fill·`Paren`). **9 형태가 iverilog 와 바이트 일치**: `{8'he1,120'h0}` · `128'(8'he1)<<120`
-  (둘 다 리포트가 든 것) · `{16{8'hAB}}` · `~A` · `A>>8` · `A<<4` · `A|lit` · `A&lit` · `A^{2{…}}`.
-  ⚠️⚠️ **admission 이 "캐리 없음" 이고 그것이 규칙이다** — concat·replicate·size cast·상수 **논리** 시프트·
-  `&`/`|`/`^`·`~` 는 각 결과 비트를 **알려진 위치의 피연산자 비트**로 정한다. `+`/`-`/`*` 는 128비트 캐리
-  체인이 필요하고 `>>>` 는 부호비트를 읽는다 ⇒ 여기서 구현하면 **엔진 산술의 두 번째 철자**이고 미묘하게
-  틀리면 **조용히 틀린 파라미터**(P0-5) ⇒ **거부 유지**(테스트로 핀). ⚠️ x/z 도 같은 원칙으로 갈랐다 —
-  **배치 arm**(concat/replicate/shift/cast 는 비트를 **옮기지 읽지 않는다**)은 통과, **값을 읽는 arm** 은 거부.
-  ⭐ 이름 해석은 **`walk_scopes_key` 를 그대로 쓴다**(`lower_expr` 과 한 철자 · 두 번째 스코프 워크가
-  §4.5.218 의 모양이다) · `wide_param_bits` **만** 본다(비트·폭·부호를 함께 들고 있는 유일한 테이블 —
-  좁은 파라미터는 fail-closed 로 거부). **뮤테이션 10 중 9 사망 · 1 도달 불가(실측)** — ⚠️ **넷이 눈먼
-  축이었다**(`&|^` 의 x 절반 · **좁은 lhs** 가 있어야 갈리는 비트별 폭 규칙 · **두 번째 wide param** 이
-  있어야 드러나는 이름 해석 · concat 안 fill) · ⚠️ 한 치환은 **의미 없는 no-op** 이었다(`get` 성공 시
-  `or_else` 미실행 → SURVIVED 로 세지 않고 다시 걸었다) · ⚠️ 계층 이름 arm 은 **`panic!` 프로브 0 히트**
-  (vita·iverilog 둘 다 계층 참조를 localparam 초기화자에서 먼저 거부한다) ⇒ fail-closed 유지.
-  앵커 = `cli/tests/wide_param_fold.rs` **10건**. ⚠️ **잔여 = part-select**(`{A[127:64], 64'h0}` 은 아직
-  거부 · iverilog 는 접는다) — 인덱스 fold 가 필요한 별개 arm 이라 이 슬라이스에 안 넣었다.
-  ⚠️ **2판 잔여 "wide 파라미터 OVERRIDE 는 loud"** 는 **여전히 열려 있다**(그쪽은 `ResolvedOverride` 채널).
-
-- **✅ §3.5-① RESOLVED (2026-08-18 · 클리어 순서 1번)** — `repeat` 의 count 가 **`const_bound_u32`**
-  (모든 select bound·replication count 가 쓰는 그 퍼널)로 접힌다. ⭐⭐ **수정의 본체는 arm 이 아니라
-  "한 철자"** 다 — 언롤 판정을 `repeat_unroll_count` 하나로 만들어 **lowering(`lower_repeat`)과
-  분류기(`ast_has_repeat_with_timing`)가 같은 답**을 내게 했다(분류기는 `&self` 가 됐고 그것만 읽는다).
-  **3-way(PRE/POST/iverilog) — FIXED 5 · 회귀 0**: `4*16`·`LP`·`LP/2`·`$clog2(LP)` 가 전부 iverilog
-  값과 일치. ⭐ **다섯 번째는 리포트에 없던 pre-existing false-loud** — **`repeat ('1)`** 이 E3009 였다
-  (iverilog `c=1`): `lower_repeat` 는 fill 리터럴 arm 을 늘 갖고 있었는데 **분류기의 사본에는 없어서**
-  *"언롤러가 안 먹는 count"* 로 읽고 거부했다 = **두 철자 문제의 실증**. ⚠️ **일부러 loud 로 남긴 둘**:
-  `repeat (4'd15+4'd1)` 은 SV 가 4비트에서 **0** 으로 자르는데(iverilog `c=0`) 무제한 i64 도메인은 16 을
-  내므로 `const_bound_u32` 의 **width-exact 가드가 거절하는 것이 옳다**(loud 는 wrong 이 아니다) ·
-  **언롤 상한(1024) 초과**도 런타임 카운터로 떨어져 loud. ⚠️ 잔여 = **`repeat (m_n)`(모듈 넷) = 클리어
-  순서 6번**(프레임 subset 의 런타임 카운터) · **`repeat (LP)` 는 이미 되므로 P1 선행조건에서 빠졌다**
-  (`const_bound_u32` 가 `const_eval_in_scope` 를 이미 쓴다 — 옛 기록이 §2 DEEP 과 묶어 둔 것은 정정).
-  ⭐ **문구도 원인을 이름으로 부른다** — 세 거부 술어(`!leaf` / `unsafe_repeat` / `unsafe_ctor`)를 결정
-  **전에** 이름으로 평가하고, `frame_task_has_unsafe_construct` 는 `bool` 이 아니라 **어느 구문인지**를
-  돌려준다(다섯 사이트). ⚠️ **`!leaf` 분기는 도달 가능하다**(`panic!` 프로브 실측 3건 · 전부
-  `cli::fork_in_frame` 의 fork-arm `return`) — 뮤테이션이 그 문구를 뭉갤 때 처음엔 생존했고 판별자를 지어
-  사살했다. **뮤테이션 8/8 사망** · 앵커 = `cli/tests/repeat_count_fold.rs`(8건 · iverilog 핀).
-  ⚠️ **곁가지 발굴**: 태스크 지역 `localparam`(`task automatic t; localparam int K = 3;`)은 **파서가
-  거부**한다(E2002 · PRE==POST = pre-existing · iverilog 는 받는다). 별건으로 아래 §3 소형 큐에 등재.
-
-- **✅ §3.6-① RESOLVED (2026-08-18 · 클리어 순서 2번)** — `default clocking` 이 이 스코프의 무클럭
-  concurrent assertion에 **실제로 클럭을 준다**(IEEE 1800 §14.12). ⭐⭐ **센티넬은 이미 있었다** —
-  `assert property(NAME)` 이 예전부터 **빈 sensitivity 리스트**로 파싱되고 코드가 그것을 *"the empty
-  sentinel"* 이라 부르고 있었으므로, 파서는 **거부를 걷어내고 같은 센티넬을 남기고**(`sva_prop.rs`)
-  **`sva_check.rs` 의 드레인 한 자리**가 해석한다(모듈 단위라 형제 모듈로 샐 수 없다 — `lower_clocking_blocks`
-  가 `clocking_events` 와 함께 지우고, 유일한 소비자가 **같은 `elaborate_instance` 안**에서 늦게 돈다).
-  ⚠️⚠️ **오라클은 verilator 5.050 이다** — **iverilog 13 은 `default clocking` 을 파싱조차 못 한다**.
-  **6형태 전부 verilator 와 일치**: 무클럭 `a |-> b`(FAIL t=1,3,5) · 명시 클럭 우선(t=3,9) · **bare
-  `assert property (a)` = 클럭된 불리언**(§16.12 · 명시 철자 `@(clk) a` 는 원래 돌고 있었다) · named
-  property 무클럭 · 그리고 **default 가 없으면 여전히 거부**(verilator 도 거부 — 파서 에러를 지우는 것이
-  거부를 *없애는* 게 아니라 *옮기는* 것임을 그 사실이 고정한다). ⚠️ bare-이름 재해석은 **`default
-  clocking` 이 있을 때만**(없으면 *"unknown property"* 문구 그대로 = 진짜 오타를 안 삼킨다 · 대조군 핀).
-  ⚠️ **지원 안 되는 클럭 이벤트는 보이지 않는 default 가 되지 않는다**(edge-list 검사 **뒤**에 기록 —
-  ⭐ 뮤테이션이 그 순서를 **오늘은 등가**라고 실측했다: 그 거부가 Error 라 런 자체가 없다. 그래도
-  fail-closed 로 남기고 논거를 코드에 적었다 — 그 거부가 경고로 내려가는 날 정확히 그것이 silent-wrong 이 된다).
-  **뮤테이션 7/7**(생존 1 = 위 등가) · 앵커 = `cli/tests/default_clocking.rs` **8건**(⚠️ 그중 **모듈 간
-  누수 판별자**는 배터리가 요구해서 지었다 — 나머지 일곱이 전부 단일 모듈이라 눈먼 축이었다).
-  ✅ **§3.6-② 도 닫혔다(2026-08-19 · 클리어 순서 7번)** — `ModuleItem::DefaultDisableIff` + 모듈 단위
-  기록 + 드레인이 빈 `disable_iff` 를 채운다(⚠️ **multi-clock 게이트보다 먼저** — early `continue` 가
-  기본 리셋을 조용히 떨어뜨리지 않도록). **verilator 3/3 일치**(억제 · 명시 `disable iff` 가 이김 ·
-  대조군). ⭐ 곁가지로 **한 스코프에 둘이면 loud**(IEEE §16.15 · verilator 도 명시 거부) — 그리고 그
-  거부가 *"첫 것이냐 마지막이냐"* 를 **증명 가능하게 무의미**하게 만든다(⭐ 뮤테이션이 그 결론을 거꾸로
-  냈다: 생존 → 판별 설계를 찾다 그것이 불법임을 알았다). ⚠️ AST 변종 하나라 **`.vu` SchemaHash 재핀**
-  (sim-ir·format_version 불변 · 순수 IR-0).
-
-- **✅ §3.7 RESOLVED — INPUT 방향 (2026-08-18 · 클리어 순서 5번) · ⚠️ output/inout 은 좁혀서 잔여.**
-  ⭐ **수정은 넷 종류 하나다** — 인라인(static-lifetime) 경로가 formal-local 을 `map_net_kind_or_wire`
-  로 잡아 `string` → **1비트 `Wire`** 였고 copy-in 이 잘렸다. **프레임 경로는 1비트로 둬도 되는데**
-  `FuncMeta` 가 있고 엔진이 **`str_params` 마스크**로 *"이 슬롯은 힙 핸들"* 을 알기 때문이다 —
-  인라인된 태스크엔 `FuncMeta` 가 없어 그 사실을 나를 것이 없다 ⇒ **`frame_local_net_kind`**(프레임 지역
-  `string` 이 이미 쓰는 그 함수). 6 형태가 iverilog 와 일치(리터럴 · string 변수 · 정수 formal 병행 ·
-  본문 `s.len()` · 길이 다른 연속 호출 · `automatic` 불변). ⚠️⚠️ **행을 지웠다가 되돌려 좁혔다** —
-  통째로 지우니 output/inout 이 *"output/inout arg must be a simple net (v1)"* + **허위 E3010 캐스케이드**
-  로 떨어졌는데(formal 이 안 묶여 본문 읽기가 미해결), **실측상 `automatic` 은 output/inout 도 고친다**
-  ⇒ 옛 문구의 조언이 그 방향엔 **옳았다**. 그래서 output/inout 전용 한 메시지를 남기고 *"INPUT 은 이제
-  지원된다"* 까지 말하게 했다(독자가 input 까지 다시 쓰지 않도록) · 캐스케이드 **0**.
-  ⚠️⚠️ **기존 핀이 이 슬라이스의 가장 중요한 검증이었다** — `static_task_string_formal_loud_rejects` 의
-  주석이 관심사를 **둘**로 적어 뒀다(*"자르고, **`StrCmp` 라우팅도 건너뛴다** — 둘 다 조용하다"*).
-  내 수정은 첫째만 겨냥했으므로 둘째를 즉시 쟀고 **함께 열렸다**(`r=1`/`r=1`/`r=0` 전부 iverilog 일치)
-  ⇒ 핀을 positive 로 뒤집되 ⚠️ **불일치 행을 넣었다**(일치 케이스만이면 *"항상 1을 반환하는 비교"* 도
-  통과하는데 그게 바로 그 테스트가 잡으려던 결함이다). **뮤테이션 5/5** · 앵커 =
-  `cli/tests/static_task_string_formal.rs` **4건**(⚠️ 방향 이름 판별자는 배터리가 요구해서 더했다 —
-  `inout` 에 "output" 이라고 쓰면 독자를 틀린 포트로 보낸다 = §3.4 가 이미 값을 치른 결함).
-  ⚠️ **static FUNCTION 의 `string` formal 은 원래 됐다**(PRE 실측) — §3.7 은 task 전용이었다.
-
-- **⚠️⚠️ §3.11 `function automatic` 인라인 — 지어서 재고 되돌렸다(2026-08-19 · 클리어 순서 8번).**
-  **이 저장소가 이 계획에 대해 적어 둔 전제가 측정으로 반증됐다.**
-  리포터 실측 codegen `able/total` = **12.3%(core) / 16.0%(top)**, 거부 사유의 **87%가
-  `user_call_in_expr`**. 이쪽 census 도 같다(`always @(posedge clk) r <= fa(a)` 한 설계에서
-  `able 1/4` · `frame_bodies 1` · `user_call_in_expr 1`). 판별자는 키워드 하나다 — `function f`
-  는 인라인되고 `function automatic f` 는 프레임으로 내려가 호출 프로세스가 codegen 에서 거부된다.
-  ⭐ **지은 것**: `build_frame_set` 의 `f.automatic` 이 **단독으로** 프레임을 강제하지 않게 하고,
-  나머지 절(2-state 반환 · 비직선 바디 · unpacked formal · string 반환 · 재귀 폐포)은 그대로 두었다.
-  ⚠️ **첫 판정을 실측이 좁혔다** — `automatic` 함수가 **지역을 대입 전에 읽으면** 두 경로가 갈린다
-  (프레임 = 매 호출 fresh `x` / 인라인 = 호출 사이트당 저장이라 두 번째 호출이 이전 값). iverilog 는
-  `x x` 인데 인라인으로 보내면 vita 가 **E3010** = correct→loud 하강 ⇒ **지역을 선언하지 않는**
-  automatic 함수만 열었다(리포트가 말한 S-box·`xtime`·GF 곱이 정확히 그 모양).
-  ⚠️⚠️ **그래도 안 된다 — 전 스위트가 15건 실패했고 기제 교체가 아니라 진짜 동작 변화였다.**
-  가장 선명한 둘: `inline_formal_bind::a_frame_call_actual_is_evaluated_once` 가 `$random` 인자를
-  **두 번 뽑았고**(`val=01/03` → `04/09`), `size_cast_seal::a_widening_cast_never_evaluates_an_impure_operand_twice`
-  가 걸렸다 — 그 테스트의 doc 이 이유를 이미 적어 뒀다: **인라인 확장이 피연산자를 두 번째로 이름 부른다**
-  (`Select{Bit, base: e}`), 그래서 불순한 actual 이 두 번 돈다. 나머지 열셋도 대부분
-  *"…is_a_documented_gap"* / *"…matches_bare"* = **인라인 경로의 핀된 결함들**이다.
-  ⇒ ⭐⭐ **결론: `automatic` 은 "프레임 경로" 를 뜻하고, 그것이 이 저장소가 인라인 경로의 알려진
-  결함으로부터 코드를 지키는 방법이다.** *"비-재귀 automatic 은 인라인이 의미상 동일하다"* 는 **거짓**이다.
-  ⇒ **진짜 선행조건 둘 중 하나**(둘 다 §2/§5 에 이미 있다):
-  ⓐ **인라인 확장이 피연산자를 한 번만 이름 부르게** 한다(또는 callee-purity 술어) — 그러면 그 열다섯 중
-  다수가 사라지고 그때 `automatic` 을 보낼 수 있다 · ⓑ ⭐ **더 곧은 길: 인라인이 아니라 codegen 을 고친다**
-  — `is_codegen_able` 이 `Terminator::Call` 을 가진 프로세스를 통째로 거부하는 것이 원인이고(§5 T1/T2),
-  그쪽을 열면 **프레임 경로를 유지한 채** 리포터의 지표가 오른다. ⓑ 가 사다리를 안 건드린다.
-  ⚠️ picorv32 는 어느 형태도 안 써서 65/68 이다 — **이 축은 벤치가 대표하지 않는다.**
-
-- ✅ **staged `file:line:col` 해결(2026-08-19 · #9 · format v28).** `.vu` 가 **source-map tail**
-  (파일별 `(name, ORIGINAL text)` + 세그먼트 5-튜플 — `resolve` 가 읽는 정확히 그 부분집합)을 싣고,
-  `velab` 이 그것으로 `SourceMap` 을 재구성해 **one-shot 과 같은 `MapResolver`** 를 설치한다(해석
-  규칙 재철자 0). `canon`/`dir` 은 **일부러 안 싣는다**(머신 로컬 절대경로 — 3-OS 바이트 동일성을
-  깨고, include reader 전용이라 staged 에선 아무도 안 읽는다). 판별 축 5개 전부 one-shot 과 바이트
-  동일: 평범한 E3010 · **include 파일이 자기 이름+로컬 줄**(`inc4.svh:4:8`) · **매크로 사용
-  지점**(collapsed 세그먼트) · 다중 파일 G12 · **멀티바이트 char 컬럼**(17, 바이트면 21). corrupt
-  tail 은 loud(`undecodable .vu source-map trailer`). 유닛 스윕은 **모든 확장 바이트**에서 roundtrip
-  맵의 `resolve_span` 동일성을 단언한다. ⚠️ **잔여: `velab -L`(worklib 병합) 경로는 여전히
-  위치가 없다** — 병합이 **여러 CU** 의 아이템을 한 unit 으로 합치는데 각 CU 의 스팬은 자기 확장
-  버퍼(0부터)를 인덱싱해 **좌표공간이 겹친다**. 틀린 CU 의 맵으로 풀면 **틀린 file:line**(없는 것보다
-  나쁘다)이라 `None` 유지 — 닫으려면 병합 시 스팬 오프셋 재작성(AST 전체 walk)이 필요하다.
-
-- ✅ **§3.10 런타임 severity `file:line` + 인스턴스 경로 해결(2026-08-19 · #10 · format v29).**
-  엔진은 span-free IR 위에서 돌므로 **스스로는 영원히 못 푼다** — 답은 elaborate 가 **한 번**
-  푸는 것이다: `lower_severity_task` 가 `severities` 를 쓰는 **같은 자리**에서 `cur_location()` +
-  `cur_prefix` 를 `severity_locs` 사이드카(StmtId → file·line·col·byte범위·인스턴스)로 굳히고,
-  런타임 emitter 셋(statement 경로 `emit_severity_message` · frame 경로 `frame_emit_severity` ·
-  deferred 성숙 `mature_deferred`)이 **한 헬퍼**(`severity_diag_meta`)로 읽는다. 출력:
-  `d.sv:5:5: error[VITA-E4003] …: child says 42 [in top.u1] [at time 5]` — **한 소스 줄을 두
-  인스턴스가 각자 자기 경로로 보고**한다(§4.5.249 의 논거가 런타임에 도달). 커버: `$fatal`/`$error`/
-  `$warning`/`$info` · **W4031 unique/priority 위반**(case 문을 가리킨다) · **deferred assert**(성숙
-  시각에 **액션 사이트** 위치 + reach-시각 값) · **frame-path severity**. one-shot ↔ staged **바이트
-  동일**(velab 이 v28 소스맵으로 해석해 `.velab` extra-sidecars 로 나른다 — #9 가 선행조건이었던
-  이유). iverilog 가 같은 4요소를 확인(`ERROR: d.sv:5: … Time: 5 Scope: top.u1`). resolver 없는
-  경로(엔진 유닛 하네스)는 **엔트리 자체가 없어** 바이트 동일. ⚠️ **잔여(측정)**: sid 가 없는
-  런타임 진단군 — RunRange/W4020/W4022/W4028 등 — 은 접근 **문장**을 아는 키가 엔진에 없다(넷
-  선언 지점은 있지만 표준 위치 슬롯에 찍으면 접근 지점으로 오독된다 = 없는 것보다 나쁘다).
-  §4.5.341 이 이미 배열 **이름**을 붙였으므로 남은 값은 작다.
-
-### ⭐⭐ 3판 잔여 5건의 클리어 순서 (2026-08-18 · **전부 코드 사이트까지 실측**)
-
-> 순서의 근거는 **선행조건 그래프**이지 리포트의 번호가 아니다. ⚠️ **§2 가 §3 보다 위**라는 원칙(§1)은
-> 유지되는데, 아래 **P1 이 마침 §2 항목**이라 사다리와 이 순서가 충돌하지 않는다.
-
-| # | 슬라이스 | 여는 것 | 선행조건 | 사이트(실측) |
-|---|---|---|---|---|
-| ~~1~~ | ✅ **§3.5-① 완료(2026-08-18)** | `4*16`·`LP`·`LP/2`·`$clog2(LP)`·⭐`'1` — **FIXED 5 · 회귀 0** | — | 답은 arm 이 아니라 **한 철자**(`repeat_unroll_count` 를 lowering·분류기가 공유) · 뮤테이션 **8/8** |
-| ~~2~~ | ✅ **§3.6-① 완료(2026-08-18)** | verilator 6/6 일치 · bare-이름 = 클럭된 불리언까지 | — | 센티넬은 이미 있었다(`assert property(NAME)`) · 드레인 한 자리 · 뮤테이션 7/7 |
-| ~~3~~ | ✅ **§3.3 완료(2026-08-18)** | 9 형태가 iverilog 바이트 일치 | — | admission = **캐리 없음** · 이름은 `walk_scopes_key` 한 철자 · 뮤테이션 9/10 + 도달불가 1 |
-| ~~4~~ | ✅ **§3.1 (a)(b) 완료(2026-08-18)** | 4형태 경고 · 값 불변 · 정당한 3형태 경고 0 | — | 판별자는 AST 가 아니라 **provenance**(멤버가 part-select 로 desugar 된다) · `W2004` · 뮤테이션 3/4 + 도달불가 1 · ⚠️ **(c) 는 잔여** |
-| ~~5~~ | ✅ **§3.7 INPUT 완료(2026-08-18)** | 6형태 iverilog 일치 + `StrCmp` 라우팅 | — | 수정은 **넷 종류 하나**(`frame_local_net_kind`) · 뮤테이션 5/5 · ⚠️ **output/inout 은 좁혀서 잔여** |
-| ~~P1~~ | ✅ **완료(2026-08-18)** — ⚠️ **census 가 범위를 셋에서 하나로 줄였다**(나머지 둘은 이미 열려 있었다) | inner-NET shadow · 6형태 iverilog 일치 · **generate 바디 삭제 재발 없음** | — | ⭐ 필요했던 것은 이름 집합이 아니라 **선언 블록의 SPAN**(`hoist_block_local_nets` 가 이미 들고 있었다 · span 은 order-independent AST 사실) · 뮤테이션 6/6 |
-| ~~6~~ | ✅ **§3.5-③ 완료(2026-08-19)** | `repeat` 가족 **전부** 프레임에서 돈다 + 동시 활성화 판별자 | — | 카운터를 **예약 패스**에서 프레임 창 안에 · 핸드오프는 **span 키** · ⭐ 곁가지로 **§2 self-width 절단 silent-wrong** 동반 수정 |
-| ~~7~~ | ✅ **§3.6-② 완료(2026-08-19)** | verilator 3/3 일치 + ⭐ **중복 선언 loud** 신설 | — | AST 변종 1(**`.vu` 재핀** · sim-ir·format_version 불변) · `default clocking` 과 **같은 자리·같은 리셋** · 적용은 **multi-clock 게이트보다 먼저** · 뮤테이션 4/5 + **증명된 등가 1** |
-| ⚠️ ~~8~~ | **§3.11 — 지어서 재고 되돌렸다(2026-08-19)** | — | ⇒ 선행조건이 **바뀌었다**: ⓐ 인라인이 피연산자를 **한 번만** 이름 부르게 하거나 ⓑ **codegen 쪽**(`is_codegen_able` 의 `Terminator::Call` 거부)을 연다 | 전 스위트 **15 실패** · `$random` 이 **두 번** 뽑혔다 = 인라인 경로의 **핀된 사다리 위반**을 상속한다 |
-| ~~9~~ | ✅ **staged `file:line` 완료(2026-08-19 · format v28)** | `velab` 진단이 one-shot 과 **바이트 동일**한 위치를 갖는다 | — | `.vu` 에 source-map tail(`(name,text)`+세그먼트 · `dir`/`canon` 은 3-OS 동일성 때문에 제외) · `velab` 이 재구성해 **같은 `MapResolver`** 설치 · ⚠️ `-L` 병합 경로는 좌표공간 겹침으로 잔여 |
-| ~~10~~ | ✅ **§3.10 런타임 `file:line` 완료(2026-08-19 · format v29)** | severity 가족 전부가 `file:line:col [in 인스턴스] [at time N]` 을 갖는다 · staged 바이트 동일 | — | elaborate 가 **한 번** 풀어 `severity_locs` 사이드카로 · emitter 셋이 **한 헬퍼** 공유 · sid 없는 진단군(RunRange 등)은 측정된 잔여 |
-
-⭐ **1~5 는 서로 독립이고 선행조건이 없다** — 순서는 *"리포터가 실제로 막힌 정도 × 크기"* 로 정했다
-(1 은 리포터가 **문구 때문에 두 번 헛수정**했고, 2 는 **한 플래그 배선**, 4 는 **sign-off 에서만 터지는
-유일한 부류**). ⚠️ **1·3 은 같은 결함 클래스**(폴더에 arm 이 없다)지만 **도메인이 달라**(u32 vs
-`BitPacked`) 한 슬라이스에 묶지 마라 — 묶으면 한쪽 오라클이 다른 쪽을 못 지킨다.
+- **라운드가 남긴 잔여 (전부 loud 또는 경고 없음 = 안전 · 각자 독립 슬라이스):**
+  - **§3.1(c) `always_comb` 구동 변수의 선언 초기화자** — verilator `MULTIDRIVEN` error · xrun
+    `*E,MULAXX` · iverilog 는 실행(2:1). elaborate 층이고 감도 리스트 합성이 그 집합을 이미 안다.
+    곁가지: `a[7:0][3:0]`(slice-of-slice)은 이름에서 시작해 **아직 경고하지 않는데** iverilog 는
+    거부한다 — 별개 판별자 필요(doc-15 에 기록).
+  - **§3.3 잔여** — wide `localparam` 의 **part-select fold**(`{A[127:64], 64'h0}` · iverilog 는
+    접는다 · 인덱스 fold 가 필요한 별개 arm) · **wide 파라미터 OVERRIDE 는 여전히 loud**(2판 잔여 ·
+    `ResolvedOverride` 채널).
+  - **§3.7 잔여** — static task 의 `string` **output/inout** formal(INPUT 은 닫혔다 · 전용 loud
+    메시지가 "INPUT 은 지원된다" 까지 말한다 · `automatic` 이 우회).
+  - **§3.11 `function automatic` 인라인 — 선행조건이 바뀐 채 열려 있다.** *"비-재귀 automatic 은
+    인라인과 의미상 동일"* 은 **측정으로 반증**(전 스위트 15 실패 · `$random` 이 두 번 — 인라인
+    확장이 피연산자를 **두 번째로 이름 부른다**). 길 둘: ⓐ 인라인이 피연산자를 **한 번만** 이름
+    부르게(또는 callee-purity 술어 — 그러면 인라인 경로의 핀된 결함 다수가 함께 사라진다) ·
+    ⭐ⓑ **codegen 쪽을 연다**(`is_codegen_able` 의 `Terminator::Call` 거부 = §5 T1/T2) — 프레임
+    경로를 유지한 채 리포터의 지표(`user_call_in_expr` 87%)가 오르므로 **사다리를 안 건드린다**.
+    상세 = ARCHIVE §4.5.342 의 8번 항목.
+  - **#9 잔여** — `velab -L`(worklib 병합) 경로는 여전히 위치가 없다: 병합이 여러 CU 를 한 unit 으로
+    합치는데 각 CU 의 스팬이 자기 확장 버퍼(0부터)를 인덱싱해 **좌표공간이 겹친다**. 틀린 CU 의 맵으로
+    풀면 틀린 file:line(없는 것보다 나쁘다) ⇒ `None` 유지 · 닫으려면 병합 시 스팬 오프셋 재작성(AST
+    전체 walk). 실측: worklib 테스트 중 elaborate 진단 텍스트를 단언하는 것 0.
+  - **#10 잔여** — sid 가 없는 런타임 진단군(RunRange/W4020/W4022/W4028 등)은 접근 **문장**을 아는
+    키가 엔진에 없다. 넷 선언 지점을 표준 위치 슬롯에 찍으면 접근 지점으로 오독된다(없는 것보다
+    나쁘다) ⇒ 위치 없음 유지 · §4.5.341 이 이미 배열 **이름**을 붙여 남은 값은 작다.
 
 **§4.5.314 이 남긴 1건 (오라클 ✓ iverilog):**
 
@@ -766,9 +604,11 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ---
 
-## ★★★★ 5.2 **재개 지점 — 세션이 끊겼다면 여기부터** (2026-08-17)
+## ★★★★ 5.2 **재개 지점 — 세션이 끊겼다면 여기부터** (2026-08-19)
 
-> **Phase A · B · C · D 가 전부 끝났다.** 아래는 *"다음에 무엇을 해야 하나"* 의 **유일한 정본**이고,
+> **Phase A · B · C · D 가 전부 끝났고, 3판 클리어 라운드(1~10+P1)도 끝났다**(2026-08-19 ·
+> ARCHIVE §4.5.342 — #9/#10 이 staged·런타임 진단에 `file:line` 을 줬고 format 은 **29** 다).
+> 아래는 *"다음에 무엇을 해야 하나"* 의 **유일한 정본**이고,
 > 이 절만 읽으면 재개할 수 있게 적었다. 종류별 우선순위 원칙은 [§1](#1-착수-우선순위--원칙만-여기--현재-큐는-52-재개-지점)
 > 이고 **현재 큐는 여기 하나뿐이다** — §1 에 두 번째 큐를 만들지 마라(2026-08-18 에 그렇게 썩은 적이 있다).
 > 실행 기록(Phase A~D · 슬라이스 59건)은 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md).
@@ -781,7 +621,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,533 tests green** · no-oracle lib **135** green · clippy **3 구성** 0 · fmt 0 · format_version **27** · MsgCode **67** (2026-08-18 · §4.5.341) |
+| 게이트 | **5,596 tests green** · no-oracle 축 green · clippy **3 구성** 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-19 · ARCHIVE §4.5.342) |
 
 ### 다음 후보 — 우선순위 순
 

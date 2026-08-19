@@ -2,8 +2,8 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-08-18)**: format_version **27** · **5,533 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **67** · **MSRV 1.85** · **기본 백엔드 = `native`**.
-> - **최신 완료**: **§4.5.341**(외부 aes_top 3판 — 리포트 11항목 중 6 수정·5 로드맵 · ⭐⭐ IEEE Table 5-1 이 **정의하는** escape 다섯이 조용히 틀려 있었다[`\ddd`·`\xhh`·`\v`·`\f`·`\a`] · `\r` 은 오라클이 갈려 **W3059** 로 loud · 진단이 `file:line:col`+인스턴스 경로를 얻었다[picorv32 elaborate 0 → 58/58] · `run.json` 에 `elab_s`/`sim_s`). 직전 = **§4.5.340**(외부 round-29 · format 27) · **§4.5.314**(IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 + staged `-G` + `'x`/`'z` override 차단 — 적대 3라운드 결함 20건, 넷은 내 앞 라운드 수정이 만든 하강). 직전 = §4.5.313(외부 리포트 aes_top 16항목 + 자체 리뷰 17결함) · §4.5.311/312(③층 S3a·S2 슬라이스 4). **완료 슬라이스 전체 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
+> - **기준(2026-08-19)**: format_version **29** · **5,596 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
+> - **최신 완료**: **§4.5.342**(3판 잔여 클리어 라운드 1~10+P1 · 2026-08-18~19 — §3.1(a)(b) `W2004` · §3.3 wide fold · §3.5-①③ `repeat` 가족 · §3.6-①② default clocking/disable iff · §3.7 INPUT string formal · P1 inner-NET shadow[DEEP 해소 — 답은 name-set 이 아니라 **선언 블록의 SPAN**] · ⭐⭐ **#9 staged `file:line`**[`.vu` source-map tail · format v28] · ⭐⭐ **#10 런타임 severity `file:line`+인스턴스+시각**[`severity_locs` 사이드카 · format v29 · `d.sv:5:5: error[…] … [in top.u1] [at time 5]`] · ⚠️ §3.11 은 **지어서 재고 되돌렸다** — *"비-재귀 automatic 은 인라인과 동일"* 이 15 실패로 반증[`$random` 두 번] ⇒ 길은 codegen 쪽[`is_codegen_able` 의 `Terminator::Call`]). 직전 = **§4.5.341**(외부 aes_top 3판 — 리포트 11항목 중 6 수정·5 로드맵 · ⭐⭐ IEEE Table 5-1 이 **정의하는** escape 다섯이 조용히 틀려 있었다[`\ddd`·`\xhh`·`\v`·`\f`·`\a`] · `\r` 은 오라클이 갈려 **W3059** 로 loud · 진단이 `file:line:col`+인스턴스 경로를 얻었다[picorv32 elaborate 0 → 58/58] · `run.json` 에 `elab_s`/`sim_s`). 직전 = **§4.5.340**(외부 round-29 · format 27) · **§4.5.314**(IEEE 1364-2005 §12.2 암시적 파라미터 포트 리스트 + staged `-G` + `'x`/`'z` override 차단 — 적대 3라운드 결함 20건, 넷은 내 앞 라운드 수정이 만든 하강). 직전 = §4.5.313(외부 리포트 aes_top 16항목 + 자체 리뷰 17결함) · §4.5.311/312(③층 S3a·S2 슬라이스 4). **완료 슬라이스 전체 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) · 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md).
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
@@ -28,13 +28,13 @@
 | # | 항목 | 근거/오라클 |
 |---|---|---|
 | **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말: ① module-scope `$clog2` 무제한 fold ② 캐스트 SIZE 식 ③ real `**` 지수 — **셋이 한 뿌리** | iverilog 라이브 차분 |
-| **2** | **§3 loud→supported** — ⭐ **클리어 순서가 확정됐다**(ROADMAP §3 「3판 잔여 5건의 클리어 순서」 · 코드 사이트까지 실측): **1** §3.5-① `repeat` fold arm+문구 → **2** §3.6-① `default clocking` 배선 → **3** §3.3 wide fold arm → **4** §3.1 이식성 경고 → **5** §3.7 string formal. **다섯 다 선행조건 0.** 그 뒤는 P1(아래 3번 행)에 묶인다 | iverilog·verilator 실측 ✓ |
+| **2** | **§3 loud→supported** — ✅ **3판 클리어 라운드 완료**(1~10+P1 · ARCHIVE §4.5.342). 다음 후보 = 라운드가 남긴 잔여(§3.1(c) `always_comb` decl-init · §3.3 part-select fold · §3.7 output/inout · §3.11 은 선행조건 ⓐ/ⓑ 로 재편성 — ⭐ⓑ codegen 쪽이 사다리를 안 건드린다) + §3 소형 큐 | iverilog·verilator 실측 ✓ |
 | **2b** | **§0 승격 큐 T2 잔여 2건** — `real` const-fold(= `int'(<real param>)` 바운드의 선행) · sized-literal enum label | iverilog ✓ 2/2 |
-| 3 | **§2 DEEP** — inner NET vs outer PARAM shadow(선행 = order-INDEPENDENT AST-gathered per-scope name set) ⚠️ **이 선행조건은 §3.5 `repeat (LP)` 도 막고 있다**(같은 `walk_scopes_key_shadowed` 계약) | iverilog ✓ |
+| 3 | ~~**§2 DEEP** — inner NET vs outer PARAM shadow~~ ✅ **P1 로 해소**(2026-08-18 · ARCHIVE §4.5.342 — 답은 name-set 이 아니라 선언 블록의 SPAN · `repeat (LP)` 는 이미 열려 있었다) — 남은 형제 = §4.5.276 후속 ①(`for` trip-count 식별자) · package 변수 clobber | iverilog ✓ |
 | 4 | **§6 OBS** — OBS-2 sva.jsonl(R-L6) 또는 OBS-1 잔여(staged obs·`--seed`) | 3-way 내부 차분 |
 | 5 | **성능 — 스케줄러 축**(사다리 아래) — 측정 완료: 스케줄러 **29.0%** self + 그 축의 할당 5.8% ≈ **35%** 미최적화 · 첫 표적은 `propagate` 의 델타마다 `Vec` 셋 | 프로파일 실측 2026-08-18 |
 | 6 | DEEP-defer 재개(%c/%s UTF-8 pipeline·derived-localparam self-width·`$unit` typedef ②) | 전용 인프라 슬라이스 |
-| **0** | **✅✅✅ Phase A~D 전부 완료 (2026-08-17)** — **A** 커버리지 **100.00%**(거부 0) · **B** 제품 표면이 **native 하나**(`oracle` feature · 삭제 0) · **C** interp = 테스트 도구(성능 최적화 **영구 제외**) · **D** 벤치 **10/10 에서 native < vm** + **코드젠 기각**. **실행 기록 = [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** · 해설 = [study/02](study/02-v1-native-coverage.md) | **5,533 green** · clippy 3 구성 0 |
+| **0** | **✅✅✅ Phase A~D 전부 완료 (2026-08-17)** — **A** 커버리지 **100.00%**(거부 0) · **B** 제품 표면이 **native 하나**(`oracle` feature · 삭제 0) · **C** interp = 테스트 도구(성능 최적화 **영구 제외**) · **D** 벤치 **10/10 에서 native < vm** + **코드젠 기각**. **실행 기록 = [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** · 해설 = [study/02](study/02-v1-native-coverage.md) | **5,596 green** · clippy 3 구성 0 |
 
 > **순서 주의**: 원칙은 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported > ③ 전제조건 충족 honest-loud > ④ OBS`([ROADMAP §1](ROADMAP.md)).
 > **성능은 이 사다리 위에 올라오지 않는다**(2026-08-17 이후 · Phase D 종료로 옛 "T 단계 최우선" 오너 지시는 소멸).
@@ -44,7 +44,7 @@
 | 분류 | 항목 수 | 내용 | 정본 |
 |---|---:|---|---|
 | correct-support 승격 큐 | 6 | **T1 전부 완료** · T2 독립 4 · T3 전제조건 2 | ROADMAP §0 |
-| 🔴 silent-wrong 잔여 | 38 | **오라클-有 7**(part-select 바운드·replication count·package real·구조적 지연·real→int formal·inner-NET shadow·block-local package clobber) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
+| 🔴 silent-wrong 잔여 | 37 | **오라클-有 6**(part-select 바운드·replication count·package real·구조적 지연·real→int formal·block-local package clobber — ~~inner-NET shadow~~ 는 P1 해소) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
 | honest-loud 잔여 | 35 + **round-28 4건** | string/heap·함수/formal·소형 큐·EXT2 3건·deep 저우선(VCD fidelity·X→real·x/z-fill param) + **§4.5.284 follow-on 4**(`specify` 블록·이벤트 컨트롤 계층참조 실지원·cross-process `disable` no-op·E3010/E3009 file:line 일관성 — 전부 실사용 ASIC 사이트, 오라클 ✓) | ROADMAP §3 |
 | SVA/검증 잔여 | 6 | empty-match 융합·N2c full·prop-ref skew 고급형·QUAD default-flip·N4 clocking 잔여·class down-cast | ROADMAP §4 |
 | perf/하드닝 | 5 + **T0~T4** | ⭐ **T0~T4 = 측정된 10.7× 청구**(doc-21 §7.3 · VM 커버리지 0% · 프레임 호출 650 ns vs iverilog 375 ns · 함수 지역 배열 원소 쓰기 514 ns vs 24 ns). 기존 5건은 전부 보류 판정(SVA-QUAD flip·FMT-CACHE b·GEN-3X-STR a·QUEUE-MID + **COMB-DEPTH**: 깊이 비용은 iverilog 도 같음이 실측 = vita 결함 아님. levelize 승격은 프로세스 실행 순서 이동을 감수해야 하고 이득 상한 ≈D/2) | ROADMAP §5 |
