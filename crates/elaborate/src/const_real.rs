@@ -53,9 +53,26 @@ impl Elaborator<'_> {
     pub(crate) fn const_eval_real_in_scope(&self, e: &ast::Expr) -> Option<f64> {
         use ast::ExprKind as K;
         let fin = |v: f64| v.is_finite().then_some(v);
+        // §11.8.1: a real operator CONVERTS its integral operand, and the
+        // conversion reads the integral subtree's SELF-DETERMINED value — the real
+        // side gives it no width context. Recursing into the subtree with f64
+        // arithmetic instead re-implemented integer arithmetic width-unlimited:
+        // `1.0 + -4'sd8` folded 9.0 (the 4-bit negate wraps to −8 ⇒ −7.0, iverilog
+        // agrees), `1.0 + 3/2` folded 2.5 (integer division ⇒ 2.0), and the `**`
+        // exponent cell `2.0 ** -4'sd8` promoted −8 to +8. So a real-free subtree
+        // folds in the INTEGER domain at its own width and only its RESULT crosses
+        // into f64. Declining integral shapes stay loud here (falling back to the
+        // f64 re-walk would revive exactly the widening this gate closes).
+        // `expr_mentions_real` is the same conservative discriminator
+        // `param_real_value` orders the two domains with.
+        if !self.expr_mentions_real(e) {
+            return self.const_int_selfdet(e).map(|v| v as f64);
+        }
         match &e.kind {
             K::RealLit { raw, .. } => Some(parse_real_f64(raw)),
             // An integer literal inside a real expression promotes (§11.8.1).
+            // (Reached only for a literal the gate above declined to claim — kept
+            // for the day `expr_mentions_real` learns a form this arm models.)
             K::IntLit { .. } => const_eval_i64_lit(e).map(|v| v as f64),
             K::Paren { inner } => self.const_eval_real_in_scope(inner),
             K::Unary { op, operand } => {
@@ -110,9 +127,13 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                // The condition is a truth value; fold it in whichever domain it
-                // belongs to, integer first (the common `P > 2 ? …` spelling).
-                let c = match self.const_eval_in_scope(cond) {
+                // The condition is a truth value in a SELF-DETERMINED position
+                // (§11.4.11) — integer first (the common `P > 2 ? …` spelling),
+                // but at the condition's own width: the unlimited fold read
+                // `(4'd15 + 4'd1) ? 1.5 : 2.5` as 16 ⇒ 1.5 where the 4-bit sum
+                // wraps to 0 ⇒ 2.5 (iverilog agrees). A real-mentioning
+                // condition declines in the integer walk and folds here.
+                let c = match self.const_int_selfdet(cond) {
                     Some(v) => v != 0,
                     None => self.const_eval_real_in_scope(cond)? != 0.0,
                 };

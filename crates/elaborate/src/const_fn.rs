@@ -269,15 +269,10 @@ impl Elaborator<'_> {
                 }
             }
             ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
-                let n = self.const_eval_in_scope(&args[0])?;
-                if n < 0 {
-                    return None; // width-dependent in IEEE; loud in this domain
-                }
-                if n <= 1 {
-                    Some(0)
-                } else {
-                    Some((64 - ((n - 1) as u64).leading_zeros()) as i64)
-                }
+                // Self-determined, treated-as-unsigned argument — the unlimited
+                // fold here answered 4 for `$clog2(4'd15 + 4'd1)` while the
+                // constant-function interpreter answered 0 for the same text.
+                self.const_clog2_selfdet(&args[0], &BTreeMap::new(), &ConstWidths::new(), 0)
             }
             // v7 P2-D: `pkg::sym` in const contexts.
             ast::ExprKind::PkgScoped { pkg, name } => self
@@ -425,6 +420,68 @@ impl Elaborator<'_> {
         self.eval_const_env_self(rhs, env, envw, depth)
     }
 
+    /// A SELF-DETERMINED integral position OUTSIDE any function body: a `$clog2`
+    /// argument, a size cast's SIZE expression, an integral subtree converting to
+    /// real (§11.8.1). Such a position has no surrounding integral context — it is
+    /// sized and signed by itself — so the plain width-unlimited module-scope fold
+    /// widens it instead: `$clog2(4'd15 + 4'd1)` read 16 where the argument is a
+    /// 4-bit 0 (iverilog 0 — and vita's OWN constant-function interpreter already
+    /// answered 0 for the same text), `(4'd9+4'd8)'(2)` sized 17 bits where the
+    /// size is a 4-bit 1, and `2.0 ** -4'sd8` promoted the exponent to +8.
+    ///
+    /// Same degrade contract as the Pow helper above: where the self width is
+    /// unknown the walk keeps the unlimited behavior rather than refusing (the
+    /// §4.5.339 measurement — a refusal is only as loud as its CALLER).
+    pub(crate) fn const_int_selfdet(&self, e: &ast::Expr) -> Option<i64> {
+        self.eval_const_env_self(
+            e,
+            &std::collections::BTreeMap::new(),
+            &ConstWidths::new(),
+            0,
+        )
+    }
+
+    /// `$clog2(arg)` in a const domain — one spelling for all three fold arms
+    /// (module scope, plain env twin, width-aware twin).
+    ///
+    /// The ARGUMENT is a self-determined position (§11.6.1 Table 11-21) and
+    /// §20.8.1 says it "shall be treated as an unsigned value" — that is a
+    /// reading of the argument's BIT PATTERN at its own width, so
+    /// `$clog2(4'sd7 + 4'sd1)` is `$clog2(4'b1000 = 8)` = 3. Verilator and
+    /// vita's OWN runtime both answer 3 (iverilog 13.0 answers 32: it converts
+    /// the −8 to a 32-bit integer first — recorded as an iverilog divergence,
+    /// same family as its `$clog2` self-inconsistencies in §0). The same rule
+    /// makes `$clog2(-1)` fold 32 — a 32-bit all-ones pattern — where the old
+    /// `n < 0 → None` refusal kept it loud against both oracles.
+    ///
+    /// Where the argument's width is unknown (0) or beyond the i64 walk (>64),
+    /// a non-negative value IS its own unsigned reading; a negative one needs
+    /// bits this domain cannot see and stays loud (the pre-slice behavior).
+    pub(crate) fn const_clog2_selfdet(
+        &self,
+        arg: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &ConstWidths,
+        depth: u32,
+    ) -> Option<i64> {
+        let v = self.eval_const_env_self(arg, env, envw, depth)?;
+        let n: u64 = match self.const_self_width(arg, envw).unwrap_or(0) {
+            w @ 1..=63 => (v as u64) & ((1u64 << w) - 1),
+            64 => v as u64,
+            _ => {
+                if v < 0 {
+                    return None;
+                }
+                v as u64
+            }
+        };
+        Some(if n <= 1 {
+            0
+        } else {
+            (64 - (n - 1).leading_zeros()) as i64
+        })
+    }
+
     /// A static cast `casting_type'(e)` in the INTEGER const domain (the
     /// `const_eval_in_scope` arm). Correct-or-loud: only the forms whose value is
     /// exact without tracking an operand WIDTH fold; everything else is None ⇒ the
@@ -505,7 +562,10 @@ impl Elaborator<'_> {
     /// One function so the two domains cannot answer differently about the same text.
     pub(crate) fn cast_size_bits(&self, target: &ast::CastTarget) -> Option<i64> {
         match target {
-            ast::CastTarget::Size(w) => self.const_eval_in_scope(w),
+            // The SIZE expression is itself a self-determined position — it has no
+            // outer width context — so `(4'd9+4'd8)'(2)` names a 1-bit cast (the
+            // 4-bit sum wraps), not a 17-bit one. The unlimited fold answered 17.
+            ast::CastTarget::Size(w) => self.const_int_selfdet(w),
             ast::CastTarget::Named(path) if path.segments.len() == 1 => {
                 let id = ast::Expr {
                     kind: ast::ExprKind::Ident(path.clone()),
@@ -513,7 +573,9 @@ impl Elaborator<'_> {
                 };
                 // Folds ONLY for a genuine constant — a typedef, class or net name
                 // yields None, so a real type cast is still not mistaken for a size.
-                self.const_eval_in_scope(&id)
+                // Same walk as the Size arm (a bare name cannot wrap, but two walks
+                // for one construct is how the spellings drift apart).
+                self.const_int_selfdet(&id)
             }
             _ => None,
         }
@@ -576,15 +638,10 @@ impl Elaborator<'_> {
                 }
             }
             ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
-                let n = self.eval_const_env(&args[0], env, envw, depth)?;
-                if n < 0 {
-                    return None;
-                }
-                if n <= 1 {
-                    Some(0)
-                } else {
-                    Some((64 - ((n - 1) as u64).leading_zeros()) as i64)
-                }
+                // Self-determined argument — same rule as the width-aware twin's
+                // arm; this plain walk otherwise widens it (the `**` exponent
+                // comment above tells the same story for the same reason).
+                self.const_clog2_selfdet(&args[0], env, envw, depth)
             }
             // A nested call's ARGUMENTS are expressions in THIS body, so they must
             // be sized with THIS body's widths — handing over an empty map made

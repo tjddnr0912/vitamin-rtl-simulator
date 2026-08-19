@@ -49,8 +49,12 @@ impl Elaborator<'_> {
                 })
             }
             // N'(e): result is N bits; signedness INHERITED from the operand.
-            ast::CastTarget::Size(w_expr) => {
-                let n = match self.const_eval_in_scope(w_expr) {
+            ast::CastTarget::Size(_) => {
+                // `cast_size_bits` owns the size fold (SELF-determined — the size
+                // expression has no outer context); a private `const_eval_in_scope`
+                // here was a second spelling that widened `(4'd9+4'd8)'(2)` to 17
+                // bits while the const domain (post-§2-fix) says 1.
+                let n = match self.cast_size_bits(target) {
                     Some(n) if n >= 1 && (n as u64) <= MAX_NET_WIDTH => n as u32,
                     _ => {
                         self.error(

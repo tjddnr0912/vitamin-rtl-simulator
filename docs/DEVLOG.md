@@ -276,3 +276,20 @@
   검증 = statement-effect 15종 × subroutine 6형(90) + 클래스 메서드 15 + 상호작용 8 + 패닉 5 를 **PRE(`218dba2`)/POST/iverilog 3-way 전수** = **회귀 0 · fixed 35**, 예제 4종 stdout+VCD **바이트 동일**(효과 없는 설계 무영향), 신규 테스트 21 + 사다리를 올린 r19 pin 1건 갱신. drift pin = `compute_effect` fall-through 의 `debug_assert!(!k_rhs_is_stmt_effect_family(rhs))`.
 
 **3판 클리어 라운드(2026-08-18~19, `b472b67`…`b868ff3`, 5,533→5,596 green, format 27→29, MsgCode 67→68): aes_top 3판이 로드맵으로 넘긴 5건 + 선행조건을 순서 1~10 + P1 로 완주.** §3.5-① `repeat` fold(한 철자 `repeat_unroll_count` — 분류기 사본에 없던 fill arm 이 pre-existing false-loud 를 만들고 있었다) · §3.6-① `default clocking`(센티넬은 이미 있었다 · 오라클은 verilator — iverilog 는 파싱 불가) · §3.3 wide localparam fold(admission = **캐리 없음** — `+`/`-`/`*` 를 여기서 접으면 엔진 산술의 두 번째 철자) · §3.1(a)(b) select-base 이식성 `W2004`(판별자는 AST 가 아니라 **provenance** — 파서만 안다) · §3.7 static task `string` INPUT formal(`frame_local_net_kind` 하나) · P1 inner-NET shadow(예언된 선행조건 *order-independent name set* 은 필요 없었다 — 답은 **선언 블록의 SPAN**) · §3.5-③ `repeat (m_n)`(카운터를 예약 패스에 · ⭐ 곁가지로 §2 self-width 절단 silent-wrong 동반 수정) · §3.6-② `default disable iff`(중복 선언 loud 신설) · ⚠️ **§3.11 은 지어서 재고 되돌렸다** — *"비-재귀 `automatic` 은 인라인과 의미상 동일"* 이 전 스위트 15 실패로 반증됐다(`$random` 이 두 번 — 인라인 확장이 피연산자를 두 번째로 이름 부른다). `automatic` 은 "프레임 경로" 를 뜻하고 그것이 인라인 경로의 핀된 결함들로부터 코드를 지키는 방법이다 ⇒ 진짜 길은 codegen 쪽(`is_codegen_able` 의 `Terminator::Call` 거부)이다. **#9 staged `file:line`(format v28)**: `vcmp` 가 버리던 SourceMap 을 `.vu` 의 source-map tail 로 나르고(`dir`/`canon` 은 3-OS 동일성 때문에 일부러 제외) `velab` 이 재구성해 **같은 `MapResolver`** 를 설치 — include 파일명·매크로 사용 지점(collapsed)·다중 파일·멀티바이트 char 컬럼까지 one-shot 과 바이트 동일, 절단·부재 tail 은 loud. **#10 런타임 severity `file:line`+인스턴스(format v29)**: 엔진은 span-free IR 이라 영원히 스스로 못 푼다 — elaborate 가 `severities` 를 쓰는 같은 자리에서 **한 번** 풀어 `severity_locs` 사이드카로 굳히고 emitter 셋(statement/frame/deferred)이 한 헬퍼로 읽는다. `d.sv:5:5: error[VITA-E4003] …: child says 42 [in top.u1] [at time 5]` — 한 소스 줄을 두 인스턴스가 각자 경로로 보고하고, deferred assert 는 **액션 사이트**를 가리키며, iverilog 가 같은 4요소를 확인한다. 그 순간 28개 테스트가 무너졌는데 뿌리는 하나 — **nonce 절대경로가 처음으로 transcript 에 보이게 된 것**(12개 헬퍼를 상대경로로 · 핀 3건은 위치를 포함해 강화). 절차 사고 1: 뮤테이션 배터리 복원 루프가 zsh 에서 word-split 을 안 해 뮤테이션 7개가 스택됐다 — 전량 폐기하고 bash + 격리 가드로 재실행(7/7 사망). 상세 전문 = ROADMAP_ARCHIVE §4.5.342.
+
+## 2026-08-19 (밤) — §2 정확성 큐 1~3: 자기결정 위치 셋 (§4.5.343)
+
+큐가 "한 뿌리"라 적어 둔 셋($clog2 인자 · 캐스트 SIZE 식 · real 도메인 `**` 지수)을 §4.5.339 의
+자기결정 걷기 하나로 라우팅했다. 착수 전 재측정이 서술을 두 번 고쳤다 — real 클래스는 `**` 만이
+아니라 **모든 real 연산자의 정수 피연산자**(8형태 발산)였고, 수정은 서술보다 작았다
+(`const_eval_real_in_scope` 상단 게이트 하나 + `param_real_value` 한 줄 + 삼항 cond). $clog2 는
+IEEE §20.8.1 "treated as unsigned" 를 **인자 자기 폭의 비트 패턴**으로 읽어야 했다 — 초판의
+`n<0` decline 이 signed-wrap 셀을 correct→loud 로 강등시키는 것을 적대 famA 스윕이 착지 전에
+잡았고, verilator 5.050 + vita 런타임 + LRM 텍스트 3자가 3 으로 합치(iverilog 32 = 결함 ⑤).
+뮤테이션 첫 배터리 9/10 — M9(plain-twin arm) 생존이 도달 경로 오판을 드러냈다: Blocking 대입
+타깃은 envw 에 항상 항목이 있어 width-twin 으로 가고, plain twin 의 진짜 문은 **폭이 안 접히는
+formal range 를 가진 call 인자**였다. 뮤턴트 빌드로 라우팅 증명(G2 7→0·exit 0) 후 재판정 KILLED
+= 10/10. 재판정 첫 시도는 타임아웃이 복원 전에 명령을 죽여 트리가 뮤턴트로 남았다 → trap restore
+EXIT 규칙을 RULES ⓓ 로 병합. 곁 측정 셋을 §2 에 등재: 런타임 mixed-real 넓힘(같은 소스가
+localparam ✓/runtime ✗ — #1 논거와 동형), genif cond 2-오라클 발산, untyped localparam 오라클
+분열. PRE-3-way 회귀 0 · staged parity 바이트 동일 · 5,596 → **5,608 green**.

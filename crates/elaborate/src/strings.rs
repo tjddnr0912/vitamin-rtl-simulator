@@ -245,8 +245,14 @@ impl Elaborator<'_> {
             let f = self.const_eval_real_in_scope(value)?;
             return Some((f, None));
         }
+        // A wholly integral initializer of a DECLARED-real parameter converts to
+        // real at its own self-determined size (§11.8.1 — the real target gives it
+        // no integral context): `parameter real P = 4'd15 + 4'd1` binds 0.0 (the
+        // 4-bit sum wraps; iverilog agrees), not 16.0. The i64 twin registers the
+        // SAME self-determined value, so the parameter's integral capabilities
+        // cannot disagree with its real reading.
         declared_real
-            .then(|| self.const_eval_in_scope(value))
+            .then(|| self.const_int_selfdet(value))
             .flatten()
             .map(|v| (v as f64, Some(v)))
     }

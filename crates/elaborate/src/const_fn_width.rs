@@ -367,15 +367,7 @@ impl Elaborator<'_> {
             // `$clog2(4'd15 + 4'd15)` is `$clog2(14)` = 4, not `$clog2(30)` = 5,
             // whatever the assignment target is.
             K::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
-                let n = self.eval_const_env_self(&args[0], env, envw, depth)?;
-                if n < 0 {
-                    return None; // width-dependent in IEEE; loud in this domain
-                }
-                Some(if n <= 1 {
-                    0
-                } else {
-                    (64 - ((n - 1) as u64).leading_zeros()) as i64
-                })
+                self.const_clog2_selfdet(&args[0], env, envw, depth)
             }
             // A leaf enters the context at ITS OWN declared width: §11.6.1 extends
             // an operand to the context size, sign-extending only when the operand
