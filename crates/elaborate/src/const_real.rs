@@ -33,7 +33,12 @@ impl Elaborator<'_> {
     /// first would decide the branch on the wrong value — the exact leaf-conversion
     /// mistake this domain exists to avoid.
     pub(crate) fn const_truth_in_scope(&self, e: &ast::Expr) -> Option<bool> {
-        if let Some(v) = self.const_eval_in_scope(e) {
+        // A CONDITION is a self-determined position (§11.6.1 Table 11-21): nothing
+        // around it supplies a width. `generate if (4'd15 + 4'd1)` therefore tests the
+        // 4-bit 0 and takes the `else` — which is what iverilog AND verilator do, and
+        // what the width-unlimited fold got wrong by elaborating the other branch,
+        // silently, at exit 0.
+        if let Some(v) = self.const_int_selfdet(e) {
             return Some(v != 0);
         }
         if !self.expr_mentions_real(e) {

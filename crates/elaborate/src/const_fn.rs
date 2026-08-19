@@ -201,13 +201,19 @@ impl Elaborator<'_> {
                 i64::try_from(ticks / mult).ok()
             }
             ast::ExprKind::Paren { inner } => self.const_eval_in_scope(inner),
+            // `!e` yields ONE bit from a SELF-DETERMINED operand (Table 11-21) —
+            // `!(4'd15 + 4'd1)` must see the 4-bit 0, not the unlimited 16. The three
+            // context-determined unaries keep this walk.
+            ast::ExprKind::Unary {
+                op: ast::UnOp::LogNot,
+                operand,
+            } => Some((self.const_int_selfdet(operand)? == 0) as i64),
             ast::ExprKind::Unary { op, operand } => {
                 let v = self.const_eval_in_scope(operand)?;
                 match op {
                     ast::UnOp::Plus => Some(v),
                     ast::UnOp::Minus => v.checked_neg(),
                     ast::UnOp::BitNot => Some(!v),
-                    ast::UnOp::LogNot => Some((v == 0) as i64),
                     _ => None,
                 }
             }
@@ -240,7 +246,11 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                let c = self.const_eval_in_scope(cond)?;
+                // §11.4.11: the CONDITION is self-determined — it takes no width from
+                // the arms or from the surrounding context. The real-domain twin
+                // (`const_eval_real_in_scope`) already folded it that way; this one
+                // did not, so one source line had two answers.
+                let c = self.const_int_selfdet(cond)?;
                 if c != 0 {
                     self.const_eval_in_scope(then_e)
                 } else {
@@ -271,26 +281,39 @@ impl Elaborator<'_> {
             // width collapsed to 1, a replication count to 0).
             ast::ExprKind::Cast { target, expr } => self.const_eval_cast(target, expr),
             ast::ExprKind::Binary { op, lhs, rhs } => {
-                // Two WHOLE-NODE comparison folds live outside the numeric domain
-                // (a string equality, an x/z wildcard pattern). `const_compare_special`
-                // owns both so the width-aware walk can consult the SAME rule instead of
-                // shadowing them by recursing into the operands.
-                if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
-                    return Some(v);
+                // §11.6.1 Table 11-21: a comparison / equality / logical operator
+                // delivers ONE bit and sizes its operands against EACH OTHER, so the
+                // whole node is a SELF-DETERMINED position — the surrounding context
+                // gives it nothing, and this width-unlimited walk is simply the wrong
+                // evaluator. It answered `(4'd15 + 4'd1) > 4'd0` as 1 where the 4-bit
+                // sum wraps to 0 and BOTH oracles say 0, and the same 16-vs-0 rode into
+                // every generate-if condition and ternary condition built on one.
+                // The width-aware walk owns that arm (and consults
+                // `const_compare_special` from inside it, so the string / wildcard
+                // whole-node folds still fire).
+                if !binop_result_is_context_determined(*op) {
+                    return self.const_int_selfdet(e);
                 }
                 let a = self.const_eval_in_scope(lhs)?;
-                let b = if matches!(op, ast::BinOp::Pow) {
-                    // `**`'s EXPONENT is self-determined (§11.6.1 Table 11-21) —
-                    // the plain unlimited fold below widens it instead, which is
-                    // exactly the §4.5.319 defect this domain still had.
-                    self.const_pow_exponent_selfdet(
+                // The RIGHT operand of `**` and of every shift is a self-determined
+                // position (§11.6.1 Table 11-21) — the plain unlimited fold widens it
+                // instead. `**` was closed in §4.5.319; the four shifts were not, and
+                // once comparisons started redirecting into the width-aware twin (which
+                // routes ALL FIVE) the same subexpression answered two different things
+                // depending on whether a comparison happened to sit above it:
+                // `8'd1 << (4'd15 + 4'd1)` folded 65536 alone and 1 under a `>`.
+                // Both oracles say 1 — the 4-bit count wraps to 0.
+                let b = match op {
+                    ast::BinOp::Pow => self.const_pow_exponent_selfdet(
                         rhs,
                         &std::collections::BTreeMap::new(),
                         &ConstWidths::new(),
                         0,
-                    )?
-                } else {
-                    self.const_eval_in_scope(rhs)?
+                    )?,
+                    ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => {
+                        self.const_int_selfdet(rhs)?
+                    }
+                    _ => self.const_eval_in_scope(rhs)?,
                 };
                 const_binop(*op, a, b)
             }
@@ -487,7 +510,12 @@ impl Elaborator<'_> {
         if !matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
             return None;
         }
-        let a = self.const_eval_in_scope(lhs)?;
+        // ⚠️ SELF-DETERMINED, like every other operand of a comparison: this helper is
+        // consulted from inside the width-aware arm, so reading the LHS with the
+        // width-unlimited walk would make the wildcard the one member of its own
+        // operator family still answering from the evaluator that family redirects
+        // away from (`(4'd15 + 4'd1) ==? 4'b000x` is 1 for both oracles and was 0).
+        let a = self.const_int_selfdet(lhs)?;
         // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
         // of the PATTERN (rhs) are don't-cares (§11.4.6). const_eval carries no
         // x/z, so the generic `const_eval_in_scope(rhs)` below returns None on
@@ -678,15 +706,28 @@ impl Elaborator<'_> {
                     None => self.lookup_scoped(n),
                 }
             }
+            // `!e` takes a SELF-DETERMINED operand here too — same rule, same reason.
+            ast::ExprKind::Unary {
+                op: ast::UnOp::LogNot,
+                operand,
+            } => Some((self.eval_const_env_self(operand, env, envw, depth)? == 0) as i64),
             ast::ExprKind::Unary { op, operand } => {
                 let v = self.eval_const_env(operand, env, envw, depth)?;
                 match op {
                     ast::UnOp::Plus => Some(v),
                     ast::UnOp::Minus => v.checked_neg(),
                     ast::UnOp::BitNot => Some(!v),
-                    ast::UnOp::LogNot => Some((v == 0) as i64),
                     _ => None,
                 }
+            }
+            // A non-context-determined operator is a self-determined NODE (the same
+            // rule `const_eval_in_scope` and `eval_const_env_at` state); this plain
+            // twin would otherwise be the last evaluator in the const domain that
+            // contradicts `binop_result_is_context_determined`. Reachable only through
+            // `eval_const_assign`'s unknown-target path, so this is a consistency
+            // guard rather than a measured defect.
+            ast::ExprKind::Binary { op, .. } if !binop_result_is_context_determined(*op) => {
+                self.eval_const_env_self(e, env, envw, depth)
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
                 let a = self.eval_const_env(lhs, env, envw, depth)?;

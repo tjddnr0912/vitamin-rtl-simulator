@@ -130,10 +130,19 @@
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | **top-level const 문맥의 무제한 fold**(오라클 ✓ · §4.5.346 이 캐스트 안쪽만 닫았다) | ⭐ **캐스트 lane 은 이제 폭-정직인데 bare lane 은 아니다** — 실측: `8'((4'd15+4'd1) > 4'd0)` 이 iverilog 의 0(POST 정답)인데 **같은 비교를 캐스트 없이** 쓰면 vita 1 / iverilog 0. 같은 뿌리가 **generate-if cond**(아래 옛 4번, 2-오라클 합치)와 **bare 비교·범위 bound** 를 함께 덮는다. blast = generate elaboration ⇒ PRE-3-way 필수 |
-> | 2 | u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
-> | 3 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
-> | 4 | **음수 상수가 소비자에서 조용히 먹힌다**(§4.5.346 적대 리뷰 실측·pre-existing·PRE==POST) | ⓐ 음수 replication count `{W{1'b1}}`(W=−56)가 **진단 없이 255** — iverilog 는 *"Concatenation repeat may not be negative"* 로 거부 ⓑ 음수 range bound `logic [P:0]`(P=−56)가 **W3056 로 1비트 클램프**(iverilog 57)이고 그 경고 문구(*"param value 0?"*)가 **사실과 다르다**. 둘 다 평범한 철자(`localparam W = -56`)로 재현 |
+> | **1** | u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
+> | 2 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
+> | 3 | **음수 상수가 소비자에서 조용히 먹힌다**(§4.5.346 적대 리뷰 실측·pre-existing·PRE==POST) | ⓐ 음수 replication count `{W{1'b1}}`(W=−56)가 **진단 없이 255** — iverilog 는 *"Concatenation repeat may not be negative"* 로 거부 ⓑ 음수 range bound `logic [P:0]`(P=−56)가 **W3056 로 1비트 클램프**(iverilog 57)이고 그 경고 문구(*"param value 0?"*)가 **사실과 다르다**. 둘 다 평범한 철자(`localparam W = -56`)로 재현 |
+>
+> ✅ **top-level 자기결정 위치는 §4.5.347 로 RESOLVED**(2026-08-20 · 상세=ARCHIVE): 착수 전
+> **3-오라클 census 18칸**(iverilog·verilator·vita)이 스코프를 정했다 — **두 오라클이 합치하는 9칸만**
+> 고치고 갈리는 축(untyped localparam 16 vs 0 · repeat 2 vs 18)은 손대지 않았다. 비교/등가/논리
+> 연산자의 결과는 1비트이고 피연산자는 **서로에 대해** sizing 되므로 노드 전체가 자기결정 —
+> `const_eval_in_scope` 이 그 자리를 무제한으로 접고 있었다. 곁으로 시프트 카운트(같은 부분식이 비교
+> 아래에서만 맞던 자기 불일치)와 와일드카드 비교의 LHS, 그리고 `const_self_width` 의 **Replicate arm
+> 부재**(replication 피연산자가 폭을 미상으로 만들어 규칙이 통째로 무력화)까지 닫았다. 193칸 3-way
+> **회귀 0 · FIXED 15**. 분할은 `binop_result_is_context_determined` 라는 **와일드카드 없는 exhaustive
+> match** 한 자리에 적었다(새 BinOp 는 컴파일을 깨뜨린다).
 >
 > ✅ **`const_eval_cast` 의 Size/Named arm 은 §4.5.346 으로 RESOLVED**(2026-08-20 · 상세=ARCHIVE): 피연산자를
 > **먼저 `max(self, N)` 으로 sizing** 하고 부호를 피연산자에서 물려받는다 — §4.5.345 가 상수함수 본문 arm 에 깐
@@ -235,6 +244,19 @@
   - **4-state 지역변수의 무초기화 기본값이 0 이다**(pre-existing·PRE==POST). `integer x; g = x + 1;` 이 vita **1** / iverilog **x**. i64 해석기가 unknown 을 못 나른다 — 2-state(`int x;`)는 정답.
   - **packed 차원 곱이 u32 를 넘으면 패닉**(pre-existing·PRE==POST·진단 없음). `bit [65535:0][65535:0] tt;` 가 `attempt to multiply with overflow` 로 abort. §4.5.345 의 `checked_mul` 자리가 아니라 그 위(넷 할당)다.
   - **선언 폭 모델이 셋인데 하나만 packed 를 본다**(maintainability). `const_decl_wsign`(곱 · §4.5.345) · `const_bound.rs::decl_is_wide`(첫 차원만) · `ast_kind_range_width`. 지금은 **건전**(차원을 무시하면 폭을 과소평가 → 과잉 decline, 단조) 하나 명시되지 않은 의존이다 — 폭을 *줄일* 수 있는 차원 규칙이 생기면 조용히 깨진다.
+- **⚡ 상수 도메인의 비교/논리/삼항조건 fold 가 §4.5.347 이후 ~3배 느리다**(값은 전부 정답 · 리뷰 실측).
+  `const_int_selfdet` 이 평가 전에 `const_self_width` 와 `const_signed_env` 로 트리를 두 번 더 걷고,
+  비교 arm 이 lhs·rhs 를 폭·부호로 각각 다시 걷는다 = **피연산자당 6 walk vs 옛 2**. 실측(병리적):
+  1,500개 localparam × 60항 체인 0.35 → 1.00 s · 이중 generate-for(같은 체인이 bound) 3.14 → 11.73 s
+  (3.7×) · **컨트롤(같은 크기에 `+`) 1.00×** 라 비용은 정확히 리다이렉트다. ⚠️ **현실 설계에서는
+  측정되지 않는다** — picorv32 elaborate 0.030 → 0.030 s · 평범한 3,000회 generate-for 0.116 → 0.162 s.
+  후보 처방 둘: ⓐ 폭과 부호를 **한 번의 walk 로 융합**(6→4 walk) ⓑ generate-for bound 의 **genvar-free
+  부분식 메모**(반복 배수를 없앤다 — 병리 케이스의 진짜 승수). 값이 아니라 시간이므로 차분에는 안 보인다.
+- **`==?`/`!=?` 좌편향 체인은 여전히 2^depth**(pre-existing · §4.5.346 이 비-와일드카드 쪽만 닫았다 ·
+  §4.5.347 이 그 상수를 2.6× 키웠다). 깊이 22 에서 30 s → 79 s. 값은 정확(iverilog 일치).
+- **폭이 정확히 64 인 비교는 여전히 조용히 틀린다**(pre-existing · PRE==POST · **2-오라클 합치**).
+  `((64'd1 - 64'd2) > 64'd0)` 이 두 오라클 1 / vita 0 — `masking = ctx_w > 0 && ctx_w < 64` 의 off-by-one
+  이고, 63비트 쌍은 §4.5.347 이 고쳤다. 위 「64비트 상수」 항목과 같은 도메인 경계.
 - **🔴 64비트 상수의 부호 없는 값이 i64 도메인에서 음수로 읽힌다**(pre-existing·PRE==POST·**2-오라클 합치**·§4.5.345 라운드 3 발굴). `localparam L = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` 가 vita **222** / iverilog·verilator **111**. 같은 결함이 `parameter [63:0] BIG = 64'hFFFF…; (BIG > 0)` 철자에도 있다. 뿌리 = `const_eval_i64_lit` 의 64비트 재해석 arm(*"magnitude misuse 는 range 검사가 loud 로 잡는다"* 고 적혀 있으나 **비교 위치엔 그 검사가 없다** — §2 의 u64 지수 항목과 **같은 주석·같은 구멍**). ⚠️ §4.5.345 는 이 클래스를 **새 문법(concat/replication)으로 넓히지 않으려고** 64비트 배치를 의도적으로 decline 한다(핀 `a_placement_that_does_not_fit_the_i64_domain_declines`) — 이 항목이 닫히면 그 decline 도 함께 열 수 있다. 처방 후보 = i64 대신 `(bits, width, signed)` 를 나르거나, 부호 없는 64비트를 만드는 자리에서 loud.
 - **placement/캐스트 fold 의 잔여**(§4.5.345 가 연 lane 의 경계 · 전부 honest-loud). carry 연산이 든 concat(`{4'd2,(4'd1+4'd1)}` iverilog 34) · concat 안의 x/z · **prim/signing 캐스트**(`int'(7)` iverilog 7 — 그 피연산자는 자기결정이라 SIZE 의 `max(self,N)` 규칙과 다르다) · 지역변수에서 온 replication count(iverilog 도 거부). carry-free folder 를 넓히는 것은 *두 번째 산술 철자*라 금지 — 늘리려면 해석기 자신의 폭-인식 걷기로 라우팅해야 한다(위 표 1번과 같은 처방).
 - **self-referential 반환 range 는 여전히 스택 오버플로**(pre-existing·오라클 없음 — iverilog 도 내부 abort·§4.5.339 발굴). `function [f():0] f();` — `const_fn_ret_wsign` 경로가 call 깊이를 안 끈다. 처방은 §4.5.339 가 default 에 쓴 **같은 한 줄**(`depth + 1`).

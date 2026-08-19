@@ -26,6 +26,54 @@ use super::*;
 /// of its value env, so an assignment can find its target's declared shape.
 pub(crate) type ConstWidths = std::collections::BTreeMap<String, (u32, bool)>;
 
+/// Does this operator's RESULT take the surrounding context width?
+///
+/// The context-determined ones widen with their neighbours; the rest — the
+/// comparisons, the equalities and the two logical operators — deliver ONE bit and
+/// size their operands against EACH OTHER (IEEE §11.6.1 Table 11-21), so the whole
+/// node is a self-determined position and the width-UNLIMITED module-scope fold is
+/// the wrong evaluator for it.
+///
+/// Written as an exhaustive match on purpose: a new `BinOp` must not silently join
+/// whichever side the compiler defaults to. This is the one spelling of that split
+/// *inside the constant domain* — `eval_const_env_at`'s three-way match,
+/// `const_eval_in_scope`'s redirect and `eval_const_env`'s guard all stand on it.
+/// ⚠️ Four hand-written copies of the same list live outside it (`expr_ctx.rs` ×2,
+/// `hoist/arms.rs`, `sim-ir::selfwidth`); they were read and they AGREE, and the
+/// const-vs-runtime split they could have caused was measured closed rather than
+/// opened by this rule — but they are not derived from this function.
+pub(crate) fn binop_result_is_context_determined(op: ast::BinOp) -> bool {
+    use ast::BinOp as B;
+    match op {
+        B::Add
+        | B::Sub
+        | B::Mul
+        | B::Div
+        | B::Mod
+        | B::Pow
+        | B::Shl
+        | B::Shr
+        | B::AShl
+        | B::AShr
+        | B::BitAnd
+        | B::BitXor
+        | B::BitXnor
+        | B::BitOr => true,
+        B::Lt
+        | B::Le
+        | B::Gt
+        | B::Ge
+        | B::Eq
+        | B::Ne
+        | B::CaseEq
+        | B::CaseNe
+        | B::WildEq
+        | B::WildNe
+        | B::LogAnd
+        | B::LogOr => false,
+    }
+}
+
 impl Elaborator<'_> {
     /// Mask `v` into `w` bits, sign-extending when `signed` — the single place the
     /// interpreter narrows a value, shared by the operator masking and the final
@@ -108,6 +156,19 @@ impl Elaborator<'_> {
             K::Concat { parts } => parts.iter().try_fold(0u32, |acc, p| {
                 acc.checked_add(self.const_self_width(p, envw)?)
             }),
+            // §11.4.12.1: a replication is `count` copies of its operand list — also
+            // self-determined and unsigned. Without this arm a replication operand made
+            // the whole enclosing width UNKNOWN, so the width-aware walk degraded to the
+            // unlimited domain and `({2{4'd15}} + 4'd1) > 4'd0` kept answering 1 where
+            // both oracles answer 0 — the same defect the `Concat` twin above was added
+            // for, one operator over.
+            K::Replicate { count, value } => {
+                let n = const_eval_u32(count)?;
+                let one = value.iter().try_fold(0u32, |acc, p| {
+                    acc.checked_add(self.const_self_width(p, envw)?)
+                })?;
+                n.checked_mul(one)
+            }
             // `$clog2`/`$bits` are 32-bit integers.
             K::SysCall { .. } => Some(32),
             K::Cast { target, expr } => match target {
@@ -318,8 +379,11 @@ impl Elaborator<'_> {
                     }
                     // A comparison's operands size against EACH OTHER, not against
                     // the surrounding context, and the result is a 1-bit 0/1 that
-                    // no masking may touch.
+                    // no masking may touch. (`binop_result_is_context_determined`
+                    // is the shared statement of that split; this arm is its
+                    // `false` side and the two above are its `true` side.)
                     _ => {
+                        debug_assert!(!binop_result_is_context_determined(*op));
                         // ⚠️ Two comparison folds are WHOLE-NODE facts that this walk
                         // would shadow by recursing into the operands — a `string`
                         // equality and an x/z wildcard pattern. With NO local bindings

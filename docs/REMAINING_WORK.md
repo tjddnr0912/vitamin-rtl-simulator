@@ -2,7 +2,7 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-08-20)**: format_version **29** · **5,633 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
+> - **기준(2026-08-20)**: format_version **29** · **5,642 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
 > - **최신 완료**: **§4.5.345**(§2 상수함수 해석기의 선언 바인딩 — 미fold 초기화를 미바인딩으로 · 동명 param 폴백 금지 · 자기참조 크래시→loud · multi-packed 폭=차원의 곱 · concat/repl/SIZE캐스트를 모듈 스코프와 **같은** carry-free folder 로 · ⚠️ 기록된 메커니즘이 오진이라 첫 판이 회귀였고 PRE-3-way 가 잡았다) · 직전 = **§4.5.344**(bound/count/index lane) · **§4.5.343**(자기결정 위치 셋). 그 이전 전부 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스(한 줄씩) — 이 줄에 체인을 쌓지 않는다.
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
@@ -59,4 +59,4 @@
 
 ## E. 비계획 — 영구 비목표 (gap 아님)
 
-- **DEFPARAM**(deprecated) · **IMPLICIT-NET**(정책=E3010) · **OOS**(synthesis·waveform GUI·UPF/SDF/DPI-C·shortreal·trireg·UVM·unique/priority 다중-match).
+- **DEFPARAM**(deprecated) · **IMPLICIT-NET**(정책=E3010) · **OOS**(synthesis·waveform GUI·UPF/SDF/DPI-C·shortreal·trireg·UVM·unique/priority 다중-match).> - **최신 완료**: **§4.5.347**(§2 top-level 자기결정 위치 — 착수 스코프를 3-오라클 census 로 갈라 합치 9칸만 착수 · 분할을 exhaustive match 한 자리로 · 리뷰가 낸 이웃 불일치 둘 해소 · 193칸 회귀 0 · FIXED 15) · 직전 = **§4.5.346**(크기 캐스트의 상수 도메인) · **§4.5.345**(상수함수 선언 바인딩). 그 이전 전부 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스(한 줄씩) — 이 줄에 체인을 쌓지 않는다.
