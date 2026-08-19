@@ -130,10 +130,16 @@
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | **`const_eval_cast` 의 Size/Named arm 이 피연산자를 무제한 도메인에서 접는다**(오라클 ✓ · §4.5.345 가 메커니즘까지 실측) | **silent-wrong 이고 한 줄이다** — `eval_const_assign(operand, …, Some((n, sign)))` 로 라우팅. 실측 3칸: `4'((4'd8+4'd8)/4'd3)` vita **5**/iverilog **0** · `4'(4'd15+4'd1)` loud→**0** · `2'((8'sd100+8'sd100)>>1)` loud→**0**. §4.5.345 가 **자기결정(지수) lane 에는 이미 그 라우팅을 깔았고**(핀 `cast_size_selfdet_const_folds_at_the_cast_width`) 남은 것은 `const_eval_cast` 한 자리. ⚠️ 옛 기록의 선행조건 *"트리 전역 AST self-폭 패스"* 는 **이 도메인에 한해 이미 서 있다**(`const_self_width`+`const_signed_env`) |
+> | **1** | **top-level const 문맥의 무제한 fold**(오라클 ✓ · §4.5.346 이 캐스트 안쪽만 닫았다) | ⭐ **캐스트 lane 은 이제 폭-정직인데 bare lane 은 아니다** — 실측: `8'((4'd15+4'd1) > 4'd0)` 이 iverilog 의 0(POST 정답)인데 **같은 비교를 캐스트 없이** 쓰면 vita 1 / iverilog 0. 같은 뿌리가 **generate-if cond**(아래 옛 4번, 2-오라클 합치)와 **bare 비교·범위 bound** 를 함께 덮는다. blast = generate elaboration ⇒ PRE-3-way 필수 |
 > | 2 | u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
 > | 3 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
-> | 4 | **generate-if cond 의 무제한 fold**(§4.5.343 발굴·**2-오라클 합치**) | 광역 폭 클래스의 일부 · blast = generate elaboration ⇒ PRE-3-way 필수 |
+> | 4 | **음수 상수가 소비자에서 조용히 먹힌다**(§4.5.346 적대 리뷰 실측·pre-existing·PRE==POST) | ⓐ 음수 replication count `{W{1'b1}}`(W=−56)가 **진단 없이 255** — iverilog 는 *"Concatenation repeat may not be negative"* 로 거부 ⓑ 음수 range bound `logic [P:0]`(P=−56)가 **W3056 로 1비트 클램프**(iverilog 57)이고 그 경고 문구(*"param value 0?"*)가 **사실과 다르다**. 둘 다 평범한 철자(`localparam W = -56`)로 재현 |
+>
+> ✅ **`const_eval_cast` 의 Size/Named arm 은 §4.5.346 으로 RESOLVED**(2026-08-20 · 상세=ARCHIVE): 피연산자를
+> **먼저 `max(self, N)` 으로 sizing** 하고 부호를 피연산자에서 물려받는다 — §4.5.345 가 상수함수 본문 arm 에 깐
+> **같은 라우팅**이고, 이제 `const_size_cast` 한 함수를 두 arm 이 공유한다. 절단이 근사가 아니게 되니 옛 arm 의
+> *"부호 두 해석이 일치할 때만"* 자기제약이 통째로 필요 없어졌다(그 제약이 `8'(255)`·`4'(9)`·`8'(P)`·`64'(-1)`·
+> `1'(3)` 같은 **평범한 좁힘 캐스트 20종**을 거절하고 있었다). 147칸 3-way **회귀 0 · FIXED 4 · LOUD→CORR 23**.
 >
 > ✅ **body-local init 조용한 0 · 자기참조 초기화 크래시 · 폭-0 타깃(옛 1번과 2번 앞머리)은 §4.5.345 로 RESOLVED**
 > (2026-08-20 · 상세=ARCHIVE): 한 뿌리 = *해석기가 모르는 것을 값으로 만들었다*. 미fold 초기화는 **미바인딩**(읽을 때만
@@ -172,7 +178,7 @@
 > **⚠️ 옛 §1 NEXT 에서 이관한 4건 (2026-08-18)** — 이 넷은 **§2 본문에 불릿이 없고 옛 §1 목록에만**
 > 있었다(즉 §1 은 포인터가 아니라 **내용을 들고 있었다**). 이관 시 무손실 검증이 잡았고, 원문 그대로 옮긴다:
 >
-> - **폭 인식 상수 접기** — 자기결정 위치 셋(옛 「다음 착수 순서」 1~3)은 **§4.5.343 로 해소**; 남은 것은 top-level const 문맥 전반(generate-if cond·untyped localparam·range bound 등 — 위 표 5번과 divergence 목록에 실측 기록)이고 그 해소가 곧 캐스트 뭉치의 선행조건(AST self-폭 패스)이다. ⭐ **인터프리터 coerce 가 가장 도달성 높은 진입점**이라고 기록돼 있었다.
+> - **폭 인식 상수 접기** — 자기결정 위치 셋(옛 「다음 착수 순서」 1~3)은 **§4.5.343 로 해소**; 남은 것은 top-level const 문맥 전반(generate-if cond·untyped localparam·range bound 등 — **위 표 1번**과 divergence 목록에 실측 기록)이고 그 해소가 곧 캐스트 뭉치의 선행조건(AST self-폭 패스)이다. ⚠️ §4.5.346 이 **캐스트 안쪽에서는 그 패스가 이미 선다**는 것을 증명했다(`const_self_width`+`const_signed_env` 로 충분 · `8'((4'd15+4'd1) > 4'd0)` 이 iverilog 0). ⭐ **인터프리터 coerce 가 가장 도달성 높은 진입점**이라고 기록돼 있었다.
 > - **package-scope `real`** (오라클 ✓).
 > - **구조적 지연**(오라클 ✓) — **§4.5.221 이 도달성을 넓혀 우선순위 상향 후보**로 적혀 있었다.
 > - **`real` → `input int` formal**(오라클 ✓).
@@ -221,7 +227,7 @@
 - ~~**🔴 elaborate 상수접기가 `**` 지수를 자기결정하지 않는다**~~ **RESOLVED**(§4.5.339·상세=ARCHIVE) — 세 fold 사이트가 **한 헬퍼**(`const_pow_exponent_selfdet` → §4.5.186 폭 모델의 `eval_const_env_self`)를 공유한다. §4.5.319 가 닫은 다섯 철자에 이은 **여섯 번째이자 마지막**. 97칸 3-way **FIXED 10 · LOUD→CORR 2 · WRONG→LOUD 2 · 회귀 0**. **잔여 = 아래 「폭-미상 wrapping 지수」 한 줄뿐**(genvar 부호는 그 슬라이스가 함께 고쳤다).
 - **폭-미상 leaf 위의 WRAPPING 지수는 무제한 fold 로 남는다**(§4.5.339 가 **일부러** 남겼다·리뷰 실측). 폭이 0(=UNKNOWN)으로 기록되는 leaf(다중 packed 로컬 등) 위에서 지수가 **랩하면** 값이 갈린다 — `3 ** (m - 8'd250)`(m=4)이 vita **0** / iverilog **59049**. ⚠️⚠️ **거부는 답이 아니다 — 지어서 재고 되돌렸다**: 폭-미상을 거부하면 range-bound 위치에서 **decline 경로가 조용한 기본값**을 넣어(`logic [f3():0]` → **1비트 넷·exit 0·진단 0**) correct→**silent-wrong** 이 되고, 값이 정확한 셀(`3 ** (m + 0)`)은 correct→loud 로 강등된다 ⇒ **해소는 거부가 아니라 폭 모델 완성**(`const_decl_wsign` 이 다중 packed 를 답하게).
 - **🔴 런타임 mixed-real Binary 가 정수 피연산자의 wrap 위치를 넓힌다**(pre-existing·PRE==POST·오라클 ✓·§4.5.343 발굴). `logic signed [3:0] s = -8;` 에서 `1.0 + (-s)` 가 vita **9.0** / iverilog **−7.0**, `1.0 + (s + s)` 가 **−15.0** / **1.0** — leaf(`1.0 + s`)와 **SysFunc Pow lane**(`2.0 ** (-s)` = 0.003906)은 정확하므로 자리는 `ir::Binary` mixed lane 의 폭 문맥이다(real 경계 너머로 정수 문맥이 내려간다 — §11.8.1 은 변환 경계에서 self-det). ⚠️ §4.5.343 이 elaborate const 를 정답으로 만든 지금 **같은 소스가 localparam ✓ / runtime ✗** 로 갈린다(#1 의 자기 불일치 논거와 동형) — 「다음 착수 순서」 4번.
-- **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
+- **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴 · 위 표 1번의 한 철자). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
 - **real-반환 const fn 의 본문이 정수 도메인으로 해석된다**(pre-existing·PRE==POST·§4.5.343 발굴·소형). `function real f(); f = 4'd15 + 4'd1;` 이 16.0 을 접는다(real 타깃 대입은 self-det 0 이 맞을 것) — `eval_const_call` 이 real 반환형의 본문을 i64 로 인터프리트. real 산술이 든 본문은 어차피 decline(loud)이라 창이 좁다.
 - **u64 패턴 지수를 i64 도메인이 음수로 읽는다**(pre-existing·오라클 ✓·§4.5.339 발굴). `4'sd3 ** (64'd0 - 64'd8)` 이 param **0** / iverilog·vita 런타임 **926288481** — `const_eval_i64_lit` 의 64비트 재해석 arm 이 −8 을 만든다(그 arm 주석은 *"magnitude misuse 는 range 검사가 loud 로 잡는다"* 인데 **지수 위치엔 그 검사가 없다**).
 - ~~**인터프리터의 폭-0 타깃 · fold 안 되는 body-local 초기화의 조용한 0 · body-decl 초기화 크래시**~~ **RESOLVED**(§4.5.345·상세=ARCHIVE). **잔여 넷**(전부 §4.5.345 가 적대 리뷰로 실측):

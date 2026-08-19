@@ -320,6 +320,20 @@ impl Elaborator<'_> {
                     // the surrounding context, and the result is a 1-bit 0/1 that
                     // no masking may touch.
                     _ => {
+                        // ⚠️ Two comparison folds are WHOLE-NODE facts that this walk
+                        // would shadow by recursing into the operands — a `string`
+                        // equality and an x/z wildcard pattern. With NO local bindings
+                        // there is nothing a module-scope resolution could shadow, so
+                        // consult the shared owner first; the same conjunct
+                        // `eval_const_env`'s delegation arm uses.
+                        // ⚠️ Only the SPECIAL cases delegate, never the whole node: a
+                        // plain `(4'd15 + 4'd1) > 0` must keep this walk's width-honest
+                        // 0 and not the unlimited domain's 1.
+                        if env.is_empty() && envw.is_empty() {
+                            if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
+                                return Some(v);
+                            }
+                        }
                         // An UNKNOWN operand width means the pair cannot be sized,
                         // so nothing is masked (`w = 0`) rather than guessing 32.
                         let w = match (

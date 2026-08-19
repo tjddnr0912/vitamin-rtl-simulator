@@ -271,69 +271,14 @@ impl Elaborator<'_> {
             // width collapsed to 1, a replication count to 0).
             ast::ExprKind::Cast { target, expr } => self.const_eval_cast(target, expr),
             ast::ExprKind::Binary { op, lhs, rhs } => {
-                // A STRING comparison folds in the string domain, before the i64 one —
-                // `MODE == "Y"` on a `parameter string MODE` is the canonical way to
-                // switch an implementation in a generate-if, and neither operand has an
-                // i64 value, so the numeric fold below returned None and the generate-if
-                // was loud ("condition is not a constant"). IEEE 1800 §6.16 compares
-                // string VALUES, so equality is exact text equality.
-                if matches!(
-                    op,
-                    ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::CaseEq | ast::BinOp::CaseNe
-                ) {
-                    if let (Some(x), Some(y)) =
-                        (self.const_str_in_scope(lhs), self.const_str_in_scope(rhs))
-                    {
-                        let want_eq = matches!(op, ast::BinOp::Eq | ast::BinOp::CaseEq);
-                        return Some(i64::from((x == y) == want_eq));
-                    }
+                // Two WHOLE-NODE comparison folds live outside the numeric domain
+                // (a string equality, an x/z wildcard pattern). `const_compare_special`
+                // owns both so the width-aware walk can consult the SAME rule instead of
+                // shadowing them by recursing into the operands.
+                if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
+                    return Some(v);
                 }
                 let a = self.const_eval_in_scope(lhs)?;
-                // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
-                // of the PATTERN (rhs) are don't-cares (§11.4.6). const_eval carries no
-                // x/z, so the generic `const_eval_in_scope(rhs)` below returns None on
-                // the pattern; pull the pattern's value + x/z mask straight from the
-                // literal and masked-compare. The pattern zero-extends, so `a & !mask`
-                // at full width matches iverilog for a narrower pattern too. Fail-closed:
-                // only a NON-NEGATIVE const `a` (an i64 sign bit would corrupt the
-                // full-width compare) and a single-word, bit-63-clear pattern; otherwise
-                // fall through to None (loud). An x/z-free pattern is NOT intercepted —
-                // it folds via the `WildEq`/`WildNe` collapse arm below.
-                if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
-                    if let ast::ExprKind::IntLit { kind, raw } = &rhs.kind {
-                        // Only a SIZED pattern is safe: bits ABOVE its declared width
-                        // zero-extend, so the masked compare's "the LHS high bits must
-                        // be 0" is correct. An UNSIZED x/z literal (`'hx`) x-FILLS to the
-                        // context width — but parse_int_literal sizes it to its 32-bit
-                        // self-width, so an LHS wider than 32 bits would wrongly require
-                        // its high bits to be 0 (silent-wrong). Leave unsized x/z patterns
-                        // loud (fall through → the generic rhs fold returns None).
-                        if matches!(kind, ast::IntLitKind::Sized) {
-                            if let Some(cv) = parse_int_literal(raw, *kind) {
-                                if cv.bits.unk.iter().any(|&u| u != 0) {
-                                    let pat = cv.bits.val.first().copied().unwrap_or(0);
-                                    let mask = cv.bits.unk.first().copied().unwrap_or(0);
-                                    if a >= 0
-                                        && cv.bits.val.len() <= 1
-                                        && cv.bits.unk.len() <= 1
-                                        && (pat >> 63) == 0
-                                        && (mask >> 63) == 0
-                                    {
-                                        let eq =
-                                            (a & !(mask as i64)) == (pat as i64 & !(mask as i64));
-                                        return Some(if matches!(op, ast::BinOp::WildEq) {
-                                            eq
-                                        } else {
-                                            !eq
-                                        }
-                                            as i64);
-                                    }
-                                    return None; // negative LHS / wide / bit-63 pattern → loud
-                                }
-                            }
-                        }
-                    }
-                }
                 let b = if matches!(op, ast::BinOp::Pow) {
                     // `**`'s EXPONENT is self-determined (§11.6.1 Table 11-21) —
                     // the plain unlimited fold below widens it instead, which is
@@ -495,33 +440,176 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The two WHOLE-NODE comparison folds that do not live in the numeric domain:
+    /// a `string` parameter equality (§6.16 compares TEXT, and neither operand has an
+    /// i64 value at all) and `==?`/`!=?` against an x/z PATTERN literal (§11.4.6 makes
+    /// the pattern's unknown bits don't-cares).
+    ///
+    /// Both are MODULE-SCOPE facts — they resolve names through `const_str_in_scope` /
+    /// `const_eval_in_scope` — so a caller with local bindings must not consult them.
+    /// They live here rather than inline because the WIDTH-AWARE walk
+    /// (`eval_const_env_at`) recurses into a comparison's OPERANDS and would otherwise
+    /// shadow them: routing a size cast through that walk turned `8'(MODE == "Y")` —
+    /// the canonical way to switch an implementation on a string parameter — from
+    /// iverilog's 1 into a decline, which a width consumer swallows as a 1-bit net.
+    ///
+    /// `None` means "no special case applies", not "loud": every fail-closed exit here
+    /// leads to a generic fold that declines on the same operand anyway.
+    pub(crate) fn const_compare_special(
+        &self,
+        op: ast::BinOp,
+        lhs: &ast::Expr,
+        rhs: &ast::Expr,
+    ) -> Option<i64> {
+        let op = &op;
+        // A STRING comparison folds in the string domain, before the i64 one —
+        // `MODE == "Y"` on a `parameter string MODE` is the canonical way to
+        // switch an implementation in a generate-if, and neither operand has an
+        // i64 value, so the numeric fold below returned None and the generate-if
+        // was loud ("condition is not a constant"). IEEE 1800 §6.16 compares
+        // string VALUES, so equality is exact text equality.
+        if matches!(
+            op,
+            ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::CaseEq | ast::BinOp::CaseNe
+        ) {
+            if let (Some(x), Some(y)) = (self.const_str_in_scope(lhs), self.const_str_in_scope(rhs))
+            {
+                let want_eq = matches!(op, ast::BinOp::Eq | ast::BinOp::CaseEq);
+                return Some(i64::from((x == y) == want_eq));
+            }
+        }
+        // ⚠️ Everything below is the WILDCARD case only, and the LHS fold must not
+        // happen before that check. This helper runs on EVERY binary node, and the
+        // arm it was extracted from folds the LHS again for its generic path — so
+        // computing it here unconditionally evaluates each left operand TWICE, which
+        // is 2^depth on a left-deep chain. Measured: a 200-deep `(~r5) - 5'd0 - …`
+        // index went from milliseconds to over four minutes (a suite timeout).
+        if !matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
+            return None;
+        }
+        let a = self.const_eval_in_scope(lhs)?;
+        // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
+        // of the PATTERN (rhs) are don't-cares (§11.4.6). const_eval carries no
+        // x/z, so the generic `const_eval_in_scope(rhs)` below returns None on
+        // the pattern; pull the pattern's value + x/z mask straight from the
+        // literal and masked-compare. The pattern zero-extends, so `a & !mask`
+        // at full width matches iverilog for a narrower pattern too. Fail-closed:
+        // only a NON-NEGATIVE const `a` (an i64 sign bit would corrupt the
+        // full-width compare) and a single-word, bit-63-clear pattern; otherwise
+        // fall through to None (loud). An x/z-free pattern is NOT intercepted —
+        // it folds via the `WildEq`/`WildNe` collapse arm below.
+        if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
+            if let ast::ExprKind::IntLit { kind, raw } = &rhs.kind {
+                // Only a SIZED pattern is safe: bits ABOVE its declared width
+                // zero-extend, so the masked compare's "the LHS high bits must
+                // be 0" is correct. An UNSIZED x/z literal (`'hx`) x-FILLS to the
+                // context width — but parse_int_literal sizes it to its 32-bit
+                // self-width, so an LHS wider than 32 bits would wrongly require
+                // its high bits to be 0 (silent-wrong). Leave unsized x/z patterns
+                // loud (fall through → the generic rhs fold returns None).
+                if matches!(kind, ast::IntLitKind::Sized) {
+                    if let Some(cv) = parse_int_literal(raw, *kind) {
+                        if cv.bits.unk.iter().any(|&u| u != 0) {
+                            let pat = cv.bits.val.first().copied().unwrap_or(0);
+                            let mask = cv.bits.unk.first().copied().unwrap_or(0);
+                            if a >= 0
+                                && cv.bits.val.len() <= 1
+                                && cv.bits.unk.len() <= 1
+                                && (pat >> 63) == 0
+                                && (mask >> 63) == 0
+                            {
+                                let eq = (a & !(mask as i64)) == (pat as i64 & !(mask as i64));
+                                return Some(if matches!(op, ast::BinOp::WildEq) {
+                                    eq
+                                } else {
+                                    !eq
+                                } as i64);
+                            }
+                            return None; // negative LHS / wide / bit-63 pattern → loud
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Fold a SIZE cast `N'(e)` / `W'(e)` — the ONE spelling the module-scope arm
+    /// (`const_eval_cast`) and the constant-function arm (`eval_const_env`) share.
+    ///
+    /// §6.24.1 / §11.8.1: the operand runs at `max(its self width, N)` with the
+    /// OPERAND's signedness and the result is delivered in N bits — which is exactly
+    /// what the assignment funnel computes for a target of `(N, sign)`, so no second
+    /// copy of the width rule exists.
+    ///
+    /// Declines outside the i64 constant domain, and both halves of that boundary were
+    /// measured the hard way:
+    ///
+    ///   * `N > 64` — the operand still evaluates at 64 bits, so a carry past bit 63 is
+    ///     lost. `65'(64'hFFFF_FFFF_FFFF_FFFF + 64'd1) >> 64` is 1 for iverilog AND
+    ///     verilator and 0 here, so answering at all is a silent wrong.
+    ///   * `N == 64` with an UNSIGNED result whose top bit is set — `coerce_int_width`
+    ///     is the identity at 64, so the value escapes as a NEGATIVE i64 and
+    ///     `(64'(64'hFFFF_FFFF_FFFF_FFFF) > 0)` answers 0 for iverilog's 1. This is the
+    ///     same fit rule `const_placement_env` applies, and the same pre-existing
+    ///     64-bit class ROADMAP §2 records for a bare literal — extending it through a
+    ///     new syntax is not licensed by its already existing.
+    fn const_size_cast(
+        &self,
+        target: &ast::CastTarget,
+        operand: &ast::Expr,
+        env: &BTreeMap<String, i64>,
+        envw: &ConstWidths,
+        depth: u32,
+    ) -> Option<i64> {
+        let n = u32::try_from(self.cast_size_bits(target)?).ok()?;
+        if !(1..=64).contains(&n) {
+            return None;
+        }
+        let sg = self.const_signed_env(operand, envw);
+        let v = self.eval_const_assign(operand, env, envw, depth, Some((n, sg)))?;
+        if n == 64 && !sg && v < 0 {
+            return None;
+        }
+        Some(v)
+    }
+
     fn const_eval_cast(&self, target: &ast::CastTarget, operand: &ast::Expr) -> Option<i64> {
-        let v = self.const_eval_in_scope(operand)?;
         match target {
             // `int'(e)`, `byte'(e)`, … — a fixed (width, signedness) target, so the
             // runtime cast's resize-then-sign-stamp is exactly `coerce_int_width`.
             // `real'` yields None from the shared table (no integral value here).
+            // ⚠️ Routing this through `const_size_cast` too was tried and measured
+            // EQUIVALENT — 13 discriminators (division, modulo and shift under a
+            // narrowing `byte'`/`shortint'`, a 64-bit operand, a wrapping sum) all
+            // agree, because the final coercion to a FIXED width already reduces
+            // whatever the wider evaluation produced. Left alone because a prim cast
+            // also changes the 4-state-ness and the domain (`real'` has no integral
+            // value at all), and unifying on the strength of "no cell separates them"
+            // would be a claim this domain has not earned.
             ast::CastTarget::Prim(p) => {
                 let (w, s, _) = cast_prim_wsign(*p)?;
-                Some(coerce_int_width(v, w, s))
+                Some(coerce_int_width(self.const_eval_in_scope(operand)?, w, s))
             }
-            // `N'(e)`: N bits, signedness INHERITED from the operand — which this
-            // domain does not track. Fold only where both interpretations agree: a
-            // non-negative value that leaves the target's sign bit clear. (`4'(9)`
-            // is 9 unsigned but −7 signed, so it stays loud.)
+            // `N'(e)`: the operand runs at `max(its self width, N)` and the result is
+            // delivered in N bits with the operand's signedness (IEEE §6.24.1 /
+            // §11.8.1 — §4.5.316 pinned that rule against iverilog). That is exactly
+            // what the assignment funnel computes for a target of `(N, sign)`, and it
+            // is the SAME routing `eval_const_env`'s Cast arm already uses, so the
+            // two spellings of one construct cannot answer differently.
+            //
+            // This used to fold the operand in the width-UNLIMITED domain and then
+            // truncate, which is unsound on top of an un-narrowed operand
+            // (`4'((4'd8+4'd8)/4'd3)` divided 16 by 3 and answered 5 where the 4-bit
+            // sum is 0, so SV — and iverilog — answer 0). It compensated by folding
+            // only where the signed and unsigned readings AGREE, i.e. a non-negative
+            // value with the target's sign bit clear, which declined every ordinary
+            // narrowing cast (`8'(255)`, `4'(9)`, `8'(P)`, `64'(-1)`, `1'(3)` — all
+            // values iverilog prints). Sizing the operand first removes both: the
+            // truncation is no longer an approximation, so the sign no longer has to
+            // be guessed away.
             ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
-                let n = self.cast_size_bits(target)?;
-                if !(1..=64).contains(&n) || v < 0 {
-                    return None;
-                }
-                // At 64 bits every non-negative i64 is already representable with the
-                // sign bit clear; below that the check must actually run (at exactly
-                // 63 it is `v < 2^62`, NOT a bypass — bypassing it would return a
-                // positive value the 63-bit signed reading calls negative).
-                if n >= 64 {
-                    return Some(v);
-                }
-                (v < (1i64 << (n - 1))).then_some(v)
+                self.const_size_cast(target, operand, &BTreeMap::new(), &ConstWidths::new(), 0)
             }
             // `signed'`/`unsigned'` PRESERVE the operand's width, which this domain
             // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), so it
@@ -663,11 +751,7 @@ impl Elaborator<'_> {
             ast::ExprKind::Cast {
                 target: target @ (ast::CastTarget::Size(_) | ast::CastTarget::Named(_)),
                 expr,
-            } => {
-                let n = u32::try_from(self.cast_size_bits(target)?).ok()?;
-                let sg = self.const_signed_env(expr, envw);
-                self.eval_const_assign(expr, env, envw, depth, Some((n, sg)))
-            }
+            } => self.const_size_cast(target, expr, env, envw, depth),
             // A form this env twin does not model itself (`pkg::X`, a const-array
             // element read, `$bits`, a prim/signing cast, …). With NO local
             // bindings there is nothing a module-scope resolution could shadow,
