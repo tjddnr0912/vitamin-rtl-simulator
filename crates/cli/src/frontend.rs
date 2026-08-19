@@ -665,6 +665,9 @@ pub(crate) fn run_vita_str_gated(
         proc_multipliers: sc.proc_multipliers,
         proc_prec_mults: sc.proc_prec_mults,
         severities: sc.severities,
+        // #10: elaborate-resolved file:line:col + instance for severity
+        // statements (one-shot path; empty without a resolver ⇒ byte-identical).
+        severity_locs: sc.severity_locs,
         // §21.3.2 %t/$timeformat: the call-site table + the precision exponent
         // %t scales against (one-shot path; empty/−9 ⇒ byte-identical).
         timeformat_stmts: sc.timeformat_stmts,

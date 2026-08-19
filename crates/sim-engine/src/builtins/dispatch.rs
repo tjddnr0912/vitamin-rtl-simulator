@@ -150,7 +150,7 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     // out-of-band severity entry keyed by StmtId — intercept BEFORE the normal
     // stdout print so the text reaches the DIAGNOSTIC stream only (doc-13).
     if let Some(sev) = sched.st.severities.get(&sid).copied() {
-        return crate::builtins::run_severity_with(sched, nets, sev, fmt, args);
+        return crate::builtins::run_severity_with(sched, nets, sev, fmt, args, sid);
     }
     // §21.3.2: a `$timeformat` call is a no-op `Display` whose StmtId is in
     // `timeformat_stmts` (the assert_ctl pattern) — update the live `%t` format

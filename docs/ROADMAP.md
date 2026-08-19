@@ -436,9 +436,22 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   버퍼(0부터)를 인덱싱해 **좌표공간이 겹친다**. 틀린 CU 의 맵으로 풀면 **틀린 file:line**(없는 것보다
   나쁘다)이라 `None` 유지 — 닫으려면 병합 시 스팬 오프셋 재작성(AST 전체 walk)이 필요하다.
 
-- **§3.10 잔여 — 런타임 진단의 인스턴스 경로와 file:line.** §4.5.341이 시각(round-29) + **배열
-  이름**을 붙였고, elaborate 쪽은 `file:line:col` + 인스턴스 경로를 갖는다. 런타임 쪽에 남은 것은
-  **소스 위치**다(엔진은 IR 위에서 돌아 span이 없다 — §4.5.249 `SpanResolver`가 재사용 지점).
+- ✅ **§3.10 런타임 severity `file:line` + 인스턴스 경로 해결(2026-08-19 · #10 · format v29).**
+  엔진은 span-free IR 위에서 돌므로 **스스로는 영원히 못 푼다** — 답은 elaborate 가 **한 번**
+  푸는 것이다: `lower_severity_task` 가 `severities` 를 쓰는 **같은 자리**에서 `cur_location()` +
+  `cur_prefix` 를 `severity_locs` 사이드카(StmtId → file·line·col·byte범위·인스턴스)로 굳히고,
+  런타임 emitter 셋(statement 경로 `emit_severity_message` · frame 경로 `frame_emit_severity` ·
+  deferred 성숙 `mature_deferred`)이 **한 헬퍼**(`severity_diag_meta`)로 읽는다. 출력:
+  `d.sv:5:5: error[VITA-E4003] …: child says 42 [in top.u1] [at time 5]` — **한 소스 줄을 두
+  인스턴스가 각자 자기 경로로 보고**한다(§4.5.249 의 논거가 런타임에 도달). 커버: `$fatal`/`$error`/
+  `$warning`/`$info` · **W4031 unique/priority 위반**(case 문을 가리킨다) · **deferred assert**(성숙
+  시각에 **액션 사이트** 위치 + reach-시각 값) · **frame-path severity**. one-shot ↔ staged **바이트
+  동일**(velab 이 v28 소스맵으로 해석해 `.velab` extra-sidecars 로 나른다 — #9 가 선행조건이었던
+  이유). iverilog 가 같은 4요소를 확인(`ERROR: d.sv:5: … Time: 5 Scope: top.u1`). resolver 없는
+  경로(엔진 유닛 하네스)는 **엔트리 자체가 없어** 바이트 동일. ⚠️ **잔여(측정)**: sid 가 없는
+  런타임 진단군 — RunRange/W4020/W4022/W4028 등 — 은 접근 **문장**을 아는 키가 엔진에 없다(넷
+  선언 지점은 있지만 표준 위치 슬롯에 찍으면 접근 지점으로 오독된다 = 없는 것보다 나쁘다).
+  §4.5.341 이 이미 배열 **이름**을 붙였으므로 남은 값은 작다.
 
 ### ⭐⭐ 3판 잔여 5건의 클리어 순서 (2026-08-18 · **전부 코드 사이트까지 실측**)
 
@@ -457,7 +470,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~7~~ | ✅ **§3.6-② 완료(2026-08-19)** | verilator 3/3 일치 + ⭐ **중복 선언 loud** 신설 | — | AST 변종 1(**`.vu` 재핀** · sim-ir·format_version 불변) · `default clocking` 과 **같은 자리·같은 리셋** · 적용은 **multi-clock 게이트보다 먼저** · 뮤테이션 4/5 + **증명된 등가 1** |
 | ⚠️ ~~8~~ | **§3.11 — 지어서 재고 되돌렸다(2026-08-19)** | — | ⇒ 선행조건이 **바뀌었다**: ⓐ 인라인이 피연산자를 **한 번만** 이름 부르게 하거나 ⓑ **codegen 쪽**(`is_codegen_able` 의 `Terminator::Call` 거부)을 연다 | 전 스위트 **15 실패** · `$random` 이 **두 번** 뽑혔다 = 인라인 경로의 **핀된 사다리 위반**을 상속한다 |
 | ~~9~~ | ✅ **staged `file:line` 완료(2026-08-19 · format v28)** | `velab` 진단이 one-shot 과 **바이트 동일**한 위치를 갖는다 | — | `.vu` 에 source-map tail(`(name,text)`+세그먼트 · `dir`/`canon` 은 3-OS 동일성 때문에 제외) · `velab` 이 재구성해 **같은 `MapResolver`** 설치 · ⚠️ `-L` 병합 경로는 좌표공간 겹침으로 잔여 |
-| **10** | **§3.10 런타임 `file:line`** | 엔진 진단에 위치 | 엔진이 IR 위에서 돌아 span 이 없다 | §4.5.249 `SpanResolver` 가 재사용 지점 |
+| ~~10~~ | ✅ **§3.10 런타임 `file:line` 완료(2026-08-19 · format v29)** | severity 가족 전부가 `file:line:col [in 인스턴스] [at time N]` 을 갖는다 · staged 바이트 동일 | — | elaborate 가 **한 번** 풀어 `severity_locs` 사이드카로 · emitter 셋이 **한 헬퍼** 공유 · sid 없는 진단군(RunRange 등)은 측정된 잔여 |
 
 ⭐ **1~5 는 서로 독립이고 선행조건이 없다** — 순서는 *"리포터가 실제로 막힌 정도 × 크기"* 로 정했다
 (1 은 리포터가 **문구 때문에 두 번 헛수정**했고, 2 는 **한 플래그 배선**, 4 는 **sign-off 에서만 터지는

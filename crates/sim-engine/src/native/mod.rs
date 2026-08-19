@@ -219,6 +219,10 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         wired_or_nets: _,
         radixes: _,
         severities: _,
+        // #10: pure DIAGNOSTIC metadata (file:line:col + instance for severity
+        // reports) — read only at emit time, orthogonal to execution. Never a
+        // reject axis.
+        severity_locs: _,
         init_procs: _,
         final_procs: _,
         // `$timeformat` is runtime print state, orthogonal to codegen — the

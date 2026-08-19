@@ -208,7 +208,7 @@ impl SimState<'_> {
                         args,
                     } if self.severities.contains_key(&sid) => {
                         if let Some(&sev) = self.severities.get(&sid) {
-                            self.frame_emit_severity(sev, *fmt, args);
+                            self.frame_emit_severity(sev, *fmt, args, sid);
                         }
                     }
                     // Family D (r17): a genuine `$display`/`$write` in this subset TASK

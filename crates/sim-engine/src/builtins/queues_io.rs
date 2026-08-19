@@ -156,9 +156,10 @@ pub(crate) fn run_severity_with<N: crate::eval::NetReader + ?Sized>(
     sev: crate::SeverityKind,
     fmt: Option<u32>,
     args: &[u32],
+    sid: u32,
 ) -> Ctl {
     let message = render_task_args(sched, nets, fmt, args, None);
-    emit_severity_message(sched, sev, message)
+    emit_severity_message(sched, sev, message, sid)
 }
 
 /// Emit an already-rendered severity message to the diagnostic stream and apply
@@ -169,6 +170,7 @@ pub(crate) fn emit_severity_message(
     sched: &mut Scheduler,
     sev: crate::SeverityKind,
     mut message: String,
+    sid: u32,
 ) -> Ctl {
     use crate::SeverityKind as K;
     use diag::{Diagnostic, LogEvent, TimeStamp};
@@ -177,12 +179,16 @@ pub(crate) fn emit_severity_message(
     if message.is_empty() {
         message = code.title().to_string();
     }
+    // #10: file:line:col + instance path, resolved at elaborate time and keyed
+    // by this statement's sid (a deferred assert passes its ACTION sid — the
+    // report points at the `$error`, not the maturation site).
+    let (location, context) = sched.st.severity_diag_meta(sid);
     sched.st.sink.emit(LogEvent::Diagnostic(Diagnostic {
         severity,
         code,
         message,
-        location: None,
-        context: Vec::new(),
+        location,
+        context,
         sim_time: Some(TimeStamp {
             ticks: sched.st.now,
         }),

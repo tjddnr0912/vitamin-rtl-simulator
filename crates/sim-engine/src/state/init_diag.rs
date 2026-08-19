@@ -123,6 +123,7 @@ impl<'a> SimState<'a> {
             init_procs: Vec::new(),
             proc_prec_mults: Vec::new(),
             severities: crate::SeverityTable::new(),
+            severity_locs: crate::SeverityLocTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             stage_lines: Vec::new(),
@@ -432,6 +433,40 @@ impl<'a> SimState<'a> {
             }));
         }
         cell.set(n.saturating_add(1));
+    }
+
+    /// #10: the `(location, context)` a severity diagnostic keyed by `sid`
+    /// carries — resolved at ELABORATE time into `severity_locs` (the IR is
+    /// span-free; this lookup is the only source of a runtime `file:line:col`).
+    /// ONE spelling shared by the statement-path, frame-path and
+    /// deferred-maturation emitters — a second copy would let the three report
+    /// different places for one statement. A missing entry (no resolver at
+    /// elaborate — AST-only callers, engine unit harnesses) yields
+    /// `(None, [])`, the pre-#10 diagnostic shape, byte-identical.
+    pub(crate) fn severity_diag_meta(
+        &self,
+        sid: u32,
+    ) -> (Option<diag::SourceLoc>, Vec<diag::Frame>) {
+        match self.severity_locs.get(&sid) {
+            Some(l) => (
+                Some(diag::SourceLoc {
+                    file: l.file.clone(),
+                    line: l.line,
+                    col: l.col,
+                    byte_start: l.byte_start,
+                    byte_end: l.byte_end,
+                }),
+                if l.instance.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![diag::Frame {
+                        label: l.instance.clone(),
+                        location: None,
+                    }]
+                },
+            ),
+            None => (None, Vec::new()),
+        }
     }
 
     /// Emit `VITA-W4028`: a matched plusarg's value cannot be converted by the

@@ -30,7 +30,7 @@ fn run_one(src: &str, collapse: bool) -> (String, String, Option<i32>) {
     let f = d.join("t.sv");
     std::fs::write(&f, src).unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_vita"));
-    cmd.arg(f.to_str().unwrap()).current_dir(&d);
+    cmd.arg("t.sv").current_dir(&d);
     // Always start from a clean slate so an ambient VITA_SVA_COLLAPSE in the
     // tester's shell cannot poison the fan-out reference run.
     cmd.env_remove("VITA_SVA_COLLAPSE");

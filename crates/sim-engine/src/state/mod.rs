@@ -364,6 +364,10 @@ pub(crate) struct SimState<'a> {
     /// StmtId → severity for `$fatal`/`$error`/`$warning`/`$info` statements
     /// (from `SimOpts.severities`); empty ⇒ no severity tasks in the design.
     pub severities: crate::SeverityTable,
+    /// StmtId → resolved source location + instance path for severity
+    /// statements (from `SimOpts.severity_locs`); empty ⇒ location-less
+    /// severity diagnostics (no resolver at elaborate, or a pre-#10 harness).
+    pub severity_locs: crate::SeverityLocTable,
     /// StmtIds of `$timeformat` calls, lowered as no-op `Display` statements
     /// (the `assert_ctl`/severity side-table pattern, from
     /// `SimOpts.timeformat_stmts`); empty ⇒ no `$timeformat` in the design.

@@ -30,7 +30,7 @@ fn run(src: &str) -> (String, String, Option<i32>) {
     let f = d.join("t.sv");
     std::fs::write(&f, src).unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_vita"))
-        .arg(f.to_str().unwrap())
+        .arg("t.sv")
         .current_dir(&d)
         .output()
         .expect("run vita");
@@ -289,7 +289,7 @@ fn deferred_recycle_keeps_all_reports() {
     // in the stream — which was 3 by luck and became 18 the moment the renderer
     // started printing mnemonics (`E-RUN-USER-ERROR` carries three of them).
     assert_eq!(
-        count(&err, ": R [at time 0]"),
+        count(&err, ": R [in top] [at time 0]"),
         3,
         "three recycled instances mature independently. err:\n{err}\nout:\n{out}"
     );

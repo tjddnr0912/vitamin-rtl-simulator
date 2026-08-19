@@ -297,9 +297,11 @@ impl StderrSink {
             Severity::Warning => self.warnings.set(self.warnings.get() + 1),
             _ => self.notes.set(self.notes.get() + 1),
         }
-        // A runtime diagnostic has no file:line (the engine works on IR, not
-        // spans) but it DOES know when it fired, and every runtime emitter
-        // already stamps `sim_time` — the renderer was dropping it. Without it
+        // A runtime diagnostic knows when it fired (every runtime emitter
+        // stamps `sim_time` — the renderer was dropping it), and since #10 the
+        // SEVERITY family also knows where: elaborate resolves each severity
+        // statement's span into `severity_locs` and the emitters attach it
+        // (the engine itself still works on span-free IR). Without the time
         // a design with many `unique case` sites or many indexed arrays reports
         // N identical lines that cannot be told apart; the time alone separates
         // "during reset" from "in steady state", which is the question a reader
@@ -504,6 +506,16 @@ struct StagedExtraSidecars {
     /// tail; rides the format_version 26 bump. EMPTY ⇒ no declaration initializers.
     #[serde(default)]
     init_procs: Vec<u32>,
+    /// #10: StmtId → (file, line, col, byte range, instance) for severity
+    /// statements, resolved at ELABORATE time (velab holds the source map since
+    /// v28; the engine's IR is span-free, so vrun can only REPLAY this record).
+    /// Without it a STAGED `$fatal`/`$error`/`$warning`/`$info` (and a
+    /// `unique`/`priority` violation / deferred assert) silently prints
+    /// location-less while the one-shot run prints `file:line:col [in path]`.
+    /// APPEND-ONLY tail; rides the format_version 29 bump. EMPTY when no
+    /// severity tasks (or no resolver) ⇒ byte-identical.
+    #[serde(default)]
+    severity_locs: sim_engine::SeverityLocTable,
 }
 
 impl StagedExtraSidecars {
@@ -544,6 +556,7 @@ impl StagedExtraSidecars {
             net_decl_ranges: sc.net_decl_ranges.clone(),
             file_directed_stmts: sc.file_directed_stmts.clone(),
             init_procs: sc.init_procs.clone(),
+            severity_locs: sc.severity_locs.clone(),
         }
     }
 }

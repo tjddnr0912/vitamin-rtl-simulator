@@ -1021,6 +1021,9 @@ struct Elaborator<'s> {
     // StmtId → SeverityKind for every `$fatal`/`$error`/`$warning`/`$info` lowered
     // (each as a `SysTaskId::Display` stmt). Threaded via `SimOpts.severities`.
     severities: SeverityTable,
+    // StmtId → resolved source location + instance path for the same statements
+    // (entry ⟺ a SpanResolver was installed). Threaded via `SimOpts.severity_locs`.
+    severity_locs: SeverityLocTable,
     // StmtIds of `$timeformat` calls (each a no-op `SysTaskId::Display` stmt —
     // the assert_ctl/severity pattern). Threaded via `SimOpts.timeformat_stmts`.
     timeformat_stmts: std::collections::BTreeSet<u32>,

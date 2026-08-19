@@ -90,6 +90,33 @@ impl SeverityKind {
 /// `SimOpts` / the `.velab` trailer and NEVER enters the golden `SimIr` root.
 pub type SeverityTable = std::collections::BTreeMap<u32, SeverityKind>;
 
+/// Where a severity statement WAS in the source, resolved at ELABORATE time.
+/// The engine runs on span-free IR, so this is the only way a runtime
+/// `$fatal`/`$error`/`$warning`/`$info` (or a `unique`/`priority` violation /
+/// deferred assert, which lower through the same table) can say `file:line:col`
+/// — and resolving ONCE here also makes one-shot and staged output identical by
+/// construction (both read this record; neither re-resolves at runtime).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SeverityLoc {
+    pub file: String,
+    pub line: u32,
+    pub col: u32,
+    pub byte_start: u32,
+    pub byte_end: u32,
+    /// The INSTANCE path this statement was elaborated under (`cur_prefix`, the
+    /// same string elaborate-time diagnostics print as `[in …]`). A module
+    /// instantiated N times lowers N copies of the statement, so each StmtId
+    /// names ITS instance — `file:line:col` alone cannot tell them apart.
+    pub instance: String,
+}
+
+/// StmtId → [`SeverityLoc`], keyed identically to [`SeverityTable`] (both are
+/// written at the single `lower_severity_task` site). An entry exists only when
+/// a `SpanResolver` was installed — the no-resolver (AST-only / unit-test)
+/// paths stay byte-identical. Rides `SimOpts` / the `.velab` extra-sidecars
+/// trailer; NEVER the golden `SimIr` root.
+pub type SeverityLocTable = std::collections::BTreeMap<u32, SeverityLoc>;
+
 /// Default-radix side table (P1-5): StmtId → radix (2/8/16) for the
 /// `$displayb/o/h`, `$writeb/o/h`, `$strobeb/o/h`, `$monitorb/o/h` variants —
 /// the b/o/h changes only how UNFORMATTED arguments render (IEEE §17.1.1.1).
@@ -345,6 +372,10 @@ pub struct Sidecars {
     /// rounding); rides `SimOpts.proc_prec_mults`. EMPTY ⇒ S = 1 everywhere.
     pub proc_prec_mults: Vec<u64>,
     pub severities: SeverityTable,
+    /// Source location + instance path per severity StmtId (see [`SeverityLoc`]).
+    /// EMPTY when no resolver was installed ⇒ runtime severity diagnostics stay
+    /// location-less (the pre-slice behavior).
+    pub severity_locs: SeverityLocTable,
     /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
     /// OBS-3: StmtIds of `$vita_stage(...)` calls (no-op `Display` stmts the engine

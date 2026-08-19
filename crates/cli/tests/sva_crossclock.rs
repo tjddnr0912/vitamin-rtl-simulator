@@ -32,7 +32,7 @@ fn run(src: &str) -> (String, String, Option<i32>) {
     let f = d.join("t.sv");
     std::fs::write(&f, src).unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_vita"))
-        .arg(f.to_str().unwrap())
+        .arg("t.sv")
         .current_dir(&d)
         .output()
         .expect("run vita");

@@ -734,6 +734,10 @@ pub(crate) fn run_vrun_gated(
         // trailer — without them a staged `%t` mis-scales and a `$timeformat`
         // prints its args.
         timeformat_stmts: extra.timeformat_stmts,
+        // #10 (STAGED-DROP parity): severity file:line:col + instance — without
+        // this the staged run silently prints location-less severity reports
+        // while one-shot locates them.
+        severity_locs: extra.severity_locs,
         stage_stmts: std::collections::BTreeSet::new(),
         handle_copy_stmts: extra.handle_copy_stmts,
         queue_slice_stmts: extra.queue_slice_stmts,

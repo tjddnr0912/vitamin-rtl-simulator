@@ -429,7 +429,8 @@ impl Scheduler<'_, '_> {
         let mut term: Option<Step> = None;
         for (_key, rpt) in map {
             if let Some(sev) = self.st.severities.get(&rpt.action_sid).copied() {
-                match crate::builtins::emit_severity_message(self, sev, rpt.message) {
+                match crate::builtins::emit_severity_message(self, sev, rpt.message, rpt.action_sid)
+                {
                     crate::builtins::Ctl::Fatal => {
                         term = Some(Step::Fatal);
                         break;

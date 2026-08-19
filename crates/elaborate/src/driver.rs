@@ -160,6 +160,7 @@ impl<'s> Elaborator<'s> {
             inline_stack: Vec::new(),
             fork_modes: ForkModeTable::new(),
             severities: SeverityTable::new(),
+            severity_locs: SeverityLocTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),

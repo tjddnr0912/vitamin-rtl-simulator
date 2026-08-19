@@ -65,8 +65,8 @@ pub use backend::{
 pub use elaborate::{
     AssignRankTable, CovItem, CovgInstMeta, DeferActTable, DeferMarkTable, DeferRegion,
     ForkModeTable, FuncMeta, FuncTable, JoinMode, NetDeclRangeTable, NetDimsTable, NetNameTable,
-    QueueBoundTable, RadixTable, SeverityKind, SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo,
-    TaskCallProc,
+    QueueBoundTable, RadixTable, SeverityKind, SeverityLoc, SeverityLocTable, SeverityTable,
+    Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
 };
 pub use levelize::{
     comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies,
@@ -274,6 +274,11 @@ pub struct SimOpts {
     /// `SysTaskId::Display`). EMPTY for severity-free designs (the default), so
     /// every existing caller is unaffected. Never enters the golden IR.
     pub severities: SeverityTable,
+    /// StmtId → source location + instance path for the SAME statements
+    /// (resolved at elaborate time — the engine's IR is span-free). EMPTY when
+    /// no `SpanResolver` was installed ⇒ severity diagnostics stay
+    /// location-less, byte-identical to the pre-#10 output. Never golden IR.
+    pub severity_locs: SeverityLocTable,
     /// `$timeformat` side table: StmtIds of `$timeformat` calls (lowered as no-op
     /// `SysTaskId::Display`, the severity/assert_ctl pattern). EMPTY for designs
     /// without `$timeformat` (the default). Never enters the golden IR.
@@ -451,6 +456,7 @@ impl Default for SimOpts {
             // of the suite. Keep them together, and flip both when flipping.
             backend: Backend::Native,
             severities: SeverityTable::new(),
+            severity_locs: SeverityLocTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
@@ -764,6 +770,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     }
     st.backend = effective_backend;
     st.severities = opts.severities.clone();
+    st.severity_locs = opts.severity_locs.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
     st.stage_stmts = opts.stage_stmts.clone();
     st.handle_copy_stmts = opts.handle_copy_stmts.clone();

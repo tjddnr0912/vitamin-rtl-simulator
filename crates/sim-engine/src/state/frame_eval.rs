@@ -1228,6 +1228,7 @@ impl<'a> SimState<'a> {
         sev: crate::SeverityKind,
         fmt: Option<u32>,
         args: &[u32],
+        sid: u32,
     ) {
         use crate::SeverityKind as K;
         // One spelling, shared with the statement-path emitter — see `SeverityKind`.
@@ -1236,12 +1237,15 @@ impl<'a> SimState<'a> {
         if message.is_empty() {
             message = code.title().to_string();
         }
+        // #10: same sid-keyed lookup as `emit_severity_message` — the two
+        // paths must report the same place for the same statement.
+        let (location, context) = self.severity_diag_meta(sid);
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity,
             code,
             message,
-            location: None,
-            context: Vec::new(),
+            location,
+            context,
             sim_time: Some(TimeStamp { ticks: self.now }),
         }));
         match sev {
@@ -1469,7 +1473,7 @@ impl<'a> SimState<'a> {
                         args,
                     } if self.severities.contains_key(&sid) => {
                         if let Some(&sev) = self.severities.get(&sid) {
-                            self.frame_emit_severity(sev, *fmt, args);
+                            self.frame_emit_severity(sev, *fmt, args, sid);
                         }
                     }
                     // Family D (r17): a genuine `$display`/`$write` in this subset function
