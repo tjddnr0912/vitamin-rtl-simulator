@@ -271,7 +271,7 @@ fn replication_count_folds_every_const_form() {
 /// an empty one used to be, so `const_fold_is_width_exact` declines and the old
 /// value stands; the same arithmetic at ≥32-bit width folds and is right.
 #[test]
-fn narrow_operand_arithmetic_declines_instead_of_folding_wrong() {
+fn narrow_operand_arithmetic_folds_at_self_width() {
     let (out, c) = run("module m; logic [63:0] g, h;\n\
          initial begin\n\
            g = {$clog2(4'd15 + 4'd15){1'b1}};\n\
@@ -279,33 +279,34 @@ fn narrow_operand_arithmetic_declines_instead_of_folding_wrong() {
            $display(\"G=%0d %0d\", $countones(g), $countones(h));\n\
            $display(\"V=%0d\", 4'd15 + 4'd15);\n\
            #1 $finish; end endmodule\n");
-    assert_eq!(c, Some(0), "the decline is silent, not loud; got:\n{out}");
-    // Narrow operands ⇒ decline ⇒ the pre-existing empty count (0), NEVER the
-    // wrong 5. Wide operands ⇒ fold ⇒ $clog2(30) = 5, which is what iverilog
-    // prints. The 0 is the tracked self-width residual, not a new defect.
+    assert_eq!(c, Some(0), "the fold is silent, not loud; got:\n{out}");
+    // Narrow operands used to DECLINE (the tracked self-width residual, an empty
+    // count); the self-determined bound tier folds the 4-bit wrap: 14, $clog2 = 4.
+    // Wide operands fold in the exact unlimited tier: $clog2(30) = 5. Both are
+    // what iverilog prints.
     assert!(
-        out.contains("G=0 5"),
-        "narrow operands decline, wide ones fold; got:\n{out}"
+        out.contains("G=4 5"),
+        "narrow operands fold at self width, wide ones stay exact; got:\n{out}"
     );
-    // The RUNTIME is unaffected and still truncates at 4 bits.
+    // The RUNTIME truncates at 4 bits — and now the const fold agrees with it.
     assert!(out.contains("V=14"), "runtime 4-bit add; got:\n{out}");
 }
 
-/// Documented residual, pinned so a future width-aware const fold has a marker:
-/// a bare `+` of narrow sized literals reaches the ENGINE's own `Add` fold,
-/// which is equally width-unlimited. This is PRE-EXISTING (identical before and
-/// after this slice) — the guard's job was only to stop the other operators from
-/// joining it, and iverilog's answer is 14, not 30.
+/// The residual this test used to MARK is resolved: a bare `+` of narrow sized
+/// literals reached the ENGINE's width-blind shallow fold (Const 15 + Const 15
+/// reduced to 30). `lower_index_expr` now corrects a shallow reduction that
+/// disagrees with the self-determined bound fold, so the count is the 4-bit
+/// wrap — iverilog's 14, and the same 14 vita's own runtime computes.
 #[test]
-fn bare_narrow_add_count_is_the_preexisting_engine_fold_residual() {
+fn bare_narrow_add_count_folds_at_self_width() {
     let (out, c) = run(
         "module m; logic [63:0] a; initial begin a = {(4'd15 + 4'd15){1'b1}};\n\
          $display(\"N=%0d\", $countones(a)); #1 $finish; end endmodule\n",
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("N=30"),
-        "pre-existing engine-side Add fold (iverilog says 14); got:\n{out}"
+        out.contains("N=14"),
+        "self-determined count (iverilog says 14); got:\n{out}"
     );
 }
 
@@ -374,11 +375,11 @@ fn indexed_part_select_width_folds_every_const_form() {
 /// line here is a value the width-unlimited i64 fold gets WRONG, so the fold must
 /// decline and leave the previous (already correct, or already loud) behavior.
 #[test]
-fn width_guard_declines_every_unprovable_shape() {
-    // (a) 32-bit leaves but an intermediate above 32 bits: SV drops the high bits
-    // (`(1<<33)>>30` = 0) while i64 says 8. The old width-1 fallback IS iverilog's
-    // answer here, so folding would turn a CORRECT select into a wrong one — and
-    // the reversed-looking `v[7 : …]` would become a bogus "out of order" reject.
+fn width_inexact_shapes_fold_at_self_width() {
+    // (a) 32-bit leaves but an intermediate above 32 bits: SV drops the high
+    // bits (`(1<<33)>>30` = 0) while the unlimited i64 fold says 8. The
+    // width-exact gate keeps that tier out; the self-determined tier computes
+    // the masked 32-bit shift and folds iverilog's 0.
     let (out, c) = run(
         "module t; logic [31:0] v; initial begin v = 32'hDEADBEEF;\n\
            $display(\"A=%h\", v[((32'd1 << 32'd33) >> 32'd30) : 0]);\n\
@@ -386,20 +387,22 @@ fn width_guard_declines_every_unprovable_shape() {
            #1 $finish; end endmodule\n",
     );
     assert_eq!(c, Some(0), "must NOT become a false loud; got:\n{out}");
-    // `A=1` is iverilog's answer (the bound is 0, so this is `v[0:0]`) — folding
-    // would have made it `0ef`. `B=1` is the unchanged pre-existing width-1 read
-    // (iverilog gives `ef`); the point of this line is that it is still SILENT and
-    // identical to before, not the "out of order" reject the wrong fold produced.
+    // `A=1` is iverilog's answer (the bound is 0, so this is `v[0:0]`) — the
+    // UNLIMITED fold would have made it `0ef`; the self-determined tier computes
+    // the 32-bit shift honestly (bit 33 drops, the bound is 0). `B=ef` is the
+    // same bound in lsb position — `v[7:0]` — which used to be a silent width-1
+    // read; both are now iverilog's values.
     assert!(out.contains("A=1"), "iverilog gives 1; got:\n{out}");
     assert!(
-        out.contains("B=1"),
-        "unchanged, and not a false loud; got:\n{out}"
+        out.contains("B=ef"),
+        "lsb bound folds honestly too (iverilog: ef); got:\n{out}"
     );
 
     // (b) a constant FUNCTION whose body does narrow arithmetic: SV computes
-    // `(8'd200 + 8'd100) >> 2` at 8 bits (44 >> 2 = 11); the interpreter's i64 says
-    // 75. A `byte` return is below 32 bits, so the call declines rather than
-    // folding a wrong count. A call must never short-circuit the leaf check.
+    // `(8'd200 + 8'd100) >> 2` at 8 bits (44 >> 2 = 11). The old width-guard
+    // declined the call (its worry was the width-UNLIMITED fold); the
+    // self-determined tier runs the width-aware interpreter, which computes the
+    // body at declared widths — 11, iverilog's answer.
     let (out, c) = run(
         "module t; function automatic byte g8(); g8 = (8'd200 + 8'd100) >> 2; endfunction\n\
          initial begin $display(\"G=%0d\", $countones(64'({g8(){1'b1}}))); \
@@ -407,15 +410,14 @@ fn width_guard_declines_every_unprovable_shape() {
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("G=0"),
-        "narrow-return const fn declines (never 75); got:\n{out}"
+        out.contains("G=11"),
+        "narrow-return const fn folds width-honestly (iverilog: 11); got:\n{out}"
     );
 
-    // (b2) a WIDE return does not rescue a narrow LOCAL: the interpreter never
-    // coerces an assignment to its declared width, so `bit [3:0] t = 4'd15+4'd15`
-    // is 30 there and 14 in SV. The whole signature plus every body decl must be
-    // ≥32 bits — vita's RUNTIME already prints 14, which is what makes the fold's
-    // 30 a silent-wrong rather than a shared imprecision.
+    // (b2) a narrow LOCAL inside a wide-return function: the width-aware
+    // interpreter coerces the assignment to the local's declared width
+    // (`bit [3:0] tt = 4'd15+4'd15` is 14), so the count now matches both
+    // iverilog and vita's own runtime — the old decline kept an empty count.
     let (out, c) = run(
         "module t; function automatic int f(); bit [3:0] tt; tt = 4'd15 + 4'd15; return tt; \
          endfunction\n\
@@ -424,8 +426,8 @@ fn width_guard_declines_every_unprovable_shape() {
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("C=0") && out.contains("R=14"),
-        "narrow-local const fn declines (never 30); runtime stays 14; got:\n{out}"
+        out.contains("C=14") && out.contains("R=14"),
+        "narrow-local const fn folds 14 = its own runtime; got:\n{out}"
     );
 
     // (c) a negative literal bound. `const_eval_u32` folds `-1` by wrapping_neg to
@@ -497,8 +499,9 @@ fn cast_folded_param_keeps_its_declared_width() {
 /// wrapper would otherwise launder a narrow callee. Both folded wrong non-zero
 /// counts before; both must decline to the previous (empty) behavior.
 #[test]
-fn const_fn_width_check_is_transitive_and_sees_nested_decls() {
-    // wide wrapper `int f(); f = g8();` around a `byte` callee — iverilog says 11.
+fn const_fn_width_folds_transitively_and_sees_nested_decls() {
+    // wide wrapper `int f(); f = g8();` around a `byte` callee — iverilog says 11,
+    // and the width-aware interpreter computes exactly that through the wrapper.
     let (out, c) = run(
         "module m; function byte g8(); g8 = (8'd200 + 8'd100) >> 2; endfunction\n\
          function int f(); f = g8(); endfunction\n\
@@ -507,11 +510,12 @@ fn const_fn_width_check_is_transitive_and_sees_nested_decls() {
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("W=0"),
-        "wrapper must not launder (never 75); got:\n{out}"
+        out.contains("W=11"),
+        "wrapper folds width-honestly (iverilog: 11, never 75); got:\n{out}"
     );
 
-    // a narrow decl inside a NAMED BLOCK, invisible to `f.body_decls`.
+    // a narrow decl inside a NAMED BLOCK (not in `f.body_decls`) — the
+    // interpreter walks the block and applies the declared width.
     let (out, c) = run(
         "module m; function int f(); begin : inner bit [3:0] t; t = 4'd15 + 4'd15; f = t; end \
          endfunction\n\
@@ -520,8 +524,8 @@ fn const_fn_width_check_is_transitive_and_sees_nested_decls() {
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("N=0"),
-        "nested decl must decline (never 30); got:\n{out}"
+        out.contains("N=14"),
+        "nested decl folds at its declared width (iverilog: 14, never 30); got:\n{out}"
     );
 
     // CONTROL: a plain all-wide const function still folds — the guard must not

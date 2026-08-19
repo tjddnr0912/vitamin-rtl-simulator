@@ -302,7 +302,20 @@ impl Elaborator<'_> {
             );
             return self.const_u32_expr(0, 32);
         }
-        id
+        // A constant index / bound / offset is a SELF-DETERMINED position, and the
+        // downstream shallow reduction of the lowered tree is width-blind:
+        // `Const 4'd9 + Const 4'd8` reduces to 17 where SV's 4-bit sum wraps to 1,
+        // so `v[(4'd9+4'd8):0]` selected 18 bits (iverilog: `v[1:0]`) and the same
+        // 17 leaked into every offset/width consumer of this funnel. Where the
+        // width-honest bound fold (§4.5.343 tier) DISAGREES with the shallow
+        // reduction, hand the consumer the folded constant; agreement (every shape
+        // that was already right) keeps the exact lowered node, and a funnel
+        // decline keeps the runtime tree (the engine's own evaluation is
+        // width-honest).
+        match (self.const_bound_u32(e), self.const_of_expr_u32(id)) {
+            (Some(n), Some(m)) if n != m => self.const_u32_expr(n, 32),
+            _ => id,
+        }
     }
 
     /// r19: the exact non-negative integer behind a real `Const`, or `None` when the

@@ -88,6 +88,7 @@ impl<'s> Elaborator<'s> {
             vif_handles: std::collections::BTreeSet::new(),
             modport_readonly: BTreeSet::new(),
             cur_prefix: String::new(),
+            repl_zero_ok: false,
             params: BTreeMap::new(),
             array_const_vals: BTreeMap::new(),
             pkg_array_const_vals: BTreeMap::new(),

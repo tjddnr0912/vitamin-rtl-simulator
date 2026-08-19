@@ -474,6 +474,12 @@ struct Elaborator<'s> {
     // `cur_prefix + "." + local`, so `tb.q` and `tb.dut.q` never collide. Empty
     // only transiently (the top is always given its module name as the root path).
     cur_prefix: String,
+    // §11.4.12.1: a ZERO replication count is legal only as a direct operand of a
+    // concatenation. The Concat arm sets this for a part whose AST kind IS
+    // `Replicate` (nothing else), and the Replicate arm `mem::take`s it on entry —
+    // before lowering its children — so the permission can never leak into a
+    // nested position (an index inside a concat part is not a concat operand).
+    repl_zero_ok: bool,
     // FQ param-name → const value, visible while lowering an instance scope.
     // Re-points the v1 free `const_eval_u32` SLOT so `[W-1:0]` folds to a width.
     params: BTreeMap<String, i64>,

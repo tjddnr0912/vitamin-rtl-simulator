@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 284건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 285건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.344` **§2 bound/count/index lane 이 자기 폭에서 접힌다**(옛 착수순서 1번 — 실체는 `**` 미fold 가 아니라 한 결함의 두 철자: `const_bound_u32` 전면 decline + lowered-tree 얕은 fold 폭-무시) · tier-3 자기결정 걷기(폭-기지 술어로 degrade 차단) + `lower_index_expr` 한 자리 합의-보존 치환(read/write/index/offset/width 동시 정합) · §11.4.12.1 0-repl 합법성 loud(verilator 동판정) · ⚠️ fill-literal 잠복 결함(32-bit all-ones)이 노출돼 엔진 패닉 → 퍼널 자체로 특례 승격 · 옛 decline-핀 6개 강화(0→4·30→14·1→ef·0→11·0→14·0→4 — 전부 오라클 값) · 뮤테이션 7/7 · 5,608→**5,616 green**
 - `4.5.343` **§2 정확성 큐 1~3 — 자기결정 위치 셋을 한 뿌리로 닫다**($clog2 인자 · 캐스트 SIZE 식 · real 변환 경계 — 무제한 i64 fold 가 셋 다 넓혔다) · vita 자기 불일치 해소(module-scope 4 vs 상수함수 0 → 세 평가기 0 합치) · §20.8.1 unsigned = **자기 폭 비트 패턴**(verilator+런타임 핀 · iverilog 32 는 결함 ⑤) · real 클래스는 **`**` 만이 아니라 모든 연산자**(8형태) — 수정은 게이트 하나 · 뮤테이션 **10/10**(생존 1 을 라우팅 증명으로 재판정) · PRE-3-way 회귀 0 · 5,596→**5,608 green**
 - `4.5.342` **3판 잔여 클리어 라운드(순서 1~10 + P1)** — §3.1(a)(b) W2004 · §3.3 wide fold · §3.5-①③ repeat · §3.6-①② default clocking/disable iff · §3.7 INPUT string formal · P1 inner-NET shadow · **#9 staged file:line(v28)** · **#10 런타임 severity file:line+인스턴스(v29)** · §3.11 은 지어서 재고 되돌림(전제 반증) · 5,533→**5,596 green** · format 27→**29** · MsgCode 67→**68**
 - `4.5.341` **외부 aes_top 3판 — 로그를 데이터로 쓸 수 있게, 그리고 그 과정에서 찾은 escape 다섯**(리포트에 값 결함 또 0 · 11 항목이 전부 **로그가 무엇을 말하는가**): ⭐⭐ **§3.2 요청은 `"\r"` 하나에 "고쳐 달라가 아니라 경고해 달라"였는데, escape 축 전체를 iverilog+verilator 로 재자 IEEE Table 5-1 이 **정의하는** `\ddd`·`\xhh`·`\v`·`\f`·`\a` **다섯이 조용히 틀려 있었다**(값도 폭도 — 백슬래시가 남았다) · ⚠️⚠️ **리포터가 제안한 우회 `"\015"`·`"\x0D"` 가 그 다섯 중 둘**이라 요청대로만 했으면 **동작하지 않는 해결책을 권했을 것** · `\r` 은 **값을 안 바꾸고**(IEEE 미정의 ∧ **오라클이 갈린다** — verilator 는 vita 와 같은 0x0D) **W3059 신설**로 silent→loud · ⭐⭐ **119 형태 sweep 이 정책의 증명**: 40 일치(전부 Table 5-1) · 79 발산(전부 미정의) · **조용한 발산 0 · 과잉경고 0 = 발산 집합 ≡ 경고 집합** · ⭐ **§3.4** `W3056 … default kept` 가 **적용된** string 오버라이드에 발화(오버라이드는 **세 채널**인데 경고가 `value` 하나만 물었다 · escalation 은 **이미 셋을 다 묻고 있었다**) → 레코드를 먼저 짓고 경고가 그것을 읽는다 · ⭐⭐ **§3.8** 화면의 유일한 문자열(`VITA-W3056`)로 `-Wno-`/`-Werror=` 가 안 됐다(`explain` 은 됐다 = **한 질문의 두 철자**) → `MsgCode::resolve` 하나를 **세 소비자가 공유** · `-Werror=all` 신설 · **렌더러가 mnemonic 을 함께 찍는다**(doc-15 worked example **55 중 42 가 그 형태**인데 제품은 0) · ⭐⭐ **§3.10** picorv32 진단 **71 건 중 위치를 가진 것이 0** — 모델은 `location`·`context`·`sim_time` 셋을 이미 들고 있었고(35 생성 사이트 중 33 이 `location: None` · `context` 는 **채우는 곳도 읽는 곳도 0** = 죽은 계약) ⇒ 인스턴스 경로 + 인스턴스화 지점 ambient span + **런타임 진단이 배열을 이름으로** → elaborate **58/58 이 위치를 얻었다** · ⚠️ `WOp::LoadIdx` 에 넷 필드를 **안 붙였다**(payload 16B → 모든 op 24→32B · 그 레인이 런의 ~20%) → **cold path 의 `off→net` 역인덱스**(offset 이 엄격 증가 = 유일, 코퍼스가 단언) · ⭐ **§3.9** `--obs-dir`/`--probe`/`--hier-tree`/`--inst-paths` 가 `--help` 에 없어 리포터가 6일 만에 **무관한 에러 메시지 안에서** 찾았다 · ⭐⭐ **§3.11** CHANGELOG 의 *"function 은 공짜"* 를 실측이 갈랐다 — **`function` 은 인라인되고 `function automatic` 은 안 된다**(그것이 스타일 가이드가 요구하는 철자다) · `run.json` 에 **`elab_s`/`sim_s`**(`wall_s` 하나로는 귀속 불가) · ⚠️⚠️ **절차 사고: 배터리 앞의 패턴 검증 루프에 `git checkout -- .` 를 써서 커밋 안 된 22 파일이 HEAD 로 되돌아갔다**(스냅샷의 10 개만 생존) → 복구 후 규칙을 두 방향으로 강화 · 전 스위트 **5,533 green** · MsgCode **66 → 67**
@@ -376,6 +377,42 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.344 §2 정확성 큐 — bound/count/index lane 이 자기 폭에서 접힌다 (2026-08-19) ✅
+
+**한 줄**: `**` 미fold 로 기록됐던 항목의 실체는 **한 결함의 두 철자 + 그 수정이 노출한 합법성 게이트
+하나**였다 — ① `const_bound_u32` 가 width-inexact 형태 전부를 decline 하고 소비자의
+`unwrap_or(1)/(0)` 가 조용히 삼키던 것(repl count `{(8'd2**8'd3){1'b1}}` → empty · `v[0 +: (8'd2**8'd3)]`
+→ 1비트) ② lowered tree 의 **얕은 fold 가 폭-무시**(`Const 4'd9 + Const 4'd8` → 17)라
+`v[(4'd9+4'd8):0]` 이 18비트 select ③ 폭-정직 fold 가 `{(4'd15+4'd1){1'b1}}` 을 **0-count** 로 만들자
+드러난 §11.4.12.1(0-repl 은 concat 직속 피연산자에서만 합법). 신규 테스트 8(+기존 핀 6 강화) ·
+5,608 → **5,614 green** · 뮤테이션 N1~N7 · format bump 없음.
+
+- **tier-3**: `const_bound_u32` 에 자기결정 걷기(§4.5.343 기계)를 additive 로 — 단 ⓐ 치환-이름 가드는
+  두 강한 티어 공통 ⓑ **전 노드 self-폭 기지(`ast_selfwidths_all_known`) 술어**로 degrade-무제한 값이
+  wrap-민감 bound 로 새는 것을 차단(안 걸면 CW1 셀에서 silent 1 → silent 300 맞교환).
+- **한 철자 자리 = `lower_index_expr`**: 얕은-fold 불일치 교정을 index·bound·offset·width·**write funnel**
+  이 공유하는 퍼널 끝단 한 곳에 두자 read/write 쌍둥이가 함께 정합(42 소비자 · 합의 시 노드 보존 =
+  기존 IR 바이트 동일). `width_from_msb_lsb_dir`·`lower_const_width_expr` 는 **무변경**으로 정합.
+- ⚠️⚠️ **회귀 1 — 엔진 패닉으로 잡음**: `vec['1 +: 4]` 가 shift-overflow panic. 근인은 새 코드가 아니라
+  **`const_bound_u32` tier-1 의 잠복 결함**(fill literal 을 32-bit all-ones 로 — `repeat` 의 fill 특례
+  주석이 이미 그 결함을 알고 있었다) — 치환이 그것을 인덱스 lane 에 노출. 수정 = fill 특례를
+  `const_bound_u32` **자체**에 승격('1→1 · '0→0 · 'x/'z→decline) ⇒ 모든 bound/count/index 소비자가
+  한 철자를 공유.
+- **0-repl 합법성**: `repl_zero_ok` 플래그 — Concat arm 이 **Replicate-kind 파트에만** 세팅, Replicate arm
+  이 **자식 lowering 전에 `mem::take`**(중첩/인덱스 위치로 누수 불가 · 실측 L1/N4 셀). bare `{(0){x}}` =
+  E3009 · concat-drop/string-empty 경로 불변. ⭐ **중첩 판별 셀에서 오라클이 갈렸다**: concat 파트의
+  **인덱스 안** 0-repl 을 iverilog 는 조용히 돌리고(0017) **verilator 5.050 은 같은 조항을 인용하며
+  거부**("only legal under a concatenation, IEEE 11.4.12.1") — vita = verilator = hand-IEEE.
+- ⭐⭐ **옛 decline-핀 6개가 전부 자기 주석이 선언한 정답으로 강화됐다**(fail-fast 뒤에 4개 더 숨어
+  있었다 — `--no-fail-fast` 전수): `$clog2(4'd15+4'd15)` count 0→**4** · bare narrow add 30→**14**(=엔진
+  런타임과 합치) · `(1<<33)>>30` lsb 셀 1→**ef** · **byte 반환 const fn** 0→**11**(width-aware 인터프리터는
+  원래 폭-정직 — 옛 게이트의 우려는 무제한 도메인에만 적용) · named-block 중첩 decl 0→**14** · signed
+  `$clog2(4'shF)` 0→**4**(verilator+런타임 · iverilog 32 = 발산 ⑤). 전부 iverilog(또는 verilator) 값.
+
+**잔여(§2 등재)**: 폭-미상 leaf(const-array 원소 — `const_self_width` 에 arm 없음) 위의 wrap bound 는
+의도적 decline 유지(pre-slice silent 1비트 · verilator 오라클 = 44) — 해소는 폭 모델 확장이고, 마커 핀
+`width_unknown_wrap_bound_keeps_preslice_decline` 이 지킨다.
 
 #### 4.5.343 §2 정확성 큐 1~3 — 자기결정 위치 셋을 한 뿌리로 닫다 (2026-08-19) ✅
 

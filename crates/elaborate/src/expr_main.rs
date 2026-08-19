@@ -799,7 +799,17 @@ impl Elaborator<'_> {
                     let part_refs: Vec<&ast::Expr> = parts.iter().collect();
                     return self.lower_string_concat_parts(&part_refs);
                 }
-                let part_ids: Vec<u32> = parts.iter().map(|p| self.lower_expr(p)).collect();
+                let part_ids: Vec<u32> = parts
+                    .iter()
+                    .map(|p| {
+                        // A DIRECT Replicate operand may carry a zero count
+                        // (§11.4.12.1); the Replicate arm takes the flag on entry.
+                        if matches!(p.kind, ast::ExprKind::Replicate { .. }) {
+                            self.repl_zero_ok = true;
+                        }
+                        self.lower_expr(p)
+                    })
+                    .collect();
                 if part_ids.iter().any(|&p| self.expr_is_real(p)) {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -809,6 +819,9 @@ impl Elaborator<'_> {
                 self.push_expr(ir::Expr::Concat { parts: part_ids })
             }
             ast::ExprKind::Replicate { count, value } => {
+                // Take (and clear) the concat-operand permission BEFORE lowering
+                // anything below — see the field doc: it must not leak inward.
+                let zero_ok = std::mem::take(&mut self.repl_zero_ok);
                 // G1 (IEEE §6.16): a string replicate `{N{str}}` in any context
                 // flattens to N copies of the value list, then lowers through the
                 // shared `$sformatf("%s…")` desugar (mirrors `string_concat_special`).
@@ -920,6 +933,20 @@ impl Elaborator<'_> {
                     // prove one (and changes nothing otherwise).
                     self.lower_const_width_expr(count)
                 };
+                // §11.4.12.1: a zero replication count is legal ONLY as a direct
+                // concatenation operand (where it contributes nothing — that path
+                // already works). Anywhere else it is an error, not a silent
+                // 0-width value: `r = {(0){1'b1}}` printed 0 with exit 0 while
+                // iverilog rejects, and the width-honest count fold now routes
+                // `{(4'd15+4'd1){1'b1}}` (a 4-bit wrap) into this same position.
+                if !zero_ok && self.const_of_expr_u32(count) == Some(0) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a replication count of zero is only legal as a direct \
+                         operand of a concatenation (IEEE §11.4.12.1)",
+                    );
+                    return self.placeholder_expr();
+                }
                 // hdl-ast `value: Vec<Expr>` is the element LIST (no wrapper
                 // Concat); sim-ir Replicate wants ONE `value: u32` → wrap in a
                 // Concat node. (For a single element this is a 1-part Concat,

@@ -12,7 +12,7 @@
 | 순 | § | 주제 | 항목 | 오라클 | 키워드 |
 |---:|---|---|---:|:--:|---|
 | **1** | §0 | correct-support 승격 큐 | 6 | ✓ 4/6 | **T1 잔여까지 전부 완료(§4.5.222~227)** · **T2-14 `-G` override 도 완료**(§4.5.313 one-shot + §4.5.314 staged — 잔여 = `-pvalue+` 별칭 · `-P<path>=` · 합성-해시 헤더 필드[format bump]) · 남은 것 = T2 잔여(real 정수문맥·리터럴 절단·PART select) + T3-13 `case inside` |
-| **2** | §2 | Silent-wrong 잔여 | 39 | ✓ 8 | ~~자기결정 위치 셋~~(§4.5.343 해소) · **런타임 mixed-real 넓힘 · genif cond**(§4.5.343 발굴) · package real · 구조적 지연 |
+| **2** | §2 | Silent-wrong 잔여 | 38 | ✓ 8 | ~~자기결정 위치 셋 · bound/count lane~~(§4.5.343/344 해소) · **런타임 mixed-real 넓힘 · genif cond** · package real · 구조적 지연 |
 | **3** | §6 | G2 OBS 트랙 | 6단계 | 내부 3-way | OBS-2 sva.jsonl → OBS-1 잔여 → R-L4 → OBS-4/5/6 |
 | **4** | §3 | Loud→supported 후보 | 30 | ✓ 대부분 | ✅ **3판 클리어 라운드 완료**(1~10+P1 · ARCHIVE §4.5.342) · string/heap · 함수/formal · 소형 큐 · VCD fidelity |
 | **5** | §4 | SVA / 검증 honest-loud | 6 | 일부 無 | empty-match 융합 · N2c · prop-ref skew · N4 clocking · class down-cast |
@@ -148,11 +148,18 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | replication count·part-select 폭 lane 의 `**` 미fold | `const_bound_u32` 게이트 조건 3 |
-> | **2** | body-local init 조용한 0 · body-decl `int t = f();` 크래시 | 같은 `unwrap_or(0)`/깊이 자리 둘 |
-> | **3** | 인터프리터의 폭-0 타깃 마스킹 · u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
-> | 4 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
-> | 5 | **generate-if cond 의 무제한 fold**(§4.5.343 발굴·**2-오라클 합치**) | 광역 폭 클래스의 일부 · blast = generate elaboration ⇒ PRE-3-way 필수 |
+> | **1** | body-local init 조용한 0 · body-decl `int t = f();` 크래시 | 같은 `unwrap_or(0)`/깊이 자리 둘 |
+> | **2** | 인터프리터의 폭-0 타깃 마스킹 · u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
+> | 3 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
+> | 4 | **generate-if cond 의 무제한 fold**(§4.5.343 발굴·**2-오라클 합치**) | 광역 폭 클래스의 일부 · blast = generate elaboration ⇒ PRE-3-way 필수 |
+>
+> ✅ **replication count·part-select 폭 lane(옛 이 표의 1번)은 §4.5.344 로 RESOLVED**(2026-08-19 · 상세=ARCHIVE):
+> 실체는 `**` 미fold 가 아니라 한 결함의 두 철자(`const_bound_u32` 의 전면 decline + lowered-tree 얕은 fold 의
+> 폭-무시)였고, 자기결정 tier + `lower_index_expr` 합의-보존 치환 한 자리로 index·bound·offset·width·write
+> 퍼널이 함께 정합. 곁: §11.4.12.1 0-repl 합법성 loud 신설(verilator 동판정 · iverilog 는 중첩 위치에 관대) ·
+> fill-literal 잠복 결함(32-bit all-ones) 해소 · 옛 decline-핀 6개가 자기 주석의 정답으로 강화. **잔여** =
+> 폭-미상 leaf(const-array 원소) 위의 wrap bound 는 의도적 decline(verilator 오라클 44 확보 · 마커 핀) —
+> 해소는 `const_self_width` 의 const-array-elem arm.
 >
 > ✅ **옛 1~3(한 뿌리 — $clog2 인자·캐스트 SIZE 식·real 변환 경계)은 §4.5.343 으로 RESOLVED**(2026-08-19 ·
 > 상세=ARCHIVE): 셋 다 §4.5.339 의 자기결정 걷기 하나로 라우팅 — `const_clog2_selfdet`(세 arm 한 철자 ·
@@ -196,7 +203,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **🔴 파라미터의 PART-SELECT 를 폭 바운드로 쓰면 조용히 1비트가 된다**(pre-existing · PRE==POST ·
   오라클 ✓ iverilog · §3.3 슬라이스가 발굴). `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;`
   가 vita `$bits(v)=1` / iverilog **239**. 전체 파라미터(`logic [W-1:0]`)는 정상이므로 갈리는 것은
-  **part-select 가 상수 바운드 도메인에 안 닿는 것**이다 — §2 「다음 착수 순서」 4번(replication count·
+  **part-select 가 상수 바운드 도메인에 안 닿는 것**이다 — §4.5.344 가 연 lane 들과 이웃(
   part-select 폭 lane)과 같은 뿌리로 보인다. **silent** 이므로 §2 정본 우선순위 ①.
 
 - 🟡 **`%h` 가 1비트 미지 EXPRESSION 결과를 `x` 로, iverilog 는 `X` 로 찍는다** (§4.5.326 차분에서 발견·PRE==POST·이 슬라이스와 무관) — `$display("%h", ^a)` 에서 `a` 에 x 가 있으면 vita `x` / iverilog `X`. **같은 값의 1비트 NET 은 양쪽 다 `x`**(`reg [0:0] a = 1'bx`) 이므로 iverilog 자신이 일관되지 않고, IEEE §21.2.1.3(*"모든 비트가 같은 미지값이면 그 미지값(소문자), 섞이면 대문자"*)은 vita 편이다. 값이 아니라 **렌더링**이며 `%b`·`%0d` 는 일치한다. 승격 조건 = 제2 오라클이나 LRM 재독으로 판정을 굳힐 때. 215설계 중 17칸.
@@ -225,7 +232,6 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 - **🔴 런타임 mixed-real Binary 가 정수 피연산자의 wrap 위치를 넓힌다**(pre-existing·PRE==POST·오라클 ✓·§4.5.343 발굴). `logic signed [3:0] s = -8;` 에서 `1.0 + (-s)` 가 vita **9.0** / iverilog **−7.0**, `1.0 + (s + s)` 가 **−15.0** / **1.0** — leaf(`1.0 + s`)와 **SysFunc Pow lane**(`2.0 ** (-s)` = 0.003906)은 정확하므로 자리는 `ir::Binary` mixed lane 의 폭 문맥이다(real 경계 너머로 정수 문맥이 내려간다 — §11.8.1 은 변환 경계에서 self-det). ⚠️ §4.5.343 이 elaborate const 를 정답으로 만든 지금 **같은 소스가 localparam ✓ / runtime ✗** 로 갈린다(#1 의 자기 불일치 논거와 동형) — 「다음 착수 순서」 4번.
 - **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
 - **real-반환 const fn 의 본문이 정수 도메인으로 해석된다**(pre-existing·PRE==POST·§4.5.343 발굴·소형). `function real f(); f = 4'd15 + 4'd1;` 이 16.0 을 접는다(real 타깃 대입은 self-det 0 이 맞을 것) — `eval_const_call` 이 real 반환형의 본문을 i64 로 인터프리트. real 산술이 든 본문은 어차피 decline(loud)이라 창이 좁다.
-- **🔴 replication count·part-select 폭 lane 이 `**` 를 아예 안 접는다**(pre-existing·오라클 ✓·silent·§4.5.339 발굴). `{(8'd2 ** 8'd3){1'b1}}` 이 vita `00000000` / iverilog `11111111` · `v[0 +: (8'd2 ** 8'd3)]` 가 `01` / `cd`. `const_bound_u32` 의 게이트 조건 3(width-growing op 은 leaf 가 ≥32비트여야)에서 거절되고 소비자가 `unwrap_or(1)`/`unwrap_or(0)` 로 **조용히** 떨어진다.
 - **u64 패턴 지수를 i64 도메인이 음수로 읽는다**(pre-existing·오라클 ✓·§4.5.339 발굴). `4'sd3 ** (64'd0 - 64'd8)` 이 param **0** / iverilog·vita 런타임 **926288481** — `const_eval_i64_lit` 의 64비트 재해석 arm 이 −8 을 만든다(그 arm 주석은 *"magnitude misuse 는 range 검사가 loud 로 잡는다"* 인데 **지수 위치엔 그 검사가 없다**).
 - **인터프리터의 폭-0(=UNKNOWN) 타깃이 실폭처럼 마스킹에 참여한다**(pre-existing·오라클 ✓·§4.5.339 발굴). `bit [1:0][3:0] tt; tt = 4'd13 ** 4'd2;` 가 **9** / iverilog **169** — `eval_const_assign` 의 `w.max(tw)` 가 `tw=0` 을 그대로 쓴다(**자기 doc 이 반대로 적어 뒀다** — *"width 0 = UNKNOWN ⇒ 마스킹 안 함"*).
 - **fold 안 되는 body-local 초기화가 조용히 0 이 된다**(pre-existing·오라클 ✓·§4.5.339 발굴). 상수함수 본문의 `int x = 8'(5); g = x;` 가 vita **0** / iverilog **5** — `.and_then(...).unwrap_or(0)` 이 *"초기화 없음"* 과 *"초기화 미fold"* 를 합친다(`eval_const_call` 자기 doc 의 *"None → LOUD"* 와 모순 · 사이트 둘). 곁: `int t = f();` 형태의 body-decl 초기화는 **PRE·POST 둘 다 스택 오버플로**(깊이 캡이 그 경로를 안 묶는다 = §4.5.339 가 인자·default 철자만 닫았다는 증거).
@@ -635,7 +641,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,608 tests green** · no-oracle 축 green · clippy **3 구성** 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-19 · ARCHIVE §4.5.343) |
+| 게이트 | **5,616 tests green** · no-oracle 축 green · clippy **3 구성** 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-19 · ARCHIVE §4.5.344) |
 
 ### 다음 후보 — 우선순위 순
 

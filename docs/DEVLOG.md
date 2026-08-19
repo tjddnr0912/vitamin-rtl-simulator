@@ -293,3 +293,19 @@ formal range 를 가진 call 인자**였다. 뮤턴트 빌드로 라우팅 증�
 EXIT 규칙을 RULES ⓓ 로 병합. 곁 측정 셋을 §2 에 등재: 런타임 mixed-real 넓힘(같은 소스가
 localparam ✓/runtime ✗ — #1 논거와 동형), genif cond 2-오라클 발산, untyped localparam 오라클
 분열. PRE-3-way 회귀 0 · staged parity 바이트 동일 · 5,596 → **5,608 green**.
+
+## 2026-08-19 (심야) — §2 bound/count/index lane (§4.5.344)
+
+큐가 "`**` 미fold · 게이트 조건 3"으로 적어 둔 항목의 실체는 한 결함의 두 철자였다 —
+`const_bound_u32` 가 width-inexact 전부를 decline 하고 소비자가 silent 기본값으로 삼키던 것,
+그리고 lowered-tree 얕은 fold 의 폭-무시(Const 15+Const 1 → 16). §4.5.343 의 자기결정 걷기를
+tier-3 으로 additive 하게 얹되 전-노드 폭-기지 술어로 degrade-무제한 값이 wrap-민감 bound 로
+새는 맞교환을 차단했고, 치환은 42-소비자 퍼널 `lower_index_expr` 끝단 한 자리에 두어 read·write·
+index·offset·width 가 함께 정합했다. 폭-정직 fold 가 `{(4'd15+4'd1){1'b1}}` 을 0-count 로 만들자
+§11.4.12.1 합법성 게이트가 필요해졌고(bare loud · concat 직속 허용), 중첩 판별 셀에서 verilator 가
+같은 조항을 인용하며 동판정(iverilog 는 관대)했다. 회귀 1: fill literal 을 32-bit all-ones 로 읽는
+퍼널 tier-1 의 잠복 결함이 치환으로 노출돼 엔진 shift-overflow 패닉 — repeat 의 fill 특례가 주석으로
+알고 있던 그 결함을 퍼널 자체로 승격해 해소. fail-fast 뒤에 숨어 있던 옛 decline-핀 6개는 전부
+자기 주석이 선언한 오라클 값으로 강화됐다(byte 반환 const fn 은 width-aware 인터프리터가 원래
+폭-정직이라 옛 게이트의 우려가 애초에 적용되지 않았다). 뮤테이션 7/7 · 5,608 → **5,616 green**.
+잔여 = 폭-미상 const-array 원소 bound(verilator 44 오라클 확보 · 마커 핀 · §2 등재).

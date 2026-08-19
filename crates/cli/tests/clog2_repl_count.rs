@@ -71,17 +71,15 @@ fn clog2_edge_and_large_values() {
 }
 
 #[test]
-fn clog2_arithmetic_arg_folds_when_width_exact_else_declines() {
+fn clog2_arithmetic_arg_folds_width_exact_and_wrapping() {
     // An ARITHMETIC `$clog2` argument used to be left entirely to the engine's
-    // shallow fold, so BOTH of these were a silent 0-width count. The elaborate
-    // const domain now folds the bound/count, but ONLY where its width-unlimited
-    // i64 arithmetic provably matches SV's width-limited kind:
-    //   a) `N + 1` (N = 255) — every leaf is ≥ 32 bits, so 256 is exact and
-    //      `$clog2` is 8, which is what iverilog prints (the old `0` was wrong).
-    //   b) `4'd15 + 4'd15` — 4-bit operands WRAP in SV (14, `$clog2` = 4) while
-    //      i64 gives 30 (`$clog2` = 5). `const_fold_is_width_exact` declines, so
-    //      this keeps the old empty count rather than becoming a WRONG NON-ZERO
-    //      one. That decline is the tracked self-width residual (ROADMAP §2).
+    // shallow fold, so BOTH of these were a silent 0-width count:
+    //   a) `N + 1` (N = 255) — every leaf is ≥ 32 bits, so the width-unlimited
+    //      fold is exact: `$clog2` is 8, which is what iverilog prints.
+    //   b) `4'd15 + 4'd15` — 4-bit operands WRAP in SV (14, `$clog2` = 4). This
+    //      used to DECLINE (the tracked self-width residual) and keep the old
+    //      empty count; the self-determined bound tier folds the wrapped 14, so
+    //      the count is now iverilog's 4.
     let (out, c) = run(
         "module m; parameter N = 255; logic [63:0] a, b; initial begin \
          a = {$clog2(N + 1){1'b1}}; b = {$clog2(4'd15 + 4'd15){1'b1}}; \
@@ -89,23 +87,27 @@ fn clog2_arithmetic_arg_folds_when_width_exact_else_declines() {
     );
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("R=8 0"),
-        "wide arithmetic clog2 arg folds (8, = iverilog); a narrow one declines to \
-         0 rather than a wrong non-zero; got:\n{out}"
+        out.contains("R=8 4"),
+        "wide arithmetic clog2 arg folds (8); a wrapping narrow one folds at its \
+         self width (14 -> 4, = iverilog); got:\n{out}"
     );
 }
 
 #[test]
-fn clog2_negative_arg_declines() {
-    // `$clog2` of a SIGNED-NEGATIVE constant (`4'shF` = -1) is NOT folded (SV
-    // widens a negative arg to a ≥32-bit integer). It declines to a 0 count, never
-    // a wrong non-zero. (iverilog gives 32; base was also 0, so this is base==fix.)
+fn clog2_signed_negative_arg_folds_unsigned_at_self_width() {
+    // `$clog2` of a SIGNED-NEGATIVE constant (`4'shF` = the 4-bit pattern 1111):
+    // §20.8.1 treats the argument AS UNSIGNED at its own width, so this is
+    // `$clog2(15)` = 4. Verilator 5.050 and vita's runtime both answer 4 (const
+    // and runtime lanes agree); iverilog answers 32 — it converts the −1 to a
+    // 32-bit integer first, the recorded divergence #5 (ROADMAP §0). The old
+    // decline-to-0 kept a silent empty count against all three of those.
     let (out, c) = run("module m; logic [63:0] a; initial begin \
          a = {$clog2(4'shF){1'b1}}; $display(\"R=%0d\", $countones(a)); #1 $finish; end endmodule\n");
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("R=0"),
-        "signed-negative clog2 arg declines to 0; got:\n{out}"
+        out.contains("R=4"),
+        "signed-negative clog2 arg folds unsigned at its self width (15 -> 4, \
+         = verilator + vita runtime); got:\n{out}"
     );
 }
 

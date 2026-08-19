@@ -29,13 +29,58 @@ impl Elaborator<'_> {
     /// NON-ZERO count, which is worse than the empty one it replaced. Declining
     /// leaves the caller exactly where it was.
     pub(crate) fn const_bound_u32(&self, e: &ast::Expr) -> Option<u32> {
+        // §11.6: a bare FILL literal in a self-determined position is ONE bit —
+        // `'1` is the value 1, `'0` is 0 — while the generic const-eval reads a
+        // 32-bit all-ones pattern. That mis-answer was latent while nothing
+        // consumed the funnel's fill value (`repeat` special-cases fills first,
+        // and the index funnel used to prefer the lowered 1-bit node); the
+        // agreement substitution in `lower_index_expr` made it live —
+        // `vec['1 +: 4]` handed the engine a 4294967295 offset (a shift-overflow
+        // panic). `'x`/`'z` have no index value and decline.
+        if let Some((raw, kind)) = fill_literal_ast(e) {
+            let cv = literal::fill_literal_const(raw, kind, 1)?;
+            if cv.bits.unk.iter().any(|&u| u != 0) {
+                return None;
+            }
+            return Some((cv.bits.val.first().copied().unwrap_or(0) & 1) as u32);
+        }
         if let Some(v) = const_eval_u32(e) {
             return Some(v);
         }
-        if !self.const_fold_is_width_exact(e) {
+        if self.const_fold_is_width_exact(e) {
+            return u32::try_from(self.const_eval_in_scope(e)?).ok();
+        }
+        // Width-INEXACT shapes used to decline here, and the consumers' silent
+        // `unwrap_or(1)`/`unwrap_or(0)` defaults were the §2 defect: a `**` in a
+        // replication count (`{(8'd2 ** 8'd3){1'b1}}` → empty) or an indexed
+        // part-select width (`v[0 +: (8'd2 ** 8'd3)]` → 1 bit). A bound/count is
+        // its own context (§11.6.1 — no outer width reaches it), so the
+        // self-determined walk (§4.5.343) computes the SV value, wraps included:
+        // `repeat (4'd15 + 4'd1)` folds the 4-bit 0 iverilog runs.
+        //
+        // Gated on EVERY foldable node having a known self width: the walk
+        // DEGRADES to the width-unlimited domain where a width is unknown (a
+        // const-array element, an unmodeled leaf), and an unlimited value in a
+        // wrap-sensitive bound would trade the consumer's silent default for a
+        // differently-silent unwrapped value. Substituted names decline for the
+        // same reason condition 1 gives the tier above: this walk resolves a
+        // bare ident through the param scope, not the inline substitution stack.
+        if self.ast_mentions_substituted_name(e) || !self.ast_selfwidths_all_known(e) {
             return None;
         }
-        u32::try_from(self.const_eval_in_scope(e)?).ok()
+        u32::try_from(self.const_int_selfdet(e)?).ok()
+    }
+
+    /// Does EVERY sub-expression the const domain descends into have a known,
+    /// non-zero self width? This is what makes the self-determined walk mask at
+    /// every step instead of degrading to the unlimited domain somewhere inside
+    /// (its documented contract) — the tier-3 bound fold requires it.
+    fn ast_selfwidths_all_known(&self, e: &ast::Expr) -> bool {
+        self.const_self_width(e, &ConstWidths::new())
+            .is_some_and(|w| w >= 1)
+            && Self::const_fold_children(e)
+                .iter()
+                .all(|c| self.ast_selfwidths_all_known(c))
     }
 
     /// How many times `lower_repeat` UNROLLS this count — `None` when it does not
@@ -94,7 +139,10 @@ impl Elaborator<'_> {
     /// keeps that exact node (byte-identical IR for every design that worked), and
     /// one the const domain cannot fold either keeps it too. The real/loud rejects
     /// inside [`Self::lower_index_expr`] run first and yield `Const 0`, which IS
-    /// reducible, so this can never paper over one.
+    /// reducible, so this can never paper over one. (Width-blind shallow
+    /// reductions — `Const 4'd15 + Const 4'd1` as 16 where SV wraps to 0 — are
+    /// corrected inside `lower_index_expr` itself, the one funnel every index,
+    /// bound, offset and width site shares.)
     pub(crate) fn lower_const_width_expr(&mut self, e: &ast::Expr) -> u32 {
         let id = self.lower_index_expr(e);
         if self.const_of_expr_u32(id).is_some() {
