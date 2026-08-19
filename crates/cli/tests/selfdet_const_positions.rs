@@ -218,19 +218,23 @@ fn cast_size_expression_selfdet_runtime() {
     assert!(out.contains("B9=4294967295"), "got:\n{out}");
 }
 
-/// #2, const lane: the same cast in a parameter initializer is a DECLINE (the
-/// const domain folds a size cast only where truncation cannot occur), so the
-/// binding is loud — an ascent from the silent 9. iverilog folds it to 1; full
-/// correct-support needs the width-aware operand fold (ROADMAP §2 residual).
+/// #2, const lane: this used to DECLINE (loud) — the const domain folded a size
+/// cast only where truncation could not occur — and the pin recorded iverilog's
+/// 1 as what full correct-support would give. §4.5.345 supplied the width-aware
+/// operand fold that arm was waiting for: the exponent's `(4'd9+4'd8)'(2)` is a
+/// 1-bit cast of 2, i.e. 0, so `4'd3 ** 0` is iverilog's 1.
+///
+/// ⚠️ This is the SELF-DETERMINED (exponent) lane, which routes through the
+/// interpreter's width-aware walk. A size cast reached through `const_eval_cast`
+/// — a plain `localparam P = 4'((4'd8+4'd8)/4'd3);` — still folds its operand in
+/// the width-UNLIMITED domain and answers 5 for iverilog's 0 (ROADMAP §2).
 #[test]
-fn cast_size_selfdet_const_declines_loud() {
-    loud(
-        "module top;\n\
+fn cast_size_selfdet_const_folds_at_the_cast_width() {
+    let out = run("module top;\n\
          localparam P = 4'd3 ** ((4'd9+4'd8)'(2));\n\
-         initial $display(\"P=%0d\", P);\n\
-         endmodule\n",
-        "not a foldable constant expression",
-    );
+         initial begin $display(\"P=%0d\", P); #1 $finish; end\n\
+         endmodule\n");
+    assert!(out.contains("P=1"), "got:\n{out}");
 }
 
 /// A size expression that wraps to ZERO is rejected by both simulators

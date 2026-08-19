@@ -126,14 +126,23 @@
 > **⚠️ 이 절은 주제별 묶음이지 착수 순서가 아니다.** 착수 순서는 바로 아래 표를 따른다 —
 > 위에서부터 읽으면 **선행조건(트리 전역 AST self-폭 패스)에 막힌 캐스트 뭉치**로 먼저 간다.
 >
-> **다음 착수 순서 (2026-08-19 갱신 · 옛 1~3 은 §4.5.343 로 RESOLVED)**
+> **다음 착수 순서 (2026-08-20 갱신 · 옛 1~3 은 §4.5.343, 그 다음 1 과 2의 앞머리는 §4.5.345 로 RESOLVED)**
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | body-local init 조용한 0 · body-decl `int t = f();` 크래시 | 같은 `unwrap_or(0)`/깊이 자리 둘 |
-> | **2** | 인터프리터의 폭-0 타깃 마스킹 · u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
+> | **1** | **`const_eval_cast` 의 Size/Named arm 이 피연산자를 무제한 도메인에서 접는다**(오라클 ✓ · §4.5.345 가 메커니즘까지 실측) | **silent-wrong 이고 한 줄이다** — `eval_const_assign(operand, …, Some((n, sign)))` 로 라우팅. 실측 3칸: `4'((4'd8+4'd8)/4'd3)` vita **5**/iverilog **0** · `4'(4'd15+4'd1)` loud→**0** · `2'((8'sd100+8'sd100)>>1)` loud→**0**. §4.5.345 가 **자기결정(지수) lane 에는 이미 그 라우팅을 깔았고**(핀 `cast_size_selfdet_const_folds_at_the_cast_width`) 남은 것은 `const_eval_cast` 한 자리. ⚠️ 옛 기록의 선행조건 *"트리 전역 AST self-폭 패스"* 는 **이 도메인에 한해 이미 서 있다**(`const_self_width`+`const_signed_env`) |
+> | 2 | u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
 > | 3 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
 > | 4 | **generate-if cond 의 무제한 fold**(§4.5.343 발굴·**2-오라클 합치**) | 광역 폭 클래스의 일부 · blast = generate elaboration ⇒ PRE-3-way 필수 |
+>
+> ✅ **body-local init 조용한 0 · 자기참조 초기화 크래시 · 폭-0 타깃(옛 1번과 2번 앞머리)은 §4.5.345 로 RESOLVED**
+> (2026-08-20 · 상세=ARCHIVE): 한 뿌리 = *해석기가 모르는 것을 값으로 만들었다*. 미fold 초기화는 **미바인딩**(읽을 때만
+> loud · 죽은 초기화는 정답 유지) · 선언 이름은 동명 파라미터로 폴백 금지 · `body_decls` 는 본문 깊이에서(크래시→loud) ·
+> multi-packed 폭은 **차원의 곱**. 곁: concat·replication·SIZE 캐스트를 carry-free wide folder 로 접어(모듈 스코프와
+> **같은 헬퍼**) 초기화 loud 클래스를 correct 로 올렸다. 61칸 3-way **회귀 0 · FIXED 19 · LOUD→CORR 4 · wrong→LOUD 8**.
+> ⚠️ **기록돼 있던 폭-0 메커니즘은 오진이었다** — *"`w.max(tw)` 가 `tw=0` 을 실폭처럼 쓴다"* 는 진단대로 고치면
+> `bit [1:0][3:0] tt = 8'd100*8'd100` 이 16→**10000** 인 **correct→silent-wrong** 회귀가 난다(PRE-3-way 가 잡았다).
+> `max(self, 0)` = 자기 폭은 옳은 degrade 였고, 결함은 *계산 가능한 곱-폭을 declined* 한 것이었다.
 >
 > ✅ **replication count·part-select 폭 lane(옛 이 표의 1번)은 §4.5.344 로 RESOLVED**(2026-08-19 · 상세=ARCHIVE):
 > 실체는 `**` 미fold 가 아니라 한 결함의 두 철자(`const_bound_u32` 의 전면 decline + lowered-tree 얕은 fold 의
@@ -215,8 +224,13 @@
 - **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
 - **real-반환 const fn 의 본문이 정수 도메인으로 해석된다**(pre-existing·PRE==POST·§4.5.343 발굴·소형). `function real f(); f = 4'd15 + 4'd1;` 이 16.0 을 접는다(real 타깃 대입은 self-det 0 이 맞을 것) — `eval_const_call` 이 real 반환형의 본문을 i64 로 인터프리트. real 산술이 든 본문은 어차피 decline(loud)이라 창이 좁다.
 - **u64 패턴 지수를 i64 도메인이 음수로 읽는다**(pre-existing·오라클 ✓·§4.5.339 발굴). `4'sd3 ** (64'd0 - 64'd8)` 이 param **0** / iverilog·vita 런타임 **926288481** — `const_eval_i64_lit` 의 64비트 재해석 arm 이 −8 을 만든다(그 arm 주석은 *"magnitude misuse 는 range 검사가 loud 로 잡는다"* 인데 **지수 위치엔 그 검사가 없다**).
-- **인터프리터의 폭-0(=UNKNOWN) 타깃이 실폭처럼 마스킹에 참여한다**(pre-existing·오라클 ✓·§4.5.339 발굴). `bit [1:0][3:0] tt; tt = 4'd13 ** 4'd2;` 가 **9** / iverilog **169** — `eval_const_assign` 의 `w.max(tw)` 가 `tw=0` 을 그대로 쓴다(**자기 doc 이 반대로 적어 뒀다** — *"width 0 = UNKNOWN ⇒ 마스킹 안 함"*).
-- **fold 안 되는 body-local 초기화가 조용히 0 이 된다**(pre-existing·오라클 ✓·§4.5.339 발굴). 상수함수 본문의 `int x = 8'(5); g = x;` 가 vita **0** / iverilog **5** — `.and_then(...).unwrap_or(0)` 이 *"초기화 없음"* 과 *"초기화 미fold"* 를 합친다(`eval_const_call` 자기 doc 의 *"None → LOUD"* 와 모순 · 사이트 둘). 곁: `int t = f();` 형태의 body-decl 초기화는 **PRE·POST 둘 다 스택 오버플로**(깊이 캡이 그 경로를 안 묶는다 = §4.5.339 가 인자·default 철자만 닫았다는 증거).
+- ~~**인터프리터의 폭-0 타깃 · fold 안 되는 body-local 초기화의 조용한 0 · body-decl 초기화 크래시**~~ **RESOLVED**(§4.5.345·상세=ARCHIVE). **잔여 넷**(전부 §4.5.345 가 적대 리뷰로 실측):
+  - **decl-init 호출 사슬이 깊이 캡 64 에 걸린다**(correct→loud · 두 렌즈가 독립 발견). 서로 다른 상수함수 70개가 각자 `int t = f<다음>();` 로 잇는 사슬이 iverilog 71 / PRE 71 / POST loud. **완화가 강하다**: 같은 설계를 *문장* 철자(`f<k> = f<k+1>() + 1;`)로 쓰면 **PRE 도 이미 loud** 였다(64 는 합의된 상수) — 즉 §4.5.345 는 decl 자리를 문장 자리에 맞췄을 뿐이고, 그 과금이 곧 자기참조 크래시를 없앤 것이다. 무손실 대안(리뷰 제안·미구현) = **이미 실행 중인 함수로 재진입할 때만** 한 레벨 과금(callee 이름은 `eval_const_call` 이 들고 있다) — 비순환 사슬은 안 막힌다.
+  - **4-state 지역변수의 무초기화 기본값이 0 이다**(pre-existing·PRE==POST). `integer x; g = x + 1;` 이 vita **1** / iverilog **x**. i64 해석기가 unknown 을 못 나른다 — 2-state(`int x;`)는 정답.
+  - **packed 차원 곱이 u32 를 넘으면 패닉**(pre-existing·PRE==POST·진단 없음). `bit [65535:0][65535:0] tt;` 가 `attempt to multiply with overflow` 로 abort. §4.5.345 의 `checked_mul` 자리가 아니라 그 위(넷 할당)다.
+  - **선언 폭 모델이 셋인데 하나만 packed 를 본다**(maintainability). `const_decl_wsign`(곱 · §4.5.345) · `const_bound.rs::decl_is_wide`(첫 차원만) · `ast_kind_range_width`. 지금은 **건전**(차원을 무시하면 폭을 과소평가 → 과잉 decline, 단조) 하나 명시되지 않은 의존이다 — 폭을 *줄일* 수 있는 차원 규칙이 생기면 조용히 깨진다.
+- **🔴 64비트 상수의 부호 없는 값이 i64 도메인에서 음수로 읽힌다**(pre-existing·PRE==POST·**2-오라클 합치**·§4.5.345 라운드 3 발굴). `localparam L = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` 가 vita **222** / iverilog·verilator **111**. 같은 결함이 `parameter [63:0] BIG = 64'hFFFF…; (BIG > 0)` 철자에도 있다. 뿌리 = `const_eval_i64_lit` 의 64비트 재해석 arm(*"magnitude misuse 는 range 검사가 loud 로 잡는다"* 고 적혀 있으나 **비교 위치엔 그 검사가 없다** — §2 의 u64 지수 항목과 **같은 주석·같은 구멍**). ⚠️ §4.5.345 는 이 클래스를 **새 문법(concat/replication)으로 넓히지 않으려고** 64비트 배치를 의도적으로 decline 한다(핀 `a_placement_that_does_not_fit_the_i64_domain_declines`) — 이 항목이 닫히면 그 decline 도 함께 열 수 있다. 처방 후보 = i64 대신 `(bits, width, signed)` 를 나르거나, 부호 없는 64비트를 만드는 자리에서 loud.
+- **placement/캐스트 fold 의 잔여**(§4.5.345 가 연 lane 의 경계 · 전부 honest-loud). carry 연산이 든 concat(`{4'd2,(4'd1+4'd1)}` iverilog 34) · concat 안의 x/z · **prim/signing 캐스트**(`int'(7)` iverilog 7 — 그 피연산자는 자기결정이라 SIZE 의 `max(self,N)` 규칙과 다르다) · 지역변수에서 온 replication count(iverilog 도 거부). carry-free folder 를 넓히는 것은 *두 번째 산술 철자*라 금지 — 늘리려면 해석기 자신의 폭-인식 걷기로 라우팅해야 한다(위 표 1번과 같은 처방).
 - **self-referential 반환 range 는 여전히 스택 오버플로**(pre-existing·오라클 없음 — iverilog 도 내부 abort·§4.5.339 발굴). `function [f():0] f();` — `const_fn_ret_wsign` 경로가 call 깊이를 안 끈다. 처방은 §4.5.339 가 default 에 쓴 **같은 한 줄**(`depth + 1`).
 - **`coverpoint_domain` 의 Pow arm 이 정본을 미러한다는 주장과 어긋난다**(pre-existing·minor·§4.5.339 발굴). 그 함수는 `max(lw,rw)`/`ls && rs` 로 접는데 정본(`ir_bits_of`·`sim-ir::selfwidth`)은 **LHS 폭·base 부호**다. 영향 = 커버리지 auto-bin 개수뿐.
 - **기본 백엔드의 Mul 체인이 밑수를 n 번 재-lower 해 진단을 n 배로 낸다**(pre-existing·PRE==POST·§4.5.319 라운드 3 발굴). `native_eval` 이 `a ** n`(작은 상수 n)을 Mul 체인으로 펼칠 때 `lhs` 를 n 번 낮추므로, 밑수에 범위 밖 배열 읽기가 있으면 `always @(posedge clk) r <= m[idx] ** 16;` 이 interp/native 에서 **E4002 2건**, bytecode 에서 **8건 + "further suppressed"**(8-cap 소진). **값은 안 틀린다**(체인 leaf 집합이 순수 — `Expr::Call` 은 명시 거부) — 갈리는 것은 진단 수뿐이고, 그것이 8-cap 을 먹어 뒤쪽 진단을 지운다. 같은 클래스가 `native/dirty.rs` 에 이미 기록돼 있다.

@@ -431,6 +431,14 @@ impl Elaborator<'_> {
             // An unknown target shape keeps the previous unlimited behavior.
             return self.eval_const_env(rhs, env, envw, depth);
         };
+        // ⚠️ A RECORDED width of 0 (UNKNOWN) must still flow into `ctx` below, where
+        // `max(self, 0)` leaves the RHS at its OWN self width. Degrading it to the
+        // unlimited domain instead was measured to be a REGRESSION: the self width
+        // is the right context whenever the true target is no wider than the RHS,
+        // and dropping it turned `bit [1:0][3:0] tt; tt = 8'd100 * 8'd100;` from
+        // iverilog's 16 into 10000. The defect the width-0 record actually caused
+        // was upstream — a computable width being declined — and `const_decl_wsign`
+        // is where that is fixed.
         // Unknown self-width ⇒ ctx 0 ⇒ no masking at all (the pre-slice behavior).
         // The final coercion to the target still applies: that width IS known.
         let ctx = match self.const_self_width(rhs, envw) {
@@ -455,14 +463,6 @@ impl Elaborator<'_> {
         packed: &[ast::Range],
         signed: bool,
     ) -> Option<(u32, bool)> {
-        // A MULTI-packed declaration (`logic [3:0][7:0] m`) is wider than its first
-        // dimension, and `ast_kind_range_width` only ever reports that first one —
-        // masking to it would store 8 for a 32-bit value. Decline instead: unknown
-        // width keeps the unlimited behavior, which is wrong-in-the-old-way rather
-        // than newly wrong.
-        if !packed.is_empty() {
-            return None;
-        }
         // `ast_kind_range_width` folds only a BARE DECIMAL bound, so the commonest
         // parameterized form (`bit [PW-1:0]`) fell through and kept the old
         // unlimited behavior. Fold the bounds in the const domain first — the same
@@ -485,6 +485,25 @@ impl Elaborator<'_> {
             }
             _ => ast_kind_range_width(kind, range)?,
         };
+        // A MULTI-packed declaration (`logic [3:0][7:0] m`) is as wide as the
+        // PRODUCT of its dimensions, and `ast_kind_range_width` only ever reports
+        // the first one. This used to decline outright and record UNKNOWN — but an
+        // unknown target contributes nothing to §11.6's `max(self, target)`, so
+        // `bit [1:0][3:0] tt; tt = 4'd13 ** 4'd2;` evaluated at the RHS's own 4 bits
+        // and stored 9 where iverilog stores 169. The extra dimensions are ordinary
+        // constant ranges — the same fold the first one just got — so multiply them
+        // in. A dimension this domain cannot fold still declines, and a product past
+        // 64 bits masks as the identity, which IS the unlimited behavior it had.
+        let mut w = w;
+        for r in packed {
+            if Self::ast_contains_call(&r.msb) || Self::ast_contains_call(&r.lsb) {
+                return None; // same recursion guard the first dimension takes
+            }
+            let hi = self.const_eval_in_scope(&r.msb)?;
+            let lo = self.const_eval_in_scope(&r.lsb)?;
+            let d = u32::try_from(hi.abs_diff(lo).checked_add(1)?).ok()?;
+            w = w.checked_mul(d)?;
+        }
         // `time` is unsigned by definition; every other integral kind carries the
         // signedness the DECLARATION resolved. Hard-coding the atom keywords signed
         // was wrong: the parser already applies each atom's default, so `int
