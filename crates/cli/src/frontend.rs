@@ -111,6 +111,63 @@ impl diag::SpanResolver for MapResolver<'_> {
     }
 }
 
+/// Wire form of the [`hdl_preprocess::SourceMap`] carried in the `.vu` v28 tail:
+/// `(files as (display name, ORIGINAL text), segments as (exp_start, exp_end,
+/// file index, orig_start, collapsed))`. This is exactly the subset
+/// [`hdl_preprocess::SourceMap::resolve`] reads. `SourceFileEntry::canon` and
+/// `::dir` are deliberately NOT carried — they are machine-local absolute paths
+/// used only by the include reader DURING preprocessing (already done by `vcmp`
+/// time), and serializing them would break the artifact's 3-OS byte-identity.
+pub(crate) type SmapWire = (Vec<(String, String)>, Vec<(u32, u32, u32, u32, bool)>);
+
+/// `SourceMap` → wire tail. Inverse of [`smap_from_wire`]; the pair is pinned by
+/// the resolution-equivalence test (`staged_diag_location.rs`), which asserts the
+/// roundtripped map resolves every probed span to the same `SourceLoc` as the
+/// live map — the contract is "same answers", not "same fields".
+pub(crate) fn smap_to_wire(map: &hdl_preprocess::SourceMap) -> SmapWire {
+    (
+        map.files
+            .iter()
+            .map(|f| (f.name.clone(), f.text.clone()))
+            .collect(),
+        map.segments
+            .iter()
+            .map(|s| (s.exp_start, s.exp_end, s.file.0, s.orig_start, s.collapsed))
+            .collect(),
+    )
+}
+
+/// Wire tail → a `SourceMap` that answers `resolve_span` identically to the one
+/// `vcmp` held live. `canon: None` / `dir: PathBuf::new()` are correct here, not
+/// placeholders: both fields serve the include reader, which never runs on this
+/// map (preprocessing is over; the map's only staged job is span resolution).
+pub(crate) fn smap_from_wire(w: SmapWire) -> hdl_preprocess::SourceMap {
+    let (files, segments) = w;
+    hdl_preprocess::SourceMap {
+        files: files
+            .into_iter()
+            .map(|(name, text)| hdl_preprocess::SourceFileEntry {
+                name,
+                text,
+                canon: None,
+                dir: std::path::PathBuf::new(),
+            })
+            .collect(),
+        segments: segments
+            .into_iter()
+            .map(
+                |(exp_start, exp_end, file, orig_start, collapsed)| hdl_preprocess::Segment {
+                    exp_start,
+                    exp_end,
+                    file: hdl_preprocess::FileId(file),
+                    orig_start,
+                    collapsed,
+                },
+            )
+            .collect(),
+    }
+}
+
 /// Build a `SourceLoc` for the half-open expanded-byte range `[lo, hi)` by
 /// resolving it through the preprocessor's `SourceMap` back to original positions.
 pub(crate) fn loc_from_span(map: &hdl_preprocess::SourceMap, lo: usize, hi: usize) -> SourceLoc {

@@ -129,7 +129,14 @@ pub(crate) fn run_velab_lib_gated(
         };
         let blob_hash = *blake3::hash(&bytes).as_bytes();
         blob_bytes_all.extend_from_slice(&bytes);
-        let (unit, unit_exp, prec_exp, prec) = match decode_vu_unit(&bytes, sink) {
+        // The v28 source-map tail is DROPPED on this path: the merge below
+        // splices items from MULTIPLE CUs into one unit, and each CU's AST spans
+        // index its OWN expanded buffer starting at 0 — the coordinate spaces
+        // overlap, so no single resolver can tell which CU a span belongs to.
+        // Resolving through the wrong CU's map would print a WRONG file:line,
+        // which is worse than the unlocated diagnostic this leaves (recorded in
+        // ROADMAP §3; the plain `velab a.vu` path locates since v28).
+        let (unit, unit_exp, prec_exp, prec, _smap) = match decode_vu_unit(&bytes, sink) {
             Ok(x) => x,
             Err(code) => return code,
         };

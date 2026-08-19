@@ -389,13 +389,18 @@ pub enum Applet {
 const ERROR_CATALOG: &str = include_str!("../../../docs/preview/15-error-code-reference.md");
 
 /// `.vu` decode result: the `SourceUnit` + its timescale env — per-module
-/// `unit_exp` map, per-module `prec_exp` map (v22 two-stage `#delay`), and the
-/// design-wide `global_prec_exp`.
+/// `unit_exp` map, per-module `prec_exp` map (v22 two-stage `#delay`), the
+/// design-wide `global_prec_exp` — and the reconstructed preprocessor
+/// `SourceMap` (v28 tail). NOT an `Option`: every v28 `vcmp` writes the tail,
+/// so an absent one is a truncated artifact and `decode_vu_unit` is loud about
+/// it — a tolerant `None` here would silently resurrect the location-less
+/// staged diagnostics the tail exists to end.
 type VuUnitEnv = (
     hdl_ast::SourceUnit,
     std::collections::BTreeMap<String, i8>,
     std::collections::BTreeMap<String, i8>,
     i8,
+    hdl_preprocess::SourceMap,
 );
 
 /// 14th `.velab` trailer (2026-06-22 STAGED-DROP audit fix): the engine-facing

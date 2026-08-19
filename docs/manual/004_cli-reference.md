@@ -280,8 +280,11 @@ vcmp [-o <out.vu>] <source.sv> [<source2.sv> ...]
   missing input file, a write failure, an unknown flag, or no sources given.
 
 The `.vu` body is the serialized front-end `SourceUnit` (the parsed AST) plus a
-small resolved-timescale trailer; timescale is resolved here so `velab` scales
-delays identically.
+small resolved-timescale trailer, plus a source-map trailer (file names,
+original texts, and provenance segments — format v28); timescale is resolved
+here so `velab` scales delays identically, and the source map lets `velab`
+print elaborate-time diagnostics with the same `file:line:col` as one-shot
+`vita`.
 
 ```
 vcmp pkg.sv dut.sv -o build/dut.vu

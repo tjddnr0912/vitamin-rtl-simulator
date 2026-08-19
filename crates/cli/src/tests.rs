@@ -257,3 +257,62 @@ fn dumpvars_writes_vcd_with_enddefinitions() {
     );
     let _ = std::fs::remove_file(&vcd);
 }
+
+// ── v28 `.vu` source-map tail: wire roundtrip preserves RESOLUTION, not fields ──
+//
+// `smap_to_wire`/`smap_from_wire` are inverses over the subset `resolve` reads;
+// the contract worth pinning is "the roundtripped map answers `resolve_span`
+// identically to the live map", swept over EVERY expanded byte (so verbatim
+// runs, collapsed macro runs, the include boundary, a second command-line file,
+// and the past-EOF clamp are all exercised — not just the offsets some test
+// design's diagnostics happen to hit). A field-equality pin would pass a wire
+// form that dropped `collapsed` yet broke macro-site resolution; this cannot.
+#[test]
+fn vu_source_map_wire_roundtrip_resolves_identically() {
+    let dir = std::env::temp_dir().join(format!(
+        "vita_smapwire_{}_{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    // Include file: multibyte text BEFORE a declaration so char-vs-byte columns
+    // diverge if the carried text ever stops being the ORIGINAL text.
+    std::fs::write(
+        dir.join("body.svh"),
+        "// 안녕 multibyte pad\nwire inc_w;\nassign inc_w = 1'b1;\n",
+    )
+    .unwrap();
+    let f1 = "`define M(x) (x + 1)\nmodule a;\n  `include \"body.svh\"\n  wire y;\n  assign y = `M(inc_w);\nendmodule\n";
+    let f2 = "module b;\n  a u();\nendmodule\n";
+    let sources = vec![
+        (
+            dir.join("f1.sv").to_string_lossy().into_owned(),
+            f1.to_string(),
+        ),
+        ("f2.sv".to_string(), f2.to_string()),
+    ];
+    std::fs::write(dir.join("f1.sv"), f1).unwrap();
+    let pp =
+        hdl_preprocess::preprocess_sources(&dir, &sources, &hdl_preprocess::PreOpts::default());
+    assert!(
+        pp.map.files.len() >= 3,
+        "sweep must cover two sources + one include, got {} files",
+        pp.map.files.len()
+    );
+    assert!(
+        pp.map.segments.iter().any(|s| s.collapsed) && pp.map.segments.iter().any(|s| !s.collapsed),
+        "sweep must cover both collapsed and verbatim segments"
+    );
+    let rt = crate::frontend::smap_from_wire(crate::frontend::smap_to_wire(&pp.map));
+    // Every expanded byte, plus two past-EOF probes for the clamp path.
+    for lo in 0..pp.text.len() + 2 {
+        for w in [0usize, 3] {
+            assert_eq!(
+                pp.map.resolve_span(lo, lo + w),
+                rt.resolve_span(lo, lo + w),
+                "resolution diverged at expanded offset {lo} (width {w})"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

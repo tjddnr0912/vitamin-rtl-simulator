@@ -423,13 +423,18 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
   그쪽을 열면 **프레임 경로를 유지한 채** 리포터의 지표가 오른다. ⓑ 가 사다리를 안 건드린다.
   ⚠️ picorv32 는 어느 형태도 안 써서 65/68 이다 — **이 축은 벤치가 대표하지 않는다.**
 
-- **⚠️ staged 흐름은 `file:line:col` 이 없다(pre-existing · §4.5.341 이 실측).** `vita`(one-shot)는
-  전처리기의 `SourceMap` 을 아직 들고 있어 §4.5.341 의 위치가 전부 나오지만, `velab` 은 `.vu`(파싱된
-  AST)에서 시작하므로 **`SpanResolver` 가 설치되지 않는다** — 같은 설계가 one-shot 에선
-  `d.sv:3:49: warning…[in tb.u_m1.u_a]`, staged 에선 `warning…[in tb.u_m1.u_a]` 다.
-  ⭐ **인스턴스 경로는 두 흐름 모두에서 나온다**(`cur_prefix` 에서 오지 resolver 에서 오지 않는다)
-  = 아티팩트 경계를 넘는 유일한 키. 닫으려면 `.vu` 가 **줄 테이블 또는 SourceMap 을 실어야** 하고,
-  그것은 아티팩트 형상 변경(format bump)이라 별도 슬라이스다.
+- ✅ **staged `file:line:col` 해결(2026-08-19 · #9 · format v28).** `.vu` 가 **source-map tail**
+  (파일별 `(name, ORIGINAL text)` + 세그먼트 5-튜플 — `resolve` 가 읽는 정확히 그 부분집합)을 싣고,
+  `velab` 이 그것으로 `SourceMap` 을 재구성해 **one-shot 과 같은 `MapResolver`** 를 설치한다(해석
+  규칙 재철자 0). `canon`/`dir` 은 **일부러 안 싣는다**(머신 로컬 절대경로 — 3-OS 바이트 동일성을
+  깨고, include reader 전용이라 staged 에선 아무도 안 읽는다). 판별 축 5개 전부 one-shot 과 바이트
+  동일: 평범한 E3010 · **include 파일이 자기 이름+로컬 줄**(`inc4.svh:4:8`) · **매크로 사용
+  지점**(collapsed 세그먼트) · 다중 파일 G12 · **멀티바이트 char 컬럼**(17, 바이트면 21). corrupt
+  tail 은 loud(`undecodable .vu source-map trailer`). 유닛 스윕은 **모든 확장 바이트**에서 roundtrip
+  맵의 `resolve_span` 동일성을 단언한다. ⚠️ **잔여: `velab -L`(worklib 병합) 경로는 여전히
+  위치가 없다** — 병합이 **여러 CU** 의 아이템을 한 unit 으로 합치는데 각 CU 의 스팬은 자기 확장
+  버퍼(0부터)를 인덱싱해 **좌표공간이 겹친다**. 틀린 CU 의 맵으로 풀면 **틀린 file:line**(없는 것보다
+  나쁘다)이라 `None` 유지 — 닫으려면 병합 시 스팬 오프셋 재작성(AST 전체 walk)이 필요하다.
 
 - **§3.10 잔여 — 런타임 진단의 인스턴스 경로와 file:line.** §4.5.341이 시각(round-29) + **배열
   이름**을 붙였고, elaborate 쪽은 `file:line:col` + 인스턴스 경로를 갖는다. 런타임 쪽에 남은 것은
@@ -451,7 +456,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 | ~~6~~ | ✅ **§3.5-③ 완료(2026-08-19)** | `repeat` 가족 **전부** 프레임에서 돈다 + 동시 활성화 판별자 | — | 카운터를 **예약 패스**에서 프레임 창 안에 · 핸드오프는 **span 키** · ⭐ 곁가지로 **§2 self-width 절단 silent-wrong** 동반 수정 |
 | ~~7~~ | ✅ **§3.6-② 완료(2026-08-19)** | verilator 3/3 일치 + ⭐ **중복 선언 loud** 신설 | — | AST 변종 1(**`.vu` 재핀** · sim-ir·format_version 불변) · `default clocking` 과 **같은 자리·같은 리셋** · 적용은 **multi-clock 게이트보다 먼저** · 뮤테이션 4/5 + **증명된 등가 1** |
 | ⚠️ ~~8~~ | **§3.11 — 지어서 재고 되돌렸다(2026-08-19)** | — | ⇒ 선행조건이 **바뀌었다**: ⓐ 인라인이 피연산자를 **한 번만** 이름 부르게 하거나 ⓑ **codegen 쪽**(`is_codegen_able` 의 `Terminator::Call` 거부)을 연다 | 전 스위트 **15 실패** · `$random` 이 **두 번** 뽑혔다 = 인라인 경로의 **핀된 사다리 위반**을 상속한다 |
-| **9** | **staged `file:line`** | `velab` 진단에 위치 | **아티팩트 형상 변경**(`.vu` 에 줄테이블/SourceMap) = **format bump** | one-shot 만 `SourceMap` 을 든다 |
+| ~~9~~ | ✅ **staged `file:line` 완료(2026-08-19 · format v28)** | `velab` 진단이 one-shot 과 **바이트 동일**한 위치를 갖는다 | — | `.vu` 에 source-map tail(`(name,text)`+세그먼트 · `dir`/`canon` 은 3-OS 동일성 때문에 제외) · `velab` 이 재구성해 **같은 `MapResolver`** 설치 · ⚠️ `-L` 병합 경로는 좌표공간 겹침으로 잔여 |
 | **10** | **§3.10 런타임 `file:line`** | 엔진 진단에 위치 | 엔진이 IR 위에서 돌아 span 이 없다 | §4.5.249 `SpanResolver` 가 재사용 지점 |
 
 ⭐ **1~5 는 서로 독립이고 선행조건이 없다** — 순서는 *"리포터가 실제로 막힌 정도 × 크기"* 로 정했다

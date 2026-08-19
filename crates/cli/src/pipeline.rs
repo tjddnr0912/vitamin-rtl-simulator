@@ -474,8 +474,8 @@ pub(crate) fn run_vcmp_gated(
     // Each file is its own SourceMap entry (G12) so diagnostics keep per-file name +
     // line; `text` (the concatenation) is retained only for the RULE-V composite
     // digest below, keeping worklib staleness keys byte-stable.
-    let Some((unit, rt, includes)) =
-        frontend_sources_to_unit_pre_with_includes(&srcs, sink, &pre_opts_of(opts))
+    let Some(((unit, rt, includes), smap)) =
+        crate::frontend::frontend_sources_mapped(&srcs, sink, &pre_opts_of(opts))
     else {
         return EXIT_USER_ERROR;
     };
@@ -493,6 +493,13 @@ pub(crate) fn run_vcmp_gated(
     body.extend_from_slice(
         &postcard::to_stdvec(&(rt.unit_exp, rt.global_prec_exp, rt.prec_exp))
             .expect("timescale env postcard encode infallible"),
+    );
+    // v28 source-map tail: what `velab` needs to resolve elaborate-time diagnostic
+    // spans to `file:line:col` exactly like the one-shot path. Without it the map
+    // died here and every staged elaborate diagnostic printed location-less.
+    body.extend_from_slice(
+        &postcard::to_stdvec(&crate::frontend::smap_to_wire(&smap))
+            .expect("source-map tail postcard encode infallible"),
     );
     // RULE-V composite (recorded 2026-06-11): digest of this stage's INPUT —
     // the concatenated raw source plus the -D/-I surface in argv order (they
@@ -647,7 +654,7 @@ pub(crate) fn run_velab_gated(
     // `format_version` bump); recorded in ROADMAP §0 item 14, where `-G` lives.
     let vu_composite = *blake3::hash(&bytes).as_bytes();
 
-    let (unit, unit_exp, prec_exp, global_prec_exp) = match decode_vu_unit(&bytes, sink) {
+    let (unit, unit_exp, prec_exp, global_prec_exp, smap) = match decode_vu_unit(&bytes, sink) {
         Ok(x) => x,
         Err(code) => return code,
     };
@@ -661,6 +668,9 @@ pub(crate) fn run_velab_gated(
     // doc-14 RULE B: `-G` is an ELABORATE-stage input. Dropping it here accepted the
     // flag, reported `errors=0` and produced an artifact built from the declared
     // defaults — the silent wrong-design the one-shot path is loud about.
+    // v28: the `.vu` source-map tail feeds the SAME `MapResolver` the one-shot
+    // driver installs, so staged elaborate diagnostics carry `file:line:col` too.
+    let resolver = crate::frontend::MapResolver(&smap);
     let (ir, sc) = elaborate::elaborate_located_params(
         &unit,
         sink,
@@ -668,7 +678,7 @@ pub(crate) fn run_velab_gated(
         &prec_exp,
         global_prec_exp,
         roots,
-        None,
+        Some(&resolver),
         &opts.top_params,
     );
     let Some(ir) = ir else {
@@ -693,7 +703,8 @@ pub(crate) fn run_velab_gated(
 }
 
 /// Decode a `.vu`: header gate (magic/format/schema) + `SourceUnit` frame +
-/// the tolerant timescale tail. Shared by the legacy positional path and the
+/// the tolerant timescale tail + the v28 source-map tail (loud when absent or
+/// undecodable — see below). Shared by the legacy positional path and the
 /// worklib closure loader.
 pub(crate) fn decode_vu_unit(bytes: &[u8], sink: &dyn LogSink) -> Result<VuUnitEnv, i32> {
     let (header, body) = match vita_artifact::read_vu(bytes) {
@@ -721,14 +732,17 @@ pub(crate) fn decode_vu_unit(bytes: &[u8], sink: &dyn LogSink) -> Result<VuUnitE
         i8,
         std::collections::BTreeMap<String, i8>,
     );
-    let (unit_exp, global_prec_exp, prec_exp): TsEnv = if vu_rest.is_empty() {
+    let ((unit_exp, global_prec_exp, prec_exp), map_rest): (TsEnv, &[u8]) = if vu_rest.is_empty() {
         (
-            std::collections::BTreeMap::new(),
-            -9,
-            std::collections::BTreeMap::new(),
+            (
+                std::collections::BTreeMap::new(),
+                -9,
+                std::collections::BTreeMap::new(),
+            ),
+            &[],
         )
     } else {
-        match postcard::from_bytes(vu_rest) {
+        match postcard::take_from_bytes(vu_rest) {
             Ok(x) => x,
             Err(e) => {
                 return Err(emit_artifact_error(
@@ -740,7 +754,25 @@ pub(crate) fn decode_vu_unit(bytes: &[u8], sink: &dyn LogSink) -> Result<VuUnitE
             }
         }
     };
-    Ok((unit, unit_exp, prec_exp, global_prec_exp))
+    // v28 source-map tail → rebuild the preprocessor's `SourceMap` so elaborate
+    // diagnostics resolve to `file:line:col` exactly like the one-shot path.
+    // ABSENCE is loud, same as corruption: every v28 `vcmp` writes the tail, so
+    // a missing one means the body was truncated exactly at this boundary —
+    // tolerating it would silently fall back to the location-less staged
+    // diagnostics the tail exists to end (and a resolver over an EMPTY map
+    // would be worse still: it stamps every diagnostic `:1:1`).
+    let smap = match postcard::from_bytes(map_rest) {
+        Ok(w) => crate::frontend::smap_from_wire(w),
+        Err(e) => {
+            return Err(emit_artifact_error(
+                sink,
+                &vita_artifact::ArtifactError::format(&format!(
+                    "undecodable .vu source-map trailer: {e}"
+                )),
+            ))
+        }
+    };
+    Ok((unit, unit_exp, prec_exp, global_prec_exp, smap))
 }
 
 /// Re-read `path` and, IFF its bytes hash to `want`, return its verified
