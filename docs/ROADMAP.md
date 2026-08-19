@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, **Phase A~D 실행 기록(§5.1-x · 슬라이스 59건)은 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(셋 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-07-31)**: format_version **26** · **5009 tests green** · 3-OS CI green · MsgCode **59** · **MSRV 1.85**. 최신 = **§4.5.278**(외부 round-23 — 호출의 **copy-out 목적지**를 분류기가 아예 안 보고 있었다: `Terminator::Call` 은 `{target, ret_bb}` 만 들고 목적지는 call-site 사이드 테이블에 살아서 `Stmt` lvalue 를 걷는 워크에 안 보였다 → 프레임 본문의 bare call 이 모듈 net 에 copy-out 하면 **진단 없이 rc=101** · 그것을 고치자 이웃 loud 4형태가 correct-support 로 · E3009 문구가 **패닉하는 형태를 "동작한다"고 명시**하던 것 + 거부된 terminator 를 전부 "timing control" 로 부르던 것 + 내부 `.expect()` 패닉을 fatal 로 · loud 를 걷자 드러난 `StrPutC` 프레임-로컬 문자열 silent-wrong · §3.2 성능은 **iverilog 가 같은 깊이 스케일링**임을 실측해 리포트의 뿌리 가설을 반증. 3-way 70프로브 회귀 0 · fixed 26 · 신규 테스트 14). 직전 = **§4.5.277**(외부 round-22 — 어떤 실행기가 서브루틴 본문을 돌리는지가 **본문 안의 무관한 `$display("x")` 한 줄**에 달려 있었다. 분류기가 blocking assign 을 **목적지로만** 봐서 효과가 든 rhs 를 못 봤다 · 함수도 같은 뿌리(집합이 주는 건 suspend 가 아니라 `&mut` 실행기) · static task 의 `string` 로컬은 같은 개념의 **세 번째 수집기** · fatal 이 자기 `$finish` 에 져서 안 멈추던 것 · 그리고 §4.5.275/276 이 두 번 되돌린 "이름 없던" 패닉 조건에 이름을 붙였다 = **copy-out 의 모든 목적지가 프레임 창 안인가**. 3-way 전수 회귀 0 · fixed 35 · 신규 테스트 21). 직전 = **§4.5.276**(외부 round-20 — 내가 만든 회귀와 그 밑의 silent-wrong 5건). 직전 = **§4.5.275**(값을 반환하는 output-formal 호출을 **아무 표현식 위치에서나** — 한 shape 서술을 네 워커가 공유 · 조건부 자리는 guard 블록 · 왼쪽 읽기는 pre-call 스냅샷 · 적대 리뷰 2라운드가 잡은 silent-wrong 12 + pre-existing 5, 그중 하나는 엔진 패닉). 직전 = **§4.5.274**(외부 round-19 — 값을 반환하는 호출의 output actual 33/34 · `void'(f(out))` 문장 · named arg 매핑 · silent-wrong 2건: default 인자 스코프 · frame body 안의 파일 읽기). 직전 = **§4.5.273**(외부 round-18 — suspend 하는 callee · struct 멤버 비트 커버리지 · 파서가 떨어뜨린 `automatic`). 직전 = **§4.5.272**(`-v` 유효 invocation echo). 직전 = **§4.5.271**(오라클을 만들다 나온 silent-wrong 2건 — 리시버를 못 보는 참조 워커 · `atoi` 계열이 `strtol` 이었다). 직전 = **§4.5.270**(안 쓴 로컬은 per-entry 저장과 바이트 동일 — 그리고 그걸 열자 §23.9 구멍이 드러났다). 직전 = **§4.5.269**(외부 round-17 §3.1/§3.1b/§3.3 — arm 하나가 없었고, catch-all 하나가 이미 쓴 걸 잊고 있었다). 직전 = **§4.5.268**(외부 round-16 §3.4~§3.7+§4 — 두 단계가 스코프를 다르게 중첩). 직전 = **§4.5.267**(고정 크기 `automatic` unpacked 배열 — per-entry 리셋은 측정으로 기각). 직전 = **§4.5.266**(definite-assignment 이 제어 흐름과 callee 본문을 본다 — 리포트 84건 중 53건). 직전 = **§4.5.265**(초기화자 소유권을 랭크 경로로). 직전 = **§4.5.264**(gen-item 리스트의 맨몸 `begin…end` 도 문법). 직전 = **§4.5.263**(generate REGION 은 스코프가 아니라 문법). 직전 = **§4.5.262**(bind band 를 인스턴스 경계에서 리셋). 직전 = **§4.5.261**(인스턴스 랭크 성분 3개 — root 순서·`bind` 위치·배열 원소). 직전 = **§4.5.260**(인스턴스 랭크를 선언 오프셋으로 — 재리뷰가 잡은 F4 맞바꿈). 직전 = **§4.5.259**(초기화 phase 적대 리뷰 — 하강 4 + false-loud 1). 직전 = **§4.5.258**(generate 안 블록 로컬도 모듈과 같은 규칙). 직전 = **§4.5.257**(초기화는 프로세스가 아니라 **arm 이전 phase** · 상수 fold 제거, **format 26**). 직전 = **§4.5.256**(t0 초기화 순서를 랭크 경로 데이터로 — 축 분리). 직전 = **§4.5.255**(같은-이름 `string` 배열 correct-support). 직전 = **§4.5.254**(t0 정적 초기화 순서 = 모듈 전부 → 블록 로컬 전부·generate 는 모듈보다 먼저). 직전 = **§4.5.253**(§4.5.251 적대 리뷰 — 하강 4건). 직전 = **§4.5.252**(`$sformatf` — 근인은 degenerate `eval` arm). 직전 = **§4.5.251**(`$blk$` decl-init 수집). 직전 = **§4.5.250**(§4.5.248/249 적대 리뷰 — 하강 6건). 직전 = **§4.5.249**(외부 round-20 §6 진단 위치 + §4.11 같은 이름 동적 로컬). 직전 = **§4.5.248**(외부 round-20 8 가족 — fork-arm 블록 로컬·queue 관용구·named arg·`$sformatf`). 직전 = **§4.5.247**(§4.5.246 회귀 수정). 직전 = **§4.5.246**(inner NET shadow — 마지막 ①-급 해소). 그 이전 슬라이스(§4.5.222~245)의 한 줄 요약과 상세는 전부 **[ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)**(인덱스 = 파일 상단, `#### 4.5.<N>` 검색) — 이 문서는 **전방 전용**이므로 완료 서사를 두지 않는다.
+> **기준선(2026-08-19)**: format_version **29** · **5,616 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -24,9 +24,9 @@
 >
 > **순서 주의**: 정본 우선순위(§1)는 `① 오라클 있는 CRITICAL silent-wrong > ② loud→supported`인데, 위 표의 1·2위는 **오너 지시로 §0(②)이 §2(①) 앞**에 있다. §0를 먼저 해도 §2의 ①-급이 사라진 것은 아니다.
 
-> **§4.5.275 후속 2줄(2026-07-30 · ②는 2026-07-31 §4.5.277 에서 해소)**: ①output-formal 호출의 eval-order 수리가 **클래스/2-세그먼트 메서드 본문**을 해소하지 못해 `y = c.m(x) + f(x)` 는 정직한 loud — `call_effect` 가 그 본문에 `Inert` 를 증명할 수 있으면 correct-support(오라클 有: iverilog task 쌍둥이 `y=16 x=6`). ②~~frame body 안에서는 copy-out 을 낼 수 없다~~ **RESOLVED(§4.5.277 → 잔여도 §4.5.278·상세=ARCHIVE)** — §4.5.277 이 이름 붙인 조건(**copy-out 의 모든 목적지가 프레임 창 안인가**)은 맞았지만, 그것은 **분류기의 결함**이지 프레임 본문의 성질이 아니었다: `Terminator::Call` 의 copy-out 목적지는 `Stmt` lvalue 가 아니라 call-site 사이드 테이블에 살아서 `compute_suspendable_tasks` 가 한 번도 본 적이 없었다. 워크가 그것을 보게 하니 목적지가 모듈 넷인 형태(bare call · 반환 lvalue · output actual · bit/part-select · 배열 원소 · 문자열 · 중첩 3단 · 루프 안)가 전부 correct-support. **§4.5.277 이 적어둔 "승격 전제 = 그 태스크를 `&mut` 경로로 올리는 것"이 정확히 일어난 일이다.** 잔여 = 프레임 **함수** 본문 안의 output-formal 호출뿐(함수는 `Expr::Call` 로 진입해 자기 소유의 call terminator 가 없다 — 진단이 이제 그 이유를 말한다).
+> **§4.5.275 후속(잔여 ①만 · ② 는 §4.5.277/278 로 해소 — 상세=ARCHIVE)**: output-formal 호출의 eval-order 수리가 **클래스/2-세그먼트 메서드 본문**을 해소하지 못해 `y = c.m(x) + f(x)` 는 정직한 loud — `call_effect` 가 그 본문에 `Inert` 를 증명할 수 있으면 correct-support(오라클 有: iverilog task 쌍둥이 `y=16 x=6`). 잔여-of-278 = 프레임 **함수** 본문 안의 output-formal 호출(함수는 `Expr::Call` 로 진입해 자기 소유의 call terminator 가 없다 — 진단이 그 이유를 말한다).
 
-> **§4.5.276 후속 2줄(2026-07-30)**: ①**루프 trip-count 증명이 리터럴만 받는다** — 식별자를 허용하려면 fold 가 net-aware 여야 하는데 `walk_scopes_key_shadowed` 의 계약이 `const_eval_in_scope` 도달 consumer 의 opt-in 을 금지한다(순서 의존 → 과거에 generate body 를 조용히 삭제). 그래서 `for (int j=0; j<NN; j++)`(localparam 경계)·`repeat (NN)` 은 정직한 loud. 승격 전제 = **순서 무관·AST-gathered 이름 집합**(§2 의 inner-NET shadow 와 동일한 선행조건이라 그 슬라이스에 묶는다). ②~~**`repeat` 카운트가 self-determined 폭으로 절단되지 않는다**~~ **RESOLVED(2026-08-19 · 클리어 순서 6번)** — 런타임 카운터가 count 를 자기 폭에서 평가한다(`8'd200+8'd100` → 44 = iverilog · 음수 count 0). ⚠️ 프레임 안에서는 거부가 이것을 가리고 있었으므로, 거부만 걷었으면 loud→silent 하강이었다. 옛 문구: — `repeat (8'd128 + 8'd128)` 가 vita 256 / iverilog 0(PRE 동일 = pre-existing silent-wrong). 오라클 有. §2 에 등재.
+> **§4.5.276 후속(잔여 ①만 · ② repeat self-width 절단은 §4.5.342 클리어 6번으로 해소)**: **루프 trip-count 증명이 리터럴만 받는다** — 식별자를 허용하려면 fold 가 net-aware 여야 하는데 `walk_scopes_key_shadowed` 의 계약이 `const_eval_in_scope` 도달 consumer 의 opt-in 을 금지한다(순서 의존 → 과거에 generate body 를 조용히 삭제). 그래서 `for (int j=0; j<NN; j++)`(localparam 경계)는 정직한 loud. 승격 전제 = 순서 무관 이름 집합 또는 §4.5.342-P1 식 span 논증.
 
 ## 0. correct-support 승격 큐 (2026-07-25 전수 재그라운딩 — **오너 지시로 최상위**)
 
@@ -34,19 +34,7 @@
 >
 > **순위 근거**: 전부 iverilog 오라클 有 = §1 우선순위 ②(additive·저위험). ~~T1은 한 가족이라 머신러리가 공유된다~~ — **§4.5.222 실측이 이 전제를 기각했다**(아래 T1 머리말). T2는 서로 독립적이라 개별 슬라이스.
 
-**~~T1 — string-array~~ 전부 RESOLVED** (§4.5.219 decl-init · §4.5.220 전제조건 dyn byte-select · §4.5.222 runtime index + `foreach` · §4.5.223 queue-of-string · §4.5.224 multi-dim · §4.5.225 frame-local · §4.5.226 hier read · **§4.5.227 잔여 11항목**). 상세=ARCHIVE.
-
-> **정정(기록 보존)**: 이 큐는 T1을 "한 가족·머신러리 공유"로 묶었으나 **틀린 전제였다** — 근인이 4갈래였고, 6·7은 **DYN 배열에서도 똑같이 loud**라 라우팅과 무관했다. 각각 전용 슬라이스로 갔다. 큐를 묶을 때 근인을 측정하지 않으면 이렇게 된다.
-
-**T1 잔여 = 없음 (§4.5.227·2026-07-27).** 위 표의 11항목 전부 correct-support. 근인은 4갈래였다 —
-**geometry**(1·2·3·4·5·7: 라우팅이 zero-based를 *가정*하던 것을 `flatten_word`/`lower_fixed_foreach_step`로
-*적용*으로 바꿈) · **bound**(6: 엔진 bound는 원소타입 무관, 선언 패턴이 `Queue(None)`만 받던 것) ·
-**hierarchical**(7·8·10: deferred read/write가 주소 규칙 하나를 공유하게) · **per-activation**(9: §4.5.171
-frame-local dyn 배열 fatal → 활성화별 stash/restore) · **SoA**(11: whole-element를 멤버별로 fan-out).
-상세=ARCHIVE §4.5.227.
-
-**T1에서 발굴한 잔여 4건 = 전부 RESOLVED (§4.5.228·round-20).** generate 스코프 라우팅 ·
-fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked 배열. 상세=ARCHIVE §4.5.228.
+**~~T1 — string-array~~ 전부 RESOLVED + 발굴 잔여 4건도 RESOLVED**(§4.5.219/220/222~228 · 근인은 "한 가족" 전제와 달리 4갈래[geometry·bound·hierarchical·per-activation/SoA] — 큐를 묶을 때 근인을 측정하지 않으면 이렇게 된다 · 상세=ARCHIVE).
 
 **의도적 loud(갭 아님)**: fixed 배열에 `new[]`(iverilog도 거부) · multi-dim partial 인덱스 `s[0]`(iverilog도 거부·조용한 오원소 방지) · cross-type SoA whole-element 복사(멤버 대응 보장 없음).
 
@@ -54,7 +42,7 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 **T2 — 독립 항목 (오라클 ✓·각자 전용 슬라이스)**
 
-8. ~~`real` const-fold 전면 미지원~~ **RESOLVED**(§4.5.232) — 실수 산술·alias·체인·정수 승격 전부 correct-support. **잔여(의도적 loud)**: 실수를 정수 문맥에(폭/`$clog2`/replication/정수 localparam) — **i64 twin 등록은 시도했다가 철회**(twin 이 정수 도메인에 real 식을 열어 generate 분기 오선택 등 5건 silent-wrong; §11.8.1 순서를 아는 site 가 `param_real_value` 하나뿐) · ~~generate 스코프/제어식의 real~~ **전부 RESOLVED**(§4.5.241/242). **잔여 없음** — case scrutinee 의 real 은 **iverilog 도 거부**하므로("Cannot evaluate genvar case expression") 갭이 아니라 **비목표**(§4.5.243 확인·`generate_case_real_nongoal.rs` 가 정수형 동작과 함께 핀) · `1.0/0.0` · 실수 미정의 연산자 · 실수 override.
+8. ~~`real` const-fold 전면 미지원~~ **RESOLVED**(§4.5.232 · generate 스코프/제어식은 §4.5.241/242 · 상세=ARCHIVE). **잔여(의도적 loud)**: 실수를 정수 문맥에(폭/`$clog2`/replication/정수 localparam — i64 twin 은 시도 후 철회: 5건 silent-wrong) · `1.0/0.0` · 실수 미정의 연산자 · 실수 override. generate case 의 real scrutinee 는 iverilog 도 거부라 **비목표**(§4.5.243 핀).
 9. ~~generate/interface 스코프 string decl-init~~ **RESOLVED**(§4.5.228) — 근인은 `allow_string_init` 플래그가 아니라 decl-time 쓰기가 모듈 스코프 pending 리스트로 새던 것. queue/dyn decl-init·generate 내 block-local 도 같이 열림.
 10. ~~sized-literal enum label → enum-method~~ **RESOLVED**(§4.5.234) — 신규 `const_lit_based` 를 enum 라벨만 opt-in. **잔여**: 파서 폴드는 **절단이 필요한 리터럴을 거부**한다(unsized `'h1FFFFFFFF`·mis-sized `4'hFF`) — elaborate 의 `parse_int_literal` 과 폭 규칙이 달라 값이 갈릴 수 있는 입력을 아예 안 받는 설계이며, 근본 해소는 §4.5.233 의 안 ①(literal 파싱 공유 크레이트 분리)뿐.
 11. ~~음수 range bound~~ **RESOLVED**(§4.5.228) — plain net·multi-packed inner(**후자는 silent 였다**)·배열 원소·VCD `$var` 범위까지. 잔여 = **PART select**(`x[1:-2]`, 정직한 loud·바운드 접기가 unsigned) · **포트/formal**(warn+clamp 유지·의도적 opt-in 비대칭).
@@ -87,14 +75,8 @@ fork-arm 재개(🔴) · 동시 활성화 dyn 배열 · 음수 하한 unpacked �
 
 ## 0-B. NEXT — 재개할 deep-defer follow-on
 
-> **round-18 리포트 8-가족 RESOLVED(§4.5.213·2026-07-24)** — 외부 리뷰어 round-18 리포트의 잔여 8-가족(A/G queue/array-of-non-packable-record + foreach·D automatic-block-local-init·E1 enum-method-on-formal·E2 struct-member-method + string-dyn-element·F1 output-formal-fn-in-loop-cond·F2 severity-in-frame-body·F3 wrapped-dyn-formal) + C1 const-repeat를 correct-support화(hand-IEEE/iverilog 차분). 상세=ARCHIVE §4.5.213.
->
-> **C1 part 2: fork-in-frame RESOLVED(§4.5.214·2026-07-24)** — `fork…join[_any|_none]`을 suspendable(framed) task 내부에서 실행하는 것이 "깊은 스케줄러 rework·blast radius=frame 서브시스템 전체"라 correct-or-loud LOUD 유지 중이었으나, 재조사 결과 **단일-스레드 스케줄러 + 기존 `stash_frame_windows`/`restore_frame_windows`가 이미 concurrent children을 parked parent로부터 격리**하고 있어 arm이 부모 frame-local을 안 건드리는 **Case A**(리포트 repro)는 기존 owned-window 모델로 즉시 동작함을 확인 — 신규 인프라가 필요한 건 arm이 부모 frame-local을 read/write하는 **Case B**뿐(interior-mutable arena `WindowSlot::Shared`, dyn_heap/class_heap과 동형). 3-stage(Case A·Case B `join`-all arena·Case B `join_any`/`join_none` refcount)로 전달 + final-review가 fork arm 내부 `return`의 silent frame-corruption 회귀를 잡아 즉시 loud화. format 23 불변. 상세=ARCHIVE §4.5.214.
->
-> **§0 NEXT 최상단** — ~~inner NET이 outer PARAM/enum-label을 shadow 못 함~~ **RESOLVED(§4.5.246, 회귀 수정 §4.5.247)**. 형제 항목(package 변수 clobber·block-local 잔여)은 §2에 남아 있다.
->
-> 그 외 재개할 deep-defer 항목 없음(round-18 리포트 8-가족 + C1 part1/2 全 RESOLVED). 남은 것은 소형 follow-on(아래) 또는 §1 우선순위 큐(loud→supported/OBS) 재개.
->
+> **재개할 deep-defer 항목 없음** — round-18 8-가족(§4.5.213) · fork-in-frame(§4.5.214) · inner-NET shadow(§4.5.246/247) 전부 RESOLVED(상세=ARCHIVE). 남은 것은 아래 소형 follow-on 또는 §5.2 큐.
+
 > 소형 follow-on(correct-or-loud loud 유지): void-cast of output-formal fn(`void'(getnext())`)·frame-formal array를 nested hier로 forward(OUTPUT/INOUT)·param/call leaf size-cast(`8'(P*a)`, §4.5.212 잔여)·**fork-in-frame 잔여(§4.5.214, 전부 Minor/safe)**: `fork_arms_self_contained`의 resolve-time 재-walk 중복 제거·공유 `enter_task_frame` arm에 load-bearing comment 보강·forking task를 호출하는 fork arm의 elaborate-time reject(현재는 F4004 tie-cap runtime guard로 안전하나 clean E3009가 더 명확)·same-instant zero-delay sibling visibility가 differential-미검증(iverilog 자체가 이 케이스서 스케줄링 특이).
 
 ## 0-C. 남은 대형 항목 3건 — 착수 판단표 (§4.5.244 실측)
