@@ -1413,7 +1413,22 @@ impl Elaborator<'_> {
                 })
             }
             None => {
-                let k_c = self.const_u32_expr(k.max(0) as u32, 32);
+                // `k.max(0)` for a NON-NEGATIVE k is `k` — byte-identical for every
+                // ascending net that predates the negative-left-bound support. A
+                // negative k (declared `[-8:-1]` ⇒ k = -1) needs its own sign: the
+                // wrapped `l − raw` is still the right internal bit, and clamping k
+                // to 0 would read `-raw`.
+                //
+                // DEFENSIVE: this arm needs an index `sealed_signed_index` declines,
+                // and no probe found one on such a net (a mutation forcing the old
+                // `k.max(0)` here survives the suite). Kept rather than removed
+                // because the alternative is not "declines" but "reads the wrong
+                // bit" — the guard costs nothing and its absence would be silent.
+                let k_c = if k < 0 {
+                    self.const_s32_expr(k)
+                } else {
+                    self.const_u32_expr(k as u32, 32)
+                };
                 self.push_expr(ir::Expr::Binary {
                     op: ir::BinOp::Sub,
                     lhs: k_c,
@@ -1438,6 +1453,14 @@ impl Elaborator<'_> {
             // sealed signed subtraction as the other two arms.
             let k = -(neg.unsigned_abs().min(i32::MAX as u64) as i64) as i32;
             return self.norm_sub_k(raw_off, k);
+        }
+        // The ASCENDING twin (`logic [-3:0]`, stored `[0:w-1]`): the declared RIGHT
+        // bound is internal bit 0 and indices grow leftwards, so `internal = l − raw`
+        // — the mirror of the arm above, against the DECLARED `l` rather than the
+        // normalized one the generic ascending arm below would use.
+        if let Some(&l) = self.net_decl_asc_lsb.get(&net) {
+            let k = l.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            return self.norm_k_sub(raw_off, k);
         }
         if msb >= lsb {
             if lsb == 0 {
@@ -1684,8 +1707,9 @@ impl Elaborator<'_> {
     /// direction check with a message about the wrong thing. Callers use this to say
     /// what is actually unsupported instead.
     pub(crate) fn base_has_neg_decl_lsb(&self, base: &ast::Expr) -> bool {
-        self.actual_root_net(base)
-            .is_some_and(|n| self.net_decl_neg_lsb.contains_key(&n))
+        self.actual_root_net(base).is_some_and(|n| {
+            self.net_decl_neg_lsb.contains_key(&n) || self.net_decl_asc_lsb.contains_key(&n)
+        })
     }
 
     /// The diagnostic for [`Self::base_has_neg_decl_lsb`], shared by the read and write

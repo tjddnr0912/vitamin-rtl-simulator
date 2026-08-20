@@ -112,11 +112,23 @@ impl Elaborator<'_> {
     /// `hi - idx` and never carries a negative `lo` (packed bounds clamp elsewhere).
     fn dim_coord(&mut self, i_eid: u32, lo: i64, size: u32, ascending: bool) -> u32 {
         if ascending {
-            // `ascending` is a PACKED-dim convention and `packed_extents` clamps a packed
-            // bound that folds negative, so `lo >= 0` on every reachable path. Assert
-            // rather than clamp silently: a future caller handing this an unpacked
-            // negative-`lo` dim should fail, not get a quietly wrong coordinate.
-            debug_assert!(lo >= 0, "ascending dim with a negative low bound: {lo}");
+            // The old comment here claimed `packed_extents` clamps a negative packed
+            // bound so `lo >= 0` on every reachable path, and asserted it. The
+            // invariant was ALREADY false — `logic [-3:0][1:0] x; x[-3]` panics on the
+            // pre-slice binary too — which means a RELEASE build compiled the assert
+            // out and read the `lo.max(0)` coordinate: internal bit 6 of a 4-bit dim,
+            // a silently wrong answer. The right coordinate is `(lo + size - 1) - idx`
+            // as a SIGNED subtraction, which this arena path does not build; until it
+            // does, say so in both build profiles. `$bits` and the whole value are
+            // exact either way (they never reach here).
+            if lo < 0 {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a bit/part select of a packed dimension declared with a negative \
+                     low bound (`logic [-3:0][1:0] x; x[-3]`) is not yet supported \
+                     — the whole value and `$bits` are exact",
+                );
+            }
             let hi_c = self.const_u32_expr((lo.max(0) as u32).saturating_add(size - 1), 32);
             return self.push_expr(ir::Expr::Binary {
                 op: ir::BinOp::Sub,
@@ -295,6 +307,20 @@ impl Elaborator<'_> {
                 ast::Dim::Size(e) => {
                     let v = self.const_eval_in_scope(e);
                     self.check_const_range_bound(e, v);
+                    // IEEE §7.4.2: `[size]` abbreviates `[0:size-1]`, and the size is a
+                    // POSITIVE constant. A zero or negative one used to be absorbed by
+                    // the `.max(1)` floor below and yield a silent one-word array —
+                    // `logic q[-3]` reported `$size` 1 at exit 0 while BOTH oracles
+                    // reject ("Dimension size must be greater than zero" / "Size of
+                    // range is '[-3]', must be positive integer"). Measured on both
+                    // sides of the boundary: 0 and every negative reject, 1 accepts.
+                    if v.is_some_and(|v| v <= 0) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "an unpacked array dimension size must be a POSITIVE constant \
+                             (IEEE §7.4.2) — `q[0]` / `q[-3]` declares no words",
+                        );
+                    }
                     (
                         0,
                         v.map_or(1, |v| {
@@ -312,16 +338,32 @@ impl Elaborator<'_> {
         out
     }
 
-    /// The DECLARED low bound of `range` when it folds NEGATIVE (`logic [3:-2]` → -2),
-    /// else `None`. Recorded per net by the declaration site so bit/part selects can
-    /// normalize against the real bound; see [`Self::range_to_dims_opt`].
+    /// The DECLARED low bound of `range` when it folds NEGATIVE on a DESCENDING range
+    /// (`logic [3:-2]` → -2), else `None`. Recorded per net by the declaration site so
+    /// bit/part selects can normalize against the real bound; see
+    /// [`Self::range_to_dims_opt`]. The ascending twin is [`Self::declared_asc_lsb`].
     pub(crate) fn declared_neg_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
         let r = range?;
         let m = self.const_eval_in_scope(&r.msb)?;
         let l = self.const_eval_in_scope(&r.lsb)?;
-        // ONLY the `[hi:neg]` shape. `msb < 0` with `lsb >= 0` is the degenerate
-        // `[W-1:0]`-with-W==0 parameter underflow, which keeps its graceful width-1.
         (l < 0 && m >= l).then_some(l)
+    }
+
+    /// The DECLARED right bound of `range` when it is ASCENDING (`m < l`) with a
+    /// NEGATIVE left bound (`logic [-3:0]` → 0, `logic [-8:-1]` → -1), else `None`.
+    ///
+    /// This shape used to be read as "the degenerate `[W-1:0]` with `W == 0`" and
+    /// clamped to width 1 under a warning whose text (*"param value 0?"*) was not
+    /// even true of the literal spellings that reach it. IEEE §7.4.2 sizes a vector
+    /// `|msb-lsb|+1` whatever the signs, and both oracles do: `[-56:0]` is 57 bits,
+    /// `[-1:0]` is 2 — including for the `W == 0` idiom this used to blame. Every
+    /// cell in this shape has width ≥ 2, so the old clamp was never accidentally
+    /// right about one.
+    pub(crate) fn declared_asc_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
+        let r = range?;
+        let m = self.const_eval_in_scope(&r.msb)?;
+        let l = self.const_eval_in_scope(&r.lsb)?;
+        (m < l && m < 0).then_some(l)
     }
 
     pub(crate) fn range_to_dims(
@@ -394,33 +436,43 @@ impl Elaborator<'_> {
                 // NOT a silent width-1.
                 self.check_const_range_bound(&r.msb, msb_v);
                 self.check_const_range_bound(&r.lsb, lsb_v);
-                // A bound that folds NEGATIVE clamps to width 1 + warn (NOT a fatal
-                // MAX_NET_WIDTH explosion). Two shapes fold negative:
-                //  - only msb < 0, lsb ≥ 0 → the degenerate `[W-1:0]`-with-W==0
-                //    PARAMETER underflow (v3_12 keeps this graceful, non-fatal).
-                //  - lsb < 0 → a negative LOW bound (`[3:-2]`, `[-1:-8]`, or a
-                //    param low bound that folded negative like `[7:W-3]` W==1).
-                //    iverilog sizes it |msb-lsb|+1; vita cannot yet (the u32 dbase/
-                //    offset and frozen `NetVar.msb/lsb` cannot hold a negative base).
-                //    Loud→supported gap (ROADMAP §3) — the packed-struct-member path
-                //    already does whole-correct + sub-select-loud (struct_field_
-                //    select.rs); the plain-net path should mirror it.
-                // The old message misdiagnosed the literal case as "parameterized";
-                // keep the diagnostic honest for both shapes.
-                if lsb_v.is_some_and(|v| v < 0) {
-                    // OPT-IN (see `allow_neg_lsb`): size the net `|msb-lsb|+1` as IEEE
-                    // §7.4.2 / iverilog do and store the range NORMALIZED to `[w-1:0]`
-                    // (`NetVar.msb`/`lsb` are frozen `u32` and cannot hold -2). The real
-                    // low bound rides `net_decl_neg_lsb`, which `norm_offset_for_net`
-                    // consults so `x[3]` on a `[3:-2]` addresses internal bit 5.
-                    if allow_neg_lsb {
-                        if let (Some(m), Some(l)) = (msb_v, lsb_v) {
-                            if m >= l {
-                                let w = ((m - l) as u64 + 1).min(MAX_NET_WIDTH) as u32;
-                                return (w, w.saturating_sub(1), 0, sgn);
+                // A bound that folds NEGATIVE. IEEE §7.4.2 sizes the vector
+                // `|msb-lsb|+1` whatever the signs of the two bounds are, and both
+                // oracles do — the direction of the range is what decides which bound
+                // is internal bit 0, not which one is negative.
+                //
+                // OPT-IN (see `allow_neg_lsb`): `NetVar.msb`/`lsb` are frozen `u32`
+                // and cannot hold a negative base, so such a net is STORED normalized
+                // — `[w-1:0]` descending, `[0:w-1]` ascending — and the declared bound
+                // rides the matching side map, which `norm_offset_for_net` consults so
+                // `x[3]` on a `[3:-2]` reads internal bit 5 and `x[-3]` on a `[-3:0]`
+                // reads internal bit 3. Width and side-map record turn on together;
+                // the sites that create nets without one keep the clamp below.
+                if allow_neg_lsb {
+                    if let (Some(m), Some(l)) = (msb_v, lsb_v) {
+                        if m < 0 || l < 0 {
+                            let w64 = m.abs_diff(l) + 1;
+                            if w64 > MAX_NET_WIDTH {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "declared net width {w64} exceeds the v1 cap ({MAX_NET_WIDTH})"
+                                    ),
+                                );
+                                return (1, 0, 0, sgn);
                             }
+                            let w = w64 as u32;
+                            return if m >= l {
+                                (w, w.saturating_sub(1), 0, sgn)
+                            } else {
+                                (w, 0, w.saturating_sub(1), sgn)
+                            };
                         }
                     }
+                }
+                // Not opted in: clamp to width 1 + warn (NOT a fatal MAX_NET_WIDTH
+                // explosion), with a message that names the shape it actually saw.
+                if lsb_v.is_some_and(|v| v < 0) {
                     self.warn(
                         "negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width 1",
                     );
@@ -428,7 +480,7 @@ impl Elaborator<'_> {
                 }
                 if msb_v.is_some_and(|v| v < 0) {
                     self.warn(
-                        "parameterized range underflowed (param value 0?); net clamped to width 1",
+                        "negative packed-range left bound (e.g. `[-3:0]`) is not yet supported here; net clamped to width 1",
                     );
                     return (1, 0, 0, sgn);
                 }

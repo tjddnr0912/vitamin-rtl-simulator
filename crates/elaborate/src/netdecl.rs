@@ -149,9 +149,28 @@ impl Elaborator<'_> {
             // `range_to_dims` caller keeps the warn-and-clamp: a port/formal/class-property
             // with a negative bound stays LOUD rather than becoming a wide net whose
             // selects nobody normalizes.
-            let neg_lsb = self.declared_neg_lsb(d.range.as_ref());
-            let (mut width, mut msb, lsb, signed) =
-                self.range_to_dims_opt(d.kind, d.range.as_ref(), d.signed, neg_lsb.is_some());
+            // …and only for a net that reaches the RECORD 550 lines below. A
+            // dyn/queue/assoc element net is built on an early-`continue` path that
+            // never does, so opting it in makes the net WIDE with nobody normalizing
+            // its selects: `logic [-3:0] q[$]` read `q[0][-3]` as internal bit 6 and
+            // printed a silent `x`, where the clamp at least warned. Adversarial
+            // review, and the exact ladder descent this opt-in exists to prevent.
+            let dyn_storage = decl
+                .unpacked
+                .iter()
+                .any(|x| matches!(x, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)));
+            let neg_lsb = self
+                .declared_neg_lsb(d.range.as_ref())
+                .filter(|_| !dyn_storage);
+            let asc_lsb = self
+                .declared_asc_lsb(d.range.as_ref())
+                .filter(|_| !dyn_storage);
+            let (mut width, mut msb, lsb, signed) = self.range_to_dims_opt(
+                d.kind,
+                d.range.as_ref(),
+                d.signed,
+                neg_lsb.is_some() || asc_lsb.is_some(),
+            );
             if !d.packed.is_empty() {
                 width = packed_ext
                     .iter()
@@ -697,10 +716,16 @@ impl Elaborator<'_> {
             // was sized `|msb-lsb|+1` and stored normalized as `[w-1:0]`, so this is what
             // lets a bit/part select address the declared numbering. Recorded post-add for
             // the same reason (a duplicate-decl skip must not mis-key).
-            if let Some(l) = neg_lsb {
+            if let Some(l) = neg_lsb.or(asc_lsb) {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
-                    self.net_decl_neg_lsb.insert(id, l);
+                    // Direction picks the map: the two normalizations are mirror
+                    // images (`i - l` vs `l - i`), so one map cannot serve both.
+                    if neg_lsb.is_some() {
+                        self.net_decl_neg_lsb.insert(id, l);
+                    } else {
+                        self.net_decl_asc_lsb.insert(id, l);
+                    }
                     // …and the full declared pair, for the VCD `$var` label (the stored
                     // range is normalized, so without this a waveform viewer numbers the
                     // bits `[5:0]` where iverilog numbers them `[3:-2]`).

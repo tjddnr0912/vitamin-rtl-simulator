@@ -239,10 +239,18 @@ struct Elaborator<'s> {
     /// width and this record must be turned on together, or the net is wide while its
     /// selects address the wrong bits.
     net_decl_neg_lsb: BTreeMap<u32, i64>,
+    /// The ASCENDING twin: nets declared `[m:l]` with `m < l` and `m` NEGATIVE
+    /// (`logic [-3:0] x`, and the `[W-1:0]`-with-`W==0` spelling of it) → the
+    /// declared RIGHT bound `l`. Stored normalized as `[0:w-1]`, so this is what
+    /// recovers the numbering: the right bound is internal bit 0 and indices grow
+    /// LEFTWARDS, i.e. `internal = l - i` — the mirror of the descending map's
+    /// `internal = i - l`. Disjoint from `net_decl_neg_lsb` by direction.
+    net_decl_asc_lsb: BTreeMap<u32, i64>,
     /// The DECLARED `(msb, lsb)` of those same nets, exported as the `net_decl_ranges`
     /// sidecar so the VCD `$var` line can print `x [3:-2]` instead of the normalized
-    /// `[5:0]`. Same keys as `net_decl_neg_lsb`; kept separate because that one drives
-    /// select normalization (needs only the low bound) and this one drives labelling.
+    /// `[5:0]`. Same keys as `net_decl_neg_lsb` and `net_decl_asc_lsb` together; kept
+    /// separate because those drive select normalization (each needs only one bound)
+    /// and this one drives labelling.
     net_decl_range: BTreeMap<u32, (i64, i64)>,
     /// StmtIds of `$fmonitor`/`$fstrobe` calls — the FILE-directed twins of
     /// `$monitor`/`$strobe`, which share their frozen `SysTaskId`. The engine reads

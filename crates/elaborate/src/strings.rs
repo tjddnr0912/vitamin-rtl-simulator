@@ -779,7 +779,18 @@ impl Elaborator<'_> {
                     );
                     return true;
                 };
-                let n = n.max(0) as usize; // a 0/negative count ⇒ empty string
+                // §11.4.12.2 reaches this arm too, and it is the one the generic guard
+                // below cannot see: a string VARIABLE operand returns from here. A
+                // negative count used to render an empty string at exit 0 while BOTH
+                // oracles reject it. ZERO keeps its own meaning (legal as a direct
+                // concatenation operand, §11.4.12.1).
+                if n < 0 {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a replication count may not be negative (IEEE §11.4.12.2)",
+                    );
+                }
+                let n = n.max(0) as usize;
                 let mut v = Vec::with_capacity(n.saturating_mul(value.len()));
                 for _ in 0..n {
                     v.extend(value.iter());

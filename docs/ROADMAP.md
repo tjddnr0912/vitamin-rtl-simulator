@@ -126,12 +126,13 @@
 > **⚠️ 이 절은 주제별 묶음이지 착수 순서가 아니다.** 착수 순서는 바로 아래 표를 따른다 —
 > 위에서부터 읽으면 **선행조건(트리 전역 AST self-폭 패스)에 막힌 캐스트 뭉치**로 먼저 간다.
 >
-> **다음 착수 순서 (2026-08-20 갱신 · 옛 1~3 은 §4.5.343, 그 다음 1 과 2의 앞머리는 §4.5.345 로 RESOLVED)**
+> **다음 착수 순서 (2026-08-20 갱신 · 옛 1~3 은 §4.5.343 · 그 다음 1·2 앞머리는 §4.5.345 · 런타임 mixed-real 은 §4.5.349 · 음수 상수 소비자는 §4.5.350 으로 RESOLVED)**
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
-> | 2 | **음수 상수가 소비자에서 조용히 먹힌다**(§4.5.346 적대 리뷰 실측·pre-existing·PRE==POST) | ⓐ 음수 replication count `{W{1'b1}}`(W=−56)가 **진단 없이 255** — iverilog 는 *"Concatenation repeat may not be negative"* 로 거부 ⓑ 음수 range bound `logic [P:0]`(P=−56)가 **W3056 로 1비트 클램프**(iverilog 57)이고 그 경고 문구(*"param value 0?"*)가 **사실과 다르다**. 둘 다 평범한 철자(`localparam W = -56`)로 재현 |
+> | **1** | **net 선언 초기화의 fill 리터럴이 1비트로 sizing 된다**(§4.5.350 census 발굴·오라클 ✓ 두 오라클 일치·pre-existing·PRE==POST) | `wire [7:0] a = '1;` 이 vita `00000001` / iverilog·verilator `11111111`. ⭐ **자리가 이미 하나로 좁혀져 있다** — 같은 값을 `assign a = '1;` 으로 주면 정확하고 `reg [7:0] b = '1;` 도 정확하다. 즉 **net 선언 초기화 경로만** 타깃 폭을 fill 에 안 넘긴다. `wire [7:0] c = 1 ? '1 : '0;` 도 같은 자리 |
+> | 2 | **mixed-real 잔여 셋**(§4.5.349 가 남긴 것·오라클 ✓) | framed `automatic` real 함수를 **직접 피연산자**로 · package/class 함수 · **단순 대입 경계**(`real r; r = (-s);` 두 오라클 −8.0 / vita 8.0 — 아직 문맥-결정) |
+> | 3 | **오름차순 음수 bound 의 남은 스코프 집합**(§4.5.350 적대 리뷰 실측·PRE==POST) | 모듈 스코프 net·인터페이스 멤버·block-local·`logic [-3:0] m[0:1]` 은 정확한데 **포트·서브프로그램 지역·클래스 속성**은 W3056 클램프 + exit 0 = silent-wrong(두 오라클 4비트). 자리는 `range_to_dims_opt` 의 opt-in 이 그 사이트들에 안 닿는 것 하나 |
 >
 > ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
 > (2026-08-20 · 상세=ARCHIVE): 후자는 **§4.5.345 가 `const_decl_wsign` 의 multi-packed 폭을 채우면서
@@ -210,6 +211,22 @@
 > 없음). census 가 *"셋을 함께 연다"* 도 정정했다: `repeat (LP)` 는 **이미 열려 있었고**
 > (`const_bound_u32` 가 `const_eval_in_scope` 를 쓴다) 남은 것은 §4.5.276 후속 ①(`for` trip-count
 > 식별자) 하나뿐이다. 형제 항목(package 변수 clobber · block-local 잔여 2형)은 §2 에 그대로 남아 있다.
+
+- **🔴 net 선언 초기화의 fill 리터럴이 1비트로 sizing 된다**(§4.5.350 census 발굴 · pre-existing · PRE==POST ·
+  **두 오라클 일치**). `wire [7:0] a = '1;` 이 vita `00000001` / iverilog·verilator `11111111`, `wire [7:0] c = 1 ? '1 : '0;`
+  도 같다. **자리가 이미 하나**다 — `assign a = '1;`(별도 문장)과 `reg [7:0] b = '1;`(변수 초기화)은 **정확**하므로
+  갈리는 것은 net 선언 초기화 경로가 타깃 폭을 fill 에 안 넘기는 것뿐. `'0` 은 우연히 맞고(0 확장이 0) `'x` 는
+  오라클이 갈린다(iverilog `xxxxxxxx` / verilator `00000000` — vita `0000000x`). **위 표 1번.**
+
+- **🔴 오름차순 음수 bound 가 포트·서브프로그램 지역·클래스 속성에서만 클램프된다**(§4.5.350 적대 리뷰 실측 ·
+  PRE==POST). `module sub(input logic [-3:0] i)` · `automatic function` 의 지역 · `class C; logic [-3:0] q;` 가 W3056 +
+  exit 0 로 **틀린 값**(두 오라클 4비트). 모듈 스코프 net·인터페이스 멤버·block-local·`logic [-3:0] m[0:1]` 은
+  §4.5.350 이 정확하게 만들었으므로 남은 것은 `range_to_dims_opt` 의 opt-in 이 그 사이트들에 안 닿는 것. **위 표 3번.**
+
+- **🟡 packed 음수 low bound 를 가진 dim 의 비트 선택은 좌표를 만들지 못한다**(§4.5.350 적대 2렌즈 수렴 ·
+  PRE 도 같은 자리에서 패닉했다). `logic [-3:0][1:0] x; x[-3]` — 옳은 좌표는 `(lo+size-1) - idx` 의 **부호 있는**
+  뺄셈인데 `dim_coord` 의 오름차순 arm 이 그것을 안 짓는다. §4.5.350 이 거짓 불변식(`debug_assert`)을 **두 빌드
+  모두 loud** 로 바꿔 놨다(release 는 그전까지 `lo.max(0)` 로 **조용히 틀린 비트**를 읽었다). 전체 값과 `$bits` 는 정확.
 
 - **파라미터와 넷을 같은 이름으로 선언하면 vita 만 받는다**(pre-existing · PRE==POST · **두 오라클 모두 거부** ·
   P1 슬라이스가 발굴). `localparam N = 7; logic [3:0] N;` 를 iverilog 는 *"'N' has already been declared
@@ -336,6 +353,15 @@
 - **`#(.S("str"))` 가 적용되기 전에 W3056 을 한 번 낸다**(pre-existing·값은 정답): 부모 쪽 숫자 fold 가 먼저 실패해 "override 는 상수가 아니다; 기본값 유지" 를 찍고, 그 다음 string 채널이 정상 적용한다. 경고가 사실과 반대라 거슬리지만 값은 iverilog 와 일치한다.
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
+
+> **§4.5.350 follow-on 3건**(전부 적대 2렌즈 실측 · **verilator 오라클 ✓** · iverilog 는 셋 다 거부해 부분 오라클):
+> ① **dyn/queue/assoc 원소의 음수 packed bound** — `logic [-3:0] q[$]` 는 W3056 클램프 유지(그 원소 net 은
+> `elaborate_netvar_decl_inner` 의 early-`continue` 경로에서 만들어져 선언 사이드맵에 안 닿는다 · verilator
+> `q[0][-3]`=1). ② **음수 bound net 의 PART select** — 읽기가 과잉 loud 다: 인덱스형 `q[-3 +: 2]`·`q[-1 -: 2]` 는
+> **이미 정확**하고(오라클 일치) 막힌 것은 `[msb:lsb]` 형태뿐인데 그 바운드 fold 가 unsigned 라서다 —
+> §4.5.350 이 만든 `const_bound_signed` 가 그 도구다. 쓰기는 비대칭(`x[-3:-2] = …` 은 조용히 **정확**하고
+> `x[-1:0] = …` 은 *"out of order"* 라는 **사실과 다른 방향 진단**으로 loud). ③ **packed 음수 dim 의 비트 선택**
+> = §2 의 `dim_coord` 항목과 같은 뿌리.
 
 > **✅ 외부 리포트 aes_top 2판 — 16항목 중 15 해결 (2026-08-07 · §4.5.313).** unpacked
 > 배열 포트 · 선택적 import 의 패키지-스코프 해석 · `pkg::f()` 제약 완화 · 콤마 import ·

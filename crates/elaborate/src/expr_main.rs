@@ -822,6 +822,9 @@ impl Elaborator<'_> {
                 // Take (and clear) the concat-operand permission BEFORE lowering
                 // anything below — see the field doc: it must not leak inward.
                 let zero_ok = std::mem::take(&mut self.repl_zero_ok);
+                // The count AST, kept because `count` is shadowed below by its
+                // LOWERED id and the negative-count rule reads the AST.
+                let e_count: &ast::Expr = count;
                 // G1 (IEEE §6.16): a string replicate `{N{str}}` in any context
                 // flattens to N copies of the value list, then lowers through the
                 // shared `$sformatf("%s…")` desugar (mirrors `string_concat_special`).
@@ -833,7 +836,18 @@ impl Elaborator<'_> {
                         );
                         return self.placeholder_expr();
                     };
-                    let n = n.max(0) as usize; // a 0/negative count ⇒ empty string
+                    // §11.4.12.2 reaches this arm too, and it is the one the generic guard
+                    // below cannot see: a string VARIABLE operand returns from here. A
+                    // negative count used to render an empty string at exit 0 while BOTH
+                    // oracles reject it. ZERO keeps its own meaning (legal as a direct
+                    // concatenation operand, §11.4.12.1).
+                    if n < 0 {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a replication count may not be negative (IEEE §11.4.12.2)",
+                        );
+                    }
+                    let n = n.max(0) as usize;
                     let mut flat: Vec<&ast::Expr> =
                         Vec::with_capacity(n.saturating_mul(value.len()));
                     for _ in 0..n {
@@ -933,6 +947,35 @@ impl Elaborator<'_> {
                     // prove one (and changes nothing otherwise).
                     self.lower_const_width_expr(count)
                 };
+                // §11.4.12.2: the count is a NON-NEGATIVE constant expression, and
+                // BOTH oracles reject a negative one ("Concatenation repeat may not
+                // be negative" / "Replication value of < 0 … not legal"). vita used
+                // to hand the engine the two's-complement bit pattern instead:
+                // `{W{1'b1}}` with `W = -56` replicated 4294967240 times and the
+                // result was truncated to the target, printing 255 at exit 0.
+                // Decided on the AST, self-determined. NOT on the lowered node: its
+                // u32 read SATURATES an `Add`/`Sub` to 0, so `{(2-3){…}}` and
+                // `{(W-4){…}}` reached the zero check below and it reported "a
+                // replication count of zero" about a count of -1. And NOT in the
+                // width-unlimited const domain: `{(4'd0-4'd1){1'b1}}` is 15
+                // replications in both oracles while `{(4'sd0-4'sd1){1'b1}}` is
+                // rejected — same bit pattern, and the unlimited fold calls both of
+                // them -1, so reading the sign there would false-reject a correct
+                // design. The sign only exists at the count's own width, which is
+                // exactly what `const_bound_signed` walks.
+                //
+                // A second reading off the lowered `Const` was tried and removed: a
+                // mutation battery could not find a cell it answered that this one
+                // did not, including the shape it was added for (a count naming an
+                // inlined function's formal — the substitution rewrites the AST, so
+                // this walk sees the literal).
+                if self.const_bound_signed(e_count).is_some_and(|n| n < 0) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a replication count may not be negative (IEEE §11.4.12.2)",
+                    );
+                    return self.placeholder_expr();
+                }
                 // §11.4.12.1: a zero replication count is legal ONLY as a direct
                 // concatenation operand (where it contributes nothing — that path
                 // already works). Anywhere else it is an error, not a silent

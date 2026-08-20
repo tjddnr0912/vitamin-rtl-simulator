@@ -2,8 +2,8 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-08-20)**: format_version **29** · **5,654 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
-> - **최신 완료**: **§4.5.345**(§2 상수함수 해석기의 선언 바인딩 — 미fold 초기화를 미바인딩으로 · 동명 param 폴백 금지 · 자기참조 크래시→loud · multi-packed 폭=차원의 곱 · concat/repl/SIZE캐스트를 모듈 스코프와 **같은** carry-free folder 로 · ⚠️ 기록된 메커니즘이 오진이라 첫 판이 회귀였고 PRE-3-way 가 잡았다) · 직전 = **§4.5.344**(bound/count/index lane) · **§4.5.343**(자기결정 위치 셋). 그 이전 전부 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스(한 줄씩) — 이 줄에 체인을 쌓지 않는다.
+> - **기준(2026-08-20)**: format_version **29** · **5,679 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
+> - **최신 완료**: **§4.5.350**(§2 음수 상수를 먹는 소비자 셋 — replication count·오름차순 음수 range bound·unpacked 배열 크기 · ⭐ 부호는 **자기결정 폭에서만** 존재한다 · 적대 리뷰 BLOCKING = dyn/queue 원소가 넓은 폭만 받고 사이드맵을 건너뛰던 하강) · 직전 = **§4.5.349**(런타임 mixed-real 변환 경계) · **§4.5.348**(지수의 부호). 그 이전 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스.
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.
@@ -25,7 +25,7 @@
 
 | # | 항목 | 근거/오라클 |
 |---|---|---|
-| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말: ① module-scope `$clog2` 무제한 fold ② 캐스트 SIZE 식 ③ real `**` 지수 — **셋이 한 뿌리** | iverilog 라이브 차분 |
+| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말의 「다음 착수 순서」(2026-08-20 현재: ① net 선언 초기화의 fill 리터럴 폭 ② mixed-real 잔여 셋 ③ 오름차순 음수 bound 의 남은 스코프 집합) | iverilog + verilator 라이브 차분 |
 | **2** | **§3 loud→supported** — ✅ **3판 클리어 라운드 완료**(1~10+P1 · ARCHIVE §4.5.342). 다음 후보 = 라운드가 남긴 잔여(§3.1(c) `always_comb` decl-init · §3.3 part-select fold · §3.7 output/inout · §3.11 은 선행조건 ⓐ/ⓑ 로 재편성 — ⭐ⓑ codegen 쪽이 사다리를 안 건드린다) + §3 소형 큐 | iverilog·verilator 실측 ✓ |
 | **2b** | **§0 승격 큐 T2 잔여 2건** — `real` const-fold(= `int'(<real param>)` 바운드의 선행) · sized-literal enum label | iverilog ✓ 2/2 |
 | 3 | ~~**§2 DEEP** — inner NET vs outer PARAM shadow~~ ✅ **P1 로 해소**(2026-08-18 · ARCHIVE §4.5.342 — 답은 name-set 이 아니라 선언 블록의 SPAN · `repeat (LP)` 는 이미 열려 있었다) — 남은 형제 = §4.5.276 후속 ①(`for` trip-count 식별자) · package 변수 clobber | iverilog ✓ |
@@ -42,7 +42,7 @@
 | 분류 | 항목 수 | 내용 | 정본 |
 |---|---:|---|---|
 | correct-support 승격 큐 | 6 | **T1 전부 완료** · T2 독립 4 · T3 전제조건 2 | ROADMAP §0 |
-| 🔴 silent-wrong 잔여 | 37 | **오라클-有 6**(part-select 바운드·replication count·package real·구조적 지연·real→int formal·block-local package clobber — ~~inner-NET shadow~~ 는 P1 해소) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
+| 🔴 silent-wrong 잔여 | 38 | **오라클-有 7**(part-select 바운드·**net 선언 초기화 fill 폭**·**오름차순 음수 bound 의 포트/서브프로그램/클래스 스코프**·package real·구조적 지연·real→int formal·block-local package clobber — ~~replication count~~ 는 §4.5.350 해소) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
 | honest-loud 잔여 | 35 + **round-28 4건** | string/heap·함수/formal·소형 큐·EXT2 3건·deep 저우선(VCD fidelity·X→real·x/z-fill param) + **§4.5.284 follow-on 4**(`specify` 블록·이벤트 컨트롤 계층참조 실지원·cross-process `disable` no-op·E3010/E3009 file:line 일관성 — 전부 실사용 ASIC 사이트, 오라클 ✓) | ROADMAP §3 |
 | SVA/검증 잔여 | 6 | empty-match 융합·N2c full·prop-ref skew 고급형·QUAD default-flip·N4 clocking 잔여·class down-cast | ROADMAP §4 |
 | perf/하드닝 | 5 + **T0~T4** | ⭐ **T0~T4 = 측정된 10.7× 청구**(doc-21 §7.3 · VM 커버리지 0% · 프레임 호출 650 ns vs iverilog 375 ns · 함수 지역 배열 원소 쓰기 514 ns vs 24 ns). 기존 5건은 전부 보류 판정(SVA-QUAD flip·FMT-CACHE b·GEN-3X-STR a·QUEUE-MID + **COMB-DEPTH**: 깊이 비용은 iverilog 도 같음이 실측 = vita 결함 아님. levelize 승격은 프로세스 실행 순서 이동을 감수해야 하고 이득 상한 ≈D/2) | ROADMAP §5 |
@@ -59,4 +59,4 @@
 
 ## E. 비계획 — 영구 비목표 (gap 아님)
 
-- **DEFPARAM**(deprecated) · **IMPLICIT-NET**(정책=E3010) · **OOS**(synthesis·waveform GUI·UPF/SDF/DPI-C·shortreal·trireg·UVM·unique/priority 다중-match).> - **최신 완료**: **§4.5.349**(§2 런타임 mixed-real 변환 경계 — real-ness 규칙을 sim-ir 로 리프트해 두 크레이트가 공유 · 리뷰 BLOCKING 이 "PRE 에서 상쇄되던 두 오차" 를 드러냈다) · 직전 = **§4.5.348**( 지수의 부호) · **§4.5.347**(top-level 자기결정 위치). 그 이전 전부 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스(한 줄씩) — 이 줄에 체인을 쌓지 않는다.
+- **DEFPARAM**(deprecated) · **IMPLICIT-NET**(정책=E3010) · **OOS**(synthesis·waveform GUI·UPF/SDF/DPI-C·shortreal·trireg·UVM·unique/priority 다중-match).

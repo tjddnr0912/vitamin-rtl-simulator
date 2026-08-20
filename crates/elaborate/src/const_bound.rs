@@ -71,6 +71,28 @@ impl Elaborator<'_> {
         u32::try_from(self.const_int_selfdet(e)?).ok()
     }
 
+    /// The SIGNED self-determined value of a bound / count expression, under exactly
+    /// the admission [`Self::const_bound_u32`] gives its own tier-3 — `None` when the
+    /// walk would degrade to the width-unlimited domain.
+    ///
+    /// The u32 twin cannot answer "is this negative?": it declines on a negative and
+    /// its consumers then read the two's-complement bit pattern (a replication count
+    /// of `-56` became 4294967240). Answering needs the value's SIGN, and the sign
+    /// only exists at the expression's own width — `4'd0 - 4'd1` is 15 (both oracles
+    /// replicate 15 times) while `4'sd0 - 4'sd1` is -1 (both oracles reject), and the
+    /// width-unlimited fold calls BOTH of them -1. So: same guards, signed result.
+    pub(crate) fn const_bound_signed(&self, e: &ast::Expr) -> Option<i64> {
+        // A fill literal is one bit in a self-determined position and never negative;
+        // it also has no `const_self_width`, so the guard below would decline anyway.
+        if fill_literal_ast(e).is_some() {
+            return None;
+        }
+        if self.ast_mentions_substituted_name(e) || !self.ast_selfwidths_all_known(e) {
+            return None;
+        }
+        self.const_int_selfdet(e)
+    }
+
     /// Does EVERY sub-expression the const domain descends into have a known,
     /// non-zero self width? This is what makes the self-determined walk mask at
     /// every step instead of degrading to the unlimited domain somewhere inside

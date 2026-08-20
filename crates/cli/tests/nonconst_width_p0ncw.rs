@@ -196,12 +196,11 @@ fn parameter_unpacked_dim_still_folds() {
     );
 }
 
-// ── DIAGNOSTIC HONESTY: a LITERAL negative low bound `[3:-2]` is a distinct
-//    (not-yet-supported) shape from the `[W-1:0]`-with-W==0 parameter underflow.
-//    Full support is a loud→supported gap (ROADMAP §3); the value pinned here is
-//    the HONEST diagnostic — behaviour is unchanged (both shapes warn + clamp to
-//    width 1). The old unified guard misdiagnosed the literal case as
-//    "parameterized range underflowed (param value 0?)".
+// ── DIAGNOSTIC HONESTY: both negative-bound shapes are SUPPORTED now — `[3:-2]`
+//    since §4.5.228 and the ascending `[-1:0]` / `[-3:1]` family since §4.5.350.
+//    What is pinned below is that neither carries a diagnostic about a phenomenon
+//    that does not exist: the old unified guard called the literal case
+//    "parameterized range underflowed (param value 0?)" with no parameter in sight.
 
 fn run_stderr(src: &str) -> (String, Option<i32>) {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -261,20 +260,25 @@ fn a_part_select_of_a_negative_low_bound_net_is_loud_for_the_right_reason() {
 }
 
 #[test]
-fn param_zero_width_underflow_keeps_its_message() {
-    // The degenerate `[W-1:0]` with W==0 (only the HIGH bound folds negative, low
-    // bound stays 0) is the parameter-underflow shape — it must keep its own
-    // message and stay graceful (non-fatal width-1; cf. elaborate v3_12).
+fn param_zero_width_range_is_sized_not_diagnosed() {
+    // UPDATED (was `param_zero_width_underflow_keeps_its_message`). The degenerate
+    // `[W-1:0]` with W==0 is `[-1:0]` — an ASCENDING range with a negative left
+    // bound, the mirror of `[3:-2]`. Both oracles size it 2 bits and say nothing,
+    // so the old "parameterized range underflowed (param value 0?)" text was a
+    // diagnostic about a phenomenon that does not exist; the literal `logic [-1:0]`
+    // reaches the same branch and no parameter is involved at all.
     let (err, _c) = run_stderr(
         "module t; parameter W=0; logic [W-1:0] x;\n\
          initial $display(\"B %0d\", $bits(x)); endmodule\n",
     );
     assert!(
-        err.contains("parameterized range underflowed"),
-        "parameter underflow must keep its distinct message:\n{err}"
+        !err.contains("parameterized range underflowed"),
+        "the false diagnostic must be gone:\n{err}"
     );
+    let (out, _) = run("module t; parameter W=0; logic [W-1:0] x;\n\
+         initial $display(\"B %0d\", $bits(x)); endmodule\n");
     assert!(
-        !err.contains("negative packed-range low bound"),
-        "param underflow (lsb=0) is not the literal-negative shape:\n{err}"
+        out.contains("B 2"),
+        "iverilog and verilator both print 2:\n{out}"
     );
 }

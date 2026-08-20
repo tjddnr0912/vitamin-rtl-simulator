@@ -113,14 +113,20 @@ fn a_param_folded_negative_low_bound() {
     assert!(o.contains("1111111111 w=10"), "{o}"); // iverilog: 10 bits
 }
 
-// ── PRESERVED: the degenerate `[W-1:0]` with W == 0 is a parameter UNDERFLOW, not a
-// declared negative low bound. It keeps its own message and its graceful width-1.
+// ── UPDATED (was `the_param_zero_width_underflow_is_untouched`): the degenerate
+// `[W-1:0]` with W == 0 is `[-1:0]`, an ASCENDING range with a negative left bound —
+// the mirror of `[3:-2]`, not a separate "underflow" phenomenon. IEEE §7.4.2 sizes it
+// |msb-lsb|+1 = 2 and BOTH oracles do (iverilog 13 and verilator 5.050 print `w=2`).
+// The old expectation (warn "parameterized range underflowed (param value 0?)" +
+// clamp to width 1) encoded vita's own defect: the message was not even true of the
+// literal spellings `logic [-1:0]` / `logic [-3:1]` that reach the same branch, and
+// the clamp is never accidentally right — every cell in this shape has width ≥ 2.
 #[test]
-fn the_param_zero_width_underflow_is_untouched() {
+fn the_param_zero_width_range_is_two_bits_like_both_oracles() {
     let (o, _) = run("module t; parameter W=0; logic [W-1:0] x;\n\
         initial $display(\"w=%0d\", $bits(x)); endmodule\n");
-    assert!(o.contains("parameterized range underflowed"), "{o}");
-    assert!(o.contains("w=1"), "{o}");
+    assert!(!o.contains("parameterized range underflowed"), "{o}");
+    assert!(o.contains("w=2"), "{o}");
 }
 
 // ── STILL LOUD, with the real reason: a PART select folds its own bounds through the
