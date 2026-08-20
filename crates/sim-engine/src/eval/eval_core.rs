@@ -569,16 +569,34 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 cond,
                 then_e,
                 else_e,
-            } => match self.truthiness(&self.eval(*cond)) {
-                Tri::True => self.eval_ctx(*then_e, w, eff_signed),
-                Tri::False => self.eval_ctx(*else_e, w, eff_signed),
-                Tri::Unknown => {
-                    // both branches at (w, eff_signed); merge differing→X.
-                    let t = self.eval_ctx(*then_e, w, eff_signed);
-                    let e = self.eval_ctx(*else_e, w, eff_signed);
-                    self.merge_x(&t, &e, w, eff_signed)
+            } => {
+                // §11.8.1 again: if EITHER arm is real the ternary IS a real-valued
+                // expression, so the integral arm crosses a SELF-DETERMINED
+                // conversion boundary and the node must actually PRODUCE a real.
+                // `sim_ir::realness` already claims exactly that, and since this
+                // slice the binary arms TRUST the claim — leaving the taken
+                // integral arm as an integral value at the node's 64-bit self width
+                // made `(sel ? 1.0 : (s+s)) - (s+s)` answer −16 for both oracles' 0
+                // (it used to cancel only because BOTH sides were wrong the same
+                // way). Converting here makes the static rule true of the value.
+                let real_node = self.wt.is_real(*then_e) || self.wt.is_real(*else_e);
+                let arm = |id: u32| -> Value {
+                    if real_node && !self.wt.is_real(id) {
+                        return Value::from_f64(self.eval(id).to_f64().unwrap_or(0.0));
+                    }
+                    self.eval_ctx(id, w, eff_signed)
+                };
+                match self.truthiness(&self.eval(*cond)) {
+                    Tri::True => arm(*then_e),
+                    Tri::False => arm(*else_e),
+                    Tri::Unknown => {
+                        // both branches at (w, eff_signed); merge differing→X.
+                        let t = arm(*then_e);
+                        let e = arm(*else_e);
+                        self.merge_x(&t, &e, w, eff_signed)
+                    }
                 }
-            },
+            }
 
             // ── SELF-DETERMINED structural / select: eval natural, resize ──
             Expr::Concat { parts } => {
@@ -710,6 +728,26 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             // ARITHMETIC — context-determined: BOTH operands sized to
             // (w, eff_signed), op at width w.
             Add | Sub | Mul | Div | Mod => {
+                // §11.8.1: with a REAL operand this is a real operation, and the
+                // integral-to-real CONVERSION BOUNDARY is self-determined — the
+                // integral side is read at its OWN width and converted after.
+                // Handing it the context instead let the real sibling's 64-bit
+                // self width become its evaluation width, so with
+                // `logic signed [3:0] s = -8`, `1.0 + (-s)` negated at 64 bits and
+                // answered 9 where both oracles answer −7, and `1.0 + (s + s)`
+                // answered −15 for 1. The same source text folded as a
+                // `localparam` has been correct since §4.5.343, so one expression
+                // had two answers inside one design.
+                //
+                // The predicate is STATIC (`sim_ir::realness`, memoized in the
+                // width table) and not read off the evaluated values: deciding it
+                // afterwards would mean evaluating the operands twice in the mixed
+                // case, which draws `$random` twice and moves the RNG sequence.
+                if self.wt.is_real(lhs) || self.wt.is_real(rhs) {
+                    let l = self.eval(lhs);
+                    let r = self.eval(rhs);
+                    return self.arith(op, &l, &r);
+                }
                 let l = self.eval_ctx(lhs, w, eff_signed);
                 let r = self.eval_ctx(rhs, w, eff_signed);
                 self.arith(op, &l, &r) // operates at max(l.w,r.w)=w
@@ -783,10 +821,21 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             // comparison does NOT inherit the enclosing ctx — this correctly stops
             // upward width/sign propagation.
             Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe => {
-                let cmp_w = self.wt.width(lhs).max(self.wt.width(rhs));
-                let pair_signed = self.wt.signed(lhs) && self.wt.signed(rhs);
-                let l = self.eval_ctx(lhs, cmp_w, pair_signed);
-                let r = self.eval_ctx(rhs, cmp_w, pair_signed);
+                // …and a REAL operand overrides even that mutual sizing (§11.8.1):
+                // the integral side converts at its OWN width. Without this the
+                // slice's own rule disagreed with itself inside one design —
+                // `1.0 + (-s)` read `-s` at 4 bits while `1.0 > (-s)` read it at
+                // 64, and the `if` built on the comparison took the wrong branch.
+                let (l, r) = if self.wt.is_real(lhs) || self.wt.is_real(rhs) {
+                    (self.eval(lhs), self.eval(rhs))
+                } else {
+                    let cmp_w = self.wt.width(lhs).max(self.wt.width(rhs));
+                    let pair_signed = self.wt.signed(lhs) && self.wt.signed(rhs);
+                    (
+                        self.eval_ctx(lhs, cmp_w, pair_signed),
+                        self.eval_ctx(rhs, cmp_w, pair_signed),
+                    )
+                };
                 let bit = match op {
                     CaseEq | CaseNe => self.case_eq(op, &l, &r),
                     Eq | Ne => self.log_eq(op, &l, &r),

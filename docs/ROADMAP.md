@@ -247,25 +247,17 @@
 - **`$signed(real)`/`$unsigned(real)` 이 위치 의존적이다**(pre-existing·PRE==POST·§4.5.317 발굴). 캐스트 안 15자리는 거부하지만 7자리는 exit 0 — 평범한 산술(`$signed(r)*2` → 15)·`%0d`/`%0f` 포맷·int/real 대입. iverilog 는 `The argument to $signed must be a vector type` 로 **전부** 거부한다. 곁: **2인자 `$signed(r, u)` 를 조용히 받는다**(iverilog: *"takes exactly one(1) argument"*) — §4.5.317 은 그 형태에서 **어느 슬롯이든** real 이면 캐스트를 거부하도록 맞췄지만, 스펠링 자체의 거부는 별건이다.
 - ~~**🔴 elaborate 상수접기가 `**` 지수를 자기결정하지 않는다**~~ **RESOLVED**(§4.5.339·상세=ARCHIVE) — 세 fold 사이트가 **한 헬퍼**(`const_pow_exponent_selfdet` → §4.5.186 폭 모델의 `eval_const_env_self`)를 공유한다. §4.5.319 가 닫은 다섯 철자에 이은 **여섯 번째이자 마지막**. 97칸 3-way **FIXED 10 · LOUD→CORR 2 · WRONG→LOUD 2 · 회귀 0**. **잔여 = 아래 「폭-미상 wrapping 지수」 한 줄뿐**(genvar 부호는 그 슬라이스가 함께 고쳤다).
 - ~~**폭-미상 leaf 위의 WRAPPING 지수**~~ **소멸**(§4.5.348 재센서스 — §4.5.345 의 multi-packed 폭이 그 기록이 예측한 선행조건이었고, 그것으로 이미 닫혔다: `3 ** (m - 8'd250)` 이 두 오라클과 같은 59049).
-- **🔴 런타임 mixed-real Binary 가 정수 피연산자를 64비트로 넓힌다**(pre-existing·**2-오라클 합치**·
-  §4.5.343 발굴 · **2026-08-20 메커니즘·수정 자리까지 그라운딩 완료**). `logic signed [3:0] s = -8;` 에서
-  `1.0 + (-s)` 가 두 오라클 **−7** / vita **9**, `1.0 + (s+s)` 가 **1** / **−15**. **메커니즘**:
-  `sim_ir::selfwidth` 가 real const 를 `{width:64, signed:true}` 로 답하므로 mixed Binary 의 self width 가
-  `max(64, w_int)` = 64 가 되고, `eval_binary_ctx` 의 산술 arm 이 **두 피연산자를 그 64로 평가**한다
-  (`Add|Sub|Mul|Div|Mod => eval_ctx(lhs, w, …), eval_ctx(rhs, w, …)`). §11.8.1 은 **변환 경계에서
-  self-det** 이므로 정수 쪽은 자기 폭으로 읽고 나서 변환해야 한다.
-  **실측 경계**(20칸 · iverilog+verilator 합치): 정수 부분식 단독은 정확(`$display("%0d", -s)` = −8) ·
-  명시적 `$itor(-s)` 도 정확 · **암묵적 mixed Binary 만** 틀리다 · 좌우 대칭 · 부호 무관(unsigned 도) ·
-  `+ - * /` 전부 · **세 백엔드 전부 동일**(공유 경로) · **같은 소스의 localparam 쌍둥이는 정확**(§4.5.343
-  이후) = 자기 불일치.
-  **수정 자리**: `eval_binary_ctx` 의 산술 arm 에서 *어느 한쪽이 real 이면 두 피연산자를 self-det 로*.
-  ⚠️ **선행조건 = 정적 real-ness 술어를 엔진이 가질 것.** 지금은 `elaborate::expr_is_real`(성숙한 IR 걷기 —
-  `$signed` 투명성·dyn-array real 원소 arm 포함)만 있고 엔진엔 `Value::is_real`(동적)뿐이다. 처방 =
-  그 술어를 **sim-ir 로 올려** 두 크레이트가 공유하고, 엔진은 `WidthTable` 옆에 메모이즈한다.
-  ⛔ **값으로 판정해 재평가하는 우회는 금지** — mixed 케이스에서 피연산자를 두 번 평가하면 `$random`
-  draw 가 두 번 일어나 RNG 시퀀스가 바뀐다. ⛔ **self-det 평가 후 resize 로 대체하는 것도 금지** —
-  `eval_ctx` 는 문맥을 **하위로 밀어** 넣으므로 중첩 부분식에서 의미가 다르다(광역 회귀).
-  ⚠️ 하네스 주의: `$rtoi` 로 관측하면 32비트로 절단돼 **넓힘 폭이 32 로 보인다**(실제 64) — `%f` 로 재라.
+- ~~**🔴 런타임 mixed-real Binary 가 정수 피연산자를 64비트로 넓힌다**~~ **RESOLVED**(§4.5.349 ·
+  상세=ARCHIVE) — §11.8.1 의 변환 경계를 self-det 로. **잔여 셋**(전부 pre-existing · PRE==POST ·
+  **2-오라클 합치** · §4.5.349 적대 리뷰 실측):
+  - **`automatic`(framed) real 함수를 직접 피연산자로 쓰면 여전히 넓힌다** — `fa(1) + (-s)` 가 두
+    오라클 **−7** / vita **9**. 곁: `{fa(1), 1'b0}` 이 **조용히 통과**(형제 형태 넷은 전부 loud). 공유
+    규칙의 `Call` arm 이 그 형태에 **도달하지 않는다**(resolver 문제가 아니다 — static 함수는 인라인돼
+    `Signal` arm 이 답하므로 정확하고, 임시변수 경유 `t = fa(1); t + (-s)` 도 정확).
+  - **package/class 함수도 같은 구멍** — `p::one() + (-s)` 와 `c.getr() + (-s)` 가 두 오라클 −7 / vita 9.
+  - **나머지 변환 경계는 아직 문맥-결정** — `real r; r = (-s);` 가 두 오라클 −8.0 / vita **8.0**,
+    `r = (s+s)` 가 0.0 / **−16.0**. 즉 §4.5.349 는 **Binary(산술·비교)와 Ternary** 를 닫았고
+    **단순 대입**은 남았다.
 - **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴 · 위 표 1번의 한 철자). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
 - **real-반환 const fn 의 본문이 정수 도메인으로 해석된다**(pre-existing·PRE==POST·§4.5.343 발굴·소형). `function real f(); f = 4'd15 + 4'd1;` 이 16.0 을 접는다(real 타깃 대입은 self-det 0 이 맞을 것) — `eval_const_call` 이 real 반환형의 본문을 i64 로 인터프리트. real 산술이 든 본문은 어차피 decline(loud)이라 창이 좁다.
 - ~~**u64 패턴 지수를 i64 도메인이 음수로 읽는다**~~ **RESOLVED**(§4.5.348 — 지수의 부호가 값과 함께 다닌다 · 크기가 도메인 밖이면 정직한 loud).

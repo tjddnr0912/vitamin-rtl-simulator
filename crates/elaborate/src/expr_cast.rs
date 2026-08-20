@@ -602,86 +602,28 @@ impl Elaborator<'_> {
     }
 
     /// Static real-ness of an already-lowered ExprId (for §6.2 illegality gates
-    /// and the §4.1a format-string check). Real-typed iff it is a real const, a
-    /// real net read, a `+`/`-` of a real, a `+ - * /` with a real operand, a
-    /// ternary with a real branch, or a real-producing system function.
+    /// and the §4.1a format-string check).
+    ///
+    /// The RULE lives in `sim_ir::realness` because the ENGINE needs the same
+    /// answer — §11.8.1 makes the integral-to-real conversion boundary
+    /// self-determined, so the engine has to know a binary is REAL before it
+    /// evaluates either operand, and a second spelling of "what is real" is how
+    /// the two crates drift. This is the elaborate-side driver: it recurses,
+    /// because its arena is still growing while it lowers.
     pub(crate) fn expr_is_real(&self, eid: u32) -> bool {
-        match self.exprs.get(eid as usize) {
-            Some(ir::Expr::Const { val }) => self
-                .consts
-                .get(*val as usize)
-                .is_some_and(|c| matches!(c.repr, ir::ConstRepr::Real)),
-            Some(ir::Expr::Signal { net, .. }) => {
-                self.nets
-                    .get(*net as usize)
+        let cx = ir::realness::RealnessCtx {
+            exprs: &self.exprs,
+            consts: &self.consts,
+            nets: &self.nets,
+            real_elem_dyn_nets: &self.real_elem_dyn_nets,
+            func_ret_is_real: &|f: u32| {
+                self.func_metas
+                    .get(f as usize)
+                    .and_then(|m| self.nets.get((m.base_net + m.return_slot) as usize))
                     .is_some_and(|n| matches!(n.kind, ir::NetKind::Real))
-                    // r19/S1: a `real d[]` ELEMENT. The net is `NetKind::DynArray`,
-                    // so the kind test above cannot see it. `real_elem_dyn_nets` is
-                    // the set that makes the engine store those elements as f64 in
-                    // the first place, so it cannot claim a net the engine does not
-                    // hold as real — the same discriminator the string twin uses.
-                    || self.real_elem_dyn_nets.contains(net)
-            }
-            Some(ir::Expr::Unary { op, operand }) => {
-                matches!(op, ir::UnOp::Plus | ir::UnOp::Minus) && self.expr_is_real(*operand)
-            }
-            Some(ir::Expr::Binary { op, lhs, rhs }) => {
-                // `**` is real-propagating (§11.4.4); the AST-side twin
-                // `ast_has_real_call` carries the identical list — keep them in step.
-                matches!(
-                    op,
-                    ir::BinOp::Add
-                        | ir::BinOp::Sub
-                        | ir::BinOp::Mul
-                        | ir::BinOp::Div
-                        | ir::BinOp::Pow
-                ) && (self.expr_is_real(*lhs) || self.expr_is_real(*rhs))
-            }
-            Some(ir::Expr::Ternary { then_e, else_e, .. }) => {
-                self.expr_is_real(*then_e) || self.expr_is_real(*else_e)
-            }
-            // §4.5.317: `$signed`/`$unsigned` are TRANSPARENT to the value's domain.
-            // Without this arm `4'($signed(r)*2)` printed `0000` while the very same
-            // `$signed(r)*2` with no cast printed the real-domain 15 — two answers to
-            // one expression inside one design. It has to live HERE and not in a
-            // cast-local wrapper: the wrappers appear UNDER the arithmetic
-            // (`Binary{Mul, $signed(r), 2}`), so only the recursion can see them.
-            // ANY real argument counts, not just the first: vita currently accepts a
-            // two-argument `$signed(r, a)` (pre-existing, ROADMAP §2 — iverilog says
-            // "takes exactly one(1) argument"), and keying on `args[0]` made the
-            // refusal depend on which slot the real landed in.
-            Some(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Signed | ir::SysFuncId::Unsigned,
-                args,
-            }) => args.iter().any(|a| self.expr_is_real(*a)),
-            Some(ir::Expr::SysFunc { which, args }) => {
-                matches!(
-                    which,
-                    ir::SysFuncId::Realtime
-                        | ir::SysFuncId::Itor
-                        | ir::SysFuncId::BitsToReal
-                        // r19/S1: `.atoreal()` returns `Value::from_f64` and was
-                        // absent here, so `v[s.atoreal()]` read the f64 BIT PATTERN
-                        // as an index — reachable with no `real` keyword in sight.
-                        | ir::SysFuncId::StrAtoreal
-                ) || real_math_arity(*which).is_some()
-                    // `.sum()`/`.product()` fold with `arith`, which stays in the
-                    // real domain when the elements are real.
-                    || (matches!(which, ir::SysFuncId::ArrSum | ir::SysFuncId::ArrProduct)
-                        && args.first().is_some_and(|a| self.expr_is_real(*a)))
-            }
-            // r19/S1: a real-returning function. Every consumer of this predicate is
-            // a "must be integral" gate, so a missing arm here is a silent-wrong at
-            // ~40 call sites at once — fixing the sites without fixing the predicate
-            // left all of them open. Conservative: a call whose callee is known to
-            // return a real is real; an unknown callee is not claimed.
-            Some(ir::Expr::Call { func, .. }) => self
-                .func_metas
-                .get(*func as usize)
-                .and_then(|m| self.nets.get((m.base_net + m.return_slot) as usize))
-                .is_some_and(|n| matches!(n.kind, ir::NetKind::Real)),
-            _ => false,
-        }
+            },
+        };
+        ir::realness::expr_is_real_node(&cx, &|id| self.expr_is_real(id), eid)
     }
 
     /// §4.1a STATIC gate: walk the literal format string, pair each conversion

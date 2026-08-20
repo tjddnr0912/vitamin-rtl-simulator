@@ -21,12 +21,22 @@ pub(crate) use sim_ir::selfwidth::{const_u32_of_expr, SelfWidth};
 /// The whole side table, one entry per `SimIr.exprs[i]`.
 pub(crate) struct WidthTable {
     sw: Vec<SelfWidth>,
+    /// Static real-ness, decided by the SHARED rule in `sim_ir::realness` and
+    /// memoized here. The engine needs it BEFORE evaluating a binary's operands:
+    /// IEEE §11.8.1 makes the integral-to-real conversion boundary
+    /// self-determined, so a real sibling's 64-bit self width must not become the
+    /// integral side's evaluation context.
+    real: Vec<bool>,
 }
 
 impl WidthTable {
     #[inline]
     pub(crate) fn get(&self, eid: u32) -> SelfWidth {
         self.sw[eid as usize]
+    }
+    #[inline]
+    pub(crate) fn is_real(&self, eid: u32) -> bool {
+        self.real[eid as usize]
     }
     #[inline]
     pub(crate) fn width(&self, eid: u32) -> u32 {
@@ -54,6 +64,52 @@ impl WidthTable {
     /// forward scan reads only already-filled entries.
     pub(crate) fn build(ir: &SimIr, ft: &crate::FuncTable) -> WidthTable {
         Self::build_with(ir, ft, &std::collections::BTreeMap::new())
+    }
+
+    /// As `build_with`, plus the `real d[]` element sidecar. The plain
+    /// `build_with` passes an EMPTY set, which is right for every caller that has
+    /// no `SimOpts` in hand (the backend-equivalence harnesses and the unit
+    /// tests): a dynamic array of reals cannot exist in an IR they build.
+    pub(crate) fn build_full(
+        ir: &SimIr,
+        ft: &crate::FuncTable,
+        class_fields: &std::collections::BTreeMap<u32, (u32, bool)>,
+        real_elem_dyn_nets: &std::collections::BTreeSet<u32>,
+    ) -> WidthTable {
+        let mut t = Self::build_with(ir, ft, class_fields);
+        t.real = Self::build_real(ir, ft, real_elem_dyn_nets);
+        t
+    }
+
+    /// One forward pass, same precondition as the width pass: every child
+    /// ExprId < its parent, so the memo slot a node reads is already filled.
+    fn build_real(
+        ir: &SimIr,
+        ft: &crate::FuncTable,
+        real_elem_dyn_nets: &std::collections::BTreeSet<u32>,
+    ) -> Vec<bool> {
+        let func_ret_is_real = |f: u32| {
+            ft.get(f as usize)
+                .and_then(|m| ir.nets.get((m.base_net + m.return_slot) as usize))
+                .is_some_and(|n| matches!(n.kind, sim_ir::NetKind::Real))
+        };
+        let cx = sim_ir::realness::RealnessCtx {
+            exprs: &ir.exprs,
+            consts: &ir.consts,
+            nets: &ir.nets,
+            real_elem_dyn_nets,
+            func_ret_is_real: &func_ret_is_real,
+        };
+        let mut out: Vec<bool> = Vec::with_capacity(ir.exprs.len());
+        for i in 0..ir.exprs.len() {
+            let r = sim_ir::realness::expr_is_real_node(
+                &cx,
+                &|id| *out.get(id as usize).unwrap_or(&false),
+                i as u32,
+            );
+            out.push(r);
+        }
+        out
     }
 
     /// As `build`, plus N7's class-field override.
@@ -108,6 +164,10 @@ impl WidthTable {
             debug_assert_eq!(sw.len(), i, "forward pass invariant");
             sw.push(s);
         }
-        WidthTable { sw }
+        // `build_with` has no `SimOpts`, so it cannot see the `real d[]` element
+        // sidecar; `build_full` recomputes with it. Every caller that stops here
+        // builds its own IR and has no dynamic array of reals in it.
+        let real = Self::build_real(ir, ft, &std::collections::BTreeSet::new());
+        WidthTable { sw, real }
     }
 }

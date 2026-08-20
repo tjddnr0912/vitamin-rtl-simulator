@@ -256,18 +256,6 @@ pub(crate) fn map_sysfunc(dollar_name: &str) -> Option<ir::SysFuncId> {
     }
 }
 
-/// The N6 real-math system functions (IEEE §20.8.2) — all return `real`. Their
-/// declared arity: `$pow`/`$atan2`/`$hypot` take 2 args, the rest take 1.
-pub(crate) fn real_math_arity(which: ir::SysFuncId) -> Option<usize> {
-    use ir::SysFuncId::*;
-    match which {
-        Pow | Atan2 | Hypot => Some(2),
-        Ln | Log10 | Exp | Sqrt | Floor | Ceil | Sin | Cos | Tan | Asin | Acos | Atan | Sinh
-        | Cosh | Tanh | Asinh | Acosh | Atanh => Some(1),
-        _ => None,
-    }
-}
-
 impl Elaborator<'_> {
     /// Per-bit X/Z→0 coercion for a 2-state cast target (§6.11.3). Bitwise ops
     /// propagate X, but case-equality RESOLVES it: bit `i` becomes `(e[i] === 1'b1)`
