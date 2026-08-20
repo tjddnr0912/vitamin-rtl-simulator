@@ -35,16 +35,60 @@ pub(crate) fn const_eval_i64_lit(e: &ast::Expr) -> Option<i64> {
 
 /// `**` in the i64 const domain. Negative exponents follow the IEEE integer
 /// table (1**n=1, (-1)**n=±1, 0**neg undefined → None, else 0); overflow → None.
-pub(crate) fn const_pow_i64(a: i64, b: i64) -> Option<i64> {
-    if b < 0 {
-        return match a {
-            1 => Some(1),
-            -1 => Some(if b % 2 == 0 { 1 } else { -1 }),
-            0 => None,
-            _ => Some(0),
-        };
+pub(crate) fn const_pow(a: i64, b: i64, exp_signed: bool) -> Option<i64> {
+    // The IEEE negative-exponent table applies only when the exponent REALLY is
+    // negative. `64'd0 - 64'd8` is an UNSIGNED subtraction — 18446744073709551608,
+    // not −8 — and reading the i64 container's sign instead of the expression's
+    // made `3 ** (64'd0 - 64'd8)` answer 0 where iverilog, verilator AND vita's own
+    // runtime all answer 926288481.
+    let neg = exp_signed && b < 0;
+    // A base of 0 or ±1 does not depend on the exponent's MAGNITUDE — only on its
+    // parity, which is the low bit of the pattern either way. So these answer for
+    // ANY exponent, including the huge unsigned ones the i64 domain cannot carry;
+    // gating them behind the domain check below turned `1 ** (64'd0 - 64'd8)` and
+    // `(-1) ** (64'd0 - 64'd8)` from both oracles' 1 into a decline.
+    match a {
+        1 => return Some(1),
+        -1 => return Some(if b % 2 == 0 { 1 } else { -1 }),
+        // `0 ** 0` is 1; `0 ** positive` is 0; `0 ** negative` is undefined.
+        0 => {
+            return if b == 0 {
+                Some(1)
+            } else if neg {
+                None
+            } else {
+                Some(0)
+            }
+        }
+        _ => {}
     }
-    a.checked_pow(u32::try_from(b).ok()?)
+    if neg {
+        return Some(0); // |base| ≥ 2 with a genuinely negative exponent
+    }
+    // ⚠️⚠️ An "unsigned negative" exponent is a HUGE positive one, so the exact
+    // result does not fit the i64 domain — DECLINE, the same discipline `+` and
+    // `*` keep here (`3037000500 * 3037000500` is loud too, where both oracles
+    // print 145474192).
+    //
+    // Folding it MODULARLY was tried and reverted. Square-and-multiply mod 2^64
+    // gives the right answer at every context of 64 bits or fewer — and both
+    // oracles confirmed six such cells — but the module-scope fold has no context
+    // width, and a `localparam [127:0] P = 3 ** 41` then zero-extends an
+    // ALREADY-TRUNCATED 64-bit value: `resize_bits` cannot restore what the
+    // wrapping discarded, so a loud reject became a silent wrong (and at 96 bits,
+    // one silent wrong became a different one). Both adversarial lenses landed on
+    // it independently. vita's own ENGINE is right there because it works mod
+    // 2^128 and switches to exact multi-word kernels past its wide cap.
+    //
+    // ⇒ the wrapping answer needs a KNOWN context width, which is the width-aware
+    // module-scope fold this domain does not have yet — one class with the
+    // `+`/`*` overflow, tracked in ROADMAP §2.
+    // `b as u64` reads the exponent as the BIT PATTERN it is. (Measured equivalent
+    // to `try_from(b)`: anything that fits `u32` is non-negative as an i64 too, so
+    // the two decline on exactly the same inputs. Written this way because the
+    // pattern reading is the rule, and the next change to this line should start
+    // from the rule, not from a coincidence.)
+    a.checked_pow(u32::try_from(b as u64).ok()?)
 }
 
 /// `<<`/`<<<` in the i64 const domain: value-preserving or None. A shift that
@@ -90,7 +134,18 @@ pub(crate) fn const_binop(op: ast::BinOp, a: i64, b: i64) -> Option<i64> {
         ast::BinOp::BitXnor => Some(!(a ^ b)),
         ast::BinOp::LogAnd => Some(((a != 0) && (b != 0)) as i64),
         ast::BinOp::LogOr => Some(((a != 0) || (b != 0)) as i64),
-        ast::BinOp::Pow => const_pow_i64(a, b),
+        // `**` needs the EXPONENT's signedness, which this signature cannot carry —
+        // every reachable site folds it through `const_pow` directly. Declining is
+        // fail-closed: a site added later goes loud rather than silently reading an
+        // unsigned exponent as a negative one.
+        // (A mutant that restores the old signed-reading path here SURVIVES the
+        // whole suite — which is the proof that the three sites are exhaustive:
+        // nothing reaches this arm. The decline stays as the fail-closed guard for
+        // a fourth site added later.)
+        ast::BinOp::Pow => {
+            debug_assert!(false, "Pow must fold through const_pow");
+            None
+        }
         // `<<`/`<<<`: value-preserving or None (a shifted-out/overflowing value would
         // be silently wrong). `1<<32` folds wide (4294967296), matching iverilog.
         ast::BinOp::Shl | ast::BinOp::AShl => const_shl_i64(a, b),
@@ -303,13 +358,16 @@ impl Elaborator<'_> {
                 // depending on whether a comparison happened to sit above it:
                 // `8'd1 << (4'd15 + 4'd1)` folded 65536 alone and 1 under a `>`.
                 // Both oracles say 1 — the 4-bit count wraps to 0.
-                let b = match op {
-                    ast::BinOp::Pow => self.const_pow_exponent_selfdet(
+                if matches!(op, ast::BinOp::Pow) {
+                    let (b, sg) = self.const_pow_exponent_selfdet(
                         rhs,
                         &std::collections::BTreeMap::new(),
                         &ConstWidths::new(),
                         0,
-                    )?,
+                    )?;
+                    return const_pow(a, b, sg);
+                }
+                let b = match op {
                     ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => {
                         self.const_int_selfdet(rhs)?
                     }
@@ -363,8 +421,11 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &ConstWidths,
         depth: u32,
-    ) -> Option<i64> {
-        self.eval_const_env_self(rhs, env, envw, depth)
+    ) -> Option<(i64, bool)> {
+        Some((
+            self.eval_const_env_self(rhs, env, envw, depth)?,
+            self.const_signed_env(rhs, envw),
+        ))
     }
 
     /// A SELF-DETERMINED integral position OUTSIDE any function body: a `$clog2`
@@ -737,11 +798,11 @@ impl Elaborator<'_> {
                 // the shape-unknown-target path (`eval_const_assign` with no
                 // target), but a second spelling of the rule diverging there
                 // would be silent, so it goes through the one shared helper.
-                let b = if matches!(op, ast::BinOp::Pow) {
-                    self.const_pow_exponent_selfdet(rhs, env, envw, depth)?
-                } else {
-                    self.eval_const_env(rhs, env, envw, depth)?
-                };
+                if matches!(op, ast::BinOp::Pow) {
+                    let (b, sg) = self.const_pow_exponent_selfdet(rhs, env, envw, depth)?;
+                    return const_pow(a, b, sg);
+                }
+                let b = self.eval_const_env(rhs, env, envw, depth)?;
                 const_binop(*op, a, b)
             }
             ast::ExprKind::Ternary {

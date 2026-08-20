@@ -130,9 +130,21 @@
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | u64 패턴 지수 · 폭-미상 wrapping 지수 | ⚠️ 마지막 것은 **거부로 닫지 마라**(§4.5.339 실측) |
-> | 2 | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
-> | 3 | **음수 상수가 소비자에서 조용히 먹힌다**(§4.5.346 적대 리뷰 실측·pre-existing·PRE==POST) | ⓐ 음수 replication count `{W{1'b1}}`(W=−56)가 **진단 없이 255** — iverilog 는 *"Concatenation repeat may not be negative"* 로 거부 ⓑ 음수 range bound `logic [P:0]`(P=−56)가 **W3056 로 1비트 클램프**(iverilog 57)이고 그 경고 문구(*"param value 0?"*)가 **사실과 다르다**. 둘 다 평범한 철자(`localparam W = -56`)로 재현 |
+> | **1** | **런타임 mixed-real Binary 가 정수 피연산자의 wrap 을 넓힌다**(§4.5.343 발굴·오라클 ✓) | elaborate const 가 정답이 된 지금 **같은 소스가 localparam ✓ / runtime ✗** — §4.5.343 의 #1 논거와 동형 |
+> | 2 | **음수 상수가 소비자에서 조용히 먹힌다**(§4.5.346 적대 리뷰 실측·pre-existing·PRE==POST) | ⓐ 음수 replication count `{W{1'b1}}`(W=−56)가 **진단 없이 255** — iverilog 는 *"Concatenation repeat may not be negative"* 로 거부 ⓑ 음수 range bound `logic [P:0]`(P=−56)가 **W3056 로 1비트 클램프**(iverilog 57)이고 그 경고 문구(*"param value 0?"*)가 **사실과 다르다**. 둘 다 평범한 철자(`localparam W = -56`)로 재현 |
+>
+> ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
+> (2026-08-20 · 상세=ARCHIVE): 후자는 **§4.5.345 가 `const_decl_wsign` 의 multi-packed 폭을 채우면서
+> 이미 닫혔다** — 그 항목이 *"해소는 거부가 아니라 폭 모델 완성"* 이라고 적어 둔 그대로이고, 정작 그것을
+> 이룬 슬라이스는 몰랐다(재센서스가 아니었으면 이미 고친 것을 다시 고쳤을 것이다). 전자의 뿌리는
+> **지수를 나르는 i64 가 컨테이너이지 값의 타입이 아니라는 것** — `64'd0 - 64'd8` 은 부호 없는 뺄셈이라
+> 18446744073709551608 인데 컨테이너의 부호 비트를 읽어 −8 로 보고 IEEE 음수-지수 표를 적용해 **조용히
+> 0** 을 냈다(두 오라클·vita 런타임 전부 926288481). 지수의 부호가 값과 함께 다니게 했고, 크기가 도메인
+> 밖인 경우는 **정직한 loud**. 곁: 밑수 0/±1 은 지수의 **패리티**만 쓰므로 도메인 밖 지수에서도 답한다.
+> ⚠️⚠️ **모듈러 fold 는 지어서 되돌렸다** — mod 2^64 는 문맥이 64비트 이하일 때만 옳고(두 오라클로 6칸
+> 확인), 모듈 스코프 fold 에는 문맥 폭이 없어서 `localparam [127:0] P = 3 ** 41` 이 **이미 잘린** 64비트
+> 값을 zero-extend 한다 ⇒ loud→silent-wrong(96비트에선 silent-wrong→*다른* silent-wrong). **적대 2렌즈가
+> 독립적으로 같은 BLOCKING** 을 냈다. 72칸 3-way **회귀 0 · wrong→LOUD 5**.
 >
 > ✅ **top-level 자기결정 위치는 §4.5.347 로 RESOLVED**(2026-08-20 · 상세=ARCHIVE): 착수 전
 > **3-오라클 census 18칸**(iverilog·verilator·vita)이 스코프를 정했다 — **두 오라클이 합치하는 9칸만**
@@ -234,16 +246,29 @@
 - **🔴 크기 캐스트의 real 이 fill 과 만나면 아직 조용하다**(pre-existing·PRE==POST·오라클 ✓·§4.5.317 적대 2렌즈 실측). §4.5.317 이 **퍼널이 만드는 모든 피연산자**를 막았지만, 판별자 **셋이 동시에 성립**하면 퍼널에 애초에 안 들어간다 — 반대편이 **fill(`'0`/`'1`)** ∧ real 원천이 **평범한 real 넷이 아님**(`parameter real`·real 리터럴·real 함수 반환·`$signed(r)`·`$realtime`·`$sqrt(r)`) ∧ 연산자가 **real 비전파**(`& | ^ << >> >>> %`). 288칸 매트릭스 중 **84칸**(`4'(RP ^ '0)`·`4'($sqrt(r) & '1)`·`4'(b >>> (rt ^ '0))` 이 전부 exit 0·iverilog 는 전부 거부). 두 자물쇠가 같이 열려야 샌다: `ast_ctx_signed` 가 그 leaf 에서 `None` 이라 `lower_size_ctx` 를 **안 타고**, `expr_is_real` 의 `Binary` 팔에는 **비트/시프트/`%` 가 없다**. 하나만 고치면 다른 하나가 남으므로 **인스턴스가 아니라 CLASS** 이고, 선행조건은 위 ⓐ/ⓑ 와 같은 **트리 전역 AST self-폭/도메인 패스**다.
 - **`$signed(real)`/`$unsigned(real)` 이 위치 의존적이다**(pre-existing·PRE==POST·§4.5.317 발굴). 캐스트 안 15자리는 거부하지만 7자리는 exit 0 — 평범한 산술(`$signed(r)*2` → 15)·`%0d`/`%0f` 포맷·int/real 대입. iverilog 는 `The argument to $signed must be a vector type` 로 **전부** 거부한다. 곁: **2인자 `$signed(r, u)` 를 조용히 받는다**(iverilog: *"takes exactly one(1) argument"*) — §4.5.317 은 그 형태에서 **어느 슬롯이든** real 이면 캐스트를 거부하도록 맞췄지만, 스펠링 자체의 거부는 별건이다.
 - ~~**🔴 elaborate 상수접기가 `**` 지수를 자기결정하지 않는다**~~ **RESOLVED**(§4.5.339·상세=ARCHIVE) — 세 fold 사이트가 **한 헬퍼**(`const_pow_exponent_selfdet` → §4.5.186 폭 모델의 `eval_const_env_self`)를 공유한다. §4.5.319 가 닫은 다섯 철자에 이은 **여섯 번째이자 마지막**. 97칸 3-way **FIXED 10 · LOUD→CORR 2 · WRONG→LOUD 2 · 회귀 0**. **잔여 = 아래 「폭-미상 wrapping 지수」 한 줄뿐**(genvar 부호는 그 슬라이스가 함께 고쳤다).
-- **폭-미상 leaf 위의 WRAPPING 지수는 무제한 fold 로 남는다**(§4.5.339 가 **일부러** 남겼다·리뷰 실측). 폭이 0(=UNKNOWN)으로 기록되는 leaf(다중 packed 로컬 등) 위에서 지수가 **랩하면** 값이 갈린다 — `3 ** (m - 8'd250)`(m=4)이 vita **0** / iverilog **59049**. ⚠️⚠️ **거부는 답이 아니다 — 지어서 재고 되돌렸다**: 폭-미상을 거부하면 range-bound 위치에서 **decline 경로가 조용한 기본값**을 넣어(`logic [f3():0]` → **1비트 넷·exit 0·진단 0**) correct→**silent-wrong** 이 되고, 값이 정확한 셀(`3 ** (m + 0)`)은 correct→loud 로 강등된다 ⇒ **해소는 거부가 아니라 폭 모델 완성**(`const_decl_wsign` 이 다중 packed 를 답하게).
+- ~~**폭-미상 leaf 위의 WRAPPING 지수**~~ **소멸**(§4.5.348 재센서스 — §4.5.345 의 multi-packed 폭이 그 기록이 예측한 선행조건이었고, 그것으로 이미 닫혔다: `3 ** (m - 8'd250)` 이 두 오라클과 같은 59049).
 - **🔴 런타임 mixed-real Binary 가 정수 피연산자의 wrap 위치를 넓힌다**(pre-existing·PRE==POST·오라클 ✓·§4.5.343 발굴). `logic signed [3:0] s = -8;` 에서 `1.0 + (-s)` 가 vita **9.0** / iverilog **−7.0**, `1.0 + (s + s)` 가 **−15.0** / **1.0** — leaf(`1.0 + s`)와 **SysFunc Pow lane**(`2.0 ** (-s)` = 0.003906)은 정확하므로 자리는 `ir::Binary` mixed lane 의 폭 문맥이다(real 경계 너머로 정수 문맥이 내려간다 — §11.8.1 은 변환 경계에서 self-det). ⚠️ §4.5.343 이 elaborate const 를 정답으로 만든 지금 **같은 소스가 localparam ✓ / runtime ✗** 로 갈린다(#1 의 자기 불일치 논거와 동형) — 「다음 착수 순서」 4번.
 - **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴 · 위 표 1번의 한 철자). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
 - **real-반환 const fn 의 본문이 정수 도메인으로 해석된다**(pre-existing·PRE==POST·§4.5.343 발굴·소형). `function real f(); f = 4'd15 + 4'd1;` 이 16.0 을 접는다(real 타깃 대입은 self-det 0 이 맞을 것) — `eval_const_call` 이 real 반환형의 본문을 i64 로 인터프리트. real 산술이 든 본문은 어차피 decline(loud)이라 창이 좁다.
-- **u64 패턴 지수를 i64 도메인이 음수로 읽는다**(pre-existing·오라클 ✓·§4.5.339 발굴). `4'sd3 ** (64'd0 - 64'd8)` 이 param **0** / iverilog·vita 런타임 **926288481** — `const_eval_i64_lit` 의 64비트 재해석 arm 이 −8 을 만든다(그 arm 주석은 *"magnitude misuse 는 range 검사가 loud 로 잡는다"* 인데 **지수 위치엔 그 검사가 없다**).
+- ~~**u64 패턴 지수를 i64 도메인이 음수로 읽는다**~~ **RESOLVED**(§4.5.348 — 지수의 부호가 값과 함께 다닌다 · 크기가 도메인 밖이면 정직한 loud).
 - ~~**인터프리터의 폭-0 타깃 · fold 안 되는 body-local 초기화의 조용한 0 · body-decl 초기화 크래시**~~ **RESOLVED**(§4.5.345·상세=ARCHIVE). **잔여 넷**(전부 §4.5.345 가 적대 리뷰로 실측):
   - **decl-init 호출 사슬이 깊이 캡 64 에 걸린다**(correct→loud · 두 렌즈가 독립 발견). 서로 다른 상수함수 70개가 각자 `int t = f<다음>();` 로 잇는 사슬이 iverilog 71 / PRE 71 / POST loud. **완화가 강하다**: 같은 설계를 *문장* 철자(`f<k> = f<k+1>() + 1;`)로 쓰면 **PRE 도 이미 loud** 였다(64 는 합의된 상수) — 즉 §4.5.345 는 decl 자리를 문장 자리에 맞췄을 뿐이고, 그 과금이 곧 자기참조 크래시를 없앤 것이다. 무손실 대안(리뷰 제안·미구현) = **이미 실행 중인 함수로 재진입할 때만** 한 레벨 과금(callee 이름은 `eval_const_call` 이 들고 있다) — 비순환 사슬은 안 막힌다.
   - **4-state 지역변수의 무초기화 기본값이 0 이다**(pre-existing·PRE==POST). `integer x; g = x + 1;` 이 vita **1** / iverilog **x**. i64 해석기가 unknown 을 못 나른다 — 2-state(`int x;`)는 정답.
   - **packed 차원 곱이 u32 를 넘으면 패닉**(pre-existing·PRE==POST·진단 없음). `bit [65535:0][65535:0] tt;` 가 `attempt to multiply with overflow` 로 abort. §4.5.345 의 `checked_mul` 자리가 아니라 그 위(넷 할당)다.
   - **선언 폭 모델이 셋인데 하나만 packed 를 본다**(maintainability). `const_decl_wsign`(곱 · §4.5.345) · `const_bound.rs::decl_is_wide`(첫 차원만) · `ast_kind_range_width`. 지금은 **건전**(차원을 무시하면 폭을 과소평가 → 과잉 decline, 단조) 하나 명시되지 않은 의존이다 — 폭을 *줄일* 수 있는 차원 규칙이 생기면 조용히 깨진다.
+- **🔴 i64 상수 도메인이 오버플로에서 거절한다 — 언어는 문맥 폭에서 wrap 한다**(pre-existing·CLASS·
+  **2-오라클 합치**·§4.5.348 실측). `+`·`*`·`**` 셋 다: `3037000500 * 3037000500` 이 두 오라클 145474192
+  인데 vita loud · `64'h7FFF… + 64'd1` 이 0 인데 loud · `3 ** 40` 이 689956897 인데 loud. ⚠️⚠️ **문맥
+  폭 없이 모듈러로 접지 마라** — §4.5.348 이 `**` 에 대해 지어 봤고 **loud→silent-wrong** 이 나왔다
+  (mod 2^64 는 ≤64비트 문맥에서만 옳은데 모듈 스코프 fold 는 폭을 모르고, `localparam [127:0]` 타깃이
+  이미 잘린 값을 zero-extend 한다). ⇒ 선행조건 = **폭-인식 모듈 스코프 fold**(§4.5.347 이 캐스트·비교
+  안쪽에서는 그 패스가 선다는 것을 증명했다). vita **런타임은 전부 정확**하므로 오라클은 자기 안에 있다.
+- **🔴 크기 0 인 unpacked 차원을 조용히 받는다**(pre-existing·PRE==POST·**2-오라클 합치**·§4.5.348 리뷰
+  실측). `localparam int N = 0; logic [7:0] arr [N];` 가 vita `$size=1`·exit 0 — iverilog·verilator 둘 다
+  *"Dimension size must be greater than zero"* 로 **거부**한다.
+- **untyped `localparam` 의 거대 `**` 는 iverilog 가 행(hang) 한다**(§4.5.348 실측 · 오라클 부재 기록).
+  `localparam L = 3 ** (64'd0 - 64'd8);` 에서 iverilog 가 임의정밀도로 3^(2^64−8) 을 계산하려 무한히 돈다
+  (10분 100% CPU 확인 후 종료). 그 철자는 **verilator 단독**으로만 판정할 수 있다.
 - **⚡ 상수 도메인의 비교/논리/삼항조건 fold 가 §4.5.347 이후 ~3배 느리다**(값은 전부 정답 · 리뷰 실측).
   `const_int_selfdet` 이 평가 전에 `const_self_width` 와 `const_signed_env` 로 트리를 두 번 더 걷고,
   비교 arm 이 lhs·rhs 를 폭·부호로 각각 다시 걷는다 = **피연산자당 6 walk vs 옛 2**. 실측(병리적):

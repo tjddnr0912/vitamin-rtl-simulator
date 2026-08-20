@@ -26,14 +26,26 @@ impl Parser<'_, '_> {
             ExprKind::Unary {
                 op: UnOp::Minus,
                 operand,
-            } => Some(-self.try_const_index(operand)?),
+                // (`checked_neg` only differs at `i64::MIN`, which no decimal literal
+                // can reach here — `9223372036854775808` does not parse as an i64, so
+                // the operand declines first. Kept because the guard is the rule.)
+            } => self.try_const_index(operand)?.checked_neg(),
+            // ⚠️ CHECKED, because this helper runs on EVERY binary expression the
+            // parser sees — not only on the generate-array indices it exists for.
+            // Unchecked arithmetic here panicked the whole run on an ordinary
+            // `localparam integer L = 3037000500 * 3037000500;`, which both oracles
+            // simply fold. A panic is below loud; declining just means "not a
+            // constant index", which is what a non-index expression is anyway.
+            // ⚠️ The rule was already written down one function away — `const_lit`
+            // in this same file folds checked and says why. This was its sibling
+            // spelling, and only one of the two had it.
             ExprKind::Binary { op, lhs, rhs } => {
                 let a = self.try_const_index(lhs)?;
                 let b = self.try_const_index(rhs)?;
                 match op {
-                    BinOp::Add => Some(a + b),
-                    BinOp::Sub => Some(a - b),
-                    BinOp::Mul => Some(a * b),
+                    BinOp::Add => a.checked_add(b),
+                    BinOp::Sub => a.checked_sub(b),
+                    BinOp::Mul => a.checked_mul(b),
                     _ => None,
                 }
             }

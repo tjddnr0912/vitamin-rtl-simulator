@@ -345,16 +345,15 @@ impl Elaborator<'_> {
                     // 75 at 32 — the count itself is 2 either way).
                     B::Shl | B::Shr | B::AShl | B::AShr | B::Pow => {
                         let a = self.eval_const_env_at(lhs, env, envw, depth, ctx_w, ctx_signed)?;
-                        // Pow goes through the one shared exponent helper —
-                        // today that is the same self-determined walk a shift
-                        // count takes, but a rule change to the exponent (its
-                        // §11.4.10-vs-Table-11-21 story differs from a shift
-                        // count's) must happen in ONE place.
-                        let b = if matches!(op, B::Pow) {
-                            self.const_pow_exponent_selfdet(rhs, env, envw, depth)?
-                        } else {
-                            self.eval_const_env_self(rhs, env, envw, depth)?
-                        };
+                        // Pow goes through the one shared exponent helper — which
+                        // reports the exponent's SIGNEDNESS with its value, because
+                        // that is what decides whether the IEEE negative-exponent
+                        // table applies at all. A shift count needs no such thing.
+                        if matches!(op, B::Pow) {
+                            let (b, sg) = self.const_pow_exponent_selfdet(rhs, env, envw, depth)?;
+                            return Some(mask(const_pow(a, b, sg)?));
+                        }
+                        let b = self.eval_const_env_self(rhs, env, envw, depth)?;
                         // With a KNOWN context width a shift is exact on the bit
                         // pattern, so it no longer has to decline. `const_binop`
                         // refuses a logical `>>` of a negative value because the
