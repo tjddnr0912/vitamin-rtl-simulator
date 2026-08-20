@@ -103,6 +103,38 @@
 //! program because a program can hold two widths at once — a comparison's
 //! operands are `ow` bits wide while its result is one.
 //!
+//! ## The admission's SIGN half — measured and REJECTED (2026-08-20)
+//!
+//! `compile_node`'s entry gate is `sw.width != w || sw.signed != signed`. An
+//! execution-weighted census of picorv32 (200k cycles) found that gate is where
+//! **90.4% of the generic-path evaluations decline**, split 47.6% for sign alone
+//! and 42.8% for a narrower inner node. The root's sign always matches by
+//! construction — `k_eval_for_lvalue` passes the RHS's own — so every sign
+//! decline is an INNER node inheriting its parent's context sign.
+//!
+//! Dropping the sign half is SOUND, and the argument is the admitted set rather
+//! than a claim about two's complement: `Div`/`Mod`/`Mul`/`Pow` are not admitted,
+//! `Add`/`Sub` produce identical bits either way, the bitwise ops and `Shl` are
+//! sign-blind, `Shr` is logical for both signs, and the two ops that DO read a
+//! sign take it from the operand (`>>>` would have to ask `wt.get(lhs).signed`
+//! instead of the context; a comparison already passes `lw.signed`).
+//!
+//! It was built, and it does widen admission: the slow lane fell 600,045 →
+//! 485,757 evaluations, **-19.0%**. And it is **1.00x** — picorv32 2.39 s → 2.39 s,
+//! keccak 0.47 s → 0.47 s, best-of-5, noise floor ~1%. Reverted rather than
+//! shipped, the same call `levelize.rs` records for the rank-ordered drain.
+//!
+//! ⚠️ The gap between 47.6% and 19.0% is the lesson, not a mistake in either
+//! number: a decline-site histogram attributes the FIRST failure, and removing
+//! that gate only helps a tree that fails nowhere else. Most of these trees hit
+//! another gate immediately after. Expect first-failure attribution to overstate
+//! a fix by roughly this factor.
+//!
+//! The arithmetic for why -19% of the slow lane is invisible: slow evaluations
+//! are ~6x a fast one and the whole lvalue-eval subtree is ~10% of the run, so
+//! the move is worth ~0.8% — under the noise floor before it is written. That
+//! division is the thing to do BEFORE building the next one of these.
+
 use sim_ir::SimIr;
 
 use crate::native::arena::NetArena;
