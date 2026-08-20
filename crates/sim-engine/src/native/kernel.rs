@@ -1071,9 +1071,65 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         for u in batch.drain(..) {
             match u.lhs {
                 NbaLhs::One(c) => {
+                    let c_net = c.net;
                     scratch.chunks.clear();
                     scratch.chunks.push(c);
-                    self.write_routed(&scratch, u.sampled, &u.offsets);
+                    // ⭐ THE FLAT STORE, for the region that never asked for it.
+                    //
+                    // `k_write_scalar` was built for exactly this shape and its own
+                    // doc records why — a census found 102,911 blocking writes on
+                    // picorv32 walking `write_routed`'s heap/assoc/frame/class
+                    // routing to reach a store already proved to need none of it.
+                    // The NBA region carries **24x that volume** on the same design
+                    // (12.3M applies at 200k cycles, and 100.0% of them are this
+                    // shape) and has been taking the routing the whole time: the
+                    // proof is made on the SCHEDULE side (`Op::ScheduleNbaScalar`
+                    // is gated by `plain_scalar_dest`) and then thrown away, because
+                    // an `NbaUpdate` carries a value and an offset list, not a
+                    // classification. So the proof is re-made here, from the SAME
+                    // predicate rather than a second spelling of it — the storage
+                    // classes a re-derivation would get wrong (heap, frame slot,
+                    // class handle) are stores the arena does not own, and a flat
+                    // write to their dead slot is silent.
+                    //
+                    // Measured: picorv32 2.40 s -> 2.30 s, byte-identical stdout and
+                    // stderr. keccak is flat (88.8% of its NBA writes are array or
+                    // wide, so they take the `else` unchanged).
+                    if crate::backend::plain_scalar_dest_of(&self.sched.st.plain_scalar, &scratch)
+                        .is_some()
+                    {
+                        // Implied by the predicate, not a second condition: a whole-net
+                        // scalar has nothing to resolve. `k_schedule_nba_scalar` asserts
+                        // the same equality on the other side of the region. Note this
+                        // documents the producer; it is not what makes the arm safe —
+                        // `chunk_elem`/`chunk_lsb` ignore the pair for this chunk shape.
+                        debug_assert_eq!(u.offsets.as_slice(), [(0u32, 0u32)]);
+                        // ⚠️ The tripwire the routing lane used to BE. `write_routed`
+                        // asked `NetArena::heap` (a live bitmap); the predicate asks
+                        // `plain_scalar`, built from `SimState::dyn_is_handle`. Those
+                        // are two spellings of one rule — `native/arena.rs`'s
+                        // `kind_is_heap` and `state/init_diag.rs`'s handle match — and
+                        // they agree arm-for-arm today. If a future `NetKind` reached
+                        // only one of them, the old code routed to the heap and the new
+                        // code stores flat into a dead slot at exit 0. `kind_is_heap` is
+                        // an exhaustive match so the arena side breaks the build; this
+                        // catches the other direction. (Adversarial review: the blocking
+                        // region already carries the same exposure via `Op::WriteScalar`
+                        // — this is the first place it is stated.)
+                        debug_assert!(
+                            !self
+                                .arena
+                                .heap
+                                .get(c_net as usize)
+                                .copied()
+                                .unwrap_or(false),
+                            "a heap-kind net passed plain_scalar_dest_of: the two \
+                             kind matches have drifted (net {c_net})"
+                        );
+                        self.k_write_scalar(&scratch, c_net, u.sampled);
+                    } else {
+                        self.write_routed(&scratch, u.sampled, &u.offsets);
+                    }
                 }
                 NbaLhs::Many(lv) => {
                     self.write_routed(&lv, u.sampled, &u.offsets);

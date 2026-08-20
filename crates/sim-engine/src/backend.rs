@@ -588,7 +588,27 @@ fn chunk_width_of(ir: &SimIr, c: &LvalChunk) -> u32 {
 /// The two conditions that are NOT immutable — `forced`, and whether the incoming value
 /// is real — are deliberately excluded and stay live tests inside the ops.
 fn plain_scalar_dest(ctx: Option<&CompileCtx>, lhs: &Lvalue) -> Option<u32> {
-    let plain = ctx?.plain;
+    plain_scalar_dest_of(ctx?.plain, lhs)
+}
+
+/// The predicate itself, over the table rather than over a compile context.
+///
+/// ⚠️ TWO callers and that is the whole point. `plain_scalar_dest` asks it at
+/// COMPILE time to emit `Op::WriteScalar`/`Op::ScheduleNbaScalar`; `apply_nba`
+/// asks it at APPLY time, because a nonblocking update is scheduled in one
+/// region and stored in another and the proof does not travel with it. Both
+/// halves are immutable for the run — an lvalue's shape is fixed at elaboration
+/// and `plain` describes the net's STORAGE — so the two asks cannot disagree.
+/// A second spelling in `apply_nba` could, and the storage classes it would get
+/// wrong (heap, frame slot, class handle) are stores this arena does not own.
+///
+/// ⚠️ "scalar" here means WHOLE-NET, not one bit and not one word: a 128-bit `reg`
+/// passes (adversarial review measured 30 such applies taking the fast arm, output
+/// identical). That is correct because the consumers ask their own width question —
+/// `k_write_scalar` tests `s.words == 1` and falls back — but the name reads
+/// narrower than the predicate is, so a consumer that assumes one word from the
+/// name alone would be wrong.
+pub(crate) fn plain_scalar_dest_of(plain: &[bool], lhs: &Lvalue) -> Option<u32> {
     match lhs.chunks.as_slice() {
         [c] if matches!(c.kind, sim_ir::SelKind::Bit)
             && c.word.is_none()

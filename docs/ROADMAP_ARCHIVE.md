@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 291건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 292건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.351` **NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 — 증명을 만들어 놓고 버렸다** · `k_write_scalar` 는 평범한 스칼라 쓰기용 flat store 이고 그 주석이 존재 이유를 적어 뒀다(*picorv32 에서 102,911 건이 `write_routed` 의 heap/assoc/frame/class 라우팅을 걸어 이미 필요 없다고 증명된 store 에 도달*) — 그런데 `apply_nba` 가 **한 번도 안 불렀다**. 같은 설계에서 NBA 는 **1,231만 건**(24배)이고 **100.0% 가 그 모양** · ⭐ 증명은 이미 있었다(`Op::ScheduleNbaScalar` 가 `plain_scalar_dest` 로 게이팅) — `NbaUpdate` 가 값과 offset 만 나르고 분류를 안 날라 apply 시점에 사라진다 ⇒ 술어를 **같은 함수로**(`plain_scalar_dest_of` 추출·두 호출자) 다시 묻는다 · picorv32 **2.40 → 2.31 s (−3.9%)** 백투백 A/B · **바이트 동일** · keccak flat(NBA 쓰기의 88.8% 가 배열/wide) · ⚠️ **측정이 가드도 고쳤다**: 첫 프로브의 `offsets==[(0,0)]` 만 보는 약한 가드는 picorv32 에선 우연히 동일했지만(weak_only 0) **keccak 에선 2,603 건이 샜다** — dead slot 에 flat write 될 수 있는 자리 · 적대 2렌즈 **BLOCKING 0**: soundness 가 `write_routed` 의 여섯 레인이 술어로 전부 막히고 꼬리가 **동일 인자의 동일 `write_chunk_word`** 로 환원됨을 증명(부작용 여섯이 전부 분기점 아래 · `plain_scalar` 가 잠시 비는 창은 fail-safe), differential 이 34쌍 8축 전 채널 동일 + **비공허성 증명**(fast arm 22/27 발화 · 모든 fast-arm apply 의 offsets 가 예외 없이 `(0,0)`) · 5,679 green · format 29 불변
 - `4.5.350` **§2 음수 상수를 먹는 소비자 셋 — 소비자가 언어 규칙 대신 컨테이너의 비트 패턴을 읽었다** · 큐엔 **둘**로 적혀 있었고 3-오라클 census 가 **셋**임을 보였다(세 번째 = `logic q[-3]` 가 조용히 1워드) 동시에 **불가침 축 넷**(음수 bound 의 part-select 계열 — iverilog `0101xx` vs verilator `000010`)을 잘라냈다 · ⓐ replication count 가 `-56` 을 **4294967240** 으로 읽어 타깃 폭 절단 후 **255, exit 0**(`$bits` 가 실제로 그 수를 답했다) ⇒ LOUD · ⭐⭐ **부호는 자기결정 폭에서만 존재한다**: `{(4'd0-4'd1){1'b1}}` 는 두 오라클 **255(15 복사)** 이고 `{(4'sd0-4'sd1){1'b1}}` 는 **거부**인데 폭-무제한 fold 는 **둘 다 −1** — 무제한으로 물었으면 맞는 설계를 false-reject 했다(경계 두 칸 테스트 핀 · 새 `const_bound_signed`) · 읽기를 **둘**(lowered `Const` / AST self-det) 둔 이유 = 파라미터는 접히고 `{(2-3){…}}` 는 `Add`/`Sub` 로 남아 u32 fold 가 **saturate 해 0** ⇒ 옛 진단이 −1 에 대해 *"count of zero"* 라고 말했다 · ⓑ 오름차순 음수 range bound(`[-3:0]`·`[-56:0]`·`[-8:-1]`·**`parameter W=0; logic [W-1:0]` 관용구**)가 폭 1 클램프 + *"param value 0?"* 라는 **파라미터가 없는 리터럴에도 나오던 거짓 진단** ⇒ `|msb-lsb|+1`(두 오라클 2·57·5·8·2) · ⭐ 근인은 머신러리가 아니라 §4.5.228 이 세운 **가정**(*"msb<0·lsb≥0 은 degenerate 파라미터 언더플로"*) — 방향이 어느 bound 가 내부 비트 0 인지를 정하지 **어느 쪽이 음수인지가 정하지 않는다** · 저장은 정규화 + 새 sparse map `net_decl_asc_lsb`(`internal = l − raw`, 내림차순의 거울) · VCD `$var` 는 선언 쌍 · PART select 는 쌍둥이와 같은 이유로 loud · 곁: 폭 캡 초과의 **조용한 `.min(MAX_NET_WIDTH)`** 를 두 방향 모두 평범한 cap 에러로 · ⓒ unpacked 크기 `q[-3]`/`q[0]` 는 `.max(1)` 바닥이 먹고 있었다(경계 실측: 0 과 모든 음수는 두 오라클 거부·1 은 수용) · ⚠️ **옛 동작을 의도로 고정하던 테스트 2건 갱신**(삭제 아님) · ⚠️ 적대 리뷰 **BLOCKING**: dyn/queue 원소 net 이 넓은 폭만 받고 사이드맵 기록은 early-`continue` 로 건너뛰어 **warn → 조용한 `x`** 하강 ⇒ opt-in 을 사이드맵이 실제로 정규화하는 net 으로 좁혔다 · ⚠️ **두 렌즈 수렴**: `dim_coord` 의 `debug_assert` 불변식이 **이미 거짓**이었다(PRE 도 패닉) — release 는 그것을 컴파일아웃하고 `lo.max(0)` 로 **조용히 틀린 비트**를 읽는다 ⇒ 두 빌드 모두 LOUD · 곁: string **변수** replicate 의 음수 카운트(같은 규칙의 세 번째 철자) · 79칸 4-way **회귀 0 · FIXED 30 · 오라클 분열 7(불가침)** · differential 렌즈가 55칸 추가(staged·쓰기·부호·replication 경계) **회귀 0** · 5,654→**5,679 green** · 뮤테이션 15/16(1 방어) · format 29 불변
 - `4.5.349` **§2 런타임 mixed-real — 변환 경계는 self-det, 그리고 그 규칙을 두 크레이트가 공유한다** · 뿌리 = `sim_ir::selfwidth` 가 real const 를 `{width:64}` 로 답해 mixed Binary 의 문맥이 64 가 되고 정수 형제가 거기서 평가됐다(`1.0 + (-s)` 두 오라클 −7 / vita 9) · ⭐ **선행조건을 먼저 세웠다**: `elaborate::expr_is_real` 을 **`sim_ir::realness` 로 리프트**해 `child` 콜백으로 두 크레이트가 한 철자를 공유(엔진은 `WidthTable` 옆에 메모이즈) — 앞 반복이 *"값으로 판정하면 `$random` 이 두 번 뽑히고, self-det 후 resize 는 중첩식을 깬다"* 를 금지로 적어 둔 덕에 짧은 우회를 안 골랐다 · ⚠️ 적대 리뷰 **BLOCKING**: 정적 규칙은 삼항을 real 이라 하는데 엔진의 삼항이 취해진 정수 arm 을 변환하지 않아, PRE 에서 **상쇄되던 두 오차**가 한쪽만 고쳐지며 correct→silent-wrong · 삼항이 실제로 real 을 **생산**하게 고치고 비교 연산자까지 같은 규칙으로 확장(그 전엔 `1.0 + (-s)` 와 `1.0 > (-s)` 가 한 설계 안에서 불일치, `if` 가 다른 가지를 탔다) · 68칸 3-way **회귀 0 · FIXED 11** · 4 백엔드 일치 · 뮤테이션 10/11(1 등가는 도달 불가 증명) · 5,647→**5,654 green**
 - `4.5.348` **§2 `**` 지수의 부호 — i64 는 컨테이너이지 값의 타입이 아니다** · ⭐ **재센서스가 기록된 둘 중 하나를 지웠다**: 「폭-미상 wrapping 지수」는 §4.5.345 의 multi-packed 폭이 그 기록이 스스로 예측한 선행조건이었고 **이미 닫혀 있었다**(정작 그 슬라이스는 몰랐다) · 남은 뿌리 = `64'd0 - 64'd8` 은 **부호 없는** 뺄셈인데 컨테이너의 부호 비트를 읽어 IEEE 음수-지수 표를 적용, **조용히 0**(두 오라클·vita 런타임 926288481) ⇒ 지수의 부호가 값과 함께 다니고 도메인 밖 크기는 정직한 loud · 밑수 0/±1 은 **패리티**만 쓰므로 도메인 밖 지수에도 답한다 · ⚠️⚠️ **모듈러 fold 를 지어서 되돌렸다** — mod 2^64 는 문맥 ≤64비트에서만 옳은데 모듈 스코프 fold 엔 폭이 없어 `localparam [127:0]` 이 이미 잘린 값을 zero-extend(loud→silent-wrong · 96비트에선 silent-wrong→다른 silent-wrong) · **적대 2렌즈 독립 수렴** · 곁: 파서 `try_const_index` 의 unchecked 산술이 평범한 `localparam` 하나로 **런 전체를 패닉**시키던 것 해소 · 72칸 3-way **회귀 0 · wrong→LOUD 5** · 뮤테이션 8/11(3 등가) · 5,642→**5,647 green**
@@ -383,6 +384,51 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.351 — NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 (2026-08-21 · picorv32 −3.9%)
+
+**착수 = 성능.** 다만 그라운딩은 *"무엇이 느린가"* 가 아니라 **"무엇이 거절되는가"**(LOOPROMPT §2)였고,
+그 census 가 세 축을 죽인 뒤 남긴 하나다.
+
+**뿌리 = 증명을 만들어 놓고 버렸다.** `k_write_scalar` 는 평범한 스칼라 쓰기를 위한 flat store 이고,
+그 함수의 주석이 존재 이유를 적어 뒀다 — *"picorv32 에서 **102,911** 건이 `write_routed` 의
+heap/assoc/frame/class 라우팅을 걸어 이미 필요 없다고 증명된 store 에 도달하고 있었다"*.
+**그런데 `apply_nba` 는 그것을 한 번도 안 불렀다.** 같은 설계에서 NBA 는 **1,231만 건**(그 24배)이고
+**100.0% 가 그 모양**이다. 그리고 증명은 이미 있었다 — `Op::ScheduleNbaScalar` 가
+`plain_scalar_dest` 로 게이팅되므로 **스케줄 시점엔 안다**. 다만 `NbaUpdate` 가 값과 offset 리스트만
+나르고 분류를 안 날라서 apply 시점에 사라진다. 그래서 술어를 apply 쪽에서 **다시 묻되 같은 함수로**
+묻는다(`plain_scalar_dest_of` 추출 · 두 호출자).
+
+**측정**: picorv32 200k 사이클 **2.40 → 2.31 s (−3.9%, 백투백 A/B)** best-of-5 · **stdout·stderr 바이트 동일** ·
+keccak 동일·flat(그 설계 NBA 쓰기의 88.8% 가 배열/wide 라 원래 경로).
+
+⚠️ **측정이 가드도 고쳤다.** 첫 프로브는 `offsets == [(0,0)]` 만 봤고 picorv32 에선 강한 가드와
+우연히 동일했다(weak_only = 0). **keccak 에선 2,603 건이 샜다** — heap/frame/handle/2-state/array net 이
+dead slot 에 flat write 될 수 있는 자리다. 답은 우연히 안 바뀌었지만(내부 테스트가 잡았다)
+*"두 설계에서 안전했다"* 는 증명이 아니다. 강한 술어는 picorv32 에서 비용이 0 이다.
+
+**적대 2렌즈.** soundness = **SOUND**: `write_routed` 의 여섯 레인이 술어에 의해 전부 막히고(넷은 청크
+모양 · 둘은 **같은 테이블**(frame_local)과 **같은 match**(kind_is_heap ↔ dyn_is_handle)), 살아남는 꼬리가
+**동일 인자의 동일 `write_chunk_word`** 로 환원된다. 버려지는 `u.offsets` 는 이 모양에서 `(0,0)` 임이
+증명되고 **동시에 하위에서 무시됨**이 증명된다(`chunk_elem`/`chunk_lsb` 가 raw 를 보기 전에 반환).
+여섯 부작용(dirty·edge·last_blocking_writer·ca_dirty·VCD·probe)이 **전부 분기점 아래**. `plain_scalar` 가
+잠시 비는 창(`compiled_type` 의 take→restore)은 **fail-safe** — 빈 테이블은 `else` 를 고르는데 그것이
+변경 전 동작이다. 리뷰의 MINOR 반영 = heap 판정이 **두 match 로 갈라진** 자리에 drift tripwire.
+
+**곁에서 발굴(스코프 밖)**: `crates/cli/tests/` 의 세 파일이 **하드코딩 `/tmp` 경로 12곳**을 쓴다.
+전체 스위트 두 개가 겹치면 같은 파일을 동시에 쓰고 `bare_fscanf_writes_dest` 가 깨진다(이번에 실측 ·
+격리 재실행은 통과). 제품 결함은 아니지만 flake 클래스다.
+
+**differential 렌즈**: 34 PRE/POST 쌍 · 8축 전부 · **stdout·stderr·exit·VCD·FST·obs 전 채널 동일**
+(keccak VCD 1,800,440 바이트 동일). ⭐ **비공허성까지 증명했다** — 계측 바이너리로 재니 fast arm 이
+27 설계 중 **22** 에서 발화하고, **기록된 모든 fast-arm apply 에서 offsets 가 예외 없이 `[(0,0)]`**
+인 반면 `else` 는 `[(0,17)]` 류를 본다(즉 "버려지는 offsets 는 항상 (0,0)" 이 공허하게 참인 게 아니다).
+곁 NIT 반영: `plain_scalar_dest_of` 의 "scalar" 는 **whole-net** 이지 1비트가 아니다(128비트 reg 30건이
+fast arm 을 탔고 출력 동일) — 소비자가 이름만 보고 한 워드를 가정하면 틀린다.
+
+⚠️ **전체 스위트 실패 1건은 제 하네스 문제였다** — 게이트 런이 도는 중에 두 번째 스위트를 띄웠고
+`bare_fscanf_writes_dest` 가 **하드코딩 `/tmp` 경로**를 써서 두 프로세스가 같은 파일을 동시에 썼다.
+격리 재실행·단독 재실행 모두 통과(5,679 green).
 
 #### 4.5.350 — §2 음수 상수를 먹는 소비자 셋 (2026-08-20 · 5,679 green · format 29 불변)
 
