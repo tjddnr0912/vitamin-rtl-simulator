@@ -369,6 +369,7 @@ impl Elaborator<'_> {
     /// — the resolve pass has no lowering scope to re-enter.
     pub(crate) fn resolve_pending_fill_widths(&mut self) {
         let pending = std::mem::take(&mut self.pending_fill_width);
+        let mut redirect: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
         for p in pending {
             let Some(chunk) = self.hier_resolved_chunk.get(&p.sentinel).cloned() else {
                 // The lane errored out (or never ran) — a loud diagnostic already
@@ -385,14 +386,35 @@ impl Elaborator<'_> {
                 continue; // §6.12, same withholding as the lowering-time guard
             }
             let w = self.ir_lvalue_width(&lv);
-            let Some(cv) = literal::fill_literal_const(&p.raw, p.kind, w) else {
-                continue;
-            };
-            let cid = self.intern_const(cv);
-            if let Some(slot) = self.exprs.get_mut(p.expr_id as usize) {
-                *slot = ir::Expr::Const { val: cid };
-            }
+            // Re-lower with the width that finally exists — the SAME `lower_expr_ctx`
+            // `resize_fill_rhs` would have called had it known. The old subtree becomes
+            // garbage, exactly as a fill-bearing rhs does on the ordinary path (there
+            // is no golden to preserve).
+            let new_id = self.lower_expr_ctx(&p.rhs, w);
+            redirect.insert(p.expr_id, new_id);
         }
         self.hier_resolved_chunk.clear();
+        if redirect.is_empty() {
+            return;
+        }
+        // ⚠️ THE STATEMENT'S REFERENCE MOVES, NOT THE ARENA SLOT. Copying the new root
+        // node over the old slot looks equivalent and is not: the expr arena is
+        // POST-ORDER (`sim-ir/src/selfwidth.rs` panics on a parent whose child id is
+        // larger), and a subtree built now has children above every earlier id. Only a
+        // childless node — the single `Const` a bare fill lowers to — could be moved
+        // that way, which is exactly how far the first draft of this got before the
+        // width pass caught it.
+        for s in &mut self.stmts {
+            match s {
+                ir::Stmt::BlockingAssign { rhs, .. }
+                | ir::Stmt::NonblockingAssign { rhs, .. }
+                | ir::Stmt::Force { rhs, .. } => {
+                    if let Some(&new) = redirect.get(rhs) {
+                        *rhs = new;
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 }

@@ -2,25 +2,43 @@
 
 use super::*;
 
-/// The `(raw, kind)` of an expression that IS a fill literal, seen through the two
-/// TRANSPARENT wrappers `lower_expr` also sees through.
+/// Does `e` carry a fill AND lower WITHOUT CONSULTING ANY SCOPE?
 ///
-/// ⭐ ONLY A BARE FILL, and that is not a shortcut — it is the whole broken set. A
-/// fill with a SIBLING takes its width from the sibling, not from the assignment
-/// context (`sibling_ctx`), and a concat/replication operand is self-determined, so
-/// `u.a = '1 + 1`, `u.a = {2{'1}}`, `u.a = c ? '1 : 12'h0` and `u.a = ~'0` all agree
-/// with both oracles TODAY, deferred target or not. The assignment context is the
-/// fill's only width source exactly when the fill stands alone — which is also the
-/// only shape that can be rebuilt later from `(raw, kind, width)` with no scope, and
-/// scope is precisely what the resolve pass does not have.
-fn bare_fill_literal(e: &ast::Expr) -> Option<(&str, ast::IntLitKind)> {
+/// ⭐ THE CONSTRAINT IS THE SCOPE, NOT THE SHAPE. `resolve_pending_fill_widths` runs
+/// after elaboration, where the lowering scope is gone, so the only right-hand sides
+/// it can re-lower are the ones that never ask it anything: literals and the operators
+/// over them. That covers the measured class almost entirely — `u.w64 = '1 + 1`,
+/// `-'1`, `~'1`, `'1 << 0`, `'1 & 8'hF0` — because a fill needs the assignment context
+/// exactly when no sibling is wide enough to supply the width, and a wide sibling is
+/// usually a literal.
+///
+/// ⚠️ An operand that READS something (`c ? '1 : 1'b0`) is deliberately excluded and
+/// stays in ROADMAP §2-1e: re-lowering it needs the scope, which is the item's stated
+/// prerequisite. Excluding it here is what keeps this predicate honest — it is a
+/// statement about what can be rebuilt, not a guess about what is common.
+fn scope_free_fill_expr(e: &ast::Expr) -> bool {
+    expr_contains_fill(e) && scope_free(e)
+}
+
+/// Structural whitelist: every node kind whose lowering reads only its own children.
+/// A `_` arm would silently admit the next kind someone adds, so the match is
+/// exhaustive on the ones that qualify and rejects everything else by default.
+fn scope_free(e: &ast::Expr) -> bool {
+    use ast::ExprKind::*;
     match &e.kind {
-        ast::ExprKind::Paren { inner } => bare_fill_literal(inner),
-        ast::ExprKind::MinTypMax { typ, .. } => bare_fill_literal(typ),
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
-            Some((raw, *kind))
-        }
-        _ => None,
+        IntLit { .. } => true,
+        Paren { inner } => scope_free(inner),
+        MinTypMax { typ, .. } => scope_free(typ),
+        Unary { operand, .. } => scope_free(operand),
+        Binary { lhs, rhs, .. } => scope_free(lhs) && scope_free(rhs),
+        Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => scope_free(cond) && scope_free(then_e) && scope_free(else_e),
+        Concat { parts } => parts.iter().all(scope_free),
+        Replicate { count, value } => scope_free(count) && value.iter().all(scope_free),
+        _ => false,
     }
 }
 
@@ -573,12 +591,11 @@ impl Elaborator<'_> {
         // architecture already answers by lowering a sentinel and patching it when the
         // answer arrives. The fill gets the same treatment (§4.5.355).
         if let Some(sentinel) = self.deferred_lvalue_sentinel(lv) {
-            if let Some((raw, kind)) = bare_fill_literal(rhs) {
+            if scope_free_fill_expr(rhs) {
                 self.pending_fill_width.push(PendingFillWidth {
                     expr_id: rhs_id,
                     sentinel,
-                    raw: raw.to_string(),
-                    kind,
+                    rhs: rhs.clone(),
                 });
             }
             // Either way the ctx here would be the bogus 1, so leave `lower_expr`'s IR

@@ -29,21 +29,25 @@
 //! bit, the width fed back is 1, and the literal is left exactly as `lower_expr` made
 //! it. The test below fails if that ever stops being true.
 //!
-//! ⚠️ ONLY A BARE FILL IS DEFERRED, because only a bare fill can be rebuilt from
-//! `(raw, kind, width)` — anything else needs `lower_expr_ctx` re-run, and the resolve
-//! pass has no lowering scope to re-enter.
+//! ⚠️ WHAT IS DEFERRED IS A **SCOPE-FREE** FILL EXPRESSION, not just a bare fill
+//! (§4.5.357 widened it). The resolve pass runs after elaboration with no lowering
+//! scope, so the right-hand sides it can re-lower are the ones that never ask it
+//! anything — literals and the operators over them. `u.wide = '1 + 1`, `-'1`, `~'1`,
+//! `'1 << 0`, `'1 & 8'hF0` are all in.
 //!
-//! ⚠️⚠️ THAT LEAVES A RESIDUE, AND IT IS NOT ZERO. A fill with a SIBLING normally takes
-//! the sibling's width (`sibling_ctx`), which is why `{2{'1}}`, `c ? '1 : 12'h0` and
-//! `~'0` are right at a hierarchical target with or without this slice — but the rule
-//! is `max(ctx, sibling)`, so when the sibling is NARROWER than the target the context
-//! is still the only thing that can supply the width, and at a deferred target it is
-//! still 1. Measured: `logic [63:0] W; W = '1 + 1;` is 0 (iverilog agrees) while
-//! `u.wide = '1 + 1;` is 4294967296 — the sibling `1` is 32 bits, so the local spelling
-//! reaches 64 through the context and the hierarchical one stops at 32. At a 12-bit
-//! target the two happen to coincide, which is how an earlier pass of this slice talked
-//! itself into "bare is the whole set". It is not; it is the part that is fixable
-//! without a scope. The rest is recorded in ROADMAP §2.
+//! The rule this implements is `max(ctx, sibling)`: a fill normally takes its sibling's
+//! width, which is why `{2{'1}}` and `~'0` were right at a hierarchical target even
+//! before §4.5.355 — but when the sibling is NARROWER than the target the context is
+//! the only source, and at a deferred target it was 1. Measured at the boundary:
+//! `logic [63:0] W; W = '1 + 1;` is 0 (iverilog agrees) while `u.wide = '1 + 1;` was
+//! 4294967296, because the sibling `1` is 32 bits. At a 12-bit target the two coincide,
+//! which is how an earlier pass of §4.5.355 talked itself into "bare is the whole set".
+//!
+//! ⚠️⚠️ THE RESIDUE IS AN OPERAND THAT READS SOMETHING. `u.a = c ? '1 : 1'b0` still
+//! reads 1 where both oracles read all-ones, because re-lowering it needs the scope
+//! `c` resolves in. That is ROADMAP §2-1e and its stated prerequisite, and it is the
+//! honest boundary of the predicate: a statement about what can be rebuilt, not a guess
+//! about what is common.
 //!
 //! The sibling-supplied cases are pinned below so a later "simplification" that routes
 //! them through the deferral cannot change them silently.
@@ -174,4 +178,38 @@ fn a_fill_whose_sibling_is_wide_enough_is_untouched_at_a_hierarchical_target() {
 fn a_parenthesised_bare_fill_is_still_a_bare_fill() {
     // `lower_expr` sees through `(…)`, so the deferral predicate must too.
     assert_eq!(run("u.a = ('1);", "u.a"), "111111111111");
+}
+
+#[test]
+fn a_scope_free_fill_expression_reaches_the_target_width() {
+    // ⭐ §4.5.357: the deferral admits any right-hand side whose lowering needs no
+    // scope, not only a bare literal. Each of these has a sibling NARROWER than the
+    // 12-bit target, so the assignment context is the only width source — and at a
+    // deferred target it used to be 1. ORACLE: iverilog for every value.
+    for (rhs, want) in [
+        ("'1 + 1", "000000000000"),
+        ("'1 - 1", "111111111110"),
+        ("'1 & 1", "000000000001"),
+        ("'1 | 1", "111111111111"),
+        ("'1 ^ 1", "111111111110"),
+        ("1 + '1", "000000000000"),
+        ("-'1", "000000000001"),
+        ("~'1", "000000000000"),
+        ("'1 << 0", "111111111111"),
+        ("'1 & 8'hF0", "000011110000"),
+    ] {
+        assert_eq!(run(&format!("u.a = {rhs};"), "u.a"), want, "for `{rhs}`");
+    }
+}
+
+#[test]
+fn a_right_hand_side_that_reads_a_net_is_the_recorded_residue() {
+    // ⚠️ ROADMAP §2-1e. `c` is a net, so re-lowering this at resolve time would need the
+    // lowering scope — which is exactly the prerequisite that item records. Both oracles
+    // read all-ones; vita reads 1. The test pins the CURRENT answer so the day someone
+    // builds the scope snapshot, this fails and points at itself.
+    assert_eq!(run("u.a = c ? '1 : 1'b0;", "u.a"), "000000000001");
+    // The local twin is right, which is what makes this a hierarchy problem and not a
+    // ternary problem.
+    assert_eq!(run("L = c ? '1 : 1'b0;", "L"), "111111111111");
 }

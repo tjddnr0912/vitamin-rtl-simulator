@@ -103,8 +103,10 @@ pub(crate) struct DeferredHierWrite {
 pub(crate) struct PendingFillWidth {
     pub(crate) expr_id: u32,
     pub(crate) sentinel: u32,
-    pub(crate) raw: String,
-    pub(crate) kind: ast::IntLitKind,
+    /// The right-hand side AST, kept so the resolve pass can re-lower it at the width
+    /// that finally exists. Admitted only when `scope_free_fill_expr` says the lowering
+    /// asks the scope nothing — see that predicate.
+    pub(crate) rhs: ast::Expr,
 }
 
 pub(crate) struct DeferredHierSelWrite {
