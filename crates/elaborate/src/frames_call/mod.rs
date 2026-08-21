@@ -117,6 +117,21 @@ impl Elaborator<'_> {
     /// Declared return self-width + signedness of a function (`function [15:0]`,
     /// `function integer`, `function signed [7:0]`, bare `function`).
     pub(crate) fn func_return_dims(&mut self, func: &ast::FunctionDef) -> (u32, bool) {
+        self.func_return_dims_opt(func, false)
+    }
+
+    /// [`Self::func_return_dims`] with the §7.4.2 negative-bound opt-in.
+    ///
+    /// Separate rather than a behaviour change for the same reason `range_to_dims_opt`
+    /// is: the width and `record_declared_bounds_for` have to be turned on together,
+    /// and only the FRAME path holds the return NetId to record against. The inline and
+    /// class callers keep the clamp until someone wires their record too — a literal
+    /// `false` there, so they are byte-identical (§4.5.359).
+    pub(crate) fn func_return_dims_opt(
+        &mut self,
+        func: &ast::FunctionDef,
+        allow_neg_lsb: bool,
+    ) -> (u32, bool) {
         let kind = match func.ret_type {
             ast::ParamType::Integer => ast::NetVarKind::Integer,
             ast::ParamType::Real => ast::NetVarKind::Real,
@@ -124,7 +139,8 @@ impl Elaborator<'_> {
             ast::ParamType::Time => ast::NetVarKind::Time,
             ast::ParamType::Implicit => ast::NetVarKind::Reg,
         };
-        let (w, _msb, _lsb, signed) = self.range_to_dims(kind, func.range.as_ref(), func.signed);
+        let (w, _msb, _lsb, signed) =
+            self.range_to_dims_opt(kind, func.range.as_ref(), func.signed, allow_neg_lsb);
         (w, signed)
     }
 

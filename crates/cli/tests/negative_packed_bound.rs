@@ -142,18 +142,27 @@ fn a_part_select_is_loud_naming_the_real_reason() {
     );
 }
 
-// ── STILL LOUD (documented asymmetry): only a plain net DECLARATION opts in. A PORT
-// with a negative bound keeps the warn-and-clamp, because the width and the select
-// normalization have to be enabled together and the port path records no side map.
+// ── The asymmetry this used to document is GONE (§4.5.359). A PORT now opts in like a
+// plain net declaration: the width and the select normalisation are still enabled
+// together, but through the shared `record_declared_bounds` rather than only at the one
+// site that had the twenty lines inline. Both oracles read `010101`, and vita does too —
+// with no W3056.
+//
+// ⚠️ This test previously asserted the CLAMP, i.e. it pinned a restriction as if it were
+// intent. That was the right thing to write while the restriction was deliberate and it
+// is the right thing to rewrite now that it is lifted; the value is taken from the
+// oracles rather than from what the code happens to do.
 #[test]
-fn a_port_with_a_negative_bound_stays_clamped_and_loud() {
-    let (o, _) = run("module sub(input logic [3:-2] p, output logic [3:-2] q);\n\
+fn a_port_with_a_negative_bound_takes_the_declared_width() {
+    let (o, s) = run("module sub(input logic [3:-2] p, output logic [3:-2] q);\n\
           assign q = ~p;\n\
         endmodule\n\
         module t; logic [3:-2] a, y; sub u(.p(a), .q(y));\n\
           initial begin a = 6'b101010; #1 $display(\"y=%b\", y); end\n\
         endmodule\n");
-    assert!(o.contains("W3056"), "port path must stay loud:\n{o}");
+    assert!(s, "must run:\n{o}");
+    assert!(o.contains("y=010101"), "both oracles read 010101:\n{o}");
+    assert!(!o.contains("W3056"), "the clamp warning must be gone:\n{o}");
 }
 
 // ── a pathological declaration PANICKED (`max - min` overflowed i64) where iverilog

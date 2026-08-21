@@ -470,8 +470,19 @@ fn v3_11_override_uses_parent_param() {
     );
 }
 
-// v3-12 [Fix 1 defensive]: an override of W to 0 → child [W-1:0] underflows →
-//        clamped to width 1 + warn, NOT a fatal MAX_NET_WIDTH error.
+// v3-12 [Fix 1 defensive]: an override of W to 0 → child `[W-1:0]` is `[-1:0]`, NOT a
+//        fatal MAX_NET_WIDTH error. The point of this test is that the elaboration
+//        survives; the WIDTH it survives with changed twice.
+//
+// §4.5.350 measured the idiom and found both oracles size `[-1:0]` as two bits
+// (`|msb-lsb|+1`, IEEE §7.4.2) — the old "clamp to 1 and warn" was reading it as a
+// degenerate underflow. That slice fixed plain net declarations and deliberately left
+// PORTS clamped, which is what this test then pinned. §4.5.359 wired the port site, so
+// the child is two bits here as well and the clamp warning is gone.
+//
+// ⚠️ Rewritten rather than deleted: what it guards (W=0 must not discard the IR) is
+// still worth guarding, and the numbers now come from the oracles instead of from the
+// restriction that used to be in the way.
 #[test]
 fn v3_12_zero_width_param_does_not_explode() {
     let regw = module_p(
@@ -492,13 +503,10 @@ fn v3_12_zero_width_param_does_not_explode() {
     let unit = unit_of(vec![regw, tb]);
     let sink = CollectSink::default();
     let s = elaborate(&unit, &sink).expect("W=0 must NOT discard the whole IR");
-    // child q clamped to width 1, no fatal error.
-    assert_eq!(s.nets[1].width, 1);
+    // child q is `[-1:0]` → two bits (iverilog and verilator both print `$bits` 2), and
+    // no fatal error.
+    assert_eq!(s.nets[1].width, 2);
     assert_eq!(sink.n_errors(), 0);
-    assert!(
-        sink.n_warnings() >= 1,
-        "expected the underflow-clamp warning"
-    );
 }
 
 // v3-13 [Fix 2]: surplus positional connection → ElabPortMismatch error.

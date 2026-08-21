@@ -366,6 +366,63 @@ impl Elaborator<'_> {
         (m < l && m < 0).then_some(l)
     }
 
+    /// The declared low bound this project has to REMEMBER, and which direction it
+    /// came from: `Some((l, descending))`.
+    ///
+    /// One question, two mirror answers — `[3:-2]` (descending, negative low) and
+    /// `[-3:0]` (ascending, negative high). Callers pass `.is_some()` as
+    /// `range_to_dims_opt`'s `allow_neg_lsb` and MUST call
+    /// [`Self::record_declared_bounds`] with the resulting net, because the width and
+    /// the select normalization only make sense together (§4.5.350).
+    pub(crate) fn declared_odd_bound(&mut self, range: Option<&ast::Range>) -> Option<(i64, bool)> {
+        if let Some(l) = self.declared_neg_lsb(range) {
+            return Some((l, true));
+        }
+        self.declared_asc_lsb(range).map(|l| (l, false))
+    }
+
+    /// Record the select-normalization and VCD-label side maps for a net just added
+    /// under [`Self::declared_odd_bound`].
+    ///
+    /// ⭐ THIS IS A FUNCTION BECAUSE THE SITES THAT CREATE NETS ARE NOT IN ONE PLACE.
+    /// It was inline in the module-scope net declaration, which is why only that scope
+    /// got the correct width: a PORT, a subprogram local, a function's return net and a
+    /// function formal each build their net somewhere else, and each was left on the
+    /// warn-and-clamp path — `logic [-3:0] p` read one bit at exit 0 where both oracles
+    /// read four (§4.5.359). Copying twenty lines five times would have been five
+    /// spellings of one rule; this is one.
+    ///
+    /// A no-op when the range is ordinary, so a caller may always call it.
+    pub(crate) fn record_declared_bounds(&mut self, name: &str, range: Option<&ast::Range>) {
+        let key = self.fq(name);
+        let Some(&id) = self.symbols.get(&key) else {
+            return;
+        };
+        self.record_declared_bounds_for(id, range);
+    }
+
+    /// [`Self::record_declared_bounds`] for a caller that already holds the NetId.
+    /// The subprogram sites compute `nets.len()` before `add_net`, so they take this
+    /// one and never go back through the symbol table.
+    pub(crate) fn record_declared_bounds_for(&mut self, id: u32, range: Option<&ast::Range>) {
+        let Some((l, descending)) = self.declared_odd_bound(range) else {
+            return;
+        };
+        // Direction picks the map: the two normalizations are mirror images
+        // (`i - l` vs `l - i`), so one map cannot serve both.
+        if descending {
+            self.net_decl_neg_lsb.insert(id, l);
+        } else {
+            self.net_decl_asc_lsb.insert(id, l);
+        }
+        // …and the full declared pair, for the VCD `$var` label (the stored range is
+        // normalized, so without this a waveform viewer numbers the bits `[5:0]` where
+        // iverilog numbers them `[3:-2]`).
+        if let Some(m) = range.and_then(|r| self.const_eval_in_scope(&r.msb)) {
+            self.net_decl_range.insert(id, (m, l));
+        }
+    }
+
     pub(crate) fn range_to_dims(
         &mut self,
         kind: ast::NetVarKind,

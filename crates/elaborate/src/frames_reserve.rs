@@ -298,12 +298,17 @@ impl Elaborator<'_> {
             // loud 1-elem + `frame_array_local` path below.
         }
         let pinfo = self.frame_packed_width(d);
-        let (mut w, mut msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        // §7.4.2 / §4.5.359: a subprogram LOCAL with a negative bound is sized like any
+        // other net. Opt-in and record are one unit (see `record_declared_bounds_for`).
+        let odd_bound = self.declared_odd_bound(d.range.as_ref()).is_some();
+        let (mut w, mut msb, lsb, signed) =
+            self.range_to_dims_opt(d.kind, d.range.as_ref(), d.signed, odd_bound);
         if let Some((pw, pmsb, _)) = &pinfo {
             w = *pw;
             msb = *pmsb;
         }
         let net = self.nets.len() as u32;
+        self.record_declared_bounds_for(net, d.range.as_ref());
         self.add_net(
             name,
             ir::NetVar {
@@ -490,7 +495,9 @@ impl Elaborator<'_> {
                 }
             }
         }
-        let (ret_width, ret_signed) = self.func_return_dims(func);
+        // §7.4.2 / §4.5.359: the function's RETURN net, same unit as the formals below.
+        let ret_odd_bound = self.declared_odd_bound(func.range.as_ref()).is_some();
+        let (ret_width, ret_signed) = self.func_return_dims_opt(func, ret_odd_bound);
         let scope_seg = format!("$func${name}");
         // The return var is named by the FUNCTION's own name, not the frame-table key
         // — the body assigns / reads it by that name (`f = E;` / `return f`). These are
@@ -603,8 +610,12 @@ impl Elaborator<'_> {
                     continue;
                 }
                 let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-                let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
+                // §7.4.2 / §4.5.359, same unit as the local above.
+                let odd_bound = s.declared_odd_bound(p.range.as_ref()).is_some();
+                let (w, msb, lsb, signed) =
+                    s.range_to_dims_opt(kind, p.range.as_ref(), p.signed, odd_bound);
                 let net = s.nets.len() as u32;
+                s.record_declared_bounds_for(net, p.range.as_ref());
                 s.add_net(
                     &p.name.name,
                     ir::NetVar {
@@ -631,6 +642,7 @@ impl Elaborator<'_> {
             }
             // [n_params]: the function-named RETURN var (declared range/sign).
             let ret_net = s.nets.len() as u32;
+            s.record_declared_bounds_for(ret_net, func.range.as_ref());
             s.add_net(
                 &ret_name,
                 ir::NetVar {

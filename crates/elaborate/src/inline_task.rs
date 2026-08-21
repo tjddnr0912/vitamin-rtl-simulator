@@ -630,7 +630,15 @@ impl Elaborator<'_> {
                     continue;
                 }
                 first_call = true;
-                let (w, msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                // §7.4.2 / §4.5.359: the STATIC task's body-local, the twin of the
+                // framed one in `frames_reserve`. Opt-in and record are one unit.
+                let odd_bound = self.declared_odd_bound(d.range.as_ref()).is_some();
+                let (w, msb, lsb, signed) =
+                    self.range_to_dims_opt(d.kind, d.range.as_ref(), d.signed, odd_bound);
+                let odd_net = self.nets.len() as u32;
+                if odd_bound {
+                    self.record_declared_bounds_for(odd_net, d.range.as_ref());
+                }
                 self.add_net(
                     &decl.name.name,
                     ir::NetVar {
