@@ -659,8 +659,10 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
                 continue; // MULTI-DRIVER member: written once by resolution below
             }
             let v = k.k_eval_for_lvalue(lhs, rhs);
-            let offs = k.k_resolve_lvalue_offsets(lhs);
-            changed |= k.write_routed(lhs, v, &offs);
+            // The offsets are resolved INSIDE, only on the arm that needs them:
+            // a proven plain whole-net scalar has nothing to resolve, and this
+            // line is reached ~3.3M times on picorv32/200k.
+            changed |= k.write_settled(lhs, v);
         }
         // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
         // drivers and write the net once — the engine's own loop, run EVERY

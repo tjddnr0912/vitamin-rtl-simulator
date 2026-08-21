@@ -2,8 +2,8 @@
 
 > **"goal까지 남은 것"의 상위 스냅샷.** 재계획 시점마다 통째로 갱신한다(과거 판본은 git 이력이 보존).
 >
-> - **기준(2026-08-20)**: format_version **29** · **5,679 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
-> - **최신 완료**: **§4.5.351**(NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 — picorv32 **−3.9%** · 바이트 동일 · ⭐ 증명은 스케줄 시점에 이미 있었고 apply 시점에 버려지고 있었다) · 직전 = **§4.5.350**(§2 음수 상수를 먹는 소비자 셋 — replication count·오름차순 음수 range bound·unpacked 배열 크기 · ⭐ 부호는 **자기결정 폭에서만** 존재한다 · 적대 리뷰 BLOCKING = dyn/queue 원소가 넓은 폭만 받고 사이드맵을 건너뛰던 하강) · 직전 = **§4.5.349**(런타임 mixed-real 변환 경계) · **§4.5.348**(지수의 부호). 그 이전 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스.
+> - **기준(2026-08-21)**: format_version **29** · **5,684 tests green**(+ 제품 형태 lib green · **`VITA_JIT=1` 로도 전 스위트 green**) · CI **3-OS + `build-no-oracle`** green · MsgCode **68** · **MSRV 1.85** · **기본 백엔드 = `native`**.
+> - **최신 완료**: **§4.5.352**(settle 이 델타마다 199개를 훑어 0개를 찾고 있었다 — picorv32 **−10.5%** · ⭐ *나눗셈은 게이트가 아니라 탐색이다*: 추천 후보는 −2.4% 였고 그것을 재려고 프로파일한 **같은 함수 안에 6배 큰 것**이 있었다 · ⭐ settle 은 타임스텝당이 아니라 **델타당** · 플랫 store 세 리전 완결) · 직전 = **§4.5.351**(NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 — picorv32 **−3.9%** · 바이트 동일 · ⭐ 증명은 스케줄 시점에 이미 있었고 apply 시점에 버려지고 있었다) · 직전 = **§4.5.350**(§2 음수 상수를 먹는 소비자 셋 — replication count·오름차순 음수 range bound·unpacked 배열 크기 · ⭐ 부호는 **자기결정 폭에서만** 존재한다 · 적대 리뷰 BLOCKING = dyn/queue 원소가 넓은 폭만 받고 사이드맵을 건너뛰던 하강) · 직전 = **§4.5.349**(런타임 mixed-real 변환 경계) · **§4.5.348**(지수의 부호). 그 이전 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) 인덱스.
 > - (이전 세대 슬라이스의 상세 서사는 전부 ARCHIVE 로 이관 — 이 문서는 상위 스냅샷만 둔다.)
 >
 > - 잔여 상세 목록(정본) = [ROADMAP.md](ROADMAP.md) · 완료 상세 = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존) · 이력 = [DEVLOG.md](DEVLOG.md) · 실행 큐 = `LOOPROMPT.md` NEXT.

@@ -365,6 +365,27 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// is a deliberate E3001 blind spot). Non-sole delayed nets keep the pre-fix
     /// undriven-z during the window (safe: byte-identical to before this fix).
     delayed_sole: Vec<bool>,
+    /// The ascending cont-assign indices that carry a `#d` delay — i.e. exactly
+    /// the set `schedule_delayed_cas` acts on.
+    ///
+    /// ⭐ This exists because the question is answered at ELABORATE time and was
+    /// being re-asked at runtime. `schedule_delayed_cas` ran
+    /// `for ci in 0..cont_assigns.len()` and dropped all but the delayed ones,
+    /// once per settle — and a settle happens per delta, not per timestep.
+    /// Measured on picorv32/200k: **1,400,006 settles x 199 assigns =
+    /// 278.6M iterations, of which 0 did anything** (that design has no delayed
+    /// assign at all), and the scan alone was **7.2% of the whole run**. The IR
+    /// is immutable for the life of a `Scheduler`, so the set is a constant.
+    ///
+    /// ⚠️ NOT free in the worst case, and the number is known. The indirection
+    /// costs ~3 retired instructions per DELAYED iteration and saves ~3.3 per
+    /// skipped one (measured with `/usr/bin/time -l`, which unlike wall clock
+    /// resolves a 0.3% delta: 0/200 delayed −2.29%, 100/200 −0.16%, 200/200
+    /// +0.36%, 400/400 +0.36%, against an inert layout control at +0.007%). So
+    /// **break-even is around half the assigns being delayed**, and a design
+    /// where every cont-assign carries a `#d` pays ~+0.4%. Real RTL is far below
+    /// that line (picorv32: 0 of 199) — but "always free" would be false.
+    delayed_ca_idx: Vec<u32>,
     /// Pending inertial-delay cont-assign writes, keyed by absolute apply tick.
     delayed_ca: BTreeMap<u64, Vec<DelayedWrite>>,
     /// Transport NBAs (`q <= #d v`, v5 increment A): updates due at a FUTURE

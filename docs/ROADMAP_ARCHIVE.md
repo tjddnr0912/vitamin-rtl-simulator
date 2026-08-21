@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 292건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 293건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.352` **settle 가 델타마다 199개를 훑어 0개를 찾고 있었다 — 나눗셈이 게이트가 아니라 탐색이었다** · 착수는 직전 슬라이스의 추천 후보(`settle_cont_assigns` 의 72바이트 `Value`)였고 그건 진짜였다(**−2.4%**) — 다만 *"짓기 전에 나눗셈"* 규칙을 지키려 그 함수를 프로파일했더니 **같은 함수 안에 6배 큰 것**이 있었다 · `schedule_delayed_cas` 가 `for ci in 0..cont_assigns.len()` 로 전부 만지고 `delay` 없는 것을 `continue` 했다 ⇒ picorv32 는 **딜레이 붙은 cont-assign 이 0개**인데 **1,400,006 settle × 199 = 278,601,194 회**를 돌아 런타임의 **7.2%** · ⭐ **단위가 두 자릿수 틀렸다** — settle 은 타임스텝당이 아니라 **델타당**(사이클당 7) · ⓐ `delayed_ca_idx` 를 생성자에서 한 번(바디의 `let Some(d) = … else { continue }` 는 **verbatim 유지** ⇒ 사전필터가 두 번째 철자가 되지 않고, 계측이 `delayskip == 0` 으로 둘의 일치를 증명) ⓑ `write_settled` = flat store 의 **세 번째 리전**(블로킹 D1.6 · NBA §4.5.351 · settle 은 **델타당 도는 리전**) · picorv32 **2.31 → 2.07 s (−10.5%)**(반 A −8.4% · 반 B 추가 −2.4%) · 프로파일 독립 확인(분모 맞춘 재측정) `settle_cont_assigns` self **8.83% → 1.62%** · differential 14설계 × 3백엔드 × {stdout,stderr,exit,VCD,FST} **42쌍 동일** + staged(`.velab` 바이트 동일) + obs 레일 동일 · 비공허성 양 arm 발화 실측 · **뮤테이션 12발 6 KILLED / 6 등가**(⭐ m2·m11 의 생존이 곧 "의미 불변"의 증명) · 새 회귀 5건 · 적대 2렌즈 **BLOCKING 0**(유일 생존 지적 = 반 A 의 최악 케이스 **+0.36%**, retired-instructions 로 측정 · 손익분기 ≈ 딜레이 50%) · 5,679 → **5,684 green** · format 29 불변
 - `4.5.351` **NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 — 증명을 만들어 놓고 버렸다** · `k_write_scalar` 는 평범한 스칼라 쓰기용 flat store 이고 그 주석이 존재 이유를 적어 뒀다(*picorv32 에서 102,911 건이 `write_routed` 의 heap/assoc/frame/class 라우팅을 걸어 이미 필요 없다고 증명된 store 에 도달*) — 그런데 `apply_nba` 가 **한 번도 안 불렀다**. 같은 설계에서 NBA 는 **1,231만 건**(24배)이고 **100.0% 가 그 모양** · ⭐ 증명은 이미 있었다(`Op::ScheduleNbaScalar` 가 `plain_scalar_dest` 로 게이팅) — `NbaUpdate` 가 값과 offset 만 나르고 분류를 안 날라 apply 시점에 사라진다 ⇒ 술어를 **같은 함수로**(`plain_scalar_dest_of` 추출·두 호출자) 다시 묻는다 · picorv32 **2.40 → 2.31 s (−3.9%)** 백투백 A/B · **바이트 동일** · keccak flat(NBA 쓰기의 88.8% 가 배열/wide) · ⚠️ **측정이 가드도 고쳤다**: 첫 프로브의 `offsets==[(0,0)]` 만 보는 약한 가드는 picorv32 에선 우연히 동일했지만(weak_only 0) **keccak 에선 2,603 건이 샜다** — dead slot 에 flat write 될 수 있는 자리 · 적대 2렌즈 **BLOCKING 0**: soundness 가 `write_routed` 의 여섯 레인이 술어로 전부 막히고 꼬리가 **동일 인자의 동일 `write_chunk_word`** 로 환원됨을 증명(부작용 여섯이 전부 분기점 아래 · `plain_scalar` 가 잠시 비는 창은 fail-safe), differential 이 34쌍 8축 전 채널 동일 + **비공허성 증명**(fast arm 22/27 발화 · 모든 fast-arm apply 의 offsets 가 예외 없이 `(0,0)`) · 5,679 green · format 29 불변
 - `4.5.350` **§2 음수 상수를 먹는 소비자 셋 — 소비자가 언어 규칙 대신 컨테이너의 비트 패턴을 읽었다** · 큐엔 **둘**로 적혀 있었고 3-오라클 census 가 **셋**임을 보였다(세 번째 = `logic q[-3]` 가 조용히 1워드) 동시에 **불가침 축 넷**(음수 bound 의 part-select 계열 — iverilog `0101xx` vs verilator `000010`)을 잘라냈다 · ⓐ replication count 가 `-56` 을 **4294967240** 으로 읽어 타깃 폭 절단 후 **255, exit 0**(`$bits` 가 실제로 그 수를 답했다) ⇒ LOUD · ⭐⭐ **부호는 자기결정 폭에서만 존재한다**: `{(4'd0-4'd1){1'b1}}` 는 두 오라클 **255(15 복사)** 이고 `{(4'sd0-4'sd1){1'b1}}` 는 **거부**인데 폭-무제한 fold 는 **둘 다 −1** — 무제한으로 물었으면 맞는 설계를 false-reject 했다(경계 두 칸 테스트 핀 · 새 `const_bound_signed`) · 읽기를 **둘**(lowered `Const` / AST self-det) 둔 이유 = 파라미터는 접히고 `{(2-3){…}}` 는 `Add`/`Sub` 로 남아 u32 fold 가 **saturate 해 0** ⇒ 옛 진단이 −1 에 대해 *"count of zero"* 라고 말했다 · ⓑ 오름차순 음수 range bound(`[-3:0]`·`[-56:0]`·`[-8:-1]`·**`parameter W=0; logic [W-1:0]` 관용구**)가 폭 1 클램프 + *"param value 0?"* 라는 **파라미터가 없는 리터럴에도 나오던 거짓 진단** ⇒ `|msb-lsb|+1`(두 오라클 2·57·5·8·2) · ⭐ 근인은 머신러리가 아니라 §4.5.228 이 세운 **가정**(*"msb<0·lsb≥0 은 degenerate 파라미터 언더플로"*) — 방향이 어느 bound 가 내부 비트 0 인지를 정하지 **어느 쪽이 음수인지가 정하지 않는다** · 저장은 정규화 + 새 sparse map `net_decl_asc_lsb`(`internal = l − raw`, 내림차순의 거울) · VCD `$var` 는 선언 쌍 · PART select 는 쌍둥이와 같은 이유로 loud · 곁: 폭 캡 초과의 **조용한 `.min(MAX_NET_WIDTH)`** 를 두 방향 모두 평범한 cap 에러로 · ⓒ unpacked 크기 `q[-3]`/`q[0]` 는 `.max(1)` 바닥이 먹고 있었다(경계 실측: 0 과 모든 음수는 두 오라클 거부·1 은 수용) · ⚠️ **옛 동작을 의도로 고정하던 테스트 2건 갱신**(삭제 아님) · ⚠️ 적대 리뷰 **BLOCKING**: dyn/queue 원소 net 이 넓은 폭만 받고 사이드맵 기록은 early-`continue` 로 건너뛰어 **warn → 조용한 `x`** 하강 ⇒ opt-in 을 사이드맵이 실제로 정규화하는 net 으로 좁혔다 · ⚠️ **두 렌즈 수렴**: `dim_coord` 의 `debug_assert` 불변식이 **이미 거짓**이었다(PRE 도 패닉) — release 는 그것을 컴파일아웃하고 `lo.max(0)` 로 **조용히 틀린 비트**를 읽는다 ⇒ 두 빌드 모두 LOUD · 곁: string **변수** replicate 의 음수 카운트(같은 규칙의 세 번째 철자) · 79칸 4-way **회귀 0 · FIXED 30 · 오라클 분열 7(불가침)** · differential 렌즈가 55칸 추가(staged·쓰기·부호·replication 경계) **회귀 0** · 5,654→**5,679 green** · 뮤테이션 15/16(1 방어) · format 29 불변
 - `4.5.349` **§2 런타임 mixed-real — 변환 경계는 self-det, 그리고 그 규칙을 두 크레이트가 공유한다** · 뿌리 = `sim_ir::selfwidth` 가 real const 를 `{width:64}` 로 답해 mixed Binary 의 문맥이 64 가 되고 정수 형제가 거기서 평가됐다(`1.0 + (-s)` 두 오라클 −7 / vita 9) · ⭐ **선행조건을 먼저 세웠다**: `elaborate::expr_is_real` 을 **`sim_ir::realness` 로 리프트**해 `child` 콜백으로 두 크레이트가 한 철자를 공유(엔진은 `WidthTable` 옆에 메모이즈) — 앞 반복이 *"값으로 판정하면 `$random` 이 두 번 뽑히고, self-det 후 resize 는 중첩식을 깬다"* 를 금지로 적어 둔 덕에 짧은 우회를 안 골랐다 · ⚠️ 적대 리뷰 **BLOCKING**: 정적 규칙은 삼항을 real 이라 하는데 엔진의 삼항이 취해진 정수 arm 을 변환하지 않아, PRE 에서 **상쇄되던 두 오차**가 한쪽만 고쳐지며 correct→silent-wrong · 삼항이 실제로 real 을 **생산**하게 고치고 비교 연산자까지 같은 규칙으로 확장(그 전엔 `1.0 + (-s)` 와 `1.0 > (-s)` 가 한 설계 안에서 불일치, `if` 가 다른 가지를 탔다) · 68칸 3-way **회귀 0 · FIXED 11** · 4 백엔드 일치 · 뮤테이션 10/11(1 등가는 도달 불가 증명) · 5,647→**5,654 green**
@@ -384,6 +385,113 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.352 — settle 가 델타마다 199개를 훑어 0개를 찾고 있었다 (2026-08-21 · picorv32 −10.5%)
+
+**착수 = 직전 슬라이스가 남긴 추천 후보** — *"`settle_cont_assigns` 쪽 `run_wprog` 는 아직 평면 워드에서
+72바이트 `Value` 를 다시 짓는다"*. 그 후보는 **진짜였고 −2.4% 였다.** 그런데 §4.5.351 이 세운 규칙
+(*"짓기 전에 나눗셈부터"*)을 지키려고 그 함수를 프로파일했더니, **같은 함수 안에 6배 큰 것**이 있었다.
+
+**뿌리 = `continue` 만 하는 루프 바디.** `Scheduler::schedule_delayed_cas` 는 이렇게 시작했다:
+
+```rust
+for ci in 0..self.st.ir.cont_assigns.len() {
+    let Some(d) = self.st.ir.cont_assigns[ci].delay else { continue };
+```
+
+소스로 읽으면 *"딜레이 붙은 assign 들을 처리한다"* 이다. 실제로는 **199개를 전부 만지고, settle 마다,
+1,400,006 번**이다. 그리고 picorv32 에는 **딜레이 붙은 cont-assign 이 하나도 없다**.
+
+⭐ **단위가 두 자릿수 틀려 있었다.** settle 은 **타임스텝당이 아니라 델타당**이다 — 200k 사이클에
+settle 1,400,006 회(사이클당 7). O(설계 크기) 스캔을 델타당 함수 안에 두면 O(설계 × 델타)다.
+계측: **1,400,006 × 199 = 278,601,194 회 반복, 그중 일한 것 0회.** 프로파일과 산술이 독립으로 일치했다
+(`/usr/bin/sample` 542/7482 = 7.24% ↔ 278.6M × ~2 사이클 = 0.17 s / 2.31 s = 7.3%).
+⚠️ **첫 재프로파일은 분모가 안 맞았다**(10 s 창 · POST 런이 창 안에서 끝나 7482 vs 6879). 창을 6 s 로
+줄여 **분모를 맞춘 뒤**(4474 vs 4499) 다시 재니 `settle_cont_assigns` self **8.83% → 1.62%**
+(절대 시간 ≈ **204 ms → 34 ms**, 200k 사이클 한 런 기준). 같은 재측정에서 `exec_vm::run` 은
+12.96% → 14.60% 로 **올랐는데 그게 정상**이다 — 전체가 10.4% 줄면 안 바뀐 함수의 share 는
+1/0.896 = 1.116 배가 되고, 측정된 비는 1.127 이다.
+
+**ⓐ 반 A — 딜레이 집합을 한 번만 정한다.** `Scheduler` 에 `delayed_ca_idx: Vec<u32>`(오름차순, 생성자에서
+`ca.delay.is_some()` 로 한 번). `schedule_delayed_cas` 는 그걸 순회한다. ⭐ **바디의
+`let Some(d) = … else { continue }` 는 그대로 뒀다** — `unwrap` 으로 바꾸면 사전필터가 규칙의 **두 번째
+철자**가 된다. 그대로 두면 필터가 틀렸을 때 옛 경로로 안전하게 떨어지고, 실제로 **계측이
+`delayskip == 0`** 을 보여 필터와 바디의 판단이 런타임에 정확히 일치함을 증명했다(공허하지 않게:
+같은 계측이 `delaybody = delaycall × delaylen` 도 보였다). `st.ir` 은 `&SimIr` 이고 `cont_assigns` 를
+런타임에 바꾸는 곳은 없다(프로덕션 mutation 은 전부 elaborate) ⇒ 집합은 상수.
+**엔진·tier-3 양쪽 호출자가 같이 받는다.**
+
+**ⓑ 반 B — 추천 후보 그 자체.** settle 의 평범한 arm 이 `k_eval_for_lvalue → k_resolve_lvalue_offsets →
+write_routed` 였다. 새 `NativeKernel::write_settled` 가 목적지가 이미 증명된 plain scalar 면
+`store_plain_word`(= `write_chunk_word`) 로 곧장 간다. **세 번째 리전**이다 — 블로킹은 D1.6
+(`k_write_scalar`), NBA 는 §4.5.351, 남은 하나가 cont-assign settle 이었고 **그게 델타당 도는 리전**이다.
+picorv32/200k 에서 settle 쓰기 **3,343,081 건 중 100.0%** 가 그 모양. 술어는 다른 두 리전과 **같은 함수**
+(`plain_scalar_dest_of`) — 재유도하면 heap/frame/class 를 맞혀야 하고 그 dead slot 에 flat write 하면 조용하다.
+`store_plain_word` 가 이제 `changed` 를 **반환**한다(settle fixpoint 의 계속 조건) · `k_write_scalar` 는
+`let _ =` 로 버린다(그쪽엔 소비자가 없다).
+
+**측정**: picorv32 200k **2.31 → 2.07 s**, 백투백 A/B 로 **세 배치가 −10.4% / −10.5% / −10.8%**
+(각 배치 콜드 1쌍 폐기) ⇒ **≈ −10.5%, 배치간 산포 ±0.2%p**. 반 A 단독 **−8.4%** · 반 B 를 그 위에 얹어
+**추가 −2.4%**. keccak 회귀 없음. 마지막 배치는 **커밋되는 바로 그 소스**로 다시 쟀다.
+⭐ **독립 재측정이 일치**(리뷰 3렌즈): 2.31 → 2.07 = **−10.4%** · 반 A **−7.8%** · 반 B **−2.8%**.
+그 렌즈는 PRE 를 **자기 손으로 다시 빌드**해 **동일 소스 두 빌드의 노이즈 바닥 0.0%** 를 보였고,
+**무해 레이아웃 대조군**(`Apad` = PRE 소스 + 필드만 추가, 루프는 옛것)까지 지어 **레이아웃만으로
+picorv32 가 +0.9%, cont_assign_heavy 가 −5% 움직인다**는 것을 보였다 — 즉 **형태별 ±1~2% 는 코드 배치**다.
+
+⚠️⚠️ **반 A 의 최악 케이스는 0 이 아니다 — 적대 리뷰에서 유일하게 살아남은 지적**(NIT · 정직하게 기록).
+cont-assign 이 **전부** 딜레이인 설계에서는 사전필터가 아무것도 걸러내지 않고 `delayed_ca_idx[i]` 의
+로드 하나만 남는다. ⭐ **검증자가 나보다 좋은 계기를 썼다** — wall 로는 부호가 안 정해져서(같은 설계
+25라운드에 +0.24% 와 +0.59% 가 둘 다 나옴) `/usr/bin/time -l` 의 **retired instructions**(±0.02%)로 쟀다:
+
+| 바이너리 | 200 딜레이/0 평문 (min of 7) | |
+|---|---:|---|
+| PRE | 25.7738 G | 기준 |
+| PRE 재빌드 | 25.7774 G | +0.014% (같은 소스 두 빌드의 바닥) |
+| **Apad**(필드만 추가·루프는 옛것) | 25.7755 G | **+0.007% ⇒ 레이아웃 비용은 0** |
+| 반 A | 25.8666 G | **+0.360%** |
+| 반 A+B | 25.9049 G | **+0.509%** |
+
+그리고 **선형**이다 — 딜레이 iteration 당 **+3 명령**, 건너뛴 iteration 당 **−3.3 명령**
+(0/200 딜레이 −2.29% · 100/200 −0.16% · 200/200 +0.36% · 400/400 +0.36%). ⇒ **손익분기 ≈ 딜레이 비율 50%**.
+실 RTL 은 딜레이 cont-assign 이 희소하므로(picorv32 0/199) 방향은 옳지만 **"항상 공짜"는 아니다**.
+
+**differential**: 리뷰 렌즈가 **649 설계 · vita 호출 ~4,900 회**(3 바이너리 × 3 백엔드)를 돌려
+**PRE-vs-POST 차이 0**. 내 코퍼스는 14 설계 × 전 채널 — 원샷 stdout·stderr·exit·VCD 동일 · **3 백엔드**
+(interp/vm/native) × FST **42 쌍 동일** · **staged**(vcmp→velab→vrun) 로그·VCD·`.velab` **바이트 동일** ·
+**obs 레일**(run.json·results.jsonl) 동일(`wall_s`/`elab_s`/`sim_s` 만 다름 = 빨라진 증거).
+**비공허성**: 계측 바이너리가 반 B 의 fast arm(c02 9/9 · c11 11/11 클록 · picorv32 33,661/33,661)과
+**`else` arm 둘 다**(c06 concat 3 · c12 100비트 3) 발화를 보였고, 반 A 는 `delaylen` 1~2 인 설계에서
+바디가 돌고(c13: 15 호출 × 2 = 30) 0 인 설계에서 **호출은 8~12 회인데 반복이 0** 임을 보였다.
+
+**뮤테이션 12발 — 6 KILLED · 6 SURVIVED, 그리고 살아남은 여섯이 전부 등가임을 따로 증명했다.**
+⭐ 그중 **둘은 살아남아야 정상**이고 그 생존이 곧 이 슬라이스의 주장이다: **m2**(반 A 의 필터를 "전부"로)
+와 **m11**(반 B 의 fast arm 을 끔 = PRE 경로)이 전 스위트 green 이라는 것이 **"두 반 다 의미를 안 바꾼다"**
+의 증명이다. 나머지 넷(`value.width <= 64` · `s.words == 1` · `!s.is_real` · `s.width > 0`)은 각각
+**앞선 가드에 의해 함의**된다 — 폭 둘은 `value.width >= net width`(whole-net lvalue) 때문에, 뒤 둘은
+`build_plain_scalar` 가 이미 `!is_real && width > 0` 을 요구하기 때문에. 읽기 증명만으로 끝내지 않고
+**128/100/65비트 목적지 설계를 지어 m5·m6 바이너리로 실측**해 값이 같음을 확인했다.
+죽은 여섯: 필터 반전 · 마지막 인덱스 누락 · `!value.is_real` 삭제 · `changed` 를 상수 true/false 로 ·
+술어를 `chunks.first().map(net)` 로 재유도.
+
+**새 회귀 테스트 5건**(`crates/cli/tests/settled_cont_assign_store.rs`) — 등가 뮤턴트는 **못 죽인다**
+(그것도 실측했다). 대신 **함의 자체를 핀**한다: fast arm 이 도는 1~64비트 스팬 + 체인, `else` 로 가야
+하는 65/100/128비트 whole-net(⚠️ `plain_scalar_dest_of` 는 **폭 상한이 없어서** 이들도 admit 한다 —
+막는 건 `value.width <= 64` 하나뿐이다), part-select/concat/배열원소/2-state 목적지, 딜레이 assign 이
+첫·중간·끝 인덱스에 흩어진 순서 케이스, 그리고 딜레이가 0개인 설계. 전 셀 iverilog 핀(딜레이 순서는
+verilator 까지 2오라클). ⚠️ 그 순서 케이스의 **내 손 예측이 틀렸고 오라클이 고쳤다**.
+
+**적대 2렌즈**: BLOCKING 0. soundness 는 ⓐ `delayed_ca_idx` 가 옛 순회 집합과 **같은 집합·같은 순서**
+이고 `cont_assigns` 를 런타임에 바꾸는 곳이 없음(프로덕션 mutation 은 전부 elaborate) ⓑ `write_routed`
+의 레인들이 술어로 전부 막히고 꼬리가 **동일 인자의 동일 `write_chunk_word`** 로 환원됨 ⓒ 반환하는
+`changed` 가 한 청크에서 `write_lvalue_inner` 의 OR 과 같음을 증명. 낸 지적 셋은 **전부 하드닝 요청**
+이었고 적대 검증에서 refute 됐지만, 그중 **드리프트 tripwire 는 채택**했다 — §4.5.351 이 `apply_nba` 에
+넣은 것과 같은 `debug_assert`(플랫 store 세 리전이 같은 가드를 들어야 한다).
+
+**곁 발굴(스코프 밖·기록만)**: POST 프로파일의 다음 자리 — `k_schedule_nba_scalar` **4.3%**(NBA 스케줄마다
+`chunks[0].clone()`) · `propagate` **2.5%**(델타마다 `Vec` 셋 — 옛 D6 표적, 아직 미측정) · 할당자 잔여.
+`drain_range_diags` 1.8% 는 **이미 재고 기각**된 자리다(§5.1-bb — 비용은 문장당 호출 자체).
+
+⚠️ **format_version 불변(29)** — `Scheduler` 는 런타임 상태이고 직렬화 타입이 아니다.
 
 #### 4.5.351 — NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 (2026-08-21 · picorv32 −3.9%)
 

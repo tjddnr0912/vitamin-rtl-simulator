@@ -845,10 +845,74 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         from_w: u32,
         from_signed: bool,
         to_w: u32,
-    ) {
+    ) -> bool {
         let (pv, pu) = crate::value::resize_word(val, unk, from_w, to_w, from_signed);
         let (arena, forced) = (&mut self.arena, &self.sched.st.forced);
-        arena.write_chunk_word(c, 0, 0, pv, pu, to_w, forced);
+        arena.write_chunk_word(c, 0, 0, pv, pu, to_w, forced)
+    }
+
+    /// `write_routed` for a continuous assign's settled value — the flat store
+    /// when the destination has already been proved plain, the routed funnel
+    /// otherwise.
+    ///
+    /// ⭐ THE THIRD REGION to ask this. The blocking region got the flat store in
+    /// D1.6 (`k_write_scalar`) and the NBA region in §4.5.351; the continuous-
+    /// assign settle is the one left, and it is the one that runs per DELTA.
+    /// picorv32/200k: 3,343,081 settled writes, **100.0% of them a plain scalar
+    /// whose value fits one word** — every one was walking the routing funnel and
+    /// then `write_lvalue`'s per-chunk slicing to reach the same
+    /// `write_chunk_word` this reaches in two instructions.
+    ///
+    /// The predicate is `plain_scalar_dest_of`, the SAME one the other two
+    /// regions use, for the same reason: a re-derivation would have to get heap,
+    /// frame slot and class handle right, and a flat write into one of those dead
+    /// slots is silent. The width guard is `k_write_scalar`'s, verbatim — a
+    /// context-widened RHS (`lvalue_width.max(self_width(rhs))`) can exceed one
+    /// word even when the destination does not, and that case falls through.
+    ///
+    /// Returns the funnel's own `changed` — the settle fixpoint's continuation
+    /// condition — which is why `store_plain_word` now reports it rather than
+    /// dropping it. For one plain whole-net chunk, `write_lvalue_inner`'s return
+    /// is the OR over a single chunk, i.e. this same `write_chunk_word` call's.
+    pub(crate) fn write_settled(&mut self, lhs: &Lvalue, value: Value) -> bool {
+        if !value.is_real && value.width <= 64 {
+            if let Some(net) =
+                crate::backend::plain_scalar_dest_of(&self.sched.st.plain_scalar, lhs)
+            {
+                let s = self.arena.slots[net as usize];
+                if s.words == 1 && s.width > 0 && !s.is_real {
+                    // ⚠️ The tripwire `apply_nba` carries, for the same reason and
+                    // in the same words: this arm decides "not a heap net" from
+                    // `plain_scalar` (built out of `SimState::dyn_is_handle`) while
+                    // the routing lane it replaces asked `NetArena::heap` (built out
+                    // of `kind_is_heap`). Two spellings of one rule, agreeing
+                    // arm-for-arm today. If a future `NetKind` reached only one of
+                    // them, the old code routed to the heap and this stores flat
+                    // into a dead slot at exit 0. `kind_is_heap` is an exhaustive
+                    // match so the arena side breaks the build; this catches the
+                    // other direction. Adversarial review asked for it here — the
+                    // three flat-store regions should carry the same guard.
+                    debug_assert!(
+                        !self.arena.heap.get(net as usize).copied().unwrap_or(false),
+                        "settled plain-scalar destination must not be a heap net"
+                    );
+                    // `lhs` is a parameter, borrowed independently of `self`, so
+                    // the chunk goes in by reference — no clone (an `Lvalue` owns
+                    // its chunk `Vec`, and cloning one here would trade the
+                    // routing walk for a malloc).
+                    return self.store_plain_word(
+                        &lhs.chunks[0],
+                        value.val.first().copied().unwrap_or(0),
+                        value.unk.first().copied().unwrap_or(0),
+                        value.width,
+                        value.signed,
+                        s.width,
+                    );
+                }
+            }
+        }
+        let offs = self.k_resolve_lvalue_offsets(lhs);
+        self.write_routed(lhs, value, &offs)
     }
 
     /// The cached width-specialized program for `(eid, w, signed)`, compiling
@@ -2354,7 +2418,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
             let s = self.arena.slots[net as usize];
             if s.words == 1 && s.width > 0 && !s.is_real {
                 if let [c0] = lhs.chunks.as_slice() {
-                    self.store_plain_word(
+                    // The `changed` flag has no consumer on THIS side — a
+                    // blocking write's dirty/edge bookkeeping is already done
+                    // inside the funnel. `write_settled` is the caller that needs
+                    // it (a settle fixpoint continues on it).
+                    let _ = self.store_plain_word(
                         c0,
                         value.val.first().copied().unwrap_or(0),
                         value.unk.first().copied().unwrap_or(0),

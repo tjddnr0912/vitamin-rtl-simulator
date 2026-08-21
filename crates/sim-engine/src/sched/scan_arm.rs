@@ -549,6 +549,18 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 *net_drivers.entry(net).or_default() += 1;
             }
         }
+        // The delayed set, decided ONCE. `schedule_delayed_cas` iterates this
+        // instead of rescanning every assign per settle; ascending order is the
+        // declaration order its old `0..len` loop had, and the `delay.is_some()`
+        // test here is the same field the body still reads.
+        let delayed_ca_idx: Vec<u32> = st
+            .ir
+            .cont_assigns
+            .iter()
+            .enumerate()
+            .filter(|(_, ca)| ca.delay.is_some())
+            .map(|(i, _)| i as u32)
+            .collect();
         let delayed_sole: Vec<bool> = st
             .ir
             .cont_assigns
@@ -665,6 +677,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             md_nets,
             ca_md,
             delayed_sole,
+            delayed_ca_idx,
             delayed_ca: BTreeMap::new(),
             delayed_nba: BTreeMap::new(),
             delta_count: 0,
@@ -807,7 +820,15 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         &mut self,
         nets: Option<&N>,
     ) {
-        for ci in 0..self.st.ir.cont_assigns.len() {
+        // The iteration set is `delayed_ca_idx`, not `0..cont_assigns.len()` —
+        // the same indices in the same order, minus the ones whose only effect
+        // was to reach the `continue` below. The `let Some(d) = ... else` is
+        // KEPT verbatim rather than replaced by an `unwrap`: the delay is still
+        // read from the one field that defines it, so the pre-filter cannot
+        // become a second spelling of the rule. (`self.st.ir` is a `&SimIr`
+        // fixed for this scheduler's life, so the filter cannot go stale.)
+        for i in 0..self.delayed_ca_idx.len() {
+            let ci = self.delayed_ca_idx[i] as usize;
             let Some(d) = self.st.ir.cont_assigns[ci].delay else {
                 continue;
             };
