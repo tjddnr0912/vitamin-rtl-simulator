@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 295건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 296건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.355` **계층 타깃의 fill 폭 — 폭은 없던 게 아니라 늦었다** · 큐엔 **셋**, census 는 **일곱**, 적대 프로브가 **열**(+`'x`/`'z`·task 스코프) · ⚠️ **ROADMAP 의 근인 기록이 절반이었다** — 계측해 보니 레인이 **둘**이다(`0xFF000000` 전체-net · `0xFE000000` element/select) · ⭐⭐ **고침은 새 폭 규칙이 아니라 같은 질문을 나중에 하는 것**: 두 resolve 레인이 각자 결정한 chunk 를 publish 하고, `resolve_pending_fill_widths` 가 **lowering 때 1 을 답했던 바로 그 `ir_lvalue_width`** 를 다시 부른다 ⇒ 하위 케이스(전체-net·part-select·element)가 열거 없이 떨어지고, **결정적으로 `u.a[0]`(1비트 계층 타깃, 세 오라클 `...1`)이 구조적으로 보호된다** — 레인별로 짰으면 그것까지 12개 1 로 넓혔을 것이다 · ⭐ **bare fill 만 지연**하는 이유는 지름길이 아니라 **resolve 에 lowering 스코프가 없기 때문**(`(raw,kind,width)` 로 재구성 가능한 유일한 모양) · ⚠️⚠️ **자기 정정**: 중간에 *"bare 가 곧 깨진 집합 전체"* 라고 결론냈는데 그건 **12비트 프로브의 우연**이었다 — 520칸 스윕의 64비트 타깃이 `u.wide = '1+1` = 4294967296(로컬은 0, iverilog 0)을 내놓아 깨졌다 ⇒ §2-1e 로 기록(선행조건 = 스코프를 가진 재-lower) · 520칸 3-오라클 **일치 308 → 436 · MISMATCH 132 → 4** 이고 **바뀐 128칸이 전부 iverilog 일치**(변했는데 안 맞는 것 0) · 잔여 4 = §2-1e(PRE==POST) · 잔여 80 = `force`/절차적 `assign` 의 계층 part/bit-select E3009(PRE==POST · 기존 loud) · bench 4설계 `.vu`/`.velab` 바이트 동일 · 새 회귀 8건 · 5,714 → **5,722 green** · format 29 불변
 - `4.5.354` **`lower_expr_ctx` 가 `lower_expr` 의 도메인 라우트를 전부 잃었다 — 고침의 대부분은 삭제였다** · 큐엔 *"`{<string>,'1}` 이 무한 루프 ⇒ **loud 화**"* 라고 적혀 있었고, 착수 census 가 **1 → 6** 으로, 적대 리뷰가 다시 **6 → 10** 으로 늘리는 동시에 **계획을 뒤집었다**(loud 가 아니라 correct-support) · 뿌리는 hang 이 아니다 — `lower_expr_ctx` 는 문맥 전파 6종에 대한 **두 번째 dispatch** 이고 `lower_expr` 이 가진 도메인 라우트를 **하나도** 제대로 안 갖췄다 ⇒ **노드 어딘가의 fill 리터럴이 그 라우트 전부를 우회하는 스위치**였다: ⓐ string concat `{s,'1}` = **비종료**(상호 tail call — 릴리즈는 RSS 고정 100% CPU, 디버그는 스택 오버플로 rc=134) ⓑ string replicate `{2{s,'1}}` = 문자열이 비트로 붕괴해 **24'd5** ⓒ string 비교 `s < {"a",'1}` = packed(비-lexicographic) **0**, 두 오라클 **1** ⓓ handle 비교 `h == '1` = **loud→silent**(쌍둥이 `h == 1'b1` 은 E3009) ⓔ `{ {0{x}}, '1 }` = **거짓 loud**(`repl_zero_ok` 미설정) ⓕ `N=-2; {N{'1}}` = 조용히 `111111111111` ⓖ `r & '1`/`r << '1` = **loud→silent**(§6.2) + `r ** '1` 이 §11.4.9 `$pow` **라우트**를 통째로 잃어 `0`(두 오라클 3) ⓗ `r + '1` = `0`(두 오라클 **4**) — `ir_bits_of` 가 real 에 **저장 크기 64** 를 답했다 = §4.5.353 이 `ir_lvalue_width` 에서 만난 덫이 **한 층 아래** · ⓘ 같은 덫의 Ternary arm(`c ? r : '1`) ⓙ 같은 덫의 `case` 셀렉터(`case (r) '1:`) — ⓘⓙ 는 *"나머지 층을 찾아가라"* 를 나 자신에게 적용한 `ir_bits_of` **전수 grep** 이 냈다 · ⭐⭐ **적대 리뷰가 설계를 바꿨다** — ⓔⓕ 를 찾고 나서야 **Concat/Replicate arm 이 피연산자에 `ctx = 0` 을 넘긴다**(=`lower_expr` 이 하는 것과 정의상 동일)는 게 보였다 ⇒ **가드 넷이 아니라 arm 둘 삭제**가 답이고, 그 삭제가 ⓔⓕ 를 부수적으로 해소 · 진짜 가드가 필요한 건 **Binary 하나**(`binary_stops_ctx` = 해당 사이트 조건의 verbatim 사본) · ⭐ 종료성이 **구조적**이 됐다(`lower_expr_ungated`: ctx 를 떠나는 모든 호출은 **진부분식**이거나 **게이트 없는 진입점**) · 검증은 **합성 differential** — 이 족속엔 외부 오라클이 없지만(iverilog `recv_string not implemented` 로 죽고 verilator 빌드 거부 · fill 없는 `{s,8'h0F}` 도 마찬가지) *"concat 피연산자는 self-det ⇒ fill 은 정확히 1비트"* 는 두 오라클이 string-free 족속에서 확인해 주고, 문장 레벨 `string_concat_special` 과 `1'b1` 쌍둥이가 vita 안의 두 철자로 값을 고정한다 · ⭐ string 타깃 `r={s,'1}` 은 네 산출(iverilog·verilator·PRE·POST)이 **바이트 동일 `ab\x01`** — 터미널로 봤으면 넷 다 `ab` 로 같아 보였을 자리 · differential 564 fill 설계 **0 차이** + string/handle 160칸 46 변화가 **전부 의도 집합** + bench 4설계 `.velab` 바이트 동일 · 새 회귀 18건 · 5,694 → **5,712 green** · format 29 불변
 - `4.5.353` **fill 리터럴이 문맥 폭을 못 받는 대입 형태 셋 — 머신러리는 완성돼 있었고 세 자리가 안 불렀다** · 큐엔 **하나**로 적혀 있었고 census 가 **셋**(ⓐ net 선언 초기화 ⓑ `force` ⓒ 절차적 continuous assign) · ⭐ **같은 구문의 두 하강 중 하나가 잊었다** — `wire [7:0] a = '1;` 은 암묵적 continuous assign 인데 옆의 `assign a = '1;` 과 답이 달랐다(00000001 vs 11111111) · ⓑ·ⓒ 는 **write-twin 스윕**이 찾았다 · 고침은 이미 있던 `resize_fill_rhs` 를 **한 줄씩 세 군데** 부르는 것 · ⚠️⚠️ **적대 리뷰가 내가 만든 correct→silent-wrong 을 잡았다**: `real` 타깃은 비트 문맥이 없는데 `ir_lvalue_width` 가 64(저장 폭)를 답해 `force r='1;` 이 1.0 → **1.84467e+19** (두 오라클 1.0) ⇒ ⭐ **가드를 호출부가 아니라 헬퍼 안에** 두니 내 회귀 2건을 막으면서 **선행 호출자의 pre-existing real silent-wrong 4건**(`e='1;`·`real d='1;`·`f[0]='1;`)을 덤으로 고쳤다 · ⚠️ 게이트 술어 `expr_contains_fill` 이 **`MinTypMax` 를 안 걸어** `(1:'1:2)` 가 전 자리에서 안 고쳐지고 있었다(같은 클래스라 이번에 수정) · ⚠️ **규칙의 반대 절반도 핀**(shift 량·`**` 지수·`&&`/`||`·인덱스의 fill 은 1비트 유지 — 안 그러면 silent-wrong 맞바꾸기) · `'x`/`'z` 곁수확(verilator 의 `0` 은 2-state 한계이지 분열이 아니다) · PRE-3-way **FIXED 17 · REGRESSION 0 · unchanged-ok 24** · 비-fill 설계는 기계적 바이트 동일(picorv32·keccak 3종 실측) · 스코프 밖 pre-existing 셋을 §2 에 기록(**계층 타깃 = 네 번째 자리·뿌리 다름** · `{string,'1}` **무한 루프** · `case ('1)` 셀렉터) · **뮤테이션 10/10 KILLED**(⭐ 단축 평가 mutant 이 살 거라는 내 예측이 틀렸다 — `clog2_repl_count` 가 죽인다: 그건 값 가드다) · 새 회귀 10건 · 5,684 → **5,694 green** · format 29 불변
 - `4.5.352` **settle 가 델타마다 199개를 훑어 0개를 찾고 있었다 — 나눗셈이 게이트가 아니라 탐색이었다** · 착수는 직전 슬라이스의 추천 후보(`settle_cont_assigns` 의 72바이트 `Value`)였고 그건 진짜였다(**−2.4%**) — 다만 *"짓기 전에 나눗셈"* 규칙을 지키려 그 함수를 프로파일했더니 **같은 함수 안에 6배 큰 것**이 있었다 · `schedule_delayed_cas` 가 `for ci in 0..cont_assigns.len()` 로 전부 만지고 `delay` 없는 것을 `continue` 했다 ⇒ picorv32 는 **딜레이 붙은 cont-assign 이 0개**인데 **1,400,006 settle × 199 = 278,601,194 회**를 돌아 런타임의 **7.2%** · ⭐ **단위가 두 자릿수 틀렸다** — settle 은 타임스텝당이 아니라 **델타당**(사이클당 7) · ⓐ `delayed_ca_idx` 를 생성자에서 한 번(바디의 `let Some(d) = … else { continue }` 는 **verbatim 유지** ⇒ 사전필터가 두 번째 철자가 되지 않고, 계측이 `delayskip == 0` 으로 둘의 일치를 증명) ⓑ `write_settled` = flat store 의 **세 번째 리전**(블로킹 D1.6 · NBA §4.5.351 · settle 은 **델타당 도는 리전**) · picorv32 **2.31 → 2.07 s (−10.5%)**(반 A −8.4% · 반 B 추가 −2.4%) · 프로파일 독립 확인(분모 맞춘 재측정) `settle_cont_assigns` self **8.83% → 1.62%** · differential 14설계 × 3백엔드 × {stdout,stderr,exit,VCD,FST} **42쌍 동일** + staged(`.velab` 바이트 동일) + obs 레일 동일 · 비공허성 양 arm 발화 실측 · **뮤테이션 12발 6 KILLED / 6 등가**(⭐ m2·m11 의 생존이 곧 "의미 불변"의 증명) · 새 회귀 5건 · 적대 2렌즈 **BLOCKING 0**(유일 생존 지적 = 반 A 의 최악 케이스 **+0.36%**, retired-instructions 로 측정 · 손익분기 ≈ 딜레이 50%) · 5,679 → **5,684 green** · format 29 불변
@@ -387,6 +388,41 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.355 — 계층 타깃의 fill 폭: 폭은 없던 게 아니라 늦었다 (2026-08-21 · 5,722 green · format 29 불변)
+
+**착수.** §4.5.353 이 `resize_fill_rhs` 로 *"fill 은 대입의 폭을 받는다"* 를 전 대입 형태에 깔았는데, 타깃이 `a` 가 아니라 `u.a` 면 안 먹었다. 교차-인스턴스 쓰기는 lvalue 를 **센티널 net** 으로 낮추고(자식 인스턴스의 net 이 아직 없다), `ir_lvalue_width` 가 `nets.get(0xFF00_0000)` → `None` → `.max(1)` → **1** 을 답한다.
+
+**census 가 3 을 7 로, 적대 프로브가 10 으로.**
+
+| 모양 | PRE | 두 오라클 |
+|---|---|---|
+| `u.a = '1` · `u.a <= '1` · `force u.a = '1` | `000000000001` | `111111111111` |
+| `assign u.a = '1`(절차적) | `000000000001` | `111111111111` |
+| `u.v.q = '1`(2단) | `000000000001` | `111111111111` |
+| `u.arr[0] = '1` | `000000000001` | `111111111111` |
+| `u.a[7:0] = '1` | `xxxx00000001` | `xxxx11111111` |
+| `u.a = 'x` · `'z` | `00000000000x` · `…z` | `xxxxxxxxxxxx` · `zzz…` |
+| task 스코프 안의 `u.a = '1` | `000000000001` | `111111111111` |
+
+⚠️ **ROADMAP 이 적어 둔 근인은 절반이었다.** *"센티널 = `HIER_WRITE_SENTINEL_BASE`"* 만 적혀 있었는데, 계측(`resize_fill_rhs` 임시 계장)이 레인이 **둘**임을 보였다 — `u.a` 는 `0xFF000000`(write 레인), `u.a[7:0]`·`u.arr[0]`·`u.a[0]` 는 `0xFE000000`(**sel 레인**). ⭐ 그리고 **`u.a[0]` 도 sel 레인이고 width=1 인데 그건 옳다**(1비트 타깃 · 세 오라클 일치) ⇒ **레인 단위로 고쳤으면 맞는 것을 깨뜨렸다.**
+
+**⭐⭐ 설계 = 새 규칙이 아니라 같은 질문을 나중에.** sel 레인의 resolve 는 net 의 shape 로부터 `LvalChunk` 를 **통째로 재구축**한다 — 즉 그 시점엔 폭이 이미 정확하다. 그래서 두 레인이 각자 결정한 chunk 를 `hier_resolved_chunk` 로 publish 하고, `resolve_pending_fill_widths` 가 **lowering 때 1 을 답했던 바로 그 `ir_lvalue_width`** 를 그 chunk 에 다시 묻는다. 하위 케이스가 열거 없이 떨어진다:
+
+- 전체-net → net 폭 · part-select → 재구축 chunk 의 part 폭 · element → 원소 폭 ·
+- **bit-select → 1, 즉 변화 없음** — 불가침 핀이 **구조적으로** 지켜진다.
+
+이 대칭이 곧 정당화다: 아키텍처는 이미 *"지금은 센티널로 낮추고 알게 되면 패치한다"* 이고, **폭은 그때 모르는 두 번째 값**일 뿐이다.
+
+**⭐ bare fill 만 지연하는 이유.** 지름길이 아니라 제약이다 — resolve 패스엔 **lowering 스코프가 없고**, `(raw, kind, width)` 만으로 재구성 가능한 모양은 bare fill(+ `(…)`/`MinTypMax` 투명 래퍼)뿐이다. `push_expr` 은 append 라 각 리터럴이 자기 arena 슬롯을 독점하므로, 그 슬롯의 `Const` 를 덮어써도 다른 식을 건드리지 않는다.
+
+**⚠️⚠️ 자기 정정 — 중간 결론이 우연이었다.** 12비트 타깃으로 중첩 fill 을 프로브하고 *"`'1+1`·`{2{'1}}`·`c?'1:12'h0`·`~'0` 이 전부 이미 맞으니 **bare 가 곧 깨진 집합 전체**"* 라고 적었다. **520칸 스윕이 그것을 깼다**: `u.wide = '1+1`(64비트) = **4294967296** 인데 로컬 `W = '1+1` 은 **0**(iverilog 일치). 규칙은 `max(ctx, sibling)` 이고 형제(`1` = 32비트)가 타깃보다 좁으면 ctx 가 여전히 유일한 폭 출처다 — 12비트에선 두 경로가 우연히 만나 보이지 않았을 뿐이다. ⇒ §2-1e 로 기록했고, 테스트의 해당 주장도 **형제의 폭**으로 다시 썼다(`u.a = '1 & 12'hF0F` 가 규칙을 정확히 진술하는 칸).
+
+**적대 프로브.** real 계층 타깃(`u.r = '1` = 1.0 · §6.12 가드가 지연 레인을 통과해도 살아있다) · 미해결 계층 타깃(E3010 유지) · 같은 타깃 두 번 · 한 문장 안 두 센티널 · task 스코프 — 전부 PRE 대비 회귀 0.
+
+**differential.** 520 설계(13 타깃 × 10 RHS × 4 대입 형태) 3-오라클: **일치 308 → 436 · MISMATCH 132 → 4** 이고 ⭐ **바뀐 128칸이 전부 iverilog 와 일치**(변했는데 안 맞는 것 **0**). 남은 4 = §2-1e(PRE==POST), 남은 80 = `force`/절차적 `assign` 의 계층 part/bit-select E3009(PRE==POST · 기존 loud follow-on). bench 4설계(keccak ×3 · picorv32) `.vu`/`.velab` **바이트 동일**.
+
+**게이트.** 5,714 → **5,722 green**(새 회귀 8건 = `crates/cli/tests/fill_hierarchical_target_width.rs`) · clippy 0 · fmt 0 · format_version 29 불변(elaborate 전용 · 직렬화 형상 무변경).
 
 #### 4.5.354 — `lower_expr_ctx` 가 `lower_expr` 의 도메인 라우트를 전부 잃었다 (2026-08-21 · 5,714 green · format 29 불변)
 

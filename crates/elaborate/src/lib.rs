@@ -1171,6 +1171,13 @@ struct Elaborator<'s> {
     /// HIER-REST①: deferred hierarchical ELEMENT/bit-select WRITE targets
     /// (`dut.mem[i] = …`); see [`DeferredHierSelWrite`]. Out-of-band (golden-free).
     deferred_hier_sel_write: Vec<DeferredHierSelWrite>,
+    /// §4.5.355: fill literals whose ASSIGNMENT WIDTH is not known yet because the
+    /// target is a deferred hierarchical write. See [`PendingFillWidth`].
+    pending_fill_width: Vec<PendingFillWidth>,
+    /// §4.5.355: sentinel net → the chunk the deferred-hier resolution decided on.
+    /// Published by BOTH resolve passes so `resolve_pending_fill_widths` can ask the
+    /// SAME `ir_lvalue_width` question it asked at lowering time, only later.
+    hier_resolved_chunk: std::collections::BTreeMap<u32, ir::LvalChunk>,
     /// N5 functional coverage: covergroup TYPE name → its declaration (registered in
     /// the prescan so an instance can be lowered regardless of source order).
     cover_types: std::collections::BTreeMap<String, ast::CovergroupDecl>,

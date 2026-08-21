@@ -112,6 +112,20 @@ impl Elaborator<'_> {
                 }
             };
             patch.insert(sentinel, real);
+            // §4.5.355: publish what this lane decided, so a fill literal whose
+            // assignment width had to wait for it can ask `ir_lvalue_width` now.
+            // This lane is WHOLE-NET only (see the doc above), so the resolved chunk
+            // is the plain net.
+            self.hier_resolved_chunk.insert(
+                sentinel,
+                ir::LvalChunk {
+                    net: real,
+                    word: None,
+                    offset: None,
+                    width: None,
+                    kind: ir::SelKind::Bit,
+                },
+            );
         }
         self.cur_span = ambient;
         for s in &mut self.stmts {
@@ -252,6 +266,11 @@ impl Elaborator<'_> {
                     }
                 }
             };
+            // §4.5.355: same publish as the whole-net lane — here the REBUILT chunk
+            // is the answer, which is why a hierarchical BIT-select needs no special
+            // case: its rebuilt chunk is one bit wide, so the width this feeds back is
+            // 1 and the fill is left exactly as `lower_expr` made it.
+            self.hier_resolved_chunk.insert(sentinel, chunk.clone());
             patch.insert(sentinel, (chunk, path));
         }
         self.cur_span = ambient;
@@ -327,5 +346,53 @@ impl Elaborator<'_> {
             ),
         );
         true
+    }
+
+    /// §4.5.355: give every fill literal the assignment width its deferred
+    /// hierarchical target could not supply at lowering time.
+    ///
+    /// ⭐ THIS ASKS THE SAME QUESTION `resize_fill_rhs` ASKED, JUST LATER. Both
+    /// deferral lanes have published the chunk they decided on, so `ir_lvalue_width`
+    /// finally has a real net to read; there is no second width rule here, which is
+    /// what keeps the sub-cases honest by construction:
+    ///
+    /// - whole-net (`u.a = '1`)        → the net's width;
+    /// - part-select (`u.a[7:0] = '1`) → the rebuilt chunk's part width;
+    /// - element (`u.arr[0] = '1`)     → the element's width;
+    /// - **bit-select** (`u.a[0] = '1`) → 1, i.e. NO CHANGE — and that is the
+    ///   anti-regression pin, since all three oracles agree a one-bit hierarchical
+    ///   target takes a one-bit fill. A rule written per sub-case would have had to
+    ///   remember to exclude it.
+    ///
+    /// The rebuild is scope-free (`fill_literal_const` needs only the literal's own
+    /// text and a width), which is exactly why `bare_fill_literal` admits nothing else
+    /// — the resolve pass has no lowering scope to re-enter.
+    pub(crate) fn resolve_pending_fill_widths(&mut self) {
+        let pending = std::mem::take(&mut self.pending_fill_width);
+        for p in pending {
+            let Some(chunk) = self.hier_resolved_chunk.get(&p.sentinel).cloned() else {
+                // The lane errored out (or never ran) — a loud diagnostic already
+                // exists and there is no width to hand back.
+                continue;
+            };
+            if chunk.net == POISON_NET {
+                continue;
+            }
+            let lv = ir::Lvalue {
+                chunks: vec![chunk],
+            };
+            if self.lvalue_targets_real(&lv) {
+                continue; // §6.12, same withholding as the lowering-time guard
+            }
+            let w = self.ir_lvalue_width(&lv);
+            let Some(cv) = literal::fill_literal_const(&p.raw, p.kind, w) else {
+                continue;
+            };
+            let cid = self.intern_const(cv);
+            if let Some(slot) = self.exprs.get_mut(p.expr_id as usize) {
+                *slot = ir::Expr::Const { val: cid };
+            }
+        }
+        self.hier_resolved_chunk.clear();
     }
 }

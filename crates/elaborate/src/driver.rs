@@ -190,6 +190,8 @@ impl<'s> Elaborator<'s> {
             deferred_hier_sel: Vec::new(),
             deferred_hier_write: Vec::new(),
             deferred_hier_sel_write: Vec::new(),
+            pending_fill_width: Vec::new(),
+            hier_resolved_chunk: std::collections::BTreeMap::new(),
             cover_types: std::collections::BTreeMap::new(),
             cover_insts: std::collections::BTreeMap::new(),
             cross_insts: std::collections::BTreeMap::new(),
@@ -722,6 +724,9 @@ impl<'s> Elaborator<'s> {
         // (`dut.mem[i] = …`), also before the multidriver scan (the rebuilt chunks
         // carry real net ids).
         self.resolve_deferred_hier_sel_write();
+        // §4.5.355: both lanes have now decided the real chunk, so the assignment
+        // width a fill literal could not be told at lowering time finally exists.
+        self.resolve_pending_fill_widths();
         // §4.5.166: now that hier read/write chunks + exprs carry real nets and
         // index eids, recompute the comb/latch read-sets so the referenced net
         // (and any index) enters the sensitivity list. Only runs when a hier ref

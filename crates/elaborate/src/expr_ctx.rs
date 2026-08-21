@@ -2,6 +2,28 @@
 
 use super::*;
 
+/// The `(raw, kind)` of an expression that IS a fill literal, seen through the two
+/// TRANSPARENT wrappers `lower_expr` also sees through.
+///
+/// ⭐ ONLY A BARE FILL, and that is not a shortcut — it is the whole broken set. A
+/// fill with a SIBLING takes its width from the sibling, not from the assignment
+/// context (`sibling_ctx`), and a concat/replication operand is self-determined, so
+/// `u.a = '1 + 1`, `u.a = {2{'1}}`, `u.a = c ? '1 : 12'h0` and `u.a = ~'0` all agree
+/// with both oracles TODAY, deferred target or not. The assignment context is the
+/// fill's only width source exactly when the fill stands alone — which is also the
+/// only shape that can be rebuilt later from `(raw, kind, width)` with no scope, and
+/// scope is precisely what the resolve pass does not have.
+fn bare_fill_literal(e: &ast::Expr) -> Option<(&str, ast::IntLitKind)> {
+    match &e.kind {
+        ast::ExprKind::Paren { inner } => bare_fill_literal(inner),
+        ast::ExprKind::MinTypMax { typ, .. } => bare_fill_literal(typ),
+        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+            Some((raw, *kind))
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn map_unop(op: ast::UnOp) -> ir::UnOp {
     use ast::UnOp::*;
     match op {
@@ -542,12 +564,46 @@ impl Elaborator<'_> {
         if self.lvalue_targets_real(lv) {
             return rhs_id;
         }
+        // ⚠️ A DEFERRED HIERARCHICAL TARGET HAS NO WIDTH YET. `u.a = '1;` lowers its
+        // lvalue to a SENTINEL chunk because the child instance's nets do not exist
+        // at this point; `ir_lvalue_width` then reads `nets.get(0xFF00_0000)` → `None`
+        // → `.max(1)` → 1, so the fill became one bit and `u.a` read
+        // `000000000001` where both oracles read `111111111111`. The width is not
+        // missing, only LATE — the same thing that is true of the net id, which this
+        // architecture already answers by lowering a sentinel and patching it when the
+        // answer arrives. The fill gets the same treatment (§4.5.355).
+        if let Some(sentinel) = self.deferred_lvalue_sentinel(lv) {
+            if let Some((raw, kind)) = bare_fill_literal(rhs) {
+                self.pending_fill_width.push(PendingFillWidth {
+                    expr_id: rhs_id,
+                    sentinel,
+                    raw: raw.to_string(),
+                    kind,
+                });
+            }
+            // Either way the ctx here would be the bogus 1, so leave `lower_expr`'s IR
+            // alone rather than bake that in.
+            return rhs_id;
+        }
         let lv_width = self.ir_lvalue_width(lv);
         // Re-lower the rhs with the lvalue width as the assignment context so every
         // fill in a context-determined position grows to that width (IEEE §11.6).
         // The originally-lowered `rhs_id` (sized self-determined) becomes dead — a
         // fill-bearing rhs has no golden to preserve, so this is harmless.
         self.lower_expr_ctx(rhs, lv_width)
+    }
+
+    /// The deferred-hierarchical sentinel this lvalue writes through, if any.
+    ///
+    /// Both deferral lanes are covered (`HIER_SEL_WRITE_SENTINEL_BASE ..=` spans the
+    /// element/bit-select lane and then the whole-net lane), and `POISON_NET` is
+    /// deliberately EXCLUDED: a poisoned lvalue already produced a loud error, and
+    /// there is nothing to come back and patch.
+    fn deferred_lvalue_sentinel(&self, lv: &ir::Lvalue) -> Option<u32> {
+        lv.chunks
+            .iter()
+            .map(|c| c.net)
+            .find(|&n| (HIER_SEL_WRITE_SENTINEL_BASE..POISON_NET).contains(&n))
     }
 
     /// Does this lvalue write a `real`? Used only to withhold the fill context

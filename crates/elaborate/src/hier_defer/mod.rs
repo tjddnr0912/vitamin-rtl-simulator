@@ -89,6 +89,24 @@ pub(crate) struct DeferredHierWrite {
     pub(crate) span: Option<ast::Span>,
 }
 
+/// §4.5.355: a fill literal (`'0`/`'1`/`'x`/`'z`) whose ASSIGNMENT WIDTH was not
+/// knowable when it was lowered, because the target is a deferred hierarchical write
+/// and its chunk still carried a sentinel net.
+///
+/// The literal is lowered self-determined (one bit) as usual and this record says
+/// where to go back and widen it: `expr_id` is the arena slot holding the `Const`
+/// (`push_expr` appends, so the slot is this literal's alone and overwriting it
+/// cannot disturb another expression), and `sentinel` names which deferral the width
+/// is waiting on. `resolve_pending_fill_widths` rebuilds the constant from
+/// `(raw, kind, resolved-width)` — no lowering scope required, which is why only a
+/// BARE fill is admitted here (see `bare_fill_literal`).
+pub(crate) struct PendingFillWidth {
+    pub(crate) expr_id: u32,
+    pub(crate) sentinel: u32,
+    pub(crate) raw: String,
+    pub(crate) kind: ast::IntLitKind,
+}
+
 pub(crate) struct DeferredHierSelWrite {
     pub(crate) prefix: String,
     pub(crate) path: Vec<String>,
