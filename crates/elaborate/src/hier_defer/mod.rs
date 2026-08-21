@@ -104,9 +104,12 @@ pub(crate) struct PendingFillWidth {
     pub(crate) expr_id: u32,
     pub(crate) sentinel: u32,
     /// The right-hand side AST, kept so the resolve pass can re-lower it at the width
-    /// that finally exists. Admitted only when `scope_free_fill_expr` says the lowering
-    /// asks the scope nothing — see that predicate.
+    /// that finally exists. Admitted only by `scope_free_fill_expr`.
     pub(crate) rhs: ast::Expr,
+    /// `cur_prefix` at lowering time — the whole of the "scope" a plain name needs,
+    /// because resolution is an outward walk from this string over tables that outlive
+    /// elaboration. Restored around the re-lowering (§4.5.360).
+    pub(crate) prefix: String,
 }
 
 pub(crate) struct DeferredHierSelWrite {

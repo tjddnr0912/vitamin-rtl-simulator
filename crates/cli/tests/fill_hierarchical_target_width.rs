@@ -43,11 +43,18 @@
 //! 4294967296, because the sibling `1` is 32 bits. At a 12-bit target the two coincide,
 //! which is how an earlier pass of §4.5.355 talked itself into "bare is the whole set".
 //!
-//! ⚠️⚠️ THE RESIDUE IS AN OPERAND THAT READS SOMETHING. `u.a = c ? '1 : 1'b0` still
-//! reads 1 where both oracles read all-ones, because re-lowering it needs the scope
-//! `c` resolves in. That is ROADMAP §2-1e and its stated prerequisite, and it is the
-//! honest boundary of the predicate: a statement about what can be rebuilt, not a guess
-//! about what is common.
+//! ⚠️ THE PREDICATE ALSO ADMITS A PLAIN NAME (§4.5.360). The prerequisite §2-1e recorded
+//! — "re-lowering needs the lowering scope" — turned out to be one STRING: vita resolves
+//! a name by walking outward from `cur_prefix` over FQ-keyed tables that outlive
+//! elaboration, so capturing that prefix with the pending record and restoring it is the
+//! whole snapshot. What stays out is anything resolved through state that is pushed and
+//! popped (an inlined formal's substitution, a frame window) and any dotted path.
+//!
+//! ⚠️ And the re-lowering is VERIFIED READ-ONLY FIRST. `lower_expr_ctx` reports an
+//! unresolved name by emitting the diagnostic, so a failed re-lowering cannot be rolled
+//! back; every name is checked with the same outward walk before anything is built, and
+//! a miss leaves `lower_expr`'s IR alone. Turning a wrong value into a spurious error
+//! would be a regression even though the value was wrong.
 //!
 //! The sibling-supplied cases are pinned below so a later "simplification" that routes
 //! them through the deferral cannot change them silently.
@@ -203,13 +210,46 @@ fn a_scope_free_fill_expression_reaches_the_target_width() {
 }
 
 #[test]
-fn a_right_hand_side_that_reads_a_net_is_the_recorded_residue() {
-    // ⚠️ ROADMAP §2-1e. `c` is a net, so re-lowering this at resolve time would need the
-    // lowering scope — which is exactly the prerequisite that item records. Both oracles
-    // read all-ones; vita reads 1. The test pins the CURRENT answer so the day someone
-    // builds the scope snapshot, this fails and points at itself.
-    assert_eq!(run("u.a = c ? '1 : 1'b0;", "u.a"), "000000000001");
-    // The local twin is right, which is what makes this a hierarchy problem and not a
-    // ternary problem.
+fn a_right_hand_side_that_reads_a_net_reaches_the_target_width_too() {
+    // ⭐ This was ROADMAP §2-1e's residue and read `000000000001` until §4.5.360. `c` is
+    // a module net, and the "scope snapshot" its prerequisite asked for is the captured
+    // `cur_prefix`. Both oracles read all-ones, and the LOCAL twin below is what says
+    // this was a hierarchy problem rather than a ternary one.
+    assert_eq!(run("u.a = c ? '1 : 1'b0;", "u.a"), "111111111111");
     assert_eq!(run("L = c ? '1 : 1'b0;", "L"), "111111111111");
+    // A name on the other side of the operator, and a name as the whole non-fill
+    // sibling — both go through the same verify-then-relower path.
+    assert_eq!(run("u.a = c ? 1'b0 : '1;", "u.a"), "000000000000");
+    assert_eq!(run("u.a = '1 & {11'b0, c};", "u.a"), "000000000001");
+}
+
+#[test]
+fn a_name_reached_from_a_subprogram_body_still_runs_and_agrees() {
+    // ⚠️ THE GUARD, stated as the property it protects rather than as a value: whatever
+    // the verification decides, the design must still RUN. The failure this rules out is
+    // a spurious unresolved-name error introduced by the SECOND lowering — a wrong value
+    // turning into a loud reject is still a regression.
+    //
+    // A task formal is the interesting case: it reaches the pending path from inside a
+    // subprogram body, and both oracles read all-ones.
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let src = format!(
+        "{SUB}module t; sub u();\n\
+         task automatic g(logic q);\n    u.a = q ? '1 : 1'b0;\n  endtask\n\
+         initial begin g(1'b1); #1 $display(\"r=%b\", u.a); $finish; end\nendmodule\n"
+    );
+    let p = std::env::temp_dir().join(format!("vita_fht_g_{}_{n}.sv", std::process::id()));
+    std::fs::write(&p, &src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(&p)
+        .output()
+        .expect("run vita");
+    let _ = std::fs::remove_file(&p);
+    let so = String::from_utf8_lossy(&out.stdout);
+    let se = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "must still run:\n{so}{se}");
+    assert!(
+        so.contains("r=111111111111"),
+        "iverilog reads all-ones:\n{so}{se}"
+    );
 }

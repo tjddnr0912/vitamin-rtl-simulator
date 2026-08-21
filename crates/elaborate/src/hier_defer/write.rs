@@ -386,12 +386,22 @@ impl Elaborator<'_> {
                 continue; // §6.12, same withholding as the lowering-time guard
             }
             let w = self.ir_lvalue_width(&lv);
-            // Re-lower with the width that finally exists — the SAME `lower_expr_ctx`
-            // `resize_fill_rhs` would have called had it known. The old subtree becomes
-            // garbage, exactly as a fill-bearing rhs does on the ordinary path (there
-            // is no golden to preserve).
-            let new_id = self.lower_expr_ctx(&p.rhs, w);
-            redirect.insert(p.expr_id, new_id);
+            // ⚠️ VERIFY BEFORE RE-LOWERING, READ-ONLY. `lower_expr_ctx` reports an
+            // unresolved name by EMITTING the diagnostic, so a re-lowering that fails to
+            // resolve cannot be rolled back — the error is already out. A right-hand
+            // side that mentions a name the resolve pass cannot see would therefore turn
+            // a working design LOUD, which is a regression even though the value was
+            // wrong. So every name is checked first with the SAME outward walk the
+            // lowering uses, and a miss simply leaves `lower_expr`'s IR in place.
+            let saved_prefix = std::mem::replace(&mut self.cur_prefix, p.prefix.clone());
+            let resolvable = self.every_name_resolves(&p.rhs);
+            let new_id = resolvable.then(|| self.lower_expr_ctx(&p.rhs, w));
+            self.cur_prefix = saved_prefix;
+            // The old subtree becomes garbage, exactly as a fill-bearing rhs does on the
+            // ordinary path (there is no golden to preserve).
+            if let Some(new_id) = new_id {
+                redirect.insert(p.expr_id, new_id);
+            }
         }
         self.hier_resolved_chunk.clear();
         if redirect.is_empty() {
@@ -415,6 +425,51 @@ impl Elaborator<'_> {
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// Does every plain name in `e` resolve under the CURRENT `cur_prefix`?
+    ///
+    /// Read-only, and deliberately the same outward walk `lower_expr` performs
+    /// (`walk_scopes_key` over `symbols` then `params`), so this cannot answer yes where
+    /// the lowering would answer no — the failure mode a separate predicate would have
+    /// (§4.5.276's lesson: a classifier that resolves a name must call the resolver the
+    /// lowering calls).
+    ///
+    /// `scope_free_fill_expr` already restricted the shape to literals, operators and
+    /// single-segment `Ident`s, so this walk has only those to consider.
+    fn every_name_resolves(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind::*;
+        match &e.kind {
+            IntLit { .. } => true,
+            Ident(p) => match p.segments.as_slice() {
+                [seg] => self
+                    .walk_scopes_key(&seg.name, |k| {
+                        self.symbols.contains_key(k) || self.params.contains_key(k)
+                    })
+                    .is_some(),
+                _ => false,
+            },
+            Paren { inner } => self.every_name_resolves(inner),
+            MinTypMax { typ, .. } => self.every_name_resolves(typ),
+            Unary { operand, .. } => self.every_name_resolves(operand),
+            Binary { lhs, rhs, .. } => {
+                self.every_name_resolves(lhs) && self.every_name_resolves(rhs)
+            }
+            Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.every_name_resolves(cond)
+                    && self.every_name_resolves(then_e)
+                    && self.every_name_resolves(else_e)
+            }
+            Concat { parts } => parts.iter().all(|x| self.every_name_resolves(x)),
+            Replicate { count, value } => {
+                self.every_name_resolves(count) && value.iter().all(|x| self.every_name_resolves(x))
+            }
+            _ => false,
         }
     }
 }

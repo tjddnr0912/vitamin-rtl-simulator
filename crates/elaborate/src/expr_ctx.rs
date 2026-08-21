@@ -20,13 +20,26 @@ fn scope_free_fill_expr(e: &ast::Expr) -> bool {
     expr_contains_fill(e) && scope_free(e)
 }
 
-/// Structural whitelist: every node kind whose lowering reads only its own children.
+/// Structural whitelist: every node kind whose lowering reads only its own children,
+/// plus a single-segment `Ident`.
+///
+/// ⭐ THE IDENT IS ADMITTED BECAUSE THE SCOPE IS A STRING (§4.5.360). vita resolves a
+/// name by walking outward from `cur_prefix` over FQ-keyed tables that live for the
+/// whole elaboration, so "the lowering scope" of a plain name is just that prefix —
+/// captured with the pending record and restored at resolve. What is NOT admitted is
+/// anything whose lowering needs state that is pushed and popped (an inlined function's
+/// formal substitution, a frame window): those are absent by the time the resolve pass
+/// runs, and re-lowering under them would resolve the name somewhere else.
+///
 /// A `_` arm would silently admit the next kind someone adds, so the match is
 /// exhaustive on the ones that qualify and rejects everything else by default.
 fn scope_free(e: &ast::Expr) -> bool {
     use ast::ExprKind::*;
     match &e.kind {
         IntLit { .. } => true,
+        // Single segment only: a dotted path is a hierarchical/member reference whose
+        // resolution is not the plain outward walk.
+        Ident(p) => p.segments.len() == 1,
         Paren { inner } => scope_free(inner),
         MinTypMax { typ, .. } => scope_free(typ),
         Unary { operand, .. } => scope_free(operand),
@@ -596,6 +609,7 @@ impl Elaborator<'_> {
                     expr_id: rhs_id,
                     sentinel,
                     rhs: rhs.clone(),
+                    prefix: self.cur_prefix.clone(),
                 });
             }
             // Either way the ctx here would be the bogus 1, so leave `lower_expr`'s IR
