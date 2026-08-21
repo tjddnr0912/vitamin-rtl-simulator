@@ -126,11 +126,16 @@
 > **⚠️ 이 절은 주제별 묶음이지 착수 순서가 아니다.** 착수 순서는 바로 아래 표를 따른다 —
 > 위에서부터 읽으면 **선행조건(트리 전역 AST self-폭 패스)에 막힌 캐스트 뭉치**로 먼저 간다.
 >
-> **다음 착수 순서 (2026-08-20 갱신 · 옛 1~3 은 §4.5.343 · 그 다음 1·2 앞머리는 §4.5.345 · 런타임 mixed-real 은 §4.5.349 · 음수 상수 소비자는 §4.5.350 으로 RESOLVED)**
+> **다음 착수 순서 (2026-08-21 갱신 · 옛 1~3 은 §4.5.343 · 그 다음 1·2 앞머리는 §4.5.345 · 런타임 mixed-real 은 §4.5.349 · 음수 상수 소비자는 §4.5.350 · **net 선언 초기화 fill 폭은 §4.5.353 으로 RESOLVED**)**
+>
+> ⭐ **§4.5.353 의 교훈이 이 표에 그대로 적용된다**: 큐 항목은 *"누군가 부딪힌 한 모양"* 이고 클래스가 아니다.
+> 착수 첫 행동은 구현이 아니라 **코드에서 출발하는 census** 다(§4.5.350 은 2→3, §4.5.353 은 1→3).
 >
 > | # | 항목 | 왜 이 순서인가 |
 > |---|---|---|
-> | **1** | **net 선언 초기화의 fill 리터럴이 1비트로 sizing 된다**(§4.5.350 census 발굴·오라클 ✓ 두 오라클 일치·pre-existing·PRE==POST) | `wire [7:0] a = '1;` 이 vita `00000001` / iverilog·verilator `11111111`. ⭐ **자리가 이미 하나로 좁혀져 있다** — 같은 값을 `assign a = '1;` 으로 주면 정확하고 `reg [7:0] b = '1;` 도 정확하다. 즉 **net 선언 초기화 경로만** 타깃 폭을 fill 에 안 넘긴다. `wire [7:0] c = 1 ? '1 : '0;` 도 같은 자리 |
+> | **1** | 🆕 **fill 이 계층 타깃에서 여전히 1비트다 — §4.5.353 이 남긴 네 번째 자리, 뿌리가 다르다**(적대 리뷰 실측·**PRE==POST** 이므로 pre-existing) | `u.a = '1;` · `u.b <= '1;` · `force u.c = '1;` 이 두 오라클 `111111111111` / vita `000000000001`. **자리는 호출부가 아니다** — `collect_lval_chunks` 가 다중 세그먼트 lvalue 를 `defer_hier_write` 로 보내 **센티널 net id**(`HIER_WRITE_SENTINEL_BASE+idx`)를 돌려주고, `ir_lvalue_width` 가 `nets.get()` 에서 `None` → `.max(1)` 로 **1** 을 답한다. 그래서 `resize_fill_rhs` 는 **다섯 호출자 전부에서** no-op 다. 진짜 net id 는 `resolve_deferred_hier_write` 가 나중에 패치하는데 그땐 RHS 식이 이미 만들어진 뒤다 ⇒ **선행조건 = 폭을 아는 시점과 RHS 를 짓는 시점을 붙이는 것**(memory: deferred-hier-resolve-time-ir-injection) |
+> | **1b** | 🆕 **`{<string>, '1}` 이 무한 루프**(진단도 종료도 없음 · pre-existing · PRE==POST) | ⚠️ **correct-or-loud 의 최악 결과** — 틀린 답도 loud 도 아닌 **비종료**. `lower_expr`(expr_main.rs:12)의 front gate 가 `Concat`+fill 을 `lower_expr_ctx` 로 보내고, `lower_expr_ctx` 의 Concat arm 이 string part 를 보면 **같은 노드를** `lower_expr` 로 돌려준다. 둘 다 tail call 이라 릴리즈 빌드에서 스택도 안 자라고 **RSS 고정 3.6 MB 에 100% CPU**. `wire [7:0] a = {s, '1};` · `assign a = {s, '1};` 둘 다. **최소 조치는 loud 화**(비종료 ≪ loud 는 사다리 상승) |
+> | **1c** | 🆕 **`case ('1)` 셀렉터가 1비트로 남는다**(pre-existing · PRE==POST) | §12.5 는 case 식과 **모든 item 식**을 공통 max 폭으로 sizing 한다. item(label) 쪽은 이미 `expr_special.rs:779` 가 문맥을 준다 — **셀렉터만** 안 준다 |
 > | 2 | **mixed-real 잔여 셋**(§4.5.349 가 남긴 것·오라클 ✓) | framed `automatic` real 함수를 **직접 피연산자**로 · package/class 함수 · **단순 대입 경계**(`real r; r = (-s);` 두 오라클 −8.0 / vita 8.0 — 아직 문맥-결정) |
 > | 3 | **오름차순 음수 bound 의 남은 스코프 집합**(§4.5.350 적대 리뷰 실측·PRE==POST) | 모듈 스코프 net·인터페이스 멤버·block-local·`logic [-3:0] m[0:1]` 은 정확한데 **포트·서브프로그램 지역·클래스 속성**은 W3056 클램프 + exit 0 = silent-wrong(두 오라클 4비트). 자리는 `range_to_dims_opt` 의 opt-in 이 그 사이트들에 안 닿는 것 하나 |
 >

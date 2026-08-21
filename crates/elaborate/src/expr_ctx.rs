@@ -500,18 +500,46 @@ impl Elaborator<'_> {
     }
 
     /// §5.7.1: re-size a fill-literal rhs to the assignment-context width. An
-    /// unsized single-bit FILL literal (`'0`/`'1`/`'x`/`'z`) is CONTEXT-determined
-    /// — `a = '1` into a 64-bit reg means all 64 ones, not the self-determined
-    /// 32-bit default. The caller lowers `rhs` NORMALLY first (so non-fill ExprId
-    /// ordering is untouched); this returns a fresh Const sized to the lvalue
-    /// width ONLY when `rhs` is a fill AND that width != 32 (the 32-bit case is
-    /// already correct and stays byte-identical — every existing golden keeps its
-    /// bytes). For a NON-fill rhs the lvalue width is never even read, so an
-    /// error-recovery lvalue (e.g. `x = 1` for undeclared `x`) is untouched.
+    /// unsized FILL literal (`'0`/`'1`/`'x`/`'z`) is CONTEXT-determined — `a = '1`
+    /// into a 64-bit reg means all 64 ones, not a 1-bit one zero-extended.
+    ///
+    /// The caller lowers `rhs` normally first; when the rhs carries a fill in a
+    /// context-propagating position this RE-LOWERS the whole subtree at the lvalue
+    /// width and returns the new id, abandoning the first. The abandoned id is
+    /// unreachable from any statement root — `lower_expr`/`lower_expr_ctx` never take
+    /// a `ProcessBuilder` and so cannot emit a statement — so it costs dead arena and
+    /// duplicated ELABORATE-TIME diagnostics, never a duplicated runtime effect.
+    ///
+    /// ⚠️ Two claims this comment used to make are false and were removed (§4.5.353):
+    /// there is no `width != 32` guard (the re-lowering is unconditional once a fill is
+    /// present, so a 32-bit lvalue does NOT keep its bytes), and the result is not
+    /// necessarily a `Const` (a fill-bearing Binary/Ternary/Concat comes back as its
+    /// own node). What IS true: for a NON-fill rhs the lvalue width is never read and
+    /// `rhs_id` is returned untouched, which is what makes every fill-free design
+    /// byte-identical — an error-recovery lvalue (`x = 1` for undeclared `x`) included.
     pub(crate) fn resize_fill_rhs(&mut self, rhs: &ast::Expr, rhs_id: u32, lv: &ir::Lvalue) -> u32 {
         // The rhs has no fill in a context-propagating position ⇒ untouched
         // (byte-identical; `lower_expr` already produced the right IR).
         if !expr_contains_fill(rhs) {
+            return rhs_id;
+        }
+        // ⚠️ A `real` TARGET HAS NO BIT CONTEXT (IEEE 1800 §6.12 / §11.6: a real has
+        // no width to propagate, and §5.7.1's "fill every bit of the context" has no
+        // bits to fill). `ir_lvalue_width` answers 64 for a real net — the storage
+        // size — and taking that as the context turns `'1` into 2^64-1, which the
+        // engine then converts to 1.84467e+19. Both oracles give 1.0, i.e. the fill's
+        // own self-determined 1-bit value converted to real.
+        //
+        // The guard lives HERE and not at the call sites for two reasons: it is one
+        // spelling of one rule for all five callers, and the pre-existing callers were
+        // ALREADY wrong this way — `real e; e = '1;`, `real d = '1;` and
+        // `real f[0] = '1;` all read 1.84467e+19 before this slice. Adding the third
+        // and fourth call sites (force / procedural continuous assign) would have
+        // spread that from three spellings to five; putting the guard in the shared
+        // funnel repairs all of them instead. (§4.5.353, found by adversarial review:
+        // the first draft guarded nothing and regressed `force r = '1;` from a correct
+        // 1 to 1.84467e+19 — correct→silent-wrong, which the ladder forbids.)
+        if self.lvalue_targets_real(lv) {
             return rhs_id;
         }
         let lv_width = self.ir_lvalue_width(lv);
@@ -520,6 +548,21 @@ impl Elaborator<'_> {
         // The originally-lowered `rhs_id` (sized self-determined) becomes dead — a
         // fill-bearing rhs has no golden to preserve, so this is harmless.
         self.lower_expr_ctx(rhs, lv_width)
+    }
+
+    /// Does this lvalue write a `real`? Used only to withhold the fill context
+    /// (a real has no bit width to propagate).
+    ///
+    /// ANY chunk being real is enough: a concat mixing a real with a vector is not a
+    /// legal assignment target, so the question cannot be half-true in valid code, and
+    /// answering `true` on a malformed one merely leaves `lower_expr`'s IR in place —
+    /// the fail-safe direction, since that is the behaviour before this guard existed.
+    pub(crate) fn lvalue_targets_real(&self, lv: &ir::Lvalue) -> bool {
+        lv.chunks.iter().any(|c| {
+            self.nets
+                .get(c.net as usize)
+                .is_some_and(|n| n.kind == ir::NetKind::Real)
+        })
     }
 
     /// Lower `e` in a context of width `ctx` (IEEE §11.6/§11.8.1), propagating the
@@ -682,6 +725,11 @@ impl Elaborator<'_> {
                 let value = self.push_expr(ir::Expr::Concat { parts: part_ids });
                 self.push_expr(ir::Expr::Replicate { count, value })
             }
+            // The transparent branch selector: `lower_expr` picks `typ` and drops the
+            // other two, so the context belongs to `typ`. Without this arm the node
+            // would fall to `_` below, hand itself back to `lower_expr`, and lose the
+            // context that `expr_contains_fill`'s new `MinTypMax` arm just earned it.
+            MinTypMax { typ, .. } => self.lower_expr_ctx(typ, ctx),
             _ => self.lower_expr(e),
         }
     }

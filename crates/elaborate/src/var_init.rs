@@ -125,6 +125,14 @@ impl Elaborator<'_> {
             };
             let lhs = self.lower_lvalue(&ast::Lvalue::Ident(path));
             let rhs_id = self.lower_expr(init);
+            // §5.7.1: context-determined fill literal → lvalue width. THE SAME CALL
+            // `elaborate_cont_assign` makes, because this IS that construct — a net
+            // declaration initializer is an implicit continuous assign, and the two
+            // must not disagree about how wide `'1` is. Without it the fill kept its
+            // 1-bit self-determined width and was then zero-extended, so
+            // `wire [7:0] a = '1;` read 00000001 against both oracles' 11111111 while
+            // the spelled-out `assign a = '1;` beside it was correct.
+            let rhs_id = self.resize_fill_rhs(init, rhs_id, &lhs);
             // The index of THIS cont-assign is the len BEFORE the push (matches
             // `elaborate_cont_assign`'s sidecar keying).
             let idx = self.cont_assigns.len() as u32;

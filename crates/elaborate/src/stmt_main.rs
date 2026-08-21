@@ -1226,6 +1226,11 @@ impl Elaborator<'_> {
                     );
                     return;
                 }
+                // §5.7.1 again, and it is the same rule for the same reason: a
+                // procedural continuous assign is an assignment, whatever IR node
+                // carries it. Lowering to `Stmt::Force` is an implementation choice
+                // and must not change how wide `'1` is.
+                let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lv);
                 let sid = self.push_stmt(ir::Stmt::Force {
                     lhs: lv,
                     rhs: rhs_id,
@@ -1263,6 +1268,12 @@ impl Elaborator<'_> {
                     );
                     return;
                 }
+                // §5.7.1: context-determined fill literal → lvalue width, the same
+                // call every other assignment form makes. `force a = '1;` sampled a
+                // 1-bit fill and zero-extended it (00000001 against both oracles'
+                // 11111111). The target is already proved a whole single net above,
+                // so the width `resize_fill_rhs` asks for is the net's.
+                let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lv);
                 let sid = self.push_stmt(ir::Stmt::Force {
                     lhs: lv,
                     rhs: rhs_id,

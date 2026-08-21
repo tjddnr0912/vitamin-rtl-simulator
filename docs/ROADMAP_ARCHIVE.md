@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 293건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 294건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.353` **fill 리터럴이 문맥 폭을 못 받는 대입 형태 셋 — 머신러리는 완성돼 있었고 세 자리가 안 불렀다** · 큐엔 **하나**로 적혀 있었고 census 가 **셋**(ⓐ net 선언 초기화 ⓑ `force` ⓒ 절차적 continuous assign) · ⭐ **같은 구문의 두 하강 중 하나가 잊었다** — `wire [7:0] a = '1;` 은 암묵적 continuous assign 인데 옆의 `assign a = '1;` 과 답이 달랐다(00000001 vs 11111111) · ⓑ·ⓒ 는 **write-twin 스윕**이 찾았다 · 고침은 이미 있던 `resize_fill_rhs` 를 **한 줄씩 세 군데** 부르는 것 · ⚠️⚠️ **적대 리뷰가 내가 만든 correct→silent-wrong 을 잡았다**: `real` 타깃은 비트 문맥이 없는데 `ir_lvalue_width` 가 64(저장 폭)를 답해 `force r='1;` 이 1.0 → **1.84467e+19** (두 오라클 1.0) ⇒ ⭐ **가드를 호출부가 아니라 헬퍼 안에** 두니 내 회귀 2건을 막으면서 **선행 호출자의 pre-existing real silent-wrong 4건**(`e='1;`·`real d='1;`·`f[0]='1;`)을 덤으로 고쳤다 · ⚠️ 게이트 술어 `expr_contains_fill` 이 **`MinTypMax` 를 안 걸어** `(1:'1:2)` 가 전 자리에서 안 고쳐지고 있었다(같은 클래스라 이번에 수정) · ⚠️ **규칙의 반대 절반도 핀**(shift 량·`**` 지수·`&&`/`||`·인덱스의 fill 은 1비트 유지 — 안 그러면 silent-wrong 맞바꾸기) · `'x`/`'z` 곁수확(verilator 의 `0` 은 2-state 한계이지 분열이 아니다) · PRE-3-way **FIXED 17 · REGRESSION 0 · unchanged-ok 24** · 비-fill 설계는 기계적 바이트 동일(picorv32·keccak 3종 실측) · 스코프 밖 pre-existing 셋을 §2 에 기록(**계층 타깃 = 네 번째 자리·뿌리 다름** · `{string,'1}` **무한 루프** · `case ('1)` 셀렉터) · **뮤테이션 10/10 KILLED**(⭐ 단축 평가 mutant 이 살 거라는 내 예측이 틀렸다 — `clog2_repl_count` 가 죽인다: 그건 값 가드다) · 새 회귀 10건 · 5,684 → **5,694 green** · format 29 불변
 - `4.5.352` **settle 가 델타마다 199개를 훑어 0개를 찾고 있었다 — 나눗셈이 게이트가 아니라 탐색이었다** · 착수는 직전 슬라이스의 추천 후보(`settle_cont_assigns` 의 72바이트 `Value`)였고 그건 진짜였다(**−2.4%**) — 다만 *"짓기 전에 나눗셈"* 규칙을 지키려 그 함수를 프로파일했더니 **같은 함수 안에 6배 큰 것**이 있었다 · `schedule_delayed_cas` 가 `for ci in 0..cont_assigns.len()` 로 전부 만지고 `delay` 없는 것을 `continue` 했다 ⇒ picorv32 는 **딜레이 붙은 cont-assign 이 0개**인데 **1,400,006 settle × 199 = 278,601,194 회**를 돌아 런타임의 **7.2%** · ⭐ **단위가 두 자릿수 틀렸다** — settle 은 타임스텝당이 아니라 **델타당**(사이클당 7) · ⓐ `delayed_ca_idx` 를 생성자에서 한 번(바디의 `let Some(d) = … else { continue }` 는 **verbatim 유지** ⇒ 사전필터가 두 번째 철자가 되지 않고, 계측이 `delayskip == 0` 으로 둘의 일치를 증명) ⓑ `write_settled` = flat store 의 **세 번째 리전**(블로킹 D1.6 · NBA §4.5.351 · settle 은 **델타당 도는 리전**) · picorv32 **2.31 → 2.07 s (−10.5%)**(반 A −8.4% · 반 B 추가 −2.4%) · 프로파일 독립 확인(분모 맞춘 재측정) `settle_cont_assigns` self **8.83% → 1.62%** · differential 14설계 × 3백엔드 × {stdout,stderr,exit,VCD,FST} **42쌍 동일** + staged(`.velab` 바이트 동일) + obs 레일 동일 · 비공허성 양 arm 발화 실측 · **뮤테이션 12발 6 KILLED / 6 등가**(⭐ m2·m11 의 생존이 곧 "의미 불변"의 증명) · 새 회귀 5건 · 적대 2렌즈 **BLOCKING 0**(유일 생존 지적 = 반 A 의 최악 케이스 **+0.36%**, retired-instructions 로 측정 · 손익분기 ≈ 딜레이 50%) · 5,679 → **5,684 green** · format 29 불변
 - `4.5.351` **NBA 적용이 이미 지어 둔 flat store 를 한 번도 안 불렀다 — 증명을 만들어 놓고 버렸다** · `k_write_scalar` 는 평범한 스칼라 쓰기용 flat store 이고 그 주석이 존재 이유를 적어 뒀다(*picorv32 에서 102,911 건이 `write_routed` 의 heap/assoc/frame/class 라우팅을 걸어 이미 필요 없다고 증명된 store 에 도달*) — 그런데 `apply_nba` 가 **한 번도 안 불렀다**. 같은 설계에서 NBA 는 **1,231만 건**(24배)이고 **100.0% 가 그 모양** · ⭐ 증명은 이미 있었다(`Op::ScheduleNbaScalar` 가 `plain_scalar_dest` 로 게이팅) — `NbaUpdate` 가 값과 offset 만 나르고 분류를 안 날라 apply 시점에 사라진다 ⇒ 술어를 **같은 함수로**(`plain_scalar_dest_of` 추출·두 호출자) 다시 묻는다 · picorv32 **2.40 → 2.31 s (−3.9%)** 백투백 A/B · **바이트 동일** · keccak flat(NBA 쓰기의 88.8% 가 배열/wide) · ⚠️ **측정이 가드도 고쳤다**: 첫 프로브의 `offsets==[(0,0)]` 만 보는 약한 가드는 picorv32 에선 우연히 동일했지만(weak_only 0) **keccak 에선 2,603 건이 샜다** — dead slot 에 flat write 될 수 있는 자리 · 적대 2렌즈 **BLOCKING 0**: soundness 가 `write_routed` 의 여섯 레인이 술어로 전부 막히고 꼬리가 **동일 인자의 동일 `write_chunk_word`** 로 환원됨을 증명(부작용 여섯이 전부 분기점 아래 · `plain_scalar` 가 잠시 비는 창은 fail-safe), differential 이 34쌍 8축 전 채널 동일 + **비공허성 증명**(fast arm 22/27 발화 · 모든 fast-arm apply 의 offsets 가 예외 없이 `(0,0)`) · 5,679 green · format 29 불변
 - `4.5.350` **§2 음수 상수를 먹는 소비자 셋 — 소비자가 언어 규칙 대신 컨테이너의 비트 패턴을 읽었다** · 큐엔 **둘**로 적혀 있었고 3-오라클 census 가 **셋**임을 보였다(세 번째 = `logic q[-3]` 가 조용히 1워드) 동시에 **불가침 축 넷**(음수 bound 의 part-select 계열 — iverilog `0101xx` vs verilator `000010`)을 잘라냈다 · ⓐ replication count 가 `-56` 을 **4294967240** 으로 읽어 타깃 폭 절단 후 **255, exit 0**(`$bits` 가 실제로 그 수를 답했다) ⇒ LOUD · ⭐⭐ **부호는 자기결정 폭에서만 존재한다**: `{(4'd0-4'd1){1'b1}}` 는 두 오라클 **255(15 복사)** 이고 `{(4'sd0-4'sd1){1'b1}}` 는 **거부**인데 폭-무제한 fold 는 **둘 다 −1** — 무제한으로 물었으면 맞는 설계를 false-reject 했다(경계 두 칸 테스트 핀 · 새 `const_bound_signed`) · 읽기를 **둘**(lowered `Const` / AST self-det) 둔 이유 = 파라미터는 접히고 `{(2-3){…}}` 는 `Add`/`Sub` 로 남아 u32 fold 가 **saturate 해 0** ⇒ 옛 진단이 −1 에 대해 *"count of zero"* 라고 말했다 · ⓑ 오름차순 음수 range bound(`[-3:0]`·`[-56:0]`·`[-8:-1]`·**`parameter W=0; logic [W-1:0]` 관용구**)가 폭 1 클램프 + *"param value 0?"* 라는 **파라미터가 없는 리터럴에도 나오던 거짓 진단** ⇒ `|msb-lsb|+1`(두 오라클 2·57·5·8·2) · ⭐ 근인은 머신러리가 아니라 §4.5.228 이 세운 **가정**(*"msb<0·lsb≥0 은 degenerate 파라미터 언더플로"*) — 방향이 어느 bound 가 내부 비트 0 인지를 정하지 **어느 쪽이 음수인지가 정하지 않는다** · 저장은 정규화 + 새 sparse map `net_decl_asc_lsb`(`internal = l − raw`, 내림차순의 거울) · VCD `$var` 는 선언 쌍 · PART select 는 쌍둥이와 같은 이유로 loud · 곁: 폭 캡 초과의 **조용한 `.min(MAX_NET_WIDTH)`** 를 두 방향 모두 평범한 cap 에러로 · ⓒ unpacked 크기 `q[-3]`/`q[0]` 는 `.max(1)` 바닥이 먹고 있었다(경계 실측: 0 과 모든 음수는 두 오라클 거부·1 은 수용) · ⚠️ **옛 동작을 의도로 고정하던 테스트 2건 갱신**(삭제 아님) · ⚠️ 적대 리뷰 **BLOCKING**: dyn/queue 원소 net 이 넓은 폭만 받고 사이드맵 기록은 early-`continue` 로 건너뛰어 **warn → 조용한 `x`** 하강 ⇒ opt-in 을 사이드맵이 실제로 정규화하는 net 으로 좁혔다 · ⚠️ **두 렌즈 수렴**: `dim_coord` 의 `debug_assert` 불변식이 **이미 거짓**이었다(PRE 도 패닉) — release 는 그것을 컴파일아웃하고 `lo.max(0)` 로 **조용히 틀린 비트**를 읽는다 ⇒ 두 빌드 모두 LOUD · 곁: string **변수** replicate 의 음수 카운트(같은 규칙의 세 번째 철자) · 79칸 4-way **회귀 0 · FIXED 30 · 오라클 분열 7(불가침)** · differential 렌즈가 55칸 추가(staged·쓰기·부호·replication 경계) **회귀 0** · 5,654→**5,679 green** · 뮤테이션 15/16(1 방어) · format 29 불변
@@ -385,6 +386,85 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.353 — fill 리터럴이 문맥 폭을 못 받는 대입 형태 셋 (2026-08-21 · 5,694 green · format 29 불변)
+
+**착수 = §2 큐 머리**(*"net 선언 초기화의 fill 리터럴이 1비트로 sizing 된다"*). 큐엔 **하나**로 적혀 있었고
+3-오라클 census 가 **셋**임을 보였다. 그리고 **머신러리는 이미 완성돼 있었다** — 세 자리가 그걸 안 불렀다.
+
+**뿌리 = 같은 구문의 두 하강 중 하나가 잊었다.** IEEE 1800 §5.7.1 은 unsized unbased 리터럴
+(`'0`/`'1`/`'x`/`'z`)이 **문맥 폭을 받아 전 비트를 채운다**고 하고, §11.6 은 대입 RHS 를 lvalue 폭의
+문맥-결정 위치로 만든다. `Elaborator::resize_fill_rhs` 가 정확히 그것이고 이미 `assign`·블로킹·논블로킹
+하강에서 **불리고 있었다**. 안 부른 셋:
+
+- ⓐ **net 선언 초기화** `wire [7:0] a = '1;` — 이건 **암묵적 continuous assign** 이라 바로 옆에 적은
+  `assign a = '1;` 과 답이 달랐다(00000001 vs 11111111). ⭐ **그 비대칭이 자리를 찍어 줬다.**
+- ⓑ **`force`** `force a = '1;`
+- ⓒ **절차적 continuous assign** `assign a = '1;`(프로세스 안) — `Stmt::Force` 로 하강하는데,
+  **어느 IR 노드로 내리느냐는 구현 선택이지 폭 규칙이 아니다.**
+
+⭐ **ⓑ·ⓒ 는 write-twin 스윕이 찾았다**(memory: widen-read-sweep-write-twin). 큐가 준 ⓐ 만 고쳤으면
+`force` 는 조용히 틀린 채 남았다. 대입 모양 census 표에서 port 연결·함수 인자·파라미터 오버라이드·
+assignment pattern·case label·함수 반환·task output·NBA·part-select·concat-lvalue·배열 원소·
+struct 필드는 **이미 옳았다**.
+
+**⚠️⚠️ 적대 리뷰가 내가 만든 correct→silent-wrong 을 잡았다 — 이 슬라이스의 가장 중요한 사건.**
+ⓑ·ⓒ 에 호출을 **무조건** 달았더니 `real` 타깃을 같이 끌고 들어갔다. `ir_lvalue_width` 는 real net 에
+**64**(저장 폭)를 답하는데 real 대입엔 **비트 문맥이 없다**(§6.12/§11.6) ⇒ `'1` 이 2^64−1 이 되고
+엔진의 정수→real 변환이 **1.84467e+19** 를 만든다. 두 오라클은 **1.0**.
+PRE 는 그 arm 에서 helper 를 아예 안 불렀으니 **PRE 가 맞고 POST 가 틀렸다** = 사다리 하강.
+
+⭐ **가드를 호출부가 아니라 `resize_fill_rhs` 안에 뒀다**, 그리고 그게 정답이었다 — 규칙 하나를
+다섯 호출자가 한 철자로 공유하고, **선행 호출자들이 이미 같은 방식으로 틀려 있었기** 때문이다:
+`real e; e = '1;` · `real d = '1;` · `real f[0] = '1;` 셋 다 PRE 에서 이미 1.84467e+19 였다.
+⇒ **내 회귀 2건을 막으면서 pre-existing silent-wrong 4건을 덤으로 고쳤다.** 호출부에 달았으면
+철자가 셋에서 다섯으로 늘기만 했다.
+
+**⚠️ 두 번째 리뷰 발견 — 단축 평가가 스스로 under-detect 하고 있었다(같은 클래스라 이번에 고침).**
+`expr_contains_fill` 이 `MinTypMax` 를 안 걸었다. `lower_expr` 는 `(1:'1:2)` 를 **투명하게** `typ` 로
+내리는데(문맥은 도달함) **게이트가 못 봐서** 전 대입 자리에서 1비트로 남았다(iverilog 11111111 /
+PRE·초안 POST 00000001). 두 walk 에 arm 하나씩 — `expr_contains_fill` 과 `lower_expr_ctx` — 을 추가.
+
+⚠️ **규칙의 나머지 절반도 같이 핀했다.** 자기결정 위치의 fill 은 **1비트로 남아야** 한다 — shift 량,
+`**` 지수, `&&`/`||` 피연산자, 비트 인덱스. 여기를 같이 넓혔으면 `8'd1 << '1` 이 `1 << 255` = 0 이 되어
+**silent-wrong 을 다른 silent-wrong 과 맞바꾸는** 짓이 된다. 8칸 실측 + 테스트 고정.
+
+**곁수확**: `'x`/`'z` 도 같이 고쳐졌다(이제 `xxxxxxxx`/`zzzzzzzz` = iverilog). ⚠️ verilator 의
+`00000000` 은 **2-state 한계**이지 오라클 분열이 아니다 — §5.7.1 이 명시적이라 iverilog + LRM 이 정본.
+
+**측정(PRE-3-way)**: `git archive 7b9b708` PRE 바이너리 · 41칸 파일 코퍼스에서
+**FIXED 17 · REGRESSION 0 · unchanged-ok 24** + 인라인 25칸 전부 ok.
+**비-fill 설계는 기계적으로 바이트 동일** — `!expr_contains_fill(rhs)` 리터럴 조기 반환이라 IR 이
+한 비트도 안 바뀐다. picorv32(20k) + keccak 3종 stdout·stderr·exit 동일로 실측.
+
+**뮤테이션 10발 — 10 KILLED(생존 0).** 세 사이트 각각 제거·fill 폭을 1 로 고정·`resize_fill_rhs` 를
+no-op 화·real 가드 제거·real 술어를 항상 false·`MinTypMax` arm 을 두 walk 에서 각각 제거 — 전부 죽었다.
+⭐ **내 예측이 하나 틀렸고 배터리가 고쳤다**: 단축 평가(`if !expr_contains_fill { return }`)를 없앤
+mutant 을 *"IR/성능 가드일 뿐 값 가드는 아니니 생존"* 이라 적었는데 **KILLED** 였다 —
+`cli::clog2_repl_count` 4건이 죽는다. `lower_expr_ctx` 의 Replicate arm 은 count 를
+`lower_index_expr` 로 내리는데 `lower_expr` 의 arm 은 `$clog2` 폴드 경로를 쓴다 ⇒ **fill 없는 replication 을
+문맥 경로로 보내면 값이 바뀐다**. 단축 평가는 바이트 동일성 장치가 아니라 **값 장치**이고,
+그래서 real 가드는 반드시 **그 뒤**에 온다.
+
+**적대 3렌즈**(soundness / differential / completeness-census): BLOCKING **1건 = 위의 real 회귀**
+(두 렌즈가 독립으로 잡았고 refuter 도 confirm) · 나머지는 전부 **pre-existing 이고 PRE==POST** 로 확인.
+soundness 가 증명한 것 중 값진 둘: ⓐ **dead IR 은 런타임 부작용을 못 만든다**(`lower_expr`/
+`lower_expr_ctx` 는 `ProcessBuilder` 를 안 받으므로 문장을 emit 할 수 없다 ⇒ 버려진 첫 하강은 어떤
+문장 루트에서도 도달 불가) ⓑ ⓐ 사이트의 **폭은 이미 확정**이다(net 은 pass 4, `elaborate_net_init_drivers`
+는 pass 7).
+
+**스코프 밖 — 전부 pre-existing·PRE==POST 로 실측하고 §2/§3 에 기록**:
+- 🔴 **계층 타깃**(`u.a = '1` · `u.b <= '1` · `force u.c = '1`) — **네 번째 자리이고 뿌리가 다르다**:
+  deferred-hier 센티널 net id 때문에 `ir_lvalue_width` 가 **1** 을 답해 다섯 호출자 전부에서 no-op.
+  두 오라클 111111111111 / vita 000000000001.
+- 🔴 **`{string, '1}` 이 무한 루프**(진단도 종료도 없음) — `lower_expr` 의 front gate 와
+  `lower_expr_ctx` 의 Concat-string arm 이 서로를 tail-call 한다. correct-or-loud 의 최악 결과.
+- 🔴 **`case ('1)` 셀렉터가 1비트로 남는다**(§12.5 는 case 식과 item 을 공통 max 로 sizing).
+- ⚠️ NIT: 이중 하강이 **elaborate 진단을 두 번** 낸다(pre-existing · loud→louder · `MAX_ELAB_ERRORS`
+  200 을 두 배로 소모). `resize_fill_rhs` 의 doc 이 **없는 `!= 32` 가드**를 설명하고 있던 것도 정정.
+- honest-loud 확인: `tri1 [7:0] a = '1;`(E3009) · `force a[11:4] = '1;`(E3009 — LRM 은 불법이라지만
+  두 오라클 다 0ff0) · 함수 지역 `logic [7:0] v = '1;`(E3010). struct assignment-pattern 멤버 fill 은
+  **진짜 오라클 분열**(iverilog 거부/verilator 수용)이라 불가침.
 
 #### 4.5.352 — settle 가 델타마다 199개를 훑어 0개를 찾고 있었다 (2026-08-21 · picorv32 −10.5%)
 

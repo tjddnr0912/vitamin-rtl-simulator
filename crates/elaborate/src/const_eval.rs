@@ -245,6 +245,14 @@ pub(crate) fn expr_contains_fill(e: &ast::Expr) -> bool {
         Replicate { count, value } => {
             expr_contains_fill(count) || value.iter().any(expr_contains_fill)
         }
+        // §4.5.353: `lower_expr` lowers `MinTypMax` as a TRANSPARENT pass-through
+        // (`lower_expr(typ)`), so the assignment context does reach the chosen branch —
+        // but this walk did not look inside, and the walk is what gates the whole
+        // context lowering. `wire [7:0] a = (1:'1:2);` therefore kept a 1-bit fill at
+        // EVERY assignment site, old and new alike, against both oracles' 11111111.
+        // The arm mirrors the lowering's choice exactly: only the `typ` branch is
+        // lowered, so only the `typ` branch can carry a fill that matters.
+        MinTypMax { typ, .. } => expr_contains_fill(typ),
         _ => false,
     }
 }
