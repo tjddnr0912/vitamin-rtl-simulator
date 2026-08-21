@@ -300,7 +300,7 @@ impl Elaborator<'_> {
         // casez/casex wildcard semantics are realized per-label by masking the
         // label's unknown (`?`/`z`/`x`) bits out of the compare (see
         // `case_cmp`). Plain `case` is an exact 4-state `===`.
-        let scrut_id0 = self.lower_expr(scrutinee);
+        let mut scrut_id0 = self.lower_expr(scrutinee);
         let merge = b.new_block();
 
         // Pre-allocate each Match arm's entry block; pin the default body.
@@ -323,6 +323,61 @@ impl Elaborator<'_> {
                     arm_bodies.push((arm, body));
                 }
                 ast::CaseItem::Default { body, .. } => default_body = Some(body),
+            }
+        }
+
+        // §12.5: the case expression and EVERY item expression are sized to their
+        // COMMON MAXIMUM. The loop above pushed the scrutinee's width out to the
+        // labels, which is the entire rule while the scrutinee has a width of its own
+        // — but a bare fill does not, so for `case ('1)` the maximum has to come back
+        // the other way. `case ('1) 8'hFF: a=1; 1'b1: a=3;` took the 1-bit arm (both
+        // oracles take the 8-bit one) because the selector stayed one bit.
+        //
+        // ⚠️ BOTH ENDS MOVE, and the shape that proves it is `case ('1) 8'h01: ; '1: ;`
+        // — both oracles take the `'1` arm, so widening only the selector would send it
+        // to `default` instead: correct-by-accident replaced by a different wrong
+        // answer. A label that is ITSELF a fill was sized against the old one-bit
+        // selector and has to meet the new width too.
+        //
+        // Gated on the selector carrying a fill, so a fill-free `case` re-lowers
+        // nothing and its IR is byte-identical.
+        let any_fill = expr_contains_fill(scrutinee)
+            || items.iter().any(|it| match it {
+                ast::CaseItem::Match { labels, .. } => labels.iter().any(expr_contains_fill),
+                ast::CaseItem::Default { .. } => false,
+            });
+        // ⚠️ A REAL SELECTOR IS EXCLUDED (§6.12, the §4.5.354 pin): it has no bit width
+        // to enter a maximum with, and all three oracles keep `case (r) '1: …` matching
+        // even with an eight-bit sibling label. `sibling_ctx` already withholds the
+        // width per label; this skips the collective pass for the same reason.
+        if any_fill && !self.expr_is_real(scrut_id0) {
+            let scrut_w = self.sibling_ctx(0, scrut_id0);
+            let common = tests
+                .iter()
+                .flat_map(|(ids, _)| ids.iter().copied())
+                .filter_map(|i| self.ir_bits_of(i))
+                .fold(scrut_w, u32::max);
+            if common > scrut_w {
+                // The selector only moves when it is the thing without a width; a sized
+                // selector already compares correctly against a wider label because the
+                // engine sizes each `CaseEq` pair.
+                if expr_contains_fill(scrutinee) {
+                    scrut_id0 = self.lower_expr_ctx(scrutinee, common);
+                }
+                // Same `lower_case_label` rule the loop used, now with the real common
+                // width. Only fill-bearing labels are touched: a sized label is
+                // unaffected by the context and re-lowering it would churn the arena.
+                let mut ti = 0usize;
+                for it in items {
+                    if let ast::CaseItem::Match { labels, .. } = it {
+                        for (li, l) in labels.iter().enumerate() {
+                            if expr_contains_fill(l) {
+                                tests[ti].0[li] = self.lower_case_label_at(common, l);
+                            }
+                        }
+                        ti += 1;
+                    }
+                }
             }
         }
 

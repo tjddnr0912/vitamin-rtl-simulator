@@ -776,12 +776,22 @@ impl Elaborator<'_> {
     /// signedness from the label ids, and reuse them in the compare cascade (a
     /// second lowering would bloat the expr arena and churn the goldens).
     pub(crate) fn lower_case_label(&mut self, scrut_id: u32, label: &ast::Expr) -> u32 {
+        // ⚠️ `sibling_ctx`, not a bare `ir_bits_of`: a REAL selector has no bit
+        // width to lend (§6.12) and `ir_bits_of` answers its storage 64, so
+        // `case (r) '1:` sized the label to 64 bits and fell through to `default`
+        // where BOTH oracles match — and where `case (r) 1'b1:` already matched.
+        let w = self.sibling_ctx(0, scrut_id);
+        self.lower_case_label_at(w, label)
+    }
+
+    /// `lower_case_label` with the §12.5 common width supplied directly.
+    ///
+    /// `lower_case` uses this for the second pass, once the selector and every item
+    /// have been seen and the common maximum is actually known — the first pass can
+    /// only offer the selector's own width, which is not the rule when some OTHER item
+    /// is wider (§4.5.356).
+    pub(crate) fn lower_case_label_at(&mut self, w: u32, label: &ast::Expr) -> u32 {
         if expr_contains_fill(label) {
-            // ⚠️ `sibling_ctx`, not a bare `ir_bits_of`: a REAL selector has no bit
-            // width to lend (§6.12) and `ir_bits_of` answers its storage 64, so
-            // `case (r) '1:` sized the label to 64 bits and fell through to `default`
-            // where BOTH oracles match — and where `case (r) 1'b1:` already matched.
-            let w = self.sibling_ctx(0, scrut_id);
             self.lower_expr_ctx(label, w)
         } else {
             self.lower_expr(label)
