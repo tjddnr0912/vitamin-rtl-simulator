@@ -589,11 +589,27 @@ impl Elaborator<'_> {
                 if matches!(op, WildEq | WildNe) {
                     return self.lower_wildcard_eq(lhs, rhs, matches!(op, WildNe));
                 }
+                // ⚠️ NEITHER A STRING COMPARE NOR A HANDLE COMPARE HAS A BIT-WIDTH
+                // CONTEXT TO TAKE (IEEE §6.16 / §8.4) — the same shape as the `real`
+                // guard in `resize_fill_rhs` (§6.12). `lower_expr`'s `Binary` arm
+                // routes both, in this position; this twin routed neither, so a fill
+                // literal ANYWHERE in the node was a bypass of both:
+                //   • `s < {"a",'1}` compared PACKED (zero-extends MSB-side, so not
+                //     lexicographic for unequal lengths) ⇒ 0, where both oracles say
+                //     1 — and where the twin `s < {"a",1'b1}` already said 1;
+                //   • `h == '1` printed a made-up 0 at exit 0, while the twin
+                //     `h == 1'b1` is E3009. That one is loud→silent.
+                if self.binary_stops_ctx(*op, lhs, rhs) {
+                    return self.lower_expr_ungated(e);
+                }
                 let irop = map_binop(*op);
                 // logical &&/|| : operands self-determined (1-bit truth) — ctx stops.
                 if matches!(op, LogAnd | LogOr) {
                     let l = self.lower_ctx_or_plain(lhs, 0);
                     let r = self.lower_ctx_or_plain(rhs, 0);
+                    if let Some(id) = self.binary_real_operand_route(irop, l, r) {
+                        return id;
+                    }
                     return self.push_expr(ir::Expr::Binary {
                         op: irop,
                         lhs: l,
@@ -610,6 +626,12 @@ impl Elaborator<'_> {
                 if matches!(op, Shl | Shr | AShl | AShr | Pow) {
                     let l = self.lower_ctx_or_plain(lhs, ctx);
                     let r = self.lower_expr(rhs);
+                    // ⚠️ This is the branch that owns BOTH real rules a fill used to
+                    // switch off: the shifts are permanently illegal on a real operand
+                    // and `**` is the §11.4.9 `$pow` ROUTE, not a diagnostic.
+                    if let Some(id) = self.binary_real_operand_route(irop, l, r) {
+                        return id;
+                    }
                     return self.push_expr(ir::Expr::Binary {
                         op: irop,
                         lhs: l,
@@ -626,12 +648,12 @@ impl Elaborator<'_> {
                 let (l, r) = if lf && !rf {
                     // lower the NON-fill side first; its width sets the fill side's ctx.
                     let r = self.lower_expr(rhs);
-                    let w = base.max(self.ir_bits_of(r).unwrap_or(32));
+                    let w = self.sibling_ctx(base, r);
                     let l = self.lower_expr_ctx(lhs, w);
                     (l, r)
                 } else if rf && !lf {
                     let l = self.lower_expr(lhs);
-                    let w = base.max(self.ir_bits_of(l).unwrap_or(32));
+                    let w = self.sibling_ctx(base, l);
                     let r = self.lower_expr_ctx(rhs, w);
                     (l, r)
                 } else {
@@ -639,6 +661,9 @@ impl Elaborator<'_> {
                     let w = base.max(1);
                     (self.lower_expr_ctx(lhs, w), self.lower_expr_ctx(rhs, w))
                 };
+                if let Some(id) = self.binary_real_operand_route(irop, l, r) {
+                    return id;
+                }
                 self.push_expr(ir::Expr::Binary {
                     op: irop,
                     lhs: l,
@@ -671,11 +696,13 @@ impl Elaborator<'_> {
                 let ff = expr_contains_fill(else_e);
                 let (t, f) = if tf && !ff {
                     let f = self.lower_expr(else_e);
-                    let w = ctx.max(self.ir_bits_of(f).unwrap_or(32));
+                    // Same real rule as the binary arm: `c ? r : '1` read 0 where both
+                    // oracles (and `c ? r : 1'b1`) read 1.
+                    let w = self.sibling_ctx(ctx, f);
                     (self.lower_expr_ctx(then_e, w), f)
                 } else if ff && !tf {
                     let t = self.lower_expr(then_e);
-                    let w = ctx.max(self.ir_bits_of(t).unwrap_or(32));
+                    let w = self.sibling_ctx(ctx, t);
                     (t, self.lower_expr_ctx(else_e, w))
                 } else {
                     let w = ctx.max(1);
@@ -690,48 +717,92 @@ impl Elaborator<'_> {
                     else_e: f,
                 })
             }
-            // concat/replication operands are SELF-determined → a fill is 1 bit.
-            Concat { parts } => {
-                if parts.iter().any(|p| self.expr_is_string_ast(p)) {
-                    return self.lower_expr(e); // string concat path (loud / desugar)
-                }
-                let part_ids: Vec<u32> = parts
-                    .iter()
-                    .map(|p| self.lower_ctx_or_plain(p, 0))
-                    .collect();
-                if part_ids.iter().any(|&p| self.expr_is_real(p)) {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "real may not appear in concatenation (use $realtobits)",
-                    );
-                }
-                self.push_expr(ir::Expr::Concat { parts: part_ids })
-            }
-            Replicate { count, value } => {
-                // r19/S3: the SECOND replication-count lowering site, reached
-                // whenever the replicated value contains a `'0`/`'1` fill.
-                // Gating only the other one left `{R{'1}}` printing `ff`.
-                let count = self.lower_index_expr(count);
-                let part_ids: Vec<u32> = value
-                    .iter()
-                    .map(|p| self.lower_ctx_or_plain(p, 0))
-                    .collect();
-                if part_ids.iter().any(|&p| self.expr_is_real(p)) {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "real may not appear in concatenation (use $realtobits)",
-                    );
-                }
-                let value = self.push_expr(ir::Expr::Concat { parts: part_ids });
-                self.push_expr(ir::Expr::Replicate { count, value })
-            }
+            // ⭐ `Concat` and `Replicate` HAVE NO ARM HERE, on purpose. Their operands
+            // are SELF-determined (§11.4.12), so this function's whole job — carrying
+            // a width inward — does not apply: the arms that used to be here passed
+            // `ctx = 0` to every operand, which is by definition what `lower_expr`
+            // already does. They were pure duplication, and duplication that had
+            // silently fallen behind the original: the `Concat` twin never set
+            // `repl_zero_ok`, so `{ {0{x}}, '1 }` was FALSE-LOUD where iverilog prints
+            // `000000000001` and where the no-fill `{ {0{x}}, 1'b1 }` already worked;
+            // the `Replicate` twin lowered its count through a bare `lower_index_expr`
+            // with none of the §11.4.12.2 rules, so `parameter int N = -2; {N{'1}}`
+            // rendered `111111111111` at exit 0 while `{N{1'b1}}` was correctly E3009.
+            // Deleting them fixes both by construction and cannot drift again.
             // The transparent branch selector: `lower_expr` picks `typ` and drops the
             // other two, so the context belongs to `typ`. Without this arm the node
-            // would fall to `_` below, hand itself back to `lower_expr`, and lose the
-            // context that `expr_contains_fill`'s new `MinTypMax` arm just earned it.
+            // would fall to `_` below, be lowered without a context, and lose the
+            // width that `expr_contains_fill`'s `MinTypMax` arm just earned it.
             MinTypMax { typ, .. } => self.lower_expr_ctx(typ, ctx),
-            _ => self.lower_expr(e),
+            // ⚠️⚠️ `lower_expr_ungated` HERE IS LOAD-BEARING, NOT STYLE. Since the
+            // `Concat`/`Replicate` arms above were deleted, those two kinds fall to
+            // THIS arm — and both are `is_ctx_node` kinds carrying a fill, so plain
+            // `lower_expr(e)` would re-fire the front gate and bounce straight back
+            // into this function. That is the original §4.5.354 non-termination,
+            // rebuilt. (An earlier draft of this comment claimed the two spellings
+            // were byte-identical "because every `is_ctx_node` kind has an explicit
+            // arm above". That was true before the deletion and false after it; the
+            // mutation battery is what caught the stale claim — the mutant that
+            // restores `lower_expr(e)` fails 8 tests.)
+            _ => self.lower_expr_ungated(e),
         }
+    }
+
+    /// The context a lowered SIBLING lends to the fill-bearing side: the wider of the
+    /// enclosing context and the sibling's own width — unless the sibling is REAL, in
+    /// which case it lends nothing.
+    ///
+    /// Three callers, all the same shape: a binary operator's other operand, a
+    /// ternary's other branch, and a `case` selector against its labels.
+    ///
+    /// ⚠️ A REAL OPERAND HAS NO BIT WIDTH (IEEE §6.12), and `ir_bits_of` answers 64
+    /// for one — its STORAGE size, not a width the language ever exposes. Taking that
+    /// as the fill's context made `real r = 2.5; a = r + '1;` compute
+    /// `2.5 + (2^64 - 1)` and print 0, where BOTH oracles print 4 and where the
+    /// `r + 1'b1` spelling beside it already printed 4. §11.8.1 makes the integral
+    /// operand of a mixed expression convert to real; its own self-determined width
+    /// is all it has, so the fill is one bit — which is exactly what the oracles'
+    /// `2.5 + 1 = 3.5 → 4` says it is. Same trap as `ir_lvalue_width` in §4.5.353,
+    /// one level down: at the OPERATOR rather than the assignment.
+    pub(crate) fn sibling_ctx(&self, base: u32, sibling: u32) -> u32 {
+        if self.expr_is_real(sibling) {
+            return 0;
+        }
+        base.max(self.ir_bits_of(sibling).unwrap_or(32))
+    }
+
+    /// Does `lower_expr`'s `Binary` arm send this comparison down a route whose
+    /// result has NO BIT WIDTH, so an enclosing width context must stop?
+    ///
+    /// ⭐ Both arms are VERBATIM copies of the conditions at the `lower_expr` site,
+    /// in that site's order, so the two can be diffed rather than reasoned about; a
+    /// route added there and not here is this bug again. `WildEq`/`WildNe` are absent
+    /// because BOTH paths intercept them before either route.
+    pub(crate) fn binary_stops_ctx(
+        &self,
+        op: ast::BinOp,
+        lhs: &ast::Expr,
+        rhs: &ast::Expr,
+    ) -> bool {
+        // expr_main.rs `Binary` arm — N7 handle type gate (IEEE §8.4). True for the
+        // LEGAL handle compare as well as the loud one: an object id has no width
+        // either, and copying the site's own `any_handle` test keeps this a copy
+        // rather than a guess at that test's outcome.
+        let lk = self.ast_handle_kind(lhs);
+        let rk = self.ast_handle_kind(rhs);
+        if matches!(lk, HKind::Handle | HKind::Null) || matches!(rk, HKind::Handle | HKind::Null) {
+            return true;
+        }
+        // expr_main.rs `Binary` arm — v7 P2-C StrCmp route.
+        matches!(
+            op,
+            ast::BinOp::Eq
+                | ast::BinOp::Ne
+                | ast::BinOp::Lt
+                | ast::BinOp::Le
+                | ast::BinOp::Gt
+                | ast::BinOp::Ge
+        ) && (self.expr_is_string_ast(lhs) || self.expr_is_string_ast(rhs))
     }
 
     /// Lower `e` with context width `ctx` if it contains a fill in a context-

@@ -12,6 +12,28 @@ impl Elaborator<'_> {
         if is_ctx_node(e) && expr_contains_fill(e) {
             return self.lower_expr_ctx(e, 0);
         }
+        self.lower_expr_ungated(e)
+    }
+
+    /// `lower_expr` with the fill/context front gate ALREADY DECIDED — the entry
+    /// `lower_expr_ctx` uses to hand a whole node back for ordinary lowering.
+    ///
+    /// ⚠️ It exists because the two were MUTUAL TAIL CALLS. `lower_expr_ctx`'s
+    /// `Concat` arm — since deleted as redundant, see the note where it used to be —
+    /// handed a string concat back to `lower_expr`, whose front gate
+    /// (`is_ctx_node` ∧ `expr_contains_fill` — both still true of that same node)
+    /// sent it straight back, so `wire [11:0] a = {s, '1};` never terminated. In
+    /// release that is 100% CPU at a FLAT RSS — both calls sit in tail position, so
+    /// the stack never grows to tell you what is happening; in debug it overflows
+    /// the stack and aborts (SIGABRT, rc=134).
+    ///
+    /// ⭐ With this entry the termination argument is STRUCTURAL instead of a
+    /// by-hand audit of which arms happen to exist: every call out of
+    /// `lower_expr_ctx` is either on a STRICT SUB-EXPRESSION or to this entry, and
+    /// this entry never re-enters the gate with the node it was handed. Adding a
+    /// kind to `is_ctx_node`, or deleting an arm from `lower_expr_ctx`, can no
+    /// longer resurrect the cycle.
+    pub(crate) fn lower_expr_ungated(&mut self, e: &ast::Expr) -> u32 {
         match &e.kind {
             // ── leaves ──────────────────────────────────────────────
             ast::ExprKind::IntLit { kind, raw } => {
@@ -447,37 +469,8 @@ impl Elaborator<'_> {
                 let lhs = self.lower_expr(lhs); // POST-ORDER: lhs, then rhs, then self
                 let rhs = self.lower_expr(rhs);
                 let irop = map_binop(*op);
-                // §6.2 permanent illegalities on a real operand.
-                if self.expr_is_real(lhs) || self.expr_is_real(rhs) {
-                    match irop {
-                        ir::BinOp::Mod => self.error(
-                            MsgCode::ElabUnsupported,
-                            "modulo (%) not defined on real operand",
-                        ),
-                        // IEEE 1800-2017 §11.4.9: `**` with a real operand yields a
-                        // REAL result = pow(base, exp). Desugar to the `$pow` sysfunc
-                        // (libm::pow) instead of loud-rejecting — both operands read
-                        // as real (`real_arg` converts an integral operand to f64),
-                        // so `2.0**3`, `r**2`, and `2**2.0` all fold correctly.
-                        ir::BinOp::Pow => {
-                            return self.push_expr(ir::Expr::SysFunc {
-                                which: ir::SysFuncId::Pow,
-                                args: vec![lhs, rhs],
-                            });
-                        }
-                        ir::BinOp::BitAnd
-                        | ir::BinOp::BitOr
-                        | ir::BinOp::BitXor
-                        | ir::BinOp::BitXnor
-                        | ir::BinOp::Shl
-                        | ir::BinOp::Shr
-                        | ir::BinOp::AShl
-                        | ir::BinOp::AShr => self.error(
-                            MsgCode::ElabUnsupported,
-                            "bitwise/shift/reduction not defined on real operand",
-                        ),
-                        _ => {}
-                    }
+                if let Some(id) = self.binary_real_operand_route(irop, lhs, rhs) {
+                    return id;
                 }
                 self.push_expr(ir::Expr::Binary { op: irop, lhs, rhs })
             }
@@ -1323,5 +1316,60 @@ impl Elaborator<'_> {
                 self.placeholder_expr()
             }
         }
+    }
+
+    /// What a REAL operand does to a binary operator once BOTH sides are lowered —
+    /// IEEE §6.2 permanent illegalities plus the §11.4.9 `**` route.
+    ///
+    /// Returns `Some(id)` when the operator is REPLACED (only `**`, which becomes the
+    /// `$pow` sysfunc) and `None` when the caller should build its own `Binary` node.
+    /// A permanently illegal operator is reported here and still returns `None`, so
+    /// the caller's node is well formed while the elaboration is poisoned.
+    ///
+    /// ⚠️ THIS IS A FUNCTION BECAUSE IT HAS TWO CALLERS. It used to be inline in
+    /// `lower_expr`'s `Binary` arm, and `lower_expr_ctx`'s `Binary` arm — the
+    /// width-aware twin a fill literal diverts to — never did any of it. So a fill
+    /// anywhere in the node turned every rule here off: `r & '1` and `r << '1` printed
+    /// a silent `0` at exit 0 where the `1'b1` spellings beside them were E3009
+    /// (iverilog rejects both), and `r ** '1` lost the `$pow` desugar entirely and
+    /// read `0` where BOTH oracles — and its own `r ** 1'b1` twin — read `3`.
+    pub(crate) fn binary_real_operand_route(
+        &mut self,
+        irop: ir::BinOp,
+        lhs: u32,
+        rhs: u32,
+    ) -> Option<u32> {
+        if !(self.expr_is_real(lhs) || self.expr_is_real(rhs)) {
+            return None;
+        }
+        match irop {
+            ir::BinOp::Mod => self.error(
+                MsgCode::ElabUnsupported,
+                "modulo (%) not defined on real operand",
+            ),
+            // IEEE 1800-2017 §11.4.9: `**` with a real operand yields a REAL result =
+            // pow(base, exp). Desugar to the `$pow` sysfunc (libm::pow) instead of
+            // loud-rejecting — both operands read as real (`real_arg` converts an
+            // integral operand to f64), so `2.0**3`, `r**2`, and `2**2.0` all fold.
+            ir::BinOp::Pow => {
+                return Some(self.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::Pow,
+                    args: vec![lhs, rhs],
+                }));
+            }
+            ir::BinOp::BitAnd
+            | ir::BinOp::BitOr
+            | ir::BinOp::BitXor
+            | ir::BinOp::BitXnor
+            | ir::BinOp::Shl
+            | ir::BinOp::Shr
+            | ir::BinOp::AShl
+            | ir::BinOp::AShr => self.error(
+                MsgCode::ElabUnsupported,
+                "bitwise/shift/reduction not defined on real operand",
+            ),
+            _ => {}
+        }
+        None
     }
 }
