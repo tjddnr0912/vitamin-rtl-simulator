@@ -1835,7 +1835,12 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     fn k_eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value {
         // `Scheduler::eval_for_lvalue`, restated over this store: the IEEE
         // assignment rule is width = max(lhs, self(rhs)), sign = rhs self-sign.
-        let lw = self.arena.lvalue_width(self.ir, lhs);
+        // §6.12: a real destination lends no width — see `width::lvalue_targets_real`.
+        let lw = if crate::width::lvalue_targets_real(self.ir, lhs) {
+            0
+        } else {
+            self.arena.lvalue_width(self.ir, lhs)
+        };
         let sw = self.sched.st.wt.get(rhs);
         let w = lw.max(sw.width);
         // S2: the width-specialized fast path. Admission (uniform width AND

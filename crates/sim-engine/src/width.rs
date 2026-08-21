@@ -171,3 +171,28 @@ impl WidthTable {
         WidthTable { sw, real }
     }
 }
+
+/// Does this lvalue write a REAL net — i.e. lend NO bit width to its right-hand side?
+///
+/// ⚠️ A REAL HAS NO BIT WIDTH (IEEE §6.12), so the assignment rule `width = max(lhs,
+/// self(rhs))` has nothing to take from the left: the right-hand side is
+/// SELF-DETERMINED and its value is then converted (§11.8.1 / IEEE 1364 §4.3). Asking
+/// `lvalue_width` anyway answers the real's STORAGE size, 64, and evaluating there
+/// changes the value for an UNSIGNED operand narrower than that: `byte unsigned b = 8;
+/// real r; r = -b;` read 1.84467e+19 instead of 248, because `-b` was computed in a
+/// 64-bit context. Both oracles read 248, and `$display("%0d", -b)` — the same
+/// expression with no real target — was already 248 here too.
+///
+/// ⭐ THIRD OCCURRENCE OF ONE TRAP. §4.5.353 caught `ir_lvalue_width` answering 64 for
+/// a real assignment target and §4.5.354 caught `ir_bits_of` answering 64 for a real
+/// operand; both are in elaborate. This is the engine's copy of the same question, and
+/// it is why the predicate is a named function rather than an inline check: the two
+/// backends ask it in two places (`Scheduler::eval_for_lvalue` and
+/// `k_eval_for_lvalue`) and must not drift.
+pub(crate) fn lvalue_targets_real(ir: &SimIr, lhs: &sim_ir::Lvalue) -> bool {
+    lhs.chunks.iter().any(|c| {
+        ir.nets
+            .get(c.net as usize)
+            .is_some_and(|n| matches!(n.kind, sim_ir::NetKind::Real))
+    })
+}

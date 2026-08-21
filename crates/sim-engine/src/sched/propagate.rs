@@ -315,7 +315,12 @@ impl Scheduler<'_, '_> {
     }
 
     pub(crate) fn eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value {
-        let lw = self.st.lvalue_width(lhs);
+        // §6.12: a real destination lends no width — see `width::lvalue_targets_real`.
+        let lw = if crate::width::lvalue_targets_real(self.st.ir, lhs) {
+            0
+        } else {
+            self.st.lvalue_width(lhs)
+        };
         let sw = self.st.wt.get(rhs);
         let ctx_w = lw.max(sw.width);
         self.eval_ctx_top(rhs, ctx_w, sw.signed)

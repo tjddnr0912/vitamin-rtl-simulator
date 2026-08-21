@@ -706,7 +706,18 @@ fn eval_rhs_op(
 ) -> Op {
     if let Some((c, nonint)) = ctx.and_then(|c| c.natives.map(|n| (c, n))) {
         let (ir, wt) = (c.ir, c.wt);
-        let ctx_w = lvalue_width_of(ir, lhs).max(wt.width(rhs));
+        // §6.12: a real destination lends no width — see `width::lvalue_targets_real`.
+        // ⚠️ THE THIRD SITE THAT ASKS THIS QUESTION. `Scheduler::eval_for_lvalue` and
+        // `k_eval_for_lvalue` are the other two; this one compiles the native program,
+        // so before it was fixed `real r; r = -iu;` was WRONG only when the process had
+        // no delay in it — with a `#1` the process falls to the generic path and was
+        // already right. That is why the predicate is a shared function.
+        let lw = if crate::width::lvalue_targets_real(ir, lhs) {
+            0
+        } else {
+            lvalue_width_of(ir, lhs)
+        };
+        let ctx_w = lw.max(wt.width(rhs));
         let ctx_signed = wt.signed(rhs);
         // The partition. `width_admits` is `wprog::compile`'s own first line, asked
         // The partition. The predicate is the caller's because only tier-3 can
