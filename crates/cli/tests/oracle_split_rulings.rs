@@ -14,16 +14,17 @@
 //!    conversion in it, whose answer cannot be 1 for all three. Its `1` carries no
 //!    information. verilator and vita agree on every cell.
 //!
-//! 2. `'1 ** r` with real `r`. vita reads 480, verilator 1. ⚠️⚠️ A FIX WAS BUILT AND
-//!    REVERTED. The argument for moving to 1 was vita's own inconsistency — `'1 ** r` is
-//!    480 but `(4'd15+4'd1) ** r`, the same all-ones base spelled without a fill, is 0.
-//!    That inconsistency is real. But the PRE-3-way census of 288 pow-with-fill designs
-//!    said agreement with iverilog went 267 -> 247: all 35 moved cells moved AWAY. The
-//!    measurement refuted the reading, which is this project's rule (differential beats
-//!    soundness) working as intended. And it corrected the diagnosis: iverilog reads
-//!    `(4'd15+4'd1) ** r` as 1024, i.e. the assignment context DOES reach a power's base,
-//!    so vita's inconsistency is that the non-fill path gives the base too LITTLE
-//!    context, not that the fill path gives it too much. Recorded as ROADMAP §2-1f.
+//! 2. `'1 ** r` with real `r`. ⚠️⚠️ THIS ROW WAS RULED WRONG AND IS NOW FIXED (§4.5.362).
+//!    §4.5.361 read the 480 as correct because iverilog produced it, and scored a
+//!    candidate fix by iverilog agreement (267 -> 247) — but iverilog is the leaking
+//!    party here, and the score was measuring the leak. The disqualifying evidence was
+//!    one question away and I did not ask it: send the SAME expression somewhere with no
+//!    assignment width. `real x = ('1+4'h0) ** r` is 871.4213 in all three simulators,
+//!    and `$pow(('1+4'h0), r)` — the spelling §11.4.9 defines the operator to mean — is
+//!    871.4213 in all three too. A base cannot change value according to the width of
+//!    the variable the RESULT is later stored in. The fix and its 192-pair gate live in
+//!    `power_real_exponent_self_determines_base.rs`; what stays here is the corrected
+//!    ruling and the neighbours that prove it.
 //!
 //! 3. `$itor(-<unsigned>)`. vita reads 4294967288, iverilog -8. ⚠️ The split is NOT about
 //!    signedness: iverilog reads `$itor(64'h1_0000_0008)` as 8 for an unsigned AND for a
@@ -87,33 +88,41 @@ fn a_string_relational_is_lexicographic_and_iverilog_is_not_the_reference() {
     );
 }
 
-// ── 2. the refuted fix: `**` with a real exponent ───────────────────────────────
+// ── 2. the ruling that was wrong, and the neighbours that show it ───────────────
 
 #[test]
-fn a_power_with_a_real_exponent_keeps_the_assignment_context() {
-    // ⚠️ THIS VALUE IS THE ONE A "CONSISTENCY FIX" WOULD BREAK. It agrees with iverilog;
-    // the proposed 1 agrees with verilator and loses 20 other iverilog-agreeing cells.
+fn a_power_with_a_real_exponent_self_determines_its_base() {
+    // ⭐ THE DISQUALIFYING QUESTION: the same expression with no assignment width.
+    // All three simulators say the base is 15 here. iverilog's 480 for the 16-bit
+    // destination is that destination leaking into the base — it cannot be the
+    // reference for a value it reports as 15 when asked without an integral target.
     assert_eq!(
-        line(
-            "module t; real r = 2.5; logic [15:0] a;\n\
-              initial begin a = '1 ** r; #1 $display(\"r=%0d\", a); $finish; end endmodule\n"
-        ),
-        "480"
+        line("module t; real r = 2.5, x;\n              initial begin x = ('1+4'h0) ** r; #1 $display(\"r=%0.4f\", x); $finish; end endmodule\n"),
+        "871.4213"
     );
-    // The sibling-sized spelling, also iverilog's value.
+    // ⭐ And the spelling §11.4.9 defines the operator to MEAN, which even verilator
+    // agrees with (it is wrong about fill sizing, not about self-determination).
     assert_eq!(
-        line("module t; real r = 2.5; logic [15:0] a;\n\
-              initial begin a = ('1 + 4'h0) ** r; #1 $display(\"r=%0d\", a); $finish; end endmodule\n"),
-        "480"
+        line("module t; real r = 2.5, x;\n              initial begin x = $pow(('1+4'h0), r); #1 $display(\"r=%0.4f\", x); $finish; end endmodule\n"),
+        "871.4213"
     );
-    // ⚠️ AND THE CELL THAT SHOWS THE REMAINING GAP (ROADMAP §2-1f): the SAME all-ones
-    // base written without a fill. iverilog reads 1024; vita reads 0 because the
-    // non-fill path never offers the base the assignment context. Pinned so that when
-    // someone closes §2-1f this test tells them, instead of the fill cells above
-    // silently drifting.
+    // The integral destinations, which used to read 480 for every base because the
+    // assignment width overrode the sibling.
     assert_eq!(
-        line("module t; real r = 2.5; logic [15:0] a;\n\
-              initial begin a = (4'd15+4'd1) ** r; #1 $display(\"r=%0d\", a); $finish; end endmodule\n"),
+        line("module t; real r = 2.5; logic [15:0] a, b, c;\n              initial begin a = '1 ** r; b = ('1+4'h0) ** r; c = ('1|16'd0) ** r;\n              #1 $display(\"r=%0d %0d %0d\", a, b, c); $finish; end endmodule\n"),
+        "1 871 480"
+    );
+    // ⚠️ THE HALF THAT MUST NOT MOVE: with an INTEGRAL exponent the base really is
+    // context-determined (Table 11-21), so the fill takes the assignment width and
+    // ignores its 4-bit sibling. Both readings are live in this one file on purpose.
+    assert_eq!(
+        line("module t; logic [15:0] a, b;\n              initial begin a = (4'd15+4'd1) ** 2; b = ('1+4'h0) ** 3;\n              #1 $display(\"r=%0d %0d\", a, b); $finish; end endmodule\n"),
+        "256 65535"
+    );
+    // ⚠️ AND THE NON-FILL BASE, which was already self-determined and stays that way —
+    // iverilog reads 1024 here, again by leaking the destination width into the base.
+    assert_eq!(
+        line("module t; real r = 2.5; logic [15:0] a;\n              initial begin a = (4'd15+4'd1) ** r; #1 $display(\"r=%0d\", a); $finish; end endmodule\n"),
         "0"
     );
 }

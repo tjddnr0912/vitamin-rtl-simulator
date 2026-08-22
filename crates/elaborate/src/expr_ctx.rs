@@ -711,8 +711,40 @@ impl Elaborator<'_> {
                 // (vita 0, both oracles 2), and a narrow signed literal exponent in
                 // a continuous assign widened into a positive number.
                 if matches!(op, Shl | Shr | AShl | AShr | Pow) {
-                    let l = self.lower_ctx_or_plain(lhs, ctx);
-                    let r = self.lower_expr(rhs);
+                    // ⚠️⚠️ A REAL EXPONENT REVOKES THE BASE'S CONTEXT (§11.4.9 +
+                    // §11.8.1). `x ** y` with a real `y` IS `$pow(x, y)`, and once the
+                    // expression is real there is no bit width left to hand down — the
+                    // base is self-determined, exactly as it already is for `+`, `-`,
+                    // `*` and `/`. This twin was giving it the ASSIGNMENT width, so one
+                    // base expression had two values depending on the operator that
+                    // consumed it: `logic [15:0] a = ('1+4'h0) + r` reads the fill at
+                    // its 4-bit sibling (15, so 17.5 -> 18) but `** r` read it at 16
+                    // (65535, so 480 instead of 15**2.5 = 871).
+                    //
+                    // ⭐ The oracle is the SAME TOOL one spelling over: `$pow(('1+4'h0),
+                    // r)` is 871.4213 in all three simulators, and so is the operator
+                    // form once the result goes to a `real` (where no assignment width
+                    // exists to leak). iverilog's 480 is that leak — it cannot be the
+                    // reference for a base whose value it reports as 15 when asked
+                    // without an integral destination.
+                    //
+                    // The reorder is confined to a fill-bearing base — the arith arm below
+                    // already lowers its non-fill side first, for the same reason (it has
+                    // to know that side before it can size the fill). ⚠️ That arm ALSO
+                    // requires the other side to be fill-free, and the condition does NOT
+                    // carry over: there the question is which side supplies a width and
+                    // two fills supply none, while here the question is the exponent's
+                    // DOMAIN — and an exponent can be real while containing a fill
+                    // (`r + '1`). Copying the neighbour's guard verbatim left
+                    // `('1+4'h0) ** (r + '1)` reading 64976 where $pow reads 13071.
+                    let (l, r) = if matches!(op, Pow) && expr_contains_fill(lhs) {
+                        let r = self.lower_expr(rhs);
+                        let base_ctx = if self.expr_is_real(r) { 0 } else { ctx };
+                        (self.lower_expr_ctx(lhs, base_ctx), r)
+                    } else {
+                        let l = self.lower_ctx_or_plain(lhs, ctx);
+                        (l, self.lower_expr(rhs))
+                    };
                     // ⚠️ This is the branch that owns BOTH real rules a fill used to
                     // switch off: the shifts are permanently illegal on a real operand
                     // and `**` is the §11.4.9 `$pow` ROUTE, not a diagnostic.
