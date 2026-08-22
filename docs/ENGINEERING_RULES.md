@@ -55,6 +55,20 @@
 `git archive main | tar -x -C <scratch>/presrc` 후 **별도 빌드**(worktree 금지). 기존 바인딩·분류를 바꾸는
 슬라이스는 필수. 스윕은 **3분류**(loud→정답 / silent→loud / 문구만)로 센다.
 
+### 적대 리뷰 — LOOPROMPT §4 에서 이관한 판정 규칙 (2026-08-22)
+
+- **soundness 에 명시 의뢰할 것**: ALL-sites·variant 열거 · disjoint 증명 · 동명 충돌 · guard traversal 완전성 · **소비하는 map 의 POPULATION 경로 감사**.
+- **차분은 SEMANTIC 등가로** — STRUCTURAL 비교는 버그를 은폐한다. probe 가 갈리면 4-way 로 판정: 진짜 갭 / 무오라클(iverilog `"sorry"`=hand-IEEE · `"error"`=vita loud) / vita-ahead / 하네스 포맷. **iverilog 가 자기모순이면 vita spec-correct 를 타깃으로.**
+- **같은 hazard 의 두 철자가 갈리면 그것이 신호다** — 직접은 거부, 간접은 통과 = 워커가 한 겹 아래를 못 본다.
+- **부분 지원이 silent-wrong 을 맞바꾸기만 하면 기능을 빼라** — 정답은 더 나은 절반이 아니라 honest-loud + defer. 단 **빼기 전에 소비자×값 매트릭스를 세라**(빼는 것도 편집이고 회귀를 만든다).
+
+### 리뷰 오리엔테이션 — 비용을 줄이는 것은 검증이 아니다 (LOOPROMPT §4 에서 이관 · 2026-08-22)
+
+- **측정 결과를 파일로 넘겨라** — 스윕 표(셀 × iverilog/PRE/POST × 분류)를 주고 *"이 표 밖을 쳐라"* 로 시작시킨다. 안 주면 리뷰어가 그 표를 처음부터 다시 만든다.
+- **예산을 브리핑에 적어라**(예: *"tool call ≤20 · 설계 ≤10 · 넘으면 가진 것만 보고하고 다음에 할 일을 적어라"*). 예산이 없으면 항상 끝까지 쓴다.
+- **라운드 2 는 델타만** — 바뀐 hunk 목록과 이미 죽인 뮤테이션을 주고 그 밖을 요구한다.
+- **바이너리는 스냅샷해서 넘기고 해시를 적어라.** 트리가 움직이면 렌즈들이 서로 다른 빌드를 채점하고, 최종 판정이 *"보고된 것이 아직 살아 있는가"* 를 HEAD 에서 전부 재측정해야 한다(2026-08-22 실측 · §4.5.363).
+
 ## 작성 원칙
 
 > 누적 슬라이스의 적대 리뷰에서 실제로 silent-wrong을 한 번씩 막았던 규칙들. 일화·§번호는 [ROADMAP_ARCHIVE](ROADMAP_ARCHIVE.md)에 있고 여기엔 **규칙만** 둔다. 새 교훈은 이 절에 1줄로 병합.
@@ -198,6 +212,26 @@
 - **width/type 축**: self-width table(`width.rs`)·eval 일치. **width-분기는 width-0 HANDLE(string/dyn/queue) 오분기**→NetKind discriminator를 width 前·is_str 라우팅=설정처 grep 단일소스. target-width fill=`lower_ctx_or_plain`. 4-state raw=`val&!unk`. resize=RHS 부호 extend·TARGET 부호 stamp. **real→int 가드=strict `<2^N`**. **2-state X/Z→0=per-WRITE-path·per-STORAGE**. string/dyn HANDLE formal=사이드카 마스크. **타입-signedness=全 decl 대칭**·**signedness fidelity가 全 consumer 도달**·**compare/case=COLLECTIVE**(§11.8.1)·**untyped param=값이 타입 결정**(§6.20.2·fail-open). **const-fold=단일-Const만 provably-safe**. 상세=ARCHIVE.
 - **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
 - **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
+
+### §2 항목 착수 규칙 11종 (LOOPROMPT §0b 에서 이관 · 2026-08-22)
+
+전부 실측에서 나온 것이고, §2 의 어떤 항목을 착수하든 적용된다.
+
+① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
+
+### ⭐⭐ 문맥 규칙은 **공유 평가기가 아니라 소비자**에게 둔다 (2026-08-22 · §4.5.363)
+
+새로 생긴 좁은 leaf(파라미터 셀렉트·fill 리터럴·self 폭을 가진 노드) 때문에 그 위 산술이 감긴다면, *"이 노드는 폭-정직하게 평가하라"* 는 리다이렉트를 **공유 평가기 안에 넣지 마라**. 문맥을 아는 것은 **소비자**다.
+
+§4.5.363 이 `const_eval_in_scope` 의 Binary arm 에 넣었다가 셋을 한꺼번에 냈다 — 그 함수를 **폭 규칙이 정반대인** 소비자들이 공유하기 때문이다:
+
+- 선언 range bound·차원·반복수는 **자기결정**(§11.6.1) — 거기선 옳다.
+- **파라미터의 값은 대입**(§11.6): RHS 는 `max(self, target)` 에서 평가된다. 자기결정을 강요하니 `localparam int Q = W[7:0] + 8'd240` 이 36(두 오라클 292)이 됐고, 그 칸은 **honest-loud 였다** ⇒ loud→silent-wrong.
+- **한 arm 안의 가드는 가드가 아니다** — Unary arm 이 그냥 지나가 `~W[3:0]` 이 silent-wrong 을 **다른** silent-wrong 과 맞바꿨다(막으려던 바로 그것).
+- 모든 Binary 노드마다 부분트리를 걸으면 **Θ(n²)** — 셀렉트 **없는** 8000항 상수식이 **121배** 느려졌다.
+
+같은 술어를 `array_geom` 의 선언-range fold 로 옮기니 넷이 동시에 사라졌고 bound 당 O(1) 이 됐다.
+**적용법**: 문맥/폭 규칙을 넣기 전에 *"이 함수를 누가 부르고, 그들이 문맥에 합의하는가"* 를 grep 으로 물어라. 둘이 갈리면 규칙은 **호출부**에 산다. 정의상 자기결정인 소비자는 안전한 집이고, 공유 평가기는 결코 아니다. 새 모양에 키잉해 나머지는 같은 경로를 타게 하라(§4.5.218 옵트인).
 
 ### 형제 경로 확장 (§4.5.243)
 

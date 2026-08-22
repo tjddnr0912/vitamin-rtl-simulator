@@ -790,6 +790,25 @@
 > `crates/sim-engine/tests/perf_baseline.rs` 의 `SHA256_INLINE`/`SHA256_FUNCS` 상수에만 있다
 > (그리고 그 하네스의 **10 형태 중 9 는 연속대입이 0개** — cont-assign 축 변경은 거기서 원래 도달 불가).
 
+### ★★ §2 다음 넷 — 착수 브리핑 (2026-08-22 · 11-에이전트 재census 실측 · 전부 HEAD 재현 확인)
+
+⚠️ 순서는 값싼 것부터가 아니라 **사다리 순**이다. 넷 다 2-오라클이 답한다.
+
+**ⓐ 구조적 지연의 값 fold 가 리터럴 전용** — ⚠️ 지연 자체는 **이미 정확**하다(inertial 취소 포함: 5ns 딜레이 아래 2ns 펄스는 삼켜지고, 딜레이와 같은 폭의 펄스는 살아남는다 — iverilog 동일). 깨지는 건 **값**이다: `assign #(D) y=a;` 에서 `D=7` 인데 **조용히 0딜레이**(실측: vita 는 t=1 에 반영, iverilog 는 t=8). `#(2+3)` 도 틀리므로 *"파라미터 미지원"* 이 아니라 **리터럴 전용 fold** 다. 42칸 · 36칸 2-오라클 합치.
+⭐ **고칠 자리는 한 함수 · 호출부 둘**: `grep -rn fold_ca_delay crates/` = 정의(`const_eval.rs`) + `netdecl.rs` + `var_init.rs`. 파서가 게이트 프리미티브를 전부 `ContinuousAssign` 으로 desugar 하므로 assign / net-decl / buf·and·not·nor·xor / rise-fall / turnoff 가 **한 퍼널**을 지난다. 근인 = 리터럴 전용 `const_eval_u32`(IntLit/Paren/Unary± 뒤 `_ => None`)를 부르는데 **같은 `&self` · 같은 phase 에 스코프 해석기 `const_eval_in_scope` 가 있다**.
+⚠️ **동시에 보존할 것 다섯**: real 리터럴 정밀도 반올림이 정수 가지보다 **앞** · `× time_mult` 는 **saturating**(wrap 하면 7배 early fire — 실측) · `TimeLit` 이중 스케일 금지 · 음수 param 은 **리터럴 쌍둥이와 같은 wrap** · 진짜 비상수 `assign #dv` 는 zero-delay 유지(**새로 loud 화 금지**). `parameter real` 하위케이스는 라우팅하거나 loud — **조용한 drop 금지**. `wire #5 y;`(초기화자 없는 net 지연)는 **잘라내라**(verilator 단독 오라클 · 다른 코드 경로). `ContAssign.delay` 는 `Option<u32>` 그대로 ⇒ **format 29 불변**.
+
+**ⓑ subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다** — real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다. 56칸 전부 2-오라클.
+⚠️ **`%0d` 가 반올림으로 렌더해 숨는다** ⇒ 큐에 적힌 *"반올림이 안 된다"* 는 **STALE**(`input int` formal 반올림은 21/21 green). 깨지는 건 `%h` · part-select · 비트연산 · 폭 절단 · 등가 — `int` formal 이 **3 으로 찍히면서 `(a==3)` 에 0** 을 답한다.
+⭐ **레버리지**: `grep -rn coerce_assign crates/` 가 호출자를 **두 write 퍼널만** 보여 준다(`native/write.rs` · `state/init_diag.rs`). formal-bind 두 자리는 안 부른다 — 그래서 모듈 포트와 static task 는 맞고 subprogram formal 만 틀리다. **§2 불릿 넷이 같은 퍼널에 산다**(§11.6.1 확장 부호 · `expr_is_repeatable` 이 `f(mem[i])` 거부 · 인라인 body-local 2-state 가 x/z 를 안 떨군다) ⇒ 한 슬라이스로 넷 회수 가능.
+⚠️ **그 레버리지가 곧 위험이다** — **세 자리 라우팅**(frame bind · `eval_call` bind · inline bind)이라 한 자리만 고치면 출력의 일부가 맞아 **성공처럼 보인다**(memory: routing-lives-in-several-places). **엔진 절반 먼저**(56칸 중 ~40 · 철자 의존 없음), 인라인 절반은 넓히기 뒤로(그 경로는 `cast_operand_is_real` 의 bare-single-segment 과소탐지를 물려받는다). 인라인 경로의 `expr_is_repeatable` 게이트는 **유지**(`lower_real_to_int_cast` 가 피연산자를 두 번 부른다). 가드는 값이 아니라 **성질**로 핀: `f(3) == f(3.0) == f(int'(3.0))`.
+
+**ⓒ 정확히 64비트 문맥의 비교가 조용히 틀린다**(XS~S) — `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / iverilog·verilator **111**(실측). 마스킹 술어가 `ctx_w > 0 && ctx_w < 64` 이고 **63비트 쌍둥이는 §4.5.347 이 이미 고쳤다** ⇒ 머신러리는 있고 필요한 건 **경계 census + 64비트 레인 PRE-3-way 스윕**.
+⭐ **런타임 철자는 맞는다**(같은 식을 `$display` 에 넣으면 111) = 내부 판별자 확보 — 상수 도메인만의 결함이다.
+이웃 = **64비트 unsigned 상수가 i64 도메인에서 음수로 읽힌다**(`localparam M = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` vita 222 / 두 오라클 111). 같은 *i64 는 컨테이너지 값의 타입이 아니다* 뿌리(§4.5.348) ⇒ **아마 한 슬라이스**. ⚠️ 클래스 크기 미측정 — census 가 첫 걸음이고, 닫으면 의도적으로 declined 된 64비트 placement 핀이 열린다.
+
+**ⓓ package 스코프 파라미터 셀렉트**(§4.5.363 잔여) — 위 §2 불릿 참조. ⭐ **`package.rs` 에 `param_range` 삽입만 더하는 건 이미 지어서 되돌렸다 — 키가 안 닿는다. 반복하지 마라.**
+
 ### 스케줄러 축 프로파일 (2026-08-18 · 측정 트리거 실행 결과)
 
 **방법**: release + 심볼(`CARGO_PROFILE_RELEASE_{STRIP=none,DEBUG=1}`) · picorv32 를 `-G CYCLES=1000000`
