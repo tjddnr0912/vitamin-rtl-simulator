@@ -25,7 +25,7 @@
 
 | # | 항목 | 근거/오라클 |
 |---|---|---|
-| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말의 「다음 착수 순서」. **2026-08-22 재census 실측 상위 넷**(~~ⓐ 구조적 지연 = **§4.5.364 로 RESOLVED**, 70칸 FIXED 51 · REGRESSION 0~~): ⓑ subprogram **formal-bind 퍼널**이 `coerce_assign` 을 안 부른다(real→정수 formal 이 IEEE-754 페이로드 · 56칸 · §2 불릿 넷 동시 회수) ⓒ **정확히 64비트** 상수 비교(마스킹 술어가 `ctx_w < 64` · 런타임 철자는 맞다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여) | iverilog + verilator 라이브 차분 |
+| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말의 「다음 착수 순서」. **2026-08-22 재census 실측 상위 넷**(~~ⓐ 구조적 지연 = **§4.5.364**~~ · ~~ⓑ formal-bind = **§4.5.365**~~ 로 RESOLVED · 각각 잔여 넷은 §2): ⓒ **정확히 64비트** 상수 비교(마스킹 술어가 `ctx_w < 64` · 런타임 철자는 맞다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여) | iverilog + verilator 라이브 차분 |
 | **2** | **§3 loud→supported** — ✅ **3판 클리어 라운드 완료**(1~10+P1 · ARCHIVE §4.5.342). 다음 후보 = 라운드가 남긴 잔여(§3.1(c) `always_comb` decl-init · §3.3 part-select fold · §3.7 output/inout · §3.11 은 선행조건 ⓐ/ⓑ 로 재편성 — ⭐ⓑ codegen 쪽이 사다리를 안 건드린다) + §3 소형 큐 | iverilog·verilator 실측 ✓ |
 | **2b** | **§0 승격 큐 T2 잔여 2건** — `real` const-fold(= `int'(<real param>)` 바운드의 선행) · sized-literal enum label | iverilog ✓ 2/2 |
 | 3 | ~~**§2 DEEP** — inner NET vs outer PARAM shadow~~ ✅ **P1 로 해소**(2026-08-18 · ARCHIVE §4.5.342 — 답은 name-set 이 아니라 선언 블록의 SPAN · `repeat (LP)` 는 이미 열려 있었다) — 남은 형제 = §4.5.276 후속 ①(`for` trip-count 식별자) · package 변수 clobber | iverilog ✓ |
@@ -42,7 +42,7 @@
 | 분류 | 항목 수 | 내용 | 정본 |
 |---|---:|---|---|
 | correct-support 승격 큐 | 6 | **T1 전부 완료** · T2 독립 4 · T3 전제조건 2 | ROADMAP §0 |
-| 🔴 silent-wrong 잔여 | ~30 | **오라클-有 7**(part-select 바운드·**net 선언 초기화 fill 폭**·**오름차순 음수 bound 의 포트/서브프로그램/클래스 스코프**·package real·~~구조적 지연~~(§4.5.364 해소 · 잔여 4)·real→int formal·block-local package clobber — ~~replication count~~ 는 §4.5.350 해소) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
+| 🔴 silent-wrong 잔여 | ~30 | **오라클-有 7**(part-select 바운드·**net 선언 초기화 fill 폭**·**오름차순 음수 bound 의 포트/서브프로그램/클래스 스코프**·package real·~~구조적 지연~~(§4.5.364 해소 · 잔여 4)·~~real→int formal~~(§4.5.365 해소 · 잔여 4)·block-local package clobber — ~~replication count~~ 는 §4.5.350 해소) + DEEP 5(UTF-8 pipeline·derived-param width·`$unit` typedef·enclosing-const·packed-WIDTH sibling) + 중형 ~20 + 무오라클 3 | ROADMAP §2 |
 | honest-loud 잔여 | 35 + **round-28 4건** | string/heap·함수/formal·소형 큐·EXT2 3건·deep 저우선(VCD fidelity·X→real·x/z-fill param) + **§4.5.284 follow-on 4**(`specify` 블록·이벤트 컨트롤 계층참조 실지원·cross-process `disable` no-op·E3010/E3009 file:line 일관성 — 전부 실사용 ASIC 사이트, 오라클 ✓) | ROADMAP §3 |
 | SVA/검증 잔여 | 6 | empty-match 융합·N2c full·prop-ref skew 고급형·QUAD default-flip·N4 clocking 잔여·class down-cast | ROADMAP §4 |
 | perf/하드닝 | 5 + **T0~T4** | ⭐ **T0~T4 = 측정된 10.7× 청구**(doc-21 §7.3 · VM 커버리지 0% · 프레임 호출 650 ns vs iverilog 375 ns · 함수 지역 배열 원소 쓰기 514 ns vs 24 ns). 기존 5건은 전부 보류 판정(SVA-QUAD flip·FMT-CACHE b·GEN-3X-STR a·QUEUE-MID + **COMB-DEPTH**: 깊이 비용은 iverilog 도 같음이 실측 = vita 결함 아님. levelize 승격은 프로세스 실행 순서 이동을 감수해야 하고 이득 상한 ≈D/2) | ROADMAP §5 |

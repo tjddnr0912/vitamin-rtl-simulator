@@ -406,6 +406,135 @@ impl Elaborator<'_> {
         })
     }
 
+    /// §13.5.3: a subroutine call is an ASSIGNMENT to a variable of the formal's
+    /// DECLARED type, so a REAL actual bound to an INTEGRAL formal ROUNDS
+    /// (§6.24.1, half away from zero) and then NARROWS to the formal's width —
+    /// the same rule `value::coerce_assign` applies at a net store.
+    ///
+    /// The inline TASK path already gets this for free: it copies each input actual
+    /// into a formal-WIDTH local net, so the store coerces. The two FUNCTION paths
+    /// do not — the inline one substitutes the actual's ExprId for the formal's
+    /// name (no net exists to coerce at) and the frame one hands the raw value to
+    /// the slot in-bind — so both read the real's rounded value at the BODY's width
+    /// instead of the formal's. Measured against both oracles:
+    /// `function integer f(input byte k); f = k;` called `f(300.0)` gave 300 where
+    /// iverilog and verilator both give 44 (300 truncated into a signed byte), and
+    /// the same held for every narrow formal type and for a real variable, a real
+    /// parameter, a real-returning call and a negated real. ⚠️ The INTEGER-actual
+    /// twins were all already correct, which is why this reads as a real-domain
+    /// gap rather than a formal-binding one.
+    ///
+    /// Returns `eid` unchanged for every shape it may not touch:
+    ///
+    ///   * a non-real actual (nothing to convert — the integral rules already ran),
+    ///   * a width outside the cast's own scope (0, or > 64 where
+    ///     `lower_real_to_int_cast` reports; converting there would trade a wrong
+    ///     value for a NEW loud), and
+    ///   * ⚠️ an actual that may not be REPEATED: `lower_real_to_int_cast` names its
+    ///     operand FOUR times for a ≤32-bit target (`>= 0`, floor, ceil, the
+    ///     subtraction) and five for a wider one, so a `$random`-bearing actual
+    ///     would draw more than once — the §4.5.320 hazard the sibling bind already
+    ///     guards. Such an actual keeps the pre-slice answer. ⚠️ The OTHER caller of
+    ///     that fn (`lower_prim_cast`, i.e. `int'(e)`) has never had this gate, so
+    ///     `int'($random * 1.0)` draws a count that depends on the lowering — a
+    ///     pre-existing wrong answer either way, recorded in ROADMAP §2.
+    pub(crate) fn coerce_real_actual_to_formal(
+        &mut self,
+        eid: u32,
+        w: u32,
+        formal_signed: bool,
+    ) -> u32 {
+        if w == 0 || w > 64 {
+            return eid;
+        }
+        // ⚠️ VALUE-based realness, not `cast_operand_is_real`. That predicate's AST
+        // half looks a BARE single-segment name up in `func_table`, which is a
+        // different resolver than the one that picks the callee: inside a package
+        // body a bare `g()` resolves to `P::g`, so a module-level real-returning
+        // `g` SHADOWS it and an INTEGRAL actual is declared real. Round-tripping it
+        // through f64 then loses everything past 2^53 — measured, `h(g())` with
+        // `g` returning `64'd9007199254740993` gave …992 where both oracles give
+        // …993, a correct→silent-wrong of this slice's own making. (The
+        // `classifier-must-match-its-lowering-resolver` rule, and the sibling
+        // bind's own comment already called this predicate "recognized by
+        // spelling, not by value".)
+        //
+        // ⭐ Nothing is lost by asking the IR instead: the one shape
+        // `cast_operand_is_real` sees that `expr_is_real` does not is a real-
+        // returning `Expr::Call`, and `expr_is_repeatable` refuses a `Call`
+        // anyway — so that shape never reached the cast. A real function whose
+        // body INLINES to a real `Const` is seen by both.
+        if !self.expr_is_real(eid) {
+            return eid;
+        }
+        // ⚠️ `lower_real_to_int_cast` names its operand 2 (≤32-bit target) to 5
+        // (33..=64) times, so an actual that may only be evaluated once keeps the
+        // pre-slice answer rather than drawing twice (§4.5.320).
+        if !self.expr_is_repeatable(eid) {
+            return eid;
+        }
+        self.lower_real_to_int_cast(eid, w, formal_signed, false)
+    }
+
+    /// `round-half-away-from-zero(e)` as an INTEGER-VALUED REAL, exactly.
+    ///
+    /// `te = e >= 0 ? $floor(e) : $ceil(e)` (trunc toward zero), `frac = e - te`
+    /// in (-1, 1), then `ts = te + (frac >= 0.5 ? 1 : frac <= -0.5 ? -1 : 0)`.
+    /// This is exact where `e ± 0.5` is not: for an odd integer with |e| in
+    /// [2^52, 2^53) the f64 ulp is 1.0, so `e + 0.5` is a TIE and rounds to even.
+    /// `ge` is the caller's already-built `e >= 0.0`, reused so `e` is not named
+    /// one more time than necessary.
+    fn real_round_half_away(&mut self, e: u32, ge: u32) -> u32 {
+        let floor_e = self.push_expr(ir::Expr::SysFunc {
+            which: ir::SysFuncId::Floor,
+            args: vec![e],
+        });
+        let ceil_e = self.push_expr(ir::Expr::SysFunc {
+            which: ir::SysFuncId::Ceil,
+            args: vec![e],
+        });
+        let te = self.push_expr(ir::Expr::Ternary {
+            cond: ge,
+            then_e: floor_e,
+            else_e: ceil_e,
+        });
+        let frac = self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Sub,
+            lhs: e,
+            rhs: te,
+        });
+        let p_half = self.real_const_expr("0.5");
+        let n_half = self.real_const_expr("-0.5");
+        let one_r = self.real_const_expr("1.0");
+        let neg_one_r = self.real_const_expr("-1.0");
+        let zero_bump = self.real_const_expr("0.0");
+        let ge_half = self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Ge,
+            lhs: frac,
+            rhs: p_half,
+        });
+        let le_nhalf = self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Le,
+            lhs: frac,
+            rhs: n_half,
+        });
+        let inner = self.push_expr(ir::Expr::Ternary {
+            cond: le_nhalf,
+            then_e: neg_one_r,
+            else_e: zero_bump,
+        });
+        let bump = self.push_expr(ir::Expr::Ternary {
+            cond: ge_half,
+            then_e: one_r,
+            else_e: inner,
+        });
+        self.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Add,
+            lhs: te,
+            rhs: bump,
+        })
+    }
+
     /// real → integral cast: ROUND HALF AWAY FROM ZERO (§6.24.1), NOT `$rtoi`
     /// truncation. `round = $rtoi(e + (e >= 0.0 ? 0.5 : -0.5))`. `$rtoi` yields a
     /// 32-bit int; a 33..=64-bit target (`longint'`/`time'`) splits the rounded
@@ -428,27 +557,25 @@ impl Elaborator<'_> {
             return self.placeholder_expr();
         }
         let zero_r = self.real_const_expr("0.0");
-        let half_p = self.real_const_expr("0.5");
-        let half_p2 = self.real_const_expr("0.5");
-        let half_n = self.push_expr(ir::Expr::Unary {
-            op: ir::UnOp::Minus,
-            operand: half_p2,
-        });
         let ge = self.push_expr(ir::Expr::Binary {
             op: ir::BinOp::Ge,
             lhs: e,
             rhs: zero_r,
         });
-        let adj = self.push_expr(ir::Expr::Ternary {
-            cond: ge,
-            then_e: half_p,
-            else_e: half_n,
-        });
-        let sum = self.push_expr(ir::Expr::Binary {
-            op: ir::BinOp::Add,
-            lhs: e,
-            rhs: adj,
-        });
+        // ⚠️ `e ± 0.5` is NOT the rounding — it is a TIE for an odd integer with
+        // |e| in [2^52, 2^53) (f64 ulp = 1.0), and IEEE-754 breaks that tie to
+        // EVEN, so `$rtoi(e + 0.5)` answered `e + 1`. The `tw > 32` branch already
+        // computed the exact form below and said so in its own comment; the
+        // `tw <= 32` branch did not, and answered 2 for 2^52+1 where both oracles
+        // answer 1. It went unnoticed while only `int'(r)`/`byte'(r)` reached it —
+        // §4.5.365 then routed every ≤32-bit subroutine FORMAL through it too,
+        // which would have traded one wrong answer for another. So the exact
+        // construction is hoisted and BOTH branches use it now.
+        //
+        // `te = trunc-toward-zero(e)`, `frac = e - te ∈ (-1, 1)`, then round HALF
+        // AWAY FROM ZERO with an exact ±1 bump. For |e| >= 2^52 `e` is already
+        // integer-valued so `frac = 0` and `ts = e` exactly.
+        let ts = self.real_round_half_away(e, ge);
         // 33..=64-bit target: decompose the round-half-away integer of `e` into a
         // high and low 32-bit word in the real domain. We must NOT reuse `sum`
         // (= e±0.5): for an exactly-representable ODD integer `e` with |e| in
@@ -464,56 +591,6 @@ impl Elaborator<'_> {
         // value exactly. iverilog `longint'`/`time'`-identical across small/
         // fractional/negative/>2^31/odd-in-[2^52,2^53)/min/max sweeps.
         if tw > 32 {
-            // te = trunc-toward-zero(e) (`ge` = `e >= 0`, computed above).
-            let floor_e = self.push_expr(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Floor,
-                args: vec![e],
-            });
-            let ceil_e = self.push_expr(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Ceil,
-                args: vec![e],
-            });
-            let te = self.push_expr(ir::Expr::Ternary {
-                cond: ge,
-                then_e: floor_e,
-                else_e: ceil_e,
-            });
-            let frac = self.push_expr(ir::Expr::Binary {
-                op: ir::BinOp::Sub,
-                lhs: e,
-                rhs: te,
-            }); // (-1, 1)
-            let p_half = self.real_const_expr("0.5");
-            let n_half = self.real_const_expr("-0.5");
-            let one_r = self.real_const_expr("1.0");
-            let neg_one_r = self.real_const_expr("-1.0");
-            let zero_bump = self.real_const_expr("0.0");
-            let ge_half = self.push_expr(ir::Expr::Binary {
-                op: ir::BinOp::Ge,
-                lhs: frac,
-                rhs: p_half,
-            });
-            let le_nhalf = self.push_expr(ir::Expr::Binary {
-                op: ir::BinOp::Le,
-                lhs: frac,
-                rhs: n_half,
-            });
-            // bump = frac<=-0.5 ? -1 : 0   (inner), then frac>=0.5 ? 1 : inner.
-            let inner = self.push_expr(ir::Expr::Ternary {
-                cond: le_nhalf,
-                then_e: neg_one_r,
-                else_e: zero_bump,
-            });
-            let bump = self.push_expr(ir::Expr::Ternary {
-                cond: ge_half,
-                then_e: one_r,
-                else_e: inner,
-            });
-            let ts = self.push_expr(ir::Expr::Binary {
-                op: ir::BinOp::Add,
-                lhs: te,
-                rhs: bump,
-            }); // integer-valued, round-half-away(e), EXACT
             let two32 = self.real_const_expr("4294967296.0");
             let two32b = self.real_const_expr("4294967296.0");
             let quot = self.push_expr(ir::Expr::Binary {
@@ -564,8 +641,8 @@ impl Elaborator<'_> {
         }
         let rounded = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Rtoi,
-            args: vec![sum],
-        }); // 32-bit signed
+            args: vec![ts],
+        }); // 32-bit signed; `ts` is integer-valued, so this truncation is exact
         if tw == 32 {
             return if tsigned {
                 rounded

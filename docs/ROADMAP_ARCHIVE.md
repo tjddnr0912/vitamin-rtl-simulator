@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.365` **real actual 이 정수 formal 의 폭을 안 받는다 — 그리고 참조 구현은 이미 트리 안에 있었다** · §13.5.3 은 호출을 **formal 선언 타입 변수에의 대입**으로 정의하므로 real actual 은 반올림(§6.24.1) 후 **formal 폭으로 좁혀야** 하는데 vita 는 반올림만 했다(`function integer f(input byte k); f = k;` 를 `f(300.0)` 로 → **300**, 두 오라클 **44**, exit 0) · ⚠️⚠️ **큐 문구의 절반이 STALE 이었다** — `%0d` 반올림·등가·`integer` formal·automatic 함수/task 는 **이미 정확**했고 비트셀렉트/비트연산/`%h` 는 §2 가 아니라 **§3(E3009 loud)** · ⚠️ 그리고 **첫 프로브가 나를 속였다**: `input int` + `3.0`(폭에 들어맞는 값)만 봐서 frame 경로가 정확해 보였다 — **폭보다 큰 값**을 넣어야 보인다 · ⭐ **참조 구현이 트리 안에 있었다**: inline TASK 는 입력 actual 을 **formal-폭 지역 net 에 copy-in** 하므로 저장이 `coerce_assign` 을 탄다 ⇒ 나머지 셋을 거기 맞췄다(공유 헬퍼 `coerce_real_actual_to_formal` 하나) · 184칸(10 formal × 6 real actual × 3 라우팅) **mismatch 54 → 0** · 1,170칸 스윕 **1170/1170** iverilog 일치 · ⚠️⚠️ **적대 2렌즈 3라운드 · BLOCKING 넷** — ⓐ `cast_operand_is_real` 이 **철자로** 판정(패키지 본문의 bare `g()` 는 `P::g` 인데 술어는 모듈 레벨 `real g` 를 찾는다) ⇒ **정수** actual 이 f64 왕복으로 2⁵³ 초과를 잃었다(correct→silent-wrong) ⇒ **값 기반 `expr_is_real`** 로(⭐ 잃는 것 없음 — 유일한 차이인 real-반환 `Call` 은 `expr_is_repeatable` 이 이미 거절) ⓑ frame-task 게이트가 **net kind** 라 약해 `string` INPUT formal 을 1비트 캐스트로 파괴 ⇒ 형제 둘과 **같은 철자** ⓒ `input time signed` 가 세 경로에서 correct→wrong(뿌리 = `kind_signedness` 가 명시 한정자를 버려 **formal net** 이 unsigned · pre-existing) ⇒ **좁은 decline**(집합 차 = 정확히 `{Time}` 임을 렌즈가 증명) ⓓ ⭐⭐ **`lower_real_to_int_cast` 의 ≤32비트 가지가 `$rtoi(e±0.5)`** 라 [2⁵²,2⁵³) 홀수에서 **tie-to-even**(2⁵²+1 → 2, 두 오라클 1) — >32 가지엔 정확 구성이 이미 있었고 자기 주석이 그 함정을 적어 두었다; 내 변경이 30칸을 그 가지로 새로 보내 **wrong↔wrong 맞바꿈**이 될 뻔했다 ⇒ 정확 구성을 **hoist 해 두 가지가 공유** · ⭐ **곁수확**: pre-existing `int'()`/`byte'()`/`shortint'()` 결함 40칸이 함께 해소(`0.49999999999999994` → 0 포함) · ⚠️ 렌즈가 잡은 마지막 NIT = 내가 `range_to_dims` 를 두 번 불러 **진단이 두 번** 찍혔다(그 함수는 emit 한다) ⇒ 첫 호출의 부호를 바인딩 · bench+examples **8설계 `.velab` 바이트 동일**(정수 actual 42설계 포함 50/50) · 5,785 → **5,796 green** · format 29 불변
 - `4.5.364` **구조적 지연의 값 fold 가 리터럴 전용이었다 — 그리고 리뷰가 내 수정의 수정을 세 번 잡았다** · `parameter D = 7; assign #(D) y = a;` 가 **t=1 에 전파**(두 오라클 t=8) · exit 0 · 진단 0 — `fold_ca_delay` 가 부르던 `const_delay_ticks` 의 정수 가지가 **리터럴 전용**(`IntLit`/`(…)`/unary ± 뒤 `_ => None`)이고 **호출자가 `None` 을 조용한 기본값(딜레이 없음)으로 소비**한다 · ⭐ 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**: 정수(**자기결정 폭 · unsigned 읽기** — `#(4'd15+4'd1)`=0, `parameter signed [7:0] D=-8'sd1`=**255**, 둘 다 2-오라클) · real(`parameter real RD=2.5`) · **TimeLit**(`#(5ns)`) · ⭐ 정수 레인은 `$clog2` 의 헬퍼를 **추출해 공유**(`const_unsigned_selfdet`) — 같은 위치가 §20.8.1 과 §28.16 에서 같은 철자라 두 소비자가 문맥에 합의한다 · ⭐ 파서가 게이트 프리미티브·net-decl 지연을 전부 `ContinuousAssign` 으로 desugar 하므로 **한 퍼널**(assign/wire/buf/and/or/xor/bufif1 · rise-fall-turnoff 사이드카 포함) · ⚠️ 절차적 `#delay` 는 **opt-in 밖에 둔다**(그 레인은 amount 를 런타임 식으로 낮추므로 원래 제한이 없었고, region 판정만 넓히면 `#(ZERO_PARAM)` 이 Active→Inactive 로 바뀐다 = 결함 없는 스케줄링 변경) · ⚠️ **zero-rise 는 pre-slice 모양 유지**: `Some(0)` 은 CA 를 delayed 레인으로 보내고 vita 의 zero-tick write 는 **자기 타임스텝의 Postponed 리전 뒤에** 착지한다(`$strobe` 실측 — 두 오라클 1, vita 0) ⇒ `#(ZERO_PARAM)` 을 `Some(0)` 으로 만들면 맞던 답을 그 lag 와 맞바꾼다 · ⚠️⚠️ **적대 2렌즈가 4라운드에 걸쳐 BLOCKING 을 넷 냈고 셋은 내 라운드-2 수정이 만든 것이다**: ⓐ 정수 도메인을 먼저 물어 **정확히 정수인 `parameter real R = 11` 의 i64 쌍둥이**가 잡혀 `#(R/2)` 가 5(두 오라클 6 · vita 자신의 절차적 레인도 6) ⇒ `param_real_value` 가 **이미 적어 둔 순서**(real 먼저)로 재배치 ⓑ 그런데 real-먼저를 **return** 으로 쓰자 real 도메인에 없는 연산자(`%`·비트·shift·`$clog2`·call)가 통째로 조용한 기본값이 됐다(다섯 칸이 correct→silent-wrong) ⇒ **fallback 필수** ⓒ 게이트가 쓰던 `expr_mentions_real` 은 `real_param_val` **단독 walk** 라 안쪽 `localparam R=9` 가 바깥 `parameter real R=5` 를 가려도 real 이라 답한다 ⇒ **`shadow_correct` 옵트인** 신설(결합 바인딩 walk · 기존 호출자 셋은 리터럴 `false`) — soundness 렌즈가 그 술어가 **엄격한 좁힘**(true→false 방향으로만 다르다)임을 코드로 증명 ⓓ 새 TimeLit 레인이 오버플로에 **decline**(형제 레인은 saturate)해 `#(20000s)` 가 즉시 발화 ⇒ saturate · ⚠️ **적대 렌즈의 BLOCKING 하나는 반박했다**: 지연 멀티드라이버 E3001 을 *"correct→loud 회귀"* 라 했으나 **10 ns 격자가 조용히 버려진 2 ns 지연을 못 본 것**(1 ns 격자: PRE `t=11 bus=1` / iverilog `bus=z`) ⇒ silent→loud = 사다리 **상승**, 렌즈도 세 구성으로 반례를 시도한 뒤 철회 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0 · SAME-OK 15 · DIVERGENT 3 · STILL-WRONG 1**(런타임 변수 지연 = 범위 밖) · 353설계 드리프트 스캔이 라운드마다 **수정 표적만** 움직였음을 확인 · bench+examples **8설계 `.velab` 바이트 동일** · 5,770 → **5,785 green** · format 29 불변
 - `4.5.363` **파라미터 셀렉트가 상수 도메인에 아예 없었다 — 그리고 값도 폭도 이미 거기 있었다** · `localparam logic [31:0] W = 32'h34; logic [W[7:0]-1:0] v;` 가 **1비트** net 을 exit 0 로 선언(두 오라클 52) — ⭐ **런타임 레인은 이미 정확**했고(`$display("%0d", W[7:0])` 세 툴 다 52) 선언 폭도 `param_range` 에 이미 있었다 ⇒ 없던 건 `const_eval_in_scope` 의 **arm 하나**(그 함수의 유일한 `BitSelect` arm 은 const-**배열원소** 조회라 스칼라 param 에서 declines) · ⚠️ **캐스트 뭉치의 AST self-폭 패스에 막히지 않는다**(셀렉트의 self-width 는 `|msb-lsb|+1` = 하강 불필요) · ⭐⭐ **두 개의 decline 규칙이 슬라이스의 본체다**: ⓐ **방향/선언 LSB** — `[39:8]` 도 `[0:31]` 도 저바이트가 52 이므로 `[w-1:0]` 을 가정하면 silent-wrong 을 **다른 silent-wrong** 과 맞바꾼다 ⇒ 런타임 하강이 쓰는 **바로 그 `param_sel_range`** 를 쓴다(곁수확: `param_decl_range` 에 오름차순 arm 이 생겨 **런타임** `A[26]` 이 0→1 로 고쳐졌다 = 2-오라클 silent-wrong) ⓑ **폭 provenance** — 무타입 파라미터의 폭은 값에서 *추론*될 수 있어(`localparam W = ~8'hCB` → 32 기록, 실제 8) 그것을 믿으면 **263비트 net** 이 나온다 ⇒ `param_decl_width_opt(declared_only)` 로 **선언/타입/리터럴 유래만** 채택 · ⚠️⚠️ **적대 3렌즈가 다섯을 잡았고 그중 둘이 BLOCKING** — 첫 설계는 wrap 가드를 **공유 평가기**(`const_eval_in_scope` 의 Binary arm)에 넣었는데 그 함수는 **폭 규칙이 반대인 소비자 둘**이 공유한다: 파라미터 **값**은 자기결정이 아니라 **대입**이라 `localparam int Q = W[7:0]+8'd240` 이 36(두 오라클 292 · PRE 는 loud) = **loud→silent-wrong**, 게다가 가드가 **한 arm 에만** 닿아 `~W[3:0]` 이 6(두 오라클 12) = silent→**다른** silent, 게다가 셀렉트 **없는** 8000항 식이 **121배** 느려졌다(Θ(n²)) ⇒ 규칙을 **소비자(선언 range bound = 정의상 자기결정)** 로 옮기니 셋이 한꺼번에 사라졌다 · 그 밖에 셀렉트 **자신의 인덱스**도 자기결정(`W[4'd15+4'd1]` 은 bit 0)·`[5:5]` 동일 끝점이 하강 base 에서만 거절되던 방향표·음수 선언 bound 의 `max(0)` **거짓말**(오름차순 `[-2:3]` 이 correct→silent-wrong) 수정 · 93칸 3-오라클 **AGREE3 29 → 81 · FIXED 52 · 회귀 0 · 컨트롤 28/28 불변** · bench+examples 17 산출물 **바이트 동일** · 5,753 → **5,770 green** · format 29 불변
 - `4.5.362` **real 지수는 밑수의 문맥을 회수한다 — 그리고 직전 슬라이스의 판정이 틀렸다** · §4.5.361 은 `'1 ** r` 을 *"iverilog 가 480 을 내니 vita 의 480 이 맞다"* 로 닫고, 후보 고침을 **iverilog 일치도**로 채점해 기각했다(267 → 247) — ⚠️⚠️ **그 점수가 재고 있던 것이 바로 누수였다** · ⭐⭐ 실격 질문은 한 개였고 내가 묻지 않았다: **대입 폭이 없는 곳에 같은 식을 보내라** — `real x = ('1+4'h0) ** r` 은 **세 시뮬레이터 전부 871.4213**, §11.4.9 가 연산자의 정의로 지정한 `$pow(('1+4'h0), r)` 도 **세 시뮬레이터 전부 871.4213** ⇒ 밑수는 15 이고, **밑수의 값이 결과를 나중에 담을 변수의 폭에 따라 달라질 수는 없다** ⇒ 480 은 목적지의 역류 · ⭐ 규칙은 이미 `+`·`-`·`*`·`/` 가 지키고 있었다(같은 네 밑수가 `+ r` 에서 **4·18·2·18**, `** r` 에서 **480·480·480·480**) · 게이트를 **연산자형 vs `$pow` 형** 동치로 세워 192쌍 **115 → 192**(옮겨간 77칸이 **전부 기준값에 정확히 착지**) · ⚠️ 순수-정수 `**` **384칸 바이트 동일** = Table 11-21 의 나머지 절반 보존 · ⚠️ 적대 리뷰가 **이웃의 가드를 그대로 베낀 것**을 잡았다(`!expr_contains_fill(rhs)` — fill 은 real 이 못 되지만 fill 을 품은 식은 real 이 된다) · bench·examples 8설계 stdout+stderr+VCD **바이트 동일** · 곁수확 = **static function 의 모듈 net 쓰기가 조용히 사라진다**(2-오라클) · 5,748 → **5,753 green** · format 29 불변
@@ -397,6 +398,67 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.365 — real actual 이 정수 formal 의 폭을 안 받는다 (2026-08-22 · 5,796 green · format 29 불변)
+
+**결함.** IEEE 1800 §13.5.3 은 호출을 **formal 의 선언 타입 변수에 대한 대입**으로 정의한다 ⇒ real actual 은
+반올림(§6.24.1, 0에서 멀어지는 쪽)한 뒤 **formal 폭으로 좁혀야** 한다. vita 는 반올림만 했다:
+`function integer f(input byte k); f = k;` 를 `f(300.0)` 로 부르면 **300**(두 오라클 **44**), exit 0, 진단 0.
+
+**⚠️⚠️ 착수 census 가 큐 문구의 절반을 반박했다.** 큐엔 *"real→정수 formal 이 IEEE-754 페이로드 · 56칸 ·
+`%0d` 가 반올림으로 숨긴다 · 엔진 절반 ~40칸"* 이라고 적혀 있었는데, HEAD 에서 재보니 `%0d` 반올림
+(`f(3.0)`→3 · `f(3.7)`→4)·**등가**(`(k==3)`→111)·`integer` formal·**automatic 함수/task** 는 전부 이미 정확했다
+(이전 슬라이스들이 닫았다). 비트/파트 셀렉트·비트연산·`%h` 는 **조용히 틀리지 않고 E3009 로 거부**하므로
+§2 가 아니라 **§3** 다. 남은 살아 있는 축은 하나 — **real→정수 경계**.
+
+**⚠️ 그리고 첫 프로브가 나를 속였다.** `input int` formal 에 `3.0` 을 넣어 보고 *"frame 경로는 이미 맞다"* 고
+적었다(그 값은 32비트에 **들어맞는다**). **폭보다 큰 값**을 넣자 frame 함수도 frame task 도 똑같이 틀렸다.
+직전 슬라이스의 *"프로브의 해상도가 판정을 뒤집는다"* 와 같은 교훈의 **폭 축 버전**이다.
+
+**⭐ 참조 구현이 이미 트리 안에 있었다.** inline TASK 는 입력 actual 을 **formal-폭 지역 net 에 copy-in** 하고
+그 저장이 `value::coerce_assign` 을 탄다 — 그래서 60칸 전부 맞았다. 나머지 셋(inline 함수는 actual 의 ExprId 를
+formal **이름**에 치환하고, frame 함수/ task 는 raw 값을 슬롯 in-bind 로 넘긴다)을 공유 헬퍼
+`coerce_real_actual_to_formal` 하나로 거기 맞췄다. 184칸(10 formal 타입 × 6 real actual × 3 라우팅)
+**mismatch 54 → 0**, 적대 렌즈의 1,170칸 스윕도 **1170/1170** iverilog 일치.
+
+**⚠️⚠️ 적대 2렌즈 3라운드 — BLOCKING 넷.**
+
+1. **`cast_operand_is_real` 이 철자로 판정한다.** 그 술어의 AST 반쪽은 **bare 단일 세그먼트** 이름을
+   `func_table` 에서 찾는데, 패키지 본문의 bare `g()` 는 **`P::g`** 로 해석된다 — 그래서 모듈 레벨의
+   real-반환 `g` 가 이름을 가리면 **정수** actual 이 real 이라고 판정되고, f64 왕복이 2⁵³ 초과를 잃었다
+   (`…993` → `…992`, correct→silent-wrong). ⇒ 술어를 **값 기반 `expr_is_real`** 로 바꿨다.
+   ⭐ 잃는 것이 없다는 논증이 구조적이다: `cast_operand_is_real` 만 보는 유일한 모양은 real-반환
+   `Expr::Call` 이고 그건 `expr_is_repeatable` 이 이미 거절한다 ⇒ 캐스트에 도달한 적이 없다.
+   (`classifier-must-match-its-lowering-resolver` 의 세 번째 사례.)
+2. **frame-task 의 게이트가 형제보다 약했다.** net kind 로 물으면 `String`→`Wire`·`Event`→`Reg`·
+   `ClassHandle`→`Integer` 가 통과한다 ⇒ `string` INPUT formal 이 **1비트** real→int 캐스트로 파괴됐다
+   (`range_to_dims(String, None)` = 폭 1). ⇒ 게이트를 다른 두 자리와 **같은 철자**(`ast_kind_is_bit_vector`)로.
+3. **`input time signed` 가 세 경로에서 correct→wrong.** 뿌리는 pre-existing — `kind_signedness` 가
+   `time` 을 unsigned 로 하드코딩하고 명시 한정자를 버려 **formal net** 이 unsigned 로 만들어진다(그래서
+   net 을 쓰는 static task 는 PRE 에서도 틀렸다). 좁히기 시작하자 나머지 셋도 그 net 을 따라갔다. ⇒
+   **좁은 decline**(`time` + 명시 `signed` 만): 그 칸들은 PRE 와 완전히 동일해지고, 평범한 `time` 은
+   loud(E3009) → **44** 로 올라간다. ⭐ 렌즈가 decline 집합이 **정확히 `{Time}`** 임을 집합 차로 증명했다
+   (`kind_signedness` 가 덮는 다섯 중 `ast_kind_is_bit_vector` 가 막지 않는 유일한 것).
+4. ⭐⭐ **`lower_real_to_int_cast` 의 ≤32비트 가지가 틀려 있었다.** `$rtoi(e ± 0.5)` 는 |e| 가
+   [2⁵², 2⁵³) 인 **홀수 정수**에서 f64 ulp 가 1.0 이라 **tie** 이고 IEEE-754 는 그것을 **짝수로** 깬다 ⇒
+   2⁵²+1 이 **2**(두 오라클 1). >32비트 가지는 이미 정확한 `te`/`frac`/±1 구성을 갖고 있었고 **자기 주석에
+   그 함정을 적어 두었는데** 좁은 가지엔 없었다. `int'()`/`byte'()` 만 그 가지에 닿을 땐 눈에 안 띄었지만
+   이 슬라이스가 **≤32비트 formal 전부**를 거기로 보내면서 **wrong↔wrong 맞바꿈**이 될 뻔했다 ⇒ 정확
+   구성을 `real_round_half_away` 로 **hoist 해 두 가지가 공유**한다. ⭐ **곁수확**: pre-existing 캐스트 결함
+   40칸이 함께 해소됐다(2⁵²+1→1 · 2⁵²+3→3 · −(2⁵²+1)→−1, 그리고 `int'(0.49999999999999994)` **1→0**).
+   ⚠️ 반대 절반은 불변(3.5→4 · −3.5→−4 · 2.4→2) 이고 >32비트 가지는 **933바이트 문자 동일**(렌즈 검증).
+
+**⚠️ 마지막 NIT 도 내 것이었다.** 부호를 얻으려 `range_to_dims` 를 **두 번** 불렀는데 그 함수는 **진단을
+emit 한다** ⇒ `input logic [3:-2]` 에서 W3056 이 **두 번** 찍혔다. 첫 호출의 부호를 바인딩해 해소.
+
+**측정.** 184칸 3-오라클 **FIXED 54 · REGRESSION 0** · 1,170칸 스윕 **0 회귀** · 진단/exit 스윕 **0 차이** ·
+bench+examples **8설계 `.velab` 바이트 동일**(정수 actual 42설계 포함 50/50) · 새 회귀 11 테스트.
+⚠️ **비용**: `int'(real)` 이 지배하는 루프가 **~2.5배** 느려진다(정확 반올림의 대가 · 64비트 경로는 불변) —
+이 슬라이스의 기능과 무관한 자리라 기록해 둔다.
+
+**잔여**(§2): 바인딩 자리 **아홉 중 다섯**이 남았다(output formal 을 가진 frame 함수 · 계층 task/fn ·
+class 메서드/생성자) · `expr_is_repeatable` decline 이 남기는 조용한 기본값 · `time` 의 버려진 부호 한정자 ·
+범위 밖 real 의 클램프 · `int'($random*1.0)` 의 draw 횟수 변화.
 
 #### 4.5.364 — 구조적 지연의 값 fold 가 리터럴 전용이었다 (2026-08-22 · 5,785 green · format 29 불변)
 

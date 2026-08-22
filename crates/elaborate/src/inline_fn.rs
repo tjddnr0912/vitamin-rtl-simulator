@@ -497,6 +497,7 @@ impl Elaborator<'_> {
         kind: ast::NetVarKind,
         w: u32,
         formal_signed: bool,
+        declared_signed: bool,
     ) -> u32 {
         // A heap-handle (`string`/class/`event`) or `real` formal is not a bit
         // vector: a bit-resize would corrupt the handle or the IEEE-754 payload, so
@@ -527,7 +528,24 @@ impl Elaborator<'_> {
             Some(a) => self.cast_operand_is_real(a, eid),
             None => self.expr_is_real(eid),
         };
-        if is_real || self.ir_expr_is_string(eid) {
+        if is_real {
+            // §13.5.3 makes this an ASSIGNMENT to a variable of the formal's
+            // declared type, so a real actual ROUNDS and then NARROWS to `w` —
+            // the gap the note above named ("Converting a real actual to the
+            // formal's integer type is a separate gap too"). It is closed here
+            // and NOWHERE ELSE on this path, because the inline path substitutes
+            // the actual's ExprId for the formal's NAME: with no formal net, the
+            // body would otherwise round at ITS OWN width (`f(300.0)` into an
+            // `input byte` gave 300 where both oracles give 44). The helper is
+            // shared with the frame bind and declines the shapes it may not touch
+            // (> 64 bits, a non-repeatable actual) — those keep the pre-slice
+            // answer rather than becoming a new loud or a double draw.
+            if !formal_bind_may_narrow(kind, declared_signed) {
+                return eid;
+            }
+            return self.coerce_real_actual_to_formal(eid, w, formal_signed);
+        }
+        if self.ir_expr_is_string(eid) {
             return eid;
         }
         // ⚠️ A SIGNED result is safe to build and unsafe to CONSUME: it tells every
@@ -645,8 +663,14 @@ impl Elaborator<'_> {
             }
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
             let (w, _, _, formal_signed) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
-            let bound =
-                self.bind_formal_actual(eid, ast_actuals.get(i).copied(), kind, w, formal_signed);
+            let bound = self.bind_formal_actual(
+                eid,
+                ast_actuals.get(i).copied(),
+                kind,
+                w,
+                formal_signed,
+                p.signed,
+            );
             self.subst.push((p.name.name.clone(), bound));
             self.formal_str
                 .push((p.name.name.clone(), matches!(kind, ast::NetVarKind::String)));

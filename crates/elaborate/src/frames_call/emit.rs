@@ -174,8 +174,26 @@ impl Elaborator<'_> {
                 continue;
             }
             let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-            let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
-            actual_ids.push(self.lower_ctx_or_plain(a, w));
+            // ⚠️ Bind the SIGN from this call rather than folding the range twice:
+            // `range_to_dims` EMITS diagnostics, so a second call with the same
+            // arguments printed the same warning (and counted the same error)
+            // twice — measured, `input logic [3:-2]` reported W3056 two times.
+            let (w, _, _, formal_signed) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let eid = self.lower_ctx_or_plain(a, w);
+            // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL actual
+            // bound to an INTEGRAL formal rounds and narrows to the formal's
+            // width. This value goes straight into the frame slot, so without it
+            // the body reads the real at ITS OWN width — `f(300.0)` into an
+            // `input byte` gave 300 where both oracles give 44. A `real` formal
+            // keeps its payload (the helper's target is the integral one), and it
+            // declines the shapes it may not touch. One spelling with the inline
+            // bind and with `emit_frame_task_call`'s.
+            let eid = if ast_kind_is_bit_vector(kind) && formal_bind_may_narrow(kind, p.signed) {
+                self.coerce_real_actual_to_formal(eid, w, formal_signed)
+            } else {
+                eid
+            };
+            actual_ids.push(eid);
         }
         self.push_expr(ir::Expr::Call {
             func: fid,
@@ -471,6 +489,32 @@ impl Elaborator<'_> {
                         }
                     } else {
                         let eid = self.lower_ctx_or_plain(a, fw);
+                        // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL
+                        // actual bound to an INTEGRAL formal rounds and narrows to the
+                        // formal's width. The slot in-bind hands the raw value straight
+                        // to the frame slot, so without this the body reads the real's
+                        // value at its OWN width — `f(300.0)` into an `input byte` gave
+                        // 300 where both oracles give 44. A `real` formal net keeps the
+                        // payload verbatim (the helper's job is the integral target).
+                        // One spelling with the inline-function bind.
+                        // ⚠️ The gate is the AST kind, spelled EXACTLY as the other two
+                        // binds spell it. Testing the formal NET's kind instead is
+                        // strictly weaker — `String` maps to `Wire`, `Event` to `Reg`
+                        // and `ClassHandle` to `Integer`, so a `string` INPUT formal
+                        // passed and its heap payload was destroyed by a 1-bit
+                        // real→int cast (`range_to_dims(String, None)` = width 1).
+                        let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                        let fs = self
+                            .nets
+                            .get((base_net + slot) as usize)
+                            .is_some_and(|n| n.signed);
+                        let eid = if ast_kind_is_bit_vector(kind)
+                            && formal_bind_may_narrow(kind, p.signed)
+                        {
+                            self.coerce_real_actual_to_formal(eid, fw, fs)
+                        } else {
+                            eid
+                        };
                         in_binds.push((slot, eid));
                     }
                 }

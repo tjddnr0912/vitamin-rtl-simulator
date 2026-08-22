@@ -30,6 +30,25 @@ pub(crate) fn ast_kind_range_width(
 /// Is `kind` a BIT-VECTOR (integral) type — i.e. arithmetic evaluated at a context
 /// width? `real`/`realtime`/`string`/`event`/class-handle are NOT (no context-width
 /// extension applies), so a widening assignment to one is never mis-lowered this way.
+/// May a subroutine formal of this declared type receive the §13.5.3 real→integral
+/// narrowing at its bind?
+///
+/// One shape is refused: `input time signed`. `time` is 64-bit UNSIGNED (§6.11.2),
+/// so `kind_signedness` forces the formal NET unsigned and DROPS an explicit
+/// qualifier — and on the paths where the formal IS a net the body then reads it
+/// unsigned no matter what the bind computed. Both oracles read
+/// `input time signed k` as SIGNED (`-4`), so narrowing there would turn the
+/// pre-slice answer (correct only because nothing narrowed at all) into a wrong
+/// one on three paths at once, while the net-backed static-task path stayed wrong.
+/// Refusing keeps every `time signed` cell EXACTLY at its pre-slice value, and a
+/// plain `time` formal still gets the narrowing (measured: loud → 44, both oracles).
+///
+/// The root — a dropped signing qualifier on a `time` declaration — is ROADMAP §2's;
+/// this is a decline, not a fix, and it is spelled once for all three binds.
+pub(crate) fn formal_bind_may_narrow(kind: ast::NetVarKind, declared_signed: bool) -> bool {
+    !(matches!(kind, ast::NetVarKind::Time) && declared_signed)
+}
+
 pub(crate) fn ast_kind_is_bit_vector(kind: ast::NetVarKind) -> bool {
     use ast::NetVarKind::*;
     !matches!(kind, Real | Realtime | Event | String | ClassHandle)

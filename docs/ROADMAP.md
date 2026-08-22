@@ -214,7 +214,7 @@
 > - **폭 인식 상수 접기** — 자기결정 위치 셋(옛 「다음 착수 순서」 1~3)은 **§4.5.343 로 해소**; 남은 것은 top-level const 문맥 전반(generate-if cond·untyped localparam·range bound 등 — **위 표 1번**과 divergence 목록에 실측 기록)이고 그 해소가 곧 캐스트 뭉치의 선행조건(AST self-폭 패스)이다. ⚠️ §4.5.346 이 **캐스트 안쪽에서는 그 패스가 이미 선다**는 것을 증명했다(`const_self_width`+`const_signed_env` 로 충분 · `8'((4'd15+4'd1) > 4'd0)` 이 iverilog 0). ⭐ **인터프리터 coerce 가 가장 도달성 높은 진입점**이라고 기록돼 있었다.
 > - **package-scope `real`** (오라클 ✓).
 > - ~~**구조적 지연**(오라클 ✓)~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0**). 잔여는 아래 🆕 넷.
-> - **`real` → `input int` formal**(오라클 ✓).
+> - ~~**`real` → `input int` formal**(오라클 ✓)~~ — ✅ **RESOLVED §4.5.365**(2026-08-22 · 184칸 3-오라클 **FIXED 54 · REGRESSION 0** · 1,170칸 스윕 **1170/1170** iverilog 일치). 잔여는 아래 🆕 넷.
 > - 🆕 **cont-assign 만 구동하는 wire 가 t=0 에 가짜 이벤트를 낸다**(§4.5.352 differential 렌즈 곁 발굴 ·
 >   **iverilog 1오라클만 · verilator 미조회 ⇒ 착수 전 3-오라클 census 필수**). `wire b; assign #5 b = a;`
 >   에서 vita 는 b 가 **z 로 시작**해 t=0 settle 이 x 를 쓰고 그 z→x 가 `changed` 라 `always @(b)` 를
@@ -222,6 +222,15 @@
 >   에서도 같다 ⇒ 딜레이 경로 특유가 아니라 **초기값 도메인**(z 시작 vs x 시작)의 문제.
 >   PRE==POST-A==POST 로 **§4.5.352 가 만든 것이 아님이 확인**됐다(pre-existing). 여파 = 가짜 프로세스
 >   기동이므로 사다리상 silent-wrong 후보.
+>
+> **🆕 §4.5.365 곁가지 — `int'($random*1.0)` 의 draw 횟수**(둘 다 틀렸고 값이 **바뀌었다**): `lower_real_to_int_cast` 의 ≤32비트 가지가 정확 반올림으로 바뀌며 피연산자 명명 횟수가 2→4 로 늘었고, 그 함수의 **다른 호출자**(`lower_prim_cast` = `keyword'(e)`)에는 **`expr_is_repeatable` 게이트가 없다** ⇒ `int'($random*1.0)` 이 캐스트당 2회 → 4회 draw(iverilog 는 1회). 어느 쪽도 맞은 적이 없지만 **silent↔silent 를 조용히 맞바꾸지 마라** 규칙상 기록한다. 봉쇄책은 이미 이름이 있다 — 바인드가 쓰는 그 게이트를 `lower_prim_cast` 에도 주는 것(단, 거기선 decline 이 real 을 정수 문맥에 그대로 두므로 **다른 처리**가 필요하다).
+>
+> **🆕 §4.5.365 가 남긴 formal-bind 잔여 넷**(전부 PRE==POST · 각각 다른 경로 ⇒ CLASS 분리 규칙으로 기록):
+>
+> - **바인딩 자리는 넷이 아니라 아홉이다 — 다섯이 남았다**(2-오라클 · 전부 `f(300.0)`→`input byte` 가 **300**, 오라클 44). 고친 셋(inline 함수 · frame 함수 · frame task)과 이미 맞던 하나(inline task = **formal-폭 지역 net 에 copy-in** = 참조 구현) 밖에: ⓐ **output formal 을 가진 frame 함수**(`emit_frame_func_out_call` = 별개 emitter) ⓑ **계층 task 호출**(`hier_defer/task_call.rs` — 인자가 `inline_task.rs` 에서 **formal 폭 없이** 미리 lowering 된다) ⓒ **계층 함수 호출** ⓓ **class 메서드/task** ⓔ **class 생성자**. ⚠️ ⓑⓒ 는 **구조가 다르다** — deferred-hier 구조체엔 `&ast::Expr` 가 없다.
+> - **`expr_is_repeatable` decline 이 남기는 조용한 기본값**(2-오라클). 캐스트가 피연산자를 2~5회 명명하므로 **한 번만 평가 가능한** actual 은 좁히지 않는다: 사용자 `Call`(`f(rfn(3))`), real 배열/큐 원소(`f(ra[1])`), 화이트리스트 밖 SysFunc(`$sqrt`·`$itor`·`$bitstoreal`), `p::rf(...)` 스코프 호출. ⭐ `$random` 은 **decline 이 옳다**(적용하면 두 번 draw = 다른 silent-wrong · 실측으로 1회 draw 확인). ⚠️ 곁현상: 캐스트 산출물이 `$rtoi` 를 품어 **중첩 호출에서 깊이마다 번갈아** 맞는다(N=1 정답·N=2 오답…) — 그 self-blocking 이 노드 증가를 선형으로 묶어 준다.
+> - **`time` 선언의 명시 `signed` 한정자가 버려진다**(2-오라클 · `input time signed k` 에서 `k/2` 가 오라클 −4, vita 9223372036854775804). `kind_signedness` 가 `time`→unsigned 로 하드코딩해 **formal net** 이 unsigned 로 만들어진다 ⇒ net 을 쓰는 **static task** 경로가 틀린다. §4.5.365 는 나머지 셋을 **좁게 decline** 해 PRE 를 보존했다(고치면 셋이 같이 틀려진다) — 뿌리를 고치면 넷이 함께 열린다.
+> - **범위 밖 real 의 정수 클램프**(`real rv = 1.0e300; byte'(rv)` 두 오라클 **0** / vita **−1**). §4.5.365 가 호출 경로를 **vita 자신의 캐스트와 일치**시켰을 뿐 클램프 자체는 그대로다(`±inf`·NaN 포함 · PRE==POST).
 >
 > **🆕 §4.5.364 가 남긴 지연 잔여 넷**(전부 PRE==POST · 각각 다른 경로 ⇒ CLASS 분리 규칙으로 기록):
 >
@@ -789,13 +798,13 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,785 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-22 · ARCHIVE §4.5.364) |
+| 게이트 | **5,796 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-22 · ARCHIVE §4.5.365) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ 구조적 지연 = §4.5.364 로 RESOLVED~~): ⓑ **subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다**(real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다 · 56칸 · `%0d` 가 반올림으로 렌더해 숨는다 · §2 불릿 넷을 함께 회수) ⓒ **정확히 64비트 상수 비교**(`localparam L = ((64'd1-64'd2) > 64'd0)` vita 222 / 두 오라클 111 · 마스킹 술어가 `ctx_w < 64` · **런타임 철자는 맞는다** · 63비트 쌍둥이는 §4.5.347 이 이미 고쳤다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ 구조적 지연 = §4.5.364~~ · ~~ⓑ formal-bind = §4.5.365~~ 로 RESOLVED): ⓒ **정확히 64비트 상수 비교**(`localparam L = ((64'd1-64'd2) > 64'd0)` vita 222 / 두 오라클 111 · 마스킹 술어가 `ctx_w < 64` · **런타임 철자는 맞는다** · 63비트 쌍둥이는 §4.5.347 이 이미 고쳤다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
 | **2** | **§3 loud → correct-support 승격** | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 사다리를 올리는 유일한 방향 | §3 표에서 **오라클이 답하는 행**부터. ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
@@ -809,21 +818,13 @@
 > `crates/sim-engine/tests/perf_baseline.rs` 의 `SHA256_INLINE`/`SHA256_FUNCS` 상수에만 있다
 > (그리고 그 하네스의 **10 형태 중 9 는 연속대입이 0개** — cont-assign 축 변경은 거기서 원래 도달 불가).
 
-### ★★ §2 다음 셋 — 착수 브리핑 (2026-08-22 · 11-에이전트 재census 실측 · 전부 HEAD 재현 확인 · **ⓐ 는 §4.5.364 로 완료**)
+### ★★ §2 다음 둘 — 착수 브리핑 (**ⓐ = §4.5.364 · ⓑ = §4.5.365 로 완료**)
 
-⚠️ 순서는 값싼 것부터가 아니라 **사다리 순**이다. 셋 다 2-오라클이 답한다. **다음 착수 = ⓑ.**
+⚠️ 순서는 값싼 것부터가 아니라 **사다리 순**이다. 둘 다 2-오라클이 답한다. **다음 착수 = ⓒ.**
 
 ~~**ⓐ 구조적 지연의 값 fold 가 리터럴 전용**~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0** · 5,785 green · format 29 불변). 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**(정수 자기결정-unsigned · real · TimeLit)이었다. 잔여 넷 = §2 「🆕 §4.5.364 가 남긴 지연 잔여 넷」 · 곁수확 §3 행 하나. 상세=ARCHIVE §4.5.364.
 
-**ⓑ subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다** — ⚠️⚠️ **2026-08-22 착수 재census 가 이 행의 절반을 반박했다**(§4.5.364 직후 · 18칸 3-오라클 실측). 아래는 **재측정된** 상태다.
-
-⭐ **살아 있는 §2 칸은 하나뿐**: **real actual → 좁은 정수 formal 에서 formal 의 선언 폭·부호가 적용되지 않는다**. `function integer f(input byte k); f = k; endfunction` 에 `f(300.0)` → 두 오라클 **44**(300 을 signed byte 로 절단) · vita **300**. ⚠️ **정수 actual 쌍둥이는 전부 맞다** — `f(300)`·`f(m)`(변수)·automatic·task·`bit [3:0]`·`shortint` **여섯 칸 모두 두 오라클 일치** ⇒ 깨진 축은 *formal-bind 일반*이 아니라 **real→정수 경계 하나**다.
-
-⚠️ **STALE 로 판정된 것들**(HEAD 에서 두 오라클과 일치 · 손대지 마라): `%0d` 반올림(`f(3.0)`→3 · `f(3.7)`→4) · **등가**(`(k==3)` → 111) · `integer` formal · **automatic 함수** · **automatic/static task**(셋 다 111) · real formal 로의 정수 승격. 큐에 적혀 있던 *"56칸"* · *"엔진 절반 ~40칸"* · *"`%0d` 가 숨긴다"* 는 **더 이상 성립하지 않는다**(이전 슬라이스들이 닫았다).
-
-⚠️ **나머지는 §2 가 아니라 §3(loud→supported)** — 인라인 경로에서 real actual 을 받은 formal 에 **비트/파트 셀렉트·비트연산·`%h`** 를 쓰면 **E3009 로 정직하게 거부**한다(`f = k[1:0]`·`f = k & 32'hFF`·`%0h`, 두 오라클은 3). 조용히 틀리지 않으므로 사다리상 안전하고, 승격은 별건이다.
-
-⭐ **다음 착수자에게**: 자리는 여전히 `coerce_assign` 을 안 부르는 **formal-bind 퍼널**이지만, **스코프가 여섯 칸에서 한 칸으로 줄었다** — 먼저 `f(300.0)` 이 어느 라우팅(frame / `eval_call` / inline)을 타는지 계장으로 찍어라(정수 쌍둥이가 전부 맞으므로 **세 자리를 다 고칠 필요가 없을 수 있다**). 가드는 값이 아니라 성질로 핀: `f(300) == f(300.0) == f(int'(300.0))`.
+~~**ⓑ subprogram formal-bind**~~ — ✅ **RESOLVED §4.5.365**(2026-08-22 · 184칸 **FIXED 54 · REGRESSION 0** · 5,796 green · format 29 불변). ⚠️ 착수 census 가 큐 문구의 절반을 반박했다(`%0d` 반올림·등가·automatic 은 이미 정확) 그리고 자리는 **셋이 아니라 아홉 중 셋**이었다. 잔여 넷 = §2 「🆕 §4.5.365 가 남긴 formal-bind 잔여 넷」. 상세=ARCHIVE §4.5.365.
 
 **ⓒ 정확히 64비트 문맥의 비교가 조용히 틀린다**(XS~S) — `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / iverilog·verilator **111**(실측). 마스킹 술어가 `ctx_w > 0 && ctx_w < 64` 이고 **63비트 쌍둥이는 §4.5.347 이 이미 고쳤다** ⇒ 머신러리는 있고 필요한 건 **경계 census + 64비트 레인 PRE-3-way 스윕**.
 ⭐ **런타임 철자는 맞는다**(같은 식을 `$display` 에 넣으면 111) = 내부 판별자 확보 — 상수 도메인만의 결함이다.
