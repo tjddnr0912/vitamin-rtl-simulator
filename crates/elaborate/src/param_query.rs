@@ -148,6 +148,32 @@ impl Elaborator<'_> {
             ast::ExprKind::SysCall { args, .. } => {
                 args.iter().any(|a| self.count_reads_real_param(a))
             }
+            // A SELECT of a real param (`logic [R[7:0]-1:0] v;`). Without these arms
+            // this gate missed, control fell through to `nonconst_bound_reason`, and
+            // the message was *"undefined name `R`"* about a param declared one line
+            // up — while the plain `logic [R-1:0]` twin said the true thing. Both
+            // spellings are loud either way (iverilog: "can not select part of real
+            // parameter"), so this moves no rung; it stops the diagnostic from lying.
+            // Unlike `collect_bare_idents` this walk has ONE consumer, so widening it
+            // carries no shared-path hazard.
+            ast::ExprKind::BitSelect { base, index } => {
+                self.count_reads_real_param(base) || self.count_reads_real_param(index)
+            }
+            ast::ExprKind::PartSelect { base, msb, lsb } => {
+                self.count_reads_real_param(base)
+                    || self.count_reads_real_param(msb)
+                    || self.count_reads_real_param(lsb)
+            }
+            ast::ExprKind::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                self.count_reads_real_param(base)
+                    || self.count_reads_real_param(offset)
+                    || self.count_reads_real_param(width)
+            }
             _ => false,
         }
     }

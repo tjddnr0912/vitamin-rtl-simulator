@@ -63,6 +63,30 @@ impl ParamOverrides {
 
 impl Elaborator<'_> {
     pub(crate) fn param_decl_width(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
+        self.param_decl_width_opt(p, false)
+    }
+
+    /// [`Self::param_decl_width`] with an OPT-IN provenance filter.
+    ///
+    /// `declared_only` = answer only when the width came from a DECLARED RANGE, a
+    /// TYPE, or a LITERAL — never from inference over the folded value. Every
+    /// existing caller passes a literal `false` and is byte-identical.
+    ///
+    /// ⚠️ The distinction is not cosmetic, and it was measured the hard way. The
+    /// final fallthrough sizes an untyped expression initializer as
+    /// `min_signed_bits(v).max(32)`, so `localparam W = ~8'hCB;` records 32 for a
+    /// value whose real self width is 8. A consumer that EXTRACTS BITS from that
+    /// width invents bits that do not exist: `logic [(W[15:8])+8-1:0] v;` declared a
+    /// **263-bit** net where iverilog declares 1. The bound was correct before the
+    /// select fold existed, so trusting the inferred width is a correct→silent-wrong
+    /// regression, not a residue — which is why the select path opts in here instead
+    /// of reading `param_meta` directly.
+    ///
+    /// The ALIAS arms (`localparam C = D;`, `localparam C = p::D;`) decline under
+    /// the flag as well: they inherit the source's recorded meta, and this predicate
+    /// cannot see whether THAT width was itself inferred. Fail-closed; the alias of
+    /// a declared param is recorded residue, not a wrong answer.
+    fn param_decl_width_opt(&self, p: &ast::ParamDecl, declared_only: bool) -> Option<(u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
@@ -141,6 +165,9 @@ impl Elaborator<'_> {
                 // alias must keep the SOURCE's width, not shrink to its value's.
                 if let ast::ExprKind::Ident(pth) = &e.kind {
                     if pth.segments.len() == 1 {
+                        if declared_only {
+                            return None; // inherited meta — provenance unknown here
+                        }
                         return self
                             .param_meta
                             .get(&self.fq(&pth.segments[0].name))
@@ -150,6 +177,9 @@ impl Elaborator<'_> {
                 // Same for a bare `pkg::X` alias — inherit the package constant's
                 // full `(width, signed)` (MISS → value-inferred, as above).
                 if let ast::ExprKind::PkgScoped { pkg, name } = &e.kind {
+                    if declared_only {
+                        return None; // inherited meta — provenance unknown here
+                    }
                     return self
                         .pkg_const_meta
                         .get(&pkg.name)
@@ -208,6 +238,9 @@ impl Elaborator<'_> {
                 // (§11.8.1), width from the folded value's minimal signed width.
                 // Without this a positive such param was UNSIGNED — inconsistent
                 // with the same value written as a bare literal.
+                if declared_only {
+                    return None; // VALUE-inferred — see the doc on this parameter
+                }
                 if let Some(v) = self.const_eval_in_scope(&p.value) {
                     return Some((min_signed_bits(v).max(32), self.const_expr_signed(&p.value)));
                 }
@@ -216,23 +249,55 @@ impl Elaborator<'_> {
         }
     }
 
-    /// The param's DECLARED packed range `(lo, width, ascending)` — recorded in
-    /// `param_range` ONLY when the LSB is non-zero (`localparam [15:8] P`), so a
-    /// bit/part-select `P[15:12]` normalizes its offset against the declared LSB.
-    /// `None` for a bare/atom param, a zero-LSB range (`[N:0]` — raw is already
-    /// correct), or an unfoldable bound. Reads the SAME `p.range` as
-    /// [`Self::param_decl_width`].
+    /// The param's `(lo, width, ascending)` **whenever that shape is known from a
+    /// DECLARATION rather than inferred from the value** — recorded in `param_range`
+    /// and read back by [`Self::param_sel_range`]. It answers three groups:
+    ///
+    /// 1. an explicit packed range (`[15:8]`, `[0:31]`, `[31:0]`);
+    /// 2. no range but a TYPE- or LITERAL-determined width (`int`, `localparam
+    ///    U = 300`, `byte'(-1)`, a constant-function call) → `(0, w, false)`;
+    /// 3. nothing else — notably an untyped EXPRESSION initializer, whose recorded
+    ///    width is a value inference (see [`Self::param_decl_width_opt`]).
+    ///
+    /// ⚠️ Group 2 and the descending zero-LSB half of group 1 are OFFSET NO-OPS at
+    /// runtime — `norm_offset_for_range(raw, 0, w, false)` returns `raw` unchanged —
+    /// so recording them costs nothing on the lowering path and the common shape
+    /// stays byte-identical. What they buy is PROVENANCE: this map becomes the one
+    /// place that answers "is this param's width a declared fact?", which is exactly
+    /// the question the constant-domain select fold has to ask before it extracts
+    /// bits. Group 3 declining is what keeps `localparam W = ~8'hCB; W[15:8]` from
+    /// inventing a 263-bit net out of a value-inferred 32.
+    ///
+    /// ⚠️ The ASCENDING case was missing and `lo == 0` swallowed it: `[0:31]` has
+    /// LSB 0 like `[31:0]` does, so an ascending param recorded nothing and every
+    /// consumer read the RAW offset. `localparam logic [0:31] A = 32'h34; A[26]`
+    /// answered 0 where both oracles answer 1 (ascending index 26 is internal bit
+    /// `hi − 26` = 5). Direction, not LSB, is what `norm_offset_for_range` needs.
+    ///
+    /// Reads the SAME `p.range` as [`Self::param_decl_width`].
     pub(crate) fn param_decl_range(&self, p: &ast::ParamDecl) -> Option<(u32, u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
-        let r = p.range.as_ref()?;
+        let Some(r) = p.range.as_ref() else {
+            // No declared range: the width is a fact only when a TYPE or a LITERAL
+            // states it. `lo = 0`, descending — an offset no-op.
+            let (w, _) = self.param_decl_width_opt(p, true)?;
+            return Some((0, w, false));
+        };
         let m = self.const_eval_in_scope(&r.msb)?;
         let l = self.const_eval_in_scope(&r.lsb)?;
-        let lo = m.min(l).max(0) as u32;
-        if lo == 0 {
-            return None; // zero-LSB `[N:0]`/`[0:N]` — the raw offset is already correct
+        // ⚠️⚠️ A NEGATIVE declared bound (`[3:-2]`, `[-2:3]`) DECLINES. `param_range`'s
+        // value type cannot hold a negative `lo`, so the `min(l).max(0)` this used to
+        // write recorded a LIE — and while `lo == 0` filtered every such range out the
+        // lie never reached a consumer. It does now, and it is not inert: an ascending
+        // `[-2:3]` recorded `(0, 6, true)` turned `A[0]`/`A[3]` from the correct 0/0
+        // into 1/1 against both oracles = correct→silent-wrong. Declining leaves the
+        // pre-existing (separately tracked) negative-bound behaviour exactly as it was.
+        if m < 0 || l < 0 {
+            return None;
         }
+        let lo = m.min(l) as u32;
         Some((lo, m.abs_diff(l) as u32 + 1, m < l))
     }
 

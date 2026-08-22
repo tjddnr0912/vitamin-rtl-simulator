@@ -487,8 +487,12 @@ impl Elaborator<'_> {
             Some(r) => {
                 // v3: fold through the param-aware evaluator so `[W-1:0]` resolves
                 // `W` to the bound parameter value in the current instance scope.
-                let msb_v = self.const_eval_in_scope(&r.msb);
-                let lsb_v = self.const_eval_in_scope(&r.lsb);
+                // `const_range_bound_fold`, not the plain unlimited fold: a range
+                // bound is a SELF-DETERMINED position, which matters as soon as it
+                // can contain a narrow parameter select. Select-free bounds take the
+                // identical call.
+                let msb_v = self.const_range_bound_fold(&r.msb);
+                let lsb_v = self.const_range_bound_fold(&r.lsb);
                 // P0-NCW: a net/hierarchical-referenced (non-constant) bound is loud,
                 // NOT a silent width-1.
                 self.check_const_range_bound(&r.msb, msb_v);

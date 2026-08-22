@@ -256,6 +256,25 @@ impl Elaborator<'_> {
                 else_e,
             } => vec![cond, then_e, else_e],
             K::BitSelect { base, index } => vec![base, index],
+            // The part / indexed-part twins of the arm above, restoring this
+            // function's stated COMPLETENESS invariant now that `const_eval_in_scope`
+            // folds those kinds.
+            //
+            // ⚠️ The invariant is what makes them required, NOT a specific hazard.
+            // An earlier comment here claimed they were load-bearing for
+            // `ast_mentions_substituted_name`; the mutation battery could not build a
+            // case where that is what the arms deliver (`const_select_base` and
+            // `param_sel_range` both refuse a substituted name on their own), and the
+            // only test that kills their removal is the >64-bit DIAGNOSTIC one, via
+            // `wide_param_name_in`. Recorded rather than left overclaiming — the arms
+            // stay because the invariant is the contract three predicates read.
+            K::PartSelect { base, msb, lsb } => vec![base, msb, lsb],
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => vec![base, offset, width],
             K::SysCall { args, .. } | K::Call { args, .. } => args.iter().collect(),
             K::Cast { target, expr } => match target {
                 // `N'(e)` folds its WIDTH expression too, so it is a child.

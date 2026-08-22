@@ -169,6 +169,15 @@ impl Elaborator<'_> {
                 })?;
                 n.checked_mul(one)
             }
+            // §11.5.1: a select is as wide as the bits it NAMES and is unsigned —
+            // it takes nothing from the base's width, so `W[7:0]` is 8 bits even
+            // though `W` is 32. Without this arm the width-aware walk had no self
+            // width for a select and DEGRADED to the unlimited domain, which is the
+            // §4.5.339 contract but leaves `(W[3:0] + 4'd1) > 4'd0` answering the
+            // unwrapped 16 where both oracles wrap to 0 at 4 bits.
+            K::BitSelect { .. } | K::PartSelect { .. } | K::IndexedPart { .. } => {
+                self.const_select_self_width(e)
+            }
             // `$clog2`/`$bits` are 32-bit integers.
             K::SysCall { .. } => Some(32),
             K::Cast { target, expr } => match target {

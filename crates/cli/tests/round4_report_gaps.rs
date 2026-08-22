@@ -195,21 +195,32 @@ fn gap_g_local_array_shadowing_import_is_loud_not_leaked() {
 }
 
 #[test]
-fn gap_g_local_scalar_shadowing_import_is_loud_not_leaked() {
-    // A local SCALAR param of the same name as a wildcard-imported array also
-    // shadows it (local-wins). `ROT[1]` is then a scalar bit-select (which the
-    // const domain does not fold) — must be LOUD, never the imported array
-    // element (20). Guard: the const fold and the runtime read would otherwise
-    // silently disagree (20 vs bit1-of-99).
-    let (_o, e, ok) = run(
+fn gap_g_local_scalar_shadowing_import_reads_the_local_bit_not_the_imported_element() {
+    // A local SCALAR param of the same name as a wildcard-imported array shadows it
+    // (local-wins), so `ROT[1]` is a BIT-select of 99 = 1, never the imported
+    // element 20. That property is what this test has always been about.
+    //
+    // ⚠️ IT USED TO ASSERT **LOUD**, and that was a capability gap pinned as intent:
+    // the const domain had no scalar bit-select arm, so the only way to keep the
+    // fold from disagreeing with the runtime read was to refuse both. The
+    // param-select fold closed that gap, so the two now AGREE on 1 — which is the
+    // stronger form of the same guarantee, and the one both oracles give
+    // (`localparam int ROT = 99; ROT[1]` is 1 in iverilog 13.0 and verilator 5.050;
+    // for the shape below iverilog rejects unpacked array parameters outright, so
+    // verilator is the oracle and it answers 1).
+    let (o, e, ok) = run(
         "package gp; localparam int ROT [0:3] = '{10, 20, 30, 40}; endpackage\n\
          module dut import gp::*; (output logic [7:0] o);\n\
          localparam int ROT = 99;\n\
          localparam int R = ROT[1];\n\
-         assign o = R[7:0]; endmodule\n",
+         assign o = R[7:0];\n\
+         initial begin #1; $display(\"R=%0d\", o); end endmodule\n",
     );
-    assert!(!ok, "local scalar shadowing an imported array must be loud");
-    assert!(e.contains("error["), "expected a loud error: {e}");
+    assert!(ok, "expected success, got: {e}");
+    assert!(
+        o.contains("R=1"),
+        "must read bit 1 of the LOCAL 99, not the imported element 20: {o}{e}"
+    );
 }
 
 // ─────────────────────────────── GAP D ───────────────────────────────

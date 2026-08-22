@@ -228,18 +228,49 @@
 > (`hoist_block_local_nets` 가 이미 들고 있었다 · span 은 order-independent AST 사실이라 §4.5.218 재발
 > 없음). census 가 *"셋을 함께 연다"* 도 정정했다: `repeat (LP)` 는 **이미 열려 있었고**
 > (`const_bound_u32` 가 `const_eval_in_scope` 를 쓴다) 남은 것은 §4.5.276 후속 ①(`for` trip-count
-> 식별자) 하나뿐이다. 형제 항목(package 변수 clobber · block-local 잔여 2형)은 §2 에 그대로 남아 있다.
+> 식별자) 하나뿐이다. ⚠️ **형제 항목(package 변수 clobber)은 §2 에 불릿이 없었다** — 2026-08-22 재census 가
+> 그 dangling 참조를 발견하고 아래 불릿을 복원했다(목록에서 떨어진 항목은 census 아홉 개가 전부 못 본다).
 
-- **🔴 net 선언 초기화의 fill 리터럴이 1비트로 sizing 된다**(§4.5.350 census 발굴 · pre-existing · PRE==POST ·
-  **두 오라클 일치**). `wire [7:0] a = '1;` 이 vita `00000001` / iverilog·verilator `11111111`, `wire [7:0] c = 1 ? '1 : '0;`
-  도 같다. **자리가 이미 하나**다 — `assign a = '1;`(별도 문장)과 `reg [7:0] b = '1;`(변수 초기화)은 **정확**하므로
-  갈리는 것은 net 선언 초기화 경로가 타깃 폭을 fill 에 안 넘기는 것뿐. `'0` 은 우연히 맞고(0 확장이 0) `'x` 는
-  오라클이 갈린다(iverilog `xxxxxxxx` / verilator `00000000` — vita `0000000x`). **위 표 1번.**
+- **🔴 block-local 선언이 같은 이름의 IMPORT 된 package 변수를 clobber 한다**(pre-existing · **2-오라클 합치** ·
+  2026-08-22 재census 가 복원). `package pk; integer pv = 5; endpackage` 를 `import pk::*` 한 모듈에서
+  `begin : blk integer pv; pv = 99; end` 이후 `pk::pv` 가 vita **99** / iverilog·verilator **5**. block-local 을
+  BARE NAME 으로 모듈 net 에 flatten 하는 v1 모델이 import alias 와 같은 칸에 앉는다(memory:
+  block-local-flatten-model). 사다리상 silent-wrong 이고 오라클이 둘 다 답한다.
 
-- **🔴 오름차순 음수 bound 가 포트·서브프로그램 지역·클래스 속성에서만 클램프된다**(§4.5.350 적대 리뷰 실측 ·
-  PRE==POST). `module sub(input logic [-3:0] i)` · `automatic function` 의 지역 · `class C; logic [-3:0] q;` 가 W3056 +
-  exit 0 로 **틀린 값**(두 오라클 4비트). 모듈 스코프 net·인터페이스 멤버·block-local·`logic [-3:0] m[0:1]` 은
-  §4.5.350 이 정확하게 만들었으므로 남은 것은 `range_to_dims_opt` 의 opt-in 이 그 사이트들에 안 닿는 것. **위 표 3번.**
+- **파라미터 셀렉트의 상수 폭 — RESOLVED §4.5.363**(2026-08-22 · 93칸 3-오라클 **FIXED 52 · 회귀 0** · 상세=ARCHIVE).
+  잔여는 **전부 사다리 이동 없음**(silent→silent 또는 loud→loud)이고, ⭐ **적대 리뷰가 넷을 하나로 접었다**:
+  - **🔴 package 스코프 base 는 넷이 아니라 하나다** — `c03`(`pk::W[7:0]`) · `c04`(`import pk::*` 뒤 bare) ·
+    `d12`(포트 리스트) · `d17`(서브모듈 스코프) 는 **전부 같은 텍스트**이고 소비자만 다르다. **네 철자 전부 vita 1 /
+    두 오라클 52** — ⚠️ 초안이 *"bare 는 52, `pk::` 는 1 로 갈린다"* 고 적었지만 **최종 판정 리뷰의 재측정이 반박**했다
+    (폭 provenance 게이트가 bare 쪽도 함께 닫는다) ⇒ 갈림이 아니라 **한 덩어리**다.
+    ⭐ 지어서 되돌렸다: `package.rs` 의 param 기록 자리에 `param_range` 삽입을 더해도 **키가 안 닿는다**(패키지
+    const 는 `pkg_consts`/`pkg_const_meta` 별도 테이블이고 `param_sel_range` 의 스코프 걷기는 `params`/`symbols`
+    만 본다) ⇒ 선행조건 = 패키지 const 테이블이 **선언 폭 provenance** 를 같이 나르는 것.
+  - **🔴 셀렉트들의 concat**(`{W[7:0], W[7:0]}` 을 bound 로) — 첫 칸만 맞고 둘째가 1. ⚠️ 근인이 *"concat 에 fold
+    arm 이 없다"* 가 **아니다**(리터럴 피연산자 concat bound 는 PRE 에서도 정확하다) — `fold_self_bits` 의 leaf
+    resolver 가 `&ast::HierPath` 만 받아 **셀렉트가 도달하지 못한다**. 셀렉트는 **비트 배치** 연산이라 그
+    carry-free folder 의 계약에 정확히 들어맞는다.
+  - **🔴 중첩 셀렉트**(`W[15:0][7:0]`) · **파라미터에서 파생된 파라미터의 셀렉트** — 둘 다 base 모양 게이트 밖.
+  - **🔴 const 배열을 가리는 안쪽 스칼라 — GAP-G 의 shadow 검사가 첫 가지에만 없다**(pre-existing · §4.5.363
+    최종 리뷰가 발굴 · **오라클 하나**: iverilog 는 unpacked array parameter 를 아예 거부하고 verilator 만 답한다).
+    `localparam int ROT [0:3] = '{…}` 를 generate 안쪽 `localparam int ROT = 99;` 가 가리면 `logic [ROT[1]:0] v` 가
+    vita `$bits=21`(PRE 동일) / verilator **2**. 근인 = `const_array_vals_of_base` 의 **첫 가지**가
+    `walk_scopes_key` 히트에서 바로 반환해 **자기 둘째 가지가 하는 inner-wins 검사**(`local_decl_names` ·
+    `lookup_scoped`)를 건너뛴다 ⇒ shadow 를 뚫고 바깥 배열을 읽는다. ⭐ **모듈 스코프 철자는 이미 정확**하고
+    §4.5.363 이 개선까지 했다(`round4_report_gaps` 핀) — 남은 건 **중첩 스코프 철자 하나** = 이 저장소의 서명인
+    *"한 규칙, 철자 하나 모자람"*. §4.5.363 은 자기 fold 가 그 비대칭을 **다른 silent-wrong 으로 바꾸지 않도록**
+    arm 순서를 미러링해 두기만 했다(PRE 복원).
+  - **loud 잔여**(오라클은 답한다 · 사다리 이동 없음): >64비트 파라미터 셀렉트(`wide_param_bits` 가 비트를 들고
+    있는데 i64 `params` 엔 없다 · ⭐ 진단 문구는 §4.5.363 이 **사실대로** 고쳤다) · 모듈 헤더 파라미터가 다른
+    헤더 파라미터의 셀렉트로 기본값을 받는 형태 · `#(.N(W[7:0]))` override · `defparam` · struct 멤버 폭(⭐
+    **파서** 갭 — 셀렉트 없는 `logic [W-1:0]` 도 E2002 로 죽는다 = 이 축과 무관) · 클래스 속성(셀렉트 없는
+    쌍둥이도 *"undefined name"* = 이 축과 무관).
+
+- **🔴 오름차순 음수 bound 가 클래스 속성에서만 클램프된다**(§4.5.350 적대 리뷰 발굴 · 포트·서브프로그램 지역은
+  **§4.5.359 로 RESOLVED** · PRE==POST). `class C; logic [-3:0] q;` 가 W3056 + exit 0 로 **틀린 값**(verilator 4비트 ·
+  iverilog 는 이 모양에서 assertion 사망 = **오라클 하나**). 구조가 다르다 — 클래스 필드는 net 이 아니고 정규화 맵은
+  NetId 키다(**위 표 3b**). ⚠️ 더 값싼 절반이 §2 에 없었다: **정규화 안 된 클래스 필드 셀렉트는 lsb≠0 인 평범한
+  `logic [7:1] q` 에서도 오늘 깨져 있다**.
 
 - **🟡 packed 음수 low bound 를 가진 dim 의 비트 선택은 좌표를 만들지 못한다**(§4.5.350 적대 2렌즈 수렴 ·
   PRE 도 같은 자리에서 패닉했다). `logic [-3:0][1:0] x; x[-3]` — 옳은 좌표는 `(lo+size-1) - idx` 의 **부호 있는**
@@ -293,8 +324,7 @@
   - **나머지 변환 경계는 아직 문맥-결정** — `real r; r = (-s);` 가 두 오라클 −8.0 / vita **8.0**,
     `r = (s+s)` 가 0.0 / **−16.0**. 즉 §4.5.349 는 **Binary(산술·비교)와 Ternary** 를 닫았고
     **단순 대입**은 남았다.
-- **generate-if cond 가 무제한으로 접힌다**(pre-existing·**2-오라클 합치**·§4.5.343 발굴 · 위 표 1번의 한 철자). `generate if (4'd15 + 4'd1)` 을 vita 만 taken(16) — iverilog·verilator 둘 다 else(자기결정 4비트 0). `const_truth_in_scope` 의 integer-first 가지가 `const_eval_in_scope`(무제한)라서다. 광역 폭 클래스의 일부이고 blast = generate elaboration ⇒ 전용 슬라이스 + PRE-3-way 필수 — 「다음 착수 순서」 5번.
-- **real-반환 const fn 의 본문이 정수 도메인으로 해석된다**(pre-existing·PRE==POST·§4.5.343 발굴·소형). `function real f(); f = 4'd15 + 4'd1;` 이 16.0 을 접는다(real 타깃 대입은 self-det 0 이 맞을 것) — `eval_const_call` 이 real 반환형의 본문을 i64 로 인터프리트. real 산술이 든 본문은 어차피 decline(loud)이라 창이 좁다.
+- **real-반환 const fn 의 본문 — §2 가 아니라 §3 이다**(2026-08-22 재측정). 로드맵이 적어 둔 *"16.0 을 조용히 접는다"* 는 **재현되지 않는다**: HEAD 는 `localparam real R = f();` 에 `E3009 … not a foldable constant expression` 을 낸다(iverilog 는 0.000000 = self-det 4비트 0). 즉 **honest-loud** 이므로 사다리상 §2 가 아니라 **§0-T2 real const-fold 잔여**의 한 철자다.
 - ~~**u64 패턴 지수를 i64 도메인이 음수로 읽는다**~~ **RESOLVED**(§4.5.348 — 지수의 부호가 값과 함께 다닌다 · 크기가 도메인 밖이면 정직한 loud).
 - ~~**인터프리터의 폭-0 타깃 · fold 안 되는 body-local 초기화의 조용한 0 · body-decl 초기화 크래시**~~ **RESOLVED**(§4.5.345·상세=ARCHIVE). **잔여 넷**(전부 §4.5.345 가 적대 리뷰로 실측):
   - **decl-init 호출 사슬이 깊이 캡 64 에 걸린다**(correct→loud · 두 렌즈가 독립 발견). 서로 다른 상수함수 70개가 각자 `int t = f<다음>();` 로 잇는 사슬이 iverilog 71 / PRE 71 / POST loud. **완화가 강하다**: 같은 설계를 *문장* 철자(`f<k> = f<k+1>() + 1;`)로 쓰면 **PRE 도 이미 loud** 였다(64 는 합의된 상수) — 즉 §4.5.345 는 decl 자리를 문장 자리에 맞췄을 뿐이고, 그 과금이 곧 자기참조 크래시를 없앤 것이다. 무손실 대안(리뷰 제안·미구현) = **이미 실행 중인 함수로 재진입할 때만** 한 레벨 과금(callee 이름은 `eval_const_call` 이 들고 있다) — 비순환 사슬은 안 막힌다.
@@ -308,9 +338,6 @@
   (mod 2^64 는 ≤64비트 문맥에서만 옳은데 모듈 스코프 fold 는 폭을 모르고, `localparam [127:0]` 타깃이
   이미 잘린 값을 zero-extend 한다). ⇒ 선행조건 = **폭-인식 모듈 스코프 fold**(§4.5.347 이 캐스트·비교
   안쪽에서는 그 패스가 선다는 것을 증명했다). vita **런타임은 전부 정확**하므로 오라클은 자기 안에 있다.
-- **🔴 크기 0 인 unpacked 차원을 조용히 받는다**(pre-existing·PRE==POST·**2-오라클 합치**·§4.5.348 리뷰
-  실측). `localparam int N = 0; logic [7:0] arr [N];` 가 vita `$size=1`·exit 0 — iverilog·verilator 둘 다
-  *"Dimension size must be greater than zero"* 로 **거부**한다.
 - **untyped `localparam` 의 거대 `**` 는 iverilog 가 행(hang) 한다**(§4.5.348 실측 · 오라클 부재 기록).
   `localparam L = 3 ** (64'd0 - 64'd8);` 에서 iverilog 가 임의정밀도로 3^(2^64−8) 을 계산하려 무한히 돈다
   (10분 100% CPU 확인 후 종료). 그 철자는 **verilator 단독**으로만 판정할 수 있다.
@@ -355,9 +382,8 @@
   - 곁: **actual 이 formal 보다 넓으면 바인드에서 절단하지 않는다**(의도적·`inline_fn.rs`) — `function [7:0] f(input [3:0] x); f = x;` 에 `f(8'hFF)` 가 `ff` / iverilog `0f` · **함수 반환을 replication count 로** 쓰면 `{f(8'h02){1'b1}}` 가 0 / iverilog `f`.
 - **🔴 캐스트/인라인의 확장 부호가 미러에서 온다 — 클래스 필드는 순수한데도 못 받는다**(pre-existing·PRE==POST·§4.5.321 적대 리뷰 발굴). §4.5.320 은 넓히기 arm 의 정본 부호 채택을 **불순한 피연산자(프레임 `Expr::Call`)** 때문에 보류했는데, **signed 클래스 필드**도 그 arm 에 도달하고 그것은 **순수·반복 가능**하다 — `function signed [63:0] fw; fw = c.sf;`(`sf = 8'hAB`)가 `00…ab` / hand-IEEE `ff…ab`. 즉 정본 부호 채택은 **반복 가능성 술어로 게이트한 진짜 수정**이지 무가치가 아니다(전용 슬라이스).
 - **🔴 캐스트의 문맥폭이 안쪽 자기결정 노드에서 멈춘다**(pre-existing·PRE==POST·두 오라클 ✓·§4.5.320 발굴). `64'(-16'(u16))` 가 `…fffb` / 두 오라클 `…fffb` 가 아니라 vita `000000000000fffb`(오라클 `fffffffffffffffb`), `8'(s4 * 4'(s8))` 가 `…f9`(−7) / `…09`(+9), `16'(s8 + 4'(u8))` 가 `000c` / `010c`. 무중첩 대조군 `64'(-u16)` 은 정상이라 트리거는 **중첩 캐스트·`$signed`/`$unsigned` 노드**다. 10,368칸 중 143칸, 전부 signed 좌변 + 안쪽 캐스트가 더 좁을 때.
-- **캐스트 결과가 함수/태스크 formal 에 바인딩되면 부호를 잃는다**(pre-existing·오라클 ✓·§4.5.320 발굴). `function [31:0] gu(input [31:0] x)` 에서 `gu(16'(sa))` 가 vita `…0000fffd` / iverilog `…fffffffd` — 엔진 `eval_ctx` 의 `Call` 팔이 actual 을 **formal 의 부호**로 평가한다(§13.4.3 은 대입 문맥이므로 rhs 의 부호가 확장을 정해야 한다).
 - **넓히는 캐스트가 불순한 피연산자의 부호 수정을 못 받는다**(§4.5.320 이 의도적으로 남긴 값). `extend_to` 의 부호 fill 이 피연산자를 두 번 부르므로 `16'(f())`·`int'(f())` 는 PRE 의 무부호 답을 유지한다(오라클 `fffd`/`fffffffd`). 닫으려면 **피연산자를 한 번만 부르는 4-state 보존 확장** 또는 callee 순수성 술어가 필요하다. 곁: `int'`/`byte'`/`shortint'`/`longint'` 는 `coerce_two_state` 때문에 피연산자를 **32/8/16/64회** 평가한다(PRE 동일).
-- **캐스트가 원소의 부호를 청구하지 못하는 나머지 철자들**(전부 pre-existing·PRE==POST·§4.5.320 라운드 4 실측). `unpacked_elem_signed` 는 base 가 **단일 세그먼트 ident** 인 경우만 청구하므로 아래가 남는다 — 전부 `40'(x[0]*1)` 형태에서 vita `00000000fd` / iverilog `fffffffffd`: 다차원 `g[i][j]` · **패키지 한정 `pk::pm[0]`** · 프레임 로컬 배열 · dyn 배열/queue 원소(`net_is_static_array` 가 의도적으로 제외) · 인터페이스 배열 원소(같은 인터페이스의 **스칼라** `ii.v` 는 정상). ⚠️ **패키지 철자가 가장 급하다** — `arrays.rs` 는 `pkg::arr[i]` 를 원소로 라우팅하는 전용 arm 을 이미 갖고 있으므로 **분류기가 자기 lowering 리졸버와 어긋나 있고**, 그 결과 한 설계 안에서 같은 배열의 두 철자가 다른 값을 낸다(`pm[0]` 은 정답 · `pk::pm[0]` 은 오답). PRE 는 둘 다 틀렸으므로 회귀는 아니지만 분기 자체가 신호다. 곁: **계층 배열 원소는 캐스트가 `x` 를 주입한다** — `u1.sarr[0]` 무캐스트 읽기는 `fffffffffffffff9` 로 정확한데 `16'(u1.sarr[0])` 이 `000000000000xxf9`(PRE 동일·§4.5.320 이 비트 패턴만 64비트 x → 16비트 x 로 바꿨다).
+- **캐스트가 원소의 부호를 청구하지 못하는 나머지 철자들**(전부 pre-existing·PRE==POST·§4.5.320 라운드 4 실측). `unpacked_elem_signed` 는 base 가 **단일 세그먼트 ident** 인 경우만 청구하므로 아래가 남는다 — 전부 `40'(x[0]*1)` 형태에서 vita `00000000fd` / iverilog `fffffffffd`: 다차원 `g[i][j]` · **패키지 한정 `pk::pm[0]`** · 프레임 로컬 배열 · dyn 배열/queue 원소(`net_is_static_array` 가 의도적으로 제외) · 인터페이스 배열 원소(같은 인터페이스의 **스칼라** `ii.v` 는 정상). ⚠️ **패키지 철자가 가장 급하다** — `arrays.rs` 는 `pkg::arr[i]` 를 원소로 라우팅하는 전용 arm 을 이미 갖고 있으므로 **분류기가 자기 lowering 리졸버와 어긋나 있고**, 그 결과 한 설계 안에서 같은 배열의 두 철자가 다른 값을 낸다(`pm[0]` 은 정답 · `pk::pm[0]` 은 오답). PRE 는 둘 다 틀렸으므로 회귀는 아니지만 분기 자체가 신호다. 곁: **계층 배열 원소의 캐스트는 부호를 잃는다**(⚠️ 2026-08-22 재측정으로 **정정** — 옛 문구의 `x` 주입은 더 이상 재현되지 않는다): `u1.sarr[0]` 무캐스트 읽기는 `fffffffffffffff9` 로 정확한데 `16'(u1.sarr[0])` 이 vita `000000000000fff9` / iverilog `fffffffffffffff9` — 남은 것은 위 부호 축 하나다.
 - **🔴 fill override 가 타깃 폭이 아니라 32비트로 접히는 자리 셋**(pre-existing·PRE==POST·오라클 ✓·§4.5.314 적대 2렌즈 발굴). §4.5.314 는 `'0`/`'1` 을 **선언 폭에서 다시 접도록** 퍼널을 세웠고 그 폭이 존재하는 곳은 전부 고쳤으나, `param_decl_width` 가 `None` 을 내는 세 형태는 여전히 부모 쪽 32비트 fold 로 떨어진다 — ⓐ **>64비트**(`parameter [127:0] K` + `'1` → 하위 64비트만 `0000…ffffffffffffffff`, iverilog 는 128비트 전부 1). 이것은 "wide 파라미터의 OVERRIDE 는 loud" 라는 아래 §3 불변식의 **구멍**이기도 하다(같은 선언에 명시 리터럴 `128'hFF…` 를 주면 loud 인데 `'1` 은 조용히 통과) ⓑ **`time`**(64비트 모델이 아니라 32비트 — `#(.T('1))` 이 4294967295, iverilog 18446744073709551615) ⓓ **`real`**(`#(.R('1))` 와 `-G R='1` 이 둘 다 `4294967295.0` 를 설치한다 — iverilog `1.0` · 두 채널은 서로 일치) ⓒ **untyped**(IEEE §12.2.2 는 파라미터가 override 의 폭·부호를 **받는다**고 한다 — `parameter K = 3` + `#(.K(64'hDEADBEEF))` 가 vita −559038737 / iverilog 3735928559, 그리고 `'1` 은 iverilog 가 1비트로 봐 `1`). 셋은 한 뿌리(**타깃 타입의 폭을 정하는 규칙**)이므로 한 슬라이스로 다뤄야 하고, 세 채널(`#()`·`defparam`·`-G`)이 지금은 **서로 일치**한다(§4.5.314 가 맞춘 것) — 고칠 때 그 일치를 깨지 마라.
 - **파라미터 선언 fold 가 네 벌**(pre-existing·PRE==POST·오라클 ✓·§4.5.314 적대 2렌즈 실측). 정본은 `params.rs::bind_one_param` 이고 나머지 셋이 각자 빠뜨린 것이 다르다 — `instance.rs` 의 모듈 본문 fold(override 처리 없음) · `generate.rs` · `package.rs`. 측정된 불일치: generate/package 는 `const_eval_in_scope` 로 접어 **fill 기본값을 선언 폭으로 안 접고**(`parameter [63:0] Q = '1` → `00000000ffffffff`), `package.rs` 는 **`param_range` 를 기록하지 않으며**(패키지 `parameter [15:8] P` 의 부분선택이 `x`) **`string`/`real` 을 라우팅하지 않는다**(자기 기본값만으로 E3009). §4.5.314 가 인터페이스 복사본(넷째)을 정본으로 흡수했으므로 남은 셋도 같은 방식이 가능하다 — **인스턴스가 아니라 CLASS 이므로 발견한 자리에서 고치지 말 것**(§4.5.311 교훈).
 - **`--obs-dir` 의 run.json 이 `-G` 를 안 싣는다**(pre-existing·§4.5.314 발굴). `plusargs` 와 `source.blake3` 는 있는데 파라미터 override 는 없어서, `-G W=9` 와 `-G W=100` 으로 돌린 두 런의 run.json 이 타임스탬프 말고는 **동일**하다 — 효과가 **다른 설계**인 유일한 플래그에 대해 G2 관찰 rail 이 눈멀어 있다. §4.5.314 는 같은 논거로 `-v` echo 에 행을 넣었고 rail 에는 적용하지 않았다(§6 OBS-1 잔여와 같이 다룰 것).
@@ -744,13 +770,13 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,616 tests green** · no-oracle 축 green · clippy **3 구성** 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-19 · ARCHIVE §4.5.344) |
+| 게이트 | **5,770 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-22 · ARCHIVE §4.5.363) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 방금 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현 |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**: ⓐ **구조적 지연의 값 fold 가 리터럴 전용**(`assign #(D) y=a;` 가 D=7 인데 **조용히 0딜레이** · 42칸 · 고칠 자리 = `fold_ca_delay` **한 함수 · 호출부 둘**) ⓑ **subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다**(real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다 · 56칸 · `%0d` 가 반올림으로 렌더해 숨는다 · §2 불릿 넷을 함께 회수) ⓒ **정확히 64비트 상수 비교**(`localparam L = ((64'd1-64'd2) > 64'd0)` vita 222 / 두 오라클 111 · 마스킹 술어가 `ctx_w < 64` · **런타임 철자는 맞는다** · 63비트 쌍둥이는 §4.5.347 이 이미 고쳤다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
 | **2** | **§3 loud → correct-support 승격** | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 사다리를 올리는 유일한 방향 | §3 표에서 **오라클이 답하는 행**부터. ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |

@@ -290,11 +290,23 @@ impl Elaborator<'_> {
             ast::ExprKind::BitSelect { base, index } => {
                 let idx = self.const_eval_in_scope(index)?;
                 if idx < 0 {
-                    return None;
+                    return self.const_param_select(e);
                 }
-                self.const_array_vals_of_base(base)?
-                    .get(idx as usize)
-                    .copied()
+                self.const_array_vals_of_base(base)
+                    .and_then(|vals| vals.get(idx as usize).copied())
+                    // Not a const ARRAY — try the param BIT-select. The array
+                    // lookup is first so every shape GAP-G already folded keeps
+                    // its exact answer (it declines for a scalar param anyway:
+                    // `lookup_scoped` finding the name makes it return None).
+                    .or_else(|| self.const_param_select(e))
+            }
+            // A constant PART / INDEXED-PART select of a parameter (`W[7:0]`,
+            // `W[7 -: 4]`). Without these arms the whole fold declined, and every
+            // consumer of a constant bound read `None` — a packed range collapsed
+            // to width 1 at exit 0 while both oracles sized it from the selected
+            // byte. See `const_select.rs` for the two decline rules.
+            ast::ExprKind::PartSelect { .. } | ast::ExprKind::IndexedPart { .. } => {
+                self.const_param_select(e)
             }
             ast::ExprKind::Ternary {
                 cond,

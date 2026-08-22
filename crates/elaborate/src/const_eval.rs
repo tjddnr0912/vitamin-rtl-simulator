@@ -967,16 +967,32 @@ impl Elaborator<'_> {
         }
     }
 
-    /// The first name in `e` bound to a >64-bit parameter, if any. Reuses the same
-    /// bare-identifier collector the implicit-net pass walks with, so the two agree
-    /// about what counts as a name.
+    /// The first name in `e` bound to a >64-bit parameter, if any.
+    ///
+    /// Walks [`Self::const_fold_children`] — the const domain's own traversal —
+    /// rather than `collect_bare_idents`. ⚠️ That collector is deliberately
+    /// SELECT-BLIND because the implicit-net pass shares it, where a missed arm
+    /// costs a loud E3010 and an added one could conjure a silent implicit net;
+    /// widening it for a diagnostic would trade a rung on an unrelated path. The
+    /// cost of the blindness was here: `localparam [127:0] K = …; logic [K[7:0]-1:0] v;`
+    /// never saw `K` through the select, so the message fell through to
+    /// `nonconst_bound_reason` and said *"undefined name `K`"* about a name declared
+    /// two lines up — while the message four lines above tells the user to "select
+    /// the bits you need", which is precisely what they did.
     fn wide_param_name_in(&self, e: &ast::Expr) -> Option<String> {
-        let mut names = Vec::new();
-        collect_bare_idents(e, &mut names);
-        names.into_iter().find(|n| {
-            self.walk_scopes_key(n, |k| self.wide_param_bits.contains_key(k))
-                .is_some()
-        })
+        if let ast::ExprKind::Ident(p) = &e.kind {
+            if let [seg] = p.segments.as_slice() {
+                if self
+                    .walk_scopes_key(&seg.name, |k| self.wide_param_bits.contains_key(k))
+                    .is_some()
+                {
+                    return Some(seg.name.clone());
+                }
+            }
+        }
+        Self::const_fold_children(e)
+            .into_iter()
+            .find_map(|c| self.wide_param_name_in(c))
     }
 
     /// First sub-expression that makes a range bound non-constant: a reference to a
