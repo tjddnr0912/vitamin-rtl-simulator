@@ -815,10 +815,15 @@
 
 ~~**ⓐ 구조적 지연의 값 fold 가 리터럴 전용**~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0** · 5,785 green · format 29 불변). 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**(정수 자기결정-unsigned · real · TimeLit)이었다. 잔여 넷 = §2 「🆕 §4.5.364 가 남긴 지연 잔여 넷」 · 곁수확 §3 행 하나. 상세=ARCHIVE §4.5.364.
 
-**ⓑ subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다** — real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다. 56칸 전부 2-오라클.
-⚠️ **`%0d` 가 반올림으로 렌더해 숨는다** ⇒ 큐에 적힌 *"반올림이 안 된다"* 는 **STALE**(`input int` formal 반올림은 21/21 green). 깨지는 건 `%h` · part-select · 비트연산 · 폭 절단 · 등가 — `int` formal 이 **3 으로 찍히면서 `(a==3)` 에 0** 을 답한다.
-⭐ **레버리지**: `grep -rn coerce_assign crates/` 가 호출자를 **두 write 퍼널만** 보여 준다(`native/write.rs` · `state/init_diag.rs`). formal-bind 두 자리는 안 부른다 — 그래서 모듈 포트와 static task 는 맞고 subprogram formal 만 틀리다. **§2 불릿 넷이 같은 퍼널에 산다**(§11.6.1 확장 부호 · `expr_is_repeatable` 이 `f(mem[i])` 거부 · 인라인 body-local 2-state 가 x/z 를 안 떨군다) ⇒ 한 슬라이스로 넷 회수 가능.
-⚠️ **그 레버리지가 곧 위험이다** — **세 자리 라우팅**(frame bind · `eval_call` bind · inline bind)이라 한 자리만 고치면 출력의 일부가 맞아 **성공처럼 보인다**(memory: routing-lives-in-several-places). **엔진 절반 먼저**(56칸 중 ~40 · 철자 의존 없음), 인라인 절반은 넓히기 뒤로(그 경로는 `cast_operand_is_real` 의 bare-single-segment 과소탐지를 물려받는다). 인라인 경로의 `expr_is_repeatable` 게이트는 **유지**(`lower_real_to_int_cast` 가 피연산자를 두 번 부른다). 가드는 값이 아니라 **성질**로 핀: `f(3) == f(3.0) == f(int'(3.0))`.
+**ⓑ subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다** — ⚠️⚠️ **2026-08-22 착수 재census 가 이 행의 절반을 반박했다**(§4.5.364 직후 · 18칸 3-오라클 실측). 아래는 **재측정된** 상태다.
+
+⭐ **살아 있는 §2 칸은 하나뿐**: **real actual → 좁은 정수 formal 에서 formal 의 선언 폭·부호가 적용되지 않는다**. `function integer f(input byte k); f = k; endfunction` 에 `f(300.0)` → 두 오라클 **44**(300 을 signed byte 로 절단) · vita **300**. ⚠️ **정수 actual 쌍둥이는 전부 맞다** — `f(300)`·`f(m)`(변수)·automatic·task·`bit [3:0]`·`shortint` **여섯 칸 모두 두 오라클 일치** ⇒ 깨진 축은 *formal-bind 일반*이 아니라 **real→정수 경계 하나**다.
+
+⚠️ **STALE 로 판정된 것들**(HEAD 에서 두 오라클과 일치 · 손대지 마라): `%0d` 반올림(`f(3.0)`→3 · `f(3.7)`→4) · **등가**(`(k==3)` → 111) · `integer` formal · **automatic 함수** · **automatic/static task**(셋 다 111) · real formal 로의 정수 승격. 큐에 적혀 있던 *"56칸"* · *"엔진 절반 ~40칸"* · *"`%0d` 가 숨긴다"* 는 **더 이상 성립하지 않는다**(이전 슬라이스들이 닫았다).
+
+⚠️ **나머지는 §2 가 아니라 §3(loud→supported)** — 인라인 경로에서 real actual 을 받은 formal 에 **비트/파트 셀렉트·비트연산·`%h`** 를 쓰면 **E3009 로 정직하게 거부**한다(`f = k[1:0]`·`f = k & 32'hFF`·`%0h`, 두 오라클은 3). 조용히 틀리지 않으므로 사다리상 안전하고, 승격은 별건이다.
+
+⭐ **다음 착수자에게**: 자리는 여전히 `coerce_assign` 을 안 부르는 **formal-bind 퍼널**이지만, **스코프가 여섯 칸에서 한 칸으로 줄었다** — 먼저 `f(300.0)` 이 어느 라우팅(frame / `eval_call` / inline)을 타는지 계장으로 찍어라(정수 쌍둥이가 전부 맞으므로 **세 자리를 다 고칠 필요가 없을 수 있다**). 가드는 값이 아니라 성질로 핀: `f(300) == f(300.0) == f(int'(300.0))`.
 
 **ⓒ 정확히 64비트 문맥의 비교가 조용히 틀린다**(XS~S) — `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / iverilog·verilator **111**(실측). 마스킹 술어가 `ctx_w > 0 && ctx_w < 64` 이고 **63비트 쌍둥이는 §4.5.347 이 이미 고쳤다** ⇒ 머신러리는 있고 필요한 건 **경계 census + 64비트 레인 PRE-3-way 스윕**.
 ⭐ **런타임 철자는 맞는다**(같은 식을 `$display` 에 넣으면 111) = 내부 판별자 확보 — 상수 도메인만의 결함이다.
