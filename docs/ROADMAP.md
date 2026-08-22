@@ -213,7 +213,7 @@
 >
 > - **폭 인식 상수 접기** — 자기결정 위치 셋(옛 「다음 착수 순서」 1~3)은 **§4.5.343 로 해소**; 남은 것은 top-level const 문맥 전반(generate-if cond·untyped localparam·range bound 등 — **위 표 1번**과 divergence 목록에 실측 기록)이고 그 해소가 곧 캐스트 뭉치의 선행조건(AST self-폭 패스)이다. ⚠️ §4.5.346 이 **캐스트 안쪽에서는 그 패스가 이미 선다**는 것을 증명했다(`const_self_width`+`const_signed_env` 로 충분 · `8'((4'd15+4'd1) > 4'd0)` 이 iverilog 0). ⭐ **인터프리터 coerce 가 가장 도달성 높은 진입점**이라고 기록돼 있었다.
 > - **package-scope `real`** (오라클 ✓).
-> - **구조적 지연**(오라클 ✓) — **§4.5.221 이 도달성을 넓혀 우선순위 상향 후보**로 적혀 있었다.
+> - ~~**구조적 지연**(오라클 ✓)~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0**). 잔여는 아래 🆕 넷.
 > - **`real` → `input int` formal**(오라클 ✓).
 > - 🆕 **cont-assign 만 구동하는 wire 가 t=0 에 가짜 이벤트를 낸다**(§4.5.352 differential 렌즈 곁 발굴 ·
 >   **iverilog 1오라클만 · verilator 미조회 ⇒ 착수 전 3-오라클 census 필수**). `wire b; assign #5 b = a;`
@@ -222,6 +222,15 @@
 >   에서도 같다 ⇒ 딜레이 경로 특유가 아니라 **초기값 도메인**(z 시작 vs x 시작)의 문제.
 >   PRE==POST-A==POST 로 **§4.5.352 가 만든 것이 아님이 확인**됐다(pre-existing). 여파 = 가짜 프로세스
 >   기동이므로 사다리상 silent-wrong 후보.
+>
+> **🆕 §4.5.364 가 남긴 지연 잔여 넷**(전부 PRE==POST · 각각 다른 경로 ⇒ CLASS 분리 규칙으로 기록):
+>
+> - **런타임 변수 지연**(`assign #(dv) y = a;` · **2-오라클** · dv=5 면 두 오라클 지연 5, vita 0). 상수가 아니므로 fold 가 아니라 **엔진이 서스펜션 시점에 평가**해야 한다(절차적 `#delay` 는 이미 그렇게 한다). `#(D, dv)` 부분 fold 도 같은 뿌리 — rise 만 접히고 사이드카가 통째로 떨어져 **fall 이 rise 값**이 된다. 핀 = `structural_delay_scope_fold.rs::a_runtime_variable_delay_is_still_zero_delay_and_still_quiet`.
+> - **사이즈드 음수 리터럴이 새 규칙에 도달하지 못한다** — `#(-4'd1)` 은 `const_delay_ticks` 가 먼저 답하고 그 안의 `const_eval_u32` 가 **32비트 `wrapping_neg`** 을 하므로 영영 발화 안 한다(두 오라클 **15**). ⭐ **파라미터 쌍둥이(`parameter [3:0] Q = -4'd1`)는 이제 15 로 맞다** ⇒ 같은 값의 두 철자가 갈린다 = 이 슬라이스 자신의 규칙이 틀렸다고 부르는 모양. 고침은 `const_delay_u64` 의 `_` arm 이 `Unary` 를 declines 하게 하는 것 **한 줄** 이지만 `#(-5000000000)` 같은 unsized 큰 음수의 폭 판정을 오라클로 먼저 재야 한다.
+> - **zero-rise 사이드카 거래**(`#(ZERO_PARAM, F)` 의 fall 이 버려진다 · 리터럴 쌍둥이 `#(0,F)` 는 맞다). ⭐⭐ **뿌리는 fold 가 아니라 엔진**: `Some(0)` 은 CA 를 delayed 레인으로 보내고 vita 의 zero-tick write 는 **자기 타임스텝의 Postponed 리전 뒤에** 착지한다(`$strobe` 로 실측 — 두 오라클 1, vita 0). 그래서 rise 0 을 `Some(0)` 으로 만들면 fall 을 고치는 대신 rise 를 그 lag 로 내려보낸다(양쪽 다 2-오라클 합치) ⇒ **silent↔silent 맞바꿈 금지** 규칙으로 보류. **zero-tick lag 를 고치면 둘 다 열린다.** 핀 = `..::a_zero_rise_with_a_distinct_fall_is_a_recorded_residue`.
+> - **TimeLit 이 식의 루트가 아니면 안 접힌다**(`#(5ns + 2ns)`·`#(2*5ns)`·`#(2.5ns)` · 두 오라클 8/11/4, vita 0). 새 레인은 **`TimeLit` 노드 자체**만 전역 tick 으로 스케일한다.
+>
+> **🆕 곁가지**(§4.5.364 적대 리뷰 · 이 슬라이스가 만든 것 아님): 지연 CA 의 **인덱스 안 함수 호출**(`assign #(D) y = arr[h(a)];`)이 `native_eval/compile.rs` 의 *"is_codegen_able must keep Expr::Call off the native/VM path"* 로 **패닉(exit 101)** — PRE 동일 · iverilog 는 돈다.
 >
 > ✅ **DEEP 쪽 1건(inner NET vs outer PARAM shadow)은 P1 로 해소됐다(2026-08-18 · ARCHIVE §4.5.342).**
 > 예언됐던 선행조건(*order-independent name set*)은 필요 없었다 — 필요했던 것은 **선언 블록의 SPAN**
@@ -397,6 +406,16 @@
 - **`#(.S("str"))` 가 적용되기 전에 W3056 을 한 번 낸다**(pre-existing·값은 정답): 부모 쪽 숫자 fold 가 먼저 실패해 "override 는 상수가 아니다; 기본값 유지" 를 찍고, 그 다음 string 채널이 정상 적용한다. 경고가 사실과 반대라 거슬리지만 값은 iverilog 와 일치한다.
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
+
+> 🆕 **지연 멀티드라이버의 wire 해석**(§4.5.364 곁수확 · **2-오라클** · E3001). `assign #(D) bus = en ? d : 1'bz;`
+> 를 둘 이상 겹쳐 쓰는 tri-state 버스 관용구가 **exit 1** 로 거절된다 — `check_whole_net_multidriver` 가
+> *"드라이버 중 하나라도 delayed 면 4-state wire 해석 대상이 아니다"* 로 엔진 자격(`md_nets`)을 그대로 비추기
+> 때문이다. ⚠️ **이 행은 §4.5.364 가 만든 것이 아니라 드러낸 것이다**: 그전엔 파라미터 지연이 조용히 **버려져**
+> 같은 설계가 비-지연 멀티드라이버로 통과하고 있었다(1 ns 격자 실측: `t=11 bus=1` / iverilog `bus=z`) ⇒
+> silent-wrong → honest-loud = **사다리 상승**. ⚠️ 적대 렌즈가 *"PRE 는 맞았다"* 로 BLOCKING 을 냈다가
+> **자기 프로브의 10 ns 격자가 버려진 2 ns 지연을 못 본 것**임을 확인하고 철회했다 — 세 가지 구성으로
+> 반례를 시도했으나 지연 드라이버는 `[0,D)` 동안 x 를 쥐고 PRE 엔 그 구간이 아예 없어 **구조적으로 불가능**.
+> 승격 조건 = 엔진의 `md_nets` 가 delayed 드라이버를 해석하는 것.
 
 > **§4.5.350 follow-on 3건**(전부 적대 2렌즈 실측 · **verilator 오라클 ✓** · iverilog 는 셋 다 거부해 부분 오라클):
 > ① **dyn/queue/assoc 원소의 음수 packed bound** — `logic [-3:0] q[$]` 는 W3056 클램프 유지(그 원소 net 은
@@ -770,13 +789,13 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,770 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-22 · ARCHIVE §4.5.363) |
+| 게이트 | **5,785 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-22 · ARCHIVE §4.5.364) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**: ⓐ **구조적 지연의 값 fold 가 리터럴 전용**(`assign #(D) y=a;` 가 D=7 인데 **조용히 0딜레이** · 42칸 · 고칠 자리 = `fold_ca_delay` **한 함수 · 호출부 둘**) ⓑ **subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다**(real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다 · 56칸 · `%0d` 가 반올림으로 렌더해 숨는다 · §2 불릿 넷을 함께 회수) ⓒ **정확히 64비트 상수 비교**(`localparam L = ((64'd1-64'd2) > 64'd0)` vita 222 / 두 오라클 111 · 마스킹 술어가 `ctx_w < 64` · **런타임 철자는 맞는다** · 63비트 쌍둥이는 §4.5.347 이 이미 고쳤다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ 구조적 지연 = §4.5.364 로 RESOLVED~~): ⓑ **subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다**(real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다 · 56칸 · `%0d` 가 반올림으로 렌더해 숨는다 · §2 불릿 넷을 함께 회수) ⓒ **정확히 64비트 상수 비교**(`localparam L = ((64'd1-64'd2) > 64'd0)` vita 222 / 두 오라클 111 · 마스킹 술어가 `ctx_w < 64` · **런타임 철자는 맞는다** · 63비트 쌍둥이는 §4.5.347 이 이미 고쳤다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
 | **2** | **§3 loud → correct-support 승격** | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 사다리를 올리는 유일한 방향 | §3 표에서 **오라클이 답하는 행**부터. ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
@@ -790,13 +809,11 @@
 > `crates/sim-engine/tests/perf_baseline.rs` 의 `SHA256_INLINE`/`SHA256_FUNCS` 상수에만 있다
 > (그리고 그 하네스의 **10 형태 중 9 는 연속대입이 0개** — cont-assign 축 변경은 거기서 원래 도달 불가).
 
-### ★★ §2 다음 넷 — 착수 브리핑 (2026-08-22 · 11-에이전트 재census 실측 · 전부 HEAD 재현 확인)
+### ★★ §2 다음 셋 — 착수 브리핑 (2026-08-22 · 11-에이전트 재census 실측 · 전부 HEAD 재현 확인 · **ⓐ 는 §4.5.364 로 완료**)
 
-⚠️ 순서는 값싼 것부터가 아니라 **사다리 순**이다. 넷 다 2-오라클이 답한다.
+⚠️ 순서는 값싼 것부터가 아니라 **사다리 순**이다. 셋 다 2-오라클이 답한다. **다음 착수 = ⓑ.**
 
-**ⓐ 구조적 지연의 값 fold 가 리터럴 전용** — ⚠️ 지연 자체는 **이미 정확**하다(inertial 취소 포함: 5ns 딜레이 아래 2ns 펄스는 삼켜지고, 딜레이와 같은 폭의 펄스는 살아남는다 — iverilog 동일). 깨지는 건 **값**이다: `assign #(D) y=a;` 에서 `D=7` 인데 **조용히 0딜레이**(실측: vita 는 t=1 에 반영, iverilog 는 t=8). `#(2+3)` 도 틀리므로 *"파라미터 미지원"* 이 아니라 **리터럴 전용 fold** 다. 42칸 · 36칸 2-오라클 합치.
-⭐ **고칠 자리는 한 함수 · 호출부 둘**: `grep -rn fold_ca_delay crates/` = 정의(`const_eval.rs`) + `netdecl.rs` + `var_init.rs`. 파서가 게이트 프리미티브를 전부 `ContinuousAssign` 으로 desugar 하므로 assign / net-decl / buf·and·not·nor·xor / rise-fall / turnoff 가 **한 퍼널**을 지난다. 근인 = 리터럴 전용 `const_eval_u32`(IntLit/Paren/Unary± 뒤 `_ => None`)를 부르는데 **같은 `&self` · 같은 phase 에 스코프 해석기 `const_eval_in_scope` 가 있다**.
-⚠️ **동시에 보존할 것 다섯**: real 리터럴 정밀도 반올림이 정수 가지보다 **앞** · `× time_mult` 는 **saturating**(wrap 하면 7배 early fire — 실측) · `TimeLit` 이중 스케일 금지 · 음수 param 은 **리터럴 쌍둥이와 같은 wrap** · 진짜 비상수 `assign #dv` 는 zero-delay 유지(**새로 loud 화 금지**). `parameter real` 하위케이스는 라우팅하거나 loud — **조용한 drop 금지**. `wire #5 y;`(초기화자 없는 net 지연)는 **잘라내라**(verilator 단독 오라클 · 다른 코드 경로). `ContAssign.delay` 는 `Option<u32>` 그대로 ⇒ **format 29 불변**.
+~~**ⓐ 구조적 지연의 값 fold 가 리터럴 전용**~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0** · 5,785 green · format 29 불변). 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**(정수 자기결정-unsigned · real · TimeLit)이었다. 잔여 넷 = §2 「🆕 §4.5.364 가 남긴 지연 잔여 넷」 · 곁수확 §3 행 하나. 상세=ARCHIVE §4.5.364.
 
 **ⓑ subprogram formal-bind 퍼널이 `coerce_assign` 을 안 부른다** — real actual 이 정수 formal 에 **IEEE-754 페이로드**로 들어간다. 56칸 전부 2-오라클.
 ⚠️ **`%0d` 가 반올림으로 렌더해 숨는다** ⇒ 큐에 적힌 *"반올림이 안 된다"* 는 **STALE**(`input int` formal 반올림은 21/21 green). 깨지는 건 `%h` · part-select · 비트연산 · 폭 절단 · 등가 — `int` formal 이 **3 으로 찍히면서 `(a==3)` 에 0** 을 답한다.

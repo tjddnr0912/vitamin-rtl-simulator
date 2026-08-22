@@ -484,22 +484,48 @@ impl Elaborator<'_> {
         envw: &ConstWidths,
         depth: u32,
     ) -> Option<i64> {
-        let v = self.eval_const_env_self(arg, env, envw, depth)?;
-        let n: u64 = match self.const_self_width(arg, envw).unwrap_or(0) {
-            w @ 1..=63 => (v as u64) & ((1u64 << w) - 1),
-            64 => v as u64,
-            _ => {
-                if v < 0 {
-                    return None;
-                }
-                v as u64
-            }
-        };
+        let n = self.const_unsigned_selfdet(arg, env, envw, depth)?;
         Some(if n <= 1 {
             0
         } else {
             (64 - (n - 1).leading_zeros()) as i64
         })
+    }
+
+    /// The UNSIGNED reading of a SELF-DETERMINED integral position: fold `e` at its
+    /// own width, then read the resulting bit pattern as an unsigned number.
+    ///
+    /// Two positions in the language are spelled exactly this way and this helper is
+    /// the single spelling of both, so they cannot drift:
+    ///
+    ///   * a `$clog2` argument (§20.8.1 "shall be treated as an unsigned value"), and
+    ///   * a **delay value** (§7.14 / §28.16) — measured on both oracles:
+    ///     `parameter signed [7:0] D = -8'sd1; assign #(D) y = a;` delays **255**
+    ///     units (the 8-bit pattern read unsigned), not 1 and not `-1`'s 32-bit
+    ///     reading, while `#(4'd15 + 4'd1)` delays **0** because the 4-bit sum wraps.
+    ///
+    /// Where the self width is unknown (0) or beyond the i64 walk (>64) a
+    /// non-negative value IS its own unsigned reading; a negative one would need bits
+    /// this domain cannot see, so it declines (the same degrade contract the rest of
+    /// the width-aware walk keeps).
+    pub(crate) fn const_unsigned_selfdet(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &ConstWidths,
+        depth: u32,
+    ) -> Option<u64> {
+        let v = self.eval_const_env_self(e, env, envw, depth)?;
+        match self.const_self_width(e, envw).unwrap_or(0) {
+            w @ 1..=63 => Some((v as u64) & ((1u64 << w) - 1)),
+            64 => Some(v as u64),
+            _ => {
+                if v < 0 {
+                    return None;
+                }
+                Some(v as u64)
+            }
+        }
     }
 
     /// A static cast `casting_type'(e)` in the INTEGER const domain (the

@@ -123,15 +123,7 @@ pub(crate) fn const_delay_ticks(e: &ast::Expr, mult: u64, prec_mult: u64) -> Opt
         _ => None,
     };
     if let Some(raw) = real {
-        // TWO-STAGE (doc-08): round to the MODULE's own precision first
-        // (P = M/S), then scale by S = 10^(prec − global) to global ticks.
-        // S == 1 (single-timescale designs / legacy entry) ⇒ round(d × M),
-        // byte-identical to the prior behavior.
-        let s_mult = prec_mult.max(1);
-        let p_mult = (mult / s_mult).max(1);
-        let x = parse_real_f64(raw) * p_mult as f64;
-        let stage1 = (x.round() as i64).clamp(0, u32::MAX as i64) as u64;
-        return Some(stage1.saturating_mul(s_mult).min(u32::MAX as u64) as u32);
+        return Some(real_delay_ticks(parse_real_f64(raw), mult, prec_mult));
     }
     // integer delay: exact `d × M` (saturating into u32) — a whole-unit count is
     // already an exact multiple of the module precision (unit ≥ prec), so
@@ -145,6 +137,21 @@ pub(crate) fn const_delay_ticks(e: &ast::Expr, mult: u64, prec_mult: u64) -> Opt
     // of this function already saturate; the integer branch was the one that
     // escaped its own policy.
     const_delay_u64(pick).map(|d| d.saturating_mul(mult).min(u32::MAX as u64) as u32)
+}
+
+/// TWO-STAGE (doc-08) real → tick conversion: round to the MODULE's own precision
+/// first (P = M/S), then scale by S = 10^(prec − global) to global ticks. S == 1
+/// (single-timescale designs / legacy entry) ⇒ round(d × M).
+///
+/// Factored out of `const_delay_ticks`'s real-LITERAL branch so the scope-resolved
+/// twin (`Elaborator::delay_ticks_in_scope`, for `parameter real RD = 2.5`) rounds
+/// through the SAME two stages. Two spellings of this is how `#2.5` and `#(RD)`
+/// would land on different ticks under a `10ns/1ns` module.
+fn real_delay_ticks(x: f64, mult: u64, prec_mult: u64) -> u32 {
+    let s_mult = prec_mult.max(1);
+    let p_mult = (mult / s_mult).max(1);
+    let stage1 = ((x * p_mult as f64).round() as i64).clamp(0, u32::MAX as i64) as u64;
+    stage1.saturating_mul(s_mult).min(u32::MAX as u64) as u32
 }
 
 /// The delay path's own integer fold: the full low-64-bit value of a 2-state
@@ -1089,6 +1096,119 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The SCOPE-RESOLVED half of a structural (continuous-assign / net-declaration
+    /// / gate-primitive) delay value. `const_delay_ticks` — the shared, scope-free
+    /// spelling — is asked FIRST by every caller, so this only ever adds answers
+    /// where that returned `None`; nothing it already folded changes.
+    ///
+    /// It had to exist, because the caller consumes `None` as a SILENT default: a
+    /// delay that does not fold becomes NO delay. Measured against both oracles,
+    /// `parameter D = 7; assign #(D) y = a;` propagated at t=1 instead of t=8, at
+    /// exit 0 with no diagnostic — and `#(2+3)`, `#($clog2(32))`, `#(5ns)` and
+    /// `#(RD)` for a `parameter real RD` were the same silence, because the
+    /// scope-free fold is literal-only (`IntLit` / `(…)` / unary ±, then `_ => None`).
+    ///
+    /// Three lanes:
+    ///
+    ///   * A TIME LITERAL is scaled to global ticks HERE. `const_eval_in_scope`'s
+    ///     `TimeLit` arm answers in MODULE units and declines when the literal is
+    ///     not a whole multiple of the unit — and `#(5ns)` inside a `10ns/1ns`
+    ///     module is half a unit, so that decline became the silent no-delay this
+    ///     fn exists to remove (both oracles: 5 ns). The whole-multiple cells are
+    ///     unchanged: that arm's answer × `cur_time_mult` IS this product.
+    ///   * REAL when the expression mentions a real — asked with the SHADOW-CORRECT
+    ///     resolver, and BEFORE the integer domain, but FALLING BACK to it rather
+    ///     than returning (see the two ⚠️ notes in the body).
+    ///     ⚠️⚠️ The reverse order is a measured silent-wrong and `param_real_value`
+    ///     already records why: an exactly-integral `parameter real R = 11` keeps an
+    ///     i64 TWIN in `params`, so the integer walk finds it and `#(R/2)` folds
+    ///     INTEGER division — 5 where both oracles, and vita's own procedural
+    ///     `#(R/2)`, say 5.5 ⇒ 6 ticks. A delay is a MAGNITUDE, so it needs
+    ///     `param_real_value`'s order, not the one `const_truth_in_scope` can afford
+    ///     (a truth test cannot see a truncation).
+    ///   * INTEGER otherwise, through `const_unsigned_selfdet`. A delay value is a
+    ///     SELF-DETERMINED position read as UNSIGNED — both oracles delay 0 for
+    ///     `#(4'd15 + 4'd1)` (the 4-bit sum wraps) and 255 for a
+    ///     `parameter signed [7:0] D = -8'sd1`. Folding it width-unlimited would
+    ///     answer 16 and 4294967295, so this shares `$clog2`'s helper rather than
+    ///     the plain `const_eval_in_scope`. A wholly integral `#(D/2)` therefore
+    ///     keeps integer division (5 units for `D = 11`, both oracles).
+    ///
+    /// ⚠️ Deliberately NOT wired into `lower_delay` (the procedural `#delay`), which
+    /// calls the scope-free `const_delay_ticks` to decide `Inactive` vs `Active`
+    /// ONLY. That path lowers the amount as an expression the engine evaluates at
+    /// suspension time, so it was never literal-limited; widening its region test
+    /// would move `#(ZERO_PARAM)` from `Active` (with the engine's runtime
+    /// `ticks == 0` nudge) into `Inactive` — a scheduling change with no defect
+    /// behind it. Keeping the new rule opt-in at the one consumer that needs it is
+    /// the shared-machinery rule in ENGINEERING_RULES.
+    fn delay_ticks_in_scope(&self, e: &ast::Expr) -> Option<u32> {
+        let mult = self.cur_time_mult;
+        let pmult = self.cur_prec_mult;
+        // min:typ:max picks typ — the same branch `const_delay_ticks` took before
+        // handing the rest of the expression to its literal-only fold.
+        let pick = match &e.kind {
+            ast::ExprKind::MinTypMax { typ, .. } => typ.as_ref(),
+            _ => e,
+        };
+        // Saturate, never wrap: the integer branch of `const_delay_ticks` records
+        // why (a wrapped delay is a silent EARLY fire).
+        let ticks = |v: u64| Some(v.saturating_mul(mult).min(u32::MAX as u64) as u32);
+        if let ast::ExprKind::TimeLit { num, unit_exp } = &pick.kind {
+            let val = self.const_unsigned_selfdet(
+                num,
+                &std::collections::BTreeMap::new(),
+                &ConstWidths::new(),
+                0,
+            )?;
+            // Sub-precision (finer than the design's global precision) declines, as
+            // `const_eval_in_scope`'s arm does — there is no tick to round it to.
+            let e = *unit_exp as i32 - self.global_prec_exp as i32;
+            if e < 0 {
+                return None;
+            }
+            // SATURATE on overflow, like every sibling lane — declining here would
+            // hand the caller its silent no-delay, and a dropped delay fires EARLIER
+            // than a clamped one. (`10^15 × 20000` overflows u64 under a `1s` unit at
+            // `fs` precision; both oracles never fire it, and `min(u32::MAX)` doesn't
+            // either, while `None` fires it at once. Both review lenses found this.)
+            let t = 10u64
+                .checked_pow(e as u32)
+                .and_then(|m| m.checked_mul(val))
+                .unwrap_or(u64::MAX);
+            return Some(t.min(u32::MAX as u64) as u32);
+        }
+        // ⚠️ SHADOW-CORRECT realness (`shadow_correct = true`): this predicate is
+        // CHOOSING a domain here, not widening one, so the blind `real_param_val`
+        // walk is not good enough — an inner `localparam R = 9;` shadowing an outer
+        // `parameter real R = 5;` sent `assign #(R)` into the real lane, which folded
+        // the outer 5 where both oracles delay 9.
+        // ⚠️ And the real lane FALLS BACK rather than returning: the real domain has
+        // no `%`, no bit-ops, no shifts and no call/`$clog2` arm, so `#(RD % 4)`,
+        // `#($clog2(RD))` and `#(half(RD))` over an integral `parameter real RD`
+        // decline there — and a bare `return` on that decline is the silent no-delay
+        // this whole fn exists to remove (measured: all three were correct before the
+        // real lane was put first).
+        if self.expr_mentions_real_opt(pick, true) {
+            if let Some(x) = self.const_eval_real_in_scope(pick) {
+                return Some(real_delay_ticks(x, mult, pmult));
+            }
+        }
+        self.const_unsigned_selfdet(
+            pick,
+            &std::collections::BTreeMap::new(),
+            &ConstWidths::new(),
+            0,
+        )
+        .and_then(ticks)
+    }
+
+    /// One delay value → ticks: the scope-free fold, then the scope-resolved one.
+    fn ca_delay_value(&self, e: &ast::Expr) -> Option<u32> {
+        const_delay_ticks(e, self.cur_time_mult, self.cur_prec_mult)
+            .or_else(|| self.delay_ticks_in_scope(e))
+    }
+
     /// Fold an AST continuous-assign / net-declaration delay into the two engine
     /// forms: the uniform `ContAssign.delay` (= `Some(rise)` from `values[0]`,
     /// preserving the frozen "has delay" fast-path) and, ONLY when rise/fall/turnoff
@@ -1100,23 +1220,48 @@ impl Elaborator<'_> {
         &self,
         delay: Option<&ast::Delay>,
     ) -> (Option<u32>, Option<(u32, u32, u32)>) {
-        let mult = self.cur_time_mult;
-        let pmult = self.cur_prec_mult;
         let uniform = delay.and_then(|d| {
-            d.values
-                .first()
-                .and_then(|e| const_delay_ticks(e, mult, pmult))
+            let e = d.values.first()?;
+            // ⚠️ A SCOPE-resolved RISE of 0 keeps the pre-slice shape (`None` = no
+            // delay) instead of becoming `Some(0)`. This is the one value where the
+            // silent default was already BOTH oracles' answer, and `Some(0)` is not
+            // the same thing in this engine: it routes the assign onto the delayed
+            // path, where a zero-tick write lands a delta LATER than either oracle
+            // (measured: `assign #0 y = a;` still reads 0 after two `#0` hops where
+            // iverilog and verilator both read 1). Turning `#(ZERO_PARAM)` into
+            // `Some(0)` would therefore trade a correct answer for that pre-existing
+            // lag — a rung DOWN the ladder. The lag itself (and the resulting
+            // `#0` vs `#(ZERO_PARAM)` split) is the literal spelling's, untouched
+            // here and recorded in ROADMAP §2.
+            match const_delay_ticks(e, self.cur_time_mult, self.cur_prec_mult) {
+                Some(t) => Some(t),
+                None => self.delay_ticks_in_scope(e).filter(|&t| t != 0),
+            }
         });
-        let rft = delay.and_then(|d| {
+        // The sidecar is only ever CONSULTED on the delayed path, which the engine
+        // enters on `delay.is_some()` — so an rft triple under a `None` uniform is
+        // dead weight, and computing it would be the only way this fn could emit
+        // one. Pre-slice this was implicit (both used the same fold, so values[0]
+        // failing meant the `folded?` below failed too); the zero-rise rule above
+        // makes the two able to disagree, so it is now spelled out.
+        let rft = uniform.and(delay).and_then(|d| {
             // Only 2- or 3-value specs can carry a distinct fall/turnoff.
             if d.values.len() < 2 {
                 return None;
             }
-            let folded: Option<Vec<u32>> = d
-                .values
-                .iter()
-                .map(|e| const_delay_ticks(e, mult, pmult))
-                .collect();
+            // NOT the zero-suppressing form: a FALL or TURNOFF of 0 is a real,
+            // distinct edge delay (`#(5,0)` — both oracles fall immediately) and
+            // reaches the engine through the sidecar, not through `ContAssign.delay`.
+            // ⚠️ The converse does NOT hold: a scope-folded RISE of 0 suppresses the
+            // uniform above, which kills this whole triple — so `#(ZERO_PARAM, 9)`
+            // keeps the pre-slice no-delay and its fall stays wrong, while the
+            // literal twin `#(0, 9)` is correct. Both review lenses found it; it is
+            // PRE-identical (no regression) and it is a TRADE, not an oversight —
+            // emitting `Some(0)` + sidecar fixes the fall and breaks the rise on the
+            // `#0` lag above, and both halves are 2-oracle-agreed. ROADMAP §2 owns
+            // it, with the lag named as the root that unblocks both.
+            let folded: Option<Vec<u32>> =
+                d.values.iter().map(|e| self.ca_delay_value(e)).collect();
             let folded = folded?;
             let rise = folded[0];
             let fall = folded[1];

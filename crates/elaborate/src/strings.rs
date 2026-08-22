@@ -262,29 +262,48 @@ impl Elaborator<'_> {
     /// domain. Structural and conservative: a shape it cannot see through answers
     /// false and the integer path stays in charge, exactly as before.
     pub(crate) fn expr_mentions_real(&self, e: &ast::Expr) -> bool {
+        self.expr_mentions_real_opt(e, false)
+    }
+
+    /// The same walk with the NAME arm's resolver as an opt-in parameter.
+    ///
+    /// `shadow_correct = false` (every pre-existing caller, so this is a literal
+    /// short-circuit and mechanically byte-identical for them) keeps the
+    /// independent `real_param_val` walk. `true` resolves through the COMBINED
+    /// binding set instead — the rule `real_param_is_non_integral` records:
+    ///
+    /// > an independent walk of `real_param_val` alone would match an OUTER real
+    /// > param even when an inner net / numeric param shadows it, resolving one
+    /// > name two different ways.
+    ///
+    /// The delay fold is the first caller that needs it, because it uses this
+    /// predicate to CHOOSE A DOMAIN rather than to widen one: with an inner
+    /// `localparam R = 9;` shadowing an outer `parameter real R = 5;`, the blind
+    /// walk sent `assign #(R)` into the real lane, which folded the outer 5 where
+    /// both oracles delay 9. A real LITERAL has no name, so that half of the
+    /// answer is unaffected by the choice.
+    pub(crate) fn expr_mentions_real_opt(&self, e: &ast::Expr, shadow_correct: bool) -> bool {
         use ast::ExprKind as K;
+        let r = |x| self.expr_mentions_real_opt(x, shadow_correct);
         match &e.kind {
             K::RealLit { .. } => true,
-            K::Ident(p) if p.segments.len() == 1 => self
-                .walk_scopes(&p.segments[0].name, &self.real_param_val)
-                .is_some(),
-            K::Paren { inner } => self.expr_mentions_real(inner),
-            K::Unary { operand, .. } => self.expr_mentions_real(operand),
-            K::Binary { lhs, rhs, .. } => {
-                self.expr_mentions_real(lhs) || self.expr_mentions_real(rhs)
+            K::Ident(p) if p.segments.len() == 1 => {
+                let n = &p.segments[0].name;
+                if shadow_correct {
+                    self.real_param_lowers_real(n)
+                } else {
+                    self.walk_scopes(n, &self.real_param_val).is_some()
+                }
             }
+            K::Paren { inner } => r(inner),
+            K::Unary { operand, .. } => r(operand),
+            K::Binary { lhs, rhs, .. } => r(lhs) || r(rhs),
             K::Ternary {
                 cond,
                 then_e,
                 else_e,
-            } => {
-                self.expr_mentions_real(cond)
-                    || self.expr_mentions_real(then_e)
-                    || self.expr_mentions_real(else_e)
-            }
-            K::SysCall { args, .. } | K::Call { args, .. } => {
-                args.iter().any(|a| self.expr_mentions_real(a))
-            }
+            } => r(cond) || r(then_e) || r(else_e),
+            K::SysCall { args, .. } | K::Call { args, .. } => args.iter().any(r),
             _ => false,
         }
     }

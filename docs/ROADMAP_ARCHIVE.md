@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.364` **구조적 지연의 값 fold 가 리터럴 전용이었다 — 그리고 리뷰가 내 수정의 수정을 세 번 잡았다** · `parameter D = 7; assign #(D) y = a;` 가 **t=1 에 전파**(두 오라클 t=8) · exit 0 · 진단 0 — `fold_ca_delay` 가 부르던 `const_delay_ticks` 의 정수 가지가 **리터럴 전용**(`IntLit`/`(…)`/unary ± 뒤 `_ => None`)이고 **호출자가 `None` 을 조용한 기본값(딜레이 없음)으로 소비**한다 · ⭐ 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**: 정수(**자기결정 폭 · unsigned 읽기** — `#(4'd15+4'd1)`=0, `parameter signed [7:0] D=-8'sd1`=**255**, 둘 다 2-오라클) · real(`parameter real RD=2.5`) · **TimeLit**(`#(5ns)`) · ⭐ 정수 레인은 `$clog2` 의 헬퍼를 **추출해 공유**(`const_unsigned_selfdet`) — 같은 위치가 §20.8.1 과 §28.16 에서 같은 철자라 두 소비자가 문맥에 합의한다 · ⭐ 파서가 게이트 프리미티브·net-decl 지연을 전부 `ContinuousAssign` 으로 desugar 하므로 **한 퍼널**(assign/wire/buf/and/or/xor/bufif1 · rise-fall-turnoff 사이드카 포함) · ⚠️ 절차적 `#delay` 는 **opt-in 밖에 둔다**(그 레인은 amount 를 런타임 식으로 낮추므로 원래 제한이 없었고, region 판정만 넓히면 `#(ZERO_PARAM)` 이 Active→Inactive 로 바뀐다 = 결함 없는 스케줄링 변경) · ⚠️ **zero-rise 는 pre-slice 모양 유지**: `Some(0)` 은 CA 를 delayed 레인으로 보내고 vita 의 zero-tick write 는 **자기 타임스텝의 Postponed 리전 뒤에** 착지한다(`$strobe` 실측 — 두 오라클 1, vita 0) ⇒ `#(ZERO_PARAM)` 을 `Some(0)` 으로 만들면 맞던 답을 그 lag 와 맞바꾼다 · ⚠️⚠️ **적대 2렌즈가 4라운드에 걸쳐 BLOCKING 을 넷 냈고 셋은 내 라운드-2 수정이 만든 것이다**: ⓐ 정수 도메인을 먼저 물어 **정확히 정수인 `parameter real R = 11` 의 i64 쌍둥이**가 잡혀 `#(R/2)` 가 5(두 오라클 6 · vita 자신의 절차적 레인도 6) ⇒ `param_real_value` 가 **이미 적어 둔 순서**(real 먼저)로 재배치 ⓑ 그런데 real-먼저를 **return** 으로 쓰자 real 도메인에 없는 연산자(`%`·비트·shift·`$clog2`·call)가 통째로 조용한 기본값이 됐다(다섯 칸이 correct→silent-wrong) ⇒ **fallback 필수** ⓒ 게이트가 쓰던 `expr_mentions_real` 은 `real_param_val` **단독 walk** 라 안쪽 `localparam R=9` 가 바깥 `parameter real R=5` 를 가려도 real 이라 답한다 ⇒ **`shadow_correct` 옵트인** 신설(결합 바인딩 walk · 기존 호출자 셋은 리터럴 `false`) — soundness 렌즈가 그 술어가 **엄격한 좁힘**(true→false 방향으로만 다르다)임을 코드로 증명 ⓓ 새 TimeLit 레인이 오버플로에 **decline**(형제 레인은 saturate)해 `#(20000s)` 가 즉시 발화 ⇒ saturate · ⚠️ **적대 렌즈의 BLOCKING 하나는 반박했다**: 지연 멀티드라이버 E3001 을 *"correct→loud 회귀"* 라 했으나 **10 ns 격자가 조용히 버려진 2 ns 지연을 못 본 것**(1 ns 격자: PRE `t=11 bus=1` / iverilog `bus=z`) ⇒ silent→loud = 사다리 **상승**, 렌즈도 세 구성으로 반례를 시도한 뒤 철회 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0 · SAME-OK 15 · DIVERGENT 3 · STILL-WRONG 1**(런타임 변수 지연 = 범위 밖) · 353설계 드리프트 스캔이 라운드마다 **수정 표적만** 움직였음을 확인 · bench+examples **8설계 `.velab` 바이트 동일** · 5,770 → **5,785 green** · format 29 불변
 - `4.5.363` **파라미터 셀렉트가 상수 도메인에 아예 없었다 — 그리고 값도 폭도 이미 거기 있었다** · `localparam logic [31:0] W = 32'h34; logic [W[7:0]-1:0] v;` 가 **1비트** net 을 exit 0 로 선언(두 오라클 52) — ⭐ **런타임 레인은 이미 정확**했고(`$display("%0d", W[7:0])` 세 툴 다 52) 선언 폭도 `param_range` 에 이미 있었다 ⇒ 없던 건 `const_eval_in_scope` 의 **arm 하나**(그 함수의 유일한 `BitSelect` arm 은 const-**배열원소** 조회라 스칼라 param 에서 declines) · ⚠️ **캐스트 뭉치의 AST self-폭 패스에 막히지 않는다**(셀렉트의 self-width 는 `|msb-lsb|+1` = 하강 불필요) · ⭐⭐ **두 개의 decline 규칙이 슬라이스의 본체다**: ⓐ **방향/선언 LSB** — `[39:8]` 도 `[0:31]` 도 저바이트가 52 이므로 `[w-1:0]` 을 가정하면 silent-wrong 을 **다른 silent-wrong** 과 맞바꾼다 ⇒ 런타임 하강이 쓰는 **바로 그 `param_sel_range`** 를 쓴다(곁수확: `param_decl_range` 에 오름차순 arm 이 생겨 **런타임** `A[26]` 이 0→1 로 고쳐졌다 = 2-오라클 silent-wrong) ⓑ **폭 provenance** — 무타입 파라미터의 폭은 값에서 *추론*될 수 있어(`localparam W = ~8'hCB` → 32 기록, 실제 8) 그것을 믿으면 **263비트 net** 이 나온다 ⇒ `param_decl_width_opt(declared_only)` 로 **선언/타입/리터럴 유래만** 채택 · ⚠️⚠️ **적대 3렌즈가 다섯을 잡았고 그중 둘이 BLOCKING** — 첫 설계는 wrap 가드를 **공유 평가기**(`const_eval_in_scope` 의 Binary arm)에 넣었는데 그 함수는 **폭 규칙이 반대인 소비자 둘**이 공유한다: 파라미터 **값**은 자기결정이 아니라 **대입**이라 `localparam int Q = W[7:0]+8'd240` 이 36(두 오라클 292 · PRE 는 loud) = **loud→silent-wrong**, 게다가 가드가 **한 arm 에만** 닿아 `~W[3:0]` 이 6(두 오라클 12) = silent→**다른** silent, 게다가 셀렉트 **없는** 8000항 식이 **121배** 느려졌다(Θ(n²)) ⇒ 규칙을 **소비자(선언 range bound = 정의상 자기결정)** 로 옮기니 셋이 한꺼번에 사라졌다 · 그 밖에 셀렉트 **자신의 인덱스**도 자기결정(`W[4'd15+4'd1]` 은 bit 0)·`[5:5]` 동일 끝점이 하강 base 에서만 거절되던 방향표·음수 선언 bound 의 `max(0)` **거짓말**(오름차순 `[-2:3]` 이 correct→silent-wrong) 수정 · 93칸 3-오라클 **AGREE3 29 → 81 · FIXED 52 · 회귀 0 · 컨트롤 28/28 불변** · bench+examples 17 산출물 **바이트 동일** · 5,753 → **5,770 green** · format 29 불변
 - `4.5.362` **real 지수는 밑수의 문맥을 회수한다 — 그리고 직전 슬라이스의 판정이 틀렸다** · §4.5.361 은 `'1 ** r` 을 *"iverilog 가 480 을 내니 vita 의 480 이 맞다"* 로 닫고, 후보 고침을 **iverilog 일치도**로 채점해 기각했다(267 → 247) — ⚠️⚠️ **그 점수가 재고 있던 것이 바로 누수였다** · ⭐⭐ 실격 질문은 한 개였고 내가 묻지 않았다: **대입 폭이 없는 곳에 같은 식을 보내라** — `real x = ('1+4'h0) ** r` 은 **세 시뮬레이터 전부 871.4213**, §11.4.9 가 연산자의 정의로 지정한 `$pow(('1+4'h0), r)` 도 **세 시뮬레이터 전부 871.4213** ⇒ 밑수는 15 이고, **밑수의 값이 결과를 나중에 담을 변수의 폭에 따라 달라질 수는 없다** ⇒ 480 은 목적지의 역류 · ⭐ 규칙은 이미 `+`·`-`·`*`·`/` 가 지키고 있었다(같은 네 밑수가 `+ r` 에서 **4·18·2·18**, `** r` 에서 **480·480·480·480**) · 게이트를 **연산자형 vs `$pow` 형** 동치로 세워 192쌍 **115 → 192**(옮겨간 77칸이 **전부 기준값에 정확히 착지**) · ⚠️ 순수-정수 `**` **384칸 바이트 동일** = Table 11-21 의 나머지 절반 보존 · ⚠️ 적대 리뷰가 **이웃의 가드를 그대로 베낀 것**을 잡았다(`!expr_contains_fill(rhs)` — fill 은 real 이 못 되지만 fill 을 품은 식은 real 이 된다) · bench·examples 8설계 stdout+stderr+VCD **바이트 동일** · 곁수확 = **static function 의 모듈 net 쓰기가 조용히 사라진다**(2-오라클) · 5,748 → **5,753 green** · format 29 불변
 - `4.5.361` **분열 넷을 판정했고 셋은 no-op, 넷째는 지어서 되돌렸다** · §2-1d(셋)와 §2-2b(하나)는 *"2-오라클 합의가 없으므로 착수 불가"* 로 큐에 묶여 있었다 — 재보니 **넷 다 판정 가능했고, 판정의 형태가 "어느 답이 맞나"가 아니라 "어느 오라클이 이 자리에서 오라클이 아닌가"** 였다 · ⭐⭐ **오라클 실격은 vita 를 안 보고 증명된다**: iverilog 는 `s="ab"` 에서 `s<"ab"`·`s<"aa"`·`s<"zz"` 를 **전부 1** 이라 답하고(셋이 동시에 참일 수 없다), `$itor` 은 unsigned 와 signed `longint` 의 같은 값을 **똑같이 8** 로 읽는다(부호 해석이면 갈려야 한다) ⇒ 둘 다 **자기 답들 사이의 모순**이라 vita 와의 비교가 필요 없다 · ⚠️⚠️ **넷째(`'1 ** r`)는 고쳤다가 측정이 기각했다** — 근거는 vita 자신의 불일치(fill 쓴 밑수 480 / 안 쓴 같은 값 0)였고 그 불일치는 진짜지만, 288칸 PRE-3-way 가 iverilog 일치 **267 → 247**, 옮겨간 35칸이 **전부 멀어짐**을 냈다 ⇒ 되돌림 · ⭐ 그리고 **진단이 뒤집혔다**: iverilog 는 `(4'd15+4'd1) ** r` 을 **1024** 로 읽으니 대입 문맥이 밑수에 **닿는다** ⇒ vita 의 불일치는 fill 경로가 문맥을 더 줘서가 아니라 non-fill 경로가 **덜 줘서**다(§2-1f 신규) · ⭐ `%` on real 은 두 툴이 **서로 다른 답**을 내므로(fmod 1.5 / 0) 정의된 의미가 아니다 ⇒ loud 유지 · 판정 4건 전부 `oracle_split_rulings.rs` 로 핀 — 이 파일의 목적은 기능이 아니라 **미래의 스윕이 "한 툴과 다르네" 로 silent-wrong 을 만드는 것을 막는 것** · 곁수확 둘(`$itor(<real>)` silent-wrong · `string'(<integral>)` 파서 갭) · 5,744 → **5,748 green** · format 29 불변 · **제품 코드 변경 0**
@@ -396,6 +397,80 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.364 — 구조적 지연의 값 fold 가 리터럴 전용이었다 (2026-08-22 · 5,785 green · format 29 불변)
+
+**결함.** `parameter D = 7; assign #(D) y = a;` 가 t=1 에 전파한다 — 두 오라클은 t=8. exit 0, 진단 0.
+`#(2+3)` 도 같으므로 *"파라미터 미지원"* 이 아니라 **리터럴 전용 fold** 다: `fold_ca_delay` → `const_delay_ticks`
+→ `const_delay_u64` 의 `_` arm → `const_eval_u32`(IntLit/Paren/unary ± 뒤 `_ => None`), 그리고 **호출자가
+`None` 을 조용한 기본값(딜레이 없음)으로 소비**한다. 지연 자체와 inertial 취소는 이미 정확했다 — 깨진 건 **값**.
+
+**census 가 하나를 셋으로 갈랐다.** 큐엔 *"파라미터"* 한 줄이었는데 70칸 3-오라클 census 는 레인이 셋임을 보였다.
+
+- **정수 — 자기결정 폭 · unsigned 읽기.** 오라클이 규칙을 정했다: `#(4'd15 + 4'd1)` → **0**(4비트 합이 wrap),
+  `parameter signed [7:0] D = -8'sd1` → **255**(8비트 패턴을 무부호로), `parameter [3:0] W=15; #(W+1)` → **16**
+  (unsized 형제가 32비트). 폭-무제한으로 접으면 각각 16 · 4294967295 가 된다. 이 자리는 §20.8.1 의 `$clog2`
+  인자와 **같은 철자**이므로 그 헬퍼를 `const_unsigned_selfdet` 로 **순수 추출해 공유**했다(clog2 동작 불변).
+- **real** — `parameter real RD = 2.5`·`#(RD/2.0)`·`#(2.5+1.0)`. 두 단계 반올림도 리터럴 가지에서
+  `real_delay_ticks` 로 추출해 **한 철자**로 공유(`#2.5` 와 `#(RD)` 가 `10ns/1ns` 에서 갈리지 않게).
+- **TimeLit** — `#(5ns)`. `const_eval_in_scope` 의 arm 은 **모듈 단위**로 답하고 단위의 정수배가 아니면
+  declines 하므로(`10ns/1ns` 안의 `#(5ns)` = 반 단위) 그 decline 이 다시 조용한 no-delay 였다 ⇒ 이 레인은
+  **전역 tick 으로 직접** 스케일한다. 정수배 칸은 값이 그대로다(그 답 × `cur_time_mult` 가 곧 이 곱).
+
+**한 퍼널.** 파서가 게이트 프리미티브와 net-decl 지연을 전부 `ContinuousAssign` 으로 desugar 하므로
+assign / `wire #(D) w = e` / buf·and·or·xor·bufif1 / rise-fall-turnoff 사이드카가 같은 fold 를 지난다.
+
+**opt-in 경계.** 절차적 `#delay`(`lower_delay`)는 **넓히지 않았다** — 그 레인은 amount 를 런타임 식으로
+낮추므로 애초에 리터럴 제한이 없었고, region 판정만 넓히면 `#(ZERO_PARAM)` 이 Active→Inactive 로 바뀐다
+(결함 없는 스케줄링 변경). `expr_mentions_real` 의 `shadow_correct` 도 같은 형태의 옵트인이다.
+
+**⚠️ zero-rise 는 pre-slice 모양을 유지한다(거래이지 누락이 아니다).** `Some(0)` 은 CA 를 delayed 레인으로
+보내고 vita 의 zero-tick write 는 **자기 타임스텝의 Postponed 리전 뒤에** 착지한다(`$strobe` 실측: 두 오라클
+`y=1`, vita `y=0`). 그래서 스코프-fold 된 rise 0 은 `None` 으로 억제한다 — 안 그러면 맞던 답을 그 lag 와
+맞바꾼다. 대가는 `#(ZERO_PARAM, F)` 의 fall 이 버려지는 것이고(리터럴 `#(0,F)` 는 맞다), **양쪽 다 2-오라클
+합치**라 어느 쪽으로 가든 silent↔silent 맞바꿈이다 ⇒ 뿌리(zero-tick lag)를 §2 에 적고 둘 다 핀으로 고정.
+
+**⚠️⚠️ 적대 2렌즈 4라운드 — BLOCKING 넷 중 셋은 내 라운드-2 수정이 만들었다.**
+
+1. **정수 도메인을 먼저 물었다.** 정확히 정수인 `parameter real R = 11` 은 `real_param_val` 과 `params`
+   **양쪽**에 등록되므로 정수 walk 가 그 i64 쌍둥이를 찾아 `#(R/2)` 를 **정수 나눗셈 5** 로 접었다(두 오라클
+   6 · vita 자신의 절차적 `#(R/2)` 도 6). ⭐ **코드베이스가 이미 규칙을 적어 두었다** — `param_real_value` 의
+   주석이 *"초기화자가 real 을 언급하는 순간 real fold 가 정수보다 **먼저** 돌아야 한다"* 이고 그 이유로 바로
+   이 절단을 든다. 내가 근거로 삼은 `const_truth_in_scope` 의 순서는 **진리값 소비자**의 것이라 절단이
+   보이지 않는다. **지연은 크기(magnitude)** 다 ⇒ 순서를 바꿨다.
+2. **그런데 real-먼저를 `return` 으로 썼다.** real 도메인엔 `%`·비트·shift·`$clog2`·call arm 이 없어서
+   `#(RD % 4)`·`#($clog2(RD))`·`#(half(RD))`·`#(RD & 7)`·`#(RD << 1)` 다섯 칸이 **correct→silent-wrong**
+   이 됐다(라운드-1 빌드에선 맞던 칸들) ⇒ **fallback 필수**. ⭐ 거래가 아니라는 증명이 구조적이다: i64
+   쌍둥이는 real 이 **정확히 정수**일 때만 존재하므로 두 레인은 **값**에서 갈릴 수 없고 **연산자**에서만
+   갈리는데, real 이 없는 연산자는 전부 정수 전용이다.
+3. **게이트의 resolver 가 틀렸다.** `expr_mentions_real` 의 이름 arm 은 `real_param_val` **단독 walk** 라
+   안쪽 `localparam R = 9;` 가 바깥 `parameter real R = 5;` 를 가려도 real 이라 답하고, real 레인이 **바깥
+   5** 를 접었다(두 오라클 9). 이 함정도 저장소가 이미 적어 두었다 — `real_param_is_non_integral` 의 주석이
+   *"`real_param_val` 단독 walk 는 안쪽 net/숫자 param 이 가려도 바깥 real 을 잡아 한 이름을 두 가지로
+   해석한다"*. ⇒ `expr_mentions_real_opt(e, shadow_correct)` **옵트인** 신설(결합 바인딩 walk =
+   `real_param_lowers_real`), 기존 호출자 셋은 **리터럴 `false`**. soundness 렌즈가 새 resolver 가 **엄격한
+   좁힘**임을 코드로 증명했다(결합 술어가 상위집합이라 walk 는 같거나 더 안쪽에서 멈춘다 ⇒ 차이는
+   `true→false` 방향뿐 ⇒ real 레인으로 **새로 들어가는 것은 없다**). 곁수확으로 POST2 의 shadow 결함 둘이
+   더 닫혔다(genvar 루프 · 중첩 generate).
+4. **새 TimeLit 레인이 오버플로에 decline 했다.** 형제 레인들은 전부 saturate 하는데 이것만 `?` 로 빠져
+   `#(20000s)`(`1ns/1fs` 에서 `10^15 × 20000` > u64)가 **즉시 발화**했다 — 버려진 지연은 clamp 된 지연보다
+   **더 이르다** ⇒ saturate. **두 렌즈가 독립적으로 같은 발견**을 냈다.
+
+**⚠️ 렌즈의 BLOCKING 하나는 반박했다 — 프로브의 격자 해상도가 판정을 뒤집는다.** soundness 렌즈가 지연
+멀티드라이버의 `E3001` 을 *"PRE 는 두 오라클과 바이트 동일했다 = correct→loud 회귀"* 로 냈다. 같은 설계를
+**1 ns 격자**로 다시 재니 PRE 는 `t=11 bus=1`, iverilog 는 `bus=z` — PRE 는 **지연을 조용히 버리고 있었고**
+10 ns 격자가 그것을 못 본 것이다 ⇒ silent-wrong → honest-loud = **사다리 상승**. 렌즈도 세 가지 구성으로
+반례를 시도한 뒤 *"지연 드라이버는 `[0,D)` 동안 x 를 쥐는데 PRE 엔 그 구간이 아예 없다"* 는 구조적 이유로
+철회하고 §3 행으로 재분류했다.
+
+**측정.** 70칸 3-오라클(iverilog 13.0 · verilator 5.050 · vita) PRE/POST 전이 = **FIXED 51 · REGRESSION 0 ·
+SAME-OK 15 · DIVERGENT-ORACLE 3 · STILL-WRONG 1**(런타임 변수 지연 = 범위 밖). 라운드마다 353설계 드리프트
+스캔으로 **수정 표적만** 움직였음을 확인(라운드 3 = 8칸, 전부 라운드-2 결함의 repro). bench+examples
+**8설계 `.velab` 바이트 동일**. 진단·exit 코드 스윕 전 라운드 **0 차이**. 새 회귀 테스트 15건.
+
+**잔여**(전부 PRE==POST · 각각 다른 경로 ⇒ CLASS 분리 규칙으로 §2 에 기록): 런타임 변수 지연 ·
+사이즈드 음수 **리터럴**이 새 규칙에 도달 못 함(`#(-4'd1)` 은 never / 파라미터 쌍둥이는 15 = 두 오라클) ·
+zero-rise 사이드카 거래 · TimeLit 이 식의 루트가 아닐 때. 곁가지 = 지연 CA 의 **인덱스 안 함수 호출** 패닉.
 
 #### 4.5.363 — 파라미터 셀렉트가 상수 도메인에 아예 없었다 (2026-08-22 · 5,770 green · format 29 불변)
 
