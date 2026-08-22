@@ -74,6 +74,33 @@ pub(crate) fn binop_result_is_context_determined(op: ast::BinOp) -> bool {
     }
 }
 
+/// Is this i64 EXACTLY an unsigned 64-bit value — a bit pattern whose top bit is
+/// magnitude, not sign?
+///
+/// Below 64 bits `const_mask` zero-extends an unsigned value, so the sign bit is
+/// clear and every signed i64 operation happens to agree with the unsigned reading.
+/// At exactly 64 masking is the identity (`masking = ctx_w > 0 && ctx_w < 64`), the
+/// i64 IS the width, and the SIGN-SENSITIVE operations — ordering comparisons, `/`,
+/// `%`, and both shifts (§11.4.10: `>>>` is arithmetic only when its left operand is
+/// signed, and §11.6.1 makes it unsigned here) — read the top bit as a sign.
+///
+/// Measured, both oracles: `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;`
+/// is 111 and vita folded 222, while the 63-bit twin and the RUNTIME spelling of the
+/// same text were both already right — the defect is the constant domain's alone.
+/// `==`/`!=` and `+`/`-`/`*`/`<<`/bit-ops are sign-agnostic on the bit pattern and
+/// are deliberately NOT routed here.
+///
+/// ⚠️ `== 64`, NOT `>= 64`. Above 64 bits the i64 has ALREADY truncated the value, so
+/// neither reading is the language's: measured, `(64'hFFFF_FFFF_FFFF_FFFF + 65'd1) >
+/// 64'hFFFF_FFFF_FFFF_FFFF` is 1 on both oracles and the unsigned reading of the
+/// truncation answers 2, while `64'hFFFF_FFFF_FFFF_FFFF > 65'd1` goes the other way.
+/// Neither dominates, which is the definition of a guess — so >64 keeps the pre-slice
+/// answer and stays ROADMAP §2's. The sibling `const_unsigned_selfdet` already draws
+/// the line in exactly this place.
+fn const_i64_is_unsigned_at(w: u32, signed: bool) -> bool {
+    !signed && w == 64
+}
+
 impl Elaborator<'_> {
     /// Mask `v` into `w` bits, sign-extending when `signed` — the single place the
     /// interpreter narrows a value, shared by the operator masking and the final
@@ -347,6 +374,18 @@ impl Elaborator<'_> {
                     | B::BitXnor => {
                         let a = self.eval_const_env_at(lhs, env, envw, depth, ctx_w, ctx_signed)?;
                         let b = self.eval_const_env_at(rhs, env, envw, depth, ctx_w, ctx_signed)?;
+                        // ⚠️ `/` and `%` are the two SIGN-sensitive members of this arm
+                        // (the rest are bit-pattern ops), so at 64+ unsigned bits they
+                        // divide in u64: both oracles fold
+                        // `64'hFFFF_FFFF_FFFF_FFFF % 64'd10` to 5, and the signed
+                        // reading answered −1.
+                        if const_i64_is_unsigned_at(ctx_w, ctx_signed) && b != 0 {
+                            match op {
+                                B::Div => return Some(mask(((a as u64) / (b as u64)) as i64)),
+                                B::Mod => return Some(mask(((a as u64) % (b as u64)) as i64)),
+                                _ => {}
+                            }
+                        }
                         Some(mask(const_binop(*op, a, b)?))
                     }
                     // LEFT operand takes the context; the shift COUNT / exponent is
@@ -370,6 +409,28 @@ impl Elaborator<'_> {
                         // right here, and refusing turned `bit [7:0] t =
                         // (8'sd100 + 8'sd100) >> 1` (iverilog 100) into a LOUD
                         // reject once the operands started masking to −56.
+                        // ⚠️ A logical `>>` of a 64+ unsigned value: `const_binop`
+                        // DECLINES for a negative `a` (its result depends on the
+                        // operand width, which it cannot see) and the caller then
+                        // goes LOUD — `localparam L = 64'hFFFFFFFF00000000 >> 32;`
+                        // was rejected where both oracles fold it. Here the width IS
+                        // known, so the shift is exact on the bit pattern.
+                        // ⚠️ BOTH shifts. §11.4.10 makes `>>>` arithmetic only when its
+                        // LEFT operand is signed, and §11.6.1 has already converted that
+                        // operand to the expression's type — which is unsigned here. Both
+                        // oracles agree even when the left operand is a DECLARED-signed
+                        // leaf: `(byte signed P = -100) >>> 60` compared against 64'd100
+                        // takes the unsigned branch. Leaving `>>>` out did not merely miss
+                        // a fix — the comparison route above UNMASKED it, turning 14
+                        // measured cells from correct to silently wrong.
+                        if const_i64_is_unsigned_at(ctx_w, ctx_signed)
+                            && matches!(op, B::Shr | B::AShr)
+                        {
+                            if !(0..64).contains(&b) {
+                                return Some(0);
+                            }
+                            return Some(mask(((a as u64) >> b) as i64));
+                        }
                         if masking && matches!(op, B::Shl | B::AShl | B::Shr) {
                             if !(0..64).contains(&b) {
                                 return Some(0); // every bit shifted out
@@ -421,6 +482,19 @@ impl Elaborator<'_> {
                             self.const_signed_env(lhs, envw) && self.const_signed_env(rhs, envw);
                         let a = self.eval_const_env_at(lhs, env, envw, depth, w, cs)?;
                         let b = self.eval_const_env_at(rhs, env, envw, depth, w, cs)?;
+                        // ⚠️ ORDERING at 64+ unsigned bits must read u64. `const_binop`
+                        // compares signed i64, which is right for every width masking
+                        // can normalize and wrong for the one it cannot.
+                        if const_i64_is_unsigned_at(w, cs) {
+                            let (ua, ub) = (a as u64, b as u64);
+                            match op {
+                                B::Lt => return Some((ua < ub) as i64),
+                                B::Le => return Some((ua <= ub) as i64),
+                                B::Gt => return Some((ua > ub) as i64),
+                                B::Ge => return Some((ua >= ub) as i64),
+                                _ => {}
+                            }
+                        }
                         const_binop(*op, a, b)
                     }
                 }
@@ -464,7 +538,17 @@ impl Elaborator<'_> {
             // 1 where iverilog and vita's own runtime answer 0.
             _ => {
                 let v = self.eval_const_env(e, env, envw, depth)?;
-                if !masking {
+                // ⚠️ An exactly-64-bit UNSIGNED context normalizes its leaves too, even
+                // though `masking` is off there. Without this the walk never establishes
+                // the invariant the unsigned reading asserts: a NARROW SIGNED leaf
+                // arrives sign-extended and the u64 route then reads the extension as
+                // magnitude — `(logic signed [7:0] P = -100) / 8'sd3` compared at 64 bits
+                // divided 0xFFFF_FFFF_FFFF_FF9C instead of the 156 both oracles use, and
+                // an indexed part-select width built on one went from LOUD to a silently
+                // wrong 22. `leaf_into_ctx` is exactly the §11.6.1 reinterpretation
+                // (mask to the leaf's own width, sign-extend only if BOTH the leaf and
+                // the context are signed), and it is a no-op for a leaf already ≥64 bits.
+                if !masking && !const_i64_is_unsigned_at(ctx_w, ctx_signed) {
                     return Some(v);
                 }
                 let Some(lw) = self.const_self_width(e, envw) else {

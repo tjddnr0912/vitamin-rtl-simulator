@@ -225,6 +225,12 @@
 >
 > **🆕 §4.5.365 곁가지 — `int'($random*1.0)` 의 draw 횟수**(둘 다 틀렸고 값이 **바뀌었다**): `lower_real_to_int_cast` 의 ≤32비트 가지가 정확 반올림으로 바뀌며 피연산자 명명 횟수가 2→4 로 늘었고, 그 함수의 **다른 호출자**(`lower_prim_cast` = `keyword'(e)`)에는 **`expr_is_repeatable` 게이트가 없다** ⇒ `int'($random*1.0)` 이 캐스트당 2회 → 4회 draw(iverilog 는 1회). 어느 쪽도 맞은 적이 없지만 **silent↔silent 를 조용히 맞바꾸지 마라** 규칙상 기록한다. 봉쇄책은 이미 이름이 있다 — 바인드가 쓰는 그 게이트를 `lower_prim_cast` 에도 주는 것(단, 거기선 decline 이 real 을 정수 문맥에 그대로 두므로 **다른 처리**가 필요하다).
 >
+> **🆕 §4.5.366 이 남긴 64비트 unsigned 잔여 셋**(전부 PRE==POST · 각각 다른 경로):
+>
+> - **module-scope `localparam` 의 `/`·`%`·`>>`·`>>>` 는 여전히 부호를 잃는다** ⚠️ **선언 폭이 있어도 그렇다**(적대 differential 실측: `localparam [63:0] P = 64'hFFFF…FFFF % 64'd10` 은 PRE==POST 로 18446744073709551615 · 오라클 5) — 그 자리는 **순서비교만** 폭 인식 walk 로 redirect 되고 `/`·`%`·시프트는 `ctx_w`/`ctx_signed` 를 읽는데 거기가 (64, unsigned) 가 아니다.(2-오라클 · `localparam longint unsigned L = 64'hFFFF…FFFF % 64'd10;` 오라클 5 / vita 18446744073709551615). ⭐ **비교는 고쳐졌는데 이것들은 아닌 이유**: `const_eval_in_scope` 의 Binary arm 은 **문맥-결정 아닌 연산자만** 폭 인식 walk 로 redirect 한다(`binop_result_is_context_determined`) — 문맥-결정 연산자는 자기가 **폭-무제한 signed** `const_binop` 으로 접는다. ⇒ 선행조건 = §2 머리말이 말하는 **AST self-폭 패스**: `const_eval_in_scope` 가 폭을 받아야 하고, 그러려면 무타입 `localparam L =` 의 폭(= RHS 자기 폭)을 `const_self_width` 가 **모든 모듈 스코프 노드에서** 답해야 한다. ⚠️ 상수함수 본문·선언 폭이 있는 대입은 폭 인식 walk 를 타므로 **거기선 이미 맞다**(§4.5.366 이 고쳤다).
+> - **>64비트는 의도적 decline**(`w == 64` 만 unsigned 로 읽는다). i64 가 이미 절단했고 **두 방향이 서로 반대로 틀린다** — `(64'hFFFF…FFFF + 65'd1) > 64'hFFFF…FFFF` 는 signed 읽기가 맞고(오라클 1) `((65'd1-65'd2) > 65'd0)` 은 unsigned 읽기가 맞다(오라클 1). 어느 쪽도 지배하지 않으므로 **추측 금지** ⇒ pre-slice 유지. 핀 = `const_unsigned_at_sixty_four.rs::above_sixty_four_bits_keeps_the_pre_slice_answer`.
+> - **`*` 의 64비트 unsigned 오버플로는 loud**(`64'h8000…0000 * 64'd2` 두 오라클 **0** / vita **거부**). `checked_mul` 이 declines 한다. ⚠️ 고치려면 **문맥 폭이 정확히 64일 때만** wrap 해야 한다 — §4.5.348 이 *"mod 2^64 는 문맥이 64비트 이하일 때만 옳다"* 로 지어서 되돌린 그 축이고, 이번엔 폭 인식 walk 안이라 문맥이 **있다**(그때는 모듈 스코프라 없었다) ⇒ 재검토 가능한 유일한 차이.
+>
 > **🆕 §4.5.365 가 남긴 formal-bind 잔여 넷**(전부 PRE==POST · 각각 다른 경로 ⇒ CLASS 분리 규칙으로 기록):
 >
 > - **바인딩 자리는 넷이 아니라 아홉이다 — 다섯이 남았다**(2-오라클 · 전부 `f(300.0)`→`input byte` 가 **300**, 오라클 44). 고친 셋(inline 함수 · frame 함수 · frame task)과 이미 맞던 하나(inline task = **formal-폭 지역 net 에 copy-in** = 참조 구현) 밖에: ⓐ **output formal 을 가진 frame 함수**(`emit_frame_func_out_call` = 별개 emitter) ⓑ **계층 task 호출**(`hier_defer/task_call.rs` — 인자가 `inline_task.rs` 에서 **formal 폭 없이** 미리 lowering 된다) ⓒ **계층 함수 호출** ⓓ **class 메서드/task** ⓔ **class 생성자**. ⚠️ ⓑⓒ 는 **구조가 다르다** — deferred-hier 구조체엔 `&ast::Expr` 가 없다.
@@ -410,6 +416,7 @@
 
 - **untyped localparam 의 정수 init 폭 — 오라클이 갈린다**(§4.5.343 실측). `localparam L = 4'd15 + 4'd1` 이 vita **16** = iverilog 16 / verilator **0**(§6.20.2 를 self-det 로 읽음). 두 오라클이 갈리고 vita 는 iverilog 편이므로 기록만.
 
+- **iverilog 는 64비트 unsigned `%` 에서 자기모순**(§4.5.366 적대 differential 실측): `64'hFFFFFFFFFFFFFFFF % 64'd10` = **5** 인데 **같은 값**을 다르게 적은 `(64'd0 - 64'd1) % 64'd10` = **1**(같은 설계 안에서). ⇒ 그 축의 오라클로 `(0-1)` 철자를 쓰지 마라.
 - 크로스스코프 t0 decl-init race(양쪽 §6.8 합법·self-consistent) · 런타임 구성 `-0.0` 표시 · iverilog 자인 결함들(expression-force "evaluated once" 등).
 - **`$stime` 의 부호 — 두 오라클이 갈리고 규격이 정했다**(§4.5.320). `16'($stime)` 이 t=0x8000 에서 vita/verilator 5.050 `00008000`, iverilog 13.0 `ffff8000`. IEEE 1364-2005 §17.7.2 = "returns an **unsigned** integer that is a 32-bit time". vita 는 캐스트 **밖에서도** 이미 무부호였고(`q = $stime` at t=2^31 → `0000000080000000`, PRE 동일) iverilog 만 signed `integer` 를 돌려준다 — PRE 가 캐스트 자리에서만 iverilog 와 맞았던 것은 자기모순이었다.
 - **`#(.S("str"))` 가 적용되기 전에 W3056 을 한 번 낸다**(pre-existing·값은 정답): 부모 쪽 숫자 fold 가 먼저 실패해 "override 는 상수가 아니다; 기본값 유지" 를 찍고, 그 다음 string 채널이 정상 적용한다. 경고가 사실과 반대라 거슬리지만 값은 iverilog 와 일치한다.
@@ -798,13 +805,13 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,796 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-22 · ARCHIVE §4.5.365) |
+| 게이트 | **5,806 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.366) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ 구조적 지연 = §4.5.364~~ · ~~ⓑ formal-bind = §4.5.365~~ 로 RESOLVED): ⓒ **정확히 64비트 상수 비교**(`localparam L = ((64'd1-64'd2) > 64'd0)` vita 222 / 두 오라클 111 · 마스킹 술어가 `ctx_w < 64` · **런타임 철자는 맞는다** · 63비트 쌍둥이는 §4.5.347 이 이미 고쳤다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ = §4.5.364~~ · ~~ⓑ = §4.5.365~~ · ~~ⓒ 64비트 unsigned = §4.5.366~~ 로 RESOLVED · 각각 잔여는 §2): ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
 | **2** | **§3 loud → correct-support 승격** | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 사다리를 올리는 유일한 방향 | §3 표에서 **오라클이 답하는 행**부터. ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
@@ -818,17 +825,15 @@
 > `crates/sim-engine/tests/perf_baseline.rs` 의 `SHA256_INLINE`/`SHA256_FUNCS` 상수에만 있다
 > (그리고 그 하네스의 **10 형태 중 9 는 연속대입이 0개** — cont-assign 축 변경은 거기서 원래 도달 불가).
 
-### ★★ §2 다음 둘 — 착수 브리핑 (**ⓐ = §4.5.364 · ⓑ = §4.5.365 로 완료**)
+### ★★ §2 다음 하나 — 착수 브리핑 (**ⓐ = §4.5.364 · ⓑ = §4.5.365 · ⓒ = §4.5.366 으로 완료**)
 
-⚠️ 순서는 값싼 것부터가 아니라 **사다리 순**이다. 둘 다 2-오라클이 답한다. **다음 착수 = ⓒ.**
+**다음 착수 = ⓓ.** 그 다음은 §2 「다음 착수 순서」 표에서 다시 고른다.
 
 ~~**ⓐ 구조적 지연의 값 fold 가 리터럴 전용**~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0** · 5,785 green · format 29 불변). 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**(정수 자기결정-unsigned · real · TimeLit)이었다. 잔여 넷 = §2 「🆕 §4.5.364 가 남긴 지연 잔여 넷」 · 곁수확 §3 행 하나. 상세=ARCHIVE §4.5.364.
 
 ~~**ⓑ subprogram formal-bind**~~ — ✅ **RESOLVED §4.5.365**(2026-08-22 · 184칸 **FIXED 54 · REGRESSION 0** · 5,796 green · format 29 불변). ⚠️ 착수 census 가 큐 문구의 절반을 반박했다(`%0d` 반올림·등가·automatic 은 이미 정확) 그리고 자리는 **셋이 아니라 아홉 중 셋**이었다. 잔여 넷 = §2 「🆕 §4.5.365 가 남긴 formal-bind 잔여 넷」. 상세=ARCHIVE §4.5.365.
 
-**ⓒ 정확히 64비트 문맥의 비교가 조용히 틀린다**(XS~S) — `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / iverilog·verilator **111**(실측). 마스킹 술어가 `ctx_w > 0 && ctx_w < 64` 이고 **63비트 쌍둥이는 §4.5.347 이 이미 고쳤다** ⇒ 머신러리는 있고 필요한 건 **경계 census + 64비트 레인 PRE-3-way 스윕**.
-⭐ **런타임 철자는 맞는다**(같은 식을 `$display` 에 넣으면 111) = 내부 판별자 확보 — 상수 도메인만의 결함이다.
-이웃 = **64비트 unsigned 상수가 i64 도메인에서 음수로 읽힌다**(`localparam M = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` vita 222 / 두 오라클 111). 같은 *i64 는 컨테이너지 값의 타입이 아니다* 뿌리(§4.5.348) ⇒ **아마 한 슬라이스**. ⚠️ 클래스 크기 미측정 — census 가 첫 걸음이고, 닫으면 의도적으로 declined 된 64비트 placement 핀이 열린다.
+~~**ⓒ 정확히 64비트 문맥의 비교**~~ — ✅ **RESOLVED §4.5.366**(2026-08-23 · 120칸 4-오라클 전이 **ok→wrong 0 · wrong→ok 14 · 오라클 분열 0** · 5,806 green · format 29 불변). ⭐ 규칙은 하나 — *"이 i64 는 마스킹이 정규화할 수 없는 unsigned 값을 나른다"* — 이고 폭 인식 walk 의 **소비자 넷**(순서비교 · `/`·`%` · 두 시프트 · leaf 재해석)이 그것을 묻는다. ⚠️ 착수 census 가 클래스를 *"비교"* 에서 넷으로 넓혔고, 적대 렌즈가 **`>>>` 도 부호 민감**(§11.4.10)임을 잡았다 — 비교 리다이렉트가 그 결함을 **드러내서** 14칸이 correct→silent-wrong 이 될 뻔했다. 잔여 셋 = §2 「🆕 §4.5.366 이 남긴 64비트 unsigned 잔여 셋」. 상세=ARCHIVE §4.5.366.
 
 **ⓓ package 스코프 파라미터 셀렉트**(§4.5.363 잔여) — 위 §2 불릿 참조. ⭐ **`package.rs` 에 `param_range` 삽입만 더하는 건 이미 지어서 되돌렸다 — 키가 안 닿는다. 반복하지 마라.**
 

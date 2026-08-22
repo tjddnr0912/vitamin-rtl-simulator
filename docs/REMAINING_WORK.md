@@ -25,7 +25,7 @@
 
 | # | 항목 | 근거/오라클 |
 |---|---|---|
-| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말의 「다음 착수 순서」. **2026-08-22 재census 실측 상위 넷**(~~ⓐ 구조적 지연 = **§4.5.364**~~ · ~~ⓑ formal-bind = **§4.5.365**~~ 로 RESOLVED · 각각 잔여 넷은 §2): ⓒ **정확히 64비트** 상수 비교(마스킹 술어가 `ctx_w < 64` · 런타임 철자는 맞다) ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여) | iverilog + verilator 라이브 차분 |
+| **1** | **§2 오라클-有 silent-wrong** — ⚠️ **§2 를 위에서부터 읽지 마라**(맨 위 뭉치는 *AST self-폭 패스* 선행조건에 막혀 있다). 착수표 = §2 머리말의 「다음 착수 순서」. **2026-08-22 재census 실측 상위 넷**(~~ⓐ = **§4.5.364**~~ · ~~ⓑ = **§4.5.365**~~ · ~~ⓒ 64비트 unsigned = **§4.5.366**~~ 로 RESOLVED · 각각 잔여는 §2): ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여) | iverilog + verilator 라이브 차분 |
 | **2** | **§3 loud→supported** — ✅ **3판 클리어 라운드 완료**(1~10+P1 · ARCHIVE §4.5.342). 다음 후보 = 라운드가 남긴 잔여(§3.1(c) `always_comb` decl-init · §3.3 part-select fold · §3.7 output/inout · §3.11 은 선행조건 ⓐ/ⓑ 로 재편성 — ⭐ⓑ codegen 쪽이 사다리를 안 건드린다) + §3 소형 큐 | iverilog·verilator 실측 ✓ |
 | **2b** | **§0 승격 큐 T2 잔여 2건** — `real` const-fold(= `int'(<real param>)` 바운드의 선행) · sized-literal enum label | iverilog ✓ 2/2 |
 | 3 | ~~**§2 DEEP** — inner NET vs outer PARAM shadow~~ ✅ **P1 로 해소**(2026-08-18 · ARCHIVE §4.5.342 — 답은 name-set 이 아니라 선언 블록의 SPAN · `repeat (LP)` 는 이미 열려 있었다) — 남은 형제 = §4.5.276 후속 ①(`for` trip-count 식별자) · package 변수 clobber | iverilog ✓ |

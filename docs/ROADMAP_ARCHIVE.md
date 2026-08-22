@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.366` **상수 도메인이 정확히 64비트에서 unsigned 를 잃는다 — 그리고 비교를 고치자 시프트가 드러났다** · `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / 두 오라클 **111** · ⭐ **63비트 쌍둥이와 런타임 철자는 이미 정확**했다 = 내부 판별자, 상수 도메인만의 결함 · 근인 = `eval_const_env_at` 이 값을 문맥 폭·부호로 **마스킹해 정규화**하는데 `masking = ctx_w > 0 && ctx_w < 64` 이라 **정확히 64에서 항등** ⇒ unsigned 값이 최상위 비트를 쥔 채 남고 **부호 민감 연산**이 음수로 읽는다 · ⭐ 규칙은 하나(`const_i64_is_unsigned_at`)이고 폭 인식 walk 의 **소비자 넷**이 그것을 묻는다: 순서비교(피연산자 쌍의 `(w, cs)`) · `/`·`%`(둘러싼 문맥) · 두 시프트 · leaf 재해석 · ⚠️⚠️ **적대 soundness 렌즈가 BLOCKING 넷** — ⓐ ⭐⭐ **`>>>` 도 부호 민감**(§11.4.10: arithmetic 은 왼쪽 피연산자가 signed 일 때뿐이고 §11.6.1 이 이미 unsigned 로 변환한다)인데 안 덮었고, **비교 리다이렉트가 그 잠복 결함을 드러내** 14칸이 correct→silent-wrong 이 됐다(두 오라클은 declared-signed 왼쪽 피연산자에서도 logical 을 답한다) ⓑ `w >= 64` 는 **추측**이다 — >64 는 i64 가 이미 절단했고 두 방향이 서로 반대로 틀린다(carry 모양은 signed 읽기가, 뺄셈 모양은 unsigned 읽기가 맞다) ⇒ **`w == 64`** 로 좁힘, 형제 `const_unsigned_selfdet` 이 이미 그 자리에 선을 그어 두었다 ⓒ ctx≥64 에서 walk 가 **`leaf_into_ctx` 를 안 돈다** ⇒ 좁은 **signed** leaf 가 부호확장된 채 도착해 u64 경로가 그 확장을 크기로 읽는다(`logic signed [7:0] P=-100` 이 156 이 아니라 0xFFFF…FF9C 로 나눠졌고, 그 위에 세운 `$bits` part-select 폭이 **loud→silent-wrong**) ⇒ 그 문맥에서도 leaf 를 정규화 ⓓ clippy `double_parens` 로 `-D warnings` 게이트 실패 · 120칸 4-way(iverilog·verilator·PRE·POST) **오라클 분열 0 · ok→wrong 0 · wrong→ok 14 · wrong↔다른-wrong 0** · 33칸 census 비교 클래스 전부 해소 · 상수함수 본문의 `%` 는 −1 → **5**, `>>` 는 **전체 REJ(loud) → 정답** · bench+examples **8설계 `.velab` 바이트 동일** · 5,796 → **5,806 green** · format 29 불변
 - `4.5.365` **real actual 이 정수 formal 의 폭을 안 받는다 — 그리고 참조 구현은 이미 트리 안에 있었다** · §13.5.3 은 호출을 **formal 선언 타입 변수에의 대입**으로 정의하므로 real actual 은 반올림(§6.24.1) 후 **formal 폭으로 좁혀야** 하는데 vita 는 반올림만 했다(`function integer f(input byte k); f = k;` 를 `f(300.0)` 로 → **300**, 두 오라클 **44**, exit 0) · ⚠️⚠️ **큐 문구의 절반이 STALE 이었다** — `%0d` 반올림·등가·`integer` formal·automatic 함수/task 는 **이미 정확**했고 비트셀렉트/비트연산/`%h` 는 §2 가 아니라 **§3(E3009 loud)** · ⚠️ 그리고 **첫 프로브가 나를 속였다**: `input int` + `3.0`(폭에 들어맞는 값)만 봐서 frame 경로가 정확해 보였다 — **폭보다 큰 값**을 넣어야 보인다 · ⭐ **참조 구현이 트리 안에 있었다**: inline TASK 는 입력 actual 을 **formal-폭 지역 net 에 copy-in** 하므로 저장이 `coerce_assign` 을 탄다 ⇒ 나머지 셋을 거기 맞췄다(공유 헬퍼 `coerce_real_actual_to_formal` 하나) · 184칸(10 formal × 6 real actual × 3 라우팅) **mismatch 54 → 0** · 1,170칸 스윕 **1170/1170** iverilog 일치 · ⚠️⚠️ **적대 2렌즈 3라운드 · BLOCKING 넷** — ⓐ `cast_operand_is_real` 이 **철자로** 판정(패키지 본문의 bare `g()` 는 `P::g` 인데 술어는 모듈 레벨 `real g` 를 찾는다) ⇒ **정수** actual 이 f64 왕복으로 2⁵³ 초과를 잃었다(correct→silent-wrong) ⇒ **값 기반 `expr_is_real`** 로(⭐ 잃는 것 없음 — 유일한 차이인 real-반환 `Call` 은 `expr_is_repeatable` 이 이미 거절) ⓑ frame-task 게이트가 **net kind** 라 약해 `string` INPUT formal 을 1비트 캐스트로 파괴 ⇒ 형제 둘과 **같은 철자** ⓒ `input time signed` 가 세 경로에서 correct→wrong(뿌리 = `kind_signedness` 가 명시 한정자를 버려 **formal net** 이 unsigned · pre-existing) ⇒ **좁은 decline**(집합 차 = 정확히 `{Time}` 임을 렌즈가 증명) ⓓ ⭐⭐ **`lower_real_to_int_cast` 의 ≤32비트 가지가 `$rtoi(e±0.5)`** 라 [2⁵²,2⁵³) 홀수에서 **tie-to-even**(2⁵²+1 → 2, 두 오라클 1) — >32 가지엔 정확 구성이 이미 있었고 자기 주석이 그 함정을 적어 두었다; 내 변경이 30칸을 그 가지로 새로 보내 **wrong↔wrong 맞바꿈**이 될 뻔했다 ⇒ 정확 구성을 **hoist 해 두 가지가 공유** · ⭐ **곁수확**: pre-existing `int'()`/`byte'()`/`shortint'()` 결함 40칸이 함께 해소(`0.49999999999999994` → 0 포함) · ⚠️ 렌즈가 잡은 마지막 NIT = 내가 `range_to_dims` 를 두 번 불러 **진단이 두 번** 찍혔다(그 함수는 emit 한다) ⇒ 첫 호출의 부호를 바인딩 · bench+examples **8설계 `.velab` 바이트 동일**(정수 actual 42설계 포함 50/50) · 5,785 → **5,796 green** · format 29 불변
 - `4.5.364` **구조적 지연의 값 fold 가 리터럴 전용이었다 — 그리고 리뷰가 내 수정의 수정을 세 번 잡았다** · `parameter D = 7; assign #(D) y = a;` 가 **t=1 에 전파**(두 오라클 t=8) · exit 0 · 진단 0 — `fold_ca_delay` 가 부르던 `const_delay_ticks` 의 정수 가지가 **리터럴 전용**(`IntLit`/`(…)`/unary ± 뒤 `_ => None`)이고 **호출자가 `None` 을 조용한 기본값(딜레이 없음)으로 소비**한다 · ⭐ 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**: 정수(**자기결정 폭 · unsigned 읽기** — `#(4'd15+4'd1)`=0, `parameter signed [7:0] D=-8'sd1`=**255**, 둘 다 2-오라클) · real(`parameter real RD=2.5`) · **TimeLit**(`#(5ns)`) · ⭐ 정수 레인은 `$clog2` 의 헬퍼를 **추출해 공유**(`const_unsigned_selfdet`) — 같은 위치가 §20.8.1 과 §28.16 에서 같은 철자라 두 소비자가 문맥에 합의한다 · ⭐ 파서가 게이트 프리미티브·net-decl 지연을 전부 `ContinuousAssign` 으로 desugar 하므로 **한 퍼널**(assign/wire/buf/and/or/xor/bufif1 · rise-fall-turnoff 사이드카 포함) · ⚠️ 절차적 `#delay` 는 **opt-in 밖에 둔다**(그 레인은 amount 를 런타임 식으로 낮추므로 원래 제한이 없었고, region 판정만 넓히면 `#(ZERO_PARAM)` 이 Active→Inactive 로 바뀐다 = 결함 없는 스케줄링 변경) · ⚠️ **zero-rise 는 pre-slice 모양 유지**: `Some(0)` 은 CA 를 delayed 레인으로 보내고 vita 의 zero-tick write 는 **자기 타임스텝의 Postponed 리전 뒤에** 착지한다(`$strobe` 실측 — 두 오라클 1, vita 0) ⇒ `#(ZERO_PARAM)` 을 `Some(0)` 으로 만들면 맞던 답을 그 lag 와 맞바꾼다 · ⚠️⚠️ **적대 2렌즈가 4라운드에 걸쳐 BLOCKING 을 넷 냈고 셋은 내 라운드-2 수정이 만든 것이다**: ⓐ 정수 도메인을 먼저 물어 **정확히 정수인 `parameter real R = 11` 의 i64 쌍둥이**가 잡혀 `#(R/2)` 가 5(두 오라클 6 · vita 자신의 절차적 레인도 6) ⇒ `param_real_value` 가 **이미 적어 둔 순서**(real 먼저)로 재배치 ⓑ 그런데 real-먼저를 **return** 으로 쓰자 real 도메인에 없는 연산자(`%`·비트·shift·`$clog2`·call)가 통째로 조용한 기본값이 됐다(다섯 칸이 correct→silent-wrong) ⇒ **fallback 필수** ⓒ 게이트가 쓰던 `expr_mentions_real` 은 `real_param_val` **단독 walk** 라 안쪽 `localparam R=9` 가 바깥 `parameter real R=5` 를 가려도 real 이라 답한다 ⇒ **`shadow_correct` 옵트인** 신설(결합 바인딩 walk · 기존 호출자 셋은 리터럴 `false`) — soundness 렌즈가 그 술어가 **엄격한 좁힘**(true→false 방향으로만 다르다)임을 코드로 증명 ⓓ 새 TimeLit 레인이 오버플로에 **decline**(형제 레인은 saturate)해 `#(20000s)` 가 즉시 발화 ⇒ saturate · ⚠️ **적대 렌즈의 BLOCKING 하나는 반박했다**: 지연 멀티드라이버 E3001 을 *"correct→loud 회귀"* 라 했으나 **10 ns 격자가 조용히 버려진 2 ns 지연을 못 본 것**(1 ns 격자: PRE `t=11 bus=1` / iverilog `bus=z`) ⇒ silent→loud = 사다리 **상승**, 렌즈도 세 구성으로 반례를 시도한 뒤 철회 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0 · SAME-OK 15 · DIVERGENT 3 · STILL-WRONG 1**(런타임 변수 지연 = 범위 밖) · 353설계 드리프트 스캔이 라운드마다 **수정 표적만** 움직였음을 확인 · bench+examples **8설계 `.velab` 바이트 동일** · 5,770 → **5,785 green** · format 29 불변
 - `4.5.363` **파라미터 셀렉트가 상수 도메인에 아예 없었다 — 그리고 값도 폭도 이미 거기 있었다** · `localparam logic [31:0] W = 32'h34; logic [W[7:0]-1:0] v;` 가 **1비트** net 을 exit 0 로 선언(두 오라클 52) — ⭐ **런타임 레인은 이미 정확**했고(`$display("%0d", W[7:0])` 세 툴 다 52) 선언 폭도 `param_range` 에 이미 있었다 ⇒ 없던 건 `const_eval_in_scope` 의 **arm 하나**(그 함수의 유일한 `BitSelect` arm 은 const-**배열원소** 조회라 스칼라 param 에서 declines) · ⚠️ **캐스트 뭉치의 AST self-폭 패스에 막히지 않는다**(셀렉트의 self-width 는 `|msb-lsb|+1` = 하강 불필요) · ⭐⭐ **두 개의 decline 규칙이 슬라이스의 본체다**: ⓐ **방향/선언 LSB** — `[39:8]` 도 `[0:31]` 도 저바이트가 52 이므로 `[w-1:0]` 을 가정하면 silent-wrong 을 **다른 silent-wrong** 과 맞바꾼다 ⇒ 런타임 하강이 쓰는 **바로 그 `param_sel_range`** 를 쓴다(곁수확: `param_decl_range` 에 오름차순 arm 이 생겨 **런타임** `A[26]` 이 0→1 로 고쳐졌다 = 2-오라클 silent-wrong) ⓑ **폭 provenance** — 무타입 파라미터의 폭은 값에서 *추론*될 수 있어(`localparam W = ~8'hCB` → 32 기록, 실제 8) 그것을 믿으면 **263비트 net** 이 나온다 ⇒ `param_decl_width_opt(declared_only)` 로 **선언/타입/리터럴 유래만** 채택 · ⚠️⚠️ **적대 3렌즈가 다섯을 잡았고 그중 둘이 BLOCKING** — 첫 설계는 wrap 가드를 **공유 평가기**(`const_eval_in_scope` 의 Binary arm)에 넣었는데 그 함수는 **폭 규칙이 반대인 소비자 둘**이 공유한다: 파라미터 **값**은 자기결정이 아니라 **대입**이라 `localparam int Q = W[7:0]+8'd240` 이 36(두 오라클 292 · PRE 는 loud) = **loud→silent-wrong**, 게다가 가드가 **한 arm 에만** 닿아 `~W[3:0]` 이 6(두 오라클 12) = silent→**다른** silent, 게다가 셀렉트 **없는** 8000항 식이 **121배** 느려졌다(Θ(n²)) ⇒ 규칙을 **소비자(선언 range bound = 정의상 자기결정)** 로 옮기니 셋이 한꺼번에 사라졌다 · 그 밖에 셀렉트 **자신의 인덱스**도 자기결정(`W[4'd15+4'd1]` 은 bit 0)·`[5:5]` 동일 끝점이 하강 base 에서만 거절되던 방향표·음수 선언 bound 의 `max(0)` **거짓말**(오름차순 `[-2:3]` 이 correct→silent-wrong) 수정 · 93칸 3-오라클 **AGREE3 29 → 81 · FIXED 52 · 회귀 0 · 컨트롤 28/28 불변** · bench+examples 17 산출물 **바이트 동일** · 5,753 → **5,770 green** · format 29 불변
@@ -398,6 +399,57 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.366 — 상수 도메인이 정확히 64비트에서 unsigned 를 잃는다 (2026-08-23 · 5,806 green · format 29 불변)
+
+**결함.** `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222**, 두 오라클 **111**.
+⭐ **63비트 쌍둥이도 런타임 철자도 이미 정확**했다 — 내부 판별자가 확보된, 상수 도메인만의 결함.
+
+**근인.** `eval_const_env_at` 은 값을 **문맥 폭·부호로 마스킹**해 정규화하는데 그 게이트가
+`masking = ctx_w > 0 && ctx_w < 64` 다. 64비트 미만에선 unsigned 가 zero-extend 되어 signed i64
+연산이 **우연히** 맞고, 정확히 64에선 마스킹이 **항등**이라 값이 최상위 비트를 쥔 채 남는다 ⇒
+**부호 민감 연산**이 그것을 음수로 읽는다.
+
+**규칙은 하나, 소비자는 넷.** `const_i64_is_unsigned_at(w, signed) = !signed && w == 64` 를
+폭 인식 walk 의 네 자리가 묻는다 — 순서비교(피연산자 **쌍**의 `(w, cs)`) · `/`·`%`(**둘러싼** 문맥) ·
+논리/산술 시프트 · `_` leaf arm 의 재해석. `==`/`!=`·`+`·`-`·`*`·`<<`·비트연산은 비트패턴 연산이라
+**의도적으로 제외**했다.
+
+**⚠️⚠️ 적대 soundness 렌즈 — BLOCKING 넷, 그리고 셋은 하나의 모양이다.**
+렌즈의 요약이 정확했다: *"술어가 주장하는 성질(이 i64 는 폭 w 의 unsigned 비트패턴이다)을 주변 walk 가
+정확히 `w == 64` 이고 leaf 도 w 폭일 때만 보장한다."*
+
+1. ⭐⭐ **`>>>` 도 부호 민감인데 안 덮었다.** §11.4.10 상 `>>>` 는 **왼쪽 피연산자가 signed 일 때만**
+   arithmetic 이고, §11.6.1 이 그 피연산자를 이미 식의 타입(여기선 unsigned)으로 변환한다. 두 오라클은
+   **declared-signed 왼쪽 피연산자에서도** logical 을 답한다. 그리고 이건 놓친 수정이 아니라 **내가 만든
+   회귀**다 — 비교 리다이렉트가 잠복 결함을 **드러내** 14칸이 correct→silent-wrong 이 됐다.
+   ⇒ `matches!(op, B::Shr | B::AShr)`.
+2. **`w >= 64` 는 규칙이 아니라 추측이었다.** >64 에선 i64 가 이미 절단했고 두 방향이 **서로 반대로**
+   틀린다 — `(64'hFFFF…FFFF + 65'd1) > 64'hFFFF…FFFF` 는 signed 읽기가 맞고(오라클 1),
+   `((65'd1-65'd2) > 65'd0)` 은 unsigned 읽기가 맞다(오라클 1). **어느 쪽도 지배하지 않는 것이
+   추측의 정의다** ⇒ `w == 64`. ⭐ 형제 `const_unsigned_selfdet` 이 이미 같은 자리에 선을 그어 두었다.
+3. **walk 가 ctx≥64 에서 `leaf_into_ctx` 를 안 돈다** ⇒ 좁은 **signed** leaf 가 부호확장된 채 도착하고
+   u64 경로가 그 확장을 **크기로** 읽는다(`logic signed [7:0] P = -100` 이 156 이 아니라 0xFFFF…FF9C 로
+   나눠졌다). 그 위에 세운 `$bits` indexed part-select 폭은 **loud → silent-wrong** 이었다.
+   ⇒ 그 문맥에서도 leaf 를 정규화(= §11.6.1 재해석 그대로).
+4. clippy `double_parens` 로 `-D warnings` 게이트 실패.
+
+**측정.** 120칸 4-way(iverilog · verilator · PRE · POST) — **오라클 분열 0 · ok→wrong 0 · wrong→ok 14 ·
+ok→ok 80 · wrong↔다른-wrong 0**. 33칸 census 의 비교 클래스 전부 해소. 폭 인식 walk 가 소유하는 자리에서
+상수함수 본문의 `x % 64'd10` 은 **−1 → 5**, `x >> 32` 는 **전체 REJ(loud) → 정답**.
+bench+examples **8설계 `.velab` 바이트 동일**. 새 회귀 10 테스트.
+
+**적대 differential = CLEAN**(BLOCKING 0). 48칸 4-way + 47칸 byte-identity + 25칸 경계. ⭐ decline 을
+조용한 기본값으로 먹는 소비자 일곱(범위 바운드·replication·part-select 폭·unpacked 크기·`$clog2`·
+genfor 바운드·case 라벨)에서 **loud→정답 6칸 · silent-wrong→정답 17칸**, 그 반대는 **0**. byte-identity
+47칸 **차이 0**(진단 문구·exit 코드 포함). 경계 25칸에서 **정확히 한 칸만 이동**(w=64 비교) ⇒ 규칙이
+문서대로 정확히 64다. ⚠️ 곁수확 = **iverilog 자기모순** 확정(`64'hFF…FF % 64'd10`=5 인데 같은 값의
+`(64'd0-64'd1) % 64'd10`=1) ⇒ divergence 목록에 추가.
+
+**⚠️ 잔여**(§2): module-scope `localparam` 의 `/`·`%`·`>>`·`>>>` — **선언 폭이 있어도** 그렇다(적대 렌즈
+실측: `localparam [63:0] P = …%…` PRE==POST) — 그 경로는 `const_eval_in_scope` 가
+**문맥-결정 연산자를 자기가 폭-무제한 signed 로** 접는다(비교만 폭 인식 walk 로 redirect 된다) ⇒
+선행조건은 §2 가 말하는 **AST self-폭 패스** · >64비트 decline · `*` 의 64비트 unsigned 오버플로 loud.
 
 #### 4.5.365 — real actual 이 정수 formal 의 폭을 안 받는다 (2026-08-22 · 5,796 green · format 29 불변)
 
