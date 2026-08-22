@@ -1006,11 +1006,21 @@ impl SimState<'_> {
                     Some(DynObj::DynArray { elems }) if i < elems.len() => {
                         // Deposit each in-range field bit (OOB bits drop, IEEE part-select).
                         let mut cur = elems[i].clone();
-                        for k in 0..width {
-                            let bp = lsb + k as i64;
-                            if bp >= 0 && (bp as u32) < w {
-                                let (bv, bu) = piece_r.get_vu(k);
-                                cur.set_vu(bp as u32, bv, bu);
+                        // Same rule as `frame_part_write`'s deposit, one spelling:
+                        // a fully-in-range window is a word-parallel replace, and
+                        // anything else keeps the per-bit loop that implements the
+                        // IEEE §11.5.1 out-of-range DROP. `copy_bits` is wrong here
+                        // for the same reason (it OR-merges into a zero window).
+                        if let Some(off) = crate::eval::window_in_range(lsb, width, w) {
+                            debug_assert_eq!(cur.width, w, "dyn element narrower than its net");
+                            crate::eval::replace_bits(&mut cur, off, &piece_r, 0, width);
+                        } else {
+                            for k in 0..width {
+                                let bp = lsb + k as i64;
+                                if bp >= 0 && (bp as u32) < w {
+                                    let (bv, bu) = piece_r.get_vu(k);
+                                    cur.set_vu(bp as u32, bv, bu);
+                                }
                             }
                         }
                         elems[i] = cur;

@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.367` **frame part-select 쓰기의 per-bit 루프 — 그리고 S0 가 arena 를 정확히 가격했다** · ⭐ 착수는 측정이었다(S0): keccak_f_arr 런타임의 **65.0%** 가 `run_frame_call` 안(콜 귀속 · `/usr/bin/sample` 5,318 작업 샘플)이고 run.json 이 `able 1/4 · frame_bodies 3`(flat 은 `2/4 · 0`) — **15.8× 차이가 frame body 3개와 정확히 상관** · ⚠️⚠️ **계측이 리뷰의 메커니즘 주장을 반박**했다: `wprog.rs:441` 의 frame-local decline 게이트는 keccak·picorv32 둘 다에서 **한 번도 발화하지 않는다**(`frame_decline=0`) — `wprog::compile` 이 **모듈 프로세스 body 에만** 호출되기 때문이고, `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데 frame local 엔 슬롯이 없다 ⇒ **arena 가 진짜 선행조건**(6–10주 · 상한 2.33×)임이 가격됐고 이 슬라이스는 그 65% 안의 **bounded 한 조각**만 가져갔다 · 결함 = frame slot(과 dyn-array 원소)의 part-select 쓰기가 값을 **한 비트씩** 예치하는데 그 루프가 동시에 IEEE §11.5.1 의 **범위 밖 DROP** 을 구현한다 ⇒ 창이 net 안에 완전히 들어갈 때만 word-parallel `replace_bits`, **else 는 pre-slice 루프 verbatim** · ⚠️⚠️ **`copy_bits` 를 그대로 쓰면 silent-wrong**: 그 함수는 대상 범위가 **0이어야** 하고 비트를 **OR-merge** 하는데 part-select 쓰기의 대상은 슬롯의 **현재 값**이다(`8'hF0` + `8'h0F` = `8'hFF`) ⇒ `clear 후 copy_bits` = `replace_bits` · 적대 2렌즈 **BLOCKING 0** · differential 246칸 + 200칸 퍼즈에서 **PRE≡POST**, iverilog 159/159 · soundness 가 clear 창과 write 창이 **정확히 같음**을 구성으로 증명 · ⚠️ NIT 넷 반영: ⓐ **리뷰 스냅샷이 debug 바이너리였다**(성능 슬라이스인데 — soundness 가 +88% picorv32 "회귀" 를 재다가 발견) ⓑ `replace_bits` 는 `copy_bits` 가 `dst.val[dw]` 를 **직접 인덱싱**하므로 `set_vu` 와 달리 **할당을 늘리지 않는다**(문서화 + `debug_assert`) ⓒ 게이트가 두 파일에 **손으로 복사**돼 있었다 ⇒ `window_in_range` 한 철자(§4.5.359 모양, 여섯이 되기 전 둘에서 잡음) ⓓ 성능 주장의 **메커니즘**: `set_vu` 가 인라인되지 않아 self 6.6% 가 아니라 **leaf 12.8% 를 더한 ~19%** 가 표적이다 · **keccak_f_arr 4.49 → 3.79 s = −15.6%**(release · best-of-3 · 첫 런 폐기) · keccak_f/flat/picorv32 **불변** · 4-way anchor 불변 · examples+bench **8/8 바이트 동일** · 5,806 → **5,812 green** · format 29 불변
 - `4.5.366` **상수 도메인이 정확히 64비트에서 unsigned 를 잃는다 — 그리고 비교를 고치자 시프트가 드러났다** · `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / 두 오라클 **111** · ⭐ **63비트 쌍둥이와 런타임 철자는 이미 정확**했다 = 내부 판별자, 상수 도메인만의 결함 · 근인 = `eval_const_env_at` 이 값을 문맥 폭·부호로 **마스킹해 정규화**하는데 `masking = ctx_w > 0 && ctx_w < 64` 이라 **정확히 64에서 항등** ⇒ unsigned 값이 최상위 비트를 쥔 채 남고 **부호 민감 연산**이 음수로 읽는다 · ⭐ 규칙은 하나(`const_i64_is_unsigned_at`)이고 폭 인식 walk 의 **소비자 넷**이 그것을 묻는다: 순서비교(피연산자 쌍의 `(w, cs)`) · `/`·`%`(둘러싼 문맥) · 두 시프트 · leaf 재해석 · ⚠️⚠️ **적대 soundness 렌즈가 BLOCKING 넷** — ⓐ ⭐⭐ **`>>>` 도 부호 민감**(§11.4.10: arithmetic 은 왼쪽 피연산자가 signed 일 때뿐이고 §11.6.1 이 이미 unsigned 로 변환한다)인데 안 덮었고, **비교 리다이렉트가 그 잠복 결함을 드러내** 14칸이 correct→silent-wrong 이 됐다(두 오라클은 declared-signed 왼쪽 피연산자에서도 logical 을 답한다) ⓑ `w >= 64` 는 **추측**이다 — >64 는 i64 가 이미 절단했고 두 방향이 서로 반대로 틀린다(carry 모양은 signed 읽기가, 뺄셈 모양은 unsigned 읽기가 맞다) ⇒ **`w == 64`** 로 좁힘, 형제 `const_unsigned_selfdet` 이 이미 그 자리에 선을 그어 두었다 ⓒ ctx≥64 에서 walk 가 **`leaf_into_ctx` 를 안 돈다** ⇒ 좁은 **signed** leaf 가 부호확장된 채 도착해 u64 경로가 그 확장을 크기로 읽는다(`logic signed [7:0] P=-100` 이 156 이 아니라 0xFFFF…FF9C 로 나눠졌고, 그 위에 세운 `$bits` part-select 폭이 **loud→silent-wrong**) ⇒ 그 문맥에서도 leaf 를 정규화 ⓓ clippy `double_parens` 로 `-D warnings` 게이트 실패 · 120칸 4-way(iverilog·verilator·PRE·POST) **오라클 분열 0 · ok→wrong 0 · wrong→ok 14 · wrong↔다른-wrong 0** · 33칸 census 비교 클래스 전부 해소 · 상수함수 본문의 `%` 는 −1 → **5**, `>>` 는 **전체 REJ(loud) → 정답** · bench+examples **8설계 `.velab` 바이트 동일** · 5,796 → **5,806 green** · format 29 불변
 - `4.5.365` **real actual 이 정수 formal 의 폭을 안 받는다 — 그리고 참조 구현은 이미 트리 안에 있었다** · §13.5.3 은 호출을 **formal 선언 타입 변수에의 대입**으로 정의하므로 real actual 은 반올림(§6.24.1) 후 **formal 폭으로 좁혀야** 하는데 vita 는 반올림만 했다(`function integer f(input byte k); f = k;` 를 `f(300.0)` 로 → **300**, 두 오라클 **44**, exit 0) · ⚠️⚠️ **큐 문구의 절반이 STALE 이었다** — `%0d` 반올림·등가·`integer` formal·automatic 함수/task 는 **이미 정확**했고 비트셀렉트/비트연산/`%h` 는 §2 가 아니라 **§3(E3009 loud)** · ⚠️ 그리고 **첫 프로브가 나를 속였다**: `input int` + `3.0`(폭에 들어맞는 값)만 봐서 frame 경로가 정확해 보였다 — **폭보다 큰 값**을 넣어야 보인다 · ⭐ **참조 구현이 트리 안에 있었다**: inline TASK 는 입력 actual 을 **formal-폭 지역 net 에 copy-in** 하므로 저장이 `coerce_assign` 을 탄다 ⇒ 나머지 셋을 거기 맞췄다(공유 헬퍼 `coerce_real_actual_to_formal` 하나) · 184칸(10 formal × 6 real actual × 3 라우팅) **mismatch 54 → 0** · 1,170칸 스윕 **1170/1170** iverilog 일치 · ⚠️⚠️ **적대 2렌즈 3라운드 · BLOCKING 넷** — ⓐ `cast_operand_is_real` 이 **철자로** 판정(패키지 본문의 bare `g()` 는 `P::g` 인데 술어는 모듈 레벨 `real g` 를 찾는다) ⇒ **정수** actual 이 f64 왕복으로 2⁵³ 초과를 잃었다(correct→silent-wrong) ⇒ **값 기반 `expr_is_real`** 로(⭐ 잃는 것 없음 — 유일한 차이인 real-반환 `Call` 은 `expr_is_repeatable` 이 이미 거절) ⓑ frame-task 게이트가 **net kind** 라 약해 `string` INPUT formal 을 1비트 캐스트로 파괴 ⇒ 형제 둘과 **같은 철자** ⓒ `input time signed` 가 세 경로에서 correct→wrong(뿌리 = `kind_signedness` 가 명시 한정자를 버려 **formal net** 이 unsigned · pre-existing) ⇒ **좁은 decline**(집합 차 = 정확히 `{Time}` 임을 렌즈가 증명) ⓓ ⭐⭐ **`lower_real_to_int_cast` 의 ≤32비트 가지가 `$rtoi(e±0.5)`** 라 [2⁵²,2⁵³) 홀수에서 **tie-to-even**(2⁵²+1 → 2, 두 오라클 1) — >32 가지엔 정확 구성이 이미 있었고 자기 주석이 그 함정을 적어 두었다; 내 변경이 30칸을 그 가지로 새로 보내 **wrong↔wrong 맞바꿈**이 될 뻔했다 ⇒ 정확 구성을 **hoist 해 두 가지가 공유** · ⭐ **곁수확**: pre-existing `int'()`/`byte'()`/`shortint'()` 결함 40칸이 함께 해소(`0.49999999999999994` → 0 포함) · ⚠️ 렌즈가 잡은 마지막 NIT = 내가 `range_to_dims` 를 두 번 불러 **진단이 두 번** 찍혔다(그 함수는 emit 한다) ⇒ 첫 호출의 부호를 바인딩 · bench+examples **8설계 `.velab` 바이트 동일**(정수 actual 42설계 포함 50/50) · 5,785 → **5,796 green** · format 29 불변
 - `4.5.364` **구조적 지연의 값 fold 가 리터럴 전용이었다 — 그리고 리뷰가 내 수정의 수정을 세 번 잡았다** · `parameter D = 7; assign #(D) y = a;` 가 **t=1 에 전파**(두 오라클 t=8) · exit 0 · 진단 0 — `fold_ca_delay` 가 부르던 `const_delay_ticks` 의 정수 가지가 **리터럴 전용**(`IntLit`/`(…)`/unary ± 뒤 `_ => None`)이고 **호출자가 `None` 을 조용한 기본값(딜레이 없음)으로 소비**한다 · ⭐ 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**: 정수(**자기결정 폭 · unsigned 읽기** — `#(4'd15+4'd1)`=0, `parameter signed [7:0] D=-8'sd1`=**255**, 둘 다 2-오라클) · real(`parameter real RD=2.5`) · **TimeLit**(`#(5ns)`) · ⭐ 정수 레인은 `$clog2` 의 헬퍼를 **추출해 공유**(`const_unsigned_selfdet`) — 같은 위치가 §20.8.1 과 §28.16 에서 같은 철자라 두 소비자가 문맥에 합의한다 · ⭐ 파서가 게이트 프리미티브·net-decl 지연을 전부 `ContinuousAssign` 으로 desugar 하므로 **한 퍼널**(assign/wire/buf/and/or/xor/bufif1 · rise-fall-turnoff 사이드카 포함) · ⚠️ 절차적 `#delay` 는 **opt-in 밖에 둔다**(그 레인은 amount 를 런타임 식으로 낮추므로 원래 제한이 없었고, region 판정만 넓히면 `#(ZERO_PARAM)` 이 Active→Inactive 로 바뀐다 = 결함 없는 스케줄링 변경) · ⚠️ **zero-rise 는 pre-slice 모양 유지**: `Some(0)` 은 CA 를 delayed 레인으로 보내고 vita 의 zero-tick write 는 **자기 타임스텝의 Postponed 리전 뒤에** 착지한다(`$strobe` 실측 — 두 오라클 1, vita 0) ⇒ `#(ZERO_PARAM)` 을 `Some(0)` 으로 만들면 맞던 답을 그 lag 와 맞바꾼다 · ⚠️⚠️ **적대 2렌즈가 4라운드에 걸쳐 BLOCKING 을 넷 냈고 셋은 내 라운드-2 수정이 만든 것이다**: ⓐ 정수 도메인을 먼저 물어 **정확히 정수인 `parameter real R = 11` 의 i64 쌍둥이**가 잡혀 `#(R/2)` 가 5(두 오라클 6 · vita 자신의 절차적 레인도 6) ⇒ `param_real_value` 가 **이미 적어 둔 순서**(real 먼저)로 재배치 ⓑ 그런데 real-먼저를 **return** 으로 쓰자 real 도메인에 없는 연산자(`%`·비트·shift·`$clog2`·call)가 통째로 조용한 기본값이 됐다(다섯 칸이 correct→silent-wrong) ⇒ **fallback 필수** ⓒ 게이트가 쓰던 `expr_mentions_real` 은 `real_param_val` **단독 walk** 라 안쪽 `localparam R=9` 가 바깥 `parameter real R=5` 를 가려도 real 이라 답한다 ⇒ **`shadow_correct` 옵트인** 신설(결합 바인딩 walk · 기존 호출자 셋은 리터럴 `false`) — soundness 렌즈가 그 술어가 **엄격한 좁힘**(true→false 방향으로만 다르다)임을 코드로 증명 ⓓ 새 TimeLit 레인이 오버플로에 **decline**(형제 레인은 saturate)해 `#(20000s)` 가 즉시 발화 ⇒ saturate · ⚠️ **적대 렌즈의 BLOCKING 하나는 반박했다**: 지연 멀티드라이버 E3001 을 *"correct→loud 회귀"* 라 했으나 **10 ns 격자가 조용히 버려진 2 ns 지연을 못 본 것**(1 ns 격자: PRE `t=11 bus=1` / iverilog `bus=z`) ⇒ silent→loud = 사다리 **상승**, 렌즈도 세 구성으로 반례를 시도한 뒤 철회 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0 · SAME-OK 15 · DIVERGENT 3 · STILL-WRONG 1**(런타임 변수 지연 = 범위 밖) · 353설계 드리프트 스캔이 라운드마다 **수정 표적만** 움직였음을 확인 · bench+examples **8설계 `.velab` 바이트 동일** · 5,770 → **5,785 green** · format 29 불변
@@ -399,6 +400,60 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.367 — frame part-select 쓰기의 per-bit 루프 (2026-08-23 · 5,812 green · format 29 불변)
+
+**착수는 구현이 아니라 측정이었다(S0).** 오너가 VCS급 목표를 유지하기로 하면서 성능 축이 열렸고,
+전 라운드의 분석이 지목한 frame 축을 **가격**하는 것이 첫 일이었다.
+
+- `/usr/bin/sample`, keccak_f_arr, 작업 스레드 5,318 샘플: `run_frame_call` **65.0%**,
+  그 안 `frame_write_lvalue` inclusive 36.9%.
+- `run.json` 의 codegen 리포트: keccak_f/_arr = `able 1/4 · frame_bodies 3` · keccak_f_flat =
+  `able 2/4 · frame_bodies 0`. **15.8× 성능차가 frame body 3개와 정확히 상관.**
+- ⚠️⚠️ **계측이 앞선 리뷰의 메커니즘 주장을 반박했다.** `wprog.rs:441` 의 frame-local decline 게이트는
+  keccak 과 picorv32 **둘 다에서 한 번도 발화하지 않는다**(`frame_decline=0`, 임시 카운터 실측).
+  이유는 게이트가 관대해서가 아니라 **아무도 묻지 않기 때문**이다 — `wprog::compile` 은
+  `ir.processes[proc].body` 에만 호출된다. 그리고 `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데
+  frame local 에는 슬롯이 없다.
+  ⇒ **65% 를 컴파일 레인으로 보내려면 frame local 에 arena 슬롯을 주는 것이 선행조건**이고, 그건
+  6–10주짜리 별건이다(상한 = `Value` 47.4% + frame/callstack 9.7% ⇒ **2.33×**). 이 슬라이스는 그 65%
+  안에서 **bounded 한 조각**만 가져간다.
+
+**결함.** frame slot 과 dyn-array 원소의 part-select **쓰기**가 값을 **한 비트씩** 예치한다. 그 루프는
+동시에 IEEE §11.5.1 의 **범위 밖 DROP** 을 구현하므로 지울 수 없다 ⇒ 창이 net 안에 완전히 들어갈 때만
+word-parallel 로 가고, **else 는 pre-slice 루프 verbatim**.
+
+**⚠️⚠️ `copy_bits` 를 그대로 부르면 silent-wrong 을 배포한다.** 그 함수의 doc 이 못박는다 —
+*"The destination range must be ZERO on entry … bits are OR-merged in"*. part-select 쓰기의 대상은 슬롯의
+**현재 값**이라 `8'hF0` 에 `8'h0F` 를 쓰면 `8'hFF` 가 된다. ⇒ 형제 `replace_bits` = **창을 지우고 나서**
+같은 `copy_bits` 를 부른다(비트 이동의 철자는 하나로 유지).
+
+**적대 2렌즈 — BLOCKING 0.**
+differential 이 246칸 + **200칸 랜덤 퍼즈**(net 폭 17종 × lsb ∈ [−w−2, net_w+2] × `[h:l]`/`+:`/`-:` ×
+01xz 패턴)를 돌려 **PRE≡POST 전 칸**, iverilog 일치 159/159. soundness 가 clear 창과 write 창이
+**정확히 같음**(시작·길이·두 평면·모든 정렬)을 구성으로 증명하고, 게이트가 *"per-bit 루프가 모든 비트를
+썼을 조건"* 과 **동치**임을 보였다(루프 자신의 가드를 밖으로 끌어낸 것).
+
+**⚠️ NIT 넷 — 하나는 내 절차 실수다.**
+
+1. **리뷰 스냅샷이 debug 바이너리였다.** 성능 슬라이스인데 `target/debug/vita` 를 넘겼다. soundness 가
+   +88% picorv32 *"회귀"* 를 재다가 알아채고 스스로 release 를 다시 빌드했다. **성능 슬라이스의 스냅샷은
+   release 여야 한다** — 루프 규칙으로 승격.
+2. `replace_bits` 는 `copy_bits` 가 `dst.val[dw]` 를 **직접 인덱싱**하므로 `set_vu`(늘린다)와 달리
+   **할당을 늘리지 않는다**. 오늘 도달 불가지만 문서화 + 각 호출부에 `debug_assert`.
+3. 게이트가 두 파일에 **손으로 복사**돼 있었고 bound 철자도 둘이었다(`net_w`/`w`) ⇒ `window_in_range`
+   한 철자로. §4.5.359 의 *"복사했으면 한 규칙의 여섯 철자"* 를 **둘일 때** 잡았다.
+4. 성능 주장의 **메커니즘**: `Value::set_vu` 는 인라인되지 않아 자기 스택 프레임으로 나타난다 ⇒ 표적은
+   self 6.6% 가 아니라 **그 leaf 12.8% 를 더한 ~19%** 다. 숫자만 있고 메커니즘이 없으면 결과가 아니다.
+
+**측정.** keccak_f_arr **4.49 → 3.79 s = −15.6%**(release · best-of-3 · 첫 런 폐기) · keccak_f 1.929→1.928 ·
+keccak_f_flat 0.124→0.123 · picorv32 0.450→0.450(전부 노이즈 내) · 4-way anchor 불변 ·
+examples+bench **8/8** stdout·stderr·exit 바이트 동일 · 새 회귀 6 테스트.
+vs iverilog: keccak_f_arr **0.41× → 0.50×**(vita 의 유일한 패배가 좁혀졌다).
+
+**잔여**(§2): queue·assoc 원소의 part-select 쓰기가 **조용히 사라진다**(dyn 철자만 구현됨 = write-twin 갭) ·
+폭 0 인덱스 part-select 를 조용히 받는다(iverilog 는 거부) · gather 모양 세 자리(`task_frames`·`netread`·
+`init_diag`)는 소스가 `Value` 가 아니라 raw store 라 **다른 기계** — 후속으로 분리.
 
 #### 4.5.366 — 상수 도메인이 정확히 64비트에서 unsigned 를 잃는다 (2026-08-23 · 5,806 green · format 29 불변)
 

@@ -36,6 +36,54 @@ pub(crate) fn copy_bits(dst: &mut Value, dst_off: u32, src: &Value, src_off: u32
     }
 }
 
+/// REPLACE `w` bits of both planes at `dst[dst_off..]` with `src[src_off..]`,
+/// word-parallel — the assignment form of [`copy_bits`].
+///
+/// ⚠️ `copy_bits` OR-MERGES and therefore requires a destination range that is
+/// ZERO on entry, which every one of its callers satisfies by building into a
+/// fresh `Value::zeros`. A part-select WRITE does not: its destination is the
+/// slot's current value, read back. Calling `copy_bits` there would leave the old
+/// bits set — `8'hF0` receiving `8'h0F` would read `8'hFF`. So this clears the
+/// window first and then reuses the same word-parallel copy, which keeps ONE
+/// spelling of the bit movement.
+///
+/// The caller owns TWO preconditions, and its callers assert both:
+///
+///   * RANGE — this writes every one of the `w` bits, so a part-select whose
+///     window leaves the net (IEEE §11.5.1 drops those bits) must not come here.
+///     [`window_in_range`] is the one spelling of that test.
+///   * ALLOCATION — ⚠️ `dst` must ALREADY hold `nwords(dst_off + w)` words.
+///     `copy_bits` indexes `dst.val[dw]` directly and panics past the end, while
+///     the per-bit `Value::set_vu` this replaces GROWS the planes instead. Every
+///     producer of a net-width value allocates `nwords(width).max(1)`, so the
+///     invariant holds today; the `debug_assert` at each call site is what makes a
+///     future short value fail loudly instead of as a release index panic.
+#[inline]
+pub(crate) fn replace_bits(dst: &mut Value, dst_off: u32, src: &Value, src_off: u32, w: u32) {
+    if w == 0 {
+        return;
+    }
+    dst.clear_bits(dst_off, w);
+    copy_bits(dst, dst_off, src, src_off, w);
+}
+
+/// Is a part-select window `[lsb, lsb+width)` wholly inside a `bound`-bit net?
+/// `Some(lsb as u32)` when it is — i.e. when the per-bit deposit loop would have
+/// written every one of its `width` bits, so [`replace_bits`] is exactly
+/// equivalent to it — and `None` when any bit would be DROPPED (§11.5.1), which
+/// only that loop implements.
+///
+/// One spelling for both deposit sites: the frame-slot write and the dynamic-array
+/// element write ask the same question against different bounds (the frame net's
+/// declared width, the array's ELEMENT width), and a hand-copied gate is how one
+/// rule becomes two (§4.5.359).
+#[inline]
+pub(crate) fn window_in_range(lsb: i64, width: u32, bound: u32) -> Option<u32> {
+    // `lsb >= 0` is tested BEFORE the cast, so the cast is value-preserving and
+    // the `u64` sum cannot wrap.
+    (width > 0 && lsb >= 0 && (lsb as u64) + width as u64 <= bound as u64).then_some(lsb as u32)
+}
+
 /// v6: the packed bits of a (fully-defined) value as a byte STRING — bytes
 /// MSB-first with leading 0x00 bytes stripped (packed-ASCII surface, §6.16
 /// conversion family). Shared by the string-assoc key eval and the iteration

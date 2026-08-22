@@ -563,11 +563,38 @@ impl<'a> SimState<'a> {
         };
         let piece = v.resize_keep_sign(width.max(1), false);
         let mut cur = self.frame_slot_read(fidx, auto, slot);
-        for k in 0..width {
-            let bp = lsb + k as i64;
-            if bp >= 0 && (bp as u32) < net_w {
-                let (bv, bu) = piece.get_vu(k);
-                cur.set_vu(bp as u32, bv, bu);
+        // FAST ARM: the whole window lies inside the net, so no bit is dropped and
+        // the deposit is a word-parallel replace instead of `width` calls to
+        // `set_vu`. Measured on `bench/keccak/keccak_f_arr.sv`, this loop is the
+        // hottest single site in the frame executor and 65.0% of that run is inside
+        // `run_frame_call`. ⚠️ Its 6.6% SELF time understates it: `Value::set_vu` is
+        // NOT inlined here, so it appears as its own frame under this function and
+        // its leaf samples (12.8%) land in this function's INCLUSIVE time instead —
+        // ~19% of the run is in the machinery the fast arm removes, which is what
+        // makes a 15.6% wall-clock win arithmetically possible. Per bit `set_vu`
+        // pays a length check, a growth branch and two read-modify-writes.
+        //
+        // ⚠️ The `else` is the pre-slice loop VERBATIM, and it is not dead: IEEE
+        // §11.5.1 DROPS the out-of-range bits of a part-select, which is what the
+        // per-bit `bp >= 0 && bp < net_w` test implements. A dynamic index can put
+        // the window partly or wholly outside the net (`i = -2; t[i +: 8] = …`,
+        // `i = 28` on a 32-bit net), and both oracles keep the untouched bits — so
+        // the gate is the RANGE, not the shape.
+        //
+        // ⚠️⚠️ `copy_bits` may NOT be used here: it OR-merges into a destination it
+        // requires to be zero, and `cur` is the slot's current value. `8'hF0`
+        // receiving `8'h0F` would read `8'hFF`. `replace_bits` clears the window
+        // first and then reuses that same word-parallel copy.
+        if let Some(off) = crate::eval::window_in_range(lsb, width, net_w) {
+            debug_assert_eq!(cur.width, net_w, "frame slot narrower than its net");
+            crate::eval::replace_bits(&mut cur, off, &piece, 0, width);
+        } else {
+            for k in 0..width {
+                let bp = lsb + k as i64;
+                if bp >= 0 && (bp as u32) < net_w {
+                    let (bv, bu) = piece.get_vu(k);
+                    cur.set_vu(bp as u32, bv, bu);
+                }
             }
         }
         self.frame_slot_write(fidx, auto, slot, cur);

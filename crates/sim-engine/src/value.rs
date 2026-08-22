@@ -850,6 +850,16 @@ fn fill_bits(val: &mut [u64], unk: &mut [u64], lo: u32, hi: u32, fv: u64, fu: u6
     }
 }
 
+impl Value {
+    /// Zero `w` bits of BOTH planes starting at bit `lo`, word-parallel. The
+    /// window-clear half of `eval_core::replace_bits`; `fill_bits` already owns
+    /// the word arithmetic, so this is that function with a zero fill.
+    #[inline]
+    pub(crate) fn clear_bits(&mut self, lo: u32, w: u32) {
+        fill_bits(&mut self.val, &mut self.unk, lo, lo.saturating_add(w), 0, 0);
+    }
+}
+
 /// Low mask over `width` bits in a single u64 (width ≤ 64 usage).
 #[inline]
 pub(crate) fn low_mask(width: u32) -> u64 {
