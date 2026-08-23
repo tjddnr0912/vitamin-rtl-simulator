@@ -56,13 +56,21 @@ module tb;
 	initial begin
 		got = $value$plusargs("N=%d", cycles);
 		if (got == 0) cycles = 1500000;
+		// The program MUST store: `mem_wdata` is the only path by which a computed
+		// register value reaches the bus, and the bus is all the digest can see.
+		// An earlier version looped on adds alone — and mutating the core's adder
+		// (`reg_op1 + reg_op2` -> `+ 1`) left the digest BYTE-IDENTICAL, because
+		// nothing it computed was ever observable. The digest was a program-counter
+		// trace wearing the name of a design check.
 		for (i = 0; i < 256; i = i + 1) mem[i] = 32'h00000013; // nop
 		mem[0]  = 32'h00100093; // addi x1, x0, 1
 		mem[1]  = 32'h00200113; // addi x2, x0, 2
-		mem[2]  = 32'h002081b3; // add  x3, x1, x2
+		mem[2]  = 32'h002081b3; // add  x3, x1, x2      <- loop head
 		mem[3]  = 32'h00318233; // add  x4, x3, x3
 		mem[4]  = 32'h004202b3; // add  x5, x4, x4
-		mem[5]  = 32'h00000063; // beq  x0, x0, 0  (loop back)
+		mem[5]  = 32'h04502023; // sw   x5, 64(x0)      <- x5 reaches mem_wdata
+		mem[6]  = 32'h005080b3; // add  x1, x1, x5      <- state carried across laps
+		mem[7]  = 32'hfe000ce3; // beq  x0, x0, -8      <- back to mem[2]
 		resetn = 0;
 		repeat (4) @(posedge clk);
 		resetn = 1;

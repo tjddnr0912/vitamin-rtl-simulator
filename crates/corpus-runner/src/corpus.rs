@@ -216,7 +216,7 @@ pub static CORPUS: &[Workload] = &[
         files: &["tbd.v", "src/picorv32.v"],
         data: &[],
         plusargs: &["+N=400000"],
-        digest: "DIGEST=8bdb7a2fb9b56280",
+        digest: "DIGEST=68d30f61bf9bf1d4",
         expect: Expect::Runs { exit: 0 },
         // Not verilator: picorv32's register file starts uninitialised, so the design
         // genuinely depends on 4-state semantics and verilator's 2-state

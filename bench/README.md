@@ -34,6 +34,12 @@ be committed by accident.
 3. **One `DIGEST=` line, accumulated over the whole run.** Not final state: a
    final-state comparison is blind to a divergence the design later overwrites.
 4. **Deterministic and self-terminating** — explicit `$finish`, fixed seeds, watchdog.
+5. **The digest must move when the design changes.** Mutate one line of the upstream
+   RTL and re-run: if the digest survives, the workload is not gating anything and
+   looks exactly like one that is. `picorv32` failed this — its program never stored,
+   so nothing it computed reached the bus, and inverting the core's adder left the
+   digest byte-identical. Beware dead mutations: in the `verilog-ethernet` loopback
+   TX and RX share one `lfsr`, so a CRC change cancels at both ends.
 
 ## Refusals are part of the corpus
 

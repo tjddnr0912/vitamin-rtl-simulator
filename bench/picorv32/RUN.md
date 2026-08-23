@@ -8,7 +8,7 @@
 | Clone | `bench/picorv32/src/` — verified byte-identical to upstream at that SHA |
 | Top | `tb` in `tbd.v` (written here, not upstream) |
 | Oracle | iverilog 13.0 — **not verilator** (see below) |
-| Expected | `DIGEST=8bdb7a2fb9b56280` |
+| Expected | `DIGEST=68d30f61bf9bf1d4` |
 
 ## Two testbenches, on purpose
 
@@ -42,16 +42,32 @@ is one 256-word memory and a 6-instruction loop, so wall time is linear in N.
 
 | tool | median | vs iverilog |
 |---|---|---|
-| iverilog 13.0 | 6.682 s | 1.00x |
-| **vita** (one-shot) | **4.512 s** | **1.48x faster** |
+| iverilog 13.0 | 7.046 s | 1.00x |
+| **vita** (one-shot) | **4.888 s** | **1.44x faster** |
 
 Three timed samples, interleaved, first round discarded. The cross-corpus table —
 and the only place the whole set is quoted together — is
 `docs/study/03-workload-corpus.md`.
 
+## The program has to STORE
+
+The first version of this testbench ran a loop of `addi`/`add`/`beq` and nothing else.
+It looked fine — deterministic, cycle-resolution, agreed with iverilog. It was also
+**completely insensitive to the core**: mutating picorv32's adder
+(`reg_op1 + reg_op2` -> `+ 1`) left the digest **byte-identical**, because no computed
+register value ever reached the memory bus, and the bus is all the digest can see.
+The digest was a program-counter trace wearing the name of a design check.
+
+The program now stores `x5` on every lap and carries `x1` across laps, so ALU results
+flow out on `mem_wdata`. The same mutation now moves the digest. Verify with:
+
+```sh
+sed -i '' "1240s/reg_op1 + reg_op2/reg_op1 + reg_op2 + 32'd1/" <copy>/picorv32.v
+```
+
 ## Verilator is NOT an oracle here
 
-`verilator --binary --timing` produces `DIGEST=17b6f447736ac50d`, which is not a
+`verilator --binary --timing` produces `DIGEST=d1a61ec37f37e3a8`, which is not a
 disagreement about picorv32 — it is a different design. The register file starts
 uninitialised and the core reads x from it, so this workload genuinely depends on
 4-state semantics that verilator's 2-state model approximates away. iverilog and vita

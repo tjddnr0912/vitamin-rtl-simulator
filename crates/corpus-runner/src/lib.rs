@@ -25,6 +25,15 @@
 //!    differential gate on a machine that has no oracle installed (CI has none).
 //! 4. **Deterministic and self-terminating.** Explicit `$finish`, fixed seeds, and a
 //!    watchdog, so a workload can never hang the harness.
+//! 5. **The digest must MOVE when the design changes.** A digest that survives a
+//!    mutation of the RTL is not gating anything, and it looks exactly like one that
+//!    is. `picorv32` failed this: its program was a loop of adds that never stored,
+//!    so no computed value ever reached the bus the digest watches, and inverting
+//!    the core's adder left the digest byte-identical. Every workload has since been
+//!    checked by mutating one line of its upstream RTL — but note that a *symmetric*
+//!    mutation can be dead for an honest reason (in the `verilog-ethernet` loopback,
+//!    TX and RX share one `lfsr` instance, so changing the CRC polynomial changes
+//!    both ends and cancels; the RX-side datapath mutation moves it).
 
 #![forbid(unsafe_code)]
 
