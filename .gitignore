@@ -8,12 +8,41 @@ CLAUDE.md
 # generated simulation output
 *.vcd
 
-# Phase-1 benchmark designs — third-party RTL fetched for LOCAL measurement only.
-# Never redistributed: not committed, not packaged. Each design keeps its upstream
-# license in place under bench/<name>/. See docs/study/01-interpreted-vs-compiled.md.
-/bench/*
-# ...except this one: bench/keccak is OUR OWN RTL (see its README), and the doc-18
-# round-26 three-tier measurement is only reproducible if it ships.
-!/bench/keccak/
-/bench/keccak/*.vvp
-/bench/keccak/obj_dir*/
+# Workload corpus (crates/corpus-runner · docs/study/03-workload-corpus.md).
+#
+# Two things live under bench/ and they are treated oppositely.
+#
+#   THIRD-PARTY RTL is never redistributed — not committed, not packaged. Each design
+#   keeps its upstream licence in place and is cloned at a PINNED SHA into
+#   bench/<name>/src by `corpus-runner fetch --run`.
+#
+#   THE HARNESS is committed: testbenches, file lists, firmware images and RUN.md are
+#   work product of this repository. Excluding them was a real defect — a pinned SHA
+#   reconstructs the upstream RTL but not the thing that produced the digest, so the
+#   corpus was reproducible on exactly one machine and reported eight regressions
+#   anywhere else.
+/bench/**
+!/bench/**/
+# ...but never descend into a clone or a build directory.
+/bench/*/src/
+/bench/*/obj_dir*/
+# The harness, by extension. Anything not listed here stays ignored, so a stray
+# binary or scratch probe cannot be committed by accident.
+!/bench/*/tb*.v
+!/bench/*/tb*.sv
+!/bench/*/files.txt
+!/bench/*/RUN.md
+!/bench/README.md
+!/bench/*/README.md
+!/bench/*/run.sh
+!/bench/*/prepare.sh
+!/bench/*/*.py
+# ibex is NOT a corpus workload — iverilog 13 cannot parse it, so there is no oracle
+# (ROADMAP §3 ⑤). The local tree is kept for reproduction; none of it is committed.
+/bench/ibex/
+# NOT firmware images. `blinky.hex` is byte-identical to serv's own sw/blinky.hex and
+# `prog.hex` is extracted from biriscv's test.elf — both are third-party content, so
+# they are fetched or regenerated (bench/<name>/prepare.sh), never committed.
+# bench/keccak is OUR OWN RTL (see its README) and ships whole.
+!/bench/keccak/*.sv
+!/bench/keccak/*.py

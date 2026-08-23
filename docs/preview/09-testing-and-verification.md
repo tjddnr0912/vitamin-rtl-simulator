@@ -242,6 +242,24 @@ QUIRK (expected): t=500 signal=tb.bus
 
 ---
 
+## ⚠️ `corpus-runner` 의 실제 용도가 바뀌었다 (2026-08-23 · §4.5.369)
+
+**이 절 아래에 적힌 컴플라이언스 코퍼스(`tests/corpus/` + `meta.toml` + exit 코드 분류)는
+구현되지 않았고, 앞으로도 그 형태로는 구현하지 않는다.** 그 자리를 **in-repo Rust 통합 테스트
+5,800여 건**이 이미, 그리고 더 직접적으로 차지했다 — `expect_codes` 로 assert 하려던 것을
+`assert!(err.contains("VITA-Exxxx"))` 가 하고, 골든 VCD 대신 바이트 동일성 핀이 있다. 스펙을
+되살리는 것은 그 테스트들을 파일 트리로 다시 쓰는 일이라 순손실이다.
+
+`crates/corpus-runner` 는 대신 **워크로드 코퍼스**가 됐다 — 허가적 라이선스 서드파티 RTL 을
+핀된 SHA 로 가져와 오라클이 찍은 다이제스트에 대조하고 벽시계를 재는 dev 도구다. `publish =
+false` 인 것도, dev/test 전용인 것도, 이름도 그대로다. 상세 = [study/03](../study/03-workload-corpus.md).
+
+이 절은 **역사 보존**을 위해 그대로 둔다. 아래의 정규화 규칙·메시지 코드 assert 원칙·
+`$error` strict 정책은 여전히 유효한 설계 판단이고, `vcd-diff`(역시 아직 stub)와 미래의
+차등검증 도구가 그것을 상속한다.
+
+---
+
 ## 컴플라이언스 코퍼스 구조
 
 ```

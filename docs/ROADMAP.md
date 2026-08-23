@@ -430,6 +430,53 @@
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
 
+> ### 🆕🆕 **워크로드 코퍼스가 연 여섯 줄** (정확성 다섯 + 사용성 하나 · §4.5.369 · 2026-08-23)
+>
+> 허가적 라이선스 서드파티 RTL **여덟**을 오라클로 고정해 훑은 결과다(`crates/corpus-runner`,
+> 상세 = [study/03](study/03-workload-corpus.md)). ⚠️ 이 다섯은 **우리 프로브가 아니라 남의
+> 코드**가 찾았고, 앞의 둘은 §2 큐에 **한 줄**로 있던 축이 실제로는 설계 셋을 막고 있었다는 뜻이다.
+> 우선순위는 위에서 아래로 — 위의 둘이 코퍼스 8 중 3 을 막는다.
+>
+> **① 문자열 상수 도메인이 리터럴 전용이다** (**2-오라클 — 축 자체에서**: `1 ? "RED" : "BLUE"` 를 iverilog·verilator 둘 다 `RED` 로 접는다 · **verilog-ethernet + serv 를 막는다**).
+> `elaborate/src/strings.rs::param_str_literal` 은 `StrLit`·`Paren` **두 팔뿐**이다. 그래서
+> `parameter SI = (S=="AUTO") ? "RED" : S;`(`lfsr.v` — Forencich IP 전 계열이 쓰는 관용구)와
+> 문자열 파라미터를 아래로 넘기는 `.RESET_STRATEGY(reset_strategy)`(servant SoC)가 **E3009** 다.
+> ⭐ **좁히기가 이미 끝났다**: `(S=="AUTO")` 정수 localparam · `parameter SI="RED"` · generate-if 의
+> 문자열 비교는 **셋 다 이미 정확**하고, 막힌 것은 **삼항 하나**다 — `1 ? "RED" : "BLUE"` 처럼
+> 조건이 리터럴이어도 거절한다. 즉 정수 도메인과 문자열 도메인이 **삼항에서 만나지 않는다**.
+> §4.5.364 의 *"구조적 지연의 값 fold 가 리터럴 전용이었다"* 와 **같은 모양**이므로 그 슬라이스의
+> 규율이 그대로 간다 — 도메인 순서는 **소비자**의 것이고 첫 도메인은 **return 이 아니라 fallback**
+> 이어야 한다([[domain-order-belongs-to-consumer]]).
+>
+> **② 정수 상수 도메인에 replication/concat 이 없다** (오라클 有 · **verilog-axi 를 막는다**).
+> `parameter S_THREADS = {S_COUNT{32'd2}};` 가 E3009 다(2×2 크로스바 한 대에서 E3009 54건 +
+> W3056 43건). AXI 인터커넥트의 per-port 파라미터 벡터 관용구라 이 IP 계열 전체에 걸린다.
+>
+> **③ `$fgetc`/`$value$plusargs` 류가 blocking 대입 rhs 에서만 산다** (2-오라클 · **darkriscv
+> 전체 SoC + serv 테스트벤치**). 진단이 술어를 그대로 읽는다 — *"직접 **blocking** 대입의 rhs 에서만
+> 지원"*. 실제로 막히는 두 형태: **논블로킹 쌍둥이** `UART_RFIFO <= $fgetc(fd);`(darkuart.v:303) 와
+> **조건식** `if (!$value$plusargs("N=%d", n))`(양 오라클 수용). 4줄 재현으로 확인 —
+> `c = $fgetc(fd)` 는 vita·iverilog 둘 다 65, `c <= $fgetc(fd)` 는 iverilog 66 / vita E3009.
+> ⚠️ 한쪽 가지에만 있는 가드 = [[branch-parity-before-new-traffic]] 그대로다.
+>
+> **④ unpacked 배열의 계층 원소 선택** (오라클 有 · serv). `dut.ram.mem[i] = …` 와
+> `$readmemh(f, dut.ram.mem)` 이 둘 다 E3009 다(*"a hierarchical element select is a deferred
+> follow-on"*). ⭐ **SoC 테스트벤치가 펌웨어를 싣는 정석 관용구**이고 serv 상류의 자체 벤치
+> (`servant_sim.v`)가 정확히 이 철자를 쓴다 — 후보를 늘릴수록 계속 나온다.
+>
+> **⑤ struct 타입 localparam 의 named assignment pattern** (**오라클 없음 → hand-IEEE**). ibex 의
+> `localparam exc_cause_t E = '{irq_ext: 1'b1, lower_cause: 5'd3};` 를 vita 는 E2002 로 거절하는데,
+> **iverilog 13 도 못 읽는다**(같은 줄에서 syntax error, positional 로 바꾸면 `net_scope.cc:449`
+> assertion 으로 **abort**). 그래서 ibex 는 코퍼스에서 빠졌다(계약 ② = 오라클 없는 워크로드는
+> 안 받는다). ⚠️ 다만 [[no-oracle-not-a-defer-reason]] — *"오라클이 없다"* 는 미루는 이유가 아니라
+> **LRM 에서 hand-IEEE 로 지으라**는 뜻이다. 현대 SV 코어(ibex·OpenTitan 계열)의 입구다.
+>
+> **⑥ (사용성) auto-top 이 미인스턴스화 루트를 전부 잡는다** — serv 파일 목록에서 vita 가
+> `tb`·`serv_rf_top`·`servile_rf_mem_if` **셋**을 top 으로 골라 전부 elaborate 해 진단이 3배로
+> 불어난다. `--top tb` 로 우회되지만, 서드파티 파일 목록에선 라이브러리 모듈이 섞여 오는 게
+> 정상이라 기본 동작이 실사용에서 시끄럽다.
+
+
 > 🆕 **지연 멀티드라이버의 wire 해석**(§4.5.364 곁수확 · **2-오라클** · E3001). `assign #(D) bus = en ? d : 1'bz;`
 > 를 둘 이상 겹쳐 쓰는 tri-state 버스 관용구가 **exit 1** 로 거절된다 — `check_whole_net_multidriver` 가
 > *"드라이버 중 하나라도 delayed 면 4-state wire 해석 대상이 아니다"* 로 엔진 자격(`md_nets`)을 그대로 비추기
@@ -812,26 +859,27 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,821 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.368) |
+| 게이트 | **5,845 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.369) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
 | **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ = §4.5.364~~ · ~~ⓑ = §4.5.365~~ · ~~ⓒ 64비트 unsigned = §4.5.366~~ 로 RESOLVED · 각각 잔여는 §2): ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
-| **2** | **§3 loud → correct-support 승격** | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 사다리를 올리는 유일한 방향 | §3 표에서 **오라클이 답하는 행**부터. ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) |
+| **2** | **§3 loud → correct-support 승격** — ⭐⭐ **2026-08-23 부로 이 트랙의 착수 순서는 워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 그리고 그 갭이 **실물 IP 를 막고 있다는 것이 처음으로 측정됐다** — 서드파티 여덟 중 **셋**이 거절되고 셋이 전부 **상수 도메인 한 축** | **①(문자열 삼항 · 2-오라클)이 첫 표적** — 혼자 **verilog-ethernet + serv 둘**을 열고, 좁히기가 이미 끝나 있다(`param_str_literal` 이 `StrLit`/`Paren` 두 팔뿐이고 막힌 건 **삼항 하나**). 다음이 **②**(`{N{…}}` = verilog-axi), 그다음 **③**(`$fgetc`/`$value$plusargs` 의 blocking-only 술어 · 4줄 재현). ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) — ⑤ ibex 가 그 경우다 |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
-| **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정) — keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 그게 vita 의 **유일한 패배**(iverilog 대비 0.41×→0.50×)다 · ⚠️ **arena 가 진짜 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0` — `wprog.rs:441` 게이트는 오늘 죽은 코드), `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데 **frame local 엔 슬롯이 없다** ⇒ 65% 를 컴파일 레인으로 보내려면 frame local 에 arena 슬롯이 필요하다(6–10주 · 상한 2.33×) · 그 전에 bounded 한 조각부터: §4.5.367 이 part-select 쓰기로 **−15.6%**, §4.5.368 이 no-op `mask_top` 제거로 **keccak_f_arr −11.1% · keccak_f −13.2%** 를 가져갔다(누적 keccak_f_arr **4.53 → 3.34 s**) · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 picorv32+keccak 3종의 single-core 실측을 확보하는 것이 열린 항목이다 |
+| **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정 · **§4.5.369 워크로드 코퍼스로 재가격**) — ⚠️⚠️ **코퍼스가 그림을 양방향으로 바꿨다**: 남이 쓴 RTL 다섯에서 vita 는 iverilog 대비 **기하평균 1.61×** 로 앞선다(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.48 · darkriscv **0.78**) — *"iverilog 와 동률"* 은 **우리가 쓴 keccak 두 설계**가 만든 그림이었고, 그 둘은 우리에게 유리한 벤치가 아니라 **가장 어려운 벤치**였다(빼면 1.30 → **1.61**) · ⭐ 표적은 여전히 frame 레짐이다: keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 **0.53× 로 코퍼스 최악**이다 · ⚠️ **다만 지는 둘의 공통점은 아직 안 쟀다** — `keccak_f_arr` 는 호출마다 25원소 배열을 짓고 `darkriscv`(0.78×)는 그런 게 없다. **다음 성능 슬라이스의 첫 계측은 darkriscv 여야 한다**(우리가 안 쓴 설계이고, 지는 이유가 아레나 가설과 다를 수 있다) · ⚠️ **arena 가 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0`), `WProg::run` 은 `arena.buf[slot]` 을 읽는데 **frame local 엔 슬롯이 없다**(6–10주 · 상한 2.33× — ⚠️ 그 2.33 은 **keccak_f_arr 하나**에서 나온 수다) · bounded 조각 둘이 이미 수확: §4.5.367 part-select 쓰기 **−15.6%**, §4.5.368 no-op `mask_top` 제거 **keccak_f_arr −11.1% · keccak_f −13.2%** · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 코퍼스 single-core 실측을 확보하는 것이 열린 항목이다 |
 | **4b** | **옛 성능 후보**(이미 지어 둔 빠른 경로를 안 부르는 자리 + 델타당 도는 O(설계) 스캔)(⚠️ **2026-08-21 재규정 · 2회 수확**) | ⭐ **§4.5.351(−3.9%) → §4.5.352(−10.5%)** 로 두 번 연속 답이 나왔다. 표적은 코드젠도 스케줄러 재작성도 아니라 **"증명해 놓고 버린 자리"**(플랫 store 3리전 = 블로킹·NBA·settle, **셋 다 완료**)와 **"델타당 함수 안의 O(설계 크기) 스캔"**(§4.5.352 ⓐ = 278.6M 회 헛돌기) 이다 | ⚠️ 옛 문구의 "스케줄러 29%" 는 §4.5.352 이후 더 줄었다 — `settle_cont_assigns` self **8.83% → 1.62%** 실측(분모 맞춘 6 s 창). **다음 후보(POST 프로파일 실측)**: ⓐ `k_schedule_nba_scalar` **4.3%**(NBA 스케줄마다 `chunks[0].clone()`) ⓑ `propagate` **2.5%**(델타마다 `Vec` 셋 — 옛 D6 표적, **크기 미측정**) ⓒ 할당자 잔여. ⛔ `drain_range_diags` 1.8% 는 **이미 재고 기각**(§5.1-bb — 비용은 문장당 호출 자체) · ⚠️ 착수 전 **나눗셈 필수**(rules: 나눗셈은 게이트가 아니라 탐색) |
 | **5** | ⛔ **D2-b(저장소 2-state)** | **거부됨** — 트랩이 사다리 하강이다 | 재개하려면 **정확성 거래 없는 방법**을 먼저 찾아야 한다 |
 | — | ⛔ **cycle-based 모드** | **거부됨 2026-08-20 · doc-20 M4** — picorv32 비율 **10.32** vs 게이트 1.84(미달 5.6배). 조합 블록이 사이클당 **0.097 회**만 평가되므로 이벤트 구동이 이미 조합 작업의 90.3% 를 건너뛴다 ⇒ cycle-mode 는 **10 배 더 일하고 0.84 배 아낀다** | 재진입 = 블록당 평가/사이클 **≥1** 인 코퍼스가 실수요로 나타날 때 |
 | **6** | ⛔ **코드젠 재착수** | **기각됨** — 경계가 ~38%, 천장이 11% | 재개 조건 **하나**: leaf 로드와 2-state 산술을 **생성 코드 안에 인라인**(호출 0)하고 **의미를 두 번 적지 않을** 방법 |
 
-> ⚠️ **`bench/sha256` 는 빈 디렉터리다**(2026-08-21 §4.5.352 리뷰 실측 — `.`/`..` 뿐). 성능 회귀 스윕에
-> *"keccak·sha256·picorv32"* 라고 적은 문장들은 실제로는 **keccak·picorv32 둘**이다. SHA-256 커버리지는
-> `crates/sim-engine/tests/perf_baseline.rs` 의 `SHA256_INLINE`/`SHA256_FUNCS` 상수에만 있다
-> (그리고 그 하네스의 **10 형태 중 9 는 연속대입이 0개** — cont-assign 축 변경은 거기서 원래 도달 불가).
+> ~~⚠️ **`bench/sha256` 는 빈 디렉터리다**(2026-08-21 §4.5.352 리뷰 실측).~~ **해소 2026-08-23 (§4.5.369)** —
+> secworks/sha256 이 핀된 SHA 로 들어왔고 벤치는 이제 **워크로드 코퍼스 10개**다(`corpus-runner list`).
+> 성능 회귀 스윕에 *"keccak·sha256·picorv32"* 라고 적은 옛 문장들은 그때는 실제로 **둘**이었다.
+> `crates/sim-engine/tests/perf_baseline.rs` 의 `SHA256_INLINE`/`SHA256_FUNCS` 는 별개로 남아 있고,
+> 그 하네스의 **10 형태 중 9 는 연속대입이 0개** 라는 제약도 그대로다.
 
 ### ★★ §2 다음 하나 — 착수 브리핑 (**ⓐ = §4.5.364 · ⓑ = §4.5.365 · ⓒ = §4.5.366 으로 완료**)
 

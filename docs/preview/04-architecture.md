@@ -80,7 +80,7 @@ preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명
 
 ## Cargo 워크스페이스 / 크레이트
 
-17개 크레이트(프로덕션 15개 + dev/test 전용 2개 — `corpus-runner`·`vcd-diff`, publish=false)가 단일 cargo workspace를 구성한다. 각 크레이트는 단일 책임 + 명확한 인터페이스를 가져 독립적으로 테스트 가능하다. 아래 표는 프로덕션 15개다.
+17개 크레이트(프로덕션 15개 + dev/test 전용 2개 — `corpus-runner`[워크로드 코퍼스, study/03]·`vcd-diff`, publish=false)가 단일 cargo workspace를 구성한다. 각 크레이트는 단일 책임 + 명확한 인터페이스를 가져 독립적으로 테스트 가능하다. 아래 표는 프로덕션 15개다.
 
 | 크레이트 | 책임 | 의존 |
 |---|---|---|

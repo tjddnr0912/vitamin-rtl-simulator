@@ -49,7 +49,7 @@ members = [
     "crates/cli",             # 드라이버 바이너리: vita(원샷) + vcmp/velab/vrun(단계별)
     # ── dev/test 전용 (publish=false, 배포 multicall·설치 대상 아님 — 위 15개 프로덕션 그래프와 별개) ──
     "crates/vcd-diff",        # 정규화 VCD diff (차등검증 — 09)
-    "crates/corpus-runner",   # 컴플라이언스 코퍼스 러너 (09)
+    "crates/corpus-runner",   # 워크로드 코퍼스 러너 (study/03 · 원래 계획은 09 의 컴플라이언스 코퍼스였다)
 ]
 resolver = "2"
 

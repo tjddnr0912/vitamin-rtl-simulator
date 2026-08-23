@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 301건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 302건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.369` **워크로드 코퍼스 — 남이 쓴 RTL 로 값을 매기기** · 성능 판단이 오래 설계 **둘** 위에 서 있었다(picorv32 · **우리가 재려고 쓴** keccak) — 허가적 라이선스 서드파티 **여덟**을 핀된 SHA 로 가져와 오라클로 고정 · ⭐⭐ **첫 수확이 성능이 아니라 정확성이었다**: 여덟 중 **셋이 거절**되고 셋이 **전부 같은 축**(상수 도메인 파라미터 폴딩 — 문자열 삼항[verilog-ethernet] · 문자열 Ident[serv] · 정수 replication[verilog-axi])이며, **우리 프로브에서 나온 §2 큐엔 그 축이 한 줄**로 있었다 ⇒ 우리 프로브는 우리가 의심하는 것을 찾고 남의 RTL 은 **우리가 의심하지 않는 것**을 찾는다 · ⭐ 최소 재현이 축을 삼항 하나로 좁혔다(`(S=="AUTO")` 정수 localparam · `parameter SI="RED"` · generate-if 문자열 비교는 **셋 다 이미 정확**하고 `1 ? "RED" : "BLUE"` 만 E3009 · **iverilog·verilator 둘 다 RED**) · 그 밖에 `$fgetc`/`$value$plusargs` 가 **blocking 대입 rhs 에서만** 산다(논블로킹 쌍둥이·조건식 · 4줄 재현 · [[branch-parity-before-new-traffic]]) · `$readmemh(f, dut.ram.mem)` 계층 원소 선택 · **ibex 는 오라클이 없다**(iverilog 13 이 struct 타입 localparam 에서 syntax error, positional 로 바꾸면 `net_scope.cc:449` **abort**) · **성능은 양방향으로 뒤집혔다**: 서드파티 다섯 기하평균 **1.61×**(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.48 · darkriscv **0.78**), 도는 일곱 전체는 1.30 ⇒ ⭐ **우리가 쓴 keccak 둘이 평균을 끌어내리고 있었다 = 유리한 벤치가 아니라 가장 어려운 벤치** · ⚠️ 지는 둘(keccak-arr 0.53 · darkriscv 0.78)의 **공통점은 아직 안 쟀다** — 다음 성능 계측은 darkriscv 부터 · 도구 = `crates/corpus-runner`(stub → 실물 · **의존성 0** · 매니페스트는 Rust `const` 테이블 · 거절이 **일급 상태** `Expect::Refused{diag}` 라 known-gap / DRIFTED / PROMOTED / **loud→silent-wrong REGRESSION** 을 구분) · ⚠️⚠️ **적대 soundness 렌즈 BLOCKING 넷, 넷 다 도구가 자기 목적을 배신하는 모양** — ⓐ ⭐⭐ **`Grade::Promoted` 가 도달 불가능**: `expect_exit` 를 `expect` **옆의 자유 필드**로 뒀고 거절 행 셋은 *거절하면서 내는* 코드라 `1` 이었다 ⇒ 갭이 닫히면 vita 는 0 으로 나가 동등 비교가 깨지고 **"was loud, now crashes" 빨간불**이 된다 = **코퍼스가 존재하는 이유인 그 사건이 거짓 문구로 실패 보고** ⇒ 값을 타입 안으로 = **`Expect::Runs { exit }`**(거절 행엔 적을 자리가 없다) ⓑ **여덟 행이 다른 기계에서 복원 불가**: 테스트벤치가 전부 1st-party 인데 `bench/*` 가 통째로 gitignore 였고(핀된 SHA 는 **상류 RTL** 을 복원하지 **하네스**를 복원하지 않는다) 존재 판정이 `cwd.is_dir()` 라 `fetch` 직후 **실행되고** `cannot read 'tb.v'` 가 **"newly refused" 회귀 여덟 개**로 채점된다 ⇒ gitignore 를 **allow-list** 로 뒤집어 하네스 30파일 커밋 + 존재 판정을 **소스와 런타임 데이터**로 · 곁가지로 펌웨어 둘이 실은 상류 것이라 `prepare.sh` 재생성/클론 참조로 ⓒ **파이프를 안 비웠다** — `verilog-axi` 는 2×2 크로스바 하나로 **19,238 B** 를 쏟고 macOS 파이프는 16 KiB 시작이라 넘기면 교착 ⇒ 예산 600초 후 `Timeout` = **정직하게 거절하는 설계를 "was loud, now hangs" 로 무고** ⇒ 양 파이프를 **스레드로** 드레인 + stdout/stderr 분리 ⓓ `cargo fmt --check` 실패 · ⚠️ NIT 열셋 중 ⭐⭐ **내가 ENGINEERING_RULES 에 ★★★ 로 적은 *"호출자가 순차 측정을 할 방법이 없다"* 가 거짓**(`measure(&jobs[0..1])` 두 번이면 순차) — 하필 *"규칙은 타입이어야 한다"* 를 주장하는 문단에서 타입이 아닌 것을 타입이라 불렀다 ⇒ 정정, 그리고 그게 **진짜로 가능했던** 자리는 ⓐ 였다 · 비결정성 검출기가 `Grade::Ok` 뒤에 갇혀 **죽은 코드**(다이제스트가 갈리면 `Mismatch` 로 은퇴하므로 도달 불가) ⇒ 흔들리는 툴이 **일관되게 틀린 툴로** 보고되던 것 수정 · `--reps 3` 이 샘플 **둘**을 주던 것(“median” 이라 적힌 평균) ⇒ `--reps` = **타임드 샘플 수** · **제품 코드 변경 0** · 5,821 → **5,845 green**(러너 16 + 매니페스트 위생 8) · format 29 불변 · 상세 = [study/03](study/03-workload-corpus.md)
 - `4.5.368` **canonical `Value` 를 재수립하지 말고 주장하라 — 그리고 "스위트가 전부 통과했다" 는 증명이 아니다** · `Value::resize` 의 no-op 팔(`new_width == self.width`)이 `mask_top()` 을 무조건 불러 **이미 성립하는 불변식을 재수립**하고 있었다(평면이 정확히 `nwords(width)` 워드 · top 워드에 `width` 위 비트 없음) · ⭐ 자리 특정 = 콜 귀속: `mask_top` self **15.9%** 중 **40.6% 가 바로 이 호출** ⇒ ≈6.5% · ⭐⭐ 호출부 **31곳 중 30곳은 생산자**(raw 워드에서 값을 만들며 불변식을 *세운다*) — 이 하나만 **소비자**였다 ⇒ 호출을 `debug_assert!(is_canonical())` 로 바꿔 **부담을 생산자에게** 옮겼다 · ⚠️⚠️ **적대 soundness 가 그 불변식을 엔진으로 반증했다(BLOCKING)**: `eval/sysfunc.rs` 의 `$realtobits` 가 `v.width = 64` 를 찍으면서 평면은 **인자 폭** 그대로 둔다 ⇒ `$realtobits(<128비트>)` 가 non-canonical 을 만들어 **디버그 빌드를 패닉**(release 는 PRE 와 동일하게 정상 = correct→loud, 사다리의 금지 방향) — ⭐⭐ 내가 증거로 삼은 *"5,812 테스트에서 발화 0"* 은 **증명이 아니라 커버리지 진술**이었고, 제거된 방어 검사에는 **생산자 전수 census** 가 필요하다는 것이 이 슬라이스의 교훈 · 고침은 그 생산자 한 줄(`v.mask_top()`) + 곁가지로 differential 이 찾은 `arena.rs` 의 zero-width OOB arm(도달 불가지만 불변식이 **side condition 에 기대면 안 된다**) · ⚠️ differential 은 **~840 PRE/POST 쌍**(assert 살아있는 debug 로 패닉 사냥 · >128비트 Heap·dyn/queue/assoc·class·struct·string·`$readmem`·force/release·real↔int·CRV·SVA·fork·VCD/FST·계층 쓰기·OOB 배열 읽기)에서 **패닉 0 · 차분 0** — 두 렌즈의 상보성이 실증된 자리(differential 이 CLEAN 인데 soundness 가 code-path 로 잡았다) · ⚠️ NIT: 성능 6.5% 귀속과 11–13% 벽시계는 **두 측정**이고 나머지 갭은 이론(호출 제거로 `Value` 가 escape 하지 않아 레지스터에 남는다) · **순차 A-then-B 타이밍이 picorv32 에서 가짜 +12.5%** 를 냈다 ⇒ PRE/POST **인터리브** · keccak_f_arr **3.75 → 3.34 (−11.1%)** · keccak_f **1.92 → 1.66 (−13.2%)** · flat +0.4% · picorv32 −0.9%(노이즈) · anchor·VCD·FST 바이트 동일 · 5,812 → **5,821 green** · format 29 불변
 - `4.5.367` **frame part-select 쓰기의 per-bit 루프 — 그리고 S0 가 arena 를 정확히 가격했다** · ⭐ 착수는 측정이었다(S0): keccak_f_arr 런타임의 **65.0%** 가 `run_frame_call` 안(콜 귀속 · `/usr/bin/sample` 5,318 작업 샘플)이고 run.json 이 `able 1/4 · frame_bodies 3`(flat 은 `2/4 · 0`) — **15.8× 차이가 frame body 3개와 정확히 상관** · ⚠️⚠️ **계측이 리뷰의 메커니즘 주장을 반박**했다: `wprog.rs:441` 의 frame-local decline 게이트는 keccak·picorv32 둘 다에서 **한 번도 발화하지 않는다**(`frame_decline=0`) — `wprog::compile` 이 **모듈 프로세스 body 에만** 호출되기 때문이고, `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데 frame local 엔 슬롯이 없다 ⇒ **arena 가 진짜 선행조건**(6–10주 · 상한 2.33×)임이 가격됐고 이 슬라이스는 그 65% 안의 **bounded 한 조각**만 가져갔다 · 결함 = frame slot(과 dyn-array 원소)의 part-select 쓰기가 값을 **한 비트씩** 예치하는데 그 루프가 동시에 IEEE §11.5.1 의 **범위 밖 DROP** 을 구현한다 ⇒ 창이 net 안에 완전히 들어갈 때만 word-parallel `replace_bits`, **else 는 pre-slice 루프 verbatim** · ⚠️⚠️ **`copy_bits` 를 그대로 쓰면 silent-wrong**: 그 함수는 대상 범위가 **0이어야** 하고 비트를 **OR-merge** 하는데 part-select 쓰기의 대상은 슬롯의 **현재 값**이다(`8'hF0` + `8'h0F` = `8'hFF`) ⇒ `clear 후 copy_bits` = `replace_bits` · 적대 2렌즈 **BLOCKING 0** · differential 246칸 + 200칸 퍼즈에서 **PRE≡POST**, iverilog 159/159 · soundness 가 clear 창과 write 창이 **정확히 같음**을 구성으로 증명 · ⚠️ NIT 넷 반영: ⓐ **리뷰 스냅샷이 debug 바이너리였다**(성능 슬라이스인데 — soundness 가 +88% picorv32 "회귀" 를 재다가 발견) ⓑ `replace_bits` 는 `copy_bits` 가 `dst.val[dw]` 를 **직접 인덱싱**하므로 `set_vu` 와 달리 **할당을 늘리지 않는다**(문서화 + `debug_assert`) ⓒ 게이트가 두 파일에 **손으로 복사**돼 있었다 ⇒ `window_in_range` 한 철자(§4.5.359 모양, 여섯이 되기 전 둘에서 잡음) ⓓ 성능 주장의 **메커니즘**: `set_vu` 가 인라인되지 않아 self 6.6% 가 아니라 **leaf 12.8% 를 더한 ~19%** 가 표적이다 · **keccak_f_arr 4.49 → 3.79 s = −15.6%**(release · best-of-3 · 첫 런 폐기) · keccak_f/flat/picorv32 **불변** · 4-way anchor 불변 · examples+bench **8/8 바이트 동일** · 5,806 → **5,812 green** · format 29 불변
 - `4.5.366` **상수 도메인이 정확히 64비트에서 unsigned 를 잃는다 — 그리고 비교를 고치자 시프트가 드러났다** · `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / 두 오라클 **111** · ⭐ **63비트 쌍둥이와 런타임 철자는 이미 정확**했다 = 내부 판별자, 상수 도메인만의 결함 · 근인 = `eval_const_env_at` 이 값을 문맥 폭·부호로 **마스킹해 정규화**하는데 `masking = ctx_w > 0 && ctx_w < 64` 이라 **정확히 64에서 항등** ⇒ unsigned 값이 최상위 비트를 쥔 채 남고 **부호 민감 연산**이 음수로 읽는다 · ⭐ 규칙은 하나(`const_i64_is_unsigned_at`)이고 폭 인식 walk 의 **소비자 넷**이 그것을 묻는다: 순서비교(피연산자 쌍의 `(w, cs)`) · `/`·`%`(둘러싼 문맥) · 두 시프트 · leaf 재해석 · ⚠️⚠️ **적대 soundness 렌즈가 BLOCKING 넷** — ⓐ ⭐⭐ **`>>>` 도 부호 민감**(§11.4.10: arithmetic 은 왼쪽 피연산자가 signed 일 때뿐이고 §11.6.1 이 이미 unsigned 로 변환한다)인데 안 덮었고, **비교 리다이렉트가 그 잠복 결함을 드러내** 14칸이 correct→silent-wrong 이 됐다(두 오라클은 declared-signed 왼쪽 피연산자에서도 logical 을 답한다) ⓑ `w >= 64` 는 **추측**이다 — >64 는 i64 가 이미 절단했고 두 방향이 서로 반대로 틀린다(carry 모양은 signed 읽기가, 뺄셈 모양은 unsigned 읽기가 맞다) ⇒ **`w == 64`** 로 좁힘, 형제 `const_unsigned_selfdet` 이 이미 그 자리에 선을 그어 두었다 ⓒ ctx≥64 에서 walk 가 **`leaf_into_ctx` 를 안 돈다** ⇒ 좁은 **signed** leaf 가 부호확장된 채 도착해 u64 경로가 그 확장을 크기로 읽는다(`logic signed [7:0] P=-100` 이 156 이 아니라 0xFFFF…FF9C 로 나눠졌고, 그 위에 세운 `$bits` part-select 폭이 **loud→silent-wrong**) ⇒ 그 문맥에서도 leaf 를 정규화 ⓓ clippy `double_parens` 로 `-D warnings` 게이트 실패 · 120칸 4-way(iverilog·verilator·PRE·POST) **오라클 분열 0 · ok→wrong 0 · wrong→ok 14 · wrong↔다른-wrong 0** · 33칸 census 비교 클래스 전부 해소 · 상수함수 본문의 `%` 는 −1 → **5**, `>>` 는 **전체 REJ(loud) → 정답** · bench+examples **8설계 `.velab` 바이트 동일** · 5,796 → **5,806 green** · format 29 불변
@@ -401,6 +402,115 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.369 — 워크로드 코퍼스: 남이 쓴 RTL 로 값을 매기기 (2026-08-23 · 5,845 green · format 29 불변 · **제품 코드 변경 0**)
+
+**한 줄**: 성능 판단이 설계 **두 개** 위에 서 있었다 — `picorv32`(서드파티)와 `bench/keccak`(**우리가
+재려고 쓴 것**). 허가적 라이선스 서드파티 **여덟**을 오라클로 고정해 훑으니 그림이 **양방향으로**
+뒤집혔고, 첫 수확은 성능이 아니라 **정확성**이었다.
+
+**왜.** §4.5.367 이 *"아레나 = 6–10주 · 상한 2.33×"* 라는 값을 매겼을 때 그 65.0% 도 2.33 도
+`keccak_f_arr` **하나**에서 나온 수다. 설계 하나에서 나온 천장은 **그 설계의 성질**이지 시뮬레이터의
+성질이 아니다.
+
+**방법 — 오라클 먼저, vita 나중.** 여덟 후보를 각각 독립 스카우트가 맡아 같은 순서를 밟았다:
+clone → 라이선스 → 자립 실행 구성 → **iverilog** → *그 다음에야* vita. vita 를 먼저 보면 거절당한
+구문을 피해 테스트벤치를 다시 쓰게 되고, 그렇게 만든 워크로드는 **vita 가 이미 할 줄 아는 것만**
+잰다. 지침에 그 문장을 그대로 넣었다 — *"vita 가 거절하거나 틀리는 설계는 네가 가져올 수 있는
+가장 값진 결과다. RTL 을 단순화·재작성·축소하지 마라 — 그건 측정을 파괴한다."*
+
+**정확성 수확 — 거절 셋이 전부 한 축.**
+
+| 설계 | 구문 | 도메인 |
+|---|---|---|
+| verilog-ethernet | `parameter SI = (S=="AUTO") ? "RED" : S;`(`lfsr.v`) | 문자열 삼항 |
+| serv | `.RESET_STRATEGY(reset_strategy)` | 문자열 Ident |
+| verilog-axi | `parameter S_THREADS = {S_COUNT{32'd2}};` | 정수 replication |
+
+앞의 둘은 **같은 함수**다 — `param_str_literal` 이 `StrLit`·`Paren` 두 팔뿐, 즉 문자열 상수
+도메인이 **리터럴 전용**이다(§4.5.364 의 *"구조적 지연의 값 fold 가 리터럴 전용"* 과 같은 모양).
+⭐ 최소 재현이 축을 **삼항 하나**로 좁혔다: `(S=="AUTO")` 정수 localparam · `parameter SI="RED"` ·
+generate-if 의 문자열 비교는 **셋 다 이미 정확**하고, `1 ? "RED" : "BLUE"` 처럼 조건이 리터럴이어도
+거절한다. iverilog·verilator **둘 다** `RED` 를 접는다 ⇒ 축 자체에 2-오라클.
+
+그 밖에 — `$fgetc`/`$value$plusargs` 류가 **blocking 대입 rhs 에서만** 산다(darkriscv SoC 의
+`UART_RFIFO <= $fgetc(fd)` · serv tb 의 `if (!$value$plusargs(…))` · 4줄 재현: `c = $fgetc(fd)` 는
+양쪽 65, `c <= $fgetc(fd)` 는 iverilog 66 / vita E3009) · `$readmemh(f, dut.ram.mem)` 계층 원소
+선택(SoC 벤치의 정석 관용구) · `$display("…",)` 널 인자(§17.1.1.2 가 허용) · **ibex 는 오라클이
+없다**(iverilog 13 이 `ibex_pkg.sv` 의 struct 타입 localparam 에서 syntax error, positional 로
+바꾸면 `net_scope.cc:449` assertion 으로 **abort**) ⇒ 코퍼스에서 뺐지만
+[[no-oracle-not-a-defer-reason]] 대로 hand-IEEE 대상으로 §3 ⑤ 에 남겼다.
+
+**성능 수확 — 양방향으로 뒤집혔다.**
+
+| | vita | iverilog | 비 |
+|---|---|---|---|
+| sha256 | 1.441 | 4.171 | **2.89×** |
+| biriscv | 4.967 | 9.315 | **1.88×** |
+| aes | 3.541 | 6.154 | **1.74×** |
+| picorv32 | 4.512 | 6.682 | **1.48×** |
+| keccak *(1st-party)* | 8.426 | 9.295 | 1.10× |
+| darkriscv | 9.187 | 7.194 | **0.78×** |
+| keccak-arr *(1st-party)* | 17.237 | 9.169 | **0.53×** |
+
+기하평균 **1.30×**(도는 일곱) · **1.61×**(서드파티 다섯). ⭐ **우리가 쓴 둘을 빼면 올라간다** —
+keccak 은 유리한 벤치가 아니라 **가장 어려운 벤치**였다. ⚠️ 지는 둘의 **공통점은 아직 안 쟀다**:
+`keccak_f_arr` 는 호출마다 25원소 배열을 짓고 `darkriscv` 는 그런 게 없다 ⇒ 다음 성능 계측의
+첫 표적은 **darkriscv**.
+
+**도구.** `crates/corpus-runner` 가 1줄 stub 에서 실물로. **의존성 0**(std 만 — 워크스페이스가
+`--locked` 로 3-OS 재현성을 지키는데 일 년에 몇 번 바뀌는 파일을 읽자고 파서를 들이는 건 값이 안
+맞는다) · 매니페스트는 Rust `const` 테이블 · **거절이 일급 상태**(`Expect::Refused { diag }`)라
+`known-gap`(초록 — 사다리가 작동 중) / `DRIFTED`(핀이 더는 설계를 설명 못 함) / `PROMOTED` /
+**`REGRESSION`(loud→silent-wrong)** 이 갈린다.
+
+**⚠️⚠️ 적대 soundness 렌즈 BLOCKING 넷 — 넷 다 도구가 자기 목적을 배신하는 모양이다.**
+
+- ⓐ ⭐⭐ **`Grade::Promoted` 가 도달 불가능했다.** `expect_exit` 를 `expect` **옆의 자유 필드**로
+  뒀고, 거절 행 셋은 vita 가 *거절하면서* 내는 코드라 `1` 이었다. 갭이 닫히는 날 vita 는 **0** 으로
+  나가 동등 비교가 깨지고 등급은 **`"was loud, now crashes"`** — **코퍼스가 존재하는 이유인 그
+  사건이, 거짓 문구로 실패 보고되게 배선돼 있었다.** `Grade::Promoted` 와 그 메시지가 통째로 죽은
+  코드. 고침 = 값을 타입 안으로, **`Expect::Runs { exit }`** ⇒ 거절 행엔 exit 코드를 **적을 자리가
+  없다**. (`aes` 도 같은 모양의 잠복 — 오늘 정답을 찍으며 exit 1 이라, 그 과잉-loud 를 고치면 행이
+  회귀로 뜬다.)
+- ⓑ **여덟 행이 다른 기계에서 복원되지 않았고, 그 실패를 vita 회귀로 채점했다.** 테스트벤치는 전부
+  1st-party 인데 `bench/*` 가 통째로 gitignore 였다 — 핀된 SHA 는 **상류 RTL** 을 복원하지
+  **하네스**를 복원하지 않고, 다이제스트를 만든 건 하네스다. 게다가 존재 판정이 `cwd.is_dir()` 라
+  `fetch` 가 `bench/<name>/src` 를 만드는 순간 `absent` 가 아니라 **실행**되고
+  `cannot read 'tb.v'` 가 `Refused` 로 읽혀 **"newly refused" 회귀 여덟 개**가 뜬다. 고침 둘 =
+  gitignore 를 **allow-list** 로 뒤집어(상류 클론·빌드 산출물만 제외) 하네스 30파일 커밋 + 존재
+  판정을 **소스와 런타임 데이터 파일**로. ⚠️ 곁가지로 펌웨어 둘이 실은 상류 것임이 드러났다
+  (serv `blinky.hex` 는 상류 `sw/` 와 바이트 동일 · biriscv `prog.hex` 는 상류 `test.elf` 추출)
+  ⇒ 커밋하지 않고 클론 참조 또는 `prepare.sh` 재생성.
+- ⓒ **파이프를 안 비웠다.** `try_wait` 폴링 후 `wait_with_output` 하는 흔한 모양은 워크로드가 파이프
+  버퍼를 넘기는 순간 **교착**한다(자식이 `write` 에서 막히니 안 끝나고, 부모는 안 끝났으니 안
+  읽는다) ⇒ 예산 600초를 다 쓰고 `Timeout`, `Expect::Refused` 행에서는 **`"was loud, now hangs"`**
+  — **정직하고 즉각적으로 거절하는 설계를 행업으로 무고한다.** 가설이 아니다: `verilog-axi` 는 2×2
+  크로스바 하나로 **19,238 바이트**를 stderr 로 쏟고 macOS 파이프는 16 KiB 로 시작한다(내 주석은
+  *"한 줄이라 버퍼 안쪽에 한참 못 미친다"* 고 적고 있었다). 고침 = 양 파이프를 **각자의 스레드로**
+  드레인 · 곁가지로 stdout/stderr 를 **분리**(다이제스트는 stdout, 진단은 stderr).
+- ⓓ `cargo fmt --all -- --check` 실패 — CI 게이트.
+
+**NIT 열셋 중 남는 셋.**
+
+- ⚠️⚠️ ⭐⭐ **내가 ENGINEERING_RULES 에 ★★★ 교훈으로 적은 *"호출자가 순차 측정을 할 방법이
+  없다"* 가 거짓이었다** — `measure(&jobs[0..1])` 를 두 번 부르면 그게 순차이고, 그게 바로 가짜
+  +12.5% 를 낸 모양이다. 인터리브는 **타입의 성질이 아니라 호출부의 성질**이었다. 하필
+  *"규칙은 타입이어야 한다"* 를 주장하는 문단에서 **타입이 아닌 것을 타입이라 불렀다**. 정정했고,
+  그게 **진짜로 가능했던** 자리는 ⓐ 다.
+- **비결정성 검출기가 죽은 코드였다** — `Grade::Ok` 뒤에 가둬 뒀는데 다이제스트가 갈리면
+  `Mismatch` 로 은퇴하므로 `Ok` 에 도달할 수 없다 ⇒ **흔들리는 툴이 일관되게 틀린 툴로** 보고된다.
+  이제 등급보다 먼저 본다.
+- **`--reps 3` 이 샘플 둘을 줬다**(라운드 셋 중 하나 폐기) — "median" 이라 적힌 평균이다 ⇒
+  `--reps` 를 **타임드 샘플 수**로 재정의(라운드 N+1).
+
+그 밖에 반영: `serv` 의 두 툴이 서로 다른 루트를 elaborate 하던 것(`-s tb` 추가) · 핀된 진단을
+**stderr 전체**에서 찾는다(verilog-ethernet 은 경고 24줄 뒤에 있어 emission order 에 의존하고
+있었다) · `.vvp` 가 핀된 상류 체크아웃 안에 떨어지던 것 · `--reps`/`--filter` 의 조용한 폴백 ·
+20 ms 폴링 → 2 ms.
+
+**게이트.** 5,821 → **5,845 green**(러너 16 + 매니페스트 위생 8) · clippy 0 · fmt 0 ·
+format_version **29 불변** · **제품 코드 변경 0**.
 
 #### 4.5.368 — canonical `Value` 를 재수립하지 말고 주장하라 (2026-08-23 · 5,821 green · format 29 불변)
 
