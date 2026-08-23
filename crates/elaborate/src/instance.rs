@@ -341,7 +341,9 @@ impl Elaborator<'_> {
                         // Unfoldable value = LOUD error (never a silent 0): a parameter
                         // bound to a wrong default poisons every downstream width with
                         // no trace (P0-5). 0 stays only as the post-error recovery value.
-                        let meta = self.param_decl_width(p);
+                        // A module-BODY parameter/localparam is not on the
+                        // instantiation override channel — the default binds.
+                        let meta = self.param_decl_width_unoverridden(p);
                         let folded = self.eval_param_init(&p.value, meta.map(|(w, _)| w));
                         // Wider than the i64 domain — see `wide_param_bits`. Reached
                         // only when the numeric fold DECLINED, so a wide declaration
@@ -359,7 +361,9 @@ impl Elaborator<'_> {
                             self.param_value_unfoldable("parameter", &p.name.name, &p.value);
                             0
                         });
-                        let v = self.coerce_param_value(v, p);
+                        // Same as the generate-scope twin: `meta` already encodes
+                        // that no override reached this body parameter.
+                        let v = self.coerce_param_value_with(v, meta);
                         let key = self.fq(&p.name.name);
                         // persistent copy for a hierarchical read (`dut.LP`) of a body
                         // parameter/localparam (mirrors the header path in bind_params).

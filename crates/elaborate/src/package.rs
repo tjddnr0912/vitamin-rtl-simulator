@@ -497,7 +497,8 @@ impl Elaborator<'_> {
                     let key = self.fq(&p.name.name);
                     saved.push((key.clone(), self.params.insert(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
-                    if let Some(m) = self.param_decl_width(p) {
+                    // A package constant has no override channel.
+                    if let Some(m) = self.param_decl_width_unoverridden(p) {
                         const_meta.insert(p.name.name.clone(), m);
                         // Make this param's meta visible to a LATER intra-package
                         // alias/expression (the ident/`const_expr_signed` arms read

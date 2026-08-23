@@ -63,7 +63,41 @@ impl ParamOverrides {
 
 impl Elaborator<'_> {
     pub(crate) fn param_decl_width(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
-        self.param_decl_width_opt(p, false)
+        self.param_decl_width_opt(p, false, false)
+    }
+
+    /// [`Self::param_decl_width`] for a declaration whose DEFAULT is what binds — no
+    /// override reached it.
+    ///
+    /// Only then may a concatenation initializer supply the width. IEEE §6.20.2 gives
+    /// an untyped parameter the range of its FINAL override value, so keying the width
+    /// on the declared expression truncates the override: `#(parameter P = {2{8'h1}})`
+    /// overridden with `32'hDEADBEEF` came out 16 bits holding `beef`, where both
+    /// oracles keep 32 bits and `deadbeef`. A DECLARED TYPE legitimately survives an
+    /// override; a self-determined initializer expression does not, because the value
+    /// it was determined from has been replaced.
+    /// Whether a concatenation's width comes from its operands' OWN stated widths,
+    /// with nothing inferred anywhere in the tree.
+    ///
+    /// Only a SIZED literal qualifies as a leaf. An unsized decimal is sized from its
+    /// value, and a NAME is sized from `param_meta`, which is where inferred widths
+    /// live — this predicate cannot see which kind a given name got, so it declines
+    /// rather than guess. The replication COUNT is deliberately not examined: it
+    /// scales the width but contributes none of its own bits.
+    fn concat_width_is_declared(e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::IntLit { kind, .. } => matches!(kind, ast::IntLitKind::Sized),
+            ast::ExprKind::Paren { inner } => Self::concat_width_is_declared(inner),
+            ast::ExprKind::Concat { parts } => parts.iter().all(Self::concat_width_is_declared),
+            ast::ExprKind::Replicate { value, .. } => {
+                value.iter().all(Self::concat_width_is_declared)
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn param_decl_width_unoverridden(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
+        self.param_decl_width_opt(p, false, true)
     }
 
     /// The string value of a parameter's declared default: its LITERAL first, and only
@@ -141,7 +175,12 @@ impl Elaborator<'_> {
     /// the flag as well: they inherit the source's recorded meta, and this predicate
     /// cannot see whether THAT width was itself inferred. Fail-closed; the alias of
     /// a declared param is recorded residue, not a wrong answer.
-    fn param_decl_width_opt(&self, p: &ast::ParamDecl, declared_only: bool) -> Option<(u32, bool)> {
+    fn param_decl_width_opt(
+        &self,
+        p: &ast::ParamDecl,
+        declared_only: bool,
+        default_binds: bool,
+    ) -> Option<(u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
@@ -241,6 +280,59 @@ impl Elaborator<'_> {
                         .and_then(|m| m.get(&name.name))
                         .copied();
                 }
+                // §11.4.12 / §11.4.12.1: a concatenation and a replication are
+                // SELF-DETERMINED — their width is the sum of their operands' own
+                // widths, and they are unsigned. That width is not recoverable from
+                // the value (`{2{32'd2}}` is 64 bits wide and 34 bits of magnitude),
+                // so without this arm the fallthrough below sized it from the folded
+                // i64 as `min_signed_bits(v).max(32)` and recorded 35 where both
+                // oracles say 64 — and 32 where they say 4 for `{2{2'd1}}`.
+                //
+                // It belongs with the type-determined family around it rather than
+                // with the value-inferred tail, and it answers under `declared_only`
+                // for the same reason a SIZED literal does: the width comes from the
+                // operands' own declared widths, never from the value.
+                // ⚠️ Under `declared_only` this must prove provenance LEAF BY LEAF,
+                // because the resolver it calls cannot: that resolver sizes a NAME from
+                // `param_meta` — exactly where value-INFERRED widths are recorded — and
+                // guesses `(32, false)` when there is none. Answering unconditionally
+                // made a concatenation a laundering wrapper around the very provenance
+                // the flag fences off: `localparam W = ~8'hCB; localparam Q = {W};
+                // logic [(Q[15:8])+8-1:0] v;` declared a **263-bit** net where iverilog
+                // declares 1 — the identical §4.5.363 regression through the concat
+                // door.
+                //
+                // But refusing outright is not the answer either: `S_THREADS[m*32 +:
+                // 32]` — how `axi_crossbar` forwards one port's slice of a per-port
+                // vector — IS a select over a concatenation, and denying it a width put
+                // the whole design back to loud. A concatenation of SIZED LITERALS
+                // states its width as plainly as a sized literal does; a leaf that is a
+                // name does not, and only that leaf has to decline.
+                // Parens only: the loop above also peels unary `+`/`-`, and whether a
+                // negated concatenation keeps the operand's width is a separate
+                // question that wants its own measurement. Without this, `{2{8'h1}}`
+                // recorded 16 and `({2{8'h1}})` recorded 32 — one value, two answers.
+                let mut cat = &p.value;
+                while let ast::ExprKind::Paren { inner } = &cat.kind {
+                    cat = inner;
+                }
+                if default_binds
+                    && (!declared_only || Self::concat_width_is_declared(cat))
+                    && matches!(
+                        cat.kind,
+                        ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. }
+                    )
+                {
+                    if let Some((_, w, _)) = self.const_placement_wide(
+                        cat,
+                        &std::collections::BTreeMap::new(),
+                        &ConstWidths::new(),
+                    ) {
+                        if w > 0 {
+                            return Some((w, false));
+                        }
+                    }
+                }
                 // A constant-function CALL is type-determined too: the parameter
                 // takes the function's declared RETURN type (§13.4.1), so
                 // `localparam X = fb()` with `function byte fb()` is 8 bits signed,
@@ -337,7 +429,7 @@ impl Elaborator<'_> {
         let Some(r) = p.range.as_ref() else {
             // No declared range: the width is a fact only when a TYPE or a LITERAL
             // states it. `lo = 0`, descending — an offset no-op.
-            let (w, _) = self.param_decl_width_opt(p, true)?;
+            let (w, _) = self.param_decl_width_opt(p, true, false)?;
             return Some((0, w, false));
         };
         let m = self.const_eval_in_scope(&r.msb)?;
@@ -389,11 +481,16 @@ impl Elaborator<'_> {
         self.param_range.get(&key).copied()
     }
 
-    pub(crate) fn coerce_param_value(&mut self, v: i64, p: &ast::ParamDecl) -> i64 {
-        // `param_decl_width` already reports the declared signedness (incl. `int`/
-        // `integer` via `p.signed`), so coerce with THAT — an `int unsigned` must
-        // NOT be force-signed here.
-        match self.param_decl_width(p) {
+    /// Coerce a folded parameter value to its declared width, with that width
+    /// ALREADY decided by the caller.
+    ///
+    /// The caller is the only one who knows whether an override bound, and that
+    /// changes the width (see [`Self::param_decl_width_unoverridden`]). Recomputing it
+    /// here threw that away: a concatenation default whose width the caller had just
+    /// resolved to 64 was re-derived as the value-inferred 35 and the value coerced to
+    /// it, which put `axi_crossbar`'s per-port vectors back to loud.
+    pub(crate) fn coerce_param_value_with(&mut self, v: i64, meta: Option<(u32, bool)>) -> i64 {
+        match meta {
             Some((w, signed)) => coerce_i64_to_width(v, w, signed),
             None => v,
         }
@@ -920,7 +1017,16 @@ impl Elaborator<'_> {
                 }
                 return;
             }
-            let meta = self.param_decl_width(p);
+            // The default binds only when nothing overrode it — on ANY channel.
+            let default_binds = !ovr_by_name.contains_key(p.name.name.as_str())
+                && !ovr_fill.contains_key(p.name.name.as_str())
+                && !ovr_str.contains_key(p.name.name.as_str())
+                && !ovr_unfoldable.contains(p.name.name.as_str());
+            let meta = if default_binds {
+                self.param_decl_width_unoverridden(p)
+            } else {
+                self.param_decl_width(p)
+            };
             let pw = meta.map(|(w, _)| w);
             // A fill-literal override re-folds at THIS param's declared width.
             let ovr_fill_v = ovr_fill
@@ -958,7 +1064,7 @@ impl Elaborator<'_> {
                 self.param_value_unfoldable("parameter", &p.name.name, &p.value);
                 0
             });
-            let v = self.coerce_param_value(v, p);
+            let v = self.coerce_param_value_with(v, meta);
             let key = self.fq(&p.name.name);
             // Persistent copy for hierarchical reads (`dut.WIDTH`) — `self.params`
             // is restored after the instance, so the read side needs this.

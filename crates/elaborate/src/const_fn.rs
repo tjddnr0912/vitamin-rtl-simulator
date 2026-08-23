@@ -804,33 +804,37 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Fold a constant PLACEMENT expression — a concatenation or a replication —
-    /// in the interpreter's environment.
+    /// The carry-free wide fold of a placement expression — a concatenation or a
+    /// replication — WITH the width it computed.
     ///
     /// These are self-determined (§11.4.12), and their value depends on every
-    /// operand's WIDTH, not just its value, which is why the plain i64 walk cannot
-    /// do them. `fold_self_bits` is the carry-free wide folder that already owns
-    /// exactly this arithmetic (concat / replication / size cast / constant shift /
-    /// bitwise), so this hands it a NAME RESOLVER and converts the result back into
-    /// the i64 domain. Nothing about the placement rules is written twice.
+    /// operand's WIDTH, not just its value, which is why the plain i64 walk cannot do
+    /// them. `fold_self_bits` is the carry-free wide folder that already owns exactly
+    /// this arithmetic (concat / replication / size cast / constant shift / bitwise),
+    /// so this hands it a NAME RESOLVER. Nothing about the placement rules is written
+    /// twice.
     ///
-    /// The resolver mirrors the Ident arm's rule exactly: a name DECLARED in this
-    /// body is the interpreter's own — it shadows a module param, and an UNBOUND
-    /// one declines rather than letting a same-named param answer. A name declared
-    /// with an unknown shape declines too, because the folder needs a width.
+    /// The resolver mirrors the Ident arm's rule exactly: a name DECLARED in this body
+    /// is the interpreter's own — it shadows a module param, and an UNBOUND one
+    /// declines rather than letting a same-named param answer. A name declared with an
+    /// unknown shape declines too, because the folder needs a width.
     ///
-    /// Declines (→ LOUD at the caller) for any x/z bit, for a result the i64 const
-    /// domain cannot hold — wider than 64 bits, or exactly 64 UNSIGNED bits with the
-    /// top one set, which is the domain boundary the deleted hand-rolled loop spelled
-    /// as `total > 63` — and for every operand shape the carry-free folder refuses —
-    /// notably `+`/`-`/`*`/`/`, so `{4'd2, (4'd1 + 4'd1)}` stays loud rather than
-    /// growing a second, subtly different, arithmetic here.
-    pub(crate) fn const_placement_env(
+    /// ⚠️ This returns the RAW fold. Every domain rejection — x/z bits, a result wider
+    /// than 64 bits, exactly 64 UNSIGNED bits with the top one set — lives on
+    /// [`Self::const_placement_env`], which is the i64 consumer. A caller that wants
+    /// only the WIDTH must not inherit those, because a 96-bit concatenation has a
+    /// perfectly good width and no i64.
+    ///
+    /// ⚠️ It also cannot report PROVENANCE. The resolver sizes a name from
+    /// `param_meta`, which is where value-INFERRED widths are recorded, and guesses
+    /// `(32, false)` when there is none — so a width from here is never
+    /// declared-provenance in the `param_decl_width_opt(declared_only)` sense.
+    pub(crate) fn const_placement_wide(
         &self,
         e: &ast::Expr,
         env: &std::collections::BTreeMap<String, i64>,
         envw: &ConstWidths,
-    ) -> Option<i64> {
+    ) -> Option<(ir::BitPacked, u32, bool)> {
         let resolve = |path: &ast::HierPath| -> Option<WideBits> {
             let [seg] = path.segments.as_slice() else {
                 return None; // a hierarchical name is not a constant here
@@ -860,7 +864,24 @@ impl Elaborator<'_> {
             debug_assert_eq!(bits.val.len(), bits.unk.len());
             Some((bits, w, s))
         };
-        let (b, w, sg) = fold_self_bits(e, &resolve)?;
+        fold_self_bits(e, &resolve)
+    }
+
+    /// [`Self::const_placement_wide`] converted back into the i64 constant domain.
+    ///
+    /// This is where the domain's edges live: it declines for any x/z bit, for a
+    /// result wider than 64 bits, and for exactly 64 UNSIGNED bits with the top one
+    /// set — the boundary the deleted hand-rolled loop spelled as `total > 63`. It
+    /// also inherits every operand shape the carry-free folder refuses, notably
+    /// `+`/`-`/`*`/`/`, so `{4'd2, (4'd1 + 4'd1)}` stays loud rather than growing a
+    /// second, subtly different, arithmetic here.
+    pub(crate) fn const_placement_env(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &ConstWidths,
+    ) -> Option<i64> {
+        let (b, w, sg) = self.const_placement_wide(e, env, envw)?;
         if w > 64 || b.unk.iter().any(|&u| u != 0) {
             return None;
         }

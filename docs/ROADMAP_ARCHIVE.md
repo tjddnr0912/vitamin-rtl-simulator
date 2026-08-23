@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 303건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 304건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.371` **concat 의 폭을 값에서 추론했다 — 그리고 count 넓힘은 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ② 착수 · census 가 큐를 반박(*"loud→supported"* 인데 **11칸 전부 2-오라클 합의인데 vita 는 전부 틀리고 둘은 silent-wrong**) · **실은 것 = 폭 축**: §11.4.12 상 concat 은 자기결정인데 무타입 fallthrough 가 접힌 i64 에서 `min_signed_bits(v).max(32)` 로 재 `{2{32'd2}}` 이 **35**(오라클 64) · 미override `{2{8'h1}}` 이 **32**(오라클 16) — 둘 다 **pre-existing silent-wrong** · ⚠️⚠️ 그 arm 의 게이트 둘은 **리뷰가 측정한 뒤 붙었다**: ⓐ `default_binds` — §6.20.2 는 범위를 **최종 override 값**에서 가져오는데 선언식에서 폭을 정하니 `#(.P(32'hDEADBEEF))` 가 **16비트 `beef`**, 한 칸은 PRE loud 였는데 **514비트 버스를 조용히** 지었다(⭐ 내가 *"타입-결정 계열"* 이라 적은 게 정확히 틀린 자리 — **선언 타입은 override 를 견디지만 값-결정 폭은 못 견딘다**) ⓑ **leaf 단위 provenance** — resolver 가 `param_meta`(값-추론 폭)를 읽고 없으면 `(32,false)` 추측이라 `{W}` 가 **263비트 net**(§4.5.363 회귀의 concat 문 재진입) ⇒ leaf 가 전부 sized 리터럴일 때만 declared · **되돌린 것 = count 넓힘**: verilog-axi 를 **54 → 4** 까지 내렸지만 BLOCKING 넷, **마지막 셋이 내 수정이 만든 것** — ⓵ **폭 쌍둥이를 안 넓혀** 폭-인식 walk 가 무제한 도메인으로(⭐ **오라클 없이 유죄**: 같은 파일의 리터럴 쌍둥이가 다른 답) ⓶ 상수함수 **지역변수**를 접어 170(iverilog 명시 거부) ⓷ 고쳤더니 module-scope evaluator 가 **같은 이름의 지역변수를 지나쳐 파라미터**를 잡아 **43690** ⓸ 그 evaluator 는 **콜 깊이를 0으로 재시작**해 count 안의 호출이 **스택 오버플로·abort**(PRE loud) ⇒ ⭐⭐ count 축은 상수함수 **스코프**·**깊이**·`declared_only` **provenance** 를 동시에 만족해야 하고 그건 폭 축과 다른 머신러리다 ⇒ **되돌리고 메커니즘 기록**(§4.5.361 선례) · 13설계 **바이트 동일 13/13** · 회귀 9건 · format 29 불변
 - `4.5.370` **문자열 상수 도메인이 리터럴 전용이었다 — 그리고 참조 구현은 소비자가 하나뿐이었다** · 코퍼스(§4.5.369)가 지목한 §3 ① · ⭐⭐ `const_str_in_scope` 가 StrLit·Paren·Ident·PkgScoped 를 이미 풀고 있었는데 **호출자가 하나**(문자열 동등비교)라 아무도 **값**을 안 물었고 파라미터 바인딩 일곱은 리터럴 전용 쌍둥이를 쓰고 있었다 · 큐엔 *"삼항"* 한 줄인데 census 는 **바레 리터럴을 뺀 도메인 전체**(15/16칸이 2-오라클 합의인데 vita 전부 loud) · 고침 = `Ternary`(조건은 정수 도메인과 **같은 철자** · **양 arm 다 문자열** = fail-closed)와 `Concat` 두 arm + 값 소비자 라우팅(진단 가드는 *"리터럴인가"* 라는 다른 질문이라 제외) · ⚠️⚠️ **BLOCKING 넷 중 셋이 내 수정이 만든 것**: ⓐ 값이 **따옴표 포함 raw** 라 `{"RE","D"}`=`RE""D` ⓑ ⭐⭐ `str_param_raw` 가 **폭을 안 들고 다니는데** 문자열 경로가 수치 경로보다 먼저 돌아 `[95:0] X={"A","B"}` 가 96→**16비트** ⇒ **폭 게이트** ⓒ `{"ab",""}` 의 `""` 는 **NUL 한 바이트**인데 텍스트 join 은 0글자 ⇒ declines ⓓ *"문자열인가"* 가드를 **값 도메인**에 물어 `parameter W={"A","B"}` 가 합법적 `#(.W(9))` 를 거절(correct→loud) — 그런데 가드만 되돌리니 **폴드된 기본값이 override 를 삼켜** 16706(loud→silent) ⇒ `overridden` 플래그 · ⚠️⚠️ **재리뷰 BLOCKING**: 게이트 술어 `ty == Implicit` 의 틈으로 **범위 없는 `logic`/`reg`/`bit`**(폭 1비트인데 `Implicit`+`range:None`)가 빠져 `localparam bit P={"A","B"}` 가 1→**16비트** — 파서가 `var_kind` 를 **기록했다가 버려** `parameter bit P` 와 `parameter P` 가 구별 불가능했다 ⇒ 파서 **세 줄**(range 의 **마지막** fallback `[0:0]` — `forced_range` 에 넣으면 explicit range 를 덮는다) · ⭐⭐ **곁수확**: 그 틈이 문자열과 무관하게 이미 새고 있었다 — `localparam bit N=8'hFF` 가 vita **255/8** vs 두 오라클 **1/1** · 27칸 3-오라클 **FIXED 15 · ok→wrong 0** · 14설계 중 **12 바이트 동일**(나머지 둘이 표적: serv 10→3 · vether 6→2 에러) · 5,845 → **5,865 green**(회귀 20건) · `const_fn.rs` 1402줄 ⇒ **`const_str.rs`** 분리 · format 29 불변
 - `4.5.369` **워크로드 코퍼스 — 남이 쓴 RTL 로 값을 매기기** · 성능 판단이 오래 설계 **둘** 위에 서 있었다(picorv32 · **우리가 재려고 쓴** keccak) — 허가적 라이선스 서드파티 **여덟**을 핀된 SHA 로 가져와 오라클로 고정 · ⭐⭐ **첫 수확이 성능이 아니라 정확성이었다**: 여덟 중 **셋이 거절**되고 셋이 **전부 같은 축**(상수 도메인 파라미터 폴딩 — 문자열 삼항[verilog-ethernet] · 문자열 Ident[serv] · 정수 replication[verilog-axi])이며, **우리 프로브에서 나온 §2 큐엔 그 축이 한 줄**로 있었다 ⇒ 우리 프로브는 우리가 의심하는 것을 찾고 남의 RTL 은 **우리가 의심하지 않는 것**을 찾는다 · ⭐ 최소 재현이 축을 삼항 하나로 좁혔다(`(S=="AUTO")` 정수 localparam · `parameter SI="RED"` · generate-if 문자열 비교는 **셋 다 이미 정확**하고 `1 ? "RED" : "BLUE"` 만 E3009 · **iverilog·verilator 둘 다 RED**) · 그 밖에 `$fgetc`/`$value$plusargs` 가 **blocking 대입 rhs 에서만** 산다(논블로킹 쌍둥이·조건식 · 4줄 재현 · [[branch-parity-before-new-traffic]]) · `$readmemh(f, dut.ram.mem)` 계층 원소 선택 · **ibex 는 오라클이 없다**(iverilog 13 이 struct 타입 localparam 에서 syntax error, positional 로 바꾸면 `net_scope.cc:449` **abort**) · **성능은 양방향으로 뒤집혔다**: 서드파티 다섯 기하평균 **1.61×**(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.48 · darkriscv **0.78**), 도는 일곱 전체는 1.30 ⇒ ⭐ **우리가 쓴 keccak 둘이 평균을 끌어내리고 있었다 = 유리한 벤치가 아니라 가장 어려운 벤치** · ⚠️ 지는 둘(keccak-arr 0.53 · darkriscv 0.78)의 **공통점은 아직 안 쟀다** — 다음 성능 계측은 darkriscv 부터 · 도구 = `crates/corpus-runner`(stub → 실물 · **의존성 0** · 매니페스트는 Rust `const` 테이블 · 거절이 **일급 상태** `Expect::Refused{diag}` 라 known-gap / DRIFTED / PROMOTED / **loud→silent-wrong REGRESSION** 을 구분) · ⚠️⚠️ **적대 soundness 렌즈 BLOCKING 넷, 넷 다 도구가 자기 목적을 배신하는 모양** — ⓐ ⭐⭐ **`Grade::Promoted` 가 도달 불가능**: `expect_exit` 를 `expect` **옆의 자유 필드**로 뒀고 거절 행 셋은 *거절하면서 내는* 코드라 `1` 이었다 ⇒ 갭이 닫히면 vita 는 0 으로 나가 동등 비교가 깨지고 **"was loud, now crashes" 빨간불**이 된다 = **코퍼스가 존재하는 이유인 그 사건이 거짓 문구로 실패 보고** ⇒ 값을 타입 안으로 = **`Expect::Runs { exit }`**(거절 행엔 적을 자리가 없다) ⓑ **여덟 행이 다른 기계에서 복원 불가**: 테스트벤치가 전부 1st-party 인데 `bench/*` 가 통째로 gitignore 였고(핀된 SHA 는 **상류 RTL** 을 복원하지 **하네스**를 복원하지 않는다) 존재 판정이 `cwd.is_dir()` 라 `fetch` 직후 **실행되고** `cannot read 'tb.v'` 가 **"newly refused" 회귀 여덟 개**로 채점된다 ⇒ gitignore 를 **allow-list** 로 뒤집어 하네스 30파일 커밋 + 존재 판정을 **소스와 런타임 데이터**로 · 곁가지로 펌웨어 둘이 실은 상류 것이라 `prepare.sh` 재생성/클론 참조로 ⓒ **파이프를 안 비웠다** — `verilog-axi` 는 2×2 크로스바 하나로 **19,238 B** 를 쏟고 macOS 파이프는 16 KiB 시작이라 넘기면 교착 ⇒ 예산 600초 후 `Timeout` = **정직하게 거절하는 설계를 "was loud, now hangs" 로 무고** ⇒ 양 파이프를 **스레드로** 드레인 + stdout/stderr 분리 ⓓ `cargo fmt --check` 실패 · ⚠️ NIT 열셋 중 ⭐⭐ **내가 ENGINEERING_RULES 에 ★★★ 로 적은 *"호출자가 순차 측정을 할 방법이 없다"* 가 거짓**(`measure(&jobs[0..1])` 두 번이면 순차) — 하필 *"규칙은 타입이어야 한다"* 를 주장하는 문단에서 타입이 아닌 것을 타입이라 불렀다 ⇒ 정정, 그리고 그게 **진짜로 가능했던** 자리는 ⓐ 였다 · 비결정성 검출기가 `Grade::Ok` 뒤에 갇혀 **죽은 코드**(다이제스트가 갈리면 `Mismatch` 로 은퇴하므로 도달 불가) ⇒ 흔들리는 툴이 **일관되게 틀린 툴로** 보고되던 것 수정 · `--reps 3` 이 샘플 **둘**을 주던 것(“median” 이라 적힌 평균) ⇒ `--reps` = **타임드 샘플 수** · **제품 코드 변경 0** · 5,821 → **5,845 green**(러너 16 + 매니페스트 위생 8) · format 29 불변  · ⚠️⚠️ **후속(같은 슬라이스, 커밋 `ee42eaf` 이후)**: 멈춰 선 differential 렌즈가 킬 시점에 남긴 **한 문장**이 최대 발견을 냈다 — ⭐⭐ **`picorv32` 워크로드가 아무것도 재고 있지 않았다**. 코어의 덧셈기를 뒤집어도(`reg_op1+reg_op2` → `+1`) 다이제스트가 **바이트 동일**(`7836648e76208dc9`) — 테스트 프로그램이 `addi`/`add`/`beq` 뿐이라 계산된 레지스터 값이 **버스에 한 번도 안 나오고**, 다이제스트가 보는 건 버스뿐이라 그건 **설계 검사의 이름을 단 PC 추적**이었다(결정성·오라클 일치·사이클 해상도는 **전부 통과**했다 — 통과 못 하는 유일한 검사가 변형이다) ⇒ 프로그램에 `sw x5,64(x0)` + 바퀴 간 `x1` 이월 추가, 새 다이제스트 `68d30f61bf9bf1d4`(iverilog 일치 · N=400000 · 7.05 s) · **계약 5번 신설**(*"설계를 건드리면 다이제스트가 움직여야 한다"*) 후 **아홉 전부 변형 확인 = 전부 움직인다** · ⚠️ **죽은 변형 주의**: verilog-ethernet 이 처음 *"안 움직인다"* 를 냈는데 결함이 아니라 **루프백이 TX·RX 에 같은 `lfsr` 을 쓴다** — CRC 를 바꾸면 TX 가 틀린 FCS 를 붙이고 RX 가 정확하다고 검증해 상쇄된다(RX 쪽만 건드리니 즉시 움직임) ⇒ **변형은 비대칭이어야 한다** · picorv32 비가 1.48 → **1.44**, 서드파티 기하평균 1.61 → **1.60** · 상세 = [study/03](study/03-workload-corpus.md)
 - `4.5.368` **canonical `Value` 를 재수립하지 말고 주장하라 — 그리고 "스위트가 전부 통과했다" 는 증명이 아니다** · `Value::resize` 의 no-op 팔(`new_width == self.width`)이 `mask_top()` 을 무조건 불러 **이미 성립하는 불변식을 재수립**하고 있었다(평면이 정확히 `nwords(width)` 워드 · top 워드에 `width` 위 비트 없음) · ⭐ 자리 특정 = 콜 귀속: `mask_top` self **15.9%** 중 **40.6% 가 바로 이 호출** ⇒ ≈6.5% · ⭐⭐ 호출부 **31곳 중 30곳은 생산자**(raw 워드에서 값을 만들며 불변식을 *세운다*) — 이 하나만 **소비자**였다 ⇒ 호출을 `debug_assert!(is_canonical())` 로 바꿔 **부담을 생산자에게** 옮겼다 · ⚠️⚠️ **적대 soundness 가 그 불변식을 엔진으로 반증했다(BLOCKING)**: `eval/sysfunc.rs` 의 `$realtobits` 가 `v.width = 64` 를 찍으면서 평면은 **인자 폭** 그대로 둔다 ⇒ `$realtobits(<128비트>)` 가 non-canonical 을 만들어 **디버그 빌드를 패닉**(release 는 PRE 와 동일하게 정상 = correct→loud, 사다리의 금지 방향) — ⭐⭐ 내가 증거로 삼은 *"5,812 테스트에서 발화 0"* 은 **증명이 아니라 커버리지 진술**이었고, 제거된 방어 검사에는 **생산자 전수 census** 가 필요하다는 것이 이 슬라이스의 교훈 · 고침은 그 생산자 한 줄(`v.mask_top()`) + 곁가지로 differential 이 찾은 `arena.rs` 의 zero-width OOB arm(도달 불가지만 불변식이 **side condition 에 기대면 안 된다**) · ⚠️ differential 은 **~840 PRE/POST 쌍**(assert 살아있는 debug 로 패닉 사냥 · >128비트 Heap·dyn/queue/assoc·class·struct·string·`$readmem`·force/release·real↔int·CRV·SVA·fork·VCD/FST·계층 쓰기·OOB 배열 읽기)에서 **패닉 0 · 차분 0** — 두 렌즈의 상보성이 실증된 자리(differential 이 CLEAN 인데 soundness 가 code-path 로 잡았다) · ⚠️ NIT: 성능 6.5% 귀속과 11–13% 벽시계는 **두 측정**이고 나머지 갭은 이론(호출 제거로 `Value` 가 escape 하지 않아 레지스터에 남는다) · **순차 A-then-B 타이밍이 picorv32 에서 가짜 +12.5%** 를 냈다 ⇒ PRE/POST **인터리브** · keccak_f_arr **3.75 → 3.34 (−11.1%)** · keccak_f **1.92 → 1.66 (−13.2%)** · flat +0.4% · picorv32 −0.9%(노이즈) · anchor·VCD·FST 바이트 동일 · 5,812 → **5,821 green** · format 29 불변
@@ -403,6 +404,71 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.371 — concat 의 폭을 값에서 추론했다; count 넓힘은 지어서·재서·되돌렸다 (2026-08-23 · format 29 불변)
+
+**한 줄**: 코퍼스가 지목한 §3 ② 를 착수했는데, **결함이 둘이고 그중 하나만 안전하게 실을 수
+있었다**. 실은 것 = concat/replication 의 **폭**(pre-existing silent-wrong 둘). 되돌린 것 =
+replication **count** 의 넓힘 — 적대 리뷰 3라운드가 BLOCKING **여섯**을 냈고 **셋이 내 수정이
+만든 것**이었다.
+
+**census 가 큐를 반박했다.** 큐엔 *"loud→supported"* 로 적혀 있었는데 11칸 3-오라클은 **전부
+2-오라클 합의인데 vita 는 11칸 전부 틀리고, 그중 둘은 loud 가 아니라 silent-wrong** 이라 답했다.
+
+**실은 것 — concat 의 self-폭.** §11.4.12 상 concat 은 자기결정(피연산자 폭의 합)인데 무타입
+파라미터 fallthrough 가 접힌 i64 에서 `min_signed_bits(v).max(32)` 로 재고 있었다 ⇒
+`{2{32'd2}}` 이 **35비트**(두 오라클 64). 그리고 override 가 없을 때의 `{2{8'h1}}` 이 **32**(두
+오라클 16). 둘 다 이미 접히던 형태라 **pre-existing silent-wrong** 이다. 고침 = 타입-결정 계열에
+arm 하나(+`const_placement_env` 를 쪼개 폭을 노출하는 `const_placement_wide`).
+
+⚠️⚠️ **그 arm 은 게이트가 둘이고, 둘 다 리뷰가 측정한 뒤에 붙었다.**
+
+- ⓐ **`default_binds`** — §6.20.2 는 무타입 파라미터의 범위를 **최종 override 값**에서 가져오는데,
+  선언식에서 폭을 정하니 `#(parameter P = {2{8'h1}})` + `#(.P(32'hDEADBEEF))` 가 **16비트 `beef`**
+  (두 오라클 32/`deadbeef`) = correct→silent-wrong. 한 칸 더 나쁜 것도 있었다: `wire [P-1:0] bus`
+  를 단 형태는 **PRE 가 loud** 인데 **514비트 버스를 조용히** 지었다(verilator 33,686,018).
+  ⭐ 내가 주석에 *"타입-결정 계열에 속한다"* 고 적은 것이 정확히 틀린 자리다 — **선언 타입은
+  override 를 견디지만 값-결정 폭은 못 견딘다**. 게이트는 **네 override 채널 전부** 를 본다.
+- ⓑ **leaf 단위 provenance** — 그 arm 을 `declared_only` 아래서도 답하게 두고 *"폭이 피연산자의
+  선언 폭에서 온다"* 고 정당화했는데, ⚠️⚠️ **그것을 계산하는 resolver 가 반증한다**: 이름 폭을
+  `param_meta`(값-추론 폭이 기록되는 자리)에서 읽고, 없으면 `unwrap_or((32,false))` 로 **추측**한다
+  ⇒ `localparam W = ~8'hCB; localparam Q = {W}; logic [(Q[15:8])+8-1:0] v;` 가 **263비트** net
+  (iverilog 1) = §4.5.363 이 닫은 회귀의 **concat 문 재진입**. 고침 = leaf 가 **전부 sized 리터럴**
+  일 때만 declared 라 답한다(이름 leaf 는 declines · **count 는 안 본다** — 폭을 배수할 뿐 자기
+  비트를 안 낸다).
+
+**되돌린 것 — count 넓힘.** `fold_self_bits` 의 `Replicate` arm 이 count 를 **자유함수**
+`const_eval_u32` 로 접어 리터럴 전용이었고, `{S_COUNT{32'd2}}`(모든 파라미터화 AXI/Ethernet 코어의
+per-port 관용구)가 통째로 loud 다. 넓혀 봤고 **verilog-axi 의 elaborate 에러가 54 → 4** 까지
+내려갔다. 그런데 그 길에서 BLOCKING 이 넷 나왔고 **마지막 셋은 전부 내 수정이 만든 것**이다:
+
+1. **폭 쌍둥이를 안 넓혔다**(`const_fn_width::const_self_width`) ⇒ `{N{4'd15}}` 이 **값은 있고
+   self 폭은 없는** 노드가 되고 폭-인식 walk 가 **무제한 도메인으로 degrade** 해
+   `({N{4'd15}} + 4'd1) > 4'd0` 이 **1**(두 오라클 0). ⭐ **오라클 없이 유죄**였다 — 같은 파일의
+   리터럴 쌍둥이 `{2{4'd15}}` 는 0 을 답한다.
+2. count 를 이름 resolver 로 접으니 상수함수 **지역변수**가 잡혀 **170**(§11.4.12.1 상 count 는
+   상수식 · iverilog 가 그대로 말한다: *"a reference to a net or variable is not allowed in a
+   constant expression"*). ⇒ 표현식 콜백 `CountFoldFn` + `const_eval_in_scope` 로 바꿨더니
+3. 그 evaluator 는 **모듈 스코프**라 같은 이름의 지역변수가 모듈 파라미터를 **가릴 때 파라미터가
+   이긴다** ⇒ **43690**(= `{4{4'hA}}`, 모듈 param 의 4). 170 을 지우고 43690 을 설치한 셈이다.
+4. 그리고 그 evaluator 는 **콜 깊이를 0으로 재시작**한다(같은 파일이 400줄 위에서 그 이유로
+   `ast_contains_call` 가드를 두고 있다) ⇒ count 안의 호출이 **스택 오버플로 · abort**.
+   PRE 는 loud 였다. loud→crash 는 사다리 하강이다.
+
+⭐⭐ **판단**: count 축은 (a) 상수함수 **스코프 경계**, (b) 상수함수 **콜 깊이**, (c) `declared_only`
+**provenance** 세 가지를 동시에 만족해야 하고, 그 셋은 이 슬라이스의 폭 축과 **다른 머신러리**다.
+세 라운드 동안 고칠 때마다 새 BLOCKING 이 나왔으므로 **되돌리고 메커니즘을 기록**한다(§4.5.361
+선례). 폭 축만 실었고 그 결과 **verilog-axi 는 PRE 그대로**다.
+
+**측정(실은 범위).** `{2{32'd2}}` 폭 **35 → 64** · 미override `{2{8'h1}}` 폭 **32 → 16**(둘 다
+두 오라클 일치) · 되돌린 셋(b1 지역변수 · b2 재귀 · b3 select 바운드) **PRE == POST 전부 loud** ·
+override `#(.P(32'hDEADBEEF))` **PRE == POST == iverilog** · 13설계 PRE/POST **바이트 동일 13/13** ·
+회귀 테스트 **9건** · clippy 0 · fmt 0 · format 29 불변.
+
+**잔여(전부 테스트로 핀).** ⓐ **count 는 여전히 리터럴 전용**(§3 ② · 위 메커니즘) · ⓑ concat
+파라미터에 대한 **select 바운드가 조용히 1비트**(`localparam W={2{8'h09}}; logic [W[7:0]-1:0] v;`
+가 1, iverilog 9 — **PRE 도 1** 이라 이 슬라이스가 만든 것이 아니고, 폭이 아니라 **기록된 range**
+(`param_sel_range`)가 필요하다) · ⓒ override 채널이 32비트라 64비트 concat 을 조용히 자른다.
 
 #### 4.5.370 — 문자열 상수 도메인이 리터럴 전용이었다; 참조 구현은 소비자가 하나뿐이었다 (2026-08-23 · format 29 불변)
 

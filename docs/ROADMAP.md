@@ -448,10 +448,22 @@
 > 값은 **따옴표를 포함한 raw** 라 `{"RE","D"}` 가 `RE""D`(정수로는 1092756034)가 됐다 ⇒ 내용만
 > 이어 붙이고 **다시 따옴표를 씌운다**. 잔여 = **package 스코프**(아래 ⑨).
 
-> **② 정수 상수 도메인에 replication/concat 이 없다** (오라클 有 · **verilog-axi 를 막는다**).
-> `parameter S_THREADS = {S_COUNT{32'd2}};` 가 E3009 다(2×2 크로스바 한 대에서 E3009 54건 +
-> W3056 43건). AXI 인터커넥트의 per-port 파라미터 벡터 관용구라 이 IP 계열 전체에 걸린다.
->
+> **② 정수 상수 도메인의 replication COUNT 가 리터럴 전용이다** (오라클 有 · **verilog-axi 를 막는
+> 것** · ⚠️⚠️ **§4.5.371 이 지어서·재서·되돌렸다 — 메커니즘이 기록됐으니 다음 시도는 여기서 시작하라**).
+> `fold_self_bits` 의 `Replicate` arm 이 count 를 **자유함수** `const_eval_u32` 로 접는다. 넓히면
+> **verilog-axi 의 elaborate 에러가 54 → 4** 까지 내려간다(남은 넷은 §3 ⑪). 그런데 넓힘은 **셋을
+> 동시에** 만족해야 하고, 세 라운드 동안 하나씩 고칠 때마다 새 BLOCKING 이 나왔다:
+> ⓐ **폭 쌍둥이**(`const_fn_width::const_self_width`)를 같은 순간에 넓혀야 한다 — 안 그러면
+> `{N{4'd15}}` 이 값은 있고 self 폭은 없는 노드가 돼 폭-인식 walk 가 무제한 도메인으로 degrade
+> 한다(⭐ **오라클 없이 유죄**: 리터럴 쌍둥이 `{2{4'd15}}` 와 다른 답) ·
+> ⓑ **상수함수 스코프** — count 는 §11.4.12.1 상 상수식이라 함수 **지역변수**는 자격이 없는데
+> (iverilog: *"a reference to a net or variable is not allowed in a constant expression"*),
+> 이름 resolver 로 접으면 지역변수를 잡고(**170**), `const_eval_in_scope` 로 접으면 **같은 이름의
+> 지역변수를 지나쳐 모듈 파라미터**를 잡는다(**43690**) ⇒ **지역 이름 집합을 보고 declines** 해야 한다 ·
+> ⓒ **콜 깊이** — `const_eval_in_scope` 는 깊이를 **0으로 재시작**하므로(같은 파일이 400줄 위에서
+> 그 이유로 `ast_contains_call` 가드를 둔다) count 안의 호출이 **스택 오버플로**로 abort 한다(PRE 는 loud).
+> ⇒ **선행조건 = 깊이를 이어받는 상수 평가 진입점**. 폭 축(§4.5.371 이 실은 것)과는 **다른 머신러리**다.
+
 > **③ `$fgetc`/`$value$plusargs` 류가 blocking 대입 rhs 에서만 산다** (2-오라클 · **darkriscv
 > 전체 SoC + serv 테스트벤치**). 진단이 술어를 그대로 읽는다 — *"직접 **blocking** 대입의 rhs 에서만
 > 지원"*. 실제로 막히는 두 형태: **논블로킹 쌍둥이** `UART_RFIFO <= $fgetc(fd);`(darkuart.v:303) 와
@@ -877,14 +889,14 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,865 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.370) |
+| 게이트 | **5,874 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.371) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
 | **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ = §4.5.364~~ · ~~ⓑ = §4.5.365~~ · ~~ⓒ 64비트 unsigned = §4.5.366~~ 로 RESOLVED · 각각 잔여는 §2): ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
-| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | 다음 표적 = **②**(`{N{…}}` 정수 replication = verilog-axi 를 막는 유일한 것) → **⑧**(함수 본문의 `$finish` **하나** = verilog-ethernet) → **⑦**(generate-if 조건 = serv) → **③**(`$fgetc`/`$value$plusargs` 의 blocking-only 술어) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
+| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). 다음 표적 = **⑧**(함수 본문의 `$finish` **하나** = verilog-ethernet) → **⑦**(generate-if 조건 = serv) → **⑪**(wide 반환 상수함수 = verilog-axi) → **③**(`$fgetc`/`$value$plusargs` 의 blocking-only 술어) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
 | **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정 · **§4.5.369 워크로드 코퍼스로 재가격**) — ⚠️⚠️ **코퍼스가 그림을 양방향으로 바꿨다**: 남이 쓴 RTL 다섯에서 vita 는 iverilog 대비 **기하평균 1.61×** 로 앞선다(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.44 · darkriscv **0.78**) — *"iverilog 와 동률"* 은 **우리가 쓴 keccak 두 설계**가 만든 그림이었고, 그 둘은 우리에게 유리한 벤치가 아니라 **가장 어려운 벤치**였다(빼면 1.30 → **1.60**) · ⭐ 표적은 여전히 frame 레짐이다: keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 **0.53× 로 코퍼스 최악**이다 · ⚠️ **다만 지는 둘의 공통점은 아직 안 쟀다** — `keccak_f_arr` 는 호출마다 25원소 배열을 짓고 `darkriscv`(0.78×)는 그런 게 없다. **다음 성능 슬라이스의 첫 계측은 darkriscv 여야 한다**(우리가 안 쓴 설계이고, 지는 이유가 아레나 가설과 다를 수 있다) · ⚠️ **arena 가 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0`), `WProg::run` 은 `arena.buf[slot]` 을 읽는데 **frame local 엔 슬롯이 없다**(6–10주 · 상한 2.33× — ⚠️ 그 2.33 은 **keccak_f_arr 하나**에서 나온 수다) · bounded 조각 둘이 이미 수확: §4.5.367 part-select 쓰기 **−15.6%**, §4.5.368 no-op `mask_top` 제거 **keccak_f_arr −11.1% · keccak_f −13.2%** · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 코퍼스 single-core 실측을 확보하는 것이 열린 항목이다 |

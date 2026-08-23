@@ -511,10 +511,14 @@ impl Elaborator<'_> {
                     self.str_param_raw.insert(key, raw);
                     return;
                 }
-                let meta = self.param_decl_width(p);
+                // A generate-scope parameter has no override channel, so its
+                // declared default is always what binds.
+                let meta = self.param_decl_width_unoverridden(p);
                 match self.const_eval_in_scope(&p.value) {
                     Some(v) => {
-                        let v = self.coerce_param_value(v, p);
+                        // The width the caller just resolved, not a re-derivation:
+                        // this scope has no override channel, so `meta` is authoritative.
+                        let v = self.coerce_param_value_with(v, meta);
                         let key = self.fq(&p.name.name);
                         self.hier_params.insert(key.clone(), v);
                         // ⚠️ The declared width/sign and range were NOT recorded here,
