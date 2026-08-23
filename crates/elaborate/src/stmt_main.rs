@@ -25,6 +25,19 @@ impl Elaborator<'_> {
                 return self.lower_stmt_inner(b, &rewritten);
             }
         }
+        // §3 ③: the same move for a direct-rhs-only system call (`$fgetc`,
+        // `$value$plusargs`, …) sitting in an ordinary expression position — evaluate it
+        // into a temp ahead of the statement and read the temp where it stood.
+        //
+        // Deliberately NOT folded into the gate above. That one is a MODULE-GLOBAL
+        // property ("does this design declare an output-formal function"), and these calls
+        // have nothing to do with one; `hoist/mod.rs` records what happened the last time a
+        // module-global gate disabled an unrelated arm. The stand-down lives in this arm's
+        // own guard instead: `hoist_stmt_rhs_only` returns `None` after one cheap walk when
+        // the statement carries no such call, so a design without them is byte-identical.
+        if let Some(rewritten) = self.hoist_stmt_rhs_only(b, s) {
+            return self.lower_stmt_inner(b, &rewritten);
+        }
         match s {
             // ── STRAIGHT-LINE (stay in the same block) ──────────────
             ast::Stmt::Blocking {

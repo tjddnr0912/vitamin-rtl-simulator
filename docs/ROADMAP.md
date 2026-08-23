@@ -464,13 +464,34 @@
 > 그 이유로 `ast_contains_call` 가드를 둔다) count 안의 호출이 **스택 오버플로**로 abort 한다(PRE 는 loud).
 > ⇒ **선행조건 = 깊이를 이어받는 상수 평가 진입점**. 폭 축(§4.5.371 이 실은 것)과는 **다른 머신러리**다.
 
-> **③ `$fgetc`/`$value$plusargs` 류가 blocking 대입 rhs 에서만 산다** (2-오라클 · **darkriscv
-> 전체 SoC + serv 테스트벤치**). 진단이 술어를 그대로 읽는다 — *"직접 **blocking** 대입의 rhs 에서만
-> 지원"*. 실제로 막히는 두 형태: **논블로킹 쌍둥이** `UART_RFIFO <= $fgetc(fd);`(darkuart.v:303) 와
-> **조건식** `if (!$value$plusargs("N=%d", n))`(양 오라클 수용). 4줄 재현으로 확인 —
-> `c = $fgetc(fd)` 는 vita·iverilog 둘 다 65, `c <= $fgetc(fd)` 는 iverilog 66 / vita E3009.
-> ⚠️ 한쪽 가지에만 있는 가드 = [[branch-parity-before-new-traffic]] 그대로다.
+> **③ 잔여 = 조건부·반복 평가 위치, 그리고 `$feof` 가 살아남는 문장** (§4.5.374 가 나머지를
+> 열었다). 직접-rhs 제한 자체는 사라졌다 — `hoist/special.rs` 가 호출을 temp 로 끌어내
+> **NBA rhs · `if` 조건 · `case` scrutinee · `repeat` count · 시스템/유저 태스크 인자 · 식 중첩 ·
+> lvalue 인덱스** 를 전부 연다(darkriscv 전체 SoC 가 이걸로 돌고 다이제스트가 오라클과 일치).
+> 아직 loud 인 것과 그 선행조건:
 >
+> ⓐ **`&&`/`||` 우항 · `?:` arm** — §11.4.7/§11.4.11 상 건너뛸 수 있는 평가라 무조건 hoist 하면
+> 없어야 할 파일 읽기가 일어난다. `hoist/general.rs` 는 **guard block** 으로 처리하는데,
+> 가드된 fd 읽기는 이 슬라이스가 잰 것보다 큰 주장이다 ⇒ 선행조건 = `guarded_hoist` 를 이 계열에
+> 적용하고 그 아래에서 fd 상태 순서를 증명하는 것.
+> ⓑ **`while`/`for` 조건** — 반복마다 재평가돼야 하는데 한 번 hoist 는 한 번만 읽는다.
+> 선행조건 = 루프 본문 안으로 들어가는 재작성(`lower_shortcircuit_cond` 가 조건 operand 를 자기
+> 블록의 전체 식으로 만드는 것과 같은 모양).
+> ⓒ ⭐⭐ **`$feof` 가 살아남는 문장 전부** — `$feof(fd)` 는 인자에 대해서만 pure 하고 **파일
+> 위치를 읽는다**. hoist 는 변이를 그 앞으로 옮기므로 `x = $feof(fd)*10 + $fgetc(fd)` 가 EOF
+> 근처에서 갈린다(vita 9 / iverilog −1 · **파일 중간에서는 일치**해서 프로브가 못 잡는다).
+> 지금은 좌우를 안 가리고 통째로 거절한다 — *"소스에서 이 `$feof` 가 그 호출보다 먼저
+> 평가되는가"* 를 답하려면 `general.rs` 의 `order_walk` 급 순서 판정기가 필요하고, arm 마다
+> 순서 규약이 달라(`assign_seq` 는 rhs→인덱스, `Case` 는 scrutinee→라벨, 태스크는 인자열)
+> 방어 가능한 단일 술어가 없다 ⇒ **선행조건 = 순서 판정기**.
+> ⓓ **fail-closed 로 유예된 것** — 별칭을 이름으로 못 붙이는 읽기(self-계층 `m.a` · `p::v` ·
+> `Shape::NoHoist` 자식)가 있고 그 문장의 호출이 ref 를 쓰면 거절한다. 선행조건 = 루트 대신
+> **net 동일성**으로 겹침을 판정하는 것.
+>
+> ⚠️ `$sformatf`(문자열 temp + `sformatf_expr_ok` 의 측정된 degenerate-eval 함정) ·
+> 시드 `$random`/`$dist_*`(비균일 형제의 **선재 vita-iverilog 발산** — 새 위치로 옮기면 틀린 값이
+> 늘어난다) · `$cast`(temp 타입이 목적지를 따른다)는 이 계열에 **의도적으로 안 들어갔다**.
+
 > **④ unpacked 배열의 계층 원소 선택** (오라클 有 · serv). `dut.ram.mem[i] = …` 와
 > `$readmemh(f, dut.ram.mem)` 이 둘 다 E3009 다(*"a hierarchical element select is a deferred
 > follow-on"*). ⭐ **SoC 테스트벤치가 펌웨어를 싣는 정석 관용구**이고 serv 상류의 자체 벤치

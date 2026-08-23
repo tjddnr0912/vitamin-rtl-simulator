@@ -178,21 +178,45 @@ fn ungetc_neg1_is_noop_and_clears_eof() {
 }
 
 #[test]
-fn nested_placement_is_loud() {
-    // any non-direct-rhs placement is a clean E3009, not a silent wrong value.
+fn nested_placement_now_runs() {
+    // This pinned "any non-direct-rhs placement is a clean E3009". §4.5.374 opened the
+    // once-and-unconditionally-evaluated positions by hoisting the call into a temp emitted
+    // ahead of the statement. Measured: iverilog 13.0 prints 66 ('A' + 1).
     let (out, code) = run(
         "module t;\n\
          integer fd, x;\n\
          initial begin\n\
            fd = $fopen(\"in.txt\", \"r\");\n\
            x = $fgetc(fd) + 1;\n\
+           $display(\"x %0d\", x);\n\
+         end\n\
+         endmodule\n",
+        &[("in.txt", b"AB")],
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("x 66"), "{out}");
+}
+
+#[test]
+fn a_conditionally_evaluated_placement_is_still_loud() {
+    // §11.4.11: a `?:` arm runs only when the condition selects it, so hoisting the read out
+    // of it would advance the fd on a path the source never takes. `hoist/special.rs`
+    // declines those (and `&&`/`||` right operands, and loop conditions) on purpose.
+    let (out, code) = run(
+        "module t;\n\
+         integer fd, x, k;\n\
+         initial begin\n\
+           fd = $fopen(\"in.txt\", \"r\");\n\
+           k = 0;\n\
+           x = (k != 0) ? $fgetc(fd) : 7;\n\
+           $display(\"x %0d\", x);\n\
          end\n\
          endmodule\n",
         &[("in.txt", b"AB")],
     );
     assert!(
         out.contains("VITA-E3009") || code == Some(1),
-        "nested $fgetc must be loud: {out} code={code:?}"
+        "a ?: arm must stay loud: {out} code={code:?}"
     );
 }
 

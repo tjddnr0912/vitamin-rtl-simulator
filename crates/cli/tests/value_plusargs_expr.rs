@@ -108,14 +108,17 @@ fn statement_form_unchanged() {
 }
 
 #[test]
-fn nested_in_expression_is_loud() {
-    // Deeper in an expression the side-effect placement is uncontrolled — loud.
-    let (_o, ok) = run(
+fn nested_in_expression_now_runs() {
+    // This pinned "deeper in an expression the side-effect placement is uncontrolled".
+    // §4.5.374 gives it a controlled placement: a temp assign emitted ahead of the
+    // statement. Measured against iverilog 13.0 — the return value AND the ref write.
+    let (o, ok) = run(
         "module tb; int n,x; initial begin\n\
-         x = 1 + $value$plusargs(\"L=%d\", n); $display(\"R:%0d\", x); $finish; end endmodule",
+         x = 1 + $value$plusargs(\"L=%d\", n); $display(\"R:%0d,%0d\", x, n); $finish; \
+         end endmodule",
         &["+L=5"],
     );
-    assert!(!ok, "$value$plusargs nested in an expression must be loud");
+    assert!(ok && o == "2,5", "got:\n{o}");
 }
 
 #[test]
@@ -131,19 +134,31 @@ fn parenthesized_if_condition() {
 }
 
 #[test]
-fn compound_condition_is_loud() {
-    // A COMPOUND condition (`(call && x)`) peels to a Binary, not the bare call,
-    // so it stays loud (v1) — not silently mis-evaluated.
-    let (_o, ok) = run(
+fn a_compound_condition_runs_when_the_call_is_the_left_operand() {
+    // A compound condition peels to a `Binary`, not the bare call, so `lower_branch_cond`
+    // could not own it. §4.5.374 can: the call is the LEFT operand of `&&`, which §11.4.7
+    // evaluates unconditionally. Measured against iverilog 13.0: `R:none`.
+    let (o, ok) = run(
         "module tb; int n; logic x=0; initial begin\n\
          if (($value$plusargs(\"L=%d\", n)) && x) $display(\"R:y\");\n\
          else $display(\"R:none\"); $finish; end endmodule",
         &["+L=42"],
     );
-    assert!(
-        !ok,
-        "a compound $value$plusargs condition must be loud (v1)"
+    // `run` returns what follows the `R:` marker (see the harness at the top).
+    assert!(ok && o == "none", "got:\n{o}");
+}
+
+#[test]
+fn a_short_circuit_right_operand_is_still_loud() {
+    // The mirror image: §11.4.7 may skip the RIGHT operand, so hoisting the call out of it
+    // would consume the plusarg on a path the source never takes. Declined on purpose.
+    let (_o, ok) = run(
+        "module tb; int n; logic x=0; initial begin\n\
+         if (x && ($value$plusargs(\"L=%d\", n))) $display(\"R:y\");\n\
+         else $display(\"R:none\"); $finish; end endmodule",
+        &["+L=42"],
     );
+    assert!(!ok, "a short-circuit right operand must stay loud");
 }
 
 #[test]

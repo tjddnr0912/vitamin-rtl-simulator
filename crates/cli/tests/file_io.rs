@@ -127,18 +127,25 @@ fn fdisplay_bare_args_default_decimal() {
 }
 
 #[test]
-fn fopen_outside_direct_rhs_is_loud() {
-    let (_out, err, code, _d) = run_in_dir(
+fn fopen_outside_direct_rhs_now_runs() {
+    // §3 ③: this pinned the OLD restriction — `$fopen` was legal only as the DIRECT rhs,
+    // so `+ 0` made it `E3009`. `hoist/special.rs` evaluates the call into a temp before
+    // the statement, which is what both oracles do. Re-measured against iverilog 13.0:
+    // the expression yields a usable descriptor AND the file is created.
+    let (out, err, code, d) = run_in_dir(
         "module top;\n\
          integer fd;\n\
          initial begin\n\
            fd = $fopen(\"x.txt\", \"w\") + 0;\n\
+           $display(\"OPEN=%0d\", (fd != 0) ? 1 : 0);\n\
+           $fclose(fd);\n\
            $finish;\n\
          end\n\
          endmodule\n",
     );
-    assert_ne!(code, Some(0));
-    assert!(err.contains("E3009"), "stderr:\n{err}");
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(out.contains("OPEN=1"), "stdout:\n{out}");
+    assert!(d.join("x.txt").exists(), "the file was not created");
 }
 
 #[test]

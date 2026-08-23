@@ -115,15 +115,25 @@ fn value_plusargs_works_as_an_if_condition() {
 }
 
 /// The remaining restriction, pinned so it is visible rather than surprising.
-/// `$value$plusargs` WRITES its second argument, so like the rest of the
-/// side-effecting system-function family (seeded `$random`, `$fopen`,
-/// `$sformatf`, the fd-advancing file reads) it is lowered as a statement form to
-/// guarantee single evaluation. An arbitrary expression position has no statement
-/// to desugar into, so it is loud — deliberately, not as a gap to close cheaply.
+/// `$value$plusargs` WRITES its second argument, so like the rest of the side-effecting
+/// system-function family it is lowered as a statement form to guarantee single evaluation.
+///
+/// ⚠️ This pin used to assert the expression position was LOUD, on the reasoning that "an
+/// arbitrary expression position has no statement to desugar into". §4.5.374 built exactly
+/// that statement: `hoist/special.rs` evaluates the call into a temp emitted ahead of the
+/// enclosing statement. Re-measured against iverilog 13.0 and verilator 5.050 — both agree
+/// with vita on the return value AND the ref write, with and without the plusarg.
 #[test]
-fn value_plusargs_in_an_expression_is_loud() {
-    let (out, c) = run("module m;\n  int v;\n  initial begin\n\
-           $display(\"%0d\", $value$plusargs(\"num=%d\", v));\n\
-           #1 $finish; end\nendmodule\n");
-    assert_ne!(c, Some(0), "must be loud, not silently wrong; got:\n{out}");
+fn value_plusargs_in_an_expression_runs() {
+    let src = "module m;\n  int v;\n  initial begin\n\
+           $display(\"R=%0d\", $value$plusargs(\"num=%d\", v));\n\
+           $display(\"V=%0d\", v);\n\
+           #1 $finish; end\nendmodule\n";
+    let (out, c) = run(src);
+    assert_eq!(c, Some(0), "got:\n{out}");
+    assert!(out.contains("R=0") && out.contains("V=0"), "got:\n{out}");
+
+    let (out, c) = run_args(src, &["+num=7"]);
+    assert_eq!(c, Some(0), "got:\n{out}");
+    assert!(out.contains("R=1") && out.contains("V=7"), "got:\n{out}");
 }

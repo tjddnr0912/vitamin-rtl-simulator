@@ -93,20 +93,24 @@ fn value_plusargs_first_match_wins() {
 }
 
 #[test]
-fn value_plusargs_outside_direct_rhs_is_loud() {
+fn value_plusargs_outside_direct_rhs_now_runs() {
+    // §3 ③: this pinned the OLD restriction — legal only as the DIRECT rhs, so `+ 1` was
+    // `E3009`. `hoist/special.rs` evaluates the call into a temp before the statement.
+    // Re-measured: iverilog 13.0 and verilator 5.050 both print `ok=2 n=1`, so the ref
+    // write lands as well as the return value.
     let (out, err, code) = run_with(
         "module top;\n\
          integer n, ok;\n\
          initial begin\n\
            ok = $value$plusargs(\"D=%d\", n) + 1;\n\
-           $display(\"ok=%0d\", ok);\n\
+           $display(\"ok=%0d n=%0d\", ok, n);\n\
            $finish;\n\
          end\n\
          endmodule\n",
         &["+D=1"],
     );
-    assert_ne!(code, Some(0), "must fail loud, got stdout:\n{out}");
-    assert!(err.contains("E3009"), "stderr:\n{err}");
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(out.contains("ok=2 n=1"), "stdout:\n{out}");
 }
 
 #[test]

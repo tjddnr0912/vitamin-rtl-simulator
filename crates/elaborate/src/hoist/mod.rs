@@ -6,6 +6,7 @@ mod general_ast;
 mod general_query;
 mod general_stmt;
 mod sformatf;
+mod special;
 
 // `lower_stmt`'s `$sformatf` child hoist reads the same deferred-print list, so there is
 // exactly one copy of it.

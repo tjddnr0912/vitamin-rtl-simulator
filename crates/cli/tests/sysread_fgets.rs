@@ -110,21 +110,22 @@ fn fgets_bad_fd_leaves_dest_unchanged() {
 }
 
 #[test]
-fn fgets_nested_placement_is_loud() {
+fn fgets_nested_placement_now_runs() {
+    // §4.5.374 opened the once-and-unconditionally-evaluated positions. Measured against
+    // iverilog 13.0: the count is 2 (+1 = 3) and the destination holds "AB" = 0x4142.
     let (out, code) = run(
         "module t;\n\
          reg [32:1] buf4; integer fd, x;\n\
          initial begin\n\
            fd = $fopen(\"in.txt\", \"r\");\n\
            x = $fgets(buf4, fd) + 1;\n\
+           $display(\"x %0d b %0d\", x, buf4);\n\
          end\n\
          endmodule\n",
         &[("in.txt", b"AB")],
     );
-    assert!(
-        out.contains("VITA-E3009") || code == Some(1),
-        "nested $fgets must be loud: {out} code={code:?}"
-    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("x 3 b 16706"), "{out}");
 }
 
 #[test]

@@ -263,18 +263,18 @@ fn scanf_huge_width_does_not_panic() {
 }
 
 #[test]
-fn scanf_nested_placement_is_loud() {
+fn scanf_nested_placement_now_runs() {
+    // §4.5.374. Measured against iverilog 13.0: one conversion (+1 = 2), `a` gets 5.
     let (out, code) = run(
         "module t;\n\
          integer a, x;\n\
          initial begin\n\
            x = $sscanf(\"5\",\"%d\",a) + 1;\n\
+           $display(\"x %0d a %0d\", x, a);\n\
          end\n\
          endmodule\n",
         &[],
     );
-    assert!(
-        out.contains("VITA-E3009") || code == Some(1),
-        "nested $sscanf must be loud: {out} code={code:?}"
-    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("x 2 a 5"), "{out}");
 }

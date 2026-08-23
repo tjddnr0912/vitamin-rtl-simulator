@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 306건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 307건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.374` **직접-rhs 전용 시스템함수를 식 어디에나 — 참조 구현이 또 트리 안에 있었다** · 코퍼스가 지목한 §3 ③ · **darkriscv 전체 SoC(3,115줄·9모듈)가 처음 돌고 다이제스트가 라이브 iverilog 일치**(`b4a7bb6d411fea85`) · census 42칸(4형태 × 11위치) **PRE 41 loud** — 유일 예외가 `if ($value$plusargs(…))` 로, `lower_branch_cond` 가 **한 계열·한 위치**만 desugar 했고 `!` 하나에 도로 E3009(serv 철자) ⇒ POST **31 correct · WRONG 0** · ⭐ `hoist/general.rs` 가 이미 같은 변환을 하고 `shape()` 라는 평가-순서 **단일 정본**을 갖고 있어 그대로 소비 · ⚠️⚠️ **리뷰 전에 내가 잡은 둘** — temp 를 unsigned 로 지어 `$fgetc(fd)!=-1` 이 영원히 참(EOF 는 **−1**) · rhs 가 bare call 일 때 인덱스만 hoist 해 **평가 순서를 뒤집었다**(오라클은 rhs 먼저) · ⚠️⚠️ **적대 2렌즈 BLOCKING 여섯, 전부 내 게이트의 구멍**: ⓐ `write_arg_range` 가 **뒤집혀** `$fgets`/`$fread` 의 fd 를 write 로 세 겹침 게이트가 전부 통과 ⓑ `Shape::NoHoist` 자식 읽기가 안 보이는데 `rebuild` 는 노드를 살린다(`general.rs` 의 `reads_are_opaque` 가 방어하는 그 구멍) ⓒ 별칭을 놓침(자기-계층 `m.a` = `a` · `p::v`) ⓓ 미러링하며 `task_call_inout_root_written` 누락 — 그것만 되살려도 부족해 **input 아닌 actual 전부**를 살아남는 읽기로 넣는 `_with(seq, extra)` 신설 ⓔ 새 sigil 이 VCD/FST 에 새고 **이미 동작하던** `if ($value$plusargs(…))` 의 파형까지 바꿈 ⓕ ⭐⭐ **내가 이 슬라이스에서 쓴 docstring 의 전제가 거짓** — *"fd 상태는 문장의 어떤 식도 읽을 수 없다"* 위에 조기탈출을 세웠는데 `$feof` 가 그걸 읽는다(vita 9 / ivl −1) 그리고 **값 의존적**이라 파일 중간 프로브는 초록 · ⓑⓒ 는 fail-closed `opaque`, ⓕ 는 `fd_observer` + 조기탈출 순서 반전으로 해결 · ⚠️ 마지막 NIT 도 내 수정의 부작용(`Unevaluated` 를 `Uncond` 에 묶어 `$bits` 자식이 읽기로) · differential 렌즈 **112칸 스윕 DIVERGE 0** · examples 4/4·코퍼스 10 PRE==POST · ⭐ 스위트가 **옛 제한을 인코딩한 핀 여덟**을 짚어 전부 값-어서션으로 갱신 + 거절 쌍둥이 둘 신설(그중 한 docstring 은 *"desugar 할 문장이 없다 — deliberately, not a gap to close cheaply"* 라는 **불가능 주장**이었다) · 회귀 24건 · format 29 불변
 - `4.5.373` **리덕션 연산자가 상수 도메인에 없다 — 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ⑦ · 넣으면 **serv 가 돌고 다이제스트가 오라클과 일치**(코퍼스 7/10 → **8/10**)했지만 BLOCKING 넷에 되돌렸다 · ⭐ census: generate 만의 문제가 아니라 **여섯 연산자 · 두 철자 전부** 2-오라클 loud 이고 **값 walk 하나만** 비어 있다(폭은 이미 1, 부호는 이미 unsigned — §4.5.371 의 **정반대**) · ⚠️⚠️ ⓐ 리덕션이 `const_self_width` 를 **값으로** 쓰는데 그건 `param_meta`(선언·추론 **혼합**, 미스 32)를 읽어 `generate if (&W)` 가 **반대 가지**를 exit 0 으로 골랐다 ⓑ `~`/`-` 는 **문맥 결정**인데 module-scope walk 엔 문맥이 없어 `~(\|P)` 가 raw i64(4294967294 vs 0) ⓒ 좁힘 게이트를 **한 arm 에만** 달아 `localparam` 철자에 ⓐ 가 살아 있었고, 그 칸의 테스트가 **`VAL` 을 어서션 안 해** 틀린 답 위에서 초록이었으며 docstring 의 PRE 인용도 **거짓**이었다 ⓓ ⭐⭐ **좁힘의 근거인 정리가 거짓** — 전제 *"기록된 i64 는 참값의 확장"* 이 성립 안 한다: `parameter A=4'h1; localparam W=A<<4;` 가 vita **16/32비트** vs 두 오라클 **0/4비트** ⇒ 여분 비트가 **안쪽**에 있어 폭에 둔감한 `\|` 마저 가지를 뒤집는다 ⇒ **이름 위의 리덕션은 여섯 전부 신뢰 불가** · ⭐⭐ 선행조건이 **두 단계**(폭의 declared provenance + **값이 그 폭에서 canonical**)이고 리터럴만 허용하는 반쪽은 **수요 0** 이라 전부 되돌림 · ⚠️ **같은 벽을 세 문으로**(§4.5.371 select 바운드 · concat 폭 · 리덕션) ⇒ 큐 세 줄이 아니라 **벽 하나**로 §3 에 기록 · 되돌린 뒤 6칸 PRE==POST · **제품 코드 변경 0** · format 29 불변
 - `4.5.372` **`$fatal` 이 자기 출력을 못 막았다 — 그리고 `$finish` 승격은 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ⑧ · ⭐ census 가 진단을 반박(*"system task call"* 이라는데 10칸 중 **`$finish`·`$stop` 둘만** 거절 · 나머지 여덟은 이미 돈다) · **실은 것** = §20.10 상 `$fatal` 은 종료하는데 `&self` 실행기의 래치를 **문장 경계**에서 처리하느라 `$display("VAL=%0d", f(7))` 의 출력이 나갔다(**pre-existing silent-wrong** · task 호출과 `r=f(7)` 은 원래 정확 = 자리가 좁아 고칠 수 있었다) · ⚠️ 술어는 `call_fatal` 이 아니라 **`call_fatal && !finished`** — 래치가 안 지워져 맨 셀로 물으면 `final` 블록 출력을 통째로 삼킨다 · ⚠️⚠️ **되돌린 것** = `$finish`/`$stop` 승격(넣으면 verilog-ethernet 이 elaborate 통과) — **BLOCKING 여섯 중 넷이 내 수정이 만든 것**: 라우팅이 셋이라 native 가 *"실행기가 드롭한다"* 는 **거짓 진단**으로 폴백 · `Step::Fatal` 소비부 넷이 `Error` 를 가정해 `$finish` 가 exit 1 · BB 루프 bail 이 없어 `$finish` 뒤 문장이 계속 출력하고 `$fatal;$finish;` 가 `run.json` 을 **재라벨** · ⭐⭐ 그런데 그 bail 이 **중간에 멈춘 본문의 반환값을 caller lvalue 에 커밋**시켰다(vita **x** / iverilog **55** / verilator **21** = **셋 다 다른 답**)고 `$fdisplay`/`$strobe` 값을 **8→x** 로 바꿔 **silent↔silent 맞바꿈** ⇒ 승격은 *"멈춘 본문의 반환값"* 이 미정이고 쓰기-다음-검사 순서가 E4002 를 지키려 **의도적**이라 되돌리고 선행조건 기록 · ⭐ 리뷰의 다섯 번째는 **컨트롤이 무죄 증명**(cont-assign 순서는 PRE 도 같고 **verilator 가 vita 편** = 오라클 분열) · 13설계 **바이트 동일** · 회귀 6건 · format 29 불변
 - `4.5.371` **concat 의 폭을 값에서 추론했다 — 그리고 count 넓힘은 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ② 착수 · census 가 큐를 반박(*"loud→supported"* 인데 **11칸 전부 2-오라클 합의인데 vita 는 전부 틀리고 둘은 silent-wrong**) · **실은 것 = 폭 축**: §11.4.12 상 concat 은 자기결정인데 무타입 fallthrough 가 접힌 i64 에서 `min_signed_bits(v).max(32)` 로 재 `{2{32'd2}}` 이 **35**(오라클 64) · 미override `{2{8'h1}}` 이 **32**(오라클 16) — 둘 다 **pre-existing silent-wrong** · ⚠️⚠️ 그 arm 의 게이트 둘은 **리뷰가 측정한 뒤 붙었다**: ⓐ `default_binds` — §6.20.2 는 범위를 **최종 override 값**에서 가져오는데 선언식에서 폭을 정하니 `#(.P(32'hDEADBEEF))` 가 **16비트 `beef`**, 한 칸은 PRE loud 였는데 **514비트 버스를 조용히** 지었다(⭐ 내가 *"타입-결정 계열"* 이라 적은 게 정확히 틀린 자리 — **선언 타입은 override 를 견디지만 값-결정 폭은 못 견딘다**) ⓑ **leaf 단위 provenance** — resolver 가 `param_meta`(값-추론 폭)를 읽고 없으면 `(32,false)` 추측이라 `{W}` 가 **263비트 net**(§4.5.363 회귀의 concat 문 재진입) ⇒ leaf 가 전부 sized 리터럴일 때만 declared · **되돌린 것 = count 넓힘**: verilog-axi 를 **54 → 4** 까지 내렸지만 BLOCKING 넷, **마지막 셋이 내 수정이 만든 것** — ⓵ **폭 쌍둥이를 안 넓혀** 폭-인식 walk 가 무제한 도메인으로(⭐ **오라클 없이 유죄**: 같은 파일의 리터럴 쌍둥이가 다른 답) ⓶ 상수함수 **지역변수**를 접어 170(iverilog 명시 거부) ⓷ 고쳤더니 module-scope evaluator 가 **같은 이름의 지역변수를 지나쳐 파라미터**를 잡아 **43690** ⓸ 그 evaluator 는 **콜 깊이를 0으로 재시작**해 count 안의 호출이 **스택 오버플로·abort**(PRE loud) ⇒ ⭐⭐ count 축은 상수함수 **스코프**·**깊이**·`declared_only` **provenance** 를 동시에 만족해야 하고 그건 폭 축과 다른 머신러리다 ⇒ **되돌리고 메커니즘 기록**(§4.5.361 선례) · 13설계 **바이트 동일 13/13** · 회귀 9건 · format 29 불변
@@ -406,6 +407,76 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.374 — 직접-rhs 전용 시스템함수를 식 어디에나: 참조 구현이 또 트리 안에 있었다 (2026-08-24 · 5,904 green · format 29 불변)
+
+**한 줄**: 코퍼스가 지목한 §3 ③. `$fgetc`·`$value$plusargs` 계열은 **blocking 대입의 직접 rhs**
+에서만 살았다 — 다른 모든 위치가 E3009 인데 두 오라클은 전부 받는다. 호출을 temp 로 끌어내는
+**hoist 를 지어** 여덟 위치를 열었고, **darkriscv 전체 SoC(3,115줄·9모듈)가 처음으로 돌면서
+다이제스트가 라이브 iverilog 와 일치**한다(`b4a7bb6d411fea85`).
+
+**census.** 4 형태 × 11 위치 = 42칸. **PRE 41칸 loud**, 유일한 예외가 `if ($value$plusargs(…))`
+— `lower_branch_cond` 가 **한 계열·한 위치**만 desugar 하고 있었고 `!` 하나만 붙여도 E3009 였다
+(serv 테스트벤치의 철자가 정확히 그것). POST **31칸 correct · WRONG 0**, 남은 11은 설계상 거절.
+
+⭐ **참조 구현이 이미 트리 안에 있었다** — `hoist/general.rs`(3,237줄)가 output-formal 호출에
+대해 똑같은 변환을 하고, `Shape`/`shape()` 라는 *"어떤 자식이 · 무조건 · 어떤 순서로 평가되는가"*
+의 **단일 정본**과, 짝이 되는 statement arm 들(`repeat` 은 count 를 한 번 읽지만 `while` 조건은
+아니다 · `$monitor` 는 인자를 나중에 **다시 렌더**한다)을 갖고 있다. 새 모듈은 그 `shape()` 를
+**그대로 소비**하고 arm 구성을 미러링한다.
+
+**⚠️⚠️ 내가 측정으로 잡은 둘(리뷰 전).**
+- **temp 의 부호.** `$fgetc` 는 EOF 에 **−1** 을 낸다. 기존 `fresh_ia_tmp` 은 unsigned `Reg` 라
+  `$fgetc(fd) != -1` 이 `4294967295 != -1` = 영원히 참이 된다. 직접-rhs 형태는 사용자의
+  `integer` 에 바로 대입해서 이걸 한 번도 안 드러냈다.
+- **평가 순서.** rhs 가 bare call 일 때 lvalue 인덱스만 hoist 했더니 iverilog 가 **rhs 를 먼저**
+  평가하는 `m[$fgetc(f)] = $fgetc(f)` 가 뒤집혔다(65↔66). 종료 가드를 *"whole rhs 가 bare call"*
+  에서 *"bare call 이면서 문장에 hoist 할 게 더 없다"* 로 좁혀 해결 — 그 좁은 형태가 정확히
+  이 모듈이 합성하는 문장이다.
+
+**⚠️⚠️ 적대 2렌즈 · BLOCKING 여섯 · 전부 내 게이트의 구멍.**
+- ⓐ **`write_arg_range` 가 뒤집혀 있었다.** `$fgets(str,fd)`·`$fread(mem,fd,…)` 의 목적지는
+  **arg 0** 인데(IEEE §21.3.4, 그리고 vita 자신의 `sys_special.rs` 가 `args[0]` 에
+  `deny_const_param_write` 를 건다) `$value$plusargs` 와 한 팔에 묶어 **fd** 를 write 로 셌다.
+  fd 는 살아남는 식이 절대 들지 않으므로 겹침 게이트가 **전부 통과**시켰다.
+- ⓑ **`Shape::NoHoist` 자식의 읽기가 게이트에 안 보이는데 노드는 살아남는다.**
+  `shape_children` 이 그 노드에 `[]` 를 주는데 `rebuild` 는 `clone()` 한다 — `general.rs` 가
+  `reads_are_opaque` 로 방어하는 바로 그 구멍이고 새 모듈엔 대응물이 없었다.
+- ⓒ **별칭.** 루트를 `HierPath` 첫 세그먼트로만 봐서 자기-계층(`m.a` 는 v1 flatten 상 `a` 와
+  **같은 net**)과 `p::v`(`PkgScoped` 는 `Ident` arm 에 안 걸린다)를 놓쳤다.
+- ⓓ **미러링하면서 조건을 하나 빠뜨렸다.** `UserTaskCall` arm 의 `task_call_inout_root_written`.
+  ⭐ 그런데 그것만 되살려도 안 됐다 — 그 술어는 inout **함수 호출**용이라 syscall 을 못 본다 ⇒
+  `rhs_only_hoist_ok_seq_with(seq, extra)` 를 만들어 **input 이 아닌 actual 전부**를 살아남는
+  읽기로 넣었다.
+- ⓔ **temp 가 파형에 샜다.** 새 sigil `$rhs_only_tmp$` 를 만들었는데 VCD/FST 필터는 `$ia_tmp$`
+  **하나만** 안다. 그리고 이 훅이 `lower_branch_cond` 를 가로채므로 **이미 동작하던**
+  `if ($value$plusargs(…))` 의 파형까지 바뀌었다 ⇒ sigil 통일(kind 는 signed 유지).
+- ⓕ ⭐⭐ **내가 이 슬라이스에서 쓴 docstring 의 전제가 거짓이었다.** *"they mutate only fd
+  state, **which no expression in the statement can read** (`$feof` … is PURE and so never
+  hoisted — it would be re-evaluated where it stands either way)"* 라고 적고 그 위에
+  *"write 없음 ⇒ hazard 없음"* 조기탈출을 세웠다. `$feof` 는 **인자에 대해서만** pure 하고
+  파일 위치를 읽으며, *"제자리에서 재평가"* 가 바로 결함의 정의다 — **변이가 그 앞으로 이동**한다.
+  측정: 파일 소진 후 `x = $feof(fd)*10 + $fgetc(fd)` 가 vita **9** / iverilog **−1** / PRE loud.
+  ⚠️ **값 의존적**이라 더 나쁘다 — 파일 중간에서는 두 도구가 **일치**하므로 끝까지 읽지 않는
+  프로브는 틀린 답 위에서 초록이다.
+
+ⓑⓒ 는 별칭 형태를 열거하는 대신 **fail-closed `opaque` 플래그**로 답했고, ⓕ 는 `fd_observer`
+플래그와 **조기탈출 순서 반전**으로 답했다(root 비교만 건너뛰고 walk 자체는 항상 돈다).
+
+⚠️ 마지막 NIT 도 **내 수정의 부작용**이었다 — 이중 `shape()` 호출을 접으면서 `Unevaluated` 를
+`Uncond` 에 묶어 `$bits(a)` 의 자식이 읽기로 집계됐다(§20.5 상 런타임에 아무것도 안 읽는다).
+한 줄 복원.
+
+**측정.** 42칸 census(**FIXED 31 · WRONG 0**) · differential 렌즈의 **112칸 생성 스윕 DIVERGE 0**
+· darkriscv 전체 SoC **라이브 iverilog 다이제스트 일치** · examples 4/4 및 코퍼스 10 워크로드
+**PRE == POST** · `if ($value$plusargs(…))` VCD **바이트 동일** · 회귀 24건(값은 전부 iverilog 대조)
+· ⭐ 스위트가 **옛 제한을 인코딩한 핀 여덟**을 짚었다(`$fopen(…)+0` · `$value$plusargs(…)+1` ·
+`$display(…, $value$plusargs(…))` · `$fgetc+1` · `$fgets+1` · `$sscanf+1` · 식 중첩 ·
+`(call && x)` 조건) — 전부 오라클 재측정 후 **값을 어서션**하도록 고치고 거절 쌍둥이 둘(`?:` arm ·
+`&&` 우항)을 신설. 그중 하나의 docstring 은 *"임의의 식 위치엔 desugar 할 문장이 없다 —
+**deliberately, not a gap to close cheaply**"* 라는 **불가능 주장**이었고, 이 슬라이스가 정확히 그
+문장을 지었다 · elaborate 세금은 실제 워크로드에서 **30–40 ms 로 잡음
+안**(리뷰가 잰 +15% 는 60k 문장 합성 설계) · format 29 불변.
 
 #### 4.5.373 — 리덕션 연산자가 상수 도메인에 없다: 지어서·재서·되돌렸다 (2026-08-24 · format 29 불변 · **제품 코드 변경 0**)
 
