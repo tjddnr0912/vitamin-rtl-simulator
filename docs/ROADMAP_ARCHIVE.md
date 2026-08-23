@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 304건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 305건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.372` **`$fatal` 이 자기 출력을 못 막았다 — 그리고 `$finish` 승격은 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ⑧ · ⭐ census 가 진단을 반박(*"system task call"* 이라는데 10칸 중 **`$finish`·`$stop` 둘만** 거절 · 나머지 여덟은 이미 돈다) · **실은 것** = §20.10 상 `$fatal` 은 종료하는데 `&self` 실행기의 래치를 **문장 경계**에서 처리하느라 `$display("VAL=%0d", f(7))` 의 출력이 나갔다(**pre-existing silent-wrong** · task 호출과 `r=f(7)` 은 원래 정확 = 자리가 좁아 고칠 수 있었다) · ⚠️ 술어는 `call_fatal` 이 아니라 **`call_fatal && !finished`** — 래치가 안 지워져 맨 셀로 물으면 `final` 블록 출력을 통째로 삼킨다 · ⚠️⚠️ **되돌린 것** = `$finish`/`$stop` 승격(넣으면 verilog-ethernet 이 elaborate 통과) — **BLOCKING 여섯 중 넷이 내 수정이 만든 것**: 라우팅이 셋이라 native 가 *"실행기가 드롭한다"* 는 **거짓 진단**으로 폴백 · `Step::Fatal` 소비부 넷이 `Error` 를 가정해 `$finish` 가 exit 1 · BB 루프 bail 이 없어 `$finish` 뒤 문장이 계속 출력하고 `$fatal;$finish;` 가 `run.json` 을 **재라벨** · ⭐⭐ 그런데 그 bail 이 **중간에 멈춘 본문의 반환값을 caller lvalue 에 커밋**시켰다(vita **x** / iverilog **55** / verilator **21** = **셋 다 다른 답**)고 `$fdisplay`/`$strobe` 값을 **8→x** 로 바꿔 **silent↔silent 맞바꿈** ⇒ 승격은 *"멈춘 본문의 반환값"* 이 미정이고 쓰기-다음-검사 순서가 E4002 를 지키려 **의도적**이라 되돌리고 선행조건 기록 · ⭐ 리뷰의 다섯 번째는 **컨트롤이 무죄 증명**(cont-assign 순서는 PRE 도 같고 **verilator 가 vita 편** = 오라클 분열) · 13설계 **바이트 동일** · 회귀 6건 · format 29 불변
 - `4.5.371` **concat 의 폭을 값에서 추론했다 — 그리고 count 넓힘은 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ② 착수 · census 가 큐를 반박(*"loud→supported"* 인데 **11칸 전부 2-오라클 합의인데 vita 는 전부 틀리고 둘은 silent-wrong**) · **실은 것 = 폭 축**: §11.4.12 상 concat 은 자기결정인데 무타입 fallthrough 가 접힌 i64 에서 `min_signed_bits(v).max(32)` 로 재 `{2{32'd2}}` 이 **35**(오라클 64) · 미override `{2{8'h1}}` 이 **32**(오라클 16) — 둘 다 **pre-existing silent-wrong** · ⚠️⚠️ 그 arm 의 게이트 둘은 **리뷰가 측정한 뒤 붙었다**: ⓐ `default_binds` — §6.20.2 는 범위를 **최종 override 값**에서 가져오는데 선언식에서 폭을 정하니 `#(.P(32'hDEADBEEF))` 가 **16비트 `beef`**, 한 칸은 PRE loud 였는데 **514비트 버스를 조용히** 지었다(⭐ 내가 *"타입-결정 계열"* 이라 적은 게 정확히 틀린 자리 — **선언 타입은 override 를 견디지만 값-결정 폭은 못 견딘다**) ⓑ **leaf 단위 provenance** — resolver 가 `param_meta`(값-추론 폭)를 읽고 없으면 `(32,false)` 추측이라 `{W}` 가 **263비트 net**(§4.5.363 회귀의 concat 문 재진입) ⇒ leaf 가 전부 sized 리터럴일 때만 declared · **되돌린 것 = count 넓힘**: verilog-axi 를 **54 → 4** 까지 내렸지만 BLOCKING 넷, **마지막 셋이 내 수정이 만든 것** — ⓵ **폭 쌍둥이를 안 넓혀** 폭-인식 walk 가 무제한 도메인으로(⭐ **오라클 없이 유죄**: 같은 파일의 리터럴 쌍둥이가 다른 답) ⓶ 상수함수 **지역변수**를 접어 170(iverilog 명시 거부) ⓷ 고쳤더니 module-scope evaluator 가 **같은 이름의 지역변수를 지나쳐 파라미터**를 잡아 **43690** ⓸ 그 evaluator 는 **콜 깊이를 0으로 재시작**해 count 안의 호출이 **스택 오버플로·abort**(PRE loud) ⇒ ⭐⭐ count 축은 상수함수 **스코프**·**깊이**·`declared_only` **provenance** 를 동시에 만족해야 하고 그건 폭 축과 다른 머신러리다 ⇒ **되돌리고 메커니즘 기록**(§4.5.361 선례) · 13설계 **바이트 동일 13/13** · 회귀 9건 · format 29 불변
 - `4.5.370` **문자열 상수 도메인이 리터럴 전용이었다 — 그리고 참조 구현은 소비자가 하나뿐이었다** · 코퍼스(§4.5.369)가 지목한 §3 ① · ⭐⭐ `const_str_in_scope` 가 StrLit·Paren·Ident·PkgScoped 를 이미 풀고 있었는데 **호출자가 하나**(문자열 동등비교)라 아무도 **값**을 안 물었고 파라미터 바인딩 일곱은 리터럴 전용 쌍둥이를 쓰고 있었다 · 큐엔 *"삼항"* 한 줄인데 census 는 **바레 리터럴을 뺀 도메인 전체**(15/16칸이 2-오라클 합의인데 vita 전부 loud) · 고침 = `Ternary`(조건은 정수 도메인과 **같은 철자** · **양 arm 다 문자열** = fail-closed)와 `Concat` 두 arm + 값 소비자 라우팅(진단 가드는 *"리터럴인가"* 라는 다른 질문이라 제외) · ⚠️⚠️ **BLOCKING 넷 중 셋이 내 수정이 만든 것**: ⓐ 값이 **따옴표 포함 raw** 라 `{"RE","D"}`=`RE""D` ⓑ ⭐⭐ `str_param_raw` 가 **폭을 안 들고 다니는데** 문자열 경로가 수치 경로보다 먼저 돌아 `[95:0] X={"A","B"}` 가 96→**16비트** ⇒ **폭 게이트** ⓒ `{"ab",""}` 의 `""` 는 **NUL 한 바이트**인데 텍스트 join 은 0글자 ⇒ declines ⓓ *"문자열인가"* 가드를 **값 도메인**에 물어 `parameter W={"A","B"}` 가 합법적 `#(.W(9))` 를 거절(correct→loud) — 그런데 가드만 되돌리니 **폴드된 기본값이 override 를 삼켜** 16706(loud→silent) ⇒ `overridden` 플래그 · ⚠️⚠️ **재리뷰 BLOCKING**: 게이트 술어 `ty == Implicit` 의 틈으로 **범위 없는 `logic`/`reg`/`bit`**(폭 1비트인데 `Implicit`+`range:None`)가 빠져 `localparam bit P={"A","B"}` 가 1→**16비트** — 파서가 `var_kind` 를 **기록했다가 버려** `parameter bit P` 와 `parameter P` 가 구별 불가능했다 ⇒ 파서 **세 줄**(range 의 **마지막** fallback `[0:0]` — `forced_range` 에 넣으면 explicit range 를 덮는다) · ⭐⭐ **곁수확**: 그 틈이 문자열과 무관하게 이미 새고 있었다 — `localparam bit N=8'hFF` 가 vita **255/8** vs 두 오라클 **1/1** · 27칸 3-오라클 **FIXED 15 · ok→wrong 0** · 14설계 중 **12 바이트 동일**(나머지 둘이 표적: serv 10→3 · vether 6→2 에러) · 5,845 → **5,865 green**(회귀 20건) · `const_fn.rs` 1402줄 ⇒ **`const_str.rs`** 분리 · format 29 불변
 - `4.5.369` **워크로드 코퍼스 — 남이 쓴 RTL 로 값을 매기기** · 성능 판단이 오래 설계 **둘** 위에 서 있었다(picorv32 · **우리가 재려고 쓴** keccak) — 허가적 라이선스 서드파티 **여덟**을 핀된 SHA 로 가져와 오라클로 고정 · ⭐⭐ **첫 수확이 성능이 아니라 정확성이었다**: 여덟 중 **셋이 거절**되고 셋이 **전부 같은 축**(상수 도메인 파라미터 폴딩 — 문자열 삼항[verilog-ethernet] · 문자열 Ident[serv] · 정수 replication[verilog-axi])이며, **우리 프로브에서 나온 §2 큐엔 그 축이 한 줄**로 있었다 ⇒ 우리 프로브는 우리가 의심하는 것을 찾고 남의 RTL 은 **우리가 의심하지 않는 것**을 찾는다 · ⭐ 최소 재현이 축을 삼항 하나로 좁혔다(`(S=="AUTO")` 정수 localparam · `parameter SI="RED"` · generate-if 문자열 비교는 **셋 다 이미 정확**하고 `1 ? "RED" : "BLUE"` 만 E3009 · **iverilog·verilator 둘 다 RED**) · 그 밖에 `$fgetc`/`$value$plusargs` 가 **blocking 대입 rhs 에서만** 산다(논블로킹 쌍둥이·조건식 · 4줄 재현 · [[branch-parity-before-new-traffic]]) · `$readmemh(f, dut.ram.mem)` 계층 원소 선택 · **ibex 는 오라클이 없다**(iverilog 13 이 struct 타입 localparam 에서 syntax error, positional 로 바꾸면 `net_scope.cc:449` **abort**) · **성능은 양방향으로 뒤집혔다**: 서드파티 다섯 기하평균 **1.61×**(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.48 · darkriscv **0.78**), 도는 일곱 전체는 1.30 ⇒ ⭐ **우리가 쓴 keccak 둘이 평균을 끌어내리고 있었다 = 유리한 벤치가 아니라 가장 어려운 벤치** · ⚠️ 지는 둘(keccak-arr 0.53 · darkriscv 0.78)의 **공통점은 아직 안 쟀다** — 다음 성능 계측은 darkriscv 부터 · 도구 = `crates/corpus-runner`(stub → 실물 · **의존성 0** · 매니페스트는 Rust `const` 테이블 · 거절이 **일급 상태** `Expect::Refused{diag}` 라 known-gap / DRIFTED / PROMOTED / **loud→silent-wrong REGRESSION** 을 구분) · ⚠️⚠️ **적대 soundness 렌즈 BLOCKING 넷, 넷 다 도구가 자기 목적을 배신하는 모양** — ⓐ ⭐⭐ **`Grade::Promoted` 가 도달 불가능**: `expect_exit` 를 `expect` **옆의 자유 필드**로 뒀고 거절 행 셋은 *거절하면서 내는* 코드라 `1` 이었다 ⇒ 갭이 닫히면 vita 는 0 으로 나가 동등 비교가 깨지고 **"was loud, now crashes" 빨간불**이 된다 = **코퍼스가 존재하는 이유인 그 사건이 거짓 문구로 실패 보고** ⇒ 값을 타입 안으로 = **`Expect::Runs { exit }`**(거절 행엔 적을 자리가 없다) ⓑ **여덟 행이 다른 기계에서 복원 불가**: 테스트벤치가 전부 1st-party 인데 `bench/*` 가 통째로 gitignore 였고(핀된 SHA 는 **상류 RTL** 을 복원하지 **하네스**를 복원하지 않는다) 존재 판정이 `cwd.is_dir()` 라 `fetch` 직후 **실행되고** `cannot read 'tb.v'` 가 **"newly refused" 회귀 여덟 개**로 채점된다 ⇒ gitignore 를 **allow-list** 로 뒤집어 하네스 30파일 커밋 + 존재 판정을 **소스와 런타임 데이터**로 · 곁가지로 펌웨어 둘이 실은 상류 것이라 `prepare.sh` 재생성/클론 참조로 ⓒ **파이프를 안 비웠다** — `verilog-axi` 는 2×2 크로스바 하나로 **19,238 B** 를 쏟고 macOS 파이프는 16 KiB 시작이라 넘기면 교착 ⇒ 예산 600초 후 `Timeout` = **정직하게 거절하는 설계를 "was loud, now hangs" 로 무고** ⇒ 양 파이프를 **스레드로** 드레인 + stdout/stderr 분리 ⓓ `cargo fmt --check` 실패 · ⚠️ NIT 열셋 중 ⭐⭐ **내가 ENGINEERING_RULES 에 ★★★ 로 적은 *"호출자가 순차 측정을 할 방법이 없다"* 가 거짓**(`measure(&jobs[0..1])` 두 번이면 순차) — 하필 *"규칙은 타입이어야 한다"* 를 주장하는 문단에서 타입이 아닌 것을 타입이라 불렀다 ⇒ 정정, 그리고 그게 **진짜로 가능했던** 자리는 ⓐ 였다 · 비결정성 검출기가 `Grade::Ok` 뒤에 갇혀 **죽은 코드**(다이제스트가 갈리면 `Mismatch` 로 은퇴하므로 도달 불가) ⇒ 흔들리는 툴이 **일관되게 틀린 툴로** 보고되던 것 수정 · `--reps 3` 이 샘플 **둘**을 주던 것(“median” 이라 적힌 평균) ⇒ `--reps` = **타임드 샘플 수** · **제품 코드 변경 0** · 5,821 → **5,845 green**(러너 16 + 매니페스트 위생 8) · format 29 불변  · ⚠️⚠️ **후속(같은 슬라이스, 커밋 `ee42eaf` 이후)**: 멈춰 선 differential 렌즈가 킬 시점에 남긴 **한 문장**이 최대 발견을 냈다 — ⭐⭐ **`picorv32` 워크로드가 아무것도 재고 있지 않았다**. 코어의 덧셈기를 뒤집어도(`reg_op1+reg_op2` → `+1`) 다이제스트가 **바이트 동일**(`7836648e76208dc9`) — 테스트 프로그램이 `addi`/`add`/`beq` 뿐이라 계산된 레지스터 값이 **버스에 한 번도 안 나오고**, 다이제스트가 보는 건 버스뿐이라 그건 **설계 검사의 이름을 단 PC 추적**이었다(결정성·오라클 일치·사이클 해상도는 **전부 통과**했다 — 통과 못 하는 유일한 검사가 변형이다) ⇒ 프로그램에 `sw x5,64(x0)` + 바퀴 간 `x1` 이월 추가, 새 다이제스트 `68d30f61bf9bf1d4`(iverilog 일치 · N=400000 · 7.05 s) · **계약 5번 신설**(*"설계를 건드리면 다이제스트가 움직여야 한다"*) 후 **아홉 전부 변형 확인 = 전부 움직인다** · ⚠️ **죽은 변형 주의**: verilog-ethernet 이 처음 *"안 움직인다"* 를 냈는데 결함이 아니라 **루프백이 TX·RX 에 같은 `lfsr` 을 쓴다** — CRC 를 바꾸면 TX 가 틀린 FCS 를 붙이고 RX 가 정확하다고 검증해 상쇄된다(RX 쪽만 건드리니 즉시 움직임) ⇒ **변형은 비대칭이어야 한다** · picorv32 비가 1.48 → **1.44**, 서드파티 기하평균 1.61 → **1.60** · 상세 = [study/03](study/03-workload-corpus.md)
@@ -404,6 +405,60 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.372 — `$fatal` 이 자기 출력을 못 막았다; `$finish` 승격은 지어서·재서·되돌렸다 (2026-08-23 · format 29 불변)
+
+**한 줄**: 코퍼스가 지목한 §3 ⑧ 착수. 실은 것 = **pre-existing silent-wrong 하나**(`$fatal` 이
+`$display`/`$write` 의 인자에서 걸려도 그 출력이 나갔다). 되돌린 것 = `$finish`/`$stop` 의 프레임
+서브셋 승격 — 적대 리뷰 **4라운드에 BLOCKING 여섯**, 그중 넷이 내 수정이 만든 것이다.
+
+**census 가 진단을 반박했다.** 진단은 *"함수 본문이 **system task call** 을 써서 frame-call 서브셋
+밖"* 이라 말한다. 10칸을 재보니 `$display`·`$write`·`$error`·`$warning`·`$fatal`·`$fflush` 와
+시스템 **함수**(`$time`·`$random`·`$fopen`)가 **전부 이미 돌고**, **`$finish`·`$stop` 딱 둘**만
+거절된다. 두 오라클은 열 개 다 돈다. 문구가 실제 규칙보다 다섯 배 넓었다.
+
+**실은 것.** §20.10 상 `$fatal` 은 종료한다. 그런데 `&self` 프레임 실행기는 `Step` 을 반환할 수
+없어 `call_fatal` 을 래치하고 스케줄러가 **문장 경계**에서 처리하는데, `$display("VAL=%0d", f(7))`
+에서 그 경계는 **출력 뒤**다 ⇒ iverilog 가 `BEFORE,STOPPING` 에서 멈출 때 vita 는 `VAL=8` 을 한 줄
+더 찍었다. ⭐ 자리가 좁아서 고칠 수 있었다 — task 호출과 `r = f(7)` 대입은 **원래 정확**했고, **자기
+인자를 평가한 뒤 출력하는 문장**만 틀렸다. 고침 = `render_task_args` **다음에** 래치를 묻고 쓰기를
+건너뛴다.
+
+⚠️ 그리고 그 술어는 `call_fatal` 이 아니라 **`call_fatal && !finished`** 여야 했다(리뷰 발견):
+래치는 **지워지지 않으므로** 맨 셀로 물으면 `final` 블록의 출력까지 전부 삼킨다 — `final` 은
+스케줄러가 래치를 소비한 **뒤에** 돈다. iverilog 는 그걸 찍고 PRE 의 vita 도 찍었다 ⇒
+**loud→조용히 삼킨 사용자 출력**이 될 뻔했다.
+
+**되돌린 것 — `$finish`/`$stop` 승격.** 넣으면 **verilog-ethernet 이 elaborate 를 통과한다**.
+BLOCKING 여섯 중 넷이 내 수정이 만든 것이다:
+
+1. **라우팅이 셋**(elaborate `frames_classify` · `native/frames` · `frame_eval`) — 하나만 가르치니
+   native 가 vm 으로 폴백하며 *"a subroutine statement the frame executor drops"* 라는 **거짓
+   진단**을 냈다(실행기는 그걸 실행한다).
+2. `Step::Fatal` 소비부 **넷이 전부 `Error` 를 가정** ⇒ `$finish` 가 **exit 1**. 고침 = `call_fatal`
+   은 두고 **이유만** `call_end` 로 실어 `latched_end()` 로 읽는다(두 번째 래치를 인터프리터·VM·
+   JIT·native 넷에 각각 가르치지 않기 위해).
+3. ⭐⭐ **프레임 BB 루프에 bail 이 없어** `$finish` 뒤 문장이 계속 돌며 **출력**했고(`loud→silent`),
+   `$fatal; $finish;` 가 `run.json` 을 **`"finish"` 로 재라벨**했다(에이전트가 읽는 그 필드).
+4. ⚠️⚠️ 그런데 그 bail 이 **다음 두 개를 만들었다**: ⓐ 중간에 멈춘 본문의 **반환값이 caller 의
+   lvalue 에 커밋된다** — `r = f(7)` 이 vita **x**, iverilog **55**(대입 안 함), verilator **21**
+   (끝까지 실행) = **셋 다 다른 답**이고 vita 는 어느 쪽도 아니다 · ⓑ `$fdisplay`/`$strobe`/
+   `$monitor` 는 억제 검사가 없어 값이 **8 → x** 로 바뀌었다 = **silent↔silent 맞바꿈**(사다리가
+   명시적으로 금지).
+
+⭐⭐ **판단**: 승격은 *"본문이 중간에 멈춘다"* 를 요구하고, 멈춘 본문은 **반환값이 정의되지
+않는다**. 쓰기-다음-검사 순서는 `mem[f(i)] = 1` 의 E4002 를 지키려고 **의도적으로** 그렇게 돼 있고
+(`backend.rs:505-524`), `$finish` 레인을 그 레인과 분리해야 한다. 네 라운드 동안 고칠 때마다 새
+BLOCKING 이 나왔으므로 **되돌리고 선행조건을 §3 ⑧ 에 기록**한다(§4.5.361/§4.5.371 선례).
+
+⭐ **리뷰의 다섯 번째는 컨트롤이 무죄를 증명했다** — cont-assign 에서 `BEFORE` 가 빠지는 건
+`$finish` 없는 같은 설계도 **PRE 부터** 그렇고, **verilator 도 vita 와 같은 순서**다(iverilog 만
+다르다) ⇒ 결함이 아니라 **오라클 분열 축**.
+
+**측정(실은 범위).** `$display`/`$write` 인자 fatal 억제 = **iverilog 와 정확히 일치**(PRE 는 한 줄
+더) · `final` 출력 **보존** · `$fdisplay` 값 **PRE 와 동일**(맞바꿈 없음) · task/대입 위치 불변 ·
+프레임 없는 설계 불변 · 13설계 PRE/POST **바이트 동일** · 회귀 테스트 **6건** · clippy 0 · fmt 0 ·
+format 29 불변.
 
 #### 4.5.371 — concat 의 폭을 값에서 추론했다; count 넓힘은 지어서·재서·되돌렸다 (2026-08-23 · format 29 불변)
 

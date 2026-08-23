@@ -492,12 +492,31 @@
 > `servile.v:210`·`serv_top.v:437/484` 의 E3010 **셋**이 남았다 — ⚠️ **PRE 에도 있던 것**이다
 > (PRE = E3009 일곱 + E3010 셋 · POST = E3010 셋). 즉 갭이 **깊어진 게 아니라 드러났다**.
 >
-> **⑧ 함수 본문의 `$finish` — 그리고 진단이 틀린 이유를 댄다**(2-오라클 · **verilog-ethernet 을
-> 막는 것이 이제 이것**). 진단은 *"함수 본문이 **system task call** 을 써서 frame-call 서브셋
-> 밖"* 이라고 말하는데, 5칸 census 는 `$display`·`$error`·`$warning`·`$fatal` 이 **전부 통과**하고
-> **`$finish` 하나만** 거절됨을 보인다 ⇒ 문구가 실제 규칙보다 훨씬 넓다. `lfsr_mask` 의 `$finish`
-> 는 잘못된 설정에서만 도는 **방어 가지**라 정상 경로에선 실행되지도 않는다. 4줄 재현 有.
+> **⑧ 함수 본문의 `$finish`/`$stop`** (2-오라클 · **verilog-ethernet 을 막는 것** ·
+> ⚠️⚠️ **§4.5.372 가 지어서·재서·되돌렸다 — 선행조건이 기록됐으니 다음 시도는 여기서 시작하라**).
+> 진단은 *"함수 본문이 **system task call** 을 쓴다"* 고 말하는데 10칸 census 는 훨씬 좁다 —
+> `$display`·`$write`·`$error`·`$warning`·`$fatal`·`$fflush` 와 시스템 **함수** 전부가 이미 돌고
+> **`$finish`·`$stop` 딱 둘**만 거절된다. `lfsr_mask` 의 `$finish` 는 **실행되지 않는 방어 가지**다.
 >
+> ⭐ 넣으면 verilog-ethernet 이 **elaborate 를 통과한다**(실행은 프레임 레짐 탓에 매우 느리다).
+> 그런데 넣으려면 **본문이 중간에 멈춰야** 하고, 거기서 막힌다:
+> ⓐ 프레임 본문이 중간에 멈추면 **반환값이 정의되지 않는다** — 그리고 vita·iverilog·verilator 가
+> **셋 다 다른 답**을 낸다(iverilog 는 대입 자체를 안 하고, verilator 는 본문을 끝까지 돌리고,
+> vita 는 중단하면서 부분값/x 를 **커밋한다**). `r = f(7)` 의 lvalue 에 무엇을 쓸지가 미정이므로
+> 어느 것을 골라도 loud 를 silent 와 맞바꾼다 ·
+> ⓑ 쓰기-다음-검사 순서가 `Op::ends_statement` 에 박혀 있고, 그 순서는 `mem[f(i)] = 1` 의 E4002 를
+> 지키려고 **의도적으로** 그렇게 돼 있다(`backend.rs:505-524`) ⇒ `$finish` 레인을 그 레인과
+> **분리**해야 한다(`call_end.is_some()` 이 판별자가 된다) ·
+> ⓒ 라우팅이 셋이다 — `elaborate/frames_classify.rs` · `sim-engine/native/frames.rs` ·
+> `state/frame_eval.rs` — 하나만 가르치면 native 가 vm 으로 폴백하며 *"실행기가 드롭한다"* 는
+> **거짓 진단**을 낸다 · ⓓ `Step::Fatal` 소비부 넷이 전부 `Error` 를 가정하므로 이유를 따로 실어야
+> 한다(`call_end` + `latched_end()`, 지어서 측정했고 되돌린 패치에 있다).
+>
+> ✅ **분리해서 실은 절반(§4.5.372)**: `$fatal` 이 `$display`/`$write` 의 **인자에서** 걸리면 그
+> 출력이 나가면 안 된다(§20.10) — 경계가 출력 뒤라 vita 가 iverilog 보다 한 줄 더 찍던
+> **pre-existing silent-wrong**. 잔여 = `$fdisplay`/`$fwrite`·`$strobe`/`$monitor` 는 같은 검사가
+> 없어 여전히 한 문장 늦다(⚠️ 그 값이 곧 ⓐ 의 질문이라 지금 고치면 silent↔silent 맞바꿈이 된다).
+
 > **⑨ 파라미터 선언 fold 의 네 번째 복사본(`package.rs`)이 string/real 을 아예 라우팅 안 한다**.
 > §4.5.370 이 넷 중 **셋**(params·instance·generate)을 넓힌 결과, 패키지 안팎에서 **같은 원문이
 > 다르게 접힌다** — `package P; parameter SI = (S=="AUTO") ? "RED" : S;` 는 여전히 E3009 다.
@@ -889,14 +908,14 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,874 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.371) |
+| 게이트 | **5,880 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.372) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
 | **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **2026-08-22 재census 실측 상위 후보**(~~ⓐ = §4.5.364~~ · ~~ⓑ = §4.5.365~~ · ~~ⓒ 64비트 unsigned = §4.5.366~~ 로 RESOLVED · 각각 잔여는 §2): ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) |
-| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). 다음 표적 = **⑧**(함수 본문의 `$finish` **하나** = verilog-ethernet) → **⑦**(generate-if 조건 = serv) → **⑪**(wide 반환 상수함수 = verilog-axi) → **③**(`$fgetc`/`$value$plusargs` 의 blocking-only 술어) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
+| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). ~~⑧~~ 도 §4.5.372 가 **되돌렸다**(선행조건 = *멈춘 프레임 본문의 반환값* · 상세 §3 ⑧). 다음 표적 = **⑦**(generate-if 조건 = serv) → **⑪**(wide 반환 상수함수 = verilog-axi) → **③**(`$fgetc`/`$value$plusargs` 의 blocking-only 술어) → **④**(`$readmemh(f, dut.ram.mem)`) · ⚠️ **⑧⑪ 은 §2 급 잔여를 남겼다**(§3 ⑧ 의 `$fdisplay`/`$strobe` 한 문장 lag) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
 | **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정 · **§4.5.369 워크로드 코퍼스로 재가격**) — ⚠️⚠️ **코퍼스가 그림을 양방향으로 바꿨다**: 남이 쓴 RTL 다섯에서 vita 는 iverilog 대비 **기하평균 1.61×** 로 앞선다(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.44 · darkriscv **0.78**) — *"iverilog 와 동률"* 은 **우리가 쓴 keccak 두 설계**가 만든 그림이었고, 그 둘은 우리에게 유리한 벤치가 아니라 **가장 어려운 벤치**였다(빼면 1.30 → **1.60**) · ⭐ 표적은 여전히 frame 레짐이다: keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 **0.53× 로 코퍼스 최악**이다 · ⚠️ **다만 지는 둘의 공통점은 아직 안 쟀다** — `keccak_f_arr` 는 호출마다 25원소 배열을 짓고 `darkriscv`(0.78×)는 그런 게 없다. **다음 성능 슬라이스의 첫 계측은 darkriscv 여야 한다**(우리가 안 쓴 설계이고, 지는 이유가 아레나 가설과 다를 수 있다) · ⚠️ **arena 가 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0`), `WProg::run` 은 `arena.buf[slot]` 을 읽는데 **frame local 엔 슬롯이 없다**(6–10주 · 상한 2.33× — ⚠️ 그 2.33 은 **keccak_f_arr 하나**에서 나온 수다) · bounded 조각 둘이 이미 수확: §4.5.367 part-select 쓰기 **−15.6%**, §4.5.368 no-op `mask_top` 제거 **keccak_f_arr −11.1% · keccak_f −13.2%** · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 코퍼스 single-core 실측을 확보하는 것이 열린 항목이다 |

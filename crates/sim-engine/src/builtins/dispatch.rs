@@ -535,15 +535,55 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
         }
         SysTaskId::Display => {
             let mut s = crate::builtins::render_task_args(sched, nets, fmt, args, radix);
+            if sched.st.call_fatal.get() && !sched.st.finished {
+                return Ctl::Continue; // see `fatal_latched_while_rendering` below
+            }
             s.push('\n');
             write_out(sched.st, &s);
             Ctl::Continue
         }
         SysTaskId::Write => {
             let s = crate::builtins::render_task_args(sched, nets, fmt, args, radix);
+            if sched.st.call_fatal.get() && !sched.st.finished {
+                return Ctl::Continue; // see `fatal_latched_while_rendering` below
+            }
             write_out(sched.st, &s);
             Ctl::Continue
         }
+        // ── `fatal_latched_while_rendering` ────────────────────────────────────
+        // §20.10: `$fatal` terminates the simulation. Rendering an argument can RUN
+        // one — `$display("VAL=%0d", f(7))` where `f` calls `$fatal` — and the
+        // termination is only honoured at the STATEMENT boundary (`Op::ends_statement`
+        // → `k_call_fatal`), which is after this line. So the print happened anyway:
+        // iverilog stops after the fatal's own message and vita emitted one more line
+        // (`BEFORE, STOPPING, VAL=8` against iverilog's `BEFORE, STOPPING`).
+        //
+        // Only this position is affected. A task call is a statement of its own and a
+        // `r = f(7)` assignment produces no output, so both were already exact — the
+        // lag needs a statement that PRINTS AFTER evaluating its own arguments.
+        //
+        // The check is deliberately after `render_task_args`, not before: the fatal is
+        // latched BY that rendering, so asking earlier would answer about the previous
+        // statement.
+        //
+        // ⚠️ And it is `call_fatal && !finished`, not the raw cell. The latch is never
+        // CLEARED — once the scheduler consumes it, `finished` goes true and the run
+        // winds down — so a bare `call_fatal` also suppressed every print in a `final`
+        // block, which runs after that point. iverilog emits those, and so did vita
+        // before this check existed: that would be loud turning into silently dropped
+        // user output. `!finished` is exactly "the run is ending right now" as opposed
+        // to "the run already ended".
+        //
+        // ⚠️ RESIDUE, deliberately not closed here (ROADMAP §3 ⑧):
+        //  - Per-STATEMENT, not per-argument: in `$display("%0d %0d", f(7), side(5))`
+        //    with a fatal inside `f`, a NON-frame `side` has already run when this
+        //    fires. (A frame-body side effect does not — measured.)
+        //  - `$fdisplay`/`$fwrite` and the postponed `$strobe`/`$monitor` renders have
+        //    no equivalent check and still emit one statement late. Giving them one is
+        //    the same two lines, but the value they would then print is the question
+        //    §3 ⑧ records: a frame body that ends the run mid-way has no defined
+        //    return, and vita, iverilog and verilator give three different answers.
+
         // $strobe: REGISTER a postponed capture (does NOT print now). It is
         // rendered with settled end-of-timestep values at `flush_postponed`,
         // then cleared (one-shot per call). Multiple strobes in one step print
