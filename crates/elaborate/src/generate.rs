@@ -506,7 +506,7 @@ impl Elaborator<'_> {
                 // A STRING-valued parameter has no i64 value either — same shape as
                 // the real case above, and without this a `localparam string S = "x";`
                 // inside a generate block is loud on its own declared default.
-                if let Some(raw) = Self::param_str_literal(&p.value) {
+                if let Some(raw) = self.param_str_or_folded(p, false) {
                     let key = self.fq(&p.name.name);
                     self.str_param_raw.insert(key, raw);
                     return;

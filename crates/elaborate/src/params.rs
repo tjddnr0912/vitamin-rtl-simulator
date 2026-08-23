@@ -66,6 +66,61 @@ impl Elaborator<'_> {
         self.param_decl_width_opt(p, false)
     }
 
+    /// The string value of a parameter's declared default: its LITERAL first, and only
+    /// then the widened constant-domain fold.
+    ///
+    /// The order and the gate are both load-bearing.
+    ///
+    /// The literal question comes first so that every shape which bound a string
+    /// before this existed still takes byte-identically the same route.
+    ///
+    /// The gate exists because `str_param_raw` carries **no width**, and the string
+    /// route runs BEFORE the width-carrying numeric and wide paths at every consumer.
+    /// A declaration that states a width or an integral type therefore loses it:
+    /// `localparam [95:0] X = {"A","B"};` came out as 16 bits where both oracles say
+    /// 96, and `localparam [95:0] Z = 1 ? "AB" : "CD";` came out 16706 where iverilog
+    /// says 0. Those shapes were LOUD before the widening, so folding them into the
+    /// width-free side map is loud → silent-wrong — the one move the ladder forbids.
+    /// Declining keeps them exactly as loud as they were.
+    ///
+    /// An untyped, unranged declaration has no width to lose: `localparam Q =
+    /// {"A","B"}` measures 16706 at 16 bits on vita *and* on both oracles.
+    /// The override text to apply to `p`, or None to leave the declared default.
+    ///
+    /// A LITERAL override applies as it always has. A FOLDED one applies only when the
+    /// child's declaration has no width to lose — see [`Self::param_str_or_folded`]
+    /// for why, and `ResolvedOverride::str_is_literal` for what the flag records.
+    pub(crate) fn override_text_for(
+        p: &ast::ParamDecl,
+        ov: &crate::toplevel::ResolvedOverride,
+    ) -> Option<String> {
+        let t = ov.str.as_ref()?;
+        if ov.str_is_literal || (p.range.is_none() && matches!(p.ty, ast::ParamType::Implicit)) {
+            Some(t.clone())
+        } else {
+            None
+        }
+    }
+
+    /// `overridden` = a NUMERIC override targets this parameter, so the declared
+    /// default is not what binds. The folded fallback must stand down then: an untyped
+    /// `parameter W = {"A","B"}` is an ordinary numeric parameter whose default happens
+    /// to be a string expression, and both oracles apply `#(.W(9))` to it and print 9.
+    /// Folding the default into the width-free string map instead makes the override
+    /// vanish and the design run at 16706 — a silently different design at exit 0,
+    /// which is worse than the false-loud it replaced.
+    pub(crate) fn param_str_or_folded(
+        &self,
+        p: &ast::ParamDecl,
+        overridden: bool,
+    ) -> Option<String> {
+        Self::param_str_literal(&p.value).or_else(|| {
+            (!overridden && p.range.is_none() && matches!(p.ty, ast::ParamType::Implicit))
+                .then(|| self.const_str_in_scope(&p.value))
+                .flatten()
+        })
+    }
+
     /// [`Self::param_decl_width`] with an OPT-IN provenance filter.
     ///
     /// `declared_only` = answer only when the width came from a DECLARED RANGE, a
@@ -491,6 +546,9 @@ impl Elaborator<'_> {
                     is_named: true,
                     fill: Some((kind, t.to_string())),
                     had_value: true,
+                    // A `-G` fill override carries no text at all, so the flag is
+                    // never read — `false` is the honest value.
+                    str_is_literal: false,
                     str: None,
                 });
                 continue;
@@ -525,6 +583,9 @@ impl Elaborator<'_> {
                 is_named: true,
                 fill: None,
                 had_value: true,
+                // `-G NAME="text"` is a literal by construction — the CLI parses the
+                // quotes itself, there is no expression to fold.
+                str_is_literal: true,
                 str: text,
             });
         }
@@ -573,8 +634,8 @@ impl Elaborator<'_> {
                         if let Some(f) = &ov.fill {
                             o.fill.insert(p.name.name.clone(), f.clone());
                         }
-                        if let Some(t) = &ov.str {
-                            o.text.insert(p.name.name.clone(), t.clone());
+                        if let Some(t) = Self::override_text_for(p, ov) {
+                            o.text.insert(p.name.name.clone(), t);
                         }
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
@@ -593,8 +654,8 @@ impl Elaborator<'_> {
                         if let Some(f) = &ov.fill {
                             o.fill.insert(p.name.name.clone(), f.clone());
                         }
-                        if let Some(t) = &ov.str {
-                            o.text.insert(p.name.name.clone(), t.clone());
+                        if let Some(t) = Self::override_text_for(p, ov) {
+                            o.text.insert(p.name.name.clone(), t);
                         }
                         if ov.value.is_none()
                             && ov.fill.is_none()
@@ -748,6 +809,20 @@ impl Elaborator<'_> {
                     // folded, so `ovr_by_name` has it and the escalation above stays
                     // quiet, and then this route installed the declared DEFAULT — a
                     // silently different design. iverilog rejects the assignment.
+                    // ⚠️ `param_str_literal`, NOT the widened resolver. This guard asks
+                    // *"was this declared as a string?"*, and it approximates that with
+                    // *"is its default a string literal?"*. Asking the VALUE domain
+                    // instead makes an ordinary untyped parameter whose default happens
+                    // to be a string EXPRESSION — `parameter W = {"A","B"}` — refuse a
+                    // perfectly legal numeric override: both oracles run `#(.W(9))` and
+                    // print 9, and so did this simulator before the widening.
+                    // correct-support → loud is a fall down the ladder.
+                    //
+                    // (The approximation is already too broad for a LITERAL default —
+                    // iverilog accepts `#(parameter W="AB")` + `#(.W(9))` — but that
+                    // false-loud is pre-existing and recorded in ROADMAP §3; growing it
+                    // is what this slice must not do. Same distinction that keeps
+                    // `systask.rs` on this helper.)
                     if Self::param_str_literal(&p.value).is_some()
                         && ovr_by_name.contains_key(p.name.name.as_str())
                     {
@@ -760,7 +835,7 @@ impl Elaborator<'_> {
                             ),
                         );
                     }
-                    Self::param_str_literal(&p.value)
+                    self.param_str_or_folded(p, ovr_by_name.contains_key(p.name.name.as_str()))
                 }
             };
             if let Some(raw) = str_val {

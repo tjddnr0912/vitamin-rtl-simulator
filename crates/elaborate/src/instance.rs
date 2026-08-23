@@ -187,6 +187,9 @@ impl Elaborator<'_> {
                         // uses. `v` above is the parent-side 32-bit fold and is the
                         // fallback for everything that is not a fill.
                         fill,
+                        // A defparam carries no text at all, so the flag is never
+                        // read here — `false` is the honest value for "not a literal".
+                        str_is_literal: false,
                         str: None,
                     })
                     .collect()
@@ -311,7 +314,7 @@ impl Elaborator<'_> {
                     // "abc"`, or the untyped `localparam S = "abc"`). It has no i64
                     // value, so record its raw literal (FQ-keyed, persistent — walk_scopes
                     // only matches from the declaring prefix) and skip the numeric fold.
-                    if let Some(raw) = Self::param_str_literal(&p.value) {
+                    if let Some(raw) = self.param_str_or_folded(p, false) {
                         let key = self.fq(&p.name.name);
                         self.str_param_raw.insert(key, raw);
                     } else if let Some((v, exact)) = self.param_real_value(&p.ty, &p.value) {
@@ -988,7 +991,8 @@ impl Elaborator<'_> {
                         is_named: false,
                         had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
-                        str: Self::param_str_literal(e),
+                        str_is_literal: Self::param_str_literal(e).is_some(),
+                        str: self.const_str_in_scope(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -1029,7 +1033,9 @@ impl Elaborator<'_> {
                     let fill = value
                         .as_ref()
                         .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string())));
-                    let text = value.as_ref().and_then(Self::param_str_literal);
+                    let text_is_literal =
+                        value.as_ref().and_then(Self::param_str_literal).is_some();
+                    let text = value.as_ref().and_then(|e| self.const_str_in_scope(e));
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
                         if r.is_none() {
@@ -1080,6 +1086,7 @@ impl Elaborator<'_> {
                         is_named: true,
                         had_value: value.is_some(),
                         fill,
+                        str_is_literal: text_is_literal,
                         str: text,
                     });
                 }

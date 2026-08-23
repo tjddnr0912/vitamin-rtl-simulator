@@ -26,7 +26,8 @@ impl Elaborator<'_> {
                         is_named: false,
                         had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
-                        str: Self::param_str_literal(e),
+                        str_is_literal: Self::param_str_literal(e).is_some(),
+                        str: self.const_str_in_scope(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -63,7 +64,9 @@ impl Elaborator<'_> {
                     let fill = value
                         .as_ref()
                         .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string())));
-                    let text = value.as_ref().and_then(Self::param_str_literal);
+                    let text_is_literal =
+                        value.as_ref().and_then(Self::param_str_literal).is_some();
+                    let text = value.as_ref().and_then(|e| self.const_str_in_scope(e));
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
                         if r.is_none() {
@@ -102,6 +105,7 @@ impl Elaborator<'_> {
                         is_named: true,
                         had_value: value.is_some(),
                         fill,
+                        str_is_literal: text_is_literal,
                         str: text,
                     });
                 }

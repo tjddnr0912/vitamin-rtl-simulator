@@ -354,14 +354,17 @@ pub static CORPUS: &[Workload] = &[
         data: &["src/sw/blinky.hex"],
         plusargs: &["+N=500000"],
         digest: "DIGEST=f3f45af36093b2b1",
+        // §4.5.370 folded the string constant domain, which removed all SEVEN E3009s
+        // this row used to pin. The three E3010s behind them were already there in
+        // PRE — the gap moved deeper, it did not appear.
         expect: Expect::Refused {
-            diag: "the override of parameter `RESET_STRATEGY` is not a constant",
+            diag: "generate-if condition is not a constant",
         },
         // Not verilator: SERV reads an uninitialised register file and drives x
         // deliberately, so its 2-state result (e7e8b5e6c1276563) is a different
         // design's answer. iverilog and vita's probe build agree.
         oracle: "iverilog 13.0",
-        note: "bit-serial, ~35 clk/insn — a scheduler-throughput workload. ROADMAP §3 ①",
+        note: "bit-serial, ~35 clk/insn — a scheduler-throughput workload. ROADMAP §3 ⑦",
     },
     Workload {
         name: "verilog-axi",
@@ -418,11 +421,15 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=1000"],
         digest: "DIGEST=ca4945d0044f74d8",
+        // §4.5.370 folded `STYLE_INT`. What is left is narrower than the message
+        // says: of `$display`/`$error`/`$warning`/`$fatal`/`$finish` in a function
+        // body, ONLY `$finish` is refused — and `lfsr_mask`'s sits in a defensive
+        // branch that never executes.
         expect: Expect::Refused {
-            diag: "parameter `STYLE_INT` value is not a foldable constant expression",
+            diag: "outside the frame-call subset",
         },
         oracle: "iverilog 13.0 (verilator 5.050 agrees)",
-        note: "GMII loopback — the only streaming shape. ROADMAP §3 ①",
+        note: "GMII loopback — the only streaming shape. ROADMAP §3 ⑧",
     },
     Workload {
         name: "keccak",

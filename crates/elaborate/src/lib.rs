@@ -58,6 +58,7 @@ mod const_fn;
 mod const_fn_width;
 mod const_real;
 mod const_select;
+mod const_str;
 mod cover;
 mod cover_bins;
 mod cover_synth;

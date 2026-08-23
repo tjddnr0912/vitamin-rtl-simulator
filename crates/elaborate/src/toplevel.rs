@@ -41,6 +41,15 @@ pub(crate) struct ResolvedOverride {
     /// exit 0 — the silent risk the aes_top report named. `bind_params` applies
     /// this alongside `fill`.
     pub(crate) str: Option<String>,
+    /// Whether `str` came from a string LITERAL rather than from a constant-domain
+    /// fold (a `?:`, a concatenation, a forwarded string parameter).
+    ///
+    /// The distinction is the child's WIDTH. `str` lands in a side map that carries
+    /// none, so applying it to a child declared `parameter [95:0] RS` silently drops
+    /// the declared width. For a literal that loss is pre-existing behaviour; for a
+    /// folded value the shape was LOUD before, so folding it would be loud →
+    /// silent-wrong. `bind_params` gates on this.
+    pub(crate) str_is_literal: bool,
 }
 
 impl ResolvedOverride {

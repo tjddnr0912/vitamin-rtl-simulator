@@ -345,7 +345,27 @@ impl Parser<'_, '_> {
             expl0,
             expl1,
         } = pfx.clone();
-        let range = forced_range.or_else(|| explicit_range.clone());
+        // `logic`/`reg`/`bit` with NO explicit range are ONE bit (§6.11.2). The atom
+        // recorded that in `var_kind` and then dropped it: `ParamDecl` has no such
+        // field, so `parameter bit P` and `parameter P` were literally
+        // indistinguishable downstream, and the declared width was simply lost.
+        //
+        // ⚠️ It must be the LAST fallback, never `forced_range`. Setting the atom's
+        // own width would override an explicit one, and `parameter logic [7:0] P`
+        // would come out 1 bit.
+        //
+        // Found because the string constant domain's width gate (§4.5.370) reads
+        // `p.range.is_none()` to mean "this declaration states no width", which was
+        // false for exactly these three keywords — `localparam bit P = {"A","B"}`
+        // folded to 16 bits where both oracles say 1. The same gap made
+        // `localparam bit P = 8'hFF` read 255 at 8 bits where both oracles say 1.
+        let range = forced_range.or_else(|| explicit_range.clone()).or_else(|| {
+            matches!(
+                var_kind,
+                Some(NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit)
+            )
+            .then(|| Self::dec_range(0))
+        });
         // §4.5.156 (§3 全 site): a typed param's kind may not carry a user packed range
         // unless it is a vector (`logic`/`reg`/`bit`). `forced_range` is the atom's OWN
         // fixed width (byte→[7:0]) not a user dim, so gate on `explicit_range` only.
