@@ -226,6 +226,15 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 v.is_real = false;
                 v.signed = false;
                 v.width = 64;
+                // ⚠️ RE-CANONICALISE. Stamping a width onto planes that were built
+                // for the ARGUMENT's width leaves a `Value` whose planes are longer
+                // than `nwords(64)` — the argument need not be 64 bits (iverilog
+                // rejects that outright; vita accepts it, ROADMAP §3). Every other
+                // producer masks on its tail, and §4.5.368 made `resize` at equal
+                // width ASSERT that invariant instead of re-establishing it, so this
+                // was the one producer that broke it: `$realtobits(<128-bit>)`
+                // panicked the debug build on a design release ran correctly.
+                v.mask_top();
                 v
             }
             SysFuncId::BitsToReal => {
@@ -239,6 +248,13 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 v.is_real = true;
                 v.signed = true;
                 v.width = 64;
+                // The `is_real` twin of the note above: both `mask_top` and
+                // `is_canonical` exempt a real (masking would corrupt the IEEE
+                // bits), so this cannot trip the assert — but a real carrying more
+                // words than it needs is still untidy, and dropping them here keeps
+                // the two `$…tobits`/`$bitsto…` producers symmetric.
+                v.val.resize(1, 0);
+                v.unk.resize(1, 0);
                 v
             }
             SysFuncId::Signed => {

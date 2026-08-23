@@ -329,6 +329,25 @@ impl Value {
     /// `nwords(width)` words (every constructor / word-parallel op builds it so), and
     /// `mask_top` is on the tail of nearly every Value operation, so skipping the
     /// no-op `resize` (its match + bookkeeping) in the common case is a measured win.
+    /// Are the planes exactly `nwords(width)` words with no bits set above `width`
+    /// in the top word — i.e. is `mask_top` a no-op on this value?
+    ///
+    /// The invariant every producer maintains, spelled out so the one consumer that
+    /// used to re-establish it (`resize` at equal width) can ASSERT it instead. Only
+    /// reached from `debug_assert!`, so it costs nothing in release.
+    pub(crate) fn is_canonical(&self) -> bool {
+        if self.is_real {
+            return true; // a real is 64 IEEE bits and is never bit-masked
+        }
+        let n = nwords(self.width).max(1);
+        if self.val.len() != n || self.unk.len() != n {
+            return false;
+        }
+        let m = top_mask(self.width);
+        self.val.get(n - 1).is_none_or(|w| w & !m == 0)
+            && self.unk.get(n - 1).is_none_or(|w| w & !m == 0)
+    }
+
     pub(crate) fn mask_top(&mut self) {
         if self.is_real {
             return; // a real is 64 IEEE bits; never bit-mask (would corrupt it).
@@ -471,7 +490,50 @@ impl Value {
             return self; // a real is dimensionless 64-bit; width context is a no-op.
         }
         if new_width == self.width {
-            self.mask_top();
+            // ⚠️ NOT `mask_top()`. A `Value` is CANONICAL BY CONSTRUCTION — every
+            // producer masks on its tail (`from_packed`, `zeros`/`ones`, each
+            // word-parallel op, and the two resize paths below), which is the very
+            // invariant `mask_top`'s own doc rests on: "a `Value` is almost always
+            // already exactly `nwords(width)` words". A SAME-WIDTH resize therefore
+            // re-establishes something that already holds — and that is not free.
+            // Measured on `bench/keccak` (release+symbols, `/usr/bin/sample`):
+            // `mask_top` was 15.9% of the run with 40.6% of it attributed to THIS
+            // call, and dropping it is −11.1% on keccak_f_arr and −13.2% on
+            // keccak_f, with keccak_f_flat and picorv32 unchanged (best-of-5,
+            // PRE/POST interleaved — a sequential A-then-B layout reported a fake
+            // +12.5% on picorv32).
+            // ⚠️ The 6.5% attribution and the 11–13% win are TWO measurements, not
+            // one: a sampler's self time counts only cycles inside `mask_top`, and
+            // removing a `&mut self` call also stops the `Value` escaping, so the
+            // caller can keep it in registers instead of spilling both planes
+            // around the call. That is the likely rest of the gap and it is
+            // THEORY — the A/B wall clock is the result; the profile percentage is
+            // only what pointed at it.
+            //
+            // ⚠️⚠️ The `debug_assert` is the PROOF OBLIGATION, not decoration. Every
+            // other `mask_top` call site is a producer establishing the invariant;
+            // this was the one consumer re-checking it, so removing it moves the
+            // burden onto the producers — and the assert is what makes a future
+            // producer that forgets fail LOUDLY in debug and CI (both run the dev
+            // profile) rather than reaching here unnoticed.
+            // ⚠️ Note which way the risk points: release is unaffected (every
+            // consumer indexes by `nwords(net width)`, so extra words are absorbed),
+            // so a violation shows up as a DEBUG abort on a design release runs
+            // correctly — the worst split to debug, and the reason the fix belongs
+            // at the producer.
+            // ⚠️⚠️ "The 5,812-test suite never fired it" is a COVERAGE statement, not
+            // a proof, and the adversarial review proved that by finding a producer
+            // no test exercised: `$realtobits` stamped `width = 64` onto planes
+            // sized for its argument, so `$realtobits(<128-bit>)` panicked here.
+            // Fixed at that producer; the lesson is that a removed defensive check
+            // needs a PRODUCER CENSUS, not just a green suite.
+            debug_assert!(
+                self.is_canonical(),
+                "resize at equal width received a non-canonical Value (width {}, val {} words, unk {} words)",
+                self.width,
+                self.val.len(),
+                self.unk.len(),
+            );
             // §6.16: a resize is a conversion to a PACKED width, so the result is
             // bits — the two paths below already drop `is_str`, and this one has to
             // drop it for the same reason rather than because the width happened to
@@ -981,6 +1043,126 @@ pub(crate) fn not1(a: (u64, u64)) -> (u64, u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every width that exercises a different top-word shape: sub-word, exactly one
+    /// word, spilling into a second, exactly two, and heap-backed.
+    const CANON_WIDTHS: &[u32] = &[1, 7, 8, 31, 32, 33, 63, 64, 65, 96, 127, 128, 129, 192, 200];
+
+    // ── The canonical-`Value` invariant (§4.5.368) ────────────────────────────
+    //
+    // `resize` at EQUAL width used to call `mask_top`, i.e. re-establish an
+    // invariant every producer already maintains — a measured 6.5% of a keccak run.
+    // It now ASSERTS instead, which moves the burden onto the producers. These
+    // tests are the half of the proof that does not depend on running the whole
+    // simulation suite: they check the invariant at each producer family directly,
+    // so a future producer that forgets is caught even if no design exercises it.
+
+    #[test]
+    fn every_constructor_produces_a_canonical_value() {
+        for &w in CANON_WIDTHS {
+            for signed in [false, true] {
+                assert!(
+                    Value::zeros(w, signed).is_canonical(),
+                    "zeros({w},{signed})"
+                );
+                assert!(Value::xs(w, signed).is_canonical(), "xs({w},{signed})");
+            }
+        }
+    }
+
+    #[test]
+    fn from_packed_canonicalises_dirty_high_bits() {
+        // The producer that most needs `mask_top`: raw storage words whose bits
+        // above `width` are set. Without the mask the invariant would be false at
+        // birth, and the assert in `resize` would be the thing that noticed.
+        for &w in CANON_WIDTHS {
+            let n = (w as usize).div_ceil(64).max(1);
+            let dirty = sim_ir::BitPacked {
+                val: vec![u64::MAX; n],
+                unk: vec![u64::MAX; n],
+            };
+            let v = Value::from_packed(&dirty, w, false);
+            assert!(v.is_canonical(), "from_packed all-ones at width {w}");
+            assert_eq!(v.width, w);
+        }
+    }
+
+    #[test]
+    fn a_same_width_resize_preserves_the_invariant_and_the_bits() {
+        // The arm this slice changed: a value-preserving no-op on the bits.
+        for &w in CANON_WIDTHS {
+            let n = (w as usize).div_ceil(64).max(1);
+            let src = sim_ir::BitPacked {
+                val: vec![0xA5A5_5A5A_DEAD_BEEFu64; n],
+                unk: vec![0; n],
+            };
+            let before = Value::from_packed(&src, w, false);
+            let after = before.clone().resize(w);
+            assert!(after.is_canonical(), "resize(={w}) result canonical");
+            assert_eq!(after.width, w, "width unchanged");
+            for i in 0..w {
+                assert_eq!(before.get_vu(i), after.get_vu(i), "bit {i} at width {w}");
+            }
+        }
+    }
+
+    #[test]
+    fn resizing_to_another_width_also_lands_canonical() {
+        // Both the one-word fast path and the general path, both directions, both
+        // signs — so a future change to either cannot leave a dirty top word for
+        // the equal-width arm to inherit.
+        for &from in CANON_WIDTHS {
+            for &to in CANON_WIDTHS {
+                for signed in [false, true] {
+                    let n = (from as usize).div_ceil(64).max(1);
+                    let bp = sim_ir::BitPacked {
+                        val: vec![u64::MAX; n],
+                        unk: vec![0; n],
+                    };
+                    let v = Value::from_packed(&bp, from, signed);
+                    let r = v.resize(to);
+                    assert!(r.is_canonical(), "resize {from} -> {to} (signed={signed})");
+                    assert_eq!(r.width, to);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_deliberately_non_canonical_value_is_detected() {
+        // ⚠️ The predicate has to be able to FAIL, or the assert proves nothing.
+        // Both shapes an invariant break can take: a dirty top word (in either
+        // plane) and a plane of the wrong length.
+        let mut dirty = Value::zeros(8, false);
+        dirty.val = Words::Inline {
+            w: [u64::MAX, 0],
+            len: 1,
+        };
+        assert!(!dirty.is_canonical(), "bits above width must be rejected");
+
+        let mut dirty_unk = Value::zeros(8, false);
+        dirty_unk.unk = Words::Inline {
+            w: [u64::MAX, 0],
+            len: 1,
+        };
+        assert!(!dirty_unk.is_canonical(), "the unknown plane counts too");
+
+        let mut wrong_len = Value::zeros(8, false);
+        wrong_len.val = Words::zeros(3);
+        assert!(
+            !wrong_len.is_canonical(),
+            "wrong plane length must be rejected"
+        );
+    }
+
+    #[test]
+    fn a_real_is_canonical_by_definition() {
+        // `mask_top` returns early for a real (masking would corrupt the IEEE
+        // bits), so the predicate must agree rather than report a false break.
+        let r = Value::from_f64(1.25);
+        assert!(r.is_canonical(), "a real is never bit-masked");
+        assert!(r.clone().resize(64).is_canonical(), "and survives a resize");
+    }
 
     #[test]
     fn and_or_xz_tables() {

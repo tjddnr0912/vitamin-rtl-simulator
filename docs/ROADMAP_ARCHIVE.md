@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.368` **canonical `Value` 를 재수립하지 말고 주장하라 — 그리고 "스위트가 전부 통과했다" 는 증명이 아니다** · `Value::resize` 의 no-op 팔(`new_width == self.width`)이 `mask_top()` 을 무조건 불러 **이미 성립하는 불변식을 재수립**하고 있었다(평면이 정확히 `nwords(width)` 워드 · top 워드에 `width` 위 비트 없음) · ⭐ 자리 특정 = 콜 귀속: `mask_top` self **15.9%** 중 **40.6% 가 바로 이 호출** ⇒ ≈6.5% · ⭐⭐ 호출부 **31곳 중 30곳은 생산자**(raw 워드에서 값을 만들며 불변식을 *세운다*) — 이 하나만 **소비자**였다 ⇒ 호출을 `debug_assert!(is_canonical())` 로 바꿔 **부담을 생산자에게** 옮겼다 · ⚠️⚠️ **적대 soundness 가 그 불변식을 엔진으로 반증했다(BLOCKING)**: `eval/sysfunc.rs` 의 `$realtobits` 가 `v.width = 64` 를 찍으면서 평면은 **인자 폭** 그대로 둔다 ⇒ `$realtobits(<128비트>)` 가 non-canonical 을 만들어 **디버그 빌드를 패닉**(release 는 PRE 와 동일하게 정상 = correct→loud, 사다리의 금지 방향) — ⭐⭐ 내가 증거로 삼은 *"5,812 테스트에서 발화 0"* 은 **증명이 아니라 커버리지 진술**이었고, 제거된 방어 검사에는 **생산자 전수 census** 가 필요하다는 것이 이 슬라이스의 교훈 · 고침은 그 생산자 한 줄(`v.mask_top()`) + 곁가지로 differential 이 찾은 `arena.rs` 의 zero-width OOB arm(도달 불가지만 불변식이 **side condition 에 기대면 안 된다**) · ⚠️ differential 은 **~840 PRE/POST 쌍**(assert 살아있는 debug 로 패닉 사냥 · >128비트 Heap·dyn/queue/assoc·class·struct·string·`$readmem`·force/release·real↔int·CRV·SVA·fork·VCD/FST·계층 쓰기·OOB 배열 읽기)에서 **패닉 0 · 차분 0** — 두 렌즈의 상보성이 실증된 자리(differential 이 CLEAN 인데 soundness 가 code-path 로 잡았다) · ⚠️ NIT: 성능 6.5% 귀속과 11–13% 벽시계는 **두 측정**이고 나머지 갭은 이론(호출 제거로 `Value` 가 escape 하지 않아 레지스터에 남는다) · **순차 A-then-B 타이밍이 picorv32 에서 가짜 +12.5%** 를 냈다 ⇒ PRE/POST **인터리브** · keccak_f_arr **3.75 → 3.34 (−11.1%)** · keccak_f **1.92 → 1.66 (−13.2%)** · flat +0.4% · picorv32 −0.9%(노이즈) · anchor·VCD·FST 바이트 동일 · 5,812 → **5,821 green** · format 29 불변
 - `4.5.367` **frame part-select 쓰기의 per-bit 루프 — 그리고 S0 가 arena 를 정확히 가격했다** · ⭐ 착수는 측정이었다(S0): keccak_f_arr 런타임의 **65.0%** 가 `run_frame_call` 안(콜 귀속 · `/usr/bin/sample` 5,318 작업 샘플)이고 run.json 이 `able 1/4 · frame_bodies 3`(flat 은 `2/4 · 0`) — **15.8× 차이가 frame body 3개와 정확히 상관** · ⚠️⚠️ **계측이 리뷰의 메커니즘 주장을 반박**했다: `wprog.rs:441` 의 frame-local decline 게이트는 keccak·picorv32 둘 다에서 **한 번도 발화하지 않는다**(`frame_decline=0`) — `wprog::compile` 이 **모듈 프로세스 body 에만** 호출되기 때문이고, `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데 frame local 엔 슬롯이 없다 ⇒ **arena 가 진짜 선행조건**(6–10주 · 상한 2.33×)임이 가격됐고 이 슬라이스는 그 65% 안의 **bounded 한 조각**만 가져갔다 · 결함 = frame slot(과 dyn-array 원소)의 part-select 쓰기가 값을 **한 비트씩** 예치하는데 그 루프가 동시에 IEEE §11.5.1 의 **범위 밖 DROP** 을 구현한다 ⇒ 창이 net 안에 완전히 들어갈 때만 word-parallel `replace_bits`, **else 는 pre-slice 루프 verbatim** · ⚠️⚠️ **`copy_bits` 를 그대로 쓰면 silent-wrong**: 그 함수는 대상 범위가 **0이어야** 하고 비트를 **OR-merge** 하는데 part-select 쓰기의 대상은 슬롯의 **현재 값**이다(`8'hF0` + `8'h0F` = `8'hFF`) ⇒ `clear 후 copy_bits` = `replace_bits` · 적대 2렌즈 **BLOCKING 0** · differential 246칸 + 200칸 퍼즈에서 **PRE≡POST**, iverilog 159/159 · soundness 가 clear 창과 write 창이 **정확히 같음**을 구성으로 증명 · ⚠️ NIT 넷 반영: ⓐ **리뷰 스냅샷이 debug 바이너리였다**(성능 슬라이스인데 — soundness 가 +88% picorv32 "회귀" 를 재다가 발견) ⓑ `replace_bits` 는 `copy_bits` 가 `dst.val[dw]` 를 **직접 인덱싱**하므로 `set_vu` 와 달리 **할당을 늘리지 않는다**(문서화 + `debug_assert`) ⓒ 게이트가 두 파일에 **손으로 복사**돼 있었다 ⇒ `window_in_range` 한 철자(§4.5.359 모양, 여섯이 되기 전 둘에서 잡음) ⓓ 성능 주장의 **메커니즘**: `set_vu` 가 인라인되지 않아 self 6.6% 가 아니라 **leaf 12.8% 를 더한 ~19%** 가 표적이다 · **keccak_f_arr 4.49 → 3.79 s = −15.6%**(release · best-of-3 · 첫 런 폐기) · keccak_f/flat/picorv32 **불변** · 4-way anchor 불변 · examples+bench **8/8 바이트 동일** · 5,806 → **5,812 green** · format 29 불변
 - `4.5.366` **상수 도메인이 정확히 64비트에서 unsigned 를 잃는다 — 그리고 비교를 고치자 시프트가 드러났다** · `localparam L = ((64'd1 - 64'd2) > 64'd0) ? 111 : 222;` 가 vita **222** / 두 오라클 **111** · ⭐ **63비트 쌍둥이와 런타임 철자는 이미 정확**했다 = 내부 판별자, 상수 도메인만의 결함 · 근인 = `eval_const_env_at` 이 값을 문맥 폭·부호로 **마스킹해 정규화**하는데 `masking = ctx_w > 0 && ctx_w < 64` 이라 **정확히 64에서 항등** ⇒ unsigned 값이 최상위 비트를 쥔 채 남고 **부호 민감 연산**이 음수로 읽는다 · ⭐ 규칙은 하나(`const_i64_is_unsigned_at`)이고 폭 인식 walk 의 **소비자 넷**이 그것을 묻는다: 순서비교(피연산자 쌍의 `(w, cs)`) · `/`·`%`(둘러싼 문맥) · 두 시프트 · leaf 재해석 · ⚠️⚠️ **적대 soundness 렌즈가 BLOCKING 넷** — ⓐ ⭐⭐ **`>>>` 도 부호 민감**(§11.4.10: arithmetic 은 왼쪽 피연산자가 signed 일 때뿐이고 §11.6.1 이 이미 unsigned 로 변환한다)인데 안 덮었고, **비교 리다이렉트가 그 잠복 결함을 드러내** 14칸이 correct→silent-wrong 이 됐다(두 오라클은 declared-signed 왼쪽 피연산자에서도 logical 을 답한다) ⓑ `w >= 64` 는 **추측**이다 — >64 는 i64 가 이미 절단했고 두 방향이 서로 반대로 틀린다(carry 모양은 signed 읽기가, 뺄셈 모양은 unsigned 읽기가 맞다) ⇒ **`w == 64`** 로 좁힘, 형제 `const_unsigned_selfdet` 이 이미 그 자리에 선을 그어 두었다 ⓒ ctx≥64 에서 walk 가 **`leaf_into_ctx` 를 안 돈다** ⇒ 좁은 **signed** leaf 가 부호확장된 채 도착해 u64 경로가 그 확장을 크기로 읽는다(`logic signed [7:0] P=-100` 이 156 이 아니라 0xFFFF…FF9C 로 나눠졌고, 그 위에 세운 `$bits` part-select 폭이 **loud→silent-wrong**) ⇒ 그 문맥에서도 leaf 를 정규화 ⓓ clippy `double_parens` 로 `-D warnings` 게이트 실패 · 120칸 4-way(iverilog·verilator·PRE·POST) **오라클 분열 0 · ok→wrong 0 · wrong→ok 14 · wrong↔다른-wrong 0** · 33칸 census 비교 클래스 전부 해소 · 상수함수 본문의 `%` 는 −1 → **5**, `>>` 는 **전체 REJ(loud) → 정답** · bench+examples **8설계 `.velab` 바이트 동일** · 5,796 → **5,806 green** · format 29 불변
 - `4.5.365` **real actual 이 정수 formal 의 폭을 안 받는다 — 그리고 참조 구현은 이미 트리 안에 있었다** · §13.5.3 은 호출을 **formal 선언 타입 변수에의 대입**으로 정의하므로 real actual 은 반올림(§6.24.1) 후 **formal 폭으로 좁혀야** 하는데 vita 는 반올림만 했다(`function integer f(input byte k); f = k;` 를 `f(300.0)` 로 → **300**, 두 오라클 **44**, exit 0) · ⚠️⚠️ **큐 문구의 절반이 STALE 이었다** — `%0d` 반올림·등가·`integer` formal·automatic 함수/task 는 **이미 정확**했고 비트셀렉트/비트연산/`%h` 는 §2 가 아니라 **§3(E3009 loud)** · ⚠️ 그리고 **첫 프로브가 나를 속였다**: `input int` + `3.0`(폭에 들어맞는 값)만 봐서 frame 경로가 정확해 보였다 — **폭보다 큰 값**을 넣어야 보인다 · ⭐ **참조 구현이 트리 안에 있었다**: inline TASK 는 입력 actual 을 **formal-폭 지역 net 에 copy-in** 하므로 저장이 `coerce_assign` 을 탄다 ⇒ 나머지 셋을 거기 맞췄다(공유 헬퍼 `coerce_real_actual_to_formal` 하나) · 184칸(10 formal × 6 real actual × 3 라우팅) **mismatch 54 → 0** · 1,170칸 스윕 **1170/1170** iverilog 일치 · ⚠️⚠️ **적대 2렌즈 3라운드 · BLOCKING 넷** — ⓐ `cast_operand_is_real` 이 **철자로** 판정(패키지 본문의 bare `g()` 는 `P::g` 인데 술어는 모듈 레벨 `real g` 를 찾는다) ⇒ **정수** actual 이 f64 왕복으로 2⁵³ 초과를 잃었다(correct→silent-wrong) ⇒ **값 기반 `expr_is_real`** 로(⭐ 잃는 것 없음 — 유일한 차이인 real-반환 `Call` 은 `expr_is_repeatable` 이 이미 거절) ⓑ frame-task 게이트가 **net kind** 라 약해 `string` INPUT formal 을 1비트 캐스트로 파괴 ⇒ 형제 둘과 **같은 철자** ⓒ `input time signed` 가 세 경로에서 correct→wrong(뿌리 = `kind_signedness` 가 명시 한정자를 버려 **formal net** 이 unsigned · pre-existing) ⇒ **좁은 decline**(집합 차 = 정확히 `{Time}` 임을 렌즈가 증명) ⓓ ⭐⭐ **`lower_real_to_int_cast` 의 ≤32비트 가지가 `$rtoi(e±0.5)`** 라 [2⁵²,2⁵³) 홀수에서 **tie-to-even**(2⁵²+1 → 2, 두 오라클 1) — >32 가지엔 정확 구성이 이미 있었고 자기 주석이 그 함정을 적어 두었다; 내 변경이 30칸을 그 가지로 새로 보내 **wrong↔wrong 맞바꿈**이 될 뻔했다 ⇒ 정확 구성을 **hoist 해 두 가지가 공유** · ⭐ **곁수확**: pre-existing `int'()`/`byte'()`/`shortint'()` 결함 40칸이 함께 해소(`0.49999999999999994` → 0 포함) · ⚠️ 렌즈가 잡은 마지막 NIT = 내가 `range_to_dims` 를 두 번 불러 **진단이 두 번** 찍혔다(그 함수는 emit 한다) ⇒ 첫 호출의 부호를 바인딩 · bench+examples **8설계 `.velab` 바이트 동일**(정수 actual 42설계 포함 50/50) · 5,785 → **5,796 green** · format 29 불변
@@ -400,6 +401,51 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.368 — canonical `Value` 를 재수립하지 말고 주장하라 (2026-08-23 · 5,821 green · format 29 불변)
+
+**결함.** `Value::resize` 의 `new_width == self.width` 팔이 `self.mask_top()` 을 무조건 부른다. 그런데
+`Value` 는 **구성상 canonical** 이다 — 두 평면이 정확히 `nwords(width)` 워드이고 top 워드에 `width` 위
+비트가 없다. 즉 이미 성립하는 것을 재수립한다.
+
+**자리 특정 = 콜 귀속.** `mask_top` 은 self **15.9%**(keccak_f_arr, release+symbols)이고 그중 **40.6%**
+가 바로 이 호출이다(≈6.5%). ⭐⭐ 그리고 `mask_top()` 호출부 **31곳 중 30곳은 생산자** — raw 워드에서
+값을 만들며 불변식을 *세운다*. **이 하나만 소비자**였다. ⇒ 호출을 `debug_assert!(is_canonical())` 로
+바꿔 부담을 생산자에게 옮겼다.
+
+**⚠️⚠️ 적대 soundness 가 그 불변식을 엔진으로 반증했다 — BLOCKING.**
+`eval/sysfunc.rs` 의 `$realtobits` 는 `v.width = 64` 를 찍으면서 평면은 **인자 폭** 그대로 둔다.
+`$realtobits(<128비트>)` 는 따라서 width 64 · 2워드짜리 non-canonical 을 만들고, 그 값이 이 팔에 도달해
+**디버그 빌드를 패닉**시킨다. release 는 PRE 와 바이트 동일하게 정상이므로 이것은
+**correct → loud**, 사다리의 금지 방향이고, 하필 CLAUDE.md 가 표준 빌드로 적어 둔 구성에서 난다.
+
+⭐⭐ **그리고 이게 이 슬라이스의 진짜 교훈이다.** 나는 *"`debug_assert` 를 박고 5,812 테스트를 돌렸는데
+한 번도 발화하지 않았다"* 를 증명으로 제시했다. 그건 **커버리지 진술**이다 — 어떤 테스트도
+`$realtobits` 를 64비트 아닌 인자로 부르지 않았을 뿐이다. **제거된 방어 검사는 초록 스위트가 아니라
+생산자 전수 census 로 정당화해야 한다.**
+
+고침은 그 생산자 한 줄(`v.mask_top()`). 곁가지로 differential 이 `native/arena.rs` 의 zero-width OOB
+arm 에서 같은 결함 클래스를 찾았다 — `Value::xs(width.max(1))` 뒤에 `v.width = s.width` 를 찍으므로
+폭 0이면 `unk` 비트 하나가 위에 남는다. 오늘 도달 불가(폭 0 배열 net 이 만들어지지 않는다)지만
+**불변식이 side condition 에 기대면 안 되므로** 함께 고쳤다.
+
+**⚠️ 두 렌즈의 상보성이 실증된 자리.** differential 은 **~840 PRE/POST 쌍**(assert 가 살아 있는 debug
+빌드로 패닉 사냥 — >128비트 `Words::Heap` 산술·dyn/queue/assoc(문자열 키 포함)·class·packed
+struct/union·string↔bits·`$readmem`·force/release·real↔int·`$random`/CRV·SVA·covergroup·fork·계층
+읽기/쓰기·interface·program·>64비트 파라미터·VCD/FST·OOB 배열 읽기)에서 **패닉 0 · 차분 0** 으로
+CLEAN 이었다. 결함은 **soundness 가 코드 경로 census 로** 잡았다.
+
+**측정.** keccak_f_arr **3.75 → 3.34 s (−11.1%)** · keccak_f **1.92 → 1.66 s (−13.2%)** ·
+keccak_f_flat +0.4% · picorv32 −0.9%(노이즈) · 4-way anchor·VCD·FST **바이트 동일** ·
+release 에서 `debug_assert` 와 `is_canonical` 이 **문자열·심볼 부재로 컴파일아웃 확인** · 새 회귀 9건
+(불변식 유닛 6 + `$realtobits` 커버리지 3).
+
+**⚠️ NIT 둘.** ⓐ 6.5% 귀속과 11–13% 벽시계는 **두 측정**이고 나머지 갭은 이론이다(호출을 없애면
+`Value` 가 escape 하지 않아 호출부가 두 평면을 스택에 흘리지 않는다) — 주석이 그렇게 말하도록 고쳤다.
+ⓑ **순차 A-then-B 타이밍이 picorv32 에서 가짜 +12.5%** 를 냈다(0.45 s 워크로드에서도) ⇒ PRE/POST 를
+**런 단위로 인터리브**. 직전 슬라이스의 *"debug 바이너리로 +88%"* 와 같은 계열이다.
+
+**잔여**(§3): `$realtobits`/`$bitstoreal` 이 64비트 아닌 인자를 애초에 받는 것(iverilog 는 거부).
 
 #### 4.5.367 — frame part-select 쓰기의 per-bit 루프 (2026-08-23 · 5,812 green · format 29 불변)
 

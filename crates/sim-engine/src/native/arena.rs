@@ -614,6 +614,13 @@ impl NetReader for NetArena {
             let mut v = Value::xs(s.width.max(1), s.signed);
             v.width = s.width;
             v.is_real = s.is_real;
+            // ⚠️ `xs` masked to `width.max(1)`, so a ZERO-width slot leaves one `unk`
+            // bit above the stamped width — the shape §4.5.368's `resize` assert now
+            // catches. No language surface reaches it today (a zero-width array net
+            // is not constructible: `[P-1:0]` with `P = 0` sizes to 2 since §4.5.350),
+            // which is why it is a side condition rather than a bug — but the
+            // invariant must not depend on one, so re-canonicalise here.
+            v.mask_top();
             return v;
         }
         let n = s.words as usize;

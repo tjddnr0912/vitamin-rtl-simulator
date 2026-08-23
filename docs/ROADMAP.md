@@ -225,6 +225,8 @@
 >
 > **🆕 §4.5.365 곁가지 — `int'($random*1.0)` 의 draw 횟수**(둘 다 틀렸고 값이 **바뀌었다**): `lower_real_to_int_cast` 의 ≤32비트 가지가 정확 반올림으로 바뀌며 피연산자 명명 횟수가 2→4 로 늘었고, 그 함수의 **다른 호출자**(`lower_prim_cast` = `keyword'(e)`)에는 **`expr_is_repeatable` 게이트가 없다** ⇒ `int'($random*1.0)` 이 캐스트당 2회 → 4회 draw(iverilog 는 1회). 어느 쪽도 맞은 적이 없지만 **silent↔silent 를 조용히 맞바꾸지 마라** 규칙상 기록한다. 봉쇄책은 이미 이름이 있다 — 바인드가 쓰는 그 게이트를 `lower_prim_cast` 에도 주는 것(단, 거기선 decline 이 real 을 정수 문맥에 그대로 두므로 **다른 처리**가 필요하다).
 >
+> **🆕 §4.5.368 곁발굴**(§3 성격 · pre-existing): **`$realtobits`/`$bitstoreal` 이 64비트 아닌 인자를 조용히 받는다**(iverilog 는 *"requires a 64-bit argument"* 로 거부). vita 는 저64비트를 답한다 — 그 경로가 살아 있는 것이 §4.5.368 의 BLOCKING 이 도달 가능했던 이유다.
+>
 > **🆕 §4.5.367 곁발굴 둘**(전부 PRE==POST · pre-existing):
 >
 > - **queue·assoc 원소의 part-select 쓰기가 조용히 사라진다**(verilator 오라클 · iverilog 는 구문 거부). `logic [31:0] q[$]; q.push_back(32'hFFFFFFFF); q[0][15:8]=8'h0F;` → verilator `ffff0fff` / vita **`ffffffff`**(무변화). ⭐ **dyn(`q[]`) 철자는 맞는다**(`changes.rs` 의 DynArray arm) ⇒ 같은 규칙의 세 철자 중 하나만 구현돼 있다 = write-twin 갭(memory: widen-a-read-sweep-the-write-twin).
@@ -810,7 +812,7 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,812 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.367) |
+| 게이트 | **5,821 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-23 · ARCHIVE §4.5.368) |
 
 ### 다음 후보 — 우선순위 순
 
@@ -820,7 +822,7 @@
 | **2** | **§3 loud → correct-support 승격** | 오늘 loud 인 것은 **안전하지만 기능 갭**이다. 사다리를 올리는 유일한 방향 | §3 표에서 **오라클이 답하는 행**부터. ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(memory: no-oracle-not-a-defer-reason) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
-| **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정) — keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 그게 vita 의 **유일한 패배**(iverilog 대비 0.41×→0.50×)다 · ⚠️ **arena 가 진짜 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0` — `wprog.rs:441` 게이트는 오늘 죽은 코드), `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데 **frame local 엔 슬롯이 없다** ⇒ 65% 를 컴파일 레인으로 보내려면 frame local 에 arena 슬롯이 필요하다(6–10주 · 상한 2.33×) · 그 전에 bounded 한 조각부터: §4.5.367 이 part-select 쓰기로 **−15.6%** 를 가져갔다 · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 picorv32+keccak 3종의 single-core 실측을 확보하는 것이 열린 항목이다 |
+| **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정) — keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 그게 vita 의 **유일한 패배**(iverilog 대비 0.41×→0.50×)다 · ⚠️ **arena 가 진짜 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0` — `wprog.rs:441` 게이트는 오늘 죽은 코드), `WProg::run` 은 값을 `arena.buf[slot]` 으로 읽는데 **frame local 엔 슬롯이 없다** ⇒ 65% 를 컴파일 레인으로 보내려면 frame local 에 arena 슬롯이 필요하다(6–10주 · 상한 2.33×) · 그 전에 bounded 한 조각부터: §4.5.367 이 part-select 쓰기로 **−15.6%**, §4.5.368 이 no-op `mask_top` 제거로 **keccak_f_arr −11.1% · keccak_f −13.2%** 를 가져갔다(누적 keccak_f_arr **4.53 → 3.34 s**) · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 picorv32+keccak 3종의 single-core 실측을 확보하는 것이 열린 항목이다 |
 | **4b** | **옛 성능 후보**(이미 지어 둔 빠른 경로를 안 부르는 자리 + 델타당 도는 O(설계) 스캔)(⚠️ **2026-08-21 재규정 · 2회 수확**) | ⭐ **§4.5.351(−3.9%) → §4.5.352(−10.5%)** 로 두 번 연속 답이 나왔다. 표적은 코드젠도 스케줄러 재작성도 아니라 **"증명해 놓고 버린 자리"**(플랫 store 3리전 = 블로킹·NBA·settle, **셋 다 완료**)와 **"델타당 함수 안의 O(설계 크기) 스캔"**(§4.5.352 ⓐ = 278.6M 회 헛돌기) 이다 | ⚠️ 옛 문구의 "스케줄러 29%" 는 §4.5.352 이후 더 줄었다 — `settle_cont_assigns` self **8.83% → 1.62%** 실측(분모 맞춘 6 s 창). **다음 후보(POST 프로파일 실측)**: ⓐ `k_schedule_nba_scalar` **4.3%**(NBA 스케줄마다 `chunks[0].clone()`) ⓑ `propagate` **2.5%**(델타마다 `Vec` 셋 — 옛 D6 표적, **크기 미측정**) ⓒ 할당자 잔여. ⛔ `drain_range_diags` 1.8% 는 **이미 재고 기각**(§5.1-bb — 비용은 문장당 호출 자체) · ⚠️ 착수 전 **나눗셈 필수**(rules: 나눗셈은 게이트가 아니라 탐색) |
 | **5** | ⛔ **D2-b(저장소 2-state)** | **거부됨** — 트랩이 사다리 하강이다 | 재개하려면 **정확성 거래 없는 방법**을 먼저 찾아야 한다 |
 | — | ⛔ **cycle-based 모드** | **거부됨 2026-08-20 · doc-20 M4** — picorv32 비율 **10.32** vs 게이트 1.84(미달 5.6배). 조합 블록이 사이클당 **0.097 회**만 평가되므로 이벤트 구동이 이미 조합 작업의 90.3% 를 건너뛴다 ⇒ cycle-mode 는 **10 배 더 일하고 0.84 배 아낀다** | 재진입 = 블록당 평가/사이클 **≥1** 인 코퍼스가 실수요로 나타날 때 |
