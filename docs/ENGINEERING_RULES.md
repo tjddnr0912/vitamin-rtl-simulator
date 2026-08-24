@@ -2105,3 +2105,79 @@ iverilog **−1**, PRE 는 loud.
 
 ⇒ **enum 팔을 합칠 때는 두 팔의 계약이 같은지 보라.** 같은 타입이라는 것은 같은 의미라는 뜻이
 아니다.
+
+## Removing a gate, and measuring against a moving binary (2026-08-24 · §4.5.375)
+
+### ★★★★★ **A silent `return` on an unexpected argument shape is a wrong answer, not a decline**
+
+`$readmem*`/`$writemem*` accepted only a string LITERAL for the file name:
+
+```rust
+let name = match sched.st.ir.exprs.get(a0 as usize) {
+    Some(sim_ir::Expr::Const { val }) => const_string(sched.st.ir, *val),
+    _ => return,                       // ← no file read, no diagnostic, exit 0
+};
+```
+
+The branch immediately below it — the memory argument — WARNS when it does not recognise its
+operand. The two branches sat four lines apart and disagreed about whether an unrecognised
+operand is worth mentioning. IEEE 1800 §21.4 asks only for a string EXPRESSION, and the
+canonical SoC testbench keeps the name in `reg [1023:0] firmware_file`, so the shape that hit
+the silent arm was the common one, not an exotic one.
+
+⇒ **When a handler cannot use an argument, say so.** A bare `return` in a system task is
+indistinguishable from "there was nothing to do", and it is the one outcome no user can
+debug. Read the neighbouring branches: if one of them warns and yours does not, that
+asymmetry is the bug ([[branch-parity-before-new-traffic]] on the diagnostic axis).
+
+### ★★★★★ **Removing a loud gate is a promise about everything underneath it**
+
+The gate being removed was the hierarchical memory argument. Underneath it were TWO
+independent pre-existing defects, and neither was visible until it came off:
+
+1. the silent file name above — found by building the target testbench's exact line and
+   seeing it run to exit 0 with the memory unchanged;
+2. **the t0 process order** — vita runs a parent's `initial` before its child's, both oracles
+   the reverse, so a RAM that loads its own memory overwrites the testbench's load.
+
+The second is why the slice reverted: opening the construct turned a loud reject into a
+silent wrong answer on the very idiom the construct exists to serve.
+
+⇒ **Before removing a loud gate, run the REAL design the gate was blocking** — not a
+reduction of it. Both defects were invisible to the minimal probe (`$readmemh("f.hex",
+dut.mem)` with a literal name and no child `initial`) and both appeared the moment the probe
+was widened to what serv actually ships. See
+[[removing-a-loud-gate-exposes-what-it-masked]]; this is the third slice in a row where the
+thing under the gate cost more than the gate.
+
+### ★★★★ **Fix it, or revert it — but the choice belongs to the ROOT, not to the effort spent**
+
+The feature was correct: 40+ shapes matching both oracles, one lens CLEAN, the real SoC
+running end to end. It still had to go, and the deciding facts were about the root, not about
+how much work it was:
+
+- the ordering is **pre-existing and independent** (a plain hierarchical write already loses
+  to a child's `initial`, with no `$readmem` anywhere) ⇒ the construct adds a door to an
+  already-open room rather than creating the room;
+- `sim_ir::Process` is **frozen** and has no instance field ⇒ the order cannot live in the IR
+  and needs an out-of-band rank sidecar;
+- the scheduler's `tie` is shared with combinational seeding and with fork children ⇒ the
+  blast radius is every design with a child `initial`.
+
+Three separate reasons the fix is *different machinery*. That is the same test §4.5.371/372/373
+applied, and it is the one to apply — not "I have already built it".
+
+⇒ And when you revert, **ship the part that stands alone**. The file-name fix needs no
+hierarchy at all, so it went out while the construct that uncovered it did not.
+
+### ★★★★ **A reviewer measuring against a binary you are rebuilding is measuring noise**
+
+The differential lens ran while this session rebuilt `target/release/vita` three times. It
+had to **retract four findings** — all four had matched both oracles once re-measured. It
+recovered by copying the binary to a frozen snapshot, recording its md5 and the md5 of the
+`git diff` it was built from, and re-running everything against that.
+
+⇒ **Give a review a frozen artifact, or stop building while it runs.** Copy the binary
+somewhere the working tree cannot reach and hand the reviewer that path; a review that
+silently measures three different binaries reports findings that cannot be reproduced, and
+the retraction costs more than the copy.

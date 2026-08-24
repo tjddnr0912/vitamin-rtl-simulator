@@ -144,6 +144,8 @@
 > | 4 | 🆕 **`$itor` 가 real 인자의 IEEE-754 비트를 정수로 읽는다**(§4.5.361 곁가지 · silent-wrong) | `a = $itor(3.9);` → iverilog **4** / vita **4.61596e+18**(= 3.9 의 double 비트패턴) · ⭐ **같은 값의 `real'(3.9)` 은 vita 도 3.9 로 맞다** ⇒ 캐스트 경로는 맞고 `$itor` arm 만 인자를 integral 로 가정한다 · ⚠️ 오라클 하나(verilator 는 이 모양에서 ICE) — 다만 §20.5 가 `$itor` 를 **integral→real** 로 정의하니 real 인자는 애초에 도메인 밖이다 ⇒ **loud 도 정답 후보**(사다리상 silent-wrong 보다 위) · ⚠️ 착수 시 §2-2b 의 봉인 확인 필수: `real'(x)` 가 같은 `SysFuncId::Itor` 로 내려가므로 arm 을 나누면 **두 경로가 갈린다** |
 > | 5 | 🆕 **`string'(<integral>)` 캐스트가 파서에서 막힌다**(§4.5.361 곁가지 · loud) | `s = string'(24'h610062);` → iverilog `len=2`·`s=="ab"` / vita **E2002 parse-reject**(`expected expression, found keyword 'string'`) · ⭐ 이 항목은 §2 가 아니라 **§3(loud→correct-support)** 성격이다 — 조용히 틀리지 않고 정직하게 거부한다 · ⚠️ 원래 보고는 *"NUL 스트리핑 차이"* 였는데 **그 repro 는 vita 에서 성립조차 안 한다**(파싱 실패) ⇒ NUL 축은 다른 repro 로 재측정해야 열린다 |
 > | 6 | 🆕 **static function 이 모듈 net 에 쓴 값이 조용히 사라진다**(§4.5.362 곁수확 · **2-오라클** silent-wrong) | `function logic [3:0] f(); seq = seq + 7; f = 4'h3; endfunction` 에서 `a = f();` → 반환값 `a=3` 은 맞는데 **`seq` 가 0 그대로**(iverilog·verilator 둘 다 **7**) · ⭐ `automatic` 철자는 같은 본문을 **정직하게 거부한다**(E3009 = *"frame-call subset 밖"*) ⇒ 사다리상 **static 철자만 한 칸 아래**에 있다 — 같은 규칙의 두 철자가 갈린 §4.5.359 와 같은 모양 · ⚠️ 발견 경로가 기록할 만하다: 이 슬라이스의 **재배치가 관찰 가능한지** 묻는 soundness 프로브(부작용 있는 피연산자)를 짜다가 나왔다 — PRE·POST 동일이라 이 슬라이스 것이 아니다 |
+> | 7 | 🆕 **A child instance's `initial` runs AFTER its parent's** (§4.5.375 · **2-oracle** · already reachable through supported constructs) | `u1.s = 8'hAA` in a parent vs `initial s = 8'hEE` in the child ⇒ vita `ee`, **iverilog and verilator both `aa`**, silent at exit 0 — no `$readmem` involved, through a hierarchical write that has worked since June. `instance.rs` lowers this module's own processes at step (7) and recurses into children at step (8), so every parent process takes a lower id and the t0 queue is seeded parent-first (`sched/scan_arm.rs`, `tie: pi`). ⭐ **Declaration initializers are already correct** — `init_ranks` sorts `RANK_MOD_INSTANCE` (1) before `RANK_MOD_OWN` (2); only `initial` BLOCKS lack that rank, so the fix is to give them one. ⚠️ `sim_ir::Process` is FROZEN and has no instance field, so the rank must be an out-of-band sidecar (the `init_procs` channel), and `tie` is shared with `Comb`/`Latch` seeding and `compose_child_tie` ⇒ blast radius is every design with a child `initial`. **This blocks §3 ④**, where the full repro and fix shape are written out. |
+> | 8 | 🆕 **A clocking INPUT is writable through `$readmem*`** (§4.5.375 · hand-IEEE §14.3 · **no oracle** — iverilog 13 cannot parse clocking blocks) | `$readmemh("f.hex", c.cb.mem)` writes the clocking hold net at exit 0, while the direct `c.cb.s = 8'hAA` is correctly `E3009`. §14.3: a clocking input is read-only. ⚠️ First recorded as merely LATENT — a clocking input of an unpacked array gets a **scalar** hold net, so the §3 ④ exemption arm cannot reach it — but that is the wrong reason: the **reachable** half runs through the ORDINARY resolution, which has no `clocking_hold_nets` check (both hierarchical WRITE lanes do: `hier_defer/write.rs`). ⇒ the guard belongs on the shared read resolution, covering both halves. |
 >
 > ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
 > (2026-08-20 · 상세=ARCHIVE): 후자는 **§4.5.345 가 `const_decl_wsign` 의 multi-packed 폭을 채우면서
@@ -492,11 +494,82 @@
 > 시드 `$random`/`$dist_*`(비균일 형제의 **선재 vita-iverilog 발산** — 새 위치로 옮기면 틀린 값이
 > 늘어난다) · `$cast`(temp 타입이 목적지를 따른다)는 이 계열에 **의도적으로 안 들어갔다**.
 
-> **④ unpacked 배열의 계층 원소 선택** (오라클 有 · serv). `dut.ram.mem[i] = …` 와
-> `$readmemh(f, dut.ram.mem)` 이 둘 다 E3009 다(*"a hierarchical element select is a deferred
-> follow-on"*). ⭐ **SoC 테스트벤치가 펌웨어를 싣는 정석 관용구**이고 serv 상류의 자체 벤치
-> (`servant_sim.v`)가 정확히 이 철자를 쓴다 — 후보를 늘릴수록 계속 나온다.
+> **④ A hierarchical WHOLE unpacked array as a `$readmem*`/`$writemem*` argument**
+> (2-oracle · serv, picorv32, ibex · ⚠️⚠️ **§4.5.375 built it, measured it correct, and
+> reverted it — the prerequisite below is the reason, and the next attempt should start
+> there**).
 >
+> ⚠️ **The old wording of this line was wrong for about two months.** It claimed
+> `dut.ram.mem[i] = …` was `E3009`. Every element shape works and has since June — a census
+> of eleven (element read/write, variable index, part-select, bit-select, multi-dim,
+> non-blocking, inside a task) found no failure. Three slices closed it: **N3.1** (element
+> read, `95cc674`), its **multi-dim follow-on** (`7d2f9b4`), and **HIER-REST track 9**
+> (element/bit/part-select WRITE). What is actually refused is the WHOLE array:
+> `$readmemh(f, dut.ram.mem)`, `$readmemh(f, dut.ram.mem, 0, 3)`, `$writememh(f, dut.ram.mem)`.
+>
+> **Demand is four upstream testbenches**, all the same firmware-loading line:
+> `serv src/bench/servant_sim.v:20 $readmemh(firmware_file, dut.ram.mem)` ·
+> `picorv32 src/testbench.v:253 mem.memory` · `picorv32 src/testbench_wb.v:146 ram.mem` ·
+> `ibex .../core_ibex_base_test.sv:286 mem.system_memory`.
+>
+> ⭐ **The implementation is small and was verified.** `$readmemh` already calls
+> `expr_array_view`, which already resolves dotted paths; a cross-instance name simply has
+> no net yet (the child's nets are created in a later pass), so it defers, and the deferred
+> placeholder is ALREADY `Signal { net: POISON_NET, word: None }` — the exact shape the
+> local path builds by hand. Only the read guard stands in the way, and it asks "does this
+> have a plain readable value?", which is the wrong question for a task that wants the array
+> rather than a value. A consumer-scoped exemption (the call registers its own memory
+> argument) made 40+ shapes match both oracles, including the real serv SoC end-to-end.
+>
+> ⚠️⚠️ **PREREQUISITE — t0 process order: a child's `initial` must run before its parent's.**
+> vita runs the PARENT's first; iverilog and verilator both run the child's first. So a RAM
+> that loads its own memory OVERWRITES the testbench's hierarchical load:
+>
+> ```verilog
+> module ram; reg [7:0] mem[0:3];
+>   initial $readmemh("b.hex", mem);            // child
+> endmodule
+> module tb; ram u1();
+>   initial $readmemh("a.hex", u1.mem);         // parent — both oracles win, vita loses
+> endmodule
+> ```
+>
+> Both oracles print `aa bb cc dd`; vita prints `01 02 03 04` at exit 0. Measured on the real
+> serv SoC too — `DIGEST=05ff4021b907543a` (iverilog) vs `…523a` (vita). Opening the
+> construct therefore traded a loud reject for a **silent wrong answer** on its own
+> motivating idiom, which is why it was reverted.
+>
+> ⭐ **The ordering is pre-existing and independent of `$readmem`** — `u1.s = 8'hAA` from a
+> parent already loses to the child's `initial s = 8'hEE` (vita `ee`, both oracles `aa`),
+> through a hierarchical write that has worked since June. So this is an already-open
+> silent-wrong class, not one this construct creates; the construct just adds a door.
+> ⭐ It is narrow: **declaration initializers already rank correctly** (`reg s = 8'hEE;` in
+> the child loses to the parent's write, matching both oracles), because `init_ranks` sorts
+> `RANK_MOD_INSTANCE` (1) before `RANK_MOD_OWN` (2). Only `initial` BLOCKS lack that rank.
+>
+> ⇒ **The fix shape**: `sim_ir::Process` is a frozen SchemaHash type with no instance field,
+> so the order cannot live in the IR — it needs an out-of-band per-process t0 rank sidecar,
+> the same channel `init_procs` already uses (`elaborate → SimOpts → st`). `rank_path` is
+> live while processes are lowered, so the rank is `rank_path + [RANK_MOD_OWN, proc_id]`;
+> the engine then ties the `SensKind::Initial` seeding to that order instead of to the
+> activity id (`sched/scan_arm.rs`, `tie: pi`). ⚠️ `tie` is shared with `Comb`/`Latch`
+> seeding and with `compose_child_tie` for fork children, so the blast radius is every
+> design with a child `initial` — it needs its own census and its own 2-lens review, which
+> is why it was not bolted onto §4.5.375.
+>
+> ⚠️ Two more, measured while there, both pre-existing and neither this item's business:
+> `$readmemh` into a `wire` array is accepted at local/hierarchical parity (iverilog refuses,
+> **verilator accepts** ⇒ oracle split); and — ⭐ **corrected on re-review** — a clocking
+> INPUT is writable through `$readmem*` **today, on the shared path**:
+> `$readmemh("f.hex", c.cb.mem)` writes the hold net at exit 0, while `c.cb.s = 8'hAA` is
+> correctly `E3009`. §14.3 says a clocking input is read-only (hand-IEEE — iverilog 13 cannot
+> parse clocking blocks at all). The first reading of this was that the hole was merely
+> LATENT, on the grounds that a clocking input of an unpacked array gets a SCALAR hold net;
+> that is why the exemption arm cannot reach it, but it is **not** why the hole is unreached —
+> the reachable half runs through the ordinary resolution. A guard on the exemption alone
+> would close the unreachable half and leave the live one open, so it belongs on the shared
+> path, as its own item.
+
 > **⑤ struct 타입 localparam 의 named assignment pattern** (**오라클 없음 → hand-IEEE**). ibex 의
 > `localparam exc_cause_t E = '{irq_ext: 1'b1, lower_cause: 5'd3};` 를 vita 는 E2002 로 거절하는데,
 > **iverilog 13 도 못 읽는다**(같은 줄에서 syntax error, positional 로 바꾸면 `net_scope.cc:449`

@@ -426,6 +426,72 @@ pub(crate) fn cast_task<N: crate::eval::NetReader + ?Sized>(
 /// in BOTH variants and lives in the DECLARED index domain, unwritten
 /// elements keep their value, token shortfall warns only for directive-free
 /// files, and every problem is W4023 + continue (exit parity with iverilog).
+/// The file name a `$readmem*`/`$writemem*` call names, from ANY string expression.
+///
+/// IEEE 1800 §21.4 asks only for a string expression, and the canonical SoC testbench
+/// keeps the name in a packed reg rather than writing a literal:
+///
+/// ```verilog
+/// reg [1023:0] firmware_file;
+/// if ($value$plusargs("firmware=%s", firmware_file))
+///     $readmemh(firmware_file, dut.ram.mem);
+/// ```
+///
+/// serv, picorv32 and ibex all spell it that way. Both call sites used to accept only
+/// `Expr::Const` and take a bare `return` on anything else, so those calls loaded nothing
+/// and wrote no file — at exit 0, with no diagnostic at all, which is the quietest kind of
+/// wrong answer. A SystemVerilog `string` variable was equally silent.
+///
+/// ONE helper for both, deliberately: they were byte-for-byte the same six lines, and the
+/// read side is the one anybody probes, so a fix applied there alone would have left
+/// `$writemem*` behind with no way to notice.
+///
+/// `None` ⇒ the name is empty, which every caller reports rather than ignoring.
+///
+/// The two arms decode differently, and deliberately: a literal is already a string, so
+/// `const_string` pops its TRAILING zeros, while a value read out of a net carries its
+/// padding at the top, so `value_str_bytes` strips LEADING NULs — the same end `%0s`
+/// strips when it renders that very reg.
+///
+/// x and z bits render from the VALUE plane (x→0, z→1) rather than being refused, which
+/// is what iverilog does: an x inside an otherwise valid name silently names a DIFFERENT
+/// file in both tools. That is the opposite of `handle_str_bytes`, which rejects x/z — a
+/// different contract (§6.16 string methods), not an inconsistency to align.
+/// A file name rendered safely into a human diagnostic.
+///
+/// A name that came from a net can hold any byte — a trailing NUL from a concatenation, or
+/// the raw f64 bytes of a `real`. Emitting those verbatim makes vita's own stderr a BINARY
+/// stream, and `grep` then suppresses **every** line in it, not just this one, so a CI log
+/// filter silently loses all diagnostics from the run. (PRE never hit this: it returned
+/// without saying anything at all.) The bytes still reach `fs::read_to_string` unescaped —
+/// only what a person reads is escaped.
+fn printable(name: &str) -> String {
+    name.chars()
+        .flat_map(|c| {
+            if c.is_control() {
+                format!("\\x{:02x}", c as u32).chars().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
+fn memfile_name<N: crate::eval::NetReader + ?Sized>(
+    sched: &Scheduler,
+    nets: Option<&N>,
+    a0: u32,
+) -> Option<String> {
+    let name = match sched.st.ir.exprs.get(a0 as usize) {
+        Some(sim_ir::Expr::Const { val }) => const_string(sched.st.ir, *val),
+        _ => {
+            let v = super::eval_task_arg(sched, nets, a0);
+            String::from_utf8_lossy(&crate::eval::value_str_bytes(&v)).into_owned()
+        }
+    };
+    (!name.is_empty()).then_some(name)
+}
+
 pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
     sched: &mut Scheduler,
     nets: Option<&N>,
@@ -449,9 +515,12 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
             }));
     };
     let Some(&a0) = args.first() else { return };
-    let name = match sched.st.ir.exprs.get(a0 as usize) {
-        Some(sim_ir::Expr::Const { val }) => const_string(sched.st.ir, *val),
-        _ => return,
+    let Some(name) = memfile_name(sched, nets, a0) else {
+        warn(
+            sched,
+            "$readmem: the file-name argument is empty".to_string(),
+        );
+        return;
     };
     let net = match args.get(1).and_then(|&a| sched.st.ir.exprs.get(a as usize)) {
         Some(sim_ir::Expr::Signal { net, word: None }) => *net,
@@ -478,7 +547,10 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
     let Ok(text) = std::fs::read_to_string(&name) else {
         warn(
             sched,
-            format!("$readmem: unable to open '{name}' for reading"),
+            format!(
+                "$readmem: unable to open '{}' for reading",
+                printable(&name)
+            ),
         );
         return;
     };
@@ -622,9 +694,12 @@ pub(crate) fn writemem<N: crate::eval::NetReader + ?Sized>(
             }));
     };
     let Some(&a0) = args.first() else { return };
-    let name = match sched.st.ir.exprs.get(a0 as usize) {
-        Some(sim_ir::Expr::Const { val }) => const_string(sched.st.ir, *val),
-        _ => return,
+    let Some(name) = memfile_name(sched, nets, a0) else {
+        warn(
+            sched,
+            "$writemem: the file-name argument is empty".to_string(),
+        );
+        return;
     };
     let net = match args.get(1).and_then(|&a| sched.st.ir.exprs.get(a as usize)) {
         Some(sim_ir::Expr::Signal { net, word: None }) => *net,
@@ -705,7 +780,10 @@ pub(crate) fn writemem<N: crate::eval::NetReader + ?Sized>(
     if let Err(e) = std::fs::write(&name, body) {
         warn(
             sched,
-            format!("$writemem: unable to open '{name}' for writing: {e}"),
+            format!(
+                "$writemem: unable to open '{}' for writing: {e}",
+                printable(&name)
+            ),
         );
     }
 }

@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 307건 (최신순·⚠️ = 미머지)
+## 인덱스 — 완료 슬라이스 308건 (최신순·⚠️ = 미머지)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.375` **The file name was never allowed to be a value; the hierarchical memory was built, measured, and reverted** · started on §3 ④ and the **census refuted the queue line** — every ELEMENT shape already worked (11 cells, closed back in June by N3.1 / its multi-dim follow-on / HIER-REST), and the real gap was the **whole array** as a `$readmem*`/`$writemem*` argument, three cells at one gate asking *"does this have a readable value?"* — the wrong question for a task that wants the array · demand = **four upstream testbenches** (serv, picorv32 ×2, ibex) · ⭐ the implementation was small and verified (`expr_array_view` already resolves dotted paths; the deferred placeholder is ALREADY the shape `$readmemh` builds by hand) and **40+ shapes matched both oracles**, including the real serv SoC · ⚠️⚠️ **reverted anyway**: vita runs a PARENT's `initial` before its child's while **both oracles run the child's first**, so a RAM loading its own memory overwrites the testbench's load (`01 02 03 04` vs `aa bb cc dd`, exit 0; serv digest `…523a` vs `…543a`) ⇒ the construct traded loud for **silent-wrong on its own motivating idiom** · ⭐ revert rather than fix because the ordering is **pre-existing and independent** (`u1.s = 8'hAA` already loses, no `$readmem` anywhere), `sim_ir::Process` is **frozen** so the rank must be an out-of-band sidecar, and `tie` is shared with `Comb`/`Latch` and fork children ⇒ blast radius is every design with a child `initial` · ⭐⭐ **what ships is what the revert uncovered**: `$readmem*`/`$writemem*` accepted only a string LITERAL and took a **bare `return`** otherwise — no file, no diagnostic, exit 0 — though §21.4 asks only for a string EXPRESSION and the canonical testbench uses `reg [1023:0] firmware_file`; a `string` variable was equally silent; **purely local designs were affected**, so it stands alone · ⚠️ the two sites were the same six lines ⇒ one `memfile_name` helper · adversarial: soundness **no BLOCKING** (3 NITs, 2 fixed), differential **1 BLOCKING** + 40 clean, and it **retracted four findings** measured against a binary rebuilt underneath it ⇒ re-measured from a frozen snapshot · 55 designs **zero correct→wrong** · examples 4/4 + corpus 10 **PRE == POST** · format 29 unchanged
 - `4.5.374` **직접-rhs 전용 시스템함수를 식 어디에나 — 참조 구현이 또 트리 안에 있었다** · 코퍼스가 지목한 §3 ③ · **darkriscv 전체 SoC(3,115줄·9모듈)가 처음 돌고 다이제스트가 라이브 iverilog 일치**(`b4a7bb6d411fea85`) · census 42칸(4형태 × 11위치) **PRE 41 loud** — 유일 예외가 `if ($value$plusargs(…))` 로, `lower_branch_cond` 가 **한 계열·한 위치**만 desugar 했고 `!` 하나에 도로 E3009(serv 철자) ⇒ POST **31 correct · WRONG 0** · ⭐ `hoist/general.rs` 가 이미 같은 변환을 하고 `shape()` 라는 평가-순서 **단일 정본**을 갖고 있어 그대로 소비 · ⚠️⚠️ **리뷰 전에 내가 잡은 둘** — temp 를 unsigned 로 지어 `$fgetc(fd)!=-1` 이 영원히 참(EOF 는 **−1**) · rhs 가 bare call 일 때 인덱스만 hoist 해 **평가 순서를 뒤집었다**(오라클은 rhs 먼저) · ⚠️⚠️ **적대 2렌즈 BLOCKING 여섯, 전부 내 게이트의 구멍**: ⓐ `write_arg_range` 가 **뒤집혀** `$fgets`/`$fread` 의 fd 를 write 로 세 겹침 게이트가 전부 통과 ⓑ `Shape::NoHoist` 자식 읽기가 안 보이는데 `rebuild` 는 노드를 살린다(`general.rs` 의 `reads_are_opaque` 가 방어하는 그 구멍) ⓒ 별칭을 놓침(자기-계층 `m.a` = `a` · `p::v`) ⓓ 미러링하며 `task_call_inout_root_written` 누락 — 그것만 되살려도 부족해 **input 아닌 actual 전부**를 살아남는 읽기로 넣는 `_with(seq, extra)` 신설 ⓔ 새 sigil 이 VCD/FST 에 새고 **이미 동작하던** `if ($value$plusargs(…))` 의 파형까지 바꿈 ⓕ ⭐⭐ **내가 이 슬라이스에서 쓴 docstring 의 전제가 거짓** — *"fd 상태는 문장의 어떤 식도 읽을 수 없다"* 위에 조기탈출을 세웠는데 `$feof` 가 그걸 읽는다(vita 9 / ivl −1) 그리고 **값 의존적**이라 파일 중간 프로브는 초록 · ⓑⓒ 는 fail-closed `opaque`, ⓕ 는 `fd_observer` + 조기탈출 순서 반전으로 해결 · ⚠️ 마지막 NIT 도 내 수정의 부작용(`Unevaluated` 를 `Uncond` 에 묶어 `$bits` 자식이 읽기로) · differential 렌즈 **112칸 스윕 DIVERGE 0** · examples 4/4·코퍼스 10 PRE==POST · ⭐ 스위트가 **옛 제한을 인코딩한 핀 여덟**을 짚어 전부 값-어서션으로 갱신 + 거절 쌍둥이 둘 신설(그중 한 docstring 은 *"desugar 할 문장이 없다 — deliberately, not a gap to close cheaply"* 라는 **불가능 주장**이었다) · 회귀 24건 · format 29 불변
 - `4.5.373` **리덕션 연산자가 상수 도메인에 없다 — 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ⑦ · 넣으면 **serv 가 돌고 다이제스트가 오라클과 일치**(코퍼스 7/10 → **8/10**)했지만 BLOCKING 넷에 되돌렸다 · ⭐ census: generate 만의 문제가 아니라 **여섯 연산자 · 두 철자 전부** 2-오라클 loud 이고 **값 walk 하나만** 비어 있다(폭은 이미 1, 부호는 이미 unsigned — §4.5.371 의 **정반대**) · ⚠️⚠️ ⓐ 리덕션이 `const_self_width` 를 **값으로** 쓰는데 그건 `param_meta`(선언·추론 **혼합**, 미스 32)를 읽어 `generate if (&W)` 가 **반대 가지**를 exit 0 으로 골랐다 ⓑ `~`/`-` 는 **문맥 결정**인데 module-scope walk 엔 문맥이 없어 `~(\|P)` 가 raw i64(4294967294 vs 0) ⓒ 좁힘 게이트를 **한 arm 에만** 달아 `localparam` 철자에 ⓐ 가 살아 있었고, 그 칸의 테스트가 **`VAL` 을 어서션 안 해** 틀린 답 위에서 초록이었으며 docstring 의 PRE 인용도 **거짓**이었다 ⓓ ⭐⭐ **좁힘의 근거인 정리가 거짓** — 전제 *"기록된 i64 는 참값의 확장"* 이 성립 안 한다: `parameter A=4'h1; localparam W=A<<4;` 가 vita **16/32비트** vs 두 오라클 **0/4비트** ⇒ 여분 비트가 **안쪽**에 있어 폭에 둔감한 `\|` 마저 가지를 뒤집는다 ⇒ **이름 위의 리덕션은 여섯 전부 신뢰 불가** · ⭐⭐ 선행조건이 **두 단계**(폭의 declared provenance + **값이 그 폭에서 canonical**)이고 리터럴만 허용하는 반쪽은 **수요 0** 이라 전부 되돌림 · ⚠️ **같은 벽을 세 문으로**(§4.5.371 select 바운드 · concat 폭 · 리덕션) ⇒ 큐 세 줄이 아니라 **벽 하나**로 §3 에 기록 · 되돌린 뒤 6칸 PRE==POST · **제품 코드 변경 0** · format 29 불변
 - `4.5.372` **`$fatal` 이 자기 출력을 못 막았다 — 그리고 `$finish` 승격은 지어서·재서·되돌렸다** · 코퍼스가 지목한 §3 ⑧ · ⭐ census 가 진단을 반박(*"system task call"* 이라는데 10칸 중 **`$finish`·`$stop` 둘만** 거절 · 나머지 여덟은 이미 돈다) · **실은 것** = §20.10 상 `$fatal` 은 종료하는데 `&self` 실행기의 래치를 **문장 경계**에서 처리하느라 `$display("VAL=%0d", f(7))` 의 출력이 나갔다(**pre-existing silent-wrong** · task 호출과 `r=f(7)` 은 원래 정확 = 자리가 좁아 고칠 수 있었다) · ⚠️ 술어는 `call_fatal` 이 아니라 **`call_fatal && !finished`** — 래치가 안 지워져 맨 셀로 물으면 `final` 블록 출력을 통째로 삼킨다 · ⚠️⚠️ **되돌린 것** = `$finish`/`$stop` 승격(넣으면 verilog-ethernet 이 elaborate 통과) — **BLOCKING 여섯 중 넷이 내 수정이 만든 것**: 라우팅이 셋이라 native 가 *"실행기가 드롭한다"* 는 **거짓 진단**으로 폴백 · `Step::Fatal` 소비부 넷이 `Error` 를 가정해 `$finish` 가 exit 1 · BB 루프 bail 이 없어 `$finish` 뒤 문장이 계속 출력하고 `$fatal;$finish;` 가 `run.json` 을 **재라벨** · ⭐⭐ 그런데 그 bail 이 **중간에 멈춘 본문의 반환값을 caller lvalue 에 커밋**시켰다(vita **x** / iverilog **55** / verilator **21** = **셋 다 다른 답**)고 `$fdisplay`/`$strobe` 값을 **8→x** 로 바꿔 **silent↔silent 맞바꿈** ⇒ 승격은 *"멈춘 본문의 반환값"* 이 미정이고 쓰기-다음-검사 순서가 E4002 를 지키려 **의도적**이라 되돌리고 선행조건 기록 · ⭐ 리뷰의 다섯 번째는 **컨트롤이 무죄 증명**(cont-assign 순서는 PRE 도 같고 **verilator 가 vita 편** = 오라클 분열) · 13설계 **바이트 동일** · 회귀 6건 · format 29 불변
@@ -407,6 +408,73 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+
+#### 4.5.375 — The file name was never allowed to be a value; the hierarchical memory was built, measured, and reverted (2026-08-24 · 5,912 green · format 29 unchanged)
+
+**One line**: started on §3 ④, found the queue line half wrong, built the real gap, and reverted
+it — but not before it uncovered a pre-existing silent-wrong underneath, which is what ships.
+
+**The census refuted the queue.** §3 ④ claimed `dut.ram.mem[i] = …` and
+`$readmemh(f, dut.ram.mem)` were both `E3009`. A 13-cell census across three tools found every
+ELEMENT shape already working — element read and write, variable index, part-select,
+bit-select, multi-dim, non-blocking, inside a task — 11 cells, no failure. The line had been
+stale for about two months; **N3.1**, its multi-dim follow-on and **HIER-REST track 9** closed
+it back in June. What is actually refused is the WHOLE array, in exactly three cells, all at
+one gate whose message says a whole array "has no plain readable value" — true for
+`x = dut.mem;` and the wrong question for `$readmemh`, which wants the array, not a value.
+
+**Demand is four upstream testbenches**, all the same firmware-loading line: serv
+(`servant_sim.v:20`), picorv32 (`testbench.v:253` and `testbench_wb.v:146`), ibex.
+
+⭐ **The implementation was small, and verified.** `$readmemh` already calls
+`expr_array_view`, which already resolves dotted paths; a cross-instance name simply has no
+net yet, so it defers — and the deferred placeholder is ALREADY
+`Signal { net: POISON_NET, word: None }`, the exact shape the local path builds by hand. A
+consumer-scoped exemption (the call registers its own memory argument, so the guard keeps
+refusing whole-array reads everywhere else) made **40+ shapes match both oracles**, including
+the real serv SoC end to end.
+
+**⚠️⚠️ Reverted anyway.** vita runs a PARENT's `initial` before its child's; both oracles run
+the child's first. A RAM that loads its own memory therefore overwrites the testbench's
+hierarchical load — `01 02 03 04` where both oracles give `aa bb cc dd`, at exit 0. Measured
+on the real serv SoC too: `DIGEST=…543a` (iverilog) vs `…523a` (vita). Opening the construct
+traded a loud reject for a **silent wrong answer on its own motivating idiom**.
+
+⭐ Three facts made that a revert rather than a fix-in-place. The ordering is **pre-existing
+and independent** — `u1.s = 8'hAA` already loses to the child's `initial`, with no `$readmem`
+anywhere, through a write supported since June, so this is an already-open class and the
+construct merely adds a door. `sim_ir::Process` is **frozen** and has no instance field, so
+the order cannot live in the IR; it needs an out-of-band per-process rank sidecar. And `tie`
+is shared with `Comb`/`Latch` seeding and with `compose_child_tie`, so the blast radius is
+every design with a child `initial` — its own census, its own review. Recorded with the repro
+and the fix shape in §3 ④, and as a new §2 row.
+
+**⭐⭐ What ships is what the revert uncovered.** `$readmem*`/`$writemem*` accepted only a
+string LITERAL and took a **bare `return`** on anything else: no file read, no file written,
+no diagnostic, exit 0. IEEE 1800 §21.4 asks only for a string EXPRESSION, and the canonical
+testbench keeps the name in a packed reg (`reg [1023:0] firmware_file`). A SystemVerilog
+`string` variable was equally silent. Purely local designs were affected — no hierarchy
+needed — so this is independent of the reverted half and stands on its own.
+
+⚠️ The two sites were **byte-for-byte the same six lines**, and only the read side is the one
+anybody probes, so they now share one `memfile_name` helper rather than being fixed one at a
+time. An empty name warns instead of vanishing.
+
+**Adversarial review.** Soundness: **no BLOCKING**, three NITs — the array-parameter check
+was run for the whole family though the local twin restricts it to the tasks that WRITE the
+memory (so `$writememh` on a hierarchical array parameter was refused where the local form
+worked, under a message naming the wrong task), and `is_dotted_ident` did not peel
+parentheses though the helper it complements does. Both fixed before the revert; both went
+out with it. Differential: **1 BLOCKING** (the ordering, above) and 40+ clean shapes. ⚠️ The
+differential lens also had to **retract four findings** measured against a binary this session
+rebuilt underneath it — it re-measured against a frozen snapshot, which is the right method
+and worth copying.
+
+**Measured.** 13-cell census 3-oracle · differential 55 designs, **zero correct→wrong** ·
+suite green · `$dumpvars` stdout and VCD **byte-identical** PRE vs POST · examples 4/4 and all
+ten corpus workloads **PRE == POST** · `$writememh` output files byte-identical to iverilog's,
+including the `// 0x00000000` header · 8 pinned tests, every value from a live iverilog run ·
+format 29 unchanged.
 
 #### 4.5.374 — 직접-rhs 전용 시스템함수를 식 어디에나: 참조 구현이 또 트리 안에 있었다 (2026-08-24 · 5,904 green · format 29 불변)
 
