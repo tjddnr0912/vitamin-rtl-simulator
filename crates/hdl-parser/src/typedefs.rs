@@ -352,7 +352,23 @@ impl Parser<'_, '_> {
                     // without it the whole enum stayed out of `enum_defs` and
                     // every enum method on it went loud with a misleading
                     // "hierarchical function call" message.
-                    Some(e) => match Self::const_lit_enum(e, enum_signed) {
+                    // §0 T2: …and to a module-scope `localparam` (`A = L`, `A = L+1`).
+                    // ⚠️ NOT to a `parameter`, and that is the whole safety argument:
+                    // measured, an instance override CHANGES the label values —
+                    // `m #(.K(9))` on `enum { A = K, B = K+1 }` makes iverilog print
+                    // `10`/`first=9`, not `4`/`3` — so folding one at PARSE time, before
+                    // any override is known, would be silently wrong. `try_const_index`
+                    // is exactly the right predicate because `const_locals` already
+                    // carries that guarantee ("A `parameter` is overridable → never
+                    // recorded") and it is the same fold a constant generate index uses,
+                    // so a `localparam` cannot mean one thing in `g[L]` and another here.
+                    // A `parameter` label keeps declining, which leaves the whole enum
+                    // out of `enum_defs` and its methods loud — correct-or-loud, and the
+                    // real fix for that half is moving the enum-method desugar out of the
+                    // parser, which is architectural (recorded, not attempted here).
+                    Some(e) => match Self::const_lit_enum(e, enum_signed)
+                        .or_else(|| self.try_const_index(e))
+                    {
                         Some(v) => v,
                         None => {
                             foldable = false;

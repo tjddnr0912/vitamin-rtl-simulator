@@ -293,14 +293,34 @@ fn collision_foldable_enum_methods_resolve_per_package() {
 }
 
 #[test]
-fn collision_nonfoldable_enum_methods_are_loud() {
-    // A NON-foldable enum `n` (label = a param) does NOT write `enum_defs[n]`, so a
-    // `contains_key`-based twin would copy a foldable same-name enum's STALE labels
-    // from another package → `.first/.num` silently wrong. The value-compare twin
-    // skips the stale entry, so the enum methods on `pb::n` are honest-loud instead
-    // (the plain VALUE still resolves via the unconditional TypeInfo twin).
+fn collision_localparam_enum_methods_use_their_own_packages_labels() {
+    // ⚠️ This asserted a LOUD reject until §0 T2 let an enum label fold a module-scope
+    // `localparam`. The property it was really guarding is stronger and is now checked
+    // POSITIVELY: a `contains_key`-based twin would copy the foldable same-name enum's
+    // labels from package `pa` (three of them), so `num` proves which package's labels
+    // bound. It is 2 — pb's — not 3.
     let (out, code) = run("package pa; typedef enum logic [1:0] { A, B, C } n; endpackage\n\
          package pb; localparam int BASE = 5; typedef enum logic [3:0] { X = BASE, Y } n; endpackage\n\
+         module top; pb::n e;\n\
+         initial begin e = pb::X; #1 $display(\"m=%0d num=%0d first=%0d\", e, e.num, e.first); $finish; end endmodule\n");
+    assert_eq!(code, Some(0), "a localparam label folds now:\n{out}");
+    assert!(
+        out.contains("m=5 num=2 first=5"),
+        "pb's own labels must bind (pa's would give num=3):\n{out}"
+    );
+}
+
+#[test]
+fn collision_nonfoldable_enum_methods_are_loud() {
+    // The half that is still non-foldable, and the one where the staleness hazard
+    // actually lives: a `parameter` label. It cannot fold at parse time because an
+    // instance override changes the label values (measured — `#(.K(9))` moves them), so
+    // the enum stays out of `enum_defs`, and a `contains_key`-based twin would copy the
+    // same-name enum's STALE labels from `pa`. The value-compare twin skips the stale
+    // entry, so the methods are honest-loud instead (the plain VALUE still resolves
+    // through the unconditional TypeInfo twin — see the test below).
+    let (out, code) = run("package pa; typedef enum logic [1:0] { A, B, C } n; endpackage\n\
+         package pb; parameter int BASE = 5; typedef enum logic [3:0] { X = BASE, Y } n; endpackage\n\
          module top; pb::n e;\n\
          initial begin e = pb::X; #1 $display(\"m=%0d\", e.num); $finish; end endmodule\n");
     assert_ne!(
@@ -364,5 +384,56 @@ fn scoped_unknown_package_type_is_loud() {
         code,
         Some(0),
         "unknown scoped package type must be loud:\n{out}"
+    );
+}
+
+// ── §0 T2: an enum label may name a module-scope `localparam` ────────────────
+
+/// ⚠️ The queue line called this residue "sized-literal enum label", and the census
+/// refuted that: a sized literal folds fine (`enum bit[7:0] { A = 8'hFF }` runs, and
+/// so do `.name`/`.first`/`.next`/`.num`). What was refused is a label naming a
+/// CONSTANT — `A = L`, `A = L+1`, `A = L*2` — which left the whole enum out of
+/// `enum_defs` and made every method on it loud with a misleading "hierarchical
+/// function call" message. Both oracles fold it.
+#[test]
+fn an_enum_label_folds_a_localparam() {
+    // (labels, expected "VAL=<B> <first>")
+    for (labels, want) in [
+        ("A = L, B = L+1", "VAL=6 5"),
+        ("A = 1, B = L", "VAL=5 1"),
+        ("A = L*2, B = L*3", "VAL=15 10"),
+    ] {
+        let (out, code) = run(&format!(
+            "module top;\n  localparam L = 5;\n\
+             typedef enum bit[7:0] {{ {labels} }} e_t; e_t x;\n\
+             initial begin x = B; #1 $display(\"VAL=%0d %0d\", x, x.first); $finish; end\n\
+             endmodule\n"
+        ));
+        assert_eq!(code, Some(0), "`{labels}` must fold:\n{out}");
+        assert!(
+            out.contains(want),
+            "`{labels}` must give `{want}` (both oracles do):\n{out}"
+        );
+    }
+}
+
+/// A `parameter` label must NOT fold, and this is the measurement that says why rather
+/// than a rule taken on faith: an instance override CHANGES the label values. With
+/// `m #(.K(9))` on `enum { A = K, B = K+1 }`, iverilog prints 10 and `first=9` — not 4
+/// and 3. The parser folds before any override is known, so folding one there would be
+/// silently wrong; `const_locals` already encodes the distinction ("a `parameter` is
+/// overridable → never recorded") and the label fold reuses exactly that predicate.
+#[test]
+fn an_enum_label_does_not_fold_an_overridable_parameter() {
+    let (out, code) = run("module m #(parameter K = 3) ();\n\
+           typedef enum bit[7:0] { A = K, B = K+1 } e_t; e_t x;\n\
+           initial begin x = B; $display(\"VAL=%0d %0d\", x, x.first); end\n\
+         endmodule\n\
+         module t; m #(.K(9)) u(); initial #1 $finish; endmodule\n");
+    assert_ne!(
+        code,
+        Some(0),
+        "folding an overridable parameter at parse time would print 4/3 where both \
+         oracles print 10/9:\n{out}"
     );
 }
