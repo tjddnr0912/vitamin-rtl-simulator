@@ -2215,3 +2215,22 @@ recovered by copying the binary to a frozen snapshot, recording its md5 and the 
 somewhere the working tree cannot reach and hand the reviewer that path; a review that
 silently measures three different binaries reports findings that cannot be reproduced, and
 the retraction costs more than the copy.
+
+### ★★★ **A truncated tool result is not a completed edit**
+
+2026-08-24, caught by the owner rather than by me. A tool call ended with
+*"Tool result did not finish before the conversation ended"*, and I carried on as though the edit
+had landed. It had not — the file was unchanged, and the next several steps were reasoning about a
+tree that did not exist.
+
+The trap is that a truncated result looks like a *display* problem (the output was cut off), when it
+is equally consistent with an *execution* problem (the call never completed). Nothing in the message
+distinguishes them, so treating it as cosmetic is a guess, and it is the guess that fails silently:
+the work continues on a false premise and the divergence only surfaces later, usually as a
+"regression" that never happened.
+
+⇒ **After any tool result that did not visibly complete, re-establish the state before continuing** —
+`git status --short` and `git diff --stat` for an edit, a re-read for a write, a re-run for a
+measurement. The check costs one call; skipping it costs every step built on top of it.
+⭐ This is the same rule as *"a green suite is coverage, not proof"* and *"measure the premise"*, one
+level down: **the premise here is that the previous step happened at all.**
