@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, **Phase A~D 실행 기록(§5.1-x · 슬라이스 59건)은 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(셋 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-08-24)**: format_version **29** · **5,919 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
+> **기준선(2026-08-24)**: format_version **29** · **5,930 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -214,7 +214,7 @@
 > 있었다(즉 §1 은 포인터가 아니라 **내용을 들고 있었다**). 이관 시 무손실 검증이 잡았고, 원문 그대로 옮긴다:
 >
 > - **폭 인식 상수 접기** — 자기결정 위치 셋(옛 「다음 착수 순서」 1~3)은 **§4.5.343 로 해소**; 남은 것은 top-level const 문맥 전반(generate-if cond·untyped localparam·range bound 등 — **위 표 1번**과 divergence 목록에 실측 기록)이고 그 해소가 곧 캐스트 뭉치의 선행조건(AST self-폭 패스)이다. ⚠️ §4.5.346 이 **캐스트 안쪽에서는 그 패스가 이미 선다**는 것을 증명했다(`const_self_width`+`const_signed_env` 로 충분 · `8'((4'd15+4'd1) > 4'd0)` 이 iverilog 0). ⭐ **인터프리터 coerce 가 가장 도달성 높은 진입점**이라고 기록돼 있었다.
-> - **package-scope `real`** (오라클 ✓).
+> - ~~**package-scope `real`**(오라클 ✓)~~ — ✅ **RESOLVED §4.5.377**(2026-08-24). ⭐ **§3 ⑨ 와 같은 뿌리였다**: `package.rs` 의 파라미터 fold 가 `const_eval_in_scope`(정수 전용) 하나만 물어 real/string 을 아예 라우팅하지 않았다. 값은 넘어가는데 **도메인이 안 넘어가서** `pk::PR / 2` 가 정수 도메인에서 나눠 **1.0**(두 오라클 1.5, exit 0). 정수 twin 이 `pkg_consts` 에 남으므로 `parameter real R = 4;` 의 폭-문맥 사용은 그대로.
 > - ~~**구조적 지연**(오라클 ✓)~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0**). 잔여는 아래 🆕 넷.
 > - ~~**`real` → `input int` formal**(오라클 ✓)~~ — ✅ **RESOLVED §4.5.365**(2026-08-22 · 184칸 3-오라클 **FIXED 54 · REGRESSION 0** · 1,170칸 스윕 **1170/1170** iverilog 일치). 잔여는 아래 🆕 넷.
 > - 🆕 **cont-assign 만 구동하는 wire 가 t=0 에 가짜 이벤트를 낸다**(§4.5.352 differential 렌즈 곁 발굴 ·
@@ -638,14 +638,43 @@
 > **pre-existing silent-wrong**. 잔여 = `$fdisplay`/`$fwrite`·`$strobe`/`$monitor` 는 같은 검사가
 > 없어 여전히 한 문장 늦다(⚠️ 그 값이 곧 ⓐ 의 질문이라 지금 고치면 silent↔silent 맞바꿈이 된다).
 
-> **⑨ 파라미터 선언 fold 의 네 번째 복사본(`package.rs`)이 string/real 을 아예 라우팅 안 한다**.
-> §4.5.370 이 넷 중 **셋**(params·instance·generate)을 넓힌 결과, 패키지 안팎에서 **같은 원문이
-> 다르게 접힌다** — `package P; parameter SI = (S=="AUTO") ? "RED" : S;` 는 여전히 E3009 다.
-> ⚠️ 이건 인스턴스가 아니라 **CLASS** 이고(위 §3 "파라미터 선언 fold 가 네 벌" 항목), `package.rs`
-> 를 발견한 자리에서 고치는 건 §4.5.311 이 경고한 것이며 `param_range` 로 **이미 한 번 지어서
-> 되돌렸다**. 승격 경로 = §4.5.314 식으로 정본(`bind_one_param`)이 네 번째를 흡수하는 것.
-> 회귀 테스트가 이 칸을 **loud 로 핀**해 뒀다(`string_const_domain.rs`) — 흡수되는 날 붉게 뜬다.
-
+> **⑨ 파라미터 선언 fold 의 네 번째 복사본(`package.rs`)이 string/real 을 라우팅 안 한다** —
+> ✅ **RESOLVED (§4.5.377)** (2-오라클 · format 29 불변).
+>
+> ⚠️ **census 가 큐 줄을 또 넓혔다.** 줄은 *삼항*(`parameter SI = (S=="AUTO") ? "RED" : S;`)을
+> 갭으로 지목했지만, 실제로는 **패키지 안의 string/real 이 전부** loud 였다 — `parameter S = "RED";`
+> 라는 **바레 리터럴**까지. fold 가 `const_eval_in_scope` **하나만** 묻는데 그건 정수 전용이라
+> 리터럴이 **착지할 도메인이 없었다**. 19칸 census: string 9 · real 4 가 loud, 정수·모듈스코프
+> 컨트롤은 불변, 그리고 **§2 의 package-real silent-wrong 이 같은 뿌리**(값은 넘어가고 도메인이
+> 안 넘어가 `pk::PR / 2` 가 1.0) ⇒ **§2·§3 두 줄이 한 수정으로 닫혔다**.
+>
+> ⭐ **참조 구현은 `generate.rs`**, 그리고 그게 옳은 이유는 형태를 정하는 성질을 공유하기 때문이다:
+> generate 스코프 상수도 패키지 상수도 **override 채널이 없다** ⇒ 선언 기본값이 언제나 바인딩이고
+> 폭을 선언에서 가져와도 된다. arm 순서는 real → string → 정수이고 앞 둘은 **return 이 아니라
+> fall-through**(§4.5.364 의 그 순서). ⚠️ 큐가 권한 *"`bind_one_param` 이 흡수"* 는 하지 **않았다** —
+> `bind_one_param` 은 override 채널을 다루는 쪽이라 성질이 다르다. 대신 **generate 와 package 가
+> 같은 케이스**라는 것이 이 슬라이스의 판정이다.
+>
+> ⚠️⚠️ **내 수정이 만든 회귀 둘, 내 soundness 렌즈가 잡았다** — 둘 다 *"모든 패키지 파라미터는
+> `pkg_consts` 에 있다"* 는 **불변식을 내가 깨뜨린** 것이다: ⓐ 이름공간 중복 검사가 i64 `consts` 를
+> 물어서 `parameter S = "RED"; int S;` 가 **exit 0 으로 통과**(두 오라클 거절 · 정수 twin 은 loud
+> 유지) ⇒ 검사가 묻는 것이 **NAME SPACE** 이므로 인자를 이름 집합으로 **재타입**했다 ⓑ
+> `nonconst_bound_reason` 의 `pkg::` arm 이 *"알 수 없는 `pkg::name` 은 기존의 조용한 unfoldable
+> 동작을 유지한다"* 고 **자기 주석에 예고한 구멍**으로 `logic [P::S-1:0] v;` 가 **조용히 1비트**(두
+> 오라클 5391684) ⇒ **모듈 스코프 쌍둥이가 loud** 이므로 branch parity 로 복구(값 도메인에 escalation
+> 을 넣지 않는 자리 = §4.5.370 의 그 함정 회피).
+>
+> ⭐ **곁수확**: `const_str.rs` 의 `PkgScoped` arm 은 `str_param_raw` 를 **`"P::S"` 라는 철자**로
+> 찾고 있었는데 **그 키를 쓰는 생산자가 없다**(fold 는 `$pkg$P.S`, 모듈 스코프는 `module.name`)
+> ⇒ 지원되는 것처럼 읽히는 **도달 불가 코드**였다(§4.5.370 의 *"소비자가 하나뿐인 참조 구현"* 과 같은 모양).
+> 고치니 `generate if (P::S == "AUTO")` 가 산다.
+>
+> ⚠️ **열지 않은 한 형태 = 와일드카드 import**(`import pk::*;` 뒤의 바레 이름). **loud 유지**(fold 는
+> 성공하고 import 바인딩만 없다). `apply_import_consts` 가 §26.8 wildcard-origin·모호성 부기와 함께
+> `params`(i64)로 재바인딩하는데, string/real 사이드맵에 같은 대우를 주는 것은 **라우팅이 아니라 배관**
+> 이고 호출부가 둘이라 별도 항목이다. 핀 = `string_const_domain.rs` · `real_params.rs`.
+> ⚠️ 또 하나 = **real 이 generate-if 조건**(`generate if (P::R > 1.0)`)은 loud 유지 —
+> `const_real.rs` 에 `PkgScoped` arm 이 아예 없다(조용하지 않다).
 
 > 🆕 **지연 멀티드라이버의 wire 해석**(§4.5.364 곁수확 · **2-오라클** · E3001). `assign #(D) bus = en ? d : 1'bz;`
 > 를 둘 이상 겹쳐 쓰는 tri-state 버스 관용구가 **exit 1** 로 거절된다 — `check_whole_net_multidriver` 가
@@ -1029,14 +1058,14 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,919 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-24 · ARCHIVE §4.5.376) |
+| 게이트 | **5,930 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-24 · ARCHIVE §4.5.377) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
 | **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **다음 = ⓓ**(package 스코프 파라미터 셀렉트 · §4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ⚠️⚠️ **ⓔ 는 §4.5.376 census 가 강등**했다(*"두 오라클 다 자식 먼저"* 가 거짓 — verilator 가 **vita 편** · §3 ④ 를 막고 있지도 않았다 · 남은 결함은 읽기 방향뿐이고 **코퍼스 수요 0** ⇒ 브리핑은 아래) · 그 다음 ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ~~ⓐ§4.5.364~~ ~~ⓑ§4.5.365~~ ~~ⓒ§4.5.366~~ RESOLVED(잔여는 §2) |
-| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). ~~⑧~~ 도 §4.5.372 가 **되돌렸다**(선행조건 = *멈춘 프레임 본문의 반환값* · 상세 §3 ⑧). ~~⑦~~ 도 §4.5.373 이 **되돌렸다**(②와 **같은 벽** — 상세 §3 ⑦). ~~③~~ **RESOLVED(§4.5.374)** — darkriscv 전체 SoC 가 처음 돌았다. ~~④~~ **RESOLVED(§4.5.376)** — §4.5.375 가 되돌렸던 것을 **census 가 그 revert 를 반박**하고 재랜딩했다(*"두 오라클 다 자식 먼저"* 가 거짓 · verilator 는 vita 와 같은 `01 02 03 04` · 네 테스트벤치 중 경쟁 로드를 가진 것이 **하나도 없다** · serv 는 ④ 유무와 무관하게 §3 ⑦ 로 거절). ⇒ ⭐ **다음 표적 = ⑨**(`package.rs` 네 번째 복사본) → **⑥**(auto-top) → **⑪**(wide 반환 상수함수 = verilog-axi) · ⚠️ **⑧⑪ 은 §2 급 잔여를 남겼다**(§3 ⑧ 의 `$fdisplay`/`$strobe` 한 문장 lag) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
+| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). ~~⑧~~ 도 §4.5.372 가 **되돌렸다**(선행조건 = *멈춘 프레임 본문의 반환값* · 상세 §3 ⑧). ~~⑦~~ 도 §4.5.373 이 **되돌렸다**(②와 **같은 벽** — 상세 §3 ⑦). ~~③~~ **RESOLVED(§4.5.374)** — darkriscv 전체 SoC 가 처음 돌았다. ~~④~~ **RESOLVED(§4.5.376)** — §4.5.375 가 되돌렸던 것을 **census 가 그 revert 를 반박**하고 재랜딩했다(*"두 오라클 다 자식 먼저"* 가 거짓 · verilator 는 vita 와 같은 `01 02 03 04` · 네 테스트벤치 중 경쟁 로드를 가진 것이 **하나도 없다** · serv 는 ④ 유무와 무관하게 §3 ⑦ 로 거절). ~~⑨~~ **RESOLVED(§4.5.377)** — census 가 갭을 *"삼항"* 에서 **패키지 안 string/real 전부**로 넓혔고 **§2 의 package-real silent-wrong 과 같은 뿌리**여서 두 줄이 함께 닫혔다. ⇒ ⭐ **다음 표적 = ⑥**(auto-top) → **⑪**(wide 반환 상수함수 = verilog-axi) · ⚠️ **⑧⑪ 은 §2 급 잔여를 남겼다**(§3 ⑧ 의 `$fdisplay`/`$strobe` 한 문장 lag) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
 | **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정 · **§4.5.369 워크로드 코퍼스로 재가격**) — ⚠️⚠️ **코퍼스가 그림을 양방향으로 바꿨다**: 남이 쓴 RTL 다섯에서 vita 는 iverilog 대비 **기하평균 1.61×** 로 앞선다(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.44 · darkriscv **0.78**) — *"iverilog 와 동률"* 은 **우리가 쓴 keccak 두 설계**가 만든 그림이었고, 그 둘은 우리에게 유리한 벤치가 아니라 **가장 어려운 벤치**였다(빼면 1.30 → **1.60**) · ⭐ 표적은 여전히 frame 레짐이다: keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 **0.53× 로 코퍼스 최악**이다 · ⚠️ **다만 지는 둘의 공통점은 아직 안 쟀다** — `keccak_f_arr` 는 호출마다 25원소 배열을 짓고 `darkriscv`(0.78×)는 그런 게 없다. **다음 성능 슬라이스의 첫 계측은 darkriscv 여야 한다**(우리가 안 쓴 설계이고, 지는 이유가 아레나 가설과 다를 수 있다) · ⚠️ **arena 가 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0`), `WProg::run` 은 `arena.buf[slot]` 을 읽는데 **frame local 엔 슬롯이 없다**(6–10주 · 상한 2.33× — ⚠️ 그 2.33 은 **keccak_f_arr 하나**에서 나온 수다) · bounded 조각 둘이 이미 수확: §4.5.367 part-select 쓰기 **−15.6%**, §4.5.368 no-op `mask_top` 제거 **keccak_f_arr −11.1% · keccak_f −13.2%** · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 코퍼스 single-core 실측을 확보하는 것이 열린 항목이다 |

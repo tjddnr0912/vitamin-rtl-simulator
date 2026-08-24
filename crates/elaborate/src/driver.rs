@@ -37,6 +37,8 @@ impl<'s> Elaborator<'s> {
             pkg_consts: BTreeMap::new(),
             pkg_types: BTreeMap::new(),
             pkg_const_meta: BTreeMap::new(),
+            pkg_str_raw: BTreeMap::new(),
+            pkg_real_val: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
             cu_imports: Vec::new(),

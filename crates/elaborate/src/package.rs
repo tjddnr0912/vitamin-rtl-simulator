@@ -454,7 +454,20 @@ impl Elaborator<'_> {
         // live during the fold so an intra-package alias/expression resolves a
         // sibling param's (width, signed), then restored (no cross-scope pollution).
         let mut saved_meta: Vec<(String, Option<(u32, bool)>)> = Vec::new();
+        // §3 ⑨: the string / real twins of `saved`+`consts`. Same two jobs — made LIVE
+        // during this package's fold so an intra-package sibling reference resolves
+        // (`parameter real R2 = R*2.0;`, `parameter SI = (S=="AUTO") ? "RED" : S;`), then
+        // restored so a module-scope name of the same spelling is untouched; and
+        // collected for the flush into the per-package maps the readers consult.
+        let mut saved_real: Vec<(String, Option<f64>)> = Vec::new();
+        let mut saved_str: Vec<(String, Option<String>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
+        let mut real_vals: BTreeMap<String, f64> = BTreeMap::new();
+        let mut str_vals: BTreeMap<String, String> = BTreeMap::new();
+        // Every parameter name in this body, whatever domain it folded into — see
+        // `elaborate_pkg_netvar`. Kept beside the three value maps rather than derived
+        // from them, so a future fourth domain has one obvious place to register.
+        let mut param_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         // Declared `(width, signed)` per PARAM const (flushed to
         // `pkg_const_meta`) so a `pkg::x` / bare-imported read gets its true
         // self-width in a concat/replication (see the field doc).
@@ -471,19 +484,11 @@ impl Elaborator<'_> {
         for item in &pm.body {
             match item {
                 ast::ModuleItem::Param(p) => {
-                    let v = self.const_eval_in_scope(&p.value).unwrap_or_else(|| {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            &format!(
-                                "package parameter `{}` value is not a foldable constant",
-                                p.name.name
-                            ),
-                        );
-                        0
-                    });
                     // A2b-prereq: params and variables share the package's single
                     // name space (IEEE §26.3) — a duplicate is loud, never a
                     // silent double-binding (`add_net` only guards net-vs-net).
+                    // Hoisted above the fold so it fires for every domain, not just
+                    // the integer one the fold used to be.
                     if vars.contains_key(&p.name.name) {
                         self.error(
                             MsgCode::DupUnit,
@@ -495,6 +500,56 @@ impl Elaborator<'_> {
                         );
                     }
                     let key = self.fq(&p.name.name);
+                    param_names.insert(p.name.name.clone());
+                    // §3 ⑨: this was the FOURTH copy of the parameter-declaration fold
+                    // and the only one that never learned the string / real domains, so
+                    // the same source text folded differently inside and outside a
+                    // package — `parameter S = "RED";` was loud on its own bare LITERAL,
+                    // and `parameter real PR = 3;` folded into the integer domain and
+                    // made `P::PR / 2` answer 1 where both oracles say 1.5 (silent, at
+                    // exit 0). The three arms below mirror the GENERATE copy verbatim,
+                    // which is the right reference because it shares the property that
+                    // decides the shape: a package constant, like a generate-scope one,
+                    // HAS NO OVERRIDE CHANNEL, so its declared default is always what
+                    // binds and the width may be taken from the declaration.
+                    //
+                    // Order is real → string → integer, and the first two FALL THROUGH
+                    // rather than return-or-error: `param_real_value` applies §11.8.1
+                    // (a real operand puts the expression in the real domain) and hands
+                    // back an i64 twin only when the initializer was wholly integral,
+                    // which is what keeps `localparam real R = 4;` usable where an
+                    // integer is wanted. Reversing the two is a measured silent-wrong
+                    // (§4.5.364).
+                    if let Some((rv, exact)) = self.param_real_value(&p.ty, &p.value) {
+                        // Live for the rest of THIS package's fold, so a sibling
+                        // `parameter real R2 = R*2.0;` resolves; restored below with the
+                        // integer and meta entries so nothing leaks into module scope.
+                        saved_real.push((key.clone(), self.real_param_val.insert(key.clone(), rv)));
+                        real_vals.insert(p.name.name.clone(), rv);
+                        if let Some(i) = exact {
+                            saved.push((key.clone(), self.params.insert(key.clone(), i)));
+                            consts.insert(p.name.name.clone(), i);
+                        }
+                        continue;
+                    }
+                    if let Some(raw) = self.param_str_or_folded(p, false) {
+                        saved_str.push((
+                            key.clone(),
+                            self.str_param_raw.insert(key.clone(), raw.clone()),
+                        ));
+                        str_vals.insert(p.name.name.clone(), raw);
+                        continue;
+                    }
+                    let v = self.const_eval_in_scope(&p.value).unwrap_or_else(|| {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "package parameter `{}` value is not a foldable constant",
+                                p.name.name
+                            ),
+                        );
+                        0
+                    });
                     saved.push((key.clone(), self.params.insert(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
                     // A package constant has no override channel.
@@ -607,7 +662,7 @@ impl Elaborator<'_> {
                 // package's own §6.8 pre-sweep `initial` (before-t0 for every
                 // module process — module parity, iverilog-pinned).
                 ast::ModuleItem::NetVar(d) => {
-                    self.elaborate_pkg_netvar(d, &consts, &mut vars);
+                    self.elaborate_pkg_netvar(d, &param_names, &mut vars);
                     // GAP-G: capture a const array param's foldable element values
                     // (same shape rules as the module-scope `capture_const_array_vals`)
                     // keyed by the package-local name, for `p::ROT[i]` const folds.
@@ -652,6 +707,29 @@ impl Elaborator<'_> {
                 }
             }
         }
+        // §3 ⑨: same unwind for the string / real side maps, in reverse push order and
+        // set-or-REMOVE, so a package param can never outlive its package under a bare
+        // key that a module-scope read would walk into.
+        for (k, prev) in saved_real.into_iter().rev() {
+            match prev {
+                Some(v) => {
+                    self.real_param_val.insert(k, v);
+                }
+                None => {
+                    self.real_param_val.remove(&k);
+                }
+            }
+        }
+        for (k, prev) in saved_str.into_iter().rev() {
+            match prev {
+                Some(v) => {
+                    self.str_param_raw.insert(k, v);
+                }
+                None => {
+                    self.str_param_raw.remove(&k);
+                }
+            }
+        }
         // Restore param_meta — the package's params were made live only for
         // intra-package alias resolution above; module-scope reads use
         // `pkg_const_meta` (persisted below), so these entries must not linger.
@@ -673,6 +751,12 @@ impl Elaborator<'_> {
         if !const_meta.is_empty() {
             self.pkg_const_meta.insert(pkg.clone(), const_meta);
         }
+        if !real_vals.is_empty() {
+            self.pkg_real_val.insert(pkg.clone(), real_vals);
+        }
+        if !str_vals.is_empty() {
+            self.pkg_str_raw.insert(pkg.clone(), str_vals);
+        }
         self.pkg_vars.insert(pkg.clone(), vars);
         if !array_vals.is_empty() {
             self.pkg_array_const_vals.insert(pkg.clone(), array_vals);
@@ -692,10 +776,17 @@ impl Elaborator<'_> {
     /// every module process, so module code sees the values at t0). Loud line:
     /// wire kinds are not package items (IEEE §26.2); event/string/real/
     /// class/dynamic storage are an unverified scope in v1 (scope-gate, §3).
+    /// `param_names` is the package's PARAMETER NAME SPACE — every name declared as a
+    /// parameter in this body, in ANY domain. ⚠️ It used to be the i64 `consts` map, which
+    /// was the same set only while the package fold was integer-only: once §3 ⑨ routed
+    /// string and real parameters out of `consts`, a `parameter S = "RED"; int S;`
+    /// collision stopped being reported and ran at exit 0 (both oracles reject it), while
+    /// the integer twin stayed loud. The check is about the NAME SPACE (IEEE §26.3), so
+    /// it takes the name space.
     pub(crate) fn elaborate_pkg_netvar(
         &mut self,
         d: &ast::NetVarDecl,
-        consts: &BTreeMap<String, i64>,
+        param_names: &std::collections::BTreeSet<String>,
         vars: &mut BTreeMap<String, u32>,
     ) {
         if d.kind.is_net() {
@@ -738,7 +829,7 @@ impl Elaborator<'_> {
                 );
                 return;
             }
-            if consts.contains_key(&decl.name.name) {
+            if param_names.contains(&decl.name.name) {
                 self.error(
                     MsgCode::DupUnit,
                     &format!(

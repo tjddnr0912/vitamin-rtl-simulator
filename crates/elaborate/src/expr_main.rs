@@ -101,6 +101,31 @@ impl Elaborator<'_> {
             // shadows an import, iverilog-pinned). Function references need
             // call syntax, which is outside the v7 scope — loud.
             ast::ExprKind::PkgScoped { pkg, name } => {
+                // §3 ⑨: a string / real package parameter has no i64 value, so it is
+                // kept out of `pkg_consts` and answered here — BEFORE the numeric map,
+                // for the same reason the bare-`Ident` arm below resolves its string and
+                // real side maps first. A `real` param with a wholly integral
+                // initializer is in BOTH maps; the real answer wins here because that is
+                // the parameter's DECLARED domain, and folding it as an integer is what
+                // made `P::PR / 2` answer 1 where both oracles say 1.5.
+                if let Some(rv) = self
+                    .pkg_real_val
+                    .get(&pkg.name)
+                    .and_then(|m| m.get(&name.name))
+                    .copied()
+                {
+                    let cid = self.intern_const(make_const_real(rv));
+                    return self.push_expr(ir::Expr::Const { val: cid });
+                }
+                if let Some(raw) = self
+                    .pkg_str_raw
+                    .get(&pkg.name)
+                    .and_then(|m| m.get(&name.name))
+                    .cloned()
+                {
+                    let cid = self.intern_const(parse_str_literal(&raw));
+                    return self.push_expr(ir::Expr::Const { val: cid });
+                }
                 match self
                     .pkg_consts
                     .get(&pkg.name)

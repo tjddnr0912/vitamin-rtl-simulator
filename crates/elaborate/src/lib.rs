@@ -326,6 +326,14 @@ struct Elaborator<'s> {
     /// 32 bits, so it carries the right self-width inside a concat/replication
     /// (`{4'h5, p::x}` — otherwise the 32-bit const shoves the high operand out).
     pkg_const_meta: BTreeMap<String, BTreeMap<String, (u32, bool)>>,
+    // §3 ⑨: the string / real twins of `pkg_consts`. A package parameter has no i64
+    // value in either domain, so it is kept OUT of `pkg_consts` (exactly as a
+    // module-scope string/real param is kept out of `params`) and read from here —
+    // package -> name -> raw literal (delimiters included, the `str_param_raw`
+    // convention) / f64. A `real` param whose initializer is wholly integral appears in
+    // BOTH, so an integral context still folds it.
+    pkg_str_raw: BTreeMap<String, BTreeMap<String, String>>,
+    pkg_real_val: BTreeMap<String, BTreeMap<String, f64>>,
     /// v7 P2-D: package name → its function/task definitions (clones — the
     /// same inline-expansion tables modules use).
     pkg_funcs: BTreeMap<String, BTreeMap<String, ast::FunctionDef>>,

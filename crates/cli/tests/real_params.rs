@@ -211,10 +211,47 @@ fn overriding_a_real_parameter_is_loud() {
 }
 
 #[test]
-fn package_real_parameter_is_loud() {
-    // Package constants travel through their own import machinery
-    // (`pkg_consts`/`apply_import_consts`), which is i64-only — a separate follow-on.
-    loud(
+fn a_package_real_parameter_folds_through_the_scope_operator() {
+    // ⚠️ This test asserted the OPPOSITE until §3 ⑨. The package fold was the FOURTH
+    // copy of the parameter-declaration fold and the only one that never learned the
+    // real or string domains, so `localparam real R = 2.5;` was loud on its own bare
+    // LITERAL inside a package while the identical line at module scope was correct.
+    // Both oracles accept it.
+    let out = run("package pk;\n\
+           localparam real R = 2.5;\n\
+         endpackage\n\
+         module t;\n\
+           initial $display(\"%0.1f\", pk::R);\n\
+         endmodule\n");
+    assert_eq!(out, "2.5\n");
+}
+
+#[test]
+fn a_package_real_parameter_keeps_its_domain_across_the_boundary() {
+    // The silent-wrong half of the same root, and the reason this is not merely a
+    // loud-to-supported promotion: the VALUE crossed correctly (`pk::PR` rendered
+    // 3.000000) while the DOMAIN did not, so `pk::PR / 2` divided in the integer domain
+    // and answered 1 where iverilog and verilator both say 1.5 — at exit 0. Recorded in
+    // ROADMAP §2 and in the user manual's limitations page, both now corrected.
+    let out = run("package pk;\n\
+           parameter real PR = 3;\n\
+         endpackage\n\
+         module t;\n\
+           initial $display(\"%0.1f\", pk::PR / 2);\n\
+         endmodule\n");
+    assert_eq!(out, "1.5\n");
+}
+
+#[test]
+fn a_wildcard_imported_real_parameter_is_still_loud() {
+    // The one shape §3 ⑨ deliberately did NOT open, pinned so the next attempt starts
+    // from a measured statement. `pk::R` above resolves through the package's own maps;
+    // a WILDCARD import instead re-binds each package constant into the importing
+    // scope, and that machinery (`apply_import_consts`) binds `params` — i64 — with the
+    // §26.8 wildcard-origin and ambiguity bookkeeping threaded through two call sites.
+    // Giving the string and real side maps the same treatment is real plumbing, not a
+    // routing note, so it is its own item. It stays LOUD, never silent.
+    let (_, ok, err) = run_raw(
         "package pk;\n\
            localparam real R = 2.5;\n\
          endpackage\n\
@@ -222,7 +259,12 @@ fn package_real_parameter_is_loud() {
            import pk::*;\n\
            initial $display(\"%0.1f\", R);\n\
          endmodule\n",
-        "not a foldable constant",
+    );
+    assert!(!ok, "the wildcard-imported form must stay loud");
+    assert!(
+        err.contains("R") && !err.contains("not a foldable constant"),
+        "the old message named the FOLD, which now succeeds; the remaining gap is the \
+         import binding and the diagnostic should not claim otherwise:\n{err}"
     );
 }
 

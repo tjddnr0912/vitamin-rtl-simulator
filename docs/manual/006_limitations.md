@@ -397,12 +397,17 @@ interface body or a generate scope, a hierarchical reference to another instance
 real parameter, and `$clog2()` of a real **when the result feeds a width or a
 replication count** (`$clog2(R)` on its own evaluates normally).
 
-> **Known defect — a package-scope `parameter real` is silently wrong.**
-> `pk::PR / 2` with `parameter real PR = 3;` in a package yields `1.0`, not `1.5`:
-> the package binding is not routed to the real side table, so the division happens
-> in the integer domain with no diagnostic. A module-scope `parameter real` is
-> correct. Until this is fixed, declare real constants at module scope, or pass them
-> as parameters. Tracked in `docs/ROADMAP.md` §2.
+> **Fixed — a package-scope `parameter real` used to be silently wrong.** Until
+> 2026-08-24, `pk::PR / 2` with `parameter real PR = 3;` in a package yielded `1.0`
+> rather than `1.5`: the value crossed the package boundary but its DOMAIN did not, so
+> the division happened in the integer domain with no diagnostic. String and real
+> package parameters now fold and keep their domain, reached through the scope
+> operator (`pk::R`, `pk::S`).
+>
+> ⚠️ **One form is still refused**: a real or string package parameter reached through a
+> WILDCARD import (`import pk::*;` then a bare `R`). It is loud, never silent — the
+> package fold succeeds and only the import binding is missing. Use `pk::R` explicitly,
+> or import the name directly. Tracked in `docs/ROADMAP.md` §3.
 
 ---
 

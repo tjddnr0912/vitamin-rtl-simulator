@@ -339,15 +339,147 @@ fn a_ternary_mixing_a_string_and_a_number_stays_loud() {
     );
 }
 
-/// Pinned residue, NOT a target of this slice: the parameter-declaration fold exists
-/// in FOUR copies (`params.rs` is canonical; `instance.rs`, `generate.rs` and
-/// `package.rs` are the others), and `package.rs` does not route string or real
-/// parameters at all. Three of the four now share the widened resolver; the package
-/// copy is a class problem recorded in ROADMAP §3, and patching it where it was found
-/// is exactly what §4.5.311 warns against. This test exists so that the day someone
-/// absorbs the fourth copy, it turns red and asks to be promoted.
+/// §3 ⑨: the fourth copy of the parameter-declaration fold (`package.rs`) now routes
+/// the string and real domains, so the queue's own cell folds. ⚠️ The census that opened
+/// it found the gap far wider than the line claimed: not just this ternary but every
+/// string and real form in a package, down to a bare `parameter S = "RED";` — the fold
+/// asked only `const_eval_in_scope`, which is integer-only, so a literal had no domain
+/// to land in.
 #[test]
-fn package_scope_is_still_loud_and_that_is_recorded() {
+fn package_scope_string_folding_works_through_the_scope_operator() {
+    let (out, code) = run(
+        r#"package P; parameter S = "AUTO"; parameter SI = (S=="AUTO") ? "RED" : S; endpackage
+module tb; initial $display("VAL=%0s", P::SI); endmodule
+"#,
+    );
+    assert_eq!(code, Some(0), "must run\n{out}");
+    assert!(out.contains("VAL=RED"), "both oracles print RED\n{out}");
+}
+
+/// A bare string LITERAL in a package — the shape that proves the gap was never about
+/// the ternary the queue line named. `const_eval_in_scope` is integer-only, so a literal
+/// had no domain to land in and the declaration went loud on itself.
+#[test]
+fn a_bare_string_literal_folds_in_a_package() {
+    let (out, code) = run(r#"package P; parameter S = "RED"; endpackage
+module tb; initial $display("VAL=%0s", P::S); endmodule
+"#);
+    assert_eq!(code, Some(0), "must run\n{out}");
+    assert!(out.contains("VAL=RED"), "{out}");
+}
+
+/// Two packages declaring the SAME parameter name. The fold makes each package's params
+/// live only for its own body and unwinds them afterwards, so this is the test that the
+/// unwind is real rather than incidental — without it the second package's fold would
+/// see the first's binding still live.
+#[test]
+fn two_packages_with_the_same_string_parameter_name_do_not_contaminate() {
+    let (out, code) = run(r#"package A; parameter S = "AAA"; endpackage
+package B; parameter S = "BBB"; endpackage
+module tb; initial $display("VAL=%0s %0s", A::S, B::S); endmodule
+"#);
+    assert_eq!(code, Some(0), "must run\n{out}");
+    assert!(out.contains("VAL=AAA BBB"), "both oracles agree\n{out}");
+}
+
+/// A module-local parameter of the same name must not be disturbed: `P::S` names the
+/// package unconditionally, the bare name is the local. Both oracles agree.
+#[test]
+fn a_local_parameter_of_the_same_name_is_untouched() {
+    let (out, code) = run(r#"package P; parameter S = "RED"; endpackage
+module tb; parameter S = "BLUE"; initial $display("VAL=%0s %0s", P::S, S); endmodule
+"#);
+    assert_eq!(code, Some(0), "must run\n{out}");
+    assert!(out.contains("VAL=RED BLUE"), "{out}");
+}
+
+/// The CONSTANT domain, not just the lowering one — a generate-if on a package string.
+/// ⚠️ Its `PkgScoped` arm looked `str_param_raw` up under the key `"P::S"`, a spelling no
+/// producer ever writes (the fold keys by `$pkg$P.S`, module scope by `module.name`), so
+/// the arm read as supported while being unreachable. Moot until the fold routed strings
+/// at all; now it is the difference between this generate picking a branch and going loud.
+#[test]
+fn a_package_string_decides_a_generate_if() {
+    let (out, code) = run(r#"package P; parameter S = "AUTO"; endpackage
+module tb;
+  generate if (P::S == "AUTO") begin : g initial $display("VAL=yes"); end
+  else begin : h initial $display("VAL=no"); end endgenerate
+endmodule
+"#);
+    assert_eq!(code, Some(0), "must run\n{out}");
+    assert!(
+        out.contains("VAL=yes"),
+        "both oracles take the AUTO arm\n{out}"
+    );
+}
+
+/// An unfoldable package parameter must still be loud — the three arms fall through to
+/// the integer fold's diagnostic, they do not swallow it.
+#[test]
+fn an_unfoldable_package_parameter_is_still_loud() {
+    let (out, code) = run(r#"package P; parameter X = no_such_name + 1; endpackage
+module tb; initial $display("VAL=%0d", P::X); endmodule
+"#);
+    assert_ne!(code, Some(0), "must stay loud\n{out}");
+}
+
+/// ⚠️ A regression my own soundness lens caught, pinned because it is the exact shape
+/// [[removing-a-loud-gate-exposes-what-it-masked]] describes. The duplicate-name check
+/// for a package's single name space (IEEE §26.3) asked the i64 `consts` map — which WAS
+/// the parameter name space only while the fold was integer-only. Routing strings out of
+/// `consts` made `parameter S = "RED"; int S;` run at exit 0 (both oracles reject it)
+/// while the integer twin `parameter N = 7; int N;` stayed loud. The fix is structural:
+/// the check now takes the NAME SPACE, because that is what it is about.
+#[test]
+fn a_string_parameter_colliding_with_a_package_variable_is_loud() {
+    for src in [
+        r#"package P; parameter S = "RED"; int S; endpackage
+module tb; initial $display("VAL=%0s", P::S); endmodule
+"#,
+        // and with the variable declared FIRST, so neither order relies on the other
+        r#"package P; int S; parameter S = "RED"; endpackage
+module tb; initial $display("VAL=%0s", P::S); endmodule
+"#,
+    ] {
+        let (out, code) = run(src);
+        assert_ne!(
+            code,
+            Some(0),
+            "the name-space collision must stay loud\n{out}"
+        );
+    }
+}
+
+/// ⚠️ The second regression the same lens caught, and the hole
+/// `nonconst_bound_reason`'s own comment predicted ("an UNKNOWN `pkg::name` keeps the
+/// pre-existing silent-unfoldable behavior"). With strings routed out of `pkg_consts`,
+/// `logic [P::S-1:0] v;` clamped to ONE BIT at exit 0 where both oracles give 5391684.
+/// The MODULE-scope twin is loud for the same text, so this pins branch parity: a string
+/// in an integral context is one gap for both scopes, and it is loud in both.
+#[test]
+fn a_string_package_parameter_in_a_width_context_is_loud() {
+    let (out, code) = run(r#"package P; parameter S = "RED"; endpackage
+module tb; logic [P::S-1:0] v; initial $display("VAL=%0d", $bits(v)); endmodule
+"#);
+    // ⚠️ `run` returns STDOUT; the diagnostic goes to stderr. Assert on the exit code
+    // and on the ABSENCE of a printed value — the failure mode being pinned is a design
+    // that runs and prints `VAL=1`, so "no VAL on stdout, non-zero exit" is exactly it.
+    assert_ne!(code, Some(0), "must not silently clamp to one bit\n{out}");
+    assert!(
+        !out.contains("VAL="),
+        "a silent width-1 net would have printed a value\n{out}"
+    );
+}
+
+/// The remaining half, pinned so the next attempt starts from a measured statement
+/// rather than from this file's previous (now false) claim that `package.rs` routes
+/// neither domain. It routes both; what a WILDCARD IMPORT does not carry is the
+/// binding. `apply_import_consts` re-binds each package constant into the importing
+/// scope through `params` — i64 — with the §26.8 wildcard-origin and ambiguity
+/// bookkeeping threaded through two call sites, and giving the string and real side
+/// maps the same treatment is plumbing rather than routing. It stays LOUD.
+#[test]
+fn a_wildcard_imported_string_parameter_is_still_loud() {
     let (out, code) = run(
         r#"package P; parameter S = "AUTO"; parameter SI = (S=="AUTO") ? "RED" : S; endpackage
 module tb; import P::*; initial $display("VAL=%0s", SI); endmodule
@@ -356,9 +488,8 @@ module tb; import P::*; initial $display("VAL=%0s", SI); endmodule
     assert_ne!(
         code,
         Some(0),
-        "package-scope string folding is unimplemented — if this now passes, \
-         the fourth copy of the parameter fold was absorbed; move this row to \
-         ROADMAP §3 as RESOLVED\n{out}"
+        "the wildcard-import binding is a separate item — if this now passes, \
+         record it as RESOLVED rather than deleting the row\n{out}"
     );
 }
 

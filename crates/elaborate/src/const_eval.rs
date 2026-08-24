@@ -1088,6 +1088,39 @@ impl Elaborator<'_> {
                         pkg.name, name.name
                     ));
                 }
+                // §3 ⑨: a STRING or REAL package parameter. This is the hole the comment
+                // above predicted — "an UNKNOWN `pkg::name` keeps the pre-existing
+                // silent-unfoldable behavior" — and routing those two domains out of
+                // `pkg_consts` walked straight into it: `logic [P::S-1:0] v;` with
+                // `parameter S = "RED"` silently clamped to ONE BIT at exit 0 where both
+                // oracles give 5391684. The MODULE-scope twin is loud for the same text,
+                // so this is branch parity, not a new rule — a string in an integral
+                // context is one recorded gap for both scopes, and it stays loud in both.
+                // A `real` param with a wholly integral initializer is also in
+                // `pkg_consts`, so its bound folds and never reaches here.
+                // ⚠️ NOUN PHRASES, like the sibling arms: the caller appends "… is not
+                // allowed in a constant range bound", so a sentence here reads as two
+                // clauses jammed together ("has no integral value is not allowed in …").
+                if self
+                    .pkg_str_raw
+                    .get(&pkg.name)
+                    .is_some_and(|m| m.contains_key(&name.name))
+                {
+                    return Some(format!(
+                        "a string package parameter (`{}::{}`)",
+                        pkg.name, name.name
+                    ));
+                }
+                if self
+                    .pkg_real_val
+                    .get(&pkg.name)
+                    .is_some_and(|m| m.contains_key(&name.name))
+                {
+                    return Some(format!(
+                        "a real package parameter (`{}::{}`)",
+                        pkg.name, name.name
+                    ));
+                }
                 None
             }
             // literals · SysCall · Call · New · Dollar · Error: no bare net/hier

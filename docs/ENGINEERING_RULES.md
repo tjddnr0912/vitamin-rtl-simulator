@@ -2276,3 +2276,43 @@ upstream testbenches it named has a competing child load** (serv never sets `+fi
 picorv32's `wb_ram` is instantiated without `.memfile`), and serv does not elaborate with or
 without the construct: PRE and POST stop at the same three unrelated errors, byte-identical. The
 cited serv digest difference therefore could not have come from the construct at all.
+
+### ★★★ **Routing a value out of a map breaks every predicate that used that map as a proxy**
+
+2026-08-24 (§4.5.377). The package parameter fold answered one question — `const_eval_in_scope`,
+integer-only — so `pkg_consts` happened to hold *every* package parameter. Adding the string and
+real domains routed those two out of it, and **both regressions the slice produced were code that
+had been using `pkg_consts` to mean something else**:
+
+- the duplicate-name check for a package's single name space (IEEE §26.3) asked `consts`, so
+  `parameter S = "RED"; int S;` ran at exit 0 where both oracles reject it — while the integer twin
+  `parameter N = 7; int N;` stayed loud, which is the tell;
+- `nonconst_bound_reason` fell through for a name it no longer recognised, so
+  `logic [P::S-1:0] v;` silently clamped to **one bit** where both oracles give 5391684. Its own
+  comment had predicted this: *"an UNKNOWN `pkg::name` keeps the pre-existing silent-unfoldable
+  behavior."*
+
+Neither is a bug in the new routing. Both are the old code's **proxy** going stale: a predicate
+about the *name space* was spelled as a lookup in the *integer value map*, and that was correct
+only for as long as the two sets coincided.
+
+⇒ **When you route a value out of a shared map, enumerate that map's readers before measuring
+anything.** Ask of each: is it reading a VALUE, or using membership as a proxy for a property the
+map no longer fully carries? The second kind fails silently and looks like your feature working.
+
+⇒ **Fix the proxy by retyping it, not by extending the predicate.** The dup check now takes the
+package's parameter NAME SET, because that is what it was always about; a fourth domain has one
+obvious place to register instead of a fourth `||`. Same move as
+[[context-rule-belongs-on-the-consumer]] — say what you mean in the type.
+
+⭐ Two cheap detectors, both of which fired here:
+- **The domain twin.** Write the identical design in the domain you did NOT change (the integer
+  `parameter N = 7; int N;`). If the old domain is loud and the new one is quiet, the guard was
+  keyed on the old domain's storage.
+- **The scope twin.** Write it at the scope you did NOT change. Module scope was loud for
+  `logic [S-1:0]` with a string `S`; the package scope going quiet is branch parity broken, and it
+  says the loud belongs on a shared path, not that the shape is newly legal.
+
+⚠️ Both were found by the slice's OWN soundness lens, not by the suite — the suite went green with
+both defects present, because no test had ever paired a string parameter with those two contexts.
+A green suite is coverage, not proof ([[removing-a-defensive-check-needs-a-producer-census]]).

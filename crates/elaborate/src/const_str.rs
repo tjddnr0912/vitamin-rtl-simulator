@@ -62,9 +62,16 @@ impl Elaborator<'_> {
                 })?;
                 self.str_param_raw.get(&key).cloned()
             }
+            // §3 ⑨: read the PACKAGE's own map. ⚠️ This arm used to look `str_param_raw`
+            // up under the key `"P::S"` — a spelling NO producer ever writes (the package
+            // fold keys by `$pkg$P.S`, module scope by `module.name`), so it could never
+            // hit and the arm read as supported while being unreachable. That is the same
+            // shape §4.5.370 found: a reference implementation with no producer. It was
+            // also moot until now, because the fold did not route strings at all.
             ast::ExprKind::PkgScoped { pkg, name } => self
-                .str_param_raw
-                .get(&format!("{}::{}", pkg.name, name.name))
+                .pkg_str_raw
+                .get(&pkg.name)
+                .and_then(|m| m.get(&name.name))
                 .cloned(),
             // §11.4.11. The canonical way an IP family switches an implementation on a
             // string parameter — `parameter STYLE_INT = (STYLE == "AUTO") ? "REDUCTION"
