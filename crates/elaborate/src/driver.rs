@@ -185,6 +185,7 @@ impl<'s> Elaborator<'s> {
             pending_sva: Vec::new(),
             pending_cover: Vec::new(),
             deferred_hier: Vec::new(),
+            hier_mem_args: BTreeMap::new(),
             deferred_hier_calls: Vec::new(),
             deferred_hier_task_calls: Vec::new(),
             deferred_hier_sel: Vec::new(),

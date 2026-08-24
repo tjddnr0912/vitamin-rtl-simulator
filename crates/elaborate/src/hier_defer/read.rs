@@ -220,9 +220,14 @@ impl Elaborator<'_> {
             if self.hier_ref_to_automatic_local(net, &d.path.join("."), "read") {
                 continue;
             }
+            // §3 ④: in a `$readmem*`/`$writemem*` MEMORY position a whole unpacked array
+            // is the OPERAND, so the whole-array arm below does not apply — the task
+            // wants the array, not a value. Events and dynamic handles stay rejected in
+            // every position: those have no array to hand over either.
+            let mem_arg = self.hier_mem_args.get(&d.eid).copied();
             let bad = self.event_nets.contains(&net)
                 || self.is_dyn_handle_net(net)
-                || self.net_is_static_array(net);
+                || (self.net_is_static_array(net) && mem_arg.is_none());
             if bad {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -234,6 +239,14 @@ impl Elaborator<'_> {
                     ),
                 );
                 continue;
+            }
+            // A2a twin: `$readmem*` WRITES the memory, so a desugared const
+            // array-parameter target is loud here exactly as it is on the local arm.
+            // `$writemem*` only READS it and passes — the local arm restricts the check
+            // the same way, and running it for the whole family would false-loud a
+            // legitimate `$writememh(f, dut.some_param_array)`.
+            if mem_arg == Some(true) {
+                self.deny_const_param_write(net, "$readmem into");
             }
             if let Some(ir::Expr::Signal { net: slot, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *slot = net;

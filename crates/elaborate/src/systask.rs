@@ -143,6 +143,22 @@ pub(crate) fn is_file_monitor_strobe(dollar_name: &str) -> bool {
     )
 }
 
+/// Is `e` a MULTI-segment dotted name (`dut.ram.mem`) — the only expression shape that
+/// can defer into `deferred_hier` and therefore the only one whose eid it is meaningful
+/// to record as a hierarchical memory argument?
+///
+/// Parens are peeled: `$readmemh(f, (dut.mem))` is the same reference as `dut.mem`, and
+/// asking the question one node too high answered "no" for it (soundness NIT, §4.5.375).
+/// A single segment is excluded because `expr_array_view` already resolved it above — a
+/// local name never reaches here.
+fn is_dotted_ident(e: &ast::Expr) -> bool {
+    match &e.kind {
+        ast::ExprKind::Ident(p) => p.segments.len() > 1,
+        ast::ExprKind::Paren { inner } => is_dotted_ident(inner),
+        _ => false,
+    }
+}
+
 pub(crate) fn map_systask(dollar_name: &str) -> Option<ir::SysTaskId> {
     match dollar_name {
         "$display" | "$displayb" | "$displayo" | "$displayh" => Some(ir::SysTaskId::Display),
@@ -677,6 +693,33 @@ impl Elaborator<'_> {
                                 }
                                 return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
                             }
+                        }
+                        // §3 ④: the same argument named HIERARCHICALLY (`dut.ram.mem`).
+                        // `expr_array_view` resolves dotted paths, but a cross-instance
+                        // name has no net yet — the child's nets are created in pass 8,
+                        // after this pass-7 lowering — so it declines and `lower_expr`
+                        // emits the deferred placeholder. That placeholder is ALREADY
+                        // `Signal { net: POISON_NET, word: None }`, the exact shape the
+                        // local arm above builds by hand, so nothing needs building here:
+                        // only the whole-array arm of the read guard has to know that in
+                        // THIS position an array is the operand, not a value.
+                        // Scoped to the MEMORY position (§21.4 `(file, mem, start, end)`)
+                        // and to the readmem family: `$dumpvars` keeps its historical
+                        // word-0 surface, which is a different question with a different
+                        // answer, and args ≥ 2 are addresses handled above.
+                        //
+                        // ⭐ The lowering below is the SAME `lower_expr` this arm would
+                        // have fallen through to — deliberately, so that the whole
+                        // behavioural change of this feature is "which eids the read guard
+                        // skips", and a packed / non-array target is unaffected because
+                        // the arm the note exempts never fires on one.
+                        if readmem_family && argi == 1 && is_dotted_ident(a) {
+                            let eid = self.lower_expr(a);
+                            self.hier_mem_args.insert(
+                                eid,
+                                matches!(which, ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH),
+                            );
+                            return Some(eid);
                         }
                     }
                     Some(self.lower_expr(a))

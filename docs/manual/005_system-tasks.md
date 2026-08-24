@@ -224,12 +224,19 @@ support):
   read the CLI's `+NAME[=VAL]` arguments (`vita tb.sv +VERBOSE +N=42`); the
   value form is also usable directly as an `if` condition.
 - **Memory load/store** — `$readmemh`/`$readmemb`/`$writememh`/`$writememb`
-  with optional start/finish addresses.
+  with optional start/finish addresses. The file name is any string
+  EXPRESSION (§21.4), not only a literal — the canonical
+  `reg [1023:0] firmware_file; … $readmemh(firmware_file, mem);` works, as does
+  a `string` variable. The memory may be named HIERARCHICALLY
+  (`$readmemh(f, dut.ram.mem)`), which is the firmware-loading idiom used by
+  serv, picorv32 and ibex.
 - **File I/O** — `$fopen` (fd and MCD modes), `$fclose`, `$fwrite`/`$fdisplay`
   (+ b/o/h variants), `$fgetc`/`$ungetc`/`$feof`/`$fgets`/`$fread`/`$fscanf`/
   `$sscanf`, `$sformat`/`$sformatf`, and the pre-opened STDOUT/STDERR
-  descriptors (`32'h8000_0001/2`). Reads are supported as the direct rhs of a
-  blocking assignment (`n = $fscanf(fd, …)`), **in a module process or in a
+  descriptors (`32'h8000_0001/2`). A read may appear anywhere an expression
+  may — a blocking or nonblocking rhs, an `if` condition, a `case` scrutinee,
+  a `repeat` count, a task argument, nested inside a larger expression, or in
+  an lvalue index — **in a module process or in a
   task vitamin can inline**; inside a framed subroutine body (one declared
   `automatic`, one with an `output`/`inout` formal, or one returning a string)
   a read is a fatal rather than a silent 0 — see

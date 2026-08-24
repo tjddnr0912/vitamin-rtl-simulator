@@ -2234,3 +2234,45 @@ the work continues on a false premise and the divergence only surfaces later, us
 measurement. The check costs one call; skipping it costs every step built on top of it.
 ⭐ This is the same rule as *"a green suite is coverage, not proof"* and *"measure the premise"*, one
 level down: **the premise here is that the previous step happened at all.**
+
+### ★★★ **A revert's reason is a measurement, not a finding — re-measure it before you build on it**
+
+2026-08-24 (§4.5.376). §4.5.375 built the hierarchical `$readmem*` memory argument, matched
+forty-odd shapes against both oracles, ran the real serv SoC end to end — and reverted it,
+because a parent's `initial` runs before its child's *"while **both oracles** run the child's
+first"*. That sentence was the whole case for the revert. It was wrong. Re-measured on the exact
+design it cites: iverilog prints `aa bb cc dd`, **verilator prints `01 02 03 04`** — vita's own
+answer. The two oracles do not agree; IEEE 1800 §4.7 makes `initial` execution order explicitly
+nondeterministic and each tool uses that freedom differently. There was no two-oracle
+silent-wrong, so there was nothing to revert for.
+
+Two things made it hard to catch, and both are general.
+
+**A revert propagates its reason faster than a feature propagates its behaviour.** Within one
+slice the claim was written into the §3 queue line, into a new §2 row, into the §5.2 briefing,
+and into a test docstring — four copies, each citing the others' neighbourhood, none an
+independent measurement. A day later it read as thoroughly corroborated, and it ranked the next
+slice. ⇒ **When a claim's only evidence is a previous slice's prose, it is one measurement, not
+four.** The [[a-comment-saying-cannot-is-a-claim-to-measure]] rule applies to a revert's reason
+exactly as it does to a docstring's "cannot".
+
+**"Both oracles agree" is a two-part claim, and the second part is the load-bearing one.** The
+first oracle is usually the one that motivated the investigation and gets measured carefully; the
+second is the one that turns a divergence into a defect, and it is the one most likely to have
+been assumed. ⇒ **Record the second oracle's actual output text, not the conclusion drawn from
+it.** A queue line that says "both oracles print X" and cannot show you X from each tool is
+citing a belief.
+
+⭐ The check that settled it was cheap and is worth copying: when a tool's answer matches the
+value a *competing* write would leave, **you cannot tell ordering from a dropped write** — the
+two look identical. Remove the competitor and ask again. Verilator honoured the parent's
+hierarchical `$readmemh` on its own (`aa bb cc dd`), which is what made `01 02 03 04` provably an
+ordering result rather than a silently ignored statement. Same shape as
+[[ask-the-same-expression-without-a-destination]]: re-ask the question with the confound deleted.
+
+⚠️ And check the demand claim with the same suspicion as the correctness claim. The revert also
+said the construct went "silent-wrong on its own motivating idiom" — but **none of the four
+upstream testbenches it named has a competing child load** (serv never sets `+firmware=`;
+picorv32's `wb_ram` is instantiated without `.memfile`), and serv does not elaborate with or
+without the construct: PRE and POST stop at the same three unrelated errors, byte-identical. The
+cited serv digest difference therefore could not have come from the construct at all.

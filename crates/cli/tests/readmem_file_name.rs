@@ -178,28 +178,186 @@ fn a_file_name_with_a_control_byte_keeps_stderr_textual() {
     );
 }
 
-// ── the half that did NOT ship ────────────────────────────────────────────────────
+// ── the hierarchical memory argument (§3 ④) ───────────────────────────────────────
 
 #[test]
-fn a_hierarchical_memory_argument_is_still_loud() {
+fn a_hierarchical_memory_argument_loads_the_child_s_memory() {
     // `$readmemh(f, dut.mem)` — the firmware-loading idiom serv, picorv32 and ibex all use.
-    // It was built, measured correct across forty-odd shapes, and then reverted, because
-    // vita runs a PARENT's `initial` before its child's while both oracles run the child's
-    // first. A RAM that loads its own memory therefore overwrote the testbench's load, at
-    // exit 0 — so opening this construct traded a loud reject for a silent wrong answer.
     //
-    // The ordering is pre-existing and independent (a plain `u1.s = 8'hAA` hierarchical
-    // write already loses to the child's `initial`, with no `$readmem` anywhere), and it
-    // lives in a frozen IR type, so fixing it needs an out-of-band process-rank sidecar of
-    // its own. Recorded as the prerequisite in `docs/ROADMAP.md` §3 ④.
+    // ⚠️ This test previously asserted the OPPOSITE, and the reason it gave was measured
+    // wrong. §4.5.375 built this, matched forty-odd shapes on both oracles, then reverted
+    // it on the claim that "vita runs a PARENT's `initial` before its child's while BOTH
+    // ORACLES run the child's first", which would make a RAM that loads its own memory
+    // overwrite the testbench's load. Re-measured on the exact design that claim cites:
+    // iverilog prints `aa bb cc dd`, and **verilator prints `01 02 03 04`** — vita's
+    // answer. Verified not to be a dropped write: with the child's competing load removed,
+    // verilator honours the parent's hierarchical `$readmemh` (`aa bb cc dd`). So the
+    // write-vs-write case is an ORACLE SPLIT, not a two-oracle silent-wrong, and vita
+    // lands on verilator's side of it.
     //
-    // Pinned so the next attempt starts from a measured statement rather than the queue's.
+    // The competition it feared is also absent from every testbench that motivated the
+    // feature: serv passes `.memfile(...)` and never sets `+firmware=`, so its hierarchical
+    // load never fires; picorv32's `wb_ram` is instantiated without `.memfile`; picorv32's
+    // `axi4_memory` has no load of its own. Not one has a child that loads the same array.
+    //
+    // What IS a two-oracle defect is a parent `initial` READING a child net at t0 (both
+    // oracles give the value, vita gives X) — a separate, pre-existing ordering row that
+    // no corpus design exercises. Recorded in `docs/ROADMAP.md` §2 row 7; it does not
+    // gate this construct.
+    runs(
+        &format!(
+            "{CHILD}module t;\n  ram dut();\n\
+             initial begin #1 $readmemh(\"fw.hex\", dut.mem);\n\
+             #1 $display(\"VAL=%0d\", dut.mem[1]); #5 $finish; end\n\
+             initial #500 $finish;\nendmodule\n"
+        ),
+        &[],
+        "VAL=11",
+    );
+}
+
+#[test]
+fn a_hierarchical_memory_argument_reaches_through_two_levels() {
+    // `expr_array_view` already joins dotted segments, so depth is not a separate case —
+    // pinned because the fix records an EID, and an eid-keyed exemption that only worked
+    // at depth 1 would be indistinguishable from one that works at every depth until a
+    // grandchild is asked for.
+    runs(
+        &format!(
+            "{CHILD}module mid;\n  ram r();\nendmodule\n\
+             module t;\n  mid dut();\n\
+             initial begin #1 $readmemh(\"fw.hex\", dut.r.mem);\n\
+             #1 $display(\"VAL=%0d\", dut.r.mem[2]); #5 $finish; end\n\
+             initial #500 $finish;\nendmodule\n"
+        ),
+        &[],
+        "VAL=12",
+    );
+}
+
+#[test]
+fn a_parenthesised_hierarchical_memory_argument_is_the_same_reference() {
+    // `(dut.mem)` is `dut.mem`. The shape predicate must peel parens — asking the question
+    // one node too high answered "no" here, which is the soundness NIT §4.5.375 recorded
+    // against the first attempt's twin predicate.
+    runs(
+        &format!(
+            "{CHILD}module t;\n  ram dut();\n\
+             initial begin #1 $readmemh(\"fw.hex\", (dut.mem));\n\
+             #1 $display(\"VAL=%0d\", dut.mem[3]); #5 $finish; end\n\
+             initial #500 $finish;\nendmodule\n"
+        ),
+        &[],
+        "VAL=13",
+    );
+}
+
+#[test]
+fn a_child_loading_its_own_memory_at_t0_is_an_oracle_split() {
+    // The design §4.5.375 reverted on: the child loads its own memory at t0 and the parent
+    // loads the same array hierarchically at t0. Measured on all three:
+    //
+    //     iverilog  aa bb cc dd   (child's initial runs first, parent's load wins)
+    //     verilator 01 02 03 04   (parent's runs first, child's load wins)
+    //     vita      01 02 03 04   (== verilator)
+    //
+    // IEEE 1800 §4.7 makes the order of execution of `initial` procedures explicitly
+    // nondeterministic, and the two oracles use that freedom in opposite directions, so
+    // there is no answer to be wrong about here — the §4.5.372 precedent (a cont-assign
+    // order where verilator sided with vita) ruled the same way.
+    //
+    // Pinned as a SPLIT, not as a correct answer: if a future slice reorders t0 processes
+    // to match iverilog (§2 row 7), this value flips, and it should flip deliberately with
+    // this comment read, not silently.
+    runs(
+        "module ram;\n  reg [7:0] mem [0:7];\n\
+         initial for (int i = 0; i < 8; i = i + 1) mem[i] = 8'd200 + i[7:0];\n\
+         endmodule\n\
+         module t;\n  ram dut();\n\
+         initial $readmemh(\"fw.hex\", dut.mem);\n\
+         initial begin #1 $display(\"VAL=%0d\", dut.mem[1]); #5 $finish; end\n\
+         initial #500 $finish;\nendmodule\n",
+        &[],
+        "VAL=201",
+    );
+}
+
+#[test]
+fn a_whole_hierarchical_array_is_still_not_a_value() {
+    // The guard the fix relaxes still has its real job: `x = dut.mem;` asks for a VALUE,
+    // and a whole unpacked array has none. The exemption is scoped to the `$readmem*`
+    // MEMORY POSITION, so this must stay loud — otherwise the slice traded a correct
+    // rejection for a silent word-0 read.
     loud(&format!(
-        "{CHILD}module t;\n  ram dut();\n\
-         initial begin #1 $readmemh(\"fw.hex\", dut.mem);\n\
-         #1 $display(\"VAL=%0d\", dut.mem[1]); #5 $finish; end\n\
+        "{CHILD}module t;\n  ram dut(); reg [7:0] x;\n\
+         initial begin #1 x = dut.mem; $display(\"VAL=%0d\", x); #5 $finish; end\n\
          initial #500 $finish;\nendmodule\n"
     ));
+}
+
+#[test]
+fn an_event_in_the_memory_position_is_still_loud() {
+    // Only the WHOLE-ARRAY arm of the guard is exempted. A named event has no array to
+    // hand over either, so the memory position does not rescue it — the exemption answers
+    // "is an array the operand here", not "skip this guard".
+    loud(
+        "module ram;\n  event ev;\nendmodule\n\
+         module t;\n  ram dut();\n\
+         initial begin #1 $readmemh(\"fw.hex\", dut.ev); #5 $finish; end\n\
+         initial #500 $finish;\nendmodule\n",
+    );
+}
+
+#[test]
+fn a_dynamic_handle_in_the_memory_position_is_still_loud() {
+    // The other non-array arm, for the same reason.
+    loud(
+        "module ram;\n  int dq[];\nendmodule\n\
+         module t;\n  ram dut();\n\
+         initial begin #1 $readmemh(\"fw.hex\", dut.dq); #5 $finish; end\n\
+         initial #500 $finish;\nendmodule\n",
+    );
+}
+
+#[test]
+fn readmem_into_a_hierarchical_const_array_parameter_is_loud() {
+    // The local arm denies `$readmem` into a desugared array parameter; the hierarchical
+    // arm has to deny it at RESOLVE time, because the net is not known at lowering. Before
+    // the fix this was loud for the wrong reason ("no plain readable value"); it must stay
+    // loud for the right one.
+    let (out, code, err, _d) = run(
+        "module ram;\n  localparam int P[0:3] = '{1,2,3,4};\nendmodule\n\
+         module t;\n  ram dut();\n\
+         initial begin #1 $readmemh(\"fw.hex\", dut.P); #5 $finish; end\n\
+         initial #500 $finish;\nendmodule\n",
+        &[],
+    );
+    let all = format!("{out}{err}");
+    assert_ne!(code, Some(0), "must reject: {all}");
+    assert!(
+        all.contains("$readmem into parameter"),
+        "must name the parameter, not the readable-value guard: {all}"
+    );
+}
+
+#[test]
+fn writemem_of_a_hierarchical_const_array_parameter_is_allowed() {
+    // The write-side twin of the check above, and the reason it is not applied to the whole
+    // family: `$writemem*` only READS the memory, so a parameter is a legitimate source.
+    // §4.5.375's soundness lens raised exactly this over-application as a NIT.
+    let dir = runs(
+        "module ram;\n  localparam int P[0:3] = '{1,2,3,4};\nendmodule\n\
+         module t;\n  ram dut();\n\
+         initial begin #1 $writememh(\"p.hex\", dut.P); $display(\"VAL=ok\"); #5 $finish; end\n\
+         initial #500 $finish;\nendmodule\n",
+        &[],
+        "VAL=ok",
+    );
+    let got = std::fs::read_to_string(dir.join("p.hex")).expect("p.hex");
+    assert!(
+        got.contains("00000001") && got.contains("00000004"),
+        "the parameter's elements must reach the file: {got}"
+    );
 }
 
 #[test]

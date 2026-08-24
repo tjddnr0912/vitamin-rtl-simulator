@@ -1158,6 +1158,14 @@ struct Elaborator<'s> {
     // and dotted path, then resolved against the now-complete `symbols` table after all
     // instances are elaborated (`resolve_deferred_hier`). Out-of-band (golden-free).
     deferred_hier: Vec<DeferredHier>,
+    // §3 ④: the `deferred_hier` eids that sit in a `$readmem*`/`$writemem*` MEMORY
+    // argument, where a whole unpacked array is the intended OPERAND rather than a
+    // value — so the whole-array arm of the read guard must not fire on them. The
+    // guard's question ("does this have a plain readable value?") is the right one
+    // for `x = dut.mem;` and the wrong one for a task that wants the array itself.
+    // `true` = the task WRITES the memory (`$readmem*`), the only family that must
+    // also deny a const array-parameter target; `$writemem*` only reads it.
+    hier_mem_args: BTreeMap<u32, bool>,
     // Family D (r17): deferred hierarchical FUNCTION calls (`u1.f(x)`), resolved to a
     // per-instance FuncId after all instances exist (mirrors `deferred_hier`).
     deferred_hier_calls: Vec<DeferredHierCall>,

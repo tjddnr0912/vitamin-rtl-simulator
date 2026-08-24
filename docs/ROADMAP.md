@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, **Phase A~D 실행 기록(§5.1-x · 슬라이스 59건)은 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(셋 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-08-24)**: format_version **29** · **5,912 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
+> **기준선(2026-08-24)**: format_version **29** · **5,919 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -144,7 +144,7 @@
 > | 4 | 🆕 **`$itor` 가 real 인자의 IEEE-754 비트를 정수로 읽는다**(§4.5.361 곁가지 · silent-wrong) | `a = $itor(3.9);` → iverilog **4** / vita **4.61596e+18**(= 3.9 의 double 비트패턴) · ⭐ **같은 값의 `real'(3.9)` 은 vita 도 3.9 로 맞다** ⇒ 캐스트 경로는 맞고 `$itor` arm 만 인자를 integral 로 가정한다 · ⚠️ 오라클 하나(verilator 는 이 모양에서 ICE) — 다만 §20.5 가 `$itor` 를 **integral→real** 로 정의하니 real 인자는 애초에 도메인 밖이다 ⇒ **loud 도 정답 후보**(사다리상 silent-wrong 보다 위) · ⚠️ 착수 시 §2-2b 의 봉인 확인 필수: `real'(x)` 가 같은 `SysFuncId::Itor` 로 내려가므로 arm 을 나누면 **두 경로가 갈린다** |
 > | 5 | 🆕 **`string'(<integral>)` 캐스트가 파서에서 막힌다**(§4.5.361 곁가지 · loud) | `s = string'(24'h610062);` → iverilog `len=2`·`s=="ab"` / vita **E2002 parse-reject**(`expected expression, found keyword 'string'`) · ⭐ 이 항목은 §2 가 아니라 **§3(loud→correct-support)** 성격이다 — 조용히 틀리지 않고 정직하게 거부한다 · ⚠️ 원래 보고는 *"NUL 스트리핑 차이"* 였는데 **그 repro 는 vita 에서 성립조차 안 한다**(파싱 실패) ⇒ NUL 축은 다른 repro 로 재측정해야 열린다 |
 > | 6 | 🆕 **static function 이 모듈 net 에 쓴 값이 조용히 사라진다**(§4.5.362 곁수확 · **2-오라클** silent-wrong) | `function logic [3:0] f(); seq = seq + 7; f = 4'h3; endfunction` 에서 `a = f();` → 반환값 `a=3` 은 맞는데 **`seq` 가 0 그대로**(iverilog·verilator 둘 다 **7**) · ⭐ `automatic` 철자는 같은 본문을 **정직하게 거부한다**(E3009 = *"frame-call subset 밖"*) ⇒ 사다리상 **static 철자만 한 칸 아래**에 있다 — 같은 규칙의 두 철자가 갈린 §4.5.359 와 같은 모양 · ⚠️ 발견 경로가 기록할 만하다: 이 슬라이스의 **재배치가 관찰 가능한지** 묻는 soundness 프로브(부작용 있는 피연산자)를 짜다가 나왔다 — PRE·POST 동일이라 이 슬라이스 것이 아니다 |
-> | 7 | 🆕 **A child instance's `initial` runs AFTER its parent's** (§4.5.375 · **2-oracle** · already reachable through supported constructs) | `u1.s = 8'hAA` in a parent vs `initial s = 8'hEE` in the child ⇒ vita `ee`, **iverilog and verilator both `aa`**, silent at exit 0 — no `$readmem` involved, through a hierarchical write that has worked since June. `instance.rs` lowers this module's own processes at step (7) and recurses into children at step (8), so every parent process takes a lower id and the t0 queue is seeded parent-first (`sched/scan_arm.rs`, `tie: pi`). ⭐ **Declaration initializers are already correct** — `init_ranks` sorts `RANK_MOD_INSTANCE` (1) before `RANK_MOD_OWN` (2); only `initial` BLOCKS lack that rank, so the fix is to give them one. ⚠️ `sim_ir::Process` is FROZEN and has no instance field, so the rank must be an out-of-band sidecar (the `init_procs` channel), and `tie` is shared with `Comb`/`Latch` seeding and `compose_child_tie` ⇒ blast radius is every design with a child `initial`. **This blocks §3 ④**, where the full repro and fix shape are written out. |
+> | 7 | 🔄 **REWRITTEN (§4.5.376)** — **a parent `initial` READING a child net at t0 sees X** (**2-oracle** · reachable today · ⚠️ **zero corpus demand**) | ⚠️⚠️ **The original wording of this row was measured wrong and it caused a revert.** It said `u1.s = 8'hAA` in a parent vs `initial s = 8'hEE` in the child gives vita `ee` and **"iverilog and verilator both `aa`"**. Re-measured: iverilog `aa`, **verilator `ee`** — verilator sides with VITA. Confirmed not a dropped write (with the child's competitor removed, verilator honours the parent's write). IEEE 1800 §4.7 makes `initial` order explicitly nondeterministic, so **write-vs-write across an instance boundary is an ORACLE SPLIT**, not a defect, and §3 ④ was reverted for it needlessly. **What survives as a real two-oracle silent-wrong is the READ direction**: a parent `initial` that reads a child net the child's `initial` writes gets **X** in vita and the value in both oracles — 10 cells (depth 1/2/3, two siblings, generate scope, read-into-local), no disagreement. ⭐ Narrow: a decl initializer (`init_ranks` sorts `RANK_MOD_INSTANCE` 1 before `RANK_MOD_OWN` 2), an `always @*` read, a fork-arm read, and a delayed child `initial` are **all already correct** — only a direct `initial`→`initial` read at t0 is wrong. ⚠️ **Demand is unproven**: no design in the ten-workload corpus does it, and the four testbenches that motivated §3 ④ all WRITE downward rather than read. ⇒ **Do not rank this by the ladder alone.** Fix shape if taken: `push_process` is a single funnel and `rank_path` is live there, so the rank is `rank_path + [own_slot, pid]`; but `sim_ir::Process` is FROZEN, `tie` must stay a **dense int in [0, nproc)** because `compose_child_tie` packs `(parent_tie+1) << 16`, so the sidecar is a PERMUTATION not a key; it must be threaded through **both** backends (`sched/scan_arm.rs` seeding and `native/run.rs`), and adding a `StagedExtraSidecars` field **bumps format_version to 30** (v26 did exactly this for `init_procs` — the earlier briefing's guess that 29 would hold was wrong). |
 > | 8 | 🆕 **A clocking INPUT is writable through `$readmem*`** (§4.5.375 · hand-IEEE §14.3 · **no oracle** — iverilog 13 cannot parse clocking blocks) | `$readmemh("f.hex", c.cb.mem)` writes the clocking hold net at exit 0, while the direct `c.cb.s = 8'hAA` is correctly `E3009`. §14.3: a clocking input is read-only. ⚠️ First recorded as merely LATENT — a clocking input of an unpacked array gets a **scalar** hold net, so the §3 ④ exemption arm cannot reach it — but that is the wrong reason: the **reachable** half runs through the ORDINARY resolution, which has no `clocking_hold_nets` check (both hierarchical WRITE lanes do: `hier_defer/write.rs`). ⇒ the guard belongs on the shared read resolution, covering both halves. |
 >
 > ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
@@ -494,68 +494,68 @@
 > 시드 `$random`/`$dist_*`(비균일 형제의 **선재 vita-iverilog 발산** — 새 위치로 옮기면 틀린 값이
 > 늘어난다) · `$cast`(temp 타입이 목적지를 따른다)는 이 계열에 **의도적으로 안 들어갔다**.
 
-> **④ A hierarchical WHOLE unpacked array as a `$readmem*`/`$writemem*` argument**
-> (2-oracle · serv, picorv32, ibex · ⚠️⚠️ **§4.5.375 built it, measured it correct, and
-> reverted it — the prerequisite below is the reason, and the next attempt should start
-> there**).
+> **④ A hierarchical WHOLE unpacked array as a `$readmem*`/`$writemem*` argument** —
+> ✅ **RESOLVED (§4.5.376)** (2-oracle · serv, picorv32, ibex · format 29 unchanged).
 >
-> ⚠️ **The old wording of this line was wrong for about two months.** It claimed
-> `dut.ram.mem[i] = …` was `E3009`. Every element shape works and has since June — a census
-> of eleven (element read/write, variable index, part-select, bit-select, multi-dim,
-> non-blocking, inside a task) found no failure. Three slices closed it: **N3.1** (element
-> read, `95cc674`), its **multi-dim follow-on** (`7d2f9b4`), and **HIER-REST track 9**
-> (element/bit/part-select WRITE). What is actually refused is the WHOLE array:
-> `$readmemh(f, dut.ram.mem)`, `$readmemh(f, dut.ram.mem, 0, 3)`, `$writememh(f, dut.ram.mem)`.
+> ⚠️ **This line was wrong twice, in opposite directions, and both errors are worth keeping.**
 >
-> **Demand is four upstream testbenches**, all the same firmware-loading line:
-> `serv src/bench/servant_sim.v:20 $readmemh(firmware_file, dut.ram.mem)` ·
-> `picorv32 src/testbench.v:253 mem.memory` · `picorv32 src/testbench_wb.v:146 ram.mem` ·
-> `ibex .../core_ibex_base_test.sv:286 mem.system_memory`.
+> **The first wrong version** claimed `dut.ram.mem[i] = …` was `E3009`. Every ELEMENT shape
+> works and has since June — a census of eleven (element read/write, variable index,
+> part-select, bit-select, multi-dim, non-blocking, inside a task) found no failure. Three
+> slices closed it: **N3.1** (`95cc674`), its **multi-dim follow-on** (`7d2f9b4`), and
+> **HIER-REST track 9**. What was actually refused is the WHOLE array.
 >
-> ⭐ **The implementation is small and was verified.** `$readmemh` already calls
-> `expr_array_view`, which already resolves dotted paths; a cross-instance name simply has
-> no net yet (the child's nets are created in a later pass), so it defers, and the deferred
-> placeholder is ALREADY `Signal { net: POISON_NET, word: None }` — the exact shape the
-> local path builds by hand. Only the read guard stands in the way, and it asks "does this
-> have a plain readable value?", which is the wrong question for a task that wants the array
-> rather than a value. A consumer-scoped exemption (the call registers its own memory
-> argument) made 40+ shapes match both oracles, including the real serv SoC end-to-end.
+> ⚠️⚠️ **The second wrong version was the PREREQUISITE that reverted it.** §4.5.375 built
+> this, matched forty-odd shapes, then reverted on the claim that *"vita runs a PARENT's
+> `initial` before its child's while **both oracles** run the child's first"*, which would
+> make a RAM that loads its own memory overwrite the testbench's load. §4.5.376 re-measured
+> the exact design that claim cites:
 >
-> ⚠️⚠️ **PREREQUISITE — t0 process order: a child's `initial` must run before its parent's.**
-> vita runs the PARENT's first; iverilog and verilator both run the child's first. So a RAM
-> that loads its own memory OVERWRITES the testbench's hierarchical load:
+> | | `$readmemh` child-vs-parent competition |
+> |---|---|
+> | iverilog | `aa bb cc dd` (child's `initial` first) |
+> | **verilator** | **`01 02 03 04`** (parent's first) |
+> | vita | `01 02 03 04` — **== verilator** |
 >
-> ```verilog
-> module ram; reg [7:0] mem[0:3];
->   initial $readmemh("b.hex", mem);            // child
-> endmodule
-> module tb; ram u1();
->   initial $readmemh("a.hex", u1.mem);         // parent — both oracles win, vita loses
-> endmodule
-> ```
+> Verified not to be a dropped write: with the child's competing load removed, verilator
+> honours the parent's hierarchical `$readmemh` (`aa bb cc dd`), as does a plain
+> `u1.s = 8'hAA`. So the write-vs-write case is an **ORACLE SPLIT** — IEEE 1800 §4.7 makes
+> `initial` execution order explicitly nondeterministic and the two oracles use that freedom
+> in opposite directions — not a two-oracle silent-wrong. Same ruling as §4.5.372's
+> cont-assign order, where verilator also sided with vita.
 >
-> Both oracles print `aa bb cc dd`; vita prints `01 02 03 04` at exit 0. Measured on the real
-> serv SoC too — `DIGEST=05ff4021b907543a` (iverilog) vs `…523a` (vita). Opening the
-> construct therefore traded a loud reject for a **silent wrong answer** on its own
-> motivating idiom, which is why it was reverted.
+> ⭐ **The demand it feared is absent from every testbench that motivated the feature.**
+> serv passes `.memfile("src/sw/blinky.hex")` and never sets `+firmware=`, so
+> `servant_sim.v:20` never fires; picorv32's `wb_ram` is instantiated without `.memfile`;
+> picorv32's `axi4_memory` has no load of its own. Not one has a child that loads the same
+> array. ⚠️⚠️ And the serv digest the revert cited (`…523a` vs `…543a`) **cannot have come
+> from this construct**: serv does not elaborate with or without it — PRE and POST both stop
+> at the same three §3 ⑦ `generate-if condition is not a constant` errors, byte-identical.
 >
-> ⭐ **The ordering is pre-existing and independent of `$readmem`** — `u1.s = 8'hAA` from a
-> parent already loses to the child's `initial s = 8'hEE` (vita `ee`, both oracles `aa`),
-> through a hierarchical write that has worked since June. So this is an already-open
-> silent-wrong class, not one this construct creates; the construct just adds a door.
-> ⭐ It is narrow: **declaration initializers already rank correctly** (`reg s = 8'hEE;` in
-> the child loses to the parent's write, matching both oracles), because `init_ranks` sorts
-> `RANK_MOD_INSTANCE` (1) before `RANK_MOD_OWN` (2). Only `initial` BLOCKS lack that rank.
+> **The implementation is the one §4.5.375 described**, and it is small: `expr_array_view`
+> already resolves dotted paths, a cross-instance name simply has no net yet (the child's
+> nets are created in pass 8, after the parent body lowers in pass 7), so it defers — and the
+> deferred placeholder is ALREADY `Signal { net: POISON_NET, word: None }`, the exact shape
+> the local path builds by hand. Only the read guard stood in the way, asking *"does this
+> have a plain readable value?"*, which is the right question for `x = dut.mem;` and the
+> wrong one for a task that wants the array rather than a value. The exemption is
+> consumer-scoped — the `$readmem*`/`$writemem*` MEMORY POSITION only (§21.4's arg 1), keyed
+> on the eid the call registers — so `x = dut.mem;` stays loud, and events and dynamic
+> handles stay loud in every position because they have no array to hand over either.
+> `$readmem*` also denies a const array-parameter target at RESOLVE time (the local arm's
+> twin, restricted to the family that WRITES, so `$writememh(f, dut.P)` still passes).
 >
-> ⇒ **The fix shape**: `sim_ir::Process` is a frozen SchemaHash type with no instance field,
-> so the order cannot live in the IR — it needs an out-of-band per-process t0 rank sidecar,
-> the same channel `init_procs` already uses (`elaborate → SimOpts → st`). `rank_path` is
-> live while processes are lowered, so the rank is `rank_path + [RANK_MOD_OWN, proc_id]`;
-> the engine then ties the `SensKind::Initial` seeding to that order instead of to the
-> activity id (`sched/scan_arm.rs`, `tie: pi`). ⚠️ `tie` is shared with `Comb`/`Latch`
-> seeding and with `compose_child_tie` for fork children, so the blast radius is every
-> design with a child `initial` — it needs its own census and its own 2-lens review, which
-> is why it was not bolted onto §4.5.375.
+> **Measured**: 18 cells — 8 positive shapes (depth 1/2, `$readmemb`, start/end addresses,
+> `$writememh` round-trip, filename from a `reg [1023:0]`, parenthesised, generate-scoped) all
+> matching iverilog; 3 edge shapes (interface member unchanged, time-ordered overwrite,
+> UPWARD reference `tb.mem` from a child); 7 negatives holding loud or unchanged.
+> `$writememh` output file **byte-identical** to iverilog's.
+>
+> ⚠️ **What did NOT ship, and is a separate row**: a parent `initial` READING a child net at
+> t0 gives X in vita where both oracles give the value (10 cells, no oracle disagreement).
+> That is a real §2 silent-wrong — but it is **pre-existing, independent of `$readmem`, and
+> exercised by zero of the ten corpus designs**. Recorded as **§2 row 7**; it does not gate
+> this construct, and the write-vs-write cell above is a split rather than a defect.
 >
 > ⚠️ Two more, measured while there, both pre-existing and neither this item's business:
 > `$readmemh` into a `wire` array is accepted at local/hierarchical parity (iverilog refuses,
@@ -568,7 +568,7 @@
 > that is why the exemption arm cannot reach it, but it is **not** why the hole is unreached —
 > the reachable half runs through the ordinary resolution. A guard on the exemption alone
 > would close the unreachable half and leave the live one open, so it belongs on the shared
-> path, as its own item.
+> path, as its own item (**§2 row 8**).
 
 > **⑤ struct 타입 localparam 의 named assignment pattern** (**오라클 없음 → hand-IEEE**). ibex 의
 > `localparam exc_cause_t E = '{irq_ext: 1'b1, lower_cause: 5'd3};` 를 vita 는 E2002 로 거절하는데,
@@ -1029,14 +1029,14 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,912 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-24 · ARCHIVE §4.5.375) |
+| 게이트 | **5,919 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-24 · ARCHIVE §4.5.376) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **다음 = ⓔ**(§2 row 7 · **t0 프로세스 순서** — 자식 인스턴스의 `initial` 이 부모보다 먼저 · 2-오라클 · **이미 도달 가능**하고 동시에 **§3 ④ 의 유일한 블로커** ⇒ §2·§3 두 줄을 한 번에 움직이는 유일한 항목 · 브리핑은 아래 착수 브리핑) · 그 다음 ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ~~ⓐ§4.5.364~~ ~~ⓑ§4.5.365~~ ~~ⓒ§4.5.366~~ RESOLVED(잔여는 §2) |
-| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). ~~⑧~~ 도 §4.5.372 가 **되돌렸다**(선행조건 = *멈춘 프레임 본문의 반환값* · 상세 §3 ⑧). ~~⑦~~ 도 §4.5.373 이 **되돌렸다**(②와 **같은 벽** — 상세 §3 ⑦). ~~③~~ **RESOLVED(§4.5.374)** — darkriscv 전체 SoC 가 처음 돌았다. **④ 는 §4.5.375 가 되돌렸다** — 구현은 40+ 형태가 두 오라클과 일치했으나 **t0 프로세스 순서**(§2 row 7)에서 자기 모티브 위에 silent-wrong 이 된다. ⇒ ⭐ **다음 표적 = 그 t0 순서 수정**(§2 row 7 · 자식 인스턴스의 `initial` 이 부모보다 먼저 · ④ 를 열면서 **이미 도달 가능한** silent-wrong 클래스를 닫는다) → **⑨**(`package.rs` 네 번째 복사본) → **⑥**(auto-top) → **⑪**(wide 반환 상수함수 = verilog-axi) · ⚠️ **⑧⑪ 은 §2 급 잔여를 남겼다**(§3 ⑧ 의 `$fdisplay`/`$strobe` 한 문장 lag) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **다음 = ⓓ**(package 스코프 파라미터 셀렉트 · §4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ⚠️⚠️ **ⓔ 는 §4.5.376 census 가 강등**했다(*"두 오라클 다 자식 먼저"* 가 거짓 — verilator 가 **vita 편** · §3 ④ 를 막고 있지도 않았다 · 남은 결함은 읽기 방향뿐이고 **코퍼스 수요 0** ⇒ 브리핑은 아래) · 그 다음 ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ~~ⓐ§4.5.364~~ ~~ⓑ§4.5.365~~ ~~ⓒ§4.5.366~~ RESOLVED(잔여는 §2) |
+| **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). ~~⑧~~ 도 §4.5.372 가 **되돌렸다**(선행조건 = *멈춘 프레임 본문의 반환값* · 상세 §3 ⑧). ~~⑦~~ 도 §4.5.373 이 **되돌렸다**(②와 **같은 벽** — 상세 §3 ⑦). ~~③~~ **RESOLVED(§4.5.374)** — darkriscv 전체 SoC 가 처음 돌았다. ~~④~~ **RESOLVED(§4.5.376)** — §4.5.375 가 되돌렸던 것을 **census 가 그 revert 를 반박**하고 재랜딩했다(*"두 오라클 다 자식 먼저"* 가 거짓 · verilator 는 vita 와 같은 `01 02 03 04` · 네 테스트벤치 중 경쟁 로드를 가진 것이 **하나도 없다** · serv 는 ④ 유무와 무관하게 §3 ⑦ 로 거절). ⇒ ⭐ **다음 표적 = ⑨**(`package.rs` 네 번째 복사본) → **⑥**(auto-top) → **⑪**(wide 반환 상수함수 = verilog-axi) · ⚠️ **⑧⑪ 은 §2 급 잔여를 남겼다**(§3 ⑧ 의 `$fdisplay`/`$strobe` 한 문장 lag) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
 | **2b** | **§0 correct-support 승격 큐 T2 잔여 2건** | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**(iverilog ✓ 2/2)라 더 싸다 | `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · sized-literal enum label. 각자 독립 슬라이스 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
 | **4** | ⭐ **성능 — 표적은 frame 레짐이다**(2026-08-23 · §4.5.367 S0 실측으로 재규정 · **§4.5.369 워크로드 코퍼스로 재가격**) — ⚠️⚠️ **코퍼스가 그림을 양방향으로 바꿨다**: 남이 쓴 RTL 다섯에서 vita 는 iverilog 대비 **기하평균 1.61×** 로 앞선다(sha256 2.89 · biriscv 1.88 · aes 1.74 · picorv32 1.44 · darkriscv **0.78**) — *"iverilog 와 동률"* 은 **우리가 쓴 keccak 두 설계**가 만든 그림이었고, 그 둘은 우리에게 유리한 벤치가 아니라 **가장 어려운 벤치**였다(빼면 1.30 → **1.60**) · ⭐ 표적은 여전히 frame 레짐이다: keccak_f_arr 의 **65.0%** 가 `run_frame_call` 안(콜 귀속)이고 **0.53× 로 코퍼스 최악**이다 · ⚠️ **다만 지는 둘의 공통점은 아직 안 쟀다** — `keccak_f_arr` 는 호출마다 25원소 배열을 짓고 `darkriscv`(0.78×)는 그런 게 없다. **다음 성능 슬라이스의 첫 계측은 darkriscv 여야 한다**(우리가 안 쓴 설계이고, 지는 이유가 아레나 가설과 다를 수 있다) · ⚠️ **arena 가 선행조건임이 가격됐다**: `wprog::compile` 은 **모듈 프로세스 body 에만** 호출되고(`frame_decline=0`), `WProg::run` 은 `arena.buf[slot]` 을 읽는데 **frame local 엔 슬롯이 없다**(6–10주 · 상한 2.33× — ⚠️ 그 2.33 은 **keccak_f_arr 하나**에서 나온 수다) · bounded 조각 둘이 이미 수확: §4.5.367 part-select 쓰기 **−15.6%**, §4.5.368 no-op `mask_top` 제거 **keccak_f_arr −11.1% · keccak_f −13.2%** · ⚠️ **VCS/Xcelium 은 이 프로젝트가 한 번도 측정한 적이 없다** — 목표를 유지하려면 라이선스 환경에서 코퍼스 single-core 실측을 확보하는 것이 열린 항목이다 |
@@ -1053,34 +1053,33 @@
 
 ### ★★ §2 다음 하나 — 착수 브리핑 (**ⓐ = §4.5.364 · ⓑ = §4.5.365 · ⓒ = §4.5.366 으로 완료**)
 
-**다음 착수 = ⓔ(= §2 row 7, the t0 process order).** 그 다음이 ⓓ, 이후는 §2 「다음 착수 순서」 표에서 다시 고른다.
+**다음 착수 = ⓓ**(package 스코프 파라미터 셀렉트). 이후는 §2 「다음 착수 순서」 표에서 다시 고른다.
 
-**Why ⓔ jumped ahead of ⓓ** (2026-08-24): it is the only open item that scores on *both* rails of the
-priority ladder at once. It is an **oracle-backed silent-wrong that is reachable today** — a parent's
-`u1.s = 8'hAA` loses to the child's own `initial`, through a hierarchical write supported since June,
-with no `$readmem` anywhere and exit 0 — and it is simultaneously the **sole blocker of §3 ④**, which
-was otherwise built, measured against 40+ shapes on two oracles, and reverted only because of it
-(§4.5.375). Closing one defect therefore both raises a §2 row and unblocks a §3 row; ⓓ raises one row.
+**⚠️⚠️ ⓔ was DEMOTED by its own census (§4.5.376).** It was ranked first this morning on two
+claims, and the census refuted both.
 
-**ⓔ briefing.** `instance.rs` lowers this module's own processes at step (7) and only then recurses
-into children at step (8), so a parent's processes always take lower ids, and the t0 queue is seeded
-in id order (`sched/scan_arm.rs`, `tie: pi`). Both oracles run the child's `initial` first.
-⭐ The reference implementation is already in the tree on the neighbouring lane: **declaration
-initializers are correct**, because `init_ranks` sorts `RANK_MOD_INSTANCE` (1) before `RANK_MOD_OWN`
-(2). Only `initial` BLOCKS lack such a rank, so the shape of the fix is to give them one —
-`rank_path` is live during process lowering, so the rank is `rank_path + [RANK_MOD_OWN, proc_id]`.
-⚠️ `sim_ir::Process` is FROZEN with no instance field, so the rank cannot live on it; it must be an
-out-of-band sidecar through the `init_procs` channel (which is how `SimOpts` already carries
-engine-facing side tables without touching the golden root — so **`format_version` should stay 29**;
-verify that, do not assume it).
-⚠️⚠️ Blast radius: `tie` is shared with `Comb`/`Latch` seeding and with `compose_child_tie` for fork
-children, so this touches **every design that has a child `initial`** — the census must be run over
-the corpus and the examples before the first edit, and this is a 2-lens slice with a PRE binary,
-not a local patch. Expect digests to move; a digest that does *not* move under a design that has a
-child `initial` is itself a finding.
-⚠️ Ordering is invisible to a routing census (see ENGINEERING_RULES) — probe designs must give the
-child instance an initializer **of its own** that competes with the parent's write, or the probe
-proves nothing.
+*Claim 1 — "both oracles run the child's `initial` first."* Re-measured on the exact design
+the queue cites: iverilog `aa bb cc dd`, **verilator `01 02 03 04`** — vita's answer.
+Confirmed not a dropped write (remove the child's competitor and verilator honours the
+parent's hierarchical `$readmemh`). IEEE 1800 §4.7 makes `initial` order explicitly
+nondeterministic, so the write-vs-write class is an **oracle split**, and §4.5.372's
+cont-assign ruling already treats "verilator sides with vita" as exoneration.
+
+*Claim 2 — "it is the sole blocker of §3 ④."* Not one of ④'s four motivating testbenches has
+a competing child load (serv never sets `+firmware=`; picorv32's `wb_ram` gets no `.memfile`;
+`axi4_memory` has no load of its own), and serv does not elaborate with OR without ④ — PRE
+and POST both stop at the same three §3 ⑦ errors. ⇒ **④ was never blocked, and §4.5.376
+re-landed it.**
+
+**What survives of ⓔ** is the READ direction — a parent `initial` reading a child net at t0
+gets X where both oracles give the value (10 cells). Real, two-oracle, and **exercised by zero
+of the ten corpus workloads**, against a blast radius of every multi-module design, both
+backends, and a `format_version` bump to 30. Full statement and fix shape = **§2 row 7**.
+
+⭐⭐ **The lesson is about the queue, not the feature**: a revert writes its reason into the
+queue line, the briefing, AND a test docstring at once, so a wrong reason acquires three
+corroborating copies within one slice. Re-measure a revert's rationale before building on it —
+see ENGINEERING_RULES, *"A revert's reason is a measurement, not a finding."*
 
 ~~**ⓐ 구조적 지연의 값 fold 가 리터럴 전용**~~ — ✅ **RESOLVED §4.5.364**(2026-08-22 · 70칸 3-오라클 **FIXED 51 · REGRESSION 0** · 5,785 green · format 29 불변). 큐엔 *"파라미터"* 한 줄이었고 census 는 **레인 셋**(정수 자기결정-unsigned · real · TimeLit)이었다. 잔여 넷 = §2 「🆕 §4.5.364 가 남긴 지연 잔여 넷」 · 곁수확 §3 행 하나. 상세=ARCHIVE §4.5.364.
 
