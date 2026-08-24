@@ -397,6 +397,18 @@ interface body or a generate scope, a hierarchical reference to another instance
 real parameter, and `$clog2()` of a real **when the result feeds a width or a
 replication count** (`$clog2(R)` on its own evaluates normally).
 
+> **Known limit — an enum whose label names a `parameter` has no working methods.**
+> `typedef enum { A = K, B = K+1 }` with a module `parameter K` parses and the VALUES
+> are correct, but `.name()`, `.first`, `.next` and `.num()` on that enum are rejected,
+> and the message unhelpfully mentions a "hierarchical function call". The cause is that
+> enum methods are resolved while parsing, before any instance override is known — and an
+> override really does move the labels (`#(.K(9))` shifts them), so folding the label
+> early would be silently wrong. Use a `localparam` instead, which cannot be overridden
+> and does fold (`localparam L = 5; typedef enum { A = L, B = L+1 }` works, methods
+> included), or write the values literally. One narrow exception remains even for
+> `localparam`: a *sized* literal value (`localparam L = 8'h5`) does not fold. Tracked in
+> `docs/ROADMAP.md` §0.
+
 > **Fixed — a package-scope `parameter real` used to be silently wrong.** Until
 > 2026-08-24, `pk::PR / 2` with `parameter real PR = 3;` in a package yielded `1.0`
 > rather than `1.5`: the value crossed the package boundary but its DOMAIN did not, so
