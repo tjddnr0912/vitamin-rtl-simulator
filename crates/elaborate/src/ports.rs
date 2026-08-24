@@ -512,11 +512,18 @@ impl Elaborator<'_> {
         }
     }
 
+    /// `is_root` — this instance is a TOP, nothing instantiated it. A top's ports are
+    /// unconnected BY DEFINITION (that is what being a top means), so the dangling-output
+    /// warning below is noise there, not a finding: neither iverilog (even `-Wall`) nor
+    /// verilator says anything. ⚠️ The binding is NOT a usable proxy for this — a CHILD
+    /// written `dut u();` reaches here with an empty binding too, and for that one the
+    /// warning is real information. The caller knows which it is (`parent_inst.is_none()`).
     pub(crate) fn wire_ports(
         &mut self,
         module: &ast::ModuleDecl,
         binding: PortBinding<'_>,
         parent_prefix: &str,
+        is_root: bool,
     ) {
         let ports = port_list_dirs(module);
         // `.*` wildcard (IEEE §23.3.2.5): connect every port the explicit list
@@ -605,14 +612,24 @@ impl Elaborator<'_> {
             }
             let Some(conn_expr) = conn else {
                 // unconnected port.
-                match dir {
-                    ir::PortDir::Output => {
-                        self.warn(&format!("output port `{pname}` left unconnected"));
+                // §3 ⑥: silent for a ROOT. Measured on serv: auto-top elaborates the
+                // library modules `serv_rf_top` and `servile_rf_mem_if` as independent
+                // roots — which is what IEEE 1364 and iverilog both do, so the ROOT
+                // SELECTION is not the defect the queue line took it for — and every one
+                // of their output ports then reported as "left unconnected", 19 warnings
+                // that say nothing an author can act on. Pinning `--top tb` hid it only
+                // because that testbench happens to have no ports; a single explicitly
+                // pinned top WITH one warns just the same.
+                if !is_root {
+                    match dir {
+                        ir::PortDir::Output => {
+                            self.warn(&format!("output port `{pname}` left unconnected"));
+                        }
+                        ir::PortDir::Inout => {
+                            self.warn(&format!("inout port `{pname}` left unconnected"));
+                        }
+                        _ => {} // input floats silently (z = time-0 default)
                     }
-                    ir::PortDir::Inout => {
-                        self.warn(&format!("inout port `{pname}` left unconnected"));
-                    }
-                    _ => {} // input floats silently (z = time-0 default)
                 }
                 continue;
             };

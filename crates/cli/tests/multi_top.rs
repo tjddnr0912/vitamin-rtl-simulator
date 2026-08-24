@@ -180,3 +180,61 @@ fn oneshot_top_flag_unknown_is_loud() {
         "unknown --top must exit non-zero; got {code:?}"
     );
 }
+
+// ── §3 ⑨/⑥: a ROOT's ports are unconnected by definition ─────────────────────
+
+/// ⚠️ The queue line (§3 ⑥) read the noise on serv's file list as "auto-top grabs every
+/// uninstantiated root", and the census refuted that: elaborating every uninstantiated
+/// module as an independent root is what IEEE 1364 and iverilog BOTH do — measured, two
+/// independent modules each run their `initial`, and an error in a shared submodule is
+/// reported once per root by iverilog too (`in libtop.i` AND `in tb.i`).
+///
+/// The actual defect was a warning that fires on a condition every root satisfies: a top
+/// module's output ports have nowhere to go, so "left unconnected" says nothing an author
+/// can act on. Neither iverilog (even with `-Wall`) nor verilator says anything here.
+/// On serv this was 19 of the 21 warnings; pinning `--top tb` had hidden it only because
+/// that testbench happens to declare no ports.
+#[test]
+fn a_root_module_does_not_warn_about_its_own_dangling_ports() {
+    let (out, err, code) = run_vita_full(
+        &["--top", "top"],
+        "module top(input wire clk, output wire q);\n\
+           assign q = clk;\n\
+           initial $display(\"VAL=ok\");\n\
+         endmodule\n",
+    );
+    assert_eq!(code, Some(0), "must run: {out}{err}");
+    assert!(out.contains("VAL=ok"), "{out}");
+    assert!(
+        !format!("{out}{err}").contains("left unconnected"),
+        "a top's own ports are unconnected by definition:\n{out}{err}"
+    );
+}
+
+/// The other half, and the reason the port BINDING cannot stand in for "is a root": a
+/// CHILD written `dut u();` reaches the same code with an empty binding, and there the
+/// dangling output is real information. Suppressing on the binding would have taken this
+/// warning out with it.
+#[test]
+fn a_child_instance_still_warns_about_a_dangling_output() {
+    for inst in ["dut u();", "dut u(.clk(c));"] {
+        let (out, err, code) = run_vita_full(
+            &["--top", "tb"],
+            &format!(
+                "module dut(input wire clk, output wire q);\n\
+                   assign q = clk;\n\
+                 endmodule\n\
+                 module tb;\n\
+                   wire c = 1'b0;\n\
+                   {inst}\n\
+                   initial $display(\"VAL=ok\");\n\
+                 endmodule\n"
+            ),
+        );
+        assert_eq!(code, Some(0), "must run: {out}{err}");
+        assert!(
+            format!("{out}{err}").contains("left unconnected"),
+            "a child's dangling output is real information (`{inst}`):\n{out}{err}"
+        );
+    }
+}

@@ -703,7 +703,7 @@ impl Elaborator<'_> {
         std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
         std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
         std::mem::swap(&mut self.decl_block_locals, &mut saved_dbl);
-        self.wire_ports(module, binding, &saved_prefix);
+        self.wire_ports(module, binding, &saved_prefix, parent_inst.is_none());
         std::mem::swap(&mut self.func_table, &mut saved_funcs);
         std::mem::swap(&mut self.const_func_table, &mut saved_const_funcs);
         std::mem::swap(&mut self.task_table, &mut saved_tasks);
