@@ -618,7 +618,10 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
         if addr < 0 || a < win_lo || a > win_hi || a < base || a - base >= alen {
             warn(
                 sched,
-                format!("$readmem('{name}'): address {addr} outside the load range; stopped"),
+                format!(
+                    "$readmem('{}'): address {addr} outside the load range; stopped",
+                    printable(&name)
+                ),
             );
             return;
         }
@@ -647,8 +650,9 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
         warn(
             sched,
             format!(
-                "$readmem('{name}'): not enough words for the range \
-                 [{start}:{finish}] ({wrote} of {window}); rest unchanged"
+                "$readmem('{}'): not enough words for the range \
+                 [{start}:{finish}] ({wrote} of {window}); rest unchanged",
+                printable(&name)
             ),
         );
     }
@@ -742,8 +746,9 @@ pub(crate) fn writemem<N: crate::eval::NetReader + ?Sized>(
             warn(
                 sched,
                 format!(
-                    "$writemem('{name}'): {label} address {idx} is out of bounds \
-                     for the memory [{base}:{last}]; file not written"
+                    "$writemem('{}'): {label} address {idx} is out of bounds \
+                     for the memory [{base}:{last}]; file not written",
+                    printable(&name)
                 ),
             );
             return;

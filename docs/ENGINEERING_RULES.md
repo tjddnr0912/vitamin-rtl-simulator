@@ -2170,6 +2170,40 @@ applied, and it is the one to apply — not "I have already built it".
 ⇒ And when you revert, **ship the part that stands alone**. The file-name fix needs no
 hierarchy at all, so it went out while the construct that uncovered it did not.
 
+### ★★★★★ **A construct that writes into another instance needs an ORDERING census, not just a routing one**
+
+The soundness lens ran an exhaustive **routing** census on the hierarchical memory argument
+— which nets the exemption admits (heap kinds, mangled names, automatic locals, clocking
+holds, `NetKind::String`, const parameters), and whether each write lands in the right
+storage, on both backends and through the staged pipeline. It reported CLEAN, twice.
+
+It never asked **when** the write lands relative to the target instance's own
+initialization, and that is where the defect was. Its own words afterwards: *"every probe I
+wrote gave the child RAM no initializer of its own, so the ordering could not show — and the
+shape that exposes it is the motivating idiom, not an edge case. My forty-odd shapes were a
+de-risked variant of the real thing."*
+
+⇒ **Write into another scope and you have two questions, not one**: *does the value reach
+the right storage* (routing) and *does it reach it at the right time relative to what that
+scope does to itself* (ordering). A routing census answers the first exhaustively and is
+silent about the second, which is exactly how it can be CLEAN over a silent-wrong.
+
+⇒ And the first probe should be **the upstream idiom verbatim, initializers included** —
+not a reduction of it. See [[run-the-real-design-the-gate-blocked]]; both defects in
+§4.5.375 were invisible to the reduced form and both appeared the moment it was restored.
+
+### ★★★ **Escape a name in every diagnostic, not in the ones that can see a bad byte**
+
+The file-name fix escaped non-printables at the two sites that could receive a NUL, and left
+three others interpolating raw — defensible, because those three fire only after the
+filesystem accepted the name and a path may not contain a NUL. The reviewer verified the
+reasoning and still flagged it: those three can see a **tab or a newline**, and a newline
+splits one warning across two lines.
+
+⇒ When a rule is "this value is unsafe to print", apply it at **every** site that prints the
+value. A per-site exception has to be re-derived by every later reader, and the derivation
+("can a NUL reach here?") is harder than the rule.
+
 ### ★★★★ **A reviewer measuring against a binary you are rebuilding is measuring noise**
 
 The differential lens ran while this session rebuilt `target/release/vita` three times. It
