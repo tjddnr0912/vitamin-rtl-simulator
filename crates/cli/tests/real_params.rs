@@ -13,11 +13,17 @@
 //! map alone would match an OUTER real param even when an inner net or numeric param
 //! shadows it, resolving one name two different ways.
 //!
-//! Deliberately still loud (correct-or-loud — a wrong parameter value poisons every
-//! downstream width with no trace): real ARITHMETIC in the initializer
-//! (`2.0 + 3.0`, no real const-fold path exists), a real PACKAGE parameter (its own
-//! import-const machinery), and OVERRIDING a real parameter (the override machinery
-//! is i64-only, so the declared default would be used silently).
+//! ⚠️ This header's "deliberately still loud" list has been overtaken twice and is
+//! kept as written history, not as current behaviour. Real ARITHMETIC in the
+//! initializer folds (§4.5.232 built the real const domain the old text says does not
+//! exist), a real PACKAGE parameter binds (§4.5.377), and a real reaching an INTEGER
+//! context converts at an explicit boundary (§4.5.381).
+//!
+//! What is still loud, and why, now lives in ROADMAP §0 T2 item 8 and in
+//! `real_int_context.rs`'s header. The short version: OVERRIDING a real parameter
+//! (`#(.R(2.5))` — the override channel is i64), and an IMPLICIT conversion in a width
+//! bound or a replication count, where the two oracles disagree in opposite
+//! directions and there is no answer to match.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -269,18 +275,24 @@ fn a_wildcard_imported_real_parameter_is_still_loud() {
 }
 
 #[test]
-fn real_param_in_a_replication_count_is_loud() {
-    // A real param is deliberately kept out of `params`, so a constant-required
-    // context without its own loud gate folded it to a silent 0: `{int'(R){1'b1}}`
-    // with R=2.0 printed `0` instead of iverilog's `11`. Before this slice the decl
-    // itself was loud, so this was loud -> silent-wrong.
-    loud(
-        "module t;\n\
+fn real_param_in_a_replication_count_converts_at_the_cast() {
+    // ⚠️ This pin asserted a loud reject, and it was right to at the time: a real
+    // param is kept out of `params`, so a constant-required context without its own
+    // gate folded it to a SILENT 0 — `{int'(R){1'b1}}` printed `0` where iverilog
+    // prints `11` — and the gate that stopped that was the ladder's only move then.
+    //
+    // §0 T2 gave the gate a boundary instead of a blanket. `int'(R)` is an EXPLICIT
+    // conversion (§6.24.1), so the count folds through the real domain and the f64
+    // never reaches the IR. Both oracles: `11`.
+    //
+    // The BARE spelling is still loud, and that is not a leftover — see
+    // `a_bare_real_replication_count_stays_loud` in `real_int_context.rs`, where
+    // iverilog rejects and verilator replicates.
+    let out = run("module t;\n\
            localparam real R = 2.0;\n\
            initial $display(\"%b\", {int'(R){1'b1}});\n\
-         endmodule\n",
-        "replication count that reads a real parameter",
-    );
+         endmodule\n");
+    assert_eq!(out, "11\n");
 }
 
 #[test]
@@ -293,25 +305,39 @@ fn integer_replication_counts_unaffected() {
 }
 
 #[test]
-fn real_param_in_an_integer_constant_context_is_loud() {
-    // A real param has no integral value here. Two wrong answers were tried before:
-    // folding to None left `$clog2(R)` with NO diagnostic and a silent 1-bit width,
-    // and converting at the const-eval LEAF destroyed the real value before the
-    // enclosing expression chose its context. A third was tried in the real
-    // const-fold slice — giving an exactly-integral real literal an i64 twin — and
-    // it let the INTEGER domain answer real expressions at four other const-eval
-    // sites (wrong generate branch, truncated generate-scope real param). Loud here,
-    // converted nowhere. iverilog does convert, so this is a recorded capability
-    // gap, not a correctness one.
-    for body in [
-        "logic [R-1:0] x; initial begin x=0; $display(\"%0d\", $bits(x)); end",
-        "logic [$clog2(R)-1:0] y; initial begin y=0; $display(\"%0d\", $bits(y)); end",
-    ] {
-        loud(
-            &format!("module t;\n  localparam real R = 4.0;\n  {body}\nendmodule\n"),
-            "real parameter is not an integral constant",
-        );
-    }
+fn a_bare_real_param_in_a_width_bound_is_loud() {
+    // A real param has no integral value here, and three wrong answers were tried
+    // before: folding to None left `$clog2(R)` with NO diagnostic and a silent 1-bit
+    // width; converting at the const-eval LEAF destroyed the real value before the
+    // enclosing expression chose its context; and an i64 twin for an exactly-integral
+    // real let the INTEGER domain answer real expressions at four other const-eval
+    // sites (wrong generate branch, truncated generate-scope real param).
+    //
+    // ⚠️ This used to cover the `$clog2(R)` spelling too. §0 T2 converts THAT one —
+    // it is an explicit conversion, and both oracles agree on the result — so the
+    // sibling below pins it by value. What stays loud is the IMPLICIT bound, and the
+    // reason is no longer "vita cannot": the oracles split (iverilog sizes it 4,
+    // verilator rejects the whole design), so this is the rung to stand on.
+    loud(
+        "module t;\n  localparam real R = 4.0;\n  \
+         logic [R-1:0] x; initial begin x=0; $display(\"%0d\", $bits(x)); end\nendmodule\n",
+        "real parameter is not an integral constant",
+    );
+}
+
+#[test]
+fn an_explicitly_converted_real_param_sizes_a_width() {
+    // The sibling of the cell above: `$clog2(4.0)` is 2 on both oracles, and a real
+    // has no bit pattern for §20.8.1 to read, so the call converts (§6.24.1) and
+    // takes the log of that. `8.5` rounds to 9 first ⇒ 4, which is what makes this a
+    // conversion rather than a truncation (a truncating read would give 3).
+    let out = run("module t;\n\
+           localparam real R = 4.0, S = 8.5;\n\
+           logic [$clog2(R)-1:0] y;\n\
+           logic [$clog2(S)-1:0] z;\n\
+           initial $display(\"%0d %0d\", $bits(y), $bits(z));\n\
+         endmodule\n");
+    assert_eq!(out, "2 4\n");
 }
 
 #[test]
@@ -323,14 +349,30 @@ fn a_non_integral_real_never_folds_into_the_integer_domain() {
     // loud (iverilog rounds; that is a recorded capability gap, not a correctness
     // one). An integer parameter initialized from a real comparison has no boundary
     // to convert at, so it stays loud too.
-    for src in [
-        "module t;\n  parameter real R = 2.4;\n  localparam int A = (R == 2);\n           initial $display(\"%0d\", A);\nendmodule\n",
-        "module t;\n  localparam real R = 2.5;\n  logic [R-1:0] x;\n           initial begin x=0; $display(\"%0d\", $bits(x)); end\nendmodule\n",
-        "module t;\n  localparam real R = 8.5;\n  logic [$clog2(R)-1:0] y;\n           initial begin y=0; $display(\"%0d\", $bits(y)); end\nendmodule\n",
-    ] {
-        let (_, ok, _) = run_raw(src);
-        assert!(!ok, "expected a loud reject for:\n{src}");
-    }
+    // ⚠️ The invariant is about the LEAF, and two of the three cells that used to
+    // stand here were not testing it. `localparam int A = (R == 2);` and
+    // `logic [$clog2(R)-1:0]` both have a context boundary — a declared-integral type
+    // and an explicit conversion — so §0 T2 converts them AT that boundary, whole
+    // expression first, and both agree with iverilog (0 and 4). Converting there is
+    // what the invariant PRESCRIBES; only a leaf conversion violates it. They moved
+    // to `real_int_context.rs`. What is left here is the shape with no boundary at
+    // all: a bare real in a width bound, where the oracles also split.
+    let (_, ok, _) = run_raw(
+        "module t;\n  localparam real R = 2.5;\n  logic [R-1:0] x;\n           \
+         initial begin x=0; $display(\"%0d\", $bits(x)); end\nendmodule\n",
+    );
+    assert!(!ok, "a bare real in a width bound must stay loud");
+    // …and the leaf itself never converts: `R > 2` with R = 2.4 must still be decided
+    // in the REAL domain (true), not on a truncated 2, and `R == 2` must stay false.
+    let out = run("module t;\n\
+           parameter real R = 2.4;\n\
+           localparam int A = (R == 2), B = (R > 2);\n\
+           initial $display(\"E=%0d %0d\", A, B);\n\
+         endmodule\n");
+    assert!(
+        out.contains("E=0 1"),
+        "real comparison stays real; got:\n{out}"
+    );
     // …while the real-to-real shapes that were loud only for lack of machinery now
     // fold, and agree with iverilog.
     let out = run("module t;\n\
@@ -648,15 +690,25 @@ fn a_real_param_cannot_reach_a_size_count_or_position_argument() {
         "string s = \"hello\"; initial begin s.putc(R, \"Z\"); $display(\"%s\", s); end",
         "int q[$] = '{1,2}; initial begin q.insert(R, 9); $display(\"%0d\", q.size()); end",
         "int q[$] = '{1,2}; initial begin q.delete(R); $display(\"%0d\", q.size()); end",
-        // …and the replication gate must not re-enter the const-fold resolver through a
-        // single syntactic layer: `_ => count_reads_real_param` answered "integral" for
-        // a real param with an exact i64 twin, so this folded to a silent 0.
-        "initial $display(\"%0d\", {$clog2(R){1'b1}});",
     ] {
         let src = format!("module t;\n  parameter real R = 1.5;\n  {body}\nendmodule\n");
         let (_, ok, _) = run_raw(&src);
         assert!(!ok, "expected a loud reject for:\n{src}");
     }
+    // ⚠️ `{$clog2(R){1'b1}}` used to sit in that list, guarding a real bug: the gate
+    // re-entered the const-FOLD resolver through one syntactic layer and answered
+    // "integral" for a real param with an exact i64 twin, folding to a silent 0. The
+    // guard is now a BOUNDARY rather than a blanket — `$clog2` of a real converts and
+    // the f64 never reaches the count — so the cell has a value. R = 1.5 rounds to 2,
+    // `$clog2(2)` is 1, one replication: iverilog prints 1.
+    let (rout, rok, _) = run_raw(
+        "module t;\n  parameter real R = 1.5;\n  \
+         initial $display(\"C=%0d\", {$clog2(R){1'b1}});\nendmodule\n",
+    );
+    assert!(
+        rok && rout.contains("C=1"),
+        "clog2 count converts; got:\n{rout}"
+    );
     // The same shapes with an INTEGER param must be untouched.
     let (out, ok, _) = run_raw(
         "module t;\n  parameter int P = 4;\n  logic [7:0] d[];\n  string s = \"hello\";\n  \

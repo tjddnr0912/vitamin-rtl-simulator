@@ -508,6 +508,32 @@ impl Elaborator<'_> {
         self.const_eval_in_scope(e)
     }
 
+    /// The declared default of a parameter whose DECLARED TYPE is integral but whose
+    /// initializer mentions a real (`localparam int M = R*2.0;` — both oracles 6).
+    ///
+    /// A declaration IS a context boundary: §6.24.1 converts the value to the
+    /// declared type, so the initializer folds whole in the real domain and only the
+    /// rounded result becomes the parameter's value. Reached only after
+    /// `param_real_value` has declined, which is what keeps a genuinely real
+    /// parameter in the real domain.
+    ///
+    /// ⚠️ `meta` is the gate, and it is the right one for a REASON, not by luck. An
+    /// UNTYPED parameter takes its type from its value (§6.20.2), so `localparam M =
+    /// R*2.0;` is a REAL parameter and rounding it here would be a silent-wrong of
+    /// the exact family §4.5.232 withdrew over — and `param_decl_width_unoverridden`
+    /// answers None for precisely that shape, because a non-literal initializer gives
+    /// it no width to infer. So `meta.is_some()` on a real-mentioning initializer
+    /// means the declaration STATED a range or an integral type. (That untyped
+    /// spelling stays loud; ROADMAP §2 owns it.)
+    pub(crate) fn param_value_via_real(
+        &self,
+        meta: Option<(u32, bool)>,
+        value: &ast::Expr,
+    ) -> Option<i64> {
+        meta?;
+        self.const_int_via_real(value)
+    }
+
     /// The module's OVERRIDABLE parameter list — IEEE 1364-2005 §12.2 / IEEE
     /// 1800-2017 §23.2.2.1.
     ///

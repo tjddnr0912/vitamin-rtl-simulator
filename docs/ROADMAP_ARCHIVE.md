@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 353건 (최신순·⚠️ = 미머지 · 번호는 1~380 중 353개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 354건 (최신순·⚠️ = 미머지 · 번호는 1~381 중 354개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.381` **매뉴얼이 쓰라고 안내하던 그 변환도 거절당하고 있었다** · §0 T2 의 마지막 열린 항목 = **real 상수가 정수 문맥에 닿는 것** · ⭐⭐ **철회가 이 슬라이스를 지목해 뒀다**: §4.5.232 가 i64 twin 으로 닫으려다 5건 silent-wrong 으로 철회하며 `strings.rs` 주석에 *"closing it means routing those sites through the real domain, which is its own slice"* 라고 적었고, 그 다섯 자리 중 셋은 §4.5.241/242 가 이미 닫았다 — 남은 것을 **leaf 가 아니라 소비자**에서 변환한다 · ⭐ **census 가 축을 명시/암시로 갈랐고 두 오라클이 같은 선을 긋는다**: 16형태×3툴에서 vita 는 16/16 loud, 두 오라클 합의 12 · 분열 넷은 **전부 암시 변환**이고 **서로 반대 방향**이다(`logic [R-1:0]` = iverilog 3/verilator 거부 · `{R{1'b1}}` = iverilog 거부/verilator 7 · `logic v [R]` · `R<<1`) ⇒ 규칙은 *"vita 가 숫자를 낼 수 있는가"* 가 아니라 **"언어가 이 노드를 변환이라 부르는가"** · ⭐ **근인 한 줄**: `count_reads_real_param`/`count_lowers_real_param` 이 *"real 파라미터를 언급하는가"* 를 묻는데 **`Cast` 와 `SysCall` 을 그대로 통과해 내려간다** — 그 둘이 바로 변환 그 자체 · ⭐ **반올림의 참조 구현도 트리 안에 있었다**(§6.24.1 = half away from zero · `$rtoi` 는 절단 · iverilog·verilator·**vita 자기 런타임**이 12칸 전부 일치 · 상수 도메인만 안 물었다) · ⚠️⚠️ **내가 만든 결함 둘, 둘 다 loud→silent-wrong 이고 둘 다 내 프로브가 잡았다**(스위트는 첫 번째를 통과했다): ⓐ *parity* 로 `$rtoi` arm 을 상수함수 walk 에 미러링했더니 정수 formal 이 모듈 `real` 을 가리는데 **모듈 스코프 resolver** 를 타 `f(9)`=3(iverilog 9 · §4.5.371 ⓷ 와 같은 모양) ⇒ ⭐ **고침은 arm 삭제** — 그 walk 의 catch-all 이 이미 *가릴 것이 없음을 증명하는 게이트* 아래서 모듈 스코프에 위임한다 ⇒ **shadow 규칙은 `env` 를 가진 walk 가 가진다** · ⓑ 도메인 순서 — real 도메인이 정수 부분트리를 `as f64` 로 올려 `$rtoi(2^53+1)` 이 **조용히 1 작게** ⇒ **정수 먼저**(real 은 답을 더할 수만 있지 고칠 수는 없다) · ⭐⭐ **스위트가 자기 핀 여섯을 지목했고 전부 제거된 제한을 인코딩**하고 있었다(다섯은 앞 슬라이스들이 갭을 **방어하려고** 쓴 것 · 하나는 docstring 에 §0 T2 를 **자기 선행조건으로 지목**) — ⚠️ 그중 **둘은 silent 를 핀하고 있었다**(`v[int'(3.5):0]` 이 **1비트** 를 읽는 것을 `Y=1` 로 · `$clog2(8.0)` 의 **0-count replication** 을 *"declines to 0, never a wrong non-zero"* 라 변호) — 0폭 replication 은 사다리의 안전한 쪽이 아니라 **조용한 쪽**이다 ⇒ 전부 오라클 재측정 후 **값-어서션** · ⚠️ **핀 하나는 제목이 틀렸다**(`a_non_integral_real_never_folds_into_the_integer_domain` 의 세 칸 중 둘은 **경계가 있어서** 변환이 불변식의 *처방*이다) ⇒ 불변식을 재는 칸만 남기고 **긍정 칸 추가** · ⭐ **곁수확 pre-existing silent-wrong 둘**(`nonconst_bound_reason` 에 `Cast` arm 부재 ⇒ `logic [int'(NOPE)-1:0]` 가 **1비트 exit 0** 인데 bare 쌍둥이는 loud = 도메인-쌍둥이 탐지기 · 그리고 위 select) · ⭐ **census 가 놓친 레인** = real **리터럴**(`int'(3.0)`·`$clog2(8.0)`) — 스위트 핀이 알려 줬다 · ⚠️ **수요 근거는 앞 네 슬라이스보다 약하다**(서드파티 8설계에 `parameter real` **0건** — 다만 코퍼스가 합성 RTL 이라 real 파라미터가 사는 테스트벤치가 없다) ⇒ 죽이는 근거로 쓰지 않고 기록 · ⚠️ **방법 메모**: 스윕 한 칸이 verilator 거부로 읽혔는데 **20초 워치독이 느린 기동을 죽인 것**이었다 — 워치독 킬은 오라클 판정이 아니다 · examples 4/4 바이트 동일 · 5,943 → **5,963 green** · format 29 불변 · **제품 코드 ~30줄**
 - `4.5.380` **외부 리포트 두 건 — 진단이 스스로 지운 규칙을 인용하고 있었다** · round-32(hash_top) + aes_top, 둘 다 `6c4be81` 기준이라 **HEAD(4 슬라이스 뒤)에서 전 항목 재현부터**([[external-report-fresh-probe-triage]]) · **해결 4 · 기록 6** · ⭐ **N32-1 = silent-wrong**: `wire [$bits(8'h00)-1:0] c;` 가 **1비트 net** 을 선언해 `8'hA5` 가 `1` 로 잘렸다(exit 0 · 3 백엔드 동일 · **포트 바운드면 모듈 경계를 넘어** 잘린다) — 같은 호출이 런타임 6 · unpacked 차원 8 · 파라미터 E3009 = **한 줄에 세 답** · 고침 = ⓐ 값 fold `bits_of_selfdet`(리터럴·concat·replication, **leaf 는 전부 `bits_of_view`** = 이미 도는 `$bits(<이름>)` 과 **같은 resolver**, `const_self_width` 는 **의도적으로 안 씀** — 그건 `param_meta` 로 이름을 풀고 §4.5.373 이 그 폭의 canonical 성을 반증했다) ⓑ **못 접는 형태는 loud**(`nonconst_bound_reason` 의 SysCall arm — §4.5.377 에서 내가 고친 **바로 그 catch-all** 의 다른 arm이고, `$bits(<미선언 이름>)` 조차 조용히 1비트를 만들고 있었다) · ⭐⭐ **N32-3 이 이 슬라이스의 교훈**: 진단이 *"direct rhs of a blocking assignment (v9)"* 라는 **§4.5.374 가 지운 규칙**을 인용해 곧이 들으면 **멀쩡한 코드를 되돌린다** — ⚠️ 그리고 **자리가 둘**이었다(`$fgetc` 계열 `(v9)` · `$value$plusargs` `(v7)`), **이유도 서로 다르다**(평가 **횟수** vs ref **쓰기 순서**) ⇒ 문장 둘 + 캐럿을 **호출**로 · ⚠️⚠️ **내 첫 교체 문구가 과대주장**이었다(*"a task argument … supported"*)인데 `$monitor` 인자는 **task 인자이면서 정당하게 거절**된다(재렌더) — **기존 핀이 잡았다** ⇒ 원리를 *"written 과 다른 **횟수**로 실행된다"* 로 다시 씀 · **aes §4** `a[7:0][3:0]` 무경고 ⇒ ⭐ iverilog 문구가 규칙을 정확히 준다(*"All but the final index … must be a single value, not a range"*)라 **파싱 시점 판정 가능** · ⚠️ *"두 번째 select 면 경고"* 는 **틀린다** — `mem[i][3:0]` 은 어디서나 합법이고 도처에 있다 ⇒ 판별자는 **직전 select 가 range 였는가**(측정 후 확정) · **aes §5** 진단 둘이 한 사건에 모순(*"is not a constant; default kept"* 인데 상수이고 companion 이 error) ⇒ **wide 리터럴만** 분리, ⚠️ 진짜로 default 가 유지되는 `#(.W(sig))` 는 **옛 문구가 참**이라 핀이 지켜 줬다(내 첫 시도는 그것도 갈아엎었다) · 📌 **기록 6**: aes §1(값 2⁶³ 두 레인 — reduction 은 §3 ⑦, 나머지는 §2 canonical 벽) · aes §2(**CHANGELOG 정정** — *"discriminator is one keyword"* 가 거짓, 자체 실측 plain 3/5 vs `automatic`·`for`·`if`·`case` **전부 1/5** · `p::f()` 2/5 ⇒ **8행 표**로 재작성) · aes §3(⚠️ **iverilog 도 통과** ⇒ 2-오라클 결함 아닌 **lint 기회**) · R30-1 · R30-2 · N32-2 · 코퍼스 7/10 zero drift · examples 4/4 · 5,935 → **5,943 green** · format 29 불변
 - `4.5.379` **enum 라벨이 상수 이름을 못 읽었다 — 그리고 ⑪ 은 착수 불가였다** · ⚠️ 원래 표적은 §3 ⑪ 이었는데 **census 가 착수 자체를 막았다**: verilog-axi 의 **54 에러가 전부 §3 ② 한 뿌리의 연쇄**이고(`parameter S_THREADS = {S_COUNT{32'd2}}` = 파라미터 count replication, §4.5.371 이 되돌린 것) ⑪ 의 네 칸은 **② 가 서기 전엔 보이지도 재현되지도 않는다** · ⭐ 그럼에도 ⑪ 을 최소 재현으로 재느니 **이름이 틀렸다**: *"wide 반환"* 이 아니라 **값**이다 — `[127:0]` 선언에 값이 `0x1122` 면 **이미 정확**하고, 막히는 건 **값이 64비트 초과**(65비트 리터럴 · part-select 로 쌓는 128비트 누산기)뿐 · ⚠️ **싼 절반(넓은 리터럴)은 수요 0**이고 verilog-axi 가 쓰는 건 **비싼 절반**(`calcBaseAddrs` 의 루프 누산기) = §4.5.373 이 되돌린 그 형태 ⇒ **② 뒤로 재배치**(넓은 도메인 `fold_self_bits`/`WideBits`/`BitPacked` 는 이미 있으나 **carry-free**) · ⇒ 소유자가 **§0 T2** 로 전환 · **실은 것 = enum 라벨의 상수 이름** · ⭐ **여기서도 census 가 큐 줄을 반박**: 줄은 *"sized-literal enum label"* 이라는데 sized literal 은 **이미 돈다**(`enum bit[7:0] { A = 8'hFF }` · `.name`/`.first`/`.next`/`.num` 전부 정확 · §4.5.234 가 했다) — 실제로 막힌 건 **이름 라벨**(`A = L`·`L+1`·`L*2`)이고 그러면 enum 이 통째로 `enum_defs` 에 안 들어가 **모든 메서드**가 오도적인 *"hierarchical function call"* 로 loud 였다 · ⭐⭐ **참조 구현이 파서 안에 이미 있었다**: `const_locals`(모듈 스코프 **localparam** 의 리터럴 값)와 `try_const_index` — 라벨 폴드만 그걸 안 물었다 · ⭐⭐ **안전성 논증도 이미 코드에 적혀 있었다**(*"A `parameter` is overridable → never recorded"*) 그리고 **측정으로 확인**했다: `m #(.K(9))` 로 override 하면 iverilog 가 **10/`first=9`**(4/3 아님) ⇒ 파서 시점 fold 는 **silent-wrong** 이므로 `parameter` 라벨은 **거절이 정답** · 14칸 census **FIXED 4 · 회귀 0** · 잔여 둘 **둘 다 loud**: `parameter` 라벨(근본 해소 = enum-method desugar 를 elaborate 로 = **아키텍처**) · sized-literal `localparam`(`const_locals` 가 **decimal 만** 기록 · 그 표는 generate 인덱스와 **공유**라 생산자를 넓히면 다른 소비자가 움직인다 ⇒ 별도 항목) · ⚠️ 스위트의 핀 하나가 **옛 제한을 인코딩**해 붉어졌다(`collision_nonfoldable_enum_methods_are_loud` 가 **localparam** 라벨을 썼다) ⇒ 둘로 쪼개 **localparam 은 값-어서션**(`num=2` 가 pa 의 3 이 아니라 **pb 자기 라벨**임을 **긍정적으로** 증명 = 옛 핀보다 강하다) · **parameter 는 loud 유지**(staleness 위험이 실제로 사는 자리) · ⚠️ 내가 새로 쓴 테스트 하나가 처음에 **아무것도 어서션 안 했다**(`let _ = (...)`) — §4.5.373 ⓒ 와 같은 모양이라 즉시 고치고 **세 기대값을 iverilog 로 먼저 재고** 핀했다 · 코퍼스 7/10 zero drift · examples 4/4 바이트 동일 · 5,932 → **5,935 green** · format 29 불변 · **제품 코드 한 줄**(`.or_else(|| self.try_const_index(e))`)
 - `4.5.378` **루트의 포트는 정의상 unconnected — 큐가 지목한 원인은 iverilog 와 같은 동작이었다** · 큐가 지목한 §3 ⑥ · ⭐ **census 가 진단을 반박**: 줄은 *"auto-top 이 미인스턴스화 루트를 전부 잡는다"* 를 결함으로 봤는데 그건 **IEEE 1364·iverilog 가 하는 그대로**다 — 독립 모듈 둘이면 iverilog 도 **둘 다** `initial` 을 돌리고(`VAL=A|VAL=B`), 공유 서브모듈의 오류도 **루트마다** 낸다(`in libtop.i` **그리고** `in tb.i`) · vita 는 거기에 `W-ELAB-AUTOTOP-AMBIGUOUS` 로 루트 이름까지 알려 주므로 **iverilog 보다 앞서 있다** ⇒ **루트 선택은 손대지 않았다** · ⭐⭐ **진짜 결함은 다른 것**: serv 경고 21 중 **19가 *"output port left unconnected"*** 인데 그건 **루트라면 반드시 성립하는 조건**(top 의 포트는 어디에도 안 붙는다 — 그게 top 의 정의) · ⚠️ **auto-top 과 무관**하다는 것이 결정적 — 포트를 가진 top 을 `--top` 으로 **하나만 핀해도 똑같이 경고**하고, serv 에서 `--top tb` 가 조용했던 건 그 tb 가 **마침 포트가 없어서**였다 · 두 오라클 다 침묵(iverilog 는 `-Wall` 로도) ⇒ **루트에서만** 그 경고를 끈다 · ⚠️ **포트 바인딩은 대용물이 될 수 없다** — 자식을 `dut u();` 로 써도 **같은 빈 바인딩**으로 들어오는데 거기선 그 경고가 **진짜 정보**다(측정으로 확인) ⇒ 판별자는 호출자가 아는 **`parent_inst.is_none()`** 을 `wire_ports` 로 넘긴다(§4.5.377 의 *"프록시를 쓰지 말고 사실을 넘겨라"* 와 같은 모양) · **측정**: serv auto-top **경고 21 → 2**(남은 둘 = auto-top 모호성 + timescale = 둘 다 실행 가능) · 오류 6 불변(루트 2 × 실제 3 = iverilog 와 같은 중복) · `--top tb` 3/1 불변 · 자식 경고 두 형태(`u()` · `u(.clk(c))`) **보존** · 코퍼스 7/10 zero drift · examples 4/4 바이트 동일 · 5,930 → **5,932 green** · format 29 불변 · **제품 코드 3줄 + 시그니처 한 인자**
@@ -412,6 +413,120 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.381 — The conversion the manual told users to write was refused too (2026-08-25 · 5,963 green · format 29 unchanged)
+
+**One line**: §0 T2's last open item — a `real` constant reaching an INTEGER context — closed at
+the CONTEXT BOUNDARY the withdrawn §4.5.232 twin could not reach, and the census split the axis
+cleanly into what both oracles answer and what they disagree about.
+
+**The withdrawal named this slice as its own remedy.** §4.5.232 tried to close this by giving an
+exactly-integral real parameter an i64 TWIN, and withdrew over five silent-wrongs. Its comment in
+`strings.rs` is still the best statement of why: a twin lets the INTEGER domain succeed on an
+expression that mentions a real, and `param_real_value` is the only site that applies §11.8.1's
+*"any real operand ⇒ evaluate in the real domain"*, so every other const-evaluation context
+answered from a truncated integer — `generate if (R/2 > 2)` with `R = 5.0` took the ELSE branch.
+That comment ends: *"closing it means routing those sites through the real domain, which is its
+own slice"*. This is that slice. Three of the five sites it lists were already closed
+(§4.5.241/242); the remaining ones are what this one does, and it does them at the CONSUMER, so
+no new i64 ever enters the shared integer walk.
+
+**⭐ The census split the axis on explicit-vs-implicit, and both oracles drew the same line.**
+16 shapes × 3 tools: vita was loud on all 16, the two oracles agreed on 12. The four splits are
+not scattered — every one is an IMPLICIT conversion, and the tools break in OPPOSITE directions:
+
+| shape | iverilog | verilator |
+|---|---|---|
+| `logic [R-1:0]` | 3 | **rejects** |
+| `logic v [R]` | 3 | **rejects** |
+| `{R{1'b1}}` | **rejects** | 7 |
+| `R << 1` | **rejects** | 6 |
+
+Where the source SAYS it converts (`int'(R)`, `$clog2(R)`, `$rtoi(R)`) or the destination has a
+declared integral type, the two agree without exception. So the implemented rule is not "vita can
+compute a number here" but "the language calls this node a conversion" — and the four splits stay
+loud with that measurement written into the code.
+
+**⭐ Root cause, one sentence.** Two gates — `count_reads_real_param` and
+`count_lowers_real_param` — ask *"does this expression MENTION a real parameter?"* and both descend
+straight THROUGH `Cast` and `SysCall`, which are precisely the two nodes that ARE the conversion.
+
+**⭐ Rounding: the reference implementation was already in the tree.** §6.24.1 rounds half AWAY
+from zero (`2.5`→3, `−2.5`→−3, `−0.5`→−1) and `$rtoi` truncates instead. iverilog, verilator and
+**vita's own runtime** (`lower_real_to_int_cast`, whose tie-to-even bug §4.5.365 fixed) agree on
+all twelve cells; only the constant domain never asked. `real_round_to_i64` uses Rust's
+`f64::round`, which IS that rule — deliberately not the lowered form's `e + (e >= 0 ? 0.5 : −0.5)`,
+which is tie-to-EVEN in [2^52, 2^53) and is what cost §4.5.365 a silent-wrong.
+
+**Shipped**: `const_eval_cast`'s Prim arm falls back to the real domain; `const_clog2_selfdet`
+converts a real argument; a `$rtoi` const arm; and `param_value_via_real` at all three declaration
+sites (module body, generate, package — three spellings of one fold, so without all three the same
+text answered at module scope and went loud one `generate` deeper). ~30 lines of code.
+
+**⚠️⚠️ Two defects I created, both loud → silent-wrong, both caught by probing my own change**
+(the suite was green through the first):
+
+- **A shadow, from a "parity" edit.** Mirroring the `$rtoi` arm into the const-FUNCTION walk made
+  `function int f(int N); f = $rtoi(N);` with `localparam real N = 3.9;` fold `f(9)` to **3** —
+  the module parameter, read through the integer formal — where iverilog gives 9 and PRE was loud.
+  `const_rtoi_via_real` resolves at module scope. Same shape as §4.5.371 ⓷. ⭐ The fix was to
+  DELETE the arm: that walk's catch-all already delegates to the module-scope fold under a guard
+  proving nothing local can be shadowed, so parity comes for free and **the shadow rule stays with
+  the walk that owns `env`**. The same `env.is_empty() && envw.is_empty()` guard then went on the
+  `$clog2` fallback, which had the identical latent hazard and escaped only because its env-aware
+  resolver happens to answer first.
+- **Precision, from a domain order.** `const_eval_real_in_scope` promotes a real-free subtree with
+  `as f64`, so `$rtoi(64'd9007199254740993)` — exactly 2^53+1 — came back one LESS, silently,
+  where PRE was loud. Fixed by asking the integer domain FIRST: the real domain can only ADD
+  answers there, never correct one. (vita now returns it exactly; both oracles truncate `$rtoi` to
+  a 32-bit container — iverilog −2, verilator 2147483647 — the recorded `$itor` divergence family,
+  so it is pinned hand-IEEE.)
+
+**⭐⭐ The suite pointed at six of its own pins, and every one encoded the removed limitation.**
+Five were written by earlier slices to DEFEND the gap; one named §0 T2 as its prerequisite in its
+own docstring. Two were pinning SILENT behaviour: `int_cast_of_real_param_bound_is_a_tracked_-
+preexisting_gap` asserted `v[int'(3.5):0]` reads ONE bit at exit 0 (iverilog: `v[4:0]` = `0d`), and
+`clog2_real_literal_arg_declines` asserted a **0-count replication** for `$clog2(8.0)` — defended in
+its docstring as *"declines to 0, never a wrong non-zero"* — where both oracles print 3. A 0-width
+replication is not the safe side of the ladder, it is the quiet side. All six re-measured against
+iverilog (plus verilator on the two that stay loud) and rewritten as VALUE assertions.
+
+**⚠️ And one pin was mis-titled, which matters more than the six.**
+`a_non_integral_real_never_folds_into_the_integer_domain` guards a real invariant — never convert
+at the LEAF — but two of its three cells were not testing it: `localparam int A = (R == 2)` and
+`logic [$clog2(R)-1:0]` both HAVE a context boundary, so converting there is what the invariant
+PRESCRIBES. Kept the one cell that tests it, and added a positive one (`R > 2` with `R = 2.4` must
+still be TRUE, decided in the real domain rather than on a truncated 2).
+
+**⭐ Two pre-existing silent-wrongs closed as a side effect**, both the *"a bound that does not fold
+degrades quietly"* shape §4.5.380 hit one node over: `nonconst_bound_reason` had no `Cast` arm, so
+`logic [int'(NOPE)-1:0] v;` declared a 1-bit net at exit 0 while the bare `[NOPE-1:0]` twin was
+loud about that very name (the domain-twin detector again); and the `v[int'(R):0]` select above.
+
+**⭐ A lane the census missed.** Every grid cell named a `parameter real`; the LITERAL spelling is
+the same axis and the suite's own pin is what surfaced it — `int'(3.0)`, `$clog2(8.0)` and
+`int'(2.5)` in bounds all work now and all match iverilog.
+
+**⚠️ Demand is weaker evidence here than in the last four slices**: ZERO `parameter real` across
+the eight third-party corpus designs. That is partly a corpus limitation — it is synthesizable RTL,
+where real parameters are rare by nature; they live in testbenches, which the corpus does not
+contain — so it is recorded rather than used to kill the item. The item was owner-directed §0.
+
+**⚠️ Method note**: one sweep cell first read as a verilator REJECTION and was not — a 20 s
+watchdog killed a slow binary start. A watchdog kill is not an oracle verdict; re-run before
+scoring one.
+
+**Measurements**: grid A 16 cells (10 fixed, 4 splits held loud, 2 out of scope) · scope-parity
+sweep 12 cells (module/generate/package × 4 forms, all matching both oracles) · risk sweep 13 cells
+· adversarial batch 12 cells (5 newly correct, 7 residues **every one PRE-loud → POST-loud**, zero
+regressions) · the four shapes the withdrawn twin broke unchanged · examples 4/4 stdout+VCD
+byte-identical · corpus unchanged · 5,943 → **5,963 green** · format 29 unchanged.
+
+**Residues, all loud** (ROADMAP §0 T2 item 8): the four oracle splits · an untyped localparam with
+a real value (§6.20.2 makes it a REAL parameter — rounding it is the withdrawn silent-wrong) ·
+real override `#(.R(2.5))` · `1.0/0.0` · `localparam time T = R*2.0` (`param_decl_width_opt` sends
+`time` down its untyped branch, and that function is shared by eight sites) · `$rtoi` inside a
+const-function body (needs the env-aware walk, per the shadow above) · `int'(real'(R))`.
 
 
 #### 4.5.375 — The file name was never allowed to be a value; the hierarchical memory was built, measured, and reverted (2026-08-24 · 5,912 green · format 29 unchanged)

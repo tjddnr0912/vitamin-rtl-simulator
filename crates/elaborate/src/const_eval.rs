@@ -1135,6 +1135,18 @@ impl Elaborator<'_> {
             K::SysCall { name, .. } => {
                 Some(format!("a `{}` that is not a constant here", name.name))
             }
+            // A CAST is the same hole one node over, and the same detector found it:
+            // `logic [int'(NOPE)-1:0] v;` declared a SILENT one-bit net at exit 0
+            // while the bare `[NOPE-1:0]` twin was loud about that very name. Descend
+            // first, so the reason names what is actually wrong; then name the cast
+            // itself, because reaching this fn at all means the bound did not fold and
+            // a bound that does not fold must never degrade quietly. (A cast the const
+            // domain CAN fold — `int'(f(3))` through the const-function interpreter,
+            // or `int'(R)` through the real domain — returns before this fn is called,
+            // so naming it here cannot false-loud a bound that has a value.)
+            K::Cast { expr, .. } => {
+                r(self, expr).or_else(|| Some("a cast that is not a constant here".to_string()))
+            }
             // literals · Call · New · Dollar · Error: no bare net/hier
             // ref of their own (function calls are not descended — see doc).
             _ => None,

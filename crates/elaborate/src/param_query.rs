@@ -83,9 +83,51 @@ impl Elaborator<'_> {
         .is_some_and(|k| self.real_param_val.contains_key(&k))
     }
 
+    /// Is `e` an EXPLICIT real→integral conversion whose integer value this constant
+    /// domain can actually PROVE?
+    ///
+    /// Both halves are load-bearing. The syntactic half names the context boundary:
+    /// `int'(R)`, `$clog2(R)` and `$rtoi(R)` are integral by construction, so a
+    /// "does this read a real parameter" walk that descends through them is asking
+    /// about the wrong node. The `const_eval_in_scope` half is what keeps standing
+    /// down FAIL-CLOSED — the gate this feeds exists because a replication count
+    /// that does not fold becomes a SILENT 0-width replication, so a stand-down on
+    /// the syntax alone would trade the loud for exactly that failure. Standing down
+    /// only where a value has already been proved cannot.
+    ///
+    /// It deliberately does NOT cover an IMPLICIT conversion (a bare `R` in the same
+    /// position). That is not a gap: the two oracles disagree there and in opposite
+    /// directions — iverilog rejects `{R{1'b1}}` while verilator replicates 3 times,
+    /// and for `logic [R-1:0]` it is verilator that rejects while iverilog sizes 3.
+    /// An axis where the oracles split is one vita stays loud on.
+    fn real_conversion_is_folded(&self, e: &ast::Expr) -> bool {
+        let converts = match &e.kind {
+            ast::ExprKind::Paren { inner } => return self.real_conversion_is_folded(inner),
+            // `real'(…)` is excluded: its target is not integral, so it is not a
+            // boundary into this domain at all.
+            ast::ExprKind::Cast {
+                target: ast::CastTarget::Prim(p),
+                ..
+            } => cast_prim_wsign(*p).is_some(),
+            ast::ExprKind::SysCall { name, args } => {
+                args.len() == 1 && matches!(name.name.as_str(), "$clog2" | "$rtoi")
+            }
+            _ => false,
+        };
+        converts && self.const_eval_in_scope(e).is_some()
+    }
+
     /// r19: the `lower_expr`-resolver twin of [`Self::count_reads_real_param`], for
     /// consumers that lower their operand rather than const-folding it.
     pub(crate) fn count_lowers_real_param(&self, e: &ast::Expr) -> bool {
+        // An EXPLICIT real→integral conversion is where this walk has to stop: at an
+        // `int'()` cast or a `$clog2`/`$rtoi` call, everything below the node is real
+        // and the node itself is integral by construction (§6.24.1 / §20.8.1 /
+        // §20.10). Descending through it is what made `{int'(R){1'b1}}` loud on a
+        // design BOTH oracles answer 7.
+        if self.real_conversion_is_folded(e) {
+            return false;
+        }
         match &e.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
                 self.real_param_lowers_real(&p.segments[0].name)

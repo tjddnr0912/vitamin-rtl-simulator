@@ -112,16 +112,25 @@ fn clog2_signed_negative_arg_folds_unsigned_at_self_width() {
 }
 
 #[test]
-fn clog2_real_literal_arg_declines() {
-    // A REAL literal argument (`$clog2(8.0)`) must NOT be folded — the Const stores
-    // the raw f64 bit pattern, not an integer. It declines to a 0 count (base==fix),
-    // never a wrong non-zero (a naive read would give clog2(0x4020_0000_0000_0000)).
+fn clog2_real_literal_arg_folds_through_the_real_domain() {
+    // A REAL literal argument (`$clog2(8.0)`) is 3 — measured on iverilog 13.0 AND
+    // verilator 5.050.
+    //
+    // ⚠️ This pin used to assert a 0 count, on the reasoning that the `Const` holds
+    // an f64 bit pattern rather than an integer, so declining "never gives a wrong
+    // non-zero". But a 0 count is a SILENT 0-width replication — the exact failure
+    // this file's other cells were written to close — and both oracles print 3, so
+    // the old answer was not the safe side of the ladder, it was the quiet side.
+    //
+    // What was missing is a boundary, not a refusal: §20.8.1 has no bit pattern to
+    // read out of a real, so `$clog2` CONVERTS its argument (§6.24.1) and takes the
+    // log of that. The f64 never reaches the count — only the rounded integer does.
     let (out, c) = run("module m; logic [255:0] a; initial begin \
          a = {$clog2(8.0){1'b1}}; $display(\"R=%0d\", $countones(a)); #1 $finish; end endmodule\n");
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("R=0"),
-        "real-literal clog2 arg declines to 0, never a wrong non-zero; got:\n{out}"
+        out.contains("R=3"),
+        "a real-literal clog2 arg converts then takes the log (both oracles: 3); got:\n{out}"
     );
 }
 

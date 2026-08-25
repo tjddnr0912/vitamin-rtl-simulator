@@ -540,16 +540,25 @@ impl Elaborator<'_> {
                         str_vals.insert(p.name.name.clone(), raw);
                         continue;
                     }
-                    let v = self.const_eval_in_scope(&p.value).unwrap_or_else(|| {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            &format!(
-                                "package parameter `{}` value is not a foldable constant",
-                                p.name.name
-                            ),
-                        );
-                        0
-                    });
+                    // Branch parity with the module-body and generate twins: a
+                    // declared-integral package parameter whose initializer mentions a
+                    // real converts at the declaration (§6.24.1). The meta is
+                    // recomputed a few lines below for `const_meta`; asking twice is
+                    // cheaper than reordering a block whose restore list is positional.
+                    let pmeta = self.param_decl_width_unoverridden(p);
+                    let v = self
+                        .const_eval_in_scope(&p.value)
+                        .or_else(|| self.param_value_via_real(pmeta, &p.value))
+                        .unwrap_or_else(|| {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "package parameter `{}` value is not a foldable constant",
+                                    p.name.name
+                                ),
+                            );
+                            0
+                        });
                     saved.push((key.clone(), self.params.insert(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
                     // A package constant has no override channel.

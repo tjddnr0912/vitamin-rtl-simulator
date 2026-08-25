@@ -384,18 +384,40 @@ the call to a variable first (`x = f(arr);`) resolves all of them.
 real arithmetic (`R/2` divides in the real domain), and can be overridden with any
 value that folds to an integer.
 
-Where the language requires an **integral constant** — a select index, a range or
-width bound, a replication count, an array size, a memory address — a real is
-accepted only when its value is **exactly an integer** (`parameter real R = 4;`).
-A fractional value, or an expression over a real parameter, is rejected with
-[`VITA-E3009`](007_error-codes.md); convert it explicitly with `int'()` or
-`$rtoi()`. This is deliberate: rounding silently, or reading the f64 bit pattern
-as an integer, would produce a wrong answer with no diagnostic.
+Where the language requires an **integral constant** — a range or width bound, a
+replication count, a select range, the value of an integer-typed parameter — say
+which conversion you mean and it works:
 
-Not yet supported, and rejected loudly: a `parameter real` declared in an
-interface body or a generate scope, a hierarchical reference to another instance's
-real parameter, and `$clog2()` of a real **when the result feeds a width or a
-replication count** (`$clog2(R)` on its own evaluates normally).
+```systemverilog
+localparam real R = 3.5;
+logic [int'(R)-1:0]   v;   // 4 bits — int'() rounds half AWAY from zero (§6.24.1)
+logic [$clog2(R)-1:0] w;   // 2 bits — converts first, then takes the log
+wire  [7:0] x = {int'(R){1'b1}};
+localparam int  N = $rtoi(R);   // 3 — $rtoi TRUNCATES where a cast rounds
+localparam int  M = R * 2.0;    // 7 — a declared integral type is a boundary too
+```
+
+The whole expression is evaluated in the **real** domain and only the converted
+result becomes an integer, so `R/2` is still `1.75` and a `generate if (R/2 > 1)`
+still tests `1.75 > 1`. Converting the real at the leaf instead would decide that
+branch on the wrong value, silently — which is why an implicit conversion is the
+one spelling that stays rejected:
+
+```systemverilog
+logic [R-1:0] y;          // VITA-E3009
+wire  [7:0] z = {R{1'b1}};  // VITA-E3009
+```
+
+That refusal is not a missing feature. The reference tools disagree about these,
+in opposite directions: iverilog sizes `[R-1:0]` as 3 bits while Verilator rejects
+the design outright, and for `{R{1'b1}}` iverilog rejects while Verilator
+replicates. With no agreed answer to match, vita asks you to write the conversion.
+
+Also still rejected loudly: a `parameter real` declared in an interface body, a
+hierarchical reference to another instance's real parameter, **overriding** a
+parameter with a real value (`#(.R(2.5))`), a real value in an untyped parameter
+that is then used as an integer (`localparam M = R/2.0;` — an untyped parameter
+takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`.
 
 > **Known limit — an enum whose label names a `parameter` has no working methods.**
 > `typedef enum { A = K, B = K+1 }` with a module `parameter K` parses and the VALUES

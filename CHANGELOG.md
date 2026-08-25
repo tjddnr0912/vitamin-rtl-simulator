@@ -57,6 +57,35 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A `real` constant could not reach an integer context, even when you wrote the
+  conversion.** `logic [int'(R)-1:0] v;`, `{int'(R){1'b1}}`, `$clog2(R)` in a width, and
+  `localparam int M = R*2.0;` were all rejected with `VITA-E3009` — while this manual told
+  users to "convert it explicitly with `int'()` or `$rtoi()`", advice that did not work.
+  All of them now fold, matching both iverilog and Verilator, at module, `generate` and
+  package scope alike. `int'()` rounds half **away from zero** (`int'(-2.5)` is −3) and
+  `$rtoi` truncates, per §6.24.1 and §20.10.
+
+  The expression is evaluated **whole in the real domain** and only the converted result
+  becomes an integer, so `R/2` is still `1.75` and `generate if (R/2 > 1)` still tests
+  `1.75 > 1`. An earlier attempt converted at the leaf instead and silently picked the
+  wrong `generate` branch; that is why an IMPLICIT conversion (a bare `R` in a width bound
+  or a replication count) stays rejected. It is not a missing feature — the two reference
+  tools disagree about those, in opposite directions: iverilog sizes `[R-1:0]` while
+  Verilator rejects the design, and for `{R{1'b1}}` iverilog rejects while Verilator
+  replicates. With no agreed answer, vitamin asks you to write the conversion.
+
+- **`v[int'(<real param>):0]` selected one bit, silently.** A part-select whose bound was
+  an explicitly converted real read a single bit at exit 0 where iverilog reads the whole
+  range (`v[int'(3.5):0]` is `v[4:0]`). Same root as the next entry.
+
+- **An unfoldable cast in a declaration bound declared one bit, silently.** `logic
+  [int'(NOPE)-1:0] v;` ran at exit 0 with a 1-bit net, while the bare `[NOPE-1:0]` twin was
+  already loud about that same undefined name. A bound that cannot be folded is now loud
+  whatever node it is written with.
+
+- **`$clog2` of a real literal produced an empty replication.** `{$clog2(8.0){1'b1}}`
+  replicated **zero** times at exit 0; both oracles replicate 3.
+
 - **`$bits(<expression>)` used as a packed declaration bound silently declared one bit.**
   `wire [$bits(8'h00)-1:0] c;` produced a 1-bit net, so an 8-bit assignment truncated to
   `1` at exit 0 in every backend — and on a port it truncated across the module boundary.

@@ -330,6 +330,13 @@ impl Elaborator<'_> {
                 // constant-function interpreter answered 0 for the same text.
                 self.const_clog2_selfdet(&args[0], &BTreeMap::new(), &ConstWidths::new(), 0)
             }
+            // §20.10 `$rtoi` TRUNCATES toward zero where a cast rounds, so it gets its
+            // own spelling rather than sharing the cast's: `$rtoi(2.9)` is 2 and
+            // `int'(2.9)` is 3 (both oracles). A wholly integral argument is already
+            // its own truncation and keeps the integer walk.
+            ast::ExprKind::SysCall { name, args } if name.name == "$rtoi" && args.len() == 1 => {
+                self.const_rtoi_via_real(&args[0])
+            }
             // v7 P2-D: `pkg::sym` in const contexts.
             ast::ExprKind::PkgScoped { pkg, name } => self
                 .pkg_consts
@@ -493,7 +500,27 @@ impl Elaborator<'_> {
         envw: &ConstWidths,
         depth: u32,
     ) -> Option<i64> {
-        let n = self.const_unsigned_selfdet(arg, env, envw, depth)?;
+        let n = match self.const_unsigned_selfdet(arg, env, envw, depth) {
+            Some(n) => n,
+            // §20.8.1 reads the argument's BIT PATTERN at its own width — and a real
+            // has no width to read one out of. What both oracles do instead is the
+            // §6.24.1 conversion first and `$clog2` of THAT: `$clog2(2.4)` is 1
+            // (2.4 rounds to 2) and `$clog2(0.5)` is 0 (0.5 rounds to 1). A negative
+            // result would need the unsigned reading this branch just established it
+            // does not have, so it stays loud rather than inventing a width for it.
+            // ⚠️ Gated on an EMPTY env for the same reason the walk's catch-all is:
+            // `const_int_via_real` resolves names at MODULE scope, so inside a
+            // function body — where `env`/`envw` are never empty — it would read a
+            // module `real` through an integer local of the same name. That exact
+            // shadow was measured on the `$rtoi` sibling and cost a loud →
+            // silent-wrong. A real LOCAL is not modelled in this env anyway, so the
+            // gate costs nothing it could otherwise have answered.
+            None if env.is_empty() && envw.is_empty() => match self.const_int_via_real(arg) {
+                Some(v) if v >= 0 => v as u64,
+                _ => return None,
+            },
+            None => return None,
+        };
         Some(if n <= 1 {
             0
         } else {
@@ -592,7 +619,19 @@ impl Elaborator<'_> {
             // would be a claim this domain has not earned.
             ast::CastTarget::Prim(p) => {
                 let (w, s, _) = cast_prim_wsign(*p)?;
-                Some(coerce_int_width(self.const_eval_in_scope(operand)?, w, s))
+                let v = match self.const_eval_in_scope(operand) {
+                    Some(v) => v,
+                    // `int'(<real>)` IS the conversion the source asked for, and this
+                    // cast node is the context boundary §6.24.1 names — so the operand
+                    // folds WHOLE in the real domain and only the rounded result
+                    // crosses into the integer one. The integer domain is asked first
+                    // and this is a FALLBACK, so a wholly integral operand keeps its
+                    // own width semantics (`int'(4'd15 + 4'd1)` stays the 4-bit 0).
+                    // `real'` never reaches here: `cast_prim_wsign` has no integral
+                    // (width, sign) for it and returned above.
+                    None => self.const_int_via_real(operand)?,
+                };
+                Some(coerce_int_width(v, w, s))
             }
             // `N'(e)`: the operand runs at `max(its self width, N)` and the result is
             // delivered in N bits with the operand's signedness (IEEE §6.24.1 /
@@ -736,6 +775,16 @@ impl Elaborator<'_> {
                 // comment above tells the same story for the same reason).
                 self.const_clog2_selfdet(&args[0], env, envw, depth)
             }
+            // ⚠️ NO `$rtoi` arm here, deliberately — mirroring the module-scope one
+            // was tried and it was a MEASURED silent-wrong: `const_rtoi_via_real`
+            // resolves names at module scope, so a body whose integer FORMAL shadows
+            // a module `real` of the same name read the parameter instead of the
+            // argument (`function int f(int N); f = $rtoi(N);` with `localparam real
+            // N = 3.9;` folded `f(9)` to 3 where iverilog gives 9 — and PRE was
+            // loud, so that is loud → silent-wrong). Falling through to the catch-all
+            // below is not a gap: that arm delegates to the module-scope fold, which
+            // HAS the `$rtoi` arm, under a guard that already proves nothing local
+            // can be shadowed. The shadow rule belongs to the walk that owns `env`.
             // A nested call's ARGUMENTS are expressions in THIS body, so they must
             // be sized with THIS body's widths — handing over an empty map made
             // `g((b + b) / 8'sd3)` size `b` as 32 bits and compute 66 instead of

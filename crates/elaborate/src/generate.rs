@@ -514,7 +514,14 @@ impl Elaborator<'_> {
                 // A generate-scope parameter has no override channel, so its
                 // declared default is always what binds.
                 let meta = self.param_decl_width_unoverridden(p);
-                match self.const_eval_in_scope(&p.value) {
+                // Branch parity with the module-body twin: a declared-integral
+                // parameter whose initializer mentions a real converts at the
+                // declaration (§6.24.1). Without this the same text answered 6 at
+                // module scope and went loud one `generate` deeper.
+                match self
+                    .const_eval_in_scope(&p.value)
+                    .or_else(|| self.param_value_via_real(meta, &p.value))
+                {
                     Some(v) => {
                         // The width the caller just resolved, not a re-derivation:
                         // this scope has no override channel, so `meta` is authoritative.

@@ -543,36 +543,61 @@ fn const_fn_width_folds_transitively_and_sees_nested_decls() {
     );
 }
 
-/// A real-valued bound or count has no integral constant value in this domain.
-/// `const_eval_cast` folds its operand with `const_eval_in_scope`, which does not
-/// model reals, so a real never sneaks through the new cast arm as an integer —
-/// these stay LOUD exactly as they were.
+/// An IMPLICIT real in a bound or a count stays LOUD — and after §0 T2 the reason
+/// is a measurement rather than a limitation: both oracles reject `v[R:0]`, and on
+/// `{R{1'b1}}` they SPLIT (iverilog rejects, verilator replicates 3 times).
+///
+/// ⚠️ `{int'(R){1'b1}}` used to be in this list on the grounds that
+/// `const_eval_cast` folds through `const_eval_in_scope`, "which does not model
+/// reals, so a real never sneaks through as an integer". That is exactly what §0 T2
+/// changed, and the sneaking was never the hazard: an `int'()` is the conversion
+/// §6.24.1 defines, so the operand folds WHOLE in the real domain and only the
+/// rounded result reaches the count. Pinned by value below.
 #[test]
-fn real_bounds_and_counts_stay_loud() {
-    for expr in ["{int'(R){1'b1}}", "v[R:0]", "{R{1'b1}}"] {
+fn an_implicit_real_bound_or_count_stays_loud() {
+    for expr in ["v[R:0]", "{R{1'b1}}"] {
         let (out, c) = run(&format!(
             "module m; parameter real R = 3.5; logic [15:0] v; logic [63:0] q;\n\
              initial begin v = 16'hABCD; q = 0; $display(\"Y=%h\", {expr}); \
              #1 $finish; end endmodule\n"
         ));
-        assert_ne!(c, Some(0), "real in `{expr}` must be loud; got:\n{out}");
+        assert_ne!(
+            c,
+            Some(0),
+            "implicit real in `{expr}` must be loud; got:\n{out}"
+        );
     }
 }
 
-/// PRE-EXISTING and unchanged by this slice (measured identical on a PRE build):
-/// an `int'(<real param>)` BOUND is a legal integral expression that iverilog
-/// evaluates (`v[int'(3.5):0]` = `v[4:0]`), but vita reads a silent 1-bit slice.
-/// The value is unreachable here because the const domain has no real arithmetic
-/// — the tracked `real` const-fold work (ROADMAP §0 T2) is its prerequisite, so
-/// this pins the CURRENT behavior rather than asserting correctness.
+/// R = 3.5 rounds AWAY from zero to 4, so the count is four ones = `f`. iverilog
+/// agrees, and the rounding is what distinguishes this from a truncation (which
+/// would give `7`).
 #[test]
-fn int_cast_of_real_param_bound_is_a_tracked_preexisting_gap() {
+fn an_explicitly_converted_real_count_folds() {
+    let (out, c) = run("module m; parameter real R = 3.5; logic [63:0] q;\n\
+         initial begin q = 0; $display(\"Y=%h\", {int'(R){1'b1}}); \
+         #1 $finish; end endmodule\n");
+    assert_eq!(c, Some(0));
+    assert!(
+        out.contains("Y=f"),
+        "int'(3.5) is a count of 4; got:\n{out}"
+    );
+}
+
+/// ⭐ This pin named its own prerequisite — *"the tracked `real` const-fold work
+/// (ROADMAP §0 T2) is its prerequisite, so this pins the CURRENT behavior rather
+/// than asserting correctness"* — and §0 T2 is the slice that supplied it.
+///
+/// The behaviour it was pinning was a SILENT one: `v[int'(3.5):0]` read ONE bit at
+/// exit 0 where iverilog reads `v[4:0]` = `0d`. Now both give `0d`.
+#[test]
+fn int_cast_of_real_param_bound_selects_the_converted_range() {
     let (out, c) = run("module m; parameter real R = 3.5; logic [15:0] v;\n\
          initial begin v = 16'hABCD; $display(\"Y=%h\", v[int'(R):0]); \
          #1 $finish; end endmodule\n");
     assert_eq!(c, Some(0));
     assert!(
-        out.contains("Y=1"),
-        "tracked gap: iverilog gives 0d (v[4:0]); vita still reads 1 bit; got:\n{out}"
+        out.contains("Y=0d"),
+        "int'(3.5) is 4, so this is v[4:0] = 0d (iverilog agrees); got:\n{out}"
     );
 }
