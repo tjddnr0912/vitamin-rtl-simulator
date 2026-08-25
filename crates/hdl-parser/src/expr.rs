@@ -308,14 +308,29 @@ impl Parser<'_, '_> {
         // exists `p.hi[3:0]` (which every tool accepts) and `a[7:0][3:0]` are the same
         // shape. Only here is it still known that the chain began at a name.
         let from_name = matches!(e.kind, ExprKind::Ident(_));
+        // ⚠️ `from_name` is decided ONCE, from the primary, and that leaves a hole this
+        // loop has to close separately: `a[7:0][3:0]` starts at a name, so every select
+        // in the chain inherited "legal" and the second one went unwarned while vita
+        // silently returned the whole `a`. iverilog states the real rule precisely —
+        // "All but the final index in a chain of indices must be a single value, not a
+        // range" — and that is decidable right here with no type information: a
+        // non-final select that is a RANGE is the illegal shape. Tracking it separately
+        // is what keeps `mem[1][3:0]` (index then part-select, which every tool accepts
+        // and which appears everywhere) out of the warning.
+        let mut prev_select_was_range = false;
         loop {
             match self.peek() {
                 Some(TokenKind::LBracket) => {
-                    if !from_name {
+                    if !from_name || prev_select_was_range {
                         let span = e.span;
                         self.warn_select_base(span);
                     }
-                    e = self.parse_select(e)
+                    e = self.parse_select(e);
+                    prev_select_was_range = matches!(
+                        e.kind,
+                        ExprKind::PartSelect { .. } | ExprKind::IndexedPart { .. }
+                    );
+                    continue;
                 }
                 // N6B: a METHOD call on an indexed array ELEMENT (`files[i].len()`,
                 // `arr[k].substr(a,b)`). A `name[idx]` select followed by `.ident(` is a

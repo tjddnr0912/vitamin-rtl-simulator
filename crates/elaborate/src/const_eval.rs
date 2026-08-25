@@ -1123,7 +1123,19 @@ impl Elaborator<'_> {
                 }
                 None
             }
-            // literals · SysCall · Call · New · Dollar · Error: no bare net/hier
+            // A SYSTEM CALL that did not fold. Reaching here means the bound was not
+            // constant, so this is the last chance to say why — and the catch-all below
+            // used to swallow it into a SILENT width-1 net. `wire [$bits(X)-1:0] c;`
+            // declared a ONE-BIT net whenever the `$bits` argument was a shape the
+            // constant domain could not see, truncating an 8-bit assignment to 1 at
+            // exit 0 in every backend, and doing it across a module boundary when the
+            // bound was on a port. It did that even for `$bits(<undeclared name>)`.
+            // The width-folding half of this is fixed (`bits_of_selfdet`), but a bound
+            // must not degrade silently for the shapes that remain, so name the call.
+            K::SysCall { name, .. } => {
+                Some(format!("a `{}` that is not a constant here", name.name))
+            }
+            // literals · Call · New · Dollar · Error: no bare net/hier
             // ref of their own (function calls are not descended — see doc).
             _ => None,
         }

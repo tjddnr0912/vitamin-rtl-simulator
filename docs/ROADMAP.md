@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, **Phase A~D 실행 기록(§5.1-x · 슬라이스 59건)은 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(셋 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-08-24)**: format_version **29** · **5,935 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
+> **기준선(2026-08-24)**: format_version **29** · **5,943 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -710,6 +710,23 @@
 > `x[-1:0] = …` 은 *"out of order"* 라는 **사실과 다른 방향 진단**으로 loud). ③ **packed 음수 dim 의 비트 선택**
 > = §2 의 `dim_coord` 항목과 같은 뿌리.
 
+> **✅ 외부 리포트 2건 — round-32(hash_top) · aes_top (2026-08-25 · §4.5.380).**
+> 둘 다 `6c4be81` 기준이라 **HEAD(4 슬라이스 뒤)에서 전 항목 재현부터** 했다([[external-report-fresh-probe-triage]]).
+> **해결 4 · 기록 6.**
+>
+> | 항목 | 판정 |
+> |---|---|
+> | **N32-1** `$bits(<식>)` 을 packed 선언 바운드로 → **조용히 1비트** | ✅ **FIXED** — silent-wrong. 값 fold(`bits_of_selfdet`: 리터럴·concat·replication, **leaf 는 전부 `bits_of_view`** = 이미 도는 `$bits(<이름>)` 과 같은 resolver) + **못 접는 형태는 loud**(`nonconst_bound_reason` 의 SysCall arm — `$bits(<미선언 이름>)` 조차 1비트 net 을 조용히 만들고 있었다). 포트 바운드라 **모듈 경계를 넘어** 8비트 actual 이 잘렸다 |
+> | **N32-3** 거절 진단이 §4.5.374 가 **지운 규칙**을 인용 + 캐럿이 문장 머리 | ✅ **FIXED** — ⚠️ **같은 죽은 규칙을 인용하는 자리가 둘**이었다(`$fgetc` 계열 `(v9)` · `$value$plusargs` `(v7)`), 그리고 **이유가 서로 다르다**(평가 **횟수** vs ref **쓰기 순서**) ⇒ 문장도 둘. 캐럿을 **호출**로 |
+> | **aes §4** `a[7:0][3:0]` 이 W2004 를 안 낸다 | ✅ **FIXED** — ⭐ iverilog 의 문구가 규칙을 정확히 준다(*"All but the final index in a chain of indices must be a single value, not a range"*)라 **파싱 시점에 판정 가능**. ⚠️ *"두 번째 select 면 경고"* 는 **틀린다** — `mem[i][3:0]`(인덱스 후 select)은 어디서나 합법이고 도처에 있다 ⇒ 판별자는 **직전 select 가 range 였는가** |
+> | **aes §5** 진단 둘이 한 사건에 **모순** | ✅ **FIXED** — `128'hdead…` 는 상수인데 *"is not a constant; default kept"* 였고 실제로는 companion 검사가 **error** 를 낸다 ⇒ **wide 리터럴**만 새 문구로 분리. ⚠️ 진짜로 default 가 유지되는 경우(`#(.W(sig))`)는 **옛 문구가 참**이고 핀이 있다 |
+> | **aes §1** 상수 도메인이 **값 2⁶³ 로 두 레인**, 혼합 거부 | 📌 **기록** — 리포트의 축 규명이 정확하다(폭이 아니라 값). 이 중 **reduction 부재는 §3 ⑦**(§4.5.373 이 지어서 되돌림), **wide `+`/비교·select 폭 상한**은 §2 의 *"파라미터 값이 주장 폭에서 canonical 하지 않다"* 벽과 같은 축 ⇒ **한 슬라이스 아님** |
+> | **aes §2** 인라이너 판별자가 `automatic` 만이 아니다 | 📌 **기록 + CHANGELOG 정정** — 자체 실측 확인: plain 3/5 · `automatic`·`for`·`if`·`case` **전부 1/5** · `p::f()` 2/5. CHANGELOG 표가 *"one keyword"* 라 했는데 **거짓**이었다(그 표 자체가 08-18 정정본이다) ⇒ **8행 표로 재작성**. 인라이너 확장은 §3 |
+> | **aes §3** `always_comb` 구동 변수의 선언 초기화자 무경고 | 📌 **기록** — ⚠️ **iverilog 도 통과시킨다**(실측) ⇒ 2-오라클 결함이 아니라 **lint 기회**(xrun·verilator 는 error). W2004 급 경고 한 줄이 요청 |
+> | **R30-1** 빠진 패키지 → E2002 7줄, 패키지 이름 0줄 | 📌 **기록** — tf-port 자리의 `IDENT::IDENT` 는 스코프 타입일 수밖에 없으므로 파서가 타입으로 받고 elaborate 가 *"unknown package"* 를 말하면 7줄이 1줄이 된다. 파서 작업 |
+> | **R30-2** unpacked-array 원소 LHS 인 cont-assign 에서 native 가 vm 에 **1.88×** | 📌 **기록** — 성능 축. §4 표의 `keccak_f_arr`(코퍼스 최악 0.53×)와 **같은 축**으로 보이고, 이쪽은 **자기 vm 과의 비교**라 오라클이 필요 없다. `perf_baseline.rs` 에 **그 형태의 row 가 없다** |
+> | **N32-2** replication count 의 **typed 철자**는 width twin 선행조건이 없다 | 📌 **기록(§3 ②)** — 좁힘 관찰: 폭이 선언에 있으므로 ⓐ 는 불필요, ⓑⓒ 는 남는다 |
+
 > **✅ 외부 리포트 aes_top 2판 — 16항목 중 15 해결 (2026-08-07 · §4.5.313).** unpacked
 > 배열 포트 · 선택적 import 의 패키지-스코프 해석 · `pkg::f()` 제약 완화 · 콤마 import ·
 > 포트 연결의 사용자 함수 · `RPS'()` 폴딩 · string 파라미터 · 64비트 초과 파라미터 ·
@@ -1073,7 +1090,7 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,935 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-25 · ARCHIVE §4.5.379) |
+| 게이트 | **5,943 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-25 · ARCHIVE §4.5.380) |
 
 ### 다음 후보 — 우선순위 순
 

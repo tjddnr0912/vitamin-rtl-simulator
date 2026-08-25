@@ -28,16 +28,60 @@ changed for a user of the simulator.
   costs nothing: vitamin inlines them during elaborate." An external report measured
   **12–16%** on a function-heavy AES design, with **`user_call_in_expr` 87% of the
   rejections** and `delay` a rounding error — and they were right. Re-measured here, the
-  discriminator is one keyword, not package-vs-module:
+  discriminator is not package-vs-module.
 
-  | function form | inlined during elaborate? |
-  |---|---|
-  | `function f(…)` (module- or package-scope) | **yes** — no `Expr::Call` survives |
-  | `function automatic f(…)` | **no** — lowered to a frame body; the caller's process is rejected with `user_call_in_expr` |
+  ⚠️ **Corrected again 2026-08-25.** The 08-18 correction replaced one wrong claim with a
+  narrower one — "the discriminator is one keyword" — and a second external report
+  measured that too. It is not one keyword. **Control flow in the body blocks inlining
+  just as `automatic` does**, and a package-QUALIFIED call blocks it at the call site.
+  Re-measured here on one call shape (`always_comb b = f(a);` + `always_ff c <= f(a);`),
+  varying only the body or the spelling:
 
-  `automatic` is what costs, and it is also what a style guide asks for. picorv32, which
-  uses neither form, still measures 65/68. Widening the inliner to non-recursive
-  `automatic` functions is filed in ROADMAP §3.
+  | function form / call spelling | inlined during elaborate? | `able` |
+  |---|---|---|
+  | `function f(…)`, straight-line body | **yes** — no `Expr::Call` survives | 3/5 |
+  | …with a local variable, or calling another function | **yes** | 3/5 |
+  | …containing `for` | **no** | 1/5 |
+  | …containing `if` / `else` | **no** | 1/5 |
+  | …containing `case` | **no** | 1/5 |
+  | `function automatic f(…)`, straight-line body | **no** — lowered to a frame body | 1/5 |
+  | `import p::*;` then `pf(a)` | **yes** | 3/5 |
+  | `p::pf(a)` (qualified) | **no** — that process only | 2/5 |
+
+  So on real RTL `automatic` is rarely the binding constraint: the reporting design has 24
+  `function automatic` in its RTL, and removing the keyword from all 24 moved
+  `user_call_in_expr` from 262 to 261 — **0.4%** — because 16 of those 24 contain `for` or
+  `case`, which is what a cryptographic combinational function looks like. Widening the
+  inliner to control-flow bodies (or opening `Terminator::Call` in `is_codegen_able`) is
+  filed in ROADMAP §3; the qualified-call gap is its own row.
+
+### Fixed
+
+- **`$bits(<expression>)` used as a packed declaration bound silently declared one bit.**
+  `wire [$bits(8'h00)-1:0] c;` produced a 1-bit net, so an 8-bit assignment truncated to
+  `1` at exit 0 in every backend — and on a port it truncated across the module boundary.
+  The same call already answered 8 at runtime and 8 as an unpacked dimension, so one source
+  line had three answers. It now folds for a literal, a concatenation and a replication;
+  shapes the constant domain still cannot see are LOUD instead of silently one bit
+  (previously even `$bits(<undeclared name>)` declared a 1-bit net). Reported externally.
+
+- **Two rejection diagnostics quoted a restriction that had been removed.** The file-read
+  system functions and `$value$plusargs` both said they are "supported only as the direct
+  rhs of a blocking assignment", which stopped being true when those calls were opened for
+  `if` conditions, `case` scrutinees, nonblocking right-hand sides and more. Following the
+  message made a user revert working code. Both now state their actual — and different —
+  reasons, and the caret points at the call rather than at the enclosing statement.
+
+- **`a[7:0][3:0]` produced no portability warning** while `(a^b)[3:0]` did, even though the
+  same `W2004` text says iverilog rejects every form. iverilog states the rule exactly —
+  all but the final index in a chain must be a single value, not a range — so the warning
+  now covers it. `mem[i][3:0]`, which is legal everywhere, stays silent.
+
+- **Two diagnostics contradicted each other on one event.** A parameter override wider than
+  the 64-bit override channel warned "is not a constant; default kept" while a companion
+  check errored — it is a constant, and no default was kept. The wide-literal case is now
+  named for what it is; a genuinely non-constant override still reports that its default
+  was kept, because there that is true.
 
 ### Fixed
 

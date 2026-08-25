@@ -64,8 +64,8 @@ fn loud(decls: &str, body: &str) {
         "expected a loud reject, not {code:?}:\n{out}"
     );
     assert!(
-        err.contains("direct rhs of a blocking assignment"),
-        "expected the direct-rhs diagnostic, got:\n{err}"
+        err.contains("DIFFERENT NUMBER OF TIMES"),
+        "expected the evaluation-count diagnostic, got:\n{err}"
     );
 }
 
@@ -226,10 +226,14 @@ fn a_loop_condition_stays_loud() {
 fn a_ref_write_read_elsewhere_in_the_statement_stays_loud() {
     // The hoist moves the write BEFORE the surrounding expression, so the `n` left behind
     // would read the post-call value where iverilog reads the pre-call one (99).
-    loud(
+    // ⚠️ Its diagnostic is `$value$plusargs`-specific (the reason is the out-of-order
+    // WRITE, not the evaluation count), so it does not share `loud`'s needle.
+    let (out, code, err) = run(&design(
         "",
         "    n = 99;\n    r = n + $value$plusargs(\"N=%d\", n);\n    $display(\"VAL=%0d %0d\", r, n);",
-    );
+    ));
+    assert_eq!(code, Some(1), "expected a loud reject:\n{out}");
+    assert!(err.contains("observe that write out of"), "{err}");
 }
 
 #[test]
@@ -267,7 +271,10 @@ fn a_monitor_argument_stays_loud() {
         "    $monitor(\"VAL=%0d\", $fgetc(fd));\n    #1 k = 1;",
     ));
     assert_eq!(code, Some(1), "expected a loud reject");
-    assert!(err.contains("direct rhs of a blocking assignment"), "{err}");
+    // ⚠️ `$monitor` is the case that proves the message must not say "a task argument is
+    // supported": this IS a task argument, and it is correctly refused because `$monitor`
+    // re-renders. The first wording of the corrected message overclaimed exactly here.
+    assert!(err.contains("re-rendered on every later change"), "{err}");
 }
 
 // ── what already worked must keep working ────────────────────────────────────────

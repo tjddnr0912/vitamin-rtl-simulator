@@ -2316,3 +2316,42 @@ obvious place to register instead of a fourth `||`. Same move as
 ⚠️ Both were found by the slice's OWN soundness lens, not by the suite — the suite went green with
 both defects present, because no test had ever paired a string parameter with those two contexts.
 A green suite is coverage, not proof ([[removing-a-defensive-check-needs-a-producer-census]]).
+
+### ★★★ **A diagnostic's text is a claim, and it decays when the slice that made it true is superseded**
+
+2026-08-25 (§4.5.380), from an external report. §4.5.374 removed the "direct rhs of a
+blocking assignment" restriction on the file-read system functions. The **diagnostics that
+state that restriction were not touched**, so for a month vita told users that working code
+was illegal — the report's tester correctly noted that following the message would make
+them revert four spellings that pass today. The `(v9)` tag pointed at the rule of the day
+rather than at today's.
+
+Three things generalise.
+
+**One removed rule can be quoted in several places, and they need not share a reason.** Two
+sites carried it here — the file-read family and `$value$plusargs` — and they reject for
+*different* reasons: the first because a hoist would change how many times the call runs,
+the second because it would move a ref write ahead of a read in the same statement. A
+single find-and-replace would have made one of them false again. ⇒ **When a slice lifts a
+restriction, grep the diagnostic text for the restriction's wording, and re-derive each
+site's reason separately.**
+
+**A corrected message is a new claim and needs the same measurement as a code change.** My
+replacement said "a task argument … is supported" — and `$monitor`'s argument is a task
+argument that is correctly refused, because `$monitor` re-renders and would show the frozen
+temporary. An existing pin caught it. ⇒ **Write the replacement against the cases that
+still reject, not against the ones the slice opened.** The rule that survived contact was
+not a list of positions at all but a principle: the call must run *the same number of times
+as written*.
+
+**The caret is part of the claim.** These pointed at the statement head, so a multi-line
+condition sent the reader to the `if` rather than to the offending call — while the
+queue-pop diagnostic one module away already did it correctly. ⇒ Point at the operand the
+message is about, and when a neighbour already does, copy it.
+
+⭐ Corollary for external reports, and the reason [[external-report-fresh-probe-triage]]
+keeps paying: this report was filed four slices back, and re-running every item at HEAD is
+what separated "still true" (N32-1, and both stale texts) from "already fixed" and from
+"true but not a defect" — its `always_comb`-initializer item is accepted by iverilog too,
+so it is a lint request, not a two-oracle bug, and recording it as the latter would have
+put a false row in the queue.

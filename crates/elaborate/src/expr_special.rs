@@ -580,6 +580,43 @@ impl Elaborator<'_> {
     /// the current module's nets are not in the real table yet — the
     /// decl-order prescan is the authority there. At runtime the real table
     /// resolves first (it sees generate-scoped shadows the prescan doesn't).
+    /// `$bits` of a SELF-DETERMINED expression, in the `&self` constant domain.
+    ///
+    /// The runtime path (`lower_bits_fold`) answers these by lowering the argument and
+    /// reading the resulting node's width; the constant domain cannot, because lowering
+    /// needs `&mut self` and would leave arena nodes behind at elaborate time. So this is
+    /// the `&self` twin, and it is deliberately narrow: literals carry their own width,
+    /// concatenation sums its parts, replication multiplies (§11.4.12), and EVERY other
+    /// leaf — a name, an array view — is handed to `bits_of_view`, the same resolver the
+    /// already-working `$bits(<name>)` case uses. Routing leaves anywhere else would let
+    /// this walk and the lowering disagree about what a name means, which is the shape
+    /// `classifier-must-match-its-lowering-resolver` names.
+    ///
+    /// ⚠️ NOT `const_self_width`: that walk resolves a bare name through `param_meta`,
+    /// whose widths are a mix of declared and value-inferred, and §4.5.373 measured that
+    /// a parameter's recorded value is not canonical at its recorded width. Reusing it
+    /// here would import that unsoundness into a width that declares nets.
+    pub(crate) fn bits_of_selfdet(&self, e: &ast::Expr) -> Option<u32> {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.bits_of_selfdet(inner),
+            ast::ExprKind::IntLit { kind, raw } => {
+                crate::literal::parse_int_literal(raw, *kind).map(|c| c.width)
+            }
+            ast::ExprKind::Concat { parts } => parts
+                .iter()
+                .try_fold(0u32, |acc, p| acc.checked_add(self.bits_of_selfdet(p)?)),
+            ast::ExprKind::Replicate { count, value } => {
+                let n = const_eval_u32(count)?;
+                let one = value
+                    .iter()
+                    .try_fold(0u32, |acc, p| acc.checked_add(self.bits_of_selfdet(p)?))?;
+                n.checked_mul(one)
+            }
+            _ => self.bits_of_view(e, true),
+        }
+        .filter(|&w| w > 0)
+    }
+
     pub(crate) fn bits_of_view(&self, e: &ast::Expr, prescan_first: bool) -> Option<u32> {
         if let ast::ExprKind::Paren { inner } = &e.kind {
             return self.bits_of_view(inner, prescan_first);

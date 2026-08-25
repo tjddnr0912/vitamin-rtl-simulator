@@ -1076,10 +1076,36 @@ impl Elaborator<'_> {
                                 fill.as_ref(),
                                 text.as_ref(),
                             ) {
-                                self.warn(&format!(
-                                    "override of parameter `{}` is not a constant; default kept",
-                                    name.name
-                                ));
+                                // ⚠️ Two different events reach here and they need
+                                // different sentences (external report, aes_top §5).
+                                //
+                                // A genuinely NON-CONSTANT override (`#(.W(sig))`) really
+                                // is dropped and elaboration continues, so "default kept"
+                                // is both true and the thing to say — pinned by
+                                // `an_override_that_really_is_dropped_still_warns`.
+                                //
+                                // A WIDE LITERAL (`#(.K(128'hdead…))`) is a different
+                                // event wearing the same words: it IS a constant, it just
+                                // does not fit the integer channel an override travels in,
+                                // and for a header parameter the companion check in
+                                // `params.rs` turns it into an ERROR — so nothing is
+                                // "kept" and the two diagnostics contradicted each other
+                                // on one event. Name that one for what it is.
+                                let wide_literal = Self::override_is_wide_literal(e);
+                                if wide_literal {
+                                    self.warn(&format!(
+                                        "the override of parameter `{}` is a constant \
+                                         WIDER than the 64-bit integer channel a parameter \
+                                         override travels in, so it cannot be applied",
+                                        name.name
+                                    ));
+                                } else {
+                                    self.warn(&format!(
+                                        "override of parameter `{}` is not a constant; \
+                                         default kept",
+                                        name.name
+                                    ));
+                                }
                             }
                         }
                         r

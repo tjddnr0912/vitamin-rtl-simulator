@@ -1103,13 +1103,31 @@ impl Elaborator<'_> {
                     );
                     return self.placeholder_expr();
                 }
-                // v7: $value$plusargs writes its ref var — direct-rhs only.
+                // ⚠️ Same stale rule as the file-read family below: §4.5.374's hoist
+                // opened `if` conditions, `case` scrutinees and the rest for this call
+                // too, so "direct rhs only (v7)" stopped being true and reading it
+                // literally sent users to rewrite working code. What is refused is
+                // narrower, and it is a different reason from the file-read family's:
+                // this call WRITES its second argument, and the hoist evaluates it
+                // ahead of the surrounding expression, so any other read of that same
+                // variable in the same statement would see the post-call value where
+                // both oracles see the pre-call one.
                 if name.name == "$value$plusargs" {
+                    let saved = self.cur_span;
+                    self.cur_span = Some(e.span);
                     self.error(
                         MsgCode::ElabUnsupported,
-                        "$value$plusargs is supported only as the direct rhs \
-                         of a blocking assignment (v7)",
+                        "`$value$plusargs` writes the variable passed as its second \
+                         argument, and vita evaluates the call into a temporary before \
+                         the surrounding statement runs. This position is refused \
+                         because the statement would then observe that write out of \
+                         order — or, in a position that may be skipped or repeated (the \
+                         right operand of `&&` / `||`, an arm of `?:`, a loop condition, \
+                         a `$monitor` argument), would perform it a different number of \
+                         times than written. Call it in its own statement first, then \
+                         use the result and the written variable here",
                     );
+                    self.cur_span = saved;
                     return self.placeholder_expr();
                 }
                 // v9 SYS-READ: the fd-ADVANCING file-read functions mutate the fd
@@ -1126,11 +1144,39 @@ impl Elaborator<'_> {
                     name.name.as_str(),
                     "$fgetc" | "$ungetc" | "$fgets" | "$fread" | "$fscanf" | "$sscanf"
                 ) {
+                    // ⚠️ This message used to state the pre-§4.5.374 rule — "supported
+                    // only as the direct rhs of a blocking assignment (v9)" — which had
+                    // been FALSE since the hoist opened NBA right-hand sides, `if`
+                    // conditions, `case` scrutinees, `repeat` counts, task arguments,
+                    // nested expressions and lvalue indices. Taken at face value it told
+                    // users to rewrite working code, and the `(v9)` tag pointed at the
+                    // rule of the day rather than today's. Say what is actually true.
+                    //
+                    // The caret goes on the CALL, not the enclosing statement: the
+                    // statement can span several lines and the reader needs the operand
+                    // that is illegal, which is what the neighbouring queue-pop
+                    // diagnostic already does.
+                    let saved = self.cur_span;
+                    self.cur_span = Some(e.span);
                     self.error(
                         MsgCode::ElabUnsupported,
-                        "$fgetc/$ungetc/$fgets/$fread/$fscanf/$sscanf are \
-                         supported only as the direct rhs of a blocking assignment (v9)",
+                        &format!(
+                            "`{}` advances the file position, so vita evaluates it into a \
+                             temporary once, before the statement runs. This position is \
+                             refused because the call would then happen a DIFFERENT NUMBER \
+                             OF TIMES than written: the right operand of `&&` / `||` and an \
+                             arm of `?:` may be skipped, a loop condition is re-evaluated \
+                             per iteration, and a `$monitor` / `$strobe` argument is \
+                             re-rendered on every later change and would show the frozen \
+                             temporary. Read it into a variable in its own statement first, \
+                             then use that variable here. Placements evaluated exactly once \
+                             per execution are supported — a blocking or nonblocking rhs, \
+                             an `if` condition, a `case` scrutinee, a `repeat` count, a \
+                             `$display`-style argument, an lvalue index",
+                            name.name
+                        ),
                     );
+                    self.cur_span = saved;
                     return self.placeholder_expr();
                 }
                 // v9 rank 6: $dist_uniform advances the ref seed, $cast (func form)

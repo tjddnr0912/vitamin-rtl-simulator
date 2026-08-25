@@ -310,6 +310,28 @@ impl Elaborator<'_> {
 
     /// r19: is `e` a REAL literal (through parens / unary sign)? Used by the override
     /// path, where there is no declared type to consult — only the expression.
+    /// Is this override a CONSTANT whose width exceeds the 64-bit integer channel a
+    /// parameter override travels in? `128'hdead_beef_…` is such a value: it folds to
+    /// nothing at the override site not because it is non-constant but because it does
+    /// not fit, and saying "is not a constant; default kept" about it was wrong twice
+    /// over — it IS a constant, and for a header parameter the companion check in
+    /// `params.rs` errors rather than keeping any default, so the two diagnostics
+    /// contradicted each other on one event (external report, aes_top §5).
+    ///
+    /// Deliberately literal-only: a wide constant EXPRESSION has the same problem, but
+    /// this predicate exists to pick the right SENTENCE, and widening it would relabel a
+    /// genuinely non-constant override, which is the case that really does keep its
+    /// default (pinned by `an_override_that_really_is_dropped_still_warns`).
+    pub(crate) fn override_is_wide_literal(e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => Self::override_is_wide_literal(inner),
+            ast::ExprKind::IntLit { kind, raw } => {
+                crate::literal::parse_int_literal(raw, *kind).is_some_and(|c| c.width > 64)
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) fn expr_is_real_literal(e: &ast::Expr) -> bool {
         Self::real_literal_value(e).is_some()
     }

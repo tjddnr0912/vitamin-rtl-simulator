@@ -340,7 +340,16 @@ impl Elaborator<'_> {
             // view subset only — no lowering happens in this domain. A shape
             // it can't see folds None → LOUD at the binding site.
             ast::ExprKind::SysCall { name, args } if name.name == "$bits" && args.len() == 1 => {
-                self.bits_of_view(&args[0], true).map(|n| n as i64)
+                // …and, when the argument is not a view, its SELF-DETERMINED width —
+                // a literal, a concatenation, a replication. Without that fallback
+                // `$bits(8'h00)` folded to None here, and a packed DECLARATION BOUND
+                // built on it silently became ONE BIT (`wire [$bits(8'h00)-1:0] c;`
+                // declared a 1-bit net that truncated `8'hA5` to `1`, at exit 0, in
+                // every backend). The runtime spelling of the same call already
+                // answered 8, so one source line had two answers.
+                self.bits_of_view(&args[0], true)
+                    .or_else(|| self.bits_of_selfdet(&args[0]))
+                    .map(|n| n as i64)
             }
             // A static cast in a constant context (`int'(7)`, `8'(P+1)`). Without
             // this arm `int'(7)` was NOT a foldable constant, so every bound/count
