@@ -68,7 +68,9 @@ Phase 1의 범위는 **SystemVerilog 합성가능 RTL 서브셋** — Verilog-20
 
 **파이프라인:** preprocess → lex → parse → elaborate → event-driven sim → VCD
 
-**백엔드:** 인터프리터 방식 (IR-walking). 정확성 · VCD · timescale 정밀도를 먼저 확보한 뒤, 후속 단계에서 컴파일드 백엔드를 `sim-ir` 경계 너머에 추가한다.
+**백엔드:** ⚠️ **Superseded 2026-08-17 — the shipping backend is `native`, a compiled op-stream over a flat arena, and it is the ONLY executor a released build contains.** The original plan below was carried out and then completed: correctness first on an IR-walking interpreter, then the compiled backend across the `sim-ir` boundary. `interp` still exists in a development build as the readable reference semantics — permanently excluded from performance work, because making the reference fast is how it stops being readable — and `vm` as a second implementation to bisect against. All three must print identical bytes. Details = [04 §실행 백엔드 아키텍처](04-architecture.md) · [study/02](../study/02-v1-native-coverage.md).
+>
+> *(원문)* 인터프리터 방식 (IR-walking). 정확성 · VCD · timescale 정밀도를 먼저 확보한 뒤, 후속 단계에서 컴파일드 백엔드를 `sim-ir` 경계 너머에 추가한다.
 
 **Phase 1 구문 동결 (IN-MVP / deferred):** Phase 1 경계는 합성가능성 범례가 아니라 아래 표가 단일 기준으로 정의한다.
 

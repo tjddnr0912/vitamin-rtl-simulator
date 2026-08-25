@@ -12,7 +12,7 @@ VHDL(IEEE 1076)은 다른 언어이므로 별도 프론트엔드(lexer/parser/el
 
 **범위:** SV 합성가능 RTL 서브셋. Verilog-2005 RTL 전체를 포함한다.
 
-**산출물:** preprocess → lex → parse → elaborate → event-driven sim → VCD. 백엔드는 인터프리터 방식(IR-walking).
+**산출물:** preprocess → lex → parse → elaborate → event-driven sim → VCD. ⚠️ **백엔드 문구는 낡았다 (superseded 2026-08-17)** — the shipping backend is `native` (a compiled op-stream over a flat arena) and it is the default; `interp` (IR-walking) survives only as the reference semantics in a development build. See [01 §백엔드](01-goals-and-scope.md).
 
 `timescale` 정밀도와 VCD 생성은 MVP 1일차부터 지원한다. 정확성 없이 속도만 높이는 방향은 택하지 않는다.
 

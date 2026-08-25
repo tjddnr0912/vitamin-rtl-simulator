@@ -55,6 +55,32 @@ changed for a user of the simulator.
   inliner to control-flow bodies (or opening `Terminator::Call` in `is_codegen_able`) is
   filed in ROADMAP §3; the qualified-call gap is its own row.
 
+### Documentation
+
+- **Several documents still described the simulator as running on an interpreter.**
+  Phase B/D made `native` — a compiled op-stream over a flat arena — the default and
+  the only executor a released build contains, but the user manual still said "the
+  backend is a deterministic IR-walking interpreter", the CLI reference still listed
+  `--backend <interp|vm>` with **"`interp` (default)"**, and three `docs/preview/`
+  specs still introduced the backend as `인터프리터 방식 (IR-walking)` in the present
+  tense. A reader — human or model — could reasonably conclude vitamin interprets.
+
+  Worst of these, because it is the document an agent reads to interpret vitamin's
+  output: **`docs/preview/19-ai-agent-observability.md` claimed `--backend native`
+  "still falls back to the VM" and that `"native"` appears only in
+  `backend_requested`.** Neither is true — an ordinary run writes `backend: native`,
+  `backend_requested: native`, `native.refused: null` — so an agent following that
+  spec would read the `backend` field and conclude native had not run.
+
+  All corrected against the running binary. The manual's per-backend speedup table
+  was **removed rather than refreshed**: stale numbers are what made the section
+  wrong, so it now states the ordering (`native` < `vm` < `interp`) and the commands
+  that reproduce it, leaving the numbers in one place. That ordering was re-measured
+  for this change on `bench/picorv32` — 18.0 s / 33.9 s / 52.8 s, release, warm — on
+  its own default testbench settings, so those figures are not comparable to the
+  corpus runner's picorv32 row, which drives a different configuration. The 2026-05 design spec, which predates all of this,
+  carries a HISTORICAL banner instead of being rewritten.
+
 ### Fixed
 
 - **A `real` constant could not reach an integer context, even when you wrote the

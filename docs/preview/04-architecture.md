@@ -130,6 +130,8 @@ preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명
 
 ## 하이브리드 시뮬레이션 전략
 
+> ⚠️⚠️ **This section records the ORIGINAL 2026-05 strategy, and that strategy has since been executed to completion. Read it as history, not as current behaviour.** Today vitamin has three executors and the default is the compiled one: `native` (a compiled op-stream over a flat arena) runs 100.00% of the corpus byte-exactly and is the only executor in a released build; `interp` and `vm` remain in a development build purely as second implementations to bisect a suspected defect against. Machine-code generation (cranelift) WAS built, wired and measured, then **rejected** — ~38% of a run is shim and the ceiling on op dispatch is 8.9–11.3%. Current structure = §실행 백엔드 아키텍처 below · execution record = [ROADMAP_ARCHIVE_PHASE_A-D](../ROADMAP_ARCHIVE_PHASE_A-D.md) · 해설 = [study/02](../study/02-v1-native-coverage.md).
+
 **MVP는 인터프리터다.** sim-ir를 직접 walk하는 이벤트 구동 인터프리터 방식으로 시뮬레이터를 구축한다. 이 방식은 Icarus Verilog의 vvp 런타임 접근과 유사하다 — 중간 표현을 생성하고 런타임에 해석한다. 인터프리터로 출발하는 이유는 명확하다: 정확성과 표준 준수를 먼저 확보한 다음 속도를 최적화해야 하기 때문이다.
 
 **sim-ir가 경계 역할을 한다.** sim-ir를 좁고 안정된 표면으로 유지하면, MVP 인터프리터 이후 컴파일드 또는 JIT 백엔드를 재작성 없이 추가할 수 있다. 프론트엔드 전체(preprocess → lex → parse → elaborate)는 그대로 두고 실행 백엔드만 교체하는 구조다. Verilator의 접근(C++ 코드 생성)이 후속 단계의 모델이다.
@@ -334,7 +336,9 @@ vitamin과의 관계: 후속 단계(Phase 3+)에서 컴파일드/JIT 백엔드�
 
 ### vitamin의 위치
 
-vitamin은 두 선례 사이에 의도적으로 위치한다. MVP는 Icarus처럼 인터프리터 방식으로 표준 준수를 먼저 확보한다. 그러나 sim-ir를 IR 경계로 두어 Verilator처럼 컴파일드 백엔드도 후속에 수용할 수 있다. 이 경계가 둘 다 가능하게 하는 핵심 설계 결정이다.
+⚠️ **Updated 2026-08-17 — the "후속" in the paragraph below has happened.** vitamin sits between the two precedents, and it now occupies BOTH ends: correctness was secured first on an IR-walking interpreter the way Icarus does, and the compiled backend across the `sim-ir` boundary was then built and made the **default** (`native`, 100.00% of the corpus, byte-exact against the interpreter). What was NOT adopted is Verilator's C++/machine-code generation — cranelift was built, wired and measured, then rejected on the numbers. The `sim-ir` boundary is what let the backend be replaced with no frontend rewrite, which is the claim the paragraph below makes and the thing that turned out to be true.
+
+> *(원문 2026-05)* vitamin은 두 선례 사이에 의도적으로 위치한다. MVP는 Icarus처럼 인터프리터 방식으로 표준 준수를 먼저 확보한다. 그러나 sim-ir를 IR 경계로 두어 Verilator처럼 컴파일드 백엔드도 후속에 수용할 수 있다. 이 경계가 둘 다 가능하게 하는 핵심 설계 결정이다.
 
 ---
 

@@ -117,9 +117,14 @@ packed and (multi-dimensional) unpacked arrays; `initial`/`always` and
 tasks; the `#delay`/`@(event)`/`wait` timing constructs and `assign`; plus the
 SystemVerilog data types **`enum`, `typedef`, and packed `struct`**. The core
 system tasks for display/output, time, simulation control, and VCD dump are
-supported. The backend is a deterministic IR-walking interpreter; a compiled
-backend is reserved for a later phase behind the `sim-ir` boundary. Values are
-4-state (`0`/`1`/`x`/`z`).
+supported. Values are 4-state (`0`/`1`/`x`/`z`).
+
+Process bodies run on a **compiled op-stream over a flat arena** — the backend
+named `native`, which is the default and the only executor a released build
+contains. (Two other executors, `interp` and `vm`, exist in a development build
+purely so a suspected defect can be bisected against a second implementation of
+the same semantics; all three are required to print identical bytes. See
+[`--backend`](004_cli-reference.md#choosing-a-backend).)
 
 Beyond the RTL core, waveforms can be written as **FST** as well as VCD (give
 the output an `.fst` extension via `$dumpfile` or `-o`), and functional

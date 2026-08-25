@@ -107,7 +107,7 @@ name.
 | `--dump-filelist` | Print the effective post-expansion input list and exit. |
 | `+NAME[=VAL]` | Runtime plusarg, visible to `$test$plusargs` / `$value$plusargs`. |
 | `--threads, -j <N>` | **Waveform-writer** thread budget; `N ≥ 2` moves VCD writing off the sim thread. Simulation itself is single-threaded, so this does **not** speed up a run with no waveform dump. Output stays byte-identical for any N. |
-| `--backend <interp\|vm>` | Which executor runs process bodies. `interp` (default) is the reference semantics; `vm` runs suspend-free bodies on the bytecode VM. **Output is byte-identical either way** — a wall-clock knob only. See [Choosing a backend](#choosing-a-backend). |
+| `--backend <interp\|vm\|native>` | Which executor runs process bodies. **A debug knob you do not need**: `native` is the default and runs every design. **Output is byte-identical across all three** — see [Choosing a backend](#choosing-a-backend). |
 | `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
 | `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
@@ -131,39 +131,45 @@ vita -D WIDTH=16 -I rtl/inc tb.sv
 
 ## Choosing a backend
 
-`--backend vm` runs process bodies on vitamin's bytecode VM instead of the
-tree-walking interpreter. **It cannot change your results** — every output byte,
-stdout and waveform alike, is identical to `interp`. That equivalence is enforced
-as a hard test over the whole deterministic corpus
-(`sim-engine/tests/backend_equiv.rs`), not merely intended.
+**Short answer: don't.** `native` is the default, it runs every design, and it is
+the only executor a released build contains. `--backend` is a debug knob.
 
-What it changes is wall-clock, and only for the bodies it can claim. A body that
-suspends — `#delay`, `@(event)`, `wait`, `fork` — runs on the interpreter under
-either setting, so a testbench-dominated run sees little or nothing while a
-datapath-dominated one sees the full effect.
+vitamin has three executors, and all three are required to print **identical
+bytes** — stdout and waveform alike. That equivalence is a hard test over the whole
+deterministic corpus (`sim-engine/tests/backend_equiv.rs`), not an intention, which
+is what makes the flag safe to ignore:
 
-Measured (`cargo test -p sim-engine --test perf_baseline -- --ignored --nocapture`,
-release, best-of-3, 2026-07-31):
-
-| workload | bodies on the VM | speedup |
+| backend | what it is | why it exists |
 |---|---|---|
-| expression-heavy (wide arithmetic / logic) | 1 of 2 | **1.9×** |
-| structure-heavy (select / concat / replicate) | 1 of 2 | **2.0×** |
-| SHA-256 compression round | 2 of 3 | **1.5×** |
-| memory-indexed (`mem[p]` per statement) | 1 of 2 | 1.4× |
-| clock/scheduler-bound | 1 of 2 | 1.1× |
+| **`native`** *(default)* | a compiled op-stream over a flat arena | it is the product; it runs 100.00% of the corpus byte-exactly |
+| `vm` | compiles suspend-free bodies to bytecode, interprets the rest | a second implementation to bisect a suspected defect against |
+| `interp` | walks the sim-IR directly | the readable reference for what a statement *means* |
 
-The `examples/` designs sit at 50–60% coverage, which is typical: roughly the DUT
-half of a design qualifies and the stimulus half does not.
+`interp` is **permanently excluded from performance work**: making the reference
+fast is how it stops being readable. It is not a mode anyone should run a real
+workload on, and it is not what vitamin does when you do not pass the flag.
 
-Writing a transform as a `function` does **not** cost you coverage — vitamin
-inlines those during elaborate, so the SHA-256 round above measures the same
-either way.
+**They are not in a released build.** `interp` and `vm` are compiled only under the
+`oracle` Cargo feature, which is on by default for development. A build made with
+`--no-default-features` has `native` alone, and `--backend interp|vm` there is
+`error[VITA-E0001]`, exit 3.
 
-**When to use it.** Reach for `vm` on long expression-bound runs (crypto
-datapaths, wide ALUs, vector sweeps). Leave the default alone otherwise; there is
-no correctness reason to prefer either, so the only question is whether your run
-is long enough for 1.5× to matter.
+**Performance ordering is `native` < `vm` < `interp`**, on every workload in the
+benchmark set. Deliberately no table here — a manual is the wrong place for numbers
+that move, and stale ones caused this section to be rewritten. Reproduce them:
+
+```
+cargo test -p sim-engine --release --test perf_baseline -- --ignored --nocapture
+cargo run --release -q -p corpus-runner -- run --compare   # vs iverilog
+```
+
+`vita --help` carries a current measured triple for one design.
+
+**If the gate ever refuses a design**, `native` falls back to another executor and
+says so (`W-RUN-BACKEND-FALLBACK`) rather than failing or going quiet. Nothing in
+the corpus is refused today. Under `--obs-dir`, `run.json` records `backend`
+(what actually ran) next to `backend_requested` (what you asked for); comparing
+the two is the only fallback signal.
 
 ## What actually ran (`-v`)
 
@@ -342,7 +348,7 @@ logging, plusargs) plus:
 | flag | meaning |
 |------|---------|
 | `-o <path>` | Override the VCD output path (same semantics as `vita -o`). Rejected if it names the input `.velab`. |
-| `--backend <interp\|vm>` | (`vrun` only) Same meaning as `vita --backend`. `vcmp`/`velab` **reject** it: nothing in the artifact they write depends on the backend, so accepting it would misleadingly suggest otherwise. |
+| `--backend <interp\|vm\|native>` | (`vrun` only) Same meaning as `vita --backend`. `vcmp`/`velab` **reject** it: nothing in the artifact they write depends on the backend, so accepting it would misleadingly suggest otherwise. |
 | `--upstream <file>` | Verify the `.velab`'s recorded upstream digest against a specific `.vu`. |
 
 ```

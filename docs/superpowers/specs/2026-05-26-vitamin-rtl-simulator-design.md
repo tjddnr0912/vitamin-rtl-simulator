@@ -3,6 +3,8 @@
 > **코드네임:** `vitamin` (임시 — 추후 재고) · **CLI 작업명:** `vita` (placeholder)
 > **작성일:** 2026-05-26 · **수정:** 2026-05-28 · **상태:** 설계 확정 (브레인스토밍 합의 완료)
 > **위치 안내:** 본 문서는 상위 *설계 명세*다. 실제 가이드/참조 문서 세트는 `docs/preview/`에 작성된다. 본 spec은 그 산출물의 청사진이자 단일 진실 공급원(single source of truth)이다.
+>
+> ⚠️⚠️ **HISTORICAL (2026-05-26). This is the original blueprint, not a description of the tool as it is today, and it is no longer the single source of truth — `docs/preview/` is.** The one line most likely to mislead: §5.3 and §7 describe the simulation backend as an **IR-walking interpreter**. That plan was carried out and then superseded. Today the default and shipping executor is **`native`**, a compiled op-stream over a flat arena, which runs 100.00% of the corpus byte-exactly and is the *only* executor in a released build; `interp` survives in a development build as the readable reference semantics, and `vm` as a second implementation to bisect against. Current state = [preview/04 §실행 백엔드 아키텍처](../../preview/04-architecture.md) · [study/02](../../study/02-v1-native-coverage.md) · execution record = [ROADMAP_ARCHIVE_PHASE_A-D](../../ROADMAP_ARCHIVE_PHASE_A-D.md).
 
 ---
 
